@@ -5,3 +5,6 @@
 node_modules/
 .env
 .env.local
+
+# Agent Mail installation directory (downloaded during install)
+mcp_agent_mail/

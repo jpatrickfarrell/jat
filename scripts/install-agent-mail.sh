@@ -15,39 +15,55 @@ echo -e "${BLUE}Installing Agent Mail Server...${NC}"
 echo ""
 
 # Check if already installed
-if systemctl --user is-active --quiet agent-mail 2>/dev/null; then
-    echo -e "${YELLOW}  ⊘ Agent Mail Server already running${NC}"
-    echo "  Check status: systemctl --user status agent-mail"
-    exit 0
-fi
+INSTALL_DIR="$HOME/code/jomarchy-agent-tools/mcp_agent_mail"
 
-if command -v agent-mail &> /dev/null; then
+if [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/scripts/run_server_with_token.sh" ]; then
     echo -e "${YELLOW}  ⊘ Agent Mail Server already installed${NC}"
-    echo "  Version: $(agent-mail --version 2>/dev/null || echo 'unknown')"
+    echo "  Location: $INSTALL_DIR"
+    echo ""
 else
-    echo "  → Installing Agent Mail Server via official installer..."
+    echo "  → Installing Agent Mail Server (this may take 30-60 seconds)..."
+    echo "  Installing to: $INSTALL_DIR"
     echo ""
 
-    # Use official installer with --yes flag
-    curl -fsSL https://raw.githubusercontent.com/Dicklesworthstone/mcp_agent_mail/main/scripts/install.sh | bash -s -- --yes
+    # Create temp log file for installer output
+    TEMP_LOG=$(mktemp)
 
-    echo ""
-    echo -e "${GREEN}  ✓ Agent Mail Server installed${NC}"
+    # Run installer in background, capturing output
+    # The installer will start the server at the end - we'll kill it after
+    (curl -fsSL https://raw.githubusercontent.com/Dicklesworthstone/mcp_agent_mail/main/scripts/install.sh | bash -s -- --yes > "$TEMP_LOG" 2>&1) &
+    INSTALLER_PID=$!
+
+    # Wait for installation to complete (check for run script existence)
+    echo "  Waiting for installation to complete..."
+    for i in {1..60}; do
+        if [ -f "$INSTALL_DIR/scripts/run_server_with_token.sh" ]; then
+            echo "  Installation files detected, cleaning up..."
+            sleep 2  # Let server start
+            break
+        fi
+        sleep 1
+    done
+
+    # Kill the installer and any server it started
+    pkill -P $INSTALLER_PID 2>/dev/null || true
+    kill $INSTALLER_PID 2>/dev/null || true
+    lsof -ti:8765 | xargs -r kill -9 2>/dev/null || true
+
+    # Clean up log file
+    rm -f "$TEMP_LOG"
+
+    if [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/scripts/run_server_with_token.sh" ]; then
+        echo -e "${GREEN}  ✓ Agent Mail Server installed successfully${NC}"
+    else
+        echo -e "${YELLOW}  ⚠ Installation incomplete - check manually${NC}"
+        exit 1
+    fi
 fi
 
-# Wait a moment for service to start
-sleep 2
-
-# Check if service is running
-if systemctl --user is-active --quiet agent-mail 2>/dev/null; then
-    echo -e "${GREEN}  ✓ Agent Mail Server is running${NC}"
-    echo "  API: http://localhost:3141"
-    echo "  Check logs: journalctl --user -u agent-mail -f"
-else
-    echo -e "${YELLOW}  ⚠ Agent Mail Server installed but not running${NC}"
-    echo "  Start it with: systemctl --user start agent-mail"
-    echo "  Enable at boot: systemctl --user enable agent-mail"
-fi
+echo -e "${GREEN}  ✓ Agent Mail ready${NC}"
+echo "  Location: $INSTALL_DIR"
+echo "  Server will auto-start when you run am-* commands (am-register, am-inbox, etc.)"
 
 echo ""
 echo "  Usage:"

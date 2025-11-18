@@ -2,7 +2,7 @@
 
 **Manage multiple agents across several projects in a complete AI-assisted development environment in one command.**
 
-Agent Mail (multi-agent coordination) + Beads (task planning) + 28 bash tools = Clear, fast integration that empowers agents with incredible capability—without the cost and bloat of MCP.
+Agent Mail (multi-agent coordination) + Beads (task planning) + 28 bash tools + 10 coordination commands = Full swarm orchestration that transcends context windows and project boundaries.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/joewinke/jomarchy-agent-tools/main/install.sh | bash
@@ -14,11 +14,12 @@ curl -fsSL https://raw.githubusercontent.com/joewinke/jomarchy-agent-tools/main/
 
 Jomarchy Agent Tools is a **zero-configuration AI development environment** that gives your coding assistants (Claude Code, Cursor, Aider, OpenCode, etc.) the ability to:
 
-- **Coordinate** across multiple agents without conflicts (Agent Mail)
-- **Transcend** project folders and context window bounds with cross-project communication
+- **Command** agent swarms with high-level coordination primitives (/start, /complete, /handoff)
+- **Coordinate** across multiple agents without conflicts (Agent Mail messaging + file locks)
+- **Transcend** project folders and context window bounds with persistent state
 - **Plan** work with dependency-aware task management (Beads)
 - **Execute** with 28 composable bash tools (no MCP bloat, instant integration)
-- **Scale** across all your projects with unified dashboard views
+- **Scale** infinitely - add agents without coordination overhead
 
 **Philosophy:** Following [What if you don't need MCP?](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/) by Mario Zechner - control a swarm of agents across repositories with lightweight tools instead of heavyweight servers.
 
@@ -64,6 +65,7 @@ This installs:
 - ✅ Agent Mail Server (http://localhost:3141)
 - ✅ Beads CLI (`bd` command)
 - ✅ 28 generic bash tools (am-*, browser-*, db-*, etc.)
+- ✅ 10 coordination commands (/register, /start, /complete, /handoff, etc.)
 - ✅ Optional tech stack tools (e.g., SvelteKit + Supabase with 11 additional tools)
 - ✅ Global ~/.claude/CLAUDE.md configuration
 - ✅ Per-repo setup (bd init, CLAUDE.md templates)
@@ -247,6 +249,176 @@ For each git repository in `~/code/*`:
    - Project-specific documentation template
    - Agent tools configuration section
    - Quick start guide for AI assistants
+
+### 7. Agent Swarm Coordination Commands
+
+**10 slash commands** installed to `~/.claude/commands/agent/` that enable sophisticated multi-agent orchestration:
+
+```
+~/.claude/commands/agent/
+├── register.md    - Bootstrap agent identity
+├── start.md       - Smart task start (context-aware, conflict-free)
+├── complete.md    - Finish + verify + auto-continue
+├── status.md      - Sync state without starting work
+├── handoff.md     - Transfer work with full context
+├── pause.md       - Temporarily stop, release resources
+├── block.md       - Mark blocked, coordinate with team
+├── stop.md        - Smart routing (pause/block/handoff)
+├── verify.md      - Quality checks before completion
+└── plan.md        - Convert planning docs to Beads tasks
+```
+
+#### Command Categories
+
+**Core Workflow (3 commands):**
+- `/register` - Bootstrap session (agent identity + task review)
+- `/start` - Begin work (context-aware, conflict detection, auto-select)
+- `/complete` - Finish work (verify, commit, auto-continue to next)
+
+**Coordination (5 commands):**
+- `/status` - Check state, sync with team, update presence
+- `/handoff` - Transfer ownership with full context package
+- `/pause` - Temporarily stop without completing
+- `/block` - Mark blocked, notify team, release resources
+- `/stop` - Smart routing based on reason analysis
+
+**Quality & Planning (2 commands):**
+- `/verify` - Pre-completion checks (tests, lint, browser, security)
+- `/plan` - Convert planning documents to structured Beads tasks
+
+#### How Commands Work
+
+Commands are **markdown files with instructions** that Claude Code executes:
+- Located in `~/.claude/commands/agent/`
+- Invoked with `/command-name` in Claude Code
+- Expand to full prompts with step-by-step coordination logic
+- Leverage bash tools (am-*, bd, browser-*) under the hood
+- Provide structured output with visual progress indicators
+
+#### Example: Continuous Agent Workflow
+
+**Single agent, continuous flow:**
+
+```bash
+# Start session
+/register
+# → Registers with Agent Mail
+# → Reviews available tasks from Beads
+# → Shows inbox messages
+
+# Start highest priority task
+/start
+# → Context-aware: Creates task from conversation if discussed
+# → Conflict checks: File locks, git, inbox, task status
+# → Reserves files, announces start
+# → BEGINS WORKING IMMEDIATELY
+
+# ... work happens (write code, test, document) ...
+
+# Complete and auto-continue
+/complete
+# → Runs /verify (tests, lint, security)
+# → Commits changes, updates docs
+# → Releases file reservations
+# → Marks task complete in Beads
+# → AUTO-STARTS NEXT TASK (continuous flow)
+
+# ... next task starts automatically ...
+
+# Complete and stop for the day
+/complete stop
+# → Completes current task
+# → Shows available tasks but DOESN'T auto-start
+# → Agent session ends cleanly
+```
+
+**Key insight:** `/complete` creates a **continuous flow** by automatically starting the next highest-priority task. Agents never sit idle!
+
+#### Example: Multi-Agent Coordination
+
+**3 agents working in parallel on a feature:**
+
+```bash
+# Agent 1: BlueLake (Backend API)
+/register
+/start
+# → Picks "Build user profile API endpoints" (highest priority)
+# → Reserves src/routes/api/profile/**
+# → Announces in Agent Mail thread
+# ... implements API routes ...
+/complete
+# → Auto-starts "Add profile validation logic"
+
+# Agent 2: GreenCastle (Frontend UI)
+/register
+/start
+# → Picks "Build profile edit form" (P1, no blockers)
+# → Reserves src/routes/account/profile/**
+# → Checks: No conflicts with BlueLake's API files
+# ... builds Svelte components ...
+/block "waiting for API completion"
+# → Releases reservations
+# → Notifies BlueLake via Agent Mail
+
+# Agent 3: RedMountain (Testing)
+/register
+/start profile-tests
+# → Starts specific task (parallel track)
+# → Reserves tests/profile/**
+# ... writes integration tests ...
+/handoff RedMountain "need E2E expertise"
+# → Packages work state (what's done, what remains)
+# → Sends comprehensive handoff message
+# → Releases reservations
+
+# All agents coordinate via Agent Mail:
+# - Thread ID = task ID (e.g., "profile-feature-123")
+# - File reservations prevent conflicts
+# - Messages enable async collaboration
+# - Beads tracks dependencies and completion
+```
+
+#### Architecture: How Commands Orchestrate the Swarm
+
+```
+┌─────────────────────────────────────────────┐
+│  User Input                                 │
+│  /register /start /complete /handoff        │
+└────────────┬────────────────────────────────┘
+             │
+             │ Expands to step-by-step prompts
+             │
+┌────────────▼────────────────────────────────┐
+│  Coordination Commands (10 .md files)       │
+│  • Context-aware task selection             │
+│  • Conflict detection logic                 │
+│  • State synchronization                    │
+│  • Handoff packaging                        │
+└────────┬───────────────────┬────────────────┘
+         │                   │
+         │ Executes via...   │
+         │                   │
+┌────────▼────────┐  ┌───────▼────────────────┐
+│  Bash Tools     │  │  Agent Mail + Beads    │
+│  (28 tools)     │  │  State & Coordination  │
+│  am-*, bd,      │  │  • File locks          │
+│  browser-*      │  │  • Message threads     │
+│                 │  │  • Task queue          │
+│                 │  │  • Dependency tracking │
+└─────────────────┘  └────────────────────────┘
+```
+
+**Key Benefits:**
+
+1. **🌊 Continuous Flow** - `/complete` auto-starts next task → agents never idle
+2. **🤝 Seamless Handoffs** - Full context transfer between agents
+3. **🛡️ Conflict-Free** - File reservations + checks prevent collisions
+4. **📈 Infinite Scale** - Add agents without coordination overhead
+5. **🔄 Persistent State** - Work survives context window resets
+6. **🎯 Smart Selection** - Context-aware task matching from conversation
+7. **⚡ Bulk Parallelization** - Deploy 60+ agents for massive remediation tasks
+
+**Example scenario: 60 agents fixing 1,231 TypeScript errors in 18 minutes** (via `/start` detecting bulk remediation pattern and deploying agent swarm automatically)
 
 ---
 

@@ -11,13 +11,26 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-echo -e "${BLUE}Setting up global ~/.claude/CLAUDE.md...${NC}"
+echo -e "${BLUE}Setting up global ~/.claude/CLAUDE.md and commands...${NC}"
 echo ""
 
 # Ensure ~/.claude directory exists
 mkdir -p ~/.claude
+mkdir -p ~/.claude/commands/agent
 
 CLAUDE_MD="$HOME/.claude/CLAUDE.md"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+COMMANDS_SOURCE="$SCRIPT_DIR/../commands/agent"
+
+# Install agent coordination commands
+if [ -d "$COMMANDS_SOURCE" ]; then
+    echo "  → Installing agent coordination commands..."
+    COMMAND_COUNT=$(find "$COMMANDS_SOURCE" -name "*.md" -type f | wc -l)
+    cp -r "$COMMANDS_SOURCE"/*.md ~/.claude/commands/agent/ 2>/dev/null || true
+    echo -e "${GREEN}  ✓ Installed $COMMAND_COUNT coordination commands${NC}"
+    echo "    Location: ~/.claude/commands/agent/"
+    echo ""
+fi
 
 # Check if file exists
 if [ -f "$CLAUDE_MD" ]; then
@@ -38,6 +51,124 @@ fi
 echo "  → Writing agent tools configuration..."
 
 cat >> "$CLAUDE_MD" << 'EOF'
+
+## Agent Swarm Coordination Commands
+
+**Command your agent swarm with 10 high-level coordination primitives.**
+
+These slash commands (located in `~/.claude/commands/agent/`) provide sophisticated multi-agent workflow orchestration:
+
+### Core Workflow Commands
+
+**1. `/register`** - Bootstrap agent identity
+- Registers with Agent Mail server
+- Gets unique agent name for coordination
+- Reviews available Beads tasks
+- Use at start of every session
+
+**2. `/start [task-id | quick]`** - Smart task start
+- Context-aware: Creates tasks from conversation
+- Conflict detection: Checks file locks, git, inbox
+- Auto-selects: Picks highest priority if no task specified
+- Quick mode: Skip safety checks for speed
+
+**3. `/complete [continue | stop]`** - Finish and auto-continue
+- Verifies work quality (tests, lint, security)
+- Commits changes and updates documentation
+- Releases file reservations
+- **Auto-starts next task** (continuous flow)
+- Use `/complete stop` to pause workflow
+
+### Coordination Commands
+
+**4. `/status`** - Sync state without starting work
+- Shows current task, reservations, inbox
+- Acknowledges all messages
+- Updates last_active timestamp
+- Quick orientation check
+
+**5. `/handoff <agent> [reason]`** - Transfer work with full context
+- Packages work state (progress, blockers, files)
+- Sends comprehensive handoff message
+- Releases your resources
+- Target agent can resume immediately
+
+**6. `/pause [reason]`** - Temporarily stop work
+- Releases file reservations
+- Keeps task open for resume later
+- Notifies team via Agent Mail
+- Use when taking a break
+
+**7. `/block <reason>**` - Mark task blocked
+- Documents blocker clearly
+- Notifies relevant agents
+- Releases resources for others
+- Task stays in queue until unblocked
+
+**8. `/stop [reason]`** - Smart routing
+- Analyzes your reason automatically
+- Routes to `/pause`, `/block`, or `/handoff`
+- Use when unsure which to use
+
+### Quality & Planning
+
+**9. `/verify [quick | full]`** - Comprehensive verification
+- Type checking, linting, security scan
+- Full mode: Browser testing, console errors
+- Called automatically by `/complete`
+- Use standalone to check before committing
+
+**10. `/plan [planning-doc]`** - Convert plans to Beads tasks
+- Parses planning documents
+- Creates structured tasks with dependencies
+- Sets priorities based on requirements
+- Accelerates feature kickoff
+
+### Example Workflow
+
+```bash
+# Start your session
+/register
+
+# Start working (auto-selects highest priority)
+/start
+
+# ... work happens ...
+
+# Complete and auto-continue to next task
+/complete
+
+# ... more work ...
+
+# Need help? Handoff to specialist
+/handoff Frontend-Agent "needs UI expertise"
+
+# Check in without starting work
+/status
+
+# End session
+/complete stop
+```
+
+### Benefits
+
+- **🌊 Continuous Flow**: `/complete` chains tasks → agents never idle
+- **🤝 Seamless Handoffs**: Full context transfer between agents
+- **🛡️ Conflict-Free**: File reservations + checks prevent collisions
+- **📈 Scale Up**: Add agents without coordination overhead
+- **🔄 Persistent State**: Work survives context window resets
+- **🎯 Smart Selection**: Context-aware task matching from conversation
+
+### Architecture
+
+```
+User Commands → Coordination Commands → Bash Tools → Agent Mail + Beads
+/start, /complete    10 .md files        28 tools    State & Coordination
+```
+
+Commands leverage Agent Mail (messaging, file locks) and Beads (task queue, dependencies) for full swarm orchestration across projects.
+
+---
 
 ## MCP Agent Mail: coordination for multi-agent workflows
 

@@ -8,14 +8,20 @@
 	let searchQuery = $state('');
 </script>
 
-<div class="dashboard">
-	<header class="dashboard-header">
-		<div>
-			<h1>Beads Task Dashboard</h1>
-			<p>Multi-project task management powered by Beads + Agent Mail</p>
+<div class="min-h-screen bg-base-200">
+	<div class="navbar bg-base-100 border-b border-base-300">
+		<div class="flex-1">
+			<div>
+				<h1 class="text-2xl font-bold text-base-content">Beads Task Dashboard</h1>
+				<p class="text-sm text-base-content/70">
+					Multi-project task management powered by Beads + Agent Mail
+				</p>
+			</div>
 		</div>
-		<ThemeSelector />
-	</header>
+		<div class="flex-none">
+			<ThemeSelector />
+		</div>
+	</div>
 
 	<div class="filters">
 		<div class="filter-group">
@@ -68,32 +74,6 @@
 </div>
 
 <style>
-	.dashboard {
-		min-height: 100vh;
-		background: #f9fafb;
-	}
-
-	.dashboard-header {
-		background: white;
-		border-bottom: 1px solid #e5e7eb;
-		padding: 2rem;
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-	}
-
-	.dashboard-header h1 {
-		margin: 0 0 0.5rem 0;
-		font-size: 2rem;
-		font-weight: 700;
-		color: #111827;
-	}
-
-	.dashboard-header p {
-		margin: 0;
-		color: #6b7280;
-		font-size: 1rem;
-	}
 
 	.filters {
 		background: white;

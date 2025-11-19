@@ -25,9 +25,13 @@ curl -fsSL https://raw.githubusercontent.com/joewinke/jomarchy-agent-tools/main/
 # 2. Register your agent (run inside your AI coding assistant)
 /register
 
-# 3. Create your project plan (tell your agent what to build)
-# Paste a detailed PRD or feature description, then:
-/plan
+# 3. Plan your feature (just talk to your agent!)
+# Option A - Conversational (recommended):
+#   "I want to build [feature]. It should [requirements]..."
+#   Agent asks questions, you discuss, then: /plan
+#
+# Option B - Formal PRD:
+#   Paste written PRD, then: /plan
 
 # 4. Start working on tasks
 /start
@@ -39,7 +43,7 @@ curl -fsSL https://raw.githubusercontent.com/joewinke/jomarchy-agent-tools/main/
 
 1. **Installation** (bash terminal): Installs coordination tools globally
 2. **Agent Registration** (AI assistant): Links assistant to Agent Mail system
-3. **Planning Session** (AI assistant): Converts your PRD/requirements into Beads tasks
+3. **Planning Session** (AI assistant): Talk through your idea OR paste PRD, then `/plan` converts to Beads tasks
 4. **Execution** (AI assistant or swarm): Agents pick tasks from queue and coordinate automatically
 
 See [Complete Workflow](#complete-workflow-from-idea-to-production) below for detailed walkthrough.
@@ -202,16 +206,76 @@ am-inbox Mobile  # Gets notified
 
 ## 📖 Complete Workflow: From Idea to Production
 
-### Step 1: Write a Detailed PRD (You, in a text editor)
+### Step 1: Planning Your Feature
 
-Create a comprehensive Product Requirements Document with:
-- **What** you're building (feature overview)
-- **Why** you're building it (business goals, user needs)
-- **How** it should work (user flows, edge cases)
-- **Success criteria** (how you'll know it's done)
-- **Technical considerations** (architecture, dependencies)
+**Choose your approach:**
 
-**Example PRD:**
+#### Option A: Conversational Planning (Recommended - More Natural)
+
+**Just talk to your agent in plan/architect mode!**
+
+Most modern AI assistants have a "plan mode" or "architect mode". Use it to collaborate:
+
+```
+You: I want to build a real-time collaborative whiteboard feature.
+     Multiple users should be able to draw, add shapes, and comment
+     simultaneously. It needs to sync instantly and integrate with
+     our existing project management suite.
+
+Agent: [In plan/architect mode]
+       Great! Let's think through this together. A few questions:
+
+       - How many concurrent users should we support per whiteboard?
+       - What's your target sync latency?
+       - Should it work on mobile devices?
+       - How should we handle conflicts when users edit simultaneously?
+
+You: Let's support 10+ concurrent users. Sync should be under 100ms.
+     Yes, needs to be mobile responsive. For conflicts, last-write-wins
+     is probably fine for MVP.
+
+Agent: Perfect. For the tech stack, I'm thinking:
+       - WebSocket server for real-time sync
+       - Canvas API for drawing
+       - PostgreSQL for persistence
+       - Redis for session management
+
+       Does that align with your existing architecture?
+
+You: Yes, we already use PostgreSQL and Redis. WebSockets are new but
+     that makes sense.
+
+Agent: Excellent. I'm seeing this break down into roughly 23 tasks:
+       - 5 P0 foundation tasks (WebSocket server, database schema, etc.)
+       - 12 P1 core features (drawing components, sync protocol, etc.)
+       - 6 P2 polish tasks (optimization, mobile responsiveness, etc.)
+
+       Sound good?
+
+You: Perfect! Let's do it.
+
+You: /plan
+```
+
+**What `/plan` does:**
+- Reads the **entire conversation history**
+- Extracts requirements, technical decisions, and acceptance criteria
+- Creates structured Beads tasks with dependency chains
+- Sets priorities based on your discussion
+- Generates task descriptions with full context
+
+**Why this is better:**
+- ✅ Natural conversation instead of formal writing
+- ✅ Agent asks clarifying questions as you go
+- ✅ You collaborate on technical decisions together
+- ✅ Requirements emerge organically through dialogue
+- ✅ No staring at blank cursor wondering what to write
+
+---
+
+#### Option B: Traditional PRD (For Complex/Formal Projects)
+
+**Write a detailed Product Requirements Document:**
 ```markdown
 # Feature: Real-time Collaborative Whiteboard
 
@@ -245,29 +309,35 @@ add shapes, and comment simultaneously with WebSocket synchronization.
 - Mobile responsive
 ```
 
-### Step 2: Planning Session (You + AI Agent)
-
-**In your AI coding assistant:**
+**Then paste to agent:**
 
 ```
-You: [Paste your entire PRD here]
+You: [Paste entire PRD]
 
-I want to build this feature. Please analyze this PRD and create a
-comprehensive task breakdown using /plan.
+     Please analyze this PRD and run /plan to create Beads tasks.
 
-Agent: [Reads PRD, analyzes dependencies, creates task hierarchy]
-       [Calls /plan internally]
+You: /plan
 
-       ✅ Created 23 tasks in Beads:
-          - 5 P0 (foundation - no dependencies)
-          - 12 P1 (core features)
-          - 6 P2 (polish & optimization)
+Agent: ✅ Created 23 tasks in Beads:
+       - 5 P0 (foundation - no dependencies)
+       - 12 P1 (core features)
+       - 6 P2 (polish & optimization)
 
-       Tasks are ready in the queue. Run /start to begin!
+       Tasks are ready. Run /start to begin!
 ```
+
+**When to use this approach:**
+- Complex features requiring formal specification
+- Multiple stakeholders need to review requirements
+- Compliance/documentation requirements
+- Handoff to external teams
+
+---
+
+### Step 2: Convert to Beads Tasks
 
 **What `/plan` does behind the scenes:**
-1. Analyzes your PRD for components, dependencies, and complexity
+1. Analyzes conversation history OR written PRD
 2. Breaks work into atomic, testable tasks
 3. Creates Beads tasks with proper dependency chains
 4. Sets priorities (P0 = foundation, P1 = features, P2 = polish)
@@ -433,15 +503,20 @@ Now that you understand the workflow:
 # 1. Install (terminal)
 curl -fsSL https://raw.githubusercontent.com/joewinke/jomarchy-agent-tools/main/install.sh | bash
 
-# 2. Write PRD (text editor)
-vim feature-spec.md  # Detailed requirements document
+# 2. Register (AI assistant)
+/register
 
-# 3. Planning (AI assistant)
-[Paste PRD]
-"Break this down into Beads tasks using /plan"
+# 3. Plan (AI assistant - choose your style)
+# Conversational (recommended):
+"I want to build a user dashboard with analytics charts..."
+# Agent asks questions, you discuss details, then:
+/plan
+
+# OR formal PRD:
+# [Paste written PRD]
+# /plan
 
 # 4. Execute (AI assistant or swarm)
-/register
 /start    # Pick first task
 /complete # Finish and auto-continue
 ...       # Repeat until feature done
@@ -450,7 +525,7 @@ vim feature-spec.md  # Detailed requirements document
 # Auto-created when feature tasks complete
 ```
 
-**That's it!** The tools handle coordination, the agent handles coding, you handle product decisions.
+**That's it!** Just talk through your idea, run `/plan`, then `/start`. The tools handle coordination, the agent handles coding, you handle product decisions.
 
 ---
 

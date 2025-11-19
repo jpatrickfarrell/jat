@@ -1,11 +1,12 @@
 <script>
 	/**
 	 * ThemeSelector Component
-	 * Ported from Chimaro - simplified version without user profile sync
+	 * Uses theme-change library for DaisyUI theme switching
 	 * Supports all 32 DaisyUI themes with localStorage persistence
 	 */
 
 	import { onMount } from 'svelte';
+	import { themeChange } from 'theme-change';
 
 	// All DaisyUI themes with labels
 	const themes = [
@@ -51,23 +52,30 @@
 	);
 
 	onMount(() => {
+		// Initialize theme-change library
+		themeChange(false);
+
 		// Get current theme or default to nord
-		const savedTheme = localStorage.getItem('theme');
-		if (savedTheme && themes.some((t) => t.name === savedTheme)) {
+		const savedTheme = localStorage.getItem('theme') || 'nord';
+		if (themes.some((t) => t.name === savedTheme)) {
 			currentTheme = savedTheme;
 			document.documentElement.setAttribute('data-theme', savedTheme);
-		} else {
-			currentTheme = 'nord';
-			document.documentElement.setAttribute('data-theme', 'nord');
-			localStorage.setItem('theme', 'nord');
 		}
-	});
 
-	function handleThemeChange(themeName) {
-		currentTheme = themeName;
-		document.documentElement.setAttribute('data-theme', themeName);
-		localStorage.setItem('theme', themeName);
-	}
+		// Listen for theme changes to update currentTheme
+		const observer = new MutationObserver(() => {
+			const theme = document.documentElement.getAttribute('data-theme');
+			if (theme && currentTheme !== theme) {
+				currentTheme = theme;
+			}
+		});
+		observer.observe(document.documentElement, {
+			attributes: true,
+			attributeFilter: ['data-theme']
+		});
+
+		return () => observer.disconnect();
+	});
 </script>
 
 <div class="dropdown dropdown-end">
@@ -103,7 +111,8 @@
 				<li>
 					<button
 						class="gap-3 px-2"
-						onclick={() => handleThemeChange(theme.name)}
+						data-set-theme={theme.name}
+						data-act-class="active"
 						class:active={currentTheme === theme.name}
 					>
 						<!-- Theme color preview -->

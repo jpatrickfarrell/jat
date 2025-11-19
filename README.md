@@ -117,7 +117,7 @@ bd --version
 - Git-backed storage (committable tasks)
 - Multi-project aggregation
 
-**Usage:**
+**Core Commands:**
 ```bash
 bd ready                    # Show tasks ready to work
 bd create "Task title" \
@@ -127,6 +127,44 @@ bd create "Task title" \
   --description "Detailed description"
 bd update task-id --status in_progress --assignee AgentName
 bd close task-id --reason "Completed"
+```
+
+**Workflow Patterns:**
+
+Create well-documented tasks with full context:
+```bash
+bd create "Fix OAuth authentication timeout" \
+  --type bug \
+  --labels security,auth,urgent \
+  --priority 1 \
+  --description "Users experience timeout when logging in via OAuth. Need to investigate token refresh logic and increase timeout threshold." \
+  --assignee "AgentName"
+```
+
+Set up task dependencies:
+```bash
+# Create task with dependency
+bd create "Add logout button" \
+  --type feature \
+  --labels ui \
+  --priority 2 \
+  --deps task-123  # Blocks on auth implementation
+
+# Task won't show in `bd ready` until task-123 is closed
+```
+
+Integrate with Agent Mail (use task IDs as thread IDs):
+```bash
+# Reserve files for task
+am-reserve "src/auth/**" --agent AgentName --ttl 3600 --reason "task-123"
+
+# Send progress updates
+am-send "[task-123] Progress Update" "Implemented token refresh logic." \
+  --from AgentName --thread task-123
+
+# Close task and release
+bd close task-123 --reason "Completed"
+am-release "src/auth/**" --agent AgentName
 ```
 
 ### 3. 28 Generic Bash Agent Tools
@@ -480,26 +518,21 @@ am-release "src/**/*.ts" --agent AgentName
 
 ---
 
-## Tool Reference
+## Usage Examples
 
-### Bash Composability Examples
+### Bash Composability
 
-One of the major advantages of bash tools over MCP:
+One of the major advantages of bash tools - pipe, filter, and chain:
 
 ```bash
 # Chain tools with pipes
 am-inbox AgentName --unread --json | jq '.[] | select(.importance=="urgent")'
 
-# Save and process
-am-inbox AgentName --unread > inbox.json
-cat inbox.json | jq length
-cat inbox.json | jq -r '.[].subject'
-
-# Bulk acknowledge
+# Bulk operations
 am-inbox AgentName --unread --json | jq -r '.[].id' | \
   xargs -I {} am-ack {} --agent AgentName
 
-# Conditional operations
+# Conditional logic
 if am-reservations --agent AgentName | grep -q "src/auth"; then
   echo "Already working on auth"
 else
@@ -507,38 +540,37 @@ else
 fi
 ```
 
-### Integration with Git
+### Browser Automation
 
 ```bash
-# Include task IDs in commits
-git commit -m "feat: implement OAuth login (task-123)"
-
-# Pre-commit hook checks reservations automatically
-# (installed by bd init)
-```
-
-### Browser Automation Examples
-
-```bash
-# Start browser and navigate
+# Start browser and test UI
 browser-start.js --remote-debugging-port 9222
 browser-nav.js "http://localhost:3000"
-
-# Execute JavaScript
-browser-eval.js 'document.title'
 browser-eval.js 'document.querySelector("button").click()'
 
 # Capture screenshot for verification
 screenshot=$(browser-screenshot.js)
 echo "Screenshot saved: $screenshot"
 
-# Interactive element picker
-browser-pick.js  # Click elements to copy selectors
+# Smart waiting (eliminates race conditions)
+browser-wait.js --selector ".success-message" --timeout 5000
+
+# Get structured page snapshot (1000x token savings vs screenshots!)
+browser-snapshot.js > page-state.json
+```
+
+### Git Integration
+
+```bash
+# Include task IDs in commits (for traceability)
+git commit -m "feat: implement OAuth login (task-123)"
+
+# Pre-commit hook checks reservations automatically (installed by bd init)
 ```
 
 ---
 
-## Integration Examples
+## AI Assistant Integration
 
 ### With Claude Code
 
@@ -591,80 +623,6 @@ cd ~/code/myproject
 opencode
 ```
 
----
-
-## Beads Workflow Patterns
-
-### Creating Well-Documented Tasks
-
-```bash
-bd create "Fix OAuth authentication timeout" \
-  --type bug \
-  --labels security,auth,urgent \
-  --priority 1 \
-  --description "Users experience timeout when logging in via OAuth. Need to investigate token refresh logic and increase timeout threshold. Affects production users." \
-  --assignee "AgentName"
-```
-
-### Task Dependencies
-
-```bash
-# Create task with dependency
-bd create "Add logout button" \
-  --type feature \
-  --labels ui \
-  --priority 2 \
-  --deps task-123  # Blocks on auth implementation
-
-# Task won't show in `bd ready` until task-123 is closed
-```
-
-### Integration with Agent Mail
-
-Use Beads task IDs as Agent Mail thread IDs:
-
-```bash
-# Reserve files for task
-am-reserve "src/auth/**" \
-  --agent AgentName \
-  --ttl 3600 \
-  --reason "task-123"
-
-# Send progress updates
-am-send "[task-123] Progress Update" \
-  "Implemented token refresh logic. Testing now." \
-  --from AgentName \
-  --thread task-123
-
-# Close task and release
-bd close task-123 --reason "Completed"
-am-release "src/auth/**" --agent AgentName
-```
-
----
-
-## Token Savings Breakdown
-
-### MCP vs Bash Tools
-
-| Feature | MCP Server | Bash Tools | Savings |
-|---------|-----------|------------|---------|
-| Tool definitions | 18,000 tokens | 50 tokens | 17,950 |
-| Chrome DevTools | 18,000 tokens | 0 tokens | 18,000 |
-| Agent Mail | 10,000 tokens | 0 tokens | 10,000 |
-| **Total** | **46,000 tokens** | **50 tokens** | **45,950** |
-
-### Per-Session Impact
-
-Assuming 10 sessions per week:
-- **MCP approach:** 460,000 tokens/week
-- **Bash tools:** 500 tokens/week
-- **Savings:** 459,500 tokens/week
-
-At $0.015 per 1k tokens (GPT-4):
-- **Cost with MCP:** $6.90/week
-- **Cost with bash:** $0.01/week
-- **Annual savings:** $358
 
 ---
 

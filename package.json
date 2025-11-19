@@ -16,7 +16,8 @@
     "url": "https://github.com/joewinke/jomarchy-agent-tools/issues"
   },
   "dependencies": {
-    "better-sqlite3": "^11.10.0"
+    "better-sqlite3": "^11.10.0",
+    "puppeteer-core": "^23.11.1"
   },
   "keywords": [
     "agent-mail",

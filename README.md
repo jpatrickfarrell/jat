@@ -19,23 +19,36 @@ curl -fsSL https://raw.githubusercontent.com/joewinke/jomarchy-agent-tools/main/
 ## ⚡ Quick Start
 
 ```bash
-# 1. Install (one command)
+# 1. Install (run in your terminal/bash)
 curl -fsSL https://raw.githubusercontent.com/joewinke/jomarchy-agent-tools/main/install.sh | bash
 
-# 2. Register your agent
+# 2. Register your agent (run inside your AI coding assistant)
 /register
 
-# 3. Start working
+# 3. Create your project plan (tell your agent what to build)
+# Paste a detailed PRD or feature description, then:
+/plan
+
+# 4. Start working on tasks
 /start
 ```
 
-**First task in 60 seconds!** The installer sets up Agent Mail, Beads CLI, 28 tools, and 10 coordination commands. Your AI assistant gains swarm orchestration capabilities instantly.
+**From idea to working code in 5 minutes!** The installer sets up Agent Mail, Beads CLI, 28 tools, and 10 coordination commands. Your AI assistant gains multi-agent swarm coordination capabilities instantly.
+
+### How It Actually Works
+
+1. **Installation** (bash terminal): Installs coordination tools globally
+2. **Agent Registration** (AI assistant): Links assistant to Agent Mail system
+3. **Planning Session** (AI assistant): Converts your PRD/requirements into Beads tasks
+4. **Execution** (AI assistant or swarm): Agents pick tasks from queue and coordinate automatically
+
+See [Complete Workflow](#complete-workflow-from-idea-to-production) below for detailed walkthrough.
 
 ---
 
 ## What Is This?
 
-Jomarchy Agent Tools is a **self-contained AI development environment** that gives your coding assistants (Claude Code, Cursor, Aider, OpenCode, etc.) the ability to:
+Jomarchy Agent Tools is a **self-contained AI development environment** that gives your AI coding assistants (Claude Code, Cline, Roo Code, OpenCode, etc.) the ability to:
 
 - **Command** agent swarms with high-level coordination primitives (/start, /complete, /handoff)
 - **Coordinate** across multiple agents without conflicts (Agent Mail messaging + file locks)
@@ -48,8 +61,8 @@ Jomarchy Agent Tools is a **self-contained AI development environment** that giv
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                       AI Assistants                             │
-│  (Claude Code, Cursor, Aider, Windsurf, Copilot, OpenCode)     │
+│                       AI Coding Assistants                      │
+│     (Any tool with bash access + slash command support)        │
 └─────────────────────┬───────────────────────────────────────────┘
                       │
                       ▼
@@ -105,7 +118,7 @@ Modern AI coding assistants face three major challenges:
 **Real-world impact:**
 - **Control agent swarms** that span multiple projects and coding assistants
 - **No running services**: Just bash scripts + SQLite (32k+ token savings vs MCP servers)
-- **Universal compatibility**: Works with Claude Code, Cursor, Aider, OpenCode, etc.
+- **Universal compatibility**: Works with any AI assistant that supports bash + slash commands
 - **Bash composability**: Pipe, filter, and chain tools with jq, xargs, grep
 
 ---
@@ -184,6 +197,262 @@ am-inbox Mobile  # Gets notified
 ```
 
 **Result:** Three agents across three repositories **coordinate via Agent Mail** with shared context and **zero miscommunication**.
+
+---
+
+## 📖 Complete Workflow: From Idea to Production
+
+**This is the workflow curse-of-knowledge gap that most docs miss!** Here's the actual end-to-end process:
+
+### Step 1: Write a Detailed PRD (You, in a text editor)
+
+Create a comprehensive Product Requirements Document with:
+- **What** you're building (feature overview)
+- **Why** you're building it (business goals, user needs)
+- **How** it should work (user flows, edge cases)
+- **Success criteria** (how you'll know it's done)
+- **Technical considerations** (architecture, dependencies)
+
+**Example PRD:**
+```markdown
+# Feature: Real-time Collaborative Whiteboard
+
+## Overview
+Build a real-time collaborative whiteboard where multiple users can draw,
+add shapes, and comment simultaneously with WebSocket synchronization.
+
+## Business Goals
+- Enable remote team collaboration
+- Replace expensive third-party tools
+- Integrate with our existing project management suite
+
+## User Flows
+1. User creates new whiteboard
+2. User invites collaborators via link
+3. Multiple users draw/comment in real-time
+4. Changes sync instantly (<100ms latency)
+5. Whiteboard auto-saves every 30 seconds
+
+## Technical Requirements
+- WebSocket server for real-time sync
+- Canvas API for drawing
+- Conflict resolution for simultaneous edits
+- PostgreSQL for persistence
+- Redis for session management
+
+## Success Criteria
+- Support 10+ concurrent users per whiteboard
+- <100ms sync latency
+- Zero data loss on disconnection
+- Mobile responsive
+```
+
+### Step 2: Planning Session (You + AI Agent)
+
+**In your AI coding assistant:**
+
+```
+You: [Paste your entire PRD here]
+
+I want to build this feature. Please analyze this PRD and create a
+comprehensive task breakdown using /plan.
+
+Agent: [Reads PRD, analyzes dependencies, creates task hierarchy]
+       [Calls /plan internally]
+
+       ✅ Created 23 tasks in Beads:
+          - 5 P0 (foundation - no dependencies)
+          - 12 P1 (core features)
+          - 6 P2 (polish & optimization)
+
+       Tasks are ready in the queue. Run /start to begin!
+```
+
+**What `/plan` does behind the scenes:**
+1. Analyzes your PRD for components, dependencies, and complexity
+2. Breaks work into atomic, testable tasks
+3. Creates Beads tasks with proper dependency chains
+4. Sets priorities (P0 = foundation, P1 = features, P2 = polish)
+5. Generates task descriptions with acceptance criteria
+
+**Example Beads tasks created:**
+```
+bd-001 (P0): Set up WebSocket server infrastructure
+bd-002 (P0): Create PostgreSQL schema for whiteboards
+bd-003 (P0): Implement Redis session store
+bd-004 (P1): Build Canvas drawing component [depends: bd-001]
+bd-005 (P1): Implement real-time sync protocol [depends: bd-001, bd-003]
+bd-006 (P1): Add conflict resolution [depends: bd-005]
+...
+```
+
+### Step 3: Single Agent Execution (One AI assistant)
+
+**Simple workflow - one agent tackles tasks sequentially:**
+
+```bash
+# In your AI coding assistant
+/register  # Creates agent identity in Agent Mail
+
+/start     # Auto-picks highest priority task with no blockers
+           # Agent reserves files, announces start via Agent Mail
+           # Works on bd-001: "Set up WebSocket server"
+
+/complete  # Marks bd-001 done, auto-starts bd-002
+           # Continuous flow - no manual task selection needed
+
+/complete  # Finishes bd-002, moves to bd-003
+...
+```
+
+**Key benefits:**
+- `/start` always picks the **right** task (highest priority, no blockers)
+- `/complete` automatically chains to next task
+- File reservations prevent conflicts if you later add more agents
+- Progress persists in Beads (survives session restarts)
+
+### Step 4: Multi-Agent Swarm (Advanced - parallel work)
+
+**When you want to go faster, add more agents:**
+
+**Agent 1 (Claude Code):**
+```bash
+/register --name Frontend
+/start  # Gets: bd-004 "Build Canvas drawing component"
+        # Reserves: src/components/Canvas/**
+        # Announces: "Starting bd-004" via Agent Mail
+```
+
+**Agent 2 (Cline in separate window):**
+```bash
+/register --name Backend
+/start  # Gets: bd-005 "Implement real-time sync protocol"
+        # Reserves: src/server/websocket/**
+        # Announces: "Starting bd-005" via Agent Mail
+```
+
+**Agent 3 (Roo Code in third window):**
+```bash
+/register --name Database
+/start  # Gets: bd-002 "Create PostgreSQL schema"
+        # Reserves: migrations/**
+        # Announces: "Starting bd-002" via Agent Mail
+```
+
+**What happens automatically:**
+- Agents pick different tasks (Beads prevents duplicates)
+- File reservations prevent conflicts (exclusive locks)
+- Agents coordinate via Agent Mail (announcements, blockers)
+- Dependencies auto-resolve (bd-006 waits for bd-005)
+
+### Step 5: Coordination & Communication
+
+**Agents communicate via Agent Mail:**
+
+```bash
+# Backend agent finishes WebSocket server
+/complete  # Auto-sends: "[bd-001 Complete] WebSocket server ready at ws://localhost:3000"
+
+# Frontend agent sees notification
+am-inbox Frontend --unread
+# → Message from Backend: "WebSocket server ready..."
+# → Can now connect Canvas component
+
+# If agent gets blocked
+/block "bd-006 blocked: need Redis connection string from DevOps"
+# → Sends high-priority message to team
+# → Marks task as blocked in Beads
+# → Auto-starts different task
+```
+
+### Step 6: Verification & Completion
+
+**Each agent verifies work before marking complete:**
+
+```bash
+/verify full    # For UI changes (runs browser tests)
+/verify quick   # For backend changes (type check, lint, security)
+
+# If verification passes:
+/complete       # Commits code, updates docs, releases file locks
+
+# If verification fails:
+# Agent self-corrects or calls code-refactorer
+# Does NOT mark complete until all checks pass
+```
+
+### Step 7: Feature Completion & PR
+
+**When all related tasks complete, auto-create PR:**
+
+```bash
+# Agent completes bd-023 (last task in feature)
+/complete
+
+# System detects feature completion:
+# - 23 tasks completed in last 48 hours
+# - All tasks have "whiteboard" label
+# - Branch has 47 commits since main
+
+# Auto-creates PR:
+📋 PR #123: Real-time Collaborative Whiteboard
+   Includes 23 tasks, 47 commits, 89 files changed
+   ✅ All verification checks passed
+   🔗 Ready for review
+```
+
+---
+
+## 🎓 Key Concepts to Understand
+
+### Beads Tasks Are Your Source of Truth
+- **Don't** manually pick tasks - let `/start` choose based on priority + dependencies
+- **Don't** create tasks manually - let `/plan` analyze your PRD
+- **Do** write detailed PRDs - garbage in, garbage out
+
+### File Reservations Prevent Conflicts
+- Agents automatically reserve files when starting tasks
+- Other agents see "FILE_RESERVATION_CONFLICT" and pick different work
+- Reservations auto-expire (default: 1 hour TTL)
+
+### Agent Mail Keeps Everyone Synced
+- Announcements when starting/completing tasks
+- Notifications about blockers or dependencies
+- Cross-project coordination (backend ↔ frontend)
+
+### Verification Gates Ensure Quality
+- `/verify` runs before `/complete` (mandatory)
+- Failed verification = task stays open, agent self-corrects
+- No "done but broken" tasks
+
+---
+
+## 🚀 Quick Start (Revisited)
+
+Now that you understand the workflow:
+
+```bash
+# 1. Install (terminal)
+curl -fsSL https://raw.githubusercontent.com/joewinke/jomarchy-agent-tools/main/install.sh | bash
+
+# 2. Write PRD (text editor)
+vim feature-spec.md  # Detailed requirements document
+
+# 3. Planning (AI assistant)
+[Paste PRD]
+"Break this down into Beads tasks using /plan"
+
+# 4. Execute (AI assistant or swarm)
+/register
+/start    # Pick first task
+/complete # Finish and auto-continue
+...       # Repeat until feature done
+
+# 5. Review PR (GitHub)
+# Auto-created when feature tasks complete
+```
+
+**That's it!** The tools handle coordination, the agent handles coding, you handle product decisions.
 
 ---
 
@@ -748,38 +1017,12 @@ Claude will:
 - Understand Agent Mail coordination
 - Follow project-specific patterns
 
-### With Cursor
+**For any AI coding assistant that supports:**
+- Bash command execution
+- Slash commands (custom commands via .claude/commands/)
+- Reading project-level instruction files
 
-Add to Cursor's settings (`.cursorrules`):
-
-```markdown
-# Agent Tools Available
-
-See ~/.claude/CLAUDE.md for full documentation.
-
-Quick reference:
-- Task management: bd ready, bd create, bd update
-- Agent coordination: am-register, am-reserve, am-inbox
-- Browser testing: browser-*.js tools
-```
-
-### With Aider
-
-Aider can use bash tools directly:
-
-```bash
-aider --message "Check beads for ready tasks" --yes-always
-# Aider will run: bd ready --json
-```
-
-### With OpenCode
-
-OpenCode reads the same CLAUDE.md files as Claude Code:
-
-```bash
-cd ~/code/myproject
-opencode
-```
+The global CLAUDE.md automatically provides tool documentation to all assistants.
 
 
 ---
@@ -800,8 +1043,8 @@ opencode
 
 ```
 ┌─────────────────────────────────────────────┐
-│  AI Assistants                              │
-│  (Claude Code, Cursor, Aider, OpenCode)     │
+│  AI Coding Assistants                       │
+│  (Any tool with bash + slash commands)      │
 └────────────┬────────────────────────────────┘
              │
              │ Read ~/.claude/CLAUDE.md
@@ -957,22 +1200,31 @@ Contributions welcome! Please open issues or PRs.
 | **Token cost** | ~400 tokens | 32,000+ tokens |
 | **Startup time** | Instant | 2-5 seconds |
 | **Composability** | Full bash (pipes, jq, xargs) | Limited |
-| **Compatibility** | All CLIs (Claude, Cursor, Aider, etc.) | MCP-specific |
+| **Compatibility** | Universal (any bash-capable assistant) | MCP-specific |
 | **Maintenance** | Simple shell scripts | Complex server processes |
 
 **JAT = 80x token reduction with universal compatibility.**
 
-### Can I use this with Cursor/Aider/Windsurf/Copilot?
+### Will this work with my AI coding assistant?
 
-**Yes!** JAT works with **any** AI coding assistant:
+**Yes, if your assistant supports:**
 
-- ✅ **Claude Code** - Native integration (10 slash commands + MCP)
-- ✅ **Cursor** - Bash tools work directly
-- ✅ **Aider** - Bash tools work directly
-- ✅ **Windsurf** - Bash tools + MCP config provided
-- ✅ **GitHub Copilot** - Bash tools + MCP config provided
-- ✅ **OpenCode** - Native integration (bash + MCP)
-- ✅ **Codex CLI** - Full integration
+1. ✅ **Bash command execution** - Can run shell commands
+2. ✅ **Custom slash commands** - Supports .claude/commands/ or similar
+3. ✅ **Project instruction files** - Reads CLAUDE.md or similar
+
+**Known compatible tools:**
+- Claude Code (native integration)
+- Cline (bash + slash commands)
+- Roo Code (bash + slash commands)
+- Continue.dev (bash tools)
+- OpenCode (bash + slash commands)
+- Any VSCode extension with terminal access
+- Any CLI-based assistant (Aider-style)
+
+**Not compatible:**
+- Web-only interfaces without bash access
+- Assistants that only use API calls (no shell execution)
 
 **The bash tools work everywhere.** MCP integration is optional for advanced features.
 

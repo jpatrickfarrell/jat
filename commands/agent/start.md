@@ -58,24 +58,31 @@ fi
 
 #### 1A: Check Current Agent Status
 
-**Use Read tool to check session status** (NOT bash command substitution):
+**Use helper script to get session status:**
 
-1. **Read session ID file:**
-   - Use Read tool on `/tmp/claude-session-${PPID}.txt`
-   - Extract session ID and trim whitespace (e.g., "abc123")
+```bash
+# Get session ID using helper script (finds most recent session file)
+# This works correctly even when bash commands run in subprocesses with different PPIDs
+SESSION_ID=$(~/code/jat/scripts/get-current-session-id 2>/dev/null | tr -d '\n')
 
-2. **Check if session agent file exists:**
-   - Compute filename: `.claude/agent-{session_id}.txt`
-   - Try to Read that file
-   - If exists: extract agent name → AGENT_REGISTERED=true
-   - If doesn't exist: AGENT_REGISTERED=false
+# Check if session agent file exists
+if [[ -n "$SESSION_ID" ]] && [[ -f ".claude/agent-${SESSION_ID}.txt" ]]; then
+  # Agent already registered for this session
+  AGENT_REGISTERED=true
+  CURRENT_AGENT=$(cat ".claude/agent-${SESSION_ID}.txt" 2>/dev/null | tr -d '\n')
+  echo "✅ Session agent detected: $CURRENT_AGENT"
+else
+  # No agent registered yet
+  AGENT_REGISTERED=false
+  echo "🆕 New session - no agent registered yet"
+fi
+```
 
-**Example:**
-- Read(/tmp/claude-session-${PPID}.txt) → extract "abc123"
-- Read(.claude/agent-abc123.txt) → if exists: get "SilverWind", set AGENT_REGISTERED=true
-- If file doesn't exist: set AGENT_REGISTERED=false
-
-**DO NOT use bash command substitution** - see Pattern #5 in ~/.claude/CLAUDE.md for details.
+**PPID-based session tracking:**
+- Each terminal has unique PPID (parent process ID)
+- Statusline writes session ID to `/tmp/claude-session-${PPID}.txt`
+- Prevents race conditions between multiple Claude Code instances
+- Clean process isolation across terminals
 
 #### 1B: Handle Agent Registration Based on Parameter
 
@@ -94,22 +101,60 @@ else
 fi
 ```
 
-**Then use Read/Write tools (NOT bash command substitution):**
-1. Use Read tool to read `/tmp/claude-session-${PPID}.txt`
-2. Extract session ID from the content (trim newlines)
-3. Use Write tool to write `$AGENT_NAME` to `.claude/agent-{session_id}.txt`
+**CRITICAL: Block duplicate active agents (applies to ALL registration paths):**
 
-**Example implementation:**
-- Read(/tmp/claude-session-${PPID}.txt) → extract "f435fd91-..."
-- Write(.claude/agent-f435fd91-....txt, "WiseCanyon")
-
-**Why this approach:**
-- Bash tool can't handle command substitution `$(...)` reliably
-- Read/Write tools work with dynamic filenames computed in Claude's code
-- See Pattern #5 in ~/. claude/CLAUDE.md for details
+After determining AGENT_NAME (from any path above), check if already active:
 
 ```bash
-# After writing session file, export env var (FALLBACK - for bash scripts)
+# Get current session ID using helper script
+SESSION_ID=$(~/code/jat/scripts/get-current-session-id 2>/dev/null | tr -d '\n')
+
+if [[ -n "$SESSION_ID" ]]; then
+  # Check if this agent is already active in another session
+  for session_file in .claude/agent-*.txt; do
+    [[ ! -f "$session_file" ]] && continue  # Skip if no files exist
+
+    # Skip our own session file
+    if [[ "$session_file" == ".claude/agent-${SESSION_ID}.txt" ]]; then
+      continue
+    fi
+
+    # Check if another session has this agent
+    other_agent=$(cat "$session_file" 2>/dev/null | tr -d '\n')
+    if [[ "$other_agent" == "$AGENT_NAME" ]]; then
+      # Extract session ID from filename
+      other_session=$(basename "$session_file" | sed 's/agent-//;s/.txt//')
+
+      echo ""
+      echo "╔══════════════════════════════════════════════════════════════════════════╗"
+      echo "║                    ⚠️  AGENT ALREADY ACTIVE                              ║"
+      echo "╚══════════════════════════════════════════════════════════════════════════╝"
+      echo ""
+      echo "❌ Error: Agent '$AGENT_NAME' is already active in another terminal"
+      echo ""
+      echo "📍 Active in session: ${other_session:0:8}..."
+      echo "📁 Session file: $session_file"
+      echo ""
+      echo "💡 Options:"
+      echo "   1. Close the other terminal/session"
+      echo "   2. Choose a different agent name"
+      echo "   3. Delete the session file: rm \"$session_file\""
+      echo ""
+      exit 1
+    fi
+  done
+fi
+
+# Update session file (PPID-based session tracking)
+if [[ -n "$SESSION_ID" ]]; then
+  mkdir -p .claude
+  echo "$AGENT_NAME" > ".claude/agent-${SESSION_ID}.txt"
+  echo "✓ Session file updated: .claude/agent-${SESSION_ID}.txt"
+else
+  echo "⚠️  Warning: Could not detect session ID (statusline may not show agent)"
+fi
+
+# Export env var (FALLBACK - for bash scripts)
 export AGENT_NAME="$AGENT_NAME"
 ```
 
@@ -211,25 +256,58 @@ if [[ -n "$AGENT_NAME" ]]; then
 fi
 ```
 
-**CRITICAL: Write to session file using Read/Write tools:**
+**CRITICAL: Check for duplicate active agents and write to session file:**
 
-After registering the agent, use these steps to write to the session file:
-
-1. **Read session ID:**
-   - Use Read tool on `/tmp/claude-session-${PPID}.txt`
-   - Extract session ID and trim whitespace
-
-2. **Write agent name to session file:**
-   - Compute filename: `.claude/agent-{session_id}.txt`
-   - Use Write tool to write `$AGENT_NAME` to that file
-
-3. **Verify and report:**
-   - Echo confirmation message
-
-**DO NOT use bash command substitution** - it fails in the Bash tool. Always use Read/Write tools for dynamic filenames.
+After registering the agent (or when no agents exist and creating new), ALWAYS check if agent is already active:
 
 ```bash
-# After writing session file, export env var (fallback)
+# Get session ID using helper script
+SESSION_ID=$(~/code/jat/scripts/get-current-session-id 2>/dev/null | tr -d '\n')
+
+if [[ -n "$SESSION_ID" ]]; then
+  # Check if this agent is already active in another session
+  for session_file in .claude/agent-*.txt; do
+    [[ ! -f "$session_file" ]] && continue  # Skip if no files exist
+
+    # Skip our own session file
+    if [[ "$session_file" == ".claude/agent-${SESSION_ID}.txt" ]]; then
+      continue
+    fi
+
+    # Check if another session has this agent
+    other_agent=$(cat "$session_file" 2>/dev/null | tr -d '\n')
+    if [[ "$other_agent" == "$AGENT_NAME" ]]; then
+      # Extract session ID from filename
+      other_session=$(basename "$session_file" | sed 's/agent-//;s/.txt//')
+
+      echo ""
+      echo "╔══════════════════════════════════════════════════════════════════════════╗"
+      echo "║                    ⚠️  AGENT ALREADY ACTIVE                              ║"
+      echo "╚══════════════════════════════════════════════════════════════════════════╝"
+      echo ""
+      echo "❌ Error: Agent '$AGENT_NAME' is already active in another terminal"
+      echo ""
+      echo "📍 Active in session: ${other_session:0:8}..."
+      echo "📁 Session file: $session_file"
+      echo ""
+      echo "💡 Options:"
+      echo "   1. Close the other terminal/session"
+      echo "   2. Choose a different agent name"
+      echo "   3. Delete the session file: rm \"$session_file\""
+      echo ""
+      exit 1
+    fi
+  done
+
+  # Write agent name to session-specific file (PRIMARY - statusline reads this)
+  mkdir -p .claude
+  echo "$AGENT_NAME" > ".claude/agent-${SESSION_ID}.txt"
+  echo "✓ Session file updated: .claude/agent-${SESSION_ID}.txt"
+else
+  echo "⚠️  Warning: Could not detect session ID (statusline may not show agent)"
+fi
+
+# Export env var (FALLBACK - for bash scripts)
 export AGENT_NAME="$AGENT_NAME"
 ```
 
@@ -538,18 +616,31 @@ When `TASK_MODE=bulk` is detected:
 
 **CRITICAL Implementation Detail:**
 
-Always use **Read/Write tools** (NOT bash command substitution) when writing to session files:
+Always use the **helper script** for session file handling:
 
+```bash
+✅ CORRECT (using helper script):
+SESSION_ID=$(~/code/jat/scripts/get-current-session-id 2>/dev/null | tr -d '\n')
+if [[ -n "$SESSION_ID" ]]; then
+  echo "$AGENT_NAME" > ".claude/agent-${SESSION_ID}.txt"
+fi
+
+❌ WRONG - Using $PPID directly:
+# Don't use $PPID in bash commands - each Bash tool invocation runs in a
+# NEW subprocess with a DIFFERENT PPID!
+SESSION_ID=$(cat /tmp/claude-session-${PPID}.txt | tr -d '\n')  # BROKEN
+
+❌ WRONG - Using Read/Write tools:
+# Can't use Read tool with ${PPID} - it's a bash variable!
+# Read(/tmp/claude-session-${PPID}.txt) won't work
 ```
-✅ CORRECT:
-1. Read(/tmp/claude-session-${PPID}.txt) → get "abc123"
-2. Write(.claude/agent-abc123.txt, "AgentName")
 
-❌ WRONG:
-SESSION_ID=$(cat /tmp/claude-session-${PPID}.txt) && echo "Name" > ".claude/agent-${SESSION_ID}.txt"
-```
-
-**Why:** The Bash tool can't handle command substitution `$(...)` with file paths reliably. Using Read/Write tools ensures the session file is written correctly every time.
+**Why helper script approach works:**
+- Finds the most recently modified session file (by timestamp)
+- Works even when bash commands run in subprocesses with different PPIDs
+- Each Bash tool invocation gets a new PPID, so can't rely on $PPID
+- Statusline updates the session file on every render, so newest = active
+- No race conditions between multiple Claude Code instances
 
 ---
 
@@ -558,21 +649,25 @@ SESSION_ID=$(cat /tmp/claude-session-${PPID}.txt) && echo "Name" > ".claude/agen
 **Common errors:**
 - "Task not found" → Check task ID, use `bd list` to see tasks
 - "Agent registration failed" → Check Agent Mail DB permissions
+- "Agent already active" → Another terminal is using this agent name. Close that session or choose different name
 - "File reservation conflict" → Another agent has locks, coordinate or wait
 - "No ready tasks" → Create task with `bd create` or use `bd list`
-- "Bash syntax error with session_id" → Used bash command substitution instead of Read/Write tools (see Session Awareness Details above)
+- "Could not detect session ID" → Statusline hasn't run yet or `/tmp/claude-session-${PPID}.txt` missing
+- "Session file not updating" → Check PPID file exists: `cat /tmp/claude-session-${PPID}.txt`
 
 ---
 
 ## Notes
 
+- **PPID-based isolation:** Uses `/tmp/claude-session-${PPID}.txt` for race-free multi-terminal support
+- **One agent per terminal:** Blocks registration if agent is already active in another session
 - **Session-first:** Always writes to session file before env var
-- **Use Read/Write tools:** NEVER use bash command substitution for session file paths
+- **Helper script approach:** Use `get-current-session-id` script (finds most recent session file by timestamp)
 - **Resume existing agents:** Always checks if agent name exists before registering to prevent duplicates
 - **Smart defaults:** Auto-detects recent agents, picks best task
 - **Conflict-aware:** Checks locks, git status, dependencies
 - **Actually starts:** Not just recommendations - reserves files and updates status
-- **Multi-agent ready:** Supports concurrent agents in different terminals
+- **Multi-agent ready:** Supports concurrent agents in different terminals (each with unique name)
 - **Quick mode:** Skip safety checks when you need speed
 
 ---

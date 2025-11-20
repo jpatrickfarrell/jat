@@ -48,3 +48,13 @@ export function getThreads() {
 export function searchMessages(query) {
 	return agentMail.searchMessages(query);
 }
+
+/**
+ * Get file reservations
+ * @param {string|null} agentName - Optional agent name to filter by
+ * @param {string|null} projectPath - Optional project path to filter by
+ * @returns {Array} - Array of reservation objects
+ */
+export function getReservations(agentName = null, projectPath = null) {
+	return agentMail.getReservations(agentName, projectPath);
+}

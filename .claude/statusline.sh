@@ -200,8 +200,8 @@ if command -v am-reservations &>/dev/null; then
 
     if [[ -n "$reservation_info" ]]; then
         # Extract task ID from reason field (format: "task-id: description" or just "task-id")
-        # Match exactly 3 alphanumeric characters after the prefix (standard Beads format)
-        task_id=$(echo "$reservation_info" | grep "^Reason:" | sed 's/^Reason: //' | grep -oE 'jomarchy-agent-tools-[a-z0-9]{3}\b' | head -1)
+        # Match new Beads format: jat-XXX (3 alphanumeric characters after jat-)
+        task_id=$(echo "$reservation_info" | grep "^Reason:" | sed 's/^Reason: //' | grep -oE 'jat-[a-z0-9]{3}\b' | head -1)
     fi
 fi
 

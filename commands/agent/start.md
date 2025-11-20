@@ -78,14 +78,24 @@ fi
 # User explicitly requested an agent
 AGENT_NAME="$REQUESTED_AGENT"
 am-register --name "$AGENT_NAME" --program claude-code --model sonnet-4.5
+```
 
-# Write to session file (PRIMARY - statusline reads this)
-if [[ -n "$SESSION_ID" ]]; then
-  mkdir -p .claude
-  echo "$AGENT_NAME" > ".claude/agent-${SESSION_ID}.txt"
-fi
+**Then use Read/Write tools (NOT bash command substitution):**
+1. Use Read tool to read `.claude/current-session-id.txt`
+2. Extract session ID from the content (trim newlines)
+3. Use Write tool to write `$AGENT_NAME` to `.claude/agent-{session_id}.txt`
 
-# Export env var (FALLBACK - for bash scripts)
+**Example implementation:**
+- Read(.claude/current-session-id.txt) → extract "f435fd91-..."
+- Write(.claude/agent-f435fd91-....txt, "WiseCanyon")
+
+**Why this approach:**
+- Bash tool can't handle command substitution `$(...)` reliably
+- Read/Write tools work with dynamic filenames computed in Claude's code
+- See Pattern #5 in ~/. claude/CLAUDE.md for details
+
+```bash
+# After writing session file, export env var (FALLBACK - for bash scripts)
 export AGENT_NAME="$AGENT_NAME"
 ```
 
@@ -179,15 +189,27 @@ fi
 if [[ -n "$AGENT_NAME" ]]; then
   am-register --name "$AGENT_NAME" --program claude-code --model sonnet-4.5
 fi
+```
 
-# CRITICAL: Write to session file (statusline reads this)
-if [[ -n "$SESSION_ID" ]]; then
-  mkdir -p .claude
-  echo "$AGENT_NAME" > ".claude/agent-${SESSION_ID}.txt"
-  echo "✓ Session file updated: .claude/agent-${SESSION_ID}.txt"
-fi
+**CRITICAL: Write to session file using Read/Write tools:**
 
-# Export env var (fallback)
+After registering the agent, use these steps to write to the session file:
+
+1. **Read session ID:**
+   - Use Read tool on `.claude/current-session-id.txt`
+   - Extract session ID and trim whitespace
+
+2. **Write agent name to session file:**
+   - Compute filename: `.claude/agent-{session_id}.txt`
+   - Use Write tool to write `$AGENT_NAME` to that file
+
+3. **Verify and report:**
+   - Echo confirmation message
+
+**DO NOT use bash command substitution** - it fails in the Bash tool. Always use Read/Write tools for dynamic filenames.
+
+```bash
+# After writing session file, export env var (fallback)
 export AGENT_NAME="$AGENT_NAME"
 ```
 
@@ -494,6 +516,21 @@ When `TASK_MODE=bulk` is detected:
 - `.claude/current-session-id.txt` - Written by statusline (your session ID)
 - `.claude/agent-{session_id}.txt` - Written by this command (your agent name)
 
+**CRITICAL Implementation Detail:**
+
+Always use **Read/Write tools** (NOT bash command substitution) when writing to session files:
+
+```
+✅ CORRECT:
+1. Read(.claude/current-session-id.txt) → get "abc123"
+2. Write(.claude/agent-abc123.txt, "AgentName")
+
+❌ WRONG:
+SESSION_ID=$(cat .claude/current-session-id.txt) && echo "Name" > ".claude/agent-${SESSION_ID}.txt"
+```
+
+**Why:** The Bash tool can't handle command substitution `$(...)` with file paths reliably. Using Read/Write tools ensures the session file is written correctly every time.
+
 ---
 
 ## Error Handling
@@ -503,12 +540,14 @@ When `TASK_MODE=bulk` is detected:
 - "Agent registration failed" → Check Agent Mail DB permissions
 - "File reservation conflict" → Another agent has locks, coordinate or wait
 - "No ready tasks" → Create task with `bd create` or use `bd list`
+- "Bash syntax error with session_id" → Used bash command substitution instead of Read/Write tools (see Session Awareness Details above)
 
 ---
 
 ## Notes
 
 - **Session-first:** Always writes to session file before env var
+- **Use Read/Write tools:** NEVER use bash command substitution for session file paths
 - **Smart defaults:** Auto-detects recent agents, picks best task
 - **Conflict-aware:** Checks locks, git status, dependencies
 - **Actually starts:** Not just recommendations - reserves files and updates status

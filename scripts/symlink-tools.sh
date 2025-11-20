@@ -17,64 +17,74 @@ echo ""
 # Ensure ~/.local/bin exists
 mkdir -p ~/.local/bin
 
-# Source directory for tools - try jomarchy-agent-tools first, then jomarchy
-if [ -d "$HOME/code/jomarchy-agent-tools/tools" ]; then
-    TOOLS_DIR="$HOME/code/jomarchy-agent-tools/tools"
-elif [ -d "$HOME/code/jomarchy/tools" ]; then
-    TOOLS_DIR="$HOME/code/jomarchy/tools"
-else
-    echo -e "${YELLOW}  ⚠ Tools directory not found${NC}"
-    echo "  Tried:"
-    echo "    - $HOME/code/jomarchy-agent-tools/tools"
-    echo "    - $HOME/code/jomarchy/tools"
+# Get project root directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# JAT tool directories
+TOOLS_DIR="$SCRIPT_DIR/tools"
+BROWSER_TOOLS_DIR="$SCRIPT_DIR/browser-tools"
+
+# Verify directories exist
+if [ ! -d "$TOOLS_DIR" ] || [ ! -d "$BROWSER_TOOLS_DIR" ]; then
+    echo -e "${YELLOW}  ⚠ Tool directories not found${NC}"
+    echo "  Expected:"
+    echo "    - $TOOLS_DIR"
+    echo "    - $BROWSER_TOOLS_DIR"
     exit 1
 fi
 
-# Resolve symlink if needed
-TOOLS_DIR=$(readlink -f "$TOOLS_DIR")
-
-# Count tools
-TOOL_COUNT=$(find "$TOOLS_DIR" -maxdepth 1 -type f -executable | wc -l)
-echo "  Found $TOOL_COUNT tools in $TOOLS_DIR"
+# Count all tools
+TOOL_COUNT=$(find "$TOOLS_DIR" "$BROWSER_TOOLS_DIR" -maxdepth 1 -type f -executable | wc -l)
+echo "  Found $TOOL_COUNT tools"
+echo "    - $(find "$TOOLS_DIR" -maxdepth 1 -type f -executable | wc -l) in tools/"
+echo "    - $(find "$BROWSER_TOOLS_DIR" -maxdepth 1 -type f -executable | wc -l) in browser-tools/"
 echo ""
 
 LINKED_COUNT=0
 SKIPPED_COUNT=0
 UPDATED_COUNT=0
 
-# Symlink each tool
-for tool in "$TOOLS_DIR"/*; do
-    # Skip if not a file or not executable
-    if [ ! -f "$tool" ] || [ ! -x "$tool" ]; then
-        continue
-    fi
+# Function to symlink tools from a directory
+symlink_tools() {
+    local SOURCE_DIR="$1"
 
-    TOOL_NAME=$(basename "$tool")
-    TARGET="$HOME/.local/bin/$TOOL_NAME"
+    for tool in "$SOURCE_DIR"/*; do
+        # Skip if not a file or not executable
+        if [ ! -f "$tool" ] || [ ! -x "$tool" ]; then
+            continue
+        fi
 
-    # Check if symlink already exists and points to correct location
-    if [ -L "$TARGET" ]; then
-        CURRENT_TARGET=$(readlink "$TARGET")
-        if [ "$CURRENT_TARGET" = "$tool" ]; then
-            echo -e "  ${GREEN}✓${NC} $TOOL_NAME (already linked)"
+        TOOL_NAME=$(basename "$tool")
+        TARGET="$HOME/.local/bin/$TOOL_NAME"
+
+        # Check if symlink already exists and points to correct location
+        if [ -L "$TARGET" ]; then
+            CURRENT_TARGET=$(readlink "$TARGET")
+            if [ "$CURRENT_TARGET" = "$tool" ]; then
+                echo -e "  ${GREEN}✓${NC} $TOOL_NAME (already linked)"
+                SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+                continue
+            else
+                echo -e "  ${YELLOW}↻${NC} $TOOL_NAME (updating link)"
+                rm "$TARGET"
+                UPDATED_COUNT=$((UPDATED_COUNT + 1))
+            fi
+        elif [ -e "$TARGET" ]; then
+            echo -e "  ${YELLOW}⚠${NC} $TOOL_NAME (file exists, not a symlink - skipping)"
             SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
             continue
-        else
-            echo -e "  ${YELLOW}↻${NC} $TOOL_NAME (updating link)"
-            rm "$TARGET"
-            UPDATED_COUNT=$((UPDATED_COUNT + 1))
         fi
-    elif [ -e "$TARGET" ]; then
-        echo -e "  ${YELLOW}⚠${NC} $TOOL_NAME (file exists, not a symlink - skipping)"
-        SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
-        continue
-    fi
 
-    # Create symlink
-    ln -s "$tool" "$TARGET"
-    echo -e "  ${GREEN}+${NC} $TOOL_NAME (linked)"
-    LINKED_COUNT=$((LINKED_COUNT + 1))
-done
+        # Create symlink
+        ln -s "$tool" "$TARGET"
+        echo -e "  ${GREEN}+${NC} $TOOL_NAME (linked)"
+        LINKED_COUNT=$((LINKED_COUNT + 1))
+    done
+}
+
+# Symlink tools from both directories
+symlink_tools "$TOOLS_DIR"
+symlink_tools "$BROWSER_TOOLS_DIR"
 
 echo ""
 echo -e "${BLUE}Setting up dashboard launcher...${NC}"

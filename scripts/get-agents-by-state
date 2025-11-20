@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+#
+# get-agents-by-state - Categorize agents by status (working/active/idle/offline)
+#
+# Usage: get-agents-by-state [PROJECT_PATH]
+#   PROJECT_PATH: Project path (default: current directory)
+#
+# Returns: JSON object with agents grouped by status
+# Exit codes: 0=success, 1=error
+#
+# Example output:
+# {
+#   "working": [{"name": "AgentA", "last_active": "30s ago", "tasks": 1}],
+#   "active": [{"name": "AgentB", "last_active": "2m ago", "locks": 2}],
+#   "idle": [{"name": "AgentC", "last_active": "30m ago"}],
+#   "offline": [{"name": "AgentD", "last_active": "2h ago"}]
+# }
+
+set -euo pipefail
+
+# Show help
+if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "-h" ]]; then
+    cat <<EOF
+get-agents-by-state - Categorize agents by status
+
+Usage: get-agents-by-state [PROJECT_PATH]
+
+Arguments:
+  PROJECT_PATH  Project path (default: current directory)
+
+States:
+  working  - Has in-progress tasks (actively coding)
+  active   - Active within 5 min OR has locks within 1 hour
+  idle     - Active within 1 hour but not working
+  offline  - No activity for over 1 hour
+
+Returns:
+  JSON object with agents grouped by status
+
+Exit codes:
+  0 = Success
+  1 = Error
+
+Example:
+  get-agents-by-state
+  get-agents-by-state /path/to/project
+
+EOF
+    exit 0
+fi
+
+PROJECT_PATH="${1:-.}"
+
+# Get all agents as JSON
+if [[ "$PROJECT_PATH" == "." ]]; then
+    AGENTS_JSON=$(am-agents --json 2>/dev/null || echo "[]")
+else
+    AGENTS_JSON=$(am-agents --project "$PROJECT_PATH" --json 2>/dev/null || echo "[]")
+fi
+
+# Get reservations to check for active locks (ensure valid JSON)
+RESERVATIONS_RAW=$(am-reservations --json 2>/dev/null || echo "")
+if [[ -z "$RESERVATIONS_RAW" ]] || ! echo "$RESERVATIONS_RAW" | jq empty 2>/dev/null; then
+    RESERVATIONS_JSON="[]"
+else
+    RESERVATIONS_JSON="$RESERVATIONS_RAW"
+fi
+
+# Get tasks to check in-progress status (ensure valid JSON)
+TASKS_RAW=$(bd list --json 2>/dev/null || echo "")
+if [[ -z "$TASKS_RAW" ]] || ! echo "$TASKS_RAW" | jq empty 2>/dev/null; then
+    TASKS_JSON="[]"
+else
+    TASKS_JSON="$TASKS_RAW"
+fi
+
+# Categorize agents using jq
+echo "$AGENTS_JSON" | jq -r \
+    --argjson reservations "$RESERVATIONS_JSON" \
+    --argjson tasks "$TASKS_JSON" \
+    '
+    # Helper function to format time ago
+    def format_time_ago(timestamp):
+        if timestamp == null or timestamp == "" then "Never"
+        else
+            # Convert timestamp to epoch (handle both formats)
+            (timestamp | sub(" "; "T") + "Z" | fromdateiso8601) as $ts |
+            (now - $ts) as $diff |
+            if $diff < 60 then
+                ($diff | floor | tostring) + "s ago"
+            elif $diff < 3600 then
+                (($diff / 60) | floor | tostring) + "m ago"
+            elif $diff < 86400 then
+                (($diff / 3600) | floor | tostring) + "h ago"
+            else
+                (($diff / 86400) | floor | tostring) + "d ago"
+            end
+        end;
+
+    # Helper to compute agent status
+    def agent_status:
+        # Capture agent name for use in filters
+        .name as $agent_name |
+        .last_active_ts as $last_active |
+
+        # Count in-progress tasks for this agent
+        ($tasks | map(select(.assignee == $agent_name and .status == "in_progress")) | length) as $in_progress_tasks |
+
+        # Count active reservations for this agent
+        ($reservations | map(select(.agent_name == $agent_name and (.released_ts == null or .released_ts == "") and (.expires_ts > (now | todate)))) | length) as $active_locks |
+
+        # Calculate time since active
+        (if $last_active then
+            ($last_active | sub(" "; "T") + "Z" | fromdateiso8601) as $ts |
+            (now - $ts)
+        else
+            999999999
+        end) as $time_since_active |
+
+        # Determine status
+        if $in_progress_tasks > 0 then
+            "working"
+        elif $time_since_active < 300 then
+            "active"
+        elif $active_locks > 0 and $time_since_active < 3600 then
+            "active"
+        elif $time_since_active < 3600 then
+            "idle"
+        else
+            "offline"
+        end;
+
+    # Group agents by status
+    {
+        working: [
+            .[] | select(agent_status == "working") |
+            . as $agent |
+            {
+                name: $agent.name,
+                last_active: format_time_ago($agent.last_active_ts),
+                tasks: ($tasks | map(select(.assignee == $agent.name and .status == "in_progress")) | length),
+                program: $agent.program,
+                model: $agent.model
+            }
+        ],
+        active: [
+            .[] | select(agent_status == "active") |
+            . as $agent |
+            {
+                name: $agent.name,
+                last_active: format_time_ago($agent.last_active_ts),
+                locks: ($reservations | map(select(.agent_name == $agent.name and (.released_ts == null or .released_ts == "") and (.expires_ts > (now | todate)))) | length),
+                program: $agent.program,
+                model: $agent.model
+            }
+        ],
+        idle: [
+            .[] | select(agent_status == "idle") |
+            . as $agent |
+            {
+                name: $agent.name,
+                last_active: format_time_ago($agent.last_active_ts),
+                program: $agent.program,
+                model: $agent.model
+            }
+        ],
+        offline: [
+            .[] | select(agent_status == "offline") |
+            . as $agent |
+            {
+                name: $agent.name,
+                last_active: format_time_ago($agent.last_active_ts),
+                program: $agent.program,
+                model: $agent.model
+            }
+        ]
+    }
+    '

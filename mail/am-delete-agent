@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+#
+# am-delete-agent - Delete an agent from Agent Mail
+#
+# Usage: am-delete-agent AGENT_NAME [--force] [--project PATH]
+#   AGENT_NAME: Name of agent to delete
+#   --force: Skip confirmation prompt
+#   --project PATH: Project path (default: current directory)
+#
+# Safety:
+# - Checks for active reservations (warns if found)
+# - Checks for messages (warns if found)
+# - Requires confirmation unless --force
+#
+# Exit codes: 0=success, 1=error, 2=user cancelled
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DB_PATH="${AGENT_MAIL_DB:-$HOME/.agent-mail.db}"
+
+# Show help
+if [[ $# -eq 0 ]] || [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "-h" ]]; then
+    cat <<EOF
+am-delete-agent - Delete an agent from Agent Mail
+
+Usage: am-delete-agent AGENT_NAME [--force] [--project PATH]
+
+Arguments:
+  AGENT_NAME      Name of agent to delete
+  --force         Skip confirmation prompt
+  --project PATH  Project path (default: current directory or any project if agent is unique)
+
+Safety checks:
+  - Warns if agent has active reservations
+  - Warns if agent has sent messages
+  - Requires confirmation (unless --force)
+
+Examples:
+  am-delete-agent OldAgent
+  am-delete-agent OldAgent --force
+  am-delete-agent OldAgent --force --project ~/code/myproject
+
+Exit codes:
+  0 = Agent deleted successfully
+  1 = Error (agent not found, database error)
+  2 = User cancelled
+
+Note: Deleting an agent does NOT delete:
+  - Messages sent by the agent (preserved for audit trail)
+  - Task assignments in Beads (preserved)
+  - Reservations are released automatically
+
+EOF
+    exit 0
+fi
+
+# Parse arguments
+AGENT_NAME="${1:-}"
+FORCE=false
+PROJECT_PATH=""
+
+shift || true
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --force)
+            FORCE=true
+            shift
+            ;;
+        --project)
+            PROJECT_PATH="${2:-}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+if [[ -z "$AGENT_NAME" ]]; then
+    echo "Error: AGENT_NAME required" >&2
+    echo "Usage: am-delete-agent AGENT_NAME [--force] [--project PATH]" >&2
+    exit 1
+fi
+
+# Check database exists
+if [[ ! -f "$DB_PATH" ]]; then
+    echo "Error: Agent Mail database not found at $DB_PATH" >&2
+    echo "Run 'am-register' first to initialize" >&2
+    exit 1
+fi
+
+# Determine project path and find agent
+if [[ -n "$PROJECT_PATH" ]]; then
+    # Project specified explicitly
+    PROJECT_ID=$(sqlite3 "$DB_PATH" \
+        "SELECT id FROM projects WHERE human_key = '$PROJECT_PATH' LIMIT 1;" 2>/dev/null || echo "")
+
+    if [[ -z "$PROJECT_ID" ]]; then
+        echo "Error: Project '$PROJECT_PATH' not registered in Agent Mail" >&2
+        exit 1
+    fi
+else
+    # No project specified - find agent by name across all projects
+    AGENT_COUNT=$(sqlite3 "$DB_PATH" \
+        "SELECT COUNT(*) FROM agents WHERE name = '$AGENT_NAME';" 2>/dev/null || echo "0")
+
+    if [[ "$AGENT_COUNT" -eq 0 ]]; then
+        echo "Error: Agent '$AGENT_NAME' not found in any project" >&2
+        exit 1
+    elif [[ "$AGENT_COUNT" -gt 1 ]]; then
+        echo "Error: Agent '$AGENT_NAME' found in multiple projects" >&2
+        echo "Please specify --project PATH to disambiguate" >&2
+        echo "" >&2
+        echo "Projects with this agent:" >&2
+        sqlite3 "$DB_PATH" \
+            "SELECT p.human_key FROM agents a JOIN projects p ON a.project_id = p.id WHERE a.name = '$AGENT_NAME';" | \
+            while read -r path; do
+                echo "  - $path" >&2
+            done
+        exit 1
+    fi
+
+    # Agent is unique - get project info
+    PROJECT_ID=$(sqlite3 "$DB_PATH" \
+        "SELECT project_id FROM agents WHERE name = '$AGENT_NAME' LIMIT 1;")
+    PROJECT_PATH=$(sqlite3 "$DB_PATH" \
+        "SELECT human_key FROM projects WHERE id = $PROJECT_ID LIMIT 1;")
+fi
+
+# Get agent ID
+AGENT_ID=$(sqlite3 "$DB_PATH" \
+    "SELECT id FROM agents WHERE name = '$AGENT_NAME' AND project_id = $PROJECT_ID LIMIT 1;")
+
+if [[ -z "$AGENT_ID" ]]; then
+    echo "Error: Agent '$AGENT_NAME' not found" >&2
+    exit 1
+fi
+
+# Safety checks
+echo "Checking agent dependencies..." >&2
+
+# Check for active reservations
+ACTIVE_RESERVATIONS=$(sqlite3 "$DB_PATH" \
+    "SELECT COUNT(*) FROM file_reservations
+     WHERE agent_id = $AGENT_ID
+     AND released_ts IS NULL
+     AND datetime(expires_ts) > datetime('now');" || echo "0")
+
+if [[ "$ACTIVE_RESERVATIONS" -gt 0 ]]; then
+    echo "⚠️  Warning: Agent has $ACTIVE_RESERVATIONS active reservation(s)" >&2
+    echo "   These will be released on deletion" >&2
+fi
+
+# Check for messages
+MESSAGE_COUNT=$(sqlite3 "$DB_PATH" \
+    "SELECT COUNT(*) FROM messages WHERE sender_id = $AGENT_ID;" || echo "0")
+
+if [[ "$MESSAGE_COUNT" -gt 0 ]]; then
+    echo "⚠️  Warning: Agent has sent $MESSAGE_COUNT message(s)" >&2
+    echo "   Messages will be preserved but sender will be orphaned" >&2
+fi
+
+# Confirmation prompt (unless --force)
+if [[ "$FORCE" != true ]]; then
+    echo ""
+    echo "Delete agent '$AGENT_NAME'?"
+    echo "  Project: $PROJECT_PATH"
+    echo "  Reservations: $ACTIVE_RESERVATIONS active"
+    echo "  Messages: $MESSAGE_COUNT sent"
+    echo ""
+    read -p "Confirm deletion? (y/N): " -n 1 -r
+    echo ""
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Deletion cancelled"
+        exit 2
+    fi
+fi
+
+# Delete agent (messages and reservations are handled by FK constraints or preserved)
+sqlite3 "$DB_PATH" <<SQL
+BEGIN TRANSACTION;
+
+-- Release all active reservations
+UPDATE file_reservations
+SET released_ts = datetime('now')
+WHERE agent_id = $AGENT_ID
+AND released_ts IS NULL;
+
+-- Delete agent record
+-- Note: messages are preserved (sender_id becomes orphaned but queryable)
+DELETE FROM agents WHERE id = $AGENT_ID;
+
+COMMIT;
+SQL
+
+if [[ $? -eq 0 ]]; then
+    echo "✓ Agent '$AGENT_NAME' deleted successfully"
+    [[ "$ACTIVE_RESERVATIONS" -gt 0 ]] && echo "  Released $ACTIVE_RESERVATIONS reservation(s)"
+    [[ "$MESSAGE_COUNT" -gt 0 ]] && echo "  Preserved $MESSAGE_COUNT message(s)"
+    exit 0
+else
+    echo "Error: Failed to delete agent" >&2
+    exit 1
+fi

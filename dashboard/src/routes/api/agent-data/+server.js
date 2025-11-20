@@ -78,9 +78,9 @@ export async function GET({ url }) {
 			timestamp: new Date().toISOString()
 		});
 	} catch (error) {
-		console.error('Error fetching orchestration data:', error);
+		console.error('Error fetching agent data:', error);
 		return json({
-			error: 'Failed to fetch orchestration data',
+			error: 'Failed to fetch agent data',
 			message: error.message,
 			agents: [],
 			reservations: [],

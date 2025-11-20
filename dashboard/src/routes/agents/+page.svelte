@@ -11,7 +11,7 @@
 	let unassignedTasks = $state([]);
 	let taskStats = $state(null);
 
-	// Fetch orchestration data from unified API
+	// Fetch agent data from unified API
 	async function fetchData() {
 		try {
 			const response = await fetch('/api/agents?full=true');
@@ -29,7 +29,7 @@
 			unassignedTasks = data.unassigned_tasks || [];
 			taskStats = data.task_stats || null;
 		} catch (error) {
-			console.error('Failed to fetch orchestration data:', error);
+			console.error('Failed to fetch agent data:', error);
 		}
 	}
 

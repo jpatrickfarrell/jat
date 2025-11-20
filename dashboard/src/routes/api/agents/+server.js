@@ -119,11 +119,11 @@ export async function GET({ url }) {
 			}
 		});
 	} catch (error) {
-		console.error('Error fetching orchestration data:', error);
+		console.error('Error fetching agent data:', error);
 		console.error('Error stack:', error.stack);
 
 		return json({
-			error: 'Failed to fetch orchestration data',
+			error: 'Failed to fetch agent data',
 			message: error.message,
 			stack: error.stack,
 			agents: [],

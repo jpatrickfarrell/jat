@@ -1,11 +1,44 @@
 <script>
+	import { onMount } from 'svelte';
 	import TaskList from '$lib/components/TaskList.svelte';
+	import DependencyGraph from '$lib/components/DependencyGraph.svelte';
 	import ThemeSelector from '$lib/components/ThemeSelector.svelte';
 
 	let selectedProject = $state('all');
 	let selectedPriority = $state('all');
 	let selectedStatus = $state('all');
 	let searchQuery = $state('');
+	let viewMode = $state('list'); // 'list' or 'graph'
+	let tasks = $state([]);
+	let selectedTaskId = $state(null);
+
+	// Fetch tasks based on filters
+	async function fetchTasks() {
+		const params = new URLSearchParams();
+		if (selectedProject !== 'all') params.append('project', selectedProject);
+		if (selectedStatus !== 'all') params.append('status', selectedStatus);
+		if (selectedPriority !== 'all') params.append('priority', selectedPriority);
+
+		const response = await fetch(`/api/tasks?${params}`);
+		const data = await response.json();
+		tasks = data.tasks || [];
+	}
+
+	// Handle node click in graph
+	function handleNodeClick(taskId) {
+		selectedTaskId = taskId;
+		// Could open task modal here
+		console.log('Clicked task:', taskId);
+	}
+
+	// Fetch tasks when filters change
+	$effect(() => {
+		fetchTasks();
+	});
+
+	onMount(() => {
+		fetchTasks();
+	});
 </script>
 
 <div class="min-h-screen bg-base-200">
@@ -18,7 +51,50 @@
 				</p>
 			</div>
 		</div>
-		<div class="flex-none">
+		<div class="flex-none gap-2">
+			<!-- View Mode Toggle -->
+			<div class="join">
+				<button
+					class="btn btn-sm join-item {viewMode === 'list' ? 'btn-primary' : 'btn-ghost'}"
+					onclick={() => (viewMode = 'list')}
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke-width="1.5"
+						stroke="currentColor"
+						class="w-4 h-4"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z"
+						/>
+					</svg>
+					List
+				</button>
+				<button
+					class="btn btn-sm join-item {viewMode === 'graph' ? 'btn-primary' : 'btn-ghost'}"
+					onclick={() => (viewMode = 'graph')}
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke-width="1.5"
+						stroke="currentColor"
+						class="w-4 h-4"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"
+						/>
+					</svg>
+					Graph
+				</button>
+			</div>
 			<ThemeSelector />
 		</div>
 	</div>
@@ -76,10 +152,16 @@
 		</div>
 	</div>
 
-	<TaskList
-		bind:selectedProject
-		bind:selectedPriority
-		bind:selectedStatus
-		bind:searchQuery
-	/>
+	{#if viewMode === 'list'}
+		<TaskList
+			bind:selectedProject
+			bind:selectedPriority
+			bind:selectedStatus
+			bind:searchQuery
+		/>
+	{:else}
+		<div class="p-4">
+			<DependencyGraph {tasks} onNodeClick={handleNodeClick} />
+		</div>
+	{/if}
 </div>

@@ -13,4 +13,8 @@ node_modules/
 
 # Agent Mail installation directory (downloaded during install)
 mcp_agent_mail/
+
+# Claude Code session-specific files (per-developer, don't commit)
 .claude/agent-*.txt
+.claude/agent-*-activity.jsonl
+.claude/current-session-id.txt

@@ -121,7 +121,8 @@ SELECT
 FROM messages m
 JOIN agents a ON m.sender_id = a.id
 JOIN message_recipients mr ON m.id = mr.message_id
-WHERE mr.agent_id = $AGENT_ID"
+WHERE mr.agent_id = $AGENT_ID
+  AND (m.expires_ts IS NULL OR datetime('now') < datetime(m.expires_ts))"
 
 if [[ "$UNREAD_ONLY" == "true" ]]; then
     QUERY="$QUERY AND mr.read_ts IS NULL"

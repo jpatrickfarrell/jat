@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS messages (
     importance TEXT NOT NULL DEFAULT 'normal', -- normal | high | urgent
     ack_required INTEGER DEFAULT 0,      -- Boolean: requires acknowledgment
     created_ts TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_ts TEXT DEFAULT NULL,        -- Optional expiry time for broadcasts (NULL = never expires)
 
     FOREIGN KEY (project_id) REFERENCES projects(id),
     FOREIGN KEY (sender_id) REFERENCES agents(id)
@@ -52,6 +53,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_project_id ON messages(project_id);
 CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_messages_thread_id ON messages(thread_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created_ts ON messages(created_ts);
+CREATE INDEX IF NOT EXISTS idx_messages_expires_ts ON messages(expires_ts);
 
 -- Full-text search on message bodies
 CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
@@ -122,7 +124,7 @@ SELECT * FROM file_reservations
 WHERE released_ts IS NULL
   AND datetime(expires_ts) > datetime('now');
 
--- Unread messages per agent
+-- Unread messages per agent (excluding expired broadcasts)
 CREATE VIEW IF NOT EXISTS unread_messages AS
 SELECT
     mr.agent_id,
@@ -132,9 +134,10 @@ FROM message_recipients mr
 JOIN messages m ON mr.message_id = m.id
 JOIN agents a ON mr.agent_id = a.id
 WHERE mr.read_ts IS NULL
+  AND (m.expires_ts IS NULL OR datetime('now') < datetime(m.expires_ts))
 ORDER BY m.created_ts DESC;
 
--- Messages requiring acknowledgment
+-- Messages requiring acknowledgment (excluding expired broadcasts)
 CREATE VIEW IF NOT EXISTS pending_acks AS
 SELECT
     mr.agent_id,
@@ -145,4 +148,5 @@ JOIN messages m ON mr.message_id = m.id
 JOIN agents a ON mr.agent_id = a.id
 WHERE m.ack_required = 1
   AND mr.ack_ts IS NULL
+  AND (m.expires_ts IS NULL OR datetime('now') < datetime(m.expires_ts))
 ORDER BY m.created_ts DESC;

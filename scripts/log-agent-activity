@@ -39,9 +39,14 @@ COMMAND=""
 TASK=""
 TOOL=""
 FILE=""
+SESSION_ID_PARAM=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --session)
+            SESSION_ID_PARAM="$2"
+            shift 2
+            ;;
         --type)
             TYPE="$2"
             shift 2
@@ -83,8 +88,13 @@ if [[ -z "$TYPE" ]]; then
     exit 1
 fi
 
-# Get session ID
-SESSION_ID=$(cat .claude/current-session-id.txt 2>/dev/null | tr -d '\n' || echo "")
+# Get session ID (prefer parameter, fallback to file)
+if [[ -n "$SESSION_ID_PARAM" ]]; then
+    SESSION_ID="$SESSION_ID_PARAM"
+else
+    SESSION_ID=$(cat .claude/current-session-id.txt 2>/dev/null | tr -d '\n' || echo "")
+fi
+
 if [[ -z "$SESSION_ID" ]]; then
     echo "Error: Could not determine session ID" >&2
     exit 1

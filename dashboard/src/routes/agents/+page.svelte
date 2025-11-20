@@ -186,7 +186,15 @@
 	<div class="flex h-[calc(100vh-theme(spacing.20))] pb-20">
 		<!-- Left Sidebar: Task Queue -->
 		<div class="w-80 border-r border-base-300 bg-base-100 flex flex-col">
-			<TaskQueue tasks={unassignedTasks} {agents} {reservations} />
+			<TaskQueue
+				tasks={unassignedTasks}
+				{agents}
+				{reservations}
+				{selectedProject}
+				{projects}
+				onProjectChange={handleProjectChange}
+				{taskCounts}
+			/>
 		</div>
 
 		<!-- Right Panel: Agent Grid -->

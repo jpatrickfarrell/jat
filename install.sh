@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Jomarchy Agent Tools Installer
+# JAT (Jomarchy Agent Tools) Installer
 # Complete AI-assisted development environment setup
-# https://github.com/joewinke/jomarchy-agent-tools
+# https://github.com/joewinke/jat
 
 set -e  # Exit on error
 
@@ -22,15 +22,19 @@ if [ "$EUID" -eq 0 ]; then
 fi
 
 # Determine installation directory
-if [ -d "$HOME/code/jomarchy-agent-tools" ]; then
+# Check both old name (jomarchy-agent-tools) and new name (jat)
+if [ -d "$HOME/code/jat" ]; then
+    INSTALL_DIR="$HOME/code/jat"
+    echo -e "${BLUE}Using local installation: $INSTALL_DIR${NC}"
+elif [ -d "$HOME/code/jomarchy-agent-tools" ]; then
     INSTALL_DIR="$HOME/code/jomarchy-agent-tools"
     echo -e "${BLUE}Using local installation: $INSTALL_DIR${NC}"
 else
     # Clone from GitHub
-    echo -e "${BLUE}Cloning jomarchy-agent-tools...${NC}"
-    INSTALL_DIR="$HOME/code/jomarchy-agent-tools"
+    echo -e "${BLUE}Cloning jat (Jomarchy Agent Tools)...${NC}"
+    INSTALL_DIR="$HOME/code/jat"
     mkdir -p "$HOME/code"
-    git clone https://github.com/joewinke/jomarchy-agent-tools.git "$INSTALL_DIR"
+    git clone https://github.com/joewinke/jat.git "$INSTALL_DIR"
 fi
 
 cd "$INSTALL_DIR"
@@ -38,7 +42,7 @@ cd "$INSTALL_DIR"
 echo ""
 echo -e "${BOLD}╔═══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BOLD}║                                                               ║${NC}"
-echo -e "${BOLD}║           ${BLUE}Jomarchy Agent Tools Installer${NC}${BOLD}                   ║${NC}"
+echo -e "${BOLD}║              ${BLUE}JAT (Jomarchy Agent Tools)${NC}${BOLD}                    ║${NC}"
 echo -e "${BOLD}║                                                               ║${NC}"
 echo -e "${BOLD}╚═══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
@@ -132,7 +136,7 @@ echo ""
 echo ""
 echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║                                                               ║${NC}"
-echo -e "${GREEN}║         ${BOLD}✓ Jomarchy Agent Tools Installed!${NC}${GREEN}                  ║${NC}"
+echo -e "${GREEN}║              ${BOLD}✓ JAT Successfully Installed!${NC}${GREEN}                  ║${NC}"
 echo -e "${GREEN}║                                                               ║${NC}"
 echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
@@ -164,7 +168,7 @@ echo "  3. Test Agent Mail: am-whoami --agent TestAgent"
 echo "  4. Test Beads: cd ~/code/<project> && bd ready"
 echo "  5. Test tools: am-register --help"
 echo ""
-echo "Documentation: https://github.com/joewinke/jomarchy-agent-tools"
+echo "Documentation: https://github.com/joewinke/jat"
 echo ""
 echo -e "${GREEN}Happy coding with AI! 🤖${NC}"
 echo ""

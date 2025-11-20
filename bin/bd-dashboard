@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+# bd-dashboard - Launch Beads Dashboard
+#
+# Quick launcher for the Beads task management dashboard.
+# Handles npm dependencies, server startup, and browser opening.
+
+set -euo pipefail
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Helper functions
+log() { echo -e "${BLUE}ℹ${NC} $1"; }
+success() { echo -e "${GREEN}✓${NC} $1"; }
+warn() { echo -e "${YELLOW}⚠${NC} $1"; }
+error() { echo -e "${RED}✗${NC} $1"; exit 1; }
+
+# Usage information
+usage() {
+  cat <<EOF
+bd-dashboard - Launch Beads Dashboard
+
+USAGE:
+  bd-dashboard [OPTIONS]
+
+OPTIONS:
+  --no-browser    Start server without opening browser
+  --port PORT     Use custom port (default: 5173)
+  -h, --help      Show this help message
+
+DESCRIPTION:
+  Launches the Beads task management dashboard. Automatically:
+  - Checks for and installs npm dependencies if needed
+  - Starts the SvelteKit dev server
+  - Opens your default browser to the dashboard
+  - Provides clear feedback throughout the process
+
+EXAMPLES:
+  bd-dashboard                    # Full launch with browser
+  bd-dashboard --no-browser       # Server only (for remote access)
+  bd-dashboard --port 3000        # Use custom port
+
+NOTES:
+  - Dashboard runs at http://localhost:PORT (default 5173)
+  - Press Ctrl+C to stop the server
+  - Aggregates tasks from all ~/code/*/.beads/ directories
+  - Shows Agent Mail coordination messages per task
+
+EOF
+  exit 0
+}
+
+# Parse arguments
+OPEN_BROWSER=true
+PORT=5173
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --no-browser)
+      OPEN_BROWSER=false
+      shift
+      ;;
+    --port)
+      PORT="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      ;;
+    *)
+      error "Unknown option: $1. Use --help for usage information."
+      ;;
+  esac
+done
+
+# Determine script location and dashboard directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+DASHBOARD_DIR="$PROJECT_ROOT/dashboard"
+
+# Check if dashboard directory exists
+if [[ ! -d "$DASHBOARD_DIR" ]]; then
+  error "Dashboard directory not found at: $DASHBOARD_DIR"
+fi
+
+log "Launching Beads Dashboard..."
+cd "$DASHBOARD_DIR"
+
+# Check for node_modules and package.json
+if [[ ! -f "package.json" ]]; then
+  error "package.json not found in dashboard directory"
+fi
+
+# Install dependencies if node_modules doesn't exist
+if [[ ! -d "node_modules" ]]; then
+  log "Installing npm dependencies (first-time setup)..."
+  if command -v npm &> /dev/null; then
+    npm install
+    success "Dependencies installed"
+  else
+    error "npm not found. Please install Node.js and npm first."
+  fi
+else
+  log "Dependencies already installed"
+fi
+
+# Check if port is already in use
+if command -v lsof &> /dev/null; then
+  if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
+    warn "Port $PORT is already in use"
+    log "Dashboard may already be running at http://localhost:$PORT"
+    if [[ "$OPEN_BROWSER" == true ]]; then
+      log "Opening browser..."
+      if command -v xdg-open &> /dev/null; then
+        xdg-open "http://localhost:$PORT" 2>/dev/null
+      elif command -v open &> /dev/null; then
+        open "http://localhost:$PORT"
+      fi
+    fi
+    exit 0
+  fi
+fi
+
+# Start dev server
+log "Starting SvelteKit dev server on port $PORT..."
+export VITE_PORT=$PORT
+
+# Start server in background
+npm run dev -- --port "$PORT" --host 127.0.0.1 > /tmp/bd-dashboard.log 2>&1 &
+SERVER_PID=$!
+
+# Function to cleanup on exit
+cleanup() {
+  if kill -0 $SERVER_PID 2>/dev/null; then
+    log "Stopping dashboard server (PID: $SERVER_PID)..."
+    kill $SERVER_PID 2>/dev/null || true
+    wait $SERVER_PID 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT INT TERM
+
+# Wait for server to be ready (poll localhost:PORT)
+log "Waiting for server to be ready..."
+MAX_WAIT=30
+COUNTER=0
+
+while [[ $COUNTER -lt $MAX_WAIT ]]; do
+  if curl -sf "http://localhost:$PORT" > /dev/null 2>&1; then
+    success "Dashboard server ready at http://localhost:$PORT"
+    break
+  fi
+
+  # Check if server process died
+  if ! kill -0 $SERVER_PID 2>/dev/null; then
+    error "Server failed to start. Check logs at /tmp/bd-dashboard.log"
+  fi
+
+  sleep 1
+  ((COUNTER++))
+done
+
+if [[ $COUNTER -ge $MAX_WAIT ]]; then
+  error "Server startup timeout. Check logs at /tmp/bd-dashboard.log"
+fi
+
+# Open browser
+if [[ "$OPEN_BROWSER" == true ]]; then
+  log "Opening browser..."
+
+  # Cross-platform browser opening
+  if command -v xdg-open &> /dev/null; then
+    # Linux
+    xdg-open "http://localhost:$PORT" 2>/dev/null &
+  elif command -v open &> /dev/null; then
+    # macOS
+    open "http://localhost:$PORT"
+  else
+    warn "Could not detect browser opener. Please open http://localhost:$PORT manually"
+  fi
+
+  success "Browser opened"
+fi
+
+# Show running info
+echo ""
+echo "╔════════════════════════════════════════════════════════════╗"
+echo "║           Beads Dashboard Running                          ║"
+echo "╚════════════════════════════════════════════════════════════╝"
+echo ""
+echo "  URL: http://localhost:$PORT"
+echo "  Logs: /tmp/bd-dashboard.log"
+echo "  PID: $SERVER_PID"
+echo ""
+echo "  Press Ctrl+C to stop the server"
+echo ""
+
+# Wait for server process (keeps script running)
+wait $SERVER_PID

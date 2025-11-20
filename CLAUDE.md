@@ -96,6 +96,54 @@ All three sessions work independently with their own agent identities.
 
 **These files are session-specific** - don't commit `agent-*.txt` files to git (they're per-developer session).
 
+### Troubleshooting Statusline Issues
+
+**Problem: Statusline shows wrong agent name or different session's agent**
+
+This happens when multiple Claude Code sessions are running and you need to update your current session's identity.
+
+**❌ This does NOT work:**
+```bash
+# Environment variables don't persist to statusline
+export AGENT_NAME=ShortTundra
+am-register --name ShortTundra ...
+```
+
+**✅ This DOES work - write to your session file:**
+```bash
+# Get your session ID
+session_id=$(cat .claude/current-session-id.txt 2>/dev/null | tr -d '\n')
+
+# Write your agent name to YOUR session's file
+echo "ShortTundra" > ".claude/agent-${session_id}.txt"
+```
+
+**One-liner fix:**
+```bash
+session_id=$(cat .claude/current-session-id.txt | tr -d '\n') && echo "ShortTundra" > ".claude/agent-${session_id}.txt"
+```
+
+Your statusline updates immediately - no restart needed!
+
+**Why this works:**
+- Each Claude Code session has a unique `session_id` (e.g., `abc123`)
+- The statusline reads from `.claude/agent-{your-session-id}.txt`
+- Other sessions have their own files (`.claude/agent-{other-id}.txt`)
+- `export AGENT_NAME=` only affects bash subprocesses, not the statusline process
+- Writing to the session file is the only way to update the statusline
+
+**Checking which session you're in:**
+```bash
+# See your session ID
+cat .claude/current-session-id.txt
+
+# See all session files
+ls -la .claude/agent-*.txt
+
+# See your session's agent name
+session_id=$(cat .claude/current-session-id.txt | tr -d '\n') && cat ".claude/agent-${session_id}.txt"
+```
+
 ## Command Reference
 
 **Quick start commands for agent registration and task management.**

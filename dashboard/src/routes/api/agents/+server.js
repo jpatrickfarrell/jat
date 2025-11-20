@@ -8,7 +8,7 @@
 
 import { json } from '@sveltejs/kit';
 import { getAgents, getReservations } from '$lib/server/agent-mail.js';
-import { getTasks } from '../../../../../lib/beads.js';
+import { getTasks } from '$lib/server/beads.js';
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ url }) {

@@ -38,12 +38,15 @@ json_input=$(cat)
 # Get current working directory from JSON
 cwd=$(echo "$json_input" | jq -r '.cwd // empty')
 
-# Get agent name - ONLY from AGENT_NAME environment variable
-# Do NOT auto-detect from am-agents to avoid confusion between sessions
+# Get agent name from multiple sources (priority order):
+# 1. AGENT_NAME environment variable (if set)
+# 2. .claude/current-agent.txt file (persists across session)
 agent_name=""
 
 if [[ -n "$AGENT_NAME" ]]; then
     agent_name="$AGENT_NAME"
+elif [[ -f "$cwd/.claude/current-agent.txt" ]]; then
+    agent_name=$(cat "$cwd/.claude/current-agent.txt" 2>/dev/null | tr -d '\n')
 fi
 
 # If no agent name, show "not registered" status

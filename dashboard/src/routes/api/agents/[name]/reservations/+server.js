@@ -2,14 +2,12 @@
  * Agent Reservations API - View Agent File Locks
  * GET /api/agents/[name]/reservations
  *
- * Retrieves agent's active file reservations using am-reservations
+ * Retrieves agent's active file reservations globally (across all projects)
+ * since agent names are globally unique.
  */
 
 import { json } from '@sveltejs/kit';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
+import { getReservations } from '$lib/server/agent-mail.js';
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ params }) {
@@ -23,47 +21,16 @@ export async function GET({ params }) {
 			}, { status: 400 });
 		}
 
-		// Use am-reservations command with --agent filter and --json flag
-		const command = `${process.env.HOME}/.local/bin/am-reservations --agent "${agentName}" --json`;
+		// Get reservations globally (projectPath = null) since agents are globally unique
+		const reservations = getReservations(agentName, null);
 
-		try {
-			const { stdout } = await execAsync(command);
-
-			// Parse JSON output from am-reservations
-			let reservations = [];
-			try {
-				reservations = JSON.parse(stdout.trim());
-			} catch (parseError) {
-				console.error('Failed to parse am-reservations output:', parseError);
-			}
-
-			return json({
-				success: true,
-				agentName,
-				reservations,
-				count: reservations.length,
-				timestamp: new Date().toISOString()
-			});
-		} catch (execError) {
-			console.error('am-reservations error:', execError);
-
-			// If no reservations, return empty array
-			if (execError.stderr?.includes('No reservations') || execError.code === 0) {
-				return json({
-					success: true,
-					agentName,
-					reservations: [],
-					count: 0,
-					timestamp: new Date().toISOString()
-				});
-			}
-
-			return json({
-				error: 'Failed to fetch reservations',
-				message: execError.stderr || execError.message,
-				agentName
-			}, { status: 500 });
-		}
+		return json({
+			success: true,
+			agentName,
+			reservations,
+			count: reservations.length,
+			timestamp: new Date().toISOString()
+		});
 	} catch (error) {
 		console.error('Error in GET /api/agents/[name]/reservations:', error);
 		return json({

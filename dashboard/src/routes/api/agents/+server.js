@@ -38,12 +38,7 @@ export async function GET({ url }) {
 		const projectFilter = url.searchParams.get('project');
 		const agentFilter = url.searchParams.get('agent');
 
-		console.log('🟠 [API /agents] Full orchestration request');
-		console.log('  → projectFilter:', projectFilter);
-		console.log('  → agentFilter:', agentFilter);
-
 		// Fetch all data sources in parallel for performance
-		console.log('  → Fetching data from agent-mail and beads...');
 		// NOTE: Agents and reservations are NOT filtered by project
 		// because agents work across multiple projects. Only tasks are filtered.
 		const [agents, reservations, tasks] = await Promise.all([

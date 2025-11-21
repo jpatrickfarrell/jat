@@ -3,7 +3,7 @@
 	import { calculateAgentCapacity } from '$lib/utils/capacityCalculations';
 	import { analyzeDependencies } from '$lib/utils/dependencyUtils';
 
-	let { agent, tasks = [], reservations = [], onTaskAssign = () => {}, draggedTaskId = null } = $props();
+	let { agent, tasks = [], allTasks = [], reservations = [], onTaskAssign = () => {}, draggedTaskId = null } = $props();
 
 	let isDragOver = $state(false);
 	let isAssigning = $state(false);
@@ -142,8 +142,9 @@
 	});
 
 	// Compute enhanced capacity (hour-based estimation)
+	// Use allTasks for global capacity (not filtered by project)
 	const agentCapacity = $derived(() => {
-		return calculateAgentCapacity(agent, tasks, 8);
+		return calculateAgentCapacity(agent, allTasks, 8);
 	});
 
 	// Format last activity time

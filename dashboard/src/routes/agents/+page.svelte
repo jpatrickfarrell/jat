@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { replaceState } from '$app/navigation';
 	import TaskQueue from '$lib/components/agents/TaskQueue.svelte';
 	import AgentGrid from '$lib/components/agents/AgentGrid.svelte';
 	import SystemCapacityBar from '$lib/components/agents/SystemCapacityBar.svelte';
@@ -26,28 +27,18 @@
 
 	// Handle project selection change
 	function handleProjectChange(project: string) {
-		console.log('🟢 [handleProjectChange] Called');
-		console.log('  → New project:', project);
-		console.log('  → Old selectedProject:', selectedProject);
-
 		selectedProject = project;
-		console.log('  → Updated selectedProject to:', selectedProject);
 
-		// Update URL parameter
+		// Update URL parameter using SvelteKit's replaceState
 		const url = new URL(window.location.href);
 		if (project === 'All Projects') {
-			// Remove project param for "All Projects"
-			console.log('  → Removing project param from URL');
 			url.searchParams.delete('project');
 		} else {
-			console.log('  → Setting URL param to:', project);
 			url.searchParams.set('project', project);
 		}
-		window.history.replaceState({}, '', url.toString());
-		console.log('  → New URL:', url.toString());
+		replaceState(url, {});
 
 		// Refetch data with new project filter
-		console.log('  → Calling fetchData()...');
 		fetchData();
 	}
 
@@ -64,36 +55,22 @@
 
 	// Fetch agent data from unified API
 	async function fetchData() {
-		console.log('🔴 [fetchData] Starting fetch');
-		console.log('  → selectedProject:', selectedProject);
-
 		try {
 			// Build URL with project filter
 			let url = '/api/agents?full=true';
 			if (selectedProject && selectedProject !== 'All Projects') {
 				url += `&project=${encodeURIComponent(selectedProject)}`;
 			}
-			console.log('  → API URL:', url);
 
 			const response = await fetch(url);
-			console.log('  → Response status:', response.status);
-
 			const data = await response.json();
-			console.log('  → Response data keys:', Object.keys(data));
-			console.log('  → agents count:', data.agents?.length || 0);
-			console.log('  → tasks count:', data.tasks?.length || 0);
-			console.log('  → reservations count:', data.reservations?.length || 0);
-			console.log('  → unassigned_tasks count:', data.unassigned_tasks?.length || 0);
 
 			if (data.error) {
-				console.error('  ❌ API error:', data.error);
+				console.error('API error:', data.error);
 				return;
 			}
 
 			// Update state with real data
-			console.log('  → Updating state...');
-			console.log('    Before - agents:', agents.length, 'tasks:', tasks.length);
-
 			agents = data.agents || [];
 			reservations = data.reservations || [];
 			tasks = data.tasks || [];
@@ -103,13 +80,9 @@
 			// Update allTasks when viewing all projects (for dropdown options)
 			if (selectedProject === 'All Projects') {
 				allTasks = data.tasks || [];
-				console.log('    → Updated allTasks (unfiltered):', allTasks.length);
 			}
-
-			console.log('    After - agents:', agents.length, 'tasks:', tasks.length);
-			console.log('  ✓ fetchData complete');
 		} catch (error) {
-			console.error('  ❌ Failed to fetch agent data:', error);
+			console.error('Failed to fetch agent data:', error);
 		}
 	}
 
@@ -133,8 +106,6 @@
 
 			// Immediately refresh data to show updated assignment
 			await fetchData();
-
-			console.log(`Task ${taskId} successfully assigned to ${agentName}`);
 		} catch (error) {
 			console.error('Error assigning task:', error);
 			throw error;
@@ -231,7 +202,7 @@
 
 		<!-- Right Panel: Agent Grid -->
 		<div class="flex-1 overflow-auto">
-			<AgentGrid {agents} {tasks} {reservations} onTaskAssign={handleTaskAssign} />
+			<AgentGrid {agents} {tasks} {allTasks} {reservations} onTaskAssign={handleTaskAssign} />
 		</div>
 	</div>
 

@@ -3,7 +3,7 @@
 	import AutoAssignModal from './AutoAssignModal.svelte';
 	import { generateAutoAssignments } from '$lib/utils/autoAssign';
 
-	let { agents = [], tasks = [], reservations = [], onTaskAssign = () => {} } = $props();
+	let { agents = [], tasks = [], allTasks = [], reservations = [], onTaskAssign = () => {} } = $props();
 
 	// Modal state
 	let showModal = $state(false);
@@ -268,7 +268,7 @@
 			<!-- Responsive Grid -->
 			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
 				{#each sortedAgents() as agent (agent.id || agent.name)}
-					<AgentCard {agent} {tasks} {reservations} {onTaskAssign} />
+					<AgentCard {agent} {tasks} {allTasks} {reservations} {onTaskAssign} />
 				{/each}
 			</div>
 		{/if}

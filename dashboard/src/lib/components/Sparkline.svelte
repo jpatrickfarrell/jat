@@ -775,7 +775,8 @@
 	.sparkline-controls-panel {
 		position: absolute;
 		right: 0;
-		top: 0;
+		top: 100%;
+		margin-top: 8px;
 		z-index: 50;
 	}
 

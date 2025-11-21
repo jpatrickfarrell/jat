@@ -958,29 +958,31 @@
 					{/if}
 				</div>
 
-				<!-- Week's Usage -->
-				<div class="bg-base-200 rounded px-2 py-1.5">
-					<div class="flex items-center justify-between text-xs mb-1">
-						<span class="text-base-content/70">This Week:</span>
-						<span class="font-mono font-medium text-base-content">
-							{formatTokens(agent.usage.week.total_tokens)}
-						</span>
-					</div>
-					<div class="flex items-center justify-between text-xs">
-						<span class="text-base-content/50">Cost:</span>
-						<span class="font-mono text-base-content/70">
-							{formatCost(agent.usage.week.cost)}
-						</span>
-					</div>
-					{#if agent.usage.week.sessionCount > 0}
-						<div class="flex items-center justify-between text-xs mt-1">
-							<span class="text-base-content/50">Sessions:</span>
-							<span class="text-base-content/70">
-								{agent.usage.week.sessionCount}
+				<!-- Week's Usage (only show if different from today) -->
+				{#if agent.usage.week.total_tokens !== agent.usage.today.total_tokens}
+					<div class="bg-base-200 rounded px-2 py-1.5">
+						<div class="flex items-center justify-between text-xs mb-1">
+							<span class="text-base-content/70">This Week:</span>
+							<span class="font-mono font-medium text-base-content">
+								{formatTokens(agent.usage.week.total_tokens)}
 							</span>
 						</div>
-					{/if}
-				</div>
+						<div class="flex items-center justify-between text-xs">
+							<span class="text-base-content/50">Cost:</span>
+							<span class="font-mono text-base-content/70">
+								{formatCost(agent.usage.week.cost)}
+							</span>
+						</div>
+						{#if agent.usage.week.sessionCount > 0}
+							<div class="flex items-center justify-between text-xs mt-1">
+								<span class="text-base-content/50">Sessions:</span>
+								<span class="text-base-content/70">
+									{agent.usage.week.sessionCount}
+								</span>
+							</div>
+						{/if}
+					</div>
+				{/if}
 			{/if}
 		</div>
 

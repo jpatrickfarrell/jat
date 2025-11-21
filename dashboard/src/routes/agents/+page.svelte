@@ -207,7 +207,7 @@
 					<!-- Stats Grid (responsive: 1 col mobile, 2 cols tablet+) -->
 					<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
 						<!-- System Stats Card -->
-						<div class="stats stats-vertical shadow bg-base-200">
+						<div class="stats shadow bg-base-200">
 							<div class="stat">
 								<div class="stat-title">Total Tokens (Today)</div>
 								<div class="stat-value text-{getUsageColor(systemStats().tokensToday, 'today')}">
@@ -216,7 +216,15 @@
 								<div class="stat-desc">Cost: {formatCost(systemStats().costToday)}</div>
 							</div>
 
-							{#if systemStats().tokensWeek !== systemStats().tokensToday}
+							<div class="stat">
+								<div class="stat-title">Active Agents</div>
+								<div class="stat-value text-primary">{systemStats().activeAgents}</div>
+								<div class="stat-desc">of {agents.length} total agents</div>
+							</div>
+						</div>
+
+						{#if systemStats().tokensWeek !== systemStats().tokensToday}
+							<div class="stats shadow bg-base-200">
 								<div class="stat">
 									<div class="stat-title">Total Tokens (Week)</div>
 									<div class="stat-value text-{getUsageColor(systemStats().tokensWeek, 'week')}">
@@ -224,14 +232,8 @@
 									</div>
 									<div class="stat-desc">Cost: {formatCost(systemStats().costWeek)}</div>
 								</div>
-							{/if}
-
-							<div class="stat">
-								<div class="stat-title">Active Agents</div>
-								<div class="stat-value text-primary">{systemStats().activeAgents}</div>
-								<div class="stat-desc">of {agents.length} total agents</div>
 							</div>
-						</div>
+						{/if}
 
 						<!-- Top Consumers Card -->
 						<div class="card bg-base-200 shadow">

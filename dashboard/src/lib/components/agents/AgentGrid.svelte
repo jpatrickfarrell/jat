@@ -1,9 +1,10 @@
 <script>
 	import AgentCard from './AgentCard.svelte';
 	import AutoAssignModal from './AutoAssignModal.svelte';
+	import Sparkline from '../Sparkline.svelte';
 	import { generateAutoAssignments } from '$lib/utils/autoAssign';
 
-	let { agents = [], tasks = [], allTasks = [], reservations = [], onTaskAssign = () => {} } = $props();
+	let { agents = [], tasks = [], allTasks = [], reservations = [], sparklineData = [], onTaskAssign = () => {} } = $props();
 
 	// Modal state
 	let showModal = $state(false);
@@ -171,16 +172,29 @@
 <div class="flex flex-col h-full">
 	<!-- Toolbar -->
 	<div class="bg-base-100 border-b border-base-300 p-4">
-		<div class="flex items-center justify-between">
-			<div>
+		<div class="flex items-center justify-between gap-4">
+			<div class="flex-shrink-0">
 				<h2 class="text-lg font-semibold text-base-content">Active Agents</h2>
 				<p class="text-sm text-base-content/70">
 					{agents.length} agent{agents.length !== 1 ? 's' : ''} online
 				</p>
 			</div>
 
+			<!-- Sparkline -->
+			{#if sparklineData && sparklineData.length > 0}
+				<div class="flex-1 min-w-0 max-w-md">
+					<Sparkline
+						data={sparklineData}
+						height={40}
+						colorMode="usage"
+						showTooltip={true}
+						showGrid={false}
+					/>
+				</div>
+			{/if}
+
 			<!-- Action Buttons -->
-			<div class="flex gap-2">
+			<div class="flex gap-2 flex-shrink-0">
 				<button class="btn btn-sm btn-primary" onclick={handleAutoAssign}>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"

@@ -67,10 +67,9 @@
 	let showCustomDatePicker = $state(false); // Show custom date inputs
 
 	// Options toggles
-	let internalShowGrid = $state(showGrid); // Internal grid toggle state
+	let internalShowGrid = $state(false); // Internal grid toggle state (starts off, user can toggle)
 	let smoothCurves = $state(true); // Enable bezier curve smoothing
 	let internalColorMode = $state<'usage' | 'static'>(colorMode); // Internal color mode state
-	let enableAnimations = $state(true); // Enable transitions
 
 	// ============================================================================
 	// Computed Values
@@ -193,7 +192,7 @@
 			return staticColor;
 		}
 
-		if (!filteredData || filteredData.length === 0) return '#3b82f6';
+		if (!filteredData || filteredData.length === 0) return 'oklch(var(--p))'; // Primary color
 
 		// Use relative thresholds based on actual data range
 		const allTokens = filteredData.map((d) => d.tokens);
@@ -204,16 +203,16 @@
 		// Calculate percentile position (0-100)
 		const percentile = range > 0 ? ((tokens - min) / range) * 100 : 50;
 
-		// Color gradient based on percentile
-		if (percentile < 25) return '#22c55e'; // Green (bottom 25%)
-		if (percentile < 50) return '#3b82f6'; // Blue (25-50%)
-		if (percentile < 75) return '#f59e0b'; // Orange (50-75%)
-		return '#ef4444'; // Red (top 25%)
+		// Theme-based color gradient using DaisyUI color classes
+		if (percentile < 25) return 'oklch(var(--su))'; // Success (green) - bottom 25%
+		if (percentile < 50) return 'oklch(var(--in))'; // Info (blue) - 25-50%
+		if (percentile < 75) return 'oklch(var(--wa))'; // Warning (orange) - 50-75%
+		return 'oklch(var(--er))'; // Error (red) - top 25%
 	}
 
 	/** Calculate line color based on average usage */
 	const lineColor = $derived.by(() => {
-		if (!filteredData || filteredData.length === 0) return '#3b82f6';
+		if (!filteredData || filteredData.length === 0) return 'oklch(var(--p))'; // Primary color
 		const avgTokens = filteredData.reduce((sum, d) => sum + d.tokens, 0) / filteredData.length;
 		return getColorForValue(avgTokens);
 	});
@@ -571,16 +570,6 @@
 										</button>
 									</div>
 								</label>
-
-								<!-- Enable Animations Toggle -->
-								<label class="label cursor-pointer py-1 justify-between">
-									<span class="label-text text-xs">Enable animations</span>
-									<input
-										type="checkbox"
-										class="checkbox checkbox-xs"
-										bind:checked={enableAnimations}
-									/>
-								</label>
 							</div>
 						</div>
 			</div>
@@ -635,7 +624,7 @@
 					stroke-width="2"
 					stroke-linecap="round"
 					stroke-linejoin="round"
-					style="stroke: {lineColor}; {enableAnimations ? 'transition: stroke 0.3s ease, d 0.3s ease;' : ''}"
+					style="stroke: {lineColor}; transition: stroke 0.3s ease, d 0.3s ease;"
 				/>
 			{:else if chartType === 'bars'}
 				<!-- Bar chart (equalizer style) -->
@@ -653,7 +642,7 @@
 						fill={color}
 						opacity="0.9"
 						rx="0.5"
-						style="{enableAnimations ? 'transition: fill 0.3s ease, height 0.3s ease;' : ''}"
+						style="transition: fill 0.3s ease, height 0.3s ease;"
 					/>
 				{/each}
 			{:else if chartType === 'area'}
@@ -671,7 +660,7 @@
 					stroke-width="2"
 					stroke-linecap="round"
 					stroke-linejoin="round"
-					style="{enableAnimations ? 'transition: fill 0.3s ease, stroke 0.3s ease, d 0.3s ease;' : ''}"
+					style="transition: fill 0.3s ease, stroke 0.3s ease, d 0.3s ease;"
 				/>
 			{:else if chartType === 'dots'}
 				<!-- Dot plot (small squares to avoid aspect ratio stretch) -->
@@ -687,7 +676,7 @@
 						fill={color}
 						opacity="1"
 						rx="0.5"
-						style="{enableAnimations ? 'transition: fill 0.3s ease, y 0.3s ease;' : ''}"
+						style="transition: fill 0.3s ease, y 0.3s ease;"
 					/>
 				{/each}
 			{/if}

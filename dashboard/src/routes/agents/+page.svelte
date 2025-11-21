@@ -172,7 +172,7 @@
 	<!-- Main Content: Sidebar + Agent Grid -->
 	<div class="flex h-[calc(100vh-theme(spacing.20))] pb-20">
 		<!-- Left Sidebar: Task Queue -->
-		<div class="w-80 border-r border-base-300 bg-base-100 flex flex-col">
+		<div class="w-100 border-r border-base-300 bg-base-100 flex flex-col">
 			<TaskQueue
 				tasks={unassignedTasks}
 				{agents}
@@ -184,23 +184,7 @@
 
 		<!-- Right Panel: Agent Grid -->
 		<div class="flex-1 overflow-auto">
-			<!-- 24h Token Usage Trend -->
-			{#if sparklineData && sparklineData.length > 0}
-				<div class="m-4 p-4 bg-base-100 border border-base-300 rounded-lg">
-					<h3 class="text-sm font-semibold mb-3 text-base-content/70">
-						24-Hour Token Usage
-					</h3>
-					<Sparkline
-						data={sparklineData}
-						height={60}
-						colorMode="usage"
-						showTooltip={true}
-						showGrid={false}
-					/>
-				</div>
-			{/if}
-
-			<AgentGrid {agents} {tasks} {allTasks} {reservations} onTaskAssign={handleTaskAssign} />
+			<AgentGrid {agents} {tasks} {allTasks} {reservations} {sparklineData} onTaskAssign={handleTaskAssign} />
 		</div>
 	</div>
 

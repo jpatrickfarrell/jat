@@ -421,6 +421,19 @@ else
     status_line="${GRAY}jat${RESET}"
 fi
 
+# ============================================================================
+# INDICATOR COLOR THRESHOLDS
+# ============================================================================
+# Dynamic color coding based on severity/urgency:
+#
+# 🔒 File Locks: Cyan (1-2) → Yellow (3-5) → Red (>5)
+# 📬 Messages:   Cyan (1-5) → Yellow (6-15) → Red (>15)
+# ⏱ Time Left:  Green (>30min) → Yellow (10-30min) → Red (<10min)
+# 📊 Progress:   Red (<25%) → Yellow (25-75%) → Green (>75%)
+#
+# See CLAUDE.md "Status Calculation Algorithm" for full color matrix
+# ============================================================================
+
 # Build indicators section (for line 2)
 indicators=""
 

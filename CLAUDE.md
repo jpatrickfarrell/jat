@@ -98,6 +98,139 @@ All three sessions work independently with their own agent identities.
 
 **These files are session-specific** - don't commit `agent-*.txt` files to git (they're per-developer session).
 
+### Status Calculation Algorithm
+
+**How the statusline determines what to display:**
+
+The statusline follows a priority-based decision tree to determine agent status:
+
+```
+┌─ STATUS CALCULATION DECISION TREE ─────────────────────────────────────┐
+│                                                                        │
+│  1. Check if agent is registered                                      │
+│     └─ NO → Show "jat | no agent registered"                          │
+│     └─ YES → Continue to step 2                                       │
+│                                                                        │
+│  2. Check Beads for in_progress tasks assigned to agent               │
+│     └─ FOUND → Use task from Beads (Priority 1 source)                │
+│     └─ NOT FOUND → Continue to step 3                                 │
+│                                                                        │
+│  3. Check file reservations for task ID in reason field               │
+│     └─ FOUND → Extract task ID, lookup in Beads (Priority 2 source)   │
+│     └─ NOT FOUND → Continue to step 4                                 │
+│                                                                        │
+│  4. No active task found                                              │
+│     └─ Show "AgentName | idle"                                        │
+│                                                                        │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+**Priority Order (what's checked first):**
+
+1. **Agent Registration** - `.claude/agent-{session_id}.txt` exists?
+2. **Beads in_progress** - `bd list --json | filter(assignee == agent && status == "in_progress")`
+3. **File Reservations** - `am-reservations --agent X | extract task ID from reason`
+4. **Idle State** - Agent registered but no work
+
+**Why this order matters:**
+
+- **Beads is source of truth** - If Beads says task is `in_progress`, show it (even without reservations)
+- **Reservations are fallback** - If agent has reservations but forgot to update Beads
+- **Prevents false "idle"** - Agent working but statusline shows idle is confusing
+
+**Edge Cases Handled:**
+
+1. **Task closed but reservation still active**
+   - Shows task from reservation (statusline doesn't check task status)
+   - `/agent:start` smart cleanup will release stale reservations
+
+2. **Multiple in_progress tasks**
+   - Shows first task returned by Beads (should not happen in normal workflow)
+
+3. **Reservation without task ID in reason**
+   - Shows idle (can't extract task ID to lookup)
+
+4. **Session file missing but agent registered globally**
+   - Shows "no agent registered" (session-specific, not global)
+
+**Indicator Colors (dynamic thresholds):**
+
+```
+🔒 File Locks:
+  - Cyan (1-2 locks)    - Normal load
+  - Yellow (3-5 locks)  - Moderate load
+  - Red (>5 locks)      - Heavy load
+
+📬 Unread Messages:
+  - Cyan (1-5 msgs)     - Few messages
+  - Yellow (6-15 msgs)  - Moderate backlog
+  - Red (>15 msgs)      - Needs attention
+
+⏱ Time Remaining:
+  - Green (>30 min)     - Plenty of time
+  - Yellow (10-30 min)  - Mid-way
+  - Red (<10 min)       - About to expire
+
+📊 Task Progress:
+  - Red (<25%)          - Just started
+  - Yellow (25-75%)     - In progress
+  - Green (>75%)        - Almost done
+```
+
+**Examples for Each Status State:**
+
+```
+# 1. No agent registered
+jat | no agent registered
+
+# 2. Agent registered, no work
+GreatLake | idle [📬3]
+
+# 3. Active task from Beads (in_progress)
+GreatLake | [P1] jat-va3 - Document statusline... [🔒2 📬26 ⏱45m]
+
+# 4. Active task from file reservation (fallback)
+GreatLake | [P0] jat-abc - Critical bug fix [🔒1 ⏱15m]
+
+# 5. Multiple indicators (full status)
+RichPrairie | [P1] jat-xyz - Feature work [🔒3 📬12 ⏱8m 65%]
+              └─ Yellow locks, yellow messages, red time, yellow progress
+```
+
+**Where the Logic Lives:**
+
+- **Statusline**: `.claude/statusline.sh` (lines 210-400)
+  - Session-specific agent identity
+  - Status calculation decision tree
+  - Indicator color thresholds
+
+- **Dashboard**: `dashboard/src/routes/api/agents/+server.js`
+  - Uses same logic via `getAgentStatus()` function
+  - Shared algorithm prevents drift
+
+**Code Reference:**
+
+```bash
+# Priority 1: Check Beads for in_progress tasks
+# .claude/statusline.sh:226-238
+task_json=$(bd list --json | jq -r --arg agent "$agent_name" \
+    '.[] | select(.assignee == $agent and .status == "in_progress")')
+
+# Priority 2: Fall back to file reservations
+# .claude/statusline.sh:242-263
+reservation_info=$(am-reservations --agent "$agent_name")
+task_id=$(echo "$reservation_info" | grep -oE 'jat-[a-z0-9]{3}')
+```
+
+**Troubleshooting:**
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| Shows "idle" but I'm working | Task not marked `in_progress` in Beads | Run `bd update task-id --status in_progress` |
+| Shows wrong task | Old reservation from previous task | Release stale reservation with `am-release` |
+| Shows "no agent registered" | Session file missing | Run `/agent:start` to register |
+| Indicator count seems wrong | Cached data, stale reservations | Wait 1 min for statusline refresh |
+
 ### Why PPID-Based Session Tracking?
 
 **The Problem: Race Conditions with Shared Files**

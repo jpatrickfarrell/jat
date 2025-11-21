@@ -467,7 +467,7 @@
 						</div>
 
 						<!-- Task Title -->
-						<div class="mt-1.5">
+						<div class="mt-1.5 -mb-1">
 							<h3 class="font-medium text-sm text-base-content truncate" title={task.title}>
 								{task.title}
 							</h3>
@@ -475,7 +475,7 @@
 
 						<!-- Task Description (truncated) -->
 						{#if task.description}
-							<p class="text-xs text-base-content/70 line-clamp-2">
+							<p class="text-xs text-base-content/70 line-clamp-4">
 								{task.description}
 							</p>
 						{/if}

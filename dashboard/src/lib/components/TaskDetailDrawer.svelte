@@ -518,32 +518,59 @@
 					{/if}
 					<!-- VS Code deep link button -->
 					{#if !loading && !error && task && task.project_path}
-						<a
-							href="vscode://file{task.project_path}?search={task.id}"
-							class="btn btn-sm btn-ghost"
-							title="Open in VS Code"
+						<div class="tooltip tooltip-bottom" data-tip="Open in VS Code">
+							<a
+								href="vscode://file{task.project_path}?search={task.id}"
+								class="btn btn-sm btn-ghost"
+								aria-label="Open in VS Code"
+							>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									class="h-4 w-4"
+									fill="currentColor"
+									viewBox="0 0 24 24"
+								>
+									<path
+										d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"
+									/>
+								</svg>
+							</a>
+						</div>
+					{/if}
+					<!-- Help button -->
+					<div class="tooltip tooltip-bottom" data-tip="Show shortcuts (?)">
+						<button
+							class="btn btn-sm btn-circle btn-ghost"
+							onclick={() => (showHelp = !showHelp)}
+							aria-label="Show keyboard shortcuts (?)"
 						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
 								class="h-4 w-4"
-								fill="currentColor"
+								fill="none"
 								viewBox="0 0 24 24"
+								stroke="currentColor"
 							>
 								<path
-									d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
 								/>
 							</svg>
-						</a>
-					{/if}
+						</button>
+					</div>
 					<!-- Close button -->
-					<button
-						class="btn btn-sm btn-circle btn-ghost"
-						onclick={handleClose}
-						disabled={isSaving}
-						aria-label="Close drawer"
-					>
-						✕
-					</button>
+					<div class="tooltip tooltip-bottom" data-tip="Close (Esc)">
+						<button
+							class="btn btn-sm btn-circle btn-ghost"
+							onclick={handleClose}
+							disabled={isSaving}
+							aria-label="Close drawer (Esc)"
+						>
+							✕
+						</button>
+					</div>
 				</div>
 			</div>
 
@@ -827,6 +854,102 @@
 								bind:value={formData.assignee}
 								disabled={isSaving}
 							/>
+						</div>
+					</div>
+				{/if}
+
+				<!-- Keyboard Shortcuts Help Panel -->
+				{#if showHelp}
+					<div class="mt-6 p-4 bg-base-200 border border-base-300 rounded-lg">
+						<h4 class="text-sm font-semibold mb-3 text-base-content flex items-center gap-2">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								class="h-4 w-4"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke="currentColor"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"
+								/>
+							</svg>
+							Keyboard Shortcuts
+						</h4>
+						<div class="space-y-2 text-sm">
+							<!-- General -->
+							<div>
+								<div class="text-xs font-semibold text-base-content/70 mb-1">General</div>
+								<div class="flex justify-between items-center py-1">
+									<span>Close drawer</span>
+									<kbd class="kbd kbd-sm">Esc</kbd>
+								</div>
+								<div class="flex justify-between items-center py-1">
+									<span>Show/hide shortcuts</span>
+									<kbd class="kbd kbd-sm">?</kbd>
+								</div>
+							</div>
+
+							<!-- View Mode -->
+							{#if mode === 'view'}
+								<div class="divider my-2"></div>
+								<div>
+									<div class="text-xs font-semibold text-base-content/70 mb-1">View Mode</div>
+									<div class="flex justify-between items-center py-1">
+										<span>Enter edit mode</span>
+										<kbd class="kbd kbd-sm">E</kbd>
+									</div>
+									<div class="flex justify-between items-center py-1">
+										<span>Mark task complete</span>
+										<kbd class="kbd kbd-sm">M</kbd>
+									</div>
+								</div>
+							{/if}
+
+							<!-- Edit Mode -->
+							{#if mode === 'edit'}
+								<div class="divider my-2"></div>
+								<div>
+									<div class="text-xs font-semibold text-base-content/70 mb-1">Edit Mode</div>
+									<div class="flex justify-between items-center py-1">
+										<span>Return to view mode</span>
+										<kbd class="kbd kbd-sm">E</kbd>
+									</div>
+									<div class="flex justify-between items-center py-1">
+										<span>Save and exit edit mode</span>
+										<span class="flex gap-1">
+											<kbd class="kbd kbd-sm">Cmd</kbd>
+											<span>+</span>
+											<kbd class="kbd kbd-sm">Enter</kbd>
+										</span>
+									</div>
+									<div class="flex justify-between items-center py-1">
+										<span>Assign to me</span>
+										<kbd class="kbd kbd-sm">A</kbd>
+									</div>
+								</div>
+							{/if}
+
+							<!-- Tip -->
+							<div class="divider my-2"></div>
+							<div class="alert alert-info py-2 text-xs">
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									fill="none"
+									viewBox="0 0 24 24"
+									class="stroke-current shrink-0 w-4 h-4"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+									></path>
+								</svg>
+								<span>Shortcuts don't work while typing in form fields</span>
+							</div>
 						</div>
 					</div>
 				{/if}

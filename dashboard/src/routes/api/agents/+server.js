@@ -4,11 +4,16 @@
  * GET /api/agents              → Simple agent list (lightweight, for dropdowns/lists)
  * GET /api/agents?full=true    → Full orchestration data (agents + tasks + reservations + stats)
  * GET /api/agents?orchestration=true → Alias for full orchestration data
+ * POST /api/agents             → Assign task to agent (body: { taskId, agentName })
  */
 
 import { json } from '@sveltejs/kit';
 import { getAgents, getReservations } from '$lib/server/agent-mail.js';
 import { getTasks } from '$lib/server/beads.js';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ url }) {
@@ -107,7 +112,7 @@ export async function GET({ url }) {
 			agents: agentStats,
 			reservations,
 			reservations_by_agent: reservationsByAgent,
-			tasks: tasks.slice(0, 100), // Limit to 100 most recent for performance
+			tasks: tasks, // Return all tasks (frontend handles pagination/filtering)
 			unassigned_tasks: unassignedTasks,
 			task_stats: taskStats,
 			tasks_with_deps_count: tasksWithDeps.length,
@@ -144,5 +149,74 @@ export async function GET({ url }) {
 			tasks_with_deps: [],
 			timestamp: new Date().toISOString()
 		}, { status: 500 });
+	}
+}
+
+/** @type {import('./$types').RequestHandler} */
+export async function POST({ request }) {
+	try {
+		const { taskId, agentName } = await request.json();
+
+		// Validate input
+		if (!taskId || !agentName) {
+			return json({
+				error: 'Missing required fields',
+				message: 'Both taskId and agentName are required'
+			}, { status: 400 });
+		}
+
+		// Validate task ID format (project-xxx)
+		if (!/^[a-z]+-[a-z0-9]{3}$/.test(taskId)) {
+			return json({
+				error: 'Invalid task ID format',
+				message: 'Task ID must be in format: project-xxx (e.g., jat-abc)'
+			}, { status: 400 });
+		}
+
+		// Verify task exists before assigning
+		try {
+			const { stdout } = await execAsync(`bd show "${taskId}" --json`);
+			const taskData = JSON.parse(stdout);
+			if (!taskData || taskData.length === 0) {
+				return json({
+					error: 'Task not found',
+					message: `Task ${taskId} does not exist`
+				}, { status: 404 });
+			}
+		} catch (error) {
+			return json({
+				error: 'Task not found',
+				message: `Task ${taskId} does not exist or could not be retrieved`
+			}, { status: 404 });
+		}
+
+		// Assign task to agent using bd CLI
+		try {
+			const { stdout, stderr } = await execAsync(
+				`bd update "${taskId}" --assignee "${agentName}"`
+			);
+
+			// Get updated task data
+			const { stdout: updatedTaskJson } = await execAsync(`bd show "${taskId}" --json`);
+			const updatedTask = JSON.parse(updatedTaskJson);
+
+			return json({
+				success: true,
+				message: `Task ${taskId} assigned to ${agentName}`,
+				task: updatedTask[0]
+			});
+		} catch (error) {
+			console.error('Failed to assign task:', error);
+			return json({
+				error: 'Failed to assign task',
+				message: error.message || 'Unknown error occurred'
+			}, { status: 500 });
+		}
+	} catch (error) {
+		console.error('Error in POST /api/agents:', error);
+		return json({
+			error: 'Invalid request',
+			message: error.message || 'Failed to parse request body'
+		}, { status: 400 });
 	}
 }

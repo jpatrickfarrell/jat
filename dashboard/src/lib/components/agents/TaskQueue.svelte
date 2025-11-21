@@ -8,10 +8,10 @@
 
 	let { tasks = [], agents = [], reservations = [], selectedProject = 'All Projects', projects = [], onProjectChange = () => {}, taskCounts = new Map() } = $props();
 
-	// Initialize filters from URL params
+	// Initialize filters from URL params (default to open tasks)
 	let searchQuery = $state('');
 	let priorityFilter = $state('all');
-	let statusFilter = $state('all');
+	let statusFilter = $state('open'); // Default to open tasks
 	let typeFilter = $state('all');
 	let selectedLabels = $state(new Set());
 	let dragDisabled = $state(true);

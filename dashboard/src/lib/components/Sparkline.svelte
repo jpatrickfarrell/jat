@@ -188,7 +188,15 @@
 	 * Format timestamp for tooltip
 	 */
 	function formatTimestamp(timestamp: string): string {
+		if (!timestamp) return 'No timestamp';
+
 		const date = new Date(timestamp);
+
+		// Check if date is valid
+		if (isNaN(date.getTime())) {
+			return 'Invalid date';
+		}
+
 		return date.toLocaleString('en-US', {
 			month: 'short',
 			day: 'numeric',

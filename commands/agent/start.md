@@ -494,47 +494,59 @@ if ! bd show "$TASK_ID" --json >/dev/null 2>&1; then
 fi
 ```
 
-#### If PARAM_TYPE == "none":
+#### If PARAM_TYPE == "none" or "agent-name":
 ```bash
-# Smart task selection based on conversation context
-
-# A) Analyze Recent Conversation
-# Review last 3-5 messages for context:
-# - Feature/work discussed?
-# - Bug/issue described?
-# - User needs expressed?
-
-# B) Search Beads for Related Tasks
-# If conversation context detected:
-#   1. Search Beads using keywords
-#   2. If matches found: Ask user to confirm or select
-#   3. If no matches: Offer to create task from context
-
-# C) Fall Back to Auto-Select
-# If no conversation context:
-#   1. Run: bd ready --json
-#   2. Pick highest priority task (P0 > P1 > P2)
-#   3. If no ready tasks: Report and suggest /agent:plan
+# Show task recommendations (DO NOT auto-start)
+# User must explicitly run /agent:start TASK_ID to begin work
 
 READY_TASKS=$(bd ready --json)
 READY_COUNT=$(echo "$READY_TASKS" | jq 'length')
 
 if [[ "$READY_COUNT" -eq 0 ]]; then
+  echo ""
   echo "❌ No ready tasks available"
   echo "💡 Use 'bd create' to create a task or 'bd list' to see all tasks"
-  exit 1
+  echo ""
+  exit 0
 fi
 
-# Pick highest priority task
-TASK_ID=$(echo "$READY_TASKS" | jq -r '.[0].id')
-TASK_TITLE=$(echo "$READY_TASKS" | jq -r '.[0].title')
+# Show available tasks with details
+echo ""
+echo "╔══════════════════════════════════════════════════════════════════════════╗"
+echo "║                         📋 Available Tasks                               ║"
+echo "╚══════════════════════════════════════════════════════════════════════════╝"
+echo ""
 
-echo "🎯 Auto-selected: $TASK_ID - $TASK_TITLE"
+# Display tasks in a readable format
+echo "$READY_TASKS" | jq -r '.[] |
+  "  [\(.priority | if . == 0 then "P0" elif . == 1 then "P1" else "P2" end)] \(.id) - \(.title)
+   Type: \(.issue_type) | Status: \(.status) | Assignee: \(.assignee // "unassigned")
+"'
+
+echo "────────────────────────────────────────────────────────────────────────────"
+echo ""
+echo "💡 To start working on a task, run:"
+echo ""
+echo "   /agent:start TASK_ID"
+echo ""
+echo "Example: /agent:start $(echo "$READY_TASKS" | jq -r '.[0].id')"
+echo ""
+
+# EXIT HERE - don't continue to STEP 3-9
+exit 0
 ```
 
 ---
 
+**🚨 IMPORTANT: The following steps (3-9) ONLY execute when a task-id is provided.**
+
+When no task is specified (`PARAM_TYPE == "none"` or `"agent-name"`), we exit after showing recommendations in STEP 2. The user must explicitly run `/agent:start TASK_ID` to actually start work.
+
+---
+
 ### STEP 3: Detect Task Type (Bulk vs Normal)
+
+**This step and all following steps only run when PARAM_TYPE == "task-id"**
 
 Analyze task to determine completion strategy:
 

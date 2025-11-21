@@ -824,8 +824,9 @@ browser-start.js
 # Navigate
 browser-nav.js https://example.com
 
-# Execute JavaScript
+# Execute JavaScript (supports expressions and multi-statement code)
 browser-eval.js "document.title"
+browser-eval.js "const x = 5; return x * 2"
 
 # Take screenshot
 browser-screenshot.js --fullpage
@@ -892,6 +893,71 @@ am-send --help
 db-query --help
 browser-eval.js --help
 type-check-fast --help
+```
+
+## Beads Command Cheat Sheet
+
+**Quick reference for agents to avoid common command errors.**
+
+### Core Commands
+
+```bash
+# Task creation and management
+bd create "Title" --type task --priority 1 --description "..."
+bd list --status open                   # List tasks
+bd ready --json                         # Get ready tasks
+bd show task-abc                        # Task details
+bd update task-abc --status in_progress --assignee AgentName
+bd close task-abc --reason "Completed"
+```
+
+### Dependency Management
+
+```bash
+# ✅ CORRECT ways to add dependencies
+bd create "Task" --deps task-xyz        # During creation
+bd dep add task-abc task-xyz            # After creation (abc depends on xyz)
+
+# View dependencies
+bd dep tree task-abc                    # What task-abc depends on
+bd dep tree task-abc --reverse          # What depends on task-abc
+bd dep cycles                           # Find circular dependencies
+
+# Remove dependency
+bd dep remove task-abc task-xyz
+```
+
+### Common Mistakes
+
+```bash
+# ❌ WRONG                              # ✅ CORRECT
+bd add task-abc --depends xyz           bd dep add task-abc xyz
+bd update task-abc --depends xyz        bd dep add task-abc xyz
+bd tree task-abc                        bd dep tree task-abc
+bd update task-abc --status in-progress bd update task-abc --status in_progress
+```
+
+### Status Values
+
+Use **underscores** not hyphens:
+- `open` - Available to start
+- `in_progress` - Currently being worked on (NOT `in-progress`)
+- `blocked` - Waiting on something
+- `closed` - Completed
+
+### Integration Pattern
+
+```bash
+# 1. Pick work
+bd ready --json | jq -r '.[0].id'      # Get highest priority task
+
+# 2. Start work
+bd update task-abc --status in_progress --assignee $AGENT_NAME
+am-reserve "src/**/*.ts" --agent $AGENT_NAME --reason "task-abc"
+
+# 3. Complete work
+bd close task-abc --reason "Implemented feature"
+am-release "src/**/*.ts" --agent $AGENT_NAME
 ```
 
 ## Integration with Beads

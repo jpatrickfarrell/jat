@@ -25,7 +25,14 @@ if (!p) {
 
 const result = await p.evaluate((c) => {
 	const AsyncFunction = (async () => {}).constructor;
-	return new AsyncFunction(`return (${c})`)();
+	// Support both expressions and multi-statement code
+	// Try as expression first, fall back to statement block
+	try {
+		return new AsyncFunction(`return (${c})`)();
+	} catch (e) {
+		// If expression fails (e.g., has semicolons), treat as statement block
+		return new AsyncFunction(c)();
+	}
 }, code);
 
 if (Array.isArray(result)) {

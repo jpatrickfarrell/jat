@@ -717,6 +717,102 @@ bd close task-123 --reason "Completed"
 am-release "src/auth/**" --agent AgentName
 ```
 
+#### Beads Command Reference
+
+**Core Task Commands:**
+```bash
+bd create "Task title" [flags]          # Create new task
+bd list [flags]                         # List all tasks
+bd ready [flags]                        # Show tasks ready to work (no blockers)
+bd show <task-id>                       # Show task details
+bd update <task-id> [flags]             # Update task fields
+bd close <task-id> --reason "..."      # Close task
+bd reopen <task-id>                     # Reopen closed task
+```
+
+**Dependency Management:**
+```bash
+bd dep add <task-id> <dependency-id>    # Add dependency (task depends on dependency)
+bd dep remove <task-id> <dependency-id> # Remove dependency
+bd dep tree <task-id>                   # Show dependency tree
+bd dep cycles                           # Detect circular dependencies
+```
+
+**Create Command Flags:**
+```bash
+--type <bug|feature|task|epic|chore>   # Task type (default: task)
+--priority <0-4 or P0-P4>              # Priority (0=highest, default: 2)
+--labels <label1,label2>               # Comma-separated labels
+--assignee <name>                      # Assign to agent
+--description "text"                   # Detailed description
+--deps <id1,id2>                       # Dependencies (blocks on these tasks)
+--acceptance "criteria"                # Acceptance criteria
+```
+
+**Update Command Flags:**
+```bash
+--status <open|in_progress|blocked|closed>  # Change status
+--priority <0-4 or P0-P4>                   # Change priority
+--assignee <name>                           # Reassign task
+--title "new title"                         # Rename task
+--description "text"                        # Update description
+```
+
+**Common Patterns:**
+```bash
+# Add dependency AFTER task creation
+bd dep add jat-abc jat-xyz              # jat-abc depends on jat-xyz
+
+# View dependency tree
+bd dep tree jat-abc                     # Show what jat-abc depends on
+bd dep tree jat-abc --reverse           # Show what depends on jat-abc
+
+# Check for circular dependencies
+bd dep cycles                           # Find dependency loops
+
+# Filter tasks by status
+bd list --status open                   # Only open tasks
+bd list --status in_progress            # Tasks being worked on
+bd list --status blocked                # Blocked tasks
+
+# Filter by priority
+bd list --priority 0                    # Critical tasks only
+bd ready --json | jq '.[] | select(.priority == 0)'  # Ready P0 tasks
+```
+
+**Common Mistakes and Solutions:**
+```bash
+# ❌ WRONG - bd add doesn't exist
+bd add jat-abc --depends jat-xyz
+# ✅ CORRECT - use bd dep add
+bd dep add jat-abc jat-xyz
+
+# ❌ WRONG - bd update doesn't take --depends
+bd update jat-abc --depends jat-xyz
+# ✅ CORRECT - use bd dep add for dependencies
+bd dep add jat-abc jat-xyz
+
+# ❌ WRONG - missing bd dep subcommand
+bd tree jat-abc
+# ✅ CORRECT - bd dep tree
+bd dep tree jat-abc
+
+# ❌ WRONG - status uses underscore not hyphen
+bd update jat-abc --status in-progress
+# ✅ CORRECT - status is in_progress
+bd update jat-abc --status in_progress
+```
+
+**Helpful Commands:**
+```bash
+bd help <command>                       # Get help for specific command
+bd dep --help                           # Dependency management help
+bd create --help                        # See all create flags
+bd list --json                          # Get JSON output for scripting
+bd ready --json | jq '.[] | .id'       # Get just task IDs
+bd show <task-id> --json               # Get task details as JSON
+```
+
 
 ### 3. Agent Swarm Coordination Commands
 

@@ -697,9 +697,12 @@
 				<div class="space-y-1">
 					{#each queuedTasks().slice(0, 3) as task}
 						<div class="bg-base-200 rounded px-2 py-1">
-							<p class="text-xs text-base-content truncate" title={task.title}>
-								• {task.title}
-							</p>
+							<div class="flex items-center gap-2">
+								<span class="text-xs font-mono text-base-content/50">{task.id}</span>
+								<p class="text-xs text-base-content truncate flex-1" title={task.title}>
+									{task.title}
+								</p>
+							</div>
 						</div>
 					{/each}
 					{#if queuedTasks().length > 3}

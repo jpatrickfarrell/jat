@@ -46,7 +46,7 @@
 	// Fetch agent usage data for system stats
 	async function loadAgentUsage() {
 		try {
-			const response = await fetch('/api/agents?usage=true');
+			const response = await fetch('/api/agents?full=true&usage=true');
 			if (!response.ok) {
 				throw new Error(`Failed to fetch agent usage: ${response.statusText}`);
 			}
@@ -188,10 +188,23 @@
 
 	// Summary badge text (e.g., "1138M $695 MAX")
 	const badgeSummary = $derived(() => {
-		const tokens = formatTokens(systemStats().tokensToday);
-		const cost = formatCost(systemStats().costToday);
+		// Format tokens without decimals
+		const tokensToday = systemStats().tokensToday;
+		let tokensStr = '0';
+		if (tokensToday >= 1_000_000) {
+			tokensStr = `${Math.round(tokensToday / 1_000_000)}M`;
+		} else if (tokensToday >= 1_000) {
+			tokensStr = `${Math.round(tokensToday / 1_000)}K`;
+		} else {
+			tokensStr = tokensToday.toString();
+		}
+
+		// Format cost without decimals
+		const costToday = systemStats().costToday;
+		const costStr = `$${Math.round(costToday)}`;
+
 		const tier = metrics?.tier?.toUpperCase() || 'FREE';
-		return `${tokens} ${cost} ${tier}`;
+		return `${tokensStr} ${costStr} ${tier}`;
 	});
 </script>
 
@@ -205,7 +218,7 @@
 	onblur={() => (showDetails = false)}
 	aria-label="Claude API usage - hover for details"
 >
-	{#if metrics && !isLoading}
+	{#if metrics && !isLoading && agents.length > 0}
 		<!-- Compact Badge (Always Visible) -->
 		<button
 			class="badge badge-lg gap-2 px-3 py-3 whitespace-nowrap {tierColor} hover:brightness-110 transition-all"

@@ -3,7 +3,7 @@
 	import { page } from '$app/stores';
 	import TaskList from '$lib/components/TaskList.svelte';
 	import DependencyGraph from '$lib/components/DependencyGraph.svelte';
-	import TaskDetailModal from '$lib/components/TaskDetailModal.svelte';
+	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 
 	let selectedPriority = $state('all');
 	let selectedStatus = $state('all');
@@ -12,6 +12,8 @@
 	let tasks = $state<any[]>([]);
 	let allTasks = $state<any[]>([]);
 	let selectedTaskId = $state<string | null>(null);
+	let drawerOpen = $state(false);
+	let drawerMode = $state<'view' | 'edit'>('view');
 
 	// Read project from URL parameter
 	const projectParam = $derived($page.url.searchParams.get('project'));
@@ -39,11 +41,8 @@
 	// Handle node click in graph
 	function handleNodeClick(taskId: string) {
 		selectedTaskId = taskId;
-	}
-
-	// Handle modal close
-	function handleModalClose() {
-		selectedTaskId = null;
+		drawerMode = 'view';
+		drawerOpen = true;
 	}
 
 	// Refetch tasks when filters change
@@ -117,5 +116,5 @@
 	{/if}
 
 	<!-- Task Detail Modal -->
-	<TaskDetailModal taskId={selectedTaskId} onClose={handleModalClose} />
+	<TaskDetailDrawer bind:taskId={selectedTaskId} bind:mode={drawerMode} bind:isOpen={drawerOpen} />
 </div>

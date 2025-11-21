@@ -4,7 +4,7 @@
 	import DependencyGraph from '$lib/components/DependencyGraph.svelte';
 	import TimelineGantt from '$lib/components/graph/TimelineGantt.svelte';
 	import KanbanBoard from '$lib/components/graph/KanbanBoard.svelte';
-	import TaskDetailModal from '$lib/components/TaskDetailModal.svelte';
+	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 
 	// View mode state ('dependency' | 'timeline' | 'kanban')
 	let viewMode = $state('dependency');
@@ -15,6 +15,8 @@
 	let loading = $state(true);
 	let error = $state(null);
 	let selectedTaskId = $state(null);
+	let drawerOpen = $state(false);
+	let drawerMode = $state<'view' | 'edit'>('view');
 
 	// Filters
 	let selectedPriority = $state('all');
@@ -66,11 +68,8 @@
 	// Handle node click in graph views
 	function handleNodeClick(taskId) {
 		selectedTaskId = taskId;
-	}
-
-	// Handle modal close
-	function handleModalClose() {
-		selectedTaskId = null;
+		drawerMode = 'view';
+		drawerOpen = true;
 	}
 
 	// Refetch tasks when filters change
@@ -245,5 +244,5 @@
 	{/if}
 
 	<!-- Task Detail Modal -->
-	<TaskDetailModal taskId={selectedTaskId} onClose={handleModalClose} />
+	<TaskDetailDrawer bind:taskId={selectedTaskId} bind:mode={drawerMode} bind:isOpen={drawerOpen} />
 </div>

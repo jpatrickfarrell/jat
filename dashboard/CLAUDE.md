@@ -209,6 +209,368 @@ $effect(() => {
 });
 ```
 
+## Nav Component Architecture
+
+### Overview
+
+The **Nav component** (`src/lib/components/Nav.svelte`) provides a reusable navigation bar for all dashboard pages. It uses a lightweight configuration approach to avoid massive prop drilling and keeps pages clean.
+
+**Key Features:**
+- Context-based configuration (not hardcoded per page)
+- Responsive layout (no wrapping issues)
+- Conditional elements (view toggles, project filters)
+- Consistent theming with DaisyUI
+- Single-row guarantee (flex-nowrap design)
+
+### Architecture Pattern
+
+**Configuration-driven approach:**
+
+```
+Page Component → Nav Component → navConfig.ts
+     ↓               ↓
+  Props         Context lookup
+```
+
+**Why this pattern:**
+- ✅ Pages stay clean (minimal props)
+- ✅ Easy to add new pages (just add config)
+- ✅ Consistent UI across pages
+- ✅ Single source of truth for nav structure
+- ❌ NOT 874 lines of hardcoded HTML per page
+
+### How to Use
+
+#### Basic Usage (Simple Page)
+
+```svelte
+<script>
+  import Nav from '$lib/components/Nav.svelte';
+</script>
+
+<!-- Minimal props - context drives the config -->
+<Nav context="home" />
+```
+
+#### With View Toggle (Home Page)
+
+```svelte
+<script>
+  import Nav from '$lib/components/Nav.svelte';
+
+  let viewMode = $state('list');
+</script>
+
+<Nav
+  context="home"
+  {viewMode}
+  onViewModeChange={(mode) => (viewMode = mode)}
+/>
+```
+
+#### With Project Filter (Agents Page)
+
+```svelte
+<script>
+  import Nav from '$lib/components/Nav.svelte';
+
+  let selectedProject = $state('All Projects');
+  let projects = $state(['jat', 'chimaro', 'jomarchy']);
+  let taskCounts = $state(new Map([['jat', 15], ['chimaro', 8]]));
+
+  function handleProjectChange(project: string) {
+    selectedProject = project;
+    // ... filter logic
+  }
+</script>
+
+<Nav
+  context="agents"
+  {projects}
+  {selectedProject}
+  {onProjectChange}
+  {taskCounts}
+  showProjectFilter={true}
+/>
+```
+
+### Configuration Structure
+
+**File: `src/lib/config/navConfig.ts`**
+
+```typescript
+export interface NavConfig {
+  title: string;              // Page title (e.g., "Agents")
+  subtitle: string;           // Description text
+  viewToggle?: ViewToggleOption[];  // Optional view mode buttons
+  showProjectFilter?: boolean;      // Show project dropdown
+  showThemeSelector?: boolean;      // Show theme picker (usually true)
+}
+
+export interface ViewToggleOption {
+  value: string;    // Mode identifier (e.g., 'list')
+  label: string;    // Display text (e.g., 'List View')
+  link?: string;    // Optional navigation (for cross-page toggles)
+}
+```
+
+### Adding a New Page
+
+**Step 1: Create config in `navConfig.ts`**
+
+```typescript
+// My New Page
+export const myPageConfig: NavConfig = {
+  title: 'My New Feature',
+  subtitle: 'Description of what this page does',
+  viewToggle: undefined,  // or add view modes if needed
+  showProjectFilter: false,  // true if needs project filtering
+  showThemeSelector: true
+};
+```
+
+**Step 2: Update Nav component to use the config**
+
+Currently, Nav uses inline config (lines 48-74 in `Nav.svelte`). **TODO:** Refactor to import from `navConfig.ts` instead.
+
+**Current pattern (inline):**
+```typescript
+const contextConfig = {
+  home: { title: '...', subtitle: '...', ... },
+  agents: { title: '...', subtitle: '...', ... }
+};
+```
+
+**Better pattern (import from navConfig.ts):**
+```typescript
+import { homeConfig, agentsConfig, myPageConfig } from '$lib/config/navConfig';
+
+const contextConfig = {
+  home: homeConfig,
+  agents: agentsConfig,
+  'my-page': myPageConfig
+};
+```
+
+**Step 3: Use Nav in your page**
+
+```svelte
+<!-- src/routes/my-page/+page.svelte -->
+<script>
+  import Nav from '$lib/components/Nav.svelte';
+</script>
+
+<div class="min-h-screen bg-base-200">
+  <Nav context="my-page" />
+
+  <!-- Your page content -->
+</div>
+```
+
+### Props Reference
+
+| Prop | Type | Default | Required | Description |
+|------|------|---------|----------|-------------|
+| `context` | `'home' \| 'agents' \| 'api-demo'` | - | ✅ Yes | Determines which nav config to use |
+| `projects` | `string[]` | `[]` | ❌ No | List of project names for dropdown |
+| `selectedProject` | `string` | `'All Projects'` | ❌ No | Current project selection |
+| `onProjectChange` | `(project: string) => void` | `() => {}` | ❌ No | Called when project changes |
+| `taskCounts` | `Map<string, number>` | `null` | ❌ No | Task count badges per project |
+| `showProjectFilter` | `boolean` | `false` | ❌ No | Show project selector dropdown |
+| `viewMode` | `'list' \| 'graph'` | `'list'` | ❌ No | Current view mode (home page) |
+| `onViewModeChange` | `(mode: string) => void` | `() => {}` | ❌ No | Called when view mode changes |
+
+### Responsive Design
+
+**Breakpoints:**
+- **Small screens** (<640px): Icons only, labels hidden
+- **Medium screens** (640-1024px): Icons + selected labels
+- **Large screens** (>1024px): Icons + all labels
+
+**Implementation:**
+```svelte
+<span class="hidden md:inline ml-1">List</span>  <!-- Shows on md+ -->
+<span class="hidden lg:inline ml-1">Home</span>  <!-- Shows on lg+ -->
+```
+
+### Layout Fix: No Wrapping
+
+The Nav component uses **flex-nowrap** to guarantee single-row layout:
+
+```svelte
+<div class="flex-none flex flex-nowrap items-center gap-1.5">
+  <!-- Controls never wrap to new row -->
+</div>
+```
+
+**Why this matters:**
+- Previous implementation had 3-row wrapping issues
+- `flex-nowrap` + optimized spacing (`gap-1.5`) prevents wrap
+- Responsive labels (hidden on small screens) save space
+- Guaranteed single-row layout across all screen sizes
+
+### Common Patterns
+
+#### Pattern 1: View Toggle with Cross-Page Navigation
+
+```typescript
+// In navConfig.ts
+viewToggle: [
+  { value: 'list', label: 'List View', link: '/' },
+  { value: 'agents', label: 'Agent View', link: '/agents' }
+]
+```
+
+**Use when:** Toggle represents different pages (not modes on same page)
+
+#### Pattern 2: View Mode on Same Page
+
+```typescript
+// In navConfig.ts
+viewToggle: [
+  { value: 'list', label: 'List' },
+  { value: 'graph', label: 'Graph' }
+]
+```
+
+**Use when:** Toggle switches rendering mode without navigation
+
+**Page implementation:**
+```svelte
+<script>
+  let viewMode = $state('list');
+</script>
+
+<Nav {viewMode} onViewModeChange={(m) => (viewMode = m)} />
+
+{#if viewMode === 'list'}
+  <TaskList />
+{:else}
+  <TaskGraph />
+{/if}
+```
+
+#### Pattern 3: Project Filter Integration
+
+```svelte
+<script>
+  let selectedProject = $state('All Projects');
+
+  // Sync with URL params
+  $effect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const projectParam = params.get('project');
+    selectedProject = projectParam || 'All Projects';
+  });
+
+  function handleProjectChange(project: string) {
+    selectedProject = project;
+
+    // Update URL
+    const url = new URL(window.location.href);
+    if (project === 'All Projects') {
+      url.searchParams.delete('project');
+    } else {
+      url.searchParams.set('project', project);
+    }
+    replaceState(url, {});
+
+    // Refetch data with filter
+    fetchData();
+  }
+</script>
+
+<Nav
+  context="agents"
+  {projects}
+  {selectedProject}
+  onProjectChange={handleProjectChange}
+  showProjectFilter={true}
+/>
+```
+
+### Icons
+
+Icons are defined inline in Nav component (lines 79-83):
+
+```typescript
+const icons = {
+  list: 'M3.75 12h16.5m-16.5 3.75h16.5...', // List icon path
+  graph: 'M7.5 21L3 16.5m0 0L7.5 12M3...', // Graph icon path
+  users: 'M15 19.128a9.38 9.38 0 002.625...' // Users icon path
+};
+```
+
+**To add new icon:**
+1. Get SVG path from Heroicons (https://heroicons.com)
+2. Add to `icons` object in Nav.svelte
+3. Reference in config: `{ icon: 'myIcon', ... }`
+
+### Migration Path: Inline Config → navConfig.ts
+
+**Current state:** Nav component has inline `contextConfig` (not ideal)
+
+**Goal:** Move all config to `navConfig.ts` for better separation
+
+**Steps:**
+1. Export all configs from `navConfig.ts` (already done)
+2. Import configs in Nav.svelte
+3. Replace inline object with imports
+4. Test all pages still work
+
+**Example refactor:**
+
+```typescript
+// ❌ Before (inline)
+const contextConfig = {
+  home: { title: 'Beads Task Dashboard', ... },
+  agents: { title: 'Agents', ... }
+};
+
+// ✅ After (imported)
+import { homeConfig, agentsConfig } from '$lib/config/navConfig';
+
+const contextConfig = {
+  home: homeConfig,
+  agents: agentsConfig
+};
+```
+
+### Troubleshooting
+
+**Nav wrapping to multiple rows:**
+- Check for `flex-nowrap` on controls container
+- Verify `gap-1.5` (not larger)
+- Ensure responsive labels are hidden on small screens
+
+**Project filter not showing:**
+- Check `showProjectFilter={true}` prop
+- Verify `projects` array is populated
+- Confirm context supports project filtering
+
+**View toggle not working:**
+- Check `onViewModeChange` handler is provided
+- Verify `viewMode` is reactive (`$state`)
+- Ensure config has `viewToggle` defined
+
+**Icons not displaying:**
+- Verify icon name exists in `icons` object
+- Check SVG path is valid
+- Confirm icon is referenced in config
+
+### Files
+
+**Core files:**
+- `src/lib/components/Nav.svelte` - Main component (173 lines)
+- `src/lib/config/navConfig.ts` - Configuration (52 lines)
+- `src/lib/components/ThemeSelector.svelte` - Theme dropdown (integrated)
+- `src/lib/components/ProjectSelector.svelte` - Project dropdown (integrated)
+
+**Usage examples:**
+- `src/routes/+page.svelte` - Home page with view toggle
+- `src/routes/agents/+page.svelte` - Agents page with project filter
+- `src/routes/api-demo/+page.svelte` - Simple page (no extras)
+
 ## UI Patterns: Unified Queue/Drop Zone
 
 ### Overview

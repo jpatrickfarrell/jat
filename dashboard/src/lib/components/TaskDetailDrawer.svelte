@@ -6,9 +6,10 @@
 	 * Features:
 	 * - Side panel drawer (doesn't block view)
 	 * - Dual mode: view and edit
+	 * - Auto-save edit mode (debounced 500ms)
 	 * - Fetches task data on mount
 	 * - Mode toggle button
-	 * - Displays all task fields from TaskDetailModal
+	 * - Optimistic updates with rollback
 	 */
 
 	import { tick } from 'svelte';
@@ -33,11 +34,15 @@
 		assignee: ''
 	});
 
+	// Auto-save state
+	let isSaving = $state(false);
+	let saveError = $state(null);
+	let lastSaved = $state<Date | null>(null);
+	let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+
 	// UI state
-	let isSubmitting = $state(false);
 	let validationErrors = $state({});
-	let submitError = $state(null);
-	let successMessage = $state(null);
+	let toastMessage = $state<{ type: 'success' | 'error'; text: string } | null>(null);
 
 	// Status badge colors
 	const statusColors = {
@@ -129,8 +134,83 @@
 		return new Date(dateString).toLocaleString();
 	}
 
+	// Show toast notification
+	function showToast(type: 'success' | 'error', text: string) {
+		toastMessage = { type, text };
+		setTimeout(() => {
+			toastMessage = null;
+		}, 3000); // Hide after 3 seconds
+	}
+
+	// Debounced auto-save function
+	async function autoSave(field: string, value: any) {
+		// Clear any pending save
+		if (saveTimeout) {
+			clearTimeout(saveTimeout);
+		}
+
+		// Debounce for 500ms
+		saveTimeout = setTimeout(async () => {
+			isSaving = true;
+			saveError = null;
+
+			// Create backup of current task for rollback
+			const taskBackup = { ...task };
+
+			try {
+				// Optimistic update - update UI immediately
+				if (task) {
+					task = { ...task, [field]: value };
+				}
+
+				// Prepare PATCH request body (only the changed field)
+				const updateData: any = {};
+				updateData[field] = value;
+
+				// Make PATCH request
+				const response = await fetch(`/api/tasks/${taskId}`, {
+					method: 'PATCH',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(updateData)
+				});
+
+				if (!response.ok) {
+					const errorData = await response.json();
+					throw new Error(errorData.message || 'Failed to save');
+				}
+
+				const data = await response.json();
+
+				// Update task with server response
+				task = data.task;
+				lastSaved = new Date();
+
+				// Show success toast
+				showToast('success', '✓ Saved');
+
+			} catch (error: any) {
+				console.error('Auto-save error:', error);
+
+				// Rollback on error
+				task = taskBackup;
+				saveError = error.message;
+
+				// Show error toast
+				showToast('error', `✗ ${error.message}`);
+			} finally {
+				isSaving = false;
+			}
+		}, 500);
+	}
+
 	// Toggle between view and edit modes
 	function toggleMode() {
+		// Clear any pending save when toggling modes
+		if (saveTimeout) {
+			clearTimeout(saveTimeout);
+			saveTimeout = null;
+		}
+
 		if (mode === 'view') {
 			mode = 'edit';
 		} else {
@@ -151,99 +231,66 @@
 		}
 	}
 
-	// Validate form
-	function validateForm() {
-		const errors: Record<string, string> = {};
-
-		if (!formData.title.trim()) {
-			errors.title = 'Title is required';
+	// Auto-save watchers for each field (only in edit mode)
+	$effect(() => {
+		if (mode === 'edit' && task && formData.title !== task.title) {
+			autoSave('title', formData.title);
 		}
+	});
 
-		if (formData.type === null || formData.type === undefined) {
-			errors.type = 'Type is required';
+	$effect(() => {
+		if (mode === 'edit' && task && formData.description !== task.description) {
+			autoSave('description', formData.description);
 		}
+	});
 
-		validationErrors = errors;
-		return Object.keys(errors).length === 0;
-	}
-
-	// Handle form submission (edit mode)
-	async function handleSubmit(e: Event) {
-		e.preventDefault();
-
-		// Reset previous errors
-		submitError = null;
-		successMessage = null;
-
-		// Validate form
-		if (!validateForm()) {
-			return;
+	$effect(() => {
+		if (mode === 'edit' && task && formData.priority !== task.priority) {
+			autoSave('priority', formData.priority);
 		}
+	});
 
-		isSubmitting = true;
-
-		try {
-			// Parse labels
-			const labels = formData.labels
-				.split(',')
-				.map((l) => l.trim())
-				.filter((l) => l.length > 0);
-
-			// Prepare request body
-			const requestBody = {
-				title: formData.title.trim(),
-				description: formData.description.trim() || undefined,
-				priority: formData.priority,
-				type: formData.type,
-				status: formData.status,
-				project: formData.project.trim() || undefined,
-				labels: labels.length > 0 ? labels : undefined,
-				assignee: formData.assignee.trim() || undefined
-			};
-
-			// PUT to API endpoint
-			const response = await fetch(`/api/tasks/${taskId}`, {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(requestBody)
-			});
-
-			if (!response.ok) {
-				const errorData = await response.json();
-				throw new Error(errorData.error || 'Failed to update task');
-			}
-
-			const data = await response.json();
-
-			// Success!
-			successMessage = `Task ${taskId} updated successfully!`;
-
-			// Refetch task data
-			await fetchTask(taskId);
-
-			// Switch back to view mode after short delay
-			setTimeout(() => {
-				mode = 'view';
-				successMessage = null;
-			}, 1500);
-		} catch (error: any) {
-			console.error('Error updating task:', error);
-			submitError = error.message || 'Failed to update task. Please try again.';
-		} finally {
-			isSubmitting = false;
+	$effect(() => {
+		if (mode === 'edit' && task && formData.type !== task.type) {
+			autoSave('type', formData.type);
 		}
-	}
+	});
+
+	$effect(() => {
+		if (mode === 'edit' && task && formData.status !== task.status) {
+			autoSave('status', formData.status);
+		}
+	});
+
+	$effect(() => {
+		if (mode === 'edit' && task && formData.project !== task.project) {
+			autoSave('project', formData.project);
+		}
+	});
+
+	$effect(() => {
+		if (mode === 'edit' && task && formData.assignee !== task.assignee) {
+			autoSave('assignee', formData.assignee);
+		}
+	});
 
 	// Handle drawer close
 	function handleClose() {
-		if (!isSubmitting) {
+		// Clear any pending save
+		if (saveTimeout) {
+			clearTimeout(saveTimeout);
+			saveTimeout = null;
+		}
+
+		if (!isSaving) {
 			isOpen = false;
 			// Reset to view mode on close
 			mode = 'view';
 			task = null;
 			error = null;
-			submitError = null;
-			successMessage = null;
+			saveError = null;
+			toastMessage = null;
+			lastSaved = null;
 		}
 	}
 </script>
@@ -275,9 +322,18 @@
 						{/if}
 					</div>
 					<p class="text-sm text-base-content/70 mt-1">
-						{mode === 'view'
-							? 'Viewing task details'
-							: 'Edit task details and save changes'}
+						{#if mode === 'view'}
+							Viewing task details
+						{:else if isSaving}
+							<span class="loading loading-spinner loading-xs"></span>
+							Saving...
+						{:else if lastSaved}
+							✓ Saved {new Date().getTime() - lastSaved.getTime() < 60000
+								? 'just now'
+								: 'at ' + lastSaved.toLocaleTimeString()}
+						{:else}
+							Changes save automatically
+						{/if}
 					</p>
 				</div>
 				<div class="flex items-center gap-2">
@@ -286,7 +342,7 @@
 						<button
 							class="btn btn-sm {mode === 'edit' ? 'btn-ghost' : 'btn-primary'}"
 							onclick={toggleMode}
-							disabled={isSubmitting}
+							disabled={isSaving}
 						>
 							{#if mode === 'view'}
 								<svg
@@ -333,7 +389,7 @@
 					<button
 						class="btn btn-sm btn-circle btn-ghost"
 						onclick={handleClose}
-						disabled={isSubmitting}
+						disabled={isSaving}
 						aria-label="Close drawer"
 					>
 						✕
@@ -477,8 +533,8 @@
 						</div>
 					</div>
 				{:else if mode === 'edit'}
-					<!-- Edit Mode -->
-					<form onsubmit={handleSubmit} class="space-y-6">
+					<!-- Edit Mode - Auto-save (no form submission needed) -->
+					<div class="space-y-6">
 						<!-- Title (Required) -->
 						<div class="form-control">
 							<label class="label" for="edit-task-title">
@@ -493,8 +549,7 @@
 								placeholder="Enter task title..."
 								class="input input-bordered w-full {validationErrors.title ? 'input-error' : ''}"
 								bind:value={formData.title}
-								disabled={isSubmitting}
-								required
+								disabled={isSaving}
 							/>
 							{#if validationErrors.title}
 								<label class="label">
@@ -513,7 +568,7 @@
 								placeholder="Enter task description..."
 								class="textarea textarea-bordered w-full h-32"
 								bind:value={formData.description}
-								disabled={isSubmitting}
+								disabled={isSaving}
 							></textarea>
 						</div>
 
@@ -528,7 +583,7 @@
 									id="edit-task-status"
 									class="select select-bordered w-full"
 									bind:value={formData.status}
-									disabled={isSubmitting}
+									disabled={isSaving}
 								>
 									{#each statusOptions as option}
 										<option value={option.value}>{option.label}</option>
@@ -545,7 +600,7 @@
 									id="edit-task-priority"
 									class="select select-bordered w-full"
 									bind:value={formData.priority}
-									disabled={isSubmitting}
+									disabled={isSaving}
 								>
 									{#each priorityOptions as option}
 										<option value={option.value}>{option.label}</option>
@@ -562,7 +617,7 @@
 									id="edit-task-type"
 									class="select select-bordered w-full"
 									bind:value={formData.type}
-									disabled={isSubmitting}
+									disabled={isSaving}
 								>
 									{#each typeOptions as option}
 										<option value={option.value}>{option.label}</option>
@@ -580,7 +635,7 @@
 								id="edit-task-project"
 								class="select select-bordered w-full"
 								bind:value={formData.project}
-								disabled={isSubmitting}
+								disabled={isSaving}
 							>
 								<option value="">No project</option>
 								{#each projectOptions as project}
@@ -600,7 +655,7 @@
 								placeholder="e.g., frontend, urgent, bug-fix"
 								class="input input-bordered w-full"
 								bind:value={formData.labels}
-								disabled={isSubmitting}
+								disabled={isSaving}
 							/>
 							<label class="label">
 								<span class="label-text-alt text-base-content/60">
@@ -620,50 +675,10 @@
 								placeholder="Enter assignee name..."
 								class="input input-bordered w-full"
 								bind:value={formData.assignee}
-								disabled={isSubmitting}
+								disabled={isSaving}
 							/>
 						</div>
-
-						<!-- Error Message -->
-						{#if submitError}
-							<div class="alert alert-error">
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									class="stroke-current shrink-0 h-6 w-6"
-									fill="none"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-									/>
-								</svg>
-								<span>{submitError}</span>
-							</div>
-						{/if}
-
-						<!-- Success Message -->
-						{#if successMessage}
-							<div class="alert alert-success">
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									class="stroke-current shrink-0 h-6 w-6"
-									fill="none"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-									/>
-								</svg>
-								<span>{successMessage}</span>
-							</div>
-						{/if}
-					</form>
+					</div>
 				{/if}
 			</div>
 
@@ -671,26 +686,32 @@
 			{#if !loading && !error && task}
 				<div class="p-6 border-t border-base-300 bg-base-200">
 					<div class="flex justify-end gap-3">
-						{#if mode === 'view'}
-							<button type="button" class="btn btn-ghost" onclick={handleClose}>
-								Close
-							</button>
-						{:else}
-							<button type="button" class="btn btn-ghost" onclick={toggleMode} disabled={isSubmitting}>
-								Cancel
-							</button>
-							<button
-								type="submit"
-								class="btn btn-primary"
-								onclick={handleSubmit}
-								disabled={isSubmitting}
-							>
-								{#if isSubmitting}
-									<span class="loading loading-spinner loading-sm"></span>
-									Saving...
-								{:else}
-									Save Changes
-								{/if}
+						<button type="button" class="btn btn-ghost" onclick={handleClose}>
+							Close
+						</button>
+						{#if mode === 'edit'}
+							<button type="button" class="btn btn-primary" onclick={toggleMode} disabled={isSaving}>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									class="h-4 w-4"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+									/>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+									/>
+								</svg>
+								View Mode
 							</button>
 						{/if}
 					</div>
@@ -698,4 +719,13 @@
 			{/if}
 		</div>
 	</div>
+
+	<!-- Toast Notification (Fixed position, bottom-right) -->
+	{#if toastMessage}
+		<div class="toast toast-end toast-bottom z-[60]">
+			<div class="alert {toastMessage.type === 'success' ? 'alert-success' : 'alert-error'}">
+				<span>{toastMessage.text}</span>
+			</div>
+		</div>
+	{/if}
 </div>

@@ -58,6 +58,12 @@ export interface JSONLEntry {
 	timestamp?: string;
 }
 
+export interface HourlyUsage {
+	timestamp: string;
+	tokens: number;
+	cost: number;
+}
+
 export type TimeRange = 'today' | 'week' | 'all';
 
 // ============================================================================
@@ -79,43 +85,43 @@ const PRICING = {
 /**
  * Build a map of session IDs to agent names by reading .claude/agent-*.txt files.
  *
- * @param projectPath - Path to project root (defaults to cwd)
- * @returns Map<sessionId, agentName>
+ * Input: Project path (e.g., /home/user/code/project)
+ * Output: Map<sessionId, agentName>
+ * State: Read-only, parses .claude/agent-*.txt files
  */
-export async function buildSessionAgentMap(
-	projectPath: string = process.cwd()
-): Promise<Map<string, string>> {
-	const sessionAgentMap = new Map<string, string>();
+export async function buildSessionAgentMap(projectPath: string): Promise<Map<string, string>> {
+	const map = new Map<string, string>();
 	const claudeDir = path.join(projectPath, '.claude');
 
 	try {
-		// Read all files in .claude directory
 		const files = await readdir(claudeDir);
 
-		// Filter for agent-*.txt files
-		const agentFiles = files.filter((file) => file.startsWith('agent-') && file.endsWith('.txt'));
+		// Filter for agent-{session_id}.txt files
+		const agentFiles = files.filter(f => f.startsWith('agent-') && f.endsWith('.txt'));
 
-		// Read each agent file and extract session ID
 		for (const file of agentFiles) {
-			const sessionId = file.replace('agent-', '').replace('.txt', '');
-			const filePath = path.join(claudeDir, file);
+			// Extract session ID from filename: agent-{session_id}.txt
+			const sessionId = file.slice(6, -4); // Remove 'agent-' prefix and '.txt' suffix
 
 			try {
-				const agentName = (await readFile(filePath, 'utf-8')).trim();
+				const filePath = path.join(claudeDir, file);
+				const content = await readFile(filePath, 'utf-8');
+				const agentName = content.trim();
+
 				if (agentName) {
-					sessionAgentMap.set(sessionId, agentName);
+					map.set(sessionId, agentName);
 				}
 			} catch (error) {
 				// Skip files that can't be read
-				console.warn(`Could not read agent file: ${file}`, error);
+				console.warn(`Skipping unreadable agent file: ${file}`);
 			}
 		}
 	} catch (error) {
-		// If .claude directory doesn't exist, return empty map
-		console.warn('Could not read .claude directory', error);
+		// .claude directory might not exist yet
+		console.warn('No .claude directory found, no agent mappings available');
 	}
 
-	return sessionAgentMap;
+	return map;
 }
 
 // ============================================================================
@@ -123,69 +129,68 @@ export async function buildSessionAgentMap(
 // ============================================================================
 
 /**
- * Parse a single JSONL session file and extract token usage data.
+ * Parse a single JSONL session file and extract token usage.
  *
- * @param sessionId - Session ID (filename without extension)
- * @param projectPath - Path to project root
- * @returns SessionUsage object or null if file not found/parse error
+ * Input: sessionId (string), projectPath (string)
+ * Output: SessionUsage object or null if parsing fails
+ * State: Read-only, parses ~/.claude/projects/{project-slug}/{sessionId}.jsonl
  */
-export async function parseSessionUsage(
-	sessionId: string,
-	projectPath: string = process.cwd()
-): Promise<SessionUsage | null> {
-	const homeDir = os.homedir();
-	// Convert project path to format used by Claude Code: /home/user/path -> -home-user-path
-	const projectSlug = projectPath.replace(/\//g, '-');
-	const jsonlPath = path.join(homeDir, '.claude', 'projects', projectSlug, `${sessionId}.jsonl`);
-
+export async function parseSessionUsage(sessionId: string, projectPath: string): Promise<SessionUsage | null> {
 	try {
-		const content = await readFile(jsonlPath, 'utf-8');
-		const lines = content.split('\n').filter((line) => line.trim());
+		// Construct path to JSONL file
+		const homeDir = os.homedir();
+		const projectSlug = projectPath.replace(/\//g, '-'); // Convert /path/to/project → -path-to-project
+		const sessionFile = path.join(homeDir, '.claude', 'projects', projectSlug, `${sessionId}.jsonl`);
 
+		// Read file
+		const content = await readFile(sessionFile, 'utf-8');
+
+		// Parse JSONL (one JSON object per line)
+		const lines = content.trim().split('\n');
 		let totalInput = 0;
 		let totalCacheCreation = 0;
 		let totalCacheRead = 0;
 		let totalOutput = 0;
-		let lastTimestamp = '';
+		let lastTimestamp = new Date().toISOString();
 
-		// Parse each JSONL line
 		for (const line of lines) {
+			if (!line.trim()) continue;
+
 			try {
 				const entry: JSONLEntry = JSON.parse(line);
 
-				// Look for messages with usage data
+				// Extract timestamp if available
+				if (entry.timestamp) {
+					lastTimestamp = entry.timestamp;
+				}
+
+				// Sum up token usage from .message.usage field
 				if (entry.message?.usage) {
 					const usage = entry.message.usage;
 					totalInput += usage.input_tokens || 0;
 					totalCacheCreation += usage.cache_creation_input_tokens || 0;
 					totalCacheRead += usage.cache_read_input_tokens || 0;
 					totalOutput += usage.output_tokens || 0;
-
-					// Track most recent timestamp
-					if (entry.timestamp) {
-						lastTimestamp = entry.timestamp;
-					}
 				}
 			} catch (parseError) {
-				// Skip malformed JSON lines
-				console.warn(`Could not parse JSONL line in ${sessionId}:`, parseError);
+				// Skip malformed lines
+				continue;
 			}
 		}
 
 		const totalTokens = totalInput + totalCacheCreation + totalCacheRead + totalOutput;
-		const cost = calculateCost({
-			input_tokens: totalInput,
-			cache_creation_input_tokens: totalCacheCreation,
-			cache_read_input_tokens: totalCacheRead,
-			output_tokens: totalOutput,
-			total_tokens: totalTokens,
-			cost: 0,
-			sessionCount: 1
-		});
+
+		// Calculate cost
+		const cost = (
+			(totalInput / 1_000_000) * PRICING.input +
+			(totalCacheCreation / 1_000_000) * PRICING.cache_creation +
+			(totalCacheRead / 1_000_000) * PRICING.cache_read +
+			(totalOutput / 1_000_000) * PRICING.output
+		);
 
 		return {
 			sessionId,
-			agentName: null, // Will be populated by caller using session-agent map
+			agentName: null, // Will be filled in by caller
 			timestamp: lastTimestamp,
 			tokens: {
 				input: totalInput,
@@ -197,129 +202,104 @@ export async function parseSessionUsage(
 			cost
 		};
 	} catch (error) {
-		// File not found or read error
-		console.warn(`Could not read JSONL file for session ${sessionId}:`, error);
+		// Session file might not exist or be unreadable
 		return null;
 	}
 }
 
 // ============================================================================
-// Cost Calculation
+// Time Range Filtering
 // ============================================================================
 
 /**
- * Calculate cost based on token usage and Claude Sonnet 4.5 pricing.
+ * Check if a timestamp falls within the specified time range.
  *
- * @param usage - Token usage object
- * @returns Cost in USD
+ * Input: timestamp (ISO string), range ('today' | 'week' | 'all')
+ * Output: boolean
+ * State: Read-only, pure function
  */
-export function calculateCost(usage: TokenUsage): number {
-	const inputCost = (usage.input_tokens / 1_000_000) * PRICING.input;
-	const cacheCreationCost = (usage.cache_creation_input_tokens / 1_000_000) * PRICING.cache_creation;
-	const cacheReadCost = (usage.cache_read_input_tokens / 1_000_000) * PRICING.cache_read;
-	const outputCost = (usage.output_tokens / 1_000_000) * PRICING.output;
-
-	return inputCost + cacheCreationCost + cacheReadCost + outputCost;
-}
-
-// ============================================================================
-// Date Range Filtering
-// ============================================================================
-
-/**
- * Filter sessions by time range.
- *
- * @param sessions - Array of session usage data
- * @param range - Time range filter
- * @returns Filtered sessions
- */
-function filterByTimeRange(sessions: SessionUsage[], range: TimeRange): SessionUsage[] {
-	if (range === 'all') {
-		return sessions;
-	}
+function isWithinTimeRange(timestamp: string, range: TimeRange): boolean {
+	if (range === 'all') return true;
 
 	const now = new Date();
-	let cutoffDate: Date;
+	const date = new Date(timestamp);
 
 	if (range === 'today') {
-		// Start of today (midnight)
-		cutoffDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-	} else {
-		// Last 7 days
-		cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+		// Check if same calendar day
+		return (
+			date.getFullYear() === now.getFullYear() &&
+			date.getMonth() === now.getMonth() &&
+			date.getDate() === now.getDate()
+		);
 	}
 
-	return sessions.filter((session) => {
-		if (!session.timestamp) return false;
-		const sessionDate = new Date(session.timestamp);
-		return sessionDate >= cutoffDate;
-	});
+	if (range === 'week') {
+		// Check if within last 7 days
+		const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+		return date >= weekAgo;
+	}
+
+	return false;
 }
 
 // ============================================================================
-// Aggregation
+// Agent-Specific Token Usage
 // ============================================================================
 
 /**
- * Aggregate usage for a specific agent.
+ * Get token usage for a specific agent within a time range.
  *
- * @param agentName - Agent name
- * @param timeRange - Time range filter (default: 'all')
- * @param projectPath - Path to project root
- * @returns Aggregated token usage for the agent
+ * Input: agentName (string), timeRange ('today' | 'week' | 'all'), projectPath (string)
+ * Output: TokenUsage object
+ * State: Read-only, aggregates data from session files
  */
 export async function getAgentUsage(
 	agentName: string,
-	timeRange: TimeRange = 'all',
-	projectPath: string = process.cwd()
+	timeRange: TimeRange,
+	projectPath: string
 ): Promise<TokenUsage> {
-	// Build session-agent map
+	// Build session → agent mapping
 	const sessionAgentMap = await buildSessionAgentMap(projectPath);
 
-	// Find sessions for this agent
-	const agentSessions: string[] = [];
-	for (const [sessionId, name] of sessionAgentMap.entries()) {
-		if (name === agentName) {
-			agentSessions.push(sessionId);
-		}
-	}
+	// Find all sessions for this agent
+	const agentSessions = Array.from(sessionAgentMap.entries())
+		.filter(([_, name]) => name === agentName)
+		.map(([sessionId, _]) => sessionId);
 
 	// Parse usage for each session
-	const sessions: SessionUsage[] = [];
-	for (const sessionId of agentSessions) {
-		const usage = await parseSessionUsage(sessionId, projectPath);
-		if (usage) {
-			usage.agentName = agentName;
-			sessions.push(usage);
-		}
-	}
+	const sessionUsages = await Promise.all(
+		agentSessions.map(sessionId => parseSessionUsage(sessionId, projectPath))
+	);
 
-	// Filter by time range
-	const filteredSessions = filterByTimeRange(sessions, timeRange);
-
-	// Aggregate totals
+	// Aggregate tokens across sessions (filtering by time range)
 	let totalInput = 0;
 	let totalCacheCreation = 0;
 	let totalCacheRead = 0;
 	let totalOutput = 0;
+	let sessionCount = 0;
 
-	for (const session of filteredSessions) {
-		totalInput += session.tokens.input;
-		totalCacheCreation += session.tokens.cache_creation;
-		totalCacheRead += session.tokens.cache_read;
-		totalOutput += session.tokens.output;
+	for (const usage of sessionUsages) {
+		if (!usage) continue;
+
+		// Filter by time range
+		if (!isWithinTimeRange(usage.timestamp, timeRange)) continue;
+
+		totalInput += usage.tokens.input;
+		totalCacheCreation += usage.tokens.cache_creation;
+		totalCacheRead += usage.tokens.cache_read;
+		totalOutput += usage.tokens.output;
+		sessionCount++;
 	}
 
 	const totalTokens = totalInput + totalCacheCreation + totalCacheRead + totalOutput;
-	const cost = calculateCost({
-		input_tokens: totalInput,
-		cache_creation_input_tokens: totalCacheCreation,
-		cache_read_input_tokens: totalCacheRead,
-		output_tokens: totalOutput,
-		total_tokens: totalTokens,
-		cost: 0,
-		sessionCount: filteredSessions.length
-	});
+
+	// Calculate cost
+	const cost = (
+		(totalInput / 1_000_000) * PRICING.input +
+		(totalCacheCreation / 1_000_000) * PRICING.cache_creation +
+		(totalCacheRead / 1_000_000) * PRICING.cache_read +
+		(totalOutput / 1_000_000) * PRICING.output
+	);
 
 	return {
 		input_tokens: totalInput,
@@ -328,29 +308,34 @@ export async function getAgentUsage(
 		output_tokens: totalOutput,
 		total_tokens: totalTokens,
 		cost,
-		sessionCount: filteredSessions.length
+		sessionCount
 	};
 }
 
+// ============================================================================
+// All Agents Token Usage
+// ============================================================================
+
 /**
- * Get system-wide token usage for all agents.
+ * Get token usage for all agents within a time range.
  *
- * @param timeRange - Time range filter (default: 'all')
- * @param projectPath - Path to project root
- * @returns Map of agent names to their token usage
+ * Input: timeRange ('today' | 'week' | 'all'), projectPath (string)
+ * Output: Map<agentName, TokenUsage>
+ * State: Read-only, aggregates data from all session files
  */
 export async function getAllAgentUsage(
-	timeRange: TimeRange = 'all',
-	projectPath: string = process.cwd()
+	timeRange: TimeRange,
+	projectPath: string
 ): Promise<Map<string, TokenUsage>> {
-	// Build session-agent map
+	const usageMap = new Map<string, TokenUsage>();
+
+	// Build session → agent mapping
 	const sessionAgentMap = await buildSessionAgentMap(projectPath);
 
 	// Get unique agent names
-	const agentNames = new Set(sessionAgentMap.values());
+	const agentNames = Array.from(new Set(sessionAgentMap.values()));
 
-	// Get usage for each agent
-	const usageMap = new Map<string, TokenUsage>();
+	// Fetch usage for each agent
 	for (const agentName of agentNames) {
 		const usage = await getAgentUsage(agentName, timeRange, projectPath);
 		usageMap.set(agentName, usage);
@@ -360,42 +345,45 @@ export async function getAllAgentUsage(
 }
 
 // ============================================================================
-// Utility Functions
+// Cost Calculation Helper
 // ============================================================================
 
 /**
- * Get all available session IDs for a project.
+ * Calculate cost from token usage breakdown.
  *
- * @param projectPath - Path to project root
- * @returns Array of session IDs
+ * Input: TokenUsage object
+ * Output: number (cost in USD)
+ * State: Pure function
  */
-export async function getAllSessionIds(projectPath: string = process.cwd()): Promise<string[]> {
-	const homeDir = os.homedir();
-	const projectSlug = projectPath.replace(/\//g, '-');
-	const projectsDir = path.join(homeDir, '.claude', 'projects', projectSlug);
-
-	try {
-		const files = await readdir(projectsDir);
-		return files.filter((file) => file.endsWith('.jsonl')).map((file) => file.replace('.jsonl', ''));
-	} catch (error) {
-		console.warn('Could not read projects directory:', error);
-		return [];
-	}
+export function calculateCost(usage: TokenUsage): number {
+	return (
+		(usage.input_tokens / 1_000_000) * PRICING.input +
+		(usage.cache_creation_input_tokens / 1_000_000) * PRICING.cache_creation +
+		(usage.cache_read_input_tokens / 1_000_000) * PRICING.cache_read +
+		(usage.output_tokens / 1_000_000) * PRICING.output
+	);
 }
 
+// ============================================================================
+// System-Wide Token Usage (Cross-Agent Aggregation)
+// ============================================================================
+
 /**
- * Get total system-wide token usage across all agents.
+ * Get aggregated token usage across ALL agents for a time range.
  *
- * @param timeRange - Time range filter (default: 'all')
- * @param projectPath - Path to project root
- * @returns Total token usage
+ * Input: timeRange ('today' | 'week' | 'all'), projectPath (string)
+ * Output: TokenUsage object (system-wide totals)
+ * State: Read-only, aggregates data from all agents
+ *
+ * Use case: System capacity metrics, cost tracking, overview stats
  */
-export async function getSystemTotalUsage(
-	timeRange: TimeRange = 'all',
-	projectPath: string = process.cwd()
+export async function getSystemUsage(
+	timeRange: TimeRange,
+	projectPath: string
 ): Promise<TokenUsage> {
 	const allAgentUsage = await getAllAgentUsage(timeRange, projectPath);
 
+	// Sum across all agents
 	let totalInput = 0;
 	let totalCacheCreation = 0;
 	let totalCacheRead = 0;
@@ -430,4 +418,130 @@ export async function getSystemTotalUsage(
 		cost,
 		sessionCount: totalSessions
 	};
+}
+
+// ============================================================================
+// Hourly Token Usage (RAW DATA - NO SMOOTHING)
+// ============================================================================
+
+/**
+ * Get raw hourly token usage for the last 24 hours.
+ * Returns actual tokens per hour with NO smoothing or synthetic data.
+ *
+ * Input: projectPath (string)
+ * Output: Array of HourlyUsage objects (24 hours, oldest to newest)
+ * State: Read-only, parses all JSONL files and groups by hour
+ */
+export async function getHourlyUsage(projectPath: string): Promise<HourlyUsage[]> {
+	// Initialize 24 hours of empty data (newest to oldest)
+	const now = new Date();
+	const hourlyBuckets = new Map<string, { tokens: number; cost: number }>();
+
+	// Create 24 hourly buckets
+	for (let i = 23; i >= 0; i--) {
+		const hourTime = new Date(now.getTime() - i * 60 * 60 * 1000);
+		// Round to hour start
+		hourTime.setMinutes(0, 0, 0);
+		const hourKey = hourTime.toISOString();
+		hourlyBuckets.set(hourKey, { tokens: 0, cost: 0 });
+	}
+
+	try {
+		// Get all session files
+		const homeDir = os.homedir();
+		const projectSlug = projectPath.replace(/\//g, '-');
+		const sessionsDir = path.join(homeDir, '.claude', 'projects', projectSlug);
+
+		const files = await readdir(sessionsDir);
+		const jsonlFiles = files.filter(f => f.endsWith('.jsonl'));
+
+		// Parse each session file
+		for (const file of jsonlFiles) {
+			const sessionFile = path.join(sessionsDir, file);
+
+			try {
+				const content = await readFile(sessionFile, 'utf-8');
+				const lines = content.trim().split('\n');
+
+				for (const line of lines) {
+					if (!line.trim()) continue;
+
+					try {
+						const entry: JSONLEntry = JSON.parse(line);
+
+						// Skip if no usage data
+						if (!entry.message?.usage) continue;
+
+						// Get timestamp (use entry timestamp or current time)
+						const timestamp = entry.timestamp ? new Date(entry.timestamp) : new Date();
+
+						// Skip if older than 24 hours
+						const age = now.getTime() - timestamp.getTime();
+						if (age > 24 * 60 * 60 * 1000) continue;
+
+						// Round to hour start
+						timestamp.setMinutes(0, 0, 0);
+						const hourKey = timestamp.toISOString();
+
+						// Get bucket (might not exist if timestamp is slightly off)
+						if (!hourlyBuckets.has(hourKey)) {
+							// Find closest bucket
+							const closestBucket = Array.from(hourlyBuckets.keys())
+								.reduce((closest, key) => {
+									const diff = Math.abs(new Date(key).getTime() - timestamp.getTime());
+									const closestDiff = Math.abs(new Date(closest).getTime() - timestamp.getTime());
+									return diff < closestDiff ? key : closest;
+								});
+							hourlyBuckets.set(closestBucket, {
+								tokens: (hourlyBuckets.get(closestBucket)?.tokens || 0),
+								cost: (hourlyBuckets.get(closestBucket)?.cost || 0)
+							});
+						}
+
+						const bucket = hourlyBuckets.get(hourKey);
+						if (!bucket) continue;
+
+						// Sum tokens
+						const usage = entry.message.usage;
+						const totalTokens = (
+							(usage.input_tokens || 0) +
+							(usage.cache_creation_input_tokens || 0) +
+							(usage.cache_read_input_tokens || 0) +
+							(usage.output_tokens || 0)
+						);
+
+						// Calculate cost
+						const cost = (
+							((usage.input_tokens || 0) / 1_000_000) * PRICING.input +
+							((usage.cache_creation_input_tokens || 0) / 1_000_000) * PRICING.cache_creation +
+							((usage.cache_read_input_tokens || 0) / 1_000_000) * PRICING.cache_read +
+							((usage.output_tokens || 0) / 1_000_000) * PRICING.output
+						);
+
+						bucket.tokens += totalTokens;
+						bucket.cost += cost;
+
+					} catch (parseError) {
+						// Skip malformed JSON lines
+						continue;
+					}
+				}
+			} catch (fileError) {
+				// Skip unreadable files
+				continue;
+			}
+		}
+	} catch (error) {
+		// Sessions directory might not exist
+		console.warn('Could not read sessions directory:', error);
+	}
+
+	// Convert map to array (sorted oldest to newest)
+	return Array.from(hourlyBuckets.entries())
+		.sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime())
+		.map(([timestamp, data]) => ({
+			timestamp,
+			tokens: data.tokens,
+			cost: data.cost
+		}));
 }

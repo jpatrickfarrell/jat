@@ -11,7 +11,7 @@
 import { json } from '@sveltejs/kit';
 import { getAgents, getReservations } from '$lib/server/agent-mail.js';
 import { getTasks } from '$lib/server/beads.js';
-import { getAllAgentUsage } from '$lib/utils/tokenUsage.js';
+import { getAllAgentUsage, getHourlyUsage } from '$lib/utils/tokenUsage.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -40,6 +40,7 @@ export async function GET({ url }) {
 		const projectFilter = url.searchParams.get('project');
 		const agentFilter = url.searchParams.get('agent');
 		const includeUsage = url.searchParams.get('usage') === 'true';
+		const includeHourly = url.searchParams.get('hourly') === 'true';
 
 		// Fetch all data sources in parallel for performance
 		// NOTE: Agents and reservations are NOT filtered by project
@@ -50,13 +51,19 @@ export async function GET({ url }) {
 			Promise.resolve(getTasks({ projectName: projectFilter }))  // Filter tasks only
 		];
 
+		const projectPath = process.cwd().replace('/dashboard', '');
+
 		// Optionally fetch token usage data
 		if (includeUsage) {
-			const projectPath = process.cwd().replace('/dashboard', '');
 			promises.push(
 				getAllAgentUsage('today', projectPath),
 				getAllAgentUsage('week', projectPath)
 			);
+		}
+
+		// Optionally fetch hourly token usage data (raw data for sparklines)
+		if (includeHourly) {
+			promises.push(getHourlyUsage(projectPath));
 		}
 
 		const results = await Promise.all(promises);
@@ -65,6 +72,7 @@ export async function GET({ url }) {
 		const tasks = results[2];
 		const usageToday = includeUsage ? results[3] : null;
 		const usageWeek = includeUsage ? results[4] : null;
+		const hourlyUsage = includeHourly ? results[includeUsage ? 5 : 3] : null;
 
 		// Calculate agent statistics
 		const agentStats = agents.map(agent => {
@@ -159,6 +167,7 @@ export async function GET({ url }) {
 			task_stats: taskStats,
 			tasks_with_deps_count: tasksWithDeps.length,
 			tasks_with_deps: tasksWithDeps,
+			hourlyUsage: hourlyUsage, // Raw hourly token usage (last 24 hours)
 			timestamp: new Date().toISOString(),
 			meta: {
 				poll_interval_ms: 3000, // Recommended poll interval for frontend

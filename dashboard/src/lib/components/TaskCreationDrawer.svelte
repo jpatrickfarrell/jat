@@ -31,9 +31,16 @@
 		if (drawerToggle) {
 			drawerToggle.addEventListener('change', (e) => {
 				if (e.target.checked) {
+					// Tiny delay to let DOM settle, but fast enough to preserve user gesture
 					setTimeout(() => {
-						titleInput?.focus();
-					}, 50);
+						if (titleInput) {
+							titleInput.focus();
+							// Force focus if it didn't work
+							if (document.activeElement !== titleInput) {
+								titleInput.focus();
+							}
+						}
+					}, 10);
 				}
 			});
 		}

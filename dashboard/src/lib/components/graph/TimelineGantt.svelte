@@ -232,6 +232,8 @@
 	});
 
 	onMount(() => {
+		// Set initial width from parent container
+		width = svgElement?.parentElement?.clientWidth || 1200;
 		buildTimeline();
 
 		// Rebuild on window resize

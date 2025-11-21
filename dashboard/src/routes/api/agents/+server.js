@@ -44,10 +44,12 @@ export async function GET({ url }) {
 
 		// Fetch all data sources in parallel for performance
 		console.log('  → Fetching data from agent-mail and beads...');
+		// NOTE: Agents and reservations are NOT filtered by project
+		// because agents work across multiple projects. Only tasks are filtered.
 		const [agents, reservations, tasks] = await Promise.all([
-			Promise.resolve(getAgents(projectFilter)),
-			Promise.resolve(getReservations(agentFilter, projectFilter)),
-			Promise.resolve(getTasks({ projectName: projectFilter }))
+			Promise.resolve(getAgents(null)),  // Show all agents (don't filter by project)
+			Promise.resolve(getReservations(agentFilter, null)),  // Show all reservations
+			Promise.resolve(getTasks({ projectName: projectFilter }))  // Filter tasks only
 		]);
 
 		console.log('  → Data fetched:');

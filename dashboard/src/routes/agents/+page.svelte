@@ -11,17 +11,18 @@
 	} from '$lib/utils/projectUtils';
 
 	let tasks = $state([]);
+	let allTasks = $state([]);  // Unfiltered tasks for project list calculation
 	let agents = $state([]);
 	let reservations = $state([]);
 	let unassignedTasks = $state([]);
 	let taskStats = $state(null);
 	let selectedProject = $state('All Projects');
 
-	// Extract unique projects from tasks
-	const projects = $derived(getProjectsFromTasks(tasks));
+	// Extract unique projects from ALL tasks (unfiltered)
+	const projects = $derived(getProjectsFromTasks(allTasks));
 
-	// Get task count per project
-	const taskCounts = $derived(getTaskCountByProject(tasks));
+	// Get task count per project from ALL tasks (unfiltered)
+	const taskCounts = $derived(getTaskCountByProject(allTasks));
 
 	// Handle project selection change
 	function handleProjectChange(project: string) {
@@ -98,6 +99,12 @@
 			tasks = data.tasks || [];
 			unassignedTasks = data.unassigned_tasks || [];
 			taskStats = data.task_stats || null;
+
+			// Update allTasks when viewing all projects (for dropdown options)
+			if (selectedProject === 'All Projects') {
+				allTasks = data.tasks || [];
+				console.log('    → Updated allTasks (unfiltered):', allTasks.length);
+			}
 
 			console.log('    After - agents:', agents.length, 'tasks:', tasks.length);
 			console.log('  ✓ fetchData complete');

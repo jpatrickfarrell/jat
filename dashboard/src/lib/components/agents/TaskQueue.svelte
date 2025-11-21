@@ -414,7 +414,7 @@
 	</div>
 
 	<!-- Task List -->
-	<div class="flex-1 overflow-y-auto p-4 space-y-2">
+	<div class="flex-1 overflow-y-auto p-4">
 		{#if filteredTasks.length === 0}
 			<div class="text-center py-8 text-base-content/50">
 				<svg
@@ -442,7 +442,7 @@
 			{#each filteredTasks as task (task.id)}
 				{@const depStatus = analyzeDependencies(task)}
 				<div
-					class="card bg-base-100 border border-base-300 hover:border-primary cursor-pointer transition-all {!dragDisabled ? 'opacity-50' : ''} {depStatus.hasBlockers ? 'opacity-60 border-error/30' : ''}"
+					class="card bg-base-100 border border-base-300 hover:border-primary cursor-pointer transition-all mb-1.5 {!dragDisabled ? 'opacity-50' : ''} {depStatus.hasBlockers ? 'opacity-60 border-error/30' : ''}"
 					draggable="true"
 					data-task-id={task.id}
 					ondragstart={handleDragStart}
@@ -451,7 +451,14 @@
 					title={depStatus.hasBlockers ? `⚠️ ${depStatus.blockingReason}` : ''}
 				>
 					<div class="card-body p-3 relative">
-						<!-- Badges positioned at top border -->
+						<!-- Task ID badge on left -->
+						<div class="absolute -top-2 left-2">
+							<span class="badge badge-sm badge-ghost text-xs text-base-content/50 font-mono">
+								{task.id}
+							</span>
+						</div>
+
+						<!-- Priority and Dependency badges on right -->
 						<div class="absolute -top-2 right-2 flex items-center gap-1">
 							<DependencyIndicator {task} allTasks={tasks} size="sm" />
 							<span class="badge badge-sm {getPriorityBadge(task.priority)}">
@@ -459,12 +466,11 @@
 							</span>
 						</div>
 
-						<!-- Task Header -->
+						<!-- Task Title -->
 						<div class="mb-2">
 							<h3 class="font-medium text-sm text-base-content truncate" title={task.title}>
 								{task.title}
 							</h3>
-							<p class="text-xs text-base-content/50 font-mono">{task.id}</p>
 						</div>
 
 						<!-- Task Description (truncated) -->
@@ -485,24 +491,6 @@
 								{/if}
 							</div>
 						{/if}
-
-						<!-- Drag Handle Icon -->
-						<div class="mt-2 flex justify-center">
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								fill="none"
-								viewBox="0 0 24 24"
-								stroke-width="1.5"
-								stroke="currentColor"
-								class="w-4 h-4 text-base-content/30"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M3.75 9h16.5m-16.5 6.75h16.5"
-								/>
-							</svg>
-						</div>
 					</div>
 				</div>
 			{/each}

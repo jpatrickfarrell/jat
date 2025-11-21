@@ -1,0 +1,416 @@
+/**
+ * Time-Series Token Usage Aggregation Utility
+ *
+ * Aggregates Claude Code token usage into time buckets for sparkline visualization.
+ *
+ * Features:
+ * - System-wide 24-hour view (48 × 30-minute buckets)
+ * - Per-agent session-based view (variable bucket size based on session duration)
+ * - Filtering by agent, session, date range
+ * - Performance optimized (<100ms for 24h aggregation)
+ *
+ * Usage:
+ * ```typescript
+ * // System-wide 24-hour view
+ * const systemData = await getTokenTimeSeries({ range: '24h', bucketSize: '30min' });
+ *
+ * // Per-agent session view
+ * const agentData = await getTokenTimeSeries({ agentName: 'MyAgent', bucketSize: 'session' });
+ *
+ * // Specific session
+ * const sessionData = await getTokenTimeSeries({ sessionId: 'abc123' });
+ * ```
+ */
+
+import { readdir, readFile } from 'fs/promises';
+import * as path from 'path';
+import * as os from 'os';
+import { parseSessionUsage, buildSessionAgentMap, calculateCost } from './tokenUsage';
+import type { TimeRange, SessionUsage, TokenUsage } from './tokenUsage';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+/**
+ * Time bucket size options
+ */
+export type BucketSize = '30min' | 'hour' | 'session';
+
+/**
+ * Time-series data point
+ */
+export interface TimeSeriesDataPoint {
+	/** Bucket timestamp (start of bucket) */
+	timestamp: string;
+	/** Total tokens in this bucket */
+	tokens: number;
+	/** Cost in USD for this bucket */
+	cost: number;
+	/** Token breakdown */
+	breakdown?: {
+		input: number;
+		cache_creation: number;
+		cache_read: number;
+		output: number;
+	};
+}
+
+/**
+ * Options for time-series aggregation
+ */
+export interface TimeSeriesOptions {
+	/** Time range filter */
+	range?: '24h' | '7d' | 'all';
+	/** Filter by agent name */
+	agentName?: string;
+	/** Filter by specific session ID */
+	sessionId?: string;
+	/** Bucket size for aggregation */
+	bucketSize?: BucketSize;
+	/** Project path (defaults to cwd) */
+	projectPath?: string;
+}
+
+/**
+ * Time-series aggregation result
+ */
+export interface TimeSeriesResult {
+	/** Array of data points sorted by timestamp */
+	data: TimeSeriesDataPoint[];
+	/** Total tokens across all buckets */
+	totalTokens: number;
+	/** Total cost across all buckets */
+	totalCost: number;
+	/** Number of buckets */
+	bucketCount: number;
+	/** Bucket size used */
+	bucketSize: BucketSize;
+	/** Start timestamp of range */
+	startTime: string;
+	/** End timestamp of range */
+	endTime: string;
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Get bucket duration in milliseconds
+ */
+function getBucketDurationMs(bucketSize: BucketSize): number {
+	switch (bucketSize) {
+		case '30min':
+			return 30 * 60 * 1000;
+		case 'hour':
+			return 60 * 60 * 1000;
+		case 'session':
+			return 0; // Special case: variable bucket size
+	}
+}
+
+/**
+ * Round timestamp down to bucket start
+ */
+function roundToBucketStart(timestamp: Date, bucketSize: BucketSize): Date {
+	if (bucketSize === 'session') {
+		return timestamp; // Session-based: use exact timestamp
+	}
+
+	const ms = timestamp.getTime();
+	const bucketMs = getBucketDurationMs(bucketSize);
+	const roundedMs = Math.floor(ms / bucketMs) * bucketMs;
+	return new Date(roundedMs);
+}
+
+/**
+ * Generate bucket key for grouping
+ */
+function getBucketKey(timestamp: Date, bucketSize: BucketSize): string {
+	if (bucketSize === 'session') {
+		return timestamp.toISOString(); // Exact timestamp for session-based
+	}
+
+	const rounded = roundToBucketStart(timestamp, bucketSize);
+	return rounded.toISOString();
+}
+
+/**
+ * Calculate date range boundaries
+ */
+function getDateRange(range: TimeSeriesOptions['range']): { start: Date; end: Date } {
+	const now = new Date();
+	let start: Date;
+
+	switch (range) {
+		case '24h':
+			start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+			break;
+		case '7d':
+			start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+			break;
+		case 'all':
+		default:
+			// Start from a very early date (effectively no filtering)
+			start = new Date(0);
+			break;
+	}
+
+	return { start, end: now };
+}
+
+/**
+ * Fill missing buckets with zero values
+ */
+function fillMissingBuckets(
+	data: Map<string, TimeSeriesDataPoint>,
+	bucketSize: BucketSize,
+	startTime: Date,
+	endTime: Date
+): TimeSeriesDataPoint[] {
+	if (bucketSize === 'session') {
+		// Session-based: don't fill gaps, use actual data only
+		return Array.from(data.values()).sort((a, b) =>
+			new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+		);
+	}
+
+	const bucketMs = getBucketDurationMs(bucketSize);
+	const filledData: TimeSeriesDataPoint[] = [];
+
+	// Generate all bucket timestamps in range
+	let currentBucketStart = roundToBucketStart(startTime, bucketSize);
+	const endBucketStart = roundToBucketStart(endTime, bucketSize);
+
+	while (currentBucketStart <= endBucketStart) {
+		const key = getBucketKey(currentBucketStart, bucketSize);
+
+		if (data.has(key)) {
+			filledData.push(data.get(key)!);
+		} else {
+			// Fill missing bucket with zeros
+			filledData.push({
+				timestamp: currentBucketStart.toISOString(),
+				tokens: 0,
+				cost: 0,
+				breakdown: {
+					input: 0,
+					cache_creation: 0,
+					cache_read: 0,
+					output: 0
+				}
+			});
+		}
+
+		// Move to next bucket
+		currentBucketStart = new Date(currentBucketStart.getTime() + bucketMs);
+	}
+
+	return filledData;
+}
+
+// ============================================================================
+// Main Function
+// ============================================================================
+
+/**
+ * Aggregate token usage into time-series data for sparkline visualization
+ *
+ * @param options - Aggregation options
+ * @returns Time-series result with bucketed data
+ */
+export async function getTokenTimeSeries(
+	options: TimeSeriesOptions = {}
+): Promise<TimeSeriesResult> {
+	const {
+		range = '24h',
+		agentName,
+		sessionId,
+		bucketSize = '30min',
+		projectPath = process.cwd()
+	} = options;
+
+	const homeDir = os.homedir();
+	// Strip /dashboard suffix if present (when running from dashboard directory)
+	const actualProjectPath = projectPath.replace(/\/dashboard$/, '');
+	const projectSlug = actualProjectPath.replace(/\//g, '-');
+	const projectsDir = path.join(homeDir, '.claude', 'projects', projectSlug);
+
+	// Get date range boundaries
+	const { start: startTime, end: endTime } = getDateRange(range);
+
+	// Build session-agent map for filtering
+	const sessionAgentMap = await buildSessionAgentMap(projectPath);
+
+	// Get all session IDs to process
+	let sessionIds: string[] = [];
+
+	if (sessionId) {
+		// Specific session
+		sessionIds = [sessionId];
+	} else {
+		// Get all sessions
+		try {
+			const files = await readdir(projectsDir);
+			sessionIds = files
+				.filter((file) => file.endsWith('.jsonl'))
+				.map((file) => file.replace('.jsonl', ''));
+		} catch (error) {
+			console.warn('Could not read projects directory:', error);
+			return {
+				data: [],
+				totalTokens: 0,
+				totalCost: 0,
+				bucketCount: 0,
+				bucketSize,
+				startTime: startTime.toISOString(),
+				endTime: endTime.toISOString()
+			};
+		}
+	}
+
+	// Filter sessions by agent if specified
+	if (agentName) {
+		sessionIds = sessionIds.filter((id) => sessionAgentMap.get(id) === agentName);
+	}
+
+	// Map to store aggregated data by bucket
+	const buckets = new Map<string, TimeSeriesDataPoint>();
+
+	// Process each session
+	for (const sid of sessionIds) {
+		const jsonlPath = path.join(projectsDir, `${sid}.jsonl`);
+
+		try {
+			const content = await readFile(jsonlPath, 'utf-8');
+			const lines = content.split('\n').filter((line) => line.trim());
+
+			// Parse each JSONL line
+			for (const line of lines) {
+				try {
+					const entry = JSON.parse(line);
+
+					// Skip entries without usage data or timestamp
+					if (!entry.message?.usage || !entry.timestamp) {
+						continue;
+					}
+
+					const timestamp = new Date(entry.timestamp);
+
+					// Filter by date range
+					if (timestamp < startTime || timestamp > endTime) {
+						continue;
+					}
+
+					const usage = entry.message.usage;
+					const inputTokens = usage.input_tokens || 0;
+					const cacheCreation = usage.cache_creation_input_tokens || 0;
+					const cacheRead = usage.cache_read_input_tokens || 0;
+					const outputTokens = usage.output_tokens || 0;
+					const totalTokens = inputTokens + cacheCreation + cacheRead + outputTokens;
+
+					// Calculate cost for this entry
+					const cost = calculateCost({
+						input_tokens: inputTokens,
+						cache_creation_input_tokens: cacheCreation,
+						cache_read_input_tokens: cacheRead,
+						output_tokens: outputTokens,
+						total_tokens: totalTokens,
+						cost: 0,
+						sessionCount: 1
+					});
+
+					// Determine bucket
+					const bucketKey = getBucketKey(timestamp, bucketSize);
+
+					// Add to bucket (or create new bucket)
+					if (buckets.has(bucketKey)) {
+						const bucket = buckets.get(bucketKey)!;
+						bucket.tokens += totalTokens;
+						bucket.cost += cost;
+						if (bucket.breakdown) {
+							bucket.breakdown.input += inputTokens;
+							bucket.breakdown.cache_creation += cacheCreation;
+							bucket.breakdown.cache_read += cacheRead;
+							bucket.breakdown.output += outputTokens;
+						}
+					} else {
+						buckets.set(bucketKey, {
+							timestamp: bucketKey,
+							tokens: totalTokens,
+							cost,
+							breakdown: {
+								input: inputTokens,
+								cache_creation: cacheCreation,
+								cache_read: cacheRead,
+								output: outputTokens
+							}
+						});
+					}
+				} catch (parseError) {
+					// Skip malformed JSON lines
+					continue;
+				}
+			}
+		} catch (error) {
+			// Skip sessions that can't be read
+			console.warn(`Could not read JSONL file for session ${sid}:`, error);
+			continue;
+		}
+	}
+
+	// Fill missing buckets and sort by timestamp
+	const filledData = fillMissingBuckets(buckets, bucketSize, startTime, endTime);
+
+	// Calculate totals
+	const totalTokens = filledData.reduce((sum, point) => sum + point.tokens, 0);
+	const totalCost = filledData.reduce((sum, point) => sum + point.cost, 0);
+
+	return {
+		data: filledData,
+		totalTokens,
+		totalCost,
+		bucketCount: filledData.length,
+		bucketSize,
+		startTime: startTime.toISOString(),
+		endTime: endTime.toISOString()
+	};
+}
+
+/**
+ * Get time-series data for system-wide 24-hour view
+ *
+ * Convenience function for the most common use case.
+ *
+ * @param projectPath - Project path (defaults to cwd)
+ * @returns Time-series result with 48 × 30-minute buckets
+ */
+export async function getSystemTimeSeries(projectPath?: string): Promise<TimeSeriesResult> {
+	return getTokenTimeSeries({
+		range: '24h',
+		bucketSize: '30min',
+		projectPath
+	});
+}
+
+/**
+ * Get time-series data for per-agent session view
+ *
+ * Convenience function for agent-specific views.
+ *
+ * @param agentName - Agent name
+ * @param projectPath - Project path (defaults to cwd)
+ * @returns Time-series result with session-based buckets
+ */
+export async function getAgentTimeSeries(
+	agentName: string,
+	projectPath?: string
+): Promise<TimeSeriesResult> {
+	return getTokenTimeSeries({
+		agentName,
+		bucketSize: 'session',
+		range: 'all',
+		projectPath
+	});
+}

@@ -589,45 +589,44 @@
 								</button>
 							</div>
 
-								<!-- Color Mode Section -->
-								<div class="space-y-2">
-									<div class="flex items-center justify-between">
-										<span class="label-text text-xs font-semibold">Color</span>
-										<div class="flex flex-wrap gap-1.5 p-2 bg-base-200 rounded-lg">
-											<button
-												class="badge badge-sm transition-all duration-200 cursor-pointer {internalColorMode === 'usage' ? 'badge-primary shadow-md' : 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
-												onclick={() => (internalColorMode = 'usage')}
-												title="Auto percentile-based colors"
-											>
-												Auto
-											</button>
-											<button
-												class="badge badge-sm transition-all duration-200 cursor-pointer {internalColorMode === 'static' ? 'badge-primary shadow-md' : 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
-												onclick={() => (internalColorMode = 'static')}
-												title="Single color palette"
-											>
-												Palette
-											</button>
-										</div>
+							<!-- Color Mode Section -->
+							<div class="space-y-2">
+								<div class="flex items-center justify-between">
+									<span class="label-text text-xs font-semibold">Color</span>
+									<div class="flex flex-wrap gap-1.5 p-2 bg-base-200 rounded-lg">
+										<button
+											class="badge badge-sm transition-all duration-200 cursor-pointer {internalColorMode === 'usage' ? 'badge-primary shadow-md' : 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
+											onclick={() => (internalColorMode = 'usage')}
+											title="Auto percentile-based colors"
+										>
+											Auto
+										</button>
+										<button
+											class="badge badge-sm transition-all duration-200 cursor-pointer {internalColorMode === 'static' ? 'badge-primary shadow-md' : 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
+											onclick={() => (internalColorMode = 'static')}
+											title="Single color palette"
+										>
+											Palette
+										</button>
 									</div>
-
-									<!-- Color Palette (shown when in static mode) -->
-									{#if internalColorMode === 'static'}
-										<div class="flex items-center gap-1.5 flex-wrap" transition:slide={{ duration: 150 }}>
-											{#each colorPalette as paletteColor}
-												<button
-													class="w-7 h-7 rounded-full border-2 transition-all {selectedPaletteColor === paletteColor.color ? 'border-primary ring-2 ring-primary/30 scale-110' : 'border-base-300 hover:scale-105 hover:border-base-400'}"
-													style="background-color: {paletteColor.color};"
-													onclick={() => (selectedPaletteColor = paletteColor.color)}
-													title={paletteColor.name}
-												></button>
-											{/each}
-										</div>
-									{/if}
 								</div>
+
+								<!-- Color Palette (shown when in static mode) -->
+								{#if internalColorMode === 'static'}
+									<div class="flex items-center gap-1.5 flex-wrap" transition:slide={{ duration: 150 }}>
+										{#each colorPalette as paletteColor}
+											<button
+												class="w-7 h-7 rounded-full border-2 transition-all {selectedPaletteColor === paletteColor.color ? 'border-primary ring-2 ring-primary/30 scale-110' : 'border-base-300 hover:scale-105 hover:border-base-400'}"
+												style="background-color: {paletteColor.color};"
+												onclick={() => (selectedPaletteColor = paletteColor.color)}
+												title={paletteColor.name}
+											></button>
+										{/each}
+									</div>
+								{/if}
 							</div>
 						</div>
-			</div>
+					</div>
 		</div>
 	{/if}
 

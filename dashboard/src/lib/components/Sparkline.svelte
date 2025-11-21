@@ -7,6 +7,7 @@
 	 */
 
 	import { formatTokens, formatCost, getUsageColor } from '$lib/utils/numberFormat.js';
+	import { slide } from 'svelte/transition';
 
 	// ============================================================================
 	// Props
@@ -58,6 +59,7 @@
 	let tooltipX = $state(0);
 	let tooltipY = $state(0);
 	let svgElement: SVGSVGElement;
+	let showControls = $state(false); // Hover-to-expand control panel
 
 	// ============================================================================
 	// Computed Values
@@ -157,6 +159,36 @@
 		return data[hoveredIndex];
 	});
 
+	/** Time range label for badge (e.g., "24hr") */
+	const timeRangeLabel = $derived(() => {
+		if (!data || data.length === 0) return '0hr';
+		// Calculate time span from first to last data point
+		const firstTimestamp = new Date(data[0].timestamp);
+		const lastTimestamp = new Date(data[data.length - 1].timestamp);
+		const hoursDiff = (lastTimestamp.getTime() - firstTimestamp.getTime()) / (1000 * 60 * 60);
+
+		if (hoursDiff < 1) return '1hr';
+		if (hoursDiff <= 24) return `${Math.round(hoursDiff)}hr`;
+		const daysDiff = Math.round(hoursDiff / 24);
+		return `${daysDiff}d`;
+	});
+
+	/** Chart icon SVG path for badge */
+	const chartIconPath = $derived(() => {
+		switch (chartType) {
+			case 'line':
+				return 'M2 12 L5 8 L8 10 L14 4';
+			case 'bars':
+				return 'M2 14v-4h2v4zm4 0V8h2v6zm4 0V10h2v4zm4 0V6h2v8z';
+			case 'area':
+				return 'M2 14 L2 12 L5 8 L8 10 L14 4 L14 14 Z';
+			case 'dots':
+				return 'M2 12h.01M5 8h.01M8 10h.01M11 6h.01M14 4h.01';
+			default:
+				return 'M2 12 L5 8 L8 10 L14 4';
+		}
+	});
+
 	// ============================================================================
 	// Event Handlers
 	// ============================================================================
@@ -211,53 +243,95 @@
 </script>
 
 <div class="sparkline-container" style="width: {typeof width === 'number' ? width + 'px' : width};">
-	<!-- Chart Type Toolbar -->
+	<!-- Compact Badge with Hover-to-Expand Controls -->
 	{#if showStyleToolbar}
-		<div class="sparkline-toolbar">
-			<button
-				class="btn btn-xs {chartType === 'line' ? 'btn-primary' : 'btn-ghost'}"
-				onclick={() => (chartType = 'line')}
-				title="Line chart"
-			>
-				<svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-					<path d="M2 12 L5 8 L8 10 L14 4" stroke-linecap="round" />
+		<div
+			class="sparkline-badge-container"
+			role="button"
+			tabindex="0"
+			onmouseenter={() => (showControls = true)}
+			onmouseleave={() => (showControls = false)}
+			onfocus={() => (showControls = true)}
+			onblur={() => (showControls = false)}
+			aria-label="Sparkline controls - hover to expand"
+		>
+			<!-- Compact Badge (Always Visible) -->
+			<button class="badge badge-sm gap-1.5 px-2 py-2 badge-ghost hover:badge-primary transition-all">
+				<!-- Time Range -->
+				<span class="font-mono text-xs font-semibold">
+					{timeRangeLabel()}
+				</span>
+
+				<!-- Separator -->
+				<span class="text-base-content/40">·</span>
+
+				<!-- Chart Type Icon -->
+				<svg
+					class="w-3 h-3"
+					viewBox="0 0 16 16"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.5"
+					stroke-linecap="round"
+				>
+					<path d={chartIconPath()} />
 				</svg>
 			</button>
-			<button
-				class="btn btn-xs {chartType === 'bars' ? 'btn-primary' : 'btn-ghost'}"
-				onclick={() => (chartType = 'bars')}
-				title="Bar chart (equalizer style)"
-			>
-				<svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
-					<rect x="1" y="8" width="2" height="6" />
-					<rect x="4" y="4" width="2" height="10" />
-					<rect x="7" y="6" width="2" height="8" />
-					<rect x="10" y="2" width="2" height="12" />
-					<rect x="13" y="5" width="2" height="9" />
-				</svg>
-			</button>
-			<button
-				class="btn btn-xs {chartType === 'area' ? 'btn-primary' : 'btn-ghost'}"
-				onclick={() => (chartType = 'area')}
-				title="Area chart (filled)"
-			>
-				<svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor" opacity="0.6">
-					<path d="M2 14 L2 12 L5 8 L8 10 L14 4 L14 14 Z" />
-				</svg>
-			</button>
-			<button
-				class="btn btn-xs {chartType === 'dots' ? 'btn-primary' : 'btn-ghost'}"
-				onclick={() => (chartType = 'dots')}
-				title="Dot plot"
-			>
-				<svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
-					<circle cx="2" cy="12" r="1.5" />
-					<circle cx="5" cy="8" r="1.5" />
-					<circle cx="8" cy="10" r="1.5" />
-					<circle cx="11" cy="6" r="1.5" />
-					<circle cx="14" cy="4" r="1.5" />
-				</svg>
-			</button>
+
+			<!-- Expanded Controls Panel (Hover State) -->
+			{#if showControls}
+				<div
+					class="sparkline-controls-panel"
+					transition:slide={{ duration: 200 }}
+				>
+					<div class="flex items-center gap-1 p-1.5 bg-base-200 rounded-lg shadow-lg border border-base-300">
+						<button
+							class="btn btn-xs {chartType === 'line' ? 'btn-primary' : 'btn-ghost'}"
+							onclick={() => (chartType = 'line')}
+							title="Line chart"
+						>
+							<svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+								<path d="M2 12 L5 8 L8 10 L14 4" stroke-linecap="round" />
+							</svg>
+						</button>
+						<button
+							class="btn btn-xs {chartType === 'bars' ? 'btn-primary' : 'btn-ghost'}"
+							onclick={() => (chartType = 'bars')}
+							title="Bar chart"
+						>
+							<svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
+								<rect x="1" y="8" width="2" height="6" />
+								<rect x="4" y="4" width="2" height="10" />
+								<rect x="7" y="6" width="2" height="8" />
+								<rect x="10" y="2" width="2" height="12" />
+								<rect x="13" y="5" width="2" height="9" />
+							</svg>
+						</button>
+						<button
+							class="btn btn-xs {chartType === 'area' ? 'btn-primary' : 'btn-ghost'}"
+							onclick={() => (chartType = 'area')}
+							title="Area chart"
+						>
+							<svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor" opacity="0.6">
+								<path d="M2 14 L2 12 L5 8 L8 10 L14 4 L14 14 Z" />
+							</svg>
+						</button>
+						<button
+							class="btn btn-xs {chartType === 'dots' ? 'btn-primary' : 'btn-ghost'}"
+							onclick={() => (chartType = 'dots')}
+							title="Dot plot"
+						>
+							<svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
+								<circle cx="2" cy="12" r="1.5" />
+								<circle cx="5" cy="8" r="1.5" />
+								<circle cx="8" cy="10" r="1.5" />
+								<circle cx="11" cy="6" r="1.5" />
+								<circle cx="14" cy="4" r="1.5" />
+							</svg>
+						</button>
+					</div>
+				</div>
+			{/if}
 		</div>
 	{/if}
 
@@ -383,18 +457,20 @@
 		display: inline-block;
 	}
 
-	.sparkline-toolbar {
-		display: flex;
+	.sparkline-badge-container {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
 		justify-content: flex-end;
-		gap: 0.25rem;
 		margin-bottom: 0.25rem;
-		padding: 0.25rem;
-		opacity: 0.7;
-		transition: opacity 0.2s ease;
+		width: 100%;
 	}
 
-	.sparkline-toolbar:hover {
-		opacity: 1;
+	.sparkline-controls-panel {
+		position: absolute;
+		right: 0;
+		top: 0;
+		z-index: 50;
 	}
 
 	svg {

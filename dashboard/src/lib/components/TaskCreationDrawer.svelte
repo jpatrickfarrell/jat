@@ -11,6 +11,7 @@
 	 */
 
 	import { goto } from '$app/navigation';
+	import { tick, onMount } from 'svelte';
 	import { isTaskDrawerOpen } from '$lib/stores/drawerStore';
 
 	// Reactive state from store
@@ -24,13 +25,17 @@
 		return unsubscribe;
 	});
 
-	// Auto-focus title input when drawer opens
-	$effect(() => {
-		if (isOpen && titleInput) {
-			// Small delay to ensure drawer animation starts
-			setTimeout(() => {
-				titleInput.focus();
-			}, 50);
+	// Auto-focus when drawer opens
+	onMount(() => {
+		const drawerToggle = document.getElementById('task-creation-drawer');
+		if (drawerToggle) {
+			drawerToggle.addEventListener('change', (e) => {
+				if (e.target.checked) {
+					setTimeout(() => {
+						titleInput?.focus();
+					}, 50);
+				}
+			});
 		}
 	});
 

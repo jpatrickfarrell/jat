@@ -119,7 +119,7 @@
 			.call(
 				d3.axisLeft(yScale).tickFormat((taskId) => {
 					const task = tasksWithDates.find(t => t.id === taskId);
-					return task ? `${task.id}: ${task.title.slice(0, 30)}...` : taskId;
+					return task ? `${task.id}: ${task.title}` : taskId;
 				})
 			)
 			.attr('class', 'text-base-content/70');
@@ -164,7 +164,7 @@
 			.attr('y', yScale.bandwidth() / 2)
 			.attr('dy', '0.35em')
 			.attr('class', 'text-sm fill-base-content')
-			.text(d => `P${d.priority ?? ''} ${d.title.slice(0, 20)}...`);
+			.text(d => `P${d.priority ?? ''} ${d.title}`);
 
 		// Add click interaction
 		bars.on('click', function (event, d) {

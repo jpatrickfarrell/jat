@@ -22,7 +22,6 @@
 	import ThemeSelector from './ThemeSelector.svelte';
 	import ProjectSelector from './ProjectSelector.svelte';
 	import UserProfile from './UserProfile.svelte';
-	import CommandPalette from './CommandPalette.svelte';
 
 	interface Props {
 		projects?: string[];
@@ -91,9 +90,6 @@
 
 	<!-- Right: Controls (flex-nowrap prevents wrapping) -->
 	<div class="flex-none flex flex-nowrap items-center gap-1.5">
-		<!-- Command Palette (Quick Actions) -->
-		<CommandPalette />
-
 		<!-- Project Filter (always show if projects available) -->
 		{#if unifiedNavConfig.showProjectFilter && projects.length > 0}
 			<div class="w-36 sm:w-40 md:w-48">

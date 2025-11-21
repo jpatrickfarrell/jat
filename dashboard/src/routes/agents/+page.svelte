@@ -3,7 +3,7 @@
 	import { replaceState } from '$app/navigation';
 	import TaskQueue from '$lib/components/agents/TaskQueue.svelte';
 	import AgentGrid from '$lib/components/agents/AgentGrid.svelte';
-	import ClaudeUsageBar from '$lib/components/ClaudeUsageBar.svelte';
+	import Sparkline from '$lib/components/Sparkline.svelte';
 	import {
 		getProjectsFromTasks,
 		getTaskCountByProject
@@ -17,6 +17,7 @@
 	let unassignedTasks = $state([]);
 	let taskStats = $state(null);
 	let selectedProject = $state('All Projects');
+	let sparklineData = $state([]);
 
 	// Extract unique projects from ALL tasks (unfiltered)
 	const projects = $derived(getProjectsFromTasks(allTasks));
@@ -145,6 +146,24 @@
 		}
 	}
 
+	// Fetch sparkline data (system-wide, no agent filter)
+	async function fetchSparklineData() {
+		try {
+			const response = await fetch('/api/agents/sparkline?range=24h');
+			const result = await response.json();
+
+			if (result.error) {
+				console.error('Sparkline API error:', result.error);
+				return;
+			}
+
+			// Update sparkline data
+			sparklineData = result.data || [];
+		} catch (error) {
+			console.error('Failed to fetch sparkline data:', error);
+		}
+	}
+
 	// Handle task assignment via drag-and-drop
 	async function handleTaskAssign(taskId, agentName) {
 		try {
@@ -177,8 +196,15 @@
 		return () => clearInterval(interval);
 	});
 
+	// Auto-refresh sparkline every 30 seconds
+	$effect(() => {
+		const interval = setInterval(fetchSparklineData, 30000);
+		return () => clearInterval(interval);
+	});
+
 	onMount(() => {
 		fetchData();
+		fetchSparklineData();
 	});
 </script>
 
@@ -204,6 +230,22 @@
 					System Usage Overview
 				</div>
 				<div class="collapse-content">
+					<!-- Sparkline: 24h Token Usage Trend -->
+					{#if sparklineData && sparklineData.length > 0}
+						<div class="mb-4 p-4 bg-base-200 rounded-lg">
+							<h3 class="text-sm font-semibold mb-2 text-base-content/70">
+								24-Hour Token Usage
+							</h3>
+							<Sparkline
+								data={sparklineData}
+								height={60}
+								colorMode="usage"
+								showTooltip={true}
+								showGrid={false}
+							/>
+						</div>
+					{/if}
+
 					<!-- Two column layout: Stats on left, Top Agents on right -->
 					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 						<!-- Left: Concise System Stats -->
@@ -257,7 +299,4 @@
 			<AgentGrid {agents} {tasks} {allTasks} {reservations} onTaskAssign={handleTaskAssign} />
 		</div>
 	</div>
-
-	<!-- Claude API Usage Bar (Fixed Bottom) -->
-	<ClaudeUsageBar />
 </div>

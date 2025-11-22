@@ -47,6 +47,7 @@
 	let saveError = $state(null);
 	let lastSaved = $state<Date | null>(null);
 	let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+	let isUpdatingFromServer = $state(false); // Flag to prevent effect loops during server updates
 
 	// UI state
 	let validationErrors = $state({});
@@ -110,9 +111,8 @@
 			}
 			const data = await response.json();
 			task = data.task;
-			originalTask = { ...data.task }; // Store original for comparison
 
-			// Populate form data for edit mode
+			// Populate form data for edit mode WITH DEFAULTS
 			formData = {
 				title: task.title || '',
 				description: task.description || '',
@@ -123,6 +123,9 @@
 				labels: task.labels ? task.labels.join(', ') : '',
 				assignee: task.assignee || ''
 			};
+
+			// Store original with SAME DEFAULTS as formData to prevent false change detection
+			originalTask = { ...formData };
 
 			// Fetch task history in parallel
 			fetchTaskHistory(id);
@@ -179,14 +182,21 @@
 
 	// Debounced auto-save function
 	async function autoSave(field: string, value: any) {
+		console.log(`[AutoSave] Called for field="${field}", value=`, value);
+		console.log(`[AutoSave] Current state: isSaving=${isSaving}, isUpdatingFromServer=${isUpdatingFromServer}, mode=${mode}`);
+		console.log(`[AutoSave] formData.${field}=`, formData[field], `originalTask.${field}=`, originalTask?.[field]);
+
 		// Clear any pending save
 		if (saveTimeout) {
+			console.log('[AutoSave] Clearing previous timeout');
 			clearTimeout(saveTimeout);
 		}
 
 		// Debounce for 500ms
 		saveTimeout = setTimeout(async () => {
+			console.log(`[AutoSave] Executing save for field="${field}" after debounce`);
 			isSaving = true;
+			isUpdatingFromServer = true; // Prevent effects from triggering
 			saveError = null;
 
 			// Create backup of current task for rollback
@@ -195,6 +205,7 @@
 			try {
 				// Optimistic update - update UI immediately
 				if (task) {
+					console.log(`[AutoSave] Optimistic update: task.${field} = ${value}`);
 					task = { ...task, [field]: value };
 				}
 
@@ -202,6 +213,7 @@
 				const updateData: any = {};
 				updateData[field] = value;
 
+				console.log('[AutoSave] Making PATCH request:', updateData);
 				// Make PATCH request
 				const response = await fetch(`/api/tasks/${taskId}`, {
 					method: 'PATCH',
@@ -216,16 +228,21 @@
 
 				const data = await response.json();
 
+				console.log('[AutoSave] Server response received, updating task');
 				// Update task with server response
 				task = data.task;
-				originalTask = { ...data.task }; // Update original to match saved state
+
+				// DO NOT update originalTask here - it would trigger effects again
+				// originalTask stays as the baseline from when task was loaded/entered edit mode
+
 				lastSaved = new Date();
 
 				// Show success toast
 				showToast('success', '✓ Saved');
+				console.log('[AutoSave] Save completed successfully');
 
 			} catch (error: any) {
-				console.error('Auto-save error:', error);
+				console.error('[AutoSave] Error:', error);
 
 				// Rollback on error
 				task = taskBackup;
@@ -234,7 +251,9 @@
 				// Show error toast
 				showToast('error', `✗ ${error.message}`);
 			} finally {
+				console.log('[AutoSave] Cleanup: setting isSaving=false, isUpdatingFromServer=false');
 				isSaving = false;
+				isUpdatingFromServer = false;
 			}
 		}, 500);
 	}
@@ -268,46 +287,72 @@
 	}
 
 	// Auto-save watchers for each field (only in edit mode)
-	// Compare against originalTask to prevent infinite loops
+	// Only trigger when formData actually changes from user interaction
+	// IMPORTANT: Don't compare against task.field because autoSave updates task,
+	// which would trigger this effect again, creating an infinite loop
 	$effect(() => {
-		if (mode === 'edit' && originalTask && formData.title !== originalTask.title) {
-			autoSave('title', formData.title);
+		console.log(`[Effect:title] Triggered. mode=${mode}, originalTask exists=${!!originalTask}, isUpdatingFromServer=${isUpdatingFromServer}, isSaving=${isSaving}`);
+		if (mode === 'edit' && originalTask && !isUpdatingFromServer) {
+			const changed = formData.title !== originalTask.title;
+			console.log(`[Effect:title] changed=${changed}, formData.title="${formData.title}", originalTask.title="${originalTask.title}"`);
+			if (changed && !isSaving) {
+				console.log('[Effect:title] Triggering auto-save');
+				autoSave('title', formData.title);
+			}
 		}
 	});
 
 	$effect(() => {
-		if (mode === 'edit' && originalTask && formData.description !== originalTask.description) {
-			autoSave('description', formData.description);
+		if (mode === 'edit' && originalTask && !isUpdatingFromServer) {
+			const changed = formData.description !== originalTask.description;
+			if (changed && !isSaving) {
+				autoSave('description', formData.description);
+			}
 		}
 	});
 
 	$effect(() => {
-		if (mode === 'edit' && originalTask && formData.priority !== originalTask.priority) {
-			autoSave('priority', formData.priority);
+		if (mode === 'edit' && originalTask && !isUpdatingFromServer) {
+			const changed = formData.priority !== originalTask.priority;
+			if (changed && !isSaving) {
+				autoSave('priority', formData.priority);
+			}
 		}
 	});
 
 	$effect(() => {
-		if (mode === 'edit' && originalTask && formData.type !== originalTask.type) {
-			autoSave('type', formData.type);
+		if (mode === 'edit' && originalTask && !isUpdatingFromServer) {
+			const changed = formData.type !== originalTask.type;
+			if (changed && !isSaving) {
+				autoSave('type', formData.type);
+			}
 		}
 	});
 
 	$effect(() => {
-		if (mode === 'edit' && originalTask && formData.status !== originalTask.status) {
-			autoSave('status', formData.status);
+		if (mode === 'edit' && originalTask && !isUpdatingFromServer) {
+			const changed = formData.status !== originalTask.status;
+			if (changed && !isSaving) {
+				autoSave('status', formData.status);
+			}
 		}
 	});
 
 	$effect(() => {
-		if (mode === 'edit' && originalTask && formData.project !== originalTask.project) {
-			autoSave('project', formData.project);
+		if (mode === 'edit' && originalTask && !isUpdatingFromServer) {
+			const changed = formData.project !== originalTask.project;
+			if (changed && !isSaving) {
+				autoSave('project', formData.project);
+			}
 		}
 	});
 
 	$effect(() => {
-		if (mode === 'edit' && originalTask && formData.assignee !== originalTask.assignee) {
-			autoSave('assignee', formData.assignee);
+		if (mode === 'edit' && originalTask && !isUpdatingFromServer) {
+			const changed = formData.assignee !== originalTask.assignee;
+			if (changed && !isSaving) {
+				autoSave('assignee', formData.assignee);
+			}
 		}
 	});
 

@@ -19,6 +19,7 @@
 	let taskStats = $state(null);
 	let selectedProject = $state('All Projects');
 	let sparklineData = $state([]);
+	let isInitialLoad = $state(true);
 
 	// Drawer state for TaskDetailDrawer
 	let drawerOpen = $state(false);
@@ -95,6 +96,9 @@
 			}
 		} catch (error) {
 			console.error('Failed to fetch agent data:', error);
+		} finally {
+			// Only set to false after first load completes
+			isInitialLoad = false;
 		}
 	}
 
@@ -177,21 +181,41 @@
 
 <div class="min-h-screen bg-base-200">
 	<!-- Main Content: Sidebar + Agent Grid -->
-	<div class="flex h-[calc(100vh-theme(spacing.20))] pb-20">
+	<div class="flex h-[calc(100vh-theme(spacing.20))]">
 		<!-- Left Sidebar: Task Queue -->
 		<div class="w-100 border-r border-base-300 bg-base-100 flex flex-col">
-			<TaskQueue
-				tasks={unassignedTasks}
-				{agents}
-				{reservations}
-				{selectedProject}
-				ontaskclick={handleTaskClick}
-			/>
+			{#if isInitialLoad}
+				<!-- Loading State for Task Queue -->
+				<div class="flex-1 flex items-center justify-center">
+					<div class="text-center">
+						<span class="loading loading-bars loading-lg mb-4"></span>
+						<p class="text-sm text-base-content/60">Loading tasks...</p>
+					</div>
+				</div>
+			{:else}
+				<TaskQueue
+					tasks={unassignedTasks}
+					{agents}
+					{reservations}
+					{selectedProject}
+					ontaskclick={handleTaskClick}
+				/>
+			{/if}
 		</div>
 
 		<!-- Right Panel: Agent Grid -->
 		<div class="flex-1 overflow-auto">
-			<AgentGrid {agents} {tasks} {allTasks} {reservations} {sparklineData} onTaskAssign={handleTaskAssign} ontaskclick={handleTaskClick} />
+			{#if isInitialLoad}
+				<!-- Loading State for Agent Grid -->
+				<div class="flex items-center justify-center h-full">
+					<div class="text-center">
+						<span class="loading loading-bars loading-xl mb-4"></span>
+						<p class="text-sm text-base-content/60">Loading agents...</p>
+					</div>
+				</div>
+			{:else}
+				<AgentGrid {agents} {tasks} {allTasks} {reservations} {sparklineData} onTaskAssign={handleTaskAssign} ontaskclick={handleTaskClick} />
+			{/if}
 		</div>
 	</div>
 

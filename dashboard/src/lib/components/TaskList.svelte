@@ -4,7 +4,7 @@
 	 * Displays Beads tasks with filtering using Svelte 5 $derived runes
 	 */
 
-	import TaskModal from './TaskModal.svelte';
+	import TaskDetailDrawer from './TaskDetailDrawer.svelte';
 
 	// Props
 	let {
@@ -20,7 +20,11 @@
 	let loading = $state(true);
 	let error = $state(null);
 	let lastUpdated = $state(null);
-	let selectedTask = $state(null);
+
+	// Drawer state (replacing modal)
+	let selectedTaskId = $state(null);
+	let drawerMode = $state('view');
+	let drawerOpen = $state(false);
 
 	// Priority badge classes - using DaisyUI semantic colors
 	const priorityClasses = {
@@ -76,21 +80,11 @@
 		}
 	}
 
-	// Handle task click - fetch full details and open modal
-	async function handleTaskClick(taskId) {
-		try {
-			const response = await fetch(`/api/tasks/${taskId}`);
-			if (!response.ok) throw new Error('Failed to fetch task details');
-			const taskData = await response.json();
-			selectedTask = taskData;
-		} catch (err) {
-			console.error('Error fetching task details:', err);
-		}
-	}
-
-	// Close modal
-	function closeModal() {
-		selectedTask = null;
+	// Handle task click - open drawer (drawer fetches data itself)
+	function handleTaskClick(taskId) {
+		selectedTaskId = taskId;
+		drawerMode = 'view';
+		drawerOpen = true;
 	}
 
 	// Handle keyboard events for accessibility
@@ -186,6 +180,6 @@
 		</div>
 	{/if}
 
-	<TaskModal bind:task={selectedTask} onClose={closeModal} />
+	<TaskDetailDrawer bind:taskId={selectedTaskId} bind:mode={drawerMode} bind:isOpen={drawerOpen} />
 </div>
 

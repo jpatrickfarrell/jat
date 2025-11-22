@@ -97,7 +97,7 @@
 			case 'live':
 				return 'badge-success'; // Green - truly responsive (< 1m)
 			case 'working':
-				return 'badge-info'; // Blue - actively coding (1-10m)
+				return 'badge-warning'; // Yellow - actively coding (1-10m)
 			case 'active':
 				return 'badge-accent'; // Purple/accent - recent activity
 			case 'idle':
@@ -787,11 +787,11 @@
 					<div class="text-xs flex items-start gap-1.5 py-0.5">
 					{#if statusConfig.iconType === 'svg'}
 						{#if statusConfig.iconStyle === 'solid'}
-							<svg class="shrink-0 w-4 h-4 {statusConfig.color}" viewBox="0 0 24 24" fill="currentColor" title={statusConfig.description}>
+							<svg class="shrink-0 w-4 h-4 {statusConfig.color} {currentActivity.status === 'in_progress' ? 'animate-spin' : ''}" viewBox="0 0 24 24" fill="currentColor" title={statusConfig.description}>
 								<path d={statusConfig.icon} />
 							</svg>
 						{:else}
-							<svg class="shrink-0 w-4 h-4 {statusConfig.color}" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" title={statusConfig.description}>
+							<svg class="shrink-0 w-4 h-4 {statusConfig.color} {currentActivity.status === 'in_progress' ? 'animate-spin' : ''}" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" title={statusConfig.description}>
 								<path stroke-linecap="round" stroke-linejoin="round" d={statusConfig.icon} />
 							</svg>
 						{/if}
@@ -830,11 +830,11 @@
 								</span>
 								{#if statusConfig.iconType === 'svg'}
 								{#if statusConfig.iconStyle === 'solid'}
-									<svg class="shrink-0 w-3.5 h-3.5 {statusConfig.color}" viewBox="0 0 24 24" fill="currentColor" title={statusConfig.description}>
+									<svg class="shrink-0 w-3.5 h-3.5 {statusConfig.color} {activity.status === 'in_progress' ? 'animate-spin' : ''}" viewBox="0 0 24 24" fill="currentColor" title={statusConfig.description}>
 										<path d={statusConfig.icon} />
 									</svg>
 								{:else}
-									<svg class="shrink-0 w-3.5 h-3.5 {statusConfig.color}" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" title={statusConfig.description}>
+									<svg class="shrink-0 w-3.5 h-3.5 {statusConfig.color} {activity.status === 'in_progress' ? 'animate-spin' : ''}" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" title={statusConfig.description}>
 										<path stroke-linecap="round" stroke-linejoin="round" d={statusConfig.icon} />
 									</svg>
 								{/if}

@@ -92,9 +92,6 @@
 		</main>
 	</div>
 
-	<!-- Sidebar -->
-	<div class="drawer-side">
-		<label for="main-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
-		<Sidebar />
-	</div>
+	<!-- Sidebar (Sidebar component provides the drawer-side wrapper) -->
+	<Sidebar />
 </div>

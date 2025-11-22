@@ -1026,57 +1026,8 @@
 			{/if}
 		</div>
 
-		<!-- Token Usage Sparkline -->
+		<!-- Recent Activity (with Usage Trend) -->
 		<div class="mb-3">
-			<div class="text-xs font-medium text-base-content/70 mb-1">
-				<span>Usage Trend (24h):</span>
-			</div>
-
-			{#if sparklineLoading && sparklineData.length === 0}
-				<!-- Initial Loading State -->
-				<div class="bg-base-200 rounded p-2 flex items-center justify-center">
-					<div class="loading loading-spinner loading-xs text-primary"></div>
-					<span class="text-xs text-base-content/50 ml-2">Loading...</span>
-				</div>
-
-			{:else if sparklineError && sparklineData.length === 0}
-				<!-- Error State (only show if no data at all) -->
-				<div class="bg-base-200 rounded p-2 text-center">
-					<p class="text-xs text-base-content/50">Unable to load trend data</p>
-				</div>
-
-			{:else if sparklineData.length === 0}
-				<!-- No Data State -->
-				<div class="bg-base-200 rounded p-2 text-center">
-					<p class="text-xs text-base-content/50">No trend data available</p>
-				</div>
-
-			{:else}
-				<!-- Success State: Show Sparkline -->
-				<div class="bg-base-200 rounded p-2">
-					<Sparkline
-						data={sparklineData}
-						height={40}
-						showTooltip={true}
-						colorMode="usage"
-					/>
-				</div>
-			{/if}
-		</div>
-
-		<!-- Recent Activity Feed -->
-		<div class="mb-3">
-			<div class="flex items-center justify-between text-xs font-medium text-base-content/70 mb-1">
-				<span>Recent Activity:</span>
-				{#if agent.activities && agent.activities.length > 1}
-					<button
-						class="text-primary hover:text-primary-focus"
-						onclick={() => showActivityHistory = !showActivityHistory}
-					>
-						{showActivityHistory ? '▼' : '▶'} History
-					</button>
-				{/if}
-			</div>
 			<div class="bg-base-200 rounded px-2 py-1.5">
 				{#if agent.current_activity}
 					<!-- Show current activity from activity log -->
@@ -1086,6 +1037,30 @@
 							{formatLastActivity(agent.current_activity.ts)}
 						</span>
 					</div>
+
+					<!-- Usage Trend Sparkline -->
+					<div class="my-1">
+						{#if sparklineLoading && sparklineData.length === 0}
+							<!-- Placeholder line for loading -->
+							<div class="h-10 flex items-center">
+								<div class="w-full h-px bg-base-content/20"></div>
+							</div>
+						{:else if sparklineData.length === 0}
+							<!-- Placeholder line for no data -->
+							<div class="h-10 flex items-center">
+								<div class="w-full h-px bg-base-content/20"></div>
+							</div>
+						{:else}
+							<!-- Success: Show sparkline -->
+							<Sparkline
+								data={sparklineData}
+								height={40}
+								showTooltip={true}
+								colorMode="usage"
+							/>
+						{/if}
+					</div>
+
 					<div
 						class="flex items-center gap-1 text-xs mt-1"
 						class:text-success={agentStatus() === 'live'}
@@ -1108,6 +1083,30 @@
 							{formatLastActivity(agent.last_active_ts)}
 						</span>
 					</div>
+
+					<!-- Usage Trend Sparkline -->
+					<div class="my-1">
+						{#if sparklineLoading && sparklineData.length === 0}
+							<!-- Placeholder line for loading -->
+							<div class="h-10 flex items-center">
+								<div class="w-full h-px bg-base-content/20"></div>
+							</div>
+						{:else if sparklineData.length === 0}
+							<!-- Placeholder line for no data -->
+							<div class="h-10 flex items-center">
+								<div class="w-full h-px bg-base-content/20"></div>
+							</div>
+						{:else}
+							<!-- Success: Show sparkline -->
+							<Sparkline
+								data={sparklineData}
+								height={40}
+								showTooltip={true}
+								colorMode="usage"
+							/>
+						{/if}
+					</div>
+
 					{#if agentStatus() === 'live'}
 						<div class="flex items-center gap-1 text-xs text-success mt-1">
 							<span class="inline-block w-1.5 h-1.5 bg-success rounded-full animate-pulse"></span>
@@ -1118,6 +1117,18 @@
 							Working on task
 						</div>
 					{/if}
+				{/if}
+
+				<!-- History Toggle Button -->
+				{#if agent.activities && agent.activities.length > 1}
+					<div class="mt-2 pt-1 border-t border-base-300">
+						<button
+							class="text-xs text-primary hover:text-primary-focus w-full text-left"
+							onclick={() => showActivityHistory = !showActivityHistory}
+						>
+							{showActivityHistory ? '▼' : '▶'} History
+						</button>
+					</div>
 				{/if}
 
 				<!-- Activity History (expandable) -->

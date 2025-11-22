@@ -52,7 +52,7 @@
 </script>
 
 <aside
-	class="drawer-side lg:drawer-open z-40 bg-base-200 border-r border-base-300 transition-all duration-300"
+	class="drawer-side z-40 bg-base-200 border-r border-base-300 transition-all duration-300"
 >
 	<!-- Drawer overlay (mobile only) -->
 	<label for="main-drawer" class="drawer-overlay lg:hidden"></label>

@@ -115,6 +115,52 @@ export function initializeTheme() {
 </button>
 ```
 
+### Theme Selector Location
+
+**As of November 2024**: The ThemeSelector is integrated into the **UserProfile dropdown** in the top navigation bar, not in the sidebar.
+
+**Location**: `src/lib/components/UserProfile.svelte`
+
+**How to access**:
+1. Click the user avatar icon in the top-right corner of the navigation bar
+2. The dropdown menu contains the theme picker with all 32 DaisyUI themes
+3. Theme selection persists via localStorage
+
+**Implementation**:
+```svelte
+<!-- src/lib/components/UserProfile.svelte -->
+<script lang="ts">
+  import ThemeSelector from './ThemeSelector.svelte';
+</script>
+
+<div class="dropdown dropdown-end">
+  <button class="btn btn-ghost btn-circle avatar">
+    <!-- User avatar icon -->
+  </button>
+
+  <ul class="menu dropdown-content">
+    <!-- User Info -->
+    <li class="menu-title">
+      <span>{user.name}</span>
+      <span>{user.email}</span>
+    </li>
+
+    <!-- Theme Selector -->
+    <li>
+      <ThemeSelector compact={false} />
+    </li>
+  </ul>
+</div>
+```
+
+**Why this location**:
+- ✅ Logical grouping: User preferences consolidated in user menu
+- ✅ Cleaner sidebar: Frees up space for navigation items
+- ✅ Better discoverability: Theme switching associated with user settings
+- ✅ Full labels: `compact={false}` allows showing theme names with color previews
+
+**Historical note**: Previously, the ThemeSelector was located in the Sidebar bottom utilities section. It was migrated to UserProfile in November 2024 to improve UX and reduce sidebar clutter.
+
 ### Troubleshooting Themes
 
 **Symptoms**: Theme selector works (data-theme attribute changes) but colors don't change.

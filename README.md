@@ -14,6 +14,8 @@ Agent Mail (multi-agent coordination) + Beads (task planning) + 28 bash tools + 
 curl -fsSL https://raw.githubusercontent.com/joewinke/jat/main/install.sh | bash
 ```
 
+**📖 Quick Reference:** See [`COMMANDS.md`](./COMMANDS.md) for all 7 agent commands and their parameters.
+
 ---
 
 ## ⚡ Quick Start
@@ -716,6 +718,111 @@ am-send "[task-123] Progress Update" "Implemented token refresh logic." \
 bd close task-123 --reason "Completed"
 am-release "src/auth/**" --agent AgentName
 ```
+
+#### Agent Command Quick Reference
+
+**Core Workflow (4 commands):**
+
+**`/agent:start` - Get to Work**
+```bash
+/agent:start                    # Auto-create new agent (fast!)
+/agent:start resume             # Choose from logged-out agents
+/agent:start GreatWind          # Resume specific agent by name
+/agent:start quick              # Start highest priority task immediately
+/agent:start task-abc           # Start specific task (with checks)
+/agent:start task-abc quick     # Start specific task (skip checks)
+```
+
+**`/agent:next` - Drive Mode (Auto-Continue)**
+```bash
+/agent:next                     # Full verify + commit + auto-start next
+/agent:next quick               # Quick commit + auto-start next (skip verify)
+```
+
+**What it does:**
+- ✅ Verify task (tests, lint, security) - unless quick mode
+- ✅ Commit changes
+- ✅ Acknowledge all unread Agent Mail
+- ✅ Announce completion
+- ✅ Mark task complete in Beads
+- ✅ Release file locks
+- ✅ **Auto-start highest priority task** (continuous flow)
+
+**`/agent:complete` - Finish Properly (Manual Selection)**
+```bash
+/agent:complete                 # Full verify + show menu + recommended next
+```
+
+**What it does:**
+- ✅ Verify task (tests, lint, security, browser)
+- ✅ Commit changes
+- ✅ Acknowledge all unread Agent Mail
+- ✅ Announce completion
+- ✅ Mark task complete in Beads
+- ✅ Release file locks
+- ✅ **Show available tasks menu**
+- ✅ **Display recommended next task** (you choose)
+
+**`/agent:pause` - Quick Pivot (Context Switch)**
+```bash
+/agent:pause                    # Quick exit + show menu
+```
+
+**What it does:**
+- ✅ Quick commit/stash (always fast, no verification)
+- ✅ Acknowledge all unread Agent Mail
+- ✅ Send pause notification
+- ✅ Mark task as incomplete (keeps in_progress)
+- ✅ Release file locks
+- ✅ **Show available tasks menu** (to pivot)
+
+**Support Commands (3 commands):**
+
+**`/agent:status`** - Check current work status
+```bash
+/agent:status                   # Shows task, locks, messages
+```
+
+**`/agent:verify`** - Pre-completion quality checks
+```bash
+/agent:verify                   # Verify current task
+/agent:verify task-abc          # Verify specific task
+```
+
+**`/agent:plan`** - Convert planning to Beads tasks
+```bash
+/agent:plan                     # Analyze conversation/PRD, create tasks
+```
+
+**Common Workflows:**
+
+**Drive Mode (Continuous):**
+```bash
+/agent:start                    # Create agent
+/agent:start task-abc           # Start first task
+/agent:next                     # Complete + auto-start next
+/agent:next                     # Complete + auto-start next
+# ... continuous loop ...
+```
+
+**Manual Mode (Careful):**
+```bash
+/agent:start                    # Create agent
+/agent:start task-abc           # Start task
+/agent:complete                 # Complete + show menu
+# Review recommendations...
+/agent:start task-xyz           # Pick manually
+```
+
+**Quick Pivot:**
+```bash
+/agent:start task-ui-123        # Working on UI
+# Got stuck, need to switch...
+/agent:pause                    # Quick exit + show menu
+/agent:start task-bug-456       # Switch to different work
+```
+
+---
 
 #### Beads Command Reference
 

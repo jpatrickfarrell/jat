@@ -1,6 +1,28 @@
 # Agent Command Quick Reference
 
-**7 commands for multi-agent orchestration**
+**8 commands for multi-agent orchestration**
+
+## Getting Help
+
+### `/agent:help` - Command Reference
+
+**Usage:**
+```bash
+/agent:help                     # Show all commands
+/agent:help start               # Show detailed help for specific command
+```
+
+**What it shows:**
+- All 8 agent commands with examples
+- Quick tips and common patterns
+- Links to full documentation
+
+**When to use:**
+- Forgot command syntax
+- Learning available commands
+- Need quick reference
+
+---
 
 ## Core Workflow (4 commands)
 
@@ -108,7 +130,7 @@
 
 ---
 
-## Support Commands (3 commands)
+## Support Commands (4 commands)
 
 ### `/agent:status` - Check Current Work
 

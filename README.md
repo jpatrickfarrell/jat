@@ -2,13 +2,13 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Tools](https://img.shields.io/badge/Tools-28-blue)](#4-28-generic-bash-tools)
-[![Commands](https://img.shields.io/badge/Commands-7-purple)](#3-agent-swarm-coordination-commands)
+[![Commands](https://img.shields.io/badge/Commands-8-purple)](#3-agent-swarm-coordination-commands)
 [![Agent Mail](https://img.shields.io/badge/Agent%20Mail-Bash%2BSQLite-green)](#1-agent-mail)
 [![Beads](https://img.shields.io/badge/Beads-CLI-orange)](https://github.com/steveyegge/beads)
 
 **Manage multiple agents across several projects in a complete AI-assisted development environment in one command.**
 
-Agent Mail (multi-agent coordination) + Beads (task planning) + 28 bash tools + 7 coordination commands = Full swarm orchestration that transcends context windows and project boundaries.
+Agent Mail (multi-agent coordination) + Beads (task planning) + 28 bash tools + 8 coordination commands = Full swarm orchestration that transcends context windows and project boundaries.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/joewinke/jat/main/install.sh | bash
@@ -43,7 +43,7 @@ bd init
 /agent:next
 ```
 
-**From idea to working code in 5 minutes!** The installer sets up Agent Mail, Beads CLI, 28 tools, and 7 coordination commands. Your AI assistant gains multi-agent swarm coordination capabilities instantly.
+**From idea to working code in 5 minutes!** The installer sets up Agent Mail, Beads CLI, 28 tools, and 8 coordination commands. Your AI assistant gains multi-agent swarm coordination capabilities instantly.
 
 ### How It Actually Works
 
@@ -923,10 +923,11 @@ bd show <task-id> --json               # Get task details as JSON
 
 ### 3. Agent Swarm Coordination Commands
 
-**7 slash commands** installed to `commands/agent/` that enable sophisticated multi-agent orchestration:
+**8 slash commands** installed to `commands/agent/` that enable sophisticated multi-agent orchestration:
 
 ```
 commands/agent/
+├── help.md        - Command reference: show all commands or specific help
 ├── start.md       - Begin work: register + task start
 ├── next.md        - Drive mode: complete + auto-start next
 ├── complete.md    - Finish properly: complete + show menu
@@ -937,6 +938,9 @@ commands/agent/
 ```
 
 #### Command Categories
+
+**Getting Help (1 command):**
+- `/agent:help` - Command reference: display all commands with examples (like `--help` in bash)
 
 **Core Workflow (4 commands):**
 - `/agent:start` - Begin work: handles registration, task selection, conflict detection, and work start

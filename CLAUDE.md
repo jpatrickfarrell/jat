@@ -7,7 +7,7 @@ Lightweight bash tools for agent orchestration, database operations, monitoring,
 ```
 jat/
 ├── mail/                # Agent Mail coordination system (11 tools)
-├── commands/agent/      # Agent workflow commands (7 commands)
+├── commands/agent/      # Agent workflow commands (8 commands)
 ├── browser-tools/       # Browser automation tools (11 tools)
 ├── tools/               # Database & monitoring tools (6 tools)
 ├── dashboard/           # Beads Task Dashboard (SvelteKit app)

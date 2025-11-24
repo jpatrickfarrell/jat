@@ -1,4 +1,113 @@
-# Beads Migration Tool
+# Beads Migration Tools
+
+## Overview
+
+Three complementary tools for safe Beads database backup, migration, and rollback:
+
+1. **backup-beads.sh** - Standalone backup utility
+2. **rollback-beads.sh** - Restore from backup
+3. **beads-migrate-prefix.sh** - Full migration with integrated backup
+
+---
+
+## backup-beads.sh
+
+Standalone utility to create timestamped backups of Beads and Agent Mail databases.
+
+### Usage
+
+```bash
+# Basic backup
+./tools/backup-beads.sh --project ~/code/chimaro
+
+# Labeled backup (for specific purpose)
+./tools/backup-beads.sh --project ~/code/chimaro --label "before-migration"
+
+# Backup with integrity verification
+./tools/backup-beads.sh --project ~/code/chimaro --verify
+```
+
+### Features
+
+- Timestamped backup directories
+- SHA256 checksum verification
+- Metadata file with backup details
+- Optional integrity verification
+- Backs up both Beads and Agent Mail databases
+
+### Backup Location
+
+```
+<project>/.beads/backups/backup_<timestamp>[_<label>]/
+  ├── beads.db.backup
+  ├── beads.db.sha256
+  ├── agent-mail.db.backup (if exists)
+  ├── agent-mail.db.sha256 (if exists)
+  └── metadata.txt
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--project PATH` | Path to Beads project (required) |
+| `--label LABEL` | Optional label for backup |
+| `--verify` | Verify backup integrity after creation |
+| `--help` | Show help message |
+| `--version` | Show version information |
+
+---
+
+## rollback-beads.sh
+
+Restore Beads and Agent Mail databases from a backup.
+
+### Usage
+
+```bash
+# Restore with confirmation prompt
+./tools/rollback-beads.sh --backup ~/code/chimaro/.beads/backups/backup_20231124_123456
+
+# Restore with integrity verification
+./tools/rollback-beads.sh --backup <backup-dir> --verify
+
+# Restore without confirmation (automated)
+./tools/rollback-beads.sh --backup <backup-dir> --force
+```
+
+### Safety Features
+
+- **Checksum verification** (optional with `--verify`)
+- **Confirmation prompt** (skip with `--force`)
+- **Safety backup** of current state before restoring
+- Validates backup directory structure
+- Detailed rollback instructions
+
+### Pre-Rollback Safety Backup
+
+Before restoring, creates safety backup of current state:
+
+```
+<backup-dir>/pre-rollback_<timestamp>/
+  ├── beads.db.current
+  ├── beads.db.sha256
+  ├── agent-mail.db.current (if exists)
+  └── agent-mail.db.sha256 (if exists)
+```
+
+This ensures you can recover if rollback doesn't work as expected.
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--backup PATH` | Path to backup directory (required) |
+| `--verify` | Verify backup integrity before restoring |
+| `--force` | Skip confirmation prompt |
+| `--help` | Show help message |
+| `--version` | Show version information |
+
+---
 
 ## beads-migrate-prefix.sh
 
@@ -66,11 +175,18 @@ Migrate Beads task ID prefixes across all related databases and files.
    - Location: `<project>/.beads/backups/migration_<from>_to_<to>_<timestamp>/`
 
 2. **Validation**
-   - Validates prefix format (lowercase alphanumeric + hyphens)
-   - Checks project structure exists
-   - Verifies database accessibility
-   - Detects ID collisions before migration
-   - Validates results after migration
+   - **Pre-migration checks:**
+     - Validates prefix format (lowercase alphanumeric + hyphens)
+     - Checks project structure exists
+     - Verifies database accessibility
+     - Detects ID collisions before migration
+     - Counts tasks and dependencies for validation
+   - **Post-migration validation:**
+     - No tasks remain with old prefix
+     - Expected count migrated to new prefix
+     - Total task count preserved (no data loss)
+     - Total dependency count preserved
+     - Agent Mail thread IDs updated correctly
 
 3. **Atomic Updates**
    - SQLite transactions ensure all-or-nothing updates
@@ -180,7 +296,21 @@ bd create "Test task after migration"
 
 ### Rollback
 
-If migration fails or you need to revert:
+**Option 1: Using rollback-beads.sh (Recommended)**
+
+```bash
+# Restore with verification and confirmation
+./tools/rollback-beads.sh \
+  --backup ~/code/chimaro/.beads/backups/migration_dirt_to_chimaro_20251124_111843 \
+  --verify
+
+# Restore without confirmation (automated)
+./tools/rollback-beads.sh \
+  --backup ~/code/chimaro/.beads/backups/migration_dirt_to_chimaro_20251124_111843 \
+  --force
+```
+
+**Option 2: Manual rollback**
 
 ```bash
 # Beads database
@@ -236,16 +366,131 @@ Backup location is printed after migration completes.
 - Restore from backup (see Rollback section)
 - Report issue with backup location and error details
 
+---
+
+## Complete Workflow: Backup, Migrate, and Rollback
+
+### Recommended Safe Migration Workflow
+
+**Step 1: Pre-Migration Backup (Optional but Recommended)**
+
+```bash
+# Create standalone backup before migration
+./tools/backup-beads.sh \
+  --project ~/code/chimaro \
+  --label "pre-migration" \
+  --verify
+
+# Note the backup location for quick rollback if needed
+```
+
+**Step 2: Dry-Run Migration (Always Recommended)**
+
+```bash
+# Preview what will change
+./tools/beads-migrate-prefix.sh \
+  --from dirt \
+  --to chimaro \
+  --project ~/code/chimaro \
+  --dry-run
+
+# Review output:
+# - Task counts match expectations?
+# - No collision warnings?
+# - Numbers look reasonable?
+```
+
+**Step 3: Execute Migration**
+
+```bash
+# Run actual migration (creates automatic backup)
+./tools/beads-migrate-prefix.sh \
+  --from dirt \
+  --to chimaro \
+  --project ~/code/chimaro
+
+# Migration creates backup automatically:
+# ~/code/chimaro/.beads/backups/migration_dirt_to_chimaro_<timestamp>/
+```
+
+**Step 4: Verify Migration Success**
+
+```bash
+# Check tasks have new IDs
+bd list | head -5
+
+# Verify counts match
+bd list --json | jq 'length'
+
+# Test new task creation
+bd create "Test task after migration"
+```
+
+**Step 5: Update Config**
+
+```bash
+# Edit .beads/config.yaml
+echo 'issue-prefix: "chimaro"' >> ~/code/chimaro/.beads/config.yaml
+```
+
+**Step 6: If Something Goes Wrong - Rollback**
+
+```bash
+# Use rollback script (safest - creates safety backup)
+./tools/rollback-beads.sh \
+  --backup ~/code/chimaro/.beads/backups/migration_dirt_to_chimaro_<timestamp> \
+  --verify
+
+# Or use pre-migration backup
+./tools/rollback-beads.sh \
+  --backup ~/code/chimaro/.beads/backups/backup_<timestamp>_pre-migration \
+  --verify
+```
+
+### Quick Backup & Restore (Non-Migration Use Cases)
+
+**Regular Backups:**
+
+```bash
+# Daily backup
+./tools/backup-beads.sh --project ~/code/chimaro --label "daily-$(date +%Y%m%d)"
+
+# Before major changes
+./tools/backup-beads.sh --project ~/code/chimaro --label "before-refactor" --verify
+
+# Automated backups (cron)
+0 2 * * * /home/user/code/jat/tools/backup-beads.sh --project /home/user/code/chimaro --label "auto-daily"
+```
+
+**Restore from Backup:**
+
+```bash
+# List available backups
+ls -la ~/code/chimaro/.beads/backups/
+
+# Restore specific backup
+./tools/rollback-beads.sh \
+  --backup ~/code/chimaro/.beads/backups/backup_20251124_020000_daily-20251124 \
+  --verify
+
+# Emergency restore (skip confirmation)
+./tools/rollback-beads.sh \
+  --backup ~/code/chimaro/.beads/backups/backup_<timestamp> \
+  --force
+```
+
 ### Development
 
-The tool is designed to be:
+The tools are designed to be:
 - **Reusable**: Works with any Beads project and prefix pair
 - **Safe**: Multiple validation layers and atomic transactions
 - **Clear**: Verbose logging and color-coded output
-- **Tested**: Dry-run mode for safe testing
+- **Tested**: Dry-run mode and verification for safe testing
+- **Independent**: Each tool can be used standalone or together
 
 ### Related Tasks
 
+- `jat-8f3x`: Build Beads project prefix migration tool
 - `jat-625k`: Design migration algorithm and data structures
 - `jat-v0i6`: Create backup and rollback mechanism
 - `jat-o8oy`: Implement SQLite schema migration logic

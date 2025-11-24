@@ -44,6 +44,12 @@ BACKUP_DIR=""
 BEADS_DB=""
 AGENT_MAIL_DB="${HOME}/.agent-mail.db"
 
+# Pre-migration counts (for validation)
+PRE_MIGRATION_TASK_COUNT=0
+PRE_MIGRATION_DEP_COUNT=0
+PRE_MIGRATION_TOTAL_TASKS=0
+PRE_MIGRATION_TOTAL_DEPS=0
+
 #
 # Logging functions
 #
@@ -352,8 +358,18 @@ analyze_beads_db() {
     local dep_count
     dep_count=$(sqlite3 "$BEADS_DB" "SELECT COUNT(*) FROM dependencies WHERE issue_id LIKE '${FROM_PREFIX}-%' OR depends_on_id LIKE '${FROM_PREFIX}-%';")
 
+    # Store pre-migration counts for validation
+    PRE_MIGRATION_TASK_COUNT=$task_count
+    PRE_MIGRATION_DEP_COUNT=$dep_count
+
+    # Count total tasks and dependencies (for validation)
+    PRE_MIGRATION_TOTAL_TASKS=$(sqlite3 "$BEADS_DB" "SELECT COUNT(*) FROM issues;")
+    PRE_MIGRATION_TOTAL_DEPS=$(sqlite3 "$BEADS_DB" "SELECT COUNT(*) FROM dependencies;")
+
     log_info "  Tasks with '${FROM_PREFIX}-' prefix: $task_count"
     log_info "  Dependency references: $dep_count"
+    log_info "  Total tasks in database: $PRE_MIGRATION_TOTAL_TASKS"
+    log_info "  Total dependencies in database: $PRE_MIGRATION_TOTAL_DEPS"
 
     # Check for collisions (tasks that would conflict with new prefix)
     local collision_count
@@ -500,6 +516,8 @@ validate_migration() {
         return 1
     fi
 
+    log_success "✓ No tasks remain with old prefix"
+
     # Check no dependencies remain with old prefix
     local remaining_deps
     remaining_deps=$(sqlite3 "$BEADS_DB" "SELECT COUNT(*) FROM dependencies WHERE issue_id LIKE '${FROM_PREFIX}-%' OR depends_on_id LIKE '${FROM_PREFIX}-%';")
@@ -508,6 +526,48 @@ validate_migration() {
         log_error "Validation failed: $remaining_deps dependency references still have old prefix"
         return 1
     fi
+
+    log_success "✓ No dependencies remain with old prefix"
+
+    # Verify expected count with new prefix
+    local new_prefix_count
+    new_prefix_count=$(sqlite3 "$BEADS_DB" "SELECT COUNT(*) FROM issues WHERE id LIKE '${TO_PREFIX}-%';")
+
+    if [[ "$new_prefix_count" -ne "$PRE_MIGRATION_TASK_COUNT" ]]; then
+        log_error "Validation failed: Expected $PRE_MIGRATION_TASK_COUNT tasks with new prefix, found $new_prefix_count"
+        log_error "Data may have been lost or corrupted during migration"
+        return 1
+    fi
+
+    log_success "✓ All $new_prefix_count tasks migrated to new prefix"
+
+    # Verify total task count unchanged
+    local post_migration_total_tasks
+    post_migration_total_tasks=$(sqlite3 "$BEADS_DB" "SELECT COUNT(*) FROM issues;")
+
+    if [[ "$post_migration_total_tasks" -ne "$PRE_MIGRATION_TOTAL_TASKS" ]]; then
+        log_error "Validation failed: Total task count changed!"
+        log_error "  Before: $PRE_MIGRATION_TOTAL_TASKS"
+        log_error "  After: $post_migration_total_tasks"
+        log_error "Data loss detected during migration"
+        return 1
+    fi
+
+    log_success "✓ Total task count preserved: $post_migration_total_tasks"
+
+    # Verify total dependency count unchanged
+    local post_migration_total_deps
+    post_migration_total_deps=$(sqlite3 "$BEADS_DB" "SELECT COUNT(*) FROM dependencies;")
+
+    if [[ "$post_migration_total_deps" -ne "$PRE_MIGRATION_TOTAL_DEPS" ]]; then
+        log_error "Validation failed: Total dependency count changed!"
+        log_error "  Before: $PRE_MIGRATION_TOTAL_DEPS"
+        log_error "  After: $post_migration_total_deps"
+        log_error "Data loss detected during migration"
+        return 1
+    fi
+
+    log_success "✓ Total dependency count preserved: $post_migration_total_deps"
 
     log_success "Beads database validation passed"
 
@@ -520,6 +580,14 @@ validate_migration() {
             log_error "Validation failed: $remaining_threads thread_ids still have old prefix"
             return 1
         fi
+
+        log_success "✓ No thread_ids remain with old prefix"
+
+        # Verify new prefix exists in Agent Mail
+        local new_thread_count
+        new_thread_count=$(sqlite3 "$AGENT_MAIL_DB" "SELECT COUNT(DISTINCT thread_id) FROM messages WHERE thread_id LIKE '${TO_PREFIX}-%';")
+
+        log_success "✓ Agent Mail threads updated: $new_thread_count with new prefix"
 
         log_success "Agent Mail database validation passed"
     fi

@@ -412,10 +412,15 @@ migrate_beads_db() {
     fi
 
     # Begin transaction
+    # Note: Using explicit UPDATEs instead of FK cascades for clarity and safety
+    # FK cascades would work but explicit updates make the migration more transparent
     sqlite3 "$BEADS_DB" <<EOF
 BEGIN TRANSACTION;
 
--- Update issues table (task IDs)
+-- Enable foreign key constraints (ensures referential integrity)
+PRAGMA foreign_keys = ON;
+
+-- Update issues table (task IDs - primary key)
 UPDATE issues
 SET id = REPLACE(id, '${FROM_PREFIX}-', '${TO_PREFIX}-')
 WHERE id LIKE '${FROM_PREFIX}-%';

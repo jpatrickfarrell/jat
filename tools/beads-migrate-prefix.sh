@@ -371,6 +371,47 @@ analyze_beads_db() {
     log_info "  Total tasks in database: $PRE_MIGRATION_TOTAL_TASKS"
     log_info "  Total dependencies in database: $PRE_MIGRATION_TOTAL_DEPS"
 
+    # Count other affected tables
+    local labels_count
+    labels_count=$(sqlite3 "$BEADS_DB" "SELECT COUNT(*) FROM labels WHERE issue_id LIKE '${FROM_PREFIX}-%';")
+    log_info "  Labels: $labels_count"
+
+    local comments_count
+    comments_count=$(sqlite3 "$BEADS_DB" "SELECT COUNT(*) FROM comments WHERE issue_id LIKE '${FROM_PREFIX}-%';")
+    log_info "  Comments: $comments_count"
+
+    local events_count
+    events_count=$(sqlite3 "$BEADS_DB" "SELECT COUNT(*) FROM events WHERE issue_id LIKE '${FROM_PREFIX}-%';")
+    log_info "  Events: $events_count"
+
+    local events_value_count
+    events_value_count=$(sqlite3 "$BEADS_DB" "SELECT COUNT(*) FROM events WHERE old_value LIKE '%\"${FROM_PREFIX}-%' OR new_value LIKE '%\"${FROM_PREFIX}-%';")
+    log_info "  Events with task IDs in values: $events_value_count"
+
+    local dirty_count
+    dirty_count=$(sqlite3 "$BEADS_DB" "SELECT COUNT(*) FROM dirty_issues WHERE issue_id LIKE '${FROM_PREFIX}-%';")
+    if [[ "$dirty_count" -gt 0 ]]; then
+        log_info "  Dirty issues: $dirty_count"
+    fi
+
+    local export_count
+    export_count=$(sqlite3 "$BEADS_DB" "SELECT COUNT(*) FROM export_hashes WHERE issue_id LIKE '${FROM_PREFIX}-%';")
+    if [[ "$export_count" -gt 0 ]]; then
+        log_info "  Export hashes: $export_count"
+    fi
+
+    local child_count
+    child_count=$(sqlite3 "$BEADS_DB" "SELECT COUNT(*) FROM child_counters WHERE parent_id LIKE '${FROM_PREFIX}-%';")
+    if [[ "$child_count" -gt 0 ]]; then
+        log_info "  Child counters: $child_count"
+    fi
+
+    local snapshot_count
+    snapshot_count=$(sqlite3 "$BEADS_DB" "SELECT COUNT(*) FROM issue_snapshots WHERE issue_id LIKE '${FROM_PREFIX}-%';")
+    if [[ "$snapshot_count" -gt 0 ]]; then
+        log_info "  Issue snapshots: $snapshot_count"
+    fi
+
     # Check for collisions (tasks that would conflict with new prefix)
     local collision_count
     collision_count=$(sqlite3 "$BEADS_DB" "
@@ -450,6 +491,50 @@ WHERE issue_id LIKE '${FROM_PREFIX}-%';
 UPDATE dependencies
 SET depends_on_id = REPLACE(depends_on_id, '${FROM_PREFIX}-', '${TO_PREFIX}-')
 WHERE depends_on_id LIKE '${FROM_PREFIX}-%';
+
+-- Update labels table (issue_id references)
+UPDATE labels
+SET issue_id = REPLACE(issue_id, '${FROM_PREFIX}-', '${TO_PREFIX}-')
+WHERE issue_id LIKE '${FROM_PREFIX}-%';
+
+-- Update comments table (issue_id references)
+UPDATE comments
+SET issue_id = REPLACE(issue_id, '${FROM_PREFIX}-', '${TO_PREFIX}-')
+WHERE issue_id LIKE '${FROM_PREFIX}-%';
+
+-- Update events table (issue_id references)
+UPDATE events
+SET issue_id = REPLACE(issue_id, '${FROM_PREFIX}-', '${TO_PREFIX}-')
+WHERE issue_id LIKE '${FROM_PREFIX}-%';
+
+-- Update events table (old_value and new_value JSON containing task IDs)
+UPDATE events
+SET old_value = REPLACE(old_value, '"${FROM_PREFIX}-', '"${TO_PREFIX}-')
+WHERE old_value LIKE '%"${FROM_PREFIX}-%';
+
+UPDATE events
+SET new_value = REPLACE(new_value, '"${FROM_PREFIX}-', '"${TO_PREFIX}-')
+WHERE new_value LIKE '%"${FROM_PREFIX}-%';
+
+-- Update dirty_issues table (issue_id references)
+UPDATE dirty_issues
+SET issue_id = REPLACE(issue_id, '${FROM_PREFIX}-', '${TO_PREFIX}-')
+WHERE issue_id LIKE '${FROM_PREFIX}-%';
+
+-- Update export_hashes table (issue_id references)
+UPDATE export_hashes
+SET issue_id = REPLACE(issue_id, '${FROM_PREFIX}-', '${TO_PREFIX}-')
+WHERE issue_id LIKE '${FROM_PREFIX}-%';
+
+-- Update child_counters table (parent_id references)
+UPDATE child_counters
+SET parent_id = REPLACE(parent_id, '${FROM_PREFIX}-', '${TO_PREFIX}-')
+WHERE parent_id LIKE '${FROM_PREFIX}-%';
+
+-- Update issue_snapshots table (issue_id references)
+UPDATE issue_snapshots
+SET issue_id = REPLACE(issue_id, '${FROM_PREFIX}-', '${TO_PREFIX}-')
+WHERE issue_id LIKE '${FROM_PREFIX}-%';
 
 COMMIT;
 EOF

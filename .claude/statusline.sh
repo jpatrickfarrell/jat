@@ -6,23 +6,29 @@
 #
 # Multi-line status display for agent orchestration workflows
 #
-# Line 1: Agent Name | [Priority] Task ID - Task Title [Indicators]
-# Line 2: ▪▪▪▪▪▪▫▫▫▫ Context | ⎇ folder@branch | 💬 Last Prompt
+# Line 1: Agent Name · [Priority] Task ID - Task Title ⏲ ActiveTime
+# Line 2: ▪▪▪▪▪▪▫▫▫▫ · ⎇ folder@branch · 🔒 N  📬 N  ⏱ Xm
+# Line 3: 💬 Last user prompt...                        🕐 Xm
 #
 # Features:
 #   Agent Status (Line 1):
 #     1. Agent identification (set by /agent:start via .claude/agent-{session_id}.txt)
 #     2. Task priority badge [P0/P1/P2] with color coding (Red/Yellow/Green)
 #     3. Task ID and title from Beads database (dynamic project prefix)
-#     4. File lock count indicator (🔒N)
-#     5. Unread messages count (📬N)
-#     6. Time remaining on shortest lock (⏱Xm or Xh)
-#     7. Task progress percentage if available (N%)
+#     4. Active time on task (⏲ since updated_at)
 #
 #   Context & Git (Line 2):
-#     8. Context remaining as battery bar (color-coded: >50% green, >25% yellow, <25% red)
-#     9. Git branch display: folder@branch (folder=blue, @=dim, branch=green, *=red)
-#    10. Last user prompt from transcript (truncated to 200 chars)
+#     5. Context remaining as battery bar (color-coded: >50% green, >25% yellow, <25% red)
+#     6. Git branch display: folder@branch (folder=blue, @=dim, branch=green, *=red)
+#     7. File lock count indicator (🔒N)
+#     8. Unread messages count (📬N)
+#     9. Time remaining on shortest lock (⏱Xm or Xh)
+#    10. Task progress percentage if available (N%)
+#    11. Blocked-by count (⛔N) - tasks waiting on current task
+#
+#   Last Prompt (Line 3):
+#    12. Last user prompt from transcript (truncated to 200 chars)
+#    13. Last activity timestamp (🕐) - time since prompt was sent
 #
 # Color Scheme (ANSI escape codes):
 #   Agent name:     Bold Blue   (\033[1m\033[0;34m)
@@ -38,11 +44,12 @@
 #   Idle status:    Gray        (\033[0;37m)
 #
 # Example output:
-#   GreatWind | [P1] jat-4p0 - Demo: Frontend... [🔒2 📬1 ⏱45m]
-#   ▪▪▪▪▪▪▫▫▫▫ | ⎇ jat@master* | 💬 yes implement top 3
+#   GreatWind · [P1] 🔧 jat-4p0 - Demo: Frontend... ⏲ 1h23m
+#   ▪▪▪▪▪▪▫▫▫▫ · ⎇ jat@master* · 🔒 2  📬 1  ⏱ 45m
+#   💬 yes implement top 3                          🕐 12m
 #
-#   chimaro | no agent registered (new session, run /agent:start)
-#   ▪▪▪▪▪▪▪▪▪▫ | ⎇ chimaro@main
+#   chimaro · no agent registered (new session, run /agent:start)
+#   ▪▪▪▪▪▪▪▪▪▫ · ⎇ chimaro@main
 #
 
 # ANSI color codes
@@ -612,19 +619,7 @@ if [[ $blocked_count -gt 0 ]]; then
     indicators="${indicators}${blocked_color}⛔ ${blocked_count}${RESET}"
 fi
 
-# Add last activity indicator (dynamic: green=<15m, yellow=15-60m, red=>60m)
-# Only show if activity is older than 5 minutes (to avoid clutter for active sessions)
-if [[ -n "$last_activity" ]] && [[ $last_activity_minutes -gt 5 ]]; then
-    [[ -n "$indicators" ]] && indicators="${indicators}  "
-    if [[ $last_activity_minutes -gt 60 ]]; then
-        activity_color="${RED}"
-    elif [[ $last_activity_minutes -gt 15 ]]; then
-        activity_color="${YELLOW}"
-    else
-        activity_color="${GREEN}"
-    fi
-    indicators="${indicators}${activity_color}🕐 ${last_activity}${RESET}"
-fi
+# Last activity indicator moved to line 3 (with last prompt) - see below
 
 # Build second line with context battery, git branch, and indicators
 second_line=""
@@ -656,10 +651,23 @@ if [[ -n "$indicators" ]]; then
     second_line="${second_line}${indicators}"
 fi
 
-# Build third line with last user prompt
+# Build third line with last user prompt and activity timestamp
 third_line=""
 if [[ -n "$last_prompt" ]]; then
     third_line="${YELLOW}💬${RESET} ${last_prompt}"
+
+    # Add last activity indicator (shows when the prompt was sent)
+    # Color: green=<15m, yellow=15-60m, red=>60m (stale)
+    if [[ -n "$last_activity" ]]; then
+        if [[ $last_activity_minutes -gt 60 ]]; then
+            activity_color="${RED}"
+        elif [[ $last_activity_minutes -gt 15 ]]; then
+            activity_color="${YELLOW}"
+        else
+            activity_color="${GREEN}"
+        fi
+        third_line="${third_line}  ${activity_color}🕐 ${last_activity}${RESET}"
+    fi
 fi
 
 # Output status line(s)

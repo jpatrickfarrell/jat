@@ -10,21 +10,25 @@ Complete current task properly with full verification, then show menu of availab
 - `/agent:complete` - Complete current task with full verification, show menu
 
 **What this command does:**
-1. **Full Completion Protocol**:
+1. **Read & Respond to Agent Mail** (ALWAYS - before completing)
+2. **Full Completion Protocol**:
    - Verify task (tests, lint, security, browser checks)
    - Commit changes with proper message
-2. **Agent Mail Coordination**:
-   - Check and acknowledge ALL unread messages
-   - Announce task completion (thread: task-id)
 3. **Beads Task Management**:
-   - Mark task as complete in Beads
+   - Mark task as complete in Beads (`bd close`)
    - Release file reservations
-4. **Next Task Selection**:
+4. **Announce Completion** in Agent Mail
+5. **Next Task Selection**:
    - Show available tasks menu
    - Display recommended next task with one-line command
    - Wait for user to choose (does NOT auto-start)
 
+**Key behaviors:**
+- **ALWAYS check Agent Mail first** - before completing work
+- Mail = read + respond + ack (not just silent batch-ack)
+
 **When to use:**
+- After you display "🔍 READY FOR REVIEW" and user approves
 - **Careful workflow**: You want to choose next task manually
 - **Context switch**: Might want different type of work next
 - **Review point**: Want to check status before continuing
@@ -36,11 +40,39 @@ Complete current task properly with full verification, then show menu of availab
 
 ---
 
+## CRITICAL: "Ready for Review" vs "Complete"
+
+**These are two different states. Never confuse them.**
+
+| State | Meaning | Display | Beads Status |
+|-------|---------|---------|--------------|
+| **Ready for Review** | Code work done, awaiting user decision | "🔍 READY FOR REVIEW" | `in_progress` |
+| **Complete** | Closed in Beads, reservations released | "✅ TASK COMPLETE" | `closed` |
+
+**NEVER say "Task Complete" until AFTER:**
+1. Changes committed
+2. `bd close` has run successfully
+3. Reservations released
+4. Completion announced via Agent Mail
+
+**The typical flow:**
+1. You finish coding → display "🔍 READY FOR REVIEW"
+2. User reviews and runs `/agent:complete`
+3. You run completion steps (commit, close, release, announce)
+4. THEN display "✅ TASK COMPLETE"
+
+**Why this matters:**
+- Other agents check Beads to see if tasks are available
+- If you say "complete" but haven't run `bd close`, another agent will see the task as still in-progress
+- This causes confusion and coordination problems
+
+---
+
 ## Bash Syntax Patterns for Claude Code
 
 **CRITICAL:** Claude Code's Bash tool escapes command substitution syntax. You MUST use these patterns:
 
-### ✅ CORRECT Patterns
+### CORRECT Patterns
 
 **Pattern 1: Use Read/Write tools (RECOMMENDED)**
 ```bash
@@ -54,37 +86,24 @@ Write(.claude/agent-a019c84c-7b54-45cc-9eee-dd6a70dea1a3.txt, "AgentName")
 
 **Pattern 2: Explicit variable assignment with semicolon**
 ```bash
-# ✅ Works: Explicit assignment with semicolon
+# Works: Explicit assignment with semicolon
 SESSION_ID="a019c84c-7b54-45cc-9eee-dd6a70dea1a3"; echo "$SESSION_ID"
 
-# ✅ Works: Use test command with && / ||
+# Works: Use test command with && / ||
 test -f "$file" && echo "exists" || echo "not found"
-
-# ✅ Works: Chain commands with semicolons
-SESSION_ID="abc"; mkdir -p .claude && echo "value" > ".claude/agent-${SESSION_ID}.txt"
 ```
 
-### ❌ WRONG Patterns (Will Cause Syntax Errors)
+### WRONG Patterns (Will Cause Syntax Errors)
 
 ```bash
-# ❌ BROKEN: Command substitution in assignment
+# BROKEN: Command substitution in assignment
 SESSION_ID=$(~/code/jat/scripts/get-current-session-id)
-# Error: SESSION_ID=\$ ( ... ) syntax error
+# Error: gets escaped
 
-# ❌ BROKEN: Using $PPID (each Bash invocation has different PPID)
-SESSION_ID=$(cat /tmp/claude-session-${PPID}.txt)
-# Error: subprocess PPID ≠ Claude Code process PPID
-
-# ❌ BROKEN: if statement with &&
+# BROKEN: if statement with &&
 SESSION_ID="abc" && if [[ -f "$file" ]]; then echo "yes"; fi
-# Error: syntax error near unexpected token 'if'
+# Error: syntax error
 ```
-
-**Key Rules:**
-1. **Never use `$(...)` in variable assignments** - gets escaped
-2. **Never rely on `$PPID`** - each Bash call has different PPID
-3. **Prefer Read/Write tools** - no escaping issues
-4. **Use semicolons** for multi-statement commands
 
 ---
 
@@ -94,16 +113,14 @@ SESSION_ID="abc" && if [[ -f "$file" ]]; then echo "yes"; fi
 
 #### 1A: Get Session ID
 ```bash
-# Use Read tool to get session ID
-Read(/tmp/claude-session-${PPID}.txt)
-# → Extract session_id value from output
+~/code/jat/scripts/get-current-session-id
+# → Extract session_id value
 ```
 
 #### 1B: Get Agent Name
 ```bash
-# Use Read tool to get agent name
-Read(.claude/agent-${session_id}.txt)
-# → Extract agent_name from output
+# Read .claude/agent-{session_id}.txt
+# → Extract agent_name
 ```
 
 #### 1C: Get Current Task
@@ -120,14 +137,52 @@ bd list --json | jq -r --arg agent "$agent_name" \
 
 ---
 
-### STEP 2: Verify Task
+### STEP 2: Read & Respond to Agent Mail (ALWAYS)
+
+**THIS STEP IS MANDATORY - runs before any completion work.**
+
+Do NOT silently batch-ack messages. Actually READ them and RESPOND if needed.
+
+#### 2A: Check Inbox
+```bash
+am-inbox "$agent_name" --unread
+```
+
+#### 2B: Display Messages to User
+Show the user what messages are in the inbox. Read each message.
+
+#### 2C: Respond If Needed
+- If a message asks a question → reply with `am-reply`
+- If a message changes requirements → adjust your plan
+- If a message says "stop" or "wait" → pause and clarify
+- If a message is informational → acknowledge it
+
+#### 2D: Acknowledge Messages
+```bash
+# Only AFTER reading and responding
+am-inbox "$agent_name" --unread --json | jq -r '.[].id' | while read msg_id; do
+  am-ack "$msg_id" --agent "$agent_name"
+done
+```
+
+**Why this matters:**
+- Messages might say "don't complete yet, found a bug"
+- Messages might say "requirements changed"
+- Messages might say "I need to review first"
+- You need context BEFORE completing work
+
+---
+
+### STEP 3: Verify Task
 
 ```bash
-echo "🔍 Verifying task before completion..."
+echo "Verifying task before completion..."
 
-# Run /agent:verify for current task
-# This handles: tests, lint, security, browser checks
-# (Delegate to verify.md implementation)
+# Run verification checks:
+# - Tests
+# - Lint
+# - Security scan
+# - Browser checks (if applicable)
 
 # If verification fails, STOP and report issues
 # Do NOT continue to completion
@@ -135,24 +190,21 @@ echo "🔍 Verifying task before completion..."
 
 ---
 
-### STEP 3: Commit Changes
+### STEP 4: Commit Changes
 
 ```bash
-echo "💾 Committing changes..."
+echo "Committing changes..."
 
 # Get task details for commit message
 task_json=$(bd show "$task_id" --json)
-task_title=$(echo "$task_json" | jq -r '.title')
-task_type=$(echo "$task_json" | jq -r '.type')
+task_title=$(echo "$task_json" | jq -r '.[0].title')
+task_type=$(echo "$task_json" | jq -r '.[0].issue_type')
 
 # Check git status
 git_status=$(git status --porcelain)
 
 if [[ -n "$git_status" ]]; then
-  # Stage all changes
   git add .
-
-  # Create commit message
   git commit -m "$(cat <<EOF
 $task_type: $task_title
 
@@ -164,49 +216,8 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 EOF
 )"
 else
-  echo "✅ No changes to commit"
+  echo "No changes to commit"
 fi
-```
-
----
-
-### STEP 4: Agent Mail Coordination
-
-#### 4A: Check Unread Messages
-```bash
-echo "📬 Checking Agent Mail..."
-
-unread_count=$(am-inbox "$agent_name" --unread --json | jq '. | length')
-
-if [[ "$unread_count" -gt 0 ]]; then
-  echo "📬 $unread_count unread messages - acknowledging all..."
-
-  # Get all unread message IDs and acknowledge them
-  am-inbox "$agent_name" --unread --json | jq -r '.[].id' | while read msg_id; do
-    am-ack "$msg_id" --agent "$agent_name"
-  done
-
-  echo "✅ Acknowledged $unread_count messages"
-fi
-```
-
-#### 4B: Announce Completion
-```bash
-echo "📢 Announcing task completion..."
-
-# Send completion message to Agent Mail
-am-send "[$task_id] Completed: $task_title" \
-  "Task completed by $agent_name.
-
-Status: ✅ Complete
-Type: $task_type
-Verification: Full (tests, lint, security, browser)
-
-Agent is now available for next task." \
-  --from "$agent_name" \
-  --to @active \
-  --thread "$task_id" \
-  --importance normal
 ```
 
 ---
@@ -214,8 +225,6 @@ Agent is now available for next task." \
 ### STEP 5: Mark Task Complete in Beads
 
 ```bash
-echo "✅ Marking task complete in Beads..."
-
 bd close "$task_id" --reason "Completed by $agent_name"
 ```
 
@@ -224,27 +233,33 @@ bd close "$task_id" --reason "Completed by $agent_name"
 ### STEP 6: Release File Reservations
 
 ```bash
-echo "🔓 Releasing file reservations..."
-
-# Get all reservations for this agent
-reservations=$(am-reservations --agent "$agent_name")
-
-if [[ -n "$reservations" ]]; then
-  # Release all patterns
-  # Note: am-release takes glob patterns, extract from reservation info
-  echo "$reservations" | grep -oE '"[^"]*"' | tr -d '"' | while read pattern; do
-    am-release "$pattern" --agent "$agent_name"
-  done
-
-  echo "✅ Released all file reservations"
-else
-  echo "✅ No active reservations"
-fi
+# Release all file reservations for this agent
+am-reservations --agent "$agent_name" --json | jq -r '.[].path_pattern' | while read pattern; do
+  am-release "$pattern" --agent "$agent_name"
+done
 ```
 
 ---
 
-### STEP 7: Show Final Summary + Available Tasks Menu
+### STEP 7: Announce Completion
+
+```bash
+am-send "[$task_id] Completed: $task_title" \
+  "Task completed by $agent_name.
+
+Status: Complete
+Type: $task_type
+Verification: Full (tests, lint, security)
+
+Agent is now available for next task." \
+  --from "$agent_name" \
+  --to @active \
+  --thread "$task_id"
+```
+
+---
+
+### STEP 8: Show Final Summary + Available Tasks Menu
 
 ```bash
 echo ""
@@ -255,60 +270,24 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 # Get available tasks
-available_tasks=$(bd ready --json)
-task_count=$(echo "$available_tasks" | jq '. | length')
+bd ready --json
 
-if [[ "$task_count" -eq 0 ]]; then
-  echo "📋 No more ready tasks available."
-  echo "🎉 All caught up!"
-  echo ""
-  echo "💡 Next steps:"
-  echo "   • Run /agent:plan to create new tasks"
-  echo "   • Run /agent:status to review current state"
-  echo "   • Close terminal if done for the day"
-  exit 0
-fi
-
-# Get recommended next task (highest priority)
-recommended_task=$(echo "$available_tasks" | jq -r '.[0]')
-rec_id=$(echo "$recommended_task" | jq -r '.id')
-rec_title=$(echo "$recommended_task" | jq -r '.title')
-rec_priority=$(echo "$recommended_task" | jq -r '.priority')
-rec_type=$(echo "$recommended_task" | jq -r '.type')
-
-echo "📋 Recommended Next Task:"
-echo "   → $rec_id \"$rec_title\" (Priority: P$rec_priority, Type: $rec_type)"
-echo ""
-echo "   Type: /agent:start $rec_id"
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-
-# Show full task menu
-echo "📋 Available Tasks ($task_count total):"
-echo ""
-
-# Display tasks in table format
-echo "$available_tasks" | jq -r '.[] |
-  "   [\(.priority)] \(.id) - \(.title) (\(.type))"' | head -10
-
-if [[ "$task_count" -gt 10 ]]; then
-  echo ""
-  echo "   ... and $((task_count - 10)) more tasks"
-  echo ""
-  echo "   Run 'bd ready' to see all tasks"
-fi
-
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-echo "💡 Next steps:"
-echo "   • /agent:start $rec_id - Start recommended task"
-echo "   • /agent:start <task-id> - Start different task"
-echo "   • /agent:status - Review current state"
-echo "   • Close terminal if done for the day"
-echo ""
+# Display recommended next task (highest priority)
+# Display full task menu
+# Show next steps
 ```
+
+---
+
+## Quick Mode Behavior
+
+**This command does NOT have a quick mode.**
+
+For quick completion without verification, use `/agent:next quick` instead.
+
+**Still done (NEVER skip these):**
+- STEP 2: Read & respond to Agent Mail
+- All other steps
 
 ---
 
@@ -316,27 +295,31 @@ echo ""
 
 **Successful completion:**
 ```
+📬 Checking Agent Mail...
+  1 unread message
+
+  From: TeamLead (20 min ago)
+  Subject: [jat-abc] Review note
+  Body: Looks good, just add a comment to the main function
+
+  → Acknowledged (already addressed in code)
+
 🔍 Verifying task before completion...
    ✅ Tests passed (12/12)
    ✅ Lint clean
    ✅ Security scan clean
-   ✅ Browser checks passed
 
 💾 Committing changes...
    ✅ Committed: "feat: Add user settings page"
-
-📬 Checking Agent Mail...
-   📬 3 unread messages - acknowledging all...
-   ✅ Acknowledged 3 messages
-
-📢 Announcing task completion...
-   ✅ Sent completion message to @active
 
 ✅ Marking task complete in Beads...
    ✅ Closed jat-abc
 
 🔓 Releasing file reservations...
-   ✅ Released src/lib/**/*.ts (2 files)
+   ✅ Released 2 file patterns
+
+📢 Announcing task completion...
+   ✅ Sent to @active
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ Task Completed: jat-abc "Add user settings page"
@@ -355,34 +338,12 @@ echo ""
    [1] jat-xyz - Update documentation for new API (task)
    [1] jat-def - Fix authentication timeout bug (bug)
    [2] jat-ghi - Add dark mode toggle (feature)
-   [2] jat-jkl - Refactor database queries (chore)
-   [3] jat-mno - Update dependencies (chore)
-   [3] jat-pqr - Add user profile page (feature)
-   [3] jat-stu - Fix typos in README (chore)
-   [3] jat-vwx - Add metrics dashboard (feature)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   ...
 
 💡 Next steps:
    • /agent:start jat-xyz - Start recommended task
    • /agent:start <task-id> - Start different task
    • /agent:status - Review current state
-   • Close terminal if done for the day
-```
-
-**No more tasks:**
-```
-✅ Task Completed: jat-abc "Add user settings page"
-👤 Agent: JustGrove
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📋 No more ready tasks available.
-🎉 All caught up!
-
-💡 Next steps:
-   • Run /agent:plan to create new tasks
-   • Run /agent:status to review current state
    • Close terminal if done for the day
 ```
 
@@ -392,30 +353,55 @@ echo ""
 
 **No active session:**
 ```
-❌ No active session detected.
-💡 Run /agent:start to begin working
+No active session detected.
+Run /agent:start to begin working
 ```
 
 **No task in progress:**
 ```
-❌ No task currently in progress.
-💡 Run /agent:start to pick a task
+No task currently in progress.
+Run /agent:start to pick a task
 ```
 
 **Verification failed:**
 ```
-❌ Task verification failed:
+Task verification failed:
    • 2 tests failing
    • 5 lint errors
 
-💡 Fix issues and try again
-💡 Or run /agent:verify to see detailed error report
+Fix issues and try again
+Or run /agent:verify to see detailed error report
 ```
 
-**Git commit failed:**
-```
-❌ Failed to commit changes:
-   [git error message]
+---
 
-💡 Fix git issues and try again
-```
+## Step Summary
+
+| Step | Name | When |
+|------|------|------|
+| 1 | Get Task and Agent Identity | ALWAYS |
+| 2 | Read & Respond to Mail | ALWAYS |
+| 3 | Verify Task | ALWAYS |
+| 4 | Commit Changes | ALWAYS |
+| 5 | Mark Task Complete | ALWAYS |
+| 6 | Release Reservations | ALWAYS |
+| 7 | Announce Completion | ALWAYS |
+| 8 | Show Menu + Recommended | ALWAYS |
+
+---
+
+## Key Design Principles
+
+1. **Always check Agent Mail first**
+   - Read messages BEFORE completing work
+   - Respond to questions, don't just ack
+   - Context matters for decision-making
+
+2. **Full verification required**
+   - No quick mode for this command
+   - Use `/agent:next quick` if you need speed
+
+3. **Show menu, don't auto-start**
+   - User chooses next task
+   - Recommend highest priority
+   - Different from `/agent:next` which auto-continues

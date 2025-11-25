@@ -40,14 +40,15 @@
 	const filteredUnassignedTasks = $derived(filterTasksByProjects(unassignedTasks, selectedProjects));
 
 	// Handle project badge filter change (multi-select)
-	function handleProjectFilterChange(projects: Set<string>) {
-		selectedProjects = projects;
+	function handleProjectFilterChange(newProjects: Set<string>) {
+		// Create a new Set to ensure reactivity
+		selectedProjects = new Set(newProjects);
 		// Update URL to reflect selected projects (comma-separated)
 		const url = new URL(window.location.href);
-		if (projects.size === 0) {
+		if (newProjects.size === 0) {
 			url.searchParams.delete('projects');
 		} else {
-			url.searchParams.set('projects', Array.from(projects).join(','));
+			url.searchParams.set('projects', Array.from(newProjects).join(','));
 		}
 		replaceState(url, {});
 	}
@@ -79,15 +80,9 @@
 		}
 	});
 
-	// Sync selectedProjects (multi-select) from URL params
-	$effect(() => {
-		const projectsParam = $page.url.searchParams.get('projects');
-		if (projectsParam) {
-			selectedProjects = new Set(projectsParam.split(','));
-		} else {
-			selectedProjects = new Set();
-		}
-	});
+	// NOTE: Removed URL sync effect - it was racing with handleProjectFilterChange
+	// The state is managed directly by handleProjectFilterChange, URL is just for bookmarking
+	// On page load, we sync from URL once in onMount instead
 
 	// Refetch data whenever selectedProject changes (triggered by URL or dropdown)
 	$effect(() => {
@@ -204,6 +199,12 @@
 	});
 
 	onMount(() => {
+		// Sync selectedProjects from URL on initial load
+		const projectsParam = new URLSearchParams(window.location.search).get('projects');
+		if (projectsParam) {
+			selectedProjects = new Set(projectsParam.split(','));
+		}
+
 		fetchData();
 		fetchSparklineData();
 	});
@@ -217,7 +218,7 @@
 		</label>
 		<ProjectBadgeFilter
 			{projects}
-			bind:selectedProjects
+			{selectedProjects}
 			{taskCounts}
 			onFilterChange={handleProjectFilterChange}
 		/>

@@ -12,7 +12,7 @@
 
 	let {
 		projects = [],
-		selectedProjects = $bindable(new Set<string>()),
+		selectedProjects = new Set<string>(),
 		taskCounts = new Map<string, number>(),
 		onFilterChange = (projects: Set<string>) => {}
 	} = $props();
@@ -23,18 +23,20 @@
 	);
 
 	function toggleProject(project: string) {
-		if (selectedProjects.has(project)) {
-			selectedProjects.delete(project);
+		// Create a new Set based on current selection
+		const newSet = new Set(selectedProjects);
+		if (newSet.has(project)) {
+			newSet.delete(project);
 		} else {
-			selectedProjects.add(project);
+			newSet.add(project);
 		}
-		selectedProjects = new Set(selectedProjects); // Trigger reactivity
-		onFilterChange(selectedProjects);
+		// Call parent callback - parent updates state, which flows back as prop
+		onFilterChange(newSet);
 	}
 </script>
 
 <div class="flex flex-wrap gap-1.5 p-2 bg-base-200 rounded-lg">
-	{#each filteredProjects as project}
+	{#each filteredProjects as project (project + '-' + selectedProjects.has(project))}
 		<button
 			class="badge badge-sm transition-all duration-200 cursor-pointer {selectedProjects.has(project) ? 'badge-primary shadow-md' : 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
 			onclick={() => toggleProject(project)}

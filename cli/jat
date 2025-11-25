@@ -222,18 +222,22 @@ launch_project() {
     local do_claude=false
     local do_npm=false
     local do_browser=false
+    local do_dashboard=false
     local session_count=1
     local skip_agent=false
+    local skip_dashboard=false
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --code|-c)     do_all=false; do_code=true ;;
-            --claude|-l)   do_all=false; do_claude=true ;;
-            --npm|-n)      do_all=false; do_npm=true ;;
-            --browser|-b)  do_all=false; do_browser=true ;;
-            --all|-a)      do_all=true ;;
-            --no-agent)    skip_agent=true ;;
-            [0-9]*)        session_count="$1" ;;
+            --code|-c)       do_all=false; do_code=true ;;
+            --claude|-l)     do_all=false; do_claude=true ;;
+            --npm|-n)        do_all=false; do_npm=true ;;
+            --browser|-b)    do_all=false; do_browser=true ;;
+            --dashboard|-d)  do_all=false; do_dashboard=true ;;
+            --all|-a)        do_all=true ;;
+            --no-agent)      skip_agent=true ;;
+            --no-dashboard)  skip_dashboard=true ;;
+            [0-9]*)          session_count="$1" ;;
             *) echo -e "${RED}Unknown option: $1${NC}"; return 1 ;;
         esac
         shift
@@ -290,11 +294,14 @@ launch_project() {
         sleep 0.3
         launch_npm "$path" "$name" "$port"
         launch_browser "$port" "$name"
+        # Launch dashboard unless --no-dashboard was specified
+        [[ "$skip_dashboard" != "true" ]] && launch_dashboard "$name"
     else
         $do_code && launch_code "$path" "$name"
         $do_claude && launch_claude "$path" "$name" "$db_url" "$tools_path" "$session_count" "$skip_agent"
         $do_npm && launch_npm "$path" "$name" "$port"
         $do_browser && launch_browser "$port" "$name"
+        $do_dashboard && launch_dashboard "$name"
     fi
 
     # Apply Hyprland colors

@@ -8,8 +8,10 @@
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import {
 		getProjectsFromTasks,
-		getTaskCountByProject
+		getTaskCountByProject,
+		filterTasksByProjects
 	} from '$lib/utils/projectUtils';
+	import ProjectBadgeFilter from '$lib/components/ProjectBadgeFilter.svelte';
 
 	let tasks = $state([]);
 	let allTasks = $state([]);  // Unfiltered tasks for project list calculation
@@ -18,6 +20,7 @@
 	let unassignedTasks = $state([]);
 	let taskStats = $state(null);
 	let selectedProject = $state('All Projects');
+	let selectedProjects = $state(new Set<string>()); // Multi-project filter for badge filter
 	let sparklineData = $state([]);
 	let isInitialLoad = $state(true);
 
@@ -31,6 +34,23 @@
 
 	// Get task count per project from ALL tasks (only count 'open' tasks to match TaskQueue default)
 	const taskCounts = $derived(getTaskCountByProject(allTasks, 'open'));
+
+	// Filter tasks by selected projects (multi-select)
+	const filteredTasks = $derived(filterTasksByProjects(tasks, selectedProjects));
+	const filteredUnassignedTasks = $derived(filterTasksByProjects(unassignedTasks, selectedProjects));
+
+	// Handle project badge filter change (multi-select)
+	function handleProjectFilterChange(projects: Set<string>) {
+		selectedProjects = projects;
+		// Update URL to reflect selected projects (comma-separated)
+		const url = new URL(window.location.href);
+		if (projects.size === 0) {
+			url.searchParams.delete('projects');
+		} else {
+			url.searchParams.set('projects', Array.from(projects).join(','));
+		}
+		replaceState(url, {});
+	}
 
 	// Handle project selection change
 	function handleProjectChange(project: string) {
@@ -56,6 +76,16 @@
 			selectedProject = projectParam;
 		} else {
 			selectedProject = 'All Projects';
+		}
+	});
+
+	// Sync selectedProjects (multi-select) from URL params
+	$effect(() => {
+		const projectsParam = $page.url.searchParams.get('projects');
+		if (projectsParam) {
+			selectedProjects = new Set(projectsParam.split(','));
+		} else {
+			selectedProjects = new Set();
 		}
 	});
 
@@ -180,8 +210,21 @@
 </script>
 
 <div class="min-h-screen bg-base-200">
+	<!-- Project Badge Filter -->
+	<div class="px-4 py-2 border-b border-base-300 bg-base-100">
+		<label class="text-xs font-semibold text-base-content/60 mb-1 block">
+			Projects {selectedProjects.size > 0 ? `(${selectedProjects.size} selected)` : '(all)'}
+		</label>
+		<ProjectBadgeFilter
+			{projects}
+			bind:selectedProjects
+			{taskCounts}
+			onFilterChange={handleProjectFilterChange}
+		/>
+	</div>
+
 	<!-- Main Content: Sidebar + Agent Grid -->
-	<div class="flex h-[calc(100vh-theme(spacing.20))]">
+	<div class="flex h-[calc(100vh-theme(spacing.20)-theme(spacing.16))]">
 		<!-- Left Sidebar: Task Queue -->
 		<div class="w-100 border-r border-base-300 bg-base-100 flex flex-col">
 			{#if isInitialLoad}
@@ -194,7 +237,7 @@
 				</div>
 			{:else}
 				<TaskQueue
-					tasks={unassignedTasks}
+					tasks={filteredUnassignedTasks}
 					{agents}
 					{reservations}
 					{selectedProject}
@@ -214,7 +257,7 @@
 					</div>
 				</div>
 			{:else}
-				<AgentGrid {agents} {tasks} {allTasks} {reservations} {sparklineData} onTaskAssign={handleTaskAssign} ontaskclick={handleTaskClick} />
+				<AgentGrid {agents} tasks={filteredTasks} {allTasks} {reservations} {sparklineData} onTaskAssign={handleTaskAssign} ontaskclick={handleTaskClick} />
 			{/if}
 		</div>
 	</div>

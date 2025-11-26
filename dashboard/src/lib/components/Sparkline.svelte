@@ -916,27 +916,67 @@
 
 		<!-- Multi-Series Chart Rendering -->
 		{#if isMultiSeries && filteredMultiSeriesData.length > 0}
-			{#if multiSeriesMode === 'stacked'}
+			{@const dataLength = filteredMultiSeriesData.length}
+
+			{#if chartType === 'bars'}
+				<!-- Multi-Series Bar Chart -->
+				{@const barGroupWidth = (viewBoxWidth - 2 * padding) / dataLength * 0.8}
+				{@const barWidth = barGroupWidth / activeProjects.length}
+				{#each filteredMultiSeriesData as point, dataIndex}
+					{@const groupX = padding + (dataIndex / (dataLength - 1 || 1)) * (viewBoxWidth - 2 * padding) - barGroupWidth / 2}
+					{#each activeProjects as project, projectIndex}
+						{@const tokens = point.projects[project.name]?.tokens || 0}
+						{@const barHeight = tokens > 0 ? Math.max(1, ((tokens / multiSeriesYRange.max) * (viewBoxHeight - 2 * padding))) : 0}
+						{@const barX = groupX + projectIndex * barWidth}
+						<rect
+							x={barX}
+							y={viewBoxHeight - padding - barHeight}
+							width={Math.max(0.5, barWidth - 0.5)}
+							height={barHeight}
+							fill={project.color}
+							fill-opacity="0.8"
+							rx="0.5"
+							style="transition: height 0.3s ease, y 0.3s ease;"
+						/>
+					{/each}
+				{/each}
+
+			{:else if chartType === 'dots'}
+				<!-- Multi-Series Dots Chart -->
+				{#each activeProjects as project}
+					{#each filteredMultiSeriesData as point, dataIndex}
+						{@const tokens = point.projects[project.name]?.tokens || 0}
+						{#if tokens > 0}
+							{@const x = padding + (dataIndex / (dataLength - 1 || 1)) * (viewBoxWidth - 2 * padding)}
+							{@const y = scaleMultiSeriesY(tokens)}
+							<circle
+								cx={x}
+								cy={y}
+								r="2"
+								fill={project.color}
+								fill-opacity="0.8"
+							/>
+						{/if}
+					{/each}
+				{/each}
+
+			{:else if chartType === 'area' || multiSeriesMode === 'stacked'}
 				<!-- Stacked Area Chart -->
-				{@const dataLength = filteredMultiSeriesData.length}
 				{#each activeProjects as project, projectIndex}
 					{@const projectColor = project.color}
 					{@const paths = (() => {
-						// Calculate stacked values for this project
 						const stackedPoints: Array<{ x: number; y: number; baseY: number }> = [];
 
 						for (let i = 0; i < dataLength; i++) {
 							const point = filteredMultiSeriesData[i];
 							const x = padding + (i / (dataLength - 1 || 1)) * (viewBoxWidth - 2 * padding);
 
-							// Calculate base (sum of all projects below this one in stack)
 							let baseValue = 0;
 							for (let j = projectIndex + 1; j < activeProjects.length; j++) {
 								const otherProject = activeProjects[j];
 								baseValue += point.projects[otherProject.name]?.tokens || 0;
 							}
 
-							// This project's value
 							const thisValue = point.projects[project.name]?.tokens || 0;
 							const topValue = baseValue + thisValue;
 
@@ -947,20 +987,17 @@
 							});
 						}
 
-						// Build the area path (top line + bottom line reversed)
 						const topPath = stackedPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x},${p.y}`).join(' ');
 						const bottomPath = [...stackedPoints].reverse().map((p) => `L ${p.x},${p.baseY}`).join(' ');
 
 						return { area: `${topPath} ${bottomPath} Z`, line: topPath };
 					})()}
-					<!-- Area fill -->
 					<path
 						d={paths.area}
 						fill={projectColor}
 						fill-opacity="0.4"
 						style="transition: d 0.3s ease;"
 					/>
-					<!-- Top line -->
 					<path
 						d={paths.line}
 						fill="none"
@@ -971,9 +1008,9 @@
 						style="transition: d 0.3s ease;"
 					/>
 				{/each}
+
 			{:else}
-				<!-- Overlay Multi-Line Chart -->
-				{@const dataLength = filteredMultiSeriesData.length}
+				<!-- Multi-Line Chart (default for 'line' chartType or 'overlay' mode) -->
 				{#each activeProjects as project}
 					{@const projectColor = project.color}
 					{@const linePath = (() => {
@@ -987,7 +1024,6 @@
 							points.push({ x, y });
 						}
 
-						// Build smooth line path
 						if (points.length === 0) return '';
 
 						let path = `M ${points[0].x},${points[0].y}`;

@@ -3,11 +3,32 @@
 	import * as d3 from 'd3';
 	import { getProjectColor } from '$lib/utils/projectColors';
 
+	// Types
+	interface Task {
+		id: string;
+		title?: string;
+		status?: string;
+		priority?: number;
+		created_at?: string;
+		updated_at?: string;
+	}
+
+	interface TaskWithDates extends Task {
+		startDate: Date;
+		endDate: Date;
+		duration: number;
+	}
+
+	interface Props {
+		tasks?: Task[];
+		onNodeClick?: ((taskId: string) => void) | null;
+	}
+
 	// Props
-	let { tasks = [], onNodeClick = null } = $props();
+	let { tasks = [], onNodeClick = null }: Props = $props();
 
 	// State
-	let svgElement = $state(null);
+	let svgElement = $state<SVGSVGElement | null>(null);
 	let width = $state(1200);
 	let margin = { top: 40, right: 400, bottom: 60, left: 200 };
 
@@ -16,7 +37,7 @@
 	let height = $state(600);
 
 	// Status color mapping (DaisyUI-compatible)
-	const statusColors = {
+	const statusColors: Record<string, string> = {
 		open: '#3b82f6',      // blue
 		in_progress: '#f59e0b', // amber
 		closed: '#10b981',     // green
@@ -24,7 +45,7 @@
 	};
 
 	// Priority color mapping for timeline bars
-	const priorityColors = {
+	const priorityColors: Record<number, string> = {
 		0: '#dc2626',  // P0 - red
 		1: '#f59e0b',  // P1 - amber
 		2: '#3b82f6',  // P2 - blue
@@ -32,7 +53,7 @@
 		99: '#6b7280' // default - gray
 	};
 
-	function buildTimeline() {
+	function buildTimeline(): void {
 		if (!svgElement) return;
 
 		// Clear previous timeline
@@ -52,7 +73,7 @@
 		}
 
 		// Parse task dates (use created_at/updated_at as proxies)
-		const tasksWithDates = tasks.map(task => {
+		const tasksWithDates: TaskWithDates[] = tasks.map(task => {
 			// Use created_at as start date, updated_at as end date (or create end date if closed)
 			const startDate = task.created_at ? new Date(task.created_at) : new Date();
 			const endDate = task.updated_at
@@ -65,12 +86,12 @@
 				...task,
 				startDate,
 				endDate,
-				duration: (endDate - startDate) / (1000 * 60 * 60 * 24) // days
+				duration: (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24) // days
 			};
 		});
 
 		// Sort tasks by start date
-		tasksWithDates.sort((a, b) => a.startDate - b.startDate);
+		tasksWithDates.sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
 
 		// Calculate dynamic height based on task count
 		const dynamicHeight = Math.max(
@@ -93,9 +114,8 @@
 		const innerHeight = dynamicHeight - margin.top - margin.bottom;
 
 		// X-axis: Date scale
-		const xExtent = d3.extent(
-			tasksWithDates.flatMap(d => [d.startDate, d.endDate])
-		);
+		const allDates = tasksWithDates.flatMap(d => [d.startDate, d.endDate]);
+		const xExtent = d3.extent(allDates) as [Date, Date];
 		const xScale = d3
 			.scaleTime()
 			.domain(xExtent)
@@ -128,7 +148,7 @@
 		g.append('g')
 			.attr('class', 'grid')
 			.attr('opacity', 0.1)
-			.call(d3.axisBottom(xScale).tickSize(innerHeight).tickFormat(''));
+			.call(d3.axisBottom(xScale).tickSize(innerHeight).tickFormat(() => ''));
 
 		// Add timeline bars
 		const bars = g
@@ -141,10 +161,10 @@
 		// Background bar (full duration)
 		bars
 			.append('rect')
-			.attr('width', d => Math.max(5, xScale(d.endDate) - xScale(d.startDate)))
+			.attr('width', (d: TaskWithDates) => Math.max(5, xScale(d.endDate) - xScale(d.startDate)))
 			.attr('height', yScale.bandwidth())
-			.attr('fill', d => priorityColors[d.priority ?? 99])
-			.attr('stroke', d => getProjectColor(d.id))
+			.attr('fill', (d: TaskWithDates) => priorityColors[d.priority ?? 99])
+			.attr('stroke', (d: TaskWithDates) => getProjectColor(d.id))
 			.attr('stroke-width', 2)
 			.attr('opacity', 0.6)
 			.attr('rx', 4);
@@ -154,7 +174,7 @@
 			.append('rect')
 			.attr('width', 6)
 			.attr('height', yScale.bandwidth())
-			.attr('fill', d => statusColors[d.status || 'open'])
+			.attr('fill', (d: TaskWithDates) => statusColors[d.status || 'open'])
 			.attr('rx', 4);
 
 		// Task labels (inside bars)
@@ -164,7 +184,7 @@
 			.attr('y', yScale.bandwidth() / 2)
 			.attr('dy', '0.35em')
 			.attr('class', 'text-sm fill-base-content')
-			.text(d => `P${d.priority ?? ''} ${d.title}`);
+			.text((d: TaskWithDates) => `P${d.priority ?? ''} ${d.title ?? ''}`);
 
 		// Add click interaction
 		bars.on('click', function (event, d) {
@@ -233,14 +253,23 @@
 
 	onMount(() => {
 		// Set initial width from parent container
-		width = svgElement?.parentElement?.clientWidth || 1200;
+		if (svgElement?.parentElement) {
+			width = svgElement.parentElement.clientWidth || 1200;
+		}
 		buildTimeline();
 
 		// Rebuild on window resize
-		window.addEventListener('resize', () => {
-			width = svgElement?.parentElement?.clientWidth || 1200;
+		const handleResize = () => {
+			if (svgElement?.parentElement) {
+				width = svgElement.parentElement.clientWidth || 1200;
+			}
 			buildTimeline();
-		});
+		};
+		window.addEventListener('resize', handleResize);
+
+		return () => {
+			window.removeEventListener('resize', handleResize);
+		};
 	});
 </script>
 

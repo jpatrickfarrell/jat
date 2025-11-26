@@ -154,7 +154,8 @@
 			.attr('stroke', (d: GraphNode) => getProjectColor(d.id))
 			.attr('stroke-width', (d: GraphNode) => priorityStroke[d.priority] || 1)
 			.attr('class', 'cursor-pointer hover:opacity-80 transition-opacity')
-			.call(drag(simulation) as unknown as (selection: d3.Selection<SVGCircleElement, GraphNode, SVGGElement, unknown>) => void)
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			.call(drag(simulation) as any)
 			.on('click', (event: MouseEvent, d: GraphNode) => {
 				event.stopPropagation();
 				if (onNodeClick) {

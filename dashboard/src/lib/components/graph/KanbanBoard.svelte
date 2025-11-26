@@ -1,11 +1,34 @@
 <script lang="ts">
 	import { getProjectColor } from '$lib/utils/projectColors';
 
+	// Types
+	interface Task {
+		id: string;
+		title: string;
+		status?: string;
+		priority?: number;
+		assignee?: string;
+		labels?: string[];
+		depends_on?: unknown[];
+	}
+
+	interface Column {
+		id: string;
+		label: string;
+		color: string;
+		bgColor: string;
+	}
+
+	interface Props {
+		tasks?: Task[];
+		onTaskClick?: ((taskId: string) => void) | null;
+	}
+
 	// Props
-	let { tasks = [], onTaskClick = null } = $props();
+	let { tasks = [], onTaskClick = null }: Props = $props();
 
 	// Status columns configuration
-	const columns = [
+	const columns: Column[] = [
 		{ id: 'open', label: 'Open', color: 'border-blue-500', bgColor: 'bg-blue-500/10' },
 		{
 			id: 'in_progress',
@@ -18,7 +41,7 @@
 	];
 
 	// Priority badge colors
-	const priorityColors = {
+	const priorityColors: Record<number, string> = {
 		0: 'badge-error',  // P0 - red
 		1: 'badge-warning', // P1 - amber
 		2: 'badge-info',   // P2 - blue
@@ -28,14 +51,14 @@
 
 	// Group tasks by status
 	const tasksByStatus = $derived(
-		columns.reduce((acc, column) => {
+		columns.reduce((acc: Record<string, Task[]>, column) => {
 			acc[column.id] = tasks.filter((task) => task.status === column.id);
 			return acc;
-		}, {})
+		}, {} as Record<string, Task[]>)
 	);
 
 	// Handle task card click
-	function handleTaskClick(taskId) {
+	function handleTaskClick(taskId: string): void {
 		if (onTaskClick) {
 			onTaskClick(taskId);
 		}
@@ -198,6 +221,7 @@
 	.line-clamp-2 {
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
+		line-clamp: 2;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
 	}

@@ -13,6 +13,8 @@
 
 	import { formatTokens, formatCost, getUsageColor } from '$lib/utils/numberFormat';
 	import Sparkline from './Sparkline.svelte';
+	import AnimatedDigits from './AnimatedDigits.svelte';
+	import AnimatedCost from './AnimatedCost.svelte';
 	import type { MultiSeriesDataPoint, ProjectMeta } from './Sparkline.svelte';
 
 	interface DataPoint {
@@ -158,7 +160,7 @@
 				<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
 			</svg>
 		{/if}
-		<span class="font-medium">{formatTokensCompact(tokensToday)}</span>
+		<AnimatedDigits value={formatTokensCompact(tokensToday)} class="font-medium" />
 	</span>
 
 	<!-- Separator -->
@@ -171,7 +173,7 @@
 				<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
 			</svg>
 		{/if}
-		<span class="font-medium">{formatCostCompact(costToday)}</span>
+		<AnimatedCost value={costToday} format={formatCostCompact} class="font-medium" />
 	</span>
 
 	<!-- Sparkline (multi-project or single-project) -->

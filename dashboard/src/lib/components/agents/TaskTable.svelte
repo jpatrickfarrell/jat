@@ -8,6 +8,13 @@
 	import { toggleSetItem } from '$lib/utils/filterHelpers';
 	import { getActivityStatusConfig } from '$lib/config/activityStatusConfig';
 	import { isAgentWorking as checkAgentWorking } from '$lib/utils/agentStatusUtils';
+	import {
+		bulkApiOperation,
+		fetchWithTimeout,
+		handleApiError,
+		createPutRequest,
+		createDeleteRequest
+	} from '$lib/utils/bulkApiHelpers';
 
 	let { tasks = [], allTasks = [], agents = [], reservations = [], ontaskclick = () => {} } = $props();
 
@@ -378,164 +385,113 @@
 	let bulkActionLoading = $state(false);
 	let bulkActionError = $state('');
 
-	// Bulk action handlers
+	// Helper to run bulk operations with consistent state management
+	async function runBulkOperation(operation) {
+		bulkActionLoading = true;
+		bulkActionError = '';
+
+		const result = await bulkApiOperation(
+			Array.from(selectedTasks),
+			operation,
+			{ continueOnError: false }
+		);
+
+		if (result.success) {
+			clearSelection();
+		} else {
+			bulkActionError = result.errors[0] || 'Operation failed';
+		}
+
+		bulkActionLoading = false;
+	}
+
+	// Bulk action handlers using shared utilities
 	async function handleBulkDelete() {
 		if (!confirm(`Delete ${selectedTasks.size} task(s)? This cannot be undone.`)) return;
 
-		bulkActionLoading = true;
-		bulkActionError = '';
-
-		try {
-			for (const taskId of selectedTasks) {
-				const response = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
-				if (!response.ok) {
-					throw new Error(`Failed to delete task ${taskId}`);
-				}
+		await runBulkOperation(async (taskId) => {
+			const response = await fetchWithTimeout(`/api/tasks/${taskId}`, createDeleteRequest());
+			if (!response.ok) {
+				throw new Error(await handleApiError(response, `delete task ${taskId}`));
 			}
-			clearSelection();
-		} catch (err) {
-			bulkActionError = err.message;
-		} finally {
-			bulkActionLoading = false;
-		}
+		});
 	}
 
 	async function handleBulkRelease() {
-		bulkActionLoading = true;
-		bulkActionError = '';
-
-		try {
-			for (const taskId of selectedTasks) {
-				// Unassign task and set to open
-				const response = await fetch(`/api/tasks/${taskId}`, {
-					method: 'PUT',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ assignee: null, status: 'open' })
-				});
-				if (!response.ok) {
-					throw new Error(`Failed to release task ${taskId}`);
-				}
+		await runBulkOperation(async (taskId) => {
+			const response = await fetchWithTimeout(
+				`/api/tasks/${taskId}`,
+				createPutRequest({ assignee: null, status: 'open' })
+			);
+			if (!response.ok) {
+				throw new Error(await handleApiError(response, `release task ${taskId}`));
 			}
-			clearSelection();
-		} catch (err) {
-			bulkActionError = err.message;
-		} finally {
-			bulkActionLoading = false;
-		}
+		});
 	}
 
-	function handleBulkAssign() {
-		// For now, prompt for agent name
+	async function handleBulkAssign() {
 		const agentName = prompt('Enter agent name to assign tasks to:');
 		if (!agentName) return;
 
-		bulkActionLoading = true;
-		bulkActionError = '';
-
-		(async () => {
-			try {
-				for (const taskId of selectedTasks) {
-					const response = await fetch(`/api/tasks/${taskId}`, {
-						method: 'PUT',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ assignee: agentName, status: 'in_progress' })
-					});
-					if (!response.ok) {
-						throw new Error(`Failed to assign task ${taskId}`);
-					}
-				}
-				clearSelection();
-			} catch (err) {
-				bulkActionError = err.message;
-			} finally {
-				bulkActionLoading = false;
+		await runBulkOperation(async (taskId) => {
+			const response = await fetchWithTimeout(
+				`/api/tasks/${taskId}`,
+				createPutRequest({ assignee: agentName, status: 'in_progress' })
+			);
+			if (!response.ok) {
+				throw new Error(await handleApiError(response, `assign task ${taskId}`));
 			}
-		})();
+		});
 	}
 
 	async function handleBulkChangePriority(priority) {
-		bulkActionLoading = true;
-		bulkActionError = '';
-
-		try {
-			for (const taskId of selectedTasks) {
-				const response = await fetch(`/api/tasks/${taskId}`, {
-					method: 'PUT',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ priority })
-				});
-				if (!response.ok) {
-					throw new Error(`Failed to update priority for ${taskId}`);
-				}
+		await runBulkOperation(async (taskId) => {
+			const response = await fetchWithTimeout(
+				`/api/tasks/${taskId}`,
+				createPutRequest({ priority })
+			);
+			if (!response.ok) {
+				throw new Error(await handleApiError(response, `update priority for ${taskId}`));
 			}
-			clearSelection();
-		} catch (err) {
-			bulkActionError = err.message;
-		} finally {
-			bulkActionLoading = false;
-		}
+		});
 	}
 
 	async function handleBulkChangeStatus(status) {
-		bulkActionLoading = true;
-		bulkActionError = '';
-
-		try {
-			for (const taskId of selectedTasks) {
-				const response = await fetch(`/api/tasks/${taskId}`, {
-					method: 'PUT',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ status })
-				});
-				if (!response.ok) {
-					throw new Error(`Failed to update status for ${taskId}`);
-				}
+		await runBulkOperation(async (taskId) => {
+			const response = await fetchWithTimeout(
+				`/api/tasks/${taskId}`,
+				createPutRequest({ status })
+			);
+			if (!response.ok) {
+				throw new Error(await handleApiError(response, `update status for ${taskId}`));
 			}
-			clearSelection();
-		} catch (err) {
-			bulkActionError = err.message;
-		} finally {
-			bulkActionLoading = false;
-		}
+		});
 	}
 
-	function handleBulkAddLabel() {
+	async function handleBulkAddLabel() {
 		const label = prompt('Enter label to add to selected tasks:');
 		if (!label) return;
 
-		bulkActionLoading = true;
-		bulkActionError = '';
-
-		(async () => {
-			try {
-				for (const taskId of selectedTasks) {
-					// First get current task to get existing labels
-					const getResponse = await fetch(`/api/tasks/${taskId}`);
-					if (!getResponse.ok) {
-						throw new Error(`Failed to fetch task ${taskId}`);
-					}
-					const taskData = await getResponse.json();
-					const currentLabels = taskData.task?.labels || [];
-
-					// Add new label if not already present
-					if (!currentLabels.includes(label)) {
-						const response = await fetch(`/api/tasks/${taskId}`, {
-							method: 'PUT',
-							headers: { 'Content-Type': 'application/json' },
-							body: JSON.stringify({ labels: [...currentLabels, label] })
-						});
-						if (!response.ok) {
-							throw new Error(`Failed to add label to ${taskId}`);
-						}
-					}
-				}
-				clearSelection();
-			} catch (err) {
-				bulkActionError = err.message;
-			} finally {
-				bulkActionLoading = false;
+		await runBulkOperation(async (taskId) => {
+			// First get current task to get existing labels
+			const getResponse = await fetchWithTimeout(`/api/tasks/${taskId}`);
+			if (!getResponse.ok) {
+				throw new Error(await handleApiError(getResponse, `fetch task ${taskId}`));
 			}
-		})();
+			const taskData = await getResponse.json();
+			const currentLabels = taskData.task?.labels || [];
+
+			// Add new label if not already present
+			if (!currentLabels.includes(label)) {
+				const response = await fetchWithTimeout(
+					`/api/tasks/${taskId}`,
+					createPutRequest({ labels: [...currentLabels, label] })
+				);
+				if (!response.ok) {
+					throw new Error(await handleApiError(response, `add label to ${taskId}`));
+				}
+			}
+		});
 	}
 </script>
 
@@ -934,22 +890,13 @@
 									</td>
 									<td class="whitespace-nowrap">
 										{#if task.status === 'in_progress' && task.assignee}
-											<!-- In progress: show assignee with activity indicator instead of status badge -->
+											<!-- In progress: show assignee with spinning gear (task IS being worked on) -->
 											{@const statusConfig = getActivityStatusConfig('in_progress')}
 											<span class="flex items-center gap-1.5">
-												{#if isAgentWorking(task.assignee)}
-													<!-- Working: spinning gear + agent name -->
-													<svg class="shrink-0 w-4 h-4 text-info animate-spin origin-center" viewBox="0 0 24 24" fill="currentColor" title={statusConfig.description}>
-														<path d={statusConfig.icon} />
-													</svg>
-													<span class="text-sm font-medium text-info">{task.assignee}</span>
-												{:else}
-													<!-- Assigned but not actively working -->
-													<svg class="shrink-0 w-4 h-4 text-warning" viewBox="0 0 24 24" fill="currentColor" title="Assigned but inactive">
-														<path d={statusConfig.icon} />
-													</svg>
-													<span class="text-sm text-warning">{task.assignee}</span>
-												{/if}
+												<svg class="shrink-0 w-4 h-4 text-info animate-spin origin-center" viewBox="0 0 24 24" fill="currentColor" title={statusConfig.description}>
+													<path d={statusConfig.icon} />
+												</svg>
+												<span class="text-sm font-medium text-info">{task.assignee}</span>
 											</span>
 										{:else}
 											<!-- Other statuses: show regular badge -->

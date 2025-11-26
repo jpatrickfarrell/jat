@@ -64,6 +64,17 @@
 	let toastMessage = $state<{ type: 'success' | 'error'; text: string } | null>(null);
 	let showHelp = $state(false);
 	let copiedTaskId = $state(false);
+	let editingLabels = $state(false);
+
+	// Autofocus action for inputs
+	function autofocusAction(node: HTMLElement) {
+		requestAnimationFrame(() => {
+			node.focus();
+			if (node instanceof HTMLInputElement) {
+				node.select();
+			}
+		});
+	}
 
 	// Timeline filter state
 	let timelineFilter = $state<'all' | 'tasks' | 'messages'>('all');
@@ -459,8 +470,8 @@
 					{:else}
 						<h2 class="text-2xl font-bold text-base-content">Task Details</h2>
 					{/if}
-					<!-- Task ID + Project + Status + Save Status -->
-					<div class="flex items-center gap-2 mt-1">
+					<!-- Task ID + Badges + Metadata (all in one row) -->
+					<div class="flex flex-wrap items-center gap-2 mt-1">
 						{#if task}
 							<!-- Task ID (clickable to copy) -->
 							<button
@@ -479,87 +490,119 @@
 									</svg>
 								{/if}
 							</button>
-							<!-- Project badge (quick context) -->
-							{#if task.project}
-								<span class="badge badge-sm badge-primary">{task.project}</span>
-							{/if}
-							<!-- Status badge (quick context) -->
-							<span class="badge badge-sm {statusColors[task.status] || 'badge-ghost'}">{task.status || 'unknown'}</span>
+
+							<!-- Status (editable) -->
+							<InlineSelect
+								value={task.status || 'open'}
+								options={statusOptions}
+								onSave={async (newValue) => {
+									await autoSave('status', newValue);
+								}}
+								disabled={isSaving}
+							>
+								<div class="badge badge-sm {statusColors[task.status] || 'badge-ghost'}">
+									{task.status || 'unknown'}
+								</div>
+							</InlineSelect>
+
+							<!-- Priority (editable) -->
+							<InlineSelect
+								value={String(task.priority ?? 1)}
+								options={priorityOptions.map(o => ({ value: String(o.value), label: o.label }))}
+								onSave={async (newValue) => {
+									await autoSave('priority', parseInt(newValue, 10));
+								}}
+								disabled={isSaving}
+							>
+								<div class="badge badge-sm {priorityColors[task.priority] || 'badge-ghost'}">
+									P{task.priority ?? '?'}
+								</div>
+							</InlineSelect>
+
+							<!-- Type (editable) -->
+							<InlineSelect
+								value={task.type || 'task'}
+								options={typeOptions}
+								onSave={async (newValue) => {
+									await autoSave('type', newValue);
+								}}
+								disabled={isSaving}
+							>
+								<div class="badge badge-sm badge-outline">{task.type || 'task'}</div>
+							</InlineSelect>
+
+							<!-- Project (editable) -->
+							<InlineSelect
+								value={task.project || ''}
+								options={[{ value: '', label: 'No project' }, ...projectOptions.map(p => ({ value: p, label: p }))]}
+								onSave={async (newValue) => {
+									await autoSave('project', newValue);
+								}}
+								disabled={isSaving}
+							>
+								{#if task.project}
+									<div class="badge badge-sm badge-primary">{task.project}</div>
+								{:else}
+									<div class="badge badge-sm badge-ghost badge-outline">No project</div>
+								{/if}
+							</InlineSelect>
+
+							<!-- Separator -->
+							<span class="text-base-content/20">•</span>
+
+							<!-- Created timestamp -->
+							<span class="text-xs text-base-content/50">
+								{formatRelativeTimestamp(task.created_at)}
+							</span>
+
+							<!-- Separator -->
+							<span class="text-base-content/20">•</span>
+
+							<!-- Assignee -->
+							<span class="text-xs text-base-content/50 flex items-center gap-1">
+								{#if task.assignee}
+									<span>{task.assignee}</span>
+									<button
+										class="btn btn-ghost btn-xs btn-circle opacity-50 hover:opacity-100 hover:btn-error h-4 w-4 min-h-0"
+										onclick={async () => {
+											await autoSave('assignee', '');
+										}}
+										disabled={isSaving}
+										title="Clear assignment"
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+										</svg>
+									</button>
+								{:else}
+									<span class="italic">Unassigned</span>
+								{/if}
+							</span>
 						{/if}
+
+						<!-- Save indicator -->
 						{#if isSaving}
-							<span class="text-sm text-base-content/70">
+							<span class="text-xs text-base-content/70">
 								<span class="loading loading-spinner loading-xs"></span>
 								Saving...
 							</span>
 						{:else if lastSaved}
-							<span class="text-sm text-base-content/70">
+							<span class="text-xs text-base-content/70">
 								✓ Saved {formatSavedTime(lastSaved)}
 							</span>
 						{/if}
 					</div>
 				</div>
-				<div class="flex items-center gap-2">
-					<!-- Delete button -->
-					{#if !loading && !error && task}
-						<div class="tooltip tooltip-bottom" data-tip="Delete task">
-							<button
-								class="btn btn-sm btn-circle btn-ghost text-error hover:btn-error"
-								onclick={handleDelete}
-								disabled={isSaving}
-								aria-label="Delete task"
-							>
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									class="h-4 w-4"
-									fill="none"
-									viewBox="0 0 24 24"
-									stroke="currentColor"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-									/>
-								</svg>
-							</button>
-						</div>
-					{/if}
-					<!-- Help button -->
-					<div class="tooltip tooltip-bottom" data-tip="Show shortcuts (?)">
-						<button
-							class="btn btn-sm btn-circle btn-ghost"
-							onclick={() => (showHelp = !showHelp)}
-							aria-label="Show keyboard shortcuts (?)"
-						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								class="h-4 w-4"
-								fill="none"
-								viewBox="0 0 24 24"
-								stroke="currentColor"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-								/>
-							</svg>
-						</button>
-					</div>
-					<!-- Close button -->
-					<div class="tooltip tooltip-bottom" data-tip="Close (Esc)">
-						<button
-							class="btn btn-sm btn-circle btn-ghost"
-							onclick={handleClose}
-							disabled={isSaving}
-							aria-label="Close drawer (Esc)"
-						>
-							✕
-						</button>
-					</div>
-				</div>
+				<!-- Close button (header) -->
+				<button
+					class="btn btn-sm btn-circle btn-ghost"
+					onclick={handleClose}
+					disabled={isSaving}
+					aria-label="Close drawer (Esc)"
+					title="Close (Esc)"
+				>
+					✕
+				</button>
 			</div>
 
 			<!-- Content (scrollable area between sticky header and footer) -->
@@ -595,118 +638,49 @@
 				{:else if task}
 					<!-- View Mode -->
 					<div class="flex flex-col gap-6 h-full">
-						<!-- Badges (left) + Metadata (right) -->
-						<div class="flex items-start justify-between gap-4">
-							<!-- Badges (Inline Editable) -->
-							<div class="flex flex-wrap gap-2 items-center">
-								<!-- Status -->
-								<InlineSelect
-									value={task.status || 'open'}
-									options={statusOptions}
-									onSave={async (newValue) => {
-										await autoSave('status', newValue);
-									}}
-									disabled={isSaving}
-								>
-									<div class="badge {statusColors[task.status] || 'badge-ghost'}">
-										{task.status || 'unknown'}
-									</div>
-								</InlineSelect>
-
-								<!-- Priority -->
-								<InlineSelect
-									value={String(task.priority ?? 1)}
-									options={priorityOptions.map(o => ({ value: String(o.value), label: o.label }))}
-									onSave={async (newValue) => {
-										await autoSave('priority', parseInt(newValue, 10));
-									}}
-									disabled={isSaving}
-								>
-									<div class="badge {priorityColors[task.priority] || 'badge-ghost'}">
-										P{task.priority ?? '?'}
-									</div>
-								</InlineSelect>
-
-								<!-- Type -->
-								<InlineSelect
-									value={task.type || 'task'}
-									options={typeOptions}
-									onSave={async (newValue) => {
-										await autoSave('type', newValue);
-									}}
-									disabled={isSaving}
-								>
-									<div class="badge badge-outline">{task.type || 'task'}</div>
-								</InlineSelect>
-
-								<!-- Project -->
-								<InlineSelect
-									value={task.project || ''}
-									options={[{ value: '', label: 'No project' }, ...projectOptions.map(p => ({ value: p, label: p }))]}
-									onSave={async (newValue) => {
-										await autoSave('project', newValue);
-									}}
-									disabled={isSaving}
-								>
-									{#if task.project}
-										<div class="badge badge-primary">{task.project}</div>
-									{:else}
-										<div class="badge badge-ghost badge-outline">No project</div>
-									{/if}
-								</InlineSelect>
-							</div>
-							<!-- Metadata (compact, right-aligned) -->
-							<div class="text-xs text-base-content/60 text-right shrink-0">
-								<div><span class="text-base-content/40">Created:</span> {formatRelativeTimestamp(task.created_at)}</div>
-								<div><span class="text-base-content/40">Updated:</span> {formatRelativeTimestamp(task.updated_at)}</div>
-								<div class="flex items-center justify-end gap-1">
-									<span class="text-base-content/40">Assignee:</span>
-									{#if task.assignee}
-										<span class="inline-flex items-center gap-1">
-											<span>{task.assignee}</span>
-											<button
-												class="btn btn-ghost btn-xs btn-circle opacity-50 hover:opacity-100 hover:btn-error"
-												onclick={async () => {
-													await autoSave('assignee', '');
-												}}
-												disabled={isSaving}
-												title="Clear assignment"
-											>
-												<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-												</svg>
-											</button>
-										</span>
-									{:else}
-										<span class="text-base-content/50 italic">Unassigned</span>
-									{/if}
-								</div>
-							</div>
-						</div>
-
-						<!-- Labels (Inline Editable) -->
+						<!-- Labels (badges, click to edit) -->
 						<div>
 							<h4 class="text-sm font-semibold mb-2 text-base-content/70">Labels</h4>
-							<InlineEdit
-								value={task.labels ? task.labels.join(', ') : ''}
-								onSave={async (newValue) => {
-									const labelsArray = newValue
-										.split(',')
-										.map((l) => l.trim())
-										.filter((l) => l.length > 0);
-									await autoSave('labels', labelsArray);
-								}}
-								type="text"
-								placeholder="Add labels (comma-separated)..."
-								disabled={isSaving}
-								class="text-sm"
-							/>
-							{#if task.labels && task.labels.length > 0}
-								<div class="flex flex-wrap gap-2 mt-2">
-									{#each task.labels as label}
-										<span class="badge badge-sm badge-outline">{label}</span>
-									{/each}
-								</div>
+							{#if editingLabels}
+								<!-- Edit mode: text input -->
+								<input
+									type="text"
+									class="input input-bordered input-sm w-full text-sm"
+									value={task.labels ? task.labels.join(', ') : ''}
+									placeholder="label1, label2, label3..."
+									onblur={async (e) => {
+										const labelsArray = e.currentTarget.value
+											.split(',')
+											.map((l) => l.trim())
+											.filter((l) => l.length > 0);
+										await autoSave('labels', labelsArray);
+										editingLabels = false;
+									}}
+									onkeydown={(e) => {
+										if (e.key === 'Enter') {
+											e.currentTarget.blur();
+										} else if (e.key === 'Escape') {
+											editingLabels = false;
+										}
+									}}
+									disabled={isSaving}
+									use:autofocusAction
+								/>
+							{:else}
+								<!-- Display mode: badges -->
+								<button
+									class="flex flex-wrap gap-2 items-center cursor-pointer rounded px-2 py-1 hover:bg-base-200 transition-colors w-full text-left"
+									onclick={() => (editingLabels = true)}
+									type="button"
+								>
+									{#if task.labels && task.labels.length > 0}
+										{#each task.labels as label}
+											<span class="badge badge-sm badge-outline">{label}</span>
+										{/each}
+									{:else}
+										<span class="text-sm text-base-content/50 italic">Add labels...</span>
+									{/if}
+								</button>
 							{/if}
 						</div>
 
@@ -1029,10 +1003,57 @@
 			<!-- Footer Actions -->
 			{#if !loading && !error && task}
 				<div class="p-6 border-t border-base-300 bg-base-200">
-					<div class="flex justify-end">
-						<button type="button" class="btn btn-ghost" onclick={handleClose}>
-							Close
+					<div class="flex justify-between items-center">
+						<!-- Delete button (left) -->
+						<button
+							class="btn btn-sm btn-ghost text-error hover:btn-error gap-1"
+							onclick={handleDelete}
+							disabled={isSaving}
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								class="h-4 w-4"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke="currentColor"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+								/>
+							</svg>
+							Delete
 						</button>
+						<!-- Right side buttons -->
+						<div class="flex items-center gap-2">
+							<!-- Shortcuts button -->
+							<button
+								class="btn btn-sm btn-ghost gap-1"
+								onclick={() => (showHelp = !showHelp)}
+							>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									class="h-4 w-4"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+									/>
+								</svg>
+								Shortcuts
+							</button>
+							<!-- Close button -->
+							<button type="button" class="btn btn-ghost" onclick={handleClose}>
+								Close
+							</button>
+						</div>
 					</div>
 				</div>
 			{/if}

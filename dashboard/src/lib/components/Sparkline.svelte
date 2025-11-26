@@ -1,3 +1,36 @@
+<script lang="ts" module>
+	/**
+	 * Type exports for multi-series sparkline data
+	 * These types are used by components that provide data to the Sparkline
+	 */
+
+	/** Single data point for single-series mode */
+	export interface SparklineDataPoint {
+		timestamp: string;
+		tokens: number;
+		cost: number;
+	}
+
+	/** Multi-series data point for multi-project visualization */
+	export interface MultiSeriesDataPoint {
+		timestamp: string;
+		/** Per-project token/cost data */
+		projects: Record<string, { tokens: number; cost: number }>;
+		/** Aggregate totals across all projects */
+		total: { tokens: number; cost: number };
+	}
+
+	/** Project metadata for multi-series rendering */
+	export interface ProjectMeta {
+		name: string;
+		color: string;
+		totalTokens: number;
+	}
+
+	/** Multi-series chart mode */
+	export type MultiSeriesMode = 'stacked' | 'overlay';
+</script>
+
 <script lang="ts">
 	/**
 	 * Sparkline Component
@@ -6,7 +39,7 @@
 	 * Features hover-to-expand controls for chart type, time range, and display options.
 	 * Color-coded based on usage thresholds with configurable defaults.
 	 *
-	 * @example
+	 * @example Single-series (original usage)
 	 * ```svelte
 	 * <Sparkline
 	 *   data={sparklineData}
@@ -14,6 +47,16 @@
 	 *   defaultTimeRange="24h"
 	 *   defaultColorMode="usage"
 	 *   showStyleToolbar={true}
+	 * />
+	 * ```
+	 *
+	 * @example Multi-series (multi-project mode)
+	 * ```svelte
+	 * <Sparkline
+	 *   multiSeriesData={multiProjectData}
+	 *   projectMeta={projectMetadata}
+	 *   showLegend={true}
+	 *   height={60}
 	 * />
 	 * ```
 	 */
@@ -31,9 +74,32 @@
 		cost: number;
 	}
 
+	/** Multi-series data point for multi-project visualization */
+	interface MultiSeriesDataPoint {
+		timestamp: string;
+		/** Per-project token/cost data */
+		projects: Record<string, { tokens: number; cost: number }>;
+		/** Aggregate totals across all projects */
+		total: { tokens: number; cost: number };
+	}
+
+	/** Project metadata for multi-series rendering */
+	interface ProjectMeta {
+		name: string;
+		color: string;
+		totalTokens: number;
+	}
+
+	/** Multi-series chart mode: stacked areas or overlapping lines */
+	type MultiSeriesMode = 'stacked' | 'overlay';
+
 	interface Props {
-		/** Time-series data points */
-		data: DataPoint[];
+		/** Time-series data points (single-series mode) */
+		data?: DataPoint[];
+		/** Multi-series data points (multi-project mode) */
+		multiSeriesData?: MultiSeriesDataPoint[];
+		/** Project metadata with colors (required for multi-series) */
+		projectMeta?: ProjectMeta[];
 		/** Width in pixels or '100%' for responsive (default: '100%') */
 		width?: number | string;
 		/** Height in pixels (default: 40) */
@@ -52,10 +118,14 @@
 		defaultTimeRange?: '1h' | '24h' | '7d' | '30d' | 'all';
 		/** Default color mode for initial display (default: 'usage') */
 		defaultColorMode?: 'usage' | 'static';
+		/** Show compact legend for multi-series (default: false) */
+		showLegend?: boolean;
 	}
 
 	let {
-		data,
+		data = [],
+		multiSeriesData,
+		projectMeta,
 		width = '100%',
 		height = 40,
 		showTooltip = true,
@@ -64,8 +134,12 @@
 		staticColor = '#10b981',
 		showStyleToolbar = true,
 		defaultTimeRange = '24h',
-		defaultColorMode = 'usage'
+		defaultColorMode = 'usage',
+		showLegend = false
 	}: Props = $props();
+
+	// Determine if we're in multi-series mode
+	const isMultiSeries = $derived(multiSeriesData && multiSeriesData.length > 0 && projectMeta && projectMeta.length > 0);
 
 	// ============================================================================
 	// State
@@ -75,6 +149,28 @@
 	type TimeRange = '1h' | '24h' | '7d' | '30d' | 'all' | 'custom';
 	let chartType = $state<ChartType>('line');
 	let timeRange = $state<TimeRange>(defaultTimeRange); // Initialize from prop
+
+	// Multi-series mode (stacked vs overlay) - persisted globally via localStorage
+	const MULTI_SERIES_MODE_KEY = 'sparkline-multi-series-mode';
+	let multiSeriesMode = $state<MultiSeriesMode>('stacked');
+
+	// Initialize multi-series mode from localStorage on mount
+	$effect(() => {
+		if (typeof window !== 'undefined') {
+			const stored = localStorage.getItem(MULTI_SERIES_MODE_KEY);
+			if (stored === 'stacked' || stored === 'overlay') {
+				multiSeriesMode = stored;
+			}
+		}
+	});
+
+	// Persist multi-series mode changes to localStorage
+	function setMultiSeriesMode(mode: MultiSeriesMode) {
+		multiSeriesMode = mode;
+		if (typeof window !== 'undefined') {
+			localStorage.setItem(MULTI_SERIES_MODE_KEY, mode);
+		}
+	}
 	let hoveredIndex = $state<number | null>(null);
 	let tooltipX = $state(0);
 	let tooltipY = $state(0);
@@ -174,6 +270,103 @@
 
 		return { min: paddedMin, max: paddedMax };
 	});
+
+	// ============================================================================
+	// Multi-Series Computed Values
+	// ============================================================================
+
+	/** Filter multi-series data based on selected time range */
+	const filteredMultiSeriesData = $derived.by(() => {
+		if (!multiSeriesData || multiSeriesData.length === 0) return [];
+
+		const now = new Date();
+		let cutoffTime: Date;
+
+		switch (timeRange) {
+			case '1h':
+				cutoffTime = new Date(now.getTime() - 60 * 60 * 1000);
+				break;
+			case '24h':
+				cutoffTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+				break;
+			case '7d':
+				cutoffTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+				break;
+			case '30d':
+				cutoffTime = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+				break;
+			case 'all':
+				return multiSeriesData;
+			case 'custom':
+				if (!customDateFrom && !customDateTo) return multiSeriesData;
+				const fromDate = customDateFrom ? new Date(customDateFrom) : new Date(0);
+				const toDate = customDateTo ? new Date(customDateTo) : now;
+				toDate.setHours(23, 59, 59, 999);
+				return multiSeriesData.filter((point) => {
+					const pointDate = new Date(point.timestamp);
+					return pointDate >= fromDate && pointDate <= toDate;
+				});
+			default:
+				cutoffTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+		}
+
+		return multiSeriesData.filter((point) => new Date(point.timestamp) >= cutoffTime);
+	});
+
+	/** Get active projects (non-zero tokens in filtered time range) sorted by total tokens */
+	const activeProjects = $derived.by(() => {
+		if (!projectMeta || !filteredMultiSeriesData || filteredMultiSeriesData.length === 0) return [];
+
+		// Sum tokens per project across filtered data
+		const projectTotals = new Map<string, number>();
+		for (const point of filteredMultiSeriesData) {
+			for (const [projectName, data] of Object.entries(point.projects)) {
+				projectTotals.set(projectName, (projectTotals.get(projectName) || 0) + data.tokens);
+			}
+		}
+
+		// Filter and sort by total tokens (descending)
+		return projectMeta
+			.filter((p) => (projectTotals.get(p.name) || 0) > 0)
+			.map((p) => ({ ...p, totalTokens: projectTotals.get(p.name) || 0 }))
+			.sort((a, b) => b.totalTokens - a.totalTokens);
+	});
+
+	/** Calculate Y-axis range for multi-series data */
+	const multiSeriesYRange = $derived.by(() => {
+		if (!filteredMultiSeriesData || filteredMultiSeriesData.length === 0) {
+			return { min: 0, max: 1 };
+		}
+
+		let maxValue: number;
+		if (multiSeriesMode === 'stacked') {
+			// For stacked: max is the highest total across all time points
+			maxValue = Math.max(...filteredMultiSeriesData.map((d) => d.total.tokens));
+		} else {
+			// For overlay: max is the highest individual project value
+			maxValue = 0;
+			for (const point of filteredMultiSeriesData) {
+				for (const data of Object.values(point.projects)) {
+					if (data.tokens > maxValue) maxValue = data.tokens;
+				}
+			}
+		}
+
+		// Add 10% padding
+		const paddedMax = maxValue * 1.1;
+		return { min: 0, max: paddedMax || 1 };
+	});
+
+	/** Scale Y value to SVG coordinates for multi-series */
+	function scaleMultiSeriesY(value: number): number {
+		if (multiSeriesYRange.max === multiSeriesYRange.min) return viewBoxHeight - padding;
+		const normalized = value / multiSeriesYRange.max;
+		return viewBoxHeight - padding - normalized * (viewBoxHeight - 2 * padding);
+	}
+
+	// ============================================================================
+	// Single-Series Computed Values (continued)
+	// ============================================================================
 
 	/** Scale Y value to SVG coordinates */
 	function scaleY(value: number): number {
@@ -468,6 +661,37 @@
 					</div>
 				</div>
 
+				<!-- Multi-Series Mode Section (only shown when multi-series data is present) -->
+				{#if isMultiSeries}
+					<div>
+						<div class="text-xs font-semibold mb-1.5 text-base-content/70">Multi-Project View</div>
+						<div class="flex flex-wrap gap-1.5 p-2 bg-base-200 rounded-lg">
+							<button
+								class="badge badge-sm transition-all duration-200 cursor-pointer {multiSeriesMode === 'stacked' ? 'badge-primary shadow-md' : 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
+								onclick={() => setMultiSeriesMode('stacked')}
+								title="Stacked area chart - shows cumulative total"
+							>
+								<svg class="w-3 h-3 mr-1" viewBox="0 0 16 16" fill="currentColor" opacity="0.8">
+									<path d="M1 14 L1 10 L4 8 L8 9 L12 6 L15 7 L15 14 Z" opacity="0.4" />
+									<path d="M1 14 L1 12 L4 10 L8 11 L12 8 L15 9 L15 14 Z" opacity="0.6" />
+								</svg>
+								Stacked
+							</button>
+							<button
+								class="badge badge-sm transition-all duration-200 cursor-pointer {multiSeriesMode === 'overlay' ? 'badge-primary shadow-md' : 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
+								onclick={() => setMultiSeriesMode('overlay')}
+								title="Overlay lines - compare project patterns"
+							>
+								<svg class="w-3 h-3 mr-1" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+									<path d="M1 12 L5 8 L9 10 L15 4" stroke-linecap="round" />
+									<path d="M1 10 L5 6 L9 8 L15 6" stroke-linecap="round" opacity="0.5" />
+								</svg>
+								Overlay
+							</button>
+						</div>
+					</div>
+				{/if}
+
 				<!-- Time Range Section -->
 				<div>
 					<div class="text-xs font-semibold mb-1.5 text-base-content/70">Time Range</div>
@@ -680,8 +904,115 @@
 			{/each}
 		{/if}
 
-		<!-- Chart rendering -->
-		{#if filteredData && filteredData.length > 0}
+		<!-- Multi-Series Chart Rendering -->
+		{#if isMultiSeries && filteredMultiSeriesData.length > 0}
+			{#if multiSeriesMode === 'stacked'}
+				<!-- Stacked Area Chart -->
+				{@const dataLength = filteredMultiSeriesData.length}
+				{#each activeProjects as project, projectIndex}
+					{@const projectColor = project.color}
+					{@const paths = (() => {
+						// Calculate stacked values for this project
+						const stackedPoints: Array<{ x: number; y: number; baseY: number }> = [];
+
+						for (let i = 0; i < dataLength; i++) {
+							const point = filteredMultiSeriesData[i];
+							const x = padding + (i / (dataLength - 1 || 1)) * (viewBoxWidth - 2 * padding);
+
+							// Calculate base (sum of all projects below this one in stack)
+							let baseValue = 0;
+							for (let j = projectIndex + 1; j < activeProjects.length; j++) {
+								const otherProject = activeProjects[j];
+								baseValue += point.projects[otherProject.name]?.tokens || 0;
+							}
+
+							// This project's value
+							const thisValue = point.projects[project.name]?.tokens || 0;
+							const topValue = baseValue + thisValue;
+
+							stackedPoints.push({
+								x,
+								y: scaleMultiSeriesY(topValue),
+								baseY: scaleMultiSeriesY(baseValue)
+							});
+						}
+
+						// Build the area path (top line + bottom line reversed)
+						const topPath = stackedPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x},${p.y}`).join(' ');
+						const bottomPath = [...stackedPoints].reverse().map((p) => `L ${p.x},${p.baseY}`).join(' ');
+
+						return { area: `${topPath} ${bottomPath} Z`, line: topPath };
+					})()}
+					<!-- Area fill -->
+					<path
+						d={paths.area}
+						fill={projectColor}
+						fill-opacity="0.4"
+						style="transition: d 0.3s ease;"
+					/>
+					<!-- Top line -->
+					<path
+						d={paths.line}
+						fill="none"
+						stroke={projectColor}
+						stroke-width="1.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						style="transition: d 0.3s ease;"
+					/>
+				{/each}
+			{:else}
+				<!-- Overlay Multi-Line Chart -->
+				{@const dataLength = filteredMultiSeriesData.length}
+				{#each activeProjects as project}
+					{@const projectColor = project.color}
+					{@const linePath = (() => {
+						const points: Array<{ x: number; y: number }> = [];
+
+						for (let i = 0; i < dataLength; i++) {
+							const point = filteredMultiSeriesData[i];
+							const x = padding + (i / (dataLength - 1 || 1)) * (viewBoxWidth - 2 * padding);
+							const tokens = point.projects[project.name]?.tokens || 0;
+							const y = scaleMultiSeriesY(tokens);
+							points.push({ x, y });
+						}
+
+						// Build smooth line path
+						if (points.length === 0) return '';
+
+						let path = `M ${points[0].x},${points[0].y}`;
+						if (smoothCurves && points.length > 1) {
+							for (let i = 1; i < points.length; i++) {
+								const prev = points[i - 1];
+								const curr = points[i];
+								const cpX1 = prev.x + (curr.x - prev.x) / 3;
+								const cpY1 = prev.y;
+								const cpX2 = prev.x + (2 * (curr.x - prev.x)) / 3;
+								const cpY2 = curr.y;
+								path += ` C ${cpX1},${cpY1} ${cpX2},${cpY2} ${curr.x},${curr.y}`;
+							}
+						} else {
+							for (let i = 1; i < points.length; i++) {
+								path += ` L ${points[i].x},${points[i].y}`;
+							}
+						}
+
+						return path;
+					})()}
+					<path
+						d={linePath}
+						fill="none"
+						stroke={projectColor}
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-opacity="0.8"
+						style="transition: d 0.3s ease;"
+					/>
+				{/each}
+			{/if}
+		<!-- Single-Series Chart Rendering -->
+		{:else if filteredData && filteredData.length > 0}
 			{#if chartType === 'line'}
 				<!-- Line chart (smooth curve) -->
 				<path
@@ -757,6 +1088,21 @@
 			{/if}
 		{/if}
 	</svg>
+
+	<!-- Multi-Series Legend (compact, below chart) -->
+	{#if showLegend && isMultiSeries && activeProjects.length > 0}
+		<div class="flex flex-wrap gap-2 mt-1 text-xs">
+			{#each activeProjects as project}
+				<div class="flex items-center gap-1">
+					<div
+						class="w-2 h-2 rounded-full"
+						style="background-color: {project.color};"
+					></div>
+					<span class="text-base-content/70">{project.name}</span>
+				</div>
+			{/each}
+		</div>
+	{/if}
 
 	<!-- Tooltip -->
 	{#if showTooltip && hoveredPoint}

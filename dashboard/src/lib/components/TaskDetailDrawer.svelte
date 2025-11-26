@@ -14,7 +14,7 @@
 
 	import { onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
-	import { formatDate } from '$lib/utils/dateFormatters';
+	import { formatDate, formatSavedTime } from '$lib/utils/dateFormatters';
 	import InlineEdit from '$lib/components/InlineEdit.svelte';
 	import InlineSelect from '$lib/components/InlineSelect.svelte';
 
@@ -429,18 +429,33 @@
 			<!-- Header -->
 			<div class="flex items-center justify-between p-6 border-b border-base-300">
 				<div class="flex-1 min-w-0">
-					<!-- Task Title (Inline Editable) -->
+					<!-- Task Title (Inline Editable, truncated with tooltip) -->
 					{#if task}
-						<InlineEdit
-							value={task.title || ''}
-							onSave={async (newValue) => {
-								await autoSave('title', newValue);
-							}}
-							type="text"
-							placeholder="Enter task title..."
-							disabled={isSaving}
-							class="text-2xl font-bold"
-						/>
+						<div class="group relative flex items-center gap-2">
+							<InlineEdit
+								value={task.title || ''}
+								onSave={async (newValue) => {
+									await autoSave('title', newValue);
+								}}
+								type="text"
+								placeholder="Enter task title..."
+								disabled={isSaving}
+								class="text-2xl font-bold"
+								truncate={true}
+							/>
+							<!-- Pencil icon hint (shows on hover) -->
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="1.5"
+								stroke="currentColor"
+								class="w-4 h-4 text-base-content/30 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+								aria-hidden="true"
+							>
+								<path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+							</svg>
+						</div>
 					{:else}
 						<h2 class="text-2xl font-bold text-base-content">Task Details</h2>
 					{/if}
@@ -478,9 +493,7 @@
 							</span>
 						{:else if lastSaved}
 							<span class="text-sm text-base-content/70">
-								✓ Saved {new Date().getTime() - lastSaved.getTime() < 60000
-									? 'just now'
-									: 'at ' + lastSaved.toLocaleTimeString()}
+								✓ Saved {formatSavedTime(lastSaved)}
 							</span>
 						{/if}
 					</div>

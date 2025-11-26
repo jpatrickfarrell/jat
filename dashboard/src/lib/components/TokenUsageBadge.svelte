@@ -3,13 +3,17 @@
 	 * TokenUsageBadge Component
 	 *
 	 * Compact inline display of token usage metrics for TopBar integration.
-	 * Shows: [Tokens: 1.1B] | [$695] | [sparkline]
+	 * Shows: [Tokens: 1.1B] | [$695] | [sparkline] | [legend]
+	 *
+	 * Supports both single-project and multi-project sparklines.
+	 * Multi-project mode shows stacked/overlay chart with per-project colors.
 	 *
 	 * Follows AgentCountBadge pattern with similar styling.
 	 */
 
 	import { formatTokens, formatCost, getUsageColor } from '$lib/utils/numberFormat';
 	import Sparkline from './Sparkline.svelte';
+	import type { MultiSeriesDataPoint, ProjectMeta } from './Sparkline.svelte';
 
 	interface DataPoint {
 		timestamp: string;
@@ -17,23 +21,99 @@
 		cost: number;
 	}
 
+	/** Per-project token data from API */
+	interface ProjectTokenData {
+		project: string;
+		tokens: number;
+		cost: number;
+		color: string;
+	}
+
+	/** Multi-project time-series data point from API */
+	interface MultiProjectDataPoint {
+		timestamp: string;
+		totalTokens: number;
+		totalCost: number;
+		projects: ProjectTokenData[];
+	}
+
 	interface Props {
 		/** Total tokens consumed today */
 		tokensToday?: number;
 		/** Total cost today in USD */
 		costToday?: number;
-		/** Sparkline data points (24h hourly) */
+		/** Sparkline data points (24h hourly) - single-project mode */
 		sparklineData?: DataPoint[];
+		/** Multi-project sparkline data (from ?multiProject=true API) */
+		multiProjectData?: MultiProjectDataPoint[];
+		/** Project colors map (from API response) */
+		projectColors?: Record<string, string>;
 		/** Compact mode (no labels, smaller) */
 		compact?: boolean;
+		/** Show legend for multi-project mode */
+		showLegend?: boolean;
 	}
 
 	let {
 		tokensToday = 0,
 		costToday = 0,
 		sparklineData = [],
-		compact = false
+		multiProjectData,
+		projectColors = {},
+		compact = false,
+		showLegend = true
 	}: Props = $props();
+
+	// Transform multi-project API data to Sparkline's expected format
+	const multiSeriesData = $derived.by(() => {
+		if (!multiProjectData || multiProjectData.length === 0) return undefined;
+
+		return multiProjectData.map((point): MultiSeriesDataPoint => {
+			const projects: Record<string, { tokens: number; cost: number }> = {};
+			for (const p of point.projects) {
+				projects[p.project] = { tokens: p.tokens, cost: p.cost };
+			}
+			return {
+				timestamp: point.timestamp,
+				projects,
+				total: { tokens: point.totalTokens, cost: point.totalCost }
+			};
+		});
+	});
+
+	// Build project metadata for Sparkline
+	const projectMeta = $derived.by(() => {
+		if (!multiProjectData || multiProjectData.length === 0) return undefined;
+
+		// Collect all project names and sum their tokens
+		const projectTotals = new Map<string, number>();
+		for (const point of multiProjectData) {
+			for (const p of point.projects) {
+				projectTotals.set(p.project, (projectTotals.get(p.project) || 0) + p.tokens);
+			}
+		}
+
+		// Build metadata array sorted by total tokens (descending)
+		const meta: ProjectMeta[] = [];
+		for (const [name, totalTokens] of projectTotals.entries()) {
+			meta.push({
+				name,
+				color: projectColors[name] || '#888888',
+				totalTokens
+			});
+		}
+
+		return meta.sort((a, b) => b.totalTokens - a.totalTokens);
+	});
+
+	// Get active projects (non-zero tokens) for legend
+	const activeProjects = $derived.by(() => {
+		if (!projectMeta) return [];
+		return projectMeta.filter((p) => p.totalTokens > 0).slice(0, 5); // Limit to top 5
+	});
+
+	// Check if we're in multi-project mode
+	const isMultiProject = $derived(multiSeriesData && multiSeriesData.length > 0);
 
 	// Format tokens for compact display (e.g., 1.1B, 500M, 50K)
 	function formatTokensCompact(tokens: number): string {
@@ -94,12 +174,46 @@
 		<span class="font-medium">{formatCostCompact(costToday)}</span>
 	</span>
 
-	<!-- Sparkline (if data available) -->
-	{#if sparklineData && sparklineData.length > 0}
-		<!-- Separator -->
+	<!-- Sparkline (multi-project or single-project) -->
+	{#if isMultiProject}
+		<!-- Multi-project sparkline with stacked/overlay chart -->
 		<span class="text-base-content/30">|</span>
 
-		<!-- Mini Sparkline (120px default, shrinks to 60px if needed) -->
+		<div class="hidden sm:block flex-shrink w-[120px] min-w-[60px] h-[20px]">
+			<Sparkline
+				{multiSeriesData}
+				{projectMeta}
+				width="100%"
+				height={20}
+				showTooltip={false}
+				showGrid={false}
+				showStyleToolbar={false}
+				showLegend={false}
+			/>
+		</div>
+
+		<!-- Compact Legend (only show active projects with color dots) -->
+		{#if showLegend && activeProjects.length > 0}
+			<span class="text-base-content/30">|</span>
+			<div class="hidden lg:flex items-center gap-1.5 text-xs">
+				{#each activeProjects as project}
+					<div class="flex items-center gap-0.5" title="{project.name}: {formatTokensCompact(project.totalTokens)} tokens">
+						<div
+							class="w-2 h-2 rounded-full flex-shrink-0"
+							style="background-color: {project.color};"
+						></div>
+						<span class="text-base-content/60 truncate max-w-[60px]">{project.name}</span>
+					</div>
+				{/each}
+				{#if projectMeta && projectMeta.filter(p => p.totalTokens > 0).length > 5}
+					<span class="text-base-content/40">+{projectMeta.filter(p => p.totalTokens > 0).length - 5}</span>
+				{/if}
+			</div>
+		{/if}
+	{:else if sparklineData && sparklineData.length > 0}
+		<!-- Single-project sparkline (original behavior) -->
+		<span class="text-base-content/30">|</span>
+
 		<div class="hidden sm:block flex-shrink w-[120px] min-w-[60px] h-[20px]">
 			<Sparkline
 				data={sparklineData}

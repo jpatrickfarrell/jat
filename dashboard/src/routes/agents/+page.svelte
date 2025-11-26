@@ -267,17 +267,34 @@
 		</div>
 
 		<!-- Right Panel: Agent Grid -->
-		<div class="flex-1 overflow-auto">
+		<div class="flex-1 overflow-auto flex flex-col">
+			<!-- Toolbar with Date Range Picker -->
+			<div class="flex items-center justify-between p-4 pb-2 border-b border-base-300 bg-base-100">
+				<div class="flex items-center gap-2">
+					<h2 class="text-lg font-semibold">Agents</h2>
+					<span class="badge badge-ghost badge-sm">{agents.length}</span>
+				</div>
+				<DateRangePicker
+					selectedRange={selectedDateRange}
+					customFrom={customDateFrom}
+					customTo={customDateTo}
+					onRangeChange={handleDateRangeChange}
+					compact={true}
+				/>
+			</div>
+
 			{#if isInitialLoad}
 				<!-- Loading State for Agent Grid -->
-				<div class="flex items-center justify-center h-full">
+				<div class="flex-1 flex items-center justify-center">
 					<div class="text-center">
 						<span class="loading loading-bars loading-xl mb-4"></span>
 						<p class="text-sm text-base-content/60">Loading agents...</p>
 					</div>
 				</div>
 			{:else}
-				<AgentGrid {agents} {tasks} {allTasks} {reservations} {sparklineData} onTaskAssign={handleTaskAssign} ontaskclick={handleTaskClick} {selectedDateRange} {customDateFrom} {customDateTo} />
+				<div class="flex-1 overflow-auto">
+					<AgentGrid {agents} {tasks} {allTasks} {reservations} {sparklineData} onTaskAssign={handleTaskAssign} ontaskclick={handleTaskClick} {selectedDateRange} {customDateFrom} {customDateTo} />
+				</div>
 			{/if}
 		</div>
 	</div>

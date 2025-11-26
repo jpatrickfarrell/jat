@@ -17,19 +17,25 @@
  * Handles database timestamps that may lack 'T' separator or 'Z' suffix.
  *
  * @param timestamp - Raw timestamp string (may or may not have 'T' or 'Z')
- * @returns Properly formatted ISO timestamp with 'Z' suffix for UTC parsing
+ * @returns Properly formatted ISO timestamp for Date parsing
  *
  * @example
  * normalizeTimestamp("2024-11-21 15:30:00") // → "2024-11-21T15:30:00Z"
  * normalizeTimestamp("2024-11-21T15:30:00") // → "2024-11-21T15:30:00Z"
  * normalizeTimestamp("2024-11-21T15:30:00Z") // → "2024-11-21T15:30:00Z"
+ * normalizeTimestamp("2024-11-21T15:30:00-05:00") // → "2024-11-21T15:30:00-05:00" (unchanged)
  */
 export function normalizeTimestamp(timestamp: string): string {
 	if (!timestamp) return timestamp;
 
-	// If already has 'T', check for 'Z'
+	// If already has 'T', check if it has timezone info
 	if (timestamp.includes('T')) {
-		return timestamp.endsWith('Z') ? timestamp : timestamp + 'Z';
+		// Already has Z suffix - valid UTC
+		if (timestamp.endsWith('Z')) return timestamp;
+		// Has timezone offset like +00:00 or -05:00 - already valid
+		if (/[+-]\d{2}:\d{2}$/.test(timestamp)) return timestamp;
+		// No timezone info - assume UTC and add Z
+		return timestamp + 'Z';
 	}
 
 	// Replace space with 'T' and add 'Z'
@@ -85,6 +91,33 @@ export function formatRelativeTime(dateStr: string | null | undefined): string {
 	if (diffWeeks < 4) return `${diffWeeks}w`;
 	if (diffMonths < 12) return `${diffMonths}mo`;
 	return `${diffYears}y`;
+}
+
+/**
+ * Get color class for age indicator based on staleness.
+ * Fresh tasks are green, older tasks yellow, stale tasks red.
+ *
+ * @param dateStr - Date string or ISO timestamp
+ * @returns Tailwind color class for the age
+ *
+ * Thresholds:
+ * - Green: < 1 day (fresh)
+ * - Yellow/Warning: 1-7 days
+ * - Red/Error: > 7 days (stale)
+ */
+export function getAgeColorClass(dateStr: string | null | undefined): string {
+	if (!dateStr) return 'text-base-content/50';
+
+	const date = parseTimestamp(dateStr);
+	if (!date) return 'text-base-content/50';
+
+	const now = new Date();
+	const diffMs = now.getTime() - date.getTime();
+	const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+	if (diffDays < 1) return 'text-success';      // Fresh: green
+	if (diffDays < 7) return 'text-warning';      // Getting stale: yellow
+	return 'text-error';                           // Stale: red
 }
 
 /**

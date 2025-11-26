@@ -127,7 +127,7 @@ launch_claude() {
     # Build initial prompt (without -p flag which makes it non-interactive)
     local initial_prompt=""
     if [[ "$skip_agent" != "true" ]]; then
-        initial_prompt="/agent:start"
+        initial_prompt="/jat:start"
     fi
 
     # Launch N Claude sessions with staggered timing

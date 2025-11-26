@@ -440,10 +440,16 @@
 		return getColorForValue(avgTokens);
 	});
 
-	/** Hovered data point */
+	/** Hovered data point (single-series) */
 	const hoveredPoint = $derived.by(() => {
 		if (hoveredIndex === null || !filteredData) return null;
 		return filteredData[hoveredIndex];
+	});
+
+	/** Hovered data point (multi-series) */
+	const hoveredMultiSeriesPoint = $derived.by(() => {
+		if (hoveredIndex === null || !filteredMultiSeriesData || filteredMultiSeriesData.length === 0) return null;
+		return filteredMultiSeriesData[hoveredIndex];
 	});
 
 	/** Time range label for badge based on selected timeRange */
@@ -496,15 +502,19 @@
 	 * Handle mouse move over SVG to show tooltip
 	 */
 	function handleMouseMove(event: MouseEvent) {
-		if (!showTooltip || !filteredData || filteredData.length === 0 || !svgElement) return;
+		if (!showTooltip || !svgElement) return;
+
+		// Determine which data source to use
+		const dataSource = isMultiSeries ? filteredMultiSeriesData : filteredData;
+		if (!dataSource || dataSource.length === 0) return;
 
 		// Get mouse position relative to SVG
 		const rect = svgElement.getBoundingClientRect();
 		const mouseX = event.clientX - rect.left;
 
 		// Calculate which data point is closest
-		const index = Math.round(((mouseX / rect.width) * (filteredData.length - 1)));
-		const clampedIndex = Math.max(0, Math.min(filteredData.length - 1, index));
+		const index = Math.round(((mouseX / rect.width) * (dataSource.length - 1)));
+		const clampedIndex = Math.max(0, Math.min(dataSource.length - 1, index));
 
 		hoveredIndex = clampedIndex;
 		tooltipX = event.clientX;
@@ -1011,6 +1021,47 @@
 					/>
 				{/each}
 			{/if}
+
+			<!-- Multi-Series Hover indicator (vertical line) -->
+			{#if hoveredIndex !== null && filteredMultiSeriesData.length > 0}
+				{@const dataLength = filteredMultiSeriesData.length}
+				{@const x = padding + (hoveredIndex / (dataLength - 1 || 1)) * (viewBoxWidth - 2 * padding)}
+				<line
+					x1={x}
+					y1={padding}
+					x2={x}
+					y2={viewBoxHeight - padding}
+					stroke="currentColor"
+					stroke-width="1"
+					stroke-opacity="0.3"
+					stroke-dasharray="2,2"
+				/>
+				<!-- Dots for each project at hover position -->
+				{@const hoveredPoint = filteredMultiSeriesData[hoveredIndex]}
+				{#each activeProjects as project, projectIndex}
+					{@const tokens = hoveredPoint.projects[project.name]?.tokens || 0}
+					{#if tokens > 0}
+						{@const y = multiSeriesMode === 'stacked'
+							? (() => {
+								// Calculate stacked Y position
+								let baseValue = 0;
+								for (let j = projectIndex + 1; j < activeProjects.length; j++) {
+									baseValue += hoveredPoint.projects[activeProjects[j].name]?.tokens || 0;
+								}
+								return scaleMultiSeriesY(baseValue + tokens);
+							})()
+							: scaleMultiSeriesY(tokens)}
+						<circle
+							cx={x}
+							cy={y}
+							r="3"
+							fill={project.color}
+							stroke="white"
+							stroke-width="1"
+						/>
+					{/if}
+				{/each}
+			{/if}
 		<!-- Single-Series Chart Rendering -->
 		{:else if filteredData && filteredData.length > 0}
 			{#if chartType === 'line'}
@@ -1104,8 +1155,8 @@
 		</div>
 	{/if}
 
-	<!-- Tooltip -->
-	{#if showTooltip && hoveredPoint}
+	<!-- Tooltip (single-series) -->
+	{#if showTooltip && hoveredPoint && !isMultiSeries}
 		<div
 			class="sparkline-tooltip"
 			style="left: {tooltipX}px; top: {tooltipY - 10}px;"
@@ -1116,6 +1167,30 @@
 				{formatTokens(hoveredPoint.tokens)} tokens
 			</div>
 			<div class="text-xs font-semibold">{formatCost(hoveredPoint.cost)}</div>
+		</div>
+	{/if}
+
+	<!-- Tooltip (multi-series) -->
+	{#if showTooltip && hoveredMultiSeriesPoint && isMultiSeries}
+		<div
+			class="sparkline-tooltip"
+			style="left: {tooltipX}px; top: {tooltipY - 10}px;"
+			role="tooltip"
+		>
+			<div class="text-xs font-medium mb-1">{formatTimestamp(hoveredMultiSeriesPoint.timestamp)}</div>
+			<!-- Per-project breakdown -->
+			{#each Object.entries(hoveredMultiSeriesPoint.projects).filter(([_, d]) => d.tokens > 0).sort((a, b) => b[1].tokens - a[1].tokens) as [projectName, projectData]}
+				{@const projectColor = projectMeta?.find(p => p.name === projectName)?.color || '#888'}
+				<div class="flex items-center gap-1.5 text-xs">
+					<div class="w-2 h-2 rounded-full flex-shrink-0" style="background-color: {projectColor};"></div>
+					<span class="truncate max-w-[80px]">{projectName}:</span>
+					<span class="font-mono">{formatTokens(projectData.tokens)}</span>
+				</div>
+			{/each}
+			<!-- Total -->
+			<div class="border-t border-base-300 mt-1 pt-1 text-xs font-semibold">
+				Total: {formatTokens(hoveredMultiSeriesPoint.total.tokens)} ({formatCost(hoveredMultiSeriesPoint.total.cost)})
+			</div>
 		</div>
 	{/if}
 </div>

@@ -1,9 +1,31 @@
-<script>
+<script lang="ts">
 	import AgentCard from './AgentCard.svelte';
 	import AutoAssignModal from './AutoAssignModal.svelte';
 	import { generateAutoAssignments } from '$lib/utils/autoAssign';
+	import type { Agent, Task, Reservation } from '$lib/stores/agents.svelte';
 
-	let { agents = [], tasks = [], allTasks = [], reservations = [], sparklineData = [], onTaskAssign = () => {}, ontaskclick = () => {}, selectedDateRange = 'all', customDateFrom = null, customDateTo = null } = $props();
+	// Assignment type from autoAssign utility
+	interface Assignment {
+		task: Task;
+		agent: Agent;
+		reason?: string;
+	}
+
+	// Props with types
+	interface Props {
+		agents?: Agent[];
+		tasks?: Task[];
+		allTasks?: Task[];
+		reservations?: Reservation[];
+		sparklineData?: unknown[];
+		onTaskAssign?: (taskId: string, agentName: string) => Promise<void>;
+		ontaskclick?: (taskId: string) => void;
+		selectedDateRange?: string;
+		customDateFrom?: string | null;
+		customDateTo?: string | null;
+	}
+
+	let { agents = [], tasks = [], allTasks = [], reservations = [], sparklineData = [], onTaskAssign = async () => {}, ontaskclick = () => {}, selectedDateRange = 'all', customDateFrom = null, customDateTo = null }: Props = $props();
 
 	// Determine if we're viewing historical data (not "all" or "today")
 	const isHistoricalView = $derived(() => {
@@ -22,7 +44,7 @@
 
 	// Modal state
 	let showModal = $state(false);
-	let assignments = $state([]);
+	let assignments = $state<Assignment[]>([]);
 	let isAssigning = $state(false);
 
 	// Get unassigned tasks (status='open' and no assignee)
@@ -30,8 +52,11 @@
 		tasks.filter(t => t.status === 'open' && !t.assignee)
 	);
 
+	// Agent status type
+	type AgentStatus = 'live' | 'working' | 'active' | 'idle' | 'offline';
+
 	// Helper to compute agent status (matches AgentCard.svelte and store logic)
-	function getAgentStatus(agent) {
+	function getAgentStatus(agent: Agent): AgentStatus {
 		const hasActiveLocks = agent.reservation_count > 0;
 		const hasInProgressTask = agent.in_progress_tasks > 0;
 
@@ -70,8 +95,8 @@
 	}
 
 	// Status priority for sorting (lower number = higher priority)
-	function getStatusPriority(status) {
-		const priorities = {
+	function getStatusPriority(status: AgentStatus): number {
+		const priorities: Record<AgentStatus, number> = {
 			live: 1,
 			working: 2,
 			active: 3,
@@ -109,7 +134,7 @@
 	});
 
 	// Auto-assign button action
-	function handleAutoAssign() {
+	function handleAutoAssign(): void {
 		// Generate assignments using the algorithm
 		const proposed = generateAutoAssignments(unassignedTasks, agents, reservations);
 
@@ -124,7 +149,7 @@
 	}
 
 	// Confirm and apply assignments
-	async function confirmAssignments() {
+	async function confirmAssignments(): Promise<void> {
 		isAssigning = true;
 
 		try {
@@ -143,7 +168,7 @@
 			const results = await Promise.all(promises);
 
 			// Check for errors
-			const errors = results.filter(r => r.error);
+			const errors = results.filter((r: { error?: unknown }) => r.error);
 			if (errors.length > 0) {
 				console.error('Some assignments failed:', errors);
 				alert(`${errors.length} assignment(s) failed. Check console for details.`);
@@ -156,7 +181,7 @@
 			assignments = [];
 
 			// Refresh data (parent component will handle via polling)
-		} catch (error) {
+		} catch (error: unknown) {
 			console.error('Error applying assignments:', error);
 			alert('Failed to apply assignments. See console for details.');
 		} finally {
@@ -165,19 +190,19 @@
 	}
 
 	// Cancel assignment preview
-	function cancelAssignments() {
+	function cancelAssignments(): void {
 		showModal = false;
 		assignments = [];
 	}
 
 	// Smart balance action (placeholder)
-	function handleSmartBalance() {
+	function handleSmartBalance(): void {
 		console.log('Smart balance logic will be implemented in P1 task');
 		// TODO: Implement in jomarchy-agent-tools-kpw
 	}
 
 	// Refresh data (placeholder)
-	function handleRefresh() {
+	function handleRefresh(): void {
 		console.log('Manual refresh triggered');
 		// Parent component will handle data fetching
 	}

@@ -1,5 +1,24 @@
-<script>
-	let { assignments, onConfirm, onCancel, isAssigning = false } = $props();
+<script lang="ts">
+	import type { Agent, Task } from '$lib/stores/agents.svelte';
+
+	// Assignment type from autoAssign utility
+	interface Assignment {
+		task: Task & { priority: number };
+		agent: Agent;
+		confidence: 'high' | 'medium' | 'low';
+		warnings: string[];
+		reason?: string;
+	}
+
+	// Props with types
+	interface Props {
+		assignments: Assignment[];
+		onConfirm: () => void;
+		onCancel: () => void;
+		isAssigning?: boolean;
+	}
+
+	let { assignments, onConfirm, onCancel, isAssigning = false }: Props = $props();
 
 	// Calculate summary stats
 	const highConfidence = $derived(assignments.filter(a => a.confidence === 'high').length);

@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	import { onMount } from 'svelte';
 	import { analyzeDependencies } from '$lib/utils/dependencyUtils';
 	import { getTokenColorClass, HIGH_USAGE_WARNING_THRESHOLD } from '$lib/config/tokenUsageConfig';
@@ -7,15 +7,48 @@
 	import { getAgentStatusBadge, getAgentStatusIcon, getAgentStatusVisual } from '$lib/utils/badgeHelpers';
 	import { formatLastActivity } from '$lib/utils/dateFormatters';
 	import { computeAgentStatus } from '$lib/utils/agentStatusUtils';
+	import type { Agent, Task, Reservation } from '$lib/stores/agents.svelte';
 
-	let { agent, tasks = [], allTasks = [], reservations = [], onTaskAssign = () => {}, ontaskclick = () => {}, draggedTaskId = null, selectedDateRange = 'all', customDateFrom = null, customDateTo = null, isHistoricalView = false } = $props();
+	// Extended types for inbox messages
+	interface InboxMessage {
+		id: number;
+		subject: string;
+		body: string;
+		from: string;
+		sent_ts: string;
+		read: boolean;
+	}
+
+	// Sparkline data point type
+	interface SparklinePoint {
+		timestamp: string;
+		tokens: number;
+		cost: number;
+	}
+
+	// Props with types
+	interface Props {
+		agent: Agent;
+		tasks?: Task[];
+		allTasks?: Task[];
+		reservations?: Reservation[];
+		onTaskAssign?: (taskId: string, agentName: string) => Promise<void>;
+		ontaskclick?: (taskId: string) => void;
+		draggedTaskId?: string | null;
+		selectedDateRange?: string;
+		customDateFrom?: string | null;
+		customDateTo?: string | null;
+		isHistoricalView?: boolean;
+	}
+
+	let { agent, tasks = [], allTasks = [], reservations = [], onTaskAssign = async () => {}, ontaskclick = () => {}, draggedTaskId = null, selectedDateRange = 'all', customDateFrom = null, customDateTo = null, isHistoricalView = false }: Props = $props();
 
 	let isDragOver = $state(false);
 	let isAssigning = $state(false);
 	let assignSuccess = $state(false);
-	let assignError = $state(null);
+	let assignError = $state<string | null>(null);
 	let hasConflict = $state(false);
-	let conflictReasons = $state([]);
+	let conflictReasons = $state<string[]>([]);
 	let hasDependencyBlock = $state(false);
 	let dependencyBlockReason = $state('');
 	let showDeleteModal = $state(false);
@@ -25,11 +58,11 @@
 	let showQuickActions = $state(false);
 	let quickActionsX = $state(0);
 	let quickActionsY = $state(0);
-	let quickActionsLoading = $state(null); // Track which action is loading
+	let quickActionsLoading = $state<string | null>(null); // Track which action is loading
 	let showInboxModal = $state(false);
-	let inboxMessages = $state([]);
+	let inboxMessages = $state<InboxMessage[]>([]);
 	let showReservationsModal = $state(false);
-	let reservationsList = $state([]);
+	let reservationsList = $state<Reservation[]>([]);
 	let showSendMessageModal = $state(false);
 	let messageSubject = $state('');
 	let messageBody = $state('');
@@ -39,14 +72,14 @@
 
 	// Token usage state management
 	let usageLoading = $state(false);
-	let usageError = $state(null);
+	let usageError = $state<string | null>(null);
 	let usageRetryCount = $state(0);
 
 	// Sparkline state management
-	let sparklineData = $state([]);
+	let sparklineData = $state<SparklinePoint[]>([]);
 	let sparklineLoading = $state(false);
-	let sparklineError = $state(null);
-	let sparklineInterval = null;
+	let sparklineError = $state<string | null>(null);
+	let sparklineInterval: ReturnType<typeof setInterval> | null = null;
 
 	// Compute agent status using shared utility
 	// States: live (< 1m, truly responsive) > working (1-10m with task) > active (recent activity) > idle (within 1h) > offline (>1h)
@@ -77,15 +110,21 @@
 	});
 
 
+	// Extended Task type with additional fields from API
+	interface ExtendedTask extends Task {
+		created_at?: string;
+		updated_at?: string;
+	}
+
 	// Calculate progress for current task (simple estimation based on time)
-	function getTaskProgress(task) {
+	function getTaskProgress(task: ExtendedTask | null): number {
 		if (!task) return 0;
 
 		// Simple heuristic: if task has been in progress, show 30-70% random progress
 		// In a real system, this would come from task metadata
-		const created = new Date(task.created_at || task.updated_at);
+		const created = new Date(task.created_at || task.updated_at || Date.now());
 		const now = new Date();
-		const elapsed = now - created;
+		const elapsed = now.getTime() - created.getTime();
 		const oneHour = 3600000;
 
 		// Show progress based on time elapsed (0-70% over first 2 hours)
@@ -94,7 +133,7 @@
 	}
 
 	// Handle drop event
-	async function handleDrop(event) {
+	async function handleDrop(event: DragEvent): Promise<void> {
 		event.preventDefault();
 		isDragOver = false;
 
@@ -114,7 +153,7 @@
 			return;
 		}
 
-		const taskId = event.dataTransfer.getData('text/plain');
+		const taskId = event.dataTransfer?.getData('text/plain');
 		if (!taskId) return;
 
 		// Clear previous errors and show loading state
@@ -123,7 +162,7 @@
 
 		try {
 			// Call parent callback to assign task with timeout (30 seconds)
-			const timeoutPromise = new Promise((_, reject) =>
+			const timeoutPromise = new Promise<void>((_, reject) =>
 				setTimeout(() => reject(new Error('Assignment timed out after 30 seconds')), 30000)
 			);
 
@@ -141,9 +180,9 @@
 			setTimeout(() => {
 				assignSuccess = false;
 			}, 2000);
-		} catch (error) {
+		} catch (error: unknown) {
 			console.error('Failed to assign task:', error);
-			assignError = error.message || 'Failed to assign task';
+			assignError = error instanceof Error ? error.message : 'Failed to assign task';
 			isAssigning = false;
 
 			// Auto-clear error after 5 seconds
@@ -154,17 +193,17 @@
 	}
 
 	// Infer file patterns from task based on labels and description
-	function inferFilePatterns(task) {
+	function inferFilePatterns(task: Task | null): string[] {
 		if (!task) return [];
 
-		const patterns = [];
+		const patterns: string[] = [];
 
 		// Extract glob patterns from description (e.g., "src/**/*.ts")
 		const descriptionPatterns = task.description?.match(/[\w-]+\/\*\*?\/\*\.\w+/g) || [];
 		patterns.push(...descriptionPatterns);
 
 		// Infer from labels (common patterns)
-		const labelPatternMap = {
+		const labelPatternMap: Record<string, string[]> = {
 			dashboard: ['dashboard/**/*'],
 			frontend: ['dashboard/**/*', 'frontend/**/*'],
 			backend: ['backend/**/*', 'server/**/*', 'api/**/*'],
@@ -185,10 +224,10 @@
 	}
 
 	// Check if two glob patterns conflict (simple overlap detection)
-	function patternsConflict(pattern1, pattern2) {
+	function patternsConflict(pattern1: string, pattern2: string): boolean {
 		// Simple heuristic: check if patterns share a common prefix
 		// In a real system, use a proper glob matching library
-		const normalize = (p) => p.replace(/\*/g, '').replace(/\//g, '');
+		const normalize = (p: string) => p.replace(/\*/g, '').replace(/\//g, '');
 		const p1 = normalize(pattern1);
 		const p2 = normalize(pattern2);
 
@@ -196,8 +235,14 @@
 		return p1.includes(p2) || p2.includes(p1) || p1 === p2;
 	}
 
+	// Conflict result type
+	interface ConflictResult {
+		hasConflict: boolean;
+		reasons: string[];
+	}
+
 	// Detect conflicts between task and agent's reservations
-	function detectConflicts(taskId) {
+	function detectConflicts(taskId: string | null): ConflictResult {
 		if (!taskId) return { hasConflict: false, reasons: [] };
 
 		// Find the task
@@ -217,10 +262,16 @@
 			return { hasConflict: false, reasons: [] };
 		}
 
+		// Extended reservation type with additional fields
+		interface ExtendedReservation extends Reservation {
+			file_pattern?: string;
+			pattern?: string;
+		}
+
 		// Check for conflicts
-		const conflicts = [];
-		for (const reservation of agentReservations) {
-			const reservedPattern = reservation.file_pattern || reservation.pattern;
+		const conflicts: Array<{taskPattern: string; reservedPattern: string; reservation: Reservation}> = [];
+		for (const reservation of agentReservations as ExtendedReservation[]) {
+			const reservedPattern = reservation.file_pattern || reservation.pattern || reservation.path_pattern;
 			for (const taskPattern of taskPatterns) {
 				if (patternsConflict(taskPattern, reservedPattern)) {
 					conflicts.push({
@@ -238,12 +289,12 @@
 		};
 	}
 
-	function handleDragOver(event) {
+	function handleDragOver(event: DragEvent): void {
 		event.preventDefault();
 		isDragOver = true;
 
 		// Check for dependency blocks
-		const taskId = event.dataTransfer.getData('text/plain');
+		const taskId = event.dataTransfer?.getData('text/plain') || null;
 		const task = tasks.find((t) => t.id === taskId);
 		if (task) {
 			const depStatus = analyzeDependencies(task);
@@ -259,10 +310,12 @@
 		}
 
 		// Set drag effect based on blocks
-		event.dataTransfer.dropEffect = hasDependencyBlock || hasConflict ? 'none' : 'move';
+		if (event.dataTransfer) {
+			event.dataTransfer.dropEffect = hasDependencyBlock || hasConflict ? 'none' : 'move';
+		}
 	}
 
-	function handleDragLeave() {
+	function handleDragLeave(): void {
 		isDragOver = false;
 		hasConflict = false;
 		conflictReasons = [];
@@ -271,7 +324,7 @@
 	}
 
 	// Handle agent deletion
-	async function handleDeleteAgent() {
+	async function handleDeleteAgent(): Promise<void> {
 		isDeleting = true;
 		try {
 			const response = await fetch(`/api/agents/${agent.name}`, {
@@ -288,23 +341,23 @@
 			// Success - close modal and refresh page
 			showDeleteModal = false;
 			window.location.reload();
-		} catch (error) {
+		} catch (error: unknown) {
 			console.error('Error deleting agent:', error);
-			alert(`Error deleting agent: ${error.message}`);
+			alert(`Error deleting agent: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		} finally {
 			isDeleting = false;
 		}
 	}
 
 	// Handle badge click for offline agents
-	function handleBadgeClick() {
+	function handleBadgeClick(): void {
 		if (agentStatus() === 'offline') {
 			showDeleteModal = true;
 		}
 	}
 
 	// Format token count with K/M suffix
-	function formatTokens(tokens) {
+	function formatTokens(tokens: number): string {
 		if (tokens === 0) return '0';
 		if (tokens < 1000) return tokens.toLocaleString();
 		if (tokens < 1000000) return (tokens / 1000).toFixed(1) + 'K';
@@ -312,13 +365,13 @@
 	}
 
 	// Format cost with $ prefix
-	function formatCost(cost) {
+	function formatCost(cost: number): string {
 		if (cost === 0) return '$0.00';
 		return '$' + cost.toFixed(2);
 	}
 
 	// Fetch sparkline data for this agent
-	async function fetchSparklineData() {
+	async function fetchSparklineData(): Promise<void> {
 		try {
 			sparklineLoading = true;
 			sparklineError = null;
@@ -332,9 +385,9 @@
 			const data = await response.json();
 			sparklineData = data.data || [];
 
-		} catch (error) {
+		} catch (error: unknown) {
 			console.error('Error fetching sparkline data:', error);
-			sparklineError = error.message;
+			sparklineError = error instanceof Error ? error.message : 'Unknown error';
 			sparklineData = [];
 		} finally {
 			sparklineLoading = false;
@@ -358,7 +411,7 @@
 	});
 
 	// Handle right-click to show quick actions menu
-	function handleContextMenu(event) {
+	function handleContextMenu(event: MouseEvent): void {
 		event.preventDefault();
 		quickActionsX = event.clientX;
 		quickActionsY = event.clientY;
@@ -366,13 +419,13 @@
 	}
 
 	// Close quick actions menu
-	function closeQuickActions() {
+	function closeQuickActions(): void {
 		showQuickActions = false;
 		quickActionsLoading = null;
 	}
 
 	// Quick Action: View agent's inbox
-	async function viewInbox() {
+	async function viewInbox(): Promise<void> {
 		quickActionsLoading = 'inbox';
 		try {
 			const response = await fetch(`/api/agents/${agent.name}/inbox`);
@@ -380,9 +433,9 @@
 			const data = await response.json();
 			inboxMessages = data.messages || [];
 			showInboxModal = true;
-		} catch (error) {
+		} catch (error: unknown) {
 			console.error('Failed to view inbox:', error);
-			alert(`Failed to view inbox: ${error.message}`);
+			alert(`Failed to view inbox: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		} finally {
 			quickActionsLoading = null;
 			closeQuickActions();
@@ -390,7 +443,7 @@
 	}
 
 	// Quick Action: View file locks
-	async function viewReservations() {
+	async function viewReservations(): Promise<void> {
 		quickActionsLoading = 'reservations';
 		try {
 			const response = await fetch(`/api/agents/${agent.name}/reservations`);
@@ -398,9 +451,9 @@
 			const data = await response.json();
 			reservationsList = data.reservations || [];
 			showReservationsModal = true;
-		} catch (error) {
+		} catch (error: unknown) {
 			console.error('Failed to view reservations:', error);
-			alert(`Failed to view reservations: ${error.message}`);
+			alert(`Failed to view reservations: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		} finally {
 			quickActionsLoading = null;
 			closeQuickActions();
@@ -408,7 +461,7 @@
 	}
 
 	// Release a file reservation
-	async function releaseReservation(lockId, pattern) {
+	async function releaseReservation(lockId: number, pattern: string): Promise<void> {
 		if (!confirm(`Release lock on ${pattern}?\n\nThis will allow other agents to modify these files.`)) {
 			return;
 		}
@@ -432,21 +485,21 @@
 			// Show success message
 			alert(`✓ Released lock on ${pattern}`);
 
-		} catch (error) {
+		} catch (error: unknown) {
 			console.error('Failed to release reservation:', error);
-			alert(`Failed to release reservation: ${error.message}`);
+			alert(`Failed to release reservation: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		}
 	}
 
 	// Quick Action: Send message
-	function openSendMessage() {
+	function openSendMessage(): void {
 		messageSubject = '';
 		messageBody = '';
 		showSendMessageModal = true;
 		closeQuickActions();
 	}
 
-	async function sendMessage() {
+	async function sendMessage(): Promise<void> {
 		if (!messageSubject.trim() || !messageBody.trim()) {
 			alert('Please fill in both subject and message');
 			return;
@@ -466,19 +519,19 @@
 
 			showSendMessageModal = false;
 			alert('Message sent successfully!');
-		} catch (error) {
+		} catch (error: unknown) {
 			console.error('Failed to send message:', error);
-			alert(`Failed to send message: ${error.message}`);
+			alert(`Failed to send message: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		}
 	}
 
 	// Quick Action: Clear agent's queue
-	function confirmClearQueue() {
+	function confirmClearQueue(): void {
 		showClearQueueModal = true;
 		closeQuickActions();
 	}
 
-	async function clearQueue() {
+	async function clearQueue(): Promise<void> {
 		try {
 			const response = await fetch(`/api/agents/${agent.name}/clear-queue`, {
 				method: 'POST'
@@ -488,14 +541,14 @@
 
 			showClearQueueModal = false;
 			window.location.reload();
-		} catch (error) {
+		} catch (error: unknown) {
 			console.error('Failed to clear queue:', error);
-			alert(`Failed to clear queue: ${error.message}`);
+			alert(`Failed to clear queue: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		}
 	}
 
 	// Quick Action: Unassign current task
-	function confirmUnassignTask() {
+	function confirmUnassignTask(): void {
 		if (!currentTask()) {
 			alert('No current task to unassign');
 			closeQuickActions();
@@ -505,7 +558,7 @@
 		closeQuickActions();
 	}
 
-	async function unassignCurrentTask() {
+	async function unassignCurrentTask(): Promise<void> {
 		const task = currentTask();
 		if (!task) return;
 
@@ -520,14 +573,23 @@
 
 			showUnassignModal = false;
 			window.location.reload();
-		} catch (error) {
+		} catch (error: unknown) {
 			console.error('Failed to unassign task:', error);
-			alert(`Failed to unassign task: ${error.message}`);
+			alert(`Failed to unassign task: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		}
 	}
 
+	// Extended agent type with usage data
+	interface AgentWithUsage extends Agent {
+		usage?: {
+			lastUpdated?: string;
+			today?: { total_tokens: number; cost: number };
+			week?: { total_tokens: number; cost: number; sessionCount?: number };
+		};
+	}
+
 	// Retry fetching token usage (exponential backoff)
-	async function retryFetchUsage() {
+	async function retryFetchUsage(): Promise<void> {
 		if (usageRetryCount >= 3) {
 			usageError = 'Max retry attempts reached (3). Please refresh the page.';
 			return;
@@ -544,8 +606,8 @@
 			// Trigger parent page to refetch agent data
 			// For now, just reload the page (could be improved with proper state management)
 			window.location.reload();
-		} catch (error) {
-			usageError = error.message || 'Failed to fetch token usage';
+		} catch (error: unknown) {
+			usageError = error instanceof Error ? error.message : 'Failed to fetch token usage';
 			usageRetryCount++;
 		} finally {
 			usageLoading = false;
@@ -553,12 +615,13 @@
 	}
 
 	// Check if usage data is stale (>5 minutes old)
-	function isUsageStale() {
-		if (!agent.usage || !agent.usage.lastUpdated) return false;
+	function isUsageStale(): boolean {
+		const agentWithUsage = agent as AgentWithUsage;
+		if (!agentWithUsage.usage || !agentWithUsage.usage.lastUpdated) return false;
 
-		const lastUpdated = new Date(agent.usage.lastUpdated);
+		const lastUpdated = new Date(agentWithUsage.usage.lastUpdated);
 		const now = new Date();
-		const diffMs = now - lastUpdated;
+		const diffMs = now.getTime() - lastUpdated.getTime();
 		const diffMinutes = diffMs / 60000;
 
 		return diffMinutes > 5;
@@ -566,7 +629,7 @@
 
 	// Extract task ID from activity preview text
 	// Looks for pattern like "[jat-abc]" or "jat-abc" in the preview
-	function extractTaskId(preview) {
+	function extractTaskId(preview: string | null | undefined): string | null {
 		if (!preview) return null;
 
 		// Match task ID pattern: [project-xxx] or just project-xxx
@@ -575,7 +638,7 @@
 	}
 
 	// Format date range for historical view display
-	function formatDateRangeLabel() {
+	function formatDateRangeLabel(): string {
 		if (selectedDateRange === 'today') return 'Today';
 		if (selectedDateRange === 'week') return 'This Week';
 		if (selectedDateRange === 'month') return 'This Month';

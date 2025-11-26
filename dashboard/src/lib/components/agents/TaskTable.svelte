@@ -565,8 +565,8 @@
 
 <div class="flex flex-col h-full">
 	<!-- Filter Bar -->
-	<div class="p-4 border-b border-base-300 bg-base-100">
-		<div class="flex flex-nowrap items-center gap-3 overflow-x-auto">
+	<div class="p-4 border-b border-base-300 bg-base-100 overflow-visible">
+		<div class="flex flex-wrap items-center gap-3">
 			<!-- Search -->
 			<input
 				type="text"
@@ -637,7 +637,7 @@
 			{/if}
 
 			<!-- Clear Filters -->
-			{#if searchQuery || selectedProjects.size > 0 || selectedPriorities.size < 4 || selectedStatuses.size !== 1 || !selectedStatuses.has('open') || selectedTypes.size > 0 || selectedLabels.size > 0}
+			{#if searchQuery || selectedProjects.size > 0 || selectedPriorities.size < 4 || selectedStatuses.size !== 2 || !selectedStatuses.has('open') || !selectedStatuses.has('in_progress') || selectedTypes.size > 0 || selectedLabels.size > 0}
 				<button class="btn btn-sm btn-ghost text-error" onclick={clearAllFilters}>
 					Clear filters
 				</button>
@@ -785,14 +785,6 @@
 							{/if}
 						</div>
 					</td>
-					<td class="cursor-pointer hover:bg-base-300 whitespace-nowrap" onclick={() => handleSort('status')}>
-						<div class="flex items-center gap-1">
-							Status
-							{#if sortColumn === 'status'}
-								<span class="text-primary">{sortDirection === 'asc' ? '▲' : '▼'}</span>
-							{/if}
-						</div>
-					</td>
 					<td class="w-32">Labels</td>
 					<td class="w-10 whitespace-nowrap">Deps</td>
 					<td class="cursor-pointer hover:bg-base-300 w-16" onclick={() => handleSort('updated')}>
@@ -810,13 +802,13 @@
 				<!-- Empty state -->
 				<tbody>
 					<tr>
-						<td colspan="8" class="text-center py-12">
+						<td colspan="7" class="text-center py-12">
 							<div class="text-base-content/50">
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-12 h-12 mx-auto mb-2 opacity-30">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
 								</svg>
 								<p>No tasks found</p>
-								{#if searchQuery || selectedProjects.size > 0 || selectedPriorities.size < 4 || selectedStatuses.size !== 1 || !selectedStatuses.has('open') || selectedTypes.size > 0 || selectedLabels.size > 0}
+								{#if searchQuery || selectedProjects.size > 0 || selectedPriorities.size < 4 || selectedStatuses.size !== 2 || !selectedStatuses.has('open') || !selectedStatuses.has('in_progress') || selectedTypes.size > 0 || selectedLabels.size > 0}
 									<button class="btn btn-sm btn-ghost mt-2" onclick={clearAllFilters}>
 										Clear filters
 									</button>
@@ -832,7 +824,7 @@
 						<!-- Type group header (pinned when scrolling) -->
 						<thead>
 							<tr>
-								<th colspan="8" class="bg-base-300 text-base-content font-bold text-sm py-2">
+								<th colspan="7" class="bg-base-300 text-base-content font-bold text-sm py-2">
 									<div class="flex items-center gap-2">
 										<span class="badge {getTypeBadge(type)} badge-sm">{type || 'no type'}</span>
 										<span class="text-base-content/60 font-normal">({typeTasks.length})</span>
@@ -845,12 +837,13 @@
 								<!-- Skip if this task is shown as a dependency of another -->
 								{#if !shownAsDeps.has(task.id)}
 									{@const depStatus = analyzeDependencies(task)}
+									{@const taskIsActive = task.status === 'in_progress' && task.assignee}
 									<tr
-										class="hover:bg-base-200 cursor-pointer transition-colors {depStatus.hasBlockers ? 'opacity-60' : ''} {selectedTasks.has(task.id) ? 'bg-primary/10' : ''}"
+										class="hover:bg-base-200 cursor-pointer transition-colors {depStatus.hasBlockers ? 'opacity-60' : ''} {selectedTasks.has(task.id) ? 'bg-primary/10' : ''} {taskIsActive ? 'bg-info/10' : ''}"
 										onclick={() => handleRowClick(task.id)}
 										title={depStatus.hasBlockers ? `Blocked: ${depStatus.blockingReason}` : ''}
 									>
-										<th class="bg-base-100" onclick={(e) => e.stopPropagation()}>
+										<th class="{taskIsActive ? 'bg-info/10' : ''}" onclick={(e) => e.stopPropagation()}>
 											<input
 												type="checkbox"
 												class="checkbox checkbox-sm"
@@ -858,10 +851,27 @@
 												onchange={() => toggleTask(task.id)}
 											/>
 										</th>
-										<th class="bg-base-100">
-											<span class="font-mono text-xs text-base-content/70">{task.id}</span>
+										<th class="{taskIsActive ? 'bg-info/10' : ''}">
+											<div class="flex flex-col gap-0.5">
+												<span class="font-mono text-xs text-base-content/70">{task.id}</span>
+												{#if task.status === 'in_progress' && task.assignee}
+													<!-- In progress: show assignee with spinning gear -->
+													<span class="flex items-center gap-1">
+														<svg class="shrink-0 w-3 h-3 text-info animate-spin origin-center" viewBox="0 0 24 24" fill="currentColor" aria-label="Currently in progress">
+															<title>Currently in progress</title>
+															<path d={STATUS_ICONS.gear} />
+														</svg>
+														<span class="text-xs font-medium text-info">{task.assignee}</span>
+													</span>
+												{:else}
+													<!-- Other statuses: show regular badge -->
+													<span class="badge badge-xs {getTaskStatusBadge(task.status)}">
+														{task.status?.replace('_', ' ')}
+													</span>
+												{/if}
+											</div>
 										</th>
-										<td>
+										<td class="{taskIsActive ? 'bg-info/10' : ''}">
 											<div>
 												<div class="font-medium text-sm">{task.title}</div>
 												{#if task.description}
@@ -871,39 +881,22 @@
 												{/if}
 											</div>
 										</td>
-									<td class="text-center">
+									<td class="text-center {taskIsActive ? 'bg-info/10' : ''}">
 										<span class="badge badge-sm {getPriorityBadge(task.priority)}">
 											P{task.priority}
 										</span>
 									</td>
-									<td class="whitespace-nowrap">
-										{#if task.status === 'in_progress' && task.assignee}
-											<!-- In progress: show assignee with spinning gear -->
-											<span class="flex items-center gap-1.5">
-												<svg class="shrink-0 w-4 h-4 text-info animate-spin origin-center" viewBox="0 0 24 24" fill="currentColor" aria-label="Currently in progress">
-													<title>Currently in progress</title>
-													<path d={STATUS_ICONS.gear} />
-												</svg>
-												<span class="text-sm font-medium text-info">{task.assignee}</span>
-											</span>
-										{:else}
-											<!-- Other statuses: show regular badge -->
-											<span class="badge badge-sm {getTaskStatusBadge(task.status)}">
-												{task.status?.replace('_', ' ')}
-											</span>
-										{/if}
-									</td>
-									<td>
+									<td class="{taskIsActive ? 'bg-info/10' : ''}">
 										{#if task.labels && task.labels.length > 0}
 											<LabelBadges labels={task.labels} maxDisplay={2} />
 										{:else}
 											<span class="text-base-content/30">-</span>
 										{/if}
 									</td>
-									<td class="whitespace-nowrap">
+									<td class="whitespace-nowrap {taskIsActive ? 'bg-info/10' : ''}">
 										<DependencyIndicator {task} allTasks={allTasks.length > 0 ? allTasks : tasks} size="sm" />
 									</td>
-									<td>
+									<td class="{taskIsActive ? 'bg-info/10' : ''}">
 										<span class="text-xs {getAgeColorClass(task.updated_at)}" title={formatFullDate(task.updated_at)}>
 											{formatRelativeTime(task.updated_at)}
 										</span>
@@ -919,10 +912,15 @@
 										>
 											<th class="bg-base-100"></th>
 											<th class="bg-base-100">
-												<span class="flex items-center gap-1">
-													<span class="text-base-content/50 font-mono text-xs">{depIndex === task.depends_on.length - 1 ? '└──' : '├──'}</span>
-													<span class="font-mono text-xs text-base-content/60">{dep.id}</span>
-												</span>
+												<div class="flex flex-col gap-0.5">
+													<span class="flex items-center gap-1">
+														<span class="text-base-content/50 font-mono text-xs">{depIndex === task.depends_on.length - 1 ? '└──' : '├──'}</span>
+														<span class="font-mono text-xs text-base-content/60">{dep.id}</span>
+													</span>
+													<span class="badge badge-xs badge-ghost {getTaskStatusBadge(dep.status)} ml-4">
+														{dep.status?.replace('_', ' ')}
+													</span>
+												</div>
 											</th>
 											<td>
 												<div class="pl-4">
@@ -932,11 +930,6 @@
 											<td class="text-center">
 												<span class="badge badge-sm badge-ghost {getPriorityBadge(dep.priority)}">
 													P{dep.priority}
-												</span>
-											</td>
-											<td class="whitespace-nowrap">
-												<span class="badge badge-sm badge-ghost {getTaskStatusBadge(dep.status)}">
-													{dep.status?.replace('_', ' ')}
 												</span>
 											</td>
 											<td></td>

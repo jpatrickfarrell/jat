@@ -428,40 +428,55 @@
 		<div class="bg-base-100 h-full w-full max-w-2xl flex flex-col shadow-2xl">
 			<!-- Header -->
 			<div class="flex items-center justify-between p-6 border-b border-base-300">
-				<div class="flex-1">
-					<div class="flex items-center gap-3">
+				<div class="flex-1 min-w-0">
+					<!-- Task Title (Inline Editable) -->
+					{#if task}
+						<InlineEdit
+							value={task.title || ''}
+							onSave={async (newValue) => {
+								await autoSave('title', newValue);
+							}}
+							type="text"
+							placeholder="Enter task title..."
+							disabled={isSaving}
+							class="text-2xl font-bold"
+						/>
+					{:else}
 						<h2 class="text-2xl font-bold text-base-content">Task Details</h2>
+					{/if}
+					<!-- Task ID + Save Status -->
+					<div class="flex items-center gap-2 mt-1">
 						{#if task}
 							<button
-								class="badge badge-lg badge-outline gap-1 cursor-pointer hover:badge-primary transition-colors"
+								class="badge badge-sm badge-outline gap-1 cursor-pointer hover:badge-primary transition-colors"
 								onclick={copyTaskIdToClipboard}
 								title="Click to copy task ID"
 							>
 								{task.id}
 								{#if copiedTaskId}
-									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 text-success">
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3 text-success">
 										<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
 									</svg>
 								{:else}
-									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
 										<path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
 									</svg>
 								{/if}
 							</button>
 						{/if}
-					</div>
-					<p class="text-sm text-base-content/70 mt-1">
 						{#if isSaving}
-							<span class="loading loading-spinner loading-xs"></span>
-							Saving...
+							<span class="text-sm text-base-content/70">
+								<span class="loading loading-spinner loading-xs"></span>
+								Saving...
+							</span>
 						{:else if lastSaved}
-							✓ Saved {new Date().getTime() - lastSaved.getTime() < 60000
-								? 'just now'
-								: 'at ' + lastSaved.toLocaleTimeString()}
-						{:else}
-							Click any field to edit
+							<span class="text-sm text-base-content/70">
+								✓ Saved {new Date().getTime() - lastSaved.getTime() < 60000
+									? 'just now'
+									: 'at ' + lastSaved.toLocaleTimeString()}
+							</span>
 						{/if}
-					</p>
+					</div>
 				</div>
 				<div class="flex items-center gap-2">
 					<!-- Delete button -->
@@ -560,20 +575,6 @@
 				{:else if task}
 					<!-- View Mode -->
 					<div class="flex flex-col gap-6 h-full">
-						<!-- Title (Inline Editable) -->
-						<div>
-							<InlineEdit
-								value={task.title || ''}
-								onSave={async (newValue) => {
-									await autoSave('title', newValue);
-								}}
-								type="text"
-								placeholder="Enter task title..."
-								disabled={isSaving}
-								class="text-xl font-bold"
-							/>
-						</div>
-
 						<!-- Badges (left) + Metadata (right) -->
 						<div class="flex items-start justify-between gap-4">
 							<!-- Badges (Inline Editable) -->

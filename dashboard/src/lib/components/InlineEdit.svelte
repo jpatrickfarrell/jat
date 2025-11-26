@@ -190,12 +190,12 @@
 	>
 		{#if value}
 			{#if type === 'textarea'}
-				<span class="whitespace-pre-wrap text-sm">{value}</span>
+				<span class="whitespace-pre-wrap">{value}</span>
 			{:else}
-				<span class="text-sm">{value}</span>
+				<span>{value}</span>
 			{/if}
 		{:else}
-			<span class="text-sm text-base-content/50 italic">{placeholder}</span>
+			<span class="text-base-content/50 italic">{placeholder}</span>
 		{/if}
 	</button>
 {/if}

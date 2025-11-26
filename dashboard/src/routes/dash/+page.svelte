@@ -1,26 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
-	import { replaceState } from '$app/navigation';
 	import TaskTable from '$lib/components/agents/TaskTable.svelte';
 	import AgentGrid from '$lib/components/agents/AgentGrid.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
-	import ClaudeUsageBar from '$lib/components/ClaudeUsageBar.svelte';
-	import {
-		getProjectsFromTasks,
-		getTaskCountByProject,
-		filterTasksByProjects
-	} from '$lib/utils/projectUtils';
-	import ProjectBadgeFilter from '$lib/components/ProjectBadgeFilter.svelte';
 
 	let tasks = $state([]);
 	let allTasks = $state([]);  // Unfiltered tasks for project list calculation
 	let agents = $state([]);
 	let reservations = $state([]);
-	let unassignedTasks = $state([]);
-	let taskStats = $state(null);
 	let selectedProject = $state('All Projects');
-	let selectedProjects = $state(new Set<string>()); // Multi-project filter for badge filter
 	let sparklineData = $state([]);
 	let isInitialLoad = $state(true);
 
@@ -28,47 +17,6 @@
 	let drawerOpen = $state(false);
 	let selectedTaskId = $state(null);
 	let drawerMode = $state('view');
-
-	// Extract unique projects from ALL tasks (unfiltered)
-	const projects = $derived(getProjectsFromTasks(allTasks));
-
-	// Get task count per project from ALL tasks (only count 'open' tasks to match TaskQueue default)
-	const taskCounts = $derived(getTaskCountByProject(allTasks, 'open'));
-
-	// Filter tasks by selected projects (multi-select)
-	const filteredTasks = $derived(filterTasksByProjects(tasks, selectedProjects));
-	const filteredUnassignedTasks = $derived(filterTasksByProjects(unassignedTasks, selectedProjects));
-
-	// Handle project badge filter change (multi-select)
-	function handleProjectFilterChange(newProjects: Set<string>) {
-		// Create a new Set to ensure reactivity
-		selectedProjects = new Set(newProjects);
-		// Update URL to reflect selected projects (comma-separated)
-		const url = new URL(window.location.href);
-		if (newProjects.size === 0) {
-			url.searchParams.delete('projects');
-		} else {
-			url.searchParams.set('projects', Array.from(newProjects).join(','));
-		}
-		replaceState(url, {});
-	}
-
-	// Handle project selection change
-	function handleProjectChange(project: string) {
-		selectedProject = project;
-
-		// Update URL parameter using SvelteKit's replaceState
-		const url = new URL(window.location.href);
-		if (project === 'All Projects') {
-			url.searchParams.delete('project');
-		} else {
-			url.searchParams.set('project', project);
-		}
-		replaceState(url, {});
-
-		// Refetch data with new project filter
-		fetchData();
-	}
 
 	// Sync selectedProject from URL params (REACTIVE using $page store)
 	$effect(() => {
@@ -79,10 +27,6 @@
 			selectedProject = 'All Projects';
 		}
 	});
-
-	// NOTE: Removed URL sync effect - it was racing with handleProjectFilterChange
-	// The state is managed directly by handleProjectFilterChange, URL is just for bookmarking
-	// On page load, we sync from URL once in onMount instead
 
 	// Refetch data whenever selectedProject changes (triggered by URL or dropdown)
 	$effect(() => {
@@ -112,8 +56,6 @@
 			agents = data.agents || [];
 			reservations = data.reservations || [];
 			tasks = data.tasks || [];
-			unassignedTasks = data.unassigned_tasks || [];
-			taskStats = data.task_stats || null;
 
 			// Update allTasks when viewing all projects (for dropdown options)
 			if (selectedProject === 'All Projects') {
@@ -199,41 +141,12 @@
 	});
 
 	onMount(() => {
-		// Sync selectedProjects from URL on initial load
-		const projectsParam = new URLSearchParams(window.location.search).get('projects');
-		if (projectsParam) {
-			selectedProjects = new Set(projectsParam.split(','));
-		}
-
 		fetchData();
 		fetchSparklineData();
 	});
 </script>
 
 <div class="min-h-screen bg-base-200 flex flex-col">
-	<!-- Top Row: Projects (50%) | Claude Usage (50%) -->
-	<div class="flex border-b border-base-300 bg-base-100">
-		<!-- Projects Filter -->
-		<div class="w-1/2 px-4 py-2 border-r border-base-300">
-			<label class="text-xs font-semibold text-base-content/60 mb-1 block">
-				Projects {selectedProjects.size > 0 ? `(${selectedProjects.size} selected)` : '(all)'}
-			</label>
-			<ProjectBadgeFilter
-				{projects}
-				{selectedProjects}
-				{taskCounts}
-				onFilterChange={handleProjectFilterChange}
-			/>
-		</div>
-		<!-- Claude Usage -->
-		<div class="w-1/2 px-4 py-2">
-			<label class="text-xs font-semibold text-base-content/60 mb-1 block">
-				Claude Usage
-			</label>
-			<ClaudeUsageBar mode="inline" agentsProp={agents} />
-		</div>
-	</div>
-
 	<!-- Agent Grid -->
 	<div class="border-b border-base-300 bg-base-100">
 		{#if isInitialLoad}
@@ -245,7 +158,7 @@
 				</div>
 			</div>
 		{:else}
-			<AgentGrid {agents} tasks={filteredTasks} {allTasks} {reservations} {sparklineData} onTaskAssign={handleTaskAssign} ontaskclick={handleTaskClick} />
+			<AgentGrid {agents} {tasks} {allTasks} {reservations} {sparklineData} onTaskAssign={handleTaskAssign} ontaskclick={handleTaskClick} />
 		{/if}
 	</div>
 
@@ -261,7 +174,7 @@
 			</div>
 		{:else}
 			<TaskTable
-				tasks={filteredUnassignedTasks}
+				{tasks}
 				{allTasks}
 				{agents}
 				{reservations}

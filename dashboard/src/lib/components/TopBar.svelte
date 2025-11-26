@@ -5,7 +5,10 @@
 	 * Simplified navigation bar containing only utility components:
 	 * - Hamburger toggle (mobile only, for sidebar)
 	 * - ProjectSelector
-	 * - ClaudeUsageBar
+	 * - DateRangePicker
+	 * - AgentCountBadge
+	 * - TokenUsageBadge (tokens today, cost, sparkline)
+	 * - CommandPalette
 	 * - UserProfile
 	 *
 	 * Navigation buttons (List, Graph, Agents) removed - moved to Sidebar
@@ -15,25 +18,61 @@
 	 * - selectedProject: string (current project selection)
 	 * - onProjectChange: (project: string) => void
 	 * - taskCounts: Map<string, number> (optional task counts per project)
+	 * - selectedDateRange: string (for date range picker)
+	 * - customDateFrom: string | null (for custom date range)
+	 * - customDateTo: string | null (for custom date range)
+	 * - onDateRangeChange: (range, from?, to?) => void
+	 * - tokensToday: number (total tokens consumed today)
+	 * - costToday: number (total cost today in USD)
+	 * - sparklineData: DataPoint[] (24h sparkline data)
 	 */
 
 	import ProjectSelector from './ProjectSelector.svelte';
-	import ClaudeUsageBar from './ClaudeUsageBar.svelte';
+	import DateRangePicker from './DateRangePicker.svelte';
+	import AgentCountBadge from './AgentCountBadge.svelte';
+	import TokenUsageBadge from './TokenUsageBadge.svelte';
 	import UserProfile from './UserProfile.svelte';
 	import CommandPalette from './CommandPalette.svelte';
+	import { openTaskDrawer } from '$lib/stores/drawerStore';
+
+	interface DataPoint {
+		timestamp: string;
+		tokens: number;
+		cost: number;
+	}
 
 	interface Props {
 		projects?: string[];
 		selectedProject?: string;
 		onProjectChange?: (project: string) => void;
 		taskCounts?: Map<string, number> | null;
+		selectedDateRange?: string;
+		customDateFrom?: string | null;
+		customDateTo?: string | null;
+		onDateRangeChange?: (range: string, from?: string, to?: string) => void;
+		activeAgentCount?: number;
+		totalAgentCount?: number;
+		activeAgents?: string[];
+		tokensToday?: number;
+		costToday?: number;
+		sparklineData?: DataPoint[];
 	}
 
 	let {
 		projects = [],
 		selectedProject = 'All Projects',
 		onProjectChange = () => {},
-		taskCounts = null
+		taskCounts = null,
+		selectedDateRange = 'all',
+		customDateFrom = null,
+		customDateTo = null,
+		onDateRangeChange = () => {},
+		activeAgentCount = 0,
+		totalAgentCount = 0,
+		activeAgents = [],
+		tokensToday = 0,
+		costToday = 0,
+		sparklineData = []
 	}: Props = $props();
 </script>
 
@@ -57,7 +96,7 @@
 	</label>
 
 	<!-- Left side utilities -->
-	<div class="flex-1 gap-2 px-4">
+	<div class="flex-1 flex items-center gap-2 px-4">
 		{#if projects.length > 0}
 			<div class="w-36 sm:w-40 md:w-48">
 				<ProjectSelector
@@ -69,6 +108,23 @@
 				/>
 			</div>
 		{/if}
+
+		<!-- Date Range Picker -->
+		<DateRangePicker
+			{selectedDateRange}
+			{customDateFrom}
+			{customDateTo}
+			onRangeChange={onDateRangeChange}
+			compact={true}
+		/>
+
+		<!-- Add Task Button -->
+		<button class="btn btn-sm btn-primary gap-1" onclick={openTaskDrawer}>
+			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+			</svg>
+			<span class="hidden sm:inline">Task</span>
+		</button>
 	</div>
 
 	<!-- Middle: Command Palette -->
@@ -76,10 +132,30 @@
 		<CommandPalette />
 	</div>
 
-	<!-- Right side utilities -->
-	<div class="flex-none flex items-center gap-2">
-		<!-- Claude Usage Bar -->
-		<ClaudeUsageBar />
+	<!-- Right side: Stats + User Profile -->
+	<div class="flex-none flex items-center gap-2 font-mono text-xs">
+		<!-- Agent Count Badge -->
+		<div class="hidden sm:flex">
+			<AgentCountBadge
+				activeCount={activeAgentCount}
+				totalCount={totalAgentCount}
+				{activeAgents}
+				compact={true}
+			/>
+		</div>
+
+		<!-- Separator -->
+		<span class="hidden sm:block text-base-content/20">|</span>
+
+		<!-- Token Usage Badge -->
+		<div class="hidden sm:flex">
+			<TokenUsageBadge
+				{tokensToday}
+				{costToday}
+				{sparklineData}
+				compact={true}
+			/>
+		</div>
 
 		<!-- User Profile -->
 		<UserProfile />

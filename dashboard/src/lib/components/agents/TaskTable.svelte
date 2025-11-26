@@ -2,10 +2,9 @@
 	import { page } from '$app/stores';
 	import DependencyIndicator from '$lib/components/DependencyIndicator.svelte';
 	import { analyzeDependencies } from '$lib/utils/dependencyUtils';
-	import { openTaskDrawer } from '$lib/stores/drawerStore';
 	import { getProjectFromTaskId } from '$lib/utils/projectUtils';
 	import { getPriorityBadge, getTaskStatusBadge, getTypeBadge } from '$lib/utils/badgeHelpers';
-	import { formatRelativeTime, formatFullDate, normalizeTimestamp, getTimeSinceMinutes } from '$lib/utils/dateFormatters';
+	import { formatRelativeTime, formatFullDate, normalizeTimestamp, getTimeSinceMinutes, getAgeColorClass } from '$lib/utils/dateFormatters';
 
 	let { tasks = [], allTasks = [], agents = [], reservations = [], ontaskclick = () => {} } = $props();
 
@@ -577,12 +576,12 @@
 <div class="flex flex-col h-full">
 	<!-- Filter Bar -->
 	<div class="p-4 border-b border-base-300 bg-base-100">
-		<div class="flex flex-wrap items-center gap-3">
+		<div class="flex flex-nowrap items-center gap-3 overflow-x-auto">
 			<!-- Search -->
 			<input
 				type="text"
-				placeholder="Search tasks..."
-				class="input input-bordered input-sm w-64"
+				placeholder="Search {sortedTasks.length} of {tasks.length} tasks..."
+				class="input input-bordered input-sm min-w-40 max-w-64 shrink"
 				bind:value={searchQuery}
 				oninput={() => updateURL()}
 			/>
@@ -810,17 +809,6 @@
 					<button class="btn btn-sm btn-ghost" onclick={clearSelection}>
 						Clear
 					</button>
-				{:else}
-					<!-- Normal mode -->
-					<span class="text-sm text-base-content/60">
-						{sortedTasks.length} of {tasks.length} tasks
-					</span>
-					<button class="btn btn-sm btn-primary gap-1" onclick={openTaskDrawer}>
-						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-						</svg>
-						Task
-					</button>
 				{/if}
 			</div>
 		</div>
@@ -965,7 +953,7 @@
 										</th>
 										<td>
 											<div>
-												<div class="font-medium">{task.title}</div>
+												<div class="font-medium text-sm">{task.title}</div>
 												{#if task.description}
 													<div class="text-xs text-base-content/50">
 														{task.description}
@@ -1023,7 +1011,7 @@
 										<DependencyIndicator {task} allTasks={allTasks.length > 0 ? allTasks : tasks} size="sm" />
 									</td>
 									<td>
-										<span class="text-xs text-base-content/60" title={formatFullDate(task.updated_at)}>
+										<span class="text-xs {getAgeColorClass(task.updated_at)}" title={formatFullDate(task.updated_at)}>
 											{formatRelativeTime(task.updated_at)}
 										</span>
 									</td>
@@ -1032,20 +1020,20 @@
 								{#if task.depends_on && task.depends_on.length > 0}
 									{#each task.depends_on as dep, depIndex (dep.id)}
 										<tr
-											class="hover:bg-base-200/50 cursor-pointer transition-colors opacity-50 bg-base-200/30"
+											class="hover:bg-base-200/50 cursor-pointer transition-colors opacity-80 bg-base-200/20"
 											onclick={() => handleRowClick(dep.id)}
 											title="Dependency: {dep.title}"
 										>
 											<th class="bg-base-100"></th>
 											<th class="bg-base-100">
 												<span class="flex items-center gap-1">
-													<span class="text-base-content/40 font-mono text-xs">{depIndex === task.depends_on.length - 1 ? '└──' : '├──'}</span>
-													<span class="font-mono text-xs text-base-content/50">{dep.id}</span>
+													<span class="text-base-content/50 font-mono text-xs">{depIndex === task.depends_on.length - 1 ? '└──' : '├──'}</span>
+													<span class="font-mono text-xs text-base-content/60">{dep.id}</span>
 												</span>
 											</th>
 											<td>
 												<div class="pl-4">
-													<div class="text-sm text-base-content/60">{dep.title}</div>
+													<div class="text-xs text-base-content/70">{dep.title}</div>
 												</div>
 											</td>
 											<td class="text-center">

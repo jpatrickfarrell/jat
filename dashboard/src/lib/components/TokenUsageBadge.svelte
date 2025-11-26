@@ -99,11 +99,11 @@
 		<!-- Separator -->
 		<span class="text-base-content/30">|</span>
 
-		<!-- Mini Sparkline (60x20px as per spec) -->
-		<div class="hidden sm:block w-[60px] h-[20px]">
+		<!-- Mini Sparkline (60-120px flexible width) -->
+		<div class="hidden sm:flex flex-shrink min-w-[60px] max-w-[120px] w-full h-[20px]">
 			<Sparkline
 				data={sparklineData}
-				width={60}
+				width="100%"
 				height={20}
 				colorMode="usage"
 				showTooltip={false}

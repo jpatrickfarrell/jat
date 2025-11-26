@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Statusline and Hooks Setup
-# - Copy statusline.sh to each project's .claude/ directory
+# - Copy statusline.sh to ~/.claude/statusline.sh (GLOBAL)
 # - Copy post-bash hook to ~/.claude/hooks/
 # - Configure settings.json in each project with statusline and hook
 
@@ -28,10 +28,32 @@ else
 fi
 
 # ============================================================================
-# STEP 1: Install global hook to ~/.claude/hooks/
+# STEP 1: Install global statusline to ~/.claude/
 # ============================================================================
 
-echo -e "${BLUE}Step 1: Installing global hook...${NC}"
+echo -e "${BLUE}Step 1: Installing global statusline...${NC}"
+
+mkdir -p "$HOME/.claude"
+
+STATUSLINE_SOURCE="$JAT_DIR/.claude/statusline.sh"
+STATUSLINE_DEST="$HOME/.claude/statusline.sh"
+
+if [ -f "$STATUSLINE_SOURCE" ]; then
+    cp "$STATUSLINE_SOURCE" "$STATUSLINE_DEST"
+    chmod +x "$STATUSLINE_DEST"
+    echo -e "  ${GREEN}✓ Installed statusline.sh to ~/.claude/${NC}"
+else
+    echo -e "  ${RED}✗ Statusline source not found: $STATUSLINE_SOURCE${NC}"
+    exit 1
+fi
+
+echo ""
+
+# ============================================================================
+# STEP 2: Install global hook to ~/.claude/hooks/
+# ============================================================================
+
+echo -e "${BLUE}Step 2: Installing global hook...${NC}"
 
 GLOBAL_HOOKS_DIR="$HOME/.claude/hooks"
 mkdir -p "$GLOBAL_HOOKS_DIR"
@@ -99,10 +121,10 @@ echo -e "  ${GREEN}✓ Installed post-bash hook to ~/.claude/hooks/${NC}"
 echo ""
 
 # ============================================================================
-# STEP 2: Setup per-project statusline and settings.json
+# STEP 3: Configure settings.json for each project
 # ============================================================================
 
-echo -e "${BLUE}Step 2: Configuring projects...${NC}"
+echo -e "${BLUE}Step 3: Configuring project settings...${NC}"
 echo ""
 
 # Scan ~/code/ for projects
@@ -115,7 +137,6 @@ if [ ! -d "$CODE_DIR" ]; then
 fi
 
 REPOS_FOUND=0
-STATUSLINE_CONFIGURED=0
 SETTINGS_CONFIGURED=0
 SKIPPED=0
 
@@ -142,23 +163,7 @@ for repo_dir in "$CODE_DIR"/*; do
     mkdir -p "$repo_dir/.claude"
 
     # ========================================================================
-    # Copy statusline.sh
-    # ========================================================================
-
-    STATUSLINE_DEST="$repo_dir/.claude/statusline.sh"
-    STATUSLINE_SOURCE="$JAT_DIR/.claude/statusline.sh"
-
-    if [ -f "$STATUSLINE_SOURCE" ]; then
-        cp "$STATUSLINE_SOURCE" "$STATUSLINE_DEST"
-        chmod +x "$STATUSLINE_DEST"
-        echo -e "  ${GREEN}✓ Installed statusline.sh${NC}"
-        ((STATUSLINE_CONFIGURED++))
-    else
-        echo -e "  ${YELLOW}⚠ Statusline source not found, skipping${NC}"
-    fi
-
-    # ========================================================================
-    # Configure settings.json
+    # Configure settings.json (use GLOBAL statusline path)
     # ========================================================================
 
     SETTINGS_FILE="$repo_dir/.claude/settings.json"
@@ -167,7 +172,14 @@ for repo_dir in "$CODE_DIR"/*; do
     if [ -f "$SETTINGS_FILE" ]; then
         # Check if it already has statusLine configuration
         if grep -q '"statusLine"' "$SETTINGS_FILE"; then
-            echo -e "  ${GREEN}✓${NC} settings.json already configured"
+            # Update to use global statusline if still using local
+            if grep -q '"\./\.claude/statusline\.sh' "$SETTINGS_FILE"; then
+                sed -i 's|"\./\.claude/statusline\.sh|"~/.claude/statusline.sh|g' "$SETTINGS_FILE"
+                echo -e "  ${GREEN}✓ Updated settings.json to use global statusline${NC}"
+                ((SETTINGS_CONFIGURED++))
+            else
+                echo -e "  ${GREEN}✓${NC} settings.json already configured"
+            fi
         else
             # Add statusLine and hooks configuration
             echo "  → Updating settings.json with statusline and hooks..."
@@ -177,7 +189,7 @@ for repo_dir in "$CODE_DIR"/*; do
             if jq '. + {
                 "statusLine": {
                     "type": "command",
-                    "command": "./.claude/statusline.sh",
+                    "command": "~/.claude/statusline.sh",
                     "padding": 1
                 },
                 "hooks": {
@@ -205,13 +217,13 @@ for repo_dir in "$CODE_DIR"/*; do
             fi
         fi
     else
-        # Create new settings.json
+        # Create new settings.json with GLOBAL statusline path
         echo "  → Creating settings.json with statusline and hooks..."
         cat > "$SETTINGS_FILE" << 'EOF'
 {
   "statusLine": {
     "type": "command",
-    "command": "./.claude/statusline.sh",
+    "command": "~/.claude/statusline.sh",
     "padding": 1
   },
   "hooks": {
@@ -242,8 +254,10 @@ echo -e "${GREEN}=========================================${NC}"
 echo -e "${GREEN}Statusline and Hooks Setup Complete${NC}"
 echo -e "${GREEN}=========================================${NC}"
 echo ""
+echo "  Global statusline: ~/.claude/statusline.sh"
+echo "  Global hook: ~/.claude/hooks/post-bash-agent-state-refresh.sh"
+echo ""
 echo "  Total repos found: $REPOS_FOUND"
-echo "  Statusline configured: $STATUSLINE_CONFIGURED"
 echo "  Settings.json configured: $SETTINGS_CONFIGURED"
 echo "  Skipped (not git repos): $SKIPPED"
 echo ""
@@ -253,7 +267,7 @@ if [ $REPOS_FOUND -eq 0 ]; then
     echo "  Clone some projects to ~/code/ to get started"
 else
     echo "  All repositories now have:"
-    echo "    • Multi-line statusline showing agent, task, git, context"
+    echo "    • Global statusline showing agent, task, git, context"
     echo "    • Real-time updates when running am-* or bd commands"
     echo ""
     echo "  Open Claude Code in any project to see the statusline in action!"

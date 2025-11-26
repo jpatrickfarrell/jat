@@ -1,8 +1,41 @@
 <script lang="ts">
 	/**
 	 * FilterDropdown Component
-	 * Reusable multi-select dropdown for filter bar
-	 * Uses DaisyUI dropdown pattern with badge grid content
+	 * Reusable multi-select filter component for filter bars
+	 *
+	 * Supports two modes:
+	 * - dropdown: Click button to show options in dropdown menu (default)
+	 * - inline: Options displayed inline without dropdown wrapper
+	 *
+	 * Supports two styles:
+	 * - badge: Clickable badge buttons (default, good for compact filters)
+	 * - checkbox: Checkbox list in menu format (good for longer lists)
+	 *
+	 * @example Badge dropdown (compact)
+	 * <FilterDropdown
+	 *   label="Priority"
+	 *   options={[{ value: '0', label: 'P0', count: 5 }]}
+	 *   selected={selectedPriorities}
+	 *   onToggle={(v) => selectedPriorities = toggleSetItem(selectedPriorities, v)}
+	 * />
+	 *
+	 * @example Checkbox dropdown (for longer lists)
+	 * <FilterDropdown
+	 *   label="Labels"
+	 *   options={labelOptions}
+	 *   selected={selectedLabels}
+	 *   onToggle={toggleLabel}
+	 *   style="checkbox"
+	 * />
+	 *
+	 * @example Inline badges (no dropdown wrapper)
+	 * <FilterDropdown
+	 *   label="Status"
+	 *   options={statusOptions}
+	 *   selected={selectedStatuses}
+	 *   onToggle={toggleStatus}
+	 *   mode="inline"
+	 * />
 	 */
 
 	interface FilterOption {
@@ -12,13 +45,32 @@
 	}
 
 	interface Props {
+		/** Label shown on dropdown trigger button */
 		label: string;
+		/** Available options to select from */
 		options: FilterOption[];
+		/** Currently selected values */
 		selected: Set<string>;
+		/** Callback when option is toggled */
 		onToggle: (value: string) => void;
+		/** Function to get badge color class for a value */
 		colorFn?: (value: string, isSelected: boolean) => string;
+		/** Text to show when all options are selected */
 		allSelectedText?: string;
+		/** If true, empty selection means "all" (vs "none") */
 		emptyMeansAll?: boolean;
+		/** Display mode: 'dropdown' (default) or 'inline' */
+		mode?: 'dropdown' | 'inline';
+		/** Selection style: 'badge' (default) or 'checkbox' */
+		style?: 'badge' | 'checkbox';
+		/** Additional CSS class for the container */
+		class?: string;
+		/** Dropdown menu width class (e.g., 'w-44', 'w-52') */
+		menuWidth?: string;
+		/** Max height for scrollable content (e.g., 'max-h-60') */
+		maxHeight?: string;
+		/** Show hover effect on dropdown trigger */
+		hoverTrigger?: boolean;
 	}
 
 	let {
@@ -28,10 +80,16 @@
 		onToggle,
 		colorFn = () => 'badge-primary',
 		allSelectedText = 'all',
-		emptyMeansAll = false
+		emptyMeansAll = false,
+		mode = 'dropdown',
+		style = 'badge',
+		class: className = '',
+		menuWidth = 'min-w-48',
+		maxHeight = '',
+		hoverTrigger = true
 	}: Props = $props();
 
-	// Compute display text for the button
+	// Compute display text for the trigger button
 	const displayText = $derived.by(() => {
 		if (emptyMeansAll && selected.size === 0) {
 			return allSelectedText;
@@ -40,6 +98,14 @@
 			return allSelectedText;
 		}
 		return String(selected.size);
+	});
+
+	// Compute badge class for trigger (show primary when filters active)
+	const triggerBadgeClass = $derived.by(() => {
+		if (emptyMeansAll) {
+			return selected.size > 0 ? 'badge-primary' : 'badge-ghost';
+		}
+		return 'badge-primary';
 	});
 
 	// Handle option toggle
@@ -56,35 +122,22 @@
 	}
 </script>
 
-<div class="dropdown">
-	<!-- Trigger Button -->
-	<button
-		tabindex="0"
-		class="btn btn-sm btn-ghost gap-1 px-2"
-	>
-		<span class="text-xs opacity-70">{label}</span>
-		<span class="badge badge-xs badge-primary">{displayText}</span>
-		<svg
-			xmlns="http://www.w3.org/2000/svg"
-			fill="none"
-			viewBox="0 0 24 24"
-			stroke-width="1.5"
-			stroke="currentColor"
-			class="w-3 h-3 opacity-50"
-		>
-			<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-		</svg>
-	</button>
-
-	<!-- Dropdown Content - tabindex required for DaisyUI dropdown behavior -->
-	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-	<div
-		tabindex="0"
-		role="menu"
-		class="dropdown-content bg-base-100 rounded-box shadow-lg border border-base-300 p-2 z-50 min-w-48 mt-1"
-	>
-		<div class="flex flex-wrap gap-1.5">
-			{#each options as opt}
+{#if mode === 'inline'}
+	<!-- Inline Mode: No dropdown wrapper, just badge/checkbox grid -->
+	<div class="flex flex-wrap gap-1.5 {className}">
+		{#each options as opt}
+			{#if style === 'checkbox'}
+				<label class="label cursor-pointer justify-start gap-2">
+					<input
+						type="checkbox"
+						class="checkbox checkbox-sm"
+						checked={selected.has(opt.value)}
+						onchange={() => handleToggle(opt.value)}
+					/>
+					<span>{opt.label}</span>
+					<span class="text-xs opacity-60">({opt.count})</span>
+				</label>
+			{:else}
 				<button
 					class="badge badge-sm transition-all duration-200 cursor-pointer {selected.has(opt.value)
 						? colorFn(opt.value, true) + ' shadow-md'
@@ -95,7 +148,73 @@
 					{opt.label}
 					<span class="ml-1 opacity-70">({opt.count})</span>
 				</button>
-			{/each}
-		</div>
+			{/if}
+		{/each}
 	</div>
-</div>
+{:else}
+	<!-- Dropdown Mode: Click to show options -->
+	<div class="dropdown {hoverTrigger ? 'dropdown-hover' : ''} {className}">
+		<!-- Trigger Button -->
+		<div tabindex="0" role="button" class="btn btn-sm btn-ghost gap-1">
+			{label}
+			<span class="badge badge-sm {triggerBadgeClass}">{displayText}</span>
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				fill="none"
+				viewBox="0 0 24 24"
+				stroke-width="1.5"
+				stroke="currentColor"
+				class="w-4 h-4"
+			>
+				<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+			</svg>
+		</div>
+
+		<!-- Dropdown Content -->
+		{#if style === 'checkbox'}
+			<!-- Checkbox style: Menu with checkboxes -->
+			<ul
+				tabindex="0"
+				class="dropdown-content z-50 menu p-2 shadow bg-base-100 rounded-box {menuWidth} {maxHeight ? maxHeight + ' overflow-y-auto' : ''}"
+			>
+				{#each options as opt}
+					<li>
+						<label class="label cursor-pointer justify-start gap-2">
+							<input
+								type="checkbox"
+								class="checkbox checkbox-sm"
+								checked={selected.has(opt.value)}
+								onchange={() => handleToggle(opt.value)}
+							/>
+							<span class="truncate">{opt.label}</span>
+							<span class="text-xs opacity-60">({opt.count})</span>
+						</label>
+					</li>
+				{/each}
+			</ul>
+		{:else}
+			<!-- Badge style: Grid of clickable badges -->
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+			<div
+				tabindex="0"
+				role="menu"
+				class="dropdown-content bg-base-100 rounded-box shadow-lg border border-base-300 p-2 z-50 {menuWidth} mt-1 {maxHeight ? maxHeight + ' overflow-y-auto' : ''}"
+			>
+				<div class="flex flex-wrap gap-1.5">
+					{#each options as opt}
+						<button
+							class="badge badge-sm transition-all duration-200 cursor-pointer {selected.has(opt.value)
+								? colorFn(opt.value, true) + ' shadow-md'
+								: 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
+							onclick={() => handleToggle(opt.value)}
+							onkeydown={(e) => handleKeydown(e, opt.value)}
+						>
+							{opt.label}
+							<span class="ml-1 opacity-70">({opt.count})</span>
+						</button>
+					{/each}
+				</div>
+			</div>
+		{/if}
+	</div>
+{/if}

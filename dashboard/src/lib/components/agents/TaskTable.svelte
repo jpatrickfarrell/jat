@@ -1,6 +1,7 @@
 <script>
 	import { page } from '$app/stores';
 	import DependencyIndicator from '$lib/components/DependencyIndicator.svelte';
+	import FilterDropdown from '$lib/components/FilterDropdown.svelte';
 	import { analyzeDependencies } from '$lib/utils/dependencyUtils';
 	import { getProjectFromTaskId } from '$lib/utils/projectUtils';
 	import { getPriorityBadge, getTaskStatusBadge, getTypeBadge } from '$lib/utils/badgeHelpers';
@@ -329,6 +330,37 @@
 		return Array.from(projectsSet).sort();
 	});
 
+	// Filter options for FilterDropdown components
+	const projectOptions = $derived(availableProjects.map(p => ({
+		value: p,
+		label: p,
+		count: tasks.filter(t => getProjectFromTaskId(t.id) === p).length
+	})));
+
+	const priorityOptions = $derived(['0', '1', '2', '3'].map(p => ({
+		value: p,
+		label: `P${p}`,
+		count: tasks.filter(t => String(t.priority) === p).length
+	})));
+
+	const statusOptions = $derived(['open', 'in_progress', 'blocked', 'closed'].map(s => ({
+		value: s,
+		label: s.replace('_', ' '),
+		count: tasks.filter(t => t.status === s).length
+	})));
+
+	const typeOptions = $derived(availableTypes.map(t => ({
+		value: t,
+		label: t,
+		count: tasks.filter(task => task.issue_type === t).length
+	})));
+
+	const labelOptions = $derived(availableLabels.map(l => ({
+		value: l,
+		label: l,
+		count: tasks.filter(t => t.labels?.includes(l)).length
+	})));
+
 	// Toggle functions using shared helper
 	function toggleProject(project) {
 		selectedProjects = toggleSetItem(selectedProjects, project);
@@ -509,143 +541,63 @@
 			/>
 
 			<!-- Project Filter -->
-			{#if availableProjects.length > 0}
-				<div class="dropdown dropdown-hover">
-					<div tabindex="0" role="button" class="btn btn-sm btn-ghost gap-1">
-						Project
-						<span class="badge badge-sm {selectedProjects.size > 0 ? 'badge-primary' : 'badge-ghost'}">{selectedProjects.size || 'all'}</span>
-						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-						</svg>
-					</div>
-					<ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow bg-base-100 rounded-box w-44">
-						{#each availableProjects as project}
-							<li>
-								<label class="label cursor-pointer justify-start gap-2">
-									<input
-										type="checkbox"
-										class="checkbox checkbox-sm"
-										checked={selectedProjects.has(project)}
-										onchange={() => toggleProject(project)}
-									/>
-									<span>{project}</span>
-									<span class="text-xs opacity-60">({tasks.filter(t => getProjectFromTaskId(t.id) === project).length})</span>
-								</label>
-							</li>
-						{/each}
-					</ul>
-				</div>
+			{#if projectOptions.length > 0}
+				<FilterDropdown
+					label="Project"
+					options={projectOptions}
+					selected={selectedProjects}
+					onToggle={toggleProject}
+					emptyMeansAll={true}
+					style="checkbox"
+					menuWidth="w-44"
+				/>
 			{/if}
 
 			<!-- Priority Filter -->
-			<div class="dropdown dropdown-hover">
-				<div tabindex="0" role="button" class="btn btn-sm btn-ghost gap-1">
-					Priority
-					<span class="badge badge-sm badge-primary">{selectedPriorities.size}</span>
-					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-					</svg>
-				</div>
-				<ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow bg-base-100 rounded-box w-40">
-					{#each ['0', '1', '2', '3'] as priority}
-						<li>
-							<label class="label cursor-pointer justify-start gap-2">
-								<input
-									type="checkbox"
-									class="checkbox checkbox-sm"
-									checked={selectedPriorities.has(priority)}
-									onchange={() => togglePriority(priority)}
-								/>
-								<span>P{priority}</span>
-								<span class="text-xs opacity-60">({tasks.filter(t => String(t.priority) === priority).length})</span>
-							</label>
-						</li>
-					{/each}
-				</ul>
-			</div>
+			<FilterDropdown
+				label="Priority"
+				options={priorityOptions}
+				selected={selectedPriorities}
+				onToggle={togglePriority}
+				style="checkbox"
+				menuWidth="w-40"
+			/>
 
 			<!-- Status Filter -->
-			<div class="dropdown dropdown-hover">
-				<div tabindex="0" role="button" class="btn btn-sm btn-ghost gap-1">
-					Status
-					<span class="badge badge-sm badge-primary">{selectedStatuses.size}</span>
-					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-					</svg>
-				</div>
-				<ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow bg-base-100 rounded-box w-44">
-					{#each ['open', 'in_progress', 'blocked', 'closed'] as status}
-						<li>
-							<label class="label cursor-pointer justify-start gap-2">
-								<input
-									type="checkbox"
-									class="checkbox checkbox-sm"
-									checked={selectedStatuses.has(status)}
-									onchange={() => toggleStatus(status)}
-								/>
-								<span>{status.replace('_', ' ')}</span>
-								<span class="text-xs opacity-60">({tasks.filter(t => t.status === status).length})</span>
-							</label>
-						</li>
-					{/each}
-				</ul>
-			</div>
+			<FilterDropdown
+				label="Status"
+				options={statusOptions}
+				selected={selectedStatuses}
+				onToggle={toggleStatus}
+				style="checkbox"
+				menuWidth="w-44"
+			/>
 
 			<!-- Type Filter -->
-			{#if availableTypes.length > 0}
-				<div class="dropdown dropdown-hover">
-					<div tabindex="0" role="button" class="btn btn-sm btn-ghost gap-1">
-						Type
-						<span class="badge badge-sm {selectedTypes.size > 0 ? 'badge-primary' : 'badge-ghost'}">{selectedTypes.size || 'all'}</span>
-						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-						</svg>
-					</div>
-					<ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow bg-base-100 rounded-box w-40">
-						{#each availableTypes as type}
-							<li>
-								<label class="label cursor-pointer justify-start gap-2">
-									<input
-										type="checkbox"
-										class="checkbox checkbox-sm"
-										checked={selectedTypes.has(type)}
-										onchange={() => toggleType(type)}
-									/>
-									<span>{type}</span>
-									<span class="text-xs opacity-60">({tasks.filter(t => t.issue_type === type).length})</span>
-								</label>
-							</li>
-						{/each}
-					</ul>
-				</div>
+			{#if typeOptions.length > 0}
+				<FilterDropdown
+					label="Type"
+					options={typeOptions}
+					selected={selectedTypes}
+					onToggle={toggleType}
+					emptyMeansAll={true}
+					style="checkbox"
+					menuWidth="w-40"
+				/>
 			{/if}
 
 			<!-- Labels Filter -->
-			{#if availableLabels.length > 0}
-				<div class="dropdown dropdown-hover">
-					<div tabindex="0" role="button" class="btn btn-sm btn-ghost gap-1">
-						Labels
-						<span class="badge badge-sm {selectedLabels.size > 0 ? 'badge-primary' : 'badge-ghost'}">{selectedLabels.size || 'all'}</span>
-						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-						</svg>
-					</div>
-					<ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow bg-base-100 rounded-box w-48 max-h-60 overflow-y-auto">
-						{#each availableLabels as label}
-							<li>
-								<label class="label cursor-pointer justify-start gap-2">
-									<input
-										type="checkbox"
-										class="checkbox checkbox-sm"
-										checked={selectedLabels.has(label)}
-										onchange={() => toggleLabel(label)}
-									/>
-									<span class="truncate">{label}</span>
-								</label>
-							</li>
-						{/each}
-					</ul>
-				</div>
+			{#if labelOptions.length > 0}
+				<FilterDropdown
+					label="Labels"
+					options={labelOptions}
+					selected={selectedLabels}
+					onToggle={toggleLabel}
+					emptyMeansAll={true}
+					style="checkbox"
+					menuWidth="w-48"
+					maxHeight="max-h-60"
+				/>
 			{/if}
 
 			<!-- Clear Filters -->

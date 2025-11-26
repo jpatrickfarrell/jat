@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import DependencyIndicator from '$lib/components/DependencyIndicator.svelte';
+	import FilterDropdown from '$lib/components/FilterDropdown.svelte';
 	import { analyzeDependencies } from '$lib/utils/dependencyUtils';
 	import { getPriorityBadge } from '$lib/utils/badgeHelpers';
 	import { toggleSetItem } from '$lib/utils/filterHelpers';
@@ -132,6 +133,31 @@
 		return Array.from(typesSet).sort();
 	});
 
+	// Filter options for FilterDropdown components
+	const priorityOptions = $derived(['0', '1', '2', '3'].map(p => ({
+		value: p,
+		label: `P${p}`,
+		count: tasks.filter(t => String(t.priority) === p).length
+	})));
+
+	const statusOptions = $derived(['open', 'in_progress', 'blocked', 'closed'].map(s => ({
+		value: s,
+		label: s,
+		count: tasks.filter(t => t.status === s).length
+	})));
+
+	const typeOptions = $derived(availableTypes.map(t => ({
+		value: t,
+		label: t,
+		count: tasks.filter(task => task.issue_type === t).length
+	})));
+
+	const labelOptions = $derived(availableLabels.map(l => ({
+		value: l,
+		label: l,
+		count: tasks.filter(t => t.labels?.includes(l)).length
+	})));
+
 	// Toggle functions using shared helper
 	function togglePriority(priority) {
 		selectedPriorities = toggleSetItem(selectedPriorities, priority);
@@ -214,21 +240,14 @@
 				<label class="label py-1">
 					<span class="label-text text-xs">Priority ({selectedPriorities.size} selected)</span>
 				</label>
-				<div class="flex flex-wrap gap-1.5 p-2 bg-base-200 rounded-lg">
-					{#each ['0', '1', '2', '3'] as priority}
-						<button
-							class="badge badge-sm transition-all duration-200 cursor-pointer {selectedPriorities.has(priority) ? 'badge-primary shadow-md' : 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
-							onclick={() => togglePriority(priority)}
-							onkeydown={(e) => {
-								if (e.key === 'Enter' || e.key === ' ') {
-									e.preventDefault();
-									togglePriority(priority);
-								}
-							}}
-						>
-							P{priority} <span class="ml-1 opacity-70">({tasks.filter((task) => String(task.priority) === priority).length})</span>
-						</button>
-					{/each}
+				<div class="p-2 bg-base-200 rounded-lg">
+					<FilterDropdown
+						label="Priority"
+						options={priorityOptions}
+						selected={selectedPriorities}
+						onToggle={togglePriority}
+						mode="inline"
+					/>
 				</div>
 			</div>
 
@@ -237,70 +256,49 @@
 				<label class="label py-1">
 					<span class="label-text text-xs">Status ({selectedStatuses.size} selected)</span>
 				</label>
-				<div class="flex flex-wrap gap-1.5 p-2 bg-base-200 rounded-lg">
-					{#each ['open', 'in_progress', 'blocked', 'closed'] as status}
-						<button
-							class="badge badge-sm transition-all duration-200 cursor-pointer {selectedStatuses.has(status) ? 'badge-primary shadow-md' : 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
-							onclick={() => toggleStatus(status)}
-							onkeydown={(e) => {
-								if (e.key === 'Enter' || e.key === ' ') {
-									e.preventDefault();
-									toggleStatus(status);
-								}
-							}}
-						>
-							{status} <span class="opacity-70">{tasks.filter((task) => task.status === status).length}</span>
-						</button>
-					{/each}
+				<div class="p-2 bg-base-200 rounded-lg">
+					<FilterDropdown
+						label="Status"
+						options={statusOptions}
+						selected={selectedStatuses}
+						onToggle={toggleStatus}
+						mode="inline"
+					/>
 				</div>
 			</div>
 
 			<!-- Type Filter -->
-			{#if availableTypes.length > 0}
+			{#if typeOptions.length > 0}
 				<div class="form-control">
 					<label class="label py-1">
 						<span class="label-text text-xs">Type ({selectedTypes.size > 0 ? selectedTypes.size : 'all'} selected)</span>
 					</label>
-					<div class="flex flex-wrap gap-1.5 p-2 bg-base-200 rounded-lg">
-						{#each availableTypes as type}
-							<button
-								class="badge badge-sm transition-all duration-200 cursor-pointer {selectedTypes.has(type) ? 'badge-primary shadow-md' : 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
-								onclick={() => toggleType(type)}
-								onkeydown={(e) => {
-									if (e.key === 'Enter' || e.key === ' ') {
-										e.preventDefault();
-										toggleType(type);
-									}
-								}}
-							>
-								{type} <span class="ml-0.5 opacity-70">{tasks.filter((task) => task.issue_type === type).length}</span>
-							</button>
-						{/each}
+					<div class="p-2 bg-base-200 rounded-lg">
+						<FilterDropdown
+							label="Type"
+							options={typeOptions}
+							selected={selectedTypes}
+							onToggle={toggleType}
+							mode="inline"
+						/>
 					</div>
 				</div>
 			{/if}
 
-			<!-- Multi-select Label Filter -->
-			{#if availableLabels.length > 0}
+			<!-- Labels Filter -->
+			{#if labelOptions.length > 0}
 				<div class="form-control">
 					<label class="label py-1">
 						<span class="label-text text-xs">Labels ({selectedLabels.size} selected)</span>
 					</label>
-					<div class="flex flex-wrap gap-1.5 p-2 bg-base-200 rounded-lg max-h-40 overflow-y-auto">
-						{#each availableLabels as label}
-							<button
-								class="badge badge-sm transition-all duration-200 cursor-pointer {selectedLabels.has(label) ? 'badge-primary shadow-md' : 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
-								onclick={() => toggleLabel(label)}
-								onkeydown={(e) => {
-									if (e.key === 'Enter' || e.key === ' ') {
-										e.preventDefault();
-										toggleLabel(label);
-									}
-								}}
-							>
-								{label} <span class="ml-1 opacity-70">({tasks.filter((task) => task.labels?.includes(label)).length})</span>
-							</button>
-						{/each}
+					<div class="p-2 bg-base-200 rounded-lg max-h-40 overflow-y-auto">
+						<FilterDropdown
+							label="Labels"
+							options={labelOptions}
+							selected={selectedLabels}
+							onToggle={toggleLabel}
+							mode="inline"
+						/>
 					</div>
 				</div>
 			{/if}

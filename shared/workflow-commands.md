@@ -3,7 +3,8 @@
 **9 streamlined commands for multi-agent coordination** located in `~/code/jat/commands/jat/`
 
 **Core Workflow:**
-- `/jat:start [agent-name | task-id | quick]` - **Main command**: handles registration, task selection, conflict detection, and work start
+- `/jat:start [agent-name | task-id | auto | quick]` - **Main command**: handles registration, task selection, conflict detection, and work start
+- `/jat:start auto` - **Auto-attack mode**: create agent, pick highest priority task, start immediately
 - `/jat:next` - **Drive mode**: complete current task + auto-start next (high velocity)
 - `/jat:complete [task-id]` - Finish work, verify, commit, show menu (manual selection)
 
@@ -28,12 +29,16 @@
 **Quick Start:**
 ```bash
 # Simple workflow
-/jat:start                    # Auto-detect or create agent, pick task
+/jat:start                    # Auto-detect or create agent, show task menu
+/jat:start auto               # Auto-attack: create agent, pick & start top task immediately
 /jat:next                     # Complete + auto-start next (drive mode)
 
 # With specific agent
 /jat:start MyAgent            # Register as specific agent
 /jat:start task-abc           # Start specific task (auto-registers if needed)
+
+# Multi-agent backlog attack (from CLI)
+jat myproject 4 --auto        # Launch 4 agents that each auto-start highest priority task
 
 # Pause modes
 /jat:pause task-abc --reason "Taking break"                # Keep locks

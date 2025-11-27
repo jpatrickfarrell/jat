@@ -37,6 +37,21 @@ browser-start.js --help
 
 # Start working (registers agent + picks task)
 /jat:start
+
+# Auto-attack mode (pick highest priority task immediately)
+/jat:start auto
+```
+
+## Launch Multi-Agent Backlog Attack
+
+```bash
+# Launch 4 agents that each auto-start the highest priority task
+jat myproject 4 --auto
+
+# This will:
+# 1. Start npm dev server + browser + dashboard
+# 2. Launch 4 Claude sessions (15s stagger between each)
+# 3. Each session runs /jat:start auto → picks & starts top task
 ```
 
 ## Dashboard Development

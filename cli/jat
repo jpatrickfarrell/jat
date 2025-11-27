@@ -114,6 +114,7 @@ launch_claude() {
     local tools_path="$4"
     local count="${5:-1}"
     local skip_agent="${6:-false}"
+    local auto_mode="${7:-false}"
 
     # Build environment
     local env_vars="PATH=$PATH:$tools_path:$path/.claude/tools"
@@ -127,7 +128,11 @@ launch_claude() {
     # Build initial prompt (without -p flag which makes it non-interactive)
     local initial_prompt=""
     if [[ "$skip_agent" != "true" ]]; then
-        initial_prompt="/jat:start"
+        if [[ "$auto_mode" == "true" ]]; then
+            initial_prompt="/jat:start auto"
+        else
+            initial_prompt="/jat:start"
+        fi
     fi
 
     # Launch N Claude sessions with staggered timing
@@ -146,7 +151,7 @@ launch_claude() {
         # Stagger launches so each agent sees previous agents' reservations
         if [[ $i -lt $count ]]; then
             local stagger
-            stagger=$(jq -r '.defaults.agent_stagger // 30' "$CONFIG_FILE")
+            stagger=$(jq -r '.defaults.agent_stagger // 15' "$CONFIG_FILE")
             sleep "$stagger"
         fi
     done
@@ -229,6 +234,7 @@ launch_project() {
     local session_count=1
     local skip_agent=false
     local skip_dashboard=false
+    local auto_mode=false
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -240,6 +246,7 @@ launch_project() {
             --all|-a)        do_all=true ;;
             --no-agent)      skip_agent=true ;;
             --no-dashboard)  skip_dashboard=true ;;
+            --auto)          auto_mode=true ;;
             [0-9]*)          session_count="$1" ;;
             *) echo -e "${RED}Unknown option: $1${NC}"; return 1 ;;
         esac
@@ -290,10 +297,9 @@ launch_project() {
     echo ""
 
     # Launch components
+    # Order: npm/browser/dashboard first (need time to start), then Claude sessions last
     if $do_all; then
         launch_code "$path" "$name"
-        sleep 0.3
-        launch_claude "$path" "$name" "$db_url" "$tools_path" "$session_count" "$skip_agent"
         sleep 0.3
         launch_npm "$path" "$name" "$port"
         launch_browser "$port" "$name"
@@ -302,9 +308,12 @@ launch_project() {
             sleep 0.3
             launch_dashboard "$name"
         fi
+        # Launch Claude sessions last (gives servers time to start)
+        sleep 0.3
+        launch_claude "$path" "$name" "$db_url" "$tools_path" "$session_count" "$skip_agent" "$auto_mode"
     else
         $do_code && launch_code "$path" "$name"
-        $do_claude && launch_claude "$path" "$name" "$db_url" "$tools_path" "$session_count" "$skip_agent"
+        $do_claude && launch_claude "$path" "$name" "$db_url" "$tools_path" "$session_count" "$skip_agent" "$auto_mode"
         $do_npm && launch_npm "$path" "$name" "$port"
         $do_browser && launch_browser "$port" "$name"
         $do_dashboard && launch_dashboard "$name"
@@ -642,6 +651,7 @@ JAT CLI - Launch complete dev environments
 USAGE:
     jat <project>              Launch full environment (VS Code + Claude + npm + browser + dashboard)
     jat <project> [N]          Launch with N Claude Code sessions (default: 1)
+    jat <project> [N] --auto   Launch N agents that auto-attack the backlog
     jat <project> --claude     Launch only Claude Code
     jat <project> --code       Launch only VS Code
     jat <project> --npm        Launch only dev server
@@ -659,6 +669,7 @@ COMMANDS:
 
 OPTIONS:
     N               Number of Claude Code sessions to launch (1-10)
+    --auto          Auto-attack mode: each agent picks highest priority task automatically
     --no-agent      Skip /agent:start prompt (raw Claude without auto-registration)
     --no-dashboard  Skip JAT dashboard (launch project only)
     -c, --code      Launch VS Code only
@@ -671,6 +682,7 @@ OPTIONS:
 EXAMPLES:
     jat chimaro                # Full environment (1 Claude session + dashboard)
     jat chimaro 4              # Full environment with 4 Claude sessions
+    jat chimaro 4 --auto       # Launch 4 agents that auto-attack the backlog!
     jat chimaro 4 --claude     # Only 4 Claude sessions (no VS Code/npm)
     jat chimaro --no-agent     # Claude without /agent:start auto-registration
     jat chimaro --no-dashboard # Full environment without dashboard

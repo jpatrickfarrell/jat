@@ -1,5 +1,5 @@
 ---
-argument-hint: [agent-name | task-id | quick]
+argument-hint: [agent-name | task-id | auto | quick]
 ---
 
 Get to work! Unified smart command that handles registration, task selection, conflict detection, and actually starts work.
@@ -8,6 +8,7 @@ Get to work! Unified smart command that handles registration, task selection, co
 
 **Usage:**
 - `/jat:start` - **Auto-create new agent** (fast! no prompt), show task recommendations
+- `/jat:start auto` - **Auto-attack mode**: create agent, pick highest priority task, start immediately
 - `/jat:start resume` - Show menu to **choose from existing agents**
 - `/jat:start agent-name` - Register as specific agent, show tasks
 - `/jat:start task-id` - Auto-register if needed, start that task
@@ -76,13 +77,20 @@ SESSION_ID="abc" && if [[ -f "$file" ]]; then echo "yes"; fi
 Extract parameter and detect mode:
 
 ```bash
-PARAM="$1"  # Could be: empty, "resume", agent-name, task-id, or "quick"
+PARAM="$1"  # Could be: empty, "resume", "auto", agent-name, task-id, or "quick"
 QUICK_MODE=false
 RESUME_MODE=false
+AUTO_MODE=false
 
 # Check for resume mode
 if [[ "$PARAM" == "resume" ]]; then
   RESUME_MODE=true
+  PARAM_TYPE="none"
+fi
+
+# Check for auto mode (auto-attack backlog)
+if [[ "$PARAM" == "auto" ]]; then
+  AUTO_MODE=true
   PARAM_TYPE="none"
 fi
 
@@ -92,7 +100,7 @@ if [[ "$PARAM" == "quick" ]] || [[ "$2" == "quick" ]]; then
 fi
 
 # Determine parameter type
-if [[ "$RESUME_MODE" == "false" ]]; then
+if [[ "$RESUME_MODE" == "false" ]] && [[ "$AUTO_MODE" == "false" ]]; then
   if [[ -z "$PARAM" ]] || [[ "$PARAM" == "quick" ]]; then
     PARAM_TYPE="none"
   elif bd show "$PARAM" --json >/dev/null 2>&1; then
@@ -241,7 +249,38 @@ fi
 # Continue to STEP 5
 ```
 
-#### If PARAM_TYPE == "none" or "agent-name":
+#### If AUTO_MODE == true (auto-attack backlog):
+```bash
+# Get highest priority ready task and start it immediately
+READY_TASKS=$(bd ready --json)
+READY_COUNT=$(echo "$READY_TASKS" | jq 'length')
+
+if [[ "$READY_COUNT" -eq 0 ]]; then
+  echo "╔══════════════════════════════════════════════════════════════════════════╗"
+  echo "║                    ✅ Backlog Clear!                                      ║"
+  echo "╚══════════════════════════════════════════════════════════════════════════╝"
+  echo ""
+  echo "No ready tasks available. All caught up!"
+  echo ""
+  echo "Options:"
+  echo "  - Create a task: bd create \"Task title\" --type task --priority 1"
+  echo "  - View all tasks: bd list"
+  echo "  - Check blocked tasks: bd list --status blocked"
+  exit 0
+fi
+
+# Pick highest priority task (first in sorted list)
+TASK_ID=$(echo "$READY_TASKS" | jq -r '.[0].id')
+TASK_TITLE=$(echo "$READY_TASKS" | jq -r '.[0].title')
+TASK_PRIORITY=$(echo "$READY_TASKS" | jq -r '.[0].priority')
+
+echo "🎯 Auto-selected: [$TASK_PRIORITY] $TASK_ID - $TASK_TITLE"
+echo ""
+
+# Continue to STEP 5 (start this task)
+```
+
+#### If PARAM_TYPE == "none" or "agent-name" (no auto mode):
 ```bash
 # Show task recommendations (DO NOT auto-start)
 READY_TASKS=$(bd ready --json)
@@ -623,10 +662,16 @@ Options:
 | Command | Behavior |
 |---------|----------|
 | `/jat:start` | Auto-create agent → check mail → show task recommendations |
+| `/jat:start auto` | Auto-create agent → check mail → **auto-pick & start** highest priority task |
 | `/jat:start resume` | Choose from logged-out agents → check mail → show tasks |
 | `/jat:start MyAgent` | Register as MyAgent → check mail → show tasks |
 | `/jat:start task-abc` | Auto-create agent → check mail → **start** task-abc |
 | `/jat:start task-abc quick` | Auto-create agent → check mail → **start** task-abc (skip conflicts) |
+
+**For launching multiple agents to attack backlog:**
+```bash
+jat myproject 4 --auto   # Launches 4 agents, each auto-starts highest priority task
+```
 
 ---
 

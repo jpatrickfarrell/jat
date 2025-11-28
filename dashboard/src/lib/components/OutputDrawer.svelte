@@ -207,9 +207,19 @@
 
 	// Send input to selected session
 	async function sendInput(type: 'text' | 'ctrl-c' | 'raw' = 'text') {
-		if (type === 'text' && !inputText.trim()) return;
+		console.log('[OutputDrawer] sendInput called:', { type, inputText });
+
+		if (type === 'text' && !inputText.trim()) {
+			console.log('[OutputDrawer] Empty text, returning early');
+			return;
+		}
 		const target = currentSession();
-		if (!target) return;
+		console.log('[OutputDrawer] Target session:', target);
+
+		if (!target) {
+			console.log('[OutputDrawer] No target session, returning early');
+			return;
+		}
 
 		sendingInput = true;
 
@@ -218,27 +228,48 @@
 				? { type: 'ctrl-c' }
 				: { type, input: inputText };
 
-			await fetch(`/api/sessions/${target.name}/input`, {
+			console.log('[OutputDrawer] Sending to API:', `/api/sessions/${target.name}/input`, body);
+
+			const response = await fetch(`/api/sessions/${target.name}/input`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(body)
 			});
+
+			const result = await response.json();
+			console.log('[OutputDrawer] API response:', result);
 
 			// Clear input after sending
 			if (type === 'text') {
 				inputText = '';
 			}
 		} catch (e) {
-			console.error('Failed to send input:', e);
+			console.error('[OutputDrawer] Failed to send input:', e);
 		} finally {
 			sendingInput = false;
 		}
 	}
 
-	// Quick send "1" (Yes)
+	// Quick send Enter (accept highlighted option in Claude Code prompts)
 	async function sendYes() {
-		inputText = '1';
-		await sendInput('text');
+		const target = currentSession();
+		if (!target) return;
+
+		sendingInput = true;
+		try {
+			// Send just Enter to accept the highlighted option
+			const response = await fetch(`/api/sessions/${target.name}/input`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ type: 'enter' })
+			});
+			const result = await response.json();
+			console.log('[OutputDrawer] Yes/Enter response:', result);
+		} catch (e) {
+			console.error('[OutputDrawer] Failed to send Enter:', e);
+		} finally {
+			sendingInput = false;
+		}
 	}
 
 	// Handle Enter key in input

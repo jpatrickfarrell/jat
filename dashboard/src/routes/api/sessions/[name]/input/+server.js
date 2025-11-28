@@ -33,6 +33,11 @@ export async function POST({ params, request }) {
 		let command;
 
 		switch (type) {
+			case 'enter':
+				// Send just Enter (accept highlighted option in Claude Code prompts)
+				command = `tmux send-keys -t "${sessionName}" Enter`;
+				break;
+
 			case 'ctrl-c':
 				// Send Ctrl+C (interrupt signal)
 				command = `tmux send-keys -t "${sessionName}" C-c`;

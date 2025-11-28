@@ -23,9 +23,11 @@
 		sparklineData?: unknown[];
 		onTaskAssign?: (taskId: string, agentName: string) => Promise<void>;
 		ontaskclick?: (taskId: string) => void;
+		/** Currently highlighted agent name (for scroll-to-agent feature) */
+		highlightedAgent?: string | null;
 	}
 
-	let { agents = [], tasks = [], allTasks = [], reservations = [], sparklineData = [], onTaskAssign = async () => {}, ontaskclick = () => {} }: Props = $props();
+	let { agents = [], tasks = [], allTasks = [], reservations = [], sparklineData = [], onTaskAssign = async () => {}, ontaskclick = () => {}, highlightedAgent = null }: Props = $props();
 
 	// Modal state
 	let showModal = $state(false);
@@ -293,7 +295,7 @@
 						animate:flip={{ duration: 300 }}
 						in:fly={{ x: -50, duration: 400, delay: 100 }}
 					>
-						<AgentCard {agent} {tasks} {allTasks} {reservations} {onTaskAssign} {ontaskclick} />
+						<AgentCard {agent} {tasks} {allTasks} {reservations} {onTaskAssign} {ontaskclick} isHighlighted={highlightedAgent === agent.name} />
 					</div>
 				{/each}
 				<!-- Offline count indicator -->

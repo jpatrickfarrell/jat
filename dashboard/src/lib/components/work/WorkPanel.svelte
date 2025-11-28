@@ -18,7 +18,6 @@
 	 */
 
 	import WorkCard from './WorkCard.svelte';
-	import WorkDropZone from './WorkDropZone.svelte';
 
 	// Work session type
 	interface Task {
@@ -81,20 +80,6 @@
 		});
 	});
 
-	// Track if any session is spawning (disable drop zone during spawn)
-	let isSpawning = $state(false);
-
-	// Wrap onSpawnForTask to track spawning state
-	async function handleSpawnForTask(taskId: string) {
-		if (!onSpawnForTask) return;
-		isSpawning = true;
-		try {
-			await onSpawnForTask(taskId);
-		} finally {
-			isSpawning = false;
-		}
-	}
-
 	// Create session-specific handlers
 	function createKillHandler(sessionName: string) {
 		return async () => {
@@ -133,40 +118,13 @@
 	{#if sortedSessions.length === 0}
 		<!-- Empty State -->
 		<div class="flex-1 flex flex-col items-center justify-center p-8">
-			<div class="max-w-md w-full">
-				<!-- Drop Zone for spawning -->
-				<WorkDropZone
-					onSpawnForTask={handleSpawnForTask}
-					disabled={isSpawning}
-					class="mb-6"
-				/>
-
-				<!-- Guidance Message -->
-				<div class="text-center">
-					<h3 class="text-lg font-semibold text-base-content/80 mb-2">
-						No Active Work Sessions
-					</h3>
-					<p class="text-sm text-base-content/60 mb-4">
-						Drag a task from the sidebar to start work, or spawn an agent from the task queue.
-					</p>
-					<div class="flex flex-wrap justify-center gap-2 text-xs text-base-content/50">
-						<span class="badge badge-ghost badge-sm">Drag tasks to drop zone</span>
-						<span class="badge badge-ghost badge-sm">Auto-spawns agent</span>
-						<span class="badge badge-ghost badge-sm">View output in real-time</span>
-					</div>
-				</div>
+			<div class="text-center text-base-content/60">
+				<p class="text-sm">No active work sessions</p>
 			</div>
 		</div>
 	{:else}
-		<!-- WorkCards Grid -->
+		<!-- WorkCards -->
 		<div class="flex-1 overflow-auto p-4">
-			<!-- Drop Zone at top for adding more sessions -->
-			<WorkDropZone
-				onSpawnForTask={handleSpawnForTask}
-				disabled={isSpawning}
-				class="mb-4 min-h-[80px]"
-			/>
-
 			<!-- Horizontal scrolling row (630px per card for full terminal output) -->
 			<div class="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent">
 				{#each sortedSessions as session (session.sessionName)}

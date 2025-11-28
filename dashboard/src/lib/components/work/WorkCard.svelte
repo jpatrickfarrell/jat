@@ -365,7 +365,7 @@
 	{/if}
 
 	<!-- Header: Task-first design -->
-	<div class="card-body p-4 pb-2 flex-shrink-0">
+	<div class="p-4 pb-2 flex-shrink-0 flex-grow-0">
 		<!-- Task Title (Primary) -->
 		<div class="flex items-start justify-between gap-3">
 			<div class="flex-1 min-w-0">

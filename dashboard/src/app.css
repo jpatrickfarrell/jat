@@ -218,3 +218,34 @@
 .agent-new-entrance {
 	animation: agent-entrance 1.5s ease-out forwards;
 }
+
+/* Sparkline draw animation - line draws from left to right */
+@keyframes sparkline-draw {
+	from {
+		stroke-dashoffset: 1;
+	}
+	to {
+		stroke-dashoffset: 0;
+	}
+}
+
+.sparkline-animate {
+	stroke-dasharray: 1;
+	stroke-dashoffset: 1;
+	animation: sparkline-draw 0.8s ease-out forwards;
+}
+
+/* Sparkline area fade-in animation */
+@keyframes sparkline-area-fade {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 0.4;
+	}
+}
+
+.sparkline-area-animate {
+	opacity: 0;
+	animation: sparkline-area-fade 0.8s ease-out 0.3s forwards;
+}

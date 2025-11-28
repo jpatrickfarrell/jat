@@ -23,6 +23,8 @@
 		format?: (n: number) => string;
 		/** Additional CSS classes for the container */
 		class?: string;
+		/** Inline styles for the container */
+		style?: string;
 		/** Animation duration in milliseconds (default: 400) */
 		duration?: number;
 	}
@@ -31,6 +33,7 @@
 		value,
 		format = (n: number) => `$${n.toFixed(2)}`,
 		class: className = '',
+		style = '',
 		duration = 400
 	}: Props = $props();
 
@@ -49,6 +52,6 @@
 	const displayValue = $derived(format(animatedValue.current));
 </script>
 
-<span class="font-mono {className}" aria-label={format(value)}>
+<span class="font-mono {className}" {style} aria-label={format(value)}>
 	{displayValue}
 </span>

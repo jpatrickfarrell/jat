@@ -63,6 +63,7 @@
 
 	import { formatTokens, formatCost, getUsageColor } from '$lib/utils/numberFormat.js';
 	import { slide } from 'svelte/transition';
+	import { untrack } from 'svelte';
 
 	// ============================================================================
 	// Props
@@ -120,6 +121,8 @@
 		defaultColorMode?: 'usage' | 'static';
 		/** Show compact legend for multi-series (default: false) */
 		showLegend?: boolean;
+		/** Enable draw animation (line draws left-to-right) */
+		animate?: boolean;
 	}
 
 	let {
@@ -135,7 +138,8 @@
 		showStyleToolbar = true,
 		defaultTimeRange = '12h',
 		defaultColorMode = 'usage',
-		showLegend = false
+		showLegend = false,
+		animate = true
 	}: Props = $props();
 
 	// Determine if we're in multi-series mode
@@ -149,6 +153,30 @@
 	type TimeRange = '12h' | '24h' | '7d' | '30d' | 'all' | 'custom';
 	let chartType = $state<ChartType>('line');
 	let timeRange = $state<TimeRange>(defaultTimeRange); // Initialize from prop
+
+	// Animation key - changes when data changes to re-trigger draw animation
+	let animationKey = $state(0);
+
+	// Track previous data length to detect actual data changes
+	let prevDataLength = 0;
+	let prevMultiSeriesLength = 0;
+
+	// Track data changes to trigger animation
+	$effect(() => {
+		// Read the reactive values (this creates the dependency)
+		const dataLen = data.length;
+		const multiLen = multiSeriesData?.length ?? 0;
+
+		// Check if lengths actually changed (simple heuristic to detect new data)
+		untrack(() => {
+			if ((dataLen > 0 && dataLen !== prevDataLength) ||
+				(multiLen > 0 && multiLen !== prevMultiSeriesLength)) {
+				prevDataLength = dataLen;
+				prevMultiSeriesLength = multiLen;
+				animationKey++;
+			}
+		});
+	});
 
 	// Multi-series mode (stacked vs overlay) - persisted globally via localStorage
 	const MULTI_SERIES_MODE_KEY = 'sparkline-multi-series-mode';
@@ -959,100 +987,108 @@
 
 			{:else if chartType === 'area' || multiSeriesMode === 'stacked'}
 				<!-- Stacked Area Chart -->
-				{#each activeProjects as project, projectIndex}
-					{@const projectColor = project.color}
-					{@const paths = (() => {
-						const stackedPoints: Array<{ x: number; y: number; baseY: number }> = [];
+				{#key animate ? animationKey : 0}
+					{#each activeProjects as project, projectIndex}
+						{@const projectColor = project.color}
+						{@const paths = (() => {
+							const stackedPoints: Array<{ x: number; y: number; baseY: number }> = [];
 
-						for (let i = 0; i < dataLength; i++) {
-							const point = filteredMultiSeriesData[i];
-							const x = padding + (i / (dataLength - 1 || 1)) * (viewBoxWidth - 2 * padding);
+							for (let i = 0; i < dataLength; i++) {
+								const point = filteredMultiSeriesData[i];
+								const x = padding + (i / (dataLength - 1 || 1)) * (viewBoxWidth - 2 * padding);
 
-							let baseValue = 0;
-							for (let j = projectIndex + 1; j < activeProjects.length; j++) {
-								const otherProject = activeProjects[j];
-								baseValue += point.projects[otherProject.name]?.tokens || 0;
+								let baseValue = 0;
+								for (let j = projectIndex + 1; j < activeProjects.length; j++) {
+									const otherProject = activeProjects[j];
+									baseValue += point.projects[otherProject.name]?.tokens || 0;
+								}
+
+								const thisValue = point.projects[project.name]?.tokens || 0;
+								const topValue = baseValue + thisValue;
+
+								stackedPoints.push({
+									x,
+									y: scaleMultiSeriesY(topValue),
+									baseY: scaleMultiSeriesY(baseValue)
+								});
 							}
 
-							const thisValue = point.projects[project.name]?.tokens || 0;
-							const topValue = baseValue + thisValue;
+							const topPath = stackedPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x},${p.y}`).join(' ');
+							const bottomPath = [...stackedPoints].reverse().map((p) => `L ${p.x},${p.baseY}`).join(' ');
 
-							stackedPoints.push({
-								x,
-								y: scaleMultiSeriesY(topValue),
-								baseY: scaleMultiSeriesY(baseValue)
-							});
-						}
-
-						const topPath = stackedPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x},${p.y}`).join(' ');
-						const bottomPath = [...stackedPoints].reverse().map((p) => `L ${p.x},${p.baseY}`).join(' ');
-
-						return { area: `${topPath} ${bottomPath} Z`, line: topPath };
-					})()}
-					<path
-						d={paths.area}
-						fill={projectColor}
-						fill-opacity="0.4"
-						style="transition: d 0.3s ease;"
-					/>
-					<path
-						d={paths.line}
-						fill="none"
-						stroke={projectColor}
-						stroke-width="1.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						style="transition: d 0.3s ease;"
-					/>
-				{/each}
+							return { area: `${topPath} ${bottomPath} Z`, line: topPath };
+						})()}
+						<path
+							d={paths.area}
+							fill={projectColor}
+							class={animate ? 'sparkline-area-animate' : ''}
+							style="{animate ? `animation-delay: ${projectIndex * 0.1}s;` : 'fill-opacity: 0.4; transition: d 0.3s ease;'}"
+						/>
+						<path
+							d={paths.line}
+							fill="none"
+							stroke={projectColor}
+							stroke-width="1.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							pathLength="1"
+							class={animate ? 'sparkline-animate' : ''}
+							style="{animate ? `animation-delay: ${projectIndex * 0.1}s;` : 'transition: d 0.3s ease;'}"
+						/>
+					{/each}
+				{/key}
 
 			{:else}
 				<!-- Multi-Line Chart (default for 'line' chartType or 'overlay' mode) -->
-				{#each activeProjects as project}
-					{@const projectColor = project.color}
-					{@const linePath = (() => {
-						const points: Array<{ x: number; y: number }> = [];
+				{#key animate ? animationKey : 0}
+					{#each activeProjects as project, projectIndex}
+						{@const projectColor = project.color}
+						{@const linePath = (() => {
+							const points: Array<{ x: number; y: number }> = [];
 
-						for (let i = 0; i < dataLength; i++) {
-							const point = filteredMultiSeriesData[i];
-							const x = padding + (i / (dataLength - 1 || 1)) * (viewBoxWidth - 2 * padding);
-							const tokens = point.projects[project.name]?.tokens || 0;
-							const y = scaleMultiSeriesY(tokens);
-							points.push({ x, y });
-						}
-
-						if (points.length === 0) return '';
-
-						let path = `M ${points[0].x},${points[0].y}`;
-						if (smoothCurves && points.length > 1) {
-							for (let i = 1; i < points.length; i++) {
-								const prev = points[i - 1];
-								const curr = points[i];
-								const cpX1 = prev.x + (curr.x - prev.x) / 3;
-								const cpY1 = prev.y;
-								const cpX2 = prev.x + (2 * (curr.x - prev.x)) / 3;
-								const cpY2 = curr.y;
-								path += ` C ${cpX1},${cpY1} ${cpX2},${cpY2} ${curr.x},${curr.y}`;
+							for (let i = 0; i < dataLength; i++) {
+								const point = filteredMultiSeriesData[i];
+								const x = padding + (i / (dataLength - 1 || 1)) * (viewBoxWidth - 2 * padding);
+								const tokens = point.projects[project.name]?.tokens || 0;
+								const y = scaleMultiSeriesY(tokens);
+								points.push({ x, y });
 							}
-						} else {
-							for (let i = 1; i < points.length; i++) {
-								path += ` L ${points[i].x},${points[i].y}`;
-							}
-						}
 
-						return path;
-					})()}
-					<path
-						d={linePath}
-						fill="none"
-						stroke={projectColor}
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-opacity="0.8"
-						style="transition: d 0.3s ease;"
-					/>
-				{/each}
+							if (points.length === 0) return '';
+
+							let path = `M ${points[0].x},${points[0].y}`;
+							if (smoothCurves && points.length > 1) {
+								for (let i = 1; i < points.length; i++) {
+									const prev = points[i - 1];
+									const curr = points[i];
+									const cpX1 = prev.x + (curr.x - prev.x) / 3;
+									const cpY1 = prev.y;
+									const cpX2 = prev.x + (2 * (curr.x - prev.x)) / 3;
+									const cpY2 = curr.y;
+									path += ` C ${cpX1},${cpY1} ${cpX2},${cpY2} ${curr.x},${curr.y}`;
+								}
+							} else {
+								for (let i = 1; i < points.length; i++) {
+									path += ` L ${points[i].x},${points[i].y}`;
+								}
+							}
+
+							return path;
+						})()}
+						<path
+							d={linePath}
+							fill="none"
+							stroke={projectColor}
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-opacity="0.8"
+							pathLength="1"
+							class={animate ? 'sparkline-animate' : ''}
+							style="{animate ? `animation-delay: ${projectIndex * 0.15}s;` : 'transition: d 0.3s ease;'}"
+						/>
+					{/each}
+				{/key}
 			{/if}
 
 			<!-- Multi-Series Hover indicator (vertical line) -->
@@ -1098,15 +1134,19 @@
 		<!-- Single-Series Chart Rendering -->
 		{:else if filteredData && filteredData.length > 0}
 			{#if chartType === 'line'}
-				<!-- Line chart (smooth curve) -->
-				<path
-					d={pathData}
-					fill="none"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					style="stroke: {lineColor}; transition: stroke 0.3s ease, d 0.3s ease;"
-				/>
+				<!-- Line chart (smooth curve) with draw animation -->
+				{#key animate ? animationKey : 0}
+					<path
+						d={pathData}
+						fill="none"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						pathLength="1"
+						class={animate ? 'sparkline-animate' : ''}
+						style="stroke: {lineColor}; {animate ? '' : 'transition: stroke 0.3s ease, d 0.3s ease;'}"
+					/>
+				{/key}
 			{:else if chartType === 'bars'}
 				<!-- Bar chart (equalizer style) -->
 				{#each filteredData as point, index}
@@ -1127,22 +1167,24 @@
 					/>
 				{/each}
 			{:else if chartType === 'area'}
-				<!-- Area chart (filled) -->
+				<!-- Area chart (filled) with animation -->
 				{@const points = filteredData.map((point, index) => ({
 					x: padding + (index / (filteredData.length - 1 || 1)) * (viewBoxWidth - 2 * padding),
 					y: scaleY(point.tokens)
 				}))}
 				{@const areaPath = `M ${points[0].x},${viewBoxHeight - padding} L ${points[0].x},${points[0].y} ${points.map(p => `L ${p.x},${p.y}`).join(' ')} L ${points[points.length - 1].x},${viewBoxHeight - padding} Z`}
-				<path
-					d={areaPath}
-					fill={lineColor}
-					fill-opacity="0.3"
-					stroke={lineColor}
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					style="transition: fill 0.3s ease, stroke 0.3s ease, d 0.3s ease;"
-				/>
+				{#key animate ? animationKey : 0}
+					<path
+						d={areaPath}
+						fill={lineColor}
+						stroke={lineColor}
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						class={animate ? 'sparkline-area-animate' : ''}
+						style="{animate ? '' : 'fill-opacity: 0.3; transition: fill 0.3s ease, stroke 0.3s ease, d 0.3s ease;'}"
+					/>
+				{/key}
 			{:else if chartType === 'dots'}
 				<!-- Dot plot (small squares to avoid aspect ratio stretch) -->
 				{#each filteredData as point, index}

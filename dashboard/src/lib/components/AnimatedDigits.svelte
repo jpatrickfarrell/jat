@@ -19,15 +19,17 @@
 		value: string;
 		/** Additional CSS classes for the container */
 		class?: string;
+		/** Inline styles for the container */
+		style?: string;
 	}
 
-	let { value, class: className = '' }: Props = $props();
+	let { value, class: className = '', style = '' }: Props = $props();
 
 	// Split value into individual characters
 	const characters = $derived(value.split(''));
 </script>
 
-<span class="inline-flex items-baseline font-mono {className}" aria-label={value}>
+<span class="inline-flex items-baseline font-mono {className}" {style} aria-label={value}>
 	{#each characters as char, i (i)}
 		{#if /\d/.test(char)}
 			<span class="countdown">

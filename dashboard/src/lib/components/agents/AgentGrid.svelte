@@ -3,6 +3,8 @@
 	import AutoAssignModal from './AutoAssignModal.svelte';
 	import { generateAutoAssignments } from '$lib/utils/autoAssign';
 	import { playAgentJoinSound } from '$lib/utils/soundEffects';
+	import { fly } from 'svelte/transition';
+	import { flip } from 'svelte/animate';
 	import type { Agent, Task, Reservation } from '$lib/stores/agents.svelte';
 
 	// Assignment type from autoAssign utility
@@ -286,7 +288,11 @@
 			<!-- Horizontal Scrolling Row - Industrial -->
 			<div class="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent">
 				{#each sortedAgents() as agent (agent.id || agent.name)}
-					<div class="flex-shrink-0 w-80 h-72 {newAgentNames.includes(agent.name) ? 'agent-new-entrance' : ''}">
+					<div
+						class="flex-shrink-0 w-80 h-72 {newAgentNames.includes(agent.name) ? 'agent-new-entrance' : ''}"
+						animate:flip={{ duration: 300 }}
+						in:fly={{ x: -50, duration: 400, delay: 100 }}
+					>
 						<AgentCard {agent} {tasks} {allTasks} {reservations} {onTaskAssign} {ontaskclick} />
 					</div>
 				{/each}

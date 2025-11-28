@@ -7,7 +7,7 @@
 	import LabelBadges from '$lib/components/LabelBadges.svelte';
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 	import { analyzeDependencies } from '$lib/utils/dependencyUtils';
-	import { getProjectFromTaskId } from '$lib/utils/projectUtils';
+	import { getProjectFromTaskId, extractParentId } from '$lib/utils/projectUtils';
 	import { getProjectColor } from '$lib/utils/projectColors';
 	import { getPriorityBadge, getTaskStatusBadge, getTypeBadge } from '$lib/utils/badgeHelpers';
 	import { formatRelativeTime, formatFullDate, normalizeTimestamp, getAgeColorClass } from '$lib/utils/dateFormatters';
@@ -435,27 +435,62 @@
 		});
 	}
 
-	// Grouped tasks by issue_type (for sticky type headers)
-	const groupedTasks = $derived.by(() => {
-		const groups = new Map();
-
-		// Initialize groups in order
-		for (const type of typeOrder) {
-			groups.set(type, []);
+	/**
+	 * Get the grouping key for a task based on current groupingMode
+	 */
+	function getGroupKey(task: Task): string | null {
+		switch (groupingMode) {
+			case 'type':
+				return task.issue_type || null;
+			case 'parent':
+				// Extract parent ID from hierarchical task IDs (e.g., jat-abc.1 → jat-abc)
+				// Tasks without a parent (epics or standalone) use their own ID as the group
+				const parentId = extractParentId(task.id);
+				return parentId || task.id; // Use own ID if no parent (standalone/epic)
+			case 'label':
+				// Group by first label, or null if no labels
+				return task.labels && task.labels.length > 0 ? task.labels[0] : null;
+			default:
+				return task.issue_type || null;
 		}
+	}
 
-		// Group tasks by issue_type
-		for (const task of filteredTasks) {
-			const type = task.issue_type || null;
-			if (!groups.has(type)) {
+	// Grouped tasks based on groupingMode (for sticky headers)
+	const groupedTasks = $derived.by(() => {
+		const groups = new Map<string | null, Task[]>();
+
+		// For 'type' mode, initialize groups in order
+		if (groupingMode === 'type') {
+			for (const type of typeOrder) {
 				groups.set(type, []);
 			}
-			groups.get(type).push(task);
+		}
+
+		// Group tasks by the appropriate key
+		for (const task of filteredTasks) {
+			const key = getGroupKey(task);
+			if (!groups.has(key)) {
+				groups.set(key, []);
+			}
+			groups.get(key)!.push(task);
 		}
 
 		// Sort tasks within each group
-		for (const [type, tasks] of groups) {
-			groups.set(type, sortTasks(tasks));
+		for (const [key, groupTasks] of groups) {
+			groups.set(key, sortTasks(groupTasks));
+		}
+
+		// For parent mode, sort groups: epics first (those with children), then standalone tasks
+		if (groupingMode === 'parent') {
+			const sortedEntries = Array.from(groups.entries()).sort(([keyA, tasksA], [keyB, tasksB]) => {
+				// Groups with more tasks (epics with children) come first
+				const sizeA = tasksA.length;
+				const sizeB = tasksB.length;
+				if (sizeA !== sizeB) return sizeB - sizeA;
+				// Then alphabetically by key
+				return (keyA || '').localeCompare(keyB || '');
+			});
+			return new Map(sortedEntries);
 		}
 
 		return groups;
@@ -1390,44 +1425,6 @@
 									{@const unresolvedBlockers = task.depends_on?.filter(d => d.status !== 'closed') || []}
 									{@const allTasksList = allTasks.length > 0 ? allTasks : tasks}
 									{@const blockedTasks = allTasksList.filter(t => t.depends_on?.some(d => d.id === task.id) && t.status !== 'closed')}
-									<!-- Blocker header row (if has unresolved blockers) - shows context ABOVE task -->
-									{#if unresolvedBlockers.length > 0}
-										<tr
-											class="blocker-header"
-											style="
-												background: oklch(0.14 0.01 250);
-												border-left: 2px solid oklch(0.55 0.18 30 / 0.4);
-											"
-										>
-											<td></td>
-											<td
-												colspan="6"
-												class="py-1 pl-2 text-xs"
-												style="color: oklch(0.55 0.02 250);"
-											>
-												<span class="font-mono" style="color: oklch(0.45 0.02 250);">┌─</span>
-												<span class="ml-1" style="color: oklch(0.55 0.15 30);">blocked by:</span>
-												{#each unresolvedBlockers.slice(0, 2) as blocker, i}
-													<button
-														class="font-mono ml-1.5 hover:underline cursor-pointer"
-														style="color: oklch(0.65 0.12 240); background: none; border: none; padding: 0;"
-														onclick={(e) => { e.stopPropagation(); handleRowClick(blocker.id); }}
-													>{blocker.id}</button>
-													{#if blocker.title}
-														<span class="text-xs truncate max-w-[180px] inline-block align-bottom" style="color: oklch(0.50 0.02 250);">
-															({blocker.title.slice(0, 30)}{blocker.title.length > 30 ? '...' : ''})
-														</span>
-													{/if}
-													{#if i < Math.min(unresolvedBlockers.length - 1, 1)}
-														<span style="color: oklch(0.40 0.02 250);">,</span>
-													{/if}
-												{/each}
-												{#if unresolvedBlockers.length > 2}
-													<span class="ml-1 opacity-60">+{unresolvedBlockers.length - 2} more</span>
-												{/if}
-											</td>
-										</tr>
-									{/if}
 									<!-- Main task row -->
 									<tr
 										class="cursor-pointer group overflow-visible industrial-row {depStatus.hasBlockers ? 'opacity-70' : ''} {isNewTask ? 'task-new-entrance' : ''} {isStarting ? 'task-starting' : ''} {isCompleted ? 'task-completed' : ''}"
@@ -1452,7 +1449,17 @@
 											/>
 										</th>
 										<th style="background: inherit;">
-											<TaskIdBadge {task} size="xs" showType={false} showAssignee={true} copyOnly />
+											<TaskIdBadge
+												{task}
+												size="xs"
+												showType={false}
+												showAssignee={true}
+												copyOnly
+												blockedBy={unresolvedBlockers}
+												blocks={blockedTasks}
+												showDependencies={true}
+												onOpenTask={handleRowClick}
+											/>
 										</th>
 										<td style="background: inherit;">
 											<div>
@@ -1502,44 +1509,6 @@
 										</button>
 									</td>
 								</tr>
-								<!-- Blocks footer row (if this task blocks others) - shows context BELOW task -->
-								{#if blockedTasks.length > 0}
-									<tr
-										class="blocks-footer"
-										style="
-											background: oklch(0.14 0.01 250);
-											border-left: 2px solid oklch(0.55 0.18 200 / 0.4);
-										"
-									>
-										<td></td>
-										<td
-											colspan="7"
-											class="py-1 pl-2 text-xs"
-											style="color: oklch(0.55 0.02 250);"
-										>
-											<span class="font-mono" style="color: oklch(0.45 0.02 250);">└─</span>
-											<span class="ml-1" style="color: oklch(0.55 0.15 200);">blocks:</span>
-											{#each blockedTasks.slice(0, 2) as blocked, i}
-												<button
-													class="font-mono ml-1.5 hover:underline cursor-pointer"
-													style="color: oklch(0.65 0.12 240); background: none; border: none; padding: 0;"
-													onclick={(e) => { e.stopPropagation(); handleRowClick(blocked.id); }}
-												>{blocked.id}</button>
-												{#if blocked.title}
-													<span class="text-xs truncate max-w-[180px] inline-block align-bottom" style="color: oklch(0.50 0.02 250);">
-														({blocked.title.slice(0, 30)}{blocked.title.length > 30 ? '...' : ''})
-													</span>
-												{/if}
-												{#if i < Math.min(blockedTasks.length - 1, 1)}
-													<span style="color: oklch(0.40 0.02 250);">,</span>
-												{/if}
-											{/each}
-											{#if blockedTasks.length > 2}
-												<span class="ml-1 opacity-60">+{blockedTasks.length - 2} more</span>
-											{/if}
-										</td>
-									</tr>
-								{/if}
 							{/each}
 						</tbody>
 					{/if}

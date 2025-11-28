@@ -2,6 +2,13 @@
 	import { getProjectColor as getProjectColorFromHash } from '$lib/utils/projectColors';
 	import { TASK_STATUS_VISUALS, STATUS_ICONS, getIssueTypeVisual } from '$lib/config/statusColors';
 
+	/** Dependency task info */
+	interface DepTask {
+		id: string;
+		status: string;
+		title?: string;
+	}
+
 	interface Props {
 		task: { id: string; status: string; issue_type?: string; assignee?: string; title?: string };
 		size?: 'xs' | 'sm' | 'md';
@@ -18,9 +25,15 @@
 		dropdownAlign?: 'start' | 'end';
 		/** If true, just click-to-copy without dropdown (useful when info is already visible in context) */
 		copyOnly?: boolean;
+		/** Tasks that block this task (unresolved dependencies) */
+		blockedBy?: DepTask[];
+		/** Tasks that this task blocks */
+		blocks?: DepTask[];
+		/** Show dependency indicators below badge */
+		showDependencies?: boolean;
 	}
 
-	let { task, size = 'sm', showStatus = true, showType = true, showCopyIcon = false, showAssignee = false, minimal = false, color, onOpenTask, dropdownAlign = 'start', copyOnly = false }: Props = $props();
+	let { task, size = 'sm', showStatus = true, showType = true, showCopyIcon = false, showAssignee = false, minimal = false, color, onOpenTask, dropdownAlign = 'start', copyOnly = false, blockedBy = [], blocks = [], showDependencies = false }: Props = $props();
 
 	// Show assignee when task is in_progress and has an assignee
 	const shouldShowAssignee = $derived(showAssignee && task.status === 'in_progress' && task.assignee);
@@ -79,6 +92,12 @@
 
 	// Format status for display
 	const statusLabel = $derived(task.status.replace('_', ' '));
+
+	// Dependency helpers - filter to only show unresolved blockers
+	const unresolvedBlockers = $derived(blockedBy.filter(d => d.status !== 'closed'));
+	const activeBlocks = $derived(blocks.filter(d => d.status !== 'closed'));
+	const hasBlockers = $derived(showDependencies && unresolvedBlockers.length > 0);
+	const hasBlocks = $derived(showDependencies && activeBlocks.length > 0);
 </script>
 
 {#if minimal}
@@ -146,6 +165,44 @@
 				</svg>
 				{task.assignee}
 			</span>
+		{/if}
+
+		<!-- Dependency indicators (copyOnly mode) -->
+		{#if hasBlockers || hasBlocks}
+			<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs mt-0.5">
+				{#if hasBlockers}
+					<span class="inline-flex items-center gap-1" style="color: oklch(0.65 0.20 25);">
+						<span class="font-mono">↑</span>
+						<span class="opacity-70">blocked by:</span>
+						{#each unresolvedBlockers.slice(0, 2) as dep, i}
+							<button
+								class="font-mono hover:underline"
+								onclick={(e) => { e.stopPropagation(); if (onOpenTask) onOpenTask(dep.id); }}
+								title={dep.title || dep.id}
+							>{dep.id}</button>{#if i < Math.min(unresolvedBlockers.length, 2) - 1},{/if}
+						{/each}
+						{#if unresolvedBlockers.length > 2}
+							<span class="opacity-60">+{unresolvedBlockers.length - 2}</span>
+						{/if}
+					</span>
+				{/if}
+				{#if hasBlocks}
+					<span class="inline-flex items-center gap-1" style="color: oklch(0.60 0.15 200);">
+						<span class="font-mono">↓</span>
+						<span class="opacity-70">blocks:</span>
+						{#each activeBlocks.slice(0, 2) as dep, i}
+							<button
+								class="font-mono hover:underline"
+								onclick={(e) => { e.stopPropagation(); if (onOpenTask) onOpenTask(dep.id); }}
+								title={dep.title || dep.id}
+							>{dep.id}</button>{#if i < Math.min(activeBlocks.length, 2) - 1},{/if}
+						{/each}
+						{#if activeBlocks.length > 2}
+							<span class="opacity-60">+{activeBlocks.length - 2}</span>
+						{/if}
+					</span>
+				{/if}
+			</div>
 		{/if}
 	</div>
 {:else}
@@ -253,6 +310,44 @@
 				</svg>
 				{task.assignee}
 			</span>
+		{/if}
+
+		<!-- Dependency indicators (full mode) -->
+		{#if hasBlockers || hasBlocks}
+			<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs mt-0.5">
+				{#if hasBlockers}
+					<span class="inline-flex items-center gap-1" style="color: oklch(0.65 0.20 25);">
+						<span class="font-mono">↑</span>
+						<span class="opacity-70">blocked by:</span>
+						{#each unresolvedBlockers.slice(0, 2) as dep, i}
+							<button
+								class="font-mono hover:underline"
+								onclick={(e) => { e.stopPropagation(); if (onOpenTask) onOpenTask(dep.id); }}
+								title={dep.title || dep.id}
+							>{dep.id}</button>{#if i < Math.min(unresolvedBlockers.length, 2) - 1},{/if}
+						{/each}
+						{#if unresolvedBlockers.length > 2}
+							<span class="opacity-60">+{unresolvedBlockers.length - 2}</span>
+						{/if}
+					</span>
+				{/if}
+				{#if hasBlocks}
+					<span class="inline-flex items-center gap-1" style="color: oklch(0.60 0.15 200);">
+						<span class="font-mono">↓</span>
+						<span class="opacity-70">blocks:</span>
+						{#each activeBlocks.slice(0, 2) as dep, i}
+							<button
+								class="font-mono hover:underline"
+								onclick={(e) => { e.stopPropagation(); if (onOpenTask) onOpenTask(dep.id); }}
+								title={dep.title || dep.id}
+							>{dep.id}</button>{#if i < Math.min(activeBlocks.length, 2) - 1},{/if}
+						{/each}
+						{#if activeBlocks.length > 2}
+							<span class="opacity-60">+{activeBlocks.length - 2}</span>
+						{/if}
+					</span>
+				{/if}
+			</div>
 		{/if}
 	</div>
 {/if}

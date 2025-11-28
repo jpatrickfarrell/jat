@@ -12,6 +12,7 @@
 	import { createModalState } from '$lib/utils/modalStateHelpers.svelte';
 	import AnimatedDigits from '$lib/components/AnimatedDigits.svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
+	import { openOutputDrawerForSession } from '$lib/stores/drawerStore';
 	import type { Agent, Task, Reservation } from '$lib/stores/agents.svelte';
 
 	// Extended types for inbox messages
@@ -1025,19 +1026,23 @@
 				{/if}
 			</div>
 
-			<!-- Agent Avatar -->
-			<AgentAvatar name={agent.name} size={28} class="shrink-0" />
-
-			<!-- Agent name (monospace, industrial) -->
-			<div class="flex-1 min-w-0">
-				<h3
-					class="font-mono font-bold text-sm tracking-wide truncate"
-					style="color: {statusVisual().accent}; text-shadow: 0 0 20px {statusVisual().glow};"
-					title={agent.name}
-				>
-					{agent.name?.toUpperCase() || 'UNKNOWN'}
-				</h3>
-			</div>
+			<!-- Agent Avatar + Name (clickable to open OutputDrawer) -->
+			<button
+				class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer rounded-md px-1 py-0.5 -ml-1
+					hover:bg-base-content/5 transition-colors group"
+				onclick={() => openOutputDrawerForSession(agent.name)}
+				title="Click to view session output"
+			>
+				<AgentAvatar name={agent.name} size={28} class="shrink-0 group-hover:ring-2 group-hover:ring-primary/30 rounded-full transition-all" />
+				<div class="flex-1 min-w-0 text-left">
+					<h3
+						class="font-mono font-bold text-sm tracking-wide truncate group-hover:opacity-80 transition-opacity"
+						style="color: {statusVisual().accent}; text-shadow: 0 0 20px {statusVisual().glow};"
+					>
+						{agent.name?.toUpperCase() || 'UNKNOWN'}
+					</h3>
+				</div>
+			</button>
 
 			<!-- Task badge or status label -->
 			{#if agentStatus() === 'working' && currentTask()}

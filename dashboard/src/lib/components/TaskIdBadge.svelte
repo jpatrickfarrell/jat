@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
 	import { getProjectColor as getProjectColorFromHash } from '$lib/utils/projectColors';
 	import { TASK_STATUS_VISUALS, STATUS_ICONS, getIssueTypeVisual } from '$lib/config/statusColors';
 	import WorkingAgentBadge from '$lib/components/WorkingAgentBadge.svelte';
@@ -39,37 +38,6 @@
 
 	// Show assignee when task is in_progress and has an assignee
 	const shouldShowAssignee = $derived(showAssignee && task.status === 'in_progress' && task.assignee);
-
-	// Working time counter for inline badge display
-	let now = $state(Date.now());
-	let timerInterval: ReturnType<typeof setInterval> | null = null;
-
-	onMount(() => {
-		timerInterval = setInterval(() => {
-			now = Date.now();
-		}, 30000);
-	});
-
-	onDestroy(() => {
-		if (timerInterval) clearInterval(timerInterval);
-	});
-
-	// Calculate working duration for inline display
-	const workingDuration = $derived.by(() => {
-		if (!shouldShowAssignee || !task.updated_at) return null;
-		const start = new Date(task.updated_at).getTime();
-		const elapsed = now - start;
-		if (elapsed < 0 || isNaN(elapsed)) return null;
-
-		const minutes = Math.floor(elapsed / 60000);
-		const hours = Math.floor(minutes / 60);
-		const mins = minutes % 60;
-
-		if (hours > 0) {
-			return { hours, mins };
-		}
-		return { hours: 0, mins: minutes };
-	});
 
 	let copied = $state(false);
 	let dropdownOpen = $state(false);
@@ -195,16 +163,6 @@
 				</svg>
 			{/if}
 
-			{#if shouldShowAssignee && workingDuration}
-				<span class="countdown font-mono text-xs tabular-nums text-info" title="Working for {workingDuration.hours > 0 ? `${workingDuration.hours}h ${workingDuration.mins}m` : `${workingDuration.mins}m`}">
-					{#if workingDuration.hours > 0}
-						<span style="--value:{workingDuration.hours};"></span>h<span style="--value:{workingDuration.mins};"></span>m
-					{:else}
-						<span style="--value:{workingDuration.mins};"></span>m
-					{/if}
-				</span>
-			{/if}
-
 			{#if copied}
 				<svg class="{iconSizes[size]} text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
@@ -221,7 +179,8 @@
 				name={task.assignee || ''}
 				size={16}
 				isWorking={true}
-				variant="name"
+				startTime={task.updated_at}
+				variant="timer"
 			/>
 		{/if}
 
@@ -372,7 +331,8 @@
 				name={task.assignee || ''}
 				size={16}
 				isWorking={true}
-				variant="name"
+				startTime={task.updated_at}
+				variant="timer"
 			/>
 		{/if}
 

@@ -434,19 +434,6 @@
 		return allTasks;
 	});
 
-	// Track task IDs that are shown as dependencies (to avoid duplicate rendering)
-	const shownAsDeps = $derived.by(() => {
-		const depIds = new Set();
-		for (const task of sortedTasks) {
-			if (task.depends_on && task.depends_on.length > 0) {
-				for (const dep of task.depends_on) {
-					depIds.add(dep.id);
-				}
-			}
-		}
-		return depIds;
-	});
-
 	// Derived: are all visible tasks selected?
 	const allSelected = $derived(
 		sortedTasks.length > 0 &&
@@ -1203,19 +1190,57 @@
 						</thead>
 						<tbody>
 							{#each typeTasks as task (task.id)}
-								<!-- Skip if this task is shown as a dependency of another -->
-								{#if !shownAsDeps.has(task.id)}
-									{@const depStatus = analyzeDependencies(task)}
+								{@const depStatus = analyzeDependencies(task)}
 									{@const taskIsActive = task.status === 'in_progress' && task.assignee}
 									{@const isNewTask = newTaskIds.includes(task.id)}
 									{@const isStarting = startingTaskIds.includes(task.id)}
 									{@const isCompleted = completedTaskIds.includes(task.id)}
+									{@const unresolvedBlockers = task.depends_on?.filter(d => d.status !== 'closed') || []}
+									<!-- Blocker header row (if has unresolved blockers) - shows context ABOVE task -->
+									{#if unresolvedBlockers.length > 0}
+										<tr
+											class="blocker-header"
+											style="
+												background: oklch(0.14 0.01 250);
+												border-left: 2px solid oklch(0.55 0.18 30 / 0.4);
+											"
+										>
+											<td></td>
+											<td
+												colspan="6"
+												class="py-1 pl-2 text-xs"
+												style="color: oklch(0.55 0.02 250);"
+											>
+												<span class="font-mono" style="color: oklch(0.45 0.02 250);">┌─</span>
+												<span class="ml-1" style="color: oklch(0.55 0.15 30);">blocked by:</span>
+												{#each unresolvedBlockers.slice(0, 2) as blocker, i}
+													<button
+														class="font-mono ml-1.5 hover:underline cursor-pointer"
+														style="color: oklch(0.65 0.12 240); background: none; border: none; padding: 0;"
+														onclick={(e) => { e.stopPropagation(); handleRowClick(blocker.id); }}
+													>{blocker.id}</button>
+													{#if blocker.title}
+														<span class="text-xs truncate max-w-[180px] inline-block align-bottom" style="color: oklch(0.50 0.02 250);">
+															({blocker.title.slice(0, 30)}{blocker.title.length > 30 ? '...' : ''})
+														</span>
+													{/if}
+													{#if i < Math.min(unresolvedBlockers.length - 1, 1)}
+														<span style="color: oklch(0.40 0.02 250);">,</span>
+													{/if}
+												{/each}
+												{#if unresolvedBlockers.length > 2}
+													<span class="ml-1 opacity-60">+{unresolvedBlockers.length - 2} more</span>
+												{/if}
+											</td>
+										</tr>
+									{/if}
+									<!-- Main task row -->
 									<tr
-										class="cursor-pointer group overflow-visible industrial-row {depStatus.hasBlockers ? 'opacity-50' : ''} {isNewTask ? 'task-new-entrance' : ''} {isStarting ? 'task-starting' : ''} {isCompleted ? 'task-completed' : ''}"
+										class="cursor-pointer group overflow-visible industrial-row {depStatus.hasBlockers ? 'opacity-70' : ''} {isNewTask ? 'task-new-entrance' : ''} {isStarting ? 'task-starting' : ''} {isCompleted ? 'task-completed' : ''}"
 										style="
 											background: {selectedTasks.has(task.id) ? 'oklch(0.70 0.18 240 / 0.1)' : taskIsActive ? 'oklch(0.70 0.18 240 / 0.05)' : 'oklch(0.16 0.01 250)'};
 											border-bottom: 1px solid oklch(0.25 0.01 250);
-											border-left: 2px solid {selectedTasks.has(task.id) ? 'oklch(0.70 0.18 240)' : taskIsActive ? 'oklch(0.70 0.18 240 / 0.5)' : 'transparent'};
+											border-left: 2px solid {selectedTasks.has(task.id) ? 'oklch(0.70 0.18 240)' : unresolvedBlockers.length > 0 ? 'oklch(0.55 0.18 30 / 0.4)' : taskIsActive ? 'oklch(0.70 0.18 240 / 0.5)' : 'transparent'};
 										"
 										onclick={() => handleRowClick(task.id)}
 										title={depStatus.hasBlockers ? `Blocked: ${depStatus.blockingReason}` : ''}
@@ -1266,45 +1291,6 @@
 										</span>
 									</td>
 								</tr>
-								<!-- Render dependencies as indented child rows - Industrial -->
-								{#if task.depends_on && task.depends_on.length > 0}
-									{#each task.depends_on as dep, depIndex (dep.id)}
-										{@const depIsActive = dep.status === 'in_progress' && dep.assignee}
-										<tr
-											class="cursor-pointer group industrial-row"
-											style="
-												background: {depIsActive ? 'oklch(0.70 0.18 240 / 0.03)' : 'oklch(0.14 0.01 250)'};
-												border-bottom: 1px solid oklch(0.22 0.01 250);
-												border-left: 2px solid {depIsActive ? 'oklch(0.70 0.18 240 / 0.3)' : 'oklch(0.30 0.02 250)'};
-												opacity: 0.85;
-											"
-											onclick={() => handleRowClick(dep.id)}
-											title="Dependency: {dep.title}"
-										>
-											<th style="background: inherit;"></th>
-											<th style="background: inherit;">
-												<div class="flex items-center gap-1">
-													<span class="font-mono text-xs" style="color: oklch(0.45 0.02 250);">{depIndex === task.depends_on.length - 1 ? '└──' : '├──'}</span>
-													<TaskIdBadge task={{ id: dep.id, status: dep.status, issue_type: dep.issue_type, assignee: dep.assignee }} size="xs" showType={false} showAssignee={true} copyOnly />
-												</div>
-											</th>
-											<td style="background: inherit;">
-												<div class="pl-4">
-													<div class="text-xs" style="color: oklch(0.65 0.02 250);">{dep.title}</div>
-												</div>
-											</td>
-											<td class="text-center" style="background: inherit;">
-												<span class="badge badge-sm badge-ghost {getPriorityBadge(dep.priority)}">
-													P{dep.priority}
-												</span>
-											</td>
-											<td style="background: inherit;"></td>
-											<td style="background: inherit;"></td>
-											<td style="background: inherit;"></td>
-										</tr>
-									{/each}
-								{/if}
-								{/if}
 							{/each}
 						</tbody>
 					{/if}

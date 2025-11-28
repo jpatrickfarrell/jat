@@ -221,8 +221,7 @@
 				name={task.assignee || ''}
 				size={16}
 				isWorking={true}
-				startTime={task.updated_at}
-				variant="timer"
+				variant="name"
 			/>
 		{/if}
 
@@ -373,8 +372,7 @@
 				name={task.assignee || ''}
 				size={16}
 				isWorking={true}
-				startTime={task.updated_at}
-				variant="timer"
+				variant="name"
 			/>
 		{/if}
 

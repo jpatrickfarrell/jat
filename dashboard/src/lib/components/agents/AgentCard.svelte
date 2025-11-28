@@ -469,9 +469,13 @@
 		}
 	}
 
-	// Fetch sparkline once on mount (no polling - saves API calls with many agents)
+	// Fetch sparkline once on mount, but SKIP for offline agents (saves API calls + memory)
 	onMount(() => {
-		fetchSparklineData();
+		// Only fetch sparkline for active agents - offline agents don't need real-time charts
+		const status = computeAgentStatus(agent);
+		if (status !== 'offline') {
+			fetchSparklineData();
+		}
 	});
 
 	// Handle right-click to show quick actions menu
@@ -856,8 +860,14 @@
 		</div>
 
 		<!-- Usage Trend Sparkline (full width, multi-project) -->
+		<!-- PERF: Skip heavy Sparkline component entirely for offline agents -->
 		<div class="">
-			{#if sparklineLoading && sparklineData.length === 0}
+			{#if agentStatus() === 'offline'}
+				<!-- Minimal placeholder for offline agents - no Sparkline component -->
+				<div class="h-10 flex items-center">
+					<div class="w-full h-px bg-base-content/10"></div>
+				</div>
+			{:else if sparklineLoading && sparklineData.length === 0}
 				<!-- Placeholder line for loading -->
 				<div class="h-10 flex items-center">
 					<div class="w-full h-px bg-base-content/20"></div>
@@ -876,7 +886,7 @@
 					showTooltip={true}
 					showLegend={false}
 					showStyleToolbar={true}
-					disableAnimation={agentStatus() === 'offline'}
+					disableAnimation={false}
 					animationKey={agent.last_active_ts || ''}
 				/>
 			{:else}
@@ -887,7 +897,7 @@
 					showTooltip={true}
 					colorMode="usage"
 					showStyleToolbar={true}
-					disableAnimation={agentStatus() === 'offline'}
+					disableAnimation={false}
 					animationKey={agent.last_active_ts || ''}
 				/>
 			{/if}

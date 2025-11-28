@@ -334,9 +334,10 @@ if command -v bd &>/dev/null; then
         task_type=$(echo "$task_json" | jq -r '.issue_type // empty')
         task_updated_at=$(echo "$task_json" | jq -r '.updated_at // empty')
 
-        # Truncate title if too long
-        if [[ ${#task_title} -gt 40 ]]; then
-            task_title="${task_title:0:37}..."
+        # Truncate title if too long (33 chars + "..." = 36 total)
+        # Config: dashboard/src/lib/config/constants.ts → STATUSLINE.TASK_TITLE_MAX_CHARS
+        if [[ ${#task_title} -gt 33 ]]; then
+            task_title="${task_title:0:33}..."
         fi
     fi
 fi
@@ -362,9 +363,10 @@ if [[ -z "$task_id" ]] && command -v am-reservations &>/dev/null; then
             task_type=$(echo "$task_json" | jq -r '.[0].issue_type // empty')
             task_updated_at=$(echo "$task_json" | jq -r '.[0].updated_at // empty')
 
-            # Truncate title if too long
-            if [[ ${#task_title} -gt 40 ]]; then
-                task_title="${task_title:0:37}..."
+            # Truncate title if too long (33 chars + "..." = 36 total)
+            # Config: dashboard/src/lib/config/constants.ts → STATUSLINE.TASK_TITLE_MAX_CHARS
+            if [[ ${#task_title} -gt 33 ]]; then
+                task_title="${task_title:0:33}..."
             fi
         fi
     fi

@@ -48,6 +48,23 @@ export const TIMEOUTS = {
 } as const;
 
 // =============================================================================
+// STATUSLINE CONFIGURATION
+// =============================================================================
+
+export const STATUSLINE = {
+	/**
+	 * Maximum characters for task title before truncation
+	 * Final display: TASK_TITLE_MAX_CHARS + "..." (3 chars)
+	 */
+	TASK_TITLE_MAX_CHARS: 33,
+
+	/**
+	 * Truncation suffix appended to long titles
+	 */
+	TRUNCATION_SUFFIX: '...'
+} as const;
+
+// =============================================================================
 // DISPLAY LIMITS
 // =============================================================================
 

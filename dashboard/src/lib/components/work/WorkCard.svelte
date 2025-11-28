@@ -303,6 +303,8 @@
 	class:border-base-300={!showCompletionBanner}
 	class:border-success={showCompletionBanner}
 	style="min-height: 300px;"
+	in:fly={{ x: 50, duration: 300, delay: 50 }}
+	out:fade={{ duration: 200 }}
 >
 	<!-- Completion Success Banner -->
 	{#if showCompletionBanner}
@@ -490,8 +492,8 @@
 		<!-- Output Content -->
 		<div
 			bind:this={scrollContainerRef}
-			class="overflow-y-auto p-3 font-mono text-xs leading-relaxed"
-			style="max-height: 200px; background: oklch(0.14 0.01 250);"
+			class="overflow-y-auto p-3 font-mono text-xs leading-relaxed h-108"
+			style="background: oklch(0.14 0.01 250);"
 		>
 			{#if output}
 				<pre class="whitespace-pre-wrap break-words" style="color: oklch(0.75 0.02 250);">{@html renderedOutput}</pre>

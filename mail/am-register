@@ -135,6 +135,18 @@ WHERE id = $AGENT_ID;
 SQL
 )
 
+# Generate avatar if missing (fire-and-forget, don't fail registration)
+AVATARS_DIR="${SCRIPT_DIR}/../avatars"
+AVATAR_PATH="${AVATARS_DIR}/${NAME}.svg"
+AVATAR_GENERATE="${SCRIPT_DIR}/../media/avatar-generate"
+
+if [[ ! -f "$AVATAR_PATH" && -x "$AVATAR_GENERATE" ]]; then
+    # Only attempt if ANTHROPIC_API_KEY is set
+    if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+        "$AVATAR_GENERATE" "$NAME" >/dev/null 2>&1 || true
+    fi
+fi
+
 if [[ "$JSON_OUTPUT" == "true" ]]; then
     echo "$AGENT" | am_format_json
 else
@@ -154,4 +166,9 @@ else
     echo "  Task: ${TASK_VAL:-(none)}"
     echo "  Last active: $LAST_ACTIVE"
     echo "  Database: $AGENT_MAIL_DB"
+
+    # Show avatar status
+    if [[ -f "$AVATAR_PATH" ]]; then
+        echo "  Avatar: $AVATAR_PATH"
+    fi
 fi

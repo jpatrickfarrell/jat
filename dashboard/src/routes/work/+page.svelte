@@ -1,20 +1,15 @@
 <script lang="ts">
 	/**
 	 * Work Page
-	 * Shows active Claude Code work sessions with TaskQueue sidebar.
+	 * Shows active Claude Code work sessions with TaskTable below.
 	 *
-	 * Layout: TaskQueue sidebar (left) + WorkPanel main area (right)
-	 * Features:
-	 * - Real-time session output polling (500ms)
-	 * - Spawn agents for tasks via drag-drop or click
-	 * - Kill sessions, send input
-	 * - TaskQueue reused from /agents page
+	 * Layout: WorkPanel (horizontal scroll) + TaskTable below
+	 * Similar to /dash layout pattern.
 	 */
 
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
-	import { replaceState } from '$app/navigation';
-	import TaskQueue from '$lib/components/agents/TaskQueue.svelte';
+	import TaskTable from '$lib/components/agents/TaskTable.svelte';
 	import WorkPanel from '$lib/components/work/WorkPanel.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import {
@@ -28,17 +23,12 @@
 		startPolling,
 		stopPolling
 	} from '$lib/stores/workSessions.svelte.js';
-	import {
-		getProjectsFromTasks,
-		getTaskCountByProject
-	} from '$lib/utils/projectUtils';
 
-	// Task state for sidebar
+	// Task state
 	let tasks = $state<any[]>([]);
 	let allTasks = $state<any[]>([]);
 	let agents = $state<any[]>([]);
 	let reservations = $state<any[]>([]);
-	let unassignedTasks = $state<any[]>([]);
 	let selectedProject = $state('All Projects');
 	let isInitialLoad = $state(true);
 
@@ -46,44 +36,23 @@
 	let drawerOpen = $state(false);
 	let selectedTaskId = $state<string | null>(null);
 
-	// Extract unique projects from ALL tasks (unfiltered)
-	const projects = $derived(getProjectsFromTasks(allTasks));
-
-	// Get task count per project from ALL tasks (only count 'open' tasks)
-	const taskCounts = $derived(getTaskCountByProject(allTasks, 'open'));
-
-	// Handle project selection change
-	function handleProjectChange(project: string) {
-		selectedProject = project;
-
-		// Update URL parameter
-		const url = new URL(window.location.href);
-		if (project === 'All Projects') {
-			url.searchParams.delete('project');
-		} else {
-			url.searchParams.set('project', project);
-		}
-		replaceState(url, {});
-
-		// Refetch data with new project filter
-		fetchTaskData();
-	}
-
 	// Sync selectedProject from URL params
-	let previousProject: string | null = null;
 	$effect(() => {
 		const projectParam = $page.url.searchParams.get('project');
-		const newProject = (projectParam && projectParam !== 'All Projects') ? projectParam : 'All Projects';
-
-		selectedProject = newProject;
-
-		if (previousProject !== null && previousProject !== newProject) {
-			fetchTaskData();
+		if (projectParam && projectParam !== 'All Projects') {
+			selectedProject = projectParam;
+		} else {
+			selectedProject = 'All Projects';
 		}
-		previousProject = newProject;
 	});
 
-	// Fetch task data for sidebar
+	// Refetch data whenever selectedProject changes
+	$effect(() => {
+		selectedProject;
+		fetchTaskData();
+	});
+
+	// Fetch task data
 	async function fetchTaskData() {
 		try {
 			let url = '/api/agents?full=true';
@@ -102,7 +71,6 @@
 			agents = data.agents || [];
 			reservations = data.reservations || [];
 			tasks = data.tasks || [];
-			unassignedTasks = data.unassigned_tasks || [];
 
 			if (selectedProject === 'All Projects') {
 				allTasks = data.tasks || [];
@@ -119,7 +87,6 @@
 	async function handleSpawnForTask(taskId: string) {
 		const session = await spawn(taskId);
 		if (session) {
-			// Refetch task data to update sidebar (task should now be in_progress)
 			await fetchTaskData();
 		}
 	}
@@ -144,13 +111,13 @@
 		await sendInput(sessionName, input, inputType);
 	}
 
-	// Handle task click from TaskQueue or WorkCard
+	// Handle task click
 	function handleTaskClick(taskId: string) {
 		selectedTaskId = taskId;
 		drawerOpen = true;
 	}
 
-	// Track drawer state for refetch on close
+	// Refetch on drawer close
 	let wasDrawerOpen = false;
 	$effect(() => {
 		if (wasDrawerOpen && !drawerOpen) {
@@ -160,17 +127,14 @@
 		wasDrawerOpen = drawerOpen;
 	});
 
-	// Refresh task data periodically (less frequent than session polling)
+	// Auto-refresh task data every 15 seconds
 	$effect(() => {
 		const interval = setInterval(fetchTaskData, 15000);
 		return () => clearInterval(interval);
 	});
 
 	onMount(() => {
-		// Initial data fetch
 		fetchTaskData();
-
-		// Start session polling at 500ms for real-time output
 		startPolling(500);
 	});
 
@@ -179,53 +143,47 @@
 	});
 </script>
 
-<div class="min-h-screen bg-base-200">
-	<!-- Main Content: Sidebar + Work Panel -->
-	<div class="flex h-[calc(100vh-theme(spacing.20))]">
-		<!-- Left Sidebar: Task Queue -->
-		<div class="w-100 border-r border-base-300 bg-base-100 flex flex-col">
-			{#if isInitialLoad}
-				<!-- Loading State -->
-				<div class="flex-1 flex items-center justify-center">
-					<div class="text-center">
-						<span class="loading loading-bars loading-lg mb-4"></span>
-						<p class="text-sm text-base-content/60">Loading tasks...</p>
-					</div>
+<div class="min-h-screen bg-base-200 flex flex-col">
+	<!-- Work Sessions (horizontal scroll) -->
+	<div class="border-b border-base-300 bg-base-100">
+		{#if isInitialLoad}
+			<div class="flex items-center justify-center h-48">
+				<div class="text-center">
+					<span class="loading loading-bars loading-lg mb-4"></span>
+					<p class="text-sm text-base-content/60">Loading work sessions...</p>
 				</div>
-			{:else}
-				<TaskQueue
-					tasks={unassignedTasks}
-					{agents}
-					{reservations}
-					{selectedProject}
-					ontaskclick={handleTaskClick}
-				/>
-			{/if}
-		</div>
+			</div>
+		{:else}
+			<WorkPanel
+				workSessions={workSessionsState.sessions}
+				onSpawnForTask={handleSpawnForTask}
+				onKillSession={handleKillSession}
+				onInterrupt={handleInterrupt}
+				onContinue={handleContinue}
+				onSendInput={handleSendInput}
+				onTaskClick={handleTaskClick}
+			/>
+		{/if}
+	</div>
 
-		<!-- Right Panel: Work Sessions -->
-		<div class="flex-1 overflow-hidden flex flex-col">
-			{#if isInitialLoad}
-				<!-- Loading State -->
-				<div class="flex-1 flex items-center justify-center">
-					<div class="text-center">
-						<span class="loading loading-bars loading-xl mb-4"></span>
-						<p class="text-sm text-base-content/60">Loading work sessions...</p>
-					</div>
+	<!-- Task Table -->
+	<div class="flex-1 overflow-auto bg-base-100">
+		{#if isInitialLoad}
+			<div class="flex items-center justify-center h-48">
+				<div class="text-center">
+					<span class="loading loading-bars loading-lg mb-4"></span>
+					<p class="text-sm text-base-content/60">Loading tasks...</p>
 				</div>
-			{:else}
-				<WorkPanel
-					workSessions={workSessionsState.sessions}
-					onSpawnForTask={handleSpawnForTask}
-					onKillSession={handleKillSession}
-					onInterrupt={handleInterrupt}
-					onContinue={handleContinue}
-					onSendInput={handleSendInput}
-					onTaskClick={handleTaskClick}
-					class="h-full"
-				/>
-			{/if}
-		</div>
+			</div>
+		{:else}
+			<TaskTable
+				{tasks}
+				{allTasks}
+				{agents}
+				{reservations}
+				ontaskclick={handleTaskClick}
+			/>
+		{/if}
 	</div>
 
 	<!-- Task Detail Drawer -->

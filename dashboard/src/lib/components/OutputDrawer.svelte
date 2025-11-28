@@ -369,7 +369,35 @@
 			sendInput('text');
 		}
 	}
+
+	// Handle global keyboard shortcuts when drawer is open
+	function handleGlobalKeydown(e: KeyboardEvent) {
+		// Only handle when drawer is open and not typing in input
+		if (!isOpen || !currentSession()) return;
+		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+		const options = detectedOptions();
+		if (options.length === 0) return;
+
+		// Number keys 1-9 select options
+		if (e.key >= '1' && e.key <= '9') {
+			const num = parseInt(e.key, 10);
+			const opt = options.find(o => o.number === num);
+			if (opt) {
+				e.preventDefault();
+				sendKeySequence(opt.keySequence);
+			}
+		}
+
+		// Escape key
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			sendEscape();
+		}
+	}
 </script>
+
+<svelte:window onkeydown={handleGlobalKeydown} />
 
 <!-- Toggle Button (always visible) -->
 <button

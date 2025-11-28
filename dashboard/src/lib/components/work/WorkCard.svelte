@@ -472,7 +472,11 @@
 		<div class="flex items-center justify-between mt-2 pt-2 border-t border-base-200">
 			<!-- Agent Info -->
 			<div class="flex items-center gap-2">
-				<AgentAvatar name={agentName} size={20} />
+				<div class="avatar online">
+					<div class="w-5 rounded-full ring-2 ring-info ring-offset-base-100 ring-offset-1">
+						<AgentAvatar name={agentName} size={20} />
+					</div>
+				</div>
 				<span class="text-sm font-mono text-base-content/70">{agentName}</span>
 			</div>
 

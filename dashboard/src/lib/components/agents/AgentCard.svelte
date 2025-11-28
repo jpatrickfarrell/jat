@@ -1033,7 +1033,7 @@
 				onclick={() => openOutputDrawerForSession(agent.name)}
 				title="Click to view session output"
 			>
-				<AgentAvatar name={agent.name} size={28} class="shrink-0 group-hover:ring-2 group-hover:ring-primary/30 rounded-full transition-all" />
+				<AgentAvatar name={agent.name} size={28} class="shrink-0 rounded-full transition-all {agentStatus === 'working' ? 'ring-2 ring-info ring-offset-base-100 ring-offset-1' : 'group-hover:ring-2 group-hover:ring-primary/30'}" />
 				<div class="flex-1 min-w-0 text-left">
 					<h3
 						class="font-mono font-bold text-sm tracking-wide truncate group-hover:opacity-80 transition-opacity"

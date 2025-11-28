@@ -55,6 +55,8 @@
 		onSendInput?: (input: string, type: 'text' | 'key') => Promise<void>;
 		onDismiss?: () => void; // Called when completion banner auto-dismisses
 		class?: string;
+		/** Whether this work card is currently highlighted (e.g., from clicking avatar elsewhere) */
+		isHighlighted?: boolean;
 	}
 
 	let {
@@ -73,7 +75,8 @@
 		onTaskClick,
 		onSendInput,
 		onDismiss,
-		class: className = ''
+		class: className = '',
+		isHighlighted = false
 	}: Props = $props();
 
 	// Completion state
@@ -170,11 +173,20 @@
 		keySequence: string[]; // Keys to send (e.g., ['down', 'enter'])
 	}
 
+	// Detected JAT workflow commands (e.g., /jat:complete, /jat:next)
+	interface WorkflowCommand {
+		command: string; // Full command (e.g., '/jat:complete')
+		label: string; // Display label (e.g., 'Complete')
+		description: string; // Description text
+		variant: 'success' | 'primary' | 'warning' | 'info'; // Button style
+	}
+
 	// Parse Claude Code prompt options from output
 	const detectedOptions = $derived.by((): PromptOption[] => {
 		if (!output) return [];
 
 		const options: PromptOption[] = [];
+		const seenNumbers = new Set<number>(); // Track seen option numbers to avoid duplicates
 
 		// Look for "Do you want to proceed?" or similar prompts
 		// Match lines like "❯ 1. Yes" or "  2. Yes, and don't ask again..."
@@ -183,6 +195,11 @@
 
 		while ((match = optionRegex.exec(output)) !== null) {
 			const num = parseInt(match[1], 10);
+
+			// Skip if we've already seen this option number (avoid duplicate keys)
+			if (seenNumbers.has(num)) continue;
+			seenNumbers.add(num);
+
 			const text = match[2].trim();
 
 			// Determine option type
@@ -208,6 +225,94 @@
 
 		return options;
 	});
+
+	// Detect JAT workflow commands in output (e.g., "Next steps: /jat:complete, /jat:next")
+	// Only looks at recent output to detect dynamically when agent is waiting for input
+	const detectedWorkflowCommands = $derived.by((): WorkflowCommand[] => {
+		if (!output) return [];
+
+		// Only look at the last ~2500 characters (recent output)
+		const recentOutput = output.slice(-2500);
+
+		const commands: WorkflowCommand[] = [];
+
+		// Look for /jat: commands in the output
+		// Match patterns like "• /jat:complete - Complete this task" or just "/jat:next"
+		const commandPatterns: { regex: RegExp; label: string; variant: WorkflowCommand['variant'] }[] = [
+			{
+				regex: /\/jat:complete\b/,
+				label: 'Complete',
+				variant: 'success'
+			},
+			{
+				regex: /\/jat:next\b/,
+				label: 'Next',
+				variant: 'primary'
+			},
+			{
+				regex: /\/jat:pause\b/,
+				label: 'Pause',
+				variant: 'warning'
+			},
+			{
+				regex: /\/jat:status\b/,
+				label: 'Status',
+				variant: 'info'
+			}
+		];
+
+		// Check if we're in a "work complete" context (look for "Next steps" or similar patterns)
+		const hasNextStepsContext =
+			/next\s*steps?:/i.test(recentOutput) ||
+			/ready\s*for\s*review/i.test(recentOutput) ||
+			/work\s*complete/i.test(recentOutput) ||
+			/task\s*complete/i.test(recentOutput);
+
+		// Check if work has resumed (these patterns indicate agent is working again)
+		const hasResumedWork =
+			/Starting work on/i.test(recentOutput) ||
+			/STARTING WORK:/i.test(recentOutput) ||
+			/I'll help/i.test(recentOutput) ||
+			/Let me/i.test(recentOutput) ||
+			/I'm going to/i.test(recentOutput) ||
+			/╔.*STARTING/i.test(recentOutput);
+
+		// Only show workflow buttons if we detect completion context AND work hasn't resumed
+		if (!hasNextStepsContext || hasResumedWork) return [];
+
+		for (const pattern of commandPatterns) {
+			if (pattern.regex.test(recentOutput)) {
+				// Extract description if available (text after the command)
+				const descMatch = recentOutput.match(
+					new RegExp(pattern.regex.source + '\\s*[-–—]\\s*([^\\n]+)')
+				);
+				const description = descMatch ? descMatch[1].trim() : '';
+
+				commands.push({
+					command: `/jat:${pattern.label.toLowerCase()}`,
+					label: pattern.label,
+					description,
+					variant: pattern.variant
+				});
+			}
+		}
+
+		return commands;
+	});
+
+	// Send a workflow command (e.g., /jat:complete)
+	async function sendWorkflowCommand(command: string) {
+		if (!onSendInput) return;
+		sendingInput = true;
+		try {
+			// Send the command text, then press enter to submit
+			await onSendInput(command, 'text');
+			await new Promise((r) => setTimeout(r, 50)); // Small delay between text and enter
+			await onSendInput('enter', 'key');
+		} finally {
+			sendingInput = false;
+		}
+	}
 
 	// Scroll to bottom when output changes (if auto-scroll enabled and user hasn't scrolled up)
 	$effect(() => {
@@ -320,12 +425,24 @@
 </script>
 
 <div
-	class="card bg-base-100 shadow-lg border overflow-hidden h-full flex flex-col {className}"
-	class:border-base-300={!showCompletionBanner}
-	class:border-success={showCompletionBanner}
+	class="card overflow-hidden h-full flex flex-col relative {className} {isHighlighted ? 'agent-highlight-flash ring-2 ring-info ring-offset-2 ring-offset-base-100' : ''}"
+	style="
+		background: linear-gradient(135deg, oklch(0.22 0.02 250) 0%, oklch(0.18 0.01 250) 50%, oklch(0.16 0.01 250) 100%);
+		border: 1px solid {showCompletionBanner ? 'oklch(0.65 0.20 145)' : 'oklch(0.5 0 0 / 0.15)'};
+		box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.05), 0 2px 8px oklch(0 0 0 / 0.1);
+	"
+	data-agent-name={agentName}
 	in:fly={{ x: 50, duration: 300, delay: 50 }}
 	out:fade={{ duration: 200 }}
 >
+	<!-- Status accent bar - left edge -->
+	<div
+		class="absolute left-0 top-0 bottom-0 w-1"
+		style="
+			background: {showCompletionBanner ? 'oklch(0.65 0.20 145)' : 'oklch(0.60 0.18 250)'};
+			box-shadow: {showCompletionBanner ? '0 0 8px oklch(0.65 0.20 145 / 0.5)' : '0 0 8px oklch(0.60 0.18 250 / 0.5)'};
+		"
+	></div>
 	<!-- Completion Success Banner -->
 	{#if showCompletionBanner}
 		<div
@@ -469,7 +586,7 @@
 		</div>
 
 		<!-- Agent Badge + Token Usage (Secondary Metadata) -->
-		<div class="flex items-center justify-between mt-2 pt-2 border-t border-base-200">
+		<div class="flex items-center justify-between mt-2 pt-2" style="border-top: 1px solid oklch(0.5 0 0 / 0.08);">
 			<!-- Agent Info -->
 			<div class="flex items-center gap-2">
 				<div class="avatar online">
@@ -494,7 +611,7 @@
 	</div>
 
 	<!-- Output Section -->
-	<div class="border-t border-base-300 flex-1 flex flex-col min-h-0">
+	<div class="flex-1 flex flex-col min-h-0" style="border-top: 1px solid oklch(0.5 0 0 / 0.08);">
 		<!-- Output Header -->
 		<div class="flex items-center justify-between px-4 py-1.5 bg-base-200/50 flex-shrink-0">
 			<span class="text-xs font-mono text-base-content/60">
@@ -528,7 +645,7 @@
 		</div>
 
 		<!-- Input Section -->
-		<div class="border-t border-base-300 px-3 py-2 space-y-2 flex-shrink-0" style="background: oklch(0.18 0.01 250);">
+		<div class="px-3 py-2 space-y-2 flex-shrink-0" style="border-top: 1px solid oklch(0.5 0 0 / 0.08); background: oklch(0.18 0.01 250);">
 			<!-- Quick action buttons - only show when prompt detected -->
 			{#if detectedOptions.length > 0}
 				<div class="flex gap-1.5 flex-wrap">
@@ -583,6 +700,65 @@
 					>
 						^C
 					</button>
+				</div>
+			{/if}
+
+			<!-- JAT Workflow action buttons - show when work is complete -->
+			{#if detectedWorkflowCommands.length > 0}
+				<div class="flex gap-2 flex-wrap items-center">
+					<span class="text-xs opacity-60 mr-1">Workflow:</span>
+					{#each detectedWorkflowCommands as cmd (cmd.command)}
+						{#if cmd.variant === 'success'}
+							<button
+								onclick={() => sendWorkflowCommand(cmd.command)}
+								class="btn btn-xs gap-1"
+								style="background: linear-gradient(135deg, oklch(0.45 0.18 145) 0%, oklch(0.38 0.15 160) 100%); border: none; color: white; font-weight: 600;"
+								title={cmd.description || cmd.command}
+								disabled={sendingInput || !onSendInput}
+							>
+								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+								</svg>
+								{cmd.label}
+							</button>
+						{:else if cmd.variant === 'primary'}
+							<button
+								onclick={() => sendWorkflowCommand(cmd.command)}
+								class="btn btn-xs gap-1"
+								style="background: linear-gradient(135deg, oklch(0.50 0.18 250) 0%, oklch(0.42 0.15 265) 100%); border: none; color: white; font-weight: 600;"
+								title={cmd.description || cmd.command}
+								disabled={sendingInput || !onSendInput}
+							>
+								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+								</svg>
+								{cmd.label}
+							</button>
+						{:else if cmd.variant === 'warning'}
+							<button
+								onclick={() => sendWorkflowCommand(cmd.command)}
+								class="btn btn-xs gap-1"
+								style="background: linear-gradient(135deg, oklch(0.70 0.15 85) 0%, oklch(0.60 0.12 70) 100%); border: none; color: oklch(0.25 0.05 85); font-weight: 600;"
+								title={cmd.description || cmd.command}
+								disabled={sendingInput || !onSendInput}
+							>
+								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+								</svg>
+								{cmd.label}
+							</button>
+						{:else}
+							<button
+								onclick={() => sendWorkflowCommand(cmd.command)}
+								class="btn btn-xs gap-1"
+								style="background: oklch(0.30 0.08 250); border: none; color: oklch(0.90 0.02 250); font-weight: 500;"
+								title={cmd.description || cmd.command}
+								disabled={sendingInput || !onSendInput}
+							>
+								{cmd.label}
+							</button>
+						{/if}
+					{/each}
 				</div>
 			{/if}
 

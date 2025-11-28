@@ -5,6 +5,7 @@
 	 *
 	 * Features:
 	 * - Fetches SVG from /api/avatar/{name}
+	 * - Caches results to avoid refetching on re-renders
 	 * - Fallback to initials with hash-based background color
 	 * - Uses oklch color space for theme consistency
 	 * - Handles loading, success, and error states
@@ -25,10 +26,30 @@
 	let loadState: 'loading' | 'success' | 'error' = $state('loading');
 	let svgContent: string | null = $state(null);
 
-	// Fetch avatar reactively when name changes
+	// Cache for avatar SVGs (module-level to persist across instances)
+	const avatarCache = new Map<string, string>();
+
+	// Track the last fetched name to avoid redundant fetches
+	let lastFetchedName: string | null = null;
+
+	// Fetch avatar only when name actually changes
 	async function fetchAvatar(agentName: string) {
 		if (!agentName) {
 			loadState = 'error';
+			return;
+		}
+
+		// Skip if we already fetched this name
+		if (lastFetchedName === agentName && loadState !== 'loading') {
+			return;
+		}
+
+		// Check cache first
+		const cached = avatarCache.get(agentName);
+		if (cached) {
+			svgContent = cached;
+			loadState = 'success';
+			lastFetchedName = agentName;
 			return;
 		}
 
@@ -36,10 +57,11 @@
 		svgContent = null;
 
 		try {
-			// Add cache-busting param to force refetch when avatar might have been generated
-			const response = await fetch(`/api/avatar/${encodeURIComponent(agentName)}?t=${Date.now()}`);
+			const response = await fetch(`/api/avatar/${encodeURIComponent(agentName)}`);
 			if (response.ok) {
-				svgContent = await response.text();
+				const svg = await response.text();
+				avatarCache.set(agentName, svg);
+				svgContent = svg;
 				loadState = 'success';
 			} else {
 				loadState = 'error';
@@ -47,11 +69,16 @@
 		} catch {
 			loadState = 'error';
 		}
+
+		lastFetchedName = agentName;
 	}
 
-	// React to name changes
+	// React to name changes only
 	$effect(() => {
-		fetchAvatar(name);
+		const currentName = name;
+		if (currentName !== lastFetchedName) {
+			fetchAvatar(currentName);
+		}
 	});
 </script>
 

@@ -11,6 +11,7 @@
 	import { computeAgentStatus } from '$lib/utils/agentStatusUtils';
 	import { createModalState } from '$lib/utils/modalStateHelpers.svelte';
 	import AnimatedDigits from '$lib/components/AnimatedDigits.svelte';
+	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import type { Agent, Task, Reservation } from '$lib/stores/agents.svelte';
 
 	// Extended types for inbox messages
@@ -822,6 +823,9 @@
 				{/if}
 			</div>
 
+			<!-- Agent Avatar -->
+			<AgentAvatar name={agent.name} size={28} class="shrink-0" />
+
 			<!-- Agent name (monospace, industrial) -->
 			<div class="flex-1 min-w-0">
 				<h3
@@ -886,8 +890,7 @@
 					showTooltip={true}
 					showLegend={false}
 					showStyleToolbar={true}
-					disableAnimation={false}
-					animationKey={agent.last_active_ts || ''}
+					animate={true}
 				/>
 			{:else}
 				<!-- Fallback: Single-series sparkline -->
@@ -897,8 +900,7 @@
 					showTooltip={true}
 					colorMode="usage"
 					showStyleToolbar={true}
-					disableAnimation={false}
-					animationKey={agent.last_active_ts || ''}
+					animate={true}
 				/>
 			{/if}
 		</div>
@@ -977,9 +979,12 @@
 					style="background: {cost > 0 ? `${costColor.replace(')', ' / 0.1)')}` : 'transparent'};"
 					title="Today's cost: ${cost.toFixed(2)}"
 				>
-					<span class="font-mono text-[10px]" style="color: {cost > 0 ? costColor : 'oklch(0.5 0 0 / 0.4)'};">
-						${cost < 0.01 ? '0' : cost.toFixed(2)}
-					</span>
+					<span class="text-[10px]" style="color: {cost > 0 ? costColor : 'oklch(0.5 0 0 / 0.4)'};">$</span>
+					<AnimatedDigits
+						value={cost < 0.01 ? '0' : cost.toFixed(2)}
+						class="text-[10px]"
+						style="color: {cost > 0 ? costColor : 'oklch(0.5 0 0 / 0.4)'};"
+					/>
 				</div>
 			{/if}
 		</div>

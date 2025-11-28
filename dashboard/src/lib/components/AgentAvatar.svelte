@@ -10,8 +10,6 @@
 	 * - Handles loading, success, and error states
 	 */
 
-	import { onMount } from 'svelte';
-
 	interface Props {
 		name: string;
 		size?: number;
@@ -56,15 +54,19 @@
 	const initials = $derived(getInitials(name));
 	const bgColor = $derived(getBgColor(name));
 
-	// Fetch avatar on mount
-	onMount(async () => {
-		if (!name) {
+	// Fetch avatar reactively when name changes
+	async function fetchAvatar(agentName: string) {
+		if (!agentName) {
 			loadState = 'error';
 			return;
 		}
 
+		loadState = 'loading';
+		svgContent = null;
+
 		try {
-			const response = await fetch(`/api/avatar/${encodeURIComponent(name)}`);
+			// Add cache-busting param to force refetch when avatar might have been generated
+			const response = await fetch(`/api/avatar/${encodeURIComponent(agentName)}?t=${Date.now()}`);
 			if (response.ok) {
 				svgContent = await response.text();
 				loadState = 'success';
@@ -74,6 +76,11 @@
 		} catch {
 			loadState = 'error';
 		}
+	}
+
+	// React to name changes
+	$effect(() => {
+		fetchAvatar(name);
 	});
 </script>
 

@@ -59,6 +59,12 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			icon: 'users'
 		},
 		{
+			id: 'work',
+			label: 'Work',
+			href: '/work',
+			icon: 'work'
+		},
+		{
 			id: 'dash',
 			label: 'Dash',
 			href: '/dash',

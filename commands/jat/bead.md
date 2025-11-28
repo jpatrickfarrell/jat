@@ -15,6 +15,7 @@ Convert a PRD, spec, or requirements doc into structured Beads tasks with depend
 **What this does:**
 - Reads and parses the PRD/spec (file, conversation, or inline)
 - Asks clarifying questions if requirements are ambiguous
+- Creates an **epic** for multi-task features with **hierarchical child IDs** (e.g., `jat-auth.1`, `jat-auth.2`)
 - Creates right-sized Beads (2-8 hour tasks)
 - Sets up dependency chains between tasks
 - Assigns priorities (P0-P2) based on criticality
@@ -110,7 +111,43 @@ Choose based on the spec:
 
 ## STEP 5: Create Beads
 
-For each task:
+### For Multi-Task Features: Create Epic + Children
+
+When breaking down a feature into multiple related tasks, create a parent epic first, then add child tasks with hierarchical IDs:
+
+**Step 5A: Create the Epic**
+```bash
+bd create "Epic: Feature Name" \
+  --description "High-level description of the feature" \
+  --priority [0-2] \
+  --type epic \
+  --labels "label1,label2"
+# → Returns epic ID, e.g., jat-a3f8
+```
+
+**Step 5B: Create Child Tasks with --parent**
+```bash
+bd create "First subtask" \
+  --parent jat-a3f8 \
+  --description "What to do and acceptance criteria" \
+  --priority [0-2] \
+  --type task
+# → Returns jat-a3f8.1
+
+bd create "Second subtask" \
+  --parent jat-a3f8 \
+  --description "What to do" \
+  --priority [0-2] \
+  --type task
+# → Returns jat-a3f8.2
+```
+
+**Benefits of Hierarchical IDs:**
+- Visual grouping: `jat-a3f8.1`, `jat-a3f8.2`, `jat-a3f8.3` clearly belong together
+- TaskTable can group by parent for better organization
+- Easy to see progress on an epic by its children's status
+
+### For Standalone Tasks (No Epic Needed)
 
 ```bash
 bd create "Task title" \
@@ -120,10 +157,19 @@ bd create "Task title" \
   --labels "label1,label2"
 ```
 
-Set up dependencies:
+### Set Up Dependencies Between Tasks
 
 ```bash
 bd dep add <task-id> <depends-on-task-id>
+```
+
+**Example with hierarchical tasks:**
+```bash
+# Child 2 depends on Child 1
+bd dep add jat-a3f8.2 jat-a3f8.1
+
+# Child 3 depends on Child 2
+bd dep add jat-a3f8.3 jat-a3f8.2
 ```
 
 ---
@@ -214,27 +260,46 @@ Confirm:
 2. Email verification? → P2, nice-to-have
 3. Use Supabase? → Yes
 
-**Beads created:**
+**Beads created (with hierarchical IDs):**
 
 ```
-P0 - Foundation:
-  jat-abc: Set up Supabase auth config
-  jat-def: Create users table with RLS
-  jat-ghi: Session management utilities
+Epic:
+  jat-auth: Epic: User Authentication System
 
-P1 - Core:
-  jat-jkl: Google OAuth flow (← jat-abc, jat-def)
-  jat-mno: Email/password flow (← jat-def)
-  jat-pqr: Login UI components (← jat-jkl, jat-mno)
-  jat-stu: Logout & cleanup (← jat-ghi)
+P0 - Foundation (children of jat-auth):
+  jat-auth.1: Set up Supabase auth config
+  jat-auth.2: Create users table with RLS
+  jat-auth.3: Session management utilities
 
-P2 - Enhancements:
-  jat-vwx: Password reset (← jat-mno)
-  jat-yz1: Email verification (← jat-mno)
+P1 - Core (children of jat-auth):
+  jat-auth.4: Google OAuth flow (← jat-auth.1, jat-auth.2)
+  jat-auth.5: Email/password flow (← jat-auth.2)
+  jat-auth.6: Login UI components (← jat-auth.4, jat-auth.5)
+  jat-auth.7: Logout & cleanup (← jat-auth.3)
+
+P2 - Enhancements (children of jat-auth):
+  jat-auth.8: Password reset (← jat-auth.5)
+  jat-auth.9: Email verification (← jat-auth.5)
+```
+
+**Creation commands:**
+```bash
+# Create epic first
+bd create "Epic: User Authentication System" --type epic --priority 1
+# → jat-auth
+
+# Create children with --parent
+bd create "Set up Supabase auth config" --parent jat-auth --priority 0 --type task
+# → jat-auth.1
+
+bd create "Create users table with RLS" --parent jat-auth --priority 0 --type task
+# → jat-auth.2
+
+# ... continue for all tasks
 ```
 
 **Execution:**
-- Phase 1: 3 agents on P0 tasks in parallel
+- Phase 1: 3 agents on P0 tasks (jat-auth.1, jat-auth.2, jat-auth.3) in parallel
 - Phase 2: 4 agents on P1 tasks
 - Phase 3: P2 tasks as capacity allows
 
@@ -242,9 +307,20 @@ P2 - Enhancements:
 
 ## Best Practices
 
-1. **Right-size tasks** - 2-8 hours, not too big or small
-2. **Set dependencies correctly** - enables parallel work
-3. **Prioritize thoughtfully** - P0 = foundation, P1 = core, P2 = nice-to-have
-4. **Write clear descriptions** - acceptance criteria included
-5. **Ask if unclear** - don't guess on ambiguous requirements
-6. **Front-load foundation** - so agents can parallelize sooner
+1. **Use epics for multi-task features** - Create epic first, then children with `--parent`
+2. **Right-size tasks** - 2-8 hours, not too big or small
+3. **Set dependencies correctly** - enables parallel work
+4. **Prioritize thoughtfully** - P0 = foundation, P1 = core, P2 = nice-to-have
+5. **Write clear descriptions** - acceptance criteria included
+6. **Ask if unclear** - don't guess on ambiguous requirements
+7. **Front-load foundation** - so agents can parallelize sooner
+
+### When to Use Epics vs Standalone Tasks
+
+| Scenario | Approach |
+|----------|----------|
+| 3+ related tasks for one feature | Create epic + child tasks |
+| Single task or 2 unrelated tasks | Standalone tasks |
+| Bug fixes | Standalone tasks |
+| Small enhancements | Standalone tasks |
+| New feature with multiple components | Epic + children |

@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# Edit existing image with instruction using Gemini API
+# Usage: gemini-edit INPUT "INSTRUCTION" [OUTPUT] [options]
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/gemini-lib.sh"
+
+show_help() {
+    cat <<'EOF'
+Usage: gemini-edit INPUT "INSTRUCTION" [OUTPUT] [options]
+
+Edit an existing image with a text instruction using Gemini.
+
+Arguments:
+  INPUT               Path to input image file (required)
+  INSTRUCTION         Text instruction for editing (required)
+  OUTPUT              Output file path (default: /tmp/gemini-edit-TIMESTAMP.png)
+
+Options:
+  --model MODEL       Model to use (default: gemini-2.5-flash-image)
+  --help, -h          Show this help
+
+Examples:
+  gemini-edit photo.png "Remove the background"
+  gemini-edit portrait.jpg "Make it look like a Van Gogh painting" art.png
+  gemini-edit product.png "Add a subtle shadow" --model gemini-3-pro-image-preview
+
+Environment:
+  GEMINI_API_KEY      Required. Your Gemini API key.
+EOF
+}
+
+# Defaults
+INPUT=""
+INSTRUCTION=""
+OUTPUT=""
+MODEL="$GEMINI_DEFAULT_MODEL"
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --model)
+            MODEL="$2"
+            shift 2
+            ;;
+        --help|-h)
+            show_help
+            exit 0
+            ;;
+        --*)
+            gemini_error "Unknown option: $1"
+            ;;
+        *)
+            if [[ -z "$INPUT" ]]; then
+                INPUT="$1"
+            elif [[ -z "$INSTRUCTION" ]]; then
+                INSTRUCTION="$1"
+            else
+                OUTPUT="$1"
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Validate
+if [[ -z "$INPUT" ]]; then
+    gemini_error "Input image required. Usage: gemini-edit INPUT \"INSTRUCTION\""
+fi
+
+if [[ -z "$INSTRUCTION" ]]; then
+    gemini_error "Instruction required. Usage: gemini-edit INPUT \"INSTRUCTION\""
+fi
+
+if [[ ! -f "$INPUT" ]]; then
+    gemini_error "File not found: $INPUT"
+fi
+
+gemini_check_api_key
+gemini_check_deps
+
+# Default output path
+if [[ -z "$OUTPUT" ]]; then
+    OUTPUT="/tmp/gemini-edit-$(date +%Y%m%d-%H%M%S).png"
+fi
+
+# Encode image and get MIME type
+MIME=$(gemini_mime_type "$INPUT")
+DATA=$(gemini_encode_image "$INPUT")
+
+# Build payload with text instruction and image
+PAYLOAD=$(jq -n \
+    --arg t "$INSTRUCTION" \
+    --arg m "$MIME" \
+    --arg d "$DATA" \
+    '{
+        contents: [{
+            parts: [
+                {text: $t},
+                {inlineData: {mimeType: $m, data: $d}}
+            ]
+        }],
+        generationConfig: {responseModalities: ["IMAGE", "TEXT"]}
+    }')
+
+echo "Editing with $MODEL..."
+RESPONSE=$(gemini_request "$MODEL" "$PAYLOAD")
+gemini_save_image "$RESPONSE" "$OUTPUT"
+
+# Show any text response
+TEXT=$(gemini_get_text "$RESPONSE")
+if [[ -n "$TEXT" ]]; then
+    echo "Model response: $TEXT"
+fi
+
+gemini_success "Saved: $OUTPUT"

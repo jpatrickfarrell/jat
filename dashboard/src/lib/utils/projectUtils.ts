@@ -2,6 +2,7 @@
  * Project detection utilities
  *
  * Extracts project names from task IDs for multi-project filtering
+ * Also handles hierarchical task IDs (parent.child format)
  */
 
 /**
@@ -44,6 +45,59 @@ export function getProjectFromTaskId(taskId: string): string | null {
   }
 
   return projectPrefix;
+}
+
+/**
+ * Extract parent ID from a hierarchical task ID
+ *
+ * Hierarchical IDs use dot notation: parent.childNumber (e.g., "jat-abc.1", "jat-abc.2")
+ * This function extracts the parent portion before the last dot.
+ *
+ * @param taskId - Task ID (e.g., "jat-abc.1", "jat-abc", "jat-qub2.7")
+ * @returns Parent ID or null if not hierarchical
+ *
+ * @example
+ * extractParentId("jat-abc.1") // "jat-abc"
+ * extractParentId("jat-qub2.7") // "jat-qub2"
+ * extractParentId("jat-abc.10") // "jat-abc"
+ * extractParentId("jat-abc") // null (not hierarchical)
+ * extractParentId("invalid") // null
+ */
+export function extractParentId(taskId: string): string | null {
+  if (!taskId || typeof taskId !== 'string') {
+    return null;
+  }
+
+  // Hierarchical IDs have format: parentId.childNumber (e.g., "jat-abc.1", "jat-qub2.7")
+  // The dot must be followed by one or more digits
+  const match = taskId.match(/^(.+)\.(\d+)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  const [, parentId] = match;
+
+  // Validate parent ID isn't empty
+  if (!parentId || parentId.trim() === '') {
+    return null;
+  }
+
+  return parentId;
+}
+
+/**
+ * Check if a task ID is hierarchical (has a parent)
+ *
+ * @param taskId - Task ID to check
+ * @returns true if the ID has hierarchical format (parent.child)
+ *
+ * @example
+ * isHierarchicalId("jat-abc.1") // true
+ * isHierarchicalId("jat-abc") // false
+ */
+export function isHierarchicalId(taskId: string): boolean {
+  return extractParentId(taskId) !== null;
 }
 
 /**

@@ -64,7 +64,7 @@ read
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Step 1/7: Installing Agent Mail (bash + SQLite)${NC}"
+echo -e "${BOLD}Step 1/8: Installing Agent Mail (bash + SQLite)${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -72,7 +72,7 @@ bash "$INSTALL_DIR/scripts/install-agent-mail.sh"
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Step 2/7: Installing Beads CLI${NC}"
+echo -e "${BOLD}Step 2/8: Installing Beads CLI${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -80,7 +80,7 @@ bash "$INSTALL_DIR/scripts/install-beads.sh"
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Step 3/7: Symlinking Generic Tools${NC}"
+echo -e "${BOLD}Step 3/8: Symlinking Generic Tools${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -88,7 +88,7 @@ bash "$INSTALL_DIR/scripts/symlink-tools.sh"
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Step 4/7: Statusline & Hooks Configuration${NC}"
+echo -e "${BOLD}Step 4/8: Statusline & Hooks Configuration${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -96,7 +96,7 @@ bash "$INSTALL_DIR/scripts/setup-statusline-and-hooks.sh"
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Step 5/7: Optional Tech Stack Tools${NC}"
+echo -e "${BOLD}Step 5/8: Optional Tech Stack Tools${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -128,7 +128,7 @@ fi
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Step 6/7: Setting Up Global Configuration${NC}"
+echo -e "${BOLD}Step 6/8: Setting Up Global Configuration${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -136,11 +136,19 @@ bash "$INSTALL_DIR/scripts/setup-global-claude-md.sh"
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Step 7/7: Setting Up Repositories${NC}"
+echo -e "${BOLD}Step 7/8: Setting Up Repositories${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
 bash "$INSTALL_DIR/scripts/setup-repos.sh"
+
+echo ""
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}Step 8/8: Setting Up Bash Launcher Functions${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+bash "$INSTALL_DIR/scripts/setup-bash-functions.sh"
 
 echo ""
 echo ""
@@ -163,6 +171,7 @@ echo "  ✓ Real-time hooks (auto-refresh on am-*/bd commands)"
 echo "  ✓ Git pre-commit hook (agent registration check)"
 echo "  ✓ Global ~/.claude/CLAUDE.md (multi-project instructions)"
 echo "  ✓ Per-repo setup (bd init, CLAUDE.md templates)"
+echo "  ✓ Bash launcher functions (jat-<project> in ~/.bashrc)"
 echo ""
 echo "Benefits:"
 echo ""
@@ -175,12 +184,10 @@ echo "  • Bash composability (pipes, jq, xargs)"
 echo ""
 echo "Next steps:"
 echo ""
-echo "  1. Ensure ~/.local/bin is in PATH (add to ~/.bashrc if needed):"
-echo "     export PATH=\"\$HOME/.local/bin:\$PATH\""
-echo "  2. Restart your shell: source ~/.bashrc"
+echo "  1. Restart your shell: source ~/.bashrc"
+echo "  2. Launch any project: jat-jat, jat-jomarchy, jat-<project>, etc."
 echo "  3. Test Agent Mail: am-whoami --agent TestAgent"
 echo "  4. Test Beads: cd ~/code/<project> && bd ready"
-echo "  5. Test tools: am-register --help"
 echo ""
 echo "Documentation: https://github.com/joewinke/jat"
 echo ""

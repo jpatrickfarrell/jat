@@ -359,3 +359,103 @@ export function getIssueTypeVisual(issueType: string | undefined | null): IssueT
 		label: issueType.toUpperCase()
 	};
 }
+
+// =============================================================================
+// GROUP HEADER VISUAL CONFIG
+// =============================================================================
+
+/**
+ * Grouping modes for task table
+ * - type: Group by issue_type (bug, task, feature, etc.)
+ * - parent: Group by parent task ID (for epic/subtask hierarchies)
+ * - label: Group by first label
+ */
+export type GroupingMode = 'type' | 'parent' | 'label';
+
+export interface GroupHeaderInfo {
+	icon: string;         // Emoji or unicode icon for the group header
+	label: string;        // Display label (uppercase)
+	accent: string;       // Accent color for industrial theme headers
+	bgTint: string;       // Background tint for the header
+}
+
+/**
+ * Get group header visual info based on grouping mode
+ *
+ * @param mode - The grouping mode ('type', 'parent', or 'label')
+ * @param groupKey - The key of the group (issue_type, parent ID, or label name)
+ * @returns GroupHeaderInfo with icon, label, accent, and bgTint
+ *
+ * @example
+ * // Type mode - uses issue type visuals
+ * getGroupHeaderInfo('type', 'bug')
+ * // → { icon: '🐛', label: 'BUG', accent: 'oklch(...)', bgTint: '...' }
+ *
+ * // Parent mode - uses folder icon
+ * getGroupHeaderInfo('parent', 'jat-abc')
+ * // → { icon: '📁', label: 'JAT-ABC', accent: 'oklch(...)', bgTint: '...' }
+ *
+ * // Label mode - uses tag icon
+ * getGroupHeaderInfo('label', 'dashboard')
+ * // → { icon: '🏷️', label: 'DASHBOARD', accent: 'oklch(...)', bgTint: '...' }
+ */
+export function getGroupHeaderInfo(mode: GroupingMode, groupKey: string | null): GroupHeaderInfo {
+	switch (mode) {
+		case 'type': {
+			// Use existing issue type visuals
+			const typeVisual = getIssueTypeVisual(groupKey);
+			return {
+				icon: typeVisual.icon,
+				label: typeVisual.label,
+				accent: typeVisual.accent,
+				bgTint: typeVisual.bgTint
+			};
+		}
+
+		case 'parent': {
+			// Parent grouping - folder icon with purple accent
+			if (!groupKey) {
+				return {
+					icon: '📋',
+					label: 'STANDALONE',
+					accent: 'oklch(0.60 0.05 250)',       // Muted slate for ungrouped
+					bgTint: 'oklch(0.60 0.05 250 / 0.06)'
+				};
+			}
+			return {
+				icon: '📁',
+				label: groupKey.toUpperCase(),
+				accent: 'oklch(0.70 0.18 270)',           // Purple for hierarchy
+				bgTint: 'oklch(0.70 0.18 270 / 0.08)'
+			};
+		}
+
+		case 'label': {
+			// Label grouping - tag icon with teal accent
+			if (!groupKey) {
+				return {
+					icon: '📋',
+					label: 'UNLABELED',
+					accent: 'oklch(0.60 0.05 250)',       // Muted slate for unlabeled
+					bgTint: 'oklch(0.60 0.05 250 / 0.06)'
+				};
+			}
+			return {
+				icon: '🏷️',
+				label: groupKey.toUpperCase(),
+				accent: 'oklch(0.68 0.16 185)',           // Teal for labels
+				bgTint: 'oklch(0.68 0.16 185 / 0.08)'
+			};
+		}
+
+		default: {
+			// Fallback
+			return {
+				icon: '📋',
+				label: groupKey?.toUpperCase() || 'UNKNOWN',
+				accent: 'oklch(0.60 0.05 250)',
+				bgTint: 'oklch(0.60 0.05 250 / 0.06)'
+			};
+		}
+	}
+}

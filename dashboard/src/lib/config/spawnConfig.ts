@@ -4,7 +4,15 @@
  */
 
 // Default model for spawned agents
-export const DEFAULT_MODEL = 'opus-4.5';
+// Valid: 'opus', 'sonnet', 'haiku' or full IDs like 'claude-sonnet-4-5-20250514'
+export const DEFAULT_MODEL = 'opus';
+
+// Skip permission prompts for autonomous operation
+// Enables fully autonomous agents without human confirmation
+export const DANGEROUSLY_SKIP_PERMISSIONS = true;
+
+// Agent Mail server URL (for inter-agent communication)
+export const AGENT_MAIL_URL = 'http://localhost:8765';
 
 // Maximum concurrent tmux sessions (system limit)
 export const MAX_TMUX_SESSIONS = 12;
@@ -16,4 +24,5 @@ export const DEFAULT_AGENT_COUNT = 4;
 export const MIN_AGENT_COUNT = 1;
 
 // Stagger delay between spawns (ms) to avoid overwhelming system
-export const SPAWN_STAGGER_MS = 1000;
+// Must be longer than Claude init time (5s) to ensure sequential spawns
+export const SPAWN_STAGGER_MS = 6000;

@@ -84,7 +84,7 @@
 
 <div
 	class="inline-flex items-center justify-center rounded-full overflow-hidden flex-shrink-0 {className}"
-	style="width: {size}px; height: {size}px;"
+	style="width: {size}px; height: {size}px; perspective: 200px;"
 >
 	{#if loadState === 'loading'}
 		<!-- Loading skeleton -->
@@ -93,17 +93,17 @@
 			style="background: oklch(0.30 0.02 250);"
 		></div>
 	{:else if loadState === 'success' && svgContent}
-		<!-- SVG avatar -->
+		<!-- SVG avatar with flip-in animation -->
 		<div
-			class="w-full h-full"
+			class="w-full h-full avatar-flip-in"
 			style="background: oklch(0.15 0.01 250);"
 		>
 			{@html svgContent}
 		</div>
 	{:else}
-		<!-- Fallback: generic avatar icon -->
+		<!-- Fallback: generic avatar icon with flip-in animation -->
 		<div
-			class="w-full h-full flex items-center justify-center"
+			class="w-full h-full flex items-center justify-center avatar-flip-in"
 			style="background: oklch(0.25 0.02 250);"
 		>
 			<svg
@@ -124,5 +124,25 @@
 		width: 100%;
 		height: 100%;
 		display: block;
+	}
+
+	/* Flip-in animation for avatar reveal */
+	.avatar-flip-in {
+		animation: avatarFlipIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+		transform-style: preserve-3d;
+	}
+
+	@keyframes avatarFlipIn {
+		0% {
+			transform: rotateY(-90deg) scale(0.8);
+			opacity: 0;
+		}
+		50% {
+			opacity: 1;
+		}
+		100% {
+			transform: rotateY(0deg) scale(1);
+			opacity: 1;
+		}
 	}
 </style>

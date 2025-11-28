@@ -11,7 +11,7 @@
 	import { getPriorityBadge, getTaskStatusBadge, getTypeBadge } from '$lib/utils/badgeHelpers';
 	import { formatRelativeTime, formatFullDate, normalizeTimestamp, getAgeColorClass } from '$lib/utils/dateFormatters';
 	import { toggleSetItem } from '$lib/utils/filterHelpers';
-	import { getTaskStatusVisual, STATUS_ICONS, getIssueTypeVisual } from '$lib/config/statusColors';
+	import { getTaskStatusVisual, STATUS_ICONS, getIssueTypeVisual, getGroupHeaderInfo, type GroupingMode } from '$lib/config/statusColors';
 	import { isAgentWorking as checkAgentWorking } from '$lib/utils/agentStatusUtils';
 	import {
 		bulkApiOperation,
@@ -50,7 +50,7 @@
 	}
 
 	// Grouping mode for task table - determines how tasks are grouped in the view
-	type GroupingMode = 'type' | 'parent' | 'label';
+	// Type imported from statusColors.ts: type GroupingMode = 'type' | 'parent' | 'label';
 
 	interface Props {
 		tasks?: Task[];
@@ -582,6 +582,105 @@
 	let bulkActionLoading = $state(false);
 	let bulkActionError = $state('');
 
+	// Spawn operation state
+	let spawningSingle = $state<string | null>(null); // Task ID being spawned, or null
+	let spawningBulk = $state(false); // True when bulk spawn is in progress
+
+	/**
+	 * Spawn a single agent to work on a specific task
+	 * Calls POST /api/work/spawn with the task ID
+	 * @param taskId - The ID of the task to spawn an agent for
+	 * @returns Promise that resolves when spawn completes
+	 */
+	async function handleSpawnSingle(taskId: string): Promise<boolean> {
+		if (spawningSingle || spawningBulk) return false; // Prevent concurrent spawns
+
+		spawningSingle = taskId;
+		try {
+			const response = await fetch('/api/work/spawn', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ taskId })
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				console.error('Spawn failed:', data.error || data.message);
+				return false;
+			}
+
+			// Success - the API has already:
+			// 1. Registered a new agent
+			// 2. Updated task status to in_progress
+			// 3. Created tmux session with Claude Code
+			// Parent page polling will pick up the updated task state
+			console.log(`Spawned agent ${data.session?.agentName} for task ${taskId}`);
+			return true;
+		} catch (err) {
+			console.error('Spawn request failed:', err);
+			return false;
+		} finally {
+			spawningSingle = null;
+		}
+	}
+
+	/**
+	 * Spawn agents for all selected tasks with staggered timing
+	 * Spawns agents sequentially with 2s delay between each to avoid overwhelming the system
+	 * @returns Promise that resolves when all spawns complete
+	 */
+	async function handleBulkSpawn(): Promise<void> {
+		if (spawningBulk || spawningSingle) return; // Prevent concurrent spawns
+		if (selectedTasks.size === 0) return;
+
+		spawningBulk = true;
+		const taskIds = Array.from(selectedTasks);
+		const results: { taskId: string; success: boolean }[] = [];
+
+		try {
+			for (let i = 0; i < taskIds.length; i++) {
+				const taskId = taskIds[i];
+
+				// Spawn agent for this task
+				const response = await fetch('/api/work/spawn', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ taskId })
+				});
+
+				const data = await response.json();
+				const success = response.ok;
+
+				results.push({ taskId, success });
+
+				if (success) {
+					console.log(`Spawned agent ${data.session?.agentName} for task ${taskId}`);
+				} else {
+					console.error(`Failed to spawn for ${taskId}:`, data.error || data.message);
+				}
+
+				// Stagger delay between spawns (2s), except after last one
+				if (i < taskIds.length - 1) {
+					await new Promise(resolve => setTimeout(resolve, 2000));
+				}
+			}
+
+			// Log summary
+			const successCount = results.filter(r => r.success).length;
+			console.log(`Bulk spawn complete: ${successCount}/${taskIds.length} succeeded`);
+
+			// Clear selection on success
+			if (successCount > 0) {
+				clearSelection();
+			}
+		} catch (err) {
+			console.error('Bulk spawn failed:', err);
+		} finally {
+			spawningBulk = false;
+		}
+	}
+
 	// Helper to run bulk operations with consistent state management
 	async function runBulkOperation(operation: (taskId: string) => Promise<void>) {
 		bulkActionLoading = true;
@@ -856,6 +955,16 @@
 								</svg>
 								Release
 							</button></li>
+							<li><button onclick={handleBulkSpawn} class="gap-2" disabled={spawningBulk || spawningSingle !== null}>
+								{#if spawningBulk}
+									<span class="loading loading-spinner loading-xs"></span>
+								{:else}
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+									</svg>
+								{/if}
+								Spawn Agents
+							</button></li>
 							<li>
 								<details>
 									<summary class="gap-2">
@@ -1008,6 +1117,9 @@
 							{/if}
 						</div>
 					</td>
+					<td class="w-10" style="background: inherit;">
+						<span class="font-mono text-xs tracking-wider uppercase" style="color: oklch(0.60 0.02 250);"></span>
+					</td>
 				</tr>
 			</thead>
 
@@ -1015,7 +1127,7 @@
 				<!-- Empty state - Mission Control Style -->
 				<tbody>
 					<tr>
-						<td colspan="7" class="p-0">
+						<td colspan="8" class="p-0">
 							<div
 								class="relative flex flex-col items-center justify-center py-16 overflow-hidden"
 								style="
@@ -1153,7 +1265,7 @@
 						<thead>
 							<tr>
 								<th
-									colspan="7"
+									colspan="8"
 									class="p-0 border-b border-base-content/10"
 									style="background: linear-gradient(90deg, {typeVisual.bgTint} 0%, transparent 60%);"
 								>
@@ -1205,6 +1317,8 @@
 									{@const isStarting = startingTaskIds.includes(task.id)}
 									{@const isCompleted = completedTaskIds.includes(task.id)}
 									{@const unresolvedBlockers = task.depends_on?.filter(d => d.status !== 'closed') || []}
+									{@const allTasksList = allTasks.length > 0 ? allTasks : tasks}
+									{@const blockedTasks = allTasksList.filter(t => t.depends_on?.some(d => d.id === task.id) && t.status !== 'closed')}
 									<!-- Blocker header row (if has unresolved blockers) - shows context ABOVE task -->
 									{#if unresolvedBlockers.length > 0}
 										<tr
@@ -1299,7 +1413,62 @@
 											{formatRelativeTime(task.updated_at)}
 										</span>
 									</td>
+									<td style="background: inherit;" onclick={(e) => e.stopPropagation()}>
+										<button
+											class="btn btn-xs btn-ghost hover:btn-primary"
+											onclick={() => handleSpawnSingle(task.id)}
+											disabled={spawningSingle !== null || spawningBulk || task.status === 'in_progress' || task.status === 'closed' || task.status === 'blocked' || depStatus.hasBlockers}
+											title={task.status === 'in_progress' ? 'Task already in progress' : task.status === 'closed' ? 'Task is closed' : (task.status === 'blocked' || depStatus.hasBlockers) ? `Blocked: ${depStatus.blockingReason || 'resolve dependencies first'}` : 'Spawn agent for this task'}
+										>
+											{#if spawningSingle === task.id}
+												<span class="loading loading-spinner loading-xs"></span>
+											{:else}
+												<!-- Rocket icon -->
+												<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+												</svg>
+											{/if}
+										</button>
+									</td>
 								</tr>
+								<!-- Blocks footer row (if this task blocks others) - shows context BELOW task -->
+								{#if blockedTasks.length > 0}
+									<tr
+										class="blocks-footer"
+										style="
+											background: oklch(0.14 0.01 250);
+											border-left: 2px solid oklch(0.55 0.18 200 / 0.4);
+										"
+									>
+										<td></td>
+										<td
+											colspan="7"
+											class="py-1 pl-2 text-xs"
+											style="color: oklch(0.55 0.02 250);"
+										>
+											<span class="font-mono" style="color: oklch(0.45 0.02 250);">└─</span>
+											<span class="ml-1" style="color: oklch(0.55 0.15 200);">blocks:</span>
+											{#each blockedTasks.slice(0, 2) as blocked, i}
+												<button
+													class="font-mono ml-1.5 hover:underline cursor-pointer"
+													style="color: oklch(0.65 0.12 240); background: none; border: none; padding: 0;"
+													onclick={(e) => { e.stopPropagation(); handleRowClick(blocked.id); }}
+												>{blocked.id}</button>
+												{#if blocked.title}
+													<span class="text-xs truncate max-w-[180px] inline-block align-bottom" style="color: oklch(0.50 0.02 250);">
+														({blocked.title.slice(0, 30)}{blocked.title.length > 30 ? '...' : ''})
+													</span>
+												{/if}
+												{#if i < Math.min(blockedTasks.length - 1, 1)}
+													<span style="color: oklch(0.40 0.02 250);">,</span>
+												{/if}
+											{/each}
+											{#if blockedTasks.length > 2}
+												<span class="ml-1 opacity-60">+{blockedTasks.length - 2} more</span>
+											{/if}
+										</td>
+									</tr>
+								{/if}
 							{/each}
 						</tbody>
 					{/if}
@@ -1329,6 +1498,7 @@
 										P{task.priority}
 									</span>
 								</td>
+								<td style="background: inherit;"></td>
 								<td style="background: inherit;"></td>
 								<td style="background: inherit;"></td>
 								<td style="background: inherit;"></td>

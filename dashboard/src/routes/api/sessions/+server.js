@@ -7,6 +7,11 @@
 import { json } from '@sveltejs/kit';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import {
+	DEFAULT_MODEL,
+	DANGEROUSLY_SKIP_PERMISSIONS,
+	AGENT_MAIL_URL
+} from '$lib/config/spawnConfig.js';
 
 const execAsync = promisify(exec);
 
@@ -99,9 +104,10 @@ export async function POST({ request }) {
 		const {
 			agentName,
 			project,
-			model = 'sonnet-4.5',
+			model = DEFAULT_MODEL,
 			task,
-			prompt = '/jat:start auto'
+			prompt,
+			skipPermissions = DANGEROUSLY_SKIP_PERMISSIONS
 		} = body;
 
 		// Determine project path
@@ -110,14 +116,28 @@ export async function POST({ request }) {
 		// Generate session name
 		const sessionName = agentName ? `jat-${agentName}` : `jat-agent-${Date.now()}`;
 
-		// Build the claude command
-		let claudeCmd = `cd "${projectPath}" && claude`;
-		if (model) claudeCmd += ` --model ${model}`;
+		// Build the claude command with proper flags
+		let claudeCmd = `cd "${projectPath}"`;
 
-		// Build initial prompt
-		let initialPrompt = prompt;
-		if (task && !prompt.includes(task)) {
+		// Set AGENT_MAIL_URL environment variable
+		claudeCmd += ` && AGENT_MAIL_URL="${AGENT_MAIL_URL}"`;
+
+		// Claude with model
+		claudeCmd += ` claude --model ${model}`;
+
+		// Add dangerous skip permissions for autonomous operation
+		if (skipPermissions) {
+			claudeCmd += ' --dangerously-skip-permissions';
+		}
+
+		// Build initial prompt - task takes priority, then prompt, then default auto
+		let initialPrompt;
+		if (task) {
 			initialPrompt = `/jat:start ${task}`;
+		} else if (prompt) {
+			initialPrompt = prompt;
+		} else {
+			initialPrompt = '/jat:start auto';
 		}
 
 		// Create tmux session with Claude Code

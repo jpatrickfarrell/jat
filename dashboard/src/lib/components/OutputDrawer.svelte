@@ -74,6 +74,60 @@
 		return sessions[0];
 	});
 
+	// Detected Claude Code prompt options
+	interface PromptOption {
+		number: number;
+		text: string;
+		type: 'yes' | 'yes-remember' | 'custom' | 'other';
+		keySequence: string[]; // Keys to send (e.g., ['down', 'enter'])
+	}
+
+	// Parse Claude Code prompt options from output
+	const detectedOptions = $derived(() => {
+		const session = currentSession();
+		if (!session?.output) return [];
+
+		const output = session.output;
+		const options: PromptOption[] = [];
+
+		// Look for "Do you want to proceed?" or similar prompts
+		// Match lines like "❯ 1. Yes" or "  2. Yes, and don't ask again..."
+		const optionRegex = /^[❯\s]+(\d+)\.\s+(.+)$/gm;
+		let match;
+
+		while ((match = optionRegex.exec(output)) !== null) {
+			const num = parseInt(match[1], 10);
+			const text = match[2].trim();
+
+			// Determine option type
+			let type: PromptOption['type'] = 'other';
+			if (/^Yes\s*$/.test(text)) {
+				type = 'yes';
+			} else if (/Yes.*don't ask again/i.test(text) || /Yes.*and don't ask/i.test(text)) {
+				type = 'yes-remember';
+			} else if (/Type here/i.test(text) || /tell Claude/i.test(text)) {
+				type = 'custom';
+			}
+
+			// Calculate key sequence: option 1 = just Enter, option 2 = Down+Enter, etc.
+			const downs = num - 1;
+			const keySequence: string[] = [];
+			for (let i = 0; i < downs; i++) {
+				keySequence.push('down');
+			}
+			keySequence.push('enter');
+
+			options.push({ number: num, text, type, keySequence });
+		}
+
+		return options;
+	});
+
+	// Get specific option by type
+	const getOptionByType = (type: PromptOption['type']) => {
+		return detectedOptions().find(o => o.type === type);
+	};
+
 	// Load persisted state from localStorage
 	onMount(() => {
 		if (browser) {
@@ -207,19 +261,9 @@
 
 	// Send input to selected session
 	async function sendInput(type: 'text' | 'ctrl-c' | 'raw' = 'text') {
-		console.log('[OutputDrawer] sendInput called:', { type, inputText });
-
-		if (type === 'text' && !inputText.trim()) {
-			console.log('[OutputDrawer] Empty text, returning early');
-			return;
-		}
+		if (type === 'text' && !inputText.trim()) return;
 		const target = currentSession();
-		console.log('[OutputDrawer] Target session:', target);
-
-		if (!target) {
-			console.log('[OutputDrawer] No target session, returning early');
-			return;
-		}
+		if (!target) return;
 
 		sendingInput = true;
 
@@ -228,23 +272,18 @@
 				? { type: 'ctrl-c' }
 				: { type, input: inputText };
 
-			console.log('[OutputDrawer] Sending to API:', `/api/sessions/${target.name}/input`, body);
-
-			const response = await fetch(`/api/sessions/${target.name}/input`, {
+			await fetch(`/api/sessions/${target.name}/input`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(body)
 			});
-
-			const result = await response.json();
-			console.log('[OutputDrawer] API response:', result);
 
 			// Clear input after sending
 			if (type === 'text') {
 				inputText = '';
 			}
 		} catch (e) {
-			console.error('[OutputDrawer] Failed to send input:', e);
+			console.error('Failed to send input:', e);
 		} finally {
 			sendingInput = false;
 		}
@@ -257,15 +296,13 @@
 
 		sendingInput = true;
 		try {
-			const response = await fetch(`/api/sessions/${target.name}/input`, {
+			await fetch(`/api/sessions/${target.name}/input`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ type: keyType })
 			});
-			const result = await response.json();
-			console.log(`[OutputDrawer] ${keyType} response:`, result);
 		} catch (e) {
-			console.error(`[OutputDrawer] Failed to send ${keyType}:`, e);
+			console.error(`Failed to send ${keyType}:`, e);
 		} finally {
 			sendingInput = false;
 		}
@@ -287,18 +324,43 @@
 				// Small delay between keys
 				await new Promise(r => setTimeout(r, 50));
 			}
-			console.log(`[OutputDrawer] Sent sequence:`, keys);
 		} catch (e) {
-			console.error(`[OutputDrawer] Failed to send sequence:`, e);
+			console.error('Failed to send key sequence:', e);
 		} finally {
 			sendingInput = false;
 		}
 	}
 
-	// Quick actions for Claude Code prompts
-	function sendYes() { sendKey('enter'); }
-	function sendYesRemember() { sendKeySequence(['down', 'enter']); }
+	// Quick actions for Claude Code prompts - now uses detected options
+	function sendYes() {
+		const opt = getOptionByType('yes');
+		if (opt) {
+			sendKeySequence(opt.keySequence);
+		} else {
+			// Fallback: just send Enter
+			sendKey('enter');
+		}
+	}
+
+	function sendYesRemember() {
+		const opt = getOptionByType('yes-remember');
+		if (opt) {
+			sendKeySequence(opt.keySequence);
+		} else {
+			// Fallback: Down + Enter
+			sendKeySequence(['down', 'enter']);
+		}
+	}
+
 	function sendEscape() { sendKey('escape'); }
+
+	// Send option by number (1-indexed)
+	function sendOptionNumber(num: number) {
+		const opt = detectedOptions().find(o => o.number === num);
+		if (opt) {
+			sendKeySequence(opt.keySequence);
+		}
+	}
 
 	// Handle Enter key in input
 	function handleInputKeydown(e: KeyboardEvent) {
@@ -470,26 +532,64 @@
 			class="border-t px-3 py-2 space-y-2"
 			style="background: oklch(0.18 0.01 250); border-color: oklch(0.30 0.02 250);"
 		>
-			<!-- Quick action buttons for Claude prompts -->
-			<div class="flex gap-1.5">
-				<button
-					onclick={sendYes}
-					class="btn btn-xs flex-1"
-					style="background: oklch(0.30 0.12 150); border: none; color: oklch(0.95 0.02 250);"
-					title="Accept highlighted option (Enter)"
-					disabled={sendingInput || !currentSession()}
-				>
-					Yes
-				</button>
-				<button
-					onclick={sendYesRemember}
-					class="btn btn-xs flex-1"
-					style="background: oklch(0.28 0.10 200); border: none; color: oklch(0.95 0.02 250);"
-					title="Yes + Don't ask again (Down, Enter)"
-					disabled={sendingInput || !currentSession()}
-				>
-					Yes+✓
-				</button>
+			<!-- Quick action buttons for Claude prompts - dynamic based on detected options -->
+			<div class="flex gap-1.5 flex-wrap">
+				{#if detectedOptions().length > 0}
+					<!-- Show detected prompt options with their numbers -->
+					{#each detectedOptions() as opt (opt.number)}
+						{#if opt.type === 'yes'}
+							<button
+								onclick={() => sendOptionNumber(opt.number)}
+								class="btn btn-xs"
+								style="background: oklch(0.30 0.12 150); border: none; color: oklch(0.95 0.02 250);"
+								title={`Option ${opt.number}: ${opt.text}`}
+								disabled={sendingInput || !currentSession()}
+							>
+								<span class="opacity-60 mr-0.5">{opt.number}.</span>Yes
+							</button>
+						{:else if opt.type === 'yes-remember'}
+							<button
+								onclick={() => sendOptionNumber(opt.number)}
+								class="btn btn-xs"
+								style="background: oklch(0.28 0.10 200); border: none; color: oklch(0.95 0.02 250);"
+								title={`Option ${opt.number}: ${opt.text}`}
+								disabled={sendingInput || !currentSession()}
+							>
+								<span class="opacity-60 mr-0.5">{opt.number}.</span>Yes+✓
+							</button>
+						{:else if opt.type === 'custom'}
+							<button
+								onclick={() => sendOptionNumber(opt.number)}
+								class="btn btn-xs"
+								style="background: oklch(0.25 0.08 280); border: none; color: oklch(0.85 0.02 250);"
+								title={`Option ${opt.number}: ${opt.text}`}
+								disabled={sendingInput || !currentSession()}
+							>
+								<span class="opacity-60 mr-0.5">{opt.number}.</span>Custom
+							</button>
+						{/if}
+					{/each}
+				{:else}
+					<!-- Fallback buttons when no prompt detected -->
+					<button
+						onclick={sendYes}
+						class="btn btn-xs flex-1"
+						style="background: oklch(0.30 0.12 150); border: none; color: oklch(0.95 0.02 250);"
+						title="Accept highlighted option (Enter)"
+						disabled={sendingInput || !currentSession()}
+					>
+						Yes
+					</button>
+					<button
+						onclick={sendYesRemember}
+						class="btn btn-xs flex-1"
+						style="background: oklch(0.28 0.10 200); border: none; color: oklch(0.95 0.02 250);"
+						title="Yes + Don't ask again (Down, Enter)"
+						disabled={sendingInput || !currentSession()}
+					>
+						Yes+✓
+					</button>
+				{/if}
 				<button
 					onclick={sendEscape}
 					class="btn btn-xs"

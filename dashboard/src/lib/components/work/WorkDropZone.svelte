@@ -83,9 +83,8 @@
 </script>
 
 <div
-	class="rounded-lg border-2 border-dashed transition-all duration-200 {className}"
+	class="rounded-lg border-2 border-dashed transition-all duration-200 {className} {isDragOver && !disabled ? 'bg-primary/10' : ''}"
 	class:border-primary={isDragOver && !disabled}
-	class:bg-primary/10={isDragOver && !disabled}
 	class:border-base-300={!isDragOver || disabled}
 	class:opacity-50={disabled || isSpawning}
 	class:cursor-not-allowed={disabled || isSpawning}

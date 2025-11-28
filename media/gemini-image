@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# Generate image from text prompt using Gemini API
+# Usage: gemini-image "PROMPT" [OUTPUT] [options]
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/gemini-lib.sh"
+
+show_help() {
+    cat <<'EOF'
+Usage: gemini-image "PROMPT" [OUTPUT] [options]
+
+Generate an image from a text prompt using Gemini.
+
+Arguments:
+  PROMPT              Text description of the image to generate (required)
+  OUTPUT              Output file path (default: /tmp/gemini-TIMESTAMP.png)
+
+Options:
+  --model MODEL       Model to use (default: gemini-2.5-flash-image)
+                      Available: gemini-2.5-flash-image (fast)
+                                 gemini-3-pro-image-preview (quality, 4K)
+  --aspect RATIO      Aspect ratio: 1:1, 16:9, 9:16, 4:3, 3:4, etc.
+  --size SIZE         Image size: 1K, 2K, 4K (4K requires pro model)
+  --help, -h          Show this help
+
+Examples:
+  gemini-image "A sunset over mountains"
+  gemini-image "Product photo of a coffee mug" product.png --aspect 1:1
+  gemini-image "Detailed art" art.png --model gemini-3-pro-image-preview --size 2K
+
+Environment:
+  GEMINI_API_KEY      Required. Your Gemini API key.
+EOF
+}
+
+# Defaults
+PROMPT=""
+OUTPUT=""
+MODEL="$GEMINI_DEFAULT_MODEL"
+ASPECT=""
+SIZE=""
+
+# Parse arguments: prompt is first non-flag, output is second non-flag
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --model)
+            MODEL="$2"
+            shift 2
+            ;;
+        --aspect)
+            ASPECT="$2"
+            shift 2
+            ;;
+        --size)
+            SIZE="$2"
+            shift 2
+            ;;
+        --help|-h)
+            show_help
+            exit 0
+            ;;
+        --*)
+            gemini_error "Unknown option: $1"
+            ;;
+        *)
+            if [[ -z "$PROMPT" ]]; then
+                PROMPT="$1"
+            else
+                OUTPUT="$1"
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Validate
+if [[ -z "$PROMPT" ]]; then
+    gemini_error "Prompt required. Usage: gemini-image \"PROMPT\""
+fi
+
+gemini_check_api_key
+gemini_check_deps
+
+# Default output path
+if [[ -z "$OUTPUT" ]]; then
+    OUTPUT="/tmp/gemini-$(date +%Y%m%d-%H%M%S).png"
+fi
+
+# Build generation config
+CONFIG='{"responseModalities": ["IMAGE", "TEXT"]}'
+if [[ -n "$ASPECT" ]]; then
+    CONFIG=$(echo "$CONFIG" | jq --arg a "$ASPECT" '. + {aspectRatio: $a}')
+fi
+if [[ -n "$SIZE" ]]; then
+    CONFIG=$(echo "$CONFIG" | jq --arg s "$SIZE" '. + {imageSize: $s}')
+fi
+
+# Build payload using jq for safe escaping
+PAYLOAD=$(jq -n --arg p "$PROMPT" --argjson c "$CONFIG" \
+    '{contents: [{parts: [{text: $p}]}], generationConfig: $c}')
+
+echo "Generating with $MODEL..."
+RESPONSE=$(gemini_request "$MODEL" "$PAYLOAD")
+gemini_save_image "$RESPONSE" "$OUTPUT"
+
+# Show any text response
+TEXT=$(gemini_get_text "$RESPONSE")
+if [[ -n "$TEXT" ]]; then
+    echo "Model response: $TEXT"
+fi
+
+gemini_success "Saved: $OUTPUT"

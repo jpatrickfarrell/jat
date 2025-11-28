@@ -92,6 +92,10 @@
 	let showUnassignModal = $state(false);
 	let showActivityHistory = $state(false);
 
+	// Session control state
+	let sessionControlLoading = $state<string | null>(null); // 'kill' | 'interrupt' | 'continue' | slash command name
+	let showSlashDropdown = $state(false);
+
 	// Token usage state management
 	let usageLoading = $state(false);
 	let usageError = $state<string | null>(null);
@@ -732,6 +736,116 @@
 			console.error('Failed to copy:', err);
 		}
 	}
+
+	// ═══════════════════════════════════════════════════════════════════════
+	// SESSION CONTROL FUNCTIONS
+	// Kill session, send Ctrl+C interrupt, send continue, slash commands
+	// ═══════════════════════════════════════════════════════════════════════
+
+	// Kill the agent's tmux session
+	async function killSession(): Promise<void> {
+		if (!confirm(`Kill session for ${agent.name}?\n\nThis will terminate the Claude Code session.`)) {
+			return;
+		}
+
+		sessionControlLoading = 'kill';
+		try {
+			const response = await fetch(`/api/sessions/${encodeURIComponent(agent.name)}`, {
+				method: 'DELETE'
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				throw new Error(data.message || 'Failed to kill session');
+			}
+
+			// Refresh page to update agent status
+			window.location.reload();
+		} catch (error: unknown) {
+			console.error('Failed to kill session:', error);
+			alert(`Failed to kill session: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		} finally {
+			sessionControlLoading = null;
+		}
+	}
+
+	// Send Ctrl+C interrupt to agent's session
+	async function sendInterrupt(): Promise<void> {
+		sessionControlLoading = 'interrupt';
+		try {
+			const response = await fetch(`/api/sessions/${encodeURIComponent(agent.name)}/input`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ type: 'interrupt' })
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				throw new Error(data.message || 'Failed to send interrupt');
+			}
+		} catch (error: unknown) {
+			console.error('Failed to send interrupt:', error);
+			alert(`Failed to send interrupt: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		} finally {
+			sessionControlLoading = null;
+		}
+	}
+
+	// Send 'continue' text to agent's session
+	async function sendContinue(): Promise<void> {
+		sessionControlLoading = 'continue';
+		try {
+			const response = await fetch(`/api/sessions/${encodeURIComponent(agent.name)}/input`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ type: 'text', text: 'continue' })
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				throw new Error(data.message || 'Failed to send continue');
+			}
+		} catch (error: unknown) {
+			console.error('Failed to send continue:', error);
+			alert(`Failed to send continue: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		} finally {
+			sessionControlLoading = null;
+		}
+	}
+
+	// Send slash command to agent's session
+	async function sendSlashCommand(command: string): Promise<void> {
+		sessionControlLoading = command;
+		showSlashDropdown = false;
+		try {
+			const response = await fetch(`/api/sessions/${encodeURIComponent(agent.name)}/input`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ type: 'text', text: `/jat:${command}` })
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				throw new Error(data.message || `Failed to send /${command}`);
+			}
+		} catch (error: unknown) {
+			console.error(`Failed to send /${command}:`, error);
+			alert(`Failed to send /${command}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		} finally {
+			sessionControlLoading = null;
+		}
+	}
+
+	// Toggle slash command dropdown
+	function toggleSlashDropdown(event: MouseEvent): void {
+		event.stopPropagation();
+		showSlashDropdown = !showSlashDropdown;
+	}
+
+	// Close slash dropdown when clicking outside
+	function closeSlashDropdown(): void {
+		showSlashDropdown = false;
+	}
 </script>
 
 <!-- Industrial/Terminal AgentCard -->
@@ -860,6 +974,118 @@
 				>
 					{statusVisual().label}
 				</button>
+			{/if}
+
+			<!-- ═══ SESSION CONTROL BUTTONS ═══ -->
+			<!-- Only show for non-offline agents (those with active sessions) -->
+			{#if agentStatus() !== 'offline'}
+				<div class="flex items-center gap-0.5 ml-1">
+					<!-- Ctrl+C / Interrupt button -->
+					<button
+						class="p-1 rounded hover:bg-warning/20 transition-colors group"
+						onclick={sendInterrupt}
+						disabled={sessionControlLoading !== null}
+						title="Send Ctrl+C (interrupt)"
+					>
+						{#if sessionControlLoading === 'interrupt'}
+							<span class="loading loading-spinner loading-xs"></span>
+						{:else}
+							<svg class="w-3.5 h-3.5 text-base-content/40 group-hover:text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+							</svg>
+						{/if}
+					</button>
+
+					<!-- Continue button -->
+					<button
+						class="p-1 rounded hover:bg-success/20 transition-colors group"
+						onclick={sendContinue}
+						disabled={sessionControlLoading !== null}
+						title="Send 'continue'"
+					>
+						{#if sessionControlLoading === 'continue'}
+							<span class="loading loading-spinner loading-xs"></span>
+						{:else}
+							<svg class="w-3.5 h-3.5 text-base-content/40 group-hover:text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+							</svg>
+						{/if}
+					</button>
+
+					<!-- Slash command dropdown -->
+					<div class="relative">
+						<button
+							class="p-1 rounded hover:bg-primary/20 transition-colors group"
+							onclick={toggleSlashDropdown}
+							disabled={sessionControlLoading !== null}
+							title="Slash commands"
+						>
+							{#if sessionControlLoading && !['kill', 'interrupt', 'continue'].includes(sessionControlLoading)}
+								<span class="loading loading-spinner loading-xs"></span>
+							{:else}
+								<svg class="w-3.5 h-3.5 text-base-content/40 group-hover:text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM12.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM18.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+								</svg>
+							{/if}
+						</button>
+
+						<!-- Slash command dropdown menu -->
+						{#if showSlashDropdown}
+							<!-- svelte-ignore a11y_click_events_have_key_events -->
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div class="fixed inset-0 z-40" onclick={closeSlashDropdown}></div>
+							<div class="absolute right-0 top-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-xl py-1 min-w-[140px] z-50">
+								<div class="px-2 py-1 text-[9px] font-mono tracking-wider uppercase text-base-content/40 border-b border-base-300">
+									/jat:commands
+								</div>
+								<button
+									class="w-full px-3 py-1.5 text-left text-xs hover:bg-base-200 transition-colors flex items-center gap-2"
+									onclick={() => sendSlashCommand('complete')}
+								>
+									<span class="text-success">✓</span>
+									<span>complete</span>
+								</button>
+								<button
+									class="w-full px-3 py-1.5 text-left text-xs hover:bg-base-200 transition-colors flex items-center gap-2"
+									onclick={() => sendSlashCommand('next')}
+								>
+									<span class="text-info">→</span>
+									<span>next</span>
+								</button>
+								<button
+									class="w-full px-3 py-1.5 text-left text-xs hover:bg-base-200 transition-colors flex items-center gap-2"
+									onclick={() => sendSlashCommand('status')}
+								>
+									<span class="text-warning">?</span>
+									<span>status</span>
+								</button>
+								<button
+									class="w-full px-3 py-1.5 text-left text-xs hover:bg-base-200 transition-colors flex items-center gap-2"
+									onclick={() => sendSlashCommand('pause')}
+								>
+									<span class="text-base-content/50">⏸</span>
+									<span>pause</span>
+								</button>
+							</div>
+						{/if}
+					</div>
+
+					<!-- Kill button (X icon) -->
+					<button
+						class="p-1 rounded hover:bg-error/20 transition-colors group"
+						onclick={killSession}
+						disabled={sessionControlLoading !== null}
+						title="Kill session"
+					>
+						{#if sessionControlLoading === 'kill'}
+							<span class="loading loading-spinner loading-xs"></span>
+						{:else}
+							<svg class="w-3.5 h-3.5 text-base-content/40 group-hover:text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+							</svg>
+						{/if}
+					</button>
+				</div>
 			{/if}
 		</div>
 

@@ -10,6 +10,8 @@
  * - lineCount: Number of output lines
  * - tokens: Token usage for today
  * - cost: Cost in USD for today
+ * - sparklineData: Array of hourly token usage (last 24h) for sparkline rendering
+ *   Format: [{ timestamp: ISO string, tokens: number, cost: number }, ...]
  *
  * Query params:
  * - lines: Number of output lines to capture (default: 50, max: 500)
@@ -19,9 +21,16 @@ import { json } from '@sveltejs/kit';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getTasks } from '$lib/server/beads.js';
-import { getAgentUsage } from '$lib/utils/tokenUsage.js';
+import { getAgentUsage, getAgentHourlyUsage } from '$lib/utils/tokenUsage.js';
 
 const execAsync = promisify(exec);
+
+/**
+ * @typedef {Object} SparklineDataPoint
+ * @property {string} timestamp - ISO timestamp for the hour
+ * @property {number} tokens - Token count for this hour
+ * @property {number} cost - Cost in USD for this hour
+ */
 
 /**
  * @typedef {Object} WorkSession
@@ -32,6 +41,7 @@ const execAsync = promisify(exec);
  * @property {number} lineCount - Number of output lines
  * @property {number} tokens - Token usage for today
  * @property {number} cost - Cost in USD for today
+ * @property {SparklineDataPoint[]} sparklineData - Hourly token usage (last 24h)
  * @property {string} created - Session creation timestamp
  * @property {boolean} attached - Whether session is attached
  */
@@ -146,12 +156,21 @@ export async function GET({ url }) {
 				// Get token usage for today
 				let tokens = 0;
 				let cost = 0;
+				/** @type {SparklineDataPoint[]} */
+				let sparklineData = [];
 				try {
 					const usage = await getAgentUsage(agentName, 'today', projectPath);
 					tokens = usage.total_tokens || 0;
 					cost = usage.cost || 0;
 				} catch (err) {
 					// No usage data available
+				}
+
+				// Get hourly sparkline data (last 24h)
+				try {
+					sparklineData = await getAgentHourlyUsage(agentName, projectPath);
+				} catch (err) {
+					// No sparkline data available
 				}
 
 				return {
@@ -162,6 +181,7 @@ export async function GET({ url }) {
 					lineCount,
 					tokens,
 					cost,
+					sparklineData,
 					created: session.created,
 					attached: session.attached
 				};

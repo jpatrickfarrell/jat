@@ -545,3 +545,211 @@ export async function getHourlyUsage(projectPath: string): Promise<HourlyUsage[]
 			cost: data.cost
 		}));
 }
+
+// ============================================================================
+// Session-Specific Hourly Token Usage (For Sparklines)
+// ============================================================================
+
+/**
+ * Get hourly token usage for a specific agent (last 24 hours).
+ * Aggregates across all sessions belonging to this agent.
+ * Used for rendering sparklines in WorkCard headers.
+ *
+ * Input: agentName (string), projectPath (string)
+ * Output: Array of HourlyUsage objects (24 hours, oldest to newest)
+ * State: Read-only, parses JSONL files and groups by hour
+ */
+export async function getAgentHourlyUsage(agentName: string, projectPath: string): Promise<HourlyUsage[]> {
+	// Build session → agent mapping to find this agent's sessions
+	const sessionAgentMap = await buildSessionAgentMap(projectPath);
+
+	// Find all sessions for this agent
+	const agentSessionIds = Array.from(sessionAgentMap.entries())
+		.filter(([_, name]) => name === agentName)
+		.map(([sessionId, _]) => sessionId);
+
+	// Initialize 24 hours of empty data
+	const now = new Date();
+	const hourlyBuckets = new Map<string, { tokens: number; cost: number }>();
+
+	// Create 24 hourly buckets
+	for (let i = 23; i >= 0; i--) {
+		const hourTime = new Date(now.getTime() - i * 60 * 60 * 1000);
+		hourTime.setMinutes(0, 0, 0);
+		const hourKey = hourTime.toISOString();
+		hourlyBuckets.set(hourKey, { tokens: 0, cost: 0 });
+	}
+
+	// Parse each session file and aggregate
+	for (const sessionId of agentSessionIds) {
+		try {
+			const homeDir = os.homedir();
+			const projectSlug = projectPath.replace(/\//g, '-');
+			const sessionFile = path.join(homeDir, '.claude', 'projects', projectSlug, `${sessionId}.jsonl`);
+
+			const content = await readFile(sessionFile, 'utf-8');
+			const lines = content.trim().split('\n');
+
+			for (const line of lines) {
+				if (!line.trim()) continue;
+
+				try {
+					const entry: JSONLEntry = JSON.parse(line);
+					if (!entry.message?.usage) continue;
+
+					const timestamp = entry.timestamp ? new Date(entry.timestamp) : new Date();
+					const age = now.getTime() - timestamp.getTime();
+					if (age > 24 * 60 * 60 * 1000) continue;
+
+					timestamp.setMinutes(0, 0, 0);
+					const hourKey = timestamp.toISOString();
+
+					let bucket = hourlyBuckets.get(hourKey);
+					if (!bucket) {
+						const closestKey = Array.from(hourlyBuckets.keys())
+							.reduce((closest, key) => {
+								const diff = Math.abs(new Date(key).getTime() - timestamp.getTime());
+								const closestDiff = Math.abs(new Date(closest).getTime() - timestamp.getTime());
+								return diff < closestDiff ? key : closest;
+							});
+						bucket = hourlyBuckets.get(closestKey);
+						if (!bucket) continue;
+					}
+
+					const usage = entry.message.usage;
+					const totalTokens = (
+						(usage.input_tokens || 0) +
+						(usage.cache_creation_input_tokens || 0) +
+						(usage.cache_read_input_tokens || 0) +
+						(usage.output_tokens || 0)
+					);
+
+					const cost = (
+						((usage.input_tokens || 0) / 1_000_000) * PRICING.input +
+						((usage.cache_creation_input_tokens || 0) / 1_000_000) * PRICING.cache_creation +
+						((usage.cache_read_input_tokens || 0) / 1_000_000) * PRICING.cache_read +
+						((usage.output_tokens || 0) / 1_000_000) * PRICING.output
+					);
+
+					bucket.tokens += totalTokens;
+					bucket.cost += cost;
+				} catch (parseError) {
+					continue;
+				}
+			}
+		} catch (error) {
+			// Session file might not exist
+			continue;
+		}
+	}
+
+	return Array.from(hourlyBuckets.entries())
+		.sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime())
+		.map(([timestamp, data]) => ({
+			timestamp,
+			tokens: data.tokens,
+			cost: data.cost
+		}));
+}
+
+/**
+ * Get hourly token usage for a specific session (last 24 hours).
+ * Used for rendering sparklines in WorkCard headers.
+ *
+ * Input: sessionId (string), projectPath (string)
+ * Output: Array of HourlyUsage objects (24 hours, oldest to newest)
+ * State: Read-only, parses single JSONL file and groups by hour
+ */
+export async function getSessionHourlyUsage(sessionId: string, projectPath: string): Promise<HourlyUsage[]> {
+	// Initialize 24 hours of empty data
+	const now = new Date();
+	const hourlyBuckets = new Map<string, { tokens: number; cost: number }>();
+
+	// Create 24 hourly buckets
+	for (let i = 23; i >= 0; i--) {
+		const hourTime = new Date(now.getTime() - i * 60 * 60 * 1000);
+		hourTime.setMinutes(0, 0, 0);
+		const hourKey = hourTime.toISOString();
+		hourlyBuckets.set(hourKey, { tokens: 0, cost: 0 });
+	}
+
+	try {
+		// Construct path to session JSONL file
+		const homeDir = os.homedir();
+		const projectSlug = projectPath.replace(/\//g, '-');
+		const sessionFile = path.join(homeDir, '.claude', 'projects', projectSlug, `${sessionId}.jsonl`);
+
+		const content = await readFile(sessionFile, 'utf-8');
+		const lines = content.trim().split('\n');
+
+		for (const line of lines) {
+			if (!line.trim()) continue;
+
+			try {
+				const entry: JSONLEntry = JSON.parse(line);
+
+				// Skip if no usage data
+				if (!entry.message?.usage) continue;
+
+				// Get timestamp
+				const timestamp = entry.timestamp ? new Date(entry.timestamp) : new Date();
+
+				// Skip if older than 24 hours
+				const age = now.getTime() - timestamp.getTime();
+				if (age > 24 * 60 * 60 * 1000) continue;
+
+				// Round to hour start
+				timestamp.setMinutes(0, 0, 0);
+				const hourKey = timestamp.toISOString();
+
+				// Get or find closest bucket
+				let bucket = hourlyBuckets.get(hourKey);
+				if (!bucket) {
+					// Find closest bucket
+					const closestKey = Array.from(hourlyBuckets.keys())
+						.reduce((closest, key) => {
+							const diff = Math.abs(new Date(key).getTime() - timestamp.getTime());
+							const closestDiff = Math.abs(new Date(closest).getTime() - timestamp.getTime());
+							return diff < closestDiff ? key : closest;
+						});
+					bucket = hourlyBuckets.get(closestKey);
+					if (!bucket) continue;
+				}
+
+				// Sum tokens
+				const usage = entry.message.usage;
+				const totalTokens = (
+					(usage.input_tokens || 0) +
+					(usage.cache_creation_input_tokens || 0) +
+					(usage.cache_read_input_tokens || 0) +
+					(usage.output_tokens || 0)
+				);
+
+				// Calculate cost
+				const cost = (
+					((usage.input_tokens || 0) / 1_000_000) * PRICING.input +
+					((usage.cache_creation_input_tokens || 0) / 1_000_000) * PRICING.cache_creation +
+					((usage.cache_read_input_tokens || 0) / 1_000_000) * PRICING.cache_read +
+					((usage.output_tokens || 0) / 1_000_000) * PRICING.output
+				);
+
+				bucket.tokens += totalTokens;
+				bucket.cost += cost;
+
+			} catch (parseError) {
+				continue;
+			}
+		}
+	} catch (error) {
+		// Session file might not exist - return empty buckets
+	}
+
+	// Convert map to array (sorted oldest to newest)
+	return Array.from(hourlyBuckets.entries())
+		.sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime())
+		.map(([timestamp, data]) => ({
+			timestamp,
+			tokens: data.tokens,
+			cost: data.cost
+		}));
+}

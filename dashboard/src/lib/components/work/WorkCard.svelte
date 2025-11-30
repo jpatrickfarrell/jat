@@ -27,6 +27,7 @@
 	import TokenUsageDisplay from '$lib/components/TokenUsageDisplay.svelte';
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
+	import Sparkline from '$lib/components/Sparkline.svelte';
 	import { playTaskCompleteSound } from '$lib/utils/soundEffects';
 
 	// Props
@@ -38,6 +39,12 @@
 		issue_type?: string;
 	}
 
+	interface SparklineDataPoint {
+		timestamp: string;
+		tokens: number;
+		cost: number;
+	}
+
 	interface Props {
 		sessionName: string;
 		agentName: string;
@@ -46,6 +53,7 @@
 		lineCount?: number;
 		tokens?: number;
 		cost?: number;
+		sparklineData?: SparklineDataPoint[]; // Hourly token usage for sparkline
 		isComplete?: boolean; // Task completion state
 		startTime?: Date | null; // When work started (for elapsed time)
 		onKillSession?: () => void;
@@ -68,6 +76,7 @@
 		lineCount = 0,
 		tokens = 0,
 		cost = 0,
+		sparklineData = [],
 		isComplete = false,
 		startTime = null,
 		onKillSession,
@@ -166,6 +175,15 @@
 
 	// Input state
 	let inputText = $state('');
+
+	// Attached images (pending upload)
+	interface AttachedImage {
+		id: string;
+		blob: Blob;
+		preview: string; // Data URL for thumbnail
+		name: string;
+	}
+	let attachedImages = $state<AttachedImage[]>([]);
 
 	// Detected Claude Code prompt options
 	interface PromptOption {
@@ -435,13 +453,63 @@
 		}
 	}
 
-	// Send text input
+	// Send text input (with attached images if any)
 	async function sendTextInput() {
-		if (!inputText.trim() || !onSendInput) return;
+		if (!onSendInput) return;
+
+		// Need either text or images to send
+		const hasText = inputText.trim().length > 0;
+		const hasImages = attachedImages.length > 0;
+		if (!hasText && !hasImages) return;
+
 		sendingInput = true;
 		try {
-			await onSendInput(inputText, 'text');
+			// Upload all attached images first and collect paths
+			const imagePaths: string[] = [];
+			for (const img of attachedImages) {
+				const formData = new FormData();
+				formData.append('image', img.blob, `pasted-image-${Date.now()}.png`);
+				formData.append('sessionName', sessionName);
+
+				const response = await fetch('/api/work/upload-image', {
+					method: 'POST',
+					body: formData
+				});
+
+				if (response.ok) {
+					const { filePath } = await response.json();
+					imagePaths.push(filePath);
+				} else {
+					console.error('Failed to upload image:', img.name);
+				}
+			}
+
+			// Build the message: image paths first, then user text
+			let message = '';
+			if (imagePaths.length > 0) {
+				message = imagePaths.join(' ');
+				if (hasText) {
+					message += ' ' + inputText.trim();
+				}
+			} else if (hasText) {
+				message = inputText.trim();
+			}
+
+			if (message) {
+				// Send text first (API adds Enter), then send explicit Enter after delay
+				// Double Enter ensures Claude Code registers the submission
+				await onSendInput(message, 'text');
+				await new Promise((r) => setTimeout(r, 100));
+				await onSendInput('enter', 'key');
+			}
+
+			// Clear input and attached images on success
 			inputText = '';
+			// Revoke object URLs to prevent memory leaks
+			for (const img of attachedImages) {
+				URL.revokeObjectURL(img.preview);
+			}
+			attachedImages = [];
 		} finally {
 			sendingInput = false;
 		}
@@ -456,6 +524,119 @@
 			// Clear input text on Escape or Ctrl+C (terminal behavior)
 			e.preventDefault();
 			inputText = '';
+		}
+		// Note: Ctrl+V is handled by onpaste event, not here
+	}
+
+	// Handle native paste event - only intercept for images, let text paste normally
+	function handlePaste(e: ClipboardEvent) {
+		if (!onSendInput || !e.clipboardData) return;
+
+		// Check if clipboard contains an image
+		const items = e.clipboardData.items;
+		for (const item of items) {
+			if (item.type.startsWith('image/')) {
+				// Intercept image paste
+				e.preventDefault();
+				const blob = item.getAsFile();
+				if (blob) {
+					attachImage(blob);
+				}
+				return;
+			}
+		}
+		// For text, let the native paste happen (don't preventDefault)
+	}
+
+	// Attach an image (add to pending list, don't upload yet)
+	async function attachImage(blob: Blob) {
+		const id = `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+		const name = `Image ${attachedImages.length + 1}`;
+
+		// Create preview URL
+		const preview = URL.createObjectURL(blob);
+
+		attachedImages = [...attachedImages, { id, blob, preview, name }];
+	}
+
+	// Remove an attached image
+	function removeAttachedImage(id: string) {
+		const img = attachedImages.find(i => i.id === id);
+		if (img) {
+			URL.revokeObjectURL(img.preview);
+		}
+		attachedImages = attachedImages.filter(i => i.id !== id);
+	}
+
+	// Manual paste button - reads clipboard and handles text or images
+	async function handlePasteButton() {
+		if (!onSendInput) return;
+
+		try {
+			const clipboardItems = await navigator.clipboard.read();
+
+			for (const item of clipboardItems) {
+				// Check for images first
+				const imageType = item.types.find((t: string) => t.startsWith('image/'));
+				if (imageType) {
+					const blob = await item.getType(imageType);
+					await attachImage(blob);
+					return;
+				}
+
+				// Fall back to text
+				if (item.types.includes('text/plain')) {
+					const blob = await item.getType('text/plain');
+					const text = await blob.text();
+					if (text.trim()) {
+						inputText = text;
+					}
+					return;
+				}
+			}
+		} catch (err) {
+			// Fallback: try simple text paste
+			try {
+				const text = await navigator.clipboard.readText();
+				if (text.trim()) {
+					inputText = text;
+				}
+			} catch (textErr) {
+				console.error('Failed to read clipboard:', textErr);
+			}
+		}
+	}
+
+	// Upload image and send file path to session
+	async function uploadAndSendImage(blob: Blob) {
+		if (!onSendInput) return;
+		sendingInput = true;
+
+		try {
+			// Upload to server
+			const formData = new FormData();
+			formData.append('image', blob, `pasted-image-${Date.now()}.png`);
+			formData.append('sessionName', sessionName);
+
+			const response = await fetch('/api/work/upload-image', {
+				method: 'POST',
+				body: formData
+			});
+
+			if (!response.ok) {
+				throw new Error('Failed to upload image');
+			}
+
+			const { filePath } = await response.json();
+
+			// Send the file path to Claude Code
+			await onSendInput(filePath, 'text');
+			await new Promise((r) => setTimeout(r, 100));
+			await onSendInput('enter', 'key');
+		} catch (err) {
+			console.error('Failed to upload image:', err);
+		} finally {
+			sendingInput = false;
 		}
 	}
 
@@ -541,99 +722,111 @@
 		</div>
 	{/if}
 
-	<!-- Header: Task-first design -->
-	<div class="pl-3 pr-3 pt-3 pb-2 flex-shrink-0 flex-grow-0">
-		<!-- Task Title (Primary) -->
+	<!-- Header: Compact 2-row design -->
+	<div class="pl-3 pr-3 pt-2 pb-2 flex-shrink-0 flex-grow-0">
+		<!-- Row 1: TaskIdBadge + Priority + Task Title (truncated) -->
 		{#if task}
-			<div class="flex items-center gap-2 mb-1">
+			<div class="flex items-center gap-2 min-w-0">
 				<TaskIdBadge
 					task={{ id: task.id, status: task.status, issue_type: task.issue_type, title: task.title }}
 					size="sm"
-					showType={true}
-					showStatus={true}
+					showType={false}
+					showStatus={false}
 					onOpenTask={onTaskClick}
 				/>
 				<span
-					class="font-mono text-[10px] tracking-wider px-1.5 py-0.5 rounded"
+					class="font-mono text-[10px] tracking-wider px-1 py-0.5 rounded flex-shrink-0"
 					style="background: oklch(0.5 0 0 / 0.1); color: oklch(0.70 0.10 50);"
 				>
 					P{task.priority ?? 2}
 				</span>
+				<h3 class="font-mono font-bold text-sm tracking-wide truncate min-w-0 flex-1" style="color: oklch(0.90 0.02 250);" title={task.title}>
+					{task.title}
+				</h3>
 			</div>
-			<h3 class="font-mono font-bold text-sm tracking-wide truncate" style="color: oklch(0.90 0.02 250);" title={task.title}>
-				{task.title}
-			</h3>
 		{:else}
 			<h3 class="font-mono font-bold text-sm tracking-wide" style="color: oklch(0.5 0 0 / 0.5);">
 				Idle session
 			</h3>
 		{/if}
 
-		<!-- Agent Badge + Token Usage + Control Buttons -->
-		<div class="flex items-center justify-between mt-2 pt-2" style="border-top: 1px solid oklch(0.5 0 0 / 0.08);">
+		<!-- Row 2: Agent + Sparkline + Stats + Controls -->
+		<div class="flex items-center justify-between mt-1.5 gap-2">
 			<!-- Agent Info -->
-			<div class="flex items-center gap-2">
+			<div class="flex items-center gap-1.5 flex-shrink-0">
 				<div class="avatar online">
-					<div class="w-5 rounded-full ring-2 ring-info ring-offset-base-100 ring-offset-1">
-						<AgentAvatar name={agentName} size={20} />
+					<div class="w-4 rounded-full ring-1 ring-info ring-offset-base-100 ring-offset-1">
+						<AgentAvatar name={agentName} size={16} />
 					</div>
 				</div>
 				<span class="font-mono text-[10px] tracking-wider" style="color: oklch(0.65 0.02 250);">{agentName}</span>
 			</div>
 
-			<!-- Token Usage + Control Buttons -->
-			<div class="flex items-center gap-2">
-				<TokenUsageDisplay
-					{tokens}
-					{cost}
-					timeRange="today"
-					variant="compact"
-					showTokens={true}
-					showCost={true}
-					colorCoded={true}
-				/>
-
-				<!-- Control Buttons -->
-				<div class="flex items-center gap-0.5">
-					<!-- Auto-scroll toggle -->
-					<button
-						class="btn btn-xs"
-						class:btn-primary={autoScroll}
-						class:btn-ghost={!autoScroll}
-						onclick={toggleAutoScroll}
-						title={autoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF'}
-					>
-						<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" />
-						</svg>
-					</button>
-					<!-- Attach Terminal -->
-					<button
-						class="btn btn-xs btn-ghost hover:btn-info"
-						onclick={onAttachTerminal}
-						disabled={!onAttachTerminal}
-						title="Open in terminal"
-					>
-						<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
-						</svg>
-					</button>
-					<!-- Kill Session -->
-					<button
-						class="btn btn-xs btn-ghost hover:btn-error"
-						onclick={handleKill}
-						disabled={killLoading || !onKillSession}
-						title="Kill session"
-					>
-						{#if killLoading}
-							<span class="loading loading-spinner loading-xs"></span>
-						{:else}
-							<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-							</svg>
-						{/if}
-					</button>
+			<!-- Sparkline (compact, 60px wide) -->
+			{#if sparklineData && sparklineData.length > 0}
+				<div class="flex-shrink-0" style="width: 60px; height: 20px;">
+					<Sparkline
+						data={sparklineData}
+						height={20}
+						showTooltip={true}
+						showStyleToolbar={false}
+						defaultTimeRange="24h"
+						animate={false}
+					/>
 				</div>
+			{/if}
+
+			<!-- Token/Cost Stats (compact inline) -->
+			<div class="flex items-center gap-1 flex-shrink-0">
+				<span class="font-mono text-[10px]" style="color: oklch(0.70 0.05 250);">
+					{formatTokens(tokens)}
+				</span>
+				<span class="text-[10px]" style="color: oklch(0.5 0 0 / 0.3);">•</span>
+				<span class="font-mono text-[10px]" style="color: oklch(0.70 0.10 145);">
+					${cost.toFixed(2)}
+				</span>
+			</div>
+
+			<!-- Control Buttons -->
+			<div class="flex items-center gap-0.5 flex-shrink-0">
+				<!-- Auto-scroll toggle -->
+				<button
+					class="btn btn-xs"
+					class:btn-primary={autoScroll}
+					class:btn-ghost={!autoScroll}
+					onclick={toggleAutoScroll}
+					title={autoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF'}
+				>
+					<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" />
+					</svg>
+				</button>
+				<!-- Attach Terminal -->
+				<button
+					class="btn btn-xs btn-ghost hover:btn-info"
+					onclick={onAttachTerminal}
+					disabled={!onAttachTerminal}
+					title="Open in terminal"
+				>
+					<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
+					</svg>
+				</button>
+				<!-- Kill Session -->
+				<button
+					class="btn btn-xs btn-ghost hover:btn-error"
+					onclick={handleKill}
+					disabled={killLoading || !onKillSession}
+					title="Kill session"
+				>
+					{#if killLoading}
+						<span class="loading loading-spinner loading-xs"></span>
+					{:else}
+						<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+						</svg>
+					{/if}
+				</button>
 			</div>
 		</div>
 	</div>
@@ -656,19 +849,52 @@
 
 		<!-- Input Section -->
 		<div class="px-3 py-2 flex-shrink-0" style="border-top: 1px solid oklch(0.5 0 0 / 0.08); background: oklch(0.18 0.01 250);">
+			<!-- Attached Images Preview -->
+			{#if attachedImages.length > 0}
+				<div class="flex items-center gap-1.5 mb-2 flex-wrap">
+					{#each attachedImages as img (img.id)}
+						<div
+							class="relative group flex items-center gap-1 px-1.5 py-0.5 rounded"
+							style="background: oklch(0.28 0.08 200); border: 1px solid oklch(0.35 0.06 200);"
+						>
+							<!-- Thumbnail preview -->
+							<img
+								src={img.preview}
+								alt={img.name}
+								class="w-5 h-5 object-cover rounded"
+							/>
+							<!-- Image name -->
+							<span class="font-mono text-[10px]" style="color: oklch(0.85 0.02 250);">
+								[{img.name}]
+							</span>
+							<!-- Remove button -->
+							<button
+								onclick={() => removeAttachedImage(img.id)}
+								class="ml-0.5 opacity-60 hover:opacity-100 transition-opacity"
+								title="Remove image"
+							>
+								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+								</svg>
+							</button>
+						</div>
+					{/each}
+				</div>
+			{/if}
 			<!-- Text input with dynamic button area -->
 			<div class="flex gap-2">
 				<input
 					type="text"
 					bind:value={inputText}
 					onkeydown={handleInputKeydown}
+					onpaste={handlePaste}
 					placeholder="Type and press Enter... {lineCount} lines"
 					class="input input-xs flex-1 font-mono"
 					style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.80 0.02 250);"
 					disabled={sendingInput || !onSendInput}
 				/>
-				<!-- Dynamic button area: quick actions when empty, Send when typing -->
-				{#if inputText.trim()}
+				<!-- Dynamic button area: quick actions when empty, Send when typing or images attached -->
+				{#if inputText.trim() || attachedImages.length > 0}
 					<!-- User is typing: show Send button -->
 					<button
 						onclick={sendTextInput}
@@ -682,66 +908,88 @@
 						{/if}
 					</button>
 				{:else if !task}
-					<!-- No task: show Start (unregistered) or Next (idle after completing work) -->
+					<!-- No task: show Start (unregistered) or Next (idle after completing work) + ^C -->
 					{@const isIdle = output && /is now idle|work complete|task complete/i.test(output)}
-					{#if isIdle}
+					<div class="flex items-center gap-1">
+						{#if isIdle}
+							<button
+								onclick={() => sendWorkflowCommand('/jat:next')}
+								class="btn btn-xs gap-1"
+								style="background: linear-gradient(135deg, oklch(0.50 0.18 250) 0%, oklch(0.42 0.15 265) 100%); border: none; color: white; font-weight: 600;"
+								title="Pick up next task"
+								disabled={sendingInput || !onSendInput}
+							>
+								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+								</svg>
+								Next
+							</button>
+						{:else}
+							<button
+								onclick={() => sendWorkflowCommand('/jat:start')}
+								class="btn btn-xs gap-1"
+								style="background: linear-gradient(135deg, oklch(0.50 0.18 250) 0%, oklch(0.42 0.15 265) 100%); border: none; color: white; font-weight: 600;"
+								title="Start working on a task"
+								disabled={sendingInput || !onSendInput}
+							>
+								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+								</svg>
+								Start
+							</button>
+						{/if}
 						<button
-							onclick={() => sendWorkflowCommand('/jat:next')}
-							class="btn btn-xs gap-1"
-							style="background: linear-gradient(135deg, oklch(0.50 0.18 250) 0%, oklch(0.42 0.15 265) 100%); border: none; color: white; font-weight: 600;"
-							title="Pick up next task"
+							onclick={() => sendKey('ctrl-c')}
+							class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
+							style="background: oklch(0.30 0.12 25); border: none; color: oklch(0.95 0.02 250);"
+							title="Send Ctrl+C (interrupt)"
 							disabled={sendingInput || !onSendInput}
 						>
-							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-							</svg>
-							Next
+							^C
 						</button>
-					{:else}
-						<button
-							onclick={() => sendWorkflowCommand('/jat:start')}
-							class="btn btn-xs gap-1"
-							style="background: linear-gradient(135deg, oklch(0.50 0.18 250) 0%, oklch(0.42 0.15 265) 100%); border: none; color: white; font-weight: 600;"
-							title="Start working on a task"
-							disabled={sendingInput || !onSendInput}
-						>
-							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
-							</svg>
-							Start
-						</button>
-					{/if}
+					</div>
 				{:else if detectedWorkflowCommands.length > 0}
-					<!-- Workflow commands detected: show Next as primary action -->
+					<!-- Workflow commands detected: show Next as primary action + ^C -->
 					{@const hasNext = detectedWorkflowCommands.some(c => c.command === '/jat:next')}
 					{@const hasComplete = detectedWorkflowCommands.some(c => c.command === '/jat:complete')}
-					{#if hasNext}
+					<div class="flex items-center gap-1">
+						{#if hasNext}
+							<button
+								onclick={() => sendWorkflowCommand('/jat:next')}
+								class="btn btn-xs gap-1"
+								style="background: linear-gradient(135deg, oklch(0.50 0.18 250) 0%, oklch(0.42 0.15 265) 100%); border: none; color: white; font-weight: 600;"
+								title="Pick up next task"
+								disabled={sendingInput || !onSendInput}
+							>
+								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+								</svg>
+								Next
+							</button>
+						{:else if hasComplete}
+							<button
+								onclick={() => sendWorkflowCommand('/jat:complete')}
+								class="btn btn-xs gap-1"
+								style="background: linear-gradient(135deg, oklch(0.45 0.18 145) 0%, oklch(0.38 0.15 160) 100%); border: none; color: white; font-weight: 600;"
+								title="Complete this task"
+								disabled={sendingInput || !onSendInput}
+							>
+								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+								</svg>
+								Done
+							</button>
+						{/if}
 						<button
-							onclick={() => sendWorkflowCommand('/jat:next')}
-							class="btn btn-xs gap-1"
-							style="background: linear-gradient(135deg, oklch(0.50 0.18 250) 0%, oklch(0.42 0.15 265) 100%); border: none; color: white; font-weight: 600;"
-							title="Pick up next task"
+							onclick={() => sendKey('ctrl-c')}
+							class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
+							style="background: oklch(0.30 0.12 25); border: none; color: oklch(0.95 0.02 250);"
+							title="Send Ctrl+C (interrupt)"
 							disabled={sendingInput || !onSendInput}
 						>
-							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-							</svg>
-							Next
+							^C
 						</button>
-					{:else if hasComplete}
-						<button
-							onclick={() => sendWorkflowCommand('/jat:complete')}
-							class="btn btn-xs gap-1"
-							style="background: linear-gradient(135deg, oklch(0.45 0.18 145) 0%, oklch(0.38 0.15 160) 100%); border: none; color: white; font-weight: 600;"
-							title="Complete this task"
-							disabled={sendingInput || !onSendInput}
-						>
-							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-							</svg>
-							Done
-						</button>
-					{/if}
+					</div>
 				{:else if detectedOptions.length > 0}
 					<!-- Prompt options detected: show quick action buttons -->
 					<div class="flex items-center gap-1">
@@ -797,15 +1045,74 @@
 							^C
 						</button>
 					</div>
+				{:else if task}
+					<!-- Task active but no detected workflow: show persistent JAT action buttons + ^C -->
+					<div class="flex items-center gap-1">
+						<button
+							onclick={() => sendWorkflowCommand('/jat:next')}
+							class="btn btn-xs gap-1"
+							style="background: linear-gradient(135deg, oklch(0.50 0.18 250) 0%, oklch(0.42 0.15 265) 100%); border: none; color: white; font-weight: 600;"
+							title="Complete this task and start next"
+							disabled={sendingInput || !onSendInput}
+						>
+							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+							</svg>
+							Next
+						</button>
+						<button
+							onclick={() => sendWorkflowCommand('/jat:complete')}
+							class="btn btn-xs gap-1"
+							style="background: linear-gradient(135deg, oklch(0.45 0.18 145) 0%, oklch(0.38 0.15 160) 100%); border: none; color: white; font-weight: 600;"
+							title="Complete this task and see menu"
+							disabled={sendingInput || !onSendInput}
+						>
+							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+							</svg>
+							Done
+						</button>
+						<button
+							onclick={() => sendKey('ctrl-c')}
+							class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
+							style="background: oklch(0.30 0.12 25); border: none; color: oklch(0.95 0.02 250);"
+							title="Send Ctrl+C (interrupt)"
+							disabled={sendingInput || !onSendInput}
+						>
+							^C
+						</button>
+					</div>
 				{:else}
-					<!-- No specific actions: show Send button (disabled until user types) -->
-					<button
-						onclick={sendTextInput}
-						class="btn btn-xs btn-ghost"
-						disabled={!inputText.trim() || sendingInput || !onSendInput}
-					>
-						Send
-					</button>
+					<!-- No task: show Send + Paste + ^C -->
+					<div class="flex items-center gap-1">
+						<button
+							onclick={sendTextInput}
+							class="btn btn-xs btn-ghost"
+							disabled={!inputText.trim() || sendingInput || !onSendInput}
+						>
+							Send
+						</button>
+						<button
+							onclick={handlePasteButton}
+							class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
+							style="background: oklch(0.28 0.08 200); border: none; color: oklch(0.90 0.02 250);"
+							title="Paste from clipboard (text or image)"
+							disabled={sendingInput || !onSendInput}
+						>
+							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" />
+							</svg>
+						</button>
+						<button
+							onclick={() => sendKey('ctrl-c')}
+							class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
+							style="background: oklch(0.30 0.12 25); border: none; color: oklch(0.95 0.02 250);"
+							title="Send Ctrl+C (interrupt)"
+							disabled={sendingInput || !onSendInput}
+						>
+							^C
+						</button>
+					</div>
 				{/if}
 			</div>
 		</div>

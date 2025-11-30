@@ -87,6 +87,25 @@
 	let attachments = $state<TaskAttachment[]>([]);
 	let attachmentsLoading = $state(false);
 
+	// Session logs state
+	interface SessionLog {
+		filename: string;
+		path: string;
+		size: number;
+		sizeFormatted: string;
+		modifiedAt: string;
+		sessionTime: string | null;
+		agentName: string | null;
+		taskReferences: number;
+		preview: string | null;
+	}
+	let sessionLogs = $state<SessionLog[]>([]);
+	let logsLoading = $state(false);
+	let logsExpanded = $state(false);
+	let selectedLog = $state<string | null>(null);
+	let logContent = $state<string | null>(null);
+	let logContentLoading = $state(false);
+
 	// Autofocus action for inputs
 	function autofocusAction(node: HTMLElement) {
 		requestAnimationFrame(() => {
@@ -167,9 +186,10 @@
 			task = data.task;
 			originalTask = { ...data.task };
 
-			// Fetch task history, attachments, and available tasks in parallel
+			// Fetch task history, attachments, logs, and available tasks in parallel
 			fetchTaskHistory(id);
 			fetchAttachments(id);
+			fetchSessionLogs(id);
 			fetchAvailableTasks(id);
 		} catch (err: any) {
 			error = err.message;
@@ -220,6 +240,55 @@
 		} finally {
 			attachmentsLoading = false;
 		}
+	}
+
+	// Fetch session logs for this task
+	async function fetchSessionLogs(id: string) {
+		if (!id) return;
+
+		logsLoading = true;
+
+		try {
+			const response = await fetch(`/api/tasks/${id}/logs`);
+			if (!response.ok) {
+				throw new Error(`Failed to fetch session logs: ${response.statusText}`);
+			}
+			const data = await response.json();
+			sessionLogs = data.logs || [];
+		} catch (err: any) {
+			console.error('Error fetching session logs:', err);
+			sessionLogs = [];
+		} finally {
+			logsLoading = false;
+		}
+	}
+
+	// Fetch content of a specific log file
+	async function fetchLogContent(filename: string) {
+		if (!taskId || !filename) return;
+
+		logContentLoading = true;
+		selectedLog = filename;
+
+		try {
+			const response = await fetch(`/api/tasks/${taskId}/logs/${encodeURIComponent(filename)}?format=json`);
+			if (!response.ok) {
+				throw new Error(`Failed to fetch log content: ${response.statusText}`);
+			}
+			const data = await response.json();
+			logContent = data.content || '';
+		} catch (err: any) {
+			console.error('Error fetching log content:', err);
+			logContent = null;
+		} finally {
+			logContentLoading = false;
+		}
+	}
+
+	// Close log viewer
+	function closeLogViewer() {
+		selectedLog = null;
+		logContent = null;
 	}
 
 	// Fetch available tasks from same project for dependencies dropdown
@@ -585,6 +654,11 @@
 			toastMessage = null;
 			lastSaved = null;
 			showHelp = false;
+			// Reset logs state
+			sessionLogs = [];
+			logsExpanded = false;
+			selectedLog = null;
+			logContent = null;
 		}
 	}
 
@@ -933,6 +1007,140 @@
 								</div>
 							{/if}
 						</div>
+
+						<!-- Session Logs - Industrial -->
+						<div>
+							<div class="flex items-center justify-between mb-2">
+								<h4 class="text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+									Session Logs
+									{#if sessionLogs.length > 0}
+										<span class="ml-1 badge badge-xs" style="background: oklch(0.30 0.02 250); color: oklch(0.70 0.02 250);">{sessionLogs.length}</span>
+									{/if}
+								</h4>
+								{#if sessionLogs.length > 0}
+									<button
+										class="btn btn-xs btn-ghost gap-1"
+										onclick={() => logsExpanded = !logsExpanded}
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 transition-transform {logsExpanded ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+										</svg>
+										{logsExpanded ? 'Collapse' : 'Expand'}
+									</button>
+								{/if}
+							</div>
+							{#if logsLoading}
+								<div class="flex items-center gap-2 p-3 rounded" style="background: oklch(0.18 0.01 250);">
+									<span class="loading loading-spinner loading-sm"></span>
+									<span class="text-sm" style="color: oklch(0.55 0.02 250);">Loading session logs...</span>
+								</div>
+							{:else if sessionLogs.length > 0}
+								<div class="space-y-2">
+									{#each logsExpanded ? sessionLogs : sessionLogs.slice(0, 3) as log (log.filename)}
+										<button
+											class="w-full text-left p-3 rounded group transition-colors industrial-hover"
+											style="background: oklch(0.18 0.01 250); border-left: 2px solid oklch(0.50 0.15 200);"
+											onclick={() => fetchLogContent(log.filename)}
+										>
+											<div class="flex items-center justify-between mb-1">
+												<div class="flex items-center gap-2">
+													<!-- Terminal icon -->
+													<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" style="color: oklch(0.60 0.15 200);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+														<path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+													</svg>
+													{#if log.agentName}
+														<span class="badge badge-xs badge-primary">{log.agentName}</span>
+													{/if}
+													<span class="text-xs font-mono" style="color: oklch(0.60 0.02 250);">{log.sizeFormatted}</span>
+												</div>
+												<span class="text-xs" style="color: oklch(0.50 0.02 250);">
+													{log.sessionTime ? formatRelativeTimestamp(log.sessionTime) : formatRelativeTimestamp(log.modifiedAt)}
+												</span>
+											</div>
+											<div class="text-xs font-mono truncate" style="color: oklch(0.55 0.02 250);" title={log.filename}>
+												{log.filename}
+											</div>
+											{#if log.preview}
+												<div class="text-xs mt-1 line-clamp-2" style="color: oklch(0.45 0.02 250);">
+													{log.preview}
+												</div>
+											{/if}
+											<div class="text-xs mt-1 opacity-0 group-hover:opacity-100 transition-opacity" style="color: oklch(0.60 0.15 200);">
+												Click to view log
+											</div>
+										</button>
+									{/each}
+									{#if !logsExpanded && sessionLogs.length > 3}
+										<button
+											class="w-full text-center text-xs py-2 rounded transition-colors"
+											style="color: oklch(0.60 0.15 200);"
+											onclick={() => logsExpanded = true}
+										>
+											Show {sessionLogs.length - 3} more logs...
+										</button>
+									{/if}
+								</div>
+							{:else}
+								<div class="p-3 rounded text-center" style="background: oklch(0.18 0.01 250);">
+									<span class="text-sm" style="color: oklch(0.45 0.02 250);">No session logs found</span>
+									<p class="text-xs mt-1" style="color: oklch(0.40 0.02 250);">Logs are saved when agents work on this task</p>
+								</div>
+							{/if}
+						</div>
+
+						<!-- Log Content Viewer Modal -->
+						{#if selectedLog}
+							<div class="fixed inset-0 z-[100] flex items-center justify-center p-4" style="background: oklch(0 0 0 / 0.7);">
+								<div
+									class="w-full max-w-4xl max-h-[80vh] flex flex-col rounded-lg shadow-2xl"
+									style="background: oklch(0.14 0.01 250); border: 1px solid oklch(0.35 0.02 250);"
+								>
+									<!-- Log viewer header -->
+									<div class="flex items-center justify-between p-4" style="border-bottom: 1px solid oklch(0.35 0.02 250);">
+										<div class="flex items-center gap-2">
+											<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" style="color: oklch(0.60 0.15 200);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+											</svg>
+											<span class="font-mono text-sm" style="color: oklch(0.75 0.02 250);">{selectedLog}</span>
+										</div>
+										<button
+											class="btn btn-sm btn-circle btn-ghost"
+											onclick={closeLogViewer}
+										>
+											<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+											</svg>
+										</button>
+									</div>
+									<!-- Log content -->
+									<div class="flex-1 overflow-auto p-4">
+										{#if logContentLoading}
+											<div class="flex items-center justify-center py-12">
+												<span class="loading loading-spinner loading-lg"></span>
+											</div>
+										{:else if logContent}
+											<pre class="text-xs font-mono whitespace-pre-wrap break-words" style="color: oklch(0.70 0.02 250);">{logContent}</pre>
+										{:else}
+											<div class="text-center py-12" style="color: oklch(0.50 0.02 250);">
+												Failed to load log content
+											</div>
+										{/if}
+									</div>
+									<!-- Log viewer footer -->
+									<div class="flex items-center justify-between p-4" style="border-top: 1px solid oklch(0.35 0.02 250);">
+										<span class="text-xs" style="color: oklch(0.50 0.02 250);">
+											{logContent ? `${logContent.split('\n').length} lines` : ''}
+										</span>
+										<button
+											class="btn btn-sm btn-ghost"
+											onclick={closeLogViewer}
+										>
+											Close
+										</button>
+									</div>
+								</div>
+							</div>
+						{/if}
 
 						<!-- Description (Inline Editable) - Industrial -->
 						<div>

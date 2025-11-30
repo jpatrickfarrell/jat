@@ -26,16 +26,23 @@
 		stopPolling
 	} from '$lib/stores/workSessions.svelte.js';
 	import { broadcastSessionEvent } from '$lib/stores/sessionEvents';
+	import { lastTaskEvent } from '$lib/stores/taskEvents';
 
 	// Resizable panel state
 	const STORAGE_KEY = 'work-panel-split';
 	const DEFAULT_SPLIT = 60; // 60% for work panel, 40% for task table
 	const MIN_SPLIT = 20;
 	const MAX_SPLIT = 80;
+	const SNAP_RESTORE_SIZE = 40; // Restore to 40% when unsnapping
 
 	let splitPercent = $state(DEFAULT_SPLIT);
 	let containerHeight = $state(0);
 	let containerRef: HTMLDivElement | null = null;
+
+	// Snap-to-collapse state
+	let isCollapsed = $state(false);
+	let collapsedDirection = $state<'top' | 'bottom' | null>(null);
+	let splitBeforeCollapse = $state(DEFAULT_SPLIT);
 
 	// Load saved split from localStorage
 	$effect(() => {
@@ -43,8 +50,18 @@
 			const saved = localStorage.getItem(STORAGE_KEY);
 			if (saved) {
 				const parsed = parseFloat(saved);
-				if (!isNaN(parsed) && parsed >= MIN_SPLIT && parsed <= MAX_SPLIT) {
+				// Check for collapsed states (0 or 100)
+				if (parsed === 0) {
+					isCollapsed = true;
+					collapsedDirection = 'top';
+					splitPercent = 0;
+				} else if (parsed === 100) {
+					isCollapsed = true;
+					collapsedDirection = 'bottom';
+					splitPercent = 100;
+				} else if (!isNaN(parsed) && parsed >= MIN_SPLIT && parsed <= MAX_SPLIT) {
 					splitPercent = parsed;
+					splitBeforeCollapse = parsed;
 				}
 			}
 		}
@@ -62,8 +79,40 @@
 		if (!containerHeight) return;
 
 		const deltaPercent = (deltaY / containerHeight) * 100;
-		const newSplit = Math.min(MAX_SPLIT, Math.max(MIN_SPLIT, splitPercent + deltaPercent));
+		let newSplit = splitPercent + deltaPercent;
+
+		// Snap when user drags past the normal bounds
+		// (they're at the edge and still pushing)
+		if (newSplit < MIN_SPLIT) {
+			// Trying to drag past minimum → snap top panel closed
+			splitBeforeCollapse = splitPercent >= MIN_SPLIT ? splitPercent : SNAP_RESTORE_SIZE;
+			splitPercent = 0;
+			isCollapsed = true;
+			collapsedDirection = 'top';
+			saveSplit();
+			return;
+		} else if (newSplit > MAX_SPLIT) {
+			// Trying to drag past maximum → snap bottom panel closed
+			splitBeforeCollapse = splitPercent <= MAX_SPLIT ? splitPercent : 100 - SNAP_RESTORE_SIZE;
+			splitPercent = 100;
+			isCollapsed = true;
+			collapsedDirection = 'bottom';
+			saveSplit();
+			return;
+		}
+
+		// Normal resize within bounds
 		splitPercent = newSplit;
+		isCollapsed = false;
+		collapsedDirection = null;
+		saveSplit();
+	}
+
+	// Restore from collapsed state
+	function handleRestoreFromCollapse() {
+		splitPercent = splitBeforeCollapse;
+		isCollapsed = false;
+		collapsedDirection = null;
 		saveSplit();
 	}
 
@@ -103,6 +152,17 @@
 	$effect(() => {
 		selectedProject;
 		fetchTaskData();
+	});
+
+	// Listen for task events (created, released, etc.) and refresh immediately
+	$effect(() => {
+		const unsubscribe = lastTaskEvent.subscribe((event) => {
+			if (event) {
+				// Refresh task data when any task event occurs
+				fetchTaskData();
+			}
+		});
+		return unsubscribe;
 	});
 
 	// Fetch task data
@@ -175,8 +235,18 @@
 	}
 
 	async function handleSendInput(sessionName: string, input: string, type: 'text' | 'key') {
-		const inputType = type === 'key' ? 'raw' : 'text';
-		await sendInput(sessionName, input, inputType);
+		if (type === 'key') {
+			// Special keys should be passed as the type, not the input
+			const specialKeys = ['ctrl-c', 'ctrl-d', 'enter', 'escape', 'up', 'down'];
+			if (specialKeys.includes(input)) {
+				await sendInput(sessionName, '', input as 'ctrl-c' | 'ctrl-d' | 'enter' | 'escape' | 'up' | 'down');
+				return;
+			}
+			// Fallback to raw for non-special keys
+			await sendInput(sessionName, input, 'raw');
+			return;
+		}
+		await sendInput(sessionName, input, 'text');
 	}
 
 	// Handle task click
@@ -238,12 +308,13 @@
 
 <div
 	bind:this={containerRef}
-	class="h-screen bg-base-200 flex flex-col overflow-hidden"
+	class="h-full bg-base-200 flex flex-col overflow-hidden"
 >
 	<!-- Work Sessions (horizontal scroll) -->
 	<div
-		class="overflow-hidden bg-base-100 flex flex-col"
+		class="overflow-hidden bg-base-100 flex flex-col transition-all duration-150"
 		style="height: {splitPercent}%;"
+		class:hidden={collapsedDirection === 'top'}
 	>
 		{#if isInitialLoad}
 			<div class="flex items-center justify-center flex-1">
@@ -271,13 +342,17 @@
 	<!-- Resizable Divider -->
 	<ResizableDivider
 		onResize={handleResize}
+		{isCollapsed}
+		{collapsedDirection}
+		onCollapsedClick={handleRestoreFromCollapse}
 		class="h-2 bg-base-300 hover:bg-primary/20 border-y border-base-300 flex-shrink-0"
 	/>
 
 	<!-- Task Table -->
 	<div
-		class="overflow-auto bg-base-100 flex-1"
+		class="overflow-auto bg-base-100 flex-1 transition-all duration-150"
 		style="height: {100 - splitPercent}%;"
+		class:hidden={collapsedDirection === 'bottom'}
 	>
 		{#if isInitialLoad}
 			<div class="flex items-center justify-center h-48">

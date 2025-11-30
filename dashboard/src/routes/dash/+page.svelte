@@ -28,10 +28,16 @@
 	const DEFAULT_SPLIT = 40; // 40% for AgentGrid, 60% for TaskTable
 	const MIN_SPLIT = 20;
 	const MAX_SPLIT = 80;
+	const SNAP_RESTORE_SIZE = 40; // Restore to 40% when unsnapping
 
 	let splitPercent = $state(DEFAULT_SPLIT);
 	let containerHeight = $state(0);
 	let containerRef: HTMLDivElement | null = null;
+
+	// Snap-to-collapse state
+	let isCollapsed = $state(false);
+	let collapsedDirection = $state<'top' | 'bottom' | null>(null);
+	let splitBeforeCollapse = $state(DEFAULT_SPLIT);
 
 	// Load saved split from localStorage
 	$effect(() => {
@@ -39,8 +45,18 @@
 			const saved = localStorage.getItem(STORAGE_KEY);
 			if (saved) {
 				const parsed = parseFloat(saved);
-				if (!isNaN(parsed) && parsed >= MIN_SPLIT && parsed <= MAX_SPLIT) {
+				// Check for collapsed states (0 or 100)
+				if (parsed === 0) {
+					isCollapsed = true;
+					collapsedDirection = 'top';
+					splitPercent = 0;
+				} else if (parsed === 100) {
+					isCollapsed = true;
+					collapsedDirection = 'bottom';
+					splitPercent = 100;
+				} else if (!isNaN(parsed) && parsed >= MIN_SPLIT && parsed <= MAX_SPLIT) {
 					splitPercent = parsed;
+					splitBeforeCollapse = parsed;
 				}
 			}
 		}
@@ -58,8 +74,40 @@
 		if (!containerHeight) return;
 
 		const deltaPercent = (deltaY / containerHeight) * 100;
-		const newSplit = Math.min(MAX_SPLIT, Math.max(MIN_SPLIT, splitPercent + deltaPercent));
+		let newSplit = splitPercent + deltaPercent;
+
+		// Snap when user drags past the normal bounds
+		// (they're at the edge and still pushing)
+		if (newSplit < MIN_SPLIT) {
+			// Trying to drag past minimum → snap top panel closed
+			splitBeforeCollapse = splitPercent >= MIN_SPLIT ? splitPercent : SNAP_RESTORE_SIZE;
+			splitPercent = 0;
+			isCollapsed = true;
+			collapsedDirection = 'top';
+			saveSplit();
+			return;
+		} else if (newSplit > MAX_SPLIT) {
+			// Trying to drag past maximum → snap bottom panel closed
+			splitBeforeCollapse = splitPercent <= MAX_SPLIT ? splitPercent : 100 - SNAP_RESTORE_SIZE;
+			splitPercent = 100;
+			isCollapsed = true;
+			collapsedDirection = 'bottom';
+			saveSplit();
+			return;
+		}
+
+		// Normal resize within bounds
 		splitPercent = newSplit;
+		isCollapsed = false;
+		collapsedDirection = null;
+		saveSplit();
+	}
+
+	// Restore from collapsed state
+	function handleRestoreFromCollapse() {
+		splitPercent = splitBeforeCollapse;
+		isCollapsed = false;
+		collapsedDirection = null;
 		saveSplit();
 	}
 
@@ -232,12 +280,13 @@
 
 <div
 	bind:this={containerRef}
-	class="h-screen bg-base-200 flex flex-col overflow-hidden"
+	class="h-full bg-base-200 flex flex-col overflow-hidden"
 >
 	<!-- Agent Grid -->
 	<div
-		class="overflow-hidden bg-base-100 flex flex-col"
+		class="overflow-hidden bg-base-100 flex flex-col transition-all duration-150"
 		style="height: {splitPercent}%;"
+		class:hidden={collapsedDirection === 'top'}
 	>
 		{#if isInitialLoad}
 			<!-- Loading State for Agent Grid -->
@@ -255,13 +304,17 @@
 	<!-- Resizable Divider -->
 	<ResizableDivider
 		onResize={handleResize}
+		{isCollapsed}
+		{collapsedDirection}
+		onCollapsedClick={handleRestoreFromCollapse}
 		class="h-2 bg-base-300 hover:bg-primary/20 border-y border-base-300 flex-shrink-0"
 	/>
 
 	<!-- Task Section -->
 	<div
-		class="overflow-auto bg-base-100 flex-1"
+		class="overflow-auto bg-base-100 flex-1 transition-all duration-150"
 		style="height: {100 - splitPercent}%;"
+		class:hidden={collapsedDirection === 'bottom'}
 	>
 		{#if isInitialLoad}
 			<!-- Loading State -->

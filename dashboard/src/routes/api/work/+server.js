@@ -78,7 +78,7 @@ export async function GET({ url }) {
 			});
 		}
 
-		// Parse sessions and filter for jat-* prefix
+		// Parse sessions and filter for jat-* prefix (excluding jat-pending-* which are still being set up)
 		const rawSessions = sessionsOutput
 			.split('\n')
 			.filter(line => line.length > 0)
@@ -90,7 +90,9 @@ export async function GET({ url }) {
 					attached: attached === '1'
 				};
 			})
-			.filter(session => session.name.startsWith('jat-'));
+			.filter(session => session.name.startsWith('jat-'))
+			// Filter out pending sessions (still being set up, not yet renamed to jat-{AgentName})
+			.filter(session => !session.name.startsWith('jat-pending-'));
 
 		if (rawSessions.length === 0) {
 			return json({

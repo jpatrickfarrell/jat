@@ -232,21 +232,30 @@ am-register --program claude-code --model sonnet-4.5
 Write(.claude/agent-{session_id}.txt, "AgentName")
 ```
 
-#### 1E: Rename tmux Session (if running in tmux)
+#### 1E: Rename tmux Session (CRITICAL - DO NOT SKIP)
 
-**IMPORTANT:** If the launcher created a `jat-pending-*` tmux session, rename it to `jat-{AgentName}` so the dashboard can track this agent properly.
+**🚨 CRITICAL STEP - ALWAYS RUN THIS 🚨**
+
+If the launcher created a `jat-pending-*` tmux session, rename it to `jat-{AgentName}` so the dashboard can track this agent properly.
 
 ```bash
-# Check if we're in a tmux session that needs renaming
-CURRENT_SESSION=$(tmux display-message -p '#S' 2>/dev/null || echo "")
-if [[ "$CURRENT_SESSION" == jat-pending-* ]]; then
-    tmux rename-session "jat-$AGENT_NAME"
-    echo "✓ Session renamed to jat-$AGENT_NAME"
-fi
+# Step 1: Check current tmux session name
+tmux display-message -p '#S'
+# → If output is "jat-pending-*", continue to Step 2
+
+# Step 2: Rename the session (replace AGENT_NAME with your actual agent name)
+tmux rename-session "jat-LightSun"  # Example: jat-{YourAgentName}
 ```
+
+**What happens if you skip this:**
+- ❌ `/work` page shows "pending-882263-1" instead of your agent name
+- ❌ Dashboard can't track your session properly
+- ❌ Agent grid shows correct name but `/work` panel is wrong
+- ❌ Session appears disconnected even though it's running
 
 **Why this matters:**
 - Dashboard counts active agents by looking for `jat-*` tmux sessions
+- Sessions named `jat-pending-*` are filtered out as "still being set up"
 - Agent names like "BoldRock" → session becomes `jat-BoldRock`
 - This enables proper agent tracking and the "kill session" feature
 

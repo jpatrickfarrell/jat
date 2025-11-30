@@ -198,41 +198,38 @@
 
 		for (const att of pendingAttachments) {
 			try {
-				// For images, we store the file path
-				// For this implementation, we'll use a base64 data URL for simplicity
-				// In production, you'd want proper file upload to a storage service
-				const reader = new FileReader();
+				// Step 1: Upload file to server via /api/work/upload-image
+				const formData = new FormData();
+				formData.append('image', att.file, `task-${taskId}-${Date.now()}-${att.file.name}`);
+				formData.append('sessionName', `task-${taskId}`);
 
-				await new Promise<void>((resolve, reject) => {
-					reader.onload = async () => {
-						try {
-							const response = await fetch(`/api/tasks/${taskId}/image`, {
-								method: 'PUT',
-								headers: { 'Content-Type': 'application/json' },
-								body: JSON.stringify({
-									path: reader.result as string,
-									id: att.id
-								})
-							});
-
-							if (!response.ok) {
-								console.error('Failed to upload attachment:', att.file.name);
-								allSuccess = false;
-							}
-							resolve();
-						} catch (err) {
-							console.error('Error uploading attachment:', err);
-							allSuccess = false;
-							resolve();
-						}
-					};
-					reader.onerror = () => {
-						console.error('Error reading file:', att.file.name);
-						allSuccess = false;
-						resolve();
-					};
-					reader.readAsDataURL(att.file);
+				const uploadResponse = await fetch('/api/work/upload-image', {
+					method: 'POST',
+					body: formData
 				});
+
+				if (!uploadResponse.ok) {
+					console.error('Failed to upload file:', att.file.name);
+					allSuccess = false;
+					continue;
+				}
+
+				const { filePath } = await uploadResponse.json();
+
+				// Step 2: Store the file path in task-images.json via /api/tasks/{id}/image
+				const saveResponse = await fetch(`/api/tasks/${taskId}/image`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						path: filePath,
+						id: att.id
+					})
+				});
+
+				if (!saveResponse.ok) {
+					console.error('Failed to save attachment metadata:', att.file.name);
+					allSuccess = false;
+				}
 			} catch (err) {
 				console.error('Error processing attachment:', err);
 				allSuccess = false;

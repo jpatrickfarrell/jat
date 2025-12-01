@@ -508,9 +508,11 @@ am-send "[$TASK_ID] Starting: $TASK_TITLE" \
 
 ---
 
-### STEP 10: Display Task Details
+### STEP 10: Display Task Details + Emit Working Marker
 
-Display comprehensive start summary:
+**🚨 CRITICAL: You MUST output the `[JAT:WORKING task={TASK_ID}]` marker for the dashboard to transition from STARTING → WORKING state.**
+
+Display comprehensive start summary with the marker:
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════╗
@@ -540,7 +542,11 @@ Display comprehensive start summary:
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-**The `[JAT:WORKING ...]` marker is embedded in the header box so the dashboard can detect this agent is actively working.**
+**⚠️ Dashboard State Transition:**
+- Without marker: Dashboard shows `🚀 STARTING` (cyan) - agent is initializing
+- With marker: Dashboard shows `⚙️ WORKING` (blue) - agent is actively working
+
+**The `[JAT:WORKING task={TASK_ID}]` marker MUST appear in your output.** Copy it exactly - the dashboard regex looks for `[JAT:WORKING task=` followed by the task ID.
 
 ---
 
@@ -895,7 +901,7 @@ Options:
 | 7 | Update Task in Beads | If task-id provided |
 | 8 | Create Reservations | If task-id provided |
 | 9 | Announce Task Start | If task-id provided |
-| 10 | Display Task Details | If task-id provided |
+| 10 | Display Task Details + **Emit `[JAT:WORKING]` marker** | If task-id provided |
 | 11 | Evaluate Task Clarity | If task-id provided (may output `[JAT:NEEDS_INPUT]`) |
 | 12 | Begin Work | If task is clear |
 

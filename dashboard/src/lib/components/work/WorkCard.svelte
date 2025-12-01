@@ -31,6 +31,7 @@
 	import AnimatedDigits from '$lib/components/AnimatedDigits.svelte';
 	import { playTaskCompleteSound } from '$lib/utils/soundEffects';
 	import VoiceInput from '$lib/components/VoiceInput.svelte';
+	import StatusActionBadge from './StatusActionBadge.svelte';
 
 	// Props - aligned with workSessions.svelte.ts types
 	interface Task {
@@ -109,11 +110,63 @@
 	let currentTime = $state(Date.now());
 	let elapsedTimeInterval: ReturnType<typeof setInterval> | null = null;
 
+	// API-based question data (from PostToolUse hook)
+	interface APIQuestion {
+		question: string;
+		header: string;
+		multiSelect: boolean;
+		options: { label: string; description: string }[];
+	}
+	let apiQuestionData = $state<{ active: boolean; questions: APIQuestion[] } | null>(null);
+	let questionPollInterval: ReturnType<typeof setInterval> | null = null;
+	// Track selected options locally for multi-select (API doesn't update with selections)
+	let selectedOptionIndices = $state<Set<number>>(new Set());
+	// Track current cursor position in the question UI
+	let currentOptionIndex = $state(0);
+
+	// Fetch question data from API
+	async function fetchQuestionData() {
+		if (!sessionName) return;
+		try {
+			const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}/question`);
+			if (response.ok) {
+				const data = await response.json();
+				// Reset selection state if this is a new question
+				const oldQuestion = apiQuestionData?.questions?.[0]?.question;
+				const newQuestion = data?.questions?.[0]?.question;
+				if (oldQuestion !== newQuestion) {
+					selectedOptionIndices = new Set();
+					currentOptionIndex = 0;
+				}
+				apiQuestionData = data;
+			}
+		} catch (error) {
+			// Silently fail - question data is optional enhancement
+		}
+	}
+
+	// Clear question data after answering
+	async function clearQuestionData() {
+		if (!sessionName) return;
+		try {
+			await fetch(`/api/work/${encodeURIComponent(sessionName)}/question`, {
+				method: 'DELETE'
+			});
+			apiQuestionData = null;
+		} catch (error) {
+			// Silently fail
+		}
+	}
+
 	onMount(() => {
 		// Update currentTime every second for real-time elapsed time display
 		elapsedTimeInterval = setInterval(() => {
 			currentTime = Date.now();
 		}, 1000);
+
+		// Poll for question data every 500ms when in needs-input state
+		fetchQuestionData();
+		questionPollInterval = setInterval(fetchQuestionData, 500);
 	});
 
 	// Track when completion state changes to trigger banner
@@ -139,6 +192,9 @@
 		}
 		if (elapsedTimeInterval) {
 			clearInterval(elapsedTimeInterval);
+		}
+		if (questionPollInterval) {
+			clearInterval(questionPollInterval);
 		}
 	});
 
@@ -227,12 +283,30 @@
 	}
 	let attachedImages = $state<AttachedImage[]>([]);
 
-	// Detected Claude Code prompt options
+	// Detected Claude Code prompt options (numbered format: "1. Yes", "2. No")
 	interface PromptOption {
 		number: number;
 		text: string;
 		type: 'yes' | 'yes-remember' | 'custom' | 'other';
 		keySequence: string[]; // Keys to send (e.g., ['down', 'enter'])
+	}
+
+	// Detected Claude Code AskUserQuestion options (selection format)
+	// Format: "❯ Option1" or "  Option2" with optional descriptions
+	interface QuestionOption {
+		label: string;
+		description?: string;
+		index: number; // 0-based position in the list
+		isSelected: boolean; // Whether this option has the ❯ cursor
+		keySequence: string[]; // Keys to navigate and select
+	}
+
+	// Detected question UI state
+	interface DetectedQuestion {
+		question: string; // The question text (after "?")
+		options: QuestionOption[];
+		isMultiSelect: boolean; // True if [ ] checkboxes are used
+		selectedIndices: number[]; // For multi-select, which are checked
 	}
 
 	// Detected JAT workflow commands (e.g., /jat:complete, /jat:next)
@@ -286,6 +360,141 @@
 		}
 
 		return options;
+	});
+
+	// Parse Claude Code AskUserQuestion format from output
+	// Detects both single-select (❯ cursor) and multi-select ([ ] checkbox) formats
+	const detectedQuestion = $derived.by((): DetectedQuestion | null => {
+		if (!output) return null;
+
+		// Only look at recent output (last 3000 chars)
+		const recentOutput = output.slice(-3000);
+
+		// Check for the navigation footer which indicates an active question prompt
+		const hasQuestionUI = /Enter to select.*(?:Tab|Arrow).*(?:navigate|keys).*Esc to cancel/i.test(recentOutput);
+		if (!hasQuestionUI) return null;
+
+		// Find the question text (line starting with "?")
+		const questionMatch = recentOutput.match(/^\s*\?\s+(.+)$/m);
+		const question = questionMatch ? questionMatch[1].trim() : '';
+
+		// Detect if this is multi-select by looking for [ ] or [×] checkboxes
+		const isMultiSelect = /\[\s*[×x]?\s*\]/.test(recentOutput);
+
+		const options: QuestionOption[] = [];
+		const selectedIndices: number[] = [];
+
+		if (isMultiSelect) {
+			// Multi-select format: "[ ] Option" or "[×] Option" or "[x] Option"
+			// Each line may have a checkbox followed by option text
+			const checkboxRegex = /^\s*(\[[×x\s]*\])\s+(.+?)(?:\s{2,}(.+))?$/gm;
+			let match;
+			let index = 0;
+
+			while ((match = checkboxRegex.exec(recentOutput)) !== null) {
+				const checkbox = match[1];
+				const label = match[2].trim();
+				const description = match[3]?.trim();
+				const isChecked = /[×x]/.test(checkbox);
+
+				if (isChecked) {
+					selectedIndices.push(index);
+				}
+
+				// For multi-select: navigate to option, press space to toggle
+				const keySequence: string[] = [];
+				// Navigate to the right position
+				for (let i = 0; i < index; i++) {
+					keySequence.push('down');
+				}
+				keySequence.push('space'); // Toggle selection
+
+				options.push({
+					label,
+					description,
+					index,
+					isSelected: isChecked,
+					keySequence
+				});
+				index++;
+			}
+		} else {
+			// Single-select format: "❯ Option" (selected) or "  Option" (not selected)
+			// Options may have descriptions separated by multiple spaces
+			// The ❯ may be indented, and options are aligned
+			const lines = recentOutput.split('\n');
+			let inOptionSection = false;
+			let currentSelectedIndex = 0;
+			let index = 0;
+
+			for (const line of lines) {
+				// Skip empty lines and the navigation footer
+				if (!line.trim()) continue;
+				if (/Enter to select/i.test(line)) break;
+
+				// Check if this line is an option (with ❯ cursor or aligned unselected)
+				// The ❯ may have leading whitespace, so we check for it anywhere in the line start
+				const selectedMatch = line.match(/^\s*❯\s+(.+?)(?:\s{2,}(.+))?$/);
+				// Unselected options have spaces where ❯ would be (typically 2+ spaces before text)
+				const unselectedMatch = line.match(/^\s{2,}([^\s❯].+?)(?:\s{2,}(.+))?$/);
+
+				if (selectedMatch) {
+					inOptionSection = true;
+					const label = selectedMatch[1].trim();
+					const description = selectedMatch[2]?.trim();
+					currentSelectedIndex = index;
+
+					// For single-select: navigate and press enter
+					const keySequence: string[] = [];
+					// Since this is already selected, just press enter
+					keySequence.push('enter');
+
+					options.push({
+						label,
+						description,
+						index,
+						isSelected: true,
+						keySequence
+					});
+					index++;
+				} else if (unselectedMatch && inOptionSection) {
+					const label = unselectedMatch[1].trim();
+					const description = unselectedMatch[2]?.trim();
+
+					// Skip if this looks like the question line or other non-option content
+					if (label.length > 60 || /^\?/.test(label)) continue;
+					// Skip lines that look like hints or navigation instructions
+					if (/^(Enter|Tab|Arrow|Esc|Space)/i.test(label)) continue;
+
+					// Navigate down from current position, then press enter
+					const keySequence: string[] = [];
+					const stepsDown = index - currentSelectedIndex;
+					for (let i = 0; i < stepsDown; i++) {
+						keySequence.push('down');
+					}
+					keySequence.push('enter');
+
+					options.push({
+						label,
+						description,
+						index,
+						isSelected: false,
+						keySequence
+					});
+					index++;
+				}
+			}
+		}
+
+		// Only return if we found valid options
+		if (options.length === 0) return null;
+
+		return {
+			question,
+			options,
+			isMultiSelect,
+			selectedIndices
+		};
 	});
 
 	// Detect JAT workflow state from structured markers in output
@@ -602,6 +811,51 @@
 		}
 	}
 
+	// Handle status badge actions
+	async function handleStatusAction(actionId: string) {
+		switch (actionId) {
+			case 'cleanup':
+				// Close tmux session and dismiss from UI
+				await onKillSession?.();
+				break;
+
+			case 'view-task':
+				// Open task details
+				if (displayTask?.id) {
+					onTaskClick?.(displayTask.id);
+				}
+				break;
+
+			case 'attach':
+				// Attach terminal
+				onAttachTerminal?.();
+				break;
+
+			case 'complete':
+				// Run /jat:complete command
+				await sendWorkflowCommand('/jat:complete');
+				break;
+
+			case 'escape':
+				// Send escape key
+				await sendKey('escape');
+				break;
+
+			case 'interrupt':
+				// Send Ctrl+C
+				await sendKey('ctrl-c');
+				break;
+
+			case 'start':
+				// Run /jat:start command
+				await sendWorkflowCommand('/jat:start');
+				break;
+
+			default:
+				console.warn('Unknown status action:', actionId);
+		}
+	}
+
 	// Send a key to the session
 	async function sendKey(keyType: string) {
 		if (!onSendInput) return;
@@ -628,11 +882,60 @@
 		}
 	}
 
-	// Send option by number (1-indexed)
+	// Send option by number (1-indexed) - for numbered prompts
 	function sendOptionNumber(num: number) {
 		const opt = detectedOptions.find(o => o.number === num);
 		if (opt) {
 			sendKeySequence(opt.keySequence);
+		}
+	}
+
+	// Select a question option by navigating and pressing enter/space
+	// For single-select: navigates to the option and presses enter
+	// For multi-select: navigates to the option and presses space to toggle
+	async function selectQuestionOption(option: QuestionOption, isMultiSelect: boolean) {
+		if (!onSendInput) return;
+		sendingInput = true;
+		try {
+			// Find the currently selected option index
+			const question = detectedQuestion;
+			if (!question) return;
+
+			const currentIndex = question.options.findIndex(o => o.isSelected);
+			const targetIndex = option.index;
+
+			// Calculate navigation from current position
+			if (currentIndex >= 0 && currentIndex !== targetIndex) {
+				const diff = targetIndex - currentIndex;
+				const key = diff > 0 ? 'down' : 'up';
+				const steps = Math.abs(diff);
+
+				for (let i = 0; i < steps; i++) {
+					await onSendInput(key, 'key');
+					await new Promise(r => setTimeout(r, 30));
+				}
+			}
+
+			// For multi-select, press space to toggle; for single-select, press enter
+			await new Promise(r => setTimeout(r, 50));
+			if (isMultiSelect) {
+				await onSendInput('space', 'key');
+			} else {
+				await onSendInput('enter', 'key');
+			}
+		} finally {
+			sendingInput = false;
+		}
+	}
+
+	// Confirm multi-select choices (press Enter after selecting options)
+	async function confirmMultiSelect() {
+		if (!onSendInput) return;
+		sendingInput = true;
+		try {
+			await onSendInput('enter', 'key');
+		} finally {
+			sendingInput = false;
 		}
 	}
 
@@ -952,12 +1255,12 @@
 		{#if sessionState === 'needs-input' && displayTask}
 			<!-- Needs Input state - agent blocked, needs user clarification -->
 			<div class="flex items-center gap-2 min-w-0">
-				<span
-					class="font-mono text-[10px] tracking-wider px-1.5 pt-0.5 rounded flex-shrink-0 font-bold animate-pulse"
-					style="background: oklch(0.60 0.20 45 / 0.3); color: oklch(0.90 0.15 45); border: 1px solid oklch(0.60 0.20 45 / 0.5);"
-				>
-					❓ INPUT
-				</span>
+				<StatusActionBadge
+					sessionState="needs-input"
+					{sessionName}
+					onAction={handleStatusAction}
+					disabled={sendingInput}
+				/>
 				<TaskIdBadge
 					task={{ id: displayTask.id, status: displayTask.status || 'in_progress', issue_type: displayTask.issue_type, title: displayTask.title || displayTask.id }}
 					size="sm"
@@ -978,12 +1281,12 @@
 		{:else if sessionState === 'ready-for-review' && displayTask}
 			<!-- Ready for Review state - show prominent review banner -->
 			<div class="flex items-center gap-2 min-w-0">
-				<span
-					class="font-mono text-[10px] tracking-wider px-1.5 pt-0.5 rounded flex-shrink-0 font-bold animate-pulse"
-					style="background: oklch(0.55 0.18 85 / 0.3); color: oklch(0.85 0.15 85); border: 1px solid oklch(0.55 0.18 85 / 0.5);"
-				>
-					🔍 REVIEW
-				</span>
+				<StatusActionBadge
+					sessionState="ready-for-review"
+					{sessionName}
+					onAction={handleStatusAction}
+					disabled={sendingInput}
+				/>
 				<TaskIdBadge
 					task={{ id: displayTask.id, status: displayTask.status || 'in_progress', issue_type: displayTask.issue_type, title: displayTask.title || displayTask.id }}
 					size="sm"
@@ -1004,12 +1307,12 @@
 		{:else if sessionState === 'completed' && displayTask}
 			<!-- Completed state - show task that was completed -->
 			<div class="flex items-center gap-2 min-w-0">
-				<span
-					class="font-mono text-[10px] tracking-wider px-1.5 pt-0.5 rounded flex-shrink-0 font-bold"
-					style="background: oklch(0.45 0.18 145 / 0.3); color: oklch(0.80 0.15 145); border: 1px solid oklch(0.45 0.18 145 / 0.5);"
-				>
-					✅ DONE
-				</span>
+				<StatusActionBadge
+					sessionState="completed"
+					{sessionName}
+					onAction={handleStatusAction}
+					disabled={sendingInput}
+				/>
 				<TaskIdBadge
 					task={{ id: displayTask.id, status: displayTask.status || 'closed', issue_type: displayTask.issue_type, title: displayTask.title || displayTask.id }}
 					size="sm"
@@ -1030,12 +1333,12 @@
 		{:else if sessionState === 'starting' && displayTask}
 			<!-- Starting state - agent initializing, no [JAT:WORKING] marker yet -->
 			<div class="flex items-center gap-2 min-w-0">
-				<span
-					class="font-mono text-[10px] tracking-wider px-1.5 pt-0.5 rounded flex-shrink-0 font-bold"
-					style="background: oklch(0.60 0.15 200 / 0.3); color: oklch(0.90 0.12 200); border: 1px solid oklch(0.60 0.15 200 / 0.5);"
-				>
-					🚀 STARTING
-				</span>
+				<StatusActionBadge
+					sessionState="starting"
+					{sessionName}
+					onAction={handleStatusAction}
+					disabled={sendingInput}
+				/>
 				<TaskIdBadge
 					task={{ id: displayTask.id, status: displayTask.status || 'in_progress', issue_type: displayTask.issue_type, title: displayTask.title || displayTask.id }}
 					size="sm"
@@ -1056,12 +1359,12 @@
 		{:else if sessionState === 'working' && displayTask}
 			<!-- Working state - active task with [JAT:WORKING] marker -->
 			<div class="flex items-center gap-2 min-w-0">
-				<span
-					class="font-mono text-[10px] tracking-wider px-1.5 pt-0.5 rounded flex-shrink-0 font-bold"
-					style="background: oklch(0.55 0.15 250 / 0.3); color: oklch(0.90 0.12 250); border: 1px solid oklch(0.55 0.15 250 / 0.5);"
-				>
-					⚙️ WORKING
-				</span>
+				<StatusActionBadge
+					sessionState="working"
+					{sessionName}
+					onAction={handleStatusAction}
+					disabled={sendingInput}
+				/>
 				<TaskIdBadge
 					task={{ id: displayTask.id, status: displayTask.status || 'in_progress', issue_type: displayTask.issue_type, title: displayTask.title || displayTask.id }}
 					size="sm"
@@ -1082,12 +1385,12 @@
 		{:else}
 			<!-- Idle state - no task, show prompt to start -->
 			<div class="flex items-center gap-2 min-w-0">
-				<span
-					class="font-mono text-[10px] tracking-wider px-1.5 pt-0.5 rounded flex-shrink-0"
-					style="background: oklch(0.5 0 0 / 0.1); color: oklch(0.60 0.02 250);"
-				>
-					IDLE
-				</span>
+				<StatusActionBadge
+					sessionState="idle"
+					{sessionName}
+					onAction={handleStatusAction}
+					disabled={sendingInput}
+				/>
 				<h3 class="font-mono font-bold text-sm tracking-wide" style="color: oklch(0.5 0 0 / 0.5);">
 					Ready to start work
 				</h3>
@@ -1259,6 +1562,196 @@
 					{/each}
 				</div>
 			{/if}
+
+			<!-- Smart Question UI: Show clickable options when AskUserQuestion is detected -->
+			<!-- Prefer API-based question data (from hook) over terminal parsing -->
+			{#if apiQuestionData?.active && apiQuestionData.questions?.length > 0}
+				{@const currentQuestion = apiQuestionData.questions[0]}
+				<div
+					class="mb-2 p-2 rounded-lg"
+					style="background: oklch(0.22 0.04 250); border: 1px solid oklch(0.40 0.10 200);"
+				>
+					<!-- Question header with API indicator -->
+					<div class="flex items-center gap-2 mb-2">
+						<span class="text-[10px] px-1.5 py-0.5 rounded font-mono" style="background: oklch(0.35 0.10 200); color: oklch(0.90 0.05 200);">
+							❓
+						</span>
+						<span class="text-xs font-semibold" style="color: oklch(0.90 0.10 200);">
+							{currentQuestion.question}
+						</span>
+					</div>
+
+					<!-- Options as clickable buttons (API data) -->
+					<div class="flex flex-wrap gap-1.5">
+						{#each currentQuestion.options as opt, index (index)}
+							<button
+								onclick={async () => {
+									// Navigate from current position to target index
+									const delta = index - currentOptionIndex;
+									const direction = delta > 0 ? 'down' : 'up';
+									const steps = Math.abs(delta);
+
+									for (let i = 0; i < steps; i++) {
+										await onSendInput?.(direction, 'key');
+										await new Promise(r => setTimeout(r, 30));
+									}
+									currentOptionIndex = index;
+
+									await new Promise(r => setTimeout(r, 50));
+
+									if (currentQuestion.multiSelect) {
+										// Toggle selection with space
+										await onSendInput?.('space', 'key');
+										// Update local selection state using array for better reactivity
+										const newSet = new Set(selectedOptionIndices);
+										if (newSet.has(index)) {
+											newSet.delete(index);
+										} else {
+											newSet.add(index);
+										}
+										selectedOptionIndices = newSet;
+									} else {
+										// Single select - just press enter
+										await onSendInput?.('enter', 'key');
+										clearQuestionData();
+									}
+								}}
+								class="btn btn-xs gap-1 transition-all"
+								class:btn-primary={selectedOptionIndices.has(index)}
+								class:btn-outline={!selectedOptionIndices.has(index)}
+								style={selectedOptionIndices.has(index)
+									? 'background: oklch(0.45 0.15 250); border-color: oklch(0.55 0.18 250); color: oklch(0.98 0.01 250);'
+									: 'background: oklch(0.25 0.03 250); border-color: oklch(0.40 0.03 250); color: oklch(0.80 0.02 250);'
+								}
+								title={opt.description}
+								disabled={sendingInput || !onSendInput}
+							>
+								{#if currentQuestion.multiSelect}
+									<span class="text-[10px]">
+										{selectedOptionIndices.has(index) ? '☑' : '☐'}
+									</span>
+								{/if}
+								{opt.label}
+							</button>
+						{/each}
+
+						<!-- Confirm button for multi-select (API) -->
+						{#if currentQuestion.multiSelect}
+							<button
+								onclick={async () => {
+									// Navigate to Submit option
+									// Claude Code UI has: [options...] + "Type something" + "Submit"
+									// So Submit is at index = options.length + 1
+									const submitIndex = currentQuestion.options.length + 1;
+									const delta = submitIndex - currentOptionIndex;
+									const direction = delta > 0 ? 'down' : 'up';
+									const steps = Math.abs(delta);
+
+									for (let i = 0; i < steps; i++) {
+										await onSendInput?.(direction, 'key');
+										await new Promise(r => setTimeout(r, 30));
+									}
+
+									await new Promise(r => setTimeout(r, 50));
+									// First Enter: Select "Submit" in the options list
+									await onSendInput?.('enter', 'key');
+
+									// Wait for confirmation screen to appear
+									await new Promise(r => setTimeout(r, 150));
+
+									// Second Enter: Confirm "Submit answers" on the review screen
+									await onSendInput?.('enter', 'key');
+
+									clearQuestionData();
+								}}
+								class="btn btn-xs btn-success gap-1"
+								title="Confirm selection (Enter)"
+								disabled={sendingInput || !onSendInput}
+							>
+								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+								</svg>
+								Done
+							</button>
+						{/if}
+					</div>
+
+					<!-- Hint text -->
+					<div class="text-[10px] mt-1.5 opacity-50" style="color: oklch(0.65 0.02 250);">
+						{#if currentQuestion.multiSelect}
+							Click options to toggle, then Done to confirm
+						{:else}
+							Click an option to select
+						{/if}
+					</div>
+				</div>
+			{:else if detectedQuestion}
+				<!-- Fallback to terminal-parsed question data -->
+				<div
+					class="mb-2 p-2 rounded-lg"
+					style="background: oklch(0.22 0.04 250); border: 1px solid oklch(0.35 0.06 250);"
+				>
+					<!-- Question header -->
+					{#if detectedQuestion.question}
+						<div class="text-xs font-semibold mb-2" style="color: oklch(0.85 0.10 200);">
+							{detectedQuestion.question}
+						</div>
+					{/if}
+
+					<!-- Options as clickable buttons -->
+					<div class="flex flex-wrap gap-1.5">
+						{#each detectedQuestion.options as opt (opt.index)}
+							<button
+								onclick={() => selectQuestionOption(opt, detectedQuestion.isMultiSelect)}
+								class="btn btn-xs gap-1 transition-all"
+								class:btn-primary={opt.isSelected && !detectedQuestion.isMultiSelect}
+								class:btn-outline={!opt.isSelected || detectedQuestion.isMultiSelect}
+								style={opt.isSelected && detectedQuestion.isMultiSelect
+									? 'background: oklch(0.35 0.12 250); border-color: oklch(0.50 0.15 250); color: oklch(0.95 0.02 250);'
+									: !opt.isSelected
+										? 'background: oklch(0.25 0.03 250); border-color: oklch(0.40 0.03 250); color: oklch(0.80 0.02 250);'
+										: ''
+								}
+								title={opt.description || opt.label}
+								disabled={sendingInput || !onSendInput}
+							>
+								<!-- Checkbox/radio indicator for multi-select -->
+								{#if detectedQuestion.isMultiSelect}
+									<span class="text-[10px] opacity-70">
+										{opt.isSelected ? '☑' : '☐'}
+									</span>
+								{/if}
+								{opt.label}
+							</button>
+						{/each}
+
+						<!-- Confirm button for multi-select -->
+						{#if detectedQuestion.isMultiSelect}
+							<button
+								onclick={confirmMultiSelect}
+								class="btn btn-xs btn-success gap-1"
+								title="Confirm selection (Enter)"
+								disabled={sendingInput || !onSendInput}
+							>
+								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+								</svg>
+								Done
+							</button>
+						{/if}
+					</div>
+
+					<!-- Hint text -->
+					<div class="text-[10px] mt-1.5 opacity-50" style="color: oklch(0.65 0.02 250);">
+						{#if detectedQuestion.isMultiSelect}
+							Click options to toggle, then Done to confirm
+						{:else}
+							Click an option to select
+						{/if}
+					</div>
+				</div>
+			{/if}
+
 			<!-- Text input: [esc][^c] LEFT | input MIDDLE | [action buttons] RIGHT -->
 			<div class="flex gap-1.5 items-center">
 				<!-- LEFT: Control buttons (always visible) -->

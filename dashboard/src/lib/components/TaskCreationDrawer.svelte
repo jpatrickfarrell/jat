@@ -543,9 +543,9 @@
 	<div class="drawer-side">
 		<label aria-label="close sidebar" class="drawer-overlay" onclick={handleClose}></label>
 
-		<!-- Drawer Panel - Industrial -->
+		<!-- Drawer Panel (fixed height, header/footer sticky, content scrolls) - Industrial -->
 		<div
-			class="min-h-full w-full max-w-2xl flex flex-col shadow-2xl"
+			class="h-full w-full max-w-2xl flex flex-col shadow-2xl"
 			style="
 				background: linear-gradient(180deg, oklch(0.18 0.01 250) 0%, oklch(0.16 0.01 250) 100%);
 				border-left: 1px solid oklch(0.35 0.02 250);
@@ -583,8 +583,8 @@
 				</button>
 			</div>
 
-			<!-- Form - Industrial -->
-			<form onsubmit={handleSubmit} class="flex-1 overflow-y-auto p-6" style="background: oklch(0.16 0.01 250);">
+			<!-- Content (scrollable area between sticky header and footer) - Industrial -->
+			<form onsubmit={handleSubmit} class="flex-1 overflow-y-auto p-6 flex flex-col min-h-0" style="background: oklch(0.16 0.01 250);">
 				<div class="space-y-6">
 					<!-- Title (Required) - Industrial -->
 					<div class="form-control">

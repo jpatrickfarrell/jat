@@ -241,11 +241,19 @@ If the launcher created a `jat-pending-*` tmux session, rename it to `jat-{Agent
 ```bash
 # Step 1: Check current tmux session name
 tmux display-message -p '#S'
-# → If output is "jat-pending-*", continue to Step 2
+# → If output starts with "jat-pending-", you MUST rename it
 
-# Step 2: Rename the session (replace AGENT_NAME with your actual agent name)
-tmux rename-session "jat-LightSun"  # Example: jat-{YourAgentName}
+# Step 2: Rename the session to jat-{YourAgentName}
+# IMPORTANT: Replace {YourAgentName} with your actual agent name from Step 1C
+tmux rename-session "jat-{YourAgentName}"
+
+# Step 3: VERIFY the rename worked (MANDATORY)
+tmux display-message -p '#S'
+# → MUST show "jat-{YourAgentName}" (e.g., "jat-PaleStorm")
+# → If still shows "jat-pending-*", the rename FAILED - try again!
 ```
+
+**⚠️ DO NOT proceed to Step 2 until verification passes!**
 
 **What happens if you skip this:**
 - ❌ `/work` page shows "pending-882263-1" instead of your agent name

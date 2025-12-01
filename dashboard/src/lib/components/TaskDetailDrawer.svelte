@@ -10,6 +10,7 @@
 	 * - Fetches task data on mount
 	 * - Optimistic updates with rollback
 	 * - Keyboard shortcuts (Esc, M, ?)
+	 * - Task actions: Spawn, Attach, Release, Send Message
 	 */
 
 	import { onMount, onDestroy } from 'svelte';
@@ -18,9 +19,35 @@
 	import InlineEdit from '$lib/components/InlineEdit.svelte';
 	import InlineSelect from '$lib/components/InlineSelect.svelte';
 	import TaskDependencyGraph from '$lib/components/TaskDependencyGraph.svelte';
+	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
+	import { computeAgentStatus, type AgentStatusInput, type AgentStatus } from '$lib/utils/agentStatusUtils';
+	import { analyzeDependencies } from '$lib/utils/dependencyUtils';
+	import { broadcastTaskEvent } from '$lib/stores/taskEvents';
+	import { getElapsedTimeColor, getFireScale, formatElapsedTime } from '$lib/config/rocketConfig';
+
+	// Agent interface for action state
+	interface Agent extends AgentStatusInput {
+		name: string;
+		last_active_ts?: string | null;
+		task?: string | null;
+	}
 
 	// Props
-	let { taskId = $bindable(null), isOpen = $bindable(false), ondelete = () => {} } = $props();
+	let {
+		taskId = $bindable(null),
+		isOpen = $bindable(false),
+		ondelete = () => {},
+		agents = [],
+		onspawn = async (_taskId: string) => false,
+		onrefresh = () => {}
+	}: {
+		taskId?: string | null;
+		isOpen?: boolean;
+		ondelete?: () => void;
+		agents?: Agent[];
+		onspawn?: (taskId: string) => Promise<boolean>;
+		onrefresh?: () => void;
+	} = $props();
 
 	// Task data state
 	let task = $state(null);
@@ -77,6 +104,66 @@
 	let showHelp = $state(false);
 	let copiedTaskId = $state(false);
 	let editingLabels = $state(false);
+
+	// Action state
+	let isSpawning = $state(false);
+	let isReleasing = $state(false);
+	let showMessageModal = $state(false);
+	let messageText = $state('');
+	let isSendingMessage = $state(false);
+	let now = $state(Date.now());
+
+	// Update timer for elapsed time display (every 30s)
+	let timerInterval: ReturnType<typeof setInterval> | null = null;
+
+	// Derived: Find agent for this task
+	const taskAgent = $derived(
+		task?.assignee ? agents.find(a => a.name === task.assignee) : null
+	);
+
+	// Derived: Compute agent status
+	const agentStatus = $derived<AgentStatus | null>(
+		taskAgent ? computeAgentStatus(taskAgent) : null
+	);
+
+	// Derived: Is agent reachable (has tmux session and is working)?
+	const isAgentOnline = $derived(
+		agentStatus !== null && agentStatus !== 'offline' && agentStatus !== 'disconnected'
+	);
+
+	// Derived: Session name for attach
+	const sessionName = $derived(
+		taskAgent ? `jat-${taskAgent.name}` : null
+	);
+
+	// Derived: Dependency analysis for blocking check
+	const depStatus = $derived(
+		task ? analyzeDependencies(task) : { hasBlockers: false, blockingReason: '' }
+	);
+
+	// Derived: Calculate elapsed time from task updated_at
+	const elapsed = $derived(() => {
+		if (!task || task.status !== 'in_progress' || !task.updated_at) return null;
+		const start = new Date(task.updated_at).getTime();
+		const elapsedMs = now - start;
+		if (elapsedMs < 0 || isNaN(elapsedMs)) return null;
+
+		const totalMinutes = Math.floor(elapsedMs / 60000);
+		const color = getElapsedTimeColor(totalMinutes);
+		const display = formatElapsedTime(totalMinutes);
+
+		return { display, color, minutes: totalMinutes };
+	});
+
+	// Derived: Action mode based on task status
+	type ActionMode = 'spawn' | 'in_progress' | 'blocked' | 'closed';
+	const actionMode = $derived<ActionMode>(() => {
+		if (!task) return 'spawn';
+		if (task.status === 'closed') return 'closed';
+		if (task.status === 'in_progress') return 'in_progress';
+		if (task.status === 'blocked' || depStatus.hasBlockers) return 'blocked';
+		return 'spawn';
+	});
 
 	// Task attachments state
 	interface TaskAttachment {
@@ -667,6 +754,142 @@
 		}
 	}
 
+	// ========== Task Action Handlers ==========
+
+	/**
+	 * Spawn a new agent to work on this task
+	 */
+	async function handleSpawn() {
+		if (!task || !taskId || isSpawning) return;
+
+		isSpawning = true;
+		try {
+			const success = await onspawn(taskId);
+			if (success) {
+				showToast('success', '🚀 Agent spawned');
+				// Refetch task to get updated status
+				setTimeout(() => fetchTask(taskId), 500);
+			} else {
+				showToast('error', '✗ Failed to spawn agent');
+			}
+		} catch (error: any) {
+			console.error('Spawn error:', error);
+			showToast('error', `✗ ${error.message}`);
+		} finally {
+			isSpawning = false;
+		}
+	}
+
+	/**
+	 * Release task (unassign and reset to open)
+	 */
+	async function handleRelease() {
+		if (!task || !taskId || isReleasing) return;
+
+		isReleasing = true;
+		try {
+			const response = await fetch(`/api/tasks/${taskId}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ assignee: null, status: 'open' })
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.message || 'Failed to release task');
+			}
+
+			// Broadcast event so pages refresh immediately
+			broadcastTaskEvent('task-released', taskId);
+
+			showToast('success', '✓ Task released');
+
+			// Refetch task to get updated status
+			await fetchTask(taskId);
+			onrefresh();
+		} catch (error: any) {
+			console.error('Release error:', error);
+			showToast('error', `✗ ${error.message}`);
+		} finally {
+			isReleasing = false;
+		}
+	}
+
+	/**
+	 * Attach to agent's tmux session
+	 */
+	function handleAttach() {
+		if (!sessionName) return;
+
+		const command = `tmux attach-session -t "${sessionName}"`;
+		navigator.clipboard.writeText(command);
+		showToast('success', '📋 Command copied - paste in terminal');
+	}
+
+	/**
+	 * Send a message to the agent working on this task
+	 */
+	async function handleSendMessage() {
+		if (!task || !taskId || !task.assignee || !messageText.trim()) return;
+
+		isSendingMessage = true;
+		try {
+			const response = await fetch('/api/agents/message', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					to: task.assignee,
+					subject: `Re: ${taskId}`,
+					body: messageText.trim(),
+					thread: taskId
+				})
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.message || 'Failed to send message');
+			}
+
+			showToast('success', '📬 Message sent');
+			messageText = '';
+			showMessageModal = false;
+		} catch (error: any) {
+			console.error('Send message error:', error);
+			showToast('error', `✗ ${error.message}`);
+		} finally {
+			isSendingMessage = false;
+		}
+	}
+
+	/**
+	 * Reopen a closed task
+	 */
+	async function handleReopen() {
+		if (!task || !taskId) return;
+
+		isSaving = true;
+		try {
+			const response = await fetch(`/api/tasks/${taskId}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ status: 'open', assignee: null })
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.message || 'Failed to reopen task');
+			}
+
+			showToast('success', '✓ Task reopened');
+			await fetchTask(taskId);
+			onrefresh();
+		} catch (error: any) {
+			console.error('Reopen error:', error);
+			showToast('error', `✗ ${error.message}`);
+		} finally {
+			isSaving = false;
+		}
+	}
 
 	// Keyboard shortcut handler
 	function handleKeyDown(event: KeyboardEvent) {
@@ -762,10 +985,14 @@
 		}
 	}
 
-	// Setup keyboard listener on mount
+	// Setup keyboard listener and timer on mount
 	onMount(() => {
 		if (browser) {
 			window.addEventListener('keydown', handleKeyDown);
+			// Update timer every 30 seconds for elapsed time display
+			timerInterval = setInterval(() => {
+				now = Date.now();
+			}, 30000);
 		}
 	});
 
@@ -773,6 +1000,10 @@
 	onDestroy(() => {
 		if (browser) {
 			window.removeEventListener('keydown', handleKeyDown);
+			if (timerInterval) {
+				clearInterval(timerInterval);
+				timerInterval = null;
+			}
 		}
 	});
 </script>
@@ -929,24 +1160,85 @@
 							<!-- Separator -->
 							<span class="text-base-content/20">•</span>
 
-							<!-- Assignee -->
-							<span class="text-xs text-base-content/50 flex items-center gap-1">
-								{#if task.assignee}
-									<span>{task.assignee}</span>
+							<!-- Assignee / Actions -->
+							<span class="flex items-center gap-1.5">
+								{#if actionMode() === 'spawn'}
+									<!-- Unassigned: Show Launch button -->
 									<button
-										class="btn btn-ghost btn-xs btn-circle opacity-50 hover:opacity-100 hover:btn-error h-4 w-4 min-h-0"
-										onclick={async () => {
-											await autoSave('assignee', '');
-										}}
-										disabled={isSaving}
-										title="Clear assignment"
+										class="btn btn-xs btn-primary gap-1"
+										onclick={handleSpawn}
+										disabled={isSpawning || depStatus.hasBlockers}
+										title={depStatus.hasBlockers ? depStatus.blockingReason : 'Launch agent to work on this task'}
 									>
-										<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-										</svg>
+										{#if isSpawning}
+											<span class="loading loading-spinner loading-xs"></span>
+										{:else}
+											<svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+												<path d="M12 2C12 2 8 6 8 12C8 15 9 17 10 18L10 21C10 21.5 10.5 22 11 22H13C13.5 22 14 21.5 14 21L14 18C15 17 16 15 16 12C16 6 12 2 12 2Z" />
+											</svg>
+										{/if}
+										<span>Launch</span>
 									</button>
-								{:else}
-									<span class="italic">Unassigned</span>
+									{#if depStatus.hasBlockers}
+										<span class="text-xs text-warning" title={depStatus.blockingReason}>⚠</span>
+									{/if}
+								{:else if actionMode() === 'in_progress' || actionMode() === 'blocked'}
+									<!-- Assigned: Show agent + actions -->
+									<div class="flex items-center gap-1">
+										<div class="avatar">
+											<div class="w-5 h-5 rounded-full ring-1 {isAgentOnline ? 'ring-success' : 'ring-warning'}">
+												<AgentAvatar name={task.assignee} size={20} />
+											</div>
+										</div>
+										<span class="text-xs">{task.assignee}</span>
+										{#if isAgentOnline && sessionName}
+											<button
+												class="btn btn-ghost btn-xs btn-circle h-5 w-5 min-h-0"
+												onclick={handleAttach}
+												title="Copy attach command"
+											>
+												<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
+												</svg>
+											</button>
+											<button
+												class="btn btn-ghost btn-xs btn-circle h-5 w-5 min-h-0"
+												onclick={() => showMessageModal = true}
+												title="Send message"
+											>
+												<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+												</svg>
+											</button>
+										{/if}
+										<button
+											class="btn btn-ghost btn-xs btn-circle h-5 w-5 min-h-0 hover:btn-error"
+											onclick={handleRelease}
+											disabled={isReleasing}
+											title="Release task"
+										>
+											{#if isReleasing}
+												<span class="loading loading-spinner loading-xs"></span>
+											{:else}
+												<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+												</svg>
+											{/if}
+										</button>
+									</div>
+								{:else if actionMode() === 'closed'}
+									<!-- Closed: Show reopen option -->
+									<button
+										class="btn btn-xs btn-ghost gap-1"
+										onclick={handleReopen}
+										disabled={isSaving}
+										title="Reopen task"
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+										</svg>
+										<span>Reopen</span>
+									</button>
 								{/if}
 							</span>
 						{/if}
@@ -1011,7 +1303,7 @@
 					</div>
 				{:else if task}
 					<!-- View Mode -->
-					<div class="flex flex-col gap-6 h-full">
+					<div class="flex flex-col gap-6">
 						<!-- Labels (badges, click to edit) - Industrial -->
 						<div>
 							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Labels</h4>
@@ -1736,6 +2028,111 @@
 				"
 			>
 				<span>{toastMessage.text}</span>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Send Message Modal - Industrial -->
+	{#if showMessageModal && task?.assignee}
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="fixed inset-0 z-[70] flex items-center justify-center p-4"
+			style="background: oklch(0 0 0 / 0.7); backdrop-filter: blur(4px);"
+			onclick={() => { showMessageModal = false; messageText = ''; }}
+		>
+			<div
+				class="w-full max-w-md rounded-lg shadow-2xl overflow-hidden"
+				style="
+					background: linear-gradient(180deg, oklch(0.20 0.01 250) 0%, oklch(0.16 0.01 250) 100%);
+					border: 1px solid oklch(0.35 0.02 250);
+				"
+				onclick={(e) => e.stopPropagation()}
+			>
+				<!-- Modal Header -->
+				<div
+					class="flex items-center gap-3 px-5 py-4"
+					style="
+						background: linear-gradient(90deg, oklch(0.25 0.02 250) 0%, oklch(0.22 0.01 250) 100%);
+						border-bottom: 1px solid oklch(0.35 0.02 250);
+					"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" style="color: oklch(0.70 0.18 140);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+					</svg>
+					<div class="flex-1">
+						<h3 class="font-mono text-sm font-semibold" style="color: oklch(0.85 0.02 250);">Send Message</h3>
+						<p class="text-xs" style="color: oklch(0.55 0.02 250);">To: {task.assignee}</p>
+					</div>
+					<button
+						class="btn btn-sm btn-circle btn-ghost"
+						onclick={() => { showMessageModal = false; messageText = ''; }}
+					>
+						✕
+					</button>
+				</div>
+
+				<!-- Modal Body -->
+				<div class="p-5">
+					<div class="form-control">
+						<label class="label">
+							<span class="label-text font-mono text-xs uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Message</span>
+						</label>
+						<textarea
+							class="textarea font-mono text-sm"
+							style="
+								background: oklch(0.18 0.01 250);
+								border: 1px solid oklch(0.35 0.02 250);
+								color: oklch(0.80 0.02 250);
+								min-height: 120px;
+							"
+							placeholder="Type your message..."
+							bind:value={messageText}
+							disabled={isSendingMessage}
+						></textarea>
+					</div>
+
+					<div class="flex items-center gap-2 mt-2 px-1">
+						<span class="text-[10px] font-mono" style="color: oklch(0.45 0.02 250);">Thread: {taskId}</span>
+					</div>
+				</div>
+
+				<!-- Modal Footer -->
+				<div
+					class="flex items-center justify-end gap-2 px-5 py-4"
+					style="
+						background: oklch(0.18 0.01 250);
+						border-top: 1px solid oklch(0.30 0.02 250);
+					"
+				>
+					<button
+						class="btn btn-sm btn-ghost"
+						onclick={() => { showMessageModal = false; messageText = ''; }}
+						disabled={isSendingMessage}
+					>
+						Cancel
+					</button>
+					<button
+						class="btn btn-sm gap-2"
+						style="
+							background: linear-gradient(135deg, oklch(0.50 0.15 140) 0%, oklch(0.40 0.18 150) 100%);
+							border: 1px solid oklch(0.55 0.15 140);
+							color: oklch(0.95 0.02 250);
+						"
+						onclick={handleSendMessage}
+						disabled={isSendingMessage || !messageText.trim()}
+					>
+						{#if isSendingMessage}
+							<span class="loading loading-spinner loading-xs"></span>
+							Sending...
+						{:else}
+							<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+							</svg>
+							Send
+						{/if}
+					</button>
+				</div>
 			</div>
 		</div>
 	{/if}

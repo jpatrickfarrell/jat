@@ -29,14 +29,33 @@ function formatOpenTasks(tasks) {
 	return tasks.slice(0, 30); // Limit to 30 tasks
 }
 
-// Available projects
-const PROJECTS = ['jat', 'chimaro', 'jomarchy'];
+// Default projects (fallback if no descriptions provided)
+const DEFAULT_PROJECTS = ['jat', 'chimaro', 'jomarchy'];
 
 // Build the prompt for Claude
-function buildPrompt(title, description, openTasks) {
+function buildPrompt(title, description, openTasks, projectDescriptions = {}) {
 	const taskList = openTasks
 		.map((t) => `- ${t.id}: ${t.title} (P${t.priority}, ${t.issue_type})`)
 		.join('\n');
+
+	// Build project list with descriptions if available
+	const projectNames = Object.keys(projectDescriptions).length > 0
+		? Object.keys(projectDescriptions)
+		: DEFAULT_PROJECTS;
+
+	let projectSection;
+	if (Object.keys(projectDescriptions).length > 0) {
+		// Include project descriptions for better context
+		const projectList = Object.entries(projectDescriptions)
+			.map(([name, desc]) => `- ${name}: ${desc}`)
+			.join('\n');
+		projectSection = `AVAILABLE PROJECTS (with descriptions):
+${projectList}
+
+Projects without descriptions: ${projectNames.filter(p => !projectDescriptions[p]).join(', ') || 'none'}`;
+	} else {
+		projectSection = `AVAILABLE PROJECTS: ${projectNames.join(', ')}`;
+	}
 
 	return `You are a task triage assistant. Analyze this new task and suggest appropriate metadata.
 
@@ -44,7 +63,7 @@ NEW TASK:
 Title: ${title}
 Description: ${description}
 
-AVAILABLE PROJECTS: ${PROJECTS.join(', ')}
+${projectSection}
 
 OPEN TASKS (for potential dependencies):
 ${taskList || 'No open tasks'}
@@ -62,7 +81,7 @@ Based on the task title and description, provide your suggestions in this exact 
 Guidelines:
 - Priority: P0=critical/blocking, P1=high/important, P2=medium/normal, P3=low, P4=backlog
 - Type: bug=defect/error, feature=new functionality, task=general work, epic=large multi-part, chore=maintenance
-- Project: Detect from task ID patterns, keywords, or null if unclear
+- Project: Match to the most relevant project based on descriptions and keywords. Use null if no clear match.
 - Labels: 2-4 relevant tags (e.g., "frontend", "api", "urgent", "documentation")
 - Dependencies: Only include task IDs that this new task clearly depends on
 
@@ -72,7 +91,7 @@ Respond with ONLY the JSON object, no other text.`;
 export async function POST({ request }) {
 	try {
 		const body = await request.json();
-		const { title, description, openTasks: clientOpenTasks } = body;
+		const { title, description, openTasks: clientOpenTasks, projectDescriptions } = body;
 
 		// Validate input
 		if (!title || typeof title !== 'string' || title.trim().length === 0) {
@@ -94,8 +113,13 @@ export async function POST({ request }) {
 		// Use client-provided open tasks (pre-fetched when drawer opened)
 		const openTasks = formatOpenTasks(clientOpenTasks || []);
 
-		// Build prompt
-		const prompt = buildPrompt(title.trim(), description?.trim() || '', openTasks);
+		// Build prompt with project descriptions for better context
+		const prompt = buildPrompt(
+			title.trim(),
+			description?.trim() || '',
+			openTasks,
+			projectDescriptions || {}
+		);
 
 		// Call Claude API
 		const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -166,12 +190,17 @@ export async function POST({ request }) {
 		}
 
 		// Validate and sanitize suggestions
+		// Use dynamic project names if descriptions provided, otherwise fallback to defaults
+		const validProjects = Object.keys(projectDescriptions || {}).length > 0
+			? Object.keys(projectDescriptions)
+			: DEFAULT_PROJECTS;
+
 		const sanitized = {
 			priority: Math.max(0, Math.min(4, parseInt(suggestions.priority) || 2)),
 			type: ['task', 'bug', 'feature', 'epic', 'chore'].includes(suggestions.type)
 				? suggestions.type
 				: 'task',
-			project: PROJECTS.includes(suggestions.project) ? suggestions.project : null,
+			project: validProjects.includes(suggestions.project) ? suggestions.project : null,
 			labels: Array.isArray(suggestions.labels)
 				? suggestions.labels.filter((l) => typeof l === 'string').slice(0, 5)
 				: [],

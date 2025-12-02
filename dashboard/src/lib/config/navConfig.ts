@@ -75,6 +75,12 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			label: 'Triage',
 			href: '/triage',
 			icon: 'triage'
+		},
+		{
+			id: 'projects',
+			label: 'Projects',
+			href: '/projects',
+			icon: 'projects'
 		}
 	],
 	showProjectFilter: true,

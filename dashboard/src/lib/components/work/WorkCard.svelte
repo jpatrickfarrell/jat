@@ -33,6 +33,7 @@
 	import VoiceInput from '$lib/components/VoiceInput.svelte';
 	import StatusActionBadge from './StatusActionBadge.svelte';
 	import { SESSION_STATE_VISUALS, type SessionStateVisual } from '$lib/config/statusColors';
+	import HorizontalResizeHandle from '$lib/components/HorizontalResizeHandle.svelte';
 
 	// Props - aligned with workSessions.svelte.ts types
 	interface Task {
@@ -78,6 +79,10 @@
 		class?: string;
 		/** Whether this work card is currently highlighted (e.g., from clicking avatar elsewhere) */
 		isHighlighted?: boolean;
+		/** Card width in pixels (for resizable cards) */
+		cardWidth?: number;
+		/** Called when user drags the resize handle */
+		onWidthChange?: (newWidth: number) => void;
 	}
 
 	let {
@@ -100,7 +105,9 @@
 		onSendInput,
 		onDismiss,
 		class: className = '',
-		isHighlighted = false
+		isHighlighted = false,
+		cardWidth,
+		onWidthChange
 	}: Props = $props();
 
 	// Completion state
@@ -193,6 +200,17 @@
 		// Poll for question data every 500ms when in needs-input state
 		fetchQuestionData();
 		questionPollInterval = setInterval(fetchQuestionData, 500);
+
+		// Load saved card width from localStorage
+		if (sessionName && !cardWidth) {
+			const savedWidth = localStorage.getItem(`${STORAGE_KEY_PREFIX}${sessionName}`);
+			if (savedWidth) {
+				const parsed = parseInt(savedWidth, 10);
+				if (!isNaN(parsed) && parsed >= MIN_CARD_WIDTH && parsed <= MAX_CARD_WIDTH) {
+					internalWidth = parsed;
+				}
+			}
+		}
 	});
 
 	// Set up ResizeObserver after DOM is ready
@@ -345,6 +363,49 @@
 	let resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 	const RESIZE_DEBOUNCE_MS = 300; // Wait for resize to stabilize
 	const MIN_COLUMN_CHANGE = 5; // Only resize if columns change by this much
+
+	// Manual card width resize state
+	// Internal width state (used when cardWidth prop not provided)
+	let internalWidth = $state<number | undefined>(undefined);
+	const MIN_CARD_WIDTH = 300; // Minimum card width in pixels
+	const MAX_CARD_WIDTH = 1200; // Maximum card width in pixels
+	const STORAGE_KEY_PREFIX = 'workcard-width-';
+
+	// Load saved width from localStorage on init (done in onMount below)
+
+	// Effective width (prop takes precedence over internal state)
+	const effectiveWidth = $derived(cardWidth ?? internalWidth);
+
+	/**
+	 * Handle manual resize via drag handle
+	 */
+	function handleManualResize(deltaX: number) {
+		const currentWidth = effectiveWidth ?? 400; // Default if no width set
+		const newWidth = Math.max(MIN_CARD_WIDTH, Math.min(MAX_CARD_WIDTH, currentWidth + deltaX));
+
+		if (onWidthChange) {
+			onWidthChange(newWidth);
+		} else {
+			internalWidth = newWidth;
+		}
+	}
+
+	/**
+	 * Called when resize drag ends - trigger tmux resize with final width and persist
+	 */
+	function handleResizeEnd() {
+		// Trigger tmux resize with final width
+		if (scrollContainerRef) {
+			const containerWidth = scrollContainerRef.getBoundingClientRect().width;
+			const columns = calculateColumns(containerWidth);
+			resizeTmuxSession(columns);
+		}
+
+		// Persist width to localStorage if using internal state
+		if (typeof window !== 'undefined' && sessionName && internalWidth && !cardWidth) {
+			localStorage.setItem(`${STORAGE_KEY_PREFIX}${sessionName}`, internalWidth.toString());
+		}
+	}
 
 	// Monospace font character width estimation
 	// text-xs is typically 12px, monospace chars are ~0.6em wide = ~7.2px
@@ -1499,12 +1560,15 @@
 		background: linear-gradient(135deg, oklch(0.22 0.02 250) 0%, oklch(0.18 0.01 250) 50%, oklch(0.16 0.01 250) 100%);
 		border: 1px solid {showCompletionBanner ? 'oklch(0.65 0.20 145)' : 'oklch(0.35 0.02 250)'};
 		box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.05), 0 2px 8px oklch(0 0 0 / 0.1);
+		{effectiveWidth ? `width: ${effectiveWidth}px; flex-shrink: 0;` : ''}
 	"
 	data-agent-name={agentName}
 	in:fly={{ x: 50, duration: 300, delay: 50 }}
 	out:fade={{ duration: 200 }}
 	onmouseenter={handleCardMouseEnter}
 >
+	<!-- Horizontal resize handle on right edge -->
+	<HorizontalResizeHandle onResize={handleManualResize} onResizeEnd={handleResizeEnd} />
 	<!-- Status accent bar - left edge (color reflects session state) -->
 	<div
 		class="absolute left-0 top-0 bottom-0 w-1"

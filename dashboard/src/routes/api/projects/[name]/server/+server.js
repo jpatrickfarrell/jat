@@ -64,9 +64,10 @@ async function tmuxSessionExists(sessionName) {
 
 /**
  * Get tmux session name for a project server
+ * Uses server-{projectName} format to match /api/servers endpoint detection
  */
 function getSessionName(projectName) {
-	return `${projectName}-server`;
+	return `server-${projectName}`;
 }
 
 /**
@@ -86,13 +87,28 @@ export async function GET({ params }) {
 		checkPortStatus(config.port)
 	]);
 
+	// Determine status:
+	// - If port is configured and listening: 'running'
+	// - If port is configured but not listening and session exists: 'starting'
+	// - If no port configured but session exists: 'running' (we assume it's working)
+	// - If no session: 'stopped'
+	let status = 'stopped';
+	if (sessionExists) {
+		if (config.port) {
+			status = portRunning ? 'running' : 'starting';
+		} else {
+			// No port configured - if session exists, assume running
+			status = 'running';
+		}
+	}
+
 	return json({
 		project: name,
 		port: config.port,
 		sessionName,
 		sessionExists,
 		portRunning,
-		status: portRunning ? 'running' : sessionExists ? 'starting' : 'stopped'
+		status
 	});
 }
 
@@ -117,12 +133,14 @@ export async function POST({ params }) {
 	// Check if session already exists
 	if (await tmuxSessionExists(sessionName)) {
 		const portRunning = await checkPortStatus(config.port);
+		// If no port configured, assume running; otherwise check port status
+		const status = config.port ? (portRunning ? 'running' : 'starting') : 'running';
 		return json({
 			success: true,
 			message: 'Server session already exists',
 			sessionName,
 			port: config.port,
-			status: portRunning ? 'running' : 'starting'
+			status
 		});
 	}
 
@@ -155,6 +173,8 @@ export async function POST({ params }) {
 		await new Promise(resolve => setTimeout(resolve, 1000));
 
 		const portRunning = await checkPortStatus(config.port);
+		// If no port configured, assume running; otherwise check port status
+		const status = config.port ? (portRunning ? 'running' : 'starting') : 'running';
 
 		return json({
 			success: true,
@@ -162,7 +182,7 @@ export async function POST({ params }) {
 			sessionName,
 			port: config.port,
 			command: startCommand,
-			status: portRunning ? 'running' : 'starting',
+			status,
 			attach: `tmux attach -t ${sessionName}`
 		});
 	} catch (error) {

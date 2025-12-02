@@ -1,13 +1,32 @@
 <script lang="ts">
 	/**
-	 * Projects Settings Page
+	 * Projects Page
 	 *
-	 * Displays all configured projects with stats (similar to `jat list`)
-	 * Allows users to hide/show projects from dashboard dropdowns
+	 * Layout: ServerSessionPanel (horizontal scroll) + Resizable Divider + Projects Table
+	 * Mirrors the /work page structure but for dev server sessions.
+	 *
+	 * Features:
+	 * - Server session panel showing running dev servers with terminal output
+	 * - Resizable divider between panels
+	 * - Project settings table with visibility, description, port editing
 	 */
 
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { browser } from '$app/environment';
+	import SessionPanel from '$lib/components/work/SessionPanel.svelte';
+	import ResizableDivider from '$lib/components/ResizableDivider.svelte';
+	import {
+		serverSessionsState,
+		fetch as fetchServerSessions,
+		start as startServerSession,
+		stop as stopServerSession,
+		restart as restartServerSession,
+		sendInput as sendServerInput,
+		interrupt as interruptServer,
+		startPolling as startServerPolling,
+		stopPolling as stopServerPolling
+	} from '$lib/stores/serverSessions.svelte.js';
 
 	interface Project {
 		name: string;
@@ -24,6 +43,96 @@
 		lastActivity?: string | null;
 	}
 
+	// Resizable panel state
+	const STORAGE_KEY = 'projects-panel-split';
+	const DEFAULT_SPLIT = 50; // 50% for server panel, 50% for projects table
+	const MIN_SPLIT = 20;
+	const MAX_SPLIT = 80;
+	const SNAP_RESTORE_SIZE = 40;
+
+	let splitPercent = $state(DEFAULT_SPLIT);
+	let containerHeight = $state(0);
+	let containerRef: HTMLDivElement | null = null;
+
+	// Snap-to-collapse state
+	let isCollapsed = $state(false);
+	let collapsedDirection = $state<'top' | 'bottom' | null>(null);
+	let splitBeforeCollapse = $state(DEFAULT_SPLIT);
+
+	// Load saved split from localStorage
+	$effect(() => {
+		if (browser) {
+			const saved = localStorage.getItem(STORAGE_KEY);
+			if (saved) {
+				const parsed = parseFloat(saved);
+				if (parsed === 0) {
+					isCollapsed = true;
+					collapsedDirection = 'top';
+					splitPercent = 0;
+				} else if (parsed === 100) {
+					isCollapsed = true;
+					collapsedDirection = 'bottom';
+					splitPercent = 100;
+				} else if (!isNaN(parsed) && parsed >= MIN_SPLIT && parsed <= MAX_SPLIT) {
+					splitPercent = parsed;
+					splitBeforeCollapse = parsed;
+				}
+			}
+		}
+	});
+
+	// Save split to localStorage
+	function saveSplit() {
+		if (browser) {
+			localStorage.setItem(STORAGE_KEY, splitPercent.toString());
+		}
+	}
+
+	// Handle resize from divider
+	function handleResize(deltaY: number) {
+		if (!containerHeight) return;
+
+		const deltaPercent = (deltaY / containerHeight) * 100;
+		let newSplit = splitPercent + deltaPercent;
+
+		if (newSplit < MIN_SPLIT) {
+			splitBeforeCollapse = splitPercent >= MIN_SPLIT ? splitPercent : SNAP_RESTORE_SIZE;
+			splitPercent = 0;
+			isCollapsed = true;
+			collapsedDirection = 'top';
+			saveSplit();
+			return;
+		} else if (newSplit > MAX_SPLIT) {
+			splitBeforeCollapse = splitPercent <= MAX_SPLIT ? splitPercent : 100 - SNAP_RESTORE_SIZE;
+			splitPercent = 100;
+			isCollapsed = true;
+			collapsedDirection = 'bottom';
+			saveSplit();
+			return;
+		}
+
+		splitPercent = newSplit;
+		isCollapsed = false;
+		collapsedDirection = null;
+		saveSplit();
+	}
+
+	// Restore from collapsed state
+	function handleRestoreFromCollapse() {
+		splitPercent = splitBeforeCollapse;
+		isCollapsed = false;
+		collapsedDirection = null;
+		saveSplit();
+	}
+
+	// Update container height
+	function updateContainerHeight() {
+		if (containerRef) {
+			containerHeight = containerRef.clientHeight;
+		}
+	}
+
+	// Projects state
 	let projects = $state<Project[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -282,8 +391,71 @@
 		}
 	}
 
+	// Server session event handlers
+	async function handleKillSession(sessionName: string) {
+		const success = await stopServerSession(sessionName);
+		if (success) {
+			await fetchProjects();
+		}
+	}
+
+	async function handleAttachTerminal(sessionName: string) {
+		try {
+			const response = await fetch(`/api/work/${sessionName}/attach`, {
+				method: 'POST'
+			});
+			if (!response.ok) {
+				console.error('Failed to attach terminal:', await response.text());
+			}
+		} catch (err) {
+			console.error('Failed to attach terminal:', err);
+		}
+	}
+
+	async function handleSendInput(sessionName: string, input: string, type: 'text' | 'key' | 'raw') {
+		if (type === 'raw') {
+			await sendServerInput(sessionName, input, 'raw');
+			return;
+		}
+		if (type === 'key') {
+			const specialKeys = ['ctrl-c', 'ctrl-d'];
+			if (specialKeys.includes(input)) {
+				await sendServerInput(sessionName, '', input as 'ctrl-c' | 'ctrl-d');
+				return;
+			}
+			await sendServerInput(sessionName, input, 'raw');
+			return;
+		}
+		await sendServerInput(sessionName, input, 'text');
+	}
+
+	async function handleStopServer(sessionName: string) {
+		await stopServerSession(sessionName);
+		await fetchProjects();
+	}
+
+	async function handleRestartServer(sessionName: string) {
+		await restartServerSession(sessionName);
+		await fetchProjects();
+	}
+
+	async function handleStartServer(projectName: string) {
+		await startServerSession(projectName);
+		await fetchProjects();
+	}
+
 	onMount(() => {
 		fetchProjects();
+		startServerPolling(2000);
+		updateContainerHeight();
+		window.addEventListener('resize', updateContainerHeight);
+	});
+
+	onDestroy(() => {
+		stopServerPolling();
+		if (browser) {
+			window.removeEventListener('resize', updateContainerHeight);
+		}
 	});
 
 	// Stats helpers
@@ -307,59 +479,106 @@
 	<title>Projects | JAT Dashboard</title>
 </svelte:head>
 
-<!-- Industrial page wrapper -->
-<div class="min-h-screen" style="background: oklch(0.14 0.01 250);">
-	<!-- Header -->
-	<div
-		class="sticky top-0 z-10 px-6 py-4"
-		style="
-			background: linear-gradient(180deg, oklch(0.20 0.01 250) 0%, oklch(0.18 0.01 250) 100%);
-			border-bottom: 1px solid oklch(0.30 0.02 250);
-		"
-	>
-		<div class="flex items-center justify-between max-w-6xl mx-auto">
-			<div>
-				<h1 class="text-xl font-bold font-mono uppercase tracking-wider" style="color: oklch(0.85 0.02 250);">
-					Project Settings
-				</h1>
-				<p class="text-sm mt-1" style="color: oklch(0.55 0.02 250);">
-					Manage which projects appear in dashboard dropdowns
-				</p>
-			</div>
+<svelte:window onresize={updateContainerHeight} />
 
-			<!-- Stats badges -->
-			<div class="flex items-center gap-3">
-				<div
-					class="px-3 py-1.5 rounded font-mono text-xs"
-					style="background: oklch(0.25 0.08 145 / 0.2); border: 1px solid oklch(0.50 0.15 145 / 0.4); color: oklch(0.75 0.15 145);"
-				>
-					{visibleCount} visible
+<div
+	bind:this={containerRef}
+	class="h-full bg-base-200 flex flex-col overflow-hidden"
+>
+	<!-- Server Sessions Panel (horizontal scroll) -->
+	<div
+		class="min-h-0 bg-base-100 flex flex-col transition-all duration-150"
+		style="height: {splitPercent}%; overflow-x: hidden;"
+		class:hidden={collapsedDirection === 'top'}
+	>
+		{#if serverSessionsState.isLoading && serverSessionsState.sessions.length === 0}
+			<div class="flex items-center justify-center flex-1">
+				<div class="text-center">
+					<span class="loading loading-bars loading-lg mb-4"></span>
+					<p class="text-sm text-base-content/60">Loading server sessions...</p>
 				</div>
-				{#if hiddenCount > 0}
-					<div
-						class="px-3 py-1.5 rounded font-mono text-xs"
-						style="background: oklch(0.25 0.08 30 / 0.2); border: 1px solid oklch(0.50 0.15 30 / 0.4); color: oklch(0.70 0.15 30);"
-					>
-						{hiddenCount} hidden
-					</div>
-				{/if}
-				<button
-					class="btn btn-sm btn-ghost font-mono text-xs"
-					onclick={fetchProjects}
-					disabled={loading}
-				>
-					{#if loading}
-						<span class="loading loading-spinner loading-xs"></span>
-					{:else}
-						↻ Refresh
-					{/if}
-				</button>
 			</div>
-		</div>
+		{:else}
+			<SessionPanel
+				mode="server"
+				serverSessions={serverSessionsState.sessions}
+				onKillSession={handleKillSession}
+				onAttachTerminal={handleAttachTerminal}
+				onSendInput={handleSendInput}
+				onStopServer={handleStopServer}
+				onRestartServer={handleRestartServer}
+				onStartServer={handleStartServer}
+				class="flex-1"
+			/>
+		{/if}
 	</div>
 
-	<!-- Content -->
-	<div class="px-6 py-6 max-w-6xl mx-auto">
+	<!-- Resizable Divider -->
+	<ResizableDivider
+		onResize={handleResize}
+		{isCollapsed}
+		{collapsedDirection}
+		onCollapsedClick={handleRestoreFromCollapse}
+		class="h-2 bg-base-300 hover:bg-primary/20 border-y border-base-300 flex-shrink-0"
+	/>
+
+	<!-- Projects Table Panel -->
+	<div
+		class="overflow-auto bg-base-100 flex-1 transition-all duration-150"
+		style="height: {100 - splitPercent}%;"
+		class:hidden={collapsedDirection === 'bottom'}
+	>
+		<!-- Projects Header -->
+		<div
+			class="sticky top-0 z-10 px-6 py-4"
+			style="
+				background: linear-gradient(180deg, oklch(0.20 0.01 250) 0%, oklch(0.18 0.01 250) 100%);
+				border-bottom: 1px solid oklch(0.30 0.02 250);
+			"
+		>
+			<div class="flex items-center justify-between">
+				<div>
+					<h1 class="text-lg font-bold font-mono uppercase tracking-wider" style="color: oklch(0.85 0.02 250);">
+						Project Settings
+					</h1>
+					<p class="text-xs mt-0.5" style="color: oklch(0.55 0.02 250);">
+						Manage which projects appear in dashboard dropdowns
+					</p>
+				</div>
+
+				<!-- Stats badges -->
+				<div class="flex items-center gap-3">
+					<div
+						class="px-2 py-1 rounded font-mono text-[10px]"
+						style="background: oklch(0.25 0.08 145 / 0.2); border: 1px solid oklch(0.50 0.15 145 / 0.4); color: oklch(0.75 0.15 145);"
+					>
+						{visibleCount} visible
+					</div>
+					{#if hiddenCount > 0}
+						<div
+							class="px-2 py-1 rounded font-mono text-[10px]"
+							style="background: oklch(0.25 0.08 30 / 0.2); border: 1px solid oklch(0.50 0.15 30 / 0.4); color: oklch(0.70 0.15 30);"
+						>
+							{hiddenCount} hidden
+						</div>
+					{/if}
+					<button
+						class="btn btn-xs btn-ghost font-mono text-[10px]"
+						onclick={fetchProjects}
+						disabled={loading}
+					>
+						{#if loading}
+							<span class="loading loading-spinner loading-xs"></span>
+						{:else}
+							↻ Refresh
+						{/if}
+					</button>
+				</div>
+			</div>
+		</div>
+
+		<!-- Projects Content -->
+		<div class="px-4 py-4">
 		<!-- Error message -->
 		{#if error}
 			<div
@@ -726,5 +945,6 @@
 				</div>
 			</div>
 		{/if}
+		</div>
 	</div>
 </div>

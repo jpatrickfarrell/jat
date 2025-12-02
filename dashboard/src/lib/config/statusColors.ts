@@ -397,7 +397,7 @@ export function getIssueTypeVisual(issueType: string | undefined | null): IssueT
 //
 // Unified configuration for session state visuals used by:
 // - StatusActionBadge: Dropdown status badges (bgColor, textColor, borderColor)
-// - WorkCard: Accent bar and agent info badge styling (accent, bgTint, glow)
+// - SessionCard: Accent bar and agent info badge styling (accent, bgTint, glow)
 //
 // Both use the same icon identifiers and labels for consistency.
 
@@ -407,7 +407,7 @@ export interface SessionStateVisual {
 	// Display
 	label: string;                 // Display label with emoji (e.g., "✅ DONE")
 	shortLabel: string;            // Short label without emoji (e.g., "Complete")
-	iconType: SessionStateIconType; // Icon identifier for WorkCard
+	iconType: SessionStateIconType; // Icon identifier for SessionCard
 
 	// StatusActionBadge colors (used for dropdown badges)
 	bgColor: string;               // Background color (oklch with alpha)
@@ -415,7 +415,7 @@ export interface SessionStateVisual {
 	borderColor: string;           // Border color (oklch with alpha)
 	pulse?: boolean;               // Whether to animate with pulse
 
-	// WorkCard accent bar colors (used for left accent bar and agent badge)
+	// SessionCard accent bar colors (used for left accent bar and agent badge)
 	accent: string;                // Vibrant accent color for bars/highlights
 	bgTint: string;                // Subtle background tint
 	glow: string;                  // Glow effect color (for active states)
@@ -433,7 +433,7 @@ export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
 		bgColor: 'oklch(0.60 0.15 200 / 0.3)',
 		textColor: 'oklch(0.90 0.12 200)',
 		borderColor: 'oklch(0.60 0.15 200 / 0.5)',
-		// WorkCard accent colors
+		// SessionCard accent colors
 		accent: 'oklch(0.75 0.15 200)',
 		bgTint: 'oklch(0.75 0.15 200 / 0.10)',
 		glow: 'oklch(0.75 0.15 200 / 0.5)',
@@ -447,7 +447,7 @@ export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
 		bgColor: 'oklch(0.55 0.15 250 / 0.3)',
 		textColor: 'oklch(0.90 0.12 250)',
 		borderColor: 'oklch(0.55 0.15 250 / 0.5)',
-		// WorkCard accent colors
+		// SessionCard accent colors
 		accent: 'oklch(0.70 0.18 250)',
 		bgTint: 'oklch(0.70 0.18 250 / 0.08)',
 		glow: 'oklch(0.70 0.18 250 / 0.4)',
@@ -462,7 +462,7 @@ export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
 		textColor: 'oklch(0.90 0.15 45)',
 		borderColor: 'oklch(0.60 0.20 45 / 0.5)',
 		pulse: true,
-		// WorkCard accent colors
+		// SessionCard accent colors
 		accent: 'oklch(0.75 0.20 45)',
 		bgTint: 'oklch(0.75 0.20 45 / 0.10)',
 		glow: 'oklch(0.75 0.20 45 / 0.5)',
@@ -477,7 +477,7 @@ export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
 		textColor: 'oklch(0.85 0.15 85)',
 		borderColor: 'oklch(0.55 0.18 85 / 0.5)',
 		pulse: true,
-		// WorkCard accent colors
+		// SessionCard accent colors
 		accent: 'oklch(0.70 0.20 85)',
 		bgTint: 'oklch(0.70 0.20 85 / 0.08)',
 		glow: 'oklch(0.70 0.20 85 / 0.4)',
@@ -491,7 +491,7 @@ export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
 		bgColor: 'oklch(0.50 0.12 175 / 0.3)',
 		textColor: 'oklch(0.85 0.12 175)',
 		borderColor: 'oklch(0.50 0.12 175 / 0.5)',
-		// WorkCard accent colors
+		// SessionCard accent colors
 		accent: 'oklch(0.65 0.15 175)',
 		bgTint: 'oklch(0.65 0.15 175 / 0.08)',
 		glow: 'oklch(0.65 0.15 175 / 0.4)',
@@ -505,7 +505,7 @@ export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
 		bgColor: 'oklch(0.45 0.18 145 / 0.3)',
 		textColor: 'oklch(0.80 0.15 145)',
 		borderColor: 'oklch(0.45 0.18 145 / 0.5)',
-		// WorkCard accent colors
+		// SessionCard accent colors
 		accent: 'oklch(0.70 0.20 145)',
 		bgTint: 'oklch(0.70 0.20 145 / 0.08)',
 		glow: 'oklch(0.70 0.20 145 / 0.4)',
@@ -519,7 +519,7 @@ export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
 		bgColor: 'oklch(0.5 0 0 / 0.1)',
 		textColor: 'oklch(0.60 0.02 250)',
 		borderColor: 'oklch(0.5 0 0 / 0.2)',
-		// WorkCard accent colors
+		// SessionCard accent colors
 		accent: 'oklch(0.55 0.05 250)',
 		bgTint: 'oklch(0.55 0.05 250 / 0.05)',
 		glow: 'oklch(0.55 0.05 250 / 0.2)',
@@ -708,6 +708,177 @@ export function getSessionStateVisual(state: string): SessionStateVisual {
  */
 export function getSessionStateActions(state: string): SessionStateAction[] {
 	return SESSION_STATE_ACTIONS[state] || SESSION_STATE_ACTIONS.idle;
+}
+
+// =============================================================================
+// SERVER SESSION STATE VISUAL CONFIG
+// =============================================================================
+//
+// Configuration for server session states (dev servers like npm run dev).
+// Used by ServerStatusBadge and SessionCard in server mode.
+//
+// States:
+// - running: Server is active and responding (port is listening)
+// - starting: Server is booting up (tmux session exists, port not yet listening)
+// - stopped: No tmux session for this server
+
+export type ServerState = 'running' | 'starting' | 'stopped';
+
+export interface ServerStateVisual {
+	// Display
+	label: string;                 // Display label with emoji (e.g., "🟢 RUNNING")
+	shortLabel: string;            // Short label without emoji (e.g., "Running")
+
+	// Badge colors (for ServerStatusBadge)
+	bgColor: string;               // Background color (oklch with alpha)
+	textColor: string;             // Text color (oklch)
+	borderColor: string;           // Border color (oklch with alpha)
+	pulse?: boolean;               // Whether to animate with pulse
+
+	// SessionCard accent bar colors (for server mode)
+	accent: string;                // Vibrant accent color for bars/highlights
+	bgTint: string;                // Subtle background tint
+	glow: string;                  // Glow effect color (for active states)
+
+	// SVG path for icon
+	icon: string;
+}
+
+export const SERVER_STATE_VISUALS: Record<ServerState, ServerStateVisual> = {
+	running: {
+		label: '🟢 RUNNING',
+		shortLabel: 'Running',
+		// Badge colors - vibrant green
+		bgColor: 'oklch(0.45 0.18 145 / 0.3)',
+		textColor: 'oklch(0.80 0.15 145)',
+		borderColor: 'oklch(0.45 0.18 145 / 0.5)',
+		// SessionCard accent colors
+		accent: 'oklch(0.70 0.20 145)',
+		bgTint: 'oklch(0.70 0.20 145 / 0.08)',
+		glow: 'oklch(0.70 0.20 145 / 0.4)',
+		// Play/running icon
+		icon: 'M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z'
+	},
+	starting: {
+		label: '🟡 STARTING',
+		shortLabel: 'Starting',
+		pulse: true,
+		// Badge colors - amber/yellow
+		bgColor: 'oklch(0.55 0.18 85 / 0.3)',
+		textColor: 'oklch(0.85 0.15 85)',
+		borderColor: 'oklch(0.55 0.18 85 / 0.5)',
+		// SessionCard accent colors
+		accent: 'oklch(0.75 0.18 85)',
+		bgTint: 'oklch(0.75 0.18 85 / 0.08)',
+		glow: 'oklch(0.75 0.18 85 / 0.4)',
+		// Loading/spinner icon
+		icon: 'M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99'
+	},
+	stopped: {
+		label: '⏹️ STOPPED',
+		shortLabel: 'Stopped',
+		// Badge colors - muted/gray
+		bgColor: 'oklch(0.5 0 0 / 0.1)',
+		textColor: 'oklch(0.60 0.02 250)',
+		borderColor: 'oklch(0.5 0 0 / 0.2)',
+		// SessionCard accent colors
+		accent: 'oklch(0.55 0.05 250)',
+		bgTint: 'oklch(0.55 0.05 250 / 0.05)',
+		glow: 'oklch(0.55 0.05 250 / 0.2)',
+		// Stop/square icon
+		icon: 'M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z'
+	}
+};
+
+// =============================================================================
+// SERVER SESSION STATE ACTIONS (ServerStatusBadge dropdown actions)
+// =============================================================================
+
+export interface ServerStateAction {
+	id: string;
+	label: string;
+	icon: string;         // SVG path
+	variant: 'default' | 'success' | 'warning' | 'error' | 'info';
+	description?: string;
+}
+
+export const SERVER_STATE_ACTIONS: Record<ServerState, ServerStateAction[]> = {
+	running: [
+		{
+			id: 'open',
+			label: 'Open in Browser',
+			icon: 'M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25',
+			variant: 'success',
+			description: 'Open localhost in browser'
+		},
+		{
+			id: 'stop',
+			label: 'Stop Server',
+			icon: 'M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z',
+			variant: 'error',
+			description: 'Stop the dev server'
+		},
+		{
+			id: 'restart',
+			label: 'Restart Server',
+			icon: 'M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99',
+			variant: 'warning',
+			description: 'Restart the dev server'
+		},
+		{
+			id: 'attach',
+			label: 'Attach Terminal',
+			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
+			variant: 'info',
+			description: 'Open server output in terminal'
+		}
+	],
+	starting: [
+		{
+			id: 'attach',
+			label: 'Attach Terminal',
+			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
+			variant: 'info',
+			description: 'Watch server startup'
+		},
+		{
+			id: 'kill',
+			label: 'Kill Process',
+			icon: 'M6 18L18 6M6 6l12 12',
+			variant: 'error',
+			description: 'Force kill the server process'
+		}
+	],
+	stopped: [
+		{
+			id: 'start',
+			label: 'Start Server',
+			icon: 'M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z',
+			variant: 'success',
+			description: 'Start the dev server'
+		},
+		{
+			id: 'attach',
+			label: 'Attach Terminal',
+			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
+			variant: 'info',
+			description: 'Open terminal in project directory'
+		}
+	]
+};
+
+/**
+ * Get server state visual config with fallback
+ */
+export function getServerStateVisual(state: ServerState | string): ServerStateVisual {
+	return SERVER_STATE_VISUALS[state as ServerState] || SERVER_STATE_VISUALS.stopped;
+}
+
+/**
+ * Get server state actions with fallback
+ */
+export function getServerStateActions(state: ServerState | string): ServerStateAction[] {
+	return SERVER_STATE_ACTIONS[state as ServerState] || SERVER_STATE_ACTIONS.stopped;
 }
 
 // =============================================================================

@@ -6,13 +6,13 @@
 	 * - needs-input: Agent blocked, waiting for user clarification (orange)
 	 * - ready-for-review: Agent finished work, awaiting review (yellow)
 	 *
-	 * Clicking a card expands it to show the full WorkCard inline (accordion style).
+	 * Clicking a card expands it to show the full SessionCard inline (accordion style).
 	 * Agents actively working are shown in a collapsed "working quietly" section.
 	 */
 
 	import { onMount, onDestroy } from 'svelte';
 	import type { WorkSession } from '$lib/stores/workSessions.svelte.js';
-	import WorkCard from '$lib/components/work/WorkCard.svelte';
+	import SessionCard from '$lib/components/work/SessionCard.svelte';
 
 	// State
 	let sessions = $state<WorkSession[]>([]);
@@ -23,7 +23,7 @@
 	// Expanded session tracking (accordion style - only one at a time)
 	let expandedSession = $state<string | null>(null);
 
-	// Session state detection (mirrors WorkCard logic)
+	// Session state detection (mirrors SessionCard logic)
 	type SessionState = 'working' | 'needs-input' | 'ready-for-review' | 'completed' | 'idle';
 
 	function getSessionState(session: WorkSession): SessionState {
@@ -157,7 +157,7 @@
 		}
 	}
 
-	// WorkCard action handlers
+	// SessionCard action handlers
 	async function handleKillSession(sessionName: string) {
 		try {
 			const response = await fetch('/api/work/kill', {
@@ -477,13 +477,13 @@
 									{/if}
 								</button>
 
-								<!-- Expanded WorkCard -->
+								<!-- Expanded SessionCard -->
 								{#if isExpanded}
 									<div
 										class="border-t px-2 pb-2"
 										style="border-color: oklch(0.30 0.05 45 / 0.5); background: oklch(0.10 0.01 250 / 0.5);"
 									>
-										<WorkCard
+										<SessionCard
 											sessionName={session.sessionName}
 											agentName={session.agentName}
 											task={session.task}
@@ -607,13 +607,13 @@
 									{/if}
 								</button>
 
-								<!-- Expanded WorkCard -->
+								<!-- Expanded SessionCard -->
 								{#if isExpanded}
 									<div
 										class="border-t px-2 pb-2"
 										style="border-color: oklch(0.35 0.05 85 / 0.5); background: oklch(0.10 0.01 250 / 0.5);"
 									>
-										<WorkCard
+										<SessionCard
 											sessionName={session.sessionName}
 											agentName={session.agentName}
 											task={session.task}
@@ -719,7 +719,7 @@
 							{/each}
 						</div>
 
-						<!-- Expanded WorkCard for working session (if any) -->
+						<!-- Expanded SessionCard for working session (if any) -->
 						{#each workingSessions as session (session.sessionName)}
 							{#if expandedSession === session.sessionName}
 								<div
@@ -730,7 +730,7 @@
 									"
 								>
 									<div class="p-2">
-										<WorkCard
+										<SessionCard
 											sessionName={session.sessionName}
 											agentName={session.agentName}
 											task={session.task}
@@ -791,7 +791,7 @@
 						{/each}
 					</div>
 
-					<!-- Expanded WorkCard for idle session -->
+					<!-- Expanded SessionCard for idle session -->
 					{#each idleSessions as session (session.sessionName)}
 						{#if expandedSession === session.sessionName}
 							<div
@@ -802,7 +802,7 @@
 								"
 							>
 								<div class="p-2">
-									<WorkCard
+									<SessionCard
 										sessionName={session.sessionName}
 										agentName={session.agentName}
 										task={session.task}

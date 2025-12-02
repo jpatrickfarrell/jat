@@ -553,7 +553,7 @@ export async function getHourlyUsage(projectPath: string): Promise<HourlyUsage[]
 /**
  * Get hourly token usage for a specific agent (last 24 hours).
  * Aggregates across all sessions belonging to this agent.
- * Used for rendering sparklines in WorkCard headers.
+ * Used for rendering sparklines in SessionCard headers.
  *
  * Input: agentName (string), projectPath (string)
  * Output: Array of HourlyUsage objects (24 hours, oldest to newest)
@@ -654,7 +654,7 @@ export async function getAgentHourlyUsage(agentName: string, projectPath: string
 
 /**
  * Get hourly token usage for a specific session (last 24 hours).
- * Used for rendering sparklines in WorkCard headers.
+ * Used for rendering sparklines in SessionCard headers.
  *
  * Input: sessionId (string), projectPath (string)
  * Output: Array of HourlyUsage objects (24 hours, oldest to newest)

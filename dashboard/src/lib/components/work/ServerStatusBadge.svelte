@@ -1,26 +1,27 @@
 <script lang="ts">
 	/**
-	 * StatusActionBadge Component
+	 * ServerStatusBadge Component
 	 *
-	 * A clickable status badge that opens a dropdown with context-specific actions.
-	 * Replaces static status badges (DONE, WORKING, etc.) with actionable buttons.
+	 * A clickable status badge for server sessions that shows current state
+	 * and opens a dropdown with server-specific actions (start, stop, restart).
 	 *
 	 * Configuration is imported from statusColors.ts for consistency.
 	 */
 
 	import { fly } from 'svelte/transition';
 	import {
-		getSessionStateVisual,
-		getSessionStateActions,
-		type SessionStateVisual,
-		type SessionStateAction
+		getServerStateVisual,
+		getServerStateActions,
+		type ServerStateVisual,
+		type ServerStateAction,
+		type ServerState
 	} from '$lib/config/statusColors';
 
-	type SessionState = 'starting' | 'working' | 'needs-input' | 'ready-for-review' | 'completing' | 'completed' | 'idle';
-
 	interface Props {
-		sessionState: SessionState;
+		serverStatus: ServerState;
 		sessionName: string;
+		port?: number | null;
+		portRunning?: boolean;
 		disabled?: boolean;
 		dropUp?: boolean;
 		alignRight?: boolean;
@@ -31,8 +32,10 @@
 	}
 
 	let {
-		sessionState,
+		serverStatus,
 		sessionName,
+		port = null,
+		portRunning = false,
 		disabled = false,
 		dropUp = false,
 		alignRight = false,
@@ -47,8 +50,8 @@
 	let dropdownRef: HTMLDivElement | null = null;
 
 	// Get config from centralized statusColors.ts
-	const config = $derived(getSessionStateVisual(sessionState));
-	const actions = $derived(getSessionStateActions(sessionState));
+	const config = $derived(getServerStateVisual(serverStatus));
+	const actions = $derived(getServerStateActions(serverStatus));
 
 	// Handle click outside to close dropdown
 	function handleClickOutside(event: MouseEvent) {
@@ -66,8 +69,22 @@
 	});
 
 	// Handle action execution
-	async function executeAction(action: SessionStateAction) {
+	async function executeAction(action: ServerStateAction) {
 		if (disabled || isExecuting) return;
+
+		// Handle "open" action client-side - open localhost URL in new tab
+		if (action.id === 'open') {
+			console.log('[ServerStatusBadge] Open action triggered, port:', port);
+			if (port) {
+				const url = `http://localhost:${port}`;
+				console.log('[ServerStatusBadge] Opening URL:', url);
+				window.open(url, '_blank');
+			} else {
+				console.warn('[ServerStatusBadge] Cannot open - no port configured');
+			}
+			isOpen = false;
+			return;
+		}
 
 		isExecuting = true;
 		try {
@@ -79,7 +96,7 @@
 	}
 
 	// Get variant colors for dropdown items
-	function getVariantClasses(variant: SessionStateAction['variant']): string {
+	function getVariantClasses(variant: ServerStateAction['variant']): string {
 		switch (variant) {
 			case 'success':
 				return 'hover:bg-success/20 text-success';
@@ -93,9 +110,18 @@
 				return 'hover:bg-base-300 text-base-content';
 		}
 	}
+
+	// Build display label with port info
+	const displayLabel = $derived(() => {
+		const baseLabel = variant === 'integrated' ? config.shortLabel : config.label;
+		if (port && serverStatus === 'running') {
+			return `${baseLabel} :${port}`;
+		}
+		return baseLabel;
+	});
 </script>
 
-<div class="relative inline-block {className} pr-2 pb-1" bind:this={dropdownRef}>
+<div class="relative inline-block {className}" bind:this={dropdownRef}>
 	<!-- Status Badge Button -->
 	<button
 		type="button"
@@ -109,9 +135,21 @@
 			: `background: ${config.bgColor}; color: ${config.textColor}; border: 1px solid ${config.borderColor};`
 		}
 		disabled={disabled}
-		title="Click for actions"
+		title="Click for server actions"
 	>
-		{variant === 'integrated' ? config.shortLabel : config.label}
+		<!-- Server icon -->
+		<svg class="inline-block w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+			<path stroke-linecap="round" stroke-linejoin="round" d={config.icon} />
+		</svg>
+		{displayLabel()}
+		<!-- Port status indicator -->
+		{#if port && serverStatus === 'running'}
+			<span
+				class="inline-block w-1.5 h-1.5 rounded-full ml-1"
+				style="background: {portRunning ? 'oklch(0.70 0.20 145)' : 'oklch(0.50 0.05 250)'};"
+				title={portRunning ? 'Port is listening' : 'Port not responding'}
+			></span>
+		{/if}
 		<!-- Dropdown indicator -->
 		<svg
 			class="inline-block w-2.5 h-2.5 ml-0.5 transition-transform"
@@ -135,6 +173,24 @@
 			"
 			transition:fly={{ y: dropUp ? 5 : -5, duration: 150 }}
 		>
+			<!-- Server info header -->
+			{#if port}
+				<div
+					class="px-3 py-2 flex items-center justify-between text-xs"
+					style="background: oklch(0.18 0.02 250); border-bottom: 1px solid oklch(0.30 0.02 250);"
+				>
+					<span class="opacity-70">Port</span>
+					<span class="font-mono font-bold" style="color: {config.textColor};">
+						:{port}
+						{#if portRunning}
+							<span class="text-success ml-1">active</span>
+						{:else}
+							<span class="text-base-content/40 ml-1">inactive</span>
+						{/if}
+					</span>
+				</div>
+			{/if}
+
 			<!-- Actions list -->
 			<ul class="py-1">
 				{#each actions as action (action.id)}

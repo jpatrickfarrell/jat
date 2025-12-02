@@ -3,7 +3,7 @@
 	 * Work Page
 	 * Shows active Claude Code work sessions with TaskTable below.
 	 *
-	 * Layout: WorkPanel (horizontal scroll) + Resizable Divider + TaskTable
+	 * Layout: SessionPanel (horizontal scroll) + Resizable Divider + TaskTable
 	 * User can drag divider to adjust split between panels.
 	 */
 
@@ -11,7 +11,7 @@
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
 	import TaskTable from '$lib/components/agents/TaskTable.svelte';
-	import WorkPanel from '$lib/components/work/WorkPanel.svelte';
+	import SessionPanel from '$lib/components/work/SessionPanel.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import ResizableDivider from '$lib/components/ResizableDivider.svelte';
 	import {
@@ -341,7 +341,7 @@
 				</div>
 			</div>
 		{:else}
-			<WorkPanel
+			<SessionPanel
 				workSessions={workSessionsState.sessions}
 				onSpawnForTask={handleSpawnForTask}
 				onKillSession={handleKillSession}

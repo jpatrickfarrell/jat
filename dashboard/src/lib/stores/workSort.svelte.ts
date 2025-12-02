@@ -1,6 +1,6 @@
 /**
  * Work Sort Store
- * Shared state for WorkPanel sort options, used by TopBar and WorkPanel.
+ * Shared state for SessionPanel sort options, used by TopBar and SessionPanel.
  * Persists to localStorage.
  */
 

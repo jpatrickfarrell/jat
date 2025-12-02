@@ -255,7 +255,9 @@
 		{ value: 'closed', label: 'Closed' }
 	];
 
-	const projectOptions = ['jat', 'chimaro', 'jomarchy'];
+	// Project options (dynamically loaded)
+	let projectOptions = $state<string[]>([]);
+	let isMigrating = $state(false);
 
 	// Fetch task details
 	async function fetchTask(id: string) {
@@ -614,6 +616,104 @@
 				isUpdatingFromServer = false;
 			}
 		}, 500);
+	}
+
+	// Fetch available projects from the API
+	async function fetchProjects() {
+		try {
+			const response = await fetch('/api/sessions');
+			if (response.ok) {
+				const data = await response.json();
+				// Extract unique projects from sessions
+				const projects = new Set<string>();
+				if (data.projects) {
+					data.projects.forEach((p: string) => projects.add(p));
+				}
+				// Also check task IDs for additional projects
+				if (data.tasks) {
+					data.tasks.forEach((t: any) => {
+						if (t.id) {
+							const prefix = t.id.split('-')[0];
+							if (prefix) projects.add(prefix);
+						}
+					});
+				}
+				// Fallback: if no projects found, use known defaults
+				if (projects.size === 0) {
+					projectOptions = ['jat', 'chimaro', 'jomarchy', 'flush', 'linux', 'steelbridge'];
+				} else {
+					projectOptions = Array.from(projects).sort();
+				}
+			}
+		} catch (error) {
+			console.error('Failed to fetch projects:', error);
+			// Use defaults on error
+			projectOptions = ['jat', 'chimaro', 'jomarchy'];
+		}
+	}
+
+	// Migrate task to a different project
+	async function migrateToProject(targetProject: string) {
+		if (!task || !taskId) return;
+
+		const currentProject = task.project;
+		if (currentProject === targetProject) {
+			showToast('error', 'Task is already in this project');
+			return;
+		}
+
+		// Confirm migration since it changes the task ID
+		const confirmed = confirm(
+			`Migrate task to ${targetProject}?\n\n` +
+			`This will:\n` +
+			`- Move the task to the ${targetProject} project\n` +
+			`- Assign a new task ID (e.g., ${targetProject}-xyz)\n` +
+			`- Preserve all task data and dependencies\n\n` +
+			`The current task ID (${taskId}) will no longer exist.`
+		);
+
+		if (!confirmed) return;
+
+		isMigrating = true;
+		isUpdatingFromServer = true;
+
+		try {
+			const response = await fetch(`/api/tasks/${taskId}/migrate`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ targetProject })
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				throw new Error(data.message || 'Migration failed');
+			}
+
+			// Broadcast event for other components BEFORE closing
+			broadcastTaskEvent({
+				type: 'migrated',
+				taskId: data.oldTaskId,
+				newTaskId: data.newTaskId,
+				project: targetProject
+			});
+
+			// Notify parent to refresh their data
+			onrefresh();
+
+			// Close the drawer - the old task no longer exists
+			isOpen = false;
+
+			// Show success toast with new task ID (user can find it in the list)
+			showToast('success', `✓ Migrated: ${data.oldTaskId} → ${data.newTaskId}`);
+
+		} catch (error: any) {
+			showToast('error', `✗ ${error.message}`);
+			console.error('Migration failed:', error);
+		} finally {
+			isMigrating = false;
+			isUpdatingFromServer = false;
+		}
 	}
 
 	// Add a dependency to the task
@@ -993,6 +1093,8 @@
 			timerInterval = setInterval(() => {
 				now = Date.now();
 			}, 30000);
+			// Fetch available projects for migration dropdown
+			fetchProjects();
 		}
 	});
 
@@ -1133,16 +1235,23 @@
 								<div class="badge badge-sm badge-outline">{task.type || 'task'}</div>
 							</InlineSelect>
 
-							<!-- Project (editable) -->
+							<!-- Project (migrate to different project) -->
 							<InlineSelect
 								value={task.project || ''}
-								options={[{ value: '', label: 'No project' }, ...projectOptions.map(p => ({ value: p, label: p }))]}
+								options={projectOptions.filter(p => p !== task.project).map(p => ({ value: p, label: p }))}
 								onSave={async (newValue) => {
-									await autoSave('project', newValue);
+									if (newValue && newValue !== task.project) {
+										await migrateToProject(newValue);
+									}
 								}}
-								disabled={isSaving}
+								disabled={isSaving || isMigrating}
 							>
-								{#if task.project}
+								{#if isMigrating}
+									<div class="badge badge-sm badge-primary gap-1">
+										<span class="loading loading-spinner loading-xs"></span>
+										Migrating...
+									</div>
+								{:else if task.project}
 									<div class="badge badge-sm badge-primary">{task.project}</div>
 								{:else}
 									<div class="badge badge-sm badge-ghost badge-outline">No project</div>

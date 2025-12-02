@@ -99,6 +99,9 @@
 	let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 	let isUpdatingFromServer = $state(false); // Flag to prevent effect loops during server updates
 
+	// AbortController to cancel pending fetches when task changes or drawer closes
+	let fetchController: AbortController | null = null;
+
 	// UI state
 	let toastMessage = $state<{ type: 'success' | 'error'; text: string } | null>(null);
 	let showHelp = $state(false);
@@ -263,11 +266,24 @@
 	async function fetchTask(id: string) {
 		if (!id) return;
 
+		// Cancel any pending fetches from previous task
+		if (fetchController) {
+			fetchController.abort();
+		}
+		fetchController = new AbortController();
+		const signal = fetchController.signal;
+
+		// Reset loading states for new fetch
 		loading = true;
 		error = null;
+		historyLoading = false;
+		historyError = null;
+		taskHistory = null;
+		availableTasksLoading = false;
+		availableTasks = [];
 
 		try {
-			const response = await fetch(`/api/tasks/${id}`);
+			const response = await fetch(`/api/tasks/${id}`, { signal });
 			if (!response.ok) {
 				throw new Error(`Failed to fetch task: ${response.statusText}`);
 			}
@@ -276,11 +292,16 @@
 			originalTask = { ...data.task };
 
 			// Fetch task history, attachments, logs, and available tasks in parallel
-			fetchTaskHistory(id);
-			fetchAttachments(id);
-			fetchSessionLogs(id);
-			fetchAvailableTasks(id);
+			// Pass the signal to allow cancellation
+			fetchTaskHistory(id, signal);
+			fetchAttachments(id, signal);
+			fetchSessionLogs(id, signal);
+			fetchAvailableTasks(id, signal);
 		} catch (err: any) {
+			// Ignore abort errors (expected when switching tasks or closing drawer)
+			if (err.name === 'AbortError') {
+				return;
+			}
 			error = err.message;
 			console.error('Error fetching task:', err);
 		} finally {
@@ -289,20 +310,24 @@
 	}
 
 	// Fetch task history
-	async function fetchTaskHistory(id: string) {
+	async function fetchTaskHistory(id: string, signal?: AbortSignal) {
 		if (!id) return;
 
 		historyLoading = true;
 		historyError = null;
 
 		try {
-			const response = await fetch(`/api/tasks/${id}/history`);
+			const response = await fetch(`/api/tasks/${id}/history`, { signal });
 			if (!response.ok) {
 				throw new Error(`Failed to fetch task history: ${response.statusText}`);
 			}
 			const data = await response.json();
 			taskHistory = data;
 		} catch (err: any) {
+			// Ignore abort errors (expected when switching tasks or closing drawer)
+			if (err.name === 'AbortError') {
+				return;
+			}
 			historyError = err.message;
 			console.error('Error fetching task history:', err);
 		} finally {
@@ -311,19 +336,23 @@
 	}
 
 	// Fetch task attachments
-	async function fetchAttachments(id: string) {
+	async function fetchAttachments(id: string, signal?: AbortSignal) {
 		if (!id) return;
 
 		attachmentsLoading = true;
 
 		try {
-			const response = await fetch(`/api/tasks/${id}/image`);
+			const response = await fetch(`/api/tasks/${id}/image`, { signal });
 			if (!response.ok) {
 				throw new Error(`Failed to fetch attachments: ${response.statusText}`);
 			}
 			const data = await response.json();
 			attachments = data.images || [];
 		} catch (err: any) {
+			// Ignore abort errors
+			if (err.name === 'AbortError') {
+				return;
+			}
 			console.error('Error fetching attachments:', err);
 			attachments = [];
 		} finally {
@@ -332,19 +361,23 @@
 	}
 
 	// Fetch session logs for this task
-	async function fetchSessionLogs(id: string) {
+	async function fetchSessionLogs(id: string, signal?: AbortSignal) {
 		if (!id) return;
 
 		logsLoading = true;
 
 		try {
-			const response = await fetch(`/api/tasks/${id}/logs`);
+			const response = await fetch(`/api/tasks/${id}/logs`, { signal });
 			if (!response.ok) {
 				throw new Error(`Failed to fetch session logs: ${response.statusText}`);
 			}
 			const data = await response.json();
 			sessionLogs = data.logs || [];
 		} catch (err: any) {
+			// Ignore abort errors
+			if (err.name === 'AbortError') {
+				return;
+			}
 			console.error('Error fetching session logs:', err);
 			sessionLogs = [];
 		} finally {
@@ -481,18 +514,18 @@
 	const renderedLogContent = $derived(ansiToHtml(logContent || ''));
 
 	// Fetch available tasks from same project for dependencies dropdown
-	async function fetchAvailableTasks(taskId: string) {
-		if (!taskId) return;
+	async function fetchAvailableTasks(taskIdParam: string, signal?: AbortSignal) {
+		if (!taskIdParam) return;
 
 		// Extract project from task ID (e.g., "jat-abc" -> "jat")
-		const project = taskId.split('-')[0];
+		const project = taskIdParam.split('-')[0];
 		if (!project) return;
 
 		availableTasksLoading = true;
 
 		try {
 			// Fetch open/in_progress tasks from same project
-			const response = await fetch(`/api/agents?full=true&project=${encodeURIComponent(project)}`);
+			const response = await fetch(`/api/agents?full=true&project=${encodeURIComponent(project)}`, { signal });
 			if (!response.ok) {
 				throw new Error(`Failed to fetch tasks: ${response.statusText}`);
 			}
@@ -502,7 +535,7 @@
 			const currentDeps = task?.depends_on?.map((d: any) => d.id) || [];
 			availableTasks = (data.tasks || [])
 				.filter((t: any) =>
-					t.id !== taskId &&
+					t.id !== taskIdParam &&
 					!currentDeps.includes(t.id) &&
 					(t.status === 'open' || t.status === 'in_progress')
 				)
@@ -514,6 +547,10 @@
 				}))
 				.sort((a: AvailableTask, b: AvailableTask) => a.priority - b.priority);
 		} catch (err: any) {
+			// Ignore abort errors
+			if (err.name === 'AbortError') {
+				return;
+			}
 			console.error('Error fetching available tasks:', err);
 			availableTasks = [];
 		} finally {
@@ -1068,6 +1105,12 @@
 			saveTimeout = null;
 		}
 
+		// Cancel any pending fetches
+		if (fetchController) {
+			fetchController.abort();
+			fetchController = null;
+		}
+
 		if (!isSaving && !isDeleting) {
 			isOpen = false;
 			task = null;
@@ -1082,6 +1125,16 @@
 			logsExpanded = false;
 			selectedLog = null;
 			logContent = null;
+			// Reset loading states
+			loading = false;
+			historyLoading = false;
+			historyError = null;
+			taskHistory = null;
+			availableTasksLoading = false;
+			availableTasks = [];
+			attachmentsLoading = false;
+			attachments = [];
+			logsLoading = false;
 		}
 	}
 

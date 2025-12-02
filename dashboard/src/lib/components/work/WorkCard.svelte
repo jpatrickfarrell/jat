@@ -1229,8 +1229,19 @@
 				break;
 
 			case 'attach':
-				// Attach terminal
-				onAttachTerminal?.();
+				// Attach terminal with container width for proper Hyprland sizing
+				if (sessionName) {
+					const widthPx = scrollContainerRef?.getBoundingClientRect().width;
+					try {
+						await fetch(`/api/work/${encodeURIComponent(sessionName)}/attach`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ widthPx })
+						});
+					} catch (e) {
+						console.error('Failed to attach terminal:', e);
+					}
+				}
 				break;
 
 			case 'complete':
@@ -1699,9 +1710,10 @@
 
 	<!-- Agent Tab - positioned at top-right, pulled up to top of container -->
 	<!-- Combines: Agent Info + Status Dropdown into unified tab -->
+	<!-- Background uses gradient that matches the main card's left-to-right gradient -->
 	<div
 		class="absolute right-3 top-0 -mt-9.5 z-10 flex items-center gap-0 rounded-lg rounded-bl-none rounded-br-none"
-		style="background: oklch(0.20 0.02 250); border-left: 1px solid oklch(0.35 0.02 250); border-right: 1px solid oklch(0.35 0.02 250); border-top: 1px solid oklch(0.35 0.02 250);"
+		style="background: linear-gradient(90deg, oklch(0.20 0.02 250) 0%, oklch(0.18 0.01 250) 100%); border-left: 1px solid oklch(0.35 0.02 250); border-right: 1px solid oklch(0.35 0.02 250); border-top: 1px solid oklch(0.35 0.02 250);"
 	>
 		<!-- Agent Info Section -->
 		<div class="flex items-center gap-1.5 pl-2 pr-1.5 py-1">

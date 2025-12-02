@@ -19,7 +19,7 @@
 	 *
 	 * Props:
 	 * - mode: 'agent' | 'server' (default: 'agent')
-	 * - sessionName: tmux session name (e.g., "jat-WisePrairie" or "chimaro-server")
+	 * - sessionName: tmux session name (e.g., "jat-WisePrairie" or "server-chimaro")
 	 * - agentName: Agent name (for agent mode)
 	 * - task: Current task object (for agent mode)
 	 * - projectName, displayName, port, portRunning: Server session props
@@ -1286,8 +1286,22 @@
 				break;
 
 			case 'attach':
-				// Attach terminal
-				onAttachTerminal?.();
+				// Attach terminal with container width for proper Hyprland sizing
+				if (sessionName) {
+					const widthPx = scrollContainerRef?.getBoundingClientRect().width;
+					console.log('[SessionCard] Attach clicked, widthPx:', widthPx, 'sessionName:', sessionName);
+					try {
+						const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}/attach`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ widthPx })
+						});
+						const result = await response.json();
+						console.log('[SessionCard] Attach response:', result);
+					} catch (e) {
+						console.error('[SessionCard] Failed to attach terminal:', e);
+					}
+				}
 				break;
 
 			case 'complete':
@@ -1339,8 +1353,22 @@
 				break;
 
 			case 'attach':
-				// Attach terminal to server session
-				onAttachTerminal?.();
+				// Attach terminal to server session with container width
+				if (sessionName) {
+					const widthPx = scrollContainerRef?.getBoundingClientRect().width;
+					console.log('[SessionCard:server] Attach clicked, widthPx:', widthPx, 'sessionName:', sessionName);
+					try {
+						const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}/attach`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ widthPx })
+						});
+						const result = await response.json();
+						console.log('[SessionCard:server] Attach response:', result);
+					} catch (e) {
+						console.error('[SessionCard:server] Failed to attach terminal:', e);
+					}
+				}
 				break;
 
 			case 'kill':
@@ -1790,12 +1818,13 @@
 	{#if isAgentMode}
 		<!-- Agent Tab - positioned at top-right, pulled up to top of container -->
 		<!-- Combines: Agent Info + Status Dropdown into unified tab -->
+		<!-- Background uses gradient that matches the main card's left-to-right gradient -->
 		<div
-			class="absolute right-3 top-0 -mt-9.5 z-10 flex items-center gap-0 rounded-lg rounded-bl-none rounded-br-none"
-			style="background: oklch(0.20 0.02 250); border-left: 1px solid oklch(0.35 0.02 250); border-right: 1px solid oklch(0.35 0.02 250); border-top: 1px solid oklch(0.35 0.02 250);"
+			class="absolute right-[-1px] top-0 -mt-8.5 z-10 flex items-center gap-0 rounded-lg rounded-bl-none rounded-br-none bl-"
+			style="background: linear-gradient(90deg, oklch(0.20 0.02 250) 0%, oklch(0.18 0.01 250) 100%); border-left: 0px solid oklch(0.35 0.02 250); border-right: 1px solid oklch(0.35 0.02 250); border-top: 1px solid oklch(0.35 0.02 250);"
 		>
 			<!-- Agent Info Section -->
-			<div class="flex items-center gap-1.5 pl-2 pr-1.5 py-1">
+			<div class="flex items-center gap-1.5 pl-3 pr-2.5 py-2">
 				<AgentAvatar
 					name={agentName}
 					size={18}
@@ -1811,7 +1840,7 @@
 										? 'ring-2 ring-success ring-offset-base-100 ring-offset-1'
 										: ''}"
 				/>
-				<div class="flex flex-col min-w-0">
+				<div class="flex flex-col min-w-0 ml-1">
 					<div class="flex items-center gap-1">
 						<span
 							class="font-mono text-[11px] font-semibold tracking-wider uppercase"
@@ -1872,10 +1901,11 @@
 	{:else}
 		<!-- Server Tab - positioned at top-right, pulled up to top of container -->
 		<!-- Shows: Project Name + Port + Status Dropdown -->
+		<!-- Background uses gradient that matches the main card's left-to-right gradient -->
 		{@const serverVisual = getServerStateVisual(serverStatus)}
 		<div
-			class="absolute right-3 top-0 -mt-9.5 z-10 flex items-center gap-0 rounded-lg rounded-bl-none rounded-br-none"
-			style="background: oklch(0.20 0.02 250); border-left: 1px solid oklch(0.35 0.02 250); border-right: 1px solid oklch(0.35 0.02 250); border-top: 1px solid oklch(0.35 0.02 250);"
+			class="absolute right-[-1px] top-0 -mt-9.5 z-10 flex items-center gap-0 rounded rounded-bl-none rounded-br-none"
+			style="background: linear-gradient(90deg, oklch(0.20 0.02 250) 0%, oklch(0.18 0.01 250) 100%); border-left: 1px solid oklch(0.35 0.02 250); border-right: 1px solid oklch(0.35 0.02 250); border-top: 1px solid oklch(0.35 0.02 250);"
 		>
 			<!-- Server Info Section -->
 			<div class="flex items-center gap-1.5 pl-2 pr-1.5 py-1">

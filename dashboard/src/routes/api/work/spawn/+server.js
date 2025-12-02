@@ -18,6 +18,7 @@
 import { json } from '@sveltejs/kit';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { existsSync } from 'fs';
 import {
 	DEFAULT_MODEL,
 	DANGEROUSLY_SKIP_PERMISSIONS,
@@ -34,9 +35,55 @@ export async function POST({ request }) {
 
 		// taskId is now optional - if not provided, creates a planning session
 		// imagePath is optional - if provided, will be sent to the session after startup
-		// project is optional - if provided, use that path; otherwise default to cwd
+		// project is optional - if provided, use that path; otherwise infer from task ID prefix
 
-		const projectPath = project || process.cwd().replace('/dashboard', '');
+		// Determine project path:
+		// 1. If explicit project provided, use it
+		// 2. If taskId provided, infer from prefix (e.g., "jomarchy-abc" → ~/code/jomarchy)
+		// 3. Fall back to current project (jat)
+		let projectPath = project;
+		let inferredFromTaskId = false;
+
+		if (!projectPath && taskId) {
+			// Task IDs follow format: {project}-{hash}
+			const taskPrefix = taskId.split('-')[0];
+			if (taskPrefix && taskPrefix !== 'jat') {
+				// Infer project path from task ID prefix
+				const inferredPath = `${process.env.HOME}/code/${taskPrefix}`;
+				// Validate the inferred directory exists
+				if (existsSync(inferredPath)) {
+					projectPath = inferredPath;
+					inferredFromTaskId = true;
+				} else {
+					console.warn(`[spawn] Inferred project path ${inferredPath} does not exist, falling back to current project`);
+				}
+			}
+		}
+
+		// Fall back to current project (jat) if no valid path determined
+		projectPath = projectPath || process.cwd().replace('/dashboard', '');
+
+		// Final validation: ensure project path exists
+		if (!existsSync(projectPath)) {
+			return json({
+				error: 'Project path not found',
+				message: `Project directory does not exist: ${projectPath}`,
+				taskId
+			}, { status: 400 });
+		}
+
+		// Validate beads database exists in project
+		const beadsPath = `${projectPath}/.beads`;
+		if (!existsSync(beadsPath)) {
+			return json({
+				error: 'Beads database not found',
+				message: `No .beads directory found in ${projectPath}. Run 'bd init' to initialize.`,
+				projectPath,
+				taskId
+			}, { status: 400 });
+		}
+
+		console.log('[spawn] Project path:', projectPath, inferredFromTaskId ? '(inferred from task ID)' : '');
 
 		// Step 1: Generate new agent name via am-register
 		let agentName;
@@ -68,13 +115,25 @@ export async function POST({ request }) {
 					cwd: projectPath,
 					timeout: 10000
 				});
+				console.log(`[spawn] Assigned task ${taskId} to ${agentName} in ${projectPath}`);
 			} catch (err) {
-				console.error('Failed to assign task:', err);
+				// Provide detailed error context for debugging
+				const execErr = /** @type {{ stderr?: string, stdout?: string, message?: string }} */ (err);
+				const errorDetail = execErr.stderr || execErr.stdout || (err instanceof Error ? err.message : String(err));
+
+				console.error(`[spawn] Failed to assign task ${taskId}:`, {
+					error: errorDetail,
+					projectPath,
+					agentName
+				});
+
 				return json({
 					error: 'Failed to assign task',
-					message: err instanceof Error ? err.message : String(err),
+					message: errorDetail,
+					detail: `Task ${taskId} may not exist in ${projectPath}/.beads`,
 					agentName,
-					taskId
+					taskId,
+					projectPath
 				}, { status: 500 });
 			}
 		}

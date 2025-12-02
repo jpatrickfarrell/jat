@@ -34,7 +34,6 @@ Pause current task quickly (without full completion) and show available tasks to
 
 **When NOT to use:**
 - Task is actually complete → use `/jat:complete` instead
-- Want to auto-continue → use `/jat:next` instead
 
 ---
 
@@ -351,7 +350,7 @@ Fix git issues or use 'git stash' manually
 3. **Show menu, don't auto-start**
    - User chooses next task
    - Can resume paused task
-   - Different from `/jat:next` which auto-continues
+   - Or spawn new agent for different work
 
 ---
 

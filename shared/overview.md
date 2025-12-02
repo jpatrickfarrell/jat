@@ -8,7 +8,7 @@ You are running as part of a **multi-agent development system** that enables par
 
 **Beads** - Task management with dependencies. Pick ready work, track status, manage priorities across projects.
 
-**Workflow Commands** - `/jat:start`, `/jat:next`, `/jat:complete`, `/jat:pause` - streamlined commands that handle registration, task selection, mail checking, and coordination automatically.
+**Workflow Commands** - `/jat:start`, `/jat:complete`, `/jat:pause` - streamlined commands that handle registration, task selection, mail checking, and coordination automatically.
 
 **Statusline** - Real-time display of your agent identity, current task, file locks, unread messages.
 
@@ -16,7 +16,7 @@ You are running as part of a **multi-agent development system** that enables par
 
 ### How It Works
 
-1. **You are one of potentially many agents** working in parallel
+1. **One agent = one session = one task** - each session handles exactly one task
 2. **File reservations prevent conflicts** - always reserve before editing shared files
 3. **Messages coordinate work** - check mail before starting, announce completions
 4. **Beads is the task queue** - pick from ready work, update status, close when done
@@ -25,10 +25,10 @@ You are running as part of a **multi-agent development system** that enables par
 ### Quick Start
 
 ```bash
-/jat:start          # Register + pick task + begin work
-/jat:next           # Complete current + auto-start next (drive mode)
-/jat:complete       # Complete current + show menu (manual mode)
-/jat:pause          # Pause + pivot to different work
+/jat:start          # Create agent, show available tasks
+/jat:start task-id  # Create agent, start specific task
+/jat:complete       # Complete task, end session
+/jat:pause          # Pause and pivot to different work
 ```
 
 ### Key Behaviors
@@ -37,5 +37,13 @@ You are running as part of a **multi-agent development system** that enables par
 - **Reserve files before editing** - prevents stepping on other agents
 - **Use task IDs everywhere** - thread_id, reservation reason, commits
 - **Update Beads status** - `in_progress` when working, `closed` when done
+
+### Session Lifecycle
+
+```
+spawn agent → work on task → review → /jat:complete → session ends
+                                      ↓
+                          spawn new agent for next task
+```
 
 This system enables a swarm of agents to work together efficiently without conflicts.

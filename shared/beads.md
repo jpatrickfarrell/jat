@@ -136,6 +136,82 @@ Use **underscores** not hyphens:
 **Common types:** `bug`, `feature`, `task`, `epic`, `chore`
 **Common labels:** Project-specific (e.g., `security`, `ui`, `backend`, `frontend`, `urgent`)
 
+### Epics: When to Use Hierarchical Tasks
+
+Beads supports parent-child task hierarchies using the `--parent` flag. Child tasks get automatic `.1`, `.2`, `.3` suffixes.
+
+**When to use an Epic:**
+- **Cohesive feature** - Tasks that together deliver one user-facing capability
+- **Shared context** - Tasks that need the same background/rationale
+- **Tracking completion** - Want to see "3/5 done" progress on a feature
+- **Parallel work** - Multiple agents could work on subtasks simultaneously
+
+**When standalone tasks are fine:**
+- **Unrelated work** - Bug fix + new feature + refactor (no shared theme)
+- **Single task** - One piece of work, even if it takes a while
+- **Quick fixes** - Small items that don't need grouping
+
+**Rule of thumb:**
+```
+1 task       → standalone
+2-3 related  → could go either way (lean toward epic if they share context)
+4+ related   → definitely epic
+```
+
+**Creating an Epic with Subtasks:**
+```bash
+# 1. Create the epic first
+bd create "Epic: User authentication system" \
+  --type epic \
+  --priority 1 \
+  --description "Complete auth system with OAuth and email/password login"
+# Creates: jat-abc
+
+# 2. Create subtasks with --parent
+bd create "Set up Supabase auth config" \
+  --parent jat-abc \
+  --type task \
+  --priority 0
+# Creates: jat-abc.1
+
+bd create "Implement Google OAuth flow" \
+  --parent jat-abc \
+  --type task \
+  --priority 1
+# Creates: jat-abc.2
+
+bd create "Build login UI components" \
+  --parent jat-abc \
+  --type task \
+  --priority 1
+# Creates: jat-abc.3
+
+# 3. Set dependencies between subtasks
+bd dep add jat-abc.2 jat-abc.1   # OAuth depends on auth config
+bd dep add jat-abc.3 jat-abc.2   # UI depends on OAuth
+
+# 4. Check epic progress
+bd epic status jat-abc
+# ○ jat-abc Epic: User authentication system
+#    Progress: 0/3 children closed (0%)
+```
+
+**Nesting Levels (max 3):**
+```
+jat-abc           (epic)
+├── jat-abc.1     (task or sub-epic)
+│   ├── jat-abc.1.1  (task)
+│   └── jat-abc.1.2  (task)
+├── jat-abc.2     (task)
+└── jat-abc.3     (task)
+```
+
+**Best Practices:**
+- Keep nesting shallow (1 level is usually enough)
+- Epic type for parent, task type for children
+- Set P0 on foundation tasks, P1 on features
+- Dependencies between siblings enable parallel work
+
 Recommended conventions
 - **Single source of truth**: Use **Beads** for task status/priority/dependencies; use **Agent Mail** for conversation, decisions, and attachments (audit).
 - **Shared identifiers**: Use the Beads issue id (e.g., `bd-123`) as the Mail `thread_id` and prefix message subjects with `[bd-123]`.

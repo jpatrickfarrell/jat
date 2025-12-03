@@ -895,19 +895,39 @@
 
 	/**
 	 * Spawn a new agent to work on this task
+	 * Calls /api/work/spawn directly - no need for parent to pass onspawn handler
 	 */
 	async function handleSpawn() {
 		if (!task || !taskId || isSpawning) return;
 
 		isSpawning = true;
 		try {
-			const success = await onspawn(taskId);
-			if (success) {
-				showToast('success', '🚀 Agent spawned');
-				// Refetch task to get updated status
-				setTimeout(() => fetchTask(taskId), 500);
-			} else {
-				showToast('error', '✗ Failed to spawn agent');
+			const response = await fetch('/api/work/spawn', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					taskId,
+					attach: false  // Don't auto-attach terminal
+				})
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.message || 'Failed to spawn agent');
+			}
+
+			const data = await response.json();
+			showToast('success', `🚀 Agent ${data.session?.agentName || ''} spawned`);
+
+			// Broadcast event so pages refresh immediately
+			broadcastTaskEvent('task-spawned', taskId);
+
+			// Refetch task to get updated status
+			setTimeout(() => fetchTask(taskId), 500);
+
+			// Also call the onspawn callback if provided (for additional parent handling)
+			if (onspawn) {
+				onspawn(taskId);
 			}
 		} catch (error: any) {
 			console.error('Spawn error:', error);

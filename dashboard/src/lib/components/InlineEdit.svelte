@@ -125,22 +125,44 @@
 			}
 		});
 	}
+
+	// Auto-resize textarea to fit content
+	function autoresize(node: HTMLTextAreaElement) {
+		function resize() {
+			node.style.height = 'auto';
+			node.style.height = node.scrollHeight + 'px';
+		}
+
+		// Resize on mount
+		requestAnimationFrame(resize);
+
+		// Resize on input
+		node.addEventListener('input', resize);
+
+		return {
+			destroy() {
+				node.removeEventListener('input', resize);
+			}
+		};
+	}
 </script>
 
 {#if isEditing}
 	<!-- Edit mode -->
-	<div class="inline-edit-container {className}">
+	<div class="inline-edit-container w-full {className}">
 		{#if type === 'textarea'}
 			<textarea
 				bind:this={inputElement}
 				bind:value={editValue}
 				{placeholder}
 				{rows}
-				class="textarea textarea-bordered w-full text-sm"
+				class="textarea textarea-bordered w-full text-sm resize-none overflow-hidden"
+				style="min-height: {rows * 1.5}rem;"
 				disabled={isSaving}
 				onkeydown={handleKeyDown}
 				onblur={handleBlur}
 				use:autofocus
+				use:autoresize
 			></textarea>
 		{:else}
 			<input

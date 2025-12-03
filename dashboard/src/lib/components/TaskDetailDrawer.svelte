@@ -1208,7 +1208,7 @@
 								type="text"
 								placeholder="Enter task title..."
 								disabled={isSaving}
-								class="text-2xl font-bold"
+								class="text-2xl font-bold flex-1 min-w-0"
 								truncate={true}
 							/>
 							<!-- Pencil icon hint (shows on hover) -->

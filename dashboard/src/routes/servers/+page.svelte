@@ -480,12 +480,20 @@
 		}
 	}
 
-	onMount(() => {
-		fetchProjects();
+	onMount(async () => {
+		await fetchProjects();
 		startServerPolling(2000);
 		updateContainerHeight();
 		window.addEventListener('resize', updateContainerHeight);
 		window.addEventListener('keydown', handleKeydown);
+
+		// Auto-scroll to first running server session
+		setTimeout(() => {
+			const firstRunning = serverSessionsState.sessions.find(s => s.status === 'running');
+			if (firstRunning) {
+				scrollToSession(firstRunning.sessionName);
+			}
+		}, 300); // Small delay to ensure DOM is ready
 	});
 
 	onDestroy(() => {
@@ -696,9 +704,10 @@
 								style="
 									border-bottom: 1px solid oklch(0.25 0.01 250);
 									opacity: {project.hidden ? '0.5' : '1'};
+									background: {project.status === 'running' ? 'oklch(0.20 0.03 145 / 0.15)' : 'transparent'};
 								"
-								onmouseenter={(e) => e.currentTarget.style.background = 'oklch(0.22 0.02 250)'}
-								onmouseleave={(e) => e.currentTarget.style.background = 'transparent'}
+								onmouseenter={(e) => { hoveredProject = project.name; e.currentTarget.style.background = project.status === 'running' ? 'oklch(0.22 0.05 145 / 0.25)' : 'oklch(0.22 0.02 250)'; }}
+								onmouseleave={(e) => { hoveredProject = null; e.currentTarget.style.background = project.status === 'running' ? 'oklch(0.20 0.03 145 / 0.15)' : 'transparent'; }}
 								onclick={() => runningSessionName && scrollToSession(runningSessionName)}
 							>
 								<!-- Project name with color indicator and path -->

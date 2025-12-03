@@ -1454,7 +1454,7 @@
 
 						<!-- Split button with dropdown -->
 						<div class="join">
-							<!-- Main action: Create Task (Save and Close) -->
+							<!-- Main action: Save (and Close) -->
 							<button
 								type="submit"
 								class="btn btn-primary font-mono join-item"
@@ -1463,9 +1463,9 @@
 							>
 								{#if isSubmitting}
 									<span class="loading loading-spinner loading-sm"></span>
-									Creating...
+									Saving...
 								{:else}
-									Create Task
+									Save
 								{/if}
 							</button>
 

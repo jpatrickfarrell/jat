@@ -11,8 +11,7 @@
 	 * - File attachment dropzone (supports multiple files)
 	 */
 
-	import { goto } from '$app/navigation';
-	import { tick, onMount, onDestroy } from 'svelte';
+	import { tick, onDestroy } from 'svelte';
 	import { get } from 'svelte/store';
 	import { isTaskDrawerOpen, selectedDrawerProject, availableProjects } from '$lib/stores/drawerStore';
 	import { broadcastTaskEvent } from '$lib/stores/taskEvents';
@@ -49,35 +48,22 @@
 		}
 	});
 
-	// Auto-focus when drawer opens
-	onMount(() => {
-		const drawerToggle = document.getElementById('task-creation-drawer');
-		if (drawerToggle) {
-			drawerToggle.addEventListener('change', (e) => {
-				if (e.target.checked) {
-					// 100ms delay for reliable focus (flush pattern)
-					setTimeout(() => {
-						if (titleInput) {
-							titleInput.focus();
-							// Force focus if it didn't work
-							if (document.activeElement !== titleInput) {
-								titleInput.focus();
-							}
-						}
-					}, 100);
-				}
-			});
-		}
-	});
-
-	// Reactive auto-focus with 150ms delay (flush pattern)
+	// Reactive auto-focus when drawer opens - single reliable implementation
+	// Uses requestAnimationFrame + 200ms delay to ensure drawer animation has started
+	// and input is interactable. This handles both checkbox toggle and store-based opening.
 	$effect(() => {
 		if (isOpen && titleInput) {
-			setTimeout(() => {
-				if (titleInput) {
-					titleInput.focus();
-				}
-			}, 150);
+			requestAnimationFrame(() => {
+				setTimeout(() => {
+					if (titleInput && isOpen) {
+						titleInput.focus();
+						// Double-check focus was applied (some browsers need this)
+						if (document.activeElement !== titleInput) {
+							titleInput.focus();
+						}
+					}
+				}, 200);
+			});
 		}
 	});
 
@@ -1178,118 +1164,6 @@
 						</label>
 					</div>
 
-					<!-- Dependencies (Optional) - Industrial -->
-					<div class="form-control">
-						<div class="flex items-center justify-between mb-2">
-							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
-								Dependencies
-								{#if selectedDependencies.length > 0}
-									<span class="ml-1 badge badge-xs" style="background: oklch(0.30 0.02 250); color: oklch(0.70 0.02 250);">{selectedDependencies.length}</span>
-								{/if}
-							</span>
-							<!-- Add dependency button -->
-							<div class="relative">
-								<button
-									type="button"
-									class="btn btn-xs btn-ghost gap-1"
-									onclick={() => showDependencyDropdown = !showDependencyDropdown}
-									disabled={isSubmitting || availableTasksLoading || !formData.project}
-									title={!formData.project ? 'Select a project first' : 'Add dependency'}
-								>
-									{#if availableTasksLoading}
-										<span class="loading loading-spinner loading-xs"></span>
-									{:else}
-										<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-											<path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
-										</svg>
-									{/if}
-									Add
-								</button>
-
-								<!-- Dropdown menu - Industrial -->
-								{#if showDependencyDropdown}
-									<div
-										class="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-xl w-72 max-h-64 overflow-y-auto"
-										style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250);"
-									>
-										{#if availableTasks.length === 0}
-											<div class="p-3 text-sm text-base-content/50 text-center">
-												No available tasks in this project
-											</div>
-										{:else}
-											<div class="py-1">
-												{#each availableTasks as availTask}
-													<button
-														type="button"
-														class="w-full text-left px-3 py-2 flex items-center gap-2 text-sm hover:bg-base-300/30 transition-colors"
-														onclick={() => addDependency(availTask)}
-														disabled={isSubmitting}
-													>
-														<span class="badge badge-xs {priorityColors[availTask.priority] || 'badge-ghost'}">
-															P{availTask.priority}
-														</span>
-														<span class="font-mono text-xs text-base-content/60">{availTask.id}</span>
-														<span class="flex-1 truncate">{availTask.title}</span>
-													</button>
-												{/each}
-											</div>
-										{/if}
-										<!-- Close button - Industrial -->
-										<div class="p-2" style="border-top: 1px solid oklch(0.35 0.02 250);">
-											<button
-												type="button"
-												class="btn btn-xs btn-ghost w-full"
-												onclick={() => showDependencyDropdown = false}
-											>
-												Cancel
-											</button>
-										</div>
-									</div>
-								{/if}
-							</div>
-						</div>
-
-						<!-- Selected dependencies list -->
-						{#if selectedDependencies.length > 0}
-							<div class="space-y-2 p-2 rounded" style="background: oklch(0.18 0.01 250);">
-								{#each selectedDependencies as dep (dep.id)}
-									<div
-										class="flex items-center gap-2 text-sm p-2 rounded group"
-										style="background: oklch(0.20 0.01 250); border-left: 2px solid oklch(0.70 0.18 240 / 0.3);"
-									>
-										<span class="badge badge-xs {priorityColors[dep.priority] || 'badge-ghost'}">
-											P{dep.priority}
-										</span>
-										<span class="font-mono text-xs">{dep.id}</span>
-										<span class="flex-1 truncate">{dep.title}</span>
-										<!-- Remove button -->
-										<button
-											type="button"
-											class="btn btn-xs btn-ghost btn-circle opacity-0 group-hover:opacity-100 transition-opacity text-error hover:bg-error/10"
-											onclick={() => removeDependency(dep.id)}
-											disabled={isSubmitting}
-											title="Remove dependency"
-										>
-											<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-												<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
-											</svg>
-										</button>
-									</div>
-								{/each}
-							</div>
-						{:else}
-							<div class="p-3 rounded text-center" style="background: oklch(0.18 0.01 250);">
-								{#if formData.project}
-									<span class="text-sm" style="color: oklch(0.45 0.02 250);">No dependencies selected</span>
-									<p class="text-xs mt-1" style="color: oklch(0.40 0.02 250);">Click "Add" to select tasks this depends on</p>
-								{:else}
-									<span class="text-sm" style="color: oklch(0.45 0.02 250);">Select a project first</span>
-									<p class="text-xs mt-1" style="color: oklch(0.40 0.02 250);">Dependencies are loaded based on the selected project</p>
-								{/if}
-							</div>
-						{/if}
-					</div>
-
 					<!-- Attachments Dropzone - Industrial -->
 					<div class="form-control">
 						<label class="label">
@@ -1402,6 +1276,118 @@
 										</button>
 									</div>
 								{/each}
+							</div>
+						{/if}
+					</div>
+
+					<!-- Dependencies (Optional) - Industrial -->
+					<div class="form-control">
+						<div class="flex items-center justify-between mb-2">
+							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+								Dependencies
+								{#if selectedDependencies.length > 0}
+									<span class="ml-1 badge badge-xs" style="background: oklch(0.30 0.02 250); color: oklch(0.70 0.02 250);">{selectedDependencies.length}</span>
+								{/if}
+							</span>
+							<!-- Add dependency button -->
+							<div class="relative">
+								<button
+									type="button"
+									class="btn btn-xs btn-ghost gap-1"
+									onclick={() => showDependencyDropdown = !showDependencyDropdown}
+									disabled={isSubmitting || availableTasksLoading || !formData.project}
+									title={!formData.project ? 'Select a project first' : 'Add dependency'}
+								>
+									{#if availableTasksLoading}
+										<span class="loading loading-spinner loading-xs"></span>
+									{:else}
+										<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+											<path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
+										</svg>
+									{/if}
+									Add
+								</button>
+
+								<!-- Dropdown menu - Industrial -->
+								{#if showDependencyDropdown}
+									<div
+										class="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-xl w-72 max-h-64 overflow-y-auto"
+										style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250);"
+									>
+										{#if availableTasks.length === 0}
+											<div class="p-3 text-sm text-base-content/50 text-center">
+												No available tasks in this project
+											</div>
+										{:else}
+											<div class="py-1">
+												{#each availableTasks as availTask}
+													<button
+														type="button"
+														class="w-full text-left px-3 py-2 flex items-center gap-2 text-sm hover:bg-base-300/30 transition-colors"
+														onclick={() => addDependency(availTask)}
+														disabled={isSubmitting}
+													>
+														<span class="badge badge-xs {priorityColors[availTask.priority] || 'badge-ghost'}">
+															P{availTask.priority}
+														</span>
+														<span class="font-mono text-xs text-base-content/60">{availTask.id}</span>
+														<span class="flex-1 truncate">{availTask.title}</span>
+													</button>
+												{/each}
+											</div>
+										{/if}
+										<!-- Close button - Industrial -->
+										<div class="p-2" style="border-top: 1px solid oklch(0.35 0.02 250);">
+											<button
+												type="button"
+												class="btn btn-xs btn-ghost w-full"
+												onclick={() => showDependencyDropdown = false}
+											>
+												Cancel
+											</button>
+										</div>
+									</div>
+								{/if}
+							</div>
+						</div>
+
+						<!-- Selected dependencies list -->
+						{#if selectedDependencies.length > 0}
+							<div class="space-y-2 p-2 rounded" style="background: oklch(0.18 0.01 250);">
+								{#each selectedDependencies as dep (dep.id)}
+									<div
+										class="flex items-center gap-2 text-sm p-2 rounded group"
+										style="background: oklch(0.20 0.01 250); border-left: 2px solid oklch(0.70 0.18 240 / 0.3);"
+									>
+										<span class="badge badge-xs {priorityColors[dep.priority] || 'badge-ghost'}">
+											P{dep.priority}
+										</span>
+										<span class="font-mono text-xs">{dep.id}</span>
+										<span class="flex-1 truncate">{dep.title}</span>
+										<!-- Remove button -->
+										<button
+											type="button"
+											class="btn btn-xs btn-ghost btn-circle opacity-0 group-hover:opacity-100 transition-opacity text-error hover:bg-error/10"
+											onclick={() => removeDependency(dep.id)}
+											disabled={isSubmitting}
+											title="Remove dependency"
+										>
+											<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+												<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+											</svg>
+										</button>
+									</div>
+								{/each}
+							</div>
+						{:else}
+							<div class="p-3 rounded text-center" style="background: oklch(0.18 0.01 250);">
+								{#if formData.project}
+									<span class="text-sm" style="color: oklch(0.45 0.02 250);">No dependencies selected</span>
+									<p class="text-xs mt-1" style="color: oklch(0.40 0.02 250);">Click "Add" to select tasks this depends on</p>
+								{:else}
+									<span class="text-sm" style="color: oklch(0.45 0.02 250);">Select a project first</span>
+									<p class="text-xs mt-1" style="color: oklch(0.40 0.02 250);">Dependencies are loaded based on the selected project</p>
+								{/if}
 							</div>
 						{/if}
 					</div>

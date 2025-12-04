@@ -162,6 +162,11 @@ export async function POST({ params }) {
 		}
 	}
 
+	// Add port flag if configured
+	if (config.port && !startCommand.includes('--port')) {
+		startCommand = `${startCommand} -- --port ${config.port}`;
+	}
+
 	try {
 		// Create tmux session and run dev server
 		// Using -d for detached, setting window name to match project

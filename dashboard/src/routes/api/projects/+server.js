@@ -159,28 +159,59 @@ async function checkPortStatus(port) {
 
 /**
  * Get last activity time for a project
+ * Checks multiple sources and returns the most recent:
+ * 1. Agent session files (.claude/agent-*.txt)
+ * 2. Git commit time
+ * 3. Directory mtime (fallback)
  */
 async function getLastActivity(projectPath) {
+	let mostRecentMs = 0;
+
+	// Check .claude/agent-*.txt files (most reliable indicator of recent activity)
 	try {
-		// Try git log first
+		const claudeDir = join(projectPath, '.claude');
+		if (existsSync(claudeDir)) {
+			const entries = await readdir(claudeDir);
+			const agentFiles = entries.filter(f => f.startsWith('agent-') && f.endsWith('.txt'));
+			for (const file of agentFiles) {
+				const stats = await stat(join(claudeDir, file));
+				if (stats.mtimeMs > mostRecentMs) {
+					mostRecentMs = stats.mtimeMs;
+				}
+			}
+		}
+	} catch {
+		// Ignore errors checking agent files
+	}
+
+	// Check git commit time
+	try {
 		const { stdout } = await execAsync('git log -1 --format="%ct"', {
 			cwd: projectPath,
 			timeout: 3000
 		});
 		const timestamp = parseInt(stdout.trim(), 10);
 		if (!isNaN(timestamp)) {
-			return formatRelativeTime(timestamp * 1000);
+			const gitMs = timestamp * 1000;
+			if (gitMs > mostRecentMs) {
+				mostRecentMs = gitMs;
+			}
 		}
 	} catch {
-		// Fall back to directory mtime
+		// Ignore git errors
+	}
+
+	// Fallback to directory mtime if nothing found
+	if (mostRecentMs === 0) {
 		try {
 			const stats = await stat(projectPath);
-			return formatRelativeTime(stats.mtimeMs);
+			mostRecentMs = stats.mtimeMs;
 		} catch {
 			return null;
 		}
 	}
-	return null;
+
+	return mostRecentMs > 0 ? formatRelativeTime(mostRecentMs) : null;
 }
 
 /**
@@ -262,7 +293,8 @@ export async function GET({ url }) {
 					tasks,
 					agents,
 					status,
-					lastActivity
+					// If server is running, it's active now
+					lastActivity: status === 'running' ? 'now' : lastActivity
 				};
 			}));
 		}

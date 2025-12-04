@@ -4,15 +4,18 @@
 	 * Displays count of active agent sessions by state
 	 *
 	 * Shows colored dots matching session states (in urgency order):
-	 * - Red (pulsing): needs attention (needs-input)
+	 * - Orange (pulsing): needs attention (needs-input)
 	 * - Yellow (pulsing): waiting review (ready-for-review)
-	 * - Orange: being worked (working)
-	 * - Blue/Cyan: starting up (starting)
+	 * - Blue: being worked (working)
+	 * - Cyan: starting up (starting)
 	 * - Green: complete/ready to close (completed)
 	 * - Grey: no active task (idle)
+	 *
+	 * Colors are sourced from SESSION_STATE_VISUALS in statusColors.ts
 	 */
 
 	import AnimatedDigits from './AnimatedDigits.svelte';
+	import { SESSION_STATE_VISUALS } from '$lib/config/statusColors';
 
 	interface StateCounts {
 		needsInput: number;
@@ -70,14 +73,15 @@
 		return parts.length > 0 ? parts.join(', ') : 'No active sessions';
 	});
 
-	// Colors matching session states
+	// Colors sourced from centralized SESSION_STATE_VISUALS config
+	// Maps badge state names to SESSION_STATE_VISUALS keys
 	const STATE_COLORS = {
-		needsInput: 'oklch(0.65 0.25 25)',      // Red - needs attention
-		review: 'oklch(0.78 0.18 85)',           // Yellow - waiting review
-		working: 'oklch(0.75 0.20 60)',          // Orange - being worked
-		starting: 'oklch(0.70 0.15 220)',        // Blue/Cyan - starting up
-		completed: 'oklch(0.70 0.20 145)',       // Green - complete
-		idle: 'oklch(0.55 0.02 250)'             // Grey - no active task
+		needsInput: SESSION_STATE_VISUALS['needs-input'].accent,  // Orange - needs attention
+		review: SESSION_STATE_VISUALS['ready-for-review'].accent, // Yellow - waiting review
+		working: SESSION_STATE_VISUALS.working.accent,            // Blue - being worked
+		starting: SESSION_STATE_VISUALS.starting.accent,          // Cyan - starting up
+		completed: SESSION_STATE_VISUALS.completed.accent,        // Green - complete
+		idle: SESSION_STATE_VISUALS.idle.accent                   // Grey - no active task
 	};
 </script>
 

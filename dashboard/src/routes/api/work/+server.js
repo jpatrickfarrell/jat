@@ -75,18 +75,25 @@ const execAsync = promisify(exec);
  * @returns {string} Session state
  */
 function detectSessionState(output, task, lastCompletedTask) {
-	const recentOutput = output ? output.slice(-3000) : '';
+	// Strip ANSI escape codes before pattern matching (they can appear mid-marker)
+	const stripAnsi = (str) => str.replace(/\x1b\[[0-9;]*m/g, '');
+	const recentOutput = output ? stripAnsi(output.slice(-3000)) : '';
 
 	// Find LAST position of each marker type (most recent wins)
 	const completedPos = recentOutput.lastIndexOf('[JAT:COMPLETED]');
 	const idlePos = recentOutput.lastIndexOf('[JAT:IDLE]');
-	const needsInputPos = Math.max(
-		recentOutput.lastIndexOf('[JAT:NEEDS_INPUT]'),
-		// Claude Code question prompt patterns
-		recentOutput.lastIndexOf('⎿'),  // Question prompt character
-		recentOutput.lastIndexOf('  Yes  '),  // Yes/No question option
-		recentOutput.lastIndexOf('  No  ')
-	);
+	// Claude Code question UI patterns (more specific than just ⎿ which appears in all tool results)
+	const questionUIPatterns = [
+		'Enter to select',           // Question selection UI
+		'Tab/Arrow keys to navigate', // Navigation hint
+		'Type something',            // Free-form input option
+		'[ ]',                       // Checkbox option
+	];
+	let needsInputPos = recentOutput.lastIndexOf('[JAT:NEEDS_INPUT]');
+	for (const pattern of questionUIPatterns) {
+		const pos = recentOutput.lastIndexOf(pattern);
+		if (pos > needsInputPos) needsInputPos = pos;
+	}
 	const reviewPos = Math.max(
 		recentOutput.lastIndexOf('[JAT:NEEDS_REVIEW]'),
 		recentOutput.lastIndexOf('[JAT:READY]'),

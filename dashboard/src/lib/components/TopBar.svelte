@@ -25,6 +25,7 @@
 	import UserProfile from './UserProfile.svelte';
 	import CommandPalette from './CommandPalette.svelte';
 	import Sparkline from './Sparkline.svelte';
+	import { isSparklineVisible } from '$lib/utils/sparklinePreferences';
 	import { openTaskDrawer } from '$lib/stores/drawerStore';
 	import { startSpawning, stopSpawning, startBulkSpawn, endBulkSpawn } from '$lib/stores/spawningTasks';
 	import {
@@ -51,13 +52,29 @@
 		getServerSortDir,
 		type ServerSortOption
 	} from '$lib/stores/serverSort.svelte.js';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 
-	// Initialize sort stores on mount
+	// Sparkline visibility preference
+	let sparklineVisible = $state(true);
+
+	// Initialize sort stores and sparkline preference on mount
 	onMount(() => {
 		initSort();
 		initAgentSort();
 		initServerSort();
+
+		// Load sparkline visibility preference
+		sparklineVisible = isSparklineVisible();
+
+		// Listen for preference changes from UserProfile
+		const handleVisibilityChange = (e: CustomEvent<boolean>) => {
+			sparklineVisible = e.detail;
+		};
+		window.addEventListener('sparkline-visibility-changed', handleVisibilityChange as EventListener);
+
+		return () => {
+			window.removeEventListener('sparkline-visibility-changed', handleVisibilityChange as EventListener);
+		};
 	});
 
 	// Check which page we're on for showing appropriate sort dropdown
@@ -313,10 +330,20 @@
 		project: string;
 	}
 
+	interface StateCounts {
+		needsInput: number;
+		working: number;
+		review: number;
+		completed: number;
+		starting?: number;
+		idle?: number;
+	}
+
 	interface Props {
 		activeAgentCount?: number;
 		totalAgentCount?: number;
 		activeAgents?: string[];
+		stateCounts?: StateCounts;
 		tokensToday?: number;
 		costToday?: number;
 		sparklineData?: DataPoint[];
@@ -338,6 +365,7 @@
 		activeAgentCount = 0,
 		totalAgentCount = 0,
 		activeAgents = [],
+		stateCounts,
 		tokensToday = 0,
 		costToday = 0,
 		sparklineData = [],
@@ -1170,9 +1198,9 @@
 
 	<!-- Right side: Sparkline + Stats + User Profile (Industrial) -->
 	<div class="flex-none flex items-center gap-2.5 pr-3">
-		<!-- Sparkline (positioned LEFT of all badges) -->
-		{#if multiProjectData && multiProjectData.length > 0}
-			<div class="hidden sm:block flex-shrink w-[120px] min-w-[60px] h-[20px]">
+		<!-- Sparkline (positioned LEFT of all badges, visibility controlled by user preference) -->
+		{#if sparklineVisible && multiProjectData && multiProjectData.length > 0}
+			<div class="hidden sm:block flex-shrink w-[80px] sm:w-[100px] md:w-[120px] lg:w-[150px] h-[20px]">
 				<Sparkline
 					multiSeriesData={multiProjectData.map((point) => {
 						const projects: Record<string, { tokens: number; cost: number }> = {};
@@ -1211,8 +1239,8 @@
 					showLegendInToolbar={true}
 				/>
 			</div>
-		{:else if sparklineData && sparklineData.length > 0}
-			<div class="hidden sm:block flex-shrink w-[120px] min-w-[60px] h-[20px]">
+		{:else if sparklineVisible && sparklineData && sparklineData.length > 0}
+			<div class="hidden sm:block flex-shrink w-[80px] sm:w-[100px] md:w-[120px] lg:w-[150px] h-[20px]">
 				<Sparkline
 					data={sparklineData}
 					width="100%"
@@ -1231,6 +1259,7 @@
 				activeCount={activeAgentCount}
 				totalCount={totalAgentCount}
 				{activeAgents}
+				{stateCounts}
 				compact={true}
 			/>
 		</div>

@@ -222,6 +222,43 @@
 			</button>
 		</li>
 
+		<!-- Display Settings -->
+		<li class="menu-title mt-2">
+			<span class="text-xs" style="color: oklch(0.55 0.02 250);">Display</span>
+		</li>
+
+		<li>
+			<button
+				onclick={handleSparklineToggle}
+				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors"
+				style="background: {sparklineVisible ? 'oklch(0.30 0.08 240 / 0.3)' : 'transparent'};"
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke-width="1.5"
+					stroke="currentColor"
+					class="w-4 h-4"
+					style="color: {sparklineVisible ? 'oklch(0.75 0.15 240)' : 'oklch(0.55 0.02 250)'};"
+				>
+					<path stroke-linecap="round" stroke-linejoin="round" d={chartIcon} />
+				</svg>
+				<span class="text-xs flex-1 text-left" style="color: oklch(0.70 0.02 250);">
+					Sparkline
+				</span>
+				<span
+					class="text-[10px] font-mono px-1.5 py-0.5 rounded"
+					style="
+						background: {sparklineVisible ? 'oklch(0.35 0.10 240)' : 'oklch(0.25 0.02 250)'};
+						color: {sparklineVisible ? 'oklch(0.85 0.10 240)' : 'oklch(0.55 0.02 250)'};
+					"
+				>
+					{sparklineVisible ? 'ON' : 'OFF'}
+				</span>
+			</button>
+		</li>
+
 		<li class="menu-title mt-2">
 			<span class="text-xs" style="color: oklch(0.55 0.02 250);">Terminal Settings</span>
 		</li>

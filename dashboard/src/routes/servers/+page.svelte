@@ -34,6 +34,7 @@
 		playServerStartSound,
 		playServerStopSound
 	} from '$lib/utils/soundEffects';
+	import { SessionPanelSkeleton, ProjectsTableSkeleton } from '$lib/components/skeleton';
 
 	interface Project {
 		name: string;
@@ -643,12 +644,7 @@
 		class:hidden={collapsedDirection === 'top'}
 	>
 		{#if serverSessionsState.isLoading && serverSessionsState.sessions.length === 0}
-			<div class="flex items-center justify-center flex-1">
-				<div class="text-center">
-					<span class="loading loading-bars loading-lg mb-4"></span>
-					<p class="text-sm text-base-content/60">Loading server sessions...</p>
-				</div>
-			</div>
+			<SessionPanelSkeleton cards={3} />
 		{:else}
 			<SessionPanel
 				mode="server"
@@ -692,9 +688,7 @@
 
 		<!-- Loading state -->
 		{#if loading && projects.length === 0}
-			<div class="flex items-center justify-center py-12">
-				<span class="loading loading-spinner loading-lg" style="color: oklch(0.70 0.18 240);"></span>
-			</div>
+			<ProjectsTableSkeleton rows={6} />
 		{:else if projects.length === 0}
 			<div class="flex items-center justify-center py-12">
 				<div class="text-center">

@@ -13,6 +13,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import type { WorkSession } from '$lib/stores/workSessions.svelte.js';
 	import SessionCard from '$lib/components/work/SessionCard.svelte';
+	import { TriageSkeleton } from '$lib/components/skeleton';
 
 	// State
 	let sessions = $state<WorkSession[]>([]);
@@ -339,16 +340,7 @@
 		</header>
 
 		{#if isLoading}
-			<!-- Loading state -->
-			<div class="flex items-center justify-center h-64">
-				<div class="flex flex-col items-center gap-4">
-					<div
-						class="w-8 h-8 border-2 rounded-full animate-spin"
-						style="border-color: oklch(0.7 0.15 240); border-top-color: transparent;"
-					></div>
-					<span class="text-sm" style="color: oklch(0.5 0.02 250);">Scanning sessions...</span>
-				</div>
-			</div>
+			<TriageSkeleton cards={4} />
 		{:else if error}
 			<!-- Error state -->
 			<div

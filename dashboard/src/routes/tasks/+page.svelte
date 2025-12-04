@@ -14,6 +14,8 @@
 	import SessionPanel from '$lib/components/work/SessionPanel.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import ResizableDivider from '$lib/components/ResizableDivider.svelte';
+	import SessionPanelSkeleton from '$lib/components/skeleton/SessionPanelSkeleton.svelte';
+	import TaskTableSkeleton from '$lib/components/skeleton/TaskTableSkeleton.svelte';
 	import {
 		workSessionsState,
 		fetch as fetchSessions,
@@ -338,12 +340,7 @@
 		class:hidden={collapsedDirection === 'top'}
 	>
 		{#if isInitialLoad}
-			<div class="flex items-center justify-center flex-1">
-				<div class="text-center">
-					<span class="loading loading-bars loading-lg mb-4"></span>
-					<p class="text-sm text-base-content/60">Loading work sessions...</p>
-				</div>
-			</div>
+			<SessionPanelSkeleton cards={3} />
 		{:else}
 			<SessionPanel
 				workSessions={workSessionsState.sessions}
@@ -376,12 +373,7 @@
 		class:hidden={collapsedDirection === 'bottom'}
 	>
 		{#if isInitialLoad}
-			<div class="flex items-center justify-center h-48">
-				<div class="text-center">
-					<span class="loading loading-bars loading-lg mb-4"></span>
-					<p class="text-sm text-base-content/60">Loading tasks...</p>
-				</div>
-			</div>
+			<TaskTableSkeleton rows={8} showFilters={true} />
 		{:else}
 			<TaskTable
 				{tasks}

@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import DependencyGraph from '$lib/components/DependencyGraph.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
+	import { GraphSkeleton } from '$lib/components/skeleton';
 
 	// Task type compatible with DependencyGraph component
 	interface Task {
@@ -153,9 +154,7 @@
 
 	<!-- Loading State -->
 	{#if loading}
-		<div class="flex items-center justify-center h-96">
-			<div class="loading loading-spinner loading-lg text-primary"></div>
-		</div>
+		<GraphSkeleton nodes={8} />
 
 	<!-- Error State -->
 	{:else if error}

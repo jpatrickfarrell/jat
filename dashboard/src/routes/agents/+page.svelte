@@ -7,6 +7,8 @@
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import ResizableDivider from '$lib/components/ResizableDivider.svelte';
 	import { lastSessionEvent } from '$lib/stores/sessionEvents';
+	import AgentGridSkeleton from '$lib/components/skeleton/AgentGridSkeleton.svelte';
+	import TaskTableSkeleton from '$lib/components/skeleton/TaskTableSkeleton.svelte';
 
 	let tasks = $state<any[]>([]);
 	let allTasks = $state<any[]>([]);  // Unfiltered tasks for project list calculation
@@ -321,13 +323,7 @@
 		class:hidden={collapsedDirection === 'top'}
 	>
 		{#if isInitialLoad}
-			<!-- Loading State for Agent Grid -->
-			<div class="flex items-center justify-center flex-1">
-				<div class="text-center">
-					<span class="loading loading-bars loading-lg mb-4"></span>
-					<p class="text-sm text-base-content/60">Loading agents...</p>
-				</div>
-			</div>
+			<AgentGridSkeleton cards={4} />
 		{:else}
 			<AgentGrid {agents} {tasks} onTaskClick={handleTaskClick} {highlightedAgent} />
 		{/if}
@@ -349,13 +345,7 @@
 		class:hidden={collapsedDirection === 'bottom'}
 	>
 		{#if isInitialLoad}
-			<!-- Loading State -->
-			<div class="flex items-center justify-center h-48">
-				<div class="text-center">
-					<span class="loading loading-bars loading-lg mb-4"></span>
-					<p class="text-sm text-base-content/60">Loading tasks...</p>
-				</div>
-			</div>
+			<TaskTableSkeleton rows={8} showFilters={true} />
 		{:else}
 			<TaskTable
 				{tasks}

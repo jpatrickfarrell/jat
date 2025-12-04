@@ -23,6 +23,7 @@
 		getIsLoading,
 		getError
 	} from '$lib/stores/workSessions.svelte.js';
+	import { KanbanSkeleton } from '$lib/components/skeleton';
 
 	// Drawer state
 	let drawerOpen = $state(false);
@@ -168,12 +169,7 @@
 
 	<!-- Loading State -->
 	{#if isLoading && sessions.length === 0}
-		<div class="flex items-center justify-center flex-1">
-			<div class="text-center">
-				<span class="loading loading-bars loading-lg mb-4"></span>
-				<p class="text-sm text-base-content/60">Loading sessions...</p>
-			</div>
-		</div>
+		<KanbanSkeleton columns={4} cardsPerColumn={3} />
 
 	<!-- Error State -->
 	{:else if error}

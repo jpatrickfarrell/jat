@@ -497,6 +497,38 @@
 											<kbd class="kbd kbd-sm">/</kbd>
 										</span>
 									</div>
+									<div class="flex justify-between items-center">
+										<span class="text-sm">New task</span>
+										<span class="flex gap-1">
+											<kbd class="kbd kbd-sm">Alt</kbd>
+											<span>+</span>
+											<kbd class="kbd kbd-sm">N</kbd>
+										</span>
+									</div>
+									<div class="flex justify-between items-center">
+										<span class="text-sm">Spawn session</span>
+										<span class="flex gap-1">
+											<kbd class="kbd kbd-sm">Alt</kbd>
+											<span>+</span>
+											<kbd class="kbd kbd-sm">S</kbd>
+										</span>
+									</div>
+									<div class="flex justify-between items-center">
+										<span class="text-sm opacity-70">Attach to hovered session</span>
+										<span class="flex gap-1">
+											<kbd class="kbd kbd-sm">Alt</kbd>
+											<span>+</span>
+											<kbd class="kbd kbd-sm">A</kbd>
+										</span>
+									</div>
+									<div class="flex justify-between items-center">
+										<span class="text-sm opacity-70">Complete hovered session</span>
+										<span class="flex gap-1">
+											<kbd class="kbd kbd-sm">Alt</kbd>
+											<span>+</span>
+											<kbd class="kbd kbd-sm">C</kbd>
+										</span>
+									</div>
 								</div>
 							</div>
 

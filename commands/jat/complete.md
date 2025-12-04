@@ -424,6 +424,10 @@ Output this SINGLE box containing everything - task info AND reflection together
 │     • [Key changes made]                                                 │
 │     • [Problems solved]                                                  │
 │                                                                          │
+│  🧑 Human actions required:  (ONLY if manual steps needed)               │
+│     [JAT:HUMAN_ACTION {"title":"...","description":"..."}]               │
+│     [JAT:HUMAN_ACTION {"title":"...","description":"..."}]               │
+│                                                                          │
 │  ⚡ Quality signals:                                                      │
 │     • Tests: [passing/failing/none added]                                │
 │     • Build: [clean/warnings]                                            │
@@ -454,6 +458,173 @@ Output this SINGLE box containing everything - task info AND reflection together
 - Surface conflicts - files touched that parallel agents might need
 - Share discoveries - patterns and gotchas help the whole swarm
 - Keep it actionable - insights should help the commander make decisions
+
+---
+
+### Human Actions (CRITICAL)
+
+**When to include human actions:**
+
+If your task requires ANY manual steps by the user that cannot be automated, you MUST output `[JAT:HUMAN_ACTION]` markers. This ensures the dashboard displays them prominently.
+
+**Common examples of human actions:**
+- Run migration in production database
+- Enable feature flag in admin dashboard
+- Configure third-party service (Supabase Auth, Stripe, etc.)
+- Update environment variables on production server
+- Deploy to production
+- Review and merge PR
+- Manual testing in staging environment
+
+**Marker format:**
+
+```
+[JAT:HUMAN_ACTION {"title":"Short action title","description":"Detailed steps to complete this action"}]
+```
+
+**Rules:**
+1. Each action gets its own marker on a separate line
+2. Title should be 3-8 words (shows as header in dashboard)
+3. Description can be multi-line but keep it concise
+4. JSON must be valid (escape quotes if needed)
+5. Place markers INSIDE the completion box, under "🧑 Human actions required:"
+
+**Example with human actions:**
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│  ✅ Task Completed: chimaro-xyz "Add anonymous auth support"             │
+│  👤 Agent: CalmMeadow                                                    │
+│  [JAT:IDLE]                                                              │
+│                                                                          │
+│  📋 What was accomplished:                                               │
+│     • Created migration to add auth_mode column to profiles table        │
+│     • Updated TypeScript types for anonymous auth flow                   │
+│     • Added server-side logic for anonymous session handling             │
+│                                                                          │
+│  🧑 Human actions required:                                              │
+│     [JAT:HUMAN_ACTION {"title":"Run migration in production","description":"Execute: supabase db push --db-url $PROD_DB_URL"}]
+│     [JAT:HUMAN_ACTION {"title":"Enable Anonymous Auth in Supabase","description":"Go to Supabase Dashboard > Authentication > Settings > Enable Anonymous sign-ins toggle"}]
+│                                                                          │
+│  ⚡ Quality signals:                                                      │
+│     • Tests: passing                                                     │
+│     • Build: clean                                                       │
+│                                                                          │
+│  💡 Session complete. Close terminal when ready.                         │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+**What the dashboard does with these markers:**
+- Displays a prominent "Human Actions Required" badge on the session card
+- Shows each action as a checklist item the user can mark as done
+- Persists action completion state until session is closed
+- Prevents accidental "task complete" assumption when manual work remains
+
+---
+
+### Suggested Tasks (RECOMMENDED)
+
+**When to include suggested tasks:**
+
+If your task uncovered follow-up work (bugs, improvements, tech debt, new features), you SHOULD output `[JAT:SUGGESTED_TASKS]` markers. This helps the commander make informed decisions about what to tackle next.
+
+**Marker format:**
+
+```
+[JAT:SUGGESTED_TASKS]
+{"tasks":[
+  {"type":"agent","title":"...","description":"...","priority":1},
+  {"type":"human","title":"...","description":"...","priority":2}
+]}
+[/JAT:SUGGESTED_TASKS]
+```
+
+**Field Reference:**
+
+| Field | Required | Type | Description |
+|-------|----------|------|-------------|
+| `type` | ✅ Yes | `"agent"` or `"human"` | Who should do this work |
+| `title` | ✅ Yes | string | Short task title (3-10 words) |
+| `priority` | ✅ Yes | number | 0-4 (P0=critical, P4=backlog) |
+| `description` | ❌ No | string | Detailed description of work needed |
+| `labels` | ❌ No | string[] | Labels for categorization (e.g., `["bug", "security"]`) |
+| `dependencies` | ❌ No | string[] | Task IDs this depends on (e.g., `["jat-abc"]`) |
+| `effort` | ❌ No | `"small"`, `"medium"`, `"large"` | Estimated effort |
+| `project` | ❌ No | string | Project name (auto-detected if omitted) |
+
+**Task Types:**
+
+- **`agent`** - Work that can be auto-assigned to the next available agent
+  - Examples: bug fixes, refactoring, adding tests, implementing features
+  - Dashboard can auto-spawn agents for these tasks
+
+- **`human`** - Work that requires human judgment or access
+  - Examples: design decisions, production deployments, security reviews
+  - Dashboard shows these prominently but won't auto-assign to agents
+
+**Rules:**
+
+1. JSON must be valid (escape quotes, no trailing commas)
+2. One `[JAT:SUGGESTED_TASKS]...[/JAT:SUGGESTED_TASKS]` block per completion
+3. Multiple tasks go in the `tasks` array
+4. Place marker INSIDE the completion box, under "📊 Backlog impact:"
+5. Dashboard parses on session end and offers to create tasks in Beads
+
+**Example with suggested tasks:**
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│  ✅ Task Completed: jat-xyz "Add caching to API endpoints"               │
+│  👤 Agent: SwiftMeadow                                                   │
+│  [JAT:IDLE]                                                              │
+│                                                                          │
+│  📋 What was accomplished:                                               │
+│     • Added Redis caching layer to /api/tasks endpoint                   │
+│     • Implemented cache invalidation on task updates                     │
+│     • Reduced P99 latency from 450ms to 12ms                             │
+│                                                                          │
+│  📊 Backlog impact:                                                      │
+│     • Unblocked: Dashboard performance issues now resolved               │
+│     • Discovered: Other endpoints could benefit from same pattern        │
+│                                                                          │
+│     [JAT:SUGGESTED_TASKS]                                                │
+│     {"tasks":[                                                           │
+│       {"type":"agent","title":"Add caching to /api/agents endpoint","description":"Same Redis pattern as /api/tasks. Copy approach from cache.ts.","priority":2,"effort":"small"},
+│       {"type":"agent","title":"Add cache metrics to dashboard","description":"Display cache hit/miss rates. New component in monitoring section.","priority":3,"effort":"medium"},
+│       {"type":"human","title":"Decide on cache TTL strategy","description":"Current TTL is 60s. Need product input on freshness vs performance tradeoff.","priority":2}
+│     ]}                                                                   │
+│     [/JAT:SUGGESTED_TASKS]                                               │
+│                                                                          │
+│  💡 Session complete. Close terminal when ready.                         │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+**What the dashboard does with suggested tasks:**
+
+- Parses the JSON payload when session completes
+- Displays "N Suggested Tasks" badge on session card
+- Shows task list in a modal when clicked
+- Offers one-click creation in Beads (with confirmation)
+- Agent tasks can be auto-spawned if user enables swarm mode
+- Human tasks are highlighted differently (won't auto-assign)
+
+**Comparison with JAT:HUMAN_ACTION:**
+
+| Aspect | JAT:HUMAN_ACTION | JAT:SUGGESTED_TASKS |
+|--------|------------------|---------------------|
+| **Purpose** | Manual steps for THIS task | Follow-up work from THIS task |
+| **Timing** | Must be done before task is truly complete | Can be done later, separate work |
+| **Urgency** | Blocking - task isn't done without these | Non-blocking - backlog items |
+| **Creation** | Displayed as checklist | Offered for Beads creation |
+| **Auto-assign** | N/A | Agent tasks can auto-spawn |
+
+**When to use each:**
+
+- Use `JAT:HUMAN_ACTION` when: "The user needs to do X for this task to be complete"
+  - Example: "Run migration in production" - task isn't done until migration runs
+
+- Use `JAT:SUGGESTED_TASKS` when: "I discovered Y that should be done separately"
+  - Example: "Found similar code that needs same fix" - different task, do later
 
 ---
 
@@ -622,6 +793,7 @@ This preserves attribution and maintains the audit trail.
 
 **Markers explained:**
 - `[JAT:IDLE]` - Dashboard shows completion state, session can be closed
+- `[JAT:SUGGESTED_TASKS]...[/JAT:SUGGESTED_TASKS]` - Follow-up tasks discovered during work
 
 ---
 
@@ -632,13 +804,20 @@ The completion flow uses these markers (output automatically by the templates ab
 | Marker | When to Output | Dashboard Effect |
 |--------|----------------|------------------|
 | `[JAT:IDLE]` | ONLY after `bd close` succeeds | Shows "Completed" state (green) |
+| `[JAT:HUMAN_ACTION {...}]` | When manual steps are required | Shows prominent action checklist |
+| `[JAT:SUGGESTED_TASKS]...[/JAT:SUGGESTED_TASKS]` | When follow-up work discovered | Shows "N Suggested Tasks" badge, offers Beads creation |
 
 **Critical timing:**
 - Do NOT output `[JAT:IDLE]` until AFTER all completion steps succeed
 - If you output it early, dashboard shows "complete" but task is still open in Beads
 - This causes confusion - other agents think task is done when it isn't
 
-**The marker is in the template** - just use the Step 8 template and the marker is included automatically.
+**Human action markers:**
+- Output BEFORE `[JAT:IDLE]` in the completion box
+- Each action gets its own line with valid JSON payload
+- Dashboard parses these to show a checklist of manual steps
+
+**The markers are in the template** - just use the Step 8 template and markers are included automatically.
 
 ---
 

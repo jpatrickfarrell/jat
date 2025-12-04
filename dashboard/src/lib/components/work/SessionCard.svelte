@@ -2214,7 +2214,7 @@
 			<span style="color: oklch(0.65 0.10 145);">${cost.toFixed(2)}</span>
 		{/if}
 		{#if showSparkline && sparklineData && sparklineData.length > 0}
-			<div class="flex-shrink-0 ml-1" style="width: 45px; height: 12px;">
+			<div class="flex-shrink-0 ml-1 w-[40px] sm:w-[45px] md:w-[50px] lg:w-[60px] h-[12px]">
 				<Sparkline
 					data={sparklineData}
 					height={12}

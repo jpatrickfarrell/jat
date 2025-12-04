@@ -2696,6 +2696,67 @@ While Phase 2 data loads, show DaisyUI skeleton loaders:
 **Task References:**
 - jat-aydj: Fix long loading time on /dash (completed)
 
+### Skeleton Component Library
+
+The dashboard includes a library of skeleton loading components for consistent loading states across all pages.
+
+**Import Pattern:**
+
+```svelte
+import { TaskTableSkeleton, AgentGridSkeleton, TaskDetailSkeleton } from '$lib/components/skeleton';
+```
+
+**Available Components:**
+
+| Component | Use Case | Props |
+|-----------|----------|-------|
+| `TaskTableSkeleton` | Task list tables | `rows?: number`, `showFilters?: boolean` |
+| `SessionCardSkeleton` | Work session cards | - |
+| `SessionPanelSkeleton` | Work session panels | - |
+| `AgentGridSkeleton` | Agent grid on /agents | `cards?: number` |
+| `KanbanSkeleton` | Kanban board view | `columns?: number` |
+| `ProjectsTableSkeleton` | Projects table | `rows?: number` |
+| `GraphSkeleton` | Dependency graph view | - |
+| `TimelineSkeleton` | Timeline/Gantt view | `tasks?: number` |
+| `TriageSkeleton` | Triage page | - |
+| `TaskDetailSkeleton` | Task detail drawer content | - |
+
+**Usage Example:**
+
+```svelte
+<script lang="ts">
+  import { AgentGridSkeleton } from '$lib/components/skeleton';
+
+  let loading = $state(true);
+  let agents = $state([]);
+</script>
+
+{#if loading}
+  <AgentGridSkeleton cards={4} />
+{:else}
+  <AgentGrid {agents} />
+{/if}
+```
+
+**Inline Token Usage Skeleton:**
+
+SessionCard supports a `usageLoading` prop for skeleton display while usage data loads:
+
+```svelte
+<SessionCard
+  mode="compact"
+  sessionName={session.name}
+  agentName={session.agent}
+  tokens={agent.usage?.today?.total_tokens || 0}
+  cost={agent.usage?.today?.cost || 0}
+  usageLoading={!agent.usage}  <!-- Show skeleton while loading -->
+/>
+```
+
+**Files:**
+- `src/lib/components/skeleton/index.ts` - Export barrel file
+- `src/lib/components/skeleton/*.svelte` - Individual skeleton components
+
 ## WorkCard Session State Lifecycle
 
 ### Overview

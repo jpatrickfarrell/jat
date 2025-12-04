@@ -25,3 +25,4 @@ export { default as ProjectsTableSkeleton } from './ProjectsTableSkeleton.svelte
 export { default as GraphSkeleton } from './GraphSkeleton.svelte';
 export { default as TimelineSkeleton } from './TimelineSkeleton.svelte';
 export { default as TriageSkeleton } from './TriageSkeleton.svelte';
+export { default as TaskDetailSkeleton } from './TaskDetailSkeleton.svelte';

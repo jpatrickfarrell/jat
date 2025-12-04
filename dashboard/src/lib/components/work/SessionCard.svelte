@@ -57,6 +57,7 @@
 	} from "$lib/config/statusColors";
 	import HorizontalResizeHandle from "$lib/components/HorizontalResizeHandle.svelte";
 	import { setHoveredSession } from "$lib/stores/hoveredSession";
+	import { findHumanActionMarkers } from "$lib/utils/markerParser";
 
 	// Props - aligned with workSessions.svelte.ts types
 	interface Task {
@@ -1435,6 +1436,7 @@
 
 	// Detect human action markers in output
 	// Format: [JAT:HUMAN_ACTION {"title":"...","description":"..."}]
+	// Uses unified marker parser with balanced-brace JSON extraction
 	interface HumanAction {
 		title: string;
 		description: string;
@@ -1449,84 +1451,14 @@
 		// Look at a larger window for human actions (they appear in completion summary)
 		const recentOutput = output.slice(-6000);
 
-		const actions: HumanAction[] = [];
-		// Find all [JAT:HUMAN_ACTION markers and extract JSON with balanced braces
-		const markerPrefix = "[JAT:HUMAN_ACTION ";
-		let searchStart = 0;
+		// Use unified marker parser for safe JSON extraction
+		const markers = findHumanActionMarkers(recentOutput);
 
-		while (true) {
-			const markerStart = recentOutput.indexOf(markerPrefix, searchStart);
-			if (markerStart === -1) break;
-
-			const jsonStart = markerStart + markerPrefix.length;
-
-			// Find matching closing brace by counting balanced braces
-			let braceCount = 0;
-			let jsonEnd = -1;
-			let inString = false;
-			let escapeNext = false;
-
-			for (let i = jsonStart; i < recentOutput.length; i++) {
-				const char = recentOutput[i];
-
-				if (escapeNext) {
-					escapeNext = false;
-					continue;
-				}
-
-				if (char === "\\" && inString) {
-					escapeNext = true;
-					continue;
-				}
-
-				if (char === '"' && !escapeNext) {
-					inString = !inString;
-					continue;
-				}
-
-				if (!inString) {
-					if (char === "{") {
-						braceCount++;
-					} else if (char === "}") {
-						braceCount--;
-						if (braceCount === 0) {
-							jsonEnd = i + 1;
-							break;
-						}
-					} else if (char === "]" && braceCount === 0) {
-						// Hit the closing ] before finding valid JSON
-						break;
-					}
-				}
-			}
-
-			searchStart = markerStart + 1;
-
-			if (jsonEnd === -1) {
-				// Couldn't find balanced braces - likely truncated output, skip silently
-				continue;
-			}
-
-			const jsonStr = recentOutput.slice(jsonStart, jsonEnd);
-
-			try {
-				const json = JSON.parse(jsonStr);
-				if (json.title) {
-					const actionKey = json.title;
-					actions.push({
-						title: json.title,
-						description: json.description || "",
-						completed:
-							humanActionCompletedState.get(actionKey) || false,
-					});
-				}
-			} catch {
-				// Invalid JSON despite balanced braces - skip silently
-				// This can happen with malformed output, no need to log
-			}
-		}
-
-		return actions;
+		return markers.map((marker) => ({
+			title: marker.action.title,
+			description: marker.action.description,
+			completed: humanActionCompletedState.get(marker.action.title) || false,
+		}));
 	});
 
 	// Toggle completion state of a human action
@@ -2272,8 +2204,7 @@
 			<div class="flex items-center gap-2 shrink-0">
 				{#if sparklineData && sparklineData.length > 0}
 					<div
-						class="flex-shrink-0 -mt-2"
-						style="width: 50px; height: 14px;"
+						class="flex-shrink-0 -mt-2 w-[45px] sm:w-[50px] md:w-[60px] lg:w-[70px] h-[14px]"
 					>
 						<Sparkline
 							data={sparklineData}
@@ -2625,8 +2556,7 @@
 							</span>
 							{#if sparklineData && sparklineData.length > 0}
 								<div
-									class="-mt-3 flex-shrink-0"
-									style="width: 45px; height: 14px;"
+									class="-mt-3 flex-shrink-0 w-[45px] sm:w-[50px] md:w-[60px] lg:w-[70px] h-[14px]"
 								>
 									<Sparkline
 										data={sparklineData}

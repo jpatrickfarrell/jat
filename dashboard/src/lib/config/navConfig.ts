@@ -1,17 +1,35 @@
 /**
  * Navigation Configuration
  * Unified config for dashboard navigation (replaces page-specific configs)
+ *
+ * NAVIGATION STRUCTURE:
+ *
+ * PRIMARY (main nav - always visible):
+ *   /work     - Tasks (default route, tmux sessions + agent work)
+ *   /dash     - Agents (agent dashboard, status, activity)
+ *   /projects - Servers (project server sessions)
+ *
+ * SECONDARY (collapsible or less prominent):
+ *   /triage   - Task triage (needs work, not ready for primetime)
+ *   /timeline - Historical view (link from /projects)
+ *   /kanban   - Agent kanban (sessions grouped by activity state)
+ *   /graph    - Dependency visualization
+ *
+ * DROPPED (removed):
+ *   /         - Replaced by /work as default
+ *   /agents   - Merged into /dash
  */
 
 export interface NavItem {
-	id: string; // Unique identifier (e.g., 'list', 'graph', 'agents')
-	label: string; // Display text (e.g., 'List', 'Graph', 'Agents')
-	href: string; // Navigation target (e.g., '/', '/agents')
-	icon: string; // Icon identifier (matches icon SVG paths in Nav.svelte)
+	id: string; // Unique identifier (e.g., 'work', 'dash', 'projects')
+	label: string; // Display text (e.g., 'Tasks', 'Agents', 'Servers')
+	href: string; // Navigation target (e.g., '/work', '/dash')
+	icon: string; // Icon identifier (matches icon SVG paths in Sidebar.svelte)
+	primary?: boolean; // Primary nav items are always visible
 }
 
 export interface UnifiedNavConfig {
-	navItems: NavItem[]; // All navigation items (rendered as buttons in nav bar)
+	navItems: NavItem[]; // All navigation items (rendered in sidebar)
 	showProjectFilter: boolean; // Show project selector dropdown
 	showThemeSelector: boolean; // Show theme picker
 }
@@ -20,67 +38,63 @@ export interface UnifiedNavConfig {
  * Unified Navigation Configuration
  *
  * Defines all navigation items and global nav settings.
- * Nav component imports this and renders nav items as buttons with active state.
- * Page-specific logic removed - Nav is now agnostic to which page it's on.
+ * Sidebar.svelte imports this and renders nav items with active state.
  *
- * Icons used: list, graph, calendar, columns, users
- * (Icon SVG paths defined in Nav.svelte or Sidebar.svelte)
+ * Icons used: tasks, agents, servers, triage, timeline, columns, graph
+ * (Icon SVG paths defined in Sidebar.svelte)
  */
 export const unifiedNavConfig: UnifiedNavConfig = {
 	navItems: [
+		// PRIMARY: Main navigation (always visible)
 		{
-			id: 'list',
-			label: 'List',
-			href: '/',
-			icon: 'list'
-		},
-		{
-			id: 'graph',
-			label: 'Graph',
-			href: '/graph',
-			icon: 'graph'
-		},
-		{
-			id: 'timeline',
-			label: 'Timeline',
-			href: '/timeline',
-			icon: 'calendar'
-		},
-		{
-			id: 'kanban',
-			label: 'Kanban',
-			href: '/kanban',
-			icon: 'columns'
+			id: 'tasks',
+			label: 'Tasks',
+			href: '/tasks',
+			icon: 'tasks',
+			primary: true
 		},
 		{
 			id: 'agents',
 			label: 'Agents',
 			href: '/agents',
-			icon: 'users'
+			icon: 'agents',
+			primary: true
 		},
 		{
-			id: 'work',
-			label: 'Work',
-			href: '/work',
-			icon: 'work'
+			id: 'servers',
+			label: 'Servers',
+			href: '/servers',
+			icon: 'servers',
+			primary: true
 		},
-		{
-			id: 'dash',
-			label: 'Dash',
-			href: '/dash',
-			icon: 'dash'
-		},
+		// SECONDARY: Less prominent routes
 		{
 			id: 'triage',
 			label: 'Triage',
 			href: '/triage',
-			icon: 'triage'
+			icon: 'triage',
+			primary: false
 		},
 		{
-			id: 'projects',
-			label: 'Projects',
-			href: '/projects',
-			icon: 'projects'
+			id: 'timeline',
+			label: 'Timeline',
+			href: '/timeline',
+			icon: 'timeline',
+			primary: false
+		},
+		{
+			id: 'kanban',
+			label: 'Kanban',
+			href: '/kanban',
+			icon: 'columns',
+			primary: false
+		},
+		{
+			id: 'graph',
+			label: 'Graph',
+			href: '/graph',
+			icon: 'graph',
+			primary: false
 		}
 	],
 	showProjectFilter: true,

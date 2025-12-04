@@ -24,6 +24,7 @@
 		createDeleteRequest
 	} from '$lib/utils/bulkApiHelpers';
 	import { playNewTaskChime, playTaskExitSound, playTaskStartSound, playTaskCompleteSound } from '$lib/utils/soundEffects';
+	import { spawningTaskIds, isBulkSpawning } from '$lib/stores/spawningTasks';
 
 	// Type definitions for task images
 	interface TaskImage {
@@ -1487,8 +1488,8 @@
 								</svg>
 								Release
 							</button></li>
-							<li><button onclick={handleBulkSpawn} class="gap-2" disabled={spawningBulk || spawningSingle !== null}>
-								{#if spawningBulk}
+							<li><button onclick={handleBulkSpawn} class="gap-2" disabled={spawningBulk || spawningSingle !== null || $isBulkSpawning}>
+								{#if spawningBulk || $isBulkSpawning}
 									<span class="loading loading-spinner loading-xs"></span>
 								{:else}
 									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
@@ -1955,7 +1956,7 @@
 											<TaskActionButton
 												{task}
 												{agents}
-												spawning={spawningSingle === task.id}
+												spawning={spawningSingle === task.id || $spawningTaskIds.has(task.id)}
 												hasBlockers={depStatus.hasBlockers}
 												blockingReason={depStatus.blockingReason}
 												onspawn={handleSpawnSingle}

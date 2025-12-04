@@ -4,7 +4,7 @@
  */
 
 // Default model for spawned agents
-// Valid: 'opus', 'sonnet', 'haiku' or full IDs like 'claude-sonnet-4-5-20250514'
+// Valid aliases: 'opus', 'sonnet', 'haiku' or full IDs like 'claude-opus-4-5-20250514'
 export const DEFAULT_MODEL = 'opus';
 
 // Skip permission prompts for autonomous operation

@@ -3,31 +3,17 @@
  * GET /api/tasks/ready
  *
  * Returns tasks that are ready to be worked on (no unmet dependencies)
+ * across ALL projects (not just the current one).
  */
 
 import { json } from '@sveltejs/kit';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
+import { getReadyTasks } from '$lib/server/beads.js';
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET() {
 	try {
-		const projectPath = process.cwd().replace('/dashboard', '');
-
-		// Get ready tasks from Beads
-		const { stdout } = await execAsync('bd ready --json', {
-			cwd: projectPath,
-			timeout: 10000
-		});
-
-		let tasks = [];
-		try {
-			tasks = JSON.parse(stdout.trim() || '[]');
-		} catch {
-			tasks = [];
-		}
+		// Get ready tasks from all projects using the beads.js library
+		const tasks = getReadyTasks();
 
 		return json({
 			count: tasks.length,
@@ -35,7 +21,8 @@ export async function GET() {
 				id: t.id,
 				title: t.title,
 				priority: t.priority,
-				type: t.type
+				type: t.issue_type,
+				project: t.project
 			})),
 			timestamp: new Date().toISOString()
 		});

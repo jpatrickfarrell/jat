@@ -25,6 +25,7 @@
 	import UserProfile from './UserProfile.svelte';
 	import CommandPalette from './CommandPalette.svelte';
 	import { openTaskDrawer } from '$lib/stores/drawerStore';
+	import { startSpawning, stopSpawning, startBulkSpawn, endBulkSpawn } from '$lib/stores/spawningTasks';
 	import {
 		SORT_OPTIONS,
 		initSort,
@@ -154,25 +155,67 @@
 		}
 	}
 
-	// Swarm - spawn one agent per ready task
+	// Swarm - spawn one agent per ready task using the proper /api/work/spawn endpoint
 	async function handleSwarm() {
 		swarmLoading = true;
+		startBulkSpawn(); // Signal bulk spawn started for TaskTable animations
 		try {
-			const response = await fetch('/api/sessions/batch', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ count: 4 }) // Default 4 agents
-			});
-			const data = await response.json();
-			if (!response.ok) {
-				throw new Error(data.message || 'Failed to spawn agents');
+			// Step 1: Get ready tasks
+			const readyResponse = await fetch('/api/tasks/ready');
+			const readyData = await readyResponse.json();
+
+			if (!readyResponse.ok || !readyData.tasks?.length) {
+				throw new Error('No ready tasks available');
 			}
-			console.log('Swarm started:', data);
+
+			// Spawn all ready tasks
+			const tasksToSpawn = readyData.tasks;
+			const results = [];
+			const staggerMs = 6000; // Match SPAWN_STAGGER_MS from spawnConfig
+
+			// Step 2: Spawn an agent for each ready task
+			for (let i = 0; i < tasksToSpawn.length; i++) {
+				const task = tasksToSpawn[i];
+				startSpawning(task.id); // Signal this task is spawning for animation
+				try {
+					const response = await fetch('/api/work/spawn', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ taskId: task.id })
+					});
+					const data = await response.json();
+
+					if (!response.ok) {
+						results.push({ taskId: task.id, success: false, error: data.message || 'Failed to spawn' });
+						stopSpawning(task.id); // Clear animation on failure
+					} else {
+						results.push({ taskId: task.id, success: true, agentName: data.session?.agentName });
+						// Keep spawning animation until TaskTable refreshes and sees the new status
+						setTimeout(() => stopSpawning(task.id), 2000);
+					}
+				} catch (err) {
+					results.push({ taskId: task.id, success: false, error: err instanceof Error ? err.message : 'Unknown error' });
+					stopSpawning(task.id); // Clear animation on error
+				}
+
+				// Stagger between spawns (except last one)
+				if (i < tasksToSpawn.length - 1) {
+					await new Promise(resolve => setTimeout(resolve, staggerMs));
+				}
+			}
+
+			const successCount = results.filter(r => r.success).length;
+			console.log(`Swarm complete: ${successCount}/${tasksToSpawn.length} agents spawned`, results);
+
+			if (successCount === 0) {
+				throw new Error('Failed to spawn any agents');
+			}
 		} catch (error) {
 			console.error('Swarm failed:', error);
 			alert(error instanceof Error ? error.message : 'Failed to spawn agents');
 		} finally {
 			swarmLoading = false;
+			endBulkSpawn(); // Signal bulk spawn ended
 		}
 	}
 

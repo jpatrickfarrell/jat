@@ -3,7 +3,7 @@
  * Wraps lib/beads.js for use in SvelteKit server routes
  */
 
-import { getTasks as getTasksFromBeads, getTaskById as getTaskByIdFromBeads } from '../../../../lib/beads.js';
+import { getTasks as getTasksFromBeads, getTaskById as getTaskByIdFromBeads, getReadyTasks as getReadyTasksFromBeads } from '../../../../lib/beads.js';
 
 /**
  * @typedef {import('../../../../lib/beads.js').Task} Task
@@ -28,4 +28,12 @@ export function getTasks(options = {}) {
  */
 export function getTaskById(taskId) {
 	return getTaskByIdFromBeads(taskId);
+}
+
+/**
+ * Get tasks that are ready to work on (no blocking dependencies)
+ * @returns {Task[]} List of ready tasks across all projects
+ */
+export function getReadyTasks() {
+	return getReadyTasksFromBeads();
 }

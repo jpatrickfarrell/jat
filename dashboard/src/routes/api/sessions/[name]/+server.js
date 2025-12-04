@@ -1,12 +1,13 @@
 /**
  * Session Management API
- * DELETE /api/sessions/[name] - Kill a session
+ * DELETE /api/sessions/[name] - Kill a session (and release task)
  * PATCH /api/sessions/[name] - Rename a session
  */
 
 import { json } from '@sveltejs/kit';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { getTasks } from '$lib/server/beads.js';
 
 const execAsync = promisify(exec);
 
@@ -133,40 +134,73 @@ export async function DELETE({ params }) {
 		}
 
 		// Kill the tmux session (with jat- prefix)
-		const command = `tmux kill-session -t "${sessionName}" 2>&1`;
+		const killCommand = `tmux kill-session -t "${sessionName}" 2>&1`;
+		let sessionKilled = false;
 
 		try {
-			await execAsync(command);
-
-			return json({
-				success: true,
-				agentName,
-				sessionName,
-				message: `Session for ${agentName} killed successfully`,
-				timestamp: new Date().toISOString()
-			});
+			await execAsync(killCommand);
+			sessionKilled = true;
 		} catch (execError) {
 			const execErr = /** @type {{ stderr?: string, stdout?: string, message?: string }} */ (execError);
-			// With 2>&1, stderr goes to stdout, so check both
 			const errorMessage = execErr.stdout || execErr.stderr || execErr.message || String(execError);
 
-			// Check if session not found
-			if (errorMessage.includes("can't find session") || errorMessage.includes('no server running')) {
+			// Check if session not found - that's ok, continue to release task
+			if (!errorMessage.includes("can't find session") && !errorMessage.includes('no server running')) {
 				return json({
-					error: 'Session not found',
-					message: `No active session for agent '${agentName}' (looked for tmux session '${sessionName}')`,
+					error: 'Failed to kill session',
+					message: errorMessage,
 					agentName,
 					sessionName
-				}, { status: 404 });
+				}, { status: 500 });
 			}
+		}
 
+		// Release the task assigned to this agent (search across ALL projects)
+		// Find tasks where assignee = agentName and status = in_progress, set back to open with no assignee
+		let taskReleased = false;
+		let releasedTaskId = null;
+
+		try {
+			// Use beads.js to find tasks across all projects
+			const allTasks = getTasks({ status: 'in_progress' });
+			const agentTask = allTasks.find(t => t.assignee === agentName);
+
+			if (agentTask) {
+				// Release the task: set status back to open and clear assignee
+				// Run bd update in the task's project directory
+				await execAsync(`bd update "${agentTask.id}" --status open --assignee ""`, {
+					cwd: agentTask.project_path,
+					timeout: 10000
+				});
+				taskReleased = true;
+				releasedTaskId = agentTask.id;
+			}
+		} catch (err) {
+			// Non-fatal - session is killed, task release just failed
+			console.error('Failed to release task:', err);
+		}
+
+		if (!sessionKilled && !taskReleased) {
 			return json({
-				error: 'Failed to kill session',
-				message: errorMessage,
+				error: 'Session not found',
+				message: `No active session for agent '${agentName}' and no task to release`,
 				agentName,
 				sessionName
-			}, { status: 500 });
+			}, { status: 404 });
 		}
+
+		return json({
+			success: true,
+			agentName,
+			sessionName,
+			sessionKilled,
+			taskReleased,
+			releasedTaskId,
+			message: taskReleased
+				? `Session killed and task ${releasedTaskId} released`
+				: `Session for ${agentName} killed successfully`,
+			timestamp: new Date().toISOString()
+		});
 	} catch (error) {
 		console.error('Error in DELETE /api/sessions/[name]:', error);
 		return json({

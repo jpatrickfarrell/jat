@@ -83,45 +83,145 @@ const PRICING = {
 // ============================================================================
 
 /**
- * Build a map of session IDs to agent names by reading .claude/agent-*.txt files.
+ * Discover all project directories that have .claude/agent-*.txt files.
+ * Scans ~/code/* for directories containing .claude/ subdirectories.
  *
- * Input: Project path (e.g., /home/user/code/project)
+ * Output: Array of project paths (e.g., ['/home/user/code/jat', '/home/user/code/chimaro'])
+ */
+async function discoverProjectPaths(): Promise<string[]> {
+	const homeDir = os.homedir();
+	const codeDirs = [
+		path.join(homeDir, 'code')
+	];
+
+	const projectPaths: string[] = [];
+
+	for (const codeDir of codeDirs) {
+		try {
+			const entries = await readdir(codeDir, { withFileTypes: true });
+			for (const entry of entries) {
+				if (entry.isDirectory()) {
+					const projectPath = path.join(codeDir, entry.name);
+					const claudeDir = path.join(projectPath, '.claude');
+					try {
+						await readdir(claudeDir);
+						projectPaths.push(projectPath);
+					} catch {
+						// No .claude directory, skip
+					}
+				}
+			}
+		} catch {
+			// Code directory doesn't exist, skip
+		}
+	}
+
+	return projectPaths;
+}
+
+/**
+ * Build a map of session IDs to agent names by reading .claude/agent-*.txt files.
+ * Now scans ALL projects in ~/code/* to find agent mappings, not just the specified project.
+ * This handles the case where agents work on different projects (e.g., BoldCloud on steelbridge
+ * while the dashboard runs from jat).
+ *
+ * Input: Project path (e.g., /home/user/code/project) - now used as primary, with fallback to all projects
  * Output: Map<sessionId, agentName>
- * State: Read-only, parses .claude/agent-*.txt files
+ * State: Read-only, parses .claude/agent-*.txt files from all projects
  */
 export async function buildSessionAgentMap(projectPath: string): Promise<Map<string, string>> {
 	const map = new Map<string, string>();
-	const claudeDir = path.join(projectPath, '.claude');
 
-	try {
-		const files = await readdir(claudeDir);
+	// First, get all project paths to scan
+	const allProjectPaths = await discoverProjectPaths();
 
-		// Filter for agent-{session_id}.txt files
-		const agentFiles = files.filter(f => f.startsWith('agent-') && f.endsWith('.txt'));
+	// Ensure the specified projectPath is first (highest priority)
+	const projectsToScan = [
+		projectPath,
+		...allProjectPaths.filter(p => p !== projectPath)
+	];
 
-		for (const file of agentFiles) {
-			// Extract session ID from filename: agent-{session_id}.txt
-			const sessionId = file.slice(6, -4); // Remove 'agent-' prefix and '.txt' suffix
+	for (const scanPath of projectsToScan) {
+		const claudeDir = path.join(scanPath, '.claude');
 
-			try {
-				const filePath = path.join(claudeDir, file);
-				const content = await readFile(filePath, 'utf-8');
-				const agentName = content.trim();
+		try {
+			const files = await readdir(claudeDir);
 
-				if (agentName) {
-					map.set(sessionId, agentName);
+			// Filter for agent-{session_id}.txt files
+			const agentFiles = files.filter(f => f.startsWith('agent-') && f.endsWith('.txt'));
+
+			for (const file of agentFiles) {
+				// Extract session ID from filename: agent-{session_id}.txt
+				const sessionId = file.slice(6, -4); // Remove 'agent-' prefix and '.txt' suffix
+
+				// Skip if we already have this session mapped (first project wins)
+				if (map.has(sessionId)) continue;
+
+				try {
+					const filePath = path.join(claudeDir, file);
+					const content = await readFile(filePath, 'utf-8');
+					const agentName = content.trim();
+
+					if (agentName) {
+						map.set(sessionId, agentName);
+					}
+				} catch (error) {
+					// Skip files that can't be read
 				}
-			} catch (error) {
-				// Skip files that can't be read
-				console.warn(`Skipping unreadable agent file: ${file}`);
 			}
+		} catch (error) {
+			// .claude directory might not exist, skip
 		}
-	} catch (error) {
-		// .claude directory might not exist yet
-		console.warn('No .claude directory found, no agent mappings available');
 	}
 
 	return map;
+}
+
+// ============================================================================
+// JSONL File Discovery
+// ============================================================================
+
+/**
+ * Find a session's JSONL file across all project directories.
+ * This handles the case where an agent is working on a different project
+ * than the dashboard is running from.
+ *
+ * Input: sessionId (string), primaryProjectPath (string)
+ * Output: Full path to the JSONL file, or null if not found
+ */
+async function findSessionJSONL(sessionId: string, primaryProjectPath: string): Promise<string | null> {
+	const homeDir = os.homedir();
+	const projectsDir = path.join(homeDir, '.claude', 'projects');
+
+	// First, try the primary project path
+	const primarySlug = primaryProjectPath.replace(/\//g, '-');
+	const primaryFile = path.join(projectsDir, primarySlug, `${sessionId}.jsonl`);
+	try {
+		await readFile(primaryFile, 'utf-8');
+		return primaryFile;
+	} catch {
+		// Not found in primary, search all projects
+	}
+
+	// Search all project directories
+	try {
+		const projectDirs = await readdir(projectsDir, { withFileTypes: true });
+		for (const dir of projectDirs) {
+			if (dir.isDirectory() && dir.name !== primarySlug) {
+				const candidateFile = path.join(projectsDir, dir.name, `${sessionId}.jsonl`);
+				try {
+					await readFile(candidateFile, 'utf-8');
+					return candidateFile;
+				} catch {
+					// Not found in this project, continue
+				}
+			}
+		}
+	} catch {
+		// Projects directory doesn't exist
+	}
+
+	return null;
 }
 
 // ============================================================================
@@ -137,10 +237,11 @@ export async function buildSessionAgentMap(projectPath: string): Promise<Map<str
  */
 export async function parseSessionUsage(sessionId: string, projectPath: string): Promise<SessionUsage | null> {
 	try {
-		// Construct path to JSONL file
-		const homeDir = os.homedir();
-		const projectSlug = projectPath.replace(/\//g, '-'); // Convert /path/to/project → -path-to-project
-		const sessionFile = path.join(homeDir, '.claude', 'projects', projectSlug, `${sessionId}.jsonl`);
+		// Find the JSONL file (may be in a different project)
+		const sessionFile = await findSessionJSONL(sessionId, projectPath);
+		if (!sessionFile) {
+			return null;
+		}
 
 		// Read file
 		const content = await readFile(sessionFile, 'utf-8');
@@ -583,9 +684,9 @@ export async function getAgentHourlyUsage(agentName: string, projectPath: string
 	// Parse each session file and aggregate
 	for (const sessionId of agentSessionIds) {
 		try {
-			const homeDir = os.homedir();
-			const projectSlug = projectPath.replace(/\//g, '-');
-			const sessionFile = path.join(homeDir, '.claude', 'projects', projectSlug, `${sessionId}.jsonl`);
+			// Find the JSONL file (may be in a different project)
+			const sessionFile = await findSessionJSONL(sessionId, projectPath);
+			if (!sessionFile) continue;
 
 			const content = await readFile(sessionFile, 'utf-8');
 			const lines = content.trim().split('\n');

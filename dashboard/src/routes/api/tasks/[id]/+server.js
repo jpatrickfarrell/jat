@@ -185,7 +185,7 @@ export async function PATCH({ params, request }) {
 
 		// Validate status (if provided, must be valid enum value)
 		if (updates.status !== undefined) {
-			const validStatuses = ['open', 'in_progress', 'blocked', 'closed'];
+			const validStatuses = ['open', 'in_progress', 'blocked', 'closed', 'reopened'];
 			if (!validStatuses.includes(updates.status)) {
 				validationErrors.push(`status: Must be one of: ${validStatuses.join(', ')}`);
 			}

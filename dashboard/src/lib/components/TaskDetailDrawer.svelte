@@ -24,6 +24,7 @@
 	import { analyzeDependencies } from '$lib/utils/dependencyUtils';
 	import { broadcastTaskEvent } from '$lib/stores/taskEvents';
 	import { getElapsedTimeColor, getFireScale, formatElapsedTime } from '$lib/config/rocketConfig';
+	import { TaskDetailSkeleton } from '$lib/components/skeleton';
 
 	// Agent interface for action state
 	interface Agent extends AgentStatusInput {
@@ -115,6 +116,11 @@
 	let messageText = $state('');
 	let isSendingMessage = $state(false);
 	let now = $state(Date.now());
+
+	// Reopen modal state
+	let showReopenModal = $state(false);
+	let reopenReason = $state('');
+	let isReopening = $state(false);
 
 	// Update timer for elapsed time display (every 30s)
 	let timerInterval: ReturnType<typeof setInterval> | null = null;
@@ -1019,17 +1025,39 @@
 	}
 
 	/**
-	 * Reopen a closed task
+	 * Show the reopen modal (prompts for reason)
 	 */
-	async function handleReopen() {
+	function handleReopen() {
 		if (!task || !taskId) return;
+		reopenReason = '';
+		showReopenModal = true;
+	}
 
-		isSaving = true;
+	// Hover state for reopen button group slide-open
+	let reopenButtonHovered = $state(false);
+
+	/**
+	 * Perform the actual reopen with reason appended to description
+	 * @param andStart - If true, also spawn a new agent session to work on the task
+	 */
+	async function confirmReopen(andStart: boolean = false) {
+		if (!task || !taskId || !reopenReason.trim()) return;
+
+		isReopening = true;
 		try {
+			// Build the updated description with reopened context
+			const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+			const reopenedNote = `\n\n---\n**[REOPENED ${timestamp}]** ${reopenReason.trim()}`;
+			const newDescription = (task.description || '') + reopenedNote;
+
 			const response = await fetch(`/api/tasks/${taskId}`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ status: 'open', assignee: null })
+				body: JSON.stringify({
+					status: 'open',
+					assignee: null,
+					description: newDescription
+				})
 			});
 
 			if (!response.ok) {
@@ -1037,14 +1065,41 @@
 				throw new Error(errorData.message || 'Failed to reopen task');
 			}
 
-			showToast('success', '✓ Task reopened');
+			// If andStart, spawn a new session to work on this task
+			if (andStart && task.project_path) {
+				try {
+					const spawnResponse = await fetch('/api/work/spawn', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							project: task.project_path,
+							taskId: taskId,
+							attach: true
+						})
+					});
+					if (!spawnResponse.ok) {
+						console.error('Failed to spawn session:', await spawnResponse.text());
+						showToast('warning', '✓ Task reopened, but failed to spawn session');
+					} else {
+						showToast('success', '✓ Task reopened and session started');
+					}
+				} catch (spawnErr) {
+					console.error('Spawn error:', spawnErr);
+					showToast('warning', '✓ Task reopened, but failed to spawn session');
+				}
+			} else {
+				showToast('success', '✓ Task reopened');
+			}
+
+			showReopenModal = false;
+			reopenReason = '';
 			await fetchTask(taskId);
 			onrefresh();
 		} catch (error: any) {
 			console.error('Reopen error:', error);
 			showToast('error', `✗ ${error.message}`);
 		} finally {
-			isSaving = false;
+			isReopening = false;
 		}
 	}
 
@@ -1456,10 +1511,8 @@
 				style="background: oklch(0.16 0.01 250);"
 			>
 				{#if loading}
-					<!-- Loading state -->
-					<div class="flex items-center justify-center py-12">
-						<span class="loading loading-spinner loading-lg"></span>
-					</div>
+					<!-- Loading state - Industrial skeleton -->
+					<TaskDetailSkeleton />
 				{:else if error}
 					<!-- Error state -->
 					<div class="alert alert-error">
@@ -2314,6 +2367,145 @@
 							Send
 						{/if}
 					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Reopen Task Modal - Industrial -->
+	{#if showReopenModal && task}
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="fixed inset-0 z-[70] flex items-center justify-center p-4"
+			style="background: oklch(0 0 0 / 0.7); backdrop-filter: blur(4px);"
+			onclick={() => { showReopenModal = false; reopenReason = ''; }}
+		>
+			<div
+				class="w-full max-w-md rounded-lg shadow-2xl overflow-hidden"
+				style="
+					background: linear-gradient(180deg, oklch(0.20 0.01 250) 0%, oklch(0.16 0.01 250) 100%);
+					border: 1px solid oklch(0.35 0.02 250);
+				"
+				onclick={(e) => e.stopPropagation()}
+			>
+				<!-- Modal Header -->
+				<div
+					class="flex items-center gap-3 px-5 py-4"
+					style="
+						background: linear-gradient(90deg, oklch(0.35 0.15 55) 0%, oklch(0.25 0.10 55) 100%);
+						border-bottom: 1px solid oklch(0.40 0.12 55);
+					"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" style="color: oklch(0.90 0.15 55);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+					</svg>
+					<div class="flex-1">
+						<h3 class="font-mono text-sm font-semibold" style="color: oklch(0.95 0.02 250);">Reopen Task</h3>
+						<p class="text-xs" style="color: oklch(0.75 0.05 55);">{taskId}</p>
+					</div>
+					<button
+						class="btn btn-sm btn-circle btn-ghost"
+						onclick={() => { showReopenModal = false; reopenReason = ''; }}
+					>
+						✕
+					</button>
+				</div>
+
+				<!-- Modal Body -->
+				<div class="p-5">
+					<p class="text-sm mb-4" style="color: oklch(0.70 0.02 250);">
+						This task was previously completed. What additional work is needed?
+					</p>
+
+					<div class="form-control">
+						<label class="label">
+							<span class="label-text font-mono text-xs uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+								Reason for Reopening <span class="text-warning">*</span>
+							</span>
+						</label>
+						<textarea
+							class="textarea font-mono text-sm w-full"
+							style="
+								background: oklch(0.18 0.01 250);
+								border: 1px solid oklch(0.35 0.02 250);
+								color: oklch(0.80 0.02 250);
+								min-height: 100px;
+							"
+							placeholder="e.g., Add Alt+C shortcut for complete action"
+							bind:value={reopenReason}
+							disabled={isReopening}
+						></textarea>
+						<p class="text-xs mt-2" style="color: oklch(0.45 0.02 250);">
+							This will be appended to the task description for agent context.
+						</p>
+					</div>
+				</div>
+
+				<!-- Modal Footer -->
+				<div
+					class="flex items-center justify-end gap-2 px-5 py-4"
+					style="
+						background: oklch(0.18 0.01 250);
+						border-top: 1px solid oklch(0.30 0.02 250);
+					"
+				>
+					<button
+						class="btn btn-sm btn-ghost"
+						onclick={() => { showReopenModal = false; reopenReason = ''; }}
+						disabled={isReopening}
+					>
+						Cancel
+					</button>
+					<!-- Slide-open button group -->
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
+						class="flex items-center overflow-hidden rounded-lg"
+						style="border: 1px solid oklch(0.60 0.15 55);"
+						onmouseenter={() => reopenButtonHovered = true}
+						onmouseleave={() => reopenButtonHovered = false}
+					>
+						<!-- Primary: Reopen button -->
+						<button
+							class="btn btn-sm gap-2 rounded-none border-0"
+							style="
+								background: linear-gradient(135deg, oklch(0.55 0.15 55) 0%, oklch(0.45 0.18 45) 100%);
+								color: oklch(0.95 0.02 250);
+							"
+							onclick={() => confirmReopen(false)}
+							disabled={isReopening || !reopenReason.trim()}
+						>
+							{#if isReopening}
+								<span class="loading loading-spinner loading-xs"></span>
+								Reopening...
+							{:else}
+								<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+								</svg>
+								Reopen
+							{/if}
+						</button>
+						<!-- Secondary: Slide-out "& Start" button -->
+						<button
+							class="btn btn-sm gap-1 rounded-none border-0 transition-all duration-200 ease-out"
+							style="
+								background: linear-gradient(135deg, oklch(0.45 0.18 145) 0%, oklch(0.35 0.15 145) 100%);
+								color: oklch(0.95 0.02 250);
+								border-left: 1px solid oklch(0.50 0.10 55);
+								max-width: {reopenButtonHovered ? '120px' : '0px'};
+								padding: {reopenButtonHovered ? '0.5rem 0.75rem' : '0.5rem 0'};
+								opacity: {reopenButtonHovered ? '1' : '0'};
+							"
+							onclick={() => confirmReopen(true)}
+							disabled={isReopening || !reopenReason.trim()}
+							title="Reopen task and spawn a new agent session"
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+							</svg>
+							<span class="whitespace-nowrap text-xs font-medium">& Start</span>
+						</button>
+					</div>
 				</div>
 			</div>
 		</div>

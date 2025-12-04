@@ -11,8 +11,9 @@
 	import TopBar from '$lib/components/TopBar.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import { getTaskCountByProject } from '$lib/utils/projectUtils';
-	import { initAudioOnInteraction, areSoundsEnabled, enableSounds, disableSounds } from '$lib/utils/soundEffects';
+	import { initAudioOnInteraction, areSoundsEnabled, enableSounds, disableSounds, playNewTaskChime } from '$lib/utils/soundEffects';
 	import { initSessionEvents, closeSessionEvents, lastSessionEvent } from '$lib/stores/sessionEvents';
+	import { connectTaskEvents, disconnectTaskEvents, lastTaskEvent } from '$lib/stores/taskEvents';
 	import { availableProjects, openTaskDrawer } from '$lib/stores/drawerStore';
 	import { hoveredSessionName } from '$lib/stores/hoveredSession';
 	import { get } from 'svelte/store';
@@ -28,6 +29,17 @@
 	let activeAgentCount = $state(0);
 	let totalAgentCount = $state(0);
 	let activeAgents = $state<string[]>([]);
+
+	// Agent state counts for badge display
+	interface StateCounts {
+		needsInput: number;
+		working: number;
+		review: number;
+		completed: number;
+		starting: number;
+		idle: number;
+	}
+	let stateCounts = $state<StateCounts>({ needsInput: 0, working: 0, review: 0, completed: 0, starting: 0, idle: 0 });
 
 	// Ready task count and list for Swarm button dropdown
 	let readyTaskCount = $state(0);
@@ -53,6 +65,23 @@
 	}
 	let multiProjectData = $state<MultiProjectDataPoint[]>([]);
 	let projectColors = $state<Record<string, string>>({});
+
+	// React to real-time task events from SSE (plays sound and refreshes data instantly)
+	$effect(() => {
+		const event = $lastTaskEvent;
+		if (!event) return;
+
+		if (event.type === 'task-change') {
+			// Play sound for new tasks
+			if (event.newTasks && event.newTasks.length > 0) {
+				playNewTaskChime();
+			}
+
+			// Refresh task data immediately
+			loadAllTasks();
+			loadReadyTaskCount();
+		}
+	});
 
 	// Derived project data
 	// Use config projects (from JAT config) with "All Projects" prepended
@@ -115,22 +144,29 @@
 		}
 	}
 
-	// Initialize theme-change and load all tasks
+	// Initialize theme-change, SSE, and load all tasks
 	onMount(() => {
 		themeChange(false);
 		initSessionEvents(); // Initialize cross-page session events
-		Promise.all([loadAllTasks(), loadSparklineData(), loadReadyTaskCount(), loadConfigProjects()]);
+		connectTaskEvents(); // Connect to real-time task events SSE
+		Promise.all([loadAllTasks(), loadSparklineData(), loadReadyTaskCount(), loadConfigProjects(), loadStateCounts()]);
 
-		// Set up polling for token usage, sparkline, and ready tasks (every 30 seconds)
-		const interval = setInterval(() => {
-			loadAllTasks();
+		// Set up polling for token usage and sparkline (every 30 seconds)
+		// Note: Task data is now refreshed via SSE events, but we keep polling for sparkline
+		const sparklineInterval = setInterval(() => {
 			loadSparklineData();
-			loadReadyTaskCount();
 		}, 30_000);
 
+		// Poll for session state counts more frequently (every 5 seconds) for responsive badge updates
+		const stateCountsInterval = setInterval(() => {
+			loadStateCounts();
+		}, 5_000);
+
 		return () => {
-			clearInterval(interval);
+			clearInterval(sparklineInterval);
+			clearInterval(stateCountsInterval);
 			closeSessionEvents();
+			disconnectTaskEvents();
 		};
 	});
 
@@ -141,6 +177,7 @@
 			// Refresh data when a session is killed or spawned
 			loadAllTasks();
 			loadReadyTaskCount();
+			loadStateCounts();
 		}
 	});
 
@@ -175,6 +212,20 @@
 		} catch (error) {
 			console.error('Failed to load tasks:', error);
 			allTasks = [];
+		}
+	}
+
+	// Fetch agent session state counts for badge display
+	async function loadStateCounts() {
+		try {
+			const response = await fetch('/api/work?lines=50');
+			const data = await response.json();
+
+			if (data.stateCounts) {
+				stateCounts = data.stateCounts;
+			}
+		} catch (error) {
+			console.error('Failed to load state counts:', error);
 		}
 	}
 
@@ -290,6 +341,14 @@
 			const sessionName = get(hoveredSessionName);
 			if (sessionName) {
 				try {
+					// Send Ctrl+C first to clear any stray characters in input
+					await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ type: 'ctrl-c' })
+					});
+					await new Promise((r) => setTimeout(r, 50));
+					// Send the command text (API appends Enter for type='text')
 					const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, {
 						method: 'POST',
 						headers: { 'Content-Type': 'application/json' },
@@ -300,6 +359,14 @@
 					});
 					if (!response.ok) {
 						console.error('Failed to send complete command:', await response.text());
+					} else {
+						// Send extra Enter after delay - Claude Code needs double Enter for slash commands
+						await new Promise((r) => setTimeout(r, 100));
+						await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ type: 'enter' })
+						});
 					}
 				} catch (err) {
 					console.error('Error sending complete command:', err);
@@ -356,6 +423,7 @@
 			{activeAgentCount}
 			{totalAgentCount}
 			{activeAgents}
+			{stateCounts}
 			{tokensToday}
 			{costToday}
 			{sparklineData}

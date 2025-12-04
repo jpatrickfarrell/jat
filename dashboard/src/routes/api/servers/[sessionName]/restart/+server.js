@@ -108,21 +108,41 @@ export async function POST({ params }) {
 		// Use detected port first, then config port as fallback
 		const port = detectedPort || configPort;
 
-		// Send Ctrl+C to stop the current server
-		await execAsync(`tmux send-keys -t "${sessionName}" C-c`);
-
-		// Wait for graceful shutdown
-		await new Promise((resolve) => setTimeout(resolve, 1500));
-
-		// Clear the terminal
-		await execAsync(`tmux send-keys -t "${sessionName}" "clear" Enter`);
-		await new Promise((resolve) => setTimeout(resolve, 100));
-
 		// Build the restart command with port if available
 		const portArg = port ? ` -- --port ${port}` : '';
 		const restartCommand = `npm run dev${portArg}`;
 
-		// Re-run the server command
+		// Kill the existing session (Ctrl+C may cause it to exit entirely)
+		try {
+			await execAsync(`tmux kill-session -t "${sessionName}" 2>/dev/null`);
+		} catch {
+			// Session may already be dead
+		}
+
+		// Wait a moment for cleanup
+		await new Promise((resolve) => setTimeout(resolve, 500));
+
+		// Determine the correct working directory
+		// Check if dashboard subdirectory exists with package.json
+		let workDir = projectPath;
+		try {
+			const { stdout: checkResult } = await execAsync(
+				`test -f "${projectPath}/dashboard/package.json" && echo "dashboard" || echo "root"`
+			);
+			if (checkResult.trim() === 'dashboard') {
+				workDir = `${projectPath}/dashboard`;
+			}
+		} catch {
+			// Use projectPath as-is
+		}
+
+		// Create a new session with a shell (so it survives future restarts)
+		await execAsync(`tmux new-session -d -s "${sessionName}" -c "${workDir}"`);
+
+		// Wait for session to be ready
+		await new Promise((resolve) => setTimeout(resolve, 200));
+
+		// Send the dev command
 		await execAsync(`tmux send-keys -t "${sessionName}" "${restartCommand}" Enter`);
 
 		// Wait a moment and get output

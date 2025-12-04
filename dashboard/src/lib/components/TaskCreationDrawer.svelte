@@ -44,6 +44,9 @@
 			const project = get(selectedDrawerProject);
 			if (project) {
 				formData.project = project;
+			} else if (dynamicProjects.length > 0 && !formData.project) {
+				// Default to first project if none selected (e.g., opened via Alt+N)
+				formData.project = dynamicProjects[0];
 			}
 		}
 	});
@@ -820,15 +823,15 @@
 				submitWithAction('new');
 			}
 		}
-		// Alt + Enter = Save and Start (spawn agent)
-		else if (event.altKey && event.key === 'Enter') {
+		// Cmd/Ctrl + Enter = Save and Start (spawn agent) - primary action
+		else if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
 			event.preventDefault();
 			if (!isSubmitting) {
 				submitWithAction('start');
 			}
 		}
-		// Cmd/Ctrl + Enter = Save and Close (default)
-		else if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+		// Alt + Enter = Save and Close
+		else if (event.altKey && event.key === 'Enter') {
 			event.preventDefault();
 			if (!isSubmitting) {
 				submitWithAction('close');
@@ -1106,35 +1109,27 @@
 						</div>
 					</div>
 
-					<!-- Project (Pre-selected from TopBar dropdown) - Industrial -->
+					<!-- Project - Industrial -->
 					<div class="form-control">
-						<label class="label">
+						<label class="label" for="task-project">
 							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
 								Project
+								<span class="text-error">*</span>
 							</span>
 						</label>
-						<div
-							class="flex items-center gap-2 px-4 py-3 rounded-lg"
-							style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.35 0.02 250);"
+						<select
+							id="task-project"
+							class="select w-full font-mono"
+							style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.80 0.02 250);"
+							bind:value={formData.project}
+							disabled={isSubmitting}
+							required
 						>
-							<span
-								class="w-2.5 h-2.5 rounded-full flex-shrink-0"
-								style="background: oklch(0.70 0.18 145);"
-							></span>
-							<span class="font-mono text-sm font-medium" style="color: oklch(0.85 0.02 250);">
-								{formData.project || 'No project selected'}
-							</span>
-							{#if formData.project}
-								<span class="badge badge-xs ml-auto" style="background: oklch(0.30 0.10 145 / 0.3); color: oklch(0.75 0.15 145); border: 1px solid oklch(0.50 0.15 145 / 0.3);">
-									Selected
-								</span>
-							{/if}
-						</div>
-						<label class="label">
-							<span class="label-text-alt" style="color: oklch(0.45 0.02 250);">
-								Project selected from +Task dropdown
-							</span>
-						</label>
+							<option value="" disabled>Select a project</option>
+							{#each dynamicProjects as project}
+								<option value={project}>{project}</option>
+							{/each}
+						</select>
 					</div>
 
 					<!-- Labels (Optional) - Industrial -->
@@ -1451,7 +1446,7 @@
 				<div class="flex items-center justify-between">
 					<!-- Keyboard shortcuts hint -->
 					<div class="text-xs font-mono hidden sm:block" style="color: oklch(0.45 0.02 250);">
-						⌘↵ Save · ⌥↵ Start · ⌘⇧↵ New
+						⌘↵ Start · ⌥↵ Save · ⌘⇧↵ New
 					</div>
 
 					<div class="flex gap-3">
@@ -1514,7 +1509,7 @@
 												<span class="w-4"></span>
 											{/if}
 											Save
-											<span class="ml-auto text-xs" style="color: oklch(0.50 0.02 250);">⌘↵</span>
+											<span class="ml-auto text-xs" style="color: oklch(0.50 0.02 250);">⌥↵</span>
 										</button>
 									</li>
 									<li>
@@ -1552,7 +1547,7 @@
 												<span class="w-4"></span>
 											{/if}
 											Save & Start
-											<span class="ml-auto text-xs" style="color: oklch(0.50 0.02 250);">⌥↵</span>
+											<span class="ml-auto text-xs" style="color: oklch(0.50 0.02 250);">⌘↵</span>
 										</button>
 									</li>
 								</ul>

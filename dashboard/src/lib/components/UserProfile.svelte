@@ -37,6 +37,13 @@
 	// Sound settings
 	let soundsEnabled = $state(false);
 
+	// Help modal
+	let showHelpModal = $state(false);
+
+	// Keyboard icon path
+	const keyboardIcon = 'M6.75 3a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 006.75 21h10.5a2.25 2.25 0 002.25-2.25V5.25A2.25 2.25 0 0017.25 3H6.75zm0 1.5h10.5a.75.75 0 01.75.75v13.5a.75.75 0 01-.75.75H6.75a.75.75 0 01-.75-.75V5.25a.75.75 0 01.75-.75z';
+	const questionIcon = 'M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z';
+
 	// Terminal height settings (global user preference)
 	const TERMINAL_HEIGHT_KEY = 'user-terminal-height';
 	const DEFAULT_TERMINAL_HEIGHT = 50;
@@ -111,11 +118,31 @@
 			border: 1px solid oklch(0.35 0.02 250);
 		"
 	>
-		<!-- User Info -->
-		<!-- <li class="menu-title">
-			<span class="font-semibold" style="color: oklch(0.85 0.02 250);">{user.name}</span>
-			<span class="text-xs" style="color: oklch(0.55 0.02 250);">{user.email}</span>
-		</li> -->
+		<!-- Help & Shortcuts -->
+		<li>
+			<button
+				onclick={() => showHelpModal = true}
+				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors hover:bg-base-300"
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke-width="1.5"
+					stroke="currentColor"
+					class="w-4 h-4"
+					style="color: oklch(0.70 0.18 240);"
+				>
+					<path stroke-linecap="round" stroke-linejoin="round" d={questionIcon} />
+				</svg>
+				<span class="text-xs flex-1 text-left" style="color: oklch(0.70 0.02 250);">
+					Help & Shortcuts
+				</span>
+				<kbd class="kbd kbd-xs" style="background: oklch(0.25 0.02 250); color: oklch(0.60 0.02 250);">?</kbd>
+			</button>
+		</li>
+
+		<div class="divider my-1" style="height: 1px; background: oklch(0.30 0.02 250);"></div>
 
 		<!-- Theme Selector -->
 
@@ -191,3 +218,144 @@
 		</li>
 	</ul>
 </div>
+
+<!-- Help Modal -->
+{#if showHelpModal}
+	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center"
+		style="background: oklch(0 0 0 / 0.6); backdrop-filter: blur(4px);"
+		onclick={() => showHelpModal = false}
+	>
+		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<div
+			class="relative w-full max-w-lg mx-4 rounded-lg shadow-2xl overflow-hidden"
+			style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250);"
+			onclick={(e) => e.stopPropagation()}
+		>
+			<!-- Header -->
+			<div class="flex items-center justify-between px-5 py-4" style="border-bottom: 1px solid oklch(0.30 0.02 250);">
+				<h2 class="text-lg font-semibold" style="color: oklch(0.90 0.02 250);">
+					Help & Keyboard Shortcuts
+				</h2>
+				<button
+					onclick={() => showHelpModal = false}
+					class="p-1 rounded hover:bg-base-300 transition-colors"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5" style="color: oklch(0.60 0.02 250);">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+				</button>
+			</div>
+
+			<!-- Content -->
+			<div class="px-5 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
+				<!-- Global Shortcuts -->
+				<div>
+					<h3 class="text-sm font-semibold mb-2" style="color: oklch(0.75 0.18 240);">Global Shortcuts</h3>
+					<div class="space-y-1.5">
+						<div class="flex items-center justify-between">
+							<span class="text-sm" style="color: oklch(0.70 0.02 250);">New Task</span>
+							<kbd class="kbd kbd-sm" style="background: oklch(0.25 0.02 250); color: oklch(0.80 0.02 250);">Alt + N</kbd>
+						</div>
+						<div class="flex items-center justify-between">
+							<span class="text-sm" style="color: oklch(0.70 0.02 250);">Attach to Hovered Session</span>
+							<kbd class="kbd kbd-sm" style="background: oklch(0.25 0.02 250); color: oklch(0.80 0.02 250);">Alt + A</kbd>
+						</div>
+						<div class="flex items-center justify-between">
+							<span class="text-sm" style="color: oklch(0.70 0.02 250);">Spawn New Session</span>
+							<kbd class="kbd kbd-sm" style="background: oklch(0.25 0.02 250); color: oklch(0.80 0.02 250);">Alt + S</kbd>
+						</div>
+					</div>
+				</div>
+
+				<!-- Task Creation Shortcuts -->
+				<div>
+					<h3 class="text-sm font-semibold mb-2" style="color: oklch(0.75 0.18 240);">Task Creation Drawer</h3>
+					<div class="space-y-1.5">
+						<div class="flex items-center justify-between">
+							<span class="text-sm" style="color: oklch(0.70 0.02 250);">Save & Start Agent</span>
+							<kbd class="kbd kbd-sm" style="background: oklch(0.25 0.02 250); color: oklch(0.80 0.02 250);">Ctrl + Enter</kbd>
+						</div>
+						<div class="flex items-center justify-between">
+							<span class="text-sm" style="color: oklch(0.70 0.02 250);">Save & Close</span>
+							<kbd class="kbd kbd-sm" style="background: oklch(0.25 0.02 250); color: oklch(0.80 0.02 250);">Alt + Enter</kbd>
+						</div>
+						<div class="flex items-center justify-between">
+							<span class="text-sm" style="color: oklch(0.70 0.02 250);">Save & New</span>
+							<kbd class="kbd kbd-sm" style="background: oklch(0.25 0.02 250); color: oklch(0.80 0.02 250);">Ctrl + Shift + Enter</kbd>
+						</div>
+						<div class="flex items-center justify-between">
+							<span class="text-sm" style="color: oklch(0.70 0.02 250);">Close Drawer</span>
+							<kbd class="kbd kbd-sm" style="background: oklch(0.25 0.02 250); color: oklch(0.80 0.02 250);">Escape</kbd>
+						</div>
+					</div>
+				</div>
+
+				<!-- Session Card Tips -->
+				<div>
+					<h3 class="text-sm font-semibold mb-2" style="color: oklch(0.75 0.18 240);">Session Cards</h3>
+					<ul class="text-sm space-y-1" style="color: oklch(0.65 0.02 250);">
+						<li class="flex items-start gap-2">
+							<span style="color: oklch(0.50 0.02 250);">•</span>
+							<span>Hover over a session card, then press <kbd class="kbd kbd-xs">Alt + A</kbd> to attach terminal</span>
+						</li>
+						<li class="flex items-start gap-2">
+							<span style="color: oklch(0.50 0.02 250);">•</span>
+							<span>Click the status badge for quick actions (Complete, Kill, Attach)</span>
+						</li>
+						<li class="flex items-start gap-2">
+							<span style="color: oklch(0.50 0.02 250);">•</span>
+							<span>Drag the right edge to resize session cards</span>
+						</li>
+					</ul>
+				</div>
+
+				<!-- Voice Input -->
+				<div>
+					<h3 class="text-sm font-semibold mb-2" style="color: oklch(0.75 0.18 240);">Voice Input</h3>
+					<ul class="text-sm space-y-1" style="color: oklch(0.65 0.02 250);">
+						<li class="flex items-start gap-2">
+							<span style="color: oklch(0.50 0.02 250);">•</span>
+							<span>Click the microphone icon to start voice recording</span>
+						</li>
+						<li class="flex items-start gap-2">
+							<span style="color: oklch(0.50 0.02 250);">•</span>
+							<span>Recording uses local whisper.cpp (privacy-first, no data sent externally)</span>
+						</li>
+					</ul>
+				</div>
+
+				<!-- Links -->
+				<div class="pt-2" style="border-top: 1px solid oklch(0.30 0.02 250);">
+					<h3 class="text-sm font-semibold mb-2" style="color: oklch(0.75 0.18 240);">Resources</h3>
+					<div class="flex flex-wrap gap-2">
+						<a
+							href="https://github.com/anthropics/claude-code/issues"
+							target="_blank"
+							rel="noopener noreferrer"
+							class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-colors"
+							style="background: oklch(0.25 0.02 250); color: oklch(0.70 0.02 250);"
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+							</svg>
+							Report Issue
+						</a>
+					</div>
+				</div>
+			</div>
+
+			<!-- Footer -->
+			<div class="px-5 py-3 flex justify-end" style="border-top: 1px solid oklch(0.30 0.02 250); background: oklch(0.16 0.01 250);">
+				<button
+					onclick={() => showHelpModal = false}
+					class="px-4 py-1.5 text-sm rounded transition-colors"
+					style="background: oklch(0.30 0.02 250); color: oklch(0.80 0.02 250);"
+				>
+					Close
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}

@@ -56,6 +56,7 @@
 		getServerStateVisual
 	} from '$lib/config/statusColors';
 	import HorizontalResizeHandle from '$lib/components/HorizontalResizeHandle.svelte';
+	import { setHoveredSession } from '$lib/stores/hoveredSession';
 
 	// Props - aligned with workSessions.svelte.ts types
 	interface Task {
@@ -855,11 +856,17 @@
 		}, STREAM_DEBOUNCE_MS);
 	}
 
-	// Focus input when hovering over the card
+	// Focus input when hovering over the card + track hovered session for keyboard shortcuts
 	function handleCardMouseEnter() {
 		if (inputRef && !sendingInput) {
 			inputRef.focus();
 		}
+		// Track hovered session for Alt+A keyboard shortcut
+		setHoveredSession(sessionName);
+	}
+
+	function handleCardMouseLeave() {
+		setHoveredSession(null);
 	}
 
 	// Attached images (pending upload)
@@ -1187,13 +1194,14 @@
 	 * States:
 	 * - 'starting': Task assigned, agent initializing (no [JAT:WORKING] marker yet)
 	 * - 'working': Has active in_progress task with [JAT:WORKING] marker
+	 * - 'compacting': Context compaction in progress (via PreCompact hook)
 	 * - 'needs-input': Agent blocked, needs user to provide clarification (orange)
 	 * - 'ready-for-review': Work done, awaiting user review (yellow)
 	 * - 'completing': User triggered /jat:complete, agent running completion steps (teal)
 	 * - 'completed': Task was closed, showing completion summary (green)
 	 * - 'idle': No task, new session (gray)
 	 */
-	type SessionState = 'starting' | 'working' | 'needs-input' | 'ready-for-review' | 'completing' | 'completed' | 'idle';
+	type SessionState = 'starting' | 'working' | 'compacting' | 'needs-input' | 'ready-for-review' | 'completing' | 'completed' | 'idle';
 
 	const sessionState = $derived.by((): SessionState => {
 		// Check for markers in recent output
@@ -1251,6 +1259,10 @@
 			/✅\s*Marking task complete/i,
 			/Committing changes/i,
 		]);
+		const compactingPos = findLastPos([
+			// Triggered by PreCompact hook - context compaction in progress
+			/\[JAT:COMPACTING\]/,
+		]);
 
 		// Boolean flags for no-task state checking
 		const hasCompletionMarker = /\[JAT:IDLE\]/.test(recentOutput) || /✅\s*TASK COMPLETE/.test(recentOutput);
@@ -1266,6 +1278,7 @@
 			const positions = [
 				{ state: 'needs-input' as const, pos: needsInputPos },
 				{ state: 'working' as const, pos: workingPos },
+				{ state: 'compacting' as const, pos: compactingPos },
 				{ state: 'ready-for-review' as const, pos: reviewPos },
 				{ state: 'completing' as const, pos: completingPos },
 			].filter(p => p.pos >= 0);
@@ -2034,6 +2047,7 @@
 		in:fly={{ x: 50, duration: 300, delay: 50 }}
 		out:fade={{ duration: 200 }}
 		onmouseenter={handleCardMouseEnter}
+		onmouseleave={handleCardMouseLeave}
 	>
 		<!-- Horizontal resize handle on right edge -->
 		<HorizontalResizeHandle onResize={handleManualResize} onResizeEnd={handleResizeEnd} />

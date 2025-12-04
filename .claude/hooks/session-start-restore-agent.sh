@@ -27,13 +27,16 @@ echo "$SESSION_ID" > "/tmp/claude-session-${PPID}.txt"
 
 AGENT_FILE="$CLAUDE_DIR/agent-${SESSION_ID}.txt"
 
-# If agent file already exists for this session, nothing to do
+# Track if we restored or already had agent
+AGENT_NAME=""
+
+# If agent file already exists for this session, read the name
 if [[ -f "$AGENT_FILE" ]]; then
-    exit 0
+    AGENT_NAME=$(cat "$AGENT_FILE" | tr -d '\n')
 fi
 
 # Check if we have a saved agent identity to restore (window-specific)
-if [[ -f "$PERSISTENT_AGENT_FILE" ]]; then
+if [[ -z "$AGENT_NAME" ]] && [[ -f "$PERSISTENT_AGENT_FILE" ]]; then
     AGENT_NAME=$(cat "$PERSISTENT_AGENT_FILE" | tr -d '\n')
 
     if [[ -n "$AGENT_NAME" ]]; then
@@ -50,8 +53,15 @@ if [[ -f "$PERSISTENT_AGENT_FILE" ]]; then
 
         # Log for debugging
         echo "[SessionStart] Restored agent: $AGENT_NAME for session $SESSION_ID (WINDOWID=$WINDOW_KEY)" >> "$CLAUDE_DIR/.agent-activity.log"
+    fi
+fi
 
-        # Don't clean up - keep for future /clear cycles
-        # rm -f "$PERSISTENT_AGENT_FILE"
+# Output working marker if agent has an in_progress task
+# This re-establishes dashboard state after compaction
+if [[ -n "$AGENT_NAME" ]] && command -v bd &>/dev/null; then
+    TASK_ID=$(bd list --json 2>/dev/null | jq -r --arg a "$AGENT_NAME" '.[] | select(.assignee == $a and .status == "in_progress") | .id' 2>/dev/null | head -1)
+    if [[ -n "$TASK_ID" ]]; then
+        echo "[JAT:WORKING task=$TASK_ID]"
+        echo "[SessionStart] Re-established working state for task $TASK_ID" >> "$CLAUDE_DIR/.agent-activity.log"
     fi
 fi

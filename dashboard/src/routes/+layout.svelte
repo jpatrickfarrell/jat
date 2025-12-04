@@ -13,7 +13,9 @@
 	import { getTaskCountByProject } from '$lib/utils/projectUtils';
 	import { initAudioOnInteraction, areSoundsEnabled, enableSounds, disableSounds } from '$lib/utils/soundEffects';
 	import { initSessionEvents, closeSessionEvents, lastSessionEvent } from '$lib/stores/sessionEvents';
-	import { availableProjects } from '$lib/stores/drawerStore';
+	import { availableProjects, openTaskDrawer } from '$lib/stores/drawerStore';
+	import { hoveredSessionName } from '$lib/stores/hoveredSession';
+	import { get } from 'svelte/store';
 
 	let { children } = $props();
 
@@ -251,7 +253,64 @@
 		goto(url.toString(), { replaceState: true, noScroll: true, keepFocus: true });
 	}
 
+	// Global keyboard shortcuts
+	async function handleGlobalKeydown(event: KeyboardEvent) {
+		// Alt+N = Open new task drawer (works from anywhere, even in inputs)
+		if (event.altKey && event.code === 'KeyN') {
+			event.preventDefault();
+			openTaskDrawer();
+			return;
+		}
+
+		// Alt+A = Attach terminal to hovered session
+		if (event.altKey && event.code === 'KeyA') {
+			event.preventDefault();
+			const sessionName = get(hoveredSessionName);
+			if (sessionName) {
+				try {
+					const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}/attach`, {
+						method: 'POST'
+					});
+					if (!response.ok) {
+						console.error('Failed to attach to session:', await response.text());
+					}
+				} catch (err) {
+					console.error('Error attaching to session:', err);
+				}
+			}
+			return;
+		}
+
+		// Alt+S = Spawn new session for first project (most recent)
+		if (event.altKey && event.code === 'KeyS') {
+			event.preventDefault();
+			// Get project path from /api/projects (sorted by recent activity)
+			try {
+				const projectsResponse = await fetch('/api/projects?visible=true&stats=true');
+				const projectsData = await projectsResponse.json();
+				const firstProject = projectsData.projects?.[0];
+				if (firstProject?.path) {
+					const response = await fetch('/api/work/spawn', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							project: firstProject.path,
+							attach: true
+						})
+					});
+					if (!response.ok) {
+						console.error('Failed to spawn session:', await response.text());
+					}
+				}
+			} catch (err) {
+				console.error('Error spawning session:', err);
+			}
+			return;
+		}
+	}
 </script>
+
+<svelte:window onkeydown={handleGlobalKeydown} />
 
 <svelte:head>
 	<link rel="icon" href={favicon} />

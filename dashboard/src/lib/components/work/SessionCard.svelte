@@ -247,12 +247,9 @@
 	async function clearQuestionData() {
 		if (!sessionName) return;
 		try {
-			await fetch(
-				`/api/work/${encodeURIComponent(sessionName)}/question`,
-				{
-					method: "DELETE",
-				},
-			);
+			await fetch(`/api/work/${encodeURIComponent(sessionName)}/question`, {
+				method: "DELETE",
+			});
 			apiQuestionData = null;
 		} catch (error) {
 			// Silently fail
@@ -376,9 +373,7 @@
 				typeof ResizeObserver !== "undefined" &&
 				!resizeObserverSetup
 			) {
-				resizeObserverInstance = new ResizeObserver(
-					handleContainerResize,
-				);
+				resizeObserverInstance = new ResizeObserver(handleContainerResize);
 				resizeObserverInstance.observe(scrollContainerRef);
 				resizeObserverSetup = true;
 
@@ -734,8 +729,7 @@
 		if (!el) return;
 
 		// Check if user is near bottom (within 50px)
-		const isNearBottom =
-			el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+		const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
 
 		if (isNearBottom) {
 			// User scrolled to bottom, re-enable auto-scroll
@@ -765,7 +759,9 @@
 			// Auto-reset after 30 seconds if operation hangs
 			sendingInputTimeout = setTimeout(() => {
 				if (sendingInput) {
-					console.warn('[SessionCard] sendingInput timeout - auto-resetting after 30s');
+					console.warn(
+						"[SessionCard] sendingInput timeout - auto-resetting after 30s",
+					);
 					setSendingInput(false);
 				}
 				sendingInputTimeout = null;
@@ -1122,9 +1118,7 @@
 
 				// Check if this line is an option (with ❯ cursor or aligned unselected)
 				// The ❯ may have leading whitespace, so we check for it anywhere in the line start
-				const selectedMatch = line.match(
-					/^\s*❯\s+(.+?)(?:\s{2,}(.+))?$/,
-				);
+				const selectedMatch = line.match(/^\s*❯\s+(.+?)(?:\s{2,}(.+))?$/);
 				// Unselected options have spaces where ❯ would be (typically 2+ spaces before text)
 				const unselectedMatch = line.match(
 					/^\s{2,}([^\s❯].+?)(?:\s{2,}(.+))?$/,
@@ -1201,9 +1195,7 @@
 
 		// Check for structured JAT markers (most reliable detection)
 		const readyMatch = recentOutput.match(/\[JAT:READY actions=([^\]]+)\]/);
-		const workingMatch = recentOutput.match(
-			/\[JAT:WORKING task=([^\]]+)\]/,
-		);
+		const workingMatch = recentOutput.match(/\[JAT:WORKING task=([^\]]+)\]/);
 		const idleMatch = recentOutput.match(/\[JAT:IDLE actions=([^\]]+)\]/);
 
 		// If WORKING marker is more recent than READY/IDLE, agent is actively working
@@ -1317,9 +1309,7 @@
 		const findLastPos = (patterns: RegExp[]): number => {
 			let maxPos = -1;
 			for (const pattern of patterns) {
-				const match = recentOutput.match(
-					new RegExp(pattern.source, "g"),
-				);
+				const match = recentOutput.match(new RegExp(pattern.source, "g"));
 				if (match) {
 					const lastMatch = match[match.length - 1];
 					const pos = recentOutput.lastIndexOf(lastMatch);
@@ -1501,9 +1491,7 @@
 
 			if (response.ok) {
 				const result = await response.json();
-				console.log(
-					`[SessionCard] Session log captured: ${result.filename}`,
-				);
+				console.log(`[SessionCard] Session log captured: ${result.filename}`);
 				logCaptured = true;
 			} else {
 				const error = await response.json();
@@ -1536,10 +1524,7 @@
 		}
 
 		// Detect transition to 'completed' state - celebration and log capture
-		if (
-			sessionState === "completed" &&
-			previousSessionState !== "completed"
-		) {
+		if (sessionState === "completed" && previousSessionState !== "completed") {
 			// Capture session log (all modes)
 			if (!logCaptured) {
 				captureSessionLog();
@@ -1606,8 +1591,7 @@
 		if (autoScroll && !userScrolledUp && scrollContainerRef && output) {
 			requestAnimationFrame(() => {
 				if (scrollContainerRef) {
-					scrollContainerRef.scrollTop =
-						scrollContainerRef.scrollHeight;
+					scrollContainerRef.scrollTop = scrollContainerRef.scrollHeight;
 				}
 			});
 		}
@@ -1672,17 +1656,11 @@
 			case "attach":
 				if (sessionName) {
 					try {
-						await fetch(
-							`/api/work/${encodeURIComponent(sessionName)}/attach`,
-							{
-								method: "POST",
-							},
-						);
+						await fetch(`/api/work/${encodeURIComponent(sessionName)}/attach`, {
+							method: "POST",
+						});
 					} catch (e) {
-						console.error(
-							"[SessionCard] Failed to attach terminal:",
-							e,
-						);
+						console.error("[SessionCard] Failed to attach terminal:", e);
 					}
 				}
 				break;
@@ -1738,17 +1716,11 @@
 			case "attach":
 				if (sessionName) {
 					try {
-						await fetch(
-							`/api/work/${encodeURIComponent(sessionName)}/attach`,
-							{
-								method: "POST",
-							},
-						);
+						await fetch(`/api/work/${encodeURIComponent(sessionName)}/attach`, {
+							method: "POST",
+						});
 					} catch (e) {
-						console.error(
-							"[SessionCard:server] Failed to attach terminal:",
-							e,
-						);
+						console.error("[SessionCard:server] Failed to attach terminal:", e);
 					}
 				}
 				break;
@@ -1811,9 +1783,7 @@
 			const question = detectedQuestion;
 			if (!question) return;
 
-			const currentIndex = question.options.findIndex(
-				(o) => o.isSelected,
-			);
+			const currentIndex = question.options.findIndex((o) => o.isSelected);
 			const targetIndex = option.index;
 
 			// Calculate navigation from current position
@@ -1866,11 +1836,7 @@
 			const imagePaths: string[] = [];
 			for (const img of attachedImages) {
 				const formData = new FormData();
-				formData.append(
-					"image",
-					img.blob,
-					`pasted-image-${Date.now()}.png`,
-				);
+				formData.append("image", img.blob, `pasted-image-${Date.now()}.png`);
 				formData.append("sessionName", sessionName);
 
 				const response = await fetch("/api/work/upload-image", {
@@ -2137,16 +2103,24 @@
 			<span class="opacity-40">·</span>
 		{/if}
 		{#if usageLoading}
-			<div class="skeleton w-8 h-3 rounded" style="background: oklch(0.28 0.01 250);"></div>
+			<div
+				class="skeleton w-8 h-3 rounded"
+				style="background: oklch(0.28 0.01 250);"
+			></div>
 			<span class="opacity-40">·</span>
-			<div class="skeleton w-10 h-3 rounded" style="background: oklch(0.28 0.01 250);"></div>
+			<div
+				class="skeleton w-10 h-3 rounded"
+				style="background: oklch(0.28 0.01 250);"
+			></div>
 		{:else}
 			<span style="color: oklch(0.60 0.05 250);">{formatTokens(tokens)}</span>
 			<span class="opacity-40">·</span>
 			<span style="color: oklch(0.65 0.10 145);">${cost.toFixed(2)}</span>
 		{/if}
 		{#if showSparkline && sparklineData && sparklineData.length > 0}
-			<div class="flex-shrink-0 ml-1 w-[40px] sm:w-[45px] md:w-[50px] lg:w-[60px] h-[12px]">
+			<div
+				class="flex-shrink-0 ml-1 w-[40px] sm:w-[45px] md:w-[50px] lg:w-[60px] h-[12px]"
+			>
 				<Sparkline
 					data={sparklineData}
 					height={12}
@@ -2266,9 +2240,8 @@
 							"badge-ghost",
 						]}
 						<span
-							class="badge badge-xs {priorityColors[
-								displayTask.priority
-							] ?? 'badge-ghost'}"
+							class="badge badge-xs {priorityColors[displayTask.priority] ??
+								'badge-ghost'}"
 						>
 							{priorityLabels[displayTask.priority] ??
 								`P${displayTask.priority}`}
@@ -2317,9 +2290,7 @@
 						</svg>
 						Done
 					</span>
-					<span
-						class="badge badge-xs badge-outline font-mono opacity-60"
-					>
+					<span class="badge badge-xs badge-outline font-mono opacity-60">
 						{lastCompletedTask.id}
 					</span>
 				</div>
@@ -2334,9 +2305,7 @@
 			</div>
 		{:else}
 			<!-- No task state -->
-			<div class="text-sm text-base-content/50 italic">
-				No active task
-			</div>
+			<div class="text-sm text-base-content/50 italic">No active task</div>
 		{/if}
 
 		<!-- Star celebration overlay -->
@@ -2444,13 +2413,9 @@
 								</svg>
 							</div>
 							<div>
-								<h3 class="font-bold text-white text-lg">
-									Task Complete!
-								</h3>
+								<h3 class="font-bold text-white text-lg">Task Complete!</h3>
 								{#if task}
-									<p
-										class="text-white/80 text-sm truncate max-w-xs"
-									>
+									<p class="text-white/80 text-sm truncate max-w-xs">
 										{task.title}
 									</p>
 								{/if}
@@ -2458,9 +2423,7 @@
 						</div>
 
 						<!-- Summary stats -->
-						<div
-							class="flex items-center gap-4 text-white/90 text-sm"
-						>
+						<div class="flex items-center gap-4 text-white/90 text-sm">
 							{#if elapsedTime}
 								<div class="flex items-center gap-1.5">
 									<svg
@@ -2482,11 +2445,20 @@
 							{#if usageLoading}
 								<!-- Token usage skeleton while loading -->
 								<div class="flex items-center gap-1.5">
-									<div class="skeleton w-4 h-4 rounded" style="background: oklch(0.30 0.02 250);"></div>
-									<div class="skeleton w-10 h-4 rounded" style="background: oklch(0.25 0.01 250);"></div>
+									<div
+										class="skeleton w-4 h-4 rounded"
+										style="background: oklch(0.30 0.02 250);"
+									></div>
+									<div
+										class="skeleton w-10 h-4 rounded"
+										style="background: oklch(0.25 0.01 250);"
+									></div>
 								</div>
 								<div class="flex items-center gap-1.5">
-									<div class="skeleton w-12 h-4 rounded" style="background: oklch(0.25 0.01 250);"></div>
+									<div
+										class="skeleton w-12 h-4 rounded"
+										style="background: oklch(0.25 0.01 250);"
+									></div>
 								</div>
 							{:else if tokens > 0}
 								<div class="flex items-center gap-1.5">
@@ -2503,15 +2475,12 @@
 											d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"
 										/>
 									</svg>
-									<span class="font-mono"
-										>{formatTokens(tokens)}</span
-									>
+									<span class="font-mono">{formatTokens(tokens)}</span>
 								</div>
 							{/if}
 							{#if !usageLoading && cost > 0}
 								<div class="flex items-center gap-1.5">
-									<span class="font-mono font-semibold"
-										>${cost.toFixed(2)}</span
+									<span class="font-mono font-semibold">${cost.toFixed(2)}</span
 									>
 								</div>
 							{/if}
@@ -2530,7 +2499,7 @@
 				style="background: linear-gradient(90deg, oklch(0.20 0.02 250) 0%, oklch(0.18 0.01 250) 100%); border-left: 0px solid oklch(0.35 0.02 250); border-right: 1px solid oklch(0.35 0.02 250); border-top: 1px solid oklch(0.35 0.02 250);"
 			>
 				<!-- Agent Info Section -->
-				<div class="flex items-center gap-1.5 pl-3 pr-2.5 pt-2">
+				<div class="flex items-center gap-1.5 pl-3 pt-2">
 					<AgentAvatar
 						name={agentName}
 						size={18}
@@ -2656,8 +2625,7 @@
 								<span class="opacity-40">·</span>
 							{/if}
 							{#if serverElapsedFormatted()}
-								{@const serverElapsed =
-									serverElapsedFormatted()!}
+								{@const serverElapsed = serverElapsedFormatted()!}
 								<span
 									class="flex items-center gap-0.5"
 									title="Server uptime"
@@ -2690,22 +2658,16 @@
 				</div>
 				<!-- Activity Sparkline Section -->
 				{#if activityData.length > 0}
-					{@const hasRecentActivity = activityData
-						.slice(-3)
-						.some((v) => v > 0)}
+					{@const hasRecentActivity = activityData.slice(-3).some((v) => v > 0)}
 					<div class="flex items-center">
 						<div
 							class="w-px h-4 mx-1"
 							style="background: oklch(0.40 0.01 250);"
 						></div>
 						<div
-							class="px-1 {hasRecentActivity
-								? 'animate-pulse'
-								: ''}"
+							class="px-1 {hasRecentActivity ? 'animate-pulse' : ''}"
 							title="Terminal activity"
-							style={hasRecentActivity
-								? "animation-duration: 2s;"
-								: ""}
+							style={hasRecentActivity ? "animation-duration: 2s;" : ""}
 						>
 							<TerminalActivitySparkline
 								{activityData}
@@ -2871,9 +2833,7 @@
 						class="whitespace-pre-wrap break-words m-0"
 						style="color: oklch(0.85 0.05 145);">{@html renderedOutput}</pre>
 				{:else}
-					<p class="text-base-content/40 italic m-0">
-						No output yet...
-					</p>
+					<p class="text-base-content/40 italic m-0">No output yet...</p>
 				{/if}
 			</div>
 
@@ -2979,34 +2939,23 @@
 								<button
 									onclick={async () => {
 										// Navigate from current position to target index
-										const delta =
-											index - currentOptionIndex;
-										const direction =
-											delta > 0 ? "down" : "up";
+										const delta = index - currentOptionIndex;
+										const direction = delta > 0 ? "down" : "up";
 										const steps = Math.abs(delta);
 
 										for (let i = 0; i < steps; i++) {
-											await onSendInput?.(
-												direction,
-												"key",
-											);
-											await new Promise((r) =>
-												setTimeout(r, 30),
-											);
+											await onSendInput?.(direction, "key");
+											await new Promise((r) => setTimeout(r, 30));
 										}
 										currentOptionIndex = index;
 
-										await new Promise((r) =>
-											setTimeout(r, 50),
-										);
+										await new Promise((r) => setTimeout(r, 50));
 
 										if (currentQuestion.multiSelect) {
 											// Toggle selection with space
 											await onSendInput?.("space", "key");
 											// Update local selection state using array for better reactivity
-											const newSet = new Set(
-												selectedOptionIndices,
-											);
+											const newSet = new Set(selectedOptionIndices);
 											if (newSet.has(index)) {
 												newSet.delete(index);
 											} else {
@@ -3020,12 +2969,8 @@
 										}
 									}}
 									class="btn btn-xs gap-1 transition-all"
-									class:btn-primary={selectedOptionIndices.has(
-										index,
-									)}
-									class:btn-outline={!selectedOptionIndices.has(
-										index,
-									)}
+									class:btn-primary={selectedOptionIndices.has(index)}
+									class:btn-outline={!selectedOptionIndices.has(index)}
 									style={selectedOptionIndices.has(index)
 										? "background: oklch(0.45 0.15 250); border-color: oklch(0.55 0.18 250); color: oklch(0.98 0.01 250);"
 										: "background: oklch(0.25 0.03 250); border-color: oklch(0.40 0.03 250); color: oklch(0.80 0.02 250);"}
@@ -3034,9 +2979,7 @@
 								>
 									{#if currentQuestion.multiSelect}
 										<span class="text-[10px]">
-											{selectedOptionIndices.has(index)
-												? "☑"
-												: "☐"}
+											{selectedOptionIndices.has(index) ? "☑" : "☐"}
 										</span>
 									{/if}
 									{opt.label}
@@ -3050,34 +2993,22 @@
 										// Navigate to Submit option
 										// Claude Code UI has: [options...] + "Type something" + "Submit"
 										// So Submit is at index = options.length + 1
-										const submitIndex =
-											currentQuestion.options.length + 1;
-										const delta =
-											submitIndex - currentOptionIndex;
-										const direction =
-											delta > 0 ? "down" : "up";
+										const submitIndex = currentQuestion.options.length + 1;
+										const delta = submitIndex - currentOptionIndex;
+										const direction = delta > 0 ? "down" : "up";
 										const steps = Math.abs(delta);
 
 										for (let i = 0; i < steps; i++) {
-											await onSendInput?.(
-												direction,
-												"key",
-											);
-											await new Promise((r) =>
-												setTimeout(r, 30),
-											);
+											await onSendInput?.(direction, "key");
+											await new Promise((r) => setTimeout(r, 30));
 										}
 
-										await new Promise((r) =>
-											setTimeout(r, 50),
-										);
+										await new Promise((r) => setTimeout(r, 50));
 										// First Enter: Select "Submit" in the options list
 										await onSendInput?.("enter", "key");
 
 										// Wait for confirmation screen to appear
-										await new Promise((r) =>
-											setTimeout(r, 150),
-										);
+										await new Promise((r) => setTimeout(r, 150));
 
 										// Second Enter: Confirm "Submit answers" on the review screen
 										await onSendInput?.("enter", "key");
@@ -3160,17 +3091,13 @@
 							{#each detectedQuestion.options as opt (opt.index)}
 								<button
 									onclick={() =>
-										selectQuestionOption(
-											opt,
-											detectedQuestion.isMultiSelect,
-										)}
+										selectQuestionOption(opt, detectedQuestion.isMultiSelect)}
 									class="btn btn-xs gap-1 transition-all"
 									class:btn-primary={opt.isSelected &&
 										!detectedQuestion.isMultiSelect}
 									class:btn-outline={!opt.isSelected ||
 										detectedQuestion.isMultiSelect}
-									style={opt.isSelected &&
-									detectedQuestion.isMultiSelect
+									style={opt.isSelected && detectedQuestion.isMultiSelect
 										? "background: oklch(0.35 0.12 250); border-color: oklch(0.50 0.15 250); color: oklch(0.95 0.02 250);"
 										: !opt.isSelected
 											? "background: oklch(0.25 0.03 250); border-color: oklch(0.40 0.03 250); color: oklch(0.80 0.02 250);"
@@ -3273,8 +3200,7 @@
 							{#each detectedHumanActions as action (action.title)}
 								<button
 									type="button"
-									onclick={() =>
-										toggleHumanAction(action.title)}
+									onclick={() => toggleHumanAction(action.title)}
 									class="flex items-start gap-2 p-2 rounded text-left transition-all"
 									style="background: {action.completed
 										? 'oklch(0.20 0.02 250)'
@@ -3341,8 +3267,7 @@
 							class="text-[10px] mt-2 opacity-50"
 							style="color: oklch(0.65 0.02 250);"
 						>
-							Complete these manual steps before marking task as
-							done
+							Complete these manual steps before marking task as done
 						</div>
 					</div>
 				{/if}
@@ -3357,9 +3282,7 @@
 							class:btn-primary={autoScroll}
 							class:btn-ghost={!autoScroll}
 							onclick={toggleAutoScroll}
-							title={autoScroll
-								? "Auto-scroll ON"
-								: "Auto-scroll OFF"}
+							title={autoScroll ? "Auto-scroll ON" : "Auto-scroll OFF"}
 						>
 							<svg
 								class="w-3 h-3"
@@ -3449,11 +3372,9 @@
 								class="absolute right-1.5 top-2 p-0.5 rounded-full transition-colors"
 								style="color: oklch(0.55 0.02 250);"
 								onmouseenter={(e) =>
-									(e.currentTarget.style.color =
-										"oklch(0.75 0.02 250)")}
+									(e.currentTarget.style.color = "oklch(0.75 0.02 250)")}
 								onmouseleave={(e) =>
-									(e.currentTarget.style.color =
-										"oklch(0.55 0.02 250)")}
+									(e.currentTarget.style.color = "oklch(0.55 0.02 250)")}
 								onclick={() => {
 									inputText = "";
 									lastStreamedText = "";
@@ -3507,9 +3428,7 @@
 								disabled={sendingInput || !onSendInput}
 							>
 								{#if sendingInput}
-									<span
-										class="loading loading-spinner loading-xs"
-									></span>
+									<span class="loading loading-spinner loading-xs"></span>
 								{:else}
 									Send
 								{/if}
@@ -3527,8 +3446,7 @@
 						{:else if sessionState === "ready-for-review"}
 							<!-- Ready for review: show Complete button -->
 							<button
-								onclick={() =>
-									sendWorkflowCommand("/jat:complete")}
+								onclick={() => sendWorkflowCommand("/jat:complete")}
 								class="btn btn-xs gap-1"
 								style="background: linear-gradient(135deg, oklch(0.50 0.18 145) 0%, oklch(0.42 0.15 160) 100%); border: none; color: white; font-weight: 600;"
 								title="Mark task as complete"
@@ -3552,8 +3470,7 @@
 						{:else if sessionState === "idle"}
 							<!-- Idle state: show Start button -->
 							<button
-								onclick={() =>
-									sendWorkflowCommand("/jat:start")}
+								onclick={() => sendWorkflowCommand("/jat:start")}
 								class="btn btn-xs gap-1"
 								style="background: linear-gradient(135deg, oklch(0.50 0.18 250) 0%, oklch(0.42 0.15 265) 100%); border: none; color: white; font-weight: 600;"
 								title="Start working on a task"
@@ -3577,8 +3494,7 @@
 						{:else if sessionState === "working" && task}
 							<!-- Working state with task: always show Complete button -->
 							<button
-								onclick={() =>
-									sendWorkflowCommand("/jat:complete")}
+								onclick={() => sendWorkflowCommand("/jat:complete")}
 								class="btn btn-xs gap-1"
 								style="background: linear-gradient(135deg, oklch(0.40 0.12 145) 0%, oklch(0.35 0.10 160) 100%); border: none; color: white; font-weight: 500;"
 								title="Complete this task"
@@ -3616,8 +3532,7 @@
 							)}
 							{#if hasComplete}
 								<button
-									onclick={() =>
-										sendWorkflowCommand("/jat:complete")}
+									onclick={() => sendWorkflowCommand("/jat:complete")}
 									class="btn btn-xs gap-1"
 									style="background: linear-gradient(135deg, oklch(0.45 0.18 145) 0%, oklch(0.38 0.15 160) 100%); border: none; color: white; font-weight: 600;"
 									title="Complete this task"
@@ -3644,42 +3559,33 @@
 							{#each detectedOptions as opt (opt.number)}
 								{#if opt.type === "yes"}
 									<button
-										onclick={() =>
-											sendOptionNumber(opt.number)}
+										onclick={() => sendOptionNumber(opt.number)}
 										class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
 										style="background: oklch(0.30 0.12 150); border: none; color: oklch(0.95 0.02 250);"
 										title={`Option ${opt.number}: ${opt.text}`}
 										disabled={sendingInput || !onSendInput}
 									>
-										<span class="opacity-60 mr-0.5"
-											>{opt.number}.</span
-										>Yes
+										<span class="opacity-60 mr-0.5">{opt.number}.</span>Yes
 									</button>
 								{:else if opt.type === "yes-remember"}
 									<button
-										onclick={() =>
-											sendOptionNumber(opt.number)}
+										onclick={() => sendOptionNumber(opt.number)}
 										class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
 										style="background: oklch(0.28 0.10 200); border: none; color: oklch(0.95 0.02 250);"
 										title={`Option ${opt.number}: ${opt.text}`}
 										disabled={sendingInput || !onSendInput}
 									>
-										<span class="opacity-60 mr-0.5"
-											>{opt.number}.</span
-										>Yes+
+										<span class="opacity-60 mr-0.5">{opt.number}.</span>Yes+
 									</button>
 								{:else if opt.type === "custom"}
 									<button
-										onclick={() =>
-											sendOptionNumber(opt.number)}
+										onclick={() => sendOptionNumber(opt.number)}
 										class="btn btn-xs font-mono text-[10px] tracking-wider uppercase"
 										style="background: oklch(0.25 0.08 280); border: none; color: oklch(0.85 0.02 250);"
 										title={`Option ${opt.number}: ${opt.text}`}
 										disabled={sendingInput || !onSendInput}
 									>
-										<span class="opacity-60 mr-0.5"
-											>{opt.number}.</span
-										>Custom
+										<span class="opacity-60 mr-0.5">{opt.number}.</span>Custom
 									</button>
 								{/if}
 							{/each}

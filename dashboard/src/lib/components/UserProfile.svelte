@@ -18,6 +18,10 @@
 		disableSounds,
 		playSuccessChime
 	} from '$lib/utils/soundEffects';
+	import {
+		isSparklineVisible,
+		toggleSparkline
+	} from '$lib/utils/sparklinePreferences';
 
 	// Placeholder user data
 	const user = {
@@ -36,6 +40,10 @@
 
 	// Sound settings
 	let soundsEnabled = $state(false);
+	let isSoundAnimating = $state(false);
+
+	// Sparkline visibility
+	let sparklineVisible = $state(true);
 
 	// Help modal
 	let showHelpModal = $state(false);
@@ -43,6 +51,9 @@
 	// Keyboard icon path
 	const keyboardIcon = 'M6.75 3a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 006.75 21h10.5a2.25 2.25 0 002.25-2.25V5.25A2.25 2.25 0 0017.25 3H6.75zm0 1.5h10.5a.75.75 0 01.75.75v13.5a.75.75 0 01-.75.75H6.75a.75.75 0 01-.75-.75V5.25a.75.75 0 01.75-.75z';
 	const questionIcon = 'M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z';
+
+	// Chart/sparkline icon path
+	const chartIcon = 'M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6';
 
 	// Terminal height settings (global user preference)
 	const TERMINAL_HEIGHT_KEY = 'user-terminal-height';
@@ -55,6 +66,9 @@
 		// Load saved sound preference
 		soundsEnabled = areSoundsEnabled();
 
+		// Load saved sparkline visibility preference
+		sparklineVisible = isSparklineVisible();
+
 		// Load saved terminal height
 		const saved = localStorage.getItem(TERMINAL_HEIGHT_KEY);
 		if (saved) {
@@ -66,15 +80,30 @@
 	});
 
 	function handleSoundToggle() {
-		if (soundsEnabled) {
-			disableSounds();
-			soundsEnabled = false;
-		} else {
-			enableSounds();
-			soundsEnabled = true;
-			// Play a test sound so user knows it works
-			setTimeout(() => playSuccessChime(), 100);
-		}
+		// Trigger animation
+		isSoundAnimating = true;
+
+		// Toggle sound after brief delay to let animation start
+		setTimeout(() => {
+			if (soundsEnabled) {
+				disableSounds();
+				soundsEnabled = false;
+			} else {
+				enableSounds();
+				soundsEnabled = true;
+				// Play a test sound so user knows it works
+				setTimeout(() => playSuccessChime(), 100);
+			}
+		}, 100);
+
+		// Reset animation state
+		setTimeout(() => {
+			isSoundAnimating = false;
+		}, 400);
+	}
+
+	function handleSparklineToggle() {
+		sparklineVisible = toggleSparkline();
 	}
 
 	function handleHeightChange(newHeight: number) {
@@ -171,7 +200,8 @@
 					viewBox="0 0 24 24"
 					stroke-width="1.5"
 					stroke="currentColor"
-					class="w-4 h-4"
+					class="w-4 h-4 transition-transform duration-300"
+					class:sound-icon-pulse={isSoundAnimating}
 					style="color: {soundsEnabled ? 'oklch(0.75 0.15 145)' : 'oklch(0.55 0.02 250)'};"
 				>
 					<path stroke-linecap="round" stroke-linejoin="round" d={soundsEnabled ? soundOnIcon : soundOffIcon} />
@@ -180,7 +210,8 @@
 					Sound Effects
 				</span>
 				<span
-					class="text-[10px] font-mono px-1.5 py-0.5 rounded"
+					class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300"
+					class:sound-badge-bounce={isSoundAnimating}
 					style="
 						background: {soundsEnabled ? 'oklch(0.35 0.10 145)' : 'oklch(0.25 0.02 250)'};
 						color: {soundsEnabled ? 'oklch(0.85 0.10 145)' : 'oklch(0.55 0.02 250)'};
@@ -359,3 +390,39 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	/* Sound toggle animation - pulse the speaker icon */
+	.sound-icon-pulse {
+		animation: sound-pulse 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+
+	@keyframes sound-pulse {
+		0% {
+			transform: scale(1);
+		}
+		40% {
+			transform: scale(1.3);
+		}
+		100% {
+			transform: scale(1);
+		}
+	}
+
+	/* Sound badge bounce animation */
+	.sound-badge-bounce {
+		animation: badge-bounce 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+
+	@keyframes badge-bounce {
+		0% {
+			transform: scale(1) rotate(0deg);
+		}
+		50% {
+			transform: scale(0.8) rotate(-10deg);
+		}
+		100% {
+			transform: scale(1) rotate(0deg);
+		}
+	}
+</style>

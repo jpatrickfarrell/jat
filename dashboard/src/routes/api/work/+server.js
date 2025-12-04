@@ -78,7 +78,6 @@ function detectSessionState(output, task, lastCompletedTask) {
 	const recentOutput = output ? output.slice(-3000) : '';
 
 	// Find LAST position of each marker type (most recent wins)
-	// Note: [JAT:COMPLETED] = recently finished, [JAT:IDLE] = idle/no work
 	const completedPos = recentOutput.lastIndexOf('[JAT:COMPLETED]');
 	const idlePos = recentOutput.lastIndexOf('[JAT:IDLE]');
 	const needsInputPos = Math.max(
@@ -105,36 +104,56 @@ function detectSessionState(output, task, lastCompletedTask) {
 	const workingPos = recentOutput.lastIndexOf('[JAT:WORKING');
 	const compactingPos = recentOutput.lastIndexOf('[JAT:COMPACTING]');
 
-	// Build list of detected states with their positions
-	const positions = [
-		{ state: 'completed', pos: completedPos },
-		{ state: 'idle', pos: idlePos },
-		{ state: 'needs-input', pos: needsInputPos },
-		{ state: 'ready-for-review', pos: reviewPos },
-		{ state: 'completing', pos: completingPos },
-		{ state: 'compacting', pos: compactingPos },
-		{ state: 'working', pos: workingPos }
-	];
+	// If there's an active task, use marker-based detection
+	if (task) {
+		// Build list of detected states with their positions (excluding idle - handled below)
+		const positions = [
+			{ state: 'needs-input', pos: needsInputPos },
+			{ state: 'ready-for-review', pos: reviewPos },
+			{ state: 'completing', pos: completingPos },
+			{ state: 'compacting', pos: compactingPos },
+			{ state: 'working', pos: workingPos }
+		];
 
-	// Sort by position descending (most recent marker wins)
-	const sorted = positions.filter(p => p.pos >= 0).sort((a, b) => b.pos - a.pos);
+		// Sort by position descending (most recent marker wins)
+		const sorted = positions.filter(p => p.pos >= 0).sort((a, b) => b.pos - a.pos);
 
-	if (sorted.length > 0) {
-		return sorted[0].state;
-	}
+		if (sorted.length > 0) {
+			return sorted[0].state;
+		}
 
-	// No markers found - infer from task state
-	if (task && task.status === 'in_progress') {
+		// No markers found - agent has task, default to working
+		// (task.status may be 'open' or 'in_progress' - either way they're actively working)
 		return 'working';
 	}
 
-	// No active task = idle (even if they completed something in the past)
-	if (!task) {
-		// Check if agent just started (no markers, very little output)
-		if (recentOutput.length < 500) {
-			return 'starting';
+	// No active task - check if we just completed something
+	// This matches SessionCard.svelte logic for consistency
+	if (lastCompletedTask) {
+		// Check for completion evidence in output
+		// [JAT:IDLE] appears AFTER task completion, so it indicates recently completed
+		const hasCompletionMarker = completedPos >= 0 || idlePos >= 0 ||
+			/✅\s*TASK COMPLETE/.test(recentOutput);
+		const hasReviewMarker = reviewPos >= 0;
+
+		if (hasCompletionMarker || hasReviewMarker) {
+			return 'completed';
 		}
-		return 'idle';
+
+		// If the lastCompletedTask was updated recently (within 2 hours), still show completed
+		if (lastCompletedTask.closedAt) {
+			const closedDate = new Date(lastCompletedTask.closedAt);
+			const now = new Date();
+			const hoursSinceClosed = (now.getTime() - closedDate.getTime()) / (1000 * 60 * 60);
+			if (hoursSinceClosed < 2) {
+				return 'completed';
+			}
+		}
+	}
+
+	// Check if agent just started (no markers, very little output)
+	if (recentOutput.length < 500) {
+		return 'starting';
 	}
 
 	return 'idle';

@@ -2811,12 +2811,15 @@
 			class="flex-1 flex flex-col min-h-0"
 			style="border-top: 1px solid oklch(0.5 0 0 / 0.08);"
 		>
-			<!-- Output Content -->
+			<!-- Output Content - Click to focus input -->
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				bind:this={scrollContainerRef}
-				class="overflow-y-auto px-3 font-mono text-xs leading-relaxed flex-1 min-h-0"
+				class="overflow-y-auto px-3 font-mono text-xs leading-relaxed flex-1 min-h-0 cursor-text"
 				style="background: oklch(0.12 0.01 250);"
 				onscroll={handleScroll}
+				onclick={() => inputRef?.focus()}
 			>
 				{#if output}
 					<pre

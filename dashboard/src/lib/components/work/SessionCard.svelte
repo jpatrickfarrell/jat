@@ -56,8 +56,12 @@
 		getServerStateVisual,
 	} from "$lib/config/statusColors";
 	import HorizontalResizeHandle from "$lib/components/HorizontalResizeHandle.svelte";
-	import { setHoveredSession } from "$lib/stores/hoveredSession";
-	import { findHumanActionMarkers } from "$lib/utils/markerParser";
+	import { setHoveredSession, completingSessionFlash } from "$lib/stores/hoveredSession";
+	import {
+		findHumanActionMarkers,
+		findSuggestedTasksMarker,
+		type SuggestedTask,
+	} from "$lib/utils/markerParser";
 	import { getTerminalHeight, getCtrlCIntercept, setCtrlCIntercept } from "$lib/stores/preferences.svelte";
 
 	// Props - aligned with workSessions.svelte.ts types
@@ -183,6 +187,9 @@
 	const isAgentMode = $derived(mode === "agent" || mode === "compact");
 	const isServerMode = $derived(mode === "server");
 	const isCompactMode = $derived(mode === "compact");
+
+	// Flash effect when Alt+C complete command is triggered
+	const isCompleteFlashing = $derived($completingSessionFlash === sessionName);
 
 	// Completion state
 	let showCompletionBanner = $state(false);
@@ -1452,6 +1459,109 @@
 		detectedHumanActions.filter((a) => !a.completed).length,
 	);
 
+	// ==========================================================================
+	// Suggested Tasks Detection
+	// ==========================================================================
+	// Format: [JAT:SUGGESTED_TASKS {"tasks":[{"type":"feature","title":"...","description":"...","priority":1},...]}}]
+	// Uses unified marker parser with balanced-brace JSON extraction
+
+	/** Extended SuggestedTask with local UI state for selection and editing */
+	interface SuggestedTaskWithState extends SuggestedTask {
+		/** Whether this task is selected for creation */
+		selected: boolean;
+		/** Whether user has edited this task */
+		edited: boolean;
+		/** Local edits (if edited=true, these override the original values) */
+		edits?: {
+			type?: string;
+			title?: string;
+			description?: string;
+			priority?: number;
+		};
+	}
+
+	// Local state for tracking user's selection and edits of suggested tasks
+	// Key is task title (or index if no title), value is selection/edit state
+	let suggestedTaskSelections = $state<Map<string, boolean>>(new Map());
+	let suggestedTaskEdits = $state<Map<string, Partial<SuggestedTask>>>(new Map());
+
+	/**
+	 * Detect and parse SUGGESTED_TASKS markers from terminal output.
+	 * Uses a larger output window (~8000 chars) since payload may be substantial.
+	 */
+	const detectedSuggestedTasks = $derived.by((): SuggestedTaskWithState[] => {
+		if (!output) return [];
+
+		// Look at a larger window for suggested tasks (JSON payload can be substantial)
+		const recentOutput = output.slice(-8000);
+
+		// Use unified marker parser for safe JSON extraction
+		const marker = findSuggestedTasksMarker(recentOutput);
+
+		if (!marker || !marker.tasks.length) return [];
+
+		// Map parsed tasks to tasks with local UI state
+		return marker.tasks.map((task, index) => {
+			const key = task.title || `task-${index}`;
+			const isSelected = suggestedTaskSelections.get(key) ?? false;
+			const edits = suggestedTaskEdits.get(key);
+			const hasEdits = edits && Object.keys(edits).length > 0;
+
+			return {
+				...task,
+				// Apply edits if present
+				...(hasEdits
+					? {
+							type: edits.type ?? task.type,
+							title: edits.title ?? task.title,
+							description: edits.description ?? task.description,
+							priority: edits.priority ?? task.priority,
+						}
+					: {}),
+				selected: isSelected,
+				edited: hasEdits ?? false,
+			};
+		});
+	});
+
+	/** Toggle selection state of a suggested task */
+	function toggleSuggestedTaskSelection(taskKey: string) {
+		const newSelections = new Map(suggestedTaskSelections);
+		newSelections.set(taskKey, !newSelections.get(taskKey));
+		suggestedTaskSelections = newSelections;
+	}
+
+	/** Update edits for a suggested task */
+	function updateSuggestedTaskEdit(
+		taskKey: string,
+		edits: Partial<SuggestedTask>,
+	) {
+		const newEdits = new Map(suggestedTaskEdits);
+		const existing = newEdits.get(taskKey) || {};
+		newEdits.set(taskKey, { ...existing, ...edits });
+		suggestedTaskEdits = newEdits;
+	}
+
+	/** Clear all edits for a suggested task */
+	function clearSuggestedTaskEdits(taskKey: string) {
+		const newEdits = new Map(suggestedTaskEdits);
+		newEdits.delete(taskKey);
+		suggestedTaskEdits = newEdits;
+	}
+
+	/** Get the key for a suggested task (for state tracking) */
+	function getSuggestedTaskKey(task: SuggestedTask, index: number): string {
+		return task.title || `task-${index}`;
+	}
+
+	/** Count of selected suggested tasks */
+	const selectedSuggestedTasksCount = $derived(
+		detectedSuggestedTasks.filter((t) => t.selected).length,
+	);
+
+	/** Check if any suggested tasks are detected */
+	const hasSuggestedTasks = $derived(detectedSuggestedTasks.length > 0);
+
 	// Task to display - either active task or last completed task
 	const displayTask = $derived(
 		task || (sessionState === "completed" ? lastCompletedTask : null),
@@ -2131,17 +2241,20 @@
 	     Skips: Terminal output, input section, completion banner, resize handle
 	     ═══════════════════════════════════════════════════════════════════════════ -->
 	<article
-		class="unified-agent-card p-2 rounded-lg relative overflow-hidden {className}"
-		class:ring-2={isHighlighted || sessionState === "needs-input"}
+		class="unified-agent-card p-2 rounded-lg relative overflow-hidden {className} {isCompleteFlashing ? 'complete-flash-animation' : ''}"
+		class:ring-2={isHighlighted || sessionState === "needs-input" || isCompleteFlashing}
 		class:ring-primary={isHighlighted}
-		class:ring-warning={sessionState === "needs-input"}
-		class:animate-pulse-subtle={sessionState === "needs-input"}
+		class:ring-success={isCompleteFlashing}
+		class:ring-warning={sessionState === "needs-input" && !isCompleteFlashing}
+		class:animate-pulse-subtle={sessionState === "needs-input" && !isCompleteFlashing}
 		style="
 			background: linear-gradient(135deg, {stateVisual.bgTint} 0%, oklch(0.18 0.01 250) 100%);
-			border-left: 3px solid {stateVisual.accent};
-			{sessionState === 'needs-input'
-			? 'box-shadow: 0 0 12px oklch(0.70 0.20 85 / 0.4);'
-			: ''}
+			border-left: 3px solid {isCompleteFlashing ? 'oklch(0.65 0.20 145)' : stateVisual.accent};
+			{isCompleteFlashing
+			? 'box-shadow: 0 0 20px oklch(0.65 0.20 145 / 0.6);'
+			: sessionState === 'needs-input'
+				? 'box-shadow: 0 0 12px oklch(0.70 0.20 85 / 0.4);'
+				: ''}
 		"
 		data-agent-name={agentName}
 	>
@@ -2315,13 +2428,17 @@
 	<div
 		class="card h-full flex flex-col relative rounded-none {className} {isHighlighted
 			? 'agent-highlight-flash ring-2 ring-info ring-offset-2 ring-offset-base-100'
-			: ''}"
+			: ''} {isCompleteFlashing ? 'complete-flash-animation' : ''}"
 		style="
 			background: linear-gradient(135deg, oklch(0.22 0.02 250) 0%, oklch(0.18 0.01 250) 50%, oklch(0.16 0.01 250) 100%);
-			border: 1px solid {showCompletionBanner
+			border: 1px solid {isCompleteFlashing
 			? 'oklch(0.65 0.20 145)'
-			: 'oklch(0.35 0.02 250)'};
-			box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.05), 0 2px 8px oklch(0 0 0 / 0.1);
+			: showCompletionBanner
+				? 'oklch(0.65 0.20 145)'
+				: 'oklch(0.35 0.02 250)'};
+			box-shadow: {isCompleteFlashing
+			? '0 0 20px oklch(0.65 0.20 145 / 0.6), inset 0 1px 0 oklch(1 0 0 / 0.05), 0 2px 8px oklch(0 0 0 / 0.1)'
+			: 'inset 0 1px 0 oklch(1 0 0 / 0.05), 0 2px 8px oklch(0 0 0 / 0.1)'};
 			width: {effectiveWidth ?? 640}px;
 			flex-shrink: 0;
 		"
@@ -3653,5 +3770,29 @@
 
 	.animate-pulse-subtle {
 		animation: pulse-subtle 2s ease-in-out infinite;
+	}
+
+	/* Flash animation for Alt+C complete action */
+	@keyframes complete-flash {
+		0% {
+			border-color: oklch(0.65 0.20 145);
+			box-shadow: 0 0 0 oklch(0.65 0.20 145 / 0);
+		}
+		15% {
+			border-color: oklch(0.75 0.25 145);
+			box-shadow: 0 0 30px oklch(0.65 0.20 145 / 0.8);
+		}
+		30% {
+			border-color: oklch(0.70 0.22 145);
+			box-shadow: 0 0 20px oklch(0.65 0.20 145 / 0.5);
+		}
+		100% {
+			border-color: oklch(0.35 0.02 250);
+			box-shadow: 0 0 0 oklch(0.65 0.20 145 / 0);
+		}
+	}
+
+	.complete-flash-animation {
+		animation: complete-flash 1.5s ease-out;
 	}
 </style>

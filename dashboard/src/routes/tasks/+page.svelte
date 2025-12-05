@@ -135,6 +135,19 @@
 	let selectedProject = $state('All Projects');
 	let isInitialLoad = $state(true);
 
+	// Derive completed task IDs from active sessions
+	// These are tasks that were completed by agents who still have active sessions
+	// They should remain visible in TaskTable until the session is closed
+	const completedTasksFromActiveSessions = $derived.by(() => {
+		const completedIds = new Set<string>();
+		for (const session of workSessionsState.sessions) {
+			if (session.lastCompletedTask?.id) {
+				completedIds.add(session.lastCompletedTask.id);
+			}
+		}
+		return completedIds;
+	});
+
 	// Drawer state
 	let drawerOpen = $state(false);
 	let selectedTaskId = $state<string | null>(null);
@@ -546,6 +559,7 @@
 				{allTasks}
 				{agents}
 				{reservations}
+				{completedTasksFromActiveSessions}
 				ontaskclick={handleTaskClick}
 				onagentclick={handleAgentClick}
 			/>

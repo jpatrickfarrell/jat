@@ -35,6 +35,8 @@
 		fireScale?: number;
 		/** Elapsed time info for displaying time working badge */
 		elapsed?: ElapsedTime | null;
+		/** Task was completed by an agent with an active session */
+		isCompletedByActiveSession?: boolean;
 	}
 
 	let {
@@ -47,7 +49,8 @@
 		onrelease = async () => false,
 		onattach = () => {},
 		fireScale = 1,
-		elapsed = null
+		elapsed = null,
+		isCompletedByActiveSession = false
 	}: Props = $props();
 
 	// Local state
@@ -75,8 +78,9 @@
 	);
 
 	// Determine what action mode we're in
-	type ActionMode = 'spawn' | 'dropdown' | 'disabled';
+	type ActionMode = 'spawn' | 'dropdown' | 'disabled' | 'completed';
 	const actionMode: ActionMode = $derived(
+		isCompletedByActiveSession ? 'completed' :
 		task.status === 'closed' ? 'disabled' :
 		task.status === 'in_progress' ? 'dropdown' :
 		(task.status === 'blocked' || hasBlockers) ? 'dropdown' :
@@ -137,7 +141,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="relative">
+<div class="relative flex items-center justify-center" style="min-width: 28px; min-height: 28px;">
 	{#if actionMode === 'spawn'}
 		<!-- Spawn button for open/ready tasks -->
 		<button
@@ -303,6 +307,37 @@
 				</ul>
 			{/if}
 		</div>
+
+	{:else if actionMode === 'completed'}
+		<!-- Completed task with active session - show agent avatar with green checkmark -->
+		{#if task.assignee}
+			<div class="relative inline-flex items-center justify-center" title="{task.assignee} completed this task (session active)">
+				<div class="avatar">
+					<div
+						class="rounded-full ring-2 ring-offset-base-100 ring-offset-1"
+						style="width: 24px; height: 24px; --tw-ring-color: oklch(0.65 0.20 145);"
+					>
+						<AgentAvatar name={task.assignee} size={24} />
+					</div>
+				</div>
+				<!-- Small green checkmark badge overlaid in bottom-right -->
+				<span
+					class="absolute flex items-center justify-center w-3.5 h-3.5 rounded-full"
+					style="background: oklch(0.55 0.18 145); bottom: -2px; right: -2px; border: 1.5px solid oklch(0.20 0.01 250);"
+				>
+					<svg class="w-2 h-2" style="color: oklch(0.95 0.02 145);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+					</svg>
+				</span>
+			</div>
+		{:else}
+			<!-- Fallback if no assignee -->
+			<button class="btn btn-xs btn-ghost" disabled title="Task completed">
+				<svg class="w-4 h-4" style="color: oklch(0.65 0.20 145);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+				</svg>
+			</button>
+		{/if}
 
 	{:else}
 		<!-- Disabled state for closed tasks -->

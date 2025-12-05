@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import { replaceState } from '$app/navigation';
 	import { onMount } from 'svelte';
+	import { slide } from 'svelte/transition';
 	import WorkingAgentBadge from '$lib/components/WorkingAgentBadge.svelte';
 	import FilterDropdown from '$lib/components/FilterDropdown.svelte';
 	import LabelBadges from '$lib/components/LabelBadges.svelte';
@@ -69,12 +70,14 @@
 		allTasks?: Task[];
 		agents?: Agent[];
 		reservations?: Reservation[];
+		/** Task IDs that were completed by agents with active sessions - should remain visible */
+		completedTasksFromActiveSessions?: Set<string>;
 		ontaskclick?: (taskId: string) => void;
 		/** Callback when user clicks on an agent avatar/name */
 		onagentclick?: (agentName: string) => void;
 	}
 
-	let { tasks = [], allTasks = [], agents = [], reservations = [], ontaskclick = () => {}, onagentclick }: Props = $props();
+	let { tasks = [], allTasks = [], agents = [], reservations = [], completedTasksFromActiveSessions = new Set(), ontaskclick = () => {}, onagentclick }: Props = $props();
 
 	// Track previously seen task IDs and statuses for animations
 	// Using regular variables (not $state) to avoid effect loops
@@ -141,6 +144,9 @@
 
 	// Track collapsed groups (by group key)
 	let collapsedGroups = $state<Set<string | null>>(new Set());
+
+	// Track collapsed projects (for project mode's two-level hierarchy)
+	let collapsedProjects = $state<Set<string>>(new Set());
 
 	// Keyboard navigation: track focused group index for arrow key navigation
 	let focusedGroupIndex = $state<number>(-1);
@@ -230,14 +236,31 @@
 		collapsedGroups = newSet;
 	}
 
+	// Toggle project collapse state (for project mode)
+	function toggleProjectCollapse(projectKey: string) {
+		const newSet = new Set(collapsedProjects);
+		if (newSet.has(projectKey)) {
+			newSet.delete(projectKey);
+		} else {
+			newSet.add(projectKey);
+		}
+		collapsedProjects = newSet;
+	}
+
 	// Collapse all visible groups
 	function collapseAll() {
-		collapsedGroups = new Set(visibleGroupKeys);
+		if (groupingMode === 'project') {
+			// In project mode, collapse all projects
+			collapsedProjects = new Set(Array.from(nestedGroupedTasks.keys()));
+		} else {
+			collapsedGroups = new Set(visibleGroupKeys);
+		}
 	}
 
 	// Expand all groups
 	function expandAll() {
 		collapsedGroups = new Set();
+		collapsedProjects = new Set();
 	}
 
 	// Check if all groups are collapsed
@@ -252,19 +275,20 @@
 	$effect(() => {
 		groupingMode; // dependency
 		collapsedGroups = new Set();
+		collapsedProjects = new Set();
 	});
 
 	// Initialize groupingMode from URL on mount
 	$effect(() => {
 		const groupByParam = $page.url.searchParams.get('groupBy');
-		if (groupByParam && ['type', 'parent', 'label'].includes(groupByParam)) {
+		if (groupByParam && ['type', 'parent', 'label', 'project'].includes(groupByParam)) {
 			groupingMode = groupByParam as GroupingMode;
 		}
 	});
 
 	/**
 	 * Set grouping mode and sync to URL
-	 * @param mode - The grouping mode to set ('type', 'parent', 'label')
+	 * @param mode - The grouping mode to set ('type', 'parent', 'label', 'project')
 	 */
 	function setGroupingMode(mode: GroupingMode) {
 		groupingMode = mode;
@@ -563,8 +587,12 @@
 		}
 
 		// Filter by status
+		// Include tasks that match selected statuses OR are completed by an active session
 		if (selectedStatuses.size > 0) {
-			result = result.filter((task) => selectedStatuses.has(task.status));
+			result = result.filter((task) =>
+				selectedStatuses.has(task.status) ||
+				completedTasksFromActiveSessions.has(task.id)
+			);
 		}
 
 		// Filter by type
@@ -591,9 +619,48 @@
 	// Type order for grouping (BUG first, then features, tasks, chores, epics, no type last)
 	const typeOrder = ['bug', 'feature', 'task', 'chore', 'epic', null];
 
+	// Sort function for project mode: dependency-aware, then created_at
+	// Priority: 1) Working agents, 2) Assigned, 3) No unresolved deps, 4) Priority, 5) Created at
+	function sortTasksForProjectMode(tasksToSort: Task[]): Task[] {
+		return [...tasksToSort].sort((a, b) => {
+			// First: tasks with working agents come first
+			const aWorking = isAgentWorking(a.assignee);
+			const bWorking = isAgentWorking(b.assignee);
+			if (aWorking && !bWorking) return -1;
+			if (!aWorking && bWorking) return 1;
+
+			// Second: tasks with any assignee come before unassigned
+			const aAssigned = !!a.assignee;
+			const bAssigned = !!b.assignee;
+			if (aAssigned && !bAssigned) return -1;
+			if (!aAssigned && bAssigned) return 1;
+
+			// Third: tasks with NO unresolved dependencies come before those with blockers
+			const aUnresolvedDeps = (a.depends_on || []).filter(d => d.status !== 'closed').length;
+			const bUnresolvedDeps = (b.depends_on || []).filter(d => d.status !== 'closed').length;
+			if (aUnresolvedDeps === 0 && bUnresolvedDeps > 0) return -1;
+			if (aUnresolvedDeps > 0 && bUnresolvedDeps === 0) return 1;
+
+			// Fourth: sort by priority (lower = higher priority)
+			const aPriority = a.priority ?? 99;
+			const bPriority = b.priority ?? 99;
+			if (aPriority !== bPriority) return aPriority - bPriority;
+
+			// Fifth: sort by created_at (oldest first to work on dependencies in order)
+			const aCreated = a.created_at || '';
+			const bCreated = b.created_at || '';
+			return aCreated.localeCompare(bCreated);
+		});
+	}
+
 	// Sort function used within each group
 	// Priority: 1) Tasks with working agents first, 2) Then by selected sort column
 	function sortTasks(tasksToSort: Task[]): Task[] {
+		// Use specialized sorting for project mode
+		if (groupingMode === 'project') {
+			return sortTasksForProjectMode(tasksToSort);
+		}
+
 		return [...tasksToSort].sort((a, b) => {
 			// First priority: tasks with working agents come first
 			const aWorking = isAgentWorking(a.assignee);
@@ -667,6 +734,12 @@
 			case 'label':
 				// Group by first label, or null if no labels
 				return task.labels && task.labels.length > 0 ? task.labels[0] : null;
+			case 'project':
+				// Composite key: "project::epic" for nested grouping
+				// Example: "jat::jat-abc" for subtask, "jat::jat-abc" for epic itself, "jat::" for standalone
+				const project = getProjectFromTaskId(task.id);
+				const epic = extractParentId(task.id) || task.id;
+				return project ? `${project}::${epic}` : null;
 			default:
 				return task.issue_type || null;
 		}
@@ -710,11 +783,117 @@
 			return new Map(sortedEntries);
 		}
 
+		// For project mode, sort groups: by project first, then by epic size within project
+		if (groupingMode === 'project') {
+			const sortedEntries = Array.from(groups.entries()).sort(([keyA, tasksA], [keyB, tasksB]) => {
+				// Extract project and epic from composite key "project::epic"
+				const [projectA, epicA] = (keyA || '').split('::');
+				const [projectB, epicB] = (keyB || '').split('::');
+
+				// First, sort by project alphabetically
+				const projectCompare = (projectA || '').localeCompare(projectB || '');
+				if (projectCompare !== 0) return projectCompare;
+
+				// Within same project, sort by epic size (larger groups first)
+				const sizeA = tasksA.length;
+				const sizeB = tasksB.length;
+				if (sizeA !== sizeB) return sizeB - sizeA;
+
+				// Then alphabetically by epic key
+				return (epicA || '').localeCompare(epicB || '');
+			});
+			return new Map(sortedEntries);
+		}
+
 		return groups;
 	});
 
+	// Nested grouped tasks for project mode: Map<project, Map<epic, Task[]>>
+	// This provides true two-level grouping with collapsible project headers
+	const nestedGroupedTasks = $derived.by(() => {
+		const projectMap = new Map<string, Map<string, Task[]>>();
+
+		if (groupingMode !== 'project') {
+			return projectMap; // Empty map for non-project modes
+		}
+
+		// Group tasks by project first, then by epic
+		for (const task of filteredTasks) {
+			const project = getProjectFromTaskId(task.id) || 'unknown';
+			const epic = extractParentId(task.id) || task.id;
+
+			if (!projectMap.has(project)) {
+				projectMap.set(project, new Map<string, Task[]>());
+			}
+
+			const epicMap = projectMap.get(project)!;
+			if (!epicMap.has(epic)) {
+				epicMap.set(epic, []);
+			}
+			epicMap.get(epic)!.push(task);
+		}
+
+		// Sort tasks within each epic
+		for (const [project, epicMap] of projectMap) {
+			for (const [epic, epicTasks] of epicMap) {
+				epicMap.set(epic, sortTasksForProjectMode(epicTasks));
+			}
+
+			// Sort epics within project: larger epics first, then alphabetically
+			const sortedEpicEntries = Array.from(epicMap.entries()).sort(([epicA, tasksA], [epicB, tasksB]) => {
+				// Larger epics first
+				const sizeA = tasksA.length;
+				const sizeB = tasksB.length;
+				if (sizeA !== sizeB) return sizeB - sizeA;
+				// Then alphabetically
+				return epicA.localeCompare(epicB);
+			});
+			projectMap.set(project, new Map(sortedEpicEntries));
+		}
+
+		// Sort projects alphabetically
+		const sortedProjectEntries = Array.from(projectMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+		return new Map(sortedProjectEntries);
+	});
+
+	// Get total task count for a project (for project header)
+	function getProjectTaskCount(project: string): number {
+		const epicMap = nestedGroupedTasks.get(project);
+		if (!epicMap) return 0;
+		let count = 0;
+		for (const tasks of epicMap.values()) {
+			count += tasks.length;
+		}
+		return count;
+	}
+
+	// Get working agents for a project (for project header avatars)
+	function getProjectWorkingAgents(project: string): string[] {
+		const epicMap = nestedGroupedTasks.get(project);
+		if (!epicMap) return [];
+		const agents = new Set<string>();
+		for (const tasks of epicMap.values()) {
+			for (const task of tasks) {
+				if (task.status === 'in_progress' && task.assignee) {
+					agents.add(task.assignee);
+				}
+			}
+		}
+		return Array.from(agents);
+	}
+
 	// Flattened list of all visible tasks (for select-all and backward compatibility)
 	const sortedTasks = $derived.by(() => {
+		if (groupingMode === 'project') {
+			const allTasks: Task[] = [];
+			for (const epicMap of nestedGroupedTasks.values()) {
+				for (const tasks of epicMap.values()) {
+					allTasks.push(...tasks);
+				}
+			}
+			return allTasks;
+		}
+
 		const allTasks = [];
 		for (const [type, tasks] of groupedTasks) {
 			allTasks.push(...tasks);
@@ -1553,6 +1732,19 @@
 						<path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6z" />
 					</svg>
 				</button>
+				<!-- Project grouping (cube/package icon) -->
+				<button
+					class="join-item btn btn-xs px-2"
+					style={groupingMode === 'project'
+						? 'background: oklch(0.50 0.18 240); color: oklch(0.95 0.02 250); border: none;'
+						: 'background: oklch(0.22 0.01 250); color: oklch(0.55 0.02 250); border: none;'}
+					onclick={() => setGroupingMode('project')}
+					title="Group by Project → Epic"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+						<path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+					</svg>
+				</button>
 			</div>
 
 			<!-- Collapse/Expand All Groups - Industrial btn-group -->
@@ -1976,17 +2168,404 @@
 					</tr>
 				</tbody>
 			{:else}
-				<!-- Grouped tasks with sticky headers -->
-				{#each Array.from(groupedTasks.entries()) as [groupKey, typeTasks]}
-					{#if typeTasks.length > 0}
-						<!-- Group header (pinned when scrolling) - Industrial/Terminal style -->
-						{@const typeVisual = getGroupHeaderInfo(groupingMode, groupKey)}
-						{@const parentTask = groupingMode === 'parent' && groupKey ? [...(allTasks.length > 0 ? allTasks : tasks)].find(t => t.id === groupKey) : null}
+				<!-- Project mode: Two-level nested grouping (Project → Epic → Tasks) -->
+				{#if groupingMode === 'project'}
+					{#each Array.from(nestedGroupedTasks.entries()) as [projectKey, epicMap]}
+						{@const projectTaskCount = getProjectTaskCount(projectKey)}
+						{@const projectWorkingAgents = getProjectWorkingAgents(projectKey)}
+						{@const isProjectCollapsed = collapsedProjects.has(projectKey)}
+
+						<!-- Project Header (Top-level, sticky) -->
+						<thead class="sticky z-20" style="top: 0;">
+							<tr
+								class="cursor-pointer select-none hover:brightness-110 transition-all"
+								onclick={() => toggleProjectCollapse(projectKey)}
+								title={isProjectCollapsed ? 'Click to expand project' : 'Click to collapse project'}
+							>
+								<th
+									colspan="8"
+									class="p-0 border-b-2 border-base-content/20"
+									style="background: linear-gradient(90deg, oklch(0.70 0.15 140 / 0.15) 0%, oklch(0.20 0.01 250) 80%);"
+								>
+									<div class="flex items-center gap-0">
+										<!-- Bold accent bar (green for project) -->
+										<div
+											class="w-1.5 self-stretch"
+											style="background: oklch(0.70 0.15 140);"
+										></div>
+
+										<!-- Collapse/Expand chevron -->
+										<div
+											class="flex items-center justify-center w-7 h-10 text-base-content/40 transition-transform duration-200"
+											style="transform: rotate({isProjectCollapsed ? '-90deg' : '0deg'});"
+										>
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+												<path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+											</svg>
+										</div>
+
+										<!-- Project icon with glow -->
+										<div
+											class="flex items-center justify-center w-9 h-10 text-xl"
+											style="text-shadow: 0 0 10px oklch(0.70 0.15 140);"
+										>
+											📦
+										</div>
+
+										<!-- Project name - prominent -->
+										<span
+											class="font-mono font-bold text-sm tracking-[0.15em] uppercase"
+											style="color: oklch(0.70 0.15 140);"
+										>
+											{projectKey.toUpperCase()}
+										</span>
+
+										<!-- Task count badge -->
+										<span
+											class="ml-3 px-2 py-0.5 rounded font-mono text-xs"
+											style="background: oklch(0.70 0.15 140 / 0.2); color: oklch(0.85 0.10 140);"
+										>
+											{projectTaskCount} {projectTaskCount === 1 ? 'task' : 'tasks'}
+										</span>
+
+										<!-- Working agents avatars -->
+										{#if projectWorkingAgents.length > 0}
+											<div class="flex items-center -space-x-1 ml-3">
+												{#each projectWorkingAgents.slice(0, 5) as agentName (agentName)}
+													<WorkingAgentBadge
+														name={agentName || ''}
+														size={22}
+														isWorking={true}
+														variant="avatar"
+														onClick={onagentclick}
+													/>
+												{/each}
+												{#if projectWorkingAgents.length > 5}
+													<div class="avatar placeholder w-5">
+														<div class="bg-neutral text-neutral-content w-5 rounded-full text-[9px] font-mono">
+															+{projectWorkingAgents.length - 5}
+														</div>
+													</div>
+												{/if}
+											</div>
+										{/if}
+
+										<!-- Decorative line -->
+										<div
+											class="flex-1 h-px mx-4 opacity-30"
+											style="background: linear-gradient(90deg, oklch(0.70 0.15 140), transparent);"
+										></div>
+									</div>
+								</th>
+							</tr>
+						</thead>
+
+						<!-- Project contents (epics and tasks) -->
+						{#if !isProjectCollapsed}
+							{#each Array.from(epicMap.entries()) as [epicKey, epicTasks]}
+								{@const epicVisual = getGroupHeaderInfo('parent', epicKey)}
+								{@const parentTask = [...(allTasks.length > 0 ? allTasks : tasks)].find(t => t.id === epicKey)}
+								{@const isEpicCollapsed = collapsedGroups.has(`${projectKey}::${epicKey}`)}
+								{@const epicWorkingAgents = [...new Set(epicTasks.filter(t => t.status === 'in_progress' && t.assignee).map(t => t.assignee))]}
+								{@const hasChildTasks = epicTasks.some(t => extractParentId(t.id) === epicKey)}
+								{@const showEpicHeader = epicTasks.length >= 2 || hasChildTasks}
+
+								<!-- Epic Header (nested under project) -->
+								{#if showEpicHeader}
+									<thead class="sticky z-10" style="top: 40px;">
+										<tr
+											class="cursor-pointer select-none hover:brightness-110 transition-all"
+											onclick={() => toggleGroupCollapse(`${projectKey}::${epicKey}`)}
+											title={isEpicCollapsed ? 'Click to expand epic' : 'Click to collapse epic'}
+										>
+											<th
+												colspan="8"
+												class="p-0 border-b border-base-content/10"
+												style="background: linear-gradient(90deg, {epicVisual.bgTint} 0%, oklch(0.18 0.01 250) 70%);"
+											>
+												<div class="flex items-center gap-0 pl-4">
+													<!-- Nested indent indicator -->
+													<div class="w-px h-7 mr-2" style="background: oklch(0.70 0.15 140 / 0.3);"></div>
+
+													<!-- Accent bar (purple for epic) -->
+													<div
+														class="w-1 self-stretch"
+														style="background: {epicVisual.accent};"
+													></div>
+
+													<!-- Collapse chevron -->
+													<div
+														class="flex items-center justify-center w-6 h-8 text-base-content/40 transition-transform duration-200"
+														style="transform: rotate({isEpicCollapsed ? '-90deg' : '0deg'});"
+													>
+														<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+															<path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+														</svg>
+													</div>
+
+													<!-- Epic icon -->
+													<div
+														class="flex items-center justify-center w-7 h-8 text-base"
+														style="text-shadow: 0 0 6px {epicVisual.accent};"
+													>
+														{epicVisual.icon}
+													</div>
+
+													<!-- Epic ID -->
+													<span
+														class="font-mono font-bold text-xs tracking-[0.15em] uppercase"
+														style="color: {epicVisual.accent};"
+													>
+														{epicVisual.label}
+													</span>
+
+													<!-- Epic title -->
+													{#if parentTask?.title}
+														<span class="ml-2 text-sm text-base-content/70 truncate max-w-md" title={parentTask.title}>
+															{parentTask.title}
+														</span>
+													{/if}
+
+													<!-- Working agents -->
+													{#if epicWorkingAgents.length > 0}
+														<div class="flex items-center -space-x-1 ml-3">
+															{#each epicWorkingAgents.slice(0, 4) as agentName (agentName)}
+																<WorkingAgentBadge
+																	name={agentName || ''}
+																	size={18}
+																	isWorking={true}
+																	variant="avatar"
+																	onClick={onagentclick}
+																/>
+															{/each}
+														</div>
+													{/if}
+
+													<!-- Progress bar -->
+													{#if epicTasks.length > 1}
+														{@const closedCount = epicTasks.filter(t => t.status === 'closed').length}
+														{@const progressPercent = Math.round((closedCount / epicTasks.length) * 100)}
+														<div class="flex items-center gap-2 ml-3" title="{closedCount} of {epicTasks.length} tasks completed">
+															<div class="w-20 h-1.5 bg-base-content/10 rounded-full overflow-hidden">
+																<div
+																	class="h-full rounded-full transition-all duration-300"
+																	style="width: {progressPercent}%; background: {progressPercent === 100 ? 'oklch(0.72 0.20 142)' : epicVisual.accent};"
+																></div>
+															</div>
+															<span class="font-mono text-[10px] text-base-content/50">
+																{progressPercent}%
+															</span>
+														</div>
+													{/if}
+
+													<!-- Decorative line -->
+													<div
+														class="flex-1 h-px mx-3 opacity-20"
+														style="background: linear-gradient(90deg, {epicVisual.accent}, transparent);"
+													></div>
+												</div>
+											</th>
+										</tr>
+									</thead>
+								{/if}
+
+								<!-- Tasks within epic -->
+								{#if !showEpicHeader || !isEpicCollapsed}
+									<tbody transition:slide={{ duration: 150 }}>
+										{#each epicTasks as task, taskIndex (task.id)}
+											{@const depStatus = analyzeDependencies(task)}
+											{@const taskIsActive = task.status === 'in_progress' && task.assignee}
+											{@const isNewTask = newTaskIds.includes(task.id)}
+											{@const isStarting = startingTaskIds.includes(task.id)}
+											{@const isCompleted = completedTaskIds.includes(task.id)}
+											{@const isCompletedByActiveSession = completedTasksFromActiveSessions.has(task.id)}
+											{@const isHuman = isHumanTask(task)}
+											{@const isChildTask = extractParentId(task.id) === epicKey && task.id !== epicKey}
+											{@const isLastChild = isChildTask && taskIndex === epicTasks.length - 1}
+											{@const unresolvedBlockers = task.depends_on?.filter(d => d.status !== 'closed') || []}
+											{@const allTasksList = allTasks.length > 0 ? allTasks : tasks}
+											{@const blockedTasks = allTasksList.filter(t => t.depends_on?.some(d => d.id === task.id) && t.status !== 'closed')}
+											{@const hasDependencyIssues = unresolvedBlockers.length > 0 || blockedTasks.length > 0}
+											{@const isSpawning = spawningSingle === task.id || ($spawningTaskIds.has(task.id))}
+											{@const hasRowGradient = isCompletedByActiveSession || taskIsActive}
+											<tr
+												class="hover:bg-base-200/50 cursor-pointer transition-colors {isNewTask ? 'task-new' : ''} {isStarting ? 'task-starting' : ''} {isCompleted ? 'task-completed' : ''} {isChildTask ? 'pl-6' : ''}"
+												onclick={() => handleRowClick(task.id)}
+												style="
+												background: {isCompletedByActiveSession ? 'linear-gradient(90deg, oklch(0.55 0.18 145 / 0.15), transparent)' : taskIsActive ? 'linear-gradient(90deg, oklch(0.75 0.15 85 / 0.08), transparent)' : ''};
+												border-bottom: 1px solid oklch(0.25 0.01 250);
+												border-left: {isCompletedByActiveSession ? '3px solid oklch(0.65 0.20 145)' : taskIsActive ? '2px solid oklch(0.75 0.18 85)' : isChildTask ? '1px dashed oklch(0.40 0.02 250)' : '2px solid transparent'};
+											"
+											>
+												<!-- Checkbox -->
+												<td class="w-10 px-2" style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
+													<input
+														type="checkbox"
+														class="checkbox checkbox-xs checkbox-primary"
+														checked={selectedTasks.has(task.id)}
+														onclick={(e) => { e.stopPropagation(); toggleTask(task.id); }}
+													/>
+												</td>
+
+												<!-- ID Badge -->
+												<th style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
+													<div class="flex items-center gap-1">
+														{#if isCompletedByActiveSession}
+															<!-- Completed checkmark for tasks finished by active session -->
+															<span
+																class="flex items-center justify-center w-5 h-5 rounded-full"
+																style="background: oklch(0.55 0.18 145 / 0.25);"
+																title="Completed - session still active"
+															>
+																<svg class="w-3 h-3" style="color: oklch(0.65 0.20 145);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																	<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+																</svg>
+															</span>
+														{:else if isChildTask}
+															<span
+																class="font-mono text-xs select-none"
+																style="color: oklch(0.45 0.02 250); min-width: 1rem;"
+															>{isLastChild ? '└' : '├'}</span>
+														{/if}
+														<TaskIdBadge
+															{task}
+															size="xs"
+															showType={false}
+															showAssignee={false}
+															copyOnly
+															blockedBy={unresolvedBlockers}
+															blocks={blockedTasks}
+															showDependencies={true}
+															onOpenTask={handleRowClick}
+															onAgentClick={onagentclick}
+														/>
+													</div>
+												</th>
+
+												<!-- Actions -->
+												<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};" onclick={(e) => e.stopPropagation()}>
+													<TaskActionButton
+														{task}
+														{agents}
+														spawning={isSpawning}
+														hasBlockers={depStatus.hasBlockers}
+														blockingReason={depStatus.blockingReason ?? undefined}
+														{isCompletedByActiveSession}
+														onspawn={handleSpawnSingle}
+														onattach={(sessionName) => {
+															const command = `tmux attach-session -t "${sessionName}"`;
+															navigator.clipboard.writeText(command);
+															alert(`Command copied to clipboard:\n${command}\n\nPaste in terminal to attach.`);
+														}}
+													/>
+												</td>
+
+												<!-- Title -->
+												<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
+													<div>
+														<div class="font-medium text-sm" style="color: oklch(0.85 0.02 250);">{task.title}</div>
+														{#if task.description}
+															<div class="text-xs" style="color: oklch(0.55 0.02 250);">
+																{task.description}
+															</div>
+														{/if}
+													</div>
+												</td>
+
+												<!-- Image drop zone cell - supports multiple images -->
+												<td
+													style="background: {hasRowGradient ? 'transparent' : 'inherit'};"
+													onclick={(e) => e.stopPropagation()}
+													ondrop={(e) => handleImageDrop(e, task.id)}
+													ondragover={(e) => handleImageDragOver(e, task.id)}
+													ondragleave={handleImageDragLeave}
+													class="relative w-28"
+												>
+													<div class="flex items-center gap-1 overflow-x-auto">
+														{#if uploadingImage === task.id}
+															<!-- Uploading state -->
+															<div class="w-6 h-6 flex items-center justify-center">
+																<span class="loading loading-spinner loading-xs"></span>
+															</div>
+														{/if}
+														{#each taskImages.get(task.id) || [] as img (img.id)}
+															<!-- Image thumbnail with remove button -->
+															<div class="relative group flex-shrink-0">
+																<img
+																	src={img.preview}
+																	alt="Task attachment"
+																	class="w-6 h-6 object-cover rounded border border-base-content/20 cursor-pointer hover:border-primary transition-colors"
+																	title={img.path || 'Attached image'}
+																/>
+																<!-- Remove button on hover -->
+																<button
+																	class="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-error text-error-content flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-[8px] leading-none"
+																	onclick={(e) => removeTaskImage(task.id, img.id, e)}
+																	title="Remove image"
+																>
+																	×
+																</button>
+															</div>
+														{/each}
+														<!-- Add more button / empty drop zone -->
+														<div
+															class="w-6 h-6 rounded border border-dashed flex items-center justify-center transition-all flex-shrink-0"
+															style="border-color: {dragOverTask === task.id ? 'oklch(0.70 0.18 240)' : 'oklch(0.35 0.02 250)'}; background: {dragOverTask === task.id ? 'oklch(0.70 0.18 240 / 0.1)' : 'transparent'};"
+															title={(taskImages.get(task.id) || []).length > 0 ? 'Drop to add another image' : 'Drop image here to attach'}
+														>
+															<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3" style="color: {dragOverTask === task.id ? 'oklch(0.70 0.18 240)' : 'oklch(0.45 0.02 250)'};">
+																<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+															</svg>
+														</div>
+													</div>
+												</td>
+
+												<!-- Priority -->
+												<td class="text-center" style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
+													<span class="badge badge-sm {getPriorityBadge(task.priority)}">
+														P{task.priority}
+													</span>
+												</td>
+
+												<!-- Labels -->
+												<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
+													{#if task.labels && task.labels.length > 0}
+														<LabelBadges labels={task.labels} maxDisplay={2} />
+													{:else}
+														<span style="color: oklch(0.40 0.02 250);">-</span>
+													{/if}
+												</td>
+
+												<!-- Age -->
+												<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
+													<span class="text-xs font-mono {getAgeColorClass(task.updated_at)}" title={formatFullDate(task.updated_at)}>
+														{formatRelativeTime(task.updated_at)}
+													</span>
+												</td>
+											</tr>
+										{/each}
+									</tbody>
+								{/if}
+							{/each}
+						{/if}
+					{/each}
+				{:else}
+					<!-- Standard grouped tasks (type, parent, label modes) -->
+					{@const groupEntries = Array.from(groupedTasks.entries())}
+					{#each groupEntries as [groupKey, typeTasks], loopIndex}
+						{#if typeTasks.length > 0}
+							<!-- Group header (pinned when scrolling) - Industrial/Terminal style -->
+							{@const typeVisual = getGroupHeaderInfo(groupingMode, groupKey)}
+						{@const epicId = groupingMode === 'parent' ? groupKey : null}
+						{@const parentTask = epicId ? [...(allTasks.length > 0 ? allTasks : tasks)].find(t => t.id === epicId) : null}
 						{@const isCollapsed = collapsedGroups.has(groupKey)}
 						{@const workingAgents = [...new Set(typeTasks.filter(t => t.status === 'in_progress' && t.assignee).map(t => t.assignee))]}
-						<!-- In parent mode, only show collapsible header for groups with 2+ child tasks -->
+						<!-- In parent/project mode, only show collapsible header for groups with 2+ child tasks -->
 						<!-- Standalone tasks (single task where task.id === groupKey) get no header -->
-						{@const hasChildTasks = typeTasks.some(t => extractParentId(t.id) === groupKey)}
+						{@const hasChildTasks = typeTasks.some(t => {
+							const parent = extractParentId(t.id);
+							return parent === groupKey;
+						})}
 						{@const showGroupHeader = groupingMode !== 'parent' || typeTasks.length >= 2 || hasChildTasks}
 						{@const groupIndex = visibleGroupKeys.indexOf(groupKey)}
 						{#if showGroupHeader}
@@ -2107,35 +2686,39 @@
 						{/if}
 						<!-- Show tasks if: no header (standalone task), or header exists and not collapsed -->
 						{#if !showGroupHeader || !isCollapsed}
-						<tbody>
-							{#each typeTasks as task (task.id)}
+						<tbody transition:slide={{ duration: 150 }}>
+							{#each typeTasks as task, taskIndex (task.id)}
 								{@const depStatus = analyzeDependencies(task)}
 									{@const taskIsActive = task.status === 'in_progress' && task.assignee}
 									{@const isNewTask = newTaskIds.includes(task.id)}
 									{@const isStarting = startingTaskIds.includes(task.id)}
 									{@const isCompleted = completedTaskIds.includes(task.id)}
+									{@const isCompletedByActiveSession = completedTasksFromActiveSessions.has(task.id)}
 									{@const isHuman = isHumanTask(task)}
+									{@const isChildTask = groupingMode === 'parent' && extractParentId(task.id) === groupKey && task.id !== groupKey}
+									{@const isLastChild = isChildTask && taskIndex === typeTasks.length - 1}
 									{@const unresolvedBlockers = task.depends_on?.filter(d => d.status !== 'closed') || []}
 									{@const allTasksList = allTasks.length > 0 ? allTasks : tasks}
 									{@const blockedTasks = allTasksList.filter(t => t.depends_on?.some(d => d.id === task.id) && t.status !== 'closed')}
 									{@const elapsed = task.status === 'in_progress' ? getElapsedTime(task.updated_at) : null}
 									{@const fireScale = elapsed ? getFireScale(elapsed.minutes) : 1}
+									{@const hasRowGradient = isCompletedByActiveSession || dragOverTask === task.id || selectedTasks.has(task.id) || isHuman || taskIsActive}
 									<!-- Main task row -->
 									<tr
 										class="cursor-pointer group overflow-visible industrial-row {depStatus.hasBlockers ? 'opacity-70' : ''} {isNewTask ? 'task-new-entrance' : ''} {isStarting ? 'task-starting' : ''} {isCompleted ? 'task-completed' : ''}"
 										style="
-											background: {dragOverTask === task.id ? 'oklch(0.70 0.18 240 / 0.15)' : selectedTasks.has(task.id) ? 'oklch(0.70 0.18 240 / 0.1)' : isHuman ? 'oklch(0.70 0.18 45 / 0.10)' : taskIsActive ? 'oklch(0.70 0.18 240 / 0.05)' : 'oklch(0.16 0.01 250)'};
+											background: {isCompletedByActiveSession ? 'linear-gradient(90deg, oklch(0.55 0.18 145 / 0.15), transparent)' : dragOverTask === task.id ? 'oklch(0.70 0.18 240 / 0.15)' : selectedTasks.has(task.id) ? 'oklch(0.70 0.18 240 / 0.1)' : isHuman ? 'oklch(0.70 0.18 45 / 0.10)' : taskIsActive ? 'oklch(0.70 0.18 240 / 0.05)' : ''};
 											border-bottom: 1px solid oklch(0.25 0.01 250);
-											border-left: 2px solid {dragOverTask === task.id ? 'oklch(0.70 0.18 240)' : selectedTasks.has(task.id) ? 'oklch(0.70 0.18 240)' : isHuman ? 'oklch(0.70 0.18 45)' : unresolvedBlockers.length > 0 ? 'oklch(0.55 0.18 30 / 0.4)' : taskIsActive ? 'oklch(0.70 0.18 240 / 0.5)' : 'transparent'};
+											border-left: {isCompletedByActiveSession ? '3px solid oklch(0.65 0.20 145)' : dragOverTask === task.id ? '2px solid oklch(0.70 0.18 240)' : selectedTasks.has(task.id) ? '2px solid oklch(0.70 0.18 240)' : isHuman ? '2px solid oklch(0.70 0.18 45)' : unresolvedBlockers.length > 0 ? '2px solid oklch(0.55 0.18 30 / 0.4)' : taskIsActive ? '2px solid oklch(0.70 0.18 240 / 0.5)' : '2px solid transparent'};
 										"
 										onclick={() => handleRowClick(task.id)}
 										ondrop={(e) => handleImageDrop(e, task.id)}
 										ondragover={(e) => handleImageDragOver(e, task.id)}
 										ondragleave={handleImageDragLeave}
-										title={depStatus.hasBlockers ? `Blocked: ${depStatus.blockingReason}` : ''}
+										title={isCompletedByActiveSession ? 'Completed - session still active' : depStatus.hasBlockers ? `Blocked: ${depStatus.blockingReason}` : ''}
 									>
 										<th
-											style="background: inherit;"
+											style="background: {hasRowGradient ? 'transparent' : 'inherit'};"
 											onclick={(e) => e.stopPropagation()}
 										>
 											<input
@@ -2146,28 +2729,49 @@
 												style="border-color: oklch(0.45 0.02 250);"
 											/>
 										</th>
-										<th style="background: inherit;">
-											<TaskIdBadge
-												{task}
-												size="xs"
-												showType={false}
-												showAssignee={false}
-												{elapsed}
-												copyOnly
-												blockedBy={unresolvedBlockers}
-												blocks={blockedTasks}
-												showDependencies={true}
-												onOpenTask={handleRowClick}
-												onAgentClick={onagentclick}
-											/>
+										<th style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
+											<div class="flex items-center gap-1">
+												{#if isCompletedByActiveSession}
+													<!-- Completed checkmark for tasks finished by active session -->
+													<span
+														class="flex items-center justify-center w-5 h-5 rounded-full"
+														style="background: oklch(0.55 0.18 145 / 0.25);"
+														title="Completed - session still active"
+													>
+														<svg class="w-3 h-3" style="color: oklch(0.65 0.20 145);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+														</svg>
+													</span>
+												{:else if isChildTask}
+													<!-- Tree line indicator for child tasks -->
+													<span
+														class="font-mono text-xs select-none"
+														style="color: oklch(0.45 0.02 250); min-width: 1rem;"
+													>{isLastChild ? '└' : '├'}</span>
+												{/if}
+												<TaskIdBadge
+													{task}
+													size="xs"
+													showType={false}
+													showAssignee={false}
+													{elapsed}
+													copyOnly
+													blockedBy={unresolvedBlockers}
+													blocks={blockedTasks}
+													showDependencies={true}
+													onOpenTask={handleRowClick}
+													onAgentClick={onagentclick}
+												/>
+											</div>
 										</th>
-										<td style="background: inherit;" onclick={(e) => e.stopPropagation()}>
+										<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};" onclick={(e) => e.stopPropagation()}>
 											<TaskActionButton
 												{task}
 												{agents}
 												spawning={spawningSingle === task.id || $spawningTaskIds.has(task.id)}
 												hasBlockers={depStatus.hasBlockers}
 												blockingReason={depStatus.blockingReason}
+												{isCompletedByActiveSession}
 												onspawn={handleSpawnSingle}
 												{fireScale}
 												{elapsed}
@@ -2179,7 +2783,7 @@
 												}}
 											/>
 										</td>
-										<td style="background: inherit;">
+										<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
 											<div>
 												<div class="font-medium text-sm" style="color: oklch(0.85 0.02 250);">{task.title}</div>
 												{#if task.description}
@@ -2191,7 +2795,7 @@
 										</td>
 										<!-- Image drop zone cell - supports multiple images -->
 										<td
-											style="background: inherit;"
+											style="background: {hasRowGradient ? 'transparent' : 'inherit'};"
 											onclick={(e) => e.stopPropagation()}
 											ondrop={(e) => handleImageDrop(e, task.id)}
 											ondragover={(e) => handleImageDragOver(e, task.id)}
@@ -2236,19 +2840,19 @@
 												</div>
 											</div>
 										</td>
-									<td class="text-center" style="background: inherit;">
+									<td class="text-center" style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
 										<span class="badge badge-sm {getPriorityBadge(task.priority)}">
 											P{task.priority}
 										</span>
 									</td>
-									<td style="background: inherit;">
+									<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
 										{#if task.labels && task.labels.length > 0}
 											<LabelBadges labels={task.labels} maxDisplay={2} />
 										{:else}
 											<span style="color: oklch(0.40 0.02 250);">-</span>
 										{/if}
 									</td>
-									<td style="background: inherit;">
+									<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
 										<span class="text-xs font-mono {getAgeColorClass(task.updated_at)}" title={formatFullDate(task.updated_at)}>
 											{formatRelativeTime(task.updated_at)}
 										</span>
@@ -2257,8 +2861,17 @@
 							{/each}
 						</tbody>
 						{/if}
+						<!-- Group separator: adds visual space between groups with headers -->
+						{#if showGroupHeader && loopIndex < groupEntries.length - 1}
+							<tbody>
+								<tr>
+									<td colspan="8" class="h-3" style="background: transparent; border: none;"></td>
+								</tr>
+							</tbody>
+						{/if}
 					{/if}
 				{/each}
+				{/if}
 
 				<!-- Render exiting tasks with exit animation -->
 				{#if exitingTasks.length > 0}
@@ -2273,11 +2886,11 @@
 									border-left: 2px solid {isTaskCompleted ? 'oklch(0.70 0.19 145 / 0.5)' : 'oklch(0.70 0.20 25 / 0.5)'};
 								"
 							>
-								<th style="background: inherit;"></th>
-								<th style="background: inherit;">
+								<th style="background: transparent;"></th>
+								<th style="background: transparent;">
 									<TaskIdBadge {task} size="xs" showType={false} showAssignee={false} copyOnly />
 								</th>
-								<td style="background: inherit;">
+								<td style="background: transparent;">
 									{#if isTaskCompleted}
 										<!-- Rocket landing animation for completed tasks -->
 										<div class="rocket-btn rocket-landing">
@@ -2312,18 +2925,18 @@
 										</div>
 									{/if}
 								</td>
-								<td style="background: inherit;">
+								<td style="background: transparent;">
 									<div class="font-medium text-sm" style="color: oklch(0.65 0.02 250);">{task.title}</div>
 								</td>
-								<td class="w-28" style="background: inherit;"></td><!-- Image column -->
-								<td class="text-center" style="background: inherit;">
+								<td class="w-28" style="background: transparent;"></td><!-- Image column -->
+								<td class="text-center" style="background: transparent;">
 									<span class="badge badge-sm {getPriorityBadge(task.priority)}">
 										P{task.priority}
 									</span>
 								</td>
-								<td style="background: inherit;"></td>
-								<td style="background: inherit;"></td>
-								<td style="background: inherit;"></td>
+								<td style="background: transparent;"></td>
+								<td style="background: transparent;"></td>
+								<td style="background: transparent;"></td>
 							</tr>
 						{/each}
 					</tbody>

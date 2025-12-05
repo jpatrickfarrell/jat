@@ -1073,3 +1073,204 @@ Or run /jat:verify to see detailed error report
    - Session typically ends after completion
    - User spawns new agent for next task
    - Keeps context clean and focused
+
+---
+
+## Epic/Child Task Architecture
+
+**Epics are blocked by their children, not the other way around.**
+
+### Dependency Direction
+
+When creating an epic with child tasks, the dependencies must be set up correctly:
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    CORRECT DEPENDENCY STRUCTURE                          │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  jat-abc (Epic): "Improve Dashboard"                                    │
+│    └─ DEPENDS ON (blocked by):                                          │
+│         → jat-abc.1: "Add caching" [READY - can start immediately]      │
+│         → jat-abc.2: "Optimize queries" [READY - can start immediately] │
+│         → jat-abc.3: "Add tests" [READY - can start immediately]        │
+│                                                                          │
+│  Flow:                                                                   │
+│    1. Children are READY (no blockers, agents can pick them up)         │
+│    2. Epic is BLOCKED (waiting for all children to complete)            │
+│    3. When all children complete → Epic becomes READY                   │
+│    4. Epic is then verification/UAT task                                │
+│                                                                          │
+├──────────────────────────────────────────────────────────────────────────┤
+│                    WRONG (OLD) DEPENDENCY STRUCTURE                      │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  jat-abc (Epic): "Improve Dashboard"                                    │
+│    └─ BLOCKS:                                                           │
+│         ← jat-abc.1: "Add caching" [BLOCKED - waiting on epic!]         │
+│         ← jat-abc.2: "Optimize queries" [BLOCKED]                       │
+│         ← jat-abc.3: "Add tests" [BLOCKED]                              │
+│                                                                          │
+│  Problem: Epic appears READY but has no real work defined               │
+│  Problem: Children can't start until epic is "done"                     │
+│  Problem: Agent picks epic and tries to do ALL the child work           │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+### Creating Epic with Children (Correct Pattern)
+
+**Step 1: Create the epic (will be blocked by children)**
+```bash
+bd create "Improve Dashboard Performance" \
+  --type epic \
+  --description "Parent epic for performance improvements. This task becomes verification/UAT once all children complete." \
+  --priority 1
+# → Creates: jat-abc
+```
+
+**Step 2: Create child tasks**
+```bash
+# Create children as separate tasks
+bd create "Add caching layer" --type task --priority 2
+# → Creates: jat-def
+
+bd create "Optimize database queries" --type task --priority 2
+# → Creates: jat-ghi
+
+bd create "Add performance tests" --type task --priority 3
+# → Creates: jat-jkl
+```
+
+**Step 3: Set up dependencies (epic depends on children)**
+```bash
+# Epic is blocked by each child (NOT children blocked by epic!)
+bd dep add jat-abc jat-def   # Epic depends on child 1
+bd dep add jat-abc jat-ghi   # Epic depends on child 2
+bd dep add jat-abc jat-jkl   # Epic depends on child 3
+```
+
+**Result:**
+- `jat-abc` (epic) shows as BLOCKED until all children complete
+- Children (`jat-def`, `jat-ghi`, `jat-jkl`) show as READY
+- Agents can pick up children immediately
+- When all children complete, epic becomes READY for verification
+
+### Fixing Incorrectly Created Epics
+
+If you have an epic with wrong dependency direction:
+
+```bash
+# Check current state
+bd show jat-abc
+# If it shows "Blocks: ← jat-abc.1, ← jat-abc.2" - it's WRONG
+
+# Fix by removing and re-adding dependencies
+bd dep remove jat-abc.1 jat-abc    # Remove child → parent dep
+bd dep remove jat-abc.2 jat-abc
+bd dep remove jat-abc.3 jat-abc
+
+bd dep add jat-abc jat-abc.1       # Add parent → child dep (correct)
+bd dep add jat-abc jat-abc.2
+bd dep add jat-abc jat-abc.3
+
+# Verify fix
+bd show jat-abc
+# Should now show "Depends on: → jat-abc.1, → jat-abc.2, → jat-abc.3"
+```
+
+---
+
+## Completing an Epic (Verification/UAT Workflow)
+
+**When all children are done, the epic becomes a verification task.**
+
+When you pick up an epic that has become READY (all children completed), your job is:
+
+1. **Verify all children are actually complete**
+   - Check each child task is closed in Beads
+   - Review the work done by child agents
+
+2. **Run integration/UAT verification**
+   - Run full test suite
+   - Check for integration issues between components
+   - Verify the combined work achieves the epic's goal
+
+3. **Check for loose ends**
+   - Any human actions that weren't completed?
+   - Any suggested tasks that should become real tasks?
+   - Any documentation that needs updating?
+
+4. **Complete the epic normally**
+   - If verification passes: run `/jat:complete`
+   - If issues found: create follow-up tasks, document issues
+
+### Epic Completion Output Template
+
+When completing an epic, use this modified summary:
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│  ✅ Epic Verified: jat-abc "Improve Dashboard Performance"               │
+│  👤 Agent: $agent_name                                                   │
+│  [JAT:IDLE]                                                              │
+│                                                                          │
+│  📦 Child Tasks Completed:                                               │
+│     ✓ jat-abc.1: Add caching layer (by CalmMeadow)                      │
+│     ✓ jat-abc.2: Optimize database queries (by SwiftMoon)               │
+│     ✓ jat-abc.3: Add performance tests (by JustGrove)                   │
+│                                                                          │
+│  🔍 Verification Results:                                                │
+│     • Integration tests: passing                                         │
+│     • Performance target: achieved (P99 < 200ms)                         │
+│     • No regressions detected                                            │
+│                                                                          │
+│  🧑 Human actions required (from child tasks):                           │
+│     [List any outstanding human actions from children]                   │
+│                                                                          │
+│  📊 Epic Impact:                                                         │
+│     • Dashboard load time reduced by 75%                                 │
+│     • Database query time reduced by 60%                                 │
+│                                                                          │
+│  💡 Epic complete. All work verified and integrated.                     │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Completing a Child Task (Epic Context)
+
+When completing a child task that belongs to an epic:
+
+**Step 1: Complete normally** using the standard completion flow.
+
+**Step 2: Check if this was the LAST child**
+
+```bash
+# Check if parent epic still has blockers
+parent_id=$(echo "$task_id" | sed 's/\.[0-9]*$//')
+remaining=$(bd show "$parent_id" --json | jq -r '.[] | select(.status != "closed") | .id' | grep -v "$parent_id")
+
+if [[ -z "$remaining" ]]; then
+  echo "🎉 This was the last child! Parent epic jat-abc is now READY for verification."
+fi
+```
+
+**Step 3: Include in completion summary:**
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│  ✅ Task Completed: jat-abc.3 "Add performance tests"                    │
+│  👤 Agent: JustGrove                                                     │
+│  [JAT:IDLE]                                                              │
+│                                                                          │
+│  📦 Epic Status:                                                         │
+│     Parent: jat-abc "Improve Dashboard Performance"                      │
+│     Progress: 3/3 children complete                                      │
+│     🎉 Epic is now READY for verification!                               │
+│                                                                          │
+│  [rest of standard summary...]                                           │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+This helps the commander know when an epic is ready for final verification.

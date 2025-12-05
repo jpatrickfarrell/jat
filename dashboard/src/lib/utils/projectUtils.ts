@@ -30,8 +30,9 @@ export function getProjectFromTaskId(taskId: string): string | null {
   }
 
   // Task IDs should be in format: "project-hash" (e.g., "chimaro-abc", "jat-bov")
+  // or "project-hash.N" for child tasks (e.g., "jat-7uzx.1", "jat-abc.2")
   // Project prefix must be followed by a hyphen and at least one character
-  const match = taskId.match(/^([a-zA-Z0-9_-]+?)-([a-zA-Z0-9]+)$/);
+  const match = taskId.match(/^([a-zA-Z0-9_-]+?)-([a-zA-Z0-9.]+)$/);
 
   if (!match) {
     return null;

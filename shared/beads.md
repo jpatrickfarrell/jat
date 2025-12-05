@@ -138,7 +138,23 @@ Use **underscores** not hyphens:
 
 ### Epics: When to Use Hierarchical Tasks
 
-Beads supports parent-child task hierarchies using the `--parent` flag. Child tasks get automatic `.1`, `.2`, `.3` suffixes.
+Beads supports parent-child task hierarchies. Child tasks get automatic `.1`, `.2`, `.3` suffixes.
+
+**⚠️ IMPORTANT: Epic Dependency Direction**
+
+Epics are **blocked by their children**, not the other way around:
+- **Children are READY** - Agents can work on them immediately
+- **Epic is BLOCKED** - Waiting for all children to complete
+- **When all children complete** - Epic becomes READY for verification/UAT
+
+```
+CORRECT:                              WRONG:
+jat-abc (Epic) - BLOCKED              jat-abc (Epic) - READY ⚠️
+  └─ Depends on:                        └─ Blocks:
+       → jat-abc.1 [READY]                   ← jat-abc.1 [BLOCKED] ⚠️
+       → jat-abc.2 [READY]                   ← jat-abc.2 [BLOCKED] ⚠️
+       → jat-abc.3 [READY]                   ← jat-abc.3 [BLOCKED] ⚠️
+```
 
 **When to use an Epic:**
 - **Cohesive feature** - Tasks that together deliver one user-facing capability
@@ -158,43 +174,70 @@ Beads supports parent-child task hierarchies using the `--parent` flag. Child ta
 4+ related   → definitely epic
 ```
 
-**Creating an Epic with Subtasks:**
+**Creating an Epic with Subtasks (CORRECT Pattern):**
 ```bash
-# 1. Create the epic first
+# 1. Create the epic first (will be blocked by children)
 bd create "Epic: User authentication system" \
   --type epic \
   --priority 1 \
-  --description "Complete auth system with OAuth and email/password login"
-# Creates: jat-abc
+  --description "Verification task - runs after all subtasks complete"
+# Creates: jat-abc (shows as BLOCKED once children exist)
 
-# 2. Create subtasks with --parent
-bd create "Set up Supabase auth config" \
-  --parent jat-abc \
-  --type task \
-  --priority 0
-# Creates: jat-abc.1
+# 2. Create child tasks as separate tasks
+bd create "Set up Supabase auth config" --type task --priority 0
+# Creates: jat-def
 
-bd create "Implement Google OAuth flow" \
-  --parent jat-abc \
-  --type task \
-  --priority 1
-# Creates: jat-abc.2
+bd create "Implement Google OAuth flow" --type task --priority 1
+# Creates: jat-ghi
 
-bd create "Build login UI components" \
-  --parent jat-abc \
-  --type task \
-  --priority 1
-# Creates: jat-abc.3
+bd create "Build login UI components" --type task --priority 1
+# Creates: jat-jkl
 
-# 3. Set dependencies between subtasks
-bd dep add jat-abc.2 jat-abc.1   # OAuth depends on auth config
-bd dep add jat-abc.3 jat-abc.2   # UI depends on OAuth
+# 3. Set dependencies: Epic depends on children (NOT children depend on epic!)
+bd dep add jat-abc jat-def   # Epic depends on child 1
+bd dep add jat-abc jat-ghi   # Epic depends on child 2
+bd dep add jat-abc jat-jkl   # Epic depends on child 3
 
-# 4. Check epic progress
-bd epic status jat-abc
-# ○ jat-abc Epic: User authentication system
-#    Progress: 0/3 children closed (0%)
+# 4. Set dependencies between children (optional - for sequencing)
+bd dep add jat-ghi jat-def   # OAuth depends on auth config
+bd dep add jat-jkl jat-ghi   # UI depends on OAuth
+
+# 5. Verify setup
+bd show jat-abc
+# Should show "Depends on: → jat-def, → jat-ghi, → jat-jkl"
 ```
+
+**Result:**
+- Children (`jat-def`, `jat-ghi`, `jat-jkl`) are READY for agents to pick up
+- Epic (`jat-abc`) is BLOCKED until all children complete
+- When all children complete → Epic becomes READY for verification
+
+**⚠️ WARNING about --parent flag:**
+
+The `--parent` flag creates the WRONG dependency direction (children blocked by parent). If you used `--parent`, fix it:
+
+```bash
+# If you created with --parent and dependencies are wrong:
+bd dep remove jat-abc.1 jat-abc    # Remove child → parent
+bd dep remove jat-abc.2 jat-abc
+bd dep add jat-abc jat-abc.1       # Add parent → child (correct)
+bd dep add jat-abc jat-abc.2
+
+# Verify fix
+bd show jat-abc
+# Should show "Depends on: →" not "Blocks: ←"
+```
+
+**Epic Completion Workflow:**
+
+When all children complete, the epic becomes a **verification task**:
+1. Agent picks up the now-unblocked epic
+2. Verifies all children are actually complete
+3. Runs integration/UAT tests
+4. Checks for loose ends (human actions, follow-up tasks)
+5. Closes the epic with `/jat:complete`
+
+See `/jat:complete.md` for detailed epic completion templates.
 
 **Nesting Levels (max 3):**
 ```
@@ -210,6 +253,7 @@ jat-abc           (epic)
 - Keep nesting shallow (1 level is usually enough)
 - Epic type for parent, task type for children
 - Set P0 on foundation tasks, P1 on features
+- Epic should describe verification criteria, not implementation work
 - Dependencies between siblings enable parallel work
 
 Recommended conventions

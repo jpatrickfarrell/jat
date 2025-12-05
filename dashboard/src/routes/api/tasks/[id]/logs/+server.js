@@ -74,24 +74,30 @@ export async function GET({ params }) {
 
 				// Check if this log contains the task ID
 				// Look for various patterns where task ID appears
+				// IMPORTANT: All patterns must include the full task ID to avoid false positives
 				const patterns = [
-					// JAT markers
+					// JAT markers (must include task ID)
 					`[JAT:WORKING task=${id}]`,
-					`[JAT:READY`, // After working on task
+					`[JAT:READY task=${id}]`,
+					`[JAT:NEEDS_REVIEW task=${id}]`,
+					`[JAT:COMPLETED task=${id}]`,
 					// Beads commands
 					`bd show ${id}`,
 					`bd update ${id}`,
 					`bd close ${id}`,
-					// Task references in text
+					// Task references in text (with task ID)
 					`task: ${id}`,
 					`Task: ${id}`,
 					`Starting: ${id}`,
 					`Completed: ${id}`,
-					// Task ID in commit messages or general text
-					id
+					// Log header pattern (most reliable - each log has this)
+					`# Task: ${id}`,
 				];
 
-				const containsTask = patterns.some(pattern => content.includes(pattern));
+				// Also check if the task ID appears in the filename (session-...-{taskId}-...)
+				const hasTaskInFilename = logFile.includes(`-${id}-`) || logFile.includes(`-${id}.`);
+
+				const containsTask = hasTaskInFilename || patterns.some(pattern => content.includes(pattern));
 
 				if (containsTask) {
 					// Extract agent name from filename or content

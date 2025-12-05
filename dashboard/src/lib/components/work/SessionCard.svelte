@@ -48,7 +48,7 @@
 	import TerminalActivitySparkline from "./TerminalActivitySparkline.svelte";
 	import StreakCelebration from "$lib/components/StreakCelebration.svelte";
 	import SuggestedTasksSection from "./SuggestedTasksSection.svelte";
-	import SuggestedTasksModal, { type SuggestedTaskWithState } from "./SuggestedTasksModal.svelte";
+	import SuggestedTasksModal from "./SuggestedTasksModal.svelte";
 	import {
 		SESSION_STATE_VISUALS,
 		SERVER_STATE_VISUALS,
@@ -1578,49 +1578,113 @@
 	/** Whether task creation is in progress */
 	let isCreatingSuggestedTasks = $state(false);
 
-	/** Send selected suggested tasks back to agent via tmux for creation in Beads */
+	/** Results of task creation - for inline feedback */
+	interface TaskCreationResult {
+		title: string;
+		taskId?: string;
+		success: boolean;
+		error?: string;
+	}
+	let createResults = $state<{ success: TaskCreationResult[]; failed: TaskCreationResult[] }>({
+		success: [],
+		failed: [],
+	});
+
+	/** Show results feedback */
+	let showCreateFeedback = $state(false);
+
+	/** Create selected suggested tasks by calling /api/tasks/bulk endpoint */
 	async function createSuggestedTasks(selectedTasks: typeof detectedSuggestedTasks) {
 		if (selectedTasks.length === 0) return;
-		if (!onSendInput) {
-			console.error('[SuggestedTasks] Cannot send tasks: onSendInput is not defined');
-			return;
-		}
 
 		isCreatingSuggestedTasks = true;
+		createResults = { success: [], failed: [] };
+
+		// Map tasks to the bulk API format
+		const tasksToCreate = selectedTasks.map((t) => ({
+			type: t.edits?.type || t.type || 'task',
+			title: t.edits?.title || t.title,
+			description: t.edits?.description || t.description || '',
+			priority: t.edits?.priority ?? t.priority ?? 2,
+		}));
+
+		// Determine project from parent task ID
+		const parentTaskId = task?.id || displayTask?.id;
+		const project = parentTaskId ? getProjectFromTaskId(parentTaskId) : undefined;
+
+		console.log('[SuggestedTasks] Creating tasks via bulk API:', {
+			count: selectedTasks.length,
+			project,
+			parentTaskId,
+		});
 
 		try {
-			// Map tasks to the payload format
-			const tasksToCreate = selectedTasks.map((t) => ({
-				type: t.edits?.type || t.type || 'task',
-				title: t.edits?.title || t.title,
-				description: t.edits?.description || t.description || '',
-				priority: t.edits?.priority ?? t.priority ?? 2,
-				reason: t.reason,
-			}));
+			const response = await fetch('/api/tasks/bulk', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					tasks: tasksToCreate,
+					project: project || undefined,
+				}),
+			});
 
-			// Build the payload with parent_task_id for linking
-			const payload = {
-				parent_task_id: task?.id || displayTask?.id || null,
-				tasks: tasksToCreate,
-			};
+			const result = await response.json();
 
-			// Format: [JAT:CREATE_TASKS]{...json...}[/JAT:CREATE_TASKS]
-			const message = `[JAT:CREATE_TASKS]${JSON.stringify(payload)}[/JAT:CREATE_TASKS]`;
+			if (!response.ok) {
+				// API returned an error
+				createResults.failed = tasksToCreate.map((t) => ({
+					title: t.title,
+					success: false,
+					error: result.message || 'Failed to create tasks',
+				}));
+				console.error('[SuggestedTasks] Bulk creation failed:', result);
+			} else {
+				// Process individual results
+				if (result.results && Array.isArray(result.results)) {
+					createResults.success = result.results.filter((r: TaskCreationResult) => r.success);
+					createResults.failed = result.results.filter((r: TaskCreationResult) => !r.success);
+				} else {
+					// Fallback for successful response without detailed results
+					createResults.success = tasksToCreate.map((t) => ({
+						title: t.title,
+						success: true,
+					}));
+				}
+				console.log(`[SuggestedTasks] Created ${result.created} tasks, ${result.failed} failed`);
+			}
 
-			// Send to agent's terminal via tmux
-			console.log('[SuggestedTasks] Sending to agent:', message);
-			await onSendInput(message, 'text');
+			// Show feedback
+			showCreateFeedback = true;
 
-			// Clear all selections and edits after successful send
-			suggestedTaskSelections = new Map();
-			suggestedTaskEdits = new Map();
-
-			// Log success
-			console.log(`[SuggestedTasks] Sent ${selectedTasks.length} tasks to agent for creation`);
+			// If all succeeded, clear selections after a short delay
+			if (createResults.failed.length === 0) {
+				setTimeout(() => {
+					suggestedTaskSelections = new Map();
+					suggestedTaskEdits = new Map();
+					showCreateFeedback = false;
+				}, 2500);
+			}
 		} catch (error) {
-			console.error('[SuggestedTasks] Error sending tasks to agent:', error);
+			const errorMsg = error instanceof Error ? error.message : 'Network error';
+			createResults.failed = tasksToCreate.map((t) => ({
+				title: t.title,
+				success: false,
+				error: errorMsg,
+			}));
+			showCreateFeedback = true;
+			console.error('[SuggestedTasks] Error creating tasks:', error);
 		} finally {
 			isCreatingSuggestedTasks = false;
+		}
+	}
+
+	/** Dismiss the creation feedback message */
+	function dismissCreateFeedback() {
+		showCreateFeedback = false;
+		// Clear selections if there were no failures
+		if (createResults.failed.length === 0) {
+			suggestedTaskSelections = new Map();
+			suggestedTaskEdits = new Map();
 		}
 	}
 
@@ -2415,8 +2479,8 @@
 						type="button"
 						class="badge badge-xs font-mono cursor-pointer hover:opacity-80 transition-opacity"
 						style="background: oklch(0.45 0.18 250); color: oklch(0.98 0.02 250); border: none;"
-						title="{detectedSuggestedTasks.length} suggested task{detectedSuggestedTasks.length > 1 ? 's' : ''}"
-						onclick={() => suggestedTasksExpanded = !suggestedTasksExpanded}
+						title="{detectedSuggestedTasks.length} suggested task{detectedSuggestedTasks.length > 1 ? 's' : ''} - click to review and create"
+						onclick={() => suggestedTasksModalOpen = true}
 					>
 						💡 {detectedSuggestedTasks.length}
 					</button>
@@ -2794,8 +2858,8 @@
 							type="button"
 							class="badge badge-xs font-mono mr-1.5 cursor-pointer hover:opacity-80 transition-opacity"
 							style="background: oklch(0.45 0.18 250); color: oklch(0.98 0.02 250); border: none;"
-							title="{detectedSuggestedTasks.length} suggested task{detectedSuggestedTasks.length > 1 ? 's' : ''}"
-							onclick={() => suggestedTasksExpanded = !suggestedTasksExpanded}
+							title="{detectedSuggestedTasks.length} suggested task{detectedSuggestedTasks.length > 1 ? 's' : ''} - click to review and create"
+							onclick={() => suggestedTasksModalOpen = true}
 						>
 							💡 {detectedSuggestedTasks.length}
 						</button>
@@ -3090,6 +3154,9 @@
 						onEditTask={updateSuggestedTaskEdit}
 						onClearEdits={clearSuggestedTaskEdits}
 						isCreating={isCreatingSuggestedTasks}
+						{createResults}
+						showFeedback={showCreateFeedback}
+						onDismissFeedback={dismissCreateFeedback}
 					/>
 				</div>
 			{/if}
@@ -3981,6 +4048,16 @@
 		</div>
 	</div>
 {/if}
+
+<!-- Suggested Tasks Modal -->
+<SuggestedTasksModal
+	isOpen={suggestedTasksModalOpen}
+	onClose={() => suggestedTasksModalOpen = false}
+	tasks={detectedSuggestedTasks}
+	onCreateTasks={createSuggestedTasksViaBulkApi}
+	{agentName}
+	{sessionName}
+/>
 
 <style>
 	.unified-agent-card {

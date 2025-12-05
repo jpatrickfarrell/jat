@@ -25,6 +25,7 @@
 	import { broadcastTaskEvent } from '$lib/stores/taskEvents';
 	import { getElapsedTimeColor, getFireScale, formatElapsedTime } from '$lib/config/rocketConfig';
 	import { TaskDetailSkeleton } from '$lib/components/skeleton';
+	import SlideOpenButton from '$lib/components/SlideOpenButton.svelte';
 
 	// Agent interface for action state
 	interface Agent extends AgentStatusInput {
@@ -1032,9 +1033,6 @@
 		reopenReason = '';
 		showReopenModal = true;
 	}
-
-	// Hover state for reopen button group slide-open
-	let reopenButtonHovered = $state(false);
 
 	/**
 	 * Perform the actual reopen with reason appended to description
@@ -2460,55 +2458,18 @@
 					>
 						Cancel
 					</button>
-					<!-- Slide-open button group -->
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<div
-						class="flex items-center overflow-hidden rounded-lg"
-						style="border: 1px solid oklch(0.60 0.15 55);"
-						onmouseenter={() => reopenButtonHovered = true}
-						onmouseleave={() => reopenButtonHovered = false}
-					>
-						<!-- Primary: Reopen button -->
-						<button
-							class="btn btn-sm gap-2 rounded-none border-0"
-							style="
-								background: linear-gradient(135deg, oklch(0.55 0.15 55) 0%, oklch(0.45 0.18 45) 100%);
-								color: oklch(0.95 0.02 250);
-							"
-							onclick={() => confirmReopen(false)}
-							disabled={isReopening || !reopenReason.trim()}
-						>
-							{#if isReopening}
-								<span class="loading loading-spinner loading-xs"></span>
-								Reopening...
-							{:else}
-								<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-								</svg>
-								Reopen
-							{/if}
-						</button>
-						<!-- Secondary: Slide-out "& Start" button -->
-						<button
-							class="btn btn-sm gap-1 rounded-none border-0 transition-all duration-200 ease-out"
-							style="
-								background: linear-gradient(135deg, oklch(0.45 0.18 145) 0%, oklch(0.35 0.15 145) 100%);
-								color: oklch(0.95 0.02 250);
-								border-left: 1px solid oklch(0.50 0.10 55);
-								max-width: {reopenButtonHovered ? '120px' : '0px'};
-								padding: {reopenButtonHovered ? '0.5rem 0.75rem' : '0.5rem 0'};
-								opacity: {reopenButtonHovered ? '1' : '0'};
-							"
-							onclick={() => confirmReopen(true)}
-							disabled={isReopening || !reopenReason.trim()}
-							title="Reopen task and spawn a new agent session"
-						>
-							<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
-							</svg>
-							<span class="whitespace-nowrap text-xs font-medium">& Start</span>
-						</button>
-					</div>
+					<SlideOpenButton
+						primaryLabel="Reopen"
+						primaryLoadingLabel="Reopening..."
+						primaryIcon="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+						secondaryLabel="& Start"
+						secondaryIcon="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"
+						secondaryTitle="Reopen task and spawn a new agent session"
+						disabled={isReopening || !reopenReason.trim()}
+						loading={isReopening}
+						onprimary={() => confirmReopen(false)}
+						onsecondary={() => confirmReopen(true)}
+					/>
 				</div>
 			</div>
 		</div>

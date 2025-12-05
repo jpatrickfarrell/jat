@@ -9,7 +9,7 @@
 	import { analyzeDependencies } from '$lib/utils/dependencyUtils';
 	import { getProjectFromTaskId, extractParentId, compareTaskIds } from '$lib/utils/projectUtils';
 	import { getProjectColor } from '$lib/utils/projectColors';
-	import { getPriorityBadge, getTaskStatusBadge, getTypeBadge } from '$lib/utils/badgeHelpers';
+	import { getPriorityBadge, getTaskStatusBadge, getTypeBadge, isHumanTask } from '$lib/utils/badgeHelpers';
 	import { formatRelativeTime, formatFullDate, normalizeTimestamp, getAgeColorClass } from '$lib/utils/dateFormatters';
 	import { toggleSetItem } from '$lib/utils/filterHelpers';
 	import { getTaskStatusVisual, STATUS_ICONS, getIssueTypeVisual, getGroupHeaderInfo, type GroupingMode } from '$lib/config/statusColors';
@@ -99,6 +99,25 @@
 		return () => clearInterval(timerInterval);
 	});
 
+	// Keyboard shortcuts for collapse/expand all groups
+	onMount(() => {
+		function handleKeyDown(event: KeyboardEvent) {
+			// Alt+[ = Collapse All Groups
+			if (event.altKey && event.key === '[') {
+				event.preventDefault();
+				collapseAll();
+			}
+			// Alt+] = Expand All Groups
+			if (event.altKey && event.key === ']') {
+				event.preventDefault();
+				expandAll();
+			}
+		}
+
+		document.addEventListener('keydown', handleKeyDown);
+		return () => document.removeEventListener('keydown', handleKeyDown);
+	});
+
 	// Calculate elapsed time from a timestamp with color coding
 	// Uses config from $lib/config/rocketConfig.ts
 	function getElapsedTime(timestamp: string | undefined): { display: string; color: string; minutes: number } | null {
@@ -123,6 +142,83 @@
 	// Track collapsed groups (by group key)
 	let collapsedGroups = $state<Set<string | null>>(new Set());
 
+	// Keyboard navigation: track focused group index for arrow key navigation
+	let focusedGroupIndex = $state<number>(-1);
+
+	// Get array of visible group keys for keyboard navigation
+	const visibleGroupKeys = $derived.by(() => {
+		const keys: (string | null)[] = [];
+		for (const [groupKey, typeTasks] of groupedTasks.entries()) {
+			if (typeTasks.length > 0) {
+				// Check if this group should show a header
+				const hasChildTasks = typeTasks.some(t => extractParentId(t.id) === groupKey);
+				const showGroupHeader = groupingMode !== 'parent' || typeTasks.length >= 2 || hasChildTasks;
+				if (showGroupHeader) {
+					keys.push(groupKey);
+				}
+			}
+		}
+		return keys;
+	});
+
+	// Handle keyboard navigation on group headers
+	function handleGroupKeyDown(event: KeyboardEvent, groupKey: string | null, groupIndex: number) {
+		const key = event.key;
+
+		if (key === 'Enter' || key === ' ') {
+			// Toggle collapse on Enter or Space
+			event.preventDefault();
+			toggleGroupCollapse(groupKey);
+		} else if (key === 'ArrowDown' || key === 'ArrowRight') {
+			// Navigate to next group
+			event.preventDefault();
+			const nextIndex = groupIndex + 1;
+			if (nextIndex < visibleGroupKeys.length) {
+				focusedGroupIndex = nextIndex;
+				focusGroupHeader(nextIndex);
+			}
+		} else if (key === 'ArrowUp' || key === 'ArrowLeft') {
+			// Navigate to previous group
+			event.preventDefault();
+			const prevIndex = groupIndex - 1;
+			if (prevIndex >= 0) {
+				focusedGroupIndex = prevIndex;
+				focusGroupHeader(prevIndex);
+			}
+		} else if (key === 'Home') {
+			// Jump to first group
+			event.preventDefault();
+			if (visibleGroupKeys.length > 0) {
+				focusedGroupIndex = 0;
+				focusGroupHeader(0);
+			}
+		} else if (key === 'End') {
+			// Jump to last group
+			event.preventDefault();
+			if (visibleGroupKeys.length > 0) {
+				const lastIndex = visibleGroupKeys.length - 1;
+				focusedGroupIndex = lastIndex;
+				focusGroupHeader(lastIndex);
+			}
+		}
+	}
+
+	// Focus a group header by index
+	function focusGroupHeader(index: number) {
+		// Use setTimeout to ensure DOM is updated
+		setTimeout(() => {
+			const groupHeader = document.querySelector(`[data-group-index="${index}"]`) as HTMLElement;
+			if (groupHeader) {
+				groupHeader.focus();
+			}
+		}, 0);
+	}
+
+	// Handle focus event on group header
+	function handleGroupFocus(groupIndex: number) {
+		focusedGroupIndex = groupIndex;
+	}
+
 	// Toggle group collapse state
 	function toggleGroupCollapse(groupKey: string | null) {
 		const newSet = new Set(collapsedGroups);
@@ -133,6 +229,24 @@
 		}
 		collapsedGroups = newSet;
 	}
+
+	// Collapse all visible groups
+	function collapseAll() {
+		collapsedGroups = new Set(visibleGroupKeys);
+	}
+
+	// Expand all groups
+	function expandAll() {
+		collapsedGroups = new Set();
+	}
+
+	// Check if all groups are collapsed
+	const allGroupsCollapsed = $derived(
+		visibleGroupKeys.length > 0 && collapsedGroups.size >= visibleGroupKeys.length
+	);
+
+	// Check if any groups are collapsed
+	const anyGroupsCollapsed = $derived(collapsedGroups.size > 0);
 
 	// Reset collapsed groups when grouping mode changes
 	$effect(() => {
@@ -315,6 +429,7 @@
 	let selectedStatuses = $state<Set<string>>(new Set(['open', 'in_progress']));
 	let selectedTypes = $state<Set<string>>(new Set());
 	let selectedLabels = $state<Set<string>>(new Set());
+	let humanTasksOnly = $state(false); // Show only human-action tasks
 
 	// Sorting state
 	let sortColumn = $state('priority');
@@ -386,6 +501,9 @@
 		} else {
 			selectedLabels = new Set();
 		}
+
+		const humanOnly = params.get('humanOnly');
+		humanTasksOnly = humanOnly === 'true';
 	});
 
 	// Update URL when filters change
@@ -407,6 +525,9 @@
 		}
 		if (selectedLabels.size > 0) {
 			params.set('labels', Array.from(selectedLabels).join(','));
+		}
+		if (humanTasksOnly) {
+			params.set('humanOnly', 'true');
 		}
 
 		const newURL = params.toString() ? `?${params.toString()}` : window.location.pathname;
@@ -457,6 +578,11 @@
 				const taskLabels = task.labels || [];
 				return Array.from(selectedLabels).every((label) => taskLabels.includes(label));
 			});
+		}
+
+		// Filter for human tasks only
+		if (humanTasksOnly) {
+			result = result.filter((task) => isHumanTask(task));
 		}
 
 		return result;
@@ -697,6 +823,7 @@
 		selectedStatuses = new Set(['open', 'in_progress']);
 		selectedTypes = new Set();
 		selectedLabels = new Set();
+		humanTasksOnly = false;
 		updateURL();
 	}
 
@@ -1428,8 +1555,57 @@
 				</button>
 			</div>
 
+			<!-- Collapse/Expand All Groups - Industrial btn-group -->
+			{#if visibleGroupKeys.length > 0}
+				<div class="join rounded" style="border: 1px solid oklch(0.35 0.02 250);">
+					<!-- Collapse All -->
+					<button
+						class="join-item btn btn-xs px-2"
+						style={allGroupsCollapsed
+							? 'background: oklch(0.50 0.18 240); color: oklch(0.95 0.02 250); border: none;'
+							: 'background: oklch(0.22 0.01 250); color: oklch(0.55 0.02 250); border: none;'}
+						onclick={collapseAll}
+						disabled={allGroupsCollapsed}
+						title="Collapse All Groups (Alt+[)"
+					>
+						<!-- Collapse icon: bars stacked together -->
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
+						</svg>
+					</button>
+					<!-- Expand All -->
+					<button
+						class="join-item btn btn-xs px-2"
+						style={!anyGroupsCollapsed
+							? 'background: oklch(0.50 0.18 240); color: oklch(0.95 0.02 250); border: none;'
+							: 'background: oklch(0.22 0.01 250); color: oklch(0.55 0.02 250); border: none;'}
+						onclick={expandAll}
+						disabled={!anyGroupsCollapsed}
+						title="Expand All Groups (Alt+])"
+					>
+						<!-- Expand icon: bars with vertical lines indicating expansion -->
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
+						</svg>
+					</button>
+				</div>
+			{/if}
+
+			<!-- Human Tasks Only Toggle - Industrial -->
+			<button
+				class="px-2 py-1 rounded font-mono text-xs tracking-wider transition-all flex items-center gap-1"
+				style={humanTasksOnly
+					? 'background: oklch(0.70 0.18 45 / 0.25); color: oklch(0.85 0.15 45); border: 1px solid oklch(0.70 0.18 45 / 0.5);'
+					: 'background: oklch(0.22 0.01 250); color: oklch(0.55 0.02 250); border: 1px solid oklch(0.35 0.02 250);'}
+				onclick={() => { humanTasksOnly = !humanTasksOnly; updateURL(); }}
+				title="Show human-action tasks only"
+			>
+				<span style="font-size: 1rem;">🧑</span>
+				<span class="hidden sm:inline">Human</span>
+			</button>
+
 			<!-- Clear Filters - Industrial -->
-			{#if searchQuery || selectedProjects.size > 0 || selectedPriorities.size < 4 || selectedStatuses.size !== 2 || !selectedStatuses.has('open') || !selectedStatuses.has('in_progress') || selectedTypes.size > 0 || selectedLabels.size > 0}
+			{#if searchQuery || selectedProjects.size > 0 || selectedPriorities.size < 4 || selectedStatuses.size !== 2 || !selectedStatuses.has('open') || !selectedStatuses.has('in_progress') || selectedTypes.size > 0 || selectedLabels.size > 0 || humanTasksOnly}
 				<button
 					class="px-3 py-1 rounded font-mono text-xs tracking-wider uppercase transition-all industrial-hover"
 					style="
@@ -1812,12 +1988,20 @@
 						<!-- Standalone tasks (single task where task.id === groupKey) get no header -->
 						{@const hasChildTasks = typeTasks.some(t => extractParentId(t.id) === groupKey)}
 						{@const showGroupHeader = groupingMode !== 'parent' || typeTasks.length >= 2 || hasChildTasks}
+						{@const groupIndex = visibleGroupKeys.indexOf(groupKey)}
 						{#if showGroupHeader}
 						<thead>
 							<tr
-								class="cursor-pointer select-none hover:brightness-110 transition-all"
+								class="cursor-pointer select-none hover:brightness-110 transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+								tabindex="0"
+								role="button"
+								aria-expanded={!isCollapsed}
+								aria-label="{typeVisual.label} group, {typeTasks.length} {typeTasks.length === 1 ? 'task' : 'tasks'}, {isCollapsed ? 'collapsed' : 'expanded'}"
+								data-group-index={groupIndex}
 								onclick={() => toggleGroupCollapse(groupKey)}
-								title={isCollapsed ? 'Click to expand' : 'Click to collapse'}
+								onkeydown={(e) => handleGroupKeyDown(e, groupKey, groupIndex)}
+								onfocus={() => handleGroupFocus(groupIndex)}
+								title={isCollapsed ? 'Click to expand (Enter/Space)' : 'Click to collapse (Enter/Space). Arrow keys to navigate groups.'}
 							>
 								<th
 									colspan="8"
@@ -1886,6 +2070,23 @@
 											</div>
 										{/if}
 
+										<!-- Epic progress bar (only in parent mode with >1 tasks) -->
+										{#if groupingMode === 'parent' && typeTasks.length > 1}
+											{@const closedCount = typeTasks.filter(t => t.status === 'closed').length}
+											{@const progressPercent = Math.round((closedCount / typeTasks.length) * 100)}
+											<div class="flex items-center gap-2 ml-3" title="{closedCount} of {typeTasks.length} tasks completed ({progressPercent}%)">
+												<div class="w-24 h-1.5 bg-base-content/10 rounded-full overflow-hidden">
+													<div
+														class="h-full rounded-full transition-all duration-300"
+														style="width: {progressPercent}%; background: {progressPercent === 100 ? 'oklch(0.72 0.20 142)' : typeVisual.accent};"
+													></div>
+												</div>
+												<span class="font-mono text-[10px] text-base-content/50">
+													{progressPercent}%
+												</span>
+											</div>
+										{/if}
+
 										<!-- Decorative line -->
 										<div
 											class="flex-1 h-px mx-3 opacity-30"
@@ -1913,6 +2114,7 @@
 									{@const isNewTask = newTaskIds.includes(task.id)}
 									{@const isStarting = startingTaskIds.includes(task.id)}
 									{@const isCompleted = completedTaskIds.includes(task.id)}
+									{@const isHuman = isHumanTask(task)}
 									{@const unresolvedBlockers = task.depends_on?.filter(d => d.status !== 'closed') || []}
 									{@const allTasksList = allTasks.length > 0 ? allTasks : tasks}
 									{@const blockedTasks = allTasksList.filter(t => t.depends_on?.some(d => d.id === task.id) && t.status !== 'closed')}
@@ -1922,9 +2124,9 @@
 									<tr
 										class="cursor-pointer group overflow-visible industrial-row {depStatus.hasBlockers ? 'opacity-70' : ''} {isNewTask ? 'task-new-entrance' : ''} {isStarting ? 'task-starting' : ''} {isCompleted ? 'task-completed' : ''}"
 										style="
-											background: {dragOverTask === task.id ? 'oklch(0.70 0.18 240 / 0.15)' : selectedTasks.has(task.id) ? 'oklch(0.70 0.18 240 / 0.1)' : taskIsActive ? 'oklch(0.70 0.18 240 / 0.05)' : 'oklch(0.16 0.01 250)'};
+											background: {dragOverTask === task.id ? 'oklch(0.70 0.18 240 / 0.15)' : selectedTasks.has(task.id) ? 'oklch(0.70 0.18 240 / 0.1)' : isHuman ? 'oklch(0.70 0.18 45 / 0.10)' : taskIsActive ? 'oklch(0.70 0.18 240 / 0.05)' : 'oklch(0.16 0.01 250)'};
 											border-bottom: 1px solid oklch(0.25 0.01 250);
-											border-left: 2px solid {dragOverTask === task.id ? 'oklch(0.70 0.18 240)' : selectedTasks.has(task.id) ? 'oklch(0.70 0.18 240)' : unresolvedBlockers.length > 0 ? 'oklch(0.55 0.18 30 / 0.4)' : taskIsActive ? 'oklch(0.70 0.18 240 / 0.5)' : 'transparent'};
+											border-left: 2px solid {dragOverTask === task.id ? 'oklch(0.70 0.18 240)' : selectedTasks.has(task.id) ? 'oklch(0.70 0.18 240)' : isHuman ? 'oklch(0.70 0.18 45)' : unresolvedBlockers.length > 0 ? 'oklch(0.55 0.18 30 / 0.4)' : taskIsActive ? 'oklch(0.70 0.18 240 / 0.5)' : 'transparent'};
 										"
 										onclick={() => handleRowClick(task.id)}
 										ondrop={(e) => handleImageDrop(e, task.id)}

@@ -59,7 +59,7 @@
 		getServerStateVisual,
 	} from "$lib/config/statusColors";
 	import HorizontalResizeHandle from "$lib/components/HorizontalResizeHandle.svelte";
-	import { setHoveredSession, completingSessionFlash, highlightedSessionName } from "$lib/stores/hoveredSession";
+	import { setHoveredSession, completingSessionFlash, highlightedSessionName, jumpToSession } from "$lib/stores/hoveredSession";
 	import {
 		findHumanActionMarkers,
 		findSuggestedTasksMarker,
@@ -1032,6 +1032,18 @@
 
 	function handleCardMouseLeave() {
 		setHoveredSession(null);
+	}
+
+	// Handle click anywhere in the card to center it and focus input
+	// This combines: scroll to center, glow animation, and focus input textarea
+	function handleCardClick() {
+		// Scroll to center and trigger glow animation via store
+		jumpToSession(sessionName, agentName);
+
+		// Focus the input textarea after a short delay for scroll animation
+		setTimeout(() => {
+			inputRef?.focus();
+		}, 100);
 	}
 
 	// Attached files (pending upload) - supports images, PDFs, text, code, etc.
@@ -3392,7 +3404,7 @@
 			class="flex-1 flex flex-col min-h-0"
 			style="border-top: 1px solid oklch(0.5 0 0 / 0.08);"
 		>
-			<!-- Output Content - Click to focus input -->
+			<!-- Output Content - Click to center card, add glow effect, and focus input -->
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
@@ -3400,7 +3412,7 @@
 				class="overflow-y-auto px-3 font-mono text-xs leading-relaxed flex-1 min-h-0 cursor-text"
 				style="background: oklch(0.12 0.01 250);"
 				onscroll={handleScroll}
-				onclick={() => inputRef?.focus()}
+				onclick={handleCardClick}
 			>
 				{#if output}
 					<pre

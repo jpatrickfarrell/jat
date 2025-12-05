@@ -22,7 +22,7 @@ import { json } from '@sveltejs/kit';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getTasks } from '$lib/server/beads.js';
-import { getAgentUsage, getAgentHourlyUsage } from '$lib/utils/tokenUsage.js';
+import { getAgentUsage, getAgentHourlyUsage, getAgentContextPercent } from '$lib/utils/tokenUsage.js';
 
 const execAsync = promisify(exec);
 
@@ -44,6 +44,7 @@ const execAsync = promisify(exec);
  * @property {number} tokens - Token usage for today
  * @property {number} cost - Cost in USD for today
  * @property {SparklineDataPoint[]} sparklineData - Hourly token usage (last 24h)
+ * @property {number|null} contextPercent - Context remaining percentage (0-100)
  * @property {string} created - Session creation timestamp
  * @property {boolean} attached - Whether session is attached
  * @property {string} sessionState - Detected session state (starting, working, needs-input, ready-for-review, completing, completed, idle)
@@ -65,6 +66,59 @@ const execAsync = promisify(exec);
  * @property {string} [status] - Task status
  * @property {string} [title] - Task title
  */
+
+/**
+ * Extract context remaining percentage from Claude Code's terminal output
+ * Looks for patterns like "Context left until auto-compact: 5%" or status line visual indicator
+ * @param {string} output - Terminal output
+ * @returns {number|null} Context remaining percentage (0-100) or null if not found
+ */
+function extractContextPercentFromOutput(output) {
+	if (!output) return null;
+
+	// Strip ANSI codes for cleaner matching
+	const cleanOutput = output.replace(/\x1b\[[0-9;]*m/g, '');
+
+	// Look for Claude's "Context left until auto-compact: X%" message
+	// This appears in Claude's responses when context is running low
+	const autoCompactMatch = cleanOutput.match(/Context left until auto-compact:\s*(\d+)%/i);
+	if (autoCompactMatch) {
+		return parseInt(autoCompactMatch[1], 10);
+	}
+
+	// Look for status line visual indicator using filled/unfilled squares
+	// Pattern: ▪▪▪▪▪▪▫▫▫▫ (filled squares = context remaining, unfilled = context used)
+	// This appears in the custom JAT statusline
+	// We want the LAST (most recent) match since context decreases over time
+	const visualMatches = cleanOutput.match(/[▪▫]{5,15}/g);
+	if (visualMatches && visualMatches.length > 0) {
+		// Use the last match (most recent in output)
+		const indicator = visualMatches[visualMatches.length - 1];
+		const filled = (indicator.match(/▪/g) || []).length;
+		const unfilled = (indicator.match(/▫/g) || []).length;
+		const total = filled + unfilled;
+		if (total > 0) {
+			// filled squares = context remaining, unfilled = context used
+			// So 6 filled out of 10 = 60% remaining
+			return Math.round((filled / total) * 100);
+		}
+	}
+
+	// Look for context percentage in Claude Code's status line format
+	// Pattern: "Context: X% remaining" or similar
+	const contextMatch = cleanOutput.match(/Context:\s*(\d+)%/i);
+	if (contextMatch) {
+		return parseInt(contextMatch[1], 10);
+	}
+
+	// Look for patterns like "X% context" or "context X%"
+	const percentMatch = cleanOutput.match(/(\d+)%\s*context|context\s*(\d+)%/i);
+	if (percentMatch) {
+		return parseInt(percentMatch[1] || percentMatch[2], 10);
+	}
+
+	return null;
+}
 
 /**
  * Detect session state from terminal output
@@ -318,6 +372,11 @@ export async function GET({ url }) {
 				let cost = 0;
 				/** @type {SparklineDataPoint[]} */
 				let sparklineData = [];
+				/** @type {number|null} */
+				let contextPercent = null;
+
+				// Always extract context % from Claude's terminal output (fast, most accurate)
+				contextPercent = extractContextPercentFromOutput(output);
 
 				if (includeUsage) {
 					try {
@@ -334,6 +393,15 @@ export async function GET({ url }) {
 					} catch (err) {
 						// No sparkline data available
 					}
+
+					// Fall back to token-based calculation if not found in output
+					if (contextPercent === null) {
+						try {
+							contextPercent = await getAgentContextPercent(agentName, projectPath);
+						} catch (err) {
+							// No context data available
+						}
+					}
 				}
 
 				// Detect session state from output
@@ -349,6 +417,7 @@ export async function GET({ url }) {
 					tokens,
 					cost,
 					sparklineData,
+					contextPercent,
 					created: session.created,
 					attached: session.attached,
 					sessionState

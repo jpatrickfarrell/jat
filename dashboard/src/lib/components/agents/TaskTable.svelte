@@ -26,13 +26,18 @@
 	} from '$lib/utils/bulkApiHelpers';
 	import { playNewTaskChime, playTaskExitSound, playTaskStartSound, playTaskCompleteSound } from '$lib/utils/soundEffects';
 	import { spawningTaskIds, isBulkSpawning } from '$lib/stores/spawningTasks';
+	import { getFileTypeInfo, formatFileSize, type FileCategory } from '$lib/utils/fileUtils';
 
-	// Type definitions for task images
-	interface TaskImage {
+	// Type definitions for task files (images, PDFs, text, etc.)
+	interface TaskFile {
 		blob: Blob;
-		preview: string; // Object URL for thumbnail
+		preview: string; // Object URL for thumbnail (images only)
 		path: string;    // Server path after upload
-		id: string;      // Unique ID for this image (for removal)
+		id: string;      // Unique ID for this file (for removal)
+		name: string;    // Original filename
+		category: FileCategory; // File type category
+		icon: string;    // SVG path for icon
+		iconColor: string; // oklch color for icon
 	}
 
 	// Type definitions
@@ -90,6 +95,7 @@
 	let exitingTasks = $state<Task[]>([]);
 	let startingTaskIds = $state<string[]>([]);
 	let completedTaskIds = $state<string[]>([]);
+	let workingCompletedTaskIds = $state<string[]>([]); // Tasks that transitioned from working → completed
 
 	// Timer state for elapsed time display under rockets
 	let now = $state(Date.now());
@@ -349,10 +355,15 @@
 
 		// Find tasks that changed status to closed (completed)
 		const closedIds: string[] = [];
+		const fromWorkingIds: string[] = []; // Tasks that were in_progress before becoming closed
 		for (const task of tasks) {
 			const prevStatus = previousStatusMap.get(task.id);
 			if (prevStatus && prevStatus !== 'closed' && task.status === 'closed') {
 				closedIds.push(task.id);
+				// Track if this task was working (in_progress) before completion
+				if (prevStatus === 'in_progress') {
+					fromWorkingIds.push(task.id);
+				}
 			}
 		}
 
@@ -419,6 +430,7 @@
 		// If tasks completed (status -> closed), play completion sound and trigger landing animation
 		if (closedIds.length > 0) {
 			completedTaskIds = closedIds;
+			workingCompletedTaskIds = fromWorkingIds; // Track working→completed transitions
 			playTaskCompleteSound();
 
 			// Add completed tasks to exitingTasks so they show landing animation
@@ -433,6 +445,7 @@
 			// (0.8s landing + 0.6s delay + 0.4s checkmark + 1.7s linger)
 			setTimeout(() => {
 				completedTaskIds = [];
+				workingCompletedTaskIds = [];
 				exitingTasks = exitingTasks.filter(t => !closedIds.includes(t.id));
 			}, 3500);
 		}
@@ -867,14 +880,15 @@
 		return count;
 	}
 
-	// Get working agents for a project (for project header avatars)
+	// Get agents who have worked on a project (for project header avatars)
+	// Shows all agents with assigned tasks, not just currently working ones
 	function getProjectWorkingAgents(project: string): string[] {
 		const epicMap = nestedGroupedTasks.get(project);
 		if (!epicMap) return [];
 		const agents = new Set<string>();
 		for (const tasks of epicMap.values()) {
 			for (const task of tasks) {
-				if (task.status === 'in_progress' && task.assignee) {
+				if (task.assignee) {
 					agents.add(task.assignee);
 				}
 			}
@@ -1045,9 +1059,9 @@
 	let spawningSingle = $state<string | null>(null); // Task ID being spawned, or null
 	let spawningBulk = $state(false); // True when bulk spawn is in progress
 
-	// Task images state - tracks images attached to tasks (for bug screenshots etc.)
-	let taskImages = $state<Map<string, TaskImage[]>>(new Map());
-	let uploadingImage = $state<string | null>(null); // Task ID currently uploading image
+	// Task files state - tracks files attached to tasks (images, PDFs, text, etc.)
+	let taskFiles = $state<Map<string, TaskFile[]>>(new Map());
+	let uploadingFile = $state<string | null>(null); // Task ID currently uploading file
 	let dragOverTask = $state<string | null>(null); // Task ID being dragged over
 
 	/**
@@ -1062,11 +1076,11 @@
 
 		spawningSingle = taskId;
 		try {
-			// Check if this task has attached images
-			const taskImageArray = taskImages.get(taskId) || [];
-			const imagePaths = taskImageArray.map(img => img.path).filter(Boolean);
-			// Pass first image for backward compatibility, all images stored in task notes
-			const imagePath = imagePaths.length > 0 ? imagePaths[0] : null;
+			// Check if this task has attached files
+			const taskFileArray = taskFiles.get(taskId) || [];
+			const filePaths = taskFileArray.map(f => f.path).filter(Boolean);
+			// Pass first file for backward compatibility, all files stored in task notes
+			const imagePath = filePaths.length > 0 ? filePaths[0] : null;
 
 			const response = await fetch('/api/work/spawn', {
 				method: 'POST',
@@ -1089,9 +1103,9 @@
 			// Parent page polling will pick up the updated task state
 			console.log(`Spawned agent ${data.session?.agentName} for task ${taskId}${imagePath ? ' (with image)' : ''}`);
 
-			// Clear the image after successful spawn (it's been sent)
+			// Clear the files after successful spawn (they've been sent)
 			if (imagePath) {
-				clearAllTaskImages(taskId);
+				clearAllTaskFiles(taskId);
 			}
 
 			return true;
@@ -1275,33 +1289,44 @@
 	 * Enables cross-session reactivity - images persist across browser sessions
 	 * Supports multiple images per task
 	 */
-	async function loadTaskImagesFromServer() {
+	async function loadTaskFilesFromServer() {
 		try {
 			const response = await fetch('/api/tasks/images');
 			if (!response.ok) {
-				console.warn('Failed to load task images from server');
+				console.warn('Failed to load task files from server');
 				return;
 			}
 			const { images } = await response.json();
 
-			// Convert server images to local state format
-			const newMap = new Map<string, TaskImage[]>();
-			for (const [taskId, imageData] of Object.entries(images)) {
+			// Convert server files to local state format
+			const newMap = new Map<string, TaskFile[]>();
+			for (const [taskId, fileData] of Object.entries(images)) {
 				// Handle both old format (single object) and new format (array)
-				const dataArray = Array.isArray(imageData) ? imageData : [imageData];
-				const taskImageArray: TaskImage[] = dataArray.map((data: { path: string; uploadedAt: string; id?: string }, index: number) => ({
-					blob: new Blob(), // Placeholder - actual file is on disk
-					preview: `/api/work/image${data.path}`, // API endpoint serves the image
-					path: data.path,
-					id: data.id || `img-${index}-${Date.now()}`
-				}));
-				if (taskImageArray.length > 0) {
-					newMap.set(taskId, taskImageArray);
+				const dataArray = Array.isArray(fileData) ? fileData : [fileData];
+				const taskFileArray: TaskFile[] = dataArray.map((data: { path: string; uploadedAt: string; id?: string }, index: number) => {
+					// Get file type info from path
+					const filename = data.path.split('/').pop() || 'file';
+					const mockFile = new File([new Blob()], filename);
+					const typeInfo = getFileTypeInfo(mockFile);
+
+					return {
+						blob: new Blob(), // Placeholder - actual file is on disk
+						preview: typeInfo.previewable ? `/api/work/image${data.path}` : '',
+						path: data.path,
+						id: data.id || `file-${index}-${Date.now()}`,
+						name: filename,
+						category: typeInfo.category,
+						icon: typeInfo.icon,
+						iconColor: typeInfo.color
+					};
+				});
+				if (taskFileArray.length > 0) {
+					newMap.set(taskId, taskFileArray);
 				}
 			}
-			taskImages = newMap;
+			taskFiles = newMap;
 		} catch (err) {
-			console.error('Error loading task images:', err);
+			console.error('Error loading task files:', err);
 		}
 	}
 
@@ -1309,36 +1334,36 @@
 	 * Save task image path to server for persistence
 	 * Appends to existing images for this task
 	 */
-	async function saveTaskImageToServer(taskId: string, path: string, imageId: string) {
+	async function saveTaskFileToServer(taskId: string, path: string, fileId: string) {
 		try {
 			await fetch(`/api/tasks/${taskId}/image`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ path, id: imageId, action: 'add' })
+				body: JSON.stringify({ path, id: fileId, action: 'add' })
 			});
 		} catch (err) {
-			console.error('Failed to save task image to server:', err);
+			console.error('Failed to save task file to server:', err);
 		}
 	}
 
 	/**
-	 * Remove a specific task image from server
+	 * Remove a specific task file from server
 	 */
-	async function removeTaskImageFromServer(taskId: string, imageId: string) {
+	async function removeTaskFileFromServer(taskId: string, fileId: string) {
 		try {
 			await fetch(`/api/tasks/${taskId}/image`, {
 				method: 'DELETE',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ id: imageId })
+				body: JSON.stringify({ id: fileId })
 			});
 		} catch (err) {
-			console.error('Failed to remove task image from server:', err);
+			console.error('Failed to remove task file from server:', err);
 		}
 	}
 
-	// Load task images on mount
+	// Load task files on mount
 	onMount(() => {
-		loadTaskImagesFromServer();
+		loadTaskFilesFromServer();
 	});
 
 	// Track last image refresh time to avoid excessive reloads
@@ -1354,7 +1379,7 @@
 			const now = Date.now();
 			if (now - lastImageRefreshTime >= IMAGE_REFRESH_INTERVAL) {
 				lastImageRefreshTime = now;
-				loadTaskImagesFromServer();
+				loadTaskFilesFromServer();
 			}
 		}
 	});
@@ -1370,46 +1395,57 @@
 
 		if (!event.dataTransfer) return;
 
-		// Get ALL image files from the drop
+		// Get ALL files from the drop (images, PDFs, text, code, etc.)
 		const files = Array.from(event.dataTransfer.files);
-		const imageFiles = files.filter(f => f.type.startsWith('image/'));
 
-		if (imageFiles.length > 0) {
-			// Upload all image files sequentially
-			for (const imageFile of imageFiles) {
-				await uploadTaskImage(taskId, imageFile);
+		if (files.length > 0) {
+			// Upload all files sequentially
+			for (const file of files) {
+				await uploadTaskFile(taskId, file);
 			}
 			return;
 		}
 
-		// Check for image data (e.g., pasted from clipboard via drag)
+		// Check for data items (e.g., pasted from clipboard via drag)
 		const items = Array.from(event.dataTransfer.items);
 		for (const item of items) {
-			if (item.type.startsWith('image/')) {
-				const blob = item.getAsFile();
-				if (blob) {
-					await uploadTaskImage(taskId, blob);
-				}
+			const blob = item.getAsFile();
+			if (blob) {
+				await uploadTaskFile(taskId, blob);
 			}
 		}
 	}
 
 	/**
-	 * Upload an image for a task and store the path
-	 * Appends to existing images (supports multiple images per task)
+	 * Upload a file for a task and store the path
+	 * Appends to existing files (supports multiple files per task)
 	 * Also saves to server for cross-session persistence
 	 */
-	async function uploadTaskImage(taskId: string, blob: Blob) {
-		uploadingImage = taskId;
+	async function uploadTaskFile(taskId: string, blob: Blob) {
+		uploadingFile = taskId;
 
 		try {
-			// Create preview URL
-			const preview = URL.createObjectURL(blob);
+			// Determine file name and type info
+			let name: string;
+			let typeInfo;
+			if (blob instanceof File) {
+				name = blob.name;
+				typeInfo = getFileTypeInfo(blob);
+			} else {
+				const ext = blob.type.split('/')[1] || 'bin';
+				name = `file-${Date.now()}.${ext}`;
+				const mockFile = new File([blob], name, { type: blob.type });
+				typeInfo = getFileTypeInfo(mockFile);
+			}
+
+			// Create preview URL only for images
+			const preview = typeInfo.previewable ? URL.createObjectURL(blob) : '';
 
 			// Upload to server
 			const formData = new FormData();
-			formData.append('image', blob, `task-${taskId}-${Date.now()}.png`);
+			formData.append('file', blob, name);
 			formData.append('sessionName', `task-${taskId}`);
+			formData.append('filename', name);
 
 			const response = await fetch('/api/work/upload-image', {
 				method: 'POST',
@@ -1417,45 +1453,54 @@
 			});
 
 			if (!response.ok) {
-				throw new Error('Failed to upload image');
+				throw new Error('Failed to upload file');
 			}
 
 			const { filePath } = await response.json();
 
-			// Generate unique ID for this image
-			const imageId = `img-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+			// Generate unique ID for this file
+			const fileId = `file-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
-			// Create new image object
-			const newImage: TaskImage = { blob, preview, path: filePath, id: imageId };
+			// Create new file object
+			const newFile: TaskFile = {
+				blob,
+				preview,
+				path: filePath,
+				id: fileId,
+				name,
+				category: typeInfo.category,
+				icon: typeInfo.icon,
+				iconColor: typeInfo.color
+			};
 
-			// Append to existing images for this task
-			const newMap = new Map(taskImages);
-			const existingImages = newMap.get(taskId) || [];
-			newMap.set(taskId, [...existingImages, newImage]);
-			taskImages = newMap;
+			// Append to existing files for this task
+			const newMap = new Map(taskFiles);
+			const existingFiles = newMap.get(taskId) || [];
+			newMap.set(taskId, [...existingFiles, newFile]);
+			taskFiles = newMap;
 
 			// Save to server for persistence across browser sessions
-			await saveTaskImageToServer(taskId, filePath, imageId);
+			await saveTaskFileToServer(taskId, filePath, fileId);
 
-			// Update task notes with all image paths
-			await updateTaskNotesWithImages(taskId);
+			// Update task notes with all file paths
+			await updateTaskNotesWithFiles(taskId);
 
-			console.log(`Attached image to task ${taskId}: ${filePath} (total: ${existingImages.length + 1})`);
+			console.log(`Attached file to task ${taskId}: ${filePath} (total: ${existingFiles.length + 1})`);
 		} catch (err) {
-			console.error('Failed to upload task image:', err);
+			console.error('Failed to upload task file:', err);
 		} finally {
-			uploadingImage = null;
+			uploadingFile = null;
 		}
 	}
 
 	/**
-	 * Update task notes with all image paths so agents see them via bd show
+	 * Update task notes with all file paths so agents see them via bd show
 	 */
-	async function updateTaskNotesWithImages(taskId: string) {
+	async function updateTaskNotesWithFiles(taskId: string) {
 		try {
-			const images = taskImages.get(taskId) || [];
-			if (images.length === 0) {
-				// Clear notes if no images
+			const files = taskFiles.get(taskId) || [];
+			if (files.length === 0) {
+				// Clear notes if no files
 				await fetch(`/api/tasks/${taskId}`, {
 					method: 'PATCH',
 					headers: { 'Content-Type': 'application/json' },
@@ -1464,91 +1509,89 @@
 				return;
 			}
 
-			const imagePaths = images.map((img, i) => `  ${i + 1}. ${img.path}`).join('\n');
-			const noteText = `📷 Attached screenshots:\n${imagePaths}\n(Use Read tool to view these images)`;
+			const filePaths = files.map((f, i) => `  ${i + 1}. ${f.path} (${f.name})`).join('\n');
+			const noteText = `📎 Attached files:\n${filePaths}\n(Use Read tool to view these files)`;
 			await fetch(`/api/tasks/${taskId}`, {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ notes: noteText })
 			});
 		} catch (err) {
-			console.error('Failed to update task notes with images:', err);
+			console.error('Failed to update task notes with files:', err);
 		}
 	}
 
 	/**
-	 * Clear all images from a task
-	 * Used after successful spawn when images have been sent to the agent
+	 * Clear all files from a task
+	 * Used after successful spawn when files have been sent to the agent
 	 */
-	async function clearAllTaskImages(taskId: string) {
-		const images = taskImages.get(taskId) || [];
+	async function clearAllTaskFiles(taskId: string) {
+		const files = taskFiles.get(taskId) || [];
 
 		// Revoke all object URLs
-		for (const img of images) {
-			if (img.preview && !img.preview.startsWith('/api')) {
-				URL.revokeObjectURL(img.preview);
+		for (const file of files) {
+			if (file.preview && !file.preview.startsWith('/api')) {
+				URL.revokeObjectURL(file.preview);
 			}
 		}
 
-		// Remove all images from local state
-		const newMap = new Map(taskImages);
+		// Remove all files from local state
+		const newMap = new Map(taskFiles);
 		newMap.delete(taskId);
-		taskImages = newMap;
+		taskFiles = newMap;
 
-		// Remove from server for persistence (all images)
-		for (const img of images) {
-			await removeTaskImageFromServer(taskId, img.id);
+		// Remove from server for persistence (all files)
+		for (const file of files) {
+			await removeTaskFileFromServer(taskId, file.id);
 		}
 
 		// Update task notes
-		await updateTaskNotesWithImages(taskId);
+		await updateTaskNotesWithFiles(taskId);
 	}
 
 	/**
-	 * Remove a specific image from a task
+	 * Remove a specific file from a task
 	 * Also removes from server for cross-session persistence
 	 */
-	async function removeTaskImage(taskId: string, imageId: string, event: MouseEvent) {
+	async function removeTaskFile(taskId: string, fileId: string, event: MouseEvent) {
 		event.stopPropagation();
 
-		const images = taskImages.get(taskId) || [];
-		const imgToRemove = images.find(img => img.id === imageId);
+		const files = taskFiles.get(taskId) || [];
+		const fileToRemove = files.find(f => f.id === fileId);
 
 		// Revoke object URL if it's not a file path
-		if (imgToRemove && imgToRemove.preview && !imgToRemove.preview.startsWith('/api')) {
-			URL.revokeObjectURL(imgToRemove.preview);
+		if (fileToRemove && fileToRemove.preview && !fileToRemove.preview.startsWith('/api')) {
+			URL.revokeObjectURL(fileToRemove.preview);
 		}
 
-		// Filter out the removed image
-		const newMap = new Map(taskImages);
-		const remainingImages = images.filter(img => img.id !== imageId);
-		if (remainingImages.length > 0) {
-			newMap.set(taskId, remainingImages);
+		// Filter out the removed file
+		const newMap = new Map(taskFiles);
+		const remainingFiles = files.filter(f => f.id !== fileId);
+		if (remainingFiles.length > 0) {
+			newMap.set(taskId, remainingFiles);
 		} else {
 			newMap.delete(taskId);
 		}
-		taskImages = newMap;
+		taskFiles = newMap;
 
 		// Remove from server for persistence
-		await removeTaskImageFromServer(taskId, imageId);
+		await removeTaskFileFromServer(taskId, fileId);
 
 		// Update task notes
-		await updateTaskNotesWithImages(taskId);
+		await updateTaskNotesWithFiles(taskId);
 	}
 
 	/**
-	 * Handle drag over a task row
+	 * Handle drag over a task row (for file drops)
 	 */
-	function handleImageDragOver(event: DragEvent, taskId: string) {
+	function handleFileDragOver(event: DragEvent, taskId: string) {
 		event.preventDefault();
 		event.stopPropagation();
 
-		// Check if dragging an image
+		// Check if dragging files
 		if (event.dataTransfer) {
-			const hasImage = Array.from(event.dataTransfer.types).some(t =>
-				t === 'Files' || t.startsWith('image/')
-			);
-			if (hasImage) {
+			const hasFiles = Array.from(event.dataTransfer.types).includes('Files');
+			if (hasFiles) {
 				event.dataTransfer.dropEffect = 'copy';
 				dragOverTask = taskId;
 			}
@@ -1558,7 +1601,7 @@
 	/**
 	 * Handle drag leave from a task row
 	 */
-	function handleImageDragLeave(event: DragEvent) {
+	function handleFileDragLeave(event: DragEvent) {
 		event.preventDefault();
 		dragOverTask = null;
 	}
@@ -2266,7 +2309,7 @@
 								{@const epicVisual = getGroupHeaderInfo('parent', epicKey)}
 								{@const parentTask = [...(allTasks.length > 0 ? allTasks : tasks)].find(t => t.id === epicKey)}
 								{@const isEpicCollapsed = collapsedGroups.has(`${projectKey}::${epicKey}`)}
-								{@const epicWorkingAgents = [...new Set(epicTasks.filter(t => t.status === 'in_progress' && t.assignee).map(t => t.assignee))]}
+								{@const epicWorkingAgents = [...new Set(epicTasks.filter(t => t.assignee).map(t => t.assignee))]}
 								{@const hasChildTasks = epicTasks.some(t => extractParentId(t.id) === epicKey)}
 								{@const showEpicHeader = epicTasks.length >= 2 || hasChildTasks}
 
@@ -2378,6 +2421,7 @@
 											{@const isNewTask = newTaskIds.includes(task.id)}
 											{@const isStarting = startingTaskIds.includes(task.id)}
 											{@const isCompleted = completedTaskIds.includes(task.id)}
+											{@const isWorkingCompleted = workingCompletedTaskIds.includes(task.id)}
 											{@const isCompletedByActiveSession = completedTasksFromActiveSessions.has(task.id)}
 											{@const isHuman = isHumanTask(task)}
 											{@const isChildTask = extractParentId(task.id) === epicKey && task.id !== epicKey}
@@ -2389,7 +2433,7 @@
 											{@const isSpawning = spawningSingle === task.id || ($spawningTaskIds.has(task.id))}
 											{@const hasRowGradient = isCompletedByActiveSession || taskIsActive}
 											<tr
-												class="hover:bg-base-200/50 cursor-pointer transition-colors {isNewTask ? 'task-new' : ''} {isStarting ? 'task-starting' : ''} {isCompleted ? 'task-completed' : ''} {isChildTask ? 'pl-6' : ''}"
+												class="hover:bg-base-200/50 cursor-pointer transition-colors {isNewTask ? 'task-new' : ''} {isStarting ? 'task-starting' : ''} {isWorkingCompleted ? 'task-working-completed' : isCompleted ? 'task-completed' : ''} {isChildTask ? 'pl-6' : ''}"
 												onclick={() => handleRowClick(task.id)}
 												style="
 												background: {isCompletedByActiveSession ? 'linear-gradient(90deg, oklch(0.55 0.18 145 / 0.15), transparent)' : taskIsActive ? 'linear-gradient(90deg, oklch(0.75 0.15 85 / 0.08), transparent)' : ''};
@@ -2477,31 +2521,42 @@
 													style="background: {hasRowGradient ? 'transparent' : 'inherit'};"
 													onclick={(e) => e.stopPropagation()}
 													ondrop={(e) => handleImageDrop(e, task.id)}
-													ondragover={(e) => handleImageDragOver(e, task.id)}
-													ondragleave={handleImageDragLeave}
+													ondragover={(e) => handleFileDragOver(e, task.id)}
+													ondragleave={handleFileDragLeave}
 													class="relative w-28"
 												>
 													<div class="flex items-center gap-1 overflow-x-auto">
-														{#if uploadingImage === task.id}
+														{#if uploadingFile === task.id}
 															<!-- Uploading state -->
 															<div class="w-6 h-6 flex items-center justify-center">
 																<span class="loading loading-spinner loading-xs"></span>
 															</div>
 														{/if}
-														{#each taskImages.get(task.id) || [] as img (img.id)}
-															<!-- Image thumbnail with remove button -->
+														{#each taskFiles.get(task.id) || [] as file (file.id)}
+															<!-- File thumbnail/icon with remove button -->
 															<div class="relative group flex-shrink-0">
-																<img
-																	src={img.preview}
-																	alt="Task attachment"
-																	class="w-6 h-6 object-cover rounded border border-base-content/20 cursor-pointer hover:border-primary transition-colors"
-																	title={img.path || 'Attached image'}
-																/>
+																{#if file.category === 'image' && file.preview}
+																	<img
+																		src={file.preview}
+																		alt="Task attachment"
+																		class="w-6 h-6 object-cover rounded border border-base-content/20 cursor-pointer hover:border-primary transition-colors"
+																		title={file.name || 'Attached file'}
+																	/>
+																{:else}
+																	<div
+																		class="w-6 h-6 flex items-center justify-center rounded border border-base-content/20 cursor-pointer hover:border-primary transition-colors"
+																		title={file.name || 'Attached file'}
+																	>
+																		<svg class="w-4 h-4" style="color: {file.iconColor};" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+																			<path stroke-linecap="round" stroke-linejoin="round" d={file.icon} />
+																		</svg>
+																	</div>
+																{/if}
 																<!-- Remove button on hover -->
 																<button
 																	class="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-error text-error-content flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-[8px] leading-none"
-																	onclick={(e) => removeTaskImage(task.id, img.id, e)}
-																	title="Remove image"
+																	onclick={(e) => removeTaskFile(task.id, file.id, e)}
+																	title="Remove file"
 																>
 																	×
 																</button>
@@ -2511,7 +2566,7 @@
 														<div
 															class="w-6 h-6 rounded border border-dashed flex items-center justify-center transition-all flex-shrink-0"
 															style="border-color: {dragOverTask === task.id ? 'oklch(0.70 0.18 240)' : 'oklch(0.35 0.02 250)'}; background: {dragOverTask === task.id ? 'oklch(0.70 0.18 240 / 0.1)' : 'transparent'};"
-															title={(taskImages.get(task.id) || []).length > 0 ? 'Drop to add another image' : 'Drop image here to attach'}
+															title={(taskFiles.get(task.id) || []).length > 0 ? 'Drop to add another file' : 'Drop file here to attach'}
 														>
 															<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3" style="color: {dragOverTask === task.id ? 'oklch(0.70 0.18 240)' : 'oklch(0.45 0.02 250)'};">
 																<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -2559,7 +2614,7 @@
 						{@const epicId = groupingMode === 'parent' ? groupKey : null}
 						{@const parentTask = epicId ? [...(allTasks.length > 0 ? allTasks : tasks)].find(t => t.id === epicId) : null}
 						{@const isCollapsed = collapsedGroups.has(groupKey)}
-						{@const workingAgents = [...new Set(typeTasks.filter(t => t.status === 'in_progress' && t.assignee).map(t => t.assignee))]}
+						{@const workingAgents = [...new Set(typeTasks.filter(t => t.assignee).map(t => t.assignee))]}
 						<!-- In parent/project mode, only show collapsible header for groups with 2+ child tasks -->
 						<!-- Standalone tasks (single task where task.id === groupKey) get no header -->
 						{@const hasChildTasks = typeTasks.some(t => {
@@ -2693,6 +2748,7 @@
 									{@const isNewTask = newTaskIds.includes(task.id)}
 									{@const isStarting = startingTaskIds.includes(task.id)}
 									{@const isCompleted = completedTaskIds.includes(task.id)}
+									{@const isWorkingCompleted = workingCompletedTaskIds.includes(task.id)}
 									{@const isCompletedByActiveSession = completedTasksFromActiveSessions.has(task.id)}
 									{@const isHuman = isHumanTask(task)}
 									{@const isChildTask = groupingMode === 'parent' && extractParentId(task.id) === groupKey && task.id !== groupKey}
@@ -2705,7 +2761,7 @@
 									{@const hasRowGradient = isCompletedByActiveSession || dragOverTask === task.id || selectedTasks.has(task.id) || isHuman || taskIsActive}
 									<!-- Main task row -->
 									<tr
-										class="cursor-pointer group overflow-visible industrial-row {depStatus.hasBlockers ? 'opacity-70' : ''} {isNewTask ? 'task-new-entrance' : ''} {isStarting ? 'task-starting' : ''} {isCompleted ? 'task-completed' : ''}"
+										class="cursor-pointer group overflow-visible industrial-row {depStatus.hasBlockers ? 'opacity-70' : ''} {isNewTask ? 'task-new-entrance' : ''} {isStarting ? 'task-starting' : ''} {isWorkingCompleted ? 'task-working-completed' : isCompleted ? 'task-completed' : ''}"
 										style="
 											background: {isCompletedByActiveSession ? 'linear-gradient(90deg, oklch(0.55 0.18 145 / 0.15), transparent)' : dragOverTask === task.id ? 'oklch(0.70 0.18 240 / 0.15)' : selectedTasks.has(task.id) ? 'oklch(0.70 0.18 240 / 0.1)' : isHuman ? 'oklch(0.70 0.18 45 / 0.10)' : taskIsActive ? 'oklch(0.70 0.18 240 / 0.05)' : ''};
 											border-bottom: 1px solid oklch(0.25 0.01 250);
@@ -2713,8 +2769,8 @@
 										"
 										onclick={() => handleRowClick(task.id)}
 										ondrop={(e) => handleImageDrop(e, task.id)}
-										ondragover={(e) => handleImageDragOver(e, task.id)}
-										ondragleave={handleImageDragLeave}
+										ondragover={(e) => handleFileDragOver(e, task.id)}
+										ondragleave={handleFileDragLeave}
 										title={isCompletedByActiveSession ? 'Completed - session still active' : depStatus.hasBlockers ? `Blocked: ${depStatus.blockingReason}` : ''}
 									>
 										<th
@@ -2798,31 +2854,42 @@
 											style="background: {hasRowGradient ? 'transparent' : 'inherit'};"
 											onclick={(e) => e.stopPropagation()}
 											ondrop={(e) => handleImageDrop(e, task.id)}
-											ondragover={(e) => handleImageDragOver(e, task.id)}
-											ondragleave={handleImageDragLeave}
+											ondragover={(e) => handleFileDragOver(e, task.id)}
+											ondragleave={handleFileDragLeave}
 											class="relative w-28"
 										>
 											<div class="flex items-center gap-1 overflow-x-auto">
-												{#if uploadingImage === task.id}
+												{#if uploadingFile === task.id}
 													<!-- Uploading state -->
 													<div class="w-6 h-6 flex items-center justify-center">
 														<span class="loading loading-spinner loading-xs"></span>
 													</div>
 												{/if}
-												{#each taskImages.get(task.id) || [] as img (img.id)}
-													<!-- Image thumbnail with remove button -->
+												{#each taskFiles.get(task.id) || [] as file (file.id)}
+													<!-- File thumbnail/icon with remove button -->
 													<div class="relative group flex-shrink-0">
-														<img
-															src={img.preview}
-															alt="Task attachment"
-															class="w-6 h-6 object-cover rounded border border-base-content/20 cursor-pointer hover:border-primary transition-colors"
-															title={img.path || 'Attached image'}
-														/>
+														{#if file.category === 'image' && file.preview}
+															<img
+																src={file.preview}
+																alt="Task attachment"
+																class="w-6 h-6 object-cover rounded border border-base-content/20 cursor-pointer hover:border-primary transition-colors"
+																title={file.name || 'Attached file'}
+															/>
+														{:else}
+															<div
+																class="w-6 h-6 flex items-center justify-center rounded border border-base-content/20 cursor-pointer hover:border-primary transition-colors"
+																title={file.name || 'Attached file'}
+															>
+																<svg class="w-4 h-4" style="color: {file.iconColor};" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+																	<path stroke-linecap="round" stroke-linejoin="round" d={file.icon} />
+																</svg>
+															</div>
+														{/if}
 														<!-- Remove button on hover -->
 														<button
 															class="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-error text-error-content flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-[8px] leading-none"
-															onclick={(e) => removeTaskImage(task.id, img.id, e)}
-															title="Remove image"
+															onclick={(e) => removeTaskFile(task.id, file.id, e)}
+															title="Remove file"
 														>
 															×
 														</button>
@@ -2832,7 +2899,7 @@
 												<div
 													class="w-6 h-6 rounded border border-dashed flex items-center justify-center transition-all flex-shrink-0"
 													style="border-color: {dragOverTask === task.id ? 'oklch(0.70 0.18 240)' : 'oklch(0.35 0.02 250)'}; background: {dragOverTask === task.id ? 'oklch(0.70 0.18 240 / 0.1)' : 'transparent'};"
-													title={(taskImages.get(task.id) || []).length > 0 ? 'Drop to add another image' : 'Drop image here to attach'}
+													title={(taskFiles.get(task.id) || []).length > 0 ? 'Drop to add another file' : 'Drop file here to attach'}
 												>
 													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3" style="color: {dragOverTask === task.id ? 'oklch(0.70 0.18 240)' : 'oklch(0.45 0.02 250)'};">
 														<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />

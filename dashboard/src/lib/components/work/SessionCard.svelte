@@ -1544,6 +1544,20 @@
 		return "idle";
 	});
 
+	// Detect dormant state (completed session that has been inactive for a while)
+	// Dormant shows 💤 icon instead of ✅ to indicate "sleeping, needs cleanup"
+	const isDormant = $derived.by((): boolean => {
+		if (sessionState !== 'completed') return false;
+		if (!lastCompletedTask?.closedAt) return false;
+
+		const closedDate = new Date(lastCompletedTask.closedAt);
+		const now = new Date();
+		const minutesSinceClosed = (now.getTime() - closedDate.getTime()) / (1000 * 60);
+
+		// After 5 minutes, show dormant variant
+		return minutesSinceClosed >= 5;
+	});
+
 	// Check if auto-proceed mode is active (for future autopilot feature)
 	const isAutoProceed = $derived(
 		output ? /\[JAT:AUTO_PROCEED\]/.test(output.slice(-3000)) : false,
@@ -2216,10 +2230,23 @@
 	async function sendTextInput() {
 		if (!onSendInput) return;
 
+		// CRITICAL: Cancel any pending stream debounce timer to prevent race condition
+		// where the debounce fires AFTER we send Enter, causing duplicate partial messages
+		if (streamDebounceTimer) {
+			clearTimeout(streamDebounceTimer);
+			streamDebounceTimer = null;
+		}
+
 		// Need either text or images to send
 		const hasText = inputText.trim().length > 0;
 		const hasFiles = attachedFiles.length > 0;
 		if (!hasText && !hasFiles) return;
+
+		// Wait for any in-progress streaming to complete before proceeding
+		// This prevents the race where isStreaming is true and we try to send Enter
+		if (isStreaming) {
+			await new Promise((r) => setTimeout(r, 100));
+		}
 
 		setSendingInput(true);
 		try {
@@ -2267,13 +2294,13 @@
 					await onSendInput("enter", "key");
 				} else {
 					// Not streaming or text differs - send full text
-					// Clear any partial streamed text first if streaming was on
+					// Clear any partial/stale streamed text first if streaming was on
+					// This handles the race condition where lastStreamedText is outdated
 					if (liveStreamEnabled && lastStreamedText) {
 						await onSendInput("ctrl-u", "key");
-						await new Promise((r) => setTimeout(r, 20));
+						await new Promise((r) => setTimeout(r, 30));
 					}
-					// Send text first (API adds Enter), then send explicit Enter after delay
-					// Double Enter ensures Claude Code registers the submission
+					// Send the complete message
 					await onSendInput(message, "text");
 					await new Promise((r) => setTimeout(r, 100));
 					await onSendInput("enter", "key");
@@ -2742,6 +2769,7 @@
 				<StatusActionBadge
 					{sessionState}
 					{sessionName}
+					{isDormant}
 					onAction={handleStatusAction}
 					variant="integrated"
 					alignRight={true}
@@ -3141,7 +3169,7 @@
 				"
 			>
 				<!-- Left: Agent Info -->
-				<div class="flex items-center gap-2 min-w-0">
+				<div class="flex items-center gap-2 min-w-0 ml-2">
 					<AgentAvatar
 						name={agentName}
 						size={28}
@@ -3251,6 +3279,7 @@
 					<StatusActionBadge
 						{sessionState}
 						{sessionName}
+						{isDormant}
 						onAction={handleStatusAction}
 						disabled={sendingInput}
 						alignRight={true}
@@ -4341,6 +4370,7 @@
 							<StatusActionBadge
 								{sessionState}
 								{sessionName}
+								{isDormant}
 								dropUp={true}
 								alignRight={true}
 								onAction={handleStatusAction}
@@ -4423,6 +4453,7 @@
 							<StatusActionBadge
 								{sessionState}
 								{sessionName}
+								{isDormant}
 								dropUp={true}
 								alignRight={true}
 								onAction={handleStatusAction}

@@ -3072,8 +3072,8 @@
 				<div class="flex items-center gap-1.5 pl-3 pt-2">
 					<AgentAvatar
 						name={agentName}
-						size={18}
-						class="shrink-0 {sessionState === 'starting'
+						size={24}
+						class="-mt-0.5 shrink-0 {sessionState === 'starting'
 							? 'ring-2 ring-secondary ring-offset-base-100 ring-offset-1'
 							: sessionState === 'working'
 								? 'ring-2 ring-info ring-offset-base-100 ring-offset-1'
@@ -3409,15 +3409,15 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				bind:this={scrollContainerRef}
-				class="overflow-y-auto px-3 font-mono text-xs leading-relaxed flex-1 min-h-0 cursor-text"
-				style="background: oklch(0.12 0.01 250);"
+				class="overflow-y-auto px-3 leading-relaxed flex-1 min-h-0 cursor-text bg-base-300"
+				style="font-family: var(--terminal-font); font-size: var(--terminal-font-size);"
 				onscroll={handleScroll}
 				onclick={handleCardClick}
 			>
 				{#if output}
 					<pre
-						class="whitespace-pre-wrap break-words m-0"
-						style="color: oklch(0.85 0.05 145);">{@html renderedOutput}</pre>
+						class="whitespace-pre-wrap break-words m-0 text-base-content"
+						style="font-family: inherit; font-size: inherit;">{@html renderedOutput}</pre>
 				{:else}
 					<p class="text-base-content/40 italic m-0">No output yet...</p>
 				{/if}

@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Terminal font - JetBrainsMono Nerd Font for consistent terminal appearance */
+:root {
+	--terminal-font: 'JetBrainsMono Nerd Font Mono', 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+	--terminal-font-size: 0.875rem; /* text-sm = 14px */
+}
+
 @plugin "daisyui" {
 	themes:
 		light,

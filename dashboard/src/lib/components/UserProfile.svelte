@@ -29,10 +29,14 @@
 		setTerminalFontFamily,
 		getTerminalFontSize,
 		setTerminalFontSize,
+		getTerminalScrollback,
+		setTerminalScrollback,
 		TERMINAL_FONT_OPTIONS,
 		TERMINAL_FONT_SIZE_OPTIONS,
+		TERMINAL_SCROLLBACK_OPTIONS,
 		type TerminalFontFamily,
-		type TerminalFontSize
+		type TerminalFontSize,
+		type TerminalScrollback
 	} from '$lib/stores/preferences.svelte';
 
 	// Placeholder user data
@@ -80,6 +84,7 @@
 	// Terminal font settings (reactive from preferences store)
 	const terminalFontFamily = $derived(getTerminalFontFamily());
 	const terminalFontSize = $derived(getTerminalFontSize());
+	const terminalScrollback = $derived(getTerminalScrollback());
 
 	onMount(() => {
 		// Load saved sound preference
@@ -150,6 +155,10 @@
 
 	function handleFontSizeChange(value: TerminalFontSize) {
 		setTerminalFontSize(value);
+	}
+
+	function handleScrollbackChange(value: TerminalScrollback) {
+		setTerminalScrollback(value);
 	}
 </script>
 
@@ -394,6 +403,28 @@
 								background: {terminalFontSize === option.value ? 'oklch(0.35 0.10 240)' : 'oklch(0.25 0.02 250)'};
 								color: {terminalFontSize === option.value ? 'oklch(0.90 0.10 240)' : 'oklch(0.60 0.02 250)'};
 								border: 1px solid {terminalFontSize === option.value ? 'oklch(0.45 0.12 240)' : 'oklch(0.30 0.02 250)'};
+							"
+						>
+							{option.label}
+						</button>
+					{/each}
+				</div>
+			</div>
+		</li>
+
+		<!-- Terminal Scrollback Limit -->
+		<li>
+			<div class="flex flex-col gap-1 px-2 py-1">
+				<span class="text-xs" style="color: oklch(0.70 0.02 250);">Scrollback Lines</span>
+				<div class="flex gap-1">
+					{#each TERMINAL_SCROLLBACK_OPTIONS as option}
+						<button
+							onclick={() => handleScrollbackChange(option.value)}
+							class="px-2 py-0.5 text-[10px] font-mono rounded transition-colors"
+							style="
+								background: {terminalScrollback === option.value ? 'oklch(0.35 0.10 240)' : 'oklch(0.25 0.02 250)'};
+								color: {terminalScrollback === option.value ? 'oklch(0.90 0.10 240)' : 'oklch(0.60 0.02 250)'};
+								border: 1px solid {terminalScrollback === option.value ? 'oklch(0.45 0.12 240)' : 'oklch(0.30 0.02 250)'};
 							"
 						>
 							{option.label}

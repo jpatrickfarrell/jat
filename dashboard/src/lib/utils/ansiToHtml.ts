@@ -372,3 +372,40 @@ export function ansiToHtml(input: string): string {
 export function stripAnsi(input: string): string {
 	return input.replace(/\x1b\[[0-9;]*m/g, '');
 }
+
+/**
+ * URL regex pattern for detecting clickable links
+ * Matches http://, https://, and localhost URLs
+ */
+const URL_PATTERN = /(?:https?:\/\/|localhost:\d+)(?:[^\s<>"')\]]*)/gi;
+
+/**
+ * Convert URLs in HTML to clickable links
+ * Must be called AFTER ansiToHtml to avoid breaking span tags
+ */
+export function linkifyUrls(html: string): string {
+	// Don't linkify inside existing HTML tags
+	// Split by tags, only linkify text content
+	const parts = html.split(/(<[^>]+>)/);
+
+	return parts.map(part => {
+		// Skip HTML tags
+		if (part.startsWith('<')) {
+			return part;
+		}
+		// Linkify text content
+		return part.replace(URL_PATTERN, (url) => {
+			// Ensure URL has protocol for the href
+			const href = url.startsWith('localhost') ? `http://${url}` : url;
+			return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="terminal-link">${url}</a>`;
+		});
+	}).join('');
+}
+
+/**
+ * Convert ANSI to HTML and make URLs clickable
+ */
+export function ansiToHtmlWithLinks(input: string): string {
+	const html = ansiToHtml(input);
+	return linkifyUrls(html);
+}

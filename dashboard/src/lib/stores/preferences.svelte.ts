@@ -18,7 +18,8 @@ const STORAGE_KEYS = {
 	sparklineMode: 'sparkline-multi-series-mode',
 	ctrlCIntercept: 'ctrl-c-intercept-enabled',
 	terminalFontFamily: 'terminal-font-family',
-	terminalFontSize: 'terminal-font-size'
+	terminalFontSize: 'terminal-font-size',
+	terminalScrollback: 'terminal-scrollback-lines'
 } as const;
 
 // Terminal font family options
@@ -37,6 +38,15 @@ export const TERMINAL_FONT_SIZE_OPTIONS = [
 	{ value: 'lg', label: 'LG', css: '1.125rem' }  // 18px
 ] as const;
 
+// Terminal scrollback options (lines to retain)
+export const TERMINAL_SCROLLBACK_OPTIONS = [
+	{ value: 500, label: '500' },
+	{ value: 1000, label: '1K' },
+	{ value: 2000, label: '2K' },
+	{ value: 5000, label: '5K' },
+	{ value: 10000, label: '10K' }
+] as const;
+
 // Default values
 const DEFAULTS = {
 	sparklineVisible: true,
@@ -48,7 +58,8 @@ const DEFAULTS = {
 	sparklineMode: 'stacked' as SparklineMode,
 	ctrlCIntercept: true, // When true, Ctrl+C sends interrupt to tmux; when false, Ctrl+C copies
 	terminalFontFamily: 'jetbrains' as TerminalFontFamily,
-	terminalFontSize: 'sm' as TerminalFontSize
+	terminalFontSize: 'sm' as TerminalFontSize,
+	terminalScrollback: 2000 as TerminalScrollback
 };
 
 // Types
@@ -57,6 +68,7 @@ export type TaskSaveAction = 'close' | 'new' | 'start';
 export type SparklineMode = 'stacked' | 'overlaid';
 export type TerminalFontFamily = 'jetbrains' | 'fira' | 'cascadia' | 'system';
 export type TerminalFontSize = 'xs' | 'sm' | 'base' | 'lg';
+export type TerminalScrollback = 500 | 1000 | 2000 | 5000 | 10000;
 
 // Reactive state (module-level $state)
 let sparklineVisible = $state(DEFAULTS.sparklineVisible);
@@ -69,6 +81,7 @@ let sparklineMode = $state<SparklineMode>(DEFAULTS.sparklineMode);
 let ctrlCIntercept = $state(DEFAULTS.ctrlCIntercept);
 let terminalFontFamily = $state<TerminalFontFamily>(DEFAULTS.terminalFontFamily);
 let terminalFontSize = $state<TerminalFontSize>(DEFAULTS.terminalFontSize);
+let terminalScrollback = $state<TerminalScrollback>(DEFAULTS.terminalScrollback);
 let initialized = $state(false);
 
 /**
@@ -113,6 +126,12 @@ export function initPreferences(): void {
 	terminalFontSize = (storedFontSize === 'xs' || storedFontSize === 'sm' || storedFontSize === 'base' || storedFontSize === 'lg')
 		? storedFontSize
 		: DEFAULTS.terminalFontSize;
+
+	const storedScrollback = localStorage.getItem(STORAGE_KEYS.terminalScrollback);
+	const parsedScrollback = storedScrollback ? parseInt(storedScrollback, 10) : null;
+	terminalScrollback = (parsedScrollback === 500 || parsedScrollback === 1000 || parsedScrollback === 2000 || parsedScrollback === 5000 || parsedScrollback === 10000)
+		? parsedScrollback
+		: DEFAULTS.terminalScrollback;
 
 	// Apply terminal font CSS variables to document
 	updateTerminalFontCSSVars();
@@ -318,6 +337,21 @@ export function setTerminalFontSize(value: TerminalFontSize): void {
 	if (browser) {
 		localStorage.setItem(STORAGE_KEYS.terminalFontSize, value);
 		updateTerminalFontCSSVars(terminalFontFamily, value);
+	}
+}
+
+// ============================================================================
+// Terminal Scrollback Limit
+// ============================================================================
+
+export function getTerminalScrollback(): TerminalScrollback {
+	return terminalScrollback;
+}
+
+export function setTerminalScrollback(value: TerminalScrollback): void {
+	terminalScrollback = value;
+	if (browser) {
+		localStorage.setItem(STORAGE_KEYS.terminalScrollback, String(value));
 	}
 }
 

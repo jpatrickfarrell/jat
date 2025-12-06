@@ -410,3 +410,30 @@
 .rocket-launching .rocket-smoke-2 {
 	animation: rocket-smoke 0.8s ease-out 0.35s forwards;
 }
+
+/* Terminal clickable links */
+.terminal-link {
+	color: oklch(0.70 0.15 220);
+	text-decoration: underline;
+	text-decoration-style: dotted;
+	text-underline-offset: 2px;
+	cursor: pointer;
+	transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+
+.terminal-link:hover {
+	color: oklch(0.80 0.18 220);
+	text-decoration-style: solid;
+}
+
+/* Terminal search highlight */
+.terminal-search-match {
+	background-color: oklch(0.75 0.20 85 / 0.4);
+	border-radius: 2px;
+	padding: 0 1px;
+}
+
+.terminal-search-match.current {
+	background-color: oklch(0.70 0.25 45 / 0.6);
+	outline: 1px solid oklch(0.70 0.25 45);
+}

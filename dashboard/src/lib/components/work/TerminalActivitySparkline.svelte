@@ -43,14 +43,21 @@
 		animateEntry = false
 	}: Props = $props();
 
-	// Track if we've animated already (only animate once on mount)
-	let hasAnimated = $state(false);
+	// Track previous data length to detect new data
+	let prevDataLength = $state(0);
+	// Counter that increments when new data arrives (used as animation key)
+	let animationGeneration = $state(0);
+	// How many new bars to animate (from the right)
+	let newBarsCount = $state(0);
 
-	// Trigger animation on mount when animateEntry is true
+	// Detect new data and trigger animation
 	$effect(() => {
-		if (animateEntry && activityData.length > 0 && !hasAnimated) {
-			hasAnimated = true;
+		if (animateEntry && activityData.length > prevDataLength) {
+			// New data arrived - animate the new bar(s)
+			newBarsCount = activityData.length - prevDataLength;
+			animationGeneration++;
 		}
+		prevDataLength = activityData.length;
 	});
 
 	// Get the last N data points
@@ -112,21 +119,20 @@
 	style="height: {height}px; width: {width}px;"
 	title={showTooltip ? `Activity: ${totalActivity()} events (recent: ${recentActivity()})` : undefined}
 >
-	{#each displayData() as value, i}
+	{#each displayData() as value, i (animateEntry ? `${i}-${animationGeneration}` : i)}
 		{@const isNoData = value < 0}
 		{@const isIdle = value === 0}
 		{@const isActive = value > 0}
 		{@const barHeight = isNoData ? 0 : isIdle ? 2 : Math.max((value / maxValue()) * height, 3)}
 		{@const isRecent = i >= displayData().length - 3}
-		{@const shouldAnimate = animateEntry && hasAnimated}
+		{@const isNewBar = animateEntry && (i >= maxBars - newBarsCount)}
 		<div
-			class="rounded-sm transition-all duration-200 {shouldAnimate ? 'sparkline-bar-enter' : ''}"
+			class="rounded-sm transition-all duration-200 {isNewBar ? 'sparkline-bar-enter' : ''}"
 			style="
 				width: {barWidth()}px;
 				height: {barHeight}px;
 				background: {isIdle ? 'oklch(0.30 0.01 250)' : barColor()};
 				opacity: {isNoData ? 0 : isRecent ? 1 : 0.5};
-				{shouldAnimate ? `animation-delay: ${i * 30}ms;` : ''}
 			"
 		></div>
 	{/each}

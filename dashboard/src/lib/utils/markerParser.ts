@@ -82,6 +82,12 @@ export interface SuggestedTask {
 	priority: number;
 	/** Optional reason why this task was suggested */
 	reason?: string;
+	/** Project identifier (e.g., 'jat', 'chimaro') */
+	project?: string;
+	/** Comma-separated labels */
+	labels?: string;
+	/** Task IDs this task depends on */
+	depends_on?: string[];
 }
 
 /** SUGGESTED_TASKS marker with parsed JSON */
@@ -416,7 +422,17 @@ function findSuggestedTasksBlockFormat(output: string): SuggestedTasksMarker | n
 
 	// Extract content between tags
 	const contentStart = openPos + openTag.length;
-	const content = output.slice(contentStart, closePos).trim();
+	let content = output.slice(contentStart, closePos).trim();
+
+	// Claude Code's TUI wraps long lines, which corrupts JSON. Normalize by:
+	// 1. Remove ANSI escape codes
+	// 2. Collapse newlines and excessive whitespace into single spaces
+	content = content
+		.replace(/\x1b\[[0-9;]*m/g, '') // Strip ANSI codes
+		.replace(/\r\n/g, ' ')          // CR+LF to space
+		.replace(/\n\s*/g, ' ')         // Newline + indentation to single space
+		.replace(/\s{2,}/g, ' ')        // Multiple spaces to single space
+		.trim();
 
 	// Find the JSON object in the content using balanced brace extraction
 	const jsonStartIndex = content.indexOf('{');
@@ -489,6 +505,9 @@ function parseSuggestedTasks(tasks: Array<{
 	description?: string;
 	priority?: number;
 	reason?: string;
+	project?: string;
+	labels?: string;
+	depends_on?: string[];
 }>): SuggestedTask[] {
 	return tasks.map((t) => ({
 		id: t.id,
@@ -496,7 +515,10 @@ function parseSuggestedTasks(tasks: Array<{
 		title: t.title || '',
 		description: t.description || '',
 		priority: typeof t.priority === 'number' ? t.priority : 2,
-		reason: t.reason
+		reason: t.reason,
+		project: t.project,
+		labels: t.labels,
+		depends_on: Array.isArray(t.depends_on) ? t.depends_on : undefined
 	}));
 }
 
@@ -536,6 +558,11 @@ export function determineSessionState(
 
 	if (markers.completed) {
 		positions.push({ state: 'completed', pos: markers.completed.position });
+	}
+	// AUTO_PROCEED also signals completion, just with auto-close behavior
+	// The dashboard can check markers.autoProceed separately for the auto-close logic
+	if (markers.autoProceed) {
+		positions.push({ state: 'completed', pos: markers.autoProceed.position });
 	}
 	if (markers.idle) {
 		positions.push({ state: 'idle', pos: markers.idle.position });

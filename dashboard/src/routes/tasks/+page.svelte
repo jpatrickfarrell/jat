@@ -10,9 +10,10 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
-	import TaskTable from '$lib/components/agents/TaskTable.svelte';
+	import TaskTableLazyWrapper from '$lib/components/agents/TaskTableLazyWrapper.svelte';
 	import SessionPanel from '$lib/components/work/SessionPanel.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
+	import AutoAssignmentQueue from '$lib/components/work/AutoAssignmentQueue.svelte';
 	import ResizableDivider from '$lib/components/ResizableDivider.svelte';
 	import SessionPanelSkeleton from '$lib/components/skeleton/SessionPanelSkeleton.svelte';
 	import TaskTableSkeleton from '$lib/components/skeleton/TaskTableSkeleton.svelte';
@@ -511,16 +512,26 @@
 	bind:this={containerRef}
 	class="h-full bg-base-200 flex flex-col overflow-hidden"
 >
-	<!-- Work Sessions (horizontal scroll) -->
+	<!-- Work Sessions (horizontal scroll) + Auto-Assignment Queue -->
 	<!-- min-h-0 allows proper flex shrinking; overflow-x-hidden clips horizontal overflow while scroll container handles horizontal scroll -->
 	<div
-		class="min-h-0 bg-base-100 flex flex-col transition-all duration-150"
+		class="min-h-0 bg-base-100 flex flex-col transition-all duration-150 -mb-4 relative"
 		style="height: {splitPercent}%; overflow-x: hidden;"
 		class:hidden={collapsedDirection === 'top'}
 	>
 		{#if isInitialLoad}
 			<SessionPanelSkeleton cards={3} />
 		{:else}
+			<!-- Auto-Assignment Queue - positioned in top-right corner -->
+			<div class="absolute top-2 right-2 z-10 w-80">
+				<AutoAssignmentQueue
+					{selectedProject}
+					limit={5}
+					onTaskClick={handleTaskClick}
+					onSpawnForTask={handleSpawnForTask}
+				/>
+			</div>
+
 			<SessionPanel
 				workSessions={workSessionsState.sessions}
 				onSpawnForTask={handleSpawnForTask}
@@ -554,7 +565,7 @@
 		{#if isInitialLoad}
 			<TaskTableSkeleton rows={8} showFilters={true} />
 		{:else}
-			<TaskTable
+			<TaskTableLazyWrapper
 				{tasks}
 				{allTasks}
 				{agents}

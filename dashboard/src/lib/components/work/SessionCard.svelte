@@ -638,98 +638,6 @@
 	let userScrolledUp = $state(false);
 	let scrollContainerRef: HTMLDivElement | null = null;
 
-	// Terminal toolbar state
-	let searchOpen = $state(false);
-	let searchQuery = $state('');
-	let searchMatchCount = $state(0);
-	let currentSearchMatch = $state(0);
-	let copyFeedback = $state(false);
-	let searchInputRef: HTMLInputElement | null = null;
-
-	// Copy output to clipboard (strips ANSI codes)
-	async function copyOutput() {
-		if (!output) return;
-		const plainText = stripAnsi(output);
-		try {
-			await navigator.clipboard.writeText(plainText);
-			copyFeedback = true;
-			setTimeout(() => copyFeedback = false, 1500);
-		} catch (err) {
-			console.error('Failed to copy:', err);
-		}
-	}
-
-	// Toggle search bar
-	function toggleSearch() {
-		searchOpen = !searchOpen;
-		if (searchOpen) {
-			setTimeout(() => searchInputRef?.focus(), 50);
-		} else {
-			searchQuery = '';
-			searchMatchCount = 0;
-			currentSearchMatch = 0;
-		}
-	}
-
-	// Handle Ctrl+F to open search
-	function handleKeydown(e: KeyboardEvent) {
-		if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-			e.preventDefault();
-			if (!searchOpen) {
-				toggleSearch();
-			} else {
-				searchInputRef?.focus();
-			}
-		}
-		if (e.key === 'Escape' && searchOpen) {
-			toggleSearch();
-		}
-	}
-
-	// Search within output - highlights are applied via derived renderedOutput
-	$effect(() => {
-		if (!searchQuery || !output) {
-			searchMatchCount = 0;
-			currentSearchMatch = 0;
-			return;
-		}
-		// Count matches (case-insensitive)
-		const plainText = stripAnsi(output);
-		const regex = new RegExp(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-		const matches = plainText.match(regex);
-		searchMatchCount = matches?.length || 0;
-		currentSearchMatch = searchMatchCount > 0 ? 1 : 0;
-	});
-
-	// Navigate search matches
-	function nextSearchMatch() {
-		if (searchMatchCount > 0) {
-			currentSearchMatch = currentSearchMatch >= searchMatchCount ? 1 : currentSearchMatch + 1;
-			scrollToMatch();
-		}
-	}
-
-	function prevSearchMatch() {
-		if (searchMatchCount > 0) {
-			currentSearchMatch = currentSearchMatch <= 1 ? searchMatchCount : currentSearchMatch - 1;
-			scrollToMatch();
-		}
-	}
-
-	function scrollToMatch() {
-		// Scroll to the current match in the output
-		if (!scrollContainerRef) return;
-		const matches = scrollContainerRef.querySelectorAll('.terminal-search-match');
-		const match = matches[currentSearchMatch - 1] as HTMLElement;
-		if (match) {
-			match.scrollIntoView({ behavior: 'smooth', block: 'center' });
-			// Update current class
-			matches.forEach((m, i) => {
-				m.classList.toggle('current', i === currentSearchMatch - 1);
-			});
-		}
-	}
-
 	// Suggested tasks panel expanded state (inline) and modal state
 	let suggestedTasksExpanded = $state(false);
 	let suggestedTasksModalOpen = $state(false);
@@ -2684,28 +2592,8 @@
 		}
 	}
 
-	// Render output with ANSI codes, clickable URLs, and search highlighting
-	const renderedOutput = $derived.by(() => {
-		let html = ansiToHtmlWithLinks(output);
-
-		// Apply search highlighting if search is active
-		if (searchOpen && searchQuery && searchMatchCount > 0) {
-			// Escape regex special chars in search query
-			const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-			const regex = new RegExp(`(${escapedQuery})`, 'gi');
-
-			// Split by HTML tags to only highlight text content
-			const parts = html.split(/(<[^>]+>)/);
-			html = parts.map(part => {
-				if (part.startsWith('<')) {
-					return part; // Don't modify HTML tags
-				}
-				return part.replace(regex, '<mark class="terminal-search-match">$1</mark>');
-			}).join('');
-		}
-
-		return html;
-	});
+	// Render output with ANSI codes and clickable URLs
+	const renderedOutput = $derived(ansiToHtmlWithLinks(output));
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
@@ -3519,95 +3407,10 @@
 		{/if}
 
 			<!-- Output Section -->
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="flex-1 flex flex-col min-h-0"
 			style="border-top: 10px solid oklch(0.5 0 0 / 0.08);"
-			onkeydown={handleKeydown}
 		>
-			<!-- Terminal Toolbar -->
-			<div
-				class="flex items-center justify-between px-2 py-0.5 flex-shrink-0"
-				style="background: oklch(0.20 0.01 250); border-bottom: 1px solid oklch(0.25 0.01 250);"
-			>
-				<!-- Left: Search bar (when open) -->
-				<div class="flex items-center gap-1.5 flex-1">
-					{#if searchOpen}
-						<div class="flex items-center gap-1 flex-1 max-w-xs" transition:slide={{ duration: 150, axis: 'x' }}>
-							<input
-								bind:this={searchInputRef}
-								bind:value={searchQuery}
-								type="text"
-								placeholder="Search..."
-								class="input input-xs flex-1 bg-base-300 border-base-content/20 text-xs h-5"
-								onkeydown={(e) => {
-									if (e.key === 'Enter') {
-										e.shiftKey ? prevSearchMatch() : nextSearchMatch();
-									}
-								}}
-							/>
-							{#if searchMatchCount > 0}
-								<span class="text-[10px] font-mono" style="color: oklch(0.60 0.03 250);">
-									{currentSearchMatch}/{searchMatchCount}
-								</span>
-								<button
-									onclick={prevSearchMatch}
-									class="btn btn-xs btn-ghost p-0.5 h-5 min-h-0"
-									title="Previous (Shift+Enter)"
-								>
-									<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
-									</svg>
-								</button>
-								<button
-									onclick={nextSearchMatch}
-									class="btn btn-xs btn-ghost p-0.5 h-5 min-h-0"
-									title="Next (Enter)"
-								>
-									<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-									</svg>
-								</button>
-							{:else if searchQuery}
-								<span class="text-[10px]" style="color: oklch(0.60 0.15 25);">No matches</span>
-							{/if}
-						</div>
-					{/if}
-				</div>
-
-				<!-- Right: Toolbar buttons -->
-				<div class="flex items-center gap-0.5">
-					<!-- Search button -->
-					<button
-						onclick={toggleSearch}
-						class="btn btn-xs btn-ghost p-1 h-5 min-h-0 {searchOpen ? 'bg-base-content/10' : ''}"
-						title="Search (Ctrl+F)"
-					>
-						<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-						</svg>
-					</button>
-
-					<!-- Copy button -->
-					<button
-						onclick={copyOutput}
-						class="btn btn-xs btn-ghost p-1 h-5 min-h-0"
-						title="Copy output"
-						disabled={!output}
-					>
-						{#if copyFeedback}
-							<svg class="w-3 h-3 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-							</svg>
-						{:else}
-							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9.75a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
-							</svg>
-						{/if}
-					</button>
-				</div>
-			</div>
-
 			<!-- Output Content - Click to center card, add glow effect, and focus input -->
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
 			<!-- svelte-ignore a11y_no_static_element_interactions -->

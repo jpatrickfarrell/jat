@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Setup Global Claude Configuration
-# - Installs agent coordination commands to ~/.claude/commands/jat/
+# - Symlinks agent coordination commands from jat/commands/jat/ to ~/.claude/commands/jat/
+# - Source of truth: ~/code/jat/commands/jat/*.md
 # - No longer writes to ~/.claude/CLAUDE.md (imports handled per-project)
 
 set -e
@@ -20,15 +21,29 @@ mkdir -p ~/.claude
 mkdir -p ~/.claude/commands/jat
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-COMMANDS_SOURCE="$SCRIPT_DIR/../commands/jat"
+# Resolve to absolute path (avoids /../ in symlinks)
+COMMANDS_SOURCE="$( cd "$SCRIPT_DIR/../commands/jat" && pwd )"
 
-# Install agent coordination commands
+# Install agent coordination commands as symlinks (SOT: jat/commands/jat/)
 if [ -d "$COMMANDS_SOURCE" ]; then
-    echo "  → Installing agent coordination commands..."
-    COMMAND_COUNT=$(find "$COMMANDS_SOURCE" -name "*.md" -type f | wc -l)
-    cp -r "$COMMANDS_SOURCE"/*.md ~/.claude/commands/jat/ 2>/dev/null || true
-    echo -e "${GREEN}  ✓ Installed $COMMAND_COUNT coordination commands${NC}"
-    echo "    Location: ~/.claude/commands/jat/"
+    echo "  → Installing agent coordination commands (symlinks)..."
+    COMMAND_COUNT=0
+
+    # Remove any existing files/symlinks and create fresh symlinks
+    for cmd_file in "$COMMANDS_SOURCE"/*.md; do
+        if [ -f "$cmd_file" ]; then
+            fname=$(basename "$cmd_file")
+            # Remove existing file/symlink if present
+            rm -f ~/.claude/commands/jat/"$fname"
+            # Create symlink to source
+            ln -s "$cmd_file" ~/.claude/commands/jat/"$fname"
+            COMMAND_COUNT=$((COMMAND_COUNT + 1))
+        fi
+    done
+
+    echo -e "${GREEN}  ✓ Installed $COMMAND_COUNT coordination commands (symlinked)${NC}"
+    echo "    Source: $COMMANDS_SOURCE/"
+    echo "    Target: ~/.claude/commands/jat/"
     echo ""
 fi
 

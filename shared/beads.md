@@ -140,6 +140,19 @@ Use **underscores** not hyphens:
 
 Beads supports parent-child task hierarchies. Child tasks get automatic `.1`, `.2`, `.3` suffixes.
 
+**🚨 CRITICAL: DO NOT USE `--parent` FLAG FOR EPICS**
+
+The `--parent` flag creates dependencies in the **WRONG direction** (children blocked by parent). This is a known issue that will cause agents to try to work on the epic first instead of the children.
+
+```bash
+# ❌ WRONG - creates child→parent dependency (children blocked!)
+bd create "Implement OAuth flow" --parent jat-abc
+
+# ✅ CORRECT - create task first, then add epic→child dependency
+bd create "Implement OAuth flow" --type task
+bd dep add jat-abc jat-def   # epic depends on child
+```
+
 **⚠️ IMPORTANT: Epic Dependency Direction**
 
 Epics are **blocked by their children**, not the other way around:
@@ -212,20 +225,21 @@ bd show jat-abc
 - Epic (`jat-abc`) is BLOCKED until all children complete
 - When all children complete → Epic becomes READY for verification
 
-**⚠️ WARNING about --parent flag:**
+**⚠️ WARNING: Fixing Incorrect Dependencies from --parent Flag**
 
-The `--parent` flag creates the WRONG dependency direction (children blocked by parent). If you used `--parent`, fix it:
+If you accidentally used `--parent` and need to fix the dependencies:
 
 ```bash
-# If you created with --parent and dependencies are wrong:
-bd dep remove jat-abc.1 jat-abc    # Remove child → parent
-bd dep remove jat-abc.2 jat-abc
+# 1. For each child, remove wrong dep and add correct one:
+bd dep remove jat-abc.1 jat-abc    # Remove child → parent (wrong)
 bd dep add jat-abc jat-abc.1       # Add parent → child (correct)
-bd dep add jat-abc jat-abc.2
 
-# Verify fix
+# 2. Repeat for all children...
+
+# 3. Verify fix
 bd show jat-abc
-# Should show "Depends on: →" not "Blocks: ←"
+# Should show "Depends on: → jat-abc.1, → jat-abc.2" (epic depends on children)
+# NOT "Blocks: ← jat-abc.1, ← jat-abc.2" (epic blocks children - WRONG)
 ```
 
 **Epic Completion Workflow:**

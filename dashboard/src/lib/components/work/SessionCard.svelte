@@ -1878,6 +1878,14 @@
 		SESSION_STATE_VISUALS[sessionState] || SESSION_STATE_VISUALS.idle,
 	);
 
+	// Get display labels (respects dormant state for completed sessions)
+	const displayLabel = $derived(
+		isDormant && stateVisual.dormantLabel ? stateVisual.dormantLabel : stateVisual.label
+	);
+	const displayShortLabel = $derived(
+		isDormant && stateVisual.dormantShortLabel ? stateVisual.dormantShortLabel : stateVisual.shortLabel
+	);
+
 	// Capture session log to .beads/logs/ on completion
 	async function captureSessionLog() {
 		if (logCaptured || !sessionName) return;
@@ -2283,28 +2291,17 @@
 			}
 
 			if (message) {
-				// If live streaming is enabled and we've already streamed the text,
-				// just send Enter to submit (text is already in terminal)
-				if (
-					liveStreamEnabled &&
-					lastStreamedText === inputText.trim() &&
-					!hasFiles
-				) {
-					// Text already in terminal, just submit
-					await onSendInput("enter", "key");
-				} else {
-					// Not streaming or text differs - send full text
-					// Clear any partial/stale streamed text first if streaming was on
-					// This handles the race condition where lastStreamedText is outdated
-					if (liveStreamEnabled && lastStreamedText) {
-						await onSendInput("ctrl-u", "key");
-						await new Promise((r) => setTimeout(r, 30));
-					}
-					// Send the complete message
-					await onSendInput(message, "text");
-					await new Promise((r) => setTimeout(r, 100));
-					await onSendInput("enter", "key");
+				// When live streaming is enabled, ALWAYS clear the line first as a
+				// defensive measure against stale terminal state (from previous
+				// sessions, crashes, or race conditions)
+				if (liveStreamEnabled) {
+					await onSendInput("ctrl-u", "key");
+					await new Promise((r) => setTimeout(r, 30));
 				}
+				// Send the complete message and submit
+				await onSendInput(message, "text");
+				await new Promise((r) => setTimeout(r, 100));
+				await onSendInput("enter", "key");
 			}
 
 			// Clear input and attached files on success
@@ -3216,7 +3213,7 @@
 								class="font-mono text-xs"
 								style="color: {stateVisual.textColor};"
 							>
-								{stateVisual.shortLabel}
+								{displayShortLabel}
 							</span>
 						{/if}
 					</div>

@@ -31,6 +31,10 @@
 		setTerminalFontSize,
 		getTerminalScrollback,
 		setTerminalScrollback,
+		getEpicCelebration,
+		setEpicCelebration,
+		getEpicAutoClose,
+		setEpicAutoClose,
 		TERMINAL_FONT_OPTIONS,
 		TERMINAL_FONT_SIZE_OPTIONS,
 		TERMINAL_SCROLLBACK_OPTIONS,
@@ -65,6 +69,12 @@
 	// Ctrl+C intercept (reactive from preferences store)
 	const ctrlCIntercept = $derived(getCtrlCIntercept());
 	let isCtrlCAnimating = $state(false);
+
+	// Epic celebration settings (reactive from preferences store)
+	const epicCelebration = $derived(getEpicCelebration());
+	const epicAutoClose = $derived(getEpicAutoClose());
+	let isEpicCelebrationAnimating = $state(false);
+	let isEpicAutoCloseAnimating = $state(false);
 
 	// Help modal
 	let showHelpModal = $state(false);
@@ -141,6 +151,36 @@
 		// Reset animation state
 		setTimeout(() => {
 			isCtrlCAnimating = false;
+		}, 400);
+	}
+
+	function handleEpicCelebrationToggle() {
+		// Trigger animation
+		isEpicCelebrationAnimating = true;
+
+		// Toggle after brief delay (store is reactive, UI updates automatically)
+		setTimeout(() => {
+			setEpicCelebration(!epicCelebration);
+		}, 100);
+
+		// Reset animation state
+		setTimeout(() => {
+			isEpicCelebrationAnimating = false;
+		}, 400);
+	}
+
+	function handleEpicAutoCloseToggle() {
+		// Trigger animation
+		isEpicAutoCloseAnimating = true;
+
+		// Toggle after brief delay (store is reactive, UI updates automatically)
+		setTimeout(() => {
+			setEpicAutoClose(!epicAutoClose);
+		}, 100);
+
+		// Reset animation state
+		setTimeout(() => {
+			isEpicAutoCloseAnimating = false;
 		}, 400);
 	}
 
@@ -338,6 +378,73 @@
 					"
 				>
 					{ctrlCIntercept ? 'ON' : 'OFF'}
+				</span>
+			</button>
+		</li>
+
+		<!-- Epic Settings -->
+		<li class="menu-title mt-2">
+			<span class="text-xs" style="color: oklch(0.55 0.02 250);">Epic Completion</span>
+		</li>
+
+		<li>
+			<button
+				onclick={handleEpicCelebrationToggle}
+				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors"
+				style="background: {epicCelebration ? 'oklch(0.30 0.08 85 / 0.3)' : 'transparent'};"
+				title={epicCelebration
+					? 'Celebrate when all children of an epic complete'
+					: 'No celebration for epic completion'}
+			>
+				<span
+					class="w-4 h-4 flex items-center justify-center text-sm transition-transform duration-300"
+					class:toggle-icon-pulse={isEpicCelebrationAnimating}
+				>
+					{epicCelebration ? '🎉' : '🔕'}
+				</span>
+				<span class="text-xs flex-1 text-left" style="color: oklch(0.70 0.02 250);">
+					Celebration
+				</span>
+				<span
+					class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300"
+					class:toggle-badge-bounce={isEpicCelebrationAnimating}
+					style="
+						background: {epicCelebration ? 'oklch(0.35 0.10 85)' : 'oklch(0.25 0.02 250)'};
+						color: {epicCelebration ? 'oklch(0.85 0.10 85)' : 'oklch(0.55 0.02 250)'};
+					"
+				>
+					{epicCelebration ? 'ON' : 'OFF'}
+				</span>
+			</button>
+		</li>
+
+		<li>
+			<button
+				onclick={handleEpicAutoCloseToggle}
+				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors"
+				style="background: {epicAutoClose ? 'oklch(0.30 0.08 145 / 0.3)' : 'transparent'};"
+				title={epicAutoClose
+					? 'Automatically close the epic in Beads when all children complete'
+					: 'Keep epic open even when all children complete'}
+			>
+				<span
+					class="w-4 h-4 flex items-center justify-center text-sm transition-transform duration-300"
+					class:toggle-icon-pulse={isEpicAutoCloseAnimating}
+				>
+					{epicAutoClose ? '✅' : '⏸️'}
+				</span>
+				<span class="text-xs flex-1 text-left" style="color: oklch(0.70 0.02 250);">
+					Auto-Close
+				</span>
+				<span
+					class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300"
+					class:toggle-badge-bounce={isEpicAutoCloseAnimating}
+					style="
+						background: {epicAutoClose ? 'oklch(0.35 0.10 145)' : 'oklch(0.25 0.02 250)'};
+						color: {epicAutoClose ? 'oklch(0.85 0.10 145)' : 'oklch(0.55 0.02 250)'};
+					"
+				>
+					{epicAutoClose ? 'ON' : 'OFF'}
 				</span>
 			</button>
 		</li>

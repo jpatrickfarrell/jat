@@ -19,7 +19,9 @@ const STORAGE_KEYS = {
 	ctrlCIntercept: 'ctrl-c-intercept-enabled',
 	terminalFontFamily: 'terminal-font-family',
 	terminalFontSize: 'terminal-font-size',
-	terminalScrollback: 'terminal-scrollback-lines'
+	terminalScrollback: 'terminal-scrollback-lines',
+	epicCelebration: 'epic-celebration-enabled',
+	epicAutoClose: 'epic-auto-close-enabled'
 } as const;
 
 // Terminal font family options
@@ -59,7 +61,9 @@ const DEFAULTS = {
 	ctrlCIntercept: true, // When true, Ctrl+C sends interrupt to tmux; when false, Ctrl+C copies
 	terminalFontFamily: 'jetbrains' as TerminalFontFamily,
 	terminalFontSize: 'sm' as TerminalFontSize,
-	terminalScrollback: 2000 as TerminalScrollback
+	terminalScrollback: 2000 as TerminalScrollback,
+	epicCelebration: true, // Show toast + sound when all epic children complete
+	epicAutoClose: false // Automatically close epic when all children complete
 };
 
 // Types
@@ -82,6 +86,8 @@ let ctrlCIntercept = $state(DEFAULTS.ctrlCIntercept);
 let terminalFontFamily = $state<TerminalFontFamily>(DEFAULTS.terminalFontFamily);
 let terminalFontSize = $state<TerminalFontSize>(DEFAULTS.terminalFontSize);
 let terminalScrollback = $state<TerminalScrollback>(DEFAULTS.terminalScrollback);
+let epicCelebration = $state(DEFAULTS.epicCelebration);
+let epicAutoClose = $state(DEFAULTS.epicAutoClose);
 let initialized = $state(false);
 
 /**
@@ -132,6 +138,12 @@ export function initPreferences(): void {
 	terminalScrollback = (parsedScrollback === 500 || parsedScrollback === 1000 || parsedScrollback === 2000 || parsedScrollback === 5000 || parsedScrollback === 10000)
 		? parsedScrollback
 		: DEFAULTS.terminalScrollback;
+
+	const storedEpicCelebration = localStorage.getItem(STORAGE_KEYS.epicCelebration);
+	epicCelebration = storedEpicCelebration === null ? DEFAULTS.epicCelebration : storedEpicCelebration === 'true';
+
+	const storedEpicAutoClose = localStorage.getItem(STORAGE_KEYS.epicAutoClose);
+	epicAutoClose = storedEpicAutoClose === null ? DEFAULTS.epicAutoClose : storedEpicAutoClose === 'true';
 
 	// Apply terminal font CSS variables to document
 	updateTerminalFontCSSVars();
@@ -353,6 +365,46 @@ export function setTerminalScrollback(value: TerminalScrollback): void {
 	if (browser) {
 		localStorage.setItem(STORAGE_KEYS.terminalScrollback, String(value));
 	}
+}
+
+// ============================================================================
+// Epic Celebration (toast + sound when epic children all complete)
+// ============================================================================
+
+export function getEpicCelebration(): boolean {
+	return epicCelebration;
+}
+
+export function setEpicCelebration(value: boolean): void {
+	epicCelebration = value;
+	if (browser) {
+		localStorage.setItem(STORAGE_KEYS.epicCelebration, String(value));
+	}
+}
+
+export function toggleEpicCelebration(): boolean {
+	setEpicCelebration(!epicCelebration);
+	return epicCelebration;
+}
+
+// ============================================================================
+// Epic Auto-Close (automatically close epic when all children complete)
+// ============================================================================
+
+export function getEpicAutoClose(): boolean {
+	return epicAutoClose;
+}
+
+export function setEpicAutoClose(value: boolean): void {
+	epicAutoClose = value;
+	if (browser) {
+		localStorage.setItem(STORAGE_KEYS.epicAutoClose, String(value));
+	}
+}
+
+export function toggleEpicAutoClose(): boolean {
+	setEpicAutoClose(!epicAutoClose);
+	return epicAutoClose;
 }
 
 // ============================================================================

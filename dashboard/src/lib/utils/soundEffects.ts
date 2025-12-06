@@ -802,6 +802,45 @@ function playCelebrationTones(ctx: AudioContext): void {
 }
 
 /**
+ * Play an epic completion sound - grand triumphant fanfare
+ * Used when all children of an epic are completed (bigger celebration)
+ */
+export function playEpicCompleteSound(): void {
+	if (!areSoundsEnabled()) return;
+
+	const ctx = getAudioContext();
+	if (!ctx) return;
+
+	if (ctx.state === 'suspended') {
+		ctx.resume().then(() => playEpicCompleteTones(ctx)).catch(() => {});
+		return;
+	}
+
+	playEpicCompleteTones(ctx);
+}
+
+function playEpicCompleteTones(ctx: AudioContext): void {
+	const now = ctx.currentTime;
+	const volume = 0.16; // Slightly louder for epic completion
+
+	// Grand fanfare with chord stacking for bigger sound
+	// First phrase - ascending major chord
+	playTone(ctx, 523.25, now, 0.15, volume * 0.6);       // C5
+	playTone(ctx, 659.25, now + 0.1, 0.15, volume * 0.7); // E5
+	playTone(ctx, 783.99, now + 0.2, 0.15, volume * 0.8); // G5
+
+	// Second phrase - triumphant resolution
+	playTone(ctx, 1046.5, now + 0.35, 0.2, volume * 0.9); // C6
+	playTone(ctx, 783.99, now + 0.35, 0.2, volume * 0.5); // G5 (harmony)
+	playTone(ctx, 659.25, now + 0.35, 0.2, volume * 0.4); // E5 (harmony)
+
+	// Third phrase - sparkle finish
+	playTone(ctx, 1318.5, now + 0.55, 0.12, volume * 0.7);  // E6
+	playTone(ctx, 1567.98, now + 0.65, 0.15, volume * 0.6); // G6
+	playTone(ctx, 2093.0, now + 0.75, 0.25, volume * 0.4);  // C7 - high sparkle finish
+}
+
+/**
  * Play a modal/palette open sound - quick swoop
  * Used when opening command palette or modals
  */

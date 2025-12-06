@@ -3212,6 +3212,7 @@
 							height={16}
 							width={70}
 							showTooltip={true}
+							animateEntry={true}
 						/>
 						</div>
 					{/if}
@@ -3365,6 +3366,7 @@
 								maxBars={12}
 								height={16}
 								width={50}
+								animateEntry={true}
 							/>
 						</div>
 					{/if}

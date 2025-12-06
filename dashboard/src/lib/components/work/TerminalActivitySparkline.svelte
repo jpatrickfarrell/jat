@@ -29,6 +29,8 @@
 		color?: string;
 		/** Whether to show tooltip on hover */
 		showTooltip?: boolean;
+		/** Whether to animate bars on entry (staggered) */
+		animateEntry?: boolean;
 	}
 
 	let {
@@ -37,8 +39,19 @@
 		height = 16,
 		width = 48,
 		color = 'oklch(0.65 0.15 200)',
-		showTooltip = true
+		showTooltip = true,
+		animateEntry = false
 	}: Props = $props();
+
+	// Track if we've animated already (only animate once on mount)
+	let hasAnimated = $state(false);
+
+	// Trigger animation on mount when animateEntry is true
+	$effect(() => {
+		if (animateEntry && activityData.length > 0 && !hasAnimated) {
+			hasAnimated = true;
+		}
+	});
 
 	// Get the last N data points
 	// Use -1 for "no data yet" padding, 0 for "monitored but idle"
@@ -105,14 +118,35 @@
 		{@const isActive = value > 0}
 		{@const barHeight = isNoData ? 0 : isIdle ? 2 : Math.max((value / maxValue()) * height, 3)}
 		{@const isRecent = i >= displayData().length - 3}
+		{@const shouldAnimate = animateEntry && hasAnimated}
 		<div
-			class="rounded-sm transition-all duration-200"
+			class="rounded-sm transition-all duration-200 {shouldAnimate ? 'sparkline-bar-enter' : ''}"
 			style="
 				width: {barWidth()}px;
 				height: {barHeight}px;
 				background: {isIdle ? 'oklch(0.30 0.01 250)' : barColor()};
 				opacity: {isNoData ? 0 : isRecent ? 1 : 0.5};
+				{shouldAnimate ? `animation-delay: ${i * 30}ms;` : ''}
 			"
 		></div>
 	{/each}
 </div>
+
+<style>
+	.sparkline-bar-enter {
+		animation: sparkline-grow 0.4s ease-out both;
+		transform-origin: bottom;
+	}
+
+	@keyframes sparkline-grow {
+		0% {
+			transform: scaleY(0);
+		}
+		60% {
+			transform: scaleY(1.15);
+		}
+		100% {
+			transform: scaleY(1);
+		}
+	}
+</style>

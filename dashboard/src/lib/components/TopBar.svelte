@@ -26,8 +26,9 @@
 	import CommandPalette from './CommandPalette.svelte';
 	import Sparkline from './Sparkline.svelte';
 	import { getSparklineVisible } from '$lib/stores/preferences.svelte';
-	import { openTaskDrawer } from '$lib/stores/drawerStore';
+	import { openTaskDrawer, openTaskDetailDrawer, isSpawnModalOpen } from '$lib/stores/drawerStore';
 	import { startSpawning, stopSpawning, startBulkSpawn, endBulkSpawn } from '$lib/stores/spawningTasks';
+	import { pickNextTask, type NextTaskResult } from '$lib/utils/pickNextTask';
 	import {
 		SORT_OPTIONS,
 		initSort,
@@ -372,6 +373,7 @@
 	let showSwarmDropdown = $state(false);
 	let swarmDropdownTimeout: ReturnType<typeof setTimeout> | null = null;
 	let spawningTaskId = $state<string | null>(null); // Track which single task is being spawned
+	let startNextLoading = $state(false); // Track "Start Next" primary button loading
 
 	// Task dropdown state
 	let showTaskDropdown = $state(false);
@@ -433,6 +435,51 @@
 
 	function keepSwarmMenuOpen() {
 		if (swarmDropdownTimeout) clearTimeout(swarmDropdownTimeout);
+	}
+
+	// Start Next - spawn single agent on highest-priority ready task
+	async function handleStartNext() {
+		if (startNextLoading || swarmLoading || readyTaskCount === 0) return;
+
+		startNextLoading = true;
+		showSwarmDropdown = false;
+
+		try {
+			// Use pickNextTask to get the highest-priority ready task
+			const nextTask = await pickNextTask(null, { project: selectedProject });
+
+			if (!nextTask) {
+				console.error('No ready tasks available');
+				return;
+			}
+
+			startSpawning(nextTask.taskId);
+
+			const response = await fetch('/api/work/spawn', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ taskId: nextTask.taskId })
+			});
+			const data = await response.json();
+
+			if (!response.ok) {
+				console.error('Start Next failed:', data.message);
+				stopSpawning(nextTask.taskId);
+			} else {
+				console.log('Started next task:', nextTask.taskId, data);
+				setTimeout(() => stopSpawning(nextTask.taskId), 2000);
+			}
+		} catch (err) {
+			console.error('Start Next error:', err);
+		} finally {
+			startNextLoading = false;
+		}
+	}
+
+	// Open Swarm Config modal
+	function handleOpenSwarmConfig() {
+		showSwarmDropdown = false;
+		isSpawnModalOpen.set(true);
 	}
 
 	// Spawn a single task from the dropdown
@@ -735,74 +782,131 @@
 
 		<!-- Global Action Buttons (Industrial) -->
 		<div class="hidden md:flex items-center gap-1">
-			<!-- Swarm - spawn agent per ready task (with dropdown) -->
+			<!-- Start Next - Split button: primary spawns next task, dropdown reveals options -->
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
-				class="relative"
-				onmouseenter={showSwarmMenu}
+				class="relative flex"
 				onmouseleave={hideSwarmMenuDelayed}
 			>
+				<!-- Primary Button: Start Next (spawns single agent on highest-priority task) -->
 				<button
-					class="flex items-center gap-1 py-1 rounded font-mono text-[10px] tracking-wider uppercase transition-all duration-200 ease-out overflow-hidden"
+					class="flex items-center gap-1 py-1 rounded-l font-mono text-[10px] tracking-wider uppercase transition-all duration-200 ease-out overflow-hidden"
 					style="
-						background: {swarmHovered || showSwarmDropdown ? 'linear-gradient(135deg, oklch(0.45 0.20 30) 0%, oklch(0.35 0.18 45) 100%)' : 'oklch(0.30 0.02 250)'};
-						border: 1px solid {swarmHovered || showSwarmDropdown ? 'oklch(0.55 0.20 30)' : 'oklch(0.40 0.02 250)'};
-						color: {swarmHovered || showSwarmDropdown ? 'oklch(0.95 0.02 60)' : 'oklch(0.70 0.18 30)'};
-						padding-left: {swarmHovered || showSwarmDropdown ? '12px' : '8px'};
-						padding-right: {swarmHovered || showSwarmDropdown ? '12px' : '8px'};
-						box-shadow: {swarmHovered || showSwarmDropdown ? '0 0 20px oklch(0.50 0.20 30 / 0.4)' : 'none'};
-						transform: {swarmHovered || showSwarmDropdown ? 'scale(1.05)' : 'scale(1)'};
+						background: {swarmHovered || showSwarmDropdown ? 'linear-gradient(135deg, oklch(0.50 0.20 145) 0%, oklch(0.40 0.18 160) 100%)' : 'linear-gradient(135deg, oklch(0.45 0.18 145) 0%, oklch(0.35 0.16 160) 100%)'};
+						border: 1px solid {swarmHovered || showSwarmDropdown ? 'oklch(0.55 0.20 145)' : 'oklch(0.50 0.18 145)'};
+						border-right: none;
+						color: oklch(0.98 0.02 145);
+						padding-left: 10px;
+						padding-right: 10px;
+						box-shadow: {swarmHovered || showSwarmDropdown ? '0 0 20px oklch(0.50 0.20 145 / 0.4)' : '0 0 10px oklch(0.45 0.18 145 / 0.2)'};
 					"
-					disabled={swarmLoading}
-					title={readyTaskCount > 0 ? `${readyTaskCount} ready task${readyTaskCount !== 1 ? 's' : ''}` : 'No ready tasks'}
+					onclick={handleStartNext}
+					disabled={startNextLoading || swarmLoading || readyTaskCount === 0}
+					title={readyTaskCount > 0 ? `Start highest-priority task (${readyTaskCount} ready)` : 'No ready tasks'}
 					onmouseenter={() => swarmHovered = true}
 					onmouseleave={() => swarmHovered = false}
 				>
-					{#if swarmLoading}
+					{#if startNextLoading}
 						<span class="loading loading-spinner loading-xs"></span>
-						<span>Swarming...</span>
+						<span>Starting...</span>
 					{:else}
-						<svg class="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+						<svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
 						</svg>
-						{#if swarmHovered || showSwarmDropdown}
-							<span class="whitespace-nowrap">Swarm</span>
-							{#if readyTaskCount > 0}
-								<span
-									class="px-1.5 py-0.5 rounded text-[9px] font-bold"
-									style="background: oklch(0.55 0.20 30); color: oklch(0.98 0.02 60);"
-								>{readyTaskCount}</span>
-							{/if}
-							<svg class="w-3 h-3 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-							</svg>
-						{:else}
-							<span class="hidden lg:inline">Swarm</span>
-							{#if readyTaskCount > 0}
-								<span
-									class="px-1 py-0.5 rounded text-[9px] font-bold ml-0.5"
-									style="background: oklch(0.40 0.15 30); color: oklch(0.85 0.15 30);"
-								>{readyTaskCount}</span>
-							{/if}
+						<span class="whitespace-nowrap">Start Next</span>
+						{#if readyTaskCount > 0}
+							<span
+								class="px-1.5 py-0.5 rounded text-[9px] font-bold"
+								style="background: oklch(0.55 0.22 145); color: oklch(0.98 0.02 145);"
+							>{readyTaskCount}</span>
 						{/if}
 					{/if}
 				</button>
 
-				<!-- Swarm Dropdown -->
-				{#if showSwarmDropdown && !swarmLoading}
+				<!-- Dropdown Toggle Button -->
+				<button
+					class="flex items-center justify-center py-1 px-1.5 rounded-r font-mono transition-all duration-200 ease-out"
+					style="
+						background: {showSwarmDropdown ? 'linear-gradient(135deg, oklch(0.55 0.22 145) 0%, oklch(0.45 0.20 160) 100%)' : 'linear-gradient(135deg, oklch(0.45 0.18 145) 0%, oklch(0.35 0.16 160) 100%)'};
+						border: 1px solid {showSwarmDropdown ? 'oklch(0.60 0.22 145)' : 'oklch(0.50 0.18 145)'};
+						border-left: 1px solid oklch(0.35 0.12 145);
+						color: oklch(0.98 0.02 145);
+						box-shadow: {showSwarmDropdown ? '0 0 20px oklch(0.50 0.20 145 / 0.4)' : '0 0 10px oklch(0.45 0.18 145 / 0.2)'};
+					"
+					onclick={() => showSwarmDropdown = !showSwarmDropdown}
+					onmouseenter={showSwarmMenu}
+					disabled={swarmLoading}
+					title="More spawn options"
+				>
+					<svg class="w-3 h-3 transition-transform {showSwarmDropdown ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+					</svg>
+				</button>
+
+				<!-- Dropdown Panel -->
+				{#if showSwarmDropdown && !swarmLoading && !startNextLoading}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<div
 						class="swarm-dropdown-panel"
 						onmouseenter={keepSwarmMenuOpen}
 						onmouseleave={hideSwarmMenuDelayed}
 					>
-						<!-- Header -->
+						<!-- Quick Actions Section -->
+						<div class="p-2 border-b" style="border-color: oklch(0.30 0.02 250);">
+							<div class="text-[9px] font-mono uppercase tracking-wider mb-2" style="color: oklch(0.55 0.02 250);">
+								Quick Actions
+							</div>
+
+							<!-- Swarm Config (opens modal) -->
+							<button
+								class="swarm-menu-item"
+								onclick={handleOpenSwarmConfig}
+							>
+								<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28z" />
+									<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+								</svg>
+								<div class="flex-1">
+									<div class="font-semibold">Swarm Config</div>
+									<div class="text-[10px]" style="color: oklch(0.55 0.02 250);">Configure multi-agent spawn</div>
+								</div>
+								<svg class="w-3 h-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+								</svg>
+							</button>
+
+							<!-- Run All Ready -->
+							<button
+								class="swarm-menu-item"
+								onclick={handleSwarm}
+								disabled={readyTaskCount === 0}
+							>
+								<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+								</svg>
+								<div class="flex-1">
+									<div class="font-semibold">Run All Ready</div>
+									<div class="text-[10px]" style="color: oklch(0.55 0.02 250);">Spawn agent per ready task</div>
+								</div>
+								{#if readyTaskCount > 0}
+									<span
+										class="px-1.5 py-0.5 rounded text-[9px] font-bold"
+										style="background: oklch(0.45 0.15 30); color: oklch(0.95 0.02 30);"
+									>{readyTaskCount}</span>
+								{/if}
+							</button>
+						</div>
+
+						<!-- Ready Tasks Section -->
 						<div
-							class="px-3 py-2 border-b flex items-center justify-between"
-							style="border-color: oklch(0.30 0.02 250); background: oklch(0.15 0.02 250);"
+							class="px-2 py-1.5 flex items-center justify-between"
+							style="background: oklch(0.15 0.02 250);"
 						>
-							<span class="text-xs font-semibold" style="color: oklch(0.80 0.18 30);">
-								⚡ {readyTaskCount} Ready Task{readyTaskCount !== 1 ? 's' : ''}
+							<span class="text-[9px] font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+								Pick Task
+							</span>
+							<span class="text-xs font-semibold" style="color: oklch(0.70 0.18 145);">
+								{readyTaskCount} ready
 							</span>
 						</div>
 
@@ -812,7 +916,7 @@
 							</div>
 						{:else}
 							<!-- Task list grouped by project -->
-							<div class="max-h-[350px] overflow-y-auto">
+							<div class="max-h-[280px] overflow-y-auto">
 								{#each [...tasksByProject.entries()] as [project, tasks]}
 									<!-- Project header -->
 									<div class="swarm-project-header">
@@ -825,11 +929,7 @@
 									</div>
 									<!-- Tasks for this project -->
 									{#each tasks as task}
-										<button
-											class="swarm-task-row"
-											onclick={() => handleSpawnSingle(task.id)}
-											disabled={spawningTaskId === task.id || swarmLoading}
-										>
+										<div class="swarm-task-row">
 											<div class="flex items-start justify-between gap-2 w-full">
 												<div class="flex-1 min-w-0 text-left">
 													<div class="flex items-center gap-1.5">
@@ -845,35 +945,41 @@
 														{task.title || task.id}
 													</div>
 												</div>
-												{#if spawningTaskId === task.id}
-													<span class="loading loading-spinner loading-xs" style="color: oklch(0.70 0.18 30);"></span>
-												{:else}
-													<svg class="w-4 h-4 flex-shrink-0 opacity-50 hover:opacity-100" style="color: oklch(0.70 0.18 30);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-														<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
-													</svg>
-												{/if}
+												<div class="flex items-center gap-1.5 flex-shrink-0">
+													<!-- Info button to view task details -->
+													<button
+														class="p-1 rounded hover:bg-base-300/50 transition-colors"
+														onclick={(e) => {
+															e.stopPropagation();
+															openTaskDetailDrawer(task.id);
+														}}
+														title="View task details"
+													>
+														<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5 opacity-50 hover:opacity-100" style="color: oklch(0.70 0.15 240);">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+														</svg>
+													</button>
+													<!-- Spawn button -->
+													<button
+														class="p-1 rounded hover:bg-base-300/50 transition-colors"
+														onclick={() => handleSpawnSingle(task.id)}
+														disabled={spawningTaskId === task.id || swarmLoading}
+														title="Spawn agent for this task"
+													>
+														{#if spawningTaskId === task.id}
+															<span class="loading loading-spinner loading-xs" style="color: oklch(0.70 0.18 145);"></span>
+														{:else}
+															<svg class="w-4 h-4 opacity-50 hover:opacity-100" style="color: oklch(0.70 0.18 145);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+																<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+															</svg>
+														{/if}
+													</button>
+												</div>
 											</div>
-										</button>
+										</div>
 									{/each}
 								{/each}
 							</div>
-
-							<!-- Swarm All Button -->
-							<button
-								class="swarm-all-btn"
-								onclick={handleSwarm}
-								disabled={swarmLoading || spawningTaskId !== null}
-							>
-								{#if swarmLoading}
-									<span class="loading loading-spinner loading-xs"></span>
-									<span>Swarming...</span>
-								{:else}
-									<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-									</svg>
-									<span>Swarm All {readyTaskCount} Tasks</span>
-								{/if}
-							</button>
 						{/if}
 					</div>
 				{/if}
@@ -1359,34 +1465,40 @@
 		cursor: not-allowed;
 	}
 
-	/* Swarm All Button */
-	.swarm-all-btn {
+	/* Menu item in dropdown (Quick Actions) */
+	.swarm-menu-item {
 		display: flex;
 		align-items: center;
-		justify-content: center;
-		gap: 0.5rem;
+		gap: 0.625rem;
 		width: 100%;
-		padding: 0.75rem;
-		background: linear-gradient(135deg, oklch(0.40 0.18 30) 0%, oklch(0.30 0.15 45) 100%);
+		padding: 0.625rem 0.75rem;
+		background: transparent;
 		border: none;
-		border-top: 1px solid oklch(0.35 0.10 30);
-		color: oklch(0.95 0.02 60);
+		border-radius: 0.375rem;
+		color: oklch(0.80 0.02 250);
 		font-size: 0.75rem;
-		font-weight: 600;
 		font-family: ui-monospace, monospace;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
 		cursor: pointer;
 		transition: all 0.15s ease;
+		text-align: left;
 	}
 
-	.swarm-all-btn:hover:not(:disabled) {
-		background: linear-gradient(135deg, oklch(0.50 0.20 30) 0%, oklch(0.40 0.18 45) 100%);
-		box-shadow: 0 0 15px oklch(0.50 0.20 30 / 0.4);
+	.swarm-menu-item:hover:not(:disabled) {
+		background: oklch(0.28 0.03 250);
+		color: oklch(0.90 0.02 250);
 	}
 
-	.swarm-all-btn:disabled {
-		opacity: 0.6;
+	.swarm-menu-item:disabled {
+		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	.swarm-menu-item svg {
+		color: oklch(0.65 0.15 145);
+		flex-shrink: 0;
+	}
+
+	.swarm-menu-item:hover:not(:disabled) svg {
+		color: oklch(0.75 0.18 145);
 	}
 </style>

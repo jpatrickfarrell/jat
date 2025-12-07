@@ -10,7 +10,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
-	import TaskTableLazyWrapper from '$lib/components/agents/TaskTableLazyWrapper.svelte';
+	import TaskTable from '$lib/components/agents/TaskTable.svelte';
 	import SessionPanel from '$lib/components/work/SessionPanel.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import AutoAssignmentQueue from '$lib/components/work/AutoAssignmentQueue.svelte';
@@ -472,11 +472,13 @@
 		return () => clearInterval(interval);
 	});
 
-	// Auto-refresh session usage data every 30 seconds (slower than output polling)
-	$effect(() => {
-		const interval = setInterval(() => fetchSessionUsage(), 30000);
-		return () => clearInterval(interval);
-	});
+	// DISABLED: Auto-refresh session usage data was overwhelming the server
+	// The JSONL parsing is too expensive with many active sessions
+	// Token usage will only be fetched once on mount (after 5s delay)
+	// $effect(() => {
+	// 	const interval = setInterval(() => fetchSessionUsage(), 30000);
+	// 	return () => clearInterval(interval);
+	// });
 
 	onMount(() => {
 		// Initialize sort stores for keyboard navigation
@@ -489,8 +491,9 @@
 		window.addEventListener('resize', updateContainerHeight);
 		window.addEventListener('keydown', handleKeydown);
 
-		// Phase 2: Lazy load usage data in background
-		setTimeout(() => fetchSessionUsage(), 200);
+		// Phase 2: Lazy load usage data once after 5 seconds
+		// (disabled automatic refresh - too expensive with many sessions)
+		setTimeout(() => fetchSessionUsage(), 5000);
 	});
 
 	onDestroy(() => {
@@ -565,7 +568,7 @@
 		{#if isInitialLoad}
 			<TaskTableSkeleton rows={8} showFilters={true} />
 		{:else}
-			<TaskTableLazyWrapper
+			<TaskTable
 				{tasks}
 				{allTasks}
 				{agents}

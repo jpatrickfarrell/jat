@@ -21,7 +21,11 @@
 import { watch, type FSWatcher } from 'fs';
 import { readFile } from 'fs/promises';
 import { join, dirname, basename } from 'path';
-import { broadcastTaskChange, broadcastAgentState, isInitialized } from './connectionPool.js';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { broadcastTaskChange, broadcastAgentState, broadcastOutput, isInitialized, getChannelSubscriberCount } from './connectionPool.js';
+
+const execAsync = promisify(exec);
 
 // ============================================================================
 // Configuration
@@ -42,9 +46,15 @@ const SESSIONS_DIR = join(PROJECT_ROOT, '.claude', 'sessions');
 
 let beadsWatcher: FSWatcher | null = null;
 let sessionsWatcher: FSWatcher | null = null;
+let outputPollingInterval: NodeJS.Timeout | null = null;
 let debounceTimers: Map<string, NodeJS.Timeout> = new Map();
 let previousTaskIds = new Set<string>();
+let previousOutputHashes = new Map<string, string>();
 let isWatching = false;
+
+// Output polling configuration
+const OUTPUT_POLL_INTERVAL = 250; // Poll every 250ms for near-real-time updates
+const OUTPUT_LINES = 100; // Number of lines to capture per session
 
 // ============================================================================
 // Task (Beads) Watcher
@@ -229,6 +239,136 @@ function startSessionsWatcher(): void {
 }
 
 // ============================================================================
+// Output Polling (for WebSocket streaming)
+// ============================================================================
+
+/**
+ * Simple hash function for change detection
+ * We only need to detect if output changed, not cryptographic security
+ */
+function simpleHash(str: string): string {
+	let hash = 0;
+	for (let i = 0; i < str.length; i++) {
+		const char = str.charCodeAt(i);
+		hash = ((hash << 5) - hash) + char;
+		hash = hash & hash; // Convert to 32bit integer
+	}
+	return hash.toString(36);
+}
+
+/**
+ * Get list of active jat-* tmux sessions
+ */
+async function getTmuxSessions(): Promise<string[]> {
+	try {
+		const { stdout } = await execAsync(
+			'tmux list-sessions -F "#{session_name}" 2>/dev/null || echo ""'
+		);
+		return stdout
+			.trim()
+			.split('\n')
+			.filter(name => name.startsWith('jat-') && !name.startsWith('jat-pending-'));
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Capture output from a single tmux session
+ */
+async function captureSessionOutput(sessionName: string): Promise<{ output: string; lineCount: number } | null> {
+	try {
+		const { stdout } = await execAsync(
+			`tmux capture-pane -p -e -t "${sessionName}" -S -${OUTPUT_LINES}`,
+			{ maxBuffer: 1024 * 1024 }
+		);
+		return {
+			output: stdout,
+			lineCount: stdout.split('\n').length
+		};
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Poll all tmux sessions and broadcast output changes
+ */
+async function pollOutputs(): Promise<void> {
+	if (!isInitialized()) return;
+
+	// Only poll if there are subscribers to the output channel
+	const subscriberCount = getChannelSubscriberCount('output');
+	if (subscriberCount === 0) {
+		return;
+	}
+
+	const sessions = await getTmuxSessions();
+
+	// Process sessions in parallel with a concurrency limit
+	const batchSize = 4;
+	for (let i = 0; i < sessions.length; i += batchSize) {
+		const batch = sessions.slice(i, i + batchSize);
+		await Promise.all(batch.map(async (sessionName) => {
+			const result = await captureSessionOutput(sessionName);
+			if (!result) return;
+
+			// Check if output changed using hash
+			const hash = simpleHash(result.output);
+			const previousHash = previousOutputHashes.get(sessionName);
+
+			if (hash !== previousHash) {
+				previousOutputHashes.set(sessionName, hash);
+
+				// Broadcast the change
+				broadcastOutput(sessionName, result.output, result.lineCount);
+			}
+		}));
+	}
+
+	// Clean up hashes for sessions that no longer exist
+	for (const sessionName of previousOutputHashes.keys()) {
+		if (!sessions.includes(sessionName)) {
+			previousOutputHashes.delete(sessionName);
+		}
+	}
+}
+
+/**
+ * Start output polling
+ */
+function startOutputPolling(): void {
+	if (outputPollingInterval) {
+		console.log('[WS Watcher] Output polling already running');
+		return;
+	}
+
+	console.log(`[WS Watcher] Starting output polling (${OUTPUT_POLL_INTERVAL}ms interval)`);
+
+	// Initial poll
+	pollOutputs();
+
+	// Set up interval
+	outputPollingInterval = setInterval(() => {
+		pollOutputs();
+	}, OUTPUT_POLL_INTERVAL);
+
+	console.log('[WS Watcher] Output polling started');
+}
+
+/**
+ * Stop output polling
+ */
+function stopOutputPolling(): void {
+	if (outputPollingInterval) {
+		clearInterval(outputPollingInterval);
+		outputPollingInterval = null;
+		previousOutputHashes.clear();
+		console.log('[WS Watcher] Output polling stopped');
+	}
+}
+
+// ============================================================================
 // Public API
 // ============================================================================
 
@@ -245,6 +385,7 @@ export function startWatchers(): void {
 	console.log('[WS Watcher] Starting all watchers...');
 	startBeadsWatcher();
 	startSessionsWatcher();
+	startOutputPolling();
 	isWatching = true;
 }
 
@@ -258,6 +399,9 @@ export function stopWatchers(): void {
 	// Clear all debounce timers
 	debounceTimers.forEach(timer => clearTimeout(timer));
 	debounceTimers.clear();
+
+	// Stop output polling
+	stopOutputPolling();
 
 	// Close watchers
 	if (beadsWatcher) {

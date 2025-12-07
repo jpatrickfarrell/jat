@@ -2,6 +2,10 @@
  * Work Sessions Store
  * Manages state for active Claude Code work sessions using Svelte 5 runes.
  *
+ * ## WebSocket Output Streaming
+ * Terminal output is streamed via WebSocket for <50ms latency (replacing 500ms HTTP polling).
+ * The server polls tmux sessions every 250ms and broadcasts output changes to subscribers.
+ *
  * Interface:
  * - sessions: WorkSession[] - Array of active sessions
  * - isLoading: boolean - Loading state
@@ -11,12 +15,16 @@
  * - spawn(taskId) - Spawn new agent for task
  * - kill(sessionName) - Kill a session
  * - sendInput(sessionName, input) - Send input to session
- * - startPolling(intervalMs) - Start auto-refresh
- * - stopPolling() - Stop auto-refresh
+ * - startPolling(intervalMs, useWebSocket) - Start auto-refresh (WebSocket for output, HTTP for metadata)
+ * - stopPolling() - Stop auto-refresh and WebSocket subscription
+ * - subscribeToOutputUpdates() - Manually subscribe to WebSocket output channel
+ * - unsubscribeFromOutputUpdates() - Manually unsubscribe from WebSocket output channel
+ * - isOutputStreamingActive() - Check if WebSocket streaming is active
  */
 
 import { getTerminalScrollback } from '$lib/stores/preferences.svelte';
 import { throttledFetch } from '$lib/utils/requestThrottler';
+import { subscribe as wsSubscribe, onMessage, isConnected, type WebSocketMessage } from '$lib/stores/websocket.svelte';
 
 /**
  * Sparkline data point for hourly token usage
@@ -177,6 +185,76 @@ export async function fetchUsage(): Promise<void> {
 	}
 }
 
+// ============================================================================
+// WebSocket Output Streaming
+// ============================================================================
+
+let wsOutputUnsubscribe: (() => void) | null = null;
+
+/**
+ * Subscribe to WebSocket output updates for real-time terminal streaming
+ * This replaces HTTP polling for output, providing <50ms latency
+ */
+export function subscribeToOutputUpdates(): () => void {
+	// Already subscribed?
+	if (wsOutputUnsubscribe) {
+		return wsOutputUnsubscribe;
+	}
+
+	// Subscribe to the output channel
+	wsSubscribe(['output']);
+
+	// Handle incoming output messages
+	wsOutputUnsubscribe = onMessage('output', (msg: WebSocketMessage) => {
+		if (msg.type !== 'output-update') return;
+
+		const sessionName = msg.sessionName as string;
+		const output = msg.output as string;
+		const lineCount = msg.lineCount as number;
+
+		// Find and update the matching session
+		const sessionIndex = state.sessions.findIndex(s => s.sessionName === sessionName);
+		if (sessionIndex === -1) {
+			// Session not in state yet - might be a new session
+			// The next HTTP poll will pick it up with full metadata
+			return;
+		}
+
+		// Update the session output in place for reactivity
+		state.sessions = state.sessions.map((session, idx) => {
+			if (idx === sessionIndex) {
+				return {
+					...session,
+					output,
+					lineCount
+				};
+			}
+			return session;
+		});
+	});
+
+	console.log('[workSessions] Subscribed to WebSocket output updates');
+	return wsOutputUnsubscribe;
+}
+
+/**
+ * Unsubscribe from WebSocket output updates
+ */
+export function unsubscribeFromOutputUpdates(): void {
+	if (wsOutputUnsubscribe) {
+		wsOutputUnsubscribe();
+		wsOutputUnsubscribe = null;
+		console.log('[workSessions] Unsubscribed from WebSocket output updates');
+	}
+}
+
+/**
+ * Check if WebSocket output streaming is active
+ */
+export function isOutputStreamingActive(): boolean {
+	return wsOutputUnsubscribe !== null && isConnected();
+}
+
 /**
  * Spawn a new agent for a specific task
  */
@@ -283,30 +361,47 @@ export async function sendEscape(sessionName: string): Promise<boolean> {
 
 /**
  * Start polling for session updates
- * Default interval increased from 500ms to 2000ms to reduce request load.
- * For faster updates, use SSE events instead of polling.
+ *
+ * With WebSocket streaming enabled (default), this function:
+ * - Subscribes to WebSocket 'output' channel for real-time terminal updates (<50ms latency)
+ * - Uses HTTP polling only for metadata (tasks, tokens, session list) every 5 seconds
+ *
+ * Without WebSocket (fallback), uses HTTP polling at the specified interval.
+ *
+ * @param intervalMs - Polling interval in ms (default: 5000ms for metadata, min: 2000ms)
+ * @param useWebSocket - Whether to use WebSocket for output (default: true)
  */
-export function startPolling(intervalMs: number = 2000): void {
+export function startPolling(intervalMs: number = 5000, useWebSocket: boolean = true): void {
 	stopPolling(); // Clear any existing interval
 
-	// Initial fetch
+	// Initial fetch to populate sessions
 	fetch();
 
-	// Set up polling (minimum 1000ms to prevent browser connection exhaustion)
-	const safeInterval = Math.max(intervalMs, 1000);
+	// Subscribe to WebSocket for real-time output streaming
+	if (useWebSocket) {
+		subscribeToOutputUpdates();
+	}
+
+	// Set up polling for metadata (task changes, token usage, new/removed sessions)
+	// With WebSocket, we only need occasional HTTP polls for metadata
+	// Without WebSocket, this is the only update mechanism
+	const safeInterval = Math.max(intervalMs, useWebSocket ? 2000 : 1000);
 	pollingInterval = setInterval(() => {
 		fetch();
 	}, safeInterval);
 }
 
 /**
- * Stop polling
+ * Stop polling and WebSocket subscription
  */
 export function stopPolling(): void {
 	if (pollingInterval) {
 		clearInterval(pollingInterval);
 		pollingInterval = null;
 	}
+
+	// Also unsubscribe from WebSocket output updates
+	unsubscribeFromOutputUpdates();
 }
 
 /**

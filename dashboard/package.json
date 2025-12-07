@@ -19,7 +19,8 @@
 		"better-sqlite3": "^11.8.1",
 		"d3": "^7.9.0",
 		"svelte-dnd-action": "^0.9.67",
-		"theme-change": "^2.5.0"
+		"theme-change": "^2.5.0",
+		"ws": "^8.18.3"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-node": "^5.2.9",
@@ -28,6 +29,7 @@
 		"@tailwindcss/postcss": "^4.1.17",
 		"@types/better-sqlite3": "^7.6.12",
 		"@types/d3": "^7.4.3",
+		"@types/ws": "^8.18.1",
 		"@vitest/ui": "^4.0.12",
 		"autoprefixer": "^10.4.22",
 		"daisyui": "^5.5.5",

@@ -391,10 +391,143 @@ get_override() {
     fi
 }
 
+# Add an override to the JSON file
+add_override() {
+    local task_id="$1"
+    local action="$2"
+    local reason="$3"
+
+    # Validate action
+    if [[ "$action" != "always_review" ]] && [[ "$action" != "always_auto" ]]; then
+        echo -e "${RED}Error: action must be 'always_review' or 'always_auto'${NC}" >&2
+        return 1
+    fi
+
+    local rules_file
+    rules_file=$(get_rules_file)
+
+    # Load existing rules or create defaults
+    local rules_json
+    if [[ -f "$rules_file" ]]; then
+        rules_json=$(cat "$rules_file")
+    else
+        rules_json=$(generate_defaults)
+    fi
+
+    # Check if override already exists
+    local existing
+    existing=$(echo "$rules_json" | jq -r --arg id "$task_id" '.overrides[] | select(.taskId == $id) | .taskId')
+
+    if [[ -n "$existing" ]]; then
+        # Update existing override
+        if [[ -n "$reason" ]]; then
+            rules_json=$(echo "$rules_json" | jq --arg id "$task_id" --arg action "$action" --arg reason "$reason" '
+                .overrides = [.overrides[] | if .taskId == $id then {taskId: $id, action: $action, reason: $reason} else . end]
+            ')
+        else
+            rules_json=$(echo "$rules_json" | jq --arg id "$task_id" --arg action "$action" '
+                .overrides = [.overrides[] | if .taskId == $id then {taskId: $id, action: $action} else . end]
+            ')
+        fi
+        echo -e "${GREEN}✓ Updated override for $task_id: $action${NC}"
+    else
+        # Add new override
+        if [[ -n "$reason" ]]; then
+            rules_json=$(echo "$rules_json" | jq --arg id "$task_id" --arg action "$action" --arg reason "$reason" '
+                .overrides += [{taskId: $id, action: $action, reason: $reason}]
+            ')
+        else
+            rules_json=$(echo "$rules_json" | jq --arg id "$task_id" --arg action "$action" '
+                .overrides += [{taskId: $id, action: $action}]
+            ')
+        fi
+        echo -e "${GREEN}✓ Added override for $task_id: $action${NC}"
+    fi
+
+    # Write updated rules
+    echo "$rules_json" | jq '.' > "$rules_file"
+}
+
+# Remove an override from the JSON file
+remove_override() {
+    local task_id="$1"
+
+    local rules_file
+    rules_file=$(get_rules_file)
+
+    if [[ ! -f "$rules_file" ]]; then
+        echo -e "${YELLOW}No rules file found${NC}"
+        return 0
+    fi
+
+    local rules_json
+    rules_json=$(cat "$rules_file")
+
+    # Check if override exists
+    local existing
+    existing=$(echo "$rules_json" | jq -r --arg id "$task_id" '.overrides[] | select(.taskId == $id) | .taskId')
+
+    if [[ -z "$existing" ]]; then
+        echo -e "${YELLOW}No override found for $task_id${NC}"
+        return 0
+    fi
+
+    # Remove the override
+    rules_json=$(echo "$rules_json" | jq --arg id "$task_id" '
+        .overrides = [.overrides[] | select(.taskId != $id)]
+    ')
+
+    # Write updated rules
+    echo "$rules_json" | jq '.' > "$rules_file"
+    echo -e "${GREEN}✓ Removed override for $task_id${NC}"
+}
+
+# List all overrides
+list_overrides() {
+    local rules_json
+    rules_json=$(load_rules 2>/dev/null)
+
+    local override_count
+    override_count=$(echo "$rules_json" | jq '.overrides | length')
+
+    if [[ "$override_count" -eq 0 ]]; then
+        echo -e "${DIM}No task-specific overrides configured${NC}"
+        return 0
+    fi
+
+    echo ""
+    echo -e "${BOLD}Task-Specific Overrides${NC}"
+    echo ""
+    echo -e "  ┌───────────────────┬────────────────┬────────────────────────────┐"
+    echo -e "  │ ${BOLD}Task ID${NC}           │ ${BOLD}Action${NC}         │ ${BOLD}Reason${NC}                     │"
+    echo -e "  ├───────────────────┼────────────────┼────────────────────────────┤"
+
+    echo "$rules_json" | jq -r '.overrides[] | "\(.taskId)|\(.action)|\(.reason // "")"' | while IFS='|' read -r id action reason; do
+        id_col=$(printf "%-17s" "$id")
+        action_col=$(printf "%-14s" "$action")
+        reason_col=$(printf "%-26s" "${reason:0:26}")
+
+        if [[ "$action" == "always_review" ]]; then
+            echo -e "  │ $id_col │ ${YELLOW}$action_col${NC} │ $reason_col │"
+        else
+            echo -e "  │ $id_col │ ${GREEN}$action_col${NC} │ $reason_col │"
+        fi
+    done
+
+    echo -e "  └───────────────────┴────────────────┴────────────────────────────┘"
+    echo ""
+    echo "  Total: $override_count override(s)"
+    echo ""
+}
+
 # Parse arguments
 ACTION="load"
 TYPE_QUERY=""
 OVERRIDE_QUERY=""
+ADD_OVERRIDE_ID=""
+ADD_OVERRIDE_ACTION=""
+ADD_OVERRIDE_REASON=""
+REMOVE_OVERRIDE_ID=""
 JSON_OUTPUT=false
 
 while [[ $# -gt 0 ]]; do
@@ -425,6 +558,30 @@ while [[ $# -gt 0 ]]; do
             OVERRIDE_QUERY="$2"
             shift 2
             ;;
+        --add-override)
+            ACTION="add_override"
+            ADD_OVERRIDE_ID="$2"
+            ADD_OVERRIDE_ACTION="$3"
+            ADD_OVERRIDE_REASON="$4"
+            if [[ -n "$ADD_OVERRIDE_REASON" ]]; then
+                shift 4
+            elif [[ -n "$ADD_OVERRIDE_ACTION" ]]; then
+                shift 3
+            elif [[ -n "$ADD_OVERRIDE_ID" ]]; then
+                shift 2
+            else
+                shift
+            fi
+            ;;
+        --remove-override)
+            ACTION="remove_override"
+            REMOVE_OVERRIDE_ID="$2"
+            shift 2
+            ;;
+        --list-overrides)
+            ACTION="list_overrides"
+            shift
+            ;;
         --json|-j)
             JSON_OUTPUT=true
             shift
@@ -441,6 +598,14 @@ while [[ $# -gt 0 ]]; do
             echo "  bd-review-rules-loader --get TYPE         Get maxAutoPriority for a type"
             echo "  bd-review-rules-loader --get-override ID  Get override for a task"
             echo "  bd-review-rules-loader --json             Output loaded rules as JSON"
+            echo ""
+            echo "Override Management:"
+            echo "  bd-review-rules-loader --add-override ID ACTION [REASON]"
+            echo "                                            Add/update task-specific override"
+            echo "                                            ACTION: always_review or always_auto"
+            echo "  bd-review-rules-loader --remove-override ID"
+            echo "                                            Remove task-specific override"
+            echo "  bd-review-rules-loader --list-overrides   List all task-specific overrides"
             echo ""
             echo "Schema (v$CURRENT_SCHEMA_VERSION):"
             echo "  version           Schema version (currently $CURRENT_SCHEMA_VERSION)"
@@ -535,5 +700,27 @@ case $ACTION in
             exit 1
         fi
         get_override "$OVERRIDE_QUERY"
+        ;;
+    add_override)
+        if [[ -z "$ADD_OVERRIDE_ID" ]]; then
+            echo -e "${RED}Error: --add-override requires TASK_ID ACTION [REASON]${NC}" >&2
+            echo "  Example: bd-review-rules-loader --add-override jat-abc always_review \"Security sensitive\"" >&2
+            exit 1
+        fi
+        if [[ -z "$ADD_OVERRIDE_ACTION" ]]; then
+            echo -e "${RED}Error: --add-override requires an action (always_review or always_auto)${NC}" >&2
+            exit 1
+        fi
+        add_override "$ADD_OVERRIDE_ID" "$ADD_OVERRIDE_ACTION" "$ADD_OVERRIDE_REASON"
+        ;;
+    remove_override)
+        if [[ -z "$REMOVE_OVERRIDE_ID" ]]; then
+            echo -e "${RED}Error: --remove-override requires a task ID${NC}" >&2
+            exit 1
+        fi
+        remove_override "$REMOVE_OVERRIDE_ID"
+        ;;
+    list_overrides)
+        list_overrides
         ;;
 esac

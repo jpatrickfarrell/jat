@@ -113,12 +113,44 @@ bd-review-rules-loader --get-override jat-abc  # Returns: always_review or none
 
 # Output as JSON
 bd-review-rules-loader --json
+
+# Override management (JSON file overrides)
+bd-review-rules-loader --add-override jat-abc always_review "Security sensitive"
+bd-review-rules-loader --add-override jat-xyz always_auto
+bd-review-rules-loader --remove-override jat-abc
+bd-review-rules-loader --list-overrides
 ```
 
 **Note:** Changes made via `bd-review-rules` are automatically synced to the JSON file. The loader is primarily for:
 - Direct JSON file manipulation
 - Schema migration between versions
 - Programmatic access to rules
+- Managing centralized task overrides
+
+### bd-set-review-override
+
+Set task-level overrides (stored on the task itself, not in JSON file).
+
+```bash
+# Set override on a task
+bd-set-review-override jat-abc always_review "Security sensitive"
+bd-set-review-override jat-xyz always_auto
+
+# Show current override
+bd-set-review-override jat-abc --show
+
+# Clear override
+bd-set-review-override jat-abc --clear
+```
+
+**Two types of overrides:**
+
+| Type | Command | Storage | Use Case |
+|------|---------|---------|----------|
+| JSON file | `--add-override` | `.beads/review-rules.json` | Standing rules, version-controlled |
+| Task-level | `bd-set-review-override` | Task's notes field | One-off decisions |
+
+Task-level overrides take precedence over JSON file overrides.
 
 ### bd-check-review
 

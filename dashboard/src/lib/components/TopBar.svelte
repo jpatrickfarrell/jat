@@ -318,6 +318,22 @@
 		project: string;
 	}
 
+	/** Epic with ready children for Run Epic feature */
+	interface EpicWithReady {
+		id: string;
+		title: string;
+		project: string;
+		readyCount: number;
+		totalCount: number;
+	}
+
+	/** Review rule structure */
+	interface ReviewRule {
+		type: string;
+		maxAutoPriority: number;
+		note?: string;
+	}
+
 	interface StateCounts {
 		needsInput: number;
 		working: number;
@@ -347,6 +363,10 @@
 		projects?: string[];
 		/** Currently selected project filter (for auto-detection) */
 		selectedProject?: string;
+		/** Open epics with ready children */
+		epicsWithReady?: EpicWithReady[];
+		/** Current review rules */
+		reviewRules?: ReviewRule[];
 	}
 
 	let {
@@ -362,7 +382,9 @@
 		readyTaskCount = 0,
 		readyTasks = [],
 		projects = [],
-		selectedProject = 'All Projects'
+		selectedProject = 'All Projects',
+		epicsWithReady = [],
+		reviewRules = []
 	}: Props = $props();
 
 	// Session dropdown state
@@ -374,6 +396,13 @@
 	let swarmDropdownTimeout: ReturnType<typeof setTimeout> | null = null;
 	let spawningTaskId = $state<string | null>(null); // Track which single task is being spawned
 	let startNextLoading = $state(false); // Track "Start Next" primary button loading
+
+	// Epic submenu state
+	let showEpicSubmenu = $state(false);
+	let runningEpicId = $state<string | null>(null); // Track which epic is being run
+
+	// Review settings submenu state
+	let showReviewSubmenu = $state(false);
 
 	// Task dropdown state
 	let showTaskDropdown = $state(false);
@@ -481,6 +510,104 @@
 		showSwarmDropdown = false;
 		isSpawnModalOpen.set(true);
 	}
+
+	// Run Epic - spawn agents for all ready children of an epic
+	async function handleRunEpic(epicId: string) {
+		if (runningEpicId || swarmLoading) return;
+
+		runningEpicId = epicId;
+		showEpicSubmenu = false;
+		showSwarmDropdown = false;
+
+		try {
+			// Fetch epic's children with ready status
+			const response = await fetch(`/api/epics/${epicId}/children`);
+			if (!response.ok) {
+				throw new Error('Failed to fetch epic children');
+			}
+			const data = await response.json();
+
+			// Filter to ready children only
+			const readyChildren = data.children.filter((c: { isBlocked: boolean; status: string }) =>
+				!c.isBlocked && c.status !== 'closed' && c.status !== 'in_progress'
+			);
+
+			if (readyChildren.length === 0) {
+				console.log('No ready tasks in epic', epicId);
+				return;
+			}
+
+			startBulkSpawn();
+
+			// Spawn agents for each ready child
+			const staggerMs = 6000;
+			for (let i = 0; i < readyChildren.length; i++) {
+				const task = readyChildren[i];
+				startSpawning(task.id);
+
+				try {
+					const spawnResponse = await fetch('/api/work/spawn', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ taskId: task.id })
+					});
+
+					if (!spawnResponse.ok) {
+						console.error('Failed to spawn for', task.id);
+						stopSpawning(task.id);
+					} else {
+						console.log('Spawned agent for epic child:', task.id);
+						setTimeout(() => stopSpawning(task.id), 2000);
+					}
+				} catch (err) {
+					console.error('Spawn error for', task.id, err);
+					stopSpawning(task.id);
+				}
+
+				// Stagger between spawns
+				if (i < readyChildren.length - 1) {
+					await new Promise(resolve => setTimeout(resolve, staggerMs));
+				}
+			}
+
+			console.log(`Run Epic complete: spawned ${readyChildren.length} agents for ${epicId}`);
+		} catch (err) {
+			console.error('Run Epic failed:', err);
+		} finally {
+			runningEpicId = null;
+			endBulkSpawn();
+		}
+	}
+
+	// Get epics with ready children count
+	const epicsWithReadyChildren = $derived(
+		epicsWithReady.filter(e => e.readyCount > 0).sort((a, b) => b.readyCount - a.readyCount)
+	);
+
+	// Get total ready across all epics
+	const totalEpicReadyCount = $derived(
+		epicsWithReadyChildren.reduce((sum, e) => sum + e.readyCount, 0)
+	);
+
+	// Get review summary for display
+	const reviewSummary = $derived.by(() => {
+		if (!reviewRules || reviewRules.length === 0) return null;
+
+		// Find the common threshold (most common maxAutoPriority)
+		const thresholds = reviewRules.map(r => r.maxAutoPriority);
+		const commonThreshold = thresholds[0] ?? 3;
+
+		// Count how many types auto-proceed at each level
+		const autoTypes = reviewRules.filter(r => r.maxAutoPriority >= 0).length;
+		const reviewAlways = reviewRules.filter(r => r.maxAutoPriority < 0).length;
+
+		return {
+			commonThreshold,
+			autoTypes,
+			reviewAlways,
+			description: `P0-P${commonThreshold} auto-proceed`
+		};
+	});
 
 	// Spawn a single task from the dropdown
 	async function handleSpawnSingle(taskId: string) {
@@ -895,6 +1022,197 @@
 									>{readyTaskCount}</span>
 								{/if}
 							</button>
+
+							<!-- Run Epic (with submenu) -->
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div
+								class="relative"
+								onmouseenter={() => showEpicSubmenu = true}
+								onmouseleave={() => showEpicSubmenu = false}
+							>
+								<button
+									class="swarm-menu-item w-full"
+									disabled={epicsWithReadyChildren.length === 0 || runningEpicId !== null}
+								>
+									{#if runningEpicId}
+										<span class="loading loading-spinner loading-xs"></span>
+									{:else}
+										<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+										</svg>
+									{/if}
+									<div class="flex-1">
+										<div class="font-semibold">Run Epic</div>
+										<div class="text-[10px]" style="color: oklch(0.55 0.02 250);">Spawn agents for epic tasks</div>
+									</div>
+									{#if epicsWithReadyChildren.length > 0}
+										<span
+											class="px-1.5 py-0.5 rounded text-[9px] font-bold"
+											style="background: oklch(0.50 0.15 280); color: oklch(0.95 0.02 280);"
+										>{epicsWithReadyChildren.length}</span>
+									{/if}
+									<svg class="w-3 h-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+									</svg>
+								</button>
+
+								<!-- Epic Submenu -->
+								{#if showEpicSubmenu && epicsWithReadyChildren.length > 0}
+									<div
+										class="absolute left-full top-0 ml-1 min-w-[220px] rounded-lg shadow-xl z-50 overflow-hidden"
+										style="
+											background: linear-gradient(180deg, oklch(0.20 0.02 250) 0%, oklch(0.16 0.02 250) 100%);
+											border: 1px solid oklch(0.35 0.02 250);
+										"
+									>
+										<div class="px-3 py-2 border-b" style="border-color: oklch(0.28 0.02 250);">
+											<span class="text-[9px] font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+												Select Epic
+											</span>
+										</div>
+										<div class="py-1 max-h-[200px] overflow-y-auto">
+											{#each epicsWithReadyChildren as epic}
+												<button
+													class="w-full px-3 py-2 text-left text-xs font-mono flex items-center gap-2 transition-colors"
+													style="color: oklch(0.80 0.02 250);"
+													onmouseenter={(e) => e.currentTarget.style.background = 'oklch(0.28 0.03 250)'}
+													onmouseleave={(e) => e.currentTarget.style.background = 'transparent'}
+													onclick={() => handleRunEpic(epic.id)}
+													disabled={runningEpicId === epic.id}
+												>
+													<span
+														class="w-2 h-2 rounded-full flex-shrink-0"
+														style="background: {projectColors[epic.project] || 'oklch(0.60 0.15 280)'};"
+													></span>
+													<div class="flex-1 min-w-0">
+														<div class="truncate" style="color: oklch(0.70 0.10 280);">{epic.id}</div>
+														<div class="truncate text-[10px]" style="color: oklch(0.60 0.02 250);">{epic.title}</div>
+													</div>
+													<span
+														class="px-1.5 py-0.5 rounded text-[9px] font-bold flex-shrink-0"
+														style="background: oklch(0.45 0.15 145); color: oklch(0.95 0.02 145);"
+													>{epic.readyCount}</span>
+												</button>
+											{/each}
+										</div>
+									</div>
+								{/if}
+							</div>
+						</div>
+
+						<!-- Review Settings Section -->
+						<div class="p-2 border-t" style="border-color: oklch(0.30 0.02 250);">
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div
+								class="relative"
+								onmouseenter={() => showReviewSubmenu = true}
+								onmouseleave={() => showReviewSubmenu = false}
+							>
+								<button class="swarm-menu-item w-full">
+									<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.64 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.64 0-8.573-3.007-9.963-7.178z" />
+										<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+									</svg>
+									<div class="flex-1">
+										<div class="font-semibold">Review Settings</div>
+										{#if reviewSummary}
+											<div class="text-[10px]" style="color: oklch(0.55 0.02 250);">{reviewSummary.description}</div>
+										{:else}
+											<div class="text-[10px]" style="color: oklch(0.55 0.02 250);">Auto-proceed thresholds</div>
+										{/if}
+									</div>
+									<svg class="w-3 h-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+									</svg>
+								</button>
+
+								<!-- Review Submenu -->
+								{#if showReviewSubmenu}
+									<div
+										class="absolute left-full top-0 ml-1 min-w-[240px] rounded-lg shadow-xl z-50 overflow-hidden"
+										style="
+											background: linear-gradient(180deg, oklch(0.20 0.02 250) 0%, oklch(0.16 0.02 250) 100%);
+											border: 1px solid oklch(0.35 0.02 250);
+										"
+									>
+										<div class="px-3 py-2 border-b" style="border-color: oklch(0.28 0.02 250);">
+											<span class="text-[9px] font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+												Review Rules
+											</span>
+										</div>
+										<div class="p-2">
+											<!-- Mini rule display -->
+											{#if reviewRules && reviewRules.length > 0}
+												<div class="grid grid-cols-2 gap-1 mb-2">
+													{#each reviewRules as rule}
+														{@const isAutoAll = rule.maxAutoPriority >= 4}
+														{@const isReviewAll = rule.maxAutoPriority < 0}
+														<div
+															class="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-mono"
+															style="background: oklch(0.25 0.02 250);"
+														>
+															<span class="capitalize" style="color: oklch(0.75 0.02 250);">{rule.type}</span>
+															<span
+																class="ml-auto px-1 rounded text-[9px]"
+																style="
+																	background: {isReviewAll ? 'oklch(0.40 0.15 30)' : isAutoAll ? 'oklch(0.40 0.15 145)' : 'oklch(0.35 0.10 200)'};
+																	color: {isReviewAll ? 'oklch(0.90 0.12 30)' : isAutoAll ? 'oklch(0.90 0.12 145)' : 'oklch(0.85 0.08 200)'};
+																"
+															>
+																{#if isReviewAll}
+																	Review
+																{:else if isAutoAll}
+																	Auto
+																{:else}
+																	≤P{rule.maxAutoPriority}
+																{/if}
+															</span>
+														</div>
+													{/each}
+												</div>
+											{:else}
+												<div class="text-xs text-center py-2" style="color: oklch(0.50 0.02 250);">
+													No rules configured
+												</div>
+											{/if}
+
+											<!-- Legend -->
+											<div class="flex items-center gap-3 text-[9px] mb-2 px-1" style="color: oklch(0.50 0.02 250);">
+												<div class="flex items-center gap-1">
+													<span class="w-2 h-2 rounded" style="background: oklch(0.40 0.15 145);"></span>
+													<span>Auto-proceed</span>
+												</div>
+												<div class="flex items-center gap-1">
+													<span class="w-2 h-2 rounded" style="background: oklch(0.40 0.15 30);"></span>
+													<span>Always review</span>
+												</div>
+											</div>
+
+											<!-- Full settings link -->
+											<a
+												href="/settings"
+												class="flex items-center justify-center gap-1.5 w-full py-1.5 rounded text-[10px] font-mono transition-colors"
+												style="background: oklch(0.30 0.03 250); color: oklch(0.75 0.02 250);"
+												onmouseenter={(e) => {
+													e.currentTarget.style.background = 'oklch(0.35 0.05 250)';
+													e.currentTarget.style.color = 'oklch(0.90 0.02 250)';
+												}}
+												onmouseleave={(e) => {
+													e.currentTarget.style.background = 'oklch(0.30 0.03 250)';
+													e.currentTarget.style.color = 'oklch(0.75 0.02 250)';
+												}}
+												onclick={() => { showSwarmDropdown = false; showReviewSubmenu = false; }}
+											>
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 011.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.56.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.893.149c-.425.07-.765.383-.93.78-.165.398-.143.854.107 1.204l.527.738c.32.447.269 1.06-.12 1.45l-.774.773a1.125 1.125 0 01-1.449.12l-.738-.527c-.35-.25-.806-.272-1.204-.107-.397.165-.71.505-.78.929l-.15.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527c-.447.32-1.06.269-1.45-.12l-.773-.774a1.125 1.125 0 01-.12-1.45l.527-.737c.25-.35.272-.806.108-1.204-.165-.397-.506-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.108-1.204l-.526-.738a1.125 1.125 0 01.12-1.45l.773-.773a1.125 1.125 0 011.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894z" />
+													<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+												</svg>
+												<span>Full Settings</span>
+											</a>
+										</div>
+									</div>
+								{/if}
+							</div>
 						</div>
 
 						<!-- Ready Tasks Section -->

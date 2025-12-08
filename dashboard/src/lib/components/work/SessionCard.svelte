@@ -468,10 +468,13 @@
 	});
 
 	onMount(() => {
-		// Update currentTime every second for real-time elapsed time display
+		// PERFORMANCE: Only tick every second for full modes that show animated digits.
+		// Compact mode uses static "Xh Xm" format that doesn't need second precision.
+		// With 10+ compact cards on kanban, 1-second intervals cause excessive re-renders.
+		const tickInterval = mode === 'compact' ? 30000 : 1000; // 30s for compact, 1s for others
 		elapsedTimeInterval = setInterval(() => {
 			currentTime = Date.now();
-		}, 1000);
+		}, tickInterval);
 
 		// Question polling is now managed by $effect based on sessionState
 		// This prevents N sessions from all polling simultaneously when not needed

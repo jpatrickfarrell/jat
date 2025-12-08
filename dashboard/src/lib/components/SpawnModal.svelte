@@ -12,7 +12,7 @@
 	 */
 
 	import { onMount } from 'svelte';
-	import { isSpawnModalOpen } from '$lib/stores/drawerStore';
+	import { isSpawnModalOpen, openTaskDetailDrawer } from '$lib/stores/drawerStore';
 	import {
 		DEFAULT_MODEL,
 		MAX_TMUX_SESSIONS,
@@ -253,10 +253,22 @@
 					</div>
 					<ul class="space-y-1 font-mono text-xs" style="color: oklch(0.55 0.02 250);">
 						{#each readyTasks.slice(0, Math.min(agentCount, 5)) as task, i}
-							<li class="truncate">
+							<li class="flex items-center gap-1 group">
 								<span style="color: oklch(0.70 0.15 {50 + i * 30});">Agent {i + 1}</span>
 								<span style="color: oklch(0.45 0.02 250);">→</span>
-								<span>[P{task.priority}] {task.id}</span>
+								<span class="truncate flex-1">[P{task.priority}] {task.id}</span>
+								<button
+									class="btn btn-ghost btn-xs opacity-0 group-hover:opacity-100 transition-opacity p-0.5 min-h-0 h-auto"
+									onclick={(e) => {
+										e.stopPropagation();
+										openTaskDetailDrawer(task.id);
+									}}
+									title="View task details"
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5" style="color: oklch(0.70 0.15 240);">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+									</svg>
+								</button>
 							</li>
 						{/each}
 						{#if agentCount > 5}

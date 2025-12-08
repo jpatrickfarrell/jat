@@ -3,6 +3,11 @@
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 
 	// Types
+	interface DepTask {
+		id: string;
+		status: string;
+	}
+
 	interface Task {
 		id: string;
 		title: string;
@@ -10,7 +15,7 @@
 		priority?: number;
 		assignee?: string;
 		labels?: string[];
-		depends_on?: unknown[];
+		depends_on?: DepTask[];
 	}
 
 	interface Column {
@@ -64,6 +69,13 @@
 			onTaskClick(taskId);
 		}
 	}
+
+	// Calculate tasks that this task unblocks (tasks that depend on this one)
+	function getBlockedTasks(taskId: string): DepTask[] {
+		return tasks.filter(t =>
+			t.depends_on?.some(d => d.id === taskId) && t.status !== 'closed'
+		).map(t => ({ id: t.id, status: t.status }));
+	}
 </script>
 
 <div class="w-full h-full bg-base-100 p-4 flex flex-col">
@@ -95,18 +107,33 @@
 					{:else}
 						<div class="space-y-3">
 							{#each columnTasks as task}
+								{@const blockedTasks = getBlockedTasks(task.id)}
 								<button
 									class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow w-full text-left"
 									style="border-left: 4px solid {getProjectColor(task.id)}"
 									onclick={() => handleTaskClick(task.id)}
 								>
 									<div class="card-body p-4">
-										<!-- Task ID + Priority -->
+										<!-- Task ID + Priority + Unblocks -->
 										<div class="flex items-start justify-between gap-2 mb-2">
 											<TaskIdBadge {task} size="xs" showStatus={false} showType={false} copyOnly />
-											<span class="badge badge-sm {priorityColors[task.priority ?? 99]}">
-												P{task.priority ?? '?'}
-											</span>
+											<div class="flex items-center gap-1.5">
+												{#if blockedTasks.length > 0}
+													<span
+														class="inline-flex items-center gap-0.5 text-xs font-mono px-1 py-0.5 rounded"
+														style="color: oklch(0.75 0.15 200); background: oklch(0.75 0.15 200 / 0.15);"
+														title="Completing this task unblocks {blockedTasks.length} other {blockedTasks.length === 1 ? 'task' : 'tasks'}: {blockedTasks.slice(0, 3).map(t => t.id).join(', ')}{blockedTasks.length > 3 ? '...' : ''}"
+													>
+														<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+														</svg>
+														{blockedTasks.length}
+													</span>
+												{/if}
+												<span class="badge badge-sm {priorityColors[task.priority ?? 99]}">
+													P{task.priority ?? '?'}
+												</span>
+											</div>
 										</div>
 
 										<!-- Task Title -->

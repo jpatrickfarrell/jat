@@ -35,8 +35,9 @@
 	let isLoading = $state(true);
 	let activeTab = $state<'api-limits' | 'subscription-usage'>('api-limits');
 
-	// Sparkline data (24 hours of hourly token usage)
-	let sparklineData = $state<Array<{ timestamp: string; tokens: number; cost: number }>>([]);
+	// Sparkline data (24 hours of hourly token usage) - DISABLED FOR TESTING
+	// let sparklineData = $state<Array<{ timestamp: string; tokens: number; cost: number }>>([]);
+	let sparklineData: Array<{ timestamp: string; tokens: number; cost: number }> = []; // Empty, disabled
 
 	// Fetch tier metrics from API endpoint
 	async function loadMetrics() {
@@ -65,10 +66,11 @@
 		}
 	}
 
-	// Fetch sparkline data (system-wide, no agent filter)
+	// Fetch sparkline data (system-wide, using worker threads)
 	async function fetchSparklineData() {
 		try {
-			const response = await fetch('/api/agents/sparkline?range=24h');
+			// Use multiProject=true to use async worker threads (non-blocking)
+			const response = await fetch('/api/agents/sparkline?range=24h&multiProject=true');
 			const result = await response.json();
 
 			if (result.error) {
@@ -90,17 +92,18 @@
 		// Initial load
 		async function initialLoad() {
 			isLoading = true;
-			await Promise.all([loadMetrics(), loadAgentUsage(), fetchSparklineData()]);
+			// DISABLED SPARKLINE FOR TESTING
+			await Promise.all([loadMetrics(), loadAgentUsage()]);
 			isLoading = false;
 		}
 		initialLoad();
 
-		// Poll every 30 seconds
+		// Poll every 5 minutes
 		const interval = setInterval(() => {
 			loadMetrics();
 			loadAgentUsage();
-			fetchSparklineData();
-		}, 30_000);
+			// fetchSparklineData(); // DISABLED FOR TESTING
+		}, 5 * 60 * 1000);
 
 		return () => clearInterval(interval);
 	});

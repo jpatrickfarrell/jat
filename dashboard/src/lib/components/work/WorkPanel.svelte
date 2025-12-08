@@ -168,15 +168,27 @@
 		return 5; // idle
 	}
 
+	// Pre-compute session states ONCE before sorting (avoids expensive regex in every comparison)
+	// This is critical for performance - getSessionState runs regex on 3000 chars of output
+	const sessionStates = $derived.by(() => {
+		const states = new Map<string, number>();
+		for (const session of workSessions) {
+			states.set(session.sessionName, getSessionState(session));
+		}
+		return states;
+	});
+
 	// Sort sessions based on selected sort option and direction
 	const sortedSessions = $derived.by(() => {
 		const dir = sortDir === 'asc' ? 1 : -1;
+		const states = sessionStates; // Use pre-computed states
 		return [...workSessions].sort((a, b) => {
 			switch (sortBy) {
 				case 'state': {
 					// Sort by state (asc = attention-needed first, desc = idle first)
-					const stateA = getSessionState(a);
-					const stateB = getSessionState(b);
+					// Use cached states instead of recomputing for every comparison
+					const stateA = states.get(a.sessionName) ?? 5;
+					const stateB = states.get(b.sessionName) ?? 5;
 					if (stateA !== stateB) return (stateA - stateB) * dir;
 					// Secondary: priority (always P0 first)
 					const priorityA = a.task?.priority ?? 999;

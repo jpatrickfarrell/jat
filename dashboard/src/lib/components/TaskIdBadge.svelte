@@ -54,9 +54,11 @@
 		showDependencies?: boolean;
 		/** Show dependency mini-graph in dropdown (fetches from API on hover) */
 		showDepGraph?: boolean;
+		/** Show compact unblocks count badge inline (e.g., "→3") */
+		showUnblocksCount?: boolean;
 	}
 
-	let { task, size = 'sm', showStatus = true, showType = true, showCopyIcon = false, showAssignee = false, minimal = false, color, onOpenTask, onAgentClick, dropdownAlign = 'start', copyOnly = false, blockedBy = [], blocks = [], showDependencies = false, showDepGraph = true }: Props = $props();
+	let { task, size = 'sm', showStatus = true, showType = true, showCopyIcon = false, showAssignee = false, minimal = false, color, onOpenTask, onAgentClick, dropdownAlign = 'start', copyOnly = false, blockedBy = [], blocks = [], showDependencies = false, showDepGraph = true, showUnblocksCount = false }: Props = $props();
 
 	// Dependency graph state
 	let depGraphData = $state<DepGraphData | null>(null);
@@ -231,6 +233,19 @@
 
 			<span style="color: {projectColor}">{task.id}</span>
 
+			{#if showUnblocksCount && activeBlocks.length > 0}
+				<span
+					class="inline-flex items-center gap-0.5 text-xs font-mono px-1 py-0.5 rounded"
+					style="color: oklch(0.75 0.15 200); background: oklch(0.75 0.15 200 / 0.15);"
+					title="Completing this task unblocks {activeBlocks.length} other {activeBlocks.length === 1 ? 'task' : 'tasks'}"
+				>
+					<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+					</svg>
+					{activeBlocks.length}
+				</span>
+			{/if}
+
 			{#if showStatus && !shouldShowAssignee}
 				<svg
 					class="{iconSizes[size]} {statusVisual.text} {statusVisual.animation || ''} shrink-0"
@@ -327,6 +342,19 @@
 				{/if}
 
 				<span style="color: {projectColor}">{task.id}</span>
+
+				{#if showUnblocksCount && activeBlocks.length > 0}
+					<span
+						class="inline-flex items-center gap-0.5 text-xs font-mono px-1 py-0.5 rounded"
+						style="color: oklch(0.75 0.15 200); background: oklch(0.75 0.15 200 / 0.15);"
+						title="Completing this task unblocks {activeBlocks.length} other {activeBlocks.length === 1 ? 'task' : 'tasks'}"
+					>
+						<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+						</svg>
+						{activeBlocks.length}
+					</span>
+				{/if}
 
 				{#if showStatus && !shouldShowAssignee}
 					<!-- Show status icon in badge only when not showing assignee (assignee row has its own gear) -->

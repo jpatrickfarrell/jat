@@ -29,6 +29,8 @@
 	import { successToast } from '$lib/stores/toasts.svelte';
 	import { getEpicCelebration, getEpicAutoClose } from '$lib/stores/preferences.svelte';
 	import { getFileTypeInfo, formatFileSize, type FileCategory } from '$lib/utils/fileUtils';
+	import { calculateRecommendationScore, type RecommendationScore } from '$lib/utils/recommendationUtils';
+	import RecommendedBadge from '$lib/components/RecommendedBadge.svelte';
 
 	// Type definitions for task files (images, PDFs, text, etc.)
 	interface TaskFile {
@@ -714,6 +716,30 @@
 		}
 
 		return result;
+	});
+
+	// Calculate recommended tasks - top 3 highest-impact ready tasks
+	// Uses scoring based on: unblocks count, active epic, idle agents, priority
+	const recommendedTasks = $derived.by(() => {
+		const allTasksList = allTasks.length > 0 ? allTasks : tasks;
+		const scores = new Map<string, RecommendationScore>();
+
+		// Only calculate for open tasks (ready to start)
+		for (const task of filteredTasks) {
+			if (task.status === 'open') {
+				const score = calculateRecommendationScore(task, allTasksList, agents);
+				if (score.isRecommended) {
+					scores.set(task.id, score);
+				}
+			}
+		}
+
+		// Sort by score and take top 3
+		const sorted = Array.from(scores.entries())
+			.sort((a, b) => b[1].score - a[1].score)
+			.slice(0, 3);
+
+		return new Map(sorted);
 	});
 
 	// Type order for grouping (BUG first, then features, tasks, chores, epics, no type last)
@@ -2520,6 +2546,7 @@
 											{@const hasDependencyIssues = unresolvedBlockers.length > 0 || blockedTasks.length > 0}
 											{@const isSpawning = spawningSingle === task.id || ($spawningTaskIds.has(task.id))}
 											{@const hasRowGradient = isCompletedByActiveSession || taskIsActive}
+											{@const recommendation = recommendedTasks.get(task.id)}
 											<tr
 												class="hover:bg-base-200/50 cursor-pointer transition-colors {isNewTask ? 'task-new' : ''} {isStarting ? 'task-starting' : ''} {isWorkingCompleted ? 'task-working-completed' : isCompleted ? 'task-completed' : ''} {isChildTask ? 'pl-6' : ''}"
 												onclick={() => handleRowClick(task.id)}
@@ -2680,6 +2707,9 @@
 																</svg>
 																{blockedTasks.length}
 															</span>
+														{/if}
+														{#if recommendation}
+															<RecommendedBadge reasons={recommendation.reasons} size="xs" iconOnly />
 														{/if}
 													</div>
 												</td>
@@ -2862,6 +2892,7 @@
 									{@const elapsed = task.status === 'in_progress' ? getElapsedTime(task.updated_at) : null}
 									{@const fireScale = elapsed ? getFireScale(elapsed.minutes) : 1}
 									{@const hasRowGradient = isCompletedByActiveSession || dragOverTask === task.id || selectedTasks.has(task.id) || isHuman || taskIsActive}
+									{@const recommendation = recommendedTasks.get(task.id)}
 									<!-- Main task row -->
 									<tr
 										class="cursor-pointer group overflow-visible industrial-row {depStatus.hasBlockers ? 'opacity-70' : ''} {isNewTask ? 'task-new-entrance' : ''} {isStarting ? 'task-starting' : ''} {isWorkingCompleted ? 'task-working-completed' : isCompleted ? 'task-completed' : ''}"
@@ -3026,6 +3057,9 @@
 													</svg>
 													{blockedTasks.length}
 												</span>
+											{/if}
+											{#if recommendation}
+												<RecommendedBadge reasons={recommendation.reasons} size="xs" iconOnly />
 											{/if}
 										</div>
 									</td>

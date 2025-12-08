@@ -54,6 +54,7 @@
 		tokens: number;
 		cost: number;
 		sparklineData?: SparklineDataPoint[];
+		contextPercent?: number | null;
 		created: string;
 		attached: boolean;
 	}
@@ -193,15 +194,27 @@
 		return 5; // idle
 	}
 
+	// Pre-compute session states ONCE before sorting (avoids expensive regex in every comparison)
+	// This is critical for performance - getSessionState runs regex on 3000 chars of output
+	const sessionStates = $derived.by(() => {
+		const states = new Map<string, number>();
+		for (const session of workSessions) {
+			states.set(session.sessionName, getSessionState(session));
+		}
+		return states;
+	});
+
 	// Sort sessions based on selected sort option and direction
 	const sortedSessions = $derived.by(() => {
 		const dir = sortDir === 'asc' ? 1 : -1;
+		const states = sessionStates; // Use pre-computed states
 		return [...workSessions].sort((a, b) => {
 			switch (sortBy) {
 				case 'state': {
 					// Sort by state (asc = attention-needed first, desc = idle first)
-					const stateA = getSessionState(a);
-					const stateB = getSessionState(b);
+					// Use cached states instead of recomputing for every comparison
+					const stateA = states.get(a.sessionName) ?? 5;
+					const stateB = states.get(b.sessionName) ?? 5;
 					if (stateA !== stateB) return (stateA - stateB) * dir;
 					// Secondary: priority (always P0 first)
 					const priorityA = a.task?.priority ?? 999;
@@ -366,14 +379,14 @@
 	{:else}
 		<!-- SessionCards -->
 		<div class="flex-1 min-h-0 px-2">
-			<!-- Horizontal scrolling row (640px per card for full terminal output) -->
+			<!-- Horizontal scrolling row (720px per card for full terminal output / 80 columns) -->
 			<!-- pt-10 reserves space above cards for agent tabs that use negative margin -->
 			<!-- min-h-0 is critical for proper flex height calculation -->
-			<div class="flex gap-4 overflow-x-auto h-full pt-10 pb-2 scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent">
+			<div class="flex gap-3 overflow-x-auto h-full pt-2 scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent">
 				{#if isAgentMode}
 					<!-- Agent Mode: Work Sessions -->
 					{#each sortedSessions as session (session.sessionName)}
-						<!-- Height container - SessionCard controls its own width via cardWidth prop or default 640px -->
+						<!-- Height container - SessionCard controls its own width via cardWidth prop or default 720px -->
 						<div class="h-[calc(100%-8px)]">
 							<SessionCard
 								mode="agent"
@@ -386,6 +399,7 @@
 								tokens={session.tokens}
 								cost={session.cost}
 								sparklineData={session.sparklineData}
+								contextPercent={session.contextPercent}
 								startTime={session.created ? new Date(session.created) : null}
 								onKillSession={createKillHandler(session.sessionName)}
 								onInterrupt={createInterruptHandler(session.sessionName)}

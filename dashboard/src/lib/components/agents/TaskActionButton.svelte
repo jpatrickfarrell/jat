@@ -323,7 +323,7 @@
 				<!-- Small green checkmark badge overlaid in bottom-right -->
 				<span
 					class="absolute flex items-center justify-center w-3.5 h-3.5 rounded-full"
-					style="background: oklch(0.55 0.18 145); bottom: -2px; right: -2px; border: 1.5px solid oklch(0.20 0.01 250);"
+					style="background: oklch(0.55 0.18 145); bottom: -5px; right: -5px; border: 1.5px solid oklch(0.20 0.01 250);"
 				>
 					<svg class="w-2 h-2" style="color: oklch(0.95 0.02 145);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />

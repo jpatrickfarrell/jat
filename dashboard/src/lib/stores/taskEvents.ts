@@ -16,6 +16,7 @@ export interface TaskEvent {
 	taskId?: string;
 	newTasks?: string[];
 	removedTasks?: string[];
+	updatedTasks?: string[];  // Tasks with status/assignee changes
 	timestamp: number;
 }
 
@@ -60,11 +61,16 @@ export function connectTaskEvents() {
 
 				// Convert SSE event to TaskEvent format
 				if (data.type === 'task-change') {
-					console.log('[TaskEvents] Task change detected:', data.newTasks, data.removedTasks);
+					console.log('[TaskEvents] Task change detected:', {
+						new: data.newTasks,
+						removed: data.removedTasks,
+						updated: data.updatedTasks
+					});
 					lastTaskEvent.set({
 						type: 'task-change',
 						newTasks: data.newTasks || [],
 						removedTasks: data.removedTasks || [],
+						updatedTasks: data.updatedTasks || [],
 						timestamp: data.timestamp || Date.now()
 					});
 				}

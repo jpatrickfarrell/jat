@@ -20,56 +20,83 @@ const clients = new Set<ReadableStreamDefaultController>();
 // Debounce file changes
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-async function getTaskIds(): Promise<Set<string>> {
+// Task snapshot for change detection - tracks properties that affect UI display
+interface TaskSnapshot {
+	id: string;
+	status: string;
+	assignee: string | null;
+}
+
+async function getTaskSnapshots(): Promise<Map<string, TaskSnapshot>> {
 	try {
 		const content = await readFile(BEADS_FILE, 'utf-8');
-		const ids = new Set<string>();
+		const snapshots = new Map<string, TaskSnapshot>();
 		for (const line of content.split('\n')) {
 			if (!line.trim()) continue;
 			try {
 				const task = JSON.parse(line);
-				if (task.id) ids.add(task.id);
+				if (task.id) {
+					snapshots.set(task.id, {
+						id: task.id,
+						status: task.status || 'open',
+						assignee: task.assignee || null
+					});
+				}
 			} catch {
 				// Skip invalid lines
 			}
 		}
-		return ids;
+		return snapshots;
 	} catch {
-		return new Set();
+		return new Map();
 	}
 }
 
-let previousTaskIds = new Set<string>();
+let previousSnapshots = new Map<string, TaskSnapshot>();
 
 async function checkForChanges() {
 	console.log('[SSE] Checking for task changes...');
-	const currentIds = await getTaskIds();
+	const currentSnapshots = await getTaskSnapshots();
 
 	// Find new tasks
 	const newTasks: string[] = [];
-	for (const id of currentIds) {
-		if (!previousTaskIds.has(id)) {
+	for (const id of currentSnapshots.keys()) {
+		if (!previousSnapshots.has(id)) {
 			newTasks.push(id);
 		}
 	}
 
 	// Find removed tasks
 	const removedTasks: string[] = [];
-	for (const id of previousTaskIds) {
-		if (!currentIds.has(id)) {
+	for (const id of previousSnapshots.keys()) {
+		if (!currentSnapshots.has(id)) {
 			removedTasks.push(id);
 		}
 	}
 
-	previousTaskIds = currentIds;
+	// Find updated tasks (status or assignee changed)
+	const updatedTasks: string[] = [];
+	for (const [id, current] of currentSnapshots) {
+		const previous = previousSnapshots.get(id);
+		if (previous) {
+			// Check if status or assignee changed
+			if (previous.status !== current.status || previous.assignee !== current.assignee) {
+				updatedTasks.push(id);
+				console.log(`[SSE] Task ${id} updated: status ${previous.status}->${current.status}, assignee ${previous.assignee}->${current.assignee}`);
+			}
+		}
+	}
 
-	// Broadcast to all clients
-	if (newTasks.length > 0 || removedTasks.length > 0) {
-		console.log(`[SSE] Broadcasting: ${newTasks.length} new, ${removedTasks.length} removed to ${clients.size} clients`);
+	previousSnapshots = currentSnapshots;
+
+	// Broadcast to all clients if anything changed
+	if (newTasks.length > 0 || removedTasks.length > 0 || updatedTasks.length > 0) {
+		console.log(`[SSE] Broadcasting: ${newTasks.length} new, ${removedTasks.length} removed, ${updatedTasks.length} updated to ${clients.size} clients`);
 		const event = {
 			type: 'task-change',
 			newTasks,
 			removedTasks,
+			updatedTasks,
 			timestamp: Date.now()
 		};
 
@@ -96,10 +123,10 @@ function startWatcher() {
 	// Watch the DIRECTORY instead of the file - more reliable for atomic writes
 	console.log(`[SSE] Starting directory watcher for: ${BEADS_DIR} (watching ${BEADS_FILENAME})`);
 
-	// Initialize previous task IDs
-	getTaskIds().then(ids => {
-		previousTaskIds = ids;
-		console.log(`[SSE] Initialized with ${ids.size} existing tasks`);
+	// Initialize previous task snapshots
+	getTaskSnapshots().then(snapshots => {
+		previousSnapshots = snapshots;
+		console.log(`[SSE] Initialized with ${snapshots.size} existing tasks`);
 	});
 
 	try {

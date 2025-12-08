@@ -7,6 +7,7 @@
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import ResizableDivider from '$lib/components/ResizableDivider.svelte';
 	import { lastSessionEvent } from '$lib/stores/sessionEvents';
+	import { lastTaskEvent } from '$lib/stores/taskEvents';
 	import AgentGridSkeleton from '$lib/components/skeleton/AgentGridSkeleton.svelte';
 	import TaskTableSkeleton from '$lib/components/skeleton/TaskTableSkeleton.svelte';
 
@@ -265,6 +266,16 @@
 		}
 	});
 
+	// React to task events from SSE (status/assignee changes)
+	// This ensures AgentGrid and TaskTable update immediately when tasks are assigned
+	$effect(() => {
+		const unsubscribe = lastTaskEvent.subscribe((event) => {
+			if (event) {
+				fetchData();
+			}
+		});
+		return unsubscribe;
+	});
 
 	// Track previous drawer state to detect close transition
 	let wasDrawerOpen = false;

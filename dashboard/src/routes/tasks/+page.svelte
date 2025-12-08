@@ -357,6 +357,11 @@
 			if (event) {
 				// Refresh task data when any task event occurs
 				fetchTaskData();
+				// Also refresh work sessions when tasks are updated (status/assignee changes)
+				// This ensures SessionCards show the correct task immediately
+				if (event.updatedTasks && event.updatedTasks.length > 0) {
+					fetchSessions();
+				}
 			}
 		});
 		return unsubscribe;

@@ -64,9 +64,10 @@ export async function POST({ params, request }) {
 			});
 		} catch (execError) {
 			console.error('unassign-task error:', execError);
+			const execErr = /** @type {{ stderr?: string, message?: string }} */ (execError);
 
 			// Check if task not found
-			if (execError.stderr?.includes('not found')) {
+			if (execErr.stderr?.includes('not found')) {
 				return json({
 					error: 'Task not found',
 					message: `Task ${taskId} does not exist`,
@@ -76,7 +77,7 @@ export async function POST({ params, request }) {
 
 			return json({
 				error: 'Failed to unassign task',
-				message: execError.stderr || execError.message,
+				message: execErr.stderr || execErr.message || String(execError),
 				agentName,
 				taskId
 			}, { status: 500 });
@@ -85,7 +86,7 @@ export async function POST({ params, request }) {
 		console.error('Error in POST /api/agents/[name]/unassign-task:', error);
 		return json({
 			error: 'Internal server error',
-			message: error.message
+			message: error instanceof Error ? error.message : String(error)
 		}, { status: 500 });
 	}
 }

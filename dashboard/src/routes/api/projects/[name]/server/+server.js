@@ -20,6 +20,7 @@ const CONFIG_FILE = join(homedir(), '.config', 'jat', 'projects.json');
 
 /**
  * Read project config
+ * @param {string} projectName
  */
 async function getProjectConfig(projectName) {
 	try {
@@ -37,6 +38,7 @@ async function getProjectConfig(projectName) {
 
 /**
  * Check if a port is in use
+ * @param {number|null} port
  */
 async function checkPortStatus(port) {
 	if (!port) return false;
@@ -52,6 +54,7 @@ async function checkPortStatus(port) {
 
 /**
  * Check if tmux session exists
+ * @param {string} sessionName
  */
 async function tmuxSessionExists(sessionName) {
 	try {
@@ -65,6 +68,7 @@ async function tmuxSessionExists(sessionName) {
 /**
  * Get tmux session name for a project server
  * Uses server-{projectName} format to match /api/servers endpoint detection
+ * @param {string} projectName
  */
 function getSessionName(projectName) {
 	return `server-${projectName}`;
@@ -194,7 +198,7 @@ export async function POST({ params }) {
 		console.error('Failed to start server:', error);
 		return json({
 			error: 'Failed to start server',
-			details: error.message
+			details: error instanceof Error ? error.message : String(error)
 		}, { status: 500 });
 	}
 }
@@ -240,7 +244,7 @@ export async function DELETE({ params }) {
 		console.error('Failed to stop server:', error);
 		return json({
 			error: 'Failed to stop server',
-			details: error.message
+			details: error instanceof Error ? error.message : String(error)
 		}, { status: 500 });
 	}
 }

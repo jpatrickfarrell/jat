@@ -63,14 +63,15 @@ export async function GET({ params, url }) {
 	try {
 		// Verify agent exists using am-agents
 		const { stdout } = await execAsync('am-agents --json');
+		/** @type {Array<{name: string}>} */
 		const agents = JSON.parse(stdout);
-		const agentExists = agents.some((agent) => agent.name === agentName);
+		const agentExists = agents.some((/** @type {{name: string}} */ agent) => agent.name === agentName);
 
 		if (!agentExists) {
 			return json(
 				{
 					error: `Agent '${agentName}' not found`,
-					availableAgents: agents.map((a) => a.name)
+					availableAgents: agents.map((/** @type {{name: string}} */ a) => a.name)
 				},
 				{ status: 404 }
 			);
@@ -80,7 +81,7 @@ export async function GET({ params, url }) {
 		const projectPath = process.cwd().replace('/dashboard', '');
 
 		// Get token usage for agent
-		const usage = await getAgentUsage(agentName, range, projectPath);
+		const usage = await getAgentUsage(agentName, /** @type {'today'|'week'|'all'} */ (range), projectPath);
 
 		const response = {
 			agent: agentName,
@@ -107,9 +108,10 @@ export async function GET({ params, url }) {
 		return json(response);
 	} catch (error) {
 		console.error(`Error fetching usage for agent ${agentName}:`, error);
+		const err = error instanceof Error ? error : new Error(String(error));
 
 		// Handle specific error types
-		if (error.message?.includes('ENOENT')) {
+		if (err.message?.includes('ENOENT')) {
 			return json(
 				{
 					error: 'Token usage data not found',
@@ -121,7 +123,7 @@ export async function GET({ params, url }) {
 			);
 		}
 
-		if (error.message?.includes('JSON')) {
+		if (err.message?.includes('JSON')) {
 			return json(
 				{
 					error: 'Failed to parse token usage data',
@@ -137,7 +139,7 @@ export async function GET({ params, url }) {
 		return json(
 			{
 				error: 'Failed to fetch token usage',
-				details: error.message,
+				details: err.message,
 				agent: agentName,
 				range
 			},

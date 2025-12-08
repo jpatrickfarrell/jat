@@ -16,6 +16,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { apiCache, cacheKey, CACHE_TTL, invalidateCache } from '$lib/server/cache.js';
 
 const execAsync = promisify(exec);
 
@@ -60,6 +61,7 @@ async function readDashboardSettings() {
 
 /**
  * Write dashboard visibility settings
+ * @param {{ hiddenProjects?: string[] }} settings
  */
 async function writeDashboardSettings(settings) {
 	try {
@@ -96,6 +98,7 @@ async function scanCodeDirectory() {
 
 /**
  * Get task counts for a project from Beads
+ * @param {string} projectPath
  */
 async function getProjectTaskCounts(projectPath) {
 	try {
@@ -103,8 +106,9 @@ async function getProjectTaskCounts(projectPath) {
 			cwd: projectPath,
 			timeout: 5000
 		});
+		/** @type {Array<{status: string}>} */
 		const tasks = JSON.parse(stdout || '[]');
-		const open = tasks.filter(t => t.status === 'open' || t.status === 'in_progress').length;
+		const open = tasks.filter((/** @type {{status: string}} */ t) => t.status === 'open' || t.status === 'in_progress').length;
 		const total = tasks.length;
 		return { open, total };
 	} catch {
@@ -114,6 +118,7 @@ async function getProjectTaskCounts(projectPath) {
 
 /**
  * Get agent count for a project
+ * @param {string} projectPath
  */
 async function getProjectAgentCount(projectPath) {
 	try {
@@ -144,6 +149,7 @@ async function getProjectAgentCount(projectPath) {
 
 /**
  * Check if a port is in use
+ * @param {number|null} port
  */
 async function checkPortStatus(port) {
 	if (!port) return null;
@@ -163,6 +169,7 @@ async function checkPortStatus(port) {
  * 1. Agent session files (.claude/agent-*.txt)
  * 2. Git commit time
  * 3. Directory mtime (fallback)
+ * @param {string} projectPath
  */
 async function getLastActivity(projectPath) {
 	let mostRecentMs = 0;
@@ -216,6 +223,7 @@ async function getLastActivity(projectPath) {
 
 /**
  * Format timestamp as relative time (e.g., "3m", "2h", "4d")
+ * @param {number} timestamp
  */
 function formatRelativeTime(timestamp) {
 	const now = Date.now();
@@ -235,6 +243,21 @@ export async function GET({ url }) {
 	try {
 		const visibleOnly = url.searchParams.get('visible') === 'true';
 		const includeStats = url.searchParams.get('stats') === 'true';
+
+		// Build cache key
+		const key = cacheKey('projects', {
+			visible: visibleOnly ? 'true' : undefined,
+			stats: includeStats ? 'true' : undefined
+		});
+
+		// Use longer TTL for stats (expensive) vs base (fast)
+		const ttl = includeStats ? CACHE_TTL.LONG : CACHE_TTL.MEDIUM;
+
+		// Check cache
+		const cached = apiCache.get(key);
+		if (cached) {
+			return json(cached);
+		}
 
 		// Read JAT config
 		const jatConfig = await readJatConfig();
@@ -304,7 +327,9 @@ export async function GET({ url }) {
 			projects.sort((a, b) => {
 				// Sort by lastActivity (most recent first)
 				// "now" < "3m" < "2h" < "4d"
+				/** @type {Record<string, number>} */
 				const order = { 'now': 0, 'm': 1, 'h': 2, 'd': 3 };
+				/** @param {string|null|undefined} t */
 				const getScore = (t) => {
 					if (!t) return 999;
 					if (t === 'now') return 0;
@@ -312,24 +337,32 @@ export async function GET({ url }) {
 					const num = parseInt(t.slice(0, -1), 10);
 					return (order[unit] || 3) * 1000 + num;
 				};
+				// @ts-ignore - lastActivity exists when includeStats is true
 				return getScore(a.lastActivity) - getScore(b.lastActivity);
 			});
 		}
 
-		return json({
+		// Build response
+		const responseData = {
 			projects,
 			source: jatConfig ? 'jat-config' : 'filesystem',
 			configPath: CONFIG_FILE,
 			settingsPath: DASHBOARD_SETTINGS_FILE
-		});
+		};
+
+		// Cache the response
+		apiCache.set(key, responseData, ttl);
+
+		return json(responseData);
 	} catch (error) {
 		console.error('Failed to list projects:', error);
-		return json({ projects: [], error: error.message }, { status: 500 });
+		return json({ projects: [], error: error instanceof Error ? error.message : String(error) }, { status: 500 });
 	}
 }
 
 /**
  * Write JAT config back to file
+ * @param {object} config
  */
 async function writeJatConfig(config) {
 	try {
@@ -372,6 +405,9 @@ export async function PATCH({ request }) {
 			return json({ error: 'Failed to save config' }, { status: 500 });
 		}
 
+		// Invalidate projects cache since config changed
+		invalidateCache.projects();
+
 		return json({
 			success: true,
 			project,
@@ -380,7 +416,7 @@ export async function PATCH({ request }) {
 		});
 	} catch (error) {
 		console.error('Failed to update project:', error);
-		return json({ error: error.message }, { status: 500 });
+		return json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
 	}
 }
 
@@ -417,9 +453,12 @@ export async function POST({ request }) {
 			return json({ error: 'Failed to save settings' }, { status: 500 });
 		}
 
+		// Invalidate projects cache since visibility changed
+		invalidateCache.projects();
+
 		return json({ success: true, hiddenProjects: settings.hiddenProjects });
 	} catch (error) {
 		console.error('Failed to update project settings:', error);
-		return json({ error: error.message }, { status: 500 });
+		return json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
 	}
 }

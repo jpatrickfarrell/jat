@@ -100,16 +100,18 @@ export async function POST({ request }) {
 
 	} catch (error) {
 		console.error('Transcription error:', error);
+		const err = error instanceof Error ? error : new Error(String(error));
+		const execErr = /** @type {{ killed?: boolean }} */ (error);
 
 		// Check for specific errors
-		if (error.message?.includes('ENOENT') || error.message?.includes('not found')) {
+		if (err.message?.includes('ENOENT') || err.message?.includes('not found')) {
 			return json({
 				error: 'Whisper not found. Is whisper.cpp installed?',
-				details: error.message
+				details: err.message
 			}, { status: 500 });
 		}
 
-		if (error.killed || error.message?.includes('timeout')) {
+		if (execErr.killed || err.message?.includes('timeout')) {
 			return json({
 				error: 'Transcription timed out',
 				details: 'Audio may be too long or system is busy'
@@ -118,7 +120,7 @@ export async function POST({ request }) {
 
 		return json({
 			error: 'Transcription failed',
-			details: error.message
+			details: err.message
 		}, { status: 500 });
 	}
 }
@@ -142,7 +144,7 @@ export async function GET() {
 			status: 'error',
 			whisper_cli: WHISPER_CLI,
 			model: WHISPER_MODEL,
-			error: error.message
+			error: error instanceof Error ? error.message : String(error)
 		}, { status: 500 });
 	}
 }

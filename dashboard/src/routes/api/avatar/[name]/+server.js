@@ -65,7 +65,7 @@ export async function GET({ params, url }) {
 
 			console.log(`Avatar generated for: ${name}`);
 		} catch (err) {
-			console.error(`Failed to generate avatar for ${name}:`, err.message);
+			console.error(`Failed to generate avatar for ${name}:`, err instanceof Error ? err.message : String(err));
 			// Return a simple fallback SVG instead of error
 			// Note: The client-side AgentAvatar component detects fallback SVGs
 			// (by checking for <text> tag) and shows a generic icon instead
@@ -103,12 +103,13 @@ export async function GET({ params, url }) {
 
 /**
  * Generate a simple fallback SVG with initials
+ * @param {string} name
  */
 function generateFallbackSvg(name) {
 	// Extract initials from PascalCase name (e.g., "BlueStream" -> "BS")
 	const initials = name.replace(/([a-z])([A-Z])/g, '$1 $2')
 		.split(' ')
-		.map(w => w[0])
+		.map((/** @type {string} */ w) => w[0])
 		.join('')
 		.substring(0, 2)
 		.toUpperCase();

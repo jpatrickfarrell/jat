@@ -57,7 +57,7 @@ export async function GET({ params }) {
 		});
 	} catch (error) {
 		console.error('Error reading question file:', error);
-		return json({ active: false, error: error.message });
+		return json({ active: false, error: error instanceof Error ? error.message : String(error) });
 	}
 }
 
@@ -83,6 +83,6 @@ export async function DELETE({ params }) {
 		return json({ success: true });
 	} catch (error) {
 		console.error('Error deleting question file:', error);
-		return json({ success: false, error: error.message });
+		return json({ success: false, error: error instanceof Error ? error.message : String(error) });
 	}
 }

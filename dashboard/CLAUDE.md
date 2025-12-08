@@ -2783,49 +2783,42 @@ The **WorkCard** component (`src/lib/components/work/WorkCard.svelte`) tracks ag
 
 ### Session States
 
-| State | Badge | Color | Description | Detection Pattern |
-|-------|-------|-------|-------------|-------------------|
-| `starting` | 🚀 STARTING | Blue | Agent initializing | No markers yet, task not in_progress |
-| `working` | ⚡ WORKING | Amber | Agent actively working | `[JAT:WORKING]` marker OR task.status === 'in_progress' |
-| `needs-input` | ❓ NEEDS INPUT | Purple | Waiting for user response | `⎿` prompt character in output |
-| `ready-for-review` | 👁 REVIEW | Cyan | Agent asking to complete | "ready to mark complete", "shall I mark" |
-| `completing` | ⏳ COMPLETING | Teal | Running /jat:complete | "jat:complete is running", "Marking task complete" |
-| `completed` | ✓ COMPLETED | Green | Task finished | `[JAT:COMPLETED]` marker |
-| `idle` | 💤 IDLE | Gray | No active task | Agent registered but no task assigned |
+| State | Badge | Color | Description | Detection Source |
+|-------|-------|-------|-------------|------------------|
+| `starting` | 🚀 STARTING | Blue | Agent initializing | No SSE state yet, task not in_progress |
+| `working` | ⚡ WORKING | Amber | Agent actively working | SSE `sseState='working'` OR task.status === 'in_progress' |
+| `needs-input` | ❓ NEEDS INPUT | Purple | Waiting for user response | SSE `sseState='needs_input'` OR `⎿` prompt in output |
+| `ready-for-review` | 👁 REVIEW | Cyan | Agent asking to complete | SSE `sseState='review'` |
+| `completing` | ⏳ COMPLETING | Teal | Running /jat:complete | "jat:complete is running" in output |
+| `completed` | ✓ COMPLETED | Green | Task finished | SSE `sseState='completed'` |
+| `idle` | 💤 IDLE | Gray | No active task | SSE `sseState='idle'` OR agent registered but no task |
 
-### State Detection Algorithm
+### State Detection via Signals API
 
-```typescript
-// Position-based detection: most recent marker wins
-const positions = [
-    { state: 'completed', pos: completedPos },
-    { state: 'needs-input', pos: needsInputPos },
-    { state: 'ready-for-review', pos: reviewPos },
-    { state: 'completing', pos: completingPos },
-    { state: 'working', pos: workingPos },
-];
+Session state is detected via SSE (Server-Sent Events) from the signals API. Agents emit state changes using `jat-signal`:
 
-// Sort by position descending, take first match
-const sorted = positions.filter(p => p.pos >= 0).sort((a, b) => b.pos - a.pos);
-return sorted[0]?.state || inferFromBeads();
+```bash
+# Agent signals working state
+jat-signal working task-id
+
+# Agent signals needs input
+jat-signal needs_input
+
+# Agent signals ready for review
+jat-signal review
+
+# Agent signals completion
+jat-signal completed
 ```
 
-### Why Position-Based Detection?
+The PostToolUse hook captures these signals and writes them to `/tmp/jat-signal-{session}.json`. The SSE server reads these files and broadcasts state changes to connected dashboard clients via `session-signal` events.
 
-Agent output contains multiple markers over time. The **most recent** marker reflects current state:
-
-```
-[output history]
-[JAT:WORKING] Started task           ← Old marker (pos: 100)
-Building component...
-Testing...
-Ready to mark as complete?           ← Recent marker (pos: 500) → REVIEW state
-```
+**See:** `shared/signals.md` for the complete signal system documentation.
 
 ### State Transitions
 
 **STARTING → WORKING:**
-- Automatic when `[JAT:WORKING]` marker appears
+- Agent runs `jat-signal working task-id`
 - Or inferred from `task.status === 'in_progress'` in Beads
 
 **WORKING → NEEDS INPUT:**
@@ -2978,17 +2971,19 @@ The **SessionCard** component (`src/lib/components/work/SessionCard.svelte`) is 
 
 ### State Detection
 
-SessionCard detects agent activity state by parsing tmux output for markers:
+SessionCard receives agent activity state via SSE from the signals API:
 
-| State | Detection Pattern | Description |
-|-------|-------------------|-------------|
-| `starting` | No markers, has task | Agent initializing |
-| `working` | `[JAT:WORKING]` | Actively coding |
-| `needs-input` | `[JAT:NEEDS_INPUT]`, Claude Code question UI patterns | Waiting for user |
-| `ready-for-review` | `[JAT:READY]`, `[JAT:NEEDS_REVIEW]` | Asking to complete |
-| `completing` | `jat:complete is running` | Running completion |
-| `completed` | `[JAT:COMPLETED]`, `[JAT:IDLE]` | Task finished |
-| `idle` | No task assigned | No active work |
+| State | Signal Source | Description |
+|-------|---------------|-------------|
+| `starting` | No SSE state yet, has task | Agent initializing |
+| `working` | `sseState='working'` | Actively coding |
+| `needs-input` | `sseState='needs_input'` OR question UI patterns | Waiting for user |
+| `ready-for-review` | `sseState='review'` | Asking to complete |
+| `completing` | `jat:complete is running` in output | Running completion |
+| `completed` | `sseState='completed'` | Task finished |
+| `idle` | `sseState='idle'` OR no task assigned | No active work |
+
+**See:** `shared/signals.md` for the complete signal system documentation.
 
 ### Files
 
@@ -3006,6 +3001,7 @@ SessionCard detects agent activity state by parsing tmux output for markers:
 
 **Types:**
 - `src/lib/types/agent.ts` - Agent, Task, ActivityState types
+- `src/lib/types/signals.ts` - SuggestedTask, HumanAction, SignalState types
 
 ### Pages Using SessionCard
 

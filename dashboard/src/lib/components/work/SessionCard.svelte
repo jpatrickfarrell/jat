@@ -61,11 +61,7 @@
 	} from "$lib/config/statusColors";
 	import HorizontalResizeHandle from "$lib/components/HorizontalResizeHandle.svelte";
 	import { setHoveredSession, completingSessionFlash, highlightedSessionName, jumpToSession } from "$lib/stores/hoveredSession";
-	import {
-		findHumanActionMarkers,
-		findSuggestedTasksMarker,
-		type SuggestedTask,
-	} from "$lib/utils/markerParser";
+	import type { SuggestedTask } from "$lib/types/signals";
 	import { getProjectFromTaskId } from "$lib/utils/projectUtils";
 	import { getFileTypeInfo, formatFileSize, type FileCategory } from "$lib/utils/fileUtils";
 	import { getTerminalHeight, getCtrlCIntercept, setCtrlCIntercept } from "$lib/stores/preferences.svelte";
@@ -1813,8 +1809,8 @@
 	const detectedHumanActions = $derived.by((): HumanAction[] => {
 		const actions: HumanAction[] = [];
 
-		// Source 1: Signal API actions (jat-signal action command)
-		// These take priority as they're the newer, hook-based approach
+		// Source: Signal API actions (jat-signal action command)
+		// Human actions are delivered via the jat-signal hook system
 		if (signalActionData) {
 			// If signal has items array, each item is a separate action
 			if (signalActionData.items && signalActionData.items.length > 0) {
@@ -1836,24 +1832,6 @@
 			}
 		}
 
-		// Source 2: Terminal markers (legacy [JAT:HUMAN_ACTION ...] markers)
-		// Only process if we have output
-		if (output) {
-			const recentOutput = output.slice(-6000);
-			const markers = findHumanActionMarkers(recentOutput);
-
-			for (const marker of markers) {
-				// Avoid duplicates: skip if title already exists from signal
-				if (!actions.some(a => a.title === marker.action.title)) {
-					actions.push({
-						title: marker.action.title,
-						description: marker.action.description,
-						completed: humanActionCompletedState.get(marker.action.title) || false,
-					});
-				}
-			}
-		}
-
 		return actions;
 	});
 
@@ -1872,8 +1850,8 @@
 	// ==========================================================================
 	// Suggested Tasks Detection
 	// ==========================================================================
-	// Format: [JAT:SUGGESTED_TASKS {"tasks":[{"type":"feature","title":"...","description":"...","priority":1},...]}}]
-	// Uses unified marker parser with balanced-brace JSON extraction
+	// Suggested tasks are delivered via the jat-signal hook system (SSE).
+	// See shared/signals.md for signal system documentation.
 
 	/** Extended SuggestedTask with local UI state for selection and editing */
 	interface SuggestedTaskWithState extends SuggestedTask {
@@ -1896,57 +1874,25 @@
 	let suggestedTaskEdits = $state<Map<string, Partial<SuggestedTask>>>(new Map());
 
 	/**
-	 * Detect and parse SUGGESTED_TASKS from signal data or terminal output.
-	 * Priority: jat-signal data (SSE) > terminal marker parsing (fallback)
-	 *
-	 * Signal data is more reliable as it comes directly from the jat-signal hook
-	 * without needing to parse terminal output which can be corrupted by ANSI codes.
+	 * Process SUGGESTED_TASKS from signal data (via SSE).
+	 * Signal data comes directly from the jat-signal hook without terminal parsing.
 	 */
 	const detectedSuggestedTasks = $derived.by((): SuggestedTaskWithState[] => {
 		// TTL for signal data (1 minute - matches SSE server SIGNAL_TTL_MS)
 		const SIGNAL_TTL_MS = 60 * 1000;
 
-		// Prefer signal-based suggested tasks if recent
-		if (signalSuggestedTasks && signalSuggestedTasks.length > 0 && signalSuggestedTasksTimestamp) {
-			const ageMs = Date.now() - signalSuggestedTasksTimestamp;
-			if (ageMs < SIGNAL_TTL_MS) {
-				// Map signal tasks to tasks with local UI state
-				return signalSuggestedTasks.map((task, index) => {
-					const key = task.title || `task-${index}`;
-					const isSelected = suggestedTaskSelections.get(key) ?? false;
-					const edits = suggestedTaskEdits.get(key);
-					const hasEdits = edits && Object.keys(edits).length > 0;
-
-					return {
-						...task,
-						// Apply edits if present
-						...(hasEdits
-							? {
-									type: edits.type ?? task.type,
-									title: edits.title ?? task.title,
-									description: edits.description ?? task.description,
-									priority: edits.priority ?? task.priority,
-								}
-							: {}),
-						selected: isSelected,
-						edited: hasEdits ?? false,
-					};
-				});
-			}
+		// Only process signal-based suggested tasks
+		if (!signalSuggestedTasks || signalSuggestedTasks.length === 0 || !signalSuggestedTasksTimestamp) {
+			return [];
 		}
 
-		// Fall back to terminal marker parsing for legacy support
-		if (!output) return [];
+		const ageMs = Date.now() - signalSuggestedTasksTimestamp;
+		if (ageMs >= SIGNAL_TTL_MS) {
+			return [];
+		}
 
-		// Look at a larger window for suggested tasks (JSON payload can be substantial)
-		const recentOutput = output.slice(-8000);
-
-		// Use unified marker parser for safe JSON extraction
-		const marker = findSuggestedTasksMarker(recentOutput);
-		if (!marker || !marker.tasks.length) return [];
-
-		// Map parsed tasks to tasks with local UI state
-		return marker.tasks.map((task, index) => {
+		// Map signal tasks to tasks with local UI state
+		return signalSuggestedTasks.map((task, index) => {
 			const key = task.title || `task-${index}`;
 			const isSelected = suggestedTaskSelections.get(key) ?? false;
 			const edits = suggestedTaskEdits.get(key);

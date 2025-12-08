@@ -23,7 +23,7 @@
 
 	import { slide } from 'svelte/transition';
 	import { getIssueTypeVisual } from '$lib/config/statusColors';
-	import type { SuggestedTask } from '$lib/utils/markerParser';
+	import type { SuggestedTask } from '$lib/types/signals';
 
 	/** Extended SuggestedTask with local UI state */
 	interface SuggestedTaskWithState extends SuggestedTask {

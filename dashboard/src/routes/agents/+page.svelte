@@ -15,7 +15,6 @@
 	let agents = $state<any[]>([]);
 	let reservations = $state<any[]>([]);
 	let selectedProject = $state('All Projects');
-	let sparklineData = $state([]);
 	let isInitialLoad = $state(true);
 
 	// Drawer state for TaskDetailDrawer
@@ -193,24 +192,6 @@
 		}
 	}
 
-	// Fetch sparkline data (system-wide, no agent filter)
-	async function fetchSparklineData() {
-		try {
-			const response = await fetch('/api/agents/sparkline?range=24h');
-			const result = await response.json();
-
-			if (result.error) {
-				console.error('Sparkline API error:', result.error);
-				return;
-			}
-
-			// Update sparkline data
-			sparklineData = result.data || [];
-		} catch (error) {
-			console.error('Failed to fetch sparkline data:', error);
-		}
-	}
-
 	// Handle task assignment via drag-and-drop
 	async function handleTaskAssign(taskId: string, agentName: string) {
 		try {
@@ -284,11 +265,6 @@
 		}
 	});
 
-	// Sparkline refresh - now safe with worker threads (30 second refresh)
-	$effect(() => {
-		const interval = setInterval(fetchSparklineData, 30000);
-		return () => clearInterval(interval);
-	});
 
 	// Track previous drawer state to detect close transition
 	let wasDrawerOpen = false;
@@ -307,8 +283,6 @@
 		updateContainerHeight();
 
 		// Phase 2: Load usage data in background (don't block UI)
-		// Sparkline now uses worker threads (non-blocking)
-		fetchSparklineData();
 		setTimeout(() => fetchUsageData(), 5000);
 	});
 </script>

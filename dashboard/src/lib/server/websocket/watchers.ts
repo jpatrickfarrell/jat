@@ -53,8 +53,12 @@ let previousOutputHashes = new Map<string, string>();
 let isWatching = false;
 
 // Output polling configuration
-const OUTPUT_POLL_INTERVAL = 250; // Poll every 250ms for near-real-time updates
+const OUTPUT_POLL_INTERVAL = 2000; // Poll every 2 seconds (was 250ms - caused memory leak)
 const OUTPUT_LINES = 100; // Number of lines to capture per session
+const EXEC_TIMEOUT_MS = 5000; // Timeout for exec commands
+
+// Guard against overlapping polls
+let isPolling = false;
 
 // ============================================================================
 // Task (Beads) Watcher
@@ -262,7 +266,8 @@ function simpleHash(str: string): string {
 async function getTmuxSessions(): Promise<string[]> {
 	try {
 		const { stdout } = await execAsync(
-			'tmux list-sessions -F "#{session_name}" 2>/dev/null || echo ""'
+			'tmux list-sessions -F "#{session_name}" 2>/dev/null || echo ""',
+			{ timeout: EXEC_TIMEOUT_MS }
 		);
 		return stdout
 			.trim()
@@ -280,7 +285,7 @@ async function captureSessionOutput(sessionName: string): Promise<{ output: stri
 	try {
 		const { stdout } = await execAsync(
 			`tmux capture-pane -p -e -t "${sessionName}" -S -${OUTPUT_LINES}`,
-			{ maxBuffer: 1024 * 1024 }
+			{ maxBuffer: 1024 * 1024, timeout: EXEC_TIMEOUT_MS }
 		);
 		return {
 			output: stdout,
@@ -295,6 +300,11 @@ async function captureSessionOutput(sessionName: string): Promise<{ output: stri
  * Poll all tmux sessions and broadcast output changes
  */
 async function pollOutputs(): Promise<void> {
+	// Guard against overlapping polls (prevents child process accumulation)
+	if (isPolling) {
+		return;
+	}
+
 	if (!isInitialized()) return;
 
 	// Only poll if there are subscribers to the output channel
@@ -303,34 +313,40 @@ async function pollOutputs(): Promise<void> {
 		return;
 	}
 
-	const sessions = await getTmuxSessions();
+	isPolling = true;
 
-	// Process sessions in parallel with a concurrency limit
-	const batchSize = 4;
-	for (let i = 0; i < sessions.length; i += batchSize) {
-		const batch = sessions.slice(i, i + batchSize);
-		await Promise.all(batch.map(async (sessionName) => {
-			const result = await captureSessionOutput(sessionName);
-			if (!result) return;
+	try {
+		const sessions = await getTmuxSessions();
 
-			// Check if output changed using hash
-			const hash = simpleHash(result.output);
-			const previousHash = previousOutputHashes.get(sessionName);
+		// Process sessions in parallel with a concurrency limit
+		const batchSize = 4;
+		for (let i = 0; i < sessions.length; i += batchSize) {
+			const batch = sessions.slice(i, i + batchSize);
+			await Promise.all(batch.map(async (sessionName) => {
+				const result = await captureSessionOutput(sessionName);
+				if (!result) return;
 
-			if (hash !== previousHash) {
-				previousOutputHashes.set(sessionName, hash);
+				// Check if output changed using hash
+				const hash = simpleHash(result.output);
+				const previousHash = previousOutputHashes.get(sessionName);
 
-				// Broadcast the change
-				broadcastOutput(sessionName, result.output, result.lineCount);
-			}
-		}));
-	}
+				if (hash !== previousHash) {
+					previousOutputHashes.set(sessionName, hash);
 
-	// Clean up hashes for sessions that no longer exist
-	for (const sessionName of previousOutputHashes.keys()) {
-		if (!sessions.includes(sessionName)) {
-			previousOutputHashes.delete(sessionName);
+					// Broadcast the change
+					broadcastOutput(sessionName, result.output, result.lineCount);
+				}
+			}));
 		}
+
+		// Clean up hashes for sessions that no longer exist
+		for (const sessionName of previousOutputHashes.keys()) {
+			if (!sessions.includes(sessionName)) {
+				previousOutputHashes.delete(sessionName);
+			}
+		}
+	} finally {
+		isPolling = false;
 	}
 }
 
@@ -364,6 +380,7 @@ function stopOutputPolling(): void {
 		clearInterval(outputPollingInterval);
 		outputPollingInterval = null;
 		previousOutputHashes.clear();
+		isPolling = false;
 		console.log('[WS Watcher] Output polling stopped');
 	}
 }

@@ -22,9 +22,32 @@ import { json } from '@sveltejs/kit';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getTasks } from '$lib/server/beads.js';
-import { getAgentUsage, getAgentHourlyUsage, getAgentContextPercent } from '$lib/utils/tokenUsage.js';
+import { getAgentUsageAsync, getAgentHourlyUsageAsync, getAgentContextPercent } from '$lib/utils/tokenUsage.js';
+import { apiCache, cacheKey, CACHE_TTL } from '$lib/server/cache.js';
 
 const execAsync = promisify(exec);
+
+// ============================================================================
+// Task Cache - getTasks() is expensive (parses 800+ line JSONL on each call)
+// Cache for 5 seconds to prevent constant re-parsing during frequent polling
+// ============================================================================
+let cachedTasks = [];
+let taskCacheTimestamp = 0;
+const TASK_CACHE_TTL_MS = 5000;
+
+function getCachedTasks() {
+	const now = Date.now();
+	if (now - taskCacheTimestamp > TASK_CACHE_TTL_MS || cachedTasks.length === 0) {
+		try {
+			cachedTasks = getTasks({});
+			taskCacheTimestamp = now;
+		} catch (err) {
+			console.error('Failed to fetch tasks from Beads:', err);
+			// Return stale cache on error
+		}
+	}
+	return cachedTasks;
+}
 
 /**
  * @typedef {Object} SparklineDataPoint
@@ -220,6 +243,15 @@ function detectSessionState(output, task, lastCompletedTask) {
 	return 'idle';
 }
 
+/**
+ * Cache key for per-agent usage data
+ * @param {string} agentName - Agent name
+ * @returns {string} Cache key
+ */
+function agentUsageCacheKey(agentName) {
+	return `work:agent-usage:${agentName}`;
+}
+
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ url }) {
 	try {
@@ -282,15 +314,9 @@ export async function GET({ url }) {
 			});
 		}
 
-		// Step 2: Get all tasks from Beads (for lookup)
+		// Step 2: Get all tasks from Beads (for lookup) - uses cache to avoid expensive JSONL parsing
 		/** @type {Array<{id: string, title: string, description?: string, status: string, priority: number, assignee: string, issue_type?: string, updated_at?: string}>} */
-		let allTasks = [];
-		try {
-			allTasks = getTasks({});
-		} catch (err) {
-			console.error('Failed to fetch tasks from Beads:', err);
-			// Continue without tasks
-		}
+		const allTasks = getCachedTasks();
 
 		// Create a map of agent -> in_progress task
 		/** @type {Map<string, Object>} */
@@ -379,28 +405,53 @@ export async function GET({ url }) {
 				contextPercent = extractContextPercentFromOutput(output);
 
 				if (includeUsage) {
-					try {
-						const usage = await getAgentUsage(agentName, 'today', projectPath);
-						tokens = usage.total_tokens || 0;
-						cost = usage.cost || 0;
-					} catch (err) {
-						// No usage data available
-					}
+					// Check cache for per-agent usage data (expensive JSONL parsing)
+					const usageCacheKey = agentUsageCacheKey(agentName);
+					const cachedUsage = apiCache.get(usageCacheKey);
 
-					// Get hourly sparkline data (last 24h)
-					try {
-						sparklineData = await getAgentHourlyUsage(agentName, projectPath);
-					} catch (err) {
-						// No sparkline data available
-					}
-
-					// Fall back to token-based calculation if not found in output
-					if (contextPercent === null) {
-						try {
-							contextPercent = await getAgentContextPercent(agentName, projectPath);
-						} catch (err) {
-							// No context data available
+					if (cachedUsage) {
+						// Use cached usage data
+						tokens = cachedUsage.tokens || 0;
+						cost = cachedUsage.cost || 0;
+						sparklineData = cachedUsage.sparklineData || [];
+						if (contextPercent === null) {
+							contextPercent = cachedUsage.contextPercent;
 						}
+					} else {
+						// Fetch fresh usage data (using worker threads to avoid blocking)
+						try {
+							const usage = await getAgentUsageAsync(agentName, 'today', projectPath);
+							tokens = usage.total_tokens || 0;
+							cost = usage.cost || 0;
+						} catch (err) {
+							// No usage data available
+						}
+
+						// Get hourly sparkline data (last 24h, using worker threads)
+						try {
+							sparklineData = await getAgentHourlyUsageAsync(agentName, projectPath);
+						} catch (err) {
+							// No sparkline data available
+						}
+
+						// Fall back to token-based calculation if not found in output
+						let fetchedContextPercent = null;
+						if (contextPercent === null) {
+							try {
+								fetchedContextPercent = await getAgentContextPercent(agentName, projectPath);
+								contextPercent = fetchedContextPercent;
+							} catch (err) {
+								// No context data available
+							}
+						}
+
+						// Cache the usage data for 30 seconds (reduces JSONL parsing)
+						apiCache.set(usageCacheKey, {
+							tokens,
+							cost,
+							sparklineData,
+							contextPercent: fetchedContextPercent
+						}, CACHE_TTL.LONG);
 					}
 				}
 

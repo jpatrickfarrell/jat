@@ -27,6 +27,7 @@
 import { json } from '@sveltejs/kit';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { apiCache, cacheKey, CACHE_TTL } from '$lib/server/cache.js';
 
 const execAsync = promisify(exec);
 
@@ -201,6 +202,15 @@ export async function GET({ url }) {
 		const linesParam = url.searchParams.get('lines');
 		const lines = Math.min(Math.max(parseInt(linesParam || '50', 10) || 50, 1), 500);
 
+		// Build cache key (servers don't change often, 5s cache)
+		const key = cacheKey('servers', { lines: String(lines) });
+
+		// Check cache
+		const cached = apiCache.get(key);
+		if (cached) {
+			return json(cached);
+		}
+
 		// Step 1: List server-* tmux sessions
 		const sessionsCommand = `tmux list-sessions -F "#{session_name}:#{session_created}:#{session_attached}" 2>/dev/null || echo ""`;
 
@@ -345,12 +355,18 @@ export async function GET({ url }) {
 			})
 		);
 
-		return json({
+		// Build response
+		const responseData = {
 			success: true,
 			sessions: serverSessions,
 			count: serverSessions.length,
 			timestamp: new Date().toISOString()
-		});
+		};
+
+		// Cache for 5 seconds (servers are relatively static)
+		apiCache.set(key, responseData, CACHE_TTL.MEDIUM);
+
+		return json(responseData);
 	} catch (error) {
 		console.error('Error in GET /api/servers:', error);
 		return json(

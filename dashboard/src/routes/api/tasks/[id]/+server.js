@@ -9,6 +9,7 @@ import { promisify } from 'util';
 import { readFile, writeFile, unlink } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { invalidateCache } from '$lib/server/cache.js';
 
 const execAsync = promisify(exec);
 
@@ -120,6 +121,10 @@ export async function PUT({ params, request }) {
 				return json({ error: 'Failed to update task', details: stderr }, { status: 500 });
 			}
 		}
+
+		// Invalidate related caches
+		invalidateCache.tasks();
+		invalidateCache.agents();
 
 		// Get updated task
 		const updatedTask = getTaskById(taskId);
@@ -332,6 +337,10 @@ export async function PATCH({ params, request }) {
 			}
 		}
 
+		// Invalidate related caches
+		invalidateCache.tasks();
+		invalidateCache.agents();
+
 		// Fetch and return updated task
 		const updatedTask = getTaskById(taskId);
 
@@ -415,6 +424,10 @@ export async function DELETE({ params }) {
 
 		// Permanently delete attachments since this is a DELETE (not just close)
 		await cleanupTaskAttachments(taskId);
+
+		// Invalidate related caches
+		invalidateCache.tasks();
+		invalidateCache.agents();
 
 		return json({
 			success: true,

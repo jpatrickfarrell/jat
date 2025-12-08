@@ -30,8 +30,15 @@ const execAsync = promisify(exec);
 const PROJECT_ROOT = process.cwd().replace('/dashboard', '');
 const DEFAULT_DEBOUNCE_MS = 250;
 const DEFAULT_OUTPUT_LINES = 100;
-const POLL_INTERVAL_MS = 250;
+// INCREASED from 250ms to 1000ms - polling 4x/second was parsing 802 tasks
+// from JSONL on each poll, causing server CPU spikes and browser freezes
+const POLL_INTERVAL_MS = 1000;
 const QUESTION_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes
+
+// Cache for tasks - getTasks() is expensive (parses JSONL)
+let cachedTasks: Task[] = [];
+let taskCacheTimestamp = 0;
+const TASK_CACHE_TTL_MS = 5000; // 5 second cache for tasks
 
 // ============================================================================
 // Types
@@ -270,6 +277,22 @@ function broadcast(eventType: string, data: unknown): void {
 /**
  * Poll sessions and emit events for changes
  */
+/**
+ * Get tasks with caching to avoid expensive JSONL parsing on every poll
+ */
+function getCachedTasks(): Task[] {
+	const now = Date.now();
+	if (now - taskCacheTimestamp > TASK_CACHE_TTL_MS || cachedTasks.length === 0) {
+		try {
+			cachedTasks = getTasks({});
+			taskCacheTimestamp = now;
+		} catch {
+			// Continue with stale cache on error
+		}
+	}
+	return cachedTasks;
+}
+
 async function pollSessions(outputLines: number, debounceMs: number): Promise<void> {
 	if (clients.size === 0) return;
 
@@ -277,13 +300,8 @@ async function pollSessions(outputLines: number, debounceMs: number): Promise<vo
 	const sessions = await getTmuxSessions();
 	const currentSessionNames = new Set(sessions.map(s => s.name));
 
-	// Get all tasks for agent lookup
-	let allTasks: Task[] = [];
-	try {
-		allTasks = getTasks({});
-	} catch {
-		// Continue without tasks
-	}
+	// Get all tasks for agent lookup (cached to avoid expensive JSONL parsing)
+	const allTasks = getCachedTasks();
 
 	// Create agent -> task map
 	const agentTaskMap = new Map<string, Task>();

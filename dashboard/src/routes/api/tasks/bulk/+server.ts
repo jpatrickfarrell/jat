@@ -9,6 +9,7 @@ import { json } from '@sveltejs/kit';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import type { RequestHandler } from './$types';
+import { invalidateCache } from '$lib/server/cache.js';
 
 const execAsync = promisify(exec);
 
@@ -24,10 +25,14 @@ interface SuggestedTask {
 	description: string;
 	/** Priority level: 0-4 (P0=critical, P4=lowest) */
 	priority: number;
-	/** Optional labels */
-	labels?: string[];
+	/** Optional labels (comma-separated string or array) */
+	labels?: string | string[];
 	/** Optional reason why this task was suggested */
 	reason?: string;
+	/** Optional project (overrides request-level project) */
+	project?: string;
+	/** Optional task IDs this task depends on */
+	depends_on?: string[];
 }
 
 interface BulkCreateRequest {
@@ -105,12 +110,14 @@ function escapeForShell(str: string): string {
 /**
  * Create a single task using bd create
  */
-async function createTask(task: SuggestedTask, project?: string): Promise<TaskResult> {
+async function createTask(task: SuggestedTask, defaultProject?: string): Promise<TaskResult> {
 	try {
 		const title = task.title.trim();
 		const description = task.description?.trim() || '';
 		const type = task.type.toLowerCase();
 		const priority = task.priority ?? 2;
+		// Use task-level project if provided, otherwise use default
+		const project = task.project || defaultProject;
 
 		// Build bd create command with safe escaping
 		const args: string[] = [];
@@ -129,14 +136,32 @@ async function createTask(task: SuggestedTask, project?: string): Promise<TaskRe
 			args.push(`--description '${escapeForShell(description)}'`);
 		}
 
-		// Labels if provided
-		if (task.labels && Array.isArray(task.labels) && task.labels.length > 0) {
-			const sanitizedLabels = task.labels
-				.filter((l): l is string => typeof l === 'string' && l.trim() !== '')
-				.map((l) => l.trim())
+		// Labels if provided (can be string or array)
+		if (task.labels) {
+			let labelsStr: string;
+			if (Array.isArray(task.labels)) {
+				labelsStr = task.labels
+					.filter((l): l is string => typeof l === 'string' && l.trim() !== '')
+					.map((l) => l.trim())
+					.join(',');
+			} else if (typeof task.labels === 'string') {
+				labelsStr = task.labels.trim();
+			} else {
+				labelsStr = '';
+			}
+			if (labelsStr) {
+				args.push(`--labels '${escapeForShell(labelsStr)}'`);
+			}
+		}
+
+		// Dependencies if provided
+		if (task.depends_on && Array.isArray(task.depends_on) && task.depends_on.length > 0) {
+			const depsStr = task.depends_on
+				.filter((d): d is string => typeof d === 'string' && d.trim() !== '')
+				.map((d) => d.trim())
 				.join(',');
-			if (sanitizedLabels) {
-				args.push(`--labels ${sanitizedLabels}`);
+			if (depsStr) {
+				args.push(`--depends-on '${escapeForShell(depsStr)}'`);
 			}
 		}
 
@@ -292,6 +317,12 @@ export const POST: RequestHandler = async ({ request }) => {
 		const message = allSucceeded
 			? `Successfully created ${created} task${created !== 1 ? 's' : ''}`
 			: `Created ${created} task${created !== 1 ? 's' : ''}, ${failed} failed`;
+
+		// Invalidate task-related caches since we created tasks
+		if (created > 0) {
+			invalidateCache.tasks();
+			invalidateCache.agents(); // Agent data includes task counts
+		}
 
 		return json(
 			{

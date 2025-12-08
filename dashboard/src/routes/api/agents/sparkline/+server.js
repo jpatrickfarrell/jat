@@ -55,7 +55,7 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { getTokenTimeSeries, getMultiProjectTimeSeries, getAgentMultiProjectTimeSeries } from '$lib/utils/tokenUsageTimeSeries.js';
+import { getTokenTimeSeries, getMultiProjectTimeSeries, getMultiProjectTimeSeriesAsync, getAgentMultiProjectTimeSeries } from '$lib/utils/tokenUsageTimeSeries.js';
 
 // ============================================================================
 // In-Memory Cache
@@ -76,15 +76,28 @@ import { getTokenTimeSeries, getMultiProjectTimeSeries, getAgentMultiProjectTime
 const cache = new Map();
 
 /**
- * Cache TTL in milliseconds (30 seconds)
+ * Cache TTL in milliseconds (5 minutes) - after this, cache is "stale"
+ * Stale data can still be returned while revalidating in background
  */
-const CACHE_TTL_MS = 30 * 1000;
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
 /**
- * Get cached data if valid
+ * Maximum stale age in milliseconds (30 minutes)
+ * After this, stale data is too old to return even while revalidating
+ */
+const CACHE_MAX_STALE_MS = 30 * 60 * 1000;
+
+/**
+ * Track which keys are currently being refreshed (prevent parallel refreshes)
+ * @type {Set<string>}
+ */
+const refreshingKeys = new Set();
+
+/**
+ * Get cached data with stale-while-revalidate semantics
  *
  * @param {string} key - Cache key
- * @returns {{data: any, age: number}|null} Cached data or null if expired/missing
+ * @returns {{data: any, age: number, isStale: boolean}|null} Cached data or null if missing/too old
  */
 function getCached(key) {
 	const entry = cache.get(key);
@@ -94,13 +107,18 @@ function getCached(key) {
 
 	const age = Date.now() - entry.timestamp;
 
-	// Check if expired
-	if (age > CACHE_TTL_MS) {
+	// If too old (beyond max stale), don't return
+	if (age > CACHE_MAX_STALE_MS) {
 		cache.delete(key);
 		return null;
 	}
 
-	return { data: entry.data, age };
+	// Return data with stale flag
+	return {
+		data: entry.data,
+		age,
+		isStale: age > CACHE_TTL_MS
+	};
 }
 
 /**
@@ -200,7 +218,8 @@ export async function GET({ url }) {
 			});
 		} else if (multiProject) {
 			// System-wide multi-project mode: aggregate across all projects from jat config
-			result = await getMultiProjectTimeSeries({
+			// Using async worker thread version to avoid blocking the event loop
+			result = await getMultiProjectTimeSeriesAsync({
 				range,
 				bucketSize
 			});

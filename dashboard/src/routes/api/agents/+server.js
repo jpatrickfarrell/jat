@@ -28,11 +28,42 @@
 import { json } from '@sveltejs/kit';
 import { getAgents, getReservations, getBeadsActivities, getAgentCounts } from '$lib/server/agent-mail.js';
 import { getTasks } from '$lib/server/beads.js';
-import { getAllAgentUsage, getHourlyUsage } from '$lib/utils/tokenUsage.js';
+import { getAllAgentUsageAsync, getHourlyUsageAsync } from '$lib/utils/tokenUsage.js';
+import { apiCache, cacheKey, CACHE_TTL, invalidateCache } from '$lib/server/cache.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
+
+// ============================================================================
+// Task Cache - getTasks() is expensive (parses 800+ line JSONL on each call)
+// Cache for 5 seconds to prevent constant re-parsing during frequent polling
+// ============================================================================
+let cachedTasks = [];
+let cachedTasksProject = null;
+let taskCacheTimestamp = 0;
+const TASK_CACHE_TTL_MS = 5000;
+
+/**
+ * Get tasks with caching (5s TTL)
+ * @param {string|null} projectName - Optional project filter
+ * @returns {Array} Cached or fresh tasks
+ */
+function getCachedTasks(projectName = null) {
+	const now = Date.now();
+	// Cache miss if: expired, empty, or different project filter
+	if (now - taskCacheTimestamp > TASK_CACHE_TTL_MS || cachedTasks.length === 0 || cachedTasksProject !== projectName) {
+		try {
+			cachedTasks = getTasks({ projectName });
+			cachedTasksProject = projectName;
+			taskCacheTimestamp = now;
+		} catch (err) {
+			console.error('Failed to fetch tasks from Beads:', err);
+			// Return stale cache on error
+		}
+	}
+	return cachedTasks;
+}
 
 /**
  * Parse date range from query parameters
@@ -139,7 +170,7 @@ export async function GET({ url }) {
 	                 url.searchParams.get('orchestration') === 'true';
 
 	if (!fullData) {
-		// Simple agent list (backward compatible)
+		// Simple agent list (backward compatible) - no caching needed (very fast)
 		try {
 			const projectFilter = url.searchParams.get('project') ?? undefined;
 			const agents = getAgents(projectFilter);
@@ -150,14 +181,35 @@ export async function GET({ url }) {
 		}
 	}
 
-	// Full orchestration data
-	try {
-		const projectFilter = url.searchParams.get('project') ?? undefined;
-		const agentFilter = url.searchParams.get('agent') ?? undefined;
-		const includeUsage = url.searchParams.get('usage') === 'true';
-		const includeHourly = url.searchParams.get('hourly') === 'true';
-		const includeActivities = url.searchParams.get('activities') === 'true';
+	// Full orchestration data - use caching
+	const projectFilter = url.searchParams.get('project') ?? undefined;
+	const agentFilter = url.searchParams.get('agent') ?? undefined;
+	const includeUsage = url.searchParams.get('usage') === 'true';
+	const includeHourly = url.searchParams.get('hourly') === 'true';
+	const includeActivities = url.searchParams.get('activities') === 'true';
+	const rangeParam = url.searchParams.get('range') ?? undefined;
 
+	// Build cache key from relevant parameters
+	const key = cacheKey('agents', {
+		full: 'true',
+		project: projectFilter,
+		agent: agentFilter,
+		usage: includeUsage ? 'true' : undefined,
+		hourly: includeHourly ? 'true' : undefined,
+		activities: includeActivities ? 'true' : undefined,
+		range: rangeParam
+	});
+
+	// Determine TTL based on whether usage is included (expensive operation)
+	const ttl = includeUsage ? CACHE_TTL.LONG : CACHE_TTL.SHORT;
+
+	// Check cache
+	const cached = apiCache.get(key);
+	if (cached) {
+		return json(cached);
+	}
+
+	try {
 		// Parse date range parameters
 		const dateRange = parseDateRange(url.searchParams);
 
@@ -169,7 +221,7 @@ export async function GET({ url }) {
 		/** @type {Reservation[]} */
 		const reservations = getReservations(agentFilter, undefined);  // Show all reservations
 		/** @type {Task[]} */
-		const tasks = getTasks({ projectName: projectFilter });  // Filter tasks only
+		const tasks = getCachedTasks(projectFilter);  // Filter tasks only (cached to avoid expensive JSONL parsing)
 
 		// Fetch tmux session status to determine which agents have active sessions
 		// Also get session creation time for "connecting" state detection
@@ -194,23 +246,23 @@ export async function GET({ url }) {
 		// For backward compat: create Set for hasSession check
 		const agentsWithSessions = new Set(agentSessionCreatedAt.keys());
 
-		// Optionally fetch token usage data
+		// Optionally fetch token usage data (using worker threads to avoid blocking)
 		/** @type {Map<string, import('$lib/utils/tokenUsage.js').TokenUsage> | null} */
 		let usageToday = null;
 		/** @type {Map<string, import('$lib/utils/tokenUsage.js').TokenUsage> | null} */
 		let usageWeek = null;
 		if (includeUsage) {
 			[usageToday, usageWeek] = await Promise.all([
-				getAllAgentUsage('today', projectPath),
-				getAllAgentUsage('week', projectPath)
+				getAllAgentUsageAsync('today', projectPath),
+				getAllAgentUsageAsync('week', projectPath)
 			]);
 		}
 
-		// Optionally fetch hourly token usage data (raw data for sparklines)
+		// Optionally fetch hourly token usage data (raw data for sparklines, using worker threads)
 		/** @type {import('$lib/utils/tokenUsage.js').HourlyUsage[] | null} */
 		let hourlyUsage = null;
 		if (includeHourly) {
-			hourlyUsage = await getHourlyUsage(projectPath);
+			hourlyUsage = await getHourlyUsageAsync(projectPath);
 		}
 
 		// Calculate agent statistics
@@ -416,8 +468,8 @@ export async function GET({ url }) {
 		// Get agent counts (active sessions vs total registered)
 		const agentCounts = getAgentCounts(projectPath);
 
-		// Return unified orchestration data
-		return json({
+		// Build response data
+		const responseData = {
 			agents: filteredAgentStats,
 			reservations,
 			reservations_by_agent: reservationsByAgent,
@@ -430,7 +482,12 @@ export async function GET({ url }) {
 			agent_counts: agentCounts, // Active vs total agent counts
 			timestamp: new Date().toISOString(),
 			meta
-		});
+		};
+
+		// Cache the response
+		apiCache.set(key, responseData, ttl);
+
+		return json(responseData);
 	} catch (error) {
 		console.error('Error fetching agent data:', error);
 		const errorMsg = error instanceof Error ? error.message : String(error);
@@ -504,6 +561,10 @@ export async function POST({ request }) {
 			await execAsync(
 				`bd update "${taskId}" --assignee "${agentName}"`
 			);
+
+			// Invalidate caches since task assignment changed
+			invalidateCache.agents();
+			invalidateCache.tasks();
 
 			// Get updated task data
 			const { stdout: updatedTaskJson } = await execAsync(`bd show "${taskId}" --json`);

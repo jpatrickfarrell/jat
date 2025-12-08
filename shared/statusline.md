@@ -19,7 +19,7 @@ Session 3: StrongShore | [P0] task-xyz - Critical bug fix [🔒1]
 
 When you run `/jat:start`, it automatically:
 1. Registers your agent in Agent Mail
-2. Writes agent name to `.claude/agent-{session_id}.txt`
+2. Writes agent name to `.claude/sessions/agent-{session_id}.txt`
 3. Statusline reads from that file and displays your identity
 
 **No manual setup needed** - just run a command and the statusline updates!
@@ -67,7 +67,7 @@ All three sessions work independently with their own agent identities.
 - `~/.claude/statusline.sh` - The statusline script (installed by jat)
 
 **Per-session (created automatically):**
-- `.claude/agent-{session_id}.txt` - Your agent name for this session
+- `.claude/sessions/agent-{session_id}.txt` - Your agent name for this session
 - `/tmp/claude-session-${PPID}.txt` - PPID-based session ID (process-isolated)
 
 **Don't commit** `agent-*.txt` files to git (they're per-developer session).
@@ -98,7 +98,7 @@ All three sessions work independently with their own agent identities.
 ```
 
 **Priority Order:**
-1. **Agent Registration** - `.claude/agent-{session_id}.txt` exists?
+1. **Agent Registration** - `.claude/sessions/agent-{session_id}.txt` exists?
 2. **Beads in_progress** - `bd list --json | filter(assignee == agent && status == "in_progress")`
 3. **File Reservations** - `am-reservations --agent X | extract task ID from reason`
 4. **Idle State** - Agent registered but no work

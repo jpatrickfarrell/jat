@@ -51,6 +51,6 @@ spawn agent → work on task → review → /jat:complete → session ends
 ```
 
 **Session-Aware:**
-Each command automatically updates `.claude/agent-{session_id}.txt` for statusline display. Supports multiple concurrent agents in different terminals.
+Each command automatically updates `.claude/sessions/agent-{session_id}.txt` for statusline display. Supports multiple concurrent agents in different terminals.
 
 **See project CLAUDE.md for detailed documentation.**

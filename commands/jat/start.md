@@ -175,9 +175,9 @@ bd ready --json | jq -r '.[] | "  [\(.priority)] \(.id) - \(.title)"'
 ```
 
 ```
-╔══════════════════════════════════════════════════════════════════════════╗
-║                         📋 Available Tasks                               ║
-╚══════════════════════════════════════════════════════════════════════════╝
+╔════════════════════════════════════════════════════════╗
+║              📋 Available Tasks                        ║
+╚════════════════════════════════════════════════════════╝
 
   [P0] jat-xyz - Critical bug fix
   [P1] jat-abc - Add user settings page
@@ -230,19 +230,19 @@ am-send "[$TASK_ID] Starting: $TASK_TITLE" \
 **You MUST output the `[JAT:WORKING]` marker for dashboard state tracking.**
 
 ```
-╔══════════════════════════════════════════════════════════════════════════╗
-║                    🚀 STARTING WORK: {TASK_ID}                           ║
-║  [JAT:WORKING task={TASK_ID}]                                            ║
-╚══════════════════════════════════════════════════════════════════════════╝
+╔════════════════════════════════════════════════════════╗
+║         🚀 STARTING WORK: {TASK_ID}                    ║
+║  [JAT:WORKING task={TASK_ID}]                          ║
+╚════════════════════════════════════════════════════════╝
 
 ✅ Agent: {AGENT_NAME}
 📋 Task: {TASK_TITLE}
 🎯 Priority: P{X}
 📁 Type: {bug/feature/task}
 
-┌─ TASK DETAILS ─────────────────────────────────────────────────────────┐
-│  {DESCRIPTION}                                                         │
-└────────────────────────────────────────────────────────────────────────┘
+┌─ TASK DETAILS ──────────────────────────────────────────┐
+│  {DESCRIPTION}                                          │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -254,10 +254,10 @@ am-send "[$TASK_ID] Starting: $TASK_TITLE" \
 If unclear, request clarification:
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│  ❓ NEED CLARIFICATION: {TASK_ID}                                        │
-│  [JAT:NEEDS_INPUT]                                                       │
-└──────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│  ❓ NEED CLARIFICATION: {TASK_ID}                      │
+│  [JAT:NEEDS_INPUT]                                     │
+└────────────────────────────────────────────────────────┘
 
 Questions:
   1. [Specific question]
@@ -286,10 +286,10 @@ The dashboard detects your state by scanning terminal output. Without this marke
 **Always output this exact format:**
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│  🔍 READY FOR REVIEW: {TASK_ID}                                          │
-│  [JAT:NEEDS_REVIEW]                                                      │
-└──────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│  🔍 READY FOR REVIEW: {TASK_ID}                        │
+│  [JAT:NEEDS_REVIEW]                                    │
+└────────────────────────────────────────────────────────┘
 
 Changes made:
   - [summary of changes]
@@ -319,35 +319,35 @@ The task is still `in_progress` in Beads until `/jat:complete` runs `bd close`.
 ## Session Lifecycle
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                     ONE AGENT = ONE TASK                                │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│   Dashboard spawns agent                                                │
-│         │                                                               │
-│         ▼                                                               │
-│   ┌──────────┐                                                          │
-│   │ STARTING │  Agent initializing, running /jat:start                  │
-│   └────┬─────┘                                                          │
-│        │ [JAT:WORKING task=xxx]                                         │
-│        ▼                                                                │
-│   ┌──────────┐         ┌─────────────┐                                  │
-│   │ WORKING  │ ◄─────► │ NEEDS INPUT │  Agent asks question             │
-│   └────┬─────┘         └─────────────┘                                  │
-│        │ [JAT:NEEDS_REVIEW]                                             │
-│        ▼                                                                │
-│   ┌──────────┐                                                          │
-│   │  REVIEW  │  Code done, awaiting user                                │
-│   └────┬─────┘                                                          │
-│        │ /jat:complete                                                  │
-│        ▼                                                                │
-│   ┌──────────┐                                                          │
-│   │   DONE   │  Task closed, session ends                               │
-│   └──────────┘                                                          │
-│                                                                         │
-│   To work on another task → spawn a new agent                           │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│              ONE AGENT = ONE TASK                    │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  Dashboard spawns agent                              │
+│        │                                             │
+│        ▼                                             │
+│  ┌──────────┐                                        │
+│  │ STARTING │  Running /jat:start                    │
+│  └────┬─────┘                                        │
+│       │ [JAT:WORKING task=xxx]                       │
+│       ▼                                              │
+│  ┌──────────┐      ┌─────────────┐                   │
+│  │ WORKING  │◄────►│ NEEDS INPUT │                   │
+│  └────┬─────┘      └─────────────┘                   │
+│       │ [JAT:NEEDS_REVIEW]                           │
+│       ▼                                              │
+│  ┌──────────┐                                        │
+│  │  REVIEW  │  Code done, awaiting user              │
+│  └────┬─────┘                                        │
+│       │ /jat:complete                                │
+│       ▼                                              │
+│  ┌──────────┐                                        │
+│  │   DONE   │  Task closed, session ends             │
+│  └──────────┘                                        │
+│                                                      │
+│  To work on another task → spawn new agent           │
+│                                                      │
+└──────────────────────────────────────────────────────┘
 ```
 
 ---

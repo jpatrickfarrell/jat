@@ -9,6 +9,7 @@ Lightweight bash tools for agent orchestration, database operations, monitoring,
 @~/code/jat/shared/tools.md
 @~/code/jat/shared/workflow-commands.md
 @~/code/jat/shared/statusline.md
+@~/code/jat/shared/agent-app-interface.md
 
 ## Project Structure
 
@@ -218,8 +219,8 @@ npm run dev
 
 ### Statusline not updating
 ```bash
-# Write to your session file (PPID-based)
-session_id=$(cat /tmp/claude-session-${PPID}.txt | tr -d '\n') && echo "YourAgentName" > ".claude/agent-${session_id}.txt"
+# Write to your session file (PPID-based) - uses sessions/ subdirectory
+session_id=$(cat /tmp/claude-session-${PPID}.txt | tr -d '\n') && mkdir -p .claude/sessions && echo "YourAgentName" > ".claude/sessions/agent-${session_id}.txt"
 ```
 
 ### Agent shows "offline" or "disconnected" in dashboard

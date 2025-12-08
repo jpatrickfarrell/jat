@@ -60,8 +60,9 @@ Add these patterns to your project's root `.gitignore`:
 
 ```gitignore
 # Claude Code session-specific files (per-developer, don't commit)
-.claude/agent-*.txt
-.claude/agent-*-activity.jsonl
+.claude/sessions/agent-*.txt
+.claude/sessions/agent-*-activity.jsonl
+.claude/agent-*.txt  # Legacy location
 .mcp.json
 
 # Beads: JSONL files are committed (source of truth), SQLite is local cache
@@ -77,8 +78,8 @@ Add these patterns to your project's root `.gitignore`:
 | `.beads/metadata.json` | ✅ Yes | Repository and clone IDs |
 | `.beads/.gitignore` | ✅ Yes | Ignore rules for SQLite files |
 | `.beads/beads.db*` | ❌ No | Local SQLite cache (auto-rebuilt) |
-| `.claude/agent-*.txt` | ❌ No | Per-session agent identity |
-| `.claude/agent-*-activity.jsonl` | ❌ No | Session activity logs |
+| `.claude/sessions/agent-*.txt` | ❌ No | Per-session agent identity |
+| `.claude/sessions/agent-*-activity.jsonl` | ❌ No | Session activity logs |
 | `.mcp.json` | ❌ No | Local MCP server configuration |
 
 **Why this matters:**

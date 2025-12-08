@@ -31,8 +31,22 @@ export type SessionEventType =
 	| 'session-output'
 	| 'session-state'
 	| 'session-question'
+	| 'session-signal'
 	| 'session-created'
 	| 'session-destroyed';
+
+// Suggested task interface (from jat-signal)
+export interface SuggestedTask {
+	id?: string;
+	type: string;
+	title: string;
+	description: string;
+	priority: number;
+	reason?: string;
+	project?: string;
+	labels?: string;
+	depends_on?: string[];
+}
 
 export interface SessionEvent {
 	type: SessionEventType;
@@ -50,6 +64,9 @@ export interface SessionEvent {
 		title?: string;
 		status?: string;
 	} | null;
+	// Signal event fields (from jat-signal)
+	signalType?: string;
+	suggestedTasks?: SuggestedTask[];
 }
 
 // Store for reactive updates - components can subscribe to this
@@ -71,11 +88,11 @@ const RECONNECT_DELAY = 3000;
 /**
  * Handle session-output event: update terminal output for a session
  *
- * PERFORMANCE: Only creates new array if output actually changed.
- * Creating new array triggers all SessionCard's expensive $derived computations.
+ * PERFORMANCE: Uses in-place mutation to trigger fine-grained reactivity.
+ * Creating new arrays with .map() triggers ALL SessionCard's $derived computations.
+ * In-place mutation only triggers reactivity for the specific session that changed.
  */
 function handleSessionOutput(data: SessionEvent): void {
-	const start = performance.now();
 	const { sessionName, output, lineCount } = data;
 	if (!sessionName || output === undefined) return;
 
@@ -88,38 +105,26 @@ function handleSessionOutput(data: SessionEvent): void {
 	// PERFORMANCE: Check if output actually changed before triggering re-render
 	const currentSession = workSessionsState.sessions[sessionIndex];
 	if (currentSession.output === output && currentSession.lineCount === (lineCount ?? currentSession.lineCount)) {
-		console.log(`[PERF] handleSessionOutput SKIPPED (no change) in ${(performance.now() - start).toFixed(1)}ms`);
-		return; // No change, skip expensive array update
+		return; // No change, skip update
 	}
 
-	// Update the session output reactively
-	workSessionsState.sessions = workSessionsState.sessions.map((session, idx) => {
-		if (idx === sessionIndex) {
-			return {
-				...session,
-				output: output,
-				lineCount: lineCount ?? session.lineCount
-			};
-		}
-		return session;
-	});
-	console.log(`[PERF] handleSessionOutput UPDATED in ${(performance.now() - start).toFixed(1)}ms`);
+	// PERFORMANCE: Mutate in-place for fine-grained reactivity (Svelte 5 $state)
+	// This only triggers reactivity for components that depend on THIS session
+	workSessionsState.sessions[sessionIndex].output = output;
+	if (lineCount !== undefined) {
+		workSessionsState.sessions[sessionIndex].lineCount = lineCount;
+	}
 }
 
 /**
  * Handle session-state event: update session state
  * Updates the workSessions store with the new state for real-time UI updates
  *
- * PERFORMANCE: Only creates new array if state actually changed.
+ * PERFORMANCE: Uses in-place mutation for fine-grained reactivity.
  */
 function handleSessionState(data: SessionEvent): void {
-	const { sessionName, state, previousState } = data;
+	const { sessionName, state } = data;
 	if (!sessionName || !state) return;
-
-	// Log state transitions for debugging
-	if (previousState && previousState !== state) {
-		console.log(`[SessionEvents] State transition: ${sessionName} ${previousState} → ${state}`);
-	}
 
 	// Update the session state in workSessions store
 	const sessionIndex = workSessionsState.sessions.findIndex(s => s.sessionName === sessionName);
@@ -131,21 +136,12 @@ function handleSessionState(data: SessionEvent): void {
 	// PERFORMANCE: Check if state actually changed before triggering re-render
 	const currentSession = workSessionsState.sessions[sessionIndex];
 	if (currentSession._sseState === state) {
-		return; // No change, skip expensive array update
+		return; // No change, skip update
 	}
 
-	// Store the state in a custom property for components to access
-	// This provides real-time state updates without re-parsing output
-	workSessionsState.sessions = workSessionsState.sessions.map((session, idx) => {
-		if (idx === sessionIndex) {
-			return {
-				...session,
-				_sseState: state,
-				_sseStateTimestamp: data.timestamp
-			};
-		}
-		return session;
-	});
+	// PERFORMANCE: Mutate in-place for fine-grained reactivity (Svelte 5 $state)
+	workSessionsState.sessions[sessionIndex]._sseState = state;
+	workSessionsState.sessions[sessionIndex]._sseStateTimestamp = data.timestamp;
 }
 
 /**
@@ -156,6 +152,26 @@ function handleSessionQuestion(_data: SessionEvent): void {
 	// Question data is polled separately via /api/work/{sessionId}/question
 	// This event notifies components that new question data is available
 	// Components subscribed to lastSessionEvent can refetch if needed
+}
+
+/**
+ * Handle session-signal event: update suggested tasks from jat-signal
+ * These are real-time task suggestions from agents via the signal system
+ *
+ * PERFORMANCE: Uses in-place mutation for fine-grained reactivity.
+ */
+function handleSessionSignal(data: SessionEvent): void {
+	const { sessionName, signalType, suggestedTasks } = data;
+	if (!sessionName || signalType !== 'tasks') return;
+
+	const sessionIndex = workSessionsState.sessions.findIndex(s => s.sessionName === sessionName);
+	if (sessionIndex === -1) {
+		return;
+	}
+
+	// PERFORMANCE: Mutate in-place for fine-grained reactivity (Svelte 5 $state)
+	workSessionsState.sessions[sessionIndex]._signalSuggestedTasks = suggestedTasks || [];
+	workSessionsState.sessions[sessionIndex]._signalSuggestedTasksTimestamp = data.timestamp;
 }
 
 /**
@@ -223,7 +239,7 @@ export function connectSessionEvents(): void {
 				const data: SessionEvent = JSON.parse(event.data);
 				const eventType = data.type;
 
-				console.log('[SessionEvents] Received event:', eventType, data.sessionName || '');
+				// Only log significant events (not frequent output/state updates)
 
 				// Handle event based on type
 				switch (eventType) {
@@ -238,6 +254,9 @@ export function connectSessionEvents(): void {
 						break;
 					case 'session-question':
 						handleSessionQuestion(data);
+						break;
+					case 'session-signal':
+						handleSessionSignal(data);
 						break;
 					case 'session-created':
 						handleSessionCreated(data);

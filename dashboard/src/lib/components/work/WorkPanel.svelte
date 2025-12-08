@@ -54,6 +54,20 @@
 		_sseState?: string;
 		/** Timestamp when SSE state was last updated */
 		_sseStateTimestamp?: number;
+		/** Suggested tasks from jat-signal (via SSE session-signal event) */
+		_signalSuggestedTasks?: Array<{
+			id?: string;
+			type: string;
+			title: string;
+			description: string;
+			priority: number;
+			reason?: string;
+			project?: string;
+			labels?: string;
+			depends_on?: string[];
+		}>;
+		/** Timestamp when signal suggested tasks were last updated */
+		_signalSuggestedTasksTimestamp?: number;
 	}
 
 	interface Props {
@@ -297,6 +311,8 @@
 							attached={session.attached}
 							sseState={session._sseState}
 							sseStateTimestamp={session._sseStateTimestamp}
+							signalSuggestedTasks={session._signalSuggestedTasks}
+							signalSuggestedTasksTimestamp={session._signalSuggestedTasksTimestamp}
 							onKillSession={createKillHandler(session.sessionName)}
 							onInterrupt={createInterruptHandler(session.sessionName)}
 							onContinue={createContinueHandler(session.sessionName)}

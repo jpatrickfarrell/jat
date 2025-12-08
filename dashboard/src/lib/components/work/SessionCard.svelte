@@ -2128,6 +2128,12 @@
 
 		// Detect transition to 'completed' state - celebration and log capture
 		if (sessionState === "completed" && previousSessionState !== "completed") {
+			// Notify epicQueueStore if we're in an epic execution (triggers auto-spawn for unblocked tasks)
+			const taskId = displayTask?.id || lastCompletedTask?.id;
+			if (taskId && epicIsActive()) {
+				epicCompleteTask(taskId);
+			}
+
 			// Capture session log (all modes)
 			if (!logCaptured) {
 				captureSessionLog();
@@ -2195,11 +2201,8 @@
 				autoCloseTimer = null;
 			}
 
-			// Notify epicQueueStore if we're in an epic execution
-			const taskId = displayTask?.id || lastCompletedTask?.id;
-			if (taskId && epicIsActive()) {
-				epicCompleteTask(taskId);
-			}
+			// Note: epicCompleteTask is called when sessionState transitions to 'completed'
+			// (see effect at line ~2130), not here. This just handles session cleanup.
 
 			// Call cleanup/kill session
 			if (onKillSession) {

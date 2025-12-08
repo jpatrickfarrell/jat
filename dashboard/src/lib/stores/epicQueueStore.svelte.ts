@@ -455,11 +455,25 @@ function determineInitialStatus(task: Task, allChildren: Task[]): ChildStatus {
 }
 
 /**
- * Mark a child task as completed
+ * Mark a child task as completed and auto-spawn for newly unblocked tasks
  * @param taskId - The task ID that completed
  */
-export function completeTask(taskId: string): void {
+export async function completeTask(taskId: string): Promise<void> {
 	if (!state.isActive) return;
+
+	// Find the completing task to get its assignee
+	const completingTask = state.children.find((c) => c.id === taskId);
+	const completingAgent = completingTask?.assignee;
+
+	// Remove the agent from running agents
+	if (completingAgent) {
+		removeRunningAgent(completingAgent);
+	}
+
+	// Capture which tasks are currently blocked (before recalculation)
+	const previouslyBlockedIds = new Set(
+		state.children.filter((c) => c.status === 'blocked').map((c) => c.id)
+	);
 
 	// Update the child's status
 	state.children = state.children.map((child) => {
@@ -477,6 +491,56 @@ export function completeTask(taskId: string): void {
 
 	// Recalculate blocked status for other children
 	recalculateBlockedStatus();
+
+	// Check for newly unblocked tasks and auto-spawn if enabled
+	if (state.settings.autoSpawn && canSpawnMore()) {
+		// Find tasks that were blocked but are now ready
+		const newlyUnblocked = state.children.filter(
+			(c) => previouslyBlockedIds.has(c.id) && c.status === 'ready'
+		);
+
+		if (newlyUnblocked.length > 0) {
+			// Sort by priority (lower = higher priority)
+			newlyUnblocked.sort((a, b) => a.priority - b.priority);
+			const nextTask = newlyUnblocked[0];
+
+			// Spawn an agent for the highest priority newly unblocked task
+			await spawnAgentForTaskAndTrack(nextTask.id);
+		}
+	}
+}
+
+/**
+ * Spawn an agent for a task and update tracking state
+ * @param taskId - The task ID to assign
+ */
+async function spawnAgentForTaskAndTrack(taskId: string): Promise<SpawnResult> {
+	state.isSpawning = true;
+
+	try {
+		const result = await spawnAgentForTask(taskId);
+
+		if (result.success) {
+			// Mark task as in_progress
+			updateTaskStatus(taskId, 'in_progress', result.agentName);
+
+			// Track the spawned session
+			if (result.sessionName) {
+				state.spawnedSessions.set(taskId, result.sessionName);
+			}
+
+			// Add to running agents
+			if (result.agentName) {
+				addRunningAgent(result.agentName);
+			}
+		} else {
+			state.lastSpawnError = result.error || 'Failed to spawn agent';
+		}
+
+		return result;
+	} finally {
+		state.isSpawning = false;
+	}
 }
 
 /**

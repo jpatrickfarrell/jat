@@ -17,7 +17,7 @@
 	import { initAudioOnInteraction, areSoundsEnabled, enableSounds, disableSounds, playNewTaskChime } from '$lib/utils/soundEffects';
 	import { initSessionEvents, closeSessionEvents, connectSessionEvents, disconnectSessionEvents, lastSessionEvent } from '$lib/stores/sessionEvents';
 	import { connectTaskEvents, disconnectTaskEvents, lastTaskEvent } from '$lib/stores/taskEvents';
-	import { availableProjects, openTaskDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer } from '$lib/stores/drawerStore';
+	import { availableProjects, openTaskDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId } from '$lib/stores/drawerStore';
 	import { hoveredSessionName, triggerCompleteFlash, jumpToSession } from '$lib/stores/hoveredSession';
 	import { get } from 'svelte/store';
 	import { initPreferences } from '$lib/stores/preferences.svelte';
@@ -61,9 +61,7 @@
 	}
 	let epicsWithReady = $state<EpicWithReady[]>([]);
 
-	// Epic Swarm Modal state (for testing - Alt+E to open)
-	let epicSwarmModalOpen = $state(false);
-	let epicSwarmModalEpicId = $state('jat-2ywa'); // Default test epic
+	// Epic Swarm Modal uses store state (Alt+E to open)
 
 	// Review rules for settings preview
 	interface ReviewRule {
@@ -437,10 +435,10 @@
 			return;
 		}
 
-		// Alt+E = Open Epic Swarm Modal (for testing)
+		// Alt+E = Open Epic Swarm Modal
 		if (event.altKey && event.code === 'KeyE') {
 			event.preventDefault();
-			epicSwarmModalOpen = true;
+			isEpicSwarmModalOpen.set(true);
 			return;
 		}
 
@@ -700,12 +698,8 @@
 	<!-- Spawn Modal (must be inside drawer for proper z-index) -->
 	<SpawnModal />
 
-	<!-- Epic Swarm Modal (Alt+E to test) -->
-	<EpicSwarmModal
-		epicId={epicSwarmModalEpicId}
-		bind:isOpen={epicSwarmModalOpen}
-		onClose={() => epicSwarmModalOpen = false}
-	/>
+	<!-- Epic Swarm Modal (Alt+E to open) -->
+	<EpicSwarmModal />
 
 	<!-- Sidebar (Sidebar component provides the drawer-side wrapper) -->
 	<Sidebar />

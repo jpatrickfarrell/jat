@@ -4,6 +4,7 @@
 	 * Modal for configuring and launching an epic swarm execution
 	 *
 	 * Features:
+	 * - Epic selector dropdown (fetches all epics, sorted by ready task count)
 	 * - Children list with checkboxes and status badges
 	 * - Execution mode toggle (Parallel/Sequential)
 	 * - Max concurrent agents slider (1-8)
@@ -11,6 +12,8 @@
 	 * - Auto-spawn blocked tasks checkbox
 	 * - Preview section showing what will happen
 	 * - Launch button that calls epicQueueStore.launchEpic()
+	 *
+	 * Keyboard shortcut: Alt+E to open
 	 */
 
 	import { onMount } from 'svelte';
@@ -20,7 +23,12 @@
 		type ReviewThreshold,
 		type ExecutionMode
 	} from '$lib/stores/epicQueueStore.svelte';
-	import { openTaskDetailDrawer } from '$lib/stores/drawerStore';
+	import {
+		openTaskDetailDrawer,
+		isEpicSwarmModalOpen,
+		epicSwarmModalEpicId,
+		closeEpicSwarmModal
+	} from '$lib/stores/drawerStore';
 	import {
 		DEFAULT_MODEL,
 		MAX_TMUX_SESSIONS,
@@ -36,14 +44,69 @@
 		type EpicSwarmSettings
 	} from '$lib/utils/epicSwarmSettings';
 
-	// Props
+	// Props - epicId is optional, can be selected in modal
 	interface Props {
-		epicId: string;
+		epicId?: string | null;
 		isOpen?: boolean;
 		onClose?: () => void;
 	}
 
-	let { epicId, isOpen = $bindable(false), onClose = () => {} }: Props = $props();
+	let { epicId: propEpicId = null, isOpen = $bindable(false), onClose = () => {} }: Props = $props();
+
+	// Epic info for dropdown
+	interface EpicInfo {
+		id: string;
+		title: string;
+		ready: number;
+		total: number;
+		inProgress: number;
+	}
+
+	// Epic list state
+	let availableEpics = $state<EpicInfo[]>([]);
+	let isLoadingEpics = $state(false);
+	let epicLoadError = $state<string | null>(null);
+
+	// Selected epic (from prop, store, or user selection)
+	let selectedEpicId = $state<string | null>(null);
+
+	// Keyboard shortcut: Alt+E to open modal
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.altKey && e.key.toLowerCase() === 'e') {
+			e.preventDefault();
+			isEpicSwarmModalOpen.set(true);
+		}
+	}
+
+	// Sync with store and props
+	$effect(() => {
+		const unsubscribe = isEpicSwarmModalOpen.subscribe((value) => {
+			isOpen = value;
+			if (value) {
+				loadEpics();
+			}
+		});
+		return unsubscribe;
+	});
+
+	$effect(() => {
+		const unsubscribe = epicSwarmModalEpicId.subscribe((value) => {
+			if (value) {
+				selectedEpicId = value;
+			}
+		});
+		return unsubscribe;
+	});
+
+	// Use prop epic ID if provided
+	$effect(() => {
+		if (propEpicId) {
+			selectedEpicId = propEpicId;
+		}
+	});
+
+	// Computed epicId for the rest of the component
+	const epicId = $derived(selectedEpicId || '');
 
 	// Child task from API
 	interface EpicChild {
@@ -130,6 +193,83 @@
 		{ value: 'p0-p2', label: 'P0-P2', description: 'Review P0, P1, and P2 tasks' },
 		{ value: 'none', label: 'None', description: 'Auto-complete all tasks (no review)' }
 	];
+
+	// Load epics when modal opens
+	async function loadEpics() {
+		if (availableEpics.length > 0) return; // Already loaded
+
+		isLoadingEpics = true;
+		epicLoadError = null;
+
+		try {
+			// Fetch all tasks and filter to epics
+			const response = await fetch('/api/tasks');
+			if (!response.ok) {
+				throw new Error('Failed to fetch tasks');
+			}
+
+			const data = await response.json();
+			const tasks = data.tasks || [];
+
+			// Filter to epics only
+			const epics = tasks.filter((t: any) => t.issue_type === 'epic' && t.status !== 'closed');
+
+			// For each epic, get children summary
+			const epicsWithInfo: EpicInfo[] = [];
+			for (const epic of epics) {
+				try {
+					const childResponse = await fetch(`/api/epics/${epic.id}/children`);
+					if (childResponse.ok) {
+						const childData = await childResponse.json();
+						epicsWithInfo.push({
+							id: epic.id,
+							title: epic.title,
+							ready: childData.summary.ready,
+							total: childData.summary.total,
+							inProgress: childData.summary.inProgress
+						});
+					}
+				} catch {
+					// Skip this epic if we can't fetch children
+				}
+			}
+
+			// Sort by ready tasks (most ready first), then by total
+			epicsWithInfo.sort((a, b) => {
+				if (b.ready !== a.ready) return b.ready - a.ready;
+				return b.total - a.total;
+			});
+
+			availableEpics = epicsWithInfo;
+
+			// Auto-select first epic if none selected
+			if (!selectedEpicId && epicsWithInfo.length > 0) {
+				selectedEpicId = epicsWithInfo[0].id;
+			}
+		} catch (err) {
+			epicLoadError = err instanceof Error ? err.message : 'Failed to load epics';
+		} finally {
+			isLoadingEpics = false;
+		}
+	}
+
+	// Handle epic selection change
+	function handleEpicChange(newEpicId: string) {
+		selectedEpicId = newEpicId;
+		// Reset children state
+		children = [];
+		summary = {
+			total: 0,
+			open: 0,
+			inProgress: 0,
+			closed: 0,
+			blocked: 0,
+			ready: 0
+		};
+		selectedTaskIds = new Set();
+		// Load new children
+		loadChildren();
+	}
 
 	// Load epic children and settings on mount/epicId change
 	$effect(() => {
@@ -238,6 +378,7 @@
 	function handleClose() {
 		if (!isSubmitting) {
 			isOpen = false;
+			closeEpicSwarmModal();
 			onClose();
 			submitError = null;
 			successMessage = null;
@@ -297,6 +438,9 @@
 	}
 </script>
 
+<!-- Keyboard shortcut listener -->
+<svelte:window onkeydown={handleKeydown} />
+
 <!-- Modal -->
 {#if isOpen}
 	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -310,12 +454,15 @@
 		>
 			<!-- Header -->
 			<div class="flex items-center justify-between mb-4">
-				<h3
-					class="text-lg font-bold font-mono uppercase tracking-wider"
-					style="color: oklch(0.85 0.02 250);"
-				>
-					Epic Swarm
-				</h3>
+				<div class="flex items-center gap-3">
+					<h3
+						class="text-lg font-bold font-mono uppercase tracking-wider"
+						style="color: oklch(0.85 0.02 250);"
+					>
+						Epic Swarm
+					</h3>
+					<kbd class="kbd kbd-xs" style="color: oklch(0.55 0.02 250);">Alt+E</kbd>
+				</div>
 				<button
 					class="btn btn-sm btn-circle btn-ghost"
 					onclick={handleClose}
@@ -338,6 +485,54 @@
 					</svg>
 				</button>
 			</div>
+
+			<!-- Epic Selector -->
+			{#if isLoadingEpics}
+				<div class="flex items-center gap-2 mb-4 p-3 rounded-lg" style="background: oklch(0.22 0.02 250);">
+					<span class="loading loading-spinner loading-sm"></span>
+					<span class="text-sm" style="color: oklch(0.60 0.02 250);">Loading epics...</span>
+				</div>
+			{:else if epicLoadError}
+				<div
+					class="alert mb-4"
+					style="background: oklch(0.35 0.15 25); border: 1px solid oklch(0.50 0.18 25); color: oklch(0.95 0.02 250);"
+				>
+					<span>{epicLoadError}</span>
+					<button class="btn btn-sm btn-ghost" onclick={() => { availableEpics = []; loadEpics(); }}>
+						Retry
+					</button>
+				</div>
+			{:else if availableEpics.length === 0}
+				<div class="text-center py-8" style="color: oklch(0.55 0.02 250);">
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-12 h-12 mx-auto mb-2 opacity-50">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 00-2.15-1.588H6.911a2.25 2.25 0 00-2.15 1.588L2.35 13.177a2.25 2.25 0 00-.1.661z" />
+					</svg>
+					<p class="font-medium">No open epics found</p>
+					<p class="text-sm mt-1">Create an epic with child tasks to use Epic Swarm</p>
+				</div>
+			{:else}
+				<!-- Epic Dropdown -->
+				<div class="mb-4">
+					<label
+						class="text-xs font-semibold font-mono uppercase tracking-wider block mb-2"
+						style="color: oklch(0.55 0.02 250);"
+					>
+						Select Epic
+					</label>
+					<select
+						class="select select-bordered w-full font-mono"
+						value={selectedEpicId}
+						onchange={(e) => handleEpicChange(e.currentTarget.value)}
+						disabled={isSubmitting}
+						style="background: oklch(0.22 0.02 250); border-color: oklch(0.35 0.02 250);"
+					>
+						{#each availableEpics as epic}
+							<option value={epic.id}>
+								{epic.id} - {epic.title} ({epic.ready} ready / {epic.total} total)
+							</option>
+						{/each}
+					</select>
+				</div>
 
 			{#if isLoading}
 				<!-- Loading State -->
@@ -937,6 +1132,7 @@
 					{/if}
 				</button>
 			</div>
+			{/if}
 		</div>
 	</div>
 {/if}

@@ -88,3 +88,19 @@ export function openOutputDrawerForSession(sessionName: string) {
 export function clearOutputSessionSelection() {
 	selectedOutputSession.set(null);
 }
+
+// Epic swarm modal state
+export const isEpicSwarmModalOpen = writable(false);
+export const epicSwarmModalEpicId = writable<string | null>(null);
+
+export function openEpicSwarmModal(epicId?: string) {
+	if (epicId) {
+		epicSwarmModalEpicId.set(epicId);
+	}
+	isEpicSwarmModalOpen.set(true);
+}
+
+export function closeEpicSwarmModal() {
+	isEpicSwarmModalOpen.set(false);
+	epicSwarmModalEpicId.set(null);
+}

@@ -9,14 +9,16 @@
  * - session-output: { sessionName, output, lineCount, timestamp }
  * - session-state: { sessionName, state, timestamp } - from polling OR signal file changes
  * - session-question: { sessionName, question, timestamp }
- * - session-signal: { sessionName, signalType, suggestedTasks?, action?, timestamp }
+ * - session-signal: { sessionName, signalType, suggestedTasks?, action?, timestamp } (legacy)
+ * - session-complete: { sessionName, taskId, agentName, summary, quality, humanActions?, suggestedTasks?, crossAgentIntel? }
  * - session-created: { sessionName, agentName, task, timestamp }
  * - session-destroyed: { sessionName, timestamp }
  *
  * Signal file watching:
  * - Monitors /tmp/jat-signal-tmux-*.json files for changes
  * - Broadcasts session-state events instantly when state signals change
- * - Broadcasts session-signal events for tasks and action signals
+ * - Broadcasts session-complete events for full completion bundles (new)
+ * - Broadcasts session-signal events for legacy tasks and action signals
  * - No polling delay - updates are pushed within ~50ms of file write
  *
  * The watcher only runs when at least one client is connected.
@@ -42,6 +44,10 @@ const DEFAULT_OUTPUT_LINES = 100;
 // from JSONL on each poll, causing server CPU spikes and browser freezes
 const POLL_INTERVAL_MS = 1000;
 const QUESTION_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes
+
+// Delta update configuration
+// When enabled, sends only new lines instead of full buffer (bandwidth optimization)
+const DELTA_UPDATES_ENABLED = true;
 
 // Cache for tasks - getTasks() is expensive (parses JSONL)
 let cachedTasks: Task[] = [];
@@ -71,9 +77,33 @@ interface SuggestedTask {
 }
 
 interface HumanAction {
-	action: string;
+	action?: string;
+	title?: string;
+	description?: string;
 	message?: string;
 	timestamp?: string;
+}
+
+interface QualitySignals {
+	tests: 'passing' | 'failing' | 'none' | 'skipped';
+	build: 'clean' | 'warnings' | 'errors';
+	preExisting?: string;
+}
+
+interface CrossAgentIntel {
+	files?: string[];
+	patterns?: string[];
+	gotchas?: string[];
+}
+
+interface CompletionBundle {
+	taskId: string;
+	agentName: string;
+	summary: string[];
+	quality: QualitySignals;
+	humanActions?: HumanAction[];
+	suggestedTasks?: SuggestedTask[];
+	crossAgentIntel?: CrossAgentIntel;
 }
 
 interface SessionState {
@@ -104,8 +134,19 @@ interface Task {
 // State Management
 // ============================================================================
 
-// Track connected clients
+// Track connected clients with their cursor positions for delta updates
+interface ClientState {
+	controller: ReadableStreamDefaultController;
+	// Per-session cursor positions (line count last sent to this client)
+	// Key: sessionName, Value: { linesSent: number, outputHash: string }
+	cursors: Map<string, { linesSent: number; outputHash: string }>;
+	// Whether this client has received initial full buffer for each session
+	initializedSessions: Set<string>;
+}
+
+// Track connected clients (controller -> state for delta updates)
 const clients = new Set<ReadableStreamDefaultController>();
+const clientStates = new Map<ReadableStreamDefaultController, ClientState>();
 
 // Track session state for change detection
 const sessionStates = new Map<string, SessionState>();
@@ -123,7 +164,7 @@ const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let signalWatcher: FSWatcher | null = null;
 
 // Track signal file states for change detection (keyed by sessionName)
-const signalFileStates = new Map<string, { state: string | null; tasksHash: string | null; actionHash: string | null }>();
+const signalFileStates = new Map<string, { state: string | null; tasksHash: string | null; actionHash: string | null; completeHash: string | null }>();
 
 // Debounce timers for signal file changes (prevents multiple events for same write)
 const signalDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -148,8 +189,11 @@ function simpleHash(str: string): string {
 
 /**
  * Signal file TTL - signals older than this are stale
+ * State signals (working, review, etc.) use short TTL since they change frequently
+ * Completion bundles use longer TTL since they should persist until session closes
  */
-const SIGNAL_TTL_MS = 60 * 1000; // 1 minute
+const SIGNAL_TTL_MS = 60 * 1000; // 1 minute for state signals
+const COMPLETION_TTL_MS = 30 * 60 * 1000; // 30 minutes for completion bundles
 
 /**
  * Map jat-signal states to SessionCard states
@@ -204,6 +248,7 @@ function readSignalState(sessionName: string): string | null {
 /**
  * Read suggested tasks from signal file
  * Returns array of SuggestedTask or null if not available
+ * Uses longer TTL since suggested tasks should persist until user acts
  */
 function readSignalSuggestedTasks(sessionName: string): SuggestedTask[] | null {
 	const signalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
@@ -213,10 +258,10 @@ function readSignalSuggestedTasks(sessionName: string): SuggestedTask[] | null {
 			return null;
 		}
 
-		// Check file age - signals older than TTL are stale
+		// Suggested tasks use longer TTL since they should persist until user acts
 		const stats = statSync(signalFile);
 		const ageMs = Date.now() - stats.mtimeMs;
-		if (ageMs > SIGNAL_TTL_MS) {
+		if (ageMs > COMPLETION_TTL_MS) {
 			return null;
 		}
 
@@ -297,6 +342,59 @@ function readSignalAction(sessionName: string): HumanAction | null {
 }
 
 /**
+ * Read completion bundle from signal file
+ * Returns full CompletionBundle or null if not a complete signal
+ * Uses longer TTL (COMPLETION_TTL_MS) since completion data should persist
+ */
+function readCompletionBundle(sessionName: string): CompletionBundle | null {
+	const signalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
+
+	try {
+		if (!existsSync(signalFile)) {
+			return null;
+		}
+
+		// Completion bundles use longer TTL since they should persist until user acts
+		const stats = statSync(signalFile);
+		const ageMs = Date.now() - stats.mtimeMs;
+		if (ageMs > COMPLETION_TTL_MS) {
+			return null;
+		}
+
+		const content = readFileSync(signalFile, 'utf-8');
+		const signal = JSON.parse(content);
+
+		// Only handle complete signals with full bundle
+		if (signal.type === 'complete' && signal.data) {
+			const data = signal.data;
+			return {
+				taskId: data.taskId || '',
+				agentName: data.agentName || '',
+				summary: Array.isArray(data.summary) ? data.summary : [],
+				quality: data.quality || { tests: 'none', build: 'clean' },
+				humanActions: Array.isArray(data.humanActions) ? data.humanActions : undefined,
+				suggestedTasks: Array.isArray(data.suggestedTasks) ? data.suggestedTasks.map((t: Partial<SuggestedTask>) => ({
+					id: t.id,
+					type: t.type || 'task',
+					title: t.title || '',
+					description: t.description || '',
+					priority: typeof t.priority === 'number' ? t.priority : 2,
+					reason: t.reason,
+					project: t.project,
+					labels: t.labels,
+					depends_on: t.depends_on
+				})) : undefined,
+				crossAgentIntel: data.crossAgentIntel || undefined
+			};
+		}
+
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Read full signal file content for processing
  * Returns parsed signal or null
  */
@@ -331,8 +429,8 @@ function processSignalFileChange(sessionName: string): void {
 	const signal = readSignalFile(sessionName);
 	if (!signal) return;
 
-	const prevFileState = signalFileStates.get(sessionName) || { state: null, tasksHash: null, actionHash: null };
-	const currentFileState = { state: prevFileState.state, tasksHash: prevFileState.tasksHash, actionHash: prevFileState.actionHash };
+	const prevFileState = signalFileStates.get(sessionName) || { state: null, tasksHash: null, actionHash: null, completeHash: null };
+	const currentFileState = { state: prevFileState.state, tasksHash: prevFileState.tasksHash, actionHash: prevFileState.actionHash, completeHash: prevFileState.completeHash };
 
 	// Handle state signals
 	if (signal.type === 'state' && signal.state) {
@@ -348,8 +446,33 @@ function processSignalFileChange(sessionName: string): void {
 		}
 	}
 
-	// Handle tasks signals
-	if (signal.type === 'tasks' || (signal.type === 'complete' && (signal.data as { suggestedTasks?: unknown })?.suggestedTasks)) {
+	// Handle complete signals (full completion bundle)
+	if (signal.type === 'complete') {
+		const bundle = readCompletionBundle(sessionName);
+		const completeHash = bundle ? simpleHash(JSON.stringify(bundle)) : null;
+		if (completeHash !== prevFileState.completeHash) {
+			currentFileState.completeHash = completeHash;
+			if (bundle) {
+				// Broadcast the full completion bundle (wrapped for client extraction)
+				broadcast('session-complete', {
+					sessionName,
+					completionBundle: bundle
+				});
+				console.log(`[SSE Signal] Complete bundle for ${sessionName}: ${bundle.summary?.length || 0} summary items, ${bundle.suggestedTasks?.length || 0} tasks, ${bundle.humanActions?.length || 0} actions`);
+
+				// Also update state to completed
+				currentFileState.state = 'completed';
+				broadcast('session-state', {
+					sessionName,
+					state: 'completed',
+					previousState: prevFileState.state
+				});
+			}
+		}
+	}
+
+	// Handle tasks signals (legacy standalone tasks signal)
+	if (signal.type === 'tasks') {
 		const tasks = readSignalSuggestedTasks(sessionName);
 		const tasksHash = tasks ? simpleHash(JSON.stringify(tasks)) : null;
 		if (tasksHash !== prevFileState.tasksHash) {
@@ -363,7 +486,7 @@ function processSignalFileChange(sessionName: string): void {
 		}
 	}
 
-	// Handle action signals
+	// Handle action signals (legacy standalone action signal)
 	if (signal.type === 'action') {
 		const action = readSignalAction(sessionName);
 		const actionHash = action ? simpleHash(JSON.stringify(action)) : null;
@@ -382,12 +505,41 @@ function processSignalFileChange(sessionName: string): void {
 }
 
 /**
+ * Process all existing signal files on startup
+ * This ensures clients get current state when connecting/reconnecting
+ */
+function processExistingSignalFiles(): void {
+	try {
+		const files = readdirSync('/tmp').filter(f =>
+			f.startsWith('jat-signal-tmux-') && f.endsWith('.json')
+		);
+
+		// Clear previous state so all files get broadcast
+		signalFileStates.clear();
+
+		for (const filename of files) {
+			const sessionName = filename.replace('jat-signal-tmux-', '').replace('.json', '');
+			if (sessionName) {
+				processSignalFileChange(sessionName);
+			}
+		}
+
+		console.log(`[SSE Signal] Processed ${files.length} existing signal files`);
+	} catch (err) {
+		console.error('[SSE Signal] Failed to process existing files:', err);
+	}
+}
+
+/**
  * Start watching signal files in /tmp for real-time updates
  */
 function startSignalWatcher(): void {
 	if (signalWatcher) return;
 
 	console.log('[SSE Signal] Starting signal file watcher on /tmp');
+
+	// Process existing signal files first (broadcasts current state to clients)
+	processExistingSignalFiles();
 
 	try {
 		signalWatcher = watch('/tmp', (eventType, filename) => {
@@ -621,6 +773,123 @@ function broadcast(eventType: string, data: unknown): void {
 	}
 }
 
+/**
+ * Send output update to a single client (used for delta updates)
+ */
+function sendToClient(controller: ReadableStreamDefaultController, eventType: string, data: unknown): void {
+	const message = `data: ${JSON.stringify({ type: eventType, ...data as object, timestamp: Date.now() })}\n\n`;
+	const encoded = new TextEncoder().encode(message);
+
+	try {
+		controller.enqueue(encoded);
+	} catch (err) {
+		console.error('[SSE Sessions] Failed to send to client:', err);
+	}
+}
+
+/**
+ * Calculate and send delta output update to each client
+ *
+ * Delta update protocol:
+ * - Each client maintains cursor position per session (lines they've received)
+ * - On first connect or reconnect, client gets full buffer (isDelta: false)
+ * - On subsequent updates, client gets only new lines (isDelta: true)
+ * - Client maintains local buffer and appends delta lines
+ *
+ * Event format:
+ * {
+ *   type: 'session-output',
+ *   sessionName: string,
+ *   output: string,           // Full buffer or delta lines
+ *   lineCount: number,        // Total lines in session buffer
+ *   isDelta: boolean,         // true = append these lines, false = replace buffer
+ *   deltaLineCount?: number,  // Number of new lines in delta (when isDelta=true)
+ *   cursorPosition: number    // Current cursor position (for debugging/sync)
+ * }
+ */
+function broadcastOutputWithDelta(sessionName: string, output: string, outputHash: string): void {
+	const lines = output.split('\n');
+	const totalLineCount = lines.length;
+
+	for (const controller of clients) {
+		const clientState = clientStates.get(controller);
+		if (!clientState) {
+			// Fallback: send full buffer if client state missing
+			sendToClient(controller, 'session-output', {
+				sessionName,
+				output,
+				lineCount: totalLineCount,
+				isDelta: false,
+				cursorPosition: totalLineCount
+			});
+			continue;
+		}
+
+		const cursor = clientState.cursors.get(sessionName);
+		const isInitialized = clientState.initializedSessions.has(sessionName);
+
+		if (!isInitialized || !cursor) {
+			// First time this client sees this session: send full buffer
+			clientState.cursors.set(sessionName, { linesSent: totalLineCount, outputHash });
+			clientState.initializedSessions.add(sessionName);
+
+			sendToClient(controller, 'session-output', {
+				sessionName,
+				output,
+				lineCount: totalLineCount,
+				isDelta: false,
+				cursorPosition: totalLineCount
+			});
+			continue;
+		}
+
+		// Check if buffer was truncated/rewound (e.g., terminal cleared, buffer scrolled)
+		// This happens when the new output has fewer lines than what we've sent,
+		// or when the hash changed but line count is same (content changed, not appended)
+		const bufferRewound = totalLineCount < cursor.linesSent;
+		const contentChanged = cursor.outputHash !== outputHash && totalLineCount <= cursor.linesSent;
+
+		if (bufferRewound || contentChanged) {
+			// Buffer was truncated or content changed - send full buffer
+			clientState.cursors.set(sessionName, { linesSent: totalLineCount, outputHash });
+
+			sendToClient(controller, 'session-output', {
+				sessionName,
+				output,
+				lineCount: totalLineCount,
+				isDelta: false,
+				cursorPosition: totalLineCount
+			});
+			continue;
+		}
+
+		// Calculate delta: new lines since last sent
+		const newLines = totalLineCount - cursor.linesSent;
+
+		if (newLines <= 0) {
+			// No new lines (shouldn't happen often due to hash check, but just in case)
+			continue;
+		}
+
+		// Extract only the new lines
+		const deltaLines = lines.slice(cursor.linesSent);
+		const deltaOutput = deltaLines.join('\n');
+
+		// Update cursor position
+		clientState.cursors.set(sessionName, { linesSent: totalLineCount, outputHash });
+
+		// Send delta update
+		sendToClient(controller, 'session-output', {
+			sessionName,
+			output: deltaOutput,
+			lineCount: totalLineCount,
+			isDelta: true,
+			deltaLineCount: newLines,
+			cursorPosition: totalLineCount
+		});
+	}
+}
+
 // ============================================================================
 // Session Polling
 // ============================================================================
@@ -731,11 +1000,17 @@ async function pollSessions(outputLines: number, debounceMs: number): Promise<vo
 
 			// Set new debounce timer
 			debounceTimers.set(session.name, setTimeout(() => {
-				broadcast('session-output', {
-					sessionName: session.name,
-					output,
-					lineCount
-				});
+				if (DELTA_UPDATES_ENABLED) {
+					// Use delta updates for bandwidth optimization
+					broadcastOutputWithDelta(session.name, output, outputHash);
+				} else {
+					// Legacy: send full buffer
+					broadcast('session-output', {
+						sessionName: session.name,
+						output,
+						lineCount
+					});
+				}
 				debounceTimers.delete(session.name);
 			}, debounceMs));
 		}
@@ -833,6 +1108,16 @@ export function GET({ url }: { url: URL }) {
 		start(controller) {
 			thisController = controller;
 			clients.add(controller);
+
+			// Initialize client state for delta updates
+			if (DELTA_UPDATES_ENABLED) {
+				clientStates.set(controller, {
+					controller,
+					cursors: new Map(),
+					initializedSessions: new Set()
+				});
+			}
+
 			console.log(`[SSE Sessions] Client connected. Total clients: ${clients.size}`);
 
 			// Start polling if this is the first client
@@ -840,14 +1125,20 @@ export function GET({ url }: { url: URL }) {
 				startPolling(outputLines, debounceMs);
 			}
 
-			// Send initial connection message
-			const connectMsg = `data: ${JSON.stringify({ type: 'connected', timestamp: Date.now() })}\n\n`;
+			// Send initial connection message with delta support flag
+			const connectMsg = `data: ${JSON.stringify({
+				type: 'connected',
+				timestamp: Date.now(),
+				deltaUpdatesEnabled: DELTA_UPDATES_ENABLED
+			})}\n\n`;
 			controller.enqueue(new TextEncoder().encode(connectMsg));
 		},
 		cancel() {
 			console.log('[SSE Sessions] Client disconnected');
 			if (thisController) {
 				clients.delete(thisController);
+				// Clean up client state
+				clientStates.delete(thisController);
 			}
 			console.log(`[SSE Sessions] Remaining clients: ${clients.size}`);
 

@@ -32,6 +32,7 @@ export type SessionEventType =
 	| 'session-state'
 	| 'session-question'
 	| 'session-signal'
+	| 'session-complete'
 	| 'session-created'
 	| 'session-destroyed';
 
@@ -50,9 +51,36 @@ export interface SuggestedTask {
 
 // Human action interface (from jat-signal action type)
 export interface HumanAction {
-	action: string;
+	action?: string;
+	title?: string;
+	description?: string;
 	message?: string;
 	timestamp?: string;
+}
+
+// Quality signals from completed task
+export interface QualitySignals {
+	tests: 'passing' | 'failing' | 'none' | 'skipped';
+	build: 'clean' | 'warnings' | 'errors';
+	preExisting?: string;
+}
+
+// Cross-agent intelligence from completed task
+export interface CrossAgentIntel {
+	files?: string[];
+	patterns?: string[];
+	gotchas?: string[];
+}
+
+// Full completion bundle from jat-signal complete
+export interface CompletionBundle {
+	taskId: string;
+	agentName: string;
+	summary: string[];
+	quality: QualitySignals;
+	humanActions?: HumanAction[];
+	suggestedTasks?: SuggestedTask[];
+	crossAgentIntel?: CrossAgentIntel;
 }
 
 export interface SessionEvent {
@@ -75,6 +103,14 @@ export interface SessionEvent {
 	signalType?: string;
 	suggestedTasks?: SuggestedTask[];
 	action?: HumanAction;
+	// Completion bundle fields (from jat-signal complete)
+	completionBundle?: CompletionBundle;
+	// Delta update fields (bandwidth optimization)
+	isDelta?: boolean;          // true = output contains only new lines to append
+	deltaLineCount?: number;    // Number of new lines in delta
+	cursorPosition?: number;    // Server's current cursor position
+	// Connection info
+	deltaUpdatesEnabled?: boolean; // Server capability flag
 }
 
 // Store for reactive updates - components can subscribe to this
@@ -96,12 +132,16 @@ const RECONNECT_DELAY = 3000;
 /**
  * Handle session-output event: update terminal output for a session
  *
+ * Supports two modes:
+ * 1. Full buffer (isDelta: false) - Replace entire output
+ * 2. Delta update (isDelta: true) - Append new lines to existing output
+ *
  * PERFORMANCE: Uses in-place mutation to trigger fine-grained reactivity.
  * Creating new arrays with .map() triggers ALL SessionCard's $derived computations.
  * In-place mutation only triggers reactivity for the specific session that changed.
  */
 function handleSessionOutput(data: SessionEvent): void {
-	const { sessionName, output, lineCount } = data;
+	const { sessionName, output, lineCount, isDelta } = data;
 	if (!sessionName || output === undefined) return;
 
 	const sessionIndex = workSessionsState.sessions.findIndex(s => s.sessionName === sessionName);
@@ -110,8 +150,31 @@ function handleSessionOutput(data: SessionEvent): void {
 		return;
 	}
 
-	// PERFORMANCE: Check if output actually changed before triggering re-render
 	const currentSession = workSessionsState.sessions[sessionIndex];
+
+	// Handle delta update: append new lines to existing buffer
+	if (isDelta) {
+		const currentOutput = currentSession.output || '';
+		// Append delta to existing output
+		// If current output is empty, just use the delta
+		// Otherwise, add newline separator and delta
+		const newOutput = currentOutput ? `${currentOutput}\n${output}` : output;
+
+		// Check if output actually changed before triggering re-render
+		if (currentSession.output === newOutput) {
+			return; // No change, skip update
+		}
+
+		// PERFORMANCE: Mutate in-place for fine-grained reactivity (Svelte 5 $state)
+		workSessionsState.sessions[sessionIndex].output = newOutput;
+		if (lineCount !== undefined) {
+			workSessionsState.sessions[sessionIndex].lineCount = lineCount;
+		}
+		return;
+	}
+
+	// Full buffer update: replace entire output
+	// PERFORMANCE: Check if output actually changed before triggering re-render
 	if (currentSession.output === output && currentSession.lineCount === (lineCount ?? currentSession.lineCount)) {
 		return; // No change, skip update
 	}
@@ -193,6 +256,43 @@ function handleSessionSignal(data: SessionEvent): void {
 		// Store the action for display in SessionCard
 		workSessionsState.sessions[sessionIndex]._signalAction = action;
 		workSessionsState.sessions[sessionIndex]._signalActionTimestamp = data.timestamp;
+	}
+}
+
+/**
+ * Handle session-complete event: update session with full completion bundle
+ * This event contains the structured completion data from jat-signal complete
+ *
+ * PERFORMANCE: Uses in-place mutation for fine-grained reactivity.
+ */
+function handleSessionComplete(data: SessionEvent): void {
+	const { sessionName, completionBundle } = data;
+	if (!sessionName || !completionBundle) return;
+
+	console.log('[SessionEvents] handleSessionComplete called:', sessionName);
+	console.log('[SessionEvents] Available sessions:', workSessionsState.sessions.map(s => s.sessionName));
+
+	const sessionIndex = workSessionsState.sessions.findIndex(s => s.sessionName === sessionName);
+	if (sessionIndex === -1) {
+		console.log('[SessionEvents] Session not found:', sessionName);
+		return;
+	}
+	console.log('[SessionEvents] Found session at index:', sessionIndex);
+
+	// Store the completion bundle for display in SessionCard
+	workSessionsState.sessions[sessionIndex]._completionBundle = completionBundle;
+	workSessionsState.sessions[sessionIndex]._completionBundleTimestamp = data.timestamp;
+
+	// Also update SSE state to 'completed' if not already
+	if (workSessionsState.sessions[sessionIndex]._sseState !== 'completed') {
+		workSessionsState.sessions[sessionIndex]._sseState = 'completed';
+		workSessionsState.sessions[sessionIndex]._sseStateTimestamp = data.timestamp;
+	}
+
+	// Extract suggested tasks to the signal tasks field for consistency
+	if (completionBundle.suggestedTasks && completionBundle.suggestedTasks.length > 0) {
+		workSessionsState.sessions[sessionIndex]._signalSuggestedTasks = completionBundle.suggestedTasks;
+		workSessionsState.sessions[sessionIndex]._signalSuggestedTasksTimestamp = data.timestamp;
 	}
 }
 
@@ -279,6 +379,9 @@ export function connectSessionEvents(): void {
 						break;
 					case 'session-signal':
 						handleSessionSignal(data);
+						break;
+					case 'session-complete':
+						handleSessionComplete(data);
 						break;
 					case 'session-created':
 						handleSessionCreated(data);

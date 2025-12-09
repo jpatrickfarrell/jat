@@ -51,40 +51,48 @@
 		}
 	}
 
-	// Handle rollback confirmation
-	async function handleConfirm() {
+	// Copy command to clipboard
+	async function copyCommand(command: string) {
+		try {
+			await navigator.clipboard.writeText(command);
+			successMessage = 'Command copied to clipboard!';
+			setTimeout(() => {
+				successMessage = null;
+			}, 2000);
+		} catch (error) {
+			submitError = 'Failed to copy to clipboard';
+		}
+	}
+
+	// Handle sending diff command to show what changed
+	async function handleShowDiff() {
 		if (!gitSha || !sessionName) return;
 
 		isSubmitting = true;
 		submitError = null;
-		successMessage = null;
 
 		try {
-			// Send git checkout command to the session via API
 			const response = await fetch(`/api/sessions/${sessionName}/input`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					input: `git checkout ${gitSha}`
+					input: `git diff ${gitSha}..HEAD --stat`
 				})
 			});
 
 			if (!response.ok) {
 				const data = await response.json().catch(() => ({}));
-				throw new Error(data.error || `Failed to send rollback command: ${response.status}`);
+				throw new Error(data.error || `Failed to send command: ${response.status}`);
 			}
 
-			successMessage = `Rolling back to ${gitSha.slice(0, 7)}...`;
-
-			// Close after short delay
+			successMessage = 'Showing diff in terminal...';
 			setTimeout(() => {
 				handleClose();
-				onConfirm?.();
 			}, 1500);
 
 		} catch (error: any) {
-			console.error('Rollback error:', error);
-			submitError = error.message || 'Failed to execute rollback';
+			console.error('Diff error:', error);
+			submitError = error.message || 'Failed to show diff';
 		} finally {
 			isSubmitting = false;
 		}
@@ -128,10 +136,10 @@
 							class="text-lg font-bold font-mono"
 							style="color: oklch(0.85 0.02 250);"
 						>
-							Confirm Rollback
+							Rollback Options
 						</h3>
 						<p class="text-xs mt-0.5" style="color: oklch(0.55 0.02 250);">
-							This will reset your working directory
+							Choose how to restore to this point
 						</p>
 					</div>
 				</div>
@@ -170,32 +178,90 @@
 				</div>
 			</div>
 
-			<!-- Warning Message -->
-			<div
-				class="rounded-lg p-3 mb-4 text-sm"
-				style="background: oklch(0.25 0.08 45 / 0.3); border: 1px solid oklch(0.45 0.12 45 / 0.5); color: oklch(0.85 0.10 45);"
-			>
-				<div class="flex items-start gap-2">
-					<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-					</svg>
-					<div>
-						<p class="font-medium mb-1">This action will:</p>
-						<ul class="text-xs space-y-1" style="color: oklch(0.75 0.06 45);">
-							<li>- Discard all uncommitted changes</li>
-							<li>- Reset the working directory to the selected commit</li>
-							<li>- This cannot be undone without re-applying changes</li>
-						</ul>
+			<!-- Rollback Options -->
+			<div class="space-y-3 mb-4">
+				<div class="text-xs font-mono uppercase tracking-wider mb-2" style="color: oklch(0.55 0.02 250);">
+					Rollback Options
+				</div>
+
+				<!-- Option 1: Show diff (safe) -->
+				<div
+					class="rounded-lg p-3"
+					style="background: oklch(0.20 0.06 200 / 0.3); border: 1px solid oklch(0.35 0.08 200 / 0.5);"
+				>
+					<div class="flex items-center justify-between mb-2">
+						<span class="text-sm font-medium" style="color: oklch(0.80 0.10 200);">View Changes</span>
+						<span class="text-[10px] px-1.5 py-0.5 rounded" style="background: oklch(0.30 0.10 145); color: oklch(0.85 0.12 145);">Safe</span>
+					</div>
+					<p class="text-xs mb-2" style="color: oklch(0.60 0.02 250);">
+						See what changed since this commit (runs in terminal)
+					</p>
+					<div class="flex items-center gap-2">
+						<code class="flex-1 text-[10px] px-2 py-1 rounded font-mono" style="background: oklch(0.15 0.01 250); color: oklch(0.55 0.02 250);">
+							git diff {gitSha.slice(0, 7)}..HEAD --stat
+						</code>
+						<button
+							class="btn btn-xs"
+							style="background: oklch(0.35 0.10 200); color: oklch(0.90 0.08 200);"
+							onclick={handleShowDiff}
+							disabled={isSubmitting}
+						>
+							Run
+						</button>
 					</div>
 				</div>
-			</div>
 
-			<!-- Command Preview -->
-			<div
-				class="rounded-lg p-3 mb-4 font-mono text-xs"
-				style="background: oklch(0.15 0.01 250); border: 1px solid oklch(0.25 0.02 250); color: oklch(0.60 0.02 250);"
-			>
-				<span style="color: oklch(0.50 0.02 250);">$</span> git checkout {gitSha.slice(0, 7)}
+				<!-- Option 2: Revert (safer) -->
+				<div
+					class="rounded-lg p-3"
+					style="background: oklch(0.20 0.06 85 / 0.3); border: 1px solid oklch(0.35 0.08 85 / 0.5);"
+				>
+					<div class="flex items-center justify-between mb-2">
+						<span class="text-sm font-medium" style="color: oklch(0.80 0.10 85);">Revert Changes</span>
+						<span class="text-[10px] px-1.5 py-0.5 rounded" style="background: oklch(0.30 0.08 85); color: oklch(0.85 0.10 85);">Preserves History</span>
+					</div>
+					<p class="text-xs mb-2" style="color: oklch(0.60 0.02 250);">
+						Create new commits that undo changes (safe for multi-agent)
+					</p>
+					<div class="flex items-center gap-2">
+						<code class="flex-1 text-[10px] px-2 py-1 rounded font-mono" style="background: oklch(0.15 0.01 250); color: oklch(0.55 0.02 250);">
+							git revert --no-commit {gitSha.slice(0, 7)}..HEAD
+						</code>
+						<button
+							class="btn btn-xs"
+							style="background: oklch(0.25 0.02 250); color: oklch(0.70 0.02 250);"
+							onclick={() => copyCommand(`git revert --no-commit ${gitSha}..HEAD`)}
+						>
+							Copy
+						</button>
+					</div>
+				</div>
+
+				<!-- Option 3: Hard reset (dangerous) -->
+				<div
+					class="rounded-lg p-3"
+					style="background: oklch(0.20 0.08 25 / 0.3); border: 1px solid oklch(0.35 0.10 25 / 0.5);"
+				>
+					<div class="flex items-center justify-between mb-2">
+						<span class="text-sm font-medium" style="color: oklch(0.80 0.12 25);">Hard Reset</span>
+						<span class="text-[10px] px-1.5 py-0.5 rounded" style="background: oklch(0.35 0.15 25); color: oklch(0.90 0.10 25);">Destructive</span>
+					</div>
+					<p class="text-xs mb-2" style="color: oklch(0.60 0.02 250);">
+						⚠️ Discards ALL commits after this point (including other agents' work)
+					</p>
+					<div class="flex items-center gap-2">
+						<code class="flex-1 text-[10px] px-2 py-1 rounded font-mono" style="background: oklch(0.15 0.01 250); color: oklch(0.55 0.02 250);">
+							git reset --hard {gitSha.slice(0, 7)}
+						</code>
+						<button
+							class="btn btn-xs"
+							style="background: oklch(0.25 0.02 250); color: oklch(0.70 0.02 250);"
+							onclick={() => copyCommand(`git reset --hard ${gitSha}`)}
+						>
+							Copy
+						</button>
+					</div>
+				</div>
 			</div>
 
 			<!-- Error -->
@@ -225,29 +291,13 @@
 			{/if}
 
 			<!-- Actions -->
-			<div class="flex gap-3 justify-end">
+			<div class="flex justify-end">
 				<button
 					class="btn btn-ghost"
 					onclick={handleClose}
 					disabled={isSubmitting}
 				>
-					Cancel
-				</button>
-				<button
-					class="btn font-mono gap-2"
-					style="background: oklch(0.45 0.15 45); color: oklch(0.95 0.02 250); border: 1px solid oklch(0.55 0.18 45);"
-					onclick={handleConfirm}
-					disabled={isSubmitting || !gitSha}
-				>
-					{#if isSubmitting}
-						<span class="loading loading-spinner loading-sm"></span>
-						Rolling back...
-					{:else}
-						<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-						</svg>
-						Rollback
-					{/if}
+					Close
 				</button>
 			</div>
 		</div>

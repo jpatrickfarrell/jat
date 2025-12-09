@@ -864,7 +864,6 @@
 			}
 			existingTaskTitles = titles;
 			existingTaskTitlesVersion++; // Bump version to trigger $derived reactivity
-			console.log("[SessionCard]", sessionName, "- Loaded", titles.size, "existing task titles for alreadyCreated detection (v" + existingTaskTitlesVersion + ")");
 		} catch (error) {
 			console.error("[SessionCard] Error fetching existing task titles:", error);
 		}
@@ -876,7 +875,6 @@
 	$effect(() => {
 		const hasSignalTasks = signalSuggestedTasks && signalSuggestedTasks.length > 0;
 		if (hasSignalTasks || suggestedTasksModalOpen) {
-			console.log("[SessionCard] Triggering fetchExistingTaskTitles - hasSignalTasks:", hasSignalTasks, "modalOpen:", suggestedTasksModalOpen);
 			fetchExistingTaskTitles();
 		}
 	});
@@ -2010,9 +2008,6 @@
 			return [];
 		}
 
-		// Debug: log existingTaskTitles size to verify it's populated
-		console.log("[SessionCard]", sessionName, "- detectedSuggestedTasks derived (v" + _titlesVersion + ") - existingTaskTitles.size:", existingTaskTitles.size);
-
 		// Map signal tasks to tasks with local UI state
 		return signalSuggestedTasks.map((task, index) => {
 			const key = task.title || `task-${index}`;
@@ -2024,17 +2019,6 @@
 			const effectiveTitle = hasEdits && edits.title ? edits.title : task.title;
 			const normalizedTitle = effectiveTitle?.toLowerCase().trim() || '';
 			const alreadyCreated = normalizedTitle ? existingTaskTitles.has(normalizedTitle) : false;
-
-			// Debug: log the check
-			if (index === 0) {
-				console.log("[SessionCard]", sessionName, "- First task alreadyCreated check:", {
-					effectiveTitle,
-					normalizedTitle,
-					alreadyCreated,
-					existingTitlesSize: existingTaskTitles.size,
-					hasTitle: existingTaskTitles.has(normalizedTitle)
-				});
-			}
 
 			return {
 				...task,

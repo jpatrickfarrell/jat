@@ -211,7 +211,8 @@
 
 	// Fetch all tasks to populate project dropdown and agent counts
 	// Fast task loader - no usage data, ~100ms (for reactive updates)
-	async function loadAllTasksFast() {
+	// Retries on failure since network may not be ready during page load
+	async function loadAllTasksFast(retries = 3) {
 		try {
 			const response = await fetch('/api/agents?full=true');
 			const data = await response.json();
@@ -225,12 +226,17 @@
 			}
 		} catch (error) {
 			console.error('Failed to load tasks (fast):', error);
-			allTasks = [];
+			if (retries > 0) {
+				setTimeout(() => loadAllTasksFast(retries - 1), 1000);
+			} else {
+				allTasks = [];
+			}
 		}
 	}
 
 	// Full task loader - includes usage data, ~2-4s (for initial load + background refresh)
-	async function loadAllTasks() {
+	// Retries on failure since network may not be ready during page load
+	async function loadAllTasks(retries = 3) {
 		try {
 			const response = await fetch('/api/agents?full=true&usage=true');
 			const data = await response.json();
@@ -259,7 +265,11 @@
 			costToday = totalCost;
 		} catch (error) {
 			console.error('Failed to load tasks:', error);
-			allTasks = [];
+			if (retries > 0) {
+				setTimeout(() => loadAllTasks(retries - 1), 1000);
+			} else {
+				allTasks = [];
+			}
 		}
 	}
 
@@ -336,7 +346,8 @@
 	}
 
 	// Fetch ready task count and list for Swarm button
-	async function loadReadyTaskCount() {
+	// Retries on failure since network may not be ready during page load
+	async function loadReadyTaskCount(retries = 3) {
 		try {
 			const response = await fetch('/api/tasks/ready');
 			const data = await response.json();
@@ -344,13 +355,18 @@
 			readyTasks = data.tasks || [];
 		} catch (error) {
 			console.error('Failed to fetch ready task count:', error);
-			readyTaskCount = 0;
-			readyTasks = [];
+			if (retries > 0) {
+				setTimeout(() => loadReadyTaskCount(retries - 1), 1000);
+			} else {
+				readyTaskCount = 0;
+				readyTasks = [];
+			}
 		}
 	}
 
 	// Fetch epics with ready children for Run Epic feature
-	async function loadEpicsWithReady() {
+	// Retries on failure since network may not be ready during page load
+	async function loadEpicsWithReady(retries = 3) {
 		try {
 			// Get all tasks and filter for open epics
 			const response = await fetch('/api/tasks?status=open');
@@ -383,7 +399,11 @@
 			epicsWithReady = epicsData.sort((a, b) => b.readyCount - a.readyCount);
 		} catch (error) {
 			console.error('Failed to fetch epics with ready:', error);
-			epicsWithReady = [];
+			if (retries > 0) {
+				setTimeout(() => loadEpicsWithReady(retries - 1), 1000);
+			} else {
+				epicsWithReady = [];
+			}
 		}
 	}
 
@@ -400,7 +420,8 @@
 	}
 
 	// Fetch visible projects from JAT config (with stats for sorting by activity)
-	async function loadConfigProjects() {
+	// Retries on failure since network may not be ready during page load
+	async function loadConfigProjects(retries = 3) {
 		try {
 			const response = await fetch('/api/projects?visible=true&stats=true');
 			const data = await response.json();
@@ -408,7 +429,12 @@
 			configProjects = (data.projects || []).map((p: { name: string }) => p.name);
 		} catch (error) {
 			console.error('Failed to fetch config projects:', error);
-			configProjects = [];
+			if (retries > 0) {
+				// Retry after a short delay (network may still be connecting)
+				setTimeout(() => loadConfigProjects(retries - 1), 1000);
+			} else {
+				configProjects = [];
+			}
 		}
 	}
 

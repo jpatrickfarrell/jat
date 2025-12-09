@@ -12,10 +12,10 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /** @type {import('./$types').RequestHandler} */
 export async function POST({ params, request }) {
@@ -32,67 +32,75 @@ export async function POST({ params, request }) {
 		const body = await request.json();
 		const { type = 'text', input = '' } = body;
 
-		let command;
+		// Build args array for execFile (avoids shell escaping issues entirely)
+		// Using execFile instead of exec means no shell interpretation of quotes, $, etc.
+		/** @type {string[]} */
+		let args;
 
 		switch (type) {
 			case 'enter':
 				// Send just Enter (accept highlighted option in Claude Code prompts)
-				command = `tmux send-keys -t "${sessionName}" Enter`;
+				args = ['send-keys', '-t', sessionName, 'Enter'];
 				break;
 
 			case 'down':
 				// Send Down arrow
-				command = `tmux send-keys -t "${sessionName}" Down`;
+				args = ['send-keys', '-t', sessionName, 'Down'];
 				break;
 
 			case 'up':
 				// Send Up arrow
-				command = `tmux send-keys -t "${sessionName}" Up`;
+				args = ['send-keys', '-t', sessionName, 'Up'];
 				break;
 
 			case 'escape':
 				// Send Escape key
-				command = `tmux send-keys -t "${sessionName}" Escape`;
+				args = ['send-keys', '-t', sessionName, 'Escape'];
 				break;
 
 			case 'ctrl-c':
 				// Send Ctrl+C (interrupt signal)
-				command = `tmux send-keys -t "${sessionName}" C-c`;
+				args = ['send-keys', '-t', sessionName, 'C-c'];
 				break;
 
 			case 'ctrl-d':
 				// Send Ctrl+D (EOF)
-				command = `tmux send-keys -t "${sessionName}" C-d`;
+				args = ['send-keys', '-t', sessionName, 'C-d'];
 				break;
 
 			case 'ctrl-u':
 				// Send Ctrl+U (clear line - for live streaming input)
-				command = `tmux send-keys -t "${sessionName}" C-u`;
+				args = ['send-keys', '-t', sessionName, 'C-u'];
 				break;
 
 			case 'tab':
 				// Send Tab key (for autocomplete in terminal)
-				command = `tmux send-keys -t "${sessionName}" Tab`;
+				args = ['send-keys', '-t', sessionName, 'Tab'];
 				break;
 
 			case 'raw':
 				// Send raw keys without Enter
-				// Escape: backslashes, quotes, $, and backticks (command substitution)
-				const escapedRaw = input.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`');
-				command = `tmux send-keys -t "${sessionName}" -- "${escapedRaw}"`;
+				// Using -l flag for literal mode (no key name interpretation)
+				// Using -- to stop option parsing (prevents input like "-a" being interpreted as a flag)
+				args = ['send-keys', '-t', sessionName, '-l', '--', input];
 				break;
 
 			case 'text':
 			default:
 				// Send text followed by Enter
-				// Escape: backslashes, quotes, $, and backticks (command substitution)
-				const escapedText = input.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`');
-				command = `tmux send-keys -t "${sessionName}" -- "${escapedText}" Enter`;
+				// Using -l flag for literal mode, then separate Enter key
+				// Using -- to stop option parsing (prevents input like "-a" being interpreted as a flag)
+				args = ['send-keys', '-t', sessionName, '-l', '--', input];
 				break;
 		}
 
 		try {
-			await execAsync(command);
+			await execFileAsync('tmux', args);
+
+			// For 'text' type, send Enter separately after the literal text
+			if (type === 'text' || type === undefined) {
+				await execFileAsync('tmux', ['send-keys', '-t', sessionName, 'Enter']);
+			}
 
 			return json({
 				success: true,

@@ -150,12 +150,52 @@ export async function POST({ request }) {
 			await execAsync(command);
 
 			// Wait for Claude to fully start, then send the initial prompt
-			// Claude Code needs ~5 seconds to initialize and show prompt
+			// Claude Code needs ~7 seconds to initialize and show prompt
 			if (initialPrompt) {
-				await new Promise(resolve => setTimeout(resolve, 5000));
-				// Escape special characters and send text+Enter as ONE command to avoid race conditions
+				await new Promise(resolve => setTimeout(resolve, 7000));
+
+				/**
+				 * Send the initial prompt with retry logic
+				 * Sometimes Claude isn't ready to accept input even after the wait,
+				 * so we verify the command executed and retry if needed.
+				 */
 				const escapedPrompt = initialPrompt.replace(/"/g, '\\"').replace(/\$/g, '\\$');
-				await execAsync(`tmux send-keys -t "${sessionName}" -- "${escapedPrompt}" Enter`);
+				const maxRetries = 3;
+				let commandSent = false;
+
+				for (let attempt = 1; attempt <= maxRetries && !commandSent; attempt++) {
+					try {
+						// Send text and Enter as ONE command to avoid race conditions
+						await execAsync(`tmux send-keys -t "${sessionName}" -- "${escapedPrompt}" Enter`);
+
+						// Wait a moment for the command to be processed
+						await new Promise(resolve => setTimeout(resolve, 1500));
+
+						// Check if the command was executed by looking for "is running" in output
+						const { stdout: paneOutput } = await execAsync(
+							`tmux capture-pane -t "${sessionName}" -p 2>/dev/null | tail -20`
+						);
+
+						if (paneOutput.includes('is running') || paneOutput.includes('STARTING')) {
+							commandSent = true;
+							console.log(`[sessions] Initial prompt sent successfully on attempt ${attempt}`);
+						} else if (attempt < maxRetries) {
+							// Command might not have executed - clear and resend
+							console.log(`[sessions] Attempt ${attempt}: Command may not have executed, retrying...`);
+							await execAsync(`tmux send-keys -t "${sessionName}" C-u`);
+							await new Promise(resolve => setTimeout(resolve, 500));
+						}
+					} catch (err) {
+						console.error(`[sessions] Attempt ${attempt} failed:`, err);
+						if (attempt < maxRetries) {
+							await new Promise(resolve => setTimeout(resolve, 1000));
+						}
+					}
+				}
+
+				if (!commandSent) {
+					console.warn(`[sessions] Initial prompt may not have been executed after ${maxRetries} attempts`);
+				}
 			}
 
 			return json({

@@ -187,17 +187,53 @@ export async function POST({ request }) {
 			? `/jat:start ${agentName} ${taskId}`  // Agent name + task (prevents duplicate agent)
 			: `/jat:start ${agentName}`;  // Planning mode - just register agent
 
-		await new Promise(resolve => setTimeout(resolve, 5000));
+		// Wait for Claude to initialize (7s to be safe - Claude can take a while to show prompt)
+		await new Promise(resolve => setTimeout(resolve, 7000));
 
-		try {
-			// Escape special characters for shell - match the pattern from /api/work/[sessionId]/input
-			const escapedPrompt = initialPrompt.replace(/"/g, '\\"').replace(/\$/g, '\\$');
-			// Send text and Enter as ONE command to avoid race conditions
-			// (Previously sent as two separate commands which caused Enter to be lost sometimes)
-			await execAsync(`tmux send-keys -t "${sessionName}" -- "${escapedPrompt}" Enter`);
-		} catch (err) {
-			// Non-fatal - session is created, prompt just failed
-			console.error('Failed to send initial prompt:', err);
+		/**
+		 * Send the initial prompt with retry logic
+		 * Sometimes Claude isn't ready to accept input even after the wait,
+		 * so we verify the command executed and retry if needed.
+		 */
+		const escapedPrompt = initialPrompt.replace(/"/g, '\\"').replace(/\$/g, '\\$');
+		const maxRetries = 3;
+		let commandSent = false;
+
+		for (let attempt = 1; attempt <= maxRetries && !commandSent; attempt++) {
+			try {
+				// Send text and Enter as ONE command to avoid race conditions
+				await execAsync(`tmux send-keys -t "${sessionName}" -- "${escapedPrompt}" Enter`);
+
+				// Wait a moment for the command to be processed
+				await new Promise(resolve => setTimeout(resolve, 1500));
+
+				// Check if the command was executed by looking for "is running" in output
+				// (Claude Code shows "jat:start is running…" when slash command executes)
+				const { stdout: paneOutput } = await execAsync(
+					`tmux capture-pane -t "${sessionName}" -p 2>/dev/null | tail -20`
+				);
+
+				if (paneOutput.includes('is running') || paneOutput.includes('STARTING')) {
+					commandSent = true;
+					console.log(`[spawn] Initial prompt sent successfully on attempt ${attempt}`);
+				} else if (attempt < maxRetries) {
+					// Command might not have executed - the text might be sitting in input buffer
+					// Clear and resend
+					console.log(`[spawn] Attempt ${attempt}: Command may not have executed, retrying...`);
+					await execAsync(`tmux send-keys -t "${sessionName}" C-u`);  // Clear line
+					await new Promise(resolve => setTimeout(resolve, 500));
+				}
+			} catch (err) {
+				// Non-fatal - session is created, prompt just failed
+				console.error(`[spawn] Attempt ${attempt} failed:`, err);
+				if (attempt < maxRetries) {
+					await new Promise(resolve => setTimeout(resolve, 1000));
+				}
+			}
+		}
+
+		if (!commandSent) {
+			console.warn(`[spawn] Initial prompt may not have been executed after ${maxRetries} attempts`);
 		}
 
 		// Step 4c: If imagePath provided, wait for agent to start working, then send the image

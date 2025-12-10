@@ -109,15 +109,50 @@ export async function POST({ params }) {
 			? `/jat:start ${agentName} ${currentTask.id}`
 			: `/jat:start ${agentName}`;
 
-		await new Promise(resolve => setTimeout(resolve, 5000));
+		// Wait for Claude to initialize (7s to be safe)
+		await new Promise(resolve => setTimeout(resolve, 7000));
 
-		try {
-			// Escape special characters and send text+Enter as ONE command to avoid race conditions
-			const escapedPrompt = initialPrompt.replace(/"/g, '\\"').replace(/\$/g, '\\$');
-			await execAsync(`tmux send-keys -t "${sessionId}" -- "${escapedPrompt}" Enter`);
-		} catch (err) {
-			// Non-fatal - session is created, prompt just failed
-			console.error('Failed to send initial prompt:', err);
+		/**
+		 * Send the initial prompt with retry logic
+		 * Sometimes Claude isn't ready to accept input even after the wait,
+		 * so we verify the command executed and retry if needed.
+		 */
+		const escapedPrompt = initialPrompt.replace(/"/g, '\\"').replace(/\$/g, '\\$');
+		const maxRetries = 3;
+		let commandSent = false;
+
+		for (let attempt = 1; attempt <= maxRetries && !commandSent; attempt++) {
+			try {
+				// Send text and Enter as ONE command to avoid race conditions
+				await execAsync(`tmux send-keys -t "${sessionId}" -- "${escapedPrompt}" Enter`);
+
+				// Wait a moment for the command to be processed
+				await new Promise(resolve => setTimeout(resolve, 1500));
+
+				// Check if the command was executed by looking for "is running" in output
+				const { stdout: paneOutput } = await execAsync(
+					`tmux capture-pane -t "${sessionId}" -p 2>/dev/null | tail -20`
+				);
+
+				if (paneOutput.includes('is running') || paneOutput.includes('STARTING')) {
+					commandSent = true;
+					console.log(`[restart] Initial prompt sent successfully on attempt ${attempt}`);
+				} else if (attempt < maxRetries) {
+					// Command might not have executed - clear and resend
+					console.log(`[restart] Attempt ${attempt}: Command may not have executed, retrying...`);
+					await execAsync(`tmux send-keys -t "${sessionId}" C-u`);
+					await new Promise(resolve => setTimeout(resolve, 500));
+				}
+			} catch (err) {
+				console.error(`[restart] Attempt ${attempt} failed:`, err);
+				if (attempt < maxRetries) {
+					await new Promise(resolve => setTimeout(resolve, 1000));
+				}
+			}
+		}
+
+		if (!commandSent) {
+			console.warn(`[restart] Initial prompt may not have been executed after ${maxRetries} attempts`);
 		}
 
 		return json({

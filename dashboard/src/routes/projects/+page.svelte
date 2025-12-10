@@ -688,8 +688,6 @@
 					class:ring-2={isFocused}
 					class:ring-primary={isFocused}
 					class:ring-inset={isFocused}
-					draggable="true"
-					ondragstart={(e) => handleDragStart(e, project)}
 					ondragover={(e) => handleDragOver(e, project)}
 					ondragleave={handleDragLeave}
 					ondrop={(e) => handleDrop(e, project)}
@@ -697,12 +695,25 @@
 				>
 					<!-- Project header -->
 					<div
-						class="w-full flex items-center gap-3 px-4 py-2 hover:bg-base-200/50 transition-colors cursor-grab active:cursor-grabbing bg-base-100 z-20 sticky top-0 shadow-sm {isDragOver ? 'bg-primary/10' : ''}"
+						class="w-full flex items-center gap-3 px-4 py-2 hover:bg-base-200/50 transition-colors bg-base-100 z-20 sticky top-0 shadow-sm {isDragOver ? 'bg-primary/10' : ''}"
 					>
-						<!-- Drag handle -->
-						<svg class="w-4 h-4 text-base-content/30 hover:text-base-content/60 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M4 8h16M4 16h16" />
-						</svg>
+						<!-- Drag handle - only this element initiates drag -->
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div
+							class="p-1 -m-1 cursor-grab active:cursor-grabbing flex-shrink-0"
+							draggable="true"
+							ondragstart={(e) => handleDragStart(e, project)}
+						>
+							<svg
+								class="w-4 h-4 text-base-content/30 hover:text-base-content/60 pointer-events-none"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke="currentColor"
+								stroke-width="2"
+							>
+								<path stroke-linecap="round" stroke-linejoin="round" d="M4 8h16M4 16h16" />
+							</svg>
+						</div>
 
 						<!-- Collapse button -->
 						<button

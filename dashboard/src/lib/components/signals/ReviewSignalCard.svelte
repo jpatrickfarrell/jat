@@ -11,6 +11,7 @@
 	 */
 
 	import type { ReviewSignal, FileModification, KeyDecision, CommitInfo } from '$lib/types/richSignals';
+	import { openInVSCode, openDiffInVSCode, getFileLink, getDiffLink } from '$lib/utils/fileLinks';
 
 	interface Props {
 		/** The rich review signal data */
@@ -111,18 +112,36 @@
 		return sha.slice(0, 7);
 	}
 
-	// Handle file click
+	// Handle file click - opens in VS Code by default
 	function handleFileClick(file: FileModification) {
 		if (onFileClick) {
 			onFileClick(file.path);
+		} else {
+			// Default: open in VS Code
+			openInVSCode(file.path);
 		}
 	}
 
-	// Handle diff click
+	// Handle diff click - opens diff in VS Code by default
 	function handleDiffClick(file: FileModification) {
 		if (onDiffClick) {
 			onDiffClick(file.path, file.changeType);
+		} else {
+			// Default: open diff in VS Code
+			openDiffInVSCode(file.path);
 		}
+	}
+
+	// Get tooltip for file link
+	function getFileTooltip(file: FileModification): string {
+		const link = getFileLink(file.path);
+		return `${link.description} in VS Code`;
+	}
+
+	// Get tooltip for diff link
+	function getDiffTooltip(file: FileModification): string {
+		const link = getDiffLink(file.path);
+		return link.description;
 	}
 
 	// Toggle review focus item
@@ -345,7 +364,7 @@
 									onclick={() => handleFileClick(file)}
 									class="flex-1 text-left truncate hover:opacity-80 transition-opacity cursor-pointer font-mono"
 									style="color: oklch(0.88 0.08 200);"
-									title="Open {file.path}"
+									title={getFileTooltip(file)}
 								>
 									{file.path}
 								</button>
@@ -355,20 +374,18 @@
 									{formatLinesChanged(file.linesAdded, file.linesRemoved)}
 								</span>
 
-								<!-- Diff link -->
-								{#if onDiffClick}
-									<button
-										type="button"
-										onclick={() => handleDiffClick(file)}
-										class="flex-shrink-0 px-1.5 py-0.5 rounded hover:opacity-80 transition-opacity"
-										style="background: oklch(0.28 0.06 250); color: oklch(0.80 0.10 250); border: 1px solid oklch(0.38 0.08 250);"
-										title="View diff for {file.path}"
-									>
-										<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-										</svg>
-									</button>
-								{/if}
+								<!-- Diff link (always shown - opens in VS Code by default) -->
+								<button
+									type="button"
+									onclick={() => handleDiffClick(file)}
+									class="flex-shrink-0 px-1.5 py-0.5 rounded hover:opacity-80 transition-opacity"
+									style="background: oklch(0.28 0.06 250); color: oklch(0.80 0.10 250); border: 1px solid oklch(0.38 0.08 250);"
+									title={getDiffTooltip(file)}
+								>
+									<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+									</svg>
+								</button>
 							</div>
 						{/each}
 					</div>

@@ -10,6 +10,7 @@
 	 */
 
 	import type { WorkingSignal } from '$lib/types/richSignals';
+	import { openInVSCode, isGlobPattern, getFileLink } from '$lib/utils/fileLinks';
 
 	interface Props {
 		/** The rich working signal data */
@@ -20,6 +21,12 @@
 		onFileClick?: (filePath: string) => void;
 		/** Callback when baseline commit is clicked (for rollback) */
 		onRollbackClick?: (commit: string) => void;
+		/** Callback when interrupt (Ctrl+C) is clicked - cancels current operation */
+		onInterrupt?: () => Promise<void>;
+		/** Callback when pause is clicked - runs /jat:pause to pause work */
+		onPause?: () => Promise<void>;
+		/** Whether an action is being submitted */
+		submitting?: boolean;
 		/** Whether to show in compact mode (for inline/timeline display) */
 		compact?: boolean;
 		/** Additional CSS class */
@@ -31,9 +38,24 @@
 		onTaskClick,
 		onFileClick,
 		onRollbackClick,
+		onInterrupt,
+		onPause,
+		submitting = false,
 		compact = false,
 		class: className = ''
 	}: Props = $props();
+
+	// Handle interrupt action (Ctrl+C)
+	async function handleInterrupt() {
+		if (submitting || !onInterrupt) return;
+		await onInterrupt();
+	}
+
+	// Handle pause action
+	async function handlePause() {
+		if (submitting || !onPause) return;
+		await onPause();
+	}
 
 	// Whether approach section is expanded (default collapsed in compact mode)
 	let approachExpanded = $state(!compact);
@@ -85,11 +107,23 @@
 		return sha.slice(0, 7);
 	}
 
-	// Handle file click
+	// Handle file click - opens in VS Code by default
 	function handleFileClick(filePath: string) {
 		if (onFileClick) {
 			onFileClick(filePath);
+		} else if (!isGlobPattern(filePath)) {
+			// Default: open in VS Code (skip glob patterns)
+			openInVSCode(filePath);
 		}
+	}
+
+	// Get tooltip for file link
+	function getFileTooltip(filePath: string): string {
+		if (isGlobPattern(filePath)) {
+			return `Pattern: ${filePath}`;
+		}
+		const link = getFileLink(filePath);
+		return link.description;
 	}
 
 	// Toggle approach section
@@ -249,20 +283,29 @@
 					</div>
 					<div class="flex flex-wrap gap-1">
 						{#each signal.expectedFiles as file}
+							{@const isGlob = isGlobPattern(file)}
 							<button
 								type="button"
 								onclick={() => handleFileClick(file)}
-								class="text-[11px] px-2 py-0.5 rounded hover:opacity-80 transition-opacity cursor-pointer flex items-center gap-1"
+								class="text-[11px] px-2 py-0.5 rounded transition-opacity flex items-center gap-1"
+								class:hover:opacity-80={!isGlob}
+								class:cursor-pointer={!isGlob}
+								class:cursor-default={isGlob}
+								class:opacity-70={isGlob}
 								style="background: oklch(0.25 0.06 200); color: oklch(0.88 0.10 200); border: 1px solid oklch(0.38 0.10 200);"
-								title="Open {file}"
+								title={getFileTooltip(file)}
 							>
-								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
-									/>
-								</svg>
+								{#if isGlob}
+									<!-- Glob pattern icon -->
+									<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776" />
+									</svg>
+								{:else}
+									<!-- File icon with VS Code indicator -->
+									<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+									</svg>
+								{/if}
 								{file}
 							</button>
 						{/each}
@@ -340,6 +383,50 @@
 							title="Rollback to {formatCommit(signal.baselineCommit)}"
 						>
 							Rollback
+						</button>
+					{/if}
+				</div>
+			{/if}
+
+			<!-- Action Buttons -->
+			{#if onInterrupt || onPause}
+				<div class="flex gap-2 pt-2 border-t" style="border-color: oklch(0.35 0.06 85);">
+					{#if onInterrupt}
+						<button
+							type="button"
+							onclick={handleInterrupt}
+							disabled={submitting}
+							class="btn btn-sm flex-1 gap-1"
+							style="background: oklch(0.50 0.18 25); color: oklch(0.98 0.01 250); border: none;"
+							title="Send Ctrl+C to interrupt current operation"
+						>
+							{#if submitting}
+								<span class="loading loading-spinner loading-xs"></span>
+							{:else}
+								<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+								</svg>
+							{/if}
+							Interrupt
+						</button>
+					{/if}
+					{#if onPause}
+						<button
+							type="button"
+							onclick={handlePause}
+							disabled={submitting}
+							class="btn btn-sm flex-1 gap-1"
+							style="background: oklch(0.50 0.15 45); color: oklch(0.98 0.01 250); border: none;"
+							title="Pause work on this task"
+						>
+							{#if submitting}
+								<span class="loading loading-spinner loading-xs"></span>
+							{:else}
+								<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+								</svg>
+							{/if}
+							Pause
 						</button>
 					{/if}
 				</div>

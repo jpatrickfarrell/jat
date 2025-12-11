@@ -68,6 +68,40 @@
 		}>;
 		/** Timestamp when signal suggested tasks were last updated */
 		_signalSuggestedTasksTimestamp?: number;
+		/** Completion bundle from jat-signal complete (via SSE session-complete event) */
+		_completionBundle?: {
+			taskId: string;
+			agentName: string;
+			summary: string[];
+			quality: {
+				tests: 'passing' | 'failing' | 'none' | 'skipped';
+				build: 'clean' | 'warnings' | 'errors';
+				preExisting?: string;
+			};
+			humanActions?: Array<{
+				title: string;
+				description?: string;
+				items?: string[];
+			}>;
+			suggestedTasks?: Array<{
+				id?: string;
+				type: string;
+				title: string;
+				description: string;
+				priority: number;
+				reason?: string;
+				project?: string;
+				labels?: string;
+				depends_on?: string[];
+			}>;
+			crossAgentIntel?: {
+				files?: string[];
+				patterns?: string[];
+				gotchas?: string[];
+			};
+		};
+		/** Timestamp when completion bundle was received */
+		_completionBundleTimestamp?: number;
 	}
 
 	interface Props {
@@ -306,7 +340,7 @@
 							tokens={session.tokens}
 							cost={session.cost}
 							sparklineData={session.sparklineData}
-							contextPercent={session.contextPercent}
+							contextPercent={session.contextPercent ?? undefined}
 							created={session.created}
 							attached={session.attached}
 							sseState={session._sseState}

@@ -136,7 +136,7 @@
 		let costWeek = 0;
 		let activeAgents = 0;
 
-		agentData.forEach(agent => {
+		agentData.forEach((agent: { active?: boolean; usage?: { today?: { total_tokens?: number; cost?: number }; week?: { total_tokens?: number; cost?: number } } }) => {
 			if (agent.active) {
 				activeAgents++;
 			}

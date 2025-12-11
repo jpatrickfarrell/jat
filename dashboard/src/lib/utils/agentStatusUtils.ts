@@ -82,7 +82,7 @@ export function computeAgentStatus(agent: AgentStatusInput): AgentStatus {
 
 	// Priority 1.5: CONNECTING - Session exists but still initializing
 	// Session was created recently (<10 min) but no meaningful activity yet
-	if (agent.session_created_ts && agent.hasSession !== false) {
+	if (agent.session_created_ts && agent.hasSession) {
 		const sessionAge = Date.now() - agent.session_created_ts;
 		const CONNECTING_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
 

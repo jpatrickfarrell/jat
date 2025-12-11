@@ -29,6 +29,8 @@
 		color?: string;
 		/** Whether to show tooltip on hover */
 		showTooltip?: boolean;
+		/** Whether to animate bars on entry (currently unused, kept for compatibility) */
+		animateEntry?: boolean;
 	}
 
 	let {

@@ -15,6 +15,7 @@
 	 * @property {string} project
 	 * @property {number} priority
 	 * @property {string} status
+	 * @property {string[]} [labels]
 	 */
 
 	// Props
@@ -37,10 +38,12 @@
 	let lastUpdated = $state(null);
 
 	// Drawer state (replacing modal)
-	let selectedTaskId = $state(null);
+	/** @type {string|null} */
+	let selectedTaskId = $state(/** @type {string|null} */ (null));
 	let drawerOpen = $state(false);
 
 	// Priority badge classes - using DaisyUI semantic colors
+	/** @type {Record<number, string>} */
 	const priorityClasses = {
 		0: 'badge-error',  // P0 = Critical = Red
 		1: 'badge-warning', // P1 = High = Orange/Yellow
@@ -49,6 +52,7 @@
 		4: 'badge-ghost'    // P4 = Lowest = Gray
 	};
 
+	/** @type {Record<number, string>} */
 	const priorityLabels = {
 		0: 'P0',
 		1: 'P1',

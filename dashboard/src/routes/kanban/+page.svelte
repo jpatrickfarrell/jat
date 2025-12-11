@@ -87,11 +87,11 @@
 
 	// Initial fetch on mount - SSE handles all real-time updates
 	onMount(async () => {
-		// Phase 1: Fast initial fetch
-		await fetchSessions(100);
+		// Phase 1: Fast initial fetch (no usage data)
+		await fetchSessions();
 
 		// Phase 2: Lazy load usage data once (after 5s delay)
-		setTimeout(() => fetchSessionUsage(100), 5000);
+		setTimeout(() => fetchSessionUsage(), 5000);
 	});
 
 	// No polling needed - SSE via sessionEvents provides real-time updates

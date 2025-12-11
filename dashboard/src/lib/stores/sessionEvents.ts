@@ -51,9 +51,11 @@ export interface SuggestedTask {
 
 // Human action interface (from jat-signal action type)
 export interface HumanAction {
-	action?: string;
-	title?: string;
+	title: string;
 	description?: string;
+	items?: string[];
+	// Legacy fields still supported in signal events
+	action?: string;
 	message?: string;
 	timestamp?: string;
 }

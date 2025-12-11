@@ -27,7 +27,7 @@
 		agents?: Agent[];
 		spawning?: boolean;
 		hasBlockers?: boolean;
-		blockingReason?: string;
+		blockingReason?: string | null;
 		onspawn?: (taskId: string) => Promise<boolean>;
 		onrelease?: (taskId: string) => Promise<boolean>;
 		onattach?: (sessionName: string) => void;

@@ -46,19 +46,21 @@
 		iconColor: string; // oklch color for icon
 	}
 
-	// Type definitions
+	// Type definitions - aligned with api.types.Task
 	interface Task {
 		id: string;
-		title?: string;
-		description?: string;
-		status: string;
+		title: string;
+		description: string;
+		status: 'open' | 'in_progress' | 'blocked' | 'closed';
 		priority: number;
-		issue_type?: string;
+		issue_type: 'task' | 'bug' | 'feature' | 'epic' | 'chore';
+		project: string;
 		assignee?: string;
-		labels?: string[];
-		depends_on?: Array<{ id: string; status?: string; title?: string; priority?: number; issue_type?: string; assignee?: string }>;
-		created_at?: string;
-		updated_at?: string;
+		labels: string[];
+		depends_on?: Array<{ id: string; title: string; status: string; priority: number }>;
+		blocked_by?: Array<{ id: string; title: string; status: string; priority: number }>;
+		created_ts?: string;
+		updated_ts?: string;
 	}
 
 	interface Agent {
@@ -407,11 +409,11 @@
 			const exitTasksWithStatus = removedTasks.map(t => {
 				const currentTask = allTasksMap.get(t.id);
 				if (currentTask && currentTask.status === 'closed') {
-					return { ...t, status: 'closed' };
+					return { ...t, status: 'closed' as const };
 				}
 				// Also check closedIds in case allTasks isn't updated yet
 				if (closedIds.includes(t.id)) {
-					return { ...t, status: 'closed' };
+					return { ...t, status: 'closed' as const };
 				}
 				return t;
 			});
@@ -789,9 +791,9 @@
 			const bPriority = b.priority ?? 99;
 			if (aPriority !== bPriority) return aPriority - bPriority;
 
-			// Fifth: sort by created_at (oldest first to work on dependencies in order)
-			const aCreated = a.created_at || '';
-			const bCreated = b.created_at || '';
+			// Fifth: sort by created_ts (oldest first to work on dependencies in order)
+			const aCreated = a.created_ts || '';
+			const bCreated = b.created_ts || '';
 			return aCreated.localeCompare(bCreated);
 		});
 	}
@@ -846,8 +848,8 @@
 					bVal = b.assignee || '';
 					break;
 				case 'updated':
-					aVal = a.updated_at || '';
-					bVal = b.updated_at || '';
+					aVal = a.updated_ts || '';
+					bVal = b.updated_ts || '';
 					break;
 				default:
 					return 0;
@@ -2812,8 +2814,8 @@
 
 												<!-- Age -->
 												<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
-													<span class="text-xs font-mono {getAgeColorClass(task.updated_at)}" title={formatFullDate(task.updated_at)}>
-														{formatRelativeTime(task.updated_at)}
+													<span class="text-xs font-mono {getAgeColorClass(task.updated_ts)}" title={formatFullDate(task.updated_ts)}>
+														{formatRelativeTime(task.updated_ts)}
 													</span>
 												</td>
 											</tr>
@@ -3028,7 +3030,7 @@
 									{@const unresolvedBlockers = task.depends_on?.filter(d => d.status !== 'closed') || []}
 									{@const allTasksList = allTasks.length > 0 ? allTasks : tasks}
 									{@const blockedTasks = allTasksList.filter(t => t.depends_on?.some(d => d.id === task.id) && t.status !== 'closed')}
-									{@const elapsed = task.status === 'in_progress' ? getElapsedTime(task.updated_at) : null}
+									{@const elapsed = task.status === 'in_progress' ? getElapsedTime(task.updated_ts) : null}
 									{@const fireScale = elapsed ? getFireScale(elapsed.minutes) : 1}
 									{@const hasRowGradient = isCompletedByActiveSession || dragOverTask === task.id || selectedTasks.has(task.id) || isHuman || taskIsActive}
 									{@const recommendation = recommendedTasks.get(task.id)}
@@ -3087,7 +3089,6 @@
 													size="xs"
 													showType={false}
 													showAssignee={false}
-													{elapsed}
 													copyOnly
 													blockedBy={unresolvedBlockers}
 													blocks={blockedTasks}
@@ -3225,8 +3226,8 @@
 										{/if}
 									</td>
 									<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
-										<span class="text-xs font-mono {getAgeColorClass(task.updated_at)}" title={formatFullDate(task.updated_at)}>
-											{formatRelativeTime(task.updated_at)}
+										<span class="text-xs font-mono {getAgeColorClass(task.updated_ts)}" title={formatFullDate(task.updated_ts)}>
+											{formatRelativeTime(task.updated_ts)}
 										</span>
 									</td>
 								</tr>

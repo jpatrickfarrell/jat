@@ -13,19 +13,21 @@
 	import { onMount, onDestroy } from 'svelte';
 	import TaskTable from './TaskTable.svelte';
 
-	// Define types locally to match TaskTable's expectations
+	// Define types locally to match TaskTable's expectations (aligned with api.types.Task)
 	interface Task {
 		id: string;
-		title?: string;
-		description?: string;
-		status: string;
+		title: string;
+		description: string;
+		status: 'open' | 'in_progress' | 'blocked' | 'closed';
 		priority: number;
-		issue_type?: string;
+		issue_type: 'task' | 'bug' | 'feature' | 'epic' | 'chore';
+		project: string;
 		assignee?: string;
-		labels?: string[];
-		depends_on?: Array<{ id: string; status?: string; title?: string; priority?: number; issue_type?: string; assignee?: string }>;
-		created_at?: string;
-		updated_at?: string;
+		labels: string[];
+		depends_on?: Array<{ id: string; title: string; status: string; priority: number }>;
+		blocked_by?: Array<{ id: string; title: string; status: string; priority: number }>;
+		created_ts?: string;
+		updated_ts?: string;
 	}
 
 	interface Agent {

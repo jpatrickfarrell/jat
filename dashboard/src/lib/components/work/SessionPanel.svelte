@@ -57,13 +57,21 @@
 		depends_on?: string[];
 	}
 
-	// Human action interface (from jat-signal action type)
-	interface HumanAction {
+	// Human action interface for completion bundle (title required)
+	interface CompletionHumanAction {
+		title: string;
+		description?: string;
+		items?: string[];
+	}
+
+	// Human action interface for signal events (title optional for backwards compat)
+	interface SignalAction {
 		action?: string;
 		title?: string;
 		description?: string;
 		message?: string;
 		timestamp?: string;
+		items?: string[];
 	}
 
 	// Quality signals from completed task
@@ -86,7 +94,7 @@
 		agentName: string;
 		summary: string[];
 		quality: QualitySignals;
-		humanActions?: HumanAction[];
+		humanActions?: CompletionHumanAction[];
 		suggestedTasks?: SuggestedTask[];
 		crossAgentIntel?: CrossAgentIntel;
 	}
@@ -113,7 +121,7 @@
 		/** Timestamp when signal suggested tasks were last updated */
 		_signalSuggestedTasksTimestamp?: number;
 		/** Human action from jat-signal (via SSE session-signal event) */
-		_signalAction?: HumanAction;
+		_signalAction?: SignalAction;
 		/** Timestamp when signal action was last updated */
 		_signalActionTimestamp?: number;
 		/** Completion bundle from jat-signal complete (via SSE session-complete event) */
@@ -462,14 +470,12 @@
 								tokens={session.tokens}
 								cost={session.cost}
 								sparklineData={session.sparklineData}
-								contextPercent={session.contextPercent}
+								contextPercent={session.contextPercent ?? undefined}
 								startTime={session.created ? new Date(session.created) : null}
 								sseState={session._sseState}
 								sseStateTimestamp={session._sseStateTimestamp}
 								signalSuggestedTasks={session._signalSuggestedTasks}
 								signalSuggestedTasksTimestamp={session._signalSuggestedTasksTimestamp}
-								signalAction={session._signalAction}
-								signalActionTimestamp={session._signalActionTimestamp}
 								completionBundle={session._completionBundle}
 								completionBundleTimestamp={session._completionBundleTimestamp}
 								onKillSession={createKillHandler(session.sessionName)}

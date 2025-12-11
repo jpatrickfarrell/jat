@@ -28,10 +28,14 @@
 	interface Task {
 		id: string;
 		title: string;
-		status?: string;
+		status: string;  // required for TaskIdBadge
 		priority?: number;
 		issue_type?: string;
 		project?: string;
+		description?: string;
+		labels?: string[];
+		assignee?: string;
+		updated_at?: string;
 	}
 	let searchMode = $state<'actions' | 'tasks'>('actions'); // 'actions' = command palette, 'tasks' = task search
 	let tasks = $state<Task[]>([]);

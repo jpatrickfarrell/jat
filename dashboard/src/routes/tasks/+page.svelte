@@ -511,7 +511,7 @@
 
 		// Phase 1: Fast initial load (no usage data)
 		fetchTaskData();
-		await fetchSessions(100); // Initial session fetch - SSE handles subsequent updates
+		await fetchSessions(); // Initial session fetch - SSE handles subsequent updates
 		updateContainerHeight();
 		window.addEventListener('resize', updateContainerHeight);
 		window.addEventListener('keydown', handleKeydown);

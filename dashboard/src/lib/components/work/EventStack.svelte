@@ -77,7 +77,12 @@
 	$effect(() => {
 		if (autoExpand && events.length > 0) {
 			const latestEvent = events[0];
-			if (latestEvent?.type === 'complete' || latestEvent?.type === 'tasks' || latestEvent?.state === 'completed') {
+			// Check both new format (type=completed) and legacy (state=completed)
+			const isCompletion = latestEvent?.type === 'complete' ||
+				latestEvent?.type === 'completed' ||
+				latestEvent?.type === 'tasks' ||
+				latestEvent?.state === 'completed';
+			if (isCompletion) {
 				isExpanded = true;
 			}
 		}
@@ -306,6 +311,11 @@
 	};
 
 	function getEventStyle(event: TimelineEvent) {
+		// New format: type IS the signal type (e.g., "working", "idle")
+		if (event.type && stateStyles[event.type]) {
+			return stateStyles[event.type];
+		}
+		// Legacy format: type="state" with separate state field
 		if (event.state && stateStyles[event.state]) {
 			return stateStyles[event.state];
 		}
@@ -349,17 +359,14 @@
 	}
 
 	function getEventLabel(event: TimelineEvent): string {
-		if (event.state) {
-			const label = event.state.toUpperCase().replace('_', ' ');
-			if (event.task_id) {
-				return `${label} ${event.task_id}`;
-			}
-			return label;
+		// Determine the signal type - in new format, type IS the signal type
+		const signalType = event.state || event.type;
+		const label = signalType.toUpperCase().replace('_', ' ');
+
+		if (event.task_id) {
+			return `${label} ${event.task_id}`;
 		}
-		if (event.type === 'complete') {
-			return 'COMPLETE';
-		}
-		return event.type.toUpperCase();
+		return label;
 	}
 
 	async function fetchTimeline() {
@@ -372,7 +379,10 @@
 				throw new Error(`Failed to fetch timeline: ${response.status}`);
 			}
 			const data = await response.json();
-			const newEvents: TimelineEvent[] = data.events || [];
+			// Filter out malformed events (missing type or timestamp)
+			const newEvents: TimelineEvent[] = (data.events || []).filter(
+				(e: TimelineEvent) => e.type && e.timestamp
+			);
 
 			// Detect new events that weren't in the previous list
 			if (events.length > 0 && newEvents.length > previousEventCount) {

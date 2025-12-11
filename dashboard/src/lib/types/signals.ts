@@ -164,3 +164,61 @@ export interface CompletionBundle {
 	/** Intel for other agents working in the codebase */
 	crossAgentIntel?: CrossAgentIntel;
 }
+
+// =============================================================================
+// IDLE SIGNAL TYPES
+// =============================================================================
+
+/**
+ * Session summary for idle signal.
+ *
+ * Provides a summary of what the agent accomplished during the session,
+ * useful for dashboard display and analytics.
+ */
+export interface IdleSessionSummary {
+	/** Task IDs completed during this session */
+	tasksCompleted?: string[];
+	/** Total minutes worked in this session */
+	totalDuration?: number;
+	/** Total API tokens used in this session */
+	tokensUsed?: number;
+	/** Total files modified in this session */
+	filesModified?: number;
+}
+
+/**
+ * Suggested next task for idle signal.
+ *
+ * When an agent becomes idle, it can recommend the next task to work on
+ * based on its understanding of the codebase and task dependencies.
+ */
+export interface SuggestedNextTask {
+	/** Task ID to work on next */
+	taskId: string;
+	/** Task title */
+	title: string;
+	/** Why this task is recommended next */
+	reason: string;
+}
+
+/**
+ * Enhanced idle signal with session summary and recommendations.
+ *
+ * Agents emit this when they become idle (no active task):
+ *   jat-signal idle '{"readyForWork":true,"sessionSummary":{...},"suggestedNextTask":{...}}'
+ *
+ * The dashboard uses this to show:
+ * - Whether the agent can accept new work
+ * - What the agent accomplished in the session
+ * - What task the agent recommends picking up next
+ */
+export interface IdleSignal {
+	/** Whether agent can accept new work */
+	readyForWork: boolean;
+	/** Summary of what was accomplished in this session */
+	sessionSummary?: IdleSessionSummary;
+	/** Recommended next task to work on */
+	suggestedNextTask?: SuggestedNextTask;
+	/** If not ready, explanation of why (e.g., "Waiting for PR review") */
+	blockedReason?: string;
+}

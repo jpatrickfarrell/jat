@@ -205,7 +205,20 @@ case "$SIGNAL_TYPE" in
         require_json "idle" "$SIGNAL_DATA"
         validate_payload "idle" "$SIGNAL_DATA"
         READY=$(echo "$SIGNAL_DATA" | jq -r '.readyForWork // true')
-        echo "Signal: idle (ready: ${READY})"
+        TASKS_COMPLETED=$(echo "$SIGNAL_DATA" | jq -r '.sessionSummary.tasksCompleted // [] | length')
+        SUGGESTED=$(echo "$SIGNAL_DATA" | jq -r '.suggestedNextTask.taskId // ""')
+        BLOCKED=$(echo "$SIGNAL_DATA" | jq -r '.blockedReason // ""')
+        if [[ -n "$BLOCKED" ]]; then
+            echo "Signal: idle (ready: ${READY}, blocked: ${BLOCKED})"
+        elif [[ "$TASKS_COMPLETED" -gt 0 ]] && [[ -n "$SUGGESTED" ]]; then
+            echo "Signal: idle (ready: ${READY}, completed: ${TASKS_COMPLETED}, next: ${SUGGESTED})"
+        elif [[ "$TASKS_COMPLETED" -gt 0 ]]; then
+            echo "Signal: idle (ready: ${READY}, completed: ${TASKS_COMPLETED} tasks)"
+        elif [[ -n "$SUGGESTED" ]]; then
+            echo "Signal: idle (ready: ${READY}, next: ${SUGGESTED})"
+        else
+            echo "Signal: idle (ready: ${READY})"
+        fi
         echo "[JAT-SIGNAL:idle] $SIGNAL_DATA"
         ;;
 

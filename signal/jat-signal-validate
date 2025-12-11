@@ -666,17 +666,61 @@ validate_idle() {
     fi
 
     # Required: readyForWork (boolean)
-    if echo "$payload" | jq -e 'has("readyForWork")' >/dev/null 2>&1; then
-        if ! echo "$payload" | jq -e '.readyForWork | type == "boolean"' >/dev/null 2>&1; then
-            echo "Error: idle.readyForWork must be a boolean" >&2
-            return 1
-        fi
+    if ! echo "$payload" | jq -e 'has("readyForWork")' >/dev/null 2>&1; then
+        echo "Error: idle signal missing required field 'readyForWork'" >&2
+        return 1
+    fi
+    if ! echo "$payload" | jq -e '.readyForWork | type == "boolean"' >/dev/null 2>&1; then
+        echo "Error: idle.readyForWork must be a boolean" >&2
+        return 1
     fi
 
     # Validate sessionSummary if present
     if echo "$payload" | jq -e 'has("sessionSummary")' >/dev/null 2>&1; then
         if ! echo "$payload" | jq -e '.sessionSummary | type == "object"' >/dev/null 2>&1; then
             echo "Error: idle.sessionSummary must be an object" >&2
+            return 1
+        fi
+
+        local session_summary
+        session_summary=$(echo "$payload" | jq '.sessionSummary')
+
+        # Validate tasksCompleted is array of strings if present
+        if echo "$session_summary" | jq -e 'has("tasksCompleted")' >/dev/null 2>&1; then
+            if ! echo "$session_summary" | jq -e '.tasksCompleted | type == "array"' >/dev/null 2>&1; then
+                echo "Error: idle.sessionSummary.tasksCompleted must be an array" >&2
+                return 1
+            fi
+            if ! echo "$session_summary" | jq -e '.tasksCompleted | all(type == "string")' >/dev/null 2>&1; then
+                echo "Error: idle.sessionSummary.tasksCompleted must contain only strings" >&2
+                return 1
+            fi
+        fi
+
+        # Validate numeric fields if present
+        local total_duration tokens_used files_modified
+        total_duration=$(echo "$session_summary" | jq '.totalDuration // null')
+        tokens_used=$(echo "$session_summary" | jq '.tokensUsed // null')
+        files_modified=$(echo "$session_summary" | jq '.filesModified // null')
+
+        if [[ "$total_duration" != "null" ]] && ! echo "$total_duration" | grep -qE '^[0-9]+$'; then
+            echo "Error: idle.sessionSummary.totalDuration must be a non-negative integer" >&2
+            return 1
+        fi
+        if [[ "$tokens_used" != "null" ]] && ! echo "$tokens_used" | grep -qE '^[0-9]+$'; then
+            echo "Error: idle.sessionSummary.tokensUsed must be a non-negative integer" >&2
+            return 1
+        fi
+        if [[ "$files_modified" != "null" ]] && ! echo "$files_modified" | grep -qE '^[0-9]+$'; then
+            echo "Error: idle.sessionSummary.filesModified must be a non-negative integer" >&2
+            return 1
+        fi
+
+        # Check for unknown fields in sessionSummary
+        local unknown
+        unknown=$(echo "$session_summary" | jq -r 'keys - ["tasksCompleted","totalDuration","tokensUsed","filesModified"] | .[0] // ""')
+        if [[ -n "$unknown" ]]; then
+            echo "Error: idle.sessionSummary has unknown field '$unknown'" >&2
             return 1
         fi
     fi
@@ -687,6 +731,67 @@ validate_idle() {
             echo "Error: idle.suggestedNextTask must be an object" >&2
             return 1
         fi
+
+        local suggested_next
+        suggested_next=$(echo "$payload" | jq '.suggestedNextTask')
+
+        # Required fields: taskId, title, reason
+        if ! echo "$suggested_next" | jq -e 'has("taskId")' >/dev/null 2>&1; then
+            echo "Error: idle.suggestedNextTask missing required field 'taskId'" >&2
+            return 1
+        fi
+        local task_id
+        task_id=$(echo "$suggested_next" | jq -r '.taskId // ""')
+        if [[ -z "$task_id" ]]; then
+            echo "Error: idle.suggestedNextTask.taskId cannot be empty" >&2
+            return 1
+        fi
+
+        if ! echo "$suggested_next" | jq -e 'has("title")' >/dev/null 2>&1; then
+            echo "Error: idle.suggestedNextTask missing required field 'title'" >&2
+            return 1
+        fi
+        local title
+        title=$(echo "$suggested_next" | jq -r '.title // ""')
+        if [[ -z "$title" ]]; then
+            echo "Error: idle.suggestedNextTask.title cannot be empty" >&2
+            return 1
+        fi
+
+        if ! echo "$suggested_next" | jq -e 'has("reason")' >/dev/null 2>&1; then
+            echo "Error: idle.suggestedNextTask missing required field 'reason'" >&2
+            return 1
+        fi
+        local reason
+        reason=$(echo "$suggested_next" | jq -r '.reason // ""')
+        if [[ -z "$reason" ]]; then
+            echo "Error: idle.suggestedNextTask.reason cannot be empty" >&2
+            return 1
+        fi
+
+        # Check for unknown fields in suggestedNextTask
+        local unknown
+        unknown=$(echo "$suggested_next" | jq -r 'keys - ["taskId","title","reason"] | .[0] // ""')
+        if [[ -n "$unknown" ]]; then
+            echo "Error: idle.suggestedNextTask has unknown field '$unknown'" >&2
+            return 1
+        fi
+    fi
+
+    # Validate blockedReason if present
+    if echo "$payload" | jq -e 'has("blockedReason")' >/dev/null 2>&1; then
+        if ! echo "$payload" | jq -e '.blockedReason | type == "string"' >/dev/null 2>&1; then
+            echo "Error: idle.blockedReason must be a string" >&2
+            return 1
+        fi
+    fi
+
+    # Check for unknown fields in idle signal
+    local unknown
+    unknown=$(echo "$payload" | jq -r 'keys - ["readyForWork","sessionSummary","suggestedNextTask","blockedReason"] | .[0] // ""')
+    if [[ -n "$unknown" ]]; then
+        echo "Error: idle signal has unknown field '$unknown'" >&2
+        return 1
     fi
 
     return 0
@@ -751,10 +856,17 @@ validate_completed() {
         return 1
     fi
 
-    # Validate sessionStats if present
-    if echo "$payload" | jq -e 'has("sessionStats")' >/dev/null 2>&1; then
-        if ! echo "$payload" | jq -e '.sessionStats | type == "object"' >/dev/null 2>&1; then
-            echo "Error: completed.sessionStats must be an object" >&2
+    local task_id
+    task_id=$(echo "$payload" | jq -r '.taskId // ""')
+    if [[ -z "$task_id" ]]; then
+        echo "Error: completed.taskId cannot be empty" >&2
+        return 1
+    fi
+
+    # Validate agentName if present (should be string)
+    if echo "$payload" | jq -e 'has("agentName")' >/dev/null 2>&1; then
+        if ! echo "$payload" | jq -e '.agentName | type == "string"' >/dev/null 2>&1; then
+            echo "Error: completed.agentName must be a string" >&2
             return 1
         fi
     fi
@@ -763,6 +875,176 @@ validate_completed() {
     if echo "$payload" | jq -e 'has("summary")' >/dev/null 2>&1; then
         if ! echo "$payload" | jq -e '.summary | type == "array"' >/dev/null 2>&1; then
             echo "Error: completed.summary must be an array" >&2
+            return 1
+        fi
+        if ! echo "$payload" | jq -e '.summary | all(type == "string")' >/dev/null 2>&1; then
+            echo "Error: completed.summary must contain only strings" >&2
+            return 1
+        fi
+    fi
+
+    # Validate quality if present
+    if echo "$payload" | jq -e 'has("quality")' >/dev/null 2>&1; then
+        local quality
+        quality=$(echo "$payload" | jq '.quality')
+        if ! echo "$quality" | jq -e 'type == "object"' >/dev/null 2>&1; then
+            echo "Error: completed.quality must be an object" >&2
+            return 1
+        fi
+        validate_quality_signals "$quality" "completed." || return 1
+    fi
+
+    # Validate humanActions if present
+    if echo "$payload" | jq -e 'has("humanActions")' >/dev/null 2>&1; then
+        if ! echo "$payload" | jq -e '.humanActions | type == "array"' >/dev/null 2>&1; then
+            echo "Error: completed.humanActions must be an array" >&2
+            return 1
+        fi
+        local count
+        count=$(echo "$payload" | jq '.humanActions | length')
+        local i=0
+        while [[ $i -lt $count ]]; do
+            local action
+            action=$(echo "$payload" | jq ".humanActions[$i]")
+
+            if ! echo "$action" | jq -e 'has("title")' >/dev/null 2>&1; then
+                echo "Error: completed.humanActions[$i] missing required field 'title'" >&2
+                return 1
+            fi
+
+            local title
+            title=$(echo "$action" | jq -r '.title // ""')
+            if [[ -z "$title" ]]; then
+                echo "Error: completed.humanActions[$i].title cannot be empty" >&2
+                return 1
+            fi
+
+            i=$((i + 1))
+        done
+    fi
+
+    # Validate suggestedTasks if present
+    if echo "$payload" | jq -e 'has("suggestedTasks")' >/dev/null 2>&1; then
+        local tasks
+        tasks=$(echo "$payload" | jq '.suggestedTasks')
+        if ! echo "$tasks" | jq -e 'type == "array"' >/dev/null 2>&1; then
+            echo "Error: completed.suggestedTasks must be an array" >&2
+            return 1
+        fi
+        local count
+        count=$(echo "$tasks" | jq 'length')
+        local i=0
+        while [[ $i -lt $count ]]; do
+            local task
+            task=$(echo "$tasks" | jq ".[$i]")
+
+            if ! echo "$task" | jq -e 'has("title")' >/dev/null 2>&1; then
+                echo "Error: completed.suggestedTasks[$i] missing required field 'title'" >&2
+                return 1
+            fi
+
+            local title
+            title=$(echo "$task" | jq -r '.title // ""')
+            if [[ -z "$title" ]]; then
+                echo "Error: completed.suggestedTasks[$i].title cannot be empty" >&2
+                return 1
+            fi
+
+            i=$((i + 1))
+        done
+    fi
+
+    # Validate crossAgentIntel if present
+    if echo "$payload" | jq -e 'has("crossAgentIntel")' >/dev/null 2>&1; then
+        local intel
+        intel=$(echo "$payload" | jq '.crossAgentIntel')
+        if ! echo "$intel" | jq -e 'type == "object"' >/dev/null 2>&1; then
+            echo "Error: completed.crossAgentIntel must be an object" >&2
+            return 1
+        fi
+        validate_cross_agent_intel "$intel" "completed." || return 1
+    fi
+
+    # Validate sessionStats if present (NEW: full validation)
+    if echo "$payload" | jq -e 'has("sessionStats")' >/dev/null 2>&1; then
+        local session_stats
+        session_stats=$(echo "$payload" | jq '.sessionStats')
+        if ! echo "$session_stats" | jq -e 'type == "object"' >/dev/null 2>&1; then
+            echo "Error: completed.sessionStats must be an object" >&2
+            return 1
+        fi
+
+        # Validate sessionStats.duration if present (non-negative integer)
+        local duration
+        duration=$(echo "$session_stats" | jq '.duration // null')
+        if [[ "$duration" != "null" ]]; then
+            if ! echo "$duration" | grep -qE '^[0-9]+$'; then
+                echo "Error: completed.sessionStats.duration must be a non-negative integer" >&2
+                return 1
+            fi
+        fi
+
+        # Validate sessionStats.tokensUsed if present (non-negative integer)
+        local tokens_used
+        tokens_used=$(echo "$session_stats" | jq '.tokensUsed // null')
+        if [[ "$tokens_used" != "null" ]]; then
+            if ! echo "$tokens_used" | grep -qE '^[0-9]+$'; then
+                echo "Error: completed.sessionStats.tokensUsed must be a non-negative integer" >&2
+                return 1
+            fi
+        fi
+
+        # Validate sessionStats.filesModified if present (non-negative integer)
+        local files_modified
+        files_modified=$(echo "$session_stats" | jq '.filesModified // null')
+        if [[ "$files_modified" != "null" ]]; then
+            if ! echo "$files_modified" | grep -qE '^[0-9]+$'; then
+                echo "Error: completed.sessionStats.filesModified must be a non-negative integer" >&2
+                return 1
+            fi
+        fi
+
+        # Validate sessionStats.linesChanged if present (non-negative integer)
+        local lines_changed
+        lines_changed=$(echo "$session_stats" | jq '.linesChanged // null')
+        if [[ "$lines_changed" != "null" ]]; then
+            if ! echo "$lines_changed" | grep -qE '^[0-9]+$'; then
+                echo "Error: completed.sessionStats.linesChanged must be a non-negative integer" >&2
+                return 1
+            fi
+        fi
+
+        # Validate sessionStats.commitsCreated if present (non-negative integer)
+        local commits_created
+        commits_created=$(echo "$session_stats" | jq '.commitsCreated // null')
+        if [[ "$commits_created" != "null" ]]; then
+            if ! echo "$commits_created" | grep -qE '^[0-9]+$'; then
+                echo "Error: completed.sessionStats.commitsCreated must be a non-negative integer" >&2
+                return 1
+            fi
+        fi
+
+        # Check for unknown fields in sessionStats
+        local unknown
+        unknown=$(echo "$session_stats" | jq -r 'keys - ["duration","tokensUsed","filesModified","linesChanged","commitsCreated"] | .[0] // ""')
+        if [[ -n "$unknown" ]]; then
+            echo "Error: completed.sessionStats has unknown field '$unknown'" >&2
+            return 1
+        fi
+    fi
+
+    # Validate finalCommit if present (should be string)
+    if echo "$payload" | jq -e 'has("finalCommit")' >/dev/null 2>&1; then
+        if ! echo "$payload" | jq -e '.finalCommit | type == "string"' >/dev/null 2>&1; then
+            echo "Error: completed.finalCommit must be a string" >&2
+            return 1
+        fi
+    fi
+
+    # Validate prLink if present (should be string)
+    if echo "$payload" | jq -e 'has("prLink")' >/dev/null 2>&1; then
+        if ! echo "$payload" | jq -e '.prLink | type == "string"' >/dev/null 2>&1; then
+            echo "Error: completed.prLink must be a string" >&2
             return 1
         fi
     fi

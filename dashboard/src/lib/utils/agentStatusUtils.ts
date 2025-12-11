@@ -62,6 +62,9 @@ export function computeAgentStatus(agent: AgentStatusInput): AgentStatus {
 
 	// Priority 0: No tmux session - determine if disconnected or offline
 	// hasSession is undefined for backwards compat; only treat explicit false
+	// IMPORTANT: This takes priority over in_progress_tasks because if there's
+	// no session, the agent can't be working even if a task is still in_progress.
+	// An in_progress task with no session indicates an orphaned task (agent crashed).
 	if (agent.hasSession === false) {
 		// Disconnected: session gone but was active within 15 min (unexpected)
 		if (timeSinceActive < AGENT_STATUS_THRESHOLDS.DISCONNECTED_MS) {
@@ -76,6 +79,7 @@ export function computeAgentStatus(agent: AgentStatusInput): AgentStatus {
 
 	// Priority 1: WORKING - Has active task or file locks
 	// Agent has work in progress (takes priority over recency)
+	// Note: We only reach here if hasSession !== false, so session exists
 	if (hasInProgressTask || hasActiveLocks) {
 		return 'working';
 	}

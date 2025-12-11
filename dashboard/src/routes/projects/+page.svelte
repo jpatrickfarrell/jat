@@ -60,6 +60,11 @@
 		name: string;
 		last_active_ts?: string;
 		task?: string | null;
+		// Fields needed for agent status computation (from agentStatusUtils)
+		hasSession?: boolean;
+		in_progress_tasks?: number;
+		reservation_count?: number;
+		session_created_ts?: number | null;
 	}
 
 	interface Reservation {

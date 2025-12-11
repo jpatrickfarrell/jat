@@ -8,7 +8,7 @@
 	import LabelBadges from '$lib/components/LabelBadges.svelte';
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 	import { analyzeDependencies, calculateAllCriticalPaths, type CriticalPathResult } from '$lib/utils/dependencyUtils';
-	import { getProjectFromTaskId, extractParentId, compareTaskIds } from '$lib/utils/projectUtils';
+	import { getProjectFromTaskId, extractParentId, compareTaskIds, buildEpicChildMap, getParentEpicId } from '$lib/utils/projectUtils';
 	import { getProjectColor } from '$lib/utils/projectColors';
 	import { getPriorityBadge, getTaskStatusBadge, getTypeBadge, isHumanTask } from '$lib/utils/badgeHelpers';
 	import { formatRelativeTime, formatFullDate, normalizeTimestamp, getAgeColorClass } from '$lib/utils/dateFormatters';
@@ -67,6 +67,11 @@
 		name: string;
 		last_active_ts?: string;
 		task?: string | null;
+		// Fields needed for agent status computation (from agentStatusUtils)
+		hasSession?: boolean;
+		in_progress_tasks?: number;
+		reservation_count?: number;
+		session_created_ts?: number | null;
 	}
 
 	interface Reservation {
@@ -95,6 +100,13 @@
 	}
 
 	let { tasks = [], allTasks = [], agents = [], reservations = [], completedTasksFromActiveSessions = new Set(), ontaskclick = () => {}, onagentclick, hideProjectFilter = false, hideSearch = false }: Props = $props();
+
+	// Build epic->child mapping for dependency-based grouping
+	// This allows tasks linked to epics via depends_on to be grouped under the epic
+	const epicChildMap = $derived.by(() => {
+		const taskList = allTasks.length > 0 ? allTasks : tasks;
+		return buildEpicChildMap(taskList);
+	});
 
 	// Track previously seen task IDs and statuses for animations
 	// Using regular variables (not $state) to avoid effect loops
@@ -872,9 +884,9 @@
 			case 'type':
 				return task.issue_type || null;
 			case 'parent':
-				// Extract parent ID from hierarchical task IDs (e.g., jat-abc.1 → jat-abc)
+				// Get parent epic ID - checks both hierarchical IDs (jat-abc.1) AND dependency-based relationships
 				// Tasks without a parent (epics or standalone) use their own ID as the group
-				const parentId = extractParentId(task.id);
+				const parentId = getParentEpicId(task.id, epicChildMap);
 				return parentId || task.id; // Use own ID if no parent (standalone/epic)
 			case 'label':
 				// Group by first label, or null if no labels
@@ -883,7 +895,8 @@
 				// Composite key: "project::epic" for nested grouping
 				// Example: "jat::jat-abc" for subtask, "jat::jat-abc" for epic itself, "jat::" for standalone
 				const project = getProjectFromTaskId(task.id);
-				const epic = extractParentId(task.id) || task.id;
+				// Get parent epic - checks both hierarchical IDs AND dependency-based relationships
+				const epic = getParentEpicId(task.id, epicChildMap) || task.id;
 				return project ? `${project}::${epic}` : null;
 			default:
 				return task.issue_type || null;
@@ -965,7 +978,7 @@
 		// Group tasks by project first, then by epic
 		for (const task of filteredTasks) {
 			const project = getProjectFromTaskId(task.id) || 'unknown';
-			const epic = extractParentId(task.id) || task.id;
+			const epic = getParentEpicId(task.id, epicChildMap) || task.id;
 
 			if (!projectMap.has(project)) {
 				projectMap.set(project, new Map<string, Task[]>());

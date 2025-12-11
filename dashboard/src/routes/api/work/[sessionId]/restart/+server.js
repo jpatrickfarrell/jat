@@ -79,6 +79,12 @@ export async function POST({ params }) {
 		await new Promise(resolve => setTimeout(resolve, 500));
 
 		// Step 3: Create new tmux session with Claude Code
+		// Default tmux dimensions for proper terminal output width
+		// 80 columns is the standard terminal width that Claude Code expects
+		// 40 rows provides good vertical context for terminal output
+		const TMUX_INITIAL_WIDTH = 80;
+		const TMUX_INITIAL_HEIGHT = 40;
+
 		// Build the claude command
 		let claudeCmd = `cd "${projectPath}"`;
 		claudeCmd += ` && AGENT_MAIL_URL="${AGENT_MAIL_URL}"`;
@@ -88,7 +94,8 @@ export async function POST({ params }) {
 			claudeCmd += ' --dangerously-skip-permissions';
 		}
 
-		const createSessionCmd = `tmux new-session -d -s "${sessionId}" -c "${projectPath}" && tmux send-keys -t "${sessionId}" "${claudeCmd}" Enter`;
+		// Create session with explicit dimensions to ensure proper terminal width
+		const createSessionCmd = `tmux new-session -d -s "${sessionId}" -x ${TMUX_INITIAL_WIDTH} -y ${TMUX_INITIAL_HEIGHT} -c "${projectPath}" && tmux send-keys -t "${sessionId}" "${claudeCmd}" Enter`;
 
 		try {
 			await execAsync(createSessionCmd);

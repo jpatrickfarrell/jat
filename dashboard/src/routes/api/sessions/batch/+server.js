@@ -106,6 +106,12 @@ export async function POST({ request }) {
 		const results = [];
 		const prompt = autoStart ? '/jat:start auto' : '';
 
+		// Default tmux dimensions for proper terminal output width
+		// 80 columns is the standard terminal width that Claude Code expects
+		// 40 rows provides good vertical context for terminal output
+		const TMUX_INITIAL_WIDTH = 80;
+		const TMUX_INITIAL_HEIGHT = 40;
+
 		for (let i = 0; i < agentCount; i++) {
 			// Use pending naming - /jat:start will register agent and rename session
 			const sessionName = `jat-pending-${Date.now()}-${i}`;
@@ -116,8 +122,8 @@ export async function POST({ request }) {
 				if (model) claudeCmd += ` --model ${model}`;
 				if (claudeFlags) claudeCmd += ` ${claudeFlags}`;
 
-				// Create tmux session
-				const command = `tmux new-session -d -s "${sessionName}" -c "${projectPath}" && tmux send-keys -t "${sessionName}" "${claudeCmd}" Enter`;
+				// Create tmux session with explicit dimensions to ensure proper terminal width
+				const command = `tmux new-session -d -s "${sessionName}" -x ${TMUX_INITIAL_WIDTH} -y ${TMUX_INITIAL_HEIGHT} -c "${projectPath}" && tmux send-keys -t "${sessionName}" "${claudeCmd}" Enter`;
 				await execAsync(command);
 
 				// Wait for Claude to fully start (7s - Claude Code takes time to initialize)

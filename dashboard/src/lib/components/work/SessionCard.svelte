@@ -4140,8 +4140,8 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				bind:this={scrollContainerRef}
-				class="overflow-y-auto px-3 leading-relaxed flex-1 min-h-0 cursor-text bg-base-300"
-				style="font-family: var(--terminal-font); font-size: var(--terminal-font-size);"
+				class="overflow-y-auto px-3 leading-relaxed flex-1 min-h-0 cursor-text"
+				style="font-family: var(--terminal-font); font-size: var(--terminal-font-size); background: oklch(0.17 0.01 250);"
 				onscroll={handleScroll}
 				onclick={handleCardClick}
 			>

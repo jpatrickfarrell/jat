@@ -173,8 +173,9 @@ export async function POST({ params }) {
 
 	try {
 		// Create tmux session and run dev server
-		// Using -d for detached, setting window name to match project
-		const tmuxCommand = `tmux new-session -d -s "${sessionName}" -n "dev" "cd '${projectPath}' && ${startCommand}; exec bash"`;
+		// Using -d for detached, -x 80 -y 40 for consistent terminal width
+		// Setting window name to match project
+		const tmuxCommand = `tmux new-session -d -s "${sessionName}" -x 80 -y 40 -n "dev" "cd '${projectPath}' && ${startCommand}; exec bash"`;
 
 		await execAsync(tmuxCommand, { timeout: 5000 });
 

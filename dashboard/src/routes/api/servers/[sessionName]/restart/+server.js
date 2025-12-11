@@ -128,11 +128,12 @@ export async function POST({ params }) {
 
 		// Create a restart script that runs in the background
 		// This survives even if we're restarting the server handling this request
+		// Note: Server sessions use 80x40 dimensions for consistent output width
 		const restartScript = `
 			sleep 0.5
 			tmux kill-session -t "${sessionName}" 2>/dev/null || true
 			sleep 0.5
-			tmux new-session -d -s "${sessionName}" -c "${workDir}"
+			tmux new-session -d -s "${sessionName}" -x 80 -y 40 -c "${workDir}"
 			sleep 0.2
 			tmux send-keys -t "${sessionName}" "${restartCommand}" Enter
 		`;

@@ -165,8 +165,11 @@ export async function POST({ request }) {
 
 				for (let attempt = 1; attempt <= maxRetries && !commandSent; attempt++) {
 					try {
-						// Send text and Enter as ONE command to avoid race conditions
-						await execAsync(`tmux send-keys -t "${sessionName}" -- "${escapedPrompt}" Enter`);
+						// CRITICAL: Send text and Enter SEPARATELY - Claude Code's TUI
+						// doesn't reliably process Enter when combined with text
+						await execAsync(`tmux send-keys -t "${sessionName}" -- "${escapedPrompt}"`);
+						await new Promise(resolve => setTimeout(resolve, 100));
+						await execAsync(`tmux send-keys -t "${sessionName}" Enter`);
 
 						// Wait a moment for the command to be processed
 						await new Promise(resolve => setTimeout(resolve, 1500));
@@ -180,9 +183,9 @@ export async function POST({ request }) {
 							commandSent = true;
 							console.log(`[sessions] Initial prompt sent successfully on attempt ${attempt}`);
 						} else if (attempt < maxRetries) {
-							// Command might not have executed - clear and resend
+							// Command might not have executed - use Ctrl-C to clear
 							console.log(`[sessions] Attempt ${attempt}: Command may not have executed, retrying...`);
-							await execAsync(`tmux send-keys -t "${sessionName}" C-u`);
+							await execAsync(`tmux send-keys -t "${sessionName}" C-c`);
 							await new Promise(resolve => setTimeout(resolve, 500));
 						}
 					} catch (err) {

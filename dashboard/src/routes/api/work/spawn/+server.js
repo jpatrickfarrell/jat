@@ -192,8 +192,14 @@ export async function POST({ request }) {
 
 		/**
 		 * Send the initial prompt with retry logic
-		 * Sometimes Claude isn't ready to accept input even after the wait,
-		 * so we verify the command executed and retry if needed.
+		 *
+		 * CRITICAL: Claude Code's TUI doesn't reliably process Enter when sent
+		 * in the same tmux send-keys command as the text. The fix is to:
+		 * 1. Send text first (without Enter)
+		 * 2. Brief delay for text to be fully typed
+		 * 3. Send Enter separately
+		 *
+		 * This mimics how a human would type - text first, then press Enter.
 		 */
 		const escapedPrompt = initialPrompt.replace(/"/g, '\\"').replace(/\$/g, '\\$');
 		const maxRetries = 3;
@@ -201,8 +207,14 @@ export async function POST({ request }) {
 
 		for (let attempt = 1; attempt <= maxRetries && !commandSent; attempt++) {
 			try {
-				// Send text and Enter as ONE command to avoid race conditions
-				await execAsync(`tmux send-keys -t "${sessionName}" -- "${escapedPrompt}" Enter`);
+				// Step 1: Send text WITHOUT Enter
+				await execAsync(`tmux send-keys -t "${sessionName}" -- "${escapedPrompt}"`);
+
+				// Step 2: Brief delay for text to be fully received by Claude's TUI
+				await new Promise(resolve => setTimeout(resolve, 100));
+
+				// Step 3: Send Enter SEPARATELY - this is the key fix!
+				await execAsync(`tmux send-keys -t "${sessionName}" Enter`);
 
 				// Wait a moment for the command to be processed
 				await new Promise(resolve => setTimeout(resolve, 1500));
@@ -217,10 +229,9 @@ export async function POST({ request }) {
 					commandSent = true;
 					console.log(`[spawn] Initial prompt sent successfully on attempt ${attempt}`);
 				} else if (attempt < maxRetries) {
-					// Command might not have executed - the text might be sitting in input buffer
-					// Clear and resend
+					// Command might not have executed - use Ctrl-C to clear input then retry
 					console.log(`[spawn] Attempt ${attempt}: Command may not have executed, retrying...`);
-					await execAsync(`tmux send-keys -t "${sessionName}" C-u`);  // Clear line
+					await execAsync(`tmux send-keys -t "${sessionName}" C-c`);  // Clear with Ctrl-C
 					await new Promise(resolve => setTimeout(resolve, 500));
 				}
 			} catch (err) {
@@ -244,9 +255,11 @@ export async function POST({ request }) {
 
 			try {
 				// Send the image path as input - the agent can then view it with Read tool
-				// Escape special characters and send text+Enter as ONE command
+				// Use same pattern as above: text first, then Enter separately
 				const escapedPath = imagePath.replace(/"/g, '\\"').replace(/\$/g, '\\$');
-				await execAsync(`tmux send-keys -t "${sessionName}" -- "${escapedPath}" Enter`);
+				await execAsync(`tmux send-keys -t "${sessionName}" -- "${escapedPath}"`);
+				await new Promise(resolve => setTimeout(resolve, 100));
+				await execAsync(`tmux send-keys -t "${sessionName}" Enter`);
 				console.log(`[spawn] Sent image path to session ${sessionName}: ${imagePath}`);
 			} catch (err) {
 				// Non-fatal - image send failed but session is still running

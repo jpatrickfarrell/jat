@@ -120,11 +120,14 @@ export async function POST({ request }) {
 				const command = `tmux new-session -d -s "${sessionName}" -c "${projectPath}" && tmux send-keys -t "${sessionName}" "${claudeCmd}" Enter`;
 				await execAsync(command);
 
-				// Wait for Claude to fully start (5s minimum - Claude Code takes time to initialize)
+				// Wait for Claude to fully start (7s - Claude Code takes time to initialize)
 				if (prompt) {
-					await new Promise(resolve => setTimeout(resolve, 5000));
-					const escapedPrompt = prompt.replace(/"/g, '\\"');
-					await execAsync(`tmux send-keys -t "${sessionName}" -- "${escapedPrompt}" Enter`);
+					await new Promise(resolve => setTimeout(resolve, 7000));
+					// CRITICAL: Send text and Enter SEPARATELY for Claude Code's TUI
+					const escapedPrompt = prompt.replace(/"/g, '\\"').replace(/\$/g, '\\$');
+					await execAsync(`tmux send-keys -t "${sessionName}" -- "${escapedPrompt}"`);
+					await new Promise(resolve => setTimeout(resolve, 100));
+					await execAsync(`tmux send-keys -t "${sessionName}" Enter`);
 				}
 
 				results.push({

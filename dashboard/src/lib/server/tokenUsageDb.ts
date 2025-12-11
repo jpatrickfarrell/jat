@@ -6,17 +6,19 @@
  * Design:
  * 1. Background job runs every 5 minutes (or on-demand)
  * 2. Scans JSONL files for new entries (tracks last processed position per file)
- * 3. Aggregates into hourly buckets in SQLite
+ * 3. Aggregates into 30-minute buckets in SQLite (48 points per 24h for better sparkline resolution)
  * 4. API queries SQLite instead of parsing files
  *
  * Tables:
- * - token_usage_hourly: Per-hour aggregation by project, agent, session
+ * - token_usage_hourly: Per-bucket aggregation by project, agent, session
+ *                       (column named "hour_start" for backward compatibility, but stores 30-min bucket start)
  * - aggregation_state: Tracks last processed position per JSONL file
  *
  * Benefits:
  * - API response time: 109s → <100ms
  * - Incremental updates (only process new data)
  * - Historical queries become trivial
+ * - 30-minute granularity for better sparkline resolution
  */
 
 import Database from 'better-sqlite3';
@@ -34,7 +36,7 @@ export interface HourlyUsageRow {
 	project: string;
 	agent: string | null;
 	session_id: string;
-	hour_start: string; // ISO timestamp rounded to hour
+	hour_start: string; // ISO timestamp rounded to 30-minute bucket (named for backward compatibility)
 	input_tokens: number;
 	cache_creation_tokens: number;
 	cache_read_tokens: number;
@@ -236,11 +238,22 @@ interface JSONLEntry {
 }
 
 /**
- * Round timestamp to hour start (for bucketing)
+ * Default bucket size in minutes for token aggregation.
+ * 30 minutes gives 48 data points per 24 hours for better sparkline resolution.
  */
-function roundToHour(timestamp: Date): string {
+export const DEFAULT_BUCKET_MINUTES = 30;
+
+/**
+ * Round timestamp to bucket start (for bucketing)
+ * @param timestamp - The timestamp to round
+ * @param bucketMinutes - Bucket size in minutes (default: 30)
+ * @returns ISO timestamp string rounded to bucket start
+ */
+function roundToBucket(timestamp: Date, bucketMinutes: number = DEFAULT_BUCKET_MINUTES): string {
 	const rounded = new Date(timestamp);
-	rounded.setMinutes(0, 0, 0);
+	const minutes = rounded.getMinutes();
+	const bucketStart = Math.floor(minutes / bucketMinutes) * bucketMinutes;
+	rounded.setMinutes(bucketStart, 0, 0);
 	return rounded.toISOString();
 }
 
@@ -318,13 +331,13 @@ async function processJSONLFile(
 			if (!entry.message?.usage || !entry.timestamp) continue;
 
 			const usage = entry.message.usage;
-			const hourStart = roundToHour(new Date(entry.timestamp));
+			const bucketStart = roundToBucket(new Date(entry.timestamp));
 
 			// Get or create bucket
-			let bucket = hourlyBuckets.get(hourStart);
+			let bucket = hourlyBuckets.get(bucketStart);
 			if (!bucket) {
 				bucket = { input: 0, cacheCreation: 0, cacheRead: 0, output: 0, count: 0 };
-				hourlyBuckets.set(hourStart, bucket);
+				hourlyBuckets.set(bucketStart, bucket);
 			}
 
 			// Accumulate tokens
@@ -507,7 +520,14 @@ export function getUsageForRange(
 }
 
 /**
- * Get hourly breakdown for sparklines
+ * Get time-bucketed breakdown for sparklines.
+ * Data is stored in 30-minute buckets by default.
+ * Use bucketMinutes to aggregate into larger buckets (e.g., 60 for hourly).
+ *
+ * @param startTime - Start of time range
+ * @param endTime - End of time range
+ * @param options.bucketMinutes - Output bucket size (30 = native 30-min, 60 = hourly, etc.)
+ *                                Default is 30 (native resolution).
  */
 export function getHourlyBreakdown(
 	startTime: Date,
@@ -515,7 +535,7 @@ export function getHourlyBreakdown(
 	options?: {
 		project?: string;
 		agent?: string;
-		bucketMinutes?: number; // 30 for 30-min buckets, 60 for hourly
+		bucketMinutes?: number; // 30 for 30-min buckets (native), 60 for hourly aggregation
 	}
 ): Array<{
 	timestamp: string;
@@ -523,20 +543,33 @@ export function getHourlyBreakdown(
 	cost_usd: number;
 }> {
 	const db = getDatabase();
-	const bucketMinutes = options?.bucketMinutes ?? 60;
+	const bucketMinutes = options?.bucketMinutes ?? DEFAULT_BUCKET_MINUTES;
 
-	// Group by time bucket
-	// For 30-minute buckets, we need to round hour_start differently
-	let groupExpression = 'hour_start';
-	if (bucketMinutes === 30) {
-		// SQLite doesn't have great time bucket support, so we work with hour_start
-		// and accept hourly granularity for now (can enhance later with more complex SQL)
+	// Data is stored in 30-minute buckets (hour_start column).
+	// For 30-minute output, just return the raw data grouped by hour_start.
+	// For 60-minute (hourly) output, use SQLite datetime functions to re-bucket.
+	let groupExpression: string;
+	let selectExpression: string;
+
+	if (bucketMinutes === 30 || bucketMinutes === DEFAULT_BUCKET_MINUTES) {
+		// Native 30-minute buckets - just use hour_start directly
 		groupExpression = 'hour_start';
+		selectExpression = 'hour_start';
+	} else if (bucketMinutes === 60) {
+		// Re-aggregate to hourly by truncating to hour
+		// strftime('%Y-%m-%dT%H:00:00.000Z', hour_start) rounds to hour start
+		groupExpression = "strftime('%Y-%m-%dT%H:00:00.000Z', hour_start)";
+		selectExpression = groupExpression;
+	} else {
+		// For other bucket sizes, fall back to native granularity
+		// (could implement more complex SQL for arbitrary bucket sizes if needed)
+		groupExpression = 'hour_start';
+		selectExpression = 'hour_start';
 	}
 
 	let sql = `
 		SELECT
-			${groupExpression} as timestamp,
+			${selectExpression} as timestamp,
 			COALESCE(SUM(total_tokens), 0) as total_tokens,
 			COALESCE(SUM(cost_usd), 0) as cost_usd
 		FROM token_usage_hourly
@@ -662,9 +695,14 @@ export function getWeekUsage(options?: { project?: string; agent?: string }): Ag
 }
 
 /**
- * Get last 24 hours hourly breakdown for sparklines
+ * Get last 24 hours breakdown for sparklines.
+ * Returns 48 data points (30-minute buckets) by default, or 24 points if bucketMinutes=60.
  */
-export function getLast24HoursHourly(options?: { project?: string; agent?: string }): Array<{
+export function getLast24HoursHourly(options?: {
+	project?: string;
+	agent?: string;
+	bucketMinutes?: number;
+}): Array<{
 	timestamp: string;
 	total_tokens: number;
 	cost_usd: number;

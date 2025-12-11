@@ -463,6 +463,139 @@ validate_review() {
             echo "Error: review.filesModified must be an array" >&2
             return 1
         fi
+        # Validate each file modification object
+        local count
+        count=$(echo "$payload" | jq '.filesModified | length')
+        local i=0
+        while [[ $i -lt $count ]]; do
+            local file_mod
+            file_mod=$(echo "$payload" | jq ".filesModified[$i]")
+
+            # path is required
+            if ! echo "$file_mod" | jq -e 'has("path")' >/dev/null 2>&1; then
+                echo "Error: review.filesModified[$i] missing required field 'path'" >&2
+                return 1
+            fi
+
+            # changeType if present must be valid
+            local change_type
+            change_type=$(echo "$file_mod" | jq -r '.changeType // ""')
+            if [[ -n "$change_type" ]]; then
+                case "$change_type" in
+                    added|modified|deleted) ;;
+                    *)
+                        echo "Error: review.filesModified[$i].changeType must be one of: added, modified, deleted" >&2
+                        return 1
+                        ;;
+                esac
+            fi
+
+            i=$((i + 1))
+        done
+    fi
+
+    # Validate keyDecisions is array if present
+    if echo "$payload" | jq -e 'has("keyDecisions")' >/dev/null 2>&1; then
+        if ! echo "$payload" | jq -e '.keyDecisions | type == "array"' >/dev/null 2>&1; then
+            echo "Error: review.keyDecisions must be an array" >&2
+            return 1
+        fi
+        # Validate each key decision has decision field
+        local count
+        count=$(echo "$payload" | jq '.keyDecisions | length')
+        local i=0
+        while [[ $i -lt $count ]]; do
+            if ! echo "$payload" | jq -e ".keyDecisions[$i] | has(\"decision\")" >/dev/null 2>&1; then
+                echo "Error: review.keyDecisions[$i] missing required field 'decision'" >&2
+                return 1
+            fi
+            i=$((i + 1))
+        done
+    fi
+
+    # Validate reviewFocus is array of strings if present
+    if echo "$payload" | jq -e 'has("reviewFocus")' >/dev/null 2>&1; then
+        if ! echo "$payload" | jq -e '.reviewFocus | type == "array"' >/dev/null 2>&1; then
+            echo "Error: review.reviewFocus must be an array" >&2
+            return 1
+        fi
+        if ! echo "$payload" | jq -e '.reviewFocus | all(type == "string")' >/dev/null 2>&1; then
+            echo "Error: review.reviewFocus must contain only strings" >&2
+            return 1
+        fi
+    fi
+
+    # Validate knownLimitations is array of strings if present
+    if echo "$payload" | jq -e 'has("knownLimitations")' >/dev/null 2>&1; then
+        if ! echo "$payload" | jq -e '.knownLimitations | type == "array"' >/dev/null 2>&1; then
+            echo "Error: review.knownLimitations must be an array" >&2
+            return 1
+        fi
+        if ! echo "$payload" | jq -e '.knownLimitations | all(type == "string")' >/dev/null 2>&1; then
+            echo "Error: review.knownLimitations must contain only strings" >&2
+            return 1
+        fi
+    fi
+
+    # Validate buildWarnings is array of strings if present
+    if echo "$payload" | jq -e 'has("buildWarnings")' >/dev/null 2>&1; then
+        if ! echo "$payload" | jq -e '.buildWarnings | type == "array"' >/dev/null 2>&1; then
+            echo "Error: review.buildWarnings must be an array" >&2
+            return 1
+        fi
+        if ! echo "$payload" | jq -e '.buildWarnings | all(type == "string")' >/dev/null 2>&1; then
+            echo "Error: review.buildWarnings must contain only strings" >&2
+            return 1
+        fi
+    fi
+
+    # Validate commits is array if present
+    if echo "$payload" | jq -e 'has("commits")' >/dev/null 2>&1; then
+        if ! echo "$payload" | jq -e '.commits | type == "array"' >/dev/null 2>&1; then
+            echo "Error: review.commits must be an array" >&2
+            return 1
+        fi
+        # Validate each commit has sha and message
+        local count
+        count=$(echo "$payload" | jq '.commits | length')
+        local i=0
+        while [[ $i -lt $count ]]; do
+            local commit
+            commit=$(echo "$payload" | jq ".commits[$i]")
+            if ! echo "$commit" | jq -e 'has("sha")' >/dev/null 2>&1; then
+                echo "Error: review.commits[$i] missing required field 'sha'" >&2
+                return 1
+            fi
+            if ! echo "$commit" | jq -e 'has("message")' >/dev/null 2>&1; then
+                echo "Error: review.commits[$i] missing required field 'message'" >&2
+                return 1
+            fi
+            i=$((i + 1))
+        done
+    fi
+
+    # Validate numeric fields if present
+    local total_added total_removed tests_run tests_passed
+    total_added=$(echo "$payload" | jq '.totalLinesAdded // null')
+    total_removed=$(echo "$payload" | jq '.totalLinesRemoved // null')
+    tests_run=$(echo "$payload" | jq '.testsRun // null')
+    tests_passed=$(echo "$payload" | jq '.testsPassed // null')
+
+    if [[ "$total_added" != "null" ]] && ! echo "$total_added" | grep -qE '^[0-9]+$'; then
+        echo "Error: review.totalLinesAdded must be a non-negative integer" >&2
+        return 1
+    fi
+    if [[ "$total_removed" != "null" ]] && ! echo "$total_removed" | grep -qE '^[0-9]+$'; then
+        echo "Error: review.totalLinesRemoved must be a non-negative integer" >&2
+        return 1
+    fi
+    if [[ "$tests_run" != "null" ]] && ! echo "$tests_run" | grep -qE '^[0-9]+$'; then
+        echo "Error: review.testsRun must be a non-negative integer" >&2
+        return 1
+    fi
+    if [[ "$tests_passed" != "null" ]] && ! echo "$tests_passed" | grep -qE '^[0-9]+$'; then
+        echo "Error: review.testsPassed must be a non-negative integer" >&2
+        return 1
     fi
 
     return 0

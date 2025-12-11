@@ -2225,7 +2225,7 @@
 					createResults.success.map((r) => r.taskId).filter(Boolean).join(', ')
 				);
 				// Refresh existing task titles so newly created tasks show as "Created"
-				fetchExistingTaskTitles();
+				await fetchExistingTaskTitles();
 			}
 
 			// If all succeeded, clear selections after a short delay
@@ -2301,7 +2301,7 @@
 		console.log(`[SuggestedTasks] Created ${result.created} tasks via bulk API`);
 
 		// Refresh existing task titles so newly created tasks show as "Created"
-		fetchExistingTaskTitles();
+		await fetchExistingTaskTitles();
 	}
 
 	/** Create tasks from EventStack timeline events - returns results for feedback UI */

@@ -887,6 +887,47 @@
 												</div>
 											{/if}
 										</div>
+									{:else if (event.state === 'completed' || event.type === 'completed') && event.data}
+										<!-- Rich Completed Signal UI -->
+										{@const completedData = event.data}
+										<div class="space-y-3">
+											<!-- Outcome Badge -->
+											{#if completedData.outcome}
+												{@const isSuccess = completedData.outcome === 'success'}
+												<div class="flex items-center gap-2">
+													<span
+														class="px-2.5 py-1 rounded-full text-xs font-semibold"
+														style="background: {isSuccess ? 'oklch(0.30 0.12 145)' : 'oklch(0.30 0.12 25)'}; color: {isSuccess ? 'oklch(0.85 0.18 145)' : 'oklch(0.85 0.18 25)'};"
+													>
+														{isSuccess ? '✓ Task Completed Successfully' : `Completed: ${completedData.outcome}`}
+													</span>
+												</div>
+											{/if}
+
+											<!-- Summary Section -->
+											{#if completedData.summary && completedData.summary.length > 0}
+												<div>
+													<div class="text-[10px] font-medium mb-1" style="color: oklch(0.55 0.02 250);">
+														WHAT WAS DONE
+													</div>
+													<ul class="space-y-0.5">
+														{#each completedData.summary as item}
+															<li class="flex items-start gap-2 text-xs" style="color: oklch(0.75 0.02 250);">
+																<span style="color: oklch(0.50 0.15 145);">✓</span>
+																<span>{item}</span>
+															</li>
+														{/each}
+													</ul>
+												</div>
+											{/if}
+
+											<!-- Task ID if available -->
+											{#if completedData.taskId || event.task_id}
+												<div class="text-[10px]" style="color: oklch(0.50 0.02 250);">
+													Task: <span class="font-mono">{completedData.taskId || event.task_id}</span>
+												</div>
+											{/if}
+										</div>
 									{:else if (event.state === 'review' || event.type === 'review') && hasRichSignalData(event)}
 										<!-- Rich Review Signal Card -->
 										{@const reviewSignal = {

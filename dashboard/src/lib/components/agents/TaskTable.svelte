@@ -28,7 +28,8 @@
 	import { spawningTaskIds, isBulkSpawning } from '$lib/stores/spawningTasks';
 	import { successToast } from '$lib/stores/toasts.svelte';
 	import { getEpicCelebration, getEpicAutoClose, getCollapsedEpics, setCollapsedEpics } from '$lib/stores/preferences.svelte';
-	import { getFileTypeInfo, formatFileSize, type FileCategory } from '$lib/utils/fileUtils';
+	import { workSessionsState } from '$lib/stores/workSessions.svelte';
+	import { getFileTypeInfo, getFileTypeInfoFromPath, formatFileSize, type FileCategory } from '$lib/utils/fileUtils';
 	import { calculateRecommendationScore, type RecommendationScore } from '$lib/utils/recommendationUtils';
 	import RecommendedBadge from '$lib/components/RecommendedBadge.svelte';
 	import { getEpicId, getProgress, getRunningAgents, getIsActive } from '$lib/stores/epicQueueStore.svelte';
@@ -62,7 +63,7 @@
 		depends_on?: Array<{ id: string; title: string; status: string; priority: number }>;
 		blocked_by?: Array<{ id: string; title: string; status: string; priority: number }>;
 		created_ts?: string;
-		updated_ts?: string;
+		updated_at?: string;
 	}
 
 	interface Agent {
@@ -593,6 +594,15 @@
 		return checkAgentWorking(agent);
 	}
 
+	// Check if an agent's session is actively generating output (for shimmer effect)
+	// Uses the centralized workSessionsState activity polling
+	function isAgentGenerating(agentName: string | undefined | null): boolean {
+		if (!agentName) return false;
+		const sessionName = `jat-${agentName}`;
+		const session = workSessionsState.sessions.find(s => s.sessionName === sessionName);
+		return session?._activityState === 'generating';
+	}
+
 	// Initialize filters from URL params (default to open + in_progress tasks)
 	let searchQuery = $state('');
 	let selectedProjects = $state<Set<string>>(new Set());
@@ -881,8 +891,8 @@
 					bVal = b.assignee || '';
 					break;
 				case 'updated':
-					aVal = a.updated_ts || '';
-					bVal = b.updated_ts || '';
+					aVal = a.updated_at || '';
+					bVal = b.updated_at || '';
 					break;
 				default:
 					return 0;
@@ -1471,10 +1481,9 @@
 				// Handle both old format (single object) and new format (array)
 				const dataArray = Array.isArray(fileData) ? fileData : [fileData];
 				const taskFileArray: TaskFile[] = dataArray.map((data: { path: string; uploadedAt: string; id?: string }, index: number) => {
-					// Get file type info from path
+					// Get file type info directly from path - no mock File needed
 					const filename = data.path.split('/').pop() || 'file';
-					const mockFile = new File([new Blob()], filename);
-					const typeInfo = getFileTypeInfo(mockFile);
+					const typeInfo = getFileTypeInfoFromPath(data.path);
 
 					return {
 						blob: new Blob(), // Placeholder - actual file is on disk
@@ -2745,7 +2754,10 @@
 												<!-- Title -->
 												<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
 													<div>
-														<div class="font-medium text-sm" style="color: oklch(0.85 0.02 250);">{task.title}</div>
+														<div
+															class="font-medium text-sm {taskIsActive && isAgentGenerating(task.assignee) ? 'shimmer-text-fast' : ''}"
+															style="color: oklch(0.85 0.02 250);"
+														>{task.title}</div>
 														{#if task.description}
 															<div class="text-xs line-clamp-5" style="color: oklch(0.55 0.02 250);">
 																{task.description}
@@ -2885,8 +2897,8 @@
 
 												<!-- Age -->
 												<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
-													<span class="text-xs font-mono {getAgeColorClass(task.updated_ts)}" title={formatFullDate(task.updated_ts)}>
-														{formatRelativeTime(task.updated_ts)}
+													<span class="text-xs font-mono {getAgeColorClass(task.updated_at)}" title={formatFullDate(task.updated_at)}>
+														{formatRelativeTime(task.updated_at)}
 													</span>
 												</td>
 											</tr>
@@ -3103,7 +3115,7 @@
 									{@const unresolvedBlockers = task.depends_on?.filter(d => d.status !== 'closed') || []}
 									{@const allTasksList = allTasks.length > 0 ? allTasks : tasks}
 									{@const blockedTasks = allTasksList.filter(t => t.depends_on?.some(d => d.id === task.id) && t.status !== 'closed')}
-									{@const elapsed = task.status === 'in_progress' ? getElapsedTime(task.updated_ts) : null}
+									{@const elapsed = task.status === 'in_progress' ? getElapsedTime(task.updated_at) : null}
 									{@const fireScale = elapsed ? getFireScale(elapsed.minutes) : 1}
 									{@const hasRowGradient = isCompletedByActiveSession || dragOverTask === task.id || selectedTasks.has(task.id) || isHuman || taskIsActive}
 									{@const recommendation = recommendedTasks.get(task.id)}
@@ -3193,7 +3205,10 @@
 										</td>
 										<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
 											<div>
-												<div class="font-medium text-sm" style="color: oklch(0.85 0.02 250);">{task.title}</div>
+												<div
+													class="font-medium text-sm {taskIsActive && isAgentGenerating(task.assignee) ? 'shimmer-text-fast' : ''}"
+													style="color: oklch(0.85 0.02 250);"
+												>{task.title}</div>
 												{#if task.description}
 													<div class="text-xs line-clamp-5" style="color: oklch(0.55 0.02 250);">
 														{task.description}
@@ -3325,8 +3340,8 @@
 										</div>
 									</td>
 									<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
-										<span class="text-xs font-mono {getAgeColorClass(task.updated_ts)}" title={formatFullDate(task.updated_ts)}>
-											{formatRelativeTime(task.updated_ts)}
+										<span class="text-xs font-mono {getAgeColorClass(task.updated_at)}" title={formatFullDate(task.updated_at)}>
+											{formatRelativeTime(task.updated_at)}
 										</span>
 									</td>
 								</tr>

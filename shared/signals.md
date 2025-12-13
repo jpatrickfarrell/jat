@@ -276,11 +276,21 @@ Each event type has a custom UI in the expanded timeline:
 | `working` | Task title, task ID, git SHA where work started |
 | `review` | Summary items, files modified, tests status |
 | `needs_input` | Question, question type, options if provided |
-| `completing` | Current step, progress percentage |
+| `completing` | Current step (hidden once task completes) |
+| `completed` | Green outcome badge, summary checklist, task ID |
 | `starting` | Agent name, project, model |
 | `compacting` | Reason, context size before |
 | `idle` | Ready for work status, session summary |
 | `auto_proceed` | Current task ID, next task ID |
+
+**Completing → Completed Transition:**
+
+When a task completes, intermediate `completing` events are automatically hidden from the timeline. Only the final `completed` event is shown with:
+- Green "✓ Task Completed Successfully" badge
+- "WHAT WAS DONE" summary checklist
+- Task ID reference
+
+This keeps the timeline clean - you see the steps while completion is in progress, then just the final result once done.
 
 **JSONL Format:**
 

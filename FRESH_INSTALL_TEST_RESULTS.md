@@ -33,7 +33,7 @@ All acceptance criteria verified successfully:
   - Agent Mail tools (13): am-register, am-inbox, am-send, am-reply, am-ack, etc.
   - Browser tools (7): browser-start.js, browser-nav.js, browser-eval.js, etc.
   - Database tools (6): db-query, db-schema, db-sessions
-  - Other tools: bd, bd-dashboard, jat-dashboard
+  - Other tools: bd, jat-dashboard
 
 ### 3. Agent Commands Available
 **Status:** ✅ PASS

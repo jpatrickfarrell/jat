@@ -115,27 +115,32 @@ echo ""
 # Get project root directory
 PROJECT_ROOT="$(dirname "$TOOLS_DIR")"
 
-# Symlink dashboard launcher scripts
-for launcher in "bd-dashboard" "jat-dashboard"; do
-    LAUNCHER_SOURCE="$PROJECT_ROOT/$launcher"
-    LAUNCHER_TARGET="$HOME/.local/bin/$launcher"
+# Symlink dashboard launcher script
+LAUNCHER_SOURCE="$PROJECT_ROOT/jat-dashboard"
+LAUNCHER_TARGET="$HOME/.local/bin/jat-dashboard"
 
-    if [ -f "$LAUNCHER_SOURCE" ]; then
-        if [ -L "$LAUNCHER_TARGET" ]; then
-            CURRENT_TARGET=$(readlink "$LAUNCHER_TARGET")
-            if [ "$CURRENT_TARGET" = "$LAUNCHER_SOURCE" ]; then
-                echo -e "  ${GREEN}✓${NC} $launcher (already linked)"
-            else
-                echo -e "  ${YELLOW}↻${NC} $launcher (updating link)"
-                rm "$LAUNCHER_TARGET"
-                ln -s "$LAUNCHER_SOURCE" "$LAUNCHER_TARGET"
-            fi
+if [ -f "$LAUNCHER_SOURCE" ]; then
+    if [ -L "$LAUNCHER_TARGET" ]; then
+        CURRENT_TARGET=$(readlink "$LAUNCHER_TARGET")
+        if [ "$CURRENT_TARGET" = "$LAUNCHER_SOURCE" ]; then
+            echo -e "  ${GREEN}✓${NC} jat-dashboard (already linked)"
         else
-            echo -e "  ${GREEN}+${NC} $launcher (linked)"
+            echo -e "  ${YELLOW}↻${NC} jat-dashboard (updating link)"
+            rm "$LAUNCHER_TARGET"
             ln -s "$LAUNCHER_SOURCE" "$LAUNCHER_TARGET"
         fi
+    else
+        echo -e "  ${GREEN}+${NC} jat-dashboard (linked)"
+        ln -s "$LAUNCHER_SOURCE" "$LAUNCHER_TARGET"
     fi
-done
+fi
+
+# Clean up legacy bd-dashboard symlink if it exists
+LEGACY_TARGET="$HOME/.local/bin/bd-dashboard"
+if [ -L "$LEGACY_TARGET" ]; then
+    echo -e "  ${YELLOW}✗${NC} bd-dashboard (removing legacy symlink)"
+    rm "$LEGACY_TARGET"
+fi
 
 echo ""
 echo -e "${BLUE}Setting up jat CLI...${NC}"

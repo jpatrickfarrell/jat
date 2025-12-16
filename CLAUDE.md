@@ -121,8 +121,7 @@ This contains critical information about:
 
 **Launcher Script (Recommended):**
 ```bash
-bd-dashboard        # Checks dependencies, starts server, opens browser
-jat-dashboard       # Alias for bd-dashboard
+jat-dashboard       # Checks dependencies, starts server, opens browser
 ```
 
 **Manual Commands:**

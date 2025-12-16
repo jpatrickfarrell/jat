@@ -215,10 +215,26 @@ function handleSessionOutput(data: SessionEvent): void {
 	const { sessionName, output, lineCount, isDelta, agentName } = data;
 	if (!sessionName || output === undefined) return;
 
-	const sessionIndex = workSessionsState.sessions.findIndex(s => s.sessionName === sessionName);
+	let sessionIndex = workSessionsState.sessions.findIndex(s => s.sessionName === sessionName);
+
+	// Create session on-the-fly if it doesn't exist
+	// This ensures automation works for sessions that were running before SSE connected
 	if (sessionIndex === -1) {
-		// Session not in state yet - might be new, will be added by session-created
-		return;
+		const newSession: WorkSession = {
+			sessionName,
+			agentName: agentName || sessionName.replace(/^jat-/, ''),
+			task: null,
+			lastCompletedTask: null,
+			output: '',
+			lineCount: 0,
+			tokens: 0,
+			cost: 0,
+			created: new Date().toISOString(),
+			attached: false
+		};
+		workSessionsState.sessions = [...workSessionsState.sessions, newSession];
+		sessionIndex = workSessionsState.sessions.length - 1;
+		console.log(`[SessionEvents] Auto-created session for automation: ${sessionName}`);
 	}
 
 	const currentSession = workSessionsState.sessions[sessionIndex];

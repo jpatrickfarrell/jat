@@ -376,3 +376,79 @@ export function filterTasksByProjects(tasks: Task[], projectNames: Set<string>):
     return project && projectNames.has(project);
   });
 }
+
+/**
+ * Extended task interface with dependency information
+ */
+export interface TaskWithDeps extends Task {
+  issue_type?: string;
+  depends_on?: Array<{ id: string; [key: string]: any }>;
+}
+
+/**
+ * Build a map from child task ID to parent epic ID.
+ *
+ * This is the REVERSE mapping: instead of looking at a child's depends_on
+ * (which doesn't contain the epic), we look at epics' depends_on to find
+ * their children.
+ *
+ * Correct dependency direction: Epic depends on children
+ * - Epic.depends_on contains child task IDs
+ * - Children are NOT blocked by the epic (they can be worked on immediately)
+ *
+ * @param tasks - All tasks including epics
+ * @returns Map from child_id to epic_id
+ */
+export function buildEpicChildMap(tasks: TaskWithDeps[]): Map<string, string> {
+  const childToEpic = new Map<string, string>();
+
+  if (!Array.isArray(tasks)) {
+    return childToEpic;
+  }
+
+  // Find all epics
+  const epics = tasks.filter(t => t.issue_type === 'epic');
+
+  // For each epic, look at what it depends on (its children)
+  for (const epic of epics) {
+    if (epic.depends_on && Array.isArray(epic.depends_on)) {
+      for (const dep of epic.depends_on) {
+        if (dep.id && dep.id !== epic.id) {
+          // This dependency is a child of the epic
+          childToEpic.set(dep.id, epic.id);
+        }
+      }
+    }
+  }
+
+  return childToEpic;
+}
+
+/**
+ * Get the parent epic ID for a task.
+ *
+ * Checks both:
+ * 1. Hierarchical IDs (jat-abc.1 -> jat-abc)
+ * 2. Dependency-based relationships (via epicChildMap)
+ *
+ * @param taskId - The task ID to check
+ * @param epicChildMap - Optional map from buildEpicChildMap()
+ * @returns Parent epic ID or null if no parent
+ */
+export function getParentEpicId(
+  taskId: string,
+  epicChildMap?: Map<string, string>
+): string | null {
+  // First check hierarchical ID
+  const hierarchicalParent = extractParentId(taskId);
+  if (hierarchicalParent) {
+    return hierarchicalParent;
+  }
+
+  // Then check dependency-based relationship
+  if (epicChildMap && epicChildMap.has(taskId)) {
+    return epicChildMap.get(taskId) || null;
+  }
+
+  return null;
+}

@@ -100,6 +100,62 @@ interface EpicQueueState {
 }
 
 // =============================================================================
+// PERSISTENCE
+// =============================================================================
+
+const STORAGE_KEY = 'epic-queue-active';
+
+interface PersistedEpicState {
+	epicId: string;
+	settings: ExecutionSettings;
+}
+
+/**
+ * Save active epic to localStorage for persistence across page refreshes
+ */
+function persistActiveEpic(epicId: string, settings: ExecutionSettings): void {
+	if (typeof window === 'undefined') return;
+	try {
+		const data: PersistedEpicState = { epicId, settings };
+		localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+		console.log('[epicQueueStore] Persisted active epic:', epicId);
+	} catch (e) {
+		console.error('[epicQueueStore] Failed to persist epic state:', e);
+	}
+}
+
+/**
+ * Clear persisted epic state
+ */
+function clearPersistedEpic(): void {
+	if (typeof window === 'undefined') return;
+	try {
+		localStorage.removeItem(STORAGE_KEY);
+		console.log('[epicQueueStore] Cleared persisted epic state');
+	} catch (e) {
+		console.error('[epicQueueStore] Failed to clear persisted epic:', e);
+	}
+}
+
+/**
+ * Get persisted epic state if available
+ */
+function getPersistedEpic(): PersistedEpicState | null {
+	if (typeof window === 'undefined') return null;
+	try {
+		const data = localStorage.getItem(STORAGE_KEY);
+		if (data) {
+			const parsed = JSON.parse(data) as PersistedEpicState;
+			console.log('[epicQueueStore] Found persisted epic:', parsed.epicId);
+			return parsed;
+		}
+	} catch (e) {
+		console.error('[epicQueueStore] Failed to read persisted epic:', e);
+	}
+	return null;
+}
+
+// =============================================================================
 // DEFAULT VALUES
 // =============================================================================
 
@@ -250,7 +306,10 @@ export async function launchEpic(
 		const mergedSettings = { ...defaultSettings, ...settings };
 		startEpic(epicId, data.epicTitle, childrenAsTasks, mergedSettings);
 
-		// 4. If autoSpawn is enabled, spawn initial agents
+		// 4. Persist to localStorage for page refresh survival
+		persistActiveEpic(epicId, mergedSettings);
+
+		// 5. If autoSpawn is enabled, spawn initial agents
 		if (mergedSettings.autoSpawn) {
 			const spawnResults = await spawnInitialAgents();
 			return { success: true, spawnResults };
@@ -268,35 +327,58 @@ export async function launchEpic(
  * Spawn initial agents for ready tasks up to maxConcurrent limit
  * Called automatically by launchEpic when autoSpawn is enabled.
  *
+ * Uses PARALLEL spawning with staggered start times for fast execution.
+ * Each spawn request starts after a small delay (500ms) from the previous,
+ * but all requests run concurrently.
+ *
  * @returns Array of spawn results
  */
 export async function spawnInitialAgents(): Promise<SpawnResult[]> {
+	const startTime = Date.now();
+	console.log(`[epic spawn] ========== EPIC SPAWN STARTED ==========`);
+	console.log(`[epic spawn] isActive=${state.isActive}, mode=${state.settings.mode}`);
+
 	if (!state.isActive) {
+		console.log(`[epic spawn] BLOCKED: No active epic`);
 		return [{ success: false, error: 'No active epic' }];
 	}
 
-	const results: SpawnResult[] = [];
 	const readyTasks = getReadyTasks();
+	console.log(`[epic spawn] Ready tasks: ${readyTasks.length}`, readyTasks.map(t => t.id));
+
 	// In sequential mode, only spawn 1 agent at a time
 	const maxToSpawn = state.settings.mode === 'sequential'
 		? 1
 		: Math.min(readyTasks.length, state.settings.maxConcurrent);
 
+	console.log(`[epic spawn] maxToSpawn=${maxToSpawn} (maxConcurrent=${state.settings.maxConcurrent})`);
+
 	if (maxToSpawn === 0) {
+		console.log(`[epic spawn] BLOCKED: No ready tasks to spawn`);
 		return [{ success: false, error: 'No ready tasks to spawn' }];
 	}
 
 	state.isSpawning = true;
 
-	try {
-		for (let i = 0; i < maxToSpawn; i++) {
-			const task = readyTasks[i];
+	// Use PARALLEL spawning with staggered starts (like bulk spawn fix)
+	const spawnPromises = readyTasks.slice(0, maxToSpawn).map(async (task, i) => {
+		const taskStartTime = Date.now();
 
-			// Spawn agent for this task
+		// Stagger spawn request starts (500ms between each)
+		if (i > 0) {
+			console.log(`[epic spawn] [${i + 1}/${maxToSpawn}] ${task.id}: Waiting ${i * 500}ms stagger...`);
+			await delay(i * 500);
+		}
+
+		console.log(`[epic spawn] [${i + 1}/${maxToSpawn}] ${task.id}: Sending spawn request...`);
+
+		try {
 			const result = await spawnAgentForTask(task.id);
-			results.push(result);
+			const elapsed = Date.now() - taskStartTime;
 
 			if (result.success) {
+				console.log(`[epic spawn] [${i + 1}/${maxToSpawn}] ${task.id}: ✓ SUCCESS - Agent: ${result.agentName} (${elapsed}ms)`);
+
 				// Mark task as in_progress
 				updateTaskStatus(task.id, 'in_progress', result.agentName);
 
@@ -309,18 +391,43 @@ export async function spawnInitialAgents(): Promise<SpawnResult[]> {
 				if (result.agentName) {
 					addRunningAgent(result.agentName);
 				}
+			} else {
+				console.error(`[epic spawn] [${i + 1}/${maxToSpawn}] ${task.id}: ✗ FAILED - ${result.error} (${elapsed}ms)`);
 			}
 
-			// Stagger spawns (except for the last one)
-			if (i < maxToSpawn - 1) {
-				await delay(SPAWN_STAGGER_MS);
-			}
+			return result;
+		} catch (err) {
+			const elapsed = Date.now() - taskStartTime;
+			console.error(`[epic spawn] [${i + 1}/${maxToSpawn}] ${task.id}: ✗ EXCEPTION after ${elapsed}ms:`, err);
+			return {
+				success: false,
+				taskId: task.id,
+				error: err instanceof Error ? err.message : 'Spawn exception'
+			};
 		}
+	});
+
+	console.log(`[epic spawn] All ${spawnPromises.length} promises created, waiting for completion...`);
+
+	try {
+		const results = await Promise.all(spawnPromises);
+		const successCount = results.filter(r => r.success).length;
+		const failedTasks = results.filter(r => !r.success).map(r => r.taskId);
+
+		console.log(`[epic spawn] ========== EPIC SPAWN COMPLETE ==========`);
+		console.log(`[epic spawn] Results: ${successCount}/${maxToSpawn} succeeded in ${Date.now() - startTime}ms`);
+		if (failedTasks.length > 0) {
+			console.log(`[epic spawn] Failed tasks:`, failedTasks);
+		}
+
+		return results;
+	} catch (err) {
+		console.error('[epic spawn] ✗ Promise.all EXCEPTION:', err);
+		return [{ success: false, error: 'Epic spawn failed' }];
 	} finally {
 		state.isSpawning = false;
+		console.log(`[epic spawn] isSpawning reset to false`);
 	}
-
-	return results;
 }
 
 /**
@@ -496,7 +603,7 @@ export async function completeTask(taskId: string): Promise<void> {
 	recalculateBlockedStatus();
 
 	// Check for newly unblocked tasks and auto-spawn if enabled
-	if (state.settings.autoSpawn && canSpawnMore()) {
+	if (state.settings.autoSpawn) {
 		// Find tasks that were blocked but are now ready
 		const newlyUnblocked = state.children.filter(
 			(c) => previouslyBlockedIds.has(c.id) && c.status === 'ready'
@@ -505,10 +612,19 @@ export async function completeTask(taskId: string): Promise<void> {
 		if (newlyUnblocked.length > 0) {
 			// Sort by priority (lower = higher priority)
 			newlyUnblocked.sort((a, b) => a.priority - b.priority);
-			const nextTask = newlyUnblocked[0];
 
-			// Spawn an agent for the highest priority newly unblocked task
-			await spawnAgentForTaskAndTrack(nextTask.id);
+			// Spawn agents for ALL newly unblocked tasks (up to maxConcurrent)
+			// This fills available slots when a blocking task completes
+			for (const task of newlyUnblocked) {
+				if (!canSpawnMore()) break; // Stop if at capacity
+
+				await spawnAgentForTaskAndTrack(task.id);
+
+				// Stagger spawns to avoid overwhelming the system
+				if (canSpawnMore() && newlyUnblocked.indexOf(task) < newlyUnblocked.length - 1) {
+					await delay(SPAWN_STAGGER_MS);
+				}
+			}
 		}
 	}
 }
@@ -644,6 +760,9 @@ export function isEpicComplete(): boolean {
  * Stop epic execution
  */
 export function stopEpic(): void {
+	// Clear persisted state
+	clearPersistedEpic();
+
 	// Mutate properties instead of reassigning (required for Svelte 5 exported state)
 	state.epicId = null;
 	state.epicTitle = null;
@@ -822,6 +941,104 @@ export function getSessionForTask(taskId: string): string | undefined {
  */
 export function clearSpawnError(): void {
 	state.lastSpawnError = null;
+}
+
+/**
+ * Refresh epic children status from the API
+ * Call this to sync the store with actual beads database state
+ */
+export async function refreshEpicState(): Promise<void> {
+	if (!state.isActive || !state.epicId) return;
+
+	try {
+		const response = await fetch(`/api/epics/${state.epicId}/children`);
+		if (!response.ok) return;
+
+		const data = await response.json();
+
+		// Update children status from API
+		interface ApiChild {
+			id: string;
+			status: string;
+			assignee?: string;
+		}
+		const apiChildren = new Map<string, { status: string; assignee?: string }>(
+			data.children.map((c: ApiChild) => [
+				c.id,
+				{ status: c.status, assignee: c.assignee }
+			])
+		);
+
+		// Merge API status into existing children
+		state.children = state.children.map((child) => {
+			const apiChild = apiChildren.get(child.id);
+			if (apiChild) {
+				// Map beads status to our ChildStatus
+				let newStatus: ChildStatus = child.status;
+				if (apiChild.status === 'closed') {
+					newStatus = 'completed';
+				} else if (apiChild.status === 'in_progress') {
+					newStatus = 'in_progress';
+				} else if (apiChild.status === 'open') {
+					// Check if it was blocked - if so, recalculate
+					newStatus = child.status === 'blocked' ? child.status : 'ready';
+				}
+				return {
+					...child,
+					status: newStatus,
+					assignee: apiChild.assignee || child.assignee
+				};
+			}
+			return child;
+		});
+
+		// Recalculate blocked status
+		recalculateBlockedStatus();
+
+		// Update progress
+		state.progress = {
+			completed: state.children.filter((c) => c.status === 'completed').length,
+			total: state.children.length
+		};
+	} catch (error) {
+		console.error('[epicQueueStore] Error refreshing epic state:', error);
+	}
+}
+
+/**
+ * Initialize epic state from localStorage if available
+ * Call this on app mount to restore epic across page refreshes
+ * @returns Promise with success status
+ */
+export async function initializeFromPersisted(): Promise<boolean> {
+	const persisted = getPersistedEpic();
+	if (!persisted) {
+		console.log('[epicQueueStore] No persisted epic found');
+		return false;
+	}
+
+	console.log('[epicQueueStore] Restoring epic from localStorage:', persisted.epicId);
+
+	// Fetch fresh data and restore the epic
+	const result = await launchEpic(persisted.epicId, persisted.settings);
+
+	if (!result.success) {
+		console.error('[epicQueueStore] Failed to restore epic:', result.error);
+		// Clear invalid persisted state
+		clearPersistedEpic();
+		return false;
+	}
+
+	console.log('[epicQueueStore] Successfully restored epic:', persisted.epicId);
+	return true;
+}
+
+/**
+ * Check if there's a persisted epic (without restoring)
+ * Useful for deciding whether to show loading states
+ */
+export function hasPersistedEpic(): boolean {
+	return getPersistedEpic() !== null;
 }
 
 // Export state for direct reactive access in components

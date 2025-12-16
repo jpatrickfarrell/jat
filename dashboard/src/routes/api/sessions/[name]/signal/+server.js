@@ -1,9 +1,13 @@
 /**
- * Session Signal API - Read/Clear Agent Signals
+ * Session Signal API - Read/Clear/Emit Agent Signals
  *
  * GET /api/sessions/[name]/signal
  *   Returns the current signal for a session (from PostToolUse hook)
  *   Signal file: /tmp/jat-signal-tmux-{sessionName}.json
+ *
+ * POST /api/sessions/[name]/signal
+ *   Emits a signal for the session using jat-signal command
+ *   Body: { type: string, data: string | object }
  *
  * DELETE /api/sessions/[name]/signal
  *   Clears the signal file after processing
@@ -17,6 +21,10 @@
 
 import { json } from '@sveltejs/kit';
 import { readFileSync, unlinkSync, existsSync } from 'fs';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ params }) {
@@ -98,4 +106,82 @@ export async function DELETE({ params }) {
 		deletedFiles,
 		sessionName
 	});
+}
+
+/**
+ * POST /api/sessions/[name]/signal
+ * Emit a signal for a session using jat-signal command
+ *
+ * Body: { type: string, data: string | object }
+ */
+/** @type {import('./$types').RequestHandler} */
+export async function POST({ params, request }) {
+	const sessionName = params.name;
+
+	if (!sessionName) {
+		return json({ error: 'Missing session name' }, { status: 400 });
+	}
+
+	try {
+		const body = await request.json();
+		const { type, data } = body;
+
+		if (!type) {
+			return json({
+				error: 'Missing signal type',
+				message: 'Signal type is required (e.g., "working", "review", "tasks")'
+			}, { status: 400 });
+		}
+
+		// Build the signal payload
+		// If data is an object, stringify it; otherwise use as-is
+		const payload = typeof data === 'object' ? JSON.stringify(data) : (data || '{}');
+
+		try {
+			// Execute jat-signal command
+			// The command outputs [JAT-SIGNAL:type] payload which is captured by PostToolUse hooks
+			const result = await execFileAsync('jat-signal', [type, payload], {
+				timeout: 10000,
+				env: {
+					...process.env,
+					// Set session context for the signal
+					JAT_SESSION: sessionName
+				}
+			});
+
+			return json({
+				success: true,
+				sessionName,
+				type,
+				data,
+				stdout: result.stdout,
+				message: `Signal emitted: ${type}`
+			});
+		} catch (execError) {
+			const execErr = /** @type {{ stderr?: string, message?: string, code?: string }} */ (execError);
+
+			// Check if jat-signal command not found
+			if (execErr.code === 'ENOENT') {
+				return json({
+					error: 'jat-signal not found',
+					message: 'jat-signal command not found in PATH. Ensure jat tools are installed.',
+					sessionName
+				}, { status: 500 });
+			}
+
+			const errorMessage = execErr.stderr || execErr.message || String(execError);
+
+			return json({
+				error: 'Signal failed',
+				message: errorMessage,
+				sessionName
+			}, { status: 500 });
+		}
+	} catch (error) {
+		console.error('Error in POST /api/sessions/[name]/signal:', error);
+		return json({
+			error: 'Internal server error',
+			message: error instanceof Error ? error.message : String(error)
+		}, { status: 500 });
+	}
 }

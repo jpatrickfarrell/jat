@@ -464,7 +464,8 @@ function processSignalFileChange(sessionName: string): void {
 	const prevFileState = signalFileStates.get(sessionName) || { state: null, tasksHash: null, actionHash: null, completeHash: null };
 	const currentFileState = { state: prevFileState.state, tasksHash: prevFileState.tasksHash, actionHash: prevFileState.actionHash, completeHash: prevFileState.completeHash };
 
-	// Handle state signals
+	// Handle state signals (working, review, needs_input, etc.)
+	// Include the full signal data payload for rich signal card rendering
 	if (signal.type === 'state' && signal.state) {
 		const mappedState = SIGNAL_STATE_MAP[signal.state] || signal.state;
 		if (mappedState !== prevFileState.state) {
@@ -472,9 +473,11 @@ function processSignalFileChange(sessionName: string): void {
 			broadcast('session-state', {
 				sessionName,
 				state: mappedState,
-				previousState: prevFileState.state
+				previousState: prevFileState.state,
+				// Include the full signal payload for rich signal cards
+				signalPayload: signal.data ? { type: signal.state, ...signal.data } : undefined
 			});
-			console.log(`[SSE Signal] State change for ${sessionName}: ${prevFileState.state} -> ${mappedState}`);
+			console.log(`[SSE Signal] State change for ${sessionName}: ${prevFileState.state} -> ${mappedState}${signal.data ? ' (with payload)' : ''}`);
 		}
 	}
 
@@ -610,6 +613,10 @@ function startSignalWatcher(): void {
 
 	try {
 		signalWatcher = watch('/tmp', (eventType, filename) => {
+			// Debug: log all .json file events
+			if (filename?.endsWith('.json')) {
+				console.log(`[SSE Signal] fs.watch event: ${eventType} ${filename}`);
+			}
 			if (!filename || !filename.endsWith('.json')) return;
 
 			// Handle signal files: jat-signal-tmux-{sessionName}.json

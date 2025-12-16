@@ -199,6 +199,10 @@ export interface WorkSession {
 	};
 	/** Timestamp when rich signal payload was received */
 	_richSignalPayloadTimestamp?: number;
+	/** Real-time output activity state (generating/thinking/idle) from monitor script */
+	_activityState?: 'generating' | 'thinking' | 'idle';
+	/** Timestamp when activity state was last updated */
+	_activityStateTimestamp?: number;
 }
 
 interface WorkSessionsState {
@@ -631,6 +635,7 @@ export async function sendEscape(sessionName: string): Promise<boolean> {
  * With WebSocket streaming enabled (default), this function:
  * - Subscribes to WebSocket 'output' channel for real-time terminal updates (<50ms latency)
  * - Uses HTTP polling only for metadata (tasks, tokens, session list) every 5 seconds
+ * - Starts activity polling for shimmer effect (200ms interval)
  *
  * Without WebSocket (fallback), uses HTTP polling at the specified interval.
  *
@@ -647,6 +652,9 @@ export function startPolling(intervalMs: number = 5000, useWebSocket: boolean = 
 	if (useWebSocket) {
 		subscribeToOutputUpdates();
 	}
+
+	// Start activity polling for shimmer effect (200ms for responsive updates)
+	startActivityPolling(200);
 
 	// Set up polling for metadata (task changes, token usage, new/removed sessions)
 	// With WebSocket, we only need occasional HTTP polls for metadata
@@ -669,6 +677,9 @@ export function stopPolling(): void {
 
 	// Also unsubscribe from WebSocket output updates
 	unsubscribeFromOutputUpdates();
+
+	// Stop activity polling
+	stopActivityPolling();
 }
 
 /**
@@ -707,6 +718,124 @@ export function getError(): string | null {
 
 export function getLastFetch(): Date | null {
 	return state.lastFetch;
+}
+
+// ============================================================================
+// Activity State Polling (shimmer effect)
+// ============================================================================
+
+let activityPollingInterval: ReturnType<typeof setInterval> | null = null;
+const ACTIVITY_STALE_MS = 30000; // Treat activity older than 30s as stale
+
+/**
+ * Fetch activity state for all active sessions and update the store
+ * This is the central polling mechanism that replaces per-component polling
+ */
+export async function fetchActivityStates(): Promise<void> {
+	// Get current session names
+	const sessions = state.sessions;
+	if (sessions.length === 0) return;
+
+	// Fetch activity for all sessions in parallel
+	const activityPromises = sessions.map(async (session) => {
+		try {
+			const response = await globalThis.fetch(`/api/sessions/${session.sessionName}/activity`);
+			if (!response.ok) return { sessionName: session.sessionName, state: 'idle' as const };
+
+			const data = await response.json();
+			if (data.hasActivity && data.activity?.state) {
+				// Check if activity file is stale (not updated in 30s)
+				// Use fileModifiedAt (file mtime) instead of 'since' field because
+				// 'since' only updates on state changes, but file mtime reflects actual updates
+				const fileModified = data.fileModifiedAt ? new Date(data.fileModifiedAt).getTime() : 0;
+				const age = Date.now() - fileModified;
+				if (age > ACTIVITY_STALE_MS) {
+					return { sessionName: session.sessionName, state: 'idle' as const };
+				}
+				return {
+					sessionName: session.sessionName,
+					state: data.activity.state as 'generating' | 'thinking' | 'idle'
+				};
+			}
+			return { sessionName: session.sessionName, state: 'idle' as const };
+		} catch {
+			return { sessionName: session.sessionName, state: 'idle' as const };
+		}
+	});
+
+	const results = await Promise.all(activityPromises);
+
+	// Build a map for quick lookup
+	const activityMap = new Map(results.map((r) => [r.sessionName, r.state]));
+
+	// Update sessions with activity state
+	let hasChanges = false;
+	const updatedSessions = state.sessions.map((session) => {
+		const newState = activityMap.get(session.sessionName) || 'idle';
+		if (session._activityState !== newState) {
+			hasChanges = true;
+			return {
+				...session,
+				_activityState: newState,
+				_activityStateTimestamp: Date.now()
+			};
+		}
+		return session;
+	});
+
+	// Only update state if there are actual changes (avoid re-renders)
+	if (hasChanges) {
+		state.sessions = updatedSessions;
+	}
+}
+
+/**
+ * Start polling for activity states
+ * @param intervalMs - Polling interval in milliseconds (default: 200ms for responsive shimmer)
+ */
+export function startActivityPolling(intervalMs: number = 200): void {
+	stopActivityPolling();
+
+	// Initial fetch
+	fetchActivityStates().catch(() => {});
+
+	// Set up polling
+	activityPollingInterval = setInterval(() => {
+		fetchActivityStates().catch(() => {});
+	}, intervalMs);
+}
+
+/**
+ * Stop polling for activity states
+ */
+export function stopActivityPolling(): void {
+	if (activityPollingInterval) {
+		clearInterval(activityPollingInterval);
+		activityPollingInterval = null;
+	}
+}
+
+/**
+ * Get the activity state for a specific session
+ */
+export function getActivityState(sessionName: string): 'generating' | 'thinking' | 'idle' {
+	const session = state.sessions.find((s) => s.sessionName === sessionName);
+	return session?._activityState || 'idle';
+}
+
+/**
+ * Get the SSE state for a specific session
+ */
+export function getSseState(sessionName: string): string | undefined {
+	const session = state.sessions.find((s) => s.sessionName === sessionName);
+	return session?._sseState;
+}
+
+/**
+ * Check if a session is actively generating (for shimmer effect)
+ */
+export function isGenerating(sessionName: string): boolean {
+	return getActivityState(sessionName) === 'generating';
 }
 
 // Export state for direct reactive access in components

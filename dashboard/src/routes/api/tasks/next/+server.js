@@ -23,8 +23,38 @@
 import { json } from '@sveltejs/kit';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { readFileSync, existsSync } from 'fs';
+import { homedir } from 'os';
+import { join } from 'path';
 
 const execAsync = promisify(exec);
+
+/**
+ * Get the project path for a given project name from projects.json config
+ * @param {string} projectName - Project name (e.g., "steelbridge", "jat")
+ * @returns {string} - Full path to project directory
+ */
+function getProjectPath(projectName) {
+	const configPath = join(homedir(), '.config/jat/projects.json');
+	const defaultPath = process.cwd().replace('/dashboard', '');
+
+	if (!existsSync(configPath)) {
+		return defaultPath;
+	}
+
+	try {
+		const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+		const projectConfig = config.projects?.[projectName.toLowerCase()];
+		if (projectConfig?.path) {
+			// Expand ~ to home directory
+			return projectConfig.path.replace(/^~/, homedir());
+		}
+	} catch (err) {
+		console.warn(`[next] Could not read projects config:`, err);
+	}
+
+	return defaultPath;
+}
 
 /**
  * @typedef {{ id: string, title: string, status: string, priority: number, depends_on?: Array<{ id: string, status: string }> }} Task
@@ -33,15 +63,101 @@ const execAsync = promisify(exec);
  */
 
 /**
- * Get the parent epic ID from a task ID
+ * Get the parent epic ID from a task ID (dot notation only)
  * Task IDs with dots (e.g., jat-puza.8) have parent epic (e.g., jat-puza)
+ * For non-dot notation tasks, use findEpicContainingTask() instead
  * @param {string} taskId
  * @returns {string | null}
  */
-function getParentEpicId(taskId) {
+function getParentEpicIdFromDotNotation(taskId) {
 	const dotIndex = taskId.lastIndexOf('.');
 	if (dotIndex === -1) return null;
 	return taskId.substring(0, dotIndex);
+}
+
+/**
+ * Find the epic that contains a given task in its dependencies
+ * This handles tasks with jat-{hash} format that don't use dot notation
+ * @param {string} taskId
+ * @param {string} projectPath
+ * @returns {Promise<{epicId: string, epicTitle: string} | null>}
+ */
+async function findEpicContainingTask(taskId, projectPath) {
+	try {
+		// First, check if the task itself has a parent field
+		const { stdout: taskStdout } = await execAsync(`bd show "${taskId}" --json`, {
+			cwd: projectPath,
+			timeout: 10000
+		});
+
+		const taskData = JSON.parse(taskStdout);
+		const task = Array.isArray(taskData) ? taskData[0] : taskData;
+
+		if (task?.parent) {
+			// Task has a parent field - fetch the parent to get its title
+			try {
+				const { stdout: parentStdout } = await execAsync(`bd show "${task.parent}" --json`, {
+					cwd: projectPath,
+					timeout: 10000
+				});
+				const parentData = JSON.parse(parentStdout);
+				const parent = Array.isArray(parentData) ? parentData[0] : parentData;
+				if (parent) {
+					console.log(`[next] Task ${taskId} has parent ${task.parent}`);
+					return { epicId: parent.id, epicTitle: parent.title };
+				}
+			} catch (err) {
+				console.warn(`[next] Could not fetch parent ${task.parent}:`, err);
+			}
+		}
+
+		// No parent field - search for epics that have this task as a dependency
+		// Use bd list to find epics in the same project
+		const projectPrefix = taskId.split('-')[0];
+		const { stdout: epicsStdout } = await execAsync(
+			`bd list --type epic --status open --json`,
+			{
+				cwd: projectPath,
+				timeout: 10000
+			}
+		);
+
+		const epics = JSON.parse(epicsStdout);
+
+		// Check each epic's dependencies for this task
+		for (const epic of epics) {
+			// Only check epics from the same project
+			if (!epic.id.startsWith(projectPrefix + '-')) continue;
+
+			// Fetch full epic with dependencies
+			try {
+				const { stdout: epicFullStdout } = await execAsync(`bd show "${epic.id}" --json`, {
+					cwd: projectPath,
+					timeout: 5000
+				});
+				const epicFull = JSON.parse(epicFullStdout);
+				const epicData = Array.isArray(epicFull) ? epicFull[0] : epicFull;
+
+				if (epicData?.dependencies) {
+					const hasTask = epicData.dependencies.some(
+						(/** @type {{ id: string }} */ dep) => dep.id === taskId
+					);
+					if (hasTask) {
+						console.log(`[next] Task ${taskId} found in epic ${epicData.id} dependencies`);
+						return { epicId: epicData.id, epicTitle: epicData.title };
+					}
+				}
+			} catch (err) {
+				// Skip this epic if we can't fetch it
+				continue;
+			}
+		}
+
+		return null;
+	} catch (error) {
+		console.error(`[next] Error finding epic for task ${taskId}:`, error);
+		return null;
+	}
 }
 
 /**
@@ -68,9 +184,10 @@ function isTaskReady(task) {
  * @param {string} completedTaskId
  * @param {string} epicId
  * @param {string} projectPath
+ * @param {string | null | undefined} project - Filter siblings by project
  * @returns {Promise<NextTaskResult | null>}
  */
-async function findNextEpicSibling(completedTaskId, epicId, projectPath) {
+async function findNextEpicSibling(completedTaskId, epicId, projectPath, project) {
 	try {
 		// Fetch the epic with its children using bd show
 		const { stdout } = await execAsync(`bd show "${epicId}" --json`, {
@@ -86,11 +203,16 @@ async function findNextEpicSibling(completedTaskId, epicId, projectPath) {
 			return null;
 		}
 
-		// Find ready siblings (open, not blocked, not the completed task)
+		// Find ready siblings (open, not blocked, not the completed task, same project)
 		const readySiblings = epic.dependencies
 			.filter((/** @type {Task} */ task) => {
 				// Skip the just-completed task
 				if (task.id === completedTaskId) return false;
+				// Filter by project if specified
+				if (project && project !== 'All Projects') {
+					const taskProject = task.id.split('-')[0];
+					if (taskProject !== project) return false;
+				}
 				// Must be ready (open and not blocked)
 				return isTaskReady(task);
 			})
@@ -130,7 +252,9 @@ async function findNextEpicSibling(completedTaskId, epicId, projectPath) {
 async function findFromBacklog(projectPath, project) {
 	try {
 		// Use bd ready which returns ready tasks sorted by priority
-		const { stdout } = await execAsync(`bd ready --json --limit 1 --sort hybrid`, {
+		// When filtering by project, we need to fetch more tasks since the top task might not be from the target project
+		const limit = (project && project !== 'All Projects') ? 50 : 1;
+		const { stdout } = await execAsync(`bd ready --json --limit ${limit} --sort hybrid`, {
 			cwd: projectPath,
 			timeout: 10000
 		});
@@ -145,7 +269,7 @@ async function findFromBacklog(projectPath, project) {
 		}
 
 		if (filteredTasks.length === 0) {
-			console.log(`[next] No ready tasks in backlog`);
+			console.log(`[next] No ready tasks in backlog${project ? ` for project ${project}` : ''}`);
 			return null;
 		}
 
@@ -170,16 +294,30 @@ async function findFromBacklog(projectPath, project) {
  */
 async function pickNextTask(completedTaskId, options = {}) {
 	const { project = null, preferEpic = true } = options;
-	const projectPath = process.cwd().replace('/dashboard', '');
+	// Use the project-specific path from config, or fall back to current directory
+	const projectPath = project ? getProjectPath(project) : process.cwd().replace('/dashboard', '');
+	console.log(`[next] Using project path: ${projectPath} for project: ${project || 'default'}`);
 
 	// Try epic-aware selection first
 	if (completedTaskId && preferEpic) {
-		const epicId = getParentEpicId(completedTaskId);
+		// First try dot notation (e.g., jat-puza.8 → jat-puza)
+		let epicId = getParentEpicIdFromDotNotation(completedTaskId);
+		let epicTitle = undefined;
+
+		// If no dot notation, try database lookup for epic membership
+		if (!epicId) {
+			const epicInfo = await findEpicContainingTask(completedTaskId, projectPath);
+			if (epicInfo) {
+				epicId = epicInfo.epicId;
+				epicTitle = epicInfo.epicTitle;
+			}
+		}
+
 		if (epicId) {
 			console.log(
 				`[next] Task ${completedTaskId} is part of epic ${epicId}, looking for siblings...`
 			);
-			const epicResult = await findNextEpicSibling(completedTaskId, epicId, projectPath);
+			const epicResult = await findNextEpicSibling(completedTaskId, epicId, projectPath, project);
 			if (epicResult) {
 				console.log(`[next] Found epic sibling: ${epicResult.taskId}`);
 				return epicResult;
@@ -206,14 +344,13 @@ export async function GET({ url }) {
 		const nextTask = await pickNextTask(completedTaskId, { project, preferEpic });
 
 		if (!nextTask) {
-			return json(
-				{
-					nextTask: null,
-					message: 'No ready tasks available',
-					timestamp: new Date().toISOString()
-				},
-				{ status: 404 }
-			);
+			// Return 200 with null task - this is not an error condition
+			// Having no ready tasks is expected when all work is done
+			return json({
+				nextTask: null,
+				message: 'No ready tasks available',
+				timestamp: new Date().toISOString()
+			});
 		}
 
 		return json({
@@ -252,15 +389,14 @@ export async function POST({ request, fetch }) {
 		const nextTask = await pickNextTask(completedTaskId, { project, preferEpic });
 
 		if (!nextTask) {
-			return json(
-				{
-					nextTask: null,
-					spawnResult: null,
-					message: 'No ready tasks available',
-					timestamp: new Date().toISOString()
-				},
-				{ status: 404 }
-			);
+			// Return 200 with null task - this is not an error condition
+			// Having no ready tasks is expected when all work is done
+			return json({
+				nextTask: null,
+				spawnResult: null,
+				message: 'No ready tasks available',
+				timestamp: new Date().toISOString()
+			});
 		}
 
 		// Cleanup previous session if provided

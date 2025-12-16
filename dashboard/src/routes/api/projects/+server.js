@@ -148,19 +148,63 @@ async function getProjectAgentCount(projectPath) {
 }
 
 /**
- * Check if a port is in use
- * @param {number|null} port
+ * Check if a tmux session exists
+ * @param {string} sessionName
+ * @returns {Promise<boolean>}
  */
-async function checkPortStatus(port) {
-	if (!port) return null;
+async function tmuxSessionExists(sessionName) {
 	try {
-		const { stdout } = await execAsync(`ss -tlnp 2>/dev/null | grep -q ":${port} " && echo "running" || echo "stopped"`, {
+		await execAsync(`tmux has-session -t "${sessionName}" 2>/dev/null`, { timeout: 2000 });
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Check if a port is actively listening
+ * @param {number|null} port
+ * @returns {Promise<boolean>}
+ */
+async function isPortListening(port) {
+	if (!port) return false;
+	try {
+		const { stdout } = await execAsync(`ss -tlnp 2>/dev/null | grep -q ":${port} " && echo "yes" || echo "no"`, {
 			timeout: 2000
 		});
-		return stdout.trim() === 'running' ? 'running' : null;
+		return stdout.trim() === 'yes';
 	} catch {
+		return false;
+	}
+}
+
+/**
+ * Get server status for a project
+ * Returns 'running' | 'starting' | 'stopped' | null
+ * - running: tmux session exists AND port is listening
+ * - starting: tmux session exists but port not yet listening
+ * - stopped: no tmux session (or null if no port configured)
+ *
+ * @param {string} projectName
+ * @param {number|null} port
+ */
+async function getServerStatus(projectName, port) {
+	const sessionName = `server-${projectName}`;
+	const sessionExists = await tmuxSessionExists(sessionName);
+
+	if (!sessionExists) {
+		// No session - return null (unknown/stopped)
 		return null;
 	}
+
+	// Session exists - check if port is listening
+	if (port) {
+		const portListening = await isPortListening(port);
+		return portListening ? 'running' : 'starting';
+	}
+
+	// Session exists but no port configured - assume running
+	return 'running';
 }
 
 /**
@@ -311,7 +355,7 @@ export async function GET({ url }) {
 				const [tasks, agents, status, lastActivity] = await Promise.all([
 					getProjectTaskCounts(project.path),
 					getProjectAgentCount(project.path),
-					checkPortStatus(project.port),
+					getServerStatus(project.name, project.port),
 					getLastActivity(project.path)
 				]);
 
@@ -320,8 +364,8 @@ export async function GET({ url }) {
 					tasks,
 					agents,
 					status,
-					// If server is running, it's active now
-					lastActivity: status === 'running' ? 'now' : lastActivity
+					// If server is running or starting, it's active now
+					lastActivity: (status === 'running' || status === 'starting') ? 'now' : lastActivity
 				};
 			}));
 		}

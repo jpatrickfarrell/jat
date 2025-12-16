@@ -11,7 +11,7 @@ JAT (Jomarchy Agent Tools) lets you coordinate multiple AI coding agents working
 ### 1. Install JAT
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/joewinke/jat/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | bash
 source ~/.bashrc
 ```
 

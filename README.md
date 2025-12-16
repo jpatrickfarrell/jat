@@ -17,7 +17,7 @@ JAT is a multi-agent orchestration system that lets you launch, monitor, and coo
 
 ```bash
 # 1. Install
-curl -fsSL https://raw.githubusercontent.com/joewinke/jat/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | bash
 source ~/.bashrc
 
 # 2. Add your projects
@@ -682,7 +682,7 @@ Now that you understand the workflow:
 
 ```bash
 # 1. Install (terminal)
-curl -fsSL https://raw.githubusercontent.com/joewinke/jat/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | bash
 
 # 2. Register (AI assistant)
 /register
@@ -715,7 +715,7 @@ curl -fsSL https://raw.githubusercontent.com/joewinke/jat/main/install.sh | bash
 ### One-Line Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/joewinke/jat/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | bash
 ```
 
 This installs:

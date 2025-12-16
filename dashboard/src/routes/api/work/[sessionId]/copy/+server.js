@@ -53,19 +53,29 @@ export async function GET({ params }) {
 			}, { status: 404 });
 		}
 
-		// Extract agent name from session name (jat-AgentName -> AgentName)
-		const agentName = sessionId.replace(/^jat-/, '');
+		// Detect session type and extract relevant info
+		// Agent sessions: jat-{AgentName} (e.g., jat-WisePrairie)
+		// Server sessions: {project}-dev or similar (e.g., chimaro-dev, jat-dev)
+		const isAgentSession = sessionId.startsWith('jat-') && !sessionId.endsWith('-dev');
+		const isServerSession = sessionId.endsWith('-dev') || sessionId.includes('-dev-');
 
-		// Find task assigned to this agent
+		let agentName = null;
 		let task = null;
-		try {
-			const allTasks = getTasks({});
-			task = allTasks.find(
-				t => t.status === 'in_progress' && t.assignee === agentName
-			);
-		} catch (err) {
-			console.error('Failed to fetch tasks:', err);
-			// Continue without task info
+
+		if (isAgentSession) {
+			// Extract agent name from jat-{AgentName}
+			agentName = sessionId.replace(/^jat-/, '');
+
+			// Find task assigned to this agent
+			try {
+				const allTasks = getTasks({});
+				task = allTasks.find(
+					t => t.status === 'in_progress' && t.assignee === agentName
+				);
+			} catch (err) {
+				console.error('Failed to fetch tasks:', err);
+				// Continue without task info
+			}
 		}
 
 		// Capture terminal output (full history, stripped of ANSI codes)
@@ -91,8 +101,12 @@ export async function GET({ params }) {
 		lines.push(`Session: ${sessionId}`);
 		lines.push(separator);
 
-		// Agent info
-		if (agentName) {
+		// Session type info
+		if (isServerSession) {
+			// Extract project name from server session (e.g., chimaro-dev -> chimaro)
+			const projectName = sessionId.replace(/-dev(-server)?$/, '');
+			lines.push(`Server: ${projectName}`);
+		} else if (agentName) {
 			lines.push(`Agent: ${agentName}`);
 		}
 
@@ -128,6 +142,7 @@ export async function GET({ params }) {
 		return json({
 			success: true,
 			sessionId,
+			sessionType: isServerSession ? 'server' : (isAgentSession ? 'agent' : 'unknown'),
 			agentName,
 			taskId: task?.id || null,
 			content,

@@ -1,4 +1,4 @@
-# Jomarchy Agent Tools
+# Jomarchy Agent Tools (JAT)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Dashboard](https://img.shields.io/badge/Dashboard-SvelteKit-red)](./dashboard/)
@@ -7,54 +7,132 @@
 [![Agent Mail](https://img.shields.io/badge/Agent%20Mail-Bash%2BSQLite-green)](#1-agent-mail)
 [![Beads](https://img.shields.io/badge/Beads-CLI-orange)](https://github.com/steveyegge/beads)
 
-**Manage multiple agents across several projects in a complete AI-assisted development environment in one command.**
+**Coordinate AI agent swarms from a real-time dashboard.**
 
-Agent Mail (multi-agent coordination) + Beads (task planning) + 28 bash tools + 9 coordination commands = Full swarm orchestration that transcends context windows and project boundaries.
+JAT is a multi-agent orchestration system that lets you launch, monitor, and coordinate multiple AI coding agents working in parallel across your projects. The **dashboard** is your command center.
+
+<!-- TODO: Add screenshot/gif of dashboard here -->
+
+## ⚡ 60-Second Quick Start
 
 ```bash
+# 1. Install
 curl -fsSL https://raw.githubusercontent.com/joewinke/jat/main/install.sh | bash
+source ~/.bashrc
+
+# 2. Add your projects
+jat init                        # Auto-discover projects in ~/code/
+jat add ~/projects/my-app       # Or add custom paths
+
+# 3. Launch dashboard
+jat-dashboard                   # Opens http://localhost:5174
+
+# 4. Create a task and launch an agent
+jat my-project                  # Launches Claude + dashboard + dev server
 ```
 
-**📖 Quick Reference:** See [`COMMANDS.md`](./COMMANDS.md) for all 7 agent commands and their parameters.
+**That's it!** The agent auto-starts, picks up tasks, and reports status to the dashboard in real-time.
+
+**📖 First time?** See **[GETTING_STARTED.md](./GETTING_STARTED.md)** for a complete walkthrough.
 
 ---
 
-## ⚡ Quick Start
+## What Is a Swarm?
+
+A **swarm** is multiple AI agents working in parallel on your codebase:
 
 ```bash
-# 1. Install (run in your terminal/bash)
-curl -fsSL https://raw.githubusercontent.com/joewinke/jat/main/install.sh | bash
-
-# 2. Initialize Beads in your project (creates .beads/ directory)
-bd init
-
-# 3. Start working (registers agent + picks task)
-/jat:start
-
-# 4. Plan your feature (optional - if not already planned)
-# Option A - Conversational (recommended):
-#   "I want to build [feature]. It should [requirements]..."
-#   Agent asks questions, you discuss, then: /jat:plan
-#
-# Option B - Formal PRD:
-#   Paste written PRD, then: /jat:plan
-/jat:plan
-
-# 5. Complete task and end session
-/jat:complete
-# Spawn new agent for next task
+jat my-project 4 --auto         # Launch 4 agents that auto-attack the backlog
 ```
 
-**From idea to working code in 5 minutes!** The installer sets up Agent Mail, Beads CLI, 28 tools, and 8 coordination commands. Your AI assistant gains multi-agent swarm coordination capabilities instantly.
+Each agent:
+- **Gets assigned different tasks** (no conflicts)
+- **Reserves files** to prevent collisions
+- **Coordinates via Agent Mail** (async messaging)
+- **Reports status to dashboard** (real-time signals)
 
-### How It Actually Works
+The dashboard shows all agents across all projects - their status, current tasks, and activity timeline.
 
-1. **Installation** (bash terminal): Installs coordination tools globally
-2. **Agent Registration** (AI assistant): Links assistant to Agent Mail system
-3. **Planning Session** (AI assistant): Talk through your idea OR paste PRD, then `/plan` converts to Beads tasks
-4. **Execution** (AI assistant or swarm): Agents pick tasks from queue and coordinate automatically
+---
 
-See [Complete Workflow](#complete-workflow-from-idea-to-production) below for detailed walkthrough.
+## Dashboard Features
+
+The dashboard is a SvelteKit 5 app that aggregates all your projects:
+
+| Page | What It Shows |
+|------|---------------|
+| **Tasks** | Unified backlog across all `~/code/*/.beads/` directories |
+| **Work** | Active agent sessions with real-time status signals |
+| **Agents** | Agent registry, coordination, file reservations |
+
+**Key capabilities:**
+- Create/edit tasks visually
+- Drag-and-drop task assignment
+- Real-time agent signals (working, needs input, ready for review)
+- EventStack timeline of agent activity
+- 32 DaisyUI themes
+
+**Launch:** `jat-dashboard` or `jat <project>` (includes dashboard)
+
+---
+
+## How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                          Dashboard                              │
+│              Real-time monitoring + task management             │
+└────────────────────────────┬────────────────────────────────────┘
+                             │ SSE events + API
+                             ▼
+         ┌───────────────────────────────────────┐
+         │          Coordination Layer           │
+         │    /jat:start  /jat:complete  etc.    │
+         └──────────┬────────────┬───────────────┘
+                    │            │
+        ┌───────────┴───┐  ┌─────┴──────────┐
+        │  Agent Mail   │  │     Beads      │
+        │   messaging   │  │  task queue    │
+        │  + file locks │  │ + dependencies │
+        └───────────────┘  └────────────────┘
+```
+
+1. **Create tasks** in dashboard (or CLI: `bd create "Title"`)
+2. **Launch agents** with `jat <project> N`
+3. **Agents auto-coordinate** via Agent Mail (no conflicts)
+4. **Dashboard shows real-time status** via signals
+5. **Tasks sync via git** (.beads/issues.jsonl)
+
+---
+
+## Quick Reference
+
+| Command | What It Does |
+|---------|--------------|
+| `jat-dashboard` | Launch standalone dashboard |
+| `jat <project>` | Full environment (VS Code + Claude + dashboard) |
+| `jat <project> 4` | Launch 4 agents |
+| `jat <project> 4 --auto` | 4 agents that auto-pick tasks |
+| `jat init` | Auto-discover projects in ~/code/ |
+| `jat add <path>` | Add project from any path |
+| `jat list` | Show all projects |
+| `bd create "Title"` | Create a task |
+| `bd ready` | Show tasks ready to work |
+
+**📖 Full command reference:** See [`COMMANDS.md`](./COMMANDS.md)
+
+---
+
+## Detailed Documentation
+
+The sections below cover the technical details:
+
+- [jat CLI](#-jat-cli---launch-dev-environments) - Launch commands and configuration
+- [Agent Mail](#1-agent-mail) - Multi-agent messaging and file locks
+- [Beads](#2-beads-cli) - Dependency-aware task management
+- [Tools](#4-28-generic-bash-tools) - All 28 bash tools
+- [Signals](#signals-system) - Agent-to-dashboard communication
+- [Complete Workflow](#complete-workflow-from-idea-to-production) - Full walkthrough
 
 ---
 
@@ -1299,8 +1377,7 @@ See `stacks/sveltekit-supabase/README.md` for detailed stack documentation.
 
 **Quick Launch:**
 ```bash
-bd-dashboard        # Checks dependencies, starts server, opens browser
-jat-dashboard       # Alias for bd-dashboard
+jat-dashboard       # Checks dependencies, starts server, opens browser
 ```
 
 **What the launcher does:**
@@ -1665,9 +1742,7 @@ JAT includes a standalone SvelteKit 5 dashboard for multi-agent task coordinatio
 
 **Launch:**
 ```bash
-bd-dashboard        # Auto-opens http://127.0.0.1:5174
-# or
-jat-dashboard       # Alias for bd-dashboard
+jat-dashboard       # Auto-opens http://127.0.0.1:5174
 ```
 
 **What It Does:**

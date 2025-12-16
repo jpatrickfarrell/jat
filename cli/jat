@@ -426,6 +426,123 @@ EOF
     echo "Edit config: $CONFIG_FILE"
 }
 
+add_project() {
+    local project_path="$1"
+    local project_name="$2"
+
+    if [[ -z "$project_path" ]]; then
+        echo -e "${RED}Usage: jat add <path> [name]${NC}"
+        echo ""
+        echo "Examples:"
+        echo "  jat add ~/projects/my-app"
+        echo "  jat add ~/work/client-project client"
+        echo "  jat add .                              # Add current directory"
+        return 1
+    fi
+
+    # Handle "." as current directory
+    if [[ "$project_path" == "." ]]; then
+        project_path="$(pwd)"
+    fi
+
+    # Expand ~ and resolve to absolute path
+    project_path="${project_path/#\~/$HOME}"
+    project_path="$(cd "$project_path" 2>/dev/null && pwd)" || {
+        echo -e "${RED}Error: Cannot access directory: $1${NC}"
+        return 1
+    }
+
+    # Check if it's a git repo
+    if [[ ! -d "$project_path/.git" ]]; then
+        echo -e "${YELLOW}Warning: Not a git repository: $project_path${NC}"
+        echo -e "${DIM}Continuing anyway...${NC}"
+    fi
+
+    # Determine project name
+    if [[ -z "$project_name" ]]; then
+        project_name=$(basename "$project_path")
+    fi
+
+    # Check if already configured
+    if [[ -n "$(get_project_config "$project_name")" ]]; then
+        echo -e "${YELLOW}Project '$project_name' already configured${NC}"
+        echo ""
+        echo "To update, edit: $CONFIG_FILE"
+        echo "Or remove first: jat remove $project_name"
+        return 1
+    fi
+
+    # Auto-detect port from package.json if exists
+    local port=""
+    if [[ -f "$project_path/package.json" ]]; then
+        port=$(jq -r '.scripts.dev // ""' "$project_path/package.json" 2>/dev/null | grep -oE -- '--port[= ]+[0-9]+' | grep -oE '[0-9]+' | head -1 || true)
+    fi
+
+    # Generate a color based on project name hash
+    local hash
+    hash=$(echo -n "$project_name" | md5sum | cut -c1-6)
+    local r=$((16#${hash:0:2}))
+    local g=$((16#${hash:2:2}))
+    local b=$((16#${hash:4:2}))
+    local active_color="rgb($(printf '%02x%02x%02x' $r $g $b))"
+    local inactive_color="rgb($(printf '%02x%02x%02x' $((r*3/4)) $((g*3/4)) $((b*3/4))))"
+
+    # Convert path back to use ~ for storage
+    local stored_path="${project_path/#$HOME/\~}"
+
+    # Add to config
+    local new_project
+    new_project=$(cat << EOF
+{
+  "name": "${project_name^^}",
+  "path": "$stored_path",
+  "port": ${port:-null},
+  "database_url": null,
+  "active_color": "$active_color",
+  "inactive_color": "$inactive_color"
+}
+EOF
+)
+
+    # Update config file
+    local tmp_file
+    tmp_file=$(mktemp)
+    jq ".projects[\"$project_name\"] = $new_project" "$CONFIG_FILE" > "$tmp_file"
+    mv "$tmp_file" "$CONFIG_FILE"
+
+    echo ""
+    echo -e "${GREEN}Added project: $project_name${NC}"
+    echo -e "  ${DIM}Path:${NC} $stored_path"
+    [[ -n "$port" ]] && echo -e "  ${DIM}Port:${NC} $port (auto-detected)"
+    echo -e "  ${DIM}Color:${NC} $active_color"
+    echo ""
+    echo "Launch with: jat $project_name"
+    echo "Edit config: $CONFIG_FILE"
+}
+
+remove_project() {
+    local project_name="$1"
+
+    if [[ -z "$project_name" ]]; then
+        echo -e "${RED}Usage: jat remove <project-name>${NC}"
+        return 1
+    fi
+
+    # Check if exists
+    if [[ -z "$(get_project_config "$project_name")" ]]; then
+        echo -e "${RED}Project not found: $project_name${NC}"
+        return 1
+    fi
+
+    # Remove from config
+    local tmp_file
+    tmp_file=$(mktemp)
+    jq "del(.projects[\"$project_name\"])" "$CONFIG_FILE" > "$tmp_file"
+    mv "$tmp_file" "$CONFIG_FILE"
+
+    echo -e "${GREEN}Removed project: $project_name${NC}"
+}
+
 show_config() {
     local project="$1"
 
@@ -685,6 +802,8 @@ USAGE:
 COMMANDS:
     jat list                   Show all configured projects
     jat init                   Auto-detect projects in ~/code
+    jat add <path> [name]      Add a project from any path
+    jat remove <name>          Remove a project from config
     jat config [project]       Show config (all or specific project)
     jat edit                   Edit config file
     jat colors                 Recolor all Hyprland windows
@@ -713,6 +832,9 @@ EXAMPLES:
     jat chimaro --dashboard    # Launch only the JAT dashboard
     jat jat --code --npm       # VS Code + dev server
     jat init                   # Scan ~/code for projects
+    jat add ~/projects/my-app  # Add project from custom path
+    jat add . webapp           # Add current dir with custom name
+    jat remove old-project     # Remove project from config
 
 CONFIG:
     ~/.config/jat/projects.json
@@ -1068,6 +1190,12 @@ main() {
             ;;
         hooks)
             install_hooks "$@"
+            ;;
+        add)
+            add_project "$@"
+            ;;
+        remove|rm)
+            remove_project "$@"
             ;;
         *)
             # Assume it's a project name

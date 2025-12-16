@@ -7,13 +7,12 @@
 	 * User can drag divider to adjust split between panels.
 	 */
 
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
 	import TaskTable from '$lib/components/agents/TaskTable.svelte';
 	import SessionPanel from '$lib/components/work/SessionPanel.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
-	import AutoAssignmentQueue from '$lib/components/work/AutoAssignmentQueue.svelte';
 	import ResizableDivider from '$lib/components/ResizableDivider.svelte';
 	import SessionPanelSkeleton from '$lib/components/skeleton/SessionPanelSkeleton.svelte';
 	import TaskTableSkeleton from '$lib/components/skeleton/TaskTableSkeleton.svelte';
@@ -30,6 +29,8 @@
 	import { broadcastSessionEvent, lastSessionEvent } from '$lib/stores/sessionEvents';
 	import { lastTaskEvent } from '$lib/stores/taskEvents';
 	import { initSort, getSortBy, getSortDir } from '$lib/stores/workSort.svelte.js';
+	import { maximizeSessionPanel } from '$lib/stores/hoveredSession';
+	import { getSessionMaximizeHeight } from '$lib/stores/preferences.svelte';
 
 	// Resizable panel state
 	const STORAGE_KEY = 'work-panel-split';
@@ -382,6 +383,41 @@
 		return unsubscribe;
 	});
 
+	// Listen for "maximize session panel" signal (triggered by clicking a SessionCard)
+	// This expands the session panel to fill the viewport, pushing TaskTable off-screen
+	// Set up subscription in onMount for proper lifecycle management
+	let unsubscribeMaximize: (() => void) | undefined;
+
+	onMount(() => {
+		console.log('[tasks/+page] Setting up maximizeSessionPanel subscription');
+		unsubscribeMaximize = maximizeSessionPanel.subscribe(async (sessionName) => {
+			console.log('[tasks/+page] maximizeSessionPanel subscription fired:', sessionName);
+			if (sessionName) {
+				console.log('[tasks/+page] Maximizing panel, current collapsedDirection:', collapsedDirection);
+				// Maximize the session panel using user's preference setting
+				// Get the user's preferred maximize height percentage (50-90%)
+				const heightPercent = getSessionMaximizeHeight();
+				console.log('[tasks/+page] Using session maximize height preference:', heightPercent + '%');
+
+				// Save current split so user can restore by clicking divider
+				if (!isCollapsed) {
+					splitBeforeCollapse = splitPercent;
+				}
+				splitPercent = heightPercent;
+				isCollapsed = false;
+				collapsedDirection = null;
+				saveSplit();
+				// Force DOM update since we're setting state inside a callback
+				await tick();
+				console.log('[tasks/+page] Panel maximized to', heightPercent + '%');
+			}
+		});
+	});
+
+	onDestroy(() => {
+		unsubscribeMaximize?.();
+	});
+
 	// Fetch task data
 	async function fetchTaskData() {
 		try {
@@ -531,6 +567,8 @@
 		window.addEventListener('resize', updateContainerHeight);
 		window.addEventListener('keydown', handleKeydown);
 
+		// Activity polling is now started in the root layout (works on all pages)
+
 		// Phase 2: Lazy load usage data once after 5 seconds
 		// (disabled automatic refresh - too expensive with many sessions)
 		setTimeout(() => fetchSessionUsage(), 5000);
@@ -541,6 +579,7 @@
 			window.removeEventListener('resize', updateContainerHeight);
 			window.removeEventListener('keydown', handleKeydown);
 		}
+		// Activity polling is stopped in the root layout
 	});
 </script>
 
@@ -556,24 +595,18 @@
 >
 	<!-- Work Sessions (horizontal scroll) + Auto-Assignment Queue -->
 	<!-- min-h-0 allows proper flex shrinking; overflow-x-hidden clips horizontal overflow while scroll container handles horizontal scroll -->
+	<!-- When fully maximized (collapsedDirection='bottom'), use calc(100% - 8px) to fill container minus divider height -->
 	<div
-		class="min-h-0 bg-base-100 flex flex-col transition-all duration-150 -mb-4 relative"
-		style="height: {splitPercent}%; overflow-x: hidden;"
+		class="min-h-0 bg-base-100 flex flex-col transition-all duration-150 relative"
+		class:-mb-4={collapsedDirection !== 'bottom'}
+		style={collapsedDirection === 'bottom'
+			? 'height: calc(100% - 8px); overflow-x: hidden;'
+			: `height: ${splitPercent}%; overflow-x: hidden;`}
 		class:hidden={collapsedDirection === 'top'}
 	>
 		{#if isInitialLoad}
 			<SessionPanelSkeleton cards={3} />
 		{:else}
-			<!-- Auto-Assignment Queue - positioned in top-right corner -->
-			<div class="absolute top-2 right-2 z-10 w-80">
-				<AutoAssignmentQueue
-					{selectedProject}
-					limit={5}
-					onTaskClick={handleTaskClick}
-					onSpawnForTask={handleSpawnForTask}
-				/>
-			</div>
-
 			<SessionPanel
 				workSessions={workSessionsState.sessions}
 				onSpawnForTask={handleSpawnForTask}
@@ -599,9 +632,11 @@
 	/>
 
 	<!-- Task Table -->
+	<!-- When session panel is maximized (collapsedDirection='bottom'), this is hidden and takes no space -->
 	<div
-		class="overflow-auto bg-base-100 flex-1 transition-all duration-150"
-		style="height: {100 - splitPercent}%;"
+		class="overflow-auto bg-base-100 transition-all duration-150"
+		class:flex-1={collapsedDirection !== 'bottom'}
+		style={collapsedDirection !== 'bottom' ? `height: ${100 - splitPercent}%;` : ''}
 		class:hidden={collapsedDirection === 'bottom'}
 	>
 		{#if isInitialLoad}

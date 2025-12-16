@@ -3386,6 +3386,109 @@ class="... {isWorkingCompleted ? 'task-working-completed' : isCompleted ? 'task-
 
 - jat-2mzr: Retain completed tasks visible in TaskTable (completed)
 
+## UI Patterns: Jump to Session (Click-to-Center)
+
+### Overview
+
+When a user clicks a SessionCard, the card is scrolled to the top of the viewport with a visual highlight effect and the input receives focus. This pattern is called **"Jump to Session"** internally.
+
+### What Happens
+
+1. **Maximize Panel** - Session panel expands to fill viewport (TaskTable collapses below divider)
+2. **Scroll** - Card scrolls to viewport top using `scrollIntoView({ behavior: 'smooth', block: 'start' })` at 400ms + double rAF
+3. **Highlight Flash** - 2-second glow animation pulses around the card (blue `oklch(0.70 0.18 220)`)
+4. **Ring Effect** - DaisyUI `ring-2 ring-info ring-offset-2` adds visual emphasis
+5. **Focus Input** - After 550ms delay (after scroll completes), input textarea receives focus with `preventScroll: true`
+
+**Timing Coordination:**
+- Store update triggers panel maximize (Svelte effect batching ~16-50ms)
+- CSS transition on panel (150ms `duration-150`)
+- Scroll happens at 400ms + ~33ms (double requestAnimationFrame)
+- Focus happens at 550ms with `preventScroll` to avoid overriding our scroll
+
+**To restore TaskTable:** Click the resizable divider at the bottom of the viewport.
+
+### Implementation
+
+**Function:** `jumpToSession(sessionName, agentName?, options?)` in `src/lib/stores/hoveredSession.ts`
+
+```typescript
+export function jumpToSession(
+    sessionName: string,
+    agentName?: string,
+    options?: { maximize?: boolean }  // Default: true
+) {
+    // Set as hovered so keyboard shortcuts work on it
+    hoveredSessionName.set(sessionName);
+
+    // Set highlighted for visual feedback (clears after 2s)
+    highlightedSessionName.set(sessionName);
+
+    // Signal to maximize the session panel (tasks page listens)
+    if (options?.maximize !== false) {
+        maximizeSessionPanel.set(sessionName);
+    }
+
+    // Scroll to the session card
+    const element = document.querySelector(`[data-agent-name="${agentName}"]`);
+    if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'center' });
+    }
+}
+```
+
+**Panel Maximization:** The `maximizeSessionPanel` store signals the tasks page to collapse the TaskTable. The tasks page subscribes to this store and sets `splitPercent = 100`, `isCollapsed = true`, `collapsedDirection = 'bottom'`.
+
+**Trigger:** `handleCardClick()` in SessionCard.svelte calls `jumpToSession()` and focuses input after delay.
+
+### Scroll Offset for Sticky Header
+
+The dashboard has a sticky TopBar (`h-12` = 48px). To prevent the card from scrolling behind it, SessionCard uses CSS `scroll-margin-top`:
+
+```css
+scroll-margin-top: 3.5rem;  /* 56px - accounts for TopBar + breathing room */
+```
+
+This tells `scrollIntoView({ block: 'start' })` to leave extra space at the top.
+
+### CSS Animation
+
+**Keyframes:** `@keyframes agent-highlight-flash` in `src/app.css`
+
+```css
+@keyframes agent-highlight-flash {
+    0%   { box-shadow: 0 0 0 0 oklch(0.70 0.18 220 / 0); }
+    20%  { box-shadow: 0 0 30px 10px oklch(0.70 0.18 220 / 0.5); }
+    40%  { box-shadow: 0 0 20px 5px oklch(0.70 0.18 220 / 0.3); }
+    60%  { box-shadow: 0 0 25px 8px oklch(0.70 0.18 220 / 0.4); }
+    80%  { box-shadow: 0 0 15px 3px oklch(0.70 0.18 220 / 0.2); }
+    100% { box-shadow: 0 0 0 0 oklch(0.70 0.18 220 / 0); }
+}
+
+.agent-highlight-flash {
+    animation: agent-highlight-flash 1.5s ease-out forwards;
+}
+```
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `src/lib/stores/hoveredSession.ts` | `jumpToSession()` function, `highlightedSessionName` store, `maximizeSessionPanel` store |
+| `src/lib/components/work/SessionCard.svelte` | `handleCardClick()` trigger, scroll-margin-top styling |
+| `src/routes/tasks/+page.svelte` | Subscribes to `maximizeSessionPanel` to collapse TaskTable |
+| `src/app.css` | `@keyframes agent-highlight-flash` animation |
+
+### When It's Used
+
+- **Click on SessionCard** - Main trigger, scrolls card to view and focuses input
+- **Alt+number shortcuts** - Jump to session by position in list
+- **TaskIdBadge click** - From TaskTable, jumps to the agent working on that task
+
+### Task Reference
+
+- jat-35hd: Document Jump to Session behavior and fix scroll offset (completed)
+
 ## Development Commands
 
 ```bash

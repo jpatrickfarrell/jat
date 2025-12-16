@@ -489,3 +489,98 @@
 	background-color: oklch(0.70 0.25 45 / 0.6);
 	outline: 1px solid oklch(0.70 0.25 45);
 }
+
+/* Agent activity shimmer effect - indicates agent is actively generating */
+.shimmer-text {
+	background: linear-gradient(
+		90deg,
+		currentColor 0%,
+		currentColor 40%,
+		oklch(0.85 0.18 200) 50%,
+		currentColor 60%,
+		currentColor 100%
+	);
+	background-size: 200% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	-webkit-text-fill-color: transparent;
+	animation: shimmer 2s ease-in-out infinite;
+}
+
+/* Shimmer for "generating" state - uses agent's accent color */
+.shimmer-text-fast {
+	background: linear-gradient(
+		90deg,
+		currentColor 0%,
+		currentColor 35%,
+		oklch(0.95 0.05 200) 50%,
+		currentColor 65%,
+		currentColor 100%
+	);
+	background-size: 200% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	-webkit-text-fill-color: transparent;
+	animation: shimmer 1.8s ease-in-out infinite;
+}
+
+/* Slower shimmer for "thinking" state */
+.shimmer-text-slow {
+	background: linear-gradient(
+		90deg,
+		currentColor 0%,
+		currentColor 40%,
+		oklch(0.80 0.15 280) 50%,
+		currentColor 60%,
+		currentColor 100%
+	);
+	background-size: 200% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	-webkit-text-fill-color: transparent;
+	animation: shimmer 3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+	0% {
+		background-position: 100% 0;
+	}
+	100% {
+		background-position: -100% 0;
+	}
+}
+
+/* Row shimmer for active tasks when agent is generating */
+.row-shimmer {
+	position: relative;
+	overflow: hidden;
+}
+
+.row-shimmer::after {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: linear-gradient(
+		90deg,
+		transparent 0%,
+		oklch(0.75 0.15 85 / 0.12) 25%,
+		oklch(0.80 0.18 85 / 0.18) 50%,
+		oklch(0.75 0.15 85 / 0.12) 75%,
+		transparent 100%
+	);
+	background-size: 200% 100%;
+	animation: row-shimmer 2s ease-in-out infinite;
+	pointer-events: none;
+}
+
+@keyframes row-shimmer {
+	0% {
+		background-position: 100% 0;
+	}
+	100% {
+		background-position: -100% 0;
+	}
+}

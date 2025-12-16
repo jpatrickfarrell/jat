@@ -1353,6 +1353,123 @@
 						</label>
 					</div>
 
+					<!-- Attachments Dropzone - Industrial -->
+					<div class="form-control">
+						<label class="label">
+							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+								Attachments
+							</span>
+							{#if pendingAttachments.length > 0}
+								<span class="label-text-alt font-mono" style="color: oklch(0.70 0.18 240);">
+									{pendingAttachments.length} file{pendingAttachments.length !== 1 ? 's' : ''}
+								</span>
+							{/if}
+						</label>
+
+						<!-- Hidden file input -->
+						<input
+							type="file"
+							multiple
+							accept={getAcceptAttribute()}
+							class="hidden"
+							bind:this={fileInputRef}
+							onchange={handleFileInputChange}
+							disabled={isSubmitting}
+						/>
+
+						<!-- Dropzone -->
+						<div
+							bind:this={dropzoneRef}
+							class="relative rounded-lg p-6 text-center cursor-pointer transition-all duration-200"
+							style="
+								background: {isDragOver ? 'oklch(0.25 0.08 240 / 0.3)' : 'oklch(0.18 0.01 250)'};
+								border: 2px dashed {isDragOver ? 'oklch(0.70 0.18 240)' : 'oklch(0.35 0.02 250)'};
+							"
+							ondrop={handleDrop}
+							ondragover={handleDragOver}
+							ondragenter={handleDragEnter}
+							ondragleave={handleDragLeave}
+							onclick={openFilePicker}
+							role="button"
+							tabindex="0"
+							onkeydown={(e) => e.key === 'Enter' && openFilePicker()}
+						>
+							{#if isDragOver}
+								<div class="pointer-events-none">
+									<svg class="w-12 h-12 mx-auto mb-3" style="color: oklch(0.70 0.18 240);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+									</svg>
+									<p class="font-mono text-sm" style="color: oklch(0.70 0.18 240);">
+										Drop files here
+									</p>
+								</div>
+							{:else}
+								<svg class="w-10 h-10 mx-auto mb-2" style="color: oklch(0.50 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+								</svg>
+								<p class="font-mono text-sm" style="color: oklch(0.55 0.02 250);">
+									Drop files here or click to browse
+								</p>
+								<p class="font-mono text-xs mt-1" style="color: oklch(0.45 0.02 250);">
+									Images, PDFs, text files supported
+								</p>
+							{/if}
+						</div>
+
+						<!-- Attached Files List -->
+						{#if pendingAttachments.length > 0}
+							<div class="mt-3 space-y-2">
+								{#each pendingAttachments as att (att.id)}
+									<div
+										class="flex items-center gap-3 p-2 rounded-lg"
+										style="background: oklch(0.20 0.01 250); border: 1px solid oklch(0.30 0.02 250);"
+									>
+										<!-- Preview/Icon -->
+										{#if att.category === 'image' && att.preview}
+											<img
+												src={att.preview}
+												alt={att.file.name}
+												class="w-10 h-10 object-cover rounded"
+											/>
+										{:else}
+											<div
+												class="w-10 h-10 flex items-center justify-center rounded"
+												style="background: oklch(0.25 0.02 250);"
+											>
+												<svg class="w-5 h-5" style="color: {att.iconColor};" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+													<path stroke-linecap="round" stroke-linejoin="round" d={att.icon} />
+												</svg>
+											</div>
+										{/if}
+
+										<!-- File info -->
+										<div class="flex-1 min-w-0">
+											<p class="font-mono text-sm truncate" style="color: oklch(0.80 0.02 250);">
+												{att.file.name}
+											</p>
+											<p class="font-mono text-xs" style="color: oklch(0.50 0.02 250);">
+												{formatFileSize(att.file.size)}
+											</p>
+										</div>
+
+										<!-- Remove button -->
+										<button
+											type="button"
+											class="btn btn-ghost btn-sm btn-circle"
+											onclick={(e) => { e.stopPropagation(); removeAttachment(att.id); }}
+											disabled={isSubmitting}
+											aria-label="Remove attachment"
+										>
+											<svg class="w-4 h-4" style="color: oklch(0.60 0.15 25);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+											</svg>
+										</button>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</div>
+
 					<!-- Review Override - Industrial -->
 					<div class="form-control">
 						<label class="label">
@@ -1492,123 +1609,6 @@
 								Override the project's review rules for this specific task
 							</span>
 						</label>
-					</div>
-
-					<!-- Attachments Dropzone - Industrial -->
-					<div class="form-control">
-						<label class="label">
-							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
-								Attachments
-							</span>
-							{#if pendingAttachments.length > 0}
-								<span class="label-text-alt font-mono" style="color: oklch(0.70 0.18 240);">
-									{pendingAttachments.length} file{pendingAttachments.length !== 1 ? 's' : ''}
-								</span>
-							{/if}
-						</label>
-
-						<!-- Hidden file input -->
-						<input
-							type="file"
-							multiple
-							accept={getAcceptAttribute()}
-							class="hidden"
-							bind:this={fileInputRef}
-							onchange={handleFileInputChange}
-							disabled={isSubmitting}
-						/>
-
-						<!-- Dropzone -->
-						<div
-							bind:this={dropzoneRef}
-							class="relative rounded-lg p-6 text-center cursor-pointer transition-all duration-200"
-							style="
-								background: {isDragOver ? 'oklch(0.25 0.08 240 / 0.3)' : 'oklch(0.18 0.01 250)'};
-								border: 2px dashed {isDragOver ? 'oklch(0.70 0.18 240)' : 'oklch(0.35 0.02 250)'};
-							"
-							ondrop={handleDrop}
-							ondragover={handleDragOver}
-							ondragenter={handleDragEnter}
-							ondragleave={handleDragLeave}
-							onclick={openFilePicker}
-							role="button"
-							tabindex="0"
-							onkeydown={(e) => e.key === 'Enter' && openFilePicker()}
-						>
-							{#if isDragOver}
-								<div class="pointer-events-none">
-									<svg class="w-12 h-12 mx-auto mb-3" style="color: oklch(0.70 0.18 240);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-									</svg>
-									<p class="font-mono text-sm" style="color: oklch(0.70 0.18 240);">
-										Drop files here
-									</p>
-								</div>
-							{:else}
-								<svg class="w-10 h-10 mx-auto mb-2" style="color: oklch(0.50 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-								</svg>
-								<p class="font-mono text-sm" style="color: oklch(0.55 0.02 250);">
-									Drop files here or click to browse
-								</p>
-								<p class="font-mono text-xs mt-1" style="color: oklch(0.45 0.02 250);">
-									Images, PDFs, text files supported
-								</p>
-							{/if}
-						</div>
-
-						<!-- Attached Files List -->
-						{#if pendingAttachments.length > 0}
-							<div class="mt-3 space-y-2">
-								{#each pendingAttachments as att (att.id)}
-									<div
-										class="flex items-center gap-3 p-2 rounded-lg"
-										style="background: oklch(0.20 0.01 250); border: 1px solid oklch(0.30 0.02 250);"
-									>
-										<!-- Preview/Icon -->
-										{#if att.category === 'image' && att.preview}
-											<img
-												src={att.preview}
-												alt={att.file.name}
-												class="w-10 h-10 object-cover rounded"
-											/>
-										{:else}
-											<div
-												class="w-10 h-10 flex items-center justify-center rounded"
-												style="background: oklch(0.25 0.02 250);"
-											>
-												<svg class="w-5 h-5" style="color: {att.iconColor};" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-													<path stroke-linecap="round" stroke-linejoin="round" d={att.icon} />
-												</svg>
-											</div>
-										{/if}
-
-										<!-- File info -->
-										<div class="flex-1 min-w-0">
-											<p class="font-mono text-sm truncate" style="color: oklch(0.80 0.02 250);">
-												{att.file.name}
-											</p>
-											<p class="font-mono text-xs" style="color: oklch(0.50 0.02 250);">
-												{formatFileSize(att.file.size)}
-											</p>
-										</div>
-
-										<!-- Remove button -->
-										<button
-											type="button"
-											class="btn btn-ghost btn-sm btn-circle"
-											onclick={(e) => { e.stopPropagation(); removeAttachment(att.id); }}
-											disabled={isSubmitting}
-											aria-label="Remove attachment"
-										>
-											<svg class="w-4 h-4" style="color: oklch(0.60 0.15 25);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-											</svg>
-										</button>
-									</div>
-								{/each}
-							</div>
-						{/if}
 					</div>
 
 					<!-- Dependencies (Optional) - Industrial -->

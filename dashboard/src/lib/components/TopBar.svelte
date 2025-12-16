@@ -22,6 +22,7 @@
 	import AgentCountBadge from './AgentCountBadge.svelte';
 	import TokenUsageBadge from './TokenUsageBadge.svelte';
 	import TasksCompletedBadge from './TasksCompletedBadge.svelte';
+	import EpicSwarmBadge from './EpicSwarmBadge.svelte';
 	import UserProfile from './UserProfile.svelte';
 	import CommandPalette from './CommandPalette.svelte';
 	import Sparkline from './Sparkline.svelte';
@@ -1721,6 +1722,9 @@
 				compact={true}
 			/>
 		</div>
+
+		<!-- Epic Swarm Badge (shows when epic swarm is active) -->
+		<EpicSwarmBadge />
 
 		<!-- Tasks Completed Today Badge -->
 		<div class="flex">

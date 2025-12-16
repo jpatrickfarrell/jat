@@ -163,7 +163,12 @@
 	// Get dynamic label/description for actions that need runtime data
 	function getActionLabel(action: SessionStateAction): string {
 		if (action.id === 'start-next' && nextTask) {
-			return `Start ${nextTask.taskId}`;
+			// Clear distinction between epic continuation and backlog pick
+			if (nextTask.source === 'epic') {
+				return `Continue: ${nextTask.taskId}`;
+			} else {
+				return `Start: ${nextTask.taskId}`;
+			}
 		}
 		return action.label;
 	}
@@ -178,14 +183,31 @@
 				const title = nextTask.taskTitle.length > 35
 					? nextTask.taskTitle.substring(0, 35) + '...'
 					: nextTask.taskTitle;
-				const source = nextTask.source === 'epic' && nextTask.epicId
-					? `from ${nextTask.epicId}`
-					: 'from backlog';
-				return `${title} (${source})`;
+				return title;
 			}
 			return 'No ready tasks available';
 		}
 		return action.description;
+	}
+
+	// Get source badge info for start-next action
+	function getSourceBadge(action: SessionStateAction): { label: string; color: string; bgColor: string } | null {
+		if (action.id === 'start-next' && nextTask) {
+			if (nextTask.source === 'epic') {
+				return {
+					label: nextTask.epicId ? `🏔️ ${nextTask.epicId}` : '🏔️ EPIC',
+					color: 'oklch(0.85 0.15 270)',
+					bgColor: 'oklch(0.40 0.12 270 / 0.4)'
+				};
+			} else {
+				return {
+					label: '📋 BACKLOG',
+					color: 'oklch(0.75 0.10 200)',
+					bgColor: 'oklch(0.35 0.08 200 / 0.4)'
+				};
+			}
+		}
+		return null;
 	}
 
 	// Check if action should be disabled
@@ -243,6 +265,7 @@
 					{@const actionDisabled = isActionDisabled(action)}
 					{@const actionLabel = getActionLabel(action)}
 					{@const actionDescription = getActionDescription(action)}
+					{@const sourceBadge = getSourceBadge(action)}
 					<li>
 						<button
 							type="button"
@@ -259,8 +282,18 @@
 									<path stroke-linecap="round" stroke-linejoin="round" d={action.icon} />
 								</svg>
 							{/if}
-							<div class="flex flex-col min-w-0">
-								<span class="font-semibold">{actionLabel}</span>
+							<div class="flex flex-col min-w-0 flex-1">
+								<div class="flex items-center gap-2">
+									<span class="font-semibold">{actionLabel}</span>
+									{#if sourceBadge}
+										<span
+											class="text-[9px] font-mono px-1.5 py-0.5 rounded whitespace-nowrap"
+											style="color: {sourceBadge.color}; background: {sourceBadge.bgColor};"
+										>
+											{sourceBadge.label}
+										</span>
+									{/if}
+								</div>
 								{#if actionDescription}
 									<span class="text-[10px] opacity-60 truncate">{actionDescription}</span>
 								{/if}

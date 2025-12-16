@@ -596,11 +596,12 @@
 
 	// Check if an agent's session is actively generating output (for shimmer effect)
 	// Uses the centralized workSessionsState activity polling
+	// Shimmer shows for both 'generating' (output growing) and 'thinking' (agent processing)
 	function isAgentGenerating(agentName: string | undefined | null): boolean {
 		if (!agentName) return false;
 		const sessionName = `jat-${agentName}`;
 		const session = workSessionsState.sessions.find(s => s.sessionName === sessionName);
-		return session?._activityState === 'generating';
+		return session?._activityState === 'generating' || session?._activityState === 'thinking';
 	}
 
 	// Initialize filters from URL params (default to open + in_progress tasks)
@@ -1296,57 +1297,100 @@
 
 	/**
 	 * Spawn agents for all selected tasks with staggered timing
-	 * Spawns agents sequentially with 2s delay between each to avoid overwhelming the system
+	 * Spawns agents in parallel with small stagger (500ms) between request starts
+	 * Each spawn takes 8-17 seconds server-side, so we fire them quickly and track results
 	 * @returns Promise that resolves when all spawns complete
 	 */
 	async function handleBulkSpawn(): Promise<void> {
-		if (spawningBulk || spawningSingle) return; // Prevent concurrent spawns
-		if (selectedTasks.size === 0) return;
+		const startTime = Date.now();
+		console.log(`[bulk spawn] ========== BULK SPAWN STARTED ==========`);
+		console.log(`[bulk spawn] spawningBulk=${spawningBulk}, spawningSingle=${spawningSingle}`);
+		console.log(`[bulk spawn] selectedTasks.size=${selectedTasks.size}`);
+
+		if (spawningBulk || spawningSingle) {
+			console.log(`[bulk spawn] BLOCKED: Already spawning, exiting early`);
+			return;
+		}
+		if (selectedTasks.size === 0) {
+			console.log(`[bulk spawn] BLOCKED: No tasks selected, exiting early`);
+			return;
+		}
 
 		spawningBulk = true;
 		const taskIds = Array.from(selectedTasks);
-		const results: { taskId: string; success: boolean }[] = [];
+		console.log(`[bulk spawn] Task IDs to spawn (${taskIds.length}):`, taskIds);
 
-		try {
-			for (let i = 0; i < taskIds.length; i++) {
-				const taskId = taskIds[i];
+		// Fire off all spawn requests with small stagger (500ms between starts)
+		// Each request runs in parallel - we don't wait for completion before starting next
+		const spawnPromises = taskIds.map(async (taskId, i) => {
+			const taskStartTime = Date.now();
 
-				// Spawn agent for this task
+			// Small stagger to avoid overwhelming the server
+			if (i > 0) {
+				console.log(`[bulk spawn] [${i + 1}/${taskIds.length}] ${taskId}: Waiting ${i * 500}ms stagger...`);
+				await new Promise(resolve => setTimeout(resolve, i * 500));
+			}
+
+			console.log(`[bulk spawn] [${i + 1}/${taskIds.length}] ${taskId}: Sending spawn request...`);
+
+			try {
 				const response = await fetch('/api/work/spawn', {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({ taskId })
 				});
 
-				const data = await response.json();
+				console.log(`[bulk spawn] [${i + 1}/${taskIds.length}] ${taskId}: Response status=${response.status} (${Date.now() - taskStartTime}ms)`);
+
+				let data;
+				try {
+					data = await response.json();
+				} catch (jsonErr) {
+					console.error(`[bulk spawn] [${i + 1}/${taskIds.length}] ${taskId}: Failed to parse JSON response:`, jsonErr);
+					return { taskId, success: false, error: 'JSON parse failed' };
+				}
+
 				const success = response.ok;
 
-				results.push({ taskId, success });
-
 				if (success) {
-					console.log(`Spawned agent ${data.session?.agentName} for task ${taskId}`);
+					console.log(`[bulk spawn] [${i + 1}/${taskIds.length}] ${taskId}: ✓ SUCCESS - Agent: ${data.session?.agentName} (${Date.now() - taskStartTime}ms)`);
 				} else {
-					console.error(`Failed to spawn for ${taskId}:`, data.error || data.message);
+					console.error(`[bulk spawn] [${i + 1}/${taskIds.length}] ${taskId}: ✗ FAILED - ${data.error || data.message}`, data);
 				}
 
-				// Stagger delay between spawns (2s), except after last one
-				if (i < taskIds.length - 1) {
-					await new Promise(resolve => setTimeout(resolve, 2000));
-				}
+				return { taskId, success, data };
+			} catch (err) {
+				console.error(`[bulk spawn] [${i + 1}/${taskIds.length}] ${taskId}: ✗ EXCEPTION after ${Date.now() - taskStartTime}ms:`, err);
+				return { taskId, success: false, error: err };
 			}
+		});
+
+		console.log(`[bulk spawn] All ${spawnPromises.length} promises created, waiting for completion...`);
+
+		try {
+			// Wait for all spawns to complete (they're running in parallel)
+			const results = await Promise.all(spawnPromises);
 
 			// Log summary
 			const successCount = results.filter(r => r.success).length;
-			console.log(`Bulk spawn complete: ${successCount}/${taskIds.length} succeeded`);
+			const failedTasks = results.filter(r => !r.success).map(r => r.taskId);
+
+			console.log(`[bulk spawn] ========== BULK SPAWN COMPLETE ==========`);
+			console.log(`[bulk spawn] Results: ${successCount}/${taskIds.length} succeeded in ${Date.now() - startTime}ms`);
+			if (failedTasks.length > 0) {
+				console.log(`[bulk spawn] Failed tasks:`, failedTasks);
+			}
 
 			// Clear selection on success
 			if (successCount > 0) {
+				console.log(`[bulk spawn] Clearing selection...`);
 				clearSelection();
 			}
 		} catch (err) {
-			console.error('Bulk spawn failed:', err);
+			console.error('[bulk spawn] ✗ Promise.all EXCEPTION:', err);
 		} finally {
 			spawningBulk = false;
+			console.log(`[bulk spawn] spawningBulk reset to false`);
 		}
 	}
 
@@ -2680,7 +2724,7 @@
 											{@const criticalPathLength = criticalPathResult?.pathLengths.get(task.id) || 0}
 											{@const reviewStatus = computeReviewStatus(task, reviewRules)}
 											<tr
-												class="hover:bg-base-200/50 cursor-pointer transition-colors {isNewTask ? 'task-new' : ''} {isStarting ? 'task-starting' : ''} {isWorkingCompleted ? 'task-working-completed' : isCompleted ? 'task-completed' : ''} {isChildTask ? 'pl-6' : ''}"
+												class="hover:bg-base-200/50 cursor-pointer transition-colors {isNewTask ? 'task-new' : ''} {isStarting ? 'task-starting' : ''} {isWorkingCompleted ? 'task-working-completed' : isCompleted ? 'task-completed' : ''} {isChildTask ? 'pl-6' : ''} {taskIsActive && isAgentGenerating(task.assignee) ? 'row-shimmer' : ''}"
 												onclick={() => handleRowClick(task.id)}
 												style="
 												background: {isCompletedByActiveSession ? 'linear-gradient(90deg, oklch(0.55 0.18 145 / 0.15), transparent)' : taskIsActive ? 'linear-gradient(90deg, oklch(0.75 0.15 85 / 0.08), transparent)' : ''};
@@ -3126,7 +3170,7 @@
 									{@const reviewStatusStd = computeReviewStatus(task, reviewRules)}
 									<!-- Main task row -->
 									<tr
-										class="cursor-pointer group overflow-visible industrial-row {depStatus.hasBlockers ? 'opacity-70' : ''} {isNewTask ? 'task-new-entrance' : ''} {isStarting ? 'task-starting' : ''} {isWorkingCompleted ? 'task-working-completed' : isCompleted ? 'task-completed' : ''}"
+										class="cursor-pointer group overflow-visible industrial-row {depStatus.hasBlockers ? 'opacity-70' : ''} {isNewTask ? 'task-new-entrance' : ''} {isStarting ? 'task-starting' : ''} {isWorkingCompleted ? 'task-working-completed' : isCompleted ? 'task-completed' : ''} {taskIsActive && isAgentGenerating(task.assignee) ? 'row-shimmer' : ''}"
 										style="
 											background: {isCompletedByActiveSession ? 'linear-gradient(90deg, oklch(0.55 0.18 145 / 0.15), transparent)' : dragOverTask === task.id ? 'oklch(0.70 0.18 240 / 0.15)' : selectedTasks.has(task.id) ? 'oklch(0.70 0.18 240 / 0.1)' : isHuman ? 'oklch(0.70 0.18 45 / 0.10)' : taskIsActive ? 'oklch(0.70 0.18 240 / 0.05)' : ''};
 											border-bottom: 1px solid oklch(0.25 0.01 250);

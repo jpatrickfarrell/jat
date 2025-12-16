@@ -567,7 +567,7 @@
 		margin-top: 0.25rem;
 		z-index: 50;
 		min-width: 300px;
-		max-width: 360px;
+		max-width: 600px;
 		border-radius: 0.5rem;
 		box-shadow: 0 10px 40px oklch(0 0 0 / 0.4);
 		overflow: hidden;

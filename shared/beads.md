@@ -210,9 +210,11 @@ bd create "Build login UI components" --type task --priority 1
 # Creates: jat-jkl
 
 # 3. Set dependencies: Epic depends on children (NOT children depend on epic!)
-bd dep add jat-abc jat-def   # Epic depends on child 1
-bd dep add jat-abc jat-ghi   # Epic depends on child 2
-bd dep add jat-abc jat-jkl   # Epic depends on child 3
+# USE THE HELPER SCRIPT to avoid direction mistakes:
+bd-epic-child jat-abc jat-def   # Epic depends on child 1
+bd-epic-child jat-abc jat-ghi   # Epic depends on child 2
+bd-epic-child jat-abc jat-jkl   # Epic depends on child 3
+# Or raw command (easy to get backwards!): bd dep add [epic] [child]
 
 # 4. Set dependencies between children (optional - for sequencing)
 bd dep add jat-ghi jat-def   # OAuth depends on auth config

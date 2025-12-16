@@ -54,8 +54,8 @@ SIGNAL_DATA=""
 if echo "$OUTPUT" | grep -qE '\[JAT-SIGNAL:[a-z_]+\]'; then
     # Extract signal type from marker
     SIGNAL_TYPE=$(echo "$OUTPUT" | grep -oE '\[JAT-SIGNAL:[a-z_]+\]' | head -1 | sed 's/\[JAT-SIGNAL://;s/\]//')
-    # Extract JSON payload after marker
-    SIGNAL_DATA=$(echo "$OUTPUT" | sed -n 's/.*\[JAT-SIGNAL:[a-z_]*\] *//p')
+    # Extract JSON payload after marker (take only the first match, trim whitespace)
+    SIGNAL_DATA=$(echo "$OUTPUT" | grep -oE '\[JAT-SIGNAL:[a-z_]+\] \{.*' | head -1 | sed 's/\[JAT-SIGNAL:[a-z_]*\] *//')
 fi
 
 if [[ -z "$SIGNAL_TYPE" ]]; then
@@ -94,28 +94,103 @@ for BASE_DIR in $SEARCH_DIRS; do
     done
 done
 
-# Parse signal data as JSON
-PARSED_DATA=$(echo "${SIGNAL_DATA:-{}}" | jq -c . 2>/dev/null || echo '{}')
+# Parse signal data as JSON (validate first to avoid || echo appending extra output)
+if [[ -n "$SIGNAL_DATA" ]] && echo "$SIGNAL_DATA" | jq -e . >/dev/null 2>&1; then
+    PARSED_DATA=$(echo "$SIGNAL_DATA" | jq -c .)
+else
+    PARSED_DATA='{}'
+fi
 
 # Extract task_id from payload if present
-TASK_ID=$(echo "$PARSED_DATA" | jq -r '.taskId // ""' 2>/dev/null || echo "")
+TASK_ID=$(echo "$PARSED_DATA" | jq -r '.taskId // ""' 2>/dev/null)
+TASK_ID="${TASK_ID:-}"
 
-# Build signal JSON
-SIGNAL_JSON=$(jq -c -n \
-    --arg type "$SIGNAL_TYPE" \
-    --arg session "$SESSION_ID" \
-    --arg tmux "$TMUX_SESSION" \
-    --arg task "$TASK_ID" \
-    --argjson data "$PARSED_DATA" \
-    --arg warning "${VALIDATION_WARNING:-}" \
-    '{
-        type: $type,
-        session_id: $session,
-        tmux_session: $tmux,
-        timestamp: (now | todate),
-        data: $data
-    } + (if $task != "" then {task_id: $task} else {} end)
-      + (if $warning != "" then {validation_warning: $warning} else {} end)' 2>/dev/null || echo "{}")
+# Determine if this is a state signal or data signal
+# State signals: working, review, needs_input, idle, completing, completed, starting, compacting, auto_proceed
+# Data signals: tasks, action, complete
+STATE_SIGNALS="working review needs_input idle completing completed starting compacting auto_proceed"
+IS_STATE_SIGNAL=false
+for s in $STATE_SIGNALS; do
+    if [[ "$SIGNAL_TYPE" == "$s" ]]; then
+        IS_STATE_SIGNAL=true
+        break
+    fi
+done
+
+# Defense-in-depth: Validate required fields for state signals
+# This catches signals that somehow bypassed jat-signal validation
+if [[ "$IS_STATE_SIGNAL" == "true" ]]; then
+    case "$SIGNAL_TYPE" in
+        working)
+            # working requires taskId and taskTitle
+            HAS_TASK_ID=$(echo "$PARSED_DATA" | jq -r '.taskId // ""' 2>/dev/null)
+            HAS_TASK_TITLE=$(echo "$PARSED_DATA" | jq -r '.taskTitle // ""' 2>/dev/null)
+            if [[ -z "$HAS_TASK_ID" ]] || [[ -z "$HAS_TASK_TITLE" ]]; then
+                exit 0  # Silently skip incomplete working signals
+            fi
+            ;;
+        review)
+            # review requires taskId
+            HAS_TASK_ID=$(echo "$PARSED_DATA" | jq -r '.taskId // ""' 2>/dev/null)
+            if [[ -z "$HAS_TASK_ID" ]]; then
+                exit 0  # Silently skip incomplete review signals
+            fi
+            ;;
+        needs_input)
+            # needs_input requires taskId, question, questionType
+            HAS_TASK_ID=$(echo "$PARSED_DATA" | jq -r '.taskId // ""' 2>/dev/null)
+            HAS_QUESTION=$(echo "$PARSED_DATA" | jq -r '.question // ""' 2>/dev/null)
+            HAS_TYPE=$(echo "$PARSED_DATA" | jq -r '.questionType // ""' 2>/dev/null)
+            if [[ -z "$HAS_TASK_ID" ]] || [[ -z "$HAS_QUESTION" ]] || [[ -z "$HAS_TYPE" ]]; then
+                exit 0  # Silently skip incomplete needs_input signals
+            fi
+            ;;
+        completing|completed)
+            # completing/completed require taskId
+            HAS_TASK_ID=$(echo "$PARSED_DATA" | jq -r '.taskId // ""' 2>/dev/null)
+            if [[ -z "$HAS_TASK_ID" ]]; then
+                exit 0  # Silently skip incomplete completing/completed signals
+            fi
+            ;;
+        # idle, starting, compacting, auto_proceed are more flexible
+    esac
+fi
+
+# Build signal JSON - use "type: state" + "state: <signal>" for state signals
+# This matches what the SSE server expects for rich signal card rendering
+if [[ "$IS_STATE_SIGNAL" == "true" ]]; then
+    SIGNAL_JSON=$(jq -c -n \
+        --arg state "$SIGNAL_TYPE" \
+        --arg session "$SESSION_ID" \
+        --arg tmux "$TMUX_SESSION" \
+        --arg task "$TASK_ID" \
+        --argjson data "$PARSED_DATA" \
+        '{
+            type: "state",
+            state: $state,
+            session_id: $session,
+            tmux_session: $tmux,
+            task_id: $task,
+            timestamp: (now | todate),
+            data: $data
+        }' 2>/dev/null || echo "{}")
+else
+    # Data signals keep signal type in type field
+    SIGNAL_JSON=$(jq -c -n \
+        --arg type "$SIGNAL_TYPE" \
+        --arg session "$SESSION_ID" \
+        --arg tmux "$TMUX_SESSION" \
+        --arg task "$TASK_ID" \
+        --argjson data "$PARSED_DATA" \
+        '{
+            type: $type,
+            session_id: $session,
+            tmux_session: $tmux,
+            task_id: $task,
+            timestamp: (now | todate),
+            data: $data
+        }' 2>/dev/null || echo "{}")
+fi
 
 # Get current git SHA for rollback capability
 GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "")

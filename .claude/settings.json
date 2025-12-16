@@ -5,6 +5,19 @@
     "padding": 1
   },
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/user-prompt-signal.sh",
+            "statusMessage": "",
+            "streamStdinJson": true
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "^AskUserQuestion$",

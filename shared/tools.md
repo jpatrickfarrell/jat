@@ -339,6 +339,17 @@ bd close bd-123 --reason "Completed"
 am-release src/**/*.ts --agent $AGENT_NAME
 ```
 
+### Beads Helper Tools
+
+`bd-epic-child`
+- Input: Epic ID, Child task ID
+- Output: Confirmation of dependency created
+- State: Creates epic→child dependency (epic blocked until child completes)
+- Purpose: Prevents common mistake of backwards dependency direction
+- Example: `bd-epic-child jat-abc jat-def` (epic jat-abc depends on child jat-def)
+- Why: `bd dep add A B` means "A depends on B" - easy to get backwards!
+- Location: `~/code/jat/scripts/bd-epic-child` (symlinked to ~/bin/)
+
 ### Broadcast Messaging: Examples and Best Practices
 
 Agent Mail supports broadcast messaging to coordinate multiple agents simultaneously. Use broadcasts for time-sensitive announcements, deployments, incidents, and team coordination.

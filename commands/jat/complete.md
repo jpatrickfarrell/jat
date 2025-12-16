@@ -506,7 +506,7 @@ This step implements the review rules system that allows project-level configura
 0. Check session epic context (.claude/sessions/context-{session_id}.json)
    └─ If epic context exists with reviewThreshold:
       └─ Compare task.priority to threshold
-      └─ If priority > threshold: run `jat-signal idle` (require review)
+      └─ If priority > threshold: run `jat-signal completed` (require review)
       └─ If priority <= threshold: run `jat-signal auto_proceed`
    └─ Epic context takes precedence over all other rules
 
@@ -670,7 +670,8 @@ fi  # End of: else (no REVIEW_OVERRIDE found)
 
 # Emit the completion signal with JSON payload
 if [[ "$COMPLETION_SIGNAL" == "idle" ]]; then
-  jat-signal idle '{"readyForWork":true}'
+  # Use completed signal (not idle) to show task was finished
+  jat-signal completed '{"taskId":"'"$task_id"'","outcome":"success"}'
 elif [[ "$COMPLETION_SIGNAL" == "auto_proceed" ]]; then
   jat-signal auto_proceed '{"taskId":"'"$task_id"'"}'
 fi
@@ -680,9 +681,9 @@ fi
 
 | Override Value | Effect | Use Case |
 |----------------|--------|----------|
-| `always_review` | Run `jat-signal idle` | Testing override behavior |
+| `always_review` | Run `jat-signal completed` | Testing override behavior |
 | `auto_proceed` | Run `jat-signal auto_proceed` | Skip review for specific task |
-| `force_review` | Run `jat-signal idle` | Force review even if rules say auto |
+| `force_review` | Run `jat-signal completed` | Force review even if rules say auto |
 
 #### Example review-rules.json
 
@@ -809,6 +810,9 @@ interface CompletionBundle {
     description: string;    // What needs to be done
     priority: number;       // 0-4 (P0=critical, P4=backlog)
     reason?: string;        // Why this was discovered
+    project?: string;       // Project ID (e.g., "jat", "chimaro") - defaults to current project
+    labels?: string;        // Comma-separated labels (e.g., "ui,auth,critical")
+    depends_on?: string[];  // Task IDs this depends on (e.g., ["jat-abc", "jat-def"])
   }>;
 
   // OPTIONAL - Intel for other agents
@@ -847,13 +851,16 @@ jat-signal complete '{
       "title": "Add Apple Sign-In support",
       "description": "Similar flow to Google OAuth, needs Apple Developer account setup",
       "priority": 2,
-      "reason": "Discovered while implementing Google OAuth"
+      "reason": "Discovered while implementing Google OAuth",
+      "project": "chimaro",
+      "labels": "auth,oauth,ios"
     },
     {
       "type": "task",
       "title": "Add OAuth error tracking",
       "description": "Log failed OAuth attempts to Sentry for debugging",
-      "priority": 3
+      "priority": 3,
+      "depends_on": ["jat-abc"]
     }
   ],
   "crossAgentIntel": {
@@ -947,6 +954,14 @@ Include when the user must take manual steps for the task to be truly complete:
 - P3: Low - nice to have
 - P4: Backlog - someday/maybe
 
+**Optional but Recommended Fields:**
+- **project**: Set to the current project ID (e.g., "jat", "chimaro"). Defaults to current project if omitted.
+- **labels**: Comma-separated labels for categorization (e.g., "ui,auth,performance"). Use when the task belongs to a specific area.
+- **depends_on**: Array of task IDs that must complete first (e.g., `["jat-abc"]`). Use when:
+  - The suggested task requires output from another task
+  - Tasks have a natural ordering (create feature, then add tests)
+  - You're suggesting multiple related tasks where one builds on another
+
 #### Cross-Agent Intel (crossAgentIntel)
 
 Share knowledge that helps other agents working in the same codebase:
@@ -991,14 +1006,18 @@ jat-signal complete '{
       "title": "Add auth mode indicator to UI",
       "description": "Show users whether they are in anonymous or authenticated mode. Display upgrade prompt for anon users.",
       "priority": 2,
-      "reason": "UX improvement discovered while implementing auth modes"
+      "reason": "UX improvement discovered while implementing auth modes",
+      "project": "chimaro",
+      "labels": "ui,auth,ux"
     },
     {
       "type": "task",
       "title": "Add anon session cleanup job",
       "description": "Cron job to delete anonymous sessions older than 7 days to prevent database bloat.",
       "priority": 3,
-      "reason": "Tech debt - anon sessions will accumulate without cleanup"
+      "reason": "Tech debt - anon sessions will accumulate without cleanup",
+      "labels": "backend,cron,cleanup",
+      "depends_on": ["chimaro-xyz"]
     }
   ],
   "crossAgentIntel": {
@@ -1183,8 +1202,8 @@ Create a backfilled task record? [Proceed? Y/n] Y
 📢 Announcing task completion...
    ✅ Sent to @active
 
-Signal: idle (ready: true)
-[JAT-SIGNAL:idle] {"readyForWork":true}
+Signal: completed (task: jat-abc, outcome: success)
+[JAT-SIGNAL:completed] {"taskId":"jat-abc","outcome":"success"}
 
 ┌────────────────────────────────────────────────────────┐
 │  ✅ Task Completed: jat-abc                            │
@@ -1234,8 +1253,8 @@ Signal: idle (ready: true)
 📢 Announcing task completion...
    ✅ Sent to @active
 
-Signal: idle (ready: true)
-[JAT-SIGNAL:idle] {"readyForWork":true}
+Signal: completed (task: jat-abc, outcome: success)
+[JAT-SIGNAL:completed] {"taskId":"jat-abc","outcome":"success"}
 
 ┌────────────────────────────────────────────────────────┐
 │  ✅ Task Completed: jat-abc                            │
@@ -1256,7 +1275,7 @@ Signal: idle (ready: true)
 ```
 
 **Signals explained:**
-- `jat-signal idle '{"readyForWork":true}'` - Requires human review; dashboard shows completion state, session stays open
+- `jat-signal completed '{"taskId":"...","outcome":"success"}'` - Task finished; dashboard shows COMPLETED state, session stays open for review
 - `jat-signal auto_proceed '{"taskId":"..."}'` - Auto-proceed enabled; dashboard can auto-close session
 - `jat-signal tasks '[...]'` - Follow-up tasks discovered during work
 
@@ -1271,11 +1290,11 @@ The completion flow uses these signals (captured by PostToolUse hook):
 | Signal Command | When to Run | Dashboard Effect |
 |----------------|-------------|------------------|
 | `jat-signal completing '{...}'` | During each completion step | Shows progress bar and current step |
-| `jat-signal idle '{"readyForWork":true}'` | After `bd close`, when review required | Shows "Completed" state (green), session stays open |
+| `jat-signal completed '{"taskId":"...","outcome":"success"}'` | After `bd close`, when review required | Shows "COMPLETED" state (green), session stays open for review |
 | `jat-signal auto_proceed '{"taskId":"..."}'` | After `bd close`, when auto-proceed enabled | Dashboard can auto-close session, optionally spawn next |
 | `jat-signal action '{...}'` | When manual steps are required | Shows prominent action checklist |
 | `jat-signal tasks '[...]'` | When follow-up work discovered | Shows "N Suggested Tasks" badge, offers Beads creation |
-| `jat-signal completed '{"taskId":"...","sessionStats":{...},"finalCommit":"..."}'` | After all completion steps | Final completion signal with session stats |
+| `jat-signal complete '{...}'` | After all completion steps | Full completion bundle with summary, suggested tasks, cross-agent intel |
 
 ### Completing Signal Progress Sequence
 

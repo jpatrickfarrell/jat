@@ -772,7 +772,7 @@
 
 			if (!response.ok) {
 				const errorData = await response.json();
-				throw new Error(errorData.error || 'Failed to create task');
+				throw new Error(errorData.message || 'Failed to create task');
 			}
 
 			const data = await response.json();

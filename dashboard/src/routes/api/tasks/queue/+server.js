@@ -28,8 +28,12 @@ const execAsync = promisify(exec);
 export async function GET({ url }) {
 	try {
 		const limit = parseInt(url.searchParams.get('limit') || '5', 10);
-		const sort = url.searchParams.get('sort') || 'hybrid';
+		const sortParam = url.searchParams.get('sort') || 'hybrid';
 		const project = url.searchParams.get('project');
+
+		// Validate sort parameter - only allow valid values
+		const validSorts = ['hybrid', 'priority', 'oldest'];
+		const sort = validSorts.includes(sortParam) ? sortParam : 'hybrid';
 
 		// Build bd ready command
 		let command = `bd ready --json --limit ${limit} --sort ${sort}`;

@@ -71,6 +71,25 @@ browser-start.js --help
 /jat:start auto
 ```
 
+## Dashboard AI Features (Optional)
+
+To enable AI-powered features in the dashboard, add your Anthropic API key:
+
+```bash
+# Copy the example env file
+cp ~/code/jat/dashboard/.env.example ~/code/jat/dashboard/.env
+
+# Edit and add your API key
+# Get key from: https://console.anthropic.com/settings/keys
+```
+
+**Features enabled with API key:**
+- **Task Suggestions** - AI auto-suggests priority, type, labels when creating tasks
+- **Usage Metrics** - Real-time token usage and rate limit tracking
+- **Avatar Generation** - AI-generated agent avatars
+
+Without the API key, the dashboard works fully but these AI features are disabled.
+
 ## Tmux Requirement (Critical)
 
 **All Claude Code sessions MUST run inside tmux for dashboard tracking.**

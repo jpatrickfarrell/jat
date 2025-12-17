@@ -17,6 +17,7 @@
 #   jat-signal-validate starting '{"agentName":"...",...}'
 #   jat-signal-validate compacting '{"reason":"...","contextSizeBefore":...}'
 #   jat-signal-validate auto_proceed '{"taskId":"...",...}'
+#   jat-signal-validate question '{"question":"...","questionType":"choice",...}'
 #
 # Returns:
 #   0 - Valid payload
@@ -49,6 +50,7 @@ show_usage() {
     echo "  starting    - Validate rich starting signal"
     echo "  compacting  - Validate rich compacting signal"
     echo "  auto_proceed - Validate rich auto_proceed signal"
+    echo "  question    - Validate question signal for dashboard"
     echo ""
     echo "Examples:"
     echo "  jat-signal-validate tasks '[{\"title\":\"Add tests\",\"priority\":2}]'"
@@ -1253,6 +1255,124 @@ validate_auto_proceed() {
     return 0
 }
 
+validate_question() {
+    local payload="$1"
+
+    # Must be an object
+    if ! echo "$payload" | jq -e 'type == "object"' >/dev/null 2>&1; then
+        echo "Error: question signal must be a JSON object" >&2
+        return 1
+    fi
+
+    # Required: question (string)
+    if ! echo "$payload" | jq -e 'has("question")' >/dev/null 2>&1; then
+        echo "Error: question signal missing required field 'question'" >&2
+        return 1
+    fi
+
+    local question
+    question=$(echo "$payload" | jq -r '.question // ""')
+    if [[ -z "$question" ]]; then
+        echo "Error: question.question cannot be empty" >&2
+        return 1
+    fi
+
+    # Required: questionType (must be one of: choice, confirm, input)
+    if ! echo "$payload" | jq -e 'has("questionType")' >/dev/null 2>&1; then
+        echo "Error: question signal missing required field 'questionType'" >&2
+        return 1
+    fi
+
+    local question_type
+    question_type=$(echo "$payload" | jq -r '.questionType // ""')
+    case "$question_type" in
+        choice|confirm|input) ;;
+        *)
+            echo "Error: question.questionType must be one of: choice, confirm, input" >&2
+            return 1
+            ;;
+    esac
+
+    # Validate options array if present
+    if echo "$payload" | jq -e 'has("options")' >/dev/null 2>&1; then
+        if ! echo "$payload" | jq -e '.options | type == "array"' >/dev/null 2>&1; then
+            echo "Error: question.options must be an array" >&2
+            return 1
+        fi
+
+        # Validate each option has label and value
+        local count
+        count=$(echo "$payload" | jq '.options | length')
+        local i=0
+        while [[ $i -lt $count ]]; do
+            local option
+            option=$(echo "$payload" | jq ".options[$i]")
+
+            # Required: label
+            if ! echo "$option" | jq -e 'has("label")' >/dev/null 2>&1; then
+                echo "Error: question.options[$i] missing required field 'label'" >&2
+                return 1
+            fi
+            local label
+            label=$(echo "$option" | jq -r '.label // ""')
+            if [[ -z "$label" ]]; then
+                echo "Error: question.options[$i].label cannot be empty" >&2
+                return 1
+            fi
+
+            # Required: value
+            if ! echo "$option" | jq -e 'has("value")' >/dev/null 2>&1; then
+                echo "Error: question.options[$i] missing required field 'value'" >&2
+                return 1
+            fi
+            local value
+            value=$(echo "$option" | jq -r '.value // ""')
+            if [[ -z "$value" ]]; then
+                echo "Error: question.options[$i].value cannot be empty" >&2
+                return 1
+            fi
+
+            # description is optional, but if present must be a string
+            if echo "$option" | jq -e 'has("description")' >/dev/null 2>&1; then
+                if ! echo "$option" | jq -e '.description | type == "string"' >/dev/null 2>&1; then
+                    echo "Error: question.options[$i].description must be a string" >&2
+                    return 1
+                fi
+            fi
+
+            # Check for unknown fields in option
+            local unknown
+            unknown=$(echo "$option" | jq -r 'keys - ["label","value","description"] | .[0] // ""')
+            if [[ -n "$unknown" ]]; then
+                echo "Error: question.options[$i] has unknown field '$unknown'" >&2
+                return 1
+            fi
+
+            i=$((i + 1))
+        done
+    fi
+
+    # Validate timeout if present (must be positive integer)
+    local timeout
+    timeout=$(echo "$payload" | jq '.timeout // null')
+    if [[ "$timeout" != "null" ]]; then
+        if ! echo "$timeout" | grep -qE '^[1-9][0-9]*$'; then
+            echo "Error: question.timeout must be a positive integer" >&2
+            return 1
+        fi
+    fi
+
+    # Check for unknown fields in question signal
+    local unknown
+    unknown=$(echo "$payload" | jq -r 'keys - ["question","questionType","options","timeout"] | .[0] // ""')
+    if [[ -n "$unknown" ]]; then
+        echo "Error: question signal has unknown field '$unknown'" >&2
+        return 1
+    fi
+
+    return 0
+}
+
 # =============================================================================
 # Data Signal Validators (existing)
 # =============================================================================
@@ -1429,10 +1549,13 @@ case "$SIGNAL_TYPE" in
     auto_proceed)
         validate_auto_proceed "$PAYLOAD"
         ;;
+    question)
+        validate_question "$PAYLOAD"
+        ;;
     *)
         echo "Error: Unknown signal type '$SIGNAL_TYPE'" >&2
         echo "Valid data types: tasks, action, complete" >&2
-        echo "Valid rich state types: working, review, needs_input, idle, completing, completed, starting, compacting, auto_proceed" >&2
+        echo "Valid rich state types: working, review, needs_input, idle, completing, completed, starting, compacting, auto_proceed, question" >&2
         exit 2
         ;;
 esac

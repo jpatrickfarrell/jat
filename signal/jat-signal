@@ -12,6 +12,7 @@
 #   jat-signal starting '{"agentName":"...","project":"..."}'
 #   jat-signal compacting '{"reason":"...","contextSizeBefore":180000}'
 #   jat-signal auto_proceed '{"taskId":"jat-abc"}'
+#   jat-signal question '{"question":"...","questionType":"choice","options":[...]}'
 #
 # Usage (Data Signals - always JSON):
 #   jat-signal tasks '[{...}]'                      # Suggest follow-up tasks
@@ -59,6 +60,7 @@ show_usage() {
     echo "  starting '{...}'      - Session initializing"
     echo "  compacting '{...}'    - Summarizing context"
     echo "  auto_proceed '{...}'  - OK to auto-close"
+    echo "  question '{...}'      - Structured question for dashboard"
     echo ""
     echo "Data Signals (always JSON):"
     echo "  tasks '[{...}]'       - Suggest follow-up tasks"
@@ -86,6 +88,7 @@ show_usage() {
     echo "  starting:    agentName"
     echo "  compacting:  reason, contextSizeBefore"
     echo "  auto_proceed: taskId"
+    echo "  question:    question, questionType"
 }
 
 # Parse options
@@ -303,6 +306,21 @@ case "$SIGNAL_TYPE" in
             echo "Signal: auto_proceed (task: ${TASK_ID})"
         fi
         echo "[JAT-SIGNAL:auto_proceed] $SIGNAL_DATA"
+        ;;
+
+    question)
+        require_json "question" "$SIGNAL_DATA"
+        # Compact JSON to single line for hook parsing
+        SIGNAL_DATA=$(echo "$SIGNAL_DATA" | jq -c .)
+        validate_payload "question" "$SIGNAL_DATA"
+        QUESTION_TEXT=$(echo "$SIGNAL_DATA" | jq -r '.question // ""')
+        QUESTION_TYPE=$(echo "$SIGNAL_DATA" | jq -r '.questionType // "choice"')
+        OPTIONS_COUNT=$(echo "$SIGNAL_DATA" | jq '.options // [] | length')
+        # Truncate question text for display
+        QUESTION_SHORT="${QUESTION_TEXT:0:50}"
+        [[ ${#QUESTION_TEXT} -gt 50 ]] && QUESTION_SHORT="${QUESTION_SHORT}..."
+        echo "Signal: question (type: ${QUESTION_TYPE}, options: ${OPTIONS_COUNT})"
+        echo "[JAT-SIGNAL:question] $SIGNAL_DATA"
         ;;
 
     # Data signals

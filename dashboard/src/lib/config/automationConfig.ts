@@ -182,6 +182,39 @@ export const AUTOMATION_PRESETS: AutomationPreset[] = [
 			priority: 90
 		}
 	},
+	{
+		id: 'preset-yolo-accept',
+		name: 'YOLO Mode Auto-Accept',
+		description: 'Automatically accept the --dangerously-skip-permissions prompt for first-time users',
+		category: 'recovery',
+		rule: {
+			name: 'YOLO Mode Auto-Accept',
+			description: 'Auto-accept bypass permissions mode on first run (option 2 is pre-selected)',
+			enabled: true,
+			patterns: [
+				{
+					pattern: 'Claude Code running in Bypass Permissions mode|Yes, I accept|Do you wish to proceed\\?',
+					mode: 'regex',
+					caseSensitive: false
+				}
+			],
+			actions: [
+				{
+					type: 'notify_only',
+					payload: 'YOLO mode acceptance detected, auto-accepting...'
+				},
+				{
+					type: 'send_keys',
+					payload: 'Enter',
+					delay: 1000
+				}
+			],
+			cooldownSeconds: 60,
+			maxTriggersPerSession: 2,
+			category: 'recovery',
+			priority: 95
+		}
+	},
 
 	// -------------------------------------------------------------------------
 	// Prompt Response Presets

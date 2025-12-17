@@ -97,6 +97,40 @@ async function scanCodeDirectory() {
 }
 
 /**
+ * Scan ~/code for directories with .beads/ initialized
+ * Returns projects that have Beads set up but aren't in JAT config
+ */
+async function scanBeadsProjects() {
+	const codeDir = join(homedir(), 'code');
+	if (!existsSync(codeDir)) {
+		return [];
+	}
+
+	const entries = await readdir(codeDir, { withFileTypes: true });
+	const beadsProjects = [];
+
+	for (const entry of entries) {
+		if (!entry.isDirectory() || entry.name.startsWith('.')) {
+			continue;
+		}
+
+		const projectPath = join(codeDir, entry.name);
+		const beadsDir = join(projectPath, '.beads');
+
+		// Only include if .beads/ directory exists
+		if (existsSync(beadsDir)) {
+			beadsProjects.push({
+				name: entry.name,
+				path: projectPath,
+				source: 'beads-discovered'
+			});
+		}
+	}
+
+	return beadsProjects;
+}
+
+/**
  * Get task counts for a project from Beads
  * @param {string} projectPath
  */
@@ -331,6 +365,23 @@ export async function GET({ url }) {
 					hidden: hiddenProjects.has(key),
 					source: 'jat-config'
 				});
+			}
+
+			// Also scan for projects with .beads/ that aren't in JAT config
+			// This allows newly-initialized projects (via bd init) to appear automatically
+			const beadsProjects = await scanBeadsProjects();
+			const existingNames = new Set(projects.map(p => p.name.toLowerCase()));
+
+			for (const bp of beadsProjects) {
+				if (!existingNames.has(bp.name.toLowerCase())) {
+					projects.push({
+						...bp,
+						displayName: bp.name.toUpperCase(),
+						port: null,
+						description: null,
+						hidden: hiddenProjects.has(bp.name)
+					});
+				}
 			}
 		} else {
 			// Fallback to filesystem scan

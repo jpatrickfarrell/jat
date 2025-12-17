@@ -99,7 +99,12 @@ fi
 if grep -q "$MARKER_START" "$BASHRC"; then
     echo "  → Removing existing JAT launcher block..."
     # Use sed to remove the block between markers (inclusive)
-    sed -i "/$MARKER_START/,/$MARKER_END/d" "$BASHRC"
+    # macOS sed requires -i '' (empty backup extension), Linux uses -i alone
+    if [[ "$(uname)" == "Darwin" ]]; then
+        sed -i '' "/$MARKER_START/,/$MARKER_END/d" "$BASHRC"
+    else
+        sed -i "/$MARKER_START/,/$MARKER_END/d" "$BASHRC"
+    fi
 fi
 
 # Append new block

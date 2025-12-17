@@ -119,7 +119,12 @@ EOF
     if grep -q "post-bash-jat-signal" "$SETTINGS_FILE"; then
         # Check if it's using the old project-specific path and update to global
         if grep -q "~/code/jat/.claude/hooks/post-bash-jat-signal" "$SETTINGS_FILE"; then
-            sed -i 's|~/code/jat/.claude/hooks/post-bash-jat-signal.sh|~/.claude/hooks/post-bash-jat-signal.sh|g' "$SETTINGS_FILE"
+            # macOS sed requires -i '' (empty backup extension), Linux uses -i alone
+            if [[ "$(uname)" == "Darwin" ]]; then
+                sed -i '' 's|~/code/jat/.claude/hooks/post-bash-jat-signal.sh|~/.claude/hooks/post-bash-jat-signal.sh|g' "$SETTINGS_FILE"
+            else
+                sed -i 's|~/code/jat/.claude/hooks/post-bash-jat-signal.sh|~/.claude/hooks/post-bash-jat-signal.sh|g' "$SETTINGS_FILE"
+            fi
             echo -e "  ${GREEN}✓ $REPO_NAME: Updated to global hook path${NC}"
             ((UPDATED++))
         else

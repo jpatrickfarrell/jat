@@ -65,6 +65,97 @@ RESET='\033[0m'
 BOLD='\033[1m'
 
 # ============================================================================
+# PLATFORM COMPATIBILITY
+# ============================================================================
+# macOS (BSD) and Linux (GNU) have different tool syntax:
+#   - stat: macOS uses -f %m, Linux uses -c %Y
+#   - date: macOS uses -j -f, Linux uses -d
+#   - sed:  macOS requires -i '', Linux uses -i
+#
+# These wrapper functions provide cross-platform compatibility.
+# ============================================================================
+
+# Detect platform once at startup
+IS_MACOS=false
+if [[ "$(uname)" == "Darwin" ]]; then
+    IS_MACOS=true
+fi
+
+# Get file modification time as epoch seconds (cross-platform)
+# Usage: get_file_mtime "/path/to/file"
+# Returns: epoch seconds or "0" on error
+get_file_mtime() {
+    local file="$1"
+    if [[ "$IS_MACOS" == "true" ]]; then
+        stat -f %m "$file" 2>/dev/null || echo "0"
+    else
+        stat -c %Y "$file" 2>/dev/null || echo "0"
+    fi
+}
+
+# Parse ISO date string to epoch seconds (cross-platform)
+# Usage: parse_date_to_epoch "2025-01-15T10:30:00Z"
+# Returns: epoch seconds or "0" on error
+parse_date_to_epoch() {
+    local date_str="$1"
+    if [[ -z "$date_str" ]] || [[ "$date_str" == "null" ]]; then
+        echo "0"
+        return
+    fi
+
+    if [[ "$IS_MACOS" == "true" ]]; then
+        # macOS: Try multiple date formats
+        # ISO format with T: 2025-01-15T10:30:00Z
+        local result
+        result=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$date_str" +%s 2>/dev/null)
+        if [[ -n "$result" ]]; then
+            echo "$result"
+            return
+        fi
+        # ISO format with space: 2025-01-15 10:30:00
+        result=$(date -j -f "%Y-%m-%d %H:%M:%S" "$date_str" +%s 2>/dev/null)
+        if [[ -n "$result" ]]; then
+            echo "$result"
+            return
+        fi
+        # Try stripping timezone suffix and re-parsing
+        local stripped="${date_str%Z}"
+        stripped="${stripped%+00:00}"
+        result=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$stripped" +%s 2>/dev/null)
+        if [[ -n "$result" ]]; then
+            echo "$result"
+            return
+        fi
+        echo "0"
+    else
+        # Linux: GNU date with -d flag
+        date -d "$date_str" +%s 2>/dev/null || echo "0"
+    fi
+}
+
+# Extract regex capture group (cross-platform bash/zsh)
+# Usage: if regex_match "$string" "^jat-(.+)$"; then echo "$REGEX_MATCH"; fi
+# Sets: REGEX_MATCH to the first capture group
+REGEX_MATCH=""
+regex_match() {
+    local string="$1"
+    local pattern="$2"
+    REGEX_MATCH=""
+
+    if [[ "$string" =~ $pattern ]]; then
+        # Works in both bash and zsh
+        if [[ -n "${BASH_REMATCH[1]:-}" ]]; then
+            REGEX_MATCH="${BASH_REMATCH[1]}"
+        elif [[ -n "${match[1]:-}" ]]; then
+            # zsh uses $match array
+            REGEX_MATCH="${match[1]}"
+        fi
+        return 0
+    fi
+    return 1
+}
+
+# ============================================================================
 # CACHING LAYER
 # ============================================================================
 # Cache expensive queries (bd list, am-reservations, am-inbox) to reduce
@@ -86,7 +177,9 @@ cache_get_or_run() {
 
     # Check if cache exists and is fresh
     if [[ -f "$cache_file" ]]; then
-        local cache_age=$(($(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || echo "0")))
+        local cache_mtime
+        cache_mtime=$(get_file_mtime "$cache_file")
+        local cache_age=$(($(date +%s) - cache_mtime))
         if [[ $cache_age -lt $CACHE_TTL_SECONDS ]]; then
             # Cache hit - return cached value
             cat "$cache_file"
@@ -194,11 +287,11 @@ fi
 tmux_session=$(tmux display-message -p '#S' 2>/dev/null || echo "")
 tmux_agent_name=""
 # Match jat-AgentName but NOT jat-pending-* (which are sessions still being set up)
-# NOTE: Must extract BASH_REMATCH before any other regex test clears it!
-if [[ "$tmux_session" =~ ^jat-(.+)$ ]]; then
-    tmux_agent_name="${BASH_REMATCH[1]}"
+# Uses regex_match() for bash/zsh compatibility
+if regex_match "$tmux_session" "^jat-(.+)$"; then
+    tmux_agent_name="$REGEX_MATCH"
     # Filter out pending sessions
-    if [[ "$tmux_agent_name" =~ ^pending- ]]; then
+    if regex_match "$tmux_agent_name" "^pending-"; then
         tmux_agent_name=""
     fi
 fi
@@ -411,7 +504,7 @@ if [[ -n "$agent_name" ]]; then
         if [[ "$lock_count" != "0" ]] && [[ $lock_count -gt 0 ]]; then
             expires=$(echo "$reservation_info" | grep "^Expires:" | head -1 | sed 's/^Expires: //')
             if [[ -n "$expires" ]]; then
-                expires_epoch=$(date -d "$expires" +%s 2>/dev/null || echo "0")
+                expires_epoch=$(parse_date_to_epoch "$expires")
                 now_epoch=$(date +%s)
                 seconds_remaining=$((expires_epoch - now_epoch))
 
@@ -452,7 +545,7 @@ fi
 last_activity=""
 last_activity_minutes=0
 if [[ -n "$transcript_path" ]] && [[ -f "$transcript_path" ]]; then
-    transcript_mtime=$(stat -c %Y "$transcript_path" 2>/dev/null || echo "0")
+    transcript_mtime=$(get_file_mtime "$transcript_path")
     if [[ $transcript_mtime -gt 0 ]]; then
         now_epoch=$(date +%s)
         seconds_since_activity=$((now_epoch - transcript_mtime))
@@ -471,8 +564,8 @@ fi
 # Calculate active time if task has updated_at
 active_time=""
 if [[ -n "$task_updated_at" ]]; then
-    # Parse timestamp (format: 2025-11-20T21:30:00Z or 2025-11-20 21:30:00)
-    task_epoch=$(date -d "$task_updated_at" +%s 2>/dev/null || echo "0")
+    # Parse timestamp using cross-platform function
+    task_epoch=$(parse_date_to_epoch "$task_updated_at")
     if [[ $task_epoch -gt 0 ]]; then
         now_epoch=$(date +%s)
         seconds_active=$((now_epoch - task_epoch))
@@ -682,10 +775,10 @@ if [[ -n "$time_remaining" ]]; then
 
     # Extract minutes from time_remaining (format: "45m" or "2h")
     time_minutes=0
-    if [[ "$time_remaining" =~ ([0-9]+)h ]]; then
-        time_minutes=$((${BASH_REMATCH[1]} * 60))
-    elif [[ "$time_remaining" =~ ([0-9]+)m ]]; then
-        time_minutes=${BASH_REMATCH[1]}
+    if regex_match "$time_remaining" "([0-9]+)h"; then
+        time_minutes=$((REGEX_MATCH * 60))
+    elif regex_match "$time_remaining" "([0-9]+)m"; then
+        time_minutes=$REGEX_MATCH
     fi
 
     if [[ $time_minutes -gt 30 ]]; then

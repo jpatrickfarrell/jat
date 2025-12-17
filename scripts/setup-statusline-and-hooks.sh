@@ -216,7 +216,12 @@ for repo_dir in "$CODE_DIR"/*; do
         if grep -q '"statusLine"' "$SETTINGS_FILE"; then
             # Update to use global statusline if still using local
             if grep -q '"\./\.claude/statusline\.sh' "$SETTINGS_FILE"; then
-                sed -i 's|"\./\.claude/statusline\.sh|"~/.claude/statusline.sh|g' "$SETTINGS_FILE"
+                # macOS sed requires -i '' (empty backup extension), Linux uses -i alone
+                if [[ "$(uname)" == "Darwin" ]]; then
+                    sed -i '' 's|"\./\.claude/statusline\.sh|"~/.claude/statusline.sh|g' "$SETTINGS_FILE"
+                else
+                    sed -i 's|"\./\.claude/statusline\.sh|"~/.claude/statusline.sh|g' "$SETTINGS_FILE"
+                fi
                 echo -e "  ${GREEN}✓ Updated settings.json to use global statusline${NC}"
                 ((SETTINGS_CONFIGURED++))
             else

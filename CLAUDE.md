@@ -300,6 +300,33 @@ For projects that need custom ports, colors, or database URLs:
 - `active_color` / `inactive_color` - Badge colors (optional)
 - `database_url` - For database tools (optional)
 
+## macOS and zsh Compatibility
+
+JAT supports both Linux (GNU tools) and macOS (BSD tools). The following platform differences are handled automatically:
+
+| Tool | Linux (GNU) | macOS (BSD) | JAT Handling |
+|------|-------------|-------------|--------------|
+| `stat` (file mtime) | `stat -c %Y` | `stat -f %m` | Auto-detects platform |
+| `date` (parse string) | `date -d "..."` | `date -j -f "..."` | Uses `parse_date_to_epoch()` |
+| `sed` (in-place edit) | `sed -i "..."` | `sed -i '' "..."` | Platform check in scripts |
+
+**zsh Compatibility:**
+- Scripts use `#!/bin/bash` shebang (runs in bash even if user's shell is zsh)
+- Regex capture uses `regex_match()` helper that works with both `$BASH_REMATCH` and `$match`
+- All bash-specific syntax is contained in scripts, not in user's shell
+
+**Installing on macOS:**
+```bash
+# Prerequisites
+brew install tmux sqlite jq
+
+# Install JAT
+cd ~/code/jat
+./install.sh
+```
+
+**Note:** The statusline and hooks are written in bash and installed to `~/.claude/`. They run as bash scripts regardless of your shell preference.
+
 ## Common Issues
 
 ### Dashboard themes not working

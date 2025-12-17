@@ -64,7 +64,12 @@ if [ -f "$TASK_IMAGES_JSON" ]; then
     cp "$TASK_IMAGES_JSON" "$TASK_IMAGES_JSON.bak"
 
     # Replace /tmp/claude-dashboard-files with new path
-    sed -i "s|/tmp/claude-dashboard-files|$DEST_DIR|g" "$TASK_IMAGES_JSON"
+    # macOS sed requires -i '' (empty backup extension), Linux uses -i alone
+    if [[ "$(uname)" == "Darwin" ]]; then
+        sed -i '' "s|/tmp/claude-dashboard-files|$DEST_DIR|g" "$TASK_IMAGES_JSON"
+    else
+        sed -i "s|/tmp/claude-dashboard-files|$DEST_DIR|g" "$TASK_IMAGES_JSON"
+    fi
 
     echo "  Updated paths in task-images.json"
     echo "  Backup saved to task-images.json.bak"

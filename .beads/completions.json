@@ -3353,5 +3353,359 @@
     "sessionName": "jat-DeepPrairie",
     "completedAt": "2025-12-16T20:47:11.607Z",
     "persistedAt": "2025-12-16T20:47:11.607Z"
+  },
+  "jat-rtdq": {
+    "taskId": "jat-rtdq",
+    "agentName": "SwiftGrove",
+    "summary": [
+      "Fixed TaskCreationDrawer error message extraction: changed errorData.error to errorData.message",
+      "Fixed queue endpoint sort parameter validation: sanitizes invalid values to default hybrid"
+    ],
+    "quality": {
+      "tests": "none",
+      "build": "clean"
+    },
+    "suggestedTasks": [
+      {
+        "type": "chore",
+        "title": "Add consistent error response format across all API endpoints",
+        "description": "Audit all API endpoints to ensure they return {error: boolean, message: string} consistently. Some may use different patterns.",
+        "priority": 3,
+        "reason": "Discovered inconsistent error handling patterns while fixing this bug",
+        "project": "jat",
+        "labels": "api,error-handling,consistency"
+      }
+    ],
+    "crossAgentIntel": {
+      "files": [
+        "dashboard/src/lib/components/TaskCreationDrawer.svelte",
+        "dashboard/src/routes/api/tasks/queue/+server.js"
+      ],
+      "patterns": [
+        "API errors should use {error: true, message: string} format",
+        "Frontend should read errorData.message, not errorData.error"
+      ],
+      "gotchas": [
+        "The error field is a boolean flag, not the error message text"
+      ]
+    },
+    "sessionName": "jat-SwiftGrove",
+    "completedAt": "2025-12-17T03:04:43.233Z",
+    "persistedAt": "2025-12-17T03:04:43.233Z"
+  },
+  "jat-y03v": {
+    "taskId": "jat-y03v",
+    "agentName": "GoldMountain",
+    "summary": [
+      "Added prominent IMPORTANT warning in install.sh completion message",
+      "Added Post-Installation: Add a Project section in CLAUDE.md",
+      "Documented valid project requirements (git repo + .beads/)",
+      "Provided two methods: bd init CLI or dashboard Add Project",
+      "Updated Next steps to prioritize project setup workflow"
+    ],
+    "quality": {
+      "tests": "none",
+      "build": "clean"
+    },
+    "suggestedTasks": [
+      {
+        "type": "task",
+        "title": "Add interactive bd init to install.sh",
+        "description": "After install completes, offer to run bd init on a project directory. Could use gum to select from ~/code/* directories.",
+        "priority": 3,
+        "reason": "Would make onboarding even smoother - user could add their first project during install",
+        "project": "jat",
+        "labels": "installer,ux"
+      }
+    ],
+    "crossAgentIntel": {
+      "files": [
+        "install.sh",
+        "CLAUDE.md"
+      ],
+      "patterns": [
+        "Post-install instructions go in the completion message box at the end of install.sh"
+      ],
+      "gotchas": [
+        "CLAUDE.md uses @imports for shared docs - changes to Quick Start should be self-contained"
+      ]
+    },
+    "sessionName": "jat-GoldMountain",
+    "completedAt": "2025-12-17T12:39:59.869Z",
+    "persistedAt": "2025-12-17T12:39:59.869Z"
+  },
+  "jat-6brj": {
+    "taskId": "jat-6brj",
+    "agentName": "WiseHill",
+    "summary": [
+      "Created GET /api/directories endpoint",
+      "Added optional ?path= query parameter (default: ~/code)",
+      "Security: blocks paths outside home directory",
+      "Returns path, name, isGitRepo, hasBeads for each directory"
+    ],
+    "quality": {
+      "tests": "none",
+      "build": "clean"
+    },
+    "suggestedTasks": [
+      {
+        "type": "task",
+        "title": "Create CreateProjectDrawer.svelte with path picker",
+        "description": "Use the new /api/directories endpoint to build a directory picker UI. Allow users to browse ~/code folders and select a project to add.",
+        "priority": 1,
+        "reason": "This endpoint was built to support the CreateProjectDrawer",
+        "project": "jat",
+        "labels": "ui,onboarding"
+      },
+      {
+        "type": "feature",
+        "title": "Add configurable scan roots to settings",
+        "description": "Allow users to configure multiple scan directories (~/code, ~/projects, etc) in dashboard settings instead of hardcoding ~/code",
+        "priority": 3,
+        "reason": "Future enhancement for flexibility - some users have projects in different locations",
+        "project": "jat",
+        "labels": "settings,ux"
+      }
+    ],
+    "crossAgentIntel": {
+      "files": [
+        "dashboard/src/routes/api/directories/+server.js"
+      ],
+      "patterns": [
+        "Use expandPath() to handle ~ in paths",
+        "isPathSafe() for security checks"
+      ],
+      "gotchas": [
+        "Path must be under home directory for security"
+      ]
+    },
+    "sessionName": "jat-WiseHill",
+    "completedAt": "2025-12-17T12:12:52.212Z",
+    "persistedAt": "2025-12-17T12:12:52.212Z"
+  },
+  "jat-we1u": {
+    "taskId": "jat-we1u",
+    "agentName": "NewHill",
+    "summary": [
+      "Created POST /api/projects/init endpoint",
+      "Validates path is under ~/code/ for security",
+      "Validates path exists and is a git repository",
+      "Checks for existing .beads/ to prevent re-initialization",
+      "Runs bd init --quiet and returns project info",
+      "Invalidates projects cache after successful init"
+    ],
+    "quality": {
+      "tests": "passing",
+      "build": "warnings",
+      "preExisting": "TypeScript warnings are pre-existing across many JS files"
+    },
+    "suggestedTasks": [
+      {
+        "type": "feature",
+        "title": "Add UI button in dashboard to initialize new project",
+        "description": "Add a button in the Projects page that opens a dialog to select a directory from ~/code/ and calls POST /api/projects/init to initialize it",
+        "priority": 2,
+        "reason": "The API endpoint is now available, needs UI integration",
+        "project": "jat",
+        "labels": "ui,dashboard,projects"
+      },
+      {
+        "type": "task",
+        "title": "Add directory browser API endpoint",
+        "description": "Create GET /api/directories endpoint that lists directories under ~/code/ for the project init UI to select from",
+        "priority": 2,
+        "reason": "Needed for the UI to show available directories to initialize",
+        "project": "jat",
+        "labels": "api,dashboard"
+      }
+    ],
+    "crossAgentIntel": {
+      "files": [
+        "dashboard/src/routes/api/projects/init/+server.js"
+      ],
+      "patterns": [
+        "Security: Only paths under ~/code/ are allowed",
+        "Error types: validation_error, security_error, not_found, not_git_repo, already_initialized, init_failed"
+      ],
+      "gotchas": [
+        "Path expansion handles ~ → homedir automatically",
+        "Returns 409 Conflict if .beads/ already exists"
+      ]
+    },
+    "sessionName": "jat-NewHill",
+    "completedAt": "2025-12-17T12:13:48.602Z",
+    "persistedAt": "2025-12-17T12:13:48.602Z"
+  },
+  "flush-cpj": {
+    "taskId": "flush-cpj",
+    "agentName": "PaleHill",
+    "summary": [
+      "Fixed mobile pricebook drawer categories starting expanded on open",
+      "Replaced DaisyUI checkbox-based collapse with JS-controlled conditional rendering",
+      "Mobile view now uses {#if} blocks for proper Svelte 5 state control"
+    ],
+    "quality": {
+      "tests": "none",
+      "build": "clean"
+    },
+    "suggestedTasks": [
+      {
+        "type": "task",
+        "title": "Add smooth height transition for mobile pricebook collapse",
+        "description": "The current implementation uses conditional rendering ({#if}) which causes instant show/hide. Consider adding CSS transitions for smoother UX on mobile.",
+        "priority": 4,
+        "reason": "UX enhancement discovered during collapse fix",
+        "project": "flush",
+        "labels": "ui,mobile,animation"
+      }
+    ],
+    "crossAgentIntel": {
+      "files": [
+        "src/lib/components/PricebookDrawer.svelte"
+      ],
+      "patterns": [
+        "Use {#if} conditional rendering for collapsible sections in Svelte 5, not DaisyUI checkbox collapse"
+      ],
+      "gotchas": [
+        "DaisyUI collapse with checked={expression} is not reactive in Svelte 5 - checkbox state becomes disconnected from component state"
+      ]
+    },
+    "sessionName": "jat-PaleHill",
+    "completedAt": "2025-12-17T16:12:35.977Z",
+    "persistedAt": "2025-12-17T16:12:35.977Z"
+  },
+  "flush-b6p": {
+    "taskId": "flush-b6p",
+    "agentName": "BoldCliff",
+    "summary": [
+      "Verified comprehensive Vendor PO system built by previous agents",
+      "Fixed TypeScript errors: DatabaseDefinitions.ts CLI output corruption",
+      "Fixed ServiceResult import in vendorPo.service.ts",
+      "Fixed profile type narrowing in API endpoints",
+      "Fixed safeGetSession destructuring in tech routes"
+    ],
+    "quality": {
+      "tests": "skipped",
+      "build": "warnings",
+      "preExisting": "Build warnings pre-existing (payroll, followUp services missing DB types)"
+    },
+    "humanActions": [
+      {
+        "title": "Apply database migration in production",
+        "description": "Run the migration file 20251214000001_add_vendor_pos_system.sql against production Supabase to create vendor_pos table, functions, triggers, and seed vendors"
+      },
+      {
+        "title": "Test vendor PO workflow end-to-end",
+        "description": "1. Login as technician and create a PO from /tech/vendor-po\n2. Login as admin and approve/deny the PO from /admin/vendor-pos\n3. Verify PO number sequence (PO-001234 format)"
+      }
+    ],
+    "suggestedTasks": [
+      {
+        "type": "task",
+        "title": "Regenerate DatabaseDefinitions.ts from production Supabase",
+        "description": "The current types are missing several tables (payroll_periods, payment_signatures, follow_up_automation_rules). Run supabase gen types to sync with production schema.",
+        "priority": 2,
+        "reason": "Multiple services have TypeScript errors due to missing type definitions",
+        "project": "flush",
+        "labels": "database,types,technical-debt"
+      },
+      {
+        "type": "feature",
+        "title": "Add receipt photo upload for fulfilled POs",
+        "description": "Add photo capture/upload for technicians to attach receipt images when marking PO as fulfilled. Use existing FileUpload component pattern.",
+        "priority": 3,
+        "reason": "Receipt tracking is mentioned in the service but UI upload is not implemented",
+        "project": "flush",
+        "labels": "vendor-po,photos,tech-mobile"
+      },
+      {
+        "type": "feature",
+        "title": "Add vendor PO notifications",
+        "description": "Send push notifications to admin/dispatcher when new PO is submitted for approval. Send notification to technician when PO is approved/denied.",
+        "priority": 3,
+        "reason": "Workflow would benefit from real-time notifications",
+        "project": "flush",
+        "labels": "vendor-po,notifications"
+      }
+    ],
+    "crossAgentIntel": {
+      "files": [
+        "supabase/migrations/20251214000001_add_vendor_pos_system.sql",
+        "src/lib/services/vendorPo.service.ts",
+        "src/routes/tech/vendor-po/+page.svelte",
+        "src/routes/(app)/admin/vendor-pos/+page.svelte",
+        "src/routes/api/vendor-pos/+server.ts"
+      ],
+      "patterns": [
+        "Use locals.supabase not destructured supabase from safeGetSession",
+        "PO number format: PO-XXXXXX (auto-generated by trigger)",
+        "Vendors stored in reference_data with category=vendor"
+      ],
+      "gotchas": [
+        "safeGetSession returns {session, user, amr} not {session, supabase}",
+        "DatabaseDefinitions.ts can get corrupted with CLI output - verify file starts with export type Json",
+        "Service layer uses ServiceResponse from ./types, not ServiceResult"
+      ]
+    },
+    "sessionName": "jat-BoldCliff",
+    "completedAt": "2025-12-17T16:17:14.446Z",
+    "persistedAt": "2025-12-17T16:17:14.446Z"
+  },
+  "jat-l8qr": {
+    "taskId": "jat-l8qr",
+    "agentName": "WideCloud",
+    "summary": [
+      "Added platform detection for macOS vs Linux in statusline.sh",
+      "Created cross-platform helpers: get_file_mtime(), parse_date_to_epoch(), regex_match()",
+      "Fixed stat command (stat -c vs stat -f) for file modification times",
+      "Fixed date parsing (date -d vs date -j) for ISO timestamps",
+      "Fixed sed in-place editing in 4 setup scripts",
+      "Fixed BASH_REMATCH with regex_match() for zsh compatibility",
+      "Added macOS/zsh documentation to CLAUDE.md"
+    ],
+    "quality": {
+      "tests": "none",
+      "build": "clean"
+    },
+    "suggestedTasks": [
+      {
+        "type": "task",
+        "title": "Test JAT installation on real macOS machine",
+        "description": "Verify the cross-platform fixes work correctly on actual macOS hardware with zsh as default shell. Test statusline, setup scripts, and signal hooks.",
+        "priority": 2,
+        "reason": "Changes were developed on Linux - need real macOS validation"
+      },
+      {
+        "type": "task",
+        "title": "Add macOS to CI testing matrix",
+        "description": "Add macOS runner to GitHub Actions to catch platform-specific issues before they reach users.",
+        "priority": 3,
+        "reason": "Preventive measure to avoid future macOS compatibility regressions"
+      }
+    ],
+    "crossAgentIntel": {
+      "files": [
+        ".claude/statusline.sh",
+        "scripts/setup-bash-functions.sh",
+        "scripts/migrate-task-images.sh",
+        "scripts/update-signal-hooks.sh",
+        "scripts/setup-statusline-and-hooks.sh",
+        "CLAUDE.md"
+      ],
+      "patterns": [
+        "Use get_file_mtime() instead of stat -c %Y",
+        "Use parse_date_to_epoch() instead of date -d",
+        "Use regex_match() + REGEX_MATCH variable instead of direct BASH_REMATCH",
+        "Check uname == Darwin for macOS-specific code paths"
+      ],
+      "gotchas": [
+        "macOS sed -i requires empty string backup arg: sed -i \\\"\\\" ...",
+        "zsh uses $match array, bash uses $BASH_REMATCH",
+        "BSD stat uses -f %m not -c %Y"
+      ]
+    },
+    "sessionName": "jat-WideCloud",
+    "completedAt": "2025-12-17T17:21:13.042Z",
+    "persistedAt": "2025-12-17T17:21:13.042Z"
   }
 }

@@ -116,11 +116,18 @@ export async function throttledFetch(url: string, options?: RequestInit): Promis
 		const existing = inFlightRequests.get(cacheKey);
 		if (existing) {
 			// Return the existing promise - deduplicate the request
-			// The cloned promise needs its own no-op catch to prevent
-			// "Uncaught (in promise)" warnings when the original request fails
-			const clonedPromise = existing.then(r => r.clone());
-			clonedPromise.catch(() => {});
-			return clonedPromise;
+			// Create a new promise that:
+			// 1. Clones successful responses (so each caller gets their own)
+			// 2. Properly handles rejections without losing error info
+			// 3. Has its own rejection handler to prevent uncaught warnings
+			return new Promise<Response>((resolve, reject) => {
+				existing
+					.then(r => resolve(r.clone()))
+					.catch(err => {
+						// Reject with the same error so caller can handle it
+						reject(err);
+					});
+			});
 		}
 	}
 

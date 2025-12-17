@@ -349,21 +349,29 @@ export async function fetch(includeUsage: boolean = false): Promise<void> {
 		state.lastFetch = new Date();
 	} catch (err: unknown) {
 		// Silently ignore aborted requests (they're intentional when a new poll starts)
-		// Check all possible abort error types
+		// Also silently ignore timeout errors from throttledFetch's AbortSignal.timeout()
+		// Check all possible abort/timeout error types
 		if (err instanceof Error) {
-			if (err.name === 'AbortError' || err.message?.includes('aborted') || err.message?.includes('abort')) {
+			if (err.name === 'AbortError' || err.name === 'TimeoutError' ||
+				err.message?.includes('aborted') || err.message?.includes('abort') ||
+				err.message?.includes('timed out') || err.message?.includes('timeout')) {
 				return;
 			}
 		}
-		// DOMException is a separate class from Error
+		// DOMException is a separate class from Error (covers TimeoutError from AbortSignal.timeout)
 		if (err instanceof DOMException) {
-			if (err.name === 'AbortError' || err.message?.includes('aborted') || err.message?.includes('abort')) {
+			if (err.name === 'AbortError' || err.name === 'TimeoutError' ||
+				err.message?.includes('aborted') || err.message?.includes('abort') ||
+				err.message?.includes('timed out') || err.message?.includes('timeout')) {
 				return;
 			}
 		}
-		// Catch-all for any other abort-like errors (duck typing)
-		if (typeof err === 'object' && err !== null && 'name' in err && (err as { name: string }).name === 'AbortError') {
-			return;
+		// Catch-all for any other abort/timeout-like errors (duck typing)
+		if (typeof err === 'object' && err !== null && 'name' in err) {
+			const errName = (err as { name: string }).name;
+			if (errName === 'AbortError' || errName === 'TimeoutError') {
+				return;
+			}
 		}
 
 		// Increment failure count and calculate backoff
@@ -427,11 +435,22 @@ export async function fetchUsage(): Promise<void> {
 			return session;
 		});
 	} catch (err) {
+		// Silently ignore timeout errors (expected under load from throttledFetch's AbortSignal.timeout)
+		// Still apply backoff to reduce server load
+		const isTimeoutOrAbort = err instanceof Error &&
+			(err.name === 'AbortError' || err.name === 'TimeoutError' ||
+			err.message?.includes('timed out') || err.message?.includes('timeout') ||
+			err.message?.includes('aborted') || err.message?.includes('abort'));
+
 		// Increment failure count and calculate backoff
 		usageFailureCount++;
 		const backoffMs = Math.min(BASE_BACKOFF_MS * Math.pow(2, usageFailureCount - 1), MAX_BACKOFF_MS);
 		usageBackoffUntil = Date.now() + backoffMs;
-		console.error(`workSessions.fetchUsage error (backing off ${backoffMs / 1000}s):`, err);
+
+		// Only log non-timeout errors
+		if (!isTimeoutOrAbort) {
+			console.error(`workSessions.fetchUsage error (backing off ${backoffMs / 1000}s):`, err);
+		}
 	}
 }
 

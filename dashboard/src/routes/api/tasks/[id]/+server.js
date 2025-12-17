@@ -185,11 +185,11 @@ export async function PATCH({ params, request }) {
 			}
 		}
 
-		// Validate priority (if provided, must be 0-3)
+		// Validate priority (if provided, must be 0-4)
 		if (updates.priority !== undefined && updates.priority !== null) {
 			const priority = parseInt(updates.priority);
-			if (isNaN(priority) || priority < 0 || priority > 3) {
-				validationErrors.push('priority: Must be 0 (P0), 1 (P1), 2 (P2), or 3 (P3)');
+			if (isNaN(priority) || priority < 0 || priority > 4) {
+				validationErrors.push('priority: Must be 0-4 (P0=critical, P1=high, P2=medium, P3=low, P4=backlog)');
 			}
 		}
 

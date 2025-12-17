@@ -140,11 +140,11 @@ export async function POST({ request }) {
 		// Validate priority if provided
 		if (body.priority !== undefined && body.priority !== null) {
 			const priority = parseInt(body.priority);
-			if (isNaN(priority) || priority < 0 || priority > 3) {
+			if (isNaN(priority) || priority < 0 || priority > 4) {
 				return json(
 					{
 						error: true,
-						message: 'Priority must be 0 (P0), 1 (P1), 2 (P2), or 3 (P3)'
+						message: 'Priority must be 0-4 (P0=critical, P1=high, P2=medium, P3=low, P4=backlog)'
 					},
 					{ status: 400 }
 				);

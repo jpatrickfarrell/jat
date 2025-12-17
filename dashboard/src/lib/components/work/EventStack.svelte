@@ -605,6 +605,13 @@
 			}
 		}
 
+		// For question events, show the question text
+		if (signalType === 'question' && event.data) {
+			if (event.data.question) {
+				return truncate(event.data.question as string);
+			}
+		}
+
 		// For completed events, show outcome
 		if ((signalType === 'completed' || event.type === 'complete') && event.data) {
 			if (event.data.outcome) {
@@ -1103,6 +1110,52 @@
 											<div class="text-[10px]" style="color: oklch(0.60 0.02 250);">
 												Agent has a question and is waiting for your response. Check the terminal or use the Quick Answer buttons if available.
 											</div>
+										</div>
+									{:else if event.state === 'question' || event.type === 'question'}
+										<!-- Question signal card -->
+										<div class="space-y-3">
+											<div class="flex items-center gap-2 text-xs" style="color: oklch(0.80 0.15 280);">
+												<span>💬</span>
+												<span class="font-medium">Question for Dashboard</span>
+											</div>
+											<!-- Question text -->
+											{#if event.data?.question}
+												<div class="p-2 rounded text-sm" style="background: oklch(0.25 0.02 280); color: oklch(0.90 0.02 280);">
+													{event.data.question}
+												</div>
+											{/if}
+											<!-- Question type badge -->
+											{#if event.data?.questionType}
+												<div class="flex items-center gap-2">
+													<span class="text-[10px] px-2 py-0.5 rounded" style="background: oklch(0.35 0.10 280); color: oklch(0.85 0.10 280);">
+														{event.data.questionType}
+													</span>
+													{#if event.data.timeout}
+														<span class="text-[10px]" style="color: oklch(0.50 0.02 250);">
+															Timeout: {event.data.timeout}s
+														</span>
+													{/if}
+												</div>
+											{/if}
+											<!-- Options list -->
+											{#if event.data?.options && Array.isArray(event.data.options) && event.data.options.length > 0}
+												<div class="space-y-1.5">
+													<div class="text-[10px] font-medium" style="color: oklch(0.60 0.02 250);">Options:</div>
+													{#each event.data.options as option, i}
+														<div class="flex items-start gap-2 p-1.5 rounded text-xs" style="background: oklch(0.22 0.02 250);">
+															<span class="font-mono text-[10px] px-1 rounded" style="background: oklch(0.35 0.10 280); color: oklch(0.85 0.10 280);">
+																{i + 1}
+															</span>
+															<div class="flex-1">
+																<div style="color: oklch(0.85 0.02 250);">{option.label}</div>
+																{#if option.description}
+																	<div class="text-[10px]" style="color: oklch(0.55 0.02 250);">{option.description}</div>
+																{/if}
+															</div>
+														</div>
+													{/each}
+												</div>
+											{/if}
 										</div>
 									{:else if event.state === 'idle' || event.type === 'idle'}
 										<!-- Idle state -->

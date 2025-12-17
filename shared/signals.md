@@ -38,6 +38,7 @@ Output format: `[JAT-SIGNAL:<type>] <json-payload>`
 | `completed` | `jat-signal completed '{...}'` | taskId, outcome |
 | `auto_proceed` | `jat-signal auto_proceed '{...}'` | taskId |
 | `idle` | `jat-signal idle '{...}'` | readyForWork |
+| `question` | `jat-signal question '{...}'` | question, questionType (optional: options, timeout) |
 
 **Data Signals** - Structured payloads:
 
@@ -68,6 +69,15 @@ jat-signal completing '{"taskId":"jat-abc","currentStep":"committing"}'
 
 # Waiting for user input
 jat-signal needs_input '{"taskId":"jat-abc","question":"Which auth library?","questionType":"choice"}'
+
+# Structured question for dashboard (standalone, not tied to a task)
+jat-signal question '{"question":"Which authentication method?","questionType":"choice","options":[{"label":"OAuth 2.0","value":"oauth","description":"Industry standard"},{"label":"JWT","value":"jwt","description":"Stateless tokens"}]}'
+
+# Confirm question (yes/no)
+jat-signal question '{"question":"Proceed with database migration?","questionType":"confirm"}'
+
+# Input question with timeout
+jat-signal question '{"question":"Enter component name:","questionType":"input","timeout":120}'
 
 # Ready for review (rich payload with file stats, quality status, review guidance)
 jat-signal review '{
@@ -260,6 +270,7 @@ Collapsed cards show context-specific summaries from signal payloads:
 | `completing` | `data.currentStep` (e.g., "Committing...") | `data.taskTitle` |
 | `completed` | `data.outcome` (e.g., "Task completed successfully") | `data.taskTitle` |
 | `needs_input` | `data.question` (what agent is asking) | `data.taskTitle` |
+| `question` | `data.question` (the question text) | - |
 | Others | Uppercase type + task ID (e.g., "STARTING jat-abc") | - |
 
 **Click-to-Copy:**
@@ -279,6 +290,7 @@ Each event type has a custom UI in the expanded timeline:
 | `working` | Task title, task ID, git SHA where work started |
 | `review` | Summary items, files modified, tests status |
 | `needs_input` | Question, question type, options if provided |
+| `question` | Question text, question type badge, timeout, numbered options list with descriptions |
 | `completing` | Current step (hidden once task completes) |
 | `completed` | Green outcome badge, summary checklist, task ID |
 | `starting` | Agent name, session ID (full UUID), task ID and title, project |
@@ -316,6 +328,7 @@ Signals must be written as compact single-line JSON (JSONL format), one event pe
 | Context is compacting | `jat-signal compacting '{"reason":"...","contextSizeBefore":...}'` |
 | Running completion steps | `jat-signal completing '{"taskId":"...","currentStep":"..."}'` |
 | Need user input | `jat-signal needs_input '{"taskId":"...","question":"...","questionType":"..."}'` |
+| Structured question for dashboard | `jat-signal question '{"question":"...","questionType":"..."}'` |
 | Done coding, awaiting review | `jat-signal review '{"taskId":"..."}'` |
 | Task fully completed | `jat-signal completed '{"taskId":"...","outcome":"success"}'` |
 | OK to auto-close session | `jat-signal auto_proceed '{"taskId":"..."}'` |

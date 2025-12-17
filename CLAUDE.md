@@ -28,6 +28,31 @@ jat/
 └── install.sh           # Installation script
 ```
 
+## Prerequisites
+
+**Required** (installer will check for these):
+- `tmux` - Terminal multiplexer (sessions, dashboard tracking)
+- `sqlite3` - Database for Agent Mail
+- `jq` - JSON processing
+
+**Optional but recommended:**
+- `npm` / `node` - For browser-tools and dashboard
+- `gum` - Interactive prompts during install
+
+```bash
+# Arch/Manjaro
+sudo pacman -S tmux sqlite jq
+
+# Debian/Ubuntu
+sudo apt install tmux sqlite3 jq
+
+# Fedora
+sudo dnf install tmux sqlite jq
+
+# macOS
+brew install tmux sqlite jq
+```
+
 ## Quick Start
 
 ```bash
@@ -192,6 +217,46 @@ bash ~/code/jat/scripts/install-whisper.sh
 3. ffmpeg converts WebM → WAV (16kHz mono)
 4. whisper-cli transcribes audio locally
 5. Text appears in input field
+
+## Adding New Projects
+
+Projects are automatically discovered by the dashboard in two ways:
+
+### Method 1: Run `bd init` (Recommended for quick start)
+
+```bash
+cd ~/code/my-new-project
+bd init
+# Answer prompts (or press Y for defaults)
+```
+
+The dashboard automatically scans `~/code/` for directories with `.beads/` and adds them to the project list. After running `bd init`, refresh the dashboard to see your project.
+
+### Method 2: Add to JAT Config (Full configuration)
+
+For projects that need custom ports, colors, or database URLs:
+
+```bash
+# Edit ~/.config/jat/projects.json
+{
+  "projects": {
+    "my-project": {
+      "name": "MY-PROJECT",
+      "path": "~/code/my-project",
+      "port": 3000,
+      "description": "My project description"
+    }
+  }
+}
+```
+
+**JAT config fields:**
+- `path` - Project directory (required)
+- `port` - Dev server port (optional, enables server controls)
+- `server_path` - Where to run `npm run dev` (optional, defaults to path)
+- `description` - Shown in dashboard (optional)
+- `active_color` / `inactive_color` - Badge colors (optional)
+- `database_url` - For database tools (optional)
 
 ## Common Issues
 

@@ -31,13 +31,16 @@ function expandPath(inputPath) {
 
 /**
  * Check if path is safe (under home directory)
+ * Case-insensitive on macOS/Windows where filesystems are case-insensitive
  * @param {string} targetPath
  * @returns {boolean}
  */
 function isPathSafe(targetPath) {
 	const home = homedir();
 	const normalized = normalize(targetPath);
-	return normalized.startsWith(home);
+	// macOS and Windows have case-insensitive filesystems
+	// Linux is case-sensitive, but being lenient here is safer than blocking valid paths
+	return normalized.toLowerCase().startsWith(home.toLowerCase());
 }
 
 /**

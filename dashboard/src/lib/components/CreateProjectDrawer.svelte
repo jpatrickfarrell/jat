@@ -138,9 +138,17 @@
 		validationStatus = 'checking';
 		validationMessage = 'Checking path...';
 
+		// Use AbortController for timeout
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
 		try {
 			// Check if path exists and get its status
-			const response = await fetch(`/api/directories?path=${encodeURIComponent(pathInput.trim())}`);
+			const response = await fetch(
+				`/api/directories?path=${encodeURIComponent(pathInput.trim())}`,
+				{ signal: controller.signal }
+			);
+			clearTimeout(timeoutId);
 			const data = await response.json();
 
 			if (!response.ok || data.error) {
@@ -156,7 +164,10 @@
 			const dirName = pathParts[pathParts.length - 1];
 			const parentPath = pathParts.slice(0, -1).join('/') || '/';
 
-			const parentResponse = await fetch(`/api/directories?path=${encodeURIComponent(parentPath)}`);
+			const parentResponse = await fetch(
+				`/api/directories?path=${encodeURIComponent(parentPath)}`,
+				{ signal: controller.signal }
+			);
 			const parentData = await parentResponse.json();
 
 			const dirInfo = parentData.directories?.find((d: DirectoryInfo) => d.name === dirName || d.path === pathInput.trim());
@@ -180,9 +191,15 @@
 				validationMessage = 'Path exists, click Add to initialize';
 				selectedDirectory = null;
 			}
-		} catch {
-			validationStatus = 'invalid';
-			validationMessage = 'Failed to validate path';
+		} catch (err) {
+			clearTimeout(timeoutId);
+			if (err instanceof Error && err.name === 'AbortError') {
+				validationStatus = 'invalid';
+				validationMessage = 'Validation timed out - check path and try again';
+			} else {
+				validationStatus = 'invalid';
+				validationMessage = 'Failed to validate path';
+			}
 			selectedDirectory = null;
 		}
 	}

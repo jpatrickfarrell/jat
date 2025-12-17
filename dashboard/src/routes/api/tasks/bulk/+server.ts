@@ -11,6 +11,7 @@ import { promisify } from 'util';
 import type { RequestHandler } from './$types';
 import { invalidateCache } from '$lib/server/cache.js';
 import { _resetTaskCache } from '../../../api/agents/+server.js';
+import { getProjectPath } from '$lib/server/projectPaths.js';
 
 const execAsync = promisify(exec);
 
@@ -204,8 +205,18 @@ async function createTask(task: SuggestedTask, defaultProject?: string): Promise
 
 		// Change directory to project if specified
 		if (project) {
-			const projectPath = `${process.env.HOME}/code/${project}`;
-			command = `cd '${escapeForShell(projectPath)}' && ${command}`;
+			// Look up actual project path from JAT config or beads-discovered projects
+			const projectInfo = await getProjectPath(project);
+
+			if (!projectInfo.exists) {
+				return {
+					title: task.title,
+					success: false,
+					error: `Project directory not found: ${projectInfo.path}. Add the project to ~/.config/jat/projects.json with the correct path.`
+				};
+			}
+
+			command = `cd '${escapeForShell(projectInfo.path)}' && ${command}`;
 		}
 
 		const { stdout, stderr } = await execAsync(command);

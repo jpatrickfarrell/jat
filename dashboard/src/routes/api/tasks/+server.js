@@ -6,6 +6,7 @@ import { json } from '@sveltejs/kit';
 import { getTasks, getProjects, getTaskById } from '../../../../../lib/beads.js';
 import { invalidateCache } from '$lib/server/cache.js';
 import { _resetTaskCache } from '../../api/agents/+server.js';
+import { getProjectPath } from '$lib/server/projectPaths.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -195,8 +196,21 @@ export async function POST({ request }) {
 
 		// Add project if provided (changes working directory)
 		if (project) {
-			const projectPath = `${process.env.HOME}/code/${project}`;
-			command = `cd ${projectPath} && ${command}`;
+			// Look up actual project path from JAT config or beads-discovered projects
+			const projectInfo = await getProjectPath(project);
+
+			if (!projectInfo.exists) {
+				return json(
+					{
+						error: true,
+						message: `Project directory not found: ${projectInfo.path}. Either create the directory and run 'bd init', or add the project to ~/.config/jat/projects.json with the correct path.`,
+						type: 'project_not_found'
+					},
+					{ status: 400 }
+				);
+			}
+
+			command = `cd "${projectInfo.path}" && ${command}`;
 		}
 
 		// Execute bd create command

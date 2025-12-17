@@ -63,7 +63,30 @@ brew install tmux sqlite jq
 am-whoami
 db-schema
 browser-start.js --help
+```
 
+### Post-Installation: Add a Project
+
+**You must add at least one project before using the dashboard or agents.**
+
+A valid project is:
+- A **git repository** in `~/code/`
+- Has a **`.beads/` directory** (created by `bd init`)
+
+```bash
+# Option 1: Initialize an existing project (recommended)
+cd ~/code/my-project
+bd init
+# Answer prompts (or press Y for defaults)
+
+# Option 2: From the dashboard
+jat-dashboard        # Start the dashboard
+# Go to Tasks page → click "Add Project"
+```
+
+After adding a project, you can start working:
+
+```bash
 # Start working (registers agent + picks task)
 /jat:start
 

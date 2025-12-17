@@ -27,7 +27,7 @@ import { throttledFetch, getQueueStatus } from '$lib/utils/requestThrottler';
 import { subscribe as wsSubscribe, onMessage, isConnected, type WebSocketMessage } from '$lib/stores/websocket.svelte';
 
 // Debug logging for tracking request issues (unthrottled requests)
-const DEBUG_UNTHROTTLED = true;
+const DEBUG_UNTHROTTLED = false;
 function debugUnthrottled(msg: string, data?: Record<string, unknown>) {
 	if (!DEBUG_UNTHROTTLED) return;
 	const timestamp = new Date().toISOString().slice(11, 23);
@@ -670,8 +670,8 @@ export function startPolling(intervalMs: number = 5000, useWebSocket: boolean = 
 		subscribeToOutputUpdates();
 	}
 
-	// Start activity polling for shimmer effect (200ms for responsive updates)
-	startActivityPolling(200);
+	// Start activity polling for shimmer effect (1500ms - balances responsiveness vs server load)
+	startActivityPolling(1500);
 
 	// Set up polling for metadata (task changes, token usage, new/removed sessions)
 	// With WebSocket, we only need occasional HTTP polls for metadata

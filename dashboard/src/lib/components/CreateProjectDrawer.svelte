@@ -138,17 +138,13 @@
 		validationStatus = 'checking';
 		validationMessage = 'Checking path...';
 
-		// Use AbortController for timeout
-		const controller = new AbortController();
-		const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
-
 		try {
 			// Check if path exists and get its status
+			// Each fetch gets its own 5-second timeout using AbortSignal.timeout
 			const response = await fetch(
 				`/api/directories?path=${encodeURIComponent(pathInput.trim())}`,
-				{ signal: controller.signal }
+				{ signal: AbortSignal.timeout(5000) }
 			);
-			clearTimeout(timeoutId);
 			const data = await response.json();
 
 			if (!response.ok || data.error) {
@@ -166,7 +162,7 @@
 
 			const parentResponse = await fetch(
 				`/api/directories?path=${encodeURIComponent(parentPath)}`,
-				{ signal: controller.signal }
+				{ signal: AbortSignal.timeout(5000) }
 			);
 			const parentData = await parentResponse.json();
 
@@ -192,8 +188,7 @@
 				selectedDirectory = null;
 			}
 		} catch (err) {
-			clearTimeout(timeoutId);
-			if (err instanceof Error && err.name === 'AbortError') {
+			if (err instanceof Error && err.name === 'TimeoutError') {
 				validationStatus = 'invalid';
 				validationMessage = 'Validation timed out - check path and try again';
 			} else {

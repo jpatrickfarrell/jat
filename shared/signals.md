@@ -370,10 +370,11 @@ The dashboard renders rich signal cards based on the signal type. Each card prov
 | `ReviewSignalCard` | `review` | Work summary, files modified, quality status, approve/reject actions |
 | `NeedsInputSignalCard` | `needs_input` | Question with options, context, timeout info |
 | `CompletingSignalCard` | `completing` | Progress through completion steps (verifying, committing, etc.) |
-| `CompletedSignalCard` | `completed` | Session stats, suggested tasks, human actions, cleanup button |
 | `IdleSignalCard` | `idle` | Session summary, suggested next task, start work actions |
 | `StartingSignalCard` | `starting` | Agent name, project, model, git status, tools available |
 | `CompactingSignalCard` | `compacting` | Reason, context size before/after, items being preserved |
+
+**Note:** `completed` signals are rendered via **EventStack** timeline (auto-expands on completion) rather than a dedicated signal card. This allows users to collapse the completion info to see terminal output.
 
 **Signal Card Files:**
 - `dashboard/src/lib/components/signals/index.ts` - Export barrel file
@@ -381,7 +382,6 @@ The dashboard renders rich signal cards based on the signal type. Each card prov
 - `dashboard/src/lib/components/signals/ReviewSignalCard.svelte`
 - `dashboard/src/lib/components/signals/NeedsInputSignalCard.svelte`
 - `dashboard/src/lib/components/signals/CompletingSignalCard.svelte`
-- `dashboard/src/lib/components/signals/CompletedSignalCard.svelte`
 - `dashboard/src/lib/components/signals/IdleSignalCard.svelte`
 - `dashboard/src/lib/components/signals/StartingSignalCard.svelte`
 - `dashboard/src/lib/components/signals/CompactingSignalCard.svelte`

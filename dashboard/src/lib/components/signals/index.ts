@@ -13,7 +13,7 @@ export { default as WorkingSignalCard } from './WorkingSignalCard.svelte';
 export { default as ReviewSignalCard } from './ReviewSignalCard.svelte';
 export { default as NeedsInputSignalCard } from './NeedsInputSignalCard.svelte';
 export { default as CompletingSignalCard } from './CompletingSignalCard.svelte';
-export { default as CompletedSignalCard } from './CompletedSignalCard.svelte';
+// CompletedSignalCard removed - completion info now rendered via EventStack
 export { default as IdleSignalCard } from './IdleSignalCard.svelte';
 
 // Additional signal cards

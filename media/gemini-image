@@ -15,7 +15,7 @@ Generate an image from a text prompt using Gemini.
 
 Arguments:
   PROMPT              Text description of the image to generate (required)
-  OUTPUT              Output file path (default: /tmp/gemini-TIMESTAMP.png)
+  OUTPUT              Output file path (default: ~/Pictures/gemini-TIMESTAMP.png)
 
 Options:
   --model MODEL       Model to use (default: gemini-2.5-flash-image)
@@ -85,7 +85,7 @@ gemini_check_deps
 
 # Default output path
 if [[ -z "$OUTPUT" ]]; then
-    OUTPUT="/tmp/gemini-$(date +%Y%m%d-%H%M%S).png"
+    OUTPUT="$HOME/Pictures/gemini-$(date +%Y%m%d-%H%M%S).png"
 fi
 
 # Build generation config

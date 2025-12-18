@@ -22,6 +22,7 @@
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import ResizableDivider from '$lib/components/ResizableDivider.svelte';
 	import SessionPanelSkeleton from '$lib/components/skeleton/SessionPanelSkeleton.svelte';
+	import WelcomeScreen from '$lib/components/WelcomeScreen.svelte';
 	import {
 		workSessionsState,
 		fetch as fetchSessions,
@@ -939,22 +940,8 @@
 			<SessionPanelSkeleton cards={3} />
 		</div>
 	{:else if allProjects.length === 0}
-		<!-- Empty state -->
-		<div class="flex-1 flex flex-col items-center justify-center p-8">
-			<div class="text-center text-base-content/60">
-				<svg class="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-				</svg>
-				<p class="text-lg font-medium mb-2">No projects found</p>
-				<p class="text-sm mb-4">Add a project to get started with JAT</p>
-				<button class="btn btn-primary" onclick={openProjectDrawer}>
-					<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-					</svg>
-					Add Project
-				</button>
-			</div>
-		</div>
+		<!-- Welcome/onboarding screen for new users -->
+		<WelcomeScreen onAddProject={openProjectDrawer} />
 	{:else}
 		<!-- Project list -->
 		<div class="flex flex-col">

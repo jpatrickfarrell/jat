@@ -139,8 +139,43 @@
 			label: 'Show Question UI',
 			description: 'Show custom question UI with options (instead of auto-responding)',
 			icon: 'M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z'
+		},
+		{
+			value: 'run_command',
+			label: 'Run Command',
+			description: 'Run a Claude agent slash command (e.g., /jat:complete)',
+			icon: 'M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z'
 		}
 	];
+
+	// Available slash commands (fetched from API)
+	interface SlashCommand {
+		name: string;
+		invocation: string;
+		namespace: string;
+		path: string;
+	}
+	let availableCommands = $state<SlashCommand[]>([]);
+	let commandsLoading = $state(false);
+	let commandsError = $state<string | null>(null);
+
+	// Fetch available commands when modal opens
+	async function fetchCommands() {
+		if (availableCommands.length > 0) return; // Already loaded
+		commandsLoading = true;
+		commandsError = null;
+		try {
+			const response = await fetch('/api/commands');
+			if (!response.ok) throw new Error('Failed to fetch commands');
+			const data = await response.json();
+			availableCommands = data.commands || [];
+		} catch (err) {
+			commandsError = err instanceof Error ? err.message : 'Failed to load commands';
+			console.error('Error fetching commands:', err);
+		} finally {
+			commandsLoading = false;
+		}
+	}
 
 	// Question type options for show_question_ui
 	const questionTypes: Array<{ value: 'choice' | 'confirm' | 'input'; label: string; description: string }> = [
@@ -162,6 +197,13 @@
 	// =============================================================================
 	// EFFECTS
 	// =============================================================================
+
+	// Fetch commands when modal opens
+	$effect(() => {
+		if (isOpen) {
+			fetchCommands();
+		}
+	});
 
 	// Initialize form when rule prop changes
 	$effect(() => {
@@ -759,6 +801,37 @@
 												</div>
 											{/each}
 										</div>
+									{/if}
+								</div>
+							{:else if action.type === 'run_command'}
+								<!-- Command selector for run_command action -->
+								<div class="form-group command-selector">
+									<label class="form-label">Slash Command</label>
+									{#if commandsLoading}
+										<div class="command-loading">
+											<span class="loading-spinner"></span>
+											Loading commands...
+										</div>
+									{:else if commandsError}
+										<div class="command-error">
+											<span class="error-icon">⚠</span>
+											{commandsError}
+											<button class="retry-btn" onclick={fetchCommands}>Retry</button>
+										</div>
+									{:else if availableCommands.length === 0}
+										<div class="command-empty">No commands available</div>
+									{:else}
+										<select bind:value={action.payload} class="form-select command-select">
+											<option value="">Select a command...</option>
+											{#each availableCommands as cmd}
+												<option value={cmd.invocation}>
+													{cmd.invocation} ({cmd.namespace})
+												</option>
+											{/each}
+										</select>
+										<span class="help-text">
+											The selected command will be sent to the session terminal
+										</span>
 									{/if}
 								</div>
 							{:else}
@@ -1647,5 +1720,81 @@
 
 	.w-24 {
 		width: 6rem;
+	}
+
+	/* Command Selector for run_command action */
+	.command-selector {
+		margin-top: 0.5rem;
+	}
+
+	.command-select {
+		font-family: ui-monospace, monospace;
+	}
+
+	.command-loading {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		font-size: 0.75rem;
+		color: oklch(0.65 0.02 250);
+		font-family: ui-monospace, monospace;
+	}
+
+	.loading-spinner {
+		display: inline-block;
+		width: 14px;
+		height: 14px;
+		border: 2px solid oklch(0.35 0.02 250);
+		border-top-color: oklch(0.70 0.12 200);
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
+	}
+
+	.command-error {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		font-size: 0.75rem;
+		color: oklch(0.70 0.18 25);
+		background: oklch(0.20 0.06 25 / 0.2);
+		border: 1px solid oklch(0.40 0.12 25 / 0.3);
+		border-radius: 6px;
+		font-family: ui-monospace, monospace;
+	}
+
+	.error-icon {
+		font-size: 0.9rem;
+	}
+
+	.retry-btn {
+		margin-left: auto;
+		padding: 0.25rem 0.5rem;
+		font-size: 0.65rem;
+		font-family: ui-monospace, monospace;
+		background: oklch(0.25 0.02 250);
+		border: 1px solid oklch(0.35 0.02 250);
+		border-radius: 4px;
+		color: oklch(0.75 0.02 250);
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.retry-btn:hover {
+		background: oklch(0.30 0.02 250);
+		border-color: oklch(0.45 0.02 250);
+	}
+
+	.command-empty {
+		padding: 0.5rem 0.75rem;
+		font-size: 0.75rem;
+		color: oklch(0.55 0.02 250);
+		font-style: italic;
+		font-family: ui-monospace, monospace;
 	}
 </style>

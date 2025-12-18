@@ -344,6 +344,10 @@ async function executeAction(
 				await showQuestionUI(sessionName, action, templateContext, ruleName);
 				break;
 
+			case 'run_command':
+				await runSlashCommand(sessionName, processedPayload, ruleName);
+				break;
+
 			default:
 				return {
 					action,
@@ -576,6 +580,38 @@ async function showQuestionUI(
 	infoToast(
 		`Question triggered: ${questionConfig.question.substring(0, 50)}${questionConfig.question.length > 50 ? '...' : ''}`,
 		`Rule: ${ruleName}`
+	);
+}
+
+/**
+ * Run a Claude agent slash command in the session
+ *
+ * Sends the command to the session's terminal, which will be picked up by
+ * Claude Code and executed. Commands can be specified with or without the
+ * leading slash (e.g., "/jat:complete" or "jat:complete").
+ */
+async function runSlashCommand(
+	sessionName: string,
+	command: string,
+	ruleName: string
+): Promise<void> {
+	const config = getConfig();
+
+	// Ensure command starts with /
+	const normalizedCommand = command.startsWith('/') ? command : `/${command}`;
+
+	if (config.debugLogging) {
+		console.log(`[automationEngine] Running slash command "${normalizedCommand}" in ${sessionName}`);
+	}
+
+	// Send the command to the session
+	// The sendTextToSession function sends text followed by Enter
+	await sendTextToSession(sessionName, normalizedCommand);
+
+	// Show notification
+	infoToast(
+		`Running command: ${normalizedCommand}`,
+		`Rule: ${ruleName} • Session: ${sessionName}`
 	);
 }
 

@@ -481,6 +481,33 @@
 	let signalActionData = $state<SignalAction | null>(null);
 	let signalPollInterval: ReturnType<typeof setInterval> | null = null;
 
+	// Custom question signal data (from jat-signal question command)
+	// When agent runs jat-signal question '{"question":"...","questionType":"...","options":[...]}',
+	// this data is written to /tmp/jat-question-tmux-{sessionName}.json and fetched here for display
+	interface CustomQuestionOption {
+		label: string;
+		value?: string;
+		description?: string;
+	}
+	interface CustomQuestionData {
+		active: boolean;
+		sessionName?: string;
+		session_id?: string;
+		tmux_session?: string;
+		timestamp?: string;
+		question: string;
+		questionType: 'choice' | 'confirm' | 'input';
+		options: CustomQuestionOption[];
+		timeout?: number | null;
+		fileAgeMs?: number;
+	}
+	let customQuestionData = $state<CustomQuestionData | null>(null);
+	let customQuestionPollInterval: ReturnType<typeof setInterval> | null = null;
+	let customQuestionTimeout = $state<number | null>(null); // Remaining timeout in seconds
+	let customQuestionTimeoutInterval: ReturnType<typeof setInterval> | null = null;
+	let customQuestionInputValue = $state(""); // For input-type questions
+	let suppressCustomQuestionFetch = $state(false); // Prevent race condition after answering
+
 	// Next task state (for "Start Next" action in completed state)
 	interface NextTaskInfo {
 		taskId: string;
@@ -594,6 +621,98 @@
 	// Dismiss terminal-parsed question UI
 	function dismissTerminalQuestion() {
 		dismissedTerminalQuestion = true;
+	}
+
+	// Fetch custom question data from API (jat-signal question)
+	// Uses throttledFetch to prevent connection exhaustion
+	async function fetchCustomQuestionData() {
+		if (!sessionName) return;
+		if (suppressCustomQuestionFetch) return;
+		try {
+			const response = await throttledFetch(
+				`/api/sessions/${encodeURIComponent(sessionName)}/custom-question`,
+			);
+			if (response.ok) {
+				const data = await response.json();
+				if (data.active) {
+					// New question or different question - reset state
+					const oldQuestion = customQuestionData?.question;
+					if (oldQuestion !== data.question) {
+						customQuestionInputValue = "";
+						// Start timeout countdown if specified
+						if (data.timeout) {
+							customQuestionTimeout = data.timeout;
+							startCustomQuestionTimeoutCountdown();
+						} else {
+							customQuestionTimeout = null;
+							stopCustomQuestionTimeoutCountdown();
+						}
+					}
+					customQuestionData = data;
+				} else {
+					// No active question
+					customQuestionData = null;
+					customQuestionTimeout = null;
+					stopCustomQuestionTimeoutCountdown();
+				}
+			}
+		} catch (error) {
+			// Silently fail - custom question data is optional enhancement
+		}
+	}
+
+	// Clear custom question data after answering
+	async function clearCustomQuestionData() {
+		if (!sessionName) return;
+		// Suppress fetching to prevent race condition
+		suppressCustomQuestionFetch = true;
+		customQuestionData = null;
+		customQuestionTimeout = null;
+		customQuestionInputValue = "";
+		stopCustomQuestionTimeoutCountdown();
+		try {
+			await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/custom-question`, {
+				method: "DELETE",
+			});
+		} catch (error) {
+			// Silently fail
+		}
+		// Re-enable fetching after a delay
+		setTimeout(() => {
+			suppressCustomQuestionFetch = false;
+		}, 2000);
+	}
+
+	// Start countdown timer for custom question timeout
+	function startCustomQuestionTimeoutCountdown() {
+		stopCustomQuestionTimeoutCountdown();
+		customQuestionTimeoutInterval = setInterval(() => {
+			if (customQuestionTimeout !== null && customQuestionTimeout > 0) {
+				customQuestionTimeout -= 1;
+			} else if (customQuestionTimeout === 0) {
+				// Timeout expired - could auto-dismiss or take default action
+				stopCustomQuestionTimeoutCountdown();
+			}
+		}, 1000);
+	}
+
+	// Stop countdown timer
+	function stopCustomQuestionTimeoutCountdown() {
+		if (customQuestionTimeoutInterval) {
+			clearInterval(customQuestionTimeoutInterval);
+			customQuestionTimeoutInterval = null;
+		}
+	}
+
+	// Handle custom question answer submission
+	async function submitCustomQuestionAnswer(answer: string) {
+		if (!sessionName || !onSendInput) return;
+
+		// Send the answer via tmux send-keys
+		await onSendInput(answer, "text");
+
+		// Clear the question data
+		await clearCustomQuestionData();
 	}
 
 	// Fetch signal data from API (for human actions via jat-signal action)
@@ -886,6 +1005,11 @@
 		if (questionPollInterval) {
 			clearInterval(questionPollInterval);
 		}
+		// Cleanup custom question polling and timeout
+		if (customQuestionPollInterval) {
+			clearInterval(customQuestionPollInterval);
+		}
+		stopCustomQuestionTimeoutCountdown();
 		// Note: activityPollInterval removed - polling is now centralized in workSessionsState
 		if (hoverTimeout) {
 			clearTimeout(hoverTimeout);
@@ -2025,6 +2149,26 @@
 			// Stop polling when leaving needs-input state
 			clearInterval(questionPollInterval);
 			questionPollInterval = null;
+		}
+	});
+
+	// Start/stop custom question polling based on sessionState
+	// Custom questions come from jat-signal question command (separate from AskUserQuestion tool)
+	$effect(() => {
+		const needsCustomQuestionPolling = sessionState === "needs-input";
+
+		if (needsCustomQuestionPolling && !customQuestionPollInterval) {
+			// Start polling when entering needs-input state
+			fetchCustomQuestionData().catch(() => {}); // Immediate fetch
+			customQuestionPollInterval = setInterval(() => fetchCustomQuestionData().catch(() => {}), 1500);
+		} else if (!needsCustomQuestionPolling && customQuestionPollInterval) {
+			// Stop polling when leaving needs-input state
+			clearInterval(customQuestionPollInterval);
+			customQuestionPollInterval = null;
+			// Also clear custom question data when leaving needs-input
+			customQuestionData = null;
+			customQuestionTimeout = null;
+			stopCustomQuestionTimeoutCountdown();
 		}
 	});
 
@@ -4857,6 +5001,144 @@
 								</button>
 							</div>
 						{/each}
+					</div>
+				{/if}
+
+				<!-- Custom Question UI: Show clickable options from jat-signal question -->
+				<!-- Takes priority over AskUserQuestion UI when both are present -->
+				{#if customQuestionData?.active}
+					<div
+						class="mb-2 p-2 rounded-lg relative"
+						style="background: oklch(0.22 0.04 280); border: 1px solid oklch(0.40 0.12 280);"
+					>
+						<!-- Close button -->
+						<button
+							onclick={() => clearCustomQuestionData()}
+							class="absolute top-1 right-1 p-1 rounded-full opacity-50 hover:opacity-100 transition-opacity"
+							style="color: oklch(0.65 0.02 280);"
+							title="Dismiss"
+						>
+							<svg
+								class="w-4 h-4"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke="currentColor"
+								stroke-width="2"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M6 18L18 6M6 6l12 12"
+								/>
+							</svg>
+						</button>
+
+						<!-- Question header with signal indicator and optional timeout -->
+						<div class="flex items-center gap-2 mb-2 pr-6">
+							<span
+								class="text-[10px] px-1.5 py-0.5 rounded font-mono"
+								style="background: oklch(0.35 0.12 280); color: oklch(0.90 0.05 280);"
+							>
+								🎯
+							</span>
+							<span
+								class="text-xs font-semibold flex-1"
+								style="color: oklch(0.90 0.10 280);"
+							>
+								{customQuestionData.question}
+							</span>
+							{#if customQuestionTimeout !== null && customQuestionTimeout > 0}
+								<span
+									class="text-[10px] px-1.5 py-0.5 rounded font-mono"
+									style="background: oklch(0.30 0.08 40); color: oklch(0.80 0.12 40);"
+								>
+									⏱️ {customQuestionTimeout}s
+								</span>
+							{/if}
+						</div>
+
+						<!-- Different UIs based on question type -->
+						{#if customQuestionData.questionType === 'choice' && customQuestionData.options?.length > 0}
+							<!-- Choice question: clickable option buttons -->
+							<div class="flex flex-wrap gap-1.5">
+								{#each customQuestionData.options as opt, index (index)}
+									<button
+										onclick={() => submitCustomQuestionAnswer(opt.value || opt.label)}
+										class="btn btn-xs btn-outline gap-1"
+										style="background: oklch(0.25 0.03 280); border-color: oklch(0.40 0.08 280); color: oklch(0.85 0.02 280);"
+										title={opt.description || opt.label}
+										disabled={sendingInput || !onSendInput}
+									>
+										<span class="text-[10px] opacity-60">{index + 1}.</span>
+										{opt.label}
+									</button>
+								{/each}
+							</div>
+							<div
+								class="text-[10px] mt-1.5 opacity-50"
+								style="color: oklch(0.65 0.02 280);"
+							>
+								Click an option to select
+							</div>
+						{:else if customQuestionData.questionType === 'confirm'}
+							<!-- Confirm question: Yes/No buttons -->
+							<div class="flex gap-2">
+								<button
+									onclick={() => submitCustomQuestionAnswer('yes')}
+									class="btn btn-xs btn-success gap-1"
+									disabled={sendingInput || !onSendInput}
+								>
+									<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+									</svg>
+									Yes
+								</button>
+								<button
+									onclick={() => submitCustomQuestionAnswer('no')}
+									class="btn btn-xs btn-error btn-outline gap-1"
+									disabled={sendingInput || !onSendInput}
+								>
+									<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+									</svg>
+									No
+								</button>
+							</div>
+						{:else if customQuestionData.questionType === 'input'}
+							<!-- Input question: text field with submit -->
+							<div class="flex items-center gap-2">
+								<input
+									type="text"
+									bind:value={customQuestionInputValue}
+									placeholder="Type your response..."
+									class="input input-xs input-bordered flex-1 text-xs"
+									style="background: oklch(0.18 0.02 280); border-color: oklch(0.45 0.12 280); color: oklch(0.90 0.02 280);"
+									onkeydown={(e) => {
+										if (e.key === "Enter" && customQuestionInputValue.trim()) {
+											submitCustomQuestionAnswer(customQuestionInputValue.trim());
+										}
+									}}
+									disabled={sendingInput || !onSendInput}
+								/>
+								<button
+									onclick={() => submitCustomQuestionAnswer(customQuestionInputValue.trim())}
+									class="btn btn-xs btn-success gap-1"
+									title="Send (Enter)"
+									disabled={sendingInput || !onSendInput || !customQuestionInputValue.trim()}
+								>
+									<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+									</svg>
+									Send
+								</button>
+							</div>
+							<div
+								class="text-[10px] mt-1.5 opacity-50"
+								style="color: oklch(0.65 0.02 280);"
+							>
+								Press Enter to send
+							</div>
+						{/if}
 					</div>
 				{/if}
 

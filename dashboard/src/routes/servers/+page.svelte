@@ -36,6 +36,7 @@
 	} from '$lib/utils/soundEffects';
 	import { SessionPanelSkeleton, ProjectsTableSkeleton } from '$lib/components/skeleton';
 	import { openProjectDrawer } from '$lib/stores/drawerStore';
+	import { updateProjectColorCache, initProjectColors } from '$lib/utils/projectColors';
 
 	interface Project {
 		name: string;
@@ -44,6 +45,7 @@
 		serverPath: string | null; // Where 'npm run dev' should be executed (optional, defaults to path)
 		port: number | null;
 		activeColor: string | null;
+		inactiveColor: string | null;
 		description: string | null;
 		hidden: boolean;
 		source: 'jat-config' | 'filesystem';
@@ -161,6 +163,21 @@
 	let copiedTmuxCmd = $state<string | null>(null); // Project name whose tmux cmd was copied
 	let editingPort = $state<string | null>(null); // Project name being edited (port)
 	let portDraft = $state<string>('');
+	let editingColor = $state<string | null>(null); // Project name being edited (color)
+	let colorDraft = $state<string>(''); // Color in hex format for picker
+
+	// Predefined color palette for quick selection
+	const COLOR_PALETTE = [
+		'#5588ff', '#00d4aa', '#ff6b6b', '#ffd93d', '#6bcb77',
+		'#bb66ff', '#ff9933', '#17ace6', '#8572d6', '#c90b11',
+		'#3df1ae', '#97b7fd', '#ff5555', '#44ff44', '#ffdd00'
+	];
+
+	// Convert #rrggbb to rgb(rrggbb) for JAT config (used when saving colors)
+	function hexToRgb(hex: string): string {
+		const cleaned = hex.replace('#', '').toLowerCase();
+		return `rgb(${cleaned})`;
+	}
 
 	// Phase 1: Fast fetch without stats (instant page load)
 	async function fetchProjects() {
@@ -406,6 +423,73 @@
 		}
 	}
 
+	// Color editing functions
+	function startEditingColor(project: Project) {
+		editingColor = project.name;
+		colorDraft = project.activeColor || '#888888';
+	}
+
+	function cancelEditingColor() {
+		editingColor = null;
+		colorDraft = '';
+	}
+
+	async function saveColor(project: Project, newColor: string) {
+		saving = project.name;
+		try {
+			const rgbColor = hexToRgb(newColor);
+			// Generate inactive color (darker variant)
+			const inactiveColor = generateInactiveColor(newColor);
+
+			const response = await fetch('/api/projects', {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					project: project.name,
+					active_color: rgbColor,
+					inactive_color: hexToRgb(inactiveColor)
+				})
+			});
+
+			if (!response.ok) {
+				throw new Error('Failed to save color');
+			}
+
+			// Update local state
+			projects = projects.map(p =>
+				p.name === project.name ? { ...p, activeColor: newColor, inactiveColor: inactiveColor } : p
+			);
+
+			// Update the global project color cache so other components see the new color immediately
+			updateProjectColorCache(project.name, newColor);
+
+			editingColor = null;
+			colorDraft = '';
+		} catch (err: any) {
+			console.error('Failed to save color:', err);
+			error = err.message;
+			setTimeout(() => { error = null; }, 3000);
+		} finally {
+			saving = null;
+		}
+	}
+
+	// Generate a darker inactive color variant
+	function generateInactiveColor(hexColor: string): string {
+		const hex = hexColor.replace('#', '');
+		const r = parseInt(hex.slice(0, 2), 16);
+		const g = parseInt(hex.slice(2, 4), 16);
+		const b = parseInt(hex.slice(4, 6), 16);
+
+		// Darken by 25%
+		const darkenFactor = 0.75;
+		const dr = Math.round(r * darkenFactor);
+		const dg = Math.round(g * darkenFactor);
+		const db = Math.round(b * darkenFactor);
+
+		return `#${dr.toString(16).padStart(2, '0')}${dg.toString(16).padStart(2, '0')}${db.toString(16).padStart(2, '0')}`;
+	}
+
 	// Server session event handlers
 	async function handleKillSession(sessionName: string) {
 		const success = await stopServerSession(sessionName);
@@ -530,6 +614,9 @@
 	}
 
 	onMount(async () => {
+		// Pre-fetch project colors for consistent UI
+		initProjectColors();
+
 		// Phase 1: Fast initial load (no stats)
 		await fetchProjects();
 		// Poll every 5 seconds instead of 2 seconds
@@ -755,6 +842,9 @@
 							<th class="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
 								Project
 							</th>
+							<th class="px-2 py-3 text-center font-mono text-[10px] uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+								Color
+							</th>
 							<th class="px-3 py-3 text-left font-mono text-[10px] uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
 								Port
 							</th>
@@ -792,28 +882,95 @@
 								onmouseleave={(e) => { hoveredProject = null; e.currentTarget.style.background = project.status === 'running' ? 'oklch(0.20 0.03 145 / 0.15)' : 'transparent'; }}
 								onclick={() => runningSessionName && scrollToSession(runningSessionName)}
 							>
-								<!-- Project name with color indicator and path -->
+								<!-- Project name and path -->
 								<td class="px-4 py-2">
-									<div class="flex items-start gap-2">
-										{#if project.activeColor}
-											<span
-												class="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1"
-												style="background: {project.activeColor};"
-											></span>
-										{/if}
-										<div class="flex flex-col">
-											<span class="font-mono text-sm font-medium" style="color: oklch(0.85 0.02 250);">
-												{project.name}
-											</span>
-											<button
-												class="font-mono text-[10px] truncate max-w-[160px] hover:underline cursor-pointer text-left"
-												style="color: oklch(0.45 0.02 250);"
-												title="Open folder: {project.path}"
-												onclick={(e) => { e.stopPropagation(); openFolder(project.path); }}
+									<div class="flex flex-col">
+										<span class="font-mono text-sm font-medium" style="color: oklch(0.85 0.02 250);">
+											{project.name}
+										</span>
+										<button
+											class="font-mono text-[10px] truncate max-w-[160px] hover:underline cursor-pointer text-left"
+											style="color: oklch(0.45 0.02 250);"
+											title="Open folder: {project.path}"
+											onclick={(e) => { e.stopPropagation(); openFolder(project.path); }}
+										>
+											{project.path.replace(/^\/home\/[^/]+/, '~')}
+										</button>
+									</div>
+								</td>
+
+								<!-- Color (editable with picker) -->
+								<td class="px-2 py-2">
+									<div class="relative flex justify-center">
+										{#if editingColor === project.name}
+											<!-- Color picker dropdown -->
+											<div
+												class="absolute top-0 left-1/2 -translate-x-1/2 z-50 p-2 rounded-lg shadow-xl"
+												style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.35 0.02 250);"
+												onclick={(e) => e.stopPropagation()}
 											>
-												{project.path.replace(/^\/home\/[^/]+/, '~')}
-											</button>
-										</div>
+												<!-- Palette grid -->
+												<div class="grid grid-cols-5 gap-1.5 mb-2">
+													{#each COLOR_PALETTE as color}
+														<button
+															class="w-6 h-6 rounded-full transition-transform hover:scale-110 {colorDraft === color ? 'ring-2 ring-white ring-offset-1' : ''}"
+															style="background: {color}; ring-offset-color: oklch(0.22 0.02 250);"
+															onclick={() => { colorDraft = color; }}
+															title={color}
+														></button>
+													{/each}
+												</div>
+												<!-- Custom color input -->
+												<div class="flex items-center gap-1.5 mb-2">
+													<input
+														type="color"
+														class="w-6 h-6 rounded cursor-pointer"
+														style="border: none; padding: 0;"
+														bind:value={colorDraft}
+													/>
+													<input
+														type="text"
+														class="flex-1 px-2 py-1 rounded font-mono text-xs"
+														style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
+														bind:value={colorDraft}
+														placeholder="#5588ff"
+													/>
+												</div>
+												<!-- Action buttons -->
+												<div class="flex justify-end gap-1.5">
+													<button
+														class="px-2 py-1 rounded text-xs font-medium transition-colors"
+														style="background: oklch(0.30 0.02 250); color: oklch(0.70 0.02 250);"
+														onclick={() => cancelEditingColor()}
+													>
+														Cancel
+													</button>
+													<button
+														class="px-2 py-1 rounded text-xs font-medium transition-colors"
+														style="background: oklch(0.50 0.18 145); color: white;"
+														onclick={() => saveColor(project, colorDraft)}
+														disabled={saving === project.name}
+													>
+														{saving === project.name ? 'Saving...' : 'Save'}
+													</button>
+												</div>
+											</div>
+											<!-- Current color dot (clickable to close) -->
+											<button
+												class="w-5 h-5 rounded-full transition-transform hover:scale-110"
+												style="background: {colorDraft || '#888888'}; box-shadow: 0 0 0 2px oklch(0.50 0.18 220);"
+												onclick={(e) => { e.stopPropagation(); cancelEditingColor(); }}
+												title="Cancel"
+											></button>
+										{:else}
+											<!-- Color dot (click to edit) -->
+											<button
+												class="w-5 h-5 rounded-full transition-all hover:scale-110 hover:ring-2 hover:ring-white/30"
+												style="background: {project.activeColor || '#888888'};"
+												onclick={(e) => { e.stopPropagation(); startEditingColor(project); }}
+												title="Click to change color"
+											></button>
+										{/if}
 									</div>
 								</td>
 

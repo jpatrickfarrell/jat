@@ -64,6 +64,7 @@
 import { json } from '@sveltejs/kit';
 import { getTokenTimeSeries, getMultiProjectTimeSeries, getMultiProjectTimeSeriesAsync, getAgentMultiProjectTimeSeries } from '$lib/utils/tokenUsageTimeSeries.js';
 import { getHourlyBreakdown, getUsageByProject, runAggregation, getDatabaseStats } from '$lib/server/tokenUsageDb.js';
+import { getAllProjects } from '$lib/utils/projectConfig';
 
 // ============================================================================
 // In-Memory Cache
@@ -164,15 +165,20 @@ function getCacheKey(params) {
 // ============================================================================
 
 /**
- * Project colors for multi-project sparklines (same as tokenUsageTimeSeries.js)
- * @type {Record<string, string>}
+ * Get project colors from JAT config
+ * Falls back to a default color for unknown projects
+ * @returns {Record<string, string>}
  */
-const PROJECT_COLORS = {
-	jat: '#22c55e',      // green
-	chimaro: '#3b82f6',  // blue
-	jomarchy: '#f59e0b', // amber
-	other: '#8b5cf6'     // purple
-};
+function getProjectColors() {
+	const projects = getAllProjects();
+	/** @type {Record<string, string>} */
+	const colors = {};
+	for (const [key, config] of projects) {
+		colors[key] = config.activeColor || '#888888';
+	}
+	colors.other = '#8b5cf6'; // Fallback for unknown projects
+	return colors;
+}
 
 /**
  * Get time range boundaries based on range parameter
@@ -232,6 +238,7 @@ async function fetchFromSQLite({ range, bucketSize, agentName, multiProject }) {
 
 	if (multiProject) {
 		// Multi-project mode: get usage by project
+		const PROJECT_COLORS = getProjectColors(); // Get colors from JAT config
 		const projectData = getUsageByProject(startTime, endTime);
 
 		if (!projectData || projectData.length === 0) {
@@ -282,11 +289,16 @@ async function fetchFromSQLite({ range, bucketSize, agentName, multiProject }) {
 		}
 
 		// Build project keys and colors
+		// projectKeys = only projects with activity (for data filtering)
+		// projectColors = ALL configured projects (for consistent UI colors)
 		const projectKeys = Array.from(projectSet).sort();
 		/** @type {Record<string, string>} */
-		const projectColors = {};
+		const projectColors = { ...PROJECT_COLORS };
+		// Also add colors for any active projects not in config (use fallback)
 		for (const project of projectKeys) {
-			projectColors[project] = PROJECT_COLORS[project] || PROJECT_COLORS.other;
+			if (!projectColors[project]) {
+				projectColors[project] = PROJECT_COLORS.other;
+			}
 		}
 
 		return {

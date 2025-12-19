@@ -17,6 +17,7 @@ import { join } from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { apiCache, cacheKey, CACHE_TTL, invalidateCache } from '$lib/server/cache.js';
+import { rgbToHex } from '$lib/utils/projectConfig';
 
 const execAsync = promisify(exec);
 
@@ -358,8 +359,8 @@ export async function GET({ url }) {
 					path: projectPath,
 					serverPath,
 					port: config.port || null,
-					activeColor: config.active_color || null,
-					inactiveColor: config.inactive_color || null,
+					activeColor: config.active_color ? rgbToHex(config.active_color) : null,
+					inactiveColor: config.inactive_color ? rgbToHex(config.inactive_color) : null,
 					databaseUrl: config.database_url || null,
 					description: config.description || null,
 					hidden: hiddenProjects.has(key),
@@ -475,12 +476,15 @@ async function writeJatConfig(config) {
 
 /**
  * PATCH /api/projects - Update project fields
- * Body: { project: string, description?: string, port?: number | null }
+ * Body: { project: string, description?: string, port?: number | null, active_color?: string, inactive_color?: string }
+ *
+ * Colors should be in "rgb(rrggbb)" format for consistency with JAT config.
+ * Example: "rgb(5588ff)" for blue, "rgb(00d4aa)" for teal
  */
 export async function PATCH({ request }) {
 	try {
 		const body = await request.json();
-		const { project, description, port } = body;
+		const { project, description, port, active_color, inactive_color } = body;
 
 		if (!project) {
 			return json({ error: 'Project name required' }, { status: 400 });
@@ -498,6 +502,12 @@ export async function PATCH({ request }) {
 		if (port !== undefined) {
 			jatConfig.projects[project].port = port;
 		}
+		if (active_color !== undefined) {
+			jatConfig.projects[project].active_color = active_color || null;
+		}
+		if (inactive_color !== undefined) {
+			jatConfig.projects[project].inactive_color = inactive_color || null;
+		}
 
 		const success = await writeJatConfig(jatConfig);
 		if (!success) {
@@ -511,7 +521,9 @@ export async function PATCH({ request }) {
 			success: true,
 			project,
 			description: jatConfig.projects[project].description,
-			port: jatConfig.projects[project].port
+			port: jatConfig.projects[project].port,
+			active_color: jatConfig.projects[project].active_color,
+			inactive_color: jatConfig.projects[project].inactive_color
 		});
 	} catch (error) {
 		console.error('Failed to update project:', error);

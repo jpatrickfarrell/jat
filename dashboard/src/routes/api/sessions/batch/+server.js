@@ -10,19 +10,21 @@ import { readFileSync, existsSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import { listSessionsAsync } from '$lib/server/sessions.js';
+import { CLAUDE_READY_PATTERNS, SHELL_PROMPT_PATTERNS } from '$lib/server/shellPatterns.js';
 
 const execAsync = promisify(exec);
 
 /**
  * Load JAT config defaults
- * @returns {{ model: string, claude_flags: string, agent_stagger: number }}
+ * @returns {{ model: string, claude_flags: string, agent_stagger: number, claude_startup_timeout: number }}
  */
 function loadJatDefaults() {
 	const configPath = join(homedir(), '.config/jat/projects.json');
 	const defaults = {
 		model: 'opus',
 		claude_flags: '--dangerously-skip-permissions',
-		agent_stagger: 30
+		agent_stagger: 30,
+		claude_startup_timeout: 20
 	};
 
 	if (existsSync(configPath)) {
@@ -32,6 +34,7 @@ function loadJatDefaults() {
 				if (config.defaults.model) defaults.model = config.defaults.model;
 				if (config.defaults.claude_flags) defaults.claude_flags = config.defaults.claude_flags;
 				if (config.defaults.agent_stagger) defaults.agent_stagger = config.defaults.agent_stagger;
+				if (typeof config.defaults.claude_startup_timeout === 'number') defaults.claude_startup_timeout = config.defaults.claude_startup_timeout;
 			}
 		} catch (err) {
 			console.error('Failed to load JAT config:', err);
@@ -130,22 +133,7 @@ export async function POST({ request }) {
 				// Wait for Claude to fully start with verification
 				if (prompt) {
 					// Verify Claude Code TUI is running before sending prompt
-					const CLAUDE_READY_PATTERNS = ['Claude Code', '╭', '> ', 'claude-opus', 'claude-sonnet', 'Opus', 'Sonnet', 'Type to stream'];
-					// Shell prompt patterns - detect when Claude hasn't started
-					const SHELL_PROMPT_PATTERNS = [
-						'-bash:',           // bash error prefix
-						'$ ',               // common bash prompt
-						'bash-',            // bash version prefix
-						'❯',                // zsh/powerline prompt
-						'➜',                // oh-my-zsh default
-						'%',                // zsh default prompt
-						' on ',             // starship/powerline "dir on branch" format
-						'master [',         // git branch indicators
-						'main [',           // git branch indicators
-						'jat on',           // specific to this user's prompt
-						'No such file or directory'  // bash error
-					];
-					const maxWaitSeconds = 20;
+					const maxWaitSeconds = jatDefaults.claude_startup_timeout;
 					const checkIntervalMs = 500;
 					let claudeReady = false;
 					let shellPromptDetected = false;

@@ -19,8 +19,20 @@ const JAT_CONFIG_PATH = join(homedir(), '.config', 'jat', 'projects.json');
  */
 
 /**
+ * @typedef {Object} JatDefaults
+ * @property {string} [terminal] - Default terminal emulator
+ * @property {string} [editor] - Default code editor
+ * @property {string} [tools_path] - Path to jat tools
+ * @property {string} [claude_flags] - Claude command flags
+ * @property {string} [model] - Default Claude model
+ * @property {number} [agent_stagger] - Stagger delay between agent spawns (seconds)
+ * @property {number} [claude_startup_timeout] - Claude startup timeout (seconds)
+ */
+
+/**
  * @typedef {Object} JatConfig
  * @property {Record<string, JatProjectConfig>} [projects] - Project configurations
+ * @property {JatDefaults} [defaults] - Default settings
  */
 
 /**
@@ -132,4 +144,41 @@ export async function getProjectPath(projectName) {
 		source: 'default',
 		exists: existsSync(defaultPath)
 	};
+}
+
+/**
+ * Get JAT config defaults
+ *
+ * Returns defaults from ~/.config/jat/projects.json with fallback values.
+ * Used for configurable settings like Claude startup timeout.
+ *
+ * @returns {Promise<JatDefaults>}
+ */
+export async function getJatDefaults() {
+	const jatConfig = await readJatConfig();
+
+	// Default values
+	const defaults = {
+		terminal: 'alacritty',
+		editor: 'code',
+		tools_path: '~/.local/bin',
+		claude_flags: '--dangerously-skip-permissions',
+		model: 'opus',
+		agent_stagger: 15,
+		claude_startup_timeout: 20
+	};
+
+	// Override with config values if present
+	if (jatConfig?.defaults) {
+		const configDefaults = jatConfig.defaults;
+		if (configDefaults.terminal) defaults.terminal = configDefaults.terminal;
+		if (configDefaults.editor) defaults.editor = configDefaults.editor;
+		if (configDefaults.tools_path) defaults.tools_path = configDefaults.tools_path;
+		if (configDefaults.claude_flags) defaults.claude_flags = configDefaults.claude_flags;
+		if (configDefaults.model) defaults.model = configDefaults.model;
+		if (typeof configDefaults.agent_stagger === 'number') defaults.agent_stagger = configDefaults.agent_stagger;
+		if (typeof configDefaults.claude_startup_timeout === 'number') defaults.claude_startup_timeout = configDefaults.claude_startup_timeout;
+	}
+
+	return defaults;
 }

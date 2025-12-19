@@ -12,6 +12,8 @@ import {
 	DANGEROUSLY_SKIP_PERMISSIONS,
 	AGENT_MAIL_URL
 } from '$lib/config/spawnConfig.js';
+import { getJatDefaults } from '$lib/server/projectPaths.js';
+import { CLAUDE_READY_PATTERNS, SHELL_PROMPT_PATTERNS } from '$lib/server/shellPatterns.js';
 
 const execAsync = promisify(exec);
 
@@ -160,23 +162,8 @@ export async function POST({ request }) {
 			// Wait for Claude to fully start, then send the initial prompt
 			// Verify Claude Code TUI is running before sending prompt
 			if (initialPrompt) {
-				// Check that Claude Code TUI is running (not just bash prompt)
-				const CLAUDE_READY_PATTERNS = ['Claude Code', '╭', '> ', 'claude-opus', 'claude-sonnet', 'Opus', 'Sonnet', 'Type to stream'];
-				// Shell prompt patterns - detect when Claude hasn't started
-				const SHELL_PROMPT_PATTERNS = [
-					'-bash:',           // bash error prefix
-					'$ ',               // common bash prompt
-					'bash-',            // bash version prefix
-					'❯',                // zsh/powerline prompt
-					'➜',                // oh-my-zsh default
-					'%',                // zsh default prompt
-					' on ',             // starship/powerline "dir on branch" format
-					'master [',         // git branch indicators
-					'main [',           // git branch indicators
-					'jat on',           // specific to this user's prompt
-					'No such file or directory'  // bash error
-				];
-				const maxWaitSeconds = 20;
+				const jatDefaults = await getJatDefaults();
+				const maxWaitSeconds = jatDefaults.claude_startup_timeout || 20;
 				const checkIntervalMs = 500;
 				let claudeReady = false;
 				let shellPromptDetected = false;

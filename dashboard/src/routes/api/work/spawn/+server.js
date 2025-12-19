@@ -22,10 +22,12 @@ import { existsSync } from 'fs';
 import {
 	DEFAULT_MODEL,
 	DANGEROUSLY_SKIP_PERMISSIONS,
-	AGENT_MAIL_URL
+	AGENT_MAIL_URL,
+	CLAUDE_STARTUP_TIMEOUT_SECONDS
 } from '$lib/config/spawnConfig.js';
 import { getTaskById } from '$lib/server/beads.js';
-import { getProjectPath } from '$lib/server/projectPaths.js';
+import { getProjectPath, getJatDefaults } from '$lib/server/projectPaths.js';
+import { CLAUDE_READY_PATTERNS, SHELL_PROMPT_PATTERNS } from '$lib/server/shellPatterns.js';
 
 const execAsync = promisify(exec);
 
@@ -210,24 +212,9 @@ export async function POST({ request }) {
 
 		// Wait for Claude to initialize with verification
 		// Check that Claude Code TUI is running (not just bash prompt)
-		// Claude shows these patterns when ready: "Claude Code", "╭", input prompt ">"
-		const CLAUDE_READY_PATTERNS = ['Claude Code', '╭', '> ', 'claude-opus', 'claude-sonnet', 'Opus', 'Sonnet', 'Type to stream'];
-		// Shell prompt patterns - detect when Claude hasn't started and we're still at bash/zsh
-		// Must NOT include 'claude' in the output (to avoid matching during Claude startup)
-		const SHELL_PROMPT_PATTERNS = [
-			'-bash:',           // bash error prefix
-			'$ ',               // common bash prompt
-			'bash-',            // bash version prefix
-			'❯',                // zsh/powerline prompt
-			'➜',                // oh-my-zsh default
-			'%',                // zsh default prompt
-			' on ',             // starship/powerline "dir on branch" format
-			'master [',         // git branch indicators
-			'main [',           // git branch indicators
-			'jat on',           // specific to this user's prompt
-			'No such file or directory'  // bash error when command not found
-		];
-		const maxWaitSeconds = 20;  // Increased from 15 to give more time for slow starts
+		// Get configurable timeout from JAT config (defaults to CLAUDE_STARTUP_TIMEOUT_SECONDS)
+		const jatDefaults = await getJatDefaults();
+		const maxWaitSeconds = jatDefaults.claude_startup_timeout || 20;
 		const checkIntervalMs = 500;
 		let claudeReady = false;
 		let shellPromptDetected = false;

@@ -16,6 +16,7 @@
 
 	import { fade } from 'svelte/transition';
 	import type { SlashCommand } from '$lib/types/config';
+	import { getShortcut, getDisplayShortcut } from '$lib/stores/keyboardShortcuts.svelte';
 
 	interface Props {
 		/** Slash command to display */
@@ -28,6 +29,8 @@
 		onEdit?: (command: SlashCommand) => void;
 		/** Called when delete button is clicked */
 		onDelete?: (command: SlashCommand) => void;
+		/** Called when shortcut badge is clicked to assign/edit shortcut */
+		onShortcutClick?: (command: SlashCommand) => void;
 		/** Custom class */
 		class?: string;
 	}
@@ -38,8 +41,13 @@
 		highlightMatch,
 		onEdit = () => {},
 		onDelete = () => {},
+		onShortcutClick,
 		class: className = ''
 	}: Props = $props();
+
+	// Get the shortcut for this command (reactive)
+	const shortcut = $derived(getShortcut(command.invocation));
+	const displayShortcut = $derived(shortcut ? getDisplayShortcut(shortcut) : null);
 
 	// Default highlight function if not provided
 	function defaultHighlight(text: string, query: string): { text: string; isMatch: boolean }[] {
@@ -177,6 +185,33 @@
 				</svg>
 				{command.frontmatter.author}
 			</span>
+		{/if}
+
+		<!-- Keyboard shortcut badge -->
+		{#if displayShortcut}
+			<button
+				class="badge shortcut-badge"
+				onclick={() => onShortcutClick?.(command)}
+				title="Edit keyboard shortcut"
+				aria-label="Edit keyboard shortcut"
+			>
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="badge-icon">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6" />
+				</svg>
+				{displayShortcut}
+			</button>
+		{:else if onShortcutClick}
+			<button
+				class="badge shortcut-badge empty"
+				onclick={() => onShortcutClick?.(command)}
+				title="Assign keyboard shortcut"
+				aria-label="Assign keyboard shortcut"
+			>
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="badge-icon">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+				</svg>
+				Shortcut
+			</button>
 		{/if}
 	</div>
 
@@ -389,5 +424,31 @@
 		color: oklch(0.95 0.10 85);
 		padding: 0 0.125rem;
 		border-radius: 2px;
+	}
+
+	/* Keyboard shortcut badge */
+	.shortcut-badge {
+		color: oklch(0.80 0.12 200);
+		background: oklch(0.25 0.06 200);
+		cursor: pointer;
+		transition: all 0.15s ease;
+		border: none;
+	}
+
+	.shortcut-badge:hover {
+		background: oklch(0.30 0.08 200);
+		color: oklch(0.90 0.12 200);
+	}
+
+	.shortcut-badge.empty {
+		color: oklch(0.55 0.02 250);
+		background: oklch(0.20 0.02 250);
+		border: 1px dashed oklch(0.35 0.02 250);
+	}
+
+	.shortcut-badge.empty:hover {
+		color: oklch(0.75 0.10 200);
+		background: oklch(0.22 0.04 200);
+		border-color: oklch(0.45 0.08 200);
 	}
 </style>

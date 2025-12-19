@@ -16,6 +16,7 @@
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import { getTaskCountByProject } from '$lib/utils/projectUtils';
 	import { setProjectsCache, type ProjectConfig } from '$lib/utils/fileLinks';
+	import { initProjectColors } from '$lib/utils/projectColors';
 	import { initAudioOnInteraction, areSoundsEnabled, enableSounds, disableSounds, playNewTaskChime, playCopySound } from '$lib/utils/soundEffects';
 	import { successToast } from '$lib/stores/toasts.svelte';
 	import { initSessionEvents, closeSessionEvents, connectSessionEvents, disconnectSessionEvents, lastSessionEvent } from '$lib/stores/sessionEvents';
@@ -26,6 +27,7 @@
 	import { initPreferences } from '$lib/stores/preferences.svelte';
 	import { getSessions as getWorkSessions, startActivityPolling, stopActivityPolling, fetch as fetchWorkSessions } from '$lib/stores/workSessions.svelte';
 	import { getSessions as getServerSessions } from '$lib/stores/serverSessions.svelte';
+	import { initKeyboardShortcuts, findMatchingCommand } from '$lib/stores/keyboardShortcuts.svelte';
 
 	let { children } = $props();
 
@@ -177,7 +179,9 @@
 	// Initialize theme-change, SSE, preferences, and load all tasks
 	onMount(async () => {
 		initPreferences(); // Initialize unified preferences store
+		initKeyboardShortcuts(); // Initialize keyboard shortcuts from localStorage
 		themeChange(false);
+		initProjectColors(); // Pre-fetch project colors for consistent task ID coloring
 		initSessionEvents(); // Initialize cross-page session events (BroadcastChannel)
 		connectSessionEvents(); // Connect to real-time session events SSE
 		connectTaskEvents(); // Connect to real-time task events SSE
@@ -475,8 +479,62 @@
 		goto(url.toString(), { replaceState: true, noScroll: true, keepFocus: true });
 	}
 
+	// Send a slash command to the hovered session
+	async function sendCommandToHoveredSession(commandInvocation: string) {
+		const sessionName = get(hoveredSessionName);
+		if (!sessionName) return;
+
+		// Special handling for /jat:complete to trigger visual flash
+		if (commandInvocation === '/jat:complete') {
+			triggerCompleteFlash(sessionName);
+		}
+
+		try {
+			// Send Ctrl+C first to clear any stray characters in input
+			await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ type: 'ctrl-c' })
+			});
+			await new Promise((r) => setTimeout(r, 50));
+			// Send the command text (API appends Enter for type='text')
+			const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					type: 'text',
+					input: commandInvocation
+				})
+			});
+			if (!response.ok) {
+				console.error(`Failed to send command ${commandInvocation}:`, await response.text());
+			} else {
+				// Send extra Enter after delay - Claude Code needs double Enter for slash commands
+				await new Promise((r) => setTimeout(r, 100));
+				await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ type: 'enter' })
+				});
+			}
+		} catch (err) {
+			console.error(`Error sending command ${commandInvocation}:`, err);
+		}
+	}
+
 	// Global keyboard shortcuts
 	async function handleGlobalKeydown(event: KeyboardEvent) {
+		// First check for user-defined command shortcuts (unless in an input field that should capture the event)
+		// User shortcuts take priority over built-in shortcuts (except Shift variants)
+		if (!event.shiftKey) {
+			const matchingCommand = findMatchingCommand(event);
+			if (matchingCommand) {
+				event.preventDefault();
+				await sendCommandToHoveredSession(matchingCommand);
+				return;
+			}
+		}
+
 		// Alt+N = Open new task drawer (works from anywhere, even in inputs)
 		if (event.altKey && event.code === 'KeyN') {
 			event.preventDefault();
@@ -512,49 +570,6 @@
 					}
 				} catch (err) {
 					console.error('Error attaching to session:', err);
-				}
-			}
-			return;
-		}
-
-		// Alt+C = Complete task for hovered session (sends /jat:complete command)
-		// Note: Check !shiftKey to avoid conflict with Alt+Shift+C (copy session)
-		if (event.altKey && !event.shiftKey && event.code === 'KeyC') {
-			event.preventDefault();
-			const sessionName = get(hoveredSessionName);
-			if (sessionName) {
-				// Trigger visual feedback immediately
-				triggerCompleteFlash(sessionName);
-				try {
-					// Send Ctrl+C first to clear any stray characters in input
-					await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, {
-						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ type: 'ctrl-c' })
-					});
-					await new Promise((r) => setTimeout(r, 50));
-					// Send the command text (API appends Enter for type='text')
-					const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, {
-						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({
-							type: 'text',
-							input: '/jat:complete'
-						})
-					});
-					if (!response.ok) {
-						console.error('Failed to send complete command:', await response.text());
-					} else {
-						// Send extra Enter after delay - Claude Code needs double Enter for slash commands
-						await new Promise((r) => setTimeout(r, 100));
-						await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, {
-							method: 'POST',
-							headers: { 'Content-Type': 'application/json' },
-							body: JSON.stringify({ type: 'enter' })
-						});
-					}
-				} catch (err) {
-					console.error('Error sending complete command:', err);
 				}
 			}
 			return;

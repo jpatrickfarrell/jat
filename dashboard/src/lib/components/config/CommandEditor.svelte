@@ -20,6 +20,14 @@
 		type CommandTemplate,
 		type TemplateVariable
 	} from '$lib/config/commandTemplates';
+	import {
+		getShortcut,
+		setShortcut,
+		validateShortcut,
+		checkShortcutConflict,
+		findCommandWithShortcut,
+		getDisplayShortcut
+	} from '$lib/stores/keyboardShortcuts.svelte';
 
 	// Configure marked for safe rendering
 	marked.setOptions({
@@ -48,6 +56,9 @@
 	let author = $state('');
 	let version = $state('');
 	let tags = $state('');
+	let shortcut = $state('');
+	let shortcutError = $state('');
+	let shortcutWarning = $state('');
 	let content = $state('');
 	let loading = $state(false);
 	let saving = $state(false);
@@ -110,6 +121,9 @@
 			author = '';
 			version = '';
 			tags = '';
+			shortcut = '';
+			shortcutError = '';
+			shortcutWarning = '';
 			showTemplateStep = true; // Show template picker first
 			showVariablesStep = false;
 			selectedTemplate = null;
@@ -236,6 +250,11 @@ Command content here...
 					? command.frontmatter.tags.join(', ')
 					: command.frontmatter.tags || '';
 			}
+
+			// Load keyboard shortcut from store
+			shortcut = getShortcut(command.invocation) || '';
+			shortcutError = '';
+			shortcutWarning = '';
 
 			// Editor sync is handled by the content sync $effect
 		} catch (e) {
@@ -382,6 +401,36 @@ Command content here...
 		});
 	}
 
+	// Validate shortcut input
+	function validateShortcutInput() {
+		shortcutError = '';
+		shortcutWarning = '';
+
+		if (!shortcut.trim()) return;
+
+		// Validate format
+		const validationError = validateShortcut(shortcut);
+		if (validationError) {
+			shortcutError = validationError;
+			return;
+		}
+
+		// Check for browser conflicts
+		const conflictWarning = checkShortcutConflict(shortcut);
+		if (conflictWarning) {
+			shortcutWarning = conflictWarning;
+		}
+
+		// Check if shortcut is already assigned to another command
+		const currentInvocation = isCreateMode
+			? `/${namespace}:${name.trim()}`
+			: command?.invocation || '';
+		const existingCommand = findCommandWithShortcut(shortcut);
+		if (existingCommand && existingCommand !== currentInvocation) {
+			shortcutError = `Shortcut already assigned to ${existingCommand}`;
+		}
+	}
+
 	// Build frontmatter from fields
 	function buildFrontmatter(): string {
 		const lines = ['---'];
@@ -414,6 +463,12 @@ Command content here...
 		// Check for validation errors (block save on critical errors)
 		if (validation?.hasErrors) {
 			error = `Cannot save: ${validation.errorCount} syntax error${validation.errorCount > 1 ? 's' : ''} found. Fix errors to continue.`;
+			return;
+		}
+
+		// Check for shortcut errors
+		if (shortcutError) {
+			error = `Cannot save: ${shortcutError}`;
 			return;
 		}
 
@@ -459,18 +514,25 @@ Command content here...
 				success = 'Command saved successfully';
 			}
 
+			// Build the invocation for shortcut storage
+			const commandInvocation = `/${isCreateMode ? namespace : command!.namespace}:${isCreateMode ? name.trim() : command!.name}`;
+
+			// Save keyboard shortcut to localStorage store
+			setShortcut(commandInvocation, shortcut.trim() || undefined);
+
 			// Create the saved command object
 			const savedCommand: SlashCommand = {
 				name: isCreateMode ? name.trim() : command!.name,
 				namespace: isCreateMode ? namespace : command!.namespace,
-				invocation: `/${isCreateMode ? namespace : command!.namespace}:${isCreateMode ? name.trim() : command!.name}`,
+				invocation: commandInvocation,
 				path: isCreateMode ? '' : command!.path,
 				content,
 				frontmatter: {
 					description: description || undefined,
 					author: author || undefined,
 					version: version || undefined,
-					tags: tags || undefined
+					tags: tags || undefined,
+					shortcut: shortcut.trim() || undefined
 				}
 			};
 			onSave(savedCommand);
@@ -906,6 +968,43 @@ Command content here...
 									onblur={updateFrontmatter}
 								/>
 							</div>
+						</div>
+
+						<!-- Keyboard Shortcut (full width, below grid) -->
+						<div class="form-control mt-4">
+							<label class="label" for="shortcut">
+								<span class="label-text">Keyboard Shortcut</span>
+								<span class="label-text-alt">e.g., Alt+C, Ctrl+Shift+S</span>
+							</label>
+							<div class="flex items-center gap-2">
+								<input
+									id="shortcut"
+									type="text"
+									class="input input-bordered input-sm flex-1"
+									class:input-error={shortcutError}
+									class:input-warning={shortcutWarning && !shortcutError}
+									placeholder="Alt+C"
+									bind:value={shortcut}
+									onblur={validateShortcutInput}
+									oninput={validateShortcutInput}
+								/>
+								{#if shortcut && !shortcutError}
+									<kbd class="kbd kbd-sm">{getDisplayShortcut(shortcut)}</kbd>
+								{/if}
+							</div>
+							{#if shortcutError}
+								<label class="label">
+									<span class="label-text-alt text-error">{shortcutError}</span>
+								</label>
+							{:else if shortcutWarning}
+								<label class="label">
+									<span class="label-text-alt text-warning">{shortcutWarning}</span>
+								</label>
+							{:else}
+								<label class="label">
+									<span class="label-text-alt opacity-60">Must include Alt, Ctrl, or Meta/Cmd modifier</span>
+								</label>
+							{/if}
 						</div>
 					</div>
 

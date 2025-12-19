@@ -8,6 +8,7 @@
 	 * - Description (from frontmatter)
 	 * - Tags (if present)
 	 * - Edit and delete action buttons
+	 * - Optional text highlighting for search matches
 	 *
 	 * @see dashboard/src/lib/types/config.ts for SlashCommand type
 	 * @see dashboard/src/lib/stores/configStore.svelte.ts for store
@@ -19,6 +20,10 @@
 	interface Props {
 		/** Slash command to display */
 		command: SlashCommand;
+		/** Current search query for highlighting */
+		searchQuery?: string;
+		/** Function to highlight matching text */
+		highlightMatch?: (text: string, query: string) => { text: string; isMatch: boolean }[];
 		/** Called when edit button is clicked */
 		onEdit?: (command: SlashCommand) => void;
 		/** Called when delete button is clicked */
@@ -29,10 +34,32 @@
 
 	let {
 		command,
+		searchQuery = '',
+		highlightMatch,
 		onEdit = () => {},
 		onDelete = () => {},
 		class: className = ''
 	}: Props = $props();
+
+	// Default highlight function if not provided
+	function defaultHighlight(text: string, query: string): { text: string; isMatch: boolean }[] {
+		if (!query.trim()) {
+			return [{ text, isMatch: false }];
+		}
+		const lowerText = text.toLowerCase();
+		const lowerQuery = query.toLowerCase();
+		const index = lowerText.indexOf(lowerQuery);
+		if (index === -1) {
+			return [{ text, isMatch: false }];
+		}
+		const result: { text: string; isMatch: boolean }[] = [];
+		if (index > 0) result.push({ text: text.substring(0, index), isMatch: false });
+		result.push({ text: text.substring(index, index + query.length), isMatch: true });
+		if (index + query.length < text.length) result.push({ text: text.substring(index + query.length), isMatch: false });
+		return result;
+	}
+
+	const highlight = $derived(highlightMatch ?? defaultHighlight);
 
 	// Parse tags from frontmatter
 	const tags = $derived(() => {
@@ -62,9 +89,25 @@
 	<div class="card-header">
 		<div class="command-info">
 			<div class="command-name-row">
-				<span class="command-invocation">{command.invocation}</span>
+				<span class="command-invocation">
+					{#each highlight(command.invocation, searchQuery) as segment}
+						{#if segment.isMatch}
+							<mark class="search-highlight">{segment.text}</mark>
+						{:else}
+							{segment.text}
+						{/if}
+					{/each}
+				</span>
 			</div>
-			<span class="command-name">{command.name}.md</span>
+			<span class="command-name">
+				{#each highlight(command.name, searchQuery) as segment}
+					{#if segment.isMatch}
+						<mark class="search-highlight">{segment.text}</mark>
+					{:else}
+						{segment.text}
+					{/if}
+				{/each}.md
+			</span>
 		</div>
 
 		<div class="card-actions">
@@ -110,7 +153,13 @@
 				<path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
 				<path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6z" />
 			</svg>
-			{command.namespace}
+			{#each highlight(command.namespace, searchQuery) as segment}
+				{#if segment.isMatch}
+					<mark class="search-highlight">{segment.text}</mark>
+				{:else}
+					{segment.text}
+				{/if}
+			{/each}
 		</span>
 
 		<!-- Version badge -->
@@ -332,5 +381,13 @@
 		background: oklch(0.28 0.08 25);
 		border-color: oklch(0.45 0.12 25);
 		color: oklch(0.80 0.15 25);
+	}
+
+	/* Search highlight */
+	.search-highlight {
+		background: oklch(0.50 0.15 85 / 0.4);
+		color: oklch(0.95 0.10 85);
+		padding: 0 0.125rem;
+		border-radius: 2px;
 	}
 </style>

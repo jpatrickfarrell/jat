@@ -5,6 +5,8 @@
 	 * Displays all slash commands grouped by namespace in collapsible sections with:
 	 * - Namespace-based grouping (jat, local, etc.)
 	 * - Collapsible sections per namespace
+	 * - Search/filter by name, invocation, or namespace
+	 * - Import/Export functionality
 	 * - New Command button
 	 * - Loading and error states
 	 *
@@ -41,14 +43,128 @@
 		class: className = ''
 	}: Props = $props();
 
+	// Import/Export state
+	let isExporting = $state(false);
+	let isImporting = $state(false);
+	let importFileInput: HTMLInputElement;
+	let importMessage = $state<{ type: 'success' | 'error'; text: string } | null>(null);
+
 	// Get reactive state from store
 	const commands = $derived(getCommands());
 	const commandGroups = $derived(getCommandGroups());
 	const loading = $derived(isCommandsLoading());
 	const error = $derived(getCommandsError());
 
+	// Search state
+	let searchQuery = $state('');
+	let searchInput: HTMLInputElement;
+
 	// Track expanded/collapsed state per namespace
 	let expandedNamespaces = $state<Set<string>>(new Set(['jat', 'local']));
+
+	// Score-based fuzzy search (adapted from StatusActionBadge)
+	function scoreCommand(query: string, cmd: SlashCommand): number {
+		const q = query.toLowerCase();
+		const name = cmd.name.toLowerCase();
+		const invocation = cmd.invocation.toLowerCase();
+		const namespace = cmd.namespace.toLowerCase();
+
+		let score = 0;
+
+		// Invocation matches (highest priority - what users type)
+		if (invocation === q) {
+			score += 100;
+		} else if (invocation.startsWith(q)) {
+			score += 80;
+		} else if (invocation.includes(q)) {
+			score += 60;
+		}
+
+		// Name matches
+		if (name === q) {
+			score += 50;
+		} else if (name.startsWith(q)) {
+			score += 40;
+		} else if (name.includes(q)) {
+			score += 20;
+		}
+
+		// Namespace matches (lowest priority)
+		if (namespace === q) {
+			score += 15;
+		} else if (namespace.includes(q)) {
+			score += 10;
+		}
+
+		return score;
+	}
+
+	// Filter and sort commands by score
+	function filterCommands(query: string, cmds: SlashCommand[]): SlashCommand[] {
+		if (!query.trim()) {
+			return cmds;
+		}
+
+		return cmds
+			.map(cmd => ({ cmd, score: scoreCommand(query, cmd) }))
+			.filter(({ score }) => score > 0)
+			.sort((a, b) => b.score - a.score)
+			.map(({ cmd }) => cmd);
+	}
+
+	// Filtered commands based on search
+	const filteredCommands = $derived(filterCommands(searchQuery, commands));
+
+	// Filter command groups to only include matching commands
+	const filteredCommandGroups = $derived.by(() => {
+		if (!searchQuery.trim()) {
+			return commandGroups;
+		}
+
+		const matchingIds = new Set(filteredCommands.map(c => c.path));
+
+		return commandGroups
+			.map(group => ({
+				...group,
+				commands: group.commands.filter(c => matchingIds.has(c.path))
+			}))
+			.filter(group => group.commands.length > 0);
+	});
+
+	// Match count for display
+	const matchCount = $derived(filteredCommands.length);
+	const isFiltered = $derived(searchQuery.trim().length > 0);
+
+	// Highlight matching text in a string
+	function highlightMatch(text: string, query: string): { text: string; isMatch: boolean }[] {
+		if (!query.trim()) {
+			return [{ text, isMatch: false }];
+		}
+
+		const lowerText = text.toLowerCase();
+		const lowerQuery = query.toLowerCase();
+		const index = lowerText.indexOf(lowerQuery);
+
+		if (index === -1) {
+			return [{ text, isMatch: false }];
+		}
+
+		const result: { text: string; isMatch: boolean }[] = [];
+		if (index > 0) {
+			result.push({ text: text.substring(0, index), isMatch: false });
+		}
+		result.push({ text: text.substring(index, index + query.length), isMatch: true });
+		if (index + query.length < text.length) {
+			result.push({ text: text.substring(index + query.length), isMatch: false });
+		}
+		return result;
+	}
+
+	// Clear search
+	function clearSearch() {
+		searchQuery = '';
+		searchInput?.focus();
+	}
 
 	// Toggle namespace expansion
 	function toggleNamespace(namespace: string) {
@@ -107,6 +223,93 @@
 				return 'oklch(0.65 0.10 280)'; // purple
 		}
 	}
+
+	// Export commands to JSON file
+	async function handleExport() {
+		if (isExporting || commands.length === 0) return;
+
+		isExporting = true;
+		importMessage = null;
+
+		try {
+			const response = await fetch('/api/commands/export');
+			if (!response.ok) {
+				throw new Error(`Export failed: ${response.statusText}`);
+			}
+
+			// Get the blob and trigger download
+			const blob = await response.blob();
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `commands-export-${new Date().toISOString().split('T')[0]}.json`;
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			URL.revokeObjectURL(url);
+
+			importMessage = { type: 'success', text: `Exported ${commands.length} commands` };
+			setTimeout(() => { importMessage = null; }, 3000);
+		} catch (err) {
+			console.error('Export failed:', err);
+			importMessage = { type: 'error', text: (err as Error).message };
+		} finally {
+			isExporting = false;
+		}
+	}
+
+	// Trigger file input for import
+	function triggerImport() {
+		importFileInput?.click();
+	}
+
+	// Handle file selection for import
+	async function handleImportFile(event: Event) {
+		const input = event.target as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file) return;
+
+		isImporting = true;
+		importMessage = null;
+
+		try {
+			const content = await file.text();
+			const data = JSON.parse(content);
+
+			// Validate basic structure
+			if (!data.commands || !Array.isArray(data.commands)) {
+				throw new Error('Invalid file format: missing commands array');
+			}
+
+			const response = await fetch('/api/commands/import', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: content
+			});
+
+			const result = await response.json();
+
+			if (result.success) {
+				importMessage = { type: 'success', text: result.message };
+				// Refresh commands list
+				await loadCommands();
+			} else {
+				importMessage = { type: 'error', text: result.message };
+			}
+
+			setTimeout(() => { importMessage = null; }, 5000);
+		} catch (err) {
+			console.error('Import failed:', err);
+			importMessage = {
+				type: 'error',
+				text: err instanceof SyntaxError ? 'Invalid JSON file' : (err as Error).message
+			};
+		} finally {
+			isImporting = false;
+			// Reset file input so same file can be selected again
+			input.value = '';
+		}
+	}
 </script>
 
 <div class="commands-list {className}">
@@ -117,10 +320,44 @@
 				<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
 			</svg>
 			<span class="header-title">Slash Commands</span>
-			<span class="command-count">{commands.length} command{commands.length !== 1 ? 's' : ''}</span>
+			<span class="command-count">
+				{#if isFiltered}
+					{matchCount}/{commands.length}
+				{:else}
+					{commands.length}
+				{/if}
+				command{commands.length !== 1 ? 's' : ''}
+			</span>
 		</div>
 
 		<div class="header-right">
+			<!-- Search input -->
+			<div class="search-container">
+				<svg class="search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+				</svg>
+				<input
+					bind:this={searchInput}
+					bind:value={searchQuery}
+					type="text"
+					placeholder="Filter commands..."
+					class="search-input"
+					autocomplete="off"
+				/>
+				{#if searchQuery}
+					<button
+						class="clear-btn"
+						onclick={clearSearch}
+						title="Clear filter"
+						aria-label="Clear filter"
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+						</svg>
+					</button>
+				{/if}
+			</div>
+
 			<!-- Refresh button -->
 			<button
 				class="refresh-btn"
@@ -142,6 +379,49 @@
 				</svg>
 			</button>
 
+			<!-- Import button -->
+			<button
+				class="import-btn"
+				onclick={triggerImport}
+				disabled={isImporting}
+				title="Import commands from JSON file"
+				aria-label="Import commands"
+			>
+				{#if isImporting}
+					<div class="btn-spinner"></div>
+				{:else}
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+					</svg>
+				{/if}
+				Import
+			</button>
+			<input
+				bind:this={importFileInput}
+				type="file"
+				accept=".json"
+				onchange={handleImportFile}
+				class="hidden-file-input"
+			/>
+
+			<!-- Export button -->
+			<button
+				class="export-btn"
+				onclick={handleExport}
+				disabled={isExporting || commands.length === 0}
+				title="Export all commands to JSON file"
+				aria-label="Export commands"
+			>
+				{#if isExporting}
+					<div class="btn-spinner"></div>
+				{:else}
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+					</svg>
+				{/if}
+				Export
+			</button>
+
 			<!-- Add command button -->
 			<button
 				class="add-btn"
@@ -155,6 +435,32 @@
 			</button>
 		</div>
 	</header>
+
+	<!-- Import/Export message -->
+	{#if importMessage}
+		<div
+			class="import-message"
+			class:success={importMessage.type === 'success'}
+			class:error={importMessage.type === 'error'}
+			transition:slide={{ duration: 200, axis: 'y' }}
+		>
+			{#if importMessage.type === 'success'}
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="message-icon">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+				</svg>
+			{:else}
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="message-icon">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+				</svg>
+			{/if}
+			<span>{importMessage.text}</span>
+			<button class="message-close" onclick={() => importMessage = null}>
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+				</svg>
+			</button>
+		</div>
+	{/if}
 
 	<!-- Content -->
 	<div class="list-content">
@@ -194,9 +500,24 @@
 					Add First Command
 				</button>
 			</div>
+		{:else if isFiltered && filteredCommands.length === 0}
+			<!-- No search results -->
+			<div class="empty-state" transition:fade={{ duration: 150 }}>
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="empty-icon">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+				</svg>
+				<p class="empty-title">No commands match "{searchQuery}"</p>
+				<p class="empty-hint">Try a different search term</p>
+				<button class="empty-action" onclick={clearSearch}>
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+					Clear Filter
+				</button>
+			</div>
 		{:else}
 			<!-- Commands grouped by namespace -->
-			{#each commandGroups as group (group.namespace)}
+			{#each filteredCommandGroups as group (group.namespace)}
 				<div class="namespace-group" transition:slide={{ duration: 200, axis: 'y' }}>
 					<!-- Namespace header (collapsible) -->
 					<button
@@ -228,7 +549,15 @@
 							<path stroke-linecap="round" stroke-linejoin="round" d={getNamespaceIcon(group.namespace)} />
 						</svg>
 
-						<span class="namespace-name">{group.namespace}</span>
+						<span class="namespace-name">
+							{#each highlightMatch(group.namespace, searchQuery) as segment}
+								{#if segment.isMatch}
+									<mark class="search-highlight">{segment.text}</mark>
+								{:else}
+									{segment.text}
+								{/if}
+							{/each}
+						</span>
 						<span class="namespace-count">{group.commands.length}</span>
 					</button>
 
@@ -238,6 +567,8 @@
 							{#each group.commands as command (command.path)}
 								<CommandCard
 									{command}
+									{searchQuery}
+									{highlightMatch}
 									onEdit={onEditCommand}
 									onDelete={handleDeleteCommand}
 								/>
@@ -303,6 +634,70 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
+	}
+
+	/* Search container */
+	.search-container {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.375rem 0.625rem;
+		background: oklch(0.18 0.02 250);
+		border: 1px solid oklch(0.30 0.02 250);
+		border-radius: 6px;
+		transition: border-color 0.15s ease, box-shadow 0.15s ease;
+	}
+
+	.search-container:focus-within {
+		border-color: oklch(0.50 0.10 200);
+		box-shadow: 0 0 0 2px oklch(0.50 0.10 200 / 0.2);
+	}
+
+	.search-icon {
+		width: 14px;
+		height: 14px;
+		color: oklch(0.50 0.02 250);
+		flex-shrink: 0;
+	}
+
+	.search-input {
+		background: transparent;
+		border: none;
+		outline: none;
+		font-size: 0.75rem;
+		font-family: ui-monospace, monospace;
+		color: oklch(0.85 0.02 250);
+		width: 140px;
+	}
+
+	.search-input::placeholder {
+		color: oklch(0.45 0.02 250);
+	}
+
+	.clear-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.125rem;
+		background: transparent;
+		border: none;
+		border-radius: 3px;
+		color: oklch(0.50 0.02 250);
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.clear-btn:hover {
+		background: oklch(0.30 0.02 250);
+		color: oklch(0.80 0.02 250);
+	}
+
+	/* Search highlight */
+	.search-highlight {
+		background: oklch(0.50 0.15 85 / 0.4);
+		color: oklch(0.95 0.10 85);
+		padding: 0 0.125rem;
+		border-radius: 2px;
 	}
 
 	/* Refresh button */
@@ -563,5 +958,108 @@
 
 	.empty-action:hover {
 		background: oklch(0.35 0.10 200);
+	}
+
+	/* Import/Export buttons */
+	.import-btn,
+	.export-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.375rem 0.625rem;
+		font-size: 0.75rem;
+		font-weight: 500;
+		background: oklch(0.22 0.02 250);
+		border: 1px solid oklch(0.30 0.02 250);
+		border-radius: 6px;
+		color: oklch(0.70 0.02 250);
+		cursor: pointer;
+		transition: all 0.15s ease;
+		font-family: ui-monospace, monospace;
+	}
+
+	.import-btn:hover:not(:disabled),
+	.export-btn:hover:not(:disabled) {
+		background: oklch(0.28 0.02 250);
+		color: oklch(0.85 0.02 250);
+		border-color: oklch(0.38 0.02 250);
+	}
+
+	.import-btn:disabled,
+	.export-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	/* Button spinner */
+	.btn-spinner {
+		width: 14px;
+		height: 14px;
+		border: 2px solid oklch(0.50 0.02 250);
+		border-top-color: oklch(0.70 0.02 250);
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+
+	/* Hidden file input */
+	.hidden-file-input {
+		display: none;
+	}
+
+	/* Import/Export message */
+	.import-message {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.625rem 1rem;
+		font-size: 0.8rem;
+		font-family: ui-monospace, monospace;
+		border-bottom: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.import-message.success {
+		background: oklch(0.20 0.05 145);
+		color: oklch(0.75 0.12 145);
+		border-bottom-color: oklch(0.30 0.08 145);
+	}
+
+	.import-message.error {
+		background: oklch(0.20 0.05 25);
+		color: oklch(0.75 0.12 25);
+		border-bottom-color: oklch(0.30 0.08 25);
+	}
+
+	.message-icon {
+		width: 16px;
+		height: 16px;
+		flex-shrink: 0;
+	}
+
+	.import-message.success .message-icon {
+		color: oklch(0.65 0.15 145);
+	}
+
+	.import-message.error .message-icon {
+		color: oklch(0.65 0.15 25);
+	}
+
+	.message-close {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.25rem;
+		margin-left: auto;
+		background: transparent;
+		border: none;
+		border-radius: 4px;
+		color: inherit;
+		opacity: 0.6;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.message-close:hover {
+		opacity: 1;
+		background: oklch(0 0 0 / 0.1);
 	}
 </style>

@@ -183,3 +183,209 @@ export interface ProjectsConfigFile {
 	/** Map of project slug to configuration */
 	projects: Record<string, ProjectConfig>;
 }
+
+// =============================================================================
+// HOOKS CONFIGURATION TYPES
+// =============================================================================
+
+/**
+ * Hook types that Claude Code supports.
+ *
+ * @see Claude Code documentation for hook behavior
+ */
+export type HookEventType =
+	| 'PreToolUse'
+	| 'PostToolUse'
+	| 'UserPromptSubmit'
+	| 'PreCompact'
+	| 'SessionStart';
+
+/**
+ * A single hook command configuration.
+ *
+ * @example
+ * ```typescript
+ * const hook: HookCommand = {
+ *   type: 'command',
+ *   command: './.claude/hooks/my-hook.sh',
+ *   statusMessage: 'Running hook...',
+ *   streamStdinJson: true
+ * };
+ * ```
+ */
+export interface HookCommand {
+	/** Hook type - currently only 'command' is supported */
+	type: 'command';
+	/** Shell command to execute */
+	command: string;
+	/** Optional status message shown while hook runs */
+	statusMessage?: string;
+	/** Whether to stream JSON input via stdin */
+	streamStdinJson?: boolean;
+}
+
+/**
+ * A hook entry with matcher pattern and associated hooks.
+ *
+ * @example
+ * ```typescript
+ * const entry: HookEntry = {
+ *   matcher: '^Bash$',
+ *   hooks: [
+ *     { type: 'command', command: './.claude/hooks/post-bash.sh' }
+ *   ]
+ * };
+ * ```
+ */
+export interface HookEntry {
+	/** Regex pattern to match tool names (for PreToolUse/PostToolUse) or '.*' for all */
+	matcher: string;
+	/** Array of hook commands to execute when pattern matches */
+	hooks: HookCommand[];
+}
+
+/**
+ * Map of hook event types to their entries.
+ */
+export type HooksConfig = Partial<Record<HookEventType, HookEntry[]>>;
+
+/**
+ * StatusLine configuration from settings.json.
+ */
+export interface StatusLineConfig {
+	type: 'command';
+	command: string;
+	padding?: number;
+}
+
+/**
+ * Full Claude Code settings.json structure.
+ *
+ * @example
+ * ```json
+ * {
+ *   "statusLine": {
+ *     "type": "command",
+ *     "command": "~/.claude/statusline.sh"
+ *   },
+ *   "hooks": {
+ *     "PreToolUse": [...],
+ *     "PostToolUse": [...]
+ *   }
+ * }
+ * ```
+ */
+export interface ClaudeSettingsFile {
+	statusLine?: StatusLineConfig;
+	hooks?: HooksConfig;
+}
+
+// =============================================================================
+// MCP SERVER CONFIGURATION TYPES
+// =============================================================================
+
+/**
+ * MCP server transport type.
+ *
+ * - 'stdio': Server runs as subprocess with stdio transport
+ * - 'http': Server connects via HTTP/SSE transport
+ */
+export type McpTransportType = 'stdio' | 'http';
+
+/**
+ * Configuration for an MCP server using stdio transport.
+ *
+ * @example
+ * ```typescript
+ * const server: McpServerStdio = {
+ *   command: 'npx',
+ *   args: ['-y', '@modelcontextprotocol/server-filesystem'],
+ *   env: { HOME: '/home/user' }
+ * };
+ * ```
+ */
+export interface McpServerStdio {
+	/** Command to run the MCP server */
+	command: string;
+	/** Command-line arguments (optional) */
+	args?: string[];
+	/** Environment variables (optional) */
+	env?: Record<string, string>;
+	/** Timeout in milliseconds (optional, default: 60000) */
+	timeout?: number;
+	/** Whether the server is disabled (optional) */
+	disabled?: boolean;
+}
+
+/**
+ * Configuration for an MCP server using HTTP transport.
+ *
+ * @example
+ * ```typescript
+ * const server: McpServerHttp = {
+ *   type: 'http',
+ *   url: 'https://mcp.supabase.com/mcp'
+ * };
+ * ```
+ */
+export interface McpServerHttp {
+	/** Transport type - must be 'http' */
+	type: 'http';
+	/** URL endpoint for the MCP server */
+	url: string;
+	/** HTTP headers to send with requests (optional) */
+	headers?: Record<string, string>;
+	/** Timeout in milliseconds (optional, default: 60000) */
+	timeout?: number;
+	/** Whether the server is disabled (optional) */
+	disabled?: boolean;
+	/** Tools to auto-approve without confirmation (optional) */
+	autoApprove?: string[];
+	/** Tools to disable (optional) */
+	disabledTools?: string[];
+}
+
+/**
+ * Union type for MCP server configuration.
+ *
+ * Stdio servers have 'command' property, HTTP servers have 'type: http' and 'url'.
+ */
+export type McpServerConfig = McpServerStdio | McpServerHttp;
+
+/**
+ * Root structure of .mcp.json file.
+ *
+ * @example
+ * ```json
+ * {
+ *   "mcpServers": {
+ *     "filesystem": {
+ *       "command": "npx",
+ *       "args": ["-y", "@modelcontextprotocol/server-filesystem"]
+ *     },
+ *     "supabase": {
+ *       "type": "http",
+ *       "url": "https://mcp.supabase.com/mcp"
+ *     }
+ *   }
+ * }
+ * ```
+ */
+export interface McpConfigFile {
+	/** Map of server name to configuration */
+	mcpServers: Record<string, McpServerConfig>;
+}
+
+/**
+ * Helper type to check if an MCP server uses HTTP transport.
+ */
+export function isMcpServerHttp(server: McpServerConfig): server is McpServerHttp {
+	return 'type' in server && server.type === 'http';
+}
+
+/**
+ * Helper type to check if an MCP server uses stdio transport.
+ */
+export function isMcpServerStdio(server: McpServerConfig): server is McpServerStdio {
+	return 'command' in server && !('type' in server);
+}

@@ -33,11 +33,13 @@
 	import CommandsList from '$lib/components/config/CommandsList.svelte';
 	import CommandEditor from '$lib/components/config/CommandEditor.svelte';
 	import ProjectsList from '$lib/components/config/ProjectsList.svelte';
+	import ProjectEditor from '$lib/components/config/ProjectEditor.svelte';
 	import McpConfigEditor from '$lib/components/config/McpConfigEditor.svelte';
 	import HooksEditor from '$lib/components/config/HooksEditor.svelte';
 	import ClaudeMdList from '$lib/components/config/ClaudeMdList.svelte';
 	import ClaudeMdEditor from '$lib/components/config/ClaudeMdEditor.svelte';
 	import DocsList from '$lib/components/config/DocsList.svelte';
+	import DefaultsEditor from '$lib/components/config/DefaultsEditor.svelte';
 	import type { SlashCommand, ProjectConfig, HooksConfig } from '$lib/types/config';
 
 	// Page state
@@ -52,6 +54,10 @@
 	// Command editor state
 	let editingCommand = $state<SlashCommand | null>(null);
 	let isCommandEditorOpen = $state(false);
+
+	// Project editor state
+	let isProjectEditorOpen = $state(false);
+	let editingProject = $state<{ key: string; config: ProjectConfig } | null>(null);
 
 	// CLAUDE.md editor state
 	interface ClaudeMdFile {
@@ -69,7 +75,7 @@
 	const projectsError = $derived(getProjectsError());
 
 	// Valid tabs for URL sync
-	const validTabs = ['commands', 'projects', 'mcp', 'hooks', 'claude', 'docs'];
+	const validTabs = ['commands', 'projects', 'defaults', 'mcp', 'hooks', 'claude', 'docs'];
 
 	// Sync activeTab from URL query parameter
 	$effect(() => {
@@ -93,6 +99,12 @@
 		isCommandEditorOpen = true;
 	}
 
+	// Handle add new command
+	function handleAddCommand() {
+		editingCommand = null; // null = create mode
+		isCommandEditorOpen = true;
+	}
+
 	// Handle command editor save
 	function handleCommandSave(command: SlashCommand) {
 		// Reload commands to get the updated content
@@ -107,20 +119,88 @@
 
 	// Handle edit project
 	function handleEditProject(project: ProjectConfig) {
-		console.log('[Config] Edit project:', project.name);
-		// TODO: Open project editor modal
+		// Extract project key from path (last segment)
+		const key = project.path.split('/').pop() || project.name.toLowerCase();
+		editingProject = { key, config: project };
+		isProjectEditorOpen = true;
 	}
 
 	// Handle add project
 	function handleAddProject() {
-		console.log('[Config] Add new project');
-		// TODO: Open project creation modal
+		editingProject = null; // null = create mode
+		isProjectEditorOpen = true;
 	}
 
-	// Handle delete project
+	// Handle delete project - reload projects after deletion
 	function handleDeleteProject(project: ProjectConfig) {
-		console.log('[Config] Delete project:', project.name);
-		// TODO: Implement delete
+		// Delete is handled inside ProjectEditor via onDelete callback
+		// Just reload projects to reflect the change
+		loadProjects();
+	}
+
+	// Handle project editor save
+	async function handleProjectSave(key: string, config: ProjectConfig) {
+		try {
+			const isNewProject = !editingProject; // null means create mode
+
+			if (isNewProject) {
+				// Create new project
+				const response = await fetch('/api/projects', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						action: 'create',
+						key,
+						path: config.path,
+						name: config.name,
+						port: config.port,
+						description: config.description
+					})
+				});
+
+				if (!response.ok) {
+					const data = await response.json();
+					throw new Error(data.error || 'Failed to create project');
+				}
+			} else {
+				// Update existing project
+				const response = await fetch('/api/projects', {
+					method: 'PATCH',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						project: key,
+						description: config.description,
+						port: config.port,
+						active_color: config.colors?.active,
+						inactive_color: config.colors?.inactive
+					})
+				});
+
+				if (!response.ok) {
+					const data = await response.json();
+					throw new Error(data.error || 'Failed to update project');
+				}
+			}
+
+			// Reload projects to reflect the change
+			await loadProjects();
+		} catch (error) {
+			console.error('[Config] Failed to save project:', error);
+			// The error will be handled by the ProjectEditor component
+			throw error;
+		}
+	}
+
+	// Handle project editor cancel
+	function handleProjectCancel() {
+		isProjectEditorOpen = false;
+		editingProject = null;
+	}
+
+	// Handle project deletion from editor
+	function handleProjectDelete(key: string) {
+		// Reload projects to reflect the deletion
+		loadProjects();
 	}
 
 	// Load hooks configuration
@@ -219,7 +299,7 @@
 						aria-labelledby="commands-tab"
 						transition:fade={{ duration: 150 }}
 					>
-						<CommandsList onEditCommand={handleEditCommand} />
+						<CommandsList onEditCommand={handleEditCommand} onAddCommand={handleAddCommand} />
 					</div>
 				{:else if activeTab === 'projects'}
 					<!-- Projects Tab -->
@@ -234,6 +314,16 @@
 							onAddProject={handleAddProject}
 							onDeleteProject={handleDeleteProject}
 						/>
+					</div>
+				{:else if activeTab === 'defaults'}
+					<!-- Defaults Tab -->
+					<div
+						role="tabpanel"
+						id="defaults-panel"
+						aria-labelledby="defaults-tab"
+						transition:fade={{ duration: 150 }}
+					>
+						<DefaultsEditor />
 					</div>
 				{:else if activeTab === 'mcp'}
 					<!-- MCP Tab -->
@@ -301,6 +391,15 @@
 	command={editingCommand}
 	onSave={handleCommandSave}
 	onClose={handleCommandEditorClose}
+/>
+
+<!-- Project Editor Drawer -->
+<ProjectEditor
+	bind:isOpen={isProjectEditorOpen}
+	project={editingProject}
+	onSave={handleProjectSave}
+	onCancel={handleProjectCancel}
+	onDelete={handleProjectDelete}
 />
 
 <style>

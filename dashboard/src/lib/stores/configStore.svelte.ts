@@ -13,7 +13,9 @@ import type {
 	SlashCommand,
 	CommandGroup,
 	ProjectConfig,
-	ProjectsConfigFile
+	ProjectsConfigFile,
+	HooksConfig,
+	StatusLineConfig
 } from '$lib/types/config';
 
 // =============================================================================
@@ -22,6 +24,7 @@ import type {
 
 const COMMANDS_API = '/api/commands';
 const PROJECTS_API = '/api/projects';
+const HOOKS_API = '/api/hooks';
 
 // =============================================================================
 // STATE INTERFACES
@@ -39,6 +42,12 @@ export interface ConfigState {
 	projectsLoading: boolean;
 	projectsError: string | null;
 	selectedProject: ProjectConfig | null;
+
+	// Hooks state
+	hooks: HooksConfig;
+	hooksLoading: boolean;
+	hooksError: string | null;
+	hooksExists: boolean;
 
 	// General state
 	initialized: boolean;
@@ -63,6 +72,12 @@ let state = $state<ConfigState>({
 	projectsLoading: false,
 	projectsError: null,
 	selectedProject: null,
+
+	// Hooks
+	hooks: {},
+	hooksLoading: false,
+	hooksError: null,
+	hooksExists: false,
 
 	// General
 	initialized: false
@@ -177,17 +192,21 @@ export async function createCommand(
 
 /**
  * Delete a command
+ *
+ * Uses DELETE /api/commands/{namespace}/{name} endpoint
  */
 export async function deleteCommand(command: SlashCommand): Promise<boolean> {
 	try {
-		const response = await fetch(COMMANDS_API, {
-			method: 'DELETE',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ path: command.path })
+		// Build the endpoint path: /api/commands/{namespace}/{name}
+		const endpoint = `${COMMANDS_API}/${encodeURIComponent(command.namespace)}/${encodeURIComponent(command.name)}`;
+
+		const response = await fetch(endpoint, {
+			method: 'DELETE'
 		});
 
 		if (!response.ok) {
-			throw new Error(`Failed to delete command: ${response.statusText}`);
+			const errorData = await response.json().catch(() => ({}));
+			throw new Error(errorData.message || `Failed to delete command: ${response.statusText}`);
 		}
 
 		// Remove from state
@@ -333,6 +352,61 @@ export async function toggleProjectVisibility(projectName: string, hidden: boole
 }
 
 // =============================================================================
+// HOOKS API OPERATIONS
+// =============================================================================
+
+/**
+ * Load hooks from the API
+ */
+export async function loadHooks(): Promise<void> {
+	state.hooksLoading = true;
+	state.hooksError = null;
+
+	try {
+		const response = await fetch(HOOKS_API);
+		if (!response.ok) {
+			throw new Error(`Failed to load hooks: ${response.statusText}`);
+		}
+
+		const data = await response.json();
+		state.hooks = data.hooks || {};
+		state.hooksExists = data.exists || false;
+		state.initialized = true;
+	} catch (error) {
+		console.error('[configStore] Failed to load hooks:', error);
+		state.hooksError = error instanceof Error ? error.message : 'Failed to load hooks';
+	} finally {
+		state.hooksLoading = false;
+	}
+}
+
+/**
+ * Save hooks configuration
+ */
+export async function saveHooks(hooks: HooksConfig): Promise<boolean> {
+	try {
+		const response = await fetch(HOOKS_API, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ hooks })
+		});
+
+		if (!response.ok) {
+			throw new Error(`Failed to save hooks: ${response.statusText}`);
+		}
+
+		const data = await response.json();
+		state.hooks = data.hooks || {};
+		state.hooksExists = true;
+
+		return true;
+	} catch (error) {
+		console.error('[configStore] Failed to save hooks:', error);
+		return false;
+	}
+}
+
+// =============================================================================
 // SELECTION OPERATIONS
 // =============================================================================
 
@@ -467,6 +541,22 @@ export function getProjectsError(): string | null {
 	return state.projectsError;
 }
 
+export function getHooks(): HooksConfig {
+	return state.hooks;
+}
+
+export function isHooksLoading(): boolean {
+	return state.hooksLoading;
+}
+
+export function getHooksError(): string | null {
+	return state.hooksError;
+}
+
+export function hooksFileExists(): boolean {
+	return state.hooksExists;
+}
+
 export function isInitialized(): boolean {
 	return state.initialized;
 }
@@ -476,20 +566,20 @@ export function isInitialized(): boolean {
 // =============================================================================
 
 /**
- * Initialize the store by loading both commands and projects
+ * Initialize the store by loading commands, projects, and hooks
  */
 export async function initializeStore(): Promise<void> {
 	if (typeof window === 'undefined') return; // SSR guard
 	if (state.initialized) return;
 
-	await Promise.all([loadCommands(), loadProjects()]);
+	await Promise.all([loadCommands(), loadProjects(), loadHooks()]);
 }
 
 /**
  * Refresh all data
  */
 export async function refreshAll(): Promise<void> {
-	await Promise.all([loadCommands(), loadProjects()]);
+	await Promise.all([loadCommands(), loadProjects(), loadHooks()]);
 }
 
 // Export state for direct reactive access

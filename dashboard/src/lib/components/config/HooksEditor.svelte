@@ -18,6 +18,15 @@
 		ClaudeSettingsFile
 	} from '$lib/types/config';
 	import { validateHooksConfig, type ValidationResult } from '$lib/utils/editorValidation';
+	import HookTester from './HookTester.svelte';
+
+	// Validation result type for command paths
+	interface CommandValidation {
+		type: 'error' | 'warning' | 'success';
+		message: string;
+		suggestions?: string[];
+		isValidating?: boolean;
+	}
 
 	interface Props {
 		/** Whether hooks are currently loading */
@@ -69,16 +78,114 @@
 	let saveSuccess = $state(false);
 	let expandedEvents = $state<Set<HookEventType>>(new Set());
 	let editingEntry = $state<{ eventType: HookEventType; entryIndex: number } | null>(null);
+	let showTester = $state(false);
+	let selectedTestEventType = $state<HookEventType>('PostToolUse');
 
 	// Inline validation errors per field
 	let matcherErrors = $state<Map<string, string>>(new Map());  // key: `${eventType}-${entryIndex}`
-	let commandErrors = $state<Map<string, string>>(new Map()); // key: `${eventType}-${entryIndex}-${hookIndex}`
+	let commandValidations = $state<Map<string, CommandValidation>>(new Map()); // key: `${eventType}-${entryIndex}-${hookIndex}`
+
+	// Debounce timers for async validation
+	let validationTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+	// Legacy alias for backward compatibility in hasValidationErrors
+	const commandErrors = $derived(
+		new Map([...commandValidations].filter(([_, v]) => v.type === 'error').map(([k, v]) => [k, v.message]))
+	);
 
 	// Track if there are unsaved changes
 	const hasChanges = $derived(JSON.stringify(hooks) !== JSON.stringify(originalHooks));
 
 	// Check if there are any validation errors
 	const hasValidationErrors = $derived(matcherErrors.size > 0 || commandErrors.size > 0);
+
+	// Search state
+	let searchQuery = $state('');
+	let searchInput: HTMLInputElement;
+
+	// Highlight matching text in a string (reused from CommandsList pattern)
+	function highlightMatch(text: string, query: string): { text: string; isMatch: boolean }[] {
+		if (!query.trim()) {
+			return [{ text, isMatch: false }];
+		}
+		const lowerText = text.toLowerCase();
+		const lowerQuery = query.toLowerCase();
+		const index = lowerText.indexOf(lowerQuery);
+		if (index === -1) {
+			return [{ text, isMatch: false }];
+		}
+		const result: { text: string; isMatch: boolean }[] = [];
+		if (index > 0) {
+			result.push({ text: text.substring(0, index), isMatch: false });
+		}
+		result.push({ text: text.substring(index, index + query.length), isMatch: true });
+		if (index + query.length < text.length) {
+			result.push({ text: text.substring(index + query.length), isMatch: false });
+		}
+		return result;
+	}
+
+	// Check if an entry matches the search query
+	function entryMatchesSearch(entry: HookEntry, query: string): boolean {
+		if (!query.trim()) return true;
+		const q = query.toLowerCase();
+		if (entry.matcher.toLowerCase().includes(q)) return true;
+		for (const hook of entry.hooks) {
+			if (hook.command.toLowerCase().includes(q)) return true;
+			if (hook.statusMessage?.toLowerCase().includes(q)) return true;
+		}
+		return false;
+	}
+
+	// Filter hooks based on search query - returns original indices for editing
+	function getFilteredEntryIndices(eventType: HookEventType, query: string): number[] {
+		if (!query.trim()) {
+			const entries = hooks[eventType] || [];
+			return entries.map((_, i) => i);
+		}
+		const entries = hooks[eventType] || [];
+		const indices: number[] = [];
+		entries.forEach((entry, i) => {
+			if (entryMatchesSearch(entry, query)) {
+				indices.push(i);
+			}
+		});
+		return indices;
+	}
+
+	// Check if event type has any matching entries
+	function eventTypeHasMatches(eventType: HookEventType, query: string): boolean {
+		if (!query.trim()) return true;
+		const entries = hooks[eventType] || [];
+		return entries.some(entry => entryMatchesSearch(entry, query));
+	}
+
+	// Get total entry count across all event types
+	const totalEntryCount = $derived.by(() => {
+		let count = 0;
+		for (const eventType of Object.keys(hooks) as HookEventType[]) {
+			count += hooks[eventType]?.length || 0;
+		}
+		return count;
+	});
+
+	// Get filtered entry count
+	const filteredEntryCount = $derived.by(() => {
+		if (!searchQuery.trim()) return totalEntryCount;
+		let count = 0;
+		for (const eventType of Object.keys(hooks) as HookEventType[]) {
+			count += getFilteredEntryIndices(eventType, searchQuery).length;
+		}
+		return count;
+	});
+
+	const isFiltered = $derived(searchQuery.trim().length > 0);
+
+	// Clear search
+	function clearSearch() {
+		searchQuery = '';
+		searchInput?.focus();
+	}
 
 	// Initialize hooks from API
 	export function setHooks(hooksConfig: HooksConfig) {
@@ -209,16 +316,94 @@
 		}
 	}
 
-	// Validate command path
-	function validateCommand(eventType: HookEventType, entryIndex: number, hookIndex: number, command: string): string | null {
+	// Validate command path (sync basic validation)
+	function validateCommandSync(command: string): CommandValidation | null {
 		if (!command.trim()) {
-			return 'Command path is required';
+			return { type: 'error', message: 'Command path is required' };
 		}
 		// Warn about potentially problematic paths
 		if (command.includes(' ') && !command.startsWith('"') && !command.startsWith("'")) {
-			return 'Warning: Path contains spaces - consider quoting the path';
+			return { type: 'warning', message: 'Path contains spaces - consider quoting' };
 		}
 		return null;
+	}
+
+	// Validate command path (async with path existence check)
+	async function validateCommandAsync(key: string, command: string): Promise<void> {
+		const trimmedCommand = command.trim();
+
+		// Skip empty commands (already handled by sync validation)
+		if (!trimmedCommand) return;
+
+		// Set loading state
+		const newValidations = new Map(commandValidations);
+		newValidations.set(key, { type: 'warning', message: 'Checking path...', isValidating: true });
+		commandValidations = newValidations;
+
+		try {
+			const response = await fetch('/api/hooks/validate', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ command: trimmedCommand })
+			});
+
+			const result = await response.json();
+
+			const updatedValidations = new Map(commandValidations);
+
+			if (result.error) {
+				// API returned an error
+				updatedValidations.set(key, {
+					type: 'error',
+					message: result.error,
+					suggestions: result.suggestions
+				});
+			} else if (result.valid) {
+				// Path exists and is valid
+				if (result.warning || result.isWarning) {
+					updatedValidations.set(key, {
+						type: 'warning',
+						message: result.warning || 'File exists but may have issues'
+					});
+				} else {
+					// All good, clear validation
+					updatedValidations.delete(key);
+				}
+			} else {
+				// Path doesn't exist or other issue
+				updatedValidations.set(key, {
+					type: 'error',
+					message: result.error || 'Invalid path',
+					suggestions: result.suggestions
+				});
+			}
+
+			commandValidations = updatedValidations;
+		} catch (err) {
+			// Network error - don't block, just show warning
+			const updatedValidations = new Map(commandValidations);
+			updatedValidations.set(key, {
+				type: 'warning',
+				message: 'Could not verify path (network error)'
+			});
+			commandValidations = updatedValidations;
+		}
+	}
+
+	// Debounced async validation
+	function scheduleAsyncValidation(key: string, command: string): void {
+		// Clear existing timer for this key
+		if (validationTimers.has(key)) {
+			clearTimeout(validationTimers.get(key)!);
+		}
+
+		// Schedule new validation after 500ms debounce
+		const timer = setTimeout(() => {
+			validationTimers.delete(key);
+			validateCommandAsync(key, command);
+		}, 500);
+
+		validationTimers.set(key, timer);
 	}
 
 	// Update matcher for an entry (with validation)
@@ -277,14 +462,22 @@
 		// Validate command field
 		if (field === 'command') {
 			const key = `${eventType}-${entryIndex}-${hookIndex}`;
-			const error = validateCommand(eventType, entryIndex, hookIndex, value as string);
-			const newErrors = new Map(commandErrors);
-			if (error && !error.startsWith('Warning:')) {
-				newErrors.set(key, error);
+			const syncResult = validateCommandSync(value as string);
+
+			// Apply sync validation immediately
+			const newValidations = new Map(commandValidations);
+			if (syncResult) {
+				newValidations.set(key, syncResult);
 			} else {
-				newErrors.delete(key);
+				// No sync error, schedule async validation
+				newValidations.delete(key);
 			}
-			commandErrors = newErrors;
+			commandValidations = newValidations;
+
+			// If sync validation passed, schedule async path check
+			if (!syncResult || syncResult.type !== 'error') {
+				scheduleAsyncValidation(key, value as string);
+			}
 		}
 	}
 
@@ -320,7 +513,12 @@
 		editingEntry = null;
 		// Clear all validation errors
 		matcherErrors = new Map();
-		commandErrors = new Map();
+		commandValidations = new Map();
+		// Clear any pending validation timers
+		for (const timer of validationTimers.values()) {
+			clearTimeout(timer);
+		}
+		validationTimers.clear();
 	}
 
 	// Get entry count for an event type
@@ -397,6 +595,35 @@
 						</span>
 					{/if}
 				</div>
+
+				<!-- Search Input -->
+				<div class="search-container">
+					<div class="search-input-wrapper">
+						<svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+						</svg>
+						<input
+							type="text"
+							class="search-input"
+							placeholder="Search hooks..."
+							bind:value={searchQuery}
+							bind:this={searchInput}
+						/>
+						{#if searchQuery}
+							<button class="clear-search-btn" onclick={clearSearch} title="Clear search">
+								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+								</svg>
+							</button>
+						{/if}
+					</div>
+					{#if isFiltered}
+						<span class="filter-count">
+							{filteredEntryCount} of {totalEntryCount} entries
+						</span>
+					{/if}
+				</div>
+
 				<div class="header-actions">
 					{#if saveSuccess}
 						<span class="save-success" transition:fade={{ duration: 150 }}>
@@ -440,13 +667,54 @@
 				</div>
 			</div>
 
+			<!-- Hook Tester Toggle -->
+			<div class="tester-toggle-section">
+				<button
+					class="tester-toggle-btn"
+					onclick={() => showTester = !showTester}
+					aria-expanded={showTester}
+				>
+					<svg
+						class="expand-icon"
+						class:expanded={showTester}
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M9 5l7 7-7 7"
+						/>
+					</svg>
+					<span class="tester-toggle-label">🧪 Hook Tester</span>
+					<span class="tester-toggle-hint">Test hooks against sample tool calls</span>
+				</button>
+			</div>
+
+			<!-- Hook Tester Panel -->
+			{#if showTester}
+				<div class="tester-panel" transition:slide={{ duration: 200 }}>
+					<HookTester
+						hooksConfig={hooks}
+						selectedEventType={selectedTestEventType}
+						onEventTypeChange={(eventType) => selectedTestEventType = eventType}
+					/>
+				</div>
+			{/if}
+
 			<!-- Hook Event Types -->
 			<div class="event-types">
 				{#each hookEventTypes as eventType}
 					{@const entryCount = getEntryCount(eventType.id)}
 					{@const hookCount = getHookCount(eventType.id)}
 					{@const isExpanded = expandedEvents.has(eventType.id)}
+					{@const hasMatches = eventTypeHasMatches(eventType.id, searchQuery)}
+					{@const filteredIndices = getFilteredEntryIndices(eventType.id, searchQuery)}
 
+					<!-- Hide event types with no matches when filtering -->
+					{#if !isFiltered || hasMatches}
 					<div class="event-type-card" class:has-hooks={entryCount > 0}>
 						<!-- Event Type Header -->
 						<div class="event-header">
@@ -505,17 +773,26 @@
 						<!-- Hook Entries -->
 						{#if isExpanded && hooks[eventType.id]}
 							<div class="entries-list" transition:slide={{ duration: 200 }}>
-								{#each hooks[eventType.id] || [] as entry, entryIndex (entryIndex)}
+								{#each filteredIndices as entryIndex (entryIndex)}
+									{@const entry = hooks[eventType.id][entryIndex]}
 									{@const matcherKey = `${eventType.id}-${entryIndex}`}
 									{@const matcherError = matcherErrors.get(matcherKey)}
+									{@const matcherSegments = highlightMatch(entry.matcher, searchQuery)}
+									{@const matcherHasMatch = searchQuery && matcherSegments.some(s => s.isMatch)}
 									<div class="entry-card" transition:slide={{ duration: 150 }}>
 										<div class="entry-header">
 											<div class="entry-matcher">
-												<label class="matcher-label">Matcher (regex)</label>
+												<label class="matcher-label">
+													Matcher (regex)
+													{#if matcherHasMatch}
+														<span class="match-indicator">match</span>
+													{/if}
+												</label>
 												<input
 													type="text"
 													class="matcher-input"
 													class:has-error={!!matcherError}
+													class:has-match={matcherHasMatch}
 													value={entry.matcher}
 													oninput={(e) =>
 														updateMatcher(
@@ -526,7 +803,14 @@
 													placeholder=".*"
 												/>
 												{#if matcherError}
-													<span class="field-error">{matcherError}</span>
+													<div class="field-feedback is-error">
+														<span class="feedback-icon">
+															<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+															</svg>
+														</span>
+														<span class="feedback-message">{matcherError}</span>
+													</div>
 												{/if}
 											</div>
 											<button
@@ -554,7 +838,9 @@
 										<div class="hooks-list">
 											{#each entry.hooks as hook, hookIndex (hookIndex)}
 												{@const commandKey = `${eventType.id}-${entryIndex}-${hookIndex}`}
-												{@const commandError = commandErrors.get(commandKey)}
+												{@const commandValidation = commandValidations.get(commandKey)}
+												{@const commandSegments = highlightMatch(hook.command, searchQuery)}
+												{@const commandHasMatch = searchQuery && commandSegments.some(s => s.isMatch)}
 												<div class="hook-card" transition:slide={{ duration: 150 }}>
 													<div class="hook-header">
 														<span class="hook-index">Hook {hookIndex + 1}</span>
@@ -583,24 +869,63 @@
 													<div class="hook-fields">
 														<!-- Command -->
 														<div class="field-group">
-															<label class="field-label">Command</label>
-															<input
-																type="text"
-																class="field-input font-mono"
-																class:has-error={!!commandError}
-																value={hook.command}
-																oninput={(e) =>
-																	updateHookCommand(
-																		eventType.id,
-																		entryIndex,
-																		hookIndex,
-																		'command',
-																		e.currentTarget.value
-																	)}
-																placeholder="./.claude/hooks/my-hook.sh"
-															/>
-															{#if commandError}
-																<span class="field-error">{commandError}</span>
+															<label class="field-label">
+																Command
+																{#if commandHasMatch}
+																	<span class="match-indicator">match</span>
+																{/if}
+															</label>
+															<div class="command-input-wrapper">
+																<input
+																	type="text"
+																	class="field-input font-mono"
+																	class:has-error={commandValidation?.type === 'error'}
+																	class:has-warning={commandValidation?.type === 'warning'}
+																	class:has-match={commandHasMatch}
+																	value={hook.command}
+																	oninput={(e) =>
+																		updateHookCommand(
+																			eventType.id,
+																			entryIndex,
+																			hookIndex,
+																			'command',
+																			e.currentTarget.value
+																		)}
+																	placeholder="./.claude/hooks/my-hook.sh"
+																/>
+																{#if commandValidation?.isValidating}
+																	<span class="validation-spinner"></span>
+																{/if}
+															</div>
+															{#if commandValidation}
+																<div class="field-feedback" class:is-error={commandValidation.type === 'error'} class:is-warning={commandValidation.type === 'warning'}>
+																	<span class="feedback-icon">
+																		{#if commandValidation.type === 'error'}
+																			<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+																			</svg>
+																		{:else}
+																			<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+																			</svg>
+																		{/if}
+																	</span>
+																	<span class="feedback-message">{commandValidation.message}</span>
+																</div>
+																{#if commandValidation.suggestions && commandValidation.suggestions.length > 0}
+																	<div class="path-suggestions">
+																		<span class="suggestions-label">Did you mean:</span>
+																		{#each commandValidation.suggestions as suggestion}
+																			<button
+																				type="button"
+																				class="suggestion-btn"
+																				onclick={() => updateHookCommand(eventType.id, entryIndex, hookIndex, 'command', suggestion)}
+																			>
+																				{suggestion}
+																			</button>
+																		{/each}
+																	</div>
+																{/if}
 															{/if}
 														</div>
 
@@ -672,6 +997,7 @@
 							</div>
 						{/if}
 					</div>
+					{/if}
 				{/each}
 			</div>
 		</div>
@@ -817,6 +1143,83 @@
 		border-radius: 4px;
 	}
 
+	/* Search Styles */
+	.search-container {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.search-input-wrapper {
+		position: relative;
+		display: flex;
+		align-items: center;
+	}
+
+	.search-icon {
+		position: absolute;
+		left: 0.6rem;
+		width: 16px;
+		height: 16px;
+		color: oklch(0.5 0.02 250);
+		pointer-events: none;
+	}
+
+	.search-input {
+		width: 180px;
+		padding: 0.4rem 2rem 0.4rem 2rem;
+		font-size: 0.8rem;
+		background: oklch(0.15 0.02 250);
+		border: 1px solid oklch(0.3 0.02 250);
+		border-radius: 6px;
+		color: oklch(0.9 0.02 250);
+		transition: all 0.15s ease;
+	}
+
+	.search-input:focus {
+		outline: none;
+		border-color: oklch(0.5 0.15 200);
+		background: oklch(0.12 0.02 250);
+	}
+
+	.search-input::placeholder {
+		color: oklch(0.45 0.02 250);
+	}
+
+	.clear-search-btn {
+		position: absolute;
+		right: 0.4rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		padding: 0;
+		background: transparent;
+		border: none;
+		color: oklch(0.5 0.02 250);
+		cursor: pointer;
+		transition: color 0.15s ease;
+	}
+
+	.clear-search-btn:hover {
+		color: oklch(0.7 0.02 250);
+	}
+
+	.filter-count {
+		font-size: 0.7rem;
+		color: oklch(0.6 0.12 200);
+		white-space: nowrap;
+	}
+
+	/* Highlight styles for search matches */
+	.highlight-match {
+		background: oklch(0.6 0.2 90 / 0.3);
+		color: oklch(0.9 0.15 90);
+		border-radius: 2px;
+		padding: 0 2px;
+	}
+
 	.header-actions {
 		display: flex;
 		align-items: center;
@@ -889,6 +1292,50 @@
 		border-top-color: transparent;
 		border-radius: 50%;
 		animation: spin 0.6s linear infinite;
+	}
+
+	/* Hook Tester Toggle */
+	.tester-toggle-section {
+		margin-bottom: 0.5rem;
+	}
+
+	.tester-toggle-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.75rem 1rem;
+		background: oklch(0.18 0.02 250);
+		border: 1px dashed oklch(0.35 0.08 180);
+		border-radius: 8px;
+		cursor: pointer;
+		text-align: left;
+		transition: all 0.15s ease;
+	}
+
+	.tester-toggle-btn:hover {
+		background: oklch(0.20 0.03 180);
+		border-color: oklch(0.45 0.1 180);
+	}
+
+	.tester-toggle-label {
+		font-size: 0.9rem;
+		font-weight: 600;
+		color: oklch(0.85 0.08 180);
+	}
+
+	.tester-toggle-hint {
+		font-size: 0.75rem;
+		color: oklch(0.55 0.02 250);
+		margin-left: auto;
+	}
+
+	.tester-panel {
+		margin-bottom: 1rem;
+		background: oklch(0.14 0.02 250);
+		border: 1px solid oklch(0.28 0.06 180);
+		border-radius: 8px;
+		padding: 1rem;
 	}
 
 	/* Event Types */
@@ -1048,6 +1495,24 @@
 		background: oklch(0.6 0.15 25 / 0.05);
 	}
 
+	.matcher-input.has-match {
+		border-color: oklch(0.65 0.15 90);
+		background: oklch(0.65 0.15 90 / 0.05);
+	}
+
+	.match-indicator {
+		display: inline-flex;
+		font-size: 0.6rem;
+		font-weight: 600;
+		padding: 0.1rem 0.3rem;
+		background: oklch(0.6 0.2 90 / 0.3);
+		color: oklch(0.9 0.15 90);
+		border-radius: 3px;
+		margin-left: 0.5rem;
+		text-transform: lowercase;
+		letter-spacing: normal;
+	}
+
 	.remove-entry-btn {
 		display: flex;
 		align-items: center;
@@ -1153,15 +1618,107 @@
 		background: oklch(0.6 0.15 25 / 0.05);
 	}
 
-	.field-error {
-		display: block;
-		font-size: 0.7rem;
-		color: oklch(0.7 0.15 25);
-		margin-top: 0.25rem;
+	.field-input.has-warning {
+		border-color: oklch(0.7 0.15 85);
+		background: oklch(0.7 0.15 85 / 0.05);
+	}
+
+	.field-input.has-match {
+		border-color: oklch(0.65 0.15 90);
+		background: oklch(0.65 0.15 90 / 0.05);
 	}
 
 	.field-input.font-mono {
 		font-family: ui-monospace, monospace;
+	}
+
+	/* Command input wrapper for spinner positioning */
+	.command-input-wrapper {
+		position: relative;
+		display: flex;
+		align-items: center;
+	}
+
+	.command-input-wrapper .field-input {
+		padding-right: 2rem;
+	}
+
+	.validation-spinner {
+		position: absolute;
+		right: 0.5rem;
+		width: 14px;
+		height: 14px;
+		border: 2px solid oklch(0.3 0.02 250);
+		border-top-color: oklch(0.65 0.15 200);
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+
+	/* Unified feedback for errors and warnings */
+	.field-feedback {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.35rem;
+		margin-top: 0.35rem;
+		padding: 0.35rem 0.5rem;
+		border-radius: 4px;
+		font-size: 0.7rem;
+	}
+
+	.field-feedback.is-error {
+		background: oklch(0.6 0.15 25 / 0.1);
+		color: oklch(0.75 0.15 25);
+	}
+
+	.field-feedback.is-warning {
+		background: oklch(0.7 0.15 85 / 0.1);
+		color: oklch(0.75 0.12 85);
+	}
+
+	.feedback-icon {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+	}
+
+	.feedback-message {
+		line-height: 1.4;
+	}
+
+	/* Path suggestions */
+	.path-suggestions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.35rem;
+		margin-top: 0.35rem;
+		padding: 0.35rem 0.5rem;
+		background: oklch(0.2 0.02 250);
+		border-radius: 4px;
+		font-size: 0.7rem;
+	}
+
+	.suggestions-label {
+		color: oklch(0.55 0.02 250);
+		font-weight: 500;
+	}
+
+	.suggestion-btn {
+		display: inline-flex;
+		padding: 0.2rem 0.5rem;
+		font-family: ui-monospace, monospace;
+		font-size: 0.7rem;
+		background: oklch(0.25 0.08 200);
+		border: 1px solid oklch(0.35 0.1 200);
+		border-radius: 3px;
+		color: oklch(0.8 0.1 200);
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.suggestion-btn:hover {
+		background: oklch(0.3 0.1 200);
+		border-color: oklch(0.45 0.12 200);
 	}
 
 	.field-group-inline {

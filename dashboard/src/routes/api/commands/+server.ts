@@ -6,10 +6,54 @@
  * 2. .claude/commands/*.md - Project-local commands
  */
 
-import { json } from '@sveltejs/kit';
+import { json, error } from '@sveltejs/kit';
 import { readdirSync, existsSync, statSync, lstatSync } from 'fs';
-import { join, basename } from 'path';
+import { writeFile, mkdir, access } from 'fs/promises';
+import { join, basename, dirname } from 'path';
 import { homedir } from 'os';
+import type { RequestHandler } from './$types';
+
+// Regex patterns for validation (same as in [...path]/+server.ts)
+const NAMESPACE_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
+const NAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
+const LOCAL_NAMESPACE = 'local';
+
+/**
+ * Validate namespace and name against security patterns
+ */
+function validateCommandPath(namespace: string, name: string): string | null {
+	if (
+		namespace.includes('..') ||
+		namespace.includes('/') ||
+		namespace.includes('\\') ||
+		name.includes('..') ||
+		name.includes('/') ||
+		name.includes('\\')
+	) {
+		return 'Path traversal not allowed';
+	}
+
+	if (!NAMESPACE_REGEX.test(namespace)) {
+		return `Invalid namespace format: "${namespace}". Must be alphanumeric with hyphens/underscores, starting with letter/number.`;
+	}
+
+	if (!NAME_REGEX.test(name)) {
+		return `Invalid command name format: "${name}". Must be alphanumeric with hyphens/underscores, starting with letter/number.`;
+	}
+
+	return null;
+}
+
+/**
+ * Resolve full path to command file
+ */
+function resolveCommandFilePath(namespace: string, name: string, projectPath: string): string {
+	if (namespace === LOCAL_NAMESPACE) {
+		return join(projectPath, '.claude', 'commands', `${name}.md`);
+	} else {
+		return join(homedir(), '.claude', 'commands', namespace, `${name}.md`);
+	}
+}
 
 export interface SlashCommand {
 	/** Command name (e.g., "start", "complete") */
@@ -116,7 +160,12 @@ function discoverAllCommands(projectPath?: string): SlashCommand[] {
 	return allCommands;
 }
 
-export async function GET({ url }: { url: URL }) {
+/**
+ * GET /api/commands
+ *
+ * Discover and list all available slash commands
+ */
+export const GET: RequestHandler = async ({ url }) => {
 	// Get project path from query param or use default
 	const projectPath = url.searchParams.get('project') || process.cwd().replace('/dashboard', '');
 	const home = homedir();
@@ -147,3 +196,93 @@ export async function GET({ url }: { url: URL }) {
 		...(debug && { debug: debugInfo })
 	});
 }
+
+/**
+ * POST /api/commands
+ *
+ * Create a new command file
+ * Body: { namespace: string, name: string, content: string }
+ *
+ * Examples:
+ *   - { namespace: "jat", name: "new-cmd", content: "# New Command\n..." }
+ *   - { namespace: "local", name: "my-cmd", content: "..." }
+ */
+export const POST: RequestHandler = async ({ url, request }) => {
+	// Parse request body
+	let body: { namespace?: string; name?: string; content?: string };
+	try {
+		body = await request.json();
+	} catch {
+		throw error(400, 'Invalid JSON body');
+	}
+
+	// Validate required fields
+	if (!body.namespace || typeof body.namespace !== 'string') {
+		throw error(400, 'Request body must contain "namespace" field (e.g., "jat" or "local")');
+	}
+
+	if (!body.name || typeof body.name !== 'string') {
+		throw error(400, 'Request body must contain "name" field (e.g., "start" or "my-command")');
+	}
+
+	if (!body.content || typeof body.content !== 'string') {
+		throw error(400, 'Request body must contain "content" field with the command markdown content');
+	}
+
+	const { namespace, name, content } = body;
+
+	// Validate path components
+	const validationError = validateCommandPath(namespace, name);
+	if (validationError) {
+		throw error(400, validationError);
+	}
+
+	// Get project path from query param or use default
+	const projectPath = url.searchParams.get('project') || process.cwd().replace('/dashboard', '');
+
+	const filePath = resolveCommandFilePath(namespace, name, projectPath);
+
+	try {
+		// Check if command already exists
+		let exists = false;
+		try {
+			await access(filePath);
+			exists = true;
+		} catch {
+			// File doesn't exist, which is expected for creation
+		}
+
+		if (exists) {
+			throw error(
+				409,
+				`Command already exists: ${namespace}/${name}. Use PUT /api/commands/${namespace}/${name} to update.`
+			);
+		}
+
+		// Ensure parent directory exists
+		await mkdir(dirname(filePath), { recursive: true });
+
+		// Write file content
+		await writeFile(filePath, content, 'utf-8');
+
+		return json(
+			{
+				success: true,
+				namespace,
+				name,
+				path: filePath,
+				invocation: namespace === LOCAL_NAMESPACE ? `/${name}` : `/${namespace}:${name}`,
+				message: `Command ${namespace}/${name} created successfully`
+			},
+			{ status: 201 }
+		);
+	} catch (err) {
+		// Re-throw SvelteKit errors
+		if (err && typeof err === 'object' && 'status' in err) {
+			throw err;
+		}
+
+		console.error(`Error creating command ${namespace}/${name}:`, err);
+		throw error(500, `Failed to create command: ${(err as Error).message}`);
+	}
+};

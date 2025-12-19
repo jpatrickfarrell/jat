@@ -229,6 +229,31 @@
 			return true;
 		});
 
+		// Hide 'completed' (state signal) when there's a 'complete' (data signal) for the same task
+		// within 60 seconds. The 'complete' signal has rich data; 'completed' is redundant.
+		const completeEvents = result.filter((e) => e.type === 'complete');
+		const completeTaskTimestamps = new Map<string, number>();
+		for (const e of completeEvents) {
+			if (e.task_id) {
+				completeTaskTimestamps.set(e.task_id, new Date(e.timestamp).getTime());
+			}
+		}
+		result = result.filter((e) => {
+			const eventType = e.type === 'state' ? e.state : e.type;
+			if (eventType === 'completed' && e.task_id) {
+				const completeTime = completeTaskTimestamps.get(e.task_id);
+				if (completeTime) {
+					const completedTime = new Date(e.timestamp).getTime();
+					const timeDiff = Math.abs(completedTime - completeTime);
+					// Hide if within 60 seconds of the 'complete' data signal
+					if (timeDiff < 60000) {
+						return false;
+					}
+				}
+			}
+			return true;
+		});
+
 		// Hide standalone 'tasks' events when there's a 'complete' event that already has suggestedTasks
 		// This prevents duplicate display of suggested tasks (once in 'complete' bundle, once standalone)
 		const completeEventsWithTasks = result.filter(
@@ -1147,6 +1172,8 @@
 										</div>
 									{:else if (event.state === 'needs_input' || event.type === 'needs_input') && hasRichSignalData(event)}
 										<!-- Rich Needs Input Signal Card -->
+										{@const needsInputEventKey = getEventKey(event)}
+										{@const needsInputAnsweredInfo = answeredQuestions.get(needsInputEventKey)}
 										{@const needsInputSignal = {
 											type: 'needs_input',
 											taskId: event.task_id || event.data?.taskId || '',
@@ -1162,14 +1189,99 @@
 											timeoutAction: event.data?.timeoutAction,
 											timeoutMinutes: event.data?.timeoutMinutes
 										} as NeedsInputSignal}
-										<NeedsInputSignalCard
-											signal={needsInputSignal}
-											{onSelectOption}
-											{onSubmitText}
-											{onFileClick}
-											{onTaskClick}
-											submitting={actionSubmitting}
-										/>
+										{#if needsInputAnsweredInfo}
+											<!-- Answered state - show what was selected -->
+											<div class="space-y-3">
+												<div class="flex items-center justify-between">
+													<div class="flex items-center gap-2 text-xs" style="color: oklch(0.70 0.15 145);">
+														<span>✅</span>
+														<span class="font-medium">Input Provided</span>
+													</div>
+													<button
+														class="text-[10px] px-2 py-0.5 rounded transition-all hover:brightness-110"
+														style="background: oklch(0.30 0.06 280); color: oklch(0.75 0.08 280);"
+														onclick={(e) => {
+															e.stopPropagation();
+															answeredQuestions.delete(needsInputEventKey);
+															answeredQuestions = new Map(answeredQuestions);
+														}}
+													>
+														Change answer
+													</button>
+												</div>
+												{#if needsInputSignal.question}
+													<div class="p-2 rounded text-sm" style="background: oklch(0.22 0.04 145); color: oklch(0.80 0.08 145);">
+														{needsInputSignal.question}
+													</div>
+												{/if}
+												<div class="flex items-center gap-2 p-2 rounded" style="background: oklch(0.25 0.08 145); border: 1px solid oklch(0.40 0.12 145);">
+													<span class="text-[10px] px-2 py-0.5 rounded font-medium" style="background: oklch(0.35 0.12 145); color: oklch(0.90 0.10 145);">
+														✓ Answered
+													</span>
+													<span class="text-xs font-medium" style="color: oklch(0.85 0.10 145);">
+														{needsInputAnsweredInfo.label}
+													</span>
+												</div>
+											</div>
+										{:else}
+											<!-- Unanswered - show the NeedsInputSignalCard -->
+											<NeedsInputSignalCard
+												signal={needsInputSignal}
+												onSelectOption={async (optionId) => {
+													// Find the label for this option
+													let label = optionId;
+
+													// Check for special approval/rejection values
+													if (optionId === 'approve') {
+														label = '✓ Approved';
+													} else if (optionId === 'reject') {
+														label = '✗ Rejected';
+													} else if (needsInputSignal.options) {
+														// Try to find by id or value
+														const option = needsInputSignal.options.find(o => o.id === optionId || o.value === optionId);
+														if (option) {
+															label = option.label;
+														} else {
+															// If optionId is a number string, try to get option by index (1-based)
+															const idx = parseInt(optionId, 10);
+															if (!isNaN(idx) && idx > 0 && idx <= needsInputSignal.options.length) {
+																label = needsInputSignal.options[idx - 1].label;
+															}
+														}
+													}
+
+													// Mark as answered
+													answeredQuestions.set(needsInputEventKey, {
+														answer: optionId,
+														label: label,
+														timestamp: new Date().toISOString()
+													});
+													answeredQuestions = new Map(answeredQuestions);
+
+													// Call the original handler to send input to terminal
+													if (onSelectOption) {
+														await onSelectOption(optionId);
+													}
+												}}
+												onSubmitText={async (text) => {
+													// Mark as answered with the submitted text
+													answeredQuestions.set(needsInputEventKey, {
+														answer: text,
+														label: text.length > 50 ? text.substring(0, 50) + '...' : text,
+														timestamp: new Date().toISOString()
+													});
+													answeredQuestions = new Map(answeredQuestions);
+
+													// Call the original handler to send input to terminal
+													if (onSubmitText) {
+														await onSubmitText(text);
+													}
+												}}
+												{onFileClick}
+												{onTaskClick}
+												submitting={actionSubmitting}
+											/>
+										{/if}
 									{:else if event.state === 'needs_input' || event.type === 'needs_input'}
 										<!-- Fallback Needs Input state -->
 										<div class="space-y-2">

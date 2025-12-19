@@ -35,7 +35,8 @@
 
 	// Initialize Monaco Editor
 	onMount(async () => {
-		if (!containerRef) return;
+		// Check container exists AND is attached to DOM (has parentNode)
+		if (!containerRef || !containerRef.parentNode) return;
 
 		// Initialize DaisyUI theme from document
 		daisyTheme = document.documentElement.getAttribute('data-theme') || 'nord';

@@ -2,6 +2,7 @@
 	import type { SlashCommand, CommandFrontmatter } from '$lib/types/config';
 	import { onMount, onDestroy } from 'svelte';
 	import loader from '@monaco-editor/loader';
+	import { marked } from 'marked';
 	import {
 		validateYamlFrontmatter,
 		setEditorMarkers,
@@ -15,6 +16,12 @@
 		applyTemplate,
 		type CommandTemplate
 	} from '$lib/config/commandTemplates';
+
+	// Configure marked for safe rendering
+	marked.setOptions({
+		breaks: true,
+		gfm: true
+	});
 
 	// Props
 	let {
@@ -52,9 +59,28 @@
 	let validationDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 	// Monaco
-	let editorContainer: HTMLDivElement;
-	let editor: any = null;
-	let monaco: any = null;
+	let editorContainer = $state<HTMLDivElement | null>(null);
+	let previewContainer = $state<HTMLDivElement | null>(null);
+	let editor = $state<any>(null);
+	let monaco = $state<any>(null);
+
+	// View mode: 'edit' | 'split' | 'preview'
+	type ViewMode = 'edit' | 'split' | 'preview';
+	let viewMode = $state<ViewMode>('edit');
+
+	// Rendered markdown content (stripped of frontmatter)
+	let renderedMarkdown = $derived.by(() => {
+		// Remove frontmatter for preview
+		const contentWithoutFrontmatter = content.replace(/^---[\s\S]*?---\n?/, '');
+		try {
+			return marked.parse(contentWithoutFrontmatter);
+		} catch {
+			return '<p class="text-error">Error rendering markdown</p>';
+		}
+	});
+
+	// Scroll sync state
+	let isSyncingScroll = false;
 
 	// Available namespaces
 	const namespaces = [
@@ -162,10 +188,7 @@ Command content here...
 					: command.frontmatter.tags || '';
 			}
 
-			if (editor) {
-				editor.setValue(content);
-				validateContent(content);
-			}
+			// Editor sync is handled by the content sync $effect
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load command';
 		} finally {
@@ -195,46 +218,73 @@ Command content here...
 		}, 300);
 	}
 
-	// Initialize Monaco editor
+	// Initialize Monaco - preload on mount
 	onMount(async () => {
 		try {
 			monaco = await loader.init();
-			if (editorContainer) {
-				editor = monaco.editor.create(editorContainer, {
-					value: content,
-					language: 'markdown',
-					theme: 'vs-dark',
-					minimap: { enabled: false },
-					wordWrap: 'on',
-					lineNumbers: 'on',
-					fontSize: 14,
-					tabSize: 2,
-					scrollBeyondLastLine: false,
-					automaticLayout: true,
-					padding: { top: 16, bottom: 16 },
-					// Enable error gutter (shows colored squiggles)
-					glyphMargin: true
-				});
-
-				// Track content changes and validate
-				editor.onDidChangeModelContent(() => {
-					content = editor.getValue();
-					validateContent(content);
-				});
-
-				// Keyboard shortcut for save
-				editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-					handleSave();
-				});
-
-				// Initial validation if content exists
-				if (content) {
-					validateContent(content);
-				}
-			}
 		} catch (e) {
 			console.error('Failed to load Monaco:', e);
 			error = 'Failed to load editor';
+		}
+	});
+
+	// Track if editor needs content sync (for when content loads after editor init)
+	let pendingContentSync = $state(false);
+
+	// Initialize editor when container becomes available and in DOM
+	$effect(() => {
+		// Ensure container is actually in the DOM (has parent node)
+		if (monaco && editorContainer && editorContainer.parentNode && !editor && !loading) {
+			editor = monaco.editor.create(editorContainer, {
+				value: content,
+				language: 'markdown',
+				theme: 'vs-dark',
+				minimap: { enabled: false },
+				wordWrap: 'on',
+				lineNumbers: 'on',
+				fontSize: 14,
+				tabSize: 2,
+				scrollBeyondLastLine: false,
+				automaticLayout: true,
+				padding: { top: 16, bottom: 16 },
+				// Enable error gutter (shows colored squiggles)
+				glyphMargin: true
+			});
+
+			// Track content changes and validate
+			editor.onDidChangeModelContent(() => {
+				content = editor.getValue();
+				validateContent(content);
+			});
+
+			// Keyboard shortcut for save
+			editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+				handleSave();
+			});
+
+			// Scroll sync listener
+			editor.onDidScrollChange(handleEditorScroll);
+
+			// Initial validation if content exists
+			if (content) {
+				validateContent(content);
+			}
+
+			// Check if we had pending content
+			if (pendingContentSync) {
+				pendingContentSync = false;
+			}
+		}
+	});
+
+	// Sync content to editor when content changes and editor exists
+	$effect(() => {
+		if (editor && content !== undefined) {
+			const currentValue = editor.getValue();
+			if (currentValue !== content) {
+				editor.setValue(content);
+				validateContent(content);
+			}
 		}
 	});
 
@@ -246,6 +296,42 @@ Command content here...
 			editor.dispose();
 		}
 	});
+
+	// Scroll sync: editor -> preview
+	function handleEditorScroll() {
+		if (isSyncingScroll || !previewContainer || !editor || viewMode !== 'split') return;
+		isSyncingScroll = true;
+
+		const scrollInfo = editor.getScrollTop();
+		const maxScroll = editor.getScrollHeight() - editor.getLayoutInfo().height;
+		const scrollPercent = maxScroll > 0 ? scrollInfo / maxScroll : 0;
+
+		const previewMaxScroll = previewContainer.scrollHeight - previewContainer.clientHeight;
+		previewContainer.scrollTop = scrollPercent * previewMaxScroll;
+
+		requestAnimationFrame(() => {
+			isSyncingScroll = false;
+		});
+	}
+
+	// Scroll sync: preview -> editor
+	function handlePreviewScroll() {
+		if (isSyncingScroll || !previewContainer || !editor || viewMode !== 'split') return;
+		isSyncingScroll = true;
+
+		const scrollPercent =
+			previewContainer.scrollHeight - previewContainer.clientHeight > 0
+				? previewContainer.scrollTop /
+					(previewContainer.scrollHeight - previewContainer.clientHeight)
+				: 0;
+
+		const maxScroll = editor.getScrollHeight() - editor.getLayoutInfo().height;
+		editor.setScrollTop(scrollPercent * maxScroll);
+
+		requestAnimationFrame(() => {
+			isSyncingScroll = false;
+		});
+	}
 
 	// Build frontmatter from fields
 	function buildFrontmatter(): string {
@@ -426,7 +512,7 @@ Command content here...
 			</div>
 
 			<!-- Body -->
-			<div class="flex-1 overflow-y-auto p-6">
+			<div class="flex flex-1 flex-col overflow-hidden p-6">
 				{#if loading}
 					<div class="flex h-full items-center justify-center">
 						<span class="loading loading-spinner loading-lg"></span>
@@ -583,7 +669,7 @@ Command content here...
 						{/if}
 
 						<!-- Frontmatter fields -->
-					<div class="mb-6">
+					<div class="mb-6 flex-shrink-0">
 						<h3 class="mb-3 font-medium text-base-content">Frontmatter</h3>
 						<div class="grid grid-cols-2 gap-4">
 							<div class="form-control">
@@ -644,17 +730,76 @@ Command content here...
 						</div>
 					</div>
 
-					<!-- Monaco editor -->
-					<div class="form-control flex-1">
-						<label class="label">
+					<!-- Editor header with view toggle -->
+					<div class="form-control flex min-h-0 flex-1 flex-col">
+						<div class="label flex items-center justify-between">
 							<span class="label-text font-medium">Command Content (Markdown)</span>
-							<span class="label-text-alt opacity-60">Cmd+S to save</span>
-						</label>
+							<div class="flex items-center gap-2">
+								<span class="label-text-alt opacity-60">Cmd+S to save</span>
+								<!-- View mode toggle -->
+								<div class="join">
+									<button
+										type="button"
+										class="btn btn-xs join-item {viewMode === 'edit' ? 'btn-primary' : 'btn-ghost'}"
+										onclick={() => (viewMode = 'edit')}
+										title="Edit only"
+									>
+										<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+										</svg>
+									</button>
+									<button
+										type="button"
+										class="btn btn-xs join-item {viewMode === 'split' ? 'btn-primary' : 'btn-ghost'}"
+										onclick={() => (viewMode = 'split')}
+										title="Split view"
+									>
+										<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+										</svg>
+									</button>
+									<button
+										type="button"
+										class="btn btn-xs join-item {viewMode === 'preview' ? 'btn-primary' : 'btn-ghost'}"
+										onclick={() => (viewMode = 'preview')}
+										title="Preview only"
+									>
+										<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+										</svg>
+									</button>
+								</div>
+							</div>
+						</div>
+
+						<!-- Split view container -->
 						<div
-							bind:this={editorContainer}
-							class="h-[400px] overflow-hidden rounded-t-lg border border-b-0"
+							class="flex min-h-0 flex-1 gap-0 overflow-hidden rounded-t-lg border border-b-0"
 							style="border-color: oklch(0.3 0.02 250);"
-						></div>
+						>
+							<!-- Monaco editor pane - always in DOM, hidden via CSS when preview-only -->
+							<div
+								bind:this={editorContainer}
+								class="h-full {viewMode === 'preview' ? 'hidden' : ''} {viewMode === 'split' ? 'w-1/2 border-r' : 'w-full'}"
+								style="border-color: oklch(0.3 0.02 250);"
+							></div>
+
+							<!-- Preview pane -->
+							{#if viewMode !== 'edit'}
+								<div
+									bind:this={previewContainer}
+									class="h-full overflow-y-auto {viewMode === 'split' ? 'w-1/2' : 'w-full'}"
+									style="background: oklch(0.15 0.02 250);"
+									onscroll={handlePreviewScroll}
+								>
+									<article class="prose prose-invert prose-sm max-w-none p-4">
+										{@html renderedMarkdown}
+									</article>
+								</div>
+							{/if}
+						</div>
+
 						<!-- Validation status bar -->
 						<div
 							class="flex items-center justify-between gap-2 rounded-b-lg border px-3 py-1.5 text-xs"
@@ -689,7 +834,9 @@ Command content here...
 									<span class="opacity-50">Validating...</span>
 								{/if}
 							</div>
-							<span class="opacity-50">YAML frontmatter</span>
+							<span class="opacity-50">
+								{viewMode === 'edit' ? 'YAML frontmatter' : viewMode === 'split' ? 'Split view' : 'Preview'}
+							</span>
 						</div>
 					</div>
 					{/if}

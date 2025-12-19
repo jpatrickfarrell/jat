@@ -78,12 +78,15 @@
 	);
 
 	// Determine what action mode we're in
+	// Only show dropdown when there's an assignee (something to release)
+	// For blocked tasks without assignee, show disabled spawn button
 	type ActionMode = 'spawn' | 'dropdown' | 'disabled' | 'completed';
 	const actionMode: ActionMode = $derived(
 		isCompletedByActiveSession ? 'completed' :
 		task.status === 'closed' ? 'disabled' :
 		task.status === 'in_progress' ? 'dropdown' :
-		(task.status === 'blocked' || hasBlockers) ? 'dropdown' :
+		// Only show dropdown for blocked tasks that have an assignee (something to release)
+		(task.status === 'blocked' || hasBlockers) && task.assignee ? 'dropdown' :
 		'spawn'
 	);
 

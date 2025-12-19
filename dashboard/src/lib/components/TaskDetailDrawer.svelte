@@ -1623,12 +1623,12 @@
 									{#if depStatus.hasBlockers}
 										<span class="text-xs text-warning" title={depStatus.blockingReason}>⚠</span>
 									{/if}
-								{:else if actionMode === 'in_progress' || actionMode === 'blocked'}
-									<!-- Assigned: Show agent + actions -->
+								{:else if (actionMode === 'in_progress' || actionMode === 'blocked') && task?.assignee}
+									<!-- Assigned: Show agent + actions (only when there's an actual assignee) -->
 									<div class="flex items-center gap-1">
 										<div class="avatar">
 											<div class="w-5 h-5 rounded-full ring-1 {isAgentOnline ? 'ring-success' : 'ring-warning'}">
-												<AgentAvatar name={task?.assignee ?? ''} size={20} />
+												<AgentAvatar name={task.assignee} size={20} />
 											</div>
 										</div>
 										<span class="text-xs">{task.assignee}</span>
@@ -1666,6 +1666,16 @@
 												</svg>
 											{/if}
 										</button>
+									</div>
+								{:else if actionMode === 'blocked' && !task?.assignee}
+									<!-- Blocked but no assignee: Show blocked indicator + launch option -->
+									<div class="flex items-center gap-1.5">
+										<span class="badge badge-warning badge-xs gap-1">
+											<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+											</svg>
+											Blocked
+										</span>
 									</div>
 								{:else if actionMode === 'closed'}
 									<!-- Closed: Show reopen option -->

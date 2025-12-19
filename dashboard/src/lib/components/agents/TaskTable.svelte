@@ -2540,7 +2540,7 @@
 								{@const epicVisual = getGroupHeaderInfo('parent', epicKey)}
 								{@const parentTask = [...(allTasks.length > 0 ? allTasks : tasks)].find(t => t.id === epicKey)}
 								{@const isEpicCollapsed = collapsedGroups.has(`${projectKey}::${epicKey}`)}
-								{@const epicAssignedAgents = [...new Set(epicTasks.filter(t => t.assignee).map(t => t.assignee))]}
+								{@const epicAssignedAgents = [...new Set(epicTasks.filter(t => t.assignee && t.status === 'in_progress').map(t => t.assignee))]}
 								{@const hasChildTasks = epicTasks.some(t => extractParentId(t.id) === epicKey)}
 								{@const showEpicHeader = epicTasks.length >= 2 || hasChildTasks}
 								{@const isEpicJustCompleted = completedEpicIds.includes(epicKey)}
@@ -2962,7 +2962,7 @@
 						{@const epicId = groupingMode === 'parent' ? groupKey : null}
 						{@const parentTask = epicId ? [...(allTasks.length > 0 ? allTasks : tasks)].find(t => t.id === epicId) : null}
 						{@const isCollapsed = collapsedGroups.has(groupKey)}
-						{@const assignedAgents = [...new Set(typeTasks.filter(t => t.assignee).map(t => t.assignee))]}
+						{@const assignedAgents = [...new Set(typeTasks.filter(t => t.assignee && t.status === 'in_progress').map(t => t.assignee))]}
 						<!-- In parent/project mode, only show collapsible header for groups with 2+ child tasks -->
 						<!-- Standalone tasks (single task where task.id === groupKey) get no header -->
 						{@const hasChildTasks = typeTasks.some(t => {

@@ -94,10 +94,61 @@
 	let commandsLoading = $state(false);
 	let commandsError = $state<string | null>(null);
 	let commandsExpanded = $state(false);
+	let commandSearchQuery = $state('');
+	let commandSearchInput: HTMLInputElement;
+	let selectedCommandIndex = $state(0);
 
 	// Get config from centralized statusColors.ts
 	const config = $derived(getSessionStateVisual(sessionState));
 	const actions = $derived(getSessionStateActions(sessionState));
+
+	// Score-based command search (adapted from CommandPalette)
+	function scoreCommand(query: string, cmd: SlashCommand): number {
+		const q = query.toLowerCase();
+		const name = cmd.name.toLowerCase();
+		const invocation = cmd.invocation.toLowerCase();
+
+		let score = 0;
+
+		// Invocation matches (highest priority - what users type)
+		if (invocation === q) {
+			score += 100;
+		} else if (invocation.startsWith(q)) {
+			score += 80;
+		} else if (invocation.includes(q)) {
+			score += 60;
+		}
+
+		// Name matches
+		if (name === q) {
+			score += 50;
+		} else if (name.startsWith(q)) {
+			score += 40;
+		} else if (name.includes(q)) {
+			score += 20;
+		}
+
+		// Namespace matches (lowest priority)
+		if (cmd.namespace.toLowerCase().includes(q)) {
+			score += 10;
+		}
+
+		return score;
+	}
+
+	function filterCommands(query: string): SlashCommand[] {
+		if (!query.trim()) {
+			return commands;
+		}
+
+		return commands
+			.map(cmd => ({ cmd, score: scoreCommand(query, cmd) }))
+			.filter(({ score }) => score > 0)
+			.sort((a, b) => b.score - a.score)
+			.map(({ cmd }) => cmd);
+	}
+
+	const filteredCommands = $derived(filterCommands(commandSearchQuery));
 
 	// Get display label (use dormant variant if applicable)
 	const displayLabel = $derived(
@@ -128,6 +179,60 @@
 			fetchCommands();
 		}
 	});
+
+	// Focus search input when commands section expands
+	$effect(() => {
+		if (commandsExpanded && commandSearchInput) {
+			setTimeout(() => commandSearchInput?.focus(), 50);
+		}
+	});
+
+	// Reset search and selection when commands section collapses or dropdown closes
+	$effect(() => {
+		if (!commandsExpanded || !isOpen) {
+			commandSearchQuery = '';
+			selectedCommandIndex = 0;
+		}
+	});
+
+	// Reset selected index when search query changes
+	$effect(() => {
+		if (commandSearchQuery !== undefined) {
+			selectedCommandIndex = 0;
+		}
+	});
+
+	// Handle keyboard navigation in commands search
+	function handleCommandKeyDown(e: KeyboardEvent) {
+		const maxIndex = filteredCommands.length - 1;
+
+		switch (e.key) {
+			case 'ArrowDown':
+				e.preventDefault();
+				selectedCommandIndex = Math.min(selectedCommandIndex + 1, maxIndex);
+				break;
+			case 'ArrowUp':
+				e.preventDefault();
+				selectedCommandIndex = Math.max(selectedCommandIndex - 1, 0);
+				break;
+			case 'Enter':
+				e.preventDefault();
+				if (filteredCommands[selectedCommandIndex]) {
+					executeCommand(filteredCommands[selectedCommandIndex].invocation);
+				}
+				break;
+			case 'Escape':
+				e.preventDefault();
+				if (commandSearchQuery) {
+					// Clear search first
+					commandSearchQuery = '';
+				} else {
+					// Collapse commands section
+					commandsExpanded = false;
+				}
+				break;
+		}
+	}
 
 	// Fetch available slash commands
 	async function fetchCommands() {
@@ -409,10 +514,48 @@
 					<!-- Commands list (expandable) -->
 					{#if commandsExpanded}
 						<div
-							class="max-h-[200px] overflow-y-auto"
 							style="background: oklch(0.15 0.02 250);"
 							transition:slide={{ duration: 150 }}
 						>
+							<!-- Search input (show when there are many commands) -->
+							{#if commands.length > 5}
+								<div class="px-2 py-1.5 border-b" style="border-color: oklch(0.25 0.02 250);">
+									<div class="relative flex items-center gap-1.5">
+										<svg
+											class="w-3 h-3 flex-shrink-0"
+											style="color: oklch(0.55 0.02 250);"
+											fill="none"
+											viewBox="0 0 24 24"
+											stroke="currentColor"
+											stroke-width="2"
+										>
+											<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+										</svg>
+										<input
+											bind:this={commandSearchInput}
+											bind:value={commandSearchQuery}
+											onkeydown={handleCommandKeyDown}
+											type="text"
+											placeholder="Filter commands..."
+											class="w-full bg-transparent text-[10px] font-mono focus:outline-none"
+											style="color: oklch(0.85 0.02 250);"
+											autocomplete="off"
+										/>
+										{#if commandSearchQuery}
+											<button
+												type="button"
+												onclick={() => { commandSearchQuery = ''; commandSearchInput?.focus(); }}
+												class="text-white/40 hover:text-white/70 transition-colors"
+											>
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+												</svg>
+											</button>
+										{/if}
+									</div>
+								</div>
+							{/if}
+
 							{#if commandsLoading}
 								<div class="px-3 py-3 text-center text-[10px] text-white/50">
 									<span class="loading loading-spinner loading-xs"></span>
@@ -423,15 +566,21 @@
 									<span>⚠ {commandsError}</span>
 									<button class="btn btn-xs btn-ghost ml-1" onclick={fetchCommands}>Retry</button>
 								</div>
+							{:else if filteredCommands.length === 0}
+								<div class="px-3 py-3 text-center text-[10px] text-white/50">
+									No commands match "{commandSearchQuery}"
+								</div>
 							{:else}
-								<ul class="py-0.5">
-									{#each commands as cmd (cmd.invocation)}
+								<ul class="py-0.5 max-h-[180px] overflow-y-auto">
+									{#each filteredCommands as cmd, index (cmd.invocation)}
 										<li>
 											<button
 												type="button"
 												onclick={() => executeCommand(cmd.invocation)}
-												class="w-full px-3 py-1.5 flex items-center gap-2 text-left text-[11px] transition-colors hover:bg-white/10 text-white/70 hover:text-white"
+												class="w-full px-3 py-1.5 flex items-center gap-2 text-left text-[11px] transition-colors text-white/70 hover:text-white"
+												style="background: {index === selectedCommandIndex ? 'oklch(1 0 0 / 0.1)' : 'transparent'}; border-left: 2px solid {index === selectedCommandIndex ? 'oklch(0.70 0.18 240)' : 'transparent'};"
 												disabled={isExecuting}
+												onmouseenter={() => { selectedCommandIndex = index; }}
 											>
 												<svg class="w-3.5 h-3.5 flex-shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
 													<path stroke-linecap="round" stroke-linejoin="round" d={getCommandIcon(cmd.invocation)} />
@@ -439,6 +588,9 @@
 												<span class="font-mono">{cmd.invocation}</span>
 												{#if cmd.namespace === 'local'}
 													<span class="text-[8px] px-1 py-0.5 rounded bg-white/10 text-white/40 ml-auto">local</span>
+												{/if}
+												{#if index === selectedCommandIndex && commands.length > 5}
+													<kbd class="kbd kbd-xs font-mono ml-auto" style="background: oklch(0.25 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.70 0.18 240);">↵</kbd>
 												{/if}
 											</button>
 										</li>

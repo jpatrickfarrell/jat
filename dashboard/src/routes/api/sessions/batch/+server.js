@@ -123,17 +123,52 @@ export async function POST({ request }) {
 				if (claudeFlags) claudeCmd += ` ${claudeFlags}`;
 
 				// Create tmux session with explicit dimensions to ensure proper terminal width
-				const command = `tmux new-session -d -s "${sessionName}" -x ${TMUX_INITIAL_WIDTH} -y ${TMUX_INITIAL_HEIGHT} -c "${projectPath}" && tmux send-keys -t "${sessionName}" "${claudeCmd}" Enter`;
+				// Sleep allows shell to initialize before sending keys - prevents race condition
+				const command = `tmux new-session -d -s "${sessionName}" -x ${TMUX_INITIAL_WIDTH} -y ${TMUX_INITIAL_HEIGHT} -c "${projectPath}" && sleep 0.3 && tmux send-keys -t "${sessionName}" "${claudeCmd}" Enter`;
 				await execAsync(command);
 
-				// Wait for Claude to fully start (7s - Claude Code takes time to initialize)
+				// Wait for Claude to fully start with verification
 				if (prompt) {
-					await new Promise(resolve => setTimeout(resolve, 7000));
-					// CRITICAL: Send text and Enter SEPARATELY for Claude Code's TUI
-					const escapedPrompt = prompt.replace(/"/g, '\\"').replace(/\$/g, '\\$');
-					await execAsync(`tmux send-keys -t "${sessionName}" -- "${escapedPrompt}"`);
-					await new Promise(resolve => setTimeout(resolve, 100));
-					await execAsync(`tmux send-keys -t "${sessionName}" Enter`);
+					// Verify Claude Code TUI is running before sending prompt
+					const CLAUDE_READY_PATTERNS = ['Claude Code', '╭', '> ', 'claude-opus', 'claude-sonnet', 'Opus', 'Sonnet'];
+					const BASH_PROMPT_PATTERNS = ['-bash:', '$ ', 'bash-'];
+					const maxWaitSeconds = 15;
+					const checkIntervalMs = 500;
+					let claudeReady = false;
+
+					for (let waited = 0; waited < maxWaitSeconds * 1000 && !claudeReady; waited += checkIntervalMs) {
+						await new Promise(resolve => setTimeout(resolve, checkIntervalMs));
+
+						try {
+							const { stdout: paneOutput } = await execAsync(
+								`tmux capture-pane -t "${sessionName}" -p 2>/dev/null`
+							);
+
+							const hasClaudePatterns = CLAUDE_READY_PATTERNS.some(p => paneOutput.includes(p));
+							const hasBashPrompt = BASH_PROMPT_PATTERNS.some(p => paneOutput.includes(p)) &&
+								!paneOutput.includes('claude');
+
+							if (hasClaudePatterns) {
+								claudeReady = true;
+								console.log(`[batch] Claude Code ready for ${sessionName} after ${waited}ms`);
+							} else if (hasBashPrompt && waited > 5000) {
+								console.error(`[batch] Claude Code failed to start for ${sessionName}`);
+								break;
+							}
+						} catch {
+							// Session might not exist yet, continue waiting
+						}
+					}
+
+					if (claudeReady) {
+						// CRITICAL: Send text and Enter SEPARATELY for Claude Code's TUI
+						const escapedPrompt = prompt.replace(/"/g, '\\"').replace(/\$/g, '\\$');
+						await execAsync(`tmux send-keys -t "${sessionName}" -- "${escapedPrompt}"`);
+						await new Promise(resolve => setTimeout(resolve, 100));
+						await execAsync(`tmux send-keys -t "${sessionName}" Enter`);
+					} else {
+						console.warn(`[batch] Skipping prompt for ${sessionName} - Claude not ready`);
+					}
 				}
 
 				results.push({

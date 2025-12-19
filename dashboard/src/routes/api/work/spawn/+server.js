@@ -170,7 +170,9 @@ export async function POST({ request }) {
 
 		// Create session with explicit dimensions to ensure proper terminal width from the start
 		// Without -x and -y, tmux uses default 80x24 which may not match dashboard card width
-		const createSessionCmd = `tmux new-session -d -s "${sessionName}" -x ${TMUX_INITIAL_WIDTH} -y ${TMUX_INITIAL_HEIGHT} -c "${projectPath}" && tmux send-keys -t "${sessionName}" "${claudeCmd}" Enter`;
+		// Use sleep to allow shell to initialize before sending keys - without this delay,
+		// the shell may not be ready and keys are lost (race condition)
+		const createSessionCmd = `tmux new-session -d -s "${sessionName}" -x ${TMUX_INITIAL_WIDTH} -y ${TMUX_INITIAL_HEIGHT} -c "${projectPath}" && sleep 0.3 && tmux send-keys -t "${sessionName}" "${claudeCmd}" Enter`;
 
 		try {
 			await execAsync(createSessionCmd);
@@ -206,8 +208,46 @@ export async function POST({ request }) {
 			? `/jat:start ${agentName} ${taskId}`  // Agent name + task (prevents duplicate agent)
 			: `/jat:start ${agentName}`;  // Planning mode - just register agent
 
-		// Wait for Claude to initialize (7s to be safe - Claude can take a while to show prompt)
-		await new Promise(resolve => setTimeout(resolve, 7000));
+		// Wait for Claude to initialize with verification
+		// Check that Claude Code TUI is running (not just bash prompt)
+		// Claude shows these patterns when ready: "Claude Code", "╭", input prompt ">"
+		const CLAUDE_READY_PATTERNS = ['Claude Code', '╭', '> ', 'claude-opus', 'claude-sonnet', 'Opus', 'Sonnet'];
+		const BASH_PROMPT_PATTERNS = ['-bash:', '$ ', 'bash-'];
+		const maxWaitSeconds = 15;
+		const checkIntervalMs = 500;
+		let claudeReady = false;
+
+		for (let waited = 0; waited < maxWaitSeconds * 1000 && !claudeReady; waited += checkIntervalMs) {
+			await new Promise(resolve => setTimeout(resolve, checkIntervalMs));
+
+			try {
+				const { stdout: paneOutput } = await execAsync(
+					`tmux capture-pane -t "${sessionName}" -p 2>/dev/null`
+				);
+
+				// Check if Claude is running (has Claude Code patterns)
+				const hasClaudePatterns = CLAUDE_READY_PATTERNS.some(p => paneOutput.includes(p));
+				// Check if we're back at bash prompt (Claude never started or exited)
+				const hasBashPrompt = BASH_PROMPT_PATTERNS.some(p => paneOutput.includes(p)) &&
+					!paneOutput.includes('claude');
+
+				if (hasClaudePatterns) {
+					claudeReady = true;
+					console.log(`[spawn] Claude Code ready after ${waited}ms`);
+				} else if (hasBashPrompt && waited > 5000) {
+					// If we see bash prompt after 5s, Claude likely failed to start
+					console.error(`[spawn] Claude Code failed to start - detected bash prompt`);
+					console.error(`[spawn] Terminal output: ${paneOutput.slice(-200)}`);
+					break;
+				}
+			} catch {
+				// Session might not exist yet, continue waiting
+			}
+		}
+
+		if (!claudeReady) {
+			console.warn(`[spawn] Claude Code may not have started properly after ${maxWaitSeconds}s`);
+		}
 
 		/**
 		 * Send the initial prompt with retry logic

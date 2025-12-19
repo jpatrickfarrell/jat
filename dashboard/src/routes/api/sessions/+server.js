@@ -150,15 +150,50 @@ export async function POST({ request }) {
 
 		// Create tmux session with Claude Code with explicit dimensions
 		// Use send-keys to run claude after session creation
-		const command = `tmux new-session -d -s "${sessionName}" -x ${TMUX_INITIAL_WIDTH} -y ${TMUX_INITIAL_HEIGHT} -c "${projectPath}" && tmux send-keys -t "${sessionName}" "${claudeCmd}" Enter`;
+		// Sleep allows shell to initialize before sending keys - prevents race condition
+		// where keys are sent before shell is ready to receive them
+		const command = `tmux new-session -d -s "${sessionName}" -x ${TMUX_INITIAL_WIDTH} -y ${TMUX_INITIAL_HEIGHT} -c "${projectPath}" && sleep 0.3 && tmux send-keys -t "${sessionName}" "${claudeCmd}" Enter`;
 
 		try {
 			await execAsync(command);
 
 			// Wait for Claude to fully start, then send the initial prompt
-			// Claude Code needs ~7 seconds to initialize and show prompt
+			// Verify Claude Code TUI is running before sending prompt
 			if (initialPrompt) {
-				await new Promise(resolve => setTimeout(resolve, 7000));
+				// Check that Claude Code TUI is running (not just bash prompt)
+				const CLAUDE_READY_PATTERNS = ['Claude Code', '╭', '> ', 'claude-opus', 'claude-sonnet', 'Opus', 'Sonnet'];
+				const BASH_PROMPT_PATTERNS = ['-bash:', '$ ', 'bash-'];
+				const maxWaitSeconds = 15;
+				const checkIntervalMs = 500;
+				let claudeReady = false;
+
+				for (let waited = 0; waited < maxWaitSeconds * 1000 && !claudeReady; waited += checkIntervalMs) {
+					await new Promise(resolve => setTimeout(resolve, checkIntervalMs));
+
+					try {
+						const { stdout: paneOutput } = await execAsync(
+							`tmux capture-pane -t "${sessionName}" -p 2>/dev/null`
+						);
+
+						const hasClaudePatterns = CLAUDE_READY_PATTERNS.some(p => paneOutput.includes(p));
+						const hasBashPrompt = BASH_PROMPT_PATTERNS.some(p => paneOutput.includes(p)) &&
+							!paneOutput.includes('claude');
+
+						if (hasClaudePatterns) {
+							claudeReady = true;
+							console.log(`[sessions] Claude Code ready after ${waited}ms`);
+						} else if (hasBashPrompt && waited > 5000) {
+							console.error(`[sessions] Claude Code failed to start - detected bash prompt`);
+							break;
+						}
+					} catch {
+						// Session might not exist yet, continue waiting
+					}
+				}
+
+				if (!claudeReady) {
+					console.warn(`[sessions] Claude Code may not have started properly after ${maxWaitSeconds}s`);
+				}
 
 				/**
 				 * Send the initial prompt with retry logic

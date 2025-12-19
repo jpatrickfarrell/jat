@@ -8,6 +8,7 @@
  *   /projects - Projects (default route, multi-project sessions view)
  *   /servers  - Servers (project server sessions)
  *   /automation - Automation rules configuration
+ *   /config - Config (JAT configuration files editor)
  *
  * SECONDARY (collapsible or less prominent):
  *   /graph    - Dependency visualization
@@ -66,6 +67,13 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			label: 'Automation',
 			href: '/automation',
 			icon: 'automation',
+			primary: true
+		},
+		{
+			id: 'config',
+			label: 'Config',
+			href: '/config',
+			icon: 'settings',
 			primary: true
 		},
 		// SECONDARY: Less prominent routes

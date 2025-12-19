@@ -12,6 +12,7 @@ import { writeFile, mkdir, access } from 'fs/promises';
 import { join, basename, dirname } from 'path';
 import { homedir } from 'os';
 import type { RequestHandler } from './$types';
+import type { SlashCommand } from '$lib/types/config';
 
 // Regex patterns for validation (same as in [...path]/+server.ts)
 const NAMESPACE_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
@@ -55,16 +56,7 @@ function resolveCommandFilePath(namespace: string, name: string, projectPath: st
 	}
 }
 
-export interface SlashCommand {
-	/** Command name (e.g., "start", "complete") */
-	name: string;
-	/** Full invocation (e.g., "/jat:start", "/prune-resume") */
-	invocation: string;
-	/** Namespace (e.g., "jat" for global, "local" for project-local) */
-	namespace: string;
-	/** Source file path */
-	path: string;
-}
+// SlashCommand type imported from $lib/types/config
 
 /**
  * Check if a path is a file (follows symlinks)

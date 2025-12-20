@@ -7,17 +7,147 @@
  *   { command: string } - The command path to validate
  *
  * Response:
- *   { valid: boolean, exists: boolean, isExecutable: boolean, suggestions?: string[], error?: string }
+ *   {
+ *     valid: boolean,
+ *     exists: boolean,
+ *     isExecutable: boolean,
+ *     hasShebang: boolean,
+ *     shebang?: string,
+ *     scriptType?: string,
+ *     suggestions?: string[],
+ *     error?: string,
+ *     warnings?: string[],
+ *     fixes?: { description: string, command: string }[]
+ *   }
  */
 
 import { json } from '@sveltejs/kit';
-import { existsSync, accessSync, constants, statSync } from 'fs';
+import { existsSync, accessSync, constants, statSync, readFileSync } from 'fs';
 import path from 'path';
 import type { RequestHandler } from './$types';
+
+// Common shebangs and their script types
+const SHEBANG_PATTERNS: Record<string, string> = {
+	'#!/bin/bash': 'bash',
+	'#!/usr/bin/env bash': 'bash',
+	'#!/bin/sh': 'shell',
+	'#!/usr/bin/env sh': 'shell',
+	'#!/usr/bin/env node': 'node',
+	'#!/usr/bin/node': 'node',
+	'#!/usr/bin/env python': 'python',
+	'#!/usr/bin/env python3': 'python',
+	'#!/usr/bin/python': 'python',
+	'#!/usr/bin/python3': 'python',
+	'#!/usr/bin/env ruby': 'ruby',
+	'#!/usr/bin/ruby': 'ruby',
+	'#!/usr/bin/env perl': 'perl',
+	'#!/usr/bin/perl': 'perl'
+};
+
+// File extensions and their expected script types
+const EXTENSION_TYPES: Record<string, string> = {
+	'.sh': 'bash',
+	'.bash': 'bash',
+	'.js': 'node',
+	'.mjs': 'node',
+	'.cjs': 'node',
+	'.ts': 'node',
+	'.py': 'python',
+	'.rb': 'ruby',
+	'.pl': 'perl'
+};
 
 // Get the project root directory (parent of dashboard)
 function getProjectRoot(): string {
 	return process.cwd().replace('/dashboard', '');
+}
+
+/**
+ * Parse script content for shebang and type detection
+ */
+function parseScriptContent(filePath: string): {
+	hasShebang: boolean;
+	shebang?: string;
+	scriptType?: string;
+	firstLines?: string[];
+} {
+	try {
+		const content = readFileSync(filePath, 'utf-8');
+		const lines = content.split('\n').slice(0, 5); // Read first 5 lines
+		const firstLine = lines[0]?.trim() || '';
+
+		// Check for shebang
+		if (firstLine.startsWith('#!')) {
+			// Find matching shebang pattern
+			for (const [pattern, type] of Object.entries(SHEBANG_PATTERNS)) {
+				if (firstLine.startsWith(pattern)) {
+					return {
+						hasShebang: true,
+						shebang: firstLine,
+						scriptType: type,
+						firstLines: lines
+					};
+				}
+			}
+			// Unknown shebang
+			return {
+				hasShebang: true,
+				shebang: firstLine,
+				scriptType: 'unknown',
+				firstLines: lines
+			};
+		}
+
+		return { hasShebang: false, firstLines: lines };
+	} catch {
+		return { hasShebang: false };
+	}
+}
+
+/**
+ * Detect script type from file extension
+ */
+function detectTypeFromExtension(filePath: string): string | undefined {
+	const ext = path.extname(filePath).toLowerCase();
+	return EXTENSION_TYPES[ext];
+}
+
+/**
+ * Generate actionable fix suggestions
+ */
+function generateFixes(
+	filePath: string,
+	isExecutable: boolean,
+	hasShebang: boolean,
+	extensionType?: string
+): { description: string; command: string }[] {
+	const fixes: { description: string; command: string }[] = [];
+
+	if (!isExecutable) {
+		fixes.push({
+			description: 'Make script executable',
+			command: `chmod +x ${filePath}`
+		});
+	}
+
+	if (!hasShebang && extensionType) {
+		const shebangs: Record<string, string> = {
+			bash: '#!/bin/bash',
+			shell: '#!/bin/sh',
+			node: '#!/usr/bin/env node',
+			python: '#!/usr/bin/env python3',
+			ruby: '#!/usr/bin/env ruby',
+			perl: '#!/usr/bin/env perl'
+		};
+		if (shebangs[extensionType]) {
+			fixes.push({
+				description: `Add shebang line at top of file`,
+				command: `sed -i '1i${shebangs[extensionType]}' ${filePath}`
+			});
+		}
+	}
+
+	return fixes;
 }
 
 /**
@@ -97,17 +227,56 @@ export const POST: RequestHandler = async ({ request }) => {
 			// Not executable
 		}
 
-		// Check for spaces in path (warning)
+		// Parse script content for shebang and type detection
+		const scriptInfo = parseScriptContent(resolvedPath);
+		const extensionType = detectTypeFromExtension(resolvedPath);
+
+		// Build warnings array
+		const warnings: string[] = [];
+
+		// Check for spaces in path
 		const hasSpaces = commandPath.includes(' ') && !commandPath.startsWith('"') && !commandPath.startsWith("'");
-		const warning = hasSpaces ? 'Path contains spaces - consider quoting the path' : undefined;
+		if (hasSpaces) {
+			warnings.push('Path contains spaces - consider quoting the path');
+		}
+
+		// Check executable status
+		if (!isExecutable) {
+			warnings.push('File exists but is not executable');
+		}
+
+		// Check for shebang
+		if (!scriptInfo.hasShebang) {
+			warnings.push('Script is missing a shebang line (e.g., #!/bin/bash)');
+		}
+
+		// Check for extension/shebang mismatch
+		if (scriptInfo.hasShebang && extensionType && scriptInfo.scriptType) {
+			if (scriptInfo.scriptType !== extensionType && scriptInfo.scriptType !== 'unknown') {
+				warnings.push(
+					`Extension suggests ${extensionType} but shebang indicates ${scriptInfo.scriptType}`
+				);
+			}
+		}
+
+		// Generate actionable fixes
+		const fixes = generateFixes(resolvedPath, isExecutable, scriptInfo.hasShebang, extensionType);
+
+		// Determine if this is valid (exists and executable with shebang)
+		const isFullyValid = isExecutable && scriptInfo.hasShebang;
 
 		return json({
-			valid: true,
+			valid: true, // File exists and can be used (may have warnings)
 			exists: true,
 			isExecutable,
+			hasShebang: scriptInfo.hasShebang,
+			shebang: scriptInfo.shebang,
+			scriptType: scriptInfo.scriptType || extensionType,
 			resolvedPath,
-			warning: isExecutable ? warning : 'File exists but is not executable (chmod +x)',
-			isWarning: !isExecutable || hasSpaces
+			warnings: warnings.length > 0 ? warnings : undefined,
+			fixes: fixes.length > 0 ? fixes : undefined,
+			isWarning: warnings.length > 0,
+			isFullyValid
 		});
 	} catch (error) {
 		console.error('[hooks/validate API] Error:', error);

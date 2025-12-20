@@ -19,6 +19,7 @@
 	} from '$lib/types/config';
 	import { validateHooksConfig, type ValidationResult } from '$lib/utils/editorValidation';
 	import HookTester from './HookTester.svelte';
+	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 
 	// Validation result type for command paths
 	interface CommandValidation {
@@ -26,6 +27,12 @@
 		message: string;
 		suggestions?: string[];
 		isValidating?: boolean;
+		// Enhanced validation fields
+		warnings?: string[];
+		fixes?: { description: string; command: string }[];
+		hasShebang?: boolean;
+		scriptType?: string;
+		isFullyValid?: boolean;
 	}
 
 	interface Props {
@@ -352,21 +359,36 @@
 			const updatedValidations = new Map(commandValidations);
 
 			if (result.error) {
-				// API returned an error
+				// API returned an error (file not found, etc.)
 				updatedValidations.set(key, {
 					type: 'error',
 					message: result.error,
 					suggestions: result.suggestions
 				});
 			} else if (result.valid) {
-				// Path exists and is valid
-				if (result.warning || result.isWarning) {
+				// Path exists - check for warnings
+				if (result.warnings && result.warnings.length > 0) {
+					// Has warnings (not executable, missing shebang, etc.)
 					updatedValidations.set(key, {
 						type: 'warning',
-						message: result.warning || 'File exists but may have issues'
+						message: result.warnings[0], // Primary warning
+						warnings: result.warnings,
+						fixes: result.fixes,
+						hasShebang: result.hasShebang,
+						scriptType: result.scriptType,
+						isFullyValid: result.isFullyValid
+					});
+				} else if (result.isFullyValid) {
+					// Fully valid - clear validation (show success state)
+					updatedValidations.set(key, {
+						type: 'success',
+						message: 'Script is valid and executable',
+						hasShebang: result.hasShebang,
+						scriptType: result.scriptType,
+						isFullyValid: true
 					});
 				} else {
-					// All good, clear validation
+					// Valid but no specific warnings - clear
 					updatedValidations.delete(key);
 				}
 			} else {
@@ -494,14 +516,17 @@
 			if (success) {
 				originalHooks = JSON.parse(JSON.stringify(hooks));
 				saveSuccess = true;
+				successToast('Hooks saved successfully', 'Configuration updated in .claude/settings.json');
 				setTimeout(() => {
 					saveSuccess = false;
 				}, 2000);
 			} else {
 				saveError = 'Failed to save hooks';
+				errorToast('Failed to save hooks', 'An error occurred while saving the configuration');
 			}
 		} catch (err) {
 			saveError = err instanceof Error ? err.message : 'Failed to save hooks';
+			errorToast('Failed to save hooks', saveError);
 		} finally {
 			isSaving = false;
 		}
@@ -898,11 +923,15 @@
 																{/if}
 															</div>
 															{#if commandValidation}
-																<div class="field-feedback" class:is-error={commandValidation.type === 'error'} class:is-warning={commandValidation.type === 'warning'}>
+																<div class="field-feedback" class:is-error={commandValidation.type === 'error'} class:is-warning={commandValidation.type === 'warning'} class:is-success={commandValidation.type === 'success'}>
 																	<span class="feedback-icon">
 																		{#if commandValidation.type === 'error'}
 																			<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 																				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+																			</svg>
+																		{:else if commandValidation.type === 'success'}
+																			<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
 																			</svg>
 																		{:else}
 																			<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -911,7 +940,45 @@
 																		{/if}
 																	</span>
 																	<span class="feedback-message">{commandValidation.message}</span>
+																	{#if commandValidation.scriptType}
+																		<span class="script-type-badge">{commandValidation.scriptType}</span>
+																	{/if}
 																</div>
+																<!-- Show all warnings if multiple -->
+																{#if commandValidation.warnings && commandValidation.warnings.length > 1}
+																	<div class="warnings-list">
+																		{#each commandValidation.warnings.slice(1) as warning}
+																			<div class="warning-item">
+																				<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+																				</svg>
+																				<span>{warning}</span>
+																			</div>
+																		{/each}
+																	</div>
+																{/if}
+																<!-- Actionable fixes -->
+																{#if commandValidation.fixes && commandValidation.fixes.length > 0}
+																	<div class="fixes-list">
+																		<span class="fixes-label">Quick fixes:</span>
+																		{#each commandValidation.fixes as fix}
+																			<div class="fix-item">
+																				<span class="fix-description">{fix.description}</span>
+																				<button
+																					type="button"
+																					class="fix-copy-btn"
+																					onclick={() => navigator.clipboard.writeText(fix.command)}
+																					title="Copy command to clipboard"
+																				>
+																					<code class="fix-command">{fix.command}</code>
+																					<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+																					</svg>
+																				</button>
+																			</div>
+																		{/each}
+																	</div>
+																{/if}
 																{#if commandValidation.suggestions && commandValidation.suggestions.length > 0}
 																	<div class="path-suggestions">
 																		<span class="suggestions-label">Did you mean:</span>
@@ -1675,6 +1742,11 @@
 		color: oklch(0.75 0.12 85);
 	}
 
+	.field-feedback.is-success {
+		background: oklch(0.55 0.15 145 / 0.1);
+		color: oklch(0.7 0.15 145);
+	}
+
 	.feedback-icon {
 		flex-shrink: 0;
 		display: flex;
@@ -1683,6 +1755,106 @@
 
 	.feedback-message {
 		line-height: 1.4;
+	}
+
+	/* Script type badge */
+	.script-type-badge {
+		margin-left: auto;
+		padding: 0.1rem 0.4rem;
+		font-size: 0.65rem;
+		font-weight: 600;
+		font-family: ui-monospace, monospace;
+		background: oklch(0.25 0.08 200);
+		color: oklch(0.75 0.1 200);
+		border-radius: 3px;
+		text-transform: uppercase;
+	}
+
+	/* Warnings list for multiple warnings */
+	.warnings-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		margin-top: 0.25rem;
+		padding: 0.35rem 0.5rem;
+		background: oklch(0.7 0.15 85 / 0.05);
+		border-radius: 4px;
+		font-size: 0.7rem;
+	}
+
+	.warning-item {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.35rem;
+		color: oklch(0.7 0.12 85);
+	}
+
+	.warning-item svg {
+		flex-shrink: 0;
+		margin-top: 0.1rem;
+	}
+
+	/* Fixes list with copy buttons */
+	.fixes-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		margin-top: 0.35rem;
+		padding: 0.5rem;
+		background: oklch(0.18 0.03 200);
+		border: 1px solid oklch(0.28 0.06 200);
+		border-radius: 4px;
+		font-size: 0.7rem;
+	}
+
+	.fixes-label {
+		font-weight: 600;
+		color: oklch(0.65 0.1 200);
+		margin-bottom: 0.15rem;
+	}
+
+	.fix-item {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+
+	.fix-description {
+		color: oklch(0.6 0.02 250);
+	}
+
+	.fix-copy-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.3rem 0.5rem;
+		background: oklch(0.12 0.02 250);
+		border: 1px solid oklch(0.25 0.02 250);
+		border-radius: 4px;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.fix-copy-btn:hover {
+		background: oklch(0.15 0.02 250);
+		border-color: oklch(0.35 0.08 200);
+	}
+
+	.fix-command {
+		flex: 1;
+		font-family: ui-monospace, monospace;
+		font-size: 0.7rem;
+		color: oklch(0.75 0.08 200);
+		word-break: break-all;
+	}
+
+	.fix-copy-btn svg {
+		flex-shrink: 0;
+		color: oklch(0.5 0.02 250);
+	}
+
+	.fix-copy-btn:hover svg {
+		color: oklch(0.7 0.1 200);
 	}
 
 	/* Path suggestions */

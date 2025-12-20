@@ -29,6 +29,7 @@
 		findCommandWithShortcut,
 		getDisplayShortcut
 	} from '$lib/stores/keyboardShortcuts.svelte';
+	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 
 	// Configure marked for safe rendering
 	marked.setOptions({
@@ -524,6 +525,7 @@ Command content here...
 				}
 
 				success = 'Command created successfully';
+				successToast(`Command "${namespace}:${name.trim()}" created`, 'Added to configuration');
 			} else {
 				// Update existing command
 				const res = await fetch(`/api/commands/${command!.namespace}/${command!.name}`, {
@@ -538,6 +540,7 @@ Command content here...
 				}
 
 				success = 'Command saved successfully';
+				successToast(`Command "${command!.invocation}" updated`, 'Changes saved');
 			}
 
 			// Build the invocation for shortcut storage
@@ -566,7 +569,9 @@ Command content here...
 				handleClose();
 			}, 1000);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to save';
+			const errorMessage = e instanceof Error ? e.message : 'Failed to save';
+			error = errorMessage;
+			errorToast('Failed to save command', errorMessage);
 		} finally {
 			saving = false;
 		}

@@ -28,6 +28,7 @@
 		deleteCommand
 	} from '$lib/stores/configStore.svelte';
 	import CommandCard from './CommandCard.svelte';
+	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 
 	interface Props {
 		/** Called when edit button is clicked for a command */
@@ -219,9 +220,10 @@
 	// Handle delete command
 	async function handleDeleteCommand(command: SlashCommand) {
 		const success = await deleteCommand(command);
-		if (!success) {
-			// Could show error toast here
-			console.error('Failed to delete command:', command.path);
+		if (success) {
+			successToast(`Command "${command.invocation}" deleted`, 'Removed from configuration');
+		} else {
+			errorToast('Failed to delete command', `Could not delete ${command.invocation}`);
 		}
 	}
 

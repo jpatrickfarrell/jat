@@ -64,6 +64,17 @@ if [[ -z "$TMUX_SESSION" ]]; then
     exit 0
 fi
 
+# Detect if the prompt contains an image (by checking for common image paths/patterns)
+# Image paths typically match: /path/to/file.(png|jpg|jpeg|gif|webp|svg)
+# Also check for task-images directory and upload patterns
+HAS_IMAGE="false"
+if [[ "$USER_PROMPT" =~ \.(png|jpg|jpeg|gif|webp|svg|PNG|JPG|JPEG|GIF|WEBP|SVG)($|[[:space:]]) ]] || \
+   [[ "$USER_PROMPT" =~ task-images/ ]] || \
+   [[ "$USER_PROMPT" =~ upload-.*\.(png|jpg|jpeg|gif|webp|svg) ]] || \
+   [[ "$USER_PROMPT" =~ /tmp/.*\.(png|jpg|jpeg|gif|webp|svg) ]]; then
+    HAS_IMAGE="true"
+fi
+
 # Truncate long prompts for timeline display (keep first 500 chars)
 PROMPT_PREVIEW="${USER_PROMPT:0:500}"
 if [[ ${#USER_PROMPT} -gt 500 ]]; then
@@ -84,6 +95,7 @@ EVENT_JSON=$(jq -c -n \
     --arg tmux "$TMUX_SESSION" \
     --arg task "$TASK_ID" \
     --arg prompt "$PROMPT_PREVIEW" \
+    --argjson hasImage "$HAS_IMAGE" \
     '{
         type: $type,
         session_id: $session,
@@ -91,7 +103,8 @@ EVENT_JSON=$(jq -c -n \
         task_id: $task,
         timestamp: (now | todate),
         data: {
-            prompt: $prompt
+            prompt: $prompt,
+            hasImage: $hasImage
         }
     }' 2>/dev/null || echo "{}")
 

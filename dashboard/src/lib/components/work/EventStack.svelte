@@ -645,8 +645,32 @@
 		const truncate = (s: string) => s.length > maxLen ? s.slice(0, maxLen) + '…' : s;
 
 		// For user_input events, show truncated prompt preview
-		if (event.type === 'user_input' && event.data?.prompt) {
-			return truncate(event.data.prompt as string);
+		// Include image indicator if hasImage flag is set
+		if (event.type === 'user_input') {
+			const hasImage = event.data?.hasImage === true;
+			const prompt = event.data?.prompt as string || '';
+			const promptText = prompt.trim();
+
+			if (hasImage) {
+				// Check if there's meaningful text beyond just the image path
+				// Remove common image path patterns to see what text remains
+				const textWithoutPaths = promptText
+					.replace(/\/[^\s]+\.(png|jpg|jpeg|gif|webp|svg)/gi, '')
+					.replace(/\s+/g, ' ')
+					.trim();
+
+				if (textWithoutPaths.length > 0) {
+					return `📷 ${truncate(textWithoutPaths)}`;
+				} else {
+					return '📷 Image attached';
+				}
+			}
+
+			if (promptText) {
+				return truncate(promptText);
+			}
+
+			return 'User message';
 		}
 
 		// For working events, show approach (what agent plans to do)
@@ -1621,6 +1645,20 @@
 									{:else if event.type === 'user_input' && event.data}
 										<!-- User Input event - show user's message (click to copy) -->
 										<div class="space-y-2">
+											{#if event.data.hasImage}
+												<!-- Image indicator badge -->
+												<div class="flex items-center gap-2">
+													<span
+														class="px-2 py-0.5 rounded text-[10px] font-medium inline-flex items-center gap-1"
+														style="background: oklch(0.25 0.08 280); color: oklch(0.85 0.12 280); border: 1px solid oklch(0.35 0.10 280);"
+													>
+														<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+														</svg>
+														Image attached
+													</span>
+												</div>
+											{/if}
 											{#if event.data.prompt}
 												<!-- svelte-ignore a11y_click_events_have_key_events -->
 												<!-- svelte-ignore a11y_no_static_element_interactions -->

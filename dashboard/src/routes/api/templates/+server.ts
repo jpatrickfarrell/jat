@@ -16,7 +16,7 @@ import {
 	userTemplateExists,
 	getTemplatesDirectory,
 	templatesDirectoryExists
-} from '$lib/utils/userTemplates';
+} from '$lib/utils/userTemplates.server';
 
 /**
  * GET /api/templates

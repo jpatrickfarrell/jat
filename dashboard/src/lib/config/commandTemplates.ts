@@ -1447,70 +1447,48 @@ export interface ExtendedTemplate extends CommandTemplate {
 }
 
 /**
- * Get all templates including built-in and user templates.
+ * Get all built-in templates.
  *
- * This is an async function because user templates are loaded from disk.
- * Built-in templates appear first, followed by user templates sorted by name.
+ * NOTE: User templates are stored on disk and can only be accessed via API:
+ *   GET /api/templates - list all user templates
+ *   GET /api/templates/[id] - get single user template
  *
- * @param includeUserTemplates Whether to include user templates (default: true)
- * @returns Array of all templates (built-in first, then user)
+ * For browser components that need all templates (built-in + user),
+ * fetch from /api/templates and merge with getBuiltInTemplates().
+ *
+ * @returns Array of built-in templates marked with isUserTemplate: false
  *
  * @example
- * const templates = await getAllTemplates();
- * // templates[0..6] = built-in templates
- * // templates[7+] = user templates (if any)
+ * // For built-in only (synchronous, browser-safe)
+ * const builtIn = getBuiltInTemplates();
+ *
+ * // For all templates (browser component)
+ * const builtIn = getBuiltInTemplates();
+ * const userResponse = await fetch('/api/templates');
+ * const { templates: userTemplates } = await userResponse.json();
+ * const allTemplates = [...builtIn, ...userTemplates];
  */
-export async function getAllTemplates(
-	includeUserTemplates: boolean = true
-): Promise<ExtendedTemplate[]> {
-	// Start with built-in templates (marked as not user templates)
-	const builtIn: ExtendedTemplate[] = COMMAND_TEMPLATES.map((t) => ({
+export function getBuiltInTemplates(): ExtendedTemplate[] {
+	return COMMAND_TEMPLATES.map((t) => ({
 		...t,
 		isUserTemplate: false
 	}));
-
-	if (!includeUserTemplates) {
-		return builtIn;
-	}
-
-	// Dynamically import userTemplates to avoid circular dependencies
-	// and allow this module to work in both server and client contexts
-	try {
-		const { getAllUserTemplatesSync } = await import('$lib/utils/userTemplates');
-		const userTemplates = getAllUserTemplatesSync();
-
-		return [...builtIn, ...userTemplates];
-	} catch (error) {
-		// User templates not available (e.g., client-side)
-		console.warn('[commandTemplates] User templates not available:', error);
-		return builtIn;
-	}
 }
 
 /**
- * Get a template by ID from both built-in and user templates.
+ * Get a built-in template by ID.
+ *
+ * NOTE: For user templates, use the API:
+ *   GET /api/templates/[id]
  *
  * @param id Template ID
- * @returns Template if found, undefined otherwise
+ * @returns Template if found in built-in templates, undefined otherwise
  */
-export async function getTemplateById(id: string): Promise<ExtendedTemplate | undefined> {
-	// First check built-in templates
-	const builtIn = getTemplate(id);
-	if (builtIn) {
-		return { ...builtIn, isUserTemplate: false };
+export function getBuiltInTemplateById(id: string): ExtendedTemplate | undefined {
+	const template = getTemplate(id);
+	if (template) {
+		return { ...template, isUserTemplate: false };
 	}
-
-	// Then check user templates
-	try {
-		const { getUserTemplateSync } = await import('$lib/utils/userTemplates');
-		const userTemplate = getUserTemplateSync(id);
-		if (userTemplate) {
-			return userTemplate;
-		}
-	} catch {
-		// User templates not available
-	}
-
 	return undefined;
 }
 

@@ -14,7 +14,7 @@ import {
 	updateUserTemplate,
 	deleteUserTemplate,
 	isValidTemplateId
-} from '$lib/utils/userTemplates';
+} from '$lib/utils/userTemplates.server';
 
 /**
  * Validate template ID parameter

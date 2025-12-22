@@ -81,12 +81,16 @@ if [[ ${#USER_PROMPT} -gt 500 ]]; then
     PROMPT_PREVIEW="${PROMPT_PREVIEW}..."
 fi
 
-# Get current task ID if available (from agent state file)
+# REMOVED: Task ID lookup from signal file
+# Previously we read task_id from /tmp/jat-signal-tmux-{session}.json, but this caused
+# signal leaking when a user started a new task - the user_input event would inherit
+# the OLD task_id from the previous signal file.
+#
+# User input events should not be associated with a specific task since they represent
+# what the user typed, which may be switching to a new task entirely (e.g., /jat:start).
+# The task context is better represented by subsequent agent signals that actually
+# emit the new task ID.
 TASK_ID=""
-TMUX_SIGNAL_FILE="/tmp/jat-signal-tmux-${TMUX_SESSION}.json"
-if [[ -f "$TMUX_SIGNAL_FILE" ]]; then
-    TASK_ID=$(jq -r '.task_id // ""' "$TMUX_SIGNAL_FILE" 2>/dev/null || echo "")
-fi
 
 # Build event JSON
 EVENT_JSON=$(jq -c -n \

@@ -489,20 +489,22 @@
 
 	<!-- Import success/error messages -->
 	{#if importSuccess}
-		<div class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-t border-base-content/10 bg-success/20 text-success" transition:fade={{ duration: 150 }}>
-			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-[18px] h-[18px] flex-shrink-0">
+		<div role="alert" class="alert alert-success text-sm font-medium border-t border-base-content/10 py-2" transition:fade={{ duration: 150 }}>
+			<svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
 			</svg>
 			<span>Successfully imported {parsedRuleCount} rule{parsedRuleCount !== 1 ? 's' : ''}</span>
 		</div>
 	{/if}
 	{#if importError && !showImportModal}
-		<div class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-t border-base-content/10 bg-error/20 text-error" transition:fade={{ duration: 150 }}>
-			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-[18px] h-[18px] flex-shrink-0">
+		<div role="alert" class="alert alert-error text-sm font-medium border-t border-base-content/10 py-2" transition:fade={{ duration: 150 }}>
+			<svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
 			</svg>
 			<span>{importError}</span>
-			<button class="ml-auto px-1.5 py-0.5 bg-transparent border-none text-error/70 text-base cursor-pointer leading-none rounded transition-colors duration-150 hover:bg-error/20" onclick={() => importError = null}>×</button>
+			<div>
+				<button class="btn btn-sm btn-ghost" onclick={() => importError = null}>×</button>
+			</div>
 		</div>
 	{/if}
 </div>

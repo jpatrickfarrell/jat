@@ -716,49 +716,43 @@
 				>
 					<!-- Success message -->
 					{#if createResults.success.length > 0}
-						<div class="flex items-start gap-2 text-success-content">
-							<svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-							</svg>
-							<div class="flex flex-wrap items-center gap-1">
-								<span>Created {createResults.success.length} task{createResults.success.length > 1 ? 's' : ''}:</span>
-								{#each createResults.success.filter(r => r.taskId) as result}
-									{#if onTaskClick}
-										<button
-											type="button"
-											onclick={() => onTaskClick(result.taskId!)}
-											class="badge badge-sm bg-success-content text-success gap-1 font-mono hover:brightness-110 cursor-pointer transition-all"
-											title="Click to view task details"
-										>
-											{result.taskId}
-										</button>
-									{:else}
-										<span class="badge badge-sm bg-success-content text-success font-mono">{result.taskId}</span>
-									{/if}
-								{/each}
-							</div>
-						</div>
+						<svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+						</svg>
+						<span>Created {createResults.success.length} task{createResults.success.length > 1 ? 's' : ''}:</span>
+						{#each createResults.success.filter(r => r.taskId) as result}
+							{#if onTaskClick}
+								<button
+									type="button"
+									onclick={() => onTaskClick(result.taskId!)}
+									class="badge badge-sm badge-outline font-mono hover:badge-primary cursor-pointer transition-all"
+									title="Click to view task details"
+								>
+									{result.taskId}
+								</button>
+							{:else}
+								<span class="badge badge-sm badge-outline font-mono">{result.taskId}</span>
+							{/if}
+						{/each}
 					{/if}
 
 					<!-- Error message -->
 					{#if createResults.failed.length > 0}
-						<div class="flex items-start gap-2 mt-1 text-error">
-							<svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-							</svg>
-							<div>
-								<span>Failed to create {createResults.failed.length} task{createResults.failed.length > 1 ? 's' : ''}:</span>
-								<ul class="list-disc list-inside mt-1 opacity-80 text-[10px]">
-									{#each createResults.failed as failure}
-										<li>
-											<span class="font-medium">{failure.title}</span>
-											{#if failure.error}
-												<span class="opacity-60">- {failure.error}</span>
-											{/if}
-										</li>
-									{/each}
-								</ul>
-							</div>
+						<svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+						</svg>
+						<div>
+							<span>Failed to create {createResults.failed.length} task{createResults.failed.length > 1 ? 's' : ''}:</span>
+							<ul class="list-disc list-inside mt-1 opacity-80 text-[10px]">
+								{#each createResults.failed as failure}
+									<li>
+										<span class="font-medium">{failure.title}</span>
+										{#if failure.error}
+											<span class="opacity-60">- {failure.error}</span>
+										{/if}
+									</li>
+								{/each}
+							</ul>
 						</div>
 					{/if}
 
@@ -820,24 +814,24 @@
 
 	/* Task card states */
 	.task-card-default {
-		background: color-mix(in oklch, var(--color-base-300) 50%, transparent);
+		background: var(--color-base-300) / 0.5;
 		border-color: var(--color-base-content) / 0.2;
 	}
 
 	.task-card-created {
-		background: color-mix(in oklch, var(--color-success) 20%, transparent);
-		border-color: color-mix(in oklch, var(--color-success) 50%, transparent);
+		background: var(--color-success) / 0.2;
+		border-color: var(--color-success) / 0.5;
 		opacity: 0.75;
 	}
 
 	.task-card-human-selected {
-		background: color-mix(in oklch, var(--color-warning) 30%, transparent);
-		border-color: color-mix(in oklch, var(--color-warning) 50%, transparent);
+		background: var(--color-warning) / 0.3;
+		border-color: var(--color-warning) / 0.5;
 	}
 
 	.task-card-agent-selected {
-		background: color-mix(in oklch, var(--color-info) 30%, transparent);
-		border-color: color-mix(in oklch, var(--color-info) 50%, transparent);
+		background: var(--color-info) / 0.3;
+		border-color: var(--color-info) / 0.5;
 	}
 
 	/* Checkbox states */
@@ -847,7 +841,7 @@
 	}
 
 	.checkbox-created {
-		background: color-mix(in oklch, var(--color-success) 40%, transparent);
+		background: var(--color-success) / 0.4;
 		border-color: var(--color-success);
 	}
 
@@ -872,35 +866,35 @@
 
 	/* Priority classes */
 	.priority-p0 {
-		background: color-mix(in oklch, var(--color-error) 30%, transparent);
+		background: var(--color-error) / 0.3;
 		color: var(--color-error);
 		border: none;
 		min-width: 36px;
 	}
 
 	.priority-p1 {
-		background: color-mix(in oklch, var(--color-warning) 30%, transparent);
+		background: var(--color-warning) / 0.3;
 		color: var(--color-warning);
 		border: none;
 		min-width: 36px;
 	}
 
 	.priority-p2 {
-		background: color-mix(in oklch, var(--color-info) 30%, transparent);
+		background: var(--color-info) / 0.3;
 		color: var(--color-info);
 		border: none;
 		min-width: 36px;
 	}
 
 	.priority-p3 {
-		background: color-mix(in oklch, var(--color-base-content) 20%, transparent);
+		background: var(--color-base-content) / 0.2;
 		color: var(--color-base-content) / 0.7;
 		border: none;
 		min-width: 36px;
 	}
 
 	.priority-p4 {
-		background: color-mix(in oklch, var(--color-base-content) 15%, transparent);
+		background: var(--color-base-content) / 0.15;
 		color: var(--color-base-content) / 0.5;
 		border: none;
 		min-width: 36px;

@@ -599,6 +599,8 @@
 	background-clip: text;
 	-webkit-text-fill-color: transparent;
 	animation: shimmer 2s ease-in-out infinite;
+	/* Remove text-shadow when shimmer is active - shadow on transparent text creates blur-only effect */
+	text-shadow: none !important;
 }
 
 /* Shimmer for "generating" state - uses agent's accent color */
@@ -616,6 +618,8 @@
 	background-clip: text;
 	-webkit-text-fill-color: transparent;
 	animation: shimmer 1.8s ease-in-out infinite;
+	/* Remove text-shadow when shimmer is active - shadow on transparent text creates blur-only effect */
+	text-shadow: none !important;
 }
 
 /* Slower shimmer for "thinking" state */
@@ -633,6 +637,8 @@
 	background-clip: text;
 	-webkit-text-fill-color: transparent;
 	animation: shimmer 3s ease-in-out infinite;
+	/* Remove text-shadow when shimmer is active - shadow on transparent text creates blur-only effect */
+	text-shadow: none !important;
 }
 
 @keyframes shimmer {

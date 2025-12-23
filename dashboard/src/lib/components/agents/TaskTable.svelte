@@ -597,7 +597,7 @@
 	// Check if an agent's session is actively generating output (for shimmer effect)
 	// Uses the centralized workSessionsState activity polling
 	// Shimmer shows for both 'generating' (output growing) and 'thinking' (agent processing)
-	// Falls back to showing shimmer for any active task when activity state is unknown
+	// Returns true for any assigned agent when activity state is unknown (better UX than no shimmer)
 	function isAgentGenerating(agentName: string | undefined | null): boolean {
 		if (!agentName) return false;
 		const sessionName = `jat-${agentName}`;
@@ -608,9 +608,10 @@
 			return session._activityState === 'generating' || session._activityState === 'thinking';
 		}
 
-		// Fallback: if agent is working (has an active session), show shimmer
-		// This ensures shimmer appears for active tasks even without activity monitoring
-		return isAgentWorking(agentName);
+		// Fallback: return true for any assigned agent
+		// Since taskIsActive already checks task.status === 'in_progress' && task.assignee,
+		// if we get here with a valid agentName, we should show shimmer
+		return true;
 	}
 
 	// Initialize filters from URL params (default to open + in_progress tasks)

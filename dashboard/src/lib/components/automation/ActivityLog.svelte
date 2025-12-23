@@ -117,21 +117,21 @@
 	}
 </script>
 
-<div class="activity-log {className}">
+<div class="flex flex-col rounded-lg overflow-hidden bg-base-200 border border-base-300 {className}">
 	<!-- Header with filters and clear button -->
-	<header class="log-header">
-		<div class="header-title">
-			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="header-icon">
+	<header class="flex items-center justify-between gap-4 px-4 py-3 bg-base-300 border-b border-base-300">
+		<div class="flex items-center gap-2 text-sm font-semibold text-base-content font-mono">
+			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-[18px] h-[18px] text-info">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" />
 			</svg>
 			<span>Activity Log</span>
-			<span class="entry-count">{filteredEntries.length} / {entries.length}</span>
+			<span class="text-[0.7rem] font-normal text-base-content/50 bg-base-100 px-2 py-0.5 rounded-full">{filteredEntries.length} / {entries.length}</span>
 		</div>
 
-		<div class="header-controls">
+		<div class="flex items-center gap-2">
 			<!-- Session filter -->
 			<select
-				class="filter-select"
+				class="text-xs py-1.5 px-2.5 font-mono min-w-[110px] cursor-pointer bg-base-100 border border-base-content/20 rounded-md text-base-content hover:bg-base-200 hover:border-base-content/30 focus:outline-none focus:border-info"
 				bind:value={filterSession}
 				aria-label="Filter by session"
 			>
@@ -143,7 +143,7 @@
 
 			<!-- Rule filter -->
 			<select
-				class="filter-select"
+				class="text-xs py-1.5 px-2.5 font-mono min-w-[110px] cursor-pointer bg-base-100 border border-base-content/20 rounded-md text-base-content hover:bg-base-200 hover:border-base-content/30 focus:outline-none focus:border-info"
 				bind:value={filterRule}
 				aria-label="Filter by rule"
 			>
@@ -155,7 +155,7 @@
 
 			{#if filterSession || filterRule}
 				<button
-					class="clear-filters-btn"
+					class="flex items-center gap-1.5 py-1.5 px-2.5 text-xs font-mono cursor-pointer bg-base-100 border border-base-content/20 rounded-md text-base-content/70 transition-all duration-150 hover:bg-base-200 hover:border-base-content/30 hover:text-base-content"
 					onclick={clearFilters}
 					aria-label="Clear filters"
 				>
@@ -166,7 +166,7 @@
 			{/if}
 
 			<button
-				class="clear-btn"
+				class="flex items-center gap-1.5 py-1.5 px-2.5 text-xs font-mono cursor-pointer bg-base-100 border border-base-content/20 rounded-md text-base-content/70 transition-all duration-150 hover:bg-error/20 hover:border-error/40 hover:text-base-content disabled:opacity-40 disabled:cursor-not-allowed"
 				onclick={handleClear}
 				disabled={entries.length === 0}
 				aria-label="Clear all entries"
@@ -180,64 +180,63 @@
 	</header>
 
 	<!-- Log table -->
-	<div class="log-table-wrapper">
+	<div class="flex-1 overflow-auto min-h-[200px] max-h-[400px]">
 		{#if filteredEntries.length === 0}
-			<div class="empty-state" transition:fade={{ duration: 150 }}>
+			<div class="flex flex-col items-center justify-center py-12 px-4 gap-2 text-base-content/50" transition:fade={{ duration: 150 }}>
 				{#if entries.length === 0}
-					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="empty-icon">
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10 text-base-content/30 mb-2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
 					</svg>
-					<p class="empty-title">No activity yet</p>
-					<p class="empty-hint">Rule triggers will appear here</p>
+					<p class="text-sm font-medium text-base-content/50 m-0">No activity yet</p>
+					<p class="text-xs text-base-content/40 m-0">Rule triggers will appear here</p>
 				{:else}
-					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="empty-icon">
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10 text-base-content/30 mb-2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
 					</svg>
-					<p class="empty-title">No matching entries</p>
-					<p class="empty-hint">Try adjusting your filters</p>
+					<p class="text-sm font-medium text-base-content/50 m-0">No matching entries</p>
+					<p class="text-xs text-base-content/40 m-0">Try adjusting your filters</p>
 				{/if}
 			</div>
 		{:else}
-			<table class="log-table">
-				<thead>
+			<table class="w-full text-xs" style="border-collapse: collapse;">
+				<thead class="sticky top-0 z-[1] bg-base-300">
 					<tr>
-						<th class="col-time">Time</th>
-						<th class="col-session">Session</th>
-						<th class="col-rule">Rule</th>
-						<th class="col-pattern">Pattern</th>
-						<th class="col-action">Action</th>
-						<th class="col-result">Result</th>
+						<th class="w-[75px] py-2.5 px-3 text-left font-semibold text-base-content/50 uppercase text-[0.65rem] tracking-wide border-b border-base-content/20">Time</th>
+						<th class="w-[120px] py-2.5 px-3 text-left font-semibold text-base-content/50 uppercase text-[0.65rem] tracking-wide border-b border-base-content/20">Session</th>
+						<th class="w-[130px] py-2.5 px-3 text-left font-semibold text-base-content/50 uppercase text-[0.65rem] tracking-wide border-b border-base-content/20">Rule</th>
+						<th class="min-w-[150px] py-2.5 px-3 text-left font-semibold text-base-content/50 uppercase text-[0.65rem] tracking-wide border-b border-base-content/20">Pattern</th>
+						<th class="min-w-[100px] py-2.5 px-3 text-left font-semibold text-base-content/50 uppercase text-[0.65rem] tracking-wide border-b border-base-content/20">Action</th>
+						<th class="w-[80px] py-2.5 px-3 text-center font-semibold text-base-content/50 uppercase text-[0.65rem] tracking-wide border-b border-base-content/20">Result</th>
 					</tr>
 				</thead>
 				<tbody>
 					{#each filteredEntries as entry (entry.id)}
 						<tr
-							class="log-row"
-							class:success={entry.result === 'success'}
-							class:failure={entry.result === 'failure'}
+							class="transition-colors duration-100 hover:bg-base-300/50"
+							style={entry.result === 'success' ? 'box-shadow: inset 3px 0 0 var(--color-success)' : entry.result === 'failure' ? 'box-shadow: inset 3px 0 0 var(--color-error)' : ''}
 							transition:slide={{ duration: 150, axis: 'y' }}
 						>
-							<td class="col-time" title={formatTimestampFull(entry.timestamp)}>
+							<td class="w-[75px] py-2 px-3 text-base-content/75 border-b border-base-content/10 align-middle font-mono text-base-content/60" title={formatTimestampFull(entry.timestamp)}>
 								{formatTimestamp(entry.timestamp)}
 							</td>
-							<td class="col-session">
-								<span class="session-badge">{entry.sessionName}</span>
+							<td class="w-[120px] py-2 px-3 text-base-content/75 border-b border-base-content/10 align-middle">
+								<span class="inline-block py-0.5 px-2 rounded font-mono text-[0.7rem] bg-info/20 text-info max-w-full overflow-hidden text-ellipsis whitespace-nowrap">{entry.sessionName}</span>
 							</td>
-							<td class="col-rule">
-								<span class="rule-name">{entry.ruleName}</span>
+							<td class="w-[130px] py-2 px-3 text-base-content/75 border-b border-base-content/10 align-middle">
+								<span class="text-secondary font-medium">{entry.ruleName}</span>
 							</td>
-							<td class="col-pattern">
-								<code class="pattern-code" title={entry.matchedPattern}>
-									{entry.matchedPattern.length > 30 
-										? entry.matchedPattern.slice(0, 30) + '...' 
+							<td class="min-w-[150px] py-2 px-3 text-base-content/75 border-b border-base-content/10 align-middle">
+								<code class="inline-block py-0.5 px-1.5 rounded font-mono text-[0.65rem] bg-base-300 border border-base-content/15 text-warning max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap" title={entry.matchedPattern}>
+									{entry.matchedPattern.length > 30
+										? entry.matchedPattern.slice(0, 30) + '...'
 										: entry.matchedPattern}
 								</code>
 							</td>
-							<td class="col-action">
-								<span class="action-text">{entry.actionTaken}</span>
+							<td class="min-w-[100px] py-2 px-3 text-base-content/75 border-b border-base-content/10 align-middle">
+								<span class="text-base-content/70">{entry.actionTaken}</span>
 							</td>
-							<td class="col-result">
-								<span class="result-badge {getResultBadgeClass(entry.result)}">
+							<td class="w-[80px] py-2 px-3 text-base-content/75 border-b border-base-content/10 align-middle text-center">
+								<span class="inline-block py-0.5 px-2 rounded-full text-[0.65rem] font-semibold uppercase tracking-wide {entry.result === 'success' ? 'bg-success/20 text-success' : entry.result === 'failure' ? 'bg-error/20 text-error' : entry.result === 'pending' ? 'bg-warning/20 text-warning' : 'bg-base-300 text-base-content/60'}">
 									{entry.result}
 								</span>
 							</td>
@@ -250,289 +249,5 @@
 </div>
 
 <style>
-	.activity-log {
-		display: flex;
-		flex-direction: column;
-		background: oklch(0.16 0.02 250);
-		border: 1px solid oklch(0.28 0.02 250);
-		border-radius: 10px;
-		overflow: hidden;
-	}
-
-	.log-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		padding: 0.75rem 1rem;
-		background: oklch(0.14 0.02 250);
-		border-bottom: 1px solid oklch(0.25 0.02 250);
-	}
-
-	.header-title {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.85rem;
-		font-weight: 600;
-		color: oklch(0.85 0.02 250);
-		font-family: ui-monospace, monospace;
-	}
-
-	.header-icon {
-		width: 18px;
-		height: 18px;
-		color: oklch(0.65 0.10 200);
-	}
-
-	.entry-count {
-		font-size: 0.7rem;
-		font-weight: 400;
-		color: oklch(0.50 0.02 250);
-		background: oklch(0.22 0.02 250);
-		padding: 0.125rem 0.5rem;
-		border-radius: 10px;
-	}
-
-	.header-controls {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.filter-select {
-		font-size: 0.75rem;
-		padding: 0.375rem 0.625rem;
-		background: oklch(0.20 0.02 250);
-		border: 1px solid oklch(0.30 0.02 250);
-		border-radius: 6px;
-		color: oklch(0.80 0.02 250);
-		cursor: pointer;
-		min-width: 110px;
-		font-family: ui-monospace, monospace;
-	}
-
-	.filter-select:hover {
-		background: oklch(0.24 0.02 250);
-		border-color: oklch(0.35 0.02 250);
-	}
-
-	.filter-select:focus {
-		outline: none;
-		border-color: oklch(0.50 0.10 200);
-	}
-
-	.clear-filters-btn,
-	.clear-btn {
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
-		padding: 0.375rem 0.625rem;
-		font-size: 0.75rem;
-		background: oklch(0.20 0.02 250);
-		border: 1px solid oklch(0.30 0.02 250);
-		border-radius: 6px;
-		color: oklch(0.70 0.02 250);
-		cursor: pointer;
-		transition: all 0.15s ease;
-		font-family: ui-monospace, monospace;
-	}
-
-	.clear-filters-btn:hover,
-	.clear-btn:hover:not(:disabled) {
-		background: oklch(0.28 0.02 250);
-		border-color: oklch(0.40 0.02 250);
-		color: oklch(0.85 0.02 250);
-	}
-
-	.clear-btn:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
-	}
-
-	.clear-btn:hover:not(:disabled) {
-		background: oklch(0.30 0.08 25);
-		border-color: oklch(0.45 0.12 25);
-		color: oklch(0.85 0.02 250);
-	}
-
-	.log-table-wrapper {
-		flex: 1;
-		overflow: auto;
-		min-height: 200px;
-		max-height: 400px;
-	}
-
-	.log-table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.75rem;
-	}
-
-	.log-table thead {
-		position: sticky;
-		top: 0;
-		z-index: 1;
-		background: oklch(0.18 0.02 250);
-	}
-
-	.log-table th {
-		padding: 0.625rem 0.75rem;
-		text-align: left;
-		font-weight: 600;
-		color: oklch(0.55 0.02 250);
-		text-transform: uppercase;
-		font-size: 0.65rem;
-		letter-spacing: 0.05em;
-		border-bottom: 1px solid oklch(0.28 0.02 250);
-	}
-
-	.log-table td {
-		padding: 0.5rem 0.75rem;
-		color: oklch(0.75 0.02 250);
-		border-bottom: 1px solid oklch(0.22 0.02 250);
-		vertical-align: middle;
-	}
-
-	.log-row {
-		transition: background 0.1s ease;
-	}
-
-	.log-row:hover {
-		background: oklch(0.20 0.02 250);
-	}
-
-	.log-row.success td:first-child {
-		box-shadow: inset 3px 0 0 oklch(0.65 0.15 145);
-	}
-
-	.log-row.failure td:first-child {
-		box-shadow: inset 3px 0 0 oklch(0.65 0.18 25);
-	}
-
-	.col-time {
-		width: 75px;
-		font-family: ui-monospace, monospace;
-		color: oklch(0.60 0.02 250);
-	}
-
-	.col-session {
-		width: 120px;
-	}
-
-	.session-badge {
-		display: inline-block;
-		padding: 0.125rem 0.5rem;
-		background: oklch(0.25 0.06 200);
-		color: oklch(0.80 0.10 200);
-		border-radius: 4px;
-		font-family: ui-monospace, monospace;
-		font-size: 0.7rem;
-		max-width: 100%;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.col-rule {
-		width: 130px;
-	}
-
-	.rule-name {
-		color: oklch(0.75 0.08 280);
-		font-weight: 500;
-	}
-
-	.col-pattern {
-		min-width: 150px;
-	}
-
-	.pattern-code {
-		display: inline-block;
-		padding: 0.125rem 0.375rem;
-		background: oklch(0.20 0.02 250);
-		border: 1px solid oklch(0.28 0.02 250);
-		border-radius: 4px;
-		font-family: ui-monospace, monospace;
-		font-size: 0.65rem;
-		color: oklch(0.70 0.10 55);
-		max-width: 200px;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.col-action {
-		min-width: 100px;
-	}
-
-	.action-text {
-		color: oklch(0.70 0.02 250);
-	}
-
-	.col-result {
-		width: 80px;
-		text-align: center;
-	}
-
-	.result-badge {
-		display: inline-block;
-		padding: 0.125rem 0.5rem;
-		border-radius: 10px;
-		font-size: 0.65rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.03em;
-	}
-
-	.badge-success {
-		background: oklch(0.30 0.10 145);
-		color: oklch(0.80 0.15 145);
-	}
-
-	.badge-error {
-		background: oklch(0.30 0.10 25);
-		color: oklch(0.80 0.18 25);
-	}
-
-	.badge-warning {
-		background: oklch(0.30 0.10 85);
-		color: oklch(0.80 0.15 85);
-	}
-
-	.badge-neutral {
-		background: oklch(0.25 0.02 250);
-		color: oklch(0.65 0.02 250);
-	}
-
-	/* Empty state */
-	.empty-state {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		padding: 3rem 1rem;
-		gap: 0.5rem;
-		color: oklch(0.50 0.02 250);
-	}
-
-	.empty-icon {
-		width: 40px;
-		height: 40px;
-		color: oklch(0.35 0.02 250);
-		margin-bottom: 0.5rem;
-	}
-
-	.empty-title {
-		font-size: 0.85rem;
-		font-weight: 500;
-		color: oklch(0.55 0.02 250);
-		margin: 0;
-	}
-
-	.empty-hint {
-		font-size: 0.75rem;
-		color: oklch(0.45 0.02 250);
-		margin: 0;
-	}
+	/* All styling converted to inline Tailwind/DaisyUI classes for Tailwind v4 compatibility */
 </style>

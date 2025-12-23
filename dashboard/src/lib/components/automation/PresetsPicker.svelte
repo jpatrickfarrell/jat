@@ -130,17 +130,17 @@
 	}
 </script>
 
-<div class="presets-picker {className}" class:compact>
+<div class="flex flex-col rounded-[10px] overflow-hidden bg-base-200 border border-base-300 {className}">
 	<!-- Header -->
-	<header class="picker-header">
-		<div class="header-title">
+	<header class="flex items-center justify-between py-3 px-4 bg-base-300 border-b border-base-300">
+		<div class="flex items-center gap-2 text-sm font-semibold text-base-content font-mono">
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				fill="none"
 				viewBox="0 0 24 24"
 				stroke-width="1.5"
 				stroke="currentColor"
-				class="header-icon"
+				class="w-[18px] h-[18px] text-secondary"
 			>
 				<path
 					stroke-linecap="round"
@@ -149,56 +149,55 @@
 				/>
 			</svg>
 			<span>Preset Library</span>
-			<span class="preset-count">
+			<span class="text-[0.7rem] font-normal text-base-content/50 py-0.5 px-2 rounded-[10px] bg-base-100">
 				{installedPresets.size} / {AUTOMATION_PRESETS.length} installed
 			</span>
 		</div>
 	</header>
 
 	<!-- Categories -->
-	<div class="categories-container">
+	<div class="p-4 flex flex-col gap-6 max-h-[600px] overflow-y-auto">
 		{#each categories as category}
 			{@const meta = RULE_CATEGORY_META[category]}
 			{@const stats = getCategoryStats(category)}
 			{@const presets = presetsByCategory[category]}
 
 			{#if presets.length > 0}
-				<div class="category-section" transition:slide={{ duration: 150 }}>
+				<div class="flex flex-col gap-3" transition:slide={{ duration: 150 }}>
 					<!-- Category header -->
-					<div class="category-header">
-						<div class="category-info">
+					<div class="flex flex-col gap-1">
+						<div class="flex items-center gap-2">
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
 								fill="none"
 								viewBox="0 0 24 24"
 								stroke-width="1.5"
 								stroke="currentColor"
-								class="category-icon {meta.color}"
+								class="w-4 h-4 {meta.color}"
 							>
 								<path stroke-linecap="round" stroke-linejoin="round" d={meta.icon} />
 							</svg>
-							<span class="category-name">{meta.label}</span>
-							<span class="category-stats">
+							<span class="text-sm font-semibold text-base-content/80 font-mono">{meta.label}</span>
+							<span class="text-[0.65rem] text-base-content/50 py-0.5 px-1.5 rounded-lg font-mono bg-base-100">
 								{stats.installed}/{stats.total}
 							</span>
 						</div>
-						<p class="category-description">{meta.description}</p>
+						<p class="text-[0.7rem] text-base-content/50 m-0 pl-6">{meta.description}</p>
 					</div>
 
 					<!-- Preset cards -->
-					<div class="presets-grid">
+					<div class="grid gap-3" style="grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));">
 						{#each presets as preset (preset.id)}
 							{@const isInstalled = installedPresets.has(preset.id)}
 							<div
-								class="preset-card"
-								class:installed={isInstalled}
+								class="flex flex-col rounded-lg overflow-hidden transition-all duration-150 bg-base-100 border border-base-300 hover:border-base-content/30 hover:bg-base-100/80 {isInstalled ? 'border-success/40 !bg-success/5' : ''}"
 								transition:fly={{ y: 10, duration: 150 }}
 							>
-								<div class="preset-content">
-									<div class="preset-header">
-										<h4 class="preset-name">{preset.name}</h4>
+								<div class="flex-1 p-3 flex flex-col gap-2">
+									<div class="flex items-center justify-between gap-2">
+										<h4 class="text-sm font-semibold text-base-content m-0 font-mono">{preset.name}</h4>
 										{#if isInstalled}
-											<span class="installed-badge">
+											<span class="flex items-center gap-1 text-[0.6rem] font-medium py-0.5 px-1.5 rounded-md uppercase tracking-wide text-success bg-success/20">
 												<svg
 													xmlns="http://www.w3.org/2000/svg"
 													fill="none"
@@ -218,10 +217,10 @@
 										{/if}
 									</div>
 
-									<p class="preset-description">{preset.description}</p>
+									<p class="text-[0.7rem] text-base-content/60 m-0 leading-relaxed">{preset.description}</p>
 
-									<div class="preset-meta">
-										<span class="meta-item">
+									<div class="flex items-center gap-3 mt-auto pt-2">
+										<span class="flex items-center gap-1.5 text-[0.65rem] text-base-content/50 font-mono">
 											<svg
 												xmlns="http://www.w3.org/2000/svg"
 												fill="none"
@@ -240,7 +239,7 @@
 												? 's'
 												: ''}
 										</span>
-										<span class="meta-item">
+										<span class="flex items-center gap-1.5 text-[0.65rem] text-base-content/50 font-mono">
 											<svg
 												xmlns="http://www.w3.org/2000/svg"
 												fill="none"
@@ -262,8 +261,8 @@
 									</div>
 								</div>
 
-								<div class="preset-actions">
-									<button class="preview-btn" onclick={() => showPreview(preset)} title="Preview rules">
+								<div class="flex items-center gap-1 px-3 py-2 bg-base-200/50 border-t border-base-300">
+									<button class="flex items-center justify-center w-8 h-8 rounded-md bg-transparent border-none text-base-content/50 cursor-pointer transition-all duration-150 hover:bg-base-300 hover:text-base-content" onclick={() => showPreview(preset)} title="Preview rules">
 										<svg
 											xmlns="http://www.w3.org/2000/svg"
 											fill="none"
@@ -286,8 +285,7 @@
 									</button>
 
 									<button
-										class="install-btn"
-										class:uninstall={isInstalled}
+										class="flex items-center gap-1.5 py-1.5 px-3 rounded-md text-[0.7rem] font-mono font-medium cursor-pointer transition-all duration-150 ml-auto {isInstalled ? 'bg-error/20 border border-error/30 text-error hover:bg-error/30' : 'bg-success/20 border border-success/30 text-success hover:bg-success/30'}"
 										onclick={() => togglePreset(preset)}
 										title={isInstalled ? 'Uninstall' : 'Install'}
 									>
@@ -338,7 +336,8 @@
 <!-- Preview Modal -->
 {#if showPreviewModal && previewPreset}
 	<div
-		class="modal-overlay"
+		class="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+		style="background: oklch(0.25 0.02 260 / 0.85);"
 		onclick={closePreview}
 		onkeydown={(e) => e.key === 'Escape' && closePreview()}
 		role="dialog"
@@ -347,19 +346,20 @@
 		transition:fade={{ duration: 150 }}
 	>
 		<div
-			class="modal-content"
+			class="flex flex-col w-full max-w-[550px] rounded-xl overflow-hidden bg-base-200 border border-base-300"
+			style="max-height: calc(100vh - 2rem); box-shadow: 0 25px 50px -12px oklch(0 0 0 / 0.5);"
 			onclick={(e) => e.stopPropagation()}
 			transition:fly={{ y: 20, duration: 200 }}
 		>
 			<!-- Modal Header -->
-			<header class="modal-header">
-				<div class="modal-title-row">
-					<h3 id="preview-title" class="modal-title">{previewPreset.name}</h3>
-					<span class="modal-category-badge {RULE_CATEGORY_META[previewPreset.category].color}">
+			<header class="flex items-center justify-between px-5 py-4 bg-base-300 border-b border-base-300">
+				<div class="flex items-center gap-3">
+					<h3 id="preview-title" class="text-base font-semibold text-base-content m-0 font-mono">{previewPreset.name}</h3>
+					<span class="text-[0.65rem] font-medium py-0.5 px-2 rounded-md uppercase tracking-wide {RULE_CATEGORY_META[previewPreset.category].color} bg-base-100">
 						{RULE_CATEGORY_META[previewPreset.category].label}
 					</span>
 				</div>
-				<button class="modal-close" onclick={closePreview} aria-label="Close">
+				<button class="flex items-center justify-center w-8 h-8 rounded-md bg-transparent border-none text-base-content/50 cursor-pointer transition-all duration-150 hover:bg-base-100 hover:text-base-content/80" onclick={closePreview} aria-label="Close">
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						fill="none"
@@ -374,12 +374,12 @@
 			</header>
 
 			<!-- Modal Body -->
-			<div class="modal-body">
-				<p class="modal-description">{previewPreset.description}</p>
+			<div class="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
+				<p class="text-sm text-base-content/70 m-0 leading-relaxed">{previewPreset.description}</p>
 
 				<!-- Patterns Section -->
-				<section class="preview-section">
-					<h4 class="section-title">
+				<section class="flex flex-col gap-3">
+					<h4 class="flex items-center gap-2 text-xs font-semibold text-info uppercase tracking-wider font-mono m-0">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							fill="none"
@@ -396,15 +396,15 @@
 						</svg>
 						Patterns ({previewPreset.rule.patterns.length})
 					</h4>
-					<div class="patterns-list">
+					<div class="flex flex-col gap-2">
 						{#each previewPreset.rule.patterns as pattern, i}
-							<div class="pattern-item">
-								<span class="pattern-mode-badge">
+							<div class="flex items-center gap-2 flex-wrap py-2 px-3 rounded-lg bg-base-100 border border-base-300">
+								<span class="text-[0.6rem] font-medium py-0.5 px-1.5 rounded uppercase tracking-wide text-secondary bg-secondary/20">
 									{getPatternModeLabel(pattern.mode)}
 								</span>
-								<code class="pattern-code">{pattern.pattern}</code>
+								<code class="text-[0.7rem] font-mono text-warning break-all">{pattern.pattern}</code>
 								{#if pattern.caseSensitive}
-									<span class="case-badge">Case Sensitive</span>
+									<span class="text-[0.6rem] font-medium py-0.5 px-1.5 rounded uppercase tracking-wide text-info bg-info/20">Case Sensitive</span>
 								{/if}
 							</div>
 						{/each}
@@ -412,8 +412,8 @@
 				</section>
 
 				<!-- Actions Section -->
-				<section class="preview-section">
-					<h4 class="section-title">
+				<section class="flex flex-col gap-3">
+					<h4 class="flex items-center gap-2 text-xs font-semibold text-info uppercase tracking-wider font-mono m-0">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							fill="none"
@@ -430,13 +430,13 @@
 						</svg>
 						Actions ({previewPreset.rule.actions.length})
 					</h4>
-					<div class="actions-list">
+					<div class="flex flex-col gap-2">
 						{#each previewPreset.rule.actions as action, i}
-							<div class="action-item">
-								<span class="action-type-badge">{getActionTypeLabel(action.type)}</span>
-								<code class="action-payload">{action.payload}</code>
+							<div class="flex items-center gap-2 flex-wrap py-2 px-3 rounded-lg bg-base-100 border border-base-300">
+								<span class="text-[0.6rem] font-medium py-0.5 px-1.5 rounded uppercase tracking-wide text-accent bg-accent/20">{getActionTypeLabel(action.type)}</span>
+								<code class="text-[0.7rem] font-mono text-base-content/80 break-all">{action.payload}</code>
 								{#if action.delay}
-									<span class="delay-badge">{action.delay}ms delay</span>
+									<span class="text-[0.6rem] font-medium py-0.5 px-1.5 rounded uppercase tracking-wide text-warning bg-warning/20">{action.delay}ms delay</span>
 								{/if}
 							</div>
 						{/each}
@@ -444,8 +444,8 @@
 				</section>
 
 				<!-- Settings Section -->
-				<section class="preview-section">
-					<h4 class="section-title">
+				<section class="flex flex-col gap-3">
+					<h4 class="flex items-center gap-2 text-xs font-semibold text-info uppercase tracking-wider font-mono m-0">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							fill="none"
@@ -467,26 +467,26 @@
 						</svg>
 						Settings
 					</h4>
-					<div class="settings-grid">
-						<div class="setting-item">
-							<span class="setting-label">Cooldown</span>
-							<span class="setting-value">{previewPreset.rule.cooldownSeconds}s</span>
+					<div class="grid grid-cols-2 gap-2">
+						<div class="flex items-center justify-between py-2 px-3 rounded-lg bg-base-100 border border-base-300">
+							<span class="text-[0.65rem] text-base-content/50 font-mono">Cooldown</span>
+							<span class="text-xs font-medium text-base-content font-mono">{previewPreset.rule.cooldownSeconds}s</span>
 						</div>
-						<div class="setting-item">
-							<span class="setting-label">Max Triggers</span>
-							<span class="setting-value">
+						<div class="flex items-center justify-between py-2 px-3 rounded-lg bg-base-100 border border-base-300">
+							<span class="text-[0.65rem] text-base-content/50 font-mono">Max Triggers</span>
+							<span class="text-xs font-medium text-base-content font-mono">
 								{previewPreset.rule.maxTriggersPerSession === 0
 									? 'Unlimited'
 									: previewPreset.rule.maxTriggersPerSession}
 							</span>
 						</div>
-						<div class="setting-item">
-							<span class="setting-label">Priority</span>
-							<span class="setting-value">{previewPreset.rule.priority}</span>
+						<div class="flex items-center justify-between py-2 px-3 rounded-lg bg-base-100 border border-base-300">
+							<span class="text-[0.65rem] text-base-content/50 font-mono">Priority</span>
+							<span class="text-xs font-medium text-base-content font-mono">{previewPreset.rule.priority}</span>
 						</div>
-						<div class="setting-item">
-							<span class="setting-label">Default State</span>
-							<span class="setting-value {previewPreset.rule.enabled ? 'enabled' : 'disabled'}">
+						<div class="flex items-center justify-between py-2 px-3 rounded-lg bg-base-100 border border-base-300">
+							<span class="text-[0.65rem] text-base-content/50 font-mono">Default State</span>
+							<span class="text-xs font-medium font-mono {previewPreset.rule.enabled ? 'text-success' : 'text-error'}">
 								{previewPreset.rule.enabled ? 'Enabled' : 'Disabled'}
 							</span>
 						</div>
@@ -495,10 +495,10 @@
 			</div>
 
 			<!-- Modal Footer -->
-			<footer class="modal-footer">
-				<button class="cancel-btn" onclick={closePreview}> Close </button>
+			<footer class="flex justify-end gap-3 px-5 py-4 bg-base-300 border-t border-base-300">
+				<button class="py-2 px-5 text-sm font-mono font-medium rounded-md cursor-pointer transition-all duration-150 bg-transparent border border-base-content/30 text-base-content/70 hover:bg-base-100 hover:border-base-content/40" onclick={closePreview}> Close </button>
 				{#if installedPresets.has(previewPreset.id)}
-					<button class="uninstall-btn" onclick={() => { uninstallPreset(previewPreset); closePreview(); }}>
+					<button class="flex items-center gap-2 py-2 px-4 text-sm font-mono font-medium rounded-md cursor-pointer transition-all duration-150 bg-error/20 border border-error/30 text-error hover:bg-error/30" onclick={() => { uninstallPreset(previewPreset); closePreview(); }}>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							fill="none"
@@ -516,7 +516,7 @@
 						Remove Preset
 					</button>
 				{:else}
-					<button class="install-modal-btn" onclick={installFromPreview}>
+					<button class="flex items-center gap-2 py-2 px-4 text-sm font-mono font-medium rounded-md cursor-pointer transition-all duration-150 bg-success border border-success text-success-content hover:brightness-110" onclick={installFromPreview}>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							fill="none"
@@ -540,542 +540,5 @@
 {/if}
 
 <style>
-	.presets-picker {
-		display: flex;
-		flex-direction: column;
-		background: oklch(0.16 0.02 250);
-		border: 1px solid oklch(0.28 0.02 250);
-		border-radius: 10px;
-		overflow: hidden;
-	}
-
-	.picker-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 0.75rem 1rem;
-		background: oklch(0.14 0.02 250);
-		border-bottom: 1px solid oklch(0.25 0.02 250);
-	}
-
-	.header-title {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.85rem;
-		font-weight: 600;
-		color: oklch(0.85 0.02 250);
-		font-family: ui-monospace, monospace;
-	}
-
-	.header-icon {
-		width: 18px;
-		height: 18px;
-		color: oklch(0.65 0.10 280);
-	}
-
-	.preset-count {
-		font-size: 0.7rem;
-		font-weight: 400;
-		color: oklch(0.50 0.02 250);
-		background: oklch(0.22 0.02 250);
-		padding: 0.125rem 0.5rem;
-		border-radius: 10px;
-	}
-
-	.categories-container {
-		padding: 1rem;
-		display: flex;
-		flex-direction: column;
-		gap: 1.5rem;
-		max-height: 600px;
-		overflow-y: auto;
-	}
-
-	.category-section {
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-	}
-
-	.category-header {
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
-	}
-
-	.category-info {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.category-icon {
-		width: 16px;
-		height: 16px;
-	}
-
-	.category-name {
-		font-size: 0.8rem;
-		font-weight: 600;
-		color: oklch(0.80 0.02 250);
-		font-family: ui-monospace, monospace;
-	}
-
-	.category-stats {
-		font-size: 0.65rem;
-		color: oklch(0.50 0.02 250);
-		background: oklch(0.22 0.02 250);
-		padding: 0.125rem 0.375rem;
-		border-radius: 8px;
-		font-family: ui-monospace, monospace;
-	}
-
-	.category-description {
-		font-size: 0.7rem;
-		color: oklch(0.55 0.02 250);
-		margin: 0;
-		padding-left: 1.5rem;
-	}
-
-	.presets-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-		gap: 0.75rem;
-	}
-
-	.preset-card {
-		display: flex;
-		flex-direction: column;
-		background: oklch(0.20 0.02 250);
-		border: 1px solid oklch(0.28 0.02 250);
-		border-radius: 8px;
-		overflow: hidden;
-		transition: all 0.15s ease;
-	}
-
-	.preset-card:hover {
-		border-color: oklch(0.35 0.02 250);
-		background: oklch(0.22 0.02 250);
-	}
-
-	.preset-card.installed {
-		border-color: oklch(0.40 0.10 145);
-		background: oklch(0.20 0.04 145);
-	}
-
-	.preset-content {
-		flex: 1;
-		padding: 0.75rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-	}
-
-	.preset-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.5rem;
-	}
-
-	.preset-name {
-		font-size: 0.8rem;
-		font-weight: 600;
-		color: oklch(0.85 0.02 250);
-		margin: 0;
-		font-family: ui-monospace, monospace;
-	}
-
-	.installed-badge {
-		display: flex;
-		align-items: center;
-		gap: 0.25rem;
-		font-size: 0.6rem;
-		font-weight: 500;
-		color: oklch(0.75 0.15 145);
-		background: oklch(0.25 0.08 145);
-		padding: 0.125rem 0.375rem;
-		border-radius: 6px;
-		text-transform: uppercase;
-		letter-spacing: 0.03em;
-	}
-
-	.preset-description {
-		font-size: 0.7rem;
-		color: oklch(0.60 0.02 250);
-		margin: 0;
-		line-height: 1.4;
-	}
-
-	.preset-meta {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		margin-top: auto;
-		padding-top: 0.5rem;
-	}
-
-	.meta-item {
-		display: flex;
-		align-items: center;
-		gap: 0.25rem;
-		font-size: 0.65rem;
-		color: oklch(0.50 0.02 250);
-		font-family: ui-monospace, monospace;
-	}
-
-	.preset-actions {
-		display: flex;
-		align-items: center;
-		gap: 0.25rem;
-		padding: 0.5rem 0.75rem;
-		background: oklch(0.18 0.02 250);
-		border-top: 1px solid oklch(0.25 0.02 250);
-	}
-
-	.preview-btn,
-	.install-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.375rem;
-		padding: 0.375rem 0.625rem;
-		font-size: 0.7rem;
-		font-weight: 500;
-		border-radius: 6px;
-		cursor: pointer;
-		transition: all 0.15s ease;
-		font-family: ui-monospace, monospace;
-	}
-
-	.preview-btn {
-		background: oklch(0.24 0.02 250);
-		border: 1px solid oklch(0.32 0.02 250);
-		color: oklch(0.70 0.02 250);
-	}
-
-	.preview-btn:hover {
-		background: oklch(0.28 0.02 250);
-		border-color: oklch(0.38 0.02 250);
-		color: oklch(0.85 0.02 250);
-	}
-
-	.install-btn {
-		flex: 1;
-		background: oklch(0.35 0.10 200);
-		border: 1px solid oklch(0.45 0.12 200);
-		color: oklch(0.95 0.02 250);
-	}
-
-	.install-btn:hover {
-		background: oklch(0.40 0.12 200);
-		border-color: oklch(0.50 0.14 200);
-	}
-
-	.install-btn.uninstall {
-		background: oklch(0.30 0.08 25);
-		border-color: oklch(0.40 0.10 25);
-		color: oklch(0.90 0.02 250);
-	}
-
-	.install-btn.uninstall:hover {
-		background: oklch(0.35 0.10 25);
-		border-color: oklch(0.45 0.12 25);
-	}
-
-	/* Modal Styles */
-	.modal-overlay {
-		position: fixed;
-		inset: 0;
-		background: oklch(0.10 0.02 250 / 0.85);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 100;
-		padding: 1rem;
-	}
-
-	.modal-content {
-		background: oklch(0.18 0.02 250);
-		border: 1px solid oklch(0.30 0.02 250);
-		border-radius: 12px;
-		width: 100%;
-		max-width: 500px;
-		max-height: 90vh;
-		display: flex;
-		flex-direction: column;
-		box-shadow: 0 20px 50px oklch(0 0 0 / 0.4);
-	}
-
-	.modal-header {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		padding: 1rem 1.25rem;
-		border-bottom: 1px solid oklch(0.28 0.02 250);
-		gap: 1rem;
-	}
-
-	.modal-title-row {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		flex-wrap: wrap;
-	}
-
-	.modal-title {
-		font-size: 1rem;
-		font-weight: 600;
-		color: oklch(0.90 0.02 250);
-		margin: 0;
-		font-family: ui-monospace, monospace;
-	}
-
-	.modal-category-badge {
-		font-size: 0.65rem;
-		font-weight: 500;
-		padding: 0.125rem 0.5rem;
-		border-radius: 6px;
-		background: oklch(0.25 0.02 250);
-		text-transform: uppercase;
-		letter-spacing: 0.03em;
-	}
-
-	.modal-close {
-		padding: 0.25rem;
-		background: transparent;
-		border: none;
-		color: oklch(0.55 0.02 250);
-		cursor: pointer;
-		border-radius: 6px;
-		transition: all 0.15s ease;
-	}
-
-	.modal-close:hover {
-		background: oklch(0.25 0.02 250);
-		color: oklch(0.80 0.02 250);
-	}
-
-	.modal-body {
-		flex: 1;
-		overflow-y: auto;
-		padding: 1rem 1.25rem;
-		display: flex;
-		flex-direction: column;
-		gap: 1.25rem;
-	}
-
-	.modal-description {
-		font-size: 0.8rem;
-		color: oklch(0.65 0.02 250);
-		margin: 0;
-		line-height: 1.5;
-	}
-
-	.preview-section {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-	}
-
-	.section-title {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: oklch(0.70 0.02 250);
-		margin: 0;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-	}
-
-	.patterns-list,
-	.actions-list {
-		display: flex;
-		flex-direction: column;
-		gap: 0.375rem;
-	}
-
-	.pattern-item,
-	.action-item {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.5rem 0.625rem;
-		background: oklch(0.14 0.02 250);
-		border: 1px solid oklch(0.25 0.02 250);
-		border-radius: 6px;
-		flex-wrap: wrap;
-	}
-
-	.pattern-mode-badge,
-	.action-type-badge {
-		font-size: 0.6rem;
-		font-weight: 600;
-		padding: 0.125rem 0.375rem;
-		border-radius: 4px;
-		text-transform: uppercase;
-		letter-spacing: 0.03em;
-		background: oklch(0.30 0.08 200);
-		color: oklch(0.85 0.10 200);
-	}
-
-	.action-type-badge {
-		background: oklch(0.30 0.08 280);
-		color: oklch(0.85 0.10 280);
-	}
-
-	.pattern-code,
-	.action-payload {
-		flex: 1;
-		font-size: 0.7rem;
-		font-family: ui-monospace, monospace;
-		color: oklch(0.75 0.10 55);
-		word-break: break-all;
-	}
-
-	.case-badge,
-	.delay-badge {
-		font-size: 0.55rem;
-		font-weight: 500;
-		padding: 0.125rem 0.375rem;
-		border-radius: 4px;
-		background: oklch(0.25 0.02 250);
-		color: oklch(0.60 0.02 250);
-		text-transform: uppercase;
-		letter-spacing: 0.03em;
-	}
-
-	.settings-grid {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: 0.5rem;
-	}
-
-	.setting-item {
-		display: flex;
-		flex-direction: column;
-		gap: 0.125rem;
-		padding: 0.5rem;
-		background: oklch(0.14 0.02 250);
-		border: 1px solid oklch(0.25 0.02 250);
-		border-radius: 6px;
-	}
-
-	.setting-label {
-		font-size: 0.6rem;
-		font-weight: 500;
-		color: oklch(0.50 0.02 250);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-	}
-
-	.setting-value {
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: oklch(0.80 0.02 250);
-		font-family: ui-monospace, monospace;
-	}
-
-	.setting-value.enabled {
-		color: oklch(0.75 0.15 145);
-	}
-
-	.setting-value.disabled {
-		color: oklch(0.60 0.10 25);
-	}
-
-	.modal-footer {
-		display: flex;
-		align-items: center;
-		justify-content: flex-end;
-		gap: 0.5rem;
-		padding: 1rem 1.25rem;
-		border-top: 1px solid oklch(0.28 0.02 250);
-		background: oklch(0.15 0.02 250);
-	}
-
-	.cancel-btn,
-	.uninstall-btn,
-	.install-modal-btn {
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
-		padding: 0.5rem 1rem;
-		font-size: 0.75rem;
-		font-weight: 500;
-		border-radius: 6px;
-		cursor: pointer;
-		transition: all 0.15s ease;
-		font-family: ui-monospace, monospace;
-	}
-
-	.cancel-btn {
-		background: oklch(0.24 0.02 250);
-		border: 1px solid oklch(0.32 0.02 250);
-		color: oklch(0.75 0.02 250);
-	}
-
-	.cancel-btn:hover {
-		background: oklch(0.28 0.02 250);
-		border-color: oklch(0.38 0.02 250);
-	}
-
-	.uninstall-btn {
-		background: oklch(0.35 0.10 25);
-		border: 1px solid oklch(0.45 0.12 25);
-		color: oklch(0.95 0.02 250);
-	}
-
-	.uninstall-btn:hover {
-		background: oklch(0.40 0.12 25);
-		border-color: oklch(0.50 0.14 25);
-	}
-
-	.install-modal-btn {
-		background: oklch(0.40 0.12 145);
-		border: 1px solid oklch(0.50 0.14 145);
-		color: oklch(0.98 0.02 250);
-	}
-
-	.install-modal-btn:hover {
-		background: oklch(0.45 0.14 145);
-		border-color: oklch(0.55 0.16 145);
-	}
-
-	/* Compact mode */
-	.presets-picker.compact .categories-container {
-		max-height: 400px;
-	}
-
-	.presets-picker.compact .presets-grid {
-		grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-	}
-
-	.presets-picker.compact .preset-description {
-		display: none;
-	}
-
-	/* Category colors */
-	.text-success {
-		color: oklch(0.70 0.15 145);
-	}
-
-	.text-info {
-		color: oklch(0.70 0.15 200);
-	}
-
-	.text-warning {
-		color: oklch(0.75 0.15 85);
-	}
-
-	.text-secondary {
-		color: oklch(0.70 0.12 280);
-	}
-
-	.text-accent {
-		color: oklch(0.75 0.15 310);
-	}
+	/* All styling converted to inline Tailwind/DaisyUI classes for Tailwind v4 compatibility */
 </style>

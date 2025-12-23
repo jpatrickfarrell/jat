@@ -1456,24 +1456,15 @@
 
 		<!-- Drawer Panel (fixed height, header/footer sticky, content scrolls) - Industrial -->
 		<div
-			class="h-full w-full max-w-2xl flex flex-col shadow-2xl"
-			style="
-				background: linear-gradient(180deg, oklch(0.18 0.01 250) 0%, oklch(0.16 0.01 250) 100%);
-				border-left: 1px solid oklch(0.35 0.02 250);
-			"
+			class="h-full w-full max-w-2xl flex flex-col shadow-2xl bg-base-100 border-l border-base-300"
 		>
 			<!-- Header - Industrial -->
 			<div
-				class="flex items-center justify-between p-6 relative"
-				style="
-					background: linear-gradient(180deg, oklch(0.22 0.01 250) 0%, oklch(0.20 0.01 250) 100%);
-					border-bottom: 1px solid oklch(0.35 0.02 250);
-				"
+				class="flex items-center justify-between p-6 relative bg-base-200 border-b border-base-300"
 			>
 				<!-- Left accent bar -->
 				<div
-					class="absolute left-0 top-0 bottom-0 w-1"
-					style="background: linear-gradient(180deg, oklch(0.70 0.18 240) 0%, oklch(0.70 0.18 240 / 0.3) 100%);"
+					class="absolute left-0 top-0 bottom-0 w-1 bg-primary"
 				></div>
 				<div class="flex-1 min-w-0">
 					<!-- Task Title (Inline Editable, truncated with tooltip) -->
@@ -1721,8 +1712,7 @@
 
 			<!-- Content (scrollable area between sticky header and footer) - Industrial -->
 			<div
-				class="flex-1 overflow-y-auto p-6 flex flex-col min-h-0"
-				style="background: oklch(0.16 0.01 250);"
+				class="flex-1 overflow-y-auto p-6 flex flex-col min-h-0 bg-base-100"
 			>
 				{#if loading}
 					<!-- Loading state - Industrial skeleton -->
@@ -1755,13 +1745,12 @@
 					<div class="flex flex-col gap-6">
 						<!-- Labels (badges, click to edit) - Industrial -->
 						<div>
-							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Labels</h4>
+							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider text-base-content/60">Labels</h4>
 							{#if editingLabels}
 								<!-- Edit mode: text input - Industrial -->
 								<input
 									type="text"
-									class="input input-sm w-full text-sm font-mono"
-									style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.80 0.02 250);"
+									class="input input-sm w-full text-sm font-mono bg-base-200 border border-base-300 text-base-content"
 									value={task.labels ? task.labels.join(', ') : ''}
 									placeholder="label1, label2, label3..."
 									onblur={async (e) => {
@@ -1785,8 +1774,7 @@
 							{:else}
 								<!-- Display mode: badges - Industrial -->
 								<button
-									class="flex flex-wrap gap-2 items-center cursor-pointer rounded px-2 py-1 transition-colors w-full text-left industrial-hover"
-									style="background: oklch(0.18 0.01 250);"
+									class="flex flex-wrap gap-2 items-center cursor-pointer rounded px-2 py-1 transition-colors w-full text-left industrial-hover bg-base-200"
 									onclick={() => (editingLabels = true)}
 									type="button"
 								>
@@ -1803,7 +1791,7 @@
 
 						<!-- Description (Inline Editable) - Industrial -->
 						<div>
-							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Description</h4>
+							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider text-base-content/60">Description</h4>
 							<InlineEdit
 								value={task.description || ''}
 								onSave={async (newValue) => {
@@ -1823,37 +1811,34 @@
 							ondragover={handleDragOver}
 							ondragleave={handleDragLeave}
 							ondrop={handleFileDrop}
-							class="relative rounded transition-all duration-200"
-							style="
-								{isDraggingOver ? 'background: oklch(0.25 0.10 145 / 0.15); border: 2px dashed oklch(0.55 0.18 145);' : ''}
-							"
+							class="relative rounded transition-all duration-200 {isDraggingOver ? 'bg-success/15 border-2 border-dashed border-success' : ''}"
 						>
-							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider text-base-content/60">
 								Attachments
 								{#if attachments.length > 0}
-									<span class="ml-1 badge badge-xs" style="background: oklch(0.30 0.02 250); color: oklch(0.70 0.02 250);">{attachments.length}</span>
+									<span class="ml-1 badge badge-xs bg-base-300 text-base-content/70">{attachments.length}</span>
 								{/if}
 							</h4>
 
 							{#if isUploading}
-								<div class="flex items-center gap-2 p-3 rounded" style="background: oklch(0.18 0.01 250);">
+								<div class="flex items-center gap-2 p-3 rounded bg-base-200">
 									<span class="loading loading-spinner loading-sm"></span>
-									<span class="text-sm" style="color: oklch(0.55 0.02 250);">Uploading...</span>
+									<span class="text-sm text-base-content/60">Uploading...</span>
 								</div>
 							{:else if attachmentsLoading}
-								<div class="flex items-center gap-2 p-3 rounded" style="background: oklch(0.18 0.01 250);">
+								<div class="flex items-center gap-2 p-3 rounded bg-base-200">
 									<span class="loading loading-spinner loading-sm"></span>
-									<span class="text-sm" style="color: oklch(0.55 0.02 250);">Loading attachments...</span>
+									<span class="text-sm text-base-content/60">Loading attachments...</span>
 								</div>
 							{:else if isDraggingOver}
-								<div class="p-6 rounded text-center" style="background: oklch(0.20 0.08 145 / 0.2);">
-									<svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 mx-auto mb-2" style="color: oklch(0.70 0.18 145);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<div class="p-6 rounded text-center bg-success/20">
+									<svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 mx-auto mb-2 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 										<path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
 									</svg>
-									<span class="text-sm font-medium" style="color: oklch(0.70 0.18 145);">Drop files to attach</span>
+									<span class="text-sm font-medium text-success">Drop files to attach</span>
 								</div>
 							{:else if attachments.length > 0}
-								<div class="grid grid-cols-3 gap-3 p-3 rounded overflow-visible" style="background: oklch(0.18 0.01 250);">
+								<div class="grid grid-cols-3 gap-3 p-3 rounded overflow-visible bg-base-200">
 									{#each attachments as attachment (attachment.id)}
 										<div class="relative group">
 											<a
@@ -1865,14 +1850,12 @@
 												<img
 													src={`/api/work/image${attachment.path}`}
 													alt="Task attachment"
-													class="w-full h-20 object-cover rounded border cursor-pointer hover:border-primary transition-colors"
-													style="border-color: oklch(0.35 0.02 250);"
+													class="w-full h-20 object-cover rounded border border-base-300 cursor-pointer hover:border-primary transition-colors"
 												/>
 											</a>
 											<!-- Delete button -->
 											<button
-												class="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
-												style="background: oklch(0.45 0.20 25); color: white;"
+												class="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10 bg-error text-error-content"
 												onclick={(e) => {
 													e.preventDefault();
 													e.stopPropagation();
@@ -1885,8 +1868,7 @@
 												</svg>
 											</button>
 											<div
-												class="absolute bottom-0 left-0 right-0 px-1 py-0.5 text-[10px] truncate opacity-0 group-hover:opacity-100 transition-opacity rounded-b"
-												style="background: oklch(0.15 0.01 250 / 0.9); color: oklch(0.60 0.02 250);"
+												class="absolute bottom-0 left-0 right-0 px-1 py-0.5 text-[10px] truncate opacity-0 group-hover:opacity-100 transition-opacity rounded-b bg-base-100/90 text-base-content/60"
 												title={attachment.path}
 											>
 												{attachment.path.split('/').pop()}
@@ -1894,17 +1876,17 @@
 										</div>
 									{/each}
 									<!-- Add more hint when attachments exist -->
-									<div class="flex items-center justify-center h-20 rounded border-2 border-dashed opacity-50 hover:opacity-80 transition-opacity cursor-default" style="border-color: oklch(0.35 0.02 250);">
-										<span class="text-[10px] text-center px-1" style="color: oklch(0.45 0.02 250);">Drop to add more</span>
+									<div class="flex items-center justify-center h-20 rounded border-2 border-dashed border-base-300 opacity-50 hover:opacity-80 transition-opacity cursor-default">
+										<span class="text-[10px] text-center px-1 text-base-content/50">Drop to add more</span>
 									</div>
 								</div>
 							{:else}
-								<div class="p-4 rounded text-center border-2 border-dashed transition-colors" style="background: oklch(0.18 0.01 250); border-color: oklch(0.30 0.02 250);">
-									<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mx-auto mb-2" style="color: oklch(0.45 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<div class="p-4 rounded text-center border-2 border-dashed transition-colors bg-base-200 border-base-300">
+									<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mx-auto mb-2 text-base-content/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 										<path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
 									</svg>
-									<span class="text-sm block" style="color: oklch(0.45 0.02 250);">No attachments</span>
-									<p class="text-xs mt-1" style="color: oklch(0.40 0.02 250);">Drag and drop files here to attach</p>
+									<span class="text-sm block text-base-content/50">No attachments</span>
+									<p class="text-xs mt-1 text-base-content/40">Drag and drop files here to attach</p>
 								</div>
 							{/if}
 						</div>
@@ -1912,10 +1894,10 @@
 						<!-- Task Activity Timeline (Signals) -->
 						<div>
 							<div class="flex items-center justify-between mb-2">
-								<h4 class="text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+								<h4 class="text-xs font-semibold font-mono uppercase tracking-wider text-base-content/60">
 									Activity Timeline
 									{#if taskSignals.length > 0}
-										<span class="ml-1 badge badge-xs" style="background: oklch(0.30 0.02 250); color: oklch(0.70 0.02 250);">{taskSignals.length}</span>
+										<span class="ml-1 badge badge-xs bg-base-300 text-base-content/70">{taskSignals.length}</span>
 									{/if}
 								</h4>
 								{#if taskSignals.length > 0}
@@ -1931,9 +1913,9 @@
 								{/if}
 							</div>
 							{#if signalsLoading}
-								<div class="flex items-center gap-2 p-3 rounded" style="background: oklch(0.18 0.01 250);">
+								<div class="flex items-center gap-2 p-3 rounded bg-base-200">
 									<span class="loading loading-spinner loading-sm"></span>
-									<span class="text-sm" style="color: oklch(0.55 0.02 250);">Loading activity timeline...</span>
+									<span class="text-sm text-base-content/60">Loading activity timeline...</span>
 								</div>
 							{:else if taskSignals.length > 0}
 								<!-- Stats summary -->
@@ -1982,20 +1964,20 @@
 												action: 'Action Required'
 											}}
 											<div
-												class="p-3 rounded group transition-colors"
-												style="background: oklch(0.18 0.01 250); border-left: 3px solid {stateColors[signalState] || 'oklch(0.40 0.02 250)'};"
+												class="p-3 rounded group transition-colors bg-base-200"
+												style="border-left: 3px solid {stateColors[signalState] || 'var(--fallback-bc,oklch(var(--bc)/0.4))'};"
 											>
 												<div class="flex items-center justify-between mb-1">
 													<div class="flex items-center gap-2">
 														<!-- State badge -->
-														<span class="badge badge-xs" style="background: {stateColors[signalState] || 'oklch(0.30 0.02 250)'}; color: oklch(0.15 0.01 250);">
+														<span class="badge badge-xs text-base-100" style="background: {stateColors[signalState] || 'var(--fallback-bc,oklch(var(--bc)/0.3))'};">
 															{stateLabels[signalState] || signalState}
 														</span>
 														{#if signal.agent_name}
-															<span class="text-xs font-mono" style="color: oklch(0.55 0.02 250);">{signal.agent_name}</span>
+															<span class="text-xs font-mono text-base-content/60">{signal.agent_name}</span>
 														{/if}
 													</div>
-													<span class="text-xs" style="color: oklch(0.45 0.02 250);">
+													<span class="text-xs text-base-content/50">
 														{formatRelativeTimestamp(signal.timestamp)}
 													</span>
 												</div>
@@ -2003,17 +1985,17 @@
 												{#if signal.data}
 													{@const data = signal.data as Record<string, unknown>}
 													{#if data.taskTitle}
-														<div class="text-sm font-medium mt-1" style="color: oklch(0.70 0.02 250);">
+														<div class="text-sm font-medium mt-1 text-base-content/70">
 															{data.taskTitle}
 														</div>
 													{/if}
 													{#if data.approach}
-														<div class="text-xs mt-1" style="color: oklch(0.55 0.02 250);">
+														<div class="text-xs mt-1 text-base-content/60">
 															{data.approach}
 														</div>
 													{/if}
 													{#if Array.isArray(data.summary) && data.summary.length > 0}
-														<ul class="text-xs mt-2 space-y-1 list-disc list-inside" style="color: oklch(0.55 0.02 250);">
+														<ul class="text-xs mt-2 space-y-1 list-disc list-inside text-base-content/60">
 															{#each data.summary.slice(0, 3) as item}
 																<li>{item}</li>
 															{/each}
@@ -2023,23 +2005,23 @@
 														</ul>
 													{/if}
 													{#if data.question}
-														<div class="text-sm mt-1 p-2 rounded" style="background: oklch(0.22 0.01 250); color: oklch(0.70 0.15 310);">
+														<div class="text-sm mt-1 p-2 rounded bg-base-300 text-secondary">
 															{data.question}
 														</div>
 													{/if}
 													{#if data.currentStep}
-														<div class="text-xs mt-1" style="color: oklch(0.55 0.02 250);">
+														<div class="text-xs mt-1 text-base-content/60">
 															Step: {data.currentStep}
 														</div>
 													{/if}
 													{#if data.outcome}
-														<div class="text-xs mt-1" style="color: oklch(0.65 0.18 145);">
+														<div class="text-xs mt-1 text-success">
 															Outcome: {data.outcome}
 														</div>
 													{/if}
 												{/if}
 												{#if signal.git_sha}
-													<div class="text-xs mt-2 font-mono opacity-50" style="color: oklch(0.50 0.02 250);">
+													<div class="text-xs mt-2 font-mono text-base-content/50 opacity-50">
 														git: {signal.git_sha}
 													</div>
 												{/if}
@@ -2050,7 +2032,7 @@
 									<!-- Collapsed view - show just the latest signal -->
 									{@const latest = taskSignals[taskSignals.length - 1]}
 									{@const latestState = latest.state || latest.type}
-									<div class="p-2 rounded text-sm" style="background: oklch(0.18 0.01 250); color: oklch(0.60 0.02 250);">
+									<div class="p-2 rounded text-sm bg-base-200 text-base-content/60">
 										Latest: <span class="font-medium">{latestState}</span>
 										{#if latest.agent_name}
 											by {latest.agent_name}
@@ -2059,9 +2041,9 @@
 									</div>
 								{/if}
 							{:else}
-								<div class="p-3 rounded text-center" style="background: oklch(0.18 0.01 250);">
-									<span class="text-sm" style="color: oklch(0.45 0.02 250);">No activity recorded yet</span>
-									<p class="text-xs mt-1" style="color: oklch(0.40 0.02 250);">Signals are captured when agents work on this task</p>
+								<div class="p-3 rounded text-center bg-base-200">
+									<span class="text-sm text-base-content/50">No activity recorded yet</span>
+									<p class="text-xs mt-1 text-base-content/40">Signals are captured when agents work on this task</p>
 								</div>
 							{/if}
 						</div>
@@ -2069,10 +2051,10 @@
 						<!-- Session Logs - Industrial (Legacy fallback) -->
 						<div>
 							<div class="flex items-center justify-between mb-2">
-								<h4 class="text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+								<h4 class="text-xs font-semibold font-mono uppercase tracking-wider text-base-content/60">
 									Session Logs
 									{#if sessionLogs.length > 0}
-										<span class="ml-1 badge badge-xs" style="background: oklch(0.30 0.02 250); color: oklch(0.70 0.02 250);">{sessionLogs.length}</span>
+										<span class="ml-1 badge badge-xs bg-base-300 text-base-content/70">{sessionLogs.length}</span>
 									{/if}
 								</h4>
 								{#if sessionLogs.length > 0}
@@ -2088,50 +2070,48 @@
 								{/if}
 							</div>
 							{#if logsLoading}
-								<div class="flex items-center gap-2 p-3 rounded" style="background: oklch(0.18 0.01 250);">
+								<div class="flex items-center gap-2 p-3 rounded bg-base-200">
 									<span class="loading loading-spinner loading-sm"></span>
-									<span class="text-sm" style="color: oklch(0.55 0.02 250);">Loading session logs...</span>
+									<span class="text-sm text-base-content/60">Loading session logs...</span>
 								</div>
 							{:else if sessionLogs.length > 0}
 								<div class="space-y-2">
 									{#each logsExpanded ? sessionLogs : sessionLogs.slice(0, 3) as log (log.filename)}
 										<button
-											class="w-full text-left p-3 rounded group transition-colors industrial-hover"
-											style="background: oklch(0.18 0.01 250); border-left: 2px solid oklch(0.50 0.15 200);"
+											class="w-full text-left p-3 rounded group transition-colors industrial-hover bg-base-200 border-l-2 border-info"
 											onclick={() => fetchLogContent(log.filename)}
 										>
 											<div class="flex items-center justify-between mb-1">
 												<div class="flex items-center gap-2">
 													<!-- Terminal icon -->
-													<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" style="color: oklch(0.60 0.15 200);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+													<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 														<path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
 													</svg>
 													{#if log.agentName}
 														<span class="badge badge-xs badge-primary">{log.agentName}</span>
 													{/if}
-													<span class="text-xs font-mono" style="color: oklch(0.60 0.02 250);">{log.sizeFormatted}</span>
+													<span class="text-xs font-mono text-base-content/60">{log.sizeFormatted}</span>
 												</div>
-												<span class="text-xs" style="color: oklch(0.50 0.02 250);">
+												<span class="text-xs text-base-content/50">
 													{log.sessionTime ? formatRelativeTimestamp(log.sessionTime) : formatRelativeTimestamp(log.modifiedAt)}
 												</span>
 											</div>
-											<div class="text-xs font-mono truncate" style="color: oklch(0.55 0.02 250);" title={log.filename}>
+											<div class="text-xs font-mono truncate text-base-content/60" title={log.filename}>
 												{log.filename}
 											</div>
 											{#if log.preview}
-												<div class="text-xs mt-1 line-clamp-2" style="color: oklch(0.45 0.02 250);">
+												<div class="text-xs mt-1 line-clamp-2 text-base-content/50">
 													{log.preview}
 												</div>
 											{/if}
-											<div class="text-xs mt-1 opacity-0 group-hover:opacity-100 transition-opacity" style="color: oklch(0.60 0.15 200);">
+											<div class="text-xs mt-1 opacity-0 group-hover:opacity-100 transition-opacity text-info">
 												Click to view log
 											</div>
 										</button>
 									{/each}
 									{#if !logsExpanded && sessionLogs.length > 3}
 										<button
-											class="w-full text-center text-xs py-2 rounded transition-colors"
-											style="color: oklch(0.60 0.15 200);"
+											class="w-full text-center text-xs py-2 rounded transition-colors text-info hover:text-info/80"
 											onclick={() => logsExpanded = true}
 										>
 											Show {sessionLogs.length - 3} more logs...
@@ -2139,27 +2119,26 @@
 									{/if}
 								</div>
 							{:else}
-								<div class="p-3 rounded text-center" style="background: oklch(0.18 0.01 250);">
-									<span class="text-sm" style="color: oklch(0.45 0.02 250);">No session logs found</span>
-									<p class="text-xs mt-1" style="color: oklch(0.40 0.02 250);">Logs are saved when agents work on this task</p>
+								<div class="p-3 rounded text-center bg-base-200">
+									<span class="text-sm text-base-content/50">No session logs found</span>
+									<p class="text-xs mt-1 text-base-content/40">Logs are saved when agents work on this task</p>
 								</div>
 							{/if}
 						</div>
 
 						<!-- Log Content Viewer Modal -->
 						{#if selectedLog}
-							<div class="fixed inset-0 z-[100] flex items-center justify-center p-4" style="background: oklch(0 0 0 / 0.7);">
+							<div class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70">
 								<div
-									class="w-full max-w-4xl max-h-[80vh] flex flex-col rounded-lg shadow-2xl"
-									style="background: oklch(0.14 0.01 250); border: 1px solid oklch(0.35 0.02 250);"
+									class="w-full max-w-4xl max-h-[80vh] flex flex-col rounded-lg shadow-2xl bg-base-100 border border-base-300"
 								>
 									<!-- Log viewer header -->
-									<div class="flex items-center justify-between p-4" style="border-bottom: 1px solid oklch(0.35 0.02 250);">
+									<div class="flex items-center justify-between p-4 border-b border-base-300">
 										<div class="flex items-center gap-2">
-											<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" style="color: oklch(0.60 0.15 200);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+											<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 												<path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
 											</svg>
-											<span class="font-mono text-sm" style="color: oklch(0.75 0.02 250);">{selectedLog}</span>
+											<span class="font-mono text-sm text-base-content">{selectedLog}</span>
 										</div>
 										<button
 											class="btn btn-sm btn-circle btn-ghost"
@@ -2171,22 +2150,22 @@
 										</button>
 									</div>
 									<!-- Log content -->
-									<div class="flex-1 overflow-auto p-4" style="background: oklch(0.12 0.01 250);">
+									<div class="flex-1 overflow-auto p-4 bg-base-200">
 										{#if logContentLoading}
 											<div class="flex items-center justify-center py-12">
 												<span class="loading loading-spinner loading-lg"></span>
 											</div>
 										{:else if logContent}
-											<pre class="text-xs font-mono whitespace-pre-wrap break-words" style="color: oklch(0.75 0.02 250);">{@html renderedLogContent}</pre>
+											<pre class="text-xs font-mono whitespace-pre-wrap break-words text-base-content">{@html renderedLogContent}</pre>
 										{:else}
-											<div class="text-center py-12" style="color: oklch(0.50 0.02 250);">
+											<div class="text-center py-12 text-base-content/50">
 												Failed to load log content
 											</div>
 										{/if}
 									</div>
 									<!-- Log viewer footer -->
-									<div class="flex items-center justify-between p-4" style="border-top: 1px solid oklch(0.35 0.02 250);">
-										<span class="text-xs" style="color: oklch(0.50 0.02 250);">
+									<div class="flex items-center justify-between p-4 border-t border-base-300">
+										<span class="text-xs text-base-content/50">
 											{logContent ? `${logContent.split('\n').length} lines` : ''}
 										</span>
 										<button
@@ -2203,7 +2182,7 @@
 						<!-- Dependencies - Industrial -->
 						<div>
 							<div class="flex items-center justify-between mb-2">
-								<h4 class="text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Depends On</h4>
+								<h4 class="text-xs font-semibold font-mono uppercase tracking-wider text-base-content/60">Depends On</h4>
 								<!-- Add dependency button -->
 								<div class="relative">
 									<button
@@ -2224,8 +2203,7 @@
 									<!-- Dropdown menu - Industrial -->
 									{#if showDependencyDropdown}
 										<div
-											class="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-xl w-72 max-h-64 overflow-y-auto"
-											style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250);"
+											class="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-xl w-72 max-h-64 overflow-y-auto bg-base-200 border border-base-300"
 										>
 											{#if availableTasks.length === 0}
 												<div class="p-3 text-sm text-base-content/50 text-center">
@@ -2249,7 +2227,7 @@
 												</div>
 											{/if}
 											<!-- Close button - Industrial -->
-											<div class="p-2" style="border-top: 1px solid oklch(0.35 0.02 250);">
+											<div class="p-2 border-t border-base-300">
 												<button
 													class="btn btn-xs btn-ghost w-full"
 													onclick={() => showDependencyDropdown = false}
@@ -2266,8 +2244,7 @@
 								<div class="space-y-2">
 									{#each task.depends_on as dep}
 										<div
-											class="flex items-center gap-2 text-sm p-2 rounded group"
-											style="background: oklch(0.20 0.01 250); border-left: 2px solid oklch(0.70 0.18 240 / 0.3);"
+											class="flex items-center gap-2 text-sm p-2 rounded group bg-base-200 border-l-2 border-primary/30"
 										>
 											<span class="badge badge-sm {statusColors[dep.status] || 'badge-ghost'}">
 												{dep.status || 'unknown'}
@@ -2299,12 +2276,11 @@
 						<!-- Blocks (dependents) - Industrial -->
 						{#if task.blocked_by && task.blocked_by.length > 0}
 							<div>
-								<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Blocks</h4>
+								<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider text-base-content/60">Blocks</h4>
 								<div class="space-y-2">
 									{#each task.blocked_by as dep}
 										<div
-											class="flex items-center gap-2 text-sm p-2 rounded"
-											style="background: oklch(0.20 0.01 250); border-left: 2px solid oklch(0.70 0.18 240 / 0.3);"
+											class="flex items-center gap-2 text-sm p-2 rounded bg-base-200 border-l-2 border-primary/30"
 										>
 											<span class="badge badge-sm {statusColors[dep.status] || 'badge-ghost'}">
 												{dep.status || 'unknown'}
@@ -2321,13 +2297,13 @@
 						{/if}
 
 						<!-- Activity Timeline (Task Events on Left, Messages on Right) - Industrial -->
-						<div class="pt-4 flex-1 flex flex-col min-h-0" style="border-top: 1px solid oklch(0.35 0.02 250);">
+						<div class="pt-4 flex-1 flex flex-col min-h-0 border-t border-base-300">
 							<!-- Header with filter tabs -->
 							<div class="flex items-center justify-between mb-3">
-								<h4 class="text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Activity Timeline</h4>
+								<h4 class="text-xs font-semibold font-mono uppercase tracking-wider text-base-content/60">Activity Timeline</h4>
 
 								<!-- Filter tabs - Industrial -->
-								<div class="tabs tabs-boxed tabs-xs" style="background: oklch(0.20 0.01 250);">
+								<div class="tabs tabs-boxed tabs-xs bg-base-200">
 									<button
 										class="tab {timelineFilter === 'all' ? 'tab-active' : ''}"
 										onclick={() => timelineFilter = 'all'}
@@ -2518,7 +2494,7 @@
 
 						<!-- Dependency Graph Section - Industrial -->
 						{#if task && ((task.depends_on && task.depends_on.length > 0) || (task.blocked_by && task.blocked_by.length > 0))}
-							<div class="pt-4 mt-4" style="border-top: 1px solid oklch(0.35 0.02 250);">
+							<div class="pt-4 mt-4 border-t border-base-300">
 								<TaskDependencyGraph
 									{task}
 									onNodeClick={(nodeTaskId) => {
@@ -2535,10 +2511,9 @@
 				<!-- Keyboard Shortcuts Help Panel - Industrial -->
 				{#if showHelp}
 					<div
-						class="mt-6 p-4 rounded-lg"
-						style="background: oklch(0.20 0.01 250); border: 1px solid oklch(0.35 0.02 250);"
+						class="mt-6 p-4 rounded-lg bg-base-200 border border-base-300"
 					>
-						<h4 class="text-xs font-semibold mb-3 font-mono uppercase tracking-wider flex items-center gap-2" style="color: oklch(0.70 0.18 240);">
+						<h4 class="text-xs font-semibold mb-3 font-mono uppercase tracking-wider flex items-center gap-2 text-primary">
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
 								class="h-4 w-4"
@@ -2598,11 +2573,7 @@
 			<!-- Footer Actions - Industrial -->
 			{#if !loading && !error && task}
 				<div
-					class="p-6"
-					style="
-						background: linear-gradient(180deg, oklch(0.20 0.01 250) 0%, oklch(0.18 0.01 250) 100%);
-						border-top: 1px solid oklch(0.35 0.02 250);
-					"
+					class="p-6 bg-base-200 border-t border-base-300"
 				>
 					<div class="flex justify-between items-center">
 						<!-- Delete button (left) -->
@@ -2673,12 +2644,7 @@
 	{#if toastMessage}
 		<div class="toast toast-end toast-bottom z-[60]">
 			<div
-				class="alert font-mono text-sm"
-				style="
-					background: {toastMessage.type === 'success' ? 'oklch(0.35 0.15 150)' : 'oklch(0.35 0.15 25)'};
-					border: 1px solid {toastMessage.type === 'success' ? 'oklch(0.50 0.18 150)' : 'oklch(0.50 0.18 25)'};
-					color: oklch(0.95 0.02 250);
-				"
+				class="alert font-mono text-sm {toastMessage.type === 'success' ? 'alert-success' : 'alert-error'}"
 			>
 				<span>{toastMessage.text}</span>
 			</div>
@@ -2690,32 +2656,23 @@
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
-			class="fixed inset-0 z-[70] flex items-center justify-center p-4"
-			style="background: oklch(0 0 0 / 0.7); backdrop-filter: blur(4px);"
+			class="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
 			onclick={() => { showMessageModal = false; messageText = ''; }}
 		>
 			<div
-				class="w-full max-w-md rounded-lg shadow-2xl overflow-hidden"
-				style="
-					background: linear-gradient(180deg, oklch(0.20 0.01 250) 0%, oklch(0.16 0.01 250) 100%);
-					border: 1px solid oklch(0.35 0.02 250);
-				"
+				class="w-full max-w-md rounded-lg shadow-2xl overflow-hidden bg-base-100 border border-base-300"
 				onclick={(e) => e.stopPropagation()}
 			>
 				<!-- Modal Header -->
 				<div
-					class="flex items-center gap-3 px-5 py-4"
-					style="
-						background: linear-gradient(90deg, oklch(0.25 0.02 250) 0%, oklch(0.22 0.01 250) 100%);
-						border-bottom: 1px solid oklch(0.35 0.02 250);
-					"
+					class="flex items-center gap-3 px-5 py-4 bg-base-200 border-b border-base-300"
 				>
-					<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" style="color: oklch(0.70 0.18 140);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+					<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
 					</svg>
 					<div class="flex-1">
-						<h3 class="font-mono text-sm font-semibold" style="color: oklch(0.85 0.02 250);">Send Message</h3>
-						<p class="text-xs" style="color: oklch(0.55 0.02 250);">To: {task.assignee}</p>
+						<h3 class="font-mono text-sm font-semibold text-base-content">Send Message</h3>
+						<p class="text-xs text-base-content/60">To: {task.assignee}</p>
 					</div>
 					<button
 						class="btn btn-sm btn-circle btn-ghost"
@@ -2729,16 +2686,10 @@
 				<div class="p-5">
 					<div class="form-control">
 						<label class="label">
-							<span class="label-text font-mono text-xs uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Message</span>
+							<span class="label-text font-mono text-xs uppercase tracking-wider text-base-content/60">Message</span>
 						</label>
 						<textarea
-							class="textarea font-mono text-sm"
-							style="
-								background: oklch(0.18 0.01 250);
-								border: 1px solid oklch(0.35 0.02 250);
-								color: oklch(0.80 0.02 250);
-								min-height: 120px;
-							"
+							class="textarea font-mono text-sm bg-base-200 border border-base-300 text-base-content min-h-[120px]"
 							placeholder="Type your message..."
 							bind:value={messageText}
 							disabled={isSendingMessage}
@@ -2746,17 +2697,13 @@
 					</div>
 
 					<div class="flex items-center gap-2 mt-2 px-1">
-						<span class="text-[10px] font-mono" style="color: oklch(0.45 0.02 250);">Thread: {taskId}</span>
+						<span class="text-[10px] font-mono text-base-content/50">Thread: {taskId}</span>
 					</div>
 				</div>
 
 				<!-- Modal Footer -->
 				<div
-					class="flex items-center justify-end gap-2 px-5 py-4"
-					style="
-						background: oklch(0.18 0.01 250);
-						border-top: 1px solid oklch(0.30 0.02 250);
-					"
+					class="flex items-center justify-end gap-2 px-5 py-4 bg-base-200 border-t border-base-300"
 				>
 					<button
 						class="btn btn-sm btn-ghost"
@@ -2766,12 +2713,7 @@
 						Cancel
 					</button>
 					<button
-						class="btn btn-sm gap-2"
-						style="
-							background: linear-gradient(135deg, oklch(0.50 0.15 140) 0%, oklch(0.40 0.18 150) 100%);
-							border: 1px solid oklch(0.55 0.15 140);
-							color: oklch(0.95 0.02 250);
-						"
+						class="btn btn-sm btn-success gap-2"
 						onclick={handleSendMessage}
 						disabled={isSendingMessage || !messageText.trim()}
 					>
@@ -2795,32 +2737,23 @@
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
-			class="fixed inset-0 z-[70] flex items-center justify-center p-4"
-			style="background: oklch(0 0 0 / 0.7); backdrop-filter: blur(4px);"
+			class="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
 			onclick={() => { showReopenModal = false; reopenReason = ''; }}
 		>
 			<div
-				class="w-full max-w-md rounded-lg shadow-2xl overflow-hidden"
-				style="
-					background: linear-gradient(180deg, oklch(0.20 0.01 250) 0%, oklch(0.16 0.01 250) 100%);
-					border: 1px solid oklch(0.35 0.02 250);
-				"
+				class="w-full max-w-md rounded-lg shadow-2xl overflow-hidden bg-base-100 border border-base-300"
 				onclick={(e) => e.stopPropagation()}
 			>
 				<!-- Modal Header -->
 				<div
-					class="flex items-center gap-3 px-5 py-4"
-					style="
-						background: linear-gradient(90deg, oklch(0.35 0.15 55) 0%, oklch(0.25 0.10 55) 100%);
-						border-bottom: 1px solid oklch(0.40 0.12 55);
-					"
+					class="flex items-center gap-3 px-5 py-4 bg-warning/20 border-b border-warning/30"
 				>
-					<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" style="color: oklch(0.90 0.15 55);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+					<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
 					</svg>
 					<div class="flex-1">
-						<h3 class="font-mono text-sm font-semibold" style="color: oklch(0.95 0.02 250);">Reopen Task</h3>
-						<p class="text-xs" style="color: oklch(0.75 0.05 55);">{taskId}</p>
+						<h3 class="font-mono text-sm font-semibold text-base-content">Reopen Task</h3>
+						<p class="text-xs text-warning">{taskId}</p>
 					</div>
 					<button
 						class="btn btn-sm btn-circle btn-ghost"
@@ -2832,29 +2765,23 @@
 
 				<!-- Modal Body -->
 				<div class="p-5">
-					<p class="text-sm mb-4" style="color: oklch(0.70 0.02 250);">
+					<p class="text-sm mb-4 text-base-content/70">
 						This task was previously completed. What additional work is needed?
 					</p>
 
 					<div class="form-control">
 						<label class="label">
-							<span class="label-text font-mono text-xs uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+							<span class="label-text font-mono text-xs uppercase tracking-wider text-base-content/60">
 								Reason for Reopening <span class="text-warning">*</span>
 							</span>
 						</label>
 						<textarea
-							class="textarea font-mono text-sm w-full"
-							style="
-								background: oklch(0.18 0.01 250);
-								border: 1px solid oklch(0.35 0.02 250);
-								color: oklch(0.80 0.02 250);
-								min-height: 100px;
-							"
+							class="textarea font-mono text-sm w-full bg-base-200 border border-base-300 text-base-content min-h-[100px]"
 							placeholder="e.g., Add Alt+C shortcut for complete action"
 							bind:value={reopenReason}
 							disabled={isReopening}
 						></textarea>
-						<p class="text-xs mt-2" style="color: oklch(0.45 0.02 250);">
+						<p class="text-xs mt-2 text-base-content/50">
 							This will be appended to the task description for agent context.
 						</p>
 					</div>
@@ -2862,11 +2789,7 @@
 
 				<!-- Modal Footer -->
 				<div
-					class="flex items-center justify-end gap-2 px-5 py-4"
-					style="
-						background: oklch(0.18 0.01 250);
-						border-top: 1px solid oklch(0.30 0.02 250);
-					"
+					class="flex items-center justify-end gap-2 px-5 py-4 bg-base-200 border-t border-base-300"
 				>
 					<button
 						class="btn btn-sm btn-ghost"

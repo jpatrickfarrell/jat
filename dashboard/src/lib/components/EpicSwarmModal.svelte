@@ -417,55 +417,35 @@
 		}
 	}
 
-	// Priority badge colors
-	function getPriorityColor(priority: number): string {
+	// Priority badge colors - using CSS variable classes
+	function getPriorityClass(priority: number): string {
 		switch (priority) {
 			case 0:
-				return 'oklch(0.65 0.20 25)'; // P0 - Red
+				return 'priority-p0'; // P0 - Red/Error
 			case 1:
-				return 'oklch(0.75 0.18 60)'; // P1 - Orange
+				return 'priority-p1'; // P1 - Orange/Warning
 			case 2:
-				return 'oklch(0.75 0.15 85)'; // P2 - Yellow
+				return 'priority-p2'; // P2 - Yellow
 			case 3:
-				return 'oklch(0.70 0.15 145)'; // P3 - Green
+				return 'priority-p3'; // P3 - Green/Success
 			default:
-				return 'oklch(0.55 0.02 250)'; // P4+ - Gray
+				return 'priority-p4'; // P4+ - Gray/Neutral
 		}
 	}
 
-	// Status badge styling
-	function getStatusBadge(status: string): { bg: string; text: string; label: string } {
+	// Status badge styling - using CSS classes
+	function getStatusClass(status: string): { class: string; label: string } {
 		switch (status) {
 			case 'open':
-				return {
-					bg: 'oklch(0.45 0.12 200 / 0.3)',
-					text: 'oklch(0.80 0.12 200)',
-					label: 'Open'
-				};
+				return { class: 'status-open', label: 'Open' };
 			case 'in_progress':
-				return {
-					bg: 'oklch(0.55 0.15 85 / 0.3)',
-					text: 'oklch(0.85 0.15 85)',
-					label: 'In Progress'
-				};
+				return { class: 'status-in-progress', label: 'In Progress' };
 			case 'closed':
-				return {
-					bg: 'oklch(0.45 0.15 145 / 0.3)',
-					text: 'oklch(0.80 0.15 145)',
-					label: 'Closed'
-				};
+				return { class: 'status-closed', label: 'Closed' };
 			case 'blocked':
-				return {
-					bg: 'oklch(0.45 0.15 25 / 0.3)',
-					text: 'oklch(0.80 0.15 25)',
-					label: 'Blocked'
-				};
+				return { class: 'status-blocked', label: 'Blocked' };
 			default:
-				return {
-					bg: 'oklch(0.30 0.02 250 / 0.3)',
-					text: 'oklch(0.70 0.02 250)',
-					label: status
-				};
+				return { class: 'status-default', label: status };
 		}
 	}
 </script>
@@ -478,22 +458,15 @@
 	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 	<div class="modal modal-open" onclick={(e) => e.target === e.currentTarget && handleClose()}>
 		<div
-			class="modal-box max-w-3xl"
-			style="
-				background: linear-gradient(180deg, oklch(0.18 0.01 250) 0%, oklch(0.16 0.01 250) 100%);
-				border: 1px solid oklch(0.35 0.02 250);
-			"
+			class="modal-box max-w-3xl epic-modal-box"
 		>
 			<!-- Header -->
 			<div class="flex items-center justify-between mb-4">
 				<div class="flex items-center gap-3">
-					<h3
-						class="text-lg font-bold font-mono uppercase tracking-wider"
-						style="color: oklch(0.85 0.02 250);"
-					>
+					<h3 class="text-lg font-bold font-mono uppercase tracking-wider text-base-content">
 						Epic Swarm
 					</h3>
-					<kbd class="kbd kbd-xs" style="color: oklch(0.55 0.02 250);">Alt+E</kbd>
+					<kbd class="kbd kbd-xs text-base-content/50">Alt+E</kbd>
 				</div>
 				<button
 					class="btn btn-sm btn-circle btn-ghost"
@@ -520,22 +493,19 @@
 
 			<!-- Epic Selector -->
 			{#if isLoadingEpics}
-				<div class="flex items-center gap-2 mb-4 p-3 rounded-lg" style="background: oklch(0.22 0.02 250);">
+				<div class="flex items-center gap-2 mb-4 p-3 rounded-lg bg-base-200">
 					<span class="loading loading-spinner loading-sm"></span>
-					<span class="text-sm" style="color: oklch(0.60 0.02 250);">Loading epics...</span>
+					<span class="text-sm text-base-content/60">Loading epics...</span>
 				</div>
 			{:else if epicLoadError}
-				<div
-					class="alert mb-4"
-					style="background: oklch(0.35 0.15 25); border: 1px solid oklch(0.50 0.18 25); color: oklch(0.95 0.02 250);"
-				>
+				<div class="alert alert-error mb-4">
 					<span>{epicLoadError}</span>
 					<button class="btn btn-sm btn-ghost" onclick={() => { availableEpics = []; loadEpics(); }}>
 						Retry
 					</button>
 				</div>
 			{:else if availableEpics.length === 0}
-				<div class="text-center py-8" style="color: oklch(0.55 0.02 250);">
+				<div class="text-center py-8 text-base-content/50">
 					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-12 h-12 mx-auto mb-2 opacity-50">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 00-2.15-1.588H6.911a2.25 2.25 0 00-2.15 1.588L2.35 13.177a2.25 2.25 0 00-.1.661z" />
 					</svg>
@@ -545,18 +515,14 @@
 			{:else}
 				<!-- Epic Dropdown -->
 				<div class="mb-4">
-					<label
-						class="text-xs font-semibold font-mono uppercase tracking-wider block mb-2"
-						style="color: oklch(0.55 0.02 250);"
-					>
+					<label class="text-xs font-semibold font-mono uppercase tracking-wider block mb-2 text-base-content/50">
 						Select Epic
 					</label>
 					<select
-						class="select select-bordered w-full font-mono"
+						class="select select-bordered w-full font-mono bg-base-200"
 						bind:value={selectedEpicId}
 						onchange={(e) => handleEpicChange(e.currentTarget.value)}
 						disabled={isSubmitting}
-						style="background: oklch(0.22 0.02 250); border-color: oklch(0.35 0.02 250);"
 					>
 						{#each availableEpics as epic}
 							<option value={epic.id} selected={epic.id === selectedEpicId}>
@@ -573,10 +539,7 @@
 				</div>
 			{:else if loadError}
 				<!-- Error State -->
-				<div
-					class="alert mb-4"
-					style="background: oklch(0.35 0.15 25); border: 1px solid oklch(0.50 0.18 25); color: oklch(0.95 0.02 250);"
-				>
+				<div class="alert alert-error mb-4">
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						class="h-5 w-5"
@@ -596,62 +559,44 @@
 				</div>
 			{:else}
 				<!-- Summary Stats -->
-				<div
-					class="grid grid-cols-5 gap-2 mb-4 p-3 rounded-lg"
-					style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);"
-				>
+				<div class="grid grid-cols-5 gap-2 mb-4 p-3 rounded-lg bg-base-200 border border-base-300">
 					<div class="text-center">
-						<div class="text-xl font-bold font-mono" style="color: oklch(0.85 0.02 250);">
+						<div class="text-xl font-bold font-mono text-base-content">
 							{summary.total}
 						</div>
-						<div
-							class="text-xs font-mono uppercase tracking-wider"
-							style="color: oklch(0.55 0.02 250);"
-						>
+						<div class="text-xs font-mono uppercase tracking-wider text-base-content/50">
 							Total
 						</div>
 					</div>
 					<div class="text-center">
-						<div class="text-xl font-bold font-mono" style="color: oklch(0.70 0.18 150);">
+						<div class="text-xl font-bold font-mono text-info">
 							{summary.ready}
 						</div>
-						<div
-							class="text-xs font-mono uppercase tracking-wider"
-							style="color: oklch(0.55 0.02 250);"
-						>
+						<div class="text-xs font-mono uppercase tracking-wider text-base-content/50">
 							Ready
 						</div>
 					</div>
 					<div class="text-center">
-						<div class="text-xl font-bold font-mono" style="color: oklch(0.75 0.15 85);">
+						<div class="text-xl font-bold font-mono text-warning">
 							{summary.inProgress}
 						</div>
-						<div
-							class="text-xs font-mono uppercase tracking-wider"
-							style="color: oklch(0.55 0.02 250);"
-						>
+						<div class="text-xs font-mono uppercase tracking-wider text-base-content/50">
 							In Progress
 						</div>
 					</div>
 					<div class="text-center">
-						<div class="text-xl font-bold font-mono" style="color: oklch(0.70 0.18 25);">
+						<div class="text-xl font-bold font-mono text-error">
 							{summary.blocked}
 						</div>
-						<div
-							class="text-xs font-mono uppercase tracking-wider"
-							style="color: oklch(0.55 0.02 250);"
-						>
+						<div class="text-xs font-mono uppercase tracking-wider text-base-content/50">
 							Blocked
 						</div>
 					</div>
 					<div class="text-center">
-						<div class="text-xl font-bold font-mono" style="color: oklch(0.65 0.15 145);">
+						<div class="text-xl font-bold font-mono text-success">
 							{summary.closed}
 						</div>
-						<div
-							class="text-xs font-mono uppercase tracking-wider"
-							style="color: oklch(0.55 0.02 250);"
-						>
+						<div class="text-xs font-mono uppercase tracking-wider text-base-content/50">
 							Closed
 						</div>
 					</div>
@@ -661,19 +606,13 @@
 				<div class="mb-4">
 					<div class="flex items-center justify-between mb-2">
 						<div class="flex items-center gap-2">
-							<code
-								class="text-xs font-mono px-1.5 py-0.5 rounded"
-								style="background: oklch(0.30 0.08 270 / 0.5); color: oklch(0.75 0.12 270);"
-							>
+							<code class="text-xs font-mono px-1.5 py-0.5 rounded badge-epic-id">
 								{epicId}
 							</code>
-							<span class="text-sm truncate max-w-xs" style="color: oklch(0.70 0.02 250);">
+							<span class="text-sm truncate max-w-xs text-base-content/70">
 								{epicTitle}
 							</span>
-							<span
-								class="text-xs font-mono"
-								style="color: oklch(0.55 0.02 250);"
-							>
+							<span class="text-xs font-mono text-base-content/50">
 								({selectedCount} selected)
 							</span>
 						</div>
@@ -702,13 +641,10 @@
 						</div>
 					</div>
 
-					<div
-						class="rounded-lg overflow-hidden"
-						style="background: oklch(0.20 0.01 250); border: 1px solid oklch(0.28 0.02 250);"
-					>
+					<div class="rounded-lg overflow-hidden bg-base-100 border border-base-300">
 						<div class="max-h-48 overflow-y-auto">
 							{#if children.length === 0}
-								<div class="p-4 text-center" style="color: oklch(0.55 0.02 250);">
+								<div class="p-4 text-center text-base-content/50">
 									<p>No children found for this epic.</p>
 								</div>
 							{:else}
@@ -716,18 +652,12 @@
 									{@const isSelectable =
 										child.status !== 'closed' && child.status !== 'in_progress'}
 									{@const isSelected = selectedTaskIds.has(child.id)}
-									{@const statusBadge = child.isBlocked
-										? getStatusBadge('blocked')
-										: getStatusBadge(child.status)}
+									{@const statusClass = child.isBlocked
+										? getStatusClass('blocked')
+										: getStatusClass(child.status)}
 
 									<div
-										class="flex items-center gap-2 px-3 py-2 border-b transition-colors group"
-										style="
-											border-color: oklch(0.25 0.02 250);
-											background: {isSelected
-											? 'oklch(0.25 0.05 200 / 0.3)'
-											: 'transparent'};
-										"
+										class="flex items-center gap-2 px-3 py-2 border-b border-base-200 transition-colors group {isSelected ? 'selected-row' : ''}"
 										class:opacity-50={!isSelectable}
 									>
 										<!-- Checkbox -->
@@ -740,42 +670,30 @@
 										/>
 
 										<!-- Priority Badge -->
-										<span
-											class="text-xs font-bold font-mono px-1.5 py-0.5 rounded"
-											style="
-												background: {getPriorityColor(child.priority)}20;
-												color: {getPriorityColor(child.priority)};
-											"
-										>
+										<span class="text-xs font-bold font-mono px-1.5 py-0.5 rounded {getPriorityClass(child.priority)}">
 											P{child.priority}
 										</span>
 
 										<!-- Task ID & Title -->
 										<div class="flex-1 min-w-0">
 											<div class="flex items-center gap-2">
-												<code class="text-xs" style="color: oklch(0.55 0.02 250);">
+												<code class="text-xs text-base-content/50">
 													{child.id}
 												</code>
-												<span class="text-sm truncate" style="color: oklch(0.80 0.02 250);">
+												<span class="text-sm truncate text-base-content/80">
 													{child.title}
 												</span>
 											</div>
 											{#if child.isBlocked && child.blockedBy.length > 0}
-												<div class="text-xs mt-0.5" style="color: oklch(0.55 0.15 25);">
+												<div class="text-xs mt-0.5 text-error/70">
 													Blocked by: {child.blockedBy.join(', ')}
 												</div>
 											{/if}
 										</div>
 
 										<!-- Status Badge -->
-										<span
-											class="text-xs font-mono px-2 py-0.5 rounded"
-											style="
-												background: {statusBadge.bg};
-												color: {statusBadge.text};
-											"
-										>
-											{statusBadge.label}
+										<span class="text-xs font-mono px-2 py-0.5 rounded {statusClass.class}">
+											{statusClass.label}
 										</span>
 
 										<!-- View Details Button -->
@@ -793,8 +711,7 @@
 												viewBox="0 0 24 24"
 												stroke-width="1.5"
 												stroke="currentColor"
-												class="w-4 h-4"
-												style="color: oklch(0.70 0.15 240);"
+												class="w-4 h-4 text-info"
 											>
 												<path
 													stroke-linecap="round"
@@ -812,22 +729,19 @@
 
 				<!-- Execution Settings -->
 				<div
-					class="mb-4 p-4 rounded-lg"
-					style="background: oklch(0.20 0.01 250); border: 1px solid oklch(0.28 0.02 250);"
+					class="mb-4 p-4 rounded-lg bg-base-200 border border-base-300"
 				>
 					<!-- Settings Header -->
 					<div class="flex items-center justify-between mb-4">
 						<div class="flex items-center gap-2">
 							<span
-								class="text-xs font-semibold font-mono uppercase tracking-wider"
-								style="color: oklch(0.55 0.02 250);"
+								class="text-xs font-semibold font-mono uppercase tracking-wider text-base-content/60"
 							>
 								Execution Settings
 							</span>
 							{#if showCustomSettingsIndicator}
 								<span
-									class="text-xs font-mono px-1.5 py-0.5 rounded"
-									style="background: oklch(0.45 0.12 200 / 0.3); color: oklch(0.75 0.12 200);"
+									class="text-xs font-mono px-1.5 py-0.5 rounded badge-saved"
 								>
 									Saved
 								</span>
@@ -863,8 +777,7 @@
 					<!-- Execution Mode Toggle -->
 					<div>
 						<label
-							class="text-xs font-semibold font-mono uppercase tracking-wider block mb-2"
-							style="color: oklch(0.55 0.02 250);"
+							class="text-xs font-semibold font-mono uppercase tracking-wider block mb-2 text-base-content/60"
 						>
 							Execution Mode
 						</label>
@@ -916,7 +829,7 @@
 								Sequential
 							</button>
 						</div>
-						<p class="text-xs mt-1" style="color: oklch(0.45 0.02 250);">
+						<p class="text-xs mt-1 text-base-content/50">
 							{executionMode === 'parallel'
 								? 'Run multiple agents simultaneously'
 								: 'Run agents one at a time'}
@@ -927,12 +840,11 @@
 					<div>
 						<div class="flex justify-between items-center mb-2">
 							<label
-								class="text-xs font-semibold font-mono uppercase tracking-wider"
-								style="color: oklch(0.55 0.02 250);"
+								class="text-xs font-semibold font-mono uppercase tracking-wider text-base-content/60"
 							>
 								Max Concurrent Agents
 							</label>
-							<span class="text-lg font-bold font-mono" style="color: oklch(0.85 0.02 250);">
+							<span class="text-lg font-bold font-mono text-base-content">
 								{maxConcurrent}
 							</span>
 						</div>
@@ -944,7 +856,7 @@
 							class="range range-primary range-sm w-full"
 							disabled={isSubmitting || executionMode === 'sequential'}
 						/>
-						<div class="flex justify-between text-xs mt-1" style="color: oklch(0.45 0.02 250);">
+						<div class="flex justify-between text-xs mt-1 text-base-content/50">
 							<span>{MIN_AGENT_COUNT}</span>
 							<span>max {Math.max(maxAgents, 1)}</span>
 						</div>
@@ -953,22 +865,20 @@
 					<!-- Review Threshold Dropdown -->
 					<div>
 						<label
-							class="text-xs font-semibold font-mono uppercase tracking-wider block mb-2"
-							style="color: oklch(0.55 0.02 250);"
+							class="text-xs font-semibold font-mono uppercase tracking-wider block mb-2 text-base-content/60"
 						>
 							Review Threshold
 						</label>
 						<select
-							class="select select-bordered select-sm w-full font-mono"
+							class="select select-bordered select-sm w-full font-mono bg-base-300 border-base-content/20"
 							bind:value={reviewThreshold}
 							disabled={isSubmitting}
-							style="background: oklch(0.25 0.02 250); border-color: oklch(0.35 0.02 250);"
 						>
 							{#each reviewThresholdOptions as option}
 								<option value={option.value}>{option.label}</option>
 							{/each}
 						</select>
-						<p class="text-xs mt-1" style="color: oklch(0.45 0.02 250);">
+						<p class="text-xs mt-1 text-base-content/50">
 							{reviewThresholdOptions.find((o) => o.value === reviewThreshold)?.description}
 						</p>
 					</div>
@@ -976,8 +886,7 @@
 					<!-- Auto-spawn Blocked Tasks Checkbox -->
 					<div>
 						<label
-							class="text-xs font-semibold font-mono uppercase tracking-wider block mb-2"
-							style="color: oklch(0.55 0.02 250);"
+							class="text-xs font-semibold font-mono uppercase tracking-wider block mb-2 text-base-content/60"
 						>
 							Blocked Task Handling
 						</label>
@@ -988,11 +897,11 @@
 								bind:checked={autoSpawnBlocked}
 								disabled={isSubmitting}
 							/>
-							<span class="text-sm" style="color: oklch(0.75 0.02 250);">
+							<span class="text-sm text-base-content/80">
 								Auto-spawn when unblocked
 							</span>
 						</label>
-						<p class="text-xs mt-1" style="color: oklch(0.45 0.02 250);">
+						<p class="text-xs mt-1 text-base-content/50">
 							{autoSpawnBlocked
 								? 'Agents will be spawned as blocked tasks become ready'
 								: 'Only spawn agents for currently ready tasks'}
@@ -1003,10 +912,9 @@
 
 				<!-- Preview Section -->
 				<div
-					class="rounded-lg p-3 mb-4"
-					style="background: oklch(0.20 0.01 250); border: 1px solid oklch(0.28 0.02 250);"
+					class="rounded-lg p-3 mb-4 bg-base-200 border border-base-300"
 				>
-					<div class="flex items-center gap-2 mb-2" style="color: oklch(0.65 0.02 250);">
+					<div class="flex items-center gap-2 mb-2 text-base-content/70">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							class="h-4 w-4"
@@ -1026,14 +934,13 @@
 
 					<div class="space-y-2 text-sm">
 						<div class="flex items-center gap-2">
-							<span style="color: oklch(0.55 0.02 250);">Tasks:</span>
-							<span class="font-mono font-bold" style="color: oklch(0.80 0.02 250);">
+							<span class="text-base-content/60">Tasks:</span>
+							<span class="font-mono font-bold text-base-content">
 								{selectedCount} selected
 							</span>
 							{#if blockedChildren.filter((c) => selectedTaskIds.has(c.id)).length > 0}
 								<span
-									class="text-xs px-2 py-0.5 rounded font-mono"
-									style="background: oklch(0.45 0.15 60 / 0.3); color: oklch(0.80 0.15 60);"
+									class="text-xs px-2 py-0.5 rounded font-mono badge-blocked-preview"
 								>
 									{blockedChildren.filter((c) => selectedTaskIds.has(c.id)).length} blocked (will
 									wait)
@@ -1042,19 +949,19 @@
 						</div>
 
 						<div class="flex items-center gap-2">
-							<span style="color: oklch(0.55 0.02 250);">Initial spawn:</span>
-							<span class="font-mono font-bold" style="color: oklch(0.70 0.18 150);">
+							<span class="text-base-content/60">Initial spawn:</span>
+							<span class="font-mono font-bold text-success">
 								{Math.min(readyChildren.filter((c) => selectedTaskIds.has(c.id)).length, maxConcurrent)}
 								agents
 							</span>
-							<span class="text-xs" style="color: oklch(0.45 0.02 250);">
+							<span class="text-xs text-base-content/50">
 								({executionMode === 'parallel' ? `up to ${maxConcurrent} concurrent` : 'one at a time'})
 							</span>
 						</div>
 
 						<div class="flex items-center gap-2">
-							<span style="color: oklch(0.55 0.02 250);">Review:</span>
-							<span class="font-mono" style="color: oklch(0.75 0.02 250);">
+							<span class="text-base-content/60">Review:</span>
+							<span class="font-mono text-base-content/80">
 								{reviewThresholdOptions.find((o) => o.value === reviewThreshold)?.label}
 							</span>
 						</div>
@@ -1067,8 +974,7 @@
 									viewBox="0 0 24 24"
 									stroke-width="1.5"
 									stroke="currentColor"
-									class="w-4 h-4 flex-shrink-0 mt-0.5"
-									style="color: oklch(0.70 0.15 200);"
+									class="w-4 h-4 flex-shrink-0 mt-0.5 text-info"
 								>
 									<path
 										stroke-linecap="round"
@@ -1076,7 +982,7 @@
 										d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"
 									/>
 								</svg>
-								<span class="text-xs" style="color: oklch(0.60 0.02 250);">
+								<span class="text-xs text-base-content/65">
 									{blockedChildren.filter((c) => selectedTaskIds.has(c.id)).length} blocked tasks will
 									be auto-spawned when their dependencies complete.
 								</span>
@@ -1087,10 +993,7 @@
 
 				<!-- Error Message -->
 				{#if submitError}
-					<div
-						class="alert mb-4 font-mono text-sm"
-						style="background: oklch(0.35 0.15 25); border: 1px solid oklch(0.50 0.18 25); color: oklch(0.95 0.02 250);"
-					>
+					<div class="alert alert-error mb-4 font-mono text-sm">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							class="h-5 w-5"
@@ -1111,10 +1014,7 @@
 
 				<!-- Success Message -->
 				{#if successMessage}
-					<div
-						class="alert mb-4 font-mono text-sm"
-						style="background: oklch(0.35 0.15 150); border: 1px solid oklch(0.50 0.18 150); color: oklch(0.95 0.02 250);"
-					>
+					<div class="alert alert-success mb-4 font-mono text-sm">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							class="h-5 w-5"
@@ -1168,3 +1068,84 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	/* Epic Swarm Modal theme-aware styles */
+	.epic-modal-box {
+		background: linear-gradient(
+			135deg,
+			color-mix(in oklch, var(--color-base-300) 60%, var(--color-primary) 5%),
+			var(--color-base-300)
+		);
+		border: 1px solid color-mix(in oklch, var(--color-neutral) 50%, transparent);
+	}
+
+	/* Priority badge classes */
+	.priority-p0 {
+		background: color-mix(in oklch, var(--color-error) 30%, transparent);
+		color: var(--color-error);
+	}
+	.priority-p1 {
+		background: color-mix(in oklch, var(--color-warning) 30%, transparent);
+		color: var(--color-warning);
+	}
+	.priority-p2 {
+		background: color-mix(in oklch, var(--color-info) 30%, transparent);
+		color: var(--color-info);
+	}
+	.priority-p3 {
+		background: color-mix(in oklch, var(--color-success) 30%, transparent);
+		color: var(--color-success);
+	}
+	.priority-p4 {
+		background: color-mix(in oklch, var(--color-neutral) 30%, transparent);
+		color: var(--color-base-content);
+		opacity: 0.7;
+	}
+
+	/* Status badge classes */
+	.status-open {
+		background: color-mix(in oklch, var(--color-info) 25%, transparent);
+		color: var(--color-info);
+	}
+	.status-in-progress {
+		background: color-mix(in oklch, var(--color-warning) 25%, transparent);
+		color: var(--color-warning);
+	}
+	.status-closed {
+		background: color-mix(in oklch, var(--color-success) 25%, transparent);
+		color: var(--color-success);
+	}
+	.status-blocked {
+		background: color-mix(in oklch, var(--color-error) 25%, transparent);
+		color: var(--color-error);
+	}
+	.status-default {
+		background: color-mix(in oklch, var(--color-neutral) 25%, transparent);
+		color: var(--color-base-content);
+		opacity: 0.7;
+	}
+
+	/* Epic ID badge */
+	.badge-epic-id {
+		background: color-mix(in oklch, var(--color-primary) 30%, transparent);
+		color: var(--color-primary);
+	}
+
+	/* Selected row highlight */
+	.selected-row {
+		background: color-mix(in oklch, var(--color-primary) 10%, transparent);
+	}
+
+	/* Saved indicator badge */
+	.badge-saved {
+		background: color-mix(in oklch, var(--color-info) 30%, transparent);
+		color: var(--color-info);
+	}
+
+	/* Blocked preview badge */
+	.badge-blocked-preview {
+		background: color-mix(in oklch, var(--color-warning) 30%, transparent);
+		color: var(--color-warning);
+	}
+</style>

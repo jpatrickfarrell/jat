@@ -222,30 +222,31 @@
 	);
 
 	// All match ranges for highlighting (merged and sorted)
+	// Using CSS class names for theme-compatible highlighting
 	const allMatchRanges = $derived.by(() => {
-		const ranges: Array<{ start: number; end: number; color: string; ruleId: string }> = [];
+		const ranges: Array<{ start: number; end: number; colorClass: string; ruleId: string }> = [];
 
-		// Collect rule matches with colors
-		const colors = [
-			'oklch(0.75 0.15 85)',   // Amber
-			'oklch(0.75 0.18 145)',  // Green
-			'oklch(0.70 0.15 200)',  // Cyan
-			'oklch(0.70 0.15 310)',  // Purple
-			'oklch(0.70 0.18 25)',   // Red
-			'oklch(0.75 0.12 60)'    // Yellow
+		// Collect rule matches with color classes
+		const colorClasses = [
+			'highlight-warning',   // Amber/Yellow
+			'highlight-success',   // Green
+			'highlight-info',      // Cyan/Blue
+			'highlight-secondary', // Purple
+			'highlight-error',     // Red
+			'highlight-accent'     // Yellow/Orange
 		];
 
 		ruleMatches.forEach((rm, idx) => {
-			const color = colors[idx % colors.length];
+			const colorClass = colorClasses[idx % colorClasses.length];
 			rm.matches.forEach((m) => {
-				ranges.push({ start: m.start, end: m.end, color, ruleId: rm.rule.id });
+				ranges.push({ start: m.start, end: m.end, colorClass, ruleId: rm.rule.id });
 			});
 		});
 
 		// Add custom matches in a distinct color
 		if (customMatches.length > 0) {
 			customMatches.forEach((m) => {
-				ranges.push({ start: m.start, end: m.end, color: 'oklch(0.80 0.20 280)', ruleId: 'custom' });
+				ranges.push({ start: m.start, end: m.end, colorClass: 'highlight-custom', ruleId: 'custom' });
 			});
 		}
 
@@ -268,9 +269,9 @@
 				result += escapeHtml(sampleOutput.substring(lastEnd, range.start));
 			}
 
-			// Add highlighted match
+			// Add highlighted match using CSS class
 			const matchText = escapeHtml(sampleOutput.substring(range.start, range.end));
-			result += `<mark style="background: ${range.color}; color: oklch(0.15 0.01 250); padding: 1px 2px; border-radius: 2px;">${matchText}</mark>`;
+			result += `<mark class="${range.colorClass}">${matchText}</mark>`;
 
 			lastEnd = Math.max(lastEnd, range.end);
 		}
@@ -292,32 +293,32 @@
 			.replace(/'/g, '&#039;');
 	}
 
-	// Action type display info
-	const actionTypeInfo: Record<AutomationAction['type'], { label: string; icon: string; color: string }> = {
+	// Action type display info - using CSS variable names for theme compatibility
+	const actionTypeInfo: Record<AutomationAction['type'], { label: string; icon: string; colorClass: string }> = {
 		send_text: {
 			label: 'Send Text',
 			icon: 'M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5',
-			color: 'oklch(0.75 0.15 200)'
+			colorClass: 'action-send-text'
 		},
 		send_keys: {
 			label: 'Send Keys',
 			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
-			color: 'oklch(0.70 0.15 145)'
+			colorClass: 'action-send-keys'
 		},
 		tmux_command: {
 			label: 'Tmux Command',
 			icon: 'M8.25 7.5V6.108c0-1.135.845-2.098 1.976-2.192.373-.03.748-.057 1.123-.08M15.75 18H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08M15.75 18.75v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5A3.375 3.375 0 006.375 7.5H5.25m11.9-3.664A2.251 2.251 0 0015 2.25h-1.5a2.251 2.251 0 00-2.15 1.586m5.8 0c.065.21.1.433.1.664v.75h-6V4.5c0-.231.035-.454.1-.664M6.75 7.5H4.875c-.621 0-1.125.504-1.125 1.125v12c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V16.5a9 9 0 00-9-9z',
-			color: 'oklch(0.70 0.15 85)'
+			colorClass: 'action-tmux'
 		},
 		signal: {
 			label: 'Signal',
 			icon: 'M9.348 14.651a3.75 3.75 0 010-5.303m5.304 0a3.75 3.75 0 010 5.303m-7.425 2.122a6.75 6.75 0 010-9.546m9.546 0a6.75 6.75 0 010 9.546M5.106 18.894c-3.808-3.808-3.808-9.98 0-13.789m13.788 0c3.808 3.808 3.808 9.981 0 13.79M12 12h.008v.007H12V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z',
-			color: 'oklch(0.70 0.18 310)'
+			colorClass: 'action-signal'
 		},
 		notify_only: {
 			label: 'Notify',
 			icon: 'M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0',
-			color: 'oklch(0.75 0.12 60)'
+			colorClass: 'action-notify'
 		}
 	};
 
@@ -353,14 +354,10 @@
 
 <div class="bg-base-200 rounded-lg border border-base-300 overflow-hidden">
 	<!-- Header -->
-	<div
-		class="px-4 py-3 flex items-center justify-between"
-		style="background: oklch(0.22 0.01 250); border-bottom: 1px solid oklch(0.30 0.02 250);"
-	>
+	<div class="px-4 py-3 flex items-center justify-between bg-base-300 border-b border-base-300">
 		<div class="flex items-center gap-3">
 			<svg
-				class="w-5 h-5"
-				style="color: oklch(0.70 0.15 200);"
+				class="w-5 h-5 text-info"
 				fill="none"
 				viewBox="0 0 24 24"
 				stroke="currentColor"
@@ -372,28 +369,23 @@
 					d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
 				/>
 			</svg>
-			<h3 class="font-mono text-sm font-semibold" style="color: oklch(0.85 0.02 250);">
+			<h3 class="font-mono text-sm font-semibold text-base-content">
 				Pattern Tester
 			</h3>
-			<span
-				class="px-2 py-0.5 rounded text-[10px] font-mono"
-				style="background: oklch(0.30 0.02 250); color: oklch(0.65 0.02 250);"
-			>
+			<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-base-100 text-base-content/60">
 				{totalMatches} match{totalMatches !== 1 ? 'es' : ''}
 			</span>
 		</div>
 
 		<div class="flex items-center gap-2">
 			<button
-				class="px-2 py-1 rounded text-xs font-mono transition-colors hover:bg-base-300/50"
-				style="color: oklch(0.65 0.02 250);"
+				class="px-2 py-1 rounded text-xs font-mono transition-colors text-base-content/60 hover:bg-base-100/50"
 				onclick={loadExample}
 			>
 				Load Example
 			</button>
 			<button
-				class="px-2 py-1 rounded text-xs font-mono transition-colors hover:bg-base-300/50"
-				style="color: oklch(0.65 0.02 250);"
+				class="px-2 py-1 rounded text-xs font-mono transition-colors text-base-content/60 hover:bg-base-100/50"
 				onclick={clearOutput}
 			>
 				Clear
@@ -405,46 +397,30 @@
 		<!-- Left Panel: Sample Output -->
 		<div class="flex-1 p-4 border-b lg:border-b-0 lg:border-r border-base-300">
 			<div class="mb-3">
-				<label for="sample-output" class="block mb-1 font-mono text-xs" style="color: oklch(0.65 0.02 250);">
+				<label for="sample-output" class="block mb-1 font-mono text-xs text-base-content/60">
 					Sample Terminal Output
 				</label>
 				<textarea
 					id="sample-output"
 					bind:value={sampleOutput}
-					class="w-full h-48 px-3 py-2 rounded-lg font-mono text-xs resize-none focus:outline-none focus:ring-2"
-					style="
-						background: oklch(0.15 0.01 250);
-						color: oklch(0.85 0.02 250);
-						border: 1px solid oklch(0.30 0.02 250);
-						--tw-ring-color: oklch(0.50 0.12 200);
-					"
+					class="w-full h-48 px-3 py-2 rounded-lg font-mono text-xs resize-none bg-base-300 text-base-content border border-base-content/20 focus:outline-none focus:ring-2 focus:ring-info/50"
 					placeholder="Paste terminal output here to test pattern matching..."
 				></textarea>
 			</div>
 
 			<!-- Highlighted Preview -->
 			<div class="mb-3">
-				<span class="block mb-1 font-mono text-xs" style="color: oklch(0.65 0.02 250);">
+				<span class="block mb-1 font-mono text-xs text-base-content/60">
 					Highlighted Preview
 				</span>
-				<div
-					class="w-full h-48 px-3 py-2 rounded-lg font-mono text-xs overflow-auto whitespace-pre-wrap"
-					style="
-						background: oklch(0.12 0.01 250);
-						color: oklch(0.75 0.02 250);
-						border: 1px solid oklch(0.30 0.02 250);
-					"
-				>
+				<div class="w-full h-48 px-3 py-2 rounded-lg font-mono text-xs overflow-auto whitespace-pre-wrap bg-base-300/80 text-base-content/80 border border-base-content/20">
 					{@html highlightedOutput}
 				</div>
 			</div>
 
 			<!-- Custom Pattern Input -->
-			<div
-				class="p-3 rounded-lg"
-				style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.28 0.02 250);"
-			>
-				<label for="custom-pattern" class="block mb-2 font-mono text-xs font-semibold" style="color: oklch(0.70 0.02 250);">
+			<div class="p-3 rounded-lg bg-base-300/50 border border-base-content/15">
+				<label for="custom-pattern" class="block mb-1 font-mono text-xs text-base-content/60 font-semibold">
 					Quick Test Pattern
 				</label>
 				<div class="flex items-center gap-2">
@@ -452,41 +428,32 @@
 						id="custom-pattern"
 						type="text"
 						bind:value={customPattern}
-						class="flex-1 px-3 py-1.5 rounded font-mono text-xs focus:outline-none focus:ring-2"
-						style="
-							background: oklch(0.15 0.01 250);
-							color: oklch(0.85 0.02 250);
-							border: 1px solid oklch(0.30 0.02 250);
-							--tw-ring-color: oklch(0.50 0.15 280);
-						"
+						class="flex-1 px-3 py-1.5 rounded font-mono text-xs bg-base-300 text-base-content border border-base-content/20 focus:outline-none focus:ring-2 focus:ring-secondary/50"
 						placeholder="Enter pattern to test..."
 					/>
 					<label class="flex items-center gap-1.5 cursor-pointer">
 						<input
 							type="checkbox"
 							bind:checked={customIsRegex}
-							class="checkbox checkbox-xs"
-							style="--chkbg: oklch(0.60 0.15 200);"
+							class="checkbox checkbox-xs checkbox-info"
 						/>
-						<span class="font-mono text-[10px]" style="color: oklch(0.60 0.02 250);">Regex</span>
+						<span class="font-mono text-[10px] text-base-content/60">Regex</span>
 					</label>
 					<label class="flex items-center gap-1.5 cursor-pointer">
 						<input
 							type="checkbox"
 							bind:checked={customCaseSensitive}
-							class="checkbox checkbox-xs"
-							style="--chkbg: oklch(0.60 0.15 200);"
+							class="checkbox checkbox-xs checkbox-info"
 						/>
-						<span class="font-mono text-[10px]" style="color: oklch(0.60 0.02 250);">Case</span>
+						<span class="font-mono text-[10px] text-base-content/60">Case</span>
 					</label>
 				</div>
 				{#if customError}
-					<div class="mt-2 text-[10px] font-mono" style="color: oklch(0.75 0.18 25);">
+					<div class="mt-2 text-[10px] font-mono text-error">
 						⚠️ Invalid regex: {customError}
 						{#if customIsRegex}
 							<button
-								class="ml-2 underline hover:no-underline"
-								style="color: oklch(0.70 0.15 200);"
+								class="ml-2 underline hover:no-underline text-info"
 								onclick={() => { customPattern = escapeRegex(customPattern); }}
 							>
 								Auto-escape
@@ -494,11 +461,11 @@
 						{/if}
 					</div>
 				{:else if customMatches.length > 0}
-					<div class="mt-2 text-[10px] font-mono" style="color: oklch(0.80 0.20 280);">
+					<div class="mt-2 text-[10px] font-mono text-secondary">
 						{customMatches.length} match{customMatches.length !== 1 ? 'es' : ''} found
 					</div>
 				{:else if customPattern.trim() && !customIsRegex}
-					<div class="mt-2 text-[10px] font-mono" style="color: oklch(0.55 0.02 250);">
+					<div class="mt-2 text-[10px] font-mono text-base-content/50">
 						No matches (literal search)
 					</div>
 				{/if}
@@ -508,19 +475,15 @@
 		<!-- Right Panel: Matching Rules -->
 		<div class="w-full lg:w-96 p-4">
 			<div class="mb-3">
-				<h4 class="block mb-1 font-mono text-xs font-semibold" style="color: oklch(0.70 0.02 250);">
+				<h4 class="block mb-1 font-mono text-xs text-base-content/60 font-semibold">
 					Matching Rules
 				</h4>
 			</div>
 
 			{#if ruleMatches.length === 0}
-				<div
-					class="text-center py-8 rounded-lg"
-					style="background: oklch(0.18 0.01 250); border: 1px dashed oklch(0.30 0.02 250);"
-				>
+				<div class="text-center py-8 rounded-lg bg-base-300/50 border border-dashed border-base-content/20">
 					<svg
-						class="w-8 h-8 mx-auto mb-2"
-						style="color: oklch(0.40 0.02 250);"
+						class="w-8 h-8 mx-auto mb-2 text-base-content/30"
 						fill="none"
 						viewBox="0 0 24 24"
 						stroke="currentColor"
@@ -532,50 +495,37 @@
 							d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
 						/>
 					</svg>
-					<p class="font-mono text-sm" style="color: oklch(0.50 0.02 250);">No matching rules</p>
-					<p class="font-mono text-xs mt-1" style="color: oklch(0.40 0.02 250);">
+					<p class="font-mono text-sm text-base-content/50">No matching rules</p>
+					<p class="font-mono text-xs mt-1 text-base-content/30">
 						Paste terminal output to see matches
 					</p>
 				</div>
 			{:else}
 				<div class="space-y-2 max-h-[500px] overflow-y-auto">
 					{#each ruleMatches as { rule, matches }, idx}
-						{@const colors = [
-							'oklch(0.75 0.15 85)',
-							'oklch(0.75 0.18 145)',
-							'oklch(0.70 0.15 200)',
-							'oklch(0.70 0.15 310)',
-							'oklch(0.70 0.18 25)',
-							'oklch(0.75 0.12 60)'
+						{@const colorStyles = [
+							{ border: 'border-l-warning', text: 'text-warning' },
+							{ border: 'border-l-success', text: 'text-success' },
+							{ border: 'border-l-info', text: 'text-info' },
+							{ border: 'border-l-secondary', text: 'text-secondary' },
+							{ border: 'border-l-error', text: 'text-error' },
+							{ border: 'border-l-accent', text: 'text-accent' }
 						]}
-						{@const color = colors[idx % colors.length]}
+						{@const colorStyle = colorStyles[idx % colorStyles.length]}
 						{@const actionInfo = actionTypeInfo[rule.action.type]}
-						<div
-							class="rounded-lg overflow-hidden"
-							style="
-								background: oklch(0.20 0.01 250);
-								border: 1px solid oklch(0.30 0.02 250);
-							"
-						>
+						<div class="rounded-lg overflow-hidden bg-base-300/60 border border-base-content/20">
 							<!-- Rule Header -->
-							<div
-								class="px-3 py-2 flex items-center justify-between"
-								style="border-left: 3px solid {color};"
-							>
+							<div class="px-3 py-2 flex items-center justify-between border-l-[3px] {colorStyle.border}">
 								<div class="flex items-center gap-2">
-									<span class="font-mono text-xs font-semibold" style="color: {color};">
+									<span class="font-mono text-xs font-semibold {colorStyle.text}">
 										{rule.name}
 									</span>
-									<span
-										class="px-1.5 py-0.5 rounded text-[9px] font-mono"
-										style="background: oklch(0.25 0.02 250); color: oklch(0.60 0.02 250);"
-									>
+									<span class="px-1.5 py-0.5 rounded text-[9px] font-mono bg-base-100/50 text-base-content/60">
 										{matches.length}
 									</span>
 								</div>
 								<button
-									class="px-2 py-0.5 rounded text-[10px] font-mono transition-colors hover:bg-base-300/30"
-									style="color: oklch(0.60 0.02 250);"
+									class="px-2 py-0.5 rounded text-[10px] font-mono transition-colors text-base-content/60 hover:bg-base-100/30"
 									onclick={() => testRule(rule)}
 								>
 									Test
@@ -586,20 +536,14 @@
 							<div class="px-3 pb-2">
 								<!-- Pattern -->
 								<div class="flex items-center gap-2 mb-2">
-									<span class="text-[10px] font-mono" style="color: oklch(0.45 0.02 250);">
+									<span class="text-[10px] font-mono text-base-content/40">
 										Pattern:
 									</span>
-									<code
-										class="px-1.5 py-0.5 rounded text-[10px] font-mono"
-										style="background: oklch(0.15 0.01 250); color: {color};"
-									>
+									<code class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-base-300 text-info">
 										{rule.pattern}
 									</code>
 									{#if rule.isRegex}
-										<span
-											class="px-1 py-0.5 rounded text-[8px] font-mono"
-											style="background: oklch(0.25 0.02 250); color: oklch(0.55 0.02 250);"
-										>
+										<span class="px-1 py-0.5 rounded text-[8px] font-mono bg-base-100/50 text-base-content/50">
 											REGEX
 										</span>
 									{/if}
@@ -607,16 +551,12 @@
 
 								<!-- Action -->
 								<div class="flex items-center gap-2">
-									<span class="text-[10px] font-mono" style="color: oklch(0.45 0.02 250);">
+									<span class="text-[10px] font-mono text-base-content/40">
 										Action:
 									</span>
-									<div
-										class="flex items-center gap-1.5 px-1.5 py-0.5 rounded"
-										style="background: oklch(0.18 0.01 250);"
-									>
+									<div class="flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-base-300/50 {actionInfo.colorClass === 'action-send-text' ? 'text-info' : actionInfo.colorClass === 'action-send-keys' ? 'text-success' : actionInfo.colorClass === 'action-tmux' ? 'text-warning' : actionInfo.colorClass === 'action-signal' ? 'text-secondary' : 'text-accent'}">
 										<svg
 											class="w-3 h-3"
-											style="color: {actionInfo.color};"
 											fill="none"
 											viewBox="0 0 24 24"
 											stroke="currentColor"
@@ -624,15 +564,12 @@
 										>
 											<path stroke-linecap="round" stroke-linejoin="round" d={actionInfo.icon} />
 										</svg>
-										<span class="text-[10px] font-mono" style="color: {actionInfo.color};">
+										<span class="text-[10px] font-mono">
 											{actionInfo.label}
 										</span>
 									</div>
 									{#if rule.action.value}
-										<code
-											class="px-1 py-0.5 rounded text-[9px] font-mono"
-											style="background: oklch(0.15 0.01 250); color: oklch(0.60 0.02 250);"
-										>
+										<code class="px-1 py-0.5 rounded text-[9px] font-mono bg-base-300 text-base-content/60">
 											{rule.action.value}
 										</code>
 									{/if}
@@ -640,19 +577,13 @@
 
 								<!-- Match Details (collapsed by default) -->
 								<details class="mt-2">
-									<summary
-										class="cursor-pointer text-[10px] font-mono"
-										style="color: oklch(0.50 0.02 250);"
-									>
+									<summary class="cursor-pointer text-[10px] font-mono text-base-content/50">
 										Match locations
 									</summary>
-									<div
-										class="mt-1 p-2 rounded max-h-24 overflow-y-auto"
-										style="background: oklch(0.15 0.01 250);"
-									>
+									<div class="mt-1 p-2 rounded max-h-24 overflow-y-auto bg-base-300">
 										{#each matches as match, i}
-											<div class="text-[9px] font-mono" style="color: oklch(0.55 0.02 250);">
-												{i + 1}. Line {match.line}, Col {match.column}: "<span style="color: {color};">{match.text}</span>"
+											<div class="text-[9px] font-mono text-base-content/60">
+												{i + 1}. Line {match.line}, Col {match.column}: "<span class="text-info">{match.text}</span>"
 											</div>
 										{/each}
 									</div>
@@ -666,22 +597,16 @@
 			<!-- All Rules (non-matching) -->
 			{#if activeRules.filter((r) => r.enabled && !ruleMatches.find((rm) => rm.rule.id === r.id)).length > 0}
 				<div class="mt-4">
-					<h5 class="block mb-2 font-mono text-xs" style="color: oklch(0.50 0.02 250);">
+					<h5 class="block mb-1 font-mono text-xs text-base-content/50">
 						Other Active Rules
 					</h5>
 					<div class="space-y-1">
 						{#each activeRules.filter((r) => r.enabled && !ruleMatches.find((rm) => rm.rule.id === r.id)) as rule}
-							<div
-								class="px-2 py-1.5 rounded flex items-center justify-between"
-								style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.25 0.02 250);"
-							>
-								<span class="font-mono text-[10px]" style="color: oklch(0.50 0.02 250);">
+							<div class="px-2 py-1.5 rounded flex items-center justify-between bg-base-300/50 border border-base-content/15">
+								<span class="font-mono text-[10px] text-base-content/50">
 									{rule.name}
 								</span>
-								<code
-									class="px-1 py-0.5 rounded text-[8px] font-mono truncate max-w-[120px]"
-									style="background: oklch(0.15 0.01 250); color: oklch(0.45 0.02 250);"
-								>
+								<code class="px-1 py-0.5 rounded text-[8px] font-mono truncate max-w-[120px] bg-base-300 text-base-content/40">
 									{rule.pattern}
 								</code>
 							</div>
@@ -692,3 +617,62 @@
 		</div>
 	</div>
 </div>
+
+<style>
+	/* Highlight marks for dynamically generated HTML (no @apply - use CSS variables) */
+	:global(.highlight-warning) {
+		background-color: var(--color-warning);
+		color: var(--color-warning-content);
+		padding-left: 0.125rem;
+		padding-right: 0.125rem;
+		border-radius: 0.125rem;
+	}
+
+	:global(.highlight-success) {
+		background-color: var(--color-success);
+		color: var(--color-success-content);
+		padding-left: 0.125rem;
+		padding-right: 0.125rem;
+		border-radius: 0.125rem;
+	}
+
+	:global(.highlight-info) {
+		background-color: var(--color-info);
+		color: var(--color-info-content);
+		padding-left: 0.125rem;
+		padding-right: 0.125rem;
+		border-radius: 0.125rem;
+	}
+
+	:global(.highlight-secondary) {
+		background-color: var(--color-secondary);
+		color: var(--color-secondary-content);
+		padding-left: 0.125rem;
+		padding-right: 0.125rem;
+		border-radius: 0.125rem;
+	}
+
+	:global(.highlight-error) {
+		background-color: var(--color-error);
+		color: var(--color-error-content);
+		padding-left: 0.125rem;
+		padding-right: 0.125rem;
+		border-radius: 0.125rem;
+	}
+
+	:global(.highlight-accent) {
+		background-color: var(--color-accent);
+		color: var(--color-accent-content);
+		padding-left: 0.125rem;
+		padding-right: 0.125rem;
+		border-radius: 0.125rem;
+	}
+
+	:global(.highlight-custom) {
+		background-color: var(--color-secondary);
+		color: var(--color-secondary-content);
+		padding-left: 0.125rem;
+		padding-right: 0.125rem;
+		border-radius: 0.125rem;
+	}
+</style>

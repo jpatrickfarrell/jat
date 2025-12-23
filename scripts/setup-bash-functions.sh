@@ -68,6 +68,9 @@ for repo_dir in "$CODE_DIR"/*; do
     # Capture scrollback buffer on exit (not pipe-pane which logs every redraw)
     tmux new-session -d -s \"\$session_name\" -c ~/code/$REPO_NAME
     tmux set-option -t \"\$session_name\" history-limit 50000
+    # Wait for shell to initialize before sending keys
+    # Without this delay, the shell may not be ready and keys are lost
+    sleep 0.3
     tmux send-keys -t \"\$session_name\" \"AGENT_MAIL_URL=http://localhost:8765 claude --dangerously-skip-permissions '/jat:start' \$*\" Enter
     tmux attach-session -t \"\$session_name\"
     # After detach/exit, capture scrollback to log file

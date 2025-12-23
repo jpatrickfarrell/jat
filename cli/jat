@@ -166,6 +166,9 @@ launch_claude() {
             tmux new-session -d -s '$session_name' -c '$path'
             # Set large scrollback buffer to capture full session history
             tmux set-option -t '$session_name' history-limit 50000
+            # Wait for shell to initialize before sending keys
+            # Without this delay, the shell may not be ready and keys are lost
+            sleep 0.3
             tmux send-keys -t '$session_name' '$env_vars claude $claude_flags \"$initial_prompt\"' Enter
             tmux attach-session -t '$session_name'
             # After detach/exit, capture the scrollback buffer to log file

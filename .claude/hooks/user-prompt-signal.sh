@@ -27,6 +27,14 @@ if [[ -z "$USER_PROMPT" ]] || [[ -z "$SESSION_ID" ]]; then
     exit 0
 fi
 
+# Skip /jat:start commands - these cause a race condition where the event gets
+# written to the OLD agent's timeline before /jat:start updates the agent file.
+# The /jat:start command emits its own "starting" signal which is the proper
+# event for the new session.
+if [[ "$USER_PROMPT" =~ ^/jat:start ]]; then
+    exit 0
+fi
+
 # Get tmux session name by looking up agent file from session_id
 # (Cannot use tmux display-message in subprocess - no TMUX env var)
 TMUX_SESSION=""

@@ -1,5 +1,5 @@
 ---
-argument-hint: [session | all]
+author: Joe Winke
 ---
 
 Create well-organized commits with automatic code cleanup and documentation updates.

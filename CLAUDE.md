@@ -292,13 +292,40 @@ For projects that need custom ports, colors, or database URLs:
 }
 ```
 
-**JAT config fields:**
+**JAT config fields (per-project):**
 - `path` - Project directory (required)
 - `port` - Dev server port (optional, enables server controls)
 - `server_path` - Where to run `npm run dev` (optional, defaults to path)
 - `description` - Shown in dashboard (optional)
 - `active_color` / `inactive_color` - Badge colors (optional)
 - `database_url` - For database tools (optional)
+
+**JAT defaults (global settings):**
+
+Add a `defaults` section to `~/.config/jat/projects.json` for global configuration:
+
+```json
+{
+  "defaults": {
+    "terminal": "alacritty",
+    "editor": "code",
+    "tools_path": "~/.local/bin",
+    "claude_flags": "--dangerously-skip-permissions",
+    "model": "opus",
+    "agent_stagger": 15,
+    "claude_startup_timeout": 20
+  },
+  "projects": { ... }
+}
+```
+
+- `terminal` - Terminal emulator for new sessions (default: "alacritty")
+- `editor` - Code editor command (default: "code")
+- `tools_path` - Path to jat tools (default: "~/.local/bin")
+- `claude_flags` - Claude CLI flags (default: "--dangerously-skip-permissions")
+- `model` - Default Claude model: "opus", "sonnet", "haiku" (default: "opus")
+- `agent_stagger` - Seconds between agent spawns in batch mode (default: 15)
+- `claude_startup_timeout` - Seconds to wait for Claude TUI to start (default: 20, increase for slower systems)
 
 ## macOS and zsh Compatibility
 

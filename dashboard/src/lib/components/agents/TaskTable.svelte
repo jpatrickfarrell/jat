@@ -808,8 +808,8 @@
 	// Type order for grouping (BUG first, then features, tasks, chores, epics, no type last)
 	const typeOrder = ['bug', 'feature', 'task', 'chore', 'epic', null];
 
-	// Sort function for project mode: dependency-aware, then created_at
-	// Priority: 1) Working agents, 2) Assigned, 3) No unresolved deps, 4) Priority, 5) Created at
+	// Sort function for project mode: dependency-aware, respects user-selected column
+	// Priority: 1) Working agents, 2) Assigned, 3) No unresolved deps, 4) User-selected column
 	function sortTasksForProjectMode(tasksToSort: Task[]): Task[] {
 		return [...tasksToSort].sort((a, b) => {
 			// First: tasks with working agents come first
@@ -830,15 +830,54 @@
 			if (aUnresolvedDeps === 0 && bUnresolvedDeps > 0) return -1;
 			if (aUnresolvedDeps > 0 && bUnresolvedDeps === 0) return 1;
 
-			// Fourth: sort by priority (lower = higher priority)
-			const aPriority = a.priority ?? 99;
-			const bPriority = b.priority ?? 99;
-			if (aPriority !== bPriority) return aPriority - bPriority;
+			// Fourth: sort by user-selected column (respects sortColumn and sortDirection)
+			let aVal, bVal;
 
-			// Fifth: sort by created_ts (oldest first to work on dependencies in order)
-			const aCreated = a.created_ts || '';
-			const bCreated = b.created_ts || '';
-			return aCreated.localeCompare(bCreated);
+			switch (sortColumn) {
+				case 'id':
+					// Use hierarchical-aware comparison for IDs
+					const idComparison = compareTaskIds(a.id || '', b.id || '');
+					return sortDirection === 'asc' ? idComparison : -idComparison;
+				case 'title':
+					aVal = a.title || '';
+					bVal = b.title || '';
+					break;
+				case 'priority':
+					aVal = a.priority ?? 99;
+					bVal = b.priority ?? 99;
+					break;
+				case 'status':
+					aVal = a.status || '';
+					bVal = b.status || '';
+					break;
+				case 'type':
+					aVal = a.issue_type || '';
+					bVal = b.issue_type || '';
+					break;
+				case 'assignee':
+					aVal = a.assignee || '';
+					bVal = b.assignee || '';
+					break;
+				case 'updated':
+					aVal = a.updated_at || '';
+					bVal = b.updated_at || '';
+					break;
+				default:
+					// Fallback: priority then created_ts
+					const aPriority = a.priority ?? 99;
+					const bPriority = b.priority ?? 99;
+					if (aPriority !== bPriority) return aPriority - bPriority;
+					const aCreated = a.created_ts || '';
+					const bCreated = b.created_ts || '';
+					return aCreated.localeCompare(bCreated);
+			}
+
+			if (typeof aVal === 'number' && typeof bVal === 'number') {
+				return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+			}
+
+			const comparison = String(aVal).localeCompare(String(bVal));
+			return sortDirection === 'asc' ? comparison : -comparison;
 		});
 	}
 
@@ -937,6 +976,11 @@
 
 	// Grouped tasks based on groupingMode (for sticky headers)
 	const groupedTasks = $derived.by(() => {
+		// Explicitly reference sort state to ensure Svelte tracks these dependencies
+		// (needed because sortTasks() reads them indirectly via closure)
+		const _sortCol = sortColumn;
+		const _sortDir = sortDirection;
+
 		const groups = new Map<string | null, Task[]>();
 
 		// For 'type' mode, initialize groups in order
@@ -1001,6 +1045,11 @@
 	// Nested grouped tasks for project mode: Map<project, Map<epic, Task[]>>
 	// This provides true two-level grouping with collapsible project headers
 	const nestedGroupedTasks = $derived.by(() => {
+		// Explicitly reference sort state to ensure Svelte tracks these dependencies
+		// (needed because sortTasksForProjectMode() reads them indirectly via closure)
+		const _sortCol = sortColumn;
+		const _sortDir = sortDirection;
+
 		const projectMap = new Map<string, Map<string, Task[]>>();
 
 		if (groupingMode !== 'project') {

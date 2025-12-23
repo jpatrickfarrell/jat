@@ -209,13 +209,14 @@ export function resolveUserAction(
 		// Look up builtin action
 		return getBuiltinAction(config.id, state);
 	} else if (config.type === 'command') {
-		// Custom command action - already has all the fields
+		// Custom command action - preserve all fields including command for execution
 		return {
 			id: config.id,
 			label: config.label,
 			icon: config.icon,
 			variant: config.variant,
-			description: config.description
+			description: config.description,
+			command: config.command
 		};
 	}
 	return null;

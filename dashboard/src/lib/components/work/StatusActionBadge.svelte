@@ -322,7 +322,15 @@
 		try {
 			// Play sound before executing action
 			playActionSound(action.id);
-			await onAction?.(action.id);
+
+			// Check if this is a custom command action (has command property)
+			if (action.command && onCommand) {
+				// Custom command - use onCommand callback to send the slash command
+				await onCommand(action.command);
+			} else {
+				// Built-in action - use onAction callback
+				await onAction?.(action.id);
+			}
 		} finally {
 			isExecuting = false;
 			isOpen = false;
@@ -576,7 +584,7 @@
 												type="button"
 												onclick={() => executeCommand(cmd.invocation)}
 												class="w-full px-3 py-1.5 flex items-center gap-2 text-left text-[11px] transition-colors text-base-content/70 hover:text-base-content {index === selectedCommandIndex ? 'command-item-selected' : 'command-item-default'}"
-												disabled={isExecuting}
+												disabled={disabled || isExecuting}
 												onmouseenter={() => { selectedCommandIndex = index; }}
 											>
 												<svg class="w-3.5 h-3.5 flex-shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">

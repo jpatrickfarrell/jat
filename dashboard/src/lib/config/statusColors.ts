@@ -635,6 +635,8 @@ export interface SessionStateAction {
 	icon: string;         // SVG path
 	variant: 'default' | 'success' | 'warning' | 'error' | 'info';
 	description?: string;
+	/** For custom command actions: the slash command to execute (e.g., "/jat:bead") */
+	command?: string;
 }
 
 export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {

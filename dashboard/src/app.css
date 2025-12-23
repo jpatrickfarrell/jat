@@ -605,13 +605,15 @@
 
 /* Shimmer for "generating" state - uses agent's accent color */
 .shimmer-text-fast {
+	/* Use --shimmer-text-color if set, otherwise fall back to currentColor */
+	--_shimmer-color: var(--shimmer-text-color, currentColor);
 	background: linear-gradient(
 		90deg,
-		currentColor 0%,
-		currentColor 35%,
+		var(--_shimmer-color) 0%,
+		var(--_shimmer-color) 35%,
 		var(--anim-shimmer-bright) 50%,
-		currentColor 65%,
-		currentColor 100%
+		var(--_shimmer-color) 65%,
+		var(--_shimmer-color) 100%
 	);
 	background-size: 200% 100%;
 	-webkit-background-clip: text;
@@ -683,4 +685,14 @@
 	100% {
 		background-position: -100% 0;
 	}
+}
+
+/* Sidebar tooltips need high z-index to appear above main content */
+/* When collapsed, drawer-side needs higher z-index so tooltips can escape */
+.drawer-side.overflow-visible {
+	z-index: 50;
+}
+.drawer-side.overflow-visible .tooltip::before,
+.drawer-side.overflow-visible .tooltip::after {
+	z-index: 1000;
 }

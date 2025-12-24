@@ -106,9 +106,14 @@ export async function GET({ url }) {
  * @type {import('./$types').RequestHandler}
  */
 export async function POST({ request }) {
+	// Declare project outside try block so it's accessible in catch
+	let project = null;
+
 	try {
 		// Parse request body
 		const body = await request.json();
+		// Extract project early so it's available in catch block for better error messages
+		project = body.project ? body.project.trim() : null;
 
 		// Validate required fields
 		if (!body.title || typeof body.title !== 'string' || body.title.trim() === '') {
@@ -156,7 +161,7 @@ export async function POST({ request }) {
 		const description = body.description ? body.description.trim() : '';
 		const priority = body.priority !== undefined ? parseInt(body.priority) : 2; // Default to P2
 		const type = body.type.trim().toLowerCase();
-		const project = body.project ? body.project.trim() : null;
+		// Note: project is already extracted at the top of try block
 
 		// Build bd create command
 		let command = `bd create "${title.replace(/"/g, '\\"')}"`;
@@ -286,11 +291,28 @@ export async function POST({ request }) {
 
 		// Check if it's a validation error from bd create
 		const execErr = /** @type {{ stderr?: string, message?: string }} */ (err);
-		if (execErr.stderr && execErr.stderr.includes('Error:')) {
+		const stderr = execErr.stderr || '';
+		const message = execErr.message || '';
+
+		// Check for "no beads database found" error - project not initialized
+		if (stderr.includes('no beads database found') || message.includes('no beads database found')) {
+			const projectName = project || 'this project';
 			return json(
 				{
 					error: true,
-					message: execErr.stderr.trim(),
+					message: `Project "${projectName}" has not been initialized for task tracking. Run "bd init" in the project directory, or use the "Add Project" button on the Projects page.`,
+					type: 'project_not_initialized',
+					hint: `cd ~/code/${projectName} && bd init`
+				},
+				{ status: 400 }
+			);
+		}
+
+		if (stderr.includes('Error:')) {
+			return json(
+				{
+					error: true,
+					message: stderr.trim(),
 					type: 'validation_error'
 				},
 				{ status: 400 }
@@ -300,7 +322,7 @@ export async function POST({ request }) {
 		return json(
 			{
 				error: true,
-				message: execErr.message || 'Internal server error creating task',
+				message: message || 'Internal server error creating task',
 				type: 'server_error'
 			},
 			{ status: 500 }

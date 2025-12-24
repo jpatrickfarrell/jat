@@ -343,8 +343,14 @@ async function createTask(
 
 		// Extract meaningful error message
 		let errorMessage = error.message || 'Unknown error';
-		if (error.stderr && error.stderr.includes('Error:')) {
-			errorMessage = error.stderr.trim();
+		const stderr = error.stderr || '';
+
+		// Check for "no beads database found" error - project not initialized
+		if (stderr.includes('no beads database found') || errorMessage.includes('no beads database found')) {
+			const projectName = defaultProject || task.project || 'this project';
+			errorMessage = `Project "${projectName}" has not been initialized for task tracking. Run "bd init" in the project directory, or use the "Add Project" button on the Projects page.`;
+		} else if (stderr.includes('Error:')) {
+			errorMessage = stderr.trim();
 		}
 
 		return {

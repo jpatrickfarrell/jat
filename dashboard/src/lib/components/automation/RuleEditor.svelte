@@ -28,6 +28,7 @@
 		QuestionUIOption
 	} from '$lib/types/automation';
 	import { RULE_CATEGORY_META } from '$lib/config/automationConfig';
+	import { SESSION_STATE_VISUALS } from '$lib/config/statusColors';
 	import { fly, fade } from 'svelte/transition';
 
 	// =============================================================================
@@ -92,14 +93,14 @@
 	// Validation errors
 	let errors = $state<Record<string, string>>({});
 
-	// Session state options for multi-select
+	// Session state options for multi-select - use centralized visual config
 	const sessionStates = [
-		{ value: 'working', label: 'Working', color: 'oklch(0.75 0.15 85)' },
-		{ value: 'idle', label: 'Idle', color: 'oklch(0.55 0.02 250)' },
-		{ value: 'needs-input', label: 'Needs Input', color: 'oklch(0.70 0.15 310)' },
-		{ value: 'ready-for-review', label: 'Ready for Review', color: 'oklch(0.70 0.15 200)' },
-		{ value: 'completing', label: 'Completing', color: 'oklch(0.70 0.15 170)' },
-		{ value: 'starting', label: 'Starting', color: 'oklch(0.75 0.15 200)' }
+		{ value: 'working', label: 'Working', visual: SESSION_STATE_VISUALS.working },
+		{ value: 'idle', label: 'Idle', visual: SESSION_STATE_VISUALS.idle },
+		{ value: 'needs-input', label: 'Needs Input', visual: SESSION_STATE_VISUALS['needs-input'] },
+		{ value: 'ready-for-review', label: 'Ready for Review', visual: SESSION_STATE_VISUALS['ready-for-review'] },
+		{ value: 'completing', label: 'Completing', visual: SESSION_STATE_VISUALS.completing },
+		{ value: 'starting', label: 'Starting', visual: SESSION_STATE_VISUALS.starting }
 	];
 
 	// Action type options
@@ -448,8 +449,8 @@
 	>
 		<!-- Modal Content -->
 		<div
-			class="flex flex-col w-full max-w-[700px] rounded-xl overflow-hidden bg-base-200 border border-base-300"
-			style="max-height: calc(100vh - 2rem); box-shadow: 0 25px 50px -12px oklch(0 0 0 / 0.5);"
+			class="flex flex-col w-full max-w-[700px] rounded-xl overflow-hidden bg-base-200 border border-base-300 shadow-2xl"
+			style="max-height: calc(100vh - 2rem);"
 			transition:fly={{ y: 20, duration: 200 }}
 		>
 			<!-- Header -->
@@ -616,7 +617,7 @@
 						{#each sessionStates as state}
 							<button
 								class="py-1.5 px-3 text-[0.7rem] font-mono rounded-2xl cursor-pointer transition-all duration-150 {formData.sessionFilter.includes(state.value) ? '' : 'bg-base-300 border border-base-300 text-base-content/60 hover:bg-base-100 hover:border-base-content/30'}"
-								style={formData.sessionFilter.includes(state.value) ? `background: color-mix(in oklch, ${state.color} 20%, transparent); border: 1px solid ${state.color}; color: ${state.color};` : ''}
+								style={formData.sessionFilter.includes(state.value) ? `background: ${state.visual.bgColor}; border: 1px solid ${state.visual.borderColor}; color: ${state.visual.textColor};` : ''}
 								onclick={() => toggleStateFilter(state.value)}
 							>
 								{state.label}

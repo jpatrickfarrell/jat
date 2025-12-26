@@ -336,8 +336,7 @@
 <!-- Preview Modal -->
 {#if showPreviewModal && previewPreset}
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
-		style="background: oklch(0.25 0.02 260 / 0.85);"
+		class="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm bg-base-300/85"
 		onclick={closePreview}
 		onkeydown={(e) => e.key === 'Escape' && closePreview()}
 		role="dialog"
@@ -346,8 +345,8 @@
 		transition:fade={{ duration: 150 }}
 	>
 		<div
-			class="flex flex-col w-full max-w-[550px] rounded-xl overflow-hidden bg-base-200 border border-base-300"
-			style="max-height: calc(100vh - 2rem); box-shadow: 0 25px 50px -12px oklch(0 0 0 / 0.5);"
+			class="flex flex-col w-full max-w-[550px] rounded-xl overflow-hidden bg-base-200 border border-base-300 shadow-2xl"
+			style="max-height: calc(100vh - 2rem);"
 			onclick={(e) => e.stopPropagation()}
 			transition:fly={{ y: 20, duration: 200 }}
 		>

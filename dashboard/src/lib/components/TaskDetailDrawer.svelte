@@ -26,6 +26,7 @@
 	import { getElapsedTimeColor, getFireScale, formatElapsedTime } from '$lib/config/rocketConfig';
 	import { TaskDetailSkeleton } from '$lib/components/skeleton';
 	import SlideOpenButton from '$lib/components/SlideOpenButton.svelte';
+	import { SESSION_STATE_VISUALS } from '$lib/config/statusColors';
 
 	// Task interface for drawer (extends API Task with additional optional fields)
 	interface DrawerTask {
@@ -1939,18 +1940,20 @@
 									<div class="space-y-2">
 										{#each taskSignals as signal, i (signal.timestamp + i)}
 											{@const signalState = signal.state || signal.type}
-											{@const stateColors: Record<string, string> = {
-												working: 'oklch(0.75 0.15 85)',
-												review: 'oklch(0.70 0.15 200)',
-												completed: 'oklch(0.65 0.18 145)',
-												needs_input: 'oklch(0.70 0.15 310)',
-												completing: 'oklch(0.70 0.12 180)',
-												starting: 'oklch(0.70 0.12 200)',
-												idle: 'oklch(0.50 0.02 250)',
-												tasks: 'oklch(0.70 0.15 280)',
-												complete: 'oklch(0.65 0.18 145)',
-												action: 'oklch(0.70 0.15 45)'
+											{@const signalToSessionState: Record<string, string> = {
+												working: 'working',
+												review: 'ready-for-review',
+												completed: 'completed',
+												needs_input: 'needs-input',
+												completing: 'completing',
+												starting: 'starting',
+												idle: 'idle',
+												tasks: 'idle',           // Suggested tasks - use idle color
+												complete: 'completed',   // Complete bundle - same as completed
+												action: 'needs-input'    // Action required - use needs-input color
 											}}
+											{@const sessionState = signalToSessionState[signalState] || 'idle'}
+											{@const stateVisual = SESSION_STATE_VISUALS[sessionState] || SESSION_STATE_VISUALS.idle}
 											{@const stateLabels: Record<string, string> = {
 												working: 'Working',
 												review: 'Ready for Review',
@@ -1965,12 +1968,12 @@
 											}}
 											<div
 												class="p-3 rounded group transition-colors bg-base-200"
-												style="border-left: 3px solid {stateColors[signalState] || 'var(--fallback-bc,oklch(var(--bc)/0.4))'};"
+												style="border-left: 3px solid {stateVisual.accent};"
 											>
 												<div class="flex items-center justify-between mb-1">
 													<div class="flex items-center gap-2">
 														<!-- State badge -->
-														<span class="badge badge-xs text-base-100" style="background: {stateColors[signalState] || 'var(--fallback-bc,oklch(var(--bc)/0.3))'};">
+														<span class="badge badge-xs text-base-100" style="background: {stateVisual.accent};">
 															{stateLabels[signalState] || signalState}
 														</span>
 														{#if signal.agent_name}

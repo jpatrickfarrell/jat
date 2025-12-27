@@ -43,6 +43,7 @@
 	import DefaultsEditor from '$lib/components/config/DefaultsEditor.svelte';
 	import TemplatesEditor from '$lib/components/config/TemplatesEditor.svelte';
 	import StateActionsEditor from '$lib/components/config/StateActionsEditor.svelte';
+	import KeyboardShortcutsEditor from '$lib/components/config/KeyboardShortcutsEditor.svelte';
 	import type { SlashCommand, ProjectConfig, HooksConfig } from '$lib/types/config';
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 
@@ -87,7 +88,7 @@
 	const projectsError = $derived(getProjectsError());
 
 	// Valid tabs for URL sync
-	const validTabs = ['commands', 'projects', 'defaults', 'mcp', 'hooks', 'claude', 'docs', 'templates', 'actions'];
+	const validTabs = ['commands', 'projects', 'defaults', 'mcp', 'hooks', 'claude', 'docs', 'templates', 'actions', 'shortcuts'];
 
 	// Sync activeTab from URL query parameter
 	$effect(() => {
@@ -421,6 +422,16 @@
 						transition:fade={{ duration: 150 }}
 					>
 						<StateActionsEditor />
+					</div>
+				{:else if activeTab === 'shortcuts'}
+					<!-- Keyboard Shortcuts Tab -->
+					<div
+						role="tabpanel"
+						id="shortcuts-panel"
+						aria-labelledby="shortcuts-tab"
+						transition:fade={{ duration: 150 }}
+					>
+						<KeyboardShortcutsEditor />
 					</div>
 				{/if}
 			</div>

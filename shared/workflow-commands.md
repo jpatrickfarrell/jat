@@ -1,20 +1,21 @@
 ## Agent Workflow Commands (Jomarchy Agent Tools)
 
-**8 streamlined commands for multi-agent coordination** located in `~/code/jat/commands/jat/`
+**9 streamlined commands for multi-agent coordination** located in `~/code/jat/commands/jat/`
 
 **One agent = one session = one task.** Each Claude session handles exactly one task from start to completion.
 
 **Core Workflow:**
 - `/jat:start [agent-name | task-id]` - **Main command**: handles registration, task selection, conflict detection, and work start
 - `/jat:complete [task-id]` - Finish work, verify, commit, close task, end session
+- `/jat:commit` - Create well-organized commits with automatic documentation updates
 
 **Coordination:**
-- `/jat:pause task-id [--reason | --blocked | --handoff | --abandon]` - Unified stop command with 4 modes
 - `/jat:status` - Check current work status, locks, messages
 
 **Quality & Planning:**
 - `/jat:verify [task-id]` - Pre-completion quality checks
 - `/jat:plan` - Convert planning docs/conversation to Beads tasks
+- `/jat:bead` - Convert PRD/spec into structured Beads tasks with dependencies
 
 **Maintenance:**
 - `/jat:help` - Command reference with examples
@@ -35,12 +36,6 @@
 
 # With specific agent (dashboard spawn)
 /jat:start MyAgent task-abc   # Use MyAgent, start task
-
-# Pause modes
-/jat:pause task-abc --reason "Taking break"                # Keep locks
-/jat:pause task-abc --blocked --reason "API down"          # Release locks, mark blocked
-/jat:pause task-abc --handoff Alice --reason "Need help"   # Hand off to another agent
-/jat:pause task-abc --abandon --reason "Not needed"        # Release locks, unassign
 ```
 
 **Session Lifecycle:**

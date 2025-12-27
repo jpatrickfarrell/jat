@@ -36,3 +36,4 @@ tools/
 
 # Generated avatars (per-machine, don't commit)
 avatars/
+.archive/

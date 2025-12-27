@@ -84,7 +84,7 @@ const DEFAULTS = {
 	outputDrawerOpen: false,
 	taskSaveAction: 'close' as TaskSaveAction,
 	sparklineMode: 'stacked' as SparklineMode,
-	ctrlCIntercept: true, // When true, Ctrl+C sends interrupt to tmux; when false, Ctrl+C copies
+	ctrlCIntercept: false, // When false, Ctrl+C copies (browser default); when true, Ctrl+C sends interrupt to tmux
 	terminalFontFamily: 'jetbrains' as TerminalFontFamily,
 	terminalFontSize: 'sm' as TerminalFontSize,
 	terminalScrollback: 2000 as TerminalScrollback,

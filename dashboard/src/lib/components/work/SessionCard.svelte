@@ -989,48 +989,15 @@
 		previousIsComplete = isComplete;
 	});
 
-	// Track previous output length to detect submissions from attached terminal
-	let previousOutputLength = $state(0);
-
-	// Clear textarea when streamed text is submitted in terminal
-	// Uses high water mark (maxStreamedLength) to prevent re-sending text after clearing
-	$effect(() => {
-		if (!liveStreamEnabled || !lastStreamedText || !output) {
-			previousOutputLength = output?.length || 0;
-			return;
-		}
-
-		// Only check if output grew significantly (not just echo of typed chars)
-		const outputGrowth = output.length - previousOutputLength;
-		if (outputGrowth <= 0) {
-			previousOutputLength = output.length;
-			return;
-		}
-
-		const newContent = output.slice(previousOutputLength);
-
-		// Detect submission: new content contains the streamed text AND has a newline
-		// The newline indicates Enter was pressed (either echoed or from response)
-		const hasStreamedText = newContent.includes(lastStreamedText);
-		const hasNewline = newContent.includes("\n");
-		const significantGrowth = outputGrowth > lastStreamedText.length; // More output than just echo
-
-		if (
-			hasStreamedText &&
-			hasNewline &&
-			significantGrowth &&
-			lastStreamedText.length >= 2
-		) {
-			// Text was likely submitted in terminal - clear textarea
-			// IMPORTANT: Also reset maxStreamedLength so new typing will be streamed fresh
-			inputText = "";
-			lastStreamedText = "";
-			maxStreamedLength = 0; // Reset high water mark - submission confirmed
-			setTimeout(autoResizeTextarea, 0);
-		}
-
-		previousOutputLength = output.length;
-	});
+	// NOTE: Previously had an $effect here to detect when text was submitted from an
+	// attached terminal (outside the dashboard). This caused a bug (jat-ygylc) where
+	// text would be duplicated/re-streamed multiple times because the detection was
+	// too aggressive - it would falsely trigger when Claude Code echoed back typed
+	// characters or when responses happened to contain the typed text.
+	//
+	// The effect has been removed. If users submit from an attached terminal, the
+	// local textarea won't auto-clear, but that's better than the text duplication bug.
+	// Users can manually clear with Escape or the clear button.
 
 	// Note: Activity state polling is now centralized in workSessionsState store
 	// The store polls all active sessions every 200ms and updates _activityState
@@ -3609,12 +3576,14 @@
 			e.preventDefault();
 			onSendInput("tab", "key");
 		} else if (e.key === "Escape") {
-			// Clear input text on Escape
+			// Send 2x Escape to tmux (matches Claude Code's clear/cancel behavior)
+			// Claude Code: 2x Escape = clear, 3x Escape = history dialog
 			e.preventDefault();
 			inputText = "";
-			// If streaming was active and we had text, clear terminal input too
-			if (liveStreamEnabled && lastStreamedText && onSendInput) {
-				onSendInput("ctrl-u", "key");
+			if (onSendInput) {
+				onSendInput("escape", "key");
+				// Small delay between escapes to ensure they're registered separately
+				setTimeout(() => onSendInput("escape", "key"), 50);
 			}
 			lastStreamedText = ""; // Reset streamed text tracking
 			maxStreamedLength = 0; // Reset high water mark on Escape

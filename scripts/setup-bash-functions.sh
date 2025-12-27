@@ -65,8 +65,9 @@ for repo_dir in "$CODE_DIR"/*; do
     mkdir -p \"\$logs_dir\"
 
     # Create tmux session, run Claude - session gets renamed by /jat:start
+    # Use -x 120 to ensure ANSI boxes don't wrap (default is 80 columns)
     # Capture scrollback buffer on exit (not pipe-pane which logs every redraw)
-    tmux new-session -d -s \"\$session_name\" -c ~/code/$REPO_NAME
+    tmux new-session -d -s \"\$session_name\" -x 120 -y 40 -c ~/code/$REPO_NAME
     tmux set-option -t \"\$session_name\" history-limit 50000
     # Wait for shell to initialize before sending keys
     # Without this delay, the shell may not be ready and keys are lost

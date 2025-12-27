@@ -264,6 +264,57 @@ await browser.disconnect();
 3. **Comments:** Explain complex logic, not obvious code
 4. **README Updates:** Update main README.md when adding tools
 
+### ANSI Text Box Width Constraints
+
+Command templates in `commands/jat/*.md` use Unicode box-drawing characters to display formatted output. These boxes MUST fit within the tmux default width to prevent wrapping.
+
+**Rules:**
+
+1. **Maximum display width: 76 characters** - This leaves a 4-character margin for tmux's 80-column default
+2. **Emojis count as 2 cells** - Wide characters (🔴, ✅, 📋, etc.) take 2 display columns
+3. **Box-drawing characters count as 1 cell** - (╔, ═, ║, └, etc.) are single-width
+
+**Measuring display width:**
+
+```python
+# Use this to check line widths in template files
+import unicodedata
+
+def display_width(s):
+    width = 0
+    for c in s:
+        if unicodedata.east_asian_width(c) in ('F', 'W'):
+            width += 2  # Full/Wide characters (emojis)
+        else:
+            width += 1
+    return width
+
+# Test: should be <= 76
+display_width("╔══════════════════════════════════════════════════════════════════════════╗")
+```
+
+**Why this matters:**
+
+- tmux creates detached sessions with 80-column default (`tmux new-session -d`)
+- Boxes wider than 80 characters wrap and break visual formatting
+- The 76-character limit provides safety margin for edge cases
+
+**Examples:**
+
+```
+# GOOD (76 characters display width):
+╔══════════════════════════════════════════════════════════════════════════╗
+║  ✅ TASK COMPLETED: jat-abc                                              ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+# BAD (would wrap in 80-column terminal):
+╔════════════════════════════════════════════════════════════════════════════════════╗
+║  ✅ This box is too wide and will wrap in a standard 80-column terminal           ║
+╚════════════════════════════════════════════════════════════════════════════════════╝
+```
+
+**Note:** tmux sessions created by `jat` CLI and bash launchers now use `-x 120 -y 40` for extra width, but templates should still target 76 characters for compatibility with other terminal environments.
+
 ---
 
 ## Testing Guidelines

@@ -160,10 +160,11 @@ launch_claude() {
 
         # Launch terminal with tmux session containing Claude
         # This allows dashboard to track the session via tmux
+        # Use -x 120 to ensure ANSI boxes don't wrap (default is 80 columns)
         # Capture scrollback buffer on exit (not pipe-pane which logs every redraw)
         $TERMINAL -T "$window_title" -e bash -c "
             cd '$path'
-            tmux new-session -d -s '$session_name' -c '$path'
+            tmux new-session -d -s '$session_name' -x 120 -y 40 -c '$path'
             # Set large scrollback buffer to capture full session history
             tmux set-option -t '$session_name' history-limit 50000
             # Wait for shell to initialize before sending keys

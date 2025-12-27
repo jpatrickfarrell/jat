@@ -1,0 +1,118 @@
+#!/bin/bash
+# jat-doctor - Diagnose jat installation health
+# Run this when jat features aren't working
+
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+pass() { echo -e "${GREEN}✓${NC} $1"; }
+fail() { echo -e "${RED}✗${NC} $1"; ISSUES+=("$1"); }
+warn() { echo -e "${YELLOW}⚠${NC} $1"; }
+
+ISSUES=()
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  jat Doctor Report"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+# 1. Check jat repo
+if [[ -d ~/code/jat ]]; then
+    pass "jat repo exists"
+else
+    fail "jat repo missing - run: git clone https://github.com/joewinke/jat ~/code/jat"
+fi
+
+# 2. Check shared docs
+SHARED_COUNT=$(ls ~/code/jat/shared/*.md 2>/dev/null | wc -l)
+if [[ $SHARED_COUNT -ge 10 ]]; then
+    pass "$SHARED_COUNT shared docs found"
+else
+    fail "Only $SHARED_COUNT shared docs (expected 10+)"
+fi
+
+# 3. Check statusline
+if [[ -f ~/.claude/statusline.sh ]]; then
+    pass "Statusline installed"
+else
+    fail "Statusline missing - run: cp ~/code/jat/.claude/statusline.sh ~/.claude/"
+fi
+
+# 4. Check agent commands
+if [[ -d ~/.claude/commands/jat ]]; then
+    CMD_COUNT=$(ls ~/.claude/commands/jat/*.md 2>/dev/null | wc -l)
+    BROKEN=$(find ~/.claude/commands/jat -type l ! -exec test -e {} \; -print 2>/dev/null | wc -l)
+    if [[ $BROKEN -gt 0 ]]; then
+        warn "$CMD_COUNT commands installed ($BROKEN broken symlinks)"
+        echo "    Broken symlinks:"
+        find ~/.claude/commands/jat -type l ! -exec test -e {} \; -print 2>/dev/null | while read f; do
+            echo "      - $(basename "$f")"
+        done
+        echo "    Fix: rm ~/.claude/commands/jat/*.md && cd ~/code/jat && ./install.sh"
+    else
+        pass "$CMD_COUNT agent commands installed"
+    fi
+else
+    fail "Agent commands not installed - run: cd ~/code/jat && ./install.sh"
+fi
+
+# 5. Check core tools
+echo ""
+echo "Tools:"
+TOOLS_OK=true
+for tool in am-register am-inbox am-send bd jat-signal; do
+    if command -v $tool &>/dev/null; then
+        pass "$tool"
+    else
+        fail "$tool missing"
+        TOOLS_OK=false
+    fi
+done
+
+if [[ "$TOOLS_OK" == "false" ]]; then
+    echo "    Fix: cd ~/code/jat && ./install.sh"
+fi
+
+# 6. Check Beads in current project
+echo ""
+echo "Current Project ($(basename "$PWD")):"
+if [[ -d .beads ]]; then
+    TASK_COUNT=$(bd list --json 2>/dev/null | jq length 2>/dev/null || echo "?")
+    pass "Beads initialized ($TASK_COUNT tasks)"
+else
+    warn "Beads not initialized - run: bd init"
+fi
+
+# 7. Check CLAUDE.md imports
+if [[ -f CLAUDE.md ]]; then
+    IMPORTS=$(grep -c "^@~/code/jat/shared/" CLAUDE.md 2>/dev/null || echo "0")
+    if [[ $IMPORTS -ge 5 ]]; then
+        pass "CLAUDE.md has $IMPORTS jat imports"
+    else
+        warn "CLAUDE.md has only $IMPORTS jat imports (expected 5+)"
+        echo "    Add to CLAUDE.md:"
+        echo "      @~/code/jat/shared/overview.md"
+        echo "      @~/code/jat/shared/agent-mail.md"
+        echo "      @~/code/jat/shared/beads.md"
+        echo "      @~/code/jat/shared/tools.md"
+        echo "      @~/code/jat/shared/workflow-commands.md"
+    fi
+else
+    warn "No CLAUDE.md in current directory"
+fi
+
+# Summary
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+if [[ ${#ISSUES[@]} -eq 0 ]]; then
+    echo -e "  STATUS: ${GREEN}HEALTHY${NC}"
+else
+    echo -e "  STATUS: ${RED}NEEDS REPAIR${NC} (${#ISSUES[@]} issues)"
+fi
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""

@@ -14,6 +14,7 @@ import {
 } from '$lib/config/spawnConfig.js';
 import { getJatDefaults } from '$lib/server/projectPaths.js';
 import { CLAUDE_READY_PATTERNS, SHELL_PROMPT_PATTERNS } from '$lib/server/shellPatterns.js';
+import { stripAnsi } from '$lib/utils/ansiToHtml.js';
 
 const execAsync = promisify(exec);
 
@@ -188,7 +189,7 @@ export async function POST({ request }) {
 						} else if (isLikelyShellPrompt && waited > 5000) {
 							shellPromptDetected = true;
 							console.error(`[sessions] Claude Code failed to start - detected shell prompt`);
-							console.error(`[sessions] Terminal output (last 300 chars): ${paneOutput.slice(-300)}`);
+							console.error(`[sessions] Terminal output (last 300 chars): ${stripAnsi(paneOutput.slice(-300))}`);
 							break;
 						}
 					} catch {

@@ -11,6 +11,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { listSessionsAsync } from '$lib/server/sessions.js';
 import { CLAUDE_READY_PATTERNS, SHELL_PROMPT_PATTERNS } from '$lib/server/shellPatterns.js';
+import { stripAnsi } from '$lib/utils/ansiToHtml.js';
 
 const execAsync = promisify(exec);
 
@@ -158,7 +159,7 @@ export async function POST({ request }) {
 							} else if (isLikelyShellPrompt && waited > 5000) {
 								shellPromptDetected = true;
 								console.error(`[batch] Claude Code failed to start for ${sessionName} - shell prompt detected`);
-								console.error(`[batch] Terminal output (last 300 chars): ${paneOutput.slice(-300)}`);
+								console.error(`[batch] Terminal output (last 300 chars): ${stripAnsi(paneOutput.slice(-300))}`);
 								break;
 							}
 						} catch {

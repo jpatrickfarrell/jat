@@ -2526,6 +2526,94 @@ const userTemplates = allTemplates.filter(t => t.isUserTemplate);
 
 - jat-4e31: Add custom user templates (completed)
 
+## Keyboard Shortcuts
+
+### Overview
+
+The dashboard has a comprehensive keyboard shortcut system with three categories: Global shortcuts (work from anywhere), Session shortcuts (require a hovered session), and Command shortcuts (user-assignable).
+
+**Configuration:** Settings → Shortcuts tab in the dashboard.
+
+### Global App Shortcuts
+
+These work from anywhere in the app (unless typing in an input field). All are customizable via Settings.
+
+| Default Shortcut | Action | Description |
+|-----------------|--------|-------------|
+| `Alt+N` | Create New Task | Opens task creation drawer |
+| `Alt+E` | Open Epic Swarm Modal | Launch swarm attack on an epic |
+| `Alt+S` | Open Start Next Dropdown | Quick-start a ready task |
+| `Alt+Shift+P` | Add New Project | Initialize a new project |
+
+### Session Shortcuts
+
+These require a **hovered session** (mouse over a SessionCard on Work page). All are customizable via Settings.
+
+| Default Shortcut | Action | Description |
+|-----------------|--------|-------------|
+| `Alt+A` | Attach Terminal | Open session in your terminal |
+| `Alt+K` | Kill Session | Terminate the tmux session |
+| `Alt+I` | Interrupt Session | Send Ctrl+C to the session |
+| `Alt+P` | Pause Session | Pause the agent |
+| `Alt+R` | Restart Session | Restart the session |
+| `Alt+Shift+C` | Copy Session Contents | Copy terminal output to clipboard |
+
+### System Shortcuts (Non-configurable)
+
+These are fixed and cannot be customized.
+
+| Shortcut | Action | Context |
+|----------|--------|---------|
+| `Alt+1` through `Alt+9` | Jump to Session by Position | Work page only |
+| `Escape` | Close Modals/Drawers | Global |
+
+### Command Shortcuts
+
+Users can assign custom keyboard shortcuts to any slash command. These are stored in browser localStorage.
+
+**To assign:**
+1. Go to Settings → Shortcuts tab
+2. Find the command in the "Command Shortcuts" section
+3. Click "Add shortcut" and press your key combination
+
+**Requirements:**
+- Must include a modifier key (Alt, Ctrl, or Meta/Cmd)
+- Cannot conflict with existing shortcuts
+- Alt+key combinations are recommended (generally safe)
+
+### Implementation
+
+| Component | Purpose |
+|-----------|---------|
+| `src/lib/stores/keyboardShortcuts.svelte.ts` | Store for shortcut management |
+| `src/lib/components/config/KeyboardShortcutsEditor.svelte` | UI for editing shortcuts |
+| `src/routes/+layout.svelte` | Global keyboard event handler |
+| `src/lib/stores/hoveredSession.ts` | Track which session is hovered |
+
+### Customization API
+
+```typescript
+// Get/set command shortcuts
+import { getShortcut, setShortcut } from '$lib/stores/keyboardShortcuts.svelte';
+
+setShortcut('/jat:complete', 'Alt+C');
+const shortcut = getShortcut('/jat:complete'); // 'Alt+C'
+
+// Get/set global shortcuts
+import { getGlobalShortcut, setGlobalShortcut } from '$lib/stores/keyboardShortcuts.svelte';
+
+setGlobalShortcut('new-task', 'Alt+T'); // Override default
+const current = getGlobalShortcut('new-task'); // 'Alt+T'
+
+// Reset to default
+import { resetGlobalShortcut } from '$lib/stores/keyboardShortcuts.svelte';
+resetGlobalShortcut('new-task'); // Back to 'Alt+N'
+```
+
+### Task Reference
+
+- jat-tt20r: Add keyboard shortcut documentation to CLAUDE.md
+
 ## Development Commands
 
 ```bash

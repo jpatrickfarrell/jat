@@ -4071,6 +4071,7 @@
 				<div
 					class="shrink-0 rounded-full leading-[0]"
 					style="box-shadow: 0 0 0 2px {displayAccent};"
+					title={stateVisual.description}
 				>
 					<AgentAvatar name={agentName} size={18} />
 				</div>
@@ -4656,21 +4657,23 @@
 			>
 				<!-- Left: Agent Info -->
 				<div class="flex items-center gap-2 min-w-0 ml-2">
-					<AgentAvatar
-						name={agentName}
-						size={28}
-						class="shrink-0 {sessionState === 'starting'
-							? 'ring-2 ring-secondary ring-offset-base-100 ring-offset-1'
-							: sessionState === 'working'
-								? 'ring-2 ring-info ring-offset-base-100 ring-offset-1'
-								: sessionState === 'needs-input'
-									? 'ring-2 ring-warning ring-offset-base-100 ring-offset-1'
-									: sessionState === 'ready-for-review'
-										? 'ring-2 ring-accent ring-offset-base-100 ring-offset-1'
-										: sessionState === 'completed'
-											? 'ring-2 ring-success ring-offset-base-100 ring-offset-1'
-											: ''}"
-					/>
+					<div title={stateVisual.description}>
+						<AgentAvatar
+							name={agentName}
+							size={28}
+							class="shrink-0 {sessionState === 'starting'
+								? 'ring-2 ring-secondary ring-offset-base-100 ring-offset-1'
+								: sessionState === 'working'
+									? 'ring-2 ring-info ring-offset-base-100 ring-offset-1'
+									: sessionState === 'needs-input'
+										? 'ring-2 ring-warning ring-offset-base-100 ring-offset-1'
+										: sessionState === 'ready-for-review'
+											? 'ring-2 ring-accent ring-offset-base-100 ring-offset-1'
+											: sessionState === 'completed'
+												? 'ring-2 ring-success ring-offset-base-100 ring-offset-1'
+												: ''}"
+						/>
+					</div>
 					<div class="flex flex-col min-w-0">
 						<!-- Agent name -->
 						<span

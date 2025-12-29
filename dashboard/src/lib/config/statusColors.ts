@@ -437,6 +437,7 @@ export interface SessionStateVisual {
 	label: string;                 // Display label with emoji (e.g., "✅ DONE")
 	shortLabel: string;            // Short label without emoji (e.g., "Complete")
 	iconType: SessionStateIconType; // Icon identifier for SessionCard
+	description: string;           // Tooltip description explaining this state
 
 	// Dormant variants (for sessions that have been inactive)
 	dormantLabel?: string;         // Label when dormant (e.g., "💤 COMPLETE")
@@ -467,6 +468,7 @@ export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
 		label: '🚀 STARTING',
 		shortLabel: '🚀 Starting',
 		iconType: 'rocket',
+		description: 'Agent is initializing and starting up',
 		// StatusActionBadge colors
 		bgColor: 'oklch(0.60 0.15 200 / 0.3)',
 		textColor: 'oklch(0.90 0.12 200)',
@@ -481,6 +483,7 @@ export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
 		label: '🔧 WORKING',
 		shortLabel: '🔧 Working',
 		iconType: 'gear',
+		description: 'Agent is actively writing code and making changes',
 		// Dormant variant: agent was working but has gone quiet/stalled
 		dormantLabel: '💤 WORKING',
 		dormantShortLabel: '💤 Working',
@@ -503,6 +506,7 @@ export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
 		label: '🔄 RECOVERING',
 		shortLabel: '🔄 Recovering',
 		iconType: 'gear',
+		description: 'Automation triggered recovery (API overload, rate limit, etc.)',
 		// StatusActionBadge colors - cyan/teal to indicate auto-recovery in progress
 		bgColor: 'oklch(0.55 0.18 190 / 0.3)',
 		textColor: 'oklch(0.90 0.15 190)',
@@ -519,6 +523,7 @@ export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
 		label: '📦 COMPACTING',
 		shortLabel: '📦 Compacting',
 		iconType: 'gear',
+		description: 'Context window is being compacted to reduce token usage',
 		// StatusActionBadge colors - muted purple to indicate system processing
 		bgColor: 'oklch(0.50 0.12 280 / 0.3)',
 		textColor: 'oklch(0.85 0.10 280)',
@@ -535,6 +540,7 @@ export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
 		label: '❓ INPUT',
 		shortLabel: '❓ Needs Input',
 		iconType: 'question',
+		description: 'Agent is waiting for your response to a question',
 		// Dormant variant: waiting for user but user hasn't responded
 		dormantLabel: '💤 INPUT',
 		dormantShortLabel: '💤 Needs Input',
@@ -557,6 +563,7 @@ export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
 		label: '🔍 REVIEW',
 		shortLabel: '🔍 Review',
 		iconType: 'eye',
+		description: 'Agent finished coding and is ready for you to review',
 		// Dormant variant: waiting for user review but user hasn't acted
 		dormantLabel: '💤 REVIEW',
 		dormantShortLabel: '💤 Review',
@@ -579,6 +586,7 @@ export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
 		label: '⏳ COMPLETING',
 		shortLabel: '⏳ Completing',
 		iconType: 'gear',
+		description: 'Running /jat:complete to finalize the task',
 		// StatusActionBadge colors
 		bgColor: 'oklch(0.50 0.12 175 / 0.3)',
 		textColor: 'oklch(0.85 0.12 175)',
@@ -593,6 +601,7 @@ export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
 		label: '✅ DONE',
 		shortLabel: '✅ Complete',
 		iconType: 'check',
+		description: 'Task completed successfully',
 		// Dormant variant: session completed but now sleeping/inactive
 		dormantLabel: '💤 COMPLETE',
 		dormantShortLabel: '💤 Complete',
@@ -614,6 +623,7 @@ export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
 		label: '🚀 SPAWNING NEXT',
 		shortLabel: '🚀 Spawning',
 		iconType: 'rocket',
+		description: 'Spawning next agent to continue with the next task',
 		// StatusActionBadge colors - vibrant green with cyan undertone (success + progress)
 		bgColor: 'oklch(0.50 0.20 160 / 0.3)',
 		textColor: 'oklch(0.85 0.18 160)',
@@ -630,6 +640,7 @@ export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
 		label: '💤 IDLE',
 		shortLabel: '💤 Idle',
 		iconType: 'circle',
+		description: 'Agent is idle with no active task',
 		// StatusActionBadge colors
 		bgColor: 'oklch(0.5 0 0 / 0.1)',
 		textColor: 'oklch(0.60 0.02 250)',
@@ -667,13 +678,6 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			icon: 'M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0',
 			variant: 'success',
 			description: 'Close tmux session'
-		},
-		{
-			id: 'resume',
-			label: 'Resume Session',
-			icon: 'M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99',
-			variant: 'info',
-			description: 'Resume conversation in new session'
 		},
 		{
 			id: 'view-task',
@@ -880,6 +884,7 @@ export interface ServerStateVisual {
 	// Display
 	label: string;                 // Display label with emoji (e.g., "🟢 RUNNING")
 	shortLabel: string;            // Short label without emoji (e.g., "Running")
+	description: string;           // Tooltip description explaining this state
 
 	// Badge colors (for ServerStatusBadge)
 	bgColor: string;               // Background color (oklch with alpha)
@@ -900,6 +905,7 @@ export const SERVER_STATE_VISUALS: Record<ServerState, ServerStateVisual> = {
 	running: {
 		label: '🟢 RUNNING',
 		shortLabel: 'Running',
+		description: 'Dev server is running and listening on port',
 		// Badge colors - vibrant green
 		bgColor: 'oklch(0.45 0.18 145 / 0.3)',
 		textColor: 'oklch(0.80 0.15 145)',
@@ -914,6 +920,7 @@ export const SERVER_STATE_VISUALS: Record<ServerState, ServerStateVisual> = {
 	starting: {
 		label: '🟡 STARTING',
 		shortLabel: 'Starting',
+		description: 'Dev server is starting up',
 		pulse: true,
 		// Badge colors - amber/yellow
 		bgColor: 'oklch(0.55 0.18 85 / 0.3)',
@@ -929,6 +936,7 @@ export const SERVER_STATE_VISUALS: Record<ServerState, ServerStateVisual> = {
 	stopped: {
 		label: '⏹️ STOPPED',
 		shortLabel: 'Stopped',
+		description: 'Dev server is not running',
 		// Badge colors - muted/gray
 		bgColor: 'oklch(0.5 0 0 / 0.1)',
 		textColor: 'oklch(0.60 0.02 250)',

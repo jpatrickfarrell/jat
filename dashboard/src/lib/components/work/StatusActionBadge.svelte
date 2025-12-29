@@ -425,7 +425,7 @@
 			: `background: ${config.bgColor}; color: ${config.textColor}; border: 1px solid ${config.borderColor};`
 		}
 		disabled={disabled}
-		title={dormantTooltip || "Click for actions"}
+		title={dormantTooltip || config.description || "Click for actions"}
 	>
 		{variant === 'integrated' ? displayShortLabel : displayLabel}
 		<!-- Dropdown indicator -->

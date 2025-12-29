@@ -135,7 +135,7 @@
 			: `background: ${config.bgColor}; color: ${config.textColor}; border: 1px solid ${config.borderColor};`
 		}
 		disabled={disabled}
-		title="Click for server actions"
+		title={config.description || "Click for server actions"}
 	>
 		<!-- Server icon -->
 		<svg class="inline-block w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

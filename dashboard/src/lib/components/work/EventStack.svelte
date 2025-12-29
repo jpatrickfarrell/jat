@@ -577,6 +577,12 @@
 			text: 'oklch(0.85 0.12 260)',
 			border: 'oklch(0.40 0.10 260)'
 		},
+		dashboard_input: {
+			icon: '🖱️',
+			bg: 'oklch(0.22 0.10 220)',
+			text: 'oklch(0.85 0.15 220)',
+			border: 'oklch(0.40 0.12 220)'
+		},
 		starting: {
 			icon: '🚀',
 			bg: 'oklch(0.22 0.08 200)',
@@ -731,6 +737,16 @@
 			}
 
 			return 'User message';
+		}
+
+		// For dashboard_input events, show the input that was sent
+		if (event.type === 'dashboard_input') {
+			const input = event.data?.input as string || '';
+			const isCommand = event.data?.isCommand === true;
+			if (input) {
+				return isCommand ? `🖱️ ${truncate(input)}` : truncate(input);
+			}
+			return 'Dashboard input';
 		}
 
 		// For working events, show approach (what agent plans to do)
@@ -2243,6 +2259,43 @@
 													title="Click to copy"
 												>
 													{event.data.prompt}
+													{#if copiedEventKey === getEventKey(event)}
+														<span class="absolute top-1 right-1 text-[9px] px-1.5 py-0.5 rounded" style="background: oklch(0.35 0.15 145); color: oklch(0.90 0.15 145);">
+															Copied!
+														</span>
+													{/if}
+												</div>
+											{/if}
+										</div>
+									{:else if event.type === 'dashboard_input' && event.data}
+										<!-- Dashboard Input event - show input sent via JAT UI (button/dropdown) -->
+										<div class="space-y-2">
+											<!-- Source badge -->
+											<div class="flex items-center gap-2">
+												<span
+													class="px-2 py-0.5 rounded text-[10px] font-medium inline-flex items-center gap-1"
+													style="background: oklch(0.25 0.10 220); color: oklch(0.90 0.15 220); border: 1px solid oklch(0.40 0.12 220);"
+												>
+													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+														<path stroke-linecap="round" stroke-linejoin="round" d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zM12 2.25V4.5m5.834.166l-1.591 1.591M20.25 10.5H18M7.757 14.743l-1.59 1.59M6 10.5H3.75m4.007-4.243l-1.59-1.59" />
+													</svg>
+													{event.data.isCommand ? 'Dashboard Command' : 'Dashboard Input'}
+												</span>
+											</div>
+											{#if event.data.input}
+												<!-- svelte-ignore a11y_click_events_have_key_events -->
+												<!-- svelte-ignore a11y_no_static_element_interactions -->
+												<div
+													class="text-xs p-2 rounded-lg whitespace-pre-wrap cursor-pointer transition-all hover:brightness-110 active:scale-[0.99] relative font-mono"
+													style="background: oklch(0.18 0.06 220); border-left: 3px solid oklch(0.55 0.15 220); color: oklch(0.85 0.08 220);"
+													onclick={async () => {
+														await navigator.clipboard.writeText(event.data.input);
+														copiedEventKey = getEventKey(event);
+														setTimeout(() => copiedEventKey = null, 1500);
+													}}
+													title="Click to copy"
+												>
+													{event.data.input}
 													{#if copiedEventKey === getEventKey(event)}
 														<span class="absolute top-1 right-1 text-[9px] px-1.5 py-0.5 rounded" style="background: oklch(0.35 0.15 145); color: oklch(0.90 0.15 145);">
 															Copied!

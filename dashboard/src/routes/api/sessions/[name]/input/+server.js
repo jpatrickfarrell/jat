@@ -14,8 +14,46 @@
 import { json } from '@sveltejs/kit';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { appendFileSync } from 'fs';
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * Write a dashboard_input event to the timeline for visibility in EventStack.
+ * This ensures dashboard-initiated inputs are tracked even if Claude Code's
+ * UserPromptSubmit hook fails.
+ *
+ * @param {string} sessionName - tmux session name (e.g., 'jat-AgentName')
+ * @param {string} input - The text that was sent
+ * @param {string} inputType - Type of input ('text', 'command', 'key')
+ */
+function writeTimelineEvent(sessionName, input, inputType) {
+	try {
+		// Ensure session name has jat- prefix for timeline filename
+		const tmuxSession = sessionName.startsWith('jat-') ? sessionName : `jat-${sessionName}`;
+		const timelineFile = `/tmp/jat-timeline-${tmuxSession}.jsonl`;
+
+		// Determine if this is a slash command
+		const isCommand = input.startsWith('/');
+
+		const event = {
+			type: 'dashboard_input',
+			tmux_session: tmuxSession,
+			timestamp: new Date().toISOString(),
+			data: {
+				input: input,
+				inputType: inputType,
+				isCommand: isCommand,
+				source: 'dashboard'
+			}
+		};
+
+		appendFileSync(timelineFile, JSON.stringify(event) + '\n');
+	} catch (err) {
+		// Silently fail - timeline logging is best-effort
+		console.error('[input] Failed to write timeline event:', err);
+	}
+}
 
 /** @type {import('./$types').RequestHandler} */
 export async function POST({ params, request }) {
@@ -100,6 +138,14 @@ export async function POST({ params, request }) {
 			// For 'text' type, send Enter separately after the literal text
 			if (type === 'text' || type === undefined) {
 				await execFileAsync('tmux', ['send-keys', '-t', sessionName, 'Enter']);
+			}
+
+			// Write timeline event for text inputs (commands and regular text)
+			// This ensures dashboard-initiated inputs appear in EventStack
+			// regardless of whether the UserPromptSubmit hook succeeds
+			if ((type === 'text' || type === undefined) && input) {
+				const inputType = input.startsWith('/') ? 'command' : 'text';
+				writeTimelineEvent(sessionName, input, inputType);
 			}
 
 			return json({

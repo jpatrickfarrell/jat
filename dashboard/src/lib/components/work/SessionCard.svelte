@@ -4315,6 +4315,7 @@
 						alignRight={true}
 						showCommands={true}
 						onCommand={sendWorkflowCommand}
+						task={task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } : null}
 					/>
 				{/if}
 			</div>
@@ -4951,6 +4952,7 @@
 						variant="integrated"
 						showCommands={true}
 						onCommand={sendWorkflowCommand}
+						task={task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } : null}
 					/>
 				</div>
 			</div>
@@ -5285,6 +5287,28 @@
 						autoExpand={sessionState === "completed"}
 						onCleanup={() => handleStatusAction("cleanup")}
 						onComplete={() => handleStatusAction("complete")}
+						onReview={async () => {
+							// Emit review signal via API
+							if (sessionName) {
+								try {
+									const taskId = displayTask?.id || lastCompletedTask?.id || '';
+									await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
+										method: 'POST',
+										headers: { 'Content-Type': 'application/json' },
+										body: JSON.stringify({
+											type: 'review',
+											data: {
+												taskId,
+												taskTitle: displayTask?.title || lastCompletedTask?.title || '',
+												summary: ['Work completed, ready for review']
+											}
+										})
+									});
+								} catch (e) {
+									console.error('[SessionCard] Failed to emit review signal:', e);
+								}
+							}
+						}}
 						onRollback={(event) => {
 							// Open confirmation modal before rolling back
 							if (event.git_sha) {
@@ -6605,6 +6629,7 @@
 									disabled={sendingInput || !onSendInput}
 									showCommands={true}
 									onCommand={sendWorkflowCommand}
+									task={task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } : null}
 								/>
 							{/if}
 						{:else if sessionState === "ready-for-review" || sessionState === "idle" || (sessionState === "working" && task) || sessionState === "completing" || detectedWorkflowCommands.length > 0}
@@ -6622,6 +6647,7 @@
 								disabled={sendingInput || !onSendInput}
 								showCommands={true}
 								onCommand={sendWorkflowCommand}
+								task={task ? { id: task.id, issue_type: task.issue_type, priority: task.priority } : null}
 							/>
 						{:else if detectedOptions.length > 0}
 							<!-- Prompt options detected: show quick action buttons -->

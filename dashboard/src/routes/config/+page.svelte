@@ -44,6 +44,7 @@
 	import TemplatesEditor from '$lib/components/config/TemplatesEditor.svelte';
 	import StateActionsEditor from '$lib/components/config/StateActionsEditor.svelte';
 	import KeyboardShortcutsEditor from '$lib/components/config/KeyboardShortcutsEditor.svelte';
+	import SwarmSettingsEditor from '$lib/components/config/SwarmSettingsEditor.svelte';
 	import type { SlashCommand, ProjectConfig, HooksConfig } from '$lib/types/config';
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 
@@ -88,7 +89,7 @@
 	const projectsError = $derived(getProjectsError());
 
 	// Valid tabs for URL sync
-	const validTabs = ['commands', 'projects', 'defaults', 'mcp', 'hooks', 'claude', 'docs', 'templates', 'actions', 'shortcuts'];
+	const validTabs = ['commands', 'projects', 'swarm', 'defaults', 'mcp', 'hooks', 'claude', 'docs', 'templates', 'actions', 'shortcuts'];
 
 	// Sync activeTab from URL query parameter
 	$effect(() => {
@@ -330,6 +331,16 @@
 							onAddProject={handleAddProject}
 							onDeleteProject={handleDeleteProject}
 						/>
+					</div>
+				{:else if activeTab === 'swarm'}
+					<!-- Swarm Tab -->
+					<div
+						role="tabpanel"
+						id="swarm-panel"
+						aria-labelledby="swarm-tab"
+						transition:fade={{ duration: 150 }}
+					>
+						<SwarmSettingsEditor />
 					</div>
 				{:else if activeTab === 'defaults'}
 					<!-- Defaults Tab -->

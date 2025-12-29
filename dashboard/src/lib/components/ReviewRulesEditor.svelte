@@ -116,13 +116,14 @@
 		return rule?.note ?? '';
 	}
 
-	// Check if a cell is "auto" (priority <= maxAutoPriority)
+	// Check if a cell is "auto" (priority >= minAutoPriority)
+	// Higher priority NUMBER = lower importance, so P3/P4 should auto-proceed, P0/P1 should require review
 	function isAuto(type: TaskType, priority: Priority): boolean {
-		const maxAuto = getMaxAuto(type);
-		return priority <= maxAuto;
+		const minAuto = getMaxAuto(type); // Note: field is named maxAutoPriority but semantically it's the minimum priority that auto-proceeds
+		return priority >= minAuto;
 	}
 
-	// Toggle a cell by adjusting maxAutoPriority
+	// Toggle a cell by adjusting maxAutoPriority (which is actually minAutoPriority semantically)
 	function toggleCell(type: TaskType, priority: Priority) {
 		if (!rules) return;
 
@@ -130,19 +131,19 @@
 		const ruleIndex = rules.rules.findIndex(r => r.type === type);
 
 		if (ruleIndex >= 0) {
-			// If currently auto, set maxAutoPriority to priority - 1
-			// If currently review, set maxAutoPriority to priority
-			const newMax = currentlyAuto ? priority - 1 : priority;
+			// If currently auto, set threshold to priority + 1 (so this priority now requires review)
+			// If currently review, set threshold to priority (so this priority now auto-proceeds)
+			const newThreshold = currentlyAuto ? priority + 1 : priority;
 			rules.rules[ruleIndex] = {
 				...rules.rules[ruleIndex],
-				maxAutoPriority: newMax
+				maxAutoPriority: newThreshold
 			};
 		} else {
 			// Create new rule
-			const newMax = currentlyAuto ? priority - 1 : priority;
+			const newThreshold = currentlyAuto ? priority + 1 : priority;
 			rules.rules.push({
 				type,
-				maxAutoPriority: newMax
+				maxAutoPriority: newThreshold
 			});
 		}
 
@@ -375,7 +376,7 @@
 
 			<!-- Help text -->
 			<div class="mt-4 text-xs opacity-60">
-				<p>Tasks at or below the selected priority will auto-proceed when completed. Higher priority tasks require human review.</p>
+				<p>Lower-priority tasks (P3, P4) auto-proceed. Higher-priority tasks (P0, P1) require human review.</p>
 			</div>
 		{/if}
 	</div>

@@ -24,6 +24,8 @@
 		edited: boolean;
 		/** Whether this task already exists in Beads (matched by title) */
 		alreadyCreated?: boolean;
+		/** Task ID if this task was already created (for displaying clickable badge) */
+		taskId?: string;
 		edits?: {
 			type?: string;
 			title?: string;
@@ -45,6 +47,8 @@
 		agentName?: string;
 		/** Session name for context */
 		sessionName?: string;
+		/** Callback when user clicks a task ID (opens detail drawer) */
+		onTaskClick?: (taskId: string) => void;
 	}
 
 	let {
@@ -53,7 +57,8 @@
 		tasks,
 		onCreateTasks,
 		agentName = '',
-		sessionName = ''
+		sessionName = '',
+		onTaskClick
 	}: Props = $props();
 
 	// Local state for selections and edits (keyed by task title+index)
@@ -523,25 +528,49 @@
 
 									<!-- Create single button OR Created badge -->
 									{#if task.alreadyCreated}
-										<span
-											class="flex-shrink-0 badge badge-sm badge-success gap-1"
-											title="This task already exists in Beads"
-										>
-											<svg
-												class="w-3 h-3"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke="currentColor"
-												stroke-width="2"
+										{#if task.taskId && onTaskClick}
+											<button
+												type="button"
+												class="flex-shrink-0 badge badge-sm badge-success gap-1 cursor-pointer hover:brightness-110 transition-all"
+												onclick={() => onTaskClick(task.taskId!)}
+												title="Click to view task {task.taskId}"
 											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													d="M5 13l4 4L19 7"
-												/>
-											</svg>
-											Created
-										</span>
+												<svg
+													class="w-3 h-3"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke="currentColor"
+													stroke-width="2"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M5 13l4 4L19 7"
+													/>
+												</svg>
+												{task.taskId}
+											</button>
+										{:else}
+											<span
+												class="flex-shrink-0 badge badge-sm badge-success gap-1"
+												title="This task already exists in Beads"
+											>
+												<svg
+													class="w-3 h-3"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke="currentColor"
+													stroke-width="2"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M5 13l4 4L19 7"
+													/>
+												</svg>
+												Created
+											</span>
+										{/if}
 									{:else}
 										<button
 											type="button"

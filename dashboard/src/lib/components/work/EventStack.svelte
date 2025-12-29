@@ -75,7 +75,7 @@
 	}
 
 	let {
-		sessionName,
+		sessionName = '',
 		maxEvents = 20,
 		pollInterval = 5000,
 		onRollback,
@@ -89,13 +89,21 @@
 		onAskQuestion,
 		onSelectOption,
 		onSubmitText,
+		onCleanup,
+		onComplete,
+		onReview,
 		availableProjects = [],
 		defaultProject = '',
 		class: className = '',
 		autoExpand = false,
-		filters = {}
+		filters = {},
+		/** Optional pre-loaded events (bypasses polling when provided) */
+		initialEvents = undefined as TimelineEvent[] | undefined,
+		/** Layout mode: 'popup' shows expanded on hover, 'inline' shows all events inline */
+		layoutMode = 'popup' as 'popup' | 'inline'
 	}: {
-		sessionName: string;
+		/** Session name for polling (required unless initialEvents provided) */
+		sessionName?: string;
 		maxEvents?: number;
 		pollInterval?: number;
 		onRollback?: (event: TimelineEvent) => void;
@@ -118,6 +126,12 @@
 		onSelectOption?: (optionId: string) => void;
 		/** Callback when user submits text (needs_input) */
 		onSubmitText?: (text: string) => void;
+		/** Callback when user clicks Cleanup Session on completed signal */
+		onCleanup?: () => void;
+		/** Callback when user clicks Complete Task on review signal */
+		onComplete?: () => void;
+		/** Callback when user clicks Ready for Review on working signal */
+		onReview?: () => void;
 		availableProjects?: string[];
 		/** Default project for tasks without explicit project (from current session) */
 		defaultProject?: string;
@@ -126,6 +140,10 @@
 		autoExpand?: boolean;
 		/** Event filters */
 		filters?: EventFilters;
+		/** Optional pre-loaded events (bypasses polling when provided) */
+		initialEvents?: TimelineEvent[];
+		/** Layout mode: 'popup' shows expanded on hover, 'inline' shows all events inline */
+		layoutMode?: 'popup' | 'inline';
 	} = $props();
 
 	let events = $state<TimelineEvent[]>([]);
@@ -848,9 +866,25 @@
 	}
 
 	onMount(() => {
+		// If initialEvents provided, use them directly (no polling)
+		if (initialEvents) {
+			events = initialEvents;
+			loading = false;
+			return;
+		}
+
+		// Otherwise, fetch from API and set up polling
 		fetchTimeline();
 		if (pollInterval > 0) {
 			pollTimer = setInterval(fetchTimeline, pollInterval);
+		}
+	});
+
+	// React to changes in initialEvents prop (for external state updates)
+	$effect(() => {
+		if (initialEvents) {
+			events = initialEvents;
+			loading = false;
 		}
 	});
 
@@ -862,16 +896,348 @@
 </script>
 
 {#if events.length > 0}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div
-		class="relative {className}"
-		onmouseenter={() => (isExpanded = true)}
-		onmouseleave={() => {
-			isExpanded = false;
-			expandedEventIdx = null;
-		}}
-	>
-		{#if isExpanded}
+	{#if layoutMode === 'inline'}
+		<!-- Inline layout: always expanded, no hover interaction -->
+		<div class="space-y-2 {className}">
+			{#each filteredEvents as event, idx (event.timestamp + idx)}
+				{@const style = getEventStyle(event)}
+				{@const isQuestionEvent = event.type === 'question' || event.state === 'question'}
+				{@const isUnansweredQuestion = isQuestionEvent && !answeredQuestions.has(getEventKey(event))}
+				{@const eventKey = getEventKey(event)}
+				<div
+					class="rounded-lg transition-all"
+					style="background: {style.bg}; border: 1px solid {style.border}; border-left: 3px solid {style.accent || style.border};"
+				>
+					<!-- Event header (always visible) -->
+					<button
+						class="w-full px-3 py-2 flex items-center justify-between text-left"
+						onclick={() => toggleEventExpand(idx)}
+					>
+						<div class="flex items-center gap-2">
+							<span class="text-sm">{style.icon}</span>
+							{#if isUnansweredQuestion}
+								<span
+									class="px-1.5 py-0.5 rounded text-[9px] font-bold animate-pulse"
+									style="background: oklch(0.45 0.15 280); color: oklch(0.95 0.05 280);"
+								>
+									NEEDS ANSWER
+								</span>
+							{/if}
+							<span
+								class="font-mono text-xs font-medium"
+								style="color: {style.text};"
+							>
+								{getEventLabel(event)}
+							</span>
+							{#if event.git_sha}
+								<span
+									class="px-1 py-0.5 rounded text-[9px] font-mono bg-base-300 text-base-content/60"
+								>
+									{event.git_sha.slice(0, 7)}
+								</span>
+							{/if}
+						</div>
+						<div class="flex items-center gap-2">
+							{#if event.data?.agent_name || event.data?.agentName}
+								<span class="text-[10px] font-mono text-base-content/60">
+									{event.data.agent_name || event.data.agentName}
+								</span>
+							{/if}
+							<span class="font-mono text-[10px] text-base-content/50">
+								{formatTime(event.timestamp)}
+							</span>
+							{#if event.git_sha && onRollback}
+								<button
+									class="px-1.5 py-0.5 rounded text-[9px] font-mono transition-colors btn-ghost hover:btn-info"
+									onclick={(e) => { e.stopPropagation(); handleRollback(event); }}
+									title="Rollback to this point"
+								>
+									rollback
+								</button>
+							{/if}
+							<svg
+								class="w-3 h-3 transition-transform text-base-content/50 {expandedEventIdx === idx ? 'rotate-180' : ''}"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke="currentColor"
+								stroke-width="2"
+							>
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+							</svg>
+						</div>
+					</button>
+
+					<!-- Expanded details -->
+					{#if expandedEventIdx === idx}
+						<div class="px-3 pb-3 pt-1 border-t border-base-300">
+							<!-- Rich signal content based on type -->
+							{#if event.type === 'tasks' && event.data && Array.isArray(event.data)}
+								<!-- Rich Suggested Tasks UI -->
+								{@const tasksWithState = getTasksWithState(event, eventKey)}
+								{@const selectedCount = getSelectedCount(eventKey)}
+								<SuggestedTasksSection
+									tasks={tasksWithState}
+									{selectedCount}
+									onToggleSelection={(taskKey) => toggleTaskSelection(eventKey, taskKey)}
+									getTaskKey={getSuggestedTaskKey}
+									onCreateTasks={onCreateTasks ? (tasks) => handleCreateTasks(eventKey, tasks) : undefined}
+									onCreateAndStartTasks={onCreateAndStartTasks ? (tasks) => handleCreateAndStartTasks(eventKey, tasks) : undefined}
+									onEditTask={(taskKey, edits) => editTask(eventKey, taskKey, edits)}
+									onClearEdits={(taskKey) => clearTaskEdits(eventKey, taskKey)}
+									isCreating={isCreatingTasks}
+									{createResults}
+									showFeedback={showCreateFeedback}
+									onDismissFeedback={dismissFeedback}
+									{availableProjects}
+									{defaultProject}
+									{onTaskClick}
+								/>
+							{:else if event.type === 'complete' && event.data}
+								<!-- Rich Completion Bundle UI -->
+								{@const bundle = event.data}
+								<div class="space-y-3">
+									<!-- Summary Section -->
+									{#if bundle.summary && bundle.summary.length > 0}
+										<div>
+											<div class="text-[10px] font-medium mb-1 text-base-content/50">CHANGES MADE</div>
+											<ul class="space-y-0.5">
+												{#each bundle.summary as item}
+													<li class="flex items-start gap-2 text-xs text-base-content/70">
+														<span class="text-success">•</span>
+														<span>{item}</span>
+													</li>
+												{/each}
+											</ul>
+										</div>
+									{/if}
+
+									<!-- Quality Badges -->
+									{#if bundle.quality}
+										<div class="flex flex-wrap gap-2">
+											{#if bundle.quality.tests}
+												<span class="badge badge-xs {bundle.quality.tests === 'passing' ? 'badge-success' : bundle.quality.tests === 'failing' ? 'badge-error' : 'badge-ghost'}">
+													Tests: {bundle.quality.tests}
+												</span>
+											{/if}
+											{#if bundle.quality.build}
+												<span class="badge badge-xs {bundle.quality.build === 'clean' ? 'badge-success' : bundle.quality.build === 'warnings' ? 'badge-warning' : 'badge-error'}">
+													Build: {bundle.quality.build}
+												</span>
+											{/if}
+											{#if bundle.quality.preExisting}
+												<span class="badge badge-xs badge-ghost">ℹ️ {bundle.quality.preExisting}</span>
+											{/if}
+										</div>
+									{/if}
+
+									<!-- Human Actions -->
+									{#if bundle.humanActions && bundle.humanActions.length > 0}
+										<div>
+											<div class="text-[10px] font-medium mb-1 text-warning">🧑 HUMAN ACTIONS REQUIRED ({bundle.humanActions.length})</div>
+											<div class="space-y-1.5">
+												{#each bundle.humanActions as action}
+													<div class="p-2 rounded bg-warning/10 border border-warning/30">
+														<div class="font-medium text-xs text-warning">{action.title}</div>
+														{#if action.description}
+															<div class="text-[10px] mt-1 whitespace-pre-wrap text-warning/70">{action.description}</div>
+														{/if}
+													</div>
+												{/each}
+											</div>
+										</div>
+									{/if}
+
+									<!-- Suggested Tasks (from complete bundle) -->
+									{#if bundle.suggestedTasks && bundle.suggestedTasks.length > 0}
+										{@const bundleTasksWithState = getCompleteBundleTasksWithState(bundle.suggestedTasks, eventKey)}
+										{@const bundleSelectedCount = getSelectedCount(eventKey)}
+										<div>
+											<div class="text-[10px] font-medium mb-1 text-info">📋 SUGGESTED FOLLOW-UP ({bundle.suggestedTasks.length})</div>
+											<SuggestedTasksSection
+												tasks={bundleTasksWithState}
+												selectedCount={bundleSelectedCount}
+												onToggleSelection={(taskKey) => toggleTaskSelection(eventKey, taskKey)}
+												getTaskKey={getSuggestedTaskKey}
+												onCreateTasks={onCreateTasks ? (tasks) => handleCreateTasks(eventKey, tasks) : undefined}
+												onCreateAndStartTasks={onCreateAndStartTasks ? (tasks) => handleCreateAndStartTasks(eventKey, tasks) : undefined}
+												onEditTask={(taskKey, edits) => editTask(eventKey, taskKey, edits)}
+												onClearEdits={(taskKey) => clearTaskEdits(eventKey, taskKey)}
+												isCreating={isCreatingTasks}
+												{createResults}
+												showFeedback={showCreateFeedback}
+												onDismissFeedback={dismissFeedback}
+												{availableProjects}
+												{defaultProject}
+												{onTaskClick}
+											/>
+										</div>
+									{/if}
+
+									<!-- Cross-Agent Intel -->
+									{#if bundle.crossAgentIntel}
+										<div>
+											<div class="text-[10px] font-medium mb-1 text-base-content/50">🔗 CROSS-AGENT INTEL</div>
+											<div class="p-2 rounded bg-base-300 space-y-2">
+												{#if bundle.crossAgentIntel.files && bundle.crossAgentIntel.files.length > 0}
+													<div>
+														<span class="text-[9px] font-medium text-base-content/50">Files:</span>
+														<div class="flex flex-wrap gap-1 mt-0.5">
+															{#each bundle.crossAgentIntel.files as file}
+																<span class="px-1.5 py-0.5 rounded text-[9px] font-mono bg-base-200 text-base-content/60">
+																	{file.split('/').pop()}
+																</span>
+															{/each}
+														</div>
+													</div>
+												{/if}
+												{#if bundle.crossAgentIntel.patterns && bundle.crossAgentIntel.patterns.length > 0}
+													<div>
+														<span class="text-[9px] font-medium text-base-content/50">Patterns:</span>
+														<ul class="mt-0.5">
+															{#each bundle.crossAgentIntel.patterns as pattern}
+																<li class="text-[10px] text-base-content/60">• {pattern}</li>
+															{/each}
+														</ul>
+													</div>
+												{/if}
+												{#if bundle.crossAgentIntel.gotchas && bundle.crossAgentIntel.gotchas.length > 0}
+													<div>
+														<span class="text-[9px] font-medium text-warning">⚠️ Gotchas:</span>
+														<ul class="mt-0.5">
+															{#each bundle.crossAgentIntel.gotchas as gotcha}
+																<li class="text-[10px] text-warning/80">• {gotcha}</li>
+															{/each}
+														</ul>
+													</div>
+												{/if}
+											</div>
+										</div>
+									{/if}
+								</div>
+							{:else if (event.state === 'completed' || event.type === 'completed') && event.data}
+								<!-- Rich Completed Signal UI -->
+								{@const completedData = event.data}
+								<div class="space-y-3">
+									<!-- Outcome Badge -->
+									{#if completedData.outcome}
+										{@const isSuccess = completedData.outcome === 'success'}
+										<div class="flex items-center gap-2">
+											<span class="badge {isSuccess ? 'badge-success' : 'badge-warning'}">
+												{isSuccess ? '✓ Task Completed Successfully' : `Completed: ${completedData.outcome}`}
+											</span>
+										</div>
+									{/if}
+
+									<!-- Summary Section -->
+									{#if completedData.summary && completedData.summary.length > 0}
+										<div>
+											<div class="text-[10px] font-medium mb-1 text-base-content/50">WHAT WAS DONE</div>
+											<ul class="space-y-0.5">
+												{#each completedData.summary as item}
+													<li class="flex items-start gap-2 text-xs text-base-content/70">
+														<span class="text-success">✓</span>
+														<span>{item}</span>
+													</li>
+												{/each}
+											</ul>
+										</div>
+									{/if}
+
+									<!-- Task ID if available -->
+									{#if completedData.taskId || event.task_id}
+										<div class="text-[10px] text-base-content/50">
+											Task: <span class="font-mono">{completedData.taskId || event.task_id}</span>
+										</div>
+									{/if}
+								</div>
+							{:else if (event.state === 'working' || event.type === 'working') && event.data}
+								<WorkingSignalCard
+									signal={event.data as WorkingSignal}
+									compact={true}
+									onTaskClick={onTaskClick}
+									onFileClick={onFileClick}
+									onComplete={onComplete}
+								/>
+							{:else if (event.state === 'review' || event.type === 'review') && event.data}
+								<ReviewSignalCard
+									signal={event.data as ReviewSignal}
+									compact={true}
+									onTaskClick={onTaskClick}
+									onFileClick={onFileClick}
+									onDiffClick={onDiffClick}
+									onApprove={onApprove}
+									onRequestChanges={onRequestChanges}
+									onAskQuestion={onAskQuestion}
+								/>
+							{:else if (event.state === 'needs_input' || event.type === 'needs_input' || event.type === 'question') && event.data}
+								<NeedsInputSignalCard
+									signal={event.data as NeedsInputSignal}
+									compact={true}
+									onSelectOption={onSelectOption}
+									onSubmitText={onSubmitText}
+								/>
+							{:else if (event.state === 'completing' || event.type === 'completing') && event.data}
+								<CompletingSignalCard
+									signal={event.data as CompletingSignal}
+									compact={true}
+									onTaskClick={onTaskClick}
+								/>
+							{:else if event.data}
+								<!-- Fallback: show raw JSON for other events -->
+								<div class="text-xs space-y-1">
+									{#if event.data.taskTitle}
+										<div class="font-medium text-base-content/80">{event.data.taskTitle}</div>
+									{/if}
+									{#if event.data.approach}
+										<div class="text-base-content/60">{event.data.approach}</div>
+									{/if}
+									{#if Array.isArray(event.data.summary)}
+										<ul class="list-disc list-inside text-base-content/60 space-y-0.5">
+											{#each event.data.summary.slice(0, 3) as item}
+												<li>{item}</li>
+											{/each}
+											{#if event.data.summary.length > 3}
+												<li class="opacity-60">+{event.data.summary.length - 3} more...</li>
+											{/if}
+										</ul>
+									{/if}
+									{#if event.data.outcome}
+										<div class="text-success">Outcome: {event.data.outcome}</div>
+									{/if}
+								</div>
+							{/if}
+
+							<!-- Session ID and copy button -->
+							{#if event.session_id}
+								<div class="mt-2 pt-2 border-t border-base-300/50 flex items-center justify-between">
+									<span class="text-[9px] font-mono text-base-content/40 truncate max-w-[80%]" title={event.session_id}>
+										Session: {event.session_id.slice(0, 20)}...
+									</span>
+									<button
+										class="text-[9px] text-info hover:underline"
+										onclick={() => copyToClipboard(event.session_id, `session-${eventKey}`)}
+									>
+										{copiedField === `session-${eventKey}` ? '✓ Copied' : 'Copy ID'}
+									</button>
+								</div>
+							{/if}
+						</div>
+					{/if}
+				</div>
+			{/each}
+		</div>
+	{:else}
+		<!-- Popup layout: hover to expand (original behavior) -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="relative {className}"
+			onmouseenter={() => (isExpanded = true)}
+			onmouseleave={() => {
+				isExpanded = false;
+				expandedEventIdx = null;
+			}}
+		>
+			{#if isExpanded}
 			<!-- Expanded timeline view - pops up above input with high z-index -->
 			<!-- Height expands when cards are expanded (expandedEventIdx !== null) -->
 			<!-- Use calc to subtract approximate header/input heights from viewport -->
@@ -1180,6 +1546,20 @@
 														</div>
 													{/if}
 												</div>
+											{:else if onCleanup}
+												<!-- Cleanup Session action button for completed signal -->
+												<div class="mt-3 pt-2" style="border-top: 1px solid oklch(0.35 0.12 145);">
+													<button
+														onclick={onCleanup}
+														class="btn btn-xs btn-ghost gap-1.5 text-[10px] font-medium"
+														style="color: oklch(0.75 0.15 145); background: oklch(0.45 0.12 145 / 0.2); border: 1px solid oklch(0.50 0.12 145 / 0.3);"
+													>
+														<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3">
+															<path fill-rule="evenodd" d="M5 3.25V4H2.75a.75.75 0 0 0 0 1.5h.3l.815 8.15A1.5 1.5 0 0 0 5.357 15h5.286a1.5 1.5 0 0 0 1.492-1.35l.815-8.15h.3a.75.75 0 0 0 0-1.5H11v-.75A2.25 2.25 0 0 0 8.75 1h-1.5A2.25 2.25 0 0 0 5 3.25Zm2.25-.75a.75.75 0 0 0-.75.75V4h3v-.75a.75.75 0 0 0-.75-.75h-1.5ZM6.05 6a.75.75 0 0 1 .787.713l.275 5.5a.75.75 0 0 1-1.498.075l-.275-5.5A.75.75 0 0 1 6.05 6Zm3.9 0a.75.75 0 0 1 .712.787l-.275 5.5a.75.75 0 0 1-1.498-.075l.275-5.5a.75.75 0 0 1 .786-.712Z" clip-rule="evenodd" />
+														</svg>
+														Cleanup Session
+													</button>
+												</div>
 											{/if}
 										</div>
 									{:else if (event.state === 'review' || event.type === 'review') && hasRichSignalData(event)}
@@ -1209,6 +1589,21 @@
 											{onAskQuestion}
 											submitting={actionSubmitting}
 										/>
+									{#if onComplete}
+										<!-- Complete Task action button for review signal -->
+										<div class="mt-3 pt-2" style="border-top: 1px solid oklch(0.35 0.12 200);">
+											<button
+												onclick={onComplete}
+												class="btn btn-xs btn-ghost gap-1.5 text-[10px] font-medium"
+												style="color: oklch(0.80 0.12 200); background: oklch(0.50 0.12 200 / 0.2); border: 1px solid oklch(0.55 0.12 200 / 0.3);"
+											>
+												<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3">
+													<path fill-rule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd" />
+												</svg>
+												Complete Task
+											</button>
+										</div>
+									{/if}
 									{:else if event.state === 'review' || event.type === 'review'}
 										<!-- Fallback Review state - show structured info -->
 										<div class="space-y-2">
@@ -1224,6 +1619,21 @@
 											<div class="text-[10px]" style="color: oklch(0.55 0.02 250);">
 												Agent has completed work and is awaiting your review. Check the terminal for details.
 											</div>
+											{#if onComplete}
+												<!-- Complete Task action button for fallback review -->
+												<div class="mt-3 pt-2" style="border-top: 1px solid oklch(0.35 0.12 200);">
+													<button
+														onclick={onComplete}
+														class="btn btn-xs btn-ghost gap-1.5 text-[10px] font-medium"
+														style="color: oklch(0.80 0.12 200); background: oklch(0.50 0.12 200 / 0.2); border: 1px solid oklch(0.55 0.12 200 / 0.3);"
+													>
+														<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3">
+															<path fill-rule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd" />
+														</svg>
+														Complete Task
+													</button>
+												</div>
+											{/if}
 										</div>
 									{:else if (event.state === 'working' || event.type === 'working') && hasRichSignalData(event)}
 										<!-- Rich Working Signal Card -->
@@ -1248,6 +1658,21 @@
 											{onFileClick}
 											onRollbackClick={onRollback ? (commit) => onRollback({ ...event, git_sha: commit }) : undefined}
 										/>
+									{#if onReview}
+										<!-- Ready for Review action button for working signal -->
+										<div class="mt-3 pt-2" style="border-top: 1px solid oklch(0.35 0.12 200);">
+											<button
+												onclick={onReview}
+												class="btn btn-xs btn-ghost gap-1.5 text-[10px] font-medium"
+												style="color: oklch(0.80 0.12 200); background: oklch(0.50 0.12 200 / 0.2); border: 1px solid oklch(0.55 0.12 200 / 0.3);"
+											>
+												<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3">
+<path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" /><path fill-rule="evenodd" d="M1.38 8.28a.87.87 0 0 1 0-.566 7.003 7.003 0 0 1 13.238.006.87.87 0 0 1 0 .566A7.003 7.003 0 0 1 1.379 8.28ZM11 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clip-rule="evenodd" />
+												</svg>
+												Ready for Review
+											</button>
+										</div>
+									{/if}
 									{:else if event.state === 'working' || event.type === 'working'}
 										<!-- Fallback Working state - show task info -->
 										<div class="space-y-2">
@@ -1263,6 +1688,21 @@
 											{#if event.git_sha}
 												<div class="text-[10px]" style="color: oklch(0.50 0.02 250);">
 													Started from: <span class="font-mono">{event.git_sha}</span>
+												</div>
+											{/if}
+											{#if onReview}
+												<!-- Ready for Review action button for fallback working -->
+												<div class="mt-3 pt-2" style="border-top: 1px solid oklch(0.35 0.12 200);">
+													<button
+														onclick={onReview}
+														class="btn btn-xs btn-ghost gap-1.5 text-[10px] font-medium"
+														style="color: oklch(0.80 0.12 200); background: oklch(0.50 0.12 200 / 0.2); border: 1px solid oklch(0.55 0.12 200 / 0.3);"
+													>
+														<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3">
+<path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" /><path fill-rule="evenodd" d="M1.38 8.28a.87.87 0 0 1 0-.566 7.003 7.003 0 0 1 13.238.006.87.87 0 0 1 0 .566A7.003 7.003 0 0 1 1.379 8.28ZM11 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clip-rule="evenodd" />
+														</svg>
+														Ready for Review
+													</button>
 												</div>
 											{/if}
 										</div>
@@ -1807,7 +2247,8 @@
 				{/each}
 			</div>
 		{/if}
-	</div>
+		</div>
+	{/if}
 {:else if loading}
 	<div class="px-3 py-1.5 rounded-md" style="background: oklch(0.22 0.01 250);">
 		<span class="font-mono text-[10px]" style="color: oklch(0.45 0.02 250);">

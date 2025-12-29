@@ -124,10 +124,10 @@
 		};
 	});
 
-	// Open Swarm Config modal
+	// Navigate to Swarm Config settings
 	function handleOpenSwarmConfig() {
 		showDropdown = false;
-		isSpawnModalOpen.set(true);
+		window.location.href = '/config?tab=swarm';
 	}
 
 	// Swarm - spawn one agent per ready task up to MAX_SESSIONS limit
@@ -831,9 +831,9 @@
 								/>
 							</svg>
 							<div class="flex-1">
-								<div class="font-semibold">Swarm Config</div>
+								<div class="font-semibold">Swarm Settings</div>
 								<div class="text-[10px]" style="color: oklch(0.55 0.02 250);">
-									Configure multi-agent spawn
+									Model, sessions, review rules
 								</div>
 							</div>
 							<svg
@@ -1174,7 +1174,7 @@
 
 										<!-- Full settings link -->
 										<a
-											href="/settings"
+											href="/config?tab=swarm"
 											class="flex items-center justify-center gap-1.5 w-full py-1.5 rounded text-[10px] font-mono transition-colors"
 											style="background: oklch(0.30 0.03 250); color: oklch(0.75 0.02 250);"
 											onmouseenter={(e) => {

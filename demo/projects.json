@@ -1,0 +1,29 @@
+{
+  "projects": {
+    "acme-saas": {
+      "name": "ACME-SAAS",
+      "path": "/tmp/jat-demo/acme-saas",
+      "port": 3001,
+      "description": "SaaS startup application - auth, billing, dashboard",
+      "active_color": "rgb(59, 130, 246)",
+      "inactive_color": "rgb(37, 99, 235)"
+    },
+    "pixel-art": {
+      "name": "PIXEL-ART",
+      "path": "/tmp/jat-demo/pixel-art",
+      "port": 3002,
+      "description": "Creative pixel art editor side project",
+      "active_color": "rgb(168, 85, 247)",
+      "inactive_color": "rgb(126, 34, 206)"
+    }
+  },
+  "defaults": {
+    "terminal": "alacritty",
+    "editor": "code",
+    "tools_path": "~/.local/bin",
+    "claude_flags": "--dangerously-skip-permissions",
+    "model": "opus",
+    "agent_stagger": 15,
+    "claude_startup_timeout": 20
+  }
+}

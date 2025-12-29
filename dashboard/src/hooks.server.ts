@@ -29,17 +29,21 @@ let aggregationInterval: ReturnType<typeof setInterval> | null = null;
  * - jat-signal-*.json - Signal files by session UUID
  * - jat-signal-tmux-*.json - Signal files by tmux session name
  * - jat-activity-*.json - Activity files
- * - jat-timeline-*.jsonl - Timeline logs
  * - jat-question-*.json - Question files
  * - jat-monitor-*.pid - Monitor PID files
  * - claude-*-cwd - Claude Code working directory markers (hex IDs)
+ *
+ * NOT cleaned (preserved across restarts):
+ * - jat-timeline-*.jsonl - Append-only session history for EventStack
  */
 function cleanupStaleSignalFiles(): { cleaned: number; errors: number } {
 	const tmpDir = '/tmp';
 	const patterns = [
 		/^jat-signal-.*\.json$/,
 		/^jat-activity-.*\.json$/,
-		/^jat-timeline-.*\.jsonl$/,
+		// NOTE: jat-timeline-*.jsonl files are NOT deleted - they're append-only session history
+		// that agents need for displaying EventStack. They should persist across dashboard restarts.
+		// Old timeline files are naturally cleaned up on system reboot (/tmp is ephemeral).
 		/^jat-question-.*\.json$/,
 		/^jat-monitor-.*\.pid$/,
 		/^claude-[0-9a-f]+-cwd$/ // Claude Code working directory markers

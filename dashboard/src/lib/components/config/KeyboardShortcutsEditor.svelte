@@ -2,9 +2,9 @@
 	/**
 	 * KeyboardShortcutsEditor Component
 	 *
-	 * Displays and manages keyboard shortcuts for slash commands.
-	 * Shows all commands with their assigned shortcuts, allows inline editing,
-	 * and validates for conflicts.
+	 * Displays and manages keyboard shortcuts for:
+	 * 1. Global app shortcuts (Alt+N, Alt+E, etc.) - configurable with defaults
+	 * 2. Slash command shortcuts (user-assigned)
 	 *
 	 * @see dashboard/src/lib/stores/keyboardShortcuts.svelte.ts for store API
 	 * @see dashboard/src/lib/stores/configStore.svelte.ts for commands data
@@ -20,7 +20,14 @@
 		getDisplayShortcut,
 		findCommandWithShortcut,
 		initKeyboardShortcuts,
-		clearAllShortcuts
+		clearAllShortcuts,
+		// Global shortcut functions
+		getAllGlobalShortcuts,
+		setGlobalShortcut,
+		resetGlobalShortcut,
+		resetAllGlobalShortcuts,
+		findGlobalShortcutConflict,
+		type GlobalShortcutDef
 	} from '$lib/stores/keyboardShortcuts.svelte';
 	import {
 		loadCommands,
@@ -29,41 +36,48 @@
 	} from '$lib/stores/configStore.svelte';
 	import type { SlashCommand } from '$lib/types/config';
 
-	// Global app shortcuts (hardcoded in +layout.svelte)
-	interface GlobalShortcut {
-		key: string;
-		description: string;
-		context?: string;
-	}
-
-	const globalShortcuts: GlobalShortcut[] = [
-		{ key: 'Cmd+K', description: 'Open Command Palette', context: 'Global' },
-		{ key: 'Alt+N', description: 'Create New Task', context: 'Global' },
-		{ key: 'Alt+E', description: 'Open Epic Swarm Modal', context: 'Global' },
-		{ key: 'Alt+S', description: 'Open Start Next Dropdown', context: 'Global' },
-		{ key: 'Alt+Shift+P', description: 'Add New Project', context: 'Global' },
-		{ key: 'Alt+A', description: 'Attach Terminal to Session', context: 'Hovered session' },
-		{ key: 'Alt+K', description: 'Kill Session', context: 'Hovered session' },
-		{ key: 'Alt+I', description: 'Interrupt Session (Ctrl+C)', context: 'Hovered session' },
-		{ key: 'Alt+P', description: 'Pause Session', context: 'Hovered session' },
+	// Non-editable shortcuts (system/browser level)
+	const systemShortcuts = [
 		{ key: 'Alt+1-9', description: 'Jump to Session by Position', context: 'Work page' },
 		{ key: 'Escape', description: 'Close Modals/Drawers', context: 'Global' },
 	];
 
 	// State
 	let loading = $state(true);
-	let editingCommand = $state<string | null>(null);
+	let editingItem = $state<string | null>(null);  // Can be command invocation OR global shortcut id
+	let editingType = $state<'command' | 'global' | null>(null);
 	let editValue = $state('');
 	let error = $state<string | null>(null);
 	let warning = $state<string | null>(null);
 	let success = $state<string | null>(null);
 	let showClearConfirm = $state(false);
+	let showResetGlobalConfirm = $state(false);
 	let filterText = $state('');
 	let showGlobalShortcuts = $state(true);
 
 	// Reactive data
 	let commands = $derived(getCommands());
 	let shortcuts = $derived(getAllShortcuts());
+	let globalShortcutsList = $derived(getAllGlobalShortcuts());
+
+	// Group global shortcuts by category
+	let groupedGlobalShortcuts = $derived.by(() => {
+		const groups = new Map<string, Array<GlobalShortcutDef & { currentShortcut: string; isCustom: boolean }>>();
+
+		for (const shortcut of globalShortcutsList) {
+			const existing = groups.get(shortcut.category) || [];
+			groups.set(shortcut.category, [...existing, shortcut]);
+		}
+
+		// Order: global, session, navigation
+		const order = ['global', 'session', 'navigation'];
+		return order
+			.filter(cat => groups.has(cat))
+			.map(cat => [cat, groups.get(cat)!] as const);
+	});
+
+	// Count custom global shortcuts
+	let customGlobalCount = $derived(globalShortcutsList.filter(s => s.isCustom).length);
 
 	// Filter commands based on search
 	let filteredCommands = $derived.by(() => {
@@ -108,15 +122,27 @@
 		loading = false;
 	});
 
-	function startEditing(invocation: string) {
-		editingCommand = invocation;
+	// Start editing a command shortcut
+	function startEditingCommand(invocation: string) {
+		editingItem = invocation;
+		editingType = 'command';
 		editValue = getShortcut(invocation) || '';
 		error = null;
 		warning = null;
 	}
 
+	// Start editing a global shortcut
+	function startEditingGlobal(id: string, currentShortcut: string) {
+		editingItem = id;
+		editingType = 'global';
+		editValue = currentShortcut;
+		error = null;
+		warning = null;
+	}
+
 	function cancelEditing() {
-		editingCommand = null;
+		editingItem = null;
+		editingType = null;
 		editValue = '';
 		error = null;
 		warning = null;
@@ -124,7 +150,7 @@
 
 	function handleKeydown(event: KeyboardEvent) {
 		// Capture keyboard shortcut
-		if (editingCommand && event.key !== 'Escape' && event.key !== 'Enter' && event.key !== 'Tab') {
+		if (editingItem && event.key !== 'Escape' && event.key !== 'Enter' && event.key !== 'Tab') {
 			event.preventDefault();
 
 			const parts: string[] = [];
@@ -151,7 +177,7 @@
 		}
 
 		// Handle enter to save
-		if (event.key === 'Enter' && editingCommand) {
+		if (event.key === 'Enter' && editingItem) {
 			saveShortcut();
 		}
 	}
@@ -169,11 +195,36 @@
 			return;
 		}
 
-		// Check for conflicts with other commands
-		const conflictingCommand = findCommandWithShortcut(editValue);
-		if (conflictingCommand && conflictingCommand !== editingCommand) {
-			error = `Already assigned to ${conflictingCommand}`;
-			return;
+		if (editingType === 'command') {
+			// Check for conflicts with other commands
+			const conflictingCommand = findCommandWithShortcut(editValue);
+			if (conflictingCommand && conflictingCommand !== editingItem) {
+				error = `Already assigned to ${conflictingCommand}`;
+				return;
+			}
+
+			// Check for conflicts with global shortcuts
+			const conflictingGlobal = findGlobalShortcutConflict(editValue);
+			if (conflictingGlobal) {
+				const globalDef = globalShortcutsList.find(s => s.id === conflictingGlobal);
+				error = `Conflicts with global shortcut: ${globalDef?.description || conflictingGlobal}`;
+				return;
+			}
+		} else if (editingType === 'global') {
+			// Check for conflicts with other global shortcuts
+			const conflictingGlobal = findGlobalShortcutConflict(editValue, editingItem || undefined);
+			if (conflictingGlobal) {
+				const globalDef = globalShortcutsList.find(s => s.id === conflictingGlobal);
+				error = `Conflicts with: ${globalDef?.description || conflictingGlobal}`;
+				return;
+			}
+
+			// Check for conflicts with command shortcuts
+			const conflictingCommand = findCommandWithShortcut(editValue);
+			if (conflictingCommand) {
+				error = `Conflicts with command: ${conflictingCommand}`;
+				return;
+			}
 		}
 
 		// Check for browser conflicts
@@ -184,7 +235,7 @@
 	}
 
 	function saveShortcut() {
-		if (!editingCommand) return;
+		if (!editingItem || !editingType) return;
 
 		// Validate before saving
 		if (editValue.trim()) {
@@ -194,19 +245,34 @@
 				return;
 			}
 
-			const conflictingCommand = findCommandWithShortcut(editValue);
-			if (conflictingCommand && conflictingCommand !== editingCommand) {
-				error = `Already assigned to ${conflictingCommand}`;
-				return;
+			if (editingType === 'command') {
+				const conflictingCommand = findCommandWithShortcut(editValue);
+				if (conflictingCommand && conflictingCommand !== editingItem) {
+					error = `Already assigned to ${conflictingCommand}`;
+					return;
+				}
+			} else {
+				const conflictingGlobal = findGlobalShortcutConflict(editValue, editingItem);
+				if (conflictingGlobal) {
+					const globalDef = globalShortcutsList.find(s => s.id === conflictingGlobal);
+					error = `Conflicts with: ${globalDef?.description || conflictingGlobal}`;
+					return;
+				}
 			}
 		}
 
-		// Save (empty string removes the shortcut)
-		setShortcut(editingCommand, editValue.trim() || undefined);
-
-		success = editValue.trim()
-			? `Shortcut saved: ${getDisplayShortcut(editValue)}`
-			: 'Shortcut removed';
+		// Save based on type
+		if (editingType === 'command') {
+			setShortcut(editingItem, editValue.trim() || undefined);
+			success = editValue.trim()
+				? `Shortcut saved: ${getDisplayShortcut(editValue)}`
+				: 'Shortcut removed';
+		} else {
+			setGlobalShortcut(editingItem, editValue.trim() || undefined);
+			success = editValue.trim()
+				? `Shortcut changed to: ${getDisplayShortcut(editValue)}`
+				: 'Reset to default';
+		}
 
 		cancelEditing();
 
@@ -216,9 +282,17 @@
 		}, 2000);
 	}
 
-	function removeShortcut(invocation: string) {
+	function removeCommandShortcut(invocation: string) {
 		setShortcut(invocation, undefined);
 		success = 'Shortcut removed';
+		setTimeout(() => {
+			success = null;
+		}, 2000);
+	}
+
+	function handleResetGlobalShortcut(id: string) {
+		resetGlobalShortcut(id);
+		success = 'Reset to default';
 		setTimeout(() => {
 			success = null;
 		}, 2000);
@@ -227,11 +301,27 @@
 	function handleClearAll() {
 		clearAllShortcuts();
 		showClearConfirm = false;
-		success = 'All shortcuts cleared';
+		success = 'All command shortcuts cleared';
 		setTimeout(() => {
 			success = null;
 		}, 2000);
 	}
+
+	function handleResetAllGlobal() {
+		resetAllGlobalShortcuts();
+		showResetGlobalConfirm = false;
+		success = 'All global shortcuts reset to defaults';
+		setTimeout(() => {
+			success = null;
+		}, 2000);
+	}
+
+	// Category labels for display
+	const categoryLabels: Record<string, string> = {
+		global: 'Global Actions',
+		session: 'Session Actions',
+		navigation: 'Navigation'
+	};
 </script>
 
 <div class="shortcuts-editor">
@@ -261,25 +351,147 @@
 				<path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
 			</svg>
 			Global App Shortcuts
-			<span class="badge badge-sm badge-ghost">{globalShortcuts.length}</span>
+			<span class="badge badge-sm badge-ghost">{globalShortcutsList.length}</span>
+			{#if customGlobalCount > 0}
+				<span class="badge badge-sm badge-info">{customGlobalCount} customized</span>
+			{/if}
+			<!-- Reset button in header (stops event propagation to prevent collapse toggle) -->
+			{#if customGlobalCount > 0}
+				<button
+					class="btn btn-ghost btn-sm btn-square ml-auto mr-2"
+					onclick={(e) => { e.stopPropagation(); showResetGlobalConfirm = true; }}
+					title="Reset all to defaults"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+					</svg>
+				</button>
+			{/if}
 		</div>
 		<div class="collapse-content">
-			<p class="text-xs text-base-content/60 mb-3">
-				These shortcuts are built into the app and work from anywhere (unless you're typing in an input field).
-			</p>
-			<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-				{#each globalShortcuts as shortcut}
-					<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-base-100/50">
-						<div class="flex-1">
-							<span class="text-sm">{shortcut.description}</span>
-							{#if shortcut.context && shortcut.context !== 'Global'}
-								<span class="text-xs text-base-content/40 ml-2">({shortcut.context})</span>
-							{/if}
-						</div>
-						<kbd class="kbd kbd-sm font-mono">{shortcut.key}</kbd>
+			<div class="flex items-center justify-between mb-3">
+				<p class="text-xs text-base-content/60">
+					Click any shortcut to customize. These work from anywhere (unless you're typing in an input field).
+				</p>
+				{#if showResetGlobalConfirm}
+					<div class="flex items-center gap-2">
+						<span class="text-sm text-warning">Reset all to defaults?</span>
+						<button class="btn btn-error btn-xs" onclick={handleResetAllGlobal}>Yes, Reset</button>
+						<button class="btn btn-ghost btn-xs" onclick={() => showResetGlobalConfirm = false}>Cancel</button>
 					</div>
-				{/each}
+				{/if}
 			</div>
+
+			<!-- Grouped by category -->
+			{#each groupedGlobalShortcuts as [category, shortcuts]}
+				<div class="mb-4">
+					<h4 class="text-xs font-semibold text-base-content/50 uppercase tracking-wide mb-2">
+						{categoryLabels[category] || category}
+					</h4>
+					<div class="space-y-1">
+						{#each shortcuts as shortcut}
+							{@const isEditing = editingItem === shortcut.id && editingType === 'global'}
+
+							<div
+								class="shortcut-row flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-100/50 transition-colors"
+								class:bg-base-100={isEditing}
+							>
+								<div class="flex-1 min-w-0">
+									<span class="text-sm">{shortcut.description}</span>
+									{#if shortcut.context}
+										<span class="text-xs text-base-content/40 ml-2">({shortcut.context})</span>
+									{/if}
+								</div>
+
+								<div class="flex items-center gap-2 shrink-0">
+									{#if isEditing}
+										<div class="flex flex-col items-end gap-1">
+											<div class="flex items-center gap-2">
+												<input
+													type="text"
+													class="input input-bordered input-sm w-40 font-mono text-center"
+													class:input-error={error}
+													class:input-warning={warning && !error}
+													placeholder="Press keys..."
+													bind:value={editValue}
+													onkeydown={handleKeydown}
+													autofocus
+												/>
+												<button
+													class="btn btn-success btn-sm btn-square"
+													onclick={saveShortcut}
+													disabled={!!error}
+													title="Save (Enter)"
+												>
+													<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+														<path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+													</svg>
+												</button>
+												<button
+													class="btn btn-ghost btn-sm btn-square"
+													onclick={cancelEditing}
+													title="Cancel (Esc)"
+												>
+													<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+														<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+													</svg>
+												</button>
+											</div>
+											{#if error}
+												<span class="text-xs text-error">{error}</span>
+											{:else if warning}
+												<span class="text-xs text-warning">{warning}</span>
+											{/if}
+										</div>
+									{:else}
+										<button
+											class="kbd kbd-sm font-mono cursor-pointer hover:bg-base-300 transition-colors"
+											onclick={() => startEditingGlobal(shortcut.id, shortcut.currentShortcut)}
+											title="Click to edit"
+										>
+											{getDisplayShortcut(shortcut.currentShortcut)}
+										</button>
+										{#if shortcut.isCustom}
+											<span class="badge badge-xs badge-info">custom</span>
+											<button
+												class="btn btn-ghost btn-xs btn-square opacity-50 hover:opacity-100"
+												onclick={() => handleResetGlobalShortcut(shortcut.id)}
+												title="Reset to default ({shortcut.defaultShortcut})"
+											>
+												<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+													<path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+												</svg>
+											</button>
+										{/if}
+									{/if}
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/each}
+
+			<!-- Non-editable system shortcuts -->
+			{#if systemShortcuts.length > 0}
+				<div class="mt-4 pt-3 border-t border-base-300">
+					<h4 class="text-xs font-semibold text-base-content/40 uppercase tracking-wide mb-2">
+						System (Non-configurable)
+					</h4>
+					<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+						{#each systemShortcuts as shortcut}
+							<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-base-100/30 opacity-60">
+								<div class="flex-1">
+									<span class="text-sm">{shortcut.description}</span>
+									{#if shortcut.context}
+										<span class="text-xs text-base-content/40 ml-2">({shortcut.context})</span>
+									{/if}
+								</div>
+								<kbd class="kbd kbd-sm font-mono">{shortcut.key}</kbd>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
 		</div>
 	</div>
 
@@ -345,7 +557,7 @@
 					<div class="space-y-1">
 						{#each cmds as cmd}
 							{@const currentShortcut = getShortcut(cmd.invocation)}
-							{@const isEditing = editingCommand === cmd.invocation}
+							{@const isEditing = editingItem === cmd.invocation && editingType === 'command'}
 
 							<div
 								class="shortcut-row flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200/50 transition-colors"
@@ -407,7 +619,7 @@
 											<kbd class="kbd kbd-sm font-mono">{getDisplayShortcut(currentShortcut)}</kbd>
 											<button
 												class="btn btn-ghost btn-sm btn-square opacity-50 hover:opacity-100"
-												onclick={() => startEditing(cmd.invocation)}
+												onclick={() => startEditingCommand(cmd.invocation)}
 												title="Edit shortcut"
 											>
 												<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -416,7 +628,7 @@
 											</button>
 											<button
 												class="btn btn-ghost btn-sm btn-square opacity-50 hover:opacity-100 text-error"
-												onclick={() => removeShortcut(cmd.invocation)}
+												onclick={() => removeCommandShortcut(cmd.invocation)}
 												title="Remove shortcut"
 											>
 												<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -426,7 +638,7 @@
 										{:else}
 											<button
 												class="btn btn-ghost btn-sm text-base-content/50 hover:text-base-content"
-												onclick={() => startEditing(cmd.invocation)}
+												onclick={() => startEditingCommand(cmd.invocation)}
 											>
 												<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
 													<path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />

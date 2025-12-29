@@ -27,6 +27,7 @@
 	import { TaskDetailSkeleton } from '$lib/components/skeleton';
 	import SlideOpenButton from '$lib/components/SlideOpenButton.svelte';
 	import { SESSION_STATE_VISUALS } from '$lib/config/statusColors';
+	import EventStack from '$lib/components/work/EventStack.svelte';
 
 	// Task interface for drawer (extends API Task with additional optional fields)
 	interface DrawerTask {
@@ -257,6 +258,31 @@
 	let signalsLoading = $state(false);
 	let signalsExpanded = $state(true);  // Expanded by default since it's the primary view
 	let signalsStats = $state<TaskSignalsResponse['stats'] | null>(null);
+	let resumingSessionId = $state<string | null>(null);  // Track which session is being resumed
+
+	// Get unique sessions from signals (for Resume button)
+	// A task may have multiple sessions if different agents worked on it
+	interface UniqueSession {
+		session_id: string;
+		agent_name?: string;
+		timestamp: string;  // Latest timestamp for this session
+	}
+	const uniqueSessions = $derived.by((): UniqueSession[] => {
+		const sessionMap = new Map<string, UniqueSession>();
+		for (const signal of taskSignals) {
+			if (!signal.session_id) continue;
+			const existing = sessionMap.get(signal.session_id);
+			if (!existing || signal.timestamp > existing.timestamp) {
+				sessionMap.set(signal.session_id, {
+					session_id: signal.session_id,
+					agent_name: signal.agent_name || existing?.agent_name,
+					timestamp: signal.timestamp
+				});
+			}
+		}
+		// Sort by timestamp descending (most recent first)
+		return Array.from(sessionMap.values()).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+	});
 
 	// Autofocus action for inputs
 	function autofocusAction(node: HTMLElement) {
@@ -1193,6 +1219,38 @@
 	}
 
 	/**
+	 * Resume a previous Claude Code session from the activity timeline
+	 * Uses Claude's -r flag to continue the conversation
+	 */
+	async function handleResumeSession(sessionId: string, agentName?: string) {
+		if (!sessionId || resumingSessionId) return;
+
+		resumingSessionId = sessionId;
+		try {
+			// Use agent name for the URL path, pass session_id in body
+			const name = agentName || 'unknown';
+			const response = await fetch(`/api/sessions/${name}/resume`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ session_id: sessionId })
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.message || 'Failed to resume session');
+			}
+
+			const data = await response.json();
+			showToast('success', `▶️ Resuming session for ${data.agentName || name}`);
+		} catch (error: any) {
+			console.error('Resume session error:', error);
+			showToast('error', `✗ ${error.message}`);
+		} finally {
+			resumingSessionId = null;
+		}
+	}
+
+	/**
 	 * Send a message to the agent working on this task
 	 */
 	async function handleSendMessage() {
@@ -1901,17 +1959,76 @@
 										<span class="ml-1 badge badge-xs bg-base-300 text-base-content/70">{taskSignals.length}</span>
 									{/if}
 								</h4>
-								{#if taskSignals.length > 0}
-									<button
-										class="btn btn-xs btn-ghost gap-1"
-										onclick={() => signalsExpanded = !signalsExpanded}
-									>
-										<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 transition-transform {signalsExpanded ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-										</svg>
-										{signalsExpanded ? 'Collapse' : 'Expand'}
-									</button>
-								{/if}
+								<div class="flex items-center gap-1">
+									<!-- Resume Session button(s) -->
+									{#if uniqueSessions.length === 1}
+										<!-- Single session - show simple button -->
+										<button
+											class="btn btn-xs btn-ghost gap-1 text-primary hover:btn-primary"
+											onclick={() => handleResumeSession(uniqueSessions[0].session_id, uniqueSessions[0].agent_name)}
+											disabled={resumingSessionId !== null}
+											title="Resume this session in a new terminal"
+										>
+											{#if resumingSessionId === uniqueSessions[0].session_id}
+												<span class="loading loading-spinner loading-xs"></span>
+											{:else}
+												<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+													<path d="M8 5v14l11-7z"/>
+												</svg>
+											{/if}
+											<span>Resume</span>
+										</button>
+									{:else if uniqueSessions.length > 1}
+										<!-- Multiple sessions - show dropdown -->
+										<div class="dropdown dropdown-end">
+											<button
+												tabindex="0"
+												class="btn btn-xs btn-ghost gap-1 text-primary hover:btn-primary"
+												disabled={resumingSessionId !== null}
+											>
+												<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+													<path d="M8 5v14l11-7z"/>
+												</svg>
+												<span>Resume</span>
+												<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+												</svg>
+											</button>
+											<ul tabindex="0" class="dropdown-content menu rounded-box z-50 w-52 p-1 shadow-lg bg-base-200 border border-base-300">
+												{#each uniqueSessions as session}
+													<li>
+														<button
+															class="text-xs"
+															onclick={() => { handleResumeSession(session.session_id, session.agent_name); document.activeElement?.blur(); }}
+															disabled={resumingSessionId === session.session_id}
+														>
+															{#if resumingSessionId === session.session_id}
+																<span class="loading loading-spinner loading-xs"></span>
+															{:else}
+																<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+																	<path d="M8 5v14l11-7z"/>
+																</svg>
+															{/if}
+															<span>{session.agent_name || 'Session'}</span>
+															<span class="text-base-content/50">{formatRelativeTimestamp(session.timestamp)}</span>
+														</button>
+													</li>
+												{/each}
+											</ul>
+										</div>
+									{/if}
+									{#if taskSignals.length > 0}
+										<button
+											class="btn btn-xs btn-ghost gap-1"
+											onclick={() => signalsExpanded = !signalsExpanded}
+										>
+											<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 transition-transform {signalsExpanded ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+											</svg>
+											{signalsExpanded ? 'Collapse' : 'Expand'}
+										</button>
+									{/if}
+								</div>
 							</div>
 							{#if signalsLoading}
 								<div class="flex items-center gap-2 p-3 rounded bg-base-200">
@@ -1935,102 +2052,22 @@
 										{/if}
 									</div>
 								{/if}
-								<!-- Timeline events -->
+								<!-- Timeline events using EventStack in inline mode -->
 								{#if signalsExpanded}
-									<div class="space-y-2">
-										{#each taskSignals as signal, i (signal.timestamp + i)}
-											{@const signalState = signal.state || signal.type}
-											{@const signalToSessionState: Record<string, string> = {
-												working: 'working',
-												review: 'ready-for-review',
-												completed: 'completed',
-												needs_input: 'needs-input',
-												completing: 'completing',
-												starting: 'starting',
-												idle: 'idle',
-												tasks: 'idle',           // Suggested tasks - use idle color
-												complete: 'completed',   // Complete bundle - same as completed
-												action: 'needs-input'    // Action required - use needs-input color
-											}}
-											{@const sessionState = signalToSessionState[signalState] || 'idle'}
-											{@const stateVisual = SESSION_STATE_VISUALS[sessionState] || SESSION_STATE_VISUALS.idle}
-											{@const stateLabels: Record<string, string> = {
-												working: 'Working',
-												review: 'Ready for Review',
-												completed: 'Completed',
-												needs_input: 'Needs Input',
-												completing: 'Completing',
-												starting: 'Starting',
-												idle: 'Idle',
-												tasks: 'Suggested Tasks',
-												complete: 'Complete Bundle',
-												action: 'Action Required'
-											}}
-											<div
-												class="p-3 rounded group transition-colors bg-base-200"
-												style="border-left: 3px solid {stateVisual.accent};"
-											>
-												<div class="flex items-center justify-between mb-1">
-													<div class="flex items-center gap-2">
-														<!-- State badge -->
-														<span class="badge badge-xs text-base-100" style="background: {stateVisual.accent};">
-															{stateLabels[signalState] || signalState}
-														</span>
-														{#if signal.agent_name}
-															<span class="text-xs font-mono text-base-content/60">{signal.agent_name}</span>
-														{/if}
-													</div>
-													<span class="text-xs text-base-content/50">
-														{formatRelativeTimestamp(signal.timestamp)}
-													</span>
-												</div>
-												<!-- Signal data content -->
-												{#if signal.data}
-													{@const data = signal.data as Record<string, unknown>}
-													{#if data.taskTitle}
-														<div class="text-sm font-medium mt-1 text-base-content/70">
-															{data.taskTitle}
-														</div>
-													{/if}
-													{#if data.approach}
-														<div class="text-xs mt-1 text-base-content/60">
-															{data.approach}
-														</div>
-													{/if}
-													{#if Array.isArray(data.summary) && data.summary.length > 0}
-														<ul class="text-xs mt-2 space-y-1 list-disc list-inside text-base-content/60">
-															{#each data.summary.slice(0, 3) as item}
-																<li>{item}</li>
-															{/each}
-															{#if data.summary.length > 3}
-																<li class="opacity-60">+{data.summary.length - 3} more...</li>
-															{/if}
-														</ul>
-													{/if}
-													{#if data.question}
-														<div class="text-sm mt-1 p-2 rounded bg-base-300 text-secondary">
-															{data.question}
-														</div>
-													{/if}
-													{#if data.currentStep}
-														<div class="text-xs mt-1 text-base-content/60">
-															Step: {data.currentStep}
-														</div>
-													{/if}
-													{#if data.outcome}
-														<div class="text-xs mt-1 text-success">
-															Outcome: {data.outcome}
-														</div>
-													{/if}
-												{/if}
-												{#if signal.git_sha}
-													<div class="text-xs mt-2 font-mono text-base-content/50 opacity-50">
-														git: {signal.git_sha}
-													</div>
-												{/if}
-											</div>
-										{/each}
-									</div>
+									<EventStack
+										layoutMode="inline"
+										initialEvents={taskSignals.map(s => ({
+											type: s.type,
+											state: s.state,
+											session_id: s.session_id,
+											tmux_session: s.tmux_session,
+											timestamp: s.timestamp,
+											task_id: s.task_id,
+											data: { ...s.data, agent_name: s.agent_name, agentName: s.agent_name },
+											git_sha: s.git_sha
+										}))}
+										onTaskClick={(id) => { taskId = id; }}
+									/>
 								{:else}
 									<!-- Collapsed view - show just the latest signal -->
 									{@const latest = taskSignals[taskSignals.length - 1]}

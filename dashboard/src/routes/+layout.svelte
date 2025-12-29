@@ -28,6 +28,8 @@
 	import { getSessions as getWorkSessions, startActivityPolling, stopActivityPolling, fetch as fetchWorkSessions } from '$lib/stores/workSessions.svelte';
 	import { getSessions as getServerSessions } from '$lib/stores/serverSessions.svelte';
 	import { initKeyboardShortcuts, findMatchingCommand, findMatchingGlobalShortcut } from '$lib/stores/keyboardShortcuts.svelte';
+	import { loadAutoKillConfig } from '$lib/stores/autoKillConfig';
+	import { setReviewRules as setReviewRulesStore } from '$lib/stores/reviewRules.svelte';
 
 	let { children } = $props();
 
@@ -201,6 +203,7 @@
 			loadEpicsWithReady();
 			loadReviewRules();
 			loadSparklineData();
+			loadAutoKillConfig(); // Load user's auto-kill settings for session cleanup
 		}, 100);
 
 		// Phase 3: Expensive usage data (heavily deferred, runs after user has had time to interact)
@@ -444,9 +447,12 @@
 			const response = await fetch('/api/review-rules');
 			const data = await response.json();
 			reviewRules = data.rules || [];
+			// Also populate the store for components that need it
+			setReviewRulesStore(reviewRules);
 		} catch (error) {
 			console.error('Failed to fetch review rules:', error);
 			reviewRules = [];
+			setReviewRulesStore([]);
 		}
 	}
 

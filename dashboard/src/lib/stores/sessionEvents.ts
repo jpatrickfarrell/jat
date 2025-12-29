@@ -23,6 +23,19 @@ import { writable } from 'svelte/store';
 import { workSessionsState, type WorkSession } from './workSessions.svelte';
 import { processSessionOutput, onAutomationTrigger, clearRecoveringState } from '$lib/utils/automationEngine';
 import { initializeStore as initAutomationStore, clearSessionTriggers, getRuleById } from '$lib/stores/automationRules.svelte';
+import { getIsActive as isEpicSwarmActive, getChildren as getEpicChildren, getNextReadyTask as getNextEpicTask } from './epicQueueStore.svelte';
+import { getAutoKillDelayForPriority, isAutoKillEnabled } from './autoKillConfig';
+
+// Track scheduled auto-kill timers by session name
+// Allows cancellation if user interacts with session before kill occurs
+interface ScheduledAutoKill {
+	timeout: ReturnType<typeof setTimeout>;
+	interval: ReturnType<typeof setInterval>;
+}
+const scheduledAutoKills = new Map<string, ScheduledAutoKill>();
+
+// Store for auto-kill countdown state (sessionName -> seconds remaining)
+export const autoKillCountdowns = writable<Map<string, number>>(new Map());
 
 // Event types: original cross-tab events + new SSE events
 export type SessionEventType =
@@ -199,6 +212,107 @@ let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_DELAY = 3000;
 
+// ============================================================================
+// Auto-Kill Functions
+// ============================================================================
+
+/**
+ * Get the auto-kill delay for a session based on task priority
+ * Returns delay in seconds, or null if auto-kill is disabled
+ * Now uses the autoKillConfig store for user-configurable settings
+ */
+function getAutoKillDelay(taskPriority: number | null | undefined): number | null {
+	return getAutoKillDelayForPriority(taskPriority);
+}
+
+/**
+ * Schedule an auto-kill for a completed session
+ * Sets up countdown timer and stores timeout ID for potential cancellation
+ */
+function scheduleAutoKill(sessionName: string, delaySeconds: number): void {
+	// Cancel any existing scheduled kill for this session
+	cancelAutoKill(sessionName);
+
+	console.log(`[AutoKill] Scheduling kill for ${sessionName} in ${delaySeconds}s`);
+
+	// Update countdown store
+	autoKillCountdowns.update(map => {
+		map.set(sessionName, delaySeconds);
+		return map;
+	});
+
+	// Start countdown interval (updates every second)
+	let remaining = delaySeconds;
+	const countdownInterval = setInterval(() => {
+		remaining--;
+		autoKillCountdowns.update(map => {
+			if (remaining > 0) {
+				map.set(sessionName, remaining);
+			} else {
+				map.delete(sessionName);
+			}
+			return map;
+		});
+		if (remaining <= 0) {
+			clearInterval(countdownInterval);
+		}
+	}, 1000);
+
+	// Schedule the actual kill
+	const timeoutId = setTimeout(async () => {
+		clearInterval(countdownInterval);
+		scheduledAutoKills.delete(sessionName);
+		autoKillCountdowns.update(map => {
+			map.delete(sessionName);
+			return map;
+		});
+
+		console.log(`[AutoKill] Executing kill for ${sessionName}`);
+
+		try {
+			const response = await fetch(`/api/sessions/${encodeURIComponent(sessionName.replace(/^jat-/, ''))}`, {
+				method: 'DELETE'
+			});
+
+			if (response.ok) {
+				console.log(`[AutoKill] Successfully killed ${sessionName}`);
+			} else {
+				console.warn(`[AutoKill] Failed to kill ${sessionName}: ${response.status}`);
+			}
+		} catch (error) {
+			console.error(`[AutoKill] Error killing ${sessionName}:`, error);
+		}
+	}, delaySeconds * 1000);
+
+	// Store both the timeout and interval for cancellation
+	scheduledAutoKills.set(sessionName, { timeout: timeoutId, interval: countdownInterval });
+}
+
+/**
+ * Cancel a scheduled auto-kill for a session
+ * Called when user interacts with the session (e.g., clicks to view)
+ */
+export function cancelAutoKill(sessionName: string): void {
+	const scheduled = scheduledAutoKills.get(sessionName);
+	if (scheduled) {
+		clearTimeout(scheduled.timeout);
+		clearInterval(scheduled.interval);
+		scheduledAutoKills.delete(sessionName);
+		autoKillCountdowns.update(map => {
+			map.delete(sessionName);
+			return map;
+		});
+		console.log(`[AutoKill] Cancelled scheduled kill for ${sessionName}`);
+	}
+}
+
+/**
+ * Check if a session has an auto-kill scheduled
+ */
+export function hasScheduledAutoKill(sessionName: string): boolean {
+	return scheduledAutoKills.has(sessionName);
+}
+
 /**
  * Handle session-output event: update terminal output for a session
  *
@@ -317,8 +431,8 @@ function handleSessionState(data: SessionEvent): void {
 	const { sessionName, state, signalPayload } = data;
 	if (!sessionName || !state) return;
 
-	// Auto-proceed: completed signal with autoProceed=true spawns next task
-	if (state === 'completed' && signalPayload?.autoProceed) {
+	// Auto-proceed: auto_proceed signal type triggers spawn of next task
+	if (state === 'auto_proceed') {
 		handleAutoProceed(data);
 		return;
 	}
@@ -415,6 +529,15 @@ function handleSessionComplete(data: SessionEvent): void {
 	workSessionsState.sessions[sessionIndex]._completionBundle = completionBundle;
 	workSessionsState.sessions[sessionIndex]._completionBundleTimestamp = data.timestamp;
 
+	// Clear the rich signal payload only if it's a "completing" type
+	// (the signal that shows the announcing progress bar)
+	// This allows the CompletedSignalCard to render instead
+	const currentPayload = workSessionsState.sessions[sessionIndex]._richSignalPayload;
+	if (currentPayload?.type === 'completing') {
+		workSessionsState.sessions[sessionIndex]._richSignalPayload = undefined;
+		workSessionsState.sessions[sessionIndex]._richSignalPayloadTimestamp = undefined;
+	}
+
 	// Also update SSE state to 'completed' if not already
 	if (workSessionsState.sessions[sessionIndex]._sseState !== 'completed') {
 		workSessionsState.sessions[sessionIndex]._sseState = 'completed';
@@ -426,6 +549,24 @@ function handleSessionComplete(data: SessionEvent): void {
 		workSessionsState.sessions[sessionIndex]._signalSuggestedTasks = completionBundle.suggestedTasks;
 		workSessionsState.sessions[sessionIndex]._signalSuggestedTasksTimestamp = data.timestamp;
 	}
+
+	// Schedule auto-kill for completed session
+	const session = workSessionsState.sessions[sessionIndex];
+	const taskPriority = session.task?.priority ?? null;
+	const autoKillDelay = getAutoKillDelay(taskPriority);
+
+	if (autoKillDelay !== null && autoKillDelay > 0) {
+		scheduleAutoKill(sessionName, autoKillDelay);
+	} else if (autoKillDelay === 0) {
+		// Immediate kill (delay of 0)
+		console.log(`[AutoKill] Immediate kill for ${sessionName} (delay=0)`);
+		fetch(`/api/sessions/${encodeURIComponent(sessionName.replace(/^jat-/, ''))}`, {
+			method: 'DELETE'
+		}).catch(error => {
+			console.error(`[AutoKill] Error killing ${sessionName}:`, error);
+		});
+	}
+	// If autoKillDelay is null, auto-kill is disabled - session persists
 }
 
 /**
@@ -470,28 +611,65 @@ function handleSessionDestroyed(data: SessionEvent): void {
 }
 
 /**
- * Handle auto-proceed: spawn next task automatically
+ * Handle auto-proceed: spawn next task automatically (Epic Swarm scoped)
  *
- * When an agent emits a completed signal with autoProceed=true, this handler:
- * 1. Updates session state to show "auto-proceeding"
- * 2. Calls /api/sessions/next to spawn a new session for the next ready task
- * 3. The new session will appear via session-created event
+ * When an agent emits an auto_proceed signal, this handler:
+ * 1. Checks if there's an active Epic Swarm
+ * 2. Verifies the next task is a child of the active epic
+ * 3. Updates session state to show "auto-proceeding"
+ * 4. Calls /api/sessions/next to spawn a new session
  *
- * Signal: jat-signal completed '{"taskId":"...","autoProceed":true,"nextTaskId":"..."}'
+ * IMPORTANT: Auto-proceed only works within an active Epic Swarm.
+ * Without an epic, agents complete normally without auto-spawning.
+ *
+ * Signal: jat-signal auto_proceed '{"taskId":"...","nextTaskId":"...","nextTaskTitle":"..."}'
  */
 async function handleAutoProceed(data: SessionEvent): Promise<void> {
 	const { sessionName, signalPayload } = data;
 	if (!sessionName) return;
+
+	// Check if there's an active epic swarm - auto-proceed is ONLY for epic execution
+	if (!isEpicSwarmActive()) {
+		console.log(`[SessionEvents] Auto-proceed skipped for ${sessionName} - no active epic swarm`);
+		// Update to completed state (no auto-spawn outside of epic)
+		const idx = workSessionsState.sessions.findIndex(s => s.sessionName === sessionName);
+		if (idx !== -1) {
+			workSessionsState.sessions[idx]._sseState = 'completed';
+			workSessionsState.sessions[idx]._sseStateTimestamp = data.timestamp;
+		}
+		return;
+	}
 
 	const sessionIndex = workSessionsState.sessions.findIndex(s => s.sessionName === sessionName);
 	if (sessionIndex === -1) return;
 
 	// Extract task info from signal payload
 	const taskId = signalPayload?.taskId || '';
-	const nextTaskId = (signalPayload as { nextTaskId?: string })?.nextTaskId;
-	const nextTaskTitle = (signalPayload as { nextTaskTitle?: string })?.nextTaskTitle;
+	let nextTaskId = (signalPayload as { nextTaskId?: string })?.nextTaskId;
+	let nextTaskTitle = (signalPayload as { nextTaskTitle?: string })?.nextTaskTitle;
 
-	console.log(`[SessionEvents] Auto-proceed: ${sessionName} completed ${taskId}, spawning ${nextTaskId || 'next ready task'}`);
+	// If no nextTaskId provided, get next ready task from epic children
+	if (!nextTaskId) {
+		const nextEpicTask = getNextEpicTask();
+		if (nextEpicTask) {
+			nextTaskId = nextEpicTask.id;
+			nextTaskTitle = nextEpicTask.title;
+		}
+	}
+
+	// Verify the next task is part of the active epic's children
+	const epicChildren = getEpicChildren();
+	const isEpicChild = nextTaskId ? epicChildren.some(c => c.id === nextTaskId) : false;
+
+	if (!isEpicChild) {
+		console.log(`[SessionEvents] Auto-proceed skipped for ${sessionName} - next task ${nextTaskId || '(none)'} is not an epic child`);
+		// Update state to completed instead of auto-proceeding
+		workSessionsState.sessions[sessionIndex]._sseState = 'completed';
+		workSessionsState.sessions[sessionIndex]._sseStateTimestamp = data.timestamp;
+		return;
+	}
+
+	console.log(`[SessionEvents] Auto-proceed: ${sessionName} completed ${taskId}, spawning epic child ${nextTaskId}`);
 
 	// Update session state to show auto-proceeding
 	workSessionsState.sessions[sessionIndex]._sseState = 'auto-proceeding';
@@ -514,11 +692,11 @@ async function handleAutoProceed(data: SessionEvent): Promise<void> {
 		const result = await response.json();
 
 		if (result.success) {
-			console.log(`[SessionEvents] Spawned next session: ${result.sessionName} for task ${result.nextTaskId}`);
+			console.log(`[SessionEvents] Spawned next session: ${result.sessionName} for epic task ${result.nextTaskId}`);
 			// The new session will appear via session-created SSE event
 			// The old session will be removed when tmux session is killed
 		} else {
-			console.warn(`[SessionEvents] No ready tasks to spawn: ${result.reason}`);
+			console.warn(`[SessionEvents] Failed to spawn epic task: ${result.reason}`);
 			// Update state to completed instead of auto-proceeding
 			workSessionsState.sessions[sessionIndex]._sseState = 'completed';
 		}

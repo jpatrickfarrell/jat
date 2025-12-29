@@ -209,10 +209,94 @@ export const JAT_DEFAULTS = {
 	agent_stagger: 15,
 	/** Seconds to wait for Claude TUI to start */
 	claude_startup_timeout: 20,
+	/** Maximum concurrent tmux sessions */
+	max_sessions: 12,
+	/** Default number of agents to spawn in swarm */
+	default_agent_count: 4,
 	/** Default height for sessions panel on /projects page (px) */
 	projects_session_height: 400,
 	/** Default height for tasks panel on /projects page (px) */
-	projects_task_height: 400
+	projects_task_height: 400,
+	/** Auto-cleanup completed sessions (disabled by default - powerful feature) */
+	auto_kill_enabled: false,
+	/** Seconds to wait before killing completed session */
+	auto_kill_delay: 30,
+	/** Per-priority auto-kill enabled flags (P0=critical, P4=lowest) */
+	auto_kill_p0: false,
+	auto_kill_p1: false,
+	auto_kill_p2: false,
+	auto_kill_p3: true,
+	auto_kill_p4: true
+} as const;
+
+// =============================================================================
+// SIGNAL TTL CONFIGURATION
+// =============================================================================
+
+export const SIGNAL_TTL = {
+	/**
+	 * Short TTL for transitional states (working, starting, idle)
+	 * These states change frequently as agent works, so stale signals expire quickly
+	 */
+	TRANSIENT_MS: 60 * 1000, // 1 minute
+
+	/**
+	 * Long TTL for states waiting on human action
+	 * User may step away - signal should persist until they return
+	 */
+	USER_WAITING_MS: 30 * 60 * 1000, // 30 minutes
+
+	/**
+	 * States that use the longer USER_WAITING_MS TTL
+	 * - completed: waiting for user to acknowledge/cleanup
+	 * - review: waiting for user to approve and run /jat:complete
+	 * - needs_input: waiting for user to answer a question
+	 */
+	USER_WAITING_STATES: ['completed', 'review', 'needs_input'] as const
+} as const;
+
+// =============================================================================
+// AUTO-KILL CONFIGURATION
+// =============================================================================
+
+export const AUTO_KILL = {
+	/**
+	 * Enable auto-kill for completed sessions globally.
+	 * When true, sessions will be automatically terminated after completion.
+	 */
+	ENABLED: true,
+
+	/**
+	 * Default delay in seconds before killing a completed session.
+	 * Set to 0 for immediate kill (not recommended - allows no review time).
+	 * Set to null to disable auto-kill (session persists until manually closed).
+	 */
+	DEFAULT_DELAY_SECONDS: 30,
+
+	/**
+	 * Per-priority delay overrides (in seconds).
+	 * Higher priority tasks may warrant more review time before cleanup.
+	 * Set to null to use DEFAULT_DELAY_SECONDS for that priority.
+	 * Set to 0 for immediate kill (no delay).
+	 *
+	 * Priority meanings:
+	 * - P0: Critical/urgent - longer review time
+	 * - P1: High priority - moderate review time
+	 * - P2: Medium priority - standard review time
+	 * - P3: Low priority - quick cleanup
+	 */
+	PRIORITY_DELAYS: {
+		0: 60,   // P0: 60 seconds - more time to review critical work
+		1: 45,   // P1: 45 seconds
+		2: 30,   // P2: 30 seconds (same as default)
+		3: 15    // P3: 15 seconds - quick tasks, quick cleanup
+	} as Record<number, number | null>,
+
+	/**
+	 * Maximum delay allowed (in seconds).
+	 * Prevents excessively long delays from being set.
+	 */
+	MAX_DELAY_SECONDS: 300 // 5 minutes
 } as const;
 
 // =============================================================================

@@ -114,10 +114,13 @@ export function computeReviewStatus(
 		}
 
 		// Check if priority is within auto-proceed range
-		if (taskPriority <= maxAuto) {
+		// Note: Lower priority NUMBER = higher urgency (P0 is critical, P4 is low)
+		// So P1 bug should require review, P4 bug can auto-proceed
+		// maxAutoPriority=4 means only P4+ can auto (>= comparison)
+		if (taskPriority >= maxAuto) {
 			return {
 				action: 'auto',
-				reason: `${taskType}: P${taskPriority} <= P${maxAuto} auto threshold`,
+				reason: `${taskType}: P${taskPriority} >= P${maxAuto} auto threshold`,
 				source: 'type_rule',
 				hasOverride: false,
 				rule
@@ -125,7 +128,7 @@ export function computeReviewStatus(
 		} else {
 			return {
 				action: 'review',
-				reason: `${taskType}: P${taskPriority} > P${maxAuto} auto threshold`,
+				reason: `${taskType}: P${taskPriority} < P${maxAuto} auto threshold`,
 				source: 'type_rule',
 				hasOverride: false,
 				rule

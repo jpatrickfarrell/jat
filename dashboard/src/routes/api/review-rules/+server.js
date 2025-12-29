@@ -26,16 +26,18 @@ function findBeadsDir() {
 }
 
 // Default rules configuration
+// maxAutoPriority is the minimum priority number that auto-proceeds (higher number = lower importance)
+// So maxAutoPriority: 3 means P3 and P4 auto-proceed, P0-P2 require review
 const DEFAULT_RULES = {
 	version: 1,
 	defaultAction: 'review',
 	priorityThreshold: 3,
 	rules: [
-		{ type: 'bug', maxAutoPriority: 3, note: 'P0-P3 bugs auto-proceed, P4 requires review' },
-		{ type: 'feature', maxAutoPriority: 3, note: 'P0-P3 features auto-proceed' },
-		{ type: 'task', maxAutoPriority: 3 },
-		{ type: 'chore', maxAutoPriority: 4, note: 'All chores auto-proceed' },
-		{ type: 'epic', maxAutoPriority: -1, note: 'Epics always require review' }
+		{ type: 'bug', maxAutoPriority: 4, note: 'Only P4 bugs auto-proceed, others require review' },
+		{ type: 'feature', maxAutoPriority: 3, note: 'P3-P4 features auto-proceed' },
+		{ type: 'task', maxAutoPriority: 3, note: 'P3-P4 tasks auto-proceed' },
+		{ type: 'chore', maxAutoPriority: 0, note: 'All chores auto-proceed' },
+		{ type: 'epic', maxAutoPriority: 5, note: 'Epics always require review' }
 	],
 	overrides: []
 };

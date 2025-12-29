@@ -87,24 +87,30 @@ export const JAT_DEFAULTS = {
 } as const;
 ```
 
-### 4. Signal/Question TTL Values (Repeated)
+### 4. Signal/Question TTL Values ✅ CENTRALIZED
 
+**Completed:** Signal TTL constants are now centralized in `lib/config/constants.ts`:
+
+```typescript
+export const SIGNAL_TTL = {
+  TRANSIENT_MS: 60 * 1000,           // 1 minute for transitional states
+  USER_WAITING_MS: 30 * 60 * 1000,   // 30 minutes for states awaiting human action
+  USER_WAITING_STATES: ['completed', 'review', 'needs_input'] as const
+} as const;
+```
+
+**Files updated to import from constants.ts:**
+- `routes/api/sessions/events/+server.ts`
+- `routes/api/work/+server.js`
+- `lib/components/work/SessionCard.svelte`
+
+**Remaining (not centralized):**
 | File | Constant | Value |
 |------|----------|-------|
-| `routes/api/sessions/events/+server.ts:212` | `SIGNAL_TTL_MS` | 60000ms |
-| `routes/api/sessions/events/+server.ts:213` | `COMPLETION_TTL_MS` | 1800000ms |
-| `routes/api/work/+server.js:34-36` | `SIGNAL_TTL_MS`, `COMPLETED_STATE_TTL_MS`, `COMPLETION_TTL_MS` | Same values |
 | `routes/api/sessions/[name]/custom-question/+server.ts:62` | `maxAgeMs` | 300000ms |
 | `routes/api/work/[sessionId]/question/+server.js:36` | `maxAgeMs` | 300000ms |
 
-**Recommendation:** Create `SIGNAL` config:
-```typescript
-export const SIGNAL = {
-  TTL_MS: 60 * 1000,
-  COMPLETION_TTL_MS: 30 * 60 * 1000,
-  QUESTION_MAX_AGE_MS: 5 * 60 * 1000
-} as const;
-```
+**Note:** Question max age could be added to SIGNAL_TTL if needed.
 
 ### 5. Polling Intervals (Repeated)
 

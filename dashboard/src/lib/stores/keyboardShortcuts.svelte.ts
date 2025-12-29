@@ -1,16 +1,20 @@
 /**
  * Keyboard Shortcuts Store
  *
- * Manages keyboard shortcut assignments for slash commands with localStorage persistence.
- * Uses Svelte 5 runes for automatic reactivity.
+ * Manages keyboard shortcut assignments for:
+ * 1. Global app shortcuts (Alt+N, Alt+E, etc.) - configurable with defaults
+ * 2. Slash command shortcuts (user-assigned)
+ *
+ * Uses localStorage for persistence and Svelte 5 runes for reactivity.
  *
  * @see dashboard/src/lib/types/config.ts for SlashCommand type
  */
 
 import { browser } from '$app/environment';
 
-// Storage key for localStorage
+// Storage keys for localStorage
 const STORAGE_KEY = 'command-keyboard-shortcuts';
+const GLOBAL_STORAGE_KEY = 'global-keyboard-shortcuts';
 
 // =============================================================================
 // TYPES
@@ -32,12 +36,44 @@ export interface ParsedShortcut {
 	meta: boolean;      // Command key on Mac
 }
 
+/**
+ * Global shortcut definition with metadata
+ */
+export interface GlobalShortcutDef {
+	id: string;              // Unique identifier (e.g., 'new-task')
+	description: string;     // Human-readable description
+	defaultShortcut: string; // Default key combination (e.g., 'Alt+N')
+	context?: string;        // Where this shortcut works (e.g., 'Hovered session')
+	category: 'global' | 'session' | 'navigation';  // Grouping for UI
+}
+
+/**
+ * Default global shortcuts - these are the factory defaults
+ * Users can override these in localStorage
+ */
+export const DEFAULT_GLOBAL_SHORTCUTS: GlobalShortcutDef[] = [
+	// Global actions (work from anywhere)
+	{ id: 'new-task', description: 'Create New Task', defaultShortcut: 'Alt+N', category: 'global' },
+	{ id: 'epic-swarm', description: 'Open Epic Swarm Modal', defaultShortcut: 'Alt+E', category: 'global' },
+	{ id: 'start-next', description: 'Open Start Next Dropdown', defaultShortcut: 'Alt+S', category: 'global' },
+	{ id: 'add-project', description: 'Add New Project', defaultShortcut: 'Alt+Shift+P', category: 'global' },
+
+	// Session actions (require hovered session)
+	{ id: 'attach-terminal', description: 'Attach Terminal to Session', defaultShortcut: 'Alt+A', context: 'Hovered session', category: 'session' },
+	{ id: 'kill-session', description: 'Kill Session', defaultShortcut: 'Alt+K', context: 'Hovered session', category: 'session' },
+	{ id: 'interrupt-session', description: 'Interrupt Session (Ctrl+C)', defaultShortcut: 'Alt+I', context: 'Hovered session', category: 'session' },
+	{ id: 'pause-session', description: 'Pause Session', defaultShortcut: 'Alt+P', context: 'Hovered session', category: 'session' },
+	{ id: 'restart-session', description: 'Restart Session', defaultShortcut: 'Alt+R', context: 'Hovered session', category: 'session' },
+	{ id: 'copy-session', description: 'Copy Session Contents', defaultShortcut: 'Alt+Shift+C', context: 'Hovered session', category: 'session' },
+];
+
 // =============================================================================
 // STATE
 // =============================================================================
 
 // Reactive state (module-level $state)
 let shortcuts = $state<ShortcutMap>({});
+let globalShortcuts = $state<ShortcutMap>({});  // User overrides for global shortcuts
 let initialized = $state(false);
 
 // =============================================================================
@@ -51,6 +87,7 @@ let initialized = $state(false);
 export function initKeyboardShortcuts(): void {
 	if (!browser || initialized) return;
 
+	// Load command shortcuts
 	const stored = localStorage.getItem(STORAGE_KEY);
 	if (stored) {
 		try {
@@ -64,15 +101,37 @@ export function initKeyboardShortcuts(): void {
 		}
 	}
 
+	// Load global shortcut overrides
+	const globalStored = localStorage.getItem(GLOBAL_STORAGE_KEY);
+	if (globalStored) {
+		try {
+			const parsed = JSON.parse(globalStored);
+			if (typeof parsed === 'object' && parsed !== null) {
+				globalShortcuts = parsed;
+			}
+		} catch {
+			// Invalid JSON, start fresh
+			globalShortcuts = {};
+		}
+	}
+
 	initialized = true;
 }
 
 /**
- * Save shortcuts to localStorage
+ * Save command shortcuts to localStorage
  */
 function saveToStorage(): void {
 	if (!browser) return;
 	localStorage.setItem(STORAGE_KEY, JSON.stringify(shortcuts));
+}
+
+/**
+ * Save global shortcuts to localStorage
+ */
+function saveGlobalToStorage(): void {
+	if (!browser) return;
+	localStorage.setItem(GLOBAL_STORAGE_KEY, JSON.stringify(globalShortcuts));
 }
 
 // =============================================================================
@@ -115,6 +174,74 @@ export function isInitialized(): boolean {
 }
 
 // =============================================================================
+// GLOBAL SHORTCUT GETTERS
+// =============================================================================
+
+/**
+ * Get the effective shortcut for a global action
+ * Returns user override if set, otherwise the default
+ */
+export function getGlobalShortcut(id: string): string {
+	// Check for user override first
+	if (globalShortcuts[id]) {
+		return globalShortcuts[id];
+	}
+	// Fall back to default
+	const def = DEFAULT_GLOBAL_SHORTCUTS.find(s => s.id === id);
+	return def?.defaultShortcut || '';
+}
+
+/**
+ * Get all global shortcuts (merged defaults with user overrides)
+ */
+export function getAllGlobalShortcuts(): Array<GlobalShortcutDef & { currentShortcut: string; isCustom: boolean }> {
+	return DEFAULT_GLOBAL_SHORTCUTS.map(def => ({
+		...def,
+		currentShortcut: globalShortcuts[def.id] || def.defaultShortcut,
+		isCustom: !!globalShortcuts[def.id]
+	}));
+}
+
+/**
+ * Get just the user overrides for global shortcuts
+ */
+export function getGlobalShortcutOverrides(): Readonly<ShortcutMap> {
+	return globalShortcuts;
+}
+
+/**
+ * Check if a shortcut conflicts with an existing global shortcut
+ * Returns the conflicting shortcut id, or undefined
+ */
+export function findGlobalShortcutConflict(shortcut: string, excludeId?: string): string | undefined {
+	const normalized = normalizeShortcut(shortcut);
+
+	for (const def of DEFAULT_GLOBAL_SHORTCUTS) {
+		if (def.id === excludeId) continue;
+		const currentShortcut = globalShortcuts[def.id] || def.defaultShortcut;
+		if (normalizeShortcut(currentShortcut) === normalized) {
+			return def.id;
+		}
+	}
+
+	return undefined;
+}
+
+/**
+ * Find global shortcut that matches a keyboard event
+ * Returns the shortcut id or undefined
+ */
+export function findMatchingGlobalShortcut(event: KeyboardEvent): string | undefined {
+	for (const def of DEFAULT_GLOBAL_SHORTCUTS) {
+		const currentShortcut = globalShortcuts[def.id] || def.defaultShortcut;
+		if (matchesShortcut(event, currentShortcut)) {
+			return def.id;
+		}
+	}
+	return undefined;
+}
+
+// =============================================================================
 // SETTERS
 // =============================================================================
 
@@ -150,6 +277,44 @@ export function removeShortcut(invocation: string): void {
 export function clearAllShortcuts(): void {
 	shortcuts = {};
 	saveToStorage();
+}
+
+// =============================================================================
+// GLOBAL SHORTCUT SETTERS
+// =============================================================================
+
+/**
+ * Set a custom shortcut for a global action
+ * Pass empty string or undefined to reset to default
+ */
+export function setGlobalShortcut(id: string, shortcut: string | undefined): void {
+	if (!shortcut || shortcut.trim() === '') {
+		// Remove override (reset to default)
+		const { [id]: _, ...rest } = globalShortcuts;
+		globalShortcuts = rest;
+	} else {
+		// Add/update override
+		globalShortcuts = {
+			...globalShortcuts,
+			[id]: normalizeShortcut(shortcut)
+		};
+	}
+	saveGlobalToStorage();
+}
+
+/**
+ * Reset a global shortcut to its default value
+ */
+export function resetGlobalShortcut(id: string): void {
+	setGlobalShortcut(id, undefined);
+}
+
+/**
+ * Reset all global shortcuts to defaults
+ */
+export function resetAllGlobalShortcuts(): void {
+	globalShortcuts = {};
+	saveGlobalToStorage();
 }
 
 // =============================================================================

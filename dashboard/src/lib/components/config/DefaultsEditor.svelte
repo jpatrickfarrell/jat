@@ -7,6 +7,7 @@
 	 */
 
 	import { onMount } from 'svelte';
+	import { updateAutoKillConfig } from '$lib/stores/autoKillConfig';
 
 	// Types
 	interface JatDefaults {
@@ -19,6 +20,13 @@
 		claude_startup_timeout: number;
 		projects_session_height: number;
 		projects_task_height: number;
+		auto_kill_enabled: boolean;
+		auto_kill_delay: number;
+		auto_kill_p0: boolean;
+		auto_kill_p1: boolean;
+		auto_kill_p2: boolean;
+		auto_kill_p3: boolean;
+		auto_kill_p4: boolean;
 	}
 
 	// State
@@ -40,6 +48,13 @@
 	let claudeStartupTimeout = $state(20);
 	let projectsSessionHeight = $state(400);
 	let projectsTaskHeight = $state(400);
+	let autoKillEnabled = $state(false);
+	let autoKillDelay = $state(30);
+	let autoKillP0 = $state(false);
+	let autoKillP1 = $state(false);
+	let autoKillP2 = $state(false);
+	let autoKillP3 = $state(true);
+	let autoKillP4 = $state(true);
 
 	// Track if form has changes
 	let originalValues = $state<JatDefaults | null>(null);
@@ -53,7 +68,14 @@
 			agentStagger !== originalValues.agent_stagger ||
 			claudeStartupTimeout !== originalValues.claude_startup_timeout ||
 			projectsSessionHeight !== originalValues.projects_session_height ||
-			projectsTaskHeight !== originalValues.projects_task_height
+			projectsTaskHeight !== originalValues.projects_task_height ||
+			autoKillEnabled !== originalValues.auto_kill_enabled ||
+			autoKillDelay !== originalValues.auto_kill_delay ||
+			autoKillP0 !== originalValues.auto_kill_p0 ||
+			autoKillP1 !== originalValues.auto_kill_p1 ||
+			autoKillP2 !== originalValues.auto_kill_p2 ||
+			autoKillP3 !== originalValues.auto_kill_p3 ||
+			autoKillP4 !== originalValues.auto_kill_p4
 		)
 	);
 
@@ -62,7 +84,8 @@
 		agentStagger: { min: 5, max: 300 },
 		claudeStartupTimeout: { min: 10, max: 120 },
 		projectsSessionHeight: { min: 100, max: 1200 },
-		projectsTaskHeight: { min: 100, max: 1200 }
+		projectsTaskHeight: { min: 100, max: 1200 },
+		autoKillDelay: { min: 5, max: 300 }
 	};
 
 	// Validation error messages (reactive)
@@ -106,12 +129,24 @@
 		return null;
 	});
 
+	let autoKillDelayError = $derived.by(() => {
+		if (!autoKillEnabled) return null; // Only validate when enabled
+		if (autoKillDelay < VALIDATION_RULES.autoKillDelay.min) {
+			return `Minimum is ${VALIDATION_RULES.autoKillDelay.min} seconds`;
+		}
+		if (autoKillDelay > VALIDATION_RULES.autoKillDelay.max) {
+			return `Maximum is ${VALIDATION_RULES.autoKillDelay.max} seconds`;
+		}
+		return null;
+	});
+
 	// Track if form has validation errors
 	let hasValidationErrors = $derived(
 		agentStaggerError !== null ||
 		claudeStartupTimeoutError !== null ||
 		projectsSessionHeightError !== null ||
-		projectsTaskHeightError !== null
+		projectsTaskHeightError !== null ||
+		autoKillDelayError !== null
 	);
 
 	// Load defaults on mount
@@ -141,10 +176,26 @@
 			claudeStartupTimeout = defaults.claude_startup_timeout || 20;
 			projectsSessionHeight = defaults.projects_session_height || 400;
 			projectsTaskHeight = defaults.projects_task_height || 400;
+			autoKillEnabled = defaults.auto_kill_enabled ?? true;
+			autoKillDelay = defaults.auto_kill_delay ?? 30;
+			autoKillP0 = defaults.auto_kill_p0 ?? true;
+			autoKillP1 = defaults.auto_kill_p1 ?? true;
+			autoKillP2 = defaults.auto_kill_p2 ?? true;
+			autoKillP3 = defaults.auto_kill_p3 ?? true;
+			autoKillP4 = defaults.auto_kill_p4 ?? true;
 			configPath = data.configPath || '';
 
 			// Store original values for change detection
-			originalValues = { ...defaults };
+			originalValues = {
+				...defaults,
+				auto_kill_enabled: autoKillEnabled,
+				auto_kill_delay: autoKillDelay,
+				auto_kill_p0: autoKillP0,
+				auto_kill_p1: autoKillP1,
+				auto_kill_p2: autoKillP2,
+				auto_kill_p3: autoKillP3,
+				auto_kill_p4: autoKillP4
+			};
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load defaults';
 		} finally {
@@ -171,7 +222,14 @@
 						agent_stagger: agentStagger,
 						claude_startup_timeout: claudeStartupTimeout,
 						projects_session_height: projectsSessionHeight,
-						projects_task_height: projectsTaskHeight
+						projects_task_height: projectsTaskHeight,
+						auto_kill_enabled: autoKillEnabled,
+						auto_kill_delay: autoKillDelay,
+						auto_kill_p0: autoKillP0,
+						auto_kill_p1: autoKillP1,
+						auto_kill_p2: autoKillP2,
+						auto_kill_p3: autoKillP3,
+						auto_kill_p4: autoKillP4
 					}
 				})
 			});
@@ -192,8 +250,28 @@
 				agent_stagger: agentStagger,
 				claude_startup_timeout: claudeStartupTimeout,
 				projects_session_height: projectsSessionHeight,
-				projects_task_height: projectsTaskHeight
+				projects_task_height: projectsTaskHeight,
+				auto_kill_enabled: autoKillEnabled,
+				auto_kill_delay: autoKillDelay,
+				auto_kill_p0: autoKillP0,
+				auto_kill_p1: autoKillP1,
+				auto_kill_p2: autoKillP2,
+				auto_kill_p3: autoKillP3,
+				auto_kill_p4: autoKillP4
 			};
+
+			// Update the runtime auto-kill config store so changes take effect immediately
+			updateAutoKillConfig({
+				enabled: autoKillEnabled,
+				defaultDelaySeconds: autoKillDelay,
+				priorityEnabled: {
+					0: autoKillP0,
+					1: autoKillP1,
+					2: autoKillP2,
+					3: autoKillP3,
+					4: autoKillP4
+				}
+			});
 
 			success = 'Defaults saved successfully';
 			setTimeout(() => { success = null; }, 3000);
@@ -215,6 +293,13 @@
 			claudeStartupTimeout = originalValues.claude_startup_timeout;
 			projectsSessionHeight = originalValues.projects_session_height;
 			projectsTaskHeight = originalValues.projects_task_height;
+			autoKillEnabled = originalValues.auto_kill_enabled;
+			autoKillDelay = originalValues.auto_kill_delay;
+			autoKillP0 = originalValues.auto_kill_p0;
+			autoKillP1 = originalValues.auto_kill_p1;
+			autoKillP2 = originalValues.auto_kill_p2;
+			autoKillP3 = originalValues.auto_kill_p3;
+			autoKillP4 = originalValues.auto_kill_p4;
 		}
 	}
 
@@ -245,9 +330,25 @@
 			claudeStartupTimeout = defaults.claude_startup_timeout;
 			projectsSessionHeight = defaults.projects_session_height;
 			projectsTaskHeight = defaults.projects_task_height;
+			autoKillEnabled = defaults.auto_kill_enabled ?? true;
+			autoKillDelay = defaults.auto_kill_delay ?? 30;
+			autoKillP0 = defaults.auto_kill_p0 ?? true;
+			autoKillP1 = defaults.auto_kill_p1 ?? true;
+			autoKillP2 = defaults.auto_kill_p2 ?? true;
+			autoKillP3 = defaults.auto_kill_p3 ?? true;
+			autoKillP4 = defaults.auto_kill_p4 ?? true;
 
 			// Update original values
-			originalValues = { ...defaults };
+			originalValues = {
+				...defaults,
+				auto_kill_enabled: autoKillEnabled,
+				auto_kill_delay: autoKillDelay,
+				auto_kill_p0: autoKillP0,
+				auto_kill_p1: autoKillP1,
+				auto_kill_p2: autoKillP2,
+				auto_kill_p3: autoKillP3,
+				auto_kill_p4: autoKillP4
+			};
 
 			success = 'Defaults reset to factory values';
 			setTimeout(() => { success = null; }, 3000);
@@ -490,6 +591,119 @@
 						{/if}
 					</div>
 				</div>
+			</div>
+
+			<!-- Session Cleanup Section -->
+			<div class="form-section">
+				<h3 class="section-title">Session Cleanup</h3>
+				<p class="section-description">
+					Automatically close tmux sessions after tasks complete to prevent clutter.
+				</p>
+
+				<div class="form-group">
+					<label class="form-label toggle-label" for="auto-kill-enabled">
+						<span class="toggle-label-text">
+							Auto-cleanup completed sessions
+							<span class="label-hint">Kill tmux sessions after completion delay</span>
+						</span>
+						<input
+							type="checkbox"
+							id="auto-kill-enabled"
+							class="toggle toggle-primary"
+							bind:checked={autoKillEnabled}
+						/>
+					</label>
+				</div>
+
+				{#if autoKillEnabled}
+					<div class="form-group" style="margin-top: 0.5rem;">
+						<label class="form-label" for="auto-kill-delay">
+							Cleanup Delay
+							<span class="label-hint">Seconds to wait before killing session (allows review)</span>
+						</label>
+						<div class="input-with-unit">
+							<input
+								type="number"
+								id="auto-kill-delay"
+								class="form-input"
+								class:input-error={autoKillDelayError}
+								bind:value={autoKillDelay}
+								min={VALIDATION_RULES.autoKillDelay.min}
+								max={VALIDATION_RULES.autoKillDelay.max}
+							/>
+							<span class="input-unit">seconds</span>
+						</div>
+						{#if autoKillDelayError}
+							<span class="field-error">{autoKillDelayError}</span>
+						{/if}
+						<p class="field-hint">
+							Click on a session card during countdown to cancel auto-cleanup.
+						</p>
+					</div>
+
+					<!-- Per-Priority Toggles -->
+					<div class="form-group" style="margin-top: 1rem;">
+						<label class="form-label">
+							Priorities to Auto-Cleanup
+							<span class="label-hint">Select which task priorities should auto-cleanup</span>
+						</label>
+						<div class="priority-toggles">
+							<label class="priority-toggle" for="auto-kill-p0">
+								<input
+									type="checkbox"
+									id="auto-kill-p0"
+									class="checkbox checkbox-xs checkbox-error"
+									bind:checked={autoKillP0}
+								/>
+								<span class="priority-badge priority-p0">P0</span>
+								<span class="priority-label">Critical</span>
+							</label>
+							<label class="priority-toggle" for="auto-kill-p1">
+								<input
+									type="checkbox"
+									id="auto-kill-p1"
+									class="checkbox checkbox-xs checkbox-warning"
+									bind:checked={autoKillP1}
+								/>
+								<span class="priority-badge priority-p1">P1</span>
+								<span class="priority-label">High</span>
+							</label>
+							<label class="priority-toggle" for="auto-kill-p2">
+								<input
+									type="checkbox"
+									id="auto-kill-p2"
+									class="checkbox checkbox-xs checkbox-info"
+									bind:checked={autoKillP2}
+								/>
+								<span class="priority-badge priority-p2">P2</span>
+								<span class="priority-label">Medium</span>
+							</label>
+							<label class="priority-toggle" for="auto-kill-p3">
+								<input
+									type="checkbox"
+									id="auto-kill-p3"
+									class="checkbox checkbox-xs"
+									bind:checked={autoKillP3}
+								/>
+								<span class="priority-badge priority-p3">P3</span>
+								<span class="priority-label">Low</span>
+							</label>
+							<label class="priority-toggle" for="auto-kill-p4">
+								<input
+									type="checkbox"
+									id="auto-kill-p4"
+									class="checkbox checkbox-xs"
+									bind:checked={autoKillP4}
+								/>
+								<span class="priority-badge priority-p4">P4</span>
+								<span class="priority-label">Lowest</span>
+							</label>
+						</div>
+						<p class="field-hint">
+							Unchecked priorities will keep their sessions open after completion.
+						</p>
+					</div>
+				{/if}
 			</div>
 
 			<!-- Actions -->
@@ -958,5 +1172,109 @@
 		display: flex;
 		justify-content: flex-end;
 		gap: 0.75rem;
+	}
+
+	/* Section description */
+	.section-description {
+		font-size: 0.8rem;
+		color: oklch(0.55 0.02 250);
+		margin: -0.5rem 0 1rem 0;
+		line-height: 1.5;
+	}
+
+	/* Toggle label (horizontal layout) */
+	.toggle-label {
+		flex-direction: row !important;
+		justify-content: space-between;
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.toggle-label-text {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	/* Field hint (below inputs) */
+	.field-hint {
+		font-size: 0.75rem;
+		color: oklch(0.50 0.02 250);
+		margin-top: 0.5rem;
+		line-height: 1.4;
+	}
+
+	/* Priority toggles grid */
+	.priority-toggles {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: 0.5rem;
+		margin-top: 0.5rem;
+	}
+
+	@media (min-width: 400px) {
+		.priority-toggles {
+			grid-template-columns: repeat(5, 1fr);
+		}
+	}
+
+	.priority-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.5rem 0.625rem;
+		background: oklch(0.14 0.02 250);
+		border: 1px solid oklch(0.25 0.02 250);
+		border-radius: 6px;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.priority-toggle:hover {
+		background: oklch(0.18 0.02 250);
+		border-color: oklch(0.30 0.02 250);
+	}
+
+	.priority-toggle:has(input:checked) {
+		border-color: oklch(0.40 0.08 200);
+		background: oklch(0.16 0.03 200);
+	}
+
+	.priority-badge {
+		font-size: 0.7rem;
+		font-weight: 600;
+		padding: 0.125rem 0.375rem;
+		border-radius: 4px;
+		font-family: ui-monospace, monospace;
+	}
+
+	.priority-p0 {
+		background: oklch(0.40 0.15 25);
+		color: oklch(0.95 0.05 25);
+	}
+
+	.priority-p1 {
+		background: oklch(0.45 0.15 65);
+		color: oklch(0.95 0.05 65);
+	}
+
+	.priority-p2 {
+		background: oklch(0.40 0.12 230);
+		color: oklch(0.95 0.05 230);
+	}
+
+	.priority-p3 {
+		background: oklch(0.35 0.02 250);
+		color: oklch(0.80 0.02 250);
+	}
+
+	.priority-p4 {
+		background: oklch(0.30 0.02 250);
+		color: oklch(0.70 0.02 250);
+	}
+
+	.priority-label {
+		font-size: 0.75rem;
+		color: oklch(0.65 0.02 250);
 	}
 </style>

@@ -26,6 +26,8 @@
 		playTaskStartSound
 	} from '$lib/utils/soundEffects';
 	import { slide } from 'svelte/transition';
+	import { computeReviewStatus, type TaskForReview } from '$lib/utils/reviewStatusUtils';
+	import { getReviewRules } from '$lib/stores/reviewRules.svelte';
 
 	interface SlashCommand {
 		name: string;
@@ -58,12 +60,16 @@
 		nextTask?: NextTaskInfo | null;
 		/** Whether next task is being loaded */
 		nextTaskLoading?: boolean;
+		/** Seconds until auto-kill (null = no auto-kill scheduled) */
+		autoKillCountdown?: number | null;
 		onAction?: (actionId: string) => Promise<void> | void;
 		/** Whether to show slash commands section in dropdown */
 		showCommands?: boolean;
 		/** Callback to run a slash command */
 		onCommand?: (command: string) => Promise<void> | void;
 		class?: string;
+		/** Current task (for review status calculation) */
+		task?: TaskForReview | null;
 	}
 
 	let {
@@ -77,10 +83,12 @@
 		dormantTooltip = null,
 		nextTask = null,
 		nextTaskLoading = false,
+		autoKillCountdown = null,
 		onAction,
 		showCommands = false,
 		onCommand,
-		class: className = ''
+		class: className = '',
+		task = null
 	}: Props = $props();
 
 	// Dropdown state
@@ -101,6 +109,15 @@
 	const config = $derived(getSessionStateVisual(sessionState));
 	// Get actions from configurable store (merges user config with defaults)
 	const actions = $derived(getActions(sessionState));
+
+	// Compute review status for the current task (for "complete" action indicator)
+	const reviewStatus = $derived.by(() => {
+		const reviewRules = getReviewRules();
+		if (!task || reviewRules.length === 0) {
+			return null;
+		}
+		return computeReviewStatus(task, reviewRules);
+	});
 
 	// Load user config on mount (if not already loaded)
 	$effect(() => {
@@ -308,6 +325,7 @@
 				break;
 			case 'start':
 			case 'start-next':
+			case 'resume':
 				playTaskStartSound();
 				break;
 			// 'view-task' is silent - just viewing
@@ -428,6 +446,11 @@
 		title={dormantTooltip || config.description || "Click for actions"}
 	>
 		{variant === 'integrated' ? displayShortLabel : displayLabel}
+		{#if autoKillCountdown !== null && autoKillCountdown > 0}
+			<span class="ml-1 font-mono text-[9px] opacity-75" title="Session will be cleaned up in {autoKillCountdown}s">
+				({autoKillCountdown}s)
+			</span>
+		{/if}
 		<!-- Dropdown indicator -->
 		<svg
 			class="inline-block w-2.5 h-2.5 ml-0.5 transition-transform"
@@ -454,6 +477,7 @@
 					{@const actionLabel = getActionLabel(action)}
 					{@const actionDescription = getActionDescription(action)}
 					{@const sourceBadge = getSourceBadge(action)}
+					{@const showAutoProceed = action.id === 'complete' && reviewStatus !== null}
 					<li>
 						<button
 							type="button"
@@ -478,6 +502,27 @@
 											class="text-[9px] font-mono px-1.5 py-0.5 rounded whitespace-nowrap {sourceBadge.colorClass}"
 										>
 											{sourceBadge.label}
+										</span>
+									{/if}
+									{#if showAutoProceed}
+										<span
+											class="text-[9px] font-mono px-1.5 py-0.5 rounded whitespace-nowrap flex items-center gap-1"
+											class:auto-proceed-badge={reviewStatus?.action === 'auto'}
+											class:review-required-badge={reviewStatus?.action === 'review'}
+											title={reviewStatus?.reason}
+										>
+											{#if reviewStatus?.action === 'auto'}
+												<svg class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+												</svg>
+												AUTO
+											{:else}
+												<svg class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.64 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.64 0-8.573-3.007-9.963-7.178z" />
+													<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+												</svg>
+												REVIEW
+											{/if}
 										</span>
 									{/if}
 								</div>
@@ -681,5 +726,16 @@
 	.source-badge-backlog {
 		color: var(--color-info);
 		background: color-mix(in oklch, var(--color-info) 15%, transparent);
+	}
+
+	/* Auto-proceed / Review badges for complete action */
+	.auto-proceed-badge {
+		color: oklch(0.80 0.18 145);
+		background: oklch(0.80 0.18 145 / 0.15);
+	}
+
+	.review-required-badge {
+		color: oklch(0.80 0.15 45);
+		background: oklch(0.80 0.15 45 / 0.15);
 	}
 </style>

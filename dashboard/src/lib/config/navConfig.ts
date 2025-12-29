@@ -112,6 +112,13 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			href: '/triage',
 			icon: 'triage',
 			primary: false
+		},
+		{
+			id: 'swarm',
+			label: 'Swarm',
+			href: '/swarm',
+			icon: 'swarm',
+			primary: false
 		}
 	],
 	showProjectFilter: true,

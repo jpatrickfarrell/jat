@@ -32,6 +32,8 @@
 		edited: boolean;
 		/** Whether this task already exists in Beads (matched by title) */
 		alreadyCreated?: boolean;
+		/** Task ID if this task was already created (for displaying clickable badge) */
+		taskId?: string;
 		edits?: {
 			type?: string;
 			title?: string;
@@ -514,17 +516,31 @@
 										</button>
 									{/if}
 
-									<!-- Already Created indicator -->
+									<!-- Already Created indicator with clickable task ID -->
 									{#if task.alreadyCreated}
-										<span
-											class="badge badge-xs badge-success font-mono gap-1"
-											title="This task already exists in Beads"
-										>
-											<svg class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-											</svg>
-											Created
-										</span>
+										{#if task.taskId && onTaskClick}
+											<button
+												type="button"
+												onclick={(e) => { e.stopPropagation(); onTaskClick(task.taskId!); }}
+												class="badge badge-xs badge-success font-mono gap-1 cursor-pointer hover:brightness-110 transition-all"
+												title="Click to view task {task.taskId}"
+											>
+												<svg class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+												</svg>
+												{task.taskId}
+											</button>
+										{:else}
+											<span
+												class="badge badge-xs badge-success font-mono gap-1"
+												title="This task already exists in Beads"
+											>
+												<svg class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+												</svg>
+												Created
+											</span>
+										{/if}
 									{/if}
 
 									<!-- Edited indicator with revert button -->

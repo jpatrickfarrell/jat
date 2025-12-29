@@ -827,6 +827,9 @@ COMMANDS:
     jat remove <name>          Remove a project from config
     jat resume <session-id>    Resume a previous Claude Code session
     jat resume --list          List recent sessions available to resume
+    jat demo                   Launch demo dashboard (initializes if needed)
+    jat demo init              Set up demo environment with sample projects
+    jat demo reset             Reset demo to clean state (for video retakes)
     jat config [project]       Show config (all or specific project)
     jat edit                   Edit config file
     jat colors                 Recolor all Hyprland windows
@@ -860,6 +863,9 @@ EXAMPLES:
     jat remove old-project     # Remove project from config
     jat resume --list          # Show recent sessions to resume
     jat resume 4a5001aa        # Resume session with ID starting with 4a5001aa
+    jat demo                   # Launch demo dashboard
+    jat demo init              # Set up demo projects and tasks
+    jat demo reset             # Reset demo for video retakes
 
 CONFIG:
     ~/.config/jat/projects.json
@@ -1445,6 +1451,75 @@ list_sessions() {
 }
 
 #------------------------------------------------------------------------------
+# Demo Environment
+#------------------------------------------------------------------------------
+
+demo_cmd() {
+    local subcmd="${1:-}"
+    local demo_script="$HOME/code/jat/demo/setup.sh"
+    local demo_dir="/tmp/jat-demo"
+
+    case "$subcmd" in
+        init|setup)
+            # Initialize demo environment
+            bash "$demo_script" init
+            ;;
+        reset|clean)
+            # Reset demo environment
+            bash "$demo_script" reset
+            ;;
+        --help|-h)
+            echo ""
+            echo -e "${BOLD}JAT Demo Environment${NC}"
+            echo ""
+            echo "Set up an isolated demo environment with sample projects and tasks."
+            echo "Perfect for video demos, presentations, and testing JAT features."
+            echo ""
+            echo -e "${DIM}Usage:${NC}"
+            echo "  jat demo           Launch demo dashboard (init if needed)"
+            echo "  jat demo init      Set up demo environment"
+            echo "  jat demo reset     Reset demo to clean state"
+            echo ""
+            echo -e "${DIM}Demo projects:${NC}"
+            echo "  acme-saas    - SaaS platform with auth epic + 7 tasks"
+            echo "  pixel-art    - Pixel art editor with 5 tasks"
+            echo ""
+            echo -e "${DIM}Demo directory:${NC} /tmp/jat-demo"
+            echo ""
+            ;;
+        "")
+            # Default: launch demo dashboard (init if needed)
+            if [[ ! -d "$demo_dir" ]]; then
+                echo -e "${YELLOW}Demo not initialized. Running setup...${NC}"
+                echo ""
+                bash "$demo_script" init
+            fi
+
+            # Launch dashboard for demo
+            echo ""
+            echo -e "${BOLD}╔═══════════════════════════════════════════════════════════════╗${NC}"
+            echo -e "${BOLD}║              ${CYAN}🎬 JAT Demo Mode${NC}${BOLD}                                ║${NC}"
+            echo -e "${BOLD}╚═══════════════════════════════════════════════════════════════╝${NC}"
+            echo ""
+            echo "Demo projects:"
+            echo -e "  ${CYAN}acme-saas${NC}  - jat acme-saas"
+            echo -e "  ${CYAN}pixel-art${NC}  - jat pixel-art"
+            echo ""
+            echo -e "${DIM}Launching dashboard...${NC}"
+            echo ""
+
+            # Launch dashboard only (no project-specific env)
+            launch_dashboard "DEMO"
+            ;;
+        *)
+            echo -e "${RED}Unknown demo command: $subcmd${NC}"
+            echo "Run 'jat demo --help' for usage"
+            return 1
+            ;;
+    esac
+}
+
+#------------------------------------------------------------------------------
 # Main
 #------------------------------------------------------------------------------
 
@@ -1492,6 +1567,9 @@ main() {
             ;;
         resume)
             resume_session "$@"
+            ;;
+        demo)
+            demo_cmd "$@"
             ;;
         *)
             # Assume it's a project name

@@ -14,8 +14,14 @@
 
 set -euo pipefail
 
+# Debug logging (append to temp file)
+DEBUG_LOG="/tmp/jat-signal-hook-debug.log"
+
 # Read tool info from stdin
 TOOL_INFO=$(cat)
+
+# Log incoming data
+echo "$(date -Iseconds) Hook triggered" >> "$DEBUG_LOG"
 
 # Only process Bash tool calls
 TOOL_NAME=$(echo "$TOOL_INFO" | jq -r '.tool_name // ""' 2>/dev/null || echo "")
@@ -25,15 +31,20 @@ fi
 
 # Extract the command that was executed
 COMMAND=$(echo "$TOOL_INFO" | jq -r '.tool_input.command // ""' 2>/dev/null || echo "")
+echo "$(date -Iseconds) Command: ${COMMAND:0:80}" >> "$DEBUG_LOG"
 
 # Check if it's a jat-signal command
 if ! echo "$COMMAND" | grep -q '^jat-signal '; then
+    echo "$(date -Iseconds) Not jat-signal, exiting" >> "$DEBUG_LOG"
     exit 0
 fi
+echo "$(date -Iseconds) IS a jat-signal command!" >> "$DEBUG_LOG"
 
 # Extract session ID
 SESSION_ID=$(echo "$TOOL_INFO" | jq -r '.session_id // ""' 2>/dev/null || echo "")
+echo "$(date -Iseconds) Session ID: $SESSION_ID" >> "$DEBUG_LOG"
 if [[ -z "$SESSION_ID" ]]; then
+    echo "$(date -Iseconds) ERROR: No session ID" >> "$DEBUG_LOG"
     exit 0
 fi
 
@@ -77,6 +88,7 @@ if [[ -f "$JAT_CONFIG" ]]; then
     done
 fi
 
+echo "$(date -Iseconds) Searching for agent file in: $SEARCH_DIRS" >> "$DEBUG_LOG"
 for BASE_DIR in $SEARCH_DIRS; do
     for SUBDIR in "sessions" ""; do
         if [[ -n "$SUBDIR" ]]; then
@@ -84,15 +96,18 @@ for BASE_DIR in $SEARCH_DIRS; do
         else
             AGENT_FILE="${BASE_DIR}/.claude/agent-${SESSION_ID}.txt"
         fi
+        echo "$(date -Iseconds) Checking: $AGENT_FILE exists=$(test -f "$AGENT_FILE" && echo yes || echo no)" >> "$DEBUG_LOG"
         if [[ -f "$AGENT_FILE" ]]; then
             AGENT_NAME=$(cat "$AGENT_FILE" 2>/dev/null | tr -d '\n')
             if [[ -n "$AGENT_NAME" ]]; then
                 TMUX_SESSION="jat-${AGENT_NAME}"
+                echo "$(date -Iseconds) Found agent: $AGENT_NAME -> tmux: $TMUX_SESSION" >> "$DEBUG_LOG"
                 break 2
             fi
         fi
     done
 done
+echo "$(date -Iseconds) Final TMUX_SESSION: $TMUX_SESSION" >> "$DEBUG_LOG"
 
 # Parse signal data as JSON (validate first to avoid || echo appending extra output)
 if [[ -n "$SIGNAL_DATA" ]] && echo "$SIGNAL_DATA" | jq -e . >/dev/null 2>&1; then

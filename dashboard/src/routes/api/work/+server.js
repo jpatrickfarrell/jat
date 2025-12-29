@@ -25,15 +25,9 @@ import { readFileSync, existsSync, statSync } from 'fs';
 import { getTasks } from '$lib/server/beads.js';
 import { getAgentUsageAsync, getAgentHourlyUsageAsync, getAgentContextPercent } from '$lib/utils/tokenUsage.js';
 import { apiCache, cacheKey, CACHE_TTL } from '$lib/server/cache.js';
+import { SIGNAL_TTL } from '$lib/config/constants.js';
 
 const execAsync = promisify(exec);
-
-// ============================================================================
-// Signal File Support - Read state from jat-signal hook output
-// ============================================================================
-const SIGNAL_TTL_MS = 60 * 1000; // 1 minute for most state signals
-const COMPLETED_STATE_TTL_MS = 30 * 60 * 1000; // 30 minutes for completed state (matches completion bundles)
-const COMPLETION_TTL_MS = 30 * 60 * 1000; // 30 minutes for completion bundles
 
 /**
  * Map jat-signal states to SessionCard states
@@ -69,12 +63,11 @@ function readSignalState(sessionName) {
 		const signal = JSON.parse(content);
 
 		// Check file age - use different TTL based on signal type
-		// Most state signals expire quickly (1 min), but completed state and completion bundles persist (30 min)
-		// This ensures completed sessions stay visible in dashboard until user takes action
+		// See SIGNAL_TTL in constants.ts for configuration
 		const stats = statSync(signalFile);
 		const ageMs = Date.now() - stats.mtimeMs;
-		const isCompletedState = signal.type === 'state' && signal.state === 'completed';
-		const ttl = signal.type === 'complete' || isCompletedState ? COMPLETED_STATE_TTL_MS : SIGNAL_TTL_MS;
+		const isUserWaitingState = signal.type === 'state' && SIGNAL_TTL.USER_WAITING_STATES.includes(signal.state);
+		const ttl = signal.type === 'complete' || isUserWaitingState ? SIGNAL_TTL.USER_WAITING_MS : SIGNAL_TTL.TRANSIENT_MS;
 		if (ageMs > ttl) {
 			return null;
 		}

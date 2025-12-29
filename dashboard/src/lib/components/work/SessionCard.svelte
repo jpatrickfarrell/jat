@@ -332,6 +332,9 @@
 	const isServerMode = $derived(mode === "server");
 	const isCompactMode = $derived(mode === "compact");
 
+	// Default project derived from current task ID (for suggested tasks pre-selection)
+	const defaultProject = $derived(task?.id ? getProjectFromTaskId(task.id) : '');
+
 	// Rich signal type detection - determine which signal card to render
 	// These derive typed signals from the generic richSignalPayload prop
 	const workingSignal = $derived.by(() => {
@@ -3386,27 +3389,6 @@
 				await onKillSession?.();
 				break;
 
-			case "resume":
-				// Resume completed session using Claude's -r flag
-				if (sessionName) {
-					try {
-						const response = await fetch(
-							`/api/sessions/${encodeURIComponent(sessionName)}/resume`,
-							{ method: "POST" },
-						);
-						if (response.ok) {
-							const data = await response.json();
-							console.log("[SessionCard] Resume session result:", data);
-						} else {
-							const errorData = await response.json();
-							console.error("[SessionCard] Resume session failed:", errorData);
-						}
-					} catch (e) {
-						console.error("[SessionCard] Failed to resume session:", e);
-					}
-				}
-				break;
-
 			default:
 				console.warn("Unknown status action:", actionId);
 		}
@@ -5196,6 +5178,7 @@
 						}}
 						onCreateTasks={createTimelineEventTasks}
 						{availableProjects}
+						{defaultProject}
 						onSelectOption={async (optionId) => {
 							// Send the option selection to the terminal via EventStack's needs_input card
 							if (onSendInput) {

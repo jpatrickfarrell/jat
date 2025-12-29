@@ -89,6 +89,7 @@
 		onSelectOption,
 		onSubmitText,
 		availableProjects = [],
+		defaultProject = '',
 		class: className = '',
 		autoExpand = false,
 		filters = {}
@@ -115,6 +116,8 @@
 		/** Callback when user submits text (needs_input) */
 		onSubmitText?: (text: string) => void;
 		availableProjects?: string[];
+		/** Default project for tasks without explicit project (from current session) */
+		defaultProject?: string;
 		class?: string;
 		/** Auto-expand when completion or tasks event is latest */
 		autoExpand?: boolean;
@@ -934,6 +937,7 @@
 											showFeedback={showCreateFeedback}
 											onDismissFeedback={dismissFeedback}
 											{availableProjects}
+											{defaultProject}
 											{onTaskClick}
 										/>
 									{:else if event.type === 'complete' && event.data}
@@ -1022,6 +1026,7 @@
 														showFeedback={showCreateFeedback}
 														onDismissFeedback={dismissFeedback}
 														{availableProjects}
+														{defaultProject}
 														{onTaskClick}
 													/>
 												</div>

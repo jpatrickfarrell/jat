@@ -75,6 +75,8 @@
 		onDismissFeedback?: () => void;
 		/** Available projects for dropdown (from parent/store) */
 		availableProjects?: string[];
+		/** Default project for tasks without explicit project (from current session) */
+		defaultProject?: string;
 		/** Callback when user clicks a task ID (opens detail drawer) */
 		onTaskClick?: (taskId: string) => void;
 	}
@@ -92,6 +94,7 @@
 		showFeedback = false,
 		onDismissFeedback,
 		availableProjects = [],
+		defaultProject = '',
 		onTaskClick,
 	}: Props = $props();
 
@@ -360,7 +363,7 @@
 					{@const effectiveTitle = getEffectiveValue(task, 'title') || ''}
 					{@const effectiveDescription = getEffectiveValue(task, 'description') || ''}
 					{@const effectivePriority = getEffectiveValue(task, 'priority') ?? 2}
-					{@const effectiveProject = getEffectiveValue(task, 'project') || ''}
+					{@const effectiveProject = getEffectiveValue(task, 'project') || defaultProject}
 					{@const effectiveLabels = getEffectiveValue(task, 'labels') || ''}
 					{@const effectiveDependsOn = getEffectiveValue(task, 'depends_on') || []}
 					{@const priorityClass = getPriorityClass(effectivePriority)}

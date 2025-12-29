@@ -358,6 +358,7 @@
 	 * @param mode - The grouping mode to set ('type', 'parent', 'label', 'project')
 	 */
 	function setGroupingMode(mode: GroupingMode) {
+		console.log('[TaskTable] setGroupingMode called:', mode, '(was:', groupingMode, ')');
 		groupingMode = mode;
 
 		// Sync to URL
@@ -369,6 +370,7 @@
 			url.searchParams.set('groupBy', mode);
 		}
 		replaceState(url, {});
+		console.log('[TaskTable] groupingMode is now:', groupingMode);
 	}
 
 	// Detect new, removed, and status-changed tasks when tasks array changes
@@ -852,7 +854,8 @@
 	// Sort function for project mode: user's sort column is PRIMARY
 	// Secondary tiebreakers: working agents, assigned, no blockers
 	function sortTasksForProjectMode(tasksToSort: Task[]): Task[] {
-		return [...tasksToSort].sort((a, b) => {
+		const before = tasksToSort.map(t => t.id);
+		const result = [...tasksToSort].sort((a, b) => {
 			// PRIMARY: sort by user-selected column
 			let aVal, bVal;
 
@@ -926,16 +929,25 @@
 
 			return 0;
 		});
+		const after = result.map(t => t.id);
+		if (before.length > 1) {
+			console.log('[TaskTable] sortTasksForProjectMode - before:', before, 'after:', after, 'changed:', JSON.stringify(before) !== JSON.stringify(after));
+		}
+		return result;
 	}
 
 	// Sort function used within each group
 	// Priority: 1) User's sort column, 2) Tiebreakers (working, assigned)
 	function sortTasks(tasksToSort: Task[]): Task[] {
+		console.log('[TaskTable] sortTasks called - groupingMode:', groupingMode, 'sortColumn:', sortColumn, 'sortDirection:', sortDirection, 'tasksCount:', tasksToSort.length);
+
 		// Use specialized sorting for project mode
 		if (groupingMode === 'project') {
+			console.log('[TaskTable] Using sortTasksForProjectMode');
 			return sortTasksForProjectMode(tasksToSort);
 		}
 
+		console.log('[TaskTable] Using standard sort by', sortColumn, sortDirection);
 		return [...tasksToSort].sort((a, b) => {
 			// PRIMARY: apply user's sort column first
 			let aVal, bVal;
@@ -1037,11 +1049,16 @@
 		const _sortCol = sortColumn;
 		const _sortDir = sortDirection;
 
+		console.log('[TaskTable] groupedTasks derived - groupingMode:', groupingMode, 'sortColumn:', _sortCol, 'sortDir:', _sortDir, 'filteredTasks:', filteredTasks.length);
+
 		const groups = new Map<string | null, Task[]>();
 
 		// For 'none' mode, put all tasks in a single group and sort by user's column
 		if (groupingMode === 'none') {
-			groups.set('__all__', sortTasks([...filteredTasks]));
+			console.log('[TaskTable] NONE mode - creating single __all__ group');
+			const sorted = sortTasks([...filteredTasks]);
+			console.log('[TaskTable] NONE mode - sorted tasks:', sorted.slice(0, 5).map(t => ({ id: t.id, title: t.title?.slice(0, 20), updated: t.updated_at })));
+			groups.set('__all__', sorted);
 			return groups;
 		}
 
@@ -1079,25 +1096,64 @@
 			return new Map(sortedEntries);
 		}
 
-		// For project mode, sort groups: by project first, then by epic size within project
+		// For project mode, sort groups: EPICS FIRST, then standalone tasks
+		// Within each category, sort by user's column
 		if (groupingMode === 'project') {
 			const sortedEntries = Array.from(groups.entries()).sort(([keyA, tasksA], [keyB, tasksB]) => {
-				// Extract project and epic from composite key "project::epic"
+				// Get the "representative" task for each group (first task after sorting)
+				const taskA = tasksA[0];
+				const taskB = tasksB[0];
+
+				if (!taskA || !taskB) return 0;
+
+				// FIRST: Epics (groups with >1 task OR task is type 'epic') come before standalone tasks
+				const isEpicA = tasksA.length > 1 || taskA.issue_type === 'epic';
+				const isEpicB = tasksB.length > 1 || taskB.issue_type === 'epic';
+				if (isEpicA && !isEpicB) return -1;  // A is epic, B is not → A first
+				if (!isEpicA && isEpicB) return 1;   // B is epic, A is not → B first
+
+				// SECOND: Sort by user's selected column within same category
+				let aVal, bVal;
+				switch (_sortCol) {
+					case 'id':
+						aVal = taskA.id || '';
+						bVal = taskB.id || '';
+						break;
+					case 'title':
+						aVal = taskA.title || '';
+						bVal = taskB.title || '';
+						break;
+					case 'priority':
+						aVal = taskA.priority ?? 99;
+						bVal = taskB.priority ?? 99;
+						break;
+					case 'updated':
+						aVal = taskA.updated_at || '';
+						bVal = taskB.updated_at || '';
+						break;
+					default:
+						aVal = taskA.priority ?? 99;
+						bVal = taskB.priority ?? 99;
+				}
+
+				let primaryComparison: number;
+				if (typeof aVal === 'number' && typeof bVal === 'number') {
+					primaryComparison = _sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+				} else {
+					const strComparison = String(aVal).localeCompare(String(bVal));
+					primaryComparison = _sortDir === 'asc' ? strComparison : -strComparison;
+				}
+
+				if (primaryComparison !== 0) return primaryComparison;
+
+				// TIEBREAKER: Sort by project name, then epic key
 				const [projectA, epicA] = (keyA || '').split('::');
 				const [projectB, epicB] = (keyB || '').split('::');
-
-				// First, sort by project alphabetically
 				const projectCompare = (projectA || '').localeCompare(projectB || '');
 				if (projectCompare !== 0) return projectCompare;
-
-				// Within same project, sort by epic size (larger groups first)
-				const sizeA = tasksA.length;
-				const sizeB = tasksB.length;
-				if (sizeA !== sizeB) return sizeB - sizeA;
-
-				// Then alphabetically by epic key
 				return (epicA || '').localeCompare(epicB || '');
 			});
+			console.log('[TaskTable] Project mode group sort by', _sortCol, _sortDir, '- groups:', sortedEntries.map(([k, t]) => k + '(' + t.length + ')').slice(0, 5));
 			return new Map(sortedEntries);
 		}
 
@@ -1140,20 +1196,75 @@
 				epicMap.set(epic, sortTasksForProjectMode(epicTasks));
 			}
 
-			// Sort epics within project: larger epics first, then alphabetically
+			// Sort epics within project: EPICS FIRST (multi-task groups), then standalone tasks
+			// Within each category, sort by user's column
 			const sortedEpicEntries = Array.from(epicMap.entries()).sort(([epicA, tasksA], [epicB, tasksB]) => {
-				// Larger epics first
-				const sizeA = tasksA.length;
-				const sizeB = tasksB.length;
-				if (sizeA !== sizeB) return sizeB - sizeA;
-				// Then alphabetically
+				const taskA = tasksA[0];
+				const taskB = tasksB[0];
+				if (!taskA || !taskB) return 0;
+
+				// FIRST: Epics (groups with >1 task OR task is type 'epic') come before standalone tasks
+				const isEpicA = tasksA.length > 1 || taskA.issue_type === 'epic';
+				const isEpicB = tasksB.length > 1 || taskB.issue_type === 'epic';
+				if (isEpicA && !isEpicB) return -1;  // A is epic, B is not → A first
+				if (!isEpicA && isEpicB) return 1;   // B is epic, A is not → B first
+
+				// SECOND: Sort by user's column within same category
+				let aVal, bVal;
+				switch (_sortCol) {
+					case 'id': aVal = taskA.id || ''; bVal = taskB.id || ''; break;
+					case 'title': aVal = taskA.title || ''; bVal = taskB.title || ''; break;
+					case 'priority': aVal = taskA.priority ?? 99; bVal = taskB.priority ?? 99; break;
+					case 'updated': aVal = taskA.updated_at || ''; bVal = taskB.updated_at || ''; break;
+					default: aVal = taskA.priority ?? 99; bVal = taskB.priority ?? 99;
+				}
+
+				let cmp: number;
+				if (typeof aVal === 'number' && typeof bVal === 'number') {
+					cmp = _sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+				} else {
+					const strCmp = String(aVal).localeCompare(String(bVal));
+					cmp = _sortDir === 'asc' ? strCmp : -strCmp;
+				}
+				if (cmp !== 0) return cmp;
+
+				// Tiebreaker: alphabetically by epic ID
 				return epicA.localeCompare(epicB);
 			});
 			projectMap.set(project, new Map(sortedEpicEntries));
 		}
 
-		// Sort projects alphabetically
-		const sortedProjectEntries = Array.from(projectMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+		// Sort projects by USER'S SORT COLUMN (using best task in each project)
+		const sortedProjectEntries = Array.from(projectMap.entries()).sort(([projA, epicMapA], [projB, epicMapB]) => {
+			// Get first task from first epic in each project
+			const firstEpicA = epicMapA.values().next().value;
+			const firstEpicB = epicMapB.values().next().value;
+			const taskA = firstEpicA?.[0];
+			const taskB = firstEpicB?.[0];
+			if (!taskA || !taskB) return projA.localeCompare(projB);
+
+			let aVal, bVal;
+			switch (_sortCol) {
+				case 'id': aVal = taskA.id || ''; bVal = taskB.id || ''; break;
+				case 'title': aVal = taskA.title || ''; bVal = taskB.title || ''; break;
+				case 'priority': aVal = taskA.priority ?? 99; bVal = taskB.priority ?? 99; break;
+				case 'updated': aVal = taskA.updated_at || ''; bVal = taskB.updated_at || ''; break;
+				default: aVal = taskA.priority ?? 99; bVal = taskB.priority ?? 99;
+			}
+
+			let cmp: number;
+			if (typeof aVal === 'number' && typeof bVal === 'number') {
+				cmp = _sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+			} else {
+				const strCmp = String(aVal).localeCompare(String(bVal));
+				cmp = _sortDir === 'asc' ? strCmp : -strCmp;
+			}
+			if (cmp !== 0) return cmp;
+
+			// Tiebreaker: alphabetically by project name
+			return projA.localeCompare(projB);
+		});
+		console.log('[TaskTable] nestedGroupedTasks sort by', _sortCol, _sortDir, '- projects:', sortedProjectEntries.map(([p]) => p));
 		return new Map(sortedProjectEntries);
 	});
 
@@ -1362,12 +1473,14 @@
 
 	// Sorting
 	function handleSort(column: string) {
+		console.log('[TaskTable] handleSort called:', column, '(current:', sortColumn, sortDirection, ')');
 		if (sortColumn === column) {
 			sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
 		} else {
 			sortColumn = column;
 			sortDirection = 'asc';
 		}
+		console.log('[TaskTable] handleSort - new state:', sortColumn, sortDirection);
 		updateURL();
 	}
 

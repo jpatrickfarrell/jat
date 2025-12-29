@@ -1040,12 +1040,13 @@ export function getServerStateActions(state: ServerState | string): ServerStateA
 
 /**
  * Grouping modes for task table
+ * - none: No grouping - flat list sorted by user's selected column
  * - type: Group by issue_type (bug, task, feature, etc.)
  * - parent: Group by parent task ID (for epic/subtask hierarchies)
  * - label: Group by first label
  * - project: Group by project first, then by epic within each project
  */
-export type GroupingMode = 'type' | 'parent' | 'label' | 'project';
+export type GroupingMode = 'none' | 'type' | 'parent' | 'label' | 'project';
 
 export interface GroupHeaderInfo {
 	icon: string;         // Emoji or unicode icon for the group header

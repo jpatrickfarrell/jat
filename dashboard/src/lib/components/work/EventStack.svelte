@@ -380,6 +380,31 @@
 	// State for suggested tasks management (per-event)
 	// Key: event timestamp+idx, Value: map of task key -> selection/edit state
 	let tasksStateByEvent = $state<Map<string, Map<string, { selected: boolean; edited: boolean; edits?: any }>>>(new Map());
+
+	// Map of normalized task title -> task ID for detecting already-created suggested tasks
+	let existingTaskTitles = $state<Map<string, string>>(new Map());
+
+	// Fetch existing task titles from Beads for "already created" detection
+	async function fetchExistingTaskTitles() {
+		try {
+			// Fetch all tasks (no status filter to include all states)
+			const response = await fetch('/api/tasks?limit=1000');
+			if (response.ok) {
+				const data = await response.json();
+				const tasks = data.tasks || [];
+				const titleMap = new Map<string, string>();
+				for (const task of tasks) {
+					if (task.title && task.id) {
+						const normalizedTitle = task.title.toLowerCase().trim();
+						titleMap.set(normalizedTitle, task.id);
+					}
+				}
+				existingTaskTitles = titleMap;
+			}
+		} catch (error) {
+			console.error('Failed to fetch existing task titles:', error);
+		}
+	}
 	let isCreatingTasks = $state(false);
 	let createResults = $state<{ success: any[]; failed: any[] }>({ success: [], failed: [] });
 	let showCreateFeedback = $state(false);
@@ -407,11 +432,19 @@
 		return event.data.map((task: SuggestedTask, idx: number) => {
 			const taskKey = getSuggestedTaskKey(task, idx);
 			const state = eventTasksState!.get(taskKey) || { selected: false, edited: false };
+
+			// Check if this task already exists in Beads (by normalized title)
+			const normalizedTitle = task.title?.toLowerCase().trim();
+			const existingTaskId = normalizedTitle ? existingTaskTitles.get(normalizedTitle) : undefined;
+			const alreadyCreated = !!existingTaskId;
+
 			return {
 				...task,
 				selected: state.selected,
 				edited: state.edited,
-				edits: state.edits
+				edits: state.edits,
+				alreadyCreated,
+				taskId: existingTaskId
 			};
 		});
 	}
@@ -429,11 +462,19 @@
 		return suggestedTasks.map((task: SuggestedTask, idx: number) => {
 			const taskKey = getSuggestedTaskKey(task, idx);
 			const state = eventTasksState!.get(taskKey) || { selected: false, edited: false };
+
+			// Check if this task already exists in Beads (by normalized title)
+			const normalizedTitle = task.title?.toLowerCase().trim();
+			const existingTaskId = normalizedTitle ? existingTaskTitles.get(normalizedTitle) : undefined;
+			const alreadyCreated = !!existingTaskId;
+
 			return {
 				...task,
 				selected: state.selected,
 				edited: state.edited,
-				edits: state.edits
+				edits: state.edits,
+				alreadyCreated,
+				taskId: existingTaskId
 			};
 		});
 	}
@@ -579,9 +620,9 @@
 		},
 		dashboard_input: {
 			icon: '🖱️',
-			bg: 'oklch(0.22 0.10 220)',
-			text: 'oklch(0.85 0.15 220)',
-			border: 'oklch(0.40 0.12 220)'
+			bg: 'oklch(0.22 0.10 180)',
+			text: 'oklch(0.88 0.12 180)',
+			border: 'oklch(0.42 0.12 180)'
 		},
 		starting: {
 			icon: '🚀',
@@ -888,6 +929,9 @@
 	}
 
 	onMount(() => {
+		// Fetch existing task titles for "already created" detection
+		fetchExistingTaskTitles();
+
 		// If initialEvents provided, use them directly (no polling)
 		if (initialEvents) {
 			events = initialEvents;
@@ -1241,6 +1285,37 @@
 									{#if completedData.taskId || event.task_id}
 										<div class="text-[10px] text-base-content/50">
 											Task: <span class="font-mono">{completedData.taskId || event.task_id}</span>
+										</div>
+									{/if}
+
+									<!-- Auto-proceed indicator or Cleanup button -->
+									<!-- Check both autoProceed (boolean from richSignals.ts) and completionMode (string from signals.ts) -->
+									{#if completedData.autoProceed === true || completedData.completionMode === 'auto_proceed'}
+										<div class="mt-2 pt-2 border-t border-base-300/50">
+											<div class="flex items-center gap-2 text-xs text-success">
+												<span>🚀</span>
+												<span class="font-medium">AUTO PROCEED</span>
+											</div>
+											{#if completedData.nextTaskId}
+												<div class="flex items-center gap-2 text-[10px] mt-1 text-info">
+													<span class="loading loading-spinner loading-xs"></span>
+													<span>Spawning:</span>
+													<span class="font-mono font-medium">{completedData.nextTaskId}</span>
+												</div>
+											{/if}
+										</div>
+									{:else if onCleanup}
+										<!-- Cleanup Session action button for completed signal -->
+										<div class="mt-3 pt-2 border-t border-base-300/50">
+											<button
+												onclick={onCleanup}
+												class="btn btn-xs btn-success btn-outline gap-1.5 text-[10px] font-medium"
+											>
+												<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3">
+													<path fill-rule="evenodd" d="M5 3.25V4H2.75a.75.75 0 0 0 0 1.5h.3l.815 8.15A1.5 1.5 0 0 0 5.357 15h5.286a1.5 1.5 0 0 0 1.492-1.35l.815-8.15h.3a.75.75 0 0 0 0-1.5H11v-.75A2.25 2.25 0 0 0 8.75 1h-1.5A2.25 2.25 0 0 0 5 3.25Zm2.25-.75a.75.75 0 0 0-.75.75V4h3v-.75a.75.75 0 0 0-.75-.75h-1.5ZM6.05 6a.75.75 0 0 1 .787.713l.275 5.5a.75.75 0 0 1-1.498.075l-.275-5.5A.75.75 0 0 1 6.05 6Zm3.9 0a.75.75 0 0 1 .712.787l-.275 5.5a.75.75 0 0 1-1.498-.075l.275-5.5a.75.75 0 0 1 .786-.712Z" clip-rule="evenodd" />
+												</svg>
+												Cleanup Session
+											</button>
 										</div>
 									{/if}
 								</div>
@@ -1617,7 +1692,8 @@
 											{/if}
 
 											<!-- Auto-proceed indicator (consolidated signal) -->
-											{#if completedData.autoProceed}
+											<!-- Check both autoProceed (boolean from richSignals.ts) and completionMode (string from signals.ts) -->
+											{#if completedData.autoProceed === true || completedData.completionMode === 'auto_proceed'}
 												<div class="mt-2 pt-2" style="border-top: 1px solid oklch(0.35 0.12 145);">
 													<div class="flex items-center gap-2 text-xs" style="color: oklch(0.80 0.18 145);">
 														<span>🚀</span>
@@ -2274,7 +2350,7 @@
 											<div class="flex items-center gap-2">
 												<span
 													class="px-2 py-0.5 rounded text-[10px] font-medium inline-flex items-center gap-1"
-													style="background: oklch(0.25 0.10 220); color: oklch(0.90 0.15 220); border: 1px solid oklch(0.40 0.12 220);"
+													style="background: oklch(0.25 0.10 180); color: oklch(0.88 0.12 180); border: 1px solid oklch(0.42 0.12 180);"
 												>
 													<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 														<path stroke-linecap="round" stroke-linejoin="round" d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zM12 2.25V4.5m5.834.166l-1.591 1.591M20.25 10.5H18M7.757 14.743l-1.59 1.59M6 10.5H3.75m4.007-4.243l-1.59-1.59" />
@@ -2287,7 +2363,7 @@
 												<!-- svelte-ignore a11y_no_static_element_interactions -->
 												<div
 													class="text-xs p-2 rounded-lg whitespace-pre-wrap cursor-pointer transition-all hover:brightness-110 active:scale-[0.99] relative font-mono"
-													style="background: oklch(0.18 0.06 220); border-left: 3px solid oklch(0.55 0.15 220); color: oklch(0.85 0.08 220);"
+													style="background: oklch(0.18 0.08 180); border-left: 3px solid oklch(0.50 0.12 180); color: oklch(0.85 0.10 180);"
 													onclick={async () => {
 														await navigator.clipboard.writeText(event.data.input);
 														copiedEventKey = getEventKey(event);

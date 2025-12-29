@@ -1,10 +1,14 @@
 /**
  * Work Sort Store
  * Shared state for SessionPanel sort options, used by TopBar and SessionPanel.
- * Persists to localStorage.
+ * Persists to localStorage AND URL params for bookmarkable views.
+ *
+ * URL params: ?sort=priority&dir=desc
+ * Priority: URL params > localStorage > defaults
  */
 
 import { browser } from '$app/environment';
+import { goto } from '$app/navigation';
 
 export type SortOption = 'state' | 'priority' | 'created' | 'cost' | 'manual';
 export type SortDirection = 'asc' | 'desc';
@@ -28,23 +32,75 @@ export const SORT_OPTIONS: SortConfig[] = [
 const SORT_STORAGE_KEY = 'work-panel-sort';
 const SORT_DIR_STORAGE_KEY = 'work-panel-sort-dir';
 
+// URL param keys
+const URL_SORT_KEY = 'sort';
+const URL_DIR_KEY = 'dir';
+
 // Reactive state
 let sortBy = $state<SortOption>('state');
 let sortDir = $state<SortDirection>('asc');
 let initialized = $state(false);
 
-// Initialize from localStorage
+// Helper to validate sort option
+function isValidSortOption(value: string | null): value is SortOption {
+	return value !== null && SORT_OPTIONS.some(o => o.value === value);
+}
+
+// Helper to validate sort direction
+function isValidSortDirection(value: string | null): value is SortDirection {
+	return value === 'asc' || value === 'desc';
+}
+
+// Update URL params without triggering navigation
+function updateUrlParams(sort: SortOption, dir: SortDirection): void {
+	if (!browser) return;
+
+	const url = new URL(window.location.href);
+
+	// Only set URL params if they differ from defaults (keep URL clean)
+	const defaultSort = 'state';
+	const defaultDir = 'asc';
+
+	if (sort !== defaultSort || dir !== defaultDir) {
+		url.searchParams.set(URL_SORT_KEY, sort);
+		url.searchParams.set(URL_DIR_KEY, dir);
+	} else {
+		// Remove params if using defaults
+		url.searchParams.delete(URL_SORT_KEY);
+		url.searchParams.delete(URL_DIR_KEY);
+	}
+
+	// Use replaceState to update URL without navigation
+	goto(url.pathname + url.search, { replaceState: true, keepFocus: true, noScroll: true });
+}
+
+// Initialize from URL params, falling back to localStorage
 export function initSort(): void {
 	if (!browser || initialized) return;
 
-	const savedSort = localStorage.getItem(SORT_STORAGE_KEY) as SortOption | null;
-	const savedDir = localStorage.getItem(SORT_DIR_STORAGE_KEY) as SortDirection | null;
+	// Try URL params first (highest priority for bookmarkable views)
+	const urlParams = new URLSearchParams(window.location.search);
+	const urlSort = urlParams.get(URL_SORT_KEY);
+	const urlDir = urlParams.get(URL_DIR_KEY);
 
-	if (savedSort && SORT_OPTIONS.some(o => o.value === savedSort)) {
-		sortBy = savedSort;
+	if (isValidSortOption(urlSort)) {
+		sortBy = urlSort;
+	} else {
+		// Fall back to localStorage
+		const savedSort = localStorage.getItem(SORT_STORAGE_KEY) as SortOption | null;
+		if (savedSort && SORT_OPTIONS.some(o => o.value === savedSort)) {
+			sortBy = savedSort;
+		}
 	}
-	if (savedDir && (savedDir === 'asc' || savedDir === 'desc')) {
-		sortDir = savedDir;
+
+	if (isValidSortDirection(urlDir)) {
+		sortDir = urlDir;
+	} else {
+		// Fall back to localStorage
+		const savedDir = localStorage.getItem(SORT_DIR_STORAGE_KEY) as SortDirection | null;
+		if (savedDir && (savedDir === 'asc' || savedDir === 'desc')) {
+			sortDir = savedDir;
+		}
 	}
 
 	initialized = true;
@@ -62,11 +118,14 @@ export function handleSortClick(value: SortOption): void {
 		sortDir = opt?.defaultDir ?? 'asc';
 	}
 
-	// Persist
+	// Persist to localStorage
 	if (browser) {
 		localStorage.setItem(SORT_STORAGE_KEY, sortBy);
 		localStorage.setItem(SORT_DIR_STORAGE_KEY, sortDir);
 	}
+
+	// Update URL params for bookmarkable views
+	updateUrlParams(sortBy, sortDir);
 }
 
 // Getters for reactive access
@@ -82,3 +141,14 @@ export function getSortDir(): SortDirection {
 export function getSortState(): { sortBy: SortOption; sortDir: SortDirection } {
 	return { sortBy, sortDir };
 }
+
+// Export reactive state object with getters for cross-module reactivity
+// Components should use workSortState.sortBy and workSortState.sortDir in $derived
+export const workSortState = {
+	get sortBy() {
+		return sortBy;
+	},
+	get sortDir() {
+		return sortDir;
+	}
+};

@@ -995,6 +995,9 @@ export function clearSpawnError(): void {
 /**
  * Refresh epic children status from the API
  * Call this to sync the store with actual beads database state
+ *
+ * Also checks if the epic itself was closed externally (e.g., via /jat:complete)
+ * and stops the swarm if so.
  */
 export async function refreshEpicState(): Promise<void> {
 	if (!state.isActive || !state.epicId) return;
@@ -1004,6 +1007,14 @@ export async function refreshEpicState(): Promise<void> {
 		if (!response.ok) return;
 
 		const data = await response.json();
+
+		// Check if the epic itself was closed externally
+		// This happens when an agent runs /jat:complete on the epic task
+		if (data.epicStatus === 'closed') {
+			console.log(`[epicQueueStore] Epic ${state.epicId} was closed externally, stopping swarm`);
+			stopEpic();
+			return;
+		}
 
 		// Update children status from API
 		interface ApiChild {

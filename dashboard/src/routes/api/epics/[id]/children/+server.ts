@@ -27,6 +27,7 @@ interface EpicChild {
 interface EpicChildrenResponse {
 	epicId: string;
 	epicTitle: string;
+	epicStatus: string;  // The epic's own status (open, in_progress, closed)
 	children: EpicChild[];
 	summary: {
 		total: number;
@@ -96,6 +97,7 @@ export const GET: RequestHandler = async ({ params }) => {
 			return json({
 				epicId,
 				epicTitle: epic.title,
+				epicStatus: epic.status,
 				children: [],
 				summary: {
 					total: 0,
@@ -172,6 +174,7 @@ export const GET: RequestHandler = async ({ params }) => {
 		return json({
 			epicId,
 			epicTitle: epic.title,
+			epicStatus: epic.status,
 			children,
 			summary
 		} satisfies EpicChildrenResponse);

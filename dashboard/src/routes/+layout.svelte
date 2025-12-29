@@ -27,7 +27,7 @@
 	import { initPreferences } from '$lib/stores/preferences.svelte';
 	import { getSessions as getWorkSessions, startActivityPolling, stopActivityPolling, fetch as fetchWorkSessions } from '$lib/stores/workSessions.svelte';
 	import { getSessions as getServerSessions } from '$lib/stores/serverSessions.svelte';
-	import { initKeyboardShortcuts, findMatchingCommand } from '$lib/stores/keyboardShortcuts.svelte';
+	import { initKeyboardShortcuts, findMatchingCommand, findMatchingGlobalShortcut } from '$lib/stores/keyboardShortcuts.svelte';
 
 	let { children } = $props();
 
@@ -539,54 +539,35 @@
 		}
 	}
 
-	// Global keyboard shortcuts
-	async function handleGlobalKeydown(event: KeyboardEvent) {
-		// First check for user-defined command shortcuts (unless in an input field that should capture the event)
-		// User shortcuts take priority over built-in shortcuts (except Shift variants)
-		if (!event.shiftKey) {
-			const matchingCommand = findMatchingCommand(event);
-			if (matchingCommand) {
-				event.preventDefault();
-				await sendCommandToHoveredSession(matchingCommand);
-				return;
-			}
-		}
+	// =============================================================================
+	// GLOBAL ACTION HANDLERS
+	// =============================================================================
 
-		// Alt+N = Open new task drawer (works from anywhere, even in inputs)
-		if (event.altKey && event.code === 'KeyN') {
-			event.preventDefault();
+	// Action handlers for global shortcuts - called by shortcut ID from keyboardShortcuts store
+	const globalActionHandlers: Record<string, () => Promise<void> | void> = {
+		// Global actions
+		'new-task': () => {
 			openTaskDrawer();
-			return;
-		}
+		},
 
-		// Alt+E = Open Epic Swarm Modal
-		if (event.altKey && event.code === 'KeyE') {
-			event.preventDefault();
+		'epic-swarm': () => {
 			isEpicSwarmModalOpen.set(true);
-			return;
-		}
+		},
 
-		// Alt+S = Toggle START NEXT dropdown in TopBar (with keyboard focus)
-		if (event.altKey && event.code === 'KeyS') {
-			event.preventDefault();
+		'start-next': () => {
 			if (get(isStartDropdownOpen)) {
 				closeStartDropdown();
 			} else {
 				openStartDropdownViaKeyboard();
 			}
-			return;
-		}
+		},
 
-		// Alt+Shift+P = Open Add Project drawer
-		if (event.altKey && event.shiftKey && event.code === 'KeyP') {
-			event.preventDefault();
+		'add-project': () => {
 			openProjectDrawer();
-			return;
-		}
+		},
 
-		// Alt+A = Attach terminal to hovered session
-		if (event.altKey && event.code === 'KeyA') {
-			event.preventDefault();
+		// Session actions (require hovered session)
+		'attach-terminal': async () => {
 			const sessionName = get(hoveredSessionName);
 			if (sessionName) {
 				try {
@@ -600,39 +581,9 @@
 					console.error('Error attaching to session:', err);
 				}
 			}
-			return;
-		}
+		},
 
-		// Alt+S = Spawn new session for first project (most recent)
-		if (event.altKey && event.code === 'KeyS') {
-			event.preventDefault();
-			// Get project path from /api/projects (sorted by recent activity)
-			try {
-				const projectsResponse = await fetch('/api/projects?visible=true&stats=true');
-				const projectsData = await projectsResponse.json();
-				const firstProject = projectsData.projects?.[0];
-				if (firstProject?.path) {
-					const response = await fetch('/api/work/spawn', {
-						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({
-							project: firstProject.path,
-							attach: true
-						})
-					});
-					if (!response.ok) {
-						console.error('Failed to spawn session:', await response.text());
-					}
-				}
-			} catch (err) {
-				console.error('Error spawning session:', err);
-			}
-			return;
-		}
-
-		// Alt+K = Kill hovered session (closes task and kills tmux session)
-		if (event.altKey && event.code === 'KeyK') {
-			event.preventDefault();
+		'kill-session': async () => {
 			const sessionName = get(hoveredSessionName);
 			if (sessionName) {
 				try {
@@ -646,12 +597,9 @@
 					console.error('Error killing session:', err);
 				}
 			}
-			return;
-		}
+		},
 
-		// Alt+I = Interrupt hovered session (send Ctrl+C)
-		if (event.altKey && event.code === 'KeyI') {
-			event.preventDefault();
+		'interrupt-session': async () => {
 			const sessionName = get(hoveredSessionName);
 			if (sessionName) {
 				try {
@@ -667,12 +615,9 @@
 					console.error('Error interrupting session:', err);
 				}
 			}
-			return;
-		}
+		},
 
-		// Alt+P = Pause hovered session (send /jat:pause command)
-		if (event.altKey && event.code === 'KeyP') {
-			event.preventDefault();
+		'pause-session': async () => {
 			const sessionName = get(hoveredSessionName);
 			if (sessionName) {
 				try {
@@ -707,12 +652,9 @@
 					console.error('Error sending pause command:', err);
 				}
 			}
-			return;
-		}
+		},
 
-		// Alt+R = Restart hovered session (kill and respawn with same task)
-		if (event.altKey && event.code === 'KeyR') {
-			event.preventDefault();
+		'restart-session': async () => {
 			const sessionName = get(hoveredSessionName);
 			if (sessionName) {
 				try {
@@ -726,12 +668,9 @@
 					console.error('Error restarting session:', err);
 				}
 			}
-			return;
-		}
+		},
 
-		// Alt+Shift+C = Copy hovered session contents to clipboard
-		if (event.altKey && event.shiftKey && event.code === 'KeyC') {
-			event.preventDefault();
+		'copy-session': async () => {
 			const sessionName = get(hoveredSessionName);
 			if (sessionName) {
 				try {
@@ -750,10 +689,31 @@
 					console.error('Error copying session contents:', err);
 				}
 			}
+		}
+	};
+
+	// Global keyboard shortcuts
+	async function handleGlobalKeydown(event: KeyboardEvent) {
+		// First check for user-defined command shortcuts (unless in an input field that should capture the event)
+		// User shortcuts take priority over global shortcuts (except Shift variants)
+		if (!event.shiftKey) {
+			const matchingCommand = findMatchingCommand(event);
+			if (matchingCommand) {
+				event.preventDefault();
+				await sendCommandToHoveredSession(matchingCommand);
+				return;
+			}
+		}
+
+		// Check for global app shortcuts (configurable via keyboardShortcuts store)
+		const matchingShortcutId = findMatchingGlobalShortcut(event);
+		if (matchingShortcutId && globalActionHandlers[matchingShortcutId]) {
+			event.preventDefault();
+			await globalActionHandlers[matchingShortcutId]();
 			return;
 		}
 
-		// Alt+1 through Alt+9 = Jump to Nth session (work sessions first, then server sessions)
+		// Alt+1 through Alt+9 = Jump to Nth session (special case - not in store because it's a range)
 		if (event.altKey && event.code >= 'Digit1' && event.code <= 'Digit9') {
 			event.preventDefault();
 			const index = parseInt(event.code.replace('Digit', ''), 10) - 1; // 0-indexed

@@ -40,7 +40,17 @@ export async function POST({ params, request }) {
 
 		try {
 			const { stdout } = await execAsync(showCommand, { cwd: projectPath });
-			const task = JSON.parse(stdout.trim());
+			const taskData = JSON.parse(stdout.trim());
+			// bd show --json returns an array, get the first element
+			const task = Array.isArray(taskData) ? taskData[0] : taskData;
+
+			if (!task) {
+				return json({
+					error: 'Task not found',
+					message: `Task ${taskId} does not exist`,
+					taskId
+				}, { status: 404 });
+			}
 
 			if (task.assignee !== agentName) {
 				return json({

@@ -1080,7 +1080,9 @@ export async function initializeFromPersisted(): Promise<boolean> {
 	console.log('[epicQueueStore] Restoring epic from localStorage:', persisted.epicId);
 
 	// Fetch fresh data and restore the epic
-	const result = await launchEpic(persisted.epicId, persisted.settings);
+	// IMPORTANT: autoSpawn: false to prevent spawning agents on every page navigation
+	// This is a restore operation, not a new launch - agents already spawned are still running
+	const result = await launchEpic(persisted.epicId, { ...persisted.settings, autoSpawn: false });
 
 	if (!result.success) {
 		console.error('[epicQueueStore] Failed to restore epic:', result.error);

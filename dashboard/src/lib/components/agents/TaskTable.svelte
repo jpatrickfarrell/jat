@@ -2821,10 +2821,16 @@
 														blockingReason={depStatus.blockingReason ?? undefined}
 														{isCompletedByActiveSession}
 														onspawn={handleSpawnSingle}
-														onattach={(sessionName) => {
-															const command = `tmux attach-session -t "${sessionName}"`;
-															navigator.clipboard.writeText(command);
-															alert(`Command copied to clipboard:\n${command}\n\nPaste in terminal to attach.`);
+														onattach={async (sessionName) => {
+															try {
+																const response = await fetch(`/api/sessions/${sessionName}/attach`, { method: 'POST' });
+																if (!response.ok) {
+																	const data = await response.json();
+																	console.error('Attach failed:', data.message || data.error);
+																}
+															} catch (err) {
+																console.error('Attach error:', err);
+															}
 														}}
 													/>
 												</td>
@@ -3262,11 +3268,16 @@
 												onspawn={handleSpawnSingle}
 												{fireScale}
 												{elapsed}
-												onattach={(sessionName) => {
-													// Open tmux session in new terminal
-													const command = `tmux attach-session -t "${sessionName}"`;
-													navigator.clipboard.writeText(command);
-													alert(`Command copied to clipboard:\n${command}\n\nPaste in terminal to attach.`);
+												onattach={async (sessionName) => {
+													try {
+														const response = await fetch(`/api/sessions/${sessionName}/attach`, { method: 'POST' });
+														if (!response.ok) {
+															const data = await response.json();
+															console.error('Attach failed:', data.message || data.error);
+														}
+													} catch (err) {
+														console.error('Attach error:', err);
+													}
 												}}
 											/>
 										</td>

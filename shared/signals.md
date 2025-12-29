@@ -13,6 +13,24 @@ Agents emit signals via `jat-signal` command, PostToolUse hooks capture them, an
 - Extensible (states, tasks, actions, custom data)
 - No terminal parsing - direct hook capture
 
+### Signal TTL Behavior
+
+Signal files expire after a time-to-live (TTL) to prevent stale data. Different signal types use different TTLs based on whether they wait for human action.
+
+**Configuration:** `dashboard/src/lib/config/constants.ts` → `SIGNAL_TTL`
+
+| TTL Type | Duration | States | Purpose |
+|----------|----------|--------|---------|
+| **Transient** | 1 minute | `working`, `starting`, `idle`, `compacting`, `completing` | Agent is actively working, frequent updates expected |
+| **User-Waiting** | 30 minutes | `completed`, `review`, `needs_input` | Waiting for human action - user may step away |
+
+**Why this matters:**
+- If you emit a `review` signal and the user takes a coffee break, the signal persists for 30 minutes
+- Transient states like `working` expire quickly so stale signals don't show incorrect state
+- Without the longer TTL, the dashboard falls back to output parsing which can misinterpret state
+
+**Example:** Agent emits `review`, user is away for 10 minutes → dashboard still shows "🔍 REVIEW" (not stale fallback state)
+
 ### Signal Format
 
 All signals require JSON payloads:
@@ -35,7 +53,6 @@ Output format: `[JAT-SIGNAL:<type>] <json-payload>`
 | `completing` | `jat-signal completing '{...}'` | taskId, currentStep |
 | `review` | `jat-signal review '{...}'` | taskId |
 | `needs_input` | `jat-signal needs_input '{...}'` | taskId, question, questionType |
-| `completed` | `jat-signal completed '{...}'` | taskId, outcome (optional: autoProceed, nextTaskId, nextTaskTitle) |
 | `idle` | `jat-signal idle '{...}'` | readyForWork |
 | `question` | `jat-signal question '{...}'` | question, questionType (optional: options, timeout) |
 
@@ -45,7 +62,9 @@ Output format: `[JAT-SIGNAL:<type>] <json-payload>`
 |--------|---------|-------------|
 | `tasks` | `jat-signal tasks '[{...}]'` | Suggest follow-up tasks (JSON array) |
 | `action` | `jat-signal action '{...}'` | Request human action (JSON object) |
-| `complete` | `jat-signal complete '{...}'` | Full completion bundle |
+| `complete` | `jat-signal complete '{...}'` | **Full completion bundle** - sets state to "completed" AND provides rich data |
+
+> **Note:** Use `jat-signal complete` (not `completed`) for task completion. It provides the full bundle (summary, quality, suggested tasks, human actions) AND sets the session state to "completed". The legacy `jat-signal completed` state signal is still supported but only sets state without rich data.
 
 ### Signal Schemas (Full Field Reference)
 
@@ -96,18 +115,27 @@ Output format: `[JAT-SIGNAL:<type>] <json-payload>`
 | impact | No | string | What depends on this answer |
 | timeout | No | number | Seconds before timing out |
 
-**`completed` signal fields:**
+**`complete` signal fields (RECOMMENDED):**
+
+| Field | Required | Type | Description |
+|-------|----------|------|-------------|
+| taskId | **Yes** | string | Task ID |
+| agentName | **Yes** | string | Agent name |
+| summary | **Yes** | string[] | Array of accomplishment bullet points |
+| quality | **Yes** | object | `{ tests: "passing"/"failing"/"none", build: "clean"/"warnings"/"errors" }` |
+| completionMode | **Yes** | string | `"review_required"` or `"auto_proceed"` |
+| suggestedTasks | **Yes** | object[] | Follow-up tasks (always include at least one) |
+| humanActions | No | object[] | Manual steps for user |
+| crossAgentIntel | No | object | `{ files?, patterns?, gotchas? }` for other agents |
+| nextTaskId | No | string | Task ID to spawn next (if auto_proceed) |
+| nextTaskTitle | No | string | Title of next task (for display) |
+
+**`completed` signal fields (LEGACY - prefer `complete` above):**
 
 | Field | Required | Type | Description |
 |-------|----------|------|-------------|
 | taskId | **Yes** | string | Task ID |
 | outcome | **Yes** | string | "success" / "partial" / "blocked" |
-| summary | No | string[] | What was accomplished |
-| suggestedTasks | No | object[] | Follow-up tasks for dashboard |
-| humanActions | No | object[] | Actions requiring human attention |
-| autoProceed | No | boolean | If true, dashboard will auto-spawn next task |
-| nextTaskId | No | string | Task ID to spawn next (if autoProceed) |
-| nextTaskTitle | No | string | Title of next task (for display) |
 
 ### Usage Examples
 
@@ -156,17 +184,41 @@ jat-signal review '{
   "reviewFocus":["Check token refresh logic","Verify error handling"]
 }'
 
-# Task completed (standard - requires human review)
-jat-signal completed '{"taskId":"jat-abc","outcome":"success"}'
-
-# Task completed with auto-proceed (will auto-close and spawn next task)
-jat-signal completed '{"taskId":"jat-abc","outcome":"success","autoProceed":true,"nextTaskId":"jat-def","nextTaskTitle":"Implement OAuth flow"}'
-
 # Session idle
 jat-signal idle '{"readyForWork":true}'
 ```
 
-**Suggesting Follow-up Tasks:**
+**Task Completion (RECOMMENDED - use `complete` for rich data):**
+```bash
+# Standard completion - requires human review
+jat-signal complete '{
+  "taskId": "jat-abc",
+  "agentName": "WisePrairie",
+  "completionMode": "review_required",
+  "summary": ["Fixed OAuth flow", "Added retry logic"],
+  "quality": {"tests": "passing", "build": "clean"},
+  "suggestedTasks": [{"type": "task", "title": "Add tests", "description": "...", "priority": 2}]
+}'
+
+# Auto-proceed completion - dashboard spawns next task automatically
+jat-signal complete '{
+  "taskId": "jat-abc",
+  "agentName": "WisePrairie",
+  "completionMode": "auto_proceed",
+  "nextTaskId": "jat-def",
+  "nextTaskTitle": "Implement OAuth flow",
+  "summary": ["Fixed authentication"],
+  "quality": {"tests": "passing", "build": "clean"},
+  "suggestedTasks": [{"type": "task", "title": "Add tests", "description": "...", "priority": 2}]
+}'
+```
+
+**Legacy completion (sets state only, no rich data):**
+```bash
+jat-signal completed '{"taskId":"jat-abc","outcome":"success"}'
+```
+
+**Suggesting Follow-up Tasks (standalone - prefer embedding in `complete` bundle):**
 ```bash
 jat-signal tasks '[
   {"title": "Add unit tests", "priority": 2, "type": "task"},
@@ -174,23 +226,11 @@ jat-signal tasks '[
 ]'
 ```
 
-**Requesting Human Action:**
+**Requesting Human Action (standalone - prefer embedding in `complete` bundle):**
 ```bash
 jat-signal action '{
   "title": "Run database migration",
   "description": "Execute: npx prisma migrate deploy"
-}'
-```
-
-**Full Completion Bundle:**
-```bash
-jat-signal complete '{
-  "suggestedTasks": [
-    {"title": "Add tests", "priority": 2}
-  ],
-  "humanActions": [
-    {"title": "Deploy to staging"}
-  ]
 }'
 ```
 
@@ -421,8 +461,8 @@ Signals must be written as compact single-line JSON (JSONL format), one event pe
 | Need user input | `jat-signal needs_input '{"taskId":"...","question":"...","questionType":"..."}'` |
 | Structured question for dashboard | `jat-signal question '{"question":"...","questionType":"..."}'` |
 | Done coding, awaiting review | `jat-signal review '{"taskId":"..."}'` |
-| Task fully completed | `jat-signal completed '{"taskId":"...","outcome":"success"}'` |
-| Task completed + auto-proceed | `jat-signal completed '{"taskId":"...","outcome":"success","autoProceed":true,"nextTaskId":"...","nextTaskTitle":"..."}'` |
+| Task fully completed | `jat-signal complete '{"taskId":"...","completionMode":"review_required",...}'` |
+| Task completed + auto-proceed | `jat-signal complete '{"taskId":"...","completionMode":"auto_proceed","nextTaskId":"...","nextTaskTitle":"...",...}'` |
 | Session idle | `jat-signal idle '{"readyForWork":true}'` |
 | Suggesting follow-up work | `jat-signal tasks '[...]'` |
 | Human action required | `jat-signal action '{...}'` |
@@ -561,16 +601,20 @@ jat-signal review '{
   "reviewFocus":["Verify OAuth token handling"]
 }'
 
-# Agent suggests follow-up tasks
-jat-signal tasks '[{"title":"Add tests","priority":2}]'
-
-# User approves completion via /jat:complete
-jat-signal completed '{"taskId":"jat-abc","outcome":"success"}'
+# User approves completion via /jat:complete - emits full bundle
+jat-signal complete '{
+  "taskId":"jat-abc",
+  "agentName":"FairBay",
+  "completionMode":"review_required",
+  "summary":["Added OAuth login","Created user session"],
+  "quality":{"tests":"passing","build":"clean"},
+  "suggestedTasks":[{"type":"task","title":"Add tests","description":"...","priority":2}]
+}'
 ```
 
 ### Auto-Proceed Flow
 
-When `/jat:complete` determines the task can auto-proceed (based on review rules and context), it emits a `completed` signal with `autoProceed: true` that triggers automatic spawning of the next ready task.
+When `/jat:complete` determines the task can auto-proceed (based on review rules and context), it emits a `complete` signal with `completionMode: "auto_proceed"` that triggers automatic spawning of the next ready task.
 
 **Auto-Proceed Signal Flow:**
 
@@ -580,30 +624,33 @@ When `/jat:complete` determines the task can auto-proceed (based on review rules
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  1. Agent completes task via /jat:complete                                  │
-│     └─► Step 7.5 determines: autoProceed=true (based on review rules)      │
+│     └─► Step 7.5 determines: completionMode="auto_proceed"                 │
 │                                                                             │
 │  2. Agent queries next ready task                                           │
 │     └─► bd ready --json | jq '.[0]'                                        │
 │         └─► Gets nextTaskId + nextTaskTitle                                │
 │                                                                             │
-│  3. Agent emits completed signal with autoProceed                           │
-│     └─► jat-signal completed '{                                            │
+│  3. Agent emits complete signal with auto_proceed mode                      │
+│     └─► jat-signal complete '{                                             │
 │           "taskId": "jat-abc",                                             │
-│           "outcome": "success",                                            │
-│           "autoProceed": true,                                             │
+│           "agentName": "FairBay",                                          │
+│           "completionMode": "auto_proceed",                                │
 │           "nextTaskId": "jat-def",                                         │
-│           "nextTaskTitle": "Add user auth"                                 │
+│           "nextTaskTitle": "Add user auth",                                │
+│           "summary": [...],                                                │
+│           "quality": {...},                                                │
+│           "suggestedTasks": [...]                                          │
 │         }'                                                                  │
 │                                                                             │
 │  4. PostToolUse hook captures signal                                        │
 │     └─► Writes to /tmp/jat-signal-tmux-jat-AgentName.json                  │
 │                                                                             │
 │  5. SSE server detects file change                                          │
-│     └─► Broadcasts session-signal event (type: 'completed', autoProceed)   │
+│     └─► Broadcasts session-signal event (type: 'complete', bundle)         │
 │                                                                             │
 │  6. Dashboard receives SSE event                                            │
 │     └─► sessionEvents.ts handleSessionSignal()                             │
-│     └─► Detects autoProceed === true in completed signal                   │
+│     └─► Detects completionMode === 'auto_proceed' in complete signal      │
 │     └─► Updates session state to 'auto-proceeding'                         │
 │     └─► Calls handleAutoProceed()                                          │
 │                                                                             │
@@ -655,7 +702,7 @@ When `/jat:complete` determines the task can auto-proceed (based on review rules
 
 | Before | Signal | After |
 |--------|--------|-------|
-| `completing` | `completed` (autoProceed=true) | `auto-proceeding` |
+| `completing` | `complete` (completionMode="auto_proceed") | `auto-proceeding` |
 | `auto-proceeding` | (spawn completes) | Session removed, new session appears |
 
 **Visual Feedback:**

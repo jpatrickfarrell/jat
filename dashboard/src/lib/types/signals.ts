@@ -165,6 +165,12 @@ export interface CompletionBundle {
 	suggestedTasks?: SuggestedTask[];
 	/** Intel for other agents working in the codebase */
 	crossAgentIntel?: CrossAgentIntel;
+	/** Completion mode determines dashboard behavior */
+	completionMode?: 'review_required' | 'auto_proceed';
+	/** For auto_proceed mode: next task to spawn */
+	nextTaskId?: string;
+	/** Title of the next task */
+	nextTaskTitle?: string;
 }
 
 // =============================================================================

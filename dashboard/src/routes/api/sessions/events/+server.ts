@@ -40,6 +40,7 @@ import { readFileSync, existsSync, statSync, readdirSync, watch, type FSWatcher 
 import { join } from 'path';
 import { getTasks } from '$lib/server/beads.js';
 import { persistCompletionBundle } from '$lib/server/completionBundles.js';
+import { SIGNAL_TTL } from '$lib/config/constants.js';
 
 const execAsync = promisify(exec);
 
@@ -114,6 +115,11 @@ interface CompletionBundle {
 	humanActions?: HumanAction[];
 	suggestedTasks?: SuggestedTask[];
 	crossAgentIntel?: CrossAgentIntel;
+	// Completion mode determines dashboard behavior
+	completionMode?: 'review_required' | 'auto_proceed';
+	// For auto_proceed mode: next task to spawn
+	nextTaskId?: string;
+	nextTaskTitle?: string;
 }
 
 interface SessionState {
@@ -205,14 +211,6 @@ function simpleHash(str: string): string {
 }
 
 /**
- * Signal file TTL - signals older than this are stale
- * State signals (working, review, etc.) use short TTL since they change frequently
- * Completion bundles use longer TTL since they should persist until session closes
- */
-const SIGNAL_TTL_MS = 60 * 1000; // 1 minute for state signals
-const COMPLETION_TTL_MS = 30 * 60 * 1000; // 30 minutes for completion bundles
-
-/**
  * Map jat-signal states to SessionCard states
  * Signal uses short names, SessionCard expects hyphenated names
  */
@@ -244,10 +242,11 @@ function readSignalState(sessionName: string): string | null {
 		const signal = JSON.parse(content);
 
 		// Check file age - use different TTL based on signal type
-		// State signals expire quickly (1 min), completion bundles persist (30 min)
+		// See SIGNAL_TTL in constants.ts for configuration
 		const stats = statSync(signalFile);
 		const ageMs = Date.now() - stats.mtimeMs;
-		const ttl = signal.type === 'complete' ? COMPLETION_TTL_MS : SIGNAL_TTL_MS;
+		const isUserWaitingState = signal.type === 'state' && SIGNAL_TTL.USER_WAITING_STATES.includes(signal.state);
+		const ttl = signal.type === 'complete' || isUserWaitingState ? SIGNAL_TTL.USER_WAITING_MS : SIGNAL_TTL.TRANSIENT_MS;
 		if (ageMs > ttl) {
 			return null;
 		}
@@ -282,10 +281,10 @@ function readSignalSuggestedTasks(sessionName: string): SuggestedTask[] | null {
 			return null;
 		}
 
-		// Suggested tasks use longer TTL since they should persist until user acts
+		// Suggested tasks use longer TTL since they wait for user action
 		const stats = statSync(signalFile);
 		const ageMs = Date.now() - stats.mtimeMs;
-		if (ageMs > COMPLETION_TTL_MS) {
+		if (ageMs > SIGNAL_TTL.USER_WAITING_MS) {
 			return null;
 		}
 
@@ -340,10 +339,10 @@ function readSignalAction(sessionName: string): HumanAction | null {
 			return null;
 		}
 
-		// Check file age - signals older than TTL are stale
+		// Check file age - action signals use short TTL
 		const stats = statSync(signalFile);
 		const ageMs = Date.now() - stats.mtimeMs;
-		if (ageMs > SIGNAL_TTL_MS) {
+		if (ageMs > SIGNAL_TTL.TRANSIENT_MS) {
 			return null;
 		}
 
@@ -368,7 +367,7 @@ function readSignalAction(sessionName: string): HumanAction | null {
 /**
  * Read completion bundle from signal file
  * Returns full CompletionBundle or null if not a complete signal
- * Uses longer TTL (COMPLETION_TTL_MS) since completion data should persist
+ * Uses longer TTL since completion data should persist until user acts
  */
 function readCompletionBundle(sessionName: string): CompletionBundle | null {
 	const signalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
@@ -378,10 +377,10 @@ function readCompletionBundle(sessionName: string): CompletionBundle | null {
 			return null;
 		}
 
-		// Completion bundles use longer TTL since they should persist until user acts
+		// Completion bundles use longer TTL since they wait for user action
 		const stats = statSync(signalFile);
 		const ageMs = Date.now() - stats.mtimeMs;
-		if (ageMs > COMPLETION_TTL_MS) {
+		if (ageMs > SIGNAL_TTL.USER_WAITING_MS) {
 			return null;
 		}
 
@@ -408,7 +407,11 @@ function readCompletionBundle(sessionName: string): CompletionBundle | null {
 					labels: t.labels,
 					depends_on: t.depends_on
 				})) : undefined,
-				crossAgentIntel: data.crossAgentIntel || undefined
+				crossAgentIntel: data.crossAgentIntel || undefined,
+				// Extract completion mode and next task info
+				completionMode: data.completionMode || 'review_required',
+				nextTaskId: data.nextTaskId || undefined,
+				nextTaskTitle: data.nextTaskTitle || undefined
 			};
 		}
 
@@ -434,12 +437,11 @@ function readSignalFile(sessionName: string): { type: string; state?: string; da
 		const content = readFileSync(signalFile, 'utf-8');
 		const signal = JSON.parse(content);
 
-		// Apply TTL based on signal type:
-		// - State signals (working, idle, etc.) use short TTL (1 min) since they change frequently
-		// - Completion bundles use long TTL (30 min) since they should persist for human review
+		// Apply TTL based on signal type - see SIGNAL_TTL in constants.ts
 		const stats = statSync(signalFile);
 		const ageMs = Date.now() - stats.mtimeMs;
-		const ttl = signal.type === 'complete' ? COMPLETION_TTL_MS : SIGNAL_TTL_MS;
+		const isUserWaitingState = signal.type === 'state' && SIGNAL_TTL.USER_WAITING_STATES.includes(signal.state);
+		const ttl = signal.type === 'complete' || isUserWaitingState ? SIGNAL_TTL.USER_WAITING_MS : SIGNAL_TTL.TRANSIENT_MS;
 
 		if (ageMs > ttl) {
 			return null;
@@ -505,13 +507,30 @@ function processSignalFileChange(sessionName: string): void {
 				});
 				console.log(`[SSE Signal] Complete bundle for ${sessionName}: ${bundle.summary?.length || 0} summary items, ${bundle.suggestedTasks?.length || 0} tasks, ${bundle.humanActions?.length || 0} actions`);
 
-				// Also update state to completed
-				currentFileState.state = 'completed';
-				broadcast('session-state', {
-					sessionName,
-					state: 'completed',
-					previousState: prevFileState.state
-				});
+				// Check if this is an auto-proceed completion
+				if (bundle.completionMode === 'auto_proceed') {
+					// Emit auto_proceed state to trigger dashboard auto-spawn
+					currentFileState.state = 'auto_proceed';
+					broadcast('session-state', {
+						sessionName,
+						state: 'auto_proceed',
+						previousState: prevFileState.state,
+						signalPayload: {
+							taskId: bundle.taskId,
+							nextTaskId: bundle.nextTaskId,
+							nextTaskTitle: bundle.nextTaskTitle
+						}
+					});
+					console.log(`[SSE Signal] Auto-proceed triggered for ${sessionName}: next task ${bundle.nextTaskId}`);
+				} else {
+					// Standard completion - awaiting review
+					currentFileState.state = 'completed';
+					broadcast('session-state', {
+						sessionName,
+						state: 'completed',
+						previousState: prevFileState.state
+					});
+				}
 			}
 		}
 	}

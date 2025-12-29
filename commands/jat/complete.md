@@ -647,47 +647,18 @@ if [[ -z "$COMPLETION_MODE" ]]; then
   fi  # End of: if [[ -z "$COMPLETION_MODE" ]]
 fi  # End of: else (no REVIEW_OVERRIDE found)
 
-# Emit the completion signal with JSON payload
-# Use 'completed' for review required, 'auto_proceed' for auto-spawn
-if [[ "$COMPLETION_MODE" == "review_required" ]]; then
-  # Standard completed signal - task finished, awaiting review
-  jat-signal completed '{"taskId":"'"$task_id"'","outcome":"success"}'
-elif [[ "$COMPLETION_MODE" == "auto_proceed" ]]; then
-  # Check if there's an active epic swarm - don't let standalone agents grab epic children
-  active_epic_file="/tmp/jat-epic-active.json"
-  epic_task_ids=""
-  if [[ -f "$active_epic_file" ]]; then
-    epic_task_ids=$(jq -r '.taskIds[]' "$active_epic_file" 2>/dev/null | tr '\n' ' ')
-  fi
-
-  # Query next ready task before emitting auto_proceed signal
-  next_task_json=$(bd ready --json 2>/dev/null | jq -r '.[0] // empty')
-  next_task_id=""
-  next_task_title=""
-  if [[ -n "$next_task_json" ]]; then
-    next_task_id=$(echo "$next_task_json" | jq -r '.id // empty')
-    next_task_title=$(echo "$next_task_json" | jq -r '.title // empty')
-  fi
-
-  # If next task is part of active epic swarm, don't auto-proceed
-  # Let the epic swarm coordinator handle those tasks
-  if [[ -n "$epic_task_ids" ]] && [[ " $epic_task_ids " == *" $next_task_id "* ]]; then
-    echo "⚠️ Next task $next_task_id is part of active epic swarm - requiring review"
-    jat-signal completed '{"taskId":"'"$task_id"'","outcome":"success"}'
-  else
-    # Emit auto_proceed signal - dashboard will spawn next task automatically
-    jat-signal auto_proceed '{"taskId":"'"$task_id"'","nextTaskId":"'"$next_task_id"'","nextTaskTitle":"'"$next_task_title"'"}'
-  fi
-fi
+# COMPLETION_MODE is now set - will be used in Step 8 when emitting jat-signal complete
+# The actual signal emission happens in Step 8 with the full completion bundle
+echo "📋 Completion mode determined: ${COMPLETION_MODE}"
 ```
 
 #### Review Override Values
 
-| Override Value | COMPLETION_MODE | Signal Emitted | Use Case |
-|----------------|-----------------|----------------|----------|
-| `always_review` | `review_required` | `completed` | Testing override behavior |
-| `auto_proceed` | `auto_proceed` | `auto_proceed` | Skip review for specific task |
-| `force_review` | `review_required` | `completed` | Force review even if rules say auto |
+| Override Value | COMPLETION_MODE | Behavior | Use Case |
+|----------------|-----------------|----------|----------|
+| `always_review` | `review_required` | Session stays open for human review | Testing override behavior |
+| `auto_proceed` | `auto_proceed` | Dashboard auto-spawns next task | Skip review for specific task |
+| `force_review` | `review_required` | Session stays open for human review | Force review even if rules say auto |
 
 #### Example review-rules.json
 
@@ -793,6 +764,12 @@ interface CompletionBundle {
   agentName: string;        // Your agent name
   summary: string[];        // Array of accomplishment bullet points
 
+  // REQUIRED - Completion mode from Step 7.5
+  completionMode: "review_required" | "auto_proceed";
+  // If auto_proceed, include next task info
+  nextTaskId?: string;      // ID of next task to auto-spawn
+  nextTaskTitle?: string;   // Title of next task
+
   // REQUIRED - Quality signals
   quality: {
     tests: "passing" | "failing" | "none" | "skipped";
@@ -832,9 +809,11 @@ interface CompletionBundle {
 
 ```bash
 # Build the JSON (escape quotes properly!)
+# Use COMPLETION_MODE from Step 7.5
 jat-signal complete '{
   "taskId": "jat-abc",
   "agentName": "WisePrairie",
+  "completionMode": "review_required",
   "summary": [
     "Fixed authentication flow for OAuth providers",
     "Added retry logic for failed token refreshes"
@@ -872,6 +851,19 @@ jat-signal complete '{
     "patterns": ["Use authError() helper for consistent error responses"],
     "gotchas": ["Token refresh can fail silently - always check response.ok"]
   }
+}'
+```
+
+**For auto-proceed mode:** Include `nextTaskId` and `nextTaskTitle`:
+```bash
+jat-signal complete '{
+  "taskId": "jat-abc",
+  "agentName": "WisePrairie",
+  "completionMode": "auto_proceed",
+  "nextTaskId": "jat-def",
+  "nextTaskTitle": "Add tests for OAuth flow",
+  "summary": [...],
+  ...
 }'
 ```
 
@@ -1044,12 +1036,13 @@ Share knowledge that helps other agents working in the same codebase:
 ### Example: Full Completion Flow
 
 ```bash
-# Step 7.5 already ran and set COMPLETION_MODE (review_required or auto_proceed)
+# Step 7.5 determined COMPLETION_MODE (review_required or auto_proceed)
 
-# Step 8: Emit structured completion signal
+# Step 8: Emit structured completion signal with completionMode from Step 7.5
 jat-signal complete '{
   "taskId": "chimaro-xyz",
   "agentName": "CalmMeadow",
+  "completionMode": "review_required",
   "summary": [
     "Created migration for auth_mode column",
     "Added anonymous session handling",
@@ -1480,12 +1473,11 @@ Signal: completed (task: jat-abc, outcome: success)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-**Signals explained:**
-- `jat-signal completed '{"taskId":"...","outcome":"success"}'` - Task finished, requires review; dashboard shows COMPLETED state
-- `jat-signal auto_proceed '{"taskId":"...","nextTaskId":"...","nextTaskTitle":"..."}'` - Auto-proceed enabled; dashboard spawns next task
-- `jat-signal tasks '[...]'` - Follow-up tasks discovered during work
+**Signal explained:**
+- `jat-signal complete '{...}'` - Full completion bundle with all data; dashboard shows COMPLETED state and renders interactive UI
+- Set `completionMode: "auto_proceed"` with `nextTaskId` and `nextTaskTitle` to auto-spawn next task
 
-The signal used depends on review rules (see Step 7.5).
+The completion mode is determined by review rules (see Step 7.5).
 
 ---
 
@@ -1496,11 +1488,13 @@ The completion flow uses these signals (captured by PostToolUse hook):
 | Signal Command | When to Run | Dashboard Effect |
 |----------------|-------------|------------------|
 | `jat-signal completing '{...}'` | During each completion step | Shows progress bar and current step |
-| `jat-signal completed '{"taskId":"...","outcome":"success"}'` | After `bd close`, when review required | Shows "COMPLETED" state (green), session stays open for review |
-| `jat-signal auto_proceed '{"taskId":"...","nextTaskId":"...","nextTaskTitle":"..."}'` | After `bd close`, when auto-proceed enabled | Dashboard spawns next task automatically |
-| `jat-signal action '{...}'` | When manual steps are required | Shows prominent action checklist |
-| `jat-signal tasks '[...]'` | When follow-up work discovered | Shows "N Suggested Tasks" badge, offers Beads creation |
-| `jat-signal complete '{...}'` | After all completion steps | Full completion bundle with summary, suggested tasks, cross-agent intel |
+| `jat-signal complete '{...}'` | After all completion steps | Full completion bundle with summary, suggested tasks, human actions, cross-agent intel |
+
+**The `jat-signal complete` bundle is the ONLY completion signal needed.** It includes:
+- `completionMode: "review_required"` → Dashboard shows COMPLETED state, session stays open for review
+- `completionMode: "auto_proceed"` with `nextTaskId` → Dashboard auto-spawns next task
+
+**Legacy signals (deprecated):** The individual `completed`, `auto_proceed`, `action`, and `tasks` signals still work but should NOT be used. The `complete` bundle replaces all of them.
 
 ### Completing Signal Progress Sequence
 
@@ -1530,22 +1524,21 @@ jat-signal completing '{
 
 **Dashboard renders:** Progress bar at 20%, "Step 2/5: Committing changes to git"
 
-**Signal selection is automatic** - Step 7.5 determines which signal to run based on:
+**Completion mode is determined in Step 7.5** based on:
 1. Per-task override in notes (`[REVIEW_OVERRIDE:...]`)
 2. Project review rules (`.beads/review-rules.json`)
 3. Safe default: review required (no auto-proceed without explicit configuration)
 
 **Critical timing:**
-- Do NOT run completion signals until AFTER all completion steps succeed
+- Do NOT run `jat-signal complete` until AFTER all completion steps succeed
 - If you signal early, dashboard shows "complete" but task is still open in Beads
 - This causes confusion - other agents think task is done when it isn't
 
-**Human action signals:**
-- Run BEFORE `jat-signal completed`
-- Each action gets its own `jat-signal action` call with valid JSON payload
-- Dashboard reads these from signal file to show a checklist of manual steps
+**Human actions:**
+- Include in the `humanActions` array within the `jat-signal complete` bundle
+- Dashboard renders these as an interactive checklist for manual steps
 
-**The signals are called in Step 7.5 and Step 8** - follow the implementation and signals are emitted correctly.
+**Only one signal call needed:** Use `jat-signal complete` with the full bundle (Step 8).
 
 ---
 

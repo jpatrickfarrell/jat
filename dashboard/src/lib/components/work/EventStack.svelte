@@ -92,6 +92,8 @@
 		onCleanup,
 		onComplete,
 		onReview,
+		onApplyRename,
+		onApplyLabels,
 		availableProjects = [],
 		defaultProject = '',
 		class: className = '',
@@ -132,6 +134,10 @@
 		onComplete?: () => void;
 		/** Callback when user clicks Ready for Review on working signal */
 		onReview?: () => void;
+		/** Callback when user applies suggested rename */
+		onApplyRename?: (taskId: string, newTitle: string) => void;
+		/** Callback when user applies suggested labels */
+		onApplyLabels?: (taskId: string, labels: string[]) => void;
 		availableProjects?: string[];
 		/** Default project for tasks without explicit project (from current session) */
 		defaultProject?: string;
@@ -239,11 +245,11 @@
 			result = result.filter((e) => e.task_id === filters.taskId);
 		}
 
-		// Hide 'completing' events when there's a 'completed' event for the same task
-		// The completed event is the final state and contains all the relevant info
+		// Hide 'completing' events when there's a 'completed' or 'complete' event for the same task
+		// The completed/complete event is the final state and contains all the relevant info
 		const completedTaskIds = new Set(
 			result
-				.filter((e) => e.type === 'completed' || e.state === 'completed')
+				.filter((e) => e.type === 'completed' || e.state === 'completed' || e.type === 'complete')
 				.map((e) => e.task_id)
 		);
 		result = result.filter((e) => {
@@ -1111,6 +1117,78 @@
 													</div>
 												{/if}
 											</div>
+										</div>
+									{/if}
+
+									<!-- AI Insights Section -->
+									{#if bundle.riskLevel || bundle.suggestedRename || bundle.suggestedLabels?.length || bundle.breakingChanges?.length || bundle.documentationNeeds?.length}
+										<div class="space-y-2">
+											<div class="text-[10px] font-medium mb-1 text-secondary">🤖 AI INSIGHTS</div>
+
+											<!-- Risk Level & Suggested Rename Row -->
+											<div class="flex flex-wrap items-center gap-2">
+												{#if bundle.riskLevel}
+													<span class="badge badge-xs {bundle.riskLevel === 'low' ? 'badge-success' : bundle.riskLevel === 'medium' ? 'badge-warning' : 'badge-error'}">
+														Risk: {bundle.riskLevel}
+													</span>
+												{/if}
+												{#if bundle.suggestedRename}
+													<div class="flex items-center gap-1.5 px-2 py-1 rounded bg-secondary/10 border border-secondary/30">
+														<span class="text-[10px] text-secondary/70">Rename to:</span>
+														<span class="text-[10px] font-medium text-secondary">{bundle.suggestedRename}</span>
+														<button
+															class="btn btn-xs btn-ghost text-secondary hover:bg-secondary/20"
+															onclick={() => onApplyRename?.(bundle.taskId, bundle.suggestedRename)}
+															title="Apply suggested rename"
+														>
+															Apply
+														</button>
+													</div>
+												{/if}
+											</div>
+
+											<!-- Suggested Labels -->
+											{#if bundle.suggestedLabels && bundle.suggestedLabels.length > 0}
+												<div class="flex items-center gap-2">
+													<span class="text-[9px] text-base-content/50">Labels:</span>
+													<div class="flex flex-wrap gap-1">
+														{#each bundle.suggestedLabels as label}
+															<span class="badge badge-xs badge-outline">{label}</span>
+														{/each}
+													</div>
+													<button
+														class="btn btn-xs btn-ghost text-info hover:bg-info/20"
+														onclick={() => onApplyLabels?.(bundle.taskId, bundle.suggestedLabels)}
+														title="Apply suggested labels"
+													>
+														Apply
+													</button>
+												</div>
+											{/if}
+
+											<!-- Breaking Changes -->
+											{#if bundle.breakingChanges && bundle.breakingChanges.length > 0}
+												<div class="p-2 rounded bg-error/10 border border-error/30">
+													<div class="text-[10px] font-medium text-error mb-1">⚠️ BREAKING CHANGES</div>
+													<ul class="space-y-0.5">
+														{#each bundle.breakingChanges as change}
+															<li class="text-[10px] text-error/80">• {change}</li>
+														{/each}
+													</ul>
+												</div>
+											{/if}
+
+											<!-- Documentation Needs -->
+											{#if bundle.documentationNeeds && bundle.documentationNeeds.length > 0}
+												<div class="p-2 rounded bg-info/10 border border-info/30">
+													<div class="text-[10px] font-medium text-info mb-1">📚 DOCS TO UPDATE</div>
+													<ul class="space-y-0.5">
+														{#each bundle.documentationNeeds as doc}
+															<li class="text-[10px] text-info/80">• {doc}</li>
+														{/each}
+													</ul>
+												</div>
+											{/if}
 										</div>
 									{/if}
 								</div>

@@ -9,7 +9,8 @@
 import { json } from '@sveltejs/kit';
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
+import { join, basename } from 'path';
 
 const execAsync = promisify(exec);
 
@@ -37,12 +38,13 @@ function resolveSessionName(name) {
 }
 
 /**
- * Find session_id from signal files
+ * Find session_id from signal files or persistent agent session files
  * @param {string} sessionName - tmux session name (e.g., "jat-QuickOcean")
+ * @param {string | null} projectPath - project path to search for persistent session files
  * @returns {string | null} - Claude session_id or null if not found
  */
-function findSessionId(sessionName) {
-	// Try tmux-named signal file first
+function findSessionId(sessionName, projectPath = null) {
+	// Try tmux-named signal file first (in /tmp, cleared on restart)
 	const tmuxSignalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
 	if (existsSync(tmuxSignalFile)) {
 		try {
@@ -55,7 +57,7 @@ function findSessionId(sessionName) {
 		}
 	}
 
-	// Fallback: search timeline for the session
+	// Fallback: search timeline for the session (in /tmp, cleared on restart)
 	const agentName = sessionName.replace(/^jat-/, '');
 	const timelineFile = `/tmp/jat-timeline-${sessionName}.jsonl`;
 	if (existsSync(timelineFile)) {
@@ -74,6 +76,46 @@ function findSessionId(sessionName) {
 			}
 		} catch (e) {
 			console.error(`Failed to read timeline ${timelineFile}:`, e);
+		}
+	}
+
+	// Fallback: search persistent .claude/sessions/agent-*.txt files (survive restarts)
+	// These files are named agent-{sessionId}.txt and contain the agent name
+	if (projectPath) {
+		const sessionsDir = join(projectPath, '.claude', 'sessions');
+		if (existsSync(sessionsDir)) {
+			try {
+				const files = readdirSync(sessionsDir);
+				// Sort by modification time (newest first) to get the most recent session
+				const agentFiles = files
+					.filter(f => f.startsWith('agent-') && f.endsWith('.txt'))
+					.map(f => {
+						const filePath = join(sessionsDir, f);
+						return {
+							name: f,
+							path: filePath,
+							mtime: existsSync(filePath) ? statSync(filePath).mtime.getTime() : 0
+						};
+					})
+					.sort((a, b) => b.mtime - a.mtime);
+
+				for (const file of agentFiles) {
+					try {
+						const content = readFileSync(file.path, 'utf-8').trim();
+						if (content === agentName) {
+							// Extract session ID from filename: agent-{sessionId}.txt
+							const match = file.name.match(/^agent-(.+)\.txt$/);
+							if (match) {
+								return match[1];
+							}
+						}
+					} catch (e) {
+						// Skip unreadable files
+					}
+				}
+			} catch (e) {
+				console.error(`Failed to scan sessions dir ${sessionsDir}:`, e);
+			}
 		}
 	}
 
@@ -167,9 +209,13 @@ async function getProjectPath(agentName) {
 /**
  * POST /api/sessions/[name]/resume
  * Resume a session using Claude's -r flag
+ *
+ * Body can include:
+ * - session_id: Claude conversation ID to resume (if known)
+ * - project: Project name or path (optional override)
  */
 /** @type {import('./$types').RequestHandler} */
-export async function POST({ params }) {
+export async function POST({ params, request }) {
 	try {
 		const { agentName, sessionName } = resolveSessionName(params.name);
 
@@ -180,25 +226,38 @@ export async function POST({ params }) {
 			}, { status: 400 });
 		}
 
-		// Find the session_id from signal files
-		const sessionId = findSessionId(sessionName);
-		if (!sessionId) {
-			return json({
-				error: 'Session ID not found',
-				message: `Could not find session ID for agent '${agentName}'. The session may be too old or the signal files may have been cleaned up.`,
-				agentName,
-				sessionName
-			}, { status: 404 });
+		// Parse request body for optional session_id
+		let body = {};
+		try {
+			body = await request.json();
+		} catch {
+			// No body or invalid JSON is fine
 		}
 
-		// Get project path
+		// Get project path first (needed for searching persistent session files)
 		const projectPath = await getProjectPath(agentName);
 		if (!projectPath || !existsSync(projectPath)) {
 			return json({
 				error: 'Project path not found',
 				message: `Could not find project path for agent '${agentName}'.`,
 				agentName,
-				sessionId
+				sessionName
+			}, { status: 404 });
+		}
+
+		// Use provided session_id or look it up from signal files AND persistent agent files
+		let sessionId = body.session_id;
+		if (!sessionId) {
+			sessionId = findSessionId(sessionName, projectPath);
+		}
+
+		if (!sessionId) {
+			return json({
+				error: 'Session ID not found',
+				message: `Could not find session ID for agent '${agentName}'. No matching session files found in /tmp or .claude/sessions/.`,
+				agentName,
+				sessionName,
+				projectPath
 			}, { status: 404 });
 		}
 
@@ -225,38 +284,51 @@ export async function POST({ params }) {
 			}
 		}
 
-		// Build the resume command
-		const resumeCommand = `cd "${projectPath}" && claude ${claudeFlags} -r "${sessionId}"`;
+		// Build the resume command wrapped in a tmux session for dashboard tracking
+		// 1. Kill any existing session with this name (in case it's stale)
+		// 2. Create new tmux session with claude -r running inside
+		// 3. Attach terminal to that session
+		const tmuxCreateCmd = `tmux kill-session -t "${sessionName}" 2>/dev/null; tmux new-session -d -s "${sessionName}" -c "${projectPath}" "claude ${claudeFlags} -r '${sessionId}'"`;
+		const tmuxAttachCmd = `tmux attach-session -t "${sessionName}"`;
 
-		// Launch in a new terminal
+		// First create the tmux session
+		try {
+			await execAsync(tmuxCreateCmd);
+		} catch (e) {
+			// Ignore errors from kill-session if session doesn't exist
+			console.log('tmux session creation:', e.message);
+		}
+
+		// Then launch terminal attached to the tmux session
+		const attachCommand = tmuxAttachCmd;
 		let child;
 		switch (terminal) {
 			case 'alacritty':
-				child = spawn('alacritty', ['-e', 'bash', '-c', resumeCommand], {
+				child = spawn('alacritty', ['-e', 'bash', '-c', attachCommand], {
 					detached: true,
 					stdio: 'ignore'
 				});
 				break;
 			case 'kitty':
-				child = spawn('kitty', ['bash', '-c', resumeCommand], {
+				child = spawn('kitty', ['bash', '-c', attachCommand], {
 					detached: true,
 					stdio: 'ignore'
 				});
 				break;
 			case 'gnome-terminal':
-				child = spawn('gnome-terminal', ['--', 'bash', '-c', resumeCommand], {
+				child = spawn('gnome-terminal', ['--', 'bash', '-c', attachCommand], {
 					detached: true,
 					stdio: 'ignore'
 				});
 				break;
 			case 'konsole':
-				child = spawn('konsole', ['-e', 'bash', '-c', resumeCommand], {
+				child = spawn('konsole', ['-e', 'bash', '-c', attachCommand], {
 					detached: true,
 					stdio: 'ignore'
 				});
 				break;
 			default:
-				child = spawn('xterm', ['-e', 'bash', '-c', resumeCommand], {
+				child = spawn('xterm', ['-e', 'bash', '-c', attachCommand], {
 					detached: true,
 					stdio: 'ignore'
 				});

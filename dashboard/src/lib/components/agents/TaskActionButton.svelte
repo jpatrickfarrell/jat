@@ -55,6 +55,8 @@
 
 	// Local state
 	let releasing = $state(false);
+	let resuming = $state(false);
+	let resumeError = $state<string | null>(null);
 	let dropdownOpen = $state(false);
 
 	// Find agent for this task
@@ -125,6 +127,37 @@
 		dropdownOpen = false;
 		if (sessionName) {
 			onattach(sessionName);
+		}
+	}
+
+	async function handleResume() {
+		if (resuming || !task.assignee) return;
+		resuming = true;
+		resumeError = null;
+		try {
+			const response = await fetch(`/api/sessions/${task.assignee}/resume`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' }
+			});
+			if (!response.ok) {
+				const data = await response.json();
+				// Show user-friendly error - session files cleaned up is common after restart
+				if (response.status === 404) {
+					resumeError = 'Session expired - release task and restart';
+				} else {
+					resumeError = data.message || data.error || 'Resume failed';
+				}
+				console.error('Resume failed:', data.message || data.error);
+			} else {
+				// Broadcast event so pages refresh immediately
+				broadcastTaskEvent('session-resumed', task.id);
+				dropdownOpen = false;
+			}
+		} catch (err) {
+			resumeError = 'Network error';
+			console.error('Resume error:', err);
+		} finally {
+			resuming = false;
 		}
 	}
 
@@ -276,13 +309,36 @@
 						<li class="menu-title">
 							<span class="text-warning text-xs">Agent is offline</span>
 						</li>
+						<li>
+							<button
+								onclick={handleResume}
+								disabled={resuming}
+								class="gap-2 text-info font-semibold"
+							>
+								{#if resuming}
+									<span class="loading loading-spinner loading-xs"></span>
+									Resuming...
+								{:else}
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+									</svg>
+									Resume Session
+								{/if}
+							</button>
+						</li>
+						{#if resumeError}
+							<li class="px-3 py-1">
+								<span class="text-error text-xs whitespace-normal">{resumeError}</span>
+							</li>
+						{/if}
+						<div class="divider my-0 py-0"></div>
 					{/if}
 
 					<li>
 						<button
 							onclick={handleRelease}
 							disabled={releasing}
-							class="gap-2 {!isAgentOnline && task.status === 'in_progress' ? 'text-warning font-semibold' : ''}"
+							class="gap-2 {!isAgentOnline && task.status === 'in_progress' ? '' : ''}"
 						>
 							{#if releasing}
 								<span class="loading loading-spinner loading-xs"></span>

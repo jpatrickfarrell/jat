@@ -154,6 +154,88 @@ cd ~/code/chimaro && claude "/jat:start"
 # "NOT IN TMUX SESSION - Dashboard cannot track this session"
 ```
 
+## Attach vs Resume Session Features
+
+The dashboard provides two different ways to interact with agent sessions from the UI:
+
+### Attach Session (Online Agents)
+
+**Use when:** Agent is currently running (tmux session exists)
+
+**API:** `POST /api/sessions/[name]/attach`
+
+**What it does:**
+1. Creates a new window in your parent tmux session (e.g., `jat-dashboard`)
+2. Attaches to the existing agent's tmux session
+3. Falls back to spawning a new terminal if no parent session found
+
+**When to use:**
+- You want to watch an agent work in real-time
+- You need to interact with a running agent
+- The agent is stuck and you need to manually intervene
+
+**Dashboard UI:** "Attach Terminal" action in the session dropdown
+
+```bash
+# Equivalent manual command
+tmux attach-session -t jat-AgentName
+```
+
+### Resume Session (Offline Agents)
+
+**Use when:** Agent has completed or stopped (tmux session no longer exists)
+
+**API:** `POST /api/sessions/[name]/resume`
+
+**What it does:**
+1. Looks up the Claude Code session ID from signal files or `.claude/sessions/agent-*.txt`
+2. Kills any stale tmux session with the same name
+3. Creates a new tmux session with `claude -r {session_id}` to resume the conversation
+4. Spawns a terminal attached to the new session
+
+**When to use:**
+- Agent completed but you want to continue the conversation
+- Agent crashed and you want to pick up where it left off
+- You need to ask follow-up questions about completed work
+
+**Session ID lookup order:**
+1. `/tmp/jat-signal-tmux-{session}.json` - Signal files (cleared on reboot)
+2. `/tmp/jat-timeline-{session}.jsonl` - Timeline events (cleared on reboot)
+3. `.claude/sessions/agent-{sessionId}.txt` - Persistent mapping (survives reboot)
+
+**Dashboard UI:** "Resume Session" action (only shown for offline agents)
+
+```bash
+# Equivalent manual command
+claude -r abc123-def456-session-id
+```
+
+### Key Differences
+
+| Feature | Attach | Resume |
+|---------|--------|--------|
+| **Agent Status** | Online (tmux exists) | Offline (tmux gone) |
+| **Creates Session** | No (attaches to existing) | Yes (new tmux + claude -r) |
+| **Preserves Context** | N/A (shares existing) | Yes (resumes conversation) |
+| **Session ID Needed** | No | Yes (looked up automatically) |
+| **Survives Reboot** | N/A | Yes (uses persistent files) |
+
+### Configuration
+
+Both features use these settings from `~/.config/jat/projects.json`:
+
+```json
+{
+  "defaults": {
+    "terminal": "alacritty",           // Terminal emulator to spawn
+    "claude_flags": "--dangerously-skip-permissions",
+    "parent_session": "jat-dashboard"  // For attach: where to create windows
+  }
+}
+```
+
+**Supported terminals:** alacritty, kitty, gnome-terminal, konsole, xterm (fallback)
+
 ## Launch Multi-Agent Backlog Attack
 
 ```bash

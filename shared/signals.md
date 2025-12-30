@@ -56,6 +56,54 @@ Output format: `[JAT-SIGNAL:<type>] <json-payload>`
 | `idle` | `jat-signal idle '{...}'` | readyForWork |
 | `question` | `jat-signal question '{...}'` | question, questionType (optional: options, timeout) |
 
+**Dashboard Signals** - Events written by the dashboard (not agents):
+
+| Signal | Source | Purpose |
+|--------|--------|---------|
+| `dashboard_input` | `/api/sessions/[name]/input` | Tracks input sent from dashboard UI to an agent session |
+| `user_input` | `UserPromptSubmit` hook | Tracks user text entered in Claude Code terminal |
+
+**`dashboard_input` signal** - Written when dashboard sends input to a tmux session:
+
+The dashboard writes this signal directly to the timeline file when a user sends input via the SessionCard UI. This ensures dashboard-initiated inputs appear in EventStack even if Claude Code's `UserPromptSubmit` hook fails to capture them.
+
+**When it's written:**
+- User types text in SessionCard input field and hits Enter
+- User sends a slash command (e.g., `/jat:complete`)
+- Dashboard automation sends input programmatically
+
+**Signal format (written to timeline JSONL):**
+```json
+{
+  "type": "dashboard_input",
+  "tmux_session": "jat-AgentName",
+  "timestamp": "2025-12-30T10:00:00.000Z",
+  "data": {
+    "input": "/jat:complete",
+    "inputType": "command",
+    "isCommand": true,
+    "source": "dashboard"
+  }
+}
+```
+
+**Data fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `input` | string | The text/command sent to the session |
+| `inputType` | enum | `"text"` (regular input), `"command"` (slash command), `"key"` (special key) |
+| `isCommand` | boolean | `true` if input starts with `/` |
+| `source` | string | Always `"dashboard"` (distinguishes from terminal input) |
+
+**Where it's written:**
+- File: `/tmp/jat-timeline-{tmuxSession}.jsonl`
+- Writer: `dashboard/src/routes/api/sessions/[name]/input/+server.js`
+
+**EventStack display:**
+- Shows as purple `💬 USER INPUT` card in timeline
+- Collapsed view shows truncated input text (first 60 chars)
+- Click-to-copy the full input text
+
 **Completion Signals** - Two signals work together for task completion:
 
 | Signal | Command | Purpose |
@@ -349,7 +397,8 @@ $effect(() => {
 
 | State | Signal Type | Icon | Color | Description |
 |-------|-------------|------|-------|-------------|
-| User Input | `user_input` | 💬 | Purple | User sent a message |
+| User Input | `user_input` | 💬 | Purple | User sent a message (from terminal) |
+| Dashboard Input | `dashboard_input` | 💬 | Purple | User sent input from dashboard UI |
 | Starting | `starting` | 🚀 | Cyan | Agent initializing |
 | Working | `working` | ⚡ | Amber | Actively working on task |
 | Compacting | `compacting` | 📦 | Orange | Summarizing context |
@@ -378,6 +427,7 @@ Collapsed cards show context-specific summaries from signal payloads:
 | Event Type | Collapsed Label Shows | Fallback |
 |------------|----------------------|----------|
 | `user_input` | Truncated prompt (first 60 chars) | - |
+| `dashboard_input` | Truncated input (first 60 chars) | - |
 | `working` | `data.approach` (what agent plans to do) | `data.taskTitle` |
 | `review` | First `data.summary` item or `data.reviewFocus` | `data.taskTitle` |
 | `completing` | `data.currentStep` (e.g., "Committing...") | `data.taskTitle` |
@@ -397,6 +447,7 @@ Each event type has a custom UI in the expanded timeline:
 | Event Type | Rich View |
 |------------|-----------|
 | `user_input` | User message in purple card, click-to-copy |
+| `dashboard_input` | Dashboard input in purple card, click-to-copy, shows "from dashboard" source badge |
 | `tasks` | Full SuggestedTasksSection with checkboxes, priority dropdowns, editable titles, "Create Tasks" button |
 | `complete` | Summary bullets, quality badges (tests/build), human actions, suggested tasks, cross-agent intel |
 | `action` | Title and description card |

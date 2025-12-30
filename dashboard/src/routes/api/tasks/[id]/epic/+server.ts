@@ -22,10 +22,16 @@ function escapeForShell(str: string): string {
 	return str.replace(/'/g, "'\\''");
 }
 
+interface EpicInfo {
+	exists: boolean;
+	isEpic: boolean;
+	isClosed: boolean;
+}
+
 /**
- * Check if an epic exists and is open
+ * Get info about an epic (exists, type, status)
  */
-async function isEpicOpen(epicId: string, projectPath?: string): Promise<boolean> {
+async function getEpicInfo(epicId: string, projectPath?: string): Promise<EpicInfo> {
 	try {
 		let command = `bd show '${escapeForShell(epicId)}' --json`;
 		if (projectPath) {
@@ -36,9 +42,32 @@ async function isEpicOpen(epicId: string, projectPath?: string): Promise<boolean
 		const epics = JSON.parse(stdout.trim());
 		const epic = Array.isArray(epics) ? epics[0] : epics;
 
-		if (!epic) return false;
-		return epic.status !== 'closed' && epic.issue_type === 'epic';
+		if (!epic) return { exists: false, isEpic: false, isClosed: false };
+		return {
+			exists: true,
+			isEpic: epic.issue_type === 'epic',
+			isClosed: epic.status === 'closed'
+		};
 	} catch {
+		return { exists: false, isEpic: false, isClosed: false };
+	}
+}
+
+/**
+ * Reopen a closed epic
+ */
+async function reopenEpic(epicId: string, projectPath?: string): Promise<boolean> {
+	try {
+		let command = `bd update '${escapeForShell(epicId)}' --status open`;
+		if (projectPath) {
+			command = `cd '${escapeForShell(projectPath)}' && ${command}`;
+		}
+
+		await execAsync(command, { timeout: 10000 });
+		console.log(`[task-epic] Reopened closed epic ${epicId}`);
+		return true;
+	} catch (error) {
+		console.error(`[task-epic] Failed to reopen epic ${epicId}:`, error);
 		return false;
 	}
 }
@@ -73,13 +102,25 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
 		const projectPath = task.project_path;
 
-		// Verify the epic exists and is open
-		const epicOpen = await isEpicOpen(epicId, projectPath);
-		if (!epicOpen) {
+		// Verify the epic exists
+		const epicInfo = await getEpicInfo(epicId, projectPath);
+		if (!epicInfo.exists || !epicInfo.isEpic) {
 			return json(
-				{ success: false, error: `Epic '${epicId}' not found or is closed` },
+				{ success: false, error: `Epic '${epicId}' not found` },
 				{ status: 400 }
 			);
+		}
+
+		// If epic is closed, auto-reopen it since user is adding work to it
+		let epicReopened = false;
+		if (epicInfo.isClosed) {
+			epicReopened = await reopenEpic(epicId, projectPath);
+			if (!epicReopened) {
+				return json(
+					{ success: false, error: `Failed to reopen closed epic '${epicId}'` },
+					{ status: 500 }
+				);
+			}
 		}
 
 		// CRITICAL: Dependency direction is epic depends on child
@@ -115,13 +156,16 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		invalidateCache.agents();
 		_resetTaskCache();
 
-		console.log(`[task-epic] Linked task ${taskId} to epic ${epicId}`);
+		console.log(`[task-epic] Linked task ${taskId} to epic ${epicId}${epicReopened ? ' (epic was reopened)' : ''}`);
 
 		return json({
 			success: true,
-			message: `Task ${taskId} linked to epic ${epicId}`,
+			message: epicReopened
+				? `Task ${taskId} linked to epic ${epicId} (epic was reopened)`
+				: `Task ${taskId} linked to epic ${epicId}`,
 			taskId,
-			epicId
+			epicId,
+			epicReopened
 		});
 
 	} catch (error) {

@@ -46,6 +46,7 @@
 	interface Epic {
 		id: string;
 		title: string;
+		status: string;
 		priority: number;
 		dependency_count?: number;
 	}
@@ -446,6 +447,8 @@
 			// Show toast notification based on result
 			if (data.alreadyLinked) {
 				infoToast(`Task already linked to epic`);
+			} else if (data.epicReopened) {
+				successToast(`Task ${task.id} linked to epic ${epicId} (epic reopened)`);
 			} else {
 				successToast(`Task ${task.id} linked to epic ${epicId}`);
 			}
@@ -845,7 +848,7 @@
 									</div>
 								{:else if epics.length === 0}
 									<div class="px-3 py-3 text-center text-[10px] text-white/50">
-										No open epics in this project
+										No epics in this project
 									</div>
 								{:else if filteredEpics.length === 0}
 									<div class="px-3 py-3 text-center text-[10px] text-white/50">
@@ -855,6 +858,7 @@
 									{@const canInteract = canLink || onViewEpic}
 									<ul class="py-0.5 max-h-[180px] overflow-y-auto">
 										{#each filteredEpics as epic, index (epic.id)}
+											{@const isClosed = epic.status === 'closed'}
 											<li>
 												<button
 													type="button"
@@ -873,11 +877,16 @@
 													{#if linkingEpicId === epic.id}
 														<span class="loading loading-spinner loading-xs flex-shrink-0"></span>
 													{:else}
-														<span class="text-[10px] flex-shrink-0">🏔️</span>
+														<span class="text-[10px] flex-shrink-0" class:opacity-50={isClosed}>{isClosed ? '📦' : '🏔️'}</span>
 													{/if}
 													<div class="flex flex-col min-w-0 flex-1">
-														<span class="font-mono text-[10px] text-secondary">{epic.id}</span>
-														<span class="truncate">{epic.title}</span>
+														<div class="flex items-center gap-1.5">
+															<span class="font-mono text-[10px] text-secondary" class:opacity-60={isClosed}>{epic.id}</span>
+															{#if isClosed}
+																<span class="text-[8px] px-1 py-0.5 rounded bg-base-content/10 text-base-content/40 uppercase tracking-wider">closed</span>
+															{/if}
+														</div>
+														<span class="truncate" class:opacity-60={isClosed}>{epic.title}</span>
 													</div>
 													{#if epic.dependency_count !== undefined}
 														<span class="text-[9px] px-1 py-0.5 rounded bg-base-content/10 text-base-content/40 flex-shrink-0">

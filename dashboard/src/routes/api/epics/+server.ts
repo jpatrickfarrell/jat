@@ -1,10 +1,11 @@
 /**
  * Epics API - List and create epics for task management
  *
- * GET /api/epics - List all open epics
+ * GET /api/epics - List all epics (open and closed)
  * POST /api/epics - Create a new epic
  * Query params:
  *   - project: filter by project prefix (e.g., 'jat', 'chimaro')
+ *   - status: 'open', 'closed', or 'all' (default: 'all')
  */
 
 import { json } from '@sveltejs/kit';
@@ -36,14 +37,23 @@ interface Epic {
 
 /**
  * GET /api/epics
- * List all open epics, optionally filtered by project
+ * List epics, optionally filtered by project and status
+ *
+ * By default, returns all epics (open and closed) so the UI can show
+ * closed epics that still have active work (sessions on child tasks).
  */
 export const GET: RequestHandler = async ({ url }) => {
 	try {
 		const project = url.searchParams.get('project');
+		const statusFilter = url.searchParams.get('status') || 'all';
 
-		// Get all open epics
-		const { stdout } = await execAsync('bd list --type epic --status open --json', {
+		// Build the bd list command based on status filter
+		let command = 'bd list --type epic --json';
+		if (statusFilter === 'open' || statusFilter === 'closed') {
+			command = `bd list --type epic --status ${statusFilter} --json`;
+		}
+
+		const { stdout } = await execAsync(command, {
 			timeout: 10000
 		});
 
@@ -60,8 +70,15 @@ export const GET: RequestHandler = async ({ url }) => {
 			epics = epics.filter(epic => epic.id.startsWith(`${project}-`));
 		}
 
-		// Sort by priority (lower = higher priority), then by created date
+		// Sort: open epics first, then by priority, then by created date
 		epics.sort((a, b) => {
+			// Open epics come first
+			const aOpen = a.status === 'open' ? 0 : 1;
+			const bOpen = b.status === 'open' ? 0 : 1;
+			if (aOpen !== bOpen) {
+				return aOpen - bOpen;
+			}
+			// Then by priority (lower = higher priority)
 			if (a.priority !== b.priority) {
 				return a.priority - b.priority;
 			}

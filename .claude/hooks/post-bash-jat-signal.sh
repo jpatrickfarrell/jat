@@ -7,7 +7,7 @@
 #
 # Signal format: [JAT-SIGNAL:<type>] <json-payload>
 # Types: working, review, needs_input, idle, completing, completed,
-#        starting, compacting, auto_proceed, question, tasks, action, complete
+#        starting, compacting, question, tasks, action, complete
 #
 # Input: JSON with tool name, input (command), output, session_id
 # Output: Writes to /tmp/jat-signal-{session}.json
@@ -121,9 +121,9 @@ TASK_ID=$(echo "$PARSED_DATA" | jq -r '.taskId // ""' 2>/dev/null)
 TASK_ID="${TASK_ID:-}"
 
 # Determine if this is a state signal or data signal
-# State signals: working, review, needs_input, idle, completing, completed, starting, compacting, auto_proceed, question
+# State signals: working, review, needs_input, idle, completing, completed, starting, compacting, question
 # Data signals: tasks, action, complete
-STATE_SIGNALS="working review needs_input idle completing completed starting compacting auto_proceed question"
+STATE_SIGNALS="working review needs_input idle completing completed starting compacting question"
 IS_STATE_SIGNAL=false
 for s in $STATE_SIGNALS; do
     if [[ "$SIGNAL_TYPE" == "$s" ]]; then
@@ -175,7 +175,7 @@ if [[ "$IS_STATE_SIGNAL" == "true" ]]; then
                 exit 0  # Silently skip incomplete question signals
             fi
             ;;
-        # idle, starting, compacting, auto_proceed are more flexible
+        # idle, starting, compacting are more flexible
     esac
 fi
 

@@ -10,7 +10,7 @@ Complete current task properly with full verification. Session ends after comple
 - `/jat:complete --kill` - Complete task and auto-kill session (self-destruct, no review)
 
 **Flags:**
-- `--kill` - Sets completion mode to `auto_kill`, session self-destructs after completion (no review)
+- `--kill` - Dashboard will auto-kill the session after completion (no review needed)
 
 **What this command does:**
 1. **Read & Respond to Agent Mail** (ALWAYS - before completing)
@@ -506,7 +506,9 @@ Verification: Full (tests, lint, security)" \
 
 **After announcing completion, determine which completion signal to emit based on configurable rules.**
 
-This step implements the review rules system that allows project-level configuration of which tasks require human review vs auto-kill.
+This step implements the review rules system that determines whether to auto-spawn the next task (Epic Swarm mode).
+
+**Note:** The `--kill` flag (session lifecycle) is tracked by the dashboard separately. This step only determines `COMPLETION_MODE` which controls auto-spawning.
 
 #### Rule Evaluation Order
 
@@ -514,12 +516,12 @@ This step implements the review rules system that allows project-level configura
 0. Check session epic context (.claude/sessions/context-{session_id}.json)
    └─ If epic context exists with reviewThreshold:
       └─ Compare task.priority to threshold
-      └─ If priority > threshold: COMPLETION_MODE="review_required" → completed signal (no autoKill)
-      └─ If priority <= threshold: COMPLETION_MODE="auto_kill" → completed signal with autoKill: true
+      └─ If priority > threshold: COMPLETION_MODE="review_required" → don't auto-spawn
+      └─ If priority <= threshold: COMPLETION_MODE="auto_proceed" → auto-spawn next task
    └─ Epic context takes precedence over all other rules
 
 1. Check task.notes for [REVIEW_OVERRIDE:...] pattern
-   └─ If found → Use override action (always_review, auto_kill, force_review)
+   └─ If found → Use override action (always_review, auto_proceed, force_review)
 
 2. Load .beads/review-rules.json
    └─ Find rule matching task.issue_type
@@ -529,40 +531,28 @@ This step implements the review rules system that allows project-level configura
 ```
 
 **Note on priority semantics:** Lower priority number = higher importance (P0 is critical, P4 is lowest).
-The threshold represents the HIGHEST priority number that should auto-kill.
-- `threshold: 1` → Only P0 and P1 auto-kill, P2-P4 require review
-- `threshold: 3` → P0-P3 auto-kill, only P4 requires review
+The threshold represents the HIGHEST priority number that should auto-proceed.
+- `threshold: 1` → Only P0 and P1 auto-proceed, P2-P4 require review
+- `threshold: 3` → P0-P3 auto-proceed, only P4 requires review
 
 #### Implementation
 
 ```bash
-# Parse command-line flags (set by dashboard based on user choice)
-# --kill: Session should self-destruct after completion (no review)
-KILL_FLAG=false
+# NOTE: The --kill flag is tracked by the dashboard (session lifecycle).
+# This script only determines COMPLETION_MODE which controls auto-spawning.
+# COMPLETION_MODE values:
+#   - "review_required" = don't auto-spawn next task
+#   - "auto_proceed" = auto-spawn next task (Epic Swarm)
 
-for arg in "$@"; do
-  case "$arg" in
-    --kill) KILL_FLAG=true ;;
-  esac
-done
+# Get task details
+task_json=$(bd show "$task_id" --json)
+task_notes=$(echo "$task_json" | jq -r '.[0].notes // ""')
+task_priority=$(echo "$task_json" | jq -r '.[0].priority')
+task_type=$(echo "$task_json" | jq -r '.[0].issue_type')
 
-# If --kill flag provided, skip all rule evaluation and auto-kill
-if [[ "$KILL_FLAG" == "true" ]]; then
-  COMPLETION_MODE="auto_kill"
-  echo "📋 Mode: Complete & Kill (self-destruct session)"
-else
-  # No flag provided - evaluate rules to determine completion mode
-  # This happens when user clicks "Complete" button (show completion block)
+COMPLETION_MODE=""  # Will be set by first matching rule: "review_required" or "auto_proceed"
 
-  # Get task details
-  task_json=$(bd show "$task_id" --json)
-  task_notes=$(echo "$task_json" | jq -r '.[0].notes // ""')
-  task_priority=$(echo "$task_json" | jq -r '.[0].priority')
-  task_type=$(echo "$task_json" | jq -r '.[0].issue_type')
-
-  COMPLETION_MODE=""  # Will be set by first matching rule: "review_required" or "auto_kill"
-
-  # Step 0: Check session epic context (highest priority)
+# Step 0: Check session epic context (highest priority)
 # Session context is set by dashboard when spawning agents for epic execution
 session_id=$(~/code/jat/scripts/get-current-session-id)
 context_file=".claude/sessions/context-${session_id}.json"
@@ -572,48 +562,48 @@ if [[ -f "$context_file" ]]; then
 
   if [[ -n "$epic_threshold" ]]; then
     # Convert reviewThreshold string to numeric threshold
-    # 'all' = always review (threshold -1)
-    # 'none' = never review (threshold 4)
-    # 'p0' = only P0 requires review (threshold -1 means P0+ auto-kill is wrong)
-    # 'p0-p1' = P0-P1 require review (threshold 1, P2+ auto-kill)
-    # 'p0-p2' = P0-P2 require review (threshold 2, P3+ auto-kill)
+    # 'all' = always review (no auto-spawn)
+    # 'none' = never review (always auto-spawn)
+    # 'p0' = only P0 requires review; P1+ auto-spawn
+    # 'p0-p1' = P0-P1 require review; P2+ auto-spawn
+    # 'p0-p2' = P0-P2 require review; P3+ auto-spawn
     case "$epic_threshold" in
       "all")
         echo "📋 Epic context: reviewThreshold='all' → All tasks require review"
         COMPLETION_MODE="review_required"
         ;;
       "none")
-        echo "📋 Epic context: reviewThreshold='none' → All tasks auto-kill"
-        COMPLETION_MODE="auto_kill"
+        echo "📋 Epic context: reviewThreshold='none' → All tasks auto-proceed"
+        COMPLETION_MODE="auto_proceed"
         ;;
       "p0")
-        # Only P0 requires review; P1+ auto-kill
+        # Only P0 requires review; P1+ auto-proceed
         if (( task_priority == 0 )); then
           echo "📋 Epic context: P0 task requires review (threshold: p0)"
           COMPLETION_MODE="review_required"
         else
-          echo "📋 Epic context: P${task_priority} task auto-kills (threshold: p0)"
-          COMPLETION_MODE="auto_kill"
+          echo "📋 Epic context: P${task_priority} task auto-proceeds (threshold: p0)"
+          COMPLETION_MODE="auto_proceed"
         fi
         ;;
       "p0-p1")
-        # P0-P1 require review; P2+ auto-kill
+        # P0-P1 require review; P2+ auto-proceed
         if (( task_priority <= 1 )); then
           echo "📋 Epic context: P${task_priority} task requires review (threshold: p0-p1)"
           COMPLETION_MODE="review_required"
         else
-          echo "📋 Epic context: P${task_priority} task auto-kills (threshold: p0-p1)"
-          COMPLETION_MODE="auto_kill"
+          echo "📋 Epic context: P${task_priority} task auto-proceeds (threshold: p0-p1)"
+          COMPLETION_MODE="auto_proceed"
         fi
         ;;
       "p0-p2")
-        # P0-P2 require review; P3+ auto-kill
+        # P0-P2 require review; P3+ auto-proceed
         if (( task_priority <= 2 )); then
           echo "📋 Epic context: P${task_priority} task requires review (threshold: p0-p2)"
           COMPLETION_MODE="review_required"
         else
-          echo "📋 Epic context: P${task_priority} task auto-kills (threshold: p0-p2)"
-          COMPLETION_MODE="auto_kill"
+          echo "📋 Epic context: P${task_priority} task auto-proceeds (threshold: p0-p2)"
+          COMPLETION_MODE="auto_proceed"
         fi
         ;;
       *)
@@ -631,9 +621,9 @@ if [[ -z "$COMPLETION_MODE" ]]; then
   if echo "$task_notes" | grep -q '\[REVIEW_OVERRIDE:always_review\]'; then
     echo "📋 Review override detected: always_review"
     COMPLETION_MODE="review_required"
-  elif echo "$task_notes" | grep -q '\[REVIEW_OVERRIDE:auto_kill\]'; then
-    echo "📋 Review override detected: auto_kill"
-    COMPLETION_MODE="auto_kill"
+  elif echo "$task_notes" | grep -q '\[REVIEW_OVERRIDE:auto_proceed\]'; then
+    echo "📋 Review override detected: auto_proceed"
+    COMPLETION_MODE="auto_proceed"
   elif echo "$task_notes" | grep -q '\[REVIEW_OVERRIDE:force_review\]'; then
     echo "📋 Review override detected: force_review"
     COMPLETION_MODE="review_required"
@@ -648,11 +638,11 @@ if [[ -z "$COMPLETION_MODE" ]]; then
       "$rules_file")
 
     if [[ "$max_auto" != "-1" && "$max_auto" != "null" && -n "$max_auto" ]]; then
-      # Compare: task can auto-kill if priority <= maxAutoPriority
+      # Compare: task can auto-proceed if priority <= maxAutoPriority
       # (lower number = higher priority, e.g., P0 < P3)
       if (( task_priority <= max_auto )); then
-        echo "📋 Auto-kill: P${task_priority} ${task_type} (max: P${max_auto})"
-        COMPLETION_MODE="auto_kill"
+        echo "📋 Auto-proceed: P${task_priority} ${task_type} (max: P${max_auto})"
+        COMPLETION_MODE="auto_proceed"
       else
         echo "📋 Review required: P${task_priority} ${task_type} (max auto: P${max_auto})"
         COMPLETION_MODE="review_required"
@@ -661,17 +651,17 @@ if [[ -z "$COMPLETION_MODE" ]]; then
       # No rule for this type, check defaultAction
       default_action=$(jq -r '.defaultAction // "review"' "$rules_file")
       if [[ "$default_action" == "auto" ]]; then
-        COMPLETION_MODE="auto_kill"
+        COMPLETION_MODE="auto_proceed"
       else
         COMPLETION_MODE="review_required"
       fi
     fi
   else
-    # Step 3: Fallback - NO auto-kill without explicit configuration
+    # Step 3: Fallback - NO auto-proceed without explicit configuration
     #
-    # CRITICAL: Auto-kill should ONLY happen when deliberately enabled:
+    # CRITICAL: Auto-proceed should ONLY happen when deliberately enabled:
     # 1. Epic context file exists (dashboard spawned agent for swarm)
-    # 2. Per-task override in notes ([REVIEW_OVERRIDE:auto_kill])
+    # 2. Per-task override in notes ([REVIEW_OVERRIDE:auto_proceed])
     # 3. Project has .beads/review-rules.json with explicit rules
     #
     # Without any of these, the user should decide what to do next.
@@ -693,7 +683,7 @@ echo "📋 Completion mode determined: ${COMPLETION_MODE}"
 | Override Value | COMPLETION_MODE | Behavior | Use Case |
 |----------------|-----------------|----------|----------|
 | `always_review` | `review_required` | Session stays open for human review | Testing override behavior |
-| `auto_kill` | `auto_kill` | Session self-destructs after completion | Skip review for specific task |
+| `auto_proceed` | `auto_proceed` | Session self-destructs after completion | Skip review for specific task |
 | `force_review` | `review_required` | Session stays open for human review | Force review even if rules say auto |
 
 #### Example review-rules.json
@@ -704,10 +694,10 @@ echo "📋 Completion mode determined: ${COMPLETION_MODE}"
   "defaultAction": "review",
   "priorityThreshold": 3,
   "rules": [
-    { "type": "bug", "maxAutoPriority": 3, "note": "P0-P3 bugs auto-kill" },
-    { "type": "feature", "maxAutoPriority": 3, "note": "P0-P3 features auto-kill" },
+    { "type": "bug", "maxAutoPriority": 3, "note": "P0-P3 bugs auto-proceed" },
+    { "type": "feature", "maxAutoPriority": 3, "note": "P0-P3 features auto-proceed" },
     { "type": "task", "maxAutoPriority": 3 },
-    { "type": "chore", "maxAutoPriority": 4, "note": "All chores auto-kill" },
+    { "type": "chore", "maxAutoPriority": 4, "note": "All chores auto-proceed" },
     { "type": "epic", "maxAutoPriority": -1, "note": "Epics always require review" }
   ],
   "overrides": []
@@ -715,11 +705,11 @@ echo "📋 Completion mode determined: ${COMPLETION_MODE}"
 ```
 
 **Understanding maxAutoPriority:**
-- Value represents highest priority number that can auto-kill
+- Value represents highest priority number that can auto-proceed
 - Lower priority number = higher importance (P0 is most critical)
-- `maxAutoPriority: 3` means P0, P1, P2, P3 can auto-kill; P4 requires review
-- `maxAutoPriority: -1` means no auto-kill (always review)
-- `maxAutoPriority: 4` means all priorities auto-kill
+- `maxAutoPriority: 3` means P0, P1, P2, P3 can auto-proceed; P4 requires review
+- `maxAutoPriority: -1` means no auto-proceed (always review)
+- `maxAutoPriority: 4` means all priorities auto-proceed
 
 #### Session Epic Context
 
@@ -800,7 +790,7 @@ The tool gathers all context (task details, git status, diffs, commits) and call
 # Generate the completion bundle (uses COMPLETION_MODE from Step 7.5)
 BUNDLE=$(jat-complete-bundle --task "$task_id" --agent "$agent_name" --mode "$COMPLETION_MODE")
 
-# If auto_kill with next task:
+# If auto_proceed with next task:
 # BUNDLE=$(jat-complete-bundle --task "$task_id" --agent "$agent_name" --mode auto_proceed --next-task "$next_task_id")
 
 # Emit the signal
@@ -922,7 +912,7 @@ The completion flow uses these signals (captured by PostToolUse hook):
 
 **The `jat-signal complete` bundle is the ONLY completion signal needed.** It includes:
 - `completionMode: "review_required"` → Dashboard shows COMPLETED state, session stays open for review
-- `completionMode: "auto_kill"` with `nextTaskId` → Dashboard auto-kills session and spawns next task
+- `completionMode: "auto_proceed"` with `nextTaskId` → Dashboard spawns next task (Epic Swarm)
 
 ### Completing Signal Progress Sequence
 
@@ -955,7 +945,7 @@ jat-signal completing '{
 **Completion mode is determined in Step 7.5** based on:
 1. Per-task override in notes (`[REVIEW_OVERRIDE:...]`)
 2. Project review rules (`.beads/review-rules.json`)
-3. Safe default: review required (no auto-kill without explicit configuration)
+3. Safe default: review required (no auto-proceed without explicit configuration)
 
 **Critical timing:**
 - Do NOT run `jat-signal complete` until AFTER all completion steps succeed

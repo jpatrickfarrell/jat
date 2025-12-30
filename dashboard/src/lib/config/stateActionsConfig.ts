@@ -92,6 +92,14 @@ export const BUILTIN_ACTIONS_CATALOG: AvailableBuiltinAction[] = [
 		defaultStates: ['ready-for-review']
 	},
 	{
+		id: 'complete-kill',
+		label: 'Complete & Kill',
+		description: 'Complete task and self-destruct session',
+		icon: 'M9 12.75L11.25 15 15 9.75m0 0l3 3m-3-3v7.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+		variant: 'warning',
+		defaultStates: ['ready-for-review', 'working']
+	},
+	{
 		id: 'start',
 		label: 'Pick Task',
 		description: 'Run /jat:start to pick a task (not used in one-task-one-session model)',

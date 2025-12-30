@@ -165,12 +165,13 @@ export interface CompletionBundle {
 	suggestedTasks?: SuggestedTask[];
 	/** Intel for other agents working in the codebase */
 	crossAgentIntel?: CrossAgentIntel;
-	/** Completion mode determines dashboard behavior
-	 * - 'review_required': User reviews completion before session ends
-	 * - 'auto_proceed': Auto-spawn next task and cleanup this session
-	 * - 'auto_kill': Cleanup session without spawning next task
+	/** Completion mode determines task spawning behavior (Epic Swarm)
+	 * - 'review_required': Don't auto-spawn next task
+	 * - 'auto_proceed': Spawn next task from epic queue
+	 *
+	 * NOTE: Session lifecycle (kill) is tracked separately by dashboard via pendingAutoKill store.
 	 */
-	completionMode?: 'review_required' | 'auto_proceed' | 'auto_kill';
+	completionMode?: 'review_required' | 'auto_proceed';
 	/** For auto_proceed mode: next task to spawn */
 	nextTaskId?: string;
 	/** Title of the next task */

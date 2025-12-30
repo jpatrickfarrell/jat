@@ -781,6 +781,13 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 	],
 	working: [
 		{
+			id: 'complete-kill',
+			label: 'Complete & Kill',
+			icon: 'M9 12.75L11.25 15 15 9.75m0 0l3 3m-3-3v7.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+			variant: 'warning',
+			description: 'Complete task and self-destruct session'
+		},
+		{
 			id: 'interrupt',
 			label: 'Interrupt',
 			icon: 'M15.75 5.25v13.5m-7.5-13.5v13.5',

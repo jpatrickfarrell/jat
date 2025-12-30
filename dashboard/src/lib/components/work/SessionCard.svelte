@@ -51,6 +51,7 @@
 	import TerminalActivitySparkline from "./TerminalActivitySparkline.svelte";
 	import { workSessionsState } from "$lib/stores/workSessions.svelte";
 	import { autoKillCountdowns, cancelAutoKill } from "$lib/stores/sessionEvents";
+	import { setPendingAutoKill } from "$lib/stores/autoKillConfig";
 	import EventStack from "./EventStack.svelte";
 	import StreakCelebration from "$lib/components/StreakCelebration.svelte";
 	import SuggestedTasksSection from "./SuggestedTasksSection.svelte";
@@ -2376,6 +2377,9 @@
 				`[SessionCard] Auto-completing ${sessionName} (review rules: auto for ${reviewStatus.reason})`,
 			);
 
+			// Track intent so sessionEvents knows to auto-kill when signal arrives
+			setPendingAutoKill(sessionName, true);
+
 			// Brief delay so user sees the state transition in the UI
 			setTimeout(async () => {
 				try {
@@ -3527,6 +3531,8 @@
 
 			case "complete-kill":
 				// Run /jat:complete --kill command (self-destruct session)
+				// Track intent so sessionEvents knows to auto-kill when signal arrives
+				setPendingAutoKill(sessionName, true);
 				await sendWorkflowCommand("/jat:complete --kill");
 				break;
 

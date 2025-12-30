@@ -377,13 +377,14 @@ export interface CompletedSignal {
 	prLink?: string;
 
 	// Completion mode fields
-	/** Completion mode determines dashboard behavior
-	 * - 'review_required': User reviews completion before session ends
-	 * - 'auto_proceed': Auto-spawn next task and cleanup this session
-	 * - 'auto_kill': Cleanup session without spawning next task
+	/** Completion mode determines task spawning behavior (Epic Swarm)
+	 * - 'review_required': Don't auto-spawn next task
+	 * - 'auto_proceed': Spawn next task from epic queue
+	 *
+	 * NOTE: Session lifecycle (kill) is tracked separately by dashboard via pendingAutoKill store.
 	 */
-	completionMode?: 'review_required' | 'auto_proceed' | 'auto_kill';
-	/** Next task to pick up (if auto-proceed enabled) */
+	completionMode?: 'review_required' | 'auto_proceed';
+	/** Next task to spawn (if auto_proceed mode) */
 	nextTaskId?: string;
 	/** Title of the next task */
 	nextTaskTitle?: string;

@@ -2526,13 +2526,23 @@ const userTemplates = allTemplates.filter(t => t.isUserTemplate);
 
 - jat-4e31: Add custom user templates (completed)
 
-## Swarm Settings
+## Autopilot Settings
 
 ### Overview
 
-The **SwarmSettingsEditor** component (`src/lib/components/config/SwarmSettingsEditor.svelte`) provides a unified interface for configuring agent swarm/orchestration behavior. It consolidates spawn settings and review rules into a single settings panel.
+The **SwarmSettingsEditor** component (`src/lib/components/config/SwarmSettingsEditor.svelte`) provides a unified interface for configuring agent autopilot behavior. It consolidates spawn settings and review rules into a single settings panel.
 
-**Location:** Settings page (`/config`) → Swarm Settings tab
+**Location:** Settings page (`/config`) → Autopilot tab
+
+### Terminology
+
+| Term | Meaning |
+|------|---------|
+| `auto_proceed` | Signal value: spawn next task (Epic Swarm) |
+| `review_required` | Signal value: don't auto-spawn |
+| **spawn** | Create a new session for the next task |
+| **auto-complete** | Dashboard auto-triggers `/jat:complete` based on review rules |
+| **auto-kill** | Session self-destructs (tracked by dashboard, not in signal) |
 
 ### Features
 
@@ -2646,7 +2656,7 @@ export const JAT_DEFAULTS = {
 
 **From Dashboard UI:**
 1. Navigate to Settings (`/config`)
-2. Select "Swarm Settings" tab
+2. Select "Autopilot" tab
 3. Adjust spawn configuration values
 4. Click matrix cells to toggle review rules
 5. Click "Save" to persist changes

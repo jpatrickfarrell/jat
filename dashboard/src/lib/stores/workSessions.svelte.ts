@@ -299,14 +299,24 @@ export async function fetch(includeUsage: boolean = false, bustCache: boolean = 
 		const timeoutMs = 10000;
 		const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-		// Create the fetch promise and attach a no-op catch handler synchronously
-		// This prevents "Uncaught (in promise) DOMException" during HMR/navigation
-		// when the abort fires but the promise chain has been garbage collected
-		const fetchPromise = throttledFetch(url, { signal: controller.signal });
-		fetchPromise.catch(() => {}); // Prevent unhandled rejection
-
-		const response = await fetchPromise;
+		// Create the fetch promise with inline catch to properly suppress abort errors
+		// The catch() handler must be on the same promise we await, not a separate branch
+		const response = await throttledFetch(url, { signal: controller.signal })
+			.catch((err: unknown) => {
+				// Suppress abort errors (will be null response)
+				if (err instanceof DOMException || err instanceof Error) {
+					if (err.name === 'AbortError' || err.name === 'TimeoutError') {
+						return null;
+					}
+				}
+				throw err;
+			});
 		clearTimeout(timeoutId);
+
+		// If request was aborted, exit silently
+		if (!response) {
+			return;
+		}
 		const data = await response.json();
 
 		if (!response.ok) {

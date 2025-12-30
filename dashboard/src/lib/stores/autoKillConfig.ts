@@ -3,6 +3,19 @@
  *
  * Manages runtime configuration for auto-killing completed sessions.
  * This store is loaded from the API at startup and updated when the user saves settings.
+ *
+ * ## Two Types of Auto-Kill
+ *
+ * 1. **User Intent (pendingAutoKill)** - When user clicks "Complete & Kill" button,
+ *    we track that they explicitly want the session killed after completion.
+ *    This is checked when the complete signal arrives.
+ *
+ * 2. **Auto-Complete (priority-based)** - When review rules say "auto" for a task,
+ *    the dashboard auto-triggers /jat:complete and then auto-kills based on
+ *    the autoKillConfig settings.
+ *
+ * The pendingAutoKill store takes precedence: if user clicked "Complete & Kill",
+ * we kill regardless of priority settings.
  */
 
 import { writable, get } from 'svelte/store';
@@ -109,4 +122,66 @@ export function getAutoKillDelayForPriority(priority: number | null | undefined)
 	// Use the user-configured delay for all enabled priorities
 	if (config.defaultDelaySeconds === null) return null;
 	return Math.min(config.defaultDelaySeconds, config.maxDelaySeconds);
+}
+
+// ============================================================================
+// Pending Auto-Kill Intent Store
+// ============================================================================
+
+/**
+ * Tracks which sessions have pending auto-kill intent from user action.
+ *
+ * When user clicks "Complete & Kill" in SessionCard:
+ * 1. setPendingAutoKill(sessionName, true) is called
+ * 2. /jat:complete --kill is sent to the session
+ * 3. When complete signal arrives, sessionEvents checks this store
+ * 4. If pending, session is killed regardless of priority settings
+ * 5. clearPendingAutoKill(sessionName) cleans up
+ *
+ * This separates "user explicitly wants kill" from "auto-kill based on config".
+ */
+const pendingAutoKillMap = writable<Map<string, boolean>>(new Map());
+
+/**
+ * Set pending auto-kill intent for a session.
+ * Call this when user clicks "Complete & Kill" button.
+ */
+export function setPendingAutoKill(sessionName: string, shouldKill: boolean): void {
+	pendingAutoKillMap.update((map) => {
+		const newMap = new Map(map);
+		if (shouldKill) {
+			newMap.set(sessionName, true);
+		} else {
+			newMap.delete(sessionName);
+		}
+		return newMap;
+	});
+}
+
+/**
+ * Check if a session has pending auto-kill intent.
+ * Returns true if user clicked "Complete & Kill" and signal hasn't arrived yet.
+ */
+export function hasPendingAutoKill(sessionName: string): boolean {
+	return get(pendingAutoKillMap).get(sessionName) === true;
+}
+
+/**
+ * Clear pending auto-kill intent for a session.
+ * Call this after the session has been killed or the intent is no longer valid.
+ */
+export function clearPendingAutoKill(sessionName: string): void {
+	pendingAutoKillMap.update((map) => {
+		const newMap = new Map(map);
+		newMap.delete(sessionName);
+		return newMap;
+	});
+}
+
+/**
+ * Get all sessions with pending auto-kill intent.
+ * Useful for debugging or status display.
+ */
+export function getPendingAutoKillSessions(): string[] {
+	return Array.from(get(pendingAutoKillMap).keys());
 }

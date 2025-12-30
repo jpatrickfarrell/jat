@@ -24,7 +24,7 @@ import { workSessionsState, type WorkSession } from './workSessions.svelte';
 import { processSessionOutput, onAutomationTrigger, clearRecoveringState } from '$lib/utils/automationEngine';
 import { initializeStore as initAutomationStore, clearSessionTriggers, getRuleById } from '$lib/stores/automationRules.svelte';
 import { getIsActive as isEpicSwarmActive, getChildren as getEpicChildren, getNextReadyTask as getNextEpicTask } from './epicQueueStore.svelte';
-import { getAutoKillDelayForPriority, isAutoKillEnabled } from './autoKillConfig';
+import { getAutoKillDelayForPriority, isAutoKillEnabled, hasPendingAutoKill, clearPendingAutoKill } from './autoKillConfig';
 import { addToast } from './toasts.svelte';
 
 // Track scheduled auto-kill timers by session name
@@ -540,9 +540,25 @@ function handleSessionComplete(data: SessionEvent): void {
 	}
 
 	// Schedule auto-kill for completed session
+	// Two sources of auto-kill intent:
+	// 1. User clicked "Complete & Kill" button (tracked in pendingAutoKill store)
+	// 2. Priority-based auto-kill (from autoKillConfig settings)
 	const session = workSessionsState.sessions[sessionIndex];
 	const taskPriority = session.task?.priority ?? null;
-	const autoKillDelay = getAutoKillDelay(taskPriority);
+	const userWantsKill = hasPendingAutoKill(sessionName);
+
+	// User intent takes precedence over priority-based settings
+	let autoKillDelay: number | null;
+	if (userWantsKill) {
+		// User explicitly wants kill - use immediate or very short delay
+		autoKillDelay = 0;
+		console.log(`[AutoKill] User intent: ${sessionName} will be killed immediately`);
+		// Clear the pending intent
+		clearPendingAutoKill(sessionName);
+	} else {
+		// Fall back to priority-based settings
+		autoKillDelay = getAutoKillDelay(taskPriority);
+	}
 
 	if (autoKillDelay !== null && autoKillDelay > 0) {
 		scheduleAutoKill(sessionName, autoKillDelay);

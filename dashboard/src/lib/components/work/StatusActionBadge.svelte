@@ -447,6 +447,8 @@
 			// Show toast notification based on result
 			if (data.alreadyLinked) {
 				infoToast(`Task already linked to epic`);
+			} else if (data.movedFrom) {
+				successToast(`Task ${task.id} moved from ${data.movedFrom} to ${epicId}`);
 			} else if (data.epicReopened) {
 				successToast(`Task ${task.id} linked to epic ${epicId} (epic reopened)`);
 			} else {
@@ -958,7 +960,7 @@
 										{:else}
 											<button
 												type="button"
-												onclick={() => { showCreateEpic = true; setTimeout(() => newEpicInput?.focus(), 50); }}
+												onclick={(e) => { e.stopPropagation(); showCreateEpic = true; setTimeout(() => newEpicInput?.focus(), 50); }}
 												class="w-full px-3 py-1.5 flex items-center gap-2 text-[10px] text-base-content/50 hover:text-base-content/80 hover:bg-base-content/5 transition-colors"
 												disabled={disabled || linkingEpicId !== null}
 											>

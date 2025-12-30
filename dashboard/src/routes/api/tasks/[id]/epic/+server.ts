@@ -73,6 +73,58 @@ async function reopenEpic(epicId: string, projectPath?: string): Promise<boolean
 }
 
 /**
+ * Find the epic(s) that a task is currently linked to (parent epics that depend on this task)
+ */
+async function findParentEpics(taskId: string, projectPath?: string): Promise<string[]> {
+	try {
+		// bd dep tree --reverse shows what depends ON this task
+		let command = `bd dep tree '${escapeForShell(taskId)}' --reverse --json`;
+		if (projectPath) {
+			command = `cd '${escapeForShell(projectPath)}' && ${command}`;
+		}
+
+		const { stdout } = await execAsync(command, { timeout: 10000 });
+		const result = JSON.parse(stdout.trim());
+
+		// Result is an array of tasks. depth=0 is the task itself, depth>0 are parents.
+		// Filter to only return epics at depth > 0 (direct parent epics)
+		const parentEpics: string[] = [];
+		if (Array.isArray(result)) {
+			for (const item of result) {
+				// depth=1 means direct parent (epic depends on this task)
+				if (item.depth === 1 && item.issue_type === 'epic') {
+					parentEpics.push(item.id);
+				}
+			}
+		}
+
+		return parentEpics;
+	} catch {
+		// If command fails (e.g., no dependencies), return empty array
+		return [];
+	}
+}
+
+/**
+ * Remove a task from an epic (remove the epic->task dependency)
+ */
+async function unlinkFromEpic(taskId: string, epicId: string, projectPath?: string): Promise<boolean> {
+	try {
+		let command = `bd dep remove '${escapeForShell(epicId)}' '${escapeForShell(taskId)}'`;
+		if (projectPath) {
+			command = `cd '${escapeForShell(projectPath)}' && ${command}`;
+		}
+
+		await execAsync(command, { timeout: 10000 });
+		console.log(`[task-epic] Removed task ${taskId} from epic ${epicId}`);
+		return true;
+	} catch (error) {
+		console.error(`[task-epic] Failed to remove task ${taskId} from epic ${epicId}:`, error);
+		return false;
+	}
+}
+
+/**
  * POST /api/tasks/[id]/epic
  * Link a task to an epic by adding epic->child dependency
  * Body: { epicId: string }
@@ -123,6 +175,32 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			}
 		}
 
+		// Check if task is already in an epic (support "move" between epics)
+		const currentEpics = await findParentEpics(taskId, projectPath);
+		let movedFrom: string | null = null;
+
+		// If already in the target epic, return early
+		if (currentEpics.includes(epicId)) {
+			return json({
+				success: true,
+				message: `Task ${taskId} is already linked to epic ${epicId}`,
+				taskId,
+				epicId,
+				alreadyLinked: true
+			});
+		}
+
+		// If in a different epic, remove from the old one first (move operation)
+		if (currentEpics.length > 0) {
+			for (const oldEpicId of currentEpics) {
+				const removed = await unlinkFromEpic(taskId, oldEpicId, projectPath);
+				if (removed) {
+					movedFrom = oldEpicId;
+					console.log(`[task-epic] Moving task ${taskId} from epic ${oldEpicId} to ${epicId}`);
+				}
+			}
+		}
+
 		// CRITICAL: Dependency direction is epic depends on child
 		// This makes child READY (can be worked on) and epic BLOCKED (until children complete)
 		// The command is: bd dep add [A] [B] meaning "A depends on B"
@@ -156,16 +234,33 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		invalidateCache.agents();
 		_resetTaskCache();
 
-		console.log(`[task-epic] Linked task ${taskId} to epic ${epicId}${epicReopened ? ' (epic was reopened)' : ''}`);
+		// Build log message
+		let logMsg = `[task-epic] `;
+		if (movedFrom) {
+			logMsg += `Moved task ${taskId} from epic ${movedFrom} to ${epicId}`;
+		} else {
+			logMsg += `Linked task ${taskId} to epic ${epicId}`;
+		}
+		if (epicReopened) logMsg += ' (epic was reopened)';
+		console.log(logMsg);
+
+		// Build response message
+		let message: string;
+		if (movedFrom) {
+			message = `Task ${taskId} moved from ${movedFrom} to ${epicId}`;
+		} else if (epicReopened) {
+			message = `Task ${taskId} linked to epic ${epicId} (epic was reopened)`;
+		} else {
+			message = `Task ${taskId} linked to epic ${epicId}`;
+		}
 
 		return json({
 			success: true,
-			message: epicReopened
-				? `Task ${taskId} linked to epic ${epicId} (epic was reopened)`
-				: `Task ${taskId} linked to epic ${epicId}`,
+			message,
 			taskId,
 			epicId,
-			epicReopened
+			epicReopened,
+			movedFrom
 		});
 
 	} catch (error) {

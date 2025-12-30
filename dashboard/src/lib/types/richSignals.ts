@@ -494,9 +494,13 @@ export interface StartingSignal {
 	project: string;
 	/** Claude Code session ID */
 	sessionId: string;
+	/** Task ID if starting on a specific task */
+	taskId?: string;
+	/** Task title if starting on a specific task */
+	taskTitle?: string;
 
 	// Capabilities
-	/** Model being used (e.g., "sonnet-4.5") */
+	/** Model being used (e.g., "claude-opus-4-5-20251101") */
 	model: string;
 	/** Available tools in this session */
 	tools: string[];

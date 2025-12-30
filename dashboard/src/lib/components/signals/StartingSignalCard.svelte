@@ -136,6 +136,27 @@
 
 		<!-- Body -->
 		<div class="p-3 flex flex-col gap-3">
+			<!-- Task Info (if starting on a specific task) -->
+			{#if signal.taskId}
+				<div class="flex flex-col gap-1.5">
+					<div class="flex items-center gap-2">
+						<span class="text-[10px] font-semibold opacity-60 text-base-content/60">
+							TASK
+						</span>
+						<span
+							class="text-[10px] px-1.5 py-0.5 rounded font-mono bg-warning/20 text-warning border border-warning/30"
+						>
+							{signal.taskId}
+						</span>
+					</div>
+					{#if signal.taskTitle}
+						<div class="text-[11px] text-base-content/80 leading-relaxed">
+							{signal.taskTitle}
+						</div>
+					{/if}
+				</div>
+			{/if}
+
 			<!-- Session ID (copyable) -->
 			<div class="flex items-center gap-2">
 				<span class="text-[10px] font-semibold opacity-60 text-base-content/60">

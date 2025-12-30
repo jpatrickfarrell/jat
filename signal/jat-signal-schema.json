@@ -736,6 +736,14 @@
           "type": "string",
           "description": "Claude Code session ID"
         },
+        "taskId": {
+          "type": "string",
+          "description": "Task ID if starting on a specific task"
+        },
+        "taskTitle": {
+          "type": "string",
+          "description": "Task title if starting on a specific task"
+        },
         "model": {
           "type": "string",
           "description": "Model being used"

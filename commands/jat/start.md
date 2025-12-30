@@ -118,10 +118,35 @@ am-send "[$TASK_ID] Starting: $TASK_TITLE" "Starting work" --from "$AGENT_NAME" 
 
 ### STEP 7: Emit Signals & Plan
 
-**Starting signal** (with session info):
+**Starting signal** (with full session context for dashboard display):
 ```bash
-jat-signal starting '{"agentName":"...","sessionId":"...","taskId":"...","taskTitle":"...","project":"..."}'
+jat-signal starting '{
+  "agentName": "AgentName",
+  "sessionId": "abc123-...",
+  "taskId": "jat-xyz",
+  "taskTitle": "Task title",
+  "project": "projectname",
+  "model": "claude-opus-4-5-20251101",
+  "tools": ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch", "Task", "TodoWrite", "AskUserQuestion"],
+  "gitBranch": "master",
+  "gitStatus": "clean",
+  "uncommittedFiles": []
+}'
 ```
+
+**Required fields:**
+- `agentName` - Your assigned agent name
+- `sessionId` - Claude Code session ID (from get-current-session-id)
+- `project` - Project name (e.g., "jat", "chimaro")
+- `model` - Full model ID (e.g., "claude-opus-4-5-20251101", "claude-sonnet-4-20250514")
+- `tools` - Array of available tools in this session
+- `gitBranch` - Current git branch name
+- `gitStatus` - "clean" or "dirty"
+- `uncommittedFiles` - Array of modified file paths (if dirty)
+
+**Optional fields:**
+- `taskId` - Task ID if starting on a specific task
+- `taskTitle` - Task title if starting on a specific task
 
 **Working signal** (with approach):
 ```bash
@@ -218,12 +243,12 @@ To work on another task → spawn new agent
 
 ## Signal Reference
 
-| Signal | State | When |
-|--------|-------|------|
-| `jat-signal starting '{...}'` | Starting | After registration |
-| `jat-signal working '{...}'` | Working | After reading task |
-| `jat-signal needs_input '{...}'` | Needs Input | Clarification needed |
-| `jat-signal review '{...}'` | Ready for Review | Code complete |
+| Signal | State | When | Key Fields |
+|--------|-------|------|------------|
+| `jat-signal starting '{...}'` | Starting | After registration | agentName, model, gitBranch, gitStatus, tools |
+| `jat-signal working '{...}'` | Working | After reading task | taskId, taskTitle, approach, expectedFiles |
+| `jat-signal needs_input '{...}'` | Needs Input | Clarification needed | taskId, question, questionType |
+| `jat-signal review '{...}'` | Ready for Review | Code complete | taskId, summary, filesModified |
 
 ---
 

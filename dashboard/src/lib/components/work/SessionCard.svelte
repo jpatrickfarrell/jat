@@ -186,6 +186,7 @@
 			type: "text" | "key" | "raw",
 		) => Promise<boolean | void>;
 		onDismiss?: () => void; // Agent mode: called when completion banner auto-dismisses
+		onTaskDataChange?: () => Promise<void> | void; // Called when task data changes (e.g., linked to epic)
 		// Server mode callbacks
 		onStopServer?: () => Promise<void>;
 		onRestartServer?: () => Promise<void>;
@@ -305,6 +306,7 @@
 		onTaskClick,
 		onSendInput,
 		onDismiss,
+		onTaskDataChange,
 		// Server mode callbacks
 		onStopServer,
 		onRestartServer,
@@ -4382,6 +4384,7 @@
 						task={taskForEpicLinking}
 						project={defaultProject || null}
 						onViewEpic={(epicId) => onTaskClick?.(epicId)}
+						onLinkToEpic={() => onTaskDataChange?.()}
 					/>
 				{/if}
 			</div>
@@ -5022,6 +5025,7 @@
 						task={taskForEpicLinking}
 						project={defaultProject || null}
 						onViewEpic={(epicId) => onTaskClick?.(epicId)}
+						onLinkToEpic={() => onTaskDataChange?.()}
 					/>
 				</div>
 			</div>
@@ -6735,6 +6739,7 @@
 									task={taskForEpicLinking}
 									project={defaultProject || null}
 									onViewEpic={(epicId) => onTaskClick?.(epicId)}
+									onLinkToEpic={() => onTaskDataChange?.()}
 								/>
 							{/if}
 						{:else if sessionState === "ready-for-review" || sessionState === "idle" || (sessionState === "working" && task) || sessionState === "completing" || detectedWorkflowCommands.length > 0}
@@ -6756,6 +6761,7 @@
 								task={taskForEpicLinking}
 								project={defaultProject || null}
 								onViewEpic={(epicId) => onTaskClick?.(epicId)}
+								onLinkToEpic={() => onTaskDataChange?.()}
 							/>
 						{:else if detectedOptions.length > 0}
 							<!-- Prompt options detected: show quick action buttons -->

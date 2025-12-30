@@ -1552,6 +1552,7 @@
 																	onSendInput={(input, type) => handleSendInput(session.sessionName, input, type)}
 																	onTaskClick={handleTaskClick}
 																	isHighlighted={highlightedAgent === session.agentName}
+																	onTaskDataChange={() => fetchTaskData()}
 																/>
 															</div>
 														{/each}
@@ -1632,6 +1633,7 @@
 																	onSendInput={(input, type) => handleSendInput(session.sessionName, input, type)}
 																	onTaskClick={handleTaskClick}
 																	isHighlighted={highlightedAgent === session.agentName}
+																	onTaskDataChange={() => fetchTaskData()}
 																/>
 															</div>
 														{/each}

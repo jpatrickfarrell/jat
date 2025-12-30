@@ -450,7 +450,7 @@
 				successToast(`Task ${task.id} linked to epic ${epicId}`);
 			}
 
-			// Call the callback if provided (refreshes task data)
+			// Call the callback if provided (refreshes task and session data)
 			await onLinkToEpic?.(epicId);
 
 			// Close dropdown on success

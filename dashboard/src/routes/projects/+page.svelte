@@ -247,6 +247,10 @@
 
 	// Memoized session grouping by project - computed once per project, reused
 	const sessionsByEpicCache = $derived.by(() => {
+		// Explicitly read epicChildMap to ensure Svelte tracks it as a dependency
+		const epicMap = epicChildMap;
+		const lookupMap = taskLookup;
+
 		const cache = new Map<string, { epicSessions: Map<string, typeof workSessionsState.sessions>, nonEpicSessions: typeof workSessionsState.sessions }>();
 
 		for (const [project, sessions] of sessionsByProject.entries()) {
@@ -254,14 +258,15 @@
 			const nonEpicSessions: typeof workSessionsState.sessions = [];
 
 			for (const session of sessions) {
-				const taskId = session.task?.id;
+				// Check both current task and lastCompletedTask for idle sessions
+				const taskId = session.task?.id || session.lastCompletedTask?.id;
 				if (!taskId) {
 					nonEpicSessions.push(session);
 					continue;
 				}
 
 				// O(1) lookup instead of O(n) array search
-				const task = taskLookup.get(taskId);
+				const task = lookupMap.get(taskId);
 				if (task?.issue_type === 'epic') {
 					const existing = epicSessions.get(taskId) || [];
 					existing.push(session);
@@ -269,7 +274,7 @@
 					continue;
 				}
 
-				const parentEpic = getParentEpicId(taskId, epicChildMap);
+				const parentEpic = getParentEpicId(taskId, epicMap);
 				if (parentEpic) {
 					const existing = epicSessions.get(parentEpic) || [];
 					existing.push(session);
@@ -298,7 +303,8 @@
 		const nonEpicSessions: typeof workSessionsState.sessions = [];
 
 		for (const session of sessions) {
-			const taskId = session.task?.id;
+			// Check both current task and lastCompletedTask for idle sessions
+			const taskId = session.task?.id || session.lastCompletedTask?.id;
 			if (!taskId) {
 				nonEpicSessions.push(session);
 				continue;
@@ -790,6 +796,15 @@
 		} finally {
 			isInitialLoad = false;
 		}
+	}
+
+	// Refresh after linking task to epic - busts both task and session caches
+	async function handleEpicLinkRefresh() {
+		// Fetch fresh task data (includes epic dependencies)
+		await fetchTaskData(true);
+
+		// Fetch fresh session data (busts server-side task cache)
+		await fetchSessions(false, true);
 	}
 
 	// Event handlers
@@ -1472,7 +1487,7 @@
 						<div class="flex flex-col">
 							<!-- Sessions Section - grouped by epic -->
 							{#if filteredSessions.length > 0 && !sessionState.collapsed}
-								{@const { epicSessions, nonEpicSessions } = getSessionsByEpic(filteredSessions)}
+								{@const { epicSessions, nonEpicSessions } = getSessionsByEpic(filteredSessions, project)}
 								{@const effectiveHeight = getEffectiveSessionsHeight(project, filteredSessions, sessionState.height)}
 								<div class="border-b border-base-300" transition:slide={{ duration: 200 }}>
 									<!-- Sessions content - auto-shrinks when all groups collapsed -->
@@ -1552,7 +1567,7 @@
 																	onSendInput={(input, type) => handleSendInput(session.sessionName, input, type)}
 																	onTaskClick={handleTaskClick}
 																	isHighlighted={highlightedAgent === session.agentName}
-																	onTaskDataChange={() => fetchTaskData()}
+																	onTaskDataChange={handleEpicLinkRefresh}
 																/>
 															</div>
 														{/each}
@@ -1633,7 +1648,7 @@
 																	onSendInput={(input, type) => handleSendInput(session.sessionName, input, type)}
 																	onTaskClick={handleTaskClick}
 																	isHighlighted={highlightedAgent === session.agentName}
-																	onTaskDataChange={() => fetchTaskData()}
+																	onTaskDataChange={handleEpicLinkRefresh}
 																/>
 															</div>
 														{/each}

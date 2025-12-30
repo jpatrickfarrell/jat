@@ -93,34 +93,40 @@ bd-epic-child jat-epic jat-child  # Epic blocked until child completes
 
 ### JAT Completion
 
-`jat-complete-bundle` - Generate CompletionBundle JSON via LLM
+`jat-step` - Execute completion step with automatic signal emission
 
-**Purpose:** Gathers git context and task info, calls Anthropic API to generate a structured completion bundle for the `jat-signal complete` command.
+| Step | Action | Signal |
+|------|--------|--------|
+| `verifying` | Emit only (agent does verification) | completing (0%) |
+| `committing` | git add + commit | completing (20%) |
+| `closing` | bd close | completing (40%) |
+| `releasing` | am-release all | completing (60%) |
+| `announcing` | am-send completion | completing (80%) |
+| `complete` | Generate bundle + emit complete signal | complete (100%) |
 
-| Option | Description |
-|--------|-------------|
-| `--task <id>` | Task ID (required) |
-| `--agent <name>` | Agent name (required) |
-| `--mode <mode>` | `review_required` (default) or `auto_proceed` |
-| `--next-task <id>` | Next task ID (for auto_proceed mode) |
+**Usage:**
+```bash
+jat-step <step> --task <id> --title <title> --agent <name> [--type <type>]
+```
 
-**Requires:** `ANTHROPIC_API_KEY` environment variable
+**The `complete` step:**
+- Calls `jat-complete-bundle` with auto-detected review mode
+- Generates structured completion bundle via LLM
+- Emits the final `complete` signal to dashboard
+- Auto-detects completion mode from task notes, session context, and project rules
 
 **Example:**
 ```bash
-# Generate bundle and emit signal
-BUNDLE=$(jat-complete-bundle --task jat-abc --agent FreeOcean)
-jat-signal complete "$BUNDLE"
-
-# Auto-proceed to next task
-jat-complete-bundle --task jat-abc --agent FreeOcean --mode auto_proceed --next-task jat-def
+# Run all completion steps
+jat-step verifying --task jat-abc --title "Add auth" --agent FreeOcean
+jat-step committing --task jat-abc --title "Add auth" --agent FreeOcean --type feature
+jat-step closing --task jat-abc --title "Add auth" --agent FreeOcean
+jat-step releasing --task jat-abc --title "Add auth" --agent FreeOcean
+jat-step announcing --task jat-abc --title "Add auth" --agent FreeOcean
+jat-step complete --task jat-abc --title "Add auth" --agent FreeOcean
 ```
 
-**What it does:**
-1. Fetches task details from Beads
-2. Collects git status, diff stats, and recent commits
-3. Sends context to LLM to generate structured summary
-4. Outputs JSON suitable for `jat-signal complete`
+**Requires:** `ANTHROPIC_API_KEY` environment variable (for `complete` step)
 
 ### Quick Patterns
 

@@ -389,9 +389,9 @@
 									{/if}
 								</button>
 
-								<!-- Expanded SessionCard -->
+								<!-- Expanded SessionCard - Fixed height so SessionCard's internal scroll works -->
 								{#if isExpanded}
-									<div class="triage-input-expanded border-t px-2 pb-2">
+									<div class="triage-input-expanded border-t px-2 pb-2" style="height: 60vh;">
 										<SessionCard
 											sessionName={session.sessionName}
 											agentName={session.agentName}
@@ -486,7 +486,7 @@
 
 								<!-- Expanded SessionCard -->
 								{#if isExpanded}
-									<div class="triage-review-expanded border-t px-2 pb-2">
+									<div class="triage-review-expanded border-t px-2 pb-2" style="height: 60vh;">
 										<SessionCard
 											sessionName={session.sessionName}
 											agentName={session.agentName}
@@ -573,7 +573,7 @@
 						<!-- Expanded SessionCard for working session (if any) -->
 						{#each workingSessions as session (session.sessionName)}
 							{#if expandedSession === session.sessionName}
-								<div class="bg-base-300/60 border border-info/25 mt-4 rounded-xl overflow-hidden">
+								<div class="bg-base-300/60 border border-info/25 mt-4 rounded-xl overflow-hidden" style="height: 60vh;">
 									<div class="p-2">
 										<SessionCard
 											sessionName={session.sessionName}
@@ -630,7 +630,7 @@
 					<!-- Expanded SessionCard for idle session -->
 					{#each idleSessions as session (session.sessionName)}
 						{#if expandedSession === session.sessionName}
-							<div class="bg-base-300/40 border border-base-content/[0.15] mt-4 rounded-xl overflow-hidden">
+							<div class="bg-base-300/40 border border-base-content/[0.15] mt-4 rounded-xl overflow-hidden" style="height: 60vh;">
 								<div class="p-2">
 									<SessionCard
 										sessionName={session.sessionName}

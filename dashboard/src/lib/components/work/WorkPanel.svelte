@@ -142,17 +142,32 @@
 
 	// Animation duration (matches CSS animation: 0.5s)
 	const EXIT_ANIMATION_DURATION = 500;
+	const ENTRANCE_ANIMATION_DURATION = 500;
 
 	// Map of session data for sessions that are animating out
 	// Key: sessionName, Value: frozen session data + isExiting flag
 	let exitingSessionsData = $state<Map<string, WorkSession & { _isExiting: true }>>(new Map());
 
-	// Track previous workSessions to detect removals
+	// Set of session names that are animating in (new sessions)
+	let enteringSessionNames = $state<Set<string>>(new Set());
+
+	// Track previous workSessions to detect removals and additions
 	let previousWorkSessions = $state<Map<string, WorkSession>>(new Map());
 
-	// Detect removed sessions and trigger exit animation
-	$effect(() => {
+	// Flag to skip entrance animation on initial mount (only animate truly NEW sessions)
+	let hasInitialized = $state(false);
+
+	// Detect removed and added sessions, trigger exit/entrance animations
+	// Use $effect.pre() so state updates happen BEFORE DOM render (critical for entrance animation)
+	$effect.pre(() => {
 		const currentNames = new Set(workSessions.map(s => s.sessionName));
+		const previousNames = new Set(previousWorkSessions.keys());
+
+		// DEBUG: Log session changes
+		const newSessions = [...currentNames].filter(n => !previousNames.has(n));
+		if (newSessions.length > 0) {
+			console.log('[WorkPanel] New sessions detected:', newSessions, 'hasInitialized:', hasInitialized);
+		}
 
 		// Find sessions that were in previous but not in current (removed)
 		for (const [name, prevSession] of previousWorkSessions) {
@@ -176,14 +191,51 @@
 			}
 		}
 
+		// Find sessions that are in current but not in previous (new sessions)
+		// Skip on initial mount - only animate truly NEW sessions after initial load
+		if (hasInitialized) {
+			for (const name of currentNames) {
+				if (!previousNames.has(name) && !enteringSessionNames.has(name)) {
+					// Mark session as entering
+					console.log('[WorkPanel] Adding to enteringSessionNames:', name);
+					enteringSessionNames = new Set([...enteringSessionNames, name]);
+
+					// Remove from entering after animation completes
+					setTimeout(() => {
+						console.log('[WorkPanel] Removing from enteringSessionNames:', name);
+						enteringSessionNames = new Set([...enteringSessionNames].filter(n => n !== name));
+					}, ENTRANCE_ANIMATION_DURATION);
+				}
+			}
+		}
+
 		// Update previous for next comparison
 		previousWorkSessions = new Map(workSessions.map(s => [s.sessionName, s]));
+
+		// Mark as initialized after first run
+		if (!hasInitialized && workSessions.length > 0) {
+			hasInitialized = true;
+		}
 	});
 
 	// Combined sessions: current sessions + exiting sessions (for display)
 	const displaySessions = $derived.by(() => {
-		// Start with current sessions
-		const sessions: (WorkSession & { _isExiting?: true })[] = [...workSessions];
+		// DEBUG: Log entering session names
+		if (enteringSessionNames.size > 0) {
+			console.log('[WorkPanel] displaySessions - enteringSessionNames:', [...enteringSessionNames]);
+		}
+
+		// Start with current sessions, marking entering ones
+		const sessions: (WorkSession & { _isExiting?: true; _isEntering?: true })[] = workSessions.map(s => {
+			const isEntering = enteringSessionNames.has(s.sessionName);
+			if (isEntering) {
+				console.log('[WorkPanel] Marking session as entering:', s.sessionName);
+			}
+			return {
+				...s,
+				_isEntering: isEntering ? true as const : undefined
+			};
+		});
 
 		// Add exiting sessions that aren't in current
 		for (const [name, exitingSession] of exitingSessionsData) {
@@ -426,6 +478,7 @@
 							{onTaskClick}
 							isHighlighted={highlightedAgent === session.agentName}
 							isExiting={session._isExiting === true}
+							isEntering={session._isEntering === true}
 						/>
 					</div>
 				{/each}

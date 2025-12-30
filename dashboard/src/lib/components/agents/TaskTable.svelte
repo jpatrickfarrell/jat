@@ -128,6 +128,71 @@
 	// Review rules state - fetched on mount for review status column
 	let reviewRules = $state<ReviewRule[]>([]);
 
+	// Task sessions state - maps task ID to sessions that have worked on it
+	// Fetched via batch API to show resumable session avatars
+	interface TaskSession {
+		agentName: string;
+		sessionId: string | null;
+		lastActivity: string | null;
+		signalCount: number;
+		isOnline: boolean;
+	}
+	let taskSessions = $state<Map<string, TaskSession[]>>(new Map());
+	let taskSessionsLoading = $state(false);
+
+	// Fetch task sessions for all visible tasks
+	async function fetchTaskSessions(taskIds: string[]) {
+		if (taskIds.length === 0) return;
+		taskSessionsLoading = true;
+		try {
+			const response = await fetch('/api/tasks/sessions', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ taskIds })
+			});
+			if (response.ok) {
+				const data = await response.json();
+				const newSessions = new Map<string, TaskSession[]>();
+				for (const [taskId, sessions] of Object.entries(data.sessions || {})) {
+					newSessions.set(taskId, sessions as TaskSession[]);
+				}
+				taskSessions = newSessions;
+			}
+		} catch (error) {
+			console.error('Failed to fetch task sessions:', error);
+		} finally {
+			taskSessionsLoading = false;
+		}
+	}
+
+	// Get resumable sessions for a task (exclude online/working agents)
+	function getResumableSessions(taskId: string): TaskSession[] {
+		const sessions = taskSessions.get(taskId) || [];
+		return sessions.filter(s => {
+			// Exclude agents that are currently working on any task
+			if (isAgentWorking(s.agentName)) return false;
+			// Only include offline/disconnected agents
+			return !s.isOnline;
+		});
+	}
+
+	// Resume a specific agent's session by calling the resume API
+	async function handleResumeSession(session: TaskSession) {
+		try {
+			const response = await fetch(`/api/sessions/${session.agentName}/resume`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ session_id: session.sessionId })
+			});
+			if (!response.ok) {
+				const data = await response.json();
+				console.error('Resume failed:', data.message || data.error);
+			}
+		} catch (err) {
+			console.error('Resume error:', err);
+		}
+	}
+
 	// Timer state for elapsed time display under rockets
 	let now = $state(Date.now());
 
@@ -149,6 +214,19 @@
 			}
 		} catch (error) {
 			console.error('Failed to fetch review rules:', error);
+		}
+	});
+
+	// Fetch task sessions when tasks change (for resumable session avatars)
+	// Track previous task IDs to avoid unnecessary refetches
+	let prevTaskIdString = '';
+	$effect(() => {
+		const taskIds = tasks.map(t => t.id);
+		const taskIdString = taskIds.sort().join(',');
+		// Only refetch if task list changed
+		if (taskIdString !== prevTaskIdString) {
+			prevTaskIdString = taskIdString;
+			fetchTaskSessions(taskIds);
 		}
 	});
 
@@ -3057,6 +3135,26 @@
 															onOpenTask={handleRowClick}
 															onAgentClick={onagentclick}
 														/>
+														{#if getResumableSessions(task.id).length > 0}
+															{@const resumableSessions = getResumableSessions(task.id)}
+															<!-- Resumable session avatars (agents with history) -->
+															<div class="flex items-center -space-x-1">
+																{#each resumableSessions.slice(0, 3) as session}
+																	<WorkingAgentBadge
+																		name={session.agentName}
+																		size={18}
+																		isWorking={false}
+																		variant="avatar"
+																		onClick={() => handleResumeSession(session)}
+																		class="opacity-60 hover:opacity-100 transition-opacity ring-1 ring-base-100"
+																		title={`Resume ${session.agentName}'s session`}
+																	/>
+																{/each}
+																{#if resumableSessions.length > 3}
+																	<span class="text-xs text-base-content/50 pl-1">+{resumableSessions.length - 3}</span>
+																{/if}
+															</div>
+														{/if}
 													</div>
 												</th>
 
@@ -3504,6 +3602,26 @@
 													onOpenTask={handleRowClick}
 													onAgentClick={onagentclick}
 												/>
+												{#if getResumableSessions(task.id).length > 0}
+													{@const resumableSessionsStd = getResumableSessions(task.id)}
+													<!-- Resumable session avatars (agents with history) -->
+													<div class="flex items-center -space-x-1">
+														{#each resumableSessionsStd.slice(0, 3) as session}
+															<WorkingAgentBadge
+																name={session.agentName}
+																size={18}
+																isWorking={false}
+																variant="avatar"
+																onClick={() => handleResumeSession(session)}
+																class="opacity-60 hover:opacity-100 transition-opacity ring-1 ring-base-100"
+																title={`Resume ${session.agentName}'s session`}
+															/>
+														{/each}
+														{#if resumableSessionsStd.length > 3}
+															<span class="text-xs text-base-content/50 pl-1">+{resumableSessionsStd.length - 3}</span>
+														{/if}
+													</div>
+												{/if}
 											</div>
 										</th>
 										<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};" onclick={(e) => e.stopPropagation()}>

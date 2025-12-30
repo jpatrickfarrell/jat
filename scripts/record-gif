@@ -6,18 +6,18 @@
 #   record-gif --help                 # Show help
 #
 # Requirements:
-#   - wf-recorder (Wayland screen recorder)
+#   - gpu-screen-recorder (GPU-accelerated screen recorder)
 #   - slurp (region selector)
 #   - ffmpeg (video processing)
 #
-# Install on Arch:
-#   sudo pacman -S wf-recorder slurp ffmpeg
+# These are typically pre-installed on Omarchy/Jomarchy
 
 set -e
 
 # Defaults
 OUTPUT="${1:-demo.gif}"
 FPS=10
+RECORD_FPS=30
 WIDTH=800
 TMP_VIDEO="/tmp/record-gif-$$.mp4"
 
@@ -37,14 +37,16 @@ USAGE:
 
 OPTIONS:
     -h, --help      Show this help
-    -f, --fps N     Frames per second (default: 10)
+    -f, --fps N     GIF frames per second (default: 10)
     -w, --width N   Output width in pixels (default: 800)
+    --mp4           Output mp4 instead of GIF (better for GitHub)
     --no-optimize   Skip optimization pass
 
 EXAMPLES:
     record-gif                      # Record to demo.gif
     record-gif dashboard.gif        # Record to dashboard.gif
     record-gif -f 15 -w 1200 hq.gif # Higher quality
+    record-gif --mp4 demo.mp4       # Output mp4 for GitHub
 
 WORKFLOW:
     1. Run this script
@@ -63,14 +65,18 @@ FOR README GIFS:
     # Select the browser window region
     # Do your demo (spawn agents, click questions, etc)
     # Press Ctrl+C when done
+
+NOTE:
+    GitHub READMEs support embedded mp4 which looks better than GIF.
+    Use --mp4 flag for GitHub-hosted videos.
 EOF
 }
 
 check_deps() {
     local missing=()
 
-    if ! command -v wf-recorder &>/dev/null; then
-        missing+=("wf-recorder")
+    if ! command -v gpu-screen-recorder &>/dev/null; then
+        missing+=("gpu-screen-recorder")
     fi
 
     if ! command -v slurp &>/dev/null; then
@@ -87,25 +93,17 @@ check_deps() {
         echo "Install on Arch Linux:"
         echo "  sudo pacman -S ${missing[*]}"
         echo ""
-        echo "Install on Ubuntu/Debian:"
-        echo "  sudo apt install ${missing[*]}"
+        echo "Note: gpu-screen-recorder may be in AUR"
+        echo "  yay -S gpu-screen-recorder"
         exit 1
     fi
 
     # Check if running on Wayland
     if [[ "$XDG_SESSION_TYPE" != "wayland" ]]; then
-        echo -e "${YELLOW}Warning:${NC} This script is designed for Wayland."
+        echo -e "${YELLOW}Warning:${NC} This script is optimized for Wayland."
         echo "Detected session type: $XDG_SESSION_TYPE"
         echo ""
-        echo "For X11, consider using:"
-        echo "  - peek (GUI GIF recorder)"
-        echo "  - ffmpeg with x11grab"
-        echo ""
-        read -p "Continue anyway? [y/N] " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            exit 1
-        fi
+        echo "gpu-screen-recorder works on X11 too, continuing..."
     fi
 }
 
@@ -124,6 +122,10 @@ parse_args() {
                 WIDTH="$2"
                 shift 2
                 ;;
+            --mp4)
+                OUTPUT_MP4=1
+                shift
+                ;;
             --no-optimize)
                 NO_OPTIMIZE=1
                 shift
@@ -140,9 +142,15 @@ parse_args() {
         esac
     done
 
-    # Ensure .gif extension
-    if [[ "$OUTPUT" != *.gif ]]; then
-        OUTPUT="${OUTPUT}.gif"
+    # Handle extension
+    if [[ -n "$OUTPUT_MP4" ]]; then
+        if [[ "$OUTPUT" != *.mp4 ]]; then
+            OUTPUT="${OUTPUT%.gif}.mp4"
+        fi
+    else
+        if [[ "$OUTPUT" != *.gif ]]; then
+            OUTPUT="${OUTPUT}.gif"
+        fi
     fi
 }
 
@@ -152,16 +160,20 @@ cleanup() {
 
 record() {
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}GIF Recorder${NC}"
+    echo -e "${GREEN}GIF Recorder${NC} (gpu-screen-recorder)"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     echo -e "Output: ${YELLOW}$OUTPUT${NC}"
-    echo -e "Settings: ${FPS}fps, ${WIDTH}px width"
+    if [[ -n "$OUTPUT_MP4" ]]; then
+        echo -e "Format: mp4 (direct output)"
+    else
+        echo -e "Settings: ${FPS}fps GIF, ${WIDTH}px width"
+    fi
     echo ""
     echo -e "${YELLOW}Step 1:${NC} Click and drag to select the region to record"
     echo ""
 
-    # Get region
+    # Get region using slurp
     GEOMETRY=$(slurp 2>/dev/null)
     if [[ -z "$GEOMETRY" ]]; then
         echo -e "${RED}No region selected. Exiting.${NC}"
@@ -173,13 +185,47 @@ record() {
     echo -e "${YELLOW}Step 2:${NC} Recording... Press ${RED}Ctrl+C${NC} to stop"
     echo ""
 
-    # Set up cleanup trap
-    trap cleanup EXIT
+    # Set up cleanup trap (only for GIF mode)
+    if [[ -z "$OUTPUT_MP4" ]]; then
+        trap cleanup EXIT
+    fi
 
-    # Record
-    wf-recorder -g "$GEOMETRY" -f "$TMP_VIDEO" || true
+    # Determine output file
+    if [[ -n "$OUTPUT_MP4" ]]; then
+        RECORD_OUTPUT="$OUTPUT"
+    else
+        RECORD_OUTPUT="$TMP_VIDEO"
+    fi
+
+    # Record using gpu-screen-recorder
+    # -w region: use region capture mode
+    # -region: the geometry from slurp (WxH+X+Y format)
+    # -f: framerate
+    # -o: output file
+    gpu-screen-recorder -w region -region "$GEOMETRY" -f "$RECORD_FPS" -o "$RECORD_OUTPUT" || true
 
     echo ""
+
+    # If mp4 mode, we're done
+    if [[ -n "$OUTPUT_MP4" ]]; then
+        if [[ -f "$OUTPUT" ]]; then
+            SIZE=$(du -h "$OUTPUT" | cut -f1)
+            echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${GREEN}✓ MP4 created successfully!${NC}"
+            echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo ""
+            echo -e "  File: ${YELLOW}$OUTPUT${NC}"
+            echo -e "  Size: ${SIZE}"
+            echo ""
+            echo "Upload to GitHub and embed in README:"
+            echo "  https://github.com/user-attachments/assets/your-video.mp4"
+        else
+            echo -e "${RED}Recording failed - no video file created${NC}"
+            exit 1
+        fi
+        return
+    fi
+
     echo -e "${YELLOW}Step 3:${NC} Converting to GIF..."
     echo ""
 
@@ -225,6 +271,7 @@ record() {
         echo "  - Shorter recording"
         echo "  - Lower FPS: record-gif -f 8 $OUTPUT"
         echo "  - Smaller width: record-gif -w 600 $OUTPUT"
+        echo "  - Use mp4 instead: record-gif --mp4 demo.mp4"
         echo "  - Use gifsicle: gifsicle -O3 --lossy=80 $OUTPUT -o optimized.gif"
         echo ""
     fi

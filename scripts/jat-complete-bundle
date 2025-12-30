@@ -8,9 +8,17 @@
 # Options:
 #   --task <id>       Task ID (required)
 #   --agent <name>    Agent name (required)
-#   --mode <mode>     Completion mode: review_required (default) or auto_proceed
-#   --next-task <id>  Next task ID (for auto_proceed mode)
+#   --mode <mode>     Completion mode: review_required or auto_proceed (default: auto-detect)
+#   --next-task <id>  Next task ID (for auto_proceed mode, auto-detected if not specified)
+#   --emit            Automatically emit jat-signal complete (default: just output JSON)
 #   --help            Show this help
+#
+# Mode Auto-Detection:
+#   When --mode is not specified, completion mode is auto-detected from:
+#   1. Task notes: [REVIEW_OVERRIDE:always_review|auto_proceed|force_review]
+#   2. Session epic context: .claude/sessions/context-{session_id}.json
+#   3. Project review rules: .beads/review-rules.json
+#   4. Default: review_required (safe fallback)
 #
 # Environment:
 #   ANTHROPIC_API_KEY  API key for Anthropic (required)
@@ -48,9 +56,18 @@ Usage:
 Options:
   --task <id>       Task ID (required)
   --agent <name>    Agent name (required)
-  --mode <mode>     Completion mode: review_required (default) or auto_proceed
-  --next-task <id>  Next task ID (for auto_proceed mode)
+  --mode <mode>     Completion mode: review_required or auto_proceed (auto-detected if not specified)
+  --auto-mode       Force auto-detection even if --mode is specified
+  --next-task <id>  Next task ID (for auto_proceed mode, auto-detected if not specified)
+  --emit            Automatically emit jat-signal complete (recommended)
   --help            Show this help
+
+Mode Auto-Detection:
+  When --mode is not specified, completion mode is auto-detected from:
+  1. Task notes: [REVIEW_OVERRIDE:always_review|auto_proceed|force_review]
+  2. Session epic context: .claude/sessions/context-{session_id}.json
+  3. Project review rules: .beads/review-rules.json
+  4. Default: review_required (safe fallback)
 
 Environment:
   ANTHROPIC_API_KEY  API key for Anthropic (required)
@@ -59,9 +76,8 @@ Output:
   Outputs valid JSON suitable for: jat-signal complete "$JSON"
 
 Example:
-  jat-complete-bundle --task jat-abc --agent FreeOcean
-  BUNDLE=$(jat-complete-bundle --task jat-abc --agent FreeOcean)
-  jat-signal complete "$BUNDLE"
+  jat-complete-bundle --task jat-abc --agent FreeOcean --emit
+  jat-complete-bundle --task jat-abc --agent FreeOcean --mode auto_proceed --next-task jat-def --emit
 EOF
     exit 0
 }
@@ -69,8 +85,10 @@ EOF
 # Parse arguments
 TASK_ID=""
 AGENT_NAME=""
-COMPLETION_MODE="review_required"
+COMPLETION_MODE=""  # Empty = auto-detect
 NEXT_TASK_ID=""
+EMIT_SIGNAL=false
+AUTO_MODE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -89,6 +107,14 @@ while [[ $# -gt 0 ]]; do
         --next-task)
             NEXT_TASK_ID="$2"
             shift 2
+            ;;
+        --emit)
+            EMIT_SIGNAL=true
+            shift
+            ;;
+        --auto-mode)
+            AUTO_MODE=true
+            shift
             ;;
         --help|-h)
             show_usage
@@ -136,6 +162,70 @@ TASK_TITLE=$(echo "$TASK_JSON" | jq -r '.[0].title // "Unknown"')
 TASK_TYPE=$(echo "$TASK_JSON" | jq -r '.[0].issue_type // "task"')
 TASK_PRIORITY=$(echo "$TASK_JSON" | jq -r '.[0].priority // 2')
 TASK_DESC=$(echo "$TASK_JSON" | jq -r '.[0].description // ""')
+TASK_NOTES=$(echo "$TASK_JSON" | jq -r '.[0].notes // ""')
+
+# ============================================================================
+# COMPLETION MODE AUTO-DETECTION
+# ============================================================================
+
+if [[ -z "$COMPLETION_MODE" ]] || [[ "$AUTO_MODE" == true ]]; then
+    log_dim "  • Auto-detecting completion mode..."
+    DETECTED_MODE=""
+
+    # 1. Check task notes for REVIEW_OVERRIDE
+    if [[ -n "$TASK_NOTES" ]]; then
+        if echo "$TASK_NOTES" | grep -qi '\[REVIEW_OVERRIDE:auto_proceed\]'; then
+            DETECTED_MODE="auto_proceed"
+            log_dim "    → Task notes: auto_proceed"
+        elif echo "$TASK_NOTES" | grep -qi '\[REVIEW_OVERRIDE:always_review\]\|\[REVIEW_OVERRIDE:force_review\]'; then
+            DETECTED_MODE="review_required"
+            log_dim "    → Task notes: review_required"
+        fi
+    fi
+
+    # 2. Check session epic context (if not already detected)
+    if [[ -z "$DETECTED_MODE" ]]; then
+        # Try to find session ID from PPID
+        SESSION_ID=""
+        if [[ -f "/tmp/claude-session-${PPID}.txt" ]]; then
+            SESSION_ID=$(cat "/tmp/claude-session-${PPID}.txt" | tr -d '\n')
+        fi
+
+        if [[ -n "$SESSION_ID" ]]; then
+            CONTEXT_FILE=".claude/sessions/context-${SESSION_ID}.json"
+            if [[ -f "$CONTEXT_FILE" ]]; then
+                REVIEW_THRESHOLD=$(jq -r '.reviewThreshold // empty' "$CONTEXT_FILE" 2>/dev/null)
+                if [[ "$REVIEW_THRESHOLD" == "never" ]]; then
+                    DETECTED_MODE="auto_proceed"
+                    log_dim "    → Session context: auto_proceed (reviewThreshold=never)"
+                elif [[ "$REVIEW_THRESHOLD" == "always" ]]; then
+                    DETECTED_MODE="review_required"
+                    log_dim "    → Session context: review_required (reviewThreshold=always)"
+                fi
+            fi
+        fi
+    fi
+
+    # 3. Check project review rules (if not already detected)
+    if [[ -z "$DETECTED_MODE" ]] && [[ -f ".beads/review-rules.json" ]]; then
+        DEFAULT_MODE=$(jq -r '.defaultMode // empty' ".beads/review-rules.json" 2>/dev/null)
+        if [[ "$DEFAULT_MODE" == "auto_proceed" ]]; then
+            DETECTED_MODE="auto_proceed"
+            log_dim "    → Project rules: auto_proceed"
+        elif [[ "$DEFAULT_MODE" == "review_required" ]]; then
+            DETECTED_MODE="review_required"
+            log_dim "    → Project rules: review_required"
+        fi
+    fi
+
+    # 4. Default fallback
+    if [[ -z "$DETECTED_MODE" ]]; then
+        DETECTED_MODE="review_required"
+        log_dim "    → Default: review_required"
+    fi
+
+    COMPLETION_MODE="$DETECTED_MODE"
+fi
 
 # 2. Get git status and diff
 log_dim "  • Collecting git status..."
@@ -259,12 +349,12 @@ Generate a JSON object with these fields:
     "gotchas": ["non-obvious issues or surprises"]
   },
 
-  // AI-generated insights (all optional)
-  "suggestedRename": "new title if task evolved/pivoted significantly",
-  "suggestedLabels": ["labels based on actual work done, e.g. auth, api, ui"],
-  "riskLevel": "low" | "medium" | "high",
+  // AI-generated insights
+  "suggestedLabels": ["REQUIRED: labels based on actual work done, e.g. auth, api, ui, config, signals"],
+  "riskLevel": "low" | "medium" | "high",  // REQUIRED: low=routine, medium=core logic, high=breaking/security
+  "suggestedRename": "new title if task evolved/pivoted significantly (optional - omit if title is accurate)",
   "breakingChanges": ["list of breaking changes, or omit if none"],
-  "documentationNeeds": ["docs that need updating, e.g. README, API docs"]
+  "documentationNeeds": ["docs that need updating, or omit if none"]
 }
 
 ## Guidelines
@@ -272,9 +362,9 @@ Generate a JSON object with these fields:
 2. ALWAYS include at least one suggested task - there's always follow-up work or tech debt
 3. Only include humanActions if manual steps are truly required (deploy, config, etc)
 4. crossAgentIntel should help other agents working in the same codebase
-5. Include suggestedRename ONLY if the original title no longer reflects the work done
-6. suggestedLabels should reflect what the work actually touched (auth, ui, api, db, tests, etc)
-7. riskLevel: low=routine changes, medium=core logic changes, high=breaking/security/data changes
+5. Include suggestedRename ONLY if the original title no longer reflects the work done (otherwise omit)
+6. suggestedLabels is REQUIRED - always include 1-4 labels reflecting what was touched (auth, ui, api, db, tests, config, signals, etc)
+7. riskLevel is REQUIRED - always include: low=routine changes, medium=core logic changes, high=breaking/security/data changes
 8. breakingChanges: list specific breaking changes, omit field entirely if none
 9. documentationNeeds: list specific docs needing updates, omit if none
 10. Be concise but informative
@@ -350,5 +440,11 @@ fi
 
 log_success "Generated completion bundle successfully"
 
-# Output the final JSON to stdout
-echo "$BUNDLE_JSON"
+# Either emit the signal or output the JSON
+if [[ "$EMIT_SIGNAL" == true ]]; then
+    log_dim "Emitting jat-signal complete..."
+    jat-signal complete "$BUNDLE_JSON"
+else
+    # Output the final JSON to stdout
+    echo "$BUNDLE_JSON"
+fi

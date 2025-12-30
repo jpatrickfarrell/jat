@@ -332,7 +332,7 @@ done
 ### STEP 3: Verify Task
 
 ```bash
-echo "Verifying task before completion..."
+jat-step verifying --task "$task_id" --title "$task_title" --agent "$agent_name"
 
 # Run verification checks:
 # - Tests
@@ -346,32 +346,82 @@ echo "Verifying task before completion..."
 
 ---
 
+### STEP 3.5: Update Documentation (If Appropriate)
+
+**Most tasks do NOT require doc updates.** Only update docs when you've made changes that affect how others use the codebase.
+
+#### When to Update Docs
+
+| Update Docs | Skip Docs |
+|-------------|-----------|
+| New tool/command added | Bug fixes |
+| New API endpoint or parameter | Internal refactors |
+| Breaking change to existing behavior | Performance improvements |
+| New configuration option | Code cleanup |
+| New pattern others must follow | Adding tests |
+| Removed/deprecated feature | UI tweaks |
+
+#### Where to Check
+
+1. **CLAUDE.md** - Project instructions for agents
+2. **docs/** folder - If one exists
+3. **README.md** - Only for user-facing changes
+
+#### How to Update (Minimal Approach)
+
+**DO:**
+- Update existing sections (add a row to a table, a bullet to a list)
+- One-liners preferred over paragraphs
+- Keep it factual: "Added `--emit` flag to jat-complete-bundle"
+
+**DON'T:**
+- Add new sections for small changes
+- Write verbose explanations
+- Document implementation details (code is self-documenting)
+- Add changelog entries or "as of version X" notes
+- Duplicate what's already in code comments
+
+#### Example: Good vs Bad
+
+**Good (minimal, updates existing):**
+```markdown
+| `--emit` | Automatically emit signal (recommended) |
+```
+
+**Bad (verbose, adds new section):**
+```markdown
+## New Feature: Automatic Signal Emission
+
+In version 2.0, we added a new `--emit` flag to the jat-complete-bundle
+command. This flag allows you to automatically emit the completion signal
+without having to manually call jat-signal. This was added because...
+[50 more lines]
+```
+
+#### Decision Flow
+
+```
+Did you add/change/remove something that affects usage?
+  ├─ No → Skip this step
+  └─ Yes → Can you update an existing section with 1-3 lines?
+        ├─ Yes → Make the minimal update
+        └─ No → Ask yourself: is this really necessary?
+              ├─ Yes → Add minimal new content
+              └─ No → Skip, let docs evolve organically
+```
+
+**When in doubt, skip.** Docs can always be updated later. Over-documentation is worse than under-documentation.
+
+---
+
 ### STEP 4: Commit Changes
 
 ```bash
-echo "Committing changes..."
+# Get task type for commit message
+task_type=$(bd show "$task_id" --json | jq -r '.[0].issue_type // "task"')
 
-# Get task details for commit message
-task_json=$(bd show "$task_id" --json)
-task_title=$(echo "$task_json" | jq -r '.[0].title')
-task_type=$(echo "$task_json" | jq -r '.[0].issue_type')
-
-# Check git status
-git_status=$(git status --porcelain)
-
-if [[ -n "$git_status" ]]; then
-  git add .
-  git commit -m "$(cat <<EOF
-$task_type($task_id): $task_title
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude <noreply@anthropic.com>
-EOF
-)"
-else
-  echo "No changes to commit"
-fi
+# Emit signal + commit changes (skips if no changes)
+jat-step committing --task "$task_id" --title "$task_title" --agent "$agent_name" --type "$task_type"
 ```
 
 ---
@@ -379,7 +429,8 @@ fi
 ### STEP 5: Mark Task Complete in Beads
 
 ```bash
-bd close "$task_id" --reason "Completed by $agent_name"
+# Emit signal + close task in Beads
+jat-step closing --task "$task_id" --title "$task_title" --agent "$agent_name"
 ```
 
 ---
@@ -411,10 +462,8 @@ bd epic close-eligible
 ### STEP 6: Release File Reservations
 
 ```bash
-# Release all file reservations for this agent
-am-reservations --agent "$agent_name" --json | jq -r '.[].path_pattern' | while read pattern; do
-  am-release "$pattern" --agent "$agent_name"
-done
+# Emit signal + release all reservations for this agent
+jat-step releasing --task "$task_id" --title "$task_title" --agent "$agent_name"
 ```
 
 ---
@@ -422,335 +471,32 @@ done
 ### STEP 7: Announce Completion
 
 ```bash
-am-send "[$task_id] Completed: $task_title" \
-  "Task completed by $agent_name.
-
-Status: Complete
-Type: $task_type
-Verification: Full (tests, lint, security)" \
-  --from "$agent_name" \
-  --to @active \
-  --thread "$task_id"
+# Emit signal + send completion announcement via Agent Mail
+jat-step announcing --task "$task_id" --title "$task_title" --agent "$agent_name" --type "$task_type"
 ```
 
 ---
 
-### STEP 7.5: Determine Review Action (Configurable Rules)
-
-**After announcing completion, determine which completion signal to emit based on configurable rules.**
-
-This step implements the review rules system that determines whether to auto-spawn the next task (Epic Swarm mode).
-
-**Note:** The `--kill` flag (session lifecycle) is tracked by the dashboard separately. This step only determines `COMPLETION_MODE` which controls auto-spawning.
-
-#### Rule Evaluation Order
-
-```
-0. Check session epic context (.claude/sessions/context-{session_id}.json)
-   └─ If epic context exists with reviewThreshold:
-      └─ Compare task.priority to threshold
-      └─ If priority > threshold: COMPLETION_MODE="review_required" → don't auto-spawn
-      └─ If priority <= threshold: COMPLETION_MODE="auto_proceed" → auto-spawn next task
-   └─ Epic context takes precedence over all other rules
-
-1. Check task.notes for [REVIEW_OVERRIDE:...] pattern
-   └─ If found → Use override action (always_review, auto_proceed, force_review)
-
-2. Load .beads/review-rules.json
-   └─ Find rule matching task.issue_type
-   └─ Compare task.priority to rule.maxAutoPriority
-
-3. If config missing → review required (safe default)
-```
-
-**Note on priority semantics:** Lower priority number = higher importance (P0 is critical, P4 is lowest).
-The threshold represents the HIGHEST priority number that should auto-proceed.
-- `threshold: 1` → Only P0 and P1 auto-proceed, P2-P4 require review
-- `threshold: 3` → P0-P3 auto-proceed, only P4 requires review
-
-#### Implementation
+### STEP 8: Generate Completion Bundle and Emit Signal
 
 ```bash
-# NOTE: The --kill flag is tracked by the dashboard (session lifecycle).
-# This script only determines COMPLETION_MODE which controls auto-spawning.
-# COMPLETION_MODE values:
-#   - "review_required" = don't auto-spawn next task
-#   - "auto_proceed" = auto-spawn next task (Epic Swarm)
-
-# Get task details
-task_json=$(bd show "$task_id" --json)
-task_notes=$(echo "$task_json" | jq -r '.[0].notes // ""')
-task_priority=$(echo "$task_json" | jq -r '.[0].priority')
-task_type=$(echo "$task_json" | jq -r '.[0].issue_type')
-
-COMPLETION_MODE=""  # Will be set by first matching rule: "review_required" or "auto_proceed"
-
-# Step 0: Check session epic context (highest priority)
-# Session context is set by dashboard when spawning agents for epic execution
-session_id=$(~/code/jat/scripts/get-current-session-id)
-context_file=".claude/sessions/context-${session_id}.json"
-
-if [[ -f "$context_file" ]]; then
-  epic_threshold=$(jq -r '.reviewThreshold // empty' "$context_file")
-
-  if [[ -n "$epic_threshold" ]]; then
-    # Convert reviewThreshold string to numeric threshold
-    # 'all' = always review (no auto-spawn)
-    # 'none' = never review (always auto-spawn)
-    # 'p0' = only P0 requires review; P1+ auto-spawn
-    # 'p0-p1' = P0-P1 require review; P2+ auto-spawn
-    # 'p0-p2' = P0-P2 require review; P3+ auto-spawn
-    case "$epic_threshold" in
-      "all")
-        echo "📋 Epic context: reviewThreshold='all' → All tasks require review"
-        COMPLETION_MODE="review_required"
-        ;;
-      "none")
-        echo "📋 Epic context: reviewThreshold='none' → All tasks auto-proceed"
-        COMPLETION_MODE="auto_proceed"
-        ;;
-      "p0")
-        # Only P0 requires review; P1+ auto-proceed
-        if (( task_priority == 0 )); then
-          echo "📋 Epic context: P0 task requires review (threshold: p0)"
-          COMPLETION_MODE="review_required"
-        else
-          echo "📋 Epic context: P${task_priority} task auto-proceeds (threshold: p0)"
-          COMPLETION_MODE="auto_proceed"
-        fi
-        ;;
-      "p0-p1")
-        # P0-P1 require review; P2+ auto-proceed
-        if (( task_priority <= 1 )); then
-          echo "📋 Epic context: P${task_priority} task requires review (threshold: p0-p1)"
-          COMPLETION_MODE="review_required"
-        else
-          echo "📋 Epic context: P${task_priority} task auto-proceeds (threshold: p0-p1)"
-          COMPLETION_MODE="auto_proceed"
-        fi
-        ;;
-      "p0-p2")
-        # P0-P2 require review; P3+ auto-proceed
-        if (( task_priority <= 2 )); then
-          echo "📋 Epic context: P${task_priority} task requires review (threshold: p0-p2)"
-          COMPLETION_MODE="review_required"
-        else
-          echo "📋 Epic context: P${task_priority} task auto-proceeds (threshold: p0-p2)"
-          COMPLETION_MODE="auto_proceed"
-        fi
-        ;;
-      *)
-        echo "⚠️ Unknown epic reviewThreshold: $epic_threshold (ignoring)"
-        ;;
-    esac
-  fi
-fi
-
-# If epic context didn't set mode, continue with other rules
-if [[ -z "$COMPLETION_MODE" ]]; then
-  COMPLETION_MODE="review_required"  # Default: requires review
-
-  # Step 1: Check for per-task override in notes
-  if echo "$task_notes" | grep -q '\[REVIEW_OVERRIDE:always_review\]'; then
-    echo "📋 Review override detected: always_review"
-    COMPLETION_MODE="review_required"
-  elif echo "$task_notes" | grep -q '\[REVIEW_OVERRIDE:auto_proceed\]'; then
-    echo "📋 Review override detected: auto_proceed"
-    COMPLETION_MODE="auto_proceed"
-  elif echo "$task_notes" | grep -q '\[REVIEW_OVERRIDE:force_review\]'; then
-    echo "📋 Review override detected: force_review"
-    COMPLETION_MODE="review_required"
-  else
-  # Step 2: Load review-rules.json and apply type-based rules
-  rules_file=".beads/review-rules.json"
-
-  if [[ -f "$rules_file" ]]; then
-    # Find maxAutoPriority for this task type
-    max_auto=$(jq -r --arg type "$task_type" \
-      '.rules[] | select(.type == $type) | .maxAutoPriority // -1' \
-      "$rules_file")
-
-    if [[ "$max_auto" != "-1" && "$max_auto" != "null" && -n "$max_auto" ]]; then
-      # Compare: task can auto-proceed if priority <= maxAutoPriority
-      # (lower number = higher priority, e.g., P0 < P3)
-      if (( task_priority <= max_auto )); then
-        echo "📋 Auto-proceed: P${task_priority} ${task_type} (max: P${max_auto})"
-        COMPLETION_MODE="auto_proceed"
-      else
-        echo "📋 Review required: P${task_priority} ${task_type} (max auto: P${max_auto})"
-        COMPLETION_MODE="review_required"
-      fi
-    else
-      # No rule for this type, check defaultAction
-      default_action=$(jq -r '.defaultAction // "review"' "$rules_file")
-      if [[ "$default_action" == "auto" ]]; then
-        COMPLETION_MODE="auto_proceed"
-      else
-        COMPLETION_MODE="review_required"
-      fi
-    fi
-  else
-    # Step 3: Fallback - NO auto-proceed without explicit configuration
-    #
-    # CRITICAL: Auto-proceed should ONLY happen when deliberately enabled:
-    # 1. Epic context file exists (dashboard spawned agent for swarm)
-    # 2. Per-task override in notes ([REVIEW_OVERRIDE:auto_proceed])
-    # 3. Project has .beads/review-rules.json with explicit rules
-    #
-    # Without any of these, the user should decide what to do next.
-    # Spawning random unrelated tasks is confusing and wrong.
-    echo "📋 No review-rules.json and no epic context → review required (default)"
-    COMPLETION_MODE="review_required"
-  fi
-  fi  # End of: if [[ -z "$COMPLETION_MODE" ]]
-fi  # End of: else (no REVIEW_OVERRIDE found)
-fi  # End of: if/elif/else for --kill flag
-
-# COMPLETION_MODE is now set - will be used in Step 8 when emitting jat-signal complete
-# The actual signal emission happens in Step 8 with the full completion bundle
-echo "📋 Completion mode determined: ${COMPLETION_MODE}"
+# Generate completion bundle via LLM and emit the complete signal
+# Review mode is auto-detected from task notes, session context, and project rules
+jat-step complete --task "$task_id" --title "$task_title" --agent "$agent_name"
 ```
 
-#### Review Override Values
-
-| Override Value | COMPLETION_MODE | Behavior | Use Case |
-|----------------|-----------------|----------|----------|
-| `always_review` | `review_required` | Session stays open for human review | Testing override behavior |
-| `auto_proceed` | `auto_proceed` | Session self-destructs after completion | Skip review for specific task |
-| `force_review` | `review_required` | Session stays open for human review | Force review even if rules say auto |
-
-#### Example review-rules.json
-
-```json
-{
-  "version": 1,
-  "defaultAction": "review",
-  "priorityThreshold": 3,
-  "rules": [
-    { "type": "bug", "maxAutoPriority": 3, "note": "P0-P3 bugs auto-proceed" },
-    { "type": "feature", "maxAutoPriority": 3, "note": "P0-P3 features auto-proceed" },
-    { "type": "task", "maxAutoPriority": 3 },
-    { "type": "chore", "maxAutoPriority": 4, "note": "All chores auto-proceed" },
-    { "type": "epic", "maxAutoPriority": -1, "note": "Epics always require review" }
-  ],
-  "overrides": []
-}
-```
-
-**Understanding maxAutoPriority:**
-- Value represents highest priority number that can auto-proceed
-- Lower priority number = higher importance (P0 is most critical)
-- `maxAutoPriority: 3` means P0, P1, P2, P3 can auto-proceed; P4 requires review
-- `maxAutoPriority: -1` means no auto-proceed (always review)
-- `maxAutoPriority: 4` means all priorities auto-proceed
-
-#### Session Epic Context
-
-When agents are spawned as part of an epic swarm, the dashboard writes session context to:
-```
-.claude/sessions/context-{session_id}.json
-```
-
-**Context file format:**
-```json
-{
-  "epicId": "jat-abc",
-  "reviewThreshold": "p0-p1",
-  "spawnedAt": "2025-12-08T15:30:00.000Z"
-}
-```
-
-**reviewThreshold values:**
-
-| Value | Requires Review | Auto-Proceed |
-|-------|-----------------|--------------|
-| `all` | All priorities | None |
-| `p0` | P0 only | P1-P4 |
-| `p0-p1` | P0, P1 | P2-P4 |
-| `p0-p2` | P0, P1, P2 | P3-P4 |
-| `none` | None | All priorities |
-
-**Dashboard integration:**
-
-When the dashboard spawns an agent for epic execution (via `epicQueueStore.launchEpic()`), it should:
-
-1. Call POST `/api/sessions` to spawn the agent
-2. Get the session ID from the response
-3. Write context file: `.claude/sessions/context-{session_id}.json`
-4. Include the `reviewThreshold` from `epicQueueStore.settings`
-
-**Example dashboard code:**
-```typescript
-// After spawning agent
-const contextPath = `.claude/sessions/context-${sessionId}.json`;
-const context = {
-  epicId: state.epicId,
-  reviewThreshold: state.settings.reviewThreshold,
-  spawnedAt: new Date().toISOString()
-};
-await writeFile(contextPath, JSON.stringify(context, null, 2));
-```
-
-**Note:** Epic context takes precedence over all other review rules. This allows the human commander to set a review threshold for the entire epic swarm, overriding per-project or per-task defaults.
-
----
-
-### STEP 8: Emit Structured Completion Signal
-
-**🚨 MANDATORY: Use `jat-complete-bundle` to generate the completion bundle.**
-
-```
-┌────────────────────────────────────────────────────────────────────────────┐
-│  ⚠️  DO NOT manually construct the completion signal JSON.                │
-│                                                                            │
-│  You MUST call jat-complete-bundle which:                                  │
-│    • Gathers git context automatically                                     │
-│    • Uses LLM to generate rich summaries                                   │
-│    • Includes suggested tasks, human actions, cross-agent intel            │
-│    • Produces consistent, high-quality completion bundles                  │
-│                                                                            │
-│  Manual construction results in incomplete/low-quality completion signals. │
-└────────────────────────────────────────────────────────────────────────────┘
-```
-
-The tool gathers all context (task details, git status, diffs, commits) and calls the Anthropic API to generate a structured CompletionBundle JSON.
-
-**Prerequisites:**
-- `ANTHROPIC_API_KEY` environment variable must be set (check with `echo $ANTHROPIC_API_KEY`)
-- Task must exist in Beads
-
-```bash
-# Generate the completion bundle (uses COMPLETION_MODE from Step 7.5)
-BUNDLE=$(jat-complete-bundle --task "$task_id" --agent "$agent_name" --mode "$COMPLETION_MODE")
-
-# If auto_proceed with next task:
-# BUNDLE=$(jat-complete-bundle --task "$task_id" --agent "$agent_name" --mode auto_proceed --next-task "$next_task_id")
-
-# Emit the signal
-jat-signal complete "$BUNDLE"
-```
-
-**What jat-complete-bundle does:**
-1. Fetches task details from Beads (title, type, priority, description)
+**What this does:**
+1. Fetches task details from Beads
 2. Collects git status, diff stats, recent commits
-3. Sends context to LLM to generate structured summary with:
-   - Summary bullets
-   - Quality signals (tests, build status)
-   - Human actions (if manual steps needed)
-   - Suggested follow-up tasks (ALWAYS at least one)
-   - Cross-agent intel (files, patterns, gotchas)
-   - AI insights (suggested rename, labels, risk level)
-4. Outputs valid JSON for `jat-signal complete`
+3. Auto-detects completion mode (review_required or auto_proceed) from:
+   - Task notes: `[REVIEW_OVERRIDE:auto_proceed]` or `[REVIEW_OVERRIDE:always_review]`
+   - Session epic context: `.claude/sessions/context-{session_id}.json`
+   - Project rules: `.beads/review-rules.json`
+   - Default: `review_required` (safe fallback)
+4. Calls LLM to generate structured completion bundle
+5. Emits `complete` signal (100%) to dashboard
 
-**If `jat-complete-bundle` fails:**
-- Check `ANTHROPIC_API_KEY` is set
-- Check task ID is valid with `bd show $task_id`
-- Check network connectivity
-- Do NOT fall back to manual signal construction
-
-#### Then Output Terminal Debrief
-
-After emitting the signal, output a completion summary. The bundle JSON contains all the fields - parse and display them:
+**After the signal emits, output a terminal debrief:**
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════╗
@@ -758,12 +504,33 @@ After emitting the signal, output a completion summary. The bundle JSON contains
 ║  👤 Agent: $agent_name                                                    ║
 ╚══════════════════════════════════════════════════════════════════════════╝
 
-[Display summary, quality status, human actions, suggested tasks, and cross-agent intel from the bundle]
+[Display summary, quality status, human actions, suggested tasks from the bundle]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💡 Session complete. Dashboard shows interactive UI for creating suggested tasks.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
+
+**Prerequisites:**
+- `ANTHROPIC_API_KEY` environment variable must be set
+- Task must exist in Beads
+
+**If it fails:**
+- Check `ANTHROPIC_API_KEY` is set
+- Check task ID is valid with `bd show $task_id`
+- Check network connectivity
+
+<details>
+<summary>📋 Review Mode Auto-Detection Details (Reference)</summary>
+
+The completion mode determines whether to auto-spawn the next task (Epic Swarm mode). This is handled automatically by `jat-complete-bundle --auto-mode`.
+
+1. Check task notes for `[REVIEW_OVERRIDE:auto_proceed]` or `[REVIEW_OVERRIDE:always_review]`
+2. Check session epic context: `.claude/sessions/context-{session_id}.json` with `reviewThreshold`
+3. Check project rules: `.beads/review-rules.json`
+4. Default: `review_required` (safe fallback)
+
+</details>
 
 ---
 
@@ -836,13 +603,14 @@ The completion output is generated by `jat-complete-bundle`. A typical flow look
 
 ## Dashboard State Signals
 
-The completion flow uses a **single signal** (captured by PostToolUse hook):
+The completion flow emits **progress signals** at each step, followed by a final **completion bundle**:
 
-| Signal Command | When to Run | Dashboard Effect |
-|----------------|-------------|------------------|
-| `jat-signal complete '{...}'` | After all completion steps | Full completion bundle with summary, suggested tasks, human actions, cross-agent intel |
+| Tool | Signal Emitted | Dashboard Effect |
+|------|----------------|------------------|
+| `jat-step verifying\|committing\|closing\|releasing\|announcing` | `completing` | Shows progress bar with current step |
+| `jat-complete-bundle --emit` | `complete` | Full completion bundle with summary, suggested tasks |
 
-**The `jat-signal complete` bundle is the ONLY signal emitted during completion.** It includes:
+**Signals are emitted automatically by the tools.** You don't need to manually call `jat-signal`. The final **complete signal** includes:
 - `completionMode: "review_required"` → Dashboard shows COMPLETED state, session stays open for review
 - `completionMode: "auto_proceed"` with `nextTaskId` → Dashboard spawns next task (Epic Swarm)
 
@@ -898,21 +666,21 @@ Or run /jat:verify to see detailed error report
 
 ## Step Summary
 
-| Step | Name | When |
+| Step | Name | Tool |
 |------|------|------|
-| 1A-C | Get Task and Agent Identity | ALWAYS |
-| 1D | Spontaneous Work Detection | If no in_progress task found |
-| 2 | Read & Respond to Mail | ALWAYS (after task identified) |
-| 3 | Verify Task | ALWAYS |
-| 4 | Commit Changes | ALWAYS |
-| 5 | Mark Task Complete | ALWAYS |
-| 5.5 | Auto-Close Eligible Epics | ALWAYS |
-| 6 | Release Reservations | ALWAYS |
-| 7 | Announce Completion | ALWAYS |
-| 7.5 | Determine Review Action | ALWAYS (sets COMPLETION_MODE) |
-| **8** | **Call `jat-complete-bundle`** | **ALWAYS (MANDATORY)** |
+| 1A-C | Get Task and Agent Identity | - |
+| 1D | Spontaneous Work Detection | - |
+| 2 | Read & Respond to Mail | `am-inbox`, `am-ack` |
+| 3 | Verify Task | `jat-step verifying` (0%) |
+| 3.5 | Update Documentation | *(if appropriate - most tasks skip)* |
+| 4 | Commit Changes | `jat-step committing` (20%) |
+| 5 | Mark Task Complete | `jat-step closing` (40%) |
+| 5.5 | Auto-Close Eligible Epics | `bd epic close-eligible` |
+| 6 | Release Reservations | `jat-step releasing` (60%) |
+| 7 | Announce Completion | `jat-step announcing` (80%) |
+| **8** | **Generate & Emit Completion** | **`jat-step complete`** (100%) |
 
-**⚠️ Step 8 is MANDATORY:** You must call `jat-complete-bundle` to generate the completion signal. Do not manually construct the JSON. This is the **ONLY** signal emitted during the entire `/jat:complete` flow.
+**Note:** `jat-step` automatically emits signals. Steps 3-7 emit `completing` signals with progress. Step 8 (`jat-step complete`) auto-detects review mode and emits the final `complete` signal.
 
 ---
 

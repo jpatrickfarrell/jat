@@ -14,8 +14,8 @@
 	 */
 
 	import { onMount, onDestroy, tick } from 'svelte';
-	import { slide } from 'svelte/transition';
-	import { quintOut } from 'svelte/easing';
+	import { slide, fly } from 'svelte/transition';
+	import { quintOut, cubicOut } from 'svelte/easing';
 	import { browser } from '$app/environment';
 	import SessionCard from '$lib/components/work/SessionCard.svelte';
 	import TaskTable from '$lib/components/agents/TaskTable.svelte';
@@ -141,6 +141,118 @@
 	// Epic group collapse state - tracks which epic groups are collapsed per project
 	// Key format: "project:epicId" or "project:other" for non-epic sessions
 	let collapsedEpicGroups = $state<Set<string>>(new Set());
+
+	// Per-group sort state - tracks sort setting per epic/other group
+	// Key format: "project:epicId" or "project:other"
+	let groupSortSettings = $state<Map<string, { sortBy: SortOption; sortDir: 'asc' | 'desc' }>>(new Map());
+
+	// Per-group filter state - tracks filter term per epic/other group
+	// Key format: "project:epicId" or "project:other"
+	let groupFilterTerms = $state<Map<string, string>>(new Map());
+
+	// Get sort setting for a group (defaults to state/asc)
+	function getGroupSort(project: string, groupId: string): { sortBy: SortOption; sortDir: 'asc' | 'desc' } {
+		const key = `${project}:${groupId}`;
+		return groupSortSettings.get(key) || { sortBy: 'state', sortDir: 'asc' };
+	}
+
+	// Set sort setting for a group
+	function setGroupSort(project: string, groupId: string, sortBy: SortOption, sortDir: 'asc' | 'desc') {
+		const key = `${project}:${groupId}`;
+		const newMap = new Map(groupSortSettings);
+		newMap.set(key, { sortBy, sortDir });
+		groupSortSettings = newMap;
+	}
+
+	// Handle sort click for a group
+	function handleGroupSortClick(project: string, groupId: string, value: SortOption) {
+		const current = getGroupSort(project, groupId);
+		if (current.sortBy === value) {
+			// Same button - toggle direction
+			setGroupSort(project, groupId, value, current.sortDir === 'asc' ? 'desc' : 'asc');
+		} else {
+			// Different button - switch sort and use its default direction
+			const opt = SORT_OPTIONS.find(o => o.value === value);
+			setGroupSort(project, groupId, value, opt?.defaultDir ?? 'asc');
+		}
+	}
+
+	// Get filter term for a group
+	function getGroupFilter(project: string, groupId: string): string {
+		const key = `${project}:${groupId}`;
+		return groupFilterTerms.get(key) || '';
+	}
+
+	// Set filter term for a group
+	function setGroupFilter(project: string, groupId: string, term: string) {
+		const key = `${project}:${groupId}`;
+		const newMap = new Map(groupFilterTerms);
+		newMap.set(key, term);
+		groupFilterTerms = newMap;
+	}
+
+	// Sort sessions by the given sort option
+	function sortSessions<T extends { sessionName: string; agentName: string; task?: { priority?: number } | null; created?: string; cost?: number; _sseState?: string }>(
+		sessions: T[],
+		sortBy: SortOption,
+		sortDir: 'asc' | 'desc'
+	): T[] {
+		const sorted = [...sessions].sort((a, b) => {
+			let cmp = 0;
+			switch (sortBy) {
+				case 'state': {
+					// Sort by SSE state: working > needs-input > review > idle > starting
+					const stateOrder: Record<string, number> = {
+						'working': 0, 'needs_input': 1, 'review': 2, 'idle': 3, 'starting': 4, 'completed': 5
+					};
+					const aState = a._sseState || 'idle';
+					const bState = b._sseState || 'idle';
+					cmp = (stateOrder[aState] ?? 10) - (stateOrder[bState] ?? 10);
+					break;
+				}
+				case 'priority': {
+					const aPri = a.task?.priority ?? 99;
+					const bPri = b.task?.priority ?? 99;
+					cmp = aPri - bPri;
+					break;
+				}
+				case 'created': {
+					const aTime = a.created ? new Date(a.created).getTime() : 0;
+					const bTime = b.created ? new Date(b.created).getTime() : 0;
+					cmp = aTime - bTime;
+					break;
+				}
+				case 'cost': {
+					const aCost = a.cost ?? 0;
+					const bCost = b.cost ?? 0;
+					cmp = aCost - bCost;
+					break;
+				}
+				case 'manual':
+				default:
+					// Keep original order for manual
+					cmp = 0;
+					break;
+			}
+			return sortDir === 'desc' ? -cmp : cmp;
+		});
+		return sorted;
+	}
+
+	// Filter sessions by search term
+	function filterSessionsByTerm<T extends { sessionName: string; agentName: string; task?: { title?: string; id?: string } | null }>(
+		sessions: T[],
+		term: string
+	): T[] {
+		if (!term.trim()) return sessions;
+		const lowerTerm = term.toLowerCase();
+		return sessions.filter(s =>
+			s.sessionName.toLowerCase().includes(lowerTerm) ||
+			s.agentName.toLowerCase().includes(lowerTerm) ||
+			s.task?.title?.toLowerCase().includes(lowerTerm) ||
+			s.task?.id?.toLowerCase().includes(lowerTerm)
+		);
+	}
 
 	// Keyboard navigation state
 	let focusedProjectIndex = $state<number>(-1);
@@ -1425,48 +1537,6 @@
 							</div>
 						{/if}
 
-						<!-- Sort dropdown (only show if has sessions) -->
-						{#if hasSessions}
-						<div class="dropdown dropdown-end flex-shrink-0 {isProjectCollapsed ? '' : 'ml-auto'}" onclick={(e) => e.stopPropagation()}>
-							<button
-								tabindex="0"
-								class="btn btn-xs btn-ghost gap-1 font-mono text-[10px] uppercase tracking-wider opacity-70 hover:opacity-100"
-								title="Sort sessions"
-							>
-								<span>{currentSortOption?.icon || '🔔'}</span>
-								<span class="hidden sm:inline">{currentSortOption?.label || 'State'}</span>
-								<span class="text-[9px]">{currentSortDir === 'asc' ? '▲' : '▼'}</span>
-							</button>
-							<ul tabindex="0" class="dropdown-content menu menu-xs bg-base-200 rounded-box z-50 w-36 p-1 shadow-lg border border-base-300">
-								{#each SORT_OPTIONS as opt (opt.value)}
-									<li>
-										<button
-											class="flex items-center gap-2 {currentSortBy === opt.value ? 'active' : ''}"
-											onclick={() => handleSortClick(opt.value)}
-										>
-											<span>{opt.icon}</span>
-											<span class="flex-1">{opt.label}</span>
-											{#if currentSortBy === opt.value}
-												<span class="text-[9px] opacity-70">{currentSortDir === 'asc' ? '▲' : '▼'}</span>
-											{/if}
-										</button>
-									</li>
-								{/each}
-							</ul>
-						</div>
-						{/if}
-
-						<!-- Search input -->
-						<div class="flex-shrink-0" onclick={(e) => e.stopPropagation()}>
-							<input
-								type="text"
-								placeholder="Filter..."
-								value={searchTerm}
-								oninput={(e) => setSearchTerm(project, e.currentTarget.value)}
-								class="input input-xs input-bordered w-24 focus:w-40 transition-all duration-200 bg-base-200/50"
-							/>
-						</div>
-
 						<!-- Hide project button -->
 						<button
 							class="btn btn-xs btn-ghost opacity-30 hover:opacity-100 hover:btn-error flex-shrink-0"
@@ -1500,25 +1570,74 @@
 											{#each Array.from(epicSessions.entries()) as [epicId, epicSessionList] (epicId)}
 												{@const epicTask = getEpicTask(epicId)}
 												{@const isEpicCollapsed = isEpicGroupCollapsed(project, epicId)}
-												<div class="flex flex-col gap-1 {isEpicCollapsed ? '' : 'flex-1'} min-h-0">
+												{@const groupSort = getGroupSort(project, epicId)}
+												{@const groupFilter = getGroupFilter(project, epicId)}
+												{@const groupSortOption = SORT_OPTIONS.find(o => o.value === groupSort.sortBy)}
+												{@const filteredEpicSessions = filterSessionsByTerm(epicSessionList, groupFilter)}
+												{@const sortedEpicSessions = sortSessions(filteredEpicSessions, groupSort.sortBy, groupSort.sortDir)}
+												<div class="flex flex-col gap-1 {isEpicCollapsed ? '' : 'flex-1'} min-h-0" transition:slide|local={{ duration: 250, easing: cubicOut }}>
 													<!-- Epic header (clickable to collapse) -->
 													<!-- svelte-ignore a11y_no_static_element_interactions -->
 													<div
-														class="flex items-center gap-2 px-2 py-1 bg-base-200/50 rounded-lg border-l-2 border-purple-500/50 cursor-pointer hover:bg-base-200 transition-colors select-none"
-														onclick={() => toggleEpicGroupCollapse(project, epicId)}
-														onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleEpicGroupCollapse(project, epicId); } }}
-														role="button"
-														tabindex="0"
-														title="Click to {isEpicCollapsed ? 'expand' : 'collapse'} epic sessions"
+														class="flex items-center gap-2 px-2 py-1 bg-base-200/50 rounded-lg border-l-2 border-purple-500/50 hover:bg-base-200 transition-colors select-none"
 													>
-														<span class="text-purple-400 text-sm transition-transform duration-200 {isEpicCollapsed ? '-rotate-90' : ''}">📦</span>
-														<span class="text-xs font-semibold text-purple-300 uppercase tracking-wide">{epicTask?.title || epicId}</span>
-														<span class="badge badge-xs {isEpicCollapsed ? 'badge-primary' : 'badge-ghost'}">{epicSessionList.length}</span>
+														<button
+															class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer"
+															onclick={() => toggleEpicGroupCollapse(project, epicId)}
+															title="Click to {isEpicCollapsed ? 'expand' : 'collapse'} epic sessions"
+														>
+															<span class="text-purple-400 text-sm transition-transform duration-200 {isEpicCollapsed ? '-rotate-90' : ''}">📦</span>
+															<span class="text-xs font-semibold text-purple-300 uppercase tracking-wide truncate">{epicTask?.title || epicId}</span>
+															<span class="badge badge-xs {isEpicCollapsed ? 'badge-primary' : 'badge-ghost'}">{groupFilter ? `${sortedEpicSessions.length}/${epicSessionList.length}` : epicSessionList.length}</span>
+														</button>
+
+														<!-- Sort dropdown -->
+														<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+														<div class="dropdown dropdown-end flex-shrink-0" onclick={(e) => e.stopPropagation()}>
+															<button
+																tabindex="0"
+																class="btn btn-xs btn-ghost gap-1 font-mono text-[10px] uppercase tracking-wider opacity-70 hover:opacity-100"
+																title="Sort sessions"
+															>
+																<span>{groupSortOption?.icon || '🔔'}</span>
+																<span class="hidden sm:inline">{groupSortOption?.label || 'State'}</span>
+																<span class="text-[9px]">{groupSort.sortDir === 'asc' ? '▲' : '▼'}</span>
+															</button>
+															<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+															<ul tabindex="0" class="dropdown-content menu menu-xs bg-base-200 rounded-box z-50 w-36 p-1 shadow-lg border border-base-300">
+																{#each SORT_OPTIONS as opt (opt.value)}
+																	<li>
+																		<button
+																			class="flex items-center gap-2 {groupSort.sortBy === opt.value ? 'active' : ''}"
+																			onclick={() => handleGroupSortClick(project, epicId, opt.value)}
+																		>
+																			<span>{opt.icon}</span>
+																			<span class="flex-1">{opt.label}</span>
+																			{#if groupSort.sortBy === opt.value}
+																				<span class="text-[9px] opacity-70">{groupSort.sortDir === 'asc' ? '▲' : '▼'}</span>
+																			{/if}
+																		</button>
+																	</li>
+																{/each}
+															</ul>
+														</div>
+
+														<!-- Filter input -->
+														<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+														<div class="flex-shrink-0" onclick={(e) => e.stopPropagation()}>
+															<input
+																type="text"
+																placeholder="Filter..."
+																value={groupFilter}
+																oninput={(e) => setGroupFilter(project, epicId, e.currentTarget.value)}
+																class="input input-xs input-bordered w-20 focus:w-32 transition-all duration-200 bg-base-200/50"
+															/>
+														</div>
 													</div>
 													<!-- Epic sessions (horizontal scroll) -->
 													{#if !isEpicCollapsed}
 													<div class="flex gap-3 overflow-x-auto pl-3 h-full scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent" transition:slide|local={{ duration: 300, easing: quintOut }}>
-														{#each epicSessionList as session (session.sessionName)}
+														{#each sortedEpicSessions as session, i (session.sessionName)}
 															{@const isSessionDragging = draggedSession?.sessionName === session.sessionName}
 															{@const isSessionDragOver = dragOverSession?.sessionName === session.sessionName && dragOverSession?.project === project}
 															<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -1531,6 +1650,7 @@
 																draggable={isManualSort}
 																ondragstart={(e) => handleSessionDragStart(e, project, session.sessionName)}
 																ondragend={handleSessionDragEnd}
+																transition:fly|local={{ x: -20, duration: 200, delay: i * 30, easing: cubicOut }}
 															>
 																{#if isManualSort && draggedSession && !isSessionDragging}
 																	<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -1580,27 +1700,127 @@
 											<!-- Non-epic sessions -->
 											{#if nonEpicSessions.length > 0}
 												{@const isOtherCollapsed = isEpicGroupCollapsed(project, 'other')}
-												<div class="flex flex-col gap-1 {isOtherCollapsed ? '' : 'flex-1'} min-h-0">
-													<!-- Only show header if there are also epic sessions -->
+												{@const otherGroupSort = getGroupSort(project, 'other')}
+												{@const otherGroupFilter = getGroupFilter(project, 'other')}
+												{@const otherGroupSortOption = SORT_OPTIONS.find(o => o.value === otherGroupSort.sortBy)}
+												{@const filteredOtherSessions = filterSessionsByTerm(nonEpicSessions, otherGroupFilter)}
+												{@const sortedOtherSessions = sortSessions(filteredOtherSessions, otherGroupSort.sortBy, otherGroupSort.sortDir)}
+												<div class="flex flex-col gap-1 {isOtherCollapsed ? '' : 'flex-1'} min-h-0" transition:slide|local={{ duration: 250, easing: cubicOut }}>
+													<!-- Header with sort/filter controls -->
 													{#if epicSessions.size > 0}
 														<!-- svelte-ignore a11y_no_static_element_interactions -->
 														<div
-															class="flex items-center gap-2 px-2 py-1 bg-base-200/50 rounded-lg border-l-2 border-base-content/20 cursor-pointer hover:bg-base-200 transition-colors select-none"
-															onclick={() => toggleEpicGroupCollapse(project, 'other')}
-															onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleEpicGroupCollapse(project, 'other'); } }}
-															role="button"
-															tabindex="0"
-															title="Click to {isOtherCollapsed ? 'expand' : 'collapse'} other sessions"
+															class="flex items-center gap-2 px-2 py-1 bg-base-200/50 rounded-lg border-l-2 border-base-content/20 hover:bg-base-200 transition-colors select-none"
 														>
-															<span class="text-base-content/50 text-sm transition-transform duration-200 {isOtherCollapsed ? '-rotate-90' : ''}">📋</span>
-															<span class="text-xs font-semibold text-base-content/50 uppercase tracking-wide">Other Sessions</span>
-															<span class="badge badge-xs {isOtherCollapsed ? 'badge-primary' : 'badge-ghost'}">{nonEpicSessions.length}</span>
+															<button
+																class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer"
+																onclick={() => toggleEpicGroupCollapse(project, 'other')}
+																title="Click to {isOtherCollapsed ? 'expand' : 'collapse'} other sessions"
+															>
+																<span class="text-base-content/50 text-sm transition-transform duration-200 {isOtherCollapsed ? '-rotate-90' : ''}">📋</span>
+																<span class="text-xs font-semibold text-base-content/50 uppercase tracking-wide">Other Sessions</span>
+																<span class="badge badge-xs {isOtherCollapsed ? 'badge-primary' : 'badge-ghost'}">{otherGroupFilter ? `${sortedOtherSessions.length}/${nonEpicSessions.length}` : nonEpicSessions.length}</span>
+															</button>
+
+															<!-- Sort dropdown -->
+															<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+															<div class="dropdown dropdown-end flex-shrink-0" onclick={(e) => e.stopPropagation()}>
+																<button
+																	tabindex="0"
+																	class="btn btn-xs btn-ghost gap-1 font-mono text-[10px] uppercase tracking-wider opacity-70 hover:opacity-100"
+																	title="Sort sessions"
+																>
+																	<span>{otherGroupSortOption?.icon || '🔔'}</span>
+																	<span class="hidden sm:inline">{otherGroupSortOption?.label || 'State'}</span>
+																	<span class="text-[9px]">{otherGroupSort.sortDir === 'asc' ? '▲' : '▼'}</span>
+																</button>
+																<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+																<ul tabindex="0" class="dropdown-content menu menu-xs bg-base-200 rounded-box z-50 w-36 p-1 shadow-lg border border-base-300">
+																	{#each SORT_OPTIONS as opt (opt.value)}
+																		<li>
+																			<button
+																				class="flex items-center gap-2 {otherGroupSort.sortBy === opt.value ? 'active' : ''}"
+																				onclick={() => handleGroupSortClick(project, 'other', opt.value)}
+																			>
+																				<span>{opt.icon}</span>
+																				<span class="flex-1">{opt.label}</span>
+																				{#if otherGroupSort.sortBy === opt.value}
+																					<span class="text-[9px] opacity-70">{otherGroupSort.sortDir === 'asc' ? '▲' : '▼'}</span>
+																				{/if}
+																			</button>
+																		</li>
+																	{/each}
+																</ul>
+															</div>
+
+															<!-- Filter input -->
+															<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+															<div class="flex-shrink-0" onclick={(e) => e.stopPropagation()}>
+																<input
+																	type="text"
+																	placeholder="Filter..."
+																	value={otherGroupFilter}
+																	oninput={(e) => setGroupFilter(project, 'other', e.currentTarget.value)}
+																	class="input input-xs input-bordered w-20 focus:w-32 transition-all duration-200 bg-base-200/50"
+																/>
+															</div>
+														</div>
+													{:else}
+														<!-- Header with sort/filter controls (when no epic groups exist) -->
+														<!-- svelte-ignore a11y_no_static_element_interactions -->
+														<div class="flex items-center gap-2 px-2 py-1 bg-base-200/50 rounded-lg border-l-2 border-base-content/20 hover:bg-base-200 transition-colors select-none">
+															<span class="text-base-content/50 text-sm">📋</span>
+															<span class="text-xs font-semibold text-base-content/50 uppercase tracking-wide">Sessions</span>
+															<span class="badge badge-xs badge-ghost">{otherGroupFilter ? `${sortedOtherSessions.length}/${nonEpicSessions.length}` : nonEpicSessions.length}</span>
+
+															<!-- Sort dropdown -->
+															<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+															<div class="dropdown dropdown-end flex-shrink-0 ml-auto" onclick={(e) => e.stopPropagation()}>
+																<button
+																	tabindex="0"
+																	class="btn btn-xs btn-ghost gap-1 font-mono text-[10px] uppercase tracking-wider opacity-70 hover:opacity-100"
+																	title="Sort sessions"
+																>
+																	<span>{otherGroupSortOption?.icon || '🔔'}</span>
+																	<span class="hidden sm:inline">{otherGroupSortOption?.label || 'State'}</span>
+																	<span class="text-[9px]">{otherGroupSort.sortDir === 'asc' ? '▲' : '▼'}</span>
+																</button>
+																<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+																<ul tabindex="0" class="dropdown-content menu menu-xs bg-base-200 rounded-box z-50 w-36 p-1 shadow-lg border border-base-300">
+																	{#each SORT_OPTIONS as opt (opt.value)}
+																		<li>
+																			<button
+																				class="flex items-center gap-2 {otherGroupSort.sortBy === opt.value ? 'active' : ''}"
+																				onclick={() => handleGroupSortClick(project, 'other', opt.value)}
+																			>
+																				<span>{opt.icon}</span>
+																				<span class="flex-1">{opt.label}</span>
+																				{#if otherGroupSort.sortBy === opt.value}
+																					<span class="text-[9px] opacity-70">{otherGroupSort.sortDir === 'asc' ? '▲' : '▼'}</span>
+																				{/if}
+																			</button>
+																		</li>
+																	{/each}
+																</ul>
+															</div>
+
+															<!-- Filter input -->
+															<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+															<div class="flex-shrink-0" onclick={(e) => e.stopPropagation()}>
+																<input
+																	type="text"
+																	placeholder="Filter..."
+																	value={otherGroupFilter}
+																	oninput={(e) => setGroupFilter(project, 'other', e.currentTarget.value)}
+																	class="input input-xs input-bordered w-20 focus:w-32 transition-all duration-200 bg-base-200/50"
+																/>
+															</div>
 														</div>
 													{/if}
 													<!-- Non-epic sessions (horizontal scroll) -->
 													{#if !isOtherCollapsed || epicSessions.size === 0}
 													<div class="flex gap-3 overflow-x-auto h-full {epicSessions.size > 0 ? 'pl-3' : ''} scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent" transition:slide|local={{ duration: 300, easing: quintOut }}>
-														{#each nonEpicSessions as session (session.sessionName)}
+														{#each sortedOtherSessions as session, i (session.sessionName)}
 															{@const isSessionDragging = draggedSession?.sessionName === session.sessionName}
 															{@const isSessionDragOver = dragOverSession?.sessionName === session.sessionName && dragOverSession?.project === project}
 															<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -1613,6 +1833,7 @@
 																draggable={isManualSort}
 																ondragstart={(e) => handleSessionDragStart(e, project, session.sessionName)}
 																ondragend={handleSessionDragEnd}
+																transition:fly|local={{ x: -20, duration: 200, delay: i * 30, easing: cubicOut }}
 															>
 																{#if isManualSort && draggedSession && !isSessionDragging}
 																	<!-- svelte-ignore a11y_no_static_element_interactions -->

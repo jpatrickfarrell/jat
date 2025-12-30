@@ -17,6 +17,7 @@
 	import StreakCalendar from '$lib/components/StreakCalendar.svelte';
 	import AnimatedDigits from '$lib/components/AnimatedDigits.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
+	import { HistorySkeleton } from '$lib/components/skeleton';
 	import { getProjectColor, initProjectColors } from '$lib/utils/projectColors';
 
 	interface CompletedTask {
@@ -32,7 +33,7 @@
 
 	// State
 	let tasks = $state<CompletedTask[]>([]);
-	let loading = $state(false);
+	let loading = $state(true);
 	let error = $state<string | null>(null);
 
 	// Filters
@@ -283,6 +284,36 @@
 		selectedTaskId = taskId;
 		drawerOpen = true;
 	}
+
+	// Track which tasks are resuming
+	let resumingTasks = $state<Set<string>>(new Set());
+
+	async function handleResumeSession(event: MouseEvent, task: CompletedTask) {
+		event.stopPropagation(); // Don't open drawer when clicking resume
+
+		if (!task.assignee) return;
+
+		resumingTasks.add(task.id);
+		resumingTasks = new Set(resumingTasks);
+
+		try {
+			const response = await fetch(`/api/sessions/${task.assignee}/resume`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' }
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				console.error('Failed to resume session:', data.message);
+				// Could add a toast notification here
+			}
+		} catch (error) {
+			console.error('Error resuming session:', error);
+		} finally {
+			resumingTasks.delete(task.id);
+			resumingTasks = new Set(resumingTasks);
+		}
+	}
 </script>
 
 <svelte:head>
@@ -293,10 +324,7 @@
 	<!-- Main Content -->
 	<div class="p-6">
 		{#if loading}
-			<div class="loading-state flex flex-col items-center justify-center py-20 gap-3">
-				<span class="loading loading-spinner loading-lg"></span>
-				<p class="text-base-content/60">Loading history...</p>
-			</div>
+			<HistorySkeleton dayGroups={5} tasksPerGroup={4} />
 		{:else if error}
 			<div class="error-state flex flex-col items-center justify-center py-20 gap-3">
 				<p class="text-error">{error}</p>
@@ -428,7 +456,7 @@
 							</div>
 							<div class="day-tasks">
 								{#each day.tasks as task}
-									<button class="task-item" onclick={() => handleTaskClick(task.id)}>
+									<button class="task-item group" onclick={() => handleTaskClick(task.id)}>
 										<span class="task-priority {getPriorityClass(task.priority)}"></span>
 										<div class="task-info">
 											<span class="task-title">{task.title}</span>
@@ -437,25 +465,46 @@
 												{#if task.assignee}
 													<span class="task-agent">by {task.assignee}</span>
 												{/if}
-												<span class="task-time">
-													{formatTime(task.closed_at || task.updated_at)}
-												</span>
 											</span>
 										</div>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											fill="none"
-											viewBox="0 0 24 24"
-											stroke-width="1.5"
-											stroke="currentColor"
-											class="task-arrow"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M8.25 4.5l7.5 7.5-7.5 7.5"
-											/>
-										</svg>
+										<!-- Right side: time + resume button + arrow -->
+										<div class="task-actions">
+											<span class="task-time">
+												{formatTime(task.closed_at || task.updated_at)}
+											</span>
+											<!-- Resume button - shows on hover when task has assignee -->
+											{#if task.assignee}
+												<button
+													type="button"
+													class="resume-btn"
+													onclick={(e) => handleResumeSession(e, task)}
+													title="Resume session with {task.assignee}"
+													disabled={resumingTasks.has(task.id)}
+												>
+													{#if resumingTasks.has(task.id)}
+														<span class="loading loading-spinner loading-xs"></span>
+													{:else}
+														<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+														</svg>
+													{/if}
+												</button>
+											{/if}
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												fill="none"
+												viewBox="0 0 24 24"
+												stroke-width="1.5"
+												stroke="currentColor"
+												class="task-arrow"
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													d="M8.25 4.5l7.5 7.5-7.5 7.5"
+												/>
+											</svg>
+										</div>
 									</button>
 								{/each}
 							</div>
@@ -764,8 +813,19 @@
 		color: var(--color-success);
 	}
 
+	/* Task actions container - groups time, resume button, and arrow */
+	.task-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-shrink: 0;
+	}
+
 	.task-time {
-		margin-left: auto;
+		font-size: 0.7rem;
+		color: oklch(from var(--color-base-content) l c h / 55%);
+		min-width: 60px;
+		text-align: right;
 	}
 
 	.task-arrow {
@@ -783,8 +843,43 @@
 		transform: translateX(2px);
 	}
 
-	/* Loading & Error States */
-	.loading-state,
+	/* Resume button - hidden by default, shows on hover */
+	.resume-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		border-radius: 6px;
+		background: oklch(from var(--color-success) l c h / 15%);
+		border: 1px solid oklch(from var(--color-success) l c h / 30%);
+		color: var(--color-success);
+		cursor: pointer;
+		opacity: 0;
+		transition: opacity 0.15s ease, background 0.15s ease, transform 0.15s ease;
+		flex-shrink: 0;
+	}
+
+	.task-item:hover .resume-btn {
+		opacity: 1;
+	}
+
+	.resume-btn:hover:not(:disabled) {
+		background: oklch(from var(--color-success) l c h / 25%);
+		border-color: oklch(from var(--color-success) l c h / 50%);
+		transform: scale(1.05);
+	}
+
+	.resume-btn:disabled {
+		cursor: not-allowed;
+		opacity: 0.6;
+	}
+
+	.task-item:hover .resume-btn:disabled {
+		opacity: 0.6;
+	}
+
+	/* Error & Empty States */
 	.error-state,
 	.empty-state {
 		display: flex;

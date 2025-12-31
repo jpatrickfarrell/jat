@@ -154,12 +154,12 @@
 		</div>
 
 		<div class="flex flex-col gap-3">
-			{#each filteredTasks as task (task.id)}
+			{#each filteredTasks as task, index (task.id)}
 				{@const priorityClass = priorityClasses[task.priority] || priorityClasses[2]}
 				{@const priorityLabel = priorityLabels[task.priority] || 'P2'}
 
 				<div
-					class="card bg-base-100 border border-base-300 hover:shadow-lg transition-shadow cursor-pointer"
+					class="card bg-base-100 border border-base-300 hover:shadow-lg transition-shadow cursor-pointer fade-in-left fade-in-delay-{Math.min(index, 12)}"
 					onclick={() => handleTaskClick(task.id)}
 					onkeydown={(e) => handleKeyDown(e, task.id)}
 					role="button"

@@ -74,8 +74,8 @@
 		tabindex="0"
 		class="dropdown-content menu rounded-box z-[60] min-w-40 w-max p-2 shadow-lg max-h-80 overflow-y-auto overflow-x-hidden bg-base-200 border border-base-300"
 	>
-		{#each projects as project}
-			<li>
+		{#each projects as project, index}
+			<li class="fade-in fade-in-delay-{Math.min(index, 12)}">
 				<button
 					type="button"
 					class="font-mono text-xs transition-all industrial-hover {selectedProject === project ? 'project-option-selected' : 'project-option-default'}"

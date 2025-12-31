@@ -168,13 +168,15 @@
 		{:else}
 			<!-- Projects grid -->
 			<div class="projects-grid">
-				{#each visibleProjects as project (project.path)}
-					<ProjectCard
-						{project}
-						onEdit={onEditProject}
-						onDelete={onDeleteProject}
-						onToggleVisibility={handleToggleVisibility}
-					/>
+				{#each visibleProjects as project, index (project.path)}
+					<div class="fade-in-left fade-in-delay-{Math.min(index, 12)}">
+						<ProjectCard
+							{project}
+							onEdit={onEditProject}
+							onDelete={onDeleteProject}
+							onToggleVisibility={handleToggleVisibility}
+						/>
+					</div>
 				{/each}
 			</div>
 
@@ -203,13 +205,15 @@
 
 					{#if hiddenSectionExpanded}
 						<div class="hidden-projects-grid" transition:slide={{ duration: 200, axis: 'y' }}>
-							{#each hiddenProjects as project (project.path)}
-								<ProjectCard
-									{project}
-									onEdit={onEditProject}
-									onDelete={onDeleteProject}
-									onToggleVisibility={handleToggleVisibility}
-								/>
+							{#each hiddenProjects as project, index (project.path)}
+								<div class="fade-in-left fade-in-delay-{Math.min(index, 12)}">
+									<ProjectCard
+										{project}
+										onEdit={onEditProject}
+										onDelete={onDeleteProject}
+										onToggleVisibility={handleToggleVisibility}
+									/>
+								</div>
 							{/each}
 						</div>
 					{/if}

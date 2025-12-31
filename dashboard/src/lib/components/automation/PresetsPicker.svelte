@@ -157,13 +157,13 @@
 
 	<!-- Categories -->
 	<div class="p-4 flex flex-col gap-6 max-h-[600px] overflow-y-auto">
-		{#each categories as category}
+		{#each categories as category, categoryIndex}
 			{@const meta = RULE_CATEGORY_META[category]}
 			{@const stats = getCategoryStats(category)}
 			{@const presets = presetsByCategory[category]}
 
 			{#if presets.length > 0}
-				<div class="flex flex-col gap-3" transition:slide={{ duration: 150 }}>
+				<div class="flex flex-col gap-3 fade-in-left fade-in-delay-{Math.min(categoryIndex, 12)}" transition:slide={{ duration: 150 }}>
 					<!-- Category header -->
 					<div class="flex flex-col gap-1">
 						<div class="flex items-center gap-2">
@@ -187,10 +187,10 @@
 
 					<!-- Preset cards -->
 					<div class="grid gap-3" style="grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));">
-						{#each presets as preset (preset.id)}
+						{#each presets as preset, presetIndex (preset.id)}
 							{@const isInstalled = installedPresets.has(preset.id)}
 							<div
-								class="flex flex-col rounded-lg overflow-hidden transition-all duration-150 bg-base-100 border border-base-300 hover:border-base-content/30 hover:bg-base-100/80 {isInstalled ? 'border-success/40 !bg-success/5' : ''}"
+								class="flex flex-col rounded-lg overflow-hidden transition-all duration-150 bg-base-100 border border-base-300 hover:border-base-content/30 hover:bg-base-100/80 fade-in fade-in-delay-{Math.min(presetIndex, 12)} {isInstalled ? 'border-success/40 !bg-success/5' : ''}"
 								transition:fly={{ y: 10, duration: 150 }}
 							>
 								<div class="flex-1 p-3 flex flex-col gap-2">

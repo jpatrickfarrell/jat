@@ -253,7 +253,7 @@
 					</div>
 					<ul class="space-y-1 font-mono text-xs" style="color: oklch(0.55 0.02 250);">
 						{#each readyTasks.slice(0, Math.min(agentCount, 5)) as task, i}
-							<li class="flex items-center gap-1 group">
+							<li class="flex items-center gap-1 group fade-in-left fade-in-delay-{Math.min(i, 12)}">
 								<span style="color: oklch(0.70 0.15 {50 + i * 30});">Agent {i + 1}</span>
 								<span style="color: oklch(0.45 0.02 250);">→</span>
 								<span class="truncate flex-1">[P{task.priority}] {task.id}</span>

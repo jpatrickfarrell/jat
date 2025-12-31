@@ -320,7 +320,7 @@
 			{:else}
 				<!-- Stats Row -->
 				<div class="grid grid-cols-4 gap-2">
-					<div class="stat-card streak-card">
+					<div class="stat-card streak-card fade-in fade-in-delay-0">
 						<div class="text-xl">
 							<span class="streak-fire">🔥</span>
 						</div>
@@ -332,7 +332,7 @@
 						</div>
 					</div>
 
-					<div class="stat-card">
+					<div class="stat-card fade-in fade-in-delay-1">
 						<div class="flex flex-col items-center">
 							<span class="text-xl font-bold text-warning font-mono leading-none">
 								<AnimatedDigits value={stats.todayCount.toString()} />
@@ -341,7 +341,7 @@
 						</div>
 					</div>
 
-					<div class="stat-card">
+					<div class="stat-card fade-in fade-in-delay-2">
 						<div class="flex flex-col items-center">
 							<span class="text-xl font-bold text-base-content font-mono leading-none">
 								<AnimatedDigits value={stats.bestStreak.toString()} />
@@ -350,7 +350,7 @@
 						</div>
 					</div>
 
-					<div class="stat-card">
+					<div class="stat-card fade-in fade-in-delay-3">
 						<div class="flex flex-col items-center">
 							<span class="text-xl font-bold text-base-content font-mono leading-none">
 								{stats.avgPerDay.toFixed(1)}
@@ -381,8 +381,8 @@
 				<section class="flex-1">
 					<h3 class="text-[0.7rem] font-semibold text-base-content/60 uppercase tracking-widest mb-3">Recent Activity</h3>
 					<div class="day-list">
-						{#each tasksByDay as day}
-							<div class="day-group">
+						{#each tasksByDay as day, dayIndex}
+							<div class="day-group fade-in-left fade-in-delay-{Math.min(dayIndex, 12)}">
 								<div class="day-header">
 									<span class="text-sm font-semibold text-base-content/85 font-mono">{day.displayDate}</span>
 									<span class="text-xs text-base-content/55 px-2 py-0.5 bg-base-content/10 rounded-full">{day.tasks.length} task{day.tasks.length !== 1 ? 's' : ''}</span>

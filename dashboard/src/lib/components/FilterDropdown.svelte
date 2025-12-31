@@ -125,9 +125,9 @@
 {#if mode === 'inline'}
 	<!-- Inline Mode: No dropdown wrapper, just badge/checkbox grid -->
 	<div class="flex flex-wrap gap-1.5 {className}">
-		{#each options as opt}
+		{#each options as opt, index}
 			{#if style === 'checkbox'}
-				<label class="label cursor-pointer justify-start gap-2">
+				<label class="label cursor-pointer justify-start gap-2 fade-in fade-in-delay-{Math.min(index, 12)}">
 					<input
 						type="checkbox"
 						class="checkbox checkbox-sm"
@@ -139,7 +139,7 @@
 				</label>
 			{:else}
 				<button
-					class="badge badge-sm transition-all duration-200 cursor-pointer {selected.has(opt.value)
+					class="badge badge-sm transition-all duration-200 cursor-pointer fade-in fade-in-delay-{Math.min(index, 12)} {selected.has(opt.value)
 						? colorFn(opt.value, true) + ' shadow-md'
 						: 'badge-ghost hover:badge-primary/20 hover:shadow-sm hover:scale-105'}"
 					onclick={() => handleToggle(opt.value)}
@@ -185,8 +185,8 @@
 				tabindex="0"
 				class="dropdown-content z-40 menu p-2 shadow rounded-box {menuWidth} {maxHeight ? maxHeight + ' overflow-y-auto' : ''} bg-base-200 border border-base-300"
 			>
-				{#each options as opt}
-					<li>
+				{#each options as opt, index}
+					<li class="fade-in fade-in-delay-{Math.min(index, 12)}">
 						<label
 							class="label cursor-pointer justify-start gap-2 rounded industrial-hover text-base-content/70"
 						>
@@ -211,9 +211,9 @@
 				class="dropdown-content rounded-box shadow-lg p-2 z-40 {menuWidth} mt-1 {maxHeight ? maxHeight + ' overflow-y-auto' : ''} bg-base-200 border border-base-300"
 			>
 				<div class="flex flex-wrap gap-1.5">
-					{#each options as opt}
+					{#each options as opt, index}
 						<button
-							class="px-2 py-0.5 rounded font-mono text-xs transition-all cursor-pointer border {selected.has(opt.value) ? 'bg-primary/20 border-primary/40 text-primary' : 'bg-base-300 border-base-content/20 text-base-content opacity-70 hover:opacity-100'}"
+							class="px-2 py-0.5 rounded font-mono text-xs transition-all cursor-pointer border fade-in fade-in-delay-{Math.min(index, 12)} {selected.has(opt.value) ? 'bg-primary/20 border-primary/40 text-primary' : 'bg-base-300 border-base-content/20 text-base-content opacity-70 hover:opacity-100'}"
 							onclick={() => handleToggle(opt.value)}
 							onkeydown={(e) => handleKeydown(e, opt.value)}
 						>

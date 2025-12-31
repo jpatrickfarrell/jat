@@ -32,7 +32,7 @@
 </script>
 
 <div
-	class="flex flex-col h-full min-w-[280px] {collapsed ? 'max-w-[60px]' : 'max-w-[320px]'} transition-all duration-300 {className}"
+	class="flex flex-col h-full min-w-[280px] {collapsed ? 'max-w-[60px]' : 'max-w-[320px]'} transition-all duration-300 fade-in {className}"
 >
 	<!-- Column Header -->
 	<button

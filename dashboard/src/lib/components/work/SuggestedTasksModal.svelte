@@ -391,7 +391,7 @@
 					{@const typeVisual = getIssueTypeVisual(effectiveType)}
 
 					<div
-						class="rounded-lg transition-all border {task.alreadyCreated
+						class="rounded-lg transition-all border fade-in-left fade-in-delay-{Math.min(index, 12)} {task.alreadyCreated
 							? 'task-card-created'
 							: selected
 								? isHuman

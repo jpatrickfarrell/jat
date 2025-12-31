@@ -225,12 +225,11 @@
 		{:else}
 			<!-- Horizontal Scrolling Row - Industrial -->
 			<div class="flex gap-4 overflow-x-auto pb-2 h-full scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent">
-				{#each sortedAgents as agent (agent.id || agent.name)}
+				{#each sortedAgents as agent, index (agent.id || agent.name)}
 					{@const agentTask = getAgentTask(agent)}
 					<div
-						class="flex-shrink-0 w-72 {newAgentNames.includes(agent.name) ? 'agent-new-entrance' : ''}"
+						class="flex-shrink-0 w-72 {newAgentNames.includes(agent.name) ? 'agent-new-entrance' : ''} fade-in-left fade-in-delay-{Math.min(index, 12)}"
 						animate:flip={{ duration: 300 }}
-						in:fly={{ x: -50, duration: 400, delay: 100 }}
 					>
 						<SessionCard
 							mode="compact"

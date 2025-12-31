@@ -124,8 +124,8 @@
 		<ul class="menu w-56">
 			<li class="menu-title text-xs">Theme</li>
 
-			{#each themes as theme}
-				<li>
+			{#each themes as theme, index}
+				<li class="fade-in fade-in-delay-{Math.min(index, 12)}">
 					<button
 						class="gap-3 px-2"
 						onclick={() => handleThemeChange(theme.name)}

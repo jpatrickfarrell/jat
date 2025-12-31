@@ -201,18 +201,59 @@
 		}
 	}
 
+	// Saving state for UI feedback
+	let savingFiles = $state<Set<string>>(new Set());
+	let saveError = $state<string | null>(null);
+	let saveSuccess = $state<string | null>(null);
+
 	// Handle file save
 	async function handleFileSave(path: string, content: string) {
-		// TODO: Implement API call to save file
-		console.log('[Files] Save file:', path, 'content length:', content.length);
+		if (!selectedProject) return;
 
-		// Mark file as not dirty after save
-		openFiles = openFiles.map((f) => {
-			if (f.path === path) {
-				return { ...f, dirty: false, originalContent: content };
+		// Add to saving state
+		savingFiles = new Set([...savingFiles, path]);
+		saveError = null;
+
+		try {
+			const params = new URLSearchParams({
+				project: selectedProject,
+				path
+			});
+
+			const response = await fetch(`/api/files/content?${params}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ content })
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				throw new Error(data.error || 'Failed to save file');
 			}
-			return f;
-		});
+
+			// Mark file as not dirty after save
+			openFiles = openFiles.map((f) => {
+				if (f.path === path) {
+					return { ...f, dirty: false, originalContent: content };
+				}
+				return f;
+			});
+
+			// Show success toast
+			const filename = path.split('/').pop() || path;
+			saveSuccess = `Saved ${filename}`;
+			setTimeout(() => { saveSuccess = null; }, 2000);
+
+		} catch (err) {
+			console.error('[Files] Failed to save file:', err);
+			saveError = err instanceof Error ? err.message : 'Failed to save file';
+			setTimeout(() => { saveError = null; }, 4000);
+		} finally {
+			// Remove from saving state
+			const updated = new Set(savingFiles);
+			updated.delete(path);
+			savingFiles = updated;
+		}
 	}
 
 	// Handle active file change
@@ -226,8 +267,80 @@
 		console.log('[Files] Content changed:', path, 'dirty:', dirty);
 	}
 
+	// localStorage key for persisting open files per project
+	function getStorageKey(project: string): string {
+		return `jat-files-open-${project}`;
+	}
+
+	// Track which projects have been restored to prevent double-loading
+	let restoredProjects = $state<Set<string>>(new Set());
+
+	// Save open files to localStorage
+	function saveOpenFilesToStorage() {
+		if (!selectedProject || typeof window === 'undefined') return;
+
+		const key = getStorageKey(selectedProject);
+		if (openFiles.length === 0) {
+			// Remove from storage when no files open
+			localStorage.removeItem(key);
+		} else {
+			const data = {
+				openFiles: openFiles.map(f => ({ path: f.path })),
+				activeFilePath
+			};
+			localStorage.setItem(key, JSON.stringify(data));
+		}
+	}
+
+	// Load open files from localStorage
+	async function loadOpenFilesFromStorage() {
+		if (!selectedProject || typeof window === 'undefined') return;
+		if (restoredProjects.has(selectedProject)) return;
+
+		// Mark as restored to prevent duplicate loads
+		restoredProjects = new Set([...restoredProjects, selectedProject]);
+
+		const key = getStorageKey(selectedProject);
+		const stored = localStorage.getItem(key);
+		if (!stored) return;
+
+		try {
+			const data = JSON.parse(stored);
+			const paths: string[] = data.openFiles?.map((f: { path: string }) => f.path) || [];
+			const savedActivePath = data.activeFilePath;
+
+			// Load each file's content
+			for (const path of paths) {
+				await handleFileSelect(path);
+			}
+
+			// Restore active file
+			if (savedActivePath && openFiles.some(f => f.path === savedActivePath)) {
+				activeFilePath = savedActivePath;
+			}
+		} catch (err) {
+			console.error('[Files] Failed to restore open files:', err);
+		}
+	}
+
+	// Save to storage when open files change
+	$effect(() => {
+		// Only save after initial restore is complete
+		if (restoredProjects.has(selectedProject || '')) {
+			saveOpenFilesToStorage();
+		}
+	});
+
 	onMount(() => {
 		fetchProjects();
+	});
+
+	// Load persisted files after project is selected
+	$effect(() => {
+		if (selectedProject && projects.length > 0 && !isLoading) {
+			// Small delay to ensure project is fully loaded
+			setTimeout(() => loadOpenFilesFromStorage(), 100);
+		}
 	});
 </script>
 
@@ -356,6 +469,7 @@
 							onFileSave={handleFileSave}
 							onActiveFileChange={handleActiveFileChange}
 							onContentChange={handleContentChange}
+							{savingFiles}
 						/>
 					{:else}
 						<div class="panel-header">
@@ -372,6 +486,26 @@
 					{/if}
 				</div>
 			</div>
+		</div>
+	{/if}
+</div>
+
+<!-- Toast Notifications -->
+<div class="toast toast-end toast-bottom z-50">
+	{#if saveSuccess}
+		<div class="alert alert-success shadow-lg">
+			<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+			</svg>
+			<span>{saveSuccess}</span>
+		</div>
+	{/if}
+	{#if saveError}
+		<div class="alert alert-error shadow-lg">
+			<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+			</svg>
+			<span>{saveError}</span>
 		</div>
 	{/if}
 </div>

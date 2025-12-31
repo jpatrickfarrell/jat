@@ -21,7 +21,8 @@
 		onFileClose = () => {},
 		onFileSave = () => {},
 		onActiveFileChange = () => {},
-		onContentChange = () => {}
+		onContentChange = () => {},
+		savingFiles = new Set<string>()
 	}: {
 		openFiles: OpenFile[];
 		activeFilePath: string | null;
@@ -29,7 +30,18 @@
 		onFileSave?: (path: string, content: string) => void;
 		onActiveFileChange?: (path: string) => void;
 		onContentChange?: (path: string, content: string, dirty: boolean) => void;
+		savingFiles?: Set<string>;
 	} = $props();
+
+	// Derived state: is the active file currently being saved?
+	const isActiveSaving = $derived(activeFilePath ? savingFiles.has(activeFilePath) : false);
+
+	// Handle save button click
+	function handleSaveClick() {
+		if (activeFile && activeFile.dirty && !isActiveSaving) {
+			onFileSave(activeFile.path, activeFile.content);
+		}
+	}
 
 	// Monaco ref for focus/layout
 	let monacoRef: { focus: () => void; layout: () => void } | undefined = $state(undefined);
@@ -192,14 +204,33 @@
 
 <div class="file-editor">
 	{#if openFiles.length > 0}
-		<!-- Tab Bar -->
-		<FileTabBar
-			{openFiles}
-			{activeFilePath}
-			onTabSelect={handleTabSelect}
-			onTabClose={handleTabClose}
-			onTabMiddleClick={handleTabMiddleClick}
-		/>
+		<!-- Tab Bar with Save Button -->
+		<div class="editor-header">
+			<FileTabBar
+				{openFiles}
+				{activeFilePath}
+				onTabSelect={handleTabSelect}
+				onTabClose={handleTabClose}
+				onTabMiddleClick={handleTabMiddleClick}
+			/>
+			<!-- Save Button -->
+			<button
+				class="save-btn"
+				class:saving={isActiveSaving}
+				class:has-changes={activeFile?.dirty && !isActiveSaving}
+				disabled={!activeFile?.dirty || isActiveSaving}
+				onclick={handleSaveClick}
+				title={isActiveSaving ? 'Saving...' : activeFile?.dirty ? 'Save (Ctrl+S)' : 'No changes to save'}
+			>
+				{#if isActiveSaving}
+					<span class="save-spinner"></span>
+				{:else}
+					<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+					</svg>
+				{/if}
+			</button>
+		</div>
 
 		<!-- Editor Area -->
 		<div class="editor-area">
@@ -288,6 +319,69 @@
 		background: oklch(0.14 0.01 250);
 		border-radius: 0.5rem;
 		overflow: hidden;
+	}
+
+	.editor-header {
+		display: flex;
+		align-items: stretch;
+		background: oklch(0.16 0.01 250);
+		border-bottom: 1px solid oklch(0.22 0.02 250);
+	}
+
+	.save-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		min-width: 36px;
+		background: oklch(0.18 0.01 250);
+		border: none;
+		border-left: 1px solid oklch(0.22 0.02 250);
+		color: oklch(0.45 0.02 250);
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.save-btn:hover:not(:disabled) {
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.70 0.02 250);
+	}
+
+	.save-btn.has-changes {
+		color: oklch(0.75 0.15 145);
+		animation: pulse-save 2s infinite;
+	}
+
+	.save-btn.has-changes:hover {
+		background: oklch(0.55 0.15 145 / 0.2);
+		color: oklch(0.80 0.18 145);
+	}
+
+	.save-btn.saving {
+		color: oklch(0.65 0.15 200);
+	}
+
+	.save-btn:disabled:not(.saving) {
+		cursor: not-allowed;
+		opacity: 0.5;
+	}
+
+	@keyframes pulse-save {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.7; }
+	}
+
+	.save-spinner {
+		width: 14px;
+		height: 14px;
+		border: 2px solid oklch(0.30 0.02 250);
+		border-top-color: oklch(0.65 0.15 200);
+		border-radius: 50%;
+		animation: spin 0.6s linear infinite;
+	}
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
 	}
 
 	.editor-area {

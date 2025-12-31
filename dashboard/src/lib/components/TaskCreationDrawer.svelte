@@ -17,6 +17,7 @@
 	import { broadcastTaskEvent } from '$lib/stores/taskEvents';
 	import { broadcastSessionEvent } from '$lib/stores/sessionEvents';
 	import { playSuccessChime, playErrorSound, playAttachmentSound } from '$lib/utils/soundEffects';
+	import { getActiveProject, setActiveProject } from '$lib/stores/preferences.svelte';
 	import { getFileTypeInfo, formatFileSize, getAcceptAttribute, type FileCategory } from '$lib/utils/fileUtils';
 	import VoiceInput from './VoiceInput.svelte';
 
@@ -44,13 +45,23 @@
 	// Pre-fill project when drawer opens (read from store at open time)
 	$effect(() => {
 		if (isOpen) {
-			// Read current project from store when drawer opens
-			const project = get(selectedDrawerProject);
-			if (project) {
-				formData.project = project;
+			// Priority: 1) selectedDrawerProject (explicit from caller)
+			//           2) getActiveProject() (user's last selection)
+			//           3) First from sorted list
+			const explicitProject = get(selectedDrawerProject);
+			if (explicitProject) {
+				formData.project = explicitProject;
 			} else if (dynamicProjects.length > 0 && !formData.project) {
-				// Default to first project if none selected (e.g., opened via Alt+N)
-				formData.project = dynamicProjects[0];
+				// Check if user has a preferred active project
+				const activeProject = getActiveProject();
+				const activeProjectExists = activeProject && dynamicProjects.includes(activeProject);
+
+				if (activeProjectExists) {
+					formData.project = activeProject;
+				} else {
+					// Default to first project (sorted by recent agent activity)
+					formData.project = dynamicProjects[0];
+				}
 			}
 		}
 	});
@@ -1031,7 +1042,9 @@
 
 	function selectProjectByIndex(index: number) {
 		if (index >= 0 && index < dynamicProjects.length) {
-			formData.project = dynamicProjects[index];
+			const project = dynamicProjects[index];
+			formData.project = project;
+			setActiveProject(project);
 			closeProjectDropdown();
 		}
 	}
@@ -1177,7 +1190,7 @@
 										<button
 											type="button"
 											class="font-mono {formData.project === project ? 'active' : ''} {projectDropdownOpen && projectDropdownIndex === i ? 'focus' : ''}"
-											onclick={() => { formData.project = project; closeProjectDropdown(); }}
+											onclick={() => { formData.project = project; setActiveProject(project); closeProjectDropdown(); }}
 											onmouseenter={() => projectDropdownIndex = i}
 										>
 											<span

@@ -5,6 +5,7 @@
 	 * Features:
 	 * - Tab bar for multiple open files (via FileTabBar)
 	 * - Monaco editor for file content (via MonacoWrapper)
+	 * - Media preview for images, videos, audio, and PDFs
 	 * - Auto-detect language from file extension
 	 * - Track dirty state per file
 	 * - Emits events for file operations
@@ -12,12 +13,14 @@
 
 	import FileTabBar from './FileTabBar.svelte';
 	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
+	import MediaPreview from './MediaPreview.svelte';
 	import type { OpenFile } from './types';
 
 	// Props
 	let {
 		openFiles = $bindable([]),
 		activeFilePath = $bindable(null),
+		project = '',
 		onFileClose = () => {},
 		onFileSave = () => {},
 		onActiveFileChange = () => {},
@@ -27,6 +30,7 @@
 	}: {
 		openFiles: OpenFile[];
 		activeFilePath: string | null;
+		project?: string;
 		onFileClose?: (path: string) => void;
 		onFileSave?: (path: string, content: string) => void;
 		onActiveFileChange?: (path: string) => void;
@@ -278,8 +282,18 @@
 		<!-- Editor Area -->
 		<div class="editor-area">
 			{#if activeFile}
-				{@const language = getLanguage(activeFile.path)}
-				<MonacoWrapper bind:this={monacoRef} value={activeFile.content} {language} onchange={handleContentChange} />
+				{#if activeFile.isMedia && project}
+					<!-- Media Preview for images, videos, audio, PDFs -->
+					<MediaPreview
+						{project}
+						path={activeFile.path}
+						filename={getFilename(activeFile.path)}
+					/>
+				{:else}
+					<!-- Monaco Editor for text files -->
+					{@const language = getLanguage(activeFile.path)}
+					<MonacoWrapper bind:this={monacoRef} value={activeFile.content} {language} onchange={handleContentChange} />
+				{/if}
 			{:else}
 				<div class="no-active-file">
 					<svg class="w-10 h-10 text-base-content/20" fill="none" viewBox="0 0 24 24" stroke="currentColor">

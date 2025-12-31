@@ -24,7 +24,8 @@ const STORAGE_KEYS = {
 	epicCelebration: 'epic-celebration-enabled',
 	epicAutoClose: 'epic-auto-close-enabled',
 	maxSessions: 'max-concurrent-sessions',
-	collapsedEpics: 'tasktable-collapsed-epics'
+	collapsedEpics: 'tasktable-collapsed-epics',
+	activeProject: 'active-project' // Currently selected project (used across pages)
 } as const;
 
 // Terminal font family options
@@ -91,7 +92,8 @@ const DEFAULTS = {
 	epicCelebration: true, // Show toast + sound when all epic children complete
 	epicAutoClose: false, // Automatically close epic when all children complete
 	maxSessions: 12 as MaxSessions, // Maximum concurrent agent sessions
-	collapsedEpics: [] as string[] // Task IDs of collapsed epics/groups in TaskTable
+	collapsedEpics: [] as string[], // Task IDs of collapsed epics/groups in TaskTable
+	activeProject: null as string | null // Currently selected project (consistent across pages)
 };
 
 // Types
@@ -120,6 +122,7 @@ let epicCelebration = $state(DEFAULTS.epicCelebration);
 let epicAutoClose = $state(DEFAULTS.epicAutoClose);
 let maxSessions = $state<MaxSessions>(DEFAULTS.maxSessions);
 let collapsedEpics = $state<string[]>(DEFAULTS.collapsedEpics);
+let activeProject = $state<string | null>(DEFAULTS.activeProject);
 let initialized = $state(false);
 
 /**
@@ -200,6 +203,9 @@ export function initPreferences(): void {
 	} else {
 		collapsedEpics = DEFAULTS.collapsedEpics;
 	}
+
+	// Load active project (string or null)
+	activeProject = localStorage.getItem(STORAGE_KEYS.activeProject);
 
 	// Apply terminal font CSS variables to document
 	updateTerminalFontCSSVars();
@@ -521,6 +527,25 @@ export function isEpicCollapsed(epicId: string): boolean {
 
 export function clearCollapsedEpics(): void {
 	setCollapsedEpics([]);
+}
+
+// ============================================================================
+// Active Project (currently selected project, consistent across pages)
+// ============================================================================
+
+export function getActiveProject(): string | null {
+	return activeProject;
+}
+
+export function setActiveProject(value: string | null): void {
+	activeProject = value;
+	if (browser) {
+		if (value) {
+			localStorage.setItem(STORAGE_KEYS.activeProject, value);
+		} else {
+			localStorage.removeItem(STORAGE_KEYS.activeProject);
+		}
+	}
 }
 
 // ============================================================================

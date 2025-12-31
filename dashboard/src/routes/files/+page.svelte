@@ -21,6 +21,7 @@
 	import { FileEditor, type OpenFile } from '$lib/components/files';
 	import FileTree from '$lib/components/files/FileTree.svelte';
 	import QuickFileFinder from '$lib/components/files/QuickFileFinder.svelte';
+	import { getActiveProject, setActiveProject } from '$lib/stores/preferences.svelte';
 
 	// Types
 	interface Project {
@@ -94,9 +95,11 @@
 		}
 	});
 
-	// Handle project change - update URL
+	// Handle project change - update URL and user preferences
 	function handleProjectChange(projectName: string) {
 		selectedProject = projectName;
+		// Update user preferences so other pages (like task drawer) remember this
+		setActiveProject(projectName);
 		const url = new URL(window.location.href);
 		url.searchParams.set('project', projectName);
 		goto(url.pathname + url.search, { replaceState: true, noScroll: true });
@@ -105,7 +108,8 @@
 	// Fetch visible projects
 	async function fetchProjects() {
 		try {
-			const response = await fetch('/api/projects?visible=true');
+			// Fetch with stats=true to get agent-activity-based sorting
+			const response = await fetch('/api/projects?visible=true&stats=true');
 			const data = await response.json();
 
 			if (!response.ok) {
@@ -114,10 +118,19 @@
 
 			projects = data.projects || [];
 
-			// If no project selected but we have projects, select the first one
-			// (unless URL already has a project param)
+			// If no project selected but we have projects, choose default
+			// Priority: 1) URL param, 2) User's active project, 3) First from sorted list
 			if (projects.length > 0 && !$page.url.searchParams.get('project')) {
-				handleProjectChange(projects[0].name);
+				const activeProject = getActiveProject();
+				const projectExists = activeProject && projects.some(p => p.name === activeProject);
+
+				if (projectExists) {
+					// Use the user's previously selected project
+					handleProjectChange(activeProject);
+				} else {
+					// Fall back to first project (sorted by recent agent activity)
+					handleProjectChange(projects[0].name);
+				}
 			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load projects';
@@ -125,6 +138,26 @@
 		} finally {
 			isLoading = false;
 		}
+	}
+
+	// Media file extensions that should use MediaPreview instead of Monaco
+	const MEDIA_EXTENSIONS = new Set([
+		// Images
+		'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp', 'avif',
+		// Videos
+		'mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv',
+		// Audio
+		'mp3', 'wav', 'flac', 'aac', 'm4a', 'opus',
+		// Documents
+		'pdf'
+	]);
+
+	/**
+	 * Check if a file is a media file based on extension
+	 */
+	function isMediaFile(path: string): boolean {
+		const ext = path.split('.').pop()?.toLowerCase() || '';
+		return MEDIA_EXTENSIONS.has(ext);
 	}
 
 	/**
@@ -167,11 +200,25 @@
 			return;
 		}
 
-		// Fetch file content
 		if (!selectedProject) return;
 
 		const filename = path.split('/').pop() || path;
 
+		// Check if this is a media file - don't try to fetch content, just open with media preview
+		if (isMediaFile(path)) {
+			const newFile: OpenFile = {
+				path,
+				content: '', // No content for media files
+				originalContent: '',
+				dirty: false,
+				isMedia: true
+			};
+			openFiles = [...openFiles, newFile];
+			activeFilePath = path;
+			return;
+		}
+
+		// Fetch file content for text files
 		try {
 			const params = new URLSearchParams({
 				project: selectedProject,
@@ -646,6 +693,7 @@
 						<FileEditor
 							bind:openFiles
 							bind:activeFilePath
+							project={selectedProject}
 							onFileClose={handleFileClose}
 							onFileSave={handleFileSave}
 							onActiveFileChange={handleActiveFileChange}

@@ -127,6 +127,36 @@
 		}
 	}
 
+	/**
+	 * Get a user-friendly error message for file operations
+	 */
+	function getFileErrorMessage(error: string, status: number, filename: string): string {
+		// Map common error conditions to user-friendly messages
+		if (status === 404) {
+			return `"${filename}" no longer exists. It may have been deleted or moved.`;
+		}
+		if (status === 403) {
+			if (error.includes('traversal')) {
+				return `Access denied: Cannot access files outside the project directory.`;
+			}
+			if (error.includes('sensitive')) {
+				return `"${filename}" is a sensitive file and cannot be opened.`;
+			}
+			return `Access denied: ${error}`;
+		}
+		if (status === 413) {
+			return `"${filename}" is too large to open in the editor. Maximum file size is 1MB.`;
+		}
+		if (status === 415) {
+			return `"${filename}" appears to be a binary file and cannot be displayed as text.`;
+		}
+		if (status === 500) {
+			return `Server error while reading "${filename}". Please try again.`;
+		}
+		// Default to the error message from the API
+		return error || `Failed to open "${filename}"`;
+	}
+
 	// Handle file selection from tree
 	async function handleFileSelect(path: string) {
 		// Check if file is already open
@@ -140,6 +170,8 @@
 		// Fetch file content
 		if (!selectedProject) return;
 
+		const filename = path.split('/').pop() || path;
+
 		try {
 			const params = new URLSearchParams({
 				project: selectedProject,
@@ -149,7 +181,10 @@
 
 			if (!response.ok) {
 				const data = await response.json();
-				console.error('[Files] Failed to load file:', data.message);
+				const errorMsg = getFileErrorMessage(data.error || data.message, response.status, filename);
+				fileError = errorMsg;
+				setTimeout(() => { fileError = null; }, 5000);
+				console.error('[Files] Failed to load file:', data.error || data.message);
 				return;
 			}
 
@@ -166,6 +201,9 @@
 			openFiles = [...openFiles, newFile];
 			activeFilePath = path;
 		} catch (err) {
+			const errorMsg = err instanceof Error ? err.message : 'Failed to load file';
+			fileError = `Could not open "${filename}": ${errorMsg}`;
+			setTimeout(() => { fileError = null; }, 5000);
 			console.error('[Files] Failed to load file:', err);
 		}
 	}
@@ -210,9 +248,53 @@
 	let saveError = $state<string | null>(null);
 	let saveSuccess = $state<string | null>(null);
 
+	// File operation feedback
+	let fileError = $state<string | null>(null);
+	let fileInfo = $state<string | null>(null);
+
+	/**
+	 * Get a user-friendly error message for save operations
+	 */
+	function getSaveErrorMessage(error: string, status: number, filename: string): string {
+		if (status === 403) {
+			if (error.includes('sensitive')) {
+				return `Cannot save "${filename}": This is a protected file type.`;
+			}
+			if (error.includes('traversal')) {
+				return `Cannot save outside the project directory.`;
+			}
+			return `Permission denied: ${error}`;
+		}
+		if (status === 404) {
+			return `Cannot save "${filename}": Parent directory not found.`;
+		}
+		if (status === 409) {
+			return `Conflict: Another file with this name already exists.`;
+		}
+		if (status === 413) {
+			return `File too large to save. Maximum file size is 1MB.`;
+		}
+		if (status === 500) {
+			return `Server error while saving "${filename}". Please try again.`;
+		}
+		// Check for common filesystem errors
+		if (error.includes('ENOSPC') || error.includes('no space')) {
+			return `Cannot save: Disk is full.`;
+		}
+		if (error.includes('EROFS') || error.includes('read-only')) {
+			return `Cannot save: Filesystem is read-only.`;
+		}
+		if (error.includes('EACCES')) {
+			return `Cannot save "${filename}": Permission denied.`;
+		}
+		return error || `Failed to save "${filename}"`;
+	}
+
 	// Handle file save
 	async function handleFileSave(path: string, content: string) {
 		if (!selectedProject) return;
+
+		const filename = path.split('/').pop() || path;
 
 		// Add to saving state
 		savingFiles = new Set([...savingFiles, path]);
@@ -232,7 +314,7 @@
 
 			if (!response.ok) {
 				const data = await response.json();
-				throw new Error(data.error || 'Failed to save file');
+				throw { message: data.error || 'Failed to save file', status: response.status };
 			}
 
 			// Mark file as not dirty after save
@@ -244,14 +326,17 @@
 			});
 
 			// Show success toast
-			const filename = path.split('/').pop() || path;
 			saveSuccess = `Saved ${filename}`;
 			setTimeout(() => { saveSuccess = null; }, 2000);
 
-		} catch (err) {
+		} catch (err: unknown) {
 			console.error('[Files] Failed to save file:', err);
-			saveError = err instanceof Error ? err.message : 'Failed to save file';
-			setTimeout(() => { saveError = null; }, 4000);
+			if (err && typeof err === 'object' && 'message' in err && 'status' in err) {
+				saveError = getSaveErrorMessage(err.message as string, err.status as number, filename);
+			} else {
+				saveError = err instanceof Error ? err.message : `Failed to save "${filename}"`;
+			}
+			setTimeout(() => { saveError = null; }, 5000);
 		} finally {
 			// Remove from saving state
 			const updated = new Set(savingFiles);
@@ -317,6 +402,25 @@
 				activeFilePath = newPath;
 			}
 		}
+	}
+
+	// Handle file create from tree
+	function handleFileCreate(path: string, type: 'file' | 'folder') {
+		// Files will be auto-selected by the FileTree component
+		// Just log for now
+		console.log('[Files] Created:', type, path);
+	}
+
+	// Handle tree operation error (show as toast)
+	function handleTreeError(message: string) {
+		fileError = message;
+		setTimeout(() => { fileError = null; }, 5000);
+	}
+
+	// Handle tree operation success (show as toast)
+	function handleTreeSuccess(message: string) {
+		fileInfo = message;
+		setTimeout(() => { fileInfo = null; }, 3000);
 	}
 
 	// localStorage key for persisting open files per project
@@ -495,7 +599,7 @@
 			</div>
 
 			<!-- Body: Side-by-side layout -->
-			<div class="files-body">
+			<div class="files-body max-h-[85vh]">
 				<!-- Left Panel: File Tree -->
 				<div class="file-tree-panel" style="width: {leftPanelWidth}px;">
 					<div class="panel-header">
@@ -513,6 +617,9 @@
 								onFileSelect={handleFileSelect}
 								onFileDelete={handleFileDelete}
 								onFileRename={handleFileRename}
+								onFileCreate={handleFileCreate}
+								onError={handleTreeError}
+								onSuccess={handleTreeSuccess}
 							/>
 						{/if}
 					</div>
@@ -568,7 +675,7 @@
 <!-- Toast Notifications -->
 <div class="toast toast-end toast-bottom z-50">
 	{#if saveSuccess}
-		<div class="alert alert-success shadow-lg">
+		<div class="alert alert-success shadow-lg" transition:slide={{ duration: 200 }}>
 			<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
 			</svg>
@@ -576,11 +683,37 @@
 		</div>
 	{/if}
 	{#if saveError}
-		<div class="alert alert-error shadow-lg">
+		<div class="alert alert-error shadow-lg" transition:slide={{ duration: 200 }}>
 			<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
 			</svg>
 			<span>{saveError}</span>
+			<button class="btn btn-ghost btn-xs" onclick={() => { saveError = null; }}>
+				<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+				</svg>
+			</button>
+		</div>
+	{/if}
+	{#if fileError}
+		<div class="alert alert-warning shadow-lg" transition:slide={{ duration: 200 }}>
+			<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+			</svg>
+			<span>{fileError}</span>
+			<button class="btn btn-ghost btn-xs" onclick={() => { fileError = null; }}>
+				<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+				</svg>
+			</button>
+		</div>
+	{/if}
+	{#if fileInfo}
+		<div class="alert alert-info shadow-lg" transition:slide={{ duration: 200 }}>
+			<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+			</svg>
+			<span>{fileInfo}</span>
 		</div>
 	{/if}
 </div>

@@ -57,6 +57,13 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			primary: true
 		},
 		{
+			id: 'files',
+			label: 'Files',
+			href: '/files',
+			icon: 'files',
+			primary: true
+		},
+		{
 			id: 'servers',
 			label: 'Servers',
 			href: '/servers',

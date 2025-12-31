@@ -2804,6 +2804,175 @@ resetGlobalShortcut('new-task'); // Back to 'Alt+N'
 
 - jat-tt20r: Add keyboard shortcut documentation to CLAUDE.md
 
+## Project File Explorer (/files)
+
+### Overview
+
+The **Project File Explorer** (`/files`) provides a full-featured file browser and code editor for project files. It combines a lazy-loading directory tree with a tabbed Monaco-style editor interface.
+
+**Location:** Primary navigation → Files (📄 icon)
+
+**Access:**
+- Sidebar navigation: Click "Files"
+- Command palette: `Cmd+K` → "Go to Files"
+- URL: `/files`
+
+### Key Features
+
+| Feature | Description |
+|---------|-------------|
+| **Lazy-loading FileTree** | Directories expand on demand, only loading contents when clicked |
+| **Multi-file tabs** | Open multiple files simultaneously with tab navigation |
+| **Drag-drop tab reordering** | Reorder tabs by dragging them |
+| **Persistent tab order** | Tab order and open files saved to localStorage |
+| **File type icons** | Visual icons for different file types (TypeScript, JavaScript, JSON, etc.) |
+| **File operations** | Create, rename, and delete files/folders via context menu |
+| **Syntax highlighting** | CodeMirror editor with language-appropriate highlighting |
+| **Quick file finder** | Fuzzy search modal (`Alt+P`) for fast file navigation |
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        /files Page Layout                           │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌──────────────────┐  ┌─────────────────────────────────────────┐ │
+│  │                  │  │  Tab Bar (drag-to-reorder)              │ │
+│  │    FileTree      │  │  ┌─────┬─────┬─────┬──────────────────┐ │ │
+│  │    (sidebar)     │  │  │ F1  │ F2  │ F3  │     + button     │ │ │
+│  │                  │  │  └─────┴─────┴─────┴──────────────────┘ │ │
+│  │  Lazy-loading    │  ├─────────────────────────────────────────┤ │
+│  │  directory tree  │  │                                         │ │
+│  │                  │  │         CodeMirror Editor               │ │
+│  │  Context menu    │  │                                         │ │
+│  │  for CRUD ops    │  │         (active file content)           │ │
+│  │                  │  │                                         │ │
+│  └──────────────────┘  └─────────────────────────────────────────┘ │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### FileTree Component
+
+**File:** `src/lib/components/files/FileTree.svelte`
+
+**Features:**
+- Lazy-loads directory contents on expand (GET `/api/files?path=...`)
+- Caches expanded directories to avoid re-fetching
+- Context menu (right-click) for file operations
+- Keyboard navigation (Enter to select, F2 to rename, Delete to delete)
+- File type icons based on extension
+
+**Context Menu Actions:**
+| Action | Shortcut | Description |
+|--------|----------|-------------|
+| New File | - | Create file in directory |
+| New Folder | - | Create folder in directory |
+| Rename | F2 | Rename file/folder |
+| Delete | Delete | Delete file/folder (with confirmation) |
+
+### File Tabs
+
+**Behavior:**
+- Click file in tree → opens in new tab (or focuses if already open)
+- Tabs show filename with close button (×)
+- Modified files show indicator (dot or different styling)
+- Drag tabs to reorder them
+- Tab order persists to localStorage
+
+**Keyboard Shortcuts:**
+| Shortcut | Action |
+|----------|--------|
+| `Alt+]` | Next tab |
+| `Alt+[` | Previous tab |
+| `Alt+W` | Close current tab |
+| `Alt+S` | Save current file |
+| `Alt+P` | Quick file finder |
+
+### REST API
+
+**Endpoint:** `/api/files`
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/files?path=...` | List directory contents |
+| `GET` | `/api/files/content?path=...` | Read file content |
+| `POST` | `/api/files/content` | Create new file |
+| `PUT` | `/api/files/content` | Write file content |
+| `PATCH` | `/api/files/content` | Rename file/folder |
+| `DELETE` | `/api/files/content?path=...` | Delete file/folder |
+
+**Directory Listing Response:**
+```json
+{
+  "entries": [
+    { "name": "src", "type": "directory", "path": "/project/src" },
+    { "name": "index.ts", "type": "file", "path": "/project/index.ts", "size": 1234 }
+  ]
+}
+```
+
+### LocalStorage Persistence
+
+**Keys:**
+- `files-open-tabs` - Array of open file paths
+- `files-tab-order` - Array of file paths in display order
+- `files-active-tab` - Currently active file path
+
+**Restoration:** On page load, restores previously open tabs and their order.
+
+### File Type Icons
+
+Icons are determined by file extension in FileTree:
+
+| Extension | Icon |
+|-----------|------|
+| `.ts`, `.tsx` | TypeScript (blue) |
+| `.js`, `.jsx` | JavaScript (yellow) |
+| `.svelte` | Svelte (orange) |
+| `.json` | JSON (green) |
+| `.md` | Markdown (gray) |
+| `.css`, `.scss` | Stylesheet (pink) |
+| (folder) | Folder (yellow) |
+| (default) | Generic file (gray) |
+
+### Security
+
+**Path Restrictions:**
+- API validates paths are within project directory
+- Rejects paths with `..` traversal
+- Only serves files from configured project roots
+
+### Files
+
+**Page:**
+- `src/routes/files/+page.svelte` - Main page component
+
+**Components:**
+- `src/lib/components/files/FileTree.svelte` - Directory tree with CRUD
+- `src/lib/components/files/FileTabs.svelte` - Tab bar (if separate)
+
+**API:**
+- `src/routes/api/files/+server.ts` - Directory listing
+- `src/routes/api/files/content/+server.ts` - File CRUD operations
+
+**Configuration:**
+- `src/lib/config/navConfig.ts` - Navigation entry
+- `src/lib/components/Sidebar.svelte` - Icon definition
+- `src/lib/components/CommandPalette.svelte` - Quick action
+
+### Epic Task Reference
+
+- jat-f79r7: Epic - Project File Explorer (/files route)
+  - jat-kms1v: Create /files/+page.svelte main layout (completed)
+  - jat-gz6pb: Create FileTree component with lazy loading (completed)
+  - jat-2gfhm: Add file type icons to FileTree (completed)
+  - jat-tzi7a: Add keyboard shortcuts for file operations (completed)
+  - jat-6z80w: File tabs can be drag and dropped to reorder (completed)
+  - jat-5qtio: Add file/folder create, rename, delete operations (completed)
+  - jat-myayu: Add persistent tab order storage (completed)
+
 ## Development Commands
 
 ```bash

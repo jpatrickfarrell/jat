@@ -27,9 +27,59 @@
 		onFileSelect: (path: string) => void;
 		onFileDelete?: (path: string) => void;
 		onFileRename?: (oldPath: string, newPath: string) => void;
+		onFileCreate?: (path: string, type: 'file' | 'folder') => void;
+		onError?: (message: string) => void;
+		onSuccess?: (message: string) => void;
 	}
 
-	let { project, selectedPath = null, onFileSelect, onFileDelete, onFileRename }: Props = $props();
+	let {
+		project,
+		selectedPath = null,
+		onFileSelect,
+		onFileDelete,
+		onFileRename,
+		onFileCreate,
+		onError,
+		onSuccess
+	}: Props = $props();
+
+	/**
+	 * Get a user-friendly error message for file tree operations
+	 */
+	function getOperationErrorMessage(error: string, status: number, operation: string, name: string): string {
+		if (status === 403) {
+			if (error.includes('sensitive')) {
+				return `Cannot ${operation} "${name}": This is a protected file.`;
+			}
+			if (error.includes('traversal')) {
+				return `Access denied: Cannot ${operation} files outside the project.`;
+			}
+			return `Permission denied: ${error}`;
+		}
+		if (status === 404) {
+			return `"${name}" was not found. It may have been moved or deleted.`;
+		}
+		if (status === 409) {
+			return `A file or folder named "${name}" already exists.`;
+		}
+		if (status === 500) {
+			return `Server error while ${operation === 'delete' ? 'deleting' : operation === 'rename' ? 'renaming' : 'creating'} "${name}". Please try again.`;
+		}
+		// Check for common filesystem errors
+		if (error.includes('ENOSPC') || error.includes('no space')) {
+			return `Cannot ${operation}: Disk is full.`;
+		}
+		if (error.includes('ENOTEMPTY')) {
+			return `Cannot delete "${name}": Folder is not empty.`;
+		}
+		if (error.includes('EBUSY')) {
+			return `Cannot ${operation} "${name}": File is in use by another process.`;
+		}
+		if (error.includes('EACCES')) {
+			return `Cannot ${operation} "${name}": Permission denied.`;
+		}
+		return error || `Failed to ${operation} "${name}"`;
+	}
 
 	// State
 	let rootEntries = $state<DirectoryEntry[]>([]);
@@ -201,7 +251,10 @@
 		if (!renameModal || !renameValue.trim()) return;
 
 		const newName = renameValue.trim();
-		if (newName === renameModal.name) {
+		const originalName = renameModal.name;
+		const isFolder = renameModal.isFolder;
+
+		if (newName === originalName) {
 			closeRenameModal();
 			return;
 		}
@@ -209,6 +262,12 @@
 		// Validate name
 		if (newName.includes('/') || newName.includes('\\')) {
 			renameError = 'Name cannot contain / or \\';
+			return;
+		}
+
+		// Check for invalid characters
+		if (/[<>:"|?*\x00-\x1F]/.test(newName)) {
+			renameError = 'Name contains invalid characters';
 			return;
 		}
 
@@ -229,7 +288,9 @@
 
 			if (!response.ok) {
 				const data = await response.json();
-				throw new Error(data.error || 'Failed to rename');
+				const errorMsg = getOperationErrorMessage(data.error || '', response.status, 'rename', originalName);
+				renameError = errorMsg;
+				return;
 			}
 
 			const result = await response.json();
@@ -237,6 +298,11 @@
 			// Notify parent of rename
 			if (onFileRename) {
 				onFileRename(renameModal.path, result.newPath);
+			}
+
+			// Success notification
+			if (onSuccess) {
+				onSuccess(`Renamed "${originalName}" to "${newName}"`);
 			}
 
 			// Refresh the parent folder
@@ -257,7 +323,11 @@
 
 			closeRenameModal();
 		} catch (err) {
-			renameError = err instanceof Error ? err.message : 'Failed to rename';
+			const errorMsg = err instanceof Error ? err.message : 'Failed to rename';
+			renameError = errorMsg;
+			if (onError) {
+				onError(errorMsg);
+			}
 		} finally {
 			isRenaming = false;
 		}
@@ -287,6 +357,9 @@
 	async function performDelete() {
 		if (!deleteModal) return;
 
+		const name = deleteModal.name;
+		const isFolder = deleteModal.isFolder;
+
 		isDeleting = true;
 		deleteError = null;
 
@@ -302,12 +375,19 @@
 
 			if (!response.ok) {
 				const data = await response.json();
-				throw new Error(data.error || 'Failed to delete');
+				const errorMsg = getOperationErrorMessage(data.error || '', response.status, 'delete', name);
+				deleteError = errorMsg;
+				return;
 			}
 
 			// Notify parent of delete
 			if (onFileDelete) {
 				onFileDelete(deleteModal.path);
+			}
+
+			// Success notification
+			if (onSuccess) {
+				onSuccess(`Deleted ${isFolder ? 'folder' : 'file'} "${name}"`);
 			}
 
 			// Refresh the parent folder
@@ -328,7 +408,11 @@
 
 			closeDeleteModal();
 		} catch (err) {
-			deleteError = err instanceof Error ? err.message : 'Failed to delete';
+			const errorMsg = err instanceof Error ? err.message : 'Failed to delete';
+			deleteError = errorMsg;
+			if (onError) {
+				onError(errorMsg);
+			}
 		} finally {
 			isDeleting = false;
 		}
@@ -369,10 +453,24 @@
 		if (!createModal || !createName.trim()) return;
 
 		const name = createName.trim();
+		const type = createModal.type;
 
 		// Validate name
 		if (name.includes('/') || name.includes('\\')) {
 			createError = 'Name cannot contain / or \\';
+			return;
+		}
+
+		// Check for invalid characters
+		if (/[<>:"|?*\x00-\x1F]/.test(name)) {
+			createError = 'Name contains invalid characters';
+			return;
+		}
+
+		// Check for reserved names (Windows compatibility)
+		const reservedNames = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9', 'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'];
+		if (reservedNames.includes(name.toUpperCase().split('.')[0])) {
+			createError = `"${name}" is a reserved name`;
 			return;
 		}
 
@@ -384,7 +482,7 @@
 				project,
 				path: createModal.parentPath,
 				name,
-				type: createModal.type
+				type
 			});
 
 			const response = await fetch(`/api/files/content?${params}`, {
@@ -393,10 +491,22 @@
 
 			if (!response.ok) {
 				const data = await response.json();
-				throw new Error(data.error || 'Failed to create');
+				const errorMsg = getOperationErrorMessage(data.error || '', response.status, 'create', name);
+				createError = errorMsg;
+				return;
 			}
 
 			const result = await response.json();
+
+			// Notify parent of creation
+			if (onFileCreate) {
+				onFileCreate(result.path, type);
+			}
+
+			// Success notification
+			if (onSuccess) {
+				onSuccess(`Created ${type === 'folder' ? 'folder' : 'file'} "${name}"`);
+			}
 
 			// Refresh the parent folder
 			const parentPath = createModal.parentPath;
@@ -420,13 +530,17 @@
 			}
 
 			// Select the new file/folder
-			if (createModal.type === 'file') {
+			if (type === 'file') {
 				onFileSelect(result.path);
 			}
 
 			closeCreateModal();
 		} catch (err) {
-			createError = err instanceof Error ? err.message : 'Failed to create';
+			const errorMsg = err instanceof Error ? err.message : 'Failed to create';
+			createError = errorMsg;
+			if (onError) {
+				onError(errorMsg);
+			}
 		} finally {
 			isCreating = false;
 		}

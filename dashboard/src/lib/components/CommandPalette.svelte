@@ -109,6 +109,17 @@
 			},
 		},
 		{
+			id: "nav-files",
+			label: "Go to Files",
+			description: "Browse and edit project files",
+			icon: "📄",
+			keywords: ["files", "browse", "edit", "editor", "code", "tree"],
+			execute: () => {
+				goto("/files");
+				close();
+			},
+		},
+		{
 			id: "create-task",
 			label: "Create Task",
 			description: "Open task creation drawer",

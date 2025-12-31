@@ -67,9 +67,141 @@ brew install tmux sqlite jq
 
 # Verify installation
 am-whoami
-db-schema
+bd --version
 browser-start.js --help
 ```
+
+## Verifying Installation
+
+After installation, verify each component is working correctly:
+
+### Core Prerequisites
+```bash
+# Check required tools are available
+tmux -V          # Expected: tmux 3.x
+sqlite3 --version   # Expected: 3.x.x
+jq --version     # Expected: jq-1.x
+
+# Check optional tools
+npm --version    # Expected: 10.x (optional but recommended)
+node --version   # Expected: v20+ (optional but recommended)
+```
+
+### Agent Mail (14 tools)
+```bash
+# Identity and registration
+am-whoami                    # Shows: "Not registered" or agent name
+am-agents                    # Lists all registered agents
+am-register --help           # Shows registration options
+
+# Test database exists
+ls ~/.agent-mail.db          # Should exist after install
+
+# Full registration test (creates test agent, then removes)
+am-register --name TestAgent --program test --model test && \
+  am-agents | grep TestAgent && \
+  am-delete-agent TestAgent
+# Expected: "Registered agent TestAgent", then shows in list, then removed
+```
+
+### Beads CLI
+```bash
+# Version and help
+bd --version                 # Expected: beads x.x.x
+bd --help                    # Shows available commands
+
+# Test commands (safe to run - only reads)
+bd ready --json              # Lists ready tasks (may be empty)
+bd list --status open        # Lists open tasks
+
+# If no project initialized yet:
+cd ~/code/my-project && bd init  # Initialize a project
+```
+
+### Browser Tools (12 tools)
+```bash
+# Check tool availability
+browser-start.js --help      # Shows CDP connection options
+browser-nav.js --help        # Shows navigation options
+browser-eval.js --help       # Shows JS eval options
+
+# Test browser automation (requires Chrome/Chromium)
+# Start browser with remote debugging:
+#   google-chrome --remote-debugging-port=9222
+# Then:
+browser-start.js             # Expected: "Connected to Chrome..."
+browser-nav.js https://example.com  # Navigates browser
+browser-screenshot.js --output /tmp/test.png  # Captures screenshot
+```
+
+### Database Tools (4 tools)
+```bash
+# Schema inspection
+db-schema                    # Shows Agent Mail database schema
+
+# Safe query test
+db-query "SELECT COUNT(*) as agent_count FROM agents"
+# Expected: [{"agent_count": N}]
+```
+
+### Signal Tools (2 tools)
+```bash
+# Help and validation
+jat-signal --help            # Shows signal types and options
+jat-signal-validate --help   # Shows validation options
+
+# Test signal emission (dry run style)
+jat-signal starting '{"agentName":"Test","sessionId":"test-123","project":"test","model":"test","gitBranch":"main","gitStatus":"clean","tools":[],"uncommittedFiles":[]}'
+# Expected: Writes to /tmp/jat-signal-*.json
+```
+
+### Statusline and Hooks
+```bash
+# Check hooks are installed
+ls ~/.claude/hooks/          # Should show hook scripts
+ls ~/.claude/settings.json   # Should exist
+
+# Check statusline script
+ls ~/.claude/statusline.sh   # Should exist
+~/.claude/statusline.sh      # Test run (may show errors if not in tmux)
+```
+
+### Dashboard
+```bash
+# Check dashboard can start
+cd ~/code/jat/dashboard
+npm run build                # Should compile without errors
+
+# Start dev server (Ctrl+C to stop)
+npm run dev                  # Expected: http://127.0.0.1:5174
+```
+
+### All Tools Summary Check
+```bash
+# Quick verification of all symlinks
+ls ~/.local/bin/am-* | wc -l   # Expected: 13 (Agent Mail)
+ls ~/.local/bin/bd* | wc -l    # Expected: 5 (Beads + review tools)
+ls ~/.local/bin/browser-* | wc -l  # Expected: 11 (Browser tools)
+ls ~/.local/bin/db-* | wc -l   # Expected: 4 (Database tools)
+ls ~/.local/bin/jat-* | wc -l  # Expected: 5 (JAT tools)
+
+# Check for broken symlinks
+find ~/.local/bin -type l -name "am-*" -exec test ! -e {} \; -print
+find ~/.local/bin -type l -name "bd*" -exec test ! -e {} \; -print
+find ~/.local/bin -type l -name "browser-*" -exec test ! -e {} \; -print
+# Expected: No output (no broken symlinks)
+```
+
+### Troubleshooting Verification Failures
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| `command not found` | ~/.local/bin not in PATH | Add to ~/.bashrc: `export PATH="$HOME/.local/bin:$PATH"` |
+| `am-whoami` fails | Database not initialized | Run: `bash ~/code/jat/tools/scripts/install-agent-mail.sh` |
+| `bd: command not found` | Beads not installed | Run: `bash ~/code/jat/tools/scripts/install-beads.sh` |
+| `browser-*.js` fails | npm dependencies missing | Run: `cd ~/code/jat/tools/browser && npm install` |
+| Dashboard won't start | Dependencies missing | Run: `cd ~/code/jat/dashboard && npm install` |
+| Broken symlinks | Old installation | Run: `./install.sh` to refresh symlinks |
 
 ### Post-Installation: Add a Project
 

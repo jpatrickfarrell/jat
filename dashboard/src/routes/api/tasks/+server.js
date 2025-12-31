@@ -243,8 +243,8 @@ export async function POST({ request }) {
 		if (body.review_override && (body.review_override === 'always_review' || body.review_override === 'always_auto')) {
 			try {
 				const overrideCommand = project
-					? `cd ${process.env.HOME}/code/${project} && ${process.env.HOME}/code/jat/tools/bd-set-review-override ${taskId} ${body.review_override}`
-					: `${process.env.HOME}/code/jat/tools/bd-set-review-override ${taskId} ${body.review_override}`;
+					? `cd ${process.env.HOME}/code/${project} && ${process.env.HOME}/code/jat/tools/core/bd-set-review-override ${taskId} ${body.review_override}`
+					: `${process.env.HOME}/code/jat/tools/core/bd-set-review-override ${taskId} ${body.review_override}`;
 				await execAsync(overrideCommand);
 			} catch (err) {
 				console.error('Failed to set review_override:', err);

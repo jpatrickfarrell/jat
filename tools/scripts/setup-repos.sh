@@ -7,6 +7,8 @@
 # Note: Don't use 'set -e' - arithmetic (( )) can return 1 when incrementing from 0
 # This would cause premature exit on: ((REPOS_FOUND++))
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Color codes
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -144,7 +146,7 @@ for repo_dir in "$CODE_DIR"/*; do
     fi
 
     # Install git hooks
-    HOOKS_SOURCE="$HOME/code/jat/scripts/hooks/pre-commit"
+    HOOKS_SOURCE="$SCRIPT_DIR/hooks/pre-commit"
     HOOKS_TARGET="$repo_dir/.git/hooks/pre-commit"
 
     if [ -f "$HOOKS_SOURCE" ]; then

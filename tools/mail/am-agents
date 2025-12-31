@@ -78,7 +78,7 @@ for ((i=0; i<AGENT_COUNT; i++)); do
     LAST_ACTIVE_TS=$(echo "$AGENT" | jq -r '.last_active_ts // ""')
 
     if [[ -n "$LAST_ACTIVE_TS" ]]; then
-        LAST_ACTIVE_AGO=$(~/code/jat/scripts/time-ago "$LAST_ACTIVE_TS" 2>/dev/null || echo "unknown")
+        LAST_ACTIVE_AGO=$("$SCRIPT_DIR/../scripts/time-ago" "$LAST_ACTIVE_TS" 2>/dev/null || echo "unknown")
     else
         LAST_ACTIVE_AGO="never"
     fi

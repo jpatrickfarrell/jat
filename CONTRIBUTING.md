@@ -395,7 +395,7 @@ your-tool arg1 arg2
 
 **Create/Update Test Results (if applicable):**
 
-For browser tools, update `browser-tools/ARCH_LINUX_TEST_RESULTS.md` or equivalent.
+For browser tools, update `tools/browser/ARCH_LINUX_TEST_RESULTS.md` or equivalent.
 
 ### 4. Commit with Conventional Commits
 
@@ -472,22 +472,22 @@ Brief description of what this PR does.
 
 ```
 jat/
-├── mail/                      # Agent Mail tools (am-*)
-│   ├── am-lib.sh             # Shared library
-│   ├── am-register           # Agent registration
-│   ├── am-inbox              # Inbox management
-│   └── ...                   # Other am-* tools
+├── tools/                     # All executable tools
+│   ├── browser/              # Browser automation (browser-*.js)
+│   ├── core/                 # Core utilities (db-*, bd-*, etc.)
+│   ├── mail/                 # Agent Mail (am-*)
+│   ├── media/                # Image generation (gemini-*, avatar-*)
+│   ├── signal/               # JAT signal tools
+│   └── scripts/              # Installation & utilities
 │
-├── tools/                     # Generic bash tools
-│   ├── am-* (symlinks)       # Symlinked from mail/
-│   ├── browser-*.js          # Browser automation
-│   ├── db-*                  # Database tools
-│   └── ...                   # Other generic tools
+├── commands/jat/             # Workflow commands (/jat:start, etc.)
+│   ├── start.md              # /jat:start command
+│   ├── complete.md           # /jat:complete command
+│   └── ...                   # Other commands
 │
-├── browser-tools/             # Browser tools development
-│   ├── browser-*.js          # Source files
-│   ├── package.json          # Node.js dependencies
-│   └── ARCH_LINUX_TEST_RESULTS.md
+├── dashboard/                 # Beads Task Dashboard (SvelteKit)
+│   ├── src/                  # Source files
+│   └── CLAUDE.md             # Dashboard-specific docs
 │
 ├── stacks/                    # Tech-stack-specific tools
 │   └── sveltekit-supabase/
@@ -495,19 +495,14 @@ jat/
 │       ├── install.sh        # Stack installer
 │       └── README.md         # Stack documentation
 │
-├── scripts/                   # Installation/setup scripts
-│   ├── setup-global-claude-md.sh
-│   ├── setup-repos.sh
-│   └── symlink-tools.sh
-│
-├── .claude/commands/jat/    # Coordination commands
-│   ├── register.md           # /register command
-│   ├── start.md              # /start command
-│   └── ...                   # Other commands
+├── shared/                    # Shared documentation
+│   ├── overview.md           # System overview
+│   ├── agent-mail.md         # Agent Mail docs
+│   └── ...                   # Other shared docs
 │
 ├── README.md                  # Main documentation
 ├── CONTRIBUTING.md            # This file
-├── ARCHITECTURE.md            # Technical architecture
+├── CLAUDE.md                  # Project instructions
 └── install.sh                 # Main installer
 ```
 
@@ -557,8 +552,8 @@ git push origin feature/db-backup
 ### Testing Browser Tools
 
 ```bash
-# Navigate to browser-tools directory
-cd browser-tools/
+# Navigate to browser tools directory
+cd tools/browser/
 
 # Install dependencies if needed
 npm install
@@ -601,7 +596,7 @@ Request macOS testing in your PR description. A maintainer will test on macOS be
 
 ### Can I add dependencies (npm packages, Python libs)?
 
-**For browser tools:** Yes, add to `browser-tools/package.json`
+**For browser tools:** Yes, add to `tools/browser/package.json`
 
 **For bash tools:** Avoid if possible. If absolutely necessary, document in README and make installation optional.
 

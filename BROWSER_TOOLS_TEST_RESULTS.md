@@ -23,7 +23,7 @@
 **Description:** Launches Chrome/Chromium with remote debugging
 **Test:**
 ```bash
-node browser-tools/browser-start.js
+node tools/browser/browser-start.js
 ```
 **Result:**
 ```
@@ -48,7 +48,7 @@ node browser-tools/browser-start.js
 **Description:** Navigate to URLs
 **Test:**
 ```bash
-node browser-tools/browser-nav.js https://example.com
+node tools/browser/browser-nav.js https://example.com
 ```
 **Result:**
 ```
@@ -66,7 +66,7 @@ node browser-tools/browser-nav.js https://example.com
 **Description:** Execute JavaScript in page
 **Test:**
 ```bash
-node browser-tools/browser-eval.js 'document.title'
+node tools/browser/browser-eval.js 'document.title'
 ```
 **Result:**
 ```
@@ -84,7 +84,7 @@ Example Domain
 **Description:** Capture screenshots
 **Test:**
 ```bash
-node browser-tools/browser-screenshot.js
+node tools/browser/browser-screenshot.js
 ```
 **Result:**
 ```
@@ -113,7 +113,7 @@ node browser-tools/browser-screenshot.js
 **Description:** Display and manage cookies
 **Test:**
 ```bash
-node browser-tools/browser-cookies.js
+node tools/browser/browser-cookies.js
 ```
 **Result:** (No cookies on example.com - empty output expected)
 **Notes:**
@@ -127,7 +127,7 @@ node browser-tools/browser-cookies.js
 **Description:** Example Hacker News scraper
 **Test:**
 ```bash
-node browser-tools/browser-hn-scraper.js
+node tools/browser/browser-hn-scraper.js
 ```
 **Result:**
 ```json
@@ -157,7 +157,7 @@ node browser-tools/browser-hn-scraper.js
 **Description:** Smart waiting with CDP polling to eliminate race conditions
 **Test:**
 ```bash
-node browser-tools/browser-wait.js --text "Example Domain" --timeout 5000
+node tools/browser/browser-wait.js --text "Example Domain" --timeout 5000
 ```
 **Result:**
 ```
@@ -182,7 +182,7 @@ node browser-tools/browser-wait.js --text "Example Domain" --timeout 5000
 **Description:** Structured accessibility tree snapshot (1000x token savings)
 **Test:**
 ```bash
-node browser-tools/browser-snapshot.js
+node tools/browser/browser-snapshot.js
 ```
 **Result:**
 ```json
@@ -219,7 +219,7 @@ node browser-tools/browser-snapshot.js
 **Description:** Structured console access with stack traces
 **Test:**
 ```bash
-node browser-tools/browser-console.js
+node tools/browser/browser-console.js
 ```
 **Result:**
 ```json
@@ -247,7 +247,7 @@ node browser-tools/browser-console.js
 **Description:** Network request monitoring with timing metrics
 **Test:**
 ```bash
-node browser-tools/browser-network.js
+node tools/browser/browser-network.js
 ```
 **Result:**
 ```json
@@ -272,7 +272,7 @@ node browser-tools/browser-network.js
 
 ## Dependencies
 
-**Required packages installed in browser-tools/:**
+**Required packages installed in tools/browser/:**
 ```json
 {
   "cheerio": "^1.1.2",
@@ -282,7 +282,7 @@ node browser-tools/browser-network.js
 
 **Installation:**
 ```bash
-cd browser-tools && npm install
+cd tools/browser && npm install
 ```
 
 ---
@@ -345,12 +345,12 @@ cd browser-tools && npm install
 
 1. **Symlink to ~/bin** (make globally available):
 ```bash
-ln -sf /home/jw/code/jat/browser-tools/browser-*.js ~/bin/
+ln -sf /home/jw/code/jat/tools/browser/browser-*.js ~/bin/
 ```
 
 2. **Update install.sh**:
-- Add browser-tools/ to installation script
-- Copy to ~/.local/share/jat/browser-tools/
+- Add tools/browser/ to installation script
+- Copy to ~/.local/share/jat/tools/browser/
 - Symlink all 11 tools to ~/bin/
 
 3. **Update README.md** (already documented, verify accuracy):

@@ -1144,7 +1144,7 @@ install_hooks() {
         return 1
     fi
 
-    local hooks_source="$HOME/code/jat/scripts/hooks"
+    local hooks_source="$HOME/code/jat/tools/scripts/hooks"
     local hooks_target="$target/.git/hooks"
 
     if [[ ! -d "$hooks_source" ]]; then

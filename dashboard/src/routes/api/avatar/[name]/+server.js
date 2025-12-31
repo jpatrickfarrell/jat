@@ -17,7 +17,7 @@ import { env } from '$env/dynamic/private';
 
 const execAsync = promisify(exec);
 const AVATARS_DIR = '/home/jw/code/jat/avatars';
-const AVATAR_GENERATE_SCRIPT = '/home/jw/code/jat/media/avatar-generate';
+const AVATAR_GENERATE_SCRIPT = '/home/jw/code/jat/tools/media/avatar-generate';
 
 // Track in-flight generation requests to prevent duplicates
 const generatingAvatars = new Set();

@@ -342,11 +342,11 @@ export async function PATCH({ params, request }) {
 				const projectPath = existingTask.project_path;
 				const value = updates.review_override;
 				if (value === 'always_review' || value === 'always_auto') {
-					const overrideCommand = `cd "${projectPath}" && ${process.env.HOME}/code/jat/tools/bd-set-review-override ${taskId} ${value}`;
+					const overrideCommand = `cd "${projectPath}" && ${process.env.HOME}/code/jat/tools/core/bd-set-review-override ${taskId} ${value}`;
 					await execAsync(overrideCommand);
 				} else if (value === null || value === '' || value === 'null') {
 					// Clear the override
-					const clearCommand = `cd "${projectPath}" && ${process.env.HOME}/code/jat/tools/bd-set-review-override ${taskId} --clear`;
+					const clearCommand = `cd "${projectPath}" && ${process.env.HOME}/code/jat/tools/core/bd-set-review-override ${taskId} --clear`;
 					await execAsync(clearCommand);
 				}
 			} catch (err) {

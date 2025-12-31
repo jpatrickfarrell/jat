@@ -22,7 +22,7 @@ import { existsSync } from 'fs';
 import { homedir } from 'os';
 
 // Allowed tool directories (relative to JAT root)
-const ALLOWED_DIRECTORIES = ['mail', 'browser-tools', 'tools', 'scripts', 'commands/jat'];
+const ALLOWED_DIRECTORIES = ['tools/mail', 'tools/browser', 'tools/core', 'tools/scripts', 'tools/media', 'tools/signal', 'commands/jat'];
 
 /**
  * Find JAT installation directory (same as in parent +server.ts)
@@ -39,8 +39,8 @@ function findJatPath(): string | null {
 	for (const candidate of candidates) {
 		if (
 			existsSync(candidate) &&
-			existsSync(join(candidate, 'mail')) &&
-			existsSync(join(candidate, 'browser-tools'))
+			existsSync(join(candidate, 'tools', 'mail')) &&
+			existsSync(join(candidate, 'tools', 'browser'))
 		) {
 			return candidate;
 		}

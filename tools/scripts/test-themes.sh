@@ -86,12 +86,12 @@ fi
 # Start browser (or use existing instance)
 echo ""
 echo -e "${YELLOW}Starting browser...${NC}"
-./browser-tools/browser-start.js 2>/dev/null || echo "Browser already running"
+./tools/browser/browser-start.js 2>/dev/null || echo "Browser already running"
 sleep 2
 
 # Navigate to dashboard
 echo -e "${YELLOW}Navigating to dashboard...${NC}"
-./browser-tools/browser-nav.js "$DASHBOARD_URL" > /dev/null
+./tools/browser/browser-nav.js "$DASHBOARD_URL" > /dev/null
 sleep 2
 
 # Initialize results file
@@ -128,7 +128,7 @@ for theme in "${THEMES[@]}"; do
   echo -ne "${YELLOW}Testing ${theme}...${NC} "
 
   # Set theme via localStorage and reload
-  ./browser-tools/browser-eval.js "
+  ./tools/browser/browser-eval.js "
     localStorage.setItem('theme', '$theme');
     document.documentElement.setAttribute('data-theme', '$theme');
   " > /dev/null 2>&1
@@ -137,14 +137,14 @@ for theme in "${THEMES[@]}"; do
   sleep 1
 
   # Verify theme was applied
-  CURRENT_THEME=$(./browser-tools/browser-eval.js "
+  CURRENT_THEME=$(./tools/browser/browser-eval.js "
     document.documentElement.getAttribute('data-theme')
   " 2>/dev/null | grep -o '".*"' | tr -d '"' || echo "")
 
   if [ "$CURRENT_THEME" = "$theme" ]; then
     # Take screenshot
     SCREENSHOT_PATH="$SCREENSHOTS_DIR/${theme}.png"
-    ./browser-tools/browser-screenshot.js --fullpage --output "$SCREENSHOT_PATH" > /dev/null 2>&1
+    ./tools/browser/browser-screenshot.js --fullpage --output "$SCREENSHOT_PATH" > /dev/null 2>&1
 
     if [ -f "$SCREENSHOT_PATH" ]; then
       echo -e "${GREEN}✓${NC}"

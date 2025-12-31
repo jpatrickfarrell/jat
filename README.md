@@ -1999,7 +1999,7 @@ sqlite3 ~/.agent-mail.db "PRAGMA integrity_check;"
 
 # If corrupted, reinitialize (WARNING: loses data)
 mv ~/.agent-mail.db ~/.agent-mail.db.backup
-sqlite3 ~/.agent-mail.db < ~/code/jat/mail/schema.sql
+sqlite3 ~/.agent-mail.db < ~/code/jat/tools/mail/schema.sql
 
 # Check permissions
 chmod 644 ~/.agent-mail.db

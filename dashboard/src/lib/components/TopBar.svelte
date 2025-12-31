@@ -1350,6 +1350,15 @@
 				{/if}
 			</div>
 		</div>
+
+		<!-- Epic Swarm Badge (shows swarm controls) - Action button, not reporting -->
+		<EpicSwarmBadge
+			{readyTaskCount}
+			{activeAgentCount}
+			{epicsWithReady}
+			{reviewRules}
+			{projectColors}
+		/>
 	</div>
 
 	<!-- Sort Dropdown (on /work or /tasks page) -->
@@ -1769,15 +1778,6 @@
 				compact={true}
 			/>
 		</div>
-
-		<!-- Epic Swarm Badge (shows swarm controls) -->
-		<EpicSwarmBadge
-			{readyTaskCount}
-			{activeAgentCount}
-			{epicsWithReady}
-			{reviewRules}
-			{projectColors}
-		/>
 
 		<!-- Tasks Completed Today Badge -->
 		<div class="flex">

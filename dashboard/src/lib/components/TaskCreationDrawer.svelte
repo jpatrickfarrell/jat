@@ -337,6 +337,12 @@
 	// Dynamic projects list from store (populated by layout from tasks)
 	let dynamicProjects = $state<string[]>([]);
 
+	// Project colors from store (populated by layout from sparkline API)
+	let projectColors = $state<Record<string, string>>({});
+
+	// Computed selected project color (derived for reactivity)
+	const selectedProjectColor = $derived(formData.project ? projectColors[formData.project] || null : null);
+
 	// Project descriptions for AI context (fetched from /api/projects)
 	interface ProjectInfo {
 		name: string;
@@ -351,6 +357,14 @@
 	$effect(() => {
 		const unsubscribe = availableProjects.subscribe(projects => {
 			dynamicProjects = projects;
+		});
+		return unsubscribe;
+	});
+
+	// Subscribe to projectColorsStore
+	$effect(() => {
+		const unsubscribe = projectColorsStore.subscribe(colors => {
+			projectColors = colors;
 		});
 		return unsubscribe;
 	});
@@ -1123,7 +1137,12 @@
 								type="button"
 								tabindex="0"
 								bind:this={projectDropdownBtn}
-								class="ml-8 badge badge-lg gap-1.5 px-2.5 py-2 font-mono text-sm transition-colors cursor-pointer {formData.project ? 'bg-primary/20 border-primary/40 text-primary hover:bg-primary/30' : 'bg-warning/20 border-warning/40 text-warning hover:bg-warning/30'}"
+								class="ml-8 badge badge-lg gap-1.5 px-2.5 py-2 font-mono text-sm transition-colors cursor-pointer"
+								style={formData.project && selectedProjectColor
+									? `background: color-mix(in oklch, ${selectedProjectColor} 20%, transparent); border-color: color-mix(in oklch, ${selectedProjectColor} 50%, transparent); color: ${selectedProjectColor};`
+									: formData.project
+									? 'background: oklch(0.65 0.15 145 / 0.20); border-color: oklch(0.65 0.15 145 / 0.40); color: oklch(0.65 0.15 145);'
+									: 'background: oklch(0.75 0.15 85 / 0.20); border-color: oklch(0.75 0.15 85 / 0.40); color: oklch(0.75 0.15 85);'}
 								disabled={isSubmitting}
 								title={formData.project ? 'Click to change project (Alt+P)' : 'Select a project (Alt+P)'}
 								onclick={() => projectDropdownOpen ? closeProjectDropdown() : openProjectDropdown()}
@@ -1136,9 +1155,17 @@
 									}
 								}}
 							>
-								<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-								</svg>
+								<!-- Project color dot -->
+								{#if formData.project}
+									<span
+										class="w-2 h-2 rounded-full flex-shrink-0"
+										style="background: {selectedProjectColor || 'oklch(0.60 0.15 145)'};"
+									></span>
+								{:else}
+									<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+									</svg>
+								{/if}
 								{formData.project || 'Select project'}
 								<svg class="w-2.5 h-2.5 opacity-60 transition-transform {projectDropdownOpen ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
@@ -1153,9 +1180,10 @@
 											onclick={() => { formData.project = project; closeProjectDropdown(); }}
 											onmouseenter={() => projectDropdownIndex = i}
 										>
-											<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-											</svg>
+											<span
+												class="w-2 h-2 rounded-full flex-shrink-0"
+												style="background: {projectColors[project] || 'oklch(0.60 0.15 145)'};"
+											></span>
 											{project}
 											{#if formData.project === project}
 												<svg class="w-4 h-4 ml-auto text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

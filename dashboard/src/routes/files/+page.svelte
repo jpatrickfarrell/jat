@@ -650,7 +650,7 @@
 			border-bottom: 1px solid oklch(0.22 0.02 250);
 		}
 
-		.vertical-divider-container {
+		.vertical-divider {
 			display: none;
 		}
 

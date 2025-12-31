@@ -71,7 +71,7 @@ export function saveTabsToStorage(
 
 	if (openFilePaths.length === 0) {
 		// Remove from storage when no files open
-		localStorage.removeItem(key);
+		window.localStorage.removeItem(key);
 		return;
 	}
 
@@ -80,7 +80,7 @@ export function saveTabsToStorage(
 		activeFilePath
 	};
 
-	localStorage.setItem(key, JSON.stringify(data));
+	window.localStorage.setItem(key, JSON.stringify(data));
 }
 
 /**
@@ -102,7 +102,7 @@ export function loadTabsFromStorage(project: string): PersistedTabState | null {
 	if (!isStorageAvailable()) return null;
 
 	const key = getStorageKey(project);
-	const stored = localStorage.getItem(key);
+	const stored = window.localStorage.getItem(key);
 
 	if (!stored) return null;
 
@@ -130,7 +130,7 @@ export function loadTabsFromStorage(project: string): PersistedTabState | null {
 		return { openFiles, activeFilePath };
 	} catch {
 		// Invalid JSON or structure - clear corrupted data
-		localStorage.removeItem(key);
+		window.localStorage.removeItem(key);
 		return null;
 	}
 }
@@ -143,7 +143,7 @@ export function loadTabsFromStorage(project: string): PersistedTabState | null {
 export function clearTabsFromStorage(project: string): void {
 	if (!isStorageAvailable()) return;
 	const key = getStorageKey(project);
-	localStorage.removeItem(key);
+	window.localStorage.removeItem(key);
 }
 
 /**
@@ -157,8 +157,8 @@ export function getProjectsWithSavedTabs(): string[] {
 	const prefix = 'jat-files-open-';
 	const projects: string[] = [];
 
-	for (let i = 0; i < localStorage.length; i++) {
-		const key = localStorage.key(i);
+	for (let i = 0; i < window.localStorage.length; i++) {
+		const key = window.localStorage.key(i);
 		if (key && key.startsWith(prefix)) {
 			projects.push(key.slice(prefix.length));
 		}

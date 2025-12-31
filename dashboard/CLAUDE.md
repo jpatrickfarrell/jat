@@ -3015,6 +3015,282 @@ Icons are determined by file extension in FileTree:
   - jat-myayu: Add persistent tab order storage (completed)
   - jat-q5835: Add documentation for tab order feature (completed)
 
+## File Operations Error Handling
+
+### Overview
+
+The dashboard implements a comprehensive error handling pattern for file operations that provides:
+1. **HTTP status codes** with semantic meaning
+2. **Filesystem error mapping** to human-readable messages
+3. **Client-side error humanization** for better UX
+4. **Security validation** with clear rejection messages
+
+### HTTP Error Codes
+
+The file operations API uses these HTTP status codes:
+
+| Code | Meaning | Example Scenario |
+|------|---------|------------------|
+| 400 | Bad Request | Missing required parameters, invalid file type, path is not a directory |
+| 403 | Forbidden | Path traversal detected, access outside project, sensitive file blocked |
+| 404 | Not Found | File/folder doesn't exist, project not found |
+| 409 | Conflict | File already exists (create/rename), destination exists |
+| 413 | Payload Too Large | File exceeds 1MB read limit |
+| 415 | Unsupported Media Type | Binary file cannot be displayed as text |
+| 500 | Server Error | Filesystem error, unexpected failure |
+
+### Server-Side Error Generation
+
+**Path Validation (`/api/files/+server.ts`):**
+
+```typescript
+// Missing project parameter
+throw error(400, 'Missing required parameter: project');
+
+// Path traversal attempt
+if (hasPathTraversal(relativePath)) {
+    throw error(403, 'Path traversal not allowed');
+}
+
+// Path outside project bounds
+if (!(await isPathWithinProject(targetPath, projectPath))) {
+    throw error(403, 'Access denied: path is outside project directory');
+}
+
+// Non-directory path for listing
+if (!targetStat.isDirectory()) {
+    throw error(400, 'Path is not a directory. Use /api/files/content to read files.');
+}
+```
+
+**Content Operations (`/api/files/content/+server.ts`):**
+
+```typescript
+// File too large
+if (stats.size > MAX_FILE_SIZE) {
+    return json({
+        error: `File too large: ${(stats.size / 1024 / 1024).toFixed(2)}MB exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`
+    }, { status: 413 });
+}
+
+// Binary file detection
+if (isBinaryContent(buffer)) {
+    return json({ error: 'Binary file - cannot display as text' }, { status: 415 });
+}
+
+// Sensitive file protection
+if (isSensitiveFile(resolvedPath)) {
+    return json({ error: 'Cannot write to sensitive file' }, { status: 403 });
+}
+```
+
+### Sensitive File Patterns
+
+The API blocks operations on these sensitive file patterns:
+
+```typescript
+const SENSITIVE_PATTERNS = [
+    '.env', '.env.local', '.env.production', '.env.development',
+    'credentials.json', 'secrets.json', 'service-account.json',
+    '.npmrc', '.pypirc',
+    'id_rsa', 'id_ed25519', '.pem', '.key', '.p12', '.pfx'
+];
+```
+
+### Client-Side Error Humanization
+
+**FileTree Component (`FileTree.svelte`):**
+
+The `getOperationErrorMessage()` function translates server responses into user-friendly messages:
+
+```typescript
+function getOperationErrorMessage(
+    error: string,
+    status: number,
+    operation: string,
+    name: string
+): string {
+    // HTTP status-based messages
+    if (status === 403) {
+        if (error.includes('sensitive')) {
+            return `Cannot ${operation} "${name}": This is a protected file.`;
+        }
+        if (error.includes('traversal')) {
+            return `Access denied: Cannot ${operation} files outside the project.`;
+        }
+        return `Permission denied: ${error}`;
+    }
+    if (status === 404) {
+        return `"${name}" was not found. It may have been moved or deleted.`;
+    }
+    if (status === 409) {
+        return `A file or folder named "${name}" already exists.`;
+    }
+    if (status === 500) {
+        return `Server error while ${operation} "${name}". Please try again.`;
+    }
+
+    // Filesystem error patterns
+    if (error.includes('ENOSPC') || error.includes('no space')) {
+        return `Cannot ${operation}: Disk is full.`;
+    }
+    if (error.includes('ENOTEMPTY')) {
+        return `Cannot delete "${name}": Folder is not empty.`;
+    }
+    if (error.includes('EBUSY')) {
+        return `Cannot ${operation} "${name}": File is in use by another process.`;
+    }
+    if (error.includes('EACCES')) {
+        return `Cannot ${operation} "${name}": Permission denied.`;
+    }
+
+    return error || `Failed to ${operation} "${name}"`;
+}
+```
+
+### Path Traversal Detection
+
+The API implements multi-layer traversal protection:
+
+```typescript
+function hasPathTraversal(path: string): boolean {
+    const normalized = normalize(path);
+
+    // Check normalized path for remaining ..
+    if (normalized.includes('..')) return true;
+
+    // Check for encoded/obfuscated patterns
+    const dangerousPatterns = [
+        '..',          // Parent directory
+        '\0',          // Null byte injection
+        '%2e%2e',      // URL encoded ..
+        '%252e%252e',  // Double URL encoded
+        '....',        // Some systems allow this
+        '.\\',         // Windows style
+        './'           // Explicit current dir attacks
+    ];
+
+    const lowerPath = path.toLowerCase();
+    return dangerousPatterns.some(p => lowerPath.includes(p));
+}
+```
+
+### Symlink Security
+
+Symlinks are validated to ensure they point within the project:
+
+```typescript
+if (lstats.isSymbolicLink()) {
+    try {
+        const realPath = await realpath(entryPath);
+        if (!(await isPathWithinProject(realPath, projectPath))) {
+            continue; // Skip symlinks pointing outside project
+        }
+    } catch {
+        continue; // Skip broken symlinks
+    }
+}
+```
+
+### Atomic File Writes
+
+The API uses atomic write patterns to prevent data corruption:
+
+```typescript
+// Write to temp file first
+const tempPath = `${resolvedPath}.${randomBytes(8).toString('hex')}.tmp`;
+
+try {
+    await writeFile(tempPath, content, 'utf-8');
+    await rename(tempPath, resolvedPath); // Atomic rename
+} catch (writeError) {
+    // Clean up temp file on failure
+    if (existsSync(tempPath)) {
+        await unlink(tempPath);
+    }
+    throw writeError;
+}
+```
+
+### Error Display in UI
+
+Errors are displayed in modal dialogs with appropriate styling:
+
+```svelte
+{#if renameError}
+    <div class="modal-error">{renameError}</div>
+{/if}
+```
+
+**CSS styling:**
+```css
+.modal-error {
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: oklch(0.50 0.12 30 / 0.15);
+    border: 1px solid oklch(0.55 0.15 30 / 0.3);
+    border-radius: 0.375rem;
+    color: oklch(0.70 0.15 30);
+    font-size: 0.8125rem;
+}
+```
+
+### Error Handling Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                      ERROR HANDLING FLOW                            │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  1. User Action (rename, delete, create)                            │
+│     └─► FileTree sends API request                                  │
+│                                                                     │
+│  2. Server Validation                                               │
+│     ├─► Path validation (traversal, bounds)                         │
+│     ├─► Permission validation (sensitive files)                     │
+│     └─► Filesystem checks (exists, type, size)                      │
+│                                                                     │
+│  3. Server Response                                                 │
+│     ├─► Success: { success: true, ... }                             │
+│     └─► Error: { error: "message" }, status: 4xx/5xx                │
+│                                                                     │
+│  4. Client Error Processing                                         │
+│     ├─► Extract error and status from response                      │
+│     ├─► Pass to getOperationErrorMessage()                          │
+│     └─► Display humanized message in modal                          │
+│                                                                     │
+│  5. User Feedback                                                   │
+│     ├─► Modal shows error with clear description                    │
+│     ├─► Retry button available where appropriate                    │
+│     └─► Close/Cancel to dismiss                                     │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Common Error Scenarios
+
+| Scenario | Server Response | Client Message |
+|----------|-----------------|----------------|
+| Rename to existing name | 409 + "already exists" | "A file or folder named 'x' already exists." |
+| Delete .env file | 403 + "sensitive" | "Cannot delete 'x': This is a protected file." |
+| Open binary file | 415 + "Binary file" | "Binary file - cannot display as text" |
+| Path with `../` | 403 + "traversal" | "Access denied: Cannot rename files outside the project." |
+| Disk full | 500 + "ENOSPC" | "Cannot create: Disk is full." |
+| File in use | 500 + "EBUSY" | "Cannot delete 'x': File is in use by another process." |
+
+### Files
+
+**API Endpoints:**
+- `src/routes/api/files/+server.ts` - Directory listing with path validation
+- `src/routes/api/files/content/+server.ts` - File CRUD with security checks
+
+**Components:**
+- `src/lib/components/files/FileTree.svelte` - Client-side error humanization
+
+### Task Reference
+
+- jat-r1luo: Document Error Handling Patterns
+
 ## Development Commands
 
 ```bash

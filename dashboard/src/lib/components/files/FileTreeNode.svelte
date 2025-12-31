@@ -1,0 +1,338 @@
+<script lang="ts">
+	/**
+	 * FileTreeNode - Recursive component for folder/file nodes
+	 *
+	 * Features:
+	 * - Click folder → toggle expand/collapse
+	 * - Click file → emit onFileSelect(path)
+	 * - Loading spinner while fetching folder contents
+	 * - File type icons based on extension
+	 */
+
+	import { slide } from 'svelte/transition';
+
+	interface DirectoryEntry {
+		name: string;
+		type: 'file' | 'folder';
+		size: number;
+		modified: string;
+		path: string;
+	}
+
+	interface Props {
+		entry: DirectoryEntry;
+		project: string;
+		selectedPath: string | null;
+		expandedFolders: Set<string>;
+		loadedFolders: Map<string, DirectoryEntry[]>;
+		loadingFolders: Set<string>;
+		depth?: number;
+		onFileSelect: (path: string) => void;
+		onToggleFolder: (path: string) => void;
+		filterTerm?: string;
+	}
+
+	let {
+		entry,
+		project,
+		selectedPath,
+		expandedFolders,
+		loadedFolders,
+		loadingFolders,
+		depth = 0,
+		onFileSelect,
+		onToggleFolder,
+		filterTerm = ''
+	}: Props = $props();
+
+	// Computed states
+	const isFolder = $derived(entry.type === 'folder');
+	const isExpanded = $derived(expandedFolders.has(entry.path));
+	const isLoading = $derived(loadingFolders.has(entry.path));
+	const isSelected = $derived(selectedPath === entry.path);
+	const children = $derived(loadedFolders.get(entry.path) || []);
+
+	// Filter children based on filter term
+	const filteredChildren = $derived(() => {
+		if (!filterTerm) return children;
+		const lowerFilter = filterTerm.toLowerCase();
+		return children.filter(child => {
+			// Include if name matches
+			if (child.name.toLowerCase().includes(lowerFilter)) return true;
+			// Include folders that might have matching children (we check at render time)
+			if (child.type === 'folder') return true;
+			return false;
+		});
+	});
+
+	// Get file icon based on extension
+	function getFileIcon(filename: string): string {
+		const ext = filename.split('.').pop()?.toLowerCase() || '';
+		const name = filename.toLowerCase();
+
+		// Special files
+		if (name === 'package.json') return '📦';
+		if (name === 'tsconfig.json') return '⚙️';
+		if (name === '.gitignore') return '🙈';
+		if (name === 'readme.md') return '📖';
+		if (name === 'claude.md') return '🤖';
+		if (name === 'dockerfile') return '🐳';
+		if (name === 'license' || name === 'license.md') return '📜';
+		if (name.startsWith('.env')) return '🔐';
+
+		// By extension
+		const iconMap: Record<string, string> = {
+			// TypeScript/JavaScript
+			ts: '🔷',
+			tsx: '⚛️',
+			js: '🟨',
+			jsx: '⚛️',
+			mjs: '🟨',
+			cjs: '🟨',
+			// Web
+			svelte: '🔶',
+			vue: '💚',
+			html: '🌐',
+			css: '🎨',
+			scss: '🎨',
+			less: '🎨',
+			// Data
+			json: '📋',
+			yaml: '📋',
+			yml: '📋',
+			toml: '📋',
+			xml: '📋',
+			// Docs
+			md: '📝',
+			mdx: '📝',
+			txt: '📄',
+			// Shell
+			sh: '🐚',
+			bash: '🐚',
+			zsh: '🐚',
+			fish: '🐚',
+			// Languages
+			py: '🐍',
+			go: '🐹',
+			rs: '🦀',
+			rb: '💎',
+			php: '🐘',
+			java: '☕',
+			kt: '🎯',
+			swift: '🧡',
+			c: '🔧',
+			cpp: '🔧',
+			h: '🔧',
+			// Config
+			lock: '🔒',
+			gitignore: '🙈',
+			// Images
+			png: '🖼️',
+			jpg: '🖼️',
+			jpeg: '🖼️',
+			gif: '🖼️',
+			svg: '🎨',
+			ico: '🖼️',
+			webp: '🖼️',
+			// Other
+			sql: '🗃️',
+			db: '🗃️',
+			log: '📃',
+			env: '🔐'
+		};
+
+		return iconMap[ext] || '📄';
+	}
+
+	function handleClick() {
+		if (isFolder) {
+			onToggleFolder(entry.path);
+		} else {
+			onFileSelect(entry.path);
+		}
+	}
+
+	function handleKeyDown(e: KeyboardEvent) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			handleClick();
+		}
+	}
+</script>
+
+<div class="tree-node" style="--depth: {depth};">
+	<!-- Node row -->
+	<button
+		class="node-row"
+		class:folder={isFolder}
+		class:file={!isFolder}
+		class:expanded={isExpanded}
+		class:selected={isSelected}
+		class:loading={isLoading}
+		onclick={handleClick}
+		onkeydown={handleKeyDown}
+		title={entry.path}
+		aria-expanded={isFolder ? isExpanded : undefined}
+	>
+		<!-- Indentation -->
+		<span class="indent" style="width: {depth * 16}px"></span>
+
+		<!-- Expand arrow for folders -->
+		{#if isFolder}
+			<span class="arrow" class:expanded={isExpanded}>
+				{#if isLoading}
+					<span class="loading-spinner"></span>
+				{:else}
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M9 18l6-6-6-6" />
+					</svg>
+				{/if}
+			</span>
+		{:else}
+			<span class="arrow-placeholder"></span>
+		{/if}
+
+		<!-- Icon -->
+		<span class="icon">
+			{#if isFolder}
+				{isExpanded ? '📂' : '📁'}
+			{:else}
+				{getFileIcon(entry.name)}
+			{/if}
+		</span>
+
+		<!-- Name -->
+		<span class="name" class:highlighted={filterTerm && entry.name.toLowerCase().includes(filterTerm.toLowerCase())}>
+			{entry.name}
+		</span>
+	</button>
+
+	<!-- Children (if folder is expanded) -->
+	{#if isFolder && isExpanded && children.length > 0}
+		<div class="children" transition:slide={{ duration: 150 }}>
+			{#each filteredChildren() as child (child.path)}
+				<svelte:self
+					entry={child}
+					{project}
+					{selectedPath}
+					{expandedFolders}
+					{loadedFolders}
+					{loadingFolders}
+					depth={depth + 1}
+					{onFileSelect}
+					{onToggleFolder}
+					{filterTerm}
+				/>
+			{/each}
+		</div>
+	{/if}
+</div>
+
+<style>
+	.tree-node {
+		user-select: none;
+	}
+
+	.node-row {
+		display: flex;
+		align-items: center;
+		width: 100%;
+		padding: 0.25rem 0.5rem;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		font-size: 0.8125rem;
+		color: oklch(0.75 0.02 250);
+		text-align: left;
+		border-radius: 0.25rem;
+		transition: background 0.1s ease;
+		gap: 0.25rem;
+	}
+
+	.node-row:hover {
+		background: oklch(0.22 0.02 250);
+	}
+
+	.node-row.selected {
+		background: oklch(0.65 0.12 220 / 0.2);
+		color: oklch(0.85 0.08 220);
+	}
+
+	.node-row.selected:hover {
+		background: oklch(0.65 0.12 220 / 0.25);
+	}
+
+	.node-row.folder {
+		font-weight: 500;
+	}
+
+	.indent {
+		flex-shrink: 0;
+	}
+
+	.arrow {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 16px;
+		height: 16px;
+		flex-shrink: 0;
+		transition: transform 0.15s ease;
+	}
+
+	.arrow svg {
+		width: 12px;
+		height: 12px;
+		color: oklch(0.55 0.02 250);
+	}
+
+	.arrow.expanded {
+		transform: rotate(90deg);
+	}
+
+	.arrow-placeholder {
+		width: 16px;
+		flex-shrink: 0;
+	}
+
+	.loading-spinner {
+		width: 12px;
+		height: 12px;
+		border: 2px solid oklch(0.35 0.02 250);
+		border-top-color: oklch(0.65 0.12 220);
+		border-radius: 50%;
+		animation: spin 0.6s linear infinite;
+	}
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
+	}
+
+	.icon {
+		font-size: 0.875rem;
+		flex-shrink: 0;
+		width: 18px;
+		text-align: center;
+	}
+
+	.name {
+		flex: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.name.highlighted {
+		background: oklch(0.65 0.15 85 / 0.3);
+		border-radius: 2px;
+		padding: 0 2px;
+		margin: 0 -2px;
+	}
+
+	.children {
+		/* Subtle left border to show hierarchy */
+		margin-left: 0.5rem;
+		border-left: 1px solid oklch(0.25 0.02 250);
+		padding-left: 0.25rem;
+	}
+</style>

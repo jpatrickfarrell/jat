@@ -18,6 +18,8 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { fade, slide } from 'svelte/transition';
+	import { FileEditor, type OpenFile } from '$lib/components/files';
+	import FileTree from '$lib/components/files/FileTree.svelte';
 
 	// Types
 	interface Project {
@@ -26,13 +28,6 @@
 		path: string;
 		port: number | null;
 		description: string | null;
-	}
-
-	interface OpenFile {
-		path: string;
-		content: string;
-		dirty: boolean;
-		originalContent: string;
 	}
 
 	// State
@@ -128,15 +123,47 @@
 		}
 	}
 
-	// Toggle folder expansion
-	function toggleFolder(path: string) {
-		const newExpanded = new Set(expandedFolders);
-		if (newExpanded.has(path)) {
-			newExpanded.delete(path);
-		} else {
-			newExpanded.add(path);
+	// Handle file selection from tree
+	async function handleFileSelect(path: string) {
+		// Check if file is already open
+		const existingFile = openFiles.find(f => f.path === path);
+		if (existingFile) {
+			// Just switch to it
+			activeFilePath = path;
+			return;
 		}
-		expandedFolders = newExpanded;
+
+		// Fetch file content
+		if (!selectedProject) return;
+
+		try {
+			const params = new URLSearchParams({
+				project: selectedProject,
+				path
+			});
+			const response = await fetch(`/api/files/content?${params}`);
+
+			if (!response.ok) {
+				const data = await response.json();
+				console.error('[Files] Failed to load file:', data.message);
+				return;
+			}
+
+			const data = await response.json();
+			const content = data.content || '';
+
+			// Add to open files
+			const newFile: OpenFile = {
+				path,
+				content,
+				originalContent: content,
+				dirty: false
+			};
+			openFiles = [...openFiles, newFile];
+			activeFilePath = path;
+		} catch (err) {
+			console.error('[Files] Failed to load file:', err);
+		}
 	}
 
 	// Get display name for selected project
@@ -148,6 +175,56 @@
 	const selectedProjectPath = $derived(
 		projects.find(p => p.name === selectedProject)?.path || null
 	);
+
+	// Handle file close request (called after FileEditor confirms if dirty)
+	function handleFileClose(path: string) {
+		closeFile(path);
+	}
+
+	// Close a file tab
+	function closeFile(path: string) {
+		const index = openFiles.findIndex((f) => f.path === path);
+		if (index === -1) return;
+
+		// Remove the file from openFiles
+		openFiles = openFiles.filter((f) => f.path !== path);
+
+		// If this was the active file, switch to another
+		if (activeFilePath === path) {
+			if (openFiles.length > 0) {
+				// Switch to the previous tab, or the first one
+				const newIndex = Math.min(index, openFiles.length - 1);
+				activeFilePath = openFiles[newIndex]?.path || null;
+			} else {
+				activeFilePath = null;
+			}
+		}
+	}
+
+	// Handle file save
+	async function handleFileSave(path: string, content: string) {
+		// TODO: Implement API call to save file
+		console.log('[Files] Save file:', path, 'content length:', content.length);
+
+		// Mark file as not dirty after save
+		openFiles = openFiles.map((f) => {
+			if (f.path === path) {
+				return { ...f, dirty: false, originalContent: content };
+			}
+			return f;
+		});
+	}
+
+	// Handle active file change
+	function handleActiveFileChange(path: string) {
+		activeFilePath = path;
+	}
+
+	// Handle content change
+	function handleContentChange(path: string, content: string, dirty: boolean) {
+		// Already updated by FileEditor, just log for now
+		console.log('[Files] Content changed:', path, 'dirty:', dirty);
+	}
 
 	onMount(() => {
 		fetchProjects();
@@ -239,20 +316,17 @@
 					<div class="panel-header">
 						<span class="panel-title">Explorer</span>
 					</div>
-					<div class="panel-content">
+					<div class="panel-content file-tree-content">
 						{#if !selectedProject}
 							<div class="panel-empty">
 								<p>Select a project to browse files</p>
 							</div>
 						{:else}
-							<!-- File tree will be implemented in a future task -->
-							<div class="panel-placeholder">
-								<svg class="w-8 h-8 text-base-content/20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-								</svg>
-								<p class="text-sm text-base-content/40 mt-2">File tree coming soon</p>
-								<p class="text-xs text-base-content/30 mt-1">{selectedProjectPath}</p>
-							</div>
+							<FileTree
+								project={selectedProject}
+								selectedPath={activeFilePath}
+								onFileSelect={handleFileSelect}
+							/>
 						{/if}
 					</div>
 				</div>
@@ -274,50 +348,28 @@
 
 				<!-- Right Panel: Editor -->
 				<div class="editor-panel">
-					<div class="panel-header">
-						<span class="panel-title">Editor</span>
-						{#if openFiles.length > 0}
-							<!-- Tab bar will be implemented in a future task -->
-							<div class="tab-bar">
-								{#each openFiles as file (file.path)}
-									<button
-										class="file-tab"
-										class:active={activeFilePath === file.path}
-										onclick={() => activeFilePath = file.path}
-									>
-										<span class="tab-name">{file.path.split('/').pop()}</span>
-										{#if file.dirty}
-											<span class="dirty-indicator"></span>
-										{/if}
-									</button>
-								{/each}
-							</div>
-						{/if}
-					</div>
-					<div class="panel-content">
-						{#if !selectedProject}
+					{#if selectedProject}
+						<FileEditor
+							bind:openFiles
+							bind:activeFilePath
+							onFileClose={handleFileClose}
+							onFileSave={handleFileSave}
+							onActiveFileChange={handleActiveFileChange}
+							onContentChange={handleContentChange}
+						/>
+					{:else}
+						<div class="panel-header">
+							<span class="panel-title">Editor</span>
+						</div>
+						<div class="panel-content">
 							<div class="panel-empty">
 								<svg class="w-12 h-12 text-base-content/15" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
 								</svg>
 								<p class="text-base-content/40 mt-3">Select a project to start</p>
 							</div>
-						{:else if !activeFilePath}
-							<div class="panel-empty">
-								<svg class="w-12 h-12 text-base-content/15" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-								</svg>
-								<p class="text-base-content/40 mt-3">Select a file to edit</p>
-								<p class="text-xs text-base-content/25 mt-1">Or double-click a file in the explorer</p>
-							</div>
-						{:else}
-							<!-- Editor content will be implemented in a future task -->
-							<div class="panel-placeholder">
-								<p class="text-sm text-base-content/40">Editor coming soon</p>
-								<p class="text-xs text-base-content/30 mt-1">{activeFilePath}</p>
-							</div>
-						{/if}
-					</div>
+						</div>
+					{/if}
 				</div>
 			</div>
 		</div>
@@ -460,6 +512,11 @@
 		padding: 0.5rem;
 	}
 
+	.panel-content.file-tree-content {
+		padding: 0;
+		overflow: hidden;
+	}
+
 	.panel-empty,
 	.panel-placeholder {
 		display: flex;
@@ -521,52 +578,6 @@
 
 	.vertical-divider.dragging .grip-line {
 		background: oklch(0.70 0.18 200);
-	}
-
-	/* Tab Bar */
-	.tab-bar {
-		display: flex;
-		gap: 0.25rem;
-		overflow-x: auto;
-		padding-right: 0.5rem;
-	}
-
-	.file-tab {
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
-		padding: 0.25rem 0.5rem;
-		background: transparent;
-		border: none;
-		border-radius: 0.25rem;
-		font-size: 0.75rem;
-		color: oklch(0.60 0.02 250);
-		cursor: pointer;
-		white-space: nowrap;
-		transition: all 0.15s ease;
-	}
-
-	.file-tab:hover {
-		background: oklch(0.20 0.02 250);
-		color: oklch(0.75 0.02 250);
-	}
-
-	.file-tab.active {
-		background: oklch(0.22 0.02 250);
-		color: oklch(0.85 0.02 250);
-	}
-
-	.tab-name {
-		max-width: 120px;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	.dirty-indicator {
-		width: 6px;
-		height: 6px;
-		background: oklch(0.65 0.15 45);
-		border-radius: 50%;
 	}
 
 	/* Error State */

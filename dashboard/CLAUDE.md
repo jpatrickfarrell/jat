@@ -2913,14 +2913,55 @@ The **Project File Explorer** (`/files`) provides a full-featured file browser a
 }
 ```
 
-### LocalStorage Persistence
+### Tab Order Persistence
 
-**Keys:**
-- `files-open-tabs` - Array of open file paths
-- `files-tab-order` - Array of file paths in display order
-- `files-active-tab` - Currently active file path
+The file explorer persists open tabs and their order to localStorage, allowing users to return to their previous editing session.
 
-**Restoration:** On page load, restores previously open tabs and their order.
+**How It Works:**
+
+1. **Storage Key:** `jat-files-open-${projectName}` (one key per project)
+2. **Data Format:**
+   ```json
+   {
+     "openFiles": [
+       { "path": "src/lib/components/FileTree.svelte" },
+       { "path": "src/routes/files/+page.svelte" },
+       { "path": "README.md" }
+     ],
+     "activeFilePath": "src/routes/files/+page.svelte"
+   }
+   ```
+3. **Save Triggers:** Saves automatically when:
+   - A file is opened or closed
+   - Tabs are reordered via drag-and-drop
+   - The active file changes
+
+4. **Restoration:** On page load, open files are restored in their saved order and the previously active file is selected.
+
+**Implementation Details:**
+
+| Function | Purpose |
+|----------|---------|
+| `getStorageKey(project)` | Returns key: `jat-files-open-${project}` |
+| `saveOpenFilesToStorage()` | Serializes current state to localStorage |
+| `loadOpenFilesFromStorage()` | Restores state on mount (runs once per project) |
+
+**Drag-and-Drop Tab Reordering:**
+
+The `FileTabBar` component enables drag-and-drop reordering of tabs:
+
+1. Drag a tab → visual indicator shows drop position (left/right glow)
+2. Drop the tab → `handleTabReorder(fromIndex, toIndex)` is called
+3. The `openFiles` array is reordered in memory
+4. The `$effect` detects the array change and persists to localStorage
+
+**Preventing Duplicate Restores:**
+
+A `restoredProjects` Set tracks which projects have been restored, preventing duplicate file loads when the component re-renders.
+
+**Cleanup:**
+
+When all tabs are closed, the localStorage key for that project is removed to avoid stale data.
 
 ### File Type Icons
 
@@ -2972,6 +3013,7 @@ Icons are determined by file extension in FileTree:
   - jat-6z80w: File tabs can be drag and dropped to reorder (completed)
   - jat-5qtio: Add file/folder create, rename, delete operations (completed)
   - jat-myayu: Add persistent tab order storage (completed)
+  - jat-q5835: Add documentation for tab order feature (completed)
 
 ## Development Commands
 

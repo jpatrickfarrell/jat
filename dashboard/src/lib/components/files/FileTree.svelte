@@ -4,13 +4,14 @@
 	 *
 	 * Features:
 	 * - Lazy loading: Only fetch folder contents when expanded
-	 * - Search/filter input at top
+	 * - Search/filter input at top (debounced for performance)
 	 * - Highlight currently open file
 	 * - Caches loaded folder contents
 	 * - Keyboard shortcuts: F2 (rename), Delete (delete)
+	 * - Performance optimizations for large directories
 	 */
 
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import FileTreeNode from './FileTreeNode.svelte';
 
 	interface DirectoryEntry {
@@ -87,8 +88,34 @@
 	let loadedFolders = $state<Map<string, DirectoryEntry[]>>(new Map());
 	let loadingFolders = $state<Set<string>>(new Set());
 	let filterTerm = $state('');
+	let debouncedFilterTerm = $state(''); // Actual filter applied (debounced)
+	let filterDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 	let isLoadingRoot = $state(true);
 	let rootError = $state<string | null>(null);
+
+	// Debounce filter updates for performance
+	$effect(() => {
+		const currentFilter = filterTerm;
+
+		if (filterDebounceTimer) {
+			clearTimeout(filterDebounceTimer);
+		}
+
+		// Apply filter immediately if cleared, otherwise debounce
+		if (!currentFilter) {
+			debouncedFilterTerm = '';
+		} else {
+			filterDebounceTimer = setTimeout(() => {
+				debouncedFilterTerm = currentFilter;
+			}, 150); // 150ms debounce
+		}
+
+		return () => {
+			if (filterDebounceTimer) {
+				clearTimeout(filterDebounceTimer);
+			}
+		};
+	});
 
 	// Rename modal state
 	let renameModal = $state<{ path: string; name: string; isFolder: boolean } | null>(null);
@@ -110,10 +137,10 @@
 	// Context menu state
 	let contextMenu = $state<{ x: number; y: number; entry: DirectoryEntry } | null>(null);
 
-	// Filtered root entries
+	// Filtered root entries (uses debounced filter for performance)
 	const filteredRootEntries = $derived(() => {
-		if (!filterTerm) return rootEntries;
-		const lowerFilter = filterTerm.toLowerCase();
+		if (!debouncedFilterTerm) return rootEntries;
+		const lowerFilter = debouncedFilterTerm.toLowerCase();
 		return rootEntries.filter(entry => {
 			if (entry.name.toLowerCase().includes(lowerFilter)) return true;
 			// Include folders that might contain matches
@@ -156,10 +183,60 @@
 		}
 	}
 
+	// Track folders being preloaded (hover prefetch)
+	let preloadingFolders = $state<Set<string>>(new Set());
+	let preloadTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Preload folder contents on hover (for faster expand)
+	async function preloadFolder(path: string) {
+		// Skip if already loaded or currently loading
+		if (loadedFolders.has(path) || loadingFolders.has(path) || preloadingFolders.has(path)) {
+			return;
+		}
+
+		// Mark as preloading
+		preloadingFolders = new Set([...preloadingFolders, path]);
+
+		try {
+			const entries = await fetchDirectory(path);
+			const newLoaded = new Map(loadedFolders);
+			newLoaded.set(path, entries);
+			loadedFolders = newLoaded;
+		} catch (err) {
+			// Silently fail preload - will retry on actual expand
+			console.debug(`[FileTree] Preload failed for ${path}:`, err);
+		} finally {
+			const newPreloading = new Set(preloadingFolders);
+			newPreloading.delete(path);
+			preloadingFolders = newPreloading;
+		}
+	}
+
+	// Handle folder hover - schedule preload
+	function handleFolderHover(path: string) {
+		// Cancel any pending preload
+		if (preloadTimer) {
+			clearTimeout(preloadTimer);
+		}
+
+		// Schedule preload after 200ms hover
+		preloadTimer = setTimeout(() => {
+			preloadFolder(path);
+		}, 200);
+	}
+
+	// Cancel preload on hover end
+	function handleFolderHoverEnd() {
+		if (preloadTimer) {
+			clearTimeout(preloadTimer);
+			preloadTimer = null;
+		}
+	}
+
 	// Toggle folder expansion
 	async function handleToggleFolder(path: string) {
 		const newExpanded = new Set(expandedFolders);
-		
+
 		if (newExpanded.has(path)) {
 			// Collapse
 			newExpanded.delete(path);
@@ -670,7 +747,9 @@
 						{onFileSelect}
 						onToggleFolder={handleToggleFolder}
 						onContextMenu={handleContextMenu}
-						{filterTerm}
+						filterTerm={debouncedFilterTerm}
+						onFolderHover={handleFolderHover}
+						onFolderHoverEnd={handleFolderHoverEnd}
 					/>
 				{/each}
 			</div>

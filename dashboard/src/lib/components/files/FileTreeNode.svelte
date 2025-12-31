@@ -7,6 +7,7 @@
 	 * - Click file → emit onFileSelect(path)
 	 * - Loading spinner while fetching folder contents
 	 * - File type icons based on extension
+	 * - Performance: "Show more" for large directories (100+ items)
 	 */
 
 	import { slide } from 'svelte/transition';
@@ -31,7 +32,13 @@
 		onToggleFolder: (path: string) => void;
 		onContextMenu?: (entry: DirectoryEntry, event: MouseEvent) => void;
 		filterTerm?: string;
+		onFolderHover?: (path: string) => void;
+		onFolderHoverEnd?: () => void;
 	}
+
+	// Performance: Limit initial children shown for large folders
+	const INITIAL_VISIBLE_LIMIT = 100;
+	const LOAD_MORE_INCREMENT = 100;
 
 	let {
 		entry,
@@ -44,8 +51,13 @@
 		onFileSelect,
 		onToggleFolder,
 		onContextMenu,
-		filterTerm = ''
+		filterTerm = '',
+		onFolderHover,
+		onFolderHoverEnd
 	}: Props = $props();
+
+	// Track how many children to show (for large folders)
+	let visibleChildCount = $state(INITIAL_VISIBLE_LIMIT);
 
 	// Computed states
 	const isFolder = $derived(entry.type === 'folder');
@@ -56,16 +68,51 @@
 
 	// Filter children based on filter term
 	const filteredChildren = $derived(() => {
-		if (!filterTerm) return children;
-		const lowerFilter = filterTerm.toLowerCase();
-		return children.filter(child => {
-			// Include if name matches
-			if (child.name.toLowerCase().includes(lowerFilter)) return true;
-			// Include folders that might have matching children (we check at render time)
-			if (child.type === 'folder') return true;
-			return false;
-		});
+		let result = children;
+
+		// Apply filter if present
+		if (filterTerm) {
+			const lowerFilter = filterTerm.toLowerCase();
+			result = result.filter(child => {
+				// Include if name matches
+				if (child.name.toLowerCase().includes(lowerFilter)) return true;
+				// Include folders that might have matching children (we check at render time)
+				if (child.type === 'folder') return true;
+				return false;
+			});
+		}
+
+		return result;
 	});
+
+	// Visible children (with limit applied for performance)
+	const visibleChildren = $derived(() => {
+		const all = filteredChildren();
+		return all.slice(0, visibleChildCount);
+	});
+
+	// Check if there are more children to show
+	const hasMoreChildren = $derived(() => {
+		return filteredChildren().length > visibleChildCount;
+	});
+
+	// Remaining count
+	const remainingCount = $derived(() => {
+		return filteredChildren().length - visibleChildCount;
+	});
+
+	// Reset visible count when folder changes or filter changes
+	$effect(() => {
+		// When entry path or filter changes, reset to initial limit
+		const _ = entry.path;
+		const __ = filterTerm;
+		visibleChildCount = INITIAL_VISIBLE_LIMIT;
+	});
+
+	// Show more children
+	function showMoreChildren() {
+		visibleChildCount += LOAD_MORE_INCREMENT;
+	}
 
 	// Get file icon based on extension
 	function getFileIcon(filename: string): string {
@@ -168,6 +215,19 @@
 			onContextMenu(entry, e);
 		}
 	}
+
+	// Handle folder hover for preloading
+	function handleMouseEnter() {
+		if (isFolder && !isExpanded && onFolderHover) {
+			onFolderHover(entry.path);
+		}
+	}
+
+	function handleMouseLeave() {
+		if (isFolder && onFolderHoverEnd) {
+			onFolderHoverEnd();
+		}
+	}
 </script>
 
 <div class="tree-node" style="--depth: {depth};">
@@ -182,6 +242,8 @@
 		onclick={handleClick}
 		onkeydown={handleKeyDown}
 		oncontextmenu={handleContextMenu}
+		onmouseenter={handleMouseEnter}
+		onmouseleave={handleMouseLeave}
 		title={entry.path}
 		aria-expanded={isFolder ? isExpanded : undefined}
 	>
@@ -221,7 +283,7 @@
 	<!-- Children (if folder is expanded) -->
 	{#if isFolder && isExpanded && children.length > 0}
 		<div class="children" transition:slide={{ duration: 150 }}>
-			{#each filteredChildren() as child (child.path)}
+			{#each visibleChildren() as child (child.path)}
 				<svelte:self
 					entry={child}
 					{project}
@@ -234,8 +296,16 @@
 					{onToggleFolder}
 					{onContextMenu}
 					{filterTerm}
+					{onFolderHover}
+					{onFolderHoverEnd}
 				/>
 			{/each}
+			{#if hasMoreChildren()}
+				<button class="show-more-btn" onclick={showMoreChildren}>
+					<span class="show-more-icon">···</span>
+					<span class="show-more-text">Show {Math.min(remainingCount(), LOAD_MORE_INCREMENT)} more ({remainingCount()} remaining)</span>
+				</button>
+			{/if}
 		</div>
 	{/if}
 </div>
@@ -346,5 +416,38 @@
 		margin-left: 0.5rem;
 		border-left: 1px solid oklch(0.25 0.02 250);
 		padding-left: 0.25rem;
+	}
+
+	/* Show more button for large directories */
+	.show-more-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		width: 100%;
+		padding: 0.375rem 0.5rem;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		font-size: 0.75rem;
+		color: oklch(0.55 0.12 220);
+		text-align: left;
+		border-radius: 0.25rem;
+		transition: all 0.15s ease;
+		margin-top: 0.125rem;
+	}
+
+	.show-more-btn:hover {
+		background: oklch(0.55 0.12 220 / 0.1);
+		color: oklch(0.65 0.15 220);
+	}
+
+	.show-more-icon {
+		font-size: 1rem;
+		letter-spacing: 0.1em;
+		color: oklch(0.50 0.08 220);
+	}
+
+	.show-more-text {
+		font-weight: 500;
 	}
 </style>

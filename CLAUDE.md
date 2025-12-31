@@ -21,12 +21,15 @@ Lightweight bash tools for agent orchestration, database operations, monitoring,
 
 ```
 jat/
-├── mail/                # Agent Mail coordination system (11 tools)
+├── tools/               # All executable tools
+│   ├── core/            # Database, monitoring, beads review tools
+│   ├── mail/            # Agent Mail coordination (11 tools)
+│   ├── browser/         # Browser automation (11 tools)
+│   ├── media/           # Image generation tools (gemini-*, avatar-*)
+│   ├── signal/          # JAT signal tools (jat-signal, jat-signal-validate)
+│   └── scripts/         # Installation and setup scripts
 ├── commands/jat/        # JAT workflow commands (9 commands)
-├── browser-tools/       # Browser automation tools (11 tools)
-├── tools/               # Database & monitoring tools (6 tools)
 ├── dashboard/           # Beads Task Dashboard (SvelteKit app)
-├── scripts/             # Installation and setup scripts
 ├── shared/              # Shared documentation (imported by projects)
 └── install.sh           # Installation script
 ```
@@ -59,7 +62,7 @@ brew install tmux sqlite jq
 ## Quick Start
 
 ```bash
-# Install tools (symlinks to ~/bin/)
+# Install tools (symlinks to ~/.local/bin/)
 ./install.sh
 
 # Verify installation
@@ -134,7 +137,7 @@ jat-chimaro                 # Single agent for chimaro project
 jat-jat                     # Single agent for jat project
 
 # Generate launcher functions (if not installed)
-~/code/jat/scripts/setup-bash-functions.sh
+~/code/jat/tools/scripts/setup-bash-functions.sh
 source ~/.bashrc
 ```
 
@@ -317,7 +320,7 @@ The dashboard supports voice input using local whisper.cpp - 100% private, no da
 # During initial install, select "Yes" when prompted for Voice-to-Text
 
 # Or install later:
-bash ~/code/jat/scripts/install-whisper.sh
+bash ~/code/jat/tools/scripts/install-whisper.sh
 ```
 
 ### Requirements
@@ -479,7 +482,7 @@ exit
 jat-chimaro    # or jat-jat, jat-myproject, etc.
 
 # If launcher functions not installed:
-~/code/jat/scripts/setup-bash-functions.sh
+~/code/jat/tools/scripts/setup-bash-functions.sh
 source ~/.bashrc
 ```
 
@@ -489,7 +492,7 @@ source ~/.bashrc
 ls ~/.local/share/jat/whisper/build/bin/whisper-cli
 
 # If not found, install it
-bash ~/code/jat/scripts/install-whisper.sh
+bash ~/code/jat/tools/scripts/install-whisper.sh
 
 # If whisper-cli exists but fails, rebuild (ffmpeg updated)
 cd ~/.local/share/jat/whisper/build

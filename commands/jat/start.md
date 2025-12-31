@@ -46,7 +46,7 @@ bd show "$PARAM" --json >/dev/null 2>&1 && PARAM_TYPE="task-id"
 
 #### 2A: Get Session ID
 ```bash
-~/code/jat/scripts/get-current-session-id
+~/code/jat/tools/scripts/get-current-session-id
 ```
 
 #### 2B: Register Agent

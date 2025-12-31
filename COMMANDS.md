@@ -167,7 +167,7 @@
 - ✅ CLAUDE.md has correct imports
 - ✅ Statusline installed (`~/.claude/statusline.sh`)
 - ✅ Agent commands installed (`~/.claude/commands/jat/*.md`)
-- ✅ Tools symlinked to `~/bin`
+- ✅ Tools symlinked to `~/.local/bin`
 - ✅ Beads initialized in project (`.beads/` directory)
 
 **What it repairs:**

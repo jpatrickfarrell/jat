@@ -203,8 +203,8 @@ jat colors                 # Reapply Hyprland window colors
 If you have `PROJECT_CONFIG` in your bashrc, import it:
 
 ```bash
-~/code/jat/scripts/import-bashrc-config.sh --dry-run  # Preview
-~/code/jat/scripts/import-bashrc-config.sh            # Import
+~/code/jat/tools/scripts/import-bashrc-config.sh --dry-run  # Preview
+~/code/jat/tools/scripts/import-bashrc-config.sh            # Import
 ```
 
 ---
@@ -758,24 +758,18 @@ This installs:
 **Repository Structure:**
 ```
 ~/code/jat/                          # Cloned by installer
-├── mail/                            # Agent Mail tools (11)
-│   ├── am-register
-│   ├── am-inbox
-│   └── ...
-├── browser-tools/                   # Browser automation (11)
-│   ├── browser-start.js
-│   ├── browser-eval.js
-│   └── ...
-├── tools/                           # Database & monitoring (6)
-│   ├── db-query
-│   ├── db-schema
-│   └── ...
-├── commands/jat/                  # Coordination commands (8)
+├── tools/                           # All executable tools
+│   ├── core/                        # Database, monitoring, beads review
+│   ├── mail/                        # Agent Mail tools (11)
+│   ├── browser/                     # Browser automation (11)
+│   ├── media/                       # Image generation (gemini-*, avatar-*)
+│   ├── signal/                      # JAT signals (jat-signal)
+│   └── scripts/                     # Installation scripts
+├── commands/jat/                    # Coordination commands (8)
 │   ├── register.md
 │   ├── start.md
 │   └── ...
 ├── dashboard/                       # Beads visual dashboard (SvelteKit)
-├── scripts/                         # Installation scripts
 └── install.sh                       # Main installer
 ```
 
@@ -942,7 +936,7 @@ am-release "src/auth/**" --agent GreatWind
 - ✅ CLAUDE.md has correct imports
 - ✅ Statusline installed
 - ✅ Agent commands installed
-- ✅ Tools symlinked to ~/bin
+- ✅ Tools symlinked to ~/.local/bin
 - ✅ Beads initialized in project
 
 **What it repairs:**
@@ -1809,14 +1803,14 @@ export PATH="$HOME/.local/bin:$PATH"
 ls -la ~/.local/bin/am-*
 
 # Re-run symlink setup
-bash ~/code/jat/scripts/symlink-tools.sh
+bash ~/code/jat/tools/scripts/symlink-tools.sh
 ```
 
 ### Per-Repo Setup Didn't Run
 
 ```bash
 # Manually run per-repo setup
-bash ~/code/jat/scripts/setup-repos.sh
+bash ~/code/jat/tools/scripts/setup-repos.sh
 ```
 
 ---
@@ -2099,7 +2093,7 @@ jat-chimaro    # or jat-jat, jat-myproject, etc.
 jat chimaro --claude
 
 # If launcher functions not installed:
-~/code/jat/scripts/setup-bash-functions.sh
+~/code/jat/tools/scripts/setup-bash-functions.sh
 source ~/.bashrc
 ```
 

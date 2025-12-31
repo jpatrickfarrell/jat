@@ -61,7 +61,7 @@ Replaced all `$PPID`-based session lookups with the helper script:
 
 ```bash
 # ✅ CORRECT: Using helper script
-SESSION_ID=$(~/code/jat/scripts/get-current-session-id 2>/dev/null | tr -d '\n')
+SESSION_ID=$(~/code/jat/tools/scripts/get-current-session-id 2>/dev/null | tr -d '\n')
 if [[ -n "$SESSION_ID" ]]; then
   echo "$AGENT_NAME" > ".claude/agent-${SESSION_ID}.txt"
 fi
@@ -133,7 +133,7 @@ Found 18 agent files in .claude/:
 ### Test 6: Helper Script Verification ✅
 
 ```bash
-$ ~/code/jat/scripts/get-current-session-id
+$ ~/code/jat/tools/scripts/get-current-session-id
 9b2a2fac-61d7-4333-97da-230d64d19f04
 
 $ cat .claude/agent-9b2a2fac-61d7-4333-97da-230d64d19f04.txt
@@ -171,7 +171,7 @@ fi
 **3. Agent Commands Write Agent Name:**
 ```bash
 # Now using helper script
-SESSION_ID=$(~/code/jat/scripts/get-current-session-id 2>/dev/null | tr -d '\n')
+SESSION_ID=$(~/code/jat/tools/scripts/get-current-session-id 2>/dev/null | tr -d '\n')
 echo "$AGENT_NAME" > ".claude/agent-${SESSION_ID}.txt"
 ```
 - Helper script finds most recent session file

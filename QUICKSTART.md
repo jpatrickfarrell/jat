@@ -61,7 +61,7 @@ cd ~/code/jat
 bash install.sh
 
 # Verify installation
-which am-register  # Should show ~/bin/am-register (or ~/.local/bin/am-register)
+which am-register  # Should show ~/.local/bin/am-register
 which bd          # Should show ~/code/beads/bd
 ```
 
@@ -384,7 +384,7 @@ ps aux | grep sqlite3
 **Solution**:
 ```bash
 # Check installation path
-echo $PATH | grep -E "(~/bin|~/.local/bin)"
+echo $PATH | grep "~/.local/bin"
 
 # Add to PATH if missing (add to ~/.bashrc)
 export PATH="$HOME/.local/bin:$PATH"
@@ -436,7 +436,7 @@ bash examples/workflows/01-basic-collaboration.sh
 cat examples/best-practices.md
 
 # Explore all Agent Mail commands
-ls ~/bin/am-* | xargs -n1 basename
+ls ~/.local/bin/am-* | xargs -n1 basename
 ```
 
 ---
@@ -523,7 +523,7 @@ You've learned:
 
 - **Agent Mail DB**: `~/.agent-mail.db`
 - **Beads DBs**: `~/code/PROJECT/.beads/beads.db` (per project)
-- **Tools**: `~/bin/` or `~/.local/bin/`
+- **Tools**: `~/.local/bin/`
 - **Slash Commands**: `~/.claude/commands/`
 
 ---

@@ -32,8 +32,6 @@ mcp_agent_mail/
 # This entry only affects the JAT repo itself.
 .beads/
 
-tools/
-
 # Generated avatars (per-machine, don't commit)
 avatars/
 .archive/

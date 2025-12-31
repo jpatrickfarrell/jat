@@ -1,6 +1,6 @@
 ## Agent Tools: Lightweight bash tools for common operations
 
-**Location:** Tools symlinked to `~/bin/` after running `./install.sh`
+**Location:** Tools symlinked to `~/.local/bin/` after running `./install.sh`
 
 ### Agent Mail (11 tools)
 

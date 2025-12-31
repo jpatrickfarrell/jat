@@ -537,7 +537,7 @@ Signals must be written as compact single-line JSON (JSONL format), one event pe
 ### Files Reference
 
 **Signal Tool:**
-- `signal/jat-signal` - Main signal command (symlinked to ~/bin/)
+- `signal/jat-signal` - Main signal command (symlinked to ~/.local/bin/)
 - `signal/jat-signal-validate` - JSON schema validation
 - `signal/jat-signal-schema.json` - JSON schemas for all signal types
 

@@ -86,7 +86,7 @@ When the agent enters "ready-for-review" state, the dashboard checks review rule
 **Pattern 1: Use Read/Write tools (RECOMMENDED)**
 ```bash
 # Step 1: Get value
-~/code/jat/scripts/get-current-session-id
+~/code/jat/tools/scripts/get-current-session-id
 # → "a019c84c-7b54-45cc-9eee-dd6a70dea1a3"
 
 # Step 2: Use Write tool with that value
@@ -106,7 +106,7 @@ test -f "$file" && echo "exists" || echo "not found"
 
 ```bash
 # BROKEN: Command substitution in assignment
-SESSION_ID=$(~/code/jat/scripts/get-current-session-id)
+SESSION_ID=$(~/code/jat/tools/scripts/get-current-session-id)
 # Error: gets escaped
 
 # BROKEN: if statement with &&
@@ -122,7 +122,7 @@ SESSION_ID="abc" && if [[ -f "$file" ]]; then echo "yes"; fi
 
 #### 1A: Get Session ID
 ```bash
-~/code/jat/scripts/get-current-session-id
+~/code/jat/tools/scripts/get-current-session-id
 # → Extract session_id value
 ```
 

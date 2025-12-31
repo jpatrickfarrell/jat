@@ -17,42 +17,54 @@ echo ""
 # Ensure ~/.local/bin exists
 mkdir -p ~/.local/bin
 
-# Get project root directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Get project root directory (scripts is now under tools/)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# JAT tool directories
-TOOLS_DIR="$SCRIPT_DIR/tools"
-BROWSER_TOOLS_DIR="$SCRIPT_DIR/browser-tools"
-SIGNAL_DIR="$SCRIPT_DIR/signal"
-MEDIA_DIR="$SCRIPT_DIR/media"
+# JAT tool directories (all under tools/)
+TOOLS_DIR="$PROJECT_ROOT/tools"
+CORE_DIR="$TOOLS_DIR/core"
+BROWSER_DIR="$TOOLS_DIR/browser"
+SIGNAL_DIR="$TOOLS_DIR/signal"
+MEDIA_DIR="$TOOLS_DIR/media"
+MAIL_DIR="$TOOLS_DIR/mail"
 
 # Verify directories exist
-if [ ! -d "$TOOLS_DIR" ] || [ ! -d "$BROWSER_TOOLS_DIR" ]; then
+if [ ! -d "$CORE_DIR" ] || [ ! -d "$BROWSER_DIR" ]; then
     echo -e "${YELLOW}  ⚠ Tool directories not found${NC}"
     echo "  Expected:"
-    echo "    - $TOOLS_DIR"
-    echo "    - $BROWSER_TOOLS_DIR"
+    echo "    - $CORE_DIR"
+    echo "    - $BROWSER_DIR"
     exit 1
 fi
 
-# Count all tools (signal/ and media/ are optional)
+# Count tools in each directory
+CORE_COUNT=$(find "$CORE_DIR" -maxdepth 1 -type f -executable 2>/dev/null | wc -l)
+BROWSER_COUNT=$(find "$BROWSER_DIR" -maxdepth 1 -type f -executable 2>/dev/null | wc -l)
+MAIL_COUNT=0
+if [ -d "$MAIL_DIR" ]; then
+    MAIL_COUNT=$(find "$MAIL_DIR" -maxdepth 1 -type f -executable 2>/dev/null | wc -l)
+fi
 SIGNAL_COUNT=0
 if [ -d "$SIGNAL_DIR" ]; then
-    SIGNAL_COUNT=$(find "$SIGNAL_DIR" -maxdepth 1 -type f -executable | wc -l)
+    SIGNAL_COUNT=$(find "$SIGNAL_DIR" -maxdepth 1 -type f -executable 2>/dev/null | wc -l)
 fi
 MEDIA_COUNT=0
 if [ -d "$MEDIA_DIR" ]; then
-    MEDIA_COUNT=$(find "$MEDIA_DIR" -maxdepth 1 -type f -executable | wc -l)
+    MEDIA_COUNT=$(find "$MEDIA_DIR" -maxdepth 1 -type f -executable 2>/dev/null | wc -l)
 fi
-TOOL_COUNT=$(( $(find "$TOOLS_DIR" "$BROWSER_TOOLS_DIR" -maxdepth 1 -type f -executable | wc -l) + SIGNAL_COUNT + MEDIA_COUNT ))
+TOOL_COUNT=$(( CORE_COUNT + BROWSER_COUNT + MAIL_COUNT + SIGNAL_COUNT + MEDIA_COUNT ))
 echo "  Found $TOOL_COUNT tools"
-echo "    - $(find "$TOOLS_DIR" -maxdepth 1 -type f -executable | wc -l) in tools/"
-echo "    - $(find "$BROWSER_TOOLS_DIR" -maxdepth 1 -type f -executable | wc -l) in browser-tools/"
-if [ -d "$SIGNAL_DIR" ] && [ "$SIGNAL_COUNT" -gt 0 ]; then
-    echo "    - $SIGNAL_COUNT in signal/"
+echo "    - $CORE_COUNT in tools/core/"
+echo "    - $BROWSER_COUNT in tools/browser/"
+if [ "$MAIL_COUNT" -gt 0 ]; then
+    echo "    - $MAIL_COUNT in tools/mail/"
 fi
-if [ -d "$MEDIA_DIR" ] && [ "$MEDIA_COUNT" -gt 0 ]; then
-    echo "    - $MEDIA_COUNT in media/"
+if [ "$SIGNAL_COUNT" -gt 0 ]; then
+    echo "    - $SIGNAL_COUNT in tools/signal/"
+fi
+if [ "$MEDIA_COUNT" -gt 0 ]; then
+    echo "    - $MEDIA_COUNT in tools/media/"
 fi
 echo ""
 
@@ -99,8 +111,11 @@ symlink_tools() {
 }
 
 # Symlink tools from all directories
-symlink_tools "$TOOLS_DIR"
-symlink_tools "$BROWSER_TOOLS_DIR"
+symlink_tools "$CORE_DIR"
+symlink_tools "$BROWSER_DIR"
+if [ -d "$MAIL_DIR" ]; then
+    symlink_tools "$MAIL_DIR"
+fi
 if [ -d "$SIGNAL_DIR" ]; then
     symlink_tools "$SIGNAL_DIR"
 fi
@@ -111,9 +126,6 @@ fi
 echo ""
 echo -e "${BLUE}Setting up dashboard launcher...${NC}"
 echo ""
-
-# Get project root directory
-PROJECT_ROOT="$(dirname "$TOOLS_DIR")"
 
 # Symlink dashboard launcher script
 LAUNCHER_SOURCE="$PROJECT_ROOT/jat-dashboard"
@@ -173,7 +185,7 @@ echo -e "${BLUE}Setting up jat-complete-bundle...${NC}"
 echo ""
 
 # Symlink jat-complete-bundle (completion bundle generator)
-BUNDLE_SOURCE="$PROJECT_ROOT/scripts/jat-complete-bundle"
+BUNDLE_SOURCE="$PROJECT_ROOT/tools/scripts/jat-complete-bundle"
 BUNDLE_TARGET="$HOME/.local/bin/jat-complete-bundle"
 
 if [ -f "$BUNDLE_SOURCE" ]; then

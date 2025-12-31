@@ -15,10 +15,10 @@ Agent Mail provides a mail-like communication layer that lets coding agents coor
 
 ## Installation
 
-Tools are automatically linked to `~/bin` during setup. Ensure `~/bin` is in your PATH:
+Tools are automatically linked to `~/.local/bin` during setup. Ensure `~/.local/bin` is in your PATH:
 
 ```bash
-export PATH="$HOME/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 ### macOS Compatibility

@@ -12,7 +12,7 @@ You are running as part of a **multi-agent development system** that enables par
 
 **Statusline** - Real-time display of your agent identity, current task, file locks, unread messages.
 
-**Tools** - Database queries, browser automation, monitoring, development utilities - all accessible via `~/bin/`.
+**Tools** - Database queries, browser automation, monitoring, development utilities - all accessible via `~/.local/bin/`.
 
 ### How It Works
 

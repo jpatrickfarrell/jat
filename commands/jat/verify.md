@@ -20,7 +20,7 @@ Escalatory browser verification - open the app and test it in a real browser.
 
 ## Browser Tools Overview
 
-JAT includes lightweight browser automation tools in `~/bin/`:
+JAT includes lightweight browser automation tools in `~/.local/bin/`:
 
 | Tool | Purpose |
 |------|---------|
@@ -229,7 +229,7 @@ If issues found, fix them and re-verify.
 **Browser won't start:**
 ```bash
 # Check if browser-tools are installed
-ls ~/bin/browser-*.js
+ls ~/.local/bin/browser-*.js
 
 # Try starting manually
 browser-start.js --headless

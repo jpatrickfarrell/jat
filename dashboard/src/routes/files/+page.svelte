@@ -643,7 +643,7 @@
 						</svg>
 					</button>
 					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-					<ul class="dropdown-content menu bg-base-200 rounded-box shadow-xl border border-base-300 w-72 max-h-80 overflow-y-auto z-50" tabindex="0">
+					<ul class="dropdown-content menu bg-base-200 rounded-box shadow-xl border border-base-300 w-72 max-h-80 overflow-y-auto z-50 right-0" tabindex="0">
 						{#each projects as project (project.name)}
 							<li>
 								<button

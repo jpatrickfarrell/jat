@@ -642,25 +642,23 @@
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
 						</svg>
 					</button>
-					<ul tabindex="-1" class="dropdown-content menu bg-base-200 rounded-box shadow-xl border border-base-300 w-72 max-h-80 overflow-y-auto z-50 p-2">
+					<ul tabindex="-1" class="dropdown-content bg-base-200 rounded-box shadow-xl border border-base-300 max-h-80 overflow-y-auto z-50 p-2">
 						{#each projects as project (project.name)}
-							<li>
-								<button
-									class="flex flex-col items-start gap-0.5 py-2"
-									class:active={selectedProject === project.name}
-									onclick={() => { handleProjectChange(project.name); }}
-								>
-									<div class="flex items-center gap-2">
-										<!-- Project color dot -->
-										<span
-											class="w-2 h-2 rounded-full flex-shrink-0"
-											style="background: {project.activeColor || 'oklch(0.60 0.15 145)'};"
-										></span>
-										<span class="font-medium">{project.displayName}</span>
-									</div>
-									<span class="text-xs text-base-content/50 truncate w-full pl-4">{project.path}</span>
-								</button>
-							</li>
+							<button
+								class="flex items-center gap-3 w-full px-3 py-2 rounded-lg hover:bg-base-300 transition-colors text-left"
+								class:bg-base-300={selectedProject === project.name}
+								onclick={() => { handleProjectChange(project.name); }}
+							>
+								<!-- Project color dot -->
+								<span
+									class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+									style="background: {project.activeColor || 'oklch(0.60 0.15 145)'};"
+								></span>
+								<div class="flex flex-col min-w-0">
+									<span class="font-semibold text-base-content">{project.displayName}</span>
+									<span class="text-xs text-base-content/50 truncate">{project.path}</span>
+								</div>
+							</button>
 						{/each}
 					</ul>
 				</div>

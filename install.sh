@@ -90,30 +90,30 @@ if [ -n "$MISSING_DEPS" ]; then
 fi
 
 # Determine installation directory
-# Priority: JAT_INSTALL_DIR env var > existing installation > XDG standard > ~/code fallback
+# Priority: JAT_INSTALL_DIR env var > XDG standard > legacy ~/code locations
 
 if [ -n "$JAT_INSTALL_DIR" ]; then
     # User specified custom location via environment variable
     INSTALL_DIR="$JAT_INSTALL_DIR"
     echo -e "${BLUE}Using custom installation directory: $INSTALL_DIR${NC}"
+elif [ -d "${XDG_DATA_HOME:-$HOME/.local/share}/jat" ]; then
+    # Existing XDG-compliant installation (preferred)
+    INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/jat"
+    echo -e "${BLUE}Using existing installation: $INSTALL_DIR${NC}"
 elif [ -d "$HOME/code/jat" ]; then
-    # Existing installation in ~/code/jat
+    # Existing installation in ~/code/jat (legacy or dev)
     INSTALL_DIR="$HOME/code/jat"
     echo -e "${BLUE}Using existing installation: $INSTALL_DIR${NC}"
 elif [ -d "$HOME/code/jomarchy-agent-tools" ]; then
-    # Legacy installation
+    # Legacy installation name
     INSTALL_DIR="$HOME/code/jomarchy-agent-tools"
-    echo -e "${BLUE}Using existing installation: $INSTALL_DIR${NC}"
-elif [ -d "${XDG_DATA_HOME:-$HOME/.local/share}/jat" ]; then
-    # Existing XDG-compliant installation
-    INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/jat"
     echo -e "${BLUE}Using existing installation: $INSTALL_DIR${NC}"
 else
     # New installation - ask user for preference
     echo -e "${BLUE}Where would you like to install JAT?${NC}"
     echo ""
-    echo "  1) ${HOME}/code/jat (developer-friendly, easy to find)"
-    echo "  2) ${XDG_DATA_HOME:-$HOME/.local/share}/jat (XDG standard)"
+    echo "  1) ${XDG_DATA_HOME:-$HOME/.local/share}/jat (XDG standard, recommended)"
+    echo "  2) ${HOME}/code/jat (if you're developing JAT itself)"
     echo "  3) Custom location"
     echo ""
     echo -e "${BLUE}Choose [1-3] (default: 1):${NC} "
@@ -121,10 +121,10 @@ else
 
     case "${install_choice:-1}" in
         1)
-            INSTALL_DIR="$HOME/code/jat"
+            INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/jat"
             ;;
         2)
-            INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/jat"
+            INSTALL_DIR="$HOME/code/jat"
             ;;
         3)
             echo -e "${BLUE}Enter custom path:${NC} "
@@ -132,7 +132,7 @@ else
             INSTALL_DIR="${custom_path/#\~/$HOME}"  # Expand ~ to $HOME
             ;;
         *)
-            INSTALL_DIR="$HOME/code/jat"
+            INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/jat"
             ;;
     esac
 

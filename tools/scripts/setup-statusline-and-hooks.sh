@@ -18,12 +18,22 @@ echo -e "${BLUE}Setting up statusline and hooks...${NC}"
 echo ""
 
 # Determine JAT installation directory
-if [ -d "$HOME/code/jat" ]; then
+# Accept as first argument from install.sh, or auto-detect
+if [ -n "$1" ]; then
+    JAT_DIR="$1"
+    echo -e "${BLUE}Using JAT directory: $JAT_DIR${NC}"
+elif [ -d "${XDG_DATA_HOME:-$HOME/.local/share}/jat" ]; then
+    JAT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/jat"
+elif [ -d "$HOME/code/jat" ]; then
     JAT_DIR="$HOME/code/jat"
 elif [ -d "$HOME/code/jomarchy-agent-tools" ]; then
     JAT_DIR="$HOME/code/jomarchy-agent-tools"
 else
-    echo -e "${RED}ERROR: JAT not found in ~/code/jat or ~/code/jomarchy-agent-tools${NC}"
+    echo -e "${RED}ERROR: JAT installation not found${NC}"
+    echo "Searched in:"
+    echo "  - ${XDG_DATA_HOME:-$HOME/.local/share}/jat"
+    echo "  - ~/code/jat"
+    echo "  - ~/code/jomarchy-agent-tools"
     exit 1
 fi
 

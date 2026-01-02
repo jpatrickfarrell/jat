@@ -16,17 +16,32 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# The imports to add to each project's CLAUDE.md
-JAT_IMPORTS='@~/code/jat/shared/overview.md
-@~/code/jat/shared/agent-mail.md
-@~/code/jat/shared/bash-patterns.md
-@~/code/jat/shared/beads.md
-@~/code/jat/shared/tools.md
-@~/code/jat/shared/workflow-commands.md
-@~/code/jat/shared/statusline.md'
+# Determine JAT installation directory
+# Accept as first argument from install.sh, or auto-detect
+if [ -n "$1" ]; then
+    JAT_DIR="$1"
+elif [ -d "${XDG_DATA_HOME:-$HOME/.local/share}/jat" ]; then
+    JAT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/jat"
+elif [ -d "$HOME/code/jat" ]; then
+    JAT_DIR="$HOME/code/jat"
+elif [ -d "$HOME/code/jomarchy-agent-tools" ]; then
+    JAT_DIR="$HOME/code/jomarchy-agent-tools"
+else
+    echo -e "${RED}ERROR: JAT installation not found${NC}"
+    exit 1
+fi
 
-# Marker to detect if imports are already present
-JAT_MARKER="@~/code/jat/shared/overview.md"
+# The imports to add to each project's CLAUDE.md (use detected JAT_DIR)
+JAT_IMPORTS="@$JAT_DIR/shared/overview.md
+@$JAT_DIR/shared/agent-mail.md
+@$JAT_DIR/shared/bash-patterns.md
+@$JAT_DIR/shared/beads.md
+@$JAT_DIR/shared/tools.md
+@$JAT_DIR/shared/workflow-commands.md
+@$JAT_DIR/shared/statusline.md"
+
+# Marker to detect if imports are already present (check for any JAT import)
+JAT_MARKER="@.*/shared/overview.md"
 
 # Standard gitignore patterns for JAT projects
 # These should be ignored (per-developer/session-specific):
@@ -218,8 +233,8 @@ EOF
         echo -e "  ${GREEN}✓ Created CLAUDE.md with jat imports${NC}"
         ((IMPORTS_ADDED++))
     else
-        # Check if imports are already present
-        if grep -q "$JAT_MARKER" "$CLAUDE_MD"; then
+        # Check if imports are already present (use -E for regex)
+        if grep -qE "$JAT_MARKER" "$CLAUDE_MD"; then
             echo -e "  ${GREEN}✓${NC} CLAUDE.md already has jat imports"
         else
             # Add imports at the top (after title if present)
@@ -275,13 +290,13 @@ else
     echo "  All repositories now have jat multi-agent tooling!"
     echo ""
     echo "  Each project's CLAUDE.md imports:"
-    echo "    @~/code/jat/shared/overview.md      # System overview"
-    echo "    @~/code/jat/shared/agent-mail.md    # Agent Mail docs"
-    echo "    @~/code/jat/shared/bash-patterns.md # Bash patterns"
-    echo "    @~/code/jat/shared/beads.md         # Beads task planning"
-    echo "    @~/code/jat/shared/tools.md         # 33 bash tools"
-    echo "    @~/code/jat/shared/workflow-commands.md # /jat:* commands"
-    echo "    @~/code/jat/shared/statusline.md    # Statusline docs"
+    echo "    @$JAT_DIR/shared/overview.md      # System overview"
+    echo "    @$JAT_DIR/shared/agent-mail.md    # Agent Mail docs"
+    echo "    @$JAT_DIR/shared/bash-patterns.md # Bash patterns"
+    echo "    @$JAT_DIR/shared/beads.md         # Beads task planning"
+    echo "    @$JAT_DIR/shared/tools.md         # 33 bash tools"
+    echo "    @$JAT_DIR/shared/workflow-commands.md # /jat:* commands"
+    echo "    @$JAT_DIR/shared/statusline.md    # Statusline docs"
     echo ""
     echo "  Test in any project:"
     echo "    cd ~/code/<project>"

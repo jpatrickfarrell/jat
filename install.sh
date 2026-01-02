@@ -235,7 +235,7 @@ echo -e "${BOLD}Step 5/11: Statusline & Hooks Configuration${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-bash "$INSTALL_DIR/tools/scripts/setup-statusline-and-hooks.sh"
+bash "$INSTALL_DIR/tools/scripts/setup-statusline-and-hooks.sh" "$INSTALL_DIR"
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -321,7 +321,7 @@ echo -e "${BOLD}Step 10/11: Setting Up Repositories${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-bash "$INSTALL_DIR/tools/scripts/setup-repos.sh"
+bash "$INSTALL_DIR/tools/scripts/setup-repos.sh" "$INSTALL_DIR"
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"

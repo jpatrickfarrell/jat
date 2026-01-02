@@ -16,9 +16,16 @@ Without JAT, you're managing 1-2 agents in separate terminals. With JAT, you see
 ## Quick Start
 
 ```bash
-# Install and launch dashboard
+# Install
 curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | bash
-source ~/.bashrc && jat-dashboard
+
+# Reload shell (use ~/.zshrc on macOS, ~/.bashrc on Linux)
+source ~/.zshrc     # macOS (zsh)
+# or
+source ~/.bashrc    # Linux (bash)
+
+# Launch dashboard
+jat-dashboard
 
 # Dashboard opens at http://localhost:5174
 # Add projects from the UI, spawn agents, watch them work
@@ -205,7 +212,16 @@ bd dep add <task> <blocker>     # Add dependency
 ## Installation
 
 ```bash
+# Run the installer
 curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | bash
+
+# Reload your shell config
+source ~/.zshrc     # macOS (default: zsh)
+# or
+source ~/.bashrc    # Linux (default: bash)
+
+# Start the dashboard
+jat-dashboard
 ```
 
 **Installs:**
@@ -216,7 +232,11 @@ curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | ba
 - 5 slash commands
 - Global statusline
 
-**Requirements:** Linux/macOS, bash, curl, sqlite3, jq, git, tmux
+**Requirements:** Linux/macOS, bash/zsh, curl, sqlite3, jq, git, tmux
+
+> **macOS users**: The installer auto-detects zsh (macOS default) vs bash and updates the correct config file.
+>
+> See [INSTALL.md](./INSTALL.md) for troubleshooting and detailed installation instructions.
 
 ---
 

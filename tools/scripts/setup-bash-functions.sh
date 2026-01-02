@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Bash Functions Setup
-# - Generate cc<project> launcher functions for each repo in ~/code/
-# - Add to ~/.bashrc with deduplication
+# Shell Functions Setup
+# - Generate jat-<project> launcher functions for each repo in ~/code/
+# - Add to shell config (~/.zshrc or ~/.bashrc) with deduplication
 
 # Note: Don't use 'set -e' - arithmetic (( )) can return 1 when incrementing from 0
 
@@ -13,11 +13,26 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# Markers for .bashrc block
+# Detect shell and set appropriate config file
+SHELL_NAME=$(basename "$SHELL")
+if [[ "$SHELL_NAME" == "zsh" ]]; then
+    SHELL_CONFIG="$HOME/.zshrc"
+    SHELL_TYPE="zsh"
+elif [[ "$SHELL_NAME" == "bash" ]]; then
+    SHELL_CONFIG="$HOME/.bashrc"
+    SHELL_TYPE="bash"
+else
+    echo -e "${YELLOW}⚠  Unknown shell: $SHELL_NAME. Defaulting to .bashrc${NC}"
+    SHELL_CONFIG="$HOME/.bashrc"
+    SHELL_TYPE="bash"
+fi
+
+# Markers for shell config block
 MARKER_START="# >>> JAT Claude Launchers >>>"
 MARKER_END="# <<< JAT Claude Launchers <<<"
 
-echo -e "${BLUE}Setting up bash launcher functions...${NC}"
+echo -e "${BLUE}Setting up shell launcher functions...${NC}"
+echo -e "${BLUE}Shell: $SHELL_TYPE ($SHELL_CONFIG)${NC}"
 echo ""
 
 # Scan ~/code/ for projects
@@ -91,41 +106,39 @@ fi
 
 echo ""
 
-# Update ~/.bashrc
-BASHRC="$HOME/.bashrc"
-
-if [ ! -f "$BASHRC" ]; then
-    echo -e "${YELLOW}⚠ ~/.bashrc not found, creating...${NC}"
-    touch "$BASHRC"
+# Update shell config file
+if [ ! -f "$SHELL_CONFIG" ]; then
+    echo -e "${YELLOW}⚠ $SHELL_CONFIG not found, creating...${NC}"
+    touch "$SHELL_CONFIG"
 fi
 
 # Remove existing JAT block if present
-if grep -q "$MARKER_START" "$BASHRC"; then
+if grep -q "$MARKER_START" "$SHELL_CONFIG"; then
     echo "  → Removing existing JAT launcher block..."
     # Use sed to remove the block between markers (inclusive)
     # macOS sed requires -i '' (empty backup extension), Linux uses -i alone
     if [[ "$(uname)" == "Darwin" ]]; then
-        sed -i '' "/$MARKER_START/,/$MARKER_END/d" "$BASHRC"
+        sed -i '' "/$MARKER_START/,/$MARKER_END/d" "$SHELL_CONFIG"
     else
-        sed -i "/$MARKER_START/,/$MARKER_END/d" "$BASHRC"
+        sed -i "/$MARKER_START/,/$MARKER_END/d" "$SHELL_CONFIG"
     fi
 fi
 
 # Append new block
-echo "  → Adding launcher functions to ~/.bashrc..."
-echo "" >> "$BASHRC"
-echo "$FUNCTIONS_BLOCK" >> "$BASHRC"
+echo "  → Adding launcher functions to $SHELL_CONFIG..."
+echo "" >> "$SHELL_CONFIG"
+echo "$FUNCTIONS_BLOCK" >> "$SHELL_CONFIG"
 
 echo ""
 echo -e "${GREEN}=========================================${NC}"
-echo -e "${GREEN}Bash Functions Setup Complete${NC}"
+echo -e "${GREEN}Shell Functions Setup Complete${NC}"
 echo -e "${GREEN}=========================================${NC}"
 echo ""
 echo "  Functions added: $REPOS_FOUND"
-echo "  Location: ~/.bashrc"
+echo "  Location: $SHELL_CONFIG"
 echo ""
 echo "  To use now, run:"
-echo "    source ~/.bashrc"
+echo "    source $SHELL_CONFIG"
 echo ""
 echo "  Then launch any project with:"
 for repo_dir in "$CODE_DIR"/*; do

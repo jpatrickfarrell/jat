@@ -357,7 +357,7 @@ echo "  ✓ Real-time hooks (auto-refresh on am-*/bd commands)"
 echo "  ✓ Git pre-commit hook (agent registration check)"
 echo "  ✓ Global ~/.claude/CLAUDE.md (multi-project instructions)"
 echo "  ✓ Per-repo setup (bd init, CLAUDE.md templates)"
-echo "  ✓ Bash launcher functions (jat-<project> in ~/.bashrc)"
+echo "  ✓ Shell launcher functions (jat-<project> in $SHELL_CONFIG)"
 echo ""
 echo "Benefits:"
 echo ""
@@ -381,7 +381,17 @@ echo "  Or create a new project from the dashboard:"
 echo "    1. Start the dashboard: jat-dashboard"
 echo "    2. Go to Tasks page → click 'Add Project'"
 echo ""
-echo "Quick verification (run after 'source ~/.bashrc'):"
+# Detect shell for proper instructions
+SHELL_NAME=$(basename "$SHELL")
+if [[ "$SHELL_NAME" == "zsh" ]]; then
+    SHELL_CONFIG="~/.zshrc"
+elif [[ "$SHELL_NAME" == "bash" ]]; then
+    SHELL_CONFIG="~/.bashrc"
+else
+    SHELL_CONFIG="~/.bashrc"
+fi
+
+echo "Quick verification (run after 'source $SHELL_CONFIG'):"
 echo ""
 echo "  am-whoami          # Agent identity (shows 'Not registered' if new)"
 echo "  bd --version       # Beads CLI version"
@@ -393,7 +403,7 @@ echo "  'Verifying Installation'"
 echo ""
 echo "Next steps:"
 echo ""
-echo "  1. Restart your shell: source ~/.bashrc"
+echo "  1. Restart your shell: source $SHELL_CONFIG"
 echo "  2. Add a project: cd ~/code/<your-project> && bd init"
 echo "  3. Launch the dashboard: jat-dashboard"
 echo "  4. Start working: jat-<project> (launches Claude in tmux)"

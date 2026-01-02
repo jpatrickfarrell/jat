@@ -16,7 +16,7 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { existsSync, statSync } from 'fs';
+import { existsSync, statSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join, basename, resolve, normalize } from 'path';
 import { exec } from 'child_process';
@@ -24,6 +24,9 @@ import { promisify } from 'util';
 import { invalidateCache } from '$lib/server/cache.js';
 
 const execAsync = promisify(exec);
+
+const CONFIG_DIR = join(homedir(), '.config', 'jat');
+const CONFIG_FILE = join(CONFIG_DIR, 'projects.json');
 
 /**
  * Expand ~ to home directory and resolve to absolute path
@@ -69,6 +72,41 @@ async function isGitRepo(path) {
  */
 function hasBeadsInit(path) {
 	return existsSync(join(path, '.beads'));
+}
+
+/**
+ * Add project to projects.json
+ * @param {string} projectKey - Project key (basename)
+ * @param {string} absolutePath - Absolute path to project
+ */
+function addProjectToConfig(projectKey, absolutePath) {
+	// Ensure config directory exists
+	if (!existsSync(CONFIG_DIR)) {
+		mkdirSync(CONFIG_DIR, { recursive: true });
+	}
+
+	// Read existing config or create new one
+	let config = { projects: {}, defaults: {} };
+	if (existsSync(CONFIG_FILE)) {
+		try {
+			const content = readFileSync(CONFIG_FILE, 'utf-8');
+			config = JSON.parse(content);
+			if (!config.projects) config.projects = {};
+		} catch (err) {
+			console.error('Failed to read config, creating new:', err);
+		}
+	}
+
+	// Add project if not already present
+	if (!config.projects[projectKey]) {
+		config.projects[projectKey] = {
+			name: projectKey.toUpperCase(),
+			path: absolutePath
+		};
+
+		// Write back to file
+		writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+	}
 }
 
 /**
@@ -169,6 +207,9 @@ export async function POST({ request }) {
 				cwd: absolutePath,
 				timeout: 30000 // 30 second timeout
 			});
+
+			// Add project to projects.json
+			addProjectToConfig(projectName, absolutePath);
 
 			// Invalidate projects cache so the new project appears in the dashboard
 			invalidateCache.projects();

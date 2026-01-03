@@ -103,6 +103,19 @@ echo -e "${BLUE}[6/7] Removing JAT installation...${NC}"
 REMOVED=0
 for dir in ~/.local/share/jat ~/code/jat ~/code/jomarchy-agent-tools; do
     if [ -d "$dir" ]; then
+        # Check if user is currently in this directory
+        CURRENT_DIR=$(pwd)
+        REAL_DIR=$(realpath "$dir" 2>/dev/null || echo "$dir")
+        if [[ "$CURRENT_DIR" == "$REAL_DIR"* ]]; then
+            echo -e "  ${RED}ERROR: You are currently in $dir${NC}"
+            echo -e "  ${YELLOW}Please cd to another directory and run uninstall again${NC}"
+            echo ""
+            echo "  Example:"
+            echo "    cd ~"
+            echo "    jat-uninstall"
+            exit 1
+        fi
+
         echo -e "  ${YELLOW}Found: $dir${NC}"
         read -p "    Remove this directory? [y/N] " -r
         if [[ $REPLY =~ ^[Yy]$ ]]; then

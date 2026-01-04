@@ -50,14 +50,6 @@
 	} from "$lib/stores/spawningTasks";
 	import { pickNextTask, type NextTaskResult } from "$lib/utils/pickNextTask";
 	import {
-		SORT_OPTIONS,
-		initSort,
-		handleSortClick,
-		getSortBy,
-		getSortDir,
-		type SortOption,
-	} from "$lib/stores/workSort.svelte.js";
-	import {
 		AGENT_SORT_OPTIONS,
 		initAgentSort,
 		handleAgentSortClick,
@@ -82,30 +74,18 @@
 
 	// Initialize sort stores on mount
 	onMount(() => {
-		initSort();
 		initAgentSort();
 		initServerSort();
 	});
 
 	// Check which page we're on for showing appropriate sort dropdown
-	const isWorkPage = $derived($page.url.pathname === "/work");
 	const isAgentsPage = $derived($page.url.pathname === "/agents");
 	const isServersPage = $derived($page.url.pathname === "/servers");
 
-	// Sort dropdown state (shared between work and agent pages)
+	// Sort dropdown state (shared between agent and server pages)
 	let showSortDropdown = $state(false);
 	let sortHovered = $state(false);
 	let sortDropdownTimeout: ReturnType<typeof setTimeout> | null = null;
-
-	// Get current sort state reactively (work page)
-	const currentSort = $derived(getSortBy());
-	const currentDir = $derived(getSortDir());
-	const currentSortLabel = $derived(
-		SORT_OPTIONS.find((o) => o.value === currentSort)?.label ?? "Sort",
-	);
-	const currentSortIcon = $derived(
-		SORT_OPTIONS.find((o) => o.value === currentSort)?.icon ?? "🔔",
-	);
 
 	// Get current sort state reactively (agents page)
 	const currentAgentSort = $derived(getAgentSortBy());
@@ -146,10 +126,6 @@
 		if (sortDropdownTimeout) clearTimeout(sortDropdownTimeout);
 	}
 
-	function onSortSelect(value: SortOption) {
-		handleSortClick(value);
-		showSortDropdown = false;
-	}
 
 	function onAgentSortSelect(value: AgentSortOption) {
 		handleAgentSortClick(value);
@@ -162,137 +138,9 @@
 	}
 
 	// Global action loading states
-	let newSessionLoading = $state(false);
 	let swarmLoading = $state(false);
 
-	// New Session - spawn a planning session in selected project
-	async function handleNewSession(projectName: string) {
-		newSessionLoading = true;
-		showSessionDropdown = false;
-		try {
-			const projectPath = `/home/jw/code/${projectName}`;
-			const response = await fetch("/api/work/spawn", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					attach: true,
-					project: projectPath,
-				}),
-			});
-			const data = await response.json();
-			if (!response.ok) {
-				throw new Error(data.message || "Failed to spawn session");
-			}
-			console.log("New session in", projectName, ":", data);
-		} catch (error) {
-			console.error("New session failed:", error);
-			alert(error instanceof Error ? error.message : "Failed to spawn session");
-		} finally {
-			newSessionLoading = false;
-		}
-	}
 
-	// Swarm - spawn one agent per ready task up to MAX_SESSIONS limit
-	async function handleSwarm() {
-		swarmLoading = true;
-		startBulkSpawn(); // Signal bulk spawn started for TaskTable animations
-		try {
-			// Step 1: Get current active sessions to calculate available slots
-			const workResponse = await fetch("/api/work");
-			const workData = await workResponse.json();
-			const activeSessionCount = workData.count || 0;
-			const currentMaxSessions = getMaxSessions(); // Get current preference value
-			const availableSlots = Math.max(
-				0,
-				currentMaxSessions - activeSessionCount,
-			);
-
-			if (availableSlots === 0) {
-				throw new Error(
-					`All ${currentMaxSessions} session slots are in use. Close some sessions first.`,
-				);
-			}
-
-			// Step 2: Get ready tasks
-			const readyResponse = await fetch("/api/tasks/ready");
-			const readyData = await readyResponse.json();
-
-			if (!readyResponse.ok || !readyData.tasks?.length) {
-				throw new Error("No ready tasks available");
-			}
-
-			// Limit tasks to available slots
-			const tasksToSpawn = readyData.tasks.slice(0, availableSlots);
-			const skippedCount = readyData.tasks.length - tasksToSpawn.length;
-			const results = [];
-
-			// Step 3: Spawn an agent for each ready task (up to limit)
-			for (let i = 0; i < tasksToSpawn.length; i++) {
-				const task = tasksToSpawn[i];
-				startSpawning(task.id); // Signal this task is spawning for animation
-				try {
-					const response = await fetch("/api/work/spawn", {
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify({ taskId: task.id }),
-					});
-					const data = await response.json();
-
-					if (!response.ok) {
-						results.push({
-							taskId: task.id,
-							success: false,
-							error: data.message || "Failed to spawn",
-						});
-						stopSpawning(task.id); // Clear animation on failure
-					} else {
-						results.push({
-							taskId: task.id,
-							success: true,
-							agentName: data.session?.agentName,
-						});
-						// Keep spawning animation until TaskTable refreshes and sees the new status
-						setTimeout(() => stopSpawning(task.id), 2000);
-					}
-				} catch (err) {
-					results.push({
-						taskId: task.id,
-						success: false,
-						error: err instanceof Error ? err.message : "Unknown error",
-					});
-					stopSpawning(task.id); // Clear animation on error
-				}
-
-				// Stagger between spawns (except last one)
-				if (i < tasksToSpawn.length - 1) {
-					await new Promise((resolve) => setTimeout(resolve, SPAWN_STAGGER_MS));
-				}
-			}
-
-			const successCount = results.filter((r) => r.success).length;
-			console.log(
-				`Swarm complete: ${successCount}/${tasksToSpawn.length} agents spawned`,
-				results,
-			);
-
-			if (successCount === 0) {
-				throw new Error("Failed to spawn any agents");
-			}
-
-			// Show info if some tasks were skipped due to limit
-			if (skippedCount > 0) {
-				console.log(
-					`Note: ${skippedCount} tasks skipped due to max sessions limit (${currentMaxSessions})`,
-				);
-			}
-		} catch (error) {
-			console.error("Swarm failed:", error);
-			alert(error instanceof Error ? error.message : "Failed to spawn agents");
-		} finally {
-			swarmLoading = false;
-			endBulkSpawn(); // Signal bulk spawn ended
-		}
-	}
 
 	interface DataPoint {
 		timestamp: string;
@@ -394,9 +242,6 @@
 		reviewRules = [],
 	}: Props = $props();
 
-	// Session dropdown state
-	let showSessionDropdown = $state(false);
-	let sessionDropdownTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	// Swarm dropdown state
 	let showSwarmDropdown = $state(false);
@@ -590,21 +435,6 @@
 		Math.min(readyTaskCount, availableSlots),
 	);
 
-	// Handle dropdown show/hide with delay
-	function showDropdown() {
-		if (sessionDropdownTimeout) clearTimeout(sessionDropdownTimeout);
-		showSessionDropdown = true;
-	}
-
-	function hideDropdownDelayed() {
-		sessionDropdownTimeout = setTimeout(() => {
-			showSessionDropdown = false;
-		}, 150);
-	}
-
-	function keepDropdownOpen() {
-		if (sessionDropdownTimeout) clearTimeout(sessionDropdownTimeout);
-	}
 
 	// Handle task dropdown show/hide with delay
 	function showTaskDropdownMenu() {
@@ -895,7 +725,6 @@
 	}
 
 	// Button hover states
-	let sessionHovered = $state(false);
 	let taskHovered = $state(false);
 	let swarmHovered = $state(false);
 </script>
@@ -908,11 +737,31 @@
 		border-bottom: 1px solid oklch(0.35 0.02 250);
 	"
 >
-	<!-- Sidebar toggle (industrial) -->
+	<!-- Mobile hamburger menu (visible on small screens) -->
+	<label
+		for="main-drawer"
+		aria-label="open menu"
+		class="lg:hidden flex items-center justify-center w-7 h-7 ml-3 rounded cursor-pointer transition-all hover:scale-105"
+		style="background: oklch(0.30 0.02 250); border: 1px solid oklch(0.40 0.02 250);"
+	>
+		<svg
+			xmlns="http://www.w3.org/2000/svg"
+			fill="none"
+			viewBox="0 0 24 24"
+			stroke-width="2"
+			stroke="currentColor"
+			class="w-4 h-4"
+			style="color: oklch(0.70 0.18 240);"
+		>
+			<path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+		</svg>
+	</label>
+
+	<!-- Sidebar toggle (industrial - visible on large screens) -->
 	<button
 		onclick={toggleSidebar}
 		aria-label={$isSidebarCollapsed ? "expand sidebar" : "collapse sidebar"}
-		class="flex items-center justify-center w-7 h-7 ml-3 rounded cursor-pointer transition-all hover:scale-105"
+		class="hidden lg:flex items-center justify-center w-7 h-7 ml-3 rounded cursor-pointer transition-all hover:scale-105"
 		style="background: oklch(0.30 0.02 250); border: 1px solid oklch(0.40 0.02 250);"
 	>
 		<svg
@@ -1361,110 +1210,6 @@
 		/>
 	</div>
 
-	<!-- Sort Dropdown (on /work or /tasks page) -->
-	{#if isWorkPage}
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div
-			class="relative flex-none"
-			onmouseenter={showSortMenu}
-			onmouseleave={hideSortMenuDelayed}
-		>
-			<button
-				class="flex items-center gap-1 py-1 mr-3 rounded font-mono text-[10px] tracking-wider uppercase transition-all duration-200 ease-out overflow-hidden"
-				style="
-					background: {sortHovered || showSortDropdown
-					? 'oklch(0.35 0.03 250)'
-					: 'oklch(0.30 0.02 250)'};
-					border: 1px solid {sortHovered || showSortDropdown
-					? 'oklch(0.50 0.03 250)'
-					: 'oklch(0.40 0.02 250)'};
-					color: oklch(0.80 0.02 250);
-					padding-left: 8px;
-					padding-right: 8px;
-				"
-				title="Sort work sessions"
-				onmouseenter={() => (sortHovered = true)}
-				onmouseleave={() => (sortHovered = false)}
-			>
-				<span class="text-xs">{currentSortIcon}</span>
-				<span class="hidden sm:inline">{currentSortLabel}</span>
-				<span class="text-[9px] opacity-70"
-					>{currentDir === "asc" ? "▲" : "▼"}</span
-				>
-				<svg
-					class="w-2.5 h-2.5 ml-0.5 transition-transform {showSortDropdown
-						? 'rotate-180'
-						: ''}"
-					fill="none"
-					viewBox="0 0 24 24"
-					stroke="currentColor"
-					stroke-width="2"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						d="M19.5 8.25l-7.5 7.5-7.5-7.5"
-					/>
-				</svg>
-			</button>
-
-			<!-- Sort Dropdown Menu -->
-			{#if showSortDropdown}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					class="absolute top-full left-0 mt-1 min-w-[160px] rounded-lg shadow-xl z-50 overflow-hidden"
-					style="
-						background: linear-gradient(180deg, oklch(0.22 0.02 250) 0%, oklch(0.18 0.02 250) 100%);
-						border: 1px solid oklch(0.40 0.03 250);
-					"
-					onmouseenter={keepSortMenuOpen}
-					onmouseleave={hideSortMenuDelayed}
-				>
-					<div
-						class="px-3 py-2 border-b"
-						style="border-color: oklch(0.30 0.02 250);"
-					>
-						<span
-							class="text-[9px] font-mono uppercase tracking-wider"
-							style="color: oklch(0.55 0.02 250);"
-						>
-							Sort Sessions
-						</span>
-					</div>
-					<div class="py-1">
-						{#each SORT_OPTIONS as opt (opt.value)}
-							<button
-								class="w-full px-3 py-2 text-left text-xs font-mono flex items-center gap-2 transition-colors"
-								style="color: {currentSort === opt.value
-									? 'oklch(0.90 0.15 250)'
-									: 'oklch(0.75 0.02 250)'}; background: {currentSort ===
-								opt.value
-									? 'oklch(0.30 0.05 250)'
-									: 'transparent'};"
-								onmouseenter={(e) => {
-									if (currentSort !== opt.value)
-										e.currentTarget.style.background = "oklch(0.28 0.02 250)";
-								}}
-								onmouseleave={(e) => {
-									if (currentSort !== opt.value)
-										e.currentTarget.style.background = "transparent";
-								}}
-								onclick={() => onSortSelect(opt.value)}
-							>
-								<span class="text-sm">{opt.icon}</span>
-								<span class="flex-1">{opt.label}</span>
-								{#if currentSort === opt.value}
-									<span class="text-[10px] opacity-70"
-										>{currentDir === "asc" ? "▲" : "▼"}</span
-									>
-								{/if}
-							</button>
-						{/each}
-					</div>
-				</div>
-			{/if}
-		</div>
-	{/if}
 
 	<!-- Agent Sort Dropdown (on /agents page) -->
 	{#if isAgentsPage}

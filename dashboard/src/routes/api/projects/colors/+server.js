@@ -25,16 +25,23 @@ export async function GET() {
 
 		if (config.projects) {
 			for (const [projectName, projectConfig] of Object.entries(config.projects)) {
-				// Convert rgb(rrggbb) format to #rrggbb hex format
+				// Support multiple color formats: oklch(), rgb(rrggbb), #rrggbb
 				/** @type {any} */
 				const pc = projectConfig;
 				const activeColor = pc.active_color;
 				if (activeColor) {
-					const match = activeColor.match(/^rgb\(([0-9a-fA-F]{6})\)$/);
-					if (match) {
-						colors[projectName.toLowerCase()] = `#${match[1].toLowerCase()}`;
-					} else if (activeColor.startsWith('#')) {
+					// Check for old rgb(rrggbb) format
+					const rgbMatch = activeColor.match(/^rgb\(([0-9a-fA-F]{6})\)$/);
+					if (rgbMatch) {
+						colors[projectName.toLowerCase()] = `#${rgbMatch[1].toLowerCase()}`;
+					}
+					// Check for hex format
+					else if (activeColor.startsWith('#')) {
 						colors[projectName.toLowerCase()] = activeColor.toLowerCase();
+					}
+					// Check for oklch format - pass it through as-is
+					else if (activeColor.startsWith('oklch(')) {
+						colors[projectName.toLowerCase()] = activeColor;
 					}
 				}
 			}

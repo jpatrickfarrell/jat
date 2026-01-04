@@ -123,14 +123,15 @@ export function clearProjectConfigCache(): void {
 // =============================================================================
 
 /**
- * Convert rgb(rrggbb) format to #rrggbb hex format
+ * Convert rgb(rrggbb) format to #rrggbb hex format or pass through oklch() colors
  *
- * @param rgbColor - Color in "rgb(rrggbb)" format
- * @returns Color in "#rrggbb" format
+ * @param rgbColor - Color in "rgb(rrggbb)", "#rrggbb", or "oklch(...)" format
+ * @returns Color in "#rrggbb" format or oklch() as-is
  *
  * @example
  * rgbToHex('rgb(5588ff)') // → '#5588ff'
  * rgbToHex('rgb(00d4aa)') // → '#00d4aa'
+ * rgbToHex('oklch(0.65 0.18 10)') // → 'oklch(0.65 0.18 10)'
  */
 export function rgbToHex(rgbColor: string): string {
 	// Match rgb(xxxxxx) pattern
@@ -142,6 +143,11 @@ export function rgbToHex(rgbColor: string): string {
 	// Already hex format
 	if (rgbColor.startsWith('#')) {
 		return rgbColor.toLowerCase();
+	}
+
+	// Pass through oklch() format (modern CSS color space)
+	if (rgbColor.startsWith('oklch(')) {
+		return rgbColor;
 	}
 
 	// Unknown format, return as-is

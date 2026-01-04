@@ -38,7 +38,7 @@
 	import { broadcastSessionEvent, lastSessionEvent } from '$lib/stores/sessionEvents';
 	import { lastTaskEvent } from '$lib/stores/taskEvents';
 	import { getProjectFromTaskId, filterTasksByProject, buildEpicChildMap, getParentEpicId } from '$lib/utils/projectUtils';
-	import { getProjectColor } from '$lib/utils/projectColors';
+	import { getProjectColor, getCachedProjectColors, initProjectColors } from '$lib/utils/projectColors';
 	import { openTaskDrawer, openProjectDrawer } from '$lib/stores/drawerStore';
 	import { SORT_OPTIONS, getSortBy, getSortDir, handleSortClick, initSort, workSortState, type SortOption } from '$lib/stores/workSort.svelte';
 	import { maximizeSessionPanel } from '$lib/stores/hoveredSession';
@@ -107,6 +107,7 @@
 	let reservations = $state<Reservation[]>([]);
 	let isInitialLoad = $state(true);
 	let configProjects = $state<string[]>([]); // Projects from JAT config
+	let projectColorsMap = $state<Record<string, string>>({});
 
 	// Drawer state
 	let drawerOpen = $state(false);
@@ -915,6 +916,23 @@
 		}
 	});
 
+	// Update project colors map periodically
+	$effect(() => {
+		// Initialize project colors on first load
+		initProjectColors();
+
+		// Update colors map immediately and then periodically
+		const updateColors = () => {
+			projectColorsMap = getCachedProjectColors();
+		};
+		updateColors();
+
+		// Update every 5 seconds to catch any color changes
+		const interval = setInterval(updateColors, 5000);
+
+		return () => clearInterval(interval);
+	});
+
 	// Listen for task events
 	$effect(() => {
 		const unsubscribe = lastTaskEvent.subscribe((event) => {
@@ -1458,7 +1476,7 @@
 				{@const isProjectCollapsed = projectCollapseState.get(project) ?? false}
 				{@const sessions = sessionsByProject.get(project) || []}
 				{@const projectTasks = getTasksForProject(project)}
-				{@const projectColor = getProjectColor(project)}
+				{@const projectColor = projectColorsMap[project] || 'oklch(0.60 0.15 145)'}
 				{@const hasSessions = sessions.length > 0}
 				{@const isDragging = draggedProject === project}
 				{@const isDragOver = dragOverProject === project}
@@ -1889,6 +1907,7 @@
 												onagentclick={handleAgentClick}
 												hideProjectFilter={true}
 												hideSearch={true}
+												onTasksChanged={() => fetchTaskData(true)}
 											/>
 										</div>
 									{:else}

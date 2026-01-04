@@ -100,9 +100,11 @@
 		hideProjectFilter?: boolean;
 		/** Hide the search input (for views that have their own search) */
 		hideSearch?: boolean;
+		/** Callback when tasks are deleted/modified - parent should refresh */
+		onTasksChanged?: () => void;
 	}
 
-	let { tasks = [], allTasks = [], agents = [], reservations = [], completedTasksFromActiveSessions = new Set(), ontaskclick = () => {}, onagentclick, hideProjectFilter = false, hideSearch = false }: Props = $props();
+	let { tasks = [], allTasks = [], agents = [], reservations = [], completedTasksFromActiveSessions = new Set(), ontaskclick = () => {}, onagentclick, hideProjectFilter = false, hideSearch = false, onTasksChanged }: Props = $props();
 
 	// Build epic->child mapping for dependency-based grouping
 	// This allows tasks linked to epics via depends_on to be grouped under the epic
@@ -1780,6 +1782,11 @@
 				throw new Error(await handleApiError(response, `delete task ${taskId}`));
 			}
 		});
+
+		// Notify parent to refresh after successful deletion
+		if (onTasksChanged) {
+			onTasksChanged();
+		}
 	}
 
 	async function handleBulkRelease() {

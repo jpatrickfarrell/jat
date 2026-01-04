@@ -263,7 +263,7 @@
 	<!-- Dropdown Menu - Industrial -->
 	<ul
 		tabindex="0"
-		class="menu menu-sm dropdown-content mt-3 z-[60] p-2 shadow-lg rounded w-72 max-h-[80vh] overflow-y-auto bg-base-300 border border-base-content/20"
+		class="dropdown-content mt-3 z-[60] p-2 shadow-lg rounded w-72 max-h-[80vh] overflow-y-auto bg-base-300 border border-base-content/20"
 	>
 		<!-- Help & Shortcuts -->
 		<li>

@@ -23,8 +23,9 @@ const SESSION_PREFIX = 'jat-';
 
 /**
  * Default parent session names to try (in order of preference)
+ * server-jat is the new naming convention for the dashboard dev server
  */
-const DEFAULT_PARENT_SESSIONS = ['jat-dashboard', 'dashboard', 'jat'];
+const DEFAULT_PARENT_SESSIONS = ['server-jat', 'jat-dashboard', 'dashboard', 'jat'];
 
 /**
  * Get the full tmux session name from a name parameter.

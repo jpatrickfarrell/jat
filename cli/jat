@@ -238,8 +238,8 @@ launch_dashboard() {
 
     echo -e "${DIM}  → Dashboard :$dashboard_port${NC}"
 
-    # Use a fixed tmux session name so the attach feature can find it
-    local session_name="jat-dashboard"
+    # Use server-jat prefix so the /api/servers endpoint can find it
+    local session_name="server-jat"
 
     # Launch dashboard dev server inside a tmux session
     # This allows the attach feature to work with tmux windows

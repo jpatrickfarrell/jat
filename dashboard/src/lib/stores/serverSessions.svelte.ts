@@ -57,6 +57,8 @@ interface ServerSessionsState {
 	isLoading: boolean;
 	error: string | null;
 	lastFetch: Date | null;
+	/** True after first successful fetch completes - prevents re-showing skeleton on subsequent polls */
+	initialLoadComplete: boolean;
 }
 
 // Reactive state using Svelte 5 runes
@@ -64,7 +66,8 @@ let state = $state<ServerSessionsState>({
 	sessions: [],
 	isLoading: true, // Start true to show skeleton until first fetch completes
 	error: null,
-	lastFetch: null
+	lastFetch: null,
+	initialLoadComplete: false
 });
 
 // Activity history tracking (output changes per poll interval)
@@ -94,9 +97,9 @@ let pollingInterval: ReturnType<typeof setInterval> | null = null;
  * @param lines - Number of output lines to capture (default: 50)
  */
 export async function fetch(lines: number = 50): Promise<void> {
-	// Don't set isLoading on subsequent fetches to avoid flashing
-	// Only set it on initial load when there are no sessions
-	if (state.sessions.length === 0) {
+	// Only show loading state on initial load - never on subsequent polls
+	// This prevents flashing between skeleton and empty state when no servers are running
+	if (!state.initialLoadComplete) {
 		state.isLoading = true;
 	}
 	state.error = null;
@@ -187,6 +190,7 @@ export async function fetch(lines: number = 50): Promise<void> {
 		}
 
 		state.lastFetch = new Date();
+		state.initialLoadComplete = true;
 	} catch (err) {
 		state.error = err instanceof Error ? err.message : 'Failed to fetch server sessions';
 		console.error('serverSessions.fetch error:', err);

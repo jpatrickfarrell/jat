@@ -12,6 +12,21 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
+/**
+ * Escape a string for safe use in shell commands (single-quoted).
+ * Single quotes don't interpret any special characters, so we just need
+ * to handle single quotes themselves by ending the quote, adding an escaped
+ * single quote, and starting a new quoted section.
+ * @param {string} str - The string to escape
+ * @returns {string} - Shell-safe escaped string
+ */
+function shellEscape(str) {
+	if (!str) return "''";
+	// Replace single quotes with: end quote, escaped quote, start quote
+	// 'foo'bar' becomes 'foo'\''bar'
+	return "'" + str.replace(/'/g, "'\\''") + "'";
+}
+
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ url }) {
 	const project = url.searchParams.get('project');
@@ -163,8 +178,8 @@ export async function POST({ request }) {
 		const type = body.type.trim().toLowerCase();
 		// Note: project is already extracted at the top of try block
 
-		// Build bd create command
-		let command = `bd create "${title.replace(/"/g, '\\"')}"`;
+		// Build bd create command using shellEscape for safety
+		let command = `bd create ${shellEscape(title)}`;
 
 		// Add type flag
 		command += ` --type ${type}`;
@@ -174,7 +189,7 @@ export async function POST({ request }) {
 
 		// Add description if provided
 		if (description) {
-			command += ` --description "${description.replace(/"/g, '\\"')}"`;
+			command += ` --description ${shellEscape(description)}`;
 		}
 
 		// Add labels if provided

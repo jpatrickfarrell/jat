@@ -14,6 +14,16 @@ import { _resetTaskCache } from '../../../api/agents/+server.js';
 
 const execAsync = promisify(exec);
 
+/**
+ * Escape a string for safe use in shell commands (single-quoted).
+ * @param {string} str - The string to escape
+ * @returns {string} - Shell-safe escaped string
+ */
+function shellEscape(str) {
+	if (!str) return "''";
+	return "'" + str.replace(/'/g, "'\\''") + "'";
+}
+
 // Path to task images store
 const getImageStorePath = () => {
 	const projectPath = process.cwd().replace('/dashboard', '');
@@ -83,17 +93,17 @@ export async function PUT({ params, request }) {
 			return json({ error: 'Task not found' }, { status: 404 });
 		}
 
-		// Build bd update command
+		// Build bd update command using shellEscape for safety
 		const args = [];
 
 		// Update title if changed
 		if (updates.title !== undefined) {
-			args.push(`--title "${updates.title.replace(/"/g, '\\"')}"`);
+			args.push(`--title ${shellEscape(updates.title)}`);
 		}
 
 		// Update description if changed
 		if (updates.description !== undefined) {
-			args.push(`--description "${updates.description.replace(/"/g, '\\"')}"`);
+			args.push(`--description ${shellEscape(updates.description)}`);
 		}
 
 		// Update priority if changed
@@ -109,7 +119,7 @@ export async function PUT({ params, request }) {
 		// Update assignee if changed (including clearing with null)
 		if (updates.assignee !== undefined) {
 			const sanitizedAssignee = updates.assignee ? updates.assignee.trim() : '';
-			args.push(`--assignee "${sanitizedAssignee.replace(/"/g, '\\"')}"`);
+			args.push(`--assignee ${shellEscape(sanitizedAssignee)}`);
 		}
 
 		// Execute bd update command in correct project directory
@@ -222,19 +232,19 @@ export async function PATCH({ params, request }) {
 			);
 		}
 
-		// Build bd update command with provided fields
+		// Build bd update command with provided fields using shellEscape for safety
 		const args = [];
 
 		// Update title
 		if (updates.title !== undefined) {
 			const sanitizedTitle = updates.title.trim();
-			args.push(`--title "${sanitizedTitle.replace(/"/g, '\\"')}"`);
+			args.push(`--title ${shellEscape(sanitizedTitle)}`);
 		}
 
 		// Update description
 		if (updates.description !== undefined) {
 			const sanitizedDesc = updates.description ? updates.description.trim() : '';
-			args.push(`--description "${sanitizedDesc.replace(/"/g, '\\"')}"`);
+			args.push(`--description ${shellEscape(sanitizedDesc)}`);
 		}
 
 		// Update priority
@@ -250,13 +260,13 @@ export async function PATCH({ params, request }) {
 		// Update assignee
 		if (updates.assignee !== undefined) {
 			const sanitizedAssignee = updates.assignee ? updates.assignee.trim() : '';
-			args.push(`--assignee "${sanitizedAssignee.replace(/"/g, '\\"')}"`);
+			args.push(`--assignee ${shellEscape(sanitizedAssignee)}`);
 		}
 
 		// Update notes (used for image attachments and other metadata)
 		if (updates.notes !== undefined) {
 			const sanitizedNotes = updates.notes ? updates.notes.trim() : '';
-			args.push(`--notes "${sanitizedNotes.replace(/"/g, '\\"')}"`);
+			args.push(`--notes ${shellEscape(sanitizedNotes)}`);
 		}
 
 		// Update labels using --set-labels (replaces all existing labels)
@@ -264,10 +274,10 @@ export async function PATCH({ params, request }) {
 			if (Array.isArray(updates.labels) && updates.labels.length > 0) {
 				// Join labels and quote properly for shell
 				const labelsArg = updates.labels.map((/** @type {string} */ l) => l.trim()).filter(Boolean).join(',');
-				args.push(`--set-labels "${labelsArg.replace(/"/g, '\\"')}"`);
+				args.push(`--set-labels ${shellEscape(labelsArg)}`);
 			} else if (typeof updates.labels === 'string' && updates.labels.trim()) {
 				// Support string format too (comma-separated)
-				args.push(`--set-labels "${updates.labels.replace(/"/g, '\\"')}"`);
+				args.push(`--set-labels ${shellEscape(updates.labels)}`);
 			}
 			// If empty array or empty string, we could clear labels but bd may not support that
 		}

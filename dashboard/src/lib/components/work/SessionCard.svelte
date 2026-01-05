@@ -6272,14 +6272,14 @@
 												: ''}"
 											style="color: {action.completed
 												? 'oklch(0.60 0.02 250)'
-												: 'oklch(0.95 0.05 50)'};"
+												: 'oklch(0.82 0.12 300)'};"
 										>
 											{action.title}
 										</div>
 										{#if action.description && !action.completed}
 											<div
-												class="text-[11px] mt-0.5 opacity-70"
-												style="color: oklch(0.80 0.02 250);"
+												class="text-[11px] mt-0.5"
+												style="color: oklch(0.75 0.10 300);"
 											>
 												{action.description}
 											</div>

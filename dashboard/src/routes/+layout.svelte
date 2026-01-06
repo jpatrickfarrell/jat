@@ -23,7 +23,7 @@
 	import { successToast } from '$lib/stores/toasts.svelte';
 	import { initSessionEvents, closeSessionEvents, connectSessionEvents, disconnectSessionEvents, lastSessionEvent } from '$lib/stores/sessionEvents';
 	import { connectTaskEvents, disconnectTaskEvents, lastTaskEvent } from '$lib/stores/taskEvents';
-	import { availableProjects, projectColorsStore, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, openStartDropdownViaKeyboard, closeStartDropdown, isFilePreviewDrawerOpen, filePreviewDrawerPath, filePreviewDrawerProject, filePreviewDrawerLine, closeFilePreviewDrawer, toggleTerminalDrawer } from '$lib/stores/drawerStore';
+	import { availableProjects, projectColorsStore, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, openStartDropdownViaKeyboard, closeStartDropdown, isFilePreviewDrawerOpen, filePreviewDrawerPath, filePreviewDrawerProject, filePreviewDrawerLine, closeFilePreviewDrawer, toggleTerminalDrawer, isDiffPreviewDrawerOpen, diffPreviewDrawerPath, diffPreviewDrawerProject, diffPreviewDrawerIsStaged, closeDiffPreviewDrawer } from '$lib/stores/drawerStore';
 	import { hoveredSessionName, triggerCompleteFlash, jumpToSession } from '$lib/stores/hoveredSession';
 	import { get } from 'svelte/store';
 	import { initPreferences, getActiveProject } from '$lib/stores/preferences.svelte';
@@ -869,6 +869,15 @@
 	bind:projectName={$filePreviewDrawerProject}
 	bind:lineNumber={$filePreviewDrawerLine}
 	onClose={closeFilePreviewDrawer}
+/>
+
+<!-- Global Diff Preview Drawer (for viewing git diffs with Monaco diff editor) -->
+<DiffPreviewDrawer
+	bind:isOpen={$isDiffPreviewDrawerOpen}
+	bind:filePath={$diffPreviewDrawerPath}
+	bind:projectName={$diffPreviewDrawerProject}
+	bind:isStaged={$diffPreviewDrawerIsStaged}
+	onClose={closeDiffPreviewDrawer}
 />
 
 <!-- Terminal Drawer (Ctrl+` to toggle) -->

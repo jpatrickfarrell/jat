@@ -11,6 +11,7 @@
 	 */
 	import { onMount } from 'svelte';
 	import BranchSwitcherModal from './BranchSwitcherModal.svelte';
+	import CommitDetailModal from './CommitDetailModal.svelte';
 	import { openDiffPreviewDrawer } from '$lib/stores/drawerStore';
 
 	interface Props {
@@ -32,6 +33,10 @@
 
 	// Branch switcher modal state
 	let showBranchModal = $state(false);
+
+	// Commit detail modal state
+	let showCommitModal = $state(false);
+	let selectedCommitHash = $state<string | null>(null);
 
 	// Git status state
 	let currentBranch = $state<string | null>(null);
@@ -501,6 +506,12 @@
 		// Refresh status and timeline
 		fetchStatus();
 		fetchTimeline();
+	}
+
+	// Handle commit click to show details modal
+	function handleCommitClick(commitHash: string) {
+		selectedCommitHash = commitHash;
+		showCommitModal = true;
 	}
 
 	onMount(() => {
@@ -984,7 +995,12 @@
 							{#each commits as commit, index}
 								{@const isHead = commit.hash === headCommitHash}
 								{@const firstLine = commit.message.split('\n')[0]}
-								<div class="commit-item" class:is-head={isHead} title={commit.message}>
+								<button
+									class="commit-item"
+									class:is-head={isHead}
+									title="Click to view commit details"
+									onclick={() => handleCommitClick(commit.hash)}
+								>
 									<div class="commit-marker">
 										{#if isHead}
 											<span class="head-marker">●</span>
@@ -1003,7 +1019,7 @@
 										<div class="commit-message">{truncate(firstLine, 50)}</div>
 										<div class="commit-author">{commit.author_name}</div>
 									</div>
-								</div>
+								</button>
 							{/each}
 						</div>
 					{/if}
@@ -1039,6 +1055,14 @@
 	bind:isOpen={showBranchModal}
 	onClose={() => showBranchModal = false}
 	onBranchSwitch={handleBranchSwitch}
+/>
+
+<!-- Commit Detail Modal -->
+<CommitDetailModal
+	{project}
+	commitHash={selectedCommitHash}
+	bind:isOpen={showCommitModal}
+	onClose={() => showCommitModal = false}
 />
 
 <style>

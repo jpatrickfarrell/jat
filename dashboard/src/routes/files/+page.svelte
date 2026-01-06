@@ -20,6 +20,7 @@
 	import { fade, slide } from 'svelte/transition';
 	import { FileEditor, type OpenFile } from '$lib/components/files';
 	import FileTree from '$lib/components/files/FileTree.svelte';
+	import GitPanel from '$lib/components/files/GitPanel.svelte';
 	import QuickFileFinder from '$lib/components/files/QuickFileFinder.svelte';
 	import GlobalSearch from '$lib/components/files/GlobalSearch.svelte';
 	import { getActiveProject, setActiveProject } from '$lib/stores/preferences.svelte';
@@ -60,6 +61,12 @@
 
 	// Global search state (Ctrl+Shift+F)
 	let globalSearchOpen = $state(false);
+
+	// Sidebar tab state (Files vs Git)
+	let activeTab = $state<'files' | 'git'>('files');
+
+	// FileTree component reference for scrolling
+	let fileTreeRef: { scrollToFile: (path: string) => Promise<void> } | null = $state(null);
 
 	// Layout state
 	let leftPanelWidth = $state(303); // pixels
@@ -620,9 +627,23 @@
 	}
 
 	// Handle global search result selection - open file at specific line
-	async function handleGlobalSearchResult(file: string, line: number) {
-		// First, open the file
+	async function handleGlobalSearchResult(file: string, line: number, project: string) {
+		// Switch project if different
+		if (project !== selectedProject) {
+			handleProjectChange(project);
+			// Wait for project change to take effect
+			await new Promise(r => setTimeout(r, 100));
+		}
+
+		// Open the file
 		await handleFileSelect(file);
+
+		// Scroll to the file in the FileTree (after a short delay for ref to be available)
+		setTimeout(() => {
+			if (fileTreeRef) {
+				fileTreeRef.scrollToFile(file);
+			}
+		}, 150);
 
 		// Then scroll to the line in the editor
 		// We need to give the editor a moment to load the file
@@ -630,7 +651,7 @@
 			// Get the FileEditor component and trigger scroll to line
 			const event = new CustomEvent('scroll-to-line', { detail: { line } });
 			window.dispatchEvent(event);
-		}, 100);
+		}, 200);
 	}
 
 	// Track whether we've handled the initial file parameter
@@ -663,6 +684,10 @@
 				// Open the file after a small delay to ensure storage is loaded first
 				setTimeout(async () => {
 					await handleFileSelect(fileParam);
+					// Scroll to the file in the FileTree
+					if (fileTreeRef) {
+						fileTreeRef.scrollToFile(fileParam);
+					}
 					// If line param provided, scroll to that line after file loads
 					if (lineParam) {
 						const lineNumber = parseInt(lineParam, 10);
@@ -765,13 +790,37 @@
 							</svg>
 						</button>
 					</div>
+					<!-- Tab Switcher: Files / Git -->
+					<div class="sidebar-tabs">
+						<button
+							class="sidebar-tab"
+							class:active={activeTab === 'files'}
+							onclick={() => { activeTab = 'files'; }}
+						>
+							<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+							</svg>
+							<span>Files</span>
+						</button>
+						<button
+							class="sidebar-tab"
+							class:active={activeTab === 'git'}
+							onclick={() => { activeTab = 'git'; }}
+						>
+							<svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+								<path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
+							</svg>
+							<span>Git</span>
+						</button>
+					</div>
 					<div class="panel-content file-tree-content">
 						{#if !selectedProject}
 							<div class="panel-empty">
 								<p>Select a project to browse files</p>
 							</div>
-						{:else}
+						{:else if activeTab === 'files'}
 							<FileTree
+								bind:this={fileTreeRef}
 								project={selectedProject}
 								selectedPath={activeFilePath}
 								onFileSelect={handleFileSelect}
@@ -781,6 +830,8 @@
 								onError={handleTreeError}
 								onSuccess={handleTreeSuccess}
 							/>
+						{:else}
+							<GitPanel project={selectedProject} />
 						{/if}
 					</div>
 				</div>
@@ -894,6 +945,7 @@
 	<GlobalSearch
 		isOpen={globalSearchOpen}
 		project={selectedProject}
+		availableProjects={projects.map(p => p.name)}
 		onClose={() => { globalSearchOpen = false; }}
 		onResultSelect={handleGlobalSearchResult}
 	/>
@@ -1043,6 +1095,48 @@
 	.panel-content.file-tree-content {
 		padding: 0;
 		overflow: hidden;
+	}
+
+	/* Sidebar Tabs (Files / Git) */
+	.sidebar-tabs {
+		display: flex;
+		gap: 0.25rem;
+		padding: 0.375rem 0.5rem;
+		background: oklch(0.15 0.01 250);
+		border-bottom: 1px solid oklch(0.22 0.02 250);
+	}
+
+	.sidebar-tab {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		flex: 1;
+		padding: 0.375rem 0.5rem;
+		background: transparent;
+		border: 1px solid transparent;
+		border-radius: 0.375rem;
+		cursor: pointer;
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: oklch(0.55 0.02 250);
+		transition: all 0.15s ease;
+	}
+
+	.sidebar-tab:hover {
+		background: oklch(0.20 0.02 250);
+		color: oklch(0.70 0.02 250);
+	}
+
+	.sidebar-tab.active {
+		background: oklch(0.22 0.02 250);
+		border-color: oklch(0.30 0.02 250);
+		color: oklch(0.85 0.02 250);
+	}
+
+	.sidebar-tab .tab-icon {
+		width: 14px;
+		height: 14px;
+		flex-shrink: 0;
 	}
 
 	.panel-empty,

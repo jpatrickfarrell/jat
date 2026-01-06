@@ -20,15 +20,11 @@
 
 	import { page } from "$app/stores";
 	import { get } from "svelte/store";
-	import AgentCountBadge from "./AgentCountBadge.svelte";
-	import TokenUsageBadge from "./TokenUsageBadge.svelte";
-	import TasksCompletedBadge from "./TasksCompletedBadge.svelte";
+	import ActivityBadge from "./ActivityBadge.svelte";
 	import ServersBadge from "./ServersBadge.svelte";
 	import EpicSwarmBadge from "./EpicSwarmBadge.svelte";
 	import UserProfile from "./UserProfile.svelte";
 	import CommandPalette from "./CommandPalette.svelte";
-	import Sparkline from "./Sparkline.svelte";
-	import { getSparklineVisible } from "$lib/stores/preferences.svelte";
 	import {
 		openTaskDrawer,
 		openTaskDetailDrawer,
@@ -68,9 +64,6 @@
 	import { onMount, onDestroy } from "svelte";
 	import { SPAWN_STAGGER_MS } from "$lib/config/spawnConfig";
 	import { getMaxSessions } from "$lib/stores/preferences.svelte";
-
-	// Sparkline visibility (reactive from preferences store)
-	const sparklineVisible = $derived(getSparklineVisible());
 
 	// Initialize sort stores on mount
 	onMount(() => {
@@ -1486,102 +1479,18 @@
 		class="w-px h-6 mx-3 bg-gradient-to-b from-transparent via-base-content/45 to-transparent"
 	></div>
 
-	<!-- Right side: Sparkline + Stats + User Profile (Industrial) -->
+	<!-- Right side: Activity Badge + Servers + User Profile -->
 	<div class="flex-none flex items-center gap-2.5 pr-3">
-		<!-- Sparkline (positioned LEFT of all badges, visibility controlled by user preference) -->
-		{#if sparklineVisible && multiProjectData && multiProjectData.length > 0}
-			<div
-				class="hidden sm:block flex-shrink w-[80px] sm:w-[100px] md:w-[120px] lg:w-[150px] h-[20px]"
-			>
-				<Sparkline
-					multiSeriesData={multiProjectData.map((point) => {
-						const projects: Record<string, { tokens: number; cost: number }> =
-							{};
-						for (const p of point.projects) {
-							projects[p.project] = { tokens: p.tokens, cost: p.cost };
-						}
-						return {
-							timestamp: point.timestamp,
-							projects,
-							total: { tokens: point.totalTokens, cost: point.totalCost },
-						};
-					})}
-					projectMeta={(() => {
-						const projectTotals = new Map<string, number>();
-						for (const point of multiProjectData) {
-							for (const p of point.projects) {
-								projectTotals.set(
-									p.project,
-									(projectTotals.get(p.project) || 0) + p.tokens,
-								);
-							}
-						}
-						const meta: Array<{
-							name: string;
-							color: string;
-							totalTokens: number;
-						}> = [];
-						for (const [name, totalTokens] of projectTotals.entries()) {
-							meta.push({
-								name,
-								color: projectColors[name] || "#888888",
-								totalTokens,
-							});
-						}
-						return meta.sort((a, b) => b.totalTokens - a.totalTokens);
-					})()}
-					width="100%"
-					height={20}
-					showTooltip={true}
-					showGrid={false}
-					showStyleToolbar={true}
-					showLegend={false}
-					showLegendInToolbar={true}
-				/>
-			</div>
-		{:else if sparklineVisible && sparklineData && sparklineData.length > 0}
-			<div
-				class="hidden sm:block flex-shrink w-[80px] sm:w-[100px] md:w-[120px] lg:w-[150px] h-[20px]"
-			>
-				<Sparkline
-					data={sparklineData}
-					width="100%"
-					height={20}
-					colorMode="usage"
-					showTooltip={true}
-					showGrid={false}
-					showStyleToolbar={true}
-				/>
-			</div>
-		{/if}
-
-		<!-- Agent Count Badge -->
-		<div class="hidden sm:flex">
-			<AgentCountBadge
-				activeCount={activeAgentCount}
-				totalCount={totalAgentCount}
-				{activeAgents}
-				{stateCounts}
-				compact={true}
-			/>
-		</div>
-
-		<!-- Token Usage Badge (without sparkline - moved above) -->
-		<div class="hidden sm:flex">
-			<TokenUsageBadge
-				{tokensToday}
-				{costToday}
-				sparklineData={[]}
-				multiProjectData={undefined}
-				{projectColors}
-				compact={true}
-			/>
-		</div>
-
-		<!-- Tasks Completed Today Badge -->
-		<div class="flex">
-			<TasksCompletedBadge compact={true} />
-		</div>
+		<!-- Combined Activity Badge (Agents + Tasks + Tokens in dropdown) -->
+		<ActivityBadge
+			{activeAgentCount}
+			{stateCounts}
+			{tokensToday}
+			{costToday}
+			{sparklineData}
+			{multiProjectData}
+			{projectColors}
+		/>
 
 		<!-- Dev Servers + WebSocket Status -->
 		<ServersBadge />

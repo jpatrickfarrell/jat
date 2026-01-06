@@ -6,7 +6,7 @@
  *
  * MAIN (core workflow - always visible):
  *   /work     - Work (default route, multi-project sessions view)
- *   /files    - Files (project file browser)
+ *   /files    - Explorer (project file browser + git)
  *   /servers  - Servers (project server sessions)
  *   /config   - Config (JAT configuration files editor)
  *   /projects - Projects (project configuration & management)
@@ -63,7 +63,7 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 		},
 		{
 			id: 'files',
-			label: 'Files',
+			label: 'Explorer',
 			href: '/files',
 			icon: 'files',
 			category: 'main'

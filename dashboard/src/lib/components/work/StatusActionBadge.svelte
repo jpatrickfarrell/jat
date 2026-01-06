@@ -661,7 +661,7 @@
 	}
 </script>
 
-<div class="relative inline-block z-40 {className} pr-2 pb-1" bind:this={dropdownRef}>
+<div class="relative inline-block z-1 {className} pr-2 pb-1" bind:this={dropdownRef}>
 	<!-- Status Badge Button -->
 	<button
 		type="button"

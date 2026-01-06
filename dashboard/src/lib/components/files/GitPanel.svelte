@@ -62,10 +62,19 @@
 	let isStagingAll = $state(false);
 	let isUnstagingAll = $state(false);
 
-	// Derived counts
+	// Discard changes state
+	let discardingFiles = $state<Set<string>>(new Set());
+	let pendingDiscardFile = $state<string | null>(null);
+	let discardSlideProgress = $state(0);
+	let isSliding = $state(false);
+
+	// Derived counts (exclude staged files from changes count)
 	const stagedCount = $derived(stagedFiles.length);
 	const changesCount = $derived(
-		modifiedFiles.length + deletedFiles.length + untrackedFiles.length + createdFiles.length
+		modifiedFiles.filter(f => !stagedFiles.includes(f)).length +
+		deletedFiles.filter(f => !stagedFiles.includes(f)).length +
+		untrackedFiles.filter(f => !stagedFiles.includes(f)).length +
+		createdFiles.filter(f => !stagedFiles.includes(f)).length
 	);
 
 	// Timeline state
@@ -298,6 +307,82 @@
 			showToast(err instanceof Error ? err.message : 'Failed to unstage files', 'error');
 		} finally {
 			isUnstagingAll = false;
+		}
+	}
+
+	/**
+	 * Start discard confirmation for a file
+	 */
+	function startDiscardConfirm(filePath: string) {
+		pendingDiscardFile = filePath;
+		discardSlideProgress = 0;
+		isSliding = false;
+	}
+
+	/**
+	 * Cancel discard confirmation
+	 */
+	function cancelDiscard() {
+		pendingDiscardFile = null;
+		discardSlideProgress = 0;
+		isSliding = false;
+	}
+
+	/**
+	 * Handle slide progress for discard confirmation
+	 */
+	function handleSlideMove(e: MouseEvent | TouchEvent, containerWidth: number) {
+		if (!isSliding || !pendingDiscardFile) return;
+
+		const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		const x = clientX - rect.left;
+		const progress = Math.max(0, Math.min(100, (x / containerWidth) * 100));
+		discardSlideProgress = progress;
+	}
+
+	/**
+	 * Handle slide end - check if threshold reached
+	 */
+	function handleSlideEnd() {
+		if (discardSlideProgress >= 80 && pendingDiscardFile) {
+			// Threshold reached - discard the file
+			discardFile(pendingDiscardFile);
+		}
+		// Reset slide state
+		discardSlideProgress = 0;
+		isSliding = false;
+		pendingDiscardFile = null;
+	}
+
+	/**
+	 * Discard changes to a single file
+	 */
+	async function discardFile(filePath: string) {
+		if (discardingFiles.has(filePath)) return;
+
+		discardingFiles = new Set(discardingFiles).add(filePath);
+		try {
+			const response = await fetch('/api/files/git/discard', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ project, paths: [filePath] })
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				throw new Error(data.message || 'Failed to discard changes');
+			}
+
+			await fetchStatus();
+			showToast(`Discarded: ${getFileName(filePath)}`);
+		} catch (err) {
+			showToast(err instanceof Error ? err.message : 'Failed to discard changes', 'error');
+		} finally {
+			const newSet = new Set(discardingFiles);
+			newSet.delete(filePath);
+			discardingFiles = newSet;
+			pendingDiscardFile = null;
 		}
 	}
 
@@ -686,6 +771,34 @@
 				{/if}
 			</div>
 
+			<!-- Commit Section (after staged changes, since staged files get committed) -->
+			<div class="commit-section">
+				<textarea
+					class="commit-input"
+					placeholder="Commit message..."
+					bind:value={commitMessage}
+					onkeydown={handleKeyDown}
+					rows="2"
+				></textarea>
+				<div class="commit-actions">
+					<button
+						class="btn btn-sm btn-success commit-btn"
+						onclick={handleCommit}
+						disabled={!canCommit}
+						title={stagedCount === 0 ? 'No staged changes' : 'Commit staged changes (Ctrl+Enter)'}
+					>
+						{#if isCommitting}
+							<span class="loading loading-spinner loading-xs"></span>
+						{:else}
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<polyline points="20 6 9 17 4 12" />
+							</svg>
+						{/if}
+						Commit
+					</button>
+				</div>
+			</div>
+
 			<!-- CHANGES Section (Unstaged) -->
 			<div class="changes-section">
 				<button
@@ -731,82 +844,184 @@
 						{#if changesCount === 0}
 							<div class="empty-section">No changes</div>
 						{:else}
-							<!-- Modified files -->
-							{#each modifiedFiles as file}
+							<!-- Modified files (exclude already staged) -->
+							{#each modifiedFiles.filter(f => !stagedFiles.includes(f)) as file}
 								{@const status = getStatusIndicator(file, 'modified')}
 								{@const fileName = getFileName(file)}
 								{@const directory = getDirectory(file)}
-								<div class="file-item">
-									<button
-										class="stage-btn"
-										onclick={() => stageFile(file)}
-										disabled={stagingFiles.has(file)}
-										title="Stage file"
-									>
-										{#if stagingFiles.has(file)}
-											<span class="loading loading-spinner loading-xs"></span>
-										{:else}
+								{@const isPendingDiscard = pendingDiscardFile === file}
+								<div class="file-item" class:pending-discard={isPendingDiscard}>
+									{#if isPendingDiscard}
+										<!-- Slide to confirm discard -->
+										<div
+											class="discard-slide-container"
+											role="slider"
+											aria-label="Slide to discard changes"
+											aria-valuenow={discardSlideProgress}
+											onmousedown={() => isSliding = true}
+											onmouseup={handleSlideEnd}
+											onmouseleave={() => { if (isSliding) handleSlideEnd(); }}
+											onmousemove={(e) => handleSlideMove(e, 180)}
+											ontouchstart={() => isSliding = true}
+											ontouchend={handleSlideEnd}
+											ontouchmove={(e) => handleSlideMove(e, 180)}
+										>
+											<div class="discard-slide-track">
+												<div class="discard-slide-fill" style="width: {discardSlideProgress}%"></div>
+												<div class="discard-slide-thumb" style="left: {discardSlideProgress}%">
+													<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+														<polyline points="9 18 15 12 9 6" />
+													</svg>
+												</div>
+												<span class="discard-slide-text">
+													{discardSlideProgress >= 80 ? 'Release to discard' : 'Slide to discard'}
+												</span>
+											</div>
+										</div>
+										<button class="discard-cancel-btn" onclick={cancelDiscard} title="Cancel">
 											<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-												<line x1="12" y1="5" x2="12" y2="19" />
-												<line x1="5" y1="12" x2="19" y2="12" />
+												<line x1="18" y1="6" x2="6" y2="18" />
+												<line x1="6" y1="6" x2="18" y2="18" />
 											</svg>
-										{/if}
-									</button>
-									<span class="status-indicator" style="color: {status.color}" title={status.title}>
-										{status.letter}
-									</span>
-									<button
-										class="file-name-btn"
-										onclick={() => handleFileClick(file, false)}
-										title={file}
-									>
-										<span class="file-name">{fileName}</span>
-										{#if directory}
-											<span class="file-dir">{directory}</span>
-										{/if}
-									</button>
+										</button>
+									{:else}
+										<button
+											class="stage-btn"
+											onclick={() => stageFile(file)}
+											disabled={stagingFiles.has(file)}
+											title="Stage file"
+										>
+											{#if stagingFiles.has(file)}
+												<span class="loading loading-spinner loading-xs"></span>
+											{:else}
+												<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+													<line x1="12" y1="5" x2="12" y2="19" />
+													<line x1="5" y1="12" x2="19" y2="12" />
+												</svg>
+											{/if}
+										</button>
+										<span class="status-indicator" style="color: {status.color}" title={status.title}>
+											{status.letter}
+										</span>
+										<button
+											class="file-name-btn"
+											onclick={() => handleFileClick(file, false)}
+											title={file}
+										>
+											<span class="file-name">{fileName}</span>
+											{#if directory}
+												<span class="file-dir">{directory}</span>
+											{/if}
+										</button>
+										<button
+											class="discard-btn"
+											onclick={() => startDiscardConfirm(file)}
+											disabled={discardingFiles.has(file)}
+											title="Discard changes"
+										>
+											{#if discardingFiles.has(file)}
+												<span class="loading loading-spinner loading-xs"></span>
+											{:else}
+												<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+													<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+													<path d="M3 3v5h5" />
+												</svg>
+											{/if}
+										</button>
+									{/if}
 								</div>
 							{/each}
 
-							<!-- Deleted files -->
-							{#each deletedFiles as file}
+							<!-- Deleted files (exclude already staged) -->
+							{#each deletedFiles.filter(f => !stagedFiles.includes(f)) as file}
 								{@const status = getStatusIndicator(file, 'deleted')}
 								{@const fileName = getFileName(file)}
 								{@const directory = getDirectory(file)}
-								<div class="file-item">
-									<button
-										class="stage-btn"
-										onclick={() => stageFile(file)}
-										disabled={stagingFiles.has(file)}
-										title="Stage file"
-									>
-										{#if stagingFiles.has(file)}
-											<span class="loading loading-spinner loading-xs"></span>
-										{:else}
+								{@const isPendingDiscard = pendingDiscardFile === file}
+								<div class="file-item" class:pending-discard={isPendingDiscard}>
+									{#if isPendingDiscard}
+										<!-- Slide to confirm restore -->
+										<div
+											class="discard-slide-container"
+											role="slider"
+											aria-label="Slide to restore file"
+											aria-valuenow={discardSlideProgress}
+											onmousedown={() => isSliding = true}
+											onmouseup={handleSlideEnd}
+											onmouseleave={() => { if (isSliding) handleSlideEnd(); }}
+											onmousemove={(e) => handleSlideMove(e, 180)}
+											ontouchstart={() => isSliding = true}
+											ontouchend={handleSlideEnd}
+											ontouchmove={(e) => handleSlideMove(e, 180)}
+										>
+											<div class="discard-slide-track restore">
+												<div class="discard-slide-fill" style="width: {discardSlideProgress}%"></div>
+												<div class="discard-slide-thumb" style="left: {discardSlideProgress}%">
+													<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+														<polyline points="9 18 15 12 9 6" />
+													</svg>
+												</div>
+												<span class="discard-slide-text">
+													{discardSlideProgress >= 80 ? 'Release to restore' : 'Slide to restore'}
+												</span>
+											</div>
+										</div>
+										<button class="discard-cancel-btn" onclick={cancelDiscard} title="Cancel">
 											<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-												<line x1="12" y1="5" x2="12" y2="19" />
-												<line x1="5" y1="12" x2="19" y2="12" />
+												<line x1="18" y1="6" x2="6" y2="18" />
+												<line x1="6" y1="6" x2="18" y2="18" />
 											</svg>
-										{/if}
-									</button>
-									<span class="status-indicator" style="color: {status.color}" title={status.title}>
-										{status.letter}
-									</span>
-									<button
-										class="file-name-btn"
-										onclick={() => handleFileClick(file, false)}
-										title={file}
-									>
-										<span class="file-name">{fileName}</span>
-										{#if directory}
-											<span class="file-dir">{directory}</span>
-										{/if}
-									</button>
+										</button>
+									{:else}
+										<button
+											class="stage-btn"
+											onclick={() => stageFile(file)}
+											disabled={stagingFiles.has(file)}
+											title="Stage file"
+										>
+											{#if stagingFiles.has(file)}
+												<span class="loading loading-spinner loading-xs"></span>
+											{:else}
+												<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+													<line x1="12" y1="5" x2="12" y2="19" />
+													<line x1="5" y1="12" x2="19" y2="12" />
+												</svg>
+											{/if}
+										</button>
+										<span class="status-indicator" style="color: {status.color}" title={status.title}>
+											{status.letter}
+										</span>
+										<button
+											class="file-name-btn"
+											onclick={() => handleFileClick(file, false)}
+											title={file}
+										>
+											<span class="file-name">{fileName}</span>
+											{#if directory}
+												<span class="file-dir">{directory}</span>
+											{/if}
+										</button>
+										<button
+											class="discard-btn restore"
+											onclick={() => startDiscardConfirm(file)}
+											disabled={discardingFiles.has(file)}
+											title="Restore file"
+										>
+											{#if discardingFiles.has(file)}
+												<span class="loading loading-spinner loading-xs"></span>
+											{:else}
+												<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+													<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+													<path d="M3 3v5h5" />
+												</svg>
+											{/if}
+										</button>
+									{/if}
 								</div>
 							{/each}
 
-							<!-- Untracked files -->
-							{#each untrackedFiles as file}
+							<!-- Untracked files (exclude already staged) -->
+							{#each untrackedFiles.filter(f => !stagedFiles.includes(f)) as file}
 								{@const status = getStatusIndicator(file, 'untracked')}
 								{@const fileName = getFileName(file)}
 								{@const directory = getDirectory(file)}
@@ -883,34 +1098,6 @@
 				{/if}
 			</div>
 		{/if}
-
-		<!-- Commit Section -->
-		<div class="commit-section">
-			<textarea
-				class="commit-input"
-				placeholder="Commit message..."
-				bind:value={commitMessage}
-				onkeydown={handleKeyDown}
-				rows="2"
-			></textarea>
-			<div class="commit-actions">
-				<button
-					class="btn btn-sm btn-success commit-btn"
-					onclick={handleCommit}
-					disabled={!canCommit}
-					title={stagedCount === 0 ? 'No staged changes' : 'Commit staged changes (Ctrl+Enter)'}
-				>
-					{#if isCommitting}
-						<span class="loading loading-spinner loading-xs"></span>
-					{:else}
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-							<polyline points="20 6 9 17 4 12" />
-						</svg>
-					{/if}
-					Commit
-				</button>
-			</div>
-		</div>
 
 		<!-- Push/Pull Actions -->
 		<div class="sync-actions">
@@ -1793,5 +1980,158 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	/* Discard/Revert button */
+	.discard-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		padding: 0;
+		background: transparent;
+		border: 1px solid oklch(0.30 0.02 250);
+		border-radius: 0.25rem;
+		cursor: pointer;
+		transition: all 0.15s ease;
+		flex-shrink: 0;
+		color: oklch(0.55 0.12 30);
+		margin-left: auto;
+	}
+
+	.discard-btn:hover:not(:disabled) {
+		background: oklch(0.55 0.15 30 / 0.2);
+		border-color: oklch(0.55 0.15 30);
+		color: oklch(0.70 0.15 30);
+	}
+
+	.discard-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.discard-btn svg {
+		width: 12px;
+		height: 12px;
+	}
+
+	/* Pending discard state */
+	.file-item.pending-discard {
+		background: oklch(0.18 0.03 30 / 0.3);
+		padding: 0.25rem;
+		margin: -0.125rem 0;
+		border-radius: 0.375rem;
+	}
+
+	/* Slide to confirm container */
+	.discard-slide-container {
+		flex: 1;
+		height: 24px;
+		cursor: grab;
+		user-select: none;
+		touch-action: none;
+	}
+
+	.discard-slide-container:active {
+		cursor: grabbing;
+	}
+
+	.discard-slide-track {
+		position: relative;
+		width: 100%;
+		height: 100%;
+		background: oklch(0.20 0.04 30);
+		border-radius: 12px;
+		border: 1px solid oklch(0.35 0.08 30);
+		overflow: hidden;
+	}
+
+	.discard-slide-track.restore {
+		background: oklch(0.20 0.04 145);
+		border-color: oklch(0.35 0.08 145);
+	}
+
+	.discard-slide-fill {
+		position: absolute;
+		top: 0;
+		left: 0;
+		height: 100%;
+		background: linear-gradient(90deg, oklch(0.50 0.15 30), oklch(0.60 0.18 30));
+		border-radius: 12px 0 0 12px;
+		transition: width 0.05s ease-out;
+	}
+
+	.discard-slide-track.restore .discard-slide-fill {
+		background: linear-gradient(90deg, oklch(0.50 0.15 145), oklch(0.60 0.18 145));
+	}
+
+	.discard-slide-thumb {
+		position: absolute;
+		top: 50%;
+		transform: translate(-50%, -50%);
+		width: 20px;
+		height: 20px;
+		background: oklch(0.95 0.02 250);
+		border: 2px solid oklch(0.60 0.15 30);
+		border-radius: 50%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		box-shadow: 0 2px 4px oklch(0 0 0 / 0.3);
+		transition: left 0.05s ease-out;
+	}
+
+	.discard-slide-track.restore .discard-slide-thumb {
+		border-color: oklch(0.60 0.15 145);
+	}
+
+	.discard-slide-thumb svg {
+		width: 12px;
+		height: 12px;
+		color: oklch(0.40 0.02 250);
+	}
+
+	.discard-slide-text {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		font-size: 0.625rem;
+		font-weight: 600;
+		color: oklch(0.75 0.02 250);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		pointer-events: none;
+		white-space: nowrap;
+	}
+
+	/* Cancel button for discard */
+	.discard-cancel-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 20px;
+		height: 20px;
+		padding: 0;
+		background: oklch(0.25 0.02 250);
+		border: 1px solid oklch(0.35 0.02 250);
+		border-radius: 0.25rem;
+		cursor: pointer;
+		transition: all 0.15s ease;
+		flex-shrink: 0;
+		color: oklch(0.60 0.02 250);
+		margin-left: 0.5rem;
+	}
+
+	.discard-cancel-btn:hover {
+		background: oklch(0.30 0.02 250);
+		border-color: oklch(0.45 0.02 250);
+		color: oklch(0.80 0.02 250);
+	}
+
+	.discard-cancel-btn svg {
+		width: 12px;
+		height: 12px;
 	}
 </style>

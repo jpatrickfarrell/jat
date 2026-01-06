@@ -167,6 +167,18 @@
 	export function layout() {
 		editor?.layout();
 	}
+
+	// Expose scroll to line method
+	export function scrollToLine(lineNumber: number) {
+		if (editor) {
+			// Reveal the line in the center of the editor
+			editor.revealLineInCenter(lineNumber);
+			// Also set the cursor to that line
+			editor.setPosition({ lineNumber, column: 1 });
+			// Focus the editor
+			editor.focus();
+		}
+	}
 </script>
 
 <div class="monaco-wrapper" bind:this={containerRef}>

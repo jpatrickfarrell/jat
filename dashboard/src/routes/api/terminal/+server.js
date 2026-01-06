@@ -35,18 +35,25 @@ function generateTerminalId() {
 }
 
 /**
- * Get the project working directory from jat config
+ * Get the project working directory.
+ * Default to jat project directory since that's where the dashboard runs.
  * @returns {Promise<string>} Path to project directory
  */
 async function getProjectPath() {
-	// Try to get current project from jat config
+	// Default to jat project directory (where dashboard runs from)
+	const jatPath = `${homedir()}/code/jat`;
+	if (existsSync(jatPath)) {
+		return jatPath;
+	}
+
+	// Fallback: try to get from jat config
 	const configPath = `${homedir()}/.config/jat/projects.json`;
 	if (existsSync(configPath)) {
 		try {
 			const { readFileSync } = await import('fs');
 			const config = JSON.parse(readFileSync(configPath, 'utf-8'));
 
-			// Get first project path or use cwd
+			// Get first project path
 			if (config.projects) {
 				const firstProject = Object.values(config.projects)[0];
 				if (firstProject && typeof firstProject === 'object' && 'path' in firstProject) {
@@ -62,13 +69,7 @@ async function getProjectPath() {
 		}
 	}
 
-	// Default to jat project directory
-	const jatPath = `${homedir()}/code/jat`;
-	if (existsSync(jatPath)) {
-		return jatPath;
-	}
-
-	// Fallback to home directory
+	// Final fallback to home directory
 	return homedir();
 }
 

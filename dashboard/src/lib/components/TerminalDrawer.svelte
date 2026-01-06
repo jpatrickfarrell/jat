@@ -14,7 +14,7 @@
 
 	import { onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
-	import { slide } from 'svelte/transition';
+	import { slide, fade } from 'svelte/transition';
 	import { ansiToHtml } from '$lib/utils/ansiToHtml';
 
 	// State
@@ -36,6 +36,7 @@
 	let sendingInput = $state(false);
 	let isCreatingSession = $state(false);
 	let pollInterval: ReturnType<typeof setInterval> | null = null;
+	let inputRef: HTMLInputElement | null = null;
 
 	// Get currently selected session data
 	const currentSession = $derived(() => {
@@ -45,14 +46,21 @@
 		return sessions[0];
 	});
 
-	// Load persisted state
+	// Load persisted state and set up global listeners
 	onMount(() => {
 		if (browser) {
 			const persisted = localStorage.getItem('terminal-drawer-open');
 			if (persisted === 'true') {
 				isOpen = true;
 			}
+			// Add global keydown listener for Escape (capture phase to handle before other handlers)
+			window.addEventListener('keydown', handleGlobalKeydown, true);
 		}
+		return () => {
+			if (browser) {
+				window.removeEventListener('keydown', handleGlobalKeydown, true);
+			}
+		};
 	});
 
 	// Save state changes
@@ -234,6 +242,10 @@
 			error = e instanceof Error ? e.message : 'Failed to send input';
 		} finally {
 			sendingInput = false;
+			// Refocus the input after sending
+			requestAnimationFrame(() => {
+				inputRef?.focus();
+			});
 		}
 	}
 
@@ -251,14 +263,35 @@
 			setTimeout(fetchSessionOutputs, 100);
 		} catch (e) {
 			console.error(`Failed to send ${keyType}:`, e);
+		} finally {
+			// Refocus the input after sending special key
+			requestAnimationFrame(() => {
+				inputRef?.focus();
+			});
 		}
 	}
 
-	// Handle Enter key
+	// Handle Enter key in input
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault();
 			sendInput();
+		}
+	}
+
+	// Handle global keyboard events for the drawer
+	function handleGlobalKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape' && isOpen) {
+			e.preventDefault();
+			e.stopPropagation(); // Prevent other handlers (like /work collapse)
+			isOpen = false;
+		}
+	}
+
+	// Hover-to-focus: focus input when mouse enters the input section
+	function handleInputSectionHover() {
+		if (inputRef && !sendingInput) {
+			inputRef.focus();
 		}
 	}
 
@@ -308,7 +341,7 @@
 	onclick={toggleDrawer}
 	class="fixed right-0 top-1/2 -translate-y-1/2 z-40 btn btn-sm h-auto py-4 rounded-l-lg rounded-r-none"
 	style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.35 0.02 250); border-right: none; writing-mode: vertical-rl; text-orientation: mixed; margin-top: 60px;"
-	title={isOpen ? 'Close Terminal Panel (Ctrl+`)' : 'Open Terminal Panel (Ctrl+`)'}
+	title={isOpen ? 'Close Terminal Panel (Alt+T)' : 'Open Terminal Panel (Alt+T)'}
 >
 	<svg
 		xmlns="http://www.w3.org/2000/svg"
@@ -334,6 +367,16 @@
 		>
 	{/if}
 </button>
+
+<!-- Click-outside overlay -->
+{#if isOpen}
+	<button
+		class="fixed inset-0 z-40 bg-black/20 cursor-default"
+		onclick={() => (isOpen = false)}
+		aria-label="Close terminal drawer"
+		transition:fade={{ duration: 150 }}
+	></button>
+{/if}
 
 <!-- Drawer Panel -->
 {#if isOpen}
@@ -403,7 +446,7 @@
 				<button
 					onclick={toggleDrawer}
 					class="btn btn-xs btn-ghost"
-					title="Close (Ctrl+`)"
+					title="Close (Esc or Alt+T)"
 					style="color: oklch(0.55 0.02 250);"
 				>
 					<svg
@@ -547,6 +590,7 @@
 			<div
 				class="border-t px-3 py-2 space-y-2"
 				style="background: oklch(0.18 0.01 250); border-color: oklch(0.30 0.02 250);"
+				onmouseenter={handleInputSectionHover}
 			>
 				<!-- Quick action buttons -->
 				<div class="flex gap-1.5 flex-wrap">
@@ -592,6 +636,7 @@
 				<div class="flex gap-2">
 					<input
 						type="text"
+						bind:this={inputRef}
 						bind:value={inputText}
 						onkeydown={handleKeydown}
 						placeholder="Type command and press Enter..."
@@ -620,7 +665,7 @@
 			style="background: oklch(0.16 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.45 0.02 250);"
 		>
 			<span>Polling: 500ms</span>
-			<span>Ctrl+` to toggle</span>
+			<span>Alt+T to toggle • Esc to close</span>
 		</div>
 	</div>
 {/if}

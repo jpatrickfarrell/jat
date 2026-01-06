@@ -21,6 +21,7 @@
 	import { FileEditor, type OpenFile } from '$lib/components/files';
 	import FileTree from '$lib/components/files/FileTree.svelte';
 	import QuickFileFinder from '$lib/components/files/QuickFileFinder.svelte';
+	import GlobalSearch from '$lib/components/files/GlobalSearch.svelte';
 	import { getActiveProject, setActiveProject } from '$lib/stores/preferences.svelte';
 	import { FilesSkeleton } from '$lib/components/skeleton';
 
@@ -56,6 +57,9 @@
 
 	// Quick file finder state
 	let quickFinderOpen = $state(false);
+
+	// Global search state (Ctrl+Shift+F)
+	let globalSearchOpen = $state(false);
 
 	// Layout state
 	let leftPanelWidth = $state(303); // pixels
@@ -603,6 +607,30 @@
 				quickFinderOpen = true;
 			}
 		}
+
+		// Ctrl+Shift+F - Open global search (content search)
+		// Use e.code instead of e.key for reliability with modifiers
+		if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === 'KeyF') {
+			e.preventDefault();
+			e.stopPropagation();
+			if (selectedProject) {
+				globalSearchOpen = true;
+			}
+		}
+	}
+
+	// Handle global search result selection - open file at specific line
+	async function handleGlobalSearchResult(file: string, line: number) {
+		// First, open the file
+		await handleFileSelect(file);
+
+		// Then scroll to the line in the editor
+		// We need to give the editor a moment to load the file
+		setTimeout(() => {
+			// Get the FileEditor component and trigger scroll to line
+			const event = new CustomEvent('scroll-to-line', { detail: { line } });
+			window.dispatchEvent(event);
+		}, 100);
 	}
 
 	// Track whether we've handled the initial file parameter
@@ -620,18 +648,33 @@
 		}
 	});
 
-	// Open file from URL parameter ?file=<path> (after project is loaded)
+	// Open file from URL parameter ?file=<path>&line=<number> (after project is loaded)
 	$effect(() => {
 		if (selectedProject && projects.length > 0 && !isLoading && !handledFileParam) {
 			const fileParam = $page.url.searchParams.get('file');
+			const lineParam = $page.url.searchParams.get('line');
 			if (fileParam) {
 				handledFileParam = true;
-				// Clear the file param from URL (so refresh doesn't re-open)
+				// Clear the file and line params from URL (so refresh doesn't re-open)
 				const url = new URL(window.location.href);
 				url.searchParams.delete('file');
+				url.searchParams.delete('line');
 				goto(url.pathname + url.search, { replaceState: true, noScroll: true });
 				// Open the file after a small delay to ensure storage is loaded first
-				setTimeout(() => handleFileSelect(fileParam), 150);
+				setTimeout(async () => {
+					await handleFileSelect(fileParam);
+					// If line param provided, scroll to that line after file loads
+					if (lineParam) {
+						const lineNumber = parseInt(lineParam, 10);
+						if (!isNaN(lineNumber) && lineNumber > 0) {
+							// Give editor time to initialize
+							setTimeout(() => {
+								const event = new CustomEvent('scroll-to-line', { detail: { line: lineNumber } });
+								window.dispatchEvent(event);
+							}, 200);
+						}
+					}
+				}, 150);
 			}
 		}
 	});
@@ -681,7 +724,7 @@
 				<div class="file-tree-panel" style="width: {leftPanelWidth}px;">
 					<!-- Project Selector in Panel Header -->
 					<div class="panel-header project-header">
-						<div class="dropdown dropdown-bottom w-full">
+						<div class="dropdown dropdown-bottom flex-1">
 							<button class="project-selector-compact" tabindex="0">
 								{#if selectedProjectColor}
 									<span
@@ -710,6 +753,17 @@
 								{/each}
 							</ul>
 						</div>
+						<!-- Search button -->
+						<button
+							class="search-button"
+							title="Search in files (Ctrl+Shift+F)"
+							onclick={() => { if (selectedProject) globalSearchOpen = true; }}
+							disabled={!selectedProject}
+						>
+							<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+							</svg>
+						</button>
 					</div>
 					<div class="panel-content file-tree-content">
 						{#if !selectedProject}
@@ -825,13 +879,23 @@
 	{/if}
 </div>
 
-<!-- Quick File Finder Modal (Ctrl+P) -->
+<!-- Quick File Finder Modal (Alt+P) -->
 {#if selectedProject}
 	<QuickFileFinder
 		isOpen={quickFinderOpen}
 		project={selectedProject}
 		onClose={() => { quickFinderOpen = false; }}
 		onFileSelect={handleFileSelect}
+	/>
+{/if}
+
+<!-- Global Search Modal (Ctrl+Shift+F) -->
+{#if selectedProject}
+	<GlobalSearch
+		isOpen={globalSearchOpen}
+		project={selectedProject}
+		onClose={() => { globalSearchOpen = false; }}
+		onResultSelect={handleGlobalSearchResult}
 	/>
 {/if}
 
@@ -891,6 +955,31 @@
 		height: 0.875rem;
 		color: oklch(0.45 0.02 250);
 		flex-shrink: 0;
+	}
+
+	/* Search Button */
+	.search-button {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.375rem;
+		background: transparent;
+		border: none;
+		border-radius: 0.375rem;
+		color: oklch(0.55 0.02 250);
+		cursor: pointer;
+		transition: all 0.15s ease;
+		flex-shrink: 0;
+	}
+
+	.search-button:hover:not(:disabled) {
+		background: oklch(0.25 0.02 250);
+		color: oklch(0.75 0.02 250);
+	}
+
+	.search-button:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
 	}
 
 	/* Body: Side-by-side layout */

@@ -11,6 +11,7 @@
 	 * - Emits events for file operations
 	 */
 
+	import { onMount } from 'svelte';
 	import FileTabBar from './FileTabBar.svelte';
 	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
 	import MediaPreview from './MediaPreview.svelte';
@@ -49,8 +50,8 @@
 		}
 	}
 
-	// Monaco ref for focus/layout
-	let monacoRef: { focus: () => void; layout: () => void } | undefined = $state(undefined);
+	// Monaco ref for focus/layout/scrollToLine
+	let monacoRef: { focus: () => void; layout: () => void; scrollToLine: (line: number) => void } | undefined = $state(undefined);
 
 	// Confirmation dialog state
 	let confirmClose = $state<{ path: string; filename: string } | null>(null);
@@ -268,6 +269,29 @@
 	export function layout() {
 		monacoRef?.layout();
 	}
+
+	// Scroll to a specific line in the editor
+	export function scrollToLine(lineNumber: number) {
+		monacoRef?.scrollToLine(lineNumber);
+	}
+
+	// Listen for scroll-to-line custom events (from global search)
+	onMount(() => {
+		function handleScrollToLine(e: Event) {
+			const event = e as CustomEvent<{ line: number }>;
+			if (event.detail?.line) {
+				// Small delay to ensure the editor has rendered the file
+				setTimeout(() => {
+					monacoRef?.scrollToLine(event.detail.line);
+				}, 50);
+			}
+		}
+
+		window.addEventListener('scroll-to-line', handleScrollToLine);
+		return () => {
+			window.removeEventListener('scroll-to-line', handleScrollToLine);
+		};
+	});
 </script>
 
 <svelte:window onkeydown={handleKeyDown} />

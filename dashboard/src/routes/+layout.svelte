@@ -15,6 +15,7 @@
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import FilePreviewDrawer from '$lib/components/files/FilePreviewDrawer.svelte';
+	import TerminalDrawer from '$lib/components/TerminalDrawer.svelte';
 	import { getTaskCountByProject } from '$lib/utils/projectUtils';
 	import { setProjectsCache, type ProjectConfig } from '$lib/utils/fileLinks';
 	import { initProjectColors } from '$lib/utils/projectColors';
@@ -22,10 +23,11 @@
 	import { successToast } from '$lib/stores/toasts.svelte';
 	import { initSessionEvents, closeSessionEvents, connectSessionEvents, disconnectSessionEvents, lastSessionEvent } from '$lib/stores/sessionEvents';
 	import { connectTaskEvents, disconnectTaskEvents, lastTaskEvent } from '$lib/stores/taskEvents';
-	import { availableProjects, projectColorsStore, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, openStartDropdownViaKeyboard, closeStartDropdown, isFilePreviewDrawerOpen, filePreviewDrawerPath, filePreviewDrawerProject, filePreviewDrawerLine, closeFilePreviewDrawer } from '$lib/stores/drawerStore';
+	import { availableProjects, projectColorsStore, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, openStartDropdownViaKeyboard, closeStartDropdown, isFilePreviewDrawerOpen, filePreviewDrawerPath, filePreviewDrawerProject, filePreviewDrawerLine, closeFilePreviewDrawer, toggleTerminalDrawer } from '$lib/stores/drawerStore';
 	import { hoveredSessionName, triggerCompleteFlash, jumpToSession } from '$lib/stores/hoveredSession';
 	import { get } from 'svelte/store';
-	import { initPreferences } from '$lib/stores/preferences.svelte';
+	import { initPreferences, getActiveProject } from '$lib/stores/preferences.svelte';
+	import GlobalSearch from '$lib/components/files/GlobalSearch.svelte';
 	import { getSessions as getWorkSessions, startActivityPolling, stopActivityPolling, fetch as fetchWorkSessions } from '$lib/stores/workSessions.svelte';
 	import { getSessions as getServerSessions } from '$lib/stores/serverSessions.svelte';
 	import { initKeyboardShortcuts, findMatchingCommand, findMatchingGlobalShortcut } from '$lib/stores/keyboardShortcuts.svelte';
@@ -78,6 +80,9 @@
 		note?: string;
 	}
 	let reviewRules = $state<ReviewRule[]>([]);
+
+	// Global search state (Ctrl+Shift+F from any page)
+	let globalSearchOpen = $state(false);
 
 	// Token usage state for TopBar
 	let tokensToday = $state(0);
@@ -496,6 +501,19 @@
 		}
 	}
 
+	// Handle global search result - navigate to /files with file and line
+	function handleGlobalSearchResult(file: string, line: number) {
+		const activeProject = getActiveProject() || configProjects[0];
+		if (!activeProject) return;
+
+		// Navigate to /files with the project, file, and line parameters
+		const url = new URL('/files', window.location.origin);
+		url.searchParams.set('project', activeProject);
+		url.searchParams.set('file', file);
+		url.searchParams.set('line', String(line));
+		goto(url.toString());
+	}
+
 	// Handle project selection change
 	function handleProjectChange(project: string) {
 		selectedProject = project;
@@ -578,6 +596,10 @@
 
 		'add-project': () => {
 			openProjectDrawer();
+		},
+
+		'toggle-terminal': () => {
+			toggleTerminalDrawer();
 		},
 
 		// Session actions (require hovered session)
@@ -708,6 +730,18 @@
 
 	// Global keyboard shortcuts
 	async function handleGlobalKeydown(event: KeyboardEvent) {
+		// Ctrl+Shift+F - Global search (works from any page)
+		if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.code === 'KeyF') {
+			event.preventDefault();
+			event.stopPropagation();
+			// Get active project from preferences, or use first config project
+			const activeProject = getActiveProject() || configProjects[0];
+			if (activeProject) {
+				globalSearchOpen = true;
+			}
+			return;
+		}
+
 		// First check for user-defined command shortcuts (unless in an input field that should capture the event)
 		// User shortcuts take priority over global shortcuts (except Shift variants)
 		if (!event.shiftKey) {
@@ -824,8 +858,21 @@
 	onClose={closeFilePreviewDrawer}
 />
 
+<!-- Terminal Drawer (Ctrl+` to toggle) -->
+<TerminalDrawer />
+
 <!-- Global Toast Notifications -->
 <ToastContainer />
+
+<!-- Global Search Modal (Ctrl+Shift+F from any page) -->
+{#if getActiveProject() || configProjects[0]}
+	<GlobalSearch
+		isOpen={globalSearchOpen}
+		project={getActiveProject() || configProjects[0]}
+		onClose={() => { globalSearchOpen = false; }}
+		onResultSelect={handleGlobalSearchResult}
+	/>
+{/if}
 
 <!-- Sound Permission Toast -->
 {#if showSoundPrompt}

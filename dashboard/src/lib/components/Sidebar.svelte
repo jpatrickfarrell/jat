@@ -634,6 +634,16 @@
 										</span>
 									</div>
 									<div class="flex justify-between items-center">
+										<span class="text-sm">Global file search</span>
+										<span class="flex gap-1">
+											<kbd class="kbd kbd-sm">Ctrl</kbd>
+											<span>+</span>
+											<kbd class="kbd kbd-sm">Shift</kbd>
+											<span>+</span>
+											<kbd class="kbd kbd-sm">F</kbd>
+										</span>
+									</div>
+									<div class="flex justify-between items-center">
 										<span class="text-sm opacity-70">Attach to hovered session</span>
 										<span class="flex gap-1">
 											<kbd class="kbd kbd-sm">Alt</kbd>

@@ -39,6 +39,12 @@
 	let pollInterval: ReturnType<typeof setInterval> | null = null;
 	let inputRef: HTMLInputElement | null = null;
 
+	// Visual flash feedback states (like SessionCard)
+	let escapeFlash = $state(false);
+	let tabFlash = $state(false);
+	let arrowFlash = $state(false);
+	let submitFlash = $state(false);
+
 	// Get currently selected session data
 	const currentSession = $derived(() => {
 		if (!sessions.length) return null;
@@ -290,11 +296,63 @@
 		}
 	}
 
-	// Handle Enter key in input
+	// Handle keyboard input (parity with SessionCard)
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter' && !e.shiftKey) {
+			// Enter without Shift submits the input
 			e.preventDefault();
-			sendInput();
+			// If input is empty, send Enter to tmux (for prompts)
+			if (!inputText.trim()) {
+				sendKey('enter');
+				submitFlash = true;
+				setTimeout(() => {
+					submitFlash = false;
+				}, 300);
+			} else {
+				sendInput();
+			}
+		} else if (e.key === 'Tab') {
+			// Send Tab to terminal for autocomplete
+			e.preventDefault();
+			sendKey('tab');
+			tabFlash = true;
+			setTimeout(() => {
+				tabFlash = false;
+			}, 300);
+		} else if (e.key === 'Escape' && inputText.trim()) {
+			// Escape when input has text: clear input and send 2x Escape to tmux
+			// (If input is empty, let global handler close the drawer instead)
+			e.preventDefault();
+			e.stopPropagation(); // Prevent global handler from also firing
+			inputText = '';
+			sendKey('escape');
+			// Small delay between escapes to ensure they're registered separately
+			setTimeout(() => sendKey('escape'), 50);
+			escapeFlash = true;
+			setTimeout(() => {
+				escapeFlash = false;
+			}, 300);
+		} else if (
+			(e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') &&
+			!inputText.trim()
+		) {
+			// Arrow keys: When input is empty, transmit to tmux for navigation
+			e.preventDefault();
+			const keyMap: Record<string, string> = {
+				ArrowUp: 'up',
+				ArrowDown: 'down',
+				ArrowLeft: 'left',
+				ArrowRight: 'right'
+			};
+			sendKey(keyMap[e.key]);
+			arrowFlash = true;
+			setTimeout(() => {
+				arrowFlash = false;
+			}, 300);
+		} else if ((e.key === 'Delete' || e.key === 'Backspace') && !inputText.trim()) {
+			// Delete/Backspace: When input is empty, transmit to tmux
+			e.preventDefault();
+			sendKey(e.key === 'Delete' ? 'delete' : 'backspace');
 		}
 	}
 
@@ -371,7 +429,7 @@
 	onclick={toggleDrawer}
 	class="fixed right-0 top-1/2 -translate-y-1/2 z-40 btn btn-sm h-auto py-4 rounded-l-lg rounded-r-none"
 	style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.35 0.02 250); border-right: none; writing-mode: vertical-rl; text-orientation: mixed; margin-top: 60px;"
-	title={isOpen ? 'Close Terminal Panel (Ctrl+Shift+T)' : 'Open Terminal Panel (Ctrl+Shift+T)'}
+	title={isOpen ? 'Close Terminal Panel (Ctrl+`)' : 'Open Terminal Panel (Ctrl+`)'}
 >
 	<svg
 		xmlns="http://www.w3.org/2000/svg"
@@ -480,7 +538,7 @@
 				<button
 					onclick={toggleDrawer}
 					class="btn btn-xs btn-ghost"
-					title="Close (Esc or Ctrl+Shift+T)"
+					title="Close (Esc or Ctrl+`)"
 					style="color: oklch(0.55 0.02 250);"
 				>
 					<svg
@@ -656,6 +714,18 @@
 						^U
 					</button>
 					<button
+						onclick={() => {
+							sendKey('escape');
+							setTimeout(() => sendKey('escape'), 50);
+						}}
+						class="btn btn-xs"
+						style="background: oklch(0.30 0.10 300); border: none; color: oklch(0.85 0.02 250);"
+						title="Send 2x Escape (cancel/clear)"
+						disabled={sendingInput}
+					>
+						ESC
+					</button>
+					<button
 						onclick={() => sendKey('tab')}
 						class="btn btn-xs"
 						style="background: oklch(0.25 0.05 250); border: none; color: oklch(0.80 0.02 250);"
@@ -674,7 +744,7 @@
 						bind:value={inputText}
 						onkeydown={handleKeydown}
 						placeholder="Type command and press Enter..."
-						class="input input-xs flex-1 font-mono"
+						class="input input-xs flex-1 font-mono {escapeFlash ? 'escape-flash' : ''} {tabFlash ? 'tab-flash' : ''} {arrowFlash ? 'arrow-flash' : ''} {submitFlash ? 'submit-flash' : ''}"
 						style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.80 0.02 250);"
 						disabled={sendingInput}
 					/>
@@ -699,7 +769,7 @@
 			style="background: oklch(0.16 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.45 0.02 250);"
 		>
 			<span>Polling: 500ms</span>
-			<span>Ctrl+Shift+T to toggle • Esc to close</span>
+			<span>Ctrl+` to toggle • Esc to close</span>
 		</div>
 	</div>
 {/if}

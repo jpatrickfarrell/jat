@@ -57,7 +57,7 @@ export const DEFAULT_GLOBAL_SHORTCUTS: GlobalShortcutDef[] = [
 	{ id: 'epic-swarm', description: 'Open Epic Swarm Modal', defaultShortcut: 'Alt+E', category: 'global' },
 	{ id: 'start-next', description: 'Open Start Next Dropdown', defaultShortcut: 'Alt+S', category: 'global' },
 	{ id: 'add-project', description: 'Add New Project', defaultShortcut: 'Alt+Shift+P', category: 'global' },
-	{ id: 'toggle-terminal', description: 'Toggle Terminal Drawer', defaultShortcut: 'Ctrl+Shift+T', category: 'global' },
+	{ id: 'toggle-terminal', description: 'Toggle Terminal Drawer', defaultShortcut: 'Ctrl+`', category: 'global' },
 	{ id: 'global-search', description: 'Global File Search', defaultShortcut: 'Ctrl+Shift+F', category: 'global' },
 
 	// Session actions (require hovered session)
@@ -415,6 +415,9 @@ export function matchesShortcut(event: KeyboardEvent, shortcut: string): boolean
 
 	// Direct key match
 	if (eventKey === shortcutKey) return true;
+
+	// Special handling for backtick (`) - check event.code since event.key varies by keyboard/locale
+	if (shortcutKey === '`' && event.code === 'Backquote') return true;
 
 	// Fallback: check event.code for single letter keys (more reliable with Alt modifier)
 	// Alt+key can produce special characters on some systems, but event.code is consistent

@@ -498,8 +498,9 @@
 		color: oklch(0.60 0.02 250);
 	"
 	onclick={open}
-	aria-label="Quick actions (Cmd+K)"
+	aria-label="Command palette (Cmd+K)"
 >
+	<!-- Command/Terminal icon (not search - that's for Global File Search) -->
 	<svg
 		xmlns="http://www.w3.org/2000/svg"
 		fill="none"
@@ -512,10 +513,10 @@
 		<path
 			stroke-linecap="round"
 			stroke-linejoin="round"
-			d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
+			d="m6.75 7.5 3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0 0 21 18V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v12a2.25 2.25 0 0 0 2.25 2.25Z"
 		/>
 	</svg>
-	<span class="hidden md:inline pt-0.5">⌘K</span>
+	<span class="hidden md:inline pt-0.5">Ctrl+K</span>
 </button>
 
 <!-- Modal (stays in DOM, toggle modal-open class) - Industrial -->
@@ -846,7 +847,7 @@
 				<kbd
 					class="kbd kbd-xs font-mono"
 					style="background: oklch(0.25 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.60 0.02 250);"
-					>⌘</kbd
+					>Ctrl</kbd
 				>
 				<span style="color: oklch(0.50 0.02 250);">+</span>
 				<kbd

@@ -26,12 +26,13 @@
 		isOpen: boolean;
 		project: string;
 		availableProjects?: string[];
+		projectColors?: Record<string, string>;
 		onClose: () => void;
 		onResultSelect: (file: string, line: number, project: string) => void;
 		onProjectChange?: (project: string) => void;
 	}
 
-	let { isOpen, project, availableProjects = [], onClose, onResultSelect, onProjectChange }: Props = $props();
+	let { isOpen, project, availableProjects = [], projectColors = {}, onClose, onResultSelect, onProjectChange }: Props = $props();
 
 	// Track the currently selected project (may differ from prop if user changes it)
 	let selectedProject = $state(project);
@@ -294,6 +295,10 @@
 				{#if availableProjects.length > 1}
 					<div class="dropdown dropdown-bottom">
 						<button class="project-selector" tabindex="0">
+							<span
+								class="w-2 h-2 rounded-full flex-shrink-0"
+								style="background: {projectColors[selectedProject] || 'oklch(0.60 0.15 145)'};"
+							></span>
 							<span class="project-name">{selectedProject}</span>
 							<svg class="dropdown-arrow" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
@@ -307,6 +312,10 @@
 										class:bg-base-300={selectedProject === proj}
 										onclick={() => { handleProjectChange(proj); }}
 									>
+										<span
+											class="w-2 h-2 rounded-full flex-shrink-0"
+											style="background: {projectColors[proj] || 'oklch(0.60 0.15 145)'};"
+										></span>
 										{proj}
 									</button>
 								</li>
@@ -314,7 +323,13 @@
 						</ul>
 					</div>
 				{:else}
-					<span class="project-name-static">{selectedProject}</span>
+					<span class="project-name-static">
+						<span
+							class="w-2 h-2 rounded-full flex-shrink-0 inline-block mr-1.5"
+							style="background: {projectColors[selectedProject] || 'oklch(0.60 0.15 145)'};"
+						></span>
+						{selectedProject}
+					</span>
 				{/if}
 			</div>
 

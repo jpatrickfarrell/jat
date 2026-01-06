@@ -807,6 +807,7 @@
 			{selectedProject}
 			{epicsWithReady}
 			{reviewRules}
+			onGlobalSearchOpen={() => { globalSearchOpen = true; }}
 		/>
 
 		<!-- Page content -->
@@ -858,6 +859,7 @@
 		isOpen={globalSearchOpen}
 		project={getActiveProject() || configProjects[0]}
 		availableProjects={configProjects}
+		{projectColors}
 		onClose={() => { globalSearchOpen = false; }}
 		onResultSelect={handleGlobalSearchResult}
 	/>

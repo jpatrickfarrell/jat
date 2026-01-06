@@ -478,6 +478,16 @@
 								<kbd class="kbd kbd-sm">P</kbd>
 							</div>
 						</div>
+						<div class="flex items-center justify-between py-1.5 px-3 rounded bg-base-200/50">
+							<span class="text-sm">Global file search</span>
+							<div class="flex gap-1">
+								<kbd class="kbd kbd-sm">Ctrl</kbd>
+								<span class="text-base-content/50">+</span>
+								<kbd class="kbd kbd-sm">Shift</kbd>
+								<span class="text-base-content/50">+</span>
+								<kbd class="kbd kbd-sm">F</kbd>
+							</div>
+						</div>
 					</div>
 				</div>
 

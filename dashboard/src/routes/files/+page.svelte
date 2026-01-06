@@ -1101,6 +1101,8 @@
 	.panel-content.file-tree-content {
 		padding: 0;
 		overflow: hidden;
+		display: flex;
+		flex-direction: column;
 	}
 
 	/* Sidebar Tabs (Files / Git) */
@@ -1178,7 +1180,7 @@
 		flex-direction: column;
 		flex: 1;
 		min-height: 0;
-		overflow: hidden;
+		/* Allow children to scroll - don't use overflow: hidden here */
 	}
 
 	.panel-empty,

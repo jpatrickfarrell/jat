@@ -598,6 +598,13 @@
 			toggleTerminalDrawer();
 		},
 
+		'global-search': () => {
+			const activeProject = getActiveProject() || configProjects[0];
+			if (activeProject) {
+				globalSearchOpen = true;
+			}
+		},
+
 		// Session actions (require hovered session)
 		'attach-terminal': async () => {
 			const sessionName = get(hoveredSessionName);
@@ -726,18 +733,6 @@
 
 	// Global keyboard shortcuts
 	async function handleGlobalKeydown(event: KeyboardEvent) {
-		// Ctrl+Shift+F - Global search (works from any page)
-		if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.code === 'KeyF') {
-			event.preventDefault();
-			event.stopPropagation();
-			// Get active project from preferences, or use first config project
-			const activeProject = getActiveProject() || configProjects[0];
-			if (activeProject) {
-				globalSearchOpen = true;
-			}
-			return;
-		}
-
 		// First check for user-defined command shortcuts (unless in an input field that should capture the event)
 		// User shortcuts take priority over global shortcuts (except Shift variants)
 		if (!event.shiftKey) {

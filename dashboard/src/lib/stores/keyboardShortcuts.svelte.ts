@@ -58,6 +58,7 @@ export const DEFAULT_GLOBAL_SHORTCUTS: GlobalShortcutDef[] = [
 	{ id: 'start-next', description: 'Open Start Next Dropdown', defaultShortcut: 'Alt+S', category: 'global' },
 	{ id: 'add-project', description: 'Add New Project', defaultShortcut: 'Alt+Shift+P', category: 'global' },
 	{ id: 'toggle-terminal', description: 'Toggle Terminal Drawer', defaultShortcut: 'Ctrl+Shift+T', category: 'global' },
+	{ id: 'global-search', description: 'Global File Search', defaultShortcut: 'Ctrl+Shift+F', category: 'global' },
 
 	// Session actions (require hovered session)
 	{ id: 'attach-terminal', description: 'Attach Terminal to Session', defaultShortcut: 'Alt+A', context: 'Hovered session', category: 'session' },

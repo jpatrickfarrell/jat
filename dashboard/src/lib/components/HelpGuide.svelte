@@ -163,6 +163,10 @@
 										<td>Toggle sidebar collapse/expand</td>
 									</tr>
 									<tr>
+										<td><kbd class="kbd kbd-sm">Cmd</kbd> + <kbd class="kbd kbd-sm">Shift</kbd> + <kbd class="kbd kbd-sm">F</kbd></td>
+										<td>Global file search (search across all project files)</td>
+									</tr>
+									<tr>
 										<td><kbd class="kbd kbd-sm">Esc</kbd></td>
 										<td>Close open modals/drawers</td>
 									</tr>

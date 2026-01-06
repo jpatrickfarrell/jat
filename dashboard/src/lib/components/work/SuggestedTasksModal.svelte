@@ -268,12 +268,6 @@
 		return type === 'bug' || reason.includes('human') || reason.includes('manual');
 	}
 
-	// Truncate description
-	function truncateDescription(desc: string, maxLen = 120): string {
-		if (!desc || desc.length <= maxLen) return desc || '';
-		return desc.slice(0, maxLen).trimEnd() + '...';
-	}
-
 	// Handle modal close
 	function handleClose() {
 		if (!isCreating) {
@@ -603,7 +597,7 @@
 										class="text-xs mt-1.5 line-clamp-2 text-base-content/60"
 										title={effectiveDescription}
 									>
-										{truncateDescription(effectiveDescription)}
+										{effectiveDescription}
 									</p>
 								{/if}
 

@@ -230,7 +230,7 @@
 		{#if hoveredDay.tasks.length > 0}
 			<div class="tooltip-tasks">
 				{#each hoveredDay.tasks.slice(0, 3) as task}
-					<div class="tooltip-task">{task.title.slice(0, 40)}{task.title.length > 40 ? '...' : ''}</div>
+					<div class="tooltip-task" title={task.title}>{task.title}</div>
 				{/each}
 				{#if hoveredDay.tasks.length > 3}
 					<div class="tooltip-more">+{hoveredDay.tasks.length - 3} more</div>

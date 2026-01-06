@@ -14,6 +14,7 @@
 	import TopBar from '$lib/components/TopBar.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
+	import FilePreviewDrawer from '$lib/components/files/FilePreviewDrawer.svelte';
 	import { getTaskCountByProject } from '$lib/utils/projectUtils';
 	import { setProjectsCache, type ProjectConfig } from '$lib/utils/fileLinks';
 	import { initProjectColors } from '$lib/utils/projectColors';
@@ -21,7 +22,7 @@
 	import { successToast } from '$lib/stores/toasts.svelte';
 	import { initSessionEvents, closeSessionEvents, connectSessionEvents, disconnectSessionEvents, lastSessionEvent } from '$lib/stores/sessionEvents';
 	import { connectTaskEvents, disconnectTaskEvents, lastTaskEvent } from '$lib/stores/taskEvents';
-	import { availableProjects, projectColorsStore, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, openStartDropdownViaKeyboard, closeStartDropdown } from '$lib/stores/drawerStore';
+	import { availableProjects, projectColorsStore, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, openStartDropdownViaKeyboard, closeStartDropdown, isFilePreviewDrawerOpen, filePreviewDrawerPath, filePreviewDrawerProject, filePreviewDrawerLine, closeFilePreviewDrawer } from '$lib/stores/drawerStore';
 	import { hoveredSessionName, triggerCompleteFlash, jumpToSession } from '$lib/stores/hoveredSession';
 	import { get } from 'svelte/store';
 	import { initPreferences } from '$lib/stores/preferences.svelte';
@@ -812,6 +813,15 @@
 <TaskDetailDrawer
 	bind:taskId={$taskDetailDrawerTaskId}
 	bind:isOpen={$isTaskDetailDrawerOpen}
+/>
+
+<!-- Global File Preview Drawer (for quick file viewing/editing from signal cards) -->
+<FilePreviewDrawer
+	bind:isOpen={$isFilePreviewDrawerOpen}
+	bind:filePath={$filePreviewDrawerPath}
+	bind:projectName={$filePreviewDrawerProject}
+	bind:lineNumber={$filePreviewDrawerLine}
+	onClose={closeFilePreviewDrawer}
 />
 
 <!-- Global Toast Notifications -->

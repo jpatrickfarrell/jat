@@ -10,7 +10,7 @@
 	 */
 
 	import type { WorkingSignal } from '$lib/types/richSignals';
-	import { openInJatEditor, isGlobPattern, getFileLink, openInFilesPage } from '$lib/utils/fileLinks';
+	import { openInJatEditor, isGlobPattern, getFileLink, openInFilePreviewDrawer } from '$lib/utils/fileLinks';
 
 	interface Props {
 		/** The rich working signal data */
@@ -113,14 +113,14 @@
 		return sha.slice(0, 7);
 	}
 
-	// Handle file click - opens in JAT /files page by default
+	// Handle file click - opens in FilePreviewDrawer by default
 	function handleFileClick(filePath: string) {
 		if (onFileClick) {
 			onFileClick(filePath);
 		} else if (!isGlobPattern(filePath)) {
-			// Default: open in JAT /files page if projectName is available
+			// Default: open in FilePreviewDrawer if projectName is available
 			if (projectName) {
-				openInFilesPage(filePath, projectName);
+				openInFilePreviewDrawer(filePath, projectName);
 			} else {
 				// Fallback: open in JAT file editor (without project context)
 				openInJatEditor(filePath);

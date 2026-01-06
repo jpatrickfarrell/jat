@@ -165,3 +165,27 @@ export function openStartDropdownViaKeyboard() {
 	startDropdownOpenedViaKeyboard.set(true);
 	isStartDropdownOpen.set(true);
 }
+
+// File preview drawer state (for quick file viewing/editing from signal cards)
+export const isFilePreviewDrawerOpen = writable(false);
+export const filePreviewDrawerPath = writable<string>('');
+export const filePreviewDrawerProject = writable<string>('');
+export const filePreviewDrawerLine = writable<number | null>(null);
+
+/**
+ * Open the file preview drawer for a specific file
+ * @param filePath - Path to the file (relative to project root)
+ * @param projectName - Project name (e.g., 'jat', 'chimaro')
+ * @param lineNumber - Optional line number to scroll to
+ */
+export function openFilePreviewDrawer(filePath: string, projectName: string, lineNumber?: number) {
+	filePreviewDrawerPath.set(filePath);
+	filePreviewDrawerProject.set(projectName);
+	filePreviewDrawerLine.set(lineNumber ?? null);
+	isFilePreviewDrawerOpen.set(true);
+}
+
+export function closeFilePreviewDrawer() {
+	isFilePreviewDrawerOpen.set(false);
+	// Don't clear path/project immediately to allow for smooth close animation
+}

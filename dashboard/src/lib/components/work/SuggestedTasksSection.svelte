@@ -279,11 +279,6 @@
 		return p.cssClass;
 	}
 
-	// Truncate description to a sensible length
-	function truncateDescription(desc: string, maxLen = 100): string {
-		if (!desc || desc.length <= maxLen) return desc || '';
-		return desc.slice(0, maxLen).trimEnd() + '…';
-	}
 </script>
 
 <div
@@ -593,7 +588,7 @@
 										class="text-xs mt-0.5 line-clamp-2 text-left hover:underline cursor-pointer w-full text-base-content/60"
 										title="Click to expand and edit description"
 									>
-										{truncateDescription(effectiveDescription)}
+										{effectiveDescription}
 									</button>
 								{/if}
 

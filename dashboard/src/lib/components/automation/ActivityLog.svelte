@@ -227,9 +227,7 @@
 							</td>
 							<td class="min-w-[150px] py-2 px-3 text-base-content/75 border-b border-base-content/10 align-middle">
 								<code class="inline-block py-0.5 px-1.5 rounded font-mono text-[0.65rem] bg-base-300 border border-base-content/15 text-warning max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap" title={entry.matchedPattern}>
-									{entry.matchedPattern.length > 30
-										? entry.matchedPattern.slice(0, 30) + '...'
-										: entry.matchedPattern}
+									{entry.matchedPattern}
 								</code>
 							</td>
 							<td class="min-w-[100px] py-2 px-3 text-base-content/75 border-b border-base-content/10 align-middle">

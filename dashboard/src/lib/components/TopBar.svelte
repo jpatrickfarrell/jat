@@ -126,11 +126,6 @@
 		if (sortDropdownTimeout) clearTimeout(sortDropdownTimeout);
 	}
 
-	function onSortSelect(value: SortOption) {
-		handleSortClick(value);
-		showSortDropdown = false;
-	}
-
 	function onAgentSortSelect(value: AgentSortOption) {
 		handleAgentSortClick(value);
 		showSortDropdown = false;

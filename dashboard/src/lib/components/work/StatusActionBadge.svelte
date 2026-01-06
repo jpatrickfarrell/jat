@@ -627,11 +627,7 @@
 				return 'Finding next task...';
 			}
 			if (nextTask) {
-				// Truncate title if too long
-				const title = nextTask.taskTitle.length > 35
-					? nextTask.taskTitle.substring(0, 35) + '...'
-					: nextTask.taskTitle;
-				return title;
+				return nextTask.taskTitle;
 			}
 			return 'No ready tasks available';
 		}

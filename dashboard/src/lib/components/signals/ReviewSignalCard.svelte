@@ -20,7 +20,7 @@
 		openLocalhostUrl,
 		detectRouteFromPath,
 		generateLocalhostUrl,
-		openInFilesPage,
+		openInFilePreviewDrawer,
 		generateFilesPageUrl,
 		type FileLinks
 	} from '$lib/utils/fileLinks';
@@ -130,13 +130,13 @@
 		return sha.slice(0, 7);
 	}
 
-	// Handle file click - opens in JAT /files page by default
+	// Handle file click - opens in FilePreviewDrawer by default
 	function handleFileClick(file: FileModification) {
 		if (onFileClick) {
 			onFileClick(file.path);
 		} else {
-			// Default: open in JAT /files page
-			openInFilesPage(file.path, projectName);
+			// Default: open in FilePreviewDrawer
+			openInFilePreviewDrawer(file.path, projectName);
 		}
 	}
 
@@ -610,9 +610,9 @@
 										{#if hasFileLink && focusItem?.filePath}
 											<button
 												type="button"
-												onclick={() => openInFilesPage(focusItem.filePath!, projectName)}
+												onclick={() => openInFilePreviewDrawer(focusItem.filePath!, projectName)}
 												class="px-1 py-0.5 rounded hover:opacity-80 transition-opacity bg-primary/20 text-primary border border-primary/30"
-												title="Open {focusItem.filePath} in /files"
+												title="Preview {focusItem.filePath}"
 											>
 												<svg class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 													<path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />

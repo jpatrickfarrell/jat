@@ -627,3 +627,33 @@ export function openInFilesPage(filePath: string, projectName: string): void {
 	// Open in new tab to preserve current context
 	window.open(url, '_blank');
 }
+
+/**
+ * Open a file in the FilePreviewDrawer (slide-in drawer)
+ *
+ * This opens a quick preview/edit drawer without navigating away from the current page.
+ * Useful for viewing files from signal cards, task details, etc.
+ *
+ * @param filePath - File path relative to project root
+ * @param projectName - Project name (e.g., 'jat', 'chimaro')
+ * @param lineNumber - Optional line number to scroll to
+ *
+ * @example
+ * ```typescript
+ * openInFilePreviewDrawer('src/lib/auth.ts', 'jat');
+ * // Opens drawer with auth.ts content
+ *
+ * openInFilePreviewDrawer('src/lib/auth.ts', 'jat', 42);
+ * // Opens drawer with auth.ts, scrolled to line 42
+ * ```
+ */
+export function openInFilePreviewDrawer(
+	filePath: string,
+	projectName: string,
+	lineNumber?: number
+): void {
+	// Import dynamically to avoid circular dependencies
+	import('$lib/stores/drawerStore').then(({ openFilePreviewDrawer }) => {
+		openFilePreviewDrawer(filePath, projectName, lineNumber);
+	});
+}

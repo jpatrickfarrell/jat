@@ -80,6 +80,44 @@
 	// Animation state for visibility toggles
 	let animatingVisibility = $state<string | null>(null);
 
+	// Column sorting state
+	type SortColumn = 'name' | 'port' | 'status' | 'activity' | 'tasks' | 'agents';
+	const SORT_STORAGE_KEY = 'projects-table-sort';
+	let sortColumn = $state<SortColumn>('activity');
+	let sortDir = $state<'asc' | 'desc'>('asc');
+
+	// Load sort preference from localStorage
+	$effect(() => {
+		if (browser) {
+			const saved = localStorage.getItem(SORT_STORAGE_KEY);
+			if (saved) {
+				try {
+					const parsed = JSON.parse(saved);
+					if (parsed.column && parsed.dir) {
+						sortColumn = parsed.column;
+						sortDir = parsed.dir;
+					}
+				} catch { /* ignore */ }
+			}
+		}
+	});
+
+	// Handle column header click
+	function handleColumnSort(column: SortColumn) {
+		if (sortColumn === column) {
+			// Toggle direction
+			sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+		} else {
+			// New column - set default direction
+			sortColumn = column;
+			sortDir = column === 'name' ? 'asc' : 'desc'; // Name ascending, others descending
+		}
+		// Persist to localStorage
+		if (browser) {
+			localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ column: sortColumn, dir: sortDir }));
+		}
+	}
+
 	// Load saved split from localStorage
 	$effect(() => {
 		if (browser) {
@@ -716,10 +754,10 @@
 		};
 	}
 
-	// Sort projects: visible first, then by activity (running servers first, then recent)
+	// Sort projects by user-selected column
 	const sortedProjects = $derived(() => {
 		const getActivityScore = (project: Project): number => {
-			// Running servers first within their visibility group
+			// Running servers first
 			if (project.status === 'running') return -1;
 
 			const activity = project.lastActivity;
@@ -730,11 +768,47 @@
 			const unitWeight: Record<string, number> = { 'm': 1, 'h': 60, 'd': 1440 };
 			return (unitWeight[unit] || 9999) * (isNaN(num) ? 999 : num);
 		};
+
+		const getTaskCount = (project: Project): number => {
+			return project.tasks?.open ?? 0;
+		};
+
+		const getAgentCount = (project: Project): number => {
+			return project.agents?.active ?? project.agents?.total ?? 0;
+		};
+
 		return [...projects].sort((a, b) => {
 			// First: visible projects before hidden
 			if (a.hidden !== b.hidden) return a.hidden ? 1 : -1;
-			// Then: sort by activity within each group
-			return getActivityScore(a) - getActivityScore(b);
+
+			// Then: sort by selected column
+			let cmp = 0;
+			switch (sortColumn) {
+				case 'name':
+					cmp = a.name.localeCompare(b.name);
+					break;
+				case 'port':
+					cmp = (a.port ?? 999999) - (b.port ?? 999999);
+					break;
+				case 'status':
+					// Running first, then stopped
+					const statusOrder = { 'running': 0, 'stopped': 1 };
+					const aStatus = (a.status as keyof typeof statusOrder) ?? 'stopped';
+					const bStatus = (b.status as keyof typeof statusOrder) ?? 'stopped';
+					cmp = (statusOrder[aStatus] ?? 2) - (statusOrder[bStatus] ?? 2);
+					break;
+				case 'activity':
+					cmp = getActivityScore(a) - getActivityScore(b);
+					break;
+				case 'tasks':
+					cmp = getTaskCount(b) - getTaskCount(a); // Higher first
+					break;
+				case 'agents':
+					cmp = getAgentCount(b) - getAgentCount(a); // Higher first
+					break;
+			}
+
+			return sortDir === 'desc' ? -cmp : cmp;
 		});
 	});
 

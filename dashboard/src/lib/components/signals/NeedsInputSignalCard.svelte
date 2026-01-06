@@ -11,7 +11,7 @@
 	 */
 
 	import type { NeedsInputSignal, QuestionOption } from '$lib/types/richSignals';
-	import { openInFilesPage } from '$lib/utils/fileLinks';
+	import { openInFilePreviewDrawer } from '$lib/utils/fileLinks';
 
 	interface Props {
 		/** The rich needs_input signal data */
@@ -78,19 +78,19 @@
 		}
 	}
 
-	// Handle file click - opens in JAT /files page by default
+	// Handle file click - opens in FilePreviewDrawer by default
 	function handleFileClick(filePath: string) {
 		if (onFileClick) {
 			onFileClick(filePath);
 		} else {
-			// Default: open in JAT /files page
-			openInFilesPage(filePath, projectName);
+			// Default: open in FilePreviewDrawer
+			openInFilePreviewDrawer(filePath, projectName);
 		}
 	}
 
 	// Get tooltip for file link
 	function getFileTooltip(filePath: string): string {
-		return `Open ${filePath} in /files`;
+		return `Preview ${filePath.split('/').pop()}`;
 	}
 
 	// Get question type badge info - using DaisyUI semantic color classes

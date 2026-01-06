@@ -432,11 +432,7 @@
 										</div>
 										<div class="flex items-center gap-1.5 text-xs text-base-content/50 font-mono">
 											<span class="text-warning/80 max-w-[180px] truncate" title={rule.patterns[0]?.pattern}>
-												{rule.patterns[0]?.mode === 'regex' ? '/' : '"'}
-												{rule.patterns[0]?.pattern.length > 25
-													? rule.patterns[0]?.pattern.slice(0, 25) + '...'
-													: rule.patterns[0]?.pattern}
-												{rule.patterns[0]?.mode === 'regex' ? '/' : '"'}
+												{rule.patterns[0]?.mode === 'regex' ? '/' : '"'}{rule.patterns[0]?.pattern}{rule.patterns[0]?.mode === 'regex' ? '/' : '"'}
 											</span>
 											<span class="text-base-content/30">→</span>
 											<span class="text-info/80">

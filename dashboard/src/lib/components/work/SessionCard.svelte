@@ -4281,7 +4281,7 @@
 				: isJumpHighlighted
 					? 'box-shadow: 0 0 20px oklch(0.60 0.15 220 / 0.6);'
 					: ''}
-			scroll-margin-top: 3.5rem;
+			scroll-margin-top: 6rem;
 		"
 		data-agent-name={agentName}
 	>
@@ -4560,7 +4560,7 @@
 				: 'inset 0 1px 0 oklch(1 0 0 / 0.05), 0 2px 8px oklch(0 0 0 / 0.1)'};
 			width: {effectiveWidth ?? DEFAULT_CARD_WIDTH}px;
 			flex-shrink: 0;
-			scroll-margin-top: 3.5rem;
+			scroll-margin-top: 6rem;
 		"
 		data-agent-name={agentName}
 		in:fly={{ x: 50, duration: 300, delay: 50 }}

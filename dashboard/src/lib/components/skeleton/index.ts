@@ -28,3 +28,4 @@ export { default as TriageSkeleton } from './TriageSkeleton.svelte';
 export { default as TaskDetailSkeleton } from './TaskDetailSkeleton.svelte';
 export { default as HistorySkeleton } from './HistorySkeleton.svelte';
 export { default as FilesSkeleton } from './FilesSkeleton.svelte';
+export { default as ProjectsSkeleton } from './ProjectsSkeleton.svelte';

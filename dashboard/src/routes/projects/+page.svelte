@@ -9,6 +9,7 @@
 	import { onMount } from 'svelte';
 	import { fade, slide } from 'svelte/transition';
 	import CreateProjectDrawer from '$lib/components/CreateProjectDrawer.svelte';
+	import { ProjectsSkeleton } from '$lib/components/skeleton';
 
 	// Types
 	interface Project {
@@ -228,9 +229,7 @@
 	<!-- Content -->
 	<div class="flex-1 p-6">
 		{#if loading}
-			<div class="flex items-center justify-center py-12">
-				<span class="loading loading-spinner loading-lg"></span>
-			</div>
+			<ProjectsSkeleton cards={4} />
 		{:else if error}
 			<div class="alert alert-error">
 				<span>{error}</span>

@@ -40,9 +40,13 @@
 	<div class="files-body-skeleton">
 		<!-- Left panel: File tree skeleton -->
 		<div class="file-tree-skeleton">
-			<!-- Panel header -->
+			<!-- Panel header - matches compact project selector -->
 			<div class="panel-header-skeleton">
-				<div class="skeleton h-4 w-16 rounded" style="background: oklch(0.25 0.02 250);"></div>
+				<div class="flex items-center gap-2 w-full px-1">
+					<div class="skeleton h-2 w-2 rounded-full" style="background: oklch(0.30 0.02 250);"></div>
+					<div class="skeleton h-4 flex-1 rounded" style="background: oklch(0.22 0.02 250);"></div>
+					<div class="skeleton h-3 w-3 rounded" style="background: oklch(0.20 0.02 250);"></div>
+				</div>
 			</div>
 
 			<!-- Tree items -->
@@ -152,7 +156,7 @@
 	.panel-header-skeleton {
 		display: flex;
 		align-items: center;
-		padding: 0.5rem 0.75rem;
+		padding: 0.375rem 0.5rem;  /* Match .project-header */
 		background: oklch(0.17 0.01 250);
 		border-bottom: 1px solid oklch(0.22 0.02 250);
 	}

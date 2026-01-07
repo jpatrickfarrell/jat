@@ -15,7 +15,7 @@
 	const chaosCards = [
 		{
 			title: 'Multi-Agent Swarm',
-			desc: 'Run 10+ Claude agents simultaneously.',
+			desc: 'Run 10+ Coding agents simultaneously (Claude/OpenCode/Codex).',
 			icon: 'swarm',
 			color: 'from-violet-500 to-purple-600',
 			initialX: -400,

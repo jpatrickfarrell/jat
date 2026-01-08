@@ -59,8 +59,8 @@
 			initialRotate: -35
 		},
 		{
-			title: 'Git-Backed Tasks',
-			desc: 'Tasks stored in JSONL, committed to your repo.',
+			title: 'Full Git Integration',
+			desc: 'Stage, commit, push, pull & more to your repo.',
 			icon: 'git',
 			color: 'from-gray-500 to-gray-600',
 			initialX: 400,

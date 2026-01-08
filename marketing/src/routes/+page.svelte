@@ -4,6 +4,7 @@
 	import V11FeatureCard from '$lib/components/V11FeatureCard.svelte';
 	import V14GravityWell from '$lib/components/V14GravityWell.svelte';
 	import AgenticPanhandle from '$lib/components/AgenticPanhandle.svelte';
+	import AgenticPanhandleMobile from '$lib/components/AgenticPanhandleV2.svelte';
 	import { countUp, scrollReveal, staggerChildren } from '$lib/utils/scrollObserver';
 	import { onMount } from 'svelte';
 
@@ -832,13 +833,24 @@ Next ready tasks:
 			</p>
 		</div>
 
-		<AgenticPanhandle
-			showControls={false}
-			showCenterContent={true}
-			stepDuration={5000}
-			autoPlay={true}
-			waitForScroll={true}
-		/>
+		<!-- Desktop flywheel -->
+		<div class="hidden lg:block">
+			<AgenticPanhandle
+				showControls={false}
+				showCenterContent={true}
+				stepDuration={5000}
+				autoPlay={true}
+				waitForScroll={true}
+			/>
+		</div>
+
+		<!-- Mobile flywheel -->
+		<div class="lg:hidden">
+			<AgenticPanhandleMobile
+				stepDuration={5000}
+				autoPlay={true}
+			/>
+		</div>
 
 		<!-- Tabbed workflow details -->
 		<div class="max-w-5xl mx-auto mt-16" use:scrollReveal={{ delay: 200 }}>

@@ -38,7 +38,11 @@ export interface FlywheelStageTokens {
   };
 
   // Tailwind gradient classes (for quick styling)
+  // NOTE: These only work in static contexts - use cssGradient for dynamic interpolation
   bgGradient: string;
+
+  // CSS gradient value (for inline styles - works with dynamic interpolation)
+  cssGradient: string;
 
   // Icon
   icon: string;           // Emoji or identifier
@@ -60,6 +64,7 @@ export const FLYWHEEL_STAGES: FlywheelStageTokens[] = [
       text: 'oklch(0.95 0.02 220)',
     },
     bgGradient: 'from-sky-500 to-cyan-500',
+    cssGradient: 'linear-gradient(to right, #0ea5e9, #06b6d4)',
     icon: '💭',
     iconType: 'emoji',
   },
@@ -77,6 +82,7 @@ export const FLYWHEEL_STAGES: FlywheelStageTokens[] = [
       text: 'oklch(0.95 0.02 195)',
     },
     bgGradient: 'from-cyan-500 to-teal-500',
+    cssGradient: 'linear-gradient(to right, #06b6d4, #14b8a6)',
     icon: '🌳',
     iconType: 'emoji',
   },
@@ -94,6 +100,7 @@ export const FLYWHEEL_STAGES: FlywheelStageTokens[] = [
       text: 'oklch(0.95 0.02 175)',
     },
     bgGradient: 'from-teal-500 to-emerald-500',
+    cssGradient: 'linear-gradient(to right, #14b8a6, #10b981)',
     icon: '🤖',
     iconType: 'emoji',
   },
@@ -111,6 +118,7 @@ export const FLYWHEEL_STAGES: FlywheelStageTokens[] = [
       text: 'oklch(0.95 0.02 145)',
     },
     bgGradient: 'from-emerald-500 to-green-500',
+    cssGradient: 'linear-gradient(to right, #10b981, #22c55e)',
     icon: '⚡',
     iconType: 'emoji',
   },
@@ -128,6 +136,7 @@ export const FLYWHEEL_STAGES: FlywheelStageTokens[] = [
       text: 'oklch(0.95 0.02 130)',
     },
     bgGradient: 'from-green-500 to-lime-500',
+    cssGradient: 'linear-gradient(to right, #22c55e, #84cc16)',
     icon: '❓',
     iconType: 'emoji',
   },
@@ -145,6 +154,7 @@ export const FLYWHEEL_STAGES: FlywheelStageTokens[] = [
       text: 'oklch(0.20 0.02 100)',         // Dark text on light bg
     },
     bgGradient: 'from-lime-500 to-yellow-500',
+    cssGradient: 'linear-gradient(to right, #84cc16, #eab308)',
     icon: '📝',
     iconType: 'emoji',
   },
@@ -162,6 +172,7 @@ export const FLYWHEEL_STAGES: FlywheelStageTokens[] = [
       text: 'oklch(0.95 0.02 145)',
     },
     bgGradient: 'from-green-500 to-emerald-500',
+    cssGradient: 'linear-gradient(to right, #22c55e, #10b981)',
     icon: '✅',
     iconType: 'emoji',
   },
@@ -179,6 +190,7 @@ export const FLYWHEEL_STAGES: FlywheelStageTokens[] = [
       text: 'oklch(0.95 0.02 55)',
     },
     bgGradient: 'from-amber-500 to-orange-500',
+    cssGradient: 'linear-gradient(to right, #f59e0b, #f97316)',
     icon: '🚀',
     iconType: 'emoji',
   },
@@ -196,6 +208,7 @@ export const FLYWHEEL_STAGES: FlywheelStageTokens[] = [
       text: 'oklch(0.95 0.02 350)',
     },
     bgGradient: 'from-orange-500 to-pink-500',
+    cssGradient: 'linear-gradient(to right, #f97316, #ec4899)',
     icon: '✨',
     iconType: 'emoji',
   },

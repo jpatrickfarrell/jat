@@ -3,6 +3,7 @@
 	import Nav from '$lib/components/Nav.svelte';
 	import V11FeatureCard from '$lib/components/V11FeatureCard.svelte';
 	import V14GravityWell from '$lib/components/V14GravityWell.svelte';
+	import AgenticPanhandle from '$lib/components/AgenticPanhandle.svelte';
 	import { countUp, scrollReveal, staggerChildren } from '$lib/utils/scrollObserver';
 	import { onMount } from 'svelte';
 
@@ -10,13 +11,14 @@
 	let scannerCanvasEl: HTMLCanvasElement;
 	let cardLineEl: HTMLDivElement;
 	let chaosSection: HTMLElement;
-	let chaosProgress = $state(0); // 0 to 1 based on scroll
+	let chaosProgress = $state(0);
 
-	// Get JAT primary color for canvas - we'll use a teal/cyan color
-	const PRIMARY_COLOR = { r: 56, g: 189, b: 248 }; // sky-400 equivalent
+	// Active tab for workflow details
+	let activeWorkflowTab = $state(0);
+
+	const PRIMARY_COLOR = { r: 56, g: 189, b: 248 };
 	const PRIMARY_RGB = `${PRIMARY_COLOR.r}, ${PRIMARY_COLOR.g}, ${PRIMARY_COLOR.b}`;
 
-	// "Everything in One Place" chaos cards
 	const chaosCards = [
 		{
 			title: 'Multi-Agent Swarm',
@@ -74,7 +76,6 @@
 		}
 	];
 
-	// Cards for scanner with unique code per card
 	const cards = [
 		{
 			title: 'Tasks Dashboard',
@@ -159,7 +160,6 @@ Created: jat-3nf8p
 		},
 	];
 
-	// Feature sections data (for V11FeatureCard)
 	const featureSections = [
 		{
 			category: 'Project Management',
@@ -191,28 +191,15 @@ Created: jat-3nf8p
 		}
 	];
 
-	// Workflow steps
-	const workflowSteps = [
+	// Detailed workflow steps
+	const workflowTabs = [
 		{
-			step: '01',
-			label: 'Input',
-			badge: 'PRD Ready',
-			title: 'Define the Work',
-			desc: 'Start with a PRD, feature spec, or even a rough idea. Describe what you want to build in plain language.',
-			code: `## User Authentication Feature
-
-Users should be able to:
-- Sign up with email/password
-- Login with Google OAuth
-- Reset forgotten passwords
-- See their profile page`
-		},
-		{
-			step: '02',
-			label: 'Structure',
-			badge: '5 Tasks',
-			title: 'Generate Task Tree',
-			desc: 'Run /jat:bead to convert your spec into a structured epic with tasks, priorities, and dependencies.',
+			id: 'define',
+			label: 'Define',
+			icon: '📝',
+			title: 'PRD → Task Tree',
+			benefit: 'Turn ideas into actionable work in seconds',
+			description: 'Paste a product spec and let AI generate a structured task tree with priorities, dependencies, and assignments.',
 			code: `/jat:bead
 
 Creating epic: "User Authentication"
@@ -227,11 +214,12 @@ Creating epic: "User Authentication"
 5 tasks created with dependencies`
 		},
 		{
-			step: '03',
-			label: 'Scale',
-			badge: '4 Agents',
-			title: 'Launch the Swarm',
-			desc: 'Spawn multiple agents across your projects. They pick ready tasks and start automatically.',
+			id: 'launch',
+			label: 'Launch',
+			icon: '🚀',
+			title: 'Spawn the Swarm',
+			benefit: '40 agents working while you sleep',
+			description: 'One command launches multiple agents across all your projects. They auto-pick ready tasks and start immediately.',
 			code: `jat myproject 4 --auto
 
 Spawning 4 agents...
@@ -243,11 +231,12 @@ Spawning 4 agents...
 4 agents working across 3 projects`
 		},
 		{
-			step: '04',
-			label: 'Control',
-			badge: 'You Decide',
-			title: 'Supervise from One Place',
-			desc: 'All projects, all agents, one dashboard. Answer questions with a click. Watch progress in real-time.',
+			id: 'supervise',
+			label: 'Supervise',
+			icon: '👁️',
+			title: 'Async Oversight',
+			benefit: 'Stay in control without constant attention',
+			description: 'Questions surface to the dashboard. Answer with a click. Agents wait patiently and continue autonomously.',
 			code: `[Dashboard: 4 agents active]
 
 BluePeak asks:
@@ -260,12 +249,15 @@ RedMarsh: Running tests...
 FairCove: Task complete ✓`
 		},
 		{
-			step: '05',
+			id: 'ship',
 			label: 'Ship',
-			badge: 'Done',
-			title: 'Ship Structured Work',
-			desc: 'Tasks complete, commits land, epics close. Full audit trail. Ready for the next batch.',
-			code: `Epic "User Authentication" complete!
+			icon: '✅',
+			title: 'Verified Completion',
+			benefit: 'Work is done right, not just done',
+			description: 'Structured completion verifies tests pass, commits land, and documentation is updated. Then suggests what\'s next.',
+			code: `/jat:complete
+
+Epic "User Authentication" complete!
 
 Tasks:     5/5 ✓
 Commits:   12
@@ -274,12 +266,12 @@ Tests:     All passing
 
 Next ready tasks:
   → jat-b1: Dashboard analytics
-  → jat-b2: Email notifications`
+  → jat-b2: Email notifications
+  → jat-b3: Payment integration`
 		}
 	];
 
 	onMount(() => {
-		// === HERO: Particle field with connections ===
 		if (heroCanvasEl) {
 			const ctx = heroCanvasEl.getContext('2d');
 			if (ctx) {
@@ -362,7 +354,6 @@ Next ready tasks:
 			}
 		}
 
-		// === SCANNER EFFECT ===
 		let position = window.innerWidth;
 
 		function animateCards() {
@@ -389,42 +380,32 @@ Next ready tasks:
 				const cardRight = rect.right;
 				const cardWidth = rect.width;
 
-				const codeCard = wrapper.querySelector('.card-front') as HTMLElement; // Terminal/code
-				const uiCard = wrapper.querySelector('.card-back') as HTMLElement; // Beautiful UI
+				const codeCard = wrapper.querySelector('.card-front') as HTMLElement;
+				const uiCard = wrapper.querySelector('.card-back') as HTMLElement;
 
 				if (!codeCard || !uiCard) return;
 
-				// Reversed: code shows before scanner, UI reveals after
 				if (cardLeft < scannerRight && cardRight > scannerLeft) {
-					// Card is passing through scanner
-					const intersectLeft = Math.max(scannerLeft - cardLeft, 0);
 					const intersectRight = Math.min(scannerRight - cardLeft, cardWidth);
-					// Code gets clipped from left as it passes through
 					codeCard.style.clipPath = `inset(0 0 0 ${(intersectRight / cardWidth) * 100}%)`;
-					// UI reveals from left
 					uiCard.style.clipPath = `inset(0 ${100 - (intersectRight / cardWidth) * 100}% 0 0)`;
 				} else if (cardRight < scannerLeft) {
-					// Card has passed through scanner - show UI
 					codeCard.style.clipPath = 'inset(0 0 0 100%)';
 					uiCard.style.clipPath = 'inset(0 0 0 0)';
 				} else {
-					// Card hasn't reached scanner yet - show code
 					codeCard.style.clipPath = 'inset(0 0 0 0)';
 					uiCard.style.clipPath = 'inset(0 100% 0 0)';
 				}
 			});
 		}
 
-		// Delay animation start to ensure cardLineEl is bound
 		setTimeout(() => {
 			if (cardLineEl) {
-				// Reset position to start cards from left edge
 				position = -300;
 				animateCards();
 			}
 		}, 100);
 
-		// Scanner particles
 		if (scannerCanvasEl) {
 			const ctx = scannerCanvasEl.getContext('2d');
 			if (ctx) {
@@ -445,12 +426,11 @@ Next ready tasks:
 					ctx.fillStyle = gradient;
 					ctx.fillRect(w/2 - 15, 0, 30, h);
 
-					// Particles drift LEFT (same direction as card flow: chaos→clarity)
 					if (Math.random() < 0.4) {
 						particles.push({
 							x: w/2 + (Math.random() - 0.5) * 4,
 							y: Math.random() * h,
-							vx: -(Math.random() * 0.8 + 0.3), // Negative = drift left
+							vx: -(Math.random() * 0.8 + 0.3),
 							life: 1
 						});
 					}
@@ -460,7 +440,7 @@ Next ready tasks:
 						p.x += p.vx;
 						p.life -= 0.015;
 
-						if (p.life <= 0 || p.x < 0) { // Check left boundary now
+						if (p.life <= 0 || p.x < 0) {
 							particles.splice(i, 1);
 							continue;
 						}
@@ -478,17 +458,14 @@ Next ready tasks:
 			}
 		}
 
-		// === CHAOS CARDS SCROLL-INDEXED ANIMATION ===
 		function updateChaosProgress() {
 			if (!chaosSection) return;
 
 			const rect = chaosSection.getBoundingClientRect();
 			const windowHeight = window.innerHeight;
 
-			// Start animation when section enters viewport from bottom
-			// Complete when section is centered in viewport
-			const startPoint = windowHeight; // Section top enters bottom of viewport
-			const endPoint = windowHeight * 0.36; // Section top is 36% from top of viewport (20% slower)
+			const startPoint = windowHeight;
+			const endPoint = windowHeight * 0.36;
 
 			if (rect.top >= startPoint) {
 				chaosProgress = 0;
@@ -500,7 +477,7 @@ Next ready tasks:
 		}
 
 		window.addEventListener('scroll', updateChaosProgress, { passive: true });
-		updateChaosProgress(); // Initial check
+		updateChaosProgress();
 	});
 </script>
 
@@ -565,7 +542,10 @@ Next ready tasks:
 <!-- SCANNER SECTION -->
 <section id="scanner" class="relative py-24 bg-[var(--bg-base)] overflow-hidden">
 	<div class="text-center mb-12">
-		<h2 class="text-3xl font-bold text-white mb-3">From Chaos to Clarity</h2>
+		<h2 class="text-3xl font-bold mb-3">
+			<span class="text-white">From Chaos to</span>
+			<span class="text-[var(--color-primary)]">Clarity</span>
+		</h2>
 		<p class="text-gray-400">Terminal spam goes in. Beautiful, actionable UI comes out.</p>
 	</div>
 
@@ -576,7 +556,6 @@ Next ready tasks:
 			<div bind:this={cardLineEl} class="flex items-center gap-10" style="will-change: transform;">
 				{#each [...cards, ...cards] as card}
 					<div class="scanner-card-wrapper relative w-[300px] h-[180px] flex-shrink-0">
-						<!-- Code/Terminal side (shows BEFORE scanner) -->
 						<div class="card-front absolute inset-0 rounded-xl bg-gray-900 border border-gray-700 p-4 overflow-hidden">
 							<div class="flex items-center gap-2 mb-2 pb-2 border-b border-gray-700">
 								<div class="w-2 h-2 rounded-full bg-red-500/60"></div>
@@ -586,7 +565,6 @@ Next ready tasks:
 							</div>
 							<pre class="text-[var(--color-success)]/70 text-[9px] leading-tight font-mono overflow-hidden">{card.code}</pre>
 						</div>
-						<!-- Beautiful UI side (reveals AFTER scanner) -->
 						<div class="card-back absolute inset-0 rounded-xl bg-gradient-to-br {card.color} p-5 shadow-xl">
 							<div class="text-xs font-mono text-white/60 mb-1">JAT</div>
 							<div class="text-lg font-bold text-white">{card.title}</div>
@@ -613,20 +591,21 @@ Next ready tasks:
 
 <!-- EVERYTHING IN ONE PLACE - Chaos to Order -->
 <section bind:this={chaosSection} class="relative py-32 bg-gradient-to-b from-[var(--bg-base)] via-gray-900 to-[var(--bg-base)] overflow-hidden">
-	<!-- Gravity well background - particles pulled to center -->
 	<div class="absolute inset-0 opacity-40">
 		<V14GravityWell particleCount={80} pullStrength={0.015} />
 	</div>
 	<div class="relative z-10 max-w-6xl mx-auto px-6">
 		<div class="text-center mb-20">
-			<h2 class="text-3xl md:text-4xl font-bold text-white mb-4">Everything in One Place</h2>
+			<h2 class="text-3xl md:text-4xl font-bold mb-4">
+				<span class="text-white">Everything in</span>
+				<span class="text-[var(--color-primary)]">One Place</span>
+			</h2>
 			<p class="text-gray-400 text-lg max-w-2xl mx-auto">
 				No more juggling between terminals, browsers, and task boards.
 			</p>
 		</div>
 
 		<div class="relative min-h-[500px]">
-			<!-- Chaos cards grid -->
 			<div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
 				{#each chaosCards as card, i}
 					{@const cardProgress = Math.min(1, Math.max(0, (chaosProgress - i * 0.08) / 0.6))}
@@ -640,11 +619,9 @@ Next ready tasks:
 						class:chaos-complete={chaosProgress >= 1}
 						style="transform: translate({currentX}px, {currentY}px) rotate({currentRotate}deg) scale({currentScale}); opacity: {currentOpacity};"
 					>
-						<!-- Glow effect -->
 						<div class="absolute inset-0 rounded-2xl bg-gradient-to-br {card.color} opacity-0 group-hover:opacity-20 transition-opacity blur-xl"></div>
 
 						<div class="relative z-10">
-							<!-- Icon -->
 							<div class="w-12 h-12 rounded-xl bg-gradient-to-br {card.color} p-0.5 mb-4">
 								<div class="w-full h-full rounded-[10px] bg-gray-900 flex items-center justify-center">
 									{#if card.icon === 'swarm'}
@@ -689,7 +666,6 @@ Next ready tasks:
 							<p class="text-sm text-gray-400">{card.desc}</p>
 						</div>
 
-						<!-- Floating particles when complete -->
 						{#if chaosProgress >= 1}
 							<div class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-gradient-to-r {card.color} animate-ping opacity-75" style="animation-delay: {i * 0.2}s;"></div>
 						{/if}
@@ -697,7 +673,6 @@ Next ready tasks:
 				{/each}
 			</div>
 
-			<!-- "JAT tames the chaos" indicator -->
 			<div
 				class="absolute inset-0 pointer-events-none flex items-center justify-center transition-opacity duration-300"
 				style="opacity: {Math.max(0, 1 - chaosProgress * 3)};"
@@ -713,7 +688,6 @@ Next ready tasks:
 			</div>
 		</div>
 
-		<!-- Tagline after animation -->
 		<div
 			class="text-center mt-12 transition-all duration-500"
 			style="opacity: {Math.max(0, (chaosProgress - 0.7) / 0.3)}; transform: translateY({(1 - Math.min(1, Math.max(0, (chaosProgress - 0.7) / 0.3))) * 20}px);"
@@ -727,11 +701,9 @@ Next ready tasks:
 
 <!-- THE ALIEN TOOL PROBLEM -->
 <section class="py-32 bg-gradient-to-b from-gray-900 via-[#0c0c14] to-[var(--bg-base)] relative overflow-hidden">
-	<!-- Subtle grid background -->
 	<div class="absolute inset-0 opacity-[0.03]" style="background-size: 40px 40px; background-image: linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px);"></div>
 
 	<div class="max-w-5xl mx-auto px-6 relative z-10">
-		<!-- Quote block -->
 		<div class="relative mb-16">
 			<div class="absolute -top-6 -left-4 text-6xl text-[var(--color-primary)]/20 font-serif">"</div>
 			<blockquote class="text-lg md:text-xl text-gray-300 leading-relaxed pl-8 border-l-2 border-[var(--color-primary)]/30">
@@ -748,19 +720,17 @@ Next ready tasks:
 			</cite>
 		</div>
 
-		<!-- The solution -->
 		<div class="text-center mb-12">
-			<h2 class="text-3xl md:text-4xl font-bold text-white mb-4">
-				JAT is the Manual.
+			<h2 class="text-3xl md:text-4xl font-bold mb-4">
+				<span class="text-white">JAT is the</span>
+				<span class="text-[var(--color-primary)]">Manual</span>
 			</h2>
 			<p class="text-gray-400 text-lg max-w-2xl mx-auto">
 				One unified configuration brings all those pieces together — with guardrails that let agents do deep work without doing harm.
 			</p>
 		</div>
 
-		<!-- Config visualization -->
 		<div class="grid md:grid-cols-2 gap-8 items-stretch">
-			<!-- Left: The chaos list -->
 			<div class="p-6 rounded-2xl bg-gray-900/50 border border-gray-800">
 				<h3 class="text-sm font-mono text-red-400/80 mb-4 flex items-center gap-2">
 					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -778,7 +748,6 @@ Next ready tasks:
 				</div>
 			</div>
 
-			<!-- Right: JAT config -->
 			<div class="p-6 rounded-2xl bg-gradient-to-br from-[var(--color-primary)]/10 to-cyan-500/10 border border-[var(--color-primary)]/30">
 				<h3 class="text-sm font-mono text-[var(--color-success)] mb-4 flex items-center gap-2">
 					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -808,7 +777,6 @@ Next ready tasks:
 			</div>
 		</div>
 
-		<!-- Bottom tagline -->
 		<div class="text-center mt-12">
 			<p class="text-gray-500">
 				The alien tool came with no manual. <span class="text-white">So we wrote one.</span>
@@ -817,11 +785,15 @@ Next ready tasks:
 	</div>
 </section>
 
-<!-- FEATURES GRID - Using V11FeatureCard -->
+<!-- FEATURES GRID -->
 <section id="features" class="py-24 bg-gradient-to-b from-[var(--bg-base)] to-gray-900">
 	<div class="max-w-6xl mx-auto px-6">
 		<div class="text-center mb-16" use:scrollReveal>
-			<h2 class="text-3xl md:text-4xl font-bold text-white mb-4">Everything an Agentic IDE Needs</h2>
+			<h2 class="text-3xl md:text-4xl font-bold mb-4">
+				<span class="text-white">Everything an</span>
+				<span class="text-[var(--color-primary)]">Agentic IDE</span>
+				<span class="text-white">Needs</span>
+			</h2>
 			<p class="text-gray-400 text-lg max-w-2xl mx-auto">
 				Built from the ground up for AI-first development at scale.
 			</p>
@@ -842,62 +814,113 @@ Next ready tasks:
 	</div>
 </section>
 
-<!-- WORKFLOW SECTION -->
+<!-- THE AGENTIC FLYWHEEL + TABBED WORKFLOW DETAILS -->
 <section id="workflow" class="py-24 bg-gray-900">
-	<div class="max-w-6xl mx-auto px-6">
-		<div class="text-center mb-16" use:scrollReveal>
-			<h2 class="text-3xl md:text-4xl font-bold text-white mb-4">From Spec to Shipped</h2>
-			<p class="text-gray-400 text-lg max-w-2xl mx-auto">
-				The workflow that makes 40 agents manageable. Structure in, structure out.
+	<div class="max-w-7xl mx-auto px-6">
+		<div class="text-center mb-12" use:scrollReveal>
+			<h2 class="text-3xl md:text-4xl font-bold mb-4">
+				<span class="text-white">Agents That</span>
+				<span class="text-[var(--color-primary)]">Never Stop Shipping</span>
+			</h2>
+			<p class="text-gray-300 text-lg max-w-2xl mx-auto mb-2">
+				Other tools finish one task and wait. JAT keeps going.
+			</p>
+			<p class="text-gray-500 max-w-2xl mx-auto">
+				20 agents working in parallel — completed work suggests new work — you supervise, they ship
 			</p>
 		</div>
 
-		<div class="space-y-6" use:staggerChildren={{ stagger: 100 }}>
-			{#each workflowSteps as step, i}
-				<div class="group relative flex flex-col md:flex-row gap-6 p-6 rounded-2xl bg-gray-800/50 border border-gray-700 hover:border-[var(--color-primary)]/50 transition-all workflow-step">
-					<!-- Step indicator -->
-					<div class="shrink-0 flex items-start gap-4">
-						<div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-secondary)] flex items-center justify-center group-hover:shadow-lg group-hover:shadow-[var(--color-primary)]/30 transition-shadow">
-							<span class="text-2xl font-bold text-white">{step.step}</span>
-						</div>
-						<div class="md:hidden">
-							<div class="text-xs text-gray-500 uppercase tracking-wider">{step.label}</div>
-							<div class="inline-block px-2 py-0.5 rounded bg-[var(--color-primary)]/20 text-[var(--color-primary)] text-xs font-medium mt-1">{step.badge}</div>
-						</div>
-					</div>
+		<AgenticPanhandle
+			showControls={false}
+			showCenterContent={true}
+			stepDuration={5000}
+			autoPlay={true}
+			waitForScroll={true}
+		/>
 
-					<!-- Content -->
-					<div class="flex-1 min-w-0">
-						<div class="hidden md:flex items-center gap-3 mb-2">
-							<div class="text-xs text-gray-500 uppercase tracking-wider">{step.label}</div>
-							<div class="inline-block px-2 py-0.5 rounded bg-[var(--color-primary)]/20 text-[var(--color-primary)] text-xs font-medium">{step.badge}</div>
-						</div>
-						<h3 class="text-xl font-bold text-white mb-2">{step.title}</h3>
-						<p class="text-gray-400 mb-4">{step.desc}</p>
+		<!-- Tabbed workflow details -->
+		<div class="max-w-5xl mx-auto mt-16" use:scrollReveal={{ delay: 200 }}>
+			<div class="text-center mb-6">
+				<p class="text-sm font-mono text-gray-500">EXPLORE EACH PHASE</p>
+			</div>
 
-						<!-- Code block -->
-						<div class="rounded-lg bg-gray-900 border border-gray-700 overflow-hidden">
+			<!-- Tab buttons -->
+			<div class="flex justify-center mb-6">
+				<div class="inline-flex rounded-xl bg-gray-800/50 border border-gray-700 p-1">
+					{#each workflowTabs as tab, i}
+						<button
+							onclick={() => activeWorkflowTab = i}
+							class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
+								{activeWorkflowTab === i
+									? 'bg-[var(--color-primary)] text-white shadow-lg shadow-[var(--color-primary)]/25'
+									: 'text-gray-400 hover:text-white hover:bg-gray-700/50'}"
+						>
+							<span>{tab.icon}</span>
+							<span class="hidden sm:inline">{tab.label}</span>
+						</button>
+					{/each}
+				</div>
+			</div>
+
+			<!-- Tab content -->
+			{#each workflowTabs as tab, i}
+				{#if activeWorkflowTab === i}
+					<div class="grid md:grid-cols-2 gap-6 items-start tab-content">
+						<!-- Left: Description -->
+						<div class="p-6 rounded-2xl bg-gray-800/50 border border-gray-700">
+							<div class="flex items-center gap-3 mb-4">
+								<div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-secondary)] flex items-center justify-center text-2xl">
+									{tab.icon}
+								</div>
+								<div>
+									<h3 class="text-xl font-bold text-white">{tab.title}</h3>
+									<p class="text-[var(--color-primary)] text-sm">{tab.benefit}</p>
+								</div>
+							</div>
+							<p class="text-gray-400 leading-relaxed">{tab.description}</p>
+
+							<!-- Progress dots -->
+							<div class="flex items-center justify-center gap-2 mt-6 pt-4 border-t border-gray-700">
+								{#each workflowTabs as _, j}
+									<button
+										onclick={() => activeWorkflowTab = j}
+										class="w-2 h-2 rounded-full transition-all
+											{j === i ? 'w-6 bg-[var(--color-primary)]' : 'bg-gray-600 hover:bg-gray-500'}"
+									></button>
+								{/each}
+							</div>
+						</div>
+
+						<!-- Right: Code block -->
+						<div class="rounded-2xl bg-gray-900 border border-gray-700 overflow-hidden">
 							<div class="flex items-center gap-2 px-4 py-2 bg-gray-800 border-b border-gray-700">
 								<div class="w-3 h-3 rounded-full bg-red-500/50"></div>
 								<div class="w-3 h-3 rounded-full bg-yellow-500/50"></div>
 								<div class="w-3 h-3 rounded-full bg-green-500/50"></div>
 								<span class="ml-2 text-xs text-gray-500 font-mono">jat</span>
 							</div>
-							<pre class="p-4 text-sm text-gray-300 font-mono overflow-x-auto"><code>{step.code}</code></pre>
+							<pre class="p-4 text-sm text-gray-300 font-mono overflow-x-auto leading-relaxed"><code>{tab.code}</code></pre>
 						</div>
 					</div>
-
-					<!-- Connector line -->
-					{#if i < workflowSteps.length - 1}
-						<div class="hidden md:block absolute left-[2.5rem] top-[5.5rem] w-0.5 h-[calc(100%-1rem)] bg-gradient-to-b from-[var(--color-primary)]/50 to-transparent"></div>
-					{/if}
-				</div>
+				{/if}
 			{/each}
-		</div>
 
-		<p class="text-center text-gray-400 mt-12 text-lg" use:scrollReveal>
-			This is how you go from "I have an idea" to "It's in production" - with 40 agents helping along the way.
-		</p>
+			<!-- Loop indicator -->
+			<div class="flex items-center justify-center mt-8 gap-3">
+				<div class="h-px flex-1 max-w-[100px] bg-gradient-to-r from-transparent to-[var(--color-primary)]/30"></div>
+				<div class="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/30">
+					<svg class="w-4 h-4 text-[var(--color-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+					</svg>
+					<span class="text-sm text-[var(--color-primary)]">Then repeat</span>
+				</div>
+				<div class="h-px flex-1 max-w-[100px] bg-gradient-to-l from-transparent to-[var(--color-primary)]/30"></div>
+			</div>
+
+			<p class="text-center text-gray-500 mt-6">
+				This is the flywheel. Define → Launch → Supervise → Ship → <span class="text-white">Repeat forever.</span>
+			</p>
+		</div>
 	</div>
 </section>
 
@@ -905,12 +928,14 @@ Next ready tasks:
 <section id="demo" class="py-24 bg-[var(--bg-base)]">
 	<div class="max-w-4xl mx-auto px-6">
 		<div class="text-center mb-12" use:scrollReveal>
-			<h2 class="text-3xl font-bold text-white mb-4">See It in Action</h2>
+			<h2 class="text-3xl font-bold mb-4">
+				<span class="text-white">See It</span>
+				<span class="text-[var(--color-primary)]">in Action</span>
+			</h2>
 			<p class="text-gray-400">Watch a real development session with multiple agents working in parallel.</p>
 		</div>
 
 		<div class="relative rounded-2xl overflow-hidden bg-gray-900 border border-gray-700 video-container" use:scrollReveal={{ delay: 100 }}>
-			<!-- Video placeholder -->
 			<div class="aspect-video bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
 				<div class="text-center">
 					<div class="w-20 h-20 rounded-full bg-[var(--color-primary)]/20 border border-[var(--color-primary)]/50 flex items-center justify-center mx-auto mb-4 cursor-pointer hover:bg-[var(--color-primary)]/30 hover:scale-105 transition-all">
@@ -923,7 +948,6 @@ Next ready tasks:
 				</div>
 			</div>
 
-			<!-- Stats bar -->
 			<div class="flex items-center justify-center gap-8 py-4 bg-gray-800/50 border-t border-gray-700">
 				<div class="text-center">
 					<div class="text-lg font-bold text-white">2:47</div>
@@ -951,12 +975,10 @@ Next ready tasks:
 		transition: clip-path 0.03s linear;
 	}
 
-	/* Chaos cards - scroll-indexed animation */
 	.chaos-card {
 		will-change: transform, opacity;
 	}
 
-	/* Add hover lift effect when animation complete */
 	.chaos-card.chaos-complete {
 		transition: transform 0.3s ease, border-color 0.3s ease;
 	}
@@ -965,17 +987,6 @@ Next ready tasks:
 		transform: translate(0, -4px) rotate(0deg) scale(1.02) !important;
 	}
 
-	/* Workflow step interactions */
-	.workflow-step {
-		transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
-	}
-
-	.workflow-step:hover {
-		transform: translateX(4px);
-		box-shadow: 0 10px 30px rgba(56, 189, 248, 0.1);
-	}
-
-	/* Video container hover */
 	.video-container {
 		transition: transform 0.3s ease, box-shadow 0.3s ease;
 	}
@@ -984,16 +995,34 @@ Next ready tasks:
 		box-shadow: 0 20px 60px rgba(56, 189, 248, 0.15), 0 0 0 1px rgba(56, 189, 248, 0.2);
 	}
 
-	/* Reduced motion - show cards immediately */
+	/* Tab content animation */
+	.tab-content {
+		animation: fadeIn 0.3s ease;
+	}
+
+	@keyframes fadeIn {
+		from {
+			opacity: 0;
+			transform: translateY(10px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
 	@media (prefers-reduced-motion: reduce) {
 		.chaos-card {
 			transform: none !important;
 			opacity: 1 !important;
 		}
 
-		.workflow-step:hover,
 		.video-container:hover {
 			transform: none;
+		}
+
+		.tab-content {
+			animation: none;
 		}
 	}
 </style>

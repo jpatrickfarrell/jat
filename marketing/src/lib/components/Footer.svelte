@@ -23,7 +23,7 @@
 		{ name: 'Jeff Emanuel', link: 'https://github.com/Dicklesworthstone/mcp_agent_mail', label: 'Agent Mail' },
 		{ name: 'Mario Zechner', link: 'https://mariozechner.at/', label: 'Inspiration' },
 		{ name: 'Andrej Karpathy', link: 'https://karpathy.ai/', label: 'Inspiration' },
-		{ name: 'DHH', link: 'https://dhh.dk/', label: 'Inspiration' },
+		{ name: 'DHH', link: 'https://dhh.dk/', label: 'Omarchy' },
 		{ name: 'Rich Harris', link: 'https://github.com/Rich-Harris', label: 'SvelteKit' },
 		{ name: 'Microsoft', link: 'https://github.com/microsoft/monaco-editor', label: 'Monaco' },
 		{ name: 'Adam Wathan', link: 'https://github.com/adamwathan', label: 'Tailwind' },
@@ -154,8 +154,10 @@
 	<div class="max-w-4xl mx-auto px-6 relative">
 		<!-- CTA Section -->
 		<div class="text-center mb-16">
-			<h2 class="heading-lg text-white mb-4">
-				Ready to scale your AI development?
+			<h2 class="heading-lg mb-4">
+				<span class="text-white">Ready to</span>
+				<span class="text-[var(--color-primary)]">Scale</span>
+				<span class="text-white">Your AI Development?</span>
 			</h2>
 			<p class="text-gray-400 text-lg max-w-xl mx-auto mb-8">
 				One command. All your projects. As many agents as you need.
@@ -211,7 +213,7 @@
 		</div>
 
 		<!-- Credits -->
-		<div class="border-t border-gray-800 pt-12">
+		<div class="border-t border-gray-800 pt-48 mt-72">
 			<div class="text-center mb-20">
 				<p class="text-sm text-gray-500 mb-4">Standing on the shoulders of giants</p>
 				<div
@@ -246,7 +248,7 @@
 			</div>
 
 			<!-- Bottom bar -->
-			<div class="flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-gray-500">
+			<div class="mt-48 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-gray-500">
 				<div class="flex items-center gap-3">
 					<Logo />
 					<span>Jomarchy Agent Tools</span>
@@ -263,7 +265,7 @@
 						Report Issue
 					</a>
 					<span class="text-gray-700">|</span>
-					<span>Built with Claude Code</span>
+					<span>Built with JAT</span>
 				</div>
 			</div>
 		</div>

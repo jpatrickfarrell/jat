@@ -22,6 +22,11 @@ JAT is the complete, self-contained environment for agentic development. Task ma
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Agents](https://img.shields.io/badge/Agents-20+-green)
 ![Tools](https://img.shields.io/badge/Tools-50+-blue)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white)](https://discord.gg/AFJf93p7Bx)
+
+<!-- TODO: Add screenshot -->
+![JAT Dashboard](./assets/dashboard-screenshot.png)
+*The JAT dashboard: agent sessions, task management, and code editor unified*
 
 ---
 
@@ -151,28 +156,32 @@ Beads-powered git-backed issue tracking (on `/work` and `/kanban`):
 
 ---
 
-## The Agentic Workflow
+## The Agentic Flywheel
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                                                              │
-│   1. PLAN WITH AI        Describe your feature, get PRD      │
-│         ↓                 (or bring your own PRD)            │
-│   2. /JAT:BEAD           Convert PRD → structured tasks      │
+│   1. PLAN WITH AI        Describe your feature, get PRD     │
 │         ↓                                                    │
-│   3. EPIC SWARM          Spawn agents on subtasks            │
+│   2. /JAT:BEAD           Convert PRD → structured tasks     │
 │         ↓                                                    │
-│   4. PARALLEL WORK       Watch agents code simultaneously    │
+│   3. EPIC SWARM          Spawn agents on subtasks           │
 │         ↓                                                    │
-│   5. SMART QUESTIONS     "OAuth or JWT?" → click button      │
+│   4. PARALLEL WORK       Watch agents code simultaneously   │
 │         ↓                                                    │
-│   6. REVIEW IN /files    See diffs, check code               │
+│   5. SMART QUESTIONS     "OAuth or JWT?" → click button     │
 │         ↓                                                    │
-│   7. COMMIT & PUSH       Stage, message, push                │
+│   6. REVIEW IN /files    See diffs, check code              │
 │         ↓                                                    │
-│   8. AUTO-PROCEED        Low-priority tasks complete auto    │
+│   7. COMMIT & PUSH       Stage, message, push               │
+│         ↓                                                    │
+│   8. AUTO-PROCEED        Low-priority tasks complete auto   │
+│         ↓                                                    │
+│   9. SUGGESTED TASKS     Agent proposes next work           │
+│         ↓                                                    │
+│        ╰──────────────── Auto-accept → back to 3 ───────────╯
 │                                                              │
-│   Scale to 20+ agents. Ship 10x faster.                      │
+│            ∞  Perpetual motion. Ship continuously.  ∞       │
 │                                                              │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -205,6 +214,25 @@ Beads-powered git-backed issue tracking (on `/work` and `/kanban`):
 | **PRD → Tasks** | `/jat:bead` converts requirements to structured tasks |
 
 Full Monaco editor and git integration included—but the magic is in agent orchestration.
+
+---
+
+## JAT vs Other AI Coding Tools
+
+| Feature | JAT | Cursor | Windsurf | Cline/Aider |
+|---------|-----|--------|----------|-------------|
+| **Multi-agent (20+)** | ✅ | ❌ | ❌ | ❌ |
+| **Visual dashboard** | ✅ | ❌ | ❌ | ❌ |
+| **Task management** | ✅ Built-in | ❌ | ❌ | ❌ |
+| **Epic Swarm (parallel)** | ✅ | ❌ | ❌ | ❌ |
+| **Agent coordination** | ✅ Agent Mail | ❌ | ❌ | ❌ |
+| **Auto-proceed rules** | ✅ | ❌ | ❌ | ❌ |
+| **Code editor** | ✅ Monaco | ✅ VS Code | ✅ VS Code | ❌ |
+| **Git integration** | ✅ | ✅ | ✅ | Partial |
+| **100% local** | ✅ | ❌ Cloud | ❌ Cloud | ✅ |
+| **Open source** | ✅ MIT | ❌ | ❌ | ✅ |
+
+JAT isn't trying to replace your editor—it's the control tower for your agent swarm.
 
 ---
 
@@ -294,6 +322,29 @@ No. JAT runs 100% locally. Code never leaves your machine.
 
 ---
 
+## Community
+
+- **Discord** — [Join the JAT community](https://discord.gg/AFJf93p7Bx) for help, discussion, and sharing what you've built
+- **Issues** — [Report bugs or request features](https://github.com/joewinke/jat/issues)
+- **Discussions** — [GitHub Discussions](https://github.com/joewinke/jat/discussions) for questions and ideas
+
+---
+
+## Contributing
+
+We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+
+**Quick start for contributors:**
+```bash
+git clone https://github.com/joewinke/jat.git ~/code/jat
+cd ~/code/jat/dashboard
+npm install && npm run dev
+```
+
+Open a PR against `master`. All contributions are licensed under MIT.
+
+---
+
 ## Credits
 
 - **[@joewinke](https://github.com/joewinke)** — Creator
@@ -302,9 +353,18 @@ No. JAT runs 100% locally. Code never leaves your machine.
 - **Mario Zechner** — [What if you don't need MCP?](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/)
 - **Andrej Karpathy** - [Some Powerful Alien Tool](https://x.com/karpathy/status/2004607146781278521?s=20)
 - **Tmux** - Terminal Multiplexer by ([Nicholas Marriott](https://github.com/tmux/tmux))
-- **Monaco** — Code editor engine
-- **SvelteKit** — Dashboard framework
-- **simple-git** — Git operations
+- **Monaco** — Code editor engine ([Microsoft](https://github.com/microsoft/monaco-editor))
+- **SvelteKit** — Dashboard framework ([Rich Harris](https://github.com/Rich-Harris))
+- **Tailwind CSS** — Utility-first CSS ([Adam Wathan](https://github.com/adamwathan))
+- **DaisyUI** — Component library ([Pouya Saadeghi](https://github.com/saadeghi))
+- **Git** — Version control ([Linus Torvalds](https://github.com/torvalds))
+- **simple-git** — Node.js Git wrapper ([Steve King](https://github.com/steveukx))
+- **D3.js** — Data visualization ([Mike Bostock](https://github.com/mbostock))
+- **Vite** — Build tool ([Evan You](https://github.com/yyx990803))
+- **SQLite** — Embedded database ([D. Richard Hipp](https://www.sqlite.org/crew.html))
+- **TypeScript** — Type safety ([Anders Hejlsberg](https://github.com/ahejlsberg), Microsoft)
+- **Claude** — Wrote a lot of the code ([Anthropic](https://anthropic.com))
+
 ---
 
 ## License
@@ -313,6 +373,6 @@ MIT
 
 ---
 
-**JAT: Coding at the thought of speed.**
+**JAT: Supervise the swarm. Ship continuously.**
 
-[Install](#quick-start) | [Docs](./QUICKSTART.md) | [Issues](https://github.com/joewinke/jat/issues)
+[Install](#quick-start) | [Docs](./QUICKSTART.md) | [Discord](https://discord.gg/AFJf93p7Bx) | [Issues](https://github.com/joewinke/jat/issues)

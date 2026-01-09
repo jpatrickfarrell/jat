@@ -89,6 +89,7 @@
 	let error = $state<string | null>(null);
 	let commitMessage = $state('');
 	let isCommitting = $state(false);
+	let isGeneratingMessage = $state(false);
 	let isPushing = $state(false);
 	let isPulling = $state(false);
 	let isFetching = $state(false);
@@ -585,6 +586,39 @@
 		}
 	}
 
+	/**
+	 * Generate a commit message using AI
+	 */
+	async function handleGenerateMessage() {
+		if (isGeneratingMessage || stagedCount === 0) return;
+
+		isGeneratingMessage = true;
+		try {
+			const response = await fetch('/api/files/git/generate-commit-message', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ project })
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				throw new Error(data.message || 'Failed to generate commit message');
+			}
+
+			const data = await response.json();
+			if (data.message) {
+				commitMessage = data.message;
+				showToast('Generated commit message');
+			} else {
+				throw new Error('No message generated');
+			}
+		} catch (err) {
+			showToast(err instanceof Error ? err.message : 'Failed to generate message', 'error');
+		} finally {
+			isGeneratingMessage = false;
+		}
+	}
+
 	// Handle branch switch from modal
 	function handleBranchSwitch(newBranch: string) {
 		currentBranch = newBranch;
@@ -781,6 +815,21 @@
 					rows="2"
 				></textarea>
 				<div class="commit-actions">
+					<button
+						class="btn btn-sm btn-ghost generate-btn"
+						onclick={handleGenerateMessage}
+						disabled={stagedCount === 0 || isGeneratingMessage}
+						title={stagedCount === 0 ? 'No staged changes' : 'Generate commit message with AI'}
+					>
+						{#if isGeneratingMessage}
+							<span class="loading loading-spinner loading-xs"></span>
+						{:else}
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83" />
+							</svg>
+						{/if}
+						Generate
+					</button>
 					<button
 						class="btn btn-sm btn-success commit-btn"
 						onclick={handleCommit}
@@ -1462,6 +1511,30 @@
 	.commit-actions {
 		display: flex;
 		justify-content: flex-end;
+		gap: 0.5rem;
+	}
+
+	.generate-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		color: oklch(0.70 0.15 270);
+		border-color: oklch(0.40 0.10 270);
+	}
+
+	.generate-btn:hover:not(:disabled) {
+		background: oklch(0.65 0.15 270 / 0.15);
+		border-color: oklch(0.55 0.15 270);
+		color: oklch(0.80 0.15 270);
+	}
+
+	.generate-btn:disabled {
+		opacity: 0.5;
+	}
+
+	.generate-btn svg {
+		width: 14px;
+		height: 14px;
 	}
 
 	.commit-btn {

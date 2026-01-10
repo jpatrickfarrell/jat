@@ -13,6 +13,7 @@
 
 	import { onMount, tick } from 'svelte';
 	import FileTreeNode from './FileTreeNode.svelte';
+	import type { GitFileStatus } from './types';
 
 	interface DirectoryEntry {
 		name: string;
@@ -20,6 +21,21 @@
 		size: number;
 		modified: string;
 		path: string;
+	}
+
+	/** Git status data from the API */
+	interface GitStatusResponse {
+		ahead: number;
+		behind: number;
+		current: string | null;
+		isClean: boolean;
+		staged: string[];
+		modified: string[];
+		deleted: string[];
+		created: string[];
+		not_added: string[];
+		conflicted: string[];
+		renamed: Array<{ from: string; to: string }>;
 	}
 
 	interface Props {
@@ -92,6 +108,82 @@
 	let filterDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 	let isLoadingRoot = $state(true);
 	let rootError = $state<string | null>(null);
+
+	// Git status state
+	let gitStatusMap = $state<Map<string, GitFileStatus>>(new Map());
+	let gitAhead = $state(0);
+	let gitBehind = $state(0);
+	let gitBranch = $state<string | null>(null);
+	let isGitClean = $state(true);
+
+	/**
+	 * Fetch git status for the project and build a path → status map
+	 */
+	async function fetchGitStatus() {
+		try {
+			const response = await fetch(`/api/files/git/status?project=${encodeURIComponent(project)}`);
+			if (!response.ok) {
+				console.debug('[FileTree] Git status not available:', response.status);
+				return;
+			}
+
+			const data: GitStatusResponse = await response.json();
+
+			// Update git info
+			gitAhead = data.ahead || 0;
+			gitBehind = data.behind || 0;
+			gitBranch = data.current;
+			isGitClean = data.isClean;
+
+			// Build path → status map
+			const newMap = new Map<string, GitFileStatus>();
+
+			// Staged files (highest priority)
+			for (const file of data.staged || []) {
+				newMap.set(file, 'staged');
+			}
+
+			// Modified (unstaged)
+			for (const file of data.modified || []) {
+				if (!newMap.has(file)) {
+					newMap.set(file, 'modified');
+				}
+			}
+
+			// Deleted
+			for (const file of data.deleted || []) {
+				newMap.set(file, 'deleted');
+			}
+
+			// Created (new staged files)
+			for (const file of data.created || []) {
+				if (!newMap.has(file)) {
+					newMap.set(file, 'added');
+				}
+			}
+
+			// Untracked files
+			for (const file of data.not_added || []) {
+				if (!newMap.has(file)) {
+					newMap.set(file, 'untracked');
+				}
+			}
+
+			// Conflicted
+			for (const file of data.conflicted || []) {
+				newMap.set(file, 'conflicted');
+			}
+
+			// Renamed files
+			for (const rename of data.renamed || []) {
+				newMap.set(rename.to, 'renamed');
+			}
+
+			gitStatusMap = newMap;
+		} catch (err) {
+			console.debug('[FileTree] Failed to fetch git status:', err);
+		}
+	}
 
 	// Debounce filter updates for performance
 	$effect(() => {
@@ -665,6 +757,7 @@
 	onMount(() => {
 		if (project) {
 			loadRoot();
+			fetchGitStatus();
 		}
 	});
 
@@ -760,6 +853,35 @@
 				</button>
 			</div>
 		</div>
+
+		<!-- Git Status Bar -->
+		{#if gitBranch || gitAhead > 0 || gitBehind > 0 || gitStatusMap.size > 0}
+			<div class="git-status-bar">
+				{#if gitBranch}
+					<span class="git-branch" title="Current branch">
+						<svg class="branch-icon" viewBox="0 0 16 16" fill="currentColor">
+							<path fill-rule="evenodd" d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V6A2.5 2.5 0 0110 8.5H6a1 1 0 00-1 1v1.128a2.251 2.251 0 11-1.5 0V5.372a2.25 2.25 0 111.5 0v1.836A2.492 2.492 0 016 7h4a1 1 0 001-1v-.628A2.25 2.25 0 019.5 3.25zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5zM3.5 3.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0z" />
+						</svg>
+						{gitBranch}
+					</span>
+				{/if}
+				{#if gitAhead > 0}
+					<span class="git-ahead" title="{gitAhead} commit{gitAhead > 1 ? 's' : ''} to push">
+						↑{gitAhead}
+					</span>
+				{/if}
+				{#if gitBehind > 0}
+					<span class="git-behind" title="{gitBehind} commit{gitBehind > 1 ? 's' : ''} behind">
+						↓{gitBehind}
+					</span>
+				{/if}
+				{#if gitStatusMap.size > 0}
+					<span class="git-changes" title="{gitStatusMap.size} file{gitStatusMap.size > 1 ? 's' : ''} changed">
+						{gitStatusMap.size} changed
+					</span>
+				{/if}
+			</div>
+		{/if}
 	</div>
 
 	<!-- Tree Content -->
@@ -794,6 +916,7 @@
 						{expandedFolders}
 						{loadedFolders}
 						{loadingFolders}
+						{gitStatusMap}
 						depth={0}
 						{onFileSelect}
 						onToggleFolder={handleToggleFolder}

@@ -11,6 +11,7 @@
 	 */
 
 	import { slide } from 'svelte/transition';
+	import { GIT_STATUS_VISUALS, type GitFileStatus } from './types';
 
 	interface DirectoryEntry {
 		name: string;
@@ -27,6 +28,7 @@
 		expandedFolders: Set<string>;
 		loadedFolders: Map<string, DirectoryEntry[]>;
 		loadingFolders: Set<string>;
+		gitStatusMap?: Map<string, GitFileStatus>;
 		depth?: number;
 		onFileSelect: (path: string) => void;
 		onToggleFolder: (path: string) => void;
@@ -47,6 +49,7 @@
 		expandedFolders,
 		loadedFolders,
 		loadingFolders,
+		gitStatusMap = new Map(),
 		depth = 0,
 		onFileSelect,
 		onToggleFolder,
@@ -55,6 +58,10 @@
 		onFolderHover,
 		onFolderHoverEnd
 	}: Props = $props();
+
+	// Get git status for this entry
+	const gitStatus = $derived(gitStatusMap.get(entry.path));
+	const gitVisuals = $derived(gitStatus ? GIT_STATUS_VISUALS[gitStatus] : null);
 
 	// Track how many children to show (for large folders)
 	let visibleChildCount = $state(INITIAL_VISIBLE_LIMIT);
@@ -279,6 +286,17 @@
 		<span class="name" class:highlighted={filterTerm && entry.name.toLowerCase().includes(filterTerm.toLowerCase())}>
 			{entry.name}
 		</span>
+
+		<!-- Git status indicator -->
+		{#if gitVisuals}
+			<span
+				class="git-status-badge"
+				style="color: {gitVisuals.color}; border-color: {gitVisuals.color};"
+				title="{gitVisuals.label}: {entry.name}"
+			>
+				{gitVisuals.letter}
+			</span>
+		{/if}
 	</button>
 
 	<!-- Children (if folder is expanded) -->
@@ -292,6 +310,7 @@
 					{expandedFolders}
 					{loadedFolders}
 					{loadingFolders}
+					{gitStatusMap}
 					depth={depth + 1}
 					{onFileSelect}
 					{onToggleFolder}
@@ -410,6 +429,30 @@
 		border-radius: 2px;
 		padding: 0 2px;
 		margin: 0 -2px;
+	}
+
+	/* Git status badge */
+	.git-status-badge {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.625rem;
+		font-weight: 700;
+		font-family: ui-monospace, 'SF Mono', Menlo, Monaco, 'Cascadia Code', monospace;
+		min-width: 14px;
+		height: 14px;
+		padding: 0 2px;
+		border-radius: 3px;
+		border: 1px solid;
+		background: transparent;
+		margin-left: auto;
+		flex-shrink: 0;
+		opacity: 0.9;
+		transition: opacity 0.1s ease;
+	}
+
+	.node-row:hover .git-status-badge {
+		opacity: 1;
 	}
 
 	.children {

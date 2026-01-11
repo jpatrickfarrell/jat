@@ -22,7 +22,7 @@ import {
 	AGENT_MAIL_URL
 } from '$lib/config/spawnConfig.js';
 import { getJatDefaults } from '$lib/server/projectPaths.js';
-import { CLAUDE_READY_PATTERNS, SHELL_PROMPT_PATTERNS } from '$lib/server/shellPatterns.js';
+import { CLAUDE_READY_PATTERNS, SHELL_PROMPT_PATTERNS, YOLO_WARNING_PATTERNS } from '$lib/server/shellPatterns.js';
 import { stripAnsi } from '$lib/utils/ansiToHtml.js';
 
 const execAsync = promisify(exec);
@@ -127,6 +127,7 @@ export async function POST({ params }) {
 		const checkIntervalMs = 500;
 		let claudeReady = false;
 		let shellPromptDetected = false;
+		let yoloWarningHandled = false;
 
 		for (let waited = 0; waited < maxWaitSeconds * 1000 && !claudeReady; waited += checkIntervalMs) {
 			await new Promise(resolve => setTimeout(resolve, checkIntervalMs));
@@ -135,6 +136,29 @@ export async function POST({ params }) {
 				const { stdout: paneOutput } = await execAsync(
 					`tmux capture-pane -t "${sessionId}" -p 2>/dev/null`
 				);
+
+				// Check for YOLO warning dialog (first-time --dangerously-skip-permissions)
+				// This dialog blocks startup and expects "1" (No) or "2" (Yes)
+				// Auto-accept by sending "2" + Enter
+				if (!yoloWarningHandled) {
+					const hasYoloWarning = YOLO_WARNING_PATTERNS.some(p => paneOutput.includes(p));
+					if (hasYoloWarning) {
+						console.log(`[restart] YOLO permission warning detected - auto-accepting...`);
+						try {
+							// Send "2" to select "Yes, I understand" option
+							await execAsync(`tmux send-keys -t "${sessionId}" "2"`);
+							await new Promise(resolve => setTimeout(resolve, 100));
+							await execAsync(`tmux send-keys -t "${sessionId}" Enter`);
+							yoloWarningHandled = true;
+							console.log(`[restart] YOLO warning auto-accepted, continuing startup...`);
+							// Give Claude time to process and show main TUI
+							await new Promise(resolve => setTimeout(resolve, 1000));
+							continue; // Re-check output after accepting
+						} catch (err) {
+							console.warn(`[restart] Failed to auto-accept YOLO warning: ${err}`);
+						}
+					}
+				}
 
 				const hasClaudePatterns = CLAUDE_READY_PATTERNS.some(p => paneOutput.includes(p));
 				const outputLowercase = paneOutput.toLowerCase();

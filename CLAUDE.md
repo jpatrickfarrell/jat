@@ -72,6 +72,71 @@ bd --version
 browser-start.js --help
 ```
 
+## Keeping JAT Updated
+
+JAT includes a self-update mechanism similar to VS Code - it checks for updates and prompts you before installing.
+
+### Update Behavior
+
+When you launch the dashboard with `jat` (no arguments), it checks for updates (at most once per 24 hours). If updates are available, you'll be prompted:
+
+```
+╔═══════════════════════════════════════════════════════════════╗
+║              🚀 JAT Dashboard                                 ║
+╚═══════════════════════════════════════════════════════════════╝
+
+Checking for updates...
+
+JAT update available (3 new commit(s)). Update now? [y/N] y
+Updating JAT...
+✓ Updated successfully
+```
+
+- **Prompt-based** - You're always asked before updates install
+- **Dashboard only** - Other commands like `jat list` don't check
+- **Throttled** - Checks at most once per 24 hours
+
+### Manual Update Commands
+
+```bash
+# Pull latest updates
+jat update
+
+# Check for updates without installing
+jat update --check
+
+# Show installation path and version
+jat update --status
+
+# Disable update checks on dashboard launch
+jat update --disable
+
+# Re-enable update checks
+jat update --enable
+```
+
+### How Updates Work
+
+1. JAT detects its installation location (in order of priority):
+   - `$JAT_INSTALL_DIR` environment variable
+   - `~/.local/share/jat` (XDG standard, recommended for users)
+   - `~/code/jat` (for developers)
+2. `jat update` runs `git pull origin master` to fetch latest changes
+3. If you have local changes, they're stashed and restored after the update
+4. Symlinks in `~/.local/bin/` are automatically refreshed
+
+### Configuration
+
+Add to `~/.config/jat/projects.json` to disable update checks:
+
+```json
+{
+  "defaults": {
+    "auto_update": false
+  }
+}
+```
+
 ## Verifying Installation
 
 After installation, verify each component is working correctly:

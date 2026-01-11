@@ -59,9 +59,18 @@
 	let successMessage = $state<string | null>(null);
 
 	// Validation state
-	let validationStatus = $state<'idle' | 'checking' | 'valid' | 'invalid' | 'already-initialized'>('idle');
+	let validationStatus = $state<'idle' | 'checking' | 'valid' | 'invalid' | 'already-initialized' | 'needs-git'>('idle');
 	let validationMessage = $state<string | null>(null);
 	let selectedDirectory = $state<DirectoryInfo | null>(null);
+
+	// New folder creation state
+	let showNewFolderInput = $state(false);
+	let newFolderName = $state('');
+	let isCreatingFolder = $state(false);
+	let folderError = $state<string | null>(null);
+
+	// Git initialization state
+	let isInitializingGit = $state(false);
 
 	// Auto-focus when drawer opens
 	$effect(() => {
@@ -118,11 +127,103 @@
 			validationStatus = 'already-initialized';
 			validationMessage = 'Beads already initialized in this project';
 		} else if (!dir.isGitRepo) {
-			validationStatus = 'invalid';
-			validationMessage = 'Not a git repository. Run "git init" first.';
+			validationStatus = 'needs-git';
+			validationMessage = 'Not a git repository. Initialize git to continue.';
 		} else {
 			validationStatus = 'valid';
 			validationMessage = 'Ready to initialize';
+		}
+	}
+
+	// Create new folder in current directory
+	async function createNewFolder() {
+		if (!newFolderName.trim()) {
+			folderError = 'Please enter a folder name';
+			return;
+		}
+
+		// Validate folder name
+		const invalidChars = /[<>:"/\\|?*\x00-\x1f]/;
+		if (invalidChars.test(newFolderName)) {
+			folderError = 'Invalid characters in folder name';
+			return;
+		}
+
+		isCreatingFolder = true;
+		folderError = null;
+
+		try {
+			const parentPath = basePath || '~/code';
+			const newPath = `${parentPath}/${newFolderName.trim()}`;
+
+			const response = await fetch('/api/directories/create', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ path: newPath })
+			});
+
+			const data = await response.json();
+
+			if (!response.ok || data.error) {
+				throw new Error(data.error || 'Failed to create folder');
+			}
+
+			// Refresh directory list and select the new folder
+			await loadDirectories(parentPath);
+
+			// Find and select the newly created folder
+			const newDir = directories.find(d => d.name === newFolderName.trim());
+			if (newDir) {
+				selectDirectory(newDir);
+			} else {
+				// If not found in list, set the path directly
+				pathInput = newPath;
+				validationStatus = 'needs-git';
+				validationMessage = 'Folder created. Initialize git to continue.';
+			}
+
+			// Reset new folder input
+			showNewFolderInput = false;
+			newFolderName = '';
+		} catch (error) {
+			folderError = error instanceof Error ? error.message : 'Failed to create folder';
+		} finally {
+			isCreatingFolder = false;
+		}
+	}
+
+	// Initialize git in selected directory
+	async function initializeGit() {
+		if (!pathInput.trim()) return;
+
+		isInitializingGit = true;
+		submitError = null;
+
+		try {
+			const response = await fetch('/api/directories/git-init', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ path: pathInput.trim() })
+			});
+
+			const data = await response.json();
+
+			if (!response.ok || data.error) {
+				throw new Error(data.error || 'Failed to initialize git');
+			}
+
+			// Update validation status
+			validationStatus = 'valid';
+			validationMessage = 'Git initialized! Ready to add project.';
+
+			// Update selected directory if we have one
+			if (selectedDirectory) {
+				selectedDirectory = { ...selectedDirectory, isGitRepo: true };
+			}
+		} catch (error) {
+			submitError = error instanceof Error ? error.message : 'Failed to initialize git';
+		} finally {
+			isInitializingGit = false;
 		}
 	}
 
@@ -288,6 +389,12 @@
 		submitError = null;
 		successMessage = null;
 		directoryError = null;
+		// Reset new folder state
+		showNewFolderInput = false;
+		newFolderName = '';
+		isCreatingFolder = false;
+		folderError = null;
+		isInitializingGit = false;
 	}
 
 	// Handle close
@@ -306,6 +413,8 @@
 			case 'invalid':
 			case 'already-initialized':
 				return 'oklch(0.65 0.20 25)'; // Red/orange
+			case 'needs-git':
+				return 'oklch(0.70 0.18 85)'; // Amber/warning
 			case 'checking':
 				return 'oklch(0.70 0.18 240)'; // Blue
 			default:
@@ -413,6 +522,32 @@
 									{validationMessage}
 								</span>
 							</div>
+
+							<!-- Initialize Git button when directory needs git -->
+							{#if validationStatus === 'needs-git'}
+								<div class="mt-3">
+									<button
+										type="button"
+										class="btn btn-sm"
+										style="background: oklch(0.30 0.12 85); border: 1px solid oklch(0.45 0.15 85); color: oklch(0.95 0.02 250);"
+										onclick={initializeGit}
+										disabled={isInitializingGit || isSubmitting}
+									>
+										{#if isInitializingGit}
+											<span class="loading loading-spinner loading-xs"></span>
+											Initializing Git...
+										{:else}
+											<svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+											</svg>
+											Initialize Git Repository
+										{/if}
+									</button>
+									<p class="text-xs mt-2" style="color: oklch(0.55 0.02 250);">
+										This will run <code class="px-1 py-0.5 rounded" style="background: oklch(0.22 0.01 250);">git init</code> in the selected folder.
+									</p>
+								</div>
+							{/if}
 						{/if}
 					</div>
 
@@ -426,19 +561,73 @@
 								<span class="text-xs font-mono" style="color: oklch(0.55 0.02 250);">
 									{basePath}
 								</span>
-								<button
-									type="button"
-									class="btn btn-xs btn-ghost"
-									onclick={() => loadDirectories()}
-									disabled={isLoadingDirectories}
-								>
-									{#if isLoadingDirectories}
-										<span class="loading loading-spinner loading-xs"></span>
-									{:else}
-										Refresh
-									{/if}
-								</button>
+								<div class="flex items-center gap-2">
+									<button
+										type="button"
+										class="btn btn-xs"
+										style="background: oklch(0.30 0.10 145); border: 1px solid oklch(0.40 0.15 145); color: oklch(0.95 0.02 250);"
+										onclick={() => { showNewFolderInput = !showNewFolderInput; folderError = null; newFolderName = ''; }}
+										disabled={isLoadingDirectories || isCreatingFolder}
+									>
+										{#if showNewFolderInput}
+											Cancel
+										{:else}
+											<svg class="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+											</svg>
+											New Folder
+										{/if}
+									</button>
+									<button
+										type="button"
+										class="btn btn-xs btn-ghost"
+										onclick={() => loadDirectories()}
+										disabled={isLoadingDirectories}
+									>
+										{#if isLoadingDirectories}
+											<span class="loading loading-spinner loading-xs"></span>
+										{:else}
+											Refresh
+										{/if}
+									</button>
+								</div>
 							</div>
+
+							<!-- New Folder Input -->
+							{#if showNewFolderInput}
+								<div class="mb-3 p-3 rounded" style="background: oklch(0.22 0.01 250); border: 1px solid oklch(0.35 0.02 250);">
+									<label class="text-xs font-mono mb-2 block" style="color: oklch(0.55 0.02 250);">
+										New folder name
+									</label>
+									<div class="flex items-center gap-2">
+										<input
+											type="text"
+											placeholder="my-new-project"
+											class="input input-sm flex-1 font-mono"
+											style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.80 0.02 250);"
+											bind:value={newFolderName}
+											disabled={isCreatingFolder}
+											onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); createNewFolder(); } }}
+										/>
+										<button
+											type="button"
+											class="btn btn-sm"
+											style="background: oklch(0.35 0.15 145); border: 1px solid oklch(0.45 0.18 145); color: oklch(0.95 0.02 250);"
+											onclick={createNewFolder}
+											disabled={isCreatingFolder || !newFolderName.trim()}
+										>
+											{#if isCreatingFolder}
+												<span class="loading loading-spinner loading-xs"></span>
+											{:else}
+												Create
+											{/if}
+										</button>
+									</div>
+									{#if folderError}
+										<p class="text-xs mt-2" style="color: oklch(0.65 0.20 25);">{folderError}</p>
+									{/if}
+								</div>
+							{/if}
 
 							{#if directoryError}
 								<div class="text-sm text-error">{directoryError}</div>
@@ -594,7 +783,7 @@
 						type="submit"
 						class="btn btn-primary font-mono"
 						onclick={handleSubmit}
-						disabled={isSubmitting || validationStatus === 'checking' || validationStatus === 'invalid' || validationStatus === 'already-initialized'}
+						disabled={isSubmitting || validationStatus === 'checking' || validationStatus === 'invalid' || validationStatus === 'already-initialized' || validationStatus === 'needs-git'}
 					>
 						{#if isSubmitting}
 							<span class="loading loading-spinner loading-sm"></span>

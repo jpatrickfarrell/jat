@@ -9,6 +9,38 @@ set -e
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/jat"
 CONFIG_FILE="$CONFIG_DIR/projects.json"
 
+# JAT source directory (detect where jat is installed)
+# Priority: JAT_INSTALL_DIR env > XDG standard > ~/code/jat > follow symlink
+detect_jat_source_dir() {
+    if [[ -n "$JAT_INSTALL_DIR" ]] && [[ -d "$JAT_INSTALL_DIR/.git" ]]; then
+        echo "$JAT_INSTALL_DIR"
+    elif [[ -d "${XDG_DATA_HOME:-$HOME/.local/share}/jat/.git" ]]; then
+        echo "${XDG_DATA_HOME:-$HOME/.local/share}/jat"
+    elif [[ -d "$HOME/code/jat/.git" ]]; then
+        echo "$HOME/code/jat"
+    else
+        # Follow the symlink from this script to find source
+        local script_path
+        script_path=$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "")
+        if [[ -n "$script_path" ]]; then
+            # Script is at PROJECT_ROOT/cli/jat, so go up two levels
+            local project_root
+            project_root=$(dirname "$(dirname "$script_path")")
+            if [[ -d "$project_root/.git" ]]; then
+                echo "$project_root"
+                return
+            fi
+        fi
+        # Fallback
+        echo "$HOME/.local/share/jat"
+    fi
+}
+
+JAT_SOURCE_DIR="$(detect_jat_source_dir)"
+
+# Update check file (stores last check timestamp)
+UPDATE_CHECK_FILE="$CONFIG_DIR/.last_update_check"
+
 # Colors
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -55,6 +87,251 @@ get_project_config() {
 
 list_projects() {
     jq -r '.projects | keys[]' "$CONFIG_FILE" 2>/dev/null
+}
+
+#------------------------------------------------------------------------------
+# Self-Update Functions
+#------------------------------------------------------------------------------
+
+# Check if updates are available (compares local and remote HEAD)
+check_for_updates() {
+    if [[ ! -d "$JAT_SOURCE_DIR/.git" ]]; then
+        return 1  # Not a git repo
+    fi
+
+    # Fetch latest from remote (quietly)
+    git -C "$JAT_SOURCE_DIR" fetch origin master --quiet 2>/dev/null || return 1
+
+    # Compare local and remote HEAD
+    local local_head remote_head
+    local_head=$(git -C "$JAT_SOURCE_DIR" rev-parse HEAD 2>/dev/null)
+    remote_head=$(git -C "$JAT_SOURCE_DIR" rev-parse origin/master 2>/dev/null)
+
+    if [[ "$local_head" != "$remote_head" ]]; then
+        return 0  # Updates available
+    fi
+    return 1  # No updates
+}
+
+# Get number of commits behind
+get_commits_behind() {
+    git -C "$JAT_SOURCE_DIR" rev-list HEAD..origin/master --count 2>/dev/null || echo "0"
+}
+
+# Perform the update
+do_update() {
+    local verbose="${1:-false}"
+
+    if [[ ! -d "$JAT_SOURCE_DIR/.git" ]]; then
+        echo -e "${RED}Error: JAT installation not found or not a git repository${NC}"
+        echo ""
+        echo "Checked locations:"
+        echo "  - ${XDG_DATA_HOME:-$HOME/.local/share}/jat"
+        echo "  - $HOME/code/jat"
+        echo ""
+        echo "JAT must be installed via git clone for auto-updates to work."
+        echo "Reinstall with: curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | bash"
+        return 1
+    fi
+
+    echo -e "${BLUE}Updating JAT...${NC}"
+    echo -e "${DIM}Source: $JAT_SOURCE_DIR${NC}"
+
+    # Check for local changes
+    if ! git -C "$JAT_SOURCE_DIR" diff-index --quiet HEAD -- 2>/dev/null; then
+        echo -e "${YELLOW}Warning: You have local changes in $JAT_SOURCE_DIR${NC}"
+        echo -e "${DIM}Stashing changes before update...${NC}"
+        git -C "$JAT_SOURCE_DIR" stash --quiet
+        local stashed=true
+    fi
+
+    # Pull latest changes
+    echo -e "${DIM}Pulling latest changes...${NC}"
+    if ! git -C "$JAT_SOURCE_DIR" pull origin master --quiet 2>&1; then
+        echo -e "${RED}Error: Failed to pull updates${NC}"
+        if [[ "${stashed:-}" == "true" ]]; then
+            git -C "$JAT_SOURCE_DIR" stash pop --quiet 2>/dev/null
+        fi
+        return 1
+    fi
+
+    # Re-run symlink script to update symlinks (quietly)
+    echo -e "${DIM}Updating symlinks...${NC}"
+    if [[ -f "$JAT_SOURCE_DIR/tools/scripts/symlink-tools.sh" ]]; then
+        bash "$JAT_SOURCE_DIR/tools/scripts/symlink-tools.sh" &>/dev/null || true
+    fi
+
+    # Restore stashed changes if any
+    if [[ "${stashed:-}" == "true" ]]; then
+        echo -e "${DIM}Restoring local changes...${NC}"
+        git -C "$JAT_SOURCE_DIR" stash pop --quiet 2>/dev/null || true
+    fi
+
+    # Update the check timestamp
+    date +%s > "$UPDATE_CHECK_FILE"
+
+    # Show what was updated
+    local new_version
+    new_version=$(git -C "$JAT_SOURCE_DIR" log -1 --format='%h - %s' 2>/dev/null)
+    echo ""
+    echo -e "${GREEN}✓ JAT updated successfully${NC}"
+    echo -e "${DIM}Latest: $new_version${NC}"
+    echo ""
+}
+
+# Check if we should auto-check for updates (once per 24 hours)
+should_check_for_updates() {
+    # Check if auto-update is disabled in config
+    local auto_update
+    auto_update=$(jq -r '.defaults.auto_update // true' "$CONFIG_FILE" 2>/dev/null)
+    if [[ "$auto_update" == "false" ]]; then
+        return 1
+    fi
+
+    # Check last update time
+    if [[ ! -f "$UPDATE_CHECK_FILE" ]]; then
+        return 0  # Never checked, should check
+    fi
+
+    local last_check now diff
+    last_check=$(cat "$UPDATE_CHECK_FILE" 2>/dev/null || echo "0")
+    now=$(date +%s)
+    diff=$((now - last_check))
+
+    # Check at most once per 24 hours (86400 seconds)
+    if [[ $diff -gt 86400 ]]; then
+        return 0  # Should check
+    fi
+    return 1  # Already checked recently
+}
+
+# Interactive update check - prompts user if update available
+# Only call this on dashboard launch, not every command
+interactive_update_check() {
+    # Only run if we should check (respects auto_update setting and 24h throttle)
+    should_check_for_updates || return 0
+
+    # Update timestamp to prevent repeated checks
+    date +%s > "$UPDATE_CHECK_FILE"
+
+    # Check if JAT source exists
+    if [[ ! -d "$JAT_SOURCE_DIR/.git" ]]; then
+        return 0
+    fi
+
+    echo -e "${DIM}Checking for updates...${NC}"
+
+    # Check for updates (this does a git fetch)
+    if check_for_updates; then
+        local commits_behind
+        commits_behind=$(get_commits_behind)
+
+        if [[ "$commits_behind" -gt 0 ]]; then
+            echo ""
+            echo -e "${YELLOW}JAT update available (${commits_behind} new commit(s)).${NC} Update now? [y/N] \c"
+
+            # Read with timeout (5 seconds)
+            local response
+            read -t 5 -r response || response=""
+
+            if [[ "$response" =~ ^[Yy]$ ]]; then
+                do_update
+            else
+                echo -e "${DIM}Skipped. Run 'jat update' later to update.${NC}"
+                echo ""
+            fi
+        fi
+    else
+        # Clear the "checking" message
+        echo -e "${DIM}Up to date.${NC}"
+    fi
+}
+
+# Manual update command
+update_cmd() {
+    local subcmd="${1:-}"
+
+    case "$subcmd" in
+        --check|-c)
+            # Just check, don't update
+            echo -e "${DIM}Checking for updates...${NC}"
+            if check_for_updates; then
+                local commits_behind
+                commits_behind=$(get_commits_behind)
+                echo -e "${GREEN}Update available: $commits_behind new commit(s)${NC}"
+                echo ""
+                echo "Run 'jat update' to update."
+            else
+                echo -e "${GREEN}✓ JAT is up to date${NC}"
+            fi
+            ;;
+        --disable)
+            # Disable auto-updates
+            local tmp_file
+            tmp_file=$(mktemp)
+            jq '.defaults.auto_update = false' "$CONFIG_FILE" > "$tmp_file"
+            mv "$tmp_file" "$CONFIG_FILE"
+            echo -e "${GREEN}✓ Auto-updates disabled${NC}"
+            echo "You can still manually update with: jat update"
+            ;;
+        --enable)
+            # Enable auto-updates
+            local tmp_file
+            tmp_file=$(mktemp)
+            jq '.defaults.auto_update = true' "$CONFIG_FILE" > "$tmp_file"
+            mv "$tmp_file" "$CONFIG_FILE"
+            echo -e "${GREEN}✓ Auto-updates enabled${NC}"
+            ;;
+        --status|-s)
+            # Show installation status
+            echo ""
+            echo -e "${BOLD}JAT Installation Status${NC}"
+            echo ""
+            echo -e "  ${DIM}Install path:${NC} $JAT_SOURCE_DIR"
+            if [[ -d "$JAT_SOURCE_DIR/.git" ]]; then
+                local current_version branch
+                current_version=$(git -C "$JAT_SOURCE_DIR" log -1 --format='%h' 2>/dev/null)
+                branch=$(git -C "$JAT_SOURCE_DIR" branch --show-current 2>/dev/null)
+                echo -e "  ${DIM}Git branch:${NC}   $branch"
+                echo -e "  ${DIM}Version:${NC}      $current_version"
+                echo -e "  ${DIM}Last commit:${NC}  $(git -C "$JAT_SOURCE_DIR" log -1 --format='%s' 2>/dev/null)"
+            else
+                echo -e "  ${YELLOW}Not a git repository - updates disabled${NC}"
+            fi
+            local auto_update
+            auto_update=$(jq -r '.defaults.auto_update // true' "$CONFIG_FILE" 2>/dev/null)
+            echo -e "  ${DIM}Auto-check:${NC}   $auto_update"
+            echo ""
+            ;;
+        --help|-h)
+            echo ""
+            echo -e "${BOLD}JAT Update${NC}"
+            echo ""
+            echo "Keep JAT up to date with the latest features and fixes."
+            echo ""
+            echo -e "${DIM}Usage:${NC}"
+            echo "  jat update           Pull latest updates"
+            echo "  jat update --check   Check for updates without installing"
+            echo "  jat update --status  Show installation path and version"
+            echo "  jat update --disable Disable update checks on dashboard launch"
+            echo "  jat update --enable  Enable update checks on dashboard launch"
+            echo ""
+            echo -e "${DIM}Update behavior:${NC}"
+            echo "  When you launch the dashboard with 'jat', it checks for updates"
+            echo "  (at most once per 24 hours). If updates are available, you'll be"
+            echo "  prompted: 'Update now? [y/N]'. Updates are never auto-installed."
+            echo ""
+            ;;
+        "")
+            # Perform update
+            do_update
+            ;;
+        *)
+            echo -e "${RED}Unknown update option: $subcmd${NC}"
+            echo "Run 'jat update --help' for usage"
+            return 1
+            ;;
+    esac
 }
 
 #------------------------------------------------------------------------------
@@ -829,6 +1106,13 @@ PROJECT MANAGEMENT:
     remove <name>          Remove project
     list                   Show all projects with status
 
+UPDATES:
+    update                 Pull latest JAT updates
+    update --check         Check for updates without installing
+    update --status        Show installation path and version
+    update --disable       Disable automatic update checks
+    update --enable        Enable automatic update checks
+
 DEMO MODE:
     demo                   Launch demo with sample projects
     demo setup             Fresh setup (cleans & recreates)
@@ -1540,6 +1824,10 @@ main() {
         echo -e "${BOLD}║              ${CYAN}🚀 JAT Dashboard${NC}${BOLD}                                 ║${NC}"
         echo -e "${BOLD}╚═══════════════════════════════════════════════════════════════╝${NC}"
         echo ""
+
+        # Check for updates only on dashboard launch (interactive prompt)
+        interactive_update_check
+
         launch_dashboard "JAT"
         exit 0
     fi
@@ -1577,6 +1865,9 @@ main() {
             ;;
         demo)
             demo_cmd "$@"
+            ;;
+        update)
+            update_cmd "$@"
             ;;
         # Hidden/advanced commands (kept for backwards compatibility)
         colors)

@@ -44,3 +44,19 @@ export const SHELL_PROMPT_PATTERNS = [
 	'jat on',           // specific to this user's prompt
 	'No such file or directory'  // bash error when command not found
 ];
+
+/**
+ * Patterns indicating the YOLO permission warning dialog is showing.
+ * This dialog appears on first use of --dangerously-skip-permissions
+ * and expects user to select "1. No" or "2. Yes, I understand".
+ *
+ * When detected, spawn should auto-accept by sending "2" + Enter.
+ */
+export const YOLO_WARNING_PATTERNS = [
+	'dangerously-skip-permissions',  // The flag name appears in warning
+	'bypass all permission checks',  // Warning text
+	'No, exit',                      // Option 1 text
+	'Yes, I understand',             // Option 2 text
+	'1. No',                         // Option format
+	'2. Yes'                         // Option format
+];

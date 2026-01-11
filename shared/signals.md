@@ -1,15 +1,15 @@
 ## JAT Signal System
 
-**Hook-based agent-to-dashboard communication for real-time state tracking.**
+**Hook-based agent-to-IDE communication for real-time state tracking.**
 
-Agents emit signals via `jat-signal` command, PostToolUse hooks capture them, and the dashboard receives real-time updates via SSE.
+Agents emit signals via `jat-signal` command, PostToolUse hooks capture them, and the IDE receives real-time updates via SSE.
 
 ### Why Signals?
 
 **Benefits:**
 - Reliable delivery (hooks fire on every Bash command)
 - Structured data (JSON payloads)
-- Real-time SSE events to dashboard
+- Real-time SSE events to IDE
 - Extensible (states, tasks, actions, custom data)
 - No terminal parsing - direct hook capture
 
@@ -17,7 +17,7 @@ Agents emit signals via `jat-signal` command, PostToolUse hooks capture them, an
 
 Signal files expire after a time-to-live (TTL) to prevent stale data. Different signal types use different TTLs based on whether they wait for human action.
 
-**Configuration:** `dashboard/src/lib/config/constants.ts` → `SIGNAL_TTL`
+**Configuration:** `ide/src/lib/config/constants.ts` → `SIGNAL_TTL`
 
 | TTL Type | Duration | States | Purpose |
 |----------|----------|--------|---------|
@@ -27,9 +27,9 @@ Signal files expire after a time-to-live (TTL) to prevent stale data. Different 
 **Why this matters:**
 - If you emit a `review` signal and the user takes a coffee break, the signal persists for 30 minutes
 - Transient states like `working` expire quickly so stale signals don't show incorrect state
-- Without the longer TTL, the dashboard falls back to output parsing which can misinterpret state
+- Without the longer TTL, the IDE falls back to output parsing which can misinterpret state
 
-**Example:** Agent emits `review`, user is away for 10 minutes → dashboard still shows "🔍 REVIEW" (not stale fallback state)
+**Example:** Agent emits `review`, user is away for 10 minutes → IDE still shows "🔍 REVIEW" (not stale fallback state)
 
 ### Signal Format
 
@@ -56,33 +56,33 @@ Output format: `[JAT-SIGNAL:<type>] <json-payload>`
 | `question` | `jat-signal question '{...}'` | question, questionType (optional: options, timeout) |
 | `completing` | `jat-signal completing '{...}'` | taskId, taskTitle, currentStep, stepsCompleted, stepsRemaining, progress, stepDescription, stepStartedAt |
 
-**Dashboard Signals** - Events written by the dashboard (not agents):
+**IDE Signals** - Events written by the IDE (not agents):
 
 | Signal | Source | Purpose |
 |--------|--------|---------|
-| `dashboard_input` | `/api/sessions/[name]/input` | Tracks input sent from dashboard UI to an agent session |
+| `ide_input` | `/api/sessions/[name]/input` | Tracks input sent from IDE UI to an agent session |
 | `user_input` | `UserPromptSubmit` hook | Tracks user text entered in Claude Code terminal |
 
-**`dashboard_input` signal** - Written when dashboard sends input to a tmux session:
+**`ide_input` signal** - Written when IDE sends input to a tmux session:
 
-The dashboard writes this signal directly to the timeline file when a user sends input via the SessionCard UI. This ensures dashboard-initiated inputs appear in EventStack even if Claude Code's `UserPromptSubmit` hook fails to capture them.
+The IDE writes this signal directly to the timeline file when a user sends input via the SessionCard UI. This ensures IDE-initiated inputs appear in EventStack even if Claude Code's `UserPromptSubmit` hook fails to capture them.
 
 **When it's written:**
 - User types text in SessionCard input field and hits Enter
 - User sends a slash command (e.g., `/jat:complete`)
-- Dashboard automation sends input programmatically
+- IDE automation sends input programmatically
 
 **Signal format (written to timeline JSONL):**
 ```json
 {
-  "type": "dashboard_input",
+  "type": "ide_input",
   "tmux_session": "jat-AgentName",
   "timestamp": "2025-12-30T10:00:00.000Z",
   "data": {
     "input": "/jat:complete",
     "inputType": "command",
     "isCommand": true,
-    "source": "dashboard"
+    "source": "ide"
   }
 }
 ```
@@ -93,11 +93,11 @@ The dashboard writes this signal directly to the timeline file when a user sends
 | `input` | string | The text/command sent to the session |
 | `inputType` | enum | `"text"` (regular input), `"command"` (slash command), `"key"` (special key) |
 | `isCommand` | boolean | `true` if input starts with `/` |
-| `source` | string | Always `"dashboard"` (distinguishes from terminal input) |
+| `source` | string | Always `"ide"` (distinguishes from terminal input) |
 
 **Where it's written:**
 - File: `/tmp/jat-timeline-{tmuxSession}.jsonl`
-- Writer: `dashboard/src/routes/api/sessions/[name]/input/+server.js`
+- Writer: `ide/src/routes/api/sessions/[name]/input/+server.js`
 
 **EventStack display:**
 - Shows as purple `💬 USER INPUT` card in timeline
@@ -113,7 +113,7 @@ The dashboard writes this signal directly to the timeline file when a user sends
 ### complete Signal
 
 **`complete` signal** - Emitted once after all completion steps:
-- Triggers dashboard to show "COMPLETED" state
+- Triggers IDE to show "COMPLETED" state
 - Contains the full CompletionBundle with summary, quality, suggested tasks
 - Determines what happens next (review_required vs auto_proceed)
 
@@ -139,8 +139,8 @@ The dashboard writes this signal directly to the timeline file when a user sends
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-**Dashboard behavior:**
-| Signal | Dashboard State | Dashboard Display |
+**IDE behavior:**
+| Signal | IDE State | IDE Display |
 |--------|-----------------|-------------------|
 | `completing` | ⏳ COMPLETING | Progress bar with current step |
 | `complete` | ✅ COMPLETED | Completion summary, quality badges, suggested tasks |
@@ -243,7 +243,7 @@ jat-signal compacting '{"reason":"context_limit","contextSizeBefore":180000}'
 # Waiting for user input
 jat-signal needs_input '{"taskId":"jat-abc","question":"Which auth library?","questionType":"choice"}'
 
-# Structured question for dashboard (standalone, not tied to a task)
+# Structured question for IDE (standalone, not tied to a task)
 jat-signal question '{"question":"Which authentication method?","questionType":"choice","options":[{"label":"OAuth 2.0","value":"oauth","description":"Industry standard"},{"label":"JWT","value":"jwt","description":"Stateless tokens"}]}'
 
 # Confirm question (yes/no)
@@ -284,7 +284,7 @@ jat-signal complete '{
   "suggestedTasks": [{"type": "task", "title": "Add tests", "description": "...", "priority": 2}]
 }'
 
-# Auto-proceed completion - dashboard spawns next task automatically
+# Auto-proceed completion - IDE spawns next task automatically
 jat-signal complete '{
   "taskId": "jat-abc",
   "agentName": "WisePrairie",
@@ -311,11 +311,11 @@ jat-signal complete '{
    └─► Writes JSON to /tmp/jat-signal-{session}.json
    └─► Also writes /tmp/jat-signal-tmux-{sessionName}.json
 
-4. Dashboard SSE server watches signal files
+4. IDE SSE server watches signal files
    └─► /api/sessions/events endpoint
    └─► Broadcasts session-signal event to all clients
 
-5. Dashboard UI updates in real-time
+5. IDE UI updates in real-time
    └─► SessionCard shows current state
    └─► Suggested tasks appear in UI
 ```
@@ -370,7 +370,7 @@ The hook is triggered after every Bash tool call. It:
 }
 ```
 
-### Dashboard Integration
+### IDE Integration
 
 **SSE Endpoint:** `/api/sessions/events`
 
@@ -396,12 +396,12 @@ $effect(() => {
 });
 ```
 
-### Session States in Dashboard
+### Session States in IDE
 
 | State | Signal Type | Icon | Color | Description |
 |-------|-------------|------|-------|-------------|
 | User Input | `user_input` | 💬 | Purple | User sent a message (from terminal) |
-| Dashboard Input | `dashboard_input` | 💬 | Purple | User sent input from dashboard UI |
+| IDE Input | `ide_input` | 💬 | Purple | User sent input from IDE UI |
 | Starting | `starting` | 🚀 | Cyan | Agent initializing |
 | Working | `working` | ⚡ | Amber | Actively working on task |
 | Compacting | `compacting` | 📦 | Orange | Summarizing context |
@@ -413,7 +413,7 @@ $effect(() => {
 
 ### Timeline / EventStack
 
-All signals are also written to a timeline JSONL file (`/tmp/jat-timeline-jat-{AgentName}.jsonl`) for historical tracking. The dashboard's **EventStack** component displays this timeline in a stacked card UI.
+All signals are also written to a timeline JSONL file (`/tmp/jat-timeline-jat-{AgentName}.jsonl`) for historical tracking. The IDE's **EventStack** component displays this timeline in a stacked card UI.
 
 **Features:**
 - Shows most recent event in collapsed view
@@ -429,7 +429,7 @@ Collapsed cards show context-specific summaries from signal payloads:
 | Event Type | Collapsed Label Shows | Fallback |
 |------------|----------------------|----------|
 | `user_input` | Truncated prompt (first 60 chars) | - |
-| `dashboard_input` | Truncated input (first 60 chars) | - |
+| `ide_input` | Truncated input (first 60 chars) | - |
 | `working` | `data.approach` (what agent plans to do) | `data.taskTitle` |
 | `review` | First `data.summary` item or `data.reviewFocus` | `data.taskTitle` |
 | `completed` | `data.outcome` (e.g., "Task completed successfully") | `data.taskTitle` |
@@ -448,7 +448,7 @@ Each event type has a custom UI in the expanded timeline:
 | Event Type | Rich View |
 |------------|-----------|
 | `user_input` | User message in purple card, click-to-copy |
-| `dashboard_input` | Dashboard input in purple card, click-to-copy, shows "from dashboard" source badge |
+| `ide_input` | IDE input in purple card, click-to-copy, shows "from IDE" source badge |
 | `tasks` | Full SuggestedTasksSection with checkboxes, priority dropdowns, editable titles, "Create Tasks" button |
 | `complete` | Summary bullets, quality badges (tests/build), human actions, suggested tasks, cross-agent intel |
 | `action` | Title and description card |
@@ -521,14 +521,14 @@ Signals must be written as compact single-line JSON (JSONL format), one event pe
 | Starting work on task | `jat-signal working '{"taskId":"...","taskTitle":"..."}'` |
 | Context is compacting | `jat-signal compacting '{"reason":"...","contextSizeBefore":...}'` |
 | Need user input | `jat-signal needs_input '{"taskId":"...","question":"...","questionType":"..."}'` |
-| Structured question for dashboard | `jat-signal question '{"question":"...","questionType":"..."}'` |
+| Structured question for IDE | `jat-signal question '{"question":"...","questionType":"..."}'` |
 | Done coding, awaiting review | `jat-signal review '{"taskId":"..."}'` |
 | Running /jat:complete steps | `jat-signal completing '{"taskId":"...","currentStep":"verifying",...}'` |
 | Task fully completed | `jat-signal complete '{"taskId":"...","completionMode":"review_required",...}'` |
 | Task completed + auto-proceed | `jat-signal complete '{"taskId":"...","completionMode":"auto_proceed","nextTaskId":"...","nextTaskTitle":"...",...}'` |
 | Session idle | `jat-signal idle '{"readyForWork":true}'` |
 
-**Critical:** Without signals, dashboard shows stale state. Always signal when:
+**Critical:** Without signals, IDE shows stale state. Always signal when:
 - You start or finish substantial work
 - You're waiting for user input
 - You transition between states
@@ -544,17 +544,17 @@ Signals must be written as compact single-line JSON (JSONL format), one event pe
 **Hooks:**
 - `.claude/hooks/post-bash-jat-signal.sh` - PostToolUse hook
 
-**Dashboard:**
-- `dashboard/src/lib/stores/sessionEvents.ts` - SSE client store
-- `dashboard/src/lib/components/work/EventStack.svelte` - Timeline UI component
-- `dashboard/src/routes/api/sessions/events/+server.ts` - SSE endpoint
-- `dashboard/src/routes/api/sessions/[name]/signal/+server.js` - Signal API
-- `dashboard/src/routes/api/sessions/[name]/timeline/+server.ts` - Timeline API
-- `dashboard/src/routes/api/signals/+server.js` - All signals API
+**IDE:**
+- `ide/src/lib/stores/sessionEvents.ts` - SSE client store
+- `ide/src/lib/components/work/EventStack.svelte` - Timeline UI component
+- `ide/src/routes/api/sessions/events/+server.ts` - SSE endpoint
+- `ide/src/routes/api/sessions/[name]/signal/+server.js` - Signal API
+- `ide/src/routes/api/sessions/[name]/timeline/+server.ts` - Timeline API
+- `ide/src/routes/api/signals/+server.js` - All signals API
 
 **Signal Card Components:**
 
-The dashboard renders rich signal cards based on the signal type. Each card provides interactive UI for that specific state.
+The IDE renders rich signal cards based on the signal type. Each card provides interactive UI for that specific state.
 
 | Component | Signal Type | Description |
 |-----------|-------------|-------------|
@@ -568,16 +568,16 @@ The dashboard renders rich signal cards based on the signal type. Each card prov
 **Note:** `completed` signals are rendered via **EventStack** timeline (auto-expands on completion) rather than a dedicated signal card. This allows users to collapse the completion info to see terminal output.
 
 **Signal Card Files:**
-- `dashboard/src/lib/components/signals/index.ts` - Export barrel file
-- `dashboard/src/lib/components/signals/WorkingSignalCard.svelte`
-- `dashboard/src/lib/components/signals/ReviewSignalCard.svelte`
-- `dashboard/src/lib/components/signals/NeedsInputSignalCard.svelte`
-- `dashboard/src/lib/components/signals/IdleSignalCard.svelte`
-- `dashboard/src/lib/components/signals/StartingSignalCard.svelte`
-- `dashboard/src/lib/components/signals/CompactingSignalCard.svelte`
+- `ide/src/lib/components/signals/index.ts` - Export barrel file
+- `ide/src/lib/components/signals/WorkingSignalCard.svelte`
+- `ide/src/lib/components/signals/ReviewSignalCard.svelte`
+- `ide/src/lib/components/signals/NeedsInputSignalCard.svelte`
+- `ide/src/lib/components/signals/IdleSignalCard.svelte`
+- `ide/src/lib/components/signals/StartingSignalCard.svelte`
+- `ide/src/lib/components/signals/CompactingSignalCard.svelte`
 
 **Type Definitions:**
-- `dashboard/src/lib/types/richSignals.ts` - TypeScript interfaces for all signal types
+- `ide/src/lib/types/richSignals.ts` - TypeScript interfaces for all signal types
 
 **Signal Files:**
 - `/tmp/jat-signal-{session_id}.json` - Current signal by Claude session ID
@@ -588,7 +588,7 @@ The dashboard renders rich signal cards based on the signal type. Each card prov
 
 | Issue | Cause | Fix |
 |-------|-------|-----|
-| Dashboard shows wrong state | Signal not sent | Run appropriate `jat-signal` command |
+| IDE shows wrong state | Signal not sent | Run appropriate `jat-signal` command |
 | "No signal file found" | Hook not firing | Check `.claude/settings.json` has PostToolUse hook |
 | Signal file not written | Agent file missing | Ensure `.claude/sessions/agent-{id}.txt` exists |
 | SSE not updating | Connection dropped | Refresh page, check `/api/sessions/events` |
@@ -723,7 +723,7 @@ When `/jat:complete` determines the task can auto-proceed (based on review rules
 │  5. SSE server detects file change                                          │
 │     └─► Broadcasts session-signal event (type: 'complete', bundle)         │
 │                                                                             │
-│  6. Dashboard receives SSE event                                            │
+│  6. IDE receives SSE event                                            │
 │     └─► sessionEvents.ts handleSessionSignal()                             │
 │     └─► Detects completionMode === 'auto_proceed' in complete signal      │
 │     └─► Updates session state to 'auto-proceeding'                         │
@@ -742,7 +742,7 @@ When `/jat:complete` determines the task can auto-proceed (based on review rules
 │     └─► /jat:start registers new agent                                     │
 │     └─► Renames session to jat-{NewAgentName}                              │
 │     └─► Emits working signal                                               │
-│     └─► Dashboard shows new session card                                   │
+│     └─► IDE shows new session card                                   │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -773,7 +773,7 @@ When `/jat:complete` determines the task can auto-proceed (based on review rules
 }
 ```
 
-**Dashboard State Transition:**
+**IDE State Transition:**
 
 | Before | Signal | After |
 |--------|--------|-------|

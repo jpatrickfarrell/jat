@@ -7,7 +7,7 @@
 #
 # This provides consistent status calculation between:
 #   - Statusline (.claude/statusline.sh)
-#   - Dashboard (dashboard/src/lib/stores/agents.svelte.ts)
+#   - IDE (ide/src/lib/stores/agents.svelte.ts)
 #
 # Usage:
 #   get-agent-task.sh AGENT_NAME
@@ -18,7 +18,7 @@
 #   - Exit code 0: Task found
 #   - Exit code 1: No task found
 #
-# Algorithm (matches dashboard logic):
+# Algorithm (matches IDE logic):
 #   1. Check Beads for in_progress tasks assigned to agent
 #   2. Check Agent Mail for active file reservations by agent
 #   3. Return task_id if found from EITHER source
@@ -44,7 +44,7 @@ fi
 AGENT_NAME="$1"
 
 # STEP 1: Check Beads for in_progress tasks assigned to this agent
-# This matches dashboard logic: agent.in_progress_tasks > 0
+# This matches IDE logic: agent.in_progress_tasks > 0
 if command -v bd &>/dev/null; then
     # Get all in_progress tasks assigned to this agent
     in_progress_task=$(bd list --status in_progress --json 2>/dev/null | \
@@ -58,7 +58,7 @@ if command -v bd &>/dev/null; then
 fi
 
 # STEP 2: Check Agent Mail for active file reservations by this agent
-# This matches dashboard logic: agent.reservation_count > 0
+# This matches IDE logic: agent.reservation_count > 0
 # Extract task ID from reservation reason field (e.g., "jat-abc")
 if command -v am-reservations &>/dev/null; then
     reservation_info=$(am-reservations --agent "$AGENT_NAME" 2>/dev/null || true)

@@ -3,7 +3,7 @@
 # monitor-output.sh - Real-time output activity monitor
 #
 # Monitors tmux pane output to detect when agent is actively generating text.
-# Writes ephemeral state to /tmp/jat-activity-{session}.json for dashboard polling.
+# Writes ephemeral state to /tmp/jat-activity-{session}.json for IDE polling.
 #
 # Usage: monitor-output.sh <tmux-session-name>
 # Started by: user-prompt-signal.sh (on user message)
@@ -73,8 +73,8 @@ while true; do
         fi
     fi
 
-    # Keep file timestamp fresh for dashboard staleness check (every ~2 seconds)
-    # Dashboard considers activity older than 30s as stale, so we update at least every 20 iterations
+    # Keep file timestamp fresh for IDE staleness check (every ~2 seconds)
+    # IDE considers activity older than 30s as stale, so we update at least every 20 iterations
     ((touch_count++)) || true
     if [[ $touch_count -gt 20 ]]; then
         write_state "$last_state" true

@@ -119,11 +119,18 @@ fi
 cd "$INSTALL_DIR"
 
 echo ""
-echo -e "${BOLD}╔═══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BOLD}║                                                               ║${NC}"
-echo -e "${BOLD}║                   ${BLUE}JAT (Jomarchy Agent Tools)${NC}${BOLD}                  ║${NC}"
-echo -e "${BOLD}║                                                               ║${NC}"
-echo -e "${BOLD}╚═══════════════════════════════════════════════════════════════╝${NC}"
+echo -e "${BOLD}╔───────────────────────────────────────────╗${NC}"
+echo -e "${BOLD}│                                           │${NC}"
+echo -e "${BOLD}│           __       ___   .___________.    │${NC}"
+echo -e "${BOLD}│          |  |     /   \\  |           |    │${NC}"
+echo -e "${BOLD}│          |  |    /  ^  \\ \`---|  |----\`    │${NC}"
+echo -e "${BOLD}│    .--.  |  |   /  /_\\  \\    |  |         │${NC}"
+echo -e "${BOLD}│    |  \`--'  |  /  _____  \\   |  |         │${NC}"
+echo -e "${BOLD}│     \\______/  /__/     \\__\\  |__|         │${NC}"
+echo -e "${BOLD}│                                           │${NC}"
+echo -e "${BOLD}│         ${BLUE}◇ Supervise the Swarm ◇${NC}${BOLD}           │${NC}"
+echo -e "${BOLD}│                                           │${NC}"
+echo -e "${BOLD}╚───────────────────────────────────────────╝${NC}"
 echo ""
 echo "Complete AI-assisted development environment:"
 echo ""
@@ -190,9 +197,9 @@ if command -v npm &> /dev/null; then
     fi
 
     # Install dashboard dependencies (SvelteKit, etc.)
-    if [ -f "$INSTALL_DIR/dashboard/package.json" ]; then
+    if [ -f "$INSTALL_DIR/ide/package.json" ]; then
         echo "  → Installing dashboard dependencies..."
-        (cd "$INSTALL_DIR/dashboard" && npm install --legacy-peer-deps --engine-strict=false --silent 2>/dev/null) && \
+        (cd "$INSTALL_DIR/ide" && npm install --legacy-peer-deps --engine-strict=false --silent 2>/dev/null) && \
             echo -e "  ${GREEN}✓${NC} dashboard dependencies installed" || \
             echo -e "  ${YELLOW}⚠${NC} dashboard npm install failed (run manually: cd dashboard && npm install --legacy-peer-deps)"
     fi
@@ -201,7 +208,7 @@ else
     echo "  Install Node.js/npm, then run manually:"
     echo "    cd $INSTALL_DIR && npm install"
     echo "    cd $INSTALL_DIR/tools/browser && npm install"
-    echo "    cd $INSTALL_DIR/dashboard && npm install"
+    echo "    cd $INSTALL_DIR/ide && npm install"
 fi
 
 echo ""
@@ -261,7 +268,7 @@ echo ""
 
 # Ask about Voice-to-Text
 INSTALL_WHISPER="no"
-echo "Voice-to-Text enables speech input in the dashboard."
+echo "Voice-to-Text enables speech input in the IDE."
 echo "Requires: ~2GB disk, cmake, g++, ffmpeg"
 echo ""
 if command -v gum &> /dev/null; then
@@ -294,11 +301,11 @@ bash "$INSTALL_DIR/tools/scripts/setup-global-claude-md.sh"
 
 echo ""
 echo ""
-echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║                                                               ║${NC}"
-echo -e "${GREEN}║              ${BOLD}✓ JAT Successfully Installed!${NC}${GREEN}                  ║${NC}"
-echo -e "${GREEN}║                                                               ║${NC}"
-echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
+echo -e "${GREEN}╔───────────────────────────────────────────╗${NC}"
+echo -e "${GREEN}│                                           │${NC}"
+echo -e "${GREEN}│      ${BOLD}✓ JAT Successfully Installed!${NC}${GREEN}        │${NC}"
+echo -e "${GREEN}│                                           │${NC}"
+echo -e "${GREEN}╚───────────────────────────────────────────╝${NC}"
 echo ""
 echo "What was installed:"
 echo ""
@@ -319,56 +326,33 @@ echo "  ✓ Git pre-commit hook (agent registration check)"
 echo "  ✓ Global ~/.claude/CLAUDE.md (multi-project instructions)"
 echo "  ✓ Per-repo setup (bd init, CLAUDE.md templates)"
 echo ""
-echo "Benefits:"
-echo ""
-echo "  • Multi-agent coordination via Agent Mail"
-echo "  • Dependency-aware task planning with Beads"
-echo "  • Real-time statusline (agent identity, task, context, git)"
-echo "  • 32,000+ token savings vs MCP servers"
-echo "  • Works across ALL AI coding assistants"
-echo "  • Bash composability (pipes, jq, xargs)"
-echo ""
-echo -e "${YELLOW}⚠️  IMPORTANT: Add at least one project to get started!${NC}"
-echo ""
-echo "  The dashboard needs projects to track. A valid project is:"
-echo "    • A git repository in ~/code/"
-echo "    • Has a .beads/ directory (created by 'bd init')"
-echo ""
-echo "  Quick setup for an existing project:"
-echo "    cd ~/code/my-project && bd init"
-echo ""
-echo "  Or create a new project from the dashboard:"
-echo "    1. Start the dashboard: jat"
-echo "    2. Go to Tasks page → click 'Add Project'"
-echo ""
-# Detect shell for proper instructions
+# Detect shell config file
 SHELL_NAME=$(basename "$SHELL")
 if [[ "$SHELL_NAME" == "zsh" ]]; then
-    SHELL_CONFIG="~/.zshrc"
+    SHELL_CONFIG="$HOME/.zshrc"
 elif [[ "$SHELL_NAME" == "bash" ]]; then
-    SHELL_CONFIG="~/.bashrc"
+    SHELL_CONFIG="$HOME/.bashrc"
 else
-    SHELL_CONFIG="~/.bashrc"
+    SHELL_CONFIG="$HOME/.bashrc"
 fi
 
-echo "Quick verification (run after 'source $SHELL_CONFIG'):"
+# Ensure ~/.local/bin is in PATH
+if ! grep -q '\.local/bin' "$SHELL_CONFIG" 2>/dev/null; then
+    echo "" >> "$SHELL_CONFIG"
+    echo '# JAT tools' >> "$SHELL_CONFIG"
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_CONFIG"
+    echo -e "  ${GREEN}✓${NC} Added ~/.local/bin to PATH in $SHELL_CONFIG"
+fi
+
 echo ""
-echo "  am-whoami          # Agent identity (shows 'Not registered' if new)"
-echo "  bd --version       # Beads CLI version"
-echo "  db-schema          # Agent Mail database schema"
-echo "  jat-signal --help  # Signal tool help"
-echo ""
-echo "For detailed verification of all tools, see CLAUDE.md section:"
-echo "  'Verifying Installation'"
-echo ""
-echo "Next steps:"
-echo ""
-echo "  1. Restart your shell: source $SHELL_CONFIG"
-echo "  2. Add a project: cd ~/code/<your-project> && bd init"
-echo "  3. Launch the dashboard: jat"
-echo "  4. Start working: jat-<project> (launches Claude in tmux)"
+echo "The IDE will guide you through adding your first project."
 echo ""
 echo "Documentation: https://github.com/joewinke/jat"
 echo ""
-echo -e "${GREEN}Happy coding with AI! 🤖${NC}"
+echo -e -n "${BOLD}Launch JAT now? [Y/n]${NC} "
+read -r response
+if [[ ! "$response" =~ ^[Nn]$ ]]; then
+    echo ""
+    exec "$HOME/.local/bin/jat"
+fi
 echo ""

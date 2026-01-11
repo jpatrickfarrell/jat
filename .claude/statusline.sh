@@ -438,7 +438,7 @@ task_progress=""
 task_type=""
 task_updated_at=""
 
-# Priority 1: Check Beads for in_progress tasks (matches dashboard logic)
+# Priority 1: Check Beads for in_progress tasks (matches IDE logic)
 if command -v bd &>/dev/null; then
     # Change to project directory if provided
     if [[ -n "$cwd" ]] && [[ -d "$cwd" ]]; then
@@ -602,8 +602,8 @@ esac
 # ============================================================================
 # AGENT STATUS CALCULATION
 # ============================================================================
-# Matches dashboard logic from: dashboard/src/lib/utils/agentStatusUtils.ts
-# Thresholds from: dashboard/src/lib/config/constants.ts → AGENT_STATUS_THRESHOLDS
+# Matches IDE logic from: ide/src/lib/utils/agentStatusUtils.ts
+# Thresholds from: ide/src/lib/config/constants.ts → AGENT_STATUS_THRESHOLDS
 #
 # Status priority order:
 #   1. working - Has active task OR file locks (agent is engaged)
@@ -619,7 +619,7 @@ WORKING_THRESHOLD_MIN=10   # 600000ms = 10 minutes
 IDLE_THRESHOLD_MIN=60      # 3600000ms = 1 hour
 
 # Compute agent status
-# Labels in CAPS to match dashboard (statusColors.ts)
+# Labels in CAPS to match IDE (statusColors.ts)
 # Icons: ⚙ gear, ● dot, ◉ circle-dot, ○ circle, ⏻ power
 agent_status="OFFLINE"  # Default
 agent_status_icon="⏻"
@@ -709,7 +709,7 @@ if [[ -n "$task_id" ]]; then
     status_line="${status_line} ${GREEN}${task_id}${RESET}"
 
     # Task title removed from line 1 to prevent wrapping that breaks avatar alignment
-    # Title is available via: dashboard, bd show <task-id>, or line 3 (optional)
+    # Title is available via: IDE, bd show <task-id>, or line 3 (optional)
 
     # Add active time if available
     if [[ -n "$active_time" ]]; then
@@ -718,7 +718,7 @@ if [[ -n "$task_id" ]]; then
 
 elif [[ -n "$agent_name" ]]; then
     # Agent registered but no active task - show computed status with icon
-    # Status matches dashboard: LIVE/ACTIVE/IDLE/OFFLINE (WORKING handled above with task)
+    # Status matches IDE: LIVE/ACTIVE/IDLE/OFFLINE (WORKING handled above with task)
     status_line="${status_line} ${GRAY}·${RESET} ${agent_status_color}${agent_status_icon} ${agent_status}${RESET}"
 else
     # Fallback - use project folder name

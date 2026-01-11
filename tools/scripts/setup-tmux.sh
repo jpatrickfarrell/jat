@@ -3,7 +3,7 @@
 # Tmux Mouse Configuration Setup
 # - Enables mouse scrolling in tmux sessions
 # - Fixes Alacritty's faux scrolling behavior in alternate screen mode
-# - Required for proper scrolling in Claude Code TUI when using dashboard-spawned sessions
+# - Required for proper scrolling in Claude Code TUI when using IDE-spawned sessions
 
 # Color codes
 GREEN='\033[0;32m'

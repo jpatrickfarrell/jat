@@ -24,8 +24,8 @@ if [[ -f "$AGENT_FILE" ]]; then
     # Save to window-specific location (no race condition with other agents)
     echo "$AGENT_NAME" > "$PERSISTENT_AGENT_FILE"
 
-    # Output marker for dashboard state detection
-    # This tells the dashboard we're compacting (not idle/waiting for review)
+    # Output marker for IDE state detection
+    # This tells the IDE we're compacting (not idle/waiting for review)
     echo "[JAT:COMPACTING]"
 
     # Log for debugging

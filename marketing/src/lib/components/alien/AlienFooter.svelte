@@ -11,7 +11,7 @@
 	const links = [
 		{ label: 'GitHub', href: 'https://github.com/jomarchy/jat' },
 		{ label: 'Documentation', href: '#chapters' },
-		{ label: 'Dashboard', href: '#interface' }
+		{ label: 'IDE', href: '#interface' }
 	];
 
 	const glyphs = ['⌬', '⏣', '⎔', '◬', '⧫', '⬡'];

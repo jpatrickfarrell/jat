@@ -425,12 +425,12 @@ Makes subjects scannable in busy inboxes!
 
 ## Real-World Example
 
-**Based on actual PaleStar + DashboardBuilder session:**
+**Based on actual PaleStar + IDEBuilder session:**
 
 ```bash
-# DashboardBuilder: P0 foundation
-am-reserve "dashboard/**" --agent DashboardBuilder
-am-send "[odm] Starting SvelteKit" --from DashboardBuilder
+# IDEBuilder: P0 foundation
+am-reserve "ide/**" --agent IDEBuilder
+am-send "[odm] Starting SvelteKit" --from IDEBuilder
 
 # PaleStar: P0 query layers (parallel)
 am-reserve "lib/**" --agent PaleStar
@@ -438,17 +438,17 @@ am-send "[rpe] Starting Beads layer" --from PaleStar
 
 # Both work simultaneously (no conflicts!)
 
-# DashboardBuilder finishes first
-am-send "[odm] ✅ Complete" --from DashboardBuilder
-am-release "dashboard/**" --agent DashboardBuilder
+# IDEBuilder finishes first
+am-send "[odm] ✅ Complete" --from IDEBuilder
+am-release "ide/**" --agent IDEBuilder
 
 # PaleStar finishes
 am-send "[rpe] ✅ Complete" --from PaleStar
 am-release "lib/**" --agent PaleStar
 
-# DashboardBuilder uses PaleStar's work
-am-reserve "dashboard/src/**" --agent DashboardBuilder
-am-send "[qx8] Starting UI (using lib/beads.js)" --from DashboardBuilder
+# IDEBuilder uses PaleStar's work
+am-reserve "ide/src/**" --agent IDEBuilder
+am-send "[qx8] Starting UI (using lib/beads.js)" --from IDEBuilder
 
 # Result: 3 P0 tasks done in 90 minutes with ZERO conflicts
 ```

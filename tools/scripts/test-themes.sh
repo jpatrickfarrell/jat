@@ -2,7 +2,7 @@
 #
 # Theme Testing Script - Automated testing of all 32 DaisyUI themes
 #
-# Tests dashboard functionality across all themes:
+# Tests IDE functionality across all themes:
 # - Takes screenshots of each theme
 # - Verifies theme switching works
 # - Documents visual issues
@@ -19,10 +19,10 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-DASHBOARD_PORT=9223
-DASHBOARD_URL="http://localhost:${DASHBOARD_PORT}"
-SCREENSHOTS_DIR="dashboard/theme-screenshots"
-RESULTS_FILE="dashboard/THEME_TEST_RESULTS.md"
+IDE_PORT=9223
+IDE_URL="http://localhost:${IDE_PORT}"
+SCREENSHOTS_DIR="ide/theme-screenshots"
+RESULTS_FILE="ide/THEME_TEST_RESULTS.md"
 
 # All 32 DaisyUI themes
 THEMES=(
@@ -61,7 +61,7 @@ THEMES=(
 )
 
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}║   DaisyUI Theme Testing - Beads Dashboard               ║${NC}"
+echo -e "${BLUE}║   DaisyUI Theme Testing - Beads IDE               ║${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
 echo ""
 
@@ -69,16 +69,16 @@ echo ""
 mkdir -p "$SCREENSHOTS_DIR"
 echo -e "${GREEN}✓${NC} Created screenshots directory: $SCREENSHOTS_DIR"
 
-# Check if dashboard server is running
+# Check if IDE server is running
 echo ""
-echo -e "${YELLOW}Checking dashboard server...${NC}"
-if curl -sf "$DASHBOARD_URL" > /dev/null 2>&1; then
-  echo -e "${GREEN}✓${NC} Dashboard server is running at $DASHBOARD_URL"
+echo -e "${YELLOW}Checking IDE server...${NC}"
+if curl -sf "$IDE_URL" > /dev/null 2>&1; then
+  echo -e "${GREEN}✓${NC} IDE server is running at $IDE_URL"
 else
-  echo -e "${RED}✗${NC} Dashboard server not running at $DASHBOARD_URL"
+  echo -e "${RED}✗${NC} IDE server not running at $IDE_URL"
   echo ""
-  echo "Please start the dashboard server first:"
-  echo "  cd dashboard && npm run dev -- --port $DASHBOARD_PORT"
+  echo "Please start the IDE server first:"
+  echo "  cd ide && npm run dev -- --port $IDE_PORT"
   echo ""
   exit 1
 fi
@@ -89,9 +89,9 @@ echo -e "${YELLOW}Starting browser...${NC}"
 ./tools/browser/browser-start.js 2>/dev/null || echo "Browser already running"
 sleep 2
 
-# Navigate to dashboard
-echo -e "${YELLOW}Navigating to dashboard...${NC}"
-./tools/browser/browser-nav.js "$DASHBOARD_URL" > /dev/null
+# Navigate to IDE
+echo -e "${YELLOW}Navigating to IDE...${NC}"
+./tools/browser/browser-nav.js "$IDE_URL" > /dev/null
 sleep 2
 
 # Initialize results file
@@ -99,7 +99,7 @@ cat > "$RESULTS_FILE" << 'EOF'
 # DaisyUI Theme Testing Results
 
 **Date**: $(date '+%Y-%m-%d %H:%M:%S')
-**Dashboard URL**: http://localhost:9223
+**IDE URL**: http://localhost:9223
 **Total Themes**: 32
 
 ## Test Methodology
@@ -264,8 +264,8 @@ For each theme screenshot, verify:
 
 - **OS**: $(uname -s)
 - **Browser**: Chromium (headless)
-- **Dashboard Version**: $(cd dashboard && npm pkg get version | tr -d '"')
-- **DaisyUI Version**: $(cd dashboard && npm list daisyui | grep daisyui | awk '{print $2}')
+- **IDE Version**: $(cd ide && npm pkg get version | tr -d '"')
+- **DaisyUI Version**: $(cd ide && npm list daisyui | grep daisyui | awk '{print $2}')
 
 EOF
 

@@ -25,7 +25,7 @@
 			description: 'Initialize all tools and create symlinks'
 		},
 		{
-			title: 'Start the Dashboard',
+			title: 'Start the IDE',
 			command: 'jat',
 			description: 'Launch your command center'
 		},
@@ -40,7 +40,7 @@
 		{ name: 'tmux', desc: 'Terminal multiplexer' },
 		{ name: 'sqlite3', desc: 'Database for Agent Mail' },
 		{ name: 'jq', desc: 'JSON processing' },
-		{ name: 'node', desc: 'Dashboard & browser tools' }
+		{ name: 'node', desc: 'IDE & browser tools' }
 	];
 
 	async function copyCommand(command: string, index: number) {

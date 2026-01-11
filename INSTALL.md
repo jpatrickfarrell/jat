@@ -13,9 +13,9 @@ For bash users (Linux):
 curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | bash && source ~/.bashrc
 ```
 
-Then start the dashboard:
+Then start the IDE:
 ```bash
-jat-dashboard
+jat
 ```
 
 Open your browser to: http://localhost:5174
@@ -31,9 +31,9 @@ Open your browser to: http://localhost:5174
    - Alternative: `~/code/jat`
    - Custom: You can specify your own path
 4. **Clones the repository**
-5. **Installs dashboard dependencies** (npm packages)
+5. **Installs IDE dependencies** (npm packages)
 6. **Adds JAT to your PATH**
-7. **Creates the `jat-dashboard` command**
+7. **Creates the `jat` command**
 
 ## Shell Detection
 
@@ -75,8 +75,8 @@ sudo pacman -S tmux sqlite jq nodejs npm
 git clone https://github.com/joewinke/jat ~/.local/share/jat
 cd ~/.local/share/jat
 
-# 3. Install dashboard dependencies
-cd dashboard
+# 3. Install IDE dependencies
+cd ide
 npm install
 cd ..
 
@@ -85,12 +85,12 @@ echo 'export PATH="$PATH:$HOME/.local/share/jat/tools"' >> ~/.zshrc
 source ~/.zshrc
 
 # 5. Test the installation
-jat-dashboard
+jat
 ```
 
 ## Troubleshooting
 
-### "command not found: jat-dashboard"
+### "command not found: jat"
 
 **Cause**: Shell config not reloaded or PATH not set
 
@@ -114,7 +114,7 @@ echo $PATH | grep jat
 
 **DON'T DO THIS:**
 ```bash
-# Install and launch dashboard
+# Install and launch IDE
 curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | bash
 ```
 
@@ -123,13 +123,13 @@ curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | ba
 curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | bash
 ```
 
-### "source ~/.bashrc && jat-dashboard" fails on macOS
+### "source ~/.bashrc && jat" fails on macOS
 
 **Cause**: macOS uses `zsh` by default, not `bash`
 
 **Solution**: Use `~/.zshrc` instead:
 ```bash
-source ~/.zshrc && jat-dashboard
+source ~/.zshrc && jat
 ```
 
 ### Homebrew not found on macOS
@@ -159,13 +159,13 @@ Then run the JAT installer again.
    npm --version
    ```
 
-### Dashboard won't start
+### IDE won't start
 
 **Cause**: Missing npm dependencies
 
 **Solution**:
 ```bash
-cd ~/.local/share/jat/dashboard  # or wherever you installed JAT
+cd ~/.local/share/jat/ide  # or wherever you installed JAT
 npm install
 npm run dev
 ```
@@ -213,8 +213,8 @@ To update JAT to the latest version:
 ```bash
 cd ~/.local/share/jat  # or your install location
 git pull origin master
-cd dashboard
-npm install  # update dashboard dependencies
+cd ide
+npm install  # update IDE dependencies
 ```
 
 ## Platform-Specific Notes
@@ -251,7 +251,7 @@ npm install  # update dashboard dependencies
 
 After installation:
 
-1. **Start the dashboard**: `jat-dashboard`
+1. **Start the IDE**: `jat`
 2. **Open browser**: http://localhost:5174
 3. **Initialize a project**:
    ```bash

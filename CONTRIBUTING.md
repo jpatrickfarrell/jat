@@ -485,9 +485,9 @@ jat/
 │   ├── complete.md           # /jat:complete command
 │   └── ...                   # Other commands
 │
-├── dashboard/                 # Beads Task Dashboard (SvelteKit)
+├── ide/                 # Beads Task IDE (SvelteKit)
 │   ├── src/                  # Source files
-│   └── CLAUDE.md             # Dashboard-specific docs
+│   └── CLAUDE.md             # IDE-specific docs
 │
 ├── stacks/                    # Tech-stack-specific tools
 │   └── sveltekit-supabase/

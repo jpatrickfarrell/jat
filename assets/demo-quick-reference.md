@@ -21,11 +21,11 @@ bash ~/code/jat/assets/demo-reset.sh
 
 ### Frame 3 (10-20s): Generate Tasks [SPEED UP]
 - Agent creates PRD
-- Runs `/jat:bead`
+- Runs `/jat:tasktree`
 - Creates subtasks
 
 ### Frame 4 (20-25s): Tasks Appear
-- Dashboard shows 4 new tasks
+- IDE shows 4 new tasks
 - Different project badges
 
 ### Frame 5 (25-35s): Launch Swarm
@@ -44,7 +44,7 @@ bash ~/code/jat/assets/demo-reset.sh
 
 ## 🎯 Key Visuals
 
-✅ Never leave the dashboard
+✅ Never leave the IDE
 ✅ 3 projects working in parallel
 ✅ Interactive question UI
 ✅ Real-time progress tracking

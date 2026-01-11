@@ -59,7 +59,7 @@ if [[ -z "$AGENT_NAME" ]] && [[ -f "$PERSISTENT_AGENT_FILE" ]]; then
 fi
 
 # Output working marker if agent has an in_progress task
-# This re-establishes dashboard state after compaction
+# This re-establishes IDE state after compaction
 if [[ -n "$AGENT_NAME" ]] && command -v bd &>/dev/null; then
     TASK_ID=$(bd list --json 2>/dev/null | jq -r --arg a "$AGENT_NAME" '.[] | select(.assignee == $a and .status == "in_progress") | .id' 2>/dev/null | head -1)
     if [[ -n "$TASK_ID" ]]; then

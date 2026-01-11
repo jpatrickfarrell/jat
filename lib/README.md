@@ -264,7 +264,7 @@ This allows `getFileReservationsByTask()` to link reservations to tasks.
 **After integration:**
 - ✅ Full visibility: See which agents are working on which tasks
 - ✅ Audit trail: Complete history of messages + reservations per task
-- ✅ Active work dashboard: Real-time view of agent activity
+- ✅ Active work IDE: Real-time view of agent activity
 - ✅ Handoff tracking: Know when work was passed between agents
 - ✅ Metrics: Integration adoption rate, agent activity stats
 

@@ -1,7 +1,7 @@
-# JAT Dashboard Demo Recording Script - Final
+# JAT IDE Demo Recording Script - Final
 
 **Target:** 45-60 second MP4 showcasing JAT's multi-project orchestration
-**Key Message:** Manage multiple client projects simultaneously with one dashboard
+**Key Message:** Manage multiple client projects simultaneously with one IDE
 
 ---
 
@@ -28,14 +28,14 @@ Each is a complete, self-contained SvelteKit application.
 # - Adds projects to config
 jat-demo setup
 
-# Show only demo projects in dashboard
+# Show only demo projects in IDE
 jat-demo on
 ```
 
-### 2. Start Dashboard
+### 2. Start IDE
 
 ```bash
-jat-dashboard
+jat
 ```
 
 ### 3. Browser Setup
@@ -49,7 +49,7 @@ jat-dashboard
 
 - Blog task: `~/code/jat/assets/demo-task-blog.txt`
 - Shop task: `~/code/jat/assets/demo-task-shop.txt`
-- Dashboard task: `~/code/jat/assets/demo-task-dashboard.txt`
+- IDE task: `~/code/jat/assets/demo-task-dashboard.txt`
 
 ---
 
@@ -65,7 +65,7 @@ jat-dashboard
    - 📊 **jat-demo-dashboard** (Analytics)
 3. All show empty task lists
 
-**Narration:** "Three client projects, one dashboard"
+**Narration:** "Three client projects, one IDE"
 
 ### Scene 2: Create Blog Comment Feature (0:05-0:15)
 
@@ -96,14 +96,14 @@ jat-dashboard
 
 **Narration:** "Multiple agents, different projects, parallel execution"
 
-### Scene 4: Add Dashboard Feature (0:25-0:30)
+### Scene 4: Add IDE Feature (0:25-0:30)
 
-1. Click **"+ Task"** in dashboard project
+1. Click **"+ Task"** in IDE project
 2. Quick create:
    - Title: `Real-time visitor tracking`
    - Description: (short paste from demo-task-dashboard.txt)
 3. Click **"Save & Launch"** (instant execution!)
-4. **DashboardAgent** joins the swarm automatically
+4. **IDEAgent** joins the swarm automatically
 5. **THREE agents now working in parallel**
 
 **Narration:** "Save and launch - straight to execution"
@@ -174,11 +174,11 @@ Rapid cuts:
 ## 📝 NARRATION SCRIPT (Optional Voiceover)
 
 ```
-0:00 "Three client projects. One dashboard to rule them all."
+0:00 "Three client projects. One IDE to rule them all."
 0:08 "Create a task. Launch an agent. It starts planning."
 0:18 "While that works, start another project's feature."
 0:25 "And another. True parallel development."
-0:32 "When agents need decisions, the dashboard delivers."
+0:32 "When agents need decisions, the IDE delivers."
 0:40 "Organize your view. Focus on what matters."
 0:47 "From requirements to running code."
 0:52 "JAT. Orchestration for modern development."
@@ -242,7 +242,7 @@ The demo succeeds if viewers understand:
 
 1. **Multi-project management** - Not just one codebase
 2. **Parallel execution** - Real simultaneous work
-3. **Interactive orchestration** - Dashboard handles agent questions
+3. **Interactive orchestration** - IDE handles agent questions
 4. **Flexible organization** - Collapse/expand/monitor as needed
 5. **Complete workflow** - From task creation to completion
 

@@ -60,7 +60,7 @@
 
 	const storySnippets = [
 		{ headline: "It starts with an idea.", text: "You describe what you want: \"Add user authentication.\" The AI helps you turn it into a structured PRD." },
-		{ headline: "The PRD becomes tasks.", text: "Run /jat:bead and watch your requirements transform into a dependency tree of actionable work." },
+		{ headline: "The PRD becomes tasks.", text: "Run /jat:tasktree and watch your requirements transform into a dependency tree of actionable work." },
 		{ headline: "Agents swarm the work.", text: "Multiple AI agents claim tasks and start coding in parallel. No bottlenecks. No waiting." },
 		{ headline: "Parallel execution.", text: "Each agent works independently on their assigned task. Code flows from multiple sources simultaneously." },
 		{ headline: "Questions surface to you.", text: "When an agent needs a decision — \"OAuth or JWT?\" — it appears as a clickable button, not buried in terminal spam." },

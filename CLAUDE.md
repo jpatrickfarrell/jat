@@ -30,7 +30,7 @@ jat/
 │   ├── signal/          # JAT signal tools (jat-signal, jat-signal-validate)
 │   └── scripts/         # Installation and setup scripts
 ├── commands/jat/        # JAT workflow commands (9 commands)
-├── dashboard/           # Beads Task Dashboard (SvelteKit app)
+├── ide/           # Beads Task IDE (SvelteKit app)
 ├── shared/              # Shared documentation (imported by projects)
 └── install.sh           # Installation script
 ```
@@ -38,12 +38,12 @@ jat/
 ## Prerequisites
 
 **Required** (installer will check for these):
-- `tmux` - Terminal multiplexer (sessions, dashboard tracking)
+- `tmux` - Terminal multiplexer (sessions, IDE tracking)
 - `sqlite3` - Database for Agent Mail
 - `jq` - JSON processing
 
 **Optional but recommended:**
-- `npm` / `node` - For browser-tools and dashboard
+- `npm` / `node` - For browser-tools and IDE
 - `gum` - Interactive prompts during install
 
 ```bash
@@ -78,11 +78,11 @@ JAT includes a self-update mechanism similar to VS Code - it checks for updates 
 
 ### Update Behavior
 
-When you launch the dashboard with `jat` (no arguments), it checks for updates (at most once per 24 hours). If updates are available, you'll be prompted:
+When you launch the IDE with `jat` (no arguments), it checks for updates (at most once per 24 hours). If updates are available, you'll be prompted:
 
 ```
 ╔═══════════════════════════════════════════════════════════════╗
-║              🚀 JAT Dashboard                                 ║
+║              🚀 JAT IDE                                 ║
 ╚═══════════════════════════════════════════════════════════════╝
 
 Checking for updates...
@@ -93,7 +93,7 @@ Updating JAT...
 ```
 
 - **Prompt-based** - You're always asked before updates install
-- **Dashboard only** - Other commands like `jat list` don't check
+- **IDE only** - Other commands like `jat list` don't check
 - **Throttled** - Checks at most once per 24 hours
 
 ### Manual Update Commands
@@ -108,7 +108,7 @@ jat update --check
 # Show installation path and version
 jat update --status
 
-# Disable update checks on dashboard launch
+# Disable update checks on IDE launch
 jat update --disable
 
 # Re-enable update checks
@@ -232,10 +232,10 @@ ls ~/.claude/statusline.sh   # Should exist
 ~/.claude/statusline.sh      # Test run (may show errors if not in tmux)
 ```
 
-### Dashboard
+### IDE
 ```bash
-# Check dashboard can start
-cd ~/code/jat/dashboard
+# Check IDE can start
+cd ~/code/jat/ide
 npm run build                # Should compile without errors
 
 # Start dev server (Ctrl+C to stop)
@@ -266,12 +266,12 @@ find ~/.local/bin -type l -name "browser-*" -exec test ! -e {} \; -print
 | `am-whoami` fails | Database not initialized | Run: `bash ~/code/jat/tools/scripts/install-agent-mail.sh` |
 | `bd: command not found` | Beads not installed | Run: `bash ~/code/jat/tools/scripts/install-beads.sh` |
 | `browser-*.js` fails | npm dependencies missing | Run: `cd ~/code/jat/tools/browser && npm install` |
-| Dashboard won't start | Dependencies missing | Run: `cd ~/code/jat/dashboard && npm install` |
+| IDE won't start | Dependencies missing | Run: `cd ~/code/jat/ide && npm install` |
 | Broken symlinks | Old installation | Run: `./install.sh` to refresh symlinks |
 
 ### Post-Installation: Add a Project
 
-**You must add at least one project before using the dashboard or agents.**
+**You must add at least one project before using the IDE or agents.**
 
 A valid project is:
 - A **git repository** in `~/code/`
@@ -283,8 +283,8 @@ cd ~/code/my-project
 bd init
 # Answer prompts (or press Y for defaults)
 
-# Option 2: From the dashboard
-jat        # Start the dashboard
+# Option 2: From the IDE
+jat        # Start the IDE
 # Go to Tasks page → click "Add Project"
 ```
 
@@ -298,13 +298,13 @@ After adding a project, you can start working:
 /jat:start auto
 ```
 
-## Dashboard AI Features (Optional)
+## IDE AI Features (Optional)
 
-To enable AI-powered features in the dashboard, add your Anthropic API key:
+To enable AI-powered features in the IDE, add your Anthropic API key:
 
 ```bash
 # Copy the example env file
-cp ~/code/jat/dashboard/.env.example ~/code/jat/dashboard/.env
+cp ~/code/jat/ide/.env.example ~/code/jat/ide/.env
 
 # Edit and add your API key
 # Get key from: https://console.anthropic.com/settings/keys
@@ -315,13 +315,13 @@ cp ~/code/jat/dashboard/.env.example ~/code/jat/dashboard/.env
 - **Usage Metrics** - Real-time token usage and rate limit tracking
 - **Avatar Generation** - AI-generated agent avatars
 
-Without the API key, the dashboard works fully but these AI features are disabled.
+Without the API key, the IDE works fully but these AI features are disabled.
 
 ## Tmux Requirement (Critical)
 
-**All Claude Code sessions MUST run inside tmux for dashboard tracking.**
+**All Claude Code sessions MUST run inside tmux for IDE tracking.**
 
-The dashboard tracks agents via tmux sessions named `jat-{AgentName}`. Sessions not running in tmux will show as "offline" or "disconnected" in the dashboard.
+The IDE tracks agents via tmux sessions named `jat-{AgentName}`. Sessions not running in tmux will show as "offline" or "disconnected" in the IDE.
 
 ### Correct Launch Methods
 
@@ -343,7 +343,7 @@ source ~/.bashrc
 
 1. Launch creates `jat-pending-{id}` tmux session
 2. `/jat:start` registers agent and renames session to `jat-{AgentName}`
-3. Dashboard sees `jat-{AgentName}` and tracks the agent
+3. IDE sees `jat-{AgentName}` and tracks the agent
 
 ### What NOT To Do
 
@@ -352,12 +352,12 @@ source ~/.bashrc
 cd ~/code/chimaro && claude "/jat:start"
 
 # This will show a statusline error:
-# "NOT IN TMUX SESSION - Dashboard cannot track this session"
+# "NOT IN TMUX SESSION - IDE cannot track this session"
 ```
 
 ## Attach vs Resume Session Features
 
-The dashboard provides two different ways to interact with agent sessions from the UI:
+The IDE provides two different ways to interact with agent sessions from the UI:
 
 ### Attach Session (Online Agents)
 
@@ -366,7 +366,7 @@ The dashboard provides two different ways to interact with agent sessions from t
 **API:** `POST /api/sessions/[name]/attach`
 
 **What it does:**
-1. Creates a new window in your parent tmux session (e.g., `jat-dashboard`)
+1. Creates a new window in your parent tmux session (e.g., `jat-ide`)
 2. Attaches to the existing agent's tmux session
 3. Falls back to spawning a new terminal if no parent session found
 
@@ -375,7 +375,7 @@ The dashboard provides two different ways to interact with agent sessions from t
 - You need to interact with a running agent
 - The agent is stuck and you need to manually intervene
 
-**Dashboard UI:** "Attach Terminal" action in the session dropdown
+**IDE UI:** "Attach Terminal" action in the session dropdown
 
 ```bash
 # Equivalent manual command
@@ -404,7 +404,7 @@ tmux attach-session -t jat-AgentName
 2. `/tmp/jat-timeline-{session}.jsonl` - Timeline events (cleared on reboot)
 3. `.claude/sessions/agent-{sessionId}.txt` - Persistent mapping (survives reboot)
 
-**Dashboard UI:** "Resume Session" action (only shown for offline agents)
+**IDE UI:** "Resume Session" action (only shown for offline agents)
 
 ```bash
 # Equivalent manual command
@@ -430,7 +430,7 @@ Both features use these settings from `~/.config/jat/projects.json`:
   "defaults": {
     "terminal": "alacritty",           // Terminal emulator to spawn
     "claude_flags": "--dangerously-skip-permissions",
-    "parent_session": "jat-dashboard"  // For attach: where to create windows
+    "parent_session": "jat-ide"  // For attach: where to create windows
   }
 }
 ```
@@ -444,23 +444,23 @@ Both features use these settings from `~/.config/jat/projects.json`:
 jat chimaro 4 --auto
 
 # This will:
-# 1. Start npm dev server + browser + dashboard
+# 1. Start npm dev server + browser + IDE
 # 2. Launch 4 Claude sessions in tmux (15s stagger between each)
 # 3. Each session runs /jat:start auto → picks & starts top task
 
-# Claude-only (no npm server, browser, or dashboard)
+# Claude-only (no npm server, browser, or IDE)
 jat chimaro 4 --claude --auto
 ```
 
-## Dashboard Development
+## IDE Development
 
-**The Beads Task Dashboard is a SvelteKit 5 application in the `dashboard/` directory.**
+**The Beads Task IDE is a SvelteKit 5 application in the `ide/` directory.**
 
-### Important: Dashboard-Specific Documentation
+### Important: IDE-Specific Documentation
 
-When working on the dashboard, refer to:
+When working on the IDE, refer to:
 ```
-dashboard/CLAUDE.md
+ide/CLAUDE.md
 ```
 
 This contains critical information about:
@@ -470,7 +470,7 @@ This contains critical information about:
 - Svelte 5 runes syntax
 - Common pitfalls and troubleshooting
 
-### Quick Dashboard Commands
+### Quick IDE Commands
 
 **Launcher Script (Recommended):**
 ```bash
@@ -479,7 +479,7 @@ jat       # Checks dependencies, starts server, opens browser
 
 **Manual Commands:**
 ```bash
-cd dashboard
+cd ide
 npm install
 npm run dev         # Usually http://127.0.0.1:5174
 
@@ -488,7 +488,7 @@ rm -rf .svelte-kit node_modules/.vite
 npm run dev
 ```
 
-### Critical Dashboard Issue: Tailwind v4
+### Critical IDE Issue: Tailwind v4
 
 **This does NOT work (v3 syntax):**
 ```css
@@ -506,11 +506,11 @@ npm run dev
 }
 ```
 
-See `dashboard/CLAUDE.md` for full details.
+See `ide/CLAUDE.md` for full details.
 
 ## Voice-to-Text (Optional)
 
-The dashboard supports voice input using local whisper.cpp - 100% private, no data leaves your machine.
+The IDE supports voice input using local whisper.cpp - 100% private, no data leaves your machine.
 
 ### Installation
 
@@ -548,7 +548,7 @@ bash ~/code/jat/tools/scripts/install-whisper.sh
 
 ## Adding New Projects
 
-Projects are automatically discovered by the dashboard in two ways:
+Projects are automatically discovered by the IDE in two ways:
 
 ### Method 1: Run `bd init` (Recommended for quick start)
 
@@ -558,7 +558,7 @@ bd init
 # Answer prompts (or press Y for defaults)
 ```
 
-The dashboard automatically scans `~/code/` for directories with `.beads/` and adds them to the project list. After running `bd init`, refresh the dashboard to see your project.
+The IDE automatically scans `~/code/` for directories with `.beads/` and adds them to the project list. After running `bd init`, refresh the IDE to see your project.
 
 ### Method 2: Add to JAT Config (Full configuration)
 
@@ -582,7 +582,7 @@ For projects that need custom ports, colors, or database URLs:
 - `path` - Project directory (required)
 - `port` - Dev server port (optional, enables server controls)
 - `server_path` - Where to run `npm run dev` (optional, defaults to path)
-- `description` - Shown in dashboard (optional)
+- `description` - Shown in IDE (optional)
 - `active_color` / `inactive_color` - Badge colors (optional)
 - `database_url` - For database tools (optional)
 
@@ -642,7 +642,7 @@ cd ~/code/jat
 
 ## Demo System
 
-JAT includes a streamlined demo system for recording videos and showcasing dashboard features. The demo uses three pre-configured projects with distinct colors for visual differentiation.
+JAT includes a streamlined demo system for recording videos and showcasing IDE features. The demo uses three pre-configured projects with distinct colors for visual differentiation.
 
 ### Demo Projects
 
@@ -658,7 +658,7 @@ JAT includes a streamlined demo system for recording videos and showcasing dashb
 # One-time setup (creates projects, clears tasks, configures colors)
 jat-demo setup
 
-# Show only demo projects in dashboard (hide regular projects)
+# Show only demo projects in IDE (hide regular projects)
 jat-demo on
 
 # After recording, restore regular projects
@@ -673,7 +673,7 @@ jat-demo clean
 | Command | Description |
 |---------|-------------|
 | `jat-demo setup` | Creates demo projects in ~/code/, initializes with beads, adds to config with distinct colors |
-| `jat-demo on` | Hides all non-demo projects in dashboard, shows only demo projects |
+| `jat-demo on` | Hides all non-demo projects in IDE, shows only demo projects |
 | `jat-demo off` | Shows regular projects, hides demo projects |
 | `jat-demo status` | Shows visibility status of all projects |
 | `jat-demo clean` | Removes all demo projects (interactive confirmation) |
@@ -703,7 +703,7 @@ Demo recording scripts are located in `assets/`:
 ### After Recording
 
 ```bash
-# Restore normal dashboard view
+# Restore normal IDE view
 jat-demo off
 
 # Optional: Remove demo projects entirely
@@ -717,9 +717,9 @@ jat-demo clean
 
 ## Common Issues
 
-### Dashboard themes not working
-1. Check `dashboard/src/app.css` uses Tailwind v4 syntax
-2. See `dashboard/CLAUDE.md` for detailed troubleshooting
+### IDE themes not working
+1. Check `ide/src/app.css` uses Tailwind v4 syntax
+2. See `ide/CLAUDE.md` for detailed troubleshooting
 
 ### Agent Mail "not registered"
 ```bash
@@ -734,9 +734,9 @@ cd /home/jw/code/jat
 ./install.sh
 ```
 
-### Fresh dashboard build needed
+### Fresh IDE build needed
 ```bash
-cd dashboard
+cd ide
 rm -rf .svelte-kit node_modules/.vite
 npm run dev
 ```
@@ -747,7 +747,7 @@ npm run dev
 session_id=$(cat /tmp/claude-session-${PPID}.txt | tr -d '\n') && mkdir -p .claude/sessions && echo "YourAgentName" > ".claude/sessions/agent-${session_id}.txt"
 ```
 
-### Agent shows "offline" or "disconnected" in dashboard
+### Agent shows "offline" or "disconnected" in IDE
 ```bash
 # Cause: Claude session not running inside tmux
 # Fix: Exit and restart with a launcher function
@@ -779,7 +779,7 @@ curl http://localhost:5174/api/transcribe
 ## References
 
 - **Shared docs**: `./shared/*.md` (imported above)
-- **Dashboard docs**: `dashboard/CLAUDE.md`
+- **IDE docs**: `ide/CLAUDE.md`
 - **JAT commands**: `./commands/jat/*.md`
 - **Tool source**: Each tool directory contains implementation
 - **Installation**: `install.sh` for symlink setup

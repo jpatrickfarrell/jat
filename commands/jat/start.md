@@ -68,7 +68,7 @@ mkdir -p .claude/sessions
 ```bash
 tmux rename-session "jat-{AgentName}"
 ```
-Without this, the dashboard can't track your session.
+Without this, the IDE can't track your session.
 
 ---
 
@@ -118,7 +118,7 @@ am-send "[$TASK_ID] Starting: $TASK_TITLE" "Starting work" --from "$AGENT_NAME" 
 
 ### STEP 7: Emit Signals & Plan
 
-**Starting signal** (with full session context for dashboard display):
+**Starting signal** (with full session context for IDE display):
 ```bash
 jat-signal starting '{
   "agentName": "AgentName",
@@ -214,7 +214,7 @@ Run /jat:complete when ready to close this task.
 ## Session Lifecycle
 
 ```
-Dashboard spawns agent
+IDE spawns agent
        │
        ▼
   ┌──────────┐

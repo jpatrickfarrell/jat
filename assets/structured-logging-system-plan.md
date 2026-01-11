@@ -1,4 +1,4 @@
-# Structured Logging System Plan for JAT Dashboard
+# Structured Logging System Plan for JAT IDE
 
 ## Overview
 
@@ -11,7 +11,7 @@ A structured logging system to replace the 947 console statements with a central
 
 ## Current State
 
-- **947 total console statements** found across the dashboard
+- **947 total console statements** found across the IDE
 - Distribution:
   - Routes (API endpoints, pages): ~600 statements
   - Components: ~200 statements
@@ -374,7 +374,7 @@ import { createWriteStream } from 'fs';
 import { join } from 'path';
 
 const logStream = createWriteStream(
-  join(process.cwd(), 'logs', `dashboard-${new Date().toISOString().split('T')[0]}.log`),
+  join(process.cwd(), 'logs', `ide-${new Date().toISOString().split('T')[0]}.log`),
   { flags: 'a' }
 );
 
@@ -411,7 +411,7 @@ export function shipLogs(logs: LogEntry[]) {
 }
 ```
 
-## Dashboard Log Viewer
+## IDE Log Viewer
 
 Create a `/logs` route for viewing logs in development:
 
@@ -479,7 +479,7 @@ Create a `/logs` route for viewing logs in development:
 4. **Error Tracking**: Automatic error aggregation and alerting
 5. **Performance Monitoring**: Built-in timing and slow query detection
 6. **Audit Trail**: Complete record of user actions and system events
-7. **Real-time Monitoring**: SSE-based log streaming to dashboard
+7. **Real-time Monitoring**: SSE-based log streaming to IDE
 
 ## Implementation Timeline
 
@@ -498,7 +498,7 @@ Create a `/logs` route for viewing logs in development:
 
 ## Notes
 
-- This plan addresses the 947 console statements found in the dashboard
+- This plan addresses the 947 console statements found in the IDE
 - Priority given to high-traffic paths (API endpoints, database operations)
 - Browser compatibility maintained through pino's browser adapter
 - Development experience enhanced with pretty printing and real-time viewer

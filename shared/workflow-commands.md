@@ -11,7 +11,7 @@
 
 **Escalation & Planning:**
 - `/jat:verify [url]` - **Escalatory**: browser verification when user wants deeper testing
-- `/jat:bead [prd-path]` - Convert PRD/spec into structured Beads tasks with dependencies
+- `/jat:tasktree [prd-path]` - Convert PRD/spec into structured Beads tasks with dependencies
 
 **Maintenance:**
 - `jat-doctor` - Bash script to diagnose installation issues (run anytime)
@@ -29,7 +29,7 @@
 /jat:start task-abc           # Create agent, start specific task
 /jat:complete                 # Complete task, end session
 
-# With specific agent (dashboard spawn)
+# With specific agent (IDE spawn)
 /jat:start MyAgent task-abc   # Use MyAgent, start task
 ```
 

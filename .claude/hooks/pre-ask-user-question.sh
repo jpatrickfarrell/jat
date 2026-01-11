@@ -3,7 +3,7 @@
 # pre-ask-user-question.sh - Claude PreToolUse hook for AskUserQuestion
 #
 # This hook captures the question data BEFORE the user answers,
-# writing it to a temp file for the dashboard to display.
+# writing it to a temp file for the IDE to display.
 #
 # PreToolUse is required because PostToolUse runs after the user
 # has already answered, making the question data irrelevant.
@@ -60,13 +60,13 @@ QUESTION_DATA=$(echo "$TOOL_INFO" | jq -c --arg tmux "$TMUX_SESSION" '{
 QUESTION_FILE="/tmp/claude-question-${SESSION_ID}.json"
 echo "$QUESTION_DATA" > "$QUESTION_FILE" 2>/dev/null || true
 
-# Also write to tmux session name file for easy dashboard lookup
+# Also write to tmux session name file for easy IDE lookup
 if [[ -n "$TMUX_SESSION" ]]; then
     TMUX_QUESTION_FILE="/tmp/claude-question-tmux-${TMUX_SESSION}.json"
     echo "$QUESTION_DATA" > "$TMUX_QUESTION_FILE" 2>/dev/null || true
 fi
 
-# Also emit a needs_input signal so the dashboard transitions to needs-input state
+# Also emit a needs_input signal so the IDE transitions to needs-input state
 # This triggers the question polling in SessionCard
 if [[ -n "$TMUX_SESSION" ]]; then
     # Extract the first question text for the signal

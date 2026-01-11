@@ -10,7 +10,7 @@ This layer uses the "sidecar" pattern - external apps that enhance the agent exp
 
 **How it works:**
 ```
-CLI Agent (any) ──► PostToolUse Hooks ──► Temp Files ──► Dashboard UI
+CLI Agent (any) ──► PostToolUse Hooks ──► Temp Files ──► IDE UI
                                                               │
                                                               ▼
                                                          tmux keys
@@ -23,7 +23,7 @@ CLI Agent (any) ──► PostToolUse Hooks ──► Temp Files ──► Dashb
 - Works with ANY CLI agent (Claude Code, Aider, Cline, Codex, etc.)
 - No changes to the agent needed
 - Pattern: hooks + temp files + tmux
-- Agent doesn't know about the dashboard
+- Agent doesn't know about the IDE
 
 **Examples:**
 - Smart Question UI (buttons instead of typing numbers)
@@ -34,7 +34,7 @@ CLI Agent (any) ──► PostToolUse Hooks ──► Temp Files ──► Dashb
 **Implementation:**
 - `PostToolUse` hooks capture tool outputs
 - Data written to `/tmp/` files (JSON)
-- Dashboard polls or uses SSE to read state
+- IDE polls or uses SSE to read state
 - User actions sent back via `tmux send-keys`
 
 ### Layer 2: Explicit Coordination (JAT-Specific)
@@ -91,7 +91,7 @@ Agent reads CLAUDE.md ──► Uses Agent Mail ──► Picks tasks from Beads
 │   │  • Temp file state sharing                                   │  │
 │   │  • tmux session management                                   │  │
 │   │  • SSE for real-time updates                                 │  │
-│   │  • Dashboard UI rendering                                    │  │
+│   │  • IDE UI rendering                                    │  │
 │   └─────────────────────────────────────────────────────────────┘  │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
@@ -125,7 +125,7 @@ Agent reads CLAUDE.md ──► Uses Agent Mail ──► Picks tasks from Beads
 - `.claude/hooks/` - PostToolUse hook scripts
 - `.claude/settings.json` - Hook configuration
 - `/tmp/claude-question-*.json` - Question state files
-- `dashboard/src/routes/api/sessions/` - SSE endpoints
+- `ide/src/routes/api/sessions/` - SSE endpoints
 
 **Layer 2 (Explicit):**
 - `CLAUDE.md` - Agent instructions

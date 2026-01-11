@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # JAT Voice-to-Text (Whisper.cpp) Installer
-# Installs local speech-to-text for dashboard voice input
+# Installs local speech-to-text for IDE voice input
 # 100% private - no data leaves your machine
 
 set -e
@@ -177,11 +177,11 @@ else
     exit 1
 fi
 
-# Create symlink for dashboard API
+# Create symlink for IDE API
 echo ""
 echo -e "${BLUE}Creating configuration...${NC}"
 
-# Update dashboard transcribe API to use jat whisper path
+# Update IDE transcribe API to use jat whisper path
 # The API checks ~/.local/share/jat/whisper first, then falls back to chezwizper
 echo -e "${GREEN}  ✓ Whisper configured at: $WHISPER_DIR${NC}"
 
@@ -196,7 +196,7 @@ echo "  ✓ whisper.cpp: $WHISPER_DIR"
 echo "  ✓ whisper-cli: $WHISPER_DIR/build/bin/whisper-cli"
 echo "  ✓ Model: $WHISPER_DIR/models/$MODEL_NAME"
 echo ""
-echo "The dashboard will automatically detect and use this installation."
+echo "The IDE will automatically detect and use this installation."
 echo "Voice input buttons will appear in TaskCreationDrawer and WorkCard."
 echo ""
 echo "To test manually:"

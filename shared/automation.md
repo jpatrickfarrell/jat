@@ -13,7 +13,7 @@ The automation system monitors agent session output and automatically executes a
 │                                                                             │
 │  Session Output → Pattern Matching → Action Execution → Activity Log        │
 │                                                                             │
-│  1. Dashboard polls tmux session output                                     │
+│  1. IDE polls tmux session output                                     │
 │  2. automationEngine.processSessionOutput() checks all enabled rules        │
 │  3. Matching rules trigger actions (with rate limiting)                     │
 │  4. Actions executed: send keys, tmux commands, signals, notifications      │
@@ -28,11 +28,11 @@ The automation system monitors agent session output and automatically executes a
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| Types | `dashboard/src/lib/types/automation.ts` | TypeScript interfaces |
-| Store | `dashboard/src/lib/stores/automationRules.svelte.ts` | State management, CRUD, persistence |
-| Engine | `dashboard/src/lib/utils/automationEngine.ts` | Pattern matching, action execution |
-| Config | `dashboard/src/lib/config/automationConfig.ts` | Default config, preset library |
-| Route | `dashboard/src/routes/automation/+page.svelte` | UI page |
+| Types | `ide/src/lib/types/automation.ts` | TypeScript interfaces |
+| Store | `ide/src/lib/stores/automationRules.svelte.ts` | State management, CRUD, persistence |
+| Engine | `ide/src/lib/utils/automationEngine.ts` | Pattern matching, action execution |
+| Config | `ide/src/lib/config/automationConfig.ts` | Default config, preset library |
+| Route | `ide/src/routes/automation/+page.svelte` | UI page |
 
 **UI Components:**
 
@@ -371,7 +371,7 @@ if (myRule) {
 
 ### Adding New Presets
 
-Edit `dashboard/src/lib/config/automationConfig.ts`:
+Edit `ide/src/lib/config/automationConfig.ts`:
 
 ```typescript
 export const AUTOMATION_PRESETS: AutomationPreset[] = [
@@ -425,10 +425,10 @@ Rules can be limited to trigger only in specific session states:
 ### Integration Points
 
 **Session Monitoring:**
-The automation engine is called from the session polling loop in the dashboard. When new output is detected, `processSessionOutput()` is invoked.
+The automation engine is called from the session polling loop in the IDE. When new output is detected, `processSessionOutput()` is invoked.
 
 **Signals:**
-Actions can emit JAT signals via the `signal` action type, which writes to `/tmp/jat-signal-*.json` for dashboard state updates.
+Actions can emit JAT signals via the `signal` action type, which writes to `/tmp/jat-signal-*.json` for IDE state updates.
 
 **Activity Logging:**
 All rule triggers are logged to the activity store with:
@@ -442,26 +442,26 @@ All rule triggers are logged to the activity store with:
 ### Files Reference
 
 **Types:**
-- `dashboard/src/lib/types/automation.ts` - All TypeScript interfaces
+- `ide/src/lib/types/automation.ts` - All TypeScript interfaces
 
 **Store:**
-- `dashboard/src/lib/stores/automationRules.svelte.ts` - Svelte 5 store with CRUD, persistence
+- `ide/src/lib/stores/automationRules.svelte.ts` - Svelte 5 store with CRUD, persistence
 
 **Engine:**
-- `dashboard/src/lib/utils/automationEngine.ts` - Pattern matching, action execution
+- `ide/src/lib/utils/automationEngine.ts` - Pattern matching, action execution
 
 **Config:**
-- `dashboard/src/lib/config/automationConfig.ts` - Default config, preset definitions
+- `ide/src/lib/config/automationConfig.ts` - Default config, preset definitions
 
 **Components:**
-- `dashboard/src/lib/components/automation/RulesList.svelte`
-- `dashboard/src/lib/components/automation/RuleEditor.svelte`
-- `dashboard/src/lib/components/automation/PresetsPicker.svelte`
-- `dashboard/src/lib/components/automation/PatternTester.svelte`
-- `dashboard/src/lib/components/automation/ActivityLog.svelte`
+- `ide/src/lib/components/automation/RulesList.svelte`
+- `ide/src/lib/components/automation/RuleEditor.svelte`
+- `ide/src/lib/components/automation/PresetsPicker.svelte`
+- `ide/src/lib/components/automation/PatternTester.svelte`
+- `ide/src/lib/components/automation/ActivityLog.svelte`
 
 **Route:**
-- `dashboard/src/routes/automation/+page.svelte` - Main UI page
+- `ide/src/routes/automation/+page.svelte` - Main UI page
 
 ### Troubleshooting
 

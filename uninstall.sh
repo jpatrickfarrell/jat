@@ -40,7 +40,7 @@ echo -e "${BLUE}JAT Complete Uninstall${NC}"
 echo ""
 echo -e "${YELLOW}This will remove:${NC}"
 echo "  • JAT installation directory"
-echo "  • ~/.local/bin symlinks (bd, am-*, jat-dashboard, etc.)"
+echo "  • ~/.local/bin symlinks (bd, am-*, jat, browser-*, etc.)"
 echo "  • ~/.config/jat config files"
 echo "  • ~/.claude/commands/jat"
 echo "  • Running tmux sessions (server-jat, jat-*)"
@@ -66,7 +66,7 @@ done
 
 # 2. Remove symlinks from ~/.local/bin
 echo -e "${BLUE}[2/7] Removing symlinks from ~/.local/bin...${NC}"
-for tool in bd bd-* am-* jat-dashboard browser-* db-* signal-* omarchy-* jat-*; do
+for tool in bd bd-* am-* browser-* db-* signal-* omarchy-* jat jat-*; do
     if [ -L ~/.local/bin/"$tool" ]; then
         rm ~/.local/bin/"$tool" && echo "  ✓ Removed $tool"
     fi

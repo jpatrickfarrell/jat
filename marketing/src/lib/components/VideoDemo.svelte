@@ -27,14 +27,14 @@
 						<!-- Background gradient -->
 						<div class="absolute inset-0 bg-gradient-to-br from-[var(--color-primary)]/10 to-[var(--color-secondary)]/10"></div>
 
-						<!-- Fake dashboard preview -->
+						<!-- Fake IDE preview -->
 						<div class="absolute inset-4 rounded-lg border border-gray-800 bg-[var(--bg-surface)]/50 overflow-hidden">
 							<!-- Header bar -->
 							<div class="h-10 bg-[var(--bg-elevated)] border-b border-gray-800 flex items-center px-4 gap-2">
 								<div class="w-3 h-3 rounded-full bg-red-500/60"></div>
 								<div class="w-3 h-3 rounded-full bg-yellow-500/60"></div>
 								<div class="w-3 h-3 rounded-full bg-green-500/60"></div>
-								<span class="ml-4 text-xs text-gray-500 font-mono">JAT Dashboard</span>
+								<span class="ml-4 text-xs text-gray-500 font-mono">JAT IDE</span>
 							</div>
 
 							<!-- Content grid -->

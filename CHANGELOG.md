@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Initial public release of JAT
-- Beads Task Dashboard (SvelteKit 5)
+- Beads Task IDE (SvelteKit 5)
 - Agent Mail coordination system
 - Browser automation tools (11 tools)
 - Media generation tools (avatar, image generation)

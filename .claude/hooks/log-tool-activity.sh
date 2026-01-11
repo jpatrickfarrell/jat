@@ -84,7 +84,7 @@ case "$TOOL_NAME" in
             --content "$TOOL_NAME: $PATTERN"
         ;;
     AskUserQuestion)
-        # Extract question data and write to session-specific file for dashboard
+        # Extract question data and write to session-specific file for IDE
         QUESTIONS_JSON=$(echo "$TOOL_INFO" | jq -c '.tool_input.questions // []' 2>/dev/null || echo "[]")
 
         # Get tmux session name if running in tmux
@@ -93,7 +93,7 @@ case "$TOOL_NAME" in
             TMUX_SESSION=$(tmux display-message -p '#S' 2>/dev/null || echo "")
         fi
 
-        # Write to both session ID file and tmux session file for dashboard access
+        # Write to both session ID file and tmux session file for IDE access
         QUESTION_FILE="/tmp/claude-question-${SESSION_ID}.json"
         QUESTION_DATA=$(echo "$TOOL_INFO" | jq -c --arg tmux "$TMUX_SESSION" '{
             session_id: .session_id,
@@ -104,7 +104,7 @@ case "$TOOL_NAME" in
 
         echo "$QUESTION_DATA" > "$QUESTION_FILE" 2>/dev/null || true
 
-        # Also write to tmux session name file for easy dashboard lookup
+        # Also write to tmux session name file for easy IDE lookup
         if [[ -n "$TMUX_SESSION" ]]; then
             TMUX_QUESTION_FILE="/tmp/claude-question-tmux-${TMUX_SESSION}.json"
             echo "$QUESTION_DATA" > "$TMUX_QUESTION_FILE" 2>/dev/null || true

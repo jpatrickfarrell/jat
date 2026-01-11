@@ -67,7 +67,7 @@
 			</div>
 			<div class="text-center">
 				<div class="text-2xl font-bold text-white">1</div>
-				<div class="text-sm text-gray-500">Dashboard</div>
+				<div class="text-sm text-gray-500">IDE</div>
 			</div>
 		</div>
 	</div>

@@ -4,16 +4,16 @@ Beads provides a lightweight, dependency-aware issue database and a CLI (`bd`) f
 
 ### Multi-Project Architecture
 
-**Per-project databases with unified dashboard:**
+**Per-project databases with unified IDE:**
 - Each project has its own `.beads/` directory (e.g., `~/code/chimaro/.beads`, `~/code/jomarchy/.beads`)
 - Task IDs are prefixed with project name (e.g., `chimaro-abc`, `jomarchy-36j`)
 - `bd` commands work in your current project directory automatically
-- **Unified view**: Chimaro's development dashboard aggregates all projects from `~/code/*`
+- **Unified view**: Chimaro's IDE aggregates all projects from `~/code/*`
 - Access at: `http://localhost:5173/account/development/beads` (when running Chimaro)
 
 **Benefits:**
 - Clean separation: Each project's tasks are committable to its own git repo
-- Single dashboard: View and filter tasks across all projects
+- Single IDE: View and filter tasks across all projects
 - Context-aware: `bd` commands always operate on current project
 - Visual distinction: Color-coded ID badges show project at a glance
 
@@ -41,7 +41,7 @@ bd create "Build browser-wait.js - Smart waiting capability" \
 # Creates jomarchy-yyy
 
 # View all projects together
-# Open Chimaro dashboard in browser to see aggregated view with filtering
+# Open JAT IDE in browser to see aggregated view with filtering
 ```
 
 ### Git Integration and .gitignore Best Practices
@@ -260,10 +260,10 @@ See `/jat:complete.md` for detailed epic completion templates.
 
 **Reopening Closed Epics:**
 
-The dashboard supports **auto-reopening closed epics** when you need to add more work to a completed feature:
+The IDE supports **auto-reopening closed epics** when you need to add more work to a completed feature:
 
 **How it works:**
-1. Dashboard shows both open AND closed epics in the "Add to Epic" dropdown
+1. IDE shows both open AND closed epics in the "Add to Epic" dropdown
 2. Closed epics appear with visual indicators (📦 icon, "closed" badge, reduced opacity)
 3. When you select a closed epic to add a task, the epic is automatically reopened
 4. A toast notification confirms: "Task linked to epic (epic was reopened)"
@@ -287,7 +287,7 @@ Closed epics:   [P1] 📦 jat-xyz: Payment Flow (closed)
 
 **API behavior:**
 ```bash
-# Dashboard API automatically handles reopen
+# IDE API automatically handles reopen
 POST /api/tasks/{taskId}/epic
 Body: { "epicId": "jat-xyz" }
 Response: { "success": true, "epicReopened": true, ... }
@@ -295,7 +295,7 @@ Response: { "success": true, "epicReopened": true, ... }
 
 **CLI equivalent:**
 ```bash
-# Manual steps if not using dashboard
+# Manual steps if not using IDE
 bd update jat-xyz --status open       # Reopen the epic
 bd dep add jat-xyz jat-newtask        # Add new task as dependency
 ```

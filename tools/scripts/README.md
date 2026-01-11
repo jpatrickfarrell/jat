@@ -6,18 +6,18 @@ Helper scripts for agent orchestration workflows.
 
 **Purpose:** Get current task ID for an agent by checking both Beads and Agent Mail.
 
-**Problem Solved:** Provides consistent agent status calculation between statusline and dashboard. Previously, the statusline only checked file reservations while the dashboard checked both Beads tasks and reservations, causing inconsistent status display.
+**Problem Solved:** Provides consistent agent status calculation between statusline and IDE. Previously, the statusline only checked file reservations while the IDE checked both Beads tasks and reservations, causing inconsistent status display.
 
 ### Algorithm
 
-The script checks TWO sources (matching dashboard logic):
+The script checks TWO sources (matching IDE logic):
 
 1. **Beads Database** - Check for `in_progress` tasks assigned to agent
 2. **Agent Mail** - Check for active file reservations by agent
 
 Returns task_id if found from **EITHER** source.
 
-This matches the dashboard logic in `dashboard/src/lib/stores/agents.svelte.ts`:
+This matches the IDE logic in `ide/src/lib/stores/agents.svelte.ts`:
 
 ```typescript
 const hasInProgressTask = agent.in_progress_tasks > 0;
@@ -82,7 +82,7 @@ task_id=$(am-reservations --agent "$agent_name" | grep "^Reason:" | ...)
 task_id=$(./scripts/get-agent-task.sh "$agent_name")
 ```
 
-**Dashboard** (`dashboard/src/lib/stores/agents.svelte.ts`):
+**IDE** (`ide/src/lib/stores/agents.svelte.ts`):
 Already implements this logic correctly (serves as reference implementation).
 
 ### Task ID Patterns

@@ -47,7 +47,7 @@ All examples use a temporary test database so they won't affect your real Agent 
 
 These examples are based on actual multi-agent development sessions:
 
-- **PaleStar + DashboardBuilder**: Building the Beads dashboard (foundation + UI tasks in parallel)
+- **PaleStar + IDEBuilder**: Building the Beads IDE (foundation + UI tasks in parallel)
 - **Cross-project coordination**: Multiple agents working across different repositories
 - **Conflict prevention**: File reservations preventing merge conflicts
 

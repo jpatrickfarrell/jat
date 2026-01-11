@@ -6,7 +6,7 @@
 #
 # Scenario:
 #   - PaleStar builds query layers (foundation work)
-#   - DashboardBuilder builds UI components (depends on foundation)
+#   - IDEBuilder builds UI components (depends on foundation)
 #   - Both work in parallel without conflicts using file reservations
 #
 # Key concepts:
@@ -37,27 +37,27 @@ echo ""
 # Step 1: Register agents
 echo "Step 1: Register two agents for parallel work"
 ./am-register --name PaleStar --program claude-code --model sonnet-4.5 --task "Building query layers"
-./am-register --name DashboardBuilder --program claude-code --model sonnet-4.5 --task "Building dashboard UI"
+./am-register --name IDEBuilder --program claude-code --model sonnet-4.5 --task "Building dashboard UI"
 echo ""
 
-# Step 2: DashboardBuilder welcomes PaleStar and suggests parallel work
-echo "Step 2: DashboardBuilder sends welcome message with parallel work opportunities"
+# Step 2: IDEBuilder welcomes PaleStar and suggests parallel work
+echo "Step 2: IDEBuilder sends welcome message with parallel work opportunities"
 ./am-send "Welcome PaleStar! Parallel work ready" \
   "$(cat <<'EOF'
-I'm setting up the dashboard foundation. Here are P0 tasks we can do in parallel:
+I'm setting up the IDE foundation. Here are P0 tasks we can do in parallel:
 
 1. Build Beads query layer (lib/beads.js)
 2. Build Agent Mail query layer (lib/agent-mail.js)
 
-These are independent of my dashboard/ work. Pick one and we'll coordinate!
+These are independent of my ide/ work. Pick one and we'll coordinate!
 EOF
 )" \
-  --from DashboardBuilder --to PaleStar --thread project-kickoff --importance high
+  --from IDEBuilder --to PaleStar --thread project-kickoff --importance high
 echo ""
 
 # Step 3: Both agents reserve non-overlapping file patterns
 echo "Step 3: Agents reserve different file patterns (no conflicts!)"
-./am-reserve "dashboard/**" --agent DashboardBuilder --ttl 3600 --exclusive --reason "Setting up SvelteKit"
+./am-reserve "ide/**" --agent IDEBuilder --ttl 3600 --exclusive --reason "Setting up SvelteKit"
 ./am-reserve "lib/**" --agent PaleStar --ttl 3600 --exclusive --reason "Building query layers"
 echo ""
 
@@ -65,26 +65,26 @@ echo ""
 echo "Step 4: Both agents announce their parallel work"
 ./am-send "[dashboard-setup] Starting SvelteKit foundation" \
   "Setting up minimal SvelteKit + Svelte 5. ETA: 20 minutes." \
-  --from DashboardBuilder --to PaleStar --thread dashboard-setup
+  --from IDEBuilder --to PaleStar --thread dashboard-setup
 
 ./am-send "[query-layers] Starting Beads query layer" \
   "Building lib/beads.js with better-sqlite3. ETA: 30 minutes." \
-  --from PaleStar --to DashboardBuilder --thread query-layers
+  --from PaleStar --to IDEBuilder --thread query-layers
 echo ""
 
-# Step 5: DashboardBuilder finishes first
-echo "Step 5: DashboardBuilder completes foundation"
+# Step 5: IDEBuilder finishes first
+echo "Step 5: IDEBuilder completes foundation"
 ./am-send "[dashboard-setup] ✅ COMPLETE - SvelteKit ready" \
-  "Dashboard foundation complete. Ready for query layer integration!" \
-  --from DashboardBuilder --to PaleStar --thread dashboard-setup --importance high
-./am-release "dashboard/**" --agent DashboardBuilder
+  "IDE foundation complete. Ready for query layer integration!" \
+  --from IDEBuilder --to PaleStar --thread dashboard-setup --importance high
+./am-release "ide/**" --agent IDEBuilder
 echo ""
 
 # Step 6: PaleStar finishes query layer
 echo "Step 6: PaleStar completes query layer"
 ./am-send "[query-layers] ✅ COMPLETE - Beads layer ready" \
-  "lib/beads.js complete with full test coverage. Dashboard can now query tasks!" \
-  --from PaleStar --to DashboardBuilder --thread query-layers --importance high
+  "lib/beads.js complete with full test coverage. IDE can now query tasks!" \
+  --from PaleStar --to IDEBuilder --thread query-layers --importance high
 ./am-release "lib/**" --agent PaleStar
 echo ""
 
@@ -103,13 +103,13 @@ echo "════════════════════════�
 echo ""
 echo "Key takeaways:"
 echo "  • Non-overlapping file patterns = zero conflicts"
-echo "  • dashboard/** and lib/** can be worked on simultaneously"
+echo "  • ide/** and lib/** can be worked on simultaneously"
 echo "  • Completion messages notify dependent work is ready"
 echo "  • Releasing files early enables next phase of work"
 echo "  • Total time: ~30 min parallel vs ~50 min sequential"
 echo ""
 echo "Real-world result from this pattern:"
-echo "  • PaleStar + DashboardBuilder completed 3 P0 tasks in 1 session"
+echo "  • PaleStar + IDEBuilder completed 3 P0 tasks in 1 session"
 echo "  • Zero merge conflicts"
 echo "  • Clean handoff (foundation → UI integration)"
 echo ""

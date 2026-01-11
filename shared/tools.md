@@ -107,11 +107,11 @@ AI image generation via Google Gemini API.
 
 ### Signal Tools (tools/signal/)
 
-JAT signal emission for dashboard state updates.
+JAT signal emission for IDE state updates.
 
 | Tool | Purpose |
 |------|---------|
-| `jat-signal` | Emit status signals to dashboard |
+| `jat-signal` | Emit status signals to IDE |
 | `jat-signal-validate` | Validate signal JSON against schema |
 | `jat-signal-schema.json` | JSON schema for signal payloads |
 
@@ -170,7 +170,7 @@ Installation, setup, and utility scripts.
 | `cleanup-jsonl-cron.sh` | Cron wrapper for cleanup |
 | `extract-har-timings.sh` | Extract timings from HAR files |
 | `test-statusline.sh` | Test statusline display |
-| `test-themes.sh` | Test dashboard themes |
+| `test-themes.sh` | Test IDE themes |
 | `fix-hook-stdin.sh` | Fix hook stdin issues |
 | `update-signal-hooks.sh` | Update signal hook scripts |
 | `import-bashrc-config.sh` | Import bashrc configuration |

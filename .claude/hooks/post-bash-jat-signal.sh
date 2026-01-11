@@ -3,7 +3,7 @@
 # post-bash-jat-signal.sh - PostToolUse hook for jat-signal commands
 #
 # Detects when agent runs jat-signal and writes structured data to temp file
-# for dashboard consumption via SSE.
+# for IDE consumption via SSE.
 #
 # Signal format: [JAT-SIGNAL:<type>] <json-payload>
 # Types: working, review, needs_input, idle, completing, completed,
@@ -79,7 +79,7 @@ if [[ -z "$SIGNAL_TYPE" ]]; then
     exit 0
 fi
 
-# Get tmux session name for dashboard lookup
+# Get tmux session name for IDE lookup
 TMUX_SESSION=""
 
 # Build list of directories to search: current dir + configured projects
@@ -245,9 +245,9 @@ if [[ -n "$TMUX_SESSION" ]]; then
 fi
 
 # For question signals, also write to /tmp/jat-question-*.json files
-# This allows the dashboard to poll for questions separately from other signals
+# This allows the IDE to poll for questions separately from other signals
 if [[ "$SIGNAL_TYPE" == "question" ]]; then
-    # Build question-specific JSON with fields expected by dashboard
+    # Build question-specific JSON with fields expected by IDE
     QUESTION_JSON=$(jq -c -n \
         --arg session "$SESSION_ID" \
         --arg tmux "$TMUX_SESSION" \
@@ -266,7 +266,7 @@ if [[ "$SIGNAL_TYPE" == "question" ]]; then
     QUESTION_FILE="/tmp/jat-question-${SESSION_ID}.json"
     echo "$QUESTION_JSON" > "$QUESTION_FILE" 2>/dev/null || true
 
-    # Also write to tmux session name file for easy dashboard lookup
+    # Also write to tmux session name file for easy IDE lookup
     if [[ -n "$TMUX_SESSION" ]]; then
         TMUX_QUESTION_FILE="/tmp/jat-question-tmux-${TMUX_SESSION}.json"
         echo "$QUESTION_JSON" > "$TMUX_QUESTION_FILE" 2>/dev/null || true

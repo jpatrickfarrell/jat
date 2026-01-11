@@ -2,9 +2,9 @@
 
 **Everything you need to vibe code. In one place. Finally.**
 
-JAT is the complete, self-contained environment for agentic development. Task management, agent orchestration, code editor, git integration, terminal access—all unified in a single dashboard. No plugins to install, no services to configure, no pieces to assemble. Just describe what you want and supervise the swarm.
+JAT is the complete, self-contained environment for agentic development. Task management, agent orchestration, code editor, git integration, terminal access—all unified in a single IDE. No plugins to install, no services to configure, no pieces to assemble. Just describe what you want and supervise the swarm.
 
-![Dashboard](https://img.shields.io/badge/Dashboard-SvelteKit-orange)
+![IDE](https://img.shields.io/badge/IDE-SvelteKit-orange)
 ![Agents](https://img.shields.io/badge/Agents-20+-green)
 ![Tools](https://img.shields.io/badge/Tools-50+-blue)
 
@@ -138,7 +138,7 @@ Access any agent's terminal session or run commands:
 │  Terminal: jat-WildMeadow                              [×] [□] [−] │
 ├─────────────────────────────────────────────────────────────────────┤
 │  $ npm run build                                                   │
-│  > dashboard@0.0.1 build                                           │
+│  > jat-ide@0.0.1 build                                             │
 │  > vite build                                                      │
 │                                                                    │
 │  vite v7.2.2 building for production...                           │
@@ -172,9 +172,9 @@ Access any agent's terminal session or run commands:
 │                                                                      │
 │   1. PLAN WITH AI        Describe your feature, get PRD              │
 │         ↓                 (or bring your own PRD)                    │
-│   2. /JAT:BEAD           Convert PRD → structured tasks              │
+│   2. /JAT:TASKTREE           Convert PRD → structured tasks              │
 │         ↓                                                            │
-│   3. EPIC SWARM          Dashboard spawns agents on subtasks         │
+│   3. EPIC SWARM          IDE spawns agents on subtasks         │
 │         ↓                                                            │
 │   4. PARALLEL WORK       Agents code simultaneously                  │
 │         ↓                                                            │
@@ -201,7 +201,7 @@ Access any agent's terminal session or run commands:
 | **Epic Swarm** | Spawn parallel agents on subtasks |
 | **Auto-proceed rules** | Configure auto-completion by type/priority matrix |
 | **Error recovery** | Automatic retry patterns for failures |
-| **PRD → Tasks** | `/jat:bead` converts requirements to structured tasks |
+| **PRD → Tasks** | `/jat:tasktree` converts requirements to structured tasks |
 | **Full IDE** | Monaco editor, git panel, file explorer—all built in |
 
 The magic is in agent orchestration. Everything else is just table stakes.
@@ -253,7 +253,7 @@ Open http://localhost:3333 → Add a project → Create a task → Spawn an agen
 
 ```
 ~/code/jat/
-├── dashboard/          # SvelteKit app (the IDE)
+├── ide/          # SvelteKit app (the IDE)
 │   ├── src/
 │   │   ├── routes/     # /work, /files, /kanban, /servers, /config
 │   │   └── lib/
@@ -267,7 +267,7 @@ Open http://localhost:3333 → Add a project → Create a task → Spawn an agen
 │   ├── mail/           # Agent coordination (am-*)
 │   ├── browser/        # Browser automation
 │   └── signal/         # State synchronization
-├── commands/           # /jat:start, /jat:complete, /jat:bead
+├── commands/           # /jat:start, /jat:complete, /jat:tasktree
 └── shared/             # Agent-facing documentation
 ```
 
@@ -288,7 +288,7 @@ All settings in `~/.config/jat/`:
 | `review-rules.json` | Auto-proceed matrix by type/priority |
 | `templates/` | Custom command templates |
 
-Dashboard settings at `/config`:
+IDE settings at `/config`:
 - Max concurrent sessions (default: 12)
 - Default Claude model (opus/sonnet/haiku)
 - Spawn stagger timing
@@ -300,7 +300,7 @@ Dashboard settings at `/config`:
 | Doc | Purpose |
 |-----|---------|
 | [CLAUDE.md](./CLAUDE.md) | Full technical reference |
-| [dashboard/CLAUDE.md](./dashboard/CLAUDE.md) | Dashboard development guide |
+| [ide/CLAUDE.md](./ide/CLAUDE.md) | IDE development guide |
 | [QUICKSTART.md](./QUICKSTART.md) | Getting started guide |
 | [shared/](./shared/) | Agent-facing documentation |
 
@@ -333,7 +333,7 @@ Yes. JAT handles agent orchestration and code review. Use your favorite editor f
 - **Agent Mail** — Inspired by [Dicklesworthstone/mcp_agent_mail](https://github.com/Dicklesworthstone/mcp_agent_mail)
 - **Beads** — Task management ([steveyegge/beads](https://github.com/steveyegge/beads))
 - **Monaco** — Code editor engine
-- **SvelteKit** — Dashboard framework
+- **SvelteKit** — IDE framework
 - **DaisyUI** — UI components
 - **simple-git** — Git operations
 

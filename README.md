@@ -17,7 +17,7 @@
 
 **Agents ship, suggest, repeat. You supervise.**
 
-JAT is the complete, self-contained environment for agentic development. Task management, agent orchestration, code editor, git integration, terminal access—all unified in a single dashboard. No plugins to install, no services to configure, no pieces to assemble. Just describe what you want and supervise the swarm.
+JAT is the complete, self-contained environment for agentic development. Task management, agent orchestration, code editor, git integration, terminal access—all unified in a single IDE. No plugins to install, no services to configure, no pieces to assemble. Just describe what you want and supervise the swarm.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Agents](https://img.shields.io/badge/Agents-20+-green)
@@ -25,8 +25,8 @@ JAT is the complete, self-contained environment for agentic development. Task ma
 [![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white)](https://discord.gg/AFJf93p7Bx)
 
 <!-- TODO: Add screenshot -->
-![JAT Dashboard](./assets/dashboard-screenshot.png)
-*The JAT dashboard: agent sessions, task management, and code editor unified*
+![JAT IDE](./assets/ide-screenshot.png)
+*The JAT IDE: agent sessions, task management, and code editor unified*
 
 ---
 
@@ -163,7 +163,7 @@ Beads-powered git-backed issue tracking (on `/work` and `/kanban`):
 │                                                              │
 │   1. PLAN WITH AI        Describe your feature, get PRD     │
 │         ↓                                                    │
-│   2. /JAT:BEAD           Convert PRD → structured tasks     │
+│   2. /JAT:TASKTREE           Convert PRD → structured tasks     │
 │         ↓                                                    │
 │   3. EPIC SWARM          Spawn agents on subtasks           │
 │         ↓                                                    │
@@ -211,7 +211,7 @@ Beads-powered git-backed issue tracking (on `/work` and `/kanban`):
 | **Epic Swarm** | Spawn parallel agents on subtasks |
 | **Auto-proceed rules** | Configure auto-completion by type/priority |
 | **Error recovery** | Automatic retry patterns for failures |
-| **PRD → Tasks** | `/jat:bead` converts requirements to structured tasks |
+| **PRD → Tasks** | `/jat:tasktree` converts requirements to structured tasks |
 
 Full Monaco editor and git integration included—but the magic is in agent orchestration.
 
@@ -222,7 +222,7 @@ Full Monaco editor and git integration included—but the magic is in agent orch
 | Feature | JAT | Cursor | Windsurf | Cline/Aider |
 |---------|-----|--------|----------|-------------|
 | **Multi-agent (20+)** | ✅ | ❌ | ❌ | ❌ |
-| **Visual dashboard** | ✅ | ❌ | ❌ | ❌ |
+| **Visual IDE** | ✅ | ❌ | ❌ | ❌ |
 | **Task management** | ✅ Built-in | ❌ | ❌ | ❌ |
 | **Epic Swarm (parallel)** | ✅ | ❌ | ❌ | ❌ |
 | **Agent coordination** | ✅ Agent Mail | ❌ | ❌ | ❌ |
@@ -240,7 +240,7 @@ JAT isn't trying to replace your editor—it's the control tower for your agent 
 
 ```
 ~/code/jat/
-├── dashboard/          # SvelteKit app (the IDE)
+├── ide/          # SvelteKit app (the IDE)
 │   └── src/
 │       ├── routes/     # /work, /files, /kanban, /servers
 │       └── lib/
@@ -252,7 +252,7 @@ JAT isn't trying to replace your editor—it's the control tower for your agent 
 │   ├── mail/           # Agent coordination (am-*)
 │   ├── browser/        # Browser automation
 │   └── signal/         # State sync
-├── commands/           # /jat:start, /jat:complete, /jat:bead
+├── commands/           # /jat:start, /jat:complete, /jat:tasktree
 └── shared/             # Agent documentation
 ```
 
@@ -286,7 +286,7 @@ JAT isn't trying to replace your editor—it's the control tower for your agent 
 }
 ```
 
-Dashboard settings at `/config`:
+IDE settings at `/config`:
 - Max concurrent sessions
 - Default Claude model
 - Spawn stagger timing
@@ -301,7 +301,7 @@ Dashboard settings at `/config`:
 |-----|---------|
 | [QUICKSTART.md](./QUICKSTART.md) | 5-minute tutorial |
 | [CLAUDE.md](./CLAUDE.md) | Full technical reference |
-| [dashboard/CLAUDE.md](./dashboard/CLAUDE.md) | Dashboard dev guide |
+| [ide/CLAUDE.md](./ide/CLAUDE.md) | IDE dev guide |
 | [shared/](./shared/) | Agent documentation |
 
 ---
@@ -337,7 +337,7 @@ We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guideline
 **Quick start for contributors:**
 ```bash
 git clone https://github.com/joewinke/jat.git ~/code/jat
-cd ~/code/jat/dashboard
+cd ~/code/jat/ide
 npm install && npm run dev
 ```
 
@@ -355,7 +355,7 @@ Open a PR against `master`. All contributions are licensed under MIT.
 - **DHH** - [Inspiration](https://dhh.dk/)
 - **Tmux** - Terminal Multiplexer by ([Nicholas Marriott](https://github.com/tmux/tmux))
 - **Monaco** — Code editor engine ([Microsoft](https://github.com/microsoft/monaco-editor))
-- **SvelteKit** — Dashboard framework ([Rich Harris](https://github.com/Rich-Harris))
+- **SvelteKit** — IDE framework ([Rich Harris](https://github.com/Rich-Harris))
 - **Tailwind CSS** — Utility-first CSS ([Adam Wathan](https://github.com/adamwathan))
 - **DaisyUI** — Component library ([Pouya Saadeghi](https://github.com/saadeghi))
 - **Git** — Version control ([Linus Torvalds](https://github.com/torvalds))

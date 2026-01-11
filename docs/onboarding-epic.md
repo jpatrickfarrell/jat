@@ -6,7 +6,7 @@
 
 ## Problem
 
-First-time JAT users who install the system but don't have an existing project are stuck. The dashboard shows an empty state with no clear path forward. These users need guided onboarding to:
+First-time JAT users who install the system but don't have an existing project are stuck. The IDE shows an empty state with no clear path forward. These users need guided onboarding to:
 - Create their first project
 - Write a Product Requirements Document (PRD)
 - Initialize Beads task management
@@ -24,7 +24,7 @@ Create a guided onboarding experience where a special "Project Setup Agent" walk
 │                     ONBOARDING USER FLOW                        │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  1. Dashboard Detects Empty State                              │
+│  1. IDE Detects Empty State                              │
 │     └─► No projects in ~/.config/jat/projects.json             │
 │                                                                 │
 │  2. Show Onboarding CTA                                         │
@@ -73,9 +73,9 @@ Create a guided onboarding experience where a special "Project Setup Agent" walk
 
 ## Sub-Tasks
 
-### Phase 1: Dashboard Empty State & UI
+### Phase 1: IDE Empty State & UI
 
-- **jat-TBD1**: Detect empty state on dashboard load
+- **jat-TBD1**: Detect empty state on IDE load
   - Check if `~/.config/jat/projects.json` has any projects
   - Display onboarding CTA if empty
   - Type: task, Priority: P1
@@ -89,7 +89,7 @@ Create a guided onboarding experience where a special "Project Setup Agent" walk
 - **jat-TBD3**: Implement "Get Started" button handler
   - Calls `/api/onboarding/start` endpoint
   - Spawns tmux session with onboarding agent
-  - Opens SessionCard in dashboard
+  - Opens SessionCard in IDE
   - Type: task, Priority: P1
 
 ### Phase 2: Onboarding Agent & Session Management
@@ -103,7 +103,7 @@ Create a guided onboarding experience where a special "Project Setup Agent" walk
 - **jat-TBD5**: Create `/api/onboarding/start` endpoint
   - Spawns tmux session: `tmux-jat-onboarding-{timestamp}`
   - Launches Claude Code with onboarding prompt
-  - Returns session ID to dashboard
+  - Returns session ID to IDE
   - Type: task, Priority: P1
 
 - **jat-TBD6**: Create onboarding slash command `/jat:onboard`
@@ -139,7 +139,7 @@ Create a guided onboarding experience where a special "Project Setup Agent" walk
 - **jat-TBD10**: Agent JAT config integration
   - Adds project to `~/.config/jat/projects.json`
   - Sets up project-specific settings
-  - Registers project in dashboard
+  - Registers project in IDE
   - Type: task, Priority: P1
 
 ### Phase 4: Task Generation & Kickoff
@@ -157,7 +157,7 @@ Create a guided onboarding experience where a special "Project Setup Agent" walk
   - If yes, runs `/jat:start` on first ready task
   - Type: task, Priority: P2
 
-- **jat-TBD13**: Dashboard auto-refreshes after onboarding
+- **jat-TBD13**: IDE auto-refreshes after onboarding
   - Polls for project creation completion
   - Automatically shows new project when ready
   - Displays success message
@@ -216,19 +216,19 @@ Create a guided onboarding experience where a special "Project Setup Agent" walk
 
 **Session Management:**
 - Onboarding sessions are tagged differently from work sessions
-- Dashboard shows them in a special "Setup" section
+- IDE shows them in a special "Setup" section
 - Can be reused for creating additional projects
 
 **Error Handling:**
 - If user abandons onboarding, session remains accessible
-- Can resume from dashboard later
+- Can resume from IDE later
 - Agent prompts to continue from last step
 
 ## Dependencies
 
 - Existing JAT config system (`~/.config/jat/projects.json`)
 - Beads CLI (`bd init`, `bd create`)
-- Dashboard SessionCard component
+- IDE SessionCard component
 - tmux session management
 
 ## Open Questions
@@ -240,5 +240,5 @@ Create a guided onboarding experience where a special "Project Setup Agent" walk
 
 ## Related Epics
 
-- jat-xyz: Dashboard empty states and error handling
+- jat-xyz: IDE empty states and error handling
 - jat-abc: Improved project configuration management

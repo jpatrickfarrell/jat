@@ -2,12 +2,12 @@
  * Signal Card Design Tokens
  *
  * Shared visual tokens for signal/session state cards.
- * Used by both the dashboard (interactive) and marketing (preview).
+ * Used by both the IDE (interactive) and marketing (preview).
  *
  * This is the SINGLE SOURCE OF TRUTH for signal card visuals.
- * When colors change here, both dashboard and marketing update.
+ * When colors change here, both IDE and marketing update.
  *
- * @see dashboard/src/lib/config/statusColors.ts - Full dashboard implementation
+ * @see ide/src/lib/config/statusColors.ts - Full IDE implementation
  * @see marketing/src/routes/flywheel/ - Marketing flywheel visualization
  */
 
@@ -23,7 +23,7 @@ export interface FlywheelStageTokens {
   num: number;
   id: string;           // Machine ID: 'plan', 'bead', 'swarm', etc.
   title: string;        // Display title: 'PLAN', 'BEAD', etc.
-  desc: string;         // Short description: 'Idea → PRD', '/jat:bead', etc.
+  desc: string;         // Short description: 'Idea → PRD', '/jat:tasktree', etc.
 
   // Signal mapping (null for pre/post signal stages)
   signalState: string | null;
@@ -72,7 +72,7 @@ export const FLYWHEEL_STAGES: FlywheelStageTokens[] = [
     num: 2,
     id: 'bead',
     title: 'BEAD',
-    desc: '/jat:bead',
+    desc: '/jat:tasktree',
     signalState: null,  // Pre-signal: task creation
     colors: {
       primary: 'oklch(0.72 0.16 195)',      // Cyan
@@ -218,7 +218,7 @@ export const FLYWHEEL_STAGES: FlywheelStageTokens[] = [
 // SIGNAL STATE TOKENS
 // =============================================================================
 //
-// Core signal states from the dashboard.
+// Core signal states from the IDE.
 // These are the actual states that agents emit.
 
 export interface SignalStateTokens {

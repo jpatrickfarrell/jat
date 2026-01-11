@@ -62,7 +62,7 @@ Spawning agents...
   ├─ RedMarsh   → jat-c2 [P1]
   └─ FairCove   → jat-d1 [P2]
 
-Dashboard: http://localhost:5174
+IDE: http://localhost:5174
 Agents: 4 active | 0 idle
 
 # Each agent automatically:

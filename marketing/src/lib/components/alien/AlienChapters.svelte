@@ -62,7 +62,7 @@ Expires: 1h`,
 			glyph: '⎔',
 			title: 'Swarm Orchestration',
 			subtitle: '40+ Agents Working Together',
-			description: 'Spawn an army of agents with one command. They auto-pick ready work, coordinate via signals, and report through the dashboard.',
+			description: 'Spawn an army of agents with one command. They auto-pick ready work, coordinate via signals, and report through the IDE.',
 			features: [
 				'Parallel agent spawning',
 				'Auto task assignment',
@@ -77,7 +77,7 @@ Spawning 4 agents...
   RedMarsh  → jat-c2 [P1]
   FairCove  → jat-d1 [P2]
 
-Dashboard: http://localhost:5174`,
+IDE: http://localhost:5174`,
 			color: 'oklch(75% 0.18 145)'
 		},
 		{
@@ -106,7 +106,7 @@ Dashboard: http://localhost:5174`,
 		{
 			number: 'V',
 			glyph: '⧫',
-			title: 'The Dashboard',
+			title: 'The IDE',
 			subtitle: 'Your Command Center',
 			description: 'A unified interface for all projects, all agents, all tasks. Monaco editor, git integration, live terminal output, and more.',
 			features: [

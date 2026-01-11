@@ -274,5 +274,5 @@
 - **Shared Docs:** `~/code/jat/shared/*.md` (imported by all projects)
 - **Project-Specific Docs:** `CLAUDE.md`
 - **Command Implementations:** `commands/jat/*.md`
-- **Dashboard:** Run `jat-dashboard` to see tasks visually
+- **IDE:** Run `jat` to see tasks visually
 - **Beads:** See `README.md` section on Beads command reference

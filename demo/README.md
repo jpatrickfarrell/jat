@@ -8,7 +8,7 @@ This directory contains everything needed to run an isolated JAT demo.
 # Initialize/reset the demo environment
 jat demo init
 
-# Launch the demo dashboard
+# Launch the demo IDE
 jat demo
 
 # Reset to clean state (for video retakes)
@@ -43,7 +43,7 @@ The demo creates a temporary environment at `/tmp/jat-demo/` with:
 
 ### Demo Flow
 
-1. **Launch demo**: `jat demo` opens dashboard with demo projects
+1. **Launch demo**: `jat demo` opens IDE with demo projects
 2. **Create task**: Use UI to add a task (shows AI suggestions)
 3. **Spawn agent**: Click "New Session" or `jat acme-saas`
 4. **Watch workflow**: Agent picks task, starts working, signals progress

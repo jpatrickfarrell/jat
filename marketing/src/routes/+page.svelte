@@ -41,7 +41,7 @@
 		},
 		{
 			title: 'PRD to Tasks',
-			desc: 'Paste a PRD, run /jat:bead, get a task tree.',
+			desc: 'Paste a PRD, run /jat:tasktree, get a task tree.',
 			icon: 'tree',
 			color: 'from-emerald-500 to-teal-500',
 			initialX: -300,
@@ -79,7 +79,7 @@
 
 	const cards = [
 		{
-			title: 'Tasks Dashboard',
+			title: 'Tasks IDE',
 			color: 'from-[var(--color-primary)] to-cyan-500',
 			tagline: 'All projects. One view.',
 			bullets: ['12 ready tasks', '3 in progress', '2 blocked'],
@@ -167,7 +167,7 @@ Created: jat-3nf8p
 			icon: 'kanban' as const,
 			color: 'from-[var(--color-primary)] to-cyan-500',
 			desc: 'Structure that scales with your ambition',
-			items: ['Multi-repo unified dashboard', 'Epics, features, tasks hierarchy', 'Dependency tracking', 'Priority-based work selection']
+			items: ['Multi-repo unified IDE', 'Epics, features, tasks hierarchy', 'Dependency tracking', 'Priority-based work selection']
 		},
 		{
 			category: 'Agent Orchestration',
@@ -201,7 +201,7 @@ Created: jat-3nf8p
 			title: 'PRD → Task Tree',
 			benefit: 'Turn ideas into actionable work in seconds',
 			description: 'Paste a product spec and let AI generate a structured task tree with priorities, dependencies, and assignments.',
-			code: `/jat:bead
+			code: `/jat:tasktree
 
 Creating epic: "User Authentication"
 ├─ jat-a1: Setup Supabase auth [P0]
@@ -237,8 +237,8 @@ Spawning 4 agents...
 			icon: '👁️',
 			title: 'Async Oversight',
 			benefit: 'Stay in control without constant attention',
-			description: 'Questions surface to the dashboard. Answer with a click. Agents wait patiently and continue autonomously.',
-			code: `[Dashboard: 4 agents active]
+			description: 'Questions surface to the IDE. Answer with a click. Agents wait patiently and continue autonomously.',
+			code: `[IDE: 4 agents active]
 
 BluePeak asks:
   "Supabase or Firebase for auth?"
@@ -509,7 +509,7 @@ Next ready tasks:
 		</h1>
 
 		<p class="text-xl text-gray-300 max-w-3xl mx-auto mb-10 leading-relaxed">
-			Task management. Agent orchestration. Multi-project dashboards. Git-Sync.
+			Task management. Agent orchestration. Multi-project view. Git-Sync.
 		<br>
 			The complete environment for AI-assisted development at scale.
 		</p>
@@ -547,7 +547,7 @@ Next ready tasks:
 			<div class="w-px h-12 bg-gray-800"></div>
 			<div>
 				<div class="text-3xl font-bold text-white">1</div>
-				<div class="text-sm text-gray-500">Dashboard</div>
+				<div class="text-sm text-gray-500">IDE</div>
 			</div>
 		</div>
 	</div>
@@ -710,7 +710,7 @@ Next ready tasks:
 			style="opacity: {Math.max(0, (chaosProgress - 0.7) / 0.3)}; transform: translateY({(1 - Math.min(1, Math.max(0, (chaosProgress - 0.7) / 0.3))) * 20}px);"
 		>
 			<p class="text-lg text-gray-400">
-				<span class="text-white font-semibold">JAT brings order to the chaos</span> — one dashboard to rule them all.
+				<span class="text-white font-semibold">JAT brings order to the chaos</span> — one IDE to rule them all.
 			</p>
 		</div>
 	</div>
@@ -977,7 +977,7 @@ Next ready tasks:
 							<path d="M8 5v14l11-7z"/>
 						</svg>
 					</div>
-					<div class="text-lg font-semibold text-white">JAT Dashboard</div>
+					<div class="text-lg font-semibold text-white">JAT IDE</div>
 					<div class="text-sm text-gray-500 mt-1">Demo video coming soon</div>
 				</div>
 			</div>

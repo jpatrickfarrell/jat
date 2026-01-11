@@ -1,11 +1,11 @@
 # JAT - Agent Management for AI Coding Assistants
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Dashboard](https://img.shields.io/badge/Dashboard-SvelteKit-red)](./dashboard/)
+[![IDE](https://img.shields.io/badge/IDE-SvelteKit-red)](./ide/)
 [![Tools](https://img.shields.io/badge/Tools-28+-blue)](#tools)
 [![Commands](https://img.shields.io/badge/Commands-5-purple)](#commands)
 
-**Manage 20+ AI agents across all your projects from one dashboard.**
+**Manage 20+ AI agents across all your projects from one IDE.**
 
 Without JAT, you're managing 1-2 agents in separate terminals. With JAT, you see every agent, every task, every project in one interface. Organize your entire backlog, spawn agents on demand, and watch them coordinate automatically.
 
@@ -16,11 +16,11 @@ Without JAT, you're managing 1-2 agents in separate terminals. With JAT, you see
 ## Quick Start
 
 ```bash
-# Install and launch dashboard
+# Install and launch IDE
 curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | bash
-source ~/.bashrc && jat-dashboard
+source ~/.bashrc && jat
 
-# Dashboard opens at http://localhost:5174
+# IDE opens at http://localhost:5174
 # Add projects from the UI, spawn agents, watch them work
 ```
 
@@ -35,11 +35,11 @@ jat demo                        # Watch 3 agents coordinate on a sample project
 
 ## What You Get
 
-### Dashboard
+### IDE
 
 Your command center for all agents across all projects.
 
-<!-- PLACEHOLDER: Dashboard screenshot coming - see assets/RECORDING-SCRIPT.md -->
+<!-- PLACEHOLDER: IDE screenshot coming - see assets/RECORDING-SCRIPT.md -->
 
 | Route | What It Does |
 |-------|--------------|
@@ -71,7 +71,7 @@ Each agent:
 - Gets assigned different tasks (no duplicates)
 - Reserves files (no collisions)
 - Messages other agents (async coordination)
-- Reports status to dashboard (real-time)
+- Reports status to IDE (real-time)
 
 ### Task Management
 
@@ -85,7 +85,7 @@ bd dep add auth-ui auth-api     # UI depends on API
 
 **The to-do system that scales:**
 - Every project has a `.beads/` directory with its task database
-- Dashboard aggregates all of them into one unified backlog
+- IDE aggregates all of them into one unified backlog
 - Dependencies prevent agents from starting blocked work
 - Priorities ensure critical tasks get picked first
 - Tasks sync via git - commit your backlog with your code
@@ -96,7 +96,7 @@ bd dep add auth-ui auth-api     # UI depends on API
 |---------|--------------|
 | `/jat:start` | Pick a task, reserve files, begin work |
 | `/jat:complete` | Verify, commit, close task, end session |
-| `/jat:bead` | Convert PRD or conversation to structured tasks |
+| `/jat:tasktree` | Convert PRD or conversation to structured tasks |
 | `/jat:verify` | Run tests, lint, security checks |
 | `/jat:doctor` | Diagnose and repair JAT setup |
 
@@ -126,7 +126,7 @@ browser-eval.js 'document.title'
 **One agent = one session = one task.** But you can run as many agents as you want.
 
 ```bash
-# From dashboard: click "Spawn Agent" on any project
+# From IDE: click "Spawn Agent" on any project
 # Or from terminal:
 jat my-project 4 --auto         # Launch 4 agents that auto-pick tasks
 ```
@@ -135,15 +135,15 @@ Each agent:
 1. Picks the highest priority ready task
 2. Works on it
 3. Completes and closes the session
-4. Dashboard spawns the next agent
+4. IDE spawns the next agent
 
 **Why this scales to 20+ agents:**
 - **File reservations** prevent edit conflicts
 - **Dependencies** control task ordering
 - **Agent Mail** enables async communication
-- **Dashboard** shows all agents across all projects in one view
+- **IDE** shows all agents across all projects in one view
 
-You're not juggling terminal windows. You're watching a dashboard.
+You're not juggling terminal windows. You're watching an IDE.
 
 ---
 
@@ -178,11 +178,11 @@ What happens:
 ## CLI Reference
 
 ```bash
-# Dashboard
-jat-dashboard                   # Launch standalone
+# IDE
+jat                             # Launch standalone
 
 # Full environment
-jat <project>                   # VS Code + Claude + dashboard + dev server
+jat <project>                   # VS Code + Claude + IDE + dev server
 jat <project> 4                 # Launch 4 Claude sessions
 jat <project> --auto            # Agents auto-pick tasks
 
@@ -209,7 +209,7 @@ curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | ba
 ```
 
 **Installs:**
-- Dashboard (SvelteKit)
+- IDE (SvelteKit)
 - Agent Mail (11 bash tools)
 - Beads CLI
 - 28+ generic tools
@@ -259,7 +259,7 @@ curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | ba
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        DASHBOARD                             │
+│                          IDE                                 │
 │            Real-time monitoring + task management            │
 └────────────────┬────────────────────────────┬───────────────┘
                  │ SSE (signals)              │ send-keys
@@ -268,7 +268,7 @@ curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | ba
 │                         TMUX                                 │
 │                                                              │
 │   Each agent runs in a named tmux session (jat-AgentName)    │
-│   Dashboard reads output, sends input via tmux send-keys     │
+│   IDE reads output, sends input via tmux send-keys     │
 │                                                              │
 └──────────────────────────┬───────────────────────────────────┘
                            │
@@ -292,13 +292,13 @@ curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | ba
 └──────────────────────────────────────────────────────────────┘
 ```
 
-**Why tmux?** It's already installed everywhere, gives us named sessions, and agents don't need to know about the dashboard - they just see a terminal.
+**Why tmux?** It's already installed everywhere, gives us named sessions, and agents don't need to know about the IDE - they just see a terminal.
 
 **The tmux integration is key:**
 - Every agent runs in a tmux session named `jat-{AgentName}`
-- Dashboard captures terminal output and signals from tmux
-- When you click a button in the dashboard, it sends keystrokes via `tmux send-keys`
-- The agent has no idea the dashboard exists - it just sees terminal input
+- IDE captures terminal output and signals from tmux
+- When you click a button in the IDE, it sends keystrokes via `tmux send-keys`
+- The agent has no idea the IDE exists - it just sees terminal input
 
 ---
 
@@ -311,10 +311,10 @@ Any CLI agent with bash access: Claude Code, Aider, Cline, Codex, Continue.dev, 
 File reservations prevent it. Second agent gets `FILE_RESERVATION_CONFLICT` and picks different work.
 
 **Can I use just the tools?**
-Yes. All 28+ tools work standalone without the dashboard or coordination layer.
+Yes. All 28+ tools work standalone without the IDE or coordination layer.
 
 **Do I need to run a server?**
-Only the dashboard (SvelteKit dev server). Everything else is bash + SQLite.
+Only the IDE (SvelteKit dev server). Everything else is bash + SQLite.
 
 ---
 
@@ -330,7 +330,7 @@ Only the dashboard (SvelteKit dev server). Everything else is bash + SQLite.
 
 - [Beads](https://github.com/steveyegge/beads) - Task management CLI
 - [Jomarchy](https://github.com/joewinke/jomarchy) - Linux configuration system
-- [Sidecar Kit](https://github.com/joewinke/sidecar-kit) - Build your own agent dashboard (the pattern JAT is built on)
+- [Sidecar Kit](https://github.com/joewinke/sidecar-kit) - Build your own agent IDE (the pattern JAT is built on)
 
 ---
 
@@ -340,6 +340,6 @@ MIT
 
 ---
 
-**Go from 1-2 agents to 20+. Zero conflicts. One dashboard.**
+**Go from 1-2 agents to 20+. Zero conflicts. One IDE.**
 
 [Install](#installation) | [Docs](./GETTING_STARTED.md) | [Issues](https://github.com/joewinke/jat/issues)

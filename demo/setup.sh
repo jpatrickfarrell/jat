@@ -95,12 +95,12 @@ export async function signOut(): Promise<void> {
 }
 EOF
 
-    cat > "$project_dir/src/components/Dashboard.tsx" << 'EOF'
-// Dashboard component - needs analytics widgets
-export function Dashboard() {
+    cat > "$project_dir/src/components/IDE.tsx" << 'EOF'
+// IDE component - needs analytics widgets
+export function IDE() {
   return (
     <div>
-      <h1>Dashboard</h1>
+      <h1>IDE</h1>
       {/* TODO: Add analytics widgets */}
       {/* TODO: Add recent activity feed */}
       {/* TODO: Add team overview */}
@@ -448,7 +448,7 @@ setup_demo() {
     echo -e "  ${CYAN}pixel-art${NC}  - Pixel art editor (5 tasks)"
     echo ""
     echo "Next steps:"
-    echo -e "  ${DIM}1.${NC} Launch dashboard:  ${BOLD}jat demo${NC}"
+    echo -e "  ${DIM}1.${NC} Launch IDE:  ${BOLD}jat demo${NC}"
     echo -e "  ${DIM}2.${NC} Start an agent:    ${BOLD}jat acme-saas${NC}"
     echo -e "  ${DIM}3.${NC} Epic swarm:        ${BOLD}jat acme-saas 3 --auto${NC}"
     echo ""

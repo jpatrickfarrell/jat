@@ -354,7 +354,7 @@ Should match message count.
 - [ ] Reservation conflict notifications
 - [ ] Message attachments (file paths/content)
 - [ ] Web UI for visualization
-- [ ] Multi-project dashboard
+- [ ] Multi-project IDE
 - [ ] Integration with git hooks
 - [ ] Automatic Beads task updates
 

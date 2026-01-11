@@ -25,7 +25,7 @@
 		},
 		{
 			title: 'Multi-Project',
-			description: 'All your repositories in one dashboard. Filter, prioritize, assign across everything.',
+			description: 'All your repositories in one IDE. Filter, prioritize, assign across everything.',
 			color: 'var(--color-success)'
 		},
 		{

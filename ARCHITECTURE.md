@@ -343,7 +343,7 @@ CREATE INDEX idx_reservations_expires ON file_reservations(expires_ts);
 
 - Clean separation (each repo has own tasks)
 - Committable to repo (no global state leakage)
-- Dashboard aggregation (Chimaro reads all `~/code/*/.beads/`)
+- IDE aggregation (Chimaro reads all `~/code/*/.beads/`)
 
 ---
 
@@ -696,7 +696,7 @@ am-reserve "../../../etc/passwd"  # Directory traversal
 - Beads: One `.beads/` per project
 - **Limit:** Unlimited (tested with 50+ projects)
 
-**Dashboard aggregation:**
+**IDE aggregation:**
 
 - Chimaro scans `~/code/*/.beads/`
 - Linear scan: ~10ms per project
@@ -739,7 +739,7 @@ am-reserve "../../../etc/passwd"  # Directory traversal
    - Load balancing (distribute work evenly)
    - Failure recovery (reassign if agent crashes)
 
-4. **Real-Time Dashboard**
+4. **Real-Time IDE**
    - WebSocket updates (no page refresh)
    - Agent presence indicators (who's online)
    - Live task progress tracking

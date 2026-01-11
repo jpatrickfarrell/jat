@@ -1,13 +1,13 @@
 ## Agent/App Interface Pattern
 
-This document describes the architecture for building external applications that interface with Claude Code agents. The JAT dashboard is an implementation of this pattern.
+This document describes the architecture for building external applications that interface with Claude Code agents. The JAT IDE is an implementation of this pattern.
 
 ### Why This Matters
 
 Claude Code runs in a terminal, but many interactions benefit from richer UIs:
 - **Questions** - Clickable buttons instead of typing numbers
 - **Task management** - Visual boards instead of CLI commands
-- **Monitoring** - Real-time dashboards instead of polling logs
+- **Monitoring** - Real-time IDE tracking instead of polling logs
 - **File operations** - Drag-drop instead of path typing
 
 The agent/app interface pattern enables external apps to:
@@ -131,7 +131,7 @@ Temp files enable cross-process communication without sockets.
 
 **Why both session ID and tmux session?**
 - Session ID: Unique per Claude Code instance, stable across restarts
-- tmux session: Human-readable, matches dashboard naming (`jat-AgentName`)
+- tmux session: Human-readable, matches IDE naming (`jat-AgentName`)
 - Write to both for flexible lookup
 
 **File Lifecycle:**
@@ -247,7 +247,7 @@ AGENT_NAME=$(cat ".claude/sessions/agent-${SESSION_ID}.txt")
 # 3. Derive tmux session name
 TMUX_SESSION="jat-${AGENT_NAME}"
 
-# 4. Write state file for dashboard
+# 4. Write state file for IDE
 echo "$DATA" > "/tmp/claude-question-tmux-${TMUX_SESSION}.json"
 ```
 
@@ -332,7 +332,7 @@ Other tools that could benefit from app interfaces:
 
 | Tool | Enhancement | Implementation |
 |------|-------------|----------------|
-| **Bash** | Show command output in dashboard | PostToolUse hook, stream to app |
+| **Bash** | Show command output in IDE | PostToolUse hook, stream to app |
 | **Edit** | Visual diff before/after | PreToolUse captures old, PostToolUse captures new |
 | **Read** | File browser integration | Log accessed files, show in sidebar |
 | **WebFetch** | Preview fetched content | Cache responses, render in app |
@@ -360,15 +360,15 @@ When building a new agent/app interface:
 .claude/hooks/pre-ask-user-question.sh    # Hook script
 .claude/settings.json                      # Hook configuration
 /tmp/claude-question-tmux-{session}.json  # State file
-dashboard/src/routes/api/work/[sessionId]/question/+server.ts  # API
-dashboard/src/lib/components/work/SessionCard.svelte           # UI
+ide/src/routes/api/work/[sessionId]/question/+server.ts  # API
+ide/src/lib/components/work/SessionCard.svelte           # UI
 ```
 
 **Data flow:**
 ```
 1. Agent calls AskUserQuestion
 2. PreToolUse hook fires, writes question JSON to /tmp/
-3. Dashboard polls /api/work/{session}/question
+3. IDE polls /api/work/{session}/question
 4. API reads temp file, returns question data
 5. SessionCard renders options as buttons
 6. User clicks button
@@ -377,11 +377,11 @@ dashboard/src/lib/components/work/SessionCard.svelte           # UI
 9. SessionCard calls DELETE to clear question file
 ```
 
-See `dashboard/CLAUDE.md` section "SMART QUESTION UI FLOW" for detailed implementation.
+See `ide/CLAUDE.md` section "SMART QUESTION UI FLOW" for detailed implementation.
 
 ### References
 
 - **Hooks documentation**: Claude Code docs on PreToolUse/PostToolUse
 - **tmux manual**: `man tmux` for send-keys, capture-pane
-- **Implementation**: `dashboard/src/lib/components/work/SessionCard.svelte`
+- **Implementation**: `ide/src/lib/components/work/SessionCard.svelte`
 - **Hook script**: `.claude/hooks/pre-ask-user-question.sh`

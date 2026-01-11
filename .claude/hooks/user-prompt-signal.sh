@@ -3,7 +3,7 @@
 # user-prompt-signal.sh - UserPromptSubmit hook for tracking user messages
 #
 # Fires when user submits a prompt to Claude Code.
-# Writes user_input event to timeline for dashboard visibility.
+# Writes user_input event to timeline for IDE visibility.
 #
 # Input: JSON via stdin with format: {"session_id": "...", "prompt": "...", ...}
 # Output: Appends to /tmp/jat-timeline-{tmux-session}.jsonl

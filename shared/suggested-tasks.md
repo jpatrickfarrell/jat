@@ -1,6 +1,6 @@
 ## Suggested Tasks Flow
 
-**Agents discover follow-up work during task completion and signal it to the dashboard for human review and batch creation.**
+**Agents discover follow-up work during task completion and signal it to the IDE for human review and batch creation.**
 
 This document explains how suggested tasks flow from agent discovery to Beads task creation.
 
@@ -12,7 +12,7 @@ During task completion, agents often discover related work that should be tracke
 - Features that would improve the area worked on
 - Documentation that needs updating
 
-Rather than creating tasks immediately, agents signal these discoveries to the dashboard where humans can review, edit, and selectively create them.
+Rather than creating tasks immediately, agents signal these discoveries to the IDE where humans can review, edit, and selectively create them.
 
 ### Flow Architecture
 
@@ -30,13 +30,13 @@ Rather than creating tasks immediately, agents signal these discoveries to the d
 │  3. PostToolUse hook captures signal                                        │
 │     └─► Writes JSON to /tmp/jat-signal-{session}.json                      │
 │                                                                             │
-│  4. Dashboard SSE server broadcasts completion bundle                       │
+│  4. IDE SSE server broadcasts completion bundle                       │
 │     └─► session-complete event sent to all connected clients               │
 │                                                                             │
 │  5. SessionCard/EventStack displays suggested tasks                         │
 │     └─► SuggestedTasksSection renders interactive task cards               │
 │                                                                             │
-│  6. Human reviews and edits tasks in dashboard                              │
+│  6. Human reviews and edits tasks in IDE                              │
 │     └─► Edit priority, type, title, description, project, labels           │
 │                                                                             │
 │  7. Human clicks "Create Tasks" to batch create in Beads                    │
@@ -130,11 +130,11 @@ jat-signal complete '{
 }'
 ```
 
-### Dashboard Side: Task Review UI
+### IDE Side: Task Review UI
 
 #### SuggestedTasksSection Component
 
-The dashboard renders suggested tasks in an interactive panel with:
+The IDE renders suggested tasks in an interactive panel with:
 
 - **Checkbox selection** - Select tasks to create
 - **Human/Agent indicator** - 🧑 for human tasks (bugs), 🤖 for automatable tasks
@@ -263,7 +263,7 @@ The API normalizes common type variations:
 
 #### Auto-Suggest API
 
-The dashboard includes an AI endpoint that analyzes task titles and suggests metadata:
+The IDE includes an AI endpoint that analyzes task titles and suggests metadata:
 
 **Endpoint:** `POST /api/tasks/suggest`
 
@@ -293,15 +293,15 @@ When creating a task manually, click "Auto-suggest" to get AI recommendations:
 - `.claude/hooks/post-bash-jat-signal.sh` - PostToolUse hook
 - `commands/jat/complete.md` - Completion workflow documentation
 
-**Dashboard Side:**
-- `dashboard/src/lib/components/work/SuggestedTasksSection.svelte` - Inline panel UI
-- `dashboard/src/lib/components/work/SuggestedTasksModal.svelte` - Modal UI
-- `dashboard/src/lib/components/work/EventStack.svelte` - Timeline integration
-- `dashboard/src/lib/components/work/SessionCard.svelte` - Session integration
-- `dashboard/src/routes/api/tasks/bulk/+server.ts` - Bulk creation API
-- `dashboard/src/routes/api/tasks/suggest/+server.js` - AI suggestion API
-- `dashboard/src/lib/stores/sessionEvents.ts` - SSE event handling
-- `dashboard/src/lib/types/signals.ts` - TypeScript interfaces
+**IDE Side:**
+- `ide/src/lib/components/work/SuggestedTasksSection.svelte` - Inline panel UI
+- `ide/src/lib/components/work/SuggestedTasksModal.svelte` - Modal UI
+- `ide/src/lib/components/work/EventStack.svelte` - Timeline integration
+- `ide/src/lib/components/work/SessionCard.svelte` - Session integration
+- `ide/src/routes/api/tasks/bulk/+server.ts` - Bulk creation API
+- `ide/src/routes/api/tasks/suggest/+server.js` - AI suggestion API
+- `ide/src/lib/stores/sessionEvents.ts` - SSE event handling
+- `ide/src/lib/types/signals.ts` - TypeScript interfaces
 
 ### Best Practices
 
@@ -326,7 +326,7 @@ When creating a task manually, click "Auto-suggest" to get AI recommendations:
 
 | Issue | Cause | Fix |
 |-------|-------|-----|
-| Tasks not appearing in dashboard | Signal not sent | Check agent sent `jat-signal complete` |
+| Tasks not appearing in IDE | Signal not sent | Check agent sent `jat-signal complete` |
 | SSE not broadcasting | Hook not firing | Verify PostToolUse hook in settings.json |
 | Duplicate task created | Title check failed | Tasks are matched by exact title |
 | Wrong project assigned | Project not specified | Set project in task or request |
@@ -361,11 +361,11 @@ jat-signal complete '{
   ]
 }'
 
-# 3. Dashboard shows completion bundle with suggested tasks
+# 3. IDE shows completion bundle with suggested tasks
 # 4. Human reviews tasks in SuggestedTasksSection
 # 5. Human edits 2FA task priority to P1, adds "security" label
 # 6. Human selects both tasks and clicks "Create Tasks"
-# 7. Dashboard calls POST /api/tasks/bulk
+# 7. IDE calls POST /api/tasks/bulk
 # 8. Tasks created in Beads: jat-abc (2FA), jat-abd (docs)
 # 9. Success message shown, tasks appear in task list
 ```

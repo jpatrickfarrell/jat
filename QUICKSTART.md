@@ -22,10 +22,10 @@ brew install tmux sqlite jq node
 ```
 
 **Why these?**
-- `tmux` - Agent sessions run here (dashboard tracks them)
+- `tmux` - Agent sessions run here (IDE tracks them)
 - `sqlite3` - Agent Mail database (coordination)
 - `jq` - JSON processing (tool outputs)
-- `node/npm` - Dashboard and browser automation
+- `node/npm` - IDE and browser automation
 
 ---
 
@@ -72,10 +72,10 @@ bd init
 
 ---
 
-## Step 4: Start the Dashboard (30 sec)
+## Step 4: Start the IDE (30 sec)
 
 ```bash
-jat-dashboard
+jat
 ```
 
 **This:**
@@ -91,7 +91,7 @@ jat-dashboard
 
 ## Step 5: Launch Your First Agent (1 min)
 
-### Option A: Via Dashboard (Recommended for First Time)
+### Option A: Via IDE (Recommended for First Time)
 
 1. Go to **Tasks** page
 2. Click **"Create Task"** button
@@ -118,7 +118,7 @@ jat myproject 4 --auto
 1. Tmux session created: `jat-{AgentName}`
 2. Claude Code starts in session
 3. Agent runs `/jat:start` (picks highest priority task)
-4. Dashboard shows live terminal output
+4. IDE shows live terminal output
 5. Session state updates in real-time
 
 ---
@@ -126,7 +126,7 @@ jat myproject 4 --auto
 ## You're Now Orchestrating AI Agents! 🎉
 
 **What you have:**
-- ✅ Visual dashboard showing all agent sessions
+- ✅ Visual IDE showing all agent sessions
 - ✅ Task management (create, assign, track)
 - ✅ Live terminal output per agent
 - ✅ Code editor (`/files` page)
@@ -209,7 +209,7 @@ Go to **Config → Automation → Presets**:
 
 ### Watch the Magic
 
-- Dashboard converts each `[ ]` item into a subtask
+- IDE converts each `[ ]` item into a subtask
 - 4 agents spawn simultaneously
 - Each picks a subtask (ordered by priority)
 - As tasks complete, agents auto-proceed to next task
@@ -224,20 +224,20 @@ Go to **Config → Automation → Presets**:
 
 ## Common First-Time Issues
 
-### "Agent shows offline in dashboard"
+### "Agent shows offline in IDE"
 
 **Cause:** Not running in tmux
 
 **Fix:**
 ```bash
 # Don't run:
-claude "/jat:start"  # ❌ No tmux, dashboard can't track
+claude "/jat:start"  # ❌ No tmux, IDE can't track
 
 # Do run:
 jat-myproject        # ✅ Launcher creates tmux session
 ```
 
-### "Dashboard says 'No projects found'"
+### "IDE says 'No projects found'"
 
 **Cause:** Haven't run `bd init` in your project
 
@@ -245,7 +245,7 @@ jat-myproject        # ✅ Launcher creates tmux session
 ```bash
 cd ~/code/myproject
 bd init
-# Refresh dashboard
+# Refresh IDE
 ```
 
 ### "Voice input mic button doesn't work"
@@ -270,7 +270,7 @@ npm install
 ### "Agents cost too much"
 
 **Check usage:**
-- Dashboard → Agent card → Shows tokens + cost today/week
+- IDE → Agent card → Shows tokens + cost today/week
 - Adjust review rules to require more human review
 - Set max concurrent lower (fewer agents = less cost)
 
@@ -285,7 +285,7 @@ npm install
 
 ### Level 1: Single Agent (you just did this ✅)
 - Launch one agent on one task
-- Watch it work in dashboard
+- Watch it work in IDE
 - Review and complete
 
 ### Level 2: Auto-Proceed
@@ -305,7 +305,7 @@ npm install
 
 ### Level 5: Multi-Project
 - Initialize multiple projects (`~/code/project1`, `~/code/project2`)
-- Dashboard shows all projects
+- IDE shows all projects
 - Swarm attack across projects
 
 ---
@@ -326,9 +326,9 @@ npm install
 
 ## Essential Commands
 
-### Dashboard
+### IDE
 ```bash
-jat-dashboard                   # Launch dashboard
+jat                             # Launch IDE
 ```
 
 ### Project Management
@@ -359,7 +359,7 @@ am-send "Message" --to <agent>  # Send message
 ```
 /jat:start          Pick task, reserve files, begin work
 /jat:complete       Verify, commit, close task, end session
-/jat:bead           Convert PRD to structured tasks
+/jat:tasktree           Convert PRD to structured tasks
 /jat:verify         Run tests, lint, security checks
 /jat:doctor         Diagnose and repair JAT setup
 ```
@@ -390,7 +390,7 @@ Karpathy said programmers could be **10X more powerful** if they could just stri
 **You just strung it together.**
 
 - ✅ Agents orchestrated
-- ✅ Dashboard running
+- ✅ IDE running
 - ✅ Tasks tracked
 - ✅ Automation configured
 

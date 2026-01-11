@@ -17,8 +17,8 @@ Users should be able to:
 		{
 			number: '02',
 			title: 'Generate Task Tree',
-			description: 'Run /jat:bead to convert your spec into a structured epic with tasks, priorities, and dependencies.',
-			code: `/jat:bead
+			description: 'Run /jat:tasktree to convert your spec into a structured epic with tasks, priorities, and dependencies.',
+			code: `/jat:tasktree
 
 Creating epic: "User Authentication"
 ├─ jat-a1: Setup Supabase auth config [P0]
@@ -54,8 +54,8 @@ Spawning 4 agents...
 		{
 			number: '04',
 			title: 'Supervise from One Place',
-			description: 'All projects, all agents, one dashboard. Answer questions with a click. Watch progress in real-time.',
-			code: `[Dashboard: 4 agents active]
+			description: 'All projects, all agents, one IDE. Answer questions with a click. Watch progress in real-time.',
+			code: `[IDE: 4 agents active]
 
 BluePeak asks:
   "Supabase or Firebase for auth?"

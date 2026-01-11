@@ -278,12 +278,12 @@ If you say yes, I'll:
 2. Pick up the task
 3. Start implementing it
 
-Or, you can explore the dashboard first and start working whenever
+Or, you can explore the IDE first and start working whenever
 you're ready. What would you like to do?
 
 Options:
 1. Start working now
-2. Show me the dashboard first
+2. Show me the IDE first
 3. I'll do it manually later
 ```
 
@@ -297,7 +297,7 @@ Options:
 ```
 No problem! Here's how to get started when you're ready:
 
-1. Open the dashboard: http://127.0.0.1:3333
+1. Open the IDE: http://127.0.0.1:3333
 2. Navigate to your project: "my-awesome-app"
 3. Click "Start Next Task" or run `/jat:start` in Claude Code
 

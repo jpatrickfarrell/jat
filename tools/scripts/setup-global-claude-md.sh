@@ -73,7 +73,7 @@ EOF
     echo "    Location: $CONFIG_FILE"
     echo ""
     echo "    Add more projects via:"
-    echo "      • Dashboard UI (Add Project button)"
+    echo "      • IDE UI (Add Project button)"
     echo "      • Edit $CONFIG_FILE manually"
     echo ""
 else

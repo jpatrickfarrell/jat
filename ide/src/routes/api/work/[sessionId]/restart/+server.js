@@ -127,8 +127,6 @@ export async function POST({ params }) {
 		const checkIntervalMs = 500;
 		let claudeReady = false;
 		let shellPromptDetected = false;
-		let yoloWarningHandled = false;
-
 		for (let waited = 0; waited < maxWaitSeconds * 1000 && !claudeReady; waited += checkIntervalMs) {
 			await new Promise(resolve => setTimeout(resolve, checkIntervalMs));
 
@@ -138,28 +136,19 @@ export async function POST({ params }) {
 				);
 
 				// Check for YOLO warning dialog (first-time --dangerously-skip-permissions)
-				// This dialog blocks startup and expects "1" (No) or "2" (Yes)
-				// Auto-accept by sending "2" + Enter
-				// IMPORTANT: Use isYoloWarningDialog() which requires MULTIPLE patterns
-				// to avoid false positives from the command line containing the flag name
-				if (!yoloWarningHandled) {
-					const hasYoloWarning = isYoloWarningDialog(paneOutput);
-					if (hasYoloWarning) {
-						console.log(`[restart] YOLO permission warning detected - auto-accepting...`);
-						try {
-							// Send "2" to select "Yes, I understand" option
-							await execAsync(`tmux send-keys -t "${sessionId}" "2"`);
-							await new Promise(resolve => setTimeout(resolve, 100));
-							await execAsync(`tmux send-keys -t "${sessionId}" Enter`);
-							yoloWarningHandled = true;
-							console.log(`[restart] YOLO warning auto-accepted, continuing startup...`);
-							// Give Claude time to process and show main TUI
-							await new Promise(resolve => setTimeout(resolve, 1000));
-							continue; // Re-check output after accepting
-						} catch (err) {
-							console.warn(`[restart] Failed to auto-accept YOLO warning: ${err}`);
-						}
-					}
+				// This dialog blocks startup and expects user to select "1" (No) or "2" (Yes)
+				// We do NOT auto-accept for liability reasons - user must read and accept themselves
+				if (isYoloWarningDialog(paneOutput)) {
+					console.log(`[restart] YOLO permission warning detected - waiting for user to accept in terminal...`);
+					// Return error so IDE can notify user to accept manually
+					return json({
+						error: 'Permission warning requires user acceptance',
+						code: 'YOLO_WARNING_PENDING',
+						message: 'Claude Code is showing a permissions warning dialog. Please open the terminal and accept it to continue.',
+						sessionId,
+						agentName,
+						recoveryHint: `Run: tmux attach-session -t ${sessionId}`
+					}, { status: 202 }); // 202 Accepted - request received but needs user action
 				}
 
 				const hasClaudePatterns = CLAUDE_READY_PATTERNS.some(p => paneOutput.includes(p));

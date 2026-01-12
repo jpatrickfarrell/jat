@@ -16,6 +16,7 @@
 	import SessionCard from '$lib/components/work/SessionCard.svelte';
 	import HorizontalResizeHandle from '$lib/components/HorizontalResizeHandle.svelte';
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
+	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 
 	interface TmuxSession {
 		name: string;
@@ -132,20 +133,21 @@
 					cost: session.cost || 0
 				});
 
-				// Get project from current task ID
-				if (session.task?.id) {
-					const project = getProjectFromTaskId(session.task.id);
+				// Get project from current task ID, or fall back to lastCompletedTask
+				const taskSource = session.task || session.lastCompletedTask;
+				if (taskSource?.id) {
+					const project = getProjectFromTaskId(taskSource.id);
 					if (project) {
 						projectMap.set(session.agentName, project);
 					}
 					// Store full task info for TaskIdBadge
 					taskMap.set(session.agentName, {
-						id: session.task.id,
-						status: session.task.status || 'open',
-						issue_type: session.task.issue_type,
-						title: session.task.title,
-						priority: session.task.priority,
-						description: session.task.description
+						id: taskSource.id,
+						status: taskSource.status || 'open',
+						issue_type: taskSource.issue_type,
+						title: taskSource.title,
+						priority: taskSource.priority,
+						description: taskSource.description
 					});
 				}
 			}
@@ -590,6 +592,12 @@
 							{@const isExpanded = expandedSession === session.name}
 							{@const sessionAgentName = getAgentName(session.name)}
 							{@const sessionTask = agentTasks.get(sessionAgentName)}
+							{@const statusDotColor = sessionTask?.status === 'in_progress'
+								? 'oklch(0.75 0.15 85)'
+								: sessionTask?.status === 'closed'
+								? 'oklch(0.65 0.18 145)'
+								: 'oklch(0.50 0.02 250)'
+							}
 							<tr
 								class="session-row"
 								class:attached={session.attached}
@@ -599,37 +607,32 @@
 								onclick={() => toggleExpanded(session.name)}
 							>
 								<td class="td-name">
-									<div class="name-row">
-										<span class="expand-icon" class:rotated={isExpanded}>
-											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="14" height="14">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-											</svg>
-										</span>
-										<span class="session-name">{session.name}</span>
-									</div>
-									<div class="session-badges">
-										{#if session.project}
-											{@const projectColor = getProjectColor(session.project)}
-											<span
-												class="session-project"
-												style="background: color-mix(in oklch, {projectColor} 20%, transparent); border-color: color-mix(in oklch, {projectColor} 50%, transparent); color: {projectColor};"
-											>
-												<span
-													class="project-dot"
-													style="background: {projectColor};"
-												></span>
-												{session.project}
-											</span>
-										{/if}
+									<!-- Row 1: Project pill + Task title -->
+									<div class="task-row">
 										{#if sessionTask}
 											<TaskIdBadge
 												task={sessionTask}
 												size="xs"
-												showStatus={true}
-												showType={true}
-												copyOnly={true}
+												variant="projectPill"
+												{statusDotColor}
 											/>
+											<span class="task-title" title={sessionTask.title}>
+												{sessionTask.title || sessionTask.id}
+											</span>
 										{/if}
+									</div>
+									<!-- Row 2: Task description (truncated) -->
+									{#if sessionTask?.description}
+										<div class="task-description">
+											{sessionTask.description}
+										</div>
+									{/if}
+									<!-- Row 3: Avatar + Agent name -->
+									<div class="agent-row">
+										{#if session.type === 'agent' && sessionAgentName}
+											<AgentAvatar name={sessionAgentName} size={20} />
+										{/if}
+										<span class="session-name">{sessionAgentName || session.name}</span>
 									</div>
 								</td>
 								<td class="td-type">
@@ -1043,59 +1046,43 @@
 		gap: 0.125rem;
 	}
 
-	.name-row {
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
-	}
-
-	.expand-icon {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		color: oklch(0.55 0.02 250);
-		transition: transform 0.2s ease, color 0.15s;
-	}
-
-	.expand-icon.rotated {
-		transform: rotate(90deg);
-		color: oklch(0.75 0.15 200);
-	}
-
-	.expandable:hover .expand-icon {
-		color: oklch(0.70 0.12 145);
-	}
-
 	.session-name {
+		font-size: 0.75rem;
 		font-weight: 500;
-		color: oklch(0.85 0.02 250);
+		color: oklch(0.65 0.02 250);
 	}
 
-	.session-badges {
+	.task-row {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		flex-wrap: wrap;
-		margin-top: 0.25rem;
 	}
 
-	.session-project {
-		display: inline-flex;
+	.agent-row {
+		display: flex;
 		align-items: center;
-		gap: 0.25rem;
-		font-size: 0.65rem;
-		font-family: ui-monospace, monospace;
-		padding: 0.1rem 0.4rem;
-		border-radius: 9999px;
-		border: 1px solid;
-		width: fit-content;
+		gap: 0.375rem;
+		margin-top: 0.375rem;
 	}
 
-	.project-dot {
-		width: 0.375rem;
-		height: 0.375rem;
-		border-radius: 50%;
-		flex-shrink: 0;
+	.task-title {
+		font-size: 0.8rem;
+		font-weight: 500;
+		color: oklch(0.80 0.02 250);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		max-width: 350px;
+	}
+
+	.task-description {
+		font-size: 0.7rem;
+		color: oklch(0.55 0.02 250);
+		margin-top: 0.25rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		max-width: 400px;
 	}
 
 	/* Type badge */

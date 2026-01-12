@@ -56,9 +56,16 @@
 		showDepGraph?: boolean;
 		/** Show compact unblocks count badge inline (e.g., "→3") */
 		showUnblocksCount?: boolean;
+		/** Optional status dot color (oklch string) - shows a colored dot before the ID representing agent state */
+		statusDotColor?: string;
+		/** Display variant: 'default' (normal badge) | 'projectPill' (outline pill with project prefix only) */
+		variant?: 'default' | 'projectPill';
 	}
 
-	let { task, size = 'sm', showStatus = true, showType = true, showCopyIcon = false, showAssignee = false, minimal = false, color, onOpenTask, onAgentClick, dropdownAlign = 'start', copyOnly = false, blockedBy = [], blocks = [], showDependencies = false, showDepGraph = true, showUnblocksCount = false }: Props = $props();
+	let { task, size = 'sm', showStatus = true, showType = true, showCopyIcon = false, showAssignee = false, minimal = false, color, onOpenTask, onAgentClick, dropdownAlign = 'start', copyOnly = false, blockedBy = [], blocks = [], showDependencies = false, showDepGraph = true, showUnblocksCount = false, statusDotColor, variant = 'default' }: Props = $props();
+
+	// Extract project prefix from task ID (e.g., "jat-abc" -> "jat")
+	const projectPrefix = $derived(task.id.split('-')[0] || task.id);
 
 	// Dependency graph state
 	let depGraphData = $state<DepGraphData | null>(null);
@@ -183,6 +190,36 @@
 		title="Click to copy task ID"
 	>
 		<span class={size === 'xs' ? 'text-xs' : size === 'sm' ? 'text-sm' : 'text-base'} style="color: {projectColor}">{task.id}</span>
+		{#if copied}
+			<svg class="{iconSizes[size]} text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+			</svg>
+		{/if}
+	</button>
+{:else if variant === 'projectPill'}
+	<!-- Project pill mode: outline pill with status dot and task ID -->
+	{@const dotColor = statusDotColor || 'oklch(0.50 0.02 250)'}
+	<button
+		class="inline-flex items-center gap-1.5 font-mono rounded-full cursor-pointer
+			   hover:opacity-90 transition-all {size === 'xs' ? 'text-xs px-2 py-0.5' : size === 'sm' ? 'text-sm px-2.5 py-0.5' : 'text-base px-3 py-1'}"
+		style="
+			background: color-mix(in oklch, {projectColor} 15%, transparent);
+			border: 1px solid color-mix(in oklch, {projectColor} 40%, transparent);
+			color: {projectColor};
+		"
+		onclick={copyId}
+		title="Click to copy task ID"
+	>
+		<!-- Status dot (uses status color, not project color) -->
+		<span
+			class="rounded-full shrink-0 {size === 'xs' ? 'w-2 h-2' : size === 'sm' ? 'w-2.5 h-2.5' : 'w-3 h-3'}"
+			style="background: {dotColor};"
+		></span>
+		<!-- Full task ID -->
+		<span>{task.id}</span>
+		{#if showType && task.issue_type}
+			<span class="opacity-80">{typeVisual.icon}</span>
+		{/if}
 		{#if copied}
 			<svg class="{iconSizes[size]} text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />

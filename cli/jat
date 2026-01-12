@@ -93,7 +93,7 @@ list_projects() {
 # Self-Update Functions
 #------------------------------------------------------------------------------
 
-# Check if updates are available (compares local and remote HEAD)
+# Check if updates are available (origin/master has commits we don't have)
 check_for_updates() {
     if [[ ! -d "$JAT_SOURCE_DIR/.git" ]]; then
         return 1  # Not a git repo
@@ -102,15 +102,15 @@ check_for_updates() {
     # Fetch latest from remote (quietly)
     git -C "$JAT_SOURCE_DIR" fetch origin master --quiet 2>/dev/null || return 1
 
-    # Compare local and remote HEAD
-    local local_head remote_head
-    local_head=$(git -C "$JAT_SOURCE_DIR" rev-parse HEAD 2>/dev/null)
-    remote_head=$(git -C "$JAT_SOURCE_DIR" rev-parse origin/master 2>/dev/null)
+    # Check if origin/master has commits that HEAD doesn't have
+    # This correctly handles the case where local is ahead of origin
+    local behind
+    behind=$(git -C "$JAT_SOURCE_DIR" rev-list HEAD..origin/master --count 2>/dev/null || echo "0")
 
-    if [[ "$local_head" != "$remote_head" ]]; then
+    if [[ "$behind" -gt 0 ]]; then
         return 0  # Updates available
     fi
-    return 1  # No updates
+    return 1  # No updates (either up-to-date or ahead of origin)
 }
 
 # Get number of commits behind

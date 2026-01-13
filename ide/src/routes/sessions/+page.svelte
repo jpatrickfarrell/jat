@@ -769,10 +769,11 @@
 								? 'oklch(0.70 0.20 190)' // Cyan for recovering
 								: 'oklch(0.55 0.05 250)' // Grey for idle/unknown
 							}
+							{@const derivedProject = session.project || (session.type !== 'server' && session.name.includes('-') ? session.name.split('-')[0] : null)}
 							{@const rowProjectColor = sessionTask?.id
 								? getProjectColor(sessionTask.id)
-								: session.project
-									? getProjectColor(`${session.project}-x`)
+								: derivedProject
+									? getProjectColor(`${derivedProject}-x`)
 									: null
 							}
 							{@const elapsed = getElapsedFormatted(session.created)}
@@ -826,12 +827,12 @@
 												</span>
 											{:else}
 												<!-- No task - show project badge if known, otherwise session name -->
-												{#if session.project}
+												{#if derivedProject}
 													<span
 														class="project-badge"
 														style="background: {rowProjectColor ? `color-mix(in oklch, ${rowProjectColor} 25%, transparent)` : 'oklch(0.25 0.02 250)'}; border-color: {rowProjectColor || 'oklch(0.35 0.02 250)'}; color: {rowProjectColor || 'oklch(0.75 0.02 250)'};"
 													>
-														{session.project}
+														{derivedProject}
 													</span>
 												{:else}
 													<span class="session-name-pill">{session.name}</span>

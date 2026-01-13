@@ -58,6 +58,7 @@
 	let autoKillP4 = $state(true);
 	let skipPermissions = $state(false);
 	let launchingYolo = $state(false);
+	let savingSkipPermissions = $state(false);
 
 	// Track if form has changes
 	let originalValues = $state<JatDefaults | null>(null);
@@ -399,6 +400,52 @@
 			launchingYolo = false;
 		}
 	}
+
+	/**
+	 * Auto-save skip_permissions when the toggle is changed
+	 * This setting is important enough to save immediately without requiring Save button
+	 */
+	async function handleSkipPermissionsToggle(event: Event) {
+		const checkbox = event.target as HTMLInputElement;
+		const newValue = checkbox.checked;
+		skipPermissions = newValue;
+		savingSkipPermissions = true;
+		error = null;
+
+		try {
+			const response = await fetch('/api/config/defaults', {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					defaults: {
+						skip_permissions: newValue
+					}
+				})
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				throw new Error(data.error || 'Failed to save setting');
+			}
+
+			// Update original value so hasChanges reflects saved state
+			if (originalValues) {
+				originalValues = { ...originalValues, skip_permissions: newValue };
+			}
+
+			success = newValue
+				? 'Autonomous mode enabled. New agents will run without permission prompts.'
+				: 'Autonomous mode disabled.';
+			setTimeout(() => { success = null; }, 3000);
+		} catch (err) {
+			// Revert the toggle on error
+			skipPermissions = !newValue;
+			error = err instanceof Error ? err.message : 'Failed to save setting';
+		} finally {
+			savingSkipPermissions = false;
+		}
+	}
 </script>
 
 <div class="defaults-editor">
@@ -548,52 +595,58 @@
 					This allows agents to execute commands without confirmation prompts.
 				</p>
 
-				<div class="autonomous-warning">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="warning-icon">
-						<path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-					</svg>
-					<div class="warning-content">
-						<strong>First time setup required</strong>
-						<p>
-							Before enabling this toggle, you must accept Claude's permissions warning once in your terminal.
-							Click the button below to launch a Claude session where you can accept it.
-						</p>
-					</div>
-				</div>
-
-				<div class="autonomous-actions">
-					<button
-						type="button"
-						class="btn btn-warning"
-						onclick={launchYoloSession}
-						disabled={launchingYolo || skipPermissions}
-					>
-						{#if launchingYolo}
-							<span class="btn-spinner"></span>
-							Launching...
-						{:else}
-							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
-								<path d="M5 3l14 9-14 9V3z"/>
+				{#if !skipPermissions}
+					<div class="autonomous-setup-section">
+						<div class="autonomous-warning">
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="warning-icon">
+								<path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
 							</svg>
-							Launch Claude to Accept Warning
-						{/if}
-					</button>
-					{#if skipPermissions}
-						<span class="already-enabled">Already enabled</span>
-					{/if}
-				</div>
+							<div class="warning-content">
+								<strong>First time setup required</strong>
+								<p>
+									Before enabling this toggle, you must accept Claude's permissions warning once in your terminal.
+									Click the button below to launch a Claude session where you can accept it.
+								</p>
+							</div>
+						</div>
+
+						<div class="autonomous-actions">
+							<button
+								type="button"
+								class="btn btn-warning"
+								onclick={launchYoloSession}
+								disabled={launchingYolo}
+							>
+								{#if launchingYolo}
+									<span class="btn-spinner"></span>
+									Launching...
+								{:else}
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+										<path d="M5 3l14 9-14 9V3z"/>
+									</svg>
+									Launch Claude to Accept Warning
+								{/if}
+							</button>
+						</div>
+					</div>
+				{/if}
 
 				<div class="form-group" style="margin-top: 1.25rem;">
 					<label class="form-label toggle-label" for="skip-permissions">
 						<span class="toggle-label-text">
 							Enable autonomous mode
 							<span class="label-hint">Pass --dangerously-skip-permissions to spawned agents</span>
+							{#if savingSkipPermissions}
+								<span class="saving-indicator">Saving...</span>
+							{/if}
 						</span>
 						<input
 							type="checkbox"
 							id="skip-permissions"
 							class="toggle toggle-warning"
-							bind:checked={skipPermissions}
+							checked={skipPermissions}
+							onchange={handleSkipPermissionsToggle}
+							disabled={savingSkipPermissions}
 						/>
 					</label>
 				</div>
@@ -1460,6 +1513,43 @@
 		font-size: 0.8rem;
 		color: oklch(0.55 0.02 250);
 		font-style: italic;
+	}
+
+	.autonomous-setup-section {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		overflow: hidden;
+		animation: slideDown 0.3s ease-out;
+	}
+
+	@keyframes slideDown {
+		from {
+			opacity: 0;
+			max-height: 0;
+			transform: translateY(-10px);
+		}
+		to {
+			opacity: 1;
+			max-height: 300px;
+			transform: translateY(0);
+		}
+	}
+
+	.saving-indicator {
+		display: inline-block;
+		margin-left: 0.5rem;
+		padding: 0.125rem 0.5rem;
+		font-size: 0.7rem;
+		color: oklch(0.85 0.15 200);
+		background: oklch(0.30 0.08 200 / 0.5);
+		border-radius: 0.25rem;
+		animation: pulse 1s ease-in-out infinite;
+	}
+
+	@keyframes pulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.5; }
 	}
 
 	.enabled-notice {

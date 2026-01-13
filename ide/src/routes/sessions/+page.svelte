@@ -692,11 +692,18 @@
 								? 'oklch(0.70 0.20 190)' // Cyan for recovering
 								: 'oklch(0.55 0.05 250)' // Grey for idle/unknown
 							}
+							{@const rowProjectColor = sessionTask?.id
+								? getProjectColor(sessionTask.id)
+								: session.project
+									? getProjectColor(`${session.project}-x`)
+									: null
+							}
 							{@const elapsed = getElapsedFormatted(session.created)}
 							<tr
 								class="session-row"
 								class:attached={session.attached}
 								class:selected={selectedSession === session.name}
+								style={rowProjectColor ? `border-left: 3px solid ${rowProjectColor};` : ''}
 								class:expanded={isExpanded}
 								class:expandable={true}
 								onclick={() => toggleExpanded(session.name)}
@@ -765,14 +772,25 @@
 								</td>
 								<td class="td-actions" onclick={(e) => e.stopPropagation()}>
 									{#if session.type === 'agent'}
-										<!-- Stacked: Agent name, StatusActionBadge, Timer -->
-										<div class="agent-actions-stack">
-											<!-- Agent name with avatar -->
-											<div class="agent-info">
-												<AgentAvatar name={sessionAgentName} size={18} />
+										<!-- Two-row layout: Agent info row, then StatusActionBadge -->
+										<div class="agent-column">
+											<!-- Row 1: Avatar + Name + Timer -->
+											<div class="agent-info-row">
+												<AgentAvatar name={sessionAgentName} size={16} />
 												<span class="agent-name">{sessionAgentName}</span>
+												{#if elapsed}
+													<span class="agent-timer">
+														{#if elapsed.showHours}
+															<AnimatedDigits value={elapsed.hours} class="text-[10px]" />
+															<span class="timer-sep">:</span>
+														{/if}
+														<AnimatedDigits value={elapsed.minutes} class="text-[10px]" />
+														<span class="timer-sep">:</span>
+														<AnimatedDigits value={elapsed.seconds} class="text-[10px]" />
+													</span>
+												{/if}
 											</div>
-											<!-- Status action badge -->
+											<!-- Row 2: Status action badge -->
 											<StatusActionBadge
 												sessionState="idle"
 												sessionName={session.name}
@@ -784,18 +802,6 @@
 													}
 												}}
 											/>
-											<!-- Timer -->
-											{#if elapsed}
-												<span class="agent-timer font-mono text-[10px] opacity-60 inline-flex items-baseline">
-													{#if elapsed.showHours}
-														<AnimatedDigits value={elapsed.hours} class="text-[10px]" />
-														<span class="opacity-60">:</span>
-													{/if}
-													<AnimatedDigits value={elapsed.minutes} class="text-[10px]" />
-													<span class="opacity-60">:</span>
-													<AnimatedDigits value={elapsed.seconds} class="text-[10px]" />
-												</span>
-											{/if}
 										</div>
 									{:else}
 										<!-- Non-agent sessions: simple buttons -->
@@ -1151,7 +1157,7 @@
 
 	/* Column widths - give narrow columns fixed widths so SESSION expands */
 	.th-status, .td-status { width: 90px; }
-	.th-actions, .td-actions { width: 140px; }
+	.th-actions, .td-actions { width: 160px; }
 
 	/* Session name */
 	.td-name {
@@ -1214,32 +1220,40 @@
 		max-width: 100%;
 	}
 
-	/* Agent actions stack (in Actions column) */
-	.agent-actions-stack {
+	/* Agent column layout (two rows: info row + badge) */
+	.agent-column {
 		display: flex;
 		flex-direction: column;
-		align-items: center;
-		gap: 0.25rem;
+		gap: 0.375rem;
 	}
 
-	.agent-info {
+	.agent-info-row {
 		display: flex;
 		align-items: center;
-		gap: 0.25rem;
+		gap: 0.375rem;
 	}
 
 	.agent-name {
 		font-size: 0.7rem;
 		font-weight: 500;
-		color: oklch(0.70 0.02 250);
-		max-width: 90px;
+		color: oklch(0.75 0.02 250);
+		max-width: 70px;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 
 	.agent-timer {
-		margin-top: 0.125rem;
+		font-family: ui-monospace, monospace;
+		font-size: 0.625rem;
+		color: oklch(0.55 0.02 250);
+		display: inline-flex;
+		align-items: baseline;
+		margin-left: auto;
+	}
+
+	.timer-sep {
+		opacity: 0.5;
 	}
 
 	/* Status */

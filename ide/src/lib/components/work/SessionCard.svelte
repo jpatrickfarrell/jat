@@ -79,6 +79,7 @@
 		SuggestedTaskWithState,
 	} from "$lib/types/signals";
 	import { getProjectFromTaskId } from "$lib/utils/projectUtils";
+	import { getProjectColor } from "$lib/utils/projectColors";
 	import {
 		getFileTypeInfo,
 		formatFileSize,
@@ -354,6 +355,25 @@
 		task?.id ? getProjectFromTaskId(task.id) :
 		lastCompletedTask?.id ? getProjectFromTaskId(lastCompletedTask.id) : ''
 	);
+
+	// Project color for session card border accent (uses project config colors)
+	// For agent mode: derives from task ID prefix (e.g., "jat-abc" → jat project color)
+	// For server mode: uses projectName prop directly
+	const projectColor = $derived.by(() => {
+		// For agent mode, use task ID to get project color
+		if (isAgentMode) {
+			const taskId = task?.id || lastCompletedTask?.id;
+			if (taskId) {
+				return getProjectColor(taskId);
+			}
+		}
+		// For server mode, use project name
+		if (isServerMode && projectName) {
+			// getProjectColor expects a task ID format, so we construct one
+			return getProjectColor(`${projectName}-x`);
+		}
+		return null;
+	});
 
 	// Task for StatusActionBadge epic linking - use current task OR last completed task
 	// This allows linking completed tasks to epics (e.g., if user forgot before completing)
@@ -4675,6 +4695,16 @@
 									: 'none'};
 		"
 		></div>
+		<!-- Project color accent bar - top edge (shows project identity) -->
+		{#if projectColor}
+			<div
+				class="absolute left-0 right-0 top-0 h-1 z-10"
+				style="
+					background: {projectColor};
+					box-shadow: 0 0 8px color-mix(in oklch, {projectColor} 50%, transparent);
+				"
+			></div>
+		{/if}
 		<!-- Completion Success Banner -->
 		{#if showCompletionBanner}
 			<div

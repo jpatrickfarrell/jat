@@ -38,6 +38,8 @@
 		elapsed?: ElapsedTime | null;
 		/** Task was completed by an agent with an active session */
 		isCompletedByActiveSession?: boolean;
+		/** Session ID for resuming offline sessions (prevents 404 after restart) */
+		sessionId?: string | null;
 	}
 
 	let {
@@ -51,7 +53,8 @@
 		onattach = () => {},
 		fireScale = 1,
 		elapsed = null,
-		isCompletedByActiveSession = false
+		isCompletedByActiveSession = false,
+		sessionId = null
 	}: Props = $props();
 
 	// Local state
@@ -138,7 +141,8 @@
 		try {
 			const response = await fetch(`/api/sessions/${task.assignee}/resume`, {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' }
+				headers: { 'Content-Type': 'application/json' },
+				body: sessionId ? JSON.stringify({ session_id: sessionId }) : undefined
 			});
 			if (!response.ok) {
 				const data = await response.json();

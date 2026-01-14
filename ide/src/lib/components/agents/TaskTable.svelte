@@ -180,6 +180,14 @@
 		});
 	}
 
+	// Get sessionId for a task's current assignee (for resume functionality)
+	function getSessionIdForAssignee(taskId: string, assignee: string | undefined): string | null {
+		if (!assignee) return null;
+		const sessions = taskSessions[taskId] || [];
+		const session = sessions.find(s => s.agentName === assignee);
+		return session?.sessionId ?? null;
+	}
+
 	// Resume a specific agent's session by calling the resume API
 	async function handleResumeSession(session: TaskSession) {
 		try {
@@ -3377,6 +3385,7 @@
 														hasBlockers={depStatus.hasBlockers}
 														blockingReason={depStatus.blockingReason ?? undefined}
 														{isCompletedByActiveSession}
+														sessionId={getSessionIdForAssignee(task.id, task.assignee)}
 														onspawn={handleSpawnSingle}
 														onattach={async (sessionName) => {
 															try {
@@ -3842,6 +3851,7 @@
 												hasBlockers={depStatus.hasBlockers}
 												blockingReason={depStatus.blockingReason}
 												{isCompletedByActiveSession}
+												sessionId={getSessionIdForAssignee(task.id, task.assignee)}
 												onspawn={handleSpawnSingle}
 												{fireScale}
 												{elapsed}

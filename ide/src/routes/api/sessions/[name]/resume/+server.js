@@ -38,6 +38,65 @@ function resolveSessionName(name) {
 }
 
 /**
+ * Convert a project path to Claude's project slug format
+ * @param {string} projectPath - e.g., "/home/jw/code/jat"
+ * @returns {string} - e.g., "-home-jw-code-jat"
+ */
+function getProjectSlug(projectPath) {
+	return projectPath.replace(/\//g, '-');
+}
+
+/**
+ * Search Claude JSONL session files for an agent's most recent session
+ * This is a last-resort fallback when no other session mapping exists
+ * @param {string} agentName - Agent name to search for
+ * @param {string} projectPath - Project path to compute the slug
+ * @returns {string | null} - Session ID or null if not found
+ */
+function findSessionIdFromJsonl(agentName, projectPath) {
+	const homeDir = process.env.HOME || '';
+	const projectSlug = getProjectSlug(projectPath);
+	const claudeProjectDir = join(homeDir, '.claude', 'projects', projectSlug);
+
+	if (!existsSync(claudeProjectDir)) {
+		return null;
+	}
+
+	try {
+		const files = readdirSync(claudeProjectDir)
+			.filter(f => f.endsWith('.jsonl'))
+			.map(f => ({
+				name: f,
+				path: join(claudeProjectDir, f),
+				sessionId: f.replace('.jsonl', ''),
+				mtime: statSync(join(claudeProjectDir, f)).mtime.getTime()
+			}))
+			.sort((a, b) => b.mtime - a.mtime); // Newest first
+
+		// Search for agent name in signal data (most reliable pattern)
+		// Look for: "agentName":"TrueCave" in jat-signal outputs
+		const agentPattern = new RegExp(`"agentName"\\s*:\\s*"${agentName}"`, 'i');
+
+		for (const file of files) {
+			try {
+				const content = readFileSync(file.path, 'utf-8');
+				// Check if this session contains our agent's signals
+				if (agentPattern.test(content)) {
+					console.log(`Found session for ${agentName} in JSONL: ${file.sessionId}`);
+					return file.sessionId;
+				}
+			} catch (e) {
+				// Skip unreadable files
+			}
+		}
+	} catch (e) {
+		console.error(`Failed to scan Claude projects dir ${claudeProjectDir}:`, e);
+	}
+
+	return null;
+}
+
+/**
  * Find session_id from signal files or persistent agent session files
  * @param {string} sessionName - tmux session name (e.g., "jat-QuickOcean")
  * @param {string | null} projectPath - project path to search for persistent session files
@@ -116,6 +175,16 @@ function findSessionId(sessionName, projectPath = null) {
 			} catch (e) {
 				console.error(`Failed to scan sessions dir ${sessionsDir}:`, e);
 			}
+		}
+	}
+
+	// Final fallback: scan Claude JSONL session files for agent's signals
+	// This catches sessions where .claude/sessions/agent-*.txt was never created
+	if (projectPath) {
+		const agentName = sessionName.replace(/^jat-/, '');
+		const jsonlSessionId = findSessionIdFromJsonl(agentName, projectPath);
+		if (jsonlSessionId) {
+			return jsonlSessionId;
 		}
 	}
 

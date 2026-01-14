@@ -720,6 +720,8 @@
 	function startGitStatusPolling() {
 		// Avoid duplicate intervals
 		if (gitStatusInterval) return;
+		// Don't start polling if tab is hidden
+		if (document.visibilityState === 'hidden') return;
 		// Fetch immediately
 		fetchGitStatusForBadges();
 		// Then poll every 10 seconds
@@ -743,9 +745,21 @@
 		handleResize(); // Check initial state
 		window.addEventListener('resize', handleResize);
 
+		// Pause git polling when tab is hidden, resume when visible
+		function handleVisibilityChange() {
+			if (document.visibilityState === 'hidden') {
+				stopGitStatusPolling();
+			} else if (selectedProject) {
+				// Resume polling and fetch immediately to catch changes
+				startGitStatusPolling();
+			}
+		}
+		document.addEventListener('visibilitychange', handleVisibilityChange);
+
 		return () => {
 			stopGitStatusPolling();
 			window.removeEventListener('resize', handleResize);
+			document.removeEventListener('visibilitychange', handleVisibilityChange);
 		};
 	});
 

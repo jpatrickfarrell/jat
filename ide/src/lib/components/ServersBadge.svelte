@@ -142,8 +142,8 @@
 		fetchProjects();
 		fetchServers();
 
-		// Poll servers every 5 seconds
-		const interval = setInterval(() => fetchServers(), 5000);
+		// Poll servers every 15 seconds (server status rarely changes)
+		const interval = setInterval(() => fetchServers(), 15000);
 		return () => clearInterval(interval);
 	});
 

@@ -958,8 +958,8 @@
 		};
 		updateColors();
 
-		// Update every 5 seconds to catch any color changes
-		const interval = setInterval(updateColors, 5000);
+		// Update every 60 seconds as a fallback (colors rarely change at runtime)
+		const interval = setInterval(updateColors, 60000);
 
 		return () => clearInterval(interval);
 	});

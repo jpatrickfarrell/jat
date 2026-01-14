@@ -177,7 +177,7 @@
 
 	function startPolling() {
 		if (pollInterval) clearInterval(pollInterval);
-		pollInterval = setInterval(fetchSignals, 2000);
+		pollInterval = setInterval(fetchSignals, 5000);
 	}
 
 	function stopPolling() {

@@ -208,8 +208,8 @@
 
 	onMount(() => {
 		fetchSessions();
-		// Poll every 2 seconds for responsive updates
-		pollingInterval = setInterval(fetchSessions, 2000);
+		// Poll every 5 seconds (sufficient for triage overview)
+		pollingInterval = setInterval(fetchSessions, 5000);
 	});
 
 	onDestroy(() => {

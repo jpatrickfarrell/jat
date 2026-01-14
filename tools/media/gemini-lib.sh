@@ -61,12 +61,19 @@ gemini_request() {
     local payload="$2"
     local url="${GEMINI_API_URL}/${model}:generateContent"
 
+    # Write payload to temp file to avoid argument length limits
+    local tmpfile
+    tmpfile=$(mktemp)
+    echo "$payload" > "$tmpfile"
+
     local response http_code body
     response=$(curl -s -w "\n%{http_code}" \
         -H "Content-Type: application/json" \
         -H "x-goog-api-key: ${GEMINI_API_KEY}" \
-        -d "$payload" \
+        -d @"$tmpfile" \
         "$url")
+
+    rm -f "$tmpfile"
 
     http_code=$(echo "$response" | tail -n1)
     body=$(echo "$response" | head -n-1)

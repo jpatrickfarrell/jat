@@ -88,13 +88,17 @@ fi
 
 # Encode image and get MIME type
 MIME=$(gemini_mime_type "$INPUT")
-DATA=$(gemini_encode_image "$INPUT")
 
-# Build payload with text instruction and image
+# Write base64 data to temp file to avoid argument length limits
+TMPDATA=$(mktemp)
+trap "rm -f '$TMPDATA'" EXIT
+gemini_encode_image "$INPUT" > "$TMPDATA"
+
+# Build payload with text instruction and image using temp file
 PAYLOAD=$(jq -n \
     --arg t "$INSTRUCTION" \
     --arg m "$MIME" \
-    --arg d "$DATA" \
+    --rawfile d "$TMPDATA" \
     '{
         contents: [{
             parts: [

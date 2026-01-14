@@ -253,7 +253,8 @@
 				.map((e) => e.task_id)
 		);
 		result = result.filter((e) => {
-			if (e.type === 'completing' && e.task_id && completedTaskIds.has(e.task_id)) {
+			// Check both e.type and e.state since completing signals can come in either format
+			if ((e.type === 'completing' || e.state === 'completing') && e.task_id && completedTaskIds.has(e.task_id)) {
 				return false; // Hide completing events for completed tasks
 			}
 			return true;

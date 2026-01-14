@@ -1782,6 +1782,7 @@
 	// Always steals focus between session cards, only protects search boxes/filters
 	function handleCardMouseEnter() {
 		setHoveredSession(sessionName);
+		showMinimap = true;
 
 		// Focus-follows-mouse: focus the input when hovering over the card
 		// Skip ONLY if user is typing in a non-session input (search box, filter, etc.)
@@ -1800,6 +1801,7 @@
 
 	function handleCardMouseLeave() {
 		setHoveredSession(null);
+		showMinimap = false;
 	}
 
 	// Handle click anywhere in the card to center it and focus input
@@ -4353,7 +4355,7 @@
 	     Skips: Terminal output, input section, completion banner, resize handle
 	     ═══════════════════════════════════════════════════════════════════════════ -->
 	<article
-		class="unified-agent-card p-2 rounded-lg relative overflow-visible {className} {isCompleteFlashing
+		class="unified-agent-card p-2 rounded-lg relative overflow-hidden flex flex-col {className} {isCompleteFlashing
 			? 'complete-flash-animation'
 			: ''} {isExiting ? 'session-exit' : ''} {isEntering ? 'session-entrance' : ''}"
 		class:ring-2={effectiveHighlighted ||
@@ -5490,14 +5492,15 @@
 			{/if}
 
 			<!-- Output Content with Minimap Sidebar -->
-			<div class="flex flex-1 min-h-0">
+			<div class="relative flex-1 min-h-0 overflow-hidden">
 				<!-- Terminal Output - Click to center card, add glow effect, and focus input -->
 				<!-- svelte-ignore a11y_click_events_have_key_events -->
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
 					bind:this={scrollContainerRef}
-					class="flex-1 overflow-y-auto overflow-x-auto px-3 leading-relaxed min-h-0 cursor-text"
-					style="font-family: var(--terminal-font); font-size: var(--terminal-font-size); background: oklch(0.17 0.01 250);"
+					bind:clientHeight={outputContainerHeight}
+					class="absolute inset-0 overflow-y-auto overflow-x-auto px-3 leading-relaxed cursor-text"
+					style="font-family: var(--terminal-font); font-size: var(--terminal-font-size); background: oklch(0.17 0.01 250); {showMinimap && output ? 'right: 60px;' : ''}"
 					onscroll={handleScroll}
 					onclick={handleCardClick}
 				>
@@ -5510,12 +5513,11 @@
 					{/if}
 				</div>
 
-				<!-- Minimap Sidebar -->
+				<!-- Minimap Sidebar (absolute positioned) -->
 				{#if showMinimap && output && mode === 'agent'}
 					<div
-						class="w-[60px] border-l flex-shrink-0"
+						class="absolute top-0 right-0 bottom-0 w-[60px] border-l overflow-hidden"
 						style="border-color: oklch(0.25 0.02 250); background: oklch(0.12 0.01 250);"
-						bind:clientHeight={outputContainerHeight}
 					>
 						<MinimapCssScale
 							bind:this={minimapRef}
@@ -5529,7 +5531,7 @@
 
 			<!-- Event Timeline Stack (peeks above input, expands on hover) -->
 			{#if mode === "agent" && sessionName}
-				<div class="relative px-3 bg-base-300">
+				<div class="relative px-3 bg-base-300 flex-shrink-0">
 					<EventStack
 						{sessionName}
 						maxEvents={20}
@@ -6632,27 +6634,6 @@
 									stroke-linecap="round"
 									stroke-linejoin="round"
 									d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3"
-								/>
-							</svg>
-						</button>
-						<!-- Minimap toggle -->
-						<button
-							class="btn btn-xs btn-ghost"
-							onclick={() => showMinimap = !showMinimap}
-							title={showMinimap ? "Hide minimap" : "Show minimap"}
-						>
-							<svg
-								class="w-3 h-3 transition-colors"
-								class:text-secondary={showMinimap}
-								fill="none"
-								viewBox="0 0 24 24"
-								stroke="currentColor"
-								stroke-width="2"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25"
 								/>
 							</svg>
 						</button>

@@ -8,10 +8,10 @@
 	 */
 
 	import { onMount, onDestroy } from 'svelte';
+	import { goto } from '$app/navigation';
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
-	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
-	import StatusActionBadge from '$lib/components/work/StatusActionBadge.svelte';
 	import SortDropdown from '$lib/components/SortDropdown.svelte';
+	import TasksActive from '$lib/components/sessions/TasksActive.svelte';
 	import { getProjectColor, fetchAndGetProjectColors } from '$lib/utils/projectColors';
 
 	interface TmuxSession {
@@ -459,112 +459,17 @@
 			<div class="empty-state">
 				<span>No active sessions</span>
 			</div>
-		{:else}
-			<div class="sessions-table-wrapper">
-				<table class="sessions-table">
-					<thead>
-						<tr>
-							<th class="th-task">Task</th>
-							<th class="th-agent">Agent</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each sortedAgentSessions as session (session.name)}
-							{@const agentName = getAgentName(session.name)}
-							{@const sessionTask = agentTasks.get(agentName)}
-							{@const sessionInfo = agentSessionInfo.get(agentName)}
-							{@const activityState = sessionInfo?.activityState}
-							{@const statusDotColor = activityState === 'working'
-								? 'oklch(0.70 0.18 250)'
-								: activityState === 'compacting'
-								? 'oklch(0.65 0.15 280)'
-								: activityState === 'needs-input'
-								? 'oklch(0.75 0.20 45)'
-								: activityState === 'ready-for-review'
-								? 'oklch(0.70 0.20 85)'
-								: activityState === 'completing'
-								? 'oklch(0.65 0.15 175)'
-								: activityState === 'completed'
-								? 'oklch(0.70 0.20 145)'
-								: activityState === 'starting'
-								? 'oklch(0.75 0.15 200)'
-								: activityState === 'recovering'
-								? 'oklch(0.70 0.20 190)'
-								: 'oklch(0.55 0.05 250)'
-							}
-							{@const derivedProject = agentProjects.get(agentName) || session.project || null}
-							{@const rowProjectColor = sessionTask?.id
-								? getProjectColorReactive(sessionTask.id)
-								: derivedProject
-									? getProjectColorReactive(`${derivedProject}-x`)
-									: null
-							}
-							{@const elapsed = getElapsedFormatted(session.created)}
-							<tr
-								class="session-row"
-								style={rowProjectColor ? `border-left: 3px solid ${rowProjectColor};` : ''}
-							>
-								<td class="td-task">
-									{#if sessionTask}
-										<TaskIdBadge
-											task={sessionTask}
-											size="xs"
-											variant="projectPill"
-											showType={true}
-											{statusDotColor}
-										/>
-										<span class="task-title" title={sessionTask.title}>
-											{sessionTask.title || sessionTask.id}
-										</span>
-									{:else}
-										{#if derivedProject}
-											<span
-												class="project-badge"
-												style="background: {rowProjectColor ? `color-mix(in oklch, ${rowProjectColor} 25%, transparent)` : 'oklch(0.25 0.02 250)'}; border-color: {rowProjectColor || 'oklch(0.35 0.02 250)'}; color: {rowProjectColor || 'oklch(0.75 0.02 250)'};"
-											>
-												{derivedProject}
-											</span>
-										{:else}
-											<span class="session-name-pill">{session.name}</span>
-										{/if}
-										<span class="no-task-label">No active task</span>
-									{/if}
-								</td>
-								<td class="td-agent">
-									<div class="agent-column">
-										<div class="agent-info-row">
-											<AgentAvatar name={agentName} size={16} />
-											<span class="agent-name">{agentName}</span>
-											{#if session.attached}
-												<span class="attached-indicator" title="Terminal attached">
-													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="attached-icon">
-														<path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-													</svg>
-												</span>
-											{/if}
-										</div>
-										<StatusActionBadge
-											sessionState={activityState || 'idle'}
-											{elapsed}
-											sessionName={session.name}
-											alignRight={true}
-											stacked={true}
-											class="self-end"
-											onAction={async (actionId) => {
-												if (actionId === 'attach') {
-													await attachSession(session.name);
-												} else if (actionId === 'kill' || actionId === 'cleanup') {
-													await killSession(session.name);
-												}
-											}}
-										/>
-									</div>
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
+	{:else}
+			<TasksActive
+				sessions={sortedAgentSessions}
+				{agentTasks}
+				{agentSessionInfo}
+				{agentProjects}
+				{projectColors}
+				onKillSession={killSession}
+				onAttachSession={attachSession}
+				onViewTask={(taskId) => goto(`/tasks/${taskId}`)}
+			/>
 		{/if}
 	</section>
 

@@ -539,6 +539,9 @@ launch_ide() {
         tmux kill-session -t "$session_name" 2>/dev/null || true
     fi
 
+    # Also kill any orphaned process on the port (tmux kill-session can leave orphans)
+    fuser -k "$ide_port/tcp" 2>/dev/null || true
+
     echo -e "${DIM}  → IDE :$ide_port${NC}"
 
     # Clear Vite cache to prevent stale chunk errors

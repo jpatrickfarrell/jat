@@ -21,7 +21,7 @@ argument-hint: [agent-name | task-id | agent-name task-id]
 
 ## What This Command Does
 
-1. **Register agent** - Create new or resume existing
+1. **Establish identity** - Use pre-registered agent (IDE-spawned) or create new (CLI)
 2. **Check Agent Mail** - Read messages before starting work
 3. **Select task** - From parameter or show recommendations
 4. **Review prior tasks** - Check for duplicates and related work
@@ -50,22 +50,45 @@ bd show "$PARAM" --json >/dev/null 2>&1 && PARAM_TYPE="task-id"
 ~/code/jat/tools/scripts/get-current-session-id
 ```
 
-#### 2B: Register Agent
+#### 2B: Check for Pre-Registered Agent (IDE-Spawned)
+
+**IDE-spawned agents are already registered.** The spawn API writes an identity file before launching Claude:
+
 ```bash
-# If agent exists, resume it
+# Check if agent was pre-registered by IDE spawn API
+TMUX_SESSION=$(tmux display-message -p '#S' 2>/dev/null)
+PRE_REG_FILE=".claude/sessions/.tmux-agent-${TMUX_SESSION}"
+if [[ -f "$PRE_REG_FILE" ]]; then
+    AGENT_NAME=$(cat "$PRE_REG_FILE")
+    echo "✓ Using pre-registered agent: $AGENT_NAME"
+    # Skip registration - already done by spawn API
+fi
+```
+
+If the pre-registration file exists:
+- Use that agent name (it's already in the Agent Mail database)
+- Skip `am-register` entirely
+- Proceed to Step 2D (write session file)
+
+#### 2C: Register Agent (Manual/CLI Only)
+
+**Only needed if NOT spawned by IDE** (no pre-registration file found):
+
+```bash
+# If agent name was provided and exists, resume it
 am-agents | grep -q "^  ${REQUESTED_AGENT}$" && echo "Resuming: $REQUESTED_AGENT"
 
 # Otherwise create new
 am-register --name "$REQUESTED_AGENT" --program claude-code --model sonnet-4.5
 ```
 
-#### 2C: Write Session File
+#### 2D: Write Session File
 ```bash
 mkdir -p .claude/sessions
 # Use Write tool: Write(.claude/sessions/agent-{session_id}.txt, "AgentName")
 ```
 
-#### 2D: Rename tmux Session (CRITICAL)
+#### 2E: Rename tmux Session (CRITICAL)
 ```bash
 tmux rename-session "jat-{AgentName}"
 ```

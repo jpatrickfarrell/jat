@@ -3945,6 +3945,209 @@ These specialized classes are defined earlier in `app.css` for specific UI patte
 
 - jat-3845b: Standardize animation utility classes
 
+## Agent Registration via IDE Spawn API
+
+### Overview
+
+The IDE's `/api/work/spawn` endpoint handles agent registration automatically when spawning new sessions. This eliminates the need for agents to call `am-register` manually and ensures consistent agent setup.
+
+**Key changes from legacy approach:**
+- **Name generation** is now done in JavaScript (not via `am-register`)
+- **Database insertion** happens directly via SQLite (not via bash tool)
+- **Session identity files** are written before Claude starts (not by the agent)
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      AGENT REGISTRATION FLOW                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. IDE calls POST /api/work/spawn                                          │
+│     └─► Request body: { taskId?, model?, attach?, project? }               │
+│                                                                             │
+│  2. Generate unique agent name (JavaScript)                                 │
+│     └─► ADJECTIVES × NOUNS = 5,184 combinations                            │
+│     └─► Collision checking against existing agents                          │
+│                                                                             │
+│  3. Register agent in Agent Mail database (SQLite)                          │
+│     └─► INSERT INTO agents (project_id, name, program, model, ...)         │
+│                                                                             │
+│  4. Write agent identity file (pre-session)                                 │
+│     └─► .claude/sessions/.tmux-agent-jat-{AgentName}                       │
+│                                                                             │
+│  5. Create tmux session + start Claude Code                                 │
+│     └─► tmux new-session -d -s "jat-{AgentName}"                           │
+│     └─► claude --model {model} --append-system-prompt ...                  │
+│                                                                             │
+│  6. Send /jat:start {AgentName} [taskId]                                   │
+│     └─► Agent resumes existing identity (no duplicate registration)        │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Name Generation
+
+Agent names are generated using two word lists combining nature and geography themes:
+
+**ADJECTIVES (72 words):**
+- Temperature/Texture: Swift, Calm, Warm, Cool, Soft, Hard, Smooth, Rough, Sharp, Dense, Thin, Thick, Crisp, Mild, Brisk, Gentle
+- Light/Color: Bright, Dark, Light, Pale, Vivid, Muted, Stark, Dim, Gold, Silver, Azure, Amber, Russet, Ivory, Jade, Coral
+- Size/Scale: Grand, Great, Vast, Wide, Broad, Deep, High, Tall, Long, Far, Near, Open, Steep, Sheer, Flat, Round
+- Quality/Character: Bold, Keen, Wise, Fair, True, Pure, Free, Wild, Clear, Fresh, Fine, Good, Rich, Full, Whole, Prime
+- Weather/Time: Sunny, Misty, Windy, Rainy, Early, Late, First, Last
+
+**NOUNS (72 words):**
+- Water Bodies: River, Ocean, Lake, Stream, Creek, Brook, Pond, Falls, Bay, Cove, Gulf, Inlet, Fjord, Strait, Marsh, Spring
+- Land Features: Mountain, Valley, Canyon, Gorge, Ravine, Basin, Plateau, Mesa, Hill, Ridge, Cliff, Bluff, Ledge, Shelf, Slope, Terrace
+- Vegetation: Forest, Woods, Grove, Glade, Thicket, Copse, Orchard, Garden, Prairie, Meadow, Field, Plain, Heath, Moor, Steppe, Savanna
+- Coastal: Shore, Coast, Beach, Dune, Cape, Point, Isle, Reef
+- Atmospheric: Cloud, Storm, Wind, Mist, Frost, Dawn, Dusk, Horizon
+- Geological: Stone, Rock, Boulder, Pebble, Sand, Clay, Slate, Granite
+
+**Total combinations:** 72 × 72 = **5,184 unique names**
+
+**Example names:** GentleCoast, SwiftMeadow, BrightCanyon, DeepForest, CalmHorizon
+
+**Collision handling:**
+1. Check generated name against existing agents in database (case-insensitive)
+2. If collision, regenerate (up to 100 attempts)
+3. Fallback: Append random numeric suffix (e.g., `WildStone847`)
+
+### Database Registration
+
+The spawn API inserts directly into the Agent Mail SQLite database:
+
+**Database location:** `~/.agent-mail.db`
+
+**Agent insertion:**
+```sql
+INSERT INTO agents (project_id, name, program, model, task_description)
+VALUES (?, ?, 'claude-code', ?, '')
+```
+
+**Project lookup/creation:**
+```sql
+-- Check if project exists
+SELECT id FROM projects WHERE human_key = ?
+
+-- Create if not exists
+INSERT INTO projects (slug, human_key) VALUES (?, ?)
+```
+
+**Existing agent handling:**
+- If agent already exists for the project, update `last_active_ts` and `model`
+- No duplicate agents are created
+
+### Session Identity Files
+
+Before starting Claude Code, the spawn API writes identity files that help hooks and the `/jat:start` command identify the agent:
+
+**File written:** `.claude/sessions/.tmux-agent-jat-{AgentName}`
+
+**Contents:** Just the agent name (e.g., `GentleCoast`)
+
+**Purpose:** The session-start hook reads this file using the tmux session name to restore the agent identity into the Claude Code session file (`.claude/sessions/agent-{sessionId}.txt`).
+
+**Why pre-write?**
+- Claude Code's session ID isn't known until it starts
+- The tmux session name IS known (`jat-{AgentName}`)
+- Hooks can look up agent name using tmux session name
+
+### Comparison: Legacy vs New Approach
+
+| Aspect | Legacy (am-register) | New (IDE Spawn) |
+|--------|---------------------|-----------------|
+| **Name generation** | Bash script with word lists | JavaScript with same word lists |
+| **Database access** | Via am-register bash tool | Direct SQLite via better-sqlite3 |
+| **When registered** | By agent after /jat:start | By IDE before Claude starts |
+| **Identity file** | Written by agent | Written by IDE (pre-session) |
+| **Task assignment** | Agent runs `bd update` | IDE runs `bd update` |
+| **Collision check** | am-register handles | JavaScript handles |
+
+**Benefits of new approach:**
+- **Faster startup** - No bash tool overhead
+- **Atomic registration** - Agent exists before Claude starts
+- **Consistent identity** - Name passed to /jat:start matches database
+- **Better error handling** - JavaScript can return detailed errors
+
+### API Reference
+
+**Endpoint:** `POST /api/work/spawn`
+
+**Request body:**
+```typescript
+{
+  taskId?: string;      // Task to assign (optional - omit for planning session)
+  model?: string;       // Claude model: "opus" | "sonnet" | "haiku" (default: from config)
+  attach?: boolean;     // Open terminal window (default: false)
+  imagePath?: string;   // Path to image to send after startup (optional)
+  project?: string;     // Project name to use (optional - inferred from taskId)
+}
+```
+
+**Success response:**
+```json
+{
+  "success": true,
+  "session": {
+    "sessionName": "jat-GentleCoast",
+    "agentName": "GentleCoast",
+    "task": { "id": "jat-abc", "title": "...", ... },
+    "project": "jat",
+    "created": "2025-12-19T12:00:00.000Z",
+    "attached": false
+  },
+  "message": "Spawned agent GentleCoast for task jat-abc"
+}
+```
+
+**Error responses:**
+
+| Status | Code | Cause |
+|--------|------|-------|
+| 400 | Bad Request | Project path not found, no .beads directory |
+| 409 | Conflict | Session already exists (duplicate tmux session name) |
+| 500 | Server Error | Failed to register agent, failed to create session |
+| 202 | Accepted | YOLO warning dialog requires user acceptance |
+
+### For Agent Developers
+
+**When implementing /jat:start:**
+
+1. **Check if agent exists** - The IDE has already registered the agent
+2. **Resume, don't create** - Use the agent name passed as argument
+3. **Write session file** - Map Claude session ID to agent name:
+   ```bash
+   mkdir -p .claude/sessions
+   echo "AgentName" > .claude/sessions/agent-{sessionId}.txt
+   ```
+4. **Rename tmux session** - Ensure IDE can track:
+   ```bash
+   tmux rename-session "jat-{AgentName}"
+   ```
+
+**The spawn API passes agent name explicitly:**
+```
+/jat:start GentleCoast jat-abc
+```
+This ensures the agent uses the pre-registered name instead of generating a new one.
+
+### Files
+
+**Implementation:**
+- `ide/src/routes/api/work/spawn/+server.js` - Spawn API endpoint (675 lines)
+
+**Related:**
+- `~/.agent-mail.db` - Agent Mail SQLite database
+- `.claude/sessions/.tmux-agent-*` - Pre-session identity files
+- `.claude/sessions/agent-*.txt` - Session-to-agent mapping files
+
+### Task Reference
+
+- jat-sud88: Add agent registration to IDE spawn API (completed)
+- jat-jbhnu: Document New Agent Registration Process (this section)
+
 ## References
 
 - [Tailwind CSS v4 Docs](https://tailwindcss.com/docs)

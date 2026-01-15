@@ -812,6 +812,28 @@
 														<span>Loading task details...</span>
 													</div>
 												{:else}
+													<!-- Metadata (compact row at top) -->
+													<div class="task-panel-metadata-bar">
+														{#if expandedTaskDetails?.assignee}
+															<span class="meta-item">
+																<AgentAvatar name={expandedTaskDetails.assignee} size={14} />
+																{expandedTaskDetails.assignee}
+															</span>
+														{/if}
+														{#if expandedTaskDetails?.created_at}
+															<span class="meta-item">
+																<span class="meta-label-inline">Created</span>
+																{new Date(expandedTaskDetails.created_at).toLocaleDateString()}
+															</span>
+														{/if}
+														{#if expandedTaskDetails?.updated_at}
+															<span class="meta-item">
+																<span class="meta-label-inline">Updated</span>
+																{new Date(expandedTaskDetails.updated_at).toLocaleDateString()}
+															</span>
+														{/if}
+													</div>
+
 													<!-- Description -->
 													{#if expandedTask.description}
 														<div class="task-panel-section">
@@ -925,34 +947,6 @@
 															</div>
 														</div>
 													{/if}
-
-													<!-- Metadata -->
-													<div class="task-panel-section">
-														<span class="task-panel-label">Metadata</span>
-														<div class="task-panel-metadata">
-															{#if expandedTaskDetails?.assignee}
-																<div class="meta-row">
-																	<span class="meta-label">Assignee</span>
-																	<span class="meta-value">
-																		<AgentAvatar name={expandedTaskDetails.assignee} size={16} />
-																		{expandedTaskDetails.assignee}
-																	</span>
-																</div>
-															{/if}
-															{#if expandedTaskDetails?.created_at}
-																<div class="meta-row">
-																	<span class="meta-label">Created</span>
-																	<span class="meta-value">{new Date(expandedTaskDetails.created_at).toLocaleDateString()}</span>
-																</div>
-															{/if}
-															{#if expandedTaskDetails?.updated_at}
-																<div class="meta-row">
-																	<span class="meta-label">Updated</span>
-																	<span class="meta-value">{new Date(expandedTaskDetails.updated_at).toLocaleDateString()}</span>
-																</div>
-															{/if}
-														</div>
-													</div>
 
 													<!-- Activity Timeline -->
 													{#if expandedTaskDetails?.timeline && expandedTaskDetails.timeline.length > 0}
@@ -1501,6 +1495,63 @@
 		white-space: pre-wrap;
 	}
 
+	.task-panel-notes-input {
+		width: 100%;
+		font-size: 0.8rem;
+		color: oklch(0.85 0.02 250);
+		background: oklch(0.16 0.01 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.375rem;
+		padding: 0.5rem 0.625rem;
+		line-height: 1.5;
+		resize: vertical;
+		min-height: 6rem;
+		font-family: inherit;
+		transition: border-color 0.15s, box-shadow 0.15s;
+	}
+
+	.task-panel-notes-input:focus {
+		outline: none;
+		border-color: oklch(0.60 0.15 200);
+		box-shadow: 0 0 0 2px oklch(0.60 0.15 200 / 0.2);
+	}
+
+	.task-panel-notes-input:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+
+	.task-panel-notes-display {
+		display: flex;
+		align-items: flex-start;
+		width: 100%;
+		font-size: 0.8rem;
+		color: oklch(0.70 0.02 250);
+		background: oklch(0.14 0.01 250);
+		border: 1px dashed oklch(0.25 0.02 250);
+		border-radius: 0.375rem;
+		padding: 0.5rem 0.625rem;
+		text-align: left;
+		line-height: 1.5;
+		cursor: pointer;
+		min-height: 6rem;
+		white-space: pre-wrap;
+		transition: border-color 0.15s, background-color 0.15s;
+	}
+
+	.task-panel-notes-display:hover {
+		border-color: oklch(0.35 0.02 250);
+		background: oklch(0.16 0.01 250);
+	}
+
+	.task-panel-notes-saving {
+		display: block;
+		font-size: 0.7rem;
+		color: oklch(0.55 0.02 250);
+		margin-top: 0.25rem;
+		font-style: italic;
+	}
+
 	.task-panel-actions {
 		margin-top: auto;
 		padding-top: 0.75rem;
@@ -1612,31 +1663,27 @@
 		color: oklch(0.70 0.12 200);
 	}
 
-	/* Metadata section */
-	.task-panel-metadata {
+	/* Metadata bar (compact single row at top) */
+	.task-panel-metadata-bar {
 		display: flex;
-		flex-direction: column;
-		gap: 0.375rem;
-	}
-
-	.meta-row {
-		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
-		justify-content: space-between;
-		gap: 0.5rem;
-	}
-
-	.meta-label {
+		gap: 0.75rem;
+		padding-bottom: 0.625rem;
+		margin-bottom: 0.5rem;
+		border-bottom: 1px solid oklch(0.22 0.02 250);
 		font-size: 0.7rem;
-		color: oklch(0.50 0.02 250);
+		color: oklch(0.60 0.02 250);
 	}
 
-	.meta-value {
-		display: flex;
+	.meta-item {
+		display: inline-flex;
 		align-items: center;
-		gap: 0.375rem;
-		font-size: 0.75rem;
-		color: oklch(0.75 0.02 250);
+		gap: 0.25rem;
+	}
+
+	.meta-label-inline {
+		color: oklch(0.50 0.02 250);
 	}
 
 	/* Activity Timeline section */

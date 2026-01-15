@@ -22,6 +22,7 @@ mcp_agent_mail/
 .claude/sessions/agent-*.txt
 .claude/sessions/agent-*-activity.jsonl
 .claude/.agent-identity-*
+.claude/.agent-workflow-state-*
 .mcp.json
 # Note: Session IDs now in /tmp/claude-session-${PPID}.txt (PPID-based, not in repo)
 

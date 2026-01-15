@@ -1,6 +1,6 @@
 #!/bin/bash
-# Session start hook: Restore agent identity after compaction or session resume
-# This ensures the agent file exists for the new session ID
+# Session start hook: Restore agent identity and inject workflow context after compaction
+# This ensures the agent file exists AND the agent knows where it was in the workflow
 #
 # Uses WINDOWID-based file - stable across /clear (unlike PPID which changes)
 # Each terminal window has unique WINDOWID, avoiding race conditions
@@ -12,6 +12,7 @@ CLAUDE_DIR="$PROJECT_DIR/.claude"
 # Falls back to PPID if WINDOWID not available
 WINDOW_KEY="${WINDOWID:-$PPID}"
 PERSISTENT_AGENT_FILE="$CLAUDE_DIR/.agent-identity-${WINDOW_KEY}"
+PERSISTENT_STATE_FILE="$CLAUDE_DIR/.agent-workflow-state-${WINDOW_KEY}.json"
 
 # Read session ID from stdin JSON (provided by Claude Code)
 INPUT=$(cat)
@@ -58,12 +59,68 @@ if [[ -z "$AGENT_NAME" ]] && [[ -f "$PERSISTENT_AGENT_FILE" ]]; then
     fi
 fi
 
-# Output working marker if agent has an in_progress task
-# This re-establishes IDE state after compaction
-if [[ -n "$AGENT_NAME" ]] && command -v bd &>/dev/null; then
+# Check for saved workflow state and inject context reminder
+TASK_ID=""
+if [[ -f "$PERSISTENT_STATE_FILE" ]]; then
+    SIGNAL_STATE=$(jq -r '.signalState // "unknown"' "$PERSISTENT_STATE_FILE" 2>/dev/null)
+    TASK_ID=$(jq -r '.taskId // ""' "$PERSISTENT_STATE_FILE" 2>/dev/null)
+    TASK_TITLE=$(jq -r '.taskTitle // ""' "$PERSISTENT_STATE_FILE" 2>/dev/null)
+
+    # Only output context if we have meaningful state
+    if [[ -n "$TASK_ID" ]]; then
+        # Determine what signal should be emitted next based on last state
+        case "$SIGNAL_STATE" in
+            "starting")
+                NEXT_ACTION="Emit 'working' signal with taskId, taskTitle, and approach before continuing work"
+                WORKFLOW_STEP="After registration, before implementation"
+                ;;
+            "working")
+                NEXT_ACTION="Continue implementation. When done, emit 'review' signal before presenting results"
+                WORKFLOW_STEP="Implementation in progress"
+                ;;
+            "needs_input")
+                NEXT_ACTION="After user responds, emit 'working' signal to resume, then continue work"
+                WORKFLOW_STEP="Waiting for user input"
+                ;;
+            "review")
+                NEXT_ACTION="Present findings to user. Run /jat:complete when approved"
+                WORKFLOW_STEP="Ready for review"
+                ;;
+            *)
+                NEXT_ACTION="Check task status and emit appropriate signal (working/review)"
+                WORKFLOW_STEP="Unknown - verify current state"
+                ;;
+        esac
+
+        # Output as compact marker for IDE + structured context for agent
+        echo "[JAT:WORKING task=$TASK_ID]"
+        echo ""
+        echo "=== JAT WORKFLOW CONTEXT (restored after compaction) ==="
+        echo "Agent: $AGENT_NAME"
+        echo "Task: $TASK_ID - $TASK_TITLE"
+        echo "Last Signal: $SIGNAL_STATE"
+        echo "Workflow Step: $WORKFLOW_STEP"
+        echo "NEXT ACTION REQUIRED: $NEXT_ACTION"
+        echo "========================================================="
+
+        echo "[SessionStart] Injected workflow context: state=$SIGNAL_STATE, task=$TASK_ID" >> "$CLAUDE_DIR/.agent-activity.log"
+    fi
+fi
+
+# Fallback: If no state file but agent has in_progress task, still output working marker
+if [[ -z "$TASK_ID" ]] && [[ -n "$AGENT_NAME" ]] && command -v bd &>/dev/null; then
     TASK_ID=$(bd list --json 2>/dev/null | jq -r --arg a "$AGENT_NAME" '.[] | select(.assignee == $a and .status == "in_progress") | .id' 2>/dev/null | head -1)
     if [[ -n "$TASK_ID" ]]; then
+        TASK_TITLE=$(bd show "$TASK_ID" --json 2>/dev/null | jq -r '.[0].title // ""' 2>/dev/null)
         echo "[JAT:WORKING task=$TASK_ID]"
-        echo "[SessionStart] Re-established working state for task $TASK_ID" >> "$CLAUDE_DIR/.agent-activity.log"
+        echo ""
+        echo "=== JAT WORKFLOW CONTEXT (restored from Beads) ==="
+        echo "Agent: $AGENT_NAME"
+        echo "Task: $TASK_ID - $TASK_TITLE"
+        echo "Last Signal: unknown (no state file)"
+        echo "NEXT ACTION: Emit 'working' signal if continuing work, or 'review' signal if done"
+        echo "=================================================="
+
+        echo "[SessionStart] Fallback context from Beads: task=$TASK_ID" >> "$CLAUDE_DIR/.agent-activity.log"
     fi
 fi

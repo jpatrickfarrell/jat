@@ -3895,6 +3895,12 @@
 			setTimeout(() => {
 				submitFlash = false;
 			}, 300);
+
+			// Restore focus to input after successful submission
+			// Use setTimeout to ensure DOM updates complete first
+			setTimeout(() => {
+				inputRef?.focus({ preventScroll: true });
+			}, 50);
 		} finally {
 			setSendingInput(false);
 		}
@@ -3915,6 +3921,10 @@
 				setTimeout(() => {
 					submitFlash = false;
 				}, 300);
+				// Restore focus after sending Enter
+				setTimeout(() => {
+					inputRef?.focus({ preventScroll: true });
+				}, 50);
 			} else {
 				sendTextInput();
 			}

@@ -322,7 +322,7 @@ export const SIGNAL_STATES: Record<string, SignalStateTokens> = {
   },
   completed: {
     id: 'completed',
-    label: '✅ DONE',
+    label: '✅ COMPLETE',
     shortLabel: 'Complete',
     colors: {
       bg: 'oklch(0.45 0.18 145 / 0.30)',

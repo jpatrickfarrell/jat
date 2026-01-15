@@ -22,6 +22,8 @@
 	import { successToast } from '$lib/stores/toasts.svelte';
 	import { initSessionEvents, closeSessionEvents, connectSessionEvents, disconnectSessionEvents, lastSessionEvent } from '$lib/stores/sessionEvents';
 	import { connectTaskEvents, disconnectTaskEvents, lastTaskEvent } from '$lib/stores/taskEvents';
+	import { connect as connectWebSocket, disconnect as disconnectWebSocket } from '$lib/stores/websocket.svelte';
+	import { registerConnection, unregisterConnection } from '$lib/utils/connectionManager';
 	import { availableProjects, projectColorsStore, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, openStartDropdownViaKeyboard, closeStartDropdown, isFilePreviewDrawerOpen, filePreviewDrawerPath, filePreviewDrawerProject, filePreviewDrawerLine, closeFilePreviewDrawer, toggleTerminalDrawer, isDiffPreviewDrawerOpen, diffPreviewDrawerPath, diffPreviewDrawerProject, diffPreviewDrawerIsStaged, diffPreviewDrawerCommitHash, closeDiffPreviewDrawer, setGitAheadCount, setGitChangesCount, setActiveSessionsCount, setRunningServersCount } from '$lib/stores/drawerStore';
 	import { hoveredSessionName, triggerCompleteFlash, jumpToSession } from '$lib/stores/hoveredSession';
 	import { get } from 'svelte/store';
@@ -194,6 +196,9 @@
 		}
 	}
 
+	// Track connection manager registrations for cleanup
+	let connectionIds: string[] = [];
+
 	// Initialize theme-change, SSE, preferences, and load all tasks
 	onMount(async () => {
 		initPreferences(); // Initialize unified preferences store
@@ -202,8 +207,16 @@
 		themeChange(false);
 		initProjectColors(); // Pre-fetch project colors for consistent task ID coloring
 		initSessionEvents(); // Initialize cross-page session events (BroadcastChannel)
-		connectSessionEvents(); // Connect to real-time session events SSE
-		connectTaskEvents(); // Connect to real-time task events SSE
+
+		// Register persistent connections with the connection manager
+		// The manager handles visibility-based connect/disconnect to avoid exhausting
+		// the browser's connection limit (6 per domain) when multiple tabs are open.
+		// Priority determines connection order when tab becomes visible (lower = first)
+		connectionIds = [
+			registerConnection('websocket', connectWebSocket, disconnectWebSocket, 5),
+			registerConnection('session-events-sse', connectSessionEvents, disconnectSessionEvents, 10),
+			registerConnection('task-events-sse', connectTaskEvents, disconnectTaskEvents, 15)
+		];
 
 		// Phase 1: Critical data for initial render (fast, no usage data)
 		// Use loadAllTasksFast instead of loadAllTasks to avoid 2-4s token aggregation
@@ -242,8 +255,8 @@
 
 		return () => {
 			closeSessionEvents(); // Close cross-page BroadcastChannel
-			disconnectSessionEvents(); // Disconnect from session events SSE
-			disconnectTaskEvents(); // Disconnect from task events SSE
+			// Unregister all connections from the manager (handles disconnect)
+			connectionIds.forEach(id => unregisterConnection(id));
 			stopActivityPolling(); // Stop activity polling
 			stopGitStatusPolling(); // Stop git status polling for Files badge
 			clearAllBadges(); // Clear favicon and title badges on unmount

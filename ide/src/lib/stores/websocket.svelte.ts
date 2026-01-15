@@ -376,13 +376,13 @@ export function isConnected(): boolean {
 export { state as websocketState };
 
 // ============================================================================
-// Auto-connect on module load (browser only)
+// Auto-connect DISABLED - now managed by +layout.svelte via connectionManager
 // ============================================================================
 
-if (browser) {
-	// Auto-connect when module is imported
-	// Defer to allow app initialization
-	setTimeout(() => {
-		connect();
-	}, 100);
-}
+// Previously auto-connected on module import, but this caused issues with multiple tabs.
+// Each tab would create a WebSocket connection immediately, exhausting the browser's
+// connection limit (typically 6 per domain). Now managed centrally via connectionManager
+// which only connects when the tab is visible.
+//
+// Connection is initiated in +layout.svelte:
+//   registerConnection('websocket', connect, disconnect, 5);

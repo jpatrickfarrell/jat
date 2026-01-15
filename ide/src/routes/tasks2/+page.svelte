@@ -370,7 +370,7 @@
 		spawningTaskId = task.id;
 		try {
 			// Use the spawn API to start a new agent session with this task
-			const response = await fetch('/api/spawn', {
+			const response = await fetch('/api/work/spawn', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
@@ -548,6 +548,8 @@
 											{elapsed}
 											sessionName={session.name}
 											alignRight={true}
+											stacked={true}
+											class="self-end"
 											onAction={async (actionId) => {
 												if (actionId === 'attach') {
 													await attachSession(session.name);
@@ -627,19 +629,50 @@
 								</td>
 								<td class="td-actions">
 									<button
-										class="spawn-btn"
+										class="btn btn-xs btn-ghost hover:btn-primary rocket-btn {spawningTaskId === task.id ? 'rocket-launching' : ''}"
 										onclick={() => spawnTask(task)}
 										disabled={spawningTaskId === task.id}
+										title="Launch agent"
 									>
-										{#if spawningTaskId === task.id}
-											<span class="spinner"></span>
-											Spawning...
-										{:else}
-											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="spawn-icon">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+										<div class="relative w-5 h-5 flex items-center justify-center overflow-visible">
+											<!-- Debris/particles -->
+											<div class="rocket-debris-1 absolute w-1 h-1 rounded-full bg-warning/80 left-1/2 top-1/2 opacity-0"></div>
+											<div class="rocket-debris-2 absolute w-0.5 h-0.5 rounded-full bg-info/60 left-1/2 top-1/3 opacity-0"></div>
+											<div class="rocket-debris-3 absolute w-1 h-0.5 rounded-full bg-base-content/40 left-1/2 top-2/3 opacity-0"></div>
+
+											<!-- Smoke puffs -->
+											<div class="rocket-smoke absolute w-2 h-2 rounded-full bg-base-content/30 bottom-0 left-1/2 -translate-x-1/2 opacity-0"></div>
+											<div class="rocket-smoke-2 absolute w-1.5 h-1.5 rounded-full bg-base-content/20 bottom-0 left-1/2 -translate-x-1/2 translate-x-1 opacity-0"></div>
+
+											<!-- Engine sparks -->
+											<div class="engine-spark-1 absolute w-1.5 h-1.5 rounded-full bg-orange-400 left-1/2 top-1/2 opacity-0"></div>
+											<div class="engine-spark-2 absolute w-1 h-1 rounded-full bg-yellow-300 left-1/2 top-1/2 opacity-0"></div>
+											<div class="engine-spark-3 absolute w-[5px] h-[5px] rounded-full bg-amber-500 left-1/2 top-1/2 opacity-0"></div>
+											<div class="engine-spark-4 absolute w-1 h-1 rounded-full bg-red-400 left-1/2 top-1/2 opacity-0"></div>
+
+											<!-- Fire/exhaust -->
+											<div class="rocket-fire absolute bottom-0 left-1/2 -translate-x-1/2 w-2 origin-top opacity-0">
+												<svg viewBox="0 0 12 20" class="w-full">
+													<path d="M6 0 L9 8 L7 6 L6 12 L5 6 L3 8 Z" fill="url(#fireGradient-{task.id})" />
+													<defs>
+														<linearGradient id="fireGradient-{task.id}" x1="0%" y1="0%" x2="0%" y2="100%">
+															<stop offset="0%" style="stop-color:#f0932b" />
+															<stop offset="50%" style="stop-color:#f39c12" />
+															<stop offset="100%" style="stop-color:#e74c3c" />
+														</linearGradient>
+													</defs>
+												</svg>
+											</div>
+
+											<!-- Rocket body -->
+											<svg class="rocket-icon w-4 h-4" viewBox="0 0 24 24" fill="none">
+												<path d="M12 2C12 2 8 6 8 12C8 15 9 17 10 18L10 21C10 21.5 10.5 22 11 22H13C13.5 22 14 21.5 14 21L14 18C15 17 16 15 16 12C16 6 12 2 12 2Z" fill="currentColor" />
+												<circle cx="12" cy="10" r="2" fill="oklch(0.75 0.15 200)" />
+												<path d="M8 14L5 17L6 18L8 16Z" fill="currentColor" />
+												<path d="M16 14L19 17L18 18L16 16Z" fill="currentColor" />
+												<path d="M12 2C12 2 10 5 10 8" stroke="oklch(0.9 0.05 200)" stroke-width="0.5" stroke-linecap="round" opacity="0.5" />
 											</svg>
-											Spawn
-										{/if}
+										</div>
 									</button>
 								</td>
 							</tr>
@@ -886,48 +919,9 @@
 		font-style: italic;
 	}
 
-	/* Spawn button */
-	.spawn-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.375rem;
-		padding: 0.375rem 0.75rem;
-		background: oklch(0.55 0.18 145);
-		border: none;
-		border-radius: 0.375rem;
-		color: oklch(0.98 0.01 250);
-		font-size: 0.75rem;
-		font-weight: 500;
-		cursor: pointer;
-		transition: background 0.15s, transform 0.1s;
-	}
-
-	.spawn-btn:hover:not(:disabled) {
-		background: oklch(0.60 0.20 145);
-		transform: translateY(-1px);
-	}
-
-	.spawn-btn:disabled {
-		opacity: 0.6;
-		cursor: not-allowed;
-	}
-
-	.spawn-icon {
-		width: 0.875rem;
-		height: 0.875rem;
-	}
-
-	.spinner {
-		width: 0.875rem;
-		height: 0.875rem;
-		border: 2px solid transparent;
-		border-top-color: currentColor;
-		border-radius: 50%;
-		animation: spin 0.6s linear infinite;
-	}
-
-	@keyframes spin {
-		to { transform: rotate(360deg); }
+	/* Actions column - center the rocket button */
+	.td-actions {
+		text-align: center;
 	}
 
 	/* Responsive */

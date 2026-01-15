@@ -107,6 +107,8 @@
 		/** Callback when an epic is clicked without a task (for viewing/navigation) */
 		onViewEpic?: (epicId: string) => Promise<void> | void;
 		class?: string;
+		/** When true, displays elapsed time below the status label instead of inline (for compact table layouts) */
+		stacked?: boolean;
 	}
 
 	let {
@@ -132,6 +134,7 @@
 		onLinkToEpic,
 		onViewEpic,
 		class: className = "",
+		stacked = false,
 	}: Props = $props();
 
 	// Dropdown state
@@ -733,10 +736,10 @@
 				onCancelAutoKill();
 			}
 		}}
-		class="font-mono tracking-wider flex-shrink-0 font-bold cursor-pointer transition-all focus:outline-none {variant ===
+		class="w-[130px] font-mono tracking-wider flex-shrink-0 font-bold cursor-pointer transition-all focus:outline-none {variant ===
 		'integrated'
 			? 'text-[11px] px-2 py-0.5 hover:bg-white/5 rounded'
-			: 'text-[10px] px-1.5 pt-0.5 rounded hover:scale-105 hover:brightness-110 focus:ring-2 focus:ring-offset-1 focus:ring-offset-base-100'}"
+			: 'text-[13px] pt-1.5 pb-1 rounded hover:scale-105 hover:brightness-110 focus:ring-2 focus:ring-offset-1 focus:ring-offset-base-100'} {stacked ? 'flex flex-col items-center gap-0' : ''}"
 		class:animate-pulse={config.pulse && variant === "badge"}
 		class:cursor-not-allowed={disabled}
 		class:opacity-50={disabled}
@@ -746,41 +749,83 @@
 		{disabled}
 		title={dormantTooltip || config.description || "Click for actions"}
 	>
-		{variant === "integrated" ? displayShortLabel : displayLabel}
-		{#if elapsed}
-			<span class="elapsed-time">
-				{#if elapsed.showHours}
-					<AnimatedDigits value={elapsed.hours} class="text-[9px]" />
+		{#if stacked}
+			<!-- Stacked layout: label on top, elapsed time below -->
+			<span class="flex items-center">
+				{variant === "integrated" ? displayShortLabel : displayLabel}
+				<!-- Dropdown indicator -->
+				<svg
+					class="ml-1 inline-block w-2.5 h-2.5 ml-0.5 transition-transform"
+					class:rotate-180={dropUp ? !isOpen : isOpen}
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+					stroke-width="2.5"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M19.5 8.25l-7.5 7.5-7.5-7.5"
+					/>
+				</svg>
+			</span>
+			{#if elapsed}
+				<span class="elapsed-time text-[8px] opacity-80">
+					{#if elapsed.showHours}
+						<AnimatedDigits value={elapsed.hours} class="text-[12px]" />
+						<span class="elapsed-sep">:</span>
+					{/if}
+					<AnimatedDigits value={elapsed.minutes} class="text-[12px]" />
 					<span class="elapsed-sep">:</span>
-				{/if}
-				<AnimatedDigits value={elapsed.minutes} class="text-[9px]" />
-				<span class="elapsed-sep">:</span>
-				<AnimatedDigits value={elapsed.seconds} class="text-[9px]" />
-			</span>
-		{/if}
-		{#if autoKillCountdown !== null && autoKillCountdown > 0}
-			<span
-				class="ml-1 font-mono text-[9px] opacity-75"
-				title="Session will be cleaned up in {autoKillCountdown}s"
+					<AnimatedDigits value={elapsed.seconds} class="text-[12px]" />
+				</span>
+			{/if}
+			{#if autoKillCountdown !== null && autoKillCountdown > 0}
+				<span
+					class="font-mono text-[8px] opacity-75"
+					title="Session will be cleaned up in {autoKillCountdown}s"
+				>
+					({autoKillCountdown}s)
+				</span>
+			{/if}
+		{:else}
+			<!-- Default inline layout -->
+			{variant === "integrated" ? displayShortLabel : displayLabel}
+			{#if elapsed}
+				<span class="elapsed-time">
+					{#if elapsed.showHours}
+						<AnimatedDigits value={elapsed.hours} class="text-[9px]" />
+						<span class="elapsed-sep">:</span>
+					{/if}
+					<AnimatedDigits value={elapsed.minutes} class="text-[9px]" />
+					<span class="elapsed-sep">:</span>
+					<AnimatedDigits value={elapsed.seconds} class="text-[9px]" />
+				</span>
+			{/if}
+			{#if autoKillCountdown !== null && autoKillCountdown > 0}
+				<span
+					class="ml-1 font-mono text-[9px] opacity-75"
+					title="Session will be cleaned up in {autoKillCountdown}s"
+				>
+					({autoKillCountdown}s)
+				</span>
+			{/if}
+			<!-- Dropdown indicator -->
+			<svg
+				class="inline-block w-2.5 h-2.5 ml-0.5 transition-transform"
+				class:rotate-180={dropUp ? !isOpen : isOpen}
+				fill="none"
+				viewBox="0 0 24 24"
+				stroke="currentColor"
+				stroke-width="2.5"
 			>
-				({autoKillCountdown}s)
-			</span>
+				<path
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					d="M19.5 8.25l-7.5 7.5-7.5-7.5"
+				/>
+			</svg>
 		{/if}
-		<!-- Dropdown indicator -->
-		<svg
-			class="inline-block w-2.5 h-2.5 ml-0.5 transition-transform"
-			class:rotate-180={dropUp ? !isOpen : isOpen}
-			fill="none"
-			viewBox="0 0 24 24"
-			stroke="currentColor"
-			stroke-width="2.5"
-		>
-			<path
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				d="M19.5 8.25l-7.5 7.5-7.5-7.5"
-			/>
-		</svg>
 	</button>
 
 	<!-- Dropdown Menu -->
@@ -788,7 +833,8 @@
 		<div
 			class="status-dropdown absolute z-40 min-w-[180px] rounded-lg shadow-xl overflow-hidden {dropUp
 				? 'bottom-full mb-1'
-				: 'top-full mt-1'} {alignRight ? 'right-0' : 'left-0'}"
+				: 'top-full mt-1'}"
+			style={alignRight ? 'left: 100%; right: auto; transform: translateX(-100%);' : 'left: 0; right: auto;'}
 			transition:fly={{ y: dropUp ? 5 : -5, duration: 150 }}
 		>
 			<!-- Actions list -->

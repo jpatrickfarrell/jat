@@ -13,13 +13,14 @@
  */
 
 import { runAggregation } from '$lib/server/tokenUsageDb';
-import { readdirSync, unlinkSync, statSync, existsSync } from 'fs';
+import { readdirSync, unlinkSync, statSync, existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { randomUUID } from 'crypto';
 import logger from '$lib/utils/logger';
 import { shouldLog, getSamplingRate } from '$lib/config/logConfig';
 import { dev } from '$app/environment';
+import { SIGNAL_TTL } from '$lib/config/constants';
 
 // Track aggregation interval
 let aggregationInterval: ReturnType<typeof setInterval> | null = null;
@@ -42,10 +43,11 @@ let aggregationInterval: ReturnType<typeof setInterval> | null = null;
  * NOT cleaned (preserved across restarts):
  * - jat-timeline-*.jsonl - Append-only session history for EventStack
  */
-function cleanupStaleSignalFiles(): { cleaned: number; errors: number } {
+function cleanupStaleSignalFiles(): { cleaned: number; errors: number; preserved: number } {
 	const tmpDir = '/tmp';
-	const patterns = [
-		/^jat-signal-.*\.json$/,
+
+	// Patterns that should be deleted unconditionally (always stale on restart)
+	const unconditionalPatterns = [
 		/^jat-activity-.*\.json$/,
 		// NOTE: jat-timeline-*.jsonl files are NOT deleted - they're append-only session history
 		// that agents need for displaying EventStack. They should persist across IDE restarts.
@@ -55,22 +57,55 @@ function cleanupStaleSignalFiles(): { cleaned: number; errors: number } {
 		/^claude-[0-9a-f]+-cwd$/ // Claude Code working directory markers
 	];
 
+	// Signal files need age-based cleanup - only delete if older than TTL
+	// This preserves recent signals from active agents across IDE restarts
+	const signalPattern = /^jat-signal-.*\.json$/;
+
 	let cleaned = 0;
 	let errors = 0;
+	let preserved = 0;
 
 	try {
 		const files = readdirSync(tmpDir);
 
 		for (const file of files) {
-			// Check if file matches any of our patterns
-			const matches = patterns.some((pattern) => pattern.test(file));
-			if (!matches) continue;
+			const filePath = join(tmpDir, file);
 
 			try {
-				const filePath = join(tmpDir, file);
-				// Only delete files, not directories
 				const stat = statSync(filePath);
-				if (stat.isFile()) {
+				if (!stat.isFile()) continue;
+
+				// Handle signal files with age-based cleanup
+				if (signalPattern.test(file)) {
+					const ageMs = Date.now() - stat.mtimeMs;
+
+					// Read signal to determine appropriate TTL
+					let ttl = SIGNAL_TTL.TRANSIENT_MS; // Default to shorter TTL
+					try {
+						const content = readFileSync(filePath, 'utf-8');
+						const signal = JSON.parse(content);
+						// Use longer TTL for user-waiting states
+						if (signal.type === 'state' && SIGNAL_TTL.USER_WAITING_STATES.includes(signal.state)) {
+							ttl = SIGNAL_TTL.USER_WAITING_MS;
+						} else if (signal.type === 'complete') {
+							ttl = SIGNAL_TTL.USER_WAITING_MS;
+						}
+					} catch {
+						// If we can't read/parse, use short TTL
+					}
+
+					if (ageMs > ttl) {
+						unlinkSync(filePath);
+						cleaned++;
+					} else {
+						preserved++;
+					}
+					continue;
+				}
+
+				// Handle unconditional patterns (delete regardless of age)
+				const matchesUnconditional = unconditionalPatterns.some((pattern) => pattern.test(file));
+				if (matchesUnconditional) {
 					unlinkSync(filePath);
 					cleaned++;
 				}
@@ -83,7 +118,7 @@ function cleanupStaleSignalFiles(): { cleaned: number; errors: number } {
 		console.error('[Signal Cleanup] Failed to read /tmp directory:', err);
 	}
 
-	return { cleaned, errors };
+	return { cleaned, errors, preserved };
 }
 
 /**
@@ -184,10 +219,12 @@ async function initializeStartupTasks() {
 	// Run signal file cleanup immediately (non-blocking, fast)
 	console.log('[Signal Cleanup] Cleaning stale temp files from /tmp...');
 	const cleanupResult = cleanupStaleSignalFiles();
-	if (cleanupResult.cleaned > 0) {
-		console.log(
-			`[Signal Cleanup] Removed ${cleanupResult.cleaned} stale files${cleanupResult.errors > 0 ? ` (${cleanupResult.errors} errors)` : ''}`
-		);
+	if (cleanupResult.cleaned > 0 || cleanupResult.preserved > 0) {
+		const parts = [];
+		if (cleanupResult.cleaned > 0) parts.push(`removed ${cleanupResult.cleaned} stale`);
+		if (cleanupResult.preserved > 0) parts.push(`preserved ${cleanupResult.preserved} active`);
+		if (cleanupResult.errors > 0) parts.push(`${cleanupResult.errors} errors`);
+		console.log(`[Signal Cleanup] ${parts.join(', ')}`);
 	} else {
 		console.log('[Signal Cleanup] No stale files to clean');
 	}

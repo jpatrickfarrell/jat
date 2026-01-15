@@ -376,6 +376,11 @@
 
 <svelte:head>
 	<title>Tasks | JAT IDE</title>
+	<meta name="description" content="Task management for AI coding agents. Create, assign, and track tasks with dependency management." />
+	<meta property="og:title" content="Tasks | JAT IDE" />
+	<meta property="og:description" content="Task management for AI coding agents. Create, assign, and track tasks with dependency management." />
+	<meta property="og:image" content="/favicons/tasks.svg" />
+	<link rel="icon" href="/favicons/tasks.svg" />
 </svelte:head>
 
 <div class="tasks-page">

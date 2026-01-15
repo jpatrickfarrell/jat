@@ -98,13 +98,13 @@
 			},
 		},
 		{
-			id: "nav-work",
-			label: "Go to Work",
+			id: "nav-dash",
+			label: "Go to Dashboard",
 			description: "View sessions and tasks",
-			icon: "📁",
-			keywords: ["work", "projects", "agents", "team", "coordination", "assign", "sessions"],
+			icon: "📊",
+			keywords: ["dash", "dashboard", "work", "projects", "agents", "team", "coordination", "assign", "sessions"],
 			execute: () => {
-				goto("/work");
+				goto("/dash");
 				close();
 			},
 		},

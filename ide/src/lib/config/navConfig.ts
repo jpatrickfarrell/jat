@@ -6,7 +6,7 @@
  *
  * MAIN (core workflow - always visible):
  *   /tasks    - Tasks (active sessions + open tasks with spawn)
- *   /work     - Work (multi-project sessions view with terminal output)
+ *   /dash     - Dash (multi-project sessions view with terminal output)
  *   /files    - Files (project file browser)
  *   /source   - Source Control (git changes, diff viewer)
  *   /servers  - Servers (project server sessions)
@@ -27,7 +27,7 @@
  */
 
 export interface NavItem {
-	id: string; // Unique identifier (e.g., 'work', 'files', 'servers')
+	id: string; // Unique identifier (e.g., 'dash', 'files', 'servers')
 	label: string; // Display text (e.g., 'Work', 'Files', 'Servers')
 	href: string; // Navigation target (e.g., '/work', '/files')
 	icon: string; // Icon identifier (matches icon SVG paths in Sidebar.svelte)
@@ -60,10 +60,10 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			category: 'main'
 		},
 		{
-			id: 'work',
-			label: 'Work',
-			href: '/work',
-			icon: 'tmux',
+			id: 'dash',
+			label: 'Dash',
+			href: '/dash',
+			icon: 'dashboard',
 			category: 'main'
 		},
 		{

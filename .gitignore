@@ -21,6 +21,7 @@ mcp_agent_mail/
 .claude/agent-*-activity.jsonl
 .claude/sessions/agent-*.txt
 .claude/sessions/agent-*-activity.jsonl
+.claude/sessions/.tmux-agent-*
 .claude/.agent-identity-*
 .claude/.agent-workflow-state-*
 .mcp.json

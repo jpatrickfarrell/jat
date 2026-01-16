@@ -813,6 +813,7 @@
 		gap: 0.5rem;
 		height: 100%;
 		overflow: hidden;
+		min-width: 0; /* Allow content to shrink below child content size */
 	}
 
 	.task-panel-loading {
@@ -897,10 +898,12 @@
 	.tab-content {
 		flex: 1;
 		overflow-y: auto;
+		overflow-x: hidden; /* Prevent horizontal overflow */
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
 		padding-top: 0.5rem;
+		min-width: 0; /* Allow content to shrink */
 	}
 
 	/* Details tab layout - Description at top, Notes fills middle, Labels at bottom */
@@ -909,17 +912,23 @@
 		flex-direction: column;
 		height: 100%;
 		gap: 0.75rem;
+		min-width: 0; /* Allow layout to shrink below content size */
+		overflow: hidden; /* Prevent overflow */
 	}
 
 	.description-section {
 		flex-shrink: 0;
+		min-width: 0; /* Allow section to shrink below content size */
+		overflow: hidden;
 	}
 
 	.notes-section {
 		flex: 1;
 		min-height: 0;
+		min-width: 0; /* Allow section to shrink below content size */
 		display: flex;
 		flex-direction: column;
+		overflow: hidden; /* Prevent content overflow */
 	}
 
 	.labels-section {
@@ -931,6 +940,8 @@
 
 	.attachments-section {
 		flex-shrink: 0;
+		min-width: 0; /* Allow section to shrink below content size */
+		overflow: hidden;
 	}
 
 	.empty-tab {
@@ -1065,6 +1076,7 @@
 		height: calc(4 * 1.5em + 1rem);
 		overflow: hidden;
 		white-space: pre-wrap;
+		word-break: break-word; /* Prevent long words from causing overflow */
 		transition: border-color 0.15s, background-color 0.15s;
 	}
 
@@ -1093,6 +1105,7 @@
 		min-height: 6rem;
 		font-family: inherit;
 		transition: border-color 0.15s, box-shadow 0.15s;
+		word-break: break-word; /* Prevent long words from causing overflow */
 	}
 
 	.task-panel-notes-input:focus {
@@ -1116,6 +1129,8 @@
 		cursor: pointer;
 		min-height: 6rem;
 		white-space: pre-wrap;
+		word-break: break-word; /* Prevent long words from causing overflow */
+		overflow: hidden; /* Hide any overflow */
 		transition: border-color 0.15s, background-color 0.15s;
 	}
 
@@ -1273,12 +1288,14 @@
 		display: flex;
 		flex-direction: column;
 		min-height: 60px;
+		min-width: 80px; /* Ensure minimum width for at least one thumbnail + padding */
 		padding: 0.5rem;
 		border: 2px dashed oklch(0.30 0.02 250);
 		border-radius: 0.5rem;
 		background: oklch(0.14 0.01 250);
 		cursor: pointer;
 		transition: all 0.2s;
+		overflow: hidden; /* Prevent overflow */
 	}
 
 	.attachments-dropzone:hover {
@@ -1330,6 +1347,8 @@
 		flex-wrap: wrap;
 		gap: 0.5rem;
 		align-items: center;
+		max-width: 100%; /* Prevent horizontal overflow */
+		overflow: hidden;
 	}
 
 	.attachment-thumbnail-wrapper {

@@ -9,6 +9,7 @@
 	import { onMount } from 'svelte';
 	import { fade, slide } from 'svelte/transition';
 	import CreateProjectDrawer from '$lib/components/CreateProjectDrawer.svelte';
+	import { openProjectDrawer } from '$lib/stores/drawerStore';
 	import { ProjectsSkeleton } from '$lib/components/skeleton';
 
 	// Types
@@ -40,7 +41,6 @@
 	let showHidden = $state(false);
 
 	// Drawer states
-	let createDrawerOpen = $state(false);
 	let editDrawerOpen = $state(false);
 	let editingProject = $state<Project | null>(null);
 
@@ -191,7 +191,6 @@
 	}
 
 	function handleProjectCreated() {
-		createDrawerOpen = false;
 		fetchProjects();
 	}
 
@@ -221,7 +220,7 @@
 			</div>
 			<button
 				class="btn btn-primary font-mono uppercase tracking-wider"
-				onclick={() => createDrawerOpen = true}
+				onclick={openProjectDrawer}
 			>
 				<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
 					<path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
@@ -378,7 +377,7 @@
 						<div class="text-base-content/40 text-lg font-mono uppercase tracking-wider mb-4">No projects configured</div>
 						<button
 							class="btn btn-primary font-mono uppercase tracking-wider"
-							onclick={() => createDrawerOpen = true}
+							onclick={openProjectDrawer}
 						>
 							Add Your First Project
 						</button>
@@ -451,7 +450,6 @@
 
 <!-- Create Project Drawer -->
 <CreateProjectDrawer
-	bind:open={createDrawerOpen}
 	onProjectCreated={handleProjectCreated}
 />
 

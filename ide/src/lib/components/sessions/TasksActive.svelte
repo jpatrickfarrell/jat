@@ -625,6 +625,37 @@
 		}
 	}
 
+	// Send a workflow command (e.g., /jat:complete) to a specific session
+	async function sendWorkflowCommand(sessionName: string, command: string) {
+		const sessionId = encodeURIComponent(sessionName);
+		try {
+			// Send Ctrl+U first to clear any stray characters in input
+			await fetch(`/api/work/${sessionId}/input`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ type: 'ctrl-u' })
+			});
+			await new Promise(r => setTimeout(r, 50));
+
+			// Send the command text
+			await fetch(`/api/work/${sessionId}/input`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ input: command, type: 'text' })
+			});
+
+			// Send extra Enter after delay - Claude Code needs double Enter for slash commands
+			await new Promise(r => setTimeout(r, 100));
+			await fetch(`/api/work/${sessionId}/input`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ type: 'enter' })
+			});
+		} catch (err) {
+			console.error('[TasksActive] sendWorkflowCommand ERROR:', err);
+		}
+	}
+
 	// Cleanup on destroy
 	import { onDestroy } from 'svelte';
 	onDestroy(() => {
@@ -800,6 +831,9 @@
 										sessionName={session.name}
 										alignRight={true}
 										animate={isNew}
+										showCommands={true}
+										showEpic={true}
+										onCommand={(cmd) => sendWorkflowCommand(session.name, cmd)}
 										onAction={async (actionId) => {
 											if (actionId === 'attach') {
 												await handleAttachSession(session.name);
@@ -808,43 +842,9 @@
 											} else if (actionId === 'view-task' && sessionTask) {
 												onViewTask?.(sessionTask.id);
 											} else if (actionId === 'complete') {
-												const sessionId = encodeURIComponent(session.name);
-												await fetch(`/api/work/${sessionId}/input`, {
-													method: 'POST',
-													headers: { 'Content-Type': 'application/json' },
-													body: JSON.stringify({ type: 'ctrl-u' })
-												});
-												await new Promise(r => setTimeout(r, 50));
-												await fetch(`/api/work/${sessionId}/input`, {
-													method: 'POST',
-													headers: { 'Content-Type': 'application/json' },
-													body: JSON.stringify({ input: '/jat:complete', type: 'text' })
-												});
-												await new Promise(r => setTimeout(r, 100));
-												await fetch(`/api/work/${sessionId}/input`, {
-													method: 'POST',
-													headers: { 'Content-Type': 'application/json' },
-													body: JSON.stringify({ type: 'enter' })
-												});
+												await sendWorkflowCommand(session.name, '/jat:complete');
 											} else if (actionId === 'complete-kill') {
-												const sessionId = encodeURIComponent(session.name);
-												await fetch(`/api/work/${sessionId}/input`, {
-													method: 'POST',
-													headers: { 'Content-Type': 'application/json' },
-													body: JSON.stringify({ type: 'ctrl-u' })
-												});
-												await new Promise(r => setTimeout(r, 50));
-												await fetch(`/api/work/${sessionId}/input`, {
-													method: 'POST',
-													headers: { 'Content-Type': 'application/json' },
-													body: JSON.stringify({ input: '/jat:complete --kill', type: 'text' })
-												});
-												await new Promise(r => setTimeout(r, 100));
-												await fetch(`/api/work/${sessionId}/input`, {
-													method: 'POST',
-													headers: { 'Content-Type': 'application/json' },
-													body: JSON.stringify({ type: 'enter' })
-												});
+												await sendWorkflowCommand(session.name, '/jat:complete --kill');
 											} else if (actionId === 'interrupt') {
 												await fetch(`/api/work/${encodeURIComponent(session.name)}/input`, {
 													method: 'POST',

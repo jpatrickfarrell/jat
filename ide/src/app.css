@@ -1287,11 +1287,11 @@
 /* Slide out back and up - for expanded row exit */
 @keyframes slide-out-bck-top {
 	0% {
-		transform: translateZ(0) translateY(0);
+		transform: perspective(1000px) translateZ(0) translateY(0);
 		opacity: 1;
 	}
 	100% {
-		transform: translateZ(-1100px) translateY(-1000px);
+		transform: perspective(1000px) translateZ(-1100px) translateY(-1000px);
 		opacity: 0;
 	}
 }

@@ -528,20 +528,26 @@ export async function spawnNextAgent(): Promise<SpawnResult | null> {
 }
 
 /**
- * Spawn an agent for a specific task via POST /api/sessions
+ * Spawn an agent for a specific task via POST /api/work/spawn
+ * This endpoint handles:
+ * - Auto-generating unique agent names
+ * - Registering agents in Agent Mail database
+ * - Detecting project from task ID prefix
+ * - Assigning tasks to agents in Beads
+ *
  * @param taskId - The task ID to assign to the agent
  * @returns Spawn result
  */
 async function spawnAgentForTask(taskId: string): Promise<SpawnResult> {
 	try {
-		const response = await fetch('/api/sessions', {
+		const response = await fetch('/api/work/spawn', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
-				model: DEFAULT_MODEL,
-				task: taskId
-				// agentName is auto-generated (jat-pending-*)
-				// project is auto-detected from cwd
+				taskId,
+				model: DEFAULT_MODEL
+				// Project is auto-detected from taskId prefix (e.g., steelbridge-abc -> steelbridge)
+				// Agent name is auto-generated and registered in Agent Mail
 			})
 		});
 
@@ -555,10 +561,11 @@ async function spawnAgentForTask(taskId: string): Promise<SpawnResult> {
 			};
 		}
 
+		// /api/work/spawn returns { success, session: { sessionName, agentName, ... } }
 		return {
 			success: true,
-			sessionName: data.sessionName,
-			agentName: data.agentName,
+			sessionName: data.session?.sessionName,
+			agentName: data.session?.agentName,
 			taskId
 		};
 	} catch (err) {

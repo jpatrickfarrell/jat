@@ -745,7 +745,7 @@
 							>
 								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
 							</svg>
-							<span>Active Sessions</span>
+							<span>Active Tasks</span>
 							<span class="subsection-count">{projectSessions.length}</span>
 						</button>
 
@@ -841,7 +841,7 @@
 											/>
 										</svg>
 										<span class="standalone-icon">📋</span>
-										<span class="epic-title">Standalone Sessions</span>
+										<span class="epic-title font-mono">STANDALONE TASKS</span>
 										<div class="epic-agents">
 											{#each epicSessions as session}
 												<WorkingAgentBadge name={getAgentName(session.name)} size={18} variant="avatar" isWorking={true} />
@@ -1075,7 +1075,7 @@
 		/* Sticky positioning so tabs stay visible when scrolling */
 		position: sticky;
 		top: 0;
-		z-index: 30;
+		z-index: 10;
 	}
 
 	.project-tab {
@@ -1326,17 +1326,18 @@
 	}
 
 	/* Make expanded session rows sticky within accordion */
+	/* top: 120px accounts for sticky project-tabs bar + breathing room */
 	.epic-content :global(.sessions-table tbody tr.expanded) {
 		position: sticky;
-		top: 0;
-		z-index: 10;
+		top: 120px;
+		z-index: 5;
 		background: oklch(0.18 0.02 250);
 	}
 
 	.epic-content :global(.sessions-table tbody tr.expanded-row) {
 		position: sticky;
-		top: 44px; /* Height of the header row */
-		z-index: 10;
+		top: 164px; /* 120px (header row top) + 44px (header row height) */
+		z-index: 5;
 		background: oklch(0.16 0.01 250);
 		box-shadow: 0 4px 12px oklch(0 0 0 / 0.4);
 	}

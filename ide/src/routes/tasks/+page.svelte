@@ -209,6 +209,25 @@
 		}
 	});
 
+	// Set smart subsection defaults when data loads on page refresh
+	// Standalone tasks expansion is now handled by default in isEpicExpanded()
+	$effect(() => {
+		if (!selectedProject) return;
+
+		const projectSessions = sessionsByProject().get(selectedProject) || [];
+		const hasActiveSessions = projectSessions.length > 0;
+
+		// Only set subsection defaults on first load for this project
+		// (expandedEpicsByProject not being set serves as "first load" marker)
+		if (!expandedEpicsByProject.has(selectedProject) && hasActiveSessions) {
+			// If active sessions exist, collapse Open Tasks to focus on active work
+			const projectSubsections = collapsedSubsections.get(selectedProject) || new Set<SubsectionType>();
+			projectSubsections.add('tasks');
+			collapsedSubsections.set(selectedProject, projectSubsections);
+			collapsedSubsections = new Map(collapsedSubsections);
+		}
+	});
+
 	// Group sessions by project
 	const sessionsByProject = $derived(() => {
 		const grouped = new Map<string, TmuxSession[]>();
@@ -313,13 +332,20 @@
 	function toggleEpicCollapse(project: string, epicId: string | null, subsection: 'sessions' | 'tasks' = 'tasks') {
 		// Each subsection (sessions/tasks) has independent expand state
 		const key = epicId ? `${subsection}-${epicId}` : `${subsection}-standalone`;
-		const expanded = expandedEpicsByProject.get(project) ?? new Set<string>();
+		let expanded = expandedEpicsByProject.get(project);
+
+		if (!expanded) {
+			// Initialize with default state: standalone tasks expanded, epic groups collapsed
+			expanded = new Set<string>();
+			expanded.add('sessions-standalone');
+			expanded.add('tasks-standalone');
+		}
 
 		if (expanded.has(key)) {
-			// Collapse this group
+			// Currently expanded, collapse it
 			expanded.delete(key);
 		} else {
-			// Expand this group
+			// Currently collapsed, expand it
 			expanded.add(key);
 		}
 
@@ -331,7 +357,11 @@
 		// Each subsection (sessions/tasks) has independent expand state
 		const key = epicId ? `${subsection}-${epicId}` : `${subsection}-standalone`;
 		const expanded = expandedEpicsByProject.get(project);
-		return expanded?.has(key) ?? false;
+		if (!expanded) {
+			// Default: standalone tasks are expanded, epic groups are collapsed
+			return epicId === null;
+		}
+		return expanded.has(key);
 	}
 
 	// Subsection collapse handlers

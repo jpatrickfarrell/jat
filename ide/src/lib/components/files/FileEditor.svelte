@@ -24,29 +24,43 @@
 		project = '',
 		onFileClose = () => {},
 		onFileSave = () => {},
+		onFileRefresh = () => {},
 		onActiveFileChange = () => {},
 		onContentChange = () => {},
 		onTabReorder = () => {},
-		savingFiles = new Set<string>()
+		savingFiles = new Set<string>(),
+		refreshingFiles = new Set<string>()
 	}: {
 		openFiles: OpenFile[];
 		activeFilePath: string | null;
 		project?: string;
 		onFileClose?: (path: string) => void;
 		onFileSave?: (path: string, content: string) => void;
+		onFileRefresh?: (path: string) => void;
 		onActiveFileChange?: (path: string) => void;
 		onContentChange?: (path: string, content: string, dirty: boolean) => void;
 		onTabReorder?: (fromIndex: number, toIndex: number) => void;
 		savingFiles?: Set<string>;
+		refreshingFiles?: Set<string>;
 	} = $props();
 
 	// Derived state: is the active file currently being saved?
 	const isActiveSaving = $derived(activeFilePath ? savingFiles.has(activeFilePath) : false);
 
+	// Derived state: is the active file currently being refreshed?
+	const isActiveRefreshing = $derived(activeFilePath ? refreshingFiles.has(activeFilePath) : false);
+
 	// Handle save button click
 	function handleSaveClick() {
 		if (activeFile && activeFile.dirty && !isActiveSaving) {
 			onFileSave(activeFile.path, activeFile.content);
+		}
+	}
+
+	// Handle refresh button click
+	function handleRefreshClick() {
+		if (activeFile && !isActiveRefreshing) {
+			onFileRefresh(activeFile.path);
 		}
 	}
 
@@ -317,6 +331,22 @@
 				<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
 				</svg>
+			</button>
+			<!-- Refresh Button -->
+			<button
+				class="refresh-btn"
+				class:refreshing={isActiveRefreshing}
+				disabled={!activeFile || isActiveRefreshing}
+				onclick={handleRefreshClick}
+				title={isActiveRefreshing ? 'Refreshing...' : 'Reload file from disk'}
+			>
+				{#if isActiveRefreshing}
+					<span class="refresh-spinner"></span>
+				{:else}
+					<svg class="refresh-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+					</svg>
+				{/if}
 			</button>
 			<!-- Save Button -->
 			<button
@@ -596,6 +626,51 @@
 	.help-btn:hover {
 		background: oklch(0.22 0.02 250);
 		color: oklch(0.70 0.02 250);
+	}
+
+	.refresh-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0 0.5rem;
+		min-width: 32px;
+		background: oklch(0.18 0.01 250);
+		border: none;
+		border-left: 1px solid oklch(0.22 0.02 250);
+		color: oklch(0.45 0.02 250);
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.refresh-btn:hover:not(:disabled) {
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.70 0.02 250);
+	}
+
+	.refresh-btn.refreshing {
+		color: oklch(0.65 0.15 200);
+		background: oklch(0.55 0.15 200 / 0.1);
+	}
+
+	.refresh-btn:disabled:not(.refreshing) {
+		cursor: not-allowed;
+		opacity: 0.5;
+	}
+
+	.refresh-icon {
+		width: 16px;
+		height: 16px;
+		flex-shrink: 0;
+	}
+
+	.refresh-spinner {
+		width: 14px;
+		height: 14px;
+		border: 2px solid oklch(0.30 0.02 250);
+		border-top-color: oklch(0.65 0.15 200);
+		border-radius: 50%;
+		animation: spin 0.6s linear infinite;
+		flex-shrink: 0;
 	}
 
 	.save-btn {

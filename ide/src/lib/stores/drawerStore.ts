@@ -104,6 +104,14 @@ export function closeProjectDrawer() {
 	isProjectDrawerOpen.set(false);
 }
 
+// Project created event - increment to signal a project was created
+// Pages can subscribe to this and refresh their project lists
+export const projectCreatedSignal = writable(0);
+
+export function signalProjectCreated() {
+	projectCreatedSignal.update(n => n + 1);
+}
+
 // Start dropdown state (TopBar's START NEXT dropdown)
 // Keyboard shortcut: Alt+S to open
 export const isStartDropdownOpen = writable(false);

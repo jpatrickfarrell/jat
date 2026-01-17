@@ -13,7 +13,7 @@
 	 */
 
 	import { tick } from 'svelte';
-	import { isProjectDrawerOpen, closeProjectDrawer } from '$lib/stores/drawerStore';
+	import { isProjectDrawerOpen, closeProjectDrawer, signalProjectCreated } from '$lib/stores/drawerStore';
 	import { playSuccessChime, playErrorSound } from '$lib/utils/soundEffects';
 	import { invalidateAll } from '$app/navigation';
 
@@ -359,7 +359,10 @@
 			// Invalidate all data to refresh project lists across the app
 			await invalidateAll();
 
-			// Call callback to refresh project list
+			// Signal that a project was created - pages subscribed to this will refresh
+			signalProjectCreated();
+
+			// Call callback to refresh project list (for backward compatibility)
 			if (onProjectCreated) {
 				onProjectCreated();
 			}

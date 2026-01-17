@@ -35,7 +35,7 @@
 		playServerStopSound
 	} from '$lib/utils/soundEffects';
 	import { SessionPanelSkeleton, ProjectsTableSkeleton } from '$lib/components/skeleton';
-	import { openProjectDrawer } from '$lib/stores/drawerStore';
+	import { openProjectDrawer, projectCreatedSignal } from '$lib/stores/drawerStore';
 	import { updateProjectColorCache, initProjectColors } from '$lib/utils/projectColors';
 
 	interface Project {
@@ -663,6 +663,16 @@
 			}
 		}
 	}
+
+	// Subscribe to project created signal to reactively refresh list
+	$effect(() => {
+		// Access the signal value to create dependency
+		const signalValue = $projectCreatedSignal;
+		// Only refetch if signal has been triggered (not on initial mount)
+		if (signalValue > 0) {
+			fetchProjects();
+		}
+	});
 
 	onMount(async () => {
 		// Pre-fetch project colors for consistent UI

@@ -762,21 +762,9 @@
 												showType={true}
 												{statusDotColor}
 												animate={isNew && hadTaskOnEntry}
+												resumed={session.resumed}
+												attached={session.attached}
 											/>
-											{#if session.resumed}
-												<span class="resumed-badge" title="Resumed from previous session">
-													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="resumed-icon">
-														<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-													</svg>
-												</span>
-											{/if}
-											{#if session.attached}
-												<span class="attached-indicator" title="Terminal attached">
-													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="attached-icon">
-														<path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-													</svg>
-												</span>
-											{/if}
 										</div>
 									{:else}
 										<!-- No task - show project badge if known, otherwise session name -->
@@ -1053,7 +1041,7 @@
 		background: oklch(0.16 0.01 250);
 		border: 1px solid oklch(0.25 0.02 250);
 		border-radius: 8px;
-		overflow-x: clip;
+		/* NOTE: overflow-x: clip removed - it was clipping TaskIdBadge dropdowns (see jat-1xa13) */
 	}
 
 	.sessions-table {
@@ -1221,34 +1209,6 @@
 		font-weight: 500;
 		color: oklch(0.70 0.02 250);
 		white-space: nowrap;
-	}
-
-	/* Attached indicator */
-	.attached-indicator {
-		display: flex;
-		align-items: center;
-		margin-left: 0.25rem;
-	}
-
-	.attached-icon {
-		width: 12px;
-		height: 12px;
-		color: oklch(0.70 0.18 145);
-		filter: drop-shadow(0 0 3px oklch(0.65 0.18 145 / 0.6));
-	}
-
-	/* Resumed session indicator */
-	.resumed-badge {
-		display: flex;
-		align-items: center;
-		margin-left: 0.25rem;
-	}
-
-	.resumed-icon {
-		width: 12px;
-		height: 12px;
-		color: oklch(0.70 0.15 200);
-		filter: drop-shadow(0 0 3px oklch(0.65 0.15 200 / 0.6));
 	}
 
 	/* Actions */

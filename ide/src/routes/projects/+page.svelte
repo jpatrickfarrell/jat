@@ -8,8 +8,7 @@
 
 	import { onMount } from 'svelte';
 	import { fade, slide } from 'svelte/transition';
-	import CreateProjectDrawer from '$lib/components/CreateProjectDrawer.svelte';
-	import { openProjectDrawer } from '$lib/stores/drawerStore';
+	import { openProjectDrawer, projectCreatedSignal } from '$lib/stores/drawerStore';
 	import { ProjectsSkeleton } from '$lib/components/skeleton';
 
 	// Types
@@ -191,9 +190,15 @@
 		}
 	}
 
-	function handleProjectCreated() {
-		fetchProjects();
-	}
+	// Subscribe to project created signal to reactively refresh list
+	$effect(() => {
+		// Access the signal value to create dependency
+		const signalValue = $projectCreatedSignal;
+		// Only refetch if signal has been triggered (not on initial mount)
+		if (signalValue > 0) {
+			fetchProjects();
+		}
+	});
 
 	onMount(() => {
 		fetchProjects();
@@ -473,11 +478,6 @@
 		{/if}
 	</div>
 </div>
-
-<!-- Create Project Drawer -->
-<CreateProjectDrawer
-	onProjectCreated={handleProjectCreated}
-/>
 
 <!-- Edit Project Drawer -->
 {#if editDrawerOpen && editingProject}

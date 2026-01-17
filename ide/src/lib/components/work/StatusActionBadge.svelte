@@ -153,6 +153,50 @@
 	let isOpen = $state(false);
 	let isExecuting = $state(false);
 	let dropdownRef: HTMLDivElement | null = null;
+	let triggerRef: HTMLButtonElement | null = $state(null);
+	let dropdownContentRef: HTMLDivElement | null = $state(null);
+
+	// Portal-based dropdown to escape stacking context (jat-1xa13)
+	let dropdownPosition = $state({ top: 0, left: 0 });
+
+	function updateDropdownPosition() {
+		if (!triggerRef) return;
+		const rect = triggerRef.getBoundingClientRect();
+		const dropdownWidth = 220; // min-w-[180px] + some buffer
+		const dropdownHeight = 300; // estimate max height
+
+		// Position below trigger by default
+		let top = rect.bottom + 4;
+		let left = alignRight ? rect.right - dropdownWidth : rect.left;
+
+		// If dropUp is requested or not enough space below, position above
+		const viewportHeight = window.innerHeight;
+		if (dropUp || (top + dropdownHeight > viewportHeight && rect.top > dropdownHeight)) {
+			top = rect.top - dropdownHeight - 4;
+		}
+
+		// Clamp to viewport bounds
+		const viewportWidth = window.innerWidth;
+		if (left < 8) left = 8;
+		if (left + dropdownWidth > viewportWidth - 8) {
+			left = viewportWidth - dropdownWidth - 8;
+		}
+		if (top < 8) top = 8;
+
+		dropdownPosition = { top, left };
+	}
+
+	// Portal action - moves element to body level to escape stacking contexts
+	function portalAction(node: HTMLElement) {
+		document.body.appendChild(node);
+		return {
+			destroy() {
+				if (node.parentNode === document.body) {
+					document.body.removeChild(node);
+				}
+			}
+		};
+	}
 
 	// Commands state
 	let commands = $state<SlashCommand[]>([]);
@@ -252,7 +296,11 @@
 
 	// Handle click outside to close dropdown
 	function handleClickOutside(event: MouseEvent) {
-		if (dropdownRef && !dropdownRef.contains(event.target as Node)) {
+		const target = event.target as Node;
+		// Check if click is inside the trigger wrapper OR the portalled dropdown content
+		const isInsideTrigger = dropdownRef && dropdownRef.contains(target);
+		const isInsideDropdown = dropdownContentRef && dropdownContentRef.contains(target);
+		if (!isInsideTrigger && !isInsideDropdown) {
 			isOpen = false;
 		}
 	}
@@ -734,10 +782,15 @@
 	<!-- Status Badge Button -->
 	<button
 		type="button"
+		bind:this={triggerRef}
 		onclick={() => {
 			if (disabled) return;
 			const wasOpen = isOpen;
 			isOpen = !isOpen;
+			// Update position when opening (for portal positioning)
+			if (!wasOpen) {
+				updateDropdownPosition();
+			}
 			// Cancel auto-kill countdown when user opens dropdown (shows they're paying attention)
 			if (
 				!wasOpen &&
@@ -840,13 +893,13 @@
 		{/if}
 	</button>
 
-	<!-- Dropdown Menu -->
+	<!-- Dropdown Menu - uses portal to escape stacking context (jat-1xa13) -->
 	{#if isOpen}
 		<div
-			class="status-dropdown absolute z-40 min-w-[180px] rounded-lg shadow-xl overflow-hidden {dropUp
-				? 'bottom-full mb-1'
-				: 'top-full mt-1'}"
-			style={alignRight ? 'left: 100%; right: auto; transform: translateX(-100%);' : 'left: 0; right: auto;'}
+			use:portalAction
+			bind:this={dropdownContentRef}
+			class="status-dropdown fixed min-w-[180px] rounded-lg shadow-xl overflow-hidden"
+			style="top: {dropdownPosition.top}px; left: {dropdownPosition.left}px; z-index: 2147483647;"
 			transition:fly={{ y: dropUp ? 5 : -5, duration: 150 }}
 		>
 			<!-- Actions list -->

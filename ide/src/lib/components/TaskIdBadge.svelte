@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { getProjectColor as getProjectColorFromHash } from '$lib/utils/projectColors';
 	import { TASK_STATUS_VISUALS, STATUS_ICONS, getIssueTypeVisual } from '$lib/config/statusColors';
 	import { isHumanTask } from '$lib/utils/badgeHelpers';
@@ -65,9 +66,13 @@
 		agentName?: string;
 		/** Apply entrance animation to text (tracking-in-expand) */
 		animate?: boolean;
+		/** Session was resumed from previous session (agentPill variant) */
+		resumed?: boolean;
+		/** Terminal is attached to session (agentPill variant) */
+		attached?: boolean;
 	}
 
-	let { task, size = 'sm', showStatus = true, showType = true, showCopyIcon = false, showAssignee = false, minimal = false, color, onOpenTask, onAgentClick, dropdownAlign = 'start', copyOnly = false, blockedBy = [], blocks = [], showDependencies = false, showDepGraph = true, showUnblocksCount = false, statusDotColor, variant = 'default', agentName, animate = false }: Props = $props();
+	let { task, size = 'sm', showStatus = true, showType = true, showCopyIcon = false, showAssignee = false, minimal = false, color, onOpenTask, onAgentClick, dropdownAlign = 'start', copyOnly = false, blockedBy = [], blocks = [], showDependencies = false, showDepGraph = true, showUnblocksCount = false, statusDotColor, variant = 'default', agentName, animate = false, resumed = false, attached = false }: Props = $props();
 
 	// Extract project prefix from task ID (e.g., "jat-abc" -> "jat")
 	const projectPrefix = $derived(task.id.split('-')[0] || task.id);
@@ -125,10 +130,16 @@
 	let copied = $state(false);
 	let dropdownOpen = $state(false);
 
-	// Dropdown position tracking for fixed positioning (escapes stacking context - see jat-1xa13)
+	// Portal-based dropdown to escape stacking context (jat-1xa13)
+	// The dropdown is rendered to document.body via portalAction to be truly above all other elements
 	let dropdownRef: HTMLDivElement | null = $state(null);
 	let dropdownPosition = $state({ top: 0, left: 0 });
 	let isDropdownVisible = $state(false);
+	let hideTimeout: ReturnType<typeof setTimeout> | null = null;
+
+	onDestroy(() => {
+		if (hideTimeout) clearTimeout(hideTimeout);
+	});
 
 	function updateDropdownPosition() {
 		if (!dropdownRef) return;
@@ -152,13 +163,47 @@
 	}
 
 	function handleDropdownEnter() {
+		// Cancel any pending hide
+		if (hideTimeout) {
+			clearTimeout(hideTimeout);
+			hideTimeout = null;
+		}
 		updateDropdownPosition();
 		isDropdownVisible = true;
 		fetchDepGraph();
 	}
 
 	function handleDropdownLeave() {
-		isDropdownVisible = false;
+		// Delay hiding to allow mouse to move from trigger to fixed dropdown
+		hideTimeout = setTimeout(() => {
+			isDropdownVisible = false;
+			hideTimeout = null;
+		}, 100);
+	}
+
+	function handleDropdownContentEnter() {
+		// Cancel hide if mouse enters the dropdown content
+		if (hideTimeout) {
+			clearTimeout(hideTimeout);
+			hideTimeout = null;
+		}
+		isDropdownVisible = true;
+	}
+
+	// Portal action - moves element to body level to escape stacking contexts
+	function portalAction(node: HTMLElement) {
+		// Move the node to body
+		document.body.appendChild(node);
+
+		return {
+			destroy() {
+				// Move back before destroy (Svelte needs the node in original location to unmount)
+				// Actually, just remove it - Svelte will handle cleanup
+				if (node.parentNode === document.body) {
+					document.body.removeChild(node);
+				}
+			}
+		};
 	}
 
 	const sizeClasses: Record<string, string> = {
@@ -287,64 +332,108 @@
 	{@const ringColor = isClosed ? 'oklch(0.65 0.20 145)' : (statusDotColor || 'oklch(0.50 0.02 250)')}
 	{@const avatarSize = size === 'xs' ? 20 : size === 'sm' ? 24 : 28}
 	{@const badgeColor = isClosed ? 'oklch(0.65 0.20 145)' : projectColor}
-	<button
-		class="inline-flex items-center gap-2 font-mono rounded-full cursor-pointer whitespace-nowrap
-			   hover:opacity-90 transition-all {size === 'xs' ? 'text-xs pr-2 pl-0.5 py-0.5' : size === 'sm' ? 'text-sm pr-2.5 pl-0.5 py-0.5' : 'text-base pr-3 pl-1 py-1'}"
-		style="
-			background: color-mix(in oklch, {badgeColor} 12%, transparent);
-			border: 1px solid color-mix(in oklch, {badgeColor} 30%, transparent);
-			color: {badgeColor};
-		"
-		onclick={copyId}
-		title="Click to copy task ID"
-	>
-		{#if isClosed}
-			<!-- Checkmark circle for closed tasks (replaces avatar) -->
-			<div
-				class="rounded-full shrink-0 flex items-center justify-center"
-				style="
-					width: {avatarSize}px;
-					height: {avatarSize}px;
-					background: oklch(0.65 0.20 145 / 0.2);
-					border: 2px solid oklch(0.65 0.20 145);
-				"
-			>
-				<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+	<div class="inline-flex flex-col items-start">
+		<button
+			class="inline-flex items-center gap-2 font-mono rounded-full cursor-pointer whitespace-nowrap
+				   hover:opacity-90 transition-all {size === 'xs' ? 'text-xs pr-2 pl-0.5 py-0.5' : size === 'sm' ? 'text-sm pr-2.5 pl-0.5 py-0.5' : 'text-base pr-3 pl-1 py-1'}"
+			style="
+				background: color-mix(in oklch, {badgeColor} 12%, transparent);
+				border: 1px solid color-mix(in oklch, {badgeColor} 30%, transparent);
+				color: {badgeColor};
+			"
+			onclick={copyId}
+			title="Click to copy task ID"
+		>
+			{#if isClosed}
+				<!-- Checkmark circle for closed tasks (replaces avatar) -->
+				<div
+					class="rounded-full shrink-0 flex items-center justify-center"
+					style="
+						width: {avatarSize}px;
+						height: {avatarSize}px;
+						background: oklch(0.65 0.20 145 / 0.2);
+						border: 2px solid oklch(0.65 0.20 145);
+					"
+				>
+					<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+					</svg>
+				</div>
+			{:else}
+				<!-- Avatar with status ring -->
+				<div
+					class="rounded-full shrink-0 flex items-center justify-center"
+					style="
+						padding: 2px;
+						background: {ringColor};
+						box-shadow: 0 0 6px {ringColor};
+					"
+				>
+					{#if agentName}
+						<AgentAvatar name={agentName} size={avatarSize - 4} />
+					{:else}
+						<!-- Fallback dot if no agent -->
+						<div
+							class="rounded-full"
+							style="width: {avatarSize - 4}px; height: {avatarSize - 4}px; background: oklch(0.25 0.02 250);"
+						></div>
+					{/if}
+				</div>
+			{/if}
+			<!-- Task ID -->
+			<span class="{animate ? 'tracking-in-expand' : ''} {isClosed ? 'line-through opacity-70' : ''}" style={animate ? 'animation-delay: 100ms;' : ''}>{task.id}</span>
+			{#if copied}
+				<svg class="{iconSizes[size]} text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
 				</svg>
-			</div>
-		{:else}
-			<!-- Avatar with status ring -->
-			<div
-				class="rounded-full shrink-0 flex items-center justify-center"
-				style="
-					padding: 2px;
-					background: {ringColor};
-					box-shadow: 0 0 6px {ringColor};
-				"
-			>
-				{#if agentName}
-					<AgentAvatar name={agentName} size={avatarSize - 4} />
-				{:else}
-					<!-- Fallback dot if no agent -->
-					<div
-						class="rounded-full"
-						style="width: {avatarSize - 4}px; height: {avatarSize - 4}px; background: oklch(0.25 0.02 250);"
-					></div>
-				{/if}
-			</div>
-		{/if}
-		<!-- Task ID -->
-		<span class="{animate ? 'tracking-in-expand' : ''} {isClosed ? 'line-through opacity-70' : ''}" style={animate ? 'animation-delay: 100ms;' : ''}>{task.id}</span>
-		{#if showType && task.issue_type}
-			<span class="opacity-80">{typeVisual.icon}</span>
-		{/if}
-		{#if copied}
-			<svg class="{iconSizes[size]} text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-				<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-			</svg>
-		{/if}
-	</button>
+			{/if}
+		</button>
+
+		<!-- Icons row - outside button, below the badge -->
+		<div class="flex items-center gap-1 mt-0.5 ml-8">
+			<!-- Priority badge -->
+			{#if showType && task.issue_type && !isClosed}
+				<span class={size === 'xs' ? 'text-xs' : size === 'sm' ? 'text-sm' : 'text-base'}>{typeVisual.icon}</span>
+			{/if}
+			{#if task.priority !== undefined}
+				{@const priorityColors = {
+					0: { bg: 'oklch(0.55 0.20 25 / 0.25)', text: 'oklch(0.75 0.18 25)', border: 'oklch(0.55 0.20 25 / 0.5)' },
+					1: { bg: 'oklch(0.55 0.18 85 / 0.25)', text: 'oklch(0.80 0.15 85)', border: 'oklch(0.55 0.18 85 / 0.5)' },
+					2: { bg: 'oklch(0.55 0.15 200 / 0.20)', text: 'oklch(0.75 0.12 200)', border: 'oklch(0.55 0.15 200 / 0.4)' },
+					3: { bg: 'oklch(0.35 0.02 250 / 0.30)', text: 'oklch(0.65 0.02 250)', border: 'oklch(0.35 0.02 250 / 0.5)' },
+					4: { bg: 'oklch(0.30 0.02 250 / 0.25)', text: 'oklch(0.55 0.02 250)', border: 'oklch(0.30 0.02 250 / 0.4)' }
+				}}
+				{@const pColor = priorityColors[task.priority as keyof typeof priorityColors] || priorityColors[3]}
+				<span
+					class="text-xs font-semibold px-1 py-0.5 rounded scale-75"
+					style="background: {pColor.bg}; color: {pColor.text}; border: 1px solid {pColor.border};"
+				>P{task.priority}</span>
+			{/if}
+
+
+			{#if isHuman && !isClosed}
+				<span
+					class={size === 'xs' ? 'text-xs' : size === 'sm' ? 'text-sm' : 'text-base'}
+					title="Human action required"
+					style="color: oklch(0.70 0.18 45);"
+				>🧑</span>
+			{/if}
+			{#if resumed}
+				<span class="resumed-badge" title="Resumed from previous session">
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3" style="color: oklch(0.70 0.15 200); filter: drop-shadow(0 0 3px oklch(0.65 0.15 200 / 0.6));">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+					</svg>
+				</span>
+			{/if}
+			{#if attached}
+				<span class="attached-indicator" title="Terminal attached">
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3" style="color: oklch(0.70 0.18 145); filter: drop-shadow(0 0 3px oklch(0.65 0.18 145 / 0.6));">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+					</svg>
+				</span>
+			{/if}
+		</div>
+	</div>
 {:else if copyOnly}
 	<!-- Copy-only mode: just a clickable badge, no dropdown (for use in tables where info is already visible) -->
 	<div class="inline-flex flex-col items-start gap-0.5 relative">
@@ -374,7 +463,7 @@
 
 		<!-- Main badge -->
 		<button
-			class="inline-flex items-center font-mono rounded cursor-pointer
+			class="inline-flex items-center font-mono rounded cursor-pointer mt-3
 				   bg-base-100 hover:bg-base-200 transition-colors group border {isClosed ? 'border-success/40' : 'border-base-300'} {sizeClasses[size]}"
 			onclick={copyId}
 			title="Click to copy task ID"
@@ -383,7 +472,7 @@
 		</button>
 
 		<!-- Icons row - outside button, below the badge -->
-		<div class="flex items-center gap-1 mt-0.5">
+		<div class="flex items-center gap-0.5 ml-1.5">
 			<!-- Priority badge -->
 			{#if task.priority !== undefined}
 				{@const priorityColors = {
@@ -395,7 +484,7 @@
 				}}
 				{@const pColor = priorityColors[task.priority as keyof typeof priorityColors] || priorityColors[3]}
 				<span
-					class="text-xs font-semibold px-1 py-0.5 rounded"
+					class="text-xs font-semibold px-1 py-0.5 rounded scale-70 mt-0.25"
 					style="background: {pColor.bg}; color: {pColor.text}; border: 1px solid {pColor.border};"
 				>P{task.priority}</span>
 			{/if}
@@ -432,7 +521,7 @@
 
 			{#if showStatus && !shouldShowAssignee && !isClosed}
 				<svg
-					class="{iconSizes[size]} {statusVisual.text} {statusVisual.animation || ''} shrink-0"
+					class="{iconSizes[size]} {statusVisual.text} {statusVisual.animation || ''} shrink-0 ml-0.25 mt-0.5"
 					viewBox="0 0 24 24"
 					fill={statusVisual.iconStyle === 'solid' ? 'currentColor' : 'none'}
 					stroke="currentColor"
@@ -599,12 +688,13 @@
 				{/if}
 			</div>
 
-			<!-- Hover dropdown with task info and quick actions - uses fixed positioning to escape stacking context (jat-1xa13) -->
+			<!-- Hover dropdown with task info and quick actions - uses portal to escape stacking context (jat-1xa13) -->
 			{#if isDropdownVisible}
 			<div
-				class="fixed z-[9999] p-2 shadow-lg bg-base-100 rounded-lg border border-base-300 min-w-56 max-w-72"
-				style="top: {dropdownPosition.top}px; left: {dropdownPosition.left}px;"
-				onmouseenter={() => isDropdownVisible = true}
+				use:portalAction
+				class="fixed p-2 shadow-lg bg-base-100 rounded-lg border border-base-300 min-w-56 max-w-72"
+				style="top: {dropdownPosition.top}px; left: {dropdownPosition.left}px; z-index: 2147483647;"
+				onmouseenter={handleDropdownContentEnter}
 				onmouseleave={handleDropdownLeave}
 			>
 				<!-- Task title -->

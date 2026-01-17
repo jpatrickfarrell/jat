@@ -348,6 +348,10 @@
 	let saveError = $state<string | null>(null);
 	let saveSuccess = $state<string | null>(null);
 
+	// Refreshing state for UI feedback
+	let refreshingFiles = $state<Set<string>>(new Set());
+	let refreshSuccess = $state<string | null>(null);
+
 	// File operation feedback
 	let fileError = $state<string | null>(null);
 	let fileInfo = $state<string | null>(null);
@@ -442,6 +446,73 @@
 			const updated = new Set(savingFiles);
 			updated.delete(path);
 			savingFiles = updated;
+		}
+	}
+
+	// Handle file refresh - reload content from disk
+	async function handleFileRefresh(path: string) {
+		if (!selectedProject) return;
+
+		const filename = path.split('/').pop() || path;
+
+		// Find the open file
+		const openFile = openFiles.find(f => f.path === path);
+		if (!openFile) return;
+
+		// If file is dirty, warn the user they'll lose changes
+		if (openFile.dirty) {
+			const confirmed = confirm(`"${filename}" has unsaved changes. Refreshing will discard your changes. Continue?`);
+			if (!confirmed) return;
+		}
+
+		// Add to refreshing state
+		refreshingFiles = new Set([...refreshingFiles, path]);
+
+		try {
+			const params = new URLSearchParams({
+				project: selectedProject,
+				path
+			});
+			const response = await fetch(`/api/files/content?${params}`);
+
+			if (!response.ok) {
+				const data = await response.json();
+				const errorMsg = getFileErrorMessage(data.error || data.message, response.status, filename);
+				fileError = errorMsg;
+				setTimeout(() => { fileError = null; }, 5000);
+				return;
+			}
+
+			const data = await response.json();
+			const content = data.content || '';
+
+			// Update the file in openFiles with fresh content
+			openFiles = openFiles.map(f => {
+				if (f.path === path) {
+					return {
+						...f,
+						content,
+						originalContent: content,
+						dirty: false
+					};
+				}
+				return f;
+			});
+
+			// Show success toast
+			refreshSuccess = `Refreshed ${filename}`;
+			setTimeout(() => { refreshSuccess = null; }, 2000);
+
+		} catch (err) {
+			const errorMsg = err instanceof Error ? err.message : 'Failed to refresh file';
+			fileError = `Could not refresh "${filename}": ${errorMsg}`;
+			setTimeout(() => { fileError = null; }, 5000);
+			console.error('[Files] Failed to refresh file:', err);
+		} finally {
+			// Remove from refreshing state
+			const updated = new Set(refreshingFiles);
+			updated.delete(path);
+			refreshingFiles = updated;
 		}
 	}
 
@@ -932,10 +1003,12 @@
 							project={selectedProject}
 							onFileClose={handleFileClose}
 							onFileSave={handleFileSave}
+							onFileRefresh={handleFileRefresh}
 							onActiveFileChange={handleActiveFileChange}
 							onContentChange={handleContentChange}
 							onTabReorder={handleTabReorder}
 							{savingFiles}
+							{refreshingFiles}
 						/>
 					{:else}
 						<div class="panel-header">
@@ -964,6 +1037,14 @@
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
 			</svg>
 			<span>{saveSuccess}</span>
+		</div>
+	{/if}
+	{#if refreshSuccess}
+		<div class="alert alert-info shadow-lg" transition:slide={{ duration: 200 }}>
+			<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+			</svg>
+			<span>{refreshSuccess}</span>
 		</div>
 	{/if}
 	{#if saveError}

@@ -22,7 +22,8 @@
 		onTabSelect = () => {},
 		onTabClose = () => {},
 		onTabMiddleClick = () => {},
-		onTabReorder = () => {}
+		onTabReorder = () => {},
+		onDiskChangeClick = () => {}
 	}: {
 		openFiles: OpenFile[];
 		activeFilePath: string | null;
@@ -30,6 +31,7 @@
 		onTabClose?: (path: string) => void;
 		onTabMiddleClick?: (path: string) => void;
 		onTabReorder?: (fromIndex: number, toIndex: number) => void;
+		onDiskChangeClick?: (path: string) => void;
 	} = $props();
 
 	// Drag-and-drop state
@@ -65,6 +67,12 @@
 			e.preventDefault();
 			onTabMiddleClick(path);
 		}
+	}
+
+	// Handle disk change indicator click
+	function handleDiskChangeClick(e: MouseEvent, path: string) {
+		e.stopPropagation();
+		onDiskChangeClick(path);
 	}
 
 	// Drag-and-drop handlers
@@ -154,6 +162,20 @@
 
 				<!-- Filename -->
 				<span class="tab-name">{getFileName(file.path)}</span>
+
+				<!-- Disk change indicator (external modification detected) -->
+				{#if file.hasDiskChanges}
+					<button
+						class="disk-change-btn"
+						onclick={(e) => handleDiskChangeClick(e, file.path)}
+						title="File changed on disk - Click to view diff"
+						aria-label="File changed externally"
+					>
+						<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+						</svg>
+					</button>
+				{/if}
 
 				<!-- Dirty indicator -->
 				{#if file.dirty}
@@ -299,6 +321,39 @@
 		background: oklch(0.70 0.18 85);
 		border-radius: 50%;
 		flex-shrink: 0;
+	}
+
+	/* Disk change indicator button */
+	.disk-change-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.125rem;
+		background: oklch(0.50 0.15 200 / 0.2);
+		border: none;
+		border-radius: 0.25rem;
+		color: oklch(0.70 0.18 200);
+		cursor: pointer;
+		transition: all 0.15s ease;
+		flex-shrink: 0;
+		animation: disk-change-pulse 2s ease-in-out infinite;
+	}
+
+	.disk-change-btn:hover {
+		background: oklch(0.50 0.15 200 / 0.4);
+		color: oklch(0.80 0.18 200);
+		animation: none;
+	}
+
+	@keyframes disk-change-pulse {
+		0%, 100% {
+			opacity: 0.8;
+			box-shadow: 0 0 0 0 oklch(0.65 0.15 200 / 0);
+		}
+		50% {
+			opacity: 1;
+			box-shadow: 0 0 6px 2px oklch(0.65 0.15 200 / 0.4);
+		}
 	}
 
 	.close-btn {

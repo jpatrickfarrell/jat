@@ -15,6 +15,7 @@
 	import FileTabBar from './FileTabBar.svelte';
 	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
 	import MediaPreview from './MediaPreview.svelte';
+	import InlineDiffViewer from './InlineDiffViewer.svelte';
 	import type { OpenFile } from './types';
 
 	// Props
@@ -24,31 +25,34 @@
 		project = '',
 		onFileClose = () => {},
 		onFileSave = () => {},
-		onFileRefresh = () => {},
 		onActiveFileChange = () => {},
 		onContentChange = () => {},
 		onTabReorder = () => {},
-		savingFiles = new Set<string>(),
-		refreshingFiles = new Set<string>()
+		onAcceptDiskChange = () => {},
+		onDiscardDiskChange = () => {},
+		savingFiles = new Set<string>()
 	}: {
 		openFiles: OpenFile[];
 		activeFilePath: string | null;
 		project?: string;
 		onFileClose?: (path: string) => void;
 		onFileSave?: (path: string, content: string) => void;
-		onFileRefresh?: (path: string) => void;
 		onActiveFileChange?: (path: string) => void;
 		onContentChange?: (path: string, content: string, dirty: boolean) => void;
 		onTabReorder?: (fromIndex: number, toIndex: number) => void;
+		onAcceptDiskChange?: (path: string) => void;
+		onDiscardDiskChange?: (path: string) => void;
 		savingFiles?: Set<string>;
-		refreshingFiles?: Set<string>;
 	} = $props();
 
 	// Derived state: is the active file currently being saved?
 	const isActiveSaving = $derived(activeFilePath ? savingFiles.has(activeFilePath) : false);
 
-	// Derived state: is the active file currently being refreshed?
-	const isActiveRefreshing = $derived(activeFilePath ? refreshingFiles.has(activeFilePath) : false);
+	// State: which file is showing the diff view (path or null)
+	let showingDiffForPath = $state<string | null>(null);
+
+	// Derived: is the active file currently showing the diff view?
+	const isShowingDiff = $derived(showingDiffForPath === activeFilePath && activeFile?.hasDiskChanges);
 
 	// Handle save button click
 	function handleSaveClick() {
@@ -57,10 +61,29 @@
 		}
 	}
 
-	// Handle refresh button click
-	function handleRefreshClick() {
-		if (activeFile && !isActiveRefreshing) {
-			onFileRefresh(activeFile.path);
+	// Handle disk change indicator click on tab - show the diff view
+	function handleDiskChangeClick(path: string) {
+		if (showingDiffForPath === path) {
+			// Toggle off if already showing
+			showingDiffForPath = null;
+		} else {
+			showingDiffForPath = path;
+		}
+	}
+
+	// Handle accepting disk changes - update the file content to match disk
+	function handleAcceptDiskChange() {
+		if (activeFile && activeFilePath) {
+			onAcceptDiskChange(activeFilePath);
+			showingDiffForPath = null;
+		}
+	}
+
+	// Handle discarding disk changes - keep the current content
+	function handleDiscardDiskChange() {
+		if (activeFile && activeFilePath) {
+			onDiscardDiskChange(activeFilePath);
+			showingDiffForPath = null;
 		}
 	}
 
@@ -321,6 +344,7 @@
 				onTabClose={handleTabClose}
 				onTabMiddleClick={handleTabMiddleClick}
 				{onTabReorder}
+				onDiskChangeClick={handleDiskChangeClick}
 			/>
 			<!-- Help Button -->
 			<button
@@ -331,22 +355,6 @@
 				<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
 				</svg>
-			</button>
-			<!-- Refresh Button -->
-			<button
-				class="refresh-btn"
-				class:refreshing={isActiveRefreshing}
-				disabled={!activeFile || isActiveRefreshing}
-				onclick={handleRefreshClick}
-				title={isActiveRefreshing ? 'Refreshing...' : 'Reload file from disk'}
-			>
-				{#if isActiveRefreshing}
-					<span class="refresh-spinner"></span>
-				{:else}
-					<svg class="refresh-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-					</svg>
-				{/if}
 			</button>
 			<!-- Save Button -->
 			<button
@@ -374,7 +382,45 @@
 		<!-- Editor Area -->
 		<div class="editor-area">
 			{#if activeFile}
-				{#if activeFile.isMedia && project}
+				{#if isShowingDiff && activeFile.diskContent !== undefined}
+					{@const diffLanguage = getLanguage(activeFile.path)}
+					<!-- Diff View: comparing current content with disk content -->
+					<div class="diff-view-container">
+						<div class="diff-view-header">
+							<div class="diff-view-title">
+								<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+								</svg>
+								<span>File changed on disk</span>
+							</div>
+							<div class="diff-view-labels">
+								<span class="diff-label diff-label-local">Your Version</span>
+								<span class="diff-label diff-label-disk">Disk Version</span>
+							</div>
+							<div class="diff-view-actions">
+								<button class="btn btn-sm btn-ghost" onclick={() => showingDiffForPath = null}>
+									<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+									</svg>
+									Close Diff
+								</button>
+								<button class="btn btn-sm btn-warning" onclick={handleDiscardDiskChange}>
+									Save Your Version
+								</button>
+								<button class="btn btn-sm btn-success" onclick={handleAcceptDiskChange}>
+									Use Disk Version
+								</button>
+							</div>
+						</div>
+						<div class="diff-view-editor">
+							<InlineDiffViewer
+								original={activeFile.content}
+								modified={activeFile.diskContent}
+								language={diffLanguage}
+							/>
+						</div>
+					</div>
+				{:else if activeFile.isMedia && project}
 					<!-- Media Preview for images, videos, audio, PDFs -->
 					<MediaPreview
 						{project}
@@ -628,51 +674,6 @@
 		color: oklch(0.70 0.02 250);
 	}
 
-	.refresh-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 0 0.5rem;
-		min-width: 32px;
-		background: oklch(0.18 0.01 250);
-		border: none;
-		border-left: 1px solid oklch(0.22 0.02 250);
-		color: oklch(0.45 0.02 250);
-		cursor: pointer;
-		transition: all 0.15s ease;
-	}
-
-	.refresh-btn:hover:not(:disabled) {
-		background: oklch(0.22 0.02 250);
-		color: oklch(0.70 0.02 250);
-	}
-
-	.refresh-btn.refreshing {
-		color: oklch(0.65 0.15 200);
-		background: oklch(0.55 0.15 200 / 0.1);
-	}
-
-	.refresh-btn:disabled:not(.refreshing) {
-		cursor: not-allowed;
-		opacity: 0.5;
-	}
-
-	.refresh-icon {
-		width: 16px;
-		height: 16px;
-		flex-shrink: 0;
-	}
-
-	.refresh-spinner {
-		width: 14px;
-		height: 14px;
-		border: 2px solid oklch(0.30 0.02 250);
-		border-top-color: oklch(0.65 0.15 200);
-		border-radius: 50%;
-		animation: spin 0.6s linear infinite;
-		flex-shrink: 0;
-	}
-
 	.save-btn {
 		display: flex;
 		align-items: center;
@@ -852,5 +853,68 @@
 
 	.confirm-actions .btn {
 		font-size: 0.8rem;
+	}
+
+	/* Diff View Styles */
+	.diff-view-container {
+		display: flex;
+		flex-direction: column;
+		height: 100%;
+		background: oklch(0.14 0.01 250);
+	}
+
+	.diff-view-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.75rem 1rem;
+		background: oklch(0.18 0.02 250);
+		border-bottom: 1px solid oklch(0.25 0.02 250);
+		flex-shrink: 0;
+	}
+
+	.diff-view-title {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		color: oklch(0.75 0.15 200);
+		font-size: 0.875rem;
+		font-weight: 500;
+	}
+
+	.diff-view-labels {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		font-size: 0.75rem;
+	}
+
+	.diff-label {
+		padding: 0.25rem 0.5rem;
+		border-radius: 0.25rem;
+		font-weight: 500;
+	}
+
+	.diff-label-local {
+		background: oklch(0.50 0.12 200 / 0.2);
+		color: oklch(0.75 0.15 200);
+	}
+
+	.diff-label-disk {
+		background: oklch(0.50 0.12 145 / 0.2);
+		color: oklch(0.75 0.15 145);
+	}
+
+	.diff-view-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.diff-view-editor {
+		flex: 1;
+		min-height: 0;
+		position: relative;
 	}
 </style>

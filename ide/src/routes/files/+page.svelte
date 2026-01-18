@@ -348,9 +348,8 @@
 	let saveError = $state<string | null>(null);
 	let saveSuccess = $state<string | null>(null);
 
-	// Refreshing state for UI feedback
-	let refreshingFiles = $state<Set<string>>(new Set());
-	let refreshSuccess = $state<string | null>(null);
+	// Disk change detection state
+	let diskChangePollingInterval: ReturnType<typeof setInterval> | null = null;
 
 	// File operation feedback
 	let fileError = $state<string | null>(null);
@@ -449,70 +448,154 @@
 		}
 	}
 
-	// Handle file refresh - reload content from disk
-	async function handleFileRefresh(path: string) {
-		if (!selectedProject) return;
+	/**
+	 * Poll for disk changes on open files
+	 * Checks if the content on disk differs from originalContent
+	 */
+	async function checkForDiskChanges() {
+		if (!selectedProject || openFiles.length === 0) return;
+
+		// Only check non-media, non-dirty files (dirty files are being edited)
+		const filesToCheck = openFiles.filter(f => !f.isMedia);
+		if (filesToCheck.length === 0) return;
+
+		for (const file of filesToCheck) {
+			try {
+				const params = new URLSearchParams({
+					project: selectedProject,
+					path: file.path
+				});
+				const response = await fetch(`/api/files/content?${params}`);
+
+				if (!response.ok) continue; // Skip files that can't be read
+
+				const data = await response.json();
+				const diskContent = data.content || '';
+
+				// Check if disk content differs from our originalContent
+				const hasDiskChanges = diskContent !== file.originalContent;
+
+				// Update the file if the hasDiskChanges state changed
+				if (hasDiskChanges !== file.hasDiskChanges || (hasDiskChanges && file.diskContent !== diskContent)) {
+					openFiles = openFiles.map(f => {
+						if (f.path === file.path) {
+							return {
+								...f,
+								hasDiskChanges,
+								diskContent: hasDiskChanges ? diskContent : undefined
+							};
+						}
+						return f;
+					});
+				}
+			} catch {
+				// Silently ignore errors for individual files
+			}
+		}
+	}
+
+	/**
+	 * Start polling for disk changes
+	 */
+	function startDiskChangePolling() {
+		if (diskChangePollingInterval) return;
+		if (document.visibilityState === 'hidden') return;
+
+		// Check immediately
+		checkForDiskChanges();
+
+		// Then poll every 3 seconds
+		diskChangePollingInterval = setInterval(checkForDiskChanges, 3000);
+	}
+
+	/**
+	 * Stop polling for disk changes
+	 */
+	function stopDiskChangePolling() {
+		if (diskChangePollingInterval) {
+			clearInterval(diskChangePollingInterval);
+			diskChangePollingInterval = null;
+		}
+	}
+
+	/**
+	 * Accept disk changes - replace our content with disk content
+	 */
+	function handleAcceptDiskChange(path: string) {
+		const file = openFiles.find(f => f.path === path);
+		if (!file || !file.diskContent) return;
+
+		openFiles = openFiles.map(f => {
+			if (f.path === path) {
+				return {
+					...f,
+					content: f.diskContent!,
+					originalContent: f.diskContent!,
+					dirty: false,
+					hasDiskChanges: false,
+					diskContent: undefined
+				};
+			}
+			return f;
+		});
+
+		const filename = path.split('/').pop() || path;
+		fileInfo = `Accepted disk version of ${filename}`;
+		setTimeout(() => { fileInfo = null; }, 2000);
+	}
+
+	/**
+	 * Discard disk changes - save our version to disk to overwrite external changes
+	 */
+	async function handleDiscardDiskChange(path: string) {
+		const file = openFiles.find(f => f.path === path);
+		if (!file || !selectedProject) return;
 
 		const filename = path.split('/').pop() || path;
 
-		// Find the open file
-		const openFile = openFiles.find(f => f.path === path);
-		if (!openFile) return;
-
-		// If file is dirty, warn the user they'll lose changes
-		if (openFile.dirty) {
-			const confirmed = confirm(`"${filename}" has unsaved changes. Refreshing will discard your changes. Continue?`);
-			if (!confirmed) return;
-		}
-
-		// Add to refreshing state
-		refreshingFiles = new Set([...refreshingFiles, path]);
-
+		// Save our current content to disk
 		try {
 			const params = new URLSearchParams({
 				project: selectedProject,
 				path
 			});
-			const response = await fetch(`/api/files/content?${params}`);
+
+			const response = await fetch(`/api/files/content?${params}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ content: file.content })
+			});
 
 			if (!response.ok) {
 				const data = await response.json();
-				const errorMsg = getFileErrorMessage(data.error || data.message, response.status, filename);
-				fileError = errorMsg;
-				setTimeout(() => { fileError = null; }, 5000);
-				return;
+				throw { message: data.error || 'Failed to save file', status: response.status };
 			}
 
-			const data = await response.json();
-			const content = data.content || '';
-
-			// Update the file in openFiles with fresh content
+			// Update state - our content is now the original (saved to disk)
 			openFiles = openFiles.map(f => {
 				if (f.path === path) {
 					return {
 						...f,
-						content,
-						originalContent: content,
-						dirty: false
+						originalContent: f.content,
+						dirty: false,
+						hasDiskChanges: false,
+						diskContent: undefined
 					};
 				}
 				return f;
 			});
 
-			// Show success toast
-			refreshSuccess = `Refreshed ${filename}`;
-			setTimeout(() => { refreshSuccess = null; }, 2000);
+			fileInfo = `Saved your version of ${filename}`;
+			setTimeout(() => { fileInfo = null; }, 2000);
 
-		} catch (err) {
-			const errorMsg = err instanceof Error ? err.message : 'Failed to refresh file';
-			fileError = `Could not refresh "${filename}": ${errorMsg}`;
+		} catch (err: unknown) {
+			console.error('[Files] Failed to save file:', err);
+			if (err && typeof err === 'object' && 'message' in err && 'status' in err) {
+				fileError = getSaveErrorMessage(err.message as string, err.status as number, filename);
+			} else {
+				fileError = err instanceof Error ? err.message : `Failed to save "${filename}"`;
+			}
 			setTimeout(() => { fileError = null; }, 5000);
-			console.error('[Files] Failed to refresh file:', err);
-		} finally {
-			// Remove from refreshing state
-			const updated = new Set(refreshingFiles);
-			updated.delete(path);
-			refreshingFiles = updated;
 		}
 	}
 
@@ -816,31 +899,36 @@
 		handleResize(); // Check initial state
 		window.addEventListener('resize', handleResize);
 
-		// Pause git polling when tab is hidden, resume when visible
+		// Pause polling when tab is hidden, resume when visible
 		function handleVisibilityChange() {
 			if (document.visibilityState === 'hidden') {
 				stopGitStatusPolling();
+				stopDiskChangePolling();
 			} else if (selectedProject) {
 				// Resume polling and fetch immediately to catch changes
 				startGitStatusPolling();
+				startDiskChangePolling();
 			}
 		}
 		document.addEventListener('visibilitychange', handleVisibilityChange);
 
 		return () => {
 			stopGitStatusPolling();
+			stopDiskChangePolling();
 			window.removeEventListener('resize', handleResize);
 			document.removeEventListener('visibilitychange', handleVisibilityChange);
 		};
 	});
 
-	// Load persisted files after project is selected and start git status polling
+	// Load persisted files after project is selected and start polling
 	$effect(() => {
 		if (selectedProject && projects.length > 0 && !isLoading) {
 			// Small delay to ensure project is fully loaded
 			setTimeout(() => loadOpenFilesFromStorage(), 100);
 			// Start git status polling for tab badges
 			startGitStatusPolling();
+			// Start disk change polling for open files
+			startDiskChangePolling();
 		}
 	});
 
@@ -1003,12 +1091,12 @@
 							project={selectedProject}
 							onFileClose={handleFileClose}
 							onFileSave={handleFileSave}
-							onFileRefresh={handleFileRefresh}
 							onActiveFileChange={handleActiveFileChange}
 							onContentChange={handleContentChange}
 							onTabReorder={handleTabReorder}
+							onAcceptDiskChange={handleAcceptDiskChange}
+							onDiscardDiskChange={handleDiscardDiskChange}
 							{savingFiles}
-							{refreshingFiles}
 						/>
 					{:else}
 						<div class="panel-header">
@@ -1037,14 +1125,6 @@
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
 			</svg>
 			<span>{saveSuccess}</span>
-		</div>
-	{/if}
-	{#if refreshSuccess}
-		<div class="alert alert-info shadow-lg" transition:slide={{ duration: 200 }}>
-			<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-			</svg>
-			<span>{refreshSuccess}</span>
 		</div>
 	{/if}
 	{#if saveError}

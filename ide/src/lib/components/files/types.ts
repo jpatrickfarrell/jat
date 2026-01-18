@@ -9,6 +9,10 @@ export interface OpenFile {
 	originalContent: string;
 	/** True if file is a media file (image, video, audio, pdf) */
 	isMedia?: boolean;
+	/** True if the file on disk differs from originalContent (external change detected) */
+	hasDiskChanges?: boolean;
+	/** Content from disk when hasDiskChanges is true (for diff view) */
+	diskContent?: string;
 }
 
 export interface FileNode {

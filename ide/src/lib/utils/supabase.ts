@@ -82,7 +82,9 @@ export async function runSupabaseCommand(
 ): Promise<SupabaseCommandResult> {
 	const home = process.env.HOME || '';
 	const supabaseCmd = `${home}/.local/bin/supabase`;
-	const command = `${supabaseCmd} ${args.join(' ')}`;
+	// Redirect stdin from /dev/null to prevent supabase CLI from hanging
+	// when waiting for input in non-interactive environments
+	const command = `${supabaseCmd} ${args.join(' ')} </dev/null`;
 
 	try {
 		const { stdout, stderr } = await execAsync(command, {

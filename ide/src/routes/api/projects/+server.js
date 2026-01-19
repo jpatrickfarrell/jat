@@ -497,11 +497,19 @@ export async function GET({ url }) {
 			}));
 		}
 
-		// Sort by last activity (most recent first) if stats included
-		// When both have "now" (servers running), use agent activity as tiebreaker
+		// Sort by activity AND task count if stats included
+		// Priority: 1) Has recent activity + has tasks, 2) Has tasks, 3) Recency alone
 		if (includeStats) {
 			projects.sort((a, b) => {
-				// Sort by lastActivity (most recent first)
+				// Get task counts (projects with no tasks should sort lower)
+				// @ts-ignore - stats exists when includeStats is true
+				const tasksA = a.stats?.openTaskCount || 0;
+				// @ts-ignore - stats exists when includeStats is true
+				const tasksB = b.stats?.openTaskCount || 0;
+				const hasTasksA = tasksA > 0;
+				const hasTasksB = tasksB > 0;
+
+				// Calculate activity score
 				// "now" < "3m" < "2h" < "4d"
 				/** @type {Record<string, number>} */
 				const order = { 'now': 0, 'm': 1, 'h': 2, 'd': 3 };
@@ -517,14 +525,29 @@ export async function GET({ url }) {
 				const scoreA = getScore(a.lastActivity);
 				const scoreB = getScore(b.lastActivity);
 
-				// If both have same score (e.g., both "now" from running servers),
-				// use agent activity timestamp as tiebreaker (more recent wins)
-				if (scoreA === scoreB) {
-					// @ts-ignore - _agentActivityMs exists when includeStats is true
-					return (b._agentActivityMs || 0) - (a._agentActivityMs || 0);
+				// Define "recent" as within the last week (7 days = 7000 in score)
+				const isRecentA = scoreA < 7000;
+				const isRecentB = scoreB < 7000;
+
+				// Sorting priority:
+				// 1. Projects with tasks AND recent activity (sort by recency among these)
+				// 2. Projects with tasks but older activity (sort by recency among these)
+				// 3. Projects without tasks but recent activity (sort by recency)
+				// 4. Projects without tasks and old activity (sort by recency)
+
+				// First: separate projects with tasks from those without
+				if (hasTasksA && !hasTasksB) return -1;
+				if (!hasTasksA && hasTasksB) return 1;
+
+				// Within same task category, sort by activity score
+				if (scoreA !== scoreB) {
+					return scoreA - scoreB;
 				}
 
-				return scoreA - scoreB;
+				// If both have same score (e.g., both "now" from running servers),
+				// use agent activity timestamp as tiebreaker (more recent wins)
+				// @ts-ignore - _agentActivityMs exists when includeStats is true
+				return (b._agentActivityMs || 0) - (a._agentActivityMs || 0);
 			});
 
 			// Remove internal _agentActivityMs field from response

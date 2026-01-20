@@ -362,13 +362,18 @@
 					<div class="panel-title-header">
 						<div class="title-left">
 							{#if activeMode === 'git'}
-								<svg class="panel-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-									<path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
+								<!-- Git branch icon (Lucide-style) -->
+								<svg class="panel-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+									<line x1="6" y1="3" x2="6" y2="15"></line>
+									<circle cx="18" cy="6" r="3"></circle>
+									<circle cx="6" cy="18" r="3"></circle>
+									<path d="M18 9a9 9 0 0 1-9 9"></path>
 								</svg>
 								<span>Source Control</span>
 							{:else}
-								<svg class="panel-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+								<!-- Supabase logo (lightning bolt) -->
+								<svg class="panel-title-icon" viewBox="0 0 24 24" fill="currentColor">
+									<path d="M13.5 3L6 14h6l-1.5 7L18 10h-6l1.5-7z"/>
 								</svg>
 								<span>Migrations</span>
 							{/if}
@@ -381,8 +386,12 @@
 									onclick={() => switchMode('git')}
 									title="Git Source Control"
 								>
-									<svg class="mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-										<path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77" />
+									<!-- Git branch icon (Lucide-style) -->
+									<svg class="mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+										<line x1="6" y1="3" x2="6" y2="15"></line>
+										<circle cx="18" cy="6" r="3"></circle>
+										<circle cx="6" cy="18" r="3"></circle>
+										<path d="M18 9a9 9 0 0 1-9 9"></path>
 									</svg>
 									Git
 								</button>
@@ -392,8 +401,9 @@
 									onclick={() => switchMode('supabase')}
 									title="Supabase Migrations"
 								>
-									<svg class="mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375" />
+									<!-- Supabase logo (lightning bolt) -->
+									<svg class="mode-icon" viewBox="0 0 24 24" fill="currentColor">
+										<path d="M13.5 3L6 14h6l-1.5 7L18 10h-6l1.5-7z"/>
 									</svg>
 									Supabase
 								</button>
@@ -480,8 +490,9 @@
 						{:else}
 							<div class="diff-placeholder">
 								<div class="diff-placeholder-content">
-									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="diff-placeholder-icon">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+									<!-- Supabase logo (lightning bolt) -->
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="diff-placeholder-icon">
+										<path d="M13.5 3L6 14h6l-1.5 7L18 10h-6l1.5-7z"/>
 									</svg>
 									<p class="diff-placeholder-text">
 										{selectedProject ? 'Select a migration to view SQL' : 'Select a project to start'}

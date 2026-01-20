@@ -1515,29 +1515,74 @@
 	/* Loading Skeleton */
 	.loading-container {
 		padding: 1rem;
-	}
-
-	.loading-skeleton {
 		display: flex;
 		flex-direction: column;
-		gap: 1.5rem;
-	}
-
-	.skeleton-project {
-		background: oklch(0.18 0.01 250);
-		border-radius: 0.75rem;
-		padding: 1rem;
-	}
-
-	.skeleton-rows {
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-	}
-
-	.skeleton-row {
-		display: flex;
 		gap: 1rem;
+	}
+
+	/* Project Tabs Skeleton */
+	.project-tabs-skeleton {
+		display: flex;
+		gap: 0.5rem;
+		padding: 0.5rem;
+		background: oklch(0.16 0.01 250);
+		border-radius: 0.5rem;
+		border: 1px solid oklch(0.22 0.02 250);
+	}
+
+	.skeleton-tab {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.5rem 1rem;
+		background: oklch(0.18 0.01 250);
+		border-radius: 0.375rem;
+	}
+
+	/* Section Skeleton */
+	.section-skeleton {
+		background: oklch(0.14 0.01 250);
+		border: 1px solid oklch(0.22 0.02 250);
+		border-radius: 0.5rem;
+		overflow: hidden;
+	}
+
+	.skeleton-section-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.75rem 1rem;
+		background: oklch(0.16 0.01 250);
+		border-bottom: 1px solid oklch(0.22 0.02 250);
+	}
+
+	.skeleton-subsection {
+		padding: 0.5rem;
+	}
+
+	.skeleton-subsection-header {
+		display: flex;
+		align-items: center;
+		padding: 0.5rem 0.75rem;
+		background: oklch(0.15 0.01 250);
+		border-radius: 0.375rem;
+		margin-bottom: 0.5rem;
+	}
+
+	.skeleton-task-rows {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.skeleton-task-row {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.625rem 0.75rem;
+		background: oklch(0.15 0.01 250);
+		border-radius: 0.25rem;
 	}
 
 	.skeleton {

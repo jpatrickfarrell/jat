@@ -14,6 +14,7 @@
 	import { onMount, tick } from 'svelte';
 	import FileTreeNode from './FileTreeNode.svelte';
 	import type { GitFileStatus } from './types';
+	import { setFileChangesCount } from '$lib/stores/drawerStore';
 
 	interface DirectoryEntry {
 		name: string;
@@ -118,7 +119,8 @@
 
 	// Tree change detection state
 	let hasTreeChanges = $state(false);
-	let lastKnownFingerprint = $state<string>('');
+	// Map of folder path → fingerprint (empty string '' for root)
+	let knownFingerprints = $state<Map<string, string>>(new Map());
 	let treeChangePollingInterval: ReturnType<typeof setInterval> | null = null;
 
 	/**
@@ -203,18 +205,41 @@
 
 	/**
 	 * Check if the file tree has changed on disk
-	 * Compares current root entries fingerprint with a fresh fetch
+	 * Compares root and all expanded directories against their known fingerprints
 	 */
 	async function checkForTreeChanges() {
 		if (!project || isLoadingRoot) return;
 
 		try {
-			const freshEntries = await fetchDirectory('');
-			const freshFingerprint = generateFingerprint(freshEntries);
+			// Check root directory
+			const freshRootEntries = await fetchDirectory('');
+			const freshRootFingerprint = generateFingerprint(freshRootEntries);
+			const knownRootFingerprint = knownFingerprints.get('');
 
 			// Only compare if we have a known fingerprint (skip first check)
-			if (lastKnownFingerprint && freshFingerprint !== lastKnownFingerprint) {
+			if (knownRootFingerprint && freshRootFingerprint !== knownRootFingerprint) {
 				hasTreeChanges = true;
+				return; // No need to check more - we already know there are changes
+			}
+
+			// Check all expanded subdirectories
+			for (const folderPath of expandedFolders) {
+				const knownFingerprint = knownFingerprints.get(folderPath);
+				if (!knownFingerprint) continue; // Skip if no known fingerprint yet
+
+				try {
+					const freshEntries = await fetchDirectory(folderPath);
+					const freshFingerprint = generateFingerprint(freshEntries);
+
+					if (freshFingerprint !== knownFingerprint) {
+						hasTreeChanges = true;
+						return; // No need to check more
+					}
+				} catch {
+					// Folder may have been deleted - that's a change
+					hasTreeChanges = true;
+					return;
+				}
 			}
 		} catch (err) {
 			// Silently ignore errors during polling
@@ -245,10 +270,32 @@
 
 	/**
 	 * Handle clicking the "Update" button - refresh the tree
+	 * Refreshes root and all expanded subdirectories
 	 */
 	async function handleTreeUpdate() {
 		hasTreeChanges = false;
 		await loadRoot();
+
+		// Refresh all expanded subdirectories and update their fingerprints
+		const newLoaded = new Map(loadedFolders);
+		const newFingerprints = new Map(knownFingerprints);
+
+		for (const folderPath of expandedFolders) {
+			try {
+				const entries = await fetchDirectory(folderPath);
+				newLoaded.set(folderPath, entries);
+				newFingerprints.set(folderPath, generateFingerprint(entries));
+			} catch (err) {
+				// If folder no longer exists, remove from maps
+				console.debug(`[FileTree] Failed to refresh ${folderPath}:`, err);
+				newLoaded.delete(folderPath);
+				newFingerprints.delete(folderPath);
+			}
+		}
+
+		loadedFolders = newLoaded;
+		knownFingerprints = newFingerprints;
+
 		// Also refresh git status
 		await fetchGitStatus();
 	}
@@ -275,6 +322,11 @@
 				clearTimeout(filterDebounceTimer);
 			}
 		};
+	});
+
+	// Sync hasTreeChanges to the global store for sidebar badge
+	$effect(() => {
+		setFileChangesCount(hasTreeChanges ? 1 : 0);
 	});
 
 	// Rename modal state
@@ -336,8 +388,10 @@
 
 		try {
 			rootEntries = await fetchDirectory('');
-			// Update fingerprint for change detection
-			lastKnownFingerprint = generateFingerprint(rootEntries);
+			// Update fingerprint for change detection (root = '' key)
+			const newFingerprints = new Map(knownFingerprints);
+			newFingerprints.set('', generateFingerprint(rootEntries));
+			knownFingerprints = newFingerprints;
 			hasTreeChanges = false;
 		} catch (err) {
 			rootError = err instanceof Error ? err.message : 'Failed to load directory';
@@ -421,6 +475,10 @@
 					const newLoaded = new Map(loadedFolders);
 					newLoaded.set(path, entries);
 					loadedFolders = newLoaded;
+					// Store fingerprint for change detection
+					const newFingerprints = new Map(knownFingerprints);
+					newFingerprints.set(path, generateFingerprint(entries));
+					knownFingerprints = newFingerprints;
 				} catch (err) {
 					console.error(`[FileTree] Failed to load folder ${path}:`, err);
 					// Remove from expanded on error
@@ -827,7 +885,7 @@
 			filterTerm = '';
 			// Reset tree change detection state
 			hasTreeChanges = false;
-			lastKnownFingerprint = '';
+			knownFingerprints = new Map();
 			stopTreeChangePolling();
 			loadRoot();
 		}

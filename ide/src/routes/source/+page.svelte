@@ -467,13 +467,15 @@
 							</div>
 						{/if}
 					{:else}
-						{#if selectedMigrationContent}
+						{#if selectedMigrationFilename}
 							<MigrationViewer
 								content={selectedMigrationContent}
 								title={selectedMigrationTitle}
 								isDiff={isDiff}
 								filename={selectedMigrationFilename}
+								project={selectedProject}
 								onClose={handleClearMigration}
+								onSave={(newContent) => { selectedMigrationContent = newContent; }}
 							/>
 						{:else}
 							<div class="diff-placeholder">

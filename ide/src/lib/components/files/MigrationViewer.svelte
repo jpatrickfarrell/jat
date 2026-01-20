@@ -1,11 +1,12 @@
 <script lang="ts">
 	/**
-	 * MigrationViewer - SQL content viewer for Supabase migrations
+	 * MigrationViewer - SQL editor for Supabase migrations
 	 *
 	 * Shows either:
-	 * - Schema diff output (when there are uncommitted schema changes)
-	 * - Migration SQL content (when a migration file is selected)
+	 * - Schema diff output (read-only, when there are uncommitted schema changes)
+	 * - Migration SQL content (editable, when a migration file is selected)
 	 */
+	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
 
 	interface Props {
 		/** Content to display (SQL or diff) */
@@ -14,73 +15,84 @@
 		title: string;
 		/** Whether this is a schema diff (vs migration file) */
 		isDiff?: boolean;
-		/** Filename (for migrations) */
+		/** Full relative path to the migration file (e.g., supabase/migrations/xxx.sql) */
 		filename?: string;
+		/** Project name (for saving) */
+		project?: string;
 		/** Called when close button clicked */
 		onClose?: () => void;
+		/** Called when content is saved */
+		onSave?: (content: string) => void;
 	}
 
-	let { content, title, isDiff = false, filename, onClose }: Props = $props();
+	let { content, title, isDiff = false, filename, project, onClose, onSave }: Props = $props();
 
-	/**
-	 * Basic SQL syntax highlighting
-	 * Returns HTML with highlighted keywords
-	 */
-	function highlightSql(sql: string): string {
-		// SQL keywords to highlight
-		const keywords = [
-			'CREATE', 'ALTER', 'DROP', 'TABLE', 'INDEX', 'VIEW', 'FUNCTION', 'TRIGGER',
-			'INSERT', 'UPDATE', 'DELETE', 'SELECT', 'FROM', 'WHERE', 'JOIN', 'LEFT', 'RIGHT',
-			'INNER', 'OUTER', 'ON', 'AND', 'OR', 'NOT', 'IN', 'IS', 'NULL', 'TRUE', 'FALSE',
-			'PRIMARY', 'KEY', 'FOREIGN', 'REFERENCES', 'UNIQUE', 'DEFAULT', 'CONSTRAINT',
-			'IF', 'EXISTS', 'CASCADE', 'RESTRICT', 'SET', 'AS', 'BEGIN', 'END', 'RETURNS',
-			'LANGUAGE', 'PLPGSQL', 'SQL', 'IMMUTABLE', 'STABLE', 'VOLATILE', 'SECURITY',
-			'DEFINER', 'INVOKER', 'GRANT', 'REVOKE', 'TO', 'ROLE', 'PUBLIC', 'SCHEMA',
-			'USING', 'WITH', 'CHECK', 'POLICY', 'FOR', 'ALL', 'ENABLE', 'ROW', 'LEVEL'
-		];
+	// Extract just the filename from the full path for display
+	const displayFilename = $derived(filename ? filename.split('/').pop() : undefined);
 
-		// Data types to highlight differently
-		const dataTypes = [
-			'INT', 'INTEGER', 'BIGINT', 'SMALLINT', 'SERIAL', 'BIGSERIAL',
-			'TEXT', 'VARCHAR', 'CHAR', 'UUID', 'BOOLEAN', 'BOOL',
-			'TIMESTAMP', 'TIMESTAMPTZ', 'DATE', 'TIME', 'TIMETZ',
-			'JSON', 'JSONB', 'ARRAY', 'NUMERIC', 'DECIMAL', 'REAL', 'FLOAT',
-			'BYTEA', 'MONEY', 'INTERVAL', 'VOID'
-		];
+	// Editor state
+	let editorContent = $state(content);
+	let isSaving = $state(false);
+	let saveError = $state<string | null>(null);
 
-		let highlighted = sql
-			// Escape HTML first
-			.replace(/&/g, '&amp;')
-			.replace(/</g, '&lt;')
-			.replace(/>/g, '&gt;');
+	// Track if content has been modified
+	const isDirty = $derived(editorContent !== content);
 
-		// Highlight comments
-		highlighted = highlighted.replace(/(--[^\n]*)/g, '<span class="sql-comment">$1</span>');
+	// Sync external content changes
+	$effect(() => {
+		editorContent = content;
+	});
 
-		// Highlight strings
-		highlighted = highlighted.replace(/('(?:[^'\\]|\\.)*')/g, '<span class="sql-string">$1</span>');
-
-		// Highlight keywords (case insensitive, whole words only)
-		for (const keyword of keywords) {
-			const regex = new RegExp(`\\b(${keyword})\\b`, 'gi');
-			highlighted = highlighted.replace(regex, '<span class="sql-keyword">$1</span>');
-		}
-
-		// Highlight data types
-		for (const type of dataTypes) {
-			const regex = new RegExp(`\\b(${type})\\b`, 'gi');
-			highlighted = highlighted.replace(regex, '<span class="sql-type">$1</span>');
-		}
-
-		// Highlight numbers
-		highlighted = highlighted.replace(/\b(\d+)\b/g, '<span class="sql-number">$1</span>');
-
-		return highlighted;
+	// Handle editor content changes
+	function handleEditorChange(newContent: string) {
+		editorContent = newContent;
+		saveError = null;
 	}
 
-	// Highlight content
-	const highlightedContent = $derived(highlightSql(content));
+	// Save migration content
+	async function handleSave() {
+		if (!project || !filename || isDiff) return;
+
+		isSaving = true;
+		saveError = null;
+
+		try {
+			// filename is now the full relative path (e.g., supabase/migrations/xxx.sql)
+			const response = await fetch(
+				`/api/files/content?project=${encodeURIComponent(project)}&path=${encodeURIComponent(filename)}`,
+				{
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ content: editorContent })
+				}
+			);
+
+			if (!response.ok) {
+				const data = await response.json().catch(() => ({}));
+				throw new Error(data.error || 'Failed to save migration');
+			}
+
+			// Notify parent of successful save
+			onSave?.(editorContent);
+		} catch (err) {
+			saveError = err instanceof Error ? err.message : 'Failed to save';
+		} finally {
+			isSaving = false;
+		}
+	}
+
+	// Keyboard shortcut for save
+	function handleKeydown(e: KeyboardEvent) {
+		if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+			e.preventDefault();
+			if (isDirty && !isDiff) {
+				handleSave();
+			}
+		}
+	}
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <div class="migration-viewer">
 	<!-- Header -->
@@ -92,30 +104,66 @@
 				<span class="header-badge badge-migration">SQL</span>
 			{/if}
 			<span class="header-title">{title}</span>
-			{#if filename}
-				<span class="header-filename">{filename}</span>
+			{#if displayFilename}
+				<span class="header-filename">{displayFilename}</span>
+			{/if}
+			{#if isDirty && !isDiff}
+				<span class="header-badge badge-modified">Modified</span>
 			{/if}
 		</div>
-		{#if onClose}
-			<button class="btn btn-ghost btn-sm btn-square" onclick={onClose} title="Close">
-				<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-				</svg>
-			</button>
-		{/if}
+		<div class="header-actions">
+			{#if !isDiff && project && filename}
+				<button
+					class="btn btn-sm btn-primary"
+					onclick={handleSave}
+					disabled={!isDirty || isSaving}
+					title="Save (Ctrl+S)"
+				>
+					{#if isSaving}
+						<span class="loading loading-spinner loading-xs"></span>
+					{:else}
+						<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4z" />
+							<path stroke-linecap="round" stroke-linejoin="round" d="M17 3v4h-4" />
+							<path stroke-linecap="round" stroke-linejoin="round" d="M7 14h10M7 18h6" />
+						</svg>
+					{/if}
+					Save
+				</button>
+			{/if}
+			{#if onClose}
+				<button class="btn btn-ghost btn-sm btn-square" onclick={onClose} title="Close">
+					<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+				</button>
+			{/if}
+		</div>
 	</div>
+
+	<!-- Error message -->
+	{#if saveError}
+		<div class="save-error">
+			<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+			</svg>
+			<span>{saveError}</span>
+		</div>
+	{/if}
 
 	<!-- Content -->
 	<div class="viewer-content">
-		{#if !content}
-			<div class="viewer-empty">
-				<svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-				</svg>
-				<p>Select a migration to view its content</p>
-			</div>
+		{#if isDiff}
+			<!-- Read-only diff view with syntax highlighting -->
+			<pre class="sql-content">{content}</pre>
 		{:else}
-			<pre class="sql-content">{@html highlightedContent}</pre>
+			<!-- Editable Monaco editor for migrations -->
+			<MonacoWrapper
+				bind:value={editorContent}
+				language="sql"
+				readonly={false}
+				onchange={handleEditorChange}
+			/>
 		{/if}
 	</div>
 </div>
@@ -146,6 +194,12 @@
 		min-width: 0;
 	}
 
+	.header-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
 	.header-badge {
 		font-size: 0.625rem;
 		padding: 0.125rem 0.375rem;
@@ -166,6 +220,11 @@
 		color: oklch(0.70 0.18 200);
 	}
 
+	.badge-modified {
+		background: oklch(0.70 0.15 85 / 0.2);
+		color: oklch(0.80 0.18 85);
+	}
+
 	.header-title {
 		font-weight: 600;
 		color: oklch(0.85 0.02 250);
@@ -183,59 +242,35 @@
 		white-space: nowrap;
 	}
 
+	/* Error message */
+	.save-error {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 1rem;
+		background: oklch(0.35 0.12 25 / 0.3);
+		border-bottom: 1px solid oklch(0.50 0.15 25 / 0.5);
+		color: oklch(0.75 0.15 25);
+		font-size: 0.8125rem;
+	}
+
 	/* Content */
 	.viewer-content {
 		flex: 1;
-		overflow: auto;
-		padding: 1rem;
-	}
-
-	.viewer-empty {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		height: 100%;
-		gap: 1rem;
-		color: oklch(0.50 0.02 250);
-		text-align: center;
-	}
-
-	.empty-icon {
-		width: 3rem;
-		height: 3rem;
+		overflow: hidden;
+		position: relative;
 	}
 
 	.sql-content {
 		margin: 0;
+		padding: 1rem;
 		font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
 		font-size: 0.8125rem;
 		line-height: 1.6;
 		white-space: pre-wrap;
 		word-break: break-word;
 		color: oklch(0.80 0.02 250);
-	}
-
-	/* SQL Syntax Highlighting */
-	:global(.sql-keyword) {
-		color: oklch(0.75 0.15 280);
-		font-weight: 500;
-	}
-
-	:global(.sql-type) {
-		color: oklch(0.70 0.15 200);
-	}
-
-	:global(.sql-string) {
-		color: oklch(0.70 0.15 145);
-	}
-
-	:global(.sql-number) {
-		color: oklch(0.75 0.15 85);
-	}
-
-	:global(.sql-comment) {
-		color: oklch(0.50 0.02 250);
-		font-style: italic;
+		height: 100%;
+		overflow: auto;
 	}
 </style>

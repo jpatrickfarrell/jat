@@ -68,6 +68,11 @@
 	let isPushing = $state(false);
 	let isPulling = $state(false);
 
+	// Delete migration state
+	let deletingMigration = $state<string | null>(null);
+	let showDeleteConfirm = $state(false);
+	let migrationToDelete = $state<MigrationStatus | null>(null);
+
 	// Section collapse state
 	let diffCollapsed = $state(false);
 	let migrationsCollapsed = $state(false);
@@ -252,10 +257,61 @@
 	}
 
 	/**
+	 * Show delete confirmation for a migration
+	 */
+	function confirmDeleteMigration(migration: MigrationStatus, event: MouseEvent) {
+		event.stopPropagation(); // Prevent triggering the row click
+		migrationToDelete = migration;
+		showDeleteConfirm = true;
+	}
+
+	/**
+	 * Cancel delete confirmation
+	 */
+	function cancelDelete() {
+		showDeleteConfirm = false;
+		migrationToDelete = null;
+	}
+
+	/**
+	 * Delete a local-only migration
+	 */
+	async function deleteMigration() {
+		if (!migrationToDelete || !status) return;
+
+		deletingMigration = migrationToDelete.filename;
+
+		try {
+			const response = await fetch(`/api/supabase/migration/delete?project=${encodeURIComponent(project)}`, {
+				method: 'DELETE',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ filename: migrationToDelete.filename })
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				throw new Error(data.error || 'Failed to delete migration');
+			}
+
+			showToast(`Deleted: ${migrationToDelete.filename}`);
+			showDeleteConfirm = false;
+			migrationToDelete = null;
+			await fetchStatus();
+		} catch (err) {
+			showToast(err instanceof Error ? err.message : 'Failed to delete migration', 'error');
+		} finally {
+			deletingMigration = null;
+		}
+	}
+
+	/**
 	 * Handle migration click - fetch content and emit to parent
 	 */
 	async function handleMigrationClick(migration: MigrationStatus) {
-		if (!migration.local || !onMigrationSelect || !status) return;
+		if (!migration.local || !onMigrationSelect || !status) {
+			return;
+		}
 
 		try {
 			// Calculate relative path from project root to migration file
@@ -278,7 +334,8 @@
 
 			const data = await response.json();
 			const title = migration.name || migration.filename;
-			onMigrationSelect(data.content || '', title, migration.filename, false);
+			// Pass full migrationPath for saving, not just filename (handles monorepos)
+			onMigrationSelect(data.content || '', title, migrationPath, false);
 		} catch (err) {
 			showToast(err instanceof Error ? err.message : 'Failed to load migration', 'error');
 		}
@@ -508,11 +565,14 @@
 						<div class="migrations-list">
 							{#each status.migrations as migration, index (`${migration.version}-${migration.status}-${index}`)}
 								{@const indicator = getStatusIndicator(migration)}
+								{@const isLocalOnly = migration.status === 'local-only'}
+								{@const isDeleting = deletingMigration === migration.filename}
 								<!-- svelte-ignore a11y_click_events_have_key_events -->
 								<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 								<div
 									class="migration-item"
 									class:clickable={migration.local && onMigrationSelect}
+									class:deleting={isDeleting}
 									onclick={() => handleMigrationClick(migration)}
 									role={migration.local ? 'button' : undefined}
 								>
@@ -529,12 +589,63 @@
 										</span>
 										<span class="migration-version">{formatVersion(migration.version)}</span>
 									</div>
+									{#if isLocalOnly}
+										<button
+											class="delete-btn"
+											onclick={(e) => confirmDeleteMigration(migration, e)}
+											title="Delete migration"
+											disabled={isDeleting}
+										>
+											{#if isDeleting}
+												<span class="loading loading-spinner loading-xs"></span>
+											{:else}
+												<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+												</svg>
+											{/if}
+										</button>
+									{/if}
 								</div>
 							{/each}
 						</div>
 					{/if}
 				</div>
 			{/if}
+		</div>
+	{/if}
+
+	<!-- Delete Confirmation Modal -->
+	{#if showDeleteConfirm && migrationToDelete}
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="delete-modal-overlay" onclick={cancelDelete}>
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div class="delete-modal" onclick={(e) => e.stopPropagation()}>
+				<div class="delete-modal-header">
+					<svg class="delete-modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+					</svg>
+					<h3 class="delete-modal-title">Delete Migration?</h3>
+				</div>
+				<p class="delete-modal-text">
+					Are you sure you want to delete <strong>{migrationToDelete.name || migrationToDelete.filename}</strong>?
+				</p>
+				<p class="delete-modal-warning">
+					This will permanently remove the migration file from your local filesystem. This action cannot be undone.
+				</p>
+				<div class="delete-modal-actions">
+					<button class="btn btn-sm btn-ghost" onclick={cancelDelete}>
+						Cancel
+					</button>
+					<button class="btn btn-sm btn-error" onclick={deleteMigration} disabled={!!deletingMigration}>
+						{#if deletingMigration}
+							<span class="loading loading-spinner loading-xs"></span>
+						{/if}
+						Delete
+					</button>
+				</div>
+			</div>
 		</div>
 	{/if}
 
@@ -919,6 +1030,136 @@
 		font-size: 0.6875rem;
 		color: oklch(0.50 0.02 250);
 		font-family: monospace;
+	}
+
+	/* Delete Button */
+	.delete-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.5rem;
+		height: 1.5rem;
+		padding: 0.25rem;
+		border-radius: 0.25rem;
+		border: none;
+		background: transparent;
+		color: oklch(0.50 0.02 250);
+		cursor: pointer;
+		opacity: 0;
+		transition: all 0.15s ease;
+		flex-shrink: 0;
+	}
+
+	.delete-btn svg {
+		width: 0.875rem;
+		height: 0.875rem;
+	}
+
+	.migration-item:hover .delete-btn {
+		opacity: 1;
+	}
+
+	.delete-btn:hover {
+		background: oklch(0.60 0.18 25 / 0.2);
+		color: oklch(0.70 0.18 25);
+	}
+
+	.delete-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.migration-item.deleting {
+		opacity: 0.5;
+		pointer-events: none;
+	}
+
+	/* Delete Confirmation Modal */
+	.delete-modal-overlay {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: oklch(0 0 0 / 0.5);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 1000;
+		animation: fade-in 0.15s ease-out;
+	}
+
+	.delete-modal {
+		background: oklch(0.18 0.01 250);
+		border: 1px solid oklch(0.25 0.02 250);
+		border-radius: 0.75rem;
+		padding: 1.25rem;
+		max-width: 360px;
+		width: calc(100% - 2rem);
+		box-shadow: 0 8px 24px oklch(0 0 0 / 0.4);
+		animation: scale-in 0.15s ease-out;
+	}
+
+	.delete-modal-header {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.delete-modal-icon {
+		width: 1.5rem;
+		height: 1.5rem;
+		color: oklch(0.70 0.18 45);
+		flex-shrink: 0;
+	}
+
+	.delete-modal-title {
+		font-size: 1rem;
+		font-weight: 600;
+		color: oklch(0.90 0.02 250);
+		margin: 0;
+	}
+
+	.delete-modal-text {
+		font-size: 0.8125rem;
+		color: oklch(0.70 0.02 250);
+		margin: 0 0 0.5rem;
+		line-height: 1.4;
+	}
+
+	.delete-modal-text strong {
+		color: oklch(0.85 0.02 250);
+		font-weight: 600;
+	}
+
+	.delete-modal-warning {
+		font-size: 0.75rem;
+		color: oklch(0.55 0.02 250);
+		margin: 0 0 1rem;
+		line-height: 1.4;
+	}
+
+	.delete-modal-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.5rem;
+	}
+
+	@keyframes fade-in {
+		from { opacity: 0; }
+		to { opacity: 1; }
+	}
+
+	@keyframes scale-in {
+		from {
+			opacity: 0;
+			transform: scale(0.95);
+		}
+		to {
+			opacity: 1;
+			transform: scale(1);
+		}
 	}
 
 	/* Toast */

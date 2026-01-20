@@ -364,8 +364,11 @@ export async function POST({ params, request }) {
 			// No body or invalid JSON is fine
 		}
 
-		// Get project path first (needed for searching persistent session files)
-		const projectPath = await getProjectPath(agentName);
+		// Get project path - use provided path if available, otherwise look it up
+		let projectPath = body.project ? resolveProjectPath(body.project) : null;
+		if (!projectPath) {
+			projectPath = await getProjectPath(agentName);
+		}
 		if (!projectPath || !existsSync(projectPath)) {
 			return json({
 				error: 'Project path not found',

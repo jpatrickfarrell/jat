@@ -430,7 +430,7 @@
 
 	.explainer-intro code {
 		background: oklch(0.25 0.02 250);
-		padding: 0.1rem 0.35rem;
+		padding: 0.125rem 0.375rem;
 		border-radius: 0.25rem;
 		font-family: ui-monospace, monospace;
 		font-size: 0.8rem;

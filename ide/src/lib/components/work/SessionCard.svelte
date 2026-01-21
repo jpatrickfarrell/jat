@@ -1562,6 +1562,10 @@
 	// Input state
 	let inputText = $state("");
 	let inputRef: HTMLTextAreaElement | null = null;
+
+	// Derived check for whether input has content (for Send button visibility)
+	// Using $derived ensures reactivity when inputText changes
+	const hasInputContent = $derived(inputText.trim().length > 0 || attachedFiles.length > 0);
 	let escapeFlash = $state(false); // Brief flash when Escape clears
 	let pasteFlash = $state(false); // Brief flash when content is pasted
 	let tabFlash = $state(false); // Brief flash when Tab autocomplete is sent
@@ -7248,7 +7252,7 @@
 								<span class="text-exit-animation" style="transform-origin: left center; display: inline-block;">{exitingText}</span>
 							</div>
 						{/if}
-						{#if inputText.trim()}
+						{#if inputText.trim().length > 0}
 							<button
 								type="button"
 								class="absolute right-1.5 top-2 p-0.5 rounded-full transition-colors"
@@ -7320,7 +7324,7 @@
 
 					<!-- RIGHT: Action buttons (context-dependent) -->
 					<div class="flex items-center gap-0.5 flex-shrink-0 pb-0.5">
-						{#if inputText.trim() || attachedFiles.length > 0}
+						{#if hasInputContent}
 							<!-- User is typing: show Send button -->
 							<button
 								onclick={sendTextInput}

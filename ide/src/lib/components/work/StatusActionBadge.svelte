@@ -801,7 +801,7 @@
 				onCancelAutoKill();
 			}
 		}}
-		class="min-w-[130px] font-mono tracking-wider flex-shrink-0 font-bold cursor-pointer transition-all focus:outline-none {variant ===
+		class="min-w-[150px] font-mono tracking-wider flex-shrink-0 font-bold cursor-pointer transition-all focus:outline-none {variant ===
 		'integrated'
 			? 'text-[11px] px-2 py-0.5 hover:bg-white/5 rounded'
 			: 'text-[13px] pt-1.5 pb-1 rounded hover:scale-105 hover:brightness-110 focus:ring-2 focus:ring-offset-1 focus:ring-offset-base-100'} {stacked ? 'flex flex-col items-center gap-0' : ''}"

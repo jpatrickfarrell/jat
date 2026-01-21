@@ -338,8 +338,8 @@
 	.segment {
 		display: flex;
 		align-items: center;
-		gap: 0.35rem;
-		padding: 0 0.6rem;
+		gap: 0.375rem;
+		padding: 0 0.625rem;
 		border: none;
 		background: transparent;
 		cursor: pointer;
@@ -425,7 +425,7 @@
 		width: 0.875rem;
 		height: 0.875rem;
 		opacity: 0.6;
-		margin-left: -0.15rem;
+		margin-left: -0.125rem;
 	}
 
 	/* Badge (count) */
@@ -434,7 +434,7 @@
 		font-weight: 600;
 		background: oklch(0.35 0.02 250);
 		color: oklch(0.75 0.02 250);
-		padding: 0.1rem 0.35rem;
+		padding: 0.125rem 0.375rem;
 		border-radius: 0.25rem;
 		min-width: 1.1rem;
 		text-align: center;
@@ -455,11 +455,11 @@
 	/* Dropdown */
 	.dropdown {
 		position: absolute;
-		top: calc(100% + 0.35rem);
+		top: calc(100% + 0.375rem);
 		background: oklch(0.20 0.02 250);
 		border: 1px solid oklch(0.32 0.02 250);
 		border-radius: 0.5rem;
-		padding: 0.35rem;
+		padding: 0.375rem;
 		min-width: 10rem;
 		box-shadow: 0 8px 24px oklch(0 0 0 / 0.4);
 		z-index: 50;
@@ -482,7 +482,7 @@
 		align-items: center;
 		gap: 0.5rem;
 		width: 100%;
-		padding: 0.5rem 0.65rem;
+		padding: 0.5rem 0.625rem;
 		border: none;
 		background: transparent;
 		color: oklch(0.80 0.02 250);
@@ -516,7 +516,7 @@
 	.dropdown-divider {
 		height: 1px;
 		background: oklch(0.30 0.02 250);
-		margin: 0.35rem 0;
+		margin: 0.375rem 0;
 	}
 
 	/* Dropdown header */
@@ -526,7 +526,7 @@
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		color: oklch(0.55 0.02 250);
-		padding: 0.4rem 0.65rem 0.25rem;
+		padding: 0.375rem 0.625rem 0.25rem;
 	}
 
 	/* Project dot */
@@ -559,8 +559,8 @@
 	.priority-badge {
 		font-size: 0.625rem;
 		font-weight: 700;
-		padding: 0.1rem 0.3rem;
-		border-radius: 0.2rem;
+		padding: 0.125rem 0.375rem;
+		border-radius: 0.25rem;
 		flex-shrink: 0;
 	}
 
@@ -615,7 +615,7 @@
 	.dropdown-tabs {
 		display: flex;
 		gap: 0.125rem;
-		padding: 0.35rem;
+		padding: 0.375rem;
 		border-bottom: 1px solid oklch(0.28 0.02 250);
 		overflow-x: auto;
 		scrollbar-width: none;
@@ -628,8 +628,8 @@
 	.dropdown-tab {
 		display: flex;
 		align-items: center;
-		gap: 0.3rem;
-		padding: 0.35rem 0.5rem;
+		gap: 0.25rem;
+		padding: 0.375rem 0.5rem;
 		border: none;
 		background: transparent;
 		color: oklch(0.60 0.02 250);
@@ -663,8 +663,8 @@
 		font-weight: 600;
 		background: oklch(0.28 0.02 250);
 		color: oklch(0.60 0.02 250);
-		padding: 0.1rem 0.25rem;
-		border-radius: 0.2rem;
+		padding: 0.125rem 0.25rem;
+		border-radius: 0.25rem;
 		min-width: 1rem;
 		text-align: center;
 	}

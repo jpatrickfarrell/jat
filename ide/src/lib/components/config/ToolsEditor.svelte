@@ -343,8 +343,8 @@
 	.type-badge {
 		font-size: 0.6rem;
 		font-weight: 600;
-		padding: 0.15rem 0.4rem;
-		border-radius: 3px;
+		padding: 0.125rem 0.375rem;
+		border-radius: 0.25rem;
 		color: oklch(0.15 0 0);
 		flex-shrink: 0;
 	}

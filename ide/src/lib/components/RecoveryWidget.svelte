@@ -511,7 +511,7 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 0.3rem;
+		gap: 0.375rem;
 		padding: 0.5rem 0.625rem;
 		border-radius: 0.5rem;
 		background: oklch(0.18 0.01 250);
@@ -539,7 +539,7 @@
 		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 		letter-spacing: 0.02em;
 		padding: 0.25rem 0.625rem;
-		border-radius: 0.3rem;
+		border-radius: 0.375rem;
 		background: color-mix(in oklch, var(--project-color) 15%, transparent);
 		border: 1px solid color-mix(in oklch, var(--project-color) 30%, transparent);
 		color: var(--project-color);

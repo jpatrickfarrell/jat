@@ -1266,7 +1266,7 @@
 
 	.search-icon {
 		position: absolute;
-		left: 0.6rem;
+		left: 0.625rem;
 		width: 16px;
 		height: 16px;
 		color: oklch(0.5 0.02 250);
@@ -1275,7 +1275,7 @@
 
 	.search-input {
 		width: 180px;
-		padding: 0.4rem 2rem 0.4rem 2rem;
+		padding: 0.375rem 2rem 0.375rem 2rem;
 		font-size: 0.8rem;
 		background: oklch(0.15 0.02 250);
 		border: 1px solid oklch(0.3 0.02 250);
@@ -1296,7 +1296,7 @@
 
 	.clear-search-btn {
 		position: absolute;
-		right: 0.4rem;
+		right: 0.375rem;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -1348,7 +1348,7 @@
 	}
 
 	.reset-btn {
-		padding: 0.4rem 0.75rem;
+		padding: 0.375rem 0.75rem;
 		font-size: 0.8rem;
 		font-weight: 500;
 		background: transparent;
@@ -1373,7 +1373,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.375rem;
-		padding: 0.4rem 0.75rem;
+		padding: 0.375rem 0.75rem;
 		font-size: 0.8rem;
 		font-weight: 500;
 		background: oklch(0.5 0.15 200);
@@ -1583,7 +1583,7 @@
 
 	.matcher-input {
 		width: 100%;
-		padding: 0.4rem 0.6rem;
+		padding: 0.375rem 0.625rem;
 		font-family: ui-monospace, monospace;
 		font-size: 0.85rem;
 		background: oklch(0.1 0.02 250);
@@ -1612,7 +1612,7 @@
 		display: inline-flex;
 		font-size: 0.6rem;
 		font-weight: 600;
-		padding: 0.1rem 0.3rem;
+		padding: 0.125rem 0.375rem;
 		background: oklch(0.6 0.2 90 / 0.3);
 		color: oklch(0.9 0.15 90);
 		border-radius: 3px;
@@ -1653,7 +1653,7 @@
 		background: oklch(0.11 0.02 250);
 		border: 1px solid oklch(0.2 0.02 250);
 		border-radius: 4px;
-		padding: 0.6rem;
+		padding: 0.625rem;
 	}
 
 	.hook-header {
@@ -1707,7 +1707,7 @@
 
 	.field-input {
 		width: 100%;
-		padding: 0.35rem 0.5rem;
+		padding: 0.375rem 0.5rem;
 		font-size: 0.8rem;
 		background: oklch(0.08 0.02 250);
 		border: 1px solid oklch(0.25 0.02 250);
@@ -1794,9 +1794,9 @@
 	.field-feedback {
 		display: flex;
 		align-items: flex-start;
-		gap: 0.35rem;
-		margin-top: 0.35rem;
-		padding: 0.35rem 0.5rem;
+		gap: 0.375rem;
+		margin-top: 0.375rem;
+		padding: 0.375rem 0.5rem;
 		border-radius: 4px;
 		font-size: 0.7rem;
 	}
@@ -1829,7 +1829,7 @@
 	/* Script type badge */
 	.script-type-badge {
 		margin-left: auto;
-		padding: 0.1rem 0.4rem;
+		padding: 0.125rem 0.375rem;
 		font-size: 0.65rem;
 		font-weight: 600;
 		font-family: ui-monospace, monospace;
@@ -1845,7 +1845,7 @@
 		flex-direction: column;
 		gap: 0.25rem;
 		margin-top: 0.25rem;
-		padding: 0.35rem 0.5rem;
+		padding: 0.375rem 0.5rem;
 		background: oklch(0.7 0.15 85 / 0.05);
 		border-radius: 4px;
 		font-size: 0.7rem;
@@ -1854,21 +1854,21 @@
 	.warning-item {
 		display: flex;
 		align-items: flex-start;
-		gap: 0.35rem;
+		gap: 0.375rem;
 		color: oklch(0.7 0.12 85);
 	}
 
 	.warning-item svg {
 		flex-shrink: 0;
-		margin-top: 0.1rem;
+		margin-top: 0.125rem;
 	}
 
 	/* Fixes list with copy buttons */
 	.fixes-list {
 		display: flex;
 		flex-direction: column;
-		gap: 0.35rem;
-		margin-top: 0.35rem;
+		gap: 0.375rem;
+		margin-top: 0.375rem;
 		padding: 0.5rem;
 		background: oklch(0.18 0.03 200);
 		border: 1px solid oklch(0.28 0.06 200);
@@ -1879,7 +1879,7 @@
 	.fixes-label {
 		font-weight: 600;
 		color: oklch(0.65 0.1 200);
-		margin-bottom: 0.15rem;
+		margin-bottom: 0.125rem;
 	}
 
 	.fix-item {
@@ -1896,7 +1896,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		padding: 0.3rem 0.5rem;
+		padding: 0.375rem 0.5rem;
 		background: oklch(0.12 0.02 250);
 		border: 1px solid oklch(0.25 0.02 250);
 		border-radius: 4px;
@@ -1931,9 +1931,9 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.35rem;
-		margin-top: 0.35rem;
-		padding: 0.35rem 0.5rem;
+		gap: 0.375rem;
+		margin-top: 0.375rem;
+		padding: 0.375rem 0.5rem;
 		background: oklch(0.2 0.02 250);
 		border-radius: 4px;
 		font-size: 0.7rem;
@@ -1989,7 +1989,7 @@
 		align-items: center;
 		justify-content: center;
 		gap: 0.375rem;
-		padding: 0.4rem 0.75rem;
+		padding: 0.375rem 0.75rem;
 		font-size: 0.75rem;
 		font-weight: 500;
 		background: transparent;
@@ -2019,7 +2019,7 @@
 		}
 
 		.event-header {
-			padding: 0.6rem 0.75rem;
+			padding: 0.625rem 0.75rem;
 		}
 
 		.event-label {

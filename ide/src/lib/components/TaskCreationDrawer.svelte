@@ -43,26 +43,22 @@
 		return unsubscribe;
 	});
 
+	// Track if drawer was opened without an explicit project (requires user to select one)
+	let projectSelectionRequired = $state(false);
+
 	// Pre-fill project when drawer opens (read from store at open time)
 	$effect(() => {
 		if (isOpen) {
 			// Priority: 1) selectedDrawerProject (explicit from caller)
-			//           2) getActiveProject() (user's last selection)
-			//           3) First from sorted list
+			//           2) If no explicit project, require user selection (don't auto-select)
 			const explicitProject = get(selectedDrawerProject);
 			if (explicitProject) {
 				formData.project = explicitProject;
-			} else if (dynamicProjects.length > 0 && !formData.project) {
-				// Check if user has a preferred active project
-				const activeProject = getActiveProject();
-				const activeProjectExists = activeProject && dynamicProjects.includes(activeProject);
-
-				if (activeProjectExists) {
-					formData.project = activeProject;
-				} else {
-					// Default to first project (sorted by recent agent activity)
-					formData.project = dynamicProjects[0];
-				}
+				projectSelectionRequired = false;
+			} else {
+				// No explicit project - require user to select one first
+				formData.project = '';
+				projectSelectionRequired = true;
 			}
 		}
 	});
@@ -71,10 +67,17 @@
 	// Uses requestAnimationFrame + 200ms delay to ensure drawer animation has started
 	// and input is interactable. This handles both checkbox toggle and store-based opening.
 	$effect(() => {
-		if (isOpen && titleInput) {
+		if (isOpen) {
 			requestAnimationFrame(() => {
 				setTimeout(() => {
-					if (titleInput && isOpen) {
+					if (!isOpen) return;
+
+					// If project selection is required, focus and open the project dropdown
+					if (projectSelectionRequired && projectDropdownBtn) {
+						projectDropdownBtn.focus();
+						openProjectDropdown();
+					} else if (titleInput) {
+						// Otherwise focus the title input as usual
 						titleInput.focus();
 						// Double-check focus was applied (some browsers need this)
 						if (document.activeElement !== titleInput) {
@@ -104,6 +107,9 @@
 		project: '',
 		labels: ''
 	});
+
+	// Derived: form fields should be disabled until project is selected (when required)
+	const formDisabled = $derived(projectSelectionRequired && !formData.project);
 
 	// Selected dependencies state (array of task objects)
 	interface SelectedDependency {
@@ -929,6 +935,9 @@
 		submitError = null;
 		successMessage = null;
 
+		// Reset project selection required state
+		projectSelectionRequired = false;
+
 		// Reset dependencies
 		selectedDependencies = [];
 		availableTasks = [];
@@ -1198,8 +1207,12 @@
 							</ul>
 						</div>
 					</div>
-					<p class="text-sm mt-1 text-base-content/70">
-						Fill in the details below to create a new task
+					<p class="text-sm mt-1 {formDisabled ? 'text-warning' : 'text-base-content/70'}">
+						{#if formDisabled}
+							Select a project to continue
+						{:else}
+							Fill in the details below to create a new task
+						{/if}
 					</p>
 				</div>
 				<button
@@ -1228,7 +1241,7 @@
 									type="checkbox"
 									class="toggle toggle-xs {isHumanAction ? 'toggle-warning' : ''}"
 									bind:checked={isHumanAction}
-									disabled={isSubmitting}
+									disabled={formDisabled || isSubmitting}
 								/>
 								<span class="flex items-center gap-1 text-xs {isHumanAction ? 'text-warning font-medium' : 'text-base-content/50'}">
 									<span style="font-size: 0.85rem;">🧑</span>
@@ -1240,18 +1253,18 @@
 							<input
 								id="task-title"
 								type="text"
-								placeholder="Paste task text or enter title..."
-								class="input flex-1 font-mono bg-base-200 border-base-content/30 text-base-content {validationErrors.title ? 'input-error' : ''}"
+								placeholder={formDisabled ? "Select a project first..." : "Paste task text or enter title..."}
+								class="input flex-1 font-mono bg-base-200 border-base-content/30 text-base-content {validationErrors.title ? 'input-error' : ''} {formDisabled ? 'opacity-50' : ''}"
 								bind:this={titleInput}
 								bind:value={formData.title}
 								onpaste={handleTitlePaste}
-								disabled={isSubmitting}
+								disabled={formDisabled || isSubmitting}
 								required
-								autofocus={isOpen}
+								autofocus={isOpen && !projectSelectionRequired}
 							/>
 							<VoiceInput
 								size="sm"
-								disabled={isSubmitting}
+								disabled={formDisabled || isSubmitting}
 								ontranscription={handleTitleTranscription}
 								onerror={handleVoiceInputError}
 								onstart={() => isTitleRecording = true}
@@ -1278,7 +1291,7 @@
 								{/if}
 								<VoiceInput
 									size="sm"
-									disabled={isSubmitting}
+									disabled={formDisabled || isSubmitting}
 									ontranscription={handleDescriptionTranscription}
 									onerror={handleVoiceInputError}
 									onstart={() => isDescriptionRecording = true}
@@ -1288,11 +1301,11 @@
 						</label>
 						<textarea
 							id="task-description"
-							placeholder="Enter task description or use voice input..."
-							class="textarea w-full h-32 font-mono bg-base-200 text-base-content {isDescriptionRecording ? 'textarea-primary border-primary' : 'border-base-content/30'}"
+							placeholder={formDisabled ? "Select a project first..." : "Enter task description or use voice input..."}
+							class="textarea w-full h-32 font-mono bg-base-200 text-base-content {isDescriptionRecording ? 'textarea-primary border-primary' : 'border-base-content/30'} {formDisabled ? 'opacity-50' : ''}"
 							bind:value={formData.description}
 							onblur={handleDescriptionBlur}
-							disabled={isSubmitting}
+							disabled={formDisabled || isSubmitting}
 						></textarea>
 						<label class="label">
 							<span class="label-text-alt text-base-content/60">
@@ -1397,10 +1410,10 @@
 							</label>
 							<select
 								id="task-priority"
-								class="select w-full font-mono bg-base-200 border-base-content/30 text-base-content"
+								class="select w-full font-mono bg-base-200 border-base-content/30 text-base-content {formDisabled ? 'opacity-50' : ''}"
 								bind:value={formData.priority}
 								onchange={() => markFieldModified('priority')}
-								disabled={isSubmitting}
+								disabled={formDisabled || isSubmitting}
 								required
 							>
 								{#each priorityOptions as option}
@@ -1422,10 +1435,10 @@
 							</label>
 							<select
 								id="task-type"
-								class="select w-full font-mono bg-base-200 border-base-content/30 text-base-content {validationErrors.type ? 'select-error' : ''}"
+								class="select w-full font-mono bg-base-200 border-base-content/30 text-base-content {validationErrors.type ? 'select-error' : ''} {formDisabled ? 'opacity-50' : ''}"
 								bind:value={formData.type}
 								onchange={() => markFieldModified('type')}
-								disabled={isSubmitting}
+								disabled={formDisabled || isSubmitting}
 								required
 							>
 								{#each typeOptions as option}
@@ -1453,11 +1466,11 @@
 						<input
 							id="task-labels"
 							type="text"
-							placeholder="e.g., frontend, urgent, bug-fix"
-							class="input w-full font-mono bg-base-200 border-base-content/30 text-base-content"
+							placeholder={formDisabled ? "Select a project first..." : "e.g., frontend, urgent, bug-fix"}
+							class="input w-full font-mono bg-base-200 border-base-content/30 text-base-content {formDisabled ? 'opacity-50' : ''}"
 							bind:value={formData.labels}
 							oninput={() => markFieldModified('labels')}
-							disabled={isSubmitting}
+							disabled={formDisabled || isSubmitting}
 						/>
 						<label class="label">
 							<span class="label-text-alt text-base-content/60">
@@ -1487,22 +1500,22 @@
 							class="hidden"
 							bind:this={fileInputRef}
 							onchange={handleFileInputChange}
-							disabled={isSubmitting}
+							disabled={formDisabled || isSubmitting}
 						/>
 
 						<!-- Dropzone -->
 						<div
 							bind:this={dropzoneRef}
-							class="relative rounded-lg p-6 text-center cursor-pointer transition-all duration-200 {isDragOver ? 'bg-primary/20 border-primary' : 'bg-base-200 border-base-content/30'}"
+							class="relative rounded-lg p-6 text-center transition-all duration-200 {formDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} {isDragOver && !formDisabled ? 'bg-primary/20 border-primary' : 'bg-base-200 border-base-content/30'}"
 							style="border: 2px dashed;"
-							ondrop={handleDrop}
-							ondragover={handleDragOver}
-							ondragenter={handleDragEnter}
-							ondragleave={handleDragLeave}
-							onclick={openFilePicker}
+							ondrop={(e) => !formDisabled && handleDrop(e)}
+							ondragover={(e) => !formDisabled && handleDragOver(e)}
+							ondragenter={(e) => !formDisabled && handleDragEnter(e)}
+							ondragleave={(e) => !formDisabled && handleDragLeave(e)}
+							onclick={() => !formDisabled && openFilePicker()}
 							role="button"
-							tabindex="0"
-							onkeydown={(e) => e.key === 'Enter' && openFilePicker()}
+							tabindex={formDisabled ? -1 : 0}
+							onkeydown={(e) => !formDisabled && e.key === 'Enter' && openFilePicker()}
 						>
 							{#if isDragOver}
 								<div class="pointer-events-none">
@@ -1624,10 +1637,10 @@
 						{/if}
 
 						<!-- Radio buttons for override -->
-						<div class="space-y-2">
+						<div class="space-y-2 {formDisabled ? 'opacity-50' : ''}">
 							<!-- Use project rules (default) -->
 							<label
-								class="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all {reviewOverride === null ? 'bg-primary/10 border-primary/50' : 'bg-base-200 border-base-content/20'}"
+								class="flex items-center gap-3 p-3 rounded-lg transition-all {formDisabled ? 'cursor-not-allowed' : 'cursor-pointer'} {reviewOverride === null ? 'bg-primary/10 border-primary/50' : 'bg-base-200 border-base-content/20'}"
 								style="border-width: 1px; border-style: solid;"
 							>
 								<input
@@ -1636,7 +1649,7 @@
 									class="radio radio-sm"
 									checked={reviewOverride === null}
 									onchange={() => reviewOverride = null}
-									disabled={isSubmitting}
+									disabled={formDisabled || isSubmitting}
 								/>
 								<div class="flex-1">
 									<span class="text-sm font-medium text-base-content">
@@ -1650,7 +1663,7 @@
 
 							<!-- Always require review -->
 							<label
-								class="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all {reviewOverride === 'always_review' ? 'bg-info/10 border-info/50' : 'bg-base-200 border-base-content/20'}"
+								class="flex items-center gap-3 p-3 rounded-lg transition-all {formDisabled ? 'cursor-not-allowed' : 'cursor-pointer'} {reviewOverride === 'always_review' ? 'bg-info/10 border-info/50' : 'bg-base-200 border-base-content/20'}"
 								style="border-width: 1px; border-style: solid;"
 							>
 								<input
@@ -1659,7 +1672,7 @@
 									class="radio radio-sm"
 									checked={reviewOverride === 'always_review'}
 									onchange={() => reviewOverride = 'always_review'}
-									disabled={isSubmitting}
+									disabled={formDisabled || isSubmitting}
 								/>
 								<div class="flex-1">
 									<span class="flex items-center gap-1.5 text-sm font-medium text-base-content">
@@ -1677,7 +1690,7 @@
 
 							<!-- Always auto-proceed -->
 							<label
-								class="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all {reviewOverride === 'always_auto' ? 'bg-success/10 border-success/50' : 'bg-base-200 border-base-content/20'}"
+								class="flex items-center gap-3 p-3 rounded-lg transition-all {formDisabled ? 'cursor-not-allowed' : 'cursor-pointer'} {reviewOverride === 'always_auto' ? 'bg-success/10 border-success/50' : 'bg-base-200 border-base-content/20'}"
 								style="border-width: 1px; border-style: solid;"
 							>
 								<input
@@ -1686,7 +1699,7 @@
 									class="radio radio-sm"
 									checked={reviewOverride === 'always_auto'}
 									onchange={() => reviewOverride = 'always_auto'}
-									disabled={isSubmitting}
+									disabled={formDisabled || isSubmitting}
 								/>
 								<div class="flex-1">
 									<span class="flex items-center gap-1.5 text-sm font-medium text-base-content">
@@ -1724,8 +1737,8 @@
 									type="button"
 									class="btn btn-xs btn-ghost gap-1"
 									onclick={() => showDependencyDropdown = !showDependencyDropdown}
-									disabled={isSubmitting || availableTasksLoading || !formData.project}
-									title={!formData.project ? 'Select a project first' : 'Add dependency'}
+									disabled={formDisabled || isSubmitting || availableTasksLoading || !formData.project}
+									title={formDisabled || !formData.project ? 'Select a project first' : 'Add dependency'}
 								>
 									{#if availableTasksLoading}
 										<span class="loading loading-spinner loading-xs"></span>
@@ -1892,7 +1905,7 @@
 								type="submit"
 								class="btn btn-primary font-mono join-item"
 								onclick={() => submitWithAction(defaultSaveAction)}
-								disabled={isSubmitting}
+								disabled={formDisabled || isSubmitting}
 							>
 								{#if isSubmitting}
 									<span class="loading loading-spinner loading-sm"></span>
@@ -1908,7 +1921,7 @@
 									type="button"
 									tabindex="0"
 									class="btn btn-primary join-item border-l border-primary-content/20"
-									disabled={isSubmitting}
+									disabled={formDisabled || isSubmitting}
 								>
 									<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
@@ -1923,7 +1936,7 @@
 											type="button"
 											class="font-mono text-sm flex items-center gap-2 text-base-content {defaultSaveAction === 'close' ? 'bg-primary/20' : ''}"
 											onclick={() => submitWithAction('close')}
-											disabled={isSubmitting}
+											disabled={formDisabled || isSubmitting}
 										>
 											{#if defaultSaveAction === 'close'}
 												<svg class="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1941,7 +1954,7 @@
 											type="button"
 											class="font-mono text-sm flex items-center gap-2 text-base-content {defaultSaveAction === 'new' ? 'bg-primary/20' : ''}"
 											onclick={() => submitWithAction('new')}
-											disabled={isSubmitting}
+											disabled={formDisabled || isSubmitting}
 										>
 											{#if defaultSaveAction === 'new'}
 												<svg class="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1959,7 +1972,7 @@
 											type="button"
 											class="font-mono text-sm flex items-center gap-2 text-base-content {defaultSaveAction === 'start' ? 'bg-primary/20' : ''}"
 											onclick={() => submitWithAction('start')}
-											disabled={isSubmitting}
+											disabled={formDisabled || isSubmitting}
 										>
 											{#if defaultSaveAction === 'start'}
 												<svg class="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">

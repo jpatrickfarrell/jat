@@ -849,7 +849,7 @@
 	}
 
 	.state-badge {
-		padding: 0.2rem 0.5rem;
+		padding: 0.25rem 0.5rem;
 		font-size: 0.7rem;
 		font-weight: 600;
 		font-family: ui-monospace, monospace;
@@ -858,7 +858,7 @@
 	}
 
 	.state-badge-lg {
-		padding: 0.3rem 0.75rem;
+		padding: 0.375rem 0.75rem;
 		font-size: 0.8rem;
 		font-weight: 600;
 		font-family: ui-monospace, monospace;
@@ -868,7 +868,7 @@
 
 	.custom-badge {
 		margin-left: auto;
-		padding: 0.1rem 0.4rem;
+		padding: 0.125rem 0.375rem;
 		font-size: 0.65rem;
 		font-weight: 500;
 		color: oklch(0.80 0.15 200);
@@ -991,12 +991,12 @@
 	}
 
 	.primary-badge {
-		padding: 0.1rem 0.4rem;
+		padding: 0.125rem 0.375rem;
 		font-size: 0.65rem;
 		font-weight: 600;
 		color: oklch(0.95 0.15 85);
 		background: oklch(0.40 0.15 85);
-		border-radius: 4px;
+		border-radius: 0.25rem;
 		margin-left: 0.5rem;
 	}
 
@@ -1019,12 +1019,12 @@
 	}
 
 	.action-type-badge {
-		padding: 0.1rem 0.4rem;
+		padding: 0.125rem 0.375rem;
 		font-size: 0.65rem;
 		font-weight: 500;
 		color: oklch(0.65 0.02 250);
 		background: oklch(0.25 0.02 250);
-		border-radius: 4px;
+		border-radius: 0.25rem;
 		text-transform: uppercase;
 	}
 
@@ -1075,11 +1075,11 @@
 
 	.added-badge {
 		margin-left: auto;
-		padding: 0.1rem 0.3rem;
+		padding: 0.125rem 0.375rem;
 		font-size: 0.6rem;
 		color: oklch(0.70 0.15 145);
 		background: oklch(0.25 0.10 145);
-		border-radius: 3px;
+		border-radius: 0.25rem;
 	}
 
 	/* Defaults Preview */
@@ -1099,9 +1099,9 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		padding: 0.4rem 0.75rem;
+		padding: 0.375rem 0.75rem;
 		background: oklch(0.20 0.02 250);
-		border-radius: 6px;
+		border-radius: 0.375rem;
 		font-size: 0.8rem;
 		color: oklch(0.75 0.02 250);
 	}
@@ -1112,11 +1112,11 @@
 	}
 
 	.overridden-badge {
-		padding: 0.1rem 0.3rem;
+		padding: 0.125rem 0.375rem;
 		font-size: 0.6rem;
 		color: oklch(0.70 0.15 45);
 		background: oklch(0.25 0.10 45);
-		border-radius: 3px;
+		border-radius: 0.25rem;
 	}
 
 	/* No Selection State */

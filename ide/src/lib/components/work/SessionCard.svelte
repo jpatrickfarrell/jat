@@ -3536,7 +3536,26 @@
 	async function handleStatusAction(actionId: string) {
 		switch (actionId) {
 			case "start-next":
-				// Cleanup current session and spawn agent for next task
+				// Instantly write auto-proceeding signal for immediate UI feedback
+				// Then cleanup current session and spawn agent for next task
+				if (sessionName) {
+					try {
+						await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								type: 'auto-proceeding',
+								data: {
+									taskId: displayTask?.id || lastCompletedTask?.id,
+									taskTitle: displayTask?.title || lastCompletedTask?.title,
+									agentName: agentName
+								}
+							})
+						});
+					} catch (e) {
+						console.warn('[SessionCard] Failed to write auto-proceeding signal:', e);
+					}
+				}
 				try {
 					const completedTaskId =
 						displayTask?.id || lastCompletedTask?.id || null;
@@ -3588,12 +3607,57 @@
 				break;
 
 			case "complete":
-				// Run /jat:complete command (user will review completion block)
+				// Instantly write completing signal for immediate UI feedback
+				// Then send /jat:complete command (agent will update to complete when done)
+				if (sessionName && displayTask?.id) {
+					try {
+						await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								type: 'completing',
+								data: {
+									taskId: displayTask.id,
+									taskTitle: displayTask.title,
+									currentStep: 'verifying',
+									progress: 0,
+									stepsCompleted: [],
+									stepsRemaining: ['verifying', 'committing', 'closing', 'releasing', 'announcing']
+								}
+							})
+						});
+					} catch (e) {
+						// Non-blocking - continue with command even if signal fails
+						console.warn('[SessionCard] Failed to write completing signal:', e);
+					}
+				}
 				await sendWorkflowCommand("/jat:complete");
 				break;
 
 			case "complete-kill":
-				// Run /jat:complete --kill command (self-destruct session)
+				// Instantly write completing signal for immediate UI feedback
+				// Then send /jat:complete --kill command (self-destruct session)
+				if (sessionName && displayTask?.id) {
+					try {
+						await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								type: 'completing',
+								data: {
+									taskId: displayTask.id,
+									taskTitle: displayTask.title,
+									currentStep: 'verifying',
+									progress: 0,
+									stepsCompleted: [],
+									stepsRemaining: ['verifying', 'committing', 'closing', 'releasing', 'announcing']
+								}
+							})
+						});
+					} catch (e) {
+						console.warn('[SessionCard] Failed to write completing signal:', e);
+					}
+				}
 				// Track intent so sessionEvents knows to auto-kill when signal arrives
 				setPendingAutoKill(sessionName, true);
 				await sendWorkflowCommand("/jat:complete --kill");
@@ -3617,6 +3681,96 @@
 			case "kill":
 				// Kill tmux session
 				await onKillSession?.();
+				break;
+
+			case "pause":
+				// Pause session - write signal directly for instant UX
+				if (sessionName && displayTask?.id) {
+					try {
+						const response = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/pause`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								taskId: displayTask.id,
+								taskTitle: displayTask.title,
+								agentName: agentName,
+								project: displayTask.id?.split('-')[0],
+								reason: 'User requested pause'
+							})
+						});
+						if (!response.ok) {
+							const data = await response.json();
+							console.error('[SessionCard] Pause failed:', data);
+						}
+					} catch (e) {
+						console.error('[SessionCard] Failed to pause session:', e);
+					}
+				}
+				break;
+
+			case "resume":
+				// Resume a paused session - instantly write working signal for immediate UI feedback
+				// Then call the resume API to restart the session
+				if (sessionName) {
+					try {
+						// Write working signal for instant UI update
+						await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								type: 'working',
+								data: {
+									taskId: displayTask?.id || sseSignal?.taskId,
+									taskTitle: displayTask?.title || sseSignal?.taskTitle,
+									agentName: agentName,
+									approach: 'Resuming from paused state',
+									expectedFiles: [],
+									estimatedScope: 'medium'
+								}
+							})
+						});
+					} catch (e) {
+						console.warn('[SessionCard] Failed to write working signal:', e);
+					}
+					// Call resume API
+					try {
+						const response = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/resume`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({})
+						});
+						if (!response.ok) {
+							const data = await response.json();
+							console.error('[SessionCard] Resume failed:', data);
+						}
+					} catch (e) {
+						console.error('[SessionCard] Failed to resume session:', e);
+					}
+				}
+				break;
+
+			case "start":
+				// Start on an idle session - instantly write starting signal for immediate UI feedback
+				// Then run /jat:start command
+				if (sessionName) {
+					try {
+						await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								type: 'starting',
+								data: {
+									agentName: agentName,
+									project: displayTask?.id?.split('-')[0] || '',
+									sessionId: ''
+								}
+							})
+						});
+					} catch (e) {
+						console.warn('[SessionCard] Failed to write starting signal:', e);
+					}
+				}
+				await sendWorkflowCommand("/jat:start");
 				break;
 
 			default:

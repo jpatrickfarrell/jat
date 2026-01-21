@@ -15,6 +15,7 @@
 	import FileTreeNode from './FileTreeNode.svelte';
 	import type { GitFileStatus } from './types';
 	import { setFileChangesCount } from '$lib/stores/drawerStore';
+	import { JAT_DEFAULTS } from '$lib/config/constants';
 
 	interface DirectoryEntry {
 		name: string;
@@ -133,6 +134,39 @@
 		changeType: 'added' | 'removed' | 'modified';
 	}
 	let detectedChanges = $state<DetectedChange[]>([]);
+
+	// Directories to ignore in change detection (internal/build artifacts)
+	// Loaded from config API on mount, with fallback to JAT_DEFAULTS
+	let ignoredChangeDirs = $state<Set<string>>(new Set(JAT_DEFAULTS.file_watcher_ignored_dirs));
+
+	/**
+	 * Load ignored directories from config API
+	 */
+	async function loadIgnoredDirsConfig() {
+		try {
+			const response = await fetch('/api/config/defaults');
+			if (response.ok) {
+				const data = await response.json();
+				const dirs = data.defaults?.file_watcher_ignored_dirs ?? JAT_DEFAULTS.file_watcher_ignored_dirs;
+				ignoredChangeDirs = new Set(dirs);
+			}
+		} catch (err) {
+			console.debug('[FileTree] Failed to load ignored dirs config, using defaults:', err);
+		}
+	}
+
+	/**
+	 * Check if a path should be ignored in change detection
+	 */
+	function shouldIgnoreChange(path: string, name: string): boolean {
+		// Check if it's a top-level ignored directory
+		if (ignoredChangeDirs.has(name)) return true;
+		// Check if path starts with an ignored directory
+		for (const dir of ignoredChangeDirs) {
+			if (path.startsWith(dir + '/') || path.includes('/' + dir + '/')) return true;
+		}
+		return false;
+	}
 
 	/**
 	 * Fetch git status for the project and build a path → status map
@@ -313,10 +347,14 @@
 
 			// Update state if we found changes
 			if (allChanges.length > 0) {
-				// Deduplicate by path (in case same file appears in multiple checks)
-				const uniqueChanges = Array.from(new Map(allChanges.map(c => [c.path, c])).values());
-				detectedChanges = uniqueChanges;
-				hasTreeChanges = true;
+				// Deduplicate by path and filter out ignored directories
+				const uniqueChanges = Array.from(new Map(allChanges.map(c => [c.path, c])).values())
+					.filter(c => !shouldIgnoreChange(c.path, c.name));
+
+				if (uniqueChanges.length > 0) {
+					detectedChanges = uniqueChanges;
+					hasTreeChanges = true;
+				}
 			}
 		} catch (err) {
 			// Silently ignore errors during polling
@@ -981,6 +1019,9 @@
 	});
 
 	onMount(() => {
+		// Load config for ignored directories
+		loadIgnoredDirsConfig();
+
 		if (project) {
 			loadRoot();
 			fetchGitStatus();

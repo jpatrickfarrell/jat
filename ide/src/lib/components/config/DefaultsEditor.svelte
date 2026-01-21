@@ -28,6 +28,7 @@
 		auto_kill_p3: boolean;
 		auto_kill_p4: boolean;
 		skip_permissions: boolean;
+		file_watcher_ignored_dirs: string[];
 	}
 
 	// State
@@ -57,6 +58,8 @@
 	let autoKillP3 = $state(true);
 	let autoKillP4 = $state(true);
 	let skipPermissions = $state(false);
+	let fileWatcherIgnoredDirs = $state<string[]>([]);
+	let newIgnoredDir = $state('');
 	let launchingYolo = $state(false);
 	let savingSkipPermissions = $state(false);
 
@@ -80,7 +83,8 @@
 			autoKillP2 !== originalValues.auto_kill_p2 ||
 			autoKillP3 !== originalValues.auto_kill_p3 ||
 			autoKillP4 !== originalValues.auto_kill_p4 ||
-			skipPermissions !== originalValues.skip_permissions
+			skipPermissions !== originalValues.skip_permissions ||
+			JSON.stringify(fileWatcherIgnoredDirs) !== JSON.stringify(originalValues.file_watcher_ignored_dirs)
 		)
 	);
 
@@ -189,6 +193,7 @@
 			autoKillP3 = defaults.auto_kill_p3 ?? true;
 			autoKillP4 = defaults.auto_kill_p4 ?? true;
 			skipPermissions = defaults.skip_permissions ?? false;
+			fileWatcherIgnoredDirs = defaults.file_watcher_ignored_dirs ?? [];
 			configPath = data.configPath || '';
 
 			// Store original values for change detection
@@ -201,7 +206,8 @@
 				auto_kill_p2: autoKillP2,
 				auto_kill_p3: autoKillP3,
 				auto_kill_p4: autoKillP4,
-				skip_permissions: skipPermissions
+				skip_permissions: skipPermissions,
+				file_watcher_ignored_dirs: [...fileWatcherIgnoredDirs]
 			};
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load defaults';
@@ -237,7 +243,8 @@
 						auto_kill_p2: autoKillP2,
 						auto_kill_p3: autoKillP3,
 						auto_kill_p4: autoKillP4,
-						skip_permissions: skipPermissions
+						skip_permissions: skipPermissions,
+						file_watcher_ignored_dirs: fileWatcherIgnoredDirs
 					}
 				})
 			});
@@ -266,7 +273,8 @@
 				auto_kill_p2: autoKillP2,
 				auto_kill_p3: autoKillP3,
 				auto_kill_p4: autoKillP4,
-				skip_permissions: skipPermissions
+				skip_permissions: skipPermissions,
+				file_watcher_ignored_dirs: [...fileWatcherIgnoredDirs]
 			};
 
 			// Update the runtime auto-kill config store so changes take effect immediately
@@ -310,6 +318,7 @@
 			autoKillP3 = originalValues.auto_kill_p3;
 			autoKillP4 = originalValues.auto_kill_p4;
 			skipPermissions = originalValues.skip_permissions;
+			fileWatcherIgnoredDirs = [...originalValues.file_watcher_ignored_dirs];
 		}
 	}
 
@@ -348,6 +357,7 @@
 			autoKillP3 = defaults.auto_kill_p3 ?? true;
 			autoKillP4 = defaults.auto_kill_p4 ?? true;
 			skipPermissions = defaults.skip_permissions ?? false;
+			fileWatcherIgnoredDirs = defaults.file_watcher_ignored_dirs ?? [];
 
 			// Update original values
 			originalValues = {
@@ -359,7 +369,8 @@
 				auto_kill_p2: autoKillP2,
 				auto_kill_p3: autoKillP3,
 				auto_kill_p4: autoKillP4,
-				skip_permissions: skipPermissions
+				skip_permissions: skipPermissions,
+				file_watcher_ignored_dirs: [...fileWatcherIgnoredDirs]
 			};
 
 			success = 'Defaults reset to factory values';
@@ -398,6 +409,34 @@
 			error = err instanceof Error ? err.message : 'Failed to launch session';
 		} finally {
 			launchingYolo = false;
+		}
+	}
+
+	/**
+	 * Add a new directory to the ignored list
+	 */
+	function addIgnoredDir() {
+		const trimmed = newIgnoredDir.trim();
+		if (trimmed && !fileWatcherIgnoredDirs.includes(trimmed)) {
+			fileWatcherIgnoredDirs = [...fileWatcherIgnoredDirs, trimmed];
+			newIgnoredDir = '';
+		}
+	}
+
+	/**
+	 * Remove a directory from the ignored list
+	 */
+	function removeIgnoredDir(dir: string) {
+		fileWatcherIgnoredDirs = fileWatcherIgnoredDirs.filter(d => d !== dir);
+	}
+
+	/**
+	 * Handle Enter key in the add directory input
+	 */
+	function handleIgnoredDirKeydown(event: KeyboardEvent) {
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			addIgnoredDir();
 		}
 	}
 
@@ -870,6 +909,80 @@
 						</p>
 					</div>
 				{/if}
+			</div>
+
+			<!-- File Watcher Section -->
+			<div class="form-section">
+				<h3 class="section-title">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="section-icon">
+						<path d="M3 3v18h18"/>
+						<path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/>
+					</svg>
+					File Watcher
+				</h3>
+				<p class="section-description">
+					Configure which directories are ignored when detecting file tree changes.
+					Changes in these directories won't trigger the "changes detected" badge in the sidebar.
+				</p>
+
+				<!-- Current ignored directories -->
+				<div class="form-group">
+					<label class="form-label">
+						Ignored Directories
+						<span class="label-hint">Directories to exclude from change detection</span>
+					</label>
+
+					{#if fileWatcherIgnoredDirs.length > 0}
+						<div class="ignored-dirs-list">
+							{#each fileWatcherIgnoredDirs as dir}
+								<div class="ignored-dir-item">
+									<code class="dir-name">{dir}</code>
+									<button
+										type="button"
+										class="remove-dir-btn"
+										onclick={() => removeIgnoredDir(dir)}
+										title="Remove {dir}"
+									>
+										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="remove-icon">
+											<path d="M18 6L6 18M6 6l12 12"/>
+										</svg>
+									</button>
+								</div>
+							{/each}
+						</div>
+					{:else}
+						<p class="empty-dirs-notice">No ignored directories configured.</p>
+					{/if}
+				</div>
+
+				<!-- Add new directory -->
+				<div class="form-group">
+					<label class="form-label" for="new-ignored-dir">
+						Add Directory
+						<span class="label-hint">Enter a directory name to ignore (e.g., node_modules)</span>
+					</label>
+					<div class="add-dir-row">
+						<input
+							type="text"
+							id="new-ignored-dir"
+							class="form-input"
+							bind:value={newIgnoredDir}
+							onkeydown={handleIgnoredDirKeydown}
+							placeholder=".cache"
+						/>
+						<button
+							type="button"
+							class="btn btn-secondary add-dir-btn"
+							onclick={addIgnoredDir}
+							disabled={!newIgnoredDir.trim()}
+						>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+								<path d="M12 5v14M5 12h14"/>
+							</svg>
+							Add
+						</button>
+					</div>
+				</div>
 			</div>
 
 			<!-- Actions -->
@@ -1561,5 +1674,92 @@
 		height: 18px;
 		flex-shrink: 0;
 		color: oklch(0.70 0.15 145);
+	}
+
+	/* File Watcher Section */
+	.ignored-dirs-list {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		margin-top: 0.5rem;
+	}
+
+	.ignored-dir-item {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.375rem 0.5rem;
+		background: oklch(0.18 0.02 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 6px;
+		transition: all 0.15s ease;
+	}
+
+	.ignored-dir-item:hover {
+		background: oklch(0.20 0.02 250);
+		border-color: oklch(0.35 0.02 250);
+	}
+
+	.dir-name {
+		font-size: 0.8rem;
+		font-family: ui-monospace, monospace;
+		color: oklch(0.75 0.10 200);
+		background: transparent;
+		padding: 0;
+	}
+
+	.remove-dir-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		padding: 0;
+		background: transparent;
+		border: none;
+		border-radius: 4px;
+		cursor: pointer;
+		color: oklch(0.55 0.02 250);
+		transition: all 0.15s ease;
+	}
+
+	.remove-dir-btn:hover {
+		background: oklch(0.35 0.12 25);
+		color: oklch(0.85 0.10 25);
+	}
+
+	.remove-icon {
+		width: 12px;
+		height: 12px;
+	}
+
+	.empty-dirs-notice {
+		font-size: 0.8rem;
+		color: oklch(0.50 0.02 250);
+		font-style: italic;
+		margin: 0.5rem 0 0 0;
+	}
+
+	.add-dir-row {
+		display: flex;
+		gap: 0.5rem;
+		align-items: stretch;
+	}
+
+	.add-dir-row .form-input {
+		flex: 1;
+	}
+
+	.add-dir-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.5rem 0.875rem;
+		white-space: nowrap;
+	}
+
+	.add-dir-btn .btn-icon {
+		width: 14px;
+		height: 14px;
 	}
 </style>

@@ -22,7 +22,7 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { readFileSync, unlinkSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, appendFileSync, unlinkSync, existsSync } from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 
@@ -112,9 +112,12 @@ export async function DELETE({ params }) {
 
 /**
  * POST /api/sessions/[name]/signal
- * Emit a signal for a session using jat-signal command
+ * Emit a signal for a session - writes directly to files for instant feedback
  *
- * Body: { type: string, data: string | object }
+ * Body: { type: string, data: string | object, direct?: boolean }
+ *
+ * When direct=true (default), writes directly to signal files for instant UI feedback.
+ * When direct=false, uses jat-signal command (legacy behavior).
  */
 /** @type {import('./$types').RequestHandler} */
 export async function POST({ params, request }) {
@@ -126,17 +129,60 @@ export async function POST({ params, request }) {
 
 	try {
 		const body = await request.json();
-		const { type, data } = body;
+		const { type, data, direct = true } = body;
 
 		if (!type) {
 			return json({
 				error: 'Missing signal type',
-				message: 'Signal type is required (e.g., "working", "review", "tasks")'
+				message: 'Signal type is required (e.g., "working", "review", "completing", "completed")'
 			}, { status: 400 });
 		}
 
-		// Build the signal payload
-		// If data is an object, stringify it; otherwise use as-is
+		// Normalize session name (ensure jat- prefix for tmux session)
+		const tmuxSession = sessionName.startsWith('jat-') ? sessionName : `jat-${sessionName}`;
+
+		// Direct write mode - for instant UI feedback
+		if (direct) {
+			const timestamp = new Date().toISOString();
+
+			// Build the signal payload
+			const signalData = typeof data === 'object' ? data : {};
+			const signal = {
+				type,
+				...signalData,
+				timestamp
+			};
+
+			// 1. Write current signal state to signal file
+			const signalFile = `/tmp/jat-signal-tmux-${tmuxSession}.json`;
+			writeFileSync(signalFile, JSON.stringify(signal, null, 2));
+
+			// 2. Append to timeline JSONL
+			const timelineFile = `/tmp/jat-timeline-${tmuxSession}.jsonl`;
+			const timelineEvent = {
+				type: 'signal',
+				session_id: signalData.sessionId || '',
+				tmux_session: tmuxSession,
+				timestamp,
+				state: type,
+				task_id: signalData.taskId || '',
+				data: signal
+			};
+			appendFileSync(timelineFile, JSON.stringify(timelineEvent) + '\n');
+
+			return json({
+				success: true,
+				sessionName: tmuxSession,
+				type,
+				data: signal,
+				signalFile,
+				timelineFile,
+				timestamp,
+				message: `Signal emitted: ${type} (direct write)`
+			});
+		}
+
+		// Legacy mode - use jat-signal command
 		const payload = typeof data === 'object' ? JSON.stringify(data) : (data || '{}');
 
 		try {

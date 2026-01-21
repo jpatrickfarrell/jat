@@ -232,7 +232,28 @@ export const JAT_DEFAULTS = {
 	 * User must manually accept the YOLO warning first, then enable this flag.
 	 * When false, agents will NOT pass --dangerously-skip-permissions.
 	 */
-	skip_permissions: false
+	skip_permissions: false,
+	/**
+	 * Directories to ignore when detecting file tree changes.
+	 * Changes in these directories won't trigger the "changes detected" badge.
+	 */
+	file_watcher_ignored_dirs: [
+		'.git',
+		'node_modules',
+		'.svelte-kit',
+		'.next',
+		'.nuxt',
+		'.vite',
+		'.cache',
+		'dist',
+		'build',
+		'.turbo',
+		'.parcel-cache',
+		'__pycache__',
+		'.pytest_cache',
+		'target',
+		'vendor'
+	]
 } as const;
 
 // =============================================================================

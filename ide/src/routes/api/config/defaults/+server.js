@@ -109,6 +109,26 @@ export async function PUT({ request }) {
 			}
 		}
 
+		// Validate string array fields
+		const stringArrayFields = ['file_watcher_ignored_dirs'];
+		for (const field of stringArrayFields) {
+			if (field in newDefaults) {
+				if (!Array.isArray(newDefaults[field])) {
+					return json({
+						error: 'Invalid value',
+						message: `${field} must be an array`
+					}, { status: 400 });
+				}
+				// Ensure all items are strings
+				if (!newDefaults[field].every((item) => typeof item === 'string')) {
+					return json({
+						error: 'Invalid value',
+						message: `${field} must contain only strings`
+					}, { status: 400 });
+				}
+			}
+		}
+
 		// Validate model field
 		const validModels = ['opus', 'sonnet', 'haiku'];
 		if (newDefaults.model && !validModels.includes(newDefaults.model)) {

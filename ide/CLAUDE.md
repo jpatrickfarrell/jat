@@ -11,6 +11,15 @@ Multi-project task management IDE powered by Beads + Agent Mail. Built with Svel
 - **Theme Management**: `theme-change` library + custom utilities
 - **Build Tool**: Vite
 
+## Spacing Guidelines
+
+For consistent UI spacing across components, see [`docs/spacing-guidelines.md`](docs/spacing-guidelines.md).
+
+**Key points:**
+- Use Tailwind gap/padding utilities for inline spacing
+- Follow the documented spacing scale (xs through 3xl)
+- Component-specific patterns documented for badges, tables, panels
+
 ## Theme Switching Implementation
 
 ### Critical: Tailwind v4 Syntax

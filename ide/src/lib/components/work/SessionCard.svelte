@@ -3620,9 +3620,18 @@
 					const taskId = displayTask?.id || richSignalPayload?.taskId as string || lastCompletedTask?.id || '';
 					const taskTitle = displayTask?.title || richSignalPayload?.taskTitle as string || lastCompletedTask?.title || '';
 
+					console.log('[SessionCard] complete action - taskId sources:', {
+						displayTaskId: displayTask?.id,
+						richSignalTaskId: richSignalPayload?.taskId,
+						lastCompletedTaskId: lastCompletedTask?.id,
+						resolvedTaskId: taskId,
+						sessionName
+					});
+
 					if (taskId) {
 						try {
-							await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
+							console.log('[SessionCard] Writing instant completing signal for', sessionName, 'task', taskId);
+							const signalResponse = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
 								method: 'POST',
 								headers: { 'Content-Type': 'application/json' },
 								body: JSON.stringify({
@@ -3637,10 +3646,13 @@
 									}
 								})
 							});
+							console.log('[SessionCard] Signal response:', signalResponse.status, signalResponse.ok);
 						} catch (e) {
 							// Non-blocking - continue with command even if signal fails
 							console.warn('[SessionCard] Failed to write completing signal:', e);
 						}
+					} else {
+						console.warn('[SessionCard] No taskId available for instant completing signal - skipping');
 					}
 				}
 				await sendWorkflowCommand("/jat:complete");

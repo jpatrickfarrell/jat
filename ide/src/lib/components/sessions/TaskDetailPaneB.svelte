@@ -224,13 +224,11 @@
 		}
 	}
 
-	// Svelte action to auto-resize textarea on mount
+	// Svelte action to focus textarea on mount
 	function autoResizeTextarea(node: HTMLTextAreaElement) {
 		// Use requestAnimationFrame to ensure the DOM is ready
 		requestAnimationFrame(() => {
-			node.style.height = 'auto';
-			node.style.height = node.scrollHeight + 'px';
-			node.focus(); // Also focus the textarea
+			node.focus();
 		});
 	}
 
@@ -460,12 +458,6 @@
 									bind:value={descriptionValue}
 									onblur={saveDescription}
 									use:autoResizeTextarea
-									oninput={(e) => {
-										// Auto-resize textarea on input
-										const target = e.target as HTMLTextAreaElement;
-										target.style.height = 'auto';
-										target.style.height = target.scrollHeight + 'px';
-									}}
 									placeholder="Add description..."
 									disabled={descriptionSaving}
 								></textarea>
@@ -917,9 +909,12 @@
 	}
 
 	.description-section {
-		flex-shrink: 0;
+		flex: 1; /* Take remaining space */
 		min-width: 0; /* Allow section to shrink below content size */
-		overflow: visible;
+		min-height: 80px; /* Minimum height for description */
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
 	}
 
 	/* Notes layout for Notes tab */
@@ -1048,10 +1043,11 @@
 		flex-shrink: 0;
 	}
 
-	/* Attachments section - flex to fill available space */
+	/* Attachments section - fixed height for 1-2 rows of thumbnails */
 	.attachments-section-flex {
-		flex: 1;
-		min-height: 0;
+		flex-shrink: 0;
+		min-height: 100px;
+		max-height: 180px; /* Enough for ~2 rows of thumbnails */
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
@@ -1142,12 +1138,11 @@
 		border-radius: 0.375rem;
 		padding: 0.5rem 0.625rem;
 		line-height: 1.5;
-		resize: vertical;
+		resize: none;
 		font-family: inherit;
 		transition: border-color 0.15s, box-shadow 0.15s;
-		field-sizing: content;
-		min-height: calc(4 * 1.5em + 1rem);
-		max-height: 350px !important;
+		flex: 1;
+		min-height: 0;
 		overflow-y: auto;
 	}
 
@@ -1169,8 +1164,8 @@
 		text-align: left;
 		line-height: 1.5;
 		cursor: pointer;
-		min-height: calc(2 * 1.5em + 1rem);
-		max-height: 350px !important;
+		flex: 1;
+		min-height: 0;
 		overflow-y: auto;
 		white-space: pre-wrap;
 		word-break: break-word; /* Prevent long words from causing overflow */

@@ -83,8 +83,21 @@
 	let showDropdown = $state(false);
 	let dropdownTimeout: ReturnType<typeof setTimeout> | null = null;
 
-	// Search state
+	// Search state with debounce for performance
 	let searchQuery = $state('');
+	let debouncedSearchQuery = $state('');
+	let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Debounce search query to avoid filtering on every keystroke
+	$effect(() => {
+		if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+		searchDebounceTimer = setTimeout(() => {
+			debouncedSearchQuery = searchQuery;
+		}, 150); // 150ms debounce delay
+		return () => {
+			if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+		};
+	});
 
 	// History drawer state
 	let historyDrawerOpen = $state(false);
@@ -230,6 +243,7 @@
 		dropdownTimeout = setTimeout(() => {
 			showDropdown = false;
 			searchQuery = ''; // Clear search when dropdown closes
+			debouncedSearchQuery = ''; // Also clear debounced query immediately
 		}, 150);
 	}
 
@@ -265,17 +279,40 @@
 		return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 	}
 
-	// Filter tasks based on search query
+	// Filter tasks based on debounced search query (optimized for performance)
 	const filteredTasks = $derived.by(() => {
-		if (!searchQuery.trim()) return allClosedTasks;
+		if (!debouncedSearchQuery.trim()) return allClosedTasks;
 
-		const query = searchQuery.toLowerCase().trim();
-		return allClosedTasks.filter(task => {
-			const title = (task.title || '').toLowerCase();
-			const id = task.id.toLowerCase();
-			const assignee = (task.assignee || '').toLowerCase();
-			return title.includes(query) || id.includes(query) || assignee.includes(query);
-		});
+		const query = debouncedSearchQuery.toLowerCase().trim();
+		const results: CompletedTask[] = [];
+
+		// Early termination: stop once we have enough results for display
+		const MAX_RESULTS = 150; // tasksByDay already limits to 150
+
+		for (const task of allClosedTasks) {
+			if (results.length >= MAX_RESULTS) break;
+
+			// Check id first (shortest, most likely to match for task searches)
+			if (task.id.toLowerCase().includes(query)) {
+				results.push(task);
+				continue;
+			}
+
+			// Check title
+			const title = task.title || '';
+			if (title.toLowerCase().includes(query)) {
+				results.push(task);
+				continue;
+			}
+
+			// Check assignee last (least common search target)
+			const assignee = task.assignee || '';
+			if (assignee.toLowerCase().includes(query)) {
+				results.push(task);
+			}
+		}
+
+		return results;
 	});
 
 	// Group tasks by day
@@ -509,7 +546,7 @@
 				{#if searchQuery}
 					<button
 						class="clear-btn"
-						onclick={(e) => { e.stopPropagation(); searchQuery = ''; }}
+						onclick={(e) => { e.stopPropagation(); searchQuery = ''; debouncedSearchQuery = ''; }}
 						aria-label="Clear search"
 					>
 						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">

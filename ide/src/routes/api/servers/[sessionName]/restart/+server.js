@@ -84,14 +84,18 @@ export async function POST({ params }) {
 		}
 
 		// Get project config as fallback
+		let serverPath = null;
 		try {
 			const configPath = `${process.env.HOME}/.config/jat/projects.json`;
 			const { stdout: configOutput } = await execAsync(
-				`jq -r '.projects["${projectName}"] | "\\(.path // empty)|\\(.port // empty)"' "${configPath}" 2>/dev/null`
+				`jq -r '.projects["${projectName}"] | "\\(.path // empty)|\\(.server_path // empty)|\\(.port // empty)"' "${configPath}" 2>/dev/null`
 			);
-			const [pathPart, portPart] = configOutput.trim().split('|');
+			const [pathPart, serverPathPart, portPart] = configOutput.trim().split('|');
 			if (pathPart) {
 				projectPath = pathPart.replace(/^~/, process.env.HOME || '');
+			}
+			if (serverPathPart) {
+				serverPath = serverPathPart.replace(/^~/, process.env.HOME || '');
 			}
 			if (portPart) {
 				configPort = parseInt(portPart, 10);
@@ -113,17 +117,19 @@ export async function POST({ params }) {
 		const restartCommand = `npm run dev${portArg}`;
 
 		// Determine the correct working directory
-		// Check if ide subdirectory exists with package.json
-		let workDir = projectPath;
-		try {
-			const { stdout: checkResult } = await execAsync(
-				`test -f "${projectPath}/ide/package.json" && echo "ide" || echo "root"`
-			);
-			if (checkResult.trim() === 'ide') {
-				workDir = `${projectPath}/ide`;
+		// Use server_path if specified, otherwise check for ide subdirectory
+		let workDir = serverPath || projectPath;
+		if (!serverPath) {
+			try {
+				const { stdout: checkResult } = await execAsync(
+					`test -f "${projectPath}/ide/package.json" && echo "ide" || echo "root"`
+				);
+				if (checkResult.trim() === 'ide') {
+					workDir = `${projectPath}/ide`;
+				}
+			} catch {
+				// Use projectPath as-is
 			}
-		} catch {
-			// Use projectPath as-is
 		}
 
 		// Create a restart script that runs in the background

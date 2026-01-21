@@ -862,7 +862,8 @@
 						<td class="td-status" onclick={(e) => e.stopPropagation()}>
 							{#if session.type === 'agent'}
 								{@const reviewStatus = sessionTask ? computeReviewStatus(sessionTask, getReviewRules()) : null}
-								{@const autoCompleteDisabled = autoCompleteDisabledMap.get(session.name) ?? false}
+								{@const reviewBasedDefault = reviewStatus?.action !== 'auto'}
+								{@const autoCompleteDisabled = autoCompleteDisabledMap.get(session.name) ?? reviewBasedDefault}
 								<div class="status-cell-content">
 									<StatusActionBadge
 										sessionState={activityState || 'idle'}

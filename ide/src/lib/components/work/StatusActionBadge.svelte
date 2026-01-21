@@ -801,7 +801,7 @@
 				onCancelAutoKill();
 			}
 		}}
-		class="w-[130px] font-mono tracking-wider flex-shrink-0 font-bold cursor-pointer transition-all focus:outline-none {variant ===
+		class="min-w-[130px] font-mono tracking-wider flex-shrink-0 font-bold cursor-pointer transition-all focus:outline-none {variant ===
 		'integrated'
 			? 'text-[11px] px-2 py-0.5 hover:bg-white/5 rounded'
 			: 'text-[13px] pt-1.5 pb-1 rounded hover:scale-105 hover:brightness-110 focus:ring-2 focus:ring-offset-1 focus:ring-offset-base-100'} {stacked ? 'flex flex-col items-center gap-0' : ''}"
@@ -818,6 +818,21 @@
 			<!-- Stacked layout: label on top, elapsed time below -->
 			<span class="flex items-center">
 				<span class={animate ? 'tracking-in-expand' : ''} style={animate ? 'animation-delay: 100ms;' : ''}>{variant === "integrated" ? displayShortLabel : displayLabel}</span>
+				<!-- Automation status indicator -->
+				{#if onAutoCompleteToggle}
+					<span class="ml-1 inline-flex items-center" title={autoCompleteEnabled ? 'Auto-complete enabled' + (reviewReason ? ` (${reviewReason})` : '') : 'Manual review required' + (reviewReason ? ` (${reviewReason})` : '')}>
+						{#if autoCompleteEnabled}
+							<svg class="w-2.5 h-2.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+							</svg>
+						{:else}
+							<svg class="w-2.5 h-2.5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+								<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+							</svg>
+						{/if}
+					</span>
+				{/if}
 				<!-- Dropdown indicator -->
 				<svg
 					class="ml-1 inline-block w-2.5 h-2.5 ml-0.5 transition-transform"
@@ -873,6 +888,26 @@
 					title="Session will be cleaned up in {autoKillCountdown}s"
 				>
 					({autoKillCountdown}s)
+				</span>
+			{/if}
+			<!-- Automation status indicator -->
+			{#if onAutoCompleteToggle}
+				<span
+					class="ml-1 inline-flex items-center"
+					title={autoCompleteEnabled
+						? 'Auto-complete enabled' + (reviewReason ? ` (${reviewReason})` : '')
+						: 'Manual review required' + (reviewReason ? ` (${reviewReason})` : '')}
+				>
+					{#if autoCompleteEnabled}
+						<svg class="w-2.5 h-2.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+						</svg>
+					{:else}
+						<svg class="w-2.5 h-2.5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+							<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+						</svg>
+					{/if}
 				</span>
 			{/if}
 			<!-- Dropdown indicator -->

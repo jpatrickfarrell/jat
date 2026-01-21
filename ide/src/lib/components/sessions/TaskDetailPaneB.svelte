@@ -391,7 +391,7 @@
 				{#if activeTab === 'details'}
 					<!-- Details tab: Assignee/Link, Metadata, Description, Attachments, Labels -->
 					<div class="details-layout">
-						<!-- Top row: Assignee + Details link -->
+						<!-- Top row: Assignee + Details link + Created/Updated -->
 						<div class="details-header-row">
 							{#if details?.assignee}
 								<span class="details-assignee">
@@ -399,28 +399,26 @@
 									<span class="assignee-name">{details.assignee}</span>
 								</span>
 							{/if}
+							<div class="details-header-meta">
+								{#if details?.created_at}
+									<span class="header-meta-item">
+										<span class="header-meta-label">Created</span>
+										<span class="header-meta-value">{new Date(details.created_at).toLocaleDateString()}</span>
+									</span>
+								{/if}
+								{#if details?.updated_at}
+									<span class="header-meta-item">
+										<span class="header-meta-label">Updated</span>
+										<span class="header-meta-value">{new Date(details.updated_at).toLocaleDateString()}</span>
+									</span>
+								{/if}
+							</div>
 							<button class="details-link-btn" onclick={() => onViewTask?.(task.id)}>
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
 								</svg>
 								Details
 							</button>
-						</div>
-
-						<!-- Metadata section (created/updated) -->
-						<div class="details-metadata">
-							{#if details?.created_at}
-								<span class="details-meta-item">
-									<span class="details-meta-label">Created</span>
-									<span class="details-meta-value">{new Date(details.created_at).toLocaleDateString()}</span>
-								</span>
-							{/if}
-							{#if details?.updated_at}
-								<span class="details-meta-item">
-									<span class="details-meta-label">Updated</span>
-									<span class="details-meta-value">{new Date(details.updated_at).toLocaleDateString()}</span>
-								</span>
-							{/if}
 						</div>
 
 						<!-- Description section -->
@@ -927,11 +925,11 @@
 		overflow: hidden;
 	}
 
-	/* Details tab header row (assignee + link) */
+	/* Details tab header row (assignee + created/updated + link) */
 	.details-header-row {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
+		gap: 0.75rem;
 		padding: 0.375rem 0.5rem;
 		background: oklch(0.14 0.01 250);
 		border-radius: 0.375rem;
@@ -949,6 +947,28 @@
 
 	.assignee-name {
 		font-weight: 500;
+	}
+
+	.details-header-meta {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		margin-left: auto;
+	}
+
+	.header-meta-item {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.7rem;
+	}
+
+	.header-meta-label {
+		color: oklch(0.50 0.02 250);
+	}
+
+	.header-meta-value {
+		color: oklch(0.65 0.02 250);
 	}
 
 	.details-link-btn {
@@ -969,37 +989,6 @@
 		background: oklch(0.25 0.05 220);
 		border-color: oklch(0.40 0.08 220);
 		color: oklch(0.80 0.12 220);
-	}
-
-	/* Details tab metadata (created/updated) */
-	.details-metadata {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 1rem;
-		padding: 0.5rem 0.75rem;
-		background: oklch(0.16 0.01 250);
-		border-radius: 0.375rem;
-		border: 1px solid oklch(0.22 0.02 250);
-		margin-bottom: 0.5rem;
-	}
-
-	.details-meta-item {
-		display: flex;
-		flex-direction: column;
-		gap: 0.125rem;
-	}
-
-	.details-meta-label {
-		font-size: 0.65rem;
-		font-weight: 600;
-		color: oklch(0.50 0.02 250);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-	}
-
-	.details-meta-value {
-		font-size: 0.8rem;
-		color: oklch(0.75 0.02 250);
 	}
 
 	/* Notes tab - Monaco editor container */

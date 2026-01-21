@@ -2439,13 +2439,11 @@
 				`[SessionCard] Auto-completing ${sessionName} (review rules: auto for ${reviewStatus.reason})`,
 			);
 
-			// Track intent so sessionEvents knows to auto-kill when signal arrives
-			setPendingAutoKill(sessionName, true);
-
 			// Brief delay so user sees the state transition in the UI
 			setTimeout(async () => {
 				try {
-					await sendWorkflowCommand("/jat:complete --kill");
+					// Route through handleStatusAction for instant signal support
+					await handleStatusAction("complete-kill");
 				} catch (error) {
 					console.error("[SessionCard] Auto-complete failed:", error);
 					// Reset flag so user can manually complete
@@ -3540,6 +3538,7 @@
 
 	// Handle status badge actions
 	async function handleStatusAction(actionId: string) {
+		console.log('[SessionCard] handleStatusAction called with:', actionId, 'session:', sessionName);
 		switch (actionId) {
 			case "start-next":
 				// Instantly write auto-proceeding signal for immediate UI feedback
@@ -5754,9 +5753,8 @@
 							onTaskClick={(taskId) => onTaskClick?.(taskId)}
 							onApprove={async () => {
 								// When user approves from review card, trigger completion flow
-								if (onSendInput) {
-									await onSendInput("/jat:complete", "text");
-								}
+								// Route through handleStatusAction for instant signal support
+								await handleStatusAction("complete");
 							}}
 							onRequestChanges={onSendInput
 								? async (feedback) => {
@@ -7390,6 +7388,9 @@
 									project={defaultProject || null}
 									onViewEpic={(epicId) => onTaskClick?.(epicId)}
 									onLinkToEpic={() => onTaskDataChange?.()}
+									autoCompleteEnabled={!autoCompleteDisabled}
+									onAutoCompleteToggle={() => autoCompleteDisabled = !autoCompleteDisabled}
+									reviewReason={reviewStatus?.reason ?? null}
 								/>
 							{/if}
 						{:else if sessionState === "ready-for-review" || sessionState === "idle" || (sessionState === "working" && task) || sessionState === "completing" || detectedWorkflowCommands.length > 0}

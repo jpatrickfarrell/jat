@@ -529,6 +529,12 @@ launch_ide() {
         return 0
     fi
 
+    # Detect if HTTPS is enabled (certs exist in ide/certs/)
+    local ide_protocol="http"
+    if [[ -f "$ide_path/certs/localhost.pem" ]] && [[ -f "$ide_path/certs/localhost-key.pem" ]]; then
+        ide_protocol="https"
+    fi
+
     # Use server-jat prefix so the /api/servers endpoint can find it
     local session_name="server-jat"
 
@@ -542,7 +548,7 @@ launch_ide() {
     # Also kill any orphaned process on the port (tmux kill-session can leave orphans)
     fuser -k "$ide_port/tcp" 2>/dev/null || true
 
-    echo -e "${DIM}  → IDE :$ide_port${NC}"
+    echo -e "${DIM}  → IDE ${ide_protocol}://localhost:$ide_port${NC}"
 
     # Clear Vite cache to prevent stale chunk errors
     rm -rf "$ide_path/.svelte-kit" "$ide_path/node_modules/.vite" 2>/dev/null
@@ -562,9 +568,9 @@ launch_ide() {
     (
         sleep 3
         if command -v xdg-open &>/dev/null; then
-            xdg-open "http://localhost:$ide_port" &>/dev/null
+            xdg-open "${ide_protocol}://localhost:$ide_port" &>/dev/null
         elif command -v open &>/dev/null; then
-            open "http://localhost:$ide_port"
+            open "${ide_protocol}://localhost:$ide_port"
         fi
     ) &
 }

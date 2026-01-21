@@ -87,8 +87,10 @@ export async function POST({ params }) {
 		let serverPath = null;
 		try {
 			const configPath = `${process.env.HOME}/.config/jat/projects.json`;
+			// Note: Using "" fallback instead of empty - empty causes jq to suppress
+			// the entire output if ANY field is null/empty (e.g., when port is not set)
 			const { stdout: configOutput } = await execAsync(
-				`jq -r '.projects["${projectName}"] | "\\(.path // empty)|\\(.server_path // empty)|\\(.port // empty)"' "${configPath}" 2>/dev/null`
+				`jq -r '.projects["${projectName}"] | "\\(.path // "")|\\(.server_path // "")|\\(.port // "")"' "${configPath}" 2>/dev/null`
 			);
 			const [pathPart, serverPathPart, portPart] = configOutput.trim().split('|');
 			if (pathPart) {
@@ -97,7 +99,7 @@ export async function POST({ params }) {
 			if (serverPathPart) {
 				serverPath = serverPathPart.replace(/^~/, process.env.HOME || '');
 			}
-			if (portPart) {
+			if (portPart && portPart !== 'null') {
 				configPort = parseInt(portPart, 10);
 			}
 		} catch {

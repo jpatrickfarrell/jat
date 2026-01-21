@@ -3609,26 +3609,32 @@
 			case "complete":
 				// Instantly write completing signal for immediate UI feedback
 				// Then send /jat:complete command (agent will update to complete when done)
-				if (sessionName && displayTask?.id) {
-					try {
-						await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
-							method: 'POST',
-							headers: { 'Content-Type': 'application/json' },
-							body: JSON.stringify({
-								type: 'completing',
-								data: {
-									taskId: displayTask.id,
-									taskTitle: displayTask.title,
-									currentStep: 'verifying',
-									progress: 0,
-									stepsCompleted: [],
-									stepsRemaining: ['verifying', 'committing', 'closing', 'releasing', 'announcing']
-								}
-							})
-						});
-					} catch (e) {
-						// Non-blocking - continue with command even if signal fails
-						console.warn('[SessionCard] Failed to write completing signal:', e);
+				if (sessionName) {
+					// Get task info from multiple sources (displayTask, richSignalPayload, lastCompletedTask)
+					const taskId = displayTask?.id || richSignalPayload?.taskId as string || lastCompletedTask?.id || '';
+					const taskTitle = displayTask?.title || richSignalPayload?.taskTitle as string || lastCompletedTask?.title || '';
+
+					if (taskId) {
+						try {
+							await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
+								method: 'POST',
+								headers: { 'Content-Type': 'application/json' },
+								body: JSON.stringify({
+									type: 'completing',
+									data: {
+										taskId,
+										taskTitle,
+										currentStep: 'verifying',
+										progress: 0,
+										stepsCompleted: [],
+										stepsRemaining: ['verifying', 'committing', 'closing', 'releasing', 'announcing']
+									}
+								})
+							});
+						} catch (e) {
+							// Non-blocking - continue with command even if signal fails
+							console.warn('[SessionCard] Failed to write completing signal:', e);
+						}
 					}
 				}
 				await sendWorkflowCommand("/jat:complete");
@@ -3637,25 +3643,31 @@
 			case "complete-kill":
 				// Instantly write completing signal for immediate UI feedback
 				// Then send /jat:complete --kill command (self-destruct session)
-				if (sessionName && displayTask?.id) {
-					try {
-						await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
-							method: 'POST',
-							headers: { 'Content-Type': 'application/json' },
-							body: JSON.stringify({
-								type: 'completing',
-								data: {
-									taskId: displayTask.id,
-									taskTitle: displayTask.title,
-									currentStep: 'verifying',
-									progress: 0,
-									stepsCompleted: [],
-									stepsRemaining: ['verifying', 'committing', 'closing', 'releasing', 'announcing']
-								}
-							})
-						});
-					} catch (e) {
-						console.warn('[SessionCard] Failed to write completing signal:', e);
+				if (sessionName) {
+					// Get task info from multiple sources (displayTask, richSignalPayload, lastCompletedTask)
+					const taskId = displayTask?.id || richSignalPayload?.taskId as string || lastCompletedTask?.id || '';
+					const taskTitle = displayTask?.title || richSignalPayload?.taskTitle as string || lastCompletedTask?.title || '';
+
+					if (taskId) {
+						try {
+							await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
+								method: 'POST',
+								headers: { 'Content-Type': 'application/json' },
+								body: JSON.stringify({
+									type: 'completing',
+									data: {
+										taskId,
+										taskTitle,
+										currentStep: 'verifying',
+										progress: 0,
+										stepsCompleted: [],
+										stepsRemaining: ['verifying', 'committing', 'closing', 'releasing', 'announcing']
+									}
+								})
+							});
+						} catch (e) {
+							console.warn('[SessionCard] Failed to write completing signal:', e);
+						}
 					}
 				}
 				// Track intent so sessionEvents knows to auto-kill when signal arrives

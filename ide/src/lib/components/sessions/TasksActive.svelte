@@ -13,6 +13,8 @@
 	import ServerSessionBadge from '$lib/components/ServerSessionBadge.svelte';
 	import StatusActionBadge from '$lib/components/work/StatusActionBadge.svelte';
 	import TaskDetailPaneB from '$lib/components/sessions/TaskDetailPaneB.svelte';
+	import { getReviewRules } from '$lib/stores/reviewRules.svelte';
+	import { computeReviewStatus } from '$lib/utils/reviewStatusUtils';
 
 	// Types
 	interface TmuxSession {
@@ -134,6 +136,9 @@
 
 	// Action loading state
 	let actionLoading = $state<string | null>(null);
+
+	// Per-session auto-complete disabled state (when user manually overrides)
+	let autoCompleteDisabledMap = $state<Map<string, boolean>>(new Map());
 
 	// "All done" flash state - shown when no more sessions to navigate to
 	let allDoneFlash = $state(false);
@@ -856,6 +861,8 @@
 						<!-- Column 3: Status (StatusActionBadge) -->
 						<td class="td-status" onclick={(e) => e.stopPropagation()}>
 							{#if session.type === 'agent'}
+								{@const reviewStatus = sessionTask ? computeReviewStatus(sessionTask, getReviewRules()) : null}
+								{@const autoCompleteDisabled = autoCompleteDisabledMap.get(session.name) ?? false}
 								<div class="status-cell-content">
 									<StatusActionBadge
 										sessionState={activityState || 'idle'}
@@ -897,6 +904,13 @@
 										onViewEpic={(epicId) => {
 											onViewTask?.(epicId);
 										}}
+										autoCompleteEnabled={!autoCompleteDisabled}
+										onAutoCompleteToggle={() => {
+											const newMap = new Map(autoCompleteDisabledMap);
+											newMap.set(session.name, !autoCompleteDisabled);
+											autoCompleteDisabledMap = newMap;
+										}}
+										reviewReason={reviewStatus?.reason ?? null}
 									/>
 								</div>
 							{:else}
@@ -1269,10 +1283,10 @@
 	}
 
 	/* Three-column layout widths */
-	/* Task: fixed width for TaskIdBadge, Agent: takes remaining space, Status: fixed ~140px */
+	/* Task: fixed width for TaskIdBadge, Agent: takes remaining space, Status: fixed width for StatusActionBadge */
 	.th-task, .td-task { width: 210px; }
 	.th-agent, .td-agent { width: auto; }
-	.th-status, .td-status { width: 140px; text-align: right; }
+	.th-status, .td-status { width: 160px; text-align: right; }
 
 	/* Task column */
 	.task-cell-content {

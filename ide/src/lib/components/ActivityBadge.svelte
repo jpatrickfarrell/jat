@@ -83,6 +83,9 @@
 	let showDropdown = $state(false);
 	let dropdownTimeout: ReturnType<typeof setTimeout> | null = null;
 
+	// Search state
+	let searchQuery = $state('');
+
 	// History drawer state
 	let historyDrawerOpen = $state(false);
 
@@ -226,6 +229,7 @@
 	function handleMouseLeave() {
 		dropdownTimeout = setTimeout(() => {
 			showDropdown = false;
+			searchQuery = ''; // Clear search when dropdown closes
 		}, 150);
 	}
 
@@ -261,6 +265,19 @@
 		return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 	}
 
+	// Filter tasks based on search query
+	const filteredTasks = $derived.by(() => {
+		if (!searchQuery.trim()) return allClosedTasks;
+
+		const query = searchQuery.toLowerCase().trim();
+		return allClosedTasks.filter(task => {
+			const title = (task.title || '').toLowerCase();
+			const id = task.id.toLowerCase();
+			const assignee = (task.assignee || '').toLowerCase();
+			return title.includes(query) || id.includes(query) || assignee.includes(query);
+		});
+	});
+
 	// Group tasks by day
 	interface DayGroup {
 		date: string;
@@ -277,7 +294,7 @@
 		yesterday.setDate(yesterday.getDate() - 1);
 		const yesterdayStr = getLocalDateStr(yesterday);
 
-		const sorted = [...allClosedTasks]
+		const sorted = [...filteredTasks]
 			.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
 			.slice(0, 150);
 
@@ -476,6 +493,35 @@
 	<!-- Dropdown Panel -->
 	{#if showDropdown}
 		<div class="dropdown-panel">
+			<!-- Search bar -->
+			<div class="search-bar">
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="search-icon">
+					<path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+				</svg>
+				<input
+					type="text"
+					class="search-input"
+					placeholder="Search tasks..."
+					bind:value={searchQuery}
+					onclick={(e) => e.stopPropagation()}
+					onkeydown={(e) => e.stopPropagation()}
+				/>
+				{#if searchQuery}
+					<button
+						class="clear-btn"
+						onclick={(e) => { e.stopPropagation(); searchQuery = ''; }}
+						aria-label="Clear search"
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+						</svg>
+					</button>
+				{/if}
+				{#if searchQuery && filteredTasks.length !== allClosedTasks.length}
+					<span class="match-count">{filteredTasks.length}</span>
+				{/if}
+			</div>
+
 			<!-- Header: Sparkline + Tokens + Cost -->
 			<div class="dropdown-header">
 				<!-- Sparkline -->
@@ -578,9 +624,13 @@
 				style="border-color: oklch(0.25 0.01 250); background: oklch(0.15 0.02 250);"
 			>
 				<span class="text-xs font-semibold" style="color: oklch(0.80 0.15 85);">
-					{completedCount} task{completedCount === 1 ? '' : 's'} completed today
+					{#if searchQuery}
+						{filteredTasks.length} of {allClosedTasks.length} task{allClosedTasks.length === 1 ? '' : 's'}
+					{:else}
+						{completedCount} task{completedCount === 1 ? '' : 's'} completed today
+					{/if}
 				</span>
-				{#if streak > 1}
+				{#if streak > 1 && !searchQuery}
 					<span class="text-[10px] px-1.5 py-0.5 rounded" style="background: oklch(0.25 0.10 30); color: oklch(0.80 0.15 30);">
 						{streak} day streak
 					</span>
@@ -589,7 +639,14 @@
 
 			<!-- Task list -->
 			<div class="max-h-[300px] overflow-y-auto">
-				{#if allClosedTasks.length === 0}
+				{#if filteredTasks.length === 0 && searchQuery}
+					<div class="px-3 py-4 text-center text-xs" style="color: oklch(0.50 0.02 250);">
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 mx-auto mb-2 opacity-50">
+							<path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+						</svg>
+						No tasks match "{searchQuery}"
+					</div>
+				{:else if allClosedTasks.length === 0}
 					<div class="px-3 py-4 text-center text-xs" style="color: oklch(0.50 0.02 250);">
 						No completed tasks yet
 					</div>
@@ -810,5 +867,68 @@
 	.view-history-btn:hover {
 		background: oklch(0.28 0.06 200 / 0.6);
 		color: oklch(0.85 0.12 200);
+	}
+
+	/* Search bar */
+	.search-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		background: oklch(0.14 0.02 250);
+		border-bottom: 1px solid oklch(0.25 0.01 250);
+	}
+
+	.search-icon {
+		width: 0.875rem;
+		height: 0.875rem;
+		color: oklch(0.50 0.02 250);
+		flex-shrink: 0;
+	}
+
+	.search-input {
+		flex: 1;
+		min-width: 0;
+		background: transparent;
+		border: none;
+		outline: none;
+		font-size: 0.75rem;
+		font-family: ui-monospace, monospace;
+		color: oklch(0.85 0.02 250);
+	}
+
+	.search-input::placeholder {
+		color: oklch(0.45 0.02 250);
+	}
+
+	.clear-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.25rem;
+		height: 1.25rem;
+		border-radius: 0.25rem;
+		background: oklch(0.25 0.02 250);
+		border: none;
+		cursor: pointer;
+		color: oklch(0.60 0.02 250);
+		flex-shrink: 0;
+		transition: all 0.15s ease;
+	}
+
+	.clear-btn:hover {
+		background: oklch(0.30 0.02 250);
+		color: oklch(0.80 0.02 250);
+	}
+
+	.match-count {
+		font-size: 0.625rem;
+		font-family: ui-monospace, monospace;
+		font-weight: 600;
+		color: oklch(0.70 0.12 200);
+		background: oklch(0.25 0.06 200 / 0.5);
+		padding: 0.125rem 0.375rem;
+		border-radius: 0.25rem;
+		flex-shrink: 0;
 	}
 </style>

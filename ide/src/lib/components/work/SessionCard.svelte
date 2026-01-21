@@ -196,6 +196,8 @@
 		onStopServer?: () => Promise<void>;
 		onRestartServer?: () => Promise<void>;
 		onStartServer?: () => Promise<void>;
+		/** Called when user presses Ctrl+Enter (submit and collapse) */
+		onCtrlEnterSubmit?: () => void;
 		// Shared
 		class?: string;
 		/** Whether this work card is currently highlighted (e.g., from clicking avatar elsewhere) */
@@ -322,6 +324,7 @@
 		onStopServer,
 		onRestartServer,
 		onStartServer,
+		onCtrlEnterSubmit,
 		// Shared
 		class: className = "",
 		isHighlighted = false,
@@ -4061,8 +4064,30 @@
 
 	// Handle keyboard shortcuts in input
 	function handleInputKeydown(e: KeyboardEvent) {
-		if (e.key === "Enter" && !e.shiftKey) {
-			// Enter without Shift submits the input
+		if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+			// Ctrl+Enter (or Cmd+Enter on Mac): submit AND collapse sessions panel
+			e.preventDefault();
+			const hasText = inputText.trim().length > 0;
+			const hasFiles = attachedFiles.length > 0;
+			if (!hasText && !hasFiles && onSendInput) {
+				onSendInput("enter", "key");
+			} else {
+				sendTextInput();
+			}
+			// Trigger visual flash feedback
+			submitFlash = true;
+			setTimeout(() => {
+				submitFlash = false;
+			}, 300);
+			// Call collapse callback after flash completes
+			// This lets user see the green success flash before row collapses
+			if (onCtrlEnterSubmit) {
+				setTimeout(() => {
+					onCtrlEnterSubmit();
+				}, 1400);
+			}
+		} else if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+			// Enter without modifiers submits the input
 			e.preventDefault();
 			// If input is empty, send Enter to tmux (for "Press Enter to continue" prompts)
 			const hasText = inputText.trim().length > 0;

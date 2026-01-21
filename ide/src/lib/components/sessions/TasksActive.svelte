@@ -956,6 +956,11 @@
 														fetchExpandedTaskDetails(taskId);
 													}
 												}}
+												onCtrlEnterSubmit={() => {
+													// Collapse just this session row (not the whole section)
+													expandedSession = null;
+													expandedOutput = '';
+												}}
 											/>
 										</div>
 									</div>

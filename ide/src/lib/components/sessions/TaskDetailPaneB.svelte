@@ -670,73 +670,6 @@
 								{/if}
 							</div>
 						</div>
-
-						<!-- Bottom section: Labels (pinned to bottom) -->
-						<div class="task-panel-section labels-section">
-							<span class="task-panel-label">Labels</span>
-							<div class="task-panel-labels">
-								{#if details?.labels && details.labels.length > 0}
-									{#each details.labels as label}
-										<span class="label-badge">
-											{label}
-											<button
-												class="label-remove-btn"
-												onclick={() => removeLabel(label)}
-												title="Remove label"
-												disabled={labelSaving}
-											>
-												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-2.5 h-2.5">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-												</svg>
-											</button>
-										</span>
-									{/each}
-								{/if}
-								{#if showLabelInput}
-									<div class="label-input-wrapper">
-										<input
-											type="text"
-											class="label-input"
-											placeholder="New label..."
-											bind:value={newLabelValue}
-											onkeydown={handleLabelKeydown}
-											onblur={() => { if (!newLabelValue.trim()) showLabelInput = false; }}
-											disabled={labelSaving}
-										/>
-										{#if newLabelValue.trim()}
-											<button
-												class="label-add-confirm"
-												onclick={addLabel}
-												disabled={labelSaving}
-												title="Add"
-											>
-												{#if labelSaving}
-													<span class="loading loading-spinner loading-xs"></span>
-												{:else}
-													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
-														<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-													</svg>
-												{/if}
-											</button>
-										{/if}
-									</div>
-								{:else}
-									<!-- Add button inline after labels -->
-									<button
-										class="add-label-btn-inline"
-										onclick={() => showLabelInput = true}
-										title="Add label"
-									>
-										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-										</svg>
-									</button>
-								{/if}
-								{#if (!details?.labels || details.labels.length === 0) && !showLabelInput}
-									<span class="no-labels-hint">No labels</span>
-								{/if}
-							</div>
-						</div>
 					</div>
 
 				{:else if activeTab === 'notes'}
@@ -1086,11 +1019,8 @@
 		overflow: hidden; /* Prevent content overflow */
 	}
 
-	.labels-section {
+	.labels-section-inline {
 		flex-shrink: 0;
-		margin-top: auto;
-		padding-top: 0.5rem;
-		border-top: 1px solid oklch(0.22 0.02 250);
 	}
 
 	/* Attachments section - flex to fill available space */
@@ -1212,8 +1142,7 @@
 		text-align: left;
 		line-height: 1.5;
 		cursor: pointer;
-		height: calc(4 * 1.5em + 1rem);
-		overflow: hidden;
+		min-height: calc(2 * 1.5em + 1rem);
 		white-space: pre-wrap;
 		word-break: break-word; /* Prevent long words from causing overflow */
 		transition: border-color 0.15s, background-color 0.15s;

@@ -5,8 +5,8 @@
 
 	import TaskDetailPaneB from '$lib/components/sessions/TaskDetailPaneB.svelte';
 
-	// Sample task data
-	const sampleTask = {
+	// Sample task data (reactive so edits persist)
+	let sampleTask = $state({
 		id: 'jat-abc123',
 		status: 'in_progress',
 		issue_type: 'feature',
@@ -20,7 +20,7 @@ Requirements:
 - Store in SQLite via Beads
 - Display below description section`,
 		notes: 'Checked the API - notes field already exists in schema. Need to add UI component.'
-	};
+	});
 
 	const sampleDetails = {
 		labels: ['ui', 'enhancement', 'ide'],
@@ -56,6 +56,13 @@ Requirements:
 		console.log('Save notes for', taskId, ':', notes);
 		await new Promise(resolve => setTimeout(resolve, 500));
 	}
+
+	async function handleSaveDescription(taskId: string, description: string) {
+		console.log('Save description for', taskId, ':', description);
+		await new Promise(resolve => setTimeout(resolve, 500));
+		// Update the sample task to reflect the change
+		sampleTask.description = description;
+	}
 </script>
 
 <svelte:head>
@@ -85,6 +92,7 @@ Requirements:
 				height={450}
 				onViewTask={handleViewTask}
 				onSaveNotes={handleSaveNotes}
+				onSaveDescription={handleSaveDescription}
 			/>
 		</div>
 	</div>

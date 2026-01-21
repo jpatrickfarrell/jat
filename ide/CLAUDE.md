@@ -2119,6 +2119,126 @@ Returns current question data if available:
 
 - jat-nsrz: Smart Question UI - Parse and display Claude Code question options (completed)
 
+## Instant Signal Pattern (Triage Effect)
+
+### Overview
+
+Session actions provide immediate UI feedback by writing signal files directly BEFORE calling the actual API endpoints. This creates a "triage effect" where users see state changes instantly while actual operations complete in the background.
+
+### Why This Pattern Exists
+
+**Problem:** When a user clicks an action button (resume, start, pause), the UI would freeze until the backend operation completed - sometimes 1-2 seconds for tmux operations.
+
+**Solution:** Write the expected signal state immediately, then perform the actual operation. The UI updates instantly, creating a responsive feel.
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        INSTANT SIGNAL FLOW                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. User clicks action button (e.g., "Resume")                              │
+│     └─► handleStatusAction('resume') called                                 │
+│                                                                             │
+│  2. INSTANTLY write signal to temp file                                     │
+│     └─► POST /api/sessions/{name}/signal                                    │
+│     └─► Writes to /tmp/jat-signal-tmux-{session}.json                       │
+│     └─► UI polls this file → shows new state IMMEDIATELY                    │
+│                                                                             │
+│  3. THEN call actual API endpoint                                           │
+│     └─► POST /api/sessions/{name}/resume                                    │
+│     └─► Creates tmux session, starts Claude Code, etc.                      │
+│                                                                             │
+│  Result: User sees instant feedback, actual work happens in background      │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Implemented Actions
+
+| Action | State Transition | Signal Written | Then Calls |
+|--------|-----------------|----------------|------------|
+| `pause` | working → paused | `paused` | `/api/sessions/[name]/pause` |
+| `completing` | working → completing | `completing` | (IDE handles) |
+| `resume` | paused → working | `working` | `/api/sessions/[name]/resume` |
+| `start` | idle → starting | `starting` | `/jat:start` command |
+| `start-next` | completed → auto-proceeding | `auto-proceeding` | `/api/tasks/next` |
+
+### Implementation Details
+
+**Signal API Endpoint:** `POST /api/sessions/[name]/signal`
+
+The endpoint supports a `direct` parameter (default: `true`) that writes directly to files for instant feedback:
+
+```javascript
+// Direct write mode - for instant UI feedback
+if (direct) {
+    const signal = { type, ...signalData, timestamp };
+
+    // Write current signal state
+    writeFileSync(`/tmp/jat-signal-tmux-${tmuxSession}.json`, JSON.stringify(signal, null, 2));
+
+    // Append to timeline history
+    appendFileSync(`/tmp/jat-timeline-${tmuxSession}.jsonl`, JSON.stringify(timelineEvent) + '\n');
+}
+```
+
+**SessionCard Handler Pattern:**
+
+```typescript
+case "resume":
+    if (sessionName) {
+        // STEP 1: Instantly write working signal for immediate UI update
+        await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: 'working',
+                data: { taskId, taskTitle, agentName, approach: 'Resuming from paused state' }
+            })
+        });
+
+        // STEP 2: Call actual resume API (may take 1-2 seconds)
+        await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/resume`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ taskId, agentName, project })
+        });
+    }
+    break;
+```
+
+### Files
+
+**API Endpoints:**
+- `src/routes/api/sessions/[name]/signal/+server.js` - Direct signal writes
+- `src/routes/api/sessions/[name]/pause/+server.ts` - Pause with instant signal
+- `src/routes/api/sessions/[name]/resume/+server.ts` - Resume session
+
+**Components:**
+- `src/lib/components/work/SessionCard.svelte` - `handleStatusAction()` function
+
+**Signal Files:**
+- `/tmp/jat-signal-tmux-{session}.json` - Current signal state (read by SSE)
+- `/tmp/jat-timeline-{session}.jsonl` - Signal history (append-only)
+
+### When to Use This Pattern
+
+**Use instant signals when:**
+- Action involves slow backend operations (tmux, process spawning)
+- User expects immediate visual feedback
+- The expected end state is predictable
+
+**Don't use when:**
+- Operation might fail (don't signal success prematurely)
+- State depends on operation result
+- Operation is already fast (<100ms)
+
+### Task Reference
+
+- jat-5z78g: Instant signal pattern for session state transitions (completed)
+
 ## Sound Effects System
 
 ### Overview

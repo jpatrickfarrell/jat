@@ -4,11 +4,10 @@
 	 *
 	 * Displays paused (resumable) sessions in a table format.
 	 * Similar to TasksActive but simpler - no expandable rows.
-	 * Each row shows: Task ID badge, agent avatar, task title, priority, StatusActionBadge with Resume.
+	 * Each row shows: Task ID badge (with agent avatar), task title, StatusActionBadge with Resume.
 	 */
 
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
-	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import StatusActionBadge from '$lib/components/work/StatusActionBadge.svelte';
 
 	// Types
@@ -18,6 +17,7 @@
 		taskId: string;
 		taskTitle: string;
 		taskPriority: number;
+		taskDescription?: string;
 		project: string;
 		lastActivity?: string;
 	}
@@ -34,15 +34,6 @@
 		onResumeSession?: (agentName: string, sessionId: string) => Promise<void>;
 		onViewTask?: (taskId: string) => void;
 	} = $props();
-
-	// Priority colors
-	const priorityColors: Record<number, string> = {
-		0: 'text-error font-bold',     // P0 - Critical
-		1: 'text-warning',              // P1 - High
-		2: 'text-info',                 // P2 - Medium
-		3: 'text-base-content/70',      // P3 - Low
-		4: 'text-base-content/50'       // P4 - Lowest
-	};
 
 	// Action loading state
 	let actionLoading = $state<string | null>(null);
@@ -65,43 +56,47 @@
 
 {#if sessions.length > 0}
 	<div class="paused-sessions-table">
-		<table class="table table-sm w-full">
+		<table class="paused-table">
 			<thead>
-				<tr class="text-base-content/60 text-xs uppercase tracking-wider">
-					<th class="w-[120px]">Task</th>
-					<th class="w-[140px]">Agent</th>
-					<th>Title</th>
-					<th class="w-[60px] text-center">Priority</th>
-					<th class="w-[140px] text-right">Action</th>
+				<tr>
+					<th class="th-task">Task</th>
+					<th class="th-title">Title</th>
+					<th class="th-action">Action</th>
 				</tr>
 			</thead>
 			<tbody>
 				{#each sessions as session (session.sessionId)}
 					{@const projectColor = projectColors[session.project] || 'oklch(0.70 0.15 200)'}
-					<tr class="paused-row" style="--project-color: {projectColor}">
-						<td>
-							<TaskIdBadge
-								task={{ id: session.taskId, status: 'in_progress' }}
-								size="sm"
-								showState={false}
-								onClick={() => onViewTask?.(session.taskId)}
-							/>
-						</td>
-						<td>
-							<div class="flex items-center gap-2">
-								<AgentAvatar name={session.agentName} size={24} />
-								<span class="text-sm font-medium text-base-content/80">{session.agentName}</span>
+					<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+					<tr class="paused-row clickable" style="--project-color: {projectColor}" onclick={() => onViewTask?.(session.taskId)}>
+						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+						<td class="td-task" onclick={(e) => e.stopPropagation()}>
+							<div class="task-cell-content">
+								<div class="agent-badge-row mx-2">
+									<TaskIdBadge
+										task={{ id: session.taskId, status: 'in_progress', priority: session.taskPriority }}
+										size="sm"
+										variant="agentPill"
+										agentName={session.agentName}
+										onClick={() => onViewTask?.(session.taskId)}
+									/>
+								</div>
 							</div>
 						</td>
-						<td>
-							<span class="text-sm text-base-content/90 line-clamp-1">{session.taskTitle}</span>
+						<td class="td-title">
+							<div class="title-cell">
+								<span class="task-title" title={session.taskTitle}>
+									{session.taskTitle || session.taskId}
+								</span>
+								{#if session.taskDescription}
+									<div class="task-description">
+										{session.taskDescription}
+									</div>
+								{/if}
+							</div>
 						</td>
-						<td class="text-center">
-							<span class="text-sm font-mono {priorityColors[session.taskPriority] || 'text-base-content/70'}">
-								P{session.taskPriority}
-							</span>
-						</td>
-						<td class="text-right">
+						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+						<td class="td-action text-right" onclick={(e) => e.stopPropagation()}>
 							<StatusActionBadge
 								sessionState="paused"
 								sessionName={`jat-${session.agentName}`}
@@ -125,18 +120,43 @@
 	.paused-sessions-table {
 		border-radius: 0.5rem;
 		overflow: hidden;
-		background: oklch(0.18 0.01 250 / 0.5);
-		border: 1px solid oklch(0.30 0.02 250 / 0.5);
+		max-width: 100%;
+		background: oklch(0.16 0.01 250);
+		border: 1px solid oklch(0.25 0.02 250);
 	}
 
-	.paused-sessions-table :global(thead tr) {
-		background: oklch(0.15 0.01 250 / 0.8);
+	.paused-table {
+		width: 100%;
+		max-width: 100%;
+		border-collapse: collapse;
+		table-layout: fixed;
 	}
 
-	.paused-sessions-table :global(th) {
+	.paused-table thead {
+		background: oklch(0.20 0.01 250);
+		border-bottom: 1px solid oklch(0.28 0.02 250);
+	}
+
+	.paused-table th {
+		text-align: left;
 		padding: 0.75rem 1rem;
-		font-weight: 500;
-		border-bottom: 1px solid oklch(0.25 0.02 250 / 0.5);
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: oklch(0.55 0.02 250);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	.paused-table td {
+		padding: 0.875rem 1rem;
+		font-size: 0.85rem;
+		color: oklch(0.75 0.02 250);
+		vertical-align: middle;
+		border-bottom: 1px solid oklch(0.22 0.02 250);
+	}
+
+	.paused-row:last-child td {
+		border-bottom: none;
 	}
 
 	.paused-row {
@@ -145,17 +165,61 @@
 		transition: background 0.15s ease;
 	}
 
+	.paused-row.clickable {
+		cursor: pointer;
+	}
+
 	.paused-row:hover {
 		background: linear-gradient(90deg, oklch(0.65 0.18 300 / 0.12), oklch(0.20 0.01 250 / 0.3) 50%);
 	}
 
-	.paused-row :global(td) {
-		padding: 0.75rem 1rem;
-		border-bottom: 1px solid oklch(0.22 0.02 250 / 0.4);
-		vertical-align: middle;
+	/* Column widths matching TasksActive */
+	.th-task, .td-task { width: min-content; white-space: nowrap; }
+	.th-title, .td-title { width: auto; padding-right: 2rem; }
+	.th-action, .td-action { width: 160px; text-align: right; overflow: hidden; }
+
+	/* Task cell content - matches TasksActive structure exactly */
+	.task-cell-content {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.25rem;
+		width: 100%;
+		min-width: 0;
 	}
 
-	.paused-row:last-child :global(td) {
-		border-bottom: none;
+	.agent-badge-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	/* Title cell styling matching TasksActive */
+	.title-cell {
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		min-width: 0;
+		width: 100%;
+		margin-right: 1rem;
+	}
+
+	.task-title {
+		font-size: 0.9375rem;
+		font-weight: 600;
+		color: oklch(0.85 0.02 250);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		max-width: calc(100% - 2rem);
+	}
+
+	.task-description {
+		font-size: 0.75rem;
+		color: oklch(0.65 0.05 200);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		max-width: calc(100% - 2rem);
 	}
 </style>

@@ -374,6 +374,27 @@ export async function POST({ request }) {
 			}, { status: 500 });
 		}
 
+		// Write IDE-initiated "starting" signal for instant UI feedback
+		// This shows STARTING state immediately, before agent emits its own signal
+		try {
+			const startingSignal = {
+				type: 'starting',
+				agentName,
+				sessionId: sessionName,
+				project: resolvedProject,
+				model,
+				taskId: taskId || null,
+				taskTitle: task?.title || null,
+				timestamp: new Date().toISOString()
+			};
+			const signalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
+			writeFileSync(signalFile, JSON.stringify(startingSignal, null, 2), 'utf-8');
+			console.log(`[spawn] Wrote IDE-initiated starting signal: ${signalFile}`);
+		} catch (err) {
+			// Non-fatal - UI will eventually get state from agent
+			console.warn('[spawn] Failed to write starting signal:', err);
+		}
+
 		// Step 4: Wait for Claude to initialize, then send /jat:start {agentName} [taskId]
 		// Pass the agent name explicitly so /jat:start resumes the existing agent
 		// instead of creating a new one with a different name

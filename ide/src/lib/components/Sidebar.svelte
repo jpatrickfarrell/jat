@@ -965,7 +965,7 @@
 							<h4 class="text-lg font-semibold mb-3">Quick Start</h4>
 							<div class="mockup-code text-xs">
 								<pre><code># 1. Install (run in your terminal/bash)</code></pre>
-								<pre><code>curl -fsSL https://raw.githubusercontent.com/joewinke/jat/main/install.sh | bash</code></pre>
+								<pre><code>curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/install.sh | bash</code></pre>
 								<pre><code></code></pre>
 								<pre><code># 2. Initialize Beads in your project</code></pre>
 								<pre><code>bd init</code></pre>

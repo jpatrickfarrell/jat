@@ -2164,12 +2164,21 @@ Session actions provide immediate UI feedback by writing signal files directly B
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Implemented Actions
+### Signal Emission Terminology
+
+| Term | Description | Emitter |
+|------|-------------|---------|
+| **Agent-emitted signal** | Agent runs `jat-signal` command during workflow | Agent process |
+| **IDE-initiated signal** | IDE writes signal file directly via API or spawn | IDE server |
+| **Optimistic UI state** | Local Svelte state override for instant feedback | Component |
+
+### Implemented IDE-Initiated Signals
 
 | Action | State Transition | Signal Written | Then Calls |
 |--------|-----------------|----------------|------------|
+| `spawn` | (new) → starting | `starting` | Creates tmux + Claude |
 | `pause` | working → paused | `paused` | `/api/sessions/[name]/pause` |
-| `completing` | working → completing | `completing` | (IDE handles) |
+| `completing` | working → completing | `completing` | `/jat:complete` command |
 | `resume` | paused → working | `working` | `/api/sessions/[name]/resume` |
 | `start` | idle → starting | `starting` | `/jat:start` command |
 | `start-next` | completed → auto-proceeding | `auto-proceeding` | `/api/tasks/next` |
@@ -2218,15 +2227,58 @@ case "resume":
     break;
 ```
 
+### Optimistic Local State (Enhanced Pattern)
+
+For components that display session state via props (like `StatusActionBadge`), writing signal files alone isn't enough for instant feedback - the UI must wait for SSE polling to read the file.
+
+**Solution:** Use optimistic local state that overrides SSE-derived state until SSE catches up.
+
+**TasksActive Implementation:**
+
+```typescript
+// State to track optimistic overrides
+let optimisticStates = $state<Map<string, string>>(new Map());
+
+// In onAction handler for 'complete':
+optimisticStates.set(session.name, 'completing');
+optimisticStates = new Map(optimisticStates); // trigger reactivity
+
+// StatusActionBadge uses optimistic state first:
+<StatusActionBadge
+    sessionState={optimisticStates.get(session.name) || activityState || 'idle'}
+    ...
+/>
+
+// Effect clears optimistic state when SSE catches up:
+$effect(() => {
+    for (const [sessionName, optimisticState] of optimisticStates) {
+        const sseState = agentSessionInfo.get(agentName)?.activityState;
+        if (sseState === optimisticState || /* later state */) {
+            optimisticStates.delete(sessionName);
+        }
+    }
+});
+```
+
+**When to use optimistic local state vs signal files:**
+
+| Approach | Use Case | Latency |
+|----------|----------|---------|
+| Signal files only | Cross-client sync, persistence | ~500ms (SSE poll interval) |
+| Optimistic local state | Same-client instant feedback | ~0ms (immediate) |
+| Both (recommended) | Best of both worlds | ~0ms local, syncs to others |
+
 ### Files
 
 **API Endpoints:**
+- `src/routes/api/work/spawn/+server.js` - Spawn with IDE-initiated `starting` signal
 - `src/routes/api/sessions/[name]/signal/+server.js` - Direct signal writes
 - `src/routes/api/sessions/[name]/pause/+server.ts` - Pause with instant signal
 - `src/routes/api/sessions/[name]/resume/+server.ts` - Resume session
 
 **Components:**
 - `src/lib/components/work/SessionCard.svelte` - `handleStatusAction()` function
+- `src/lib/components/sessions/TasksActive.svelte` - Optimistic state pattern for StatusActionBadge
 
 **Signal Files:**
 - `/tmp/jat-signal-tmux-{session}.json` - Current signal state (read by SSE)
@@ -2247,6 +2299,7 @@ case "resume":
 ### Task Reference
 
 - jat-5z78g: Instant signal pattern for session state transitions (completed)
+- jat-n1937: Add optimistic local state to TasksActive for instant StatusActionBadge updates (completed)
 
 ## Sound Effects System
 

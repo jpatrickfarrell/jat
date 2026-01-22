@@ -42,7 +42,7 @@ echo ""
 
 if [ ! -d "$OLD_DIR" ] && [ ! -d "$NEW_DIR" ]; then
     echo -e "${YELLOW}No JAT installation found.${NC}"
-    echo "Run the installer: curl -fsSL https://raw.githubusercontent.com/joewinke/jat/main/tools/scripts/bootstrap.sh | bash"
+    echo "Run the installer: curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/tools/scripts/bootstrap.sh | bash"
     exit 0
 fi
 

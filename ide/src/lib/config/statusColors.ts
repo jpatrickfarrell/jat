@@ -652,6 +652,21 @@ export const SESSION_STATE_VISUALS: Record<string, SessionStateVisual> = {
 		glow: 'oklch(0.65 0.18 300 / 0.3)',
 		icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
 	},
+	ready: {
+		label: '🚀 START',
+		shortLabel: '🚀 Start',
+		iconType: 'rocket',
+		description: 'Task is ready to be started',
+		// StatusActionBadge colors - green/teal for ready state
+		bgColor: 'oklch(0.50 0.18 160 / 0.25)',
+		textColor: 'oklch(0.85 0.15 160)',
+		borderColor: 'oklch(0.50 0.18 160 / 0.4)',
+		// SessionCard accent colors
+		accent: 'oklch(0.70 0.20 160)',
+		bgTint: 'oklch(0.70 0.20 160 / 0.08)',
+		glow: 'oklch(0.70 0.20 160 / 0.3)',
+		icon: 'M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z'
+	},
 	idle: {
 		label: '💤 IDLE',
 		shortLabel: '💤 Idle',
@@ -915,6 +930,15 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
 			variant: 'info',
 			description: 'Open session in terminal'
+		}
+	],
+	ready: [
+		{
+			id: 'start',
+			label: 'Start Task',
+			icon: 'M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z',
+			variant: 'success',
+			description: 'Start working on this task'
 		}
 	]
 };

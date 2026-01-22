@@ -151,6 +151,34 @@
 	// Track sessions that had task data when they first appeared (for text animation)
 	let sessionsWithTaskOnEntry = $state<Set<string>>(new Set());
 
+	// Optimistic state overrides - for instant UI feedback before SSE catches up
+	let optimisticStates = $state<Map<string, string>>(new Map());
+
+	// Clear optimistic states when SSE catches up
+	$effect(() => {
+		if (optimisticStates.size === 0) return;
+
+		let changed = false;
+		const newOptimistic = new Map(optimisticStates);
+
+		for (const [sessionName, optimisticState] of optimisticStates) {
+			const agentName = sessionName.startsWith('jat-') ? sessionName.slice(4) : sessionName;
+			const sseState = agentSessionInfo.get(agentName)?.activityState;
+
+			// Clear optimistic state if SSE reports same state or a "later" state
+			if (sseState === optimisticState ||
+				(optimisticState === 'completing' && (sseState === 'completed' || sseState === 'idle'))) {
+				newOptimistic.delete(sessionName);
+				changed = true;
+				console.log('[TasksActive] Cleared optimistic state for', sessionName, '- SSE caught up:', sseState);
+			}
+		}
+
+		if (changed) {
+			optimisticStates = newOptimistic;
+		}
+	});
+
 	// Effect to detect new and exiting sessions while preserving order
 	$effect(() => {
 		const currentNames = new Set(sessions.map(s => s.name));
@@ -803,7 +831,7 @@
 								<!-- Agent session: TaskIdBadge with avatar and status ring -->
 								<div class="task-cell-content">
 									{#if sessionTask}
-										<div class="agent-badge-row">
+										<div class="agent-badge-row mx-2">
 											<TaskIdBadge
 												task={sessionTask}
 												size="sm"
@@ -866,7 +894,7 @@
 								{@const autoCompleteDisabled = autoCompleteDisabledMap.get(session.name) ?? reviewBasedDefault}
 								<div class="status-cell-content">
 									<StatusActionBadge
-										sessionState={activityState || 'idle'}
+										sessionState={optimisticStates.get(session.name) || activityState || 'idle'}
 										{elapsed}
 										stacked={true}
 										sessionName={session.name}
@@ -883,7 +911,12 @@
 											} else if (actionId === 'view-task' && sessionTask) {
 												onViewTask?.(sessionTask.id);
 											} else if (actionId === 'complete' || actionId === 'complete-kill') {
-												// Instant completing signal - write BEFORE calling command
+												// INSTANT UI UPDATE - set optimistic state immediately
+												optimisticStates.set(session.name, 'completing');
+												optimisticStates = new Map(optimisticStates); // trigger reactivity
+												console.log('[TasksActive] Set optimistic completing state for:', session.name);
+
+												// Also write signal for persistence/other clients
 												if (sessionTask) {
 													try {
 														await fetch(`/api/sessions/${encodeURIComponent(session.name)}/signal`, {
@@ -902,7 +935,7 @@
 															})
 														});
 													} catch (e) {
-														console.warn('[TasksActive] Failed to write instant completing signal:', e);
+														console.warn('[TasksActive] Failed to write completing signal:', e);
 													}
 												}
 												// Now call the actual command
@@ -1303,19 +1336,20 @@
 		padding: 0.875rem 1rem;
 		font-size: 0.85rem;
 		color: oklch(0.75 0.02 250);
+		vertical-align: middle;
 	}
 
 	/* Three-column layout widths */
 	/* Task: fixed width for TaskIdBadge, Agent: takes remaining space, Status: fixed width for StatusActionBadge */
-	.th-task, .td-task { width: 210px; }
-	.th-agent, .td-agent { width: auto; }
+	.th-task, .td-task { width: min-content; white-space: nowrap; }
+	.th-agent, .td-agent { width: auto; padding-right: 2rem; }
 	.th-status, .td-status { width: 160px; text-align: right; }
 
 	/* Task column */
 	.task-cell-content {
 		display: flex;
 		flex-direction: column;
-		align-items: flex-start;
+		align-items: center;
 		gap: 0.25rem;
 		width: 100%;
 		min-width: 0;
@@ -1328,6 +1362,7 @@
 		gap: 0.25rem;
 		width: 100%;
 		min-width: 0;
+		margin-right: 1rem;
 	}
 
 	.no-agent-label {
@@ -1396,6 +1431,7 @@
 		white-space: nowrap;
 		flex: 1;
 		min-width: 0;
+		max-width: calc(100% - 2rem);
 	}
 
 	.task-description {
@@ -1405,8 +1441,8 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		width: 100%;
-		max-width: 100%;
+		width: calc(100% - 2rem);
+		max-width: calc(100% - 2rem);
 	}
 
 	.agent-badge-row {

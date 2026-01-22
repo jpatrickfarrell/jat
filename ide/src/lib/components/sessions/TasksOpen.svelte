@@ -428,18 +428,19 @@
 							style="{projectColor ? `border-left: 3px solid ${projectColor};` : ''}{isExiting ? ' pointer-events: none;' : ''}"
 							onclick={() => !isExiting && handleRowClick(task.id)}
 						>
-							<td class="td-task" style={isExiting ? 'background: transparent;' : ''}>
-								<TaskIdBadge
-									{task}
-									size="xs"
-									showType={true}
-									copyOnly
-									blockedBy={unresolvedBlockers}
-									blocks={blockedTasks}
-									showDependencies={true}
-									onOpenTask={handleRowClick}
-									animate={isNew}
-								/>
+							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+							<td class="td-task" style={isExiting ? 'background: transparent;' : ''} onclick={(e) => e.stopPropagation()}>
+								<div class="task-cell-content">
+									<div class="agent-badge-row mx-2">
+										<TaskIdBadge
+											{task}
+											size="sm"
+											variant="agentPill"
+											onClick={() => !isExiting && handleRowClick(task.id)}
+											animate={isNew}
+										/>
+									</div>
+								</div>
 							</td>
 							<td class="td-title" style={isExiting ? 'background: transparent;' : ''}>
 								<span class="task-title {isNew ? 'tracking-in-expand' : ''}" style={isNew ? 'animation-delay: 100ms;' : ''} title={task.title}>
@@ -643,13 +644,13 @@
 
 	/* Three-column layout widths to match TasksActive */
 	/* Task: fixed width for TaskIdBadge */
-	.th-task, .td-task { width: 210px; }
-	.th-title, .td-title { width: auto; }
+	.th-task, .td-task { width: min-content; white-space: nowrap; text-align: center; }
+	.th-title, .td-title { width: auto; padding-right: 2rem; }
 	.th-actions, .td-actions { width: 80px; text-align: right; }
 
 	.tasks-table td {
 		padding: 0.75rem 1rem;
-		vertical-align: top;
+		vertical-align: middle;
 		border-bottom: 1px solid oklch(0.22 0.02 250);
 	}
 
@@ -660,6 +661,21 @@
 
 	.task-row:hover {
 		background: oklch(0.20 0.01 250);
+	}
+
+	/* Task cell content - matches TasksActive structure */
+	.task-cell-content {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.25rem;
+		width: 100%;
+	}
+
+	.agent-badge-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 	}
 
 	/* Task info */

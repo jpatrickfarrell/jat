@@ -8,7 +8,7 @@
 	let currentCreditIndex = $state(0);
 	let creditElements: HTMLAnchorElement[] = [];
 
-	const installCommand = 'curl -fsSL https://raw.githubusercontent.com/joewinke/jat/main/tools/scripts/bootstrap.sh | bash';
+	const installCommand = 'curl -fsSL https://raw.githubusercontent.com/joewinke/jat/master/tools/scripts/bootstrap.sh | bash';
 
 	async function copyCommand() {
 		await navigator.clipboard.writeText(installCommand);

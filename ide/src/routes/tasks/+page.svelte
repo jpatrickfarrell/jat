@@ -9,27 +9,27 @@
 	 * - Maintains the aesthetic of /tasks2 while simplifying navigation
 	 */
 
-	import { onMount, onDestroy } from 'svelte';
-	import { slide } from 'svelte/transition';
-	import SortDropdown from '$lib/components/SortDropdown.svelte';
-	import TasksActive from '$lib/components/sessions/TasksActive.svelte';
-	import TasksPaused from '$lib/components/sessions/TasksPaused.svelte';
-	import TasksOpen from '$lib/components/sessions/TasksOpen.svelte';
-	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
-	import WorkingAgentBadge from '$lib/components/WorkingAgentBadge.svelte';
-	import { fetchAndGetProjectColors } from '$lib/utils/projectColors';
-	import { openTaskDetailDrawer } from '$lib/stores/drawerStore';
+	import { onMount, onDestroy } from "svelte";
+	import { slide } from "svelte/transition";
+	import SortDropdown from "$lib/components/SortDropdown.svelte";
+	import TasksActive from "$lib/components/sessions/TasksActive.svelte";
+	import TasksPaused from "$lib/components/sessions/TasksPaused.svelte";
+	import TasksOpen from "$lib/components/sessions/TasksOpen.svelte";
+	import TaskIdBadge from "$lib/components/TaskIdBadge.svelte";
+	import WorkingAgentBadge from "$lib/components/WorkingAgentBadge.svelte";
+	import { fetchAndGetProjectColors } from "$lib/utils/projectColors";
+	import { openTaskDetailDrawer } from "$lib/stores/drawerStore";
 	import {
 		getProjectFromTaskId,
 		buildEpicChildMap,
-		getParentEpicId
-	} from '$lib/utils/projectUtils';
+		getParentEpicId,
+	} from "$lib/utils/projectUtils";
 
 	interface TmuxSession {
 		name: string;
 		created: string;
 		attached: boolean;
-		type: 'agent' | 'server' | 'ide' | 'other';
+		type: "agent" | "server" | "ide" | "other";
 		project?: string;
 	}
 
@@ -100,16 +100,18 @@
 	let selectedProject = $state<string | null>(null);
 
 	// Subsection collapse state per project (sessions/paused/tasks)
-	type SubsectionType = 'sessions' | 'paused' | 'tasks';
-	let collapsedSubsections = $state<Map<string, Set<SubsectionType>>>(new Map());
+	type SubsectionType = "sessions" | "paused" | "tasks";
+	let collapsedSubsections = $state<Map<string, Set<SubsectionType>>>(
+		new Map(),
+	);
 
 	// Epic collapse state (independent: each group can be expanded/collapsed separately)
 	// Uses Set of epic keys per project. "standalone" key used for tasks without an epic.
 	let expandedEpicsByProject = $state<Map<string, Set<string>>>(new Map());
 
 	// Sort configuration for sessions
-	type SessionSortOption = 'state' | 'project' | 'created';
-	type SessionSortDirection = 'asc' | 'desc';
+	type SessionSortOption = "state" | "project" | "created";
+	type SessionSortDirection = "asc" | "desc";
 
 	interface SessionSortConfig {
 		value: string;
@@ -118,62 +120,65 @@
 		defaultDir: SessionSortDirection;
 	}
 
-	let sortBy = $state<SessionSortOption>('state');
-	let sortDir = $state<SessionSortDirection>('asc');
+	let sortBy = $state<SessionSortOption>("state");
+	let sortDir = $state<SessionSortDirection>("asc");
 
 	// State priority for sorting
 	const STATE_PRIORITY: Record<string, number> = {
-		'ready-for-review': 0,
-		'needs-input': 1,
+		"ready-for-review": 0,
+		"needs-input": 1,
 		completed: 2,
 		working: 3,
 		completing: 4,
 		starting: 5,
 		recovering: 6,
 		compacting: 7,
-		'auto-proceeding': 8,
-		idle: 9
+		"auto-proceeding": 8,
+		idle: 9,
 	};
 
 	const SORT_OPTIONS: SessionSortConfig[] = [
-		{ value: 'state', label: 'State', icon: '🎯', defaultDir: 'asc' },
-		{ value: 'project', label: 'Project', icon: '📁', defaultDir: 'asc' },
-		{ value: 'created', label: 'Created', icon: '⏱️', defaultDir: 'desc' }
+		{ value: "state", label: "State", icon: "🎯", defaultDir: "asc" },
+		{ value: "project", label: "Project", icon: "📁", defaultDir: "asc" },
+		{ value: "created", label: "Created", icon: "⏱️", defaultDir: "desc" },
 	];
 
 	let projectOrder = $state<string[]>([]);
 
 	// Helpers
-	function categorizeSession(name: string): { type: TmuxSession['type']; project?: string } {
-		if (name.startsWith('jat-')) {
+	function categorizeSession(name: string): {
+		type: TmuxSession["type"];
+		project?: string;
+	} {
+		if (name.startsWith("jat-")) {
 			const agentName = name.slice(4);
-			if (agentName.startsWith('pending-')) {
-				return { type: 'agent', project: undefined };
+			if (agentName.startsWith("pending-")) {
+				return { type: "agent", project: undefined };
 			}
 			const project = agentProjects.get(agentName);
-			return { type: 'agent', project };
+			return { type: "agent", project };
 		}
-		if (name.startsWith('server-')) {
+		if (name.startsWith("server-")) {
 			const project = name.slice(7);
-			return { type: 'server', project };
+			return { type: "server", project };
 		}
-		if (name === 'jat-ide' || name.startsWith('jat-ide')) {
-			return { type: 'ide' };
+		if (name === "jat-ide" || name.startsWith("jat-ide")) {
+			return { type: "ide" };
 		}
-		return { type: 'other' };
+		return { type: "other" };
 	}
 
 	function getAgentName(sessionName: string): string {
-		if (sessionName.startsWith('jat-')) {
+		if (sessionName.startsWith("jat-")) {
 			return sessionName.slice(4);
 		}
 		return sessionName;
 	}
 
 	function getSessionStatePriority(session: TmuxSession): number {
-		if (session.type !== 'agent') return 99;
+		if (session.type !== "agent") return 99;
 		const agentName = getAgentName(session.name);
-		const state = agentSessionInfo.get(agentName)?.activityState || 'idle';
+		const state = agentSessionInfo.get(agentName)?.activityState || "idle";
 		return STATE_PRIORITY[state] ?? 99;
 	}
 
@@ -217,7 +222,11 @@
 		const projects = allProjects();
 		if (projects.length > 0 && !selectedProject) {
 			selectProject(projects[0]);
-		} else if (projects.length > 0 && selectedProject && !projects.includes(selectedProject)) {
+		} else if (
+			projects.length > 0 &&
+			selectedProject &&
+			!projects.includes(selectedProject)
+		) {
 			// Selected project no longer exists, select first
 			selectProject(projects[0]);
 		}
@@ -227,8 +236,8 @@
 	const sessionsByProject = $derived(() => {
 		const grouped = new Map<string, TmuxSession[]>();
 
-		for (const session of sessions.filter((s) => s.type === 'agent')) {
-			const project = session.project || 'Unknown';
+		for (const session of sessions.filter((s) => s.type === "agent")) {
+			const project = session.project || "Unknown";
 			if (!grouped.has(project)) {
 				grouped.set(project, []);
 			}
@@ -238,9 +247,9 @@
 		// Sort sessions within each project
 		for (const [project, projectSessions] of grouped) {
 			projectSessions.sort((a, b) => {
-				const multiplier = sortDir === 'asc' ? 1 : -1;
+				const multiplier = sortDir === "asc" ? 1 : -1;
 
-				if (sortBy === 'state') {
+				if (sortBy === "state") {
 					const stateA = getSessionStatePriority(a);
 					const stateB = getSessionStatePriority(b);
 					if (stateA !== stateB) {
@@ -259,7 +268,7 @@
 
 	// Group sessions by epic within a project
 	function getSessionsByEpic(
-		projectSessions: TmuxSession[]
+		projectSessions: TmuxSession[],
 	): Map<string | null, TmuxSession[]> {
 		const grouped = new Map<string | null, TmuxSession[]>();
 
@@ -282,7 +291,7 @@
 		const grouped = new Map<string, Task[]>();
 
 		for (const task of openTasks) {
-			const project = getProjectFromTaskId(task.id) || 'Unknown';
+			const project = getProjectFromTaskId(task.id) || "Unknown";
 			if (!grouped.has(project)) {
 				grouped.set(project, []);
 			}
@@ -298,12 +307,12 @@
 
 		for (const task of projectTasks) {
 			// Don't include epics themselves in their own group
-			if (task.issue_type === 'epic') {
+			if (task.issue_type === "epic") {
 				continue;
 			}
 
 			// Only include open tasks (not in_progress, blocked, or closed)
-			if (task.status !== 'open') {
+			if (task.status !== "open") {
 				continue;
 			}
 
@@ -324,16 +333,22 @@
 	}
 
 	// Toggle epic collapse
-	function toggleEpicCollapse(project: string, epicId: string | null, subsection: 'sessions' | 'tasks' = 'tasks') {
+	function toggleEpicCollapse(
+		project: string,
+		epicId: string | null,
+		subsection: "sessions" | "tasks" = "tasks",
+	) {
 		// Each subsection (sessions/tasks) has independent expand state
-		const key = epicId ? `${subsection}-${epicId}` : `${subsection}-standalone`;
+		const key = epicId
+			? `${subsection}-${epicId}`
+			: `${subsection}-standalone`;
 		let expanded = expandedEpicsByProject.get(project);
 
 		if (!expanded) {
 			// Initialize with default state: standalone tasks expanded, epic groups collapsed
 			expanded = new Set<string>();
-			expanded.add('sessions-standalone');
-			expanded.add('tasks-standalone');
+			expanded.add("sessions-standalone");
+			expanded.add("tasks-standalone");
 		}
 
 		if (expanded.has(key)) {
@@ -348,9 +363,15 @@
 		expandedEpicsByProject = new Map(expandedEpicsByProject);
 	}
 
-	function isEpicExpanded(project: string, epicId: string | null, subsection: 'sessions' | 'tasks' = 'tasks'): boolean {
+	function isEpicExpanded(
+		project: string,
+		epicId: string | null,
+		subsection: "sessions" | "tasks" = "tasks",
+	): boolean {
 		// Each subsection (sessions/tasks) has independent expand state
-		const key = epicId ? `${subsection}-${epicId}` : `${subsection}-standalone`;
+		const key = epicId
+			? `${subsection}-${epicId}`
+			: `${subsection}-standalone`;
 		const expanded = expandedEpicsByProject.get(project);
 		if (!expanded) {
 			// Default: standalone tasks are expanded, epic groups are collapsed
@@ -360,8 +381,12 @@
 	}
 
 	// Subsection collapse handlers
-	function toggleSubsectionCollapse(project: string, subsection: SubsectionType) {
-		const projectSubsections = collapsedSubsections.get(project) || new Set();
+	function toggleSubsectionCollapse(
+		project: string,
+		subsection: SubsectionType,
+	) {
+		const projectSubsections =
+			collapsedSubsections.get(project) || new Set();
 		if (projectSubsections.has(subsection)) {
 			projectSubsections.delete(subsection);
 		} else {
@@ -372,7 +397,10 @@
 		saveCollapseState();
 	}
 
-	function isSubsectionCollapsed(project: string, subsection: SubsectionType): boolean {
+	function isSubsectionCollapsed(
+		project: string,
+		subsection: SubsectionType,
+	): boolean {
 		return collapsedSubsections.get(project)?.has(subsection) ?? false;
 	}
 
@@ -381,14 +409,20 @@
 		try {
 			// Save selected project tab
 			if (selectedProject) {
-				localStorage.setItem('tasks3-selected-project', selectedProject);
+				localStorage.setItem(
+					"tasks3-selected-project",
+					selectedProject,
+				);
 			}
 			// Save subsection collapse state
 			const subsectionData: Record<string, string[]> = {};
 			for (const [project, subsections] of collapsedSubsections) {
 				subsectionData[project] = Array.from(subsections);
 			}
-			localStorage.setItem('tasks3-collapsed-subsections', JSON.stringify(subsectionData));
+			localStorage.setItem(
+				"tasks3-collapsed-subsections",
+				JSON.stringify(subsectionData),
+			);
 		} catch {
 			// Ignore storage errors
 		}
@@ -397,14 +431,21 @@
 	function loadCollapseState() {
 		try {
 			// Load selected project tab
-			const savedProject = localStorage.getItem('tasks3-selected-project');
+			const savedProject = localStorage.getItem(
+				"tasks3-selected-project",
+			);
 			if (savedProject) {
 				selectedProject = savedProject;
 			}
 			// Load subsection collapse state
-			const subsectionSaved = localStorage.getItem('tasks3-collapsed-subsections');
+			const subsectionSaved = localStorage.getItem(
+				"tasks3-collapsed-subsections",
+			);
 			if (subsectionSaved) {
-				const data = JSON.parse(subsectionSaved) as Record<string, string[]>;
+				const data = JSON.parse(subsectionSaved) as Record<
+					string,
+					string[]
+				>;
 				const map = new Map<string, Set<SubsectionType>>();
 				for (const [project, subsections] of Object.entries(data)) {
 					map.set(project, new Set(subsections as SubsectionType[]));
@@ -419,10 +460,14 @@
 	// API calls
 	async function fetchProjectOrder() {
 		try {
-			const response = await fetch('/api/projects?visible=true&stats=true');
+			const response = await fetch(
+				"/api/projects?visible=true&stats=true",
+			);
 			if (!response.ok) return;
 			const data = await response.json();
-			projectOrder = (data.projects || []).map((p: { name: string }) => p.name);
+			projectOrder = (data.projects || []).map(
+				(p: { name: string }) => p.name,
+			);
 		} catch {
 			// Silent fail
 		}
@@ -430,7 +475,7 @@
 
 	async function fetchAgentProjects() {
 		try {
-			const response = await fetch('/api/work');
+			const response = await fetch("/api/work");
 			if (!response.ok) return;
 			const data = await response.json();
 
@@ -445,7 +490,7 @@
 					tokens: session.tokens || 0,
 					cost: session.cost || 0,
 					activityState: session.sessionState || undefined,
-					activityStateTimestamp: Date.now()
+					activityStateTimestamp: Date.now(),
 				});
 
 				const taskSource = session.task || session.lastCompletedTask;
@@ -456,11 +501,11 @@
 					}
 					taskMap.set(session.agentName, {
 						id: taskSource.id,
-						status: taskSource.status || 'open',
+						status: taskSource.status || "open",
 						issue_type: taskSource.issue_type,
 						title: taskSource.title,
 						priority: taskSource.priority,
-						description: taskSource.description
+						description: taskSource.description,
 					});
 				}
 			}
@@ -474,25 +519,32 @@
 
 	async function fetchSessions() {
 		try {
-			const response = await fetch('/api/sessions?filter=all');
+			const response = await fetch("/api/sessions?filter=all");
 			if (!response.ok) {
-				throw new Error('Failed to fetch sessions');
+				throw new Error("Failed to fetch sessions");
 			}
 			const data = await response.json();
 
 			sessions = (data.sessions || []).map(
-				(s: { name: string; created: string; attached: boolean; project?: string }) => {
-					const { type, project: categorizedProject } = categorizeSession(s.name);
+				(s: {
+					name: string;
+					created: string;
+					attached: boolean;
+					project?: string;
+				}) => {
+					const { type, project: categorizedProject } =
+						categorizeSession(s.name);
 					return {
 						...s,
 						type,
-						project: s.project || categorizedProject
+						project: s.project || categorizedProject,
 					};
-				}
+				},
 			);
 			sessionsError = null;
 		} catch (err) {
-			sessionsError = err instanceof Error ? err.message : 'Unknown error';
+			sessionsError =
+				err instanceof Error ? err.message : "Unknown error";
 		} finally {
 			sessionsLoading = false;
 		}
@@ -500,15 +552,15 @@
 
 	async function fetchOpenTasks() {
 		try {
-			const response = await fetch('/api/tasks');
+			const response = await fetch("/api/tasks");
 			if (!response.ok) {
-				throw new Error('Failed to fetch tasks');
+				throw new Error("Failed to fetch tasks");
 			}
 			const data = await response.json();
 			openTasks = data.tasks || [];
 			tasksError = null;
 		} catch (err) {
-			tasksError = err instanceof Error ? err.message : 'Unknown error';
+			tasksError = err instanceof Error ? err.message : "Unknown error";
 		} finally {
 			tasksLoading = false;
 		}
@@ -517,7 +569,7 @@
 	async function fetchAllTasks() {
 		try {
 			// Fetch all tasks including closed for epic mapping (no status filter = all statuses)
-			const response = await fetch('/api/tasks');
+			const response = await fetch("/api/tasks");
 			if (!response.ok) return;
 			const data = await response.json();
 			allTasks = data.tasks || [];
@@ -531,13 +583,13 @@
 			const colors = await fetchAndGetProjectColors();
 			projectColors = colors;
 		} catch (err) {
-			console.warn('Failed to fetch project colors:', err);
+			console.warn("Failed to fetch project colors:", err);
 		}
 	}
 
 	async function fetchRecoverableSessions() {
 		try {
-			const response = await fetch('/api/recovery');
+			const response = await fetch("/api/recovery");
 			if (!response.ok) return;
 			const data = await response.json();
 			recoverableSessions = data.sessions || [];
@@ -548,12 +600,16 @@
 
 	// Get recoverable session count for a project
 	function getProjectRecoverableCount(project: string): number {
-		return recoverableSessions.filter(s => s.project.toLowerCase() === project.toLowerCase()).length;
+		return recoverableSessions.filter(
+			(s) => s.project.toLowerCase() === project.toLowerCase(),
+		).length;
 	}
 
 	// Get paused sessions for a project
 	function getProjectPausedSessions(project: string): RecoverableSession[] {
-		return recoverableSessions.filter(s => s.project.toLowerCase() === project.toLowerCase());
+		return recoverableSessions.filter(
+			(s) => s.project.toLowerCase() === project.toLowerCase(),
+		);
 	}
 
 	async function fetchAllData() {
@@ -562,7 +618,7 @@
 			fetchAgentProjects(),
 			fetchProjectColors(),
 			fetchAllTasks(),
-			fetchRecoverableSessions()
+			fetchRecoverableSessions(),
 		]);
 		await Promise.all([fetchSessions(), fetchOpenTasks()]);
 	}
@@ -570,16 +626,19 @@
 	// Actions
 	async function killSession(sessionName: string) {
 		try {
-			const response = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}`, {
-				method: 'DELETE'
-			});
+			const response = await fetch(
+				`/api/sessions/${encodeURIComponent(sessionName)}`,
+				{
+					method: "DELETE",
+				},
+			);
 			if (!response.ok) {
 				const data = await response.json();
-				throw new Error(data.message || 'Failed to kill session');
+				throw new Error(data.message || "Failed to kill session");
 			}
 			await fetchSessions();
 		} catch (err) {
-			console.error('Failed to kill session:', err);
+			console.error("Failed to kill session:", err);
 		}
 	}
 
@@ -588,62 +647,65 @@
 			const response = await fetch(
 				`/api/work/${encodeURIComponent(sessionName)}/attach`,
 				{
-					method: 'POST'
-				}
+					method: "POST",
+				},
 			);
 			if (!response.ok) {
 				const data = await response.json();
-				throw new Error(data.error || 'Failed to attach session');
+				throw new Error(data.error || "Failed to attach session");
 			}
 		} catch (err) {
-			console.error('Failed to attach session:', err);
+			console.error("Failed to attach session:", err);
 		}
 	}
 
 	async function resumeSession(agentName: string, sessionId: string) {
 		try {
-			const response = await fetch(`/api/sessions/${encodeURIComponent(agentName)}/resume`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ session_id: sessionId })
-			});
+			const response = await fetch(
+				`/api/sessions/${encodeURIComponent(agentName)}/resume`,
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ session_id: sessionId }),
+				},
+			);
 			if (!response.ok) {
 				const data = await response.json();
-				throw new Error(data.error || 'Failed to resume session');
+				throw new Error(data.error || "Failed to resume session");
 			}
 			// Refresh data after resume
 			await fetchAllData();
 		} catch (err) {
-			console.error('Failed to resume session:', err);
+			console.error("Failed to resume session:", err);
 		}
 	}
 
 	async function spawnTask(task: Task) {
 		spawningTaskId = task.id;
 		try {
-			const response = await fetch('/api/work/spawn', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+			const response = await fetch("/api/work/spawn", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					taskId: task.id,
-					autoStart: true
-				})
+					autoStart: true,
+				}),
 			});
 
 			if (!response.ok) {
 				const data = await response.json();
-				throw new Error(data.error || 'Failed to spawn task');
+				throw new Error(data.error || "Failed to spawn task");
 			}
 
 			await fetchAllData();
 		} catch (err) {
-			console.error('Failed to spawn task:', err);
+			console.error("Failed to spawn task:", err);
 		} finally {
 			spawningTaskId = null;
 		}
 	}
 
-	function handleSortChange(value: string, dir: 'asc' | 'desc') {
+	function handleSortChange(value: string, dir: "asc" | "desc") {
 		sortBy = value as SessionSortOption;
 		sortDir = dir;
 	}
@@ -656,7 +718,9 @@
 	function getProjectTaskCount(project: string): number {
 		const tasks = tasksByProject().get(project) || [];
 		// Only count open tasks (exclude epics and non-open status)
-		return tasks.filter(t => t.status === 'open' && t.issue_type !== 'epic').length;
+		return tasks.filter(
+			(t) => t.status === "open" && t.issue_type !== "epic",
+		).length;
 	}
 
 	// Handle tab selection
@@ -668,7 +732,10 @@
 		const projectPausedSessions = getProjectPausedSessions(project);
 		const hasActiveSessions = projectSessions.length > 0;
 		const hasPausedSessions = projectPausedSessions.length > 0;
-		const hasOpenTasks = projectTasks.filter(t => t.status === 'open' && t.issue_type !== 'epic').length > 0;
+		const hasOpenTasks =
+			projectTasks.filter(
+				(t) => t.status === "open" && t.issue_type !== "epic",
+			).length > 0;
 
 		// Only apply default subsection collapse logic if this project doesn't have saved state
 		// This preserves user's manual collapse/expand choices
@@ -681,17 +748,17 @@
 			if (hasActiveSessions) {
 				// Expand Active Tasks (sessions not in collapsed set)
 				// Collapse Open Tasks to focus on active work
-				projectSubsections.add('tasks');
+				projectSubsections.add("tasks");
 				// Keep paused expanded if there are paused sessions
 				if (!hasPausedSessions) {
-					projectSubsections.add('paused');
+					projectSubsections.add("paused");
 				}
 			} else if (hasPausedSessions) {
 				// No active sessions but have paused - expand paused, collapse open
-				projectSubsections.add('tasks');
+				projectSubsections.add("tasks");
 			} else if (hasOpenTasks) {
 				// No active or paused sessions, so expand Open Tasks
-				projectSubsections.add('paused');
+				projectSubsections.add("paused");
 			}
 			// If nothing has content, sections simply won't render
 
@@ -705,10 +772,10 @@
 			const epicExpanded = new Set<string>();
 			if (hasActiveSessions) {
 				// Expand standalone tasks in Active Tasks section
-				epicExpanded.add('sessions-standalone');
+				epicExpanded.add("sessions-standalone");
 			} else if (hasOpenTasks) {
 				// Expand standalone tasks in Open Tasks section
-				epicExpanded.add('tasks-standalone');
+				epicExpanded.add("tasks-standalone");
 			}
 			expandedEpicsByProject.set(project, epicExpanded);
 			expandedEpicsByProject = new Map(expandedEpicsByProject);
@@ -740,37 +807,6 @@
 </svelte:head>
 
 <div class="tasks-page">
-	<!-- Header -->
-	<header class="page-header">
-		<h1>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				fill="none"
-				viewBox="0 0 24 24"
-				stroke-width="1.5"
-				stroke="currentColor"
-				class="header-icon"
-			>
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z"
-				/>
-			</svg>
-			Tasks
-			<span class="subtitle">(Grouped by Project & Epic)</span>
-		</h1>
-		<div class="header-actions">
-			<SortDropdown
-				options={SORT_OPTIONS as any}
-				{sortBy}
-				{sortDir}
-				onSortChange={handleSortChange}
-				size="xs"
-			/>
-		</div>
-	</header>
-
 	<!-- Loading State -->
 	{#if sessionsLoading && tasksLoading && sessions.length === 0 && openTasks.length === 0}
 		<div class="loading-container">
@@ -805,12 +841,20 @@
 						{#each [1, 2] as __}
 							<div class="skeleton-task-row">
 								<div class="skeleton h-5 w-16 rounded"></div>
-								<div class="skeleton h-6 w-6 rounded-full"></div>
+								<div
+									class="skeleton h-6 w-6 rounded-full"
+								></div>
 								<div class="flex-1 flex flex-col gap-1">
-									<div class="skeleton h-4 w-48 rounded"></div>
-									<div class="skeleton h-3 w-72 rounded"></div>
+									<div
+										class="skeleton h-4 w-48 rounded"
+									></div>
+									<div
+										class="skeleton h-3 w-72 rounded"
+									></div>
 								</div>
-								<div class="skeleton h-5 w-16 rounded-full"></div>
+								<div
+									class="skeleton h-5 w-16 rounded-full"
+								></div>
 							</div>
 						{/each}
 					</div>
@@ -851,23 +895,32 @@
 		<!-- Project Tabs -->
 		<div class="project-tabs">
 			{#each allProjects() as project (project)}
-				{@const projectColor = projectColors[project] || 'oklch(0.70 0.15 200)'}
+				{@const projectColor =
+					projectColors[project] || "oklch(0.70 0.15 200)"}
 				{@const isActive = selectedProject === project}
 				{@const sessionCount = getProjectSessionCount(project)}
 				{@const taskCount = getProjectTaskCount(project)}
 				{@const recoverableCount = getProjectRecoverableCount(project)}
-				{@const projectAgentSessions = sessionsByProject().get(project) || []}
+				{@const projectAgentSessions =
+					sessionsByProject().get(project) || []}
 				<button
 					class="project-tab"
 					class:active={isActive}
 					style="--project-color: {projectColor}"
 					onclick={() => selectProject(project)}
 				>
-					<span class="project-tab-name mt-1">{project.toUpperCase()}</span>
+					<span class="project-tab-name mt-1"
+						>{project.toUpperCase()}</span
+					>
 					{#if projectAgentSessions.length > 0}
 						<div class="project-tab-agents mt-2.5">
 							{#each projectAgentSessions as session}
-								<WorkingAgentBadge name={getAgentName(session.name)} size={20} variant="avatar" isWorking={true} />
+								<WorkingAgentBadge
+									name={getAgentName(session.name)}
+									size={20}
+									variant="avatar"
+									isWorking={true}
+								/>
 							{/each}
 						</div>
 					{/if}
@@ -876,10 +929,17 @@
 							<span class="tab-count sessions">{sessionCount} active</span>
 						{/if} -->
 						{#if recoverableCount > 0}
-							<span class="tab-count paused" title="{recoverableCount} paused session{recoverableCount !== 1 ? 's' : ''}">{recoverableCount} paused</span>
+							<span
+								class="tab-count paused"
+								title="{recoverableCount} paused session{recoverableCount !==
+								1
+									? 's'
+									: ''}">{recoverableCount} paused</span
+							>
 						{/if}
 						{#if taskCount > 0 && sessionCount === 0}
-							<span class="tab-count tasks">{taskCount} open</span>
+							<span class="tab-count tasks">{taskCount} open</span
+							>
 						{/if}
 					</div>
 				</button>
@@ -888,21 +948,34 @@
 
 		<!-- Selected Project Content -->
 		{#if selectedProject}
-			{@const projectSessions = sessionsByProject().get(selectedProject) || []}
+			{@const projectSessions =
+				sessionsByProject().get(selectedProject) || []}
 			{@const projectTasks = tasksByProject().get(selectedProject) || []}
-			{@const projectPausedSessions = getProjectPausedSessions(selectedProject)}
+			{@const projectPausedSessions =
+				getProjectPausedSessions(selectedProject)}
 			{@const sessionsByEpic = getSessionsByEpic(projectSessions)}
 			{@const tasksByEpic = getTasksByEpic(projectTasks)}
-			{@const projectColor = projectColors[selectedProject] || 'oklch(0.70 0.15 200)'}
+			{@const projectColor =
+				projectColors[selectedProject] || "oklch(0.70 0.15 200)"}
 
-			<section class="project-content" style="--project-color: {projectColor}">
+			<section
+				class="project-content"
+				style="--project-color: {projectColor}"
+			>
 				<!-- Active Sessions Section -->
 				{#if projectSessions.length > 0}
 					<div class="subsection">
 						<button
 							class="subsection-header"
-							onclick={() => toggleSubsectionCollapse(selectedProject!, 'sessions')}
-							aria-expanded={!isSubsectionCollapsed(selectedProject!, 'sessions')}
+							onclick={() =>
+								toggleSubsectionCollapse(
+									selectedProject!,
+									"sessions",
+								)}
+							aria-expanded={!isSubsectionCollapsed(
+								selectedProject!,
+								"sessions",
+							)}
 						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
@@ -911,143 +984,230 @@
 								stroke-width="2"
 								stroke="currentColor"
 								class="subsection-collapse-icon"
-								class:collapsed={isSubsectionCollapsed(selectedProject!, 'sessions')}
+								class:collapsed={isSubsectionCollapsed(
+									selectedProject!,
+									"sessions",
+								)}
 							>
-								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M19 9l-7 7-7-7"
+								/>
 							</svg>
 							<span>Active Tasks</span>
-							<span class="subsection-count">{projectSessions.length}</span>
+							<span class="subsection-count"
+								>{projectSessions.length}</span
+							>
 						</button>
 
-						{#if !isSubsectionCollapsed(selectedProject!, 'sessions')}
-						<!-- Group by Epic - sorted: epics by priority first, standalone last -->
-						{@const sortedSessionEntries = Array.from(sessionsByEpic.entries()).sort((a, b) => {
-							const [epicIdA] = a;
-							const [epicIdB] = b;
-							// Standalone (null) always goes last
-							if (epicIdA === null) return 1;
-							if (epicIdB === null) return -1;
-							// Sort epics by priority (lower = higher priority)
-							const epicA = getEpicTask(epicIdA);
-							const epicB = getEpicTask(epicIdB);
-							const priorityA = epicA?.priority ?? 99;
-							const priorityB = epicB?.priority ?? 99;
-							return priorityA - priorityB;
-						})}
-						{#each sortedSessionEntries as [epicId, epicSessions] (epicId ?? 'standalone')}
-							{@const epic = epicId ? getEpicTask(epicId) : null}
-							{@const isExpanded = isEpicExpanded(selectedProject!, epicId, 'sessions')}
+						{#if !isSubsectionCollapsed(selectedProject!, "sessions")}
+							<!-- Group by Epic - sorted: epics by priority first, standalone last -->
+							{@const sortedSessionEntries = Array.from(
+								sessionsByEpic.entries(),
+							).sort((a, b) => {
+								const [epicIdA] = a;
+								const [epicIdB] = b;
+								// Standalone (null) always goes last
+								if (epicIdA === null) return 1;
+								if (epicIdB === null) return -1;
+								// Sort epics by priority (lower = higher priority)
+								const epicA = getEpicTask(epicIdA);
+								const epicB = getEpicTask(epicIdB);
+								const priorityA = epicA?.priority ?? 99;
+								const priorityB = epicB?.priority ?? 99;
+								return priorityA - priorityB;
+							})}
+							{#each sortedSessionEntries as [epicId, epicSessions] (epicId ?? "standalone")}
+								{@const epic = epicId
+									? getEpicTask(epicId)
+									: null}
+								{@const isExpanded = isEpicExpanded(
+									selectedProject!,
+									epicId,
+									"sessions",
+								)}
 
-							{#if epicId && epicSessions.length > 0}
-								<!-- Epic Group - only show if there are active sessions -->
-								<div class="epic-group">
-									<button
-										class="epic-header"
-										onclick={() => toggleEpicCollapse(selectedProject!, epicId, 'sessions')}
-										aria-expanded={isExpanded}
-									>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											fill="none"
-											viewBox="0 0 24 24"
-											stroke-width="2"
-											stroke="currentColor"
-											class="collapse-icon small"
-											class:collapsed={!isExpanded}
+								{#if epicId && epicSessions.length > 0}
+									<!-- Epic Group - only show if there are active sessions -->
+									<div class="epic-group">
+										<button
+											class="epic-header"
+											onclick={() =>
+												toggleEpicCollapse(
+													selectedProject!,
+													epicId,
+													"sessions",
+												)}
+											aria-expanded={isExpanded}
 										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M19 9l-7 7-7-7"
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												fill="none"
+												viewBox="0 0 24 24"
+												stroke-width="2"
+												stroke="currentColor"
+												class="collapse-icon small"
+												class:collapsed={!isExpanded}
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													d="M19 9l-7 7-7-7"
+												/>
+											</svg>
+											<TaskIdBadge
+												task={epic || {
+													id: epicId,
+													status: "open",
+													issue_type: "epic",
+												}}
+												size="sm"
 											/>
-										</svg>
-										<TaskIdBadge task={epic || { id: epicId, status: 'open', issue_type: 'epic' }} size="sm" />
-										<span class="epic-title">{epic?.title || 'Untitled Epic'}</span>
-										<div class="epic-agents">
-											{#each epicSessions as session}
-												<WorkingAgentBadge name={getAgentName(session.name)} size={18} variant="avatar" isWorking={true} />
-											{/each}
-										</div>
-										<span class="epic-count">{epicSessions.length} active</span>
-									</button>
+											<span class="epic-title"
+												>{epic?.title ||
+													"Untitled Epic"}</span
+											>
+											<div class="epic-agents">
+												{#each epicSessions as session}
+													<WorkingAgentBadge
+														name={getAgentName(
+															session.name,
+														)}
+														size={18}
+														variant="avatar"
+														isWorking={true}
+													/>
+												{/each}
+											</div>
+											<span class="epic-count"
+												>{epicSessions.length} active</span
+											>
+										</button>
 
-									{#if isExpanded}
-										<div class="epic-content" transition:slide={{ duration: 200 }}>
-											<TasksActive
-												sessions={epicSessions}
-												{agentTasks}
-												{agentSessionInfo}
-												{agentProjects}
-												{projectColors}
-												onKillSession={killSession}
-												onAttachSession={attachSession}
-												onViewTask={(taskId) => openTaskDetailDrawer(taskId)}
-											/>
-										</div>
-									{/if}
-								</div>
-							{:else if epicSessions.length > 0}
-								<!-- Standalone Sessions (no epic) - collapsible group like epics -->
-								{@const isStandaloneExpanded = isEpicExpanded(selectedProject!, null, 'sessions')}
-								<div class="epic-group standalone">
-									<button
-										class="epic-header"
-										onclick={() => toggleEpicCollapse(selectedProject!, null, 'sessions')}
-										aria-expanded={isStandaloneExpanded}
-									>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											fill="none"
-											viewBox="0 0 24 24"
-											stroke-width="2"
-											stroke="currentColor"
-											class="collapse-icon small"
-											class:collapsed={!isStandaloneExpanded}
+										{#if isExpanded}
+											<div
+												class="epic-content"
+												transition:slide={{
+													duration: 200,
+												}}
+											>
+												<TasksActive
+													sessions={epicSessions}
+													{agentTasks}
+													{agentSessionInfo}
+													{agentProjects}
+													{projectColors}
+													onKillSession={killSession}
+													onAttachSession={attachSession}
+													onViewTask={(taskId) =>
+														openTaskDetailDrawer(
+															taskId,
+														)}
+												/>
+											</div>
+										{/if}
+									</div>
+								{:else if epicSessions.length > 0}
+									<!-- Standalone Sessions (no epic) - collapsible group like epics -->
+									{@const isStandaloneExpanded =
+										isEpicExpanded(
+											selectedProject!,
+											null,
+											"sessions",
+										)}
+									<div class="epic-group standalone">
+										<button
+											class="epic-header"
+											onclick={() =>
+												toggleEpicCollapse(
+													selectedProject!,
+													null,
+													"sessions",
+												)}
+											aria-expanded={isStandaloneExpanded}
 										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M19 9l-7 7-7-7"
-											/>
-										</svg>
-										<span class="standalone-icon">📋</span>
-										<span class="epic-title font-mono">STANDALONE TASKS</span>
-										<div class="epic-agents">
-											{#each epicSessions as session}
-												<WorkingAgentBadge name={getAgentName(session.name)} size={18} variant="avatar" isWorking={true} />
-											{/each}
-										</div>
-										<span class="epic-count">{epicSessions.length} active</span>
-									</button>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												fill="none"
+												viewBox="0 0 24 24"
+												stroke-width="2"
+												stroke="currentColor"
+												class="collapse-icon small"
+												class:collapsed={!isStandaloneExpanded}
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													d="M19 9l-7 7-7-7"
+												/>
+											</svg>
+											<span class="standalone-icon"
+												>📋</span
+											>
+											<span class="epic-title font-mono"
+												>STANDALONE TASKS</span
+											>
+											<div class="epic-agents">
+												{#each epicSessions as session}
+													<WorkingAgentBadge
+														name={getAgentName(
+															session.name,
+														)}
+														size={18}
+														variant="avatar"
+														isWorking={true}
+													/>
+												{/each}
+											</div>
+											<span class="epic-count"
+												>{epicSessions.length} active</span
+											>
+										</button>
 
-									{#if isStandaloneExpanded}
-										<div class="epic-content" transition:slide={{ duration: 200 }}>
-											<TasksActive
-												sessions={epicSessions}
-												{agentTasks}
-												{agentSessionInfo}
-												{agentProjects}
-												{projectColors}
-												onKillSession={killSession}
-												onAttachSession={attachSession}
-												onViewTask={(taskId) => openTaskDetailDrawer(taskId)}
-											/>
-										</div>
-									{/if}
-								</div>
-							{/if}
-						{/each}
+										{#if isStandaloneExpanded}
+											<div
+												class="epic-content"
+												transition:slide={{
+													duration: 200,
+												}}
+											>
+												<TasksActive
+													sessions={epicSessions}
+													{agentTasks}
+													{agentSessionInfo}
+													{agentProjects}
+													{projectColors}
+													onKillSession={killSession}
+													onAttachSession={attachSession}
+													onViewTask={(taskId) =>
+														openTaskDetailDrawer(
+															taskId,
+														)}
+												/>
+											</div>
+										{/if}
+									</div>
+								{/if}
+							{/each}
 						{/if}
 					</div>
 				{/if}
 
 				<!-- Paused Sessions Section -->
 				{#if projectPausedSessions.length > 0}
-					<div class="subsection">
+					<div class="subsection paused-subsection">
 						<button
 							class="subsection-header"
-							onclick={() => toggleSubsectionCollapse(selectedProject!, 'paused')}
-							aria-expanded={!isSubsectionCollapsed(selectedProject!, 'paused')}
+							onclick={() =>
+								toggleSubsectionCollapse(
+									selectedProject!,
+									"paused",
+								)}
+							aria-expanded={!isSubsectionCollapsed(
+								selectedProject!,
+								"paused",
+							)}
 						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
@@ -1056,21 +1216,46 @@
 								stroke-width="2"
 								stroke="currentColor"
 								class="subsection-collapse-icon"
-								class:collapsed={isSubsectionCollapsed(selectedProject!, 'paused')}
+								class:collapsed={isSubsectionCollapsed(
+									selectedProject!,
+									"paused",
+								)}
 							>
-								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M19 9l-7 7-7-7"
+								/>
 							</svg>
 							<span>Paused Sessions</span>
-							<span class="subsection-count">{projectPausedSessions.length}</span>
+							<div class="subsection-right">
+								<div class="paused-agents">
+									{#each projectPausedSessions as session}
+										<WorkingAgentBadge
+											name={session.agentName}
+											size={18}
+											variant="avatar"
+											isWorking={false}
+										/>
+									{/each}
+								</div>
+								<span class="subsection-count-inline"
+									>{projectPausedSessions.length}</span
+								>
+							</div>
 						</button>
 
-						{#if !isSubsectionCollapsed(selectedProject!, 'paused')}
-							<div class="paused-content" transition:slide={{ duration: 200 }}>
+						{#if !isSubsectionCollapsed(selectedProject!, "paused")}
+							<div
+								class="paused-content"
+								transition:slide={{ duration: 200 }}
+							>
 								<TasksPaused
 									sessions={projectPausedSessions}
 									{projectColors}
 									onResumeSession={resumeSession}
-									onViewTask={(taskId) => openTaskDetailDrawer(taskId)}
+									onViewTask={(taskId) =>
+										openTaskDetailDrawer(taskId)}
 								/>
 							</div>
 						{/if}
@@ -1082,8 +1267,15 @@
 					<div class="subsection">
 						<button
 							class="subsection-header"
-							onclick={() => toggleSubsectionCollapse(selectedProject!, 'tasks')}
-							aria-expanded={!isSubsectionCollapsed(selectedProject!, 'tasks')}
+							onclick={() =>
+								toggleSubsectionCollapse(
+									selectedProject!,
+									"tasks",
+								)}
+							aria-expanded={!isSubsectionCollapsed(
+								selectedProject!,
+								"tasks",
+							)}
 						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
@@ -1092,124 +1284,186 @@
 								stroke-width="2"
 								stroke="currentColor"
 								class="subsection-collapse-icon"
-								class:collapsed={isSubsectionCollapsed(selectedProject!, 'tasks')}
+								class:collapsed={isSubsectionCollapsed(
+									selectedProject!,
+									"tasks",
+								)}
 							>
-								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M19 9l-7 7-7-7"
+								/>
 							</svg>
 							<span>Open Tasks</span>
-							<span class="subsection-count">{Array.from(tasksByEpic.values()).reduce((sum, tasks) => sum + tasks.length, 0)}</span>
+							<span class="subsection-count"
+								>{Array.from(tasksByEpic.values()).reduce(
+									(sum, tasks) => sum + tasks.length,
+									0,
+								)}</span
+							>
 						</button>
 
-						{#if !isSubsectionCollapsed(selectedProject!, 'tasks')}
-						<!-- Group by Epic - sorted: epics by priority first, standalone last -->
-						{@const sortedTaskEntries = Array.from(tasksByEpic.entries()).sort((a, b) => {
-							const [epicIdA] = a;
-							const [epicIdB] = b;
-							// Standalone (null) always goes last
-							if (epicIdA === null) return 1;
-							if (epicIdB === null) return -1;
-							// Sort epics by priority (lower = higher priority)
-							const epicA = getEpicTask(epicIdA);
-							const epicB = getEpicTask(epicIdB);
-							const priorityA = epicA?.priority ?? 99;
-							const priorityB = epicB?.priority ?? 99;
-							return priorityA - priorityB;
-						})}
-						{#each sortedTaskEntries as [epicId, epicTasks] (epicId ?? 'standalone')}
-							{@const epic = epicId ? getEpicTask(epicId) : null}
-							{@const isExpanded = isEpicExpanded(selectedProject!, epicId)}
+						{#if !isSubsectionCollapsed(selectedProject!, "tasks")}
+							<!-- Group by Epic - sorted: epics by priority first, standalone last -->
+							{@const sortedTaskEntries = Array.from(
+								tasksByEpic.entries(),
+							).sort((a, b) => {
+								const [epicIdA] = a;
+								const [epicIdB] = b;
+								// Standalone (null) always goes last
+								if (epicIdA === null) return 1;
+								if (epicIdB === null) return -1;
+								// Sort epics by priority (lower = higher priority)
+								const epicA = getEpicTask(epicIdA);
+								const epicB = getEpicTask(epicIdB);
+								const priorityA = epicA?.priority ?? 99;
+								const priorityB = epicB?.priority ?? 99;
+								return priorityA - priorityB;
+							})}
+							{#each sortedTaskEntries as [epicId, epicTasks] (epicId ?? "standalone")}
+								{@const epic = epicId
+									? getEpicTask(epicId)
+									: null}
+								{@const isExpanded = isEpicExpanded(
+									selectedProject!,
+									epicId,
+								)}
 
-							{#if epicId && epicTasks.length > 0}
-								<!-- Epic Group - only show if there are open child tasks -->
-								<div class="epic-group">
-									<button
-										class="epic-header"
-										onclick={() => toggleEpicCollapse(selectedProject!, epicId)}
-										aria-expanded={isExpanded}
-									>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											fill="none"
-											viewBox="0 0 24 24"
-											stroke-width="2"
-											stroke="currentColor"
-											class="collapse-icon small"
-											class:collapsed={!isExpanded}
+								{#if epicId && epicTasks.length > 0}
+									<!-- Epic Group - only show if there are open child tasks -->
+									<div class="epic-group">
+										<button
+											class="epic-header"
+											onclick={() =>
+												toggleEpicCollapse(
+													selectedProject!,
+													epicId,
+												)}
+											aria-expanded={isExpanded}
 										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M19 9l-7 7-7-7"
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												fill="none"
+												viewBox="0 0 24 24"
+												stroke-width="2"
+												stroke="currentColor"
+												class="collapse-icon small"
+												class:collapsed={!isExpanded}
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													d="M19 9l-7 7-7-7"
+												/>
+											</svg>
+											<TaskIdBadge
+												task={epic || {
+													id: epicId,
+													status: "open",
+													issue_type: "epic",
+												}}
+												size="sm"
 											/>
-										</svg>
-										<TaskIdBadge task={epic || { id: epicId, status: 'open', issue_type: 'epic' }} size="sm" />
-										<span class="epic-title">{epic?.title || 'Untitled Epic'}</span>
-										<span class="epic-count">{epicTasks.length} open</span>
-									</button>
+											<span class="epic-title"
+												>{epic?.title ||
+													"Untitled Epic"}</span
+											>
+											<span class="epic-count"
+												>{epicTasks.length} open</span
+											>
+										</button>
 
-									{#if isExpanded}
-										<div class="epic-content" transition:slide={{ duration: 200 }}>
-											<TasksOpen
-												tasks={epicTasks as any[]}
-												loading={false}
-												error={null}
-												{spawningTaskId}
-												{projectColors}
-												onSpawnTask={spawnTask as any}
-												onRetry={fetchOpenTasks}
-												onTaskClick={(taskId) => openTaskDetailDrawer(taskId)}
-												showHeader={false}
-											/>
-										</div>
-									{/if}
-								</div>
-							{:else if epicTasks.length > 0}
-								<!-- Standalone Tasks (no epic) - collapsible group like epics -->
-								{@const isStandaloneExpanded = isEpicExpanded(selectedProject!, null)}
-								<div class="epic-group standalone">
-									<button
-										class="epic-header"
-										onclick={() => toggleEpicCollapse(selectedProject!, null)}
-										aria-expanded={isStandaloneExpanded}
-									>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											fill="none"
-											viewBox="0 0 24 24"
-											stroke-width="2"
-											stroke="currentColor"
-											class="collapse-icon small"
-											class:collapsed={!isStandaloneExpanded}
+										{#if isExpanded}
+											<div
+												class="epic-content"
+												transition:slide={{
+													duration: 200,
+												}}
+											>
+												<TasksOpen
+													tasks={epicTasks as any[]}
+													loading={false}
+													error={null}
+													{spawningTaskId}
+													{projectColors}
+													onSpawnTask={spawnTask as any}
+													onRetry={fetchOpenTasks}
+													onTaskClick={(taskId) =>
+														openTaskDetailDrawer(
+															taskId,
+														)}
+													showHeader={false}
+												/>
+											</div>
+										{/if}
+									</div>
+								{:else if epicTasks.length > 0}
+									<!-- Standalone Tasks (no epic) - collapsible group like epics -->
+									{@const isStandaloneExpanded =
+										isEpicExpanded(selectedProject!, null)}
+									<div class="epic-group standalone">
+										<button
+											class="epic-header"
+											onclick={() =>
+												toggleEpicCollapse(
+													selectedProject!,
+													null,
+												)}
+											aria-expanded={isStandaloneExpanded}
 										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M19 9l-7 7-7-7"
-											/>
-										</svg>
-										<span class="standalone-icon">📋</span>
-										<span class="epic-title">Standalone Tasks</span>
-										<span class="epic-count">{epicTasks.length} open</span>
-									</button>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												fill="none"
+												viewBox="0 0 24 24"
+												stroke-width="2"
+												stroke="currentColor"
+												class="collapse-icon small"
+												class:collapsed={!isStandaloneExpanded}
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													d="M19 9l-7 7-7-7"
+												/>
+											</svg>
+											<span class="standalone-icon"
+												>📋</span
+											>
+											<span class="epic-title"
+												>Standalone Tasks</span
+											>
+											<span class="epic-count"
+												>{epicTasks.length} open</span
+											>
+										</button>
 
-									{#if isStandaloneExpanded}
-										<div class="epic-content" transition:slide={{ duration: 200 }}>
-											<TasksOpen
-												tasks={epicTasks as any[]}
-												loading={false}
-												error={null}
-												{spawningTaskId}
-												{projectColors}
-												onSpawnTask={spawnTask as any}
-												onRetry={fetchOpenTasks}
-												onTaskClick={(taskId) => openTaskDetailDrawer(taskId)}
-												showHeader={false}
-											/>
-										</div>
-									{/if}
-								</div>
-							{/if}
-						{/each}
+										{#if isStandaloneExpanded}
+											<div
+												class="epic-content"
+												transition:slide={{
+													duration: 200,
+												}}
+											>
+												<TasksOpen
+													tasks={epicTasks as any[]}
+													loading={false}
+													error={null}
+													{spawningTaskId}
+													{projectColors}
+													onSpawnTask={spawnTask as any}
+													onRetry={fetchOpenTasks}
+													onTaskClick={(taskId) =>
+														openTaskDetailDrawer(
+															taskId,
+														)}
+													showHeader={false}
+												/>
+											</div>
+										{/if}
+									</div>
+								{/if}
+							{/each}
 						{/if}
 					</div>
 				{/if}
@@ -1217,7 +1471,9 @@
 				<!-- Empty state for selected project -->
 				{#if projectSessions.length === 0 && tasksByEpic.size === 0}
 					<div class="project-empty-state">
-						<span>No active sessions or open tasks for {selectedProject}</span>
+						<span
+							>No active sessions or open tasks for {selectedProject}</span
+						>
 					</div>
 				{/if}
 			</section>
@@ -1329,35 +1585,51 @@
 	}
 
 	.project-tab.active {
-		background: color-mix(in oklch, var(--project-color) 15%, oklch(0.18 0.01 250));
+		background: color-mix(
+			in oklch,
+			var(--project-color) 15%,
+			oklch(0.18 0.01 250)
+		);
 		border-color: var(--project-color);
-		box-shadow: 0 0 12px color-mix(in oklch, var(--project-color) 30%, transparent);
+		box-shadow: 0 0 12px
+			color-mix(in oklch, var(--project-color) 30%, transparent);
 	}
 
 	.project-tab-name {
 		font-size: 0.9375rem;
 		font-weight: 600;
-		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+			monospace;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		padding: 0.375rem 0.75rem;
 		border-radius: 0.375rem;
 		/* Use CSS custom property for project color */
 		background: color-mix(in oklch, var(--project-color) 15%, transparent);
-		border: 1px solid color-mix(in oklch, var(--project-color) 35%, transparent);
+		border: 1px solid
+			color-mix(in oklch, var(--project-color) 35%, transparent);
 		color: var(--project-color);
 		transition: all 0.15s ease;
 	}
 
 	.project-tab:hover .project-tab-name {
 		background: color-mix(in oklch, var(--project-color) 25%, transparent);
-		border-color: color-mix(in oklch, var(--project-color) 50%, transparent);
+		border-color: color-mix(
+			in oklch,
+			var(--project-color) 50%,
+			transparent
+		);
 	}
 
 	.project-tab.active .project-tab-name {
 		background: color-mix(in oklch, var(--project-color) 30%, transparent);
-		border-color: color-mix(in oklch, var(--project-color) 60%, transparent);
-		box-shadow: 0 0 8px color-mix(in oklch, var(--project-color) 30%, transparent);
+		border-color: color-mix(
+			in oklch,
+			var(--project-color) 60%,
+			transparent
+		);
+		box-shadow: 0 0 8px
+			color-mix(in oklch, var(--project-color) 30%, transparent);
 	}
 
 	.project-tab-agents {
@@ -1394,7 +1666,7 @@
 
 	.tab-count.paused {
 		background: oklch(0.55 0.18 55 / 0.25);
-		color: oklch(0.80 0.15 55);
+		color: oklch(0.8 0.15 55);
 		border: 1px solid oklch(0.55 0.18 55 / 0.4);
 	}
 
@@ -1530,6 +1802,31 @@
 		margin-right: 0.5rem;
 	}
 
+	.paused-agents {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		margin-right: 0.5rem;
+	}
+
+	.subsection-right {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-left: auto;
+	}
+
+	.subsection-count-inline {
+		font-size: 0.75rem;
+		font-weight: 500;
+		padding: 0.125rem 0.375rem;
+		border-radius: 9999px;
+		background: oklch(0.25 0.02 250);
+		color: oklch(0.65 0.02 250);
+		text-transform: none;
+		letter-spacing: normal;
+	}
+
 	.epic-content {
 		border-top: 1px solid oklch(0.23 0.02 250);
 	}
@@ -1546,7 +1843,7 @@
 	}
 
 	.epic-content :global(.sessions-table tbody tr) {
-		border-bottom: 1px solid oklch(0.20 0.02 250 / 0.5);
+		border-bottom: 1px solid oklch(0.2 0.02 250 / 0.5);
 	}
 
 	.epic-content :global(.sessions-table tbody tr:last-child) {
@@ -1594,7 +1891,7 @@
 
 	.epic-content :global(.tasks-table td) {
 		padding: 0.5rem 0.75rem;
-		border-bottom-color: oklch(0.20 0.02 250 / 0.5);
+		border-bottom-color: oklch(0.2 0.02 250 / 0.5);
 	}
 
 	.epic-content :global(.task-row:last-child td) {
@@ -1605,7 +1902,18 @@
 		background: oklch(0.18 0.01 250);
 	}
 
+	/* Paused subsection - indent to align with epic-group content */
+	.paused-subsection {
+		margin-left: 0.75rem;
+		margin-right: 0.75rem;
+		max-width: calc(100% - 1.5rem); /* Constrain width accounting for margins */
+	}
+
 	/* Override TasksPaused table styles to match TasksActive and TasksOpen */
+	.paused-content {
+		overflow: hidden; /* Prevent table from overflowing container */
+	}
+
 	.paused-content :global(.paused-sessions-table) {
 		background: transparent;
 		border: none;
@@ -1617,7 +1925,7 @@
 	}
 
 	.paused-content :global(.paused-table tbody tr) {
-		border-bottom: 1px solid oklch(0.20 0.02 250 / 0.5);
+		border-bottom: 1px solid oklch(0.2 0.02 250 / 0.5);
 	}
 
 	.paused-content :global(.paused-table tbody tr:last-child) {

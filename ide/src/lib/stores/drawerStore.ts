@@ -32,6 +32,9 @@ export const isTaskDrawerOpen = writable(false);
 // Selected project context for task drawer (pre-fills project field)
 export const selectedDrawerProject = writable<string | null>(null);
 
+// Initial text to populate task drawer (parsed like paste: first line = title, rest = description)
+export const initialTaskText = writable<string | null>(null);
+
 // Available projects for task drawer (dynamically populated from tasks)
 export const availableProjects = writable<string[]>([]);
 
@@ -39,11 +42,16 @@ export const availableProjects = writable<string[]>([]);
 export const projectColorsStore = writable<Record<string, string>>({});
 
 // Helper functions
-export function openTaskDrawer(project?: string) {
+export function openTaskDrawer(project?: string, text?: string) {
 	if (project && project !== 'All Projects') {
 		selectedDrawerProject.set(project);
 	} else {
 		selectedDrawerProject.set(null);
+	}
+	if (text) {
+		initialTaskText.set(text);
+	} else {
+		initialTaskText.set(null);
 	}
 	isTaskDrawerOpen.set(true);
 }

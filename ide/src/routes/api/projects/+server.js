@@ -434,6 +434,7 @@ export async function GET({ url }) {
 
 				projects.push({
 					name: key,
+					key, // Include key explicitly for easier mapping
 					displayName: config.name || key.toUpperCase(),
 					path: projectPath,
 					serverPath,
@@ -442,6 +443,8 @@ export async function GET({ url }) {
 					inactiveColor: config.inactive_color ? rgbToHex(config.inactive_color) : null,
 					databaseUrl: config.database_url || null,
 					description: config.description || null,
+					notes: config.notes || null,
+					notesHeight: config.notes_height || null,
 					hidden: hiddenProjects.has(key),
 					source: 'jat-config'
 				});
@@ -611,7 +614,7 @@ function validateProjectKey(key) {
 
 /**
  * PATCH /api/projects - Update project fields
- * Body: { project: string, description?: string, port?: number | null, server_path?: string, database_url?: string, active_color?: string, inactive_color?: string }
+ * Body: { project: string, description?: string, port?: number | null, server_path?: string, database_url?: string, active_color?: string, inactive_color?: string, notes?: string, notes_height?: number }
  *
  * Colors should be in "rgb(rrggbb)" format for consistency with JAT config.
  * Example: "rgb(5588ff)" for blue, "rgb(00d4aa)" for teal
@@ -619,7 +622,7 @@ function validateProjectKey(key) {
 export async function PATCH({ request }) {
 	try {
 		const body = await request.json();
-		const { project, description, port, server_path, database_url, active_color, inactive_color } = body;
+		const { project, description, port, server_path, database_url, active_color, inactive_color, notes, notes_height } = body;
 
 		if (!project) {
 			return json({ error: 'Project name required' }, { status: 400 });
@@ -657,6 +660,20 @@ export async function PATCH({ request }) {
 		if (inactive_color !== undefined) {
 			jatConfig.projects[project].inactive_color = inactive_color || null;
 		}
+		if (notes !== undefined) {
+			if (notes) {
+				jatConfig.projects[project].notes = notes;
+			} else {
+				delete jatConfig.projects[project].notes;
+			}
+		}
+		if (notes_height !== undefined) {
+			if (notes_height && notes_height > 0) {
+				jatConfig.projects[project].notes_height = notes_height;
+			} else {
+				delete jatConfig.projects[project].notes_height;
+			}
+		}
 
 		const success = await writeJatConfig(jatConfig);
 		if (!success) {
@@ -674,7 +691,9 @@ export async function PATCH({ request }) {
 			server_path: jatConfig.projects[project].server_path,
 			database_url: jatConfig.projects[project].database_url,
 			active_color: jatConfig.projects[project].active_color,
-			inactive_color: jatConfig.projects[project].inactive_color
+			inactive_color: jatConfig.projects[project].inactive_color,
+			notes: jatConfig.projects[project].notes,
+			notes_height: jatConfig.projects[project].notes_height
 		});
 	} catch (error) {
 		console.error('Failed to update project:', error);

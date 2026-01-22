@@ -168,6 +168,32 @@
 		editor?.layout();
 	}
 
+	// Expose getSelection method to get selected text
+	export function getSelection(): string {
+		if (!editor) return '';
+		const selection = editor.getSelection();
+		if (!selection || selection.isEmpty()) return '';
+		const model = editor.getModel();
+		if (!model) return '';
+		return model.getValueInRange(selection);
+	}
+
+	// Delete the current selection (replaces selected text with empty string)
+	export function deleteSelection(): boolean {
+		if (!editor) return false;
+		const selection = editor.getSelection();
+		if (!selection || selection.isEmpty()) return false;
+
+		// Execute an edit to replace the selection with empty string
+		editor.executeEdits('delete-selection', [{
+			range: selection,
+			text: '',
+			forceMoveMarkers: true
+		}]);
+
+		return true;
+	}
+
 	// Track decoration IDs for cleanup
 	let highlightDecorations: string[] = [];
 

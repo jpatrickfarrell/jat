@@ -13,7 +13,7 @@
 
 	import { tick, onDestroy } from 'svelte';
 	import { get } from 'svelte/store';
-	import { isTaskDrawerOpen, selectedDrawerProject, availableProjects } from '$lib/stores/drawerStore';
+	import { isTaskDrawerOpen, selectedDrawerProject, availableProjects, initialTaskText } from '$lib/stores/drawerStore';
 	import { broadcastTaskEvent } from '$lib/stores/taskEvents';
 	import { broadcastSessionEvent } from '$lib/stores/sessionEvents';
 	import { playSuccessChime, playErrorSound, playAttachmentSound } from '$lib/utils/soundEffects';
@@ -97,6 +97,43 @@
 					}
 				}, 200);
 			});
+		}
+	});
+
+	// Process initial text when drawer opens (e.g., from Project Notes "Create Task" button)
+	$effect(() => {
+		if (isOpen) {
+			const text = get(initialTaskText);
+			if (text && text.trim()) {
+				// Process like paste: first non-empty line = title, rest = description
+				const lines = text.split(/\r?\n/);
+
+				let titleLine = '';
+				let descriptionStartIndex = 0;
+
+				for (let i = 0; i < lines.length; i++) {
+					const trimmed = lines[i].trim();
+					if (trimmed) {
+						titleLine = trimmed;
+						descriptionStartIndex = i + 1;
+						break;
+					}
+				}
+
+				const descriptionLines = lines.slice(descriptionStartIndex).filter(line => line.trim());
+				const description = descriptionLines.join('\n').trim();
+
+				formData.title = titleLine;
+				formData.description = description;
+
+				// Clear the initial text so it's not processed again
+				initialTaskText.set(null);
+
+				// Trigger AI analysis if we have both title and description
+				if (titleLine && description) {
+					tick().then(() => fetchSuggestions());
+				}
+			}
 		}
 	});
 

@@ -15,6 +15,7 @@
 	import TasksActive from "$lib/components/sessions/TasksActive.svelte";
 	import TasksPaused from "$lib/components/sessions/TasksPaused.svelte";
 	import TasksOpen from "$lib/components/sessions/TasksOpen.svelte";
+	import ProjectNotes from "$lib/components/sessions/ProjectNotes.svelte";
 	import TaskIdBadge from "$lib/components/TaskIdBadge.svelte";
 	import WorkingAgentBadge from "$lib/components/WorkingAgentBadge.svelte";
 	import { fetchAndGetProjectColors } from "$lib/utils/projectColors";
@@ -81,6 +82,10 @@
 
 	// Project colors
 	let projectColors = $state<Record<string, string>>({});
+
+	// Project notes
+	let projectNotes = $state<Record<string, string>>({});
+	let projectNotesHeight = $state<Record<string, number>>({});
 
 	// Recoverable sessions state
 	interface RecoverableSession {
@@ -587,6 +592,31 @@
 		}
 	}
 
+	async function fetchProjectNotes() {
+		try {
+			const response = await fetch("/api/projects?visible=true");
+			if (!response.ok) return;
+			const data = await response.json();
+			const notes: Record<string, string> = {};
+			const heights: Record<string, number> = {};
+			for (const project of data.projects || []) {
+				const projectKey = project.key || project.name;
+				if (projectKey) {
+					if (project.notes) {
+						notes[projectKey] = project.notes;
+					}
+					if (project.notesHeight) {
+						heights[projectKey] = project.notesHeight;
+					}
+				}
+			}
+			projectNotes = notes;
+			projectNotesHeight = heights;
+		} catch (err) {
+			console.warn("Failed to fetch project notes:", err);
+		}
+	}
+
 	async function fetchRecoverableSessions() {
 		try {
 			const response = await fetch("/api/recovery");
@@ -617,6 +647,7 @@
 			fetchProjectOrder(),
 			fetchAgentProjects(),
 			fetchProjectColors(),
+			fetchProjectNotes(),
 			fetchAllTasks(),
 			fetchRecoverableSessions(),
 		]);
@@ -962,6 +993,14 @@
 				class="project-content"
 				style="--project-color: {projectColor}"
 			>
+				<!-- Project Notes Section -->
+				<ProjectNotes
+					projectName={selectedProject}
+					notes={projectNotes[selectedProject] || ""}
+					notesHeight={projectNotesHeight[selectedProject] || null}
+					{projectColor}
+				/>
+
 				<!-- Active Sessions Section -->
 				{#if projectSessions.length > 0}
 					<div class="subsection">

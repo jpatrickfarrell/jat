@@ -995,6 +995,34 @@
 													}
 												}
 												await handleKillSession(session.name);
+											} else if (actionId === 'pause') {
+												// Pause session: write paused signal and kill tmux session
+												// INSTANT UI UPDATE - set optimistic state immediately
+												optimisticStates.set(session.name, 'paused');
+												optimisticStates = new Map(optimisticStates); // trigger reactivity
+												console.log('[TasksActive] Set optimistic paused state for:', session.name);
+
+												if (sessionTask) {
+													try {
+														await fetch(`/api/sessions/${encodeURIComponent(session.name)}/pause`, {
+															method: 'POST',
+															headers: { 'Content-Type': 'application/json' },
+															body: JSON.stringify({
+																taskId: sessionTask.id,
+																taskTitle: sessionTask.title,
+																reason: 'Paused via StatusActionBadge',
+																killSession: true,
+																agentName: sessionAgentName,
+																project: session.project
+															})
+														});
+													} catch (e) {
+														console.warn('[TasksActive] Failed to pause session:', e);
+													}
+												} else {
+													// No task - just kill the session
+													await handleKillSession(session.name);
+												}
 											}
 										}}
 										task={sessionTask ? { id: sessionTask.id, issue_type: sessionTask.issue_type, priority: sessionTask.priority } : null}

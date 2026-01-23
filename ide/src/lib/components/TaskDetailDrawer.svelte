@@ -197,6 +197,15 @@
 		agentStatus !== null && agentStatus !== 'offline' && agentStatus !== 'disconnected'
 	);
 
+	// Derived: Is this a paused/recoverable session? (in_progress but agent offline)
+	// This happens when an agent was working but their tmux session is gone (paused or crashed)
+	const isPausedSession = $derived(
+		task?.status === 'in_progress' &&
+		task?.assignee &&
+		!isAgentOnline &&
+		recoverableSession !== null
+	);
+
 	// Derived: Session name for attach
 	const sessionName = $derived(
 		taskAgent ? `jat-${taskAgent.name}` : null
@@ -296,6 +305,16 @@
 	let signalsStats = $state<TaskSignalsResponse['stats'] | null>(null);
 	let resumingSessionId = $state<string | null>(null);  // Track which session is being resumed
 
+	// Recoverable session state (for paused tasks where agent is offline)
+	interface RecoverableSession {
+		agentName: string;
+		sessionId: string;
+		taskId: string;
+		lastActivity?: string;
+	}
+	let recoverableSession = $state<RecoverableSession | null>(null);
+	let recoverableLoading = $state(false);
+
 	// Available projects for suggested task creation
 	let availableProjects = $state<string[]>([]);
 	$effect(() => {
@@ -310,6 +329,7 @@
 
 	// Get unique sessions from signals (for Resume button)
 	// A task may have multiple sessions if different agents worked on it
+	// Also includes recoverableSession as fallback when no signals exist
 	interface UniqueSession {
 		session_id: string;
 		agent_name?: string;
@@ -317,6 +337,8 @@
 	}
 	const uniqueSessions = $derived.by((): UniqueSession[] => {
 		const sessionMap = new Map<string, UniqueSession>();
+
+		// First, add sessions from task signals
 		for (const signal of taskSignals) {
 			if (!signal.session_id) continue;
 			const existing = sessionMap.get(signal.session_id);
@@ -327,6 +349,16 @@
 					timestamp: signal.timestamp
 				});
 			}
+		}
+
+		// Fallback: if no signals, use recoverableSession (from recovery API)
+		// This handles cases where agent didn't emit signals but session is recoverable
+		if (sessionMap.size === 0 && recoverableSession) {
+			sessionMap.set(recoverableSession.sessionId, {
+				session_id: recoverableSession.sessionId,
+				agent_name: recoverableSession.agentName,
+				timestamp: recoverableSession.lastActivity || new Date().toISOString()
+			});
 		}
 		// Sort by timestamp descending (most recent first)
 		return Array.from(sessionMap.values()).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
@@ -438,6 +470,11 @@
 			// Fetch summary for closed tasks
 			if (data.task?.status === 'closed') {
 				fetchSummary(id, signal);
+			}
+
+			// Fetch recoverable session info for in_progress tasks (to show Resume button when paused)
+			if (data.task?.status === 'in_progress' && data.task?.assignee) {
+				fetchRecoverableSession(id, signal);
 			}
 		} catch (err: any) {
 			// Ignore abort errors (expected when switching tasks or closing drawer)
@@ -674,6 +711,43 @@
 			sessionLogs = [];
 		} finally {
 			logsLoading = false;
+		}
+	}
+
+	// Fetch recoverable session for in_progress task (when agent is offline/paused)
+	// This uses the recovery API to find session ID for tasks with no active tmux session
+	async function fetchRecoverableSession(id: string, signal?: AbortSignal) {
+		if (!id) return;
+
+		recoverableLoading = true;
+
+		try {
+			const response = await fetch('/api/recovery', { signal });
+			if (!response.ok) {
+				throw new Error(`Failed to fetch recovery info: ${response.statusText}`);
+			}
+			const data = await response.json();
+			// Find the session for this specific task
+			const session = (data.sessions || []).find((s: any) => s.taskId === id);
+			if (session) {
+				recoverableSession = {
+					agentName: session.agentName,
+					sessionId: session.sessionId,
+					taskId: session.taskId,
+					lastActivity: session.lastActivity
+				};
+			} else {
+				recoverableSession = null;
+			}
+		} catch (err: any) {
+			// Ignore abort errors
+			if (err.name === 'AbortError') {
+				return;
+			}
+			console.error('Error fetching recoverable session:', err);
+			recoverableSession = null;
+		} finally {
+			recoverableLoading = false;
 		}
 	}
 
@@ -1704,6 +1778,9 @@
 			taskSignals = [];
 			signalsStats = null;
 			signalsExpanded = true;
+			// Reset recoverable session state
+			recoverableSession = null;
+			recoverableLoading = false;
 			// Reset loading states
 			loading = false;
 			historyLoading = false;
@@ -1923,7 +2000,7 @@
 									<!-- Assigned: Show agent + actions (only when there's an actual assignee) -->
 									<div class="flex items-center gap-1">
 										<div class="avatar">
-											<div class="w-5 h-5 rounded-full ring-1 {isAgentOnline ? 'ring-success' : 'ring-warning'}">
+											<div class="w-5 h-5 rounded-full ring-1 {isAgentOnline ? 'ring-success' : isPausedSession ? 'ring-secondary' : 'ring-warning'}">
 												<AgentAvatar name={task.assignee} size={20} />
 											</div>
 										</div>
@@ -1946,6 +2023,24 @@
 												<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
 													<path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
 												</svg>
+											</button>
+										{:else if isPausedSession && recoverableSession}
+											<!-- Paused session: Show Resume button -->
+											<span class="badge badge-xs badge-secondary">paused</span>
+											<button
+												class="btn btn-xs btn-primary gap-1"
+												onclick={() => handleResumeSession(recoverableSession!.sessionId, recoverableSession!.agentName)}
+												disabled={resumingSessionId !== null}
+												title="Resume the paused Claude conversation"
+											>
+												{#if resumingSessionId === recoverableSession.sessionId}
+													<span class="loading loading-spinner loading-xs"></span>
+												{:else}
+													<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+														<path d="M8 5v14l11-7z"/>
+													</svg>
+												{/if}
+												<span>Resume</span>
 											</button>
 										{/if}
 										<button

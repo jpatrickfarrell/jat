@@ -50,11 +50,17 @@
 	// Track dirty state - compare to originalNotes which is set on load
 	let originalNotes = $state('');
 
-	// Sync notes from props to local state when project changes
+	// Track which project we've synced to avoid overwriting user edits
+	let syncedProjectName = $state('');
+
+	// Sync notes from props to local state ONLY when project changes
 	$effect(() => {
-		localNotes = notes;
-		originalNotes = notes;
-		isDirty = false;
+		if (projectName !== syncedProjectName) {
+			syncedProjectName = projectName;
+			localNotes = notes;
+			originalNotes = notes;
+			isDirty = false;
+		}
 	});
 
 	// Track dirty state
@@ -306,6 +312,7 @@
 					bind:value={localNotes}
 					language="markdown"
 					onchange={handleNotesChange}
+					disableSuggestions={true}
 				/>
 			</div>
 		</div>

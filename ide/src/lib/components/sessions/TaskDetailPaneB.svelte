@@ -873,6 +873,7 @@
 							bind:this={notesEditorRef}
 							bind:value={notesValue}
 							language="markdown"
+							disableSuggestions={true}
 						/>
 					</div>
 

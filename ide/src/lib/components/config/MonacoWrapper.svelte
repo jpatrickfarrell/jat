@@ -10,13 +10,15 @@
 		language = 'markdown',
 		theme = undefined,
 		readonly = false,
-		onchange = undefined
+		onchange = undefined,
+		disableSuggestions = false
 	}: {
 		value?: string;
 		language?: string;
 		theme?: string;
 		readonly?: boolean;
 		onchange?: (value: string) => void;
+		disableSuggestions?: boolean;
 	} = $props();
 
 	// State
@@ -26,6 +28,7 @@
 	let isReady = $state(false);
 	let resizeObserver: ResizeObserver | null = null;
 	let themeObserver: MutationObserver | null = null;
+	let isEditorFocused = $state(false);
 
 	// Track the current DaisyUI theme for reactivity
 	let daisyTheme = $state('nord');
@@ -86,7 +89,17 @@
 					useShadows: false,
 					verticalScrollbarSize: 10,
 					horizontalScrollbarSize: 10
-				}
+				},
+				// Disable suggestions/intellisense for free-form text editing
+				...(disableSuggestions ? {
+					quickSuggestions: false,
+					suggestOnTriggerCharacters: false,
+					wordBasedSuggestions: 'off',
+					parameterHints: { enabled: false },
+					suggest: { showWords: false },
+					inlineSuggest: { enabled: false },
+					acceptSuggestionOnEnter: 'off'
+				} : {})
 			});
 
 			// Listen for content changes
@@ -96,6 +109,14 @@
 					value = newValue;
 					onchange?.(newValue);
 				}
+			});
+
+			// Track focus state to prevent external syncs from interrupting typing
+			editor.onDidFocusEditorText(() => {
+				isEditorFocused = true;
+			});
+			editor.onDidBlurEditorText(() => {
+				isEditorFocused = false;
 			});
 
 			// Set up resize observer for auto-layout
@@ -120,8 +141,9 @@
 	});
 
 	// Sync external value changes to editor
+	// Skip while editor is focused to prevent interrupting user typing
 	$effect(() => {
-		if (editor && isReady) {
+		if (editor && isReady && !isEditorFocused) {
 			const currentValue = editor.getValue();
 			if (value !== currentValue) {
 				// Preserve cursor position when syncing external changes

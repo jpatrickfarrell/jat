@@ -183,10 +183,13 @@
 	// Handle delete project - call API then reload
 	async function handleDeleteProject(project: ProjectConfig) {
 		try {
+			// Extract project key from path (last segment), same as handleEditProject
+			const projectKey = project.path.split('/').pop() || project.name.toLowerCase();
+
 			const response = await fetch('/api/projects', {
 				method: 'DELETE',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ project: project.name })
+				body: JSON.stringify({ project: projectKey })
 			});
 
 			if (!response.ok) {

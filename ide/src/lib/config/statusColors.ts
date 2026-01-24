@@ -417,7 +417,7 @@ export type SessionStateIconType = 'rocket' | 'gear' | 'question' | 'eye' | 'che
 
 /**
  * Centralized SessionState type - single source of truth for all session states.
- * Used by SessionCard, StatusActionBadge, triage page, and any other components
+ * Used by SessionCard, StatusActionBadge, and any other components
  * that need to work with session states.
  */
 export type SessionState =

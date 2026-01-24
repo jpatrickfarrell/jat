@@ -21,7 +21,6 @@
  *
  * LABS (experimental, not production-ready):
  *   /automation - Automation rules configuration
- *   /triage   - Task triage (needs work)
  *   /swarm    - Swarm attack interface (experimental)
  */
 
@@ -45,7 +44,7 @@ export interface UnifiedNavConfig {
  * Defines all navigation items and global nav settings.
  * Sidebar.svelte imports this and renders nav items with active state.
  *
- * Icons used: tasks, agents, servers, triage, timeline, columns, graph
+ * Icons used: tasks, agents, servers, timeline, columns, graph
  * (Icon SVG paths defined in Sidebar.svelte)
  */
 export const unifiedNavConfig: UnifiedNavConfig = {
@@ -135,13 +134,6 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			label: 'Automation',
 			href: '/automation',
 			icon: 'automation',
-			category: 'labs'
-		},
-		{
-			id: 'triage',
-			label: 'Triage',
-			href: '/triage',
-			icon: 'triage',
 			category: 'labs'
 		},
 		{

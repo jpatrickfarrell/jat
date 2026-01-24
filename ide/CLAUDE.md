@@ -1621,7 +1621,6 @@ import { TaskTableSkeleton, AgentGridSkeleton, TaskDetailSkeleton } from '$lib/c
 | `ProjectsTableSkeleton` | Projects table | `rows?: number` |
 | `GraphSkeleton` | Dependency graph view | - |
 | `TimelineSkeleton` | Timeline/Gantt view | `tasks?: number` |
-| `TriageSkeleton` | Triage page | - |
 | `TaskDetailSkeleton` | Task detail drawer content | - |
 
 **Usage Example:**

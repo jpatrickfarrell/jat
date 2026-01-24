@@ -55,7 +55,7 @@ source ~/.bashrc
 jat
 ```
 
-Open http://localhost:3333 → Add a project → Create a task → Spawn an agent → Supervise
+Open http://localhost:3333 → **Add a project** (click "Add Project" on `/tasks` or go to `/config` → Projects) → Create a task → Spawn an agent → Supervise
 
 **Alternative (developers):**
 ```bash
@@ -134,7 +134,7 @@ Full git integration:
 - Diff preview drawer (click any file)
 - Commit timeline with details
 
-### Agent Sessions (`/work`)
+### Agent Sessions (`/tasks`)
 
 Live terminal output for all running agents:
 
@@ -144,15 +144,23 @@ Live terminal output for all running agents:
 - Send input directly to agents
 - Token usage and cost tracking
 
-### Task Management
+### Task Management (`/tasks`)
 
-Beads-powered git-backed issue tracking (on `/work` and `/kanban`):
+Beads-powered git-backed issue tracking:
 
 - Create tasks with priorities (P0-P4)
 - Epic workflows with subtask spawning
 - Dependency visualization
 - Bulk actions (select multiple, add to epic)
-- Kanban board view at `/kanban`
+
+### Source Control (`/source`)
+
+Full commit history and repository management:
+
+- Browse all commits with details
+- Multi-select commits for cherry-pick or revert
+- Search commits by message or author
+- Diff viewer for any commit
 
 ---
 
@@ -171,7 +179,7 @@ Beads-powered git-backed issue tracking (on `/work` and `/kanban`):
 │         ↓                                                    │
 │   5. SMART QUESTIONS     "OAuth or JWT?" → click button     │
 │         ↓                                                    │
-│   6. REVIEW IN /files    See diffs, check code              │
+│   6. REVIEW IN /tasks    See diffs, approve changes         │
 │         ↓                                                    │
 │   7. COMMIT & PUSH       Stage, message, push               │
 │         ↓                                                    │
@@ -192,12 +200,11 @@ Beads-powered git-backed issue tracking (on `/work` and `/kanban`):
 
 | Route | Purpose |
 |-------|---------|
-| `/work` | Agent sessions, task management, epics, questions, state tracking |
-| `/files` | Monaco editor, file tree, full git integration |
-| `/kanban` | Kanban board view for tasks |
+| `/tasks` | Agent sessions, task management, epics, questions, state tracking |
+| `/files` | Monaco editor, file tree, staged/unstaged changes |
+| `/source` | Full commit history, cherry-pick, revert, diffs |
 | `/servers` | Dev server controls (npm start/stop) |
 | `/config` | API keys, project secrets, automation rules, shortcuts |
-| `/automation` | Pattern matching, error recovery, auto-proceed |
 
 ---
 
@@ -229,6 +236,7 @@ Full Monaco editor and git integration included—but the magic is in agent orch
 | **Auto-proceed rules** | ✅ | ❌ | ❌ | ❌ |
 | **Code editor** | ✅ Monaco | ✅ VS Code | ✅ VS Code | ❌ |
 | **Git integration** | ✅ | ✅ | ✅ | Partial |
+| **Supabase integration** | ✅ Migrations | ❌ | ❌ | ❌ |
 | **100% local** | ✅ | ❌ Cloud | ❌ Cloud | ✅ |
 | **Open source** | ✅ MIT | ❌ | ❌ | ✅ |
 
@@ -242,10 +250,11 @@ JAT isn't trying to replace your editor—it's the control tower for your agent 
 ~/code/jat/
 ├── ide/          # SvelteKit app (the IDE)
 │   └── src/
-│       ├── routes/     # /work, /files, /kanban, /servers
+│       ├── routes/     # /tasks, /files, /source, /servers, /config
 │       └── lib/
 │           ├── components/files/   # FileTree, GitPanel, Editor
 │           ├── components/work/    # SessionCard, WorkPanel
+│           ├── components/source/  # CommitHistory, DiffViewer
 │           └── stores/             # State management
 ├── tools/              # 50+ CLI tools
 │   ├── core/           # Database, monitoring
@@ -339,7 +348,7 @@ Any terminal-based AI: Claude Code, Aider, Cline, Codex, etc.
 Tested with 20+. Limited by your machine and API limits, not JAT.
 
 **Can I use existing projects?**
-Yes. Run `bd init` in any git repo. JAT auto-discovers `~/code/*`.
+Yes. Run `bd init` in any git repo to initialize Beads tracking, then add the project via `/config` → Projects tab, or use the "Add Project" button on the Tasks page.
 
 **Is there a hosted version?**
 No. JAT runs 100% locally. Code never leaves your machine.
@@ -376,7 +385,7 @@ Open a PR against `master`. All contributions are licensed under MIT.
 - **Beads** — Task management ([steveyegge/beads](https://github.com/steveyegge/beads))
 - **Mario Zechner** — [What if you don't need MCP?](https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/)
 - **Andrej Karpathy** - [Some Powerful Alien Tool](https://x.com/karpathy/status/2004607146781278521?s=20)
-- **DHH** - [Inspiration](https://dhh.dk/)
+- **DHH** - [Omarchy](https://omarchy.org/)
 - **Tmux** - Terminal Multiplexer by ([Nicholas Marriott](https://github.com/tmux/tmux))
 - **Monaco** — Code editor engine ([Microsoft](https://github.com/microsoft/monaco-editor))
 - **SvelteKit** — IDE framework ([Rich Harris](https://github.com/Rich-Harris))

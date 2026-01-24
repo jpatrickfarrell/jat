@@ -25,6 +25,8 @@
 		onDelete?: (project: ProjectConfig) => void;
 		/** Called when visibility toggle is clicked */
 		onToggleVisibility?: (project: ProjectConfig) => void;
+		/** Called when open folder button is clicked */
+		onOpenFolder?: (project: ProjectConfig) => void;
 		/** Custom class */
 		class?: string;
 	}
@@ -34,6 +36,7 @@
 		onEdit = () => {},
 		onDelete = () => {},
 		onToggleVisibility = () => {},
+		onOpenFolder = () => {},
 		class: className = ''
 	}: Props = $props();
 
@@ -58,6 +61,11 @@
 	// Handle visibility toggle
 	function handleToggleVisibility() {
 		onToggleVisibility(project);
+	}
+
+	// Handle open folder
+	function handleOpenFolder() {
+		onOpenFolder(project);
 	}
 </script>
 
@@ -97,6 +105,18 @@
 						<path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
 					</svg>
 				{/if}
+			</button>
+
+			<!-- Open folder button -->
+			<button
+				class="action-btn folder"
+				onclick={handleOpenFolder}
+				title="Open in file manager"
+				aria-label="Open in file manager"
+			>
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776" />
+				</svg>
 			</button>
 
 			<!-- Edit button -->
@@ -438,6 +458,12 @@
 		background: oklch(0.28 0.06 200);
 		border-color: oklch(0.40 0.10 200);
 		color: oklch(0.80 0.10 200);
+	}
+
+	.action-btn.folder:hover {
+		background: oklch(0.28 0.06 55);
+		border-color: oklch(0.40 0.10 55);
+		color: oklch(0.80 0.10 55);
 	}
 
 	.action-btn.edit:hover {

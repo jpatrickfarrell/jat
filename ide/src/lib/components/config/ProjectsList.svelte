@@ -69,6 +69,24 @@
 		}
 	}
 
+	// Handle open folder
+	async function handleOpenFolder(project: ProjectConfig) {
+		try {
+			const response = await fetch('/api/open-folder', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ path: project.path })
+			});
+			if (!response.ok) {
+				const error = await response.json();
+				throw new Error(error.message || 'Failed to open folder');
+			}
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Failed to open folder';
+			errorToast('Failed to open folder', message);
+		}
+	}
+
 	// Handle retry
 	function handleRetry() {
 		loadProjects();
@@ -175,6 +193,7 @@
 							onEdit={onEditProject}
 							onDelete={onDeleteProject}
 							onToggleVisibility={handleToggleVisibility}
+							onOpenFolder={handleOpenFolder}
 						/>
 					</div>
 				{/each}
@@ -212,6 +231,7 @@
 										onEdit={onEditProject}
 										onDelete={onDeleteProject}
 										onToggleVisibility={handleToggleVisibility}
+										onOpenFolder={handleOpenFolder}
 									/>
 								</div>
 							{/each}

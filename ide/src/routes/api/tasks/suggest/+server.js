@@ -20,14 +20,17 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { getApiKeyWithFallback } from '$lib/utils/credentials';
+import { claudeCliCall } from '$lib/server/claudeCli';
 
 // Get API key with fallback chain:
 // 1. ~/.config/jat/credentials.json (preferred)
 // 2. Environment variables (legacy)
+// 3. null (will use claude CLI as fallback)
 function getApiKey() {
 	return getApiKeyWithFallback('anthropic', 'ANTHROPIC_API_KEY') ||
 		env.ANTHROPIC_API_KEY ||
-		process.env.ANTHROPIC_API_KEY;
+		process.env.ANTHROPIC_API_KEY ||
+		null;
 }
 
 /**
@@ -101,18 +104,6 @@ export async function POST({ request }) {
 			return json({ error: true, message: 'Title is required' }, { status: 400 });
 		}
 
-		// Get API key
-		const apiKey = getApiKey();
-		if (!apiKey) {
-			return json(
-				{
-					error: true,
-					message: 'ANTHROPIC_API_KEY not configured. Add it to ide/.env'
-				},
-				{ status: 500 }
-			);
-		}
-
 		// Use client-provided open tasks (pre-fetched when drawer opened)
 		const openTasks = formatOpenTasks(clientOpenTasks || []);
 
@@ -125,69 +116,96 @@ export async function POST({ request }) {
 			projectDescription || ''
 		);
 
-		// Call Claude API
-		const response = await fetch('https://api.anthropic.com/v1/messages', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				'x-api-key': apiKey,
-				'anthropic-version': '2023-06-01'
-			},
-			body: JSON.stringify({
-				model: 'claude-3-5-haiku-20241022',
-				max_tokens: 500,
-				messages: [
+		// Get API key (may be null - will use CLI fallback)
+		const apiKey = getApiKey();
+
+		let responseText = '';
+		let usage = null;
+
+		if (apiKey) {
+			// Use direct API call
+			const response = await fetch('https://api.anthropic.com/v1/messages', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'x-api-key': apiKey,
+					'anthropic-version': '2023-06-01'
+				},
+				body: JSON.stringify({
+					model: 'claude-3-5-haiku-20241022',
+					max_tokens: 500,
+					messages: [
+						{
+							role: 'user',
+							content: prompt
+						}
+					]
+				})
+			});
+
+			if (!response.ok) {
+				const errorText = await response.text();
+				console.error('Claude API error:', response.status, errorText);
+				return json(
 					{
-						role: 'user',
-						content: prompt
-					}
-				]
-			})
-		});
+						error: true,
+						message: `Claude API error: ${response.status}`,
+						details: errorText
+					},
+					{ status: 502 }
+				);
+			}
 
-		if (!response.ok) {
-			const errorText = await response.text();
-			console.error('Claude API error:', response.status, errorText);
-			return json(
-				{
-					error: true,
-					message: `Claude API error: ${response.status}`,
-					details: errorText
-				},
-				{ status: 502 }
-			);
-		}
-
-		const result = await response.json();
-
-		// Extract the text response
-		const textContent = result.content?.find((/** @type {{ type?: string, text?: string }} */ c) => c.type === 'text');
-		if (!textContent?.text) {
-			return json(
-				{
-					error: true,
-					message: 'No response from Claude'
-				},
-				{ status: 500 }
-			);
+			const result = await response.json();
+			const textContent = result.content?.find((/** @type {{ type?: string, text?: string }} */ c) => c.type === 'text');
+			if (!textContent?.text) {
+				return json(
+					{
+						error: true,
+						message: 'No response from Claude'
+					},
+					{ status: 500 }
+				);
+			}
+			responseText = textContent.text;
+			usage = result.usage;
+		} else {
+			// Use Claude CLI as fallback (uses user's Claude Code authentication)
+			try {
+				const cliResponse = await claudeCliCall(prompt, { model: 'haiku' });
+				responseText = cliResponse.result;
+				usage = cliResponse.usage;
+			} catch (cliErr) {
+				const cliError = /** @type {Error} */ (cliErr);
+				console.error('Claude CLI error:', cliError.message);
+				return json(
+					{
+						error: true,
+						message: cliError.message.includes('not found')
+							? 'Claude CLI not available. Install Claude Code or configure ANTHROPIC_API_KEY.'
+							: `Claude CLI error: ${cliError.message}`
+					},
+					{ status: 503 }
+				);
+			}
 		}
 
 		// Parse the JSON response
 		let suggestions;
 		try {
 			// Try to extract JSON from the response (handle potential markdown code blocks)
-			let jsonText = textContent.text.trim();
+			let jsonText = responseText.trim();
 			if (jsonText.startsWith('```')) {
 				jsonText = jsonText.replace(/```json?\n?/g, '').replace(/```$/g, '').trim();
 			}
 			suggestions = JSON.parse(jsonText);
 		} catch (parseErr) {
-			console.error('Failed to parse Claude response:', textContent.text);
+			console.error('Failed to parse Claude response:', responseText);
 			return json(
 				{
 					error: true,
 					message: 'Failed to parse AI suggestions',
-					raw: textContent.text
+					raw: responseText
 				},
 				{ status: 500 }
 			);

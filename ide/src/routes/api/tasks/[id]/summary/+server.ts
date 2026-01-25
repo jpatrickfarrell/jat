@@ -18,6 +18,7 @@ import { execSync } from 'child_process';
 import type { RequestHandler } from './$types';
 import { getProjectPath } from '$lib/utils/projectUtils';
 import Anthropic from '@anthropic-ai/sdk';
+import { claudeCliCall } from '$lib/server/claudeCli';
 
 interface TimelineEvent {
 	type: string;
@@ -211,30 +212,6 @@ export const GET: RequestHandler = async ({ params, url }) => {
 			});
 		}
 
-		// Generate summary using LLM if no completion data
-		const apiKey = process.env.ANTHROPIC_API_KEY;
-		if (!apiKey) {
-			// Return a basic summary without LLM
-			const basicSummary: TaskSummary = {
-				taskId: id,
-				title: taskData.title,
-				summary: [`Task "${taskData.title}" ${hasCompletion ? 'was completed' : 'is ' + taskData.status}`],
-				outcome: hasCompletion ? 'completed' : (taskData.status === 'blocked' ? 'blocked' : 'incomplete'),
-				duration,
-				agent,
-				keyChanges: [],
-				generatedAt: new Date().toISOString()
-			};
-
-			return json({
-				task_id: id,
-				summary: basicSummary,
-				cached: false,
-				source: 'basic',
-				timestamp: new Date().toISOString()
-			});
-		}
-
 		// Build context for LLM
 		const signalSummary = signals.map(s => {
 			const state = s.state || s.type;
@@ -287,21 +264,34 @@ For suggestedTasks: Include 0-3 follow-up tasks if the work naturally leads to a
 
 Output ONLY the JSON object.`;
 
-		try {
-			const client = new Anthropic({ apiKey });
-			const response = await client.messages.create({
-				model: 'claude-3-5-haiku-latest',
-				max_tokens: 1024,
-				messages: [{ role: 'user', content: prompt }]
-			});
+		// Try to generate summary using LLM (API key or CLI fallback)
+		const apiKey = process.env.ANTHROPIC_API_KEY;
 
-			const content = response.content[0];
-			if (content.type !== 'text') {
-				throw new Error('Unexpected response type');
+		try {
+			let responseText: string;
+
+			if (apiKey) {
+				// Use direct API call
+				const client = new Anthropic({ apiKey });
+				const response = await client.messages.create({
+					model: 'claude-3-5-haiku-latest',
+					max_tokens: 1024,
+					messages: [{ role: 'user', content: prompt }]
+				});
+
+				const content = response.content[0];
+				if (content.type !== 'text') {
+					throw new Error('Unexpected response type');
+				}
+				responseText = content.text;
+			} else {
+				// Use Claude CLI as fallback (uses user's Claude Code authentication)
+				const cliResponse = await claudeCliCall(prompt, { model: 'haiku' });
+				responseText = cliResponse.result;
 			}
 
 			// Clean and parse JSON
-			let jsonText = content.text
+			let jsonText = responseText
 				.replace(/^```json\n?/g, '')
 				.replace(/^```\n?/g, '')
 				.replace(/\n?```$/g, '')
@@ -331,7 +321,7 @@ Output ONLY the JSON object.`;
 				task_id: id,
 				summary,
 				cached: false,
-				source: 'llm',
+				source: apiKey ? 'llm' : 'cli',
 				timestamp: new Date().toISOString()
 			});
 

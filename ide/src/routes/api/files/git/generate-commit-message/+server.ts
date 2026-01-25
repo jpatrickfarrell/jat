@@ -35,6 +35,7 @@ import {
 	type CommitMessageStyle,
 	type CommitMessageModel
 } from '$lib/config/constants';
+import { claudeCliCall } from '$lib/server/claudeCli';
 
 const CONFIG_PATH = join(homedir(), '.config', 'jat', 'projects.json');
 
@@ -169,12 +170,6 @@ export const POST: RequestHandler = async ({ request }) => {
 			throw error(400, 'Project name is required');
 		}
 
-		// Get API key
-		const apiKey = getApiKey();
-		if (!apiKey) {
-			throw error(500, 'ANTHROPIC_API_KEY not configured. Add it to ide/.env');
-		}
-
 		// Load commit message configuration
 		const config = await loadCommitMessageConfig();
 
@@ -204,55 +199,78 @@ export const POST: RequestHandler = async ({ request }) => {
 		// Build prompt with configuration
 		const prompt = buildPrompt(diff, stagedFiles, config);
 
-		// Call Claude API with configured model and max_tokens
-		const response = await fetch('https://api.anthropic.com/v1/messages', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				'x-api-key': apiKey,
-				'anthropic-version': '2023-06-01'
-			},
-			body: JSON.stringify({
-				model: config.model,
-				max_tokens: config.max_tokens,
-				messages: [
-					{
-						role: 'user',
-						content: prompt
-					}
-				]
-			})
-		});
+		// Get API key (may be null - will use CLI fallback)
+		const apiKey = getApiKey();
 
-		if (!response.ok) {
-			const errorText = await response.text();
-			console.error('Claude API error:', response.status, errorText);
-			throw error(502, `Claude API error: ${response.status}`);
-		}
+		let responseText: string;
+		let usage = null;
 
-		const apiResult = await response.json();
+		if (apiKey) {
+			// Call Claude API with configured model and max_tokens
+			const response = await fetch('https://api.anthropic.com/v1/messages', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'x-api-key': apiKey,
+					'anthropic-version': '2023-06-01'
+				},
+				body: JSON.stringify({
+					model: config.model,
+					max_tokens: config.max_tokens,
+					messages: [
+						{
+							role: 'user',
+							content: prompt
+						}
+					]
+				})
+			});
 
-		// Extract the text response
-		const textContent = apiResult.content?.find((c: { type?: string; text?: string }) => c.type === 'text');
-		if (!textContent?.text) {
-			throw error(500, 'No response from Claude');
+			if (!response.ok) {
+				const errorText = await response.text();
+				console.error('Claude API error:', response.status, errorText);
+				throw error(502, `Claude API error: ${response.status}`);
+			}
+
+			const apiResult = await response.json();
+			const textContent = apiResult.content?.find((c: { type?: string; text?: string }) => c.type === 'text');
+			if (!textContent?.text) {
+				throw error(500, 'No response from Claude');
+			}
+			responseText = textContent.text;
+			usage = apiResult.usage;
+		} else {
+			// Use Claude CLI as fallback (uses user's Claude Code authentication)
+			// Map config.model to CLI model names
+			const cliModel = config.model.includes('haiku') ? 'haiku' : 'sonnet';
+			try {
+				const cliResponse = await claudeCliCall(prompt, { model: cliModel });
+				responseText = cliResponse.result;
+				usage = cliResponse.usage;
+			} catch (cliErr) {
+				const cliError = cliErr as Error;
+				console.error('Claude CLI error:', cliError.message);
+				throw error(503, cliError.message.includes('not found')
+					? 'Claude CLI not available. Install Claude Code or configure ANTHROPIC_API_KEY.'
+					: `Claude CLI error: ${cliError.message}`);
+			}
 		}
 
 		// Parse the JSON response
 		let suggestion;
 		try {
 			// Try to extract JSON from the response (handle potential markdown code blocks)
-			let jsonText = textContent.text.trim();
+			let jsonText = responseText.trim();
 			if (jsonText.startsWith('```')) {
 				jsonText = jsonText.replace(/```json?\n?/g, '').replace(/```$/g, '').trim();
 			}
 			suggestion = JSON.parse(jsonText);
 		} catch (parseErr) {
-			console.error('Failed to parse Claude response:', textContent.text);
+			console.error('Failed to parse Claude response:', responseText);
 			// Fall back to using the raw text as the message
 			return json({
 				success: true,
-				message: textContent.text.trim(),
+				message: responseText.trim(),
 				reasoning: 'Could not parse structured response, using raw output'
 			});
 		}
@@ -261,7 +279,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			success: true,
 			message: suggestion.message || '',
 			reasoning: suggestion.reasoning || '',
-			usage: apiResult.usage,
+			usage,
 			config: {
 				model: config.model,
 				style: config.style

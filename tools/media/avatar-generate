@@ -30,8 +30,10 @@ Examples:
   avatar-generate NewCoast --output /tmp/test.svg
 
 Environment:
-  ANTHROPIC_API_KEY   Required. Your Anthropic API key.
+  ANTHROPIC_API_KEY   Your Anthropic API key (optional if claude CLI is available)
   AVATARS_DIR         Override avatars directory (default: ../avatars relative to script)
+
+Note: If ANTHROPIC_API_KEY is not set, falls back to using 'claude -p' CLI.
 EOF
 }
 
@@ -100,13 +102,22 @@ if [[ -z "$AGENT_NAME" ]]; then
     error "Agent name required. Usage: avatar-generate AGENT_NAME"
 fi
 
+# Check if API key is available, or if claude CLI is available as fallback
+USE_CLI=false
 if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
-    error "ANTHROPIC_API_KEY environment variable required"
+    if command -v claude &>/dev/null; then
+        USE_CLI=true
+        echo "No ANTHROPIC_API_KEY set, using claude CLI"
+    else
+        error "ANTHROPIC_API_KEY not set and claude CLI not available"
+    fi
 fi
 
 # Check dependencies
-if ! command -v curl &>/dev/null; then
-    error "curl is required but not installed"
+if [[ "$USE_CLI" != "true" ]]; then
+    if ! command -v curl &>/dev/null; then
+        error "curl is required but not installed"
+    fi
 fi
 if ! command -v jq &>/dev/null; then
     error "jq is required but not installed"
@@ -158,31 +169,42 @@ Requirements:
 - Use 2-4 colors maximum
 - Make it distinctive and memorable"
 
-# Build API request payload
-PAYLOAD=$(jq -n \
-    --arg prompt "$PROMPT" \
-    '{
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1024,
-        messages: [{role: "user", content: $prompt}]
-    }')
+# Call Claude (API or CLI)
+if [[ "$USE_CLI" == "true" ]]; then
+    # Use claude CLI with --output-format json
+    echo "Calling Claude via CLI..."
+    RESPONSE=$(echo "$PROMPT" | claude -p --model sonnet --output-format json 2>&1) || {
+        error "Claude CLI failed: $RESPONSE"
+    }
 
-# Call Claude API
-echo "Calling Claude API..."
-RESPONSE=$(curl -s -X POST "https://api.anthropic.com/v1/messages" \
-    -H "Content-Type: application/json" \
-    -H "x-api-key: $ANTHROPIC_API_KEY" \
-    -H "anthropic-version: 2023-06-01" \
-    -d "$PAYLOAD")
+    # Extract result from CLI JSON response
+    SVG_CONTENT=$(echo "$RESPONSE" | jq -r '.result // empty')
+else
+    # Use direct API call
+    PAYLOAD=$(jq -n \
+        --arg prompt "$PROMPT" \
+        '{
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 1024,
+            messages: [{role: "user", content: $prompt}]
+        }')
 
-# Check for API errors
-if echo "$RESPONSE" | jq -e '.error' &>/dev/null; then
-    ERROR_MSG=$(echo "$RESPONSE" | jq -r '.error.message // .error.type // "Unknown error"')
-    error "API error: $ERROR_MSG"
+    echo "Calling Claude API..."
+    RESPONSE=$(curl -s -X POST "https://api.anthropic.com/v1/messages" \
+        -H "Content-Type: application/json" \
+        -H "x-api-key: $ANTHROPIC_API_KEY" \
+        -H "anthropic-version: 2023-06-01" \
+        -d "$PAYLOAD")
+
+    # Check for API errors
+    if echo "$RESPONSE" | jq -e '.error' &>/dev/null; then
+        ERROR_MSG=$(echo "$RESPONSE" | jq -r '.error.message // .error.type // "Unknown error"')
+        error "API error: $ERROR_MSG"
+    fi
+
+    # Extract text content
+    SVG_CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty')
 fi
-
-# Extract text content
-SVG_CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty')
 
 if [[ -z "$SVG_CONTENT" ]]; then
     error "No content in API response"

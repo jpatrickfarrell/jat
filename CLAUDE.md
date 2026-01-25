@@ -10,6 +10,7 @@ Lightweight bash tools for agent orchestration, database operations, monitoring,
 @~/code/jat/shared/agent-app-interface.md
 @~/code/jat/shared/automation.md
 @~/code/jat/shared/architecture.md
+@~/code/jat/shared/agent-programs.md
 
 <!-- NOTE: Agent-execution docs (signals.md, workflow-commands.md, statusline.md,
      suggested-tasks.md) are NOT imported here. They're embedded in the command

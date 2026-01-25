@@ -804,7 +804,7 @@
 							type="text"
 							id="edit-startup-pattern"
 							class="input input-bordered w-full"
-							placeholder="{command} --model {model} {flags}"
+							placeholder={`{command} --model {model} {flags}`}
 							bind:value={editForm.startupPattern}
 						/>
 						<p class="form-hint">Custom command pattern. Uses {`{command}`}, {`{model}`}, {`{flags}`}</p>

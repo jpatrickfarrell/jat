@@ -231,6 +231,37 @@
 	}
 
 	/**
+	 * Stage a renamed file (requires both old and new paths)
+	 * Git tracks renames as delete old + add new, so we must stage both paths
+	 */
+	async function stageRename(renamed: { from: string; to: string }) {
+		if (stagingFiles.has(renamed.to)) return;
+
+		stagingFiles = new Set(stagingFiles).add(renamed.to);
+		try {
+			const response = await fetch('/api/files/git/stage', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ project, paths: [renamed.from, renamed.to] })
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				throw new Error(data.message || 'Failed to stage renamed file');
+			}
+
+			await fetchStatus();
+			showToast(`Staged: ${getFileName(renamed.from)} → ${getFileName(renamed.to)}`);
+		} catch (err) {
+			showToast(err instanceof Error ? err.message : 'Failed to stage renamed file', 'error');
+		} finally {
+			const newSet = new Set(stagingFiles);
+			newSet.delete(renamed.to);
+			stagingFiles = newSet;
+		}
+	}
+
+	/**
 	 * Unstage a single file
 	 */
 	async function unstageFile(filePath: string) {
@@ -266,7 +297,10 @@
 	async function stageAll() {
 		if (isStagingAll) return;
 
-		const allChanges = [...modifiedFiles, ...deletedFiles, ...untrackedFiles, ...createdFiles, ...renamedFiles.map(r => r.to)];
+		// For renamed files, we need both the old (from) and new (to) paths
+		// Git tracks renames as delete old + add new, so both must be staged
+		const renamedPaths = renamedFiles.flatMap(r => [r.from, r.to]);
+		const allChanges = [...modifiedFiles, ...deletedFiles, ...untrackedFiles, ...createdFiles, ...renamedPaths];
 		if (allChanges.length === 0) return;
 
 		isStagingAll = true;
@@ -741,6 +775,10 @@
 	function startStatusPolling() {
 		if (statusPollInterval) return;
 		statusPollInterval = setInterval(() => {
+			// Skip fetch when page is hidden to avoid Content-Length mismatch errors
+			if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+				return;
+			}
 			// Only poll if not currently loading or performing an operation
 			if (!isLoading && !isCommitting && !isPushing && !isPulling && !isFetching) {
 				fetchStatus();
@@ -786,6 +824,10 @@
 			ahead = 0;
 			behind = 0;
 			unpushedCount = 0;
+			// Close commit modal and clear selection when project changes
+			// Prevents "bad object" errors from fetching old project's commits
+			showCommitModal = false;
+			selectedCommitHash = null;
 
 			fetchStatus();
 			fetchTimeline();
@@ -1358,9 +1400,9 @@
 								<div class="file-item">
 									<button
 										class="stage-btn"
-										onclick={() => stageFile(renamed.to)}
+										onclick={() => stageRename(renamed)}
 										disabled={stagingFiles.has(renamed.to)}
-										title="Stage file"
+										title="Stage renamed file"
 									>
 										{#if stagingFiles.has(renamed.to)}
 											<span class="loading loading-spinner loading-xs"></span>

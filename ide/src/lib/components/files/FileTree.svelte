@@ -982,6 +982,20 @@
 		}
 	}
 
+	// Copy path to clipboard
+	async function copyPathToClipboard(path: string) {
+		try {
+			await navigator.clipboard.writeText(path);
+			if (onSuccess) {
+				onSuccess(`Copied path: ${path}`);
+			}
+		} catch (err) {
+			if (onError) {
+				onError('Failed to copy path to clipboard');
+			}
+		}
+	}
+
 	// Handle keyboard shortcuts
 	function handleKeyDown(e: KeyboardEvent) {
 		// Don't handle if we're in an input field
@@ -989,16 +1003,38 @@
 			return;
 		}
 
-		// F2 - Rename selected file
-		if (e.key === 'F2' && selectedPath) {
+		// F2 or R - Rename selected file
+		if ((e.key === 'F2' || e.key.toLowerCase() === 'r') && selectedPath) {
 			e.preventDefault();
 			openRenameModal(selectedPath);
 		}
 
-		// Delete - Delete selected file
-		if (e.key === 'Delete' && selectedPath) {
+		// Delete or D - Delete selected file
+		if ((e.key === 'Delete' || e.key.toLowerCase() === 'd') && selectedPath) {
 			e.preventDefault();
 			openDeleteModal(selectedPath);
+		}
+
+		// C - Copy path to clipboard
+		if (e.key.toLowerCase() === 'c' && selectedPath) {
+			e.preventDefault();
+			copyPathToClipboard(selectedPath);
+		}
+
+		// F - New file (in selected folder or root)
+		if (e.key.toLowerCase() === 'f') {
+			e.preventDefault();
+			const entry = selectedPath ? findEntryByPath(selectedPath) : null;
+			const parentPath = entry?.type === 'folder' ? entry.path : (selectedPath?.includes('/') ? selectedPath.substring(0, selectedPath.lastIndexOf('/')) : '');
+			openCreateModal('file', parentPath);
+		}
+
+		// O - New folder (in selected folder or root)
+		if (e.key.toLowerCase() === 'o') {
+			e.preventDefault();
+			const entry = selectedPath ? findEntryByPath(selectedPath) : null;
+			const parentPath = entry?.type === 'folder' ? entry.path : (selectedPath?.includes('/') ? selectedPath.substring(0, selectedPath.lastIndexOf('/')) : '');
+			openCreateModal('folder', parentPath);
 		}
 	}
 
@@ -1448,6 +1484,7 @@
 					<path d="M14 2v6h6M12 18v-6M9 15h6" />
 				</svg>
 				<span>New File</span>
+				<span class="context-menu-shortcut">F</span>
 			</button>
 			<button class="context-menu-item" onclick={() => openCreateModal('folder', contextMenu!.entry.path)}>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1455,6 +1492,7 @@
 					<path d="M12 11v6M9 14h6" />
 				</svg>
 				<span>New Folder</span>
+				<span class="context-menu-shortcut">O</span>
 			</button>
 			<div class="context-menu-divider"></div>
 		{/if}
@@ -1463,6 +1501,7 @@
 				<path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
 			</svg>
 			<span>Rename</span>
+			<span class="context-menu-shortcut">R</span>
 		</button>
 		{#if contextMenu.entry.type === 'file' && onToggleStar}
 			<button
@@ -1476,11 +1515,20 @@
 				<span>{starredFiles.has(contextMenu.entry.path) ? 'Unstar' : 'Star'}</span>
 			</button>
 		{/if}
+		<button class="context-menu-item" onclick={() => { copyPathToClipboard(contextMenu!.entry.path); closeContextMenu(); }}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+				<path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+			</svg>
+			<span>Copy Path</span>
+			<span class="context-menu-shortcut">C</span>
+		</button>
 		<button class="context-menu-item context-menu-item-danger" onclick={() => { openDeleteModal(contextMenu!.entry.path); closeContextMenu(); }}>
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
 			</svg>
 			<span>Delete</span>
+			<span class="context-menu-shortcut">D</span>
 		</button>
 	</div>
 {/if}
@@ -2361,6 +2409,16 @@
 		height: 1px;
 		background: oklch(0.28 0.02 250);
 		margin: 0.375rem 0;
+	}
+
+	.context-menu-shortcut {
+		margin-left: auto;
+		font-size: 0.6875rem;
+		color: oklch(0.50 0.02 250);
+		font-family: ui-monospace, monospace;
+		padding: 0.125rem 0.25rem;
+		background: oklch(0.22 0.02 250);
+		border-radius: 0.25rem;
 	}
 
 	/* Create modal path display */

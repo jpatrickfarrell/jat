@@ -68,7 +68,8 @@
 	let agentPickerOpen = $state(false);
 	let agentPickerTask = $state<Task | null>(null);
 	// Position for fixed-positioned agent picker (to escape overflow containers)
-	let agentPickerPosition = $state<{ top: number; right: number } | null>(null);
+	// Uses bottom/left to drop up and to the left for better visibility
+	let agentPickerPosition = $state<{ bottom: number; left: number } | null>(null);
 
 	// Track Alt key state for visual feedback
 	$effect(() => {
@@ -103,12 +104,15 @@
 
 		// Alt+click opens agent selector
 		if (event.altKey) {
-			// Calculate fixed position from button
+			// Calculate fixed position from button - drop up and to the left
 			const button = event.currentTarget as HTMLElement;
 			const rect = button.getBoundingClientRect();
+			// Position to the left, but ensure it stays within viewport
+			const preferredLeft = rect.left - 280; // AgentSelector is ~320px wide
+			const safeLeft = Math.max(8, preferredLeft); // At least 8px from left edge
 			agentPickerPosition = {
-				top: rect.bottom + 4, // 4px gap below button
-				right: window.innerWidth - rect.right // Align right edge
+				bottom: window.innerHeight - rect.top + 4, // 4px gap above button
+				left: safeLeft
 			};
 			agentPickerTask = task;
 			agentPickerOpen = true;
@@ -552,11 +556,12 @@
 										<!-- Backdrop -->
 										<div class="fixed inset-0 z-40" onclick={handleAgentPickerCancel}></div>
 										<!-- Agent selector with fixed positioning to escape overflow containers -->
+										<!-- Drops up and to the left for better visibility -->
 										<!-- svelte-ignore a11y_no_static_element_interactions -->
 										<!-- svelte-ignore a11y_click_events_have_key_events -->
 										<div
 											class="fixed z-50"
-											style="top: {agentPickerPosition.top}px; right: {agentPickerPosition.right}px;"
+											style="bottom: {agentPickerPosition.bottom}px; left: {agentPickerPosition.left}px;"
 											onclick={(e) => e.stopPropagation()}
 										>
 											<AgentSelector

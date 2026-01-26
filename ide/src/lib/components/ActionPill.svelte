@@ -1,5 +1,10 @@
 <script lang="ts">
 	import { getProjectColor } from '$lib/utils/projectColors';
+	import {
+		isStartDropdownOpen,
+		startDropdownOpenedViaKeyboard,
+		closeStartDropdown
+	} from '$lib/stores/drawerStore';
 
 	interface Project {
 		name: string;
@@ -47,6 +52,21 @@
 	let swarmDropdownOpen = $state(false);
 	let startSelectedTab = $state('all');
 
+	// Sync with global store for keyboard shortcut support (Alt+S)
+	$effect(() => {
+		const unsubscribe = isStartDropdownOpen.subscribe((isOpen) => {
+			if (isOpen && readyTaskCount > 1) {
+				startDropdownOpen = true;
+				newDropdownOpen = false;
+				swarmDropdownOpen = false;
+				startSelectedTab = 'all';
+			} else if (!isOpen) {
+				startDropdownOpen = false;
+			}
+		});
+		return unsubscribe;
+	});
+
 	// Derived
 	const readyTaskCount = $derived(readyTasks.length);
 
@@ -81,6 +101,8 @@
 			newDropdownOpen = false;
 			startDropdownOpen = false;
 			swarmDropdownOpen = false;
+			// Also close global store
+			closeStartDropdown();
 		}
 	}
 
@@ -111,6 +133,9 @@
 			swarmDropdownOpen = false;
 			if (startDropdownOpen) {
 				startSelectedTab = 'all'; // Reset to All tab when opening
+				isStartDropdownOpen.set(true);
+			} else {
+				closeStartDropdown();
 			}
 		} else if (readyTaskCount === 1) {
 			onStart(readyTasks[0].id);
@@ -119,6 +144,7 @@
 
 	function handleStartTaskSelect(taskId: string) {
 		startDropdownOpen = false;
+		closeStartDropdown();
 		onStart(taskId);
 	}
 

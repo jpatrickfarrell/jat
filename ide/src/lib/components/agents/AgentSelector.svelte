@@ -486,7 +486,7 @@
 			<!-- Agent selection - Custom dropdown -->
 			<div class="form-control mb-3">
 				<label class="label py-1">
-					<span class="label-text text-xs font-medium">Agent Program</span>
+					<span class="label-text text-xs font-medium">Agent Harness</span>
 				</label>
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div class="relative" onkeydown={handleAgentKeydown}>

@@ -414,6 +414,12 @@ export interface AgentProgramPreset {
 
 	/** Partial configuration (merged with defaults) */
 	config: Partial<AgentProgram>;
+
+	/** Installation command (e.g., 'npm install -g @anthropic/claude-code') */
+	installCommand?: string;
+
+	/** URL to installation instructions */
+	installUrl?: string;
 }
 
 /**
@@ -426,6 +432,8 @@ export const AGENT_PRESETS: AgentProgramPreset[] = [
 		id: 'claude-code',
 		name: 'Claude Code',
 		description: 'Anthropic Claude via Claude Code CLI',
+		installCommand: 'npm install -g @anthropic-ai/claude-code',
+		installUrl: 'https://docs.anthropic.com/en/docs/claude-code',
 		config: {
 			id: 'claude-code',
 			name: 'Claude Code',
@@ -443,8 +451,10 @@ export const AGENT_PRESETS: AgentProgramPreset[] = [
 	},
 	{
 		id: 'codex-cli',
-		name: 'OpenAI Codex CLI',
+		name: 'Codex',
 		description: 'OpenAI Codex via official CLI',
+		installCommand: 'npm install -g @openai/codex',
+		installUrl: 'https://github.com/openai/codex',
 		config: {
 			id: 'codex-cli',
 			name: 'Codex CLI',
@@ -463,21 +473,22 @@ export const AGENT_PRESETS: AgentProgramPreset[] = [
 		}
 	},
 	{
-		id: 'gemini-code',
-		name: 'Gemini Code',
-		description: 'Google Gemini via Gemini CLI',
+		id: 'gemini-cli',
+		name: 'Gemini CLI',
+		description: 'Google Gemini terminal coding agent',
+		installCommand: 'npx https://geminicli.com/run',
+		installUrl: 'https://geminicli.com/',
 		config: {
-			id: 'gemini-code',
-			name: 'Gemini Code',
+			id: 'gemini-cli',
+			name: 'Gemini CLI',
 			command: 'gemini',
 			models: [
-				{ id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', shortName: 'flash', costTier: 'low' },
-				{ id: 'gemini-2.0-pro', name: 'Gemini 2.0 Pro', shortName: 'pro', costTier: 'high' }
+				{ id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', shortName: 'pro', costTier: 'high' },
+				{ id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', shortName: 'flash', costTier: 'low' },
+				{ id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', shortName: 'flash-2.0', costTier: 'low' }
 			],
 			defaultModel: 'flash',
-			authType: 'api_key',
-			apiKeyProvider: 'google',
-			apiKeyEnvVar: 'GEMINI_API_KEY',
+			authType: 'subscription',  // Gemini CLI has its own auth via 'gemini auth'
 			flags: [],
 			taskInjection: 'prompt'
 		}
@@ -486,6 +497,8 @@ export const AGENT_PRESETS: AgentProgramPreset[] = [
 		id: 'aider',
 		name: 'Aider',
 		description: 'Aider - AI pair programming in terminal',
+		installCommand: 'pip install aider-chat',
+		installUrl: 'https://aider.chat/docs/install.html',
 		config: {
 			id: 'aider',
 			name: 'Aider',
@@ -507,6 +520,8 @@ export const AGENT_PRESETS: AgentProgramPreset[] = [
 		id: 'opencode',
 		name: 'OpenCode',
 		description: 'OpenCode - Terminal-based AI coding assistant',
+		installCommand: 'curl -fsSL https://opencode.ai/install | bash',
+		installUrl: 'https://opencode.ai/',
 		config: {
 			id: 'opencode',
 			name: 'OpenCode',

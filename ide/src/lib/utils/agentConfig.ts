@@ -319,9 +319,13 @@ const OPENCODE_AUTH_FILE = join(homedir(), '.local', 'share', 'opencode', 'auth.
 // Path to Codex CLI's auth file
 const CODEX_AUTH_FILE = join(homedir(), '.codex', 'auth.json');
 
+// Path to Gemini CLI's auth/config file
+const GEMINI_CLI_AUTH_FILE = join(homedir(), '.gemini', 'settings.json');
+
 /**
  * Check if Codex CLI has valid authentication configured.
  * Codex uses auth stored in ~/.codex/auth.json or OPENAI_API_KEY env var.
+ * The auth.json format is: { "OPENAI_API_KEY": "sk-..." }
  */
 export function isCodexAuthConfigured(): { configured: boolean; hasApiKey: boolean; message?: string } {
 	// Check if Codex auth file exists
@@ -336,7 +340,7 @@ export function isCodexAuthConfigured(): { configured: boolean; hasApiKey: boole
 		return {
 			configured: false,
 			hasApiKey: false,
-			message: 'Run "codex auth" to authenticate or add OpenAI API key'
+			message: 'Run "codex login" to authenticate or add OpenAI API key'
 		};
 	}
 
@@ -344,11 +348,12 @@ export function isCodexAuthConfigured(): { configured: boolean; hasApiKey: boole
 		const content = readFileSync(CODEX_AUTH_FILE, 'utf-8');
 		const auth = JSON.parse(content);
 
-		// Codex auth.json can have api_key or oauth tokens
-		if (auth.api_key || auth.access_token) {
+		// Codex auth.json stores the API key as OPENAI_API_KEY
+		// Format: { "OPENAI_API_KEY": "sk-..." }
+		if (auth.OPENAI_API_KEY || auth.api_key || auth.access_token) {
 			return {
 				configured: true,
-				hasApiKey: !!auth.api_key
+				hasApiKey: true
 			};
 		}
 
@@ -356,13 +361,13 @@ export function isCodexAuthConfigured(): { configured: boolean; hasApiKey: boole
 		return {
 			configured: false,
 			hasApiKey: false,
-			message: 'Codex auth file exists but is invalid. Run "codex auth"'
+			message: 'Codex auth file exists but is invalid. Run "codex login"'
 		};
 	} catch {
 		return {
 			configured: false,
 			hasApiKey: false,
-			message: 'Codex auth file is invalid. Run "codex auth"'
+			message: 'Codex auth file is invalid. Run "codex login"'
 		};
 	}
 }
@@ -411,9 +416,49 @@ export function isOpenCodeAuthConfigured(provider: string): { configured: boolea
 }
 
 /**
+ * Check if Gemini CLI has valid authentication configured.
+ * Gemini CLI uses Google auth stored in ~/.gemini/settings.json
+ * or GEMINI_API_KEY / GOOGLE_API_KEY environment variables.
+ * @see https://geminicli.com/
+ */
+export function isGeminiCliAuthConfigured(): { configured: boolean; hasApiKey: boolean; message?: string } {
+	// Check if Gemini CLI auth file exists
+	if (existsSync(GEMINI_CLI_AUTH_FILE)) {
+		try {
+			const content = readFileSync(GEMINI_CLI_AUTH_FILE, 'utf-8');
+			const settings = JSON.parse(content);
+
+			// Check for API key in settings or OAuth tokens
+			if (settings.api_key || settings.apiKey || settings.GEMINI_API_KEY || settings.access_token) {
+				return {
+					configured: true,
+					hasApiKey: true
+				};
+			}
+		} catch {
+			// File exists but is invalid, continue to other checks
+		}
+	}
+
+	// Fall back to checking for GEMINI_API_KEY or GOOGLE_API_KEY in credentials vault
+	if (hasApiKey('google') || hasApiKey('gemini')) {
+		return {
+			configured: true,
+			hasApiKey: true
+		};
+	}
+
+	return {
+		configured: false,
+		hasApiKey: false,
+		message: 'Run "gemini auth" to authenticate or add Google/Gemini API key'
+	};
+}
+
+/**
  * Check if an API key exists in the credentials vault.
  */
-function hasApiKey(provider: string): boolean {
+export function hasApiKey(provider: string): boolean {
 	if (!existsSync(CREDENTIALS_FILE)) {
 		return false;
 	}
@@ -475,7 +520,22 @@ export function getAgentStatus(agent: AgentProgram): AgentStatus {
 		} else if (!commandAvailable) {
 			statusMessage = `Command '${agent.command}' not found`;
 		} else if (!authConfigured) {
-			statusMessage = codexAuth.message || 'Run "codex auth" to authenticate';
+			statusMessage = codexAuth.message || 'Run "codex login" to authenticate';
+		} else {
+			statusMessage = 'Available';
+		}
+	} else if (agent.command === 'gemini') {
+		// Gemini CLI uses ~/.gemini/settings.json or GEMINI_API_KEY
+		const geminiAuth = isGeminiCliAuthConfigured();
+
+		authConfigured = geminiAuth.configured;
+
+		if (!agent.enabled) {
+			statusMessage = 'Disabled';
+		} else if (!commandAvailable) {
+			statusMessage = `Command '${agent.command}' not found. Install via: npm install -g @google/gemini-cli`;
+		} else if (!authConfigured) {
+			statusMessage = geminiAuth.message || 'Run "gemini auth" to authenticate';
 		} else {
 			statusMessage = 'Available';
 		}

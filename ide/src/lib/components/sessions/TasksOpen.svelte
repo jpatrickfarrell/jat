@@ -67,6 +67,8 @@
 	let altKeyHeld = $state(false);
 	let agentPickerOpen = $state(false);
 	let agentPickerTask = $state<Task | null>(null);
+	// Position for fixed-positioned agent picker (to escape overflow containers)
+	let agentPickerPosition = $state<{ top: number; right: number } | null>(null);
 
 	// Track Alt key state for visual feedback
 	$effect(() => {
@@ -101,6 +103,13 @@
 
 		// Alt+click opens agent selector
 		if (event.altKey) {
+			// Calculate fixed position from button
+			const button = event.currentTarget as HTMLElement;
+			const rect = button.getBoundingClientRect();
+			agentPickerPosition = {
+				top: rect.bottom + 4, // 4px gap below button
+				right: window.innerWidth - rect.right // Align right edge
+			};
 			agentPickerTask = task;
 			agentPickerOpen = true;
 			return;
@@ -116,11 +125,13 @@
 		}
 		agentPickerOpen = false;
 		agentPickerTask = null;
+		agentPickerPosition = null;
 	}
 
 	function handleAgentPickerCancel() {
 		agentPickerOpen = false;
 		agentPickerTask = null;
+		agentPickerPosition = null;
 	}
 
 	function handleRowClick(taskId: string) {
@@ -535,15 +546,19 @@
 							<td class="td-actions" style={isExiting ? 'background: transparent;' : ''}>
 								<div class="relative flex items-center justify-center">
 									<!-- Agent picker dropdown (shown when Alt+click) -->
-									{#if agentPickerOpen && agentPickerTask?.id === task.id}
+									{#if agentPickerOpen && agentPickerTask?.id === task.id && agentPickerPosition}
 										<!-- svelte-ignore a11y_no_static_element_interactions -->
 										<!-- svelte-ignore a11y_click_events_have_key_events -->
 										<!-- Backdrop -->
 										<div class="fixed inset-0 z-40" onclick={handleAgentPickerCancel}></div>
-										<!-- Agent selector positioned below button -->
+										<!-- Agent selector with fixed positioning to escape overflow containers -->
 										<!-- svelte-ignore a11y_no_static_element_interactions -->
 										<!-- svelte-ignore a11y_click_events_have_key_events -->
-										<div class="absolute top-full right-0 mt-1 z-50" onclick={(e) => e.stopPropagation()}>
+										<div
+											class="fixed z-50"
+											style="top: {agentPickerPosition.top}px; right: {agentPickerPosition.right}px;"
+											onclick={(e) => e.stopPropagation()}
+										>
 											<AgentSelector
 												task={task}
 												onselect={handleAgentSelect}

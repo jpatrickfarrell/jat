@@ -1,15 +1,16 @@
 <script lang="ts">
 	/**
-	 * AgentProgramsEditor Component
+	 * AgentProgramsEditor Component (Agent Harnesses)
 	 *
-	 * Manages agent program configurations for the IDE.
+	 * Manages agent harness configurations for the IDE.
+	 * Harnesses are CLI tools that wrap LLMs for coding tasks (Claude Code, Codex, OpenCode, etc.)
 	 * Storage: ~/.config/jat/agents.json
 	 *
 	 * Features:
-	 * - List view showing all configured agents with status (enabled, auth status)
-	 * - Default agent indicator (star icon)
+	 * - List view showing all configured harnesses with status (enabled, auth status)
+	 * - Default harness indicator (star icon)
 	 * - Configure button opens drawer/modal with full edit capabilities
-	 * - Add Agent button with preset templates (Claude, Codex, Gemini)
+	 * - Add Harness button with preset templates (Claude, Codex, Gemini, OpenCode)
 	 * - Drag to reorder (affects fallback priority)
 	 *
 	 * @see shared/agent-programs.md for architecture documentation
@@ -19,6 +20,7 @@
 	import { fade, slide } from 'svelte/transition';
 	import type { AgentProgram, AgentStatus, AgentModel, AgentAuthType } from '$lib/types/agentProgram';
 	import { AGENT_PRESETS } from '$lib/types/agentProgram';
+	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
 
 	// Types
 	interface AgentProgramWithStatus extends AgentProgram {
@@ -46,6 +48,17 @@
 	let showAdvancedOptions = $state(false);
 	let newFormFlags = $state<string[]>([]);
 	let newFormNewFlag = $state('');
+
+	// Verification state
+	let isVerifying = $state(false);
+	let verificationResult = $state<{
+		ready: boolean;
+		commandInstalled: boolean;
+		authConfigured: boolean;
+		warnings: string[];
+		instructions: string[];
+	} | null>(null);
+	let skipVerification = $state(false);
 
 	// Delete confirmation state
 	let deletingProgram = $state<string | null>(null);
@@ -170,6 +183,9 @@
 		showAdvancedOptions = false;
 		newFormFlags = [];
 		newFormNewFlag = '';
+		verificationResult = null;
+		skipVerification = false;
+		isVerifying = false;
 	}
 
 	function selectPreset(presetId: string) {
@@ -186,10 +202,49 @@
 		}
 	}
 
+	async function verifyHarness() {
+		if (!newProgramForm.command) {
+			return;
+		}
+
+		isVerifying = true;
+		verificationResult = null;
+
+		try {
+			const response = await fetch('/api/config/agents/verify', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					command: newProgramForm.command,
+					authType: newProgramForm.authType,
+					apiKeyProvider: newProgramForm.apiKeyProvider
+				})
+			});
+
+			if (response.ok) {
+				verificationResult = await response.json();
+			}
+		} catch (err) {
+			console.error('Verification failed:', err);
+		} finally {
+			isVerifying = false;
+		}
+	}
+
 	async function addProgram() {
 		if (!newProgramForm.id || !newProgramForm.name) {
 			addError = 'ID and name are required';
 			return;
+		}
+
+		// Verify first if not skipping
+		if (!skipVerification && !verificationResult) {
+			await verifyHarness();
+
+			// If verification shows issues, don't add yet (user can click "Add Anyway")
+			if (verificationResult && !verificationResult.ready) {
+				return;
+			}
 		}
 
 		isAdding = true;
@@ -229,6 +284,11 @@
 		} finally {
 			isAdding = false;
 		}
+	}
+
+	function addAnyway() {
+		skipVerification = true;
+		addProgram();
 	}
 
 	// Delete agent
@@ -468,16 +528,16 @@
 <div class="agent-programs-editor">
 	<div class="section-header">
 		<div class="header-content">
-			<h2>Agent Programs</h2>
+			<h2>Agent Harnesses</h2>
 			<p class="section-description">
-				Configure AI coding assistants. Agents are used to spawn work sessions.
+				Configure AI coding agent harnesses. Harnesses wrap LLMs for coding tasks.
 			</p>
 		</div>
 		<button class="btn btn-sm btn-primary" onclick={openAddModal}>
 			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="icon">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
 			</svg>
-			Add Agent
+			Add Harness
 		</button>
 	</div>
 
@@ -514,9 +574,16 @@
 						</svg>
 					</div>
 
-					<div class="program-main">
+					<div
+						class="program-main"
+						onclick={() => openEditDrawer(program)}
+						onkeydown={(e) => e.key === 'Enter' && openEditDrawer(program)}
+						role="button"
+						tabindex="0"
+					>
 						<div class="program-header">
 							<div class="program-title">
+								<ProviderLogo agentId={program.id} size={20} />
 								<h3>{program.name}</h3>
 								{#if isDefault}
 									<span class="default-badge" title="Default agent">
@@ -566,7 +633,8 @@
 							{/if}
 						</div>
 
-						<div class="program-actions">
+						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+						<div class="program-actions" onclick={(e) => e.stopPropagation()}>
 							<label class="toggle-label">
 								<input
 									type="checkbox"
@@ -873,12 +941,12 @@
 	</div>
 {/if}
 
-<!-- Add Agent Modal -->
+<!-- Add Harness Modal -->
 {#if showAddModal}
 	<div class="modal-overlay" onclick={closeAddModal} transition:fade={{ duration: 150 }}>
 		<div class="modal-content modal-lg" onclick={(e) => e.stopPropagation()}>
 			<div class="modal-header">
-				<h3>Add Agent Program</h3>
+				<h3>Add Agent Harness</h3>
 				<button class="btn btn-ghost btn-sm btn-circle" onclick={closeAddModal}>
 					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="icon">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -896,7 +964,10 @@
 								class="preset-card"
 								onclick={() => selectPreset(preset.id)}
 							>
-								<h4>{preset.name}</h4>
+								<div class="preset-header">
+									<ProviderLogo agentId={preset.id} size={24} />
+									<h4>{preset.name}</h4>
+								</div>
 								<p>{preset.description}</p>
 								<div class="preset-models">
 									{#each preset.config.models ?? [] as model}
@@ -923,11 +994,51 @@
 								};
 							}}
 						>
-							<h4>Custom Agent</h4>
+							<div class="preset-header">
+								<ProviderLogo provider="generic" size={24} />
+								<h4>Custom Agent</h4>
+							</div>
 							<p>Configure from scratch</p>
 						</button>
 					</div>
 				{:else}
+					{@const selectedPresetInfo = AGENT_PRESETS.find(p => p.id === selectedPreset)}
+					<!-- Installation Instructions -->
+					{#if selectedPresetInfo && (selectedPresetInfo.installCommand || selectedPresetInfo.installUrl)}
+						<div class="install-info">
+							<div class="install-header">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="icon-sm">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23-.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+								</svg>
+								<span>Installation</span>
+							</div>
+							{#if selectedPresetInfo.installCommand}
+								<div class="install-command">
+									<code>{selectedPresetInfo.installCommand}</code>
+									<button
+										class="btn btn-ghost btn-xs copy-btn"
+										onclick={() => {
+											navigator.clipboard.writeText(selectedPresetInfo.installCommand || '');
+										}}
+										title="Copy command"
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="icon-xs">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+										</svg>
+									</button>
+								</div>
+							{/if}
+							{#if selectedPresetInfo.installUrl}
+								<a href={selectedPresetInfo.installUrl} target="_blank" rel="noopener noreferrer" class="install-link">
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="icon-xs">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+									</svg>
+									View full installation instructions
+								</a>
+							{/if}
+						</div>
+					{/if}
+
 					<div class="form-section">
 						<div class="form-group">
 							<label for="new-id">Agent ID</label>
@@ -1096,13 +1207,53 @@
 
 					<button
 						class="btn btn-ghost btn-sm back-btn"
-						onclick={() => { selectedPreset = null; newProgramForm = {}; showAdvancedOptions = false; newFormFlags = []; newFormNewFlag = ''; }}
+						onclick={() => { selectedPreset = null; newProgramForm = {}; showAdvancedOptions = false; newFormFlags = []; newFormNewFlag = ''; verificationResult = null; skipVerification = false; }}
 					>
 						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="icon-sm">
 							<path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
 						</svg>
 						Back to presets
 					</button>
+
+					<!-- Verification Warnings -->
+					{#if verificationResult && !verificationResult.ready && !skipVerification}
+						<div class="verification-warning" transition:slide={{ duration: 200 }}>
+							<div class="warning-header">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="icon-sm">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+								</svg>
+								<span>Setup Required</span>
+							</div>
+							<ul class="warning-list">
+								{#each verificationResult.warnings as warning}
+									<li>{warning}</li>
+								{/each}
+							</ul>
+							{#if verificationResult.instructions.length > 0}
+								<div class="warning-instructions">
+									<span class="instructions-label">To fix:</span>
+									{#each verificationResult.instructions as instruction}
+										<div class="instruction-item">
+											{#if instruction.startsWith('Run:') || instruction.startsWith('npm ') || instruction.startsWith('pip ') || instruction.startsWith('curl ')}
+												<code>{instruction.replace('Run: ', '')}</code>
+												<button
+													class="btn btn-ghost btn-xs copy-btn"
+													onclick={() => navigator.clipboard.writeText(instruction.replace('Run: ', ''))}
+													title="Copy command"
+												>
+													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="icon-xs">
+														<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+													</svg>
+												</button>
+											{:else}
+												<span>{instruction}</span>
+											{/if}
+										</div>
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{/if}
 
 					{#if addError}
 						<div class="error-message">{addError}</div>
@@ -1113,18 +1264,37 @@
 			<div class="modal-footer">
 				<button class="btn btn-ghost" onclick={closeAddModal}>Cancel</button>
 				{#if selectedPreset}
-					<button
-						class="btn btn-primary"
-						onclick={addProgram}
-						disabled={isAdding || !newProgramForm.id || !newProgramForm.name}
-					>
-						{#if isAdding}
-							<span class="loading-spinner small"></span>
-							Adding...
-						{:else}
-							Add Agent
-						{/if}
-					</button>
+					{#if verificationResult && !verificationResult.ready && !skipVerification}
+						<!-- Verification failed - show "Add Anyway" option -->
+						<button
+							class="btn btn-warning"
+							onclick={addAnyway}
+							disabled={isAdding || !newProgramForm.id || !newProgramForm.name}
+						>
+							{#if isAdding}
+								<span class="loading-spinner small"></span>
+								Adding...
+							{:else}
+								Add Anyway
+							{/if}
+						</button>
+					{:else}
+						<button
+							class="btn btn-primary"
+							onclick={addProgram}
+							disabled={isAdding || isVerifying || !newProgramForm.id || !newProgramForm.name}
+						>
+							{#if isVerifying}
+								<span class="loading-spinner small"></span>
+								Verifying...
+							{:else if isAdding}
+								<span class="loading-spinner small"></span>
+								Adding...
+							{:else}
+								Add Harness
+							{/if}
+						</button>
+					{/if}
 				{/if}
 			</div>
 		</div>
@@ -1137,7 +1307,7 @@
 	<div class="modal-overlay" onclick={closeDeleteConfirm} transition:fade={{ duration: 150 }}>
 		<div class="modal-content modal-sm" onclick={(e) => e.stopPropagation()}>
 			<div class="modal-header">
-				<h3>Delete Agent Program</h3>
+				<h3>Delete Agent Harness</h3>
 			</div>
 
 			<div class="modal-body">
@@ -1285,6 +1455,18 @@
 	.program-main {
 		flex: 1;
 		padding: 1rem;
+		cursor: pointer;
+		border-radius: 0 10px 10px 0;
+		transition: background-color 0.15s ease;
+	}
+
+	.program-main:hover {
+		background-color: oklch(0.18 0.02 250);
+	}
+
+	.program-main:focus {
+		outline: none;
+		background-color: oklch(0.18 0.02 250);
 	}
 
 	.program-header {
@@ -1786,11 +1968,18 @@
 		border-style: dashed;
 	}
 
+	.preset-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 0.375rem;
+	}
+
 	.preset-card h4 {
 		font-size: 0.9375rem;
 		font-weight: 600;
 		color: oklch(0.90 0.02 250);
-		margin: 0 0 0.375rem 0;
+		margin: 0;
 	}
 
 	.preset-card p {
@@ -1803,6 +1992,150 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.25rem;
+	}
+
+	/* Installation Info Section */
+	.install-info {
+		background: oklch(0.16 0.02 200 / 0.3);
+		border: 1px solid oklch(0.35 0.08 200 / 0.4);
+		border-radius: 8px;
+		padding: 0.875rem;
+		margin-bottom: 1.25rem;
+	}
+
+	.install-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: oklch(0.80 0.08 200);
+		margin-bottom: 0.625rem;
+	}
+
+	.install-header .icon-sm {
+		width: 16px;
+		height: 16px;
+	}
+
+	.install-command {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		background: oklch(0.12 0.01 250);
+		border-radius: 6px;
+		padding: 0.5rem 0.625rem;
+		margin-bottom: 0.5rem;
+		overflow-x: auto;
+	}
+
+	.install-command code {
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-size: 0.8125rem;
+		color: oklch(0.85 0.02 250);
+		white-space: nowrap;
+		flex: 1;
+	}
+
+	.install-command .copy-btn {
+		flex-shrink: 0;
+		opacity: 0.6;
+		padding: 0.25rem;
+	}
+
+	.install-command .copy-btn:hover {
+		opacity: 1;
+		background: oklch(0.22 0.02 250);
+	}
+
+	.install-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		font-size: 0.8125rem;
+		color: oklch(0.70 0.12 200);
+		text-decoration: none;
+	}
+
+	.install-link:hover {
+		color: oklch(0.80 0.15 200);
+		text-decoration: underline;
+	}
+
+	.icon-xs {
+		width: 14px;
+		height: 14px;
+	}
+
+	/* Verification Warning */
+	.verification-warning {
+		background: oklch(0.25 0.08 85 / 0.3);
+		border: 1px solid oklch(0.50 0.12 85 / 0.5);
+		border-radius: 8px;
+		padding: 0.875rem;
+		margin-top: 1rem;
+	}
+
+	.warning-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-weight: 600;
+		color: oklch(0.85 0.12 85);
+		margin-bottom: 0.5rem;
+	}
+
+	.warning-list {
+		margin: 0 0 0.75rem 0;
+		padding-left: 1.5rem;
+		color: oklch(0.75 0.08 85);
+		font-size: 0.875rem;
+	}
+
+	.warning-list li {
+		margin-bottom: 0.25rem;
+	}
+
+	.warning-instructions {
+		background: oklch(0.12 0.01 250);
+		border-radius: 6px;
+		padding: 0.625rem 0.75rem;
+	}
+
+	.instructions-label {
+		display: block;
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: oklch(0.65 0.02 250);
+		margin-bottom: 0.5rem;
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
+	}
+
+	.instruction-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 0.375rem;
+	}
+
+	.instruction-item:last-child {
+		margin-bottom: 0;
+	}
+
+	.instruction-item code {
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-size: 0.8125rem;
+		color: oklch(0.85 0.02 250);
+		background: oklch(0.18 0.01 250);
+		padding: 0.25rem 0.5rem;
+		border-radius: 4px;
+		flex: 1;
+	}
+
+	.instruction-item span {
+		font-size: 0.8125rem;
+		color: oklch(0.70 0.02 250);
 	}
 
 	.back-btn {

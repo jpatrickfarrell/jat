@@ -52,20 +52,31 @@
 </script>
 
 <span class="inline-flex items-center gap-1.5 {className}">
-	<svg
-		xmlns="http://www.w3.org/2000/svg"
-		viewBox={providerInfo.viewBox ?? '0 0 24 24'}
-		fill="currentColor"
-		width={size}
-		height={size}
-		style="color: {providerInfo.color};"
-		aria-label="{providerInfo.name} logo"
-	>
-		<path d={providerInfo.iconPath} />
-		{#if providerInfo.iconPath2}
-			<path d={providerInfo.iconPath2} />
-		{/if}
-	</svg>
+	{#if providerInfo.imageUrl}
+		<img
+			src={providerInfo.imageUrl}
+			alt="{providerInfo.name} logo"
+			width={size}
+			height={size}
+			class="object-contain"
+			style="min-width: {size}px; min-height: {size}px;"
+		/>
+	{:else}
+		<svg
+			xmlns="http://www.w3.org/2000/svg"
+			viewBox={providerInfo.viewBox ?? '0 0 24 24'}
+			fill="currentColor"
+			width={size}
+			height={size}
+			style="color: {providerInfo.color};"
+			aria-label="{providerInfo.name} logo"
+		>
+			<path d={providerInfo.iconPath} />
+			{#if providerInfo.iconPath2}
+				<path d={providerInfo.iconPath2} />
+			{/if}
+		</svg>
+	{/if}
 	{#if showName}
 		<span class="text-xs" style="color: {providerInfo.color};">{providerInfo.name}</span>
 	{/if}

@@ -53,6 +53,24 @@ export const CODEX_READY_PATTERNS = [
 ];
 
 /**
+ * Patterns indicating Gemini CLI is running and ready for input.
+ * Gemini CLI is Google's terminal coding agent.
+ * @see https://geminicli.com/
+ */
+export const GEMINI_CLI_READY_PATTERNS = [
+	'gemini>',
+	'Gemini',
+	'gemini-2',        // Model names like gemini-2.0-flash
+	'gemini-pro',      // Gemini Pro model
+	'gemini-flash',    // Gemini Flash model
+	'Google AI',       // Provider indicator
+	'What can I help', // Welcome prompt
+	'Enter a prompt',  // Input prompt
+	'Type your',       // Generic input prompt
+	'✨',              // Gemini often uses sparkle emoji in prompts
+];
+
+/**
  * Get ready patterns for a specific agent command.
  */
 export function getReadyPatternsForAgent(command: string): string[] {
@@ -61,6 +79,9 @@ export function getReadyPatternsForAgent(command: string): string[] {
 	}
 	if (command === 'codex') {
 		return CODEX_READY_PATTERNS;
+	}
+	if (command === 'gemini') {
+		return GEMINI_CLI_READY_PATTERNS;
 	}
 	// Default to Claude patterns
 	return CLAUDE_READY_PATTERNS;

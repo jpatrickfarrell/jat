@@ -233,7 +233,7 @@ export async function POST({ request }) {
 		return json({
 			success: true,
 			suggestions: sanitized,
-			usage: result.usage
+			usage
 		});
 	} catch (err) {
 		const error = /** @type {Error} */ (err);

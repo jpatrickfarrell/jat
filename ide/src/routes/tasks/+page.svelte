@@ -19,7 +19,7 @@
 	import TaskIdBadge from "$lib/components/TaskIdBadge.svelte";
 	import WorkingAgentBadge from "$lib/components/WorkingAgentBadge.svelte";
 	import { fetchAndGetProjectColors } from "$lib/utils/projectColors";
-	import { openTaskDetailDrawer, openProjectDrawer, projectCreatedSignal } from "$lib/stores/drawerStore";
+	import { openTaskDetailDrawer, openProjectDrawer, projectCreatedSignal, openTaskDrawer } from "$lib/stores/drawerStore";
 	import {
 		getProjectFromTaskId,
 		buildEpicChildMap,
@@ -725,16 +725,24 @@
 		}
 	}
 
-	async function spawnTask(task: Task) {
+	async function spawnTask(task: Task, selection?: { agentId: string | null; model: string | null }) {
 		spawningTaskId = task.id;
 		try {
+			const body: Record<string, any> = {
+				taskId: task.id,
+				autoStart: true,
+			};
+
+			// Add agent/model selection if provided (from Alt+click agent picker)
+			if (selection) {
+				if (selection.agentId) body.agentId = selection.agentId;
+				if (selection.model) body.model = selection.model;
+			}
+
 			const response = await fetch("/api/work/spawn", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					taskId: task.id,
-					autoStart: true,
-				}),
+				body: JSON.stringify(body),
 			});
 
 			if (!response.ok) {
@@ -1480,6 +1488,7 @@
 															taskId,
 														)}
 													showHeader={false}
+													onAddTask={() => openTaskDrawer(selectedProject ?? undefined)}
 												/>
 											</div>
 										{/if}
@@ -1544,6 +1553,7 @@
 															taskId,
 														)}
 													showHeader={false}
+													onAddTask={() => openTaskDrawer(selectedProject ?? undefined)}
 												/>
 											</div>
 										{/if}
@@ -1555,11 +1565,32 @@
 				{/if}
 
 				<!-- Empty state for selected project -->
-				{#if projectSessions.length === 0 && tasksByEpic.size === 0}
+				{#if projectSessions.length === 0 && tasksByEpic.size === 0 && projectPausedSessions.length === 0}
 					<div class="project-empty-state">
 						<span
 							>No active sessions or open tasks for {selectedProject}</span
 						>
+						<button
+							class="add-task-empty-btn"
+							onclick={() => openTaskDrawer(selectedProject ?? undefined)}
+							title="Add new task"
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="2"
+								stroke="currentColor"
+								class="add-task-icon"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M12 4.5v15m7.5-7.5h-15"
+								/>
+							</svg>
+							<span class="add-task-label">Add Task</span>
+						</button>
 					</div>
 				{/if}
 			</section>
@@ -2169,6 +2200,52 @@
 	.project-empty-state {
 		margin: 1rem;
 		padding: 2rem;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1.5rem;
+	}
+
+	/* Add task button for empty state - matches add-project-tab pattern */
+	.add-task-empty-btn {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		padding: 1rem 1.5rem;
+		background: oklch(0.16 0.01 250);
+		border: 2px dashed oklch(0.30 0.02 250);
+		border-radius: 0.5rem;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.add-task-empty-btn:hover {
+		background: oklch(0.20 0.01 250);
+		border-color: oklch(0.45 0.02 250);
+	}
+
+	.add-task-empty-btn:hover .add-task-icon {
+		color: oklch(0.75 0.15 200);
+	}
+
+	.add-task-empty-btn:hover .add-task-label {
+		color: oklch(0.75 0.15 200);
+	}
+
+	.add-task-icon {
+		width: 1.5rem;
+		height: 1.5rem;
+		color: oklch(0.45 0.02 250);
+		transition: color 0.15s ease;
+	}
+
+	.add-task-label {
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: oklch(0.45 0.02 250);
+		transition: color 0.15s ease;
 	}
 
 	.error-state button {

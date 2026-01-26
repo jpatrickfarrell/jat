@@ -16,7 +16,7 @@
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 	import WorkingAgentBadge from '$lib/components/WorkingAgentBadge.svelte';
 	import { fetchAndGetProjectColors } from '$lib/utils/projectColors';
-	import { openTaskDetailDrawer } from '$lib/stores/drawerStore';
+	import { openTaskDetailDrawer, openTaskDrawer } from '$lib/stores/drawerStore';
 	import {
 		getProjectFromTaskId,
 		buildEpicChildMap,
@@ -948,6 +948,7 @@
 														onRetry={fetchOpenTasks}
 														onTaskClick={(taskId) => openTaskDetailDrawer(taskId)}
 														showHeader={false}
+														onAddTask={() => openTaskDrawer(project)}
 													/>
 												</div>
 											{/if}
@@ -993,6 +994,7 @@
 														onRetry={fetchOpenTasks}
 														onTaskClick={(taskId) => openTaskDetailDrawer(taskId)}
 														showHeader={false}
+														onAddTask={() => openTaskDrawer(project)}
 													/>
 												</div>
 											{/if}

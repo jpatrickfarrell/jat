@@ -13,7 +13,7 @@
 	import TasksActive from '$lib/components/sessions/TasksActive.svelte';
 	import TasksOpen from '$lib/components/sessions/TasksOpen.svelte';
 	import { fetchAndGetProjectColors } from '$lib/utils/projectColors';
-	import { openTaskDetailDrawer } from '$lib/stores/drawerStore';
+	import { openTaskDetailDrawer, openTaskDrawer } from '$lib/stores/drawerStore';
 
 	interface TmuxSession {
 		name: string;
@@ -452,6 +452,7 @@
 		onSpawnTask={spawnTask}
 		onRetry={fetchOpenTasks}
 		onTaskClick={(taskId) => openTaskDetailDrawer(taskId)}
+		onAddTask={() => openTaskDrawer()}
 	/>
 </div>
 

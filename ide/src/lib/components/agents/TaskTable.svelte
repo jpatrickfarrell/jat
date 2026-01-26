@@ -1605,13 +1605,22 @@
 	let dragOverTask = $state<string | null>(null); // Task ID being dragged over
 
 	/**
+	 * Agent selection for spawn - can override auto-selected agent/model
+	 */
+	interface AgentSelection {
+		agentId: string | null;
+		model: string | null;
+	}
+
+	/**
 	 * Spawn a single agent to work on a specific task
 	 * Calls POST /api/work/spawn with the task ID
 	 * If an image is attached to the task, it will be passed to the agent
 	 * @param taskId - The ID of the task to spawn an agent for
+	 * @param selection - Optional agent/model selection to override routing rules
 	 * @returns Promise that resolves when spawn completes
 	 */
-	async function handleSpawnSingle(taskId: string): Promise<boolean> {
+	async function handleSpawnSingle(taskId: string, selection?: AgentSelection): Promise<boolean> {
 		if (spawningSingle || spawningBulk) return false; // Prevent concurrent spawns
 
 		spawningSingle = taskId;
@@ -1622,10 +1631,23 @@
 			// Pass first file for backward compatibility, all files stored in task notes
 			const imagePath = filePaths.length > 0 ? filePaths[0] : null;
 
+			// Build spawn request body
+			const spawnBody: Record<string, unknown> = { taskId };
+			if (imagePath) {
+				spawnBody.imagePath = imagePath;
+			}
+			// Add agent selection if provided (overrides routing rules)
+			if (selection?.agentId) {
+				spawnBody.agentId = selection.agentId;
+			}
+			if (selection?.model) {
+				spawnBody.model = selection.model;
+			}
+
 			const response = await fetch('/api/work/spawn', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ taskId, imagePath })
+				body: JSON.stringify(spawnBody)
 			});
 
 			const data = await response.json();
@@ -1641,7 +1663,10 @@
 			// 3. Created tmux session with Claude Code
 			// 4. Sent the image path if one was attached
 			// Parent page polling will pick up the updated task state
-			console.log(`Spawned agent ${data.session?.agentName} for task ${taskId}${imagePath ? ' (with image)' : ''}`);
+			const agentInfo = selection?.agentId
+				? `${data.session?.agentName} (${selection.agentId}/${selection.model})`
+				: data.session?.agentName;
+			console.log(`Spawned agent ${agentInfo} for task ${taskId}${imagePath ? ' (with image)' : ''}`);
 
 			// Clear the files after successful spawn (they've been sent)
 			if (imagePath) {

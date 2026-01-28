@@ -360,25 +360,25 @@
 					</svg>
 				</div>
 			{:else}
-				<!-- Avatar with status ring -->
-				<div
-					class="rounded-full shrink-0 flex items-center justify-center"
-					style="
-						padding: 2px;
-						background: {ringColor};
-						box-shadow: 0 0 6px {ringColor};
-					"
-				>
-					{#if agentName}
-						<AgentAvatar name={agentName} size={avatarSize - 4} />
-					{:else}
-						<!-- Fallback dot if no agent -->
+				<!-- Avatar with status ring using AgentAvatar's built-in ring support -->
+				{#if agentName}
+					<AgentAvatar name={agentName} size={avatarSize - 4} showRing={true} ringColor={ringColor} showGlow={true} />
+				{:else}
+					<!-- Fallback dot if no agent -->
+					<div
+						class="rounded-full shrink-0"
+						style="
+							padding: 2px;
+							background: {ringColor};
+							box-shadow: 0 0 6px {ringColor};
+						"
+					>
 						<div
 							class="rounded-full"
 							style="width: {avatarSize - 4}px; height: {avatarSize - 4}px; background: oklch(0.25 0.02 250);"
 						></div>
-					{/if}
-				</div>
+					</div>
+				{/if}
 			{/if}
 			<!-- Task ID -->
 			<span class="{animate ? 'tracking-in-expand' : ''} {isClosed ? 'line-through opacity-70' : ''}" style={animate ? 'animation-delay: 100ms;' : ''}>{task.id}</span>

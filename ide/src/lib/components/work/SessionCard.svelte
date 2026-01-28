@@ -108,6 +108,7 @@
 	import StartingSignalCard from "$lib/components/signals/StartingSignalCard.svelte";
 	import CompactingSignalCard from "$lib/components/signals/CompactingSignalCard.svelte";
 	import { MinimapCssScale } from "$lib/components/minimap";
+	import SendToLLM from "./SendToLLM.svelte";
 	import type {
 		WorkingSignal,
 		ReviewSignal,
@@ -192,6 +193,8 @@
 		onDismiss?: () => void; // Agent mode: called when completion banner auto-dismisses
 		onTaskDataChange?: () => Promise<void> | void; // Called when task data changes (e.g., linked to epic)
 		onFileAttachedToTask?: (taskId: string) => void; // Called when a file is attached to the task
+		/** Called when LLM generates a file result that should open in editor */
+		onLLMFileResult?: (filename: string, content: string) => void;
 		// Server mode callbacks
 		onStopServer?: () => Promise<void>;
 		onRestartServer?: () => Promise<void>;
@@ -324,6 +327,7 @@
 		onDismiss,
 		onTaskDataChange,
 		onFileAttachedToTask,
+		onLLMFileResult,
 		// Server mode callbacks
 		onStopServer,
 		onRestartServer,
@@ -7291,6 +7295,15 @@
 								</svg>
 							{/if}
 						</button>
+						<!-- Send to LLM button -->
+						<SendToLLM
+							content={output ? stripAnsi(output) : ''}
+							taskId={task?.id}
+							project={defaultProject}
+							onNotesUpdated={onTaskDataChange}
+							onFileResult={onLLMFileResult}
+							disabled={!output}
+						/>
 					</div>
 
 					<!-- MIDDLE: Text input (flexible width) with clear button and streaming indicator -->

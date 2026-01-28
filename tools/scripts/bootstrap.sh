@@ -41,7 +41,7 @@ if [ -d "$INSTALL_DIR" ]; then
     echo "  3) Cancel"
     echo ""
     echo -n "Choose [1-3] (default: 1): "
-    read -r choice
+    read -r choice </dev/tty
 
     case "${choice:-1}" in
         1)

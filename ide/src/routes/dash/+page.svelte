@@ -329,6 +329,21 @@
 	const currentSortBy = $derived(workSortState.sortBy);
 	const currentSortDir = $derived(workSortState.sortDir);
 
+	// Derive agentSessionInfo from workSessionsState for TaskTable status ring colors
+	// Maps agent name to session state info
+	const agentSessionInfo = $derived.by(() => {
+		const map = new Map<string, { activityState?: string; activityStateTimestamp?: number }>();
+		for (const session of workSessionsState.sessions) {
+			if (session.agentName) {
+				map.set(session.agentName, {
+					activityState: session._sseState,
+					activityStateTimestamp: session._sseStateTimestamp
+				});
+			}
+		}
+		return map;
+	});
+
 	// Derive all projects (from JAT config, sessions, AND tasks)
 	// Config projects are shown even if empty (for onboarding new projects)
 	const allProjects = $derived.by(() => {
@@ -1926,6 +1941,7 @@
 												allTasks={allTasks}
 												{agents}
 												{reservations}
+												{agentSessionInfo}
 												completedTasksFromActiveSessions={getCompletedTasksForProject(project)}
 												ontaskclick={handleTaskClick}
 												onagentclick={handleAgentClick}

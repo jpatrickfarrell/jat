@@ -1839,6 +1839,7 @@
 					agents={taskTableAgents}
 					reservations={taskTableReservations}
 					{completedTasksFromActiveSessions}
+					{agentSessionInfo}
 					ontaskclick={handleTaskTableTaskClick}
 					onagentclick={handleTaskTableAgentClick}
 					onTasksChanged={handleTaskTableTasksChanged}

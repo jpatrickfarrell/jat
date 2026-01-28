@@ -972,11 +972,13 @@
 					{#if projectAgentSessions.length > 0}
 						<div class="project-tab-agents mt-2.5">
 							{#each projectAgentSessions as session}
+								{@const agentName = getAgentName(session.name)}
 								<WorkingAgentBadge
-									name={getAgentName(session.name)}
+									name={agentName}
 									size={20}
 									variant="avatar"
 									isWorking={true}
+									sessionState={agentSessionInfo.get(agentName)?.activityState}
 								/>
 							{/each}
 						</div>

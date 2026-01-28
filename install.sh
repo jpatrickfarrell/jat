@@ -60,7 +60,7 @@ if [ -n "$MISSING_DEPS" ]; then
 
     if [ -n "$PKG_MANAGER" ]; then
         echo -e "${BLUE}Would you like to install them now with $PKG_MANAGER? [Y/n]${NC}"
-        read -r response
+        read -r response </dev/tty
 
         if [[ "$response" =~ ^([yY][eE][sS]|[yY]| *)$ ]]; then
             echo -e "${BLUE}Installing dependencies...${NC}"
@@ -146,7 +146,7 @@ echo ""
 echo "This will save 32,000+ tokens vs MCP servers!"
 echo ""
 echo -e "${YELLOW}Press ENTER to continue or Ctrl+C to cancel${NC}"
-read
+read </dev/tty
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -245,7 +245,7 @@ if command -v gum &> /dev/null; then
         "Skip - No additional stacks")
 else
     echo -n "Install SvelteKit + Supabase tools? [y/N] "
-    read -r response
+    read -r response </dev/tty
     if [[ "$response" =~ ^[Yy]$ ]]; then
         SELECTED_STACKS="SvelteKit"
     fi
@@ -277,7 +277,7 @@ if command -v gum &> /dev/null; then
     fi
 else
     echo -n "Install Voice-to-Text (whisper.cpp)? [y/N] "
-    read -r response
+    read -r response </dev/tty
     if [[ "$response" =~ ^[Yy]$ ]]; then
         INSTALL_WHISPER="yes"
     fi
@@ -350,7 +350,7 @@ echo ""
 echo "Documentation: https://github.com/joewinke/jat"
 echo ""
 echo -e -n "${BOLD}Launch JAT now? [Y/n]${NC} "
-read -r response
+read -r response </dev/tty
 if [[ ! "$response" =~ ^[Nn]$ ]]; then
     echo ""
     exec "$HOME/.local/bin/jat"

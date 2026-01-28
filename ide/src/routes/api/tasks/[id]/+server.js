@@ -122,6 +122,12 @@ export async function PUT({ params, request }) {
 			args.push(`--assignee ${shellEscape(sanitizedAssignee)}`);
 		}
 
+		// Update notes if changed
+		if (updates.notes !== undefined) {
+			const sanitizedNotes = updates.notes ? updates.notes.trim() : '';
+			args.push(`--notes ${shellEscape(sanitizedNotes)}`);
+		}
+
 		// Execute bd update command in correct project directory
 		if (args.length > 0) {
 			const projectPath = existingTask.project_path;

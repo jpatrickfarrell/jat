@@ -86,6 +86,12 @@
 	// Grouping mode for task table - determines how tasks are grouped in the view
 	// Type imported from statusColors.ts: type GroupingMode = 'type' | 'parent' | 'label';
 
+	/** Agent session info for status ring colors (keyed by agent name) */
+	interface AgentSessionInfo {
+		activityState?: string;
+		activityStateTimestamp?: number;
+	}
+
 	interface Props {
 		tasks?: Task[];
 		allTasks?: Task[];
@@ -102,9 +108,11 @@
 		hideSearch?: boolean;
 		/** Callback when tasks are deleted/modified - parent should refresh */
 		onTasksChanged?: () => void;
+		/** Agent session info for determining status ring colors (from parent's /api/work fetch) */
+		agentSessionInfo?: Map<string, AgentSessionInfo>;
 	}
 
-	let { tasks = [], allTasks = [], agents = [], reservations = [], completedTasksFromActiveSessions = new Set(), ontaskclick = () => {}, onagentclick, hideProjectFilter = false, hideSearch = false, onTasksChanged }: Props = $props();
+	let { tasks = [], allTasks = [], agents = [], reservations = [], completedTasksFromActiveSessions = new Set(), ontaskclick = () => {}, onagentclick, hideProjectFilter = false, hideSearch = false, onTasksChanged, agentSessionInfo }: Props = $props();
 
 	// Build epic->child mapping for dependency-based grouping
 	// This allows tasks linked to epics via depends_on to be grouped under the epic
@@ -712,6 +720,26 @@
 		// Since taskIsActive already checks task.status === 'in_progress' && task.assignee,
 		// if we get here with a valid agentName, we should show shimmer
 		return true;
+	}
+
+	// Get the session state for an agent (e.g., 'working', 'ready-for-review', etc.)
+	// Used to color the status ring on agent avatars in epic headers
+	// First checks the agentSessionInfo prop (from parent's /api/work fetch), then falls back to workSessionsState
+	function getAgentSessionState(agentName: string | undefined | null): string {
+		if (!agentName) return 'working';
+
+		// First, try the agentSessionInfo prop (preferred - always up-to-date from parent's fetch)
+		if (agentSessionInfo) {
+			const sessionInfo = agentSessionInfo.get(agentName);
+			if (sessionInfo?.activityState) {
+				return sessionInfo.activityState;
+			}
+		}
+
+		// Fallback: check the global workSessionsState store
+		const sessionName = `jat-${agentName}`;
+		const session = workSessionsState.sessions.find(s => s.sessionName === sessionName);
+		return session?._sseState || 'working';
 	}
 
 	// Initialize filters from URL params (default to open + in_progress tasks)
@@ -3103,6 +3131,7 @@
 														name={agentName || ''}
 														size={22}
 														isWorking={true}
+														sessionState={getAgentSessionState(agentName)}
 														variant="avatar"
 														onClick={onagentclick}
 													/>
@@ -3210,6 +3239,7 @@
 																	name={agentName || ''}
 																	size={18}
 																	isWorking={true}
+																	sessionState={getAgentSessionState(agentName)}
 																	variant="avatar"
 																	onClick={onagentclick}
 																/>
@@ -3657,6 +3687,7 @@
 														name={agentName || ''}
 														size={20}
 														isWorking={true}
+														sessionState={getAgentSessionState(agentName)}
 														variant="avatar"
 														onClick={onagentclick}
 													/>

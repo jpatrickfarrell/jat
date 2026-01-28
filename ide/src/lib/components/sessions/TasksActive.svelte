@@ -15,6 +15,9 @@
 	import TaskDetailPaneB from '$lib/components/sessions/TaskDetailPaneB.svelte';
 	import { getReviewRules } from '$lib/stores/reviewRules.svelte';
 	import { computeReviewStatus } from '$lib/utils/reviewStatusUtils';
+	import { getSessionStateVisual } from '$lib/config/statusColors';
+	import { getNotesUpdateSignal, clearNotesUpdateSignal } from '$lib/stores/taskNotesUpdate.svelte';
+	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
 
 	// Types
 	interface TmuxSession {
@@ -133,6 +136,78 @@
 	let notesEditing = $state(false);
 	let notesValue = $state('');
 	let notesSaving = $state(false);
+
+	// LLM file result drawer state
+	let llmFileDrawerOpen = $state(false);
+	let llmFileContent = $state('');
+	let llmFileName = $state('');
+	let llmFileProject = $state('');
+	let llmFileSaving = $state(false);
+	let llmFileSaved = $state(false);
+	let llmFileValidation = $state<{ status: 'idle' | 'valid' | 'invalid' | 'checking'; message: string | null }>({ status: 'idle', message: null });
+	let llmFileValidationTimeout: ReturnType<typeof setTimeout> | null = null;
+
+	// Validate LLM file path
+	function validateLlmFilePath(filename: string) {
+		if (llmFileValidationTimeout) {
+			clearTimeout(llmFileValidationTimeout);
+		}
+
+		if (!filename.trim()) {
+			llmFileValidation = { status: 'invalid', message: 'Filename is required' };
+			return;
+		}
+
+		// Check for invalid characters in path
+		const invalidChars = /[<>:"|?*\x00-\x1f]/;
+		if (invalidChars.test(filename)) {
+			llmFileValidation = { status: 'invalid', message: 'Invalid characters in filename (< > : " | ? *)' };
+			return;
+		}
+
+		// Check for double slashes or leading/trailing slashes
+		if (filename.includes('//') || filename.startsWith('/') || filename.endsWith('/')) {
+			llmFileValidation = { status: 'invalid', message: 'Invalid path format' };
+			return;
+		}
+
+		// Check for path traversal attempts
+		if (filename.includes('..')) {
+			llmFileValidation = { status: 'invalid', message: 'Path traversal (..) not allowed' };
+			return;
+		}
+
+		// Check file extension
+		const hasExtension = /\.[a-zA-Z0-9]+$/.test(filename);
+		if (!hasExtension) {
+			llmFileValidation = { status: 'invalid', message: 'Filename should have an extension (e.g., .md, .txt)' };
+			return;
+		}
+
+		// Debounce server-side validation
+		llmFileValidation = { status: 'checking', message: 'Checking path...' };
+		llmFileValidationTimeout = setTimeout(async () => {
+			try {
+				// Check if file already exists
+				const params = new URLSearchParams({
+					project: llmFileProject,
+					path: filename.trim()
+				});
+				const response = await fetch(`/api/files/content?${params}`, { method: 'HEAD' });
+
+				if (response.ok) {
+					llmFileValidation = { status: 'valid', message: 'File exists - will be overwritten' };
+				} else if (response.status === 404) {
+					llmFileValidation = { status: 'valid', message: 'Ready to save' };
+				} else {
+					llmFileValidation = { status: 'valid', message: 'Ready to save' };
+				}
+			} catch {
+				// If check fails, still allow saving
+				llmFileValidation = { status: 'valid', message: 'Ready to save' };
+			}
+		}, 300);
+	}
 
 	// Action loading state
 	let actionLoading = $state<string | null>(null);
@@ -264,6 +339,16 @@
 			mergedObjects.set(name, session);
 		}
 		previousSessionObjects = mergedObjects;
+	});
+
+	// React to notes updates from SendToLLM component
+	$effect(() => {
+		const signal = getNotesUpdateSignal();
+		if (signal && signal.taskId === expandedTaskId) {
+			// Notes were updated for the currently expanded task - refresh details
+			fetchExpandedTaskDetails(signal.taskId);
+			clearNotesUpdateSignal();
+		}
 	});
 
 	// Derived: sessions to render in order (includes exiting sessions in their original position)
@@ -798,24 +883,8 @@
 					{@const sessionTask = agentTasks.get(sessionAgentName)}
 					{@const sessionInfo = agentSessionInfo.get(sessionAgentName)}
 					{@const activityState = sessionInfo?.activityState}
-					{@const statusDotColor = activityState === 'working'
-						? 'oklch(0.70 0.18 250)'
-						: activityState === 'compacting'
-						? 'oklch(0.65 0.15 280)'
-						: activityState === 'needs-input'
-						? 'oklch(0.75 0.20 45)'
-						: activityState === 'ready-for-review'
-						? 'oklch(0.70 0.20 85)'
-						: activityState === 'completing'
-						? 'oklch(0.65 0.15 175)'
-						: activityState === 'completed'
-						? 'oklch(0.70 0.20 145)'
-						: activityState === 'starting'
-						? 'oklch(0.75 0.15 200)'
-						: activityState === 'recovering'
-						? 'oklch(0.70 0.20 190)'
-						: 'oklch(0.55 0.05 250)'
-					}
+					{@const effectiveState = optimisticStates.get(session.name) || activityState || 'idle'}
+					{@const statusDotColor = getSessionStateVisual(effectiveState).accent}
 					{@const derivedProject = agentProjects.get(sessionAgentName) || session.project || null}
 					{@const rowProjectColor = sessionTask?.id
 						? getProjectColorReactive(sessionTask.id)
@@ -885,7 +954,7 @@
 											{:else}
 												<span class="session-name-pill {isNew ? 'tracking-in-expand' : ''}" style={isNew ? 'animation-delay: 100ms;' : ''}>{session.name}</span>
 											{/if}
-											<AgentAvatar name={sessionAgentName} size={20} />
+											<AgentAvatar name={sessionAgentName} size={20} showRing={true} sessionState={effectiveState} />
 											<span class="agent-name-inline {isNew ? 'tracking-in-expand' : ''}" style={isNew ? 'animation-delay: 100ms;' : ''}>{sessionAgentName}</span>
 										</div>
 									{/if}
@@ -1137,6 +1206,16 @@
 														fetchExpandedTaskDetails(taskId);
 													}
 												}}
+												onLLMFileResult={(filename, content) => {
+													llmFileName = filename;
+													llmFileContent = content;
+													llmFileProject = agentProjects.get(expandedAgentName) || '';
+													llmFileSaved = false;
+													llmFileValidation = { status: 'idle', message: null };
+													llmFileDrawerOpen = true;
+													// Validate initial filename
+													validateLlmFilePath(filename);
+												}}
 												onCtrlEnterSubmit={() => {
 													// Collapse just this session row with proper animation
 													// (same pattern as toggleExpanded)
@@ -1297,6 +1376,190 @@
 				{/each}
 			</tbody>
 		</table>
+	</div>
+{/if}
+
+<!-- LLM File Result Drawer -->
+{#if llmFileDrawerOpen}
+	<div class="drawer drawer-end z-50">
+		<input id="llm-file-drawer" type="checkbox" class="drawer-toggle" checked />
+		<div class="drawer-side">
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<label
+				class="drawer-overlay"
+				onclick={() => llmFileDrawerOpen = false}
+			></label>
+			<div class="bg-base-200 min-h-full w-[600px] max-w-[90vw] flex flex-col">
+				<!-- Header -->
+				<div class="flex items-center justify-between p-4 border-b border-base-content/10">
+					<div class="flex items-center gap-3">
+						<svg class="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+						</svg>
+						<div>
+							<h3 class="font-semibold text-base-content">LLM Result</h3>
+							{#if llmFileProject}
+								<p class="text-xs text-base-content/50">Project: {llmFileProject}</p>
+							{/if}
+						</div>
+					</div>
+					<div class="flex items-center gap-2">
+						<!-- Copy button -->
+						<button
+							type="button"
+							class="btn btn-sm btn-ghost"
+							onclick={() => {
+								navigator.clipboard.writeText(llmFileContent);
+							}}
+							title="Copy to clipboard"
+						>
+							<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+							</svg>
+						</button>
+						<!-- Close button -->
+						<button
+							type="button"
+							class="btn btn-sm btn-ghost btn-circle"
+							onclick={() => llmFileDrawerOpen = false}
+						>
+							<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+							</svg>
+						</button>
+					</div>
+				</div>
+
+				<!-- Filename input with path preview and validation -->
+				<div class="px-4 py-3 border-b border-base-content/10">
+					<label class="text-xs text-base-content/60 mb-1 block">Save as:</label>
+					<div class="flex items-center gap-1">
+						<span class="text-xs text-base-content/40 font-mono shrink-0">~/code/{llmFileProject}/</span>
+						<input
+							type="text"
+							class="input input-sm input-bordered flex-1 font-mono text-sm {llmFileValidation.status === 'invalid' ? 'input-error' : ''}"
+							bind:value={llmFileName}
+							oninput={() => validateLlmFilePath(llmFileName)}
+							placeholder="filename.md"
+							disabled={llmFileSaving || llmFileSaved}
+						/>
+					</div>
+					<!-- Validation status -->
+					<div class="mt-1.5 flex items-center gap-2">
+						{#if llmFileValidation.status === 'checking'}
+							<span class="loading loading-spinner loading-xs text-base-content/50"></span>
+							<span class="text-xs text-base-content/50">{llmFileValidation.message}</span>
+						{:else if llmFileValidation.status === 'invalid'}
+							<svg class="w-3.5 h-3.5 text-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+							</svg>
+							<span class="text-xs text-error">{llmFileValidation.message}</span>
+						{:else if llmFileValidation.status === 'valid'}
+							<svg class="w-3.5 h-3.5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+							</svg>
+							<span class="text-xs text-success">{llmFileValidation.message}</span>
+						{:else}
+							<span class="text-xs text-base-content/40">
+								Full path: <span class="font-mono">~/code/{llmFileProject}/{llmFileName || 'filename.md'}</span>
+							</span>
+						{/if}
+					</div>
+				</div>
+
+				<!-- Monaco Editor -->
+				<div class="flex-1 overflow-hidden">
+					<MonacoWrapper
+						value={llmFileContent}
+						language={
+							llmFileName.endsWith('.md') ? 'markdown' :
+							llmFileName.endsWith('.json') ? 'json' :
+							llmFileName.endsWith('.yaml') || llmFileName.endsWith('.yml') ? 'yaml' :
+							llmFileName.endsWith('.ts') || llmFileName.endsWith('.tsx') ? 'typescript' :
+							llmFileName.endsWith('.js') || llmFileName.endsWith('.jsx') ? 'javascript' :
+							llmFileName.endsWith('.py') ? 'python' :
+							llmFileName.endsWith('.sh') ? 'shell' :
+							llmFileName.endsWith('.css') ? 'css' :
+							llmFileName.endsWith('.html') ? 'html' :
+							'markdown'
+						}
+						readonly={true}
+					/>
+				</div>
+
+				<!-- Footer with Save/Discard -->
+				<div class="p-4 border-t border-base-content/10 flex items-center justify-between gap-3">
+					{#if llmFileSaved}
+						<div class="flex items-center gap-2 text-success">
+							<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+							</svg>
+							<span class="text-sm">Saved to {llmFileName}</span>
+						</div>
+						<button
+							type="button"
+							class="btn btn-sm"
+							onclick={() => llmFileDrawerOpen = false}
+						>
+							Close
+						</button>
+					{:else}
+						<button
+							type="button"
+							class="btn btn-sm btn-ghost"
+							onclick={() => llmFileDrawerOpen = false}
+							disabled={llmFileSaving}
+						>
+							Discard
+						</button>
+						<button
+							type="button"
+							class="btn btn-sm btn-primary"
+							disabled={llmFileSaving || !llmFileName.trim() || !llmFileProject || llmFileValidation.status === 'invalid' || llmFileValidation.status === 'checking'}
+							onclick={async () => {
+								if (!llmFileName.trim() || !llmFileProject || llmFileValidation.status !== 'valid') return;
+
+								llmFileSaving = true;
+								try {
+									const params = new URLSearchParams({
+										project: llmFileProject,
+										path: llmFileName.trim()
+									});
+									const response = await fetch(`/api/files/content?${params}`, {
+										method: 'PUT',
+										headers: { 'Content-Type': 'application/json' },
+										body: JSON.stringify({ content: llmFileContent })
+									});
+
+									if (!response.ok) {
+										const err = await response.json();
+										throw new Error(err.error || 'Failed to save file');
+									}
+
+									llmFileSaved = true;
+								} catch (err) {
+									console.error('[LLM File Save] Error:', err);
+									alert(err instanceof Error ? err.message : 'Failed to save file');
+								} finally {
+									llmFileSaving = false;
+								}
+							}}
+						>
+							{#if llmFileSaving}
+								<span class="loading loading-spinner loading-xs"></span>
+								Saving...
+							{:else}
+								<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+								</svg>
+								Save to Project
+							{/if}
+						</button>
+					{/if}
+				</div>
+			</div>
+		</div>
 	</div>
 {/if}
 

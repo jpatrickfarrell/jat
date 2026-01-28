@@ -42,6 +42,12 @@
 		expires_ts: string;
 	}
 
+	/** Agent session info for status ring colors (keyed by agent name) */
+	interface AgentSessionInfo {
+		activityState?: string;
+		activityStateTimestamp?: number;
+	}
+
 	// Props - same as TaskTable
 	interface Props {
 		tasks?: Task[];
@@ -53,6 +59,8 @@
 		onagentclick?: (agentName: string) => void;
 		initialPageSize?: number;
 		pageSize?: number;
+		/** Agent session info for determining status ring colors (from parent's /api/work fetch) */
+		agentSessionInfo?: Map<string, AgentSessionInfo>;
 	}
 
 	let {
@@ -64,7 +72,8 @@
 		ontaskclick = () => {},
 		onagentclick,
 		initialPageSize = 100, // Load 100 tasks initially
-		pageSize = 50 // Load 50 more on each scroll
+		pageSize = 50, // Load 50 more on each scroll
+		agentSessionInfo
 	}: Props = $props();
 
 	// Lazy loading state
@@ -153,6 +162,7 @@
 		{agents}
 		{reservations}
 		{completedTasksFromActiveSessions}
+		{agentSessionInfo}
 		{ontaskclick}
 		{onagentclick}
 	/>

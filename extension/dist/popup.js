@@ -36,10 +36,12 @@
   }
 })();
 console.log("JAT Browser Extension Popup loaded");
-const screenshotBtn = document.getElementById("screenshot-btn");
+const screenshotVisibleBtn = document.getElementById("screenshot-visible-btn");
+const screenshotFullpageBtn = document.getElementById("screenshot-fullpage-btn");
+const screenshotElementBtn = document.getElementById("screenshot-element-btn");
+const screenshotAnnotateBtn = document.getElementById("screenshot-annotate-btn");
 const consoleBtn = document.getElementById("console-btn");
 const networkBtn = document.getElementById("network-btn");
-const elementPickerBtn = document.getElementById("element-picker-btn");
 const reportBtn = document.getElementById("report-btn");
 const statusDiv = document.getElementById("status");
 function showStatus(message, isError = false) {
@@ -53,16 +55,18 @@ async function getCurrentTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   return tab;
 }
-screenshotBtn?.addEventListener("click", async () => {
+screenshotVisibleBtn?.addEventListener("click", async () => {
   try {
-    showStatus("Capturing screenshot...");
+    showStatus("Capturing visible area...");
     const tab = await getCurrentTab();
     if (!tab.id) throw new Error("No active tab found");
     const response = await chrome.tabs.sendMessage(tab.id, {
-      type: "CAPTURE_SCREENSHOT"
+      type: "CAPTURE_SCREENSHOT",
+      options: { type: "visible" }
     });
     if (response?.success) {
-      showStatus("Screenshot captured successfully!");
+      const size = response.size ? ` (${formatBytes(response.size)})` : "";
+      showStatus(`Visible area captured${size}!`);
     } else {
       throw new Error(response?.error || "Screenshot capture failed");
     }
@@ -71,6 +75,70 @@ screenshotBtn?.addEventListener("click", async () => {
     showStatus(`Screenshot failed: ${error instanceof Error ? error.message : "Unknown error"}`, true);
   }
 });
+screenshotFullpageBtn?.addEventListener("click", async () => {
+  try {
+    showStatus("Capturing full page (this may take a moment)...");
+    const tab = await getCurrentTab();
+    if (!tab.id) throw new Error("No active tab found");
+    const response = await chrome.tabs.sendMessage(tab.id, {
+      type: "CAPTURE_SCREENSHOT",
+      options: { type: "fullpage" }
+    });
+    if (response?.success) {
+      const size = response.size ? ` (${formatBytes(response.size)})` : "";
+      const dims = response.width && response.height ? ` ${response.width}x${response.height}` : "";
+      showStatus(`Full page captured${dims}${size}!`);
+    } else {
+      throw new Error(response?.error || "Full page capture failed");
+    }
+  } catch (error) {
+    console.error("Full page screenshot error:", error);
+    showStatus(`Full page capture failed: ${error instanceof Error ? error.message : "Unknown error"}`, true);
+  }
+});
+screenshotElementBtn?.addEventListener("click", async () => {
+  try {
+    showStatus("Click on an element to capture...");
+    const tab = await getCurrentTab();
+    if (!tab.id) throw new Error("No active tab found");
+    const response = await chrome.tabs.sendMessage(tab.id, {
+      type: "START_ELEMENT_SCREENSHOT"
+    });
+    if (response?.success) {
+      showStatus("Element picker activated!");
+      window.close();
+    } else {
+      throw new Error(response?.error || "Element picker activation failed");
+    }
+  } catch (error) {
+    console.error("Element screenshot error:", error);
+    showStatus(`Element capture failed: ${error instanceof Error ? error.message : "Unknown error"}`, true);
+  }
+});
+screenshotAnnotateBtn?.addEventListener("click", async () => {
+  try {
+    showStatus("Opening annotation editor...");
+    const tab = await getCurrentTab();
+    if (!tab.id) throw new Error("No active tab found");
+    const response = await chrome.tabs.sendMessage(tab.id, {
+      type: "OPEN_ANNOTATION_EDITOR"
+    });
+    if (response?.success) {
+      showStatus("Annotation editor opened!");
+      window.close();
+    } else {
+      throw new Error(response?.error || "No screenshot available to annotate");
+    }
+  } catch (error) {
+    console.error("Annotation error:", error);
+    showStatus(`Annotation failed: ${error instanceof Error ? error.message : "Unknown error"}`, true);
+  }
+});
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 consoleBtn?.addEventListener("click", async () => {
   try {
     showStatus("Capturing console logs...");
@@ -103,25 +171,6 @@ networkBtn?.addEventListener("click", async () => {
   } catch (error) {
     console.error("Network logs error:", error);
     showStatus(`Network capture failed: ${error instanceof Error ? error.message : "Unknown error"}`, true);
-  }
-});
-elementPickerBtn?.addEventListener("click", async () => {
-  try {
-    showStatus("Click on any element on the page...");
-    const tab = await getCurrentTab();
-    if (!tab.id) throw new Error("No active tab found");
-    const response = await chrome.tabs.sendMessage(tab.id, {
-      type: "START_ELEMENT_PICKER"
-    });
-    if (response?.success) {
-      showStatus("Element picker activated!");
-      window.close();
-    } else {
-      throw new Error(response?.error || "Element picker activation failed");
-    }
-  } catch (error) {
-    console.error("Element picker error:", error);
-    showStatus(`Element picker failed: ${error instanceof Error ? error.message : "Unknown error"}`, true);
   }
 });
 reportBtn?.addEventListener("click", async () => {

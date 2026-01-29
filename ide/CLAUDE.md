@@ -3123,6 +3123,67 @@ resetGlobalShortcut('new-task'); // Back to 'Alt+N'
 
 - jat-tt20r: Add keyboard shortcut documentation to CLAUDE.md
 
+## Monaco Editor Context Menu Actions
+
+### Overview
+
+All Monaco editors in the IDE support custom right-click context menu actions for LLM interaction and task creation. The context menu is styled to match the JAT FileTree aesthetic (dark theme, rounded corners, oklch colors).
+
+### Custom Actions
+
+| Action | Shortcut | Description | Availability |
+|--------|----------|-------------|--------------|
+| **Send to LLM** | `Alt+L` | Opens LLMTransformModal with selected text | When text is selected |
+| **Create Task from Selection** | `Alt+T` | Opens TaskCreationDrawer with selection as description | When text is selected |
+
+### Where Actions Are Available
+
+| Component | Location | Send to LLM | Create Task | Replace/Insert |
+|-----------|----------|-------------|-------------|----------------|
+| **FileEditor** | `/files` page | Yes | Yes | Yes (editable) |
+| **MigrationViewer** | `/source` > migrations | Yes | Yes | Yes (editable) |
+| **DiffViewer** | `/source` > git diffs | Yes | Yes | No (read-only) |
+
+**Note:** DiffViewer renders `LLMTransformModal` without `onReplace`/`onInsert` callbacks since diffs are read-only. Users can only copy the LLM result.
+
+### Implementation Pattern
+
+**MonacoWrapper-based editors** (FileEditor, MigrationViewer):
+- Pass `onSendToLLM` and `onCreateTask` callback props to MonacoWrapper
+- MonacoWrapper conditionally adds context menu actions via `editor.addAction()`
+
+**Direct Monaco editors** (DiffViewer):
+- Uses `monaco.editor.createDiffEditor()` directly (not MonacoWrapper)
+- Adds custom actions to both sub-editors: `diffEditor.getOriginalEditor()` and `diffEditor.getModifiedEditor()`
+- Casts `ICodeEditor` to `IStandaloneCodeEditor` for `addAction()` access
+
+### Styled Context Menu
+
+The Monaco context menu is globally styled in `app.css` (section: "MONACO EDITOR CONTEXT MENU") to match the JAT FileTree style:
+
+- Dark background (`oklch(0.18 0.02 250)`)
+- Rounded corners with subtle border
+- Keybinding badges styled as monospace chips
+- Entrance animation (scale + fade)
+
+**Critical:** `useShadowDOM: false` must be set on all Monaco editors for the CSS overrides to apply. Without this, Monaco renders the menu inside a Shadow DOM where external styles can't reach.
+
+### Files
+
+| File | Role |
+|------|------|
+| `src/app.css` | Global context menu styles (MONACO EDITOR CONTEXT MENU section) |
+| `src/lib/components/config/MonacoWrapper.svelte` | `onSendToLLM` and `onCreateTask` props, `addAction()` calls |
+| `src/lib/components/files/FileEditor.svelte` | Wires callbacks to MonacoWrapper |
+| `src/lib/components/files/MigrationViewer.svelte` | Wires callbacks to MonacoWrapper + LLMTransformModal |
+| `src/lib/components/files/DiffViewer.svelte` | Direct `addAction()` on both diff sub-editors |
+| `src/lib/components/LLMTransformModal.svelte` | Modal for LLM text transformation |
+| `src/lib/stores/drawerStore.ts` | `openTaskDrawer()` for task creation |
+
+### Task Reference
+
+- jat-a7372: Add Send to LLM and Create Task context menu actions to all Monaco editors
+
 ## Project File Explorer (/files)
 
 ### Overview

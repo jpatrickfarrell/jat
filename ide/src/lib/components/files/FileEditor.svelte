@@ -17,6 +17,7 @@
 	import MediaPreview from './MediaPreview.svelte';
 	import InlineDiffViewer from './InlineDiffViewer.svelte';
 	import LLMTransformModal from '$lib/components/LLMTransformModal.svelte';
+	import { openTaskDrawer } from '$lib/stores/drawerStore';
 	import type { OpenFile } from './types';
 
 	// Props
@@ -125,6 +126,10 @@
 	function handleSendToLLM(selectedText: string) {
 		llmSelectedText = selectedText;
 		llmModalOpen = true;
+	}
+
+	function handleCreateTask(selectedText: string) {
+		openTaskDrawer(project, selectedText.trim());
 	}
 
 	function handleLLMReplace(newText: string) {
@@ -554,6 +559,7 @@
 						{language}
 						onchange={handleContentChange}
 						onSendToLLM={handleSendToLLM}
+						onCreateTask={handleCreateTask}
 					/>
 				{/if}
 			{:else}

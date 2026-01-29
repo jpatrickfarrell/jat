@@ -12,7 +12,8 @@
 		readonly = false,
 		onchange = undefined,
 		disableSuggestions = false,
-		onSendToLLM = undefined
+		onSendToLLM = undefined,
+		onCreateTask = undefined
 	}: {
 		value?: string;
 		language?: string;
@@ -22,6 +23,8 @@
 		disableSuggestions?: boolean;
 		/** Callback when user selects "Send to LLM" from context menu. Receives selected text. */
 		onSendToLLM?: (selectedText: string) => void;
+		/** Callback when user selects "Create Task" from context menu. Receives selected text. */
+		onCreateTask?: (selectedText: string) => void;
 	} = $props();
 
 	// State
@@ -93,6 +96,7 @@
 					verticalScrollbarSize: 10,
 					horizontalScrollbarSize: 10
 				},
+				useShadowDOM: false,
 				// Disable suggestions/intellisense for free-form text editing
 				...(disableSuggestions ? {
 					quickSuggestions: false,
@@ -169,6 +173,30 @@
 								const selectedText = model.getValueInRange(selection);
 								if (selectedText) {
 									onSendToLLM(selectedText);
+								}
+							}
+						}
+					}
+				});
+			}
+
+			// Add "Create Task" action to context menu (only shows when text is selected)
+			if (onCreateTask) {
+				editor.addAction({
+					id: 'editor.action.createTask',
+					label: 'Create Task from Selection',
+					keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyT],
+					contextMenuGroupId: 'modification',
+					contextMenuOrder: 1.6,
+					precondition: 'editorHasSelection',
+					run: (ed) => {
+						const selection = ed.getSelection();
+						if (selection && !selection.isEmpty()) {
+							const model = ed.getModel();
+							if (model) {
+								const selectedText = model.getValueInRange(selection);
+								if (selectedText) {
+									onCreateTask(selectedText);
 								}
 							}
 						}

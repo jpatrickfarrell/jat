@@ -15,6 +15,8 @@
 	import loader from '@monaco-editor/loader';
 	import type * as Monaco from 'monaco-editor';
 	import { getMonacoTheme } from '$lib/utils/themeManager';
+	import LLMTransformModal from '$lib/components/LLMTransformModal.svelte';
+	import { openTaskDrawer } from '$lib/stores/drawerStore';
 
 	// Props
 	let {
@@ -45,6 +47,10 @@
 	let additions = $state(0);
 	let deletions = $state(0);
 	let isStaging = $state(false);
+
+	// LLM Transform modal state
+	let llmModalOpen = $state(false);
+	let llmSelectedText = $state('');
 
 	// Metadata about changes (mode change, binary, etc.)
 	let modeChange = $state<{ oldMode: string; newMode: string } | null>(null);
@@ -163,6 +169,59 @@
 		}
 	});
 
+	function handleSendToLLM(selectedText: string) {
+		llmSelectedText = selectedText;
+		llmModalOpen = true;
+	}
+
+	function handleCreateTask(selectedText: string) {
+		openTaskDrawer(projectName ?? '', selectedText.trim());
+	}
+
+	/** Add custom context menu actions (Send to LLM, Create Task) to a Monaco editor instance */
+	function addCustomActions(ed: Monaco.editor.ICodeEditor, m: typeof Monaco) {
+		// Cast to IStandaloneCodeEditor which has addAction (diff sub-editors support it at runtime)
+		const standaloneEd = ed as Monaco.editor.IStandaloneCodeEditor;
+
+		standaloneEd.addAction({
+			id: 'editor.action.sendToLLM',
+			label: 'Send to LLM',
+			keybindings: [m.KeyMod.Alt | m.KeyCode.KeyL],
+			contextMenuGroupId: 'modification',
+			contextMenuOrder: 1.5,
+			precondition: 'editorHasSelection',
+			run: (e: Monaco.editor.ICodeEditor) => {
+				const selection = e.getSelection();
+				if (selection && !selection.isEmpty()) {
+					const model = e.getModel();
+					if (model) {
+						const text = model.getValueInRange(selection);
+						if (text) handleSendToLLM(text);
+					}
+				}
+			}
+		});
+
+		standaloneEd.addAction({
+			id: 'editor.action.createTask',
+			label: 'Create Task from Selection',
+			keybindings: [m.KeyMod.Alt | m.KeyCode.KeyT],
+			contextMenuGroupId: 'modification',
+			contextMenuOrder: 1.6,
+			precondition: 'editorHasSelection',
+			run: (e: Monaco.editor.ICodeEditor) => {
+				const selection = e.getSelection();
+				if (selection && !selection.isEmpty()) {
+					const model = e.getModel();
+					if (model) {
+						const text = model.getValueInRange(selection);
+						if (text) handleCreateTask(text);
+					}
+				}
+			}
+		});
+	}
+
 	async function initMonacoDiffEditor() {
 		// Guard: only initialize once
 		if (!containerRef || diffEditor || editorInitialized) return;
@@ -236,13 +295,18 @@
 					useShadows: false,
 					verticalScrollbarSize: 10,
 					horizontalScrollbarSize: 10
-				}
+				},
+				useShadowDOM: false
 			});
 
 			diffEditor.setModel({
 				original: originalModel,
 				modified: modifiedModel
 			});
+
+			// Add custom context menu actions to both sub-editors
+			addCustomActions(diffEditor.getOriginalEditor(), monaco);
+			addCustomActions(diffEditor.getModifiedEditor(), monaco);
 
 			// Set up resize observer
 			resizeObserver = new ResizeObserver(() => {
@@ -525,6 +589,13 @@
 		</div>
 	</div>
 </div>
+
+<LLMTransformModal
+	bind:isOpen={llmModalOpen}
+	selectedText={llmSelectedText}
+	project={projectName ?? ''}
+	onClose={() => { llmModalOpen = false; }}
+/>
 
 <style>
 	.diff-viewer {

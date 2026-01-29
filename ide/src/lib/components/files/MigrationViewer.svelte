@@ -7,6 +7,8 @@
 	 * - Migration SQL content (editable, when a migration file is selected)
 	 */
 	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
+	import LLMTransformModal from '$lib/components/LLMTransformModal.svelte';
+	import { openTaskDrawer } from '$lib/stores/drawerStore';
 
 	interface Props {
 		/** Content to display (SQL or diff) */
@@ -38,6 +40,16 @@
 	// Track if content has been modified
 	const isDirty = $derived(editorContent !== content);
 
+	// Monaco ref for LLM replace/insert
+	let monacoRef: {
+		replaceText: (search: string, replacement: string) => boolean;
+		insertAfter: (search: string, text: string) => boolean;
+	} | undefined = $state(undefined);
+
+	// LLM Transform modal state
+	let llmModalOpen = $state(false);
+	let llmSelectedText = $state('');
+
 	// Sync external content changes
 	$effect(() => {
 		editorContent = content;
@@ -47,6 +59,34 @@
 	function handleEditorChange(newContent: string) {
 		editorContent = newContent;
 		saveError = null;
+	}
+
+	function handleSendToLLM(selectedText: string) {
+		llmSelectedText = selectedText;
+		llmModalOpen = true;
+	}
+
+	function handleCreateTask(selectedText: string) {
+		openTaskDrawer(project ?? '', selectedText.trim());
+	}
+
+	function handleLLMReplace(newText: string) {
+		if (monacoRef?.replaceText(llmSelectedText, newText)) return;
+		// Fallback: direct content mutation
+		const index = editorContent.indexOf(llmSelectedText);
+		if (index !== -1) {
+			editorContent = editorContent.slice(0, index) + newText + editorContent.slice(index + llmSelectedText.length);
+		}
+	}
+
+	function handleLLMInsert(newText: string) {
+		if (monacoRef?.insertAfter(llmSelectedText, newText)) return;
+		// Fallback: direct content mutation
+		const index = editorContent.indexOf(llmSelectedText);
+		if (index !== -1) {
+			const insertPoint = index + llmSelectedText.length;
+			editorContent = editorContent.slice(0, insertPoint) + '\n' + newText + editorContent.slice(insertPoint);
+		}
 	}
 
 	// Save migration content
@@ -159,14 +199,26 @@
 		{:else}
 			<!-- Editable Monaco editor for migrations -->
 			<MonacoWrapper
+				bind:this={monacoRef}
 				bind:value={editorContent}
 				language="sql"
 				readonly={false}
 				onchange={handleEditorChange}
+				onSendToLLM={handleSendToLLM}
+				onCreateTask={handleCreateTask}
 			/>
 		{/if}
 	</div>
 </div>
+
+<LLMTransformModal
+	bind:isOpen={llmModalOpen}
+	selectedText={llmSelectedText}
+	project={project ?? ''}
+	onClose={() => { llmModalOpen = false; }}
+	onReplace={handleLLMReplace}
+	onInsert={handleLLMInsert}
+/>
 
 <style>
 	.migration-viewer {

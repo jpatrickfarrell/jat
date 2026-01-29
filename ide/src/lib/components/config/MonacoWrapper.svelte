@@ -11,7 +11,8 @@
 		theme = undefined,
 		readonly = false,
 		onchange = undefined,
-		disableSuggestions = false
+		disableSuggestions = false,
+		onSendToLLM = undefined
 	}: {
 		value?: string;
 		language?: string;
@@ -19,6 +20,8 @@
 		readonly?: boolean;
 		onchange?: (value: string) => void;
 		disableSuggestions?: boolean;
+		/** Callback when user selects "Send to LLM" from context menu. Receives selected text. */
+		onSendToLLM?: (selectedText: string) => void;
 	} = $props();
 
 	// State
@@ -148,6 +151,30 @@
 					}
 				}
 			});
+
+			// Add "Send to LLM" action to context menu (only shows when text is selected)
+			if (onSendToLLM) {
+				editor.addAction({
+					id: 'editor.action.sendToLLM',
+					label: 'Send to LLM',
+					keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyL],
+					contextMenuGroupId: 'modification',
+					contextMenuOrder: 1.5,
+					precondition: 'editorHasSelection',
+					run: (ed) => {
+						const selection = ed.getSelection();
+						if (selection && !selection.isEmpty()) {
+							const model = ed.getModel();
+							if (model) {
+								const selectedText = model.getValueInRange(selection);
+								if (selectedText) {
+									onSendToLLM(selectedText);
+								}
+							}
+						}
+					}
+				});
+			}
 
 			// Set up resize observer for auto-layout
 			resizeObserver = new ResizeObserver(() => {

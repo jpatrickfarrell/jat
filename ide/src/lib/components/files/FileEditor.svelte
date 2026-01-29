@@ -16,6 +16,7 @@
 	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
 	import MediaPreview from './MediaPreview.svelte';
 	import InlineDiffViewer from './InlineDiffViewer.svelte';
+	import LLMTransformModal from '$lib/components/LLMTransformModal.svelte';
 	import type { OpenFile } from './types';
 
 	// Props
@@ -98,6 +99,81 @@
 
 	function toggleHelp() {
 		showHelpModal = !showHelpModal;
+	}
+
+	// LLM Transform modal state
+	let llmModalOpen = $state(false);
+	let llmSelectedText = $state('');
+
+	function handleSendToLLM(selectedText: string) {
+		llmSelectedText = selectedText;
+		llmModalOpen = true;
+	}
+
+	function handleLLMReplace(newText: string) {
+		// Replace the selected text in the editor
+		// MonacoWrapper doesn't expose executeEdits, so we update the content
+		if (activeFile && activeFilePath) {
+			const content = activeFile.content;
+			const selection = llmSelectedText;
+			const index = content.indexOf(selection);
+			if (index !== -1) {
+				const newContent = content.slice(0, index) + newText + content.slice(index + selection.length);
+				handleContentChange(newContent);
+			}
+		}
+	}
+
+	function handleLLMInsert(newText: string) {
+		// Insert after the selected text
+		if (activeFile && activeFilePath) {
+			const content = activeFile.content;
+			const selection = llmSelectedText;
+			const index = content.indexOf(selection);
+			if (index !== -1) {
+				const insertPoint = index + selection.length;
+				const newContent = content.slice(0, insertPoint) + '\n' + newText + content.slice(insertPoint);
+				handleContentChange(newContent);
+			}
+		}
+	}
+
+	function handleLLMSaveToFile(filename: string, content: string) {
+		// Get the directory of the currently active file, or use project root
+		let basePath = '';
+		if (activeFilePath) {
+			const lastSlash = activeFilePath.lastIndexOf('/');
+			if (lastSlash > 0) {
+				basePath = activeFilePath.slice(0, lastSlash + 1);
+			}
+		}
+
+		// Create a new file with the content
+		const newPath = basePath + filename;
+
+		// Add to open files
+		const newFile: OpenFile = {
+			path: newPath,
+			content,
+			dirty: true,
+			originalContent: ''
+		};
+
+		// Check if file already exists in open files
+		const existingIndex = openFiles.findIndex(f => f.path === newPath);
+		if (existingIndex >= 0) {
+			// Update existing file
+			openFiles = openFiles.map((f, i) =>
+				i === existingIndex ? { ...f, content, dirty: true } : f
+			);
+		} else {
+			// Add new file
+			openFiles = [...openFiles, newFile];
+		}
+
+		// Set as active
+		activeFilePath = newPath;
+		onActiveFileChange(newPath);
 	}
 
 	// Get the currently active file
@@ -430,7 +506,13 @@
 				{:else}
 					<!-- Monaco Editor for text files -->
 					{@const language = getLanguage(activeFile.path)}
-					<MonacoWrapper bind:this={monacoRef} value={activeFile.content} {language} onchange={handleContentChange} />
+					<MonacoWrapper
+						bind:this={monacoRef}
+						value={activeFile.content}
+						{language}
+						onchange={handleContentChange}
+						onSendToLLM={handleSendToLLM}
+					/>
 				{/if}
 			{:else}
 				<div class="no-active-file">
@@ -598,6 +680,21 @@
 					</div>
 				</div>
 
+				<!-- AI Tools -->
+				<div>
+					<h4 class="text-sm font-semibold text-base-content/70 uppercase tracking-wide mb-3">AI Tools</h4>
+					<div class="space-y-2">
+						<div class="flex items-center justify-between py-1.5 px-3 rounded bg-base-200/50">
+							<span class="text-sm">Send selection to LLM</span>
+							<div class="flex gap-1">
+								<kbd class="kbd kbd-sm">Alt</kbd>
+								<span class="text-base-content/50">+</span>
+								<kbd class="kbd kbd-sm">L</kbd>
+							</div>
+						</div>
+					</div>
+				</div>
+
 				<!-- General -->
 				<div>
 					<h4 class="text-sm font-semibold text-base-content/70 uppercase tracking-wide mb-3">General</h4>
@@ -638,6 +735,17 @@
 		<div class="modal-backdrop bg-black/50" onclick={toggleHelp}></div>
 	</div>
 {/if}
+
+<!-- LLM Transform Modal -->
+<LLMTransformModal
+	bind:isOpen={llmModalOpen}
+	selectedText={llmSelectedText}
+	{project}
+	onClose={() => { llmModalOpen = false; }}
+	onReplace={handleLLMReplace}
+	onInsert={handleLLMInsert}
+	onSaveToFile={handleLLMSaveToFile}
+/>
 
 <style>
 	.file-editor {

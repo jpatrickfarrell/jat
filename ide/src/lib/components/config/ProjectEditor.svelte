@@ -4,6 +4,7 @@
 	import { saveProject } from '$lib/stores/configStore.svelte';
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 	import ProjectSecretsEditor from './ProjectSecretsEditor.svelte';
+	import SupabaseSetupWizard from './SupabaseSetupWizard.svelte';
 
 	interface Props {
 		isOpen: boolean;
@@ -30,6 +31,9 @@
 	// Color picker state
 	let editingActiveColor = $state(false);
 	let editingInactiveColor = $state(false);
+
+	// Supabase wizard state
+	let showSupabaseWizard = $state(false);
 
 	// Predefined color palette for quick selection - using oklch for perceptual uniformity
 	const COLOR_PALETTE = [
@@ -144,6 +148,8 @@
 			// Reset color picker state
 			editingActiveColor = false;
 			editingInactiveColor = false;
+			// Reset supabase wizard state
+			showSupabaseWizard = false;
 		}
 	});
 
@@ -585,6 +591,46 @@
 				{/if}
 			</div>
 
+			<!-- Supabase Configuration Section (only for existing projects) -->
+			{#if !isNewProject && key}
+				<div class="space-y-4">
+					<h3 class="text-sm font-medium text-base-content/70 uppercase tracking-wide">Supabase Integration</h3>
+
+					<div class="p-4 rounded-lg border border-base-content/10" style="background: oklch(0.16 0.02 250);">
+						<div class="flex items-start gap-4">
+							<div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background: oklch(0.55 0.15 145 / 0.15);">
+								<svg class="w-6 h-6" viewBox="0 0 109 113" fill="none" xmlns="http://www.w3.org/2000/svg">
+									<path d="M63.7076 110.284C60.8481 113.885 55.0502 111.912 54.9813 107.314L53.9738 40.0627L99.1935 40.0627C107.384 40.0627 111.952 49.5228 106.859 55.9374L63.7076 110.284Z" fill="url(#sg-a)"/>
+									<path d="M45.317 2.07103C48.1765 -1.53037 53.9745 0.442937 54.0434 5.04076L54.4849 72.2922H9.83113C1.64038 72.2922 -2.92775 62.8321 2.16584 56.4175L45.317 2.07103Z" fill="#3ECF8E"/>
+									<defs>
+										<linearGradient id="sg-a" x1="53.9738" y1="54.974" x2="94.1635" y2="71.8295" gradientUnits="userSpaceOnUse">
+											<stop stop-color="#249361"/>
+											<stop offset="1" stop-color="#3ECF8E"/>
+										</linearGradient>
+									</defs>
+								</svg>
+							</div>
+							<div class="flex-1">
+								<h4 class="font-medium text-sm mb-1">Connect to Supabase</h4>
+								<p class="text-xs text-base-content/60 mb-3">
+									Set up Supabase CLI linking, configure API keys, and manage database credentials for this project.
+								</p>
+								<button
+									class="btn btn-sm"
+									style="background: oklch(0.55 0.15 145 / 0.15); color: oklch(0.75 0.15 145); border-color: oklch(0.55 0.15 145 / 0.3);"
+									onclick={() => showSupabaseWizard = true}
+								>
+									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+									</svg>
+									Configure Supabase
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			{/if}
+
 			<!-- Display Colors Section -->
 			<div class="space-y-4">
 				<h3 class="text-sm font-medium text-base-content/70 uppercase tracking-wide">Display Colors</h3>
@@ -974,6 +1020,30 @@
 						</button>
 					</div>
 				</div>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Supabase Setup Wizard Modal -->
+	{#if showSupabaseWizard}
+		<div
+			class="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4"
+			transition:fade={{ duration: 150 }}
+			onclick={(e) => e.target === e.currentTarget && (showSupabaseWizard = false)}
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="supabase-wizard-title"
+		>
+			<div
+				class="bg-base-100 rounded-xl shadow-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto"
+				transition:fly={{ y: 20, duration: 200 }}
+			>
+				<SupabaseSetupWizard
+					project={key}
+					projectPath={path}
+					onComplete={() => { showSupabaseWizard = false; successToast('Supabase configured', 'Project is now connected to Supabase'); }}
+					onCancel={() => showSupabaseWizard = false}
+				/>
 			</div>
 		</div>
 	{/if}

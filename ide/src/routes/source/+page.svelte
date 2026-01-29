@@ -185,10 +185,10 @@
 		if (!selectedProject) return;
 
 		try {
-			const response = await fetch(`/api/files/git/stage?project=${encodeURIComponent(selectedProject)}`, {
+			const response = await fetch('/api/files/git/stage', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ path })
+				body: JSON.stringify({ project: selectedProject, paths: [path] })
 			});
 
 			if (!response.ok) {
@@ -210,10 +210,10 @@
 		if (!selectedProject) return;
 
 		try {
-			const response = await fetch(`/api/files/git/unstage?project=${encodeURIComponent(selectedProject)}`, {
+			const response = await fetch('/api/files/git/unstage', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ path })
+				body: JSON.stringify({ project: selectedProject, paths: [path] })
 			});
 
 			if (!response.ok) {

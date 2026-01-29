@@ -1,0 +1,426 @@
+<script lang="ts">
+	/**
+	 * LLMTransformModal
+	 *
+	 * A modal for transforming selected text through an LLM.
+	 * Used by Monaco editor "Send to LLM" context menu action.
+	 *
+	 * Flow:
+	 * 1. User selects text in Monaco editor
+	 * 2. Right-clicks and chooses "Send to LLM" (or presses Alt+L)
+	 * 3. This modal opens with the selected text
+	 * 4. User enters instructions
+	 * 5. LLM processes and returns transformed text
+	 * 6. User can replace selection or copy result
+	 */
+
+	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
+
+	interface Props {
+		/** Whether the modal is open */
+		isOpen: boolean;
+		/** The selected text to transform */
+		selectedText: string;
+		/** Project name for file saves and sessions */
+		project?: string;
+		/** Callback when modal closes */
+		onClose: () => void;
+		/** Callback when user wants to replace selection with result */
+		onReplace?: (newText: string) => void;
+		/** Callback when user wants to insert result after selection */
+		onInsert?: (newText: string) => void;
+		/** Callback when user wants to save result to a file */
+		onSaveToFile?: (filename: string, content: string) => void;
+	}
+
+	let {
+		isOpen = $bindable(false),
+		selectedText,
+		project = '',
+		onClose,
+		onReplace,
+		onInsert,
+		onSaveToFile
+	}: Props = $props();
+
+	// State
+	let instructions = $state('');
+	let isProcessing = $state(false);
+	let result = $state<string | null>(null);
+	let textareaRef = $state<HTMLTextAreaElement | null>(null);
+	let showFilenameInput = $state(false);
+	let filename = $state('llm-result.md');
+	let isStartingSession = $state(false);
+
+	// Focus textarea when modal opens
+	$effect(() => {
+		if (isOpen && textareaRef) {
+			setTimeout(() => textareaRef?.focus(), 100);
+		}
+	});
+
+	// Reset state when modal opens
+	$effect(() => {
+		if (isOpen) {
+			result = null;
+			instructions = '';
+			showFilenameInput = false;
+			filename = 'llm-result.md';
+		}
+	});
+
+	async function handleSubmit() {
+		if (!instructions.trim()) {
+			errorToast('Please enter instructions for processing');
+			return;
+		}
+
+		if (!selectedText.trim()) {
+			errorToast('No text to process');
+			return;
+		}
+
+		isProcessing = true;
+
+		try {
+			const response = await fetch('/api/llm/process', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					content: selectedText,
+					instructions: instructions.trim()
+				})
+			});
+
+			if (!response.ok) {
+				const error = await response.json();
+				throw new Error(error.error || 'Failed to process content');
+			}
+
+			const data = await response.json();
+			result = data.result;
+		} catch (err) {
+			console.error('[LLMTransformModal] Error:', err);
+			errorToast(err instanceof Error ? err.message : 'Failed to process content');
+		} finally {
+			isProcessing = false;
+		}
+	}
+
+	function handleReplace() {
+		if (result && onReplace) {
+			onReplace(result);
+			successToast('Text replaced');
+			handleClose();
+		}
+	}
+
+	function handleInsert() {
+		if (result && onInsert) {
+			onInsert(result);
+			successToast('Text inserted');
+			handleClose();
+		}
+	}
+
+	async function handleCopy() {
+		if (result) {
+			await navigator.clipboard.writeText(result);
+			successToast('Copied to clipboard');
+		}
+	}
+
+	function handleSaveToFile() {
+		if (result && onSaveToFile && filename.trim()) {
+			onSaveToFile(filename.trim(), result);
+			successToast(`Saved to ${filename.trim()}`);
+			showFilenameInput = false;
+			handleClose();
+		}
+	}
+
+	async function handleStartSession() {
+		if (!result) return;
+
+		isStartingSession = true;
+
+		try {
+			// Build context for the planning session
+			const sessionContext = `# Context
+
+## Original Text
+\`\`\`
+${selectedText}
+\`\`\`
+
+## Instructions Given
+${instructions}
+
+## LLM Result
+${result}
+
+---
+
+Continue this conversation. The user wants to discuss or refine this transformation.`;
+
+			// Spawn a planning session (no task)
+			const response = await fetch('/api/work/spawn', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					model: 'sonnet',
+					attach: true,
+					project: project || undefined
+				})
+			});
+
+			if (!response.ok) {
+				const error = await response.json();
+				throw new Error(error.error || 'Failed to start session');
+			}
+
+			const data = await response.json();
+
+			// Send the context to the session via tmux
+			if (data.session?.sessionName) {
+				// Wait for session to be ready, then send context
+				setTimeout(async () => {
+					try {
+						await fetch(`/api/sessions/${encodeURIComponent(data.session.sessionName)}/input`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ input: sessionContext })
+						});
+					} catch (err) {
+						console.warn('[LLMTransformModal] Failed to send context to session:', err);
+					}
+				}, 3000); // Wait 3 seconds for Claude to start
+			}
+
+			successToast(`Started session ${data.session?.agentName || 'new agent'}`);
+			handleClose();
+		} catch (err) {
+			console.error('[LLMTransformModal] Error starting session:', err);
+			errorToast(err instanceof Error ? err.message : 'Failed to start session');
+		} finally {
+			isStartingSession = false;
+		}
+	}
+
+	function handleClose() {
+		isOpen = false;
+		result = null;
+		instructions = '';
+		onClose();
+	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') {
+			handleClose();
+		} else if (e.key === 'Enter' && e.ctrlKey && !result) {
+			handleSubmit();
+		}
+	}
+</script>
+
+{#if isOpen}
+	<!-- Modal backdrop -->
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+		onclick={handleClose}
+		onkeydown={handleKeydown}
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="llm-transform-title"
+	>
+		<!-- Modal content -->
+		<div
+			class="bg-base-300 rounded-lg shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col relative"
+			style="background: oklch(0.18 0.02 250);"
+			onclick={(e) => e.stopPropagation()}
+		>
+			<!-- Header -->
+			<div class="flex items-center justify-between px-4 py-3 border-b border-base-content/10">
+				<h3 id="llm-transform-title" class="text-base font-semibold text-base-content/90">
+					Send to LLM
+				</h3>
+				<button
+					type="button"
+					class="btn btn-ghost btn-sm btn-circle"
+					onclick={handleClose}
+					aria-label="Close"
+				>
+					<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+				</button>
+			</div>
+
+			<!-- Body -->
+			<div class="flex-1 overflow-auto p-4 space-y-4">
+				<!-- Selected text preview -->
+				<div>
+					<label class="label py-1">
+						<span class="label-text text-xs text-base-content/60">Selected Text</span>
+						<span class="label-text-alt text-xs text-base-content/40">{selectedText.length} chars</span>
+					</label>
+					<div
+						class="font-mono text-xs p-3 rounded border border-base-content/10 max-h-32 overflow-auto whitespace-pre-wrap"
+						style="background: oklch(0.14 0.01 250);"
+					>
+						{selectedText.slice(0, 500)}{selectedText.length > 500 ? '...' : ''}
+					</div>
+				</div>
+
+				<!-- Instructions input -->
+				<div>
+					<label class="label py-1">
+						<span class="label-text text-xs text-base-content/60">Instructions</span>
+						<span class="label-text-alt text-xs text-base-content/40">Ctrl+Enter to submit</span>
+					</label>
+					<textarea
+						bind:this={textareaRef}
+						bind:value={instructions}
+						placeholder="Enter instructions for the LLM..."
+						class="textarea textarea-bordered w-full font-mono text-sm"
+						rows="3"
+						disabled={isProcessing || !!result}
+						style="background: oklch(0.14 0.01 250); border-color: oklch(0.25 0.02 250);"
+					></textarea>
+				</div>
+
+				<!-- Result display (when available) -->
+				{#if result}
+					<div>
+						<label class="label py-1">
+							<span class="label-text text-xs text-success">Result</span>
+							<span class="label-text-alt text-xs text-base-content/40">{result.length} chars</span>
+						</label>
+						<div
+							class="font-mono text-xs p-3 rounded border border-success/30 max-h-48 overflow-auto whitespace-pre-wrap"
+							style="background: oklch(0.14 0.01 250);"
+						>
+							{result}
+						</div>
+					</div>
+				{/if}
+			</div>
+
+			<!-- Filename input modal overlay -->
+			{#if showFilenameInput}
+				<div class="absolute inset-0 bg-black/50 flex items-center justify-center z-10 rounded-lg">
+					<div class="bg-base-300 p-4 rounded-lg shadow-xl border border-base-content/10 w-72" style="background: oklch(0.20 0.02 250);">
+						<label class="label py-1">
+							<span class="label-text text-xs text-base-content/60">Filename</span>
+						</label>
+						<input
+							type="text"
+							bind:value={filename}
+							placeholder="llm-result.md"
+							class="input input-sm input-bordered w-full font-mono text-xs"
+							style="background: oklch(0.14 0.01 250); border-color: oklch(0.25 0.02 250);"
+							onkeydown={(e) => e.key === 'Enter' && handleSaveToFile()}
+						/>
+						<div class="flex justify-end gap-2 mt-3">
+							<button type="button" class="btn btn-xs btn-ghost" onclick={() => showFilenameInput = false}>
+								Cancel
+							</button>
+							<button type="button" class="btn btn-xs btn-primary" onclick={handleSaveToFile} disabled={!filename.trim()}>
+								Save
+							</button>
+						</div>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Footer -->
+			<div class="px-4 py-3 border-t border-base-content/10 flex items-center justify-between gap-2">
+				{#if result}
+					<!-- Left side actions -->
+					<div class="flex items-center gap-1">
+						<button type="button" class="btn btn-sm btn-ghost" onclick={() => { result = null; }} title="Process again with different instructions">
+							<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+							</svg>
+							Try Again
+						</button>
+					</div>
+
+					<!-- Right side actions -->
+					<div class="flex items-center gap-1">
+						<button type="button" class="btn btn-sm btn-ghost" onclick={handleCopy} title="Copy to clipboard">
+							<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" />
+							</svg>
+							Copy
+						</button>
+						{#if onSaveToFile}
+							<button type="button" class="btn btn-sm btn-ghost" onclick={() => showFilenameInput = true} title="Save to file">
+								<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+								</svg>
+								Save File
+							</button>
+						{/if}
+						<button
+							type="button"
+							class="btn btn-sm btn-secondary"
+							onclick={handleStartSession}
+							disabled={isStartingSession}
+							title="Start a Claude session to continue this conversation"
+						>
+							{#if isStartingSession}
+								<span class="loading loading-spinner loading-xs"></span>
+							{:else}
+								<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
+								</svg>
+							{/if}
+							Start Session
+						</button>
+						{#if onInsert}
+							<button type="button" class="btn btn-sm btn-info" onclick={handleInsert} title="Insert result after selection">
+								<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+								</svg>
+								Insert After
+							</button>
+						{/if}
+						{#if onReplace}
+							<button type="button" class="btn btn-sm btn-primary" onclick={handleReplace} title="Replace selected text with result">
+								<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+								</svg>
+								Replace
+							</button>
+						{/if}
+					</div>
+				{:else}
+					<!-- Submit buttons -->
+					<div></div>
+					<div class="flex items-center gap-2">
+						<button type="button" class="btn btn-sm btn-ghost" onclick={handleClose}>
+							Cancel
+						</button>
+						<button
+							type="button"
+							class="btn btn-sm btn-primary"
+							onclick={handleSubmit}
+							disabled={isProcessing || !instructions.trim()}
+						>
+							{#if isProcessing}
+								<span class="loading loading-spinner loading-xs"></span>
+								Processing...
+							{:else}
+								<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
+								</svg>
+								Process
+							{/if}
+						</button>
+					</div>
+				{/if}
+			</div>
+		</div>
+	</div>
+{/if}

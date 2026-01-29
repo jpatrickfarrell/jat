@@ -311,11 +311,9 @@ export async function PATCH({ params, request }) {
 		// Handle dependencies separately using bd dep add/remove
 		// Note: bd CLI doesn't support --deps flag for updates, need to use bd dep add
 		if (updates.dependencies !== undefined && Array.isArray(updates.dependencies)) {
-			// Get current dependencies - cast task to include dependencies property
-			/** @type {{ dependencies?: string[] }} */
-			const taskWithDeps = /** @type {{ dependencies?: string[] }} */ (existingTask);
+			// Get current dependency IDs from depends_on (array of {id, title, status, ...} objects)
 			/** @type {string[]} */
-			const currentDeps = taskWithDeps.dependencies || [];
+			const currentDeps = (existingTask.depends_on || []).map((/** @type {{id: string}} */ d) => d.id);
 			/** @type {string[]} */
 			const newDeps = updates.dependencies;
 

@@ -1545,7 +1545,7 @@
 									</span>
 									{#if event.git_sha}
 										<span
-											class="px-1 py-0.5 rounded text-[9px] font-mono flex-shrink-0"
+											class="mr-1.5 px-1.5 py-0.5 rounded text-[9px] font-mono flex-shrink-0"
 											style="background: oklch(0.25 0.02 250); color: oklch(0.60 0.02 250);"
 										>
 											{event.git_sha}

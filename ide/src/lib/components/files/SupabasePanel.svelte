@@ -621,7 +621,17 @@
 						Linked
 					</span>
 					{#if status.projectRef}
-						<span class="project-ref">{status.projectRef}</span>
+						<!-- svelte-ignore a11y_click_events_have_key_events -->
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<span
+							class="project-ref clickable"
+							title="Click to copy"
+							onclick={(e) => {
+								e.stopPropagation();
+								navigator.clipboard.writeText(status?.projectRef || '');
+								showToast('Copied project ref to clipboard');
+							}}
+						>{status.projectRef}</span>
 					{/if}
 				{:else}
 					<span class="status-badge status-unlinked">
@@ -1318,6 +1328,22 @@
 		font-family: monospace;
 		font-size: 0.6875rem;
 		color: oklch(0.55 0.02 250);
+	}
+
+	.project-ref.clickable {
+		cursor: pointer;
+		padding: 0.125rem 0.375rem;
+		border-radius: 0.25rem;
+		transition: all 0.15s ease;
+	}
+
+	.project-ref.clickable:hover {
+		background: oklch(0.25 0.02 250);
+		color: oklch(0.75 0.02 250);
+	}
+
+	.project-ref.clickable:active {
+		transform: scale(0.95);
 	}
 
 	.btn-refresh {

@@ -2487,17 +2487,23 @@
 	// Poll for signal data (human actions) in agent mode only
 	// Signal data comes from jat-signal action command via PostToolUse hook
 	// Poll every 3 seconds - signals are written once and persist until cleared
+	// Stop polling when session completes (no more signals expected)
 	$effect(() => {
 		// Only poll in agent/compact mode (not server mode)
 		if (!isAgentMode) return;
 
-		// Start polling on mount
-		if (!signalPollInterval) {
+		const needsSignalPolling = sessionState !== "completed" && sessionState !== "idle";
+
+		if (needsSignalPolling && !signalPollInterval) {
 			fetchSignalData().catch(() => {}); // Immediate fetch (catch timeout errors)
 			signalPollInterval = setInterval(
 				() => fetchSignalData().catch(() => {}),
 				3000,
 			);
+		} else if (!needsSignalPolling && signalPollInterval) {
+			// Stop polling when session is completed or idle
+			clearInterval(signalPollInterval);
+			signalPollInterval = null;
 		}
 
 		// Cleanup on unmount (effect cleanup function)

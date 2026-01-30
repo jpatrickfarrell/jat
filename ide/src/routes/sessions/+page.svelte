@@ -468,6 +468,11 @@
 			if (response.ok) {
 				const data = await response.json();
 				expandedOutput = data.output || '';
+				// Stop polling if the session has ended (tmux session gone)
+				if (data.sessionEnded && outputPollInterval) {
+					clearInterval(outputPollInterval);
+					outputPollInterval = null;
+				}
 			}
 		} catch (err) {
 			console.error('Failed to fetch session output:', err);

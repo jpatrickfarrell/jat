@@ -68,14 +68,36 @@ export async function GET({ params, url }) {
 		}
 
 		// Check if session exists
+		let sessionAlive = true;
 		try {
 			await execAsync(`tmux has-session -t "${sessionId}" 2>/dev/null`);
 		} catch {
+			sessionAlive = false;
+		}
+
+		// If session is gone, return empty output with sessionEnded flag
+		// instead of 404 to prevent console error spam from polling clients
+		if (!sessionAlive) {
+			// Still check for session log history
+			let sessionLog = null;
+			if (includePreCompact) {
+				sessionLog = await readSessionLog(sessionId);
+			}
+
 			return json({
-				error: 'Session not found',
-				message: `Session '${sessionId}' does not exist`,
-				sessionId
-			}, { status: 404 });
+				success: true,
+				sessionId,
+				output: sessionLog ? sessionLog.content : '',
+				lineCount: sessionLog ? sessionLog.content.split('\n').length : 0,
+				lines,
+				sessionEnded: true,
+				hasSessionHistory: !!sessionLog,
+				sessionLogInfo: sessionLog ? {
+					filename: sessionLog.filename,
+					modifiedAt: sessionLog.modifiedAt
+				} : null,
+				timestamp: new Date().toISOString()
+			});
 		}
 
 		// Capture output

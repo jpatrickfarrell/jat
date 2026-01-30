@@ -27,7 +27,9 @@
 	import { availableProjects, projectColorsStore, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, openStartDropdownViaKeyboard, closeStartDropdown, isFilePreviewDrawerOpen, filePreviewDrawerPath, filePreviewDrawerProject, filePreviewDrawerLine, closeFilePreviewDrawer, toggleTerminalDrawer, isDiffPreviewDrawerOpen, diffPreviewDrawerPath, diffPreviewDrawerProject, diffPreviewDrawerIsStaged, diffPreviewDrawerCommitHash, closeDiffPreviewDrawer, setGitAheadCount, setGitChangesCount, setActiveSessionsCount, setRunningServersCount, setActiveAgentSessionsCount } from '$lib/stores/drawerStore';
 	import { hoveredSessionName, triggerCompleteFlash, jumpToSession } from '$lib/stores/hoveredSession';
 	import { get } from 'svelte/store';
+	import { browser } from '$app/environment';
 	import { initPreferences, getActiveProject } from '$lib/stores/preferences.svelte';
+	import { isSetupSkipped } from '$lib/stores/onboardingStore.svelte';
 	import GlobalSearch from '$lib/components/files/GlobalSearch.svelte';
 	import { getSessions as getWorkSessions, startActivityPolling, stopActivityPolling, fetch as fetchWorkSessions } from '$lib/stores/workSessions.svelte';
 	import { getSessions as getServerSessions } from '$lib/stores/serverSessions.svelte';
@@ -134,6 +136,9 @@
 		}
 	});
 
+	// Detect if on setup page (hide chrome for focused onboarding)
+	const isSetupPage = $derived($page.url.pathname === '/setup');
+
 	// Derived project data
 	// Use config projects (from JAT config) with "All Projects" prepended
 	const projects = $derived(['All Projects', ...configProjects]);
@@ -151,6 +156,19 @@
 	$effect(() => {
 		// Use config projects directly (already excludes "All Projects")
 		availableProjects.set(configProjects);
+	});
+
+	// Route guard: redirect to /setup when no projects exist
+	// Allows /setup and /config (settings needed during setup)
+	let configProjectsLoaded = $state(false);
+
+	$effect(() => {
+		if (browser && configProjectsLoaded && configProjects.length === 0 && !isSetupSkipped()) {
+			const path = $page.url.pathname;
+			if (path !== '/setup' && !path.startsWith('/config') && path !== '/') {
+				goto('/setup', { replaceState: true });
+			}
+		}
 	});
 
 	// Track if audio has been initialized and permission prompt state
@@ -583,6 +601,7 @@
 				};
 			}
 			setProjectsCache(projectsCache);
+			configProjectsLoaded = true;
 		} catch (error) {
 			console.error('Failed to fetch config projects:', error);
 			if (retries > 0) {
@@ -590,6 +609,7 @@
 				setTimeout(() => loadConfigProjects(retries - 1), 1000);
 			} else {
 				configProjects = [];
+				configProjectsLoaded = true;
 			}
 		}
 	}
@@ -925,55 +945,67 @@
 
 <svelte:window onkeydown={handleGlobalKeydown} />
 
-<!-- Drawer Structure -->
-<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-<div class="drawer lg:drawer-open" onclick={handleFirstInteraction}>
-	<!-- Drawer toggle (hidden checkbox for mobile sidebar) -->
-	<input id="main-drawer" type="checkbox" class="drawer-toggle" />
+{#if isSetupPage}
+	<!-- Setup page: focused layout without sidebar/topbar -->
+	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<div class="h-screen overflow-y-auto" onclick={handleFirstInteraction}>
+		{@render children()}
 
-	<!-- Main content area -->
-	<div class="drawer-content flex flex-col h-screen">
-		<!-- Top Bar -->
-		<TopBar
-			{activeAgentCount}
-			{totalAgentCount}
-			{activeAgents}
-			{stateCounts}
-			{tokensToday}
-			{costToday}
-			{sparklineData}
-			{multiProjectData}
-			{projectColors}
-			{readyTaskCount}
-			{readyTasks}
-			{projects}
-			{selectedProject}
-			{epicsWithReady}
-			{reviewRules}
-			onGlobalSearchOpen={() => { globalSearchOpen = true; }}
-		/>
-
-		<!-- Page content -->
-		<main class="flex-1 min-h-0 overflow-y-auto">
-			{@render children()}
-		</main>
-
-		<!-- Task Creation Drawer (must be inside drawer-content for proper positioning) -->
+		<!-- Drawers still available during setup (project creation, task creation) -->
 		<TaskCreationDrawer />
-
-		<!-- Create Project Drawer (for adding new projects to JAT) -->
 		<CreateProjectDrawer onProjectCreated={loadConfigProjects} />
 	</div>
+{:else}
+	<!-- Drawer Structure -->
+	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<div class="drawer lg:drawer-open" onclick={handleFirstInteraction}>
+		<!-- Drawer toggle (hidden checkbox for mobile sidebar) -->
+		<input id="main-drawer" type="checkbox" class="drawer-toggle" />
 
-	<!-- Spawn Modal (must be inside drawer for proper z-index) -->
-	<SpawnModal />
+		<!-- Main content area -->
+		<div class="drawer-content flex flex-col h-screen">
+			<!-- Top Bar -->
+			<TopBar
+				{activeAgentCount}
+				{totalAgentCount}
+				{activeAgents}
+				{stateCounts}
+				{tokensToday}
+				{costToday}
+				{sparklineData}
+				{multiProjectData}
+				{projectColors}
+				{readyTaskCount}
+				{readyTasks}
+				{projects}
+				{selectedProject}
+				{epicsWithReady}
+				{reviewRules}
+				onGlobalSearchOpen={() => { globalSearchOpen = true; }}
+			/>
 
-	<!-- Epic Swarm Modal (Alt+E to open) -->
-	<EpicSwarmModal />
+			<!-- Page content -->
+			<main class="flex-1 min-h-0 overflow-y-auto">
+				{@render children()}
+			</main>
 
-	<!-- Sidebar (Sidebar component provides the drawer-side wrapper) -->
-	<Sidebar />
-</div>
+			<!-- Task Creation Drawer (must be inside drawer-content for proper positioning) -->
+			<TaskCreationDrawer />
+
+			<!-- Create Project Drawer (for adding new projects to JAT) -->
+			<CreateProjectDrawer onProjectCreated={loadConfigProjects} />
+		</div>
+
+		<!-- Spawn Modal (must be inside drawer for proper z-index) -->
+		<SpawnModal />
+
+		<!-- Epic Swarm Modal (Alt+E to open) -->
+		<EpicSwarmModal />
+
+		<!-- Sidebar (Sidebar component provides the drawer-side wrapper) -->
+		<Sidebar />
+	</div>
+{/if}
 
 <!-- Global Task Detail Drawer (for inspecting tasks from anywhere) -->
 <TaskDetailDrawer

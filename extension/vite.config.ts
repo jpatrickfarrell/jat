@@ -12,6 +12,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         popup: resolve(__dirname, 'src/popup/index.html'),
+        options: resolve(__dirname, 'src/options/index.html'),
         background: resolve(__dirname, 'src/background/background.ts'),
         content: resolve(__dirname, 'src/content/content.ts'),
       },
@@ -55,21 +56,30 @@ export default defineConfig({
       }
     },
     {
-      name: 'copy-popup-html',
+      name: 'copy-html-pages',
       closeBundle() {
-        // Vite puts the popup HTML in dist/src/popup/ - copy to dist root
+        // Vite puts HTML files in dist/src/{dir}/ - copy to dist root
         // and fix script paths to be relative to the new location
-        const popupSrc = resolve(__dirname, 'dist/src/popup/index.html')
-        const popupDest = resolve(__dirname, 'dist/popup.html')
-        if (fs.existsSync(popupSrc)) {
-          let html = fs.readFileSync(popupSrc, 'utf-8')
-          // Fix relative paths: ../../popup.js -> ./popup.js
-          html = html.replace(/src="\.\.\/\.\.\//g, 'src="./')
-          html = html.replace(/href="\.\.\/\.\.\//g, 'href="./')
-          fs.writeFileSync(popupDest, html)
-          // Remove the nested src/ directory artifact
-          fs.rmSync(resolve(__dirname, 'dist/src'), { recursive: true, force: true })
-          console.log('✓ Copied popup.html to dist root (paths fixed)')
+        const pages = [
+          { src: 'dist/src/popup/index.html', dest: 'dist/popup.html', name: 'popup' },
+          { src: 'dist/src/options/index.html', dest: 'dist/options.html', name: 'options' },
+        ]
+        for (const page of pages) {
+          const pageSrc = resolve(__dirname, page.src)
+          const pageDest = resolve(__dirname, page.dest)
+          if (fs.existsSync(pageSrc)) {
+            let html = fs.readFileSync(pageSrc, 'utf-8')
+            // Fix relative paths: ../../foo.js -> ./foo.js
+            html = html.replace(/src="\.\.\/\.\.\//g, 'src="./')
+            html = html.replace(/href="\.\.\/\.\.\//g, 'href="./')
+            fs.writeFileSync(pageDest, html)
+            console.log(`✓ Copied ${page.name}.html to dist root (paths fixed)`)
+          }
+        }
+        // Remove the nested src/ directory artifact
+        const srcDir = resolve(__dirname, 'dist/src')
+        if (fs.existsSync(srcDir)) {
+          fs.rmSync(srcDir, { recursive: true, force: true })
         }
       }
     },

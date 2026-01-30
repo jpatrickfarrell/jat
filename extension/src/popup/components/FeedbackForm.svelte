@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ConsoleLogEntry, ElementData } from '../stores/capturedData.svelte'
+  import { isConfigured, submitFeedback } from '../../lib/supabase'
 
   interface Props {
     screenshots: string[]
@@ -16,6 +17,8 @@
   let priority: 'low' | 'medium' | 'high' | 'critical' = $state('medium')
   let submitting = $state(false)
   let submitError = $state('')
+  let submitSuccess = $state(false)
+  let configured = $state<boolean | null>(null)
 
   const typeOptions = [
     { value: 'bug', label: 'Bug' },
@@ -30,43 +33,75 @@
     { value: 'critical', label: 'Critical', desc: 'Blocking' },
   ] as const
 
+  // Check if Supabase is configured on mount
+  $effect(() => {
+    isConfigured().then(v => { configured = v })
+  })
+
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault()
     if (!title.trim()) return
 
     submitting = true
     submitError = ''
+    submitSuccess = false
 
     try {
-      const report = {
-        title: title.trim(),
-        description: description.trim(),
-        type,
-        priority,
-        url: (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.url || '',
-        userAgent: navigator.userAgent,
-        timestamp: new Date().toISOString(),
-        capturedData: {
-          screenshots,
-          consoleLogs,
-          selectedElements,
-        }
-      }
+      const pageUrl = (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.url || ''
 
-      // Store the bug report
-      await chrome.storage.local.set({
-        [`bugReport_${Date.now()}`]: report
-      })
+      if (configured) {
+        // Submit to Supabase
+        const result = await submitFeedback(
+          {
+            title: title.trim(),
+            description: description.trim(),
+            type,
+            priority,
+            page_url: pageUrl,
+            user_agent: navigator.userAgent,
+            console_logs: consoleLogs.length > 0 ? consoleLogs : null,
+            selected_elements: selectedElements.length > 0 ? selectedElements : null,
+            screenshot_urls: null, // Filled by submitFeedback after upload
+            metadata: null,
+          },
+          screenshots,
+        )
+
+        if (!result.ok) {
+          submitError = result.error || 'Submission failed'
+          return
+        }
+      } else {
+        // Fallback: store locally when Supabase is not configured
+        const report = {
+          title: title.trim(),
+          description: description.trim(),
+          type,
+          priority,
+          url: pageUrl,
+          userAgent: navigator.userAgent,
+          timestamp: new Date().toISOString(),
+          capturedData: { screenshots, consoleLogs, selectedElements },
+        }
+        await chrome.storage.local.set({
+          [`bugReport_${Date.now()}`]: report,
+        })
+      }
 
       // Clear captured data after successful submission
       await chrome.runtime.sendMessage({ type: 'CLEAR_CAPTURED_DATA' })
 
-      onclose()
+      submitSuccess = true
+      setTimeout(() => onclose(), 1200)
     } catch (err) {
       submitError = err instanceof Error ? err.message : 'Submission failed'
     } finally {
       submitting = false
     }
+  }
+
+  function openSettings() {
+    chrome.runtime.openOptionsPage?.()
   }
 
   // Summary of attached data
@@ -79,7 +114,20 @@
   }
 </script>
 
+{#if submitSuccess}
+  <div class="success-banner">
+    <span class="success-icon">&#x2713;</span>
+    <span>Report submitted{configured ? '' : ' (saved locally)'}!</span>
+  </div>
+{:else}
 <form class="form" onsubmit={handleSubmit}>
+  {#if configured === false}
+    <div class="config-notice">
+      <span>Supabase not configured. Reports will be saved locally.</span>
+      <button type="button" class="config-link" onclick={openSettings}>Set up Supabase</button>
+    </div>
+  {/if}
+
   <div class="field">
     <label for="title">Title <span class="required">*</span></label>
     <input
@@ -159,6 +207,7 @@
     </button>
   </div>
 </form>
+{/if}
 
 <style>
   .form {
@@ -255,6 +304,54 @@
     font-size: 11px;
     color: #9ca3af;
     padding: 0 4px;
+  }
+
+  .success-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 20px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    color: #166534;
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .success-icon {
+    font-size: 20px;
+    color: #16a34a;
+  }
+
+  .config-notice {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 5px;
+    font-size: 12px;
+    color: #92400e;
+  }
+
+  .config-link {
+    background: none;
+    border: none;
+    color: #2563eb;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 0;
+    font-family: inherit;
+    text-decoration: underline;
+    white-space: nowrap;
+  }
+
+  .config-link:hover {
+    color: #1d4ed8;
   }
 
   .error {

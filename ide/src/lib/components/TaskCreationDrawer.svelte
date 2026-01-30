@@ -184,7 +184,7 @@
 	// Attachment state
 	let pendingAttachments = $state<PendingAttachment[]>([]);
 	let isDragOver = $state(false);
-	let dropzoneRef: HTMLDivElement | null = null;
+	let drawerDragCounter = $state(0); // Track nested drag enter/leave on drawer
 	let fileInputRef: HTMLInputElement | null = null;
 
 	// UI state
@@ -668,11 +668,12 @@
 		}
 	}
 
-	// Handle drop event
-	function handleDrop(event: DragEvent) {
+	// Handle drop on the whole drawer (prevents browser navigation on missed drops)
+	function handleDrawerDrop(event: DragEvent) {
 		event.preventDefault();
 		event.stopPropagation();
 		isDragOver = false;
+		drawerDragCounter = 0;
 
 		const files = event.dataTransfer?.files;
 		if (files && files.length > 0) {
@@ -681,8 +682,8 @@
 		}
 	}
 
-	// Handle drag over
-	function handleDragOver(event: DragEvent) {
+	// Handle drag over on drawer (must preventDefault to allow drop)
+	function handleDrawerDragOver(event: DragEvent) {
 		event.preventDefault();
 		event.stopPropagation();
 
@@ -690,28 +691,26 @@
 		if (event.dataTransfer) {
 			event.dataTransfer.dropEffect = 'copy';
 		}
-		isDragOver = true;
 	}
 
-	// Handle drag enter
-	function handleDragEnter(event: DragEvent) {
+	// Handle drag enter on drawer (use counter to handle nested elements)
+	function handleDrawerDragEnter(event: DragEvent) {
 		event.preventDefault();
 		event.stopPropagation();
+		drawerDragCounter++;
+		if (drawerDragCounter > 0) {
+			isDragOver = true;
+		}
 	}
 
-	// Handle drag leave
-	function handleDragLeave(event: DragEvent) {
+	// Handle drag leave on drawer
+	function handleDrawerDragLeave(event: DragEvent) {
 		event.preventDefault();
 		event.stopPropagation();
-
-		// Only set to false if leaving the dropzone entirely
-		const rect = dropzoneRef?.getBoundingClientRect();
-		if (rect) {
-			const x = event.clientX;
-			const y = event.clientY;
-			if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-				isDragOver = false;
-			}
+		drawerDragCounter--;
+		if (drawerDragCounter <= 0) {
+			drawerDragCounter = 0;
+			isDragOver = false;
 		}
 	}
 
@@ -1027,6 +1026,7 @@
 		});
 		pendingAttachments = [];
 		isDragOver = false;
+		drawerDragCounter = 0;
 	}
 
 	// Track which save action to perform after submission
@@ -1196,12 +1196,29 @@
 		<label aria-label="close sidebar" class="drawer-overlay" onclick={handleClose}></label>
 
 		<!-- Drawer Panel (fixed height, header/footer sticky, content scrolls) - Industrial -->
+		<!-- Entire drawer is a drop zone to prevent browser navigation on missed drops -->
 		<div
-			class="h-full w-full max-w-2xl flex flex-col shadow-2xl bg-base-300 border-l border-base-content/30"
+			class="h-full w-full max-w-2xl flex flex-col shadow-2xl bg-base-300 border-l border-base-content/30 relative"
 			role="dialog"
 			aria-labelledby="drawer-title"
 			onkeydown={handleKeydown}
+			ondrop={handleDrawerDrop}
+			ondragover={handleDrawerDragOver}
+			ondragenter={handleDrawerDragEnter}
+			ondragleave={handleDrawerDragLeave}
 		>
+			<!-- Full-drawer drop overlay -->
+			{#if isDragOver && !formDisabled}
+				<div class="absolute inset-0 z-50 flex items-center justify-center bg-base-300/80 backdrop-blur-sm border-2 border-dashed border-primary rounded-lg pointer-events-none">
+					<div class="text-center">
+						<svg class="w-16 h-16 mx-auto mb-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+						</svg>
+						<p class="font-mono text-lg font-semibold text-primary">Drop files anywhere</p>
+						<p class="font-mono text-sm mt-1 text-base-content/60">Files will be added as attachments</p>
+					</div>
+				</div>
+			{/if}
 			<!-- Header - Industrial -->
 			<div
 				class="flex items-center justify-between p-6 relative bg-base-200 border-b border-base-content/30"
@@ -1622,40 +1639,24 @@
 							disabled={formDisabled || isSubmitting}
 						/>
 
-						<!-- Dropzone -->
+						<!-- Click-to-browse zone (drops handled by drawer-level handler) -->
 						<div
-							bind:this={dropzoneRef}
-							class="relative rounded-lg p-6 text-center transition-all duration-200 {formDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} {isDragOver && !formDisabled ? 'bg-primary/20 border-primary' : 'bg-base-200 border-base-content/30'}"
+							class="relative rounded-lg p-6 text-center transition-all duration-200 {formDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} bg-base-200 border-base-content/30"
 							style="border: 2px dashed;"
-							ondrop={(e) => !formDisabled && handleDrop(e)}
-							ondragover={(e) => !formDisabled && handleDragOver(e)}
-							ondragenter={(e) => !formDisabled && handleDragEnter(e)}
-							ondragleave={(e) => !formDisabled && handleDragLeave(e)}
 							onclick={() => !formDisabled && openFilePicker()}
 							role="button"
 							tabindex={formDisabled ? -1 : 0}
 							onkeydown={(e) => !formDisabled && e.key === 'Enter' && openFilePicker()}
 						>
-							{#if isDragOver}
-								<div class="pointer-events-none">
-									<svg class="w-12 h-12 mx-auto mb-3 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-									</svg>
-									<p class="font-mono text-sm text-primary">
-										Drop files here
-									</p>
-								</div>
-							{:else}
-								<svg class="w-10 h-10 mx-auto mb-2 text-base-content/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-								</svg>
-								<p class="font-mono text-sm text-base-content/70">
-									Drop files here or click to browse
-								</p>
-								<p class="font-mono text-xs mt-1 text-base-content/50">
-									Images, PDFs, text files supported
-								</p>
-							{/if}
+							<svg class="w-10 h-10 mx-auto mb-2 text-base-content/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+							</svg>
+							<p class="font-mono text-sm text-base-content/70">
+								Drop files anywhere or click to browse
+							</p>
+							<p class="font-mono text-xs mt-1 text-base-content/50">
+								Images, PDFs, text files supported
+							</p>
 						</div>
 
 						<!-- Attached Files List -->

@@ -811,13 +811,21 @@
 			collapsedSubsections = new Map(collapsedSubsections);
 		}
 
-		// Also expand the standalone group within the appropriate subsection
+		// Also expand groups within the appropriate subsection
 		// (expandedEpicsByProject is not persisted, so always apply defaults)
 		if (!expandedEpicsByProject.has(project)) {
 			const epicExpanded = new Set<string>();
 			if (hasActiveSessions) {
 				// Expand standalone tasks in Active Tasks section
 				epicExpanded.add("sessions-standalone");
+				// Also expand epic groups that have active sessions
+				// so agents are always visible (not hidden behind collapsed headers)
+				const sessionsByEpic = getSessionsByEpic(projectSessions);
+				for (const [epicId, epicSessions] of sessionsByEpic) {
+					if (epicId && epicSessions.length > 0) {
+						epicExpanded.add(`sessions-${epicId}`);
+					}
+				}
 			} else if (hasOpenTasks) {
 				// Expand standalone tasks in Open Tasks section
 				epicExpanded.add("tasks-standalone");

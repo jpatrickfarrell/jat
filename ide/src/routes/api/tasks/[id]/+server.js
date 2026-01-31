@@ -103,6 +103,12 @@ export async function PUT({ params, request }) {
 
 		// Update description if changed
 		if (updates.description !== undefined) {
+			if (typeof updates.description === 'string' && updates.description.length > 50_000) {
+				return json(
+					{ error: 'Description too long. Maximum is 50,000 characters.' },
+					{ status: 400 }
+				);
+			}
 			args.push(`--description ${shellEscape(updates.description)}`);
 		}
 
@@ -214,6 +220,11 @@ export async function PATCH({ params, request }) {
 			if (!validStatuses.includes(updates.status)) {
 				validationErrors.push(`status: Must be one of: ${validStatuses.join(', ')}`);
 			}
+		}
+
+		// Validate description length (if provided)
+		if (updates.description !== undefined && typeof updates.description === 'string' && updates.description.length > 50_000) {
+			validationErrors.push(`description: Too long (${updates.description.length} chars). Maximum is 50,000 characters.`);
 		}
 
 		// Note: Labels are not supported by bd update command (skip validation)

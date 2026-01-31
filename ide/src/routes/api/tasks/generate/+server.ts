@@ -95,7 +95,7 @@ function sanitizeTasks(raw: unknown[]): GeneratedTask[] {
 							.filter(Boolean)
 							.slice(0, 5)
 					: [],
-				description: String(item.description || '').trim(),
+				description: String(item.description || '').trim().slice(0, 50_000),
 				deps: Array.isArray(item.deps)
 					? (item.deps as unknown[])
 							.filter((d): d is string => typeof d === 'string')

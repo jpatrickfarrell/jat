@@ -328,6 +328,20 @@ export const AUTO_KILL = {
 } as const;
 
 // =============================================================================
+// TASK FIELD LIMITS
+// =============================================================================
+
+export const TASK_LIMITS = {
+	/**
+	 * Maximum length for task description field (in characters).
+	 * Prevents bd import failures caused by Go's bufio.Scanner 64KB line limit.
+	 * JSONL lines include all task fields, so description cap is set well below
+	 * the 64KB threshold to leave room for title, labels, metadata, etc.
+	 */
+	MAX_DESCRIPTION_LENGTH: 50_000
+} as const;
+
+// =============================================================================
 // HELPER TYPE EXPORTS
 // =============================================================================
 

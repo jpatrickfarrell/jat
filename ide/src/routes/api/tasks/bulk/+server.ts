@@ -286,6 +286,15 @@ async function createTask(
 		const title = task.title.trim();
 		const description = task.description?.trim() || '';
 		const type = normalizeType(task.type);
+
+		// Validate description length
+		if (description.length > 50_000) {
+			return {
+				title,
+				success: false,
+				error: `Description too long (${description.length} chars). Maximum is 50,000.`
+			};
+		}
 		const priority = task.priority ?? 2;
 		// Use task-level project if provided, otherwise use default
 		const project = task.project || defaultProject;

@@ -171,6 +171,17 @@ export async function POST({ request }) {
 			}
 		}
 
+		// Validate description length
+		if (body.description && typeof body.description === 'string' && body.description.length > 50_000) {
+			return json(
+				{
+					error: true,
+					message: `Description too long (${body.description.length} chars). Maximum is 50,000 characters.`
+				},
+				{ status: 400 }
+			);
+		}
+
 		// Sanitize inputs
 		const title = body.title.trim();
 		const description = body.description ? body.description.trim() : '';

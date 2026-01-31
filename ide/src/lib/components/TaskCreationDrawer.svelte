@@ -73,6 +73,8 @@
 		if (next >= 0 && next < creationTabs.length) {
 			activeMode = creationTabs[next].id;
 			drawerCreationMode.set(activeMode);
+			// Refocus drawer panel so subsequent arrow keys still fire
+			requestAnimationFrame(() => drawerPanel?.focus());
 		}
 	}
 
@@ -227,6 +229,7 @@
 	let successMessage = $state<string | null>(null);
 	let titleInput: HTMLInputElement;
 	let projectDropdownBtn: HTMLButtonElement;
+	let drawerPanel: HTMLDivElement;
 	let projectDropdownOpen = $state(false);
 	let projectDropdownIndex = $state(0);
 
@@ -1199,6 +1202,17 @@
 
 	// Handle keyboard shortcuts
 	function handleKeydown(event: KeyboardEvent) {
+		// Arrow keys navigate tabs when no text input is active, or focused input is empty
+		if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+			const el = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null;
+			const isTextInput = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA');
+			if (!isTextInput || !el.value) {
+				event.preventDefault();
+				navigateTab(event.key === 'ArrowLeft' ? -1 : 1);
+				return;
+			}
+		}
+
 		// Alt + P = Focus/open project dropdown
 		if (event.altKey && event.key.toLowerCase() === 'p') {
 			event.preventDefault();
@@ -1243,7 +1257,9 @@
 		<!-- Drawer Panel (fixed height, header/footer sticky, content scrolls) - Industrial -->
 		<!-- Entire drawer is a drop zone to prevent browser navigation on missed drops -->
 		<div
-			class="h-full w-full max-w-2xl flex flex-col shadow-2xl bg-base-300 border-l border-base-content/30 relative"
+			bind:this={drawerPanel}
+			tabindex="-1"
+			class="h-full w-full max-w-2xl flex flex-col shadow-2xl bg-base-300 border-l border-base-content/30 relative outline-none"
 			role="dialog"
 			aria-labelledby="drawer-title"
 			onkeydown={handleKeydown}
@@ -1434,12 +1450,6 @@
 								bind:this={titleInput}
 								bind:value={formData.title}
 								onpaste={handleTitlePaste}
-								onkeydown={(e) => {
-									if (!formData.title && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-										e.preventDefault();
-										navigateTab(e.key === 'ArrowLeft' ? -1 : 1);
-									}
-								}}
 								disabled={formDisabled || isSubmitting}
 								required
 								autofocus={isOpen && !projectSelectionRequired}

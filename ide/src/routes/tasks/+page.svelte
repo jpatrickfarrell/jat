@@ -842,6 +842,16 @@
 	onMount(() => {
 		loadCollapseState();
 		fetchAllData();
+
+		// Auto-open drawer for new users from /setup
+		const params = new URL(window.location.href).searchParams;
+		if (params.get('welcome') === 'true') {
+			const project = params.get('project') || undefined;
+			openTaskDrawer(project);
+			// Clean URL without triggering navigation
+			history.replaceState({}, '', '/tasks');
+		}
+
 		pollInterval = setInterval(() => {
 			// Skip fetch when page is hidden to avoid Content-Length mismatch errors
 			if (document.visibilityState === 'hidden') return;

@@ -117,7 +117,7 @@
 	}
 
 	function handleCreateFirstTask() {
-		goto('/tasks/create?welcome=true', { replaceState: true });
+		goto(`/tasks?welcome=true${firstProject ? `&project=${encodeURIComponent(firstProject)}` : ''}`, { replaceState: true });
 	}
 
 	function handleGoToSettings() {

@@ -62,6 +62,23 @@ export const GET: RequestHandler = async ({ url }) => {
 		// Get HEAD commit hash
 		const headHash = log.latest?.hash || null;
 
+		// Find merge-base with default branch (for branch divergence indicator)
+		let mergeBaseHash: string | null = null;
+		let defaultBranch: string | null = null;
+
+		if (currentBranch && currentBranch !== 'master' && currentBranch !== 'main') {
+			for (const candidate of ['master', 'main']) {
+				try {
+					const result = await git.raw(['merge-base', 'HEAD', candidate]);
+					mergeBaseHash = result.trim();
+					defaultBranch = candidate;
+					break;
+				} catch {
+					// Branch doesn't exist, try next
+				}
+			}
+		}
+
 		return json({
 			project: projectName,
 			projectPath,
@@ -70,6 +87,8 @@ export const GET: RequestHandler = async ({ url }) => {
 			tracking,
 			headHash,
 			remoteHeadHash,
+			mergeBaseHash,
+			defaultBranch,
 			unpushedCount: unpushedHashes.size,
 			commits: log.all.map((commit) => ({
 				hash: commit.hash,

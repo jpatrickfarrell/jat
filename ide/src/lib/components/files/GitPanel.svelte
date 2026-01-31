@@ -96,6 +96,8 @@
 	let isLoadingTimeline = $state(false);
 	let timelineError = $state<string | null>(null);
 	let unpushedCount = $state(0);
+	let mergeBaseHash = $state<string | null>(null);
+	let defaultBranch = $state<string | null>(null);
 
 	// UI state
 	let isLoading = $state(true);
@@ -551,6 +553,8 @@
 			const data = await response.json();
 			commits = data.commits || [];
 			unpushedCount = data.unpushedCount || 0;
+			mergeBaseHash = data.mergeBaseHash || null;
+			defaultBranch = data.defaultBranch || null;
 		} catch (err) {
 			timelineError = err instanceof Error ? err.message : 'Failed to fetch commits';
 			console.error('[GitPanel] Error fetching timeline:', err);
@@ -1546,6 +1550,14 @@
 						<div class="commit-list">
 							{#each commits as commit, index}
 								{@const firstLine = commit.message.split('\n')[0]}
+								{@const isMergeBase = mergeBaseHash && commit.hash === mergeBaseHash && index > 0}
+								{#if isMergeBase}
+									<div class="branch-divider">
+										<div class="branch-divider-line"></div>
+										<span class="branch-divider-label">branched from {defaultBranch}</span>
+										<div class="branch-divider-line"></div>
+									</div>
+								{/if}
 								<button
 									class="commit-item"
 									class:is-head={commit.isHead}
@@ -2146,6 +2158,30 @@
 	/* Unpushed section of line */
 	.commit-line.unpushed {
 		background: oklch(0.55 0.12 75);
+	}
+
+	/* Branch divergence divider */
+	.branch-divider {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0.25rem;
+		margin: 0.25rem 0;
+	}
+
+	.branch-divider-line {
+		flex: 1;
+		height: 1px;
+		background: oklch(0.35 0.02 250);
+	}
+
+	.branch-divider-label {
+		font-size: 0.625rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: oklch(0.50 0.02 250);
+		white-space: nowrap;
 	}
 
 	.commit-details {

@@ -93,6 +93,9 @@
 	// Project colors
 	let projectColors = $state<Record<string, string>>({});
 
+	// Task → integration source mapping (lazy loaded)
+	let taskIntegrations = $state<Record<string, { sourceId: string; sourceType: string; sourceName: string; sourceEnabled: boolean }>>({});
+
 	// Project notes
 	let projectNotes = $state<Record<string, string>>({});
 	let projectNotesHeight = $state<Record<string, number>>({});
@@ -691,6 +694,28 @@
 		}
 	}
 
+	async function fetchTaskIntegrations() {
+		try {
+			// Gather IDs from both open tasks and active agent tasks
+			const idSet = new Set<string>();
+			for (const t of allTasks) idSet.add(t.id);
+			for (const [, t] of agentTasks) idSet.add(t.id);
+			const ids = [...idSet];
+			if (ids.length === 0) {
+				taskIntegrations = {};
+				return;
+			}
+			const response = await fetch(
+				`/api/tasks/integrations?taskIds=${ids.join(",")}`,
+			);
+			if (!response.ok) return;
+			const data = await response.json();
+			taskIntegrations = data.integrations || {};
+		} catch {
+			// Silent fail - integrations are supplemental
+		}
+	}
+
 	async function fetchRecoverableSessions() {
 		try {
 			const response = await fetch("/api/recovery");
@@ -898,7 +923,7 @@
 		]);
 	}
 
-	// Non-critical data (colors, notes, project order, recovery, completed tasks)
+	// Non-critical data (colors, notes, project order, recovery, completed tasks, integrations)
 	async function fetchSupplementalData() {
 		await Promise.all([
 			fetchProjectOrder(),
@@ -906,6 +931,7 @@
 			fetchProjectNotes(),
 			fetchCompletedTasks(),
 			fetchCompletedMemory(),
+			fetchTaskIntegrations(),
 		]);
 	}
 
@@ -1548,6 +1574,7 @@
 													{agentSessionInfo}
 													{agentProjects}
 													{projectColors}
+													{taskIntegrations}
 													onKillSession={killSession}
 													onAttachSession={attachSession}
 													onViewTask={(taskId) =>
@@ -1623,6 +1650,7 @@
 													{agentSessionInfo}
 													{agentProjects}
 													{projectColors}
+													{taskIntegrations}
 													onKillSession={killSession}
 													onAttachSession={attachSession}
 													onViewTask={(taskId) =>
@@ -1698,6 +1726,7 @@
 								<TasksPaused
 									sessions={projectPausedSessions}
 									{projectColors}
+									{taskIntegrations}
 									onResumeSession={resumeSession}
 									onRestartTask={restartTask}
 									onUnassignTask={unassignTask}
@@ -1768,6 +1797,7 @@
 								<TasksPaused
 									sessions={projectChatSessions}
 									{projectColors}
+									{taskIntegrations}
 									onResumeSession={resumeSession}
 									onRestartTask={restartTask}
 									onUnassignTask={unassignTask}
@@ -1941,6 +1971,7 @@
 													error={null}
 													{spawningTaskId}
 													{projectColors}
+													{taskIntegrations}
 													highlightedTaskIds={isSwarmHovered || isSwarmSpawning ? launchableIds : new Set()}
 													onSpawnTask={spawnTask as any}
 													onRetry={fetchTasks}

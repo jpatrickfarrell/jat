@@ -6,6 +6,7 @@
 	import WorkingAgentBadge from '$lib/components/WorkingAgentBadge.svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
+	import { getIntegrationIcon } from '$lib/config/integrationIcons';
 
 	/** Dependency task info */
 	interface DepTask {
@@ -79,9 +80,14 @@
 		harness?: string;
 		/** Callback when user clicks the harness icon in the avatar slot (agentPill variant, no agent assigned) */
 		onHarnessClick?: (event: MouseEvent) => void;
+		/** Integration source info (if task was created by an integration) */
+		integration?: { sourceId: string; sourceType: string; sourceName: string } | null;
 	}
 
-	let { task, size = 'sm', showStatus = true, showType = true, showCopyIcon = false, showAssignee = false, minimal = false, color, onOpenTask, onAgentClick, dropdownAlign = 'start', copyOnly = false, blockedBy = [], blocks = [], showDependencies = false, showDepGraph = true, showUnblocksCount = false, statusDotColor, variant = 'default', agentName, animate = false, resumed = false, attached = false, onClick, exiting = false, harness, onHarnessClick }: Props = $props();
+	let { task, size = 'sm', showStatus = true, showType = true, showCopyIcon = false, showAssignee = false, minimal = false, color, onOpenTask, onAgentClick, dropdownAlign = 'start', copyOnly = false, blockedBy = [], blocks = [], showDependencies = false, showDepGraph = true, showUnblocksCount = false, statusDotColor, variant = 'default', agentName, animate = false, resumed = false, attached = false, onClick, exiting = false, harness, onHarnessClick, integration = null }: Props = $props();
+
+	// Integration icon (derived from type)
+	const integrationIcon = $derived(integration ? getIntegrationIcon(integration.sourceType) : null);
 
 	// Extract project prefix from task ID (e.g., "jat-abc" -> "jat")
 	const projectPrefix = $derived(task.id.split('-')[0] || task.id);
@@ -503,6 +509,13 @@
 					<ProviderLogo agentId={harness} size={12} />
 				</span>
 			{/if}
+			{#if integrationIcon && integration}
+				<span class="inline-flex scale-75" title="From {integration.sourceType}: {integration.sourceName}">
+					<svg class="w-3.5 h-3.5" viewBox={integrationIcon.viewBox} fill={integrationIcon.fill ? 'currentColor' : 'none'} stroke={integrationIcon.fill ? 'none' : 'currentColor'} stroke-width="1.5" style="color: {integrationIcon.color};">
+						<path d={integrationIcon.svg} />
+					</svg>
+				</span>
+			{/if}
 			{#if taskAgeInfo.label}
 				<span
 					class="text-[10px] font-mono font-semibold"
@@ -587,6 +600,13 @@
 			{:else if harness}
 				<span class="inline-flex scale-70 mt-0.25" title={harness}>
 					<ProviderLogo agentId={harness} size={12} />
+				</span>
+			{/if}
+			{#if integrationIcon && integration}
+				<span class="inline-flex scale-70 mt-0.25" title="From {integration.sourceType}: {integration.sourceName}">
+					<svg class="w-3.5 h-3.5" viewBox={integrationIcon.viewBox} fill={integrationIcon.fill ? 'currentColor' : 'none'} stroke={integrationIcon.fill ? 'none' : 'currentColor'} stroke-width="1.5" style="color: {integrationIcon.color};">
+						<path d={integrationIcon.svg} />
+					</svg>
 				</span>
 			{/if}
 			{#if taskAgeInfo.label}
@@ -742,6 +762,13 @@
 				{:else if harness}
 					<span class="inline-flex scale-70 ml-1" title={harness}>
 						<ProviderLogo agentId={harness} size={12} />
+					</span>
+				{/if}
+				{#if integrationIcon && integration}
+					<span class="inline-flex scale-70 ml-1" title="From {integration.sourceType}: {integration.sourceName}">
+						<svg class="w-3.5 h-3.5" viewBox={integrationIcon.viewBox} fill={integrationIcon.fill ? 'currentColor' : 'none'} stroke={integrationIcon.fill ? 'none' : 'currentColor'} stroke-width="1.5" style="color: {integrationIcon.color};">
+							<path d={integrationIcon.svg} />
+						</svg>
 					</span>
 				{/if}
 				{#if taskAgeInfo.label}

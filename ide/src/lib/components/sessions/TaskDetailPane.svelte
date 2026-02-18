@@ -7,6 +7,7 @@
 	 */
 
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
+	import { getIntegrationIcon, type IntegrationIconDef } from '$lib/config/integrationIcons';
 
 	// Types
 	interface AgentTask {
@@ -62,7 +63,8 @@
 		loading = false,
 		height = 300,
 		onViewTask,
-		onSaveNotes
+		onSaveNotes,
+		integration = null
 	}: {
 		task: AgentTask;
 		details: ExtendedTaskDetails | null;
@@ -70,7 +72,11 @@
 		height?: number;
 		onViewTask?: (taskId: string) => void;
 		onSaveNotes?: (taskId: string, notes: string) => Promise<void>;
+		integration?: { sourceId: string; sourceType: string; sourceName: string; sourceEnabled: boolean } | null;
 	} = $props();
+
+	// Integration icon
+	const integrationIcon = $derived(integration ? getIntegrationIcon(integration.sourceType) : null);
 
 	// Status colors for badges
 	const statusColors: Record<string, string> = {
@@ -257,6 +263,25 @@
 								{/each}
 							</div>
 						{/if}
+					</div>
+				</div>
+			{/if}
+
+			<!-- Integration Source -->
+			{#if integration && integrationIcon}
+				<div class="task-panel-section">
+					<span class="task-panel-label">Integration</span>
+					<div class="flex items-center gap-2 mt-1 px-1 py-1.5 rounded" style="background: oklch(0.18 0.02 250); border: 1px solid oklch(0.25 0.02 250);">
+						<svg class="w-5 h-5 shrink-0" viewBox={integrationIcon.viewBox} fill={integrationIcon.fill ? 'currentColor' : 'none'} stroke={integrationIcon.fill ? 'none' : 'currentColor'} stroke-width="1.5" style="color: {integrationIcon.color};">
+							<path d={integrationIcon.svg} />
+						</svg>
+						<div class="flex flex-col min-w-0">
+							<span class="text-xs font-semibold capitalize" style="color: {integrationIcon.color};">{integration.sourceType}</span>
+							<span class="text-[10px] opacity-60 truncate" title={integration.sourceName}>{integration.sourceName}</span>
+						</div>
+						<span class="ml-auto text-[9px] px-1.5 py-0.5 rounded-full shrink-0" style="background: {integration.sourceEnabled ? 'oklch(0.35 0.12 145 / 0.3)' : 'oklch(0.35 0.02 250 / 0.3)'}; color: {integration.sourceEnabled ? 'oklch(0.70 0.15 145)' : 'oklch(0.55 0.02 250)'};">
+							{integration.sourceEnabled ? 'Active' : 'Disabled'}
+						</span>
 					</div>
 				</div>
 			{/if}

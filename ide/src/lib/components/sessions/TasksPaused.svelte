@@ -28,6 +28,7 @@
 	let {
 		sessions = [],
 		projectColors = {},
+		taskIntegrations = {},
 		onResumeSession,
 		onRestartTask,
 		onUnassignTask,
@@ -35,6 +36,7 @@
 	}: {
 		sessions: PausedSession[];
 		projectColors: Record<string, string>;
+		taskIntegrations?: Record<string, { sourceId: string; sourceType: string; sourceName: string; sourceEnabled: boolean }>;
 		onResumeSession?: (agentName: string, sessionId: string) => Promise<void>;
 		onRestartTask?: (taskId: string) => Promise<void>;
 		onUnassignTask?: (taskId: string, agentName: string) => Promise<void>;
@@ -121,6 +123,7 @@
 										size="sm"
 										variant="agentPill"
 										agentName={session.agentName}
+										integration={taskIntegrations[session.taskId] || null}
 										onClick={() => onViewTask?.(session.taskId)}
 									/>
 									<div class="text-column">

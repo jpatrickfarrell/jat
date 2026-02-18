@@ -94,6 +94,7 @@
 		agentSessionInfo = new Map(),
 		agentProjects = new Map(),
 		projectColors = {},
+		taskIntegrations = {},
 		onKillSession,
 		onAttachSession,
 		onViewTask
@@ -103,6 +104,7 @@
 		agentSessionInfo: Map<string, AgentSessionInfo>;
 		agentProjects: Map<string, string>;
 		projectColors: Record<string, string>;
+		taskIntegrations?: Record<string, { sourceId: string; sourceType: string; sourceName: string; sourceEnabled: boolean }>;
 		onKillSession?: (sessionName: string) => Promise<void>;
 		onAttachSession?: (sessionName: string) => Promise<void>;
 		onViewTask?: (taskId: string) => void;
@@ -1046,6 +1048,7 @@
 												agentName={sessionAgentName}
 												showType={true}
 												{statusDotColor}
+												integration={taskIntegrations[sessionTask.id] || null}
 												animate={isNew && hadTaskOnEntry}
 												resumed={session.resumed}
 												attached={session.attached}
@@ -1475,6 +1478,7 @@
 											}}
 											onUploadAttachment={handleUploadAttachment}
 											onRemoveAttachment={handleRemoveAttachment}
+											integration={taskIntegrations[expandedTask.id] || null}
 										/>
 									{/if}
 								</div>

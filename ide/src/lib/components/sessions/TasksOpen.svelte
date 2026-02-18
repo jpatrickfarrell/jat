@@ -61,6 +61,7 @@
 		error = null,
 		spawningTaskId = null,
 		projectColors = {},
+		taskIntegrations = {},
 		showHeader = true,
 		highlightedTaskIds = new Set<string>(),
 		onSpawnTask = () => {},
@@ -73,6 +74,7 @@
 		error: string | null;
 		spawningTaskId: string | null;
 		projectColors: Record<string, string>;
+		taskIntegrations?: Record<string, { sourceId: string; sourceType: string; sourceName: string; sourceEnabled: boolean }>;
 		showHeader?: boolean;
 		highlightedTaskIds?: Set<string>;
 		onSpawnTask: (task: Task, selection?: AgentSelection) => void;
@@ -1252,6 +1254,7 @@
 											{task}
 											size="sm"
 											variant="agentPill"
+											integration={taskIntegrations[task.id] || null}
 											onClick={() => !isExiting && handleRowClick(task.id)}
 											animate={isNew}
 											{harness}

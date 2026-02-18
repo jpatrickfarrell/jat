@@ -732,14 +732,32 @@
 		return groupTasksByDay(tasks);
 	}
 
-	/** Initial fetch: load today's completed tasks */
+	/** Initial fetch: load today's completed tasks, auto-lookback if empty */
 	async function fetchCompletedTasks() {
 		completedLoading = true;
 		completedNoMoreDays = false;
 		completedDaysSearched = 0;
 		try {
+			// Try today first
 			completedDayGroups = await fetchCompletedDay(0);
 			completedDaysSearched = 1;
+
+			// If today is empty, automatically look back up to 14 days
+			// to find the most recent completed tasks
+			if (completedDayGroups.length === 0) {
+				for (let attempt = 1; attempt <= 14; attempt++) {
+					const dayGroups = await fetchCompletedDay(attempt);
+					if (dayGroups.length > 0) {
+						completedDayGroups = dayGroups;
+						completedDaysSearched = attempt + 1;
+						break;
+					}
+				}
+				if (completedDayGroups.length === 0) {
+					completedDaysSearched += 14;
+					completedNoMoreDays = true;
+				}
+			}
 		} catch {
 			// Silent fail
 		} finally {
@@ -2081,7 +2099,7 @@
 
 									{#if completedDayGroups.length === 0}
 										<div class="completed-empty">
-											No completed tasks yet
+											No completed tasks in the last 2 weeks
 										</div>
 									{/if}
 								{/if}

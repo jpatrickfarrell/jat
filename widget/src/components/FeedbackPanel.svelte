@@ -11,9 +11,23 @@
 
   let {
     endpoint,
+    project,
+    userId = '',
+    userEmail = '',
+    userName = '',
+    userRole = '',
+    orgId = '',
+    orgName = '',
     onclose,
   }: {
     endpoint: string;
+    project: string;
+    userId?: string;
+    userEmail?: string;
+    userName?: string;
+    userRole?: string;
+    orgId?: string;
+    orgName?: string;
     onclose: () => void;
   } = $props();
 
@@ -28,6 +42,7 @@
 
   let submitting = $state(false);
   let capturing = $state(false);
+  let picking = $state(false);
 
   let toastMessage = $state('');
   let toastType = $state<'success' | 'error'>('success');
@@ -45,8 +60,10 @@
     try {
       const dataUrl = await captureViewport();
       screenshots = [...screenshots, dataUrl];
+      showToast(`Screenshot captured (${screenshots.length})`, 'success');
     } catch (err) {
-      showToast('Screenshot failed', 'error');
+      console.error('[jat-feedback] Screenshot failed:', err);
+      showToast('Screenshot failed: ' + (err instanceof Error ? err.message : 'unknown error'), 'error');
     } finally {
       capturing = false;
     }
@@ -57,8 +74,11 @@
   }
 
   function handlePickElement() {
+    picking = true;
     startElementPicker((data) => {
       selectedElements = [...selectedElements, data];
+      picking = false;
+      showToast(`Element captured: <${data.tagName.toLowerCase()}>`, 'success');
     });
   }
 
@@ -75,17 +95,33 @@
     // Refresh logs right before submit
     refreshLogs();
 
+    // Build metadata with reporter/org context if available
+    const metadata: FeedbackReport['metadata'] = {};
+    if (userId || userEmail || userName || userRole) {
+      metadata.reporter = {};
+      if (userId) metadata.reporter.userId = userId;
+      if (userEmail) metadata.reporter.email = userEmail;
+      if (userName) metadata.reporter.name = userName;
+      if (userRole) metadata.reporter.role = userRole;
+    }
+    if (orgId || orgName) {
+      metadata.organization = {};
+      if (orgId) metadata.organization.id = orgId;
+      if (orgName) metadata.organization.name = orgName;
+    }
+
     const report: FeedbackReport = {
       title: title.trim(),
       description: description.trim(),
       type,
       priority,
+      project: project || '',
       page_url: window.location.href,
       user_agent: navigator.userAgent,
       console_logs: consoleLogs.length > 0 ? consoleLogs : null,
       selected_elements: selectedElements.length > 0 ? selectedElements : null,
       screenshots: screenshots.length > 0 ? screenshots : null,
-      metadata: null,
+      metadata: Object.keys(metadata).length > 0 ? metadata : null,
     };
 
     try {
@@ -136,7 +172,7 @@
   ] as const;
 
   function attachmentCount(): number {
-    return screenshots.length + selectedElements.length + (consoleLogs.length > 0 ? 1 : 0);
+    return screenshots.length + selectedElements.length;
   }
 </script>
 
@@ -179,17 +215,27 @@
     <div class="tools">
       <ScreenshotPreview {screenshots} {capturing} oncapture={handleCapture} onremove={handleRemoveScreenshot} />
 
-      <button type="button" class="tool-btn" onclick={handlePickElement}>
+      <button type="button" class="tool-btn" onclick={handlePickElement} disabled={picking}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
           <path d="M7 2L7 22M17 2V22M2 7H22M2 17H22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
         </svg>
-        Pick Element
+        {#if picking}
+          Click an element...
+        {:else}
+          Pick Element{#if selectedElements.length > 0} <span class="tool-count">{selectedElements.length}</span>{/if}
+        {/if}
       </button>
     </div>
 
     {#if selectedElements.length > 0}
-      <div class="attach-badge">
-        {selectedElements.length} element{selectedElements.length > 1 ? 's' : ''} selected
+      <div class="elements-list">
+        {#each selectedElements as el, i}
+          <div class="element-item">
+            <span class="element-tag">&lt;{el.tagName.toLowerCase()}&gt;</span>
+            <span class="element-text">{el.textContent?.substring(0, 40) || el.selector}</span>
+            <button class="element-remove" onclick={() => { selectedElements = selectedElements.filter((_, idx) => idx !== i); }} aria-label="Remove">&times;</button>
+          </div>
+        {/each}
       </div>
     {/if}
 
@@ -330,14 +376,60 @@
   }
   .tool-btn:hover { background: #374151; }
 
-  .attach-badge {
-    padding: 5px 10px;
+  .tool-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: #3b82f6;
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    margin-left: 2px;
+  }
+  .elements-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .element-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
     background: #1e3a5f;
     border: 1px solid #2563eb40;
     border-radius: 5px;
     font-size: 11px;
     color: #93c5fd;
   }
+  .element-tag {
+    font-family: monospace;
+    font-weight: 600;
+    color: #60a5fa;
+    flex-shrink: 0;
+  }
+  .element-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #9ca3af;
+  }
+  .element-remove {
+    background: none;
+    border: none;
+    color: #6b7280;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 2px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .element-remove:hover { color: #ef4444; }
   .attach-summary {
     font-size: 11px;
     color: #6b7280;

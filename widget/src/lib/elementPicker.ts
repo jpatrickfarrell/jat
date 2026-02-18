@@ -71,6 +71,8 @@ function handleClick(event: MouseEvent) {
   const target = event.target as HTMLElement;
   const rect = target.getBoundingClientRect();
 
+  // Save callback before stopElementPicker() nulls it
+  const callback = onSelect;
   stopElementPicker();
 
   const elementData: ElementData = {
@@ -99,7 +101,7 @@ function handleClick(event: MouseEvent) {
     url: window.location.href,
   };
 
-  onSelect?.(elementData);
+  callback?.(elementData);
 }
 
 function handleEscape(event: KeyboardEvent) {

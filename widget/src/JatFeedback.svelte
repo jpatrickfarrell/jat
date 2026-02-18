@@ -5,6 +5,7 @@
   import type { WidgetConfig } from './lib/types';
   import { DEFAULT_CONFIG } from './lib/types';
   import { startConsoleCapture, stopConsoleCapture } from './lib/consoleCapture';
+  import { isElementPickerActive } from './lib/elementPicker';
   import { startRetryLoop, stopRetryLoop } from './lib/queue';
   import FeedbackButton from './components/FeedbackButton.svelte';
   import FeedbackPanel from './components/FeedbackPanel.svelte';
@@ -12,17 +13,46 @@
   // Custom element attributes
   let {
     endpoint = '',
+    project = '',
     position = 'bottom-right',
     theme = 'dark',
     buttoncolor = '#3b82f6',
+    'user-id': userId = '',
+    'user-email': userEmail = '',
+    'user-name': userName = '',
+    'user-role': userRole = '',
+    'org-id': orgId = '',
+    'org-name': orgName = '',
   }: {
     endpoint: string;
+    project: string;
     position: string;
     theme: string;
     buttoncolor: string;
+    'user-id': string;
+    'user-email': string;
+    'user-name': string;
+    'user-role': string;
+    'org-id': string;
+    'org-name': string;
   } = $props();
 
   let open = $state(false);
+  let pickerHidden = $state(false);
+
+  // Poll element picker state to hide/show panel
+  let pickerPollInterval: ReturnType<typeof setInterval> | null = null;
+
+  function startPickerPoll() {
+    pickerPollInterval = setInterval(() => {
+      const active = isElementPickerActive();
+      if (active && !pickerHidden) {
+        pickerHidden = true;
+      } else if (!active && pickerHidden) {
+        pickerHidden = false;
+      }
+    }, 100);
+  }
 
   let config = $derived<WidgetConfig>({
     ...DEFAULT_CONFIG,
@@ -59,18 +89,25 @@
       startConsoleCapture(config.maxConsoleLogs);
     }
     startRetryLoop();
+    startPickerPoll();
+
+    // Listen for external open requests (e.g. host app's "Report Bug" button)
+    const handleOpen = () => { open = true; };
+    window.addEventListener('jat-feedback:open', handleOpen);
+    return () => window.removeEventListener('jat-feedback:open', handleOpen);
   });
 
   onDestroy(() => {
     stopConsoleCapture();
     stopRetryLoop();
+    if (pickerPollInterval) clearInterval(pickerPollInterval);
   });
 </script>
 
-<div class="jat-feedback-root" style="{positionStyles[config.position] || positionStyles['bottom-right']}; --jat-btn-color: {config.buttonColor};">
+<div class="jat-feedback-root" style="{positionStyles[config.position] || positionStyles['bottom-right']}; --jat-btn-color: {config.buttonColor}; {pickerHidden ? 'display: none;' : ''}">
   {#if open && config.endpoint}
     <div class="jat-feedback-panel" style="{panelPositionStyles[config.position] || panelPositionStyles['bottom-right']}">
-      <FeedbackPanel endpoint={config.endpoint} onclose={close} />
+      <FeedbackPanel endpoint={config.endpoint} {project} {userId} {userEmail} {userName} {userRole} {orgId} {orgName} onclose={close} />
     </div>
   {:else if open && !config.endpoint}
     <div class="jat-feedback-panel" style="{panelPositionStyles[config.position] || panelPositionStyles['bottom-right']}">

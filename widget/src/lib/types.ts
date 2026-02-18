@@ -33,17 +33,34 @@ export interface ElementData {
   url: string;
 }
 
+export interface FeedbackReporter {
+  userId?: string;
+  email?: string;
+  name?: string;
+  role?: string;
+}
+
+export interface FeedbackOrganization {
+  id?: string;
+  name?: string;
+}
+
 export interface FeedbackReport {
   title: string;
   description: string;
   type: 'bug' | 'enhancement' | 'other';
   priority: 'low' | 'medium' | 'high' | 'critical';
+  project: string;
   page_url: string;
   user_agent: string;
   console_logs: ConsoleLogEntry[] | null;
   selected_elements: ElementData[] | null;
   screenshots: string[] | null;
-  metadata: Record<string, unknown> | null;
+  metadata: {
+    reporter?: FeedbackReporter;
+    organization?: FeedbackOrganization;
+    [key: string]: unknown;
+  } | null;
 }
 
 export interface WidgetConfig {

@@ -206,8 +206,8 @@ export const NODE_TYPE_META: Record<NodeType, NodeTypeMeta> = {
 		color: 'oklch(0.72 0.17 220)',
 		bgColor: 'oklch(0.72 0.17 220 / 0.08)',
 		portColor: 'oklch(0.72 0.17 220)',
-		helpText: 'Spawns a new agent session for an existing task or creates a new task. The agent works independently.',
-		defaultConfig: { taskTitle: '', model: 'sonnet' }
+		helpText: 'Spawns a new agent session for an existing task or creates a new task. Agent and model are selected via routing rules or manual override.',
+		defaultConfig: { taskTitle: '' }
 	},
 
 	action_browser: {

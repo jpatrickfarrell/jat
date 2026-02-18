@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { ActionCreateTaskConfig } from '$lib/types/workflow';
 	import { TASK_TYPES, PRIORITY_OPTIONS } from '$lib/config/workflowNodes';
 
@@ -11,6 +12,15 @@
 	} = $props();
 
 	let showHelp = $state(false);
+	let projects = $state<string[]>([]);
+
+	onMount(async () => {
+		try {
+			const res = await fetch('/api/projects?visible=true');
+			const data = await res.json();
+			projects = (data.projects || []).map((p: { name: string }) => p.name);
+		} catch { /* ignore */ }
+	});
 
 	function update(patch: Partial<ActionCreateTaskConfig>) {
 		config = { ...config, ...patch };
@@ -137,13 +147,16 @@
 			<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Project</span>
 			<span class="label-text-alt" style="color: oklch(0.55 0.02 250)">Optional</span>
 		</label>
-		<input
-			type="text"
-			class="input input-sm input-bordered w-full"
+		<select
+			class="select select-sm select-bordered w-full"
 			style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"
 			value={config.project || ''}
-			oninput={(e) => update({ project: e.currentTarget.value || undefined })}
-			placeholder="Target project"
-		/>
+			onchange={(e) => update({ project: e.currentTarget.value || undefined })}
+		>
+			<option value="">Select project</option>
+			{#each projects as proj}
+				<option value={proj}>{proj}</option>
+			{/each}
+		</select>
 	</div>
 </div>

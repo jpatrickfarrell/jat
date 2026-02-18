@@ -1,12 +1,15 @@
 /**
  * Task Integration Lookup API
  *
- * GET /api/tasks/integrations?taskIds=id1,id2,...
+ * GET /api/tasks/integrations?taskIds=id1,id2,...  (required)
  *
  * Looks up which integration source (if any) created each task by querying
  * the ingest database's ingested_items table, then joining with integrations.json.
+ * The taskIds parameter is required — the client sends only the IDs of
+ * tasks currently displayed on the page.
  *
- * Returns a map of taskId → { sourceId, sourceType, sourceName, sourceEnabled }
+ * Returns a map of taskId → { sourceId, sourceType, sourceName, sourceEnabled,
+ *   callback?, actions?, itemId?, referenceId? }
  */
 
 import { json } from '@sveltejs/kit';
@@ -27,18 +30,21 @@ function loadIntegrationsConfig() {
 	}
 }
 
+/**
+ * Extract the external reference ID from the ingest item_id.
+ * For supabase items, item_id is "supabase-{uuid}" → extract the UUID.
+ * For other types, return the item_id as-is.
+ */
+function extractReferenceId(/** @type {string} */ itemId, /** @type {string} */ sourceType) {
+	if (!itemId) return null;
+	if (sourceType === 'supabase' && itemId.startsWith('supabase-')) {
+		return itemId.slice('supabase-'.length);
+	}
+	return itemId;
+}
+
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ url }) {
-	const taskIdsParam = url.searchParams.get('taskIds');
-	if (!taskIdsParam) {
-		return json({ integrations: {} });
-	}
-
-	const taskIds = taskIdsParam.split(',').filter(Boolean).slice(0, 200);
-	if (taskIds.length === 0) {
-		return json({ integrations: {} });
-	}
-
 	if (!existsSync(INGEST_DB_PATH)) {
 		return json({ integrations: {} });
 	}
@@ -47,10 +53,15 @@ export async function GET({ url }) {
 	try {
 		db = new Database(INGEST_DB_PATH, { readonly: true });
 
-		// Query ingested_items for all matching task_ids
+		const taskIdsParam = url.searchParams.get('taskIds');
+		if (!taskIdsParam) return json({ integrations: {} });
+
+		const taskIds = taskIdsParam.split(',').filter(Boolean);
+		if (taskIds.length === 0) return json({ integrations: {} });
+
 		const placeholders = taskIds.map(() => '?').join(',');
 		const rows = db.prepare(
-			`SELECT task_id, source_id FROM ingested_items WHERE task_id IN (${placeholders})`
+			`SELECT task_id, source_id, item_id FROM ingested_items WHERE task_id IN (${placeholders})`
 		).all(...taskIds);
 
 		if (rows.length === 0) {
@@ -65,17 +76,40 @@ export async function GET({ url }) {
 			sourceMap.set(source.id, source);
 		}
 
-		// Build result map: taskId → integration info
-		/** @type {Record<string, { sourceId: string, sourceType: string, sourceName: string, sourceEnabled: boolean }>} */
+		// Build result map: taskId → integration info (enriched with callback/actions)
+		/** @type {Record<string, any>} */
 		const integrations = {};
 		for (const row of /** @type {any[]} */ (rows)) {
 			const source = sourceMap.get(row.source_id);
-			integrations[row.task_id] = {
+			const sourceType = source?.type || 'unknown';
+			const referenceId = extractReferenceId(/** @type {string} */ (row.item_id), /** @type {string} */ (sourceType));
+
+			/** @type {any} */
+			const entry = {
 				sourceId: row.source_id,
-				sourceType: source?.type || 'unknown',
+				sourceType,
 				sourceName: source ? (source.channel || source.feedUrl || source.chatId || source.id) : row.source_id,
-				sourceEnabled: source?.enabled ?? false
+				sourceEnabled: source?.enabled ?? false,
+				itemId: row.item_id || null,
+				referenceId
 			};
+
+			// Include callback config if present
+			if (source?.callback) {
+				entry.callback = source.callback;
+			}
+
+			// Include actions if present
+			if (source?.actions && Array.isArray(source.actions)) {
+				entry.actions = source.actions;
+			}
+
+			// Include projectUrl for link template resolution
+			if (source?.projectUrl) {
+				entry.projectUrl = source.projectUrl;
+			}
+
+			integrations[row.task_id] = entry;
 		}
 
 		return json({ integrations });

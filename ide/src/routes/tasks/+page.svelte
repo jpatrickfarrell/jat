@@ -696,18 +696,25 @@
 
 	async function fetchTaskIntegrations() {
 		try {
-			// Gather IDs from both open tasks and active agent tasks
-			const idSet = new Set<string>();
-			for (const t of allTasks) idSet.add(t.id);
-			for (const [, t] of agentTasks) idSet.add(t.id);
-			const ids = [...idSet];
-			if (ids.length === 0) {
-				taskIntegrations = {};
-				return;
+			// Only fetch integrations for the currently selected project's tasks
+			// (openTasks contains ALL tasks from ALL projects — sending them all
+			//  causes HTTP 431 when the URL exceeds header size limits)
+			const ids = new Set<string>();
+			const projectTasks = selectedProject
+				? tasksByProject.get(selectedProject) || []
+				: openTasks;
+			for (const t of projectTasks) ids.add(t.id);
+			for (const [, t] of agentTasks) {
+				if (!selectedProject || getProjectFromTaskId(t.id) === selectedProject) {
+					ids.add(t.id);
+				}
 			}
-			const response = await fetch(
-				`/api/tasks/integrations?taskIds=${ids.join(",")}`,
-			);
+			for (const day of completedDayGroups) {
+				for (const t of day.tasks) ids.add(t.id);
+			}
+			if (ids.size === 0) return;
+
+			const response = await fetch(`/api/tasks/integrations?taskIds=${[...ids].join(",")}`);
 			if (!response.ok) return;
 			const data = await response.json();
 			taskIntegrations = data.integrations || {};
@@ -923,7 +930,7 @@
 		]);
 	}
 
-	// Non-critical data (colors, notes, project order, recovery, completed tasks, integrations)
+	// Non-critical data (colors, notes, project order, recovery, completed tasks)
 	async function fetchSupplementalData() {
 		await Promise.all([
 			fetchProjectOrder(),
@@ -931,7 +938,6 @@
 			fetchProjectNotes(),
 			fetchCompletedTasks(),
 			fetchCompletedMemory(),
-			fetchTaskIntegrations(),
 		]);
 	}
 
@@ -942,6 +948,9 @@
 			fetchSupplementalData(),
 			fetchRecoverableSessions(),
 		]);
+		// Integrations depend on openTasks/agentTasks being populated,
+		// so fetch after critical data is loaded
+		fetchTaskIntegrations();
 	}
 
 	// Actions
@@ -1184,6 +1193,7 @@
 		selectedProject = project;
 		completedDayGroups = []; // Reset completed tasks for new project
 		fetchCompletedTasks(); // Re-fetch completed tasks for the new project
+		fetchTaskIntegrations(); // Re-fetch integrations for new project's tasks
 
 		const projectSessions = sessionsByProject.get(project) || [];
 		const projectTasks = tasksByProject.get(project) || [];
@@ -1279,6 +1289,7 @@
 		// Phase 2: Non-critical data after a short delay (reduces server contention)
 		setTimeout(() => {
 			fetchSupplementalData();
+			fetchTaskIntegrations(); // Needs openTasks populated from Phase 1
 		}, 1500);
 
 		// Phase 3: Recovery data — load after initial render, then poll every 30s

@@ -43,6 +43,8 @@
 		onsave?: (selection: { agentId: string | null; model: string | null }) => void;
 		/** Called when user cancels/closes */
 		oncancel?: () => void;
+		/** Called when agent or model selection changes (useful in compact/inline mode) */
+		onchange?: (selection: { agentId: string | null; model: string | null }) => void;
 		/** Show compact inline mode vs full dropdown */
 		compact?: boolean;
 	}
@@ -52,6 +54,7 @@
 		onselect = () => {},
 		onsave,
 		oncancel = () => {},
+		onchange,
 		compact = false
 	}: Props = $props();
 
@@ -229,12 +232,14 @@
 		if (selectedAgentId) {
 			void loadModelsForAgent(selectedAgentId);
 		}
+		onchange?.({ agentId: selectedAgentId, model: selectedModel });
 	}
 
 	function handleModelChange(event: Event) {
 		const target = event.target as HTMLSelectElement;
 		selectedModel = target.value || null;
 		useAutoSelection = false;
+		onchange?.({ agentId: selectedAgentId, model: selectedModel });
 	}
 
 	function handleResetToAuto() {
@@ -247,6 +252,7 @@
 			useAutoSelection = true;
 			modelSearchQuery = '';
 			void loadModelsForAgent(result.agentId);
+			onchange?.({ agentId: null, model: null });
 		}
 	}
 
@@ -297,6 +303,7 @@
 		showAgentDropdown = false;
 		highlightedAgentIndex = -1;
 		void loadModelsForAgent(program.id);
+		onchange?.({ agentId: program.id, model: selectedModel });
 	}
 
 	// Select model from dropdown
@@ -306,6 +313,7 @@
 		showModelDropdown = false;
 		modelSearchQuery = '';
 		highlightedModelIndex = -1;
+		onchange?.({ agentId: selectedAgentId, model: model.shortName });
 	}
 
 	// Open/close agent dropdown with keyboard reset

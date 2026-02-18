@@ -15,6 +15,7 @@
 	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
 	import SlideOpenButton from '$lib/components/SlideOpenButton.svelte';
 	import { getIntegrationIcon, type IntegrationIconDef } from '$lib/config/integrationIcons';
+	import type { IntegrationAction, CallbackLogEntry } from '$lib/types/integration';
 
 	// Types
 	interface AgentTask {
@@ -89,11 +90,148 @@
 		onRemoveLabel?: (taskId: string, label: string) => Promise<void>;
 		onUploadAttachment?: (taskId: string, file: File) => Promise<void>;
 		onRemoveAttachment?: (taskId: string, attachmentId: string) => Promise<void>;
-		integration?: { sourceId: string; sourceType: string; sourceName: string; sourceEnabled: boolean } | null;
+		integration?: {
+			sourceId: string;
+			sourceType: string;
+			sourceName: string;
+			sourceEnabled: boolean;
+			itemId?: string;
+			referenceId?: string;
+			projectUrl?: string;
+			callback?: {
+				url: string;
+				secretName: string;
+				events: string[];
+				statusMapping: Record<string, string>;
+				referenceTable: string;
+				referenceIdFrom: string;
+			};
+			actions?: IntegrationAction[];
+		} | null;
 	} = $props();
 
 	// Integration icon
 	const integrationIcon = $derived(integration ? getIntegrationIcon(integration.sourceType) : null);
+
+	// Whether the integration has interactive features (callback or actions)
+	const hasInteractiveIntegration = $derived(
+		integration && (integration.callback || (integration.actions && integration.actions.length > 0))
+	);
+
+	// Integration action state
+	let callbackLog = $state<CallbackLogEntry[]>([]);
+	let callbackLogLoading = $state(false);
+	let actionLoading = $state<string | null>(null);
+	let actionResult = $state<{ actionId: string; success: boolean; message: string } | null>(null);
+	let confirmAction = $state<IntegrationAction | null>(null);
+
+	// Fetch callback log when integration has callback
+	$effect(() => {
+		if (integration?.callback && task?.id) {
+			fetchCallbackLog();
+		}
+	});
+
+	// Map for action button icons (Lucide SVG paths)
+	const ACTION_ICONS: Record<string, string> = {
+		'refresh': 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
+		'check': 'M4.5 12.75l6 6 9-13.5',
+		'external-link': 'M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25',
+		'send': 'M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5',
+		'arrow-right': 'M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3'
+	};
+
+	function getMappedStatus(jatStatus: string): string | null {
+		if (!integration?.callback?.statusMapping) return null;
+		return integration.callback.statusMapping[jatStatus] || null;
+	}
+
+	function resolveUrlTemplate(template: string): string {
+		if (!integration) return template;
+		return template
+			.replace(/\{referenceId\}/g, integration.referenceId || '')
+			.replace(/\{taskId\}/g, task?.id || '')
+			.replace(/\{projectUrl\}/g, integration.projectUrl || '');
+	}
+
+	function formatTimeAgo(timestamp: string): string {
+		const diff = Date.now() - new Date(timestamp).getTime();
+		const mins = Math.floor(diff / 60000);
+		if (mins < 1) return 'just now';
+		if (mins < 60) return `${mins}m ago`;
+		const hrs = Math.floor(mins / 60);
+		if (hrs < 24) return `${hrs}h ago`;
+		return `${Math.floor(hrs / 24)}d ago`;
+	}
+
+	async function fetchCallbackLog() {
+		if (!task?.id) return;
+		callbackLogLoading = true;
+		try {
+			const res = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/callbacks`);
+			if (res.ok) {
+				const data = await res.json();
+				callbackLog = data.entries || [];
+			}
+		} catch {
+			// Silently fail - log is supplementary
+		} finally {
+			callbackLogLoading = false;
+		}
+	}
+
+	async function fireCallback(action: IntegrationAction) {
+		if (!integration || !action.event) return;
+		actionLoading = action.id;
+		actionResult = null;
+		try {
+			const res = await fetch(`/api/integrations/${encodeURIComponent(integration.sourceId)}/callback`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					taskId: task.id,
+					event: action.event,
+					referenceId: integration.referenceId || '',
+					taskStatus: task.status
+				})
+			});
+			const data = await res.json();
+			actionResult = {
+				actionId: action.id,
+				success: data.success,
+				message: data.success ? `Sent (${data.duration_ms}ms)` : (data.error || 'Failed')
+			};
+			if (data.success) {
+				await fetchCallbackLog();
+			}
+		} catch (err: any) {
+			actionResult = { actionId: action.id, success: false, message: err.message || 'Network error' };
+		} finally {
+			actionLoading = null;
+			setTimeout(() => { if (actionResult?.actionId === action.id) actionResult = null; }, 4000);
+		}
+	}
+
+	function handleActionClick(action: IntegrationAction) {
+		if (action.type === 'link' && action.urlTemplate) {
+			window.open(resolveUrlTemplate(action.urlTemplate), '_blank');
+			return;
+		}
+		if (action.type === 'callback') {
+			if (action.confirmMessage) {
+				confirmAction = action;
+			} else {
+				fireCallback(action);
+			}
+		}
+	}
+
+	function confirmAndFire() {
+		if (confirmAction) {
+			fireCallback(confirmAction);
+			confirmAction = null;
+		}
+	}
 
 	// Status colors for badges
 	const statusColors: Record<string, string> = {
@@ -603,17 +741,103 @@
 						{#if integration && integrationIcon}
 							<div class="task-panel-section">
 								<span class="task-panel-label">Integration</span>
-								<div class="flex items-center gap-2 mt-1 px-1 py-1.5 rounded" style="background: oklch(0.18 0.02 250); border: 1px solid oklch(0.25 0.02 250);">
-									<svg class="w-5 h-5 shrink-0" viewBox={integrationIcon.viewBox} fill={integrationIcon.fill ? 'currentColor' : 'none'} stroke={integrationIcon.fill ? 'none' : 'currentColor'} stroke-width="1.5" style="color: {integrationIcon.color};">
-										<path d={integrationIcon.svg} />
-									</svg>
-									<div class="flex flex-col min-w-0">
-										<span class="text-xs font-semibold capitalize" style="color: {integrationIcon.color};">{integration.sourceType}</span>
-										<span class="text-[10px] opacity-60 truncate" title={integration.sourceName}>{integration.sourceName}</span>
+								<div class="integration-card">
+									<!-- Header: icon, name, status -->
+									<div class="flex items-center gap-2">
+										<svg class="w-5 h-5 shrink-0" viewBox={integrationIcon.viewBox} fill={integrationIcon.fill ? 'currentColor' : 'none'} stroke={integrationIcon.fill ? 'none' : 'currentColor'} stroke-width="1.5" style="color: {integrationIcon.color};">
+											<path d={integrationIcon.svg} />
+										</svg>
+										<div class="flex flex-col min-w-0">
+											<span class="text-xs font-semibold capitalize" style="color: {integrationIcon.color};">{integration.sourceType}</span>
+											<span class="text-[10px] opacity-60 truncate" title={integration.sourceName}>{integration.sourceName}</span>
+										</div>
+										<span class="ml-auto text-[9px] px-1.5 py-0.5 rounded-full shrink-0" style="background: {integration.sourceEnabled ? 'oklch(0.35 0.12 145 / 0.3)' : 'oklch(0.35 0.02 250 / 0.3)'}; color: {integration.sourceEnabled ? 'oklch(0.70 0.15 145)' : 'oklch(0.55 0.02 250)'};">
+											{integration.sourceEnabled ? 'Active' : 'Disabled'}
+										</span>
 									</div>
-									<span class="ml-auto text-[9px] px-1.5 py-0.5 rounded-full shrink-0" style="background: {integration.sourceEnabled ? 'oklch(0.35 0.12 145 / 0.3)' : 'oklch(0.35 0.02 250 / 0.3)'}; color: {integration.sourceEnabled ? 'oklch(0.70 0.15 145)' : 'oklch(0.55 0.02 250)'};">
-										{integration.sourceEnabled ? 'Active' : 'Disabled'}
-									</span>
+
+									{#if hasInteractiveIntegration}
+										<!-- Status Sync -->
+										{#if integration.callback?.statusMapping && task.status}
+											{@const mapped = getMappedStatus(task.status)}
+											{#if mapped}
+												<div class="integration-status-sync">
+													<span class="sync-label">Status Sync</span>
+													<div class="sync-mapping">
+														<span class="sync-value">{task.status}</span>
+														<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3" style="color: oklch(0.50 0.02 250);">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+														</svg>
+														<span class="sync-value mapped">{mapped}</span>
+													</div>
+												</div>
+											{/if}
+										{/if}
+
+										<!-- Action Buttons -->
+										{#if integration.actions && integration.actions.length > 0}
+											<div class="integration-actions">
+												{#each integration.actions as action}
+													<button
+														class="integration-action-btn"
+														class:loading={actionLoading === action.id}
+														class:success={actionResult?.actionId === action.id && actionResult?.success}
+														class:error={actionResult?.actionId === action.id && !actionResult?.success}
+														onclick={() => handleActionClick(action)}
+														disabled={actionLoading !== null}
+														title={action.description || action.label}
+													>
+														{#if actionLoading === action.id}
+															<span class="loading loading-spinner" style="width: 12px; height: 12px;"></span>
+														{:else if action.icon && ACTION_ICONS[action.icon]}
+															<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
+																<path stroke-linecap="round" stroke-linejoin="round" d={ACTION_ICONS[action.icon]} />
+															</svg>
+														{/if}
+														<span>{action.label}</span>
+														{#if actionResult?.actionId === action.id}
+															<span class="action-result-msg">{actionResult.message}</span>
+														{/if}
+													</button>
+												{/each}
+											</div>
+										{/if}
+
+										<!-- Confirm Dialog -->
+										{#if confirmAction}
+											<div class="integration-confirm">
+												<p class="text-[11px]" style="color: oklch(0.75 0.12 60);">{confirmAction.confirmMessage}</p>
+												<div class="flex gap-1.5 mt-1.5">
+													<button class="integration-action-btn" onclick={() => confirmAction = null}>Cancel</button>
+													<button class="integration-action-btn confirm-yes" onclick={confirmAndFire}>Confirm</button>
+												</div>
+											</div>
+										{/if}
+
+										<!-- Callback Log -->
+										{#if integration.callback}
+											<div class="integration-callback-log">
+												<span class="sync-label">Callback Log</span>
+												{#if callbackLogLoading}
+													<div class="flex items-center gap-1.5 py-1">
+														<span class="loading loading-spinner" style="width: 10px; height: 10px;"></span>
+														<span class="text-[10px]" style="color: oklch(0.50 0.02 250);">Loading...</span>
+													</div>
+												{:else if callbackLog.length === 0}
+													<span class="text-[10px] italic" style="color: oklch(0.45 0.02 250);">No callbacks yet</span>
+												{:else}
+													{#each callbackLog.slice(0, 5) as entry}
+														<div class="callback-log-entry" class:log-success={entry.status >= 200 && entry.status < 300} class:log-error={entry.status === 0 || entry.status >= 400}>
+															<span class="log-indicator">{entry.status >= 200 && entry.status < 300 ? '\u2713' : '\u2717'}</span>
+															<span class="log-event">{entry.event}</span>
+															<span class="log-time">{formatTimeAgo(entry.timestamp)}</span>
+															<span class="log-status">{entry.status || 'err'}</span>
+														</div>
+													{/each}
+												{/if}
+											</div>
+										{/if}
+									{/if}
 								</div>
 							</div>
 						{/if}
@@ -2735,5 +2959,159 @@
 		font-size: 0.65rem;
 		color: oklch(0.45 0.02 250);
 		font-style: italic;
+	}
+
+	/* ─── Integration Interactive Styles ─── */
+
+	.integration-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		margin-top: 0.25rem;
+		padding: 0.5rem;
+		border-radius: 0.375rem;
+		background: oklch(0.18 0.02 250);
+		border: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.integration-status-sync {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.sync-label {
+		font-size: 0.6rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: oklch(0.50 0.02 250);
+	}
+
+	.sync-mapping {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+	}
+
+	.sync-value {
+		font-size: 0.65rem;
+		padding: 0.125rem 0.375rem;
+		border-radius: 0.25rem;
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.70 0.02 250);
+	}
+
+	.sync-value.mapped {
+		background: oklch(0.25 0.08 200 / 0.3);
+		color: oklch(0.75 0.12 200);
+	}
+
+	.integration-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.375rem;
+	}
+
+	.integration-action-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.25rem 0.5rem;
+		font-size: 0.65rem;
+		font-weight: 500;
+		border-radius: 0.25rem;
+		border: 1px solid oklch(0.30 0.05 220);
+		background: oklch(0.20 0.03 220);
+		color: oklch(0.70 0.10 220);
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.integration-action-btn:hover:not(:disabled) {
+		background: oklch(0.25 0.05 220);
+		border-color: oklch(0.40 0.08 220);
+		color: oklch(0.80 0.12 220);
+	}
+
+	.integration-action-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.integration-action-btn.loading {
+		border-color: oklch(0.40 0.10 200);
+	}
+
+	.integration-action-btn.success {
+		border-color: oklch(0.40 0.12 145);
+		color: oklch(0.75 0.15 145);
+	}
+
+	.integration-action-btn.error {
+		border-color: oklch(0.40 0.12 25);
+		color: oklch(0.75 0.15 25);
+	}
+
+	.integration-action-btn.confirm-yes {
+		background: oklch(0.30 0.10 145 / 0.3);
+		border-color: oklch(0.40 0.12 145);
+		color: oklch(0.75 0.15 145);
+	}
+
+	.action-result-msg {
+		font-size: 0.6rem;
+		margin-left: 0.25rem;
+		opacity: 0.8;
+	}
+
+	.integration-confirm {
+		padding: 0.5rem;
+		border-radius: 0.25rem;
+		background: oklch(0.20 0.04 60 / 0.2);
+		border: 1px solid oklch(0.35 0.08 60 / 0.4);
+	}
+
+	.integration-callback-log {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.callback-log-entry {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		font-size: 0.6rem;
+		padding: 0.125rem 0;
+		color: oklch(0.55 0.02 250);
+	}
+
+	.log-indicator {
+		font-size: 0.65rem;
+		font-weight: 700;
+		width: 0.875rem;
+		text-align: center;
+	}
+
+	.log-success .log-indicator { color: oklch(0.70 0.15 145); }
+	.log-error .log-indicator { color: oklch(0.70 0.15 25); }
+
+	.log-event {
+		color: oklch(0.65 0.02 250);
+	}
+
+	.log-time {
+		margin-left: auto;
+		color: oklch(0.45 0.02 250);
+		font-size: 0.55rem;
+	}
+
+	.log-status {
+		font-family: monospace;
+		font-size: 0.55rem;
+		color: oklch(0.50 0.02 250);
+		min-width: 1.5rem;
+		text-align: right;
 	}
 </style>

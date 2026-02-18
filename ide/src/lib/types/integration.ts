@@ -228,6 +228,64 @@ export interface BaseAdapterInterface {
 	): Promise<{ messageId?: string } | void>;
 }
 
+// ─── Callback & Actions Types ───────────────────────────────────────────────
+
+/**
+ * Callback configuration for bidirectional integration communication.
+ * When present on a source, JAT can push status updates back to the integration.
+ */
+export interface IntegrationCallback {
+	/** Webhook endpoint URL */
+	url: string;
+	/** jat-secret key name for the shared secret */
+	secretName: string;
+	/** Which events trigger callbacks */
+	events: string[];
+	/** Maps JAT status → integration status values */
+	statusMapping: Record<string, string>;
+	/** Target table name sent in webhook payload */
+	referenceTable: string;
+	/** Dot-path to extract the source record ID from task metadata (e.g., "metadata.supabase_row_id") */
+	referenceIdFrom: string;
+}
+
+/**
+ * An action that can be triggered from the Integration tab in TaskDetailPane.
+ */
+export interface IntegrationAction {
+	/** Unique action identifier */
+	id: string;
+	/** Button label */
+	label: string;
+	/** Tooltip / description text */
+	description?: string;
+	/** Action type: callback fires webhook, link opens URL, command runs CLI */
+	type: 'callback' | 'link' | 'command';
+	/** Which event to fire (for callback type) */
+	event?: string;
+	/** URL template with {referenceId}, {taskId}, {projectUrl} placeholders (for link type) */
+	urlTemplate?: string;
+	/** If set, show confirm dialog before executing */
+	confirmMessage?: string;
+	/** Lucide icon name for the button */
+	icon?: string;
+	/** Condition controlling when the action is visible (e.g., "task.status === 'closed'") */
+	visibleWhen?: string;
+}
+
+/**
+ * A single callback log entry stored in .jat/callback-log/{task-id}.jsonl.
+ */
+export interface CallbackLogEntry {
+	timestamp: string;
+	event: string;
+	url: string;
+	status: number;
+	response?: Record<string, unknown>;
+	duration_ms: number;
+	error?: string;
+}
+
 // ─── IDE-Specific Types ──────────────────────────────────────────────────────
 
 /**
@@ -280,6 +338,10 @@ export interface IntegrationSource {
 	filterSubject?: string;
 	markAsRead?: boolean;
 	command?: string;
+	/** Optional callback config for bidirectional communication */
+	callback?: IntegrationCallback;
+	/** Optional actions rendered in the Integration tab */
+	actions?: IntegrationAction[];
 	[key: string]: unknown;
 }
 

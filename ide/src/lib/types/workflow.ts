@@ -143,8 +143,10 @@ export interface ActionSpawnAgentConfig {
 	taskTitle?: string;
 	/** Task description (used if taskId not set) */
 	taskDescription?: string;
-	/** Model override */
-	model?: 'haiku' | 'sonnet' | 'opus';
+	/** Agent program ID (e.g., 'claude-code', 'codex-cli'). Null = use routing rules. */
+	agentId?: string;
+	/** Model shortName (e.g., 'opus', 'sonnet', 'o4-mini'). Null = use agent default. */
+	model?: string;
 	/** Target project */
 	project?: string;
 }

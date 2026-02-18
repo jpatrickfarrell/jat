@@ -434,15 +434,18 @@ async function executeSpawnAgent(
 ): Promise<unknown> {
 	const config = node.config as ActionSpawnAgentConfig;
 
-	ctx.log(node.id, `Spawn agent: task=${config.taskId || config.taskTitle}, model=${config.model}`);
+	ctx.log(node.id, `Spawn agent: task=${config.taskId || config.taskTitle}, agent=${config.agentId || 'auto'}, model=${config.model || 'default'}`);
 
 	if (ctx.dryRun) {
-		return { dryRun: true, taskId: config.taskId, taskTitle: config.taskTitle, model: config.model };
+		return { dryRun: true, taskId: config.taskId, taskTitle: config.taskTitle, agentId: config.agentId, model: config.model };
 	}
 
 	const body: Record<string, unknown> = {};
 	if (config.taskId) {
 		body.taskId = config.taskId;
+	}
+	if (config.agentId) {
+		body.agentId = config.agentId;
 	}
 	if (config.model) {
 		body.model = config.model;

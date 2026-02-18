@@ -256,6 +256,7 @@ export async function loadProjects(): Promise<void> {
 			},
 			database_url: p.databaseUrl,
 			hidden: p.hidden,
+			favorite: p.favorite,
 			stats: p.stats ? {
 				hasJat: p.stats.hasJat,
 				hasClaudeMd: p.stats.hasClaudeMd,
@@ -359,6 +360,37 @@ export async function toggleProjectVisibility(projectName: string, hidden: boole
 		return true;
 	} catch (error) {
 		console.error('[configStore] Failed to toggle visibility:', error);
+		return false;
+	}
+}
+
+/**
+ * Toggle project favorite status
+ */
+export async function toggleProjectFavorite(projectPath: string, favorite: boolean): Promise<boolean> {
+	try {
+		const projectKey = projectPath.split('/').pop() || '';
+		const response = await fetch(PROJECTS_API, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				project: projectKey,
+				favorite
+			})
+		});
+
+		if (!response.ok) {
+			throw new Error(`Failed to toggle favorite: ${response.statusText}`);
+		}
+
+		// Update in state
+		state.projects = state.projects.map((p) =>
+			p.path === projectPath ? { ...p, favorite } : p
+		);
+
+		return true;
+	} catch (error) {
+		console.error('[configStore] Failed to toggle favorite:', error);
 		return false;
 	}
 }

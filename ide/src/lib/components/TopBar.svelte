@@ -260,6 +260,8 @@
 		onProjectChange?: (project: string) => void;
 		/** Task counts per project (for ProjectSelector) */
 		taskCounts?: Map<string, number> | null;
+		/** Set of favorite project names */
+		favoriteProjects?: Set<string>;
 	}
 
 	let {
@@ -281,6 +283,7 @@
 		onGlobalSearchOpen,
 		onProjectChange,
 		taskCounts = null,
+		favoriteProjects = new Set<string>(),
 	}: Props = $props();
 
 
@@ -470,6 +473,7 @@
 				compact={true}
 				showColors={true}
 				projectColors={projectColorsMap}
+				{favoriteProjects}
 				{readyTasks}
 				epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount }))}
 				idleSlots={availableSlots}

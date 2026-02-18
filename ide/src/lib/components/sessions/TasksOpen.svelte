@@ -17,6 +17,7 @@
 	import { AGENT_PRESETS } from '$lib/types/agentProgram';
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
 	import { spawnInBatches, type SpawnResult } from '$lib/utils/spawnBatch';
+	import { formatShortDate, parseTimestamp } from '$lib/utils/dateFormatters';
 
 	interface AgentSelection {
 		agentId: string | null;
@@ -49,6 +50,7 @@
 		assignee?: string;
 		labels?: string[];
 		created_at?: string;
+		due_date?: string | null;
 		depends_on?: Dependency[];
 		agent_program?: string | null;
 	}
@@ -99,6 +101,141 @@
 	// === Single-task Harness Picker ===
 	let harnessPickerTaskId = $state<string | null>(null);
 	let harnessPickerPos = $state({ x: 0, y: 0, openUp: false, maxH: 0 });
+
+	// === Due Date Picker ===
+	let dueDatePickerTaskId = $state<string | null>(null);
+	let dueDatePickerPos = $state<{ x: number; y: number } | null>(null);
+	let dueDateTempValue = $state('');
+	let dueDateTempTime = $state('');
+	let dueDateSaving = $state(false);
+
+	function formatDueDate(dateStr: string | null | undefined): string {
+		if (!dateStr) return '';
+		const date = parseTimestamp(dateStr);
+		if (!date) return '';
+		const now = new Date();
+		const diffMs = date.getTime() - now.getTime();
+		const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+		// Show short date, but highlight if overdue or soon
+		return formatShortDate(dateStr);
+	}
+
+	function getDueDateColor(dateStr: string | null | undefined): string {
+		if (!dateStr) return '';
+		const date = parseTimestamp(dateStr);
+		if (!date) return '';
+		const now = new Date();
+		const diffMs = date.getTime() - now.getTime();
+		const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+		if (diffDays < 0) return 'oklch(0.70 0.18 30)'; // overdue - red
+		if (diffDays <= 1) return 'oklch(0.75 0.18 50)'; // due today/tomorrow - orange
+		if (diffDays <= 3) return 'oklch(0.75 0.15 85)'; // due soon - amber
+		return 'oklch(0.60 0.02 250)'; // normal - muted
+	}
+
+	function openDueDatePicker(task: Task, e: MouseEvent) {
+		e.stopPropagation();
+		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		dueDatePickerTaskId = task.id;
+		// Parse existing date into date and time parts
+		if (task.due_date) {
+			const d = parseTimestamp(task.due_date);
+			if (d) {
+				const year = d.getFullYear();
+				const month = String(d.getMonth() + 1).padStart(2, '0');
+				const day = String(d.getDate()).padStart(2, '0');
+				dueDateTempValue = `${year}-${month}-${day}`;
+				const hours = d.getHours();
+				const mins = d.getMinutes();
+				if (hours !== 0 || mins !== 0) {
+					dueDateTempTime = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+				} else {
+					dueDateTempTime = '';
+				}
+			} else {
+				dueDateTempValue = '';
+				dueDateTempTime = '';
+			}
+		} else {
+			dueDateTempValue = '';
+			dueDateTempTime = '';
+		}
+		// Position: prefer below cell, but flip above if near viewport bottom
+		const pickerHeight = 200;
+		const pickerWidth = 260;
+		const spaceBelow = window.innerHeight - rect.bottom;
+		const y = spaceBelow < pickerHeight + 8
+			? Math.max(8, rect.top - pickerHeight - 4)
+			: rect.bottom + 4;
+		const x = Math.min(rect.left, window.innerWidth - pickerWidth - 8);
+		dueDatePickerPos = { x, y };
+	}
+
+	function closeDueDatePicker() {
+		dueDatePickerTaskId = null;
+		dueDatePickerPos = null;
+	}
+
+	async function saveDueDate() {
+		if (!dueDatePickerTaskId) return;
+		dueDateSaving = true;
+		try {
+			let dueDate: string | null = null;
+			if (dueDateTempValue) {
+				if (dueDateTempTime) {
+					dueDate = `${dueDateTempValue}T${dueDateTempTime}:00`;
+				} else {
+					dueDate = `${dueDateTempValue}T00:00:00`;
+				}
+			}
+			const res = await fetch(`/api/tasks/${dueDatePickerTaskId}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ due_date: dueDate })
+			});
+			if (res.ok) {
+				// Update local task data
+				const idx = tasks.findIndex(t => t.id === dueDatePickerTaskId);
+				if (idx !== -1) {
+					tasks[idx] = { ...tasks[idx], due_date: dueDate };
+					tasks = [...tasks];
+				}
+				closeDueDatePicker();
+			} else {
+				addToast('Failed to update due date', 'error');
+			}
+		} catch {
+			addToast('Failed to update due date', 'error');
+		} finally {
+			dueDateSaving = false;
+		}
+	}
+
+	async function clearDueDate() {
+		if (!dueDatePickerTaskId) return;
+		dueDateSaving = true;
+		try {
+			const res = await fetch(`/api/tasks/${dueDatePickerTaskId}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ due_date: null })
+			});
+			if (res.ok) {
+				const idx = tasks.findIndex(t => t.id === dueDatePickerTaskId);
+				if (idx !== -1) {
+					tasks[idx] = { ...tasks[idx], due_date: null };
+					tasks = [...tasks];
+				}
+				closeDueDatePicker();
+			} else {
+				addToast('Failed to clear due date', 'error');
+			}
+		} catch {
+			addToast('Failed to clear due date', 'error');
+		} finally {
+			dueDateSaving = false;
+		}
+	}
 
 	// === Hover-to-select (spacebar) ===
 	let hoveredTaskId = $state<string | null>(null);
@@ -1077,6 +1214,7 @@
 							/>
 						</th>
 						<th class="th-task">Task</th>
+						<th class="th-due-date">Due</th>
 						<th class="th-actions">Actions</th>
 					</tr>
 				</thead>
@@ -1145,6 +1283,20 @@
 										</div>
 									</div>
 								</div>
+							</td>
+							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+							<td class="td-due-date" style={isExiting ? 'background: transparent;' : ''} onclick={(e) => { if (!isExiting) openDueDatePicker(task, e); }}>
+								{#if task.due_date}
+									<span class="due-date-display" style="color: {getDueDateColor(task.due_date)}" title={task.due_date}>
+										{formatDueDate(task.due_date)}
+									</span>
+								{:else}
+									<span class="due-date-empty">
+										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14" style="opacity: 0;">
+											<rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+										</svg>
+									</span>
+								{/if}
 							</td>
 							<td class="td-actions" style={isExiting ? 'background: transparent;' : ''}>
 								<div class="relative flex items-center justify-center">
@@ -1253,6 +1405,55 @@
 		</div>
 	{/if}
 </section>
+
+<!-- Due Date Picker Popover -->
+{#if dueDatePickerTaskId && dueDatePickerPos}
+	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<div class="fixed inset-0 z-40" onclick={closeDueDatePicker}></div>
+	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<div
+		class="due-date-picker fixed z-50"
+		style="left: {dueDatePickerPos.x}px; top: {dueDatePickerPos.y}px;"
+		onclick={(e) => e.stopPropagation()}
+	>
+		<div class="due-date-picker-header">Due Date</div>
+		<div class="due-date-picker-body">
+			<input
+				type="date"
+				class="due-date-input"
+				bind:value={dueDateTempValue}
+			/>
+			<div class="due-date-time-row">
+				<label class="due-date-time-label">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12">
+						<circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+					</svg>
+					Time
+				</label>
+				<input
+					type="time"
+					class="due-date-time-input"
+					bind:value={dueDateTempTime}
+					placeholder="Optional"
+				/>
+			</div>
+		</div>
+		<div class="due-date-picker-footer">
+			{#if tasks.find(t => t.id === dueDatePickerTaskId)?.due_date}
+				<button class="due-date-btn due-date-btn-clear" onclick={clearDueDate} disabled={dueDateSaving}>
+					Clear
+				</button>
+			{/if}
+			<div class="flex-1"></div>
+			<button class="due-date-btn due-date-btn-cancel" onclick={closeDueDatePicker} disabled={dueDateSaving}>
+				Cancel
+			</button>
+			<button class="due-date-btn due-date-btn-save" onclick={saveDueDate} disabled={dueDateSaving || !dueDateTempValue}>
+				{dueDateSaving ? 'Saving...' : 'Save'}
+			</button>
+		</div>
+	</div>
+{/if}
 
 <!-- Floating Action Bar -->
 {#if selectionCount > 0}
@@ -1723,8 +1924,9 @@
 		border-bottom: 1px solid oklch(0.25 0.02 250);
 	}
 
-	/* Two-column layout widths (badge + title merged into task column) */
+	/* Column layout widths (badge + title merged into task column) */
 	.th-task, .td-task { width: auto; padding-left: 0.25rem; padding-right: 0.25rem; }
+	.th-due-date, .td-due-date { width: 80px; min-width: 80px; max-width: 80px; text-align: center; padding: 0.5rem 0.25rem !important; }
 	.th-actions, .td-actions { width: 80px; text-align: right; }
 
 	.tasks-table td {
@@ -1803,8 +2005,159 @@
 		text-align: center;
 	}
 
+	/* Due date column */
+	.td-due-date {
+		cursor: pointer;
+		position: relative;
+	}
+
+	.td-due-date:hover {
+		background: oklch(0.22 0.02 250) !important;
+	}
+
+	.due-date-display {
+		font-size: 0.75rem;
+		font-weight: 500;
+		white-space: nowrap;
+	}
+
+	.due-date-empty {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: oklch(0.40 0.02 250);
+	}
+
+	.task-row:hover .due-date-empty svg {
+		opacity: 0.5 !important;
+	}
+
+	/* Due date picker popover */
+	.due-date-picker {
+		width: 260px;
+		background: oklch(0.18 0.02 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.5rem;
+		box-shadow: 0 10px 30px oklch(0.05 0 0 / 0.5);
+		animation: contextMenuIn 0.1s ease;
+	}
+
+	.due-date-picker-header {
+		padding: 0.625rem 0.75rem;
+		font-size: 0.75rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: oklch(0.55 0.02 250);
+		border-bottom: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.due-date-picker-body {
+		padding: 0.75rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.625rem;
+	}
+
+	.due-date-input, .due-date-time-input {
+		width: 100%;
+		padding: 0.5rem 0.625rem;
+		background: oklch(0.14 0.01 250);
+		border: 1px solid oklch(0.30 0.02 250);
+		border-radius: 0.375rem;
+		color: oklch(0.88 0.02 250);
+		font-size: 0.8125rem;
+		outline: none;
+		transition: border-color 0.15s;
+	}
+
+	.due-date-input:focus, .due-date-time-input:focus {
+		border-color: oklch(0.60 0.15 250);
+	}
+
+	/* Style the calendar icon and date picker chrome */
+	.due-date-input::-webkit-calendar-picker-indicator,
+	.due-date-time-input::-webkit-calendar-picker-indicator {
+		filter: invert(0.7);
+		cursor: pointer;
+	}
+
+	.due-date-time-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.due-date-time-label {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.75rem;
+		color: oklch(0.55 0.02 250);
+		white-space: nowrap;
+		min-width: 50px;
+	}
+
+	.due-date-time-input {
+		flex: 1;
+	}
+
+	.due-date-picker-footer {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.5rem 0.75rem;
+		border-top: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.due-date-btn {
+		padding: 0.375rem 0.625rem;
+		border: none;
+		border-radius: 0.375rem;
+		font-size: 0.75rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.1s;
+	}
+
+	.due-date-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.due-date-btn-cancel {
+		background: transparent;
+		color: oklch(0.65 0.02 250);
+	}
+
+	.due-date-btn-cancel:hover:not(:disabled) {
+		background: oklch(0.22 0.02 250);
+	}
+
+	.due-date-btn-save {
+		background: oklch(0.45 0.15 250);
+		color: oklch(0.95 0.02 250);
+	}
+
+	.due-date-btn-save:hover:not(:disabled) {
+		background: oklch(0.50 0.15 250);
+	}
+
+	.due-date-btn-clear {
+		background: transparent;
+		color: oklch(0.65 0.15 30);
+	}
+
+	.due-date-btn-clear:hover:not(:disabled) {
+		background: oklch(0.55 0.15 30 / 0.15);
+	}
+
 	/* Responsive */
 	@media (max-width: 768px) {
+		.th-due-date, .td-due-date {
+			display: none;
+		}
+
 		.th-task {
 			width: 60%;
 		}
@@ -2049,7 +2402,10 @@
 	/* Swarm hover highlight - launchable tasks glow when swarm button is hovered */
 	.swarm-highlight {
 		position: relative;
-		overflow: hidden;
+		/* NOTE: Do NOT use overflow:hidden on <tr> — it breaks table-layout:fixed
+		   by forcing the browser to change display from table-row to block,
+		   which causes all columns to shrink. The ::after shimmer is naturally
+		   clipped to its own element bounds (position:absolute + inset:0). */
 		background: oklch(0.65 0.20 280 / 0.12) !important;
 		box-shadow: inset 0 0 20px oklch(0.65 0.20 280 / 0.08);
 		transition: background 0.2s ease, box-shadow 0.2s ease;

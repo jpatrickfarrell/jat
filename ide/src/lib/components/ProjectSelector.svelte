@@ -38,6 +38,8 @@
 		showColors?: boolean;
 		/** Optional map of project name -> color. If provided, used instead of getProjectColor() */
 		projectColors?: Map<string, string> | null;
+		/** Set of project names that are favorites (sorted to top of dropdown) */
+		favoriteProjects?: Set<string> | null;
 		readyTasks?: ReadyTask[];
 		epics?: Epic[];
 		idleSlots?: number;
@@ -54,6 +56,7 @@
 		compact = false,
 		showColors = false,
 		projectColors = null,
+		favoriteProjects = null,
 		readyTasks = [],
 		epics = [],
 		idleSlots = 0,
@@ -61,6 +64,18 @@
 		onStart,
 		onSwarm,
 	}: Props = $props();
+
+	// Sort projects: favorites first, then the rest
+	const sortedProjects = $derived(
+		favoriteProjects && favoriteProjects.size > 0
+			? [...projects].sort((a, b) => {
+				const aFav = favoriteProjects.has(a) ? 1 : 0;
+				const bFav = favoriteProjects.has(b) ? 1 : 0;
+				if (aFav !== bFav) return bFav - aFav;
+				return 0; // preserve original order within groups
+			})
+			: projects
+	);
 
 	let open = $state(false);
 	let containerEl = $state<HTMLDivElement | null>(null);
@@ -197,8 +212,9 @@
 		<div class="dropdown-menu">
 			<!-- Projects Section -->
 			<div class="dropdown-section-header">Projects</div>
-			{#each projects as project}
+			{#each sortedProjects as project}
 				{@const projColor = getColor(project)}
+				{@const isFavorite = favoriteProjects?.has(project)}
 				<button
 					type="button"
 					class="dropdown-item project-item"
@@ -207,6 +223,11 @@
 					onclick={() => handleSelect(project)}
 				>
 					<span class="item-dot"></span>
+					{#if isFavorite}
+						<svg class="favorite-star" viewBox="0 0 24 24" fill="currentColor">
+							<path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clip-rule="evenodd" />
+						</svg>
+					{/if}
 					<span class="item-label">{formatProjectOption(project)}</span>
 					{#if selectedProject === project}
 						<svg class="check-icon" viewBox="0 0 16 16" fill="currentColor">
@@ -492,6 +513,13 @@
 	.project-item.active .item-dot {
 		opacity: 1;
 		box-shadow: 0 0 5px color-mix(in oklch, var(--project-color) 50%, transparent);
+	}
+
+	.favorite-star {
+		width: 0.75rem;
+		height: 0.75rem;
+		flex-shrink: 0;
+		color: oklch(0.80 0.18 85);
 	}
 
 	.item-label {

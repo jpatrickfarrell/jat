@@ -469,6 +469,7 @@ export async function GET({ url }) {
 					notesHeight: config.notes_height || null,
 					defaultHarness: config.default_harness || null,
 					hidden: hiddenProjects.has(key.toLowerCase()),
+					favorite: config.favorite || false,
 					source: 'jat-config'
 				});
 			}
@@ -535,6 +536,11 @@ export async function GET({ url }) {
 		// Priority: 1) Has agents, 2) Has tasks, 3) Recency
 		if (includeStats) {
 			projects.sort((a, b) => {
+				// Favorites always sort first
+				const favA = a.favorite ? 1 : 0;
+				const favB = b.favorite ? 1 : 0;
+				if (favA !== favB) return favB - favA;
+
 				// @ts-ignore - stats exists when includeStats is true
 				const agentsA = a.stats?.agentCount || 0;
 				// @ts-ignore - stats exists when includeStats is true
@@ -656,7 +662,7 @@ function validateProjectKey(key) {
 export async function PATCH({ request }) {
 	try {
 		const body = await request.json();
-		const { project, description, port, server_path, database_url, active_color, inactive_color, notes, notes_height, default_harness } = body;
+		const { project, description, port, server_path, database_url, active_color, inactive_color, notes, notes_height, default_harness, favorite } = body;
 
 		if (!project) {
 			return json({ error: 'Project name required' }, { status: 400 });
@@ -715,6 +721,13 @@ export async function PATCH({ request }) {
 				delete jatConfig.projects[project].default_harness;
 			}
 		}
+		if (favorite !== undefined) {
+			if (favorite) {
+				jatConfig.projects[project].favorite = true;
+			} else {
+				delete jatConfig.projects[project].favorite;
+			}
+		}
 
 		const success = await writeJatConfig(jatConfig);
 		if (!success) {
@@ -735,7 +748,8 @@ export async function PATCH({ request }) {
 			inactive_color: jatConfig.projects[project].inactive_color,
 			notes: jatConfig.projects[project].notes,
 			notes_height: jatConfig.projects[project].notes_height,
-			default_harness: jatConfig.projects[project].default_harness || null
+			default_harness: jatConfig.projects[project].default_harness || null,
+			favorite: jatConfig.projects[project].favorite || false
 		});
 	} catch (error) {
 		console.error('Failed to update project:', error);

@@ -23,7 +23,8 @@
 		isProjectsLoading,
 		getProjectsError,
 		loadProjects,
-		toggleProjectVisibility
+		toggleProjectVisibility,
+		toggleProjectFavorite
 	} from '$lib/stores/configStore.svelte';
 	import ProjectCard from './ProjectCard.svelte';
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
@@ -66,6 +67,19 @@
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Failed to toggle visibility';
 			errorToast('Failed to update project visibility', message);
+		}
+	}
+
+	// Handle favorite toggle
+	async function handleToggleFavorite(project: ProjectConfig) {
+		try {
+			const newFavorite = !project.favorite;
+			await toggleProjectFavorite(project.path, newFavorite);
+			const action = newFavorite ? 'added to' : 'removed from';
+			successToast(`Project "${project.name}" ${action} favorites`);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Failed to toggle favorite';
+			errorToast('Failed to update favorite', message);
 		}
 	}
 
@@ -194,6 +208,7 @@
 							onDelete={onDeleteProject}
 							onToggleVisibility={handleToggleVisibility}
 							onOpenFolder={handleOpenFolder}
+							onToggleFavorite={handleToggleFavorite}
 						/>
 					</div>
 				{/each}
@@ -232,6 +247,7 @@
 										onDelete={onDeleteProject}
 										onToggleVisibility={handleToggleVisibility}
 										onOpenFolder={handleOpenFolder}
+										onToggleFavorite={handleToggleFavorite}
 									/>
 								</div>
 							{/each}

@@ -52,6 +52,7 @@
 	let selectedProject = $state('');
 	let allTasks = $state([]);
 	let configProjects = $state<string[]>([]); // Projects from JAT config (visible ones)
+	let favoriteProjects = $state<Set<string>>(new Set()); // Projects marked as favorite
 
 	// Agent count state
 	let activeAgentCount = $state(0);
@@ -637,6 +638,13 @@
 			// Extract project names from the config (sorted by last activity when stats=true)
 			configProjects = projectsArray.map((p: { name: string }) => p.name);
 
+			// Extract favorite projects
+			const favs = new Set<string>();
+			for (const p of projectsArray) {
+				if (p.favorite) favs.add(p.name);
+			}
+			favoriteProjects = favs;
+
 			// Populate the projects cache for fileLinks.ts localhost URL utilities
 			const projectsCache: Record<string, ProjectConfig> = {};
 			for (const p of projectsArray) {
@@ -1059,13 +1067,14 @@
 				{selectedProject}
 				{epicsWithReady}
 				{reviewRules}
+				{favoriteProjects}
 				onGlobalSearchOpen={() => { globalSearchOpen = true; }}
 				onProjectChange={handleProjectChange}
 				{taskCounts}
 			/>
 
 			<!-- Page content -->
-			<main class="flex-1 min-h-0 overflow-y-auto">
+			<main class="flex-1 min-h-0 overflow-y-auto" style="scrollbar-gutter: stable;">
 				{@render children()}
 			</main>
 

@@ -2298,7 +2298,7 @@
 		cursor: pointer;
 		font-size: 0.75rem;
 		font-weight: 600;
-		transition: all 0.2s ease;
+		transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 		white-space: nowrap;
 		animation: swarm-glow 2s ease-in-out infinite;
 	}

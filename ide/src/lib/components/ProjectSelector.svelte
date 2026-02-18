@@ -40,6 +40,8 @@
 		projectColors?: Map<string, string> | null;
 		/** Set of project names that are favorites (sorted to top of dropdown) */
 		favoriteProjects?: Set<string> | null;
+		/** Called when favorite star is toggled for a project */
+		onToggleFavorite?: (project: string) => void;
 		readyTasks?: ReadyTask[];
 		epics?: Epic[];
 		idleSlots?: number;
@@ -57,6 +59,7 @@
 		showColors = false,
 		projectColors = null,
 		favoriteProjects = null,
+		onToggleFavorite,
 		readyTasks = [],
 		epics = [],
 		idleSlots = 0,
@@ -157,6 +160,11 @@
 		onNewTask?.(selectedProject);
 	}
 
+	function handleToggleFavorite(e: MouseEvent, project: string) {
+		e.stopPropagation();
+		onToggleFavorite?.(project);
+	}
+
 	// Alt+S keyboard shortcut support - open dropdown to show ready tasks
 	$effect(() => {
 		const unsubscribe = isStartDropdownOpen.subscribe((isOpen: boolean) => {
@@ -223,12 +231,26 @@
 					onclick={() => handleSelect(project)}
 				>
 					<span class="item-dot"></span>
-					{#if isFavorite}
-						<svg class="favorite-star" viewBox="0 0 24 24" fill="currentColor">
-							<path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clip-rule="evenodd" />
-						</svg>
-					{/if}
 					<span class="item-label">{formatProjectOption(project)}</span>
+					{#if onToggleFavorite}
+						<button
+							type="button"
+							class="favorite-star-btn"
+							class:is-favorite={isFavorite}
+							onclick={(e) => handleToggleFavorite(e, project)}
+							title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+						>
+							{#if isFavorite}
+								<svg viewBox="0 0 24 24" fill="currentColor">
+									<path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clip-rule="evenodd" />
+								</svg>
+							{:else}
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+								</svg>
+							{/if}
+						</button>
+					{/if}
 					{#if selectedProject === project}
 						<svg class="check-icon" viewBox="0 0 16 16" fill="currentColor">
 							<path fill-rule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd" />
@@ -515,11 +537,46 @@
 		box-shadow: 0 0 5px color-mix(in oklch, var(--project-color) 50%, transparent);
 	}
 
-	.favorite-star {
-		width: 0.75rem;
-		height: 0.75rem;
+	.favorite-star-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.25rem;
+		height: 1.25rem;
 		flex-shrink: 0;
+		padding: 0;
+		border: none;
+		border-radius: 0.25rem;
+		background: transparent;
+		cursor: pointer;
+		color: oklch(0.40 0.02 250);
+		opacity: 0;
+		transition: all 0.15s ease;
+	}
+
+	.favorite-star-btn svg {
+		width: 0.8rem;
+		height: 0.8rem;
+	}
+
+	/* Show on row hover */
+	.project-item:hover .favorite-star-btn {
+		opacity: 1;
+	}
+
+	/* Always visible when favorited */
+	.favorite-star-btn.is-favorite {
+		opacity: 1;
 		color: oklch(0.80 0.18 85);
+	}
+
+	.favorite-star-btn:hover {
+		color: oklch(0.85 0.15 85);
+		background: oklch(0.28 0.08 85 / 0.3);
+	}
+
+	.favorite-star-btn.is-favorite:hover {
+		color: oklch(0.60 0.10 85);
 	}
 
 	.item-label {

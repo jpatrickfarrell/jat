@@ -669,6 +669,30 @@
 		}
 	}
 
+	// Toggle favorite status for a project via API and update local state
+	async function handleToggleFavorite(project: string) {
+		const isFav = favoriteProjects.has(project);
+		const newFav = !isFav;
+		try {
+			const projectKey = project.toLowerCase();
+			const response = await fetch('/api/projects', {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ project: projectKey, favorite: newFav })
+			});
+			if (!response.ok) return;
+			const updated = new Set(favoriteProjects);
+			if (newFav) {
+				updated.add(project);
+			} else {
+				updated.delete(project);
+			}
+			favoriteProjects = updated;
+		} catch (error) {
+			console.error('[layout] Failed to toggle favorite:', error);
+		}
+	}
+
 	// Check ingest_autostart setting and start daemon if enabled and not already running
 	// Also syncs max_sessions from server config to client-side preferences store
 	async function checkIngestAutoStart() {
@@ -1068,6 +1092,7 @@
 				{epicsWithReady}
 				{reviewRules}
 				{favoriteProjects}
+				onToggleFavorite={handleToggleFavorite}
 				onGlobalSearchOpen={() => { globalSearchOpen = true; }}
 				onProjectChange={handleProjectChange}
 				{taskCounts}

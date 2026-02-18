@@ -19,6 +19,7 @@
 	 */
 
 	import { page } from "$app/stores";
+	import { getProjectColor } from "$lib/utils/projectColors";
 	import ActivityBadge from "./ActivityBadge.svelte";
 	import ServersBadge from "./ServersBadge.svelte";
 	import UserProfile from "./UserProfile.svelte";
@@ -262,6 +263,8 @@
 		taskCounts?: Map<string, number> | null;
 		/** Set of favorite project names */
 		favoriteProjects?: Set<string>;
+		/** Called when favorite star is toggled in ProjectSelector */
+		onToggleFavorite?: (project: string) => void;
 	}
 
 	let {
@@ -284,6 +287,7 @@
 		onProjectChange,
 		taskCounts = null,
 		favoriteProjects = new Set<string>(),
+		onToggleFavorite,
 	}: Props = $props();
 
 
@@ -462,9 +466,9 @@
 		</svg>
 	</button>
 
-	<!-- Project Selector + Actions (global, always visible) -->
+	<!-- Project Selector + Favorite Chips (global, always visible) -->
 	{#if actualProjects.length > 0 && onProjectChange}
-		<div class="ml-3 flex-none">
+		<div class="ml-3 flex-none flex items-center gap-1.5">
 			<ProjectSelector
 				projects={actualProjects}
 				{selectedProject}
@@ -474,6 +478,7 @@
 				showColors={true}
 				projectColors={projectColorsMap}
 				{favoriteProjects}
+				{onToggleFavorite}
 				{readyTasks}
 				epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount }))}
 				idleSlots={availableSlots}
@@ -481,6 +486,32 @@
 				onStart={handleSpawnSingle}
 				onSwarm={(count, epicId) => epicId ? handleRunEpic(epicId) : handleSwarm()}
 			/>
+			{#each actualProjects.filter(p => favoriteProjects.has(p) && p !== selectedProject) as favProject}
+				{@const favColor = projectColorsMap.get(favProject) || getProjectColor(favProject)}
+				<div class="fav-chip" style="--fav-color: {favColor};">
+					<button
+						type="button"
+						class="fav-chip-btn"
+						onclick={() => onProjectChange?.(favProject)}
+						title={favProject}
+					>
+						<span class="fav-dot"></span>
+						<span class="fav-label">{favProject}</span>
+					</button>
+					{#if onNewTask}
+						<button
+							type="button"
+							class="fav-new-btn"
+							onclick={() => handleNewTask(favProject)}
+							title="New task in {favProject}"
+						>
+							<svg viewBox="0 0 20 20" fill="currentColor">
+								<path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
+							</svg>
+						</button>
+					{/if}
+				</div>
+			{/each}
 		</div>
 	{/if}
 

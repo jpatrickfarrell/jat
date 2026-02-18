@@ -2399,45 +2399,15 @@
 		background: oklch(0.70 0.18 240 / 0.12) !important;
 	}
 
-	/* Swarm hover highlight - launchable tasks glow when swarm button is hovered */
+	/* Swarm hover highlight - launchable tasks glow when swarm button is hovered.
+	   IMPORTANT: Do NOT add position:relative, overflow:hidden, or ::after
+	   pseudo-elements to <tr> elements — these are undefined/non-standard in CSS
+	   for display:table-row and can break table-layout:fixed, causing columns
+	   to shrink or collapse. Only background and box-shadow are safe on <tr>. */
 	.swarm-highlight {
-		position: relative;
-		/* NOTE: Do NOT use overflow:hidden on <tr> — it breaks table-layout:fixed
-		   by forcing the browser to change display from table-row to block,
-		   which causes all columns to shrink. The ::after shimmer is naturally
-		   clipped to its own element bounds (position:absolute + inset:0). */
 		background: oklch(0.65 0.20 280 / 0.12) !important;
 		box-shadow: inset 0 0 20px oklch(0.65 0.20 280 / 0.08);
 		transition: background 0.2s ease, box-shadow 0.2s ease;
-	}
-
-	.swarm-highlight::after {
-		content: '';
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: linear-gradient(
-			90deg,
-			transparent 0%,
-			oklch(0.65 0.20 280 / 0.15) 25%,
-			oklch(0.75 0.20 280 / 0.22) 50%,
-			oklch(0.65 0.20 280 / 0.15) 75%,
-			transparent 100%
-		);
-		background-size: 200% 100%;
-		animation: swarm-shimmer 0.8s ease-out forwards;
-		pointer-events: none;
-	}
-
-	@keyframes swarm-shimmer {
-		0% {
-			background-position: 100% 0;
-		}
-		100% {
-			background-position: -100% 0;
-		}
 	}
 
 	/* Selection count badge in header */

@@ -2448,6 +2448,10 @@
 
 	.epic-content {
 		border-top: 1px solid oklch(0.23 0.02 250);
+		/* Ensure full width even during Svelte slide transition which temporarily
+		   applies overflow:hidden + height animation. Without this, table-layout:fixed
+		   tables inside may compute incorrect column widths. */
+		width: 100%;
 	}
 
 	/* Override TasksActive table styles when inside accordion to reduce visual prominence */

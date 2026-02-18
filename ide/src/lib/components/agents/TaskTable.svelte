@@ -3304,7 +3304,7 @@
 													<!-- Run Epic button -->
 													{#if !isEpicFullyComplete}
 														<button
-															class="btn btn-xs btn-ghost gap-1 ml-2 hover:bg-primary/20 hover:text-primary {canRunEpic ? '' : 'opacity-40 cursor-not-allowed'}"
+															class="inline-flex items-center h-6 px-2 text-xs font-medium rounded gap-1 ml-2 bg-transparent text-base-content/70 hover:bg-primary/20 hover:text-primary transition-colors {canRunEpic ? '' : 'opacity-40 cursor-not-allowed'}"
 															onclick={(e) => {
 																e.stopPropagation();
 																if (canRunEpic) {
@@ -3759,7 +3759,7 @@
 										<!-- Run Epic button (only in parent mode) -->
 										{#if groupingMode === 'parent' && !parentIsFullyComplete}
 											<button
-												class="btn btn-xs btn-ghost gap-1 ml-2 hover:bg-primary/20 hover:text-primary {canRunParentEpic ? '' : 'opacity-40 cursor-not-allowed'}"
+												class="inline-flex items-center h-6 px-2 text-xs font-medium rounded gap-1 ml-2 bg-transparent text-base-content/70 hover:bg-primary/20 hover:text-primary transition-colors {canRunParentEpic ? '' : 'opacity-40 cursor-not-allowed'}"
 												onclick={(e) => {
 													e.stopPropagation();
 													if (canRunParentEpic && groupKey) {

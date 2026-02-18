@@ -939,6 +939,8 @@
 			<NodeConfigPanel
 				bind:node={configNode}
 				bind:isOpen={configPanelOpen}
+				{nodes}
+				{edges}
 				onUpdate={handleNodeUpdate}
 				onDelete={handleNodeDelete}
 				onClose={() => (configPanelOpen = false)}

@@ -1,6 +1,7 @@
 <script lang="ts">
-	import type { WorkflowNode, NodeType, NodeConfig } from '$lib/types/workflow';
+	import type { WorkflowNode, WorkflowEdge, NodeType, NodeConfig } from '$lib/types/workflow';
 	import { getNodeMeta, type NodeTypeMeta } from '$lib/config/workflowNodes';
+	import { getUpstreamVariables } from '$lib/utils/workflowVariables';
 	import CronTriggerConfig from './nodes/CronTriggerConfig.svelte';
 	import EventTriggerConfig from './nodes/EventTriggerConfig.svelte';
 	import ManualTriggerConfig from './nodes/ManualTriggerConfig.svelte';
@@ -16,6 +17,8 @@
 	let {
 		node = $bindable(null),
 		isOpen = $bindable(false),
+		nodes = [],
+		edges = [],
 		onUpdate = () => {},
 		onDelete = () => {},
 		onClose = () => {},
@@ -23,6 +26,8 @@
 	}: {
 		node: WorkflowNode | null;
 		isOpen: boolean;
+		nodes?: WorkflowNode[];
+		edges?: WorkflowEdge[];
 		onUpdate?: (node: WorkflowNode) => void;
 		onDelete?: (nodeId: string) => void;
 		onClose?: () => void;
@@ -31,6 +36,9 @@
 
 	let meta = $derived(node ? getNodeMeta(node.type) : null);
 	let cfg: any = $derived(node?.config);
+	const upstreamVariables = $derived(
+		node ? getUpstreamVariables(node.id, nodes, edges) : []
+	);
 	let editLabel = $state('');
 	let isEditingLabel = $state(false);
 	let testResult = $state<{ output?: string; error?: string; loading: boolean }>({ loading: false });
@@ -172,7 +180,7 @@
 				{:else if node.type === 'action_run_bash'}
 					<RunBashConfig config={cfg} onUpdate={handleConfigUpdate} />
 				{:else if node.type === 'action_spawn_agent'}
-					<SpawnAgentConfig config={cfg} onUpdate={handleConfigUpdate} />
+					<SpawnAgentConfig config={cfg} onUpdate={handleConfigUpdate} {upstreamVariables} />
 				{:else if node.type === 'action_browser'}
 					<BrowserConfig config={cfg} onUpdate={handleConfigUpdate} />
 				{:else if node.type === 'condition'}

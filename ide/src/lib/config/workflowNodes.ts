@@ -206,7 +206,7 @@ export const NODE_TYPE_META: Record<NodeType, NodeTypeMeta> = {
 		color: 'oklch(0.72 0.17 220)',
 		bgColor: 'oklch(0.72 0.17 220 / 0.08)',
 		portColor: 'oklch(0.72 0.17 220)',
-		helpText: 'Spawns a new agent session for an existing task or creates a new task. Agent and model are selected via routing rules or manual override.',
+		helpText: 'Spawns a new agent session. Create a new task with a templated title (use {{input}} for upstream data) or reference an existing task ID. Agent and model are selected via routing rules or manual override.',
 		defaultConfig: { taskTitle: '' }
 	},
 

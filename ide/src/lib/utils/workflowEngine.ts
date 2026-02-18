@@ -434,7 +434,7 @@ async function executeSpawnAgent(
 ): Promise<unknown> {
 	const config = node.config as ActionSpawnAgentConfig;
 
-	ctx.log(node.id, `Spawn agent: task=${config.taskId || config.taskTitle}, agent=${config.agentId || 'auto'}, model=${config.model || 'default'}`);
+	ctx.log(node.id, `Spawn agent: task=${config.taskId || '(none)'}, agent=${config.agentId || 'auto'}, model=${config.model || 'default'}`);
 
 	if (ctx.dryRun) {
 		return { dryRun: true, taskId: config.taskId, taskTitle: config.taskTitle, agentId: config.agentId, model: config.model };

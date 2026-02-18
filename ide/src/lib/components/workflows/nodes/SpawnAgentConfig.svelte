@@ -1,14 +1,18 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { ActionSpawnAgentConfig } from '$lib/types/workflow';
+	import type { UpstreamVariableGroup } from '$lib/utils/workflowVariables';
 	import AgentSelector from '$lib/components/agents/AgentSelector.svelte';
+	import TemplateVariables from './TemplateVariables.svelte';
 
 	let {
 		config = { taskTitle: '', model: 'sonnet' },
-		onUpdate = () => {}
+		onUpdate = () => {},
+		upstreamVariables = []
 	}: {
 		config: ActionSpawnAgentConfig;
 		onUpdate?: (config: ActionSpawnAgentConfig) => void;
+		upstreamVariables?: UpstreamVariableGroup[];
 	} = $props();
 
 	function update(patch: Partial<ActionSpawnAgentConfig>) {
@@ -80,8 +84,14 @@
 				style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"
 				value={config.taskTitle || ''}
 				oninput={(e) => update({ taskTitle: e.currentTarget.value })}
-				placeholder="Title for the new task"
+				placeholder={upstreamVariables.length > 0 ? 'Task title — click a variable below to insert' : `Use {{input}} for data from previous node`}
 			/>
+			{#if upstreamVariables.length > 0}
+				<TemplateVariables
+					groups={upstreamVariables}
+					onInsert={(text) => update({ taskTitle: (config.taskTitle || '') + text })}
+				/>
+			{/if}
 		</div>
 
 		<div class="form-control">
@@ -94,8 +104,14 @@
 				style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250); min-height: 80px"
 				value={config.taskDescription || ''}
 				oninput={(e) => update({ taskDescription: e.currentTarget.value || undefined })}
-				placeholder="Detailed task description"
+				placeholder={upstreamVariables.length > 0 ? 'Task description — click a variable below to insert' : `Detailed task description. Use {{input}} for upstream data.`}
 			></textarea>
+			{#if upstreamVariables.length > 0}
+				<TemplateVariables
+					groups={upstreamVariables}
+					onInsert={(text) => update({ taskDescription: (config.taskDescription || '') + text })}
+				/>
+			{/if}
 		</div>
 	{:else}
 		<div class="form-control">

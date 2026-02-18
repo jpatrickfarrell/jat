@@ -1508,6 +1508,34 @@
 				{#if isPluginType}
 					{#if step === 0}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
+							<!-- Setup guide for Supabase -->
+								{#if sourceType === 'supabase'}
+									<details
+										class="rounded-lg"
+										style="background: oklch(0.20 0.04 155 / 0.3); border: 1px solid oklch(0.30 0.04 155);"
+									>
+										<summary class="cursor-pointer px-3 py-2.5 font-mono text-[11px] font-semibold select-none" style="color: oklch(0.70 0.10 155);">
+											How to get a Supabase Service Role Key
+										</summary>
+										<div class="px-3 pb-3 space-y-2">
+											<ol class="font-mono text-[10px] space-y-1.5 list-decimal list-inside" style="color: oklch(0.60 0.02 250);">
+												<li>Go to your <a href="https://supabase.com/dashboard" target="_blank" rel="noopener" class="underline" style="color: oklch(0.70 0.12 155);">Supabase Dashboard</a></li>
+												<li>Select your project, then go to <strong style="color: oklch(0.75 0.02 250);">Settings → API</strong></li>
+												<li>Under <strong style="color: oklch(0.75 0.02 250);">Project API keys</strong>, copy the <code style="color: oklch(0.65 0.02 250);">service_role</code> key (starts with <code style="color: oklch(0.65 0.02 250);">eyJhbG...</code>)</li>
+												<li>The <strong style="color: oklch(0.75 0.02 250);">Project URL</strong> is also on this page (e.g. <code style="color: oklch(0.65 0.02 250);">{`https://xxx.supabase.co`}</code>)</li>
+											</ol>
+											<div
+												class="px-2.5 py-2 rounded mt-2"
+												style="background: oklch(0.18 0.02 250); border: 1px solid oklch(0.25 0.02 250);"
+											>
+												<p class="font-mono text-[10px]" style="color: oklch(0.55 0.02 250);">
+													The <code style="color: oklch(0.65 0.02 250);">service_role</code> key bypasses Row Level Security. Keep it secret — never expose it in client-side code. Your table needs a status column (e.g. <code style="color: oklch(0.65 0.02 250);">jat_status</code>) to track which rows have been ingested.
+												</p>
+											</div>
+										</div>
+									</details>
+								{/if}
+
 							{#if pluginMetadata?.configFields && pluginMetadata.configFields.length > 0}
 								<DynamicConfigForm
 									configFields={pluginMetadata.configFields}

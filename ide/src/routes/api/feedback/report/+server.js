@@ -2,7 +2,7 @@
  * Feedback Widget Report API
  *
  * Receives bug reports from the <jat-feedback> widget and creates tasks.
- * Screenshots are saved to .jat/screenshots/ and referenced in the task description.
+ * Screenshots are saved as proper task attachments via the task-images system.
  * Includes CORS headers for cross-origin widget usage.
  *
  * POST - Submit a bug report (creates a task)
@@ -14,8 +14,14 @@ import { createTask } from '$lib/server/jat-tasks.js';
 import { invalidateCache } from '$lib/server/cache.js';
 import { _resetTaskCache } from '../../../api/agents/+server.js';
 import { emitEvent } from '$lib/utils/eventBus.server.js';
-import { writeFileSync, mkdirSync, existsSync } from 'fs';
-import { resolve } from 'path';
+import { getProjectPath } from '$lib/server/projectPaths.js';
+import { writeFileSync, readFileSync, mkdirSync, existsSync } from 'fs';
+import { resolve, join, dirname } from 'path';
+import { homedir } from 'os';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 const CORS_HEADERS = {
 	'Access-Control-Allow-Origin': '*',
@@ -94,14 +100,24 @@ export async function POST({ request }) {
 			descParts.push(`**Browser:** ${body.user_agent}`);
 		}
 
-		// Save screenshots and collect paths
-		const screenshotPaths = [];
-		if (body.screenshots && Array.isArray(body.screenshots) && body.screenshots.length > 0) {
-			const projectPath = process.cwd().replace(/\/ide$/, '');
-			const screenshotsDir = resolve(projectPath, '.jat', 'screenshots');
+		// Resolve project path from body.project or fallback to JAT
+		let projectPath = process.cwd().replace(/\/ide$/, '');
+		if (body.project && typeof body.project === 'string' && body.project.trim()) {
+			const resolved = await getProjectPath(body.project.trim());
+			if (resolved.exists) {
+				projectPath = resolved.path;
+			} else {
+				console.warn(`[feedback-report] Project "${body.project}" not found, falling back to default`);
+			}
+		}
 
-			if (!existsSync(screenshotsDir)) {
-				mkdirSync(screenshotsDir, { recursive: true });
+		// Save screenshots to standard task-images location
+		/** @type {{ path: string; uploadedAt: string; id: string }[]} */
+		const savedAttachments = [];
+		if (body.screenshots && Array.isArray(body.screenshots) && body.screenshots.length > 0) {
+			const imagesDir = join(homedir(), '.local', 'share', 'jat', 'task-images');
+			if (!existsSync(imagesDir)) {
+				mkdirSync(imagesDir, { recursive: true });
 			}
 
 			const timestamp = Date.now();
@@ -115,20 +131,23 @@ export async function POST({ request }) {
 
 					const mime = header.match(/:(.*?);/)?.[1] || 'image/png';
 					const ext = mime === 'image/png' ? 'png' : 'jpg';
-					const filename = `feedback-${timestamp}-${i}.${ext}`;
-					const filepath = resolve(screenshotsDir, filename);
+					const rand = Math.random().toString(36).substring(2, 8);
+					const filename = `upload-feedback-${timestamp}-${rand}.${ext}`;
+					const filepath = join(imagesDir, filename);
 
 					writeFileSync(filepath, Buffer.from(base64, 'base64'));
-					screenshotPaths.push(`.jat/screenshots/${filename}`);
+					savedAttachments.push({
+						path: filepath,
+						uploadedAt: new Date().toISOString(),
+						id: `feedback-${timestamp}-${i}`
+					});
 				} catch (err) {
 					console.warn(`[feedback-report] Screenshot save failed (${i}):`, err.message);
 				}
 			}
 
-			if (screenshotPaths.length > 0) {
-				descParts.push(
-					`**Screenshots:** ${screenshotPaths.length} saved\n${screenshotPaths.map((p) => `- \`${p}\``).join('\n')}`
-				);
+			if (savedAttachments.length > 0) {
+				descParts.push(`**Screenshots:** ${savedAttachments.length} attached`);
 			}
 		}
 
@@ -169,7 +188,6 @@ export async function POST({ request }) {
 		const fullDescription = descParts.join('\n\n');
 
 		// Create the task
-		const projectPath = process.cwd().replace(/\/ide$/, '');
 		const createdTask = createTask({
 			projectPath,
 			title: `[Feedback] ${title}`,
@@ -181,6 +199,31 @@ export async function POST({ request }) {
 			assignee: null,
 			notes: ''
 		});
+
+		// Register screenshots as proper task attachments
+		if (savedAttachments.length > 0) {
+			try {
+				const imageStorePath = join(process.cwd().replace(/\/ide$/, ''), '.jat', 'task-images.json');
+				let taskImages = {};
+				if (existsSync(imageStorePath)) {
+					taskImages = JSON.parse(readFileSync(imageStorePath, 'utf-8'));
+				}
+				taskImages[createdTask.id] = savedAttachments;
+				const storeDir = dirname(imageStorePath);
+				if (!existsSync(storeDir)) {
+					mkdirSync(storeDir, { recursive: true });
+				}
+				writeFileSync(imageStorePath, JSON.stringify(taskImages, null, 2), 'utf-8');
+
+				// Sync image paths to task notes so agents see them via `jt show`
+				const imageList = savedAttachments.map((img, i) => `  ${i + 1}. ${img.path}`).join('\n');
+				const notes = `📷 Attached screenshots:\n${imageList}\n(Use Read tool to view these images)`;
+				const escapedNotes = notes.replace(/"/g, '\\"');
+				await execAsync(`cd "${projectPath}" && jt update ${createdTask.id} --notes "${escapedNotes}"`);
+			} catch (err) {
+				console.warn('[feedback-report] Failed to register attachments:', err.message);
+			}
+		}
 
 		// Invalidate caches
 		invalidateCache.tasks();

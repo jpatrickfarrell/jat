@@ -1261,7 +1261,7 @@
 						<!-- Features -->
 						<div class="flex flex-wrap gap-2 pt-3">
 							{#each [
-								{ icon: '📸', label: 'Screenshots', desc: 'Viewport capture via html2canvas' },
+								{ icon: '📸', label: 'Screenshots', desc: 'Viewport capture via modern-screenshot' },
 								{ icon: '🐛', label: 'Console Logs', desc: 'Errors, warnings, logs' },
 								{ icon: '🎯', label: 'Element Picker', desc: 'Click to inspect any element' },
 								{ icon: '📝', label: 'Bug Reports', desc: 'Structured form to JAT tasks' },
@@ -1290,7 +1290,7 @@
 									class="font-mono text-[9px] leading-relaxed px-2.5 py-2 rounded overflow-x-auto"
 									style="background: oklch(0.12 0.01 250); color: oklch(0.60 0.06 200); border: 1px solid oklch(0.20 0.02 250); margin: 0;"
 								>{`<script src="http://localhost:3333/widget/jat-feedback.js"><\/script>
-<jat-feedback endpoint="http://localhost:3333"></jat-feedback>`}</pre>
+<jat-feedback endpoint="http://localhost:3333" project="your-project"></jat-feedback>`}</pre>
 								<button
 									class="absolute top-1.5 right-1.5 font-mono text-[8px] px-1.5 py-0.5 rounded cursor-pointer transition-colors duration-150"
 									style="
@@ -1299,7 +1299,7 @@
 										border: 1px solid {widgetCopied ? 'oklch(0.40 0.10 145)' : 'oklch(0.35 0.04 270)'};
 									"
 									onclick={() => {
-										navigator.clipboard.writeText(`<script src="http://localhost:3333/widget/jat-feedback.js"><\/script>\n<jat-feedback endpoint="http://localhost:3333"></jat-feedback>`);
+										navigator.clipboard.writeText(`<script src="http://localhost:3333/widget/jat-feedback.js"><\/script>\n<jat-feedback endpoint="http://localhost:3333" project="your-project"></jat-feedback>`);
 										widgetCopied = true;
 										setTimeout(() => widgetCopied = false, 2000);
 									}}
@@ -1317,6 +1317,7 @@
 							<div class="space-y-1.5">
 								{#each [
 									{ attr: 'endpoint', desc: 'JAT IDE URL (required)', example: 'http://localhost:3333' },
+									{ attr: 'project', desc: 'Project name for task routing', example: 'flush | chimaro | jat' },
 									{ attr: 'position', desc: 'Button position', example: 'bottom-right | bottom-left | top-right | top-left' },
 									{ attr: 'theme', desc: 'Color theme', example: 'dark | light' },
 									{ attr: 'buttoncolor', desc: 'Button color', example: '#3b82f6' }

@@ -204,6 +204,21 @@ export class BaseAdapter {
   }
 
   /**
+   * Post-ingest callback. Called after a task is created from a polled item.
+   * Override to update the source (e.g. mark a database row as ingested).
+   * Default: no-op.
+   *
+   * @param {Object} sourceConfig - Source configuration
+   * @param {IngestItem} item - The item that was ingested
+   * @param {string} taskId - The created JAT task ID
+   * @param {(name: string) => string} getSecret - Retrieve a secret by name
+   * @returns {Promise<void>}
+   */
+  async markIngested(_sourceConfig, _item, _taskId, _getSecret) {
+    // no-op for adapters that don't need post-ingest updates
+  }
+
+  /**
    * Poll for replies to tracked threads (optional, used by Slack).
    *
    * @param {Object} source - Source configuration

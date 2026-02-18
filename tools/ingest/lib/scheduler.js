@@ -249,6 +249,15 @@ async function pollSource(source) {
           applyAutomation(taskId, source);
         }
 
+        // Post-ingest callback (e.g. Supabase adapter marks rows as ingested)
+        if (taskId && typeof adapter.markIngested === 'function') {
+          try {
+            await adapter.markIngested(source, item, taskId, getSecret);
+          } catch (err) {
+            logger.warn(`markIngested failed for ${item.id}: ${err.message}`, source.id);
+          }
+        }
+
         // Register thread for reply tracking
         if (taskId && source.trackReplies !== false) {
           registerThread(source.id, item.id, item.origin?.threadId || item.id, taskId);

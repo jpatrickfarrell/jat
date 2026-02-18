@@ -96,6 +96,15 @@ function validate(config) {
     if (src.type === 'gmail' && !src.folder) {
       throw new Error(`Gmail source ${src.id} must have a "folder" (Gmail label name)`);
     }
+    if (src.type === 'supabase' && !src.projectUrl) {
+      throw new Error(`Supabase source ${src.id} must have a "projectUrl"`);
+    }
+    if (src.type === 'supabase' && !src.secretName) {
+      throw new Error(`Supabase source ${src.id} must have a "secretName"`);
+    }
+    if (src.type === 'supabase' && !src.table) {
+      throw new Error(`Supabase source ${src.id} must have a "table"`);
+    }
     if (src.debounceMs !== undefined && src.debounceMs !== true && src.debounceMs !== false) {
       const ms = Number(src.debounceMs);
       if (isNaN(ms) || ms < 0) {

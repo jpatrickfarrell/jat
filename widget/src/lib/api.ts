@@ -28,3 +28,59 @@ export async function healthCheck(endpoint: string): Promise<boolean> {
     return false;
   }
 }
+
+export interface ReportSummary {
+  id: string;
+  title: string;
+  description: string;
+  type: string;
+  priority: string;
+  status: string;
+  dev_notes: string | null;
+  user_response: string | null;
+  user_response_at: string | null;
+  page_url: string | null;
+  created_at: string;
+}
+
+export async function fetchReports(endpoint: string): Promise<{ reports: ReportSummary[]; error?: string }> {
+  try {
+    const url = `${endpoint.replace(/\/$/, '')}/api/feedback/reports`;
+    const response = await fetch(url, {
+      method: 'GET',
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      return { reports: [], error: data.error || `HTTP ${response.status}` };
+    }
+
+    const data = await response.json();
+    return { reports: data.reports || [] };
+  } catch (err) {
+    return { reports: [], error: err instanceof Error ? err.message : 'Failed to fetch' };
+  }
+}
+
+export async function respondToReport(endpoint: string, reportId: string, response: 'accepted' | 'rejected'): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const url = `${endpoint.replace(/\/$/, '')}/api/feedback/reports/${reportId}/respond`;
+    const res = await fetch(url, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ response }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      return { ok: false, error: data.error || `HTTP ${res.status}` };
+    }
+
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to respond' };
+  }
+}

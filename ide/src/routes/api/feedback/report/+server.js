@@ -151,18 +151,31 @@ export async function POST({ request }) {
 			}
 		}
 
-		// Add console logs summary
+		// Add console logs summary — prioritize errors/warns, then most recent
 		if (body.console_logs && Array.isArray(body.console_logs) && body.console_logs.length > 0) {
-			const logSummary = body.console_logs
-				.slice(0, 10)
+			const allLogs = body.console_logs;
+			const errors = allLogs.filter((l) => l.type === 'error' || l.type === 'warn');
+			const recent = allLogs.slice(-10);
+			// Dedupe by timestamp+message, errors first then recent context
+			const seen = new Set();
+			const prioritized = [];
+			for (const log of [...errors, ...recent]) {
+				const key = `${log.timestamp || ''}|${log.message || ''}`;
+				if (!seen.has(key)) {
+					seen.add(key);
+					prioritized.push(log);
+				}
+			}
+			const selected = prioritized.slice(-20);
+			const logSummary = selected
 				.map((log) => {
 					const level = log.type || log.level || 'log';
 					const msg =
 						typeof log.message === 'string' ? log.message : JSON.stringify(log.message);
-					return `- [${level}] ${msg.substring(0, 200)}`;
+					return `- [${level}] ${msg.substring(0, 500)}`;
 				})
 				.join('\n');
-			descParts.push(`**Console Logs** (${body.console_logs.length}):\n${logSummary}`);
+			descParts.push(`**Console Logs** (${allLogs.length} total, ${selected.length} shown):\n${logSummary}`);
 		}
 
 		// Add selected elements summary

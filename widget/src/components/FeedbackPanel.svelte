@@ -8,6 +8,7 @@
   import ScreenshotPreview from './ScreenshotPreview.svelte';
   import ConsoleLogList from './ConsoleLogList.svelte';
   import StatusToast from './StatusToast.svelte';
+  import RequestList from './RequestList.svelte';
 
   let {
     endpoint,
@@ -30,6 +31,8 @@
     orgName?: string;
     onclose: () => void;
   } = $props();
+
+  let activeTab = $state<'new' | 'requests'>('new');
 
   let title = $state('');
   let description = $state('');
@@ -129,7 +132,8 @@
       if (result.ok) {
         showToast(`Report submitted (${result.id})`, 'success');
         resetForm();
-        setTimeout(onclose, 1200);
+        // Switch to requests tab to show the new report
+        setTimeout(() => { activeTab = 'requests'; }, 1200);
       } else {
         // Queue for retry
         enqueue(endpoint, report);
@@ -178,87 +182,100 @@
 
 <div class="panel">
   <div class="panel-header">
-    <h2>Send Feedback</h2>
+    <div class="tabs">
+      <button class="tab" class:active={activeTab === 'new'} onclick={() => activeTab = 'new'}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        New Report
+      </button>
+      <button class="tab" class:active={activeTab === 'requests'} onclick={() => activeTab = 'requests'}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        My Requests
+      </button>
+    </div>
     <button class="close-btn" onclick={onclose} aria-label="Close">&times;</button>
   </div>
 
-  <form class="panel-body" onsubmit={handleSubmit}>
-    <div class="field">
-      <label for="jat-fb-title">Title <span class="req">*</span></label>
-      <input id="jat-fb-title" type="text" bind:value={title} placeholder="Brief description" required disabled={submitting} />
-    </div>
+  {#if activeTab === 'new'}
+    <form class="panel-body" onsubmit={handleSubmit}>
+      <div class="field">
+        <label for="jat-fb-title">Title <span class="req">*</span></label>
+        <input id="jat-fb-title" type="text" bind:value={title} placeholder="Brief description" required disabled={submitting} />
+      </div>
 
-    <div class="field">
-      <label for="jat-fb-desc">Description</label>
-      <textarea id="jat-fb-desc" bind:value={description} placeholder="Steps to reproduce, expected vs actual..." rows="3" disabled={submitting}></textarea>
-    </div>
+      <div class="field">
+        <label for="jat-fb-desc">Description</label>
+        <textarea id="jat-fb-desc" bind:value={description} placeholder="Steps to reproduce, expected vs actual..." rows="3" disabled={submitting}></textarea>
+      </div>
 
-    <div class="field-row">
-      <div class="field half">
-        <label for="jat-fb-type">Type</label>
-        <select id="jat-fb-type" bind:value={type} disabled={submitting}>
-          {#each typeOptions as opt}
-            <option value={opt.value}>{opt.label}</option>
+      <div class="field-row">
+        <div class="field half">
+          <label for="jat-fb-type">Type</label>
+          <select id="jat-fb-type" bind:value={type} disabled={submitting}>
+            {#each typeOptions as opt}
+              <option value={opt.value}>{opt.label}</option>
+            {/each}
+          </select>
+        </div>
+        <div class="field half">
+          <label for="jat-fb-priority">Priority</label>
+          <select id="jat-fb-priority" bind:value={priority} disabled={submitting}>
+            {#each priorityOptions as opt}
+              <option value={opt.value}>{opt.label}</option>
+            {/each}
+          </select>
+        </div>
+      </div>
+
+      <div class="tools">
+        <ScreenshotPreview {screenshots} {capturing} oncapture={handleCapture} onremove={handleRemoveScreenshot} />
+
+        <button type="button" class="tool-btn" onclick={handlePickElement} disabled={picking}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <path d="M7 2L7 22M17 2V22M2 7H22M2 17H22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          {#if picking}
+            Click an element...
+          {:else}
+            Pick Element{#if selectedElements.length > 0} <span class="tool-count">{selectedElements.length}</span>{/if}
+          {/if}
+        </button>
+      </div>
+
+      {#if selectedElements.length > 0}
+        <div class="elements-list">
+          {#each selectedElements as el, i}
+            <div class="element-item">
+              <span class="element-tag">&lt;{el.tagName.toLowerCase()}&gt;</span>
+              <span class="element-text">{el.textContent?.substring(0, 40) || el.selector}</span>
+              <button class="element-remove" onclick={() => { selectedElements = selectedElements.filter((_, idx) => idx !== i); }} aria-label="Remove">&times;</button>
+            </div>
           {/each}
-        </select>
+        </div>
+      {/if}
+
+      <ConsoleLogList logs={consoleLogs} />
+
+      {#if attachmentCount() > 0}
+        <div class="attach-summary">
+          {attachmentCount()} attachment{attachmentCount() > 1 ? 's' : ''} will be included
+        </div>
+      {/if}
+
+      <div class="actions">
+        <button type="button" class="cancel-btn" onclick={onclose} disabled={submitting}>Cancel</button>
+        <button type="submit" class="submit-btn" disabled={submitting || !title.trim()}>
+          {#if submitting}
+            <span class="spinner"></span>
+            Submitting...
+          {:else}
+            Submit
+          {/if}
+        </button>
       </div>
-      <div class="field half">
-        <label for="jat-fb-priority">Priority</label>
-        <select id="jat-fb-priority" bind:value={priority} disabled={submitting}>
-          {#each priorityOptions as opt}
-            <option value={opt.value}>{opt.label}</option>
-          {/each}
-        </select>
-      </div>
-    </div>
-
-    <div class="tools">
-      <ScreenshotPreview {screenshots} {capturing} oncapture={handleCapture} onremove={handleRemoveScreenshot} />
-
-      <button type="button" class="tool-btn" onclick={handlePickElement} disabled={picking}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-          <path d="M7 2L7 22M17 2V22M2 7H22M2 17H22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        {#if picking}
-          Click an element...
-        {:else}
-          Pick Element{#if selectedElements.length > 0} <span class="tool-count">{selectedElements.length}</span>{/if}
-        {/if}
-      </button>
-    </div>
-
-    {#if selectedElements.length > 0}
-      <div class="elements-list">
-        {#each selectedElements as el, i}
-          <div class="element-item">
-            <span class="element-tag">&lt;{el.tagName.toLowerCase()}&gt;</span>
-            <span class="element-text">{el.textContent?.substring(0, 40) || el.selector}</span>
-            <button class="element-remove" onclick={() => { selectedElements = selectedElements.filter((_, idx) => idx !== i); }} aria-label="Remove">&times;</button>
-          </div>
-        {/each}
-      </div>
-    {/if}
-
-    <ConsoleLogList logs={consoleLogs} />
-
-    {#if attachmentCount() > 0}
-      <div class="attach-summary">
-        {attachmentCount()} attachment{attachmentCount() > 1 ? 's' : ''} will be included
-      </div>
-    {/if}
-
-    <div class="actions">
-      <button type="button" class="cancel-btn" onclick={onclose} disabled={submitting}>Cancel</button>
-      <button type="submit" class="submit-btn" disabled={submitting || !title.trim()}>
-        {#if submitting}
-          <span class="spinner"></span>
-          Submitting...
-        {:else}
-          Submit
-        {/if}
-      </button>
-    </div>
-  </form>
+    </form>
+  {:else}
+    <RequestList {endpoint} />
+  {/if}
 
   <StatusToast message={toastMessage} type={toastType} visible={toastVisible} />
 </div>
@@ -266,7 +283,7 @@
 <style>
   .panel {
     width: 380px;
-    max-height: 520px;
+    max-height: 540px;
     background: #111827;
     border: 1px solid #374151;
     border-radius: 12px;
@@ -282,14 +299,33 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 16px;
+    padding: 0 8px 0 0;
     border-bottom: 1px solid #1f2937;
   }
-  .panel-header h2 {
-    margin: 0;
-    font-size: 15px;
-    font-weight: 600;
+  .tabs {
+    display: flex;
+    flex: 1;
+  }
+  .tab {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 11px 14px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #6b7280;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    transition: color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+  }
+  .tab:hover { color: #d1d5db; }
+  .tab.active {
     color: #f9fafb;
+    border-bottom-color: #3b82f6;
   }
   .close-btn {
     background: none;
@@ -297,8 +333,9 @@
     color: #9ca3af;
     font-size: 20px;
     cursor: pointer;
-    padding: 0;
+    padding: 0 4px;
     line-height: 1;
+    flex-shrink: 0;
   }
   .close-btn:hover { color: #e5e7eb; }
 

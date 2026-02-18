@@ -19,6 +19,8 @@
 	 */
 
 	import { page } from "$app/stores";
+	import { flip } from "svelte/animate";
+	import { cubicOut } from "svelte/easing";
 	import { getProjectColor } from "$lib/utils/projectColors";
 	import ActivityBadge from "./ActivityBadge.svelte";
 	import ServersBadge from "./ServersBadge.svelte";
@@ -297,6 +299,16 @@
 	// Convert projectColors Record to Map for ProjectSelector
 	const projectColorsMap = $derived(new Map(Object.entries(projectColors)));
 
+	// Favorite projects list: selected first, then rest — for FLIP animation
+	const favoriteChips = $derived(() => {
+		if (!favoriteProjects || favoriteProjects.size === 0) return [];
+		const favs = actualProjects.filter(p => favoriteProjects.has(p));
+		// Selected project first, then the rest
+		const selected = favs.filter(p => p === selectedProject);
+		const rest = favs.filter(p => p !== selectedProject);
+		return [...selected, ...rest];
+	});
+
 
 	// Max sessions from user preferences (reactive)
 	const maxSessions = $derived(getMaxSessions());
@@ -469,49 +481,72 @@
 	<!-- Project Selector + Favorite Chips (global, always visible) -->
 	{#if actualProjects.length > 0 && onProjectChange}
 		<div class="ml-3 flex-none flex items-center gap-1.5">
-			<ProjectSelector
-				projects={actualProjects}
-				{selectedProject}
-				onProjectChange={onProjectChange}
-				{taskCounts}
-				compact={true}
-				showColors={true}
-				projectColors={projectColorsMap}
-				{favoriteProjects}
-				{onToggleFavorite}
-				{readyTasks}
-				epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount }))}
-				idleSlots={availableSlots}
-				onNewTask={handleNewTask}
-				onStart={handleSpawnSingle}
-				onSwarm={(count, epicId) => epicId ? handleRunEpic(epicId) : handleSwarm()}
-			/>
-			{#each actualProjects.filter(p => favoriteProjects.has(p) && p !== selectedProject) as favProject}
+			{#each favoriteChips() as favProject (favProject)}
 				{@const favColor = projectColorsMap.get(favProject) || getProjectColor(favProject)}
-				<div class="fav-chip" style="--fav-color: {favColor};">
-					<button
-						type="button"
-						class="fav-chip-btn"
-						onclick={() => onProjectChange?.(favProject)}
-						title={favProject}
-					>
-						<span class="fav-dot"></span>
-						<span class="fav-label">{favProject}</span>
-					</button>
-					{#if onNewTask}
-						<button
-							type="button"
-							class="fav-new-btn"
-							onclick={() => handleNewTask(favProject)}
-							title="New task in {favProject}"
-						>
-							<svg viewBox="0 0 20 20" fill="currentColor">
-								<path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
-							</svg>
-						</button>
+				<div class="fav-flip-wrapper" animate:flip={{ duration: 300, easing: cubicOut }}>
+					{#if favProject === selectedProject}
+						<ProjectSelector
+							projects={actualProjects}
+							{selectedProject}
+							onProjectChange={onProjectChange}
+							{taskCounts}
+							compact={true}
+							showColors={true}
+							projectColors={projectColorsMap}
+							{favoriteProjects}
+							{onToggleFavorite}
+							{readyTasks}
+							epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount }))}
+							idleSlots={availableSlots}
+							onNewTask={handleNewTask}
+							onStart={handleSpawnSingle}
+							onSwarm={(count, epicId) => epicId ? handleRunEpic(epicId) : handleSwarm()}
+						/>
+					{:else}
+						<div class="fav-chip" style="--fav-color: {favColor};">
+							<button
+								type="button"
+								class="fav-chip-btn"
+								onclick={() => onProjectChange?.(favProject)}
+								title={favProject}
+							>
+								<span class="fav-dot"></span>
+								<span class="fav-label">{favProject}</span>
+							</button>
+							<button
+								type="button"
+								class="fav-new-btn"
+								onclick={() => handleNewTask(favProject)}
+								title="New task in {favProject}"
+							>
+								<svg viewBox="0 0 20 20" fill="currentColor">
+									<path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
+								</svg>
+							</button>
+						</div>
 					{/if}
 				</div>
 			{/each}
+			<!-- Fallback: if selected project is NOT a favorite, show selector outside the each -->
+			{#if !favoriteProjects.has(selectedProject)}
+				<ProjectSelector
+					projects={actualProjects}
+					{selectedProject}
+					onProjectChange={onProjectChange}
+					{taskCounts}
+					compact={true}
+					showColors={true}
+					projectColors={projectColorsMap}
+					{favoriteProjects}
+					{onToggleFavorite}
+					{readyTasks}
+					epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount }))}
+					idleSlots={availableSlots}
+					onNewTask={handleNewTask}
+					onStart={handleSpawnSingle}
+					onSwarm={(count, epicId) => epicId ? handleRunEpic(epicId) : handleSwarm()}
+				/>
+			{/if}
 		</div>
 	{/if}
 
@@ -744,5 +779,97 @@
 </nav>
 
 <style>
-	/* Swarm Dropdown Panel styles removed (moved to ProjectSelector) */
+	/* Favorite project chips — ghost style, expand on hover */
+	.fav-chip {
+		display: inline-flex;
+		align-items: stretch;
+		border-radius: 0.375rem;
+		background: transparent;
+		border: 1px solid color-mix(in oklch, var(--fav-color) 20%, transparent);
+		transition: all 0.15s ease;
+		overflow: hidden;
+		opacity: 0.5;
+	}
+
+	.fav-chip:hover {
+		opacity: 1;
+		background: color-mix(in oklch, var(--fav-color) 18%, transparent);
+		border-color: color-mix(in oklch, var(--fav-color) 45%, transparent);
+		box-shadow: 0 0 6px color-mix(in oklch, var(--fav-color) 15%, transparent);
+	}
+
+	.fav-chip-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.2rem 0.4rem;
+		background: transparent;
+		border: none;
+		cursor: pointer;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		font-size: 0.6875rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
+		color: color-mix(in oklch, var(--fav-color) 70%, oklch(0.70 0 0));
+		transition: color 0.15s ease;
+	}
+
+	.fav-chip:hover .fav-chip-btn {
+		color: var(--fav-color);
+	}
+
+	.fav-dot {
+		width: 0.4rem;
+		height: 0.4rem;
+		border-radius: 50%;
+		background: var(--fav-color);
+		flex-shrink: 0;
+		opacity: 0.6;
+	}
+
+	.fav-chip:hover .fav-dot {
+		opacity: 1;
+	}
+
+	.fav-label {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		max-width: 6rem;
+	}
+
+	/* Hover-expand + button */
+	.fav-new-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		max-width: 0;
+		padding: 0;
+		border: none;
+		border-left: 0px solid transparent;
+		background: transparent;
+		opacity: 0;
+		overflow: hidden;
+		transition: all 0.2s ease;
+		cursor: pointer;
+		color: oklch(0.85 0.18 145);
+	}
+
+	.fav-chip:hover .fav-new-btn {
+		max-width: 1.5rem;
+		padding: 0 0.25rem;
+		border-left: 1px solid color-mix(in oklch, var(--fav-color) 30%, transparent);
+		opacity: 1;
+	}
+
+	.fav-new-btn:hover {
+		background: oklch(0.30 0.08 145 / 0.3);
+	}
+
+	.fav-new-btn svg {
+		width: 0.8rem;
+		height: 0.8rem;
+		flex-shrink: 0;
+	}
 </style>

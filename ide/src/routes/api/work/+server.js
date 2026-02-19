@@ -553,6 +553,10 @@ async function computeWorkData(lines, includeUsage) {
 			const signalState = readSignalState(session.name);
 			if (signalState) {
 				preSignalStates.set(session.name, signalState);
+			} else if (existsSync(`/tmp/jat-resumed-${session.name}.json`)) {
+				// Fallback: resumed session with no signal file (pre-fix or expired signal).
+				// Use resume marker to avoid misclassifying as "planning session".
+				preSignalStates.set(session.name, 'starting');
 			}
 
 			// Session is "active" (needs terminal capture) if:

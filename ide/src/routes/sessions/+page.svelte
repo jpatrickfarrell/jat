@@ -1981,7 +1981,7 @@
 										{#if recent.taskId && recent.taskId !== 'unknown'}
 											<div class="badge-and-text">
 												<TaskIdBadge
-													task={{ id: recent.taskId, status: recent.taskStatus || (recent.lastState === 'complete' || recent.lastState === 'completed' ? 'closed' : 'open'), title: recent.taskTitle || undefined }}
+													task={{ id: recent.taskId, status: recent.taskStatus || (recent.lastState === 'complete' || recent.lastState === 'completed' ? 'closed' : 'open'), title: recent.taskTitle || undefined, integration: recent.integration || null }}
 													size="sm"
 													variant="agentPill"
 													agentName={recent.agentName}

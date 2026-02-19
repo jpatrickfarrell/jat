@@ -19,6 +19,8 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'fs';
 import { join } from 'path';
 import { singleFlight, cacheKey } from '$lib/server/cache.js';
 import { getAllProjects } from '$lib/utils/projectConfig.js';
+import { getTaskById } from '$lib/server/jat-tasks.js';
+import { lookupIntegrations } from '$lib/server/integrationLookup.js';
 
 const execAsync = promisify(exec);
 
@@ -289,6 +291,29 @@ export async function GET({ url }) {
 		const page = allSessions.slice(offset, offset + limit);
 		const sessions = page.map(({ mtime, ...rest }) => rest);
 		const hasMore = offset + limit < allSessions.length;
+
+		// Enrich sessions with actual task status from database
+		for (const session of sessions) {
+			if (session.taskId) {
+				try {
+					const task = getTaskById(session.taskId);
+					if (task) {
+						session.taskStatus = task.status;
+					}
+				} catch { /* DB not available, skip */ }
+			}
+		}
+
+		// Enrich sessions with integration source info
+		const taskIdsWithSessions = sessions.filter(s => s.taskId).map(s => s.taskId);
+		if (taskIdsWithSessions.length > 0) {
+			const integrations = lookupIntegrations(taskIdsWithSessions);
+			for (const session of sessions) {
+				if (session.taskId && integrations[session.taskId]) {
+					session.integration = integrations[session.taskId];
+				}
+			}
+		}
 
 		return json({
 			sessions,

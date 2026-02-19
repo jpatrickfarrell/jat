@@ -57,7 +57,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		// Call the LLM
 		const response = await llmCall(prompt, {
 			maxTokens: 4096,
-			model: 'claude-3-5-haiku-20241022' // Use fast model for this utility
+			model: 'claude-haiku-4-5' // Use fast model for this utility
 		});
 
 		const durationMs = Date.now() - startTime;

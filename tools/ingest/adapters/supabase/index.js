@@ -243,12 +243,21 @@ export default class SupabaseAdapter extends BaseAdapter {
     const queryParams = `${statusCol}=eq.${encodeURIComponent(statusNew)}&order=${timestampCol}.asc&limit=20`;
     const rows = await supabaseRequest(source.projectUrl, serviceRoleKey, `${table}?${queryParams}`);
 
-    if (!rows || rows.length === 0) {
+    // Query rejected rows for reopening tasks
+    const rejectedParams = `${statusCol}=eq.rejected&order=${timestampCol}.asc&limit=20`;
+    let rejectedRows = [];
+    try {
+      rejectedRows = await supabaseRequest(source.projectUrl, serviceRoleKey, `${table}?${rejectedParams}`) || [];
+    } catch (err) {
+      // Non-fatal: rejected polling is secondary
+    }
+
+    if ((!rows || rows.length === 0) && rejectedRows.length === 0) {
       return { items: [], state: adapterState };
     }
 
     const items = [];
-    for (const row of rows) {
+    for (const row of (rows || [])) {
       const rowId = row.id || row.uuid || Object.values(row)[0];
       const title = row[titleCol] || 'Untitled';
       const author = authorCol ? row[authorCol] : null;
@@ -297,6 +306,37 @@ export default class SupabaseAdapter extends BaseAdapter {
           table: source.table,
           type: row.type || '',
           priority: row.priority || ''
+        },
+        origin: {
+          adapterType: 'supabase',
+          table: source.table,
+          rowId: String(rowId),
+          metadata: {}
+        }
+      });
+    }
+
+    // Build rejection items (reopen existing tasks)
+    const taskIdCol = source.taskIdColumn || 'jat_task_id';
+    for (const row of rejectedRows) {
+      const rowId = row.id || row.uuid || Object.values(row)[0];
+      const taskId = row[taskIdCol];
+      if (!taskId) continue; // Can't reopen without a task ID
+
+      const hash = createHash('sha256')
+        .update(`reject-${rowId}-${Date.now()}`)
+        .digest('hex');
+
+      items.push({
+        id: `supabase-reject-${rowId}-${Date.now()}`,
+        title: row[titleCol] || 'Rejected report',
+        description: '',
+        hash,
+        author: authorCol ? row[authorCol] : null,
+        timestamp: row[timestampCol] || new Date().toISOString(),
+        rejection: {
+          taskId,
+          reason: row.rejection_reason || row.user_response || 'rejected'
         },
         origin: {
           adapterType: 'supabase',

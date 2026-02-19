@@ -139,6 +139,22 @@ export const POST: RequestHandler = async ({ params, request }) => {
 				return json({ error: 'Session tmux already dead', skipped: true }, { status: 409 });
 			}
 
+			// Don't auto-pause recently resumed sessions (defense-in-depth)
+			// Resume marker persists across signal TTL expiry
+			const resumeFile = `/tmp/jat-resumed-${tmux}.json`;
+			try {
+				if (existsSync(resumeFile)) {
+					const resumeData = JSON.parse(readFileSync(resumeFile, 'utf-8'));
+					const resumedAt = new Date(resumeData.resumedAt).getTime();
+					const resumeAgeMs = Date.now() - resumedAt;
+					const RESUME_PROTECTION_MS = 30 * 60 * 1000; // 30 minutes
+					if (resumeAgeMs < RESUME_PROTECTION_MS) {
+						console.log(`[AutoPause Guard] Skipping ${tmux}: resumed ${Math.round(resumeAgeMs / 1000)}s ago (protection: ${RESUME_PROTECTION_MS / 1000}s)`);
+						return json({ error: 'Cannot auto-pause recently resumed session', skipped: true }, { status: 409 });
+					}
+				}
+			} catch { /* ignore — proceed with pause */ }
+
 			const sigFile = `/tmp/jat-signal-tmux-${tmux}.json`;
 			try {
 				if (existsSync(sigFile)) {

@@ -1,7 +1,7 @@
 import { getEnabledSources, getConfig, getSecret } from './config.js';
 import { isDuplicate, recordItem, getAdapterState, setAdapterState, logPoll, registerThread, getActiveThreads, updateThreadCursor } from './dedup.js';
 import { downloadAttachments } from './downloader.js';
-import { createTask, appendToTask, registerTaskAttachments, applyAutomation, handleThreadReply, handleReaction } from './taskCreator.js';
+import { createTask, appendToTask, registerTaskAttachments, applyAutomation, handleThreadReply, handleReaction, handleRejection } from './taskCreator.js';
 import { discoverPlugins } from './pluginLoader.js';
 import { applyFilter, resolveFilter } from './filterEngine.js';
 import { ConnectionManager } from './connectionManager.js';
@@ -194,6 +194,22 @@ async function pollSource(source) {
         const reactionResult = await handleReaction(source, item);
         if (reactionResult.handled) {
           recordItem(source.id, item.id, item.hash, reactionResult.taskId, `reaction:${item.reaction}`, item.origin);
+        }
+        continue;
+      }
+
+      // Handle rejections (reopen task with rejection notes)
+      if (item.rejection) {
+        const rejResult = handleRejection(source, item);
+        if (rejResult.handled) {
+          recordItem(source.id, item.id, item.hash, rejResult.taskId, `rejection`, item.origin);
+        }
+        if (typeof adapter.markIngested === 'function') {
+          try {
+            await adapter.markIngested(source, item, rejResult.taskId, getSecret);
+          } catch (err) {
+            logger.warn(`markIngested failed for rejection ${item.id}: ${err.message}`, source.id);
+          }
         }
         continue;
       }

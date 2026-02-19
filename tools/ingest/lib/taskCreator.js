@@ -630,6 +630,38 @@ function computeDelayMs(delay, unit) {
   return delay * multiplier;
 }
 
+/**
+ * Handle a rejection item by reopening the task and appending rejection notes.
+ * @param {Object} source - Source config
+ * @param {Object} item - Item with item.rejection.taskId and item.rejection.reason
+ * @returns {{ handled: boolean, taskId: string }}
+ */
+export function handleRejection(source, item) {
+  const taskId = item.rejection.taskId;
+  const reason = item.rejection.reason;
+  const cwd = getProjectPath(source.project);
+
+  // Reopen the task
+  try {
+    execFileSync('jt', ['update', taskId, '--status', 'open'], {
+      encoding: 'utf-8', timeout: 15000, cwd
+    });
+  } catch (err) {
+    logger.error(`Failed to reopen task ${taskId}: ${err.message}`, source.id);
+    return { handled: false, taskId };
+  }
+
+  // Append rejection notes to task description
+  appendToTask(taskId, [{
+    text: `**User rejected this report:** ${reason || 'No reason provided'}`,
+    author: item.author || 'user',
+    timestamp: new Date().toISOString()
+  }], source.project);
+
+  logger.info(`Reopened task ${taskId} (rejection: ${reason})`, source.id);
+  return { handled: true, taskId };
+}
+
 export function getProjectPath(projectName) {
   if (!projectName) return process.cwd();
 

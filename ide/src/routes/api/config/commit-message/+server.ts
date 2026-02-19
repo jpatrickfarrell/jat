@@ -64,7 +64,7 @@ async function writeConfig(config: JatConfig): Promise<void> {
  * Validate model value
  */
 function isValidModel(model: string): model is CommitMessageModel {
-	return ['claude-3-5-haiku-20241022', 'claude-sonnet-4-20250514'].includes(model);
+	return ['claude-haiku-4-5', 'claude-sonnet-4-20250514'].includes(model);
 }
 
 /**
@@ -120,7 +120,7 @@ export const PUT: RequestHandler = async ({ request }) => {
 		if (newConfig.model !== undefined && !isValidModel(newConfig.model)) {
 			return json({
 				error: 'Invalid value',
-				message: 'model must be one of: claude-3-5-haiku-20241022, claude-sonnet-4-20250514'
+				message: 'model must be one of: claude-haiku-4-5, claude-sonnet-4-20250514'
 			}, { status: 400 });
 		}
 

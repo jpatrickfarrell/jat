@@ -82,7 +82,7 @@ export interface AgentModel {
  *   models: [
  *     { id: 'claude-opus-4-5-20251101', name: 'Opus 4.5', shortName: 'opus', costTier: 'high' },
  *     { id: 'claude-sonnet-4-20250514', name: 'Sonnet 4', shortName: 'sonnet', costTier: 'medium' },
- *     { id: 'claude-3-5-haiku-20241022', name: 'Haiku', shortName: 'haiku', costTier: 'low' }
+ *     { id: 'claude-haiku-4-5', name: 'Haiku 4.5', shortName: 'haiku', costTier: 'low' }
  *   ],
  *   defaultModel: 'opus',
  *   flags: ['--dangerously-skip-permissions'],
@@ -441,7 +441,7 @@ export const AGENT_PRESETS: AgentProgramPreset[] = [
 			models: [
 				{ id: 'claude-opus-4-5-20251101', name: 'Opus 4.5', shortName: 'opus', costTier: 'high' },
 				{ id: 'claude-sonnet-4-20250514', name: 'Sonnet 4', shortName: 'sonnet', costTier: 'medium' },
-				{ id: 'claude-3-5-haiku-20241022', name: 'Haiku 3.5', shortName: 'haiku', costTier: 'low' }
+				{ id: 'claude-haiku-4-5', name: 'Haiku 4.5', shortName: 'haiku', costTier: 'low' }
 			],
 			defaultModel: 'opus',
 			authType: 'subscription',

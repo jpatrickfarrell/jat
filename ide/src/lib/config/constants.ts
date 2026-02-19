@@ -285,8 +285,9 @@ export const SIGNAL_TTL = {
 	 * - review: waiting for user to approve and run /jat:complete
 	 * - needs_input: waiting for user to answer a question
 	 * - working: agents can work for 20+ mins without emitting new signals
+	 * - starting: resumed sessions may sit in starting state while user interacts
 	 */
-	USER_WAITING_STATES: ['completed', 'review', 'needs_input', 'working', 'planning', 'paused'] as const
+	USER_WAITING_STATES: ['completed', 'review', 'needs_input', 'working', 'planning', 'paused', 'starting'] as const
 } as const;
 
 // =============================================================================
@@ -396,14 +397,14 @@ export type CommitMessageStyle =
 /**
  * Claude model options for commit message generation
  */
-export type CommitMessageModel = 'claude-3-5-haiku-20241022' | 'claude-sonnet-4-20250514';
+export type CommitMessageModel = 'claude-haiku-4-5' | 'claude-sonnet-4-20250514';
 
 /**
  * Default configuration for commit message generation
  */
 export const COMMIT_MESSAGE_DEFAULTS = {
 	/** Model to use for generation (haiku = faster/cheaper, sonnet = better quality) */
-	model: 'claude-3-5-haiku-20241022' as CommitMessageModel,
+	model: 'claude-haiku-4-5' as CommitMessageModel,
 	/** Commit message style */
 	style: 'conventional' as CommitMessageStyle,
 	/** Maximum tokens for the response */
@@ -435,7 +436,7 @@ export const LLM_PROVIDER_DEFAULTS = {
 	/** Provider mode: auto, api, or cli */
 	mode: 'auto' as LlmProviderMode,
 	/** Default model for API calls (used when mode is 'api' or 'auto') */
-	api_model: 'claude-3-5-haiku-20241022' as const,
+	api_model: 'claude-haiku-4-5' as const,
 	/** Default model for CLI calls (used when mode is 'cli' or 'auto' fallback) */
 	cli_model: 'haiku' as 'haiku' | 'sonnet' | 'opus',
 	/** Timeout in milliseconds for CLI calls */

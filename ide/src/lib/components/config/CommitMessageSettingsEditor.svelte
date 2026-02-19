@@ -23,7 +23,7 @@
 	let configPath = $state('');
 
 	// Form values
-	let model = $state<CommitMessageModel>('claude-3-5-haiku-20241022');
+	let model = $state<CommitMessageModel>('claude-haiku-4-5');
 	let style = $state<CommitMessageStyle>('conventional');
 	let maxTokens = $state(500);
 	let includeBody = $state(false);
@@ -86,7 +86,7 @@
 	// Model options
 	const MODEL_OPTIONS: { value: CommitMessageModel; label: string; description: string }[] = [
 		{
-			value: 'claude-3-5-haiku-20241022',
+			value: 'claude-haiku-4-5',
 			label: 'Claude Haiku',
 			description: 'Fast and cost-effective'
 		},

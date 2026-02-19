@@ -68,7 +68,7 @@ const SESSIONS_DIR = join(PROJECT_ROOT, '.claude', 'sessions');
 const SIGNAL_TTL = {
 	TRANSIENT_MS: 60 * 1000,         // 1 minute for transitional states
 	USER_WAITING_MS: 30 * 60 * 1000, // 30 minutes for states waiting on human
-	USER_WAITING_STATES: ['completed', 'review', 'needs_input', 'working', 'planning'] as const
+	USER_WAITING_STATES: ['completed', 'review', 'needs_input', 'working', 'planning', 'paused', 'starting'] as const
 };
 
 // Question file max age
@@ -399,8 +399,10 @@ function readSignalFile(sessionName: string): { type: string; state?: string; da
 		// Apply TTL based on signal type
 		const stats = statSync(signalFile);
 		const ageMs = Date.now() - stats.mtimeMs;
-		const isUserWaitingState = signal.type === 'state' && SIGNAL_TTL.USER_WAITING_STATES.includes(signal.state);
-		const ttl = signal.type === 'complete' || isUserWaitingState ? SIGNAL_TTL.USER_WAITING_MS : SIGNAL_TTL.TRANSIENT_MS;
+		const isAgentEmittedWaiting = signal.type === 'state' && SIGNAL_TTL.USER_WAITING_STATES.includes(signal.state);
+		// IDE-initiated signals use type directly (e.g., { type: 'working' }) instead of { type: 'state', state: 'working' }
+		const isIdeInitiatedWaiting = signal.type !== 'state' && signal.type !== 'complete' && SIGNAL_TTL.USER_WAITING_STATES.includes(signal.type);
+		const ttl = signal.type === 'complete' || isAgentEmittedWaiting || isIdeInitiatedWaiting ? SIGNAL_TTL.USER_WAITING_MS : SIGNAL_TTL.TRANSIENT_MS;
 
 		if (ageMs > ttl) {
 			return null;

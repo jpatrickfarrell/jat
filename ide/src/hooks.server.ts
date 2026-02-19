@@ -84,12 +84,12 @@ function cleanupStaleSignalFiles(): { cleaned: number; errors: number; preserved
 					try {
 						const content = readFileSync(filePath, 'utf-8');
 						const signal = JSON.parse(content);
-						// Use longer TTL for user-waiting states
-						if (signal.type === 'state' && SIGNAL_TTL.USER_WAITING_STATES.includes(signal.state)) {
-							ttl = SIGNAL_TTL.USER_WAITING_MS;
-						} else if (signal.type === 'complete') {
-							ttl = SIGNAL_TTL.USER_WAITING_MS;
-						}
+						// Use longer TTL for user-waiting states (agent-emitted or IDE-initiated)
+					const isAgentEmitted = signal.type === 'state' && SIGNAL_TTL.USER_WAITING_STATES.includes(signal.state);
+					const isIdeInitiated = signal.type !== 'state' && signal.type !== 'complete' && SIGNAL_TTL.USER_WAITING_STATES.includes(signal.type);
+					if (isAgentEmitted || isIdeInitiated || signal.type === 'complete') {
+						ttl = SIGNAL_TTL.USER_WAITING_MS;
+					}
 					} catch {
 						// If we can't read/parse, use short TTL
 					}

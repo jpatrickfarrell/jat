@@ -211,7 +211,7 @@
 					<span class="label-text font-medium">API Model</span>
 				</label>
 				<select class="select select-bordered w-full max-w-md" bind:value={config.api_model}>
-					<option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (Fast, Cost-effective)</option>
+					<option value="claude-haiku-4-5">Claude 4.5 Haiku (Fast, Cost-effective)</option>
 					<option value="claude-sonnet-4-20250514">Claude Sonnet 4 (Balanced)</option>
 				</select>
 				<label class="label">

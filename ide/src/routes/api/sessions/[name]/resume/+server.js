@@ -9,7 +9,7 @@
 import { json } from '@sveltejs/kit';
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
-import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'fs';
 import { join, basename } from 'path';
 import Database from 'better-sqlite3';
 
@@ -444,10 +444,60 @@ export async function POST({ params, request }) {
 			resumedAt: new Date().toISOString()
 		}, null, 2);
 		try {
-			const { writeFileSync } = await import('fs');
 			writeFileSync(resumeMarker, resumeData);
 		} catch (e) {
 			console.error('Failed to write resume marker:', e);
+		}
+
+		// Write IDE-initiated signal file so /api/work knows the session state.
+		// Without this, resumed sessions show as "Planning session" because
+		// readSignalState() finds no file and the sessions page overrides
+		// idle/null state to 'planning' when there's no active task.
+		try {
+			// Try to find the agent's active task from the project's task DB
+			let taskId = null;
+			let taskTitle = null;
+			const taskDbPath = join(projectPath, '.jat', 'tasks.db');
+			if (existsSync(taskDbPath)) {
+				try {
+					const taskDb = new Database(taskDbPath, { readonly: true });
+					const activeTask = /** @type {{ id: string, title: string } | undefined} */ (
+						taskDb.prepare(`
+							SELECT id, title FROM tasks
+							WHERE assignee = ? AND status = 'in_progress'
+							ORDER BY updated_at DESC LIMIT 1
+						`).get(agentName)
+					);
+					taskDb.close();
+					if (activeTask) {
+						taskId = activeTask.id;
+						taskTitle = activeTask.title;
+					}
+				} catch (e) {
+					// Non-fatal - task lookup is optional
+					console.warn('Failed to look up agent task:', e);
+				}
+			}
+
+			// Derive project name from path (e.g., /home/jw/code/jat -> jat)
+			const projectName = projectPath.split('/').filter(Boolean).pop() || '';
+
+			const signalData = {
+				type: taskId ? 'working' : 'starting',
+				agentName,
+				sessionId: sessionName,
+				project: projectName,
+				taskId,
+				taskTitle,
+				resumed: true,
+				timestamp: new Date().toISOString()
+			};
+			const signalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
+			writeFileSync(signalFile, JSON.stringify(signalData, null, 2), 'utf-8');
+			console.log(`[resume] Wrote IDE-initiated signal: ${signalFile} (type: ${signalData.type})`);
+		} catch (e) {
+			// Non-fatal - UI will eventually get state from agent signals
+			console.warn('[resume] Failed to write signal file:', e);
 		}
 
 		// Build the resume command wrapped in a tmux session for IDE tracking

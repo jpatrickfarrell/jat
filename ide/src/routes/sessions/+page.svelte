@@ -27,6 +27,7 @@
 	import { getSessionStateVisual, type SessionState } from '$lib/config/statusColors';
 	import { getReviewRules } from '$lib/stores/reviewRules.svelte';
 	import { computeReviewStatus } from '$lib/utils/reviewStatusUtils';
+	import { openTaskDetailDrawer } from '$lib/stores/drawerStore';
 	import SortDropdown from '$lib/components/SortDropdown.svelte';
 
 	interface TmuxSession {
@@ -1200,8 +1201,7 @@
 
 	function handleRecentRowClick(recent: RecentSession) {
 		if (recent.taskId && recent.taskId !== 'unknown') {
-			expandedTaskId = recent.taskId;
-			taskDetailOpen = true;
+			openTaskDetailDrawer(recent.taskId);
 		}
 	}
 
@@ -2332,8 +2332,7 @@
 			<button class="ctx-item" onmouseenter={() => { recentCtxStatusSubmenuOpen = false; }} onclick={() => {
 				const id = recentCtxData!.taskId!;
 				closeCtxMenu();
-				expandedTaskId = id;
-				taskDetailOpen = true;
+				openTaskDetailDrawer(id);
 			}}>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />

@@ -2,6 +2,7 @@
 	import AgentAvatar from "$lib/components/AgentAvatar.svelte";
 	import { getProjectColor } from "$lib/utils/projectColors";
 	import { getIssueTypeVisual } from "$lib/config/statusColors";
+	import { getIntegrationIcon } from "$lib/config/integrationIcons";
 	import {
 		type CompletedTask,
 		PRIORITY_COLORS,

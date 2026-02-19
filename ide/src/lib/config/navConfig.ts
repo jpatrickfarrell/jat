@@ -25,7 +25,6 @@
  * LABS (experimental):
  *   /quick-commands - Commands (single-turn quick commands + templates)
  *   /schedules - Schedules (scheduled task management, scheduler service controls)
- *   /swarm    - Swarm attack interface
  */
 
 export interface NavItem {
@@ -182,13 +181,6 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			icon: 'workflows',
 			category: 'labs'
 		},
-		{
-			id: 'swarm',
-			label: 'Swarm',
-			href: '/swarm',
-			icon: 'swarm',
-			category: 'labs'
-		}
 	],
 	showProjectFilter: true,
 	showThemeSelector: true

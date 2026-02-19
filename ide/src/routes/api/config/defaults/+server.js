@@ -95,7 +95,7 @@ export async function PUT({ request }) {
 		}
 
 		// Validate numeric fields
-		const numericFields = ['agent_stagger', 'claude_startup_timeout', 'projects_session_height', 'projects_task_height', 'auto_kill_delay', 'max_sessions', 'default_agent_count'];
+		const numericFields = ['agent_stagger', 'claude_startup_timeout', 'projects_session_height', 'projects_task_height', 'auto_kill_delay', 'max_sessions', 'default_agent_count', 'auto_pause_idle_timeout'];
 		for (const field of numericFields) {
 			if (field in newDefaults && typeof newDefaults[field] !== 'number') {
 				return json({
@@ -106,7 +106,7 @@ export async function PUT({ request }) {
 		}
 
 		// Validate boolean fields
-		const booleanFields = ['auto_kill_enabled', 'auto_kill_p0', 'auto_kill_p1', 'auto_kill_p2', 'auto_kill_p3', 'auto_kill_p4', 'skip_permissions', 'ingest_autostart'];
+		const booleanFields = ['auto_kill_enabled', 'auto_kill_p0', 'auto_kill_p1', 'auto_kill_p2', 'auto_kill_p3', 'auto_kill_p4', 'skip_permissions', 'ingest_autostart', 'auto_pause_enabled'];
 		for (const field of booleanFields) {
 			if (field in newDefaults && typeof newDefaults[field] !== 'boolean') {
 				return json({

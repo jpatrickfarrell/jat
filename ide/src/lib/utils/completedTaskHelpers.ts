@@ -13,6 +13,7 @@ export interface CompletedTask {
 	priority?: number;
 	issue_type?: string;
 	project?: string;
+	integration?: { sourceId: string; sourceType: string; sourceName: string } | null;
 }
 
 export interface DayGroup {

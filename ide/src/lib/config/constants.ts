@@ -233,6 +233,10 @@ export const JAT_DEFAULTS = {
 	 * When false, agents will NOT pass autonomous flags automatically.
 	 */
 	skip_permissions: false,
+	/** Auto-pause idle sessions (kills tmux for sessions idle > timeout) */
+	auto_pause_enabled: true,
+	/** Seconds a session must be idle/completed before auto-pause triggers */
+	auto_pause_idle_timeout: 300,
 	/** Auto-start ingest daemon when launching IDE */
 	ingest_autostart: false,
 	/**

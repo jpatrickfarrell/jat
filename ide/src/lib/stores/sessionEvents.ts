@@ -30,6 +30,7 @@ import { getAutoKillDelayForPriority, isAutoKillEnabled, hasPendingAutoKill, cle
 import { addToast } from './toasts.svelte';
 import { getToastNeedsInput, getToastReview, getToastComplete } from './preferences.svelte';
 import { AUTO_PAUSE_IDLE } from '$lib/config/constants';
+import { isAutoPauseEnabled, getAutoPauseTimeout, loadAutoPauseConfig } from './autoPauseConfig';
 
 // Maximum accumulated output per session (characters). Prevents unbounded memory
 // growth from delta appending — without this, output strings grow continuously
@@ -362,10 +363,10 @@ let idlePauseScanInterval: ReturnType<typeof setInterval> | null = null;
  * Scan sessions and pause any that have been idle/completed past the timeout.
  */
 async function scanAndPauseIdleSessions(): Promise<void> {
-	if (!AUTO_PAUSE_IDLE.ENABLED) return;
+	if (!isAutoPauseEnabled()) return;
 
 	const now = Date.now();
-	const timeoutMs = AUTO_PAUSE_IDLE.IDLE_TIMEOUT_SECONDS * 1000;
+	const timeoutMs = getAutoPauseTimeout() * 1000;
 	const sessions = workSessionsState.sessions;
 
 	for (const session of sessions) {
@@ -440,7 +441,7 @@ async function scanAndPauseIdleSessions(): Promise<void> {
  */
 function startIdlePauseScanner(): void {
 	stopIdlePauseScanner();
-	if (!AUTO_PAUSE_IDLE.ENABLED) return;
+	if (!isAutoPauseEnabled()) return;
 
 	// Initial scan after a delay (let sessions load first)
 	setTimeout(() => scanAndPauseIdleSessions(), 30_000);
@@ -1166,8 +1167,8 @@ export function connectSessionEvents(): void {
 	unsubSessionsChannel = onMessage('sessions', handleWebSocketSessionMessage);
 	unsubOutputChannel = onMessage('output', handleWebSocketOutputMessage);
 
-	// Start idle-session scanner (pauses sessions idle > AUTO_PAUSE_IDLE timeout)
-	startIdlePauseScanner();
+	// Load auto-pause config from API, then start the idle-session scanner
+	loadAutoPauseConfig().then(() => startIdlePauseScanner());
 
 	sessionEventsConnected.set(true);
 }

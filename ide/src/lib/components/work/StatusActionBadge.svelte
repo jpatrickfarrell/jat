@@ -774,7 +774,7 @@
 </script>
 
 <div
-	class="relative inline-block {className} pr-2 pb-1"
+	class="relative inline-block {className} pl-4 py-1"
 	bind:this={dropdownRef}
 >
 	<!-- Status Badge Button -->

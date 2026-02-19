@@ -6,23 +6,26 @@
 #   jat-step <step> --task <id> --title <title> --agent <name> [options]
 #
 # Steps:
-#   verifying   - Emit signal only (agent does verification)
-#   committing  - Emit signal + git add/commit
-#   closing     - Emit signal + jt close
-#   callback    - Emit signal + fire integration callback (if configured)
-#   releasing   - Emit signal + capture session log
+#   verifying    - Emit signal only (agent does verification)
+#   committing   - Emit signal + git add/commit
+#   closing      - Emit signal + jt close
+#   callback     - Emit signal + fire integration callback (if configured)
+#   sync-status  - Fire integration status_changed callback (no completing signal)
+#   releasing    - Emit signal + capture session log
 #
 # Options:
 #   --task <id>       Task ID (required)
 #   --title <title>   Task title (required)
 #   --agent <name>    Agent name (required)
 #   --type <type>     Task type for commit message (default: task)
+#   --status <status> Task status for sync-status step (default: in_progress)
 #   --help            Show this help
 #
 # Example:
 #   jat-step verifying --task jat-abc --title "Add auth" --agent FreeOcean
 #   jat-step committing --task jat-abc --title "Add auth" --agent FreeOcean --type feature
 #   jat-step closing --task jat-abc --title "Add auth" --agent FreeOcean
+#   jat-step sync-status --task jat-abc --title "Add auth" --agent FreeOcean --status in_progress
 
 set -euo pipefail
 
@@ -45,12 +48,13 @@ Usage:
   jat-step <step> --task <id> --title <title> --agent <name> [options]
 
 Steps:
-  verifying   - Emit signal only (agent does verification)
-  committing  - Emit signal + git add/commit
-  closing     - Emit signal + jt close
-  callback    - Emit signal + fire integration callback (if configured)
-  releasing   - Emit signal + capture session log
-  complete    - Generate completion bundle via LLM and emit complete signal
+  verifying    - Emit signal only (agent does verification)
+  committing   - Emit signal + git add/commit
+  closing      - Emit signal + jt close
+  callback     - Emit signal + fire integration callback (if configured)
+  sync-status  - Fire integration status_changed callback (no completing signal)
+  releasing    - Emit signal + capture session log
+  complete     - Generate completion bundle via LLM and emit complete signal
 
 Options:
   --task <id>       Task ID (required)
@@ -138,6 +142,7 @@ TASK_ID=""
 TASK_TITLE=""
 AGENT_NAME=""
 TASK_TYPE="task"
+TASK_STATUS="in_progress"
 
 # First argument is the step
 if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
@@ -161,6 +166,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --type)
             TASK_TYPE="$2"
+            shift 2
+            ;;
+        --status)
+            TASK_STATUS="$2"
             shift 2
             ;;
         --help|-h)
@@ -285,6 +294,45 @@ EOF
             else
                 CALLBACK_ERR=$(echo "$CALLBACK_RESULT" | jq -r '.error // "unknown error"' 2>/dev/null)
                 log_dim "Integration callback failed: ${CALLBACK_ERR} (non-blocking)"
+            fi
+        fi
+        ;;
+
+    sync-status)
+        # Fire integration status_changed callback — no completing signal
+        # Used by /jat:start to sync in_progress status to external systems
+        log_dim "Syncing status '${TASK_STATUS}' to integration..."
+        IDE_URL="http://127.0.0.1:3333"
+
+        # Query IDE for integration info
+        INTEGRATION_JSON=$(curl -sf "${IDE_URL}/api/tasks/integrations?taskIds=${TASK_ID}" 2>/dev/null || echo '{}')
+        SOURCE_ID=$(echo "$INTEGRATION_JSON" | jq -r ".integrations.\"${TASK_ID}\".sourceId // empty" 2>/dev/null)
+        REFERENCE_ID=$(echo "$INTEGRATION_JSON" | jq -r ".integrations.\"${TASK_ID}\".referenceId // empty" 2>/dev/null)
+        HAS_CALLBACK=$(echo "$INTEGRATION_JSON" | jq -r ".integrations.\"${TASK_ID}\".callback.url // empty" 2>/dev/null)
+
+        if [[ -z "$SOURCE_ID" || -z "$HAS_CALLBACK" ]]; then
+            log_dim "No integration callback configured — skipping"
+        else
+            # Fire status_changed callback
+            log_dim "Firing status_changed to ${SOURCE_ID}..."
+            CALLBACK_BODY=$(jq -n -c \
+                --arg taskId "$TASK_ID" \
+                --arg event "status_changed" \
+                --arg referenceId "$REFERENCE_ID" \
+                --arg taskStatus "$TASK_STATUS" \
+                '{taskId: $taskId, event: $event, referenceId: $referenceId, taskStatus: $taskStatus}')
+
+            CALLBACK_RESULT=$(curl -sf -X POST "${IDE_URL}/api/integrations/${SOURCE_ID}/callback" \
+                -H "Content-Type: application/json" \
+                -d "$CALLBACK_BODY" 2>/dev/null || echo '{"success":false}')
+
+            CALLBACK_OK=$(echo "$CALLBACK_RESULT" | jq -r '.success // false' 2>/dev/null)
+            if [[ "$CALLBACK_OK" == "true" ]]; then
+                CALLBACK_MS=$(echo "$CALLBACK_RESULT" | jq -r '.duration_ms // "?"' 2>/dev/null)
+                log_success "Status synced to integration (${CALLBACK_MS}ms)"
+            else
+                CALLBACK_ERR=$(echo "$CALLBACK_RESULT" | jq -r '.error // "unknown error"' 2>/dev/null)
+                log_dim "Status sync failed: ${CALLBACK_ERR} (non-blocking)"
             fi
         fi
         ;;

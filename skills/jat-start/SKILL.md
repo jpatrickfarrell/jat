@@ -40,7 +40,7 @@ Startup uses 3 parallel rounds. Each round issues all calls simultaneously, then
 ROUND 1 (parallel) → ROUND 2 (parallel) → ROUND 3 (parallel) → Banner
   Identity              Starting signal       Task update
   Task details          Memory search          Working signal
-  Git status            Prior task search
+  Git status            Prior task search      Integration sync
 ```
 
 ### ROUND 1: Gather Context (all parallel)
@@ -102,7 +102,7 @@ Look for duplicates, related work, and in-progress tasks in similar areas.
 
 ### ROUND 3: Start Work (all parallel)
 
-**Issue BOTH of these tool calls in a single message:**
+**Issue ALL of these tool calls in a single message:**
 
 **3A: Update task status:**
 ```bash
@@ -117,6 +117,12 @@ jat-signal working '{
   "expectedFiles": ["src/**/*.ts"], "baselineCommit": "COMMIT_HASH"
 }'
 ```
+
+**3C: Sync integration status** (non-blocking):
+```bash
+jat-step sync-status --task "$TASK_ID" --title "$TASK_TITLE" --agent "$AGENT_NAME" --status in_progress
+```
+Automatically pushes `in_progress` status to external integrations (e.g., Supabase). Skips silently if no integration configured. Non-blocking: startup continues even if this fails.
 
 ### Output Banner
 

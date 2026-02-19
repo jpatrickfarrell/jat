@@ -40,7 +40,7 @@ The startup sequence is organized into 3 parallel rounds. Each round issues all 
 ROUND 1 (parallel) ──► ROUND 2 (parallel) ──► ROUND 3 (parallel) ──► Banner
   Identity                 Starting signal        Task update
   Task details             Memory search           Working signal
-  Git status               Prior task search
+  Git status               Prior task search       Integration sync
 ```
 
 ---
@@ -158,7 +158,7 @@ DATE_7=$(date -d '7 days ago' +%Y-%m-%d 2>/dev/null || date -v-7d +%Y-%m-%d); jt
 
 ### ROUND 3: Start Work (all parallel)
 
-**Issue BOTH of these tool calls in a single message.** Use memory and prior task results to inform your approach.
+**Issue ALL of these tool calls in a single message.** Use memory and prior task results to inform your approach.
 
 #### 3A: Update Task Status
 
@@ -186,6 +186,20 @@ jat-signal working '{
 **Optional fields:**
 - `expectedFiles` - Array of file patterns you expect to modify
 - `baselineCommit` - Current commit hash before changes
+
+#### 3C: Sync Integration Status (non-blocking)
+
+If this task was ingested from an external source (e.g., Supabase feedback), automatically push the `in_progress` status back to the source system. This runs alongside 3A and 3B.
+
+```bash
+jat-step sync-status --task "$TASK_ID" --title "$TASK_TITLE" --agent "$AGENT_NAME" --status in_progress
+```
+
+This step:
+- Queries the IDE for integration info (callback URL, reference ID)
+- Fires `status_changed` webhook with status `in_progress`
+- Skips silently if no integration or no callback configured
+- Non-blocking: startup continues even if callback fails
 
 ---
 

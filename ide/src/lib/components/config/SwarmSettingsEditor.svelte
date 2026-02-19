@@ -336,45 +336,39 @@
 				Paused sessions free up tmux slots and reduce polling overhead.
 			</p>
 
-			<div class="form-control">
-				<label class="label cursor-pointer justify-start gap-3">
+			<div class="toggle-with-input">
+				<label class="label cursor-pointer justify-start gap-3 flex-1">
 					<input
 						type="checkbox"
 						class="toggle toggle-primary"
 						bind:checked={autoPauseEnabled}
 						onchange={() => autoSave()}
 					/>
-					<span class="label-text font-semibold" style="color: oklch(0.75 0.02 250);">
-						Enable auto-pause
-					</span>
-				</label>
-				<label class="label">
-					<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
-						When enabled, idle/completed sessions are paused after the timeout
-					</span>
-				</label>
-			</div>
-
-			{#if autoPauseEnabled}
-				<div class="dependent-field">
-					<label class="label">
-						<span class="label-text font-semibold">Idle Timeout (seconds)</span>
-					</label>
-					<input
-						type="number"
-						class="input input-bordered"
-						bind:value={autoPauseIdleTimeout}
-						oninput={scheduleAutoSave}
-						min="60"
-						max="3600"
-					/>
-					<label class="label">
-						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
-							Seconds before an idle session is paused (60-3600)
+					<div>
+						<span class="label-text font-semibold" style="color: oklch(0.75 0.02 250);">
+							Enable auto-pause
 						</span>
-					</label>
-				</div>
-			{/if}
+						<div class="text-xs mt-0.5" style="color: oklch(0.50 0.02 250);">
+							Pause idle/completed sessions after timeout
+						</div>
+					</div>
+				</label>
+				{#if autoPauseEnabled}
+					<div class="inline-number-field">
+						<span class="text-xs" style="color: oklch(0.55 0.02 250);">Timeout</span>
+						<input
+							type="number"
+							class="input input-bordered input-sm"
+							bind:value={autoPauseIdleTimeout}
+							oninput={scheduleAutoSave}
+							min="60"
+							max="3600"
+							style="width: 80px;"
+						/>
+						<span class="text-xs" style="color: oklch(0.45 0.02 250);">sec</span>
+					</div>
+				{/if}
+			</div>
 		</div>
 
 		<!-- Session Cleanup (Auto-Kill) Section -->
@@ -403,51 +397,42 @@
 				When enabled, review rules below control which tasks auto-proceed vs require human review.
 			</p>
 
-			<div class="form-control">
-				<label class="label cursor-pointer justify-start gap-3">
+			<div class="toggle-with-input">
+				<label class="label cursor-pointer justify-start gap-3 flex-1">
 					<input
 						type="checkbox"
 						class="toggle toggle-primary"
 						bind:checked={autoKillEnabled}
 						onchange={() => autoSave()}
 					/>
-					<span class="label-text font-semibold" style="color: oklch(0.75 0.02 250);">
-						Auto-cleanup completed sessions
-					</span>
+					<div>
+						<span class="label-text font-semibold" style="color: oklch(0.75 0.02 250);">
+							Auto-cleanup completed sessions
+						</span>
+						<div class="text-xs mt-0.5" style="color: oklch(0.50 0.02 250);">
+							Kill tmux sessions after completion delay
+						</div>
+					</div>
 				</label>
-				<label class="label">
-					<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
-						Kill tmux sessions after completion delay
-					</span>
-				</label>
+				{#if autoKillEnabled}
+					<div class="inline-number-field">
+						<span class="text-xs" style="color: oklch(0.55 0.02 250);">Delay</span>
+						<input
+							type="number"
+							class="input input-bordered input-sm"
+							class:input-error={autoKillDelayError}
+							bind:value={autoKillDelay}
+							oninput={scheduleAutoSave}
+							min={VALIDATION_RULES.autoKillDelay.min}
+							max={VALIDATION_RULES.autoKillDelay.max}
+							style="width: 80px;"
+						/>
+						<span class="text-xs" style="color: oklch(0.45 0.02 250);">sec</span>
+					</div>
+				{/if}
 			</div>
-
-			{#if autoKillEnabled}
-				<div class="dependent-field">
-					<label class="label">
-						<span class="label-text font-semibold">Cleanup Delay (seconds)</span>
-					</label>
-					<input
-						type="number"
-						class="input input-bordered"
-						class:input-error={autoKillDelayError}
-						bind:value={autoKillDelay}
-						oninput={scheduleAutoSave}
-						min={VALIDATION_RULES.autoKillDelay.min}
-						max={VALIDATION_RULES.autoKillDelay.max}
-					/>
-					{#if autoKillDelayError}
-						<label class="label">
-							<span class="label-text-alt" style="color: oklch(0.70 0.15 25);">{autoKillDelayError}</span>
-						</label>
-					{:else}
-						<label class="label">
-							<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
-								Seconds to wait before killing session ({VALIDATION_RULES.autoKillDelay.min}-{VALIDATION_RULES.autoKillDelay.max})
-							</span>
-						</label>
-					{/if}
-				</div>
+			{#if autoKillDelayError}
+				<div class="text-xs mt-1" style="color: oklch(0.70 0.15 25);">{autoKillDelayError}</div>
 			{/if}
 
 			{#if autoKillEnabled}
@@ -872,11 +857,18 @@
 		color: oklch(0.65 0.02 250);
 	}
 
-	/* Dependent field shown below a toggle */
-	.dependent-field {
-		max-width: 280px;
-		margin-top: 0.25rem;
-		margin-left: 3.25rem; /* align with toggle label text */
+	/* Toggle row with inline number input on the right */
+	.toggle-with-input {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.inline-number-field {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		flex-shrink: 0;
 	}
 
 	/* Validation error */

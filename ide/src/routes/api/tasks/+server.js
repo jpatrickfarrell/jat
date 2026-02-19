@@ -8,6 +8,7 @@ import { invalidateCache, singleFlight, cacheKey } from '$lib/server/cache.js';
 import { _resetTaskCache } from '../../api/agents/+server.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 import { emitEvent } from '$lib/utils/eventBus.server.js';
+import { lookupIntegrations } from '$lib/server/integrationLookup.js';
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ url }) {
@@ -103,6 +104,13 @@ export async function GET({ url }) {
 				}
 				tasks = tasks.slice(0, limitNum);
 			}
+		}
+
+		// Enrich tasks with integration source info (from ingest.db)
+		const taskIds = tasks.map((/** @type {any} */ t) => t.id);
+		const integrations = lookupIntegrations(taskIds);
+		if (Object.keys(integrations).length > 0) {
+			tasks = tasks.map((/** @type {any} */ t) => integrations[t.id] ? { ...t, integration: integrations[t.id] } : t);
 		}
 
 		return {

@@ -10,10 +10,52 @@ import { _resetTaskCache } from '../../../../api/agents/+server.js';
 import { emitEvent } from '$lib/utils/eventBus.server.js';
 
 /**
+ * Fire integration callback if this task was ingested from an external source.
+ * Non-blocking — failures are logged but don't affect the close response.
+ *
+ * @param {typeof globalThis.fetch} internalFetch - SvelteKit internal fetch
+ * @param {string} taskId
+ * @param {string} reason
+ */
+async function fireIntegrationCallback(internalFetch, taskId, reason) {
+	try {
+		const integrationRes = await internalFetch(`/api/tasks/integrations?taskIds=${taskId}`);
+		if (!integrationRes.ok) return;
+
+		const { integrations } = await integrationRes.json();
+		const integration = integrations?.[taskId];
+		if (!integration?.sourceId || !integration?.callback?.url || !integration?.referenceId) {
+			return; // No integration or no callback configured
+		}
+
+		const callbackRes = await internalFetch(`/api/integrations/${integration.sourceId}/callback`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				taskId,
+				event: 'task_closed',
+				referenceId: integration.referenceId,
+				taskStatus: 'closed',
+				notes: reason !== 'Closed via IDE' ? reason : undefined
+			})
+		});
+
+		const result = await callbackRes.json().catch(() => ({}));
+		if (result.success) {
+			console.log(`[close] Integration callback fired for ${taskId} (${result.duration_ms}ms)`);
+		} else {
+			console.warn(`[close] Integration callback failed for ${taskId}:`, result.error || 'unknown');
+		}
+	} catch (e) {
+		console.warn('[close] Integration callback error (non-blocking):', e.message || e);
+	}
+}
+
+/**
  * Close a task
  * @type {import('./$types').RequestHandler}
  */
-export async function POST({ params, request }) {
+export async function POST({ params, request, fetch: internalFetch }) {
 	const taskId = params.id;
 
 	try {
@@ -73,6 +115,9 @@ export async function POST({ params, request }) {
 		} catch (e) {
 			console.error('[tasks/close] Failed to emit task_closed event:', e);
 		}
+
+		// Fire integration callback (non-blocking, don't await)
+		fireIntegrationCallback(internalFetch, taskId, reason).catch(() => {});
 
 		return json({
 			success: true,

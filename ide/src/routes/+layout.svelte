@@ -170,10 +170,14 @@
 			url.searchParams.set('project', selectedProject);
 			goto(url.toString(), { replaceState: true, noScroll: true, keepFocus: true });
 		} else if (projectInitialized && !projectParam && configProjects.length > 0) {
-			// URL param was removed (shouldn't happen normally) - keep current or fall back
+			// URL param missing (e.g., sidebar link to /tasks without ?project=)
+			// Restore it so child pages that read from URL get the project.
 			if (!configProjects.includes(selectedProject)) {
 				selectedProject = configProjects[0];
 			}
+			const url = new URL(window.location.href);
+			url.searchParams.set('project', selectedProject);
+			goto(url.toString(), { replaceState: true, noScroll: true, keepFocus: true });
 		}
 	});
 

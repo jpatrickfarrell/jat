@@ -63,14 +63,14 @@ export async function fetchReports(endpoint: string): Promise<{ reports: ReportS
   }
 }
 
-export async function respondToReport(endpoint: string, reportId: string, response: 'accepted' | 'rejected'): Promise<{ ok: boolean; error?: string }> {
+export async function respondToReport(endpoint: string, reportId: string, response: 'accepted' | 'rejected', reason?: string): Promise<{ ok: boolean; error?: string }> {
   try {
     const url = `${endpoint.replace(/\/$/, '')}/api/feedback/reports/${reportId}/respond`;
     const res = await fetch(url, {
       method: 'PATCH',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ response }),
+      body: JSON.stringify({ response, ...(reason ? { reason } : {}) }),
     });
 
     const data = await res.json();

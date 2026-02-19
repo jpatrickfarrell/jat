@@ -63,10 +63,15 @@
 		sessionId: string | null;
 		lastState: string;
 		timestamp: string;
+		taskStatus?: string; // Optimistic override from context menu status changes
 	}
 	let recentSessions = $state<RecentSession[]>([]);
 	let recentCollapsed = $state(false);
 	let resumingSession = $state<string | null>(null);
+	let recentTotal = $state(0);
+	let recentHasMore = $state(false);
+	let recentLoadingMore = $state(false);
+	const RECENT_PAGE_SIZE = 20;
 
 	// Expanded session state (inline SessionCard)
 	let expandedSession = $state<string | null>(null);
@@ -365,15 +370,43 @@
 		fetchRecentSessions();
 	}
 
+	// Track optimistic task status overrides (survives re-fetches)
+	let recentTaskStatusOverrides = new Map<string, string>();
+
 	// Fetch recently closed sessions from signal files
 	async function fetchRecentSessions() {
 		try {
-			const response = await fetch('/api/sessions/recent');
+			const response = await fetch(`/api/sessions/recent?limit=${RECENT_PAGE_SIZE}`);
 			if (!response.ok) return;
 			const data = await response.json();
-			recentSessions = data.sessions || [];
+			const sessions: RecentSession[] = data.sessions || [];
+			// Re-apply optimistic status overrides
+			recentSessions = sessions.map(s =>
+				s.taskId && recentTaskStatusOverrides.has(s.taskId)
+					? { ...s, taskStatus: recentTaskStatusOverrides.get(s.taskId) }
+					: s
+			);
+			recentTotal = data.total || 0;
+			recentHasMore = data.hasMore || false;
 		} catch {
 			// Silent fail - recent sessions are optional
+		}
+	}
+
+	async function loadMoreRecentSessions() {
+		if (recentLoadingMore || !recentHasMore) return;
+		recentLoadingMore = true;
+		try {
+			const response = await fetch(`/api/sessions/recent?offset=${recentSessions.length}&limit=${RECENT_PAGE_SIZE}`);
+			if (!response.ok) return;
+			const data = await response.json();
+			recentSessions = [...recentSessions, ...(data.sessions || [])];
+			recentTotal = data.total || recentTotal;
+			recentHasMore = data.hasMore || false;
+		} catch {
+			// Silent fail
+		} finally {
+			recentLoadingMore = false;
 		}
 	}
 
@@ -1175,11 +1208,19 @@
 	async function ctxChangeStatus(taskId: string, newStatus: string) {
 		closeCtxMenu();
 		try {
-			await fetch(`/api/tasks/${taskId}`, {
+			const res = await fetch(`/api/tasks/${taskId}`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ status: newStatus })
 			});
+			if (res.ok) {
+				// Persist override so polling doesn't revert it
+				recentTaskStatusOverrides.set(taskId, newStatus);
+				// Optimistically update recently closed sessions
+				recentSessions = recentSessions.map(r =>
+					r.taskId === taskId ? { ...r, taskStatus: newStatus } : r
+				);
+			}
 		} catch (err) {
 			console.error('Failed to update task status:', err);
 		}
@@ -1919,7 +1960,7 @@
 								<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
 							</svg>
 							<span class="recent-title">Recently Closed</span>
-							<span class="recent-count">{recentSessions.length}</span>
+							<span class="recent-count">{recentTotal || recentSessions.length}</span>
 						</div>
 					</button>
 
@@ -1940,7 +1981,7 @@
 										{#if recent.taskId && recent.taskId !== 'unknown'}
 											<div class="badge-and-text">
 												<TaskIdBadge
-													task={{ id: recent.taskId, status: recent.lastState === 'complete' || recent.lastState === 'completed' ? 'closed' : 'open', title: recent.taskTitle || undefined }}
+													task={{ id: recent.taskId, status: recent.taskStatus || (recent.lastState === 'complete' || recent.lastState === 'completed' ? 'closed' : 'open'), title: recent.taskTitle || undefined }}
 													size="sm"
 													variant="agentPill"
 													agentName={recent.agentName}
@@ -1986,6 +2027,21 @@
 									</div>
 								</div>
 							{/each}
+
+							{#if recentHasMore}
+								<button
+									class="load-more-btn"
+									onclick={loadMoreRecentSessions}
+									disabled={recentLoadingMore}
+								>
+									{#if recentLoadingMore}
+										<span class="loading loading-spinner loading-xs"></span>
+										Loading...
+									{:else}
+										Load more sessions
+									{/if}
+								</button>
+							{/if}
 						</div>
 					{/if}
 				</div>
@@ -2320,6 +2376,7 @@
 					</svg>
 				</button>
 				{#if recentCtxStatusSubmenuOpen}
+					{@const currentStatus = recentCtxData!.taskStatus || (recentCtxData!.lastState === 'complete' || recentCtxData!.lastState === 'completed' ? 'closed' : 'open')}
 					<div class="ctx-submenu">
 						{#each [
 							{ value: 'open', label: 'Open', color: 'oklch(0.70 0.15 220)' },
@@ -2328,11 +2385,16 @@
 							{ value: 'closed', label: 'Closed', color: 'oklch(0.65 0.18 145)' }
 						] as status}
 							<button
-								class="ctx-item"
-								onclick={() => { ctxChangeStatus(recentCtxData!.taskId!, status.value); closeCtxMenu(); }}
+								class="ctx-item {currentStatus === status.value ? 'ctx-item-active' : ''}"
+								onclick={() => ctxChangeStatus(recentCtxData!.taskId!, status.value)}
 							>
 								<span class="ctx-status-dot" style="background: {status.color};"></span>
 								<span>{status.label}</span>
+								{#if currentStatus === status.value}
+									<svg class="ctx-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+										<polyline points="20 6 9 17 4 12" />
+									</svg>
+								{/if}
 							</button>
 						{/each}
 					</div>
@@ -2913,6 +2975,34 @@
 	@keyframes spin {
 		from { transform: rotate(0deg); }
 		to { transform: rotate(360deg); }
+	}
+
+	.load-more-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.4rem;
+		width: 100%;
+		padding: 0.5rem;
+		margin-top: 0.25rem;
+		background: transparent;
+		border: 1px dashed oklch(0.3 0.02 250);
+		border-radius: 0.5rem;
+		color: oklch(0.55 0.02 250);
+		font-size: 0.8rem;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.load-more-btn:hover:not(:disabled) {
+		background: oklch(0.18 0.01 250);
+		border-color: oklch(0.4 0.02 250);
+		color: oklch(0.7 0.02 250);
+	}
+
+	.load-more-btn:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
 	}
 
 	/* Command hint */

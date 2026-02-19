@@ -116,6 +116,32 @@
 	let autoDelay = $state(0);
 	let autoDelayUnit = $state<'minutes' | 'hours'>('minutes');
 
+	// Callback fields
+	let callbackEnabled = $state(false);
+	let callbackUrl = $state('');
+	let callbackSecretName = $state('');
+	let callbackEvents = $state<string[]>(['status_changed', 'task_closed']);
+	let callbackStatusMapping = $state<Array<{ jatStatus: string; externalStatus: string }>>([
+		{ jatStatus: 'open', externalStatus: '' },
+		{ jatStatus: 'in_progress', externalStatus: '' },
+		{ jatStatus: 'blocked', externalStatus: '' },
+		{ jatStatus: 'closed', externalStatus: '' }
+	]);
+	let callbackReferenceTable = $state('');
+	let callbackReferenceIdFrom = $state('item_id');
+
+	// Actions fields
+	let actionsEnabled = $state(false);
+	let wizardActions = $state<Array<{
+		id: string;
+		label: string;
+		type: 'callback' | 'link';
+		event?: string;
+		urlTemplate?: string;
+		icon?: string;
+		confirmMessage?: string;
+	}>>([]);
+
 	// Token auth state (shared by Slack and Telegram)
 	let secretStatus = $state<'checking' | 'found' | 'missing' | 'saving' | 'error'>('checking');
 	let secretMasked = $state('');
@@ -140,18 +166,20 @@
 			gmail: ['App Password', 'Gmail Settings', 'Project', 'Options'],
 			custom: ['Command', 'Project', 'Options']
 		};
-		// Add Automation, optional Filters, then Review
+		// Add Automation, Callbacks, Actions, optional Filters, then Review
 		for (const key of Object.keys(base)) {
 			base[key].push('Automation');
+			base[key].push('Callbacks');
+			base[key].push('Actions');
 			if (hasItemFields) base[key].push('Filters');
 			base[key].push('Review');
 		}
 		return base;
 	});
 
-	// For plugins: Configuration -> Project -> Options -> Automation -> [Filters] -> Review
+	// For plugins: Configuration -> Project -> Options -> Automation -> Callbacks -> Actions -> [Filters] -> Review
 	const pluginSteps = $derived.by(() => {
-		const steps = ['Configuration', 'Project', 'Options', 'Automation'];
+		const steps = ['Configuration', 'Project', 'Options', 'Automation', 'Callbacks', 'Actions'];
 		if (hasItemFields) steps.push('Filters');
 		steps.push('Review');
 		return steps;
@@ -393,6 +421,20 @@
 		autoSchedule = '08:00';
 		autoDelay = 0;
 		autoDelayUnit = 'minutes';
+		callbackEnabled = false;
+		callbackUrl = '';
+		callbackSecretName = '';
+		callbackEvents = ['status_changed', 'task_closed'];
+		callbackStatusMapping = [
+			{ jatStatus: 'open', externalStatus: '' },
+			{ jatStatus: 'in_progress', externalStatus: '' },
+			{ jatStatus: 'blocked', externalStatus: '' },
+			{ jatStatus: 'closed', externalStatus: '' }
+		];
+		callbackReferenceTable = '';
+		callbackReferenceIdFrom = 'item_id';
+		actionsEnabled = false;
+		wizardActions = [];
 	}
 
 	function populateFromEdit(src: any) {
@@ -425,6 +467,12 @@
 			autoSchedule = src.automation.schedule || '08:00';
 			autoDelay = src.automation.delay || 0;
 			autoDelayUnit = src.automation.delayUnit || 'minutes';
+		} else {
+			autoAction = 'none';
+			autoCommand = getDefaultCommand();
+			autoSchedule = '08:00';
+			autoDelay = 0;
+			autoDelayUnit = 'minutes';
 		}
 
 		// Populate plugin fields from edit source.
@@ -442,6 +490,63 @@
 		// Populate filter conditions from edit source
 		if (src.filter && Array.isArray(src.filter)) {
 			filterConditions = [...src.filter];
+		} else {
+			filterConditions = [];
+		}
+
+		// Populate callback config from edit source
+		if (src.callback) {
+			callbackEnabled = true;
+			callbackUrl = src.callback.url || '';
+			callbackSecretName = src.callback.secretName || src.secretName || '';
+			callbackEvents = src.callback.events || ['status_changed', 'task_closed'];
+			callbackReferenceTable = src.callback.referenceTable || '';
+			callbackReferenceIdFrom = src.callback.referenceIdFrom || 'item_id';
+			if (src.callback.statusMapping) {
+				// Build in a local variable to avoid reading/writing the reactive
+				// $state inside the same $effect (which would cause an infinite loop).
+				const mappings = Object.entries(src.callback.statusMapping).map(([jatStatus, externalStatus]) => ({
+					jatStatus,
+					externalStatus: externalStatus as string
+				}));
+				// Ensure all 4 JAT statuses are present
+				for (const s of ['open', 'in_progress', 'blocked', 'closed']) {
+					if (!mappings.find(m => m.jatStatus === s)) {
+						mappings.push({ jatStatus: s, externalStatus: '' });
+					}
+				}
+				callbackStatusMapping = mappings;
+			}
+		} else {
+			callbackEnabled = false;
+			callbackUrl = '';
+			callbackSecretName = '';
+			callbackEvents = ['status_changed', 'task_closed'];
+			callbackStatusMapping = [
+				{ jatStatus: 'open', externalStatus: '' },
+				{ jatStatus: 'in_progress', externalStatus: '' },
+				{ jatStatus: 'blocked', externalStatus: '' },
+				{ jatStatus: 'closed', externalStatus: '' }
+			];
+			callbackReferenceTable = '';
+			callbackReferenceIdFrom = 'item_id';
+		}
+
+		// Populate actions from edit source
+		if (src.actions && Array.isArray(src.actions) && src.actions.length > 0) {
+			actionsEnabled = true;
+			wizardActions = src.actions.map((a: any) => ({
+				id: a.id || crypto.randomUUID().slice(0, 8),
+				label: a.label || '',
+				type: a.type || 'callback',
+				event: a.event,
+				urlTemplate: a.urlTemplate,
+				icon: a.icon,
+				confirmMessage: a.confirmMessage
+			}));
+		} else {
+			actionsEnabled = false;
+			wizardActions = [];
 		}
 	}
 
@@ -914,6 +1019,39 @@
 			source.filter = filterConditions;
 		}
 
+		// Add callback config if enabled
+		if (callbackEnabled && callbackUrl.trim()) {
+			const statusMapping: Record<string, string> = {};
+			for (const m of callbackStatusMapping) {
+				if (m.externalStatus.trim()) {
+					statusMapping[m.jatStatus] = m.externalStatus.trim();
+				}
+			}
+			source.callback = {
+				url: callbackUrl.trim(),
+				...(callbackSecretName.trim() && { secretName: callbackSecretName.trim() }),
+				events: callbackEvents,
+				...(Object.keys(statusMapping).length > 0 && { statusMapping }),
+				...(callbackReferenceTable.trim() && { referenceTable: callbackReferenceTable.trim() }),
+				referenceIdFrom: callbackReferenceIdFrom.trim() || 'item_id'
+			};
+		}
+
+		// Add actions if enabled and any defined
+		if (actionsEnabled && wizardActions.length > 0) {
+			source.actions = wizardActions
+				.filter(a => a.label.trim())
+				.map(a => ({
+					id: a.id,
+					label: a.label.trim(),
+					type: a.type,
+					...(a.type === 'callback' && a.event && { event: a.event }),
+					...(a.type === 'link' && a.urlTemplate?.trim() && { urlTemplate: a.urlTemplate.trim() }),
+					...(a.icon && { icon: a.icon }),
+					...(a.confirmMessage?.trim() && { confirmMessage: a.confirmMessage.trim() })
+				}));
+		}
+
 		try {
 			onSave(source);
 		} catch (err) {
@@ -1047,6 +1185,14 @@
 					{:else if steps[step] === 'Automation'}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
 							{@render automationStep()}
+						</div>
+					{:else if steps[step] === 'Callbacks'}
+						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
+							{@render callbacksStep()}
+						</div>
+					{:else if steps[step] === 'Actions'}
+						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
+							{@render actionsStep()}
 						</div>
 					{:else if steps[step] === 'Filters'}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
@@ -1184,6 +1330,14 @@
 					{:else if steps[step] === 'Automation'}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
 							{@render automationStep()}
+						</div>
+					{:else if steps[step] === 'Callbacks'}
+						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
+							{@render callbacksStep()}
+						</div>
+					{:else if steps[step] === 'Actions'}
+						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
+							{@render actionsStep()}
 						</div>
 					{:else if steps[step] === 'Filters'}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
@@ -1334,6 +1488,14 @@
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
 							{@render automationStep()}
 						</div>
+					{:else if steps[step] === 'Callbacks'}
+						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
+							{@render callbacksStep()}
+						</div>
+					{:else if steps[step] === 'Actions'}
+						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
+							{@render actionsStep()}
+						</div>
 					{:else if steps[step] === 'Filters'}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
 							{@render filtersStep()}
@@ -1453,6 +1615,14 @@
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
 							{@render automationStep()}
 						</div>
+					{:else if steps[step] === 'Callbacks'}
+						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
+							{@render callbacksStep()}
+						</div>
+					{:else if steps[step] === 'Actions'}
+						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
+							{@render actionsStep()}
+						</div>
 					{:else if steps[step] === 'Filters'}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
 							{@render filtersStep()}
@@ -1492,6 +1662,14 @@
 					{:else if steps[step] === 'Automation'}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
 							{@render automationStep()}
+						</div>
+					{:else if steps[step] === 'Callbacks'}
+						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
+							{@render callbacksStep()}
+						</div>
+					{:else if steps[step] === 'Actions'}
+						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
+							{@render actionsStep()}
 						</div>
 					{:else if steps[step] === 'Filters'}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
@@ -1630,6 +1808,14 @@
 					{:else if steps[step] === 'Automation'}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
 							{@render automationStep()}
+						</div>
+					{:else if steps[step] === 'Callbacks'}
+						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
+							{@render callbacksStep()}
+						</div>
+					{:else if steps[step] === 'Actions'}
+						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
+							{@render actionsStep()}
 						</div>
 					{:else if steps[step] === 'Filters'}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
@@ -2236,6 +2422,271 @@
 	</div>
 {/snippet}
 
+{#snippet callbacksStep()}
+	<div class="space-y-4">
+		<div>
+			<h3 class="font-mono text-xs font-semibold mb-1" style="color: oklch(0.70 0.02 250);">Status Callbacks</h3>
+			<p class="font-mono text-[10px] mb-3" style="color: oklch(0.45 0.02 250);">
+				Send webhook notifications when task status changes (e.g. update an external record).
+			</p>
+		</div>
+
+		<!-- Enable toggle -->
+		<label class="flex items-center gap-2.5 cursor-pointer">
+			<input
+				type="checkbox"
+				class="checkbox checkbox-sm"
+				bind:checked={callbackEnabled}
+			/>
+			<span class="font-mono text-xs" style="color: oklch(0.65 0.02 250);">Enable status callbacks</span>
+		</label>
+
+		{#if callbackEnabled}
+			<div
+				class="rounded-lg px-3.5 py-3 space-y-3"
+				style="background: oklch(0.16 0.01 250); border: 1px solid oklch(0.25 0.02 250);"
+			>
+				<!-- Webhook URL -->
+				<div>
+					<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">
+						Webhook URL <span style="color: oklch(0.70 0.12 25);">*</span>
+					</label>
+					<input
+						type="url"
+						class="input input-bordered w-full font-mono text-sm"
+						placeholder="https://your-service.com/webhook"
+						bind:value={callbackUrl}
+					/>
+				</div>
+
+				<!-- Secret name -->
+				<div>
+					<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Secret Name</label>
+					<input
+						type="text"
+						class="input input-bordered w-full font-mono text-sm"
+						placeholder="webhook-secret"
+						bind:value={callbackSecretName}
+					/>
+					<p class="font-mono text-[10px] mt-1" style="color: oklch(0.45 0.02 250);">
+						Name in <code>jat-secret</code> for the webhook auth token.
+					</p>
+				</div>
+
+				<!-- Events -->
+				<div>
+					<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Events</label>
+					<div class="flex flex-col gap-1.5">
+						{#each ['status_changed', 'task_closed'] as evt}
+							<label class="flex items-center gap-2 cursor-pointer">
+								<input
+									type="checkbox"
+									class="checkbox checkbox-xs"
+									checked={callbackEvents.includes(evt)}
+									onchange={() => {
+										if (callbackEvents.includes(evt)) {
+											callbackEvents = callbackEvents.filter(e => e !== evt);
+										} else {
+											callbackEvents = [...callbackEvents, evt];
+										}
+									}}
+								/>
+								<span class="font-mono text-[11px]" style="color: oklch(0.65 0.02 250);">{evt}</span>
+							</label>
+						{/each}
+					</div>
+				</div>
+
+				<!-- Status Mapping -->
+				<div>
+					<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Status Mapping</label>
+					<p class="font-mono text-[10px] mb-2" style="color: oklch(0.45 0.02 250);">
+						Map JAT statuses to external system statuses.
+					</p>
+					<div class="space-y-1.5">
+						{#each callbackStatusMapping as mapping, i}
+							<div class="flex items-center gap-2">
+								<span class="font-mono text-[11px] w-24 shrink-0 text-right" style="color: oklch(0.55 0.02 250);">{mapping.jatStatus}</span>
+								<svg class="w-3 h-3 shrink-0" style="color: oklch(0.40 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+								<input
+									type="text"
+									class="input input-bordered input-sm flex-1 font-mono text-xs"
+									placeholder="external status"
+									bind:value={callbackStatusMapping[i].externalStatus}
+								/>
+							</div>
+						{/each}
+					</div>
+				</div>
+
+				<!-- Reference Table -->
+				<div>
+					<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Reference Table</label>
+					<input
+						type="text"
+						class="input input-bordered w-full font-mono text-sm"
+						placeholder="e.g. feedback_reports"
+						bind:value={callbackReferenceTable}
+					/>
+				</div>
+
+				<!-- Reference ID From -->
+				<div>
+					<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Reference ID From</label>
+					<input
+						type="text"
+						class="input input-bordered w-full font-mono text-sm"
+						placeholder="item_id"
+						bind:value={callbackReferenceIdFrom}
+					/>
+					<p class="font-mono text-[10px] mt-1" style="color: oklch(0.45 0.02 250);">
+						Field name on the ingested item that contains the external record ID.
+					</p>
+				</div>
+			</div>
+		{/if}
+	</div>
+{/snippet}
+
+{#snippet actionsStep()}
+	<div class="space-y-4">
+		<div>
+			<h3 class="font-mono text-xs font-semibold mb-1" style="color: oklch(0.70 0.02 250);">Action Buttons</h3>
+			<p class="font-mono text-[10px] mb-3" style="color: oklch(0.45 0.02 250);">
+				Add custom buttons that appear in the task detail integration section.
+			</p>
+		</div>
+
+		<!-- Enable toggle -->
+		<label class="flex items-center gap-2.5 cursor-pointer">
+			<input
+				type="checkbox"
+				class="checkbox checkbox-sm"
+				bind:checked={actionsEnabled}
+			/>
+			<span class="font-mono text-xs" style="color: oklch(0.65 0.02 250);">Add action buttons</span>
+		</label>
+
+		{#if actionsEnabled}
+			<div class="space-y-2">
+				{#each wizardActions as action, i}
+					<div
+						class="rounded-lg px-3.5 py-3 space-y-2.5"
+						style="background: oklch(0.16 0.01 250); border: 1px solid oklch(0.25 0.02 250);"
+					>
+						<div class="flex items-center justify-between">
+							<span class="font-mono text-[10px] font-semibold" style="color: oklch(0.50 0.02 250);">Action {i + 1}</span>
+							<button
+								type="button"
+								class="font-mono text-[10px] px-1.5 py-0.5 rounded transition-colors"
+								style="color: oklch(0.55 0.10 25); background: oklch(0.20 0.04 25 / 0.3); border: 1px solid oklch(0.35 0.08 25);"
+								onclick={() => { wizardActions = wizardActions.filter((_, idx) => idx !== i); }}
+							>
+								&times;
+							</button>
+						</div>
+
+						<!-- Label -->
+						<div>
+							<label class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.55 0.02 250);">Label</label>
+							<input
+								type="text"
+								class="input input-bordered input-sm w-full font-mono text-xs"
+								placeholder="e.g. Sync Status"
+								bind:value={wizardActions[i].label}
+							/>
+						</div>
+
+						<!-- Type -->
+						<div>
+							<label class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.55 0.02 250);">Type</label>
+							<select
+								class="select select-bordered select-sm w-full font-mono text-xs"
+								bind:value={wizardActions[i].type}
+							>
+								<option value="callback">Callback (webhook)</option>
+								<option value="link">Link (open URL)</option>
+							</select>
+						</div>
+
+						<!-- Type-specific fields -->
+						{#if action.type === 'callback'}
+							<div>
+								<label class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.55 0.02 250);">Event</label>
+								<select
+									class="select select-bordered select-sm w-full font-mono text-xs"
+									bind:value={wizardActions[i].event}
+								>
+									<option value="status_changed">status_changed</option>
+									<option value="task_closed">task_closed</option>
+								</select>
+							</div>
+						{:else}
+							<div>
+								<label class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.55 0.02 250);">URL Template</label>
+								<input
+									type="text"
+									class="input input-bordered input-sm w-full font-mono text-xs"
+									placeholder={`https://example.com/\u007BreferenceId\u007D`}
+									bind:value={wizardActions[i].urlTemplate}
+								/>
+								<p class="font-mono text-[9px] mt-0.5" style="color: oklch(0.40 0.02 250);">
+									Use {`{projectUrl}`}, {`{referenceId}`}, {`{referenceTable}`} as placeholders.
+								</p>
+							</div>
+						{/if}
+
+						<!-- Icon -->
+						<div>
+							<label class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.55 0.02 250);">Icon</label>
+							<select
+								class="select select-bordered select-sm w-full font-mono text-xs"
+								bind:value={wizardActions[i].icon}
+							>
+								<option value="refresh">refresh</option>
+								<option value="check">check</option>
+								<option value="external-link">external-link</option>
+								<option value="send">send</option>
+								<option value="eye">eye</option>
+								<option value="trash">trash</option>
+							</select>
+						</div>
+
+						<!-- Confirm Message -->
+						<div>
+							<label class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.55 0.02 250);">Confirm Message (optional)</label>
+							<input
+								type="text"
+								class="input input-bordered input-sm w-full font-mono text-xs"
+								placeholder="Are you sure?"
+								bind:value={wizardActions[i].confirmMessage}
+							/>
+						</div>
+					</div>
+				{/each}
+
+				<!-- Add action button -->
+				<button
+					type="button"
+					class="w-full px-3 py-2 rounded-lg font-mono text-xs text-center transition-colors cursor-pointer"
+					style="background: oklch(0.18 0.01 250); border: 1px dashed oklch(0.30 0.02 250); color: oklch(0.55 0.02 250);"
+					onclick={() => {
+						wizardActions = [...wizardActions, {
+							id: crypto.randomUUID().slice(0, 8),
+							label: '',
+							type: 'callback',
+							event: 'status_changed',
+							icon: 'refresh'
+						}];
+					}}
+				>
+					+ Add Action
+				</button>
+			</div>
+		{/if}
+	</div>
+{/snippet}
+
 {#snippet reviewStep()}
 	<div class="space-y-3">
 		<h3 class="font-mono text-xs font-semibold" style="color: oklch(0.70 0.02 250);">Review Configuration</h3>
@@ -2302,6 +2753,26 @@
 				{#each filterConditions as cond}
 					{@const fieldMeta = pluginMetadata?.itemFields?.find((f: any) => f.key === cond.field)}
 					{@render reviewRow('', `${fieldMeta?.label || cond.field} ${cond.operator.replace(/_/g, ' ')} ${String(cond.value)}`)}
+				{/each}
+			{/if}
+
+			<!-- Callback config -->
+			{#if callbackEnabled && callbackUrl}
+				{@render reviewRow('Callback', callbackUrl)}
+				{#if callbackSecretName}
+					{@render reviewRow('', `Secret: ${callbackSecretName}`)}
+				{/if}
+				{@render reviewRow('', `Events: ${callbackEvents.join(', ')}`)}
+				{#if callbackReferenceTable}
+					{@render reviewRow('', `Table: ${callbackReferenceTable}`)}
+				{/if}
+			{/if}
+
+			<!-- Actions -->
+			{#if actionsEnabled && wizardActions.length > 0}
+				{@render reviewRow('Actions', `${wizardActions.filter(a => a.label.trim()).length} action(s)`)}
+				{#each wizardActions.filter(a => a.label.trim()) as action}
+					{@render reviewRow('', `${action.label} (${action.type}${action.icon ? ', ' + action.icon : ''})`)}
 				{/each}
 			{/if}
 		</div>

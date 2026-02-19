@@ -9,6 +9,7 @@
 #   verifying   - Emit signal only (agent does verification)
 #   committing  - Emit signal + git add/commit
 #   closing     - Emit signal + jt close
+#   callback    - Emit signal + fire integration callback (if configured)
 #   releasing   - Emit signal + capture session log
 #
 # Options:
@@ -47,6 +48,7 @@ Steps:
   verifying   - Emit signal only (agent does verification)
   committing  - Emit signal + git add/commit
   closing     - Emit signal + jt close
+  callback    - Emit signal + fire integration callback (if configured)
   releasing   - Emit signal + capture session log
   complete    - Generate completion bundle via LLM and emit complete signal
 
@@ -70,24 +72,27 @@ get_step_config() {
     local step="$1"
     case "$step" in
         verifying)
-            echo '0|[]|["verifying","committing","closing","releasing"]|Running tests and verification'
+            echo '0|[]|["verifying","committing","closing","callback","releasing"]|Running tests and verification'
             ;;
         committing)
-            echo '25|["verifying"]|["committing","closing","releasing"]|Committing changes'
+            echo '25|["verifying"]|["committing","closing","callback","releasing"]|Committing changes'
             ;;
         closing)
-            echo '50|["verifying","committing"]|["closing","releasing"]|Closing task in JAT'
+            echo '50|["verifying","committing"]|["closing","callback","releasing"]|Closing task in JAT'
+            ;;
+        callback)
+            echo '55|["verifying","committing","closing"]|["callback","releasing"]|Firing integration callback'
             ;;
         releasing)
-            echo '75|["verifying","committing","closing"]|["releasing"]|Capturing session log'
+            echo '75|["verifying","committing","closing","callback"]|["releasing"]|Capturing session log'
             ;;
         complete)
             # complete step doesn't emit completing signal - it emits the complete signal
-            echo '100|["verifying","committing","closing","releasing"]|[]|Generating completion bundle'
+            echo '100|["verifying","committing","closing","callback","releasing"]|[]|Generating completion bundle'
             ;;
         *)
             log_error "Unknown step: $step"
-            log "Valid steps: verifying, committing, closing, releasing (session log), complete"
+            log "Valid steps: verifying, committing, closing, callback, releasing (session log), complete"
             exit 1
             ;;
     esac
@@ -229,6 +234,59 @@ EOF
         log_dim "Closing task..."
         jt close "$TASK_ID" --reason "Completed by $AGENT_NAME"
         log_success "Task closed: $TASK_ID"
+        ;;
+
+    callback)
+        emit_completing_signal "$STEP" "$TASK_ID" "$TASK_TITLE"
+
+        # Fire integration callback if this task was ingested from an external source
+        log_dim "Checking for integration callback..."
+        IDE_URL="http://127.0.0.1:3333"
+
+        # Query IDE for integration info
+        INTEGRATION_JSON=$(curl -sf "${IDE_URL}/api/tasks/integrations?taskIds=${TASK_ID}" 2>/dev/null || echo '{}')
+        SOURCE_ID=$(echo "$INTEGRATION_JSON" | jq -r ".integrations.\"${TASK_ID}\".sourceId // empty" 2>/dev/null)
+        REFERENCE_ID=$(echo "$INTEGRATION_JSON" | jq -r ".integrations.\"${TASK_ID}\".referenceId // empty" 2>/dev/null)
+        HAS_CALLBACK=$(echo "$INTEGRATION_JSON" | jq -r ".integrations.\"${TASK_ID}\".callback.url // empty" 2>/dev/null)
+
+        if [[ -z "$SOURCE_ID" || -z "$HAS_CALLBACK" ]]; then
+            log_dim "No integration callback configured — skipping"
+        else
+            # Read the review signal to get summary array
+            TMUX_SESSION=$(tmux display-message -p '#S' 2>/dev/null || true)
+            SIGNAL_FILE="/tmp/jat-signal-tmux-${TMUX_SESSION}.json"
+            SUMMARY_NOTES=""
+            if [[ -f "$SIGNAL_FILE" ]]; then
+                SUMMARY_ARRAY=$(jq -r '.summary // empty' "$SIGNAL_FILE" 2>/dev/null)
+                if [[ -n "$SUMMARY_ARRAY" && "$SUMMARY_ARRAY" != "null" ]]; then
+                    # Format summary array as markdown
+                    SUMMARY_NOTES=$(jq -r '"## What was done\n" + ([.summary[] | "- " + .] | join("\n"))' "$SIGNAL_FILE" 2>/dev/null || echo "")
+                fi
+            fi
+
+            # Fire callback
+            log_dim "Firing callback to ${SOURCE_ID}..."
+            CALLBACK_BODY=$(jq -n -c \
+                --arg taskId "$TASK_ID" \
+                --arg event "task_closed" \
+                --arg referenceId "$REFERENCE_ID" \
+                --arg taskStatus "closed" \
+                --arg notes "$SUMMARY_NOTES" \
+                '{taskId: $taskId, event: $event, referenceId: $referenceId, taskStatus: $taskStatus, notes: $notes}')
+
+            CALLBACK_RESULT=$(curl -sf -X POST "${IDE_URL}/api/integrations/${SOURCE_ID}/callback" \
+                -H "Content-Type: application/json" \
+                -d "$CALLBACK_BODY" 2>/dev/null || echo '{"success":false}')
+
+            CALLBACK_OK=$(echo "$CALLBACK_RESULT" | jq -r '.success // false' 2>/dev/null)
+            if [[ "$CALLBACK_OK" == "true" ]]; then
+                CALLBACK_MS=$(echo "$CALLBACK_RESULT" | jq -r '.duration_ms // "?"' 2>/dev/null)
+                log_success "Integration callback fired (${CALLBACK_MS}ms)"
+            else
+                CALLBACK_ERR=$(echo "$CALLBACK_RESULT" | jq -r '.error // "unknown error"' 2>/dev/null)
+                log_dim "Integration callback failed: ${CALLBACK_ERR} (non-blocking)"
+            fi
+        fi
         ;;
 
     releasing)

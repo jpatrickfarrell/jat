@@ -11,6 +11,8 @@
   let loading = $state(true);
   let error = $state('');
   let respondingId = $state('');
+  let rejectingId = $state('');
+  let rejectReason = $state('');
 
   async function load() {
     loading = true;
@@ -21,9 +23,19 @@
     loading = false;
   }
 
-  async function handleRespond(reportId: string, response: 'accepted' | 'rejected') {
+  function startReject(reportId: string) {
+    rejectingId = reportId;
+    rejectReason = '';
+  }
+
+  function cancelReject() {
+    rejectingId = '';
+    rejectReason = '';
+  }
+
+  async function handleRespond(reportId: string, response: 'accepted' | 'rejected', reason?: string) {
     respondingId = reportId;
-    const result = await respondToReport(endpoint, reportId, response);
+    const result = await respondToReport(endpoint, reportId, response, reason);
     if (result.ok) {
       // Update local state
       reports = reports.map(r => {
@@ -37,6 +49,8 @@
         }
         return r;
       });
+      rejectingId = '';
+      rejectReason = '';
     } else {
       error = result.error || 'Failed to respond';
     }
@@ -139,22 +153,46 @@
                 {report.user_response === 'accepted' ? '✓ Accepted' : '✗ Rejected'}
               </span>
             {:else if report.status === 'completed' || report.status === 'wontfix'}
-              <div class="response-actions">
-                <button
-                  class="accept-btn"
-                  disabled={respondingId === report.id}
-                  onclick={() => handleRespond(report.id, 'accepted')}
-                >
-                  {respondingId === report.id ? '...' : '✓ Accept'}
-                </button>
-                <button
-                  class="reject-btn"
-                  disabled={respondingId === report.id}
-                  onclick={() => handleRespond(report.id, 'rejected')}
-                >
-                  {respondingId === report.id ? '...' : '✗ Reject'}
-                </button>
-              </div>
+              {#if rejectingId === report.id}
+                <div class="reject-reason-form">
+                  <textarea
+                    class="reject-reason-input"
+                    placeholder="Why are you rejecting? (min 10 characters)"
+                    bind:value={rejectReason}
+                    rows="2"
+                  ></textarea>
+                  <div class="reject-reason-actions">
+                    <button class="cancel-btn" onclick={cancelReject}>Cancel</button>
+                    <button
+                      class="confirm-reject-btn"
+                      disabled={rejectReason.trim().length < 10 || respondingId === report.id}
+                      onclick={() => handleRespond(report.id, 'rejected', rejectReason.trim())}
+                    >
+                      {respondingId === report.id ? '...' : '✗ Reject'}
+                    </button>
+                  </div>
+                  {#if rejectReason.trim().length > 0 && rejectReason.trim().length < 10}
+                    <span class="char-hint">{10 - rejectReason.trim().length} more characters needed</span>
+                  {/if}
+                </div>
+              {:else}
+                <div class="response-actions">
+                  <button
+                    class="accept-btn"
+                    disabled={respondingId === report.id}
+                    onclick={() => handleRespond(report.id, 'accepted')}
+                  >
+                    {respondingId === report.id ? '...' : '✓ Accept'}
+                  </button>
+                  <button
+                    class="reject-btn"
+                    disabled={respondingId === report.id}
+                    onclick={() => startReject(report.id)}
+                  >
+                    ✗ Reject
+                  </button>
+                </div>
+              {/if}
             {/if}
           </div>
         </div>
@@ -334,5 +372,67 @@
   .accept-btn:disabled, .reject-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+  .reject-reason-form {
+    width: 100%;
+    margin-top: 6px;
+  }
+  .reject-reason-input {
+    width: 100%;
+    padding: 6px 8px;
+    background: #111827;
+    border: 1px solid #374151;
+    border-radius: 5px;
+    color: #d1d5db;
+    font-size: 12px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 40px;
+  }
+  .reject-reason-input:focus {
+    outline: none;
+    border-color: #ef4444;
+  }
+  .reject-reason-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .cancel-btn {
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid #374151;
+    background: #1f2937;
+    color: #9ca3af;
+    font-family: inherit;
+    transition: background 0.15s;
+  }
+  .cancel-btn:hover { background: #374151; }
+  .confirm-reject-btn {
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid #ef444440;
+    background: #ef444418;
+    color: #ef4444;
+    font-family: inherit;
+    transition: background 0.15s;
+  }
+  .confirm-reject-btn:hover:not(:disabled) { background: #ef444430; }
+  .confirm-reject-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .char-hint {
+    display: block;
+    font-size: 10px;
+    color: #6b7280;
+    margin-top: 3px;
   }
 </style>

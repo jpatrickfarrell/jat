@@ -757,22 +757,50 @@
 									</div>
 
 									{#if hasInteractiveIntegration}
-										<!-- Status Sync -->
-										{#if integration.callback?.statusMapping && task.status}
-											{@const mapped = getMappedStatus(task.status)}
-											{#if mapped}
-												<div class="integration-status-sync">
-													<span class="sync-label">Status Sync</span>
-													<div class="sync-mapping">
-														<span class="sync-value">{task.status}</span>
-														<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3" style="color: oklch(0.50 0.02 250);">
-															<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-														</svg>
-														<span class="sync-value mapped">{mapped}</span>
+										<!-- Integration Flow Pipeline -->
+										{@const sourceName = integration.sourceType === 'supabase' ? 'Flush' : integration.sourceName || integration.sourceType}
+										{@const flowSteps = [
+											{ id: 'ingested', label: 'Reported', system: sourceName },
+											{ id: 'working', label: 'In Progress', system: 'JAT' },
+											{ id: 'complete', label: 'Complete', system: 'JAT' },
+											{ id: 'user_review', label: 'User Review', system: sourceName }
+										]}
+										{@const hasUserResponse = callbackLog.some(e => e.event === 'user_responded')}
+										{@const userResponse = callbackLog.find(e => e.event === 'user_responded')}
+										{@const hasSyncedBack = callbackLog.some(e => e.event === 'task_closed' && e.status >= 200 && e.status < 300)}
+										{@const currentStep = hasUserResponse ? 3 : task.status === 'closed' ? (hasSyncedBack ? 2 : 2) : task.status === 'in_progress' ? 1 : task.status === 'blocked' ? 1 : 0}
+										<div class="integration-flow">
+											<div class="flow-pipeline">
+												{#each flowSteps as step, i}
+													{@const isComplete = i < currentStep}
+													{@const isActive = i === currentStep}
+													{@const isFuture = i > currentStep}
+													{#if i > 0}
+														<div class="flow-connector" class:complete={isComplete} class:active={isActive}></div>
+													{/if}
+													<div class="flow-step" class:complete={isComplete} class:active={isActive} class:future={isFuture}>
+														<div class="flow-dot">
+															{#if isComplete}
+																<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-2.5 h-2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+															{/if}
+														</div>
+														<span class="flow-label">{step.label}</span>
+														<span class="flow-system">{step.system}</span>
 													</div>
-												</div>
+												{/each}
+											</div>
+											{#if hasUserResponse && userResponse}
+												<span class="flow-user-response" class:accepted={userResponse.response === 'accepted'} class:rejected={userResponse.response === 'rejected'}>
+													{userResponse.response === 'accepted' ? '\u2713 Accepted' : '\u2717 Rejected'}{userResponse.reason ? `: ${userResponse.reason}` : ''}
+												</span>
+											{:else if callbackLog.length > 0}
+												{@const lastSync = callbackLog[0]}
+												<span class="flow-last-sync">
+													{lastSync.status >= 200 && lastSync.status < 300 ? '\u2713' : '\u2717'}
+													Last synced {formatTimeAgo(lastSync.timestamp)}
+												</span>
 											{/if}
-										{/if}
+										</div>
 
 										<!-- Action Buttons -->
 										{#if integration.actions && integration.actions.length > 0}
@@ -2974,37 +3002,122 @@
 		border: 1px solid oklch(0.25 0.02 250);
 	}
 
-	.integration-status-sync {
+	.integration-flow {
 		display: flex;
 		flex-direction: column;
-		gap: 0.25rem;
+		gap: 0.375rem;
+		padding: 0.5rem 0.25rem;
 	}
 
-	.sync-label {
-		font-size: 0.6rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		color: oklch(0.50 0.02 250);
+	.flow-pipeline {
+		display: flex;
+		align-items: flex-start;
+		justify-content: center;
+		gap: 0;
 	}
 
-	.sync-mapping {
+	.flow-step {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.2rem;
+		min-width: 3.5rem;
+	}
+
+	.flow-dot {
+		width: 1rem;
+		height: 1rem;
+		border-radius: 50%;
 		display: flex;
 		align-items: center;
-		gap: 0.375rem;
+		justify-content: center;
+		border: 2px solid oklch(0.30 0.02 250);
+		background: oklch(0.18 0.01 250);
+		transition: all 0.2s;
 	}
 
-	.sync-value {
+	.flow-step.complete .flow-dot {
+		background: oklch(0.45 0.15 145);
+		border-color: oklch(0.55 0.18 145);
+		color: oklch(0.95 0.02 145);
+	}
+
+	.flow-step.active .flow-dot {
+		background: oklch(0.45 0.15 200);
+		border-color: oklch(0.65 0.18 200);
+		box-shadow: 0 0 8px oklch(0.55 0.18 200 / 0.5);
+	}
+
+	.flow-step.future .flow-dot {
+		opacity: 0.4;
+	}
+
+	.flow-label {
+		font-size: 0.6rem;
+		font-weight: 600;
+		color: oklch(0.55 0.02 250);
+		text-align: center;
+		line-height: 1.1;
+	}
+
+	.flow-step.active .flow-label {
+		color: oklch(0.80 0.12 200);
+	}
+
+	.flow-step.complete .flow-label {
+		color: oklch(0.65 0.10 145);
+	}
+
+	.flow-system {
+		font-size: 0.5rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: oklch(0.42 0.02 250);
+		font-weight: 500;
+	}
+
+	.flow-step.active .flow-system {
+		color: oklch(0.60 0.08 200);
+	}
+
+	.flow-connector {
+		flex: 1;
+		height: 2px;
+		background: oklch(0.28 0.02 250);
+		margin-top: 0.5rem; /* center with dot */
+		min-width: 0.75rem;
+	}
+
+	.flow-connector.complete {
+		background: oklch(0.45 0.15 145);
+	}
+
+	.flow-connector.active {
+		background: linear-gradient(90deg, oklch(0.45 0.15 145), oklch(0.45 0.15 200));
+	}
+
+	.flow-last-sync {
+		font-size: 0.6rem;
+		color: oklch(0.50 0.02 250);
+		text-align: center;
+	}
+
+	.flow-user-response {
 		font-size: 0.65rem;
-		padding: 0.125rem 0.375rem;
+		font-weight: 600;
+		text-align: center;
+		padding: 0.2rem 0.5rem;
 		border-radius: 0.25rem;
-		background: oklch(0.22 0.02 250);
-		color: oklch(0.70 0.02 250);
 	}
 
-	.sync-value.mapped {
-		background: oklch(0.25 0.08 200 / 0.3);
-		color: oklch(0.75 0.12 200);
+	.flow-user-response.accepted {
+		color: oklch(0.70 0.15 145);
+		background: oklch(0.35 0.10 145 / 0.2);
+	}
+
+	.flow-user-response.rejected {
+		color: oklch(0.70 0.15 25);
+		background: oklch(0.35 0.10 25 / 0.2);
 	}
 
 	.integration-actions {

@@ -33,7 +33,7 @@
 	}
 
 	interface Props {
-		task: { id: string; status: string; issue_type?: string; assignee?: string; title?: string; updated_at?: string; created_at?: string; labels?: string[]; priority?: number };
+		task: { id: string; status: string; issue_type?: string; assignee?: string; title?: string; updated_at?: string; created_at?: string; labels?: string[]; priority?: number; integration?: { sourceId: string; sourceType: string; sourceName: string } | null };
 		size?: 'xs' | 'sm' | 'md';
 		showStatus?: boolean;
 		showType?: boolean;
@@ -86,8 +86,9 @@
 
 	let { task, size = 'sm', showStatus = true, showType = true, showCopyIcon = false, showAssignee = false, minimal = false, color, onOpenTask, onAgentClick, dropdownAlign = 'start', copyOnly = false, blockedBy = [], blocks = [], showDependencies = false, showDepGraph = true, showUnblocksCount = false, statusDotColor, variant = 'default', agentName, animate = false, resumed = false, attached = false, onClick, exiting = false, harness, onHarnessClick, integration = null }: Props = $props();
 
-	// Integration icon (derived from type)
-	const integrationIcon = $derived(integration ? getIntegrationIcon(integration.sourceType) : null);
+	// Integration icon (derived from type) - use prop first, then task.integration as fallback
+	const resolvedIntegration = $derived(integration ?? task.integration ?? null);
+	const integrationIcon = $derived(resolvedIntegration ? getIntegrationIcon(resolvedIntegration.sourceType) : null);
 
 	// Extract project prefix from task ID (e.g., "jat-abc" -> "jat")
 	const projectPrefix = $derived(task.id.split('-')[0] || task.id);
@@ -509,8 +510,8 @@
 					<ProviderLogo agentId={harness} size={12} />
 				</span>
 			{/if}
-			{#if integrationIcon && integration}
-				<span class="inline-flex scale-75" title="From {integration.sourceType}: {integration.sourceName}">
+			{#if integrationIcon && resolvedIntegration}
+				<span class="inline-flex scale-75" title="From {resolvedIntegration.sourceType}: {resolvedIntegration.sourceName}">
 					<svg class="w-3.5 h-3.5" viewBox={integrationIcon.viewBox} fill={integrationIcon.fill ? 'currentColor' : 'none'} stroke={integrationIcon.fill ? 'none' : 'currentColor'} stroke-width="1.5" style="color: {integrationIcon.color};">
 						<path d={integrationIcon.svg} />
 					</svg>
@@ -602,8 +603,8 @@
 					<ProviderLogo agentId={harness} size={12} />
 				</span>
 			{/if}
-			{#if integrationIcon && integration}
-				<span class="inline-flex scale-70 mt-0.25" title="From {integration.sourceType}: {integration.sourceName}">
+			{#if integrationIcon && resolvedIntegration}
+				<span class="inline-flex scale-70 mt-0.25" title="From {resolvedIntegration.sourceType}: {resolvedIntegration.sourceName}">
 					<svg class="w-3.5 h-3.5" viewBox={integrationIcon.viewBox} fill={integrationIcon.fill ? 'currentColor' : 'none'} stroke={integrationIcon.fill ? 'none' : 'currentColor'} stroke-width="1.5" style="color: {integrationIcon.color};">
 						<path d={integrationIcon.svg} />
 					</svg>
@@ -764,8 +765,8 @@
 						<ProviderLogo agentId={harness} size={12} />
 					</span>
 				{/if}
-				{#if integrationIcon && integration}
-					<span class="inline-flex scale-70 ml-1" title="From {integration.sourceType}: {integration.sourceName}">
+				{#if integrationIcon && resolvedIntegration}
+					<span class="inline-flex scale-70 ml-1" title="From {resolvedIntegration.sourceType}: {resolvedIntegration.sourceName}">
 						<svg class="w-3.5 h-3.5" viewBox={integrationIcon.viewBox} fill={integrationIcon.fill ? 'currentColor' : 'none'} stroke={integrationIcon.fill ? 'none' : 'currentColor'} stroke-width="1.5" style="color: {integrationIcon.color};">
 							<path d={integrationIcon.svg} />
 						</svg>

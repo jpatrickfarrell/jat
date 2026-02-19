@@ -748,6 +748,11 @@
 			if (!signalsRes.ok) return;
 
 			const signalsData = await signalsRes.json();
+
+			// Re-check after await — expandedTaskDetails may have been nulled
+			// (e.g. user collapsed the panel or switched sessions)
+			if (!expandedTaskDetails) return;
+
 			const signalEvents = (signalsData.signals || []).map((signal: any) => ({
 				type: 'signal' as const,
 				timestamp: signal.timestamp,

@@ -29,7 +29,8 @@
 	import { computeReviewStatus } from '$lib/utils/reviewStatusUtils';
 	import { openTaskDetailDrawer } from '$lib/stores/drawerStore';
 	import SortDropdown from '$lib/components/SortDropdown.svelte';
-	import { toLocalDateStr, formatDisplayDate, parseLocalDate, getTimelinePos, getTaskDuration, formatDuration, formatTime, type CompletedTask } from '$lib/utils/completedTaskHelpers';
+	import { toLocalDateStr, formatDisplayDate, parseLocalDate } from '$lib/utils/completedTaskHelpers';
+	import DurationTrack from '$lib/components/history/DurationTrack.svelte';
 
 	interface TmuxSession {
 		name: string;
@@ -2123,28 +2124,11 @@
 													{stateVisual.shortLabel}
 												</span>
 												{#if recent.taskCreatedAt}
-													{@const taskLike = { id: recent.taskId || '', title: recent.taskTitle || '', created_at: recent.taskCreatedAt, updated_at: recent.taskUpdatedAt || recent.timestamp, closed_at: recent.taskClosedAt } as CompletedTask}
-													{@const duration = getTaskDuration(taskLike)}
-													{@const pos = getTimelinePos(taskLike)}
-													<div class="recent-duration-col" title="Duration: {formatDuration(duration)}\nStarted: {new Date(recent.taskCreatedAt).toLocaleString()}\nEnded: {new Date(recent.taskClosedAt || recent.taskUpdatedAt || recent.timestamp).toLocaleString()}">
-														<span class="recent-duration-times">
-															<span class="recent-duration-start">{formatTime(recent.taskCreatedAt)}</span>
-															<span class="recent-duration-sep">–</span>
-															<span class="recent-duration-end">{formatTime(recent.taskClosedAt || recent.taskUpdatedAt || recent.timestamp)}</span>
-															<span class="recent-duration-len">{formatDuration(duration)}</span>
-														</span>
-														<div class="recent-duration-track">
-															<div class="recent-duration-noon"></div>
-															{#if pos.crossDay}
-																<div class="recent-duration-overflow-cap"></div>
-															{/if}
-															<div
-																class="recent-duration-fill"
-																class:recent-duration-overflow={pos.crossDay}
-																style="left: {pos.left}%; width: {pos.width}%"
-															></div>
-														</div>
-													</div>
+													<DurationTrack
+														createdAt={recent.taskCreatedAt}
+														endedAt={recent.taskClosedAt || recent.taskUpdatedAt || recent.timestamp}
+														width="130px"
+													/>
 												{:else}
 													<span class="recent-time" title="Last active: {new Date(recent.timestamp).toLocaleString()}">{formatElapsed(recent.timestamp)} ago</span>
 												{/if}
@@ -3123,89 +3107,6 @@
 		white-space: nowrap;
 		min-width: 3.5rem;
 		text-align: right;
-	}
-
-	.recent-duration-col {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 2px;
-		width: 130px;
-		flex-shrink: 0;
-	}
-
-	.recent-duration-times {
-		font-size: 0.65rem;
-		color: oklch(0.50 0.02 250);
-		display: flex;
-		align-items: center;
-		gap: 0.2rem;
-		white-space: nowrap;
-	}
-
-	.recent-duration-start {
-		color: oklch(0.45 0.02 250);
-	}
-
-	.recent-duration-sep {
-		color: oklch(0.35 0.02 250);
-	}
-
-	.recent-duration-end {
-		color: oklch(0.55 0.02 250);
-	}
-
-	.recent-duration-len {
-		color: oklch(0.45 0.02 250);
-		font-family: ui-monospace, monospace;
-		font-size: 0.575rem;
-	}
-
-	.recent-duration-track {
-		position: relative;
-		width: 100%;
-		height: 3px;
-		background: oklch(0.20 0.01 250);
-		border-radius: 1.5px;
-	}
-
-	.recent-duration-noon {
-		position: absolute;
-		left: 50%;
-		top: 0;
-		width: 1px;
-		height: 100%;
-		background: oklch(0.25 0.01 250);
-	}
-
-	.recent-duration-fill {
-		position: absolute;
-		top: 0;
-		height: 100%;
-		border-radius: 1.5px;
-		background: linear-gradient(
-			90deg,
-			oklch(0.55 0.12 200 / 0.5),
-			oklch(0.55 0.12 200 / 0.75)
-		);
-	}
-
-	.recent-duration-fill.recent-duration-overflow {
-		background: linear-gradient(
-			90deg,
-			oklch(0.60 0.15 85 / 0.7),
-			oklch(0.55 0.12 200 / 0.55)
-		);
-	}
-
-	.recent-duration-overflow-cap {
-		position: absolute;
-		left: 0;
-		top: -1px;
-		width: 2px;
-		height: calc(100% + 2px);
-		background: oklch(0.60 0.15 85 / 0.85);
-		border-radius: 1px;
 	}
 
 	.recent-resume-btn {

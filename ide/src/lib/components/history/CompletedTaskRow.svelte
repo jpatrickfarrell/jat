@@ -6,11 +6,8 @@
 	import {
 		type CompletedTask,
 		PRIORITY_COLORS,
-		getTaskDuration,
-		formatDuration,
-		getTimelinePos,
-		formatTime,
 	} from "$lib/utils/completedTaskHelpers";
+	import DurationTrack from "./DurationTrack.svelte";
 
 	let {
 		task,
@@ -34,8 +31,6 @@
 		integration?: { sourceId: string; sourceType: string; sourceName: string } | null;
 	} = $props();
 
-	const duration = $derived(getTaskDuration(task));
-	const pos = $derived(getTimelinePos(task));
 	const color = $derived(getProjectColor(task.project || task.id.split('-')[0]));
 	const typeVis = $derived(getIssueTypeVisual(task.issue_type));
 	const pc = $derived(PRIORITY_COLORS[task.priority as keyof typeof PRIORITY_COLORS] || PRIORITY_COLORS[3]);
@@ -47,25 +42,10 @@
 	class="task-item group"
 	onclick={() => onTaskClick(task.id)}
 >
-	<div class="task-time-col" title="Duration: {formatDuration(duration)}\nCreated: {new Date(task.created_at).toLocaleString()}{task.closed_at ? '\nCompleted: ' + new Date(task.closed_at).toLocaleString() : ''}">
-		<span class="task-time">
-			<span class="task-time-start">{formatTime(task.created_at)}</span>
-			<span class="task-time-sep">-</span>
-			<span class="task-time-end">{formatTime(task.closed_at || task.updated_at)}</span>
-			<span class="task-time-duration">{formatDuration(duration)}</span>
-		</span>
-		<div class="task-duration-track">
-			<div class="task-duration-noon"></div>
-			{#if pos.crossDay}
-				<div class="task-duration-overflow-cap"></div>
-			{/if}
-			<div
-				class="task-duration-fill"
-				class:task-duration-overflow={pos.crossDay}
-				style="left: {pos.left}%; width: {pos.width}%"
-			></div>
-		</div>
-	</div>
+	<DurationTrack
+		createdAt={task.created_at}
+		endedAt={task.closed_at || task.updated_at}
+	/>
 	<div class="task-badge" style="--pc: {color}">
 		<span class="task-badge-avatar" title={task.assignee || 'Unassigned'}>
 			{#if task.assignee}
@@ -346,89 +326,6 @@
 		align-items: center;
 		gap: 0.5rem;
 		flex-shrink: 0;
-	}
-
-	.task-time-col {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 3px;
-		width: 150px;
-		flex-shrink: 0;
-	}
-
-	.task-time {
-		font-size: 0.7rem;
-		color: oklch(from var(--color-base-content) l c h / 55%);
-		display: flex;
-		align-items: center;
-		gap: 0.25rem;
-		white-space: nowrap;
-	}
-
-	.task-time-start {
-		color: oklch(from var(--color-base-content) l c h / 40%);
-	}
-
-	.task-time-sep {
-		color: oklch(from var(--color-base-content) l c h / 30%);
-	}
-
-	.task-time-end {
-		color: oklch(from var(--color-base-content) l c h / 60%);
-	}
-
-	.task-time-duration {
-		color: oklch(from var(--color-base-content) l c h / 40%);
-		font-family: ui-monospace, monospace;
-		font-size: 0.6rem;
-	}
-
-	.task-duration-track {
-		position: relative;
-		width: 100%;
-		height: 3px;
-		background: oklch(from var(--color-base-content) l c h / 6%);
-		border-radius: 1.5px;
-	}
-
-	.task-duration-noon {
-		position: absolute;
-		left: 50%;
-		top: 0;
-		width: 1px;
-		height: 100%;
-		background: oklch(from var(--color-base-content) l c h / 10%);
-	}
-
-	.task-duration-fill {
-		position: absolute;
-		top: 0;
-		height: 100%;
-		border-radius: 1.5px;
-		background: linear-gradient(
-			90deg,
-			oklch(from var(--color-info) l c h / 50%),
-			oklch(from var(--color-info) l c h / 75%)
-		);
-	}
-
-	.task-duration-fill.task-duration-overflow {
-		background: linear-gradient(
-			90deg,
-			oklch(from var(--color-warning) l c h / 70%),
-			oklch(from var(--color-info) l c h / 55%)
-		);
-	}
-
-	.task-duration-overflow-cap {
-		position: absolute;
-		left: 0;
-		top: -1px;
-		width: 2px;
-		height: calc(100% + 2px);
-		background: oklch(from var(--color-warning) l c h / 85%);
-		border-radius: 1px;
 	}
 
 	.task-arrow {

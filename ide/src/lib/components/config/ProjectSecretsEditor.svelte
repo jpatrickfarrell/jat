@@ -269,7 +269,7 @@
 
 			<div class="form-control">
 				<input
-					type="password"
+					type="text"
 					class="input input-bordered w-full"
 					placeholder={editingSecret.placeholder}
 					bind:value={editValue}

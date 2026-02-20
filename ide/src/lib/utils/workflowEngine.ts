@@ -453,6 +453,9 @@ async function executeSpawnAgent(
 	if (config.project) {
 		body.project = config.project;
 	}
+	if (config.command) {
+		body.command = config.command;
+	}
 
 	const response = await fetch(`${ctx.ideBaseUrl}/api/work/spawn`, {
 		method: 'POST',
@@ -574,6 +577,45 @@ const EXECUTORS: Record<NodeType, NodeExecutor> = {
 	condition: executeCondition,
 	transform: executeTransform
 };
+
+// =============================================================================
+// SINGLE NODE TEST (DRY RUN)
+// =============================================================================
+
+/**
+ * Test a single node in isolation with a dry-run.
+ * Returns the result or error message.
+ */
+export async function testNode(
+	node: WorkflowNode,
+	options: { ideBaseUrl?: string; project?: string } = {}
+): Promise<{ output?: unknown; error?: string }> {
+	const { ideBaseUrl = 'http://127.0.0.1:3333', project } = options;
+
+	const executor = EXECUTORS[node.type];
+	if (!executor) {
+		return { error: `No executor for node type: ${node.type}` };
+	}
+
+	const ctx: ExecutionContext = {
+		workflowId: 'test',
+		runId: 'test-' + Date.now(),
+		startedAt: new Date().toISOString(),
+		dryRun: true,
+		ideBaseUrl,
+		project,
+		nodeResults: new Map(),
+		log: () => {},
+		_nodes: [node]
+	} as ExecutionContext & { _nodes: WorkflowNode[] };
+
+	try {
+		const output = await executor(node, undefined, ctx);
+		return { output };
+	} catch (err) {
+		return { error: err instanceof Error ? err.message : String(err) };
+	}
+}
 
 // =============================================================================
 // MAIN ENGINE

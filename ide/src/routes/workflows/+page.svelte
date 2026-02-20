@@ -944,6 +944,14 @@
 				onUpdate={handleNodeUpdate}
 				onDelete={handleNodeDelete}
 				onClose={() => (configPanelOpen = false)}
+				onTest={async (node) => {
+					const res = await fetch('/api/workflows/test-node', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ node })
+					});
+					return await res.json();
+				}}
 			/>
 		</div>
 	</div>

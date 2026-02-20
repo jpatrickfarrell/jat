@@ -22,7 +22,7 @@
 		onUpdate = () => {},
 		onDelete = () => {},
 		onClose = () => {},
-		onTest = () => {}
+		onTest = async () => ({})
 	}: {
 		node: WorkflowNode | null;
 		isOpen: boolean;
@@ -31,7 +31,7 @@
 		onUpdate?: (node: WorkflowNode) => void;
 		onDelete?: (nodeId: string) => void;
 		onClose?: () => void;
-		onTest?: (node: WorkflowNode) => void;
+		onTest?: (node: WorkflowNode) => Promise<{ output?: unknown; error?: string }>;
 	} = $props();
 
 	let meta = $derived(node ? getNodeMeta(node.type) : null);
@@ -88,7 +88,16 @@
 	async function handleTest() {
 		if (!node) return;
 		testResult = { loading: true };
-		onTest(node);
+		try {
+			const result = await onTest(node);
+			if (result.error) {
+				testResult = { loading: false, error: result.error };
+			} else {
+				testResult = { loading: false, output: typeof result.output === 'string' ? result.output : JSON.stringify(result.output, null, 2) };
+			}
+		} catch (err) {
+			testResult = { loading: false, error: err instanceof Error ? err.message : String(err) };
+		}
 	}
 </script>
 
@@ -242,6 +251,21 @@
 					Test
 				</button>
 			</div>
+
+			{#if testResult.output || testResult.error}
+				<div class="px-3 pb-3">
+					{#if testResult.error}
+						<div class="rounded-lg px-3 py-2 text-xs font-mono" style="background: oklch(0.55 0.15 20 / 0.12); color: oklch(0.75 0.12 20); border: 1px solid oklch(0.55 0.15 20 / 0.25)">
+							<span class="font-semibold">Error:</span> {testResult.error}
+						</div>
+					{:else}
+						<div class="rounded-lg px-3 py-2 text-xs font-mono overflow-auto max-h-40" style="background: oklch(0.55 0.15 145 / 0.10); color: oklch(0.75 0.10 145); border: 1px solid oklch(0.55 0.15 145 / 0.20)">
+							<span class="font-semibold">Dry-run output:</span>
+							<pre class="mt-1 whitespace-pre-wrap">{testResult.output}</pre>
+						</div>
+					{/if}
+				</div>
+			{/if}
 		</div>
 	</div>
 {/if}

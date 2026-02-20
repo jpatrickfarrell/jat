@@ -682,7 +682,8 @@ export async function POST({ request }) {
 			attach = false,
 			imagePath = null,
 			project = null,
-			mode = 'task'
+			mode = 'task',
+			command: explicitCommand = null
 		} = body;
 		const explicitProjectProvided =
 			project !== null && project !== undefined && String(project).trim() !== '';
@@ -900,7 +901,7 @@ export async function POST({ request }) {
 			agentName,
 			taskId,
 			taskTitle: task?.title,
-			taskCommand: task?.command || '/jat:start',
+			taskCommand: explicitCommand || task?.command || '/jat:start',
 			mode
 		});
 

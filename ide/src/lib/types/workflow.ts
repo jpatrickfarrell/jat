@@ -149,6 +149,8 @@ export interface ActionSpawnAgentConfig {
 	model?: string;
 	/** Target project */
 	project?: string;
+	/** Command/skill to run (e.g., '/jat:start', '/jat:chat'). Defaults to '/jat:start'. */
+	command?: string;
 }
 
 /** Browser automation action */

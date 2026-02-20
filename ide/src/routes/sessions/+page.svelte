@@ -121,9 +121,6 @@
 	const PIXELS_PER_COLUMN = 8.5; // Approximate pixels per monospace character
 	let isCardResizing = $state(false); // For showing cols indicator during resize
 
-	// Container width for sessions table (resizable)
-	let containerWidth = $state(1200); // Default max-width in pixels
-	let isContainerResizing = $state(false);
 
 	// Optimistic state and auto-complete tracking (matching TasksActive)
 	let optimisticStates = $state<Map<string, string>>(new Map());
@@ -939,29 +936,6 @@
 		document.addEventListener('mouseup', onMouseUp);
 	}
 
-	// Container width resize handling
-	function startContainerResize(e: MouseEvent) {
-		e.preventDefault();
-		isContainerResizing = true;
-		const startX = e.clientX;
-		const startWidth = containerWidth;
-
-		function onMouseMove(e: MouseEvent) {
-			const delta = e.clientX - startX;
-			// Allow expanding up to 95% of viewport width, minimum 800px
-			const maxWidth = window.innerWidth * 0.95;
-			containerWidth = Math.max(800, Math.min(maxWidth, startWidth + delta));
-		}
-
-		function onMouseUp() {
-			isContainerResizing = false;
-			document.removeEventListener('mousemove', onMouseMove);
-			document.removeEventListener('mouseup', onMouseUp);
-		}
-
-		document.addEventListener('mousemove', onMouseMove);
-		document.addEventListener('mouseup', onMouseUp);
-	}
 
 	// Send input to expanded session
 	async function sendExpandedInput(text: string, type: 'text' | 'key' | 'raw' = 'text'): Promise<boolean> {
@@ -1353,22 +1327,9 @@
 </svelte:head>
 
 <div class="tmux-page" style="background: oklch(0.14 0.01 250);">
-	<!-- Header -->
-	<div class="tmux-header">
-		<div class="header-left">
-			<h1 class="page-title">
-				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="title-icon">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
-				</svg>
-				Sessions
-			</h1>
-		</div>
-
-	</div>
-
-	<!-- Content with resizable width -->
+	<!-- Content -->
 	<div class="tmux-content-wrapper">
-		<div class="tmux-content" style="max-width: {containerWidth}px;">
+		<div class="tmux-content">
 		<!-- Session type tabs + Sort control (above table) -->
 		<div class="table-controls">
 			<SessionsTabs
@@ -1923,22 +1884,6 @@
 			</div>
 		{/if}
 		</div>
-		<!-- Container resize handle (right edge) -->
-		<div
-			class="container-resize-handle"
-			class:resizing={isContainerResizing}
-			onmousedown={startContainerResize}
-			role="separator"
-			aria-orientation="vertical"
-			tabindex="0"
-			title="Drag to resize container width"
-		>
-			<div class="container-resize-bar"></div>
-		</div>
-		<!-- Width indicator -->
-		<div class="container-width-indicator" class:visible={isContainerResizing}>
-			{containerWidth}px
-		</div>
 	</div>
 
 	<!-- Attach feedback toast -->
@@ -2325,78 +2270,14 @@
 		margin-bottom: 0.75rem;
 	}
 
-	/* Content wrapper with resize handle */
+	/* Content wrapper - full width */
 	.tmux-content-wrapper {
 		position: relative;
-		display: flex;
-		align-items: flex-start;
-		gap: 0;
 	}
 
-	/* Content */
+	/* Content - full width */
 	.tmux-content {
-		/* max-width controlled by inline style */
-		flex: 0 0 auto;
-		transition: max-width 0.05s ease-out;
-	}
-
-	/* Container resize handle (right edge) - sticky to stay visible while scrolling */
-	.container-resize-handle {
-		position: sticky;
-		top: 80px; /* Below header */
-		align-self: flex-start;
-		width: 12px;
-		height: 80px;
-		cursor: ew-resize;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		flex-shrink: 0;
-		margin-left: -4px;
-		z-index: 10;
-	}
-
-	.container-resize-bar {
-		width: 4px;
-		height: 60px;
-		background: oklch(0.30 0.02 250);
-		border-radius: 2px;
-		transition: all 0.15s;
-	}
-
-	.container-resize-handle:hover .container-resize-bar {
-		background: oklch(0.50 0.08 200);
-		height: 80px;
-		width: 5px;
-	}
-
-	.container-resize-handle.resizing .container-resize-bar {
-		background: oklch(0.65 0.15 200);
-		height: 100px;
-		width: 6px;
-	}
-
-	/* Width indicator */
-	.container-width-indicator {
-		position: fixed;
-		top: 50%;
-		left: 50%;
-		transform: translate(-50%, -50%);
-		background: oklch(0.20 0.02 250);
-		border: 1px solid oklch(0.35 0.02 250);
-		padding: 0.375rem 0.75rem;
-		border-radius: 6px;
-		font-size: 0.75rem;
-		font-family: ui-monospace, monospace;
-		color: oklch(0.70 0.12 200);
-		pointer-events: none;
-		opacity: 0;
-		transition: opacity 0.15s;
-		z-index: 100;
-	}
-
-	.container-width-indicator.visible {
-		opacity: 1;
+		width: 100%;
 	}
 
 	/* Loading skeleton */

@@ -95,6 +95,7 @@
 		agentProjects = new Map(),
 		projectColors = {},
 		taskIntegrations = {},
+		browserSessions = new Map(),
 		onKillSession,
 		onAttachSession,
 		onViewTask
@@ -105,6 +106,7 @@
 		agentProjects: Map<string, string>;
 		projectColors: Record<string, string>;
 		taskIntegrations?: Record<string, { sourceId: string; sourceType: string; sourceName: string; sourceEnabled: boolean }>;
+		browserSessions?: Map<string, number>;
 		onKillSession?: (sessionName: string) => Promise<void>;
 		onAttachSession?: (sessionName: string) => Promise<void>;
 		onViewTask?: (taskId: string) => void;
@@ -1227,6 +1229,12 @@
 										}}
 										reviewReason={reviewStatus?.reason ?? null}
 									/>
+									{#if browserSessions.get(sessionAgentName)}
+										<span class="browser-port-badge" title="Chrome DevTools on port {browserSessions.get(sessionAgentName)}">
+											<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM4.93 4.93a8 8 0 0011.32 0M1.46 8.59A10 10 0 0010 2a10 10 0 018.54 6.59M10 18a10 10 0 01-8.54-6.59M10 18a10 10 0 008.54-6.59M2 10h16M10 2a15.3 15.3 0 014 8 15.3 15.3 0 01-4 8 15.3 15.3 0 01-4-8 15.3 15.3 0 014-8z" fill="none" stroke="currentColor" stroke-width="1.5" /></svg>
+											:{browserSessions.get(sessionAgentName)}
+										</span>
+									{/if}
 								</div>
 							{:else}
 								<!-- Non-agent sessions: simple buttons -->
@@ -1468,6 +1476,7 @@
 											details={expandedTaskDetails}
 											loading={taskDetailsLoading}
 											height={expandedHeight}
+											browserPort={browserSessions.get(expandedAgentName) || null}
 											onViewTask={(taskId) => onViewTask?.(taskId)}
 											onSaveDescription={async (taskId, description) => {
 												await saveDescription(taskId, description);
@@ -2074,6 +2083,21 @@
 		align-items: flex-end;
 		gap: 0.375rem;
 		justify-content: center;
+	}
+
+	.browser-port-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		font-size: 0.65rem;
+		font-weight: 500;
+		padding: 1px 5px;
+		border-radius: 4px;
+		background: oklch(0.70 0.15 55 / 0.12);
+		color: oklch(0.75 0.15 55);
+		border: 1px solid oklch(0.70 0.15 55 / 0.25);
+		flex-shrink: 0;
+		white-space: nowrap;
 	}
 
 	.session-name {

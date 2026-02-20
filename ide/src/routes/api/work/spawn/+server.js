@@ -767,6 +767,49 @@ export async function POST({ request }) {
 
 		console.log('[spawn] Project path:', projectPath, inferredFromTaskId ? '(inferred from task ID)' : '');
 
+		// Ensure .claude/settings.json exists with hooks
+		// Without hooks, agent signals (working, review, etc.) won't be captured by the IDE
+		const claudeSettingsPath = `${projectPath}/.claude/settings.json`;
+		if (!existsSync(claudeSettingsPath)) {
+			try {
+				const claudeDir = `${projectPath}/.claude`;
+				mkdirSync(claudeDir, { recursive: true });
+				const defaultSettings = {
+					statusLine: {
+						type: 'command',
+						command: '~/.claude/statusline.sh',
+						padding: 1
+					},
+					hooks: {
+						PostToolUse: [
+							{
+								matcher: '^Bash$',
+								hooks: [
+									{
+										type: 'command',
+										command: '~/.claude/hooks/post-bash-agent-state-refresh.sh',
+										statusMessage: 'Checking agent state changes...',
+										streamStdinJson: true
+									},
+									{
+										type: 'command',
+										command: '~/.claude/hooks/post-bash-jat-signal.sh',
+										statusMessage: '',
+										streamStdinJson: true
+									}
+								]
+							}
+						]
+					}
+				};
+				writeFileSync(claudeSettingsPath, JSON.stringify(defaultSettings, null, 2), 'utf-8');
+				console.log(`[spawn] Created missing .claude/settings.json with hooks for ${projectPath}`);
+			} catch (err) {
+				// Non-fatal - signals won't work but agent can still run
+				console.warn('[spawn] Failed to create .claude/settings.json:', err);
+			}
+		}
+
 		// Extract project name from path early (needed for signal and response)
 		// e.g., "/home/jw/code/jat" -> "jat"
 		const projectName = projectPath.split('/').filter(Boolean).pop() || null;

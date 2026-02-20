@@ -4238,7 +4238,7 @@
 					// Write IDE-initiated signal if transitioning from input-waiting states
 				// This provides instant UI feedback before the agent processes the input
 				// Use 'polishing' for completed sessions (post-task follow-up), 'working' for others
-				const waitingStates = ['ready-for-review', 'needs-input', 'completed', 'idle'];
+				const waitingStates = ['needs-input', 'completed', 'idle'];
 				if (sessionName && waitingStates.includes(sessionState)) {
 					const signalType = sessionState === 'completed' ? 'polishing' : 'working';
 					try {

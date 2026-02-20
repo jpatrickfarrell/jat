@@ -93,6 +93,9 @@
 	// Project colors
 	let projectColors = $state<Record<string, string>>({});
 
+	// Browser sessions (agent name → port)
+	let browserSessions = $state<Map<string, number>>(new Map());
+
 	// Task → integration source mapping (lazy loaded)
 	let taskIntegrations = $state<Record<string, { sourceId: string; sourceType: string; sourceName: string; sourceEnabled: boolean }>>({});
 
@@ -723,6 +726,24 @@
 		}
 	}
 
+	async function fetchBrowserSessions() {
+		try {
+			const response = await fetch('/api/browser-sessions');
+			if (!response.ok) return;
+			const data = await response.json();
+			const map = new Map<string, number>();
+			for (const [port, session] of Object.entries(data.sessions || {})) {
+				const s = session as any;
+				if (s.alive || s.portListening) {
+					map.set(s.agentName, parseInt(port));
+				}
+			}
+			browserSessions = map;
+		} catch {
+			// Silent fail - browser sessions are supplemental
+		}
+	}
+
 	async function fetchRecoverableSessions() {
 		try {
 			const response = await fetch("/api/recovery");
@@ -938,6 +959,7 @@
 			fetchProjectNotes(),
 			fetchCompletedTasks(),
 			fetchCompletedMemory(),
+			fetchBrowserSessions(),
 		]);
 	}
 
@@ -1586,6 +1608,7 @@
 													{agentProjects}
 													{projectColors}
 													{taskIntegrations}
+													{browserSessions}
 													onKillSession={killSession}
 													onAttachSession={attachSession}
 													onViewTask={(taskId) =>
@@ -1662,6 +1685,7 @@
 													{agentProjects}
 													{projectColors}
 													{taskIntegrations}
+													{browserSessions}
 													onKillSession={killSession}
 													onAttachSession={attachSession}
 													onViewTask={(taskId) =>

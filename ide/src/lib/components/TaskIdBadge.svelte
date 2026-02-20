@@ -383,11 +383,8 @@
 	{@const avatarSize = size === 'xs' ? 20 : size === 'sm' ? 24 : 28}
 	{@const badgeColor = isClosed ? 'oklch(0.65 0.20 145)' : projectColor}
 	<div class="inline-flex flex-col items-start">
-		{#if agentName}
-			<span class="text-[10px] font-medium leading-none mb-0.5 self-center opacity-70" style="color: {ringColor};">{agentName}</span>
-		{/if}
 		<button
-			class="inline-flex items-center gap-2 font-mono rounded-full cursor-pointer whitespace-nowrap
+			class="inline-flex items-center gap-2 font-mono {agentName ? 'rounded-2xl' : 'rounded-full'} cursor-pointer whitespace-nowrap
 				   hover:opacity-90 transition-all {size === 'xs' ? 'text-xs pr-2 pl-0.5 py-0.5' : size === 'sm' ? 'text-sm pr-2.5 pl-0.5 py-0.5' : 'text-base pr-3 pl-1 py-1'}"
 			style="
 				background: color-mix(in oklch, {badgeColor} 12%, transparent);
@@ -456,8 +453,13 @@
 					</div>
 				{/if}
 			{/if}
-			<!-- Task ID -->
-			<span class="{animate ? 'tracking-in-expand' : ''} {isClosed ? 'line-through opacity-70' : ''}" style={animate ? 'animation-delay: 100ms;' : ''}>{task.id}</span>
+			<!-- Task ID + Agent Name -->
+			<div class="flex flex-col items-start">
+				<span class="{animate ? 'tracking-in-expand' : ''} {isClosed ? 'line-through opacity-70' : ''}" style={animate ? 'animation-delay: 100ms;' : ''}>{task.id}</span>
+				{#if agentName}
+					<span class="text-[10px] font-medium leading-none opacity-70" style="color: {ringColor};">{agentName}</span>
+				{/if}
+			</div>
 			{#if isClosed && !copied}
 				<!-- Small completion checkmark for closed tasks -->
 				<div
@@ -482,7 +484,7 @@
 		</button>
 
 		<!-- Icons row - outside button, below the badge -->
-		<div class="flex items-center gap-1 mt-0.5 ml-8">
+		<div class="flex items-center gap-1 mt-0.5 ml-2">
 			<!-- Priority badge -->
 			{#if showType && task.issue_type && !isClosed}
 				<span class={size === 'xs' ? 'text-xs' : size === 'sm' ? 'text-sm' : 'text-base'}>{typeVisual.icon}</span>

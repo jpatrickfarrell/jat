@@ -289,6 +289,45 @@ cmd_init() {
 
   touch_sentinel
 
+  # Ensure .claude/settings.json exists with hooks configured
+  # Without this, signals emitted by agents won't be captured by the IDE
+  local claude_dir="$PROJECT_ROOT/.claude"
+  local settings_file="$claude_dir/settings.json"
+  if [[ ! -f "$settings_file" ]]; then
+    mkdir -p "$claude_dir"
+    cat > "$settings_file" << 'HOOKEOF'
+{
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.sh",
+    "padding": 1
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/post-bash-agent-state-refresh.sh",
+            "statusMessage": "Checking agent state changes...",
+            "streamStdinJson": true
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/post-bash-jat-signal.sh",
+            "statusMessage": "",
+            "streamStdinJson": true
+          }
+        ]
+      }
+    ]
+  }
+}
+HOOKEOF
+    $quiet || echo "Created .claude/settings.json with hooks"
+  fi
+
   $quiet || echo "Initialized .jat/ in $PROJECT_ROOT"
 }
 

@@ -29,6 +29,7 @@
 	import { computeReviewStatus } from '$lib/utils/reviewStatusUtils';
 	import { openTaskDetailDrawer } from '$lib/stores/drawerStore';
 	import SortDropdown from '$lib/components/SortDropdown.svelte';
+	import { toLocalDateStr, formatDisplayDate, parseLocalDate, getTimelinePos, getTaskDuration, formatDuration, formatTime, type CompletedTask } from '$lib/utils/completedTaskHelpers';
 
 	interface TmuxSession {
 		name: string;
@@ -65,6 +66,12 @@
 		lastState: string;
 		timestamp: string;
 		taskStatus?: string; // Optimistic override from context menu status changes
+		taskCreatedAt?: string;
+		taskClosedAt?: string;
+		taskUpdatedAt?: string;
+		taskPriority?: number;
+		taskType?: string;
+		integration?: { sourceId: string; sourceType: string; sourceName: string } | null;
 	}
 	let recentSessions = $state<RecentSession[]>([]);
 	let recentCollapsed = $state(false);
@@ -73,6 +80,31 @@
 	let recentHasMore = $state(false);
 	let recentLoadingMore = $state(false);
 	const RECENT_PAGE_SIZE = 20;
+
+	// Day-grouped recent sessions
+	interface RecentSessionDayGroup {
+		date: string;        // YYYY-MM-DD
+		displayDate: string; // "Today", "Yesterday", "Wed, Feb 19"
+		sessions: RecentSession[];
+	}
+
+	function groupRecentSessionsByDay(sessions: RecentSession[]): RecentSessionDayGroup[] {
+		const groups = new Map<string, RecentSessionDayGroup>();
+		for (const session of sessions) {
+			const dateStr = toLocalDateStr(session.timestamp);
+			if (!groups.has(dateStr)) {
+				groups.set(dateStr, {
+					date: dateStr,
+					displayDate: formatDisplayDate(parseLocalDate(dateStr)),
+					sessions: [],
+				});
+			}
+			groups.get(dateStr)!.sessions.push(session);
+		}
+		return Array.from(groups.values()).sort((a, b) => b.date.localeCompare(a.date));
+	}
+
+	const recentDayGroups = $derived(groupRecentSessionsByDay(recentSessions));
 
 	// Expanded session state (inline SessionCard)
 	let expandedSession = $state<string | null>(null);
@@ -422,12 +454,53 @@
 		if (recentLoadingMore || !recentHasMore) return;
 		recentLoadingMore = true;
 		try {
-			const response = await fetch(`/api/sessions/recent?offset=${recentSessions.length}&limit=${RECENT_PAGE_SIZE}`);
-			if (!response.ok) return;
-			const data = await response.json();
-			recentSessions = [...recentSessions, ...(data.sessions || [])];
-			recentTotal = data.total || recentTotal;
-			recentHasMore = data.hasMore || false;
+			const currentDates = new Set(recentSessions.map(s => toLocalDateStr(s.timestamp)));
+			let offset = recentSessions.length;
+			let targetDay: string | null = null;
+			const collected: RecentSession[] = [];
+
+			// Fetch batches until we have one complete new day (no spillover)
+			while (true) {
+				const response = await fetch(`/api/sessions/recent?offset=${offset}&limit=${RECENT_PAGE_SIZE}`);
+				if (!response.ok) break;
+				const data = await response.json();
+				const batch: RecentSession[] = data.sessions || [];
+				if (batch.length === 0) { recentHasMore = false; break; }
+
+				offset += batch.length;
+				recentTotal = data.total || recentTotal;
+				recentHasMore = data.hasMore || false;
+
+				for (const s of batch) {
+					const d = toLocalDateStr(s.timestamp);
+					if (!targetDay && !currentDates.has(d)) {
+						targetDay = d;
+					}
+					if (targetDay && d !== targetDay && !currentDates.has(d)) {
+						// Crossed past the target day into an even older day — stop, don't include spillover
+						recentHasMore = true; // we know there's more since we stopped early
+						break;
+					}
+					collected.push(s);
+				}
+
+				// If we found the target day and the batch went past it, we're done
+				if (targetDay && collected.length > 0) {
+					const lastCollected = toLocalDateStr(collected[collected.length - 1].timestamp);
+					// Check if we stopped early (spillover trimmed) or batch ended exactly on target day
+					if (lastCollected === targetDay || !recentHasMore) break;
+					// If the full batch was still within known + target days, keep fetching
+					const batchLastDay = toLocalDateStr(batch[batch.length - 1].timestamp);
+					if (batchLastDay === targetDay) continue; // target day might have more sessions
+					break; // spillover was trimmed above
+				}
+
+				if (!recentHasMore) break;
+			}
+
+			if (collected.length > 0) {
+				recentSessions = [...recentSessions, ...collected];
+			}
 		} catch {
 			// Silent fail
 		} finally {
@@ -2003,65 +2076,98 @@
 
 					{#if !recentCollapsed}
 						<div class="recent-list">
-							{#each recentSessions as recent (recent.sessionName)}
-								{@const projectColor = recent.project ? getProjectColorReactive(recent.taskId || recent.project) : null}
-								{@const stateVisual = getSessionStateVisual(recent.lastState as SessionState)}
-								{@const recentStatusDotColor = stateVisual.accent}
-								<!-- svelte-ignore a11y_no_static_element_interactions -->
-							<div
-									class="recent-row"
-									style="border-left: 3px solid {projectColor || 'oklch(0.30 0.02 250)'}; cursor: pointer;"
-									onclick={() => handleRecentRowClick(recent)}
-									oncontextmenu={(e) => handleRecentContextMenu(recent, e)}
-								>
-									<div class="recent-row-left">
-										{#if recent.taskId && recent.taskId !== 'unknown'}
-											<div class="badge-and-text">
-												<TaskIdBadge
-													task={{ id: recent.taskId, status: recent.taskStatus || (recent.lastState === 'complete' || recent.lastState === 'completed' ? 'closed' : 'open'), title: recent.taskTitle || undefined, integration: recent.integration || null }}
-													size="sm"
-													variant="agentPill"
-													agentName={recent.agentName}
-													showType={false}
-													statusDotColor={recentStatusDotColor}
-												/>
-												{#if recent.taskTitle}
-													<div class="text-column">
-														<span class="task-title" title={recent.taskTitle}>{recent.taskTitle}</span>
+							{#each recentDayGroups as dayGroup (dayGroup.date)}
+								<div class="recent-day-group">
+									<div class="recent-day-header">
+										<span class="recent-day-date">{dayGroup.displayDate}</span>
+										<span class="recent-day-count">{dayGroup.sessions.length}</span>
+									</div>
+									{#each dayGroup.sessions as recent (recent.sessionName)}
+										{@const projectColor = recent.project ? getProjectColorReactive(recent.taskId || recent.project) : null}
+										{@const stateVisual = getSessionStateVisual(recent.lastState as SessionState)}
+										{@const recentStatusDotColor = stateVisual.accent}
+										<!-- svelte-ignore a11y_no_static_element_interactions -->
+										<div
+											class="recent-row"
+											style="border-left: 3px solid {projectColor || 'oklch(0.30 0.02 250)'}; cursor: pointer;"
+											onclick={() => handleRecentRowClick(recent)}
+											oncontextmenu={(e) => handleRecentContextMenu(recent, e)}
+										>
+											<div class="recent-row-left">
+												{#if recent.taskId && recent.taskId !== 'unknown'}
+													<div class="badge-and-text">
+														<TaskIdBadge
+															task={{ id: recent.taskId, status: recent.taskStatus || (recent.lastState === 'complete' || recent.lastState === 'completed' ? 'closed' : 'open'), title: recent.taskTitle || undefined, integration: recent.integration || null }}
+															size="sm"
+															variant="agentPill"
+															agentName={recent.agentName}
+															showType={false}
+															statusDotColor={recentStatusDotColor}
+														/>
+														{#if recent.taskTitle}
+															<div class="text-column">
+																<span class="task-title" title={recent.taskTitle}>{recent.taskTitle}</span>
+															</div>
+														{/if}
 													</div>
+												{:else}
+													<AgentAvatar name={recent.agentName} size={24} />
+													<span class="recent-agent-name">{recent.agentName}</span>
 												{/if}
 											</div>
-										{:else}
-											<AgentAvatar name={recent.agentName} size={24} />
-											<span class="recent-agent-name">{recent.agentName}</span>
-										{/if}
-									</div>
-									<div class="recent-row-right">
-										<span
-											class="recent-state-badge"
-											style="background: {stateVisual.bgColor}; color: {stateVisual.textColor}; border: 1px solid {stateVisual.borderColor};"
-										>
-											{stateVisual.shortLabel}
-										</span>
-										<span class="recent-time">{formatElapsed(recent.timestamp)}</span>
-										<button
-											class="recent-resume-btn"
-											onclick={() => resumeSession(recent)}
-											disabled={resumingSession === recent.sessionName}
-											title="Resume this session"
-										>
-											{#if resumingSession === recent.sessionName}
-												<svg class="recent-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-													<circle cx="12" cy="12" r="10" stroke-dasharray="31.42" stroke-dashoffset="10" />
-												</svg>
-											{:else}
-												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
-												</svg>
-											{/if}
-											<span>Resume</span>
-										</button>
-									</div>
+											<div class="recent-row-right">
+												<span
+													class="recent-state-badge"
+													style="background: {stateVisual.bgColor}; color: {stateVisual.textColor}; border: 1px solid {stateVisual.borderColor};"
+												>
+													{stateVisual.shortLabel}
+												</span>
+												{#if recent.taskCreatedAt}
+													{@const taskLike = { id: recent.taskId || '', title: recent.taskTitle || '', created_at: recent.taskCreatedAt, updated_at: recent.taskUpdatedAt || recent.timestamp, closed_at: recent.taskClosedAt } as CompletedTask}
+													{@const duration = getTaskDuration(taskLike)}
+													{@const pos = getTimelinePos(taskLike)}
+													<div class="recent-duration-col" title="Duration: {formatDuration(duration)}\nStarted: {new Date(recent.taskCreatedAt).toLocaleString()}\nEnded: {new Date(recent.taskClosedAt || recent.taskUpdatedAt || recent.timestamp).toLocaleString()}">
+														<span class="recent-duration-times">
+															<span class="recent-duration-start">{formatTime(recent.taskCreatedAt)}</span>
+															<span class="recent-duration-sep">–</span>
+															<span class="recent-duration-end">{formatTime(recent.taskClosedAt || recent.taskUpdatedAt || recent.timestamp)}</span>
+															<span class="recent-duration-len">{formatDuration(duration)}</span>
+														</span>
+														<div class="recent-duration-track">
+															<div class="recent-duration-noon"></div>
+															{#if pos.crossDay}
+																<div class="recent-duration-overflow-cap"></div>
+															{/if}
+															<div
+																class="recent-duration-fill"
+																class:recent-duration-overflow={pos.crossDay}
+																style="left: {pos.left}%; width: {pos.width}%"
+															></div>
+														</div>
+													</div>
+												{:else}
+													<span class="recent-time" title="Last active: {new Date(recent.timestamp).toLocaleString()}">{formatElapsed(recent.timestamp)} ago</span>
+												{/if}
+												<button
+													class="recent-resume-btn"
+													onclick={() => resumeSession(recent)}
+													disabled={resumingSession === recent.sessionName}
+													title="Resume this session"
+												>
+													{#if resumingSession === recent.sessionName}
+														<svg class="recent-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+															<circle cx="12" cy="12" r="10" stroke-dasharray="31.42" stroke-dashoffset="10" />
+														</svg>
+													{:else}
+														<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+														</svg>
+													{/if}
+													<span>Resume</span>
+												</button>
+											</div>
+										</div>
+									{/each}
 								</div>
 							{/each}
 
@@ -2075,7 +2181,7 @@
 										<span class="loading loading-spinner loading-xs"></span>
 										Loading...
 									{:else}
-										Load more sessions
+										Load another day
 									{/if}
 								</button>
 							{/if}
@@ -2930,6 +3036,37 @@
 		overflow: hidden;
 	}
 
+	.recent-day-group:not(:first-child) {
+		border-top: 1px solid oklch(0.22 0.02 250);
+	}
+
+	.recent-day-header {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.4rem 1rem;
+		background: oklch(0.16 0.01 250);
+		border-bottom: 1px solid oklch(0.22 0.02 250);
+	}
+
+	.recent-day-date {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: oklch(0.60 0.02 250);
+		font-family: ui-monospace, monospace;
+		letter-spacing: 0.02em;
+	}
+
+	.recent-day-count {
+		font-size: 0.65rem;
+		font-weight: 600;
+		color: oklch(0.50 0.02 250);
+		background: oklch(0.20 0.02 250);
+		padding: 0.05rem 0.35rem;
+		border-radius: 9999px;
+		font-family: ui-monospace, monospace;
+	}
+
 	.recent-row {
 		display: flex;
 		align-items: center;
@@ -2988,6 +3125,89 @@
 		text-align: right;
 	}
 
+	.recent-duration-col {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 2px;
+		width: 130px;
+		flex-shrink: 0;
+	}
+
+	.recent-duration-times {
+		font-size: 0.65rem;
+		color: oklch(0.50 0.02 250);
+		display: flex;
+		align-items: center;
+		gap: 0.2rem;
+		white-space: nowrap;
+	}
+
+	.recent-duration-start {
+		color: oklch(0.45 0.02 250);
+	}
+
+	.recent-duration-sep {
+		color: oklch(0.35 0.02 250);
+	}
+
+	.recent-duration-end {
+		color: oklch(0.55 0.02 250);
+	}
+
+	.recent-duration-len {
+		color: oklch(0.45 0.02 250);
+		font-family: ui-monospace, monospace;
+		font-size: 0.575rem;
+	}
+
+	.recent-duration-track {
+		position: relative;
+		width: 100%;
+		height: 3px;
+		background: oklch(0.20 0.01 250);
+		border-radius: 1.5px;
+	}
+
+	.recent-duration-noon {
+		position: absolute;
+		left: 50%;
+		top: 0;
+		width: 1px;
+		height: 100%;
+		background: oklch(0.25 0.01 250);
+	}
+
+	.recent-duration-fill {
+		position: absolute;
+		top: 0;
+		height: 100%;
+		border-radius: 1.5px;
+		background: linear-gradient(
+			90deg,
+			oklch(0.55 0.12 200 / 0.5),
+			oklch(0.55 0.12 200 / 0.75)
+		);
+	}
+
+	.recent-duration-fill.recent-duration-overflow {
+		background: linear-gradient(
+			90deg,
+			oklch(0.60 0.15 85 / 0.7),
+			oklch(0.55 0.12 200 / 0.55)
+		);
+	}
+
+	.recent-duration-overflow-cap {
+		position: absolute;
+		left: 0;
+		top: -1px;
+		width: 2px;
+		height: calc(100% + 2px);
+		background: oklch(0.60 0.15 85 / 0.85);
+		border-radius: 1px;
+	}
+
 	.recent-resume-btn {
 		display: inline-flex;
 		align-items: center;
@@ -3033,9 +3253,9 @@
 		align-items: center;
 		justify-content: center;
 		gap: 0.4rem;
-		width: 100%;
+		width: 80%;
 		padding: 0.5rem;
-		margin-top: 0.25rem;
+		margin: 0.5rem auto;
 		background: transparent;
 		border: 1px dashed oklch(0.3 0.02 250);
 		border-radius: 0.5rem;

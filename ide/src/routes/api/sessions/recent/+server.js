@@ -292,13 +292,18 @@ export async function GET({ url }) {
 		const sessions = page.map(({ mtime, ...rest }) => rest);
 		const hasMore = offset + limit < allSessions.length;
 
-		// Enrich sessions with actual task status from database
+		// Enrich sessions with actual task data from database
 		for (const session of sessions) {
 			if (session.taskId) {
 				try {
 					const task = getTaskById(session.taskId);
 					if (task) {
 						session.taskStatus = task.status;
+						session.taskCreatedAt = task.created_at;
+						session.taskClosedAt = task.closed_at;
+						session.taskUpdatedAt = task.updated_at;
+						session.taskPriority = task.priority;
+						session.taskType = task.issue_type;
 					}
 				} catch { /* DB not available, skip */ }
 			}

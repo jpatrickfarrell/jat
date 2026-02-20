@@ -13,8 +13,8 @@ export default defineConfig({
     lib: {
       entry: 'src/main.ts',
       name: 'JatFeedback',
-      formats: ['iife'],
-      fileName: () => 'jat-feedback.js'
+      formats: ['iife', 'es'],
+      fileName: (format) => format === 'iife' ? 'jat-feedback.js' : 'jat-feedback.mjs'
     },
     outDir: 'dist',
     minify: 'esbuild',

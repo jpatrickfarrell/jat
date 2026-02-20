@@ -12,7 +12,7 @@
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import ServerSessionBadge from '$lib/components/ServerSessionBadge.svelte';
 	import StatusActionBadge from '$lib/components/work/StatusActionBadge.svelte';
-	import TaskDetailPaneB from '$lib/components/sessions/TaskDetailPaneB.svelte';
+	import TaskDetailPane from '$lib/components/sessions/TaskDetailPane.svelte';
 	import { getReviewRules } from '$lib/stores/reviewRules.svelte';
 	import { computeReviewStatus } from '$lib/utils/reviewStatusUtils';
 	import { getSessionStateVisual, type SessionState } from '$lib/config/statusColors';
@@ -1469,9 +1469,9 @@
 										</div>
 									{/if}
 
-									<!-- Inline Task Detail Panel (Concept B: Notes Tab) -->
+									<!-- Inline Task Detail Panel -->
 									{#if expandedTask && taskDetailOpen && expandedTaskId === expandedTask.id}
-										<TaskDetailPaneB
+										<TaskDetailPane
 											task={expandedTask}
 											details={expandedTaskDetails}
 											loading={taskDetailsLoading}

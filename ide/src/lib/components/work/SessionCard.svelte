@@ -4179,7 +4179,7 @@
 			// Upload all attached files first and collect paths
 			const filePaths: string[] = [];
 			for (const file of attachedFiles) {
-				// If the file already has a path (dragged from TaskDetailPaneA), use it directly
+				// If the file already has a path (dragged from TaskDetailPane), use it directly
 				if (file.path) {
 					filePaths.push(file.path);
 					continue;
@@ -4639,7 +4639,7 @@
 		e.stopPropagation();
 		isDragOver = false;
 
-		// Check for custom JAT image path data (dragged from TaskDetailPaneA thumbnails)
+		// Check for custom JAT image path data (dragged from TaskDetailPane thumbnails)
 		const jatImageData = e.dataTransfer?.getData('application/x-jat-image');
 		if (jatImageData) {
 			try {
@@ -4673,7 +4673,7 @@
 			}
 		}
 
-		// Check for custom JAT text data (dragged description or notes from TaskDetailPaneA)
+		// Check for custom JAT text data (dragged description or notes from TaskDetailPane)
 		const jatTextData = e.dataTransfer?.getData('application/x-jat-text');
 		if (jatTextData) {
 			try {
@@ -4787,7 +4787,7 @@
 
 			if (saveResponse.ok) {
 				console.log(`Archived file to task ${taskId}: ${filePath}`);
-				// Notify parent to refresh task details (so attachment shows in TaskDetailPaneA)
+				// Notify parent to refresh task details (so attachment shows in TaskDetailPane)
 				onFileAttachedToTask?.(taskId);
 			}
 		} catch (err) {

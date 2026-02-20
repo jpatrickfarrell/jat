@@ -21,6 +21,7 @@
 		onDuplicateTask,
 		resuming = false,
 		memoryFilename,
+		integration = null,
 	}: {
 		task: CompletedTask;
 		onTaskClick: (id: string) => void;
@@ -30,6 +31,7 @@
 		onDuplicateTask?: (event: MouseEvent, task: CompletedTask) => void;
 		resuming?: boolean;
 		memoryFilename?: string;
+		integration?: { sourceId: string; sourceType: string; sourceName: string } | null;
 	} = $props();
 
 	const duration = $derived(getTaskDuration(task));
@@ -37,6 +39,8 @@
 	const color = $derived(getProjectColor(task.project || task.id.split('-')[0]));
 	const typeVis = $derived(getIssueTypeVisual(task.issue_type));
 	const pc = $derived(PRIORITY_COLORS[task.priority as keyof typeof PRIORITY_COLORS] || PRIORITY_COLORS[3]);
+	const resolvedIntegration = $derived(integration ?? task.integration ?? null);
+	const integrationIcon = $derived(resolvedIntegration ? getIntegrationIcon(resolvedIntegration.sourceType) : null);
 </script>
 
 <button
@@ -78,6 +82,13 @@
 				{/if}
 				{#if task.priority != null}
 					<span class="task-badge-priority ml-0.5" style="background: {pc.bg}; color: {pc.text}; border: 1px solid {pc.border};">P{task.priority}</span>
+				{/if}
+				{#if integrationIcon && resolvedIntegration}
+					<span class="task-badge-integration" title="{resolvedIntegration.sourceName} ({resolvedIntegration.sourceType})">
+						<svg class="w-3.5 h-3.5" viewBox={integrationIcon.viewBox} fill={integrationIcon.fill ? 'currentColor' : 'none'} stroke={integrationIcon.fill ? 'none' : 'currentColor'} stroke-width="1.5" style="color: {integrationIcon.color};">
+							<path d={integrationIcon.svg} />
+						</svg>
+					</span>
 				{/if}
 			</span>
 		</div>
@@ -293,6 +304,13 @@
 		padding: 0 4px;
 		border-radius: 3px;
 		line-height: 1.5;
+	}
+
+	.task-badge-integration {
+		display: flex;
+		align-items: center;
+		margin-left: 2px;
+		opacity: 0.85;
 	}
 
 	.task-info {

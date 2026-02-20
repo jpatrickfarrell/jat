@@ -252,6 +252,18 @@ case "$SIGNAL_TYPE" in
         TASK_TITLE=$(echo "$SIGNAL_DATA" | jq -r '.taskTitle // ""')
         echo "Signal: working (task: ${TASK_ID} - ${TASK_TITLE})"
         echo "[JAT-SIGNAL:working] $SIGNAL_DATA"
+        # Auto-claim browser port if browserPort is specified
+        BROWSER_PORT=$(echo "$SIGNAL_DATA" | jq -r '.browserPort // ""')
+        if [[ -n "$BROWSER_PORT" ]] && command -v jat-browser &>/dev/null; then
+            AGENT_NAME_W=""
+            TMUX_SESSION_W=$(tmux display-message -p '#S' 2>/dev/null || true)
+            if [[ "$TMUX_SESSION_W" == jat-* ]]; then
+                AGENT_NAME_W="${TMUX_SESSION_W#jat-}"
+            fi
+            if [[ -n "$AGENT_NAME_W" ]]; then
+                jat-browser claim "$BROWSER_PORT" --agent "$AGENT_NAME_W" --task "$TASK_ID" 2>/dev/null || true
+            fi
+        fi
         ;;
 
     review|needs_review)
@@ -263,6 +275,13 @@ case "$SIGNAL_TYPE" in
         SUMMARY_COUNT=$(echo "$SIGNAL_DATA" | jq '.summary // [] | length')
         echo "Signal: review (task: ${TASK_ID}, ${SUMMARY_COUNT} items)"
         echo "[JAT-SIGNAL:review] $SIGNAL_DATA"
+        # Auto-release browser ports for this agent
+        if command -v jat-browser &>/dev/null; then
+            TMUX_SESSION_R=$(tmux display-message -p '#S' 2>/dev/null || true)
+            if [[ "$TMUX_SESSION_R" == jat-* ]]; then
+                jat-browser release-agent "${TMUX_SESSION_R#jat-}" 2>/dev/null || true
+            fi
+        fi
         ;;
 
     needs_input|input)
@@ -414,6 +433,13 @@ case "$SIGNAL_TYPE" in
             echo "Signal: complete"
         fi
         echo "[JAT-SIGNAL:complete] $SIGNAL_DATA"
+        # Auto-release browser ports for this agent
+        if command -v jat-browser &>/dev/null; then
+            TMUX_SESSION_C=$(tmux display-message -p '#S' 2>/dev/null || true)
+            if [[ "$TMUX_SESSION_C" == jat-* ]]; then
+                jat-browser release-agent "${TMUX_SESSION_C#jat-}" 2>/dev/null || true
+            fi
+        fi
         ;;
 
     -h|--help|help)

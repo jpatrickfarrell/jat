@@ -27,6 +27,7 @@ argument-hint: [agent-name | task-id | agent-name task-id]
 4. **Review prior tasks** - Check for duplicates and related work
 5. **Start work** - Reserve files, update task status, announce start
 6. **Plan approach** - Analyze task, emit rich working signal
+7. **Signal review when done** - ALWAYS emit `jat-signal review` before presenting results
 
 ---
 
@@ -186,6 +187,8 @@ jat-signal working '{
 **Optional fields:**
 - `expectedFiles` - Array of file patterns you expect to modify
 - `baselineCommit` - Current commit hash before changes
+
+> **NEXT SIGNAL: `review`** — When your work is complete, you MUST emit `jat-signal review` BEFORE presenting results to the user. This is mandatory for ALL task types (code changes, research, investigation, documentation). See "When You Finish Working" below.
 
 #### 3C: Sync Integration Status (non-blocking)
 

@@ -1,17 +1,20 @@
 #!/usr/bin/env node
 
 import puppeteer from "puppeteer-core";
+import { browserURL } from "./browser-port.js";
 
-const message = process.argv.slice(2).join(" ");
+const message = process.argv.slice(2).filter(a => !a.startsWith("--port")).join(" ").replace(/^--port \d+ /, "");
 if (!message) {
-	console.log("Usage: browser-pick.js 'message'");
+	console.log("Usage: browser-pick.js [--port <number>] 'message'");
+	console.log("\nOptions:");
+	console.log("  --port <number>  Chrome DevTools port (default: $JAT_BROWSER_PORT or 9222)");
 	console.log("\nExample:");
 	console.log('  browser-pick.js "Click the submit button"');
 	process.exit(1);
 }
 
 const b = await puppeteer.connect({
-	browserURL: "http://localhost:9222",
+	browserURL: browserURL(),
 	defaultViewport: null,
 });
 

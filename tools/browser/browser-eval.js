@@ -1,18 +1,21 @@
 #!/usr/bin/env node
 
 import puppeteer from "puppeteer-core";
+import { browserURL } from "./browser-port.js";
 
-const code = process.argv.slice(2).join(" ");
+const code = process.argv.slice(2).filter(a => !a.startsWith("--port")).join(" ").replace(/^--port \d+ /, "");
 if (!code) {
-	console.log("Usage: browser-eval.js 'code'");
+	console.log("Usage: browser-eval.js [--port <number>] 'code'");
+	console.log("\nOptions:");
+	console.log("  --port <number>  Chrome DevTools port (default: $JAT_BROWSER_PORT or 9222)");
 	console.log("\nExamples:");
 	console.log('  browser-eval.js "document.title"');
-	console.log('  browser-eval.js "document.querySelectorAll(\'a\').length"');
+	console.log('  browser-eval.js --port 9223 "document.querySelectorAll(\'a\').length"');
 	process.exit(1);
 }
 
 const b = await puppeteer.connect({
-	browserURL: "http://localhost:9222",
+	browserURL: browserURL(),
 	defaultViewport: null,
 });
 

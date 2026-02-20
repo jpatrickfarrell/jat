@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 
 import puppeteer from "puppeteer-core";
+import { browserURL } from "./browser-port.js";
 
-const url = process.argv[2];
-const newTab = process.argv[3] === "--new";
+const positionalArgs = process.argv.slice(2).filter(a => !a.startsWith("--port"));
+const url = positionalArgs[0];
+const newTab = positionalArgs.includes("--new");
 
 if (!url) {
-	console.log("Usage: browser-nav.js <url> [--new]");
+	console.log("Usage: browser-nav.js [--port <number>] <url> [--new]");
+	console.log("\nOptions:");
+	console.log("  --port <number>  Chrome DevTools port (default: $JAT_BROWSER_PORT or 9222)");
 	console.log("\nExamples:");
 	console.log("  browser-nav.js https://example.com       # Navigate current tab");
 	console.log("  browser-nav.js https://example.com --new # Open in new tab");
@@ -14,7 +18,7 @@ if (!url) {
 }
 
 const b = await puppeteer.connect({
-	browserURL: "http://localhost:9222",
+	browserURL: browserURL(),
 	defaultViewport: null,
 });
 

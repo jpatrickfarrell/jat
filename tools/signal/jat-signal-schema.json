@@ -503,6 +503,12 @@
           "type": "array",
           "items": { "type": "string" },
           "description": "Known issues or blockers"
+        },
+        "browserPort": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "description": "Chrome DevTools port claimed for browser automation"
         }
       }
     },

@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 
 import puppeteer from "puppeteer-core";
+import { browserURL } from "./browser-port.js";
 
 const args = process.argv.slice(2);
 let selector = null;
 let maxDepth = 10;
 let includeHidden = false;
 
-// Parse arguments
+// Parse arguments (--port handled by browser-port.js)
 for (let i = 0; i < args.length; i++) {
-	if (args[i] === "--selector") {
+	if (args[i] === "--port") {
+		i++; // skip value, handled by browser-port.js
+	} else if (args[i] === "--selector") {
 		selector = args[++i];
 	} else if (args[i] === "--max-depth") {
 		maxDepth = parseInt(args[++i]);
@@ -30,7 +33,7 @@ for (let i = 0; i < args.length; i++) {
 }
 
 const b = await puppeteer.connect({
-	browserURL: "http://localhost:9222",
+	browserURL: browserURL(),
 	defaultViewport: null,
 });
 

@@ -1,0 +1,361 @@
+#!/bin/bash
+#
+# jat-browser - Browser session registry for multi-agent CDP coordination
+#
+# Usage:
+#   jat-browser claim <port> --agent NAME --task ID [--pid PID] [--project NAME]
+#   jat-browser release <port>
+#   jat-browser release-agent <name>
+#   jat-browser status
+#   jat-browser available
+#   jat-browser cleanup
+#   jat-browser help
+#
+# Registry: /tmp/jat-browser-sessions.json (cleared on reboot)
+# Lock:     /tmp/jat-browser-sessions.lock (flock for atomic writes)
+# Port range: 9222-9231 (10 ports)
+#
+
+set -euo pipefail
+
+REGISTRY="/tmp/jat-browser-sessions.json"
+LOCKFILE="/tmp/jat-browser-sessions.lock"
+PORT_MIN=9222
+PORT_MAX=9231
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+DIM='\033[2m'
+NC='\033[0m'
+
+show_help() {
+    cat << 'EOF'
+jat-browser - Browser session registry for multi-agent CDP coordination
+
+USAGE:
+    jat-browser claim <port> --agent NAME --task ID [--pid PID] [--project NAME]
+    jat-browser release <port>
+    jat-browser release-agent <name>
+    jat-browser status
+    jat-browser available
+    jat-browser cleanup
+    jat-browser help
+
+SUBCOMMANDS:
+    claim           Claim a port for an agent (fails if taken and not stale)
+    release         Release a specific port
+    release-agent   Release all ports owned by an agent
+    status          Show all claims (runs stale cleanup first)
+    available       Print next free port in 9222-9231 range
+    cleanup         Remove stale entries (dead PID or closed port)
+    help            Show this help
+
+OPTIONS (for claim):
+    --agent NAME    Agent name (required)
+    --task ID       Task ID (required)
+    --pid PID       Chrome process PID (default: auto-detect from port)
+    --project NAME  Project name (optional)
+
+EXAMPLES:
+    jat-browser claim 9222 --agent FairBay --task jat-abc
+    jat-browser release 9222
+    jat-browser release-agent FairBay
+    jat-browser status
+    jat-browser available
+
+REGISTRY:
+    /tmp/jat-browser-sessions.json (cleared on reboot = clean state)
+
+PORT RANGE:
+    9222-9231 (10 ports for Chrome DevTools Protocol)
+EOF
+}
+
+error() {
+    echo -e "${RED}error:${NC} $1" >&2
+    exit 1
+}
+
+# Ensure registry file exists
+ensure_registry() {
+    if [[ ! -f "$REGISTRY" ]]; then
+        echo '{"sessions":{},"updatedAt":""}' > "$REGISTRY"
+    fi
+}
+
+# Read registry (no lock needed for reads)
+read_registry() {
+    ensure_registry
+    cat "$REGISTRY"
+}
+
+# Write registry atomically with flock
+write_registry() {
+    local data="$1"
+    local now
+    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    data=$(echo "$data" | jq --arg ts "$now" '.updatedAt = $ts')
+    (
+        flock -w 5 200 || error "Could not acquire lock"
+        echo "$data" > "$REGISTRY"
+    ) 200>"$LOCKFILE"
+}
+
+# Check if a process is alive
+is_pid_alive() {
+    local pid="$1"
+    kill -0 "$pid" 2>/dev/null
+}
+
+# Check if a port is listening
+is_port_listening() {
+    local port="$1"
+    ss -tlnp 2>/dev/null | grep -q ":${port} " 2>/dev/null
+}
+
+# Auto-detect PID from port using lsof
+detect_pid_from_port() {
+    local port="$1"
+    lsof -i ":${port}" -t 2>/dev/null | head -1 || echo ""
+}
+
+# Check if a claim is stale (PID dead AND port not listening)
+is_stale() {
+    local pid="$1"
+    local port="$2"
+
+    # If we have a PID and it's alive, not stale
+    if [[ -n "$pid" ]] && [[ "$pid" != "null" ]] && is_pid_alive "$pid"; then
+        return 1
+    fi
+
+    # If port is still listening, not stale (PID might have changed)
+    if is_port_listening "$port"; then
+        return 1
+    fi
+
+    # Both PID dead and port not listening = stale
+    return 0
+}
+
+# Remove stale entries from registry
+do_cleanup() {
+    local reg
+    reg=$(read_registry)
+    local ports
+    ports=$(echo "$reg" | jq -r '.sessions | keys[]' 2>/dev/null)
+    local cleaned=false
+
+    for port in $ports; do
+        local pid
+        pid=$(echo "$reg" | jq -r ".sessions[\"$port\"].pid // \"\"")
+        if is_stale "$pid" "$port"; then
+            local agent
+            agent=$(echo "$reg" | jq -r ".sessions[\"$port\"].agentName // \"unknown\"")
+            reg=$(echo "$reg" | jq "del(.sessions[\"$port\"])")
+            cleaned=true
+            echo -e "${DIM}Cleaned stale entry: port $port (agent: $agent)${NC}" >&2
+        fi
+    done
+
+    if [[ "$cleaned" == "true" ]]; then
+        write_registry "$reg"
+    fi
+
+    echo "$reg"
+}
+
+# --- Subcommands ---
+
+cmd_claim() {
+    local port=""
+    local agent=""
+    local task=""
+    local pid=""
+    local project=""
+
+    # Parse args
+    port="${1:-}"
+    shift || true
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --agent) agent="${2:-}"; shift 2 ;;
+            --task)  task="${2:-}";  shift 2 ;;
+            --pid)   pid="${2:-}";   shift 2 ;;
+            --project) project="${2:-}"; shift 2 ;;
+            *) shift ;;
+        esac
+    done
+
+    [[ -z "$port" ]] && error "Port is required: jat-browser claim <port> --agent NAME --task ID"
+    [[ -z "$agent" ]] && error "--agent is required"
+    [[ -z "$task" ]] && error "--task is required"
+
+    # Validate port range
+    if [[ "$port" -lt "$PORT_MIN" ]] || [[ "$port" -gt "$PORT_MAX" ]]; then
+        error "Port $port is outside range $PORT_MIN-$PORT_MAX"
+    fi
+
+    # Auto-detect PID if not provided
+    if [[ -z "$pid" ]]; then
+        pid=$(detect_pid_from_port "$port")
+    fi
+
+    local reg
+    reg=$(read_registry)
+
+    # Check if port is already claimed
+    local existing
+    existing=$(echo "$reg" | jq -r ".sessions[\"$port\"] // empty")
+    if [[ -n "$existing" ]]; then
+        local existing_pid
+        existing_pid=$(echo "$existing" | jq -r '.pid // ""')
+        local existing_agent
+        existing_agent=$(echo "$existing" | jq -r '.agentName // "unknown"')
+
+        if ! is_stale "$existing_pid" "$port"; then
+            error "Port $port already claimed by $existing_agent (PID: $existing_pid)"
+        fi
+        # Stale entry - we'll overwrite it
+        echo -e "${DIM}Replacing stale claim on port $port (was: $existing_agent)${NC}" >&2
+    fi
+
+    local now
+    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    # Build entry
+    reg=$(echo "$reg" | jq \
+        --arg port "$port" \
+        --arg pid "$pid" \
+        --arg agent "$agent" \
+        --arg task "$task" \
+        --arg project "$project" \
+        --arg now "$now" \
+        '.sessions[$port] = {
+            port: ($port | tonumber),
+            pid: (if $pid == "" then null else ($pid | tonumber) end),
+            agentName: $agent,
+            taskId: $task,
+            project: $project,
+            claimedAt: $now
+        }')
+
+    write_registry "$reg"
+    echo -e "${GREEN}Claimed port $port for $agent${NC} (task: $task)"
+}
+
+cmd_release() {
+    local port="${1:-}"
+    [[ -z "$port" ]] && error "Port is required: jat-browser release <port>"
+
+    local reg
+    reg=$(read_registry)
+
+    local existing
+    existing=$(echo "$reg" | jq -r ".sessions[\"$port\"] // empty")
+    if [[ -z "$existing" ]]; then
+        echo -e "${DIM}Port $port was not claimed${NC}"
+        return 0
+    fi
+
+    local agent
+    agent=$(echo "$existing" | jq -r '.agentName // "unknown"')
+    reg=$(echo "$reg" | jq "del(.sessions[\"$port\"])")
+    write_registry "$reg"
+    echo -e "${GREEN}Released port $port${NC} (was: $agent)"
+}
+
+cmd_release_agent() {
+    local agent="${1:-}"
+    [[ -z "$agent" ]] && error "Agent name is required: jat-browser release-agent <name>"
+
+    local reg
+    reg=$(read_registry)
+
+    local ports
+    ports=$(echo "$reg" | jq -r --arg agent "$agent" \
+        '.sessions | to_entries[] | select(.value.agentName == $agent) | .key')
+
+    if [[ -z "$ports" ]]; then
+        echo -e "${DIM}No ports claimed by $agent${NC}"
+        return 0
+    fi
+
+    local count=0
+    for port in $ports; do
+        reg=$(echo "$reg" | jq "del(.sessions[\"$port\"])")
+        count=$((count + 1))
+    done
+
+    write_registry "$reg"
+    echo -e "${GREEN}Released $count port(s) for $agent${NC}"
+}
+
+cmd_status() {
+    local reg
+    reg=$(do_cleanup)
+
+    local count
+    count=$(echo "$reg" | jq '.sessions | length')
+
+    if [[ "$count" -eq 0 ]]; then
+        echo -e "${DIM}No active browser sessions${NC}"
+        return 0
+    fi
+
+    printf "${CYAN}%-6s %-7s %-18s %-15s %-12s %s${NC}\n" "PORT" "PID" "AGENT" "TASK" "PROJECT" "CLAIMED"
+    printf "%-6s %-7s %-18s %-15s %-12s %s\n" "------" "-------" "------------------" "---------------" "------------" "-------------------"
+
+    echo "$reg" | jq -r '.sessions | to_entries | sort_by(.key | tonumber)[] | [.value.port, (.value.pid // "-"), .value.agentName, .value.taskId, (.value.project // "-"), .value.claimedAt] | @tsv' | \
+    while IFS=$'\t' read -r port pid agent task project claimed; do
+        # Check if alive
+        local status_color="$GREEN"
+        if [[ "$pid" != "-" ]] && ! is_pid_alive "$pid" 2>/dev/null; then
+            status_color="$YELLOW"
+        fi
+        printf "${status_color}%-6s${NC} %-7s %-18s %-15s %-12s %s\n" "$port" "$pid" "$agent" "$task" "$project" "$claimed"
+    done
+}
+
+cmd_available() {
+    local reg
+    reg=$(do_cleanup)
+
+    for port in $(seq "$PORT_MIN" "$PORT_MAX"); do
+        local existing
+        existing=$(echo "$reg" | jq -r ".sessions[\"$port\"] // empty")
+        if [[ -z "$existing" ]]; then
+            echo "$port"
+            return 0
+        fi
+    done
+
+    error "No available ports in range $PORT_MIN-$PORT_MAX (all 10 ports claimed)"
+}
+
+cmd_cleanup() {
+    do_cleanup >/dev/null
+    echo -e "${GREEN}Cleanup complete${NC}"
+}
+
+# --- Main dispatch ---
+
+SUBCOMMAND="${1:-help}"
+shift || true
+
+case "$SUBCOMMAND" in
+    claim)         cmd_claim "$@" ;;
+    release)       cmd_release "$@" ;;
+    release-agent) cmd_release_agent "$@" ;;
+    status)        cmd_status ;;
+    available)     cmd_available ;;
+    cleanup)       cmd_cleanup ;;
+    -h|--help|help) show_help ;;
+    *)
+        error "Unknown subcommand: $SUBCOMMAND (try 'jat-browser help')"
+        ;;
+esac

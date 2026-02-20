@@ -2121,6 +2121,7 @@
 											onDuplicateTask={handleDuplicateTask}
 											resumingTasks={completedResumingTasks}
 											memoryMap={completedMemoryMap}
+											{taskIntegrations}
 										/>
 									{/each}
 

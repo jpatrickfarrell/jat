@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 
 import puppeteer from "puppeteer-core";
+import { browserURL } from "./browser-port.js";
 
 const args = process.argv.slice(2);
 let waitType = null;
 let waitValue = null;
 let timeout = 30000; // 30 seconds default
 
-// Parse arguments
+// Parse arguments (--port handled by browser-port.js)
 for (let i = 0; i < args.length; i++) {
-	if (args[i] === "--timeout") {
+	if (args[i] === "--port") {
+		i++; // skip value, handled by browser-port.js
+	} else if (args[i] === "--timeout") {
 		timeout = parseInt(args[++i]) * 1000;
 	} else if (args[i] === "--text") {
 		waitType = "text";
@@ -45,7 +48,7 @@ if (!waitType || !waitValue) {
 }
 
 const b = await puppeteer.connect({
-	browserURL: "http://localhost:9222",
+	browserURL: browserURL(),
 	defaultViewport: null,
 });
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import puppeteer from "puppeteer-core";
+import { browserURL } from "./browser-port.js";
 
 const args = process.argv.slice(2);
 let follow = false;
@@ -8,9 +9,11 @@ let filterType = null;
 let filterUrl = null;
 let limit = 100;
 
-// Parse arguments
+// Parse arguments (--port handled by browser-port.js)
 for (let i = 0; i < args.length; i++) {
-	if (args[i] === "--follow" || args[i] === "-f") {
+	if (args[i] === "--port") {
+		i++; // skip value, handled by browser-port.js
+	} else if (args[i] === "--follow" || args[i] === "-f") {
 		follow = true;
 	} else if (args[i] === "--type") {
 		filterType = args[++i];
@@ -34,7 +37,7 @@ for (let i = 0; i < args.length; i++) {
 }
 
 const b = await puppeteer.connect({
-	browserURL: "http://localhost:9222",
+	browserURL: browserURL(),
 	defaultViewport: null,
 });
 

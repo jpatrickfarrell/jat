@@ -11,6 +11,7 @@
 		onDuplicateTask,
 		resumingTasks,
 		memoryMap,
+		taskIntegrations = {},
 	}: {
 		day: DayGroup;
 		onTaskClick: (id: string) => void;
@@ -20,6 +21,7 @@
 		onDuplicateTask?: (event: MouseEvent, task: CompletedTask) => void;
 		resumingTasks?: Set<string>;
 		memoryMap?: Map<string, string>;
+		taskIntegrations?: Record<string, { sourceId: string; sourceType: string; sourceName: string; sourceEnabled: boolean }>;
 	} = $props();
 </script>
 
@@ -41,6 +43,7 @@
 				{onDuplicateTask}
 				resuming={resumingTasks?.has(task.id) ?? false}
 				memoryFilename={memoryMap?.get(task.id)}
+				integration={taskIntegrations[task.id] || task.integration || null}
 			/>
 		{/each}
 	</div>

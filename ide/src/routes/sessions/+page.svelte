@@ -192,6 +192,9 @@
 	}
 	let agentSessionInfo = $state<Map<string, AgentSessionInfo>>(new Map());
 
+	// Browser session registry (agent name → port)
+	let browserSessions = $state<Map<string, number>>(new Map());
+
 	// Sort configuration for sessions
 	type SessionSortOption = 'state' | 'project' | 'created';
 	type SessionSortDirection = 'asc' | 'desc';
@@ -363,9 +366,28 @@
 		}
 	}
 
+	// Fetch browser session registry (agent → port mapping)
+	async function fetchBrowserSessions() {
+		try {
+			const response = await fetch('/api/browser-sessions');
+			if (!response.ok) return;
+			const data = await response.json();
+			const map = new Map<string, number>();
+			for (const [port, session] of Object.entries(data.sessions || {})) {
+				const s = session as { agentName: string; port: number; alive: boolean; portListening: boolean };
+				if (s.alive || s.portListening) {
+					map.set(s.agentName, s.port);
+				}
+			}
+			browserSessions = map;
+		} catch {
+			// Silent fail - browser info is optional
+		}
+	}
+
 	// Fetch all data (project order + agents + colors first, then sessions)
 	async function fetchAllData() {
-		await Promise.all([fetchProjectOrder(), fetchAgentProjects(), fetchProjectColors()]);
+		await Promise.all([fetchProjectOrder(), fetchAgentProjects(), fetchProjectColors(), fetchBrowserSessions()]);
 		await fetchSessions();
 		// Lazy fetch recently closed sessions (non-blocking)
 		fetchRecentSessions();
@@ -377,7 +399,9 @@
 	// Fetch recently closed sessions from signal files
 	async function fetchRecentSessions() {
 		try {
-			const response = await fetch(`/api/sessions/recent?limit=${RECENT_PAGE_SIZE}`);
+			// Preserve any extra pages loaded via "Load More" by fetching at least as many as currently shown
+			const fetchLimit = Math.max(recentSessions.length, RECENT_PAGE_SIZE);
+			const response = await fetch(`/api/sessions/recent?limit=${fetchLimit}`);
 			if (!response.ok) return;
 			const data = await response.json();
 			const sessions: RecentSession[] = data.sessions || [];
@@ -1412,9 +1436,17 @@
 														harness={getTaskHarness(sessionTask)}
 													/>
 													<div class="text-column">
-														<span class="task-title" title={sessionTask.title}>
-															{sessionTask.title || sessionTask.id}
-														</span>
+														<div class="flex items-center gap-1.5">
+															<span class="task-title" title={sessionTask.title}>
+																{sessionTask.title || sessionTask.id}
+															</span>
+															{#if browserSessions.get(sessionAgentName)}
+																<span class="browser-port-badge" title="Chrome DevTools on port {browserSessions.get(sessionAgentName)}">
+																	<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" /></svg>
+																	:{browserSessions.get(sessionAgentName)}
+																</span>
+															{/if}
+														</div>
 														{#if sessionTask.description}
 															<div class="task-description">
 																{sessionTask.description}
@@ -2818,6 +2850,21 @@
 		white-space: nowrap;
 		width: 100%;
 		max-width: 100%;
+	}
+
+	.browser-port-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		font-size: 0.65rem;
+		font-weight: 500;
+		padding: 1px 5px;
+		border-radius: 4px;
+		background: oklch(0.70 0.15 55 / 0.12);
+		color: oklch(0.75 0.15 55);
+		border: 1px solid oklch(0.70 0.15 55 / 0.25);
+		flex-shrink: 0;
+		white-space: nowrap;
 	}
 
 	/* Recently Closed Sessions */

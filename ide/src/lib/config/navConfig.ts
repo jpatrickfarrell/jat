@@ -6,17 +6,18 @@
  *
  * MAIN (core workflow - always visible):
  *   /tasks    - Tasks (active sessions + open tasks with spawn)
+ *   /sessions - Sessions (all tmux sessions: agents, servers, other)
  *   /files    - Files (project file browser)
  *   /source   - Source Control (git changes, diff viewer)
  *   /servers  - Servers (project server sessions)
  *   /integrations - Integrations (external source configuration)
+ *   /workflows - Workflows (workflow engine configuration)
  *   /automation - Automation rules configuration
  *   /memory   - Memory (agent persistent memory browser and search)
  *   /history  - History (completed task history with streak calendar)
  *   /config   - Config (JAT configuration, includes Projects tab)
  *
  * VIEWS (alternative visualizations):
- *   /sessions - Sessions (all tmux sessions: agents, servers, other)
  *   /dash     - Dash (multi-project sessions view with terminal output)
  *   /graph    - Dependency visualization
  *   /timeline - Historical view
@@ -61,6 +62,13 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			category: 'main'
 		},
 		{
+			id: 'sessions',
+			label: 'Sessions',
+			href: '/sessions',
+			icon: 'tmux',
+			category: 'main'
+		},
+		{
 			id: 'files',
 			label: 'Files',
 			href: '/files',
@@ -86,6 +94,13 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			label: 'Integrations',
 			href: '/integrations',
 			icon: 'integrations',
+			category: 'main'
+		},
+		{
+			id: 'workflows',
+			label: 'Workflows',
+			href: '/workflows',
+			icon: 'workflows',
 			category: 'main'
 		},
 		{
@@ -124,13 +139,6 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			category: 'main'
 		},
 		// VIEWS: Alternative visualizations
-		{
-			id: 'sessions',
-			label: 'Sessions',
-			href: '/sessions',
-			icon: 'tmux',
-			category: 'views'
-		},
 		{
 			id: 'dash',
 			label: 'Dash',
@@ -172,13 +180,6 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			label: 'Schedules',
 			href: '/schedules',
 			icon: 'schedules',
-			category: 'labs'
-		},
-		{
-			id: 'workflows',
-			label: 'Workflows',
-			href: '/workflows',
-			icon: 'workflows',
 			category: 'labs'
 		},
 	],

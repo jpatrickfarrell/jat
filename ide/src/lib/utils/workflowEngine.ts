@@ -434,15 +434,52 @@ async function executeSpawnAgent(
 ): Promise<unknown> {
 	const config = node.config as ActionSpawnAgentConfig;
 
-	ctx.log(node.id, `Spawn agent: task=${config.taskId || '(none)'}, agent=${config.agentId || 'auto'}, model=${config.model || 'default'}`);
+	// Resolve template variables in title and description
+	const taskTitle = config.taskTitle
+		? substituteVariables(config.taskTitle, input, ctx)
+		: undefined;
+	const taskDescription = config.taskDescription
+		? substituteVariables(config.taskDescription, input, ctx)
+		: undefined;
+
+	ctx.log(node.id, `Spawn agent: task=${config.taskId || taskTitle || '(none)'}, agent=${config.agentId || 'auto'}, model=${config.model || 'default'}`);
 
 	if (ctx.dryRun) {
-		return { dryRun: true, taskId: config.taskId, taskTitle: config.taskTitle, agentId: config.agentId, model: config.model };
+		return { dryRun: true, taskId: config.taskId, taskTitle, agentId: config.agentId, model: config.model };
+	}
+
+	// Determine project working directory for jt commands
+	const cwd = config.project
+		? join(homedir(), 'code', config.project)
+		: ctx.project
+			? join(homedir(), 'code', ctx.project)
+			: process.cwd().replace('/ide', '');
+
+	let taskId = config.taskId;
+
+	// If "Create New Task" mode: create the task first, then spawn agent for it
+	if (!taskId && taskTitle) {
+		const args = ['create', taskTitle];
+		args.push('--type', 'task');
+		if (taskDescription) args.push('--description', taskDescription);
+
+		ctx.log(node.id, `Creating task: "${taskTitle}"`);
+		const createResult = await execCommand('jt', args, cwd);
+
+		// Extract task ID from jt create output (format: "Created jat-xxxxx")
+		const createOutput = typeof createResult === 'string' ? createResult : JSON.stringify(createResult);
+		const idMatch = createOutput.match(/([a-z][\w-]*-[a-z0-9]+)/i);
+		if (idMatch) {
+			taskId = idMatch[1];
+			ctx.log(node.id, `Created task: ${taskId}`);
+		} else {
+			ctx.log(node.id, `Warning: could not extract task ID from: ${createOutput}`);
+		}
 	}
 
 	const body: Record<string, unknown> = {};
-	if (config.taskId) {
-		body.taskId = config.taskId;
+	if (taskId) {
+		body.taskId = taskId;
 	}
 	if (config.agentId) {
 		body.agentId = config.agentId;

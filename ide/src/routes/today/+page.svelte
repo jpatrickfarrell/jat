@@ -58,7 +58,7 @@
 
 	// Due date filter
 	type DueDateFilter = "today" | "tomorrow" | "week" | "overdue" | "unscheduled" | "all";
-	let dueDateFilter = $state<DueDateFilter>("today");
+	let dueDateFilter = $state<DueDateFilter>("all");
 
 	// Date helpers (midnight-aligned for clean comparisons)
 	function getLocalDateString(date: Date): string {
@@ -94,12 +94,13 @@
 			case "overdue":
 				return !!dueDate && dueDate < getToday();
 			case "today":
-				// Today includes overdue — anything due today or before
+				// Strict: only tasks with a due date on or before today
 				return !!dueDate && dueDate <= getToday();
 			case "tomorrow":
-				return !!dueDate && dueDate === getTomorrow();
+				// Strict: only tasks due on or before tomorrow
+				return !!dueDate && dueDate <= getTomorrow();
 			case "week":
-				// This week: due today through end of week (includes overdue)
+				// Strict: only tasks due on or before end of week
 				return !!dueDate && dueDate <= getEndOfWeek();
 			default:
 				return true;
@@ -2247,6 +2248,7 @@
 											onDuplicateTask={handleDuplicateTask}
 											resumingTasks={completedResumingTasks}
 											memoryMap={completedMemoryMap}
+											{taskIntegrations}
 										/>
 									{/each}
 

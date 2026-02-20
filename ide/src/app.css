@@ -577,6 +577,18 @@
 	animation: agent-highlight-flash 1.5s ease-out forwards;
 }
 
+/* Agent pill pulse - subtle glow when agent is actively working */
+@keyframes agent-pill-pulse {
+	0%, 100% {
+		opacity: 1;
+		filter: brightness(1);
+	}
+	50% {
+		opacity: 0.92;
+		filter: brightness(1.05);
+	}
+}
+
 /* ==========================================================================
    Input Flash Animations
    Uses --anim-* variables for theme consistency.
@@ -1673,6 +1685,7 @@
 	.sparkline-animate,
 	.sparkline-area-animate,
 	.agent-highlight-flash,
+	[style*="agent-pill-pulse"],
 	.shimmer-text,
 	.shimmer-text-fast,
 	.shimmer-text-slow,

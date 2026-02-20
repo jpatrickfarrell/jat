@@ -378,167 +378,142 @@
 		{/if}
 	</button>
 {:else if variant === 'agentPill'}
-	<!-- Agent pill mode: avatar with status ring + task ID - more compact single-row display -->
+	<!-- Agent pill mode: avatar with status ring + task ID + inline icons - compact single-row display -->
 	{@const ringColor = isClosed ? 'oklch(0.65 0.20 145)' : (statusDotColor || 'oklch(0.50 0.02 250)')}
-	{@const avatarSize = size === 'xs' ? 20 : size === 'sm' ? 24 : 28}
+	{@const avatarSize = agentName ? (size === 'xs' ? 26 : size === 'sm' ? 32 : 38) : (size === 'xs' ? 20 : size === 'sm' ? 24 : 28)}
 	{@const badgeColor = isClosed ? 'oklch(0.65 0.20 145)' : projectColor}
-	<div class="inline-flex flex-col items-start">
-		<button
-			class="inline-flex items-center gap-2 font-mono {agentName ? 'rounded-2xl' : 'rounded-full'} cursor-pointer whitespace-nowrap
-				   hover:opacity-90 transition-all {size === 'xs' ? 'text-xs pr-2 pl-0.5 py-0.5' : size === 'sm' ? 'text-sm pr-2.5 pl-0.5 py-0.5' : 'text-base pr-3 pl-1 py-1'}"
-			style="
-				background: color-mix(in oklch, {badgeColor} 12%, transparent);
-				border: 1px solid color-mix(in oklch, {badgeColor} 30%, transparent);
-				color: {badgeColor};
-			"
-			onclick={copyId}
-			title="Click to copy task ID"
-		>
-			{#if isClosed && !agentName}
-				<!-- Checkmark circle for closed tasks without agent avatar -->
-				<div
-					class="rounded-full shrink-0 flex items-center justify-center"
-					style="
-						width: {avatarSize}px;
-						height: {avatarSize}px;
-						background: oklch(0.65 0.20 145 / 0.2);
-						border: 2px solid oklch(0.65 0.20 145);
-					"
+	{@const isActiveWork = !isClosed && agentName && statusDotColor && statusDotColor !== 'oklch(0.50 0.02 250)'}
+	{@const priorityColors = {
+		0: { bg: 'oklch(0.55 0.20 25 / 0.25)', text: 'oklch(0.75 0.18 25)', border: 'oklch(0.55 0.20 25 / 0.5)' },
+		1: { bg: 'oklch(0.55 0.18 85 / 0.25)', text: 'oklch(0.80 0.15 85)', border: 'oklch(0.55 0.18 85 / 0.5)' },
+		2: { bg: 'oklch(0.55 0.15 200 / 0.20)', text: 'oklch(0.75 0.12 200)', border: 'oklch(0.55 0.15 200 / 0.4)' },
+		3: { bg: 'oklch(0.35 0.02 250 / 0.30)', text: 'oklch(0.65 0.02 250)', border: 'oklch(0.35 0.02 250 / 0.5)' },
+		4: { bg: 'oklch(0.30 0.02 250 / 0.25)', text: 'oklch(0.55 0.02 250)', border: 'oklch(0.30 0.02 250 / 0.4)' }
+	}}
+	{@const pColor = priorityColors[task.priority as keyof typeof priorityColors] || priorityColors[3]}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		class="inline-flex items-center font-mono {agentName ? 'rounded-xl' : 'rounded-full'} whitespace-nowrap
+			   transition-all {size === 'xs' ? 'text-xs pr-1.5 pl-0.5 py-0.5 gap-1.5' : size === 'sm' ? 'text-sm pr-2 pl-0.5 py-0.5 gap-2' : 'text-base pr-2.5 pl-1 py-1 gap-2'}"
+		style="
+			background: color-mix(in oklch, {badgeColor} 12%, transparent);
+			border: 1px solid color-mix(in oklch, {badgeColor} 30%, transparent);
+			color: {badgeColor};
+			{isActiveWork ? `box-shadow: 0 0 8px ${ringColor}40, 0 0 16px ${ringColor}20; animation: agent-pill-pulse 3s ease-in-out infinite;` : ''}
+		"
+		title={task.title || task.id}
+		onmouseenter={() => {}}
+	>
+		<!-- Avatar section -->
+		{#if isClosed && !agentName}
+			<button class="rounded-full shrink-0 flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity" style="width: {avatarSize}px; height: {avatarSize}px; background: oklch(0.65 0.20 145 / 0.2); border: 2px solid oklch(0.65 0.20 145);" onclick={copyId} title="Click to copy task ID">
+				<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+				</svg>
+			</button>
+		{:else if isClosed && agentName}
+			<button class="ml-1.5 mt-1 shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onclick={copyId} title="Click to copy task ID">
+				<AgentAvatar name={agentName} size={avatarSize} showRing={true} ringColor="oklch(0.65 0.20 145)" showGlow={false} {exiting} />
+			</button>
+		{:else}
+			{#if agentName}
+				<button class="ml-1.5 mt-1 hrink-0 cursor-pointer hover:opacity-80 transition-opacity" onclick={copyId} title="Click to copy task ID">
+					<AgentAvatar name={agentName} size={avatarSize + 1} showRing={true} ringColor={ringColor} showGlow={true} {exiting} />
+				</button>
+			{:else if isHuman && !isClosed}
+				<button
+					class="rounded-full shrink-0 flex items-center justify-center cursor-pointer hover:brightness-125 transition-all"
+					style="width: {avatarSize}px; height: {avatarSize}px; background: oklch(0.20 0.02 250); border: 2px solid oklch(0.45 0.15 45);"
+					onclick={(e) => { e.stopPropagation(); onHarnessClick?.(e); }}
+					title="Human task"
 				>
-					<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-					</svg>
-				</div>
-			{:else if isClosed && agentName}
-				<!-- Agent avatar with green completion ring for closed tasks -->
-				<AgentAvatar name={agentName} size={avatarSize - 4} showRing={true} ringColor="oklch(0.65 0.20 145)" showGlow={false} {exiting} />
+					<ProviderLogo agentId="human" size={avatarSize - 10} />
+				</button>
+			{:else if harness}
+				<button
+					class="rounded-full shrink-0 flex items-center justify-center cursor-pointer hover:brightness-125 transition-all"
+					style="width: {avatarSize}px; height: {avatarSize}px; background: oklch(0.20 0.02 250); border: 2px solid oklch(0.35 0.03 250);"
+					onclick={(e) => { e.stopPropagation(); onHarnessClick?.(e); }}
+					title="Harness: {harness} — click to change"
+				>
+					<ProviderLogo agentId={harness} size={avatarSize - 10} />
+				</button>
 			{:else}
-				<!-- Avatar with status ring using AgentAvatar's built-in ring support -->
-				{#if agentName}
-					<AgentAvatar name={agentName} size={avatarSize - 4} showRing={true} ringColor={ringColor} showGlow={true} {exiting} />
-				{:else if isHuman && !isClosed}
-					<!-- Human task icon as avatar -->
-					<button
-						class="rounded-full shrink-0 flex items-center justify-center cursor-pointer hover:brightness-125 transition-all"
-						style="width: {avatarSize}px; height: {avatarSize}px; background: oklch(0.20 0.02 250); border: 2px solid oklch(0.45 0.15 45);"
-						onclick={(e) => { e.stopPropagation(); onHarnessClick?.(e); }}
-						title="Human task"
-					>
-						<ProviderLogo agentId="human" size={avatarSize - 10} />
-					</button>
-				{:else if harness}
-					<!-- Harness icon as avatar when no agent assigned -->
-					<button
-						class="rounded-full shrink-0 flex items-center justify-center cursor-pointer hover:brightness-125 transition-all"
-						style="width: {avatarSize}px; height: {avatarSize}px; background: oklch(0.20 0.02 250); border: 2px solid oklch(0.35 0.03 250);"
-						onclick={(e) => { e.stopPropagation(); onHarnessClick?.(e); }}
-						title="Harness: {harness} — click to change"
-					>
-						<ProviderLogo agentId={harness} size={avatarSize - 10} />
-					</button>
-				{:else}
-					<!-- Fallback dot if no agent and no harness -->
-					<div
-						class="rounded-full shrink-0"
-						style="
-							padding: 2px;
-							background: {ringColor};
-							box-shadow: 0 0 6px {ringColor};
-						"
-					>
-						<div
-							class="rounded-full"
-							style="width: {avatarSize - 4}px; height: {avatarSize - 4}px; background: oklch(0.25 0.02 250);"
-						></div>
-					</div>
-				{/if}
+				<div class="rounded-full shrink-0" style="padding: 2px; background: {ringColor}; box-shadow: 0 0 6px {ringColor};">
+					<div class="rounded-full" style="width: {avatarSize - 4}px; height: {avatarSize - 4}px; background: oklch(0.25 0.02 250);"></div>
+				</div>
 			{/if}
-			<!-- Task ID + Agent Name -->
-			<div class="flex flex-col items-start">
-				<span class="{animate ? 'tracking-in-expand' : ''} {isClosed ? 'line-through opacity-70' : ''}" style={animate ? 'animation-delay: 100ms;' : ''}>{task.id}</span>
-				{#if agentName}
-					<span class="text-[10px] font-medium leading-none opacity-70" style="color: {ringColor};">{agentName}</span>
-				{/if}
-			</div>
+		{/if}
+
+		<!-- Task ID + Agent Name + Icons (stacked rows) -->
+		<div class="flex flex-col items-start min-w-0 justify-center mt-1.5 mr-0.5 mb-1 ml-0.5">
+			<!-- Row 1: Task ID -->
+			<span class="cursor-pointer hover:opacity-80 {animate ? 'tracking-in-expand' : ''} {isClosed ? 'line-through opacity-70' : ''}" style={animate ? 'animation-delay: 100ms;' : ''} onclick={copyId} role="button" tabindex="-1">{task.id}</span>
+			<!-- Row 2: Agent name -->
+			{#if agentName}
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<span
+					class="mt-0.25 mb-0.5 text-[10px] font-medium leading-none {onAgentClick ? 'cursor-pointer hover:opacity-100 hover:underline' : ''} opacity-70"
+					style="color: {ringColor};"
+					onclick={(e) => { if (onAgentClick) { e.stopPropagation(); onAgentClick(agentName); } }}
+					title={onAgentClick ? `Jump to ${agentName}'s session` : agentName}
+				>{agentName}</span>
+			{/if}
+			<!-- Row 3: Icons -->
+			{#if !isClosed && (task.priority !== undefined || (harness && agentName) || (integrationIcon && resolvedIntegration) || taskAgeInfo.label || resumed || attached)}
+				<div class="flex items-center gap-1.5 mt-0.5">
+					{#if task.priority !== undefined}
+						<span
+							class="text-[9px] font-bold px-0.5 rounded leading-tight"
+							style="background: {pColor.bg}; color: {pColor.text}; border: 1px solid {pColor.border};"
+						>P{task.priority}</span>
+					{/if}
+					{#if harness && agentName}
+						<span class="inline-flex" title={harness}>
+							<ProviderLogo agentId={harness} size={10} />
+						</span>
+					{/if}
+					{#if integrationIcon && resolvedIntegration}
+						<span class="inline-flex" title="From {resolvedIntegration.sourceType}: {resolvedIntegration.sourceName}">
+							<svg class="w-2.5 h-2.5" viewBox={integrationIcon.viewBox} fill={integrationIcon.fill ? 'currentColor' : 'none'} stroke={integrationIcon.fill ? 'none' : 'currentColor'} stroke-width="1.5" style="color: {integrationIcon.color};">
+								<path d={integrationIcon.svg} />
+							</svg>
+						</span>
+					{/if}
+					{#if taskAgeInfo.label}
+						<span class="text-[9px] font-mono font-semibold opacity-80" style="color: {taskAgeInfo.color};" title="Task age: created {task.created_at}">{taskAgeInfo.label}</span>
+					{/if}
+					{#if resumed}
+						<span class="inline-flex" title="Resumed">
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-2.5 h-2.5" style="color: oklch(0.70 0.15 200); filter: drop-shadow(0 0 2px oklch(0.65 0.15 200 / 0.6));">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+							</svg>
+						</span>
+					{/if}
+					{#if attached}
+						<span class="inline-flex" title="Terminal attached">
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-2.5 h-2.5" style="color: oklch(0.70 0.18 145); filter: drop-shadow(0 0 2px oklch(0.65 0.18 145 / 0.6));">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+							</svg>
+						</span>
+					{/if}
+				</div>
+			{/if}
 			{#if isClosed && !copied}
-				<!-- Small completion checkmark for closed tasks -->
-				<div
-					class="rounded-full shrink-0 flex items-center justify-center"
-					style="
-						width: {Math.round(avatarSize * 0.7)}px;
-						height: {Math.round(avatarSize * 0.7)}px;
-						background: oklch(0.65 0.20 145 / 0.25);
-						border: 1.5px solid oklch(0.65 0.20 145);
-					"
-				>
-					<svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="oklch(0.65 0.20 145)" stroke-width="3">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-					</svg>
+				<div class="flex items-center gap-0.5 mt-0.5">
+					<div class="rounded-full shrink-0 flex items-center justify-center" style="width: {Math.round(avatarSize * 0.5)}px; height: {Math.round(avatarSize * 0.5)}px; background: oklch(0.65 0.20 145 / 0.25); border: 1.5px solid oklch(0.65 0.20 145);">
+						<svg class="w-2 h-2" viewBox="0 0 24 24" fill="none" stroke="oklch(0.65 0.20 145)" stroke-width="3">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+						</svg>
+					</div>
 				</div>
 			{/if}
 			{#if copied}
-				<svg class="{iconSizes[size]} text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-				</svg>
-			{/if}
-		</button>
-
-		<!-- Icons row - outside button, below the badge -->
-		<div class="flex items-center gap-1 mt-0.5 ml-2">
-			<!-- Priority badge -->
-			{#if showType && task.issue_type && !isClosed}
-				<span class={size === 'xs' ? 'text-xs' : size === 'sm' ? 'text-sm' : 'text-base'}>{typeVisual.icon}</span>
-			{/if}
-			{#if task.priority !== undefined}
-				{@const priorityColors = {
-					0: { bg: 'oklch(0.55 0.20 25 / 0.25)', text: 'oklch(0.75 0.18 25)', border: 'oklch(0.55 0.20 25 / 0.5)' },
-					1: { bg: 'oklch(0.55 0.18 85 / 0.25)', text: 'oklch(0.80 0.15 85)', border: 'oklch(0.55 0.18 85 / 0.5)' },
-					2: { bg: 'oklch(0.55 0.15 200 / 0.20)', text: 'oklch(0.75 0.12 200)', border: 'oklch(0.55 0.15 200 / 0.4)' },
-					3: { bg: 'oklch(0.35 0.02 250 / 0.30)', text: 'oklch(0.65 0.02 250)', border: 'oklch(0.35 0.02 250 / 0.5)' },
-					4: { bg: 'oklch(0.30 0.02 250 / 0.25)', text: 'oklch(0.55 0.02 250)', border: 'oklch(0.30 0.02 250 / 0.4)' }
-				}}
-				{@const pColor = priorityColors[task.priority as keyof typeof priorityColors] || priorityColors[3]}
-				<span
-					class="text-xs font-semibold px-1 py-0.5 rounded scale-75"
-					style="background: {pColor.bg}; color: {pColor.text}; border: 1px solid {pColor.border};"
-				>P{task.priority}</span>
-			{/if}
-			{#if isHuman && !isClosed}
-				<span class="inline-flex scale-75" title="Human task">
-					<ProviderLogo agentId="human" size={12} />
-				</span>
-			{:else if harness && agentName}
-				<span class="inline-flex scale-75" title={harness}>
-					<ProviderLogo agentId={harness} size={12} />
-				</span>
-			{/if}
-			{#if integrationIcon && resolvedIntegration}
-				<span class="inline-flex scale-75" title="From {resolvedIntegration.sourceType}: {resolvedIntegration.sourceName}">
-					<svg class="w-3.5 h-3.5" viewBox={integrationIcon.viewBox} fill={integrationIcon.fill ? 'currentColor' : 'none'} stroke={integrationIcon.fill ? 'none' : 'currentColor'} stroke-width="1.5" style="color: {integrationIcon.color};">
-						<path d={integrationIcon.svg} />
+				<div class="flex items-center gap-0.5 mt-0.5">
+					<svg class="w-3 h-3 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
 					</svg>
-				</span>
-			{/if}
-			{#if taskAgeInfo.label}
-				<span
-					class="text-[10px] font-mono font-semibold"
-					style="color: {taskAgeInfo.color};"
-					title="Task age: created {task.created_at}"
-				>{taskAgeInfo.label}</span>
-			{/if}
-			{#if resumed}
-				<span class="resumed-badge" title="Resumed from previous session">
-					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3" style="color: oklch(0.70 0.15 200); filter: drop-shadow(0 0 3px oklch(0.65 0.15 200 / 0.6));">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-					</svg>
-				</span>
-			{/if}
-			{#if attached}
-				<span class="attached-indicator" title="Terminal attached">
-					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3" style="color: oklch(0.70 0.18 145); filter: drop-shadow(0 0 3px oklch(0.65 0.18 145 / 0.6));">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-					</svg>
-				</span>
+				</div>
 			{/if}
 		</div>
 	</div>

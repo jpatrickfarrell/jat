@@ -412,8 +412,17 @@
 				</svg>
 			</button>
 		{:else if isClosed && agentName}
-			<button class="ml-1.5 mt-1 shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onclick={copyId} title="Click to copy task ID">
+			{@const checkBadgeSize = Math.max(12, Math.round(avatarSize * 0.42))}
+			<button class="relative ml-1.5 mt-1 shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onclick={copyId} title="Click to copy task ID">
 				<AgentAvatar name={agentName} size={avatarSize} showRing={true} ringColor="oklch(0.65 0.20 145)" showGlow={false} {exiting} />
+				<!-- Green checkmark at 4:30 clock position -->
+				<div class="absolute rounded-full flex items-center justify-center" style="width: {checkBadgeSize}px; height: {checkBadgeSize}px; bottom: 3px; right: -1px; background: oklch(0.18 0.01 250); border: 1.5px solid oklch(0.65 0.20 145);">
+					<div class="rounded-full flex items-center justify-center" style="width: {checkBadgeSize - 3}px; height: {checkBadgeSize - 3}px; background: oklch(0.65 0.20 145 / 0.35);">
+						<svg style="width: {Math.max(6, checkBadgeSize - 5)}px; height: {Math.max(6, checkBadgeSize - 5)}px;" viewBox="0 0 24 24" fill="none" stroke="oklch(0.65 0.20 145)" stroke-width="3">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+						</svg>
+					</div>
+				</div>
 			</button>
 		{:else}
 			{#if agentName}
@@ -499,16 +508,7 @@
 					{/if}
 				</div>
 			{/if}
-			{#if isClosed && !copied}
-				<div class="flex items-center gap-0.5 mt-0.5">
-					<div class="rounded-full shrink-0 flex items-center justify-center" style="width: {Math.round(avatarSize * 0.5)}px; height: {Math.round(avatarSize * 0.5)}px; background: oklch(0.65 0.20 145 / 0.25); border: 1.5px solid oklch(0.65 0.20 145);">
-						<svg class="w-2 h-2" viewBox="0 0 24 24" fill="none" stroke="oklch(0.65 0.20 145)" stroke-width="3">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-						</svg>
-					</div>
-				</div>
-			{/if}
-			{#if copied}
+				{#if copied}
 				<div class="flex items-center gap-0.5 mt-0.5">
 					<svg class="w-3 h-3 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />

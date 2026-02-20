@@ -37,6 +37,17 @@
 	// Supabase wizard state
 	let showSupabaseWizard = $state(false);
 
+	// Supabase secrets status
+	let supabaseSecretsInfo = $state<Record<string, { isSet: boolean; masked: string }>>({});
+	let supabaseConfigured = $derived.by(() => {
+		const keys = ['supabase_url', 'supabase_anon_key', 'supabase_service_role_key', 'supabase_db_password'];
+		return keys.every(k => supabaseSecretsInfo[k]?.isSet);
+	});
+	let supabasePartialCount = $derived.by(() => {
+		const keys = ['supabase_url', 'supabase_anon_key', 'supabase_service_role_key', 'supabase_db_password'];
+		return keys.filter(k => supabaseSecretsInfo[k]?.isSet).length;
+	});
+
 	// Predefined color palette for quick selection - using oklch for perceptual uniformity
 	const COLOR_PALETTE = [
 		'oklch(0.70 0.18 220)', // Blue
@@ -401,6 +412,26 @@
 		const parts = path.split('/');
 		parts[parts.length - 1] = newProjectKey.trim().toLowerCase();
 		return parts.join('/');
+	});
+
+	// Fetch Supabase secrets status when editing an existing project
+	async function fetchSupabaseSecretsStatus() {
+		if (!key) return;
+		try {
+			const response = await fetch(`/api/config/credentials/${encodeURIComponent(key)}`);
+			const data = await response.json();
+			if (data.success && data.secrets) {
+				supabaseSecretsInfo = data.secrets;
+			}
+		} catch {
+			// Ignore errors - status will just show as unconfigured
+		}
+	}
+
+	$effect(() => {
+		if (isOpen && !isNewProject && key) {
+			fetchSupabaseSecretsStatus();
+		}
 	});
 </script>
 

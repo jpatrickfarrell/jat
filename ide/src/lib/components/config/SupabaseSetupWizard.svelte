@@ -15,11 +15,12 @@
 	interface Props {
 		project: string;
 		projectPath: string;
+		existingSecrets?: Record<string, { isSet: boolean; masked: string }>;
 		onComplete?: () => void;
 		onCancel?: () => void;
 	}
 
-	let { project, projectPath, onComplete, onCancel }: Props = $props();
+	let { project, projectPath, existingSecrets, onComplete, onCancel }: Props = $props();
 
 	// Wizard state
 	let currentStep = $state<WizardStep>('init');
@@ -37,6 +38,26 @@
 	let anonKey = $state('');
 	let serviceRoleKey = $state('');
 	let dbPassword = $state('');
+
+	// Track which fields were pre-filled from existing secrets
+	let prefilled = $state<Record<string, boolean>>({});
+
+	// Pre-fill from existing secrets
+	$effect(() => {
+		if (existingSecrets) {
+			const filled: Record<string, boolean> = {};
+			if (existingSecrets.supabase_url?.isSet) {
+				filled.supabaseUrl = true;
+				// Extract project ref from URL if possible
+				const masked = existingSecrets.supabase_url.masked || '';
+				// masked values may not be useful, but mark as set
+			}
+			if (existingSecrets.supabase_anon_key?.isSet) filled.anonKey = true;
+			if (existingSecrets.supabase_service_role_key?.isSet) filled.serviceRoleKey = true;
+			if (existingSecrets.supabase_db_password?.isSet) filled.dbPassword = true;
+			prefilled = filled;
+		}
+	});
 
 	// Linking state
 	let linkSessionName = $state('');
@@ -368,6 +389,13 @@
 
 		{:else if currentStep === 'credentials'}
 			<div class="credentials-step">
+				{#if Object.keys(prefilled).length > 0}
+					<div class="rounded-lg p-3 mb-4" style="background: oklch(0.55 0.15 145 / 0.1); border: 1px solid oklch(0.55 0.15 145 / 0.2);">
+						<p class="text-sm" style="color: oklch(0.75 0.15 145);">
+							Some credentials are already saved. Leave fields blank to keep existing values, or enter new values to update them.
+						</p>
+					</div>
+				{/if}
 				<p class="text-sm text-base-content/70 mb-4">
 					Enter your Supabase project credentials. You can find these in your
 					<a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" class="link link-primary">
@@ -396,10 +424,13 @@
 				<div class="form-control w-full mb-4">
 					<label class="label">
 						<span class="label-text font-semibold">Supabase URL</span>
+						{#if prefilled.supabaseUrl && !supabaseUrl}
+							<span class="label-text-alt" style="color: oklch(0.75 0.15 145);">Already saved</span>
+						{/if}
 					</label>
 					<input
 						type="text"
-						placeholder="https://your-project.supabase.co"
+						placeholder={prefilled.supabaseUrl ? 'Already saved — leave blank to keep' : 'https://your-project.supabase.co'}
 						class="input input-bordered w-full"
 						bind:value={supabaseUrl}
 					/>
@@ -413,10 +444,13 @@
 				<div class="form-control w-full mb-4">
 					<label class="label">
 						<span class="label-text font-semibold">Anon (Public) Key</span>
+						{#if prefilled.anonKey && !anonKey}
+							<span class="label-text-alt" style="color: oklch(0.75 0.15 145);">Already saved</span>
+						{/if}
 					</label>
 					<input
 						type="password"
-						placeholder="eyJhbGciOiJIUzI1NiIs..."
+						placeholder={prefilled.anonKey ? 'Already saved — leave blank to keep' : 'eyJhbGciOiJIUzI1NiIs...'}
 						class="input input-bordered w-full font-mono text-sm"
 						bind:value={anonKey}
 					/>
@@ -430,10 +464,13 @@
 				<div class="form-control w-full mb-4">
 					<label class="label">
 						<span class="label-text font-semibold">Service Role Key</span>
+						{#if prefilled.serviceRoleKey && !serviceRoleKey}
+							<span class="label-text-alt" style="color: oklch(0.75 0.15 145);">Already saved</span>
+						{/if}
 					</label>
 					<input
 						type="password"
-						placeholder="eyJhbGciOiJIUzI1NiIs..."
+						placeholder={prefilled.serviceRoleKey ? 'Already saved — leave blank to keep' : 'eyJhbGciOiJIUzI1NiIs...'}
 						class="input input-bordered w-full font-mono text-sm"
 						bind:value={serviceRoleKey}
 					/>
@@ -447,10 +484,13 @@
 				<div class="form-control w-full mb-4">
 					<label class="label">
 						<span class="label-text font-semibold">Database Password</span>
+						{#if prefilled.dbPassword && !dbPassword}
+							<span class="label-text-alt" style="color: oklch(0.75 0.15 145);">Already saved</span>
+						{/if}
 					</label>
 					<input
 						type="password"
-						placeholder="Your database password"
+						placeholder={prefilled.dbPassword ? 'Already saved — leave blank to keep' : 'Your database password'}
 						class="input input-bordered w-full"
 						bind:value={dbPassword}
 					/>

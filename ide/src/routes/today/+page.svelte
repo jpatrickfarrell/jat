@@ -106,40 +106,6 @@
 		}
 	}
 
-	// Counts for filter chips (computed from all open tasks in selected project)
-	const filterCounts = $derived.by(() => {
-		const projectTasks = selectedProject
-			? openTasks.filter((t) => {
-					const project = getProjectFromTaskId(t.id);
-					return project === selectedProject;
-				})
-			: openTasks;
-
-		// Only count open, non-epic tasks
-		const candidates = projectTasks.filter(
-			(t) => t.status === "open" && t.issue_type !== "epic",
-		);
-
-		const counts: Record<DueDateFilter, number> = {
-			today: 0,
-			tomorrow: 0,
-			week: 0,
-			overdue: 0,
-			unscheduled: 0,
-			all: candidates.length,
-		};
-
-		for (const task of candidates) {
-			if (taskMatchesDateFilter(task, "today")) counts.today++;
-			if (taskMatchesDateFilter(task, "tomorrow")) counts.tomorrow++;
-			if (taskMatchesDateFilter(task, "week")) counts.week++;
-			if (taskMatchesDateFilter(task, "overdue")) counts.overdue++;
-			if (taskMatchesDateFilter(task, "unscheduled")) counts.unscheduled++;
-		}
-
-		return counts;
-	});
-
 	const DATE_FILTER_OPTIONS: { id: DueDateFilter; label: string; icon: string }[] = [
 		{ id: "today", label: "Today", icon: "📌" },
 		{ id: "tomorrow", label: "Tomorrow", icon: "➡️" },
@@ -233,6 +199,40 @@
 
 	// Selected project (synced from URL ?project= param, managed by TopBar)
 	let selectedProject = $state<string | null>(null);
+
+	// Counts for filter chips (computed from all open tasks in selected project)
+	const filterCounts = $derived.by(() => {
+		const projectTasks = selectedProject
+			? openTasks.filter((t) => {
+					const project = getProjectFromTaskId(t.id);
+					return project === selectedProject;
+				})
+			: openTasks;
+
+		// Only count open, non-epic tasks
+		const candidates = projectTasks.filter(
+			(t) => t.status === "open" && t.issue_type !== "epic",
+		);
+
+		const counts: Record<DueDateFilter, number> = {
+			today: 0,
+			tomorrow: 0,
+			week: 0,
+			overdue: 0,
+			unscheduled: 0,
+			all: candidates.length,
+		};
+
+		for (const task of candidates) {
+			if (taskMatchesDateFilter(task, "today")) counts.today++;
+			if (taskMatchesDateFilter(task, "tomorrow")) counts.tomorrow++;
+			if (taskMatchesDateFilter(task, "week")) counts.week++;
+			if (taskMatchesDateFilter(task, "overdue")) counts.overdue++;
+			if (taskMatchesDateFilter(task, "unscheduled")) counts.unscheduled++;
+		}
+
+		return counts;
+	});
 
 	// Subsection collapse state per project (sessions/paused/conversations/tasks)
 	type SubsectionType = "sessions" | "paused" | "conversations" | "tasks" | "completed";

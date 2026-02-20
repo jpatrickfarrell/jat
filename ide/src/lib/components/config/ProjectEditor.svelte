@@ -655,7 +655,7 @@
 				<div class="space-y-4">
 					<h3 class="text-sm font-medium text-base-content/70 uppercase tracking-wide">Supabase Integration</h3>
 
-					<div class="p-4 rounded-lg border border-base-content/10" style="background: oklch(0.16 0.02 250);">
+					<div class="p-4 rounded-lg border" style="background: oklch(0.16 0.02 250); border-color: {supabaseConfigured ? 'oklch(0.55 0.15 145 / 0.4)' : supabasePartialCount > 0 ? 'oklch(0.55 0.15 85 / 0.3)' : 'oklch(0.25 0.02 250)'}">
 						<div class="flex items-start gap-4">
 							<div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background: oklch(0.55 0.15 145 / 0.15);">
 								<svg class="w-6 h-6" viewBox="0 0 109 113" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -670,20 +670,53 @@
 								</svg>
 							</div>
 							<div class="flex-1">
-								<h4 class="font-medium text-sm mb-1">Connect to Supabase</h4>
-								<p class="text-xs text-base-content/60 mb-3">
-									Set up Supabase CLI linking, configure API keys, and manage database credentials for this project.
-								</p>
-								<button
-									class="btn btn-sm"
-									style="background: oklch(0.55 0.15 145 / 0.15); color: oklch(0.75 0.15 145); border-color: oklch(0.55 0.15 145 / 0.3);"
-									onclick={() => showSupabaseWizard = true}
-								>
-									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-									</svg>
-									Configure Supabase
-								</button>
+								{#if supabaseConfigured}
+									<h4 class="font-medium text-sm mb-1" style="color: oklch(0.75 0.15 145);">Supabase Connected</h4>
+									<p class="text-xs text-base-content/60 mb-3">
+										All Supabase credentials are configured for this project.
+									</p>
+									<button
+										class="btn btn-sm"
+										style="background: oklch(0.55 0.15 145 / 0.15); color: oklch(0.75 0.15 145); border-color: oklch(0.55 0.15 145 / 0.3);"
+										onclick={() => showSupabaseWizard = true}
+									>
+										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+										</svg>
+										Reconfigure
+									</button>
+								{:else if supabasePartialCount > 0}
+									<h4 class="font-medium text-sm mb-1" style="color: oklch(0.75 0.15 85);">Supabase Partially Configured</h4>
+									<p class="text-xs text-base-content/60 mb-3">
+										{supabasePartialCount} of 4 credentials set. Complete the setup to enable all features.
+									</p>
+									<button
+										class="btn btn-sm"
+										style="background: oklch(0.55 0.15 85 / 0.15); color: oklch(0.75 0.15 85); border-color: oklch(0.55 0.15 85 / 0.3);"
+										onclick={() => showSupabaseWizard = true}
+									>
+										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+										</svg>
+										Complete Setup
+									</button>
+								{:else}
+									<h4 class="font-medium text-sm mb-1">Connect to Supabase</h4>
+									<p class="text-xs text-base-content/60 mb-3">
+										Set up Supabase CLI linking, configure API keys, and manage database credentials for this project.
+									</p>
+									<button
+										class="btn btn-sm"
+										style="background: oklch(0.55 0.15 145 / 0.15); color: oklch(0.75 0.15 145); border-color: oklch(0.55 0.15 145 / 0.3);"
+										onclick={() => showSupabaseWizard = true}
+									>
+										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+										</svg>
+										Configure Supabase
+									</button>
+								{/if}
 							</div>
 						</div>
 					</div>
@@ -1100,7 +1133,8 @@
 				<SupabaseSetupWizard
 					project={key}
 					projectPath={path}
-					onComplete={() => { showSupabaseWizard = false; successToast('Supabase configured', 'Project is now connected to Supabase'); }}
+					existingSecrets={supabaseSecretsInfo}
+					onComplete={() => { showSupabaseWizard = false; fetchSupabaseSecretsStatus(); successToast('Supabase configured', 'Project is now connected to Supabase'); }}
 					onCancel={() => showSupabaseWizard = false}
 				/>
 			</div>

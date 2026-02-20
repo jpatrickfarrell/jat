@@ -222,7 +222,58 @@ Memory: {N relevant entries found | no index yet | no matches}
 APPROACH:
   {YOUR_APPROACH_DESCRIPTION}
   (incorporating lessons from past sessions if any)
+
+REMEMBER: When done → emit `jat-signal review` BEFORE presenting results.
 ```
+
+---
+
+## When You Finish Working
+
+**CRITICAL: You MUST emit a `review` signal BEFORE presenting your findings to the user.**
+
+This applies to ALL work completion - not just code changes. Research, investigation, documentation, and analysis tasks all require a review signal.
+
+**For code changes:**
+```bash
+jat-signal review '{
+  "taskId": "jat-abc",
+  "taskTitle": "Add feature X",
+  "summary": ["Implemented X", "Added tests"],
+  "filesModified": [
+    {"path": "src/x.ts", "changeType": "added", "linesAdded": 100, "linesRemoved": 0}
+  ],
+  "testsStatus": "passing",
+  "buildStatus": "clean",
+  "reviewFocus": ["Check error handling"]
+}'
+```
+
+**For research/investigation tasks (no code changes):**
+```bash
+jat-signal review '{
+  "taskId": "jat-abc",
+  "taskTitle": "Investigate auth timeout issue",
+  "summary": ["Found root cause: token refresh timing", "Identified fix location"],
+  "findings": ["Issue is in src/auth/refresh.ts:45", "Timeout set to 5s but API takes 8s"],
+  "recommendedActions": ["Increase timeout to 15s", "Add retry logic"]
+}'
+```
+
+**Emit the signal FIRST, then output:**
+```
+┌────────────────────────────────────────────────────────┐
+│  🔍 READY FOR REVIEW: {TASK_ID}                        │
+└────────────────────────────────────────────────────────┘
+
+📋 Summary:
+  • [accomplishment 1]
+  • [accomplishment 2]
+
+Run /jat:complete when ready to close this task.
+```
+
+**Do NOT say "Task Complete"** until the user runs `/jat:complete`.
 
 ---
 
@@ -300,55 +351,6 @@ jat-signal needs_input '{
   "questionType": "blocker"
 }'
 ```
-
----
-
-## When You Finish Working
-
-**CRITICAL: You MUST emit a `review` signal BEFORE presenting your findings to the user.**
-
-This applies to ALL work completion - not just code changes. Research, investigation, documentation, and analysis tasks all require a review signal.
-
-**For code changes:**
-```bash
-jat-signal review '{
-  "taskId": "jat-abc",
-  "taskTitle": "Add feature X",
-  "summary": ["Implemented X", "Added tests"],
-  "filesModified": [
-    {"path": "src/x.ts", "changeType": "added", "linesAdded": 100, "linesRemoved": 0}
-  ],
-  "testsStatus": "passing",
-  "buildStatus": "clean",
-  "reviewFocus": ["Check error handling"]
-}'
-```
-
-**For research/investigation tasks (no code changes):**
-```bash
-jat-signal review '{
-  "taskId": "jat-abc",
-  "taskTitle": "Investigate auth timeout issue",
-  "summary": ["Found root cause: token refresh timing", "Identified fix location"],
-  "findings": ["Issue is in src/auth/refresh.ts:45", "Timeout set to 5s but API takes 8s"],
-  "recommendedActions": ["Increase timeout to 15s", "Add retry logic"]
-}'
-```
-
-**Emit the signal FIRST, then output:**
-```
-┌────────────────────────────────────────────────────────┐
-│  🔍 READY FOR REVIEW: {TASK_ID}                        │
-└────────────────────────────────────────────────────────┘
-
-📋 Summary:
-  • [accomplishment 1]
-  • [accomplishment 2]
-
-Run /jat:complete when ready to close this task.
-```
-
-**Do NOT say "Task Complete"** until the user runs `/jat:complete`.
 
 ---
 

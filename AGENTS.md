@@ -130,14 +130,15 @@ To work on another task: spawn a new agent session.
 
 ## Completion Workflow
 
-When finishing work:
+**MANDATORY: You MUST emit `jat-signal review` BEFORE presenting any results or summary to the user.** This applies to ALL task types - code changes, research, investigation, documentation. No exceptions.
 
-1. Emit `review` signal
-2. Show "READY FOR REVIEW" with summary
+1. Emit `review` signal with summary, files modified, and/or findings
+2. Show "READY FOR REVIEW" banner with bullet-point summary
 3. Wait for user to run `/jat:complete`
 4. Complete handles: mail check, verify, commit, close, release, announce
 
 **Never say "Task Complete" until `jt close` has run.**
+**Never present results without emitting `review` signal first.**
 
 ### Completion Steps (jat-step)
 
@@ -228,4 +229,5 @@ git commit -m "feat(jat-abc): Implement new endpoint"
 - **Use task IDs everywhere** - commits, memory entries
 - **Update task status** - `in_progress` when working, `closed` when done
 - **Emit signals in order** - starting -> working -> review -> complete
+- **ALWAYS signal review before presenting results** - emit `jat-signal review` BEFORE any summary output
 - **Push to remote** - work is NOT complete until `git push` succeeds

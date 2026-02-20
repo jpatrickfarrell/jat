@@ -51,7 +51,7 @@
 	import TerminalActivitySparkline from "./TerminalActivitySparkline.svelte";
 	import { workSessionsState } from "$lib/stores/workSessions.svelte";
 	import { autoKillCountdowns, cancelAutoKill } from "$lib/stores/sessionEvents";
-	import { setPendingAutoKill } from "$lib/stores/autoKillConfig";
+	import { setPendingAutoKill, isAutoKillEnabled } from "$lib/stores/autoKillConfig";
 	import EventStack from "./EventStack.svelte";
 	import StreakCelebration from "$lib/components/StreakCelebration.svelte";
 	import SuggestedTasksSection from "./SuggestedTasksSection.svelte";
@@ -2570,6 +2570,7 @@
 	// Auto-complete effect: When session enters ready-for-review and review rules say 'auto',
 	// automatically trigger /jat:complete without user intervention.
 	// This enables low-priority work (e.g., P4 chores) to complete without clicks.
+	// REQUIRES: Session Cleanup must be enabled in /config?tab=swarm (autoKillEnabled).
 	$effect(() => {
 		// Only trigger in agent mode (not server mode)
 		if (!isAgentMode) return;
@@ -2583,6 +2584,11 @@
 			}
 			return;
 		}
+
+		// Guard: Only auto-complete if Session Cleanup is enabled globally.
+		// Without this, users who haven't opted in would get unexpected
+		// /jat:complete --kill injected into sessions. See jat-vffox.
+		if (!isAutoKillEnabled()) return;
 
 		// Auto-complete if toggle is enabled (not disabled by user)
 		// Default based on review rules, but user can toggle either way

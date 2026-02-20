@@ -14,7 +14,7 @@
 	onMount(async () => {
 		// Check if widget JS file is served
 		try {
-			const res = await fetch('/widget/jat-feedback.js', { method: 'HEAD' });
+			const res = await fetch('/feedback/jat-feedback.js', { method: 'HEAD' });
 			widgetFileExists = res.ok;
 		} catch {
 			widgetFileExists = false;
@@ -30,14 +30,14 @@
 		}
 	});
 
-	const quickStartSnippet = `<script src="http://localhost:3333/widget/jat-feedback.js"><\/script>
+	const quickStartSnippet = `<script src="http://localhost:3333/feedback/jat-feedback.js"><\/script>
 <jat-feedback endpoint="http://localhost:3333"></jat-feedback>`;
 
-	const tunnelSnippet = `<script src="https://YOUR-TUNNEL.trycloudflare.com/widget/jat-feedback.js"><\/script>
+	const tunnelSnippet = `<script src="https://YOUR-TUNNEL.trycloudflare.com/feedback/jat-feedback.js"><\/script>
 <jat-feedback endpoint="https://YOUR-TUNNEL.trycloudflare.com"></jat-feedback>`;
 
 	const reactSnippet = `// In your index.html or layout component:
-// <script src="http://localhost:3333/widget/jat-feedback.js"><\/script>
+// <script src="http://localhost:3333/feedback/jat-feedback.js"><\/script>
 
 // Then in any React component:
 export default function App() {
@@ -51,11 +51,11 @@ export default function App() {
 }`;
 
 	const svelteSnippet = `<!-- In app.html: -->
-<!-- <script src="http://localhost:3333/widget/jat-feedback.js"><\/script> -->
+<!-- <script src="http://localhost:3333/feedback/jat-feedback.js"><\/script> -->
 
 <!-- In any .svelte file: -->
 <svelte:head>
-  <script src="http://localhost:3333/widget/jat-feedback.js"><\/script>
+  <script src="http://localhost:3333/feedback/jat-feedback.js"><\/script>
 </svelte:head>
 
 <jat-feedback endpoint="http://localhost:3333"></jat-feedback>`;
@@ -67,19 +67,19 @@ export default function Layout({ children }) {
   return (
     <>
       {children}
-      <Script src="http://localhost:3333/widget/jat-feedback.js" strategy="lazyOnload" />
+      <Script src="http://localhost:3333/feedback/jat-feedback.js" strategy="lazyOnload" />
       <jat-feedback endpoint="http://localhost:3333"></jat-feedback>
     </>
   );
 }`;
 
-	const buildSnippet = `cd widget && npm install && npm run build
+	const buildSnippet = `cd feedback && npm install && npm run build
 
 # Copy to IDE static directory
-cp dist/jat-feedback.js ../ide/static/widget/
+cp dist/jat-feedback.js ../ide/static/feedback/
 
 # Or use the IDE shortcut:
-cd ide && npm run build:widget`;
+cd ide && npm run build:feedback`;
 
 	let activeFramework = $state<'html' | 'react' | 'svelte' | 'next'>('html');
 
@@ -218,7 +218,7 @@ cd ide && npm run build:widget`;
 					class="mt-3 px-3 py-2 rounded-lg font-mono text-[10px] leading-relaxed"
 					style="background: oklch(0.18 0.04 45); border: 1px solid oklch(0.28 0.08 45); color: oklch(0.70 0.12 45);"
 				>
-					The widget JS file is not found at <code style="color: oklch(0.80 0.10 45);">/widget/jat-feedback.js</code>. Run <code style="color: oklch(0.80 0.10 45);">npm run build:widget</code> from the <code>ide/</code> directory to build and copy it.
+					The widget JS file is not found at <code style="color: oklch(0.80 0.10 45);">/feedback/jat-feedback.js</code>. Run <code style="color: oklch(0.80 0.10 45);">npm run build:feedback</code> from the <code>ide/</code> directory to build and copy it.
 				</div>
 			{/if}
 		</section>
@@ -496,7 +496,7 @@ cd ide && npm run build:widget`;
 		<section class="mb-10">
 			<h2 class="font-mono text-xs font-bold uppercase tracking-widest mb-4" style="color: oklch(0.50 0.04 250);">Build from Source</h2>
 			<p class="font-mono text-[11px] mb-3 leading-relaxed" style="color: oklch(0.55 0.03 250);">
-				The widget source lives in the <code style="color: oklch(0.70 0.10 270);">widget/</code> directory.
+				The widget source lives in the <code style="color: oklch(0.70 0.10 270);">feedback/</code> directory.
 				It builds to a single IIFE file (~293KB, ~80KB gzipped).
 			</p>
 			<div class="relative">

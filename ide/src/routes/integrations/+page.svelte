@@ -1230,7 +1230,7 @@
 					</div>
 					<div class="flex items-center gap-2 shrink-0">
 						<a
-							href="/widget"
+							href="/feedback"
 							class="font-mono text-[10px] font-semibold px-3 py-1.5 rounded transition-colors duration-150"
 							style="
 								background: oklch(0.30 0.10 270);
@@ -1289,7 +1289,7 @@
 								<pre
 									class="font-mono text-[9px] leading-relaxed px-2.5 py-2 rounded overflow-x-auto"
 									style="background: oklch(0.12 0.01 250); color: oklch(0.60 0.06 200); border: 1px solid oklch(0.20 0.02 250); margin: 0;"
-								>{`<script src="http://localhost:3333/widget/jat-feedback.js"><\/script>
+								>{`<script src="http://localhost:3333/feedback/jat-feedback.js"><\/script>
 <jat-feedback endpoint="http://localhost:3333" project="your-project"></jat-feedback>`}</pre>
 								<button
 									class="absolute top-1.5 right-1.5 font-mono text-[8px] px-1.5 py-0.5 rounded cursor-pointer transition-colors duration-150"
@@ -1299,7 +1299,7 @@
 										border: 1px solid {widgetCopied ? 'oklch(0.40 0.10 145)' : 'oklch(0.35 0.04 270)'};
 									"
 									onclick={() => {
-										navigator.clipboard.writeText(`<script src="http://localhost:3333/widget/jat-feedback.js"><\/script>\n<jat-feedback endpoint="http://localhost:3333" project="your-project"></jat-feedback>`);
+										navigator.clipboard.writeText(`<script src="http://localhost:3333/feedback/jat-feedback.js"><\/script>\n<jat-feedback endpoint="http://localhost:3333" project="your-project"></jat-feedback>`);
 										widgetCopied = true;
 										setTimeout(() => widgetCopied = false, 2000);
 									}}
@@ -1378,11 +1378,11 @@
 								<pre
 									class="font-mono text-[9px] leading-relaxed px-2.5 py-2 rounded overflow-x-auto"
 									style="background: oklch(0.12 0.01 250); color: oklch(0.60 0.06 200); border: 1px solid oklch(0.20 0.02 250); margin: 0;"
-								>{`cd widget && npm install && npm run build
+								>{`cd feedback && npm install && npm run build
 # Copy to IDE static
-cp dist/jat-feedback.js ../ide/static/widget/
+cp dist/jat-feedback.js ../ide/static/feedback/
 # Or use the IDE script:
-cd ../ide && npm run build:widget`}</pre>
+cd ../ide && npm run build:feedback`}</pre>
 							</div>
 						</details>
 					</div>

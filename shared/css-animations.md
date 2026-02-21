@@ -1,6 +1,116 @@
 ## CSS Animation Approach and Design Guidelines
 
-This document describes the CSS animation strategy used in the JAT IDE, particularly for the `/tasks` page task list animations.
+This document covers CSS animation strategy for both the JAT IDE and SaaS app projects (JST template, Headcount, etc.).
+
+---
+
+## Standard SaaS App Animation System
+
+All SaaS apps built from the JST template include a shared animation library and scroll-reveal system. **When doing animation work on any SaaS project, use this standard.**
+
+### Files (included in JST template, copy to new projects)
+
+| File | Purpose |
+|------|---------|
+| `src/lib/animista.css` | Animation keyframes + utility classes (imported in root layout) |
+| `src/lib/actions/reveal.ts` | Svelte `use:reveal` action for scroll-triggered animations |
+
+### Available Animations
+
+| Class | Effect | Use On |
+|-------|--------|--------|
+| `tracking-in-expand` | Letters expand in from compressed | Page headings, hero text |
+| `tracking-out-contract` | Letters compress out | Heading exit transitions |
+| `slide-in-blurred-left` | Slide from left with blur+scale | Hero images, avatars, feature images |
+| `fade-in-bottom` | Rise up while fading in | Section cards (default for `use:reveal`) |
+| `scale-in-center` | Scale from zero | Metric cards, badges, grid items |
+| `fade-in` | Simple opacity fade | List items, table rows (with stagger) |
+
+### The `use:reveal` Action (Scroll-Triggered)
+
+Import and use on any element to animate it when it scrolls into view:
+
+```svelte
+<script>
+  import { reveal } from "$lib/actions/reveal"
+</script>
+
+<!-- Default: fade-in-bottom when element enters viewport -->
+<div use:reveal>...</div>
+
+<!-- Custom animation -->
+<div use:reveal={{ animation: 'scale-in-center' }}>...</div>
+
+<!-- Staggered delay (seconds) -->
+<div use:reveal={{ delay: 0.2 }}>...</div>
+
+<!-- Custom visibility threshold (0-1) -->
+<div use:reveal={{ threshold: 0.3 }}>...</div>
+```
+
+### Standard Page Animation Patterns
+
+Apply these patterns when animating SaaS app pages:
+
+#### 1. Hero / Header Section (above the fold, instant)
+- **Main heading (h1):** `tracking-in-expand` class directly
+- **Hero image / avatar:** `slide-in-blurred-left` class directly
+- **Badges:** `tracking-in-expand` class directly
+
+#### 2. Stat/Metric Card Grids (staggered scale)
+```svelte
+{#each metrics as metric, i}
+  <div class="card" use:reveal={{ animation: 'scale-in-center', delay: i * 0.1 }}>
+    ...
+  </div>
+{/each}
+```
+
+#### 3. Section Cards (scroll reveal)
+```svelte
+<!-- Each major section fades up when scrolled into view -->
+<div class="card" use:reveal>
+  <h2 class="tracking-in-expand">Section Title</h2>
+  ...
+</div>
+```
+
+#### 4. List/Table Items (staggered fade)
+```svelte
+{#each items as item, i}
+  <tr use:reveal={{ animation: 'fade-in', delay: i * 0.05 }}>...</tr>
+{/each}
+```
+
+#### 5. Release/Card Lists (staggered fade, wider spacing)
+```svelte
+{#each releases as release, i}
+  <div use:reveal={{ animation: 'fade-in', delay: i * 0.08 }}>...</div>
+{/each}
+```
+
+### Timing Reference
+
+| Pattern | Animation | Delay Between Items |
+|---------|-----------|---------------------|
+| Metric cards (grid) | `scale-in-center` | 100ms |
+| Table rows | `fade-in` | 50ms |
+| List items (cards) | `fade-in` | 80ms |
+| Section cards | `fade-in-bottom` | none (scroll-triggered) |
+| Headings | `tracking-in-expand` | none (instant) |
+| Images | `slide-in-blurred-left` | none (instant) |
+
+### Adding New Animations
+
+1. Pick from [animista.net](https://animista.net) — copy both `-webkit-` and unprefixed versions
+2. Add to `src/lib/animista.css` with a comment block documenting the use case
+3. Use the class name directly for above-fold elements, or via `use:reveal` for scroll-triggered
+
+---
+
+## JAT IDE Animation Strategy
+
+This section describes the CSS animation strategy used in the JAT IDE, particularly for the `/tasks` page task list animations.
 
 ### Animation Library: Animista
 

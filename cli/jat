@@ -869,15 +869,11 @@ launch_ide() {
     # Clear Vite cache to prevent stale chunk errors
     rm -rf "$ide_path/.svelte-kit" "$ide_path/node_modules/.vite" 2>/dev/null
 
-    # Launch IDE dev server inside a tmux session
-    # This allows the attach feature to work with tmux windows
-    launch_terminal_window "$name: IDE :$ide_port" "
-        cd '$ide_path'
-        tmux new-session -d -s '$session_name' -x 120 -y 40 -c '$ide_path'
-        sleep 0.3
-        tmux send-keys -t '$session_name' 'npm run dev -- --port $ide_port' Enter
-        tmux attach-session -t '$session_name'
-    "
+    # Launch IDE dev server in a detached tmux session (no terminal window)
+    # The session is discoverable by the /api/servers endpoint via the server-jat prefix
+    tmux new-session -d -s "$session_name" -x 120 -y 40 -c "$ide_path"
+    sleep 0.3
+    tmux send-keys -t "$session_name" "npm run dev -- --port $ide_port" Enter
 
     # Open browser after delay for server to start
     (

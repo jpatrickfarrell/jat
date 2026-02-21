@@ -441,17 +441,40 @@ The `feedback_reports` table columns used by the pipeline:
 
 ## Upgrading
 
-When a new version adds schema changes, a new versioned migration file will appear in `node_modules/jat-feedback/supabase/migrations/`. Check for new files after upgrading and apply any you haven't run:
+npm never auto-updates — you need to explicitly upgrade and then handle each type of change manually.
 
 ```bash
-# See what migration files the package ships
+# 1. Update the package
+npm install jat-feedback@latest
+```
+
+Then handle whatever changed in the release notes:
+
+**Widget JS changes** (UI, behavior, new attributes):
+```bash
+# Nothing extra — the updated bundle is copied to your build output automatically
+# Just redeploy your app
+```
+
+**Schema changes** (new columns, indexes):
+```bash
+# Check for new migration files
 ls node_modules/jat-feedback/supabase/migrations/
 
-# Copy new ones into your project
+# Copy any new ones into your project and run them
 cp node_modules/jat-feedback/supabase/migrations/1.1.0_*.sql \
-   supabase/migrations/$(date +%Y%m%d%H%M%S)_feedback_reports_1_1_0.sql
+   supabase/migrations/$(date +%Y%m%d%H%M%S)_feedback_1_1_0.sql
 
 supabase db push
+```
+
+**Edge function changes** (webhook behavior):
+```bash
+# Re-copy and redeploy
+cp node_modules/jat-feedback/supabase/functions/jat-webhook/index.ts \
+   supabase/functions/jat-webhook/index.ts
+
+supabase functions deploy jat-webhook
 ```
 
 ## License

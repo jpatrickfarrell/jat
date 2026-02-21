@@ -164,7 +164,6 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     }
 
     const reporter = body.metadata?.reporter || {};
-    const org = body.metadata?.organization || {};
 
     const { data: row, error: insertError } = await supabase
       .from('feedback_reports')
@@ -179,8 +178,6 @@ export const POST: RequestHandler = async ({ request, locals }) => {
         reporter_email: reporter.email || null,
         reporter_name: reporter.name || null,
         reporter_role: reporter.role || null,
-        organization_id: org.id || null,
-        organization_name: org.name || null,
         console_logs: body.console_logs || null,
         selected_elements: body.selected_elements || null,
         screenshot_paths: screenshotPaths.length > 0 ? screenshotPaths : null,
@@ -208,103 +205,20 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 };
 ```
 
-**Note:** If your app doesn't have organizations, remove the `organization_id` and `organization_name` fields from the insert and from the migration (Step 3).
+### Step 3: Run the Supabase Migration
 
-### Step 3: Supabase Migration
-
-Create a migration file (e.g., `supabase/migrations/YYYYMMDD000000_feedback_reports.sql`):
-
-```sql
--- Feedback reports table for jat-feedback widget
--- Widget POSTs to /api/feedback/report → this table
--- JAT ingest daemon polls for jat_status = 'new'
-
-CREATE TABLE IF NOT EXISTS feedback_reports (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  title TEXT NOT NULL,
-  description TEXT DEFAULT '',
-  type TEXT DEFAULT 'bug' CHECK (type IN ('bug', 'enhancement', 'other')),
-  priority TEXT DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'critical')),
-  page_url TEXT,
-  user_agent TEXT,
-
-  -- Reporter identity
-  reporter_user_id UUID REFERENCES auth.users(id),
-  reporter_email TEXT,
-  reporter_name TEXT,
-  reporter_role TEXT,
-
-  -- Organization context (remove if not applicable)
-  organization_id UUID,
-  organization_name TEXT,
-
-  -- Structured data
-  console_logs JSONB,
-  selected_elements JSONB,
-  screenshot_paths TEXT[],
-  metadata JSONB,
-
-  -- JAT ingest tracking
-  jat_status TEXT DEFAULT 'new' CHECK (jat_status IN ('new', 'ingested', 'failed', 'rejected')),
-  jat_task_id TEXT,
-
-  -- User-facing status tracking
-  status TEXT DEFAULT 'submitted'
-    CHECK (status IN ('submitted', 'in_progress', 'completed', 'wontfix', 'closed')),
-  dev_notes TEXT,
-  user_response TEXT CHECK (user_response IN ('accepted', 'rejected')),
-  user_response_at TIMESTAMPTZ,
-  rejection_reason TEXT,
-
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- Indexes
-CREATE INDEX idx_feedback_reports_jat_status ON feedback_reports(jat_status) WHERE jat_status = 'new';
-CREATE INDEX idx_feedback_reports_jat_rejected ON feedback_reports(jat_status) WHERE jat_status = 'rejected';
-CREATE INDEX idx_feedback_reports_reporter ON feedback_reports(reporter_user_id, created_at DESC);
-
--- Storage bucket for screenshots
-INSERT INTO storage.buckets (id, name, public) VALUES ('feedback-screenshots', 'feedback-screenshots', false)
-ON CONFLICT (id) DO NOTHING;
-
--- RLS policies
-ALTER TABLE feedback_reports ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Authenticated users can insert feedback"
-  ON feedback_reports FOR INSERT TO authenticated
-  WITH CHECK (true);
-
-CREATE POLICY "Users can read own feedback reports"
-  ON feedback_reports FOR SELECT TO authenticated
-  USING (reporter_user_id = auth.uid());
-
-CREATE POLICY "Users can respond to own feedback"
-  ON feedback_reports FOR UPDATE TO authenticated
-  USING (reporter_user_id = auth.uid())
-  WITH CHECK (reporter_user_id = auth.uid());
-
-CREATE POLICY "Service role full access to feedback"
-  ON feedback_reports FOR ALL TO service_role
-  USING (true) WITH CHECK (true);
-
--- Storage policies
-CREATE POLICY "Authenticated users can upload feedback screenshots"
-  ON storage.objects FOR INSERT TO authenticated
-  WITH CHECK (bucket_id = 'feedback-screenshots');
-
-CREATE POLICY "Service role can read feedback screenshots"
-  ON storage.objects FOR SELECT TO service_role
-  USING (bucket_id = 'feedback-screenshots');
-```
-
-Push the migration:
+The `feedback_reports` table schema is included in this package. Copy it into your migrations folder and push:
 
 ```bash
+# Copy the migration (rename to match your timestamp convention)
+cp node_modules/jat-feedback/supabase/migrations/1.0.0_feedback_reports.sql \
+   supabase/migrations/$(date +%Y%m%d%H%M%S)_feedback_reports.sql
+
+# Push to Supabase
 supabase db push
-# or
-supabase migration up
 ```
+
+**When upgrading jat-feedback:** check `node_modules/jat-feedback/supabase/migrations/` for new versioned files (e.g. `1.1.0_*.sql`) and copy+apply any you haven't run yet.
 
 ### Step 4: Wire User Context
 
@@ -323,8 +237,6 @@ onMount(() => {
       // Adjust based on where your app stores display name:
       if (user.user_metadata?.full_name) el.setAttribute('user-name', user.user_metadata.full_name);
       if (user.user_metadata?.role) el.setAttribute('user-role', user.user_metadata.role);
-      // If your app has organizations:
-      // if (user.organization_id) el.setAttribute('org-id', user.organization_id);
     }
   }
 });
@@ -372,12 +284,11 @@ Add this entry to the `sources` array.
     "labels": ["widget", "feedback"]
   },
   "table": "feedback_reports",
-  "statusColumn": "jat_status",
-  "statusNew": "new",
-  "statusDone": "ingested",
+  "statusColumn": "status",
+  "statusNew": "submitted",
   "taskIdColumn": "jat_task_id",
   "titleColumn": "title",
-  "descriptionTemplate": "**Reporter:** {reporter_name} ({reporter_email})\n**Page:** {page_url}\n**Browser:** {user_agent}\n\n{description}",
+  "descriptionTemplate": "**Reporter:** {reporter_name} ({reporter_email}) — {reporter_role}\n**Page:** {page_url}\n**Browser:** {user_agent}\n\n{description}",
   "authorColumn": "reporter_email",
   "timestampColumn": "created_at",
   "attachmentColumn": "screenshot_paths",
@@ -404,12 +315,11 @@ Add this entry to the `sources` array.
   "projectUrl": "https://YOUR_SUPABASE_PROJECT_ID.supabase.co",
   "secretName": "YOUR_PROJECT-supabase-service-role",
   "table": "feedback_reports",
-  "statusColumn": "jat_status",
-  "statusNew": "new",
-  "statusDone": "ingested",
+  "statusColumn": "status",
+  "statusNew": "submitted",
   "taskIdColumn": "jat_task_id",
   "titleColumn": "title",
-  "descriptionTemplate": "**Reporter:** {reporter_name} ({reporter_email})\n**Page:** {page_url}\n**Browser:** {user_agent}\n\n{description}",
+  "descriptionTemplate": "**Reporter:** {reporter_name} ({reporter_email}) — {reporter_role}\n**Page:** {page_url}\n**Browser:** {user_agent}\n\n{description}",
   "authorColumn": "reporter_email",
   "timestampColumn": "created_at",
   "attachmentColumn": "screenshot_paths",
@@ -467,7 +377,7 @@ The ingest daemon picks up config changes automatically (no restart needed).
 
 ### Step 6: Deploy the JAT Webhook Edge Function (for callbacks)
 
-The `jat-webhook` Supabase Edge Function receives status-change callbacks from JAT and updates your `feedback_reports` rows. It's included in this package at `supabase/functions/jat-webhook/index.ts` — copy it into your project and deploy it.
+The `jat-webhook` Supabase Edge Function receives status-change callbacks from JAT and updates your `feedback_reports` rows. It's included in this package — copy it into your project and deploy it.
 
 ```bash
 # Copy the function into your project
@@ -483,7 +393,7 @@ The function uses `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` — both are in
 
 **Skip this step** if you don't need bidirectional status sync (i.e., you only want JAT to ingest reports, not push status back to Supabase).
 
-### Step 6: Verify
+### Step 7: Verify
 
 ```bash
 # Check the API endpoint is working
@@ -524,11 +434,25 @@ The `feedback_reports` table columns used by the pipeline:
 
 | Column | Type | Purpose |
 |--------|------|---------|
-| `jat_status` | TEXT | Ingest state: `new` → `ingested` (or `failed`, `rejected`) |
+| `status` | TEXT | Lifecycle: `submitted` → `in_progress` → `completed` → `accepted` \| `rejected` |
 | `jat_task_id` | TEXT | JAT task ID written back after ingest (e.g., `myapp-abc`) |
-| `status` | TEXT | User-facing status synced from JAT task lifecycle |
+| `rejection_reason` | TEXT | User-provided reason when rejecting a completed report |
 | `dev_notes` | TEXT | Developer notes pushed back via callback |
-| `user_response` | TEXT | User accept/reject of completed fix |
+
+## Upgrading
+
+When a new version adds schema changes, a new versioned migration file will appear in `node_modules/jat-feedback/supabase/migrations/`. Check for new files after upgrading and apply any you haven't run:
+
+```bash
+# See what migration files the package ships
+ls node_modules/jat-feedback/supabase/migrations/
+
+# Copy new ones into your project
+cp node_modules/jat-feedback/supabase/migrations/1.1.0_*.sql \
+   supabase/migrations/$(date +%Y%m%d%H%M%S)_feedback_reports_1_1_0.sql
+
+supabase db push
+```
 
 ## License
 

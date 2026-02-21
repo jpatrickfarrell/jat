@@ -6,7 +6,8 @@
   "main": "dist/jat-feedback.js",
   "module": "dist/jat-feedback.mjs",
   "files": [
-    "dist"
+    "dist",
+    "supabase"
   ],
   "scripts": {
     "dev": "vite build --watch",

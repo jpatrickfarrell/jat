@@ -11,25 +11,11 @@ User clicks "Report Bug" → Widget captures context → POST /api/feedback/repo
 
 ## Install
 
-### Option 1: CDN (recommended)
-
-```html
-<script src="https://unpkg.com/jat-feedback@^1/dist/jat-feedback.js"></script>
-<jat-feedback project="my-app"></jat-feedback>
-<script>
-  document.querySelector('jat-feedback').setAttribute('endpoint', location.origin);
-</script>
-```
-
-### Option 2: npm
-
 ```bash
 npm install jat-feedback
 ```
 
-```js
-import 'jat-feedback';
-```
+The package includes the widget bundle, Supabase migration, and edge function — all three are needed for the full pipeline.
 
 ## Widget Attributes
 
@@ -82,9 +68,32 @@ Full setup for any SvelteKit app with Supabase. Creates the feedback pipeline fr
 
 ### Step 1: Add Widget to app.html
 
+The widget is a web component bundled at `dist/jat-feedback.js`. Use `vite-plugin-static-copy` to copy it into your build output, then load it from your own server.
+
+**vite.config.ts:**
+```typescript
+import { sveltekit } from '@sveltejs/vite-plugin-svelte';
+import { viteStaticCopy } from 'vite-plugin-static-copy';
+
+export default {
+  plugins: [
+    sveltekit(),
+    viteStaticCopy({
+      targets: [
+        {
+          src: 'node_modules/jat-feedback/dist/jat-feedback.js',
+          dest: '.'
+        }
+      ]
+    })
+  ]
+};
+```
+
+**src/app.html:**
 ```html
-<!-- src/app.html — before closing </body> tag -->
-<script src="https://unpkg.com/jat-feedback@^1/dist/jat-feedback.js"></script>
+<!-- before closing </body> tag -->
+<script src="/jat-feedback.js"></script>
 <jat-feedback project="YOUR_PROJECT"></jat-feedback>
 <script>
   (function() {

@@ -96,11 +96,12 @@ function validate(config) {
     if (src.type === 'gmail' && !src.folder) {
       throw new Error(`Gmail source ${src.id} must have a "folder" (Gmail label name)`);
     }
-    if (src.type === 'supabase' && !src.projectUrl) {
-      throw new Error(`Supabase source ${src.id} must have a "projectUrl"`);
+    // projectUrl and secretName are optional for supabase if project secrets are configured
+    if (src.type === 'supabase' && !src.projectUrl && !src.project) {
+      throw new Error(`Supabase source ${src.id} must have a "projectUrl" or a "project" with secrets configured in IDE Settings`);
     }
-    if (src.type === 'supabase' && !src.secretName) {
-      throw new Error(`Supabase source ${src.id} must have a "secretName"`);
+    if (src.type === 'supabase' && !src.secretName && !src.project) {
+      throw new Error(`Supabase source ${src.id} must have a "secretName" or a "project" with secrets configured in IDE Settings`);
     }
     if (src.type === 'supabase' && !src.table) {
       throw new Error(`Supabase source ${src.id} must have a "table"`);

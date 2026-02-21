@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { ConsoleLogEntry, ElementData, FeedbackReport } from '../lib/types';
-  import { submitReport } from '../lib/api';
+  import { submitReport, fetchReports, type ReportSummary } from '../lib/api';
   import { enqueue } from '../lib/queue';
   import { captureViewport } from '../lib/screenshot';
   import { startElementPicker } from '../lib/elementPicker';
@@ -33,6 +33,26 @@
   } = $props();
 
   let activeTab = $state<'new' | 'requests'>('new');
+
+  // Reports state — loaded eagerly so badge count is available before tab is clicked
+  let reports = $state<ReportSummary[]>([]);
+  let reportsLoading = $state(false);
+  let reportsError = $state('');
+
+  let pendingCount = $derived(reports.filter(r => r.status === 'completed').length);
+
+  async function loadReports() {
+    reportsLoading = true;
+    reportsError = '';
+    const result = await fetchReports(endpoint);
+    reports = result.reports;
+    if (result.error) reportsError = result.error;
+    reportsLoading = false;
+  }
+
+  $effect(() => {
+    loadReports();
+  });
 
   let title = $state('');
   let description = $state('');
@@ -132,8 +152,8 @@
       if (result.ok) {
         showToast(`Report submitted (${result.id})`, 'success');
         resetForm();
-        // Switch to requests tab to show the new report
-        setTimeout(() => { activeTab = 'requests'; }, 1200);
+        // Switch to requests tab to show the new report (reload first to include it)
+        setTimeout(() => { loadReports(); activeTab = 'requests'; }, 1200);
       } else {
         // Queue for retry
         enqueue(endpoint, report);
@@ -190,6 +210,9 @@
       <button class="tab" class:active={activeTab === 'requests'} onclick={() => activeTab = 'requests'}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         My Requests
+        {#if pendingCount > 0}
+          <span class="tab-badge">{pendingCount}</span>
+        {/if}
       </button>
     </div>
     <button class="close-btn" onclick={onclose} aria-label="Close">&times;</button>
@@ -274,7 +297,13 @@
       </div>
     </form>
   {:else}
-    <RequestList {endpoint} />
+    <RequestList
+      {endpoint}
+      bind:reports
+      loading={reportsLoading}
+      error={reportsError}
+      onreload={loadReports}
+    />
   {/if}
 
   <StatusToast message={toastMessage} type={toastType} visible={toastVisible} />
@@ -326,6 +355,20 @@
   .tab.active {
     color: #f9fafb;
     border-bottom-color: #3b82f6;
+  }
+  .tab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: #f59e0b;
+    color: #111827;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
   }
   .close-btn {
     background: none;

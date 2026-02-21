@@ -39,5 +39,13 @@
 	</head>
 	<body data-sveltekit-preload-data="hover">
 		<div style="display: contents">%sveltekit.body%</div>
+	<script src="https://unpkg.com/jat-feedback@^1/dist/jat-feedback.js"></script>
+	<jat-feedback project="jat" theme="dark"></jat-feedback>
+	<script>
+		(function() {
+			var el = document.querySelector('jat-feedback');
+			if (el) el.setAttribute('endpoint', location.origin);
+		})();
+	</script>
 	</body>
 </html>

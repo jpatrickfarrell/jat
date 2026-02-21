@@ -8,7 +8,11 @@
  * Use cases: feedback reports, support tickets, error logs, form submissions.
  */
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { BaseAdapter, makeAttachment } from '../base.js';
+
+const CREDS_PATH = join(process.env.HOME, '.config/jat/credentials.json');
 
 /** @type {import('../base.js').PluginMetadata} */
 export const metadata = {
@@ -28,16 +32,16 @@ export const metadata = {
       key: 'projectUrl',
       label: 'Supabase Project URL',
       type: 'string',
-      required: true,
+      required: false,
       placeholder: 'https://xxx.supabase.co',
-      helpText: 'Your Supabase project URL'
+      helpText: 'Your Supabase project URL (optional if configured in IDE Settings → Project Secrets)'
     },
     {
       key: 'secretName',
       label: 'Service Role Key Secret',
       type: 'secret',
-      required: true,
-      helpText: 'Name of the jat-secret containing the Supabase service role key'
+      required: false,
+      helpText: 'Name of the jat-secret for service role key (optional if configured in IDE Settings → Project Secrets)'
     },
     {
       key: 'table',
@@ -69,9 +73,9 @@ export const metadata = {
       key: 'statusDone',
       label: 'Ingested Value',
       type: 'string',
-      required: true,
+      required: false,
       default: 'ingested',
-      helpText: 'Value to set after task creation'
+      helpText: 'Value to set in statusColumn after task creation (optional — omit when using taskIdColumn IS NULL for dedup)'
     },
     {
       key: 'taskIdColumn',
@@ -197,22 +201,77 @@ function renderTemplate(template, row) {
   });
 }
 
+/**
+ * Try to read a project secret from credentials.json.
+ * Returns the value or null.
+ */
+function readProjectSecret(project, key) {
+  try {
+    const creds = JSON.parse(readFileSync(CREDS_PATH, 'utf-8'));
+    return creds.projectSecrets?.[project]?.[key]?.value || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the Supabase service role key.
+ * Tries project secrets first, then falls back to getSecret(secretName).
+ */
+function resolveServiceRoleKey(source, getSecret) {
+  // Try project secrets first (from IDE Settings)
+  if (source.project) {
+    const val = readProjectSecret(source.project, 'supabase_service_role_key');
+    if (val) return val;
+  }
+  // Fall back to jat-secret via secretName
+  if (source.secretName) return getSecret(source.secretName);
+  throw new Error(
+    `No service role key found. Set one in IDE Settings → Project Secrets for "${source.project}", ` +
+    `or set "secretName" in the source config.`
+  );
+}
+
+/**
+ * Resolve the Supabase project URL.
+ * Tries source config first, then project secrets.
+ */
+function resolveProjectUrl(source) {
+  if (source.projectUrl) return source.projectUrl;
+  if (source.project) {
+    const val = readProjectSecret(source.project, 'supabase_url');
+    if (val) return val;
+  }
+  throw new Error(
+    `No projectUrl found. Set one in IDE Settings → Project Secrets for "${source.project}", ` +
+    `or set "projectUrl" in the source config.`
+  );
+}
+
 export default class SupabaseAdapter extends BaseAdapter {
   constructor() {
     super('supabase');
   }
 
   validate(source) {
-    if (!source.projectUrl) {
-      return { valid: false, error: 'projectUrl is required' };
+    // projectUrl and secretName are optional if project secrets are configured
+    const hasProjectSecrets = source.project && readProjectSecret(source.project, 'supabase_service_role_key');
+    if (!source.projectUrl && !hasProjectSecrets) {
+      // Check if project secrets have the URL
+      const hasUrl = source.project && readProjectSecret(source.project, 'supabase_url');
+      if (!hasUrl) {
+        return { valid: false, error: 'projectUrl is required (or configure in IDE Settings → Project Secrets)' };
+      }
     }
-    try {
-      new URL(source.projectUrl);
-    } catch {
-      return { valid: false, error: `Invalid projectUrl: ${source.projectUrl}` };
+    if (source.projectUrl) {
+      try {
+        new URL(source.projectUrl);
+      } catch {
+        return { valid: false, error: `Invalid projectUrl: ${source.projectUrl}` };
+      }
     }
-    if (!source.secretName) {
-      return { valid: false, error: 'secretName is required (name of jat-secret for service role key)' };
+    if (!source.secretName && !hasProjectSecrets) {
+      return { valid: false, error: 'secretName is required (or configure service role key in IDE Settings → Project Secrets)' };
     }
     if (!source.table) {
       return { valid: false, error: 'table is required' };
@@ -227,10 +286,8 @@ export default class SupabaseAdapter extends BaseAdapter {
   }
 
   async poll(source, adapterState, getSecret) {
-    const serviceRoleKey = getSecret(source.secretName);
-    if (!serviceRoleKey) {
-      throw new Error(`Secret "${source.secretName}" not found. Set it with: jat-secret --set ${source.secretName} <key>`);
-    }
+    const serviceRoleKey = resolveServiceRoleKey(source, getSecret);
+    const projectUrl = resolveProjectUrl(source);
 
     const table = source.table;
     const statusCol = source.statusColumn || 'jat_status';
@@ -238,16 +295,21 @@ export default class SupabaseAdapter extends BaseAdapter {
     const titleCol = source.titleColumn || 'title';
     const authorCol = source.authorColumn || null;
     const timestampCol = source.timestampColumn || 'created_at';
+    const taskIdCol = source.taskIdColumn || 'jat_task_id';
 
-    // Query new rows: SELECT * FROM table WHERE status = 'new' ORDER BY created_at ASC LIMIT 20
-    const queryParams = `${statusCol}=eq.${encodeURIComponent(statusNew)}&order=${timestampCol}.asc&limit=20`;
-    const rows = await supabaseRequest(source.projectUrl, serviceRoleKey, `${table}?${queryParams}`);
+    // Query new rows. When taskIdColumn is configured we use IS NULL as the dedup signal
+    // (prevents re-ingesting rows that already have a task) instead of relying on statusDone.
+    let queryParams = `${statusCol}=eq.${encodeURIComponent(statusNew)}&order=${timestampCol}.asc&limit=20`;
+    if (source.taskIdColumn) {
+      queryParams = `${statusCol}=eq.${encodeURIComponent(statusNew)}&${taskIdCol}=is.null&order=${timestampCol}.asc&limit=20`;
+    }
+    const rows = await supabaseRequest(projectUrl, serviceRoleKey, `${table}?${queryParams}`);
 
     // Query rejected rows for reopening tasks
     const rejectedParams = `${statusCol}=eq.rejected&order=${timestampCol}.asc&limit=20`;
     let rejectedRows = [];
     try {
-      rejectedRows = await supabaseRequest(source.projectUrl, serviceRoleKey, `${table}?${rejectedParams}`) || [];
+      rejectedRows = await supabaseRequest(projectUrl, serviceRoleKey, `${table}?${rejectedParams}`) || [];
     } catch (err) {
       // Non-fatal: rejected polling is secondary
     }
@@ -281,7 +343,7 @@ export default class SupabaseAdapter extends BaseAdapter {
         for (const storagePath of paths) {
           if (!storagePath) continue;
           const signedUrl = await getSignedUrl(
-            source.projectUrl, serviceRoleKey,
+            projectUrl, serviceRoleKey,
             source.storageBucket, storagePath
           );
           if (signedUrl) {
@@ -317,7 +379,6 @@ export default class SupabaseAdapter extends BaseAdapter {
     }
 
     // Build rejection items (reopen existing tasks)
-    const taskIdCol = source.taskIdColumn || 'jat_task_id';
     for (const row of rejectedRows) {
       const rowId = row.id || row.uuid || Object.values(row)[0];
       const taskId = row[taskIdCol];
@@ -355,24 +416,41 @@ export default class SupabaseAdapter extends BaseAdapter {
    * Marks the source row as ingested and writes the task ID back.
    */
   async markIngested(source, item, taskId, getSecret) {
-    const serviceRoleKey = getSecret(source.secretName);
-    if (!serviceRoleKey) return;
+    let serviceRoleKey;
+    try {
+      serviceRoleKey = resolveServiceRoleKey(source, getSecret);
+    } catch {
+      return;
+    }
+    const projectUrl = resolveProjectUrl(source);
 
     const rowId = item.origin?.rowId;
     if (!rowId) return;
 
     const statusCol = source.statusColumn || 'jat_status';
-    const statusDone = source.statusDone || 'ingested';
+    const statusDone = source.statusDone; // may be undefined — see configFields note
     const taskIdCol = source.taskIdColumn || 'jat_task_id';
 
-    const updateBody = { [statusCol]: statusDone };
-    if (taskIdCol) {
-      updateBody[taskIdCol] = taskId;
+    let updateBody;
+    if (item.rejection) {
+      // After reopening the task: move row out of 'rejected' so it won't be re-polled
+      updateBody = { status: 'in_progress' };
+    } else {
+      // Normal new row: write statusDone if configured (backward compat), and task ID
+      updateBody = {};
+      if (statusDone) {
+        updateBody[statusCol] = statusDone;
+      }
+      if (taskIdCol) {
+        updateBody[taskIdCol] = taskId;
+      }
     }
+
+    if (Object.keys(updateBody).length === 0) return;
 
     try {
       await supabaseRequest(
-        source.projectUrl, serviceRoleKey,
+        projectUrl, serviceRoleKey,
         `${source.table}?id=eq.${encodeURIComponent(rowId)}`,
         { method: 'PATCH', body: updateBody }
       );
@@ -382,15 +460,18 @@ export default class SupabaseAdapter extends BaseAdapter {
   }
 
   async test(source, getSecret) {
-    const serviceRoleKey = getSecret(source.secretName);
-    if (!serviceRoleKey) {
-      return { ok: false, message: `Secret "${source.secretName}" not found` };
+    let serviceRoleKey, projectUrl;
+    try {
+      serviceRoleKey = resolveServiceRoleKey(source, getSecret);
+      projectUrl = resolveProjectUrl(source);
+    } catch (err) {
+      return { ok: false, message: err.message };
     }
 
     try {
       // Test connection by counting rows
       const rows = await supabaseRequest(
-        source.projectUrl, serviceRoleKey,
+        projectUrl, serviceRoleKey,
         `${source.table}?select=id&limit=1`,
         { headers: { 'Prefer': 'count=exact' } }
       );
@@ -398,10 +479,12 @@ export default class SupabaseAdapter extends BaseAdapter {
       // Try to get new row count
       const statusCol = source.statusColumn || 'jat_status';
       const statusNew = source.statusNew || 'new';
-      const newRows = await supabaseRequest(
-        source.projectUrl, serviceRoleKey,
-        `${source.table}?${statusCol}=eq.${encodeURIComponent(statusNew)}&select=id&limit=5`
-      );
+      const taskIdCol = source.taskIdColumn || 'jat_task_id';
+      let newRowsPath = `${source.table}?${statusCol}=eq.${encodeURIComponent(statusNew)}&select=id&limit=5`;
+      if (source.taskIdColumn) {
+        newRowsPath = `${source.table}?${statusCol}=eq.${encodeURIComponent(statusNew)}&${taskIdCol}=is.null&select=id&limit=5`;
+      }
+      const newRows = await supabaseRequest(projectUrl, serviceRoleKey, newRowsPath);
 
       const newCount = newRows ? newRows.length : 0;
       return {

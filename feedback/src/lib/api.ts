@@ -37,8 +37,8 @@ export interface ReportSummary {
   priority: string;
   status: string;
   dev_notes: string | null;
-  user_response: string | null;
-  user_response_at: string | null;
+  revision_count: number;
+  responded_at: string | null;
   page_url: string | null;
   created_at: string;
 }

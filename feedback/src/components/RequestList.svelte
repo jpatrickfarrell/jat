@@ -1,27 +1,23 @@
 <script lang="ts">
-  import { fetchReports, respondToReport, type ReportSummary } from '../lib/api';
+  import { respondToReport, type ReportSummary } from '../lib/api';
 
   let {
     endpoint,
+    reports = $bindable<ReportSummary[]>([]),
+    loading,
+    error,
+    onreload,
   }: {
     endpoint: string;
+    reports: ReportSummary[];
+    loading: boolean;
+    error: string;
+    onreload: () => void;
   } = $props();
 
-  let reports = $state<ReportSummary[]>([]);
-  let loading = $state(true);
-  let error = $state('');
   let respondingId = $state('');
   let rejectingId = $state('');
   let rejectReason = $state('');
-
-  async function load() {
-    loading = true;
-    error = '';
-    const result = await fetchReports(endpoint);
-    reports = result.reports;
-    if (result.error) error = result.error;
-    loading = false;
-  }
 
   function startReject(reportId: string) {
     rejectingId = reportId;
@@ -37,14 +33,13 @@
     respondingId = reportId;
     const result = await respondToReport(endpoint, reportId, response, reason);
     if (result.ok) {
-      // Update local state
       reports = reports.map(r => {
         if (r.id === reportId) {
           return {
             ...r,
-            user_response: response,
-            user_response_at: new Date().toISOString(),
-            ...(response === 'rejected' ? { status: 'submitted' } : {}),
+            status: response === 'rejected' ? 'rejected' : 'accepted',
+            responded_at: new Date().toISOString(),
+            ...(response === 'rejected' ? { revision_count: (r.revision_count || 0) + 1 } : {}),
           };
         }
         return r;
@@ -52,7 +47,8 @@
       rejectingId = '';
       rejectReason = '';
     } else {
-      error = result.error || 'Failed to respond';
+      // surface error briefly, then clear
+      rejectingId = '';
     }
     respondingId = '';
   }
@@ -62,6 +58,8 @@
       submitted: 'Submitted',
       in_progress: 'In Progress',
       completed: 'Completed',
+      accepted: 'Accepted',
+      rejected: 'Rejected',
       wontfix: "Won't Fix",
       closed: 'Closed',
     };
@@ -72,8 +70,10 @@
     const colors: Record<string, string> = {
       submitted: '#6b7280',
       in_progress: '#3b82f6',
-      completed: '#10b981',
-      wontfix: '#f59e0b',
+      completed: '#f59e0b',
+      accepted: '#10b981',
+      rejected: '#ef4444',
+      wontfix: '#6b7280',
       closed: '#6b7280',
     };
     return colors[status] || '#6b7280';
@@ -98,11 +98,6 @@
     if (days < 30) return `${days}d ago`;
     return new Date(dateStr).toLocaleDateString();
   }
-
-  // Load on mount
-  $effect(() => {
-    load();
-  });
 </script>
 
 <div class="request-list">
@@ -114,7 +109,7 @@
   {:else if error && reports.length === 0}
     <div class="empty">
       <p class="error-text">{error}</p>
-      <button class="retry-btn" onclick={load}>Retry</button>
+      <button class="retry-btn" onclick={onreload}>Retry</button>
     </div>
   {:else if reports.length === 0}
     <div class="empty">
@@ -125,7 +120,7 @@
   {:else}
     <div class="reports">
       {#each reports as report (report.id)}
-        <div class="report-card">
+        <div class="report-card" class:awaiting={report.status === 'completed'}>
           <div class="report-header">
             <span class="report-type">{typeIcon(report.type)}</span>
             <span class="report-title">{report.title}</span>
@@ -133,6 +128,10 @@
               {statusLabel(report.status)}
             </span>
           </div>
+
+          {#if report.revision_count > 0 && report.status !== 'accepted'}
+            <p class="revision-note">Revision {report.revision_count}</p>
+          {/if}
 
           {#if report.description}
             <p class="report-desc">{report.description.length > 120 ? report.description.slice(0, 120) + '...' : report.description}</p>
@@ -148,10 +147,10 @@
           <div class="report-footer">
             <span class="report-time">{timeAgo(report.created_at)}</span>
 
-            {#if report.user_response}
-              <span class="user-response" class:accepted={report.user_response === 'accepted'} class:rejected={report.user_response === 'rejected'}>
-                {report.user_response === 'accepted' ? '✓ Accepted' : '✗ Rejected'}
-              </span>
+            {#if report.status === 'accepted'}
+              <span class="status-pill accepted">✓ Accepted</span>
+            {:else if report.status === 'rejected'}
+              <span class="status-pill rejected">✗ Rejected</span>
             {:else if report.status === 'completed' || report.status === 'wontfix'}
               {#if rejectingId === report.id}
                 <div class="reject-reason-form">
@@ -268,6 +267,11 @@
     border: 1px solid #374151;
     border-radius: 8px;
     padding: 10px 12px;
+    transition: border-color 0.15s;
+  }
+  .report-card.awaiting {
+    border-color: #f59e0b40;
+    box-shadow: 0 0 0 1px #f59e0b20;
   }
   .report-header {
     display: flex;
@@ -297,6 +301,12 @@
     flex-shrink: 0;
     text-transform: uppercase;
     letter-spacing: 0.3px;
+  }
+  .revision-note {
+    font-size: 10px;
+    color: #f59e0b;
+    margin: 3px 0 0;
+    font-weight: 500;
   }
   .report-desc {
     font-size: 12px;
@@ -329,17 +339,17 @@
     font-size: 11px;
     color: #6b7280;
   }
-  .user-response {
+  .status-pill {
     font-size: 11px;
     font-weight: 600;
     padding: 2px 8px;
     border-radius: 4px;
   }
-  .user-response.accepted {
+  .status-pill.accepted {
     color: #10b981;
     background: #10b98118;
   }
-  .user-response.rejected {
+  .status-pill.rejected {
     color: #ef4444;
     background: #ef444418;
   }

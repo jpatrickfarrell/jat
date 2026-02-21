@@ -31,7 +31,8 @@ const STORAGE_KEYS = {
 	sidebarCollapsed: 'sidebar-collapsed', // Sidebar narrow/icon-only mode
 	toastNeedsInput: 'toast-needs-input', // Toast when agent needs input
 	toastReview: 'toast-review', // Toast when agent ready for review
-	toastComplete: 'toast-complete' // Toast when agent completes task
+	toastComplete: 'toast-complete', // Toast when agent completes task
+	debugMode: 'debug-mode-enabled' // Debug mode (shows feedback widget, dev tools)
 } as const;
 
 // Terminal font family options
@@ -105,7 +106,8 @@ const DEFAULTS = {
 	sidebarCollapsed: false, // Sidebar narrow/icon-only mode
 	toastNeedsInput: true, // Toast when agent needs input
 	toastReview: true, // Toast when agent ready for review
-	toastComplete: true // Toast when agent completes task
+	toastComplete: true, // Toast when agent completes task
+	debugMode: false // Debug mode (shows feedback widget, dev tools)
 };
 
 // Types
@@ -141,6 +143,7 @@ let sidebarCollapsed = $state(DEFAULTS.sidebarCollapsed);
 let toastNeedsInput = $state(DEFAULTS.toastNeedsInput);
 let toastReview = $state(DEFAULTS.toastReview);
 let toastComplete = $state(DEFAULTS.toastComplete);
+let debugMode = $state(DEFAULTS.debugMode);
 let initialized = $state(false);
 
 /**
@@ -245,6 +248,9 @@ export function initPreferences(): void {
 
 	const storedToastComplete = localStorage.getItem(STORAGE_KEYS.toastComplete);
 	toastComplete = storedToastComplete === null ? DEFAULTS.toastComplete : storedToastComplete === 'true';
+
+	const storedDebugMode = localStorage.getItem(STORAGE_KEYS.debugMode);
+	debugMode = storedDebugMode === null ? DEFAULTS.debugMode : storedDebugMode === 'true';
 
 	// Apply terminal font CSS variables to document
 	updateTerminalFontCSSVars();
@@ -720,6 +726,26 @@ export function setToastComplete(value: boolean): void {
 export function toggleToastComplete(): boolean {
 	setToastComplete(!toastComplete);
 	return toastComplete;
+}
+
+// ============================================================================
+// Debug Mode (shows feedback widget, dev tools)
+// ============================================================================
+
+export function getDebugMode(): boolean {
+	return debugMode;
+}
+
+export function setDebugMode(value: boolean): void {
+	debugMode = value;
+	if (browser) {
+		localStorage.setItem(STORAGE_KEYS.debugMode, String(value));
+	}
+}
+
+export function toggleDebugMode(): boolean {
+	setDebugMode(!debugMode);
+	return debugMode;
 }
 
 // ============================================================================

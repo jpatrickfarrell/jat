@@ -55,6 +55,8 @@
 		setToastReview,
 		getToastComplete,
 		setToastComplete,
+		getDebugMode,
+		setDebugMode,
 		TERMINAL_FONT_OPTIONS,
 		TERMINAL_FONT_SIZE_OPTIONS,
 		TERMINAL_SCROLLBACK_OPTIONS,
@@ -99,6 +101,10 @@
 	// Sparkline visibility (reactive from preferences store)
 	const sparklineVisible = $derived(getSparklineVisible());
 	let isSparklineAnimating = $state(false);
+
+	// Debug mode (reactive from preferences store)
+	const debugModeEnabled = $derived(getDebugMode());
+	let isDebugModeAnimating = $state(false);
 
 	// Ctrl+C intercept (reactive from preferences store)
 	const ctrlCIntercept = $derived(getCtrlCIntercept());
@@ -194,6 +200,16 @@
 		// Reset animation state
 		setTimeout(() => {
 			isSparklineAnimating = false;
+		}, 400);
+	}
+
+	function handleDebugModeToggle() {
+		isDebugModeAnimating = true;
+		setTimeout(() => {
+			setDebugMode(!debugModeEnabled);
+		}, 100);
+		setTimeout(() => {
+			isDebugModeAnimating = false;
 		}, 400);
 	}
 
@@ -496,6 +512,37 @@
 					class:toggle-badge-bounce={isSparklineAnimating}
 				>
 					{sparklineVisible ? 'ON' : 'OFF'}
+				</span>
+			</button>
+		</li>
+
+		<li>
+			<button
+				onclick={handleDebugModeToggle}
+				class="flex items-center gap-2 w-full px-2 py-1.5 rounded transition-colors {debugModeEnabled ? 'bg-secondary/20' : ''}"
+				title={debugModeEnabled
+					? 'Debug mode enabled (feedback widget visible)'
+					: 'Enable debug mode to show feedback widget and dev tools'}
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke-width="1.5"
+					stroke="currentColor"
+					class="w-4 h-4 transition-transform duration-300 {debugModeEnabled ? 'text-secondary' : 'text-base-content/50'}"
+					class:toggle-icon-pulse={isDebugModeAnimating}
+				>
+					<path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75a4.5 4.5 0 01-4.884 4.484c-1.076-.091-2.264.071-2.95.904l-7.152 8.684a2.548 2.548 0 11-3.586-3.586l8.684-7.152c.833-.686.995-1.874.904-2.95a4.5 4.5 0 016.336-4.486l-3.276 3.276a3.004 3.004 0 002.25 2.25l3.276-3.276c.256.565.398 1.192.398 1.852z" />
+				</svg>
+				<span class="text-xs flex-1 text-left text-base-content/70">
+					Debug Mode
+				</span>
+				<span
+					class="text-[10px] font-mono px-1.5 py-0.5 rounded transition-transform duration-300 {debugModeEnabled ? 'bg-secondary/40 text-secondary' : 'bg-base-200 text-base-content/50'}"
+					class:toggle-badge-bounce={isDebugModeAnimating}
+				>
+					{debugModeEnabled ? 'ON' : 'OFF'}
 				</span>
 			</button>
 		</li>

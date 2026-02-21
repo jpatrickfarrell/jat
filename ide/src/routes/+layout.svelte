@@ -29,7 +29,7 @@
 	import { hoveredSessionName, triggerCompleteFlash, jumpToSession } from '$lib/stores/hoveredSession';
 	import { get } from 'svelte/store';
 	import { browser } from '$app/environment';
-	import { initPreferences, getActiveProject, setActiveProject, setMaxSessions, type MaxSessions } from '$lib/stores/preferences.svelte';
+	import { initPreferences, getActiveProject, setActiveProject, setMaxSessions, getDebugMode, type MaxSessions } from '$lib/stores/preferences.svelte';
 	import { isSetupSkipped } from '$lib/stores/onboardingStore.svelte';
 	import UnifiedSearch from '$lib/components/search/UnifiedSearch.svelte';
 	import { getSessions as getWorkSessions, startActivityPolling, stopActivityPolling, fetch as fetchWorkSessions } from '$lib/stores/workSessions.svelte';
@@ -1055,6 +1055,14 @@
 			return;
 		}
 	}
+
+	// Sync jat-feedback widget visibility with debug mode preference
+	$effect(() => {
+		const el = document.querySelector('jat-feedback');
+		if (el) {
+			(el as HTMLElement).style.display = getDebugMode() ? '' : 'none';
+		}
+	});
 </script>
 
 <svelte:window onkeydown={handleGlobalKeydown} />

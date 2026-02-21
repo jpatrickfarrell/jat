@@ -207,14 +207,29 @@
 	}
 
 	// Portal action - moves element to body level to escape stacking contexts
+	// Also fixes Svelte 5 event delegation: portal'd elements outside the app container
+	// may have their click handlers skipped by Svelte's document delegation listener
+	// due to __root tracking. We add a direct listener to invoke __click handlers.
 	function portalAction(node: HTMLElement) {
-		// Move the node to body
 		document.body.appendChild(node);
+
+		function onPortalClick(e: MouseEvent) {
+			let el = e.target as HTMLElement | null;
+			while (el && el !== node.parentElement) {
+				const handler = (el as any).__click;
+				if (handler && !(el as any).disabled) {
+					handler.call(el, e);
+					e.stopPropagation();
+					return;
+				}
+				el = el.parentElement;
+			}
+		}
+		node.addEventListener('click', onPortalClick);
 
 		return {
 			destroy() {
-				// Move back before destroy (Svelte needs the node in original location to unmount)
-				// Actually, just remove it - Svelte will handle cleanup
+				node.removeEventListener('click', onPortalClick);
 				if (node.parentNode === document.body) {
 					document.body.removeChild(node);
 				}

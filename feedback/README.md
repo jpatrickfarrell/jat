@@ -486,6 +486,30 @@ cp node_modules/jat-feedback/supabase/functions/jat-webhook/index.ts \
 supabase functions deploy jat-webhook
 ```
 
+## Versioning
+
+This package follows semver. The `^` range in consuming projects (`"jat-feedback": "^1.1.0"`) means:
+
+- **Patch and minor** (1.1.x, 1.2.0) — auto-accepted by `npm install`
+- **Major** (2.0.0) — requires manual version bump in `package.json`
+
+### What triggers a major version
+
+| Change | Version |
+|--------|---------|
+| New nullable column (additive) | patch/minor |
+| New widget attribute (optional) | minor |
+| Removing or renaming a column | **major** |
+| Changing a column's type | **major** |
+| Renaming `status` values (e.g. `submitted` → `new`) | **major** |
+| Required integrations.json config field added/renamed | **major** |
+
+### Rule for additive schema changes
+
+Any column added in a `1.x` release **must** be nullable with no required default. This ensures consuming projects don't break even if they haven't run the migration yet — the insert just omits the column and it lands as `NULL`.
+
+If a new column is required (non-nullable, no default), that's a breaking change and belongs in a major version.
+
 ## License
 
 MIT

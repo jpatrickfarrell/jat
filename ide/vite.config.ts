@@ -1,6 +1,7 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 import { webSocketPlugin } from './src/lib/server/websocket/vitePlugin';
+import { viteStaticCopy } from 'vite-plugin-static-copy';
 import { execSync } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
@@ -64,7 +65,18 @@ export default defineConfig({
 		__BUILD_TIMESTAMP__: JSON.stringify(buildTimestamp),
 		__BUILD_DATE__: JSON.stringify(buildDate)
 	},
-	plugins: [sveltekit(), webSocketPlugin()],
+	plugins: [
+		sveltekit(),
+		webSocketPlugin(),
+		viteStaticCopy({
+			targets: [
+				{
+					src: 'node_modules/jat-feedback/dist/jat-feedback.js',
+					dest: 'feedback',
+				},
+			],
+		}),
+	],
 	server: {
 		port: 3333,
 		strictPort: true,

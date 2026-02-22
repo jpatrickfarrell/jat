@@ -189,6 +189,7 @@
 		activityStateTimestamp?: number; // Timestamp when state was fetched (so SessionCard trusts sseState)
 	}
 	let agentSessionInfo = $state<Map<string, AgentSessionInfo>>(new Map());
+	let browserSessions = $state<Map<string, number>>(new Map());
 
 	// Sort configuration for sessions
 	type SessionSortOption = 'state' | 'project' | 'created';
@@ -355,9 +356,27 @@
 		}
 	}
 
+	async function fetchBrowserSessions() {
+		try {
+			const response = await fetch('/api/browser-sessions');
+			if (!response.ok) return;
+			const data = await response.json();
+			const map = new Map<string, number>();
+			for (const [port, session] of Object.entries(data.sessions || {})) {
+				const s = session as { agentName: string; port: number; alive: boolean; portListening: boolean };
+				if (s.alive || s.portListening) {
+					map.set(s.agentName, s.port);
+				}
+			}
+			browserSessions = map;
+		} catch {
+			// Silent fail - browser info is optional
+		}
+	}
+
 	// Fetch all data (project order + agents + colors first, then sessions)
 	async function fetchAllData() {
-		await Promise.all([fetchProjectOrder(), fetchAgentProjects(), fetchProjectColors()]);
+		await Promise.all([fetchProjectOrder(), fetchAgentProjects(), fetchProjectColors(), fetchBrowserSessions()]);
 		await fetchSessions();
 	}
 
@@ -1472,6 +1491,7 @@
 													details={expandedTaskDetails}
 													loading={taskDetailsLoading}
 													height={expandedHeight}
+													browserPort={browserSessions.get(expandedAgentName) || null}
 													onViewTask={(taskId) => { window.location.href = `/tasks?task=${taskId}`; }}
 												/>
 											{/if}

@@ -1730,6 +1730,7 @@
 													details={expandedTaskDetails}
 													loading={taskDetailsLoading}
 													height={expandedHeight}
+													browserPort={browserSessions.get(expandedAgentName) || null}
 													onViewTask={(taskId) => { window.location.href = `/tasks?task=${taskId}`; }}
 												/>
 											{/if}

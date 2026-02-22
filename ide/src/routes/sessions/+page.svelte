@@ -1791,66 +1791,81 @@
 										{@const recentStatusDotColor = stateVisual.accent}
 										<!-- svelte-ignore a11y_no_static_element_interactions -->
 										<div use:reveal={{ animation: 'fade-in', delay: ri * 0.05 }}
-											class="recent-row"
-											style="border-left: 3px solid {projectColor || 'oklch(0.30 0.02 250)'}; cursor: pointer;"
+											class="recent-row group"
 											onclick={() => handleRecentRowClick(recent)}
 											oncontextmenu={(e) => handleRecentContextMenu(recent, e)}
 										>
-											<div class="recent-row-left">
+											{#if recent.taskCreatedAt}
+												<DurationTrack
+													createdAt={recent.taskCreatedAt}
+													endedAt={recent.taskClosedAt || recent.taskUpdatedAt || recent.timestamp}
+												/>
+											{:else}
+												<span class="recent-time" title="Last active: {new Date(recent.timestamp).toLocaleString()}">{formatElapsed(recent.timestamp)} ago</span>
+											{/if}
+											<div class="recent-badge">
 												{#if recent.taskId && recent.taskId !== 'unknown'}
-													<div class="badge-and-text">
-														<TaskIdBadge
-															task={{ id: recent.taskId, status: recent.taskStatus || (recent.lastState === 'complete' || recent.lastState === 'completed' ? 'closed' : 'open'), title: recent.taskTitle || undefined, integration: recent.integration || null }}
-															size="sm"
-															variant="agentPill"
-															agentName={recent.agentName}
-															showType={false}
-															statusDotColor={recentStatusDotColor}
-														/>
-														{#if recent.taskTitle}
-															<div class="text-column">
-																<span class="task-title" title={recent.taskTitle}>{recent.taskTitle}</span>
-															</div>
-														{/if}
-													</div>
-												{:else}
-													<AgentAvatar name={recent.agentName} size={24} />
-													<span class="recent-agent-name">{recent.agentName}</span>
-												{/if}
-											</div>
-											<div class="recent-row-right">
-												<span
-													class="recent-state-badge"
-													style="background: {stateVisual.bgColor}; color: {stateVisual.textColor}; border: 1px solid {stateVisual.borderColor};"
-												>
-													{stateVisual.shortLabel}
-												</span>
-												{#if recent.taskCreatedAt}
-													<DurationTrack
-														createdAt={recent.taskCreatedAt}
-														endedAt={recent.taskClosedAt || recent.taskUpdatedAt || recent.timestamp}
-														width="130px"
+													<TaskIdBadge
+														task={{ id: recent.taskId, status: recent.taskStatus || (recent.lastState === 'complete' || recent.lastState === 'completed' ? 'closed' : 'open'), title: recent.taskTitle || undefined, integration: recent.integration || null }}
+														size="sm"
+														variant="agentPill"
+														agentName={recent.agentName}
+														showType={false}
+														statusDotColor={recentStatusDotColor}
 													/>
 												{:else}
-													<span class="recent-time" title="Last active: {new Date(recent.timestamp).toLocaleString()}">{formatElapsed(recent.timestamp)} ago</span>
+													<AgentAvatar name={recent.agentName} size={28} />
+													<span class="recent-agent-id">{recent.agentName}</span>
+												{/if}
+											</div>
+											<div class="recent-info">
+												{#if recent.taskTitle}
+													<span class="recent-task-title" title={recent.taskTitle}>{recent.taskTitle}</span>
+												{/if}
+												{#if recent.agentName}
+													<span class="recent-meta">by {recent.agentName}</span>
+												{/if}
+											</div>
+											<div class="recent-actions">
+												{#if recent.taskId && recent.taskId !== 'unknown'}
+													<button
+														type="button"
+														class="recent-action-btn recent-reopen-btn"
+														onclick={(e) => { e.stopPropagation(); ctxChangeStatus(recent.taskId!, 'open'); }}
+														title="Reopen task"
+													>
+														<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+														</svg>
+													</button>
+													<button
+														type="button"
+														class="recent-action-btn recent-duplicate-btn"
+														onclick={(e) => { e.stopPropagation(); ctxDuplicateTask({ id: recent.taskId!, title: recent.taskTitle || '', issue_type: recent.taskType || 'task', priority: recent.taskPriority ?? 2, description: '' } as AgentTask); }}
+														title="Duplicate task"
+													>
+														<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" />
+														</svg>
+													</button>
 												{/if}
 												<button
-													class="recent-resume-btn"
-													onclick={() => resumeSession(recent)}
+													class="recent-action-btn recent-resume-btn"
+													onclick={(e) => { e.stopPropagation(); resumeSession(recent); }}
 													disabled={resumingSession === recent.sessionName}
-													title="Resume this session"
+													title="Resume session with {recent.agentName}"
 												>
 													{#if resumingSession === recent.sessionName}
-														<svg class="recent-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-															<circle cx="12" cy="12" r="10" stroke-dasharray="31.42" stroke-dashoffset="10" />
-														</svg>
+														<span class="loading loading-spinner loading-xs"></span>
 													{:else}
 														<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
 															<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
 														</svg>
 													{/if}
-													<span>Resume</span>
 												</button>
+												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="recent-arrow">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+												</svg>
 											</div>
 										</div>
 									{/each}
@@ -2676,50 +2691,57 @@
 	.recent-row {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		padding: 0.5rem 0.75rem;
 		gap: 0.75rem;
-		background: oklch(0.14 0.01 250);
-		transition: background 0.15s;
+		padding: 0.625rem 1rem;
+		background: transparent;
+		cursor: pointer;
+		transition: background 0.15s ease;
+		border-bottom: 1px solid oklch(from var(--color-base-300) l c h / 60%);
 	}
 
-	.recent-row:not(:last-child) {
-		border-bottom: 1px solid oklch(0.20 0.01 250);
+	.recent-row:last-child {
+		border-bottom: none;
 	}
 
 	.recent-row:hover {
-		background: oklch(0.17 0.01 250);
+		background: var(--color-base-200);
 	}
 
-	.recent-row-left {
+	.recent-badge {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		min-width: 0;
-		flex: 1;
-	}
-
-	.recent-agent-name {
-		font-size: 0.8rem;
-		font-weight: 600;
-		color: oklch(0.75 0.02 250);
-	}
-
-	.recent-row-right {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
+		gap: 6px;
 		flex-shrink: 0;
 	}
 
-	.recent-state-badge {
-		font-size: 0.65rem;
+	.recent-agent-id {
+		font-size: 0.75rem;
+		font-family: ui-monospace, monospace;
 		font-weight: 600;
-		padding: 0.1rem 0.4rem;
-		border-radius: 4px;
-		text-transform: uppercase;
-		letter-spacing: 0.03em;
+		line-height: 1;
+		color: oklch(0.75 0.02 250);
 		white-space: nowrap;
+	}
+
+	.recent-info {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+
+	.recent-task-title {
+		font-size: 0.85rem;
+		color: var(--color-base-content);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.recent-meta {
+		font-size: 0.7rem;
+		color: var(--color-success);
 	}
 
 	.recent-time {
@@ -2727,48 +2749,88 @@
 		color: oklch(0.50 0.02 250);
 		font-family: ui-monospace, monospace;
 		white-space: nowrap;
-		min-width: 3.5rem;
-		text-align: right;
+		min-width: 5rem;
+		flex-shrink: 0;
+	}
+
+	.recent-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-shrink: 0;
+	}
+
+	.recent-action-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		border-radius: 6px;
+		cursor: pointer;
+		opacity: 0;
+		transition: opacity 0.15s ease, background 0.15s ease, transform 0.15s ease;
+		flex-shrink: 0;
+	}
+
+	.recent-row:hover .recent-action-btn {
+		opacity: 1;
+	}
+
+	.recent-reopen-btn {
+		background: oklch(from var(--color-warning) l c h / 12%);
+		border: 1px solid oklch(from var(--color-warning) l c h / 25%);
+		color: oklch(from var(--color-warning) l c h / 70%);
+	}
+
+	.recent-reopen-btn:hover {
+		background: oklch(from var(--color-warning) l c h / 22%);
+		border-color: oklch(from var(--color-warning) l c h / 45%);
+		color: oklch(from var(--color-warning) l c h / 90%);
+		transform: scale(1.05);
+	}
+
+	.recent-duplicate-btn {
+		background: oklch(from var(--color-secondary) l c h / 12%);
+		border: 1px solid oklch(from var(--color-secondary) l c h / 25%);
+		color: oklch(from var(--color-secondary) l c h / 70%);
+	}
+
+	.recent-duplicate-btn:hover {
+		background: oklch(from var(--color-secondary) l c h / 22%);
+		border-color: oklch(from var(--color-secondary) l c h / 45%);
+		color: oklch(from var(--color-secondary) l c h / 90%);
+		transform: scale(1.05);
 	}
 
 	.recent-resume-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.3rem;
-		padding: 0.25rem 0.6rem;
-		font-size: 0.7rem;
-		font-weight: 600;
-		color: oklch(0.80 0.15 145);
-		background: oklch(0.55 0.15 145 / 0.15);
-		border: 1px solid oklch(0.55 0.15 145 / 0.3);
-		border-radius: 4px;
-		cursor: pointer;
-		transition: all 0.15s;
-		white-space: nowrap;
+		background: oklch(from var(--color-success) l c h / 15%);
+		border: 1px solid oklch(from var(--color-success) l c h / 30%);
+		color: var(--color-success);
 	}
 
 	.recent-resume-btn:hover:not(:disabled) {
-		background: oklch(0.55 0.15 145 / 0.25);
-		border-color: oklch(0.55 0.15 145 / 0.5);
+		background: oklch(from var(--color-success) l c h / 25%);
+		border-color: oklch(from var(--color-success) l c h / 50%);
+		transform: scale(1.05);
 	}
 
 	.recent-resume-btn:disabled {
-		opacity: 0.6;
 		cursor: not-allowed;
+		opacity: 0.6 !important;
 	}
 
-	.recent-resume-btn svg {
-		width: 12px;
-		height: 12px;
+	.recent-arrow {
+		width: 16px;
+		height: 16px;
+		color: oklch(from var(--color-base-content) l c h / 45%);
+		flex-shrink: 0;
+		transition: color 0.15s ease, transform 0.15s ease;
 	}
 
-	.recent-spinner {
-		animation: spin 1s linear infinite;
-	}
-
-	@keyframes spin {
-		from { transform: rotate(0deg); }
-		to { transform: rotate(360deg); }
+	.recent-row:hover .recent-arrow {
+		color: oklch(from var(--color-base-content) l c h / 65%);
+		transform: translateX(2px);
 	}
 
 	.load-more-btn {

@@ -1114,6 +1114,70 @@
 	}
 }
 
+/* ----------------------------------------
+ * fade-in-bottom (Animista)
+ * Element fades in while rising from below.
+ * Use on: section cards via use:reveal scroll trigger.
+ * ---------------------------------------- */
+.fade-in-bottom {
+	-webkit-animation: fade-in-bottom 0.6s cubic-bezier(0.390, 0.575, 0.565, 1.000) both;
+	        animation: fade-in-bottom 0.6s cubic-bezier(0.390, 0.575, 0.565, 1.000) both;
+}
+
+@keyframes fade-in-bottom {
+  0% {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* ----------------------------------------
+ * slide-in-blurred-left (Animista)
+ * Element slides in from left with blur + scale.
+ * Use on: hero images, avatars, feature images.
+ * ---------------------------------------- */
+.slide-in-blurred-left {
+	-webkit-animation: slide-in-blurred-left 0.6s cubic-bezier(0.230, 1.000, 0.320, 1.000) both;
+	        animation: slide-in-blurred-left 0.6s cubic-bezier(0.230, 1.000, 0.320, 1.000) both;
+}
+
+@keyframes slide-in-blurred-left {
+  0% {
+    transform: translateX(-1000px) scaleX(2.5) scaleY(0.2);
+    transform-origin: 100% 50%;
+    filter: blur(40px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0) scaleY(1) scaleX(1);
+    transform-origin: 50% 50%;
+    filter: blur(0);
+    opacity: 1;
+  }
+}
+
+/* ----------------------------------------
+ * scale-in-center (class alias)
+ * Alias matching standard Animista naming for use:reveal.
+ * ---------------------------------------- */
+.scale-in-center {
+	-webkit-animation: scale-in-center 0.5s cubic-bezier(0.250, 0.460, 0.450, 0.940) both;
+	        animation: scale-in-center 0.5s cubic-bezier(0.250, 0.460, 0.450, 0.940) both;
+}
+
+/* ----------------------------------------
+ * Scroll-reveal utility
+ * Elements with .reveal-hidden are invisible until
+ * the use:reveal action adds the animation class.
+ * ---------------------------------------- */
+.reveal-hidden {
+  opacity: 0;
+}
+
 /* Staggered animation delays for menu items (0.15s increments = deliberate cascade) */
 .fade-in-delay-0 { animation-delay: 0s; }
 .fade-in-delay-1 { animation-delay: 0.15s; }
@@ -1692,6 +1756,20 @@
 	.row-shimmer,
 	.fade-in-left,
 	.fade-in,
+	.fade-in-bottom,
+	.slide-in-blurred-left,
+	.scale-in-center,
+	.tracking-in-expand,
+	.tracking-out-contract,
+	.puff-in-center,
+	.reveal-hidden {
+		opacity: 1;
+	}
+	.fade-in-left,
+	.fade-in,
+	.fade-in-bottom,
+	.slide-in-blurred-left,
+	.scale-in-center,
 	.tracking-in-expand,
 	.tracking-out-contract,
 	.puff-in-center {

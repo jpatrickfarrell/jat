@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import TimelineGantt from '$lib/components/graph/TimelineGantt.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
@@ -25,9 +24,9 @@
 	let selectedTaskId = $state<string | null>(null);
 	let drawerOpen = $state(false);
 
-	// Filters
+	// Filters — default to 'all' statuses so the timeline shows the full picture
 	let selectedPriority = $state('all');
-	let selectedStatus = $state('open');
+	let selectedStatus = $state('all');
 	let searchQuery = $state('');
 
 	// Read project filter from URL (managed by TopBar via root layout)
@@ -36,23 +35,17 @@
 	// Sync selectedProject from URL params
 	$effect(() => {
 		const projectParam = $page.url.searchParams.get('project');
-		if (projectParam) selectedProject = projectParam;
+		selectedProject = projectParam || '';
 	});
 
-	// Filter tasks by project
-	const filteredTasks = $derived(
-		selectedProject
-			? allTasks.filter((task) => task.id.startsWith(selectedProject + '-'))
-			: allTasks
-	);
-
-	// Fetch tasks
+	// Fetch tasks — pass project to API for server-side filtering
 	async function fetchTasks() {
 		try {
 			loading = true;
 			error = null;
 
 			const params = new URLSearchParams();
+			if (selectedProject) params.append('project', selectedProject);
 			if (selectedStatus !== 'all') params.append('status', selectedStatus);
 			if (selectedPriority !== 'all') params.append('priority', selectedPriority);
 
@@ -75,21 +68,18 @@
 		drawerOpen = true;
 	}
 
-	// Refetch tasks when filters change
+	// Refetch tasks when filters or project change
 	$effect(() => {
 		// Track dependencies for re-fetch
+		selectedProject;
 		selectedStatus;
 		selectedPriority;
 		fetchTasks();
 	});
 
-	// Update displayed tasks when project filter or allTasks change
+	// Pass allTasks directly (project filtering now done server-side)
 	$effect(() => {
-		tasks = filteredTasks;
-	});
-
-	onMount(() => {
-		fetchTasks();
+		tasks = allTasks;
 	});
 </script>
 

@@ -20,6 +20,7 @@
 	import { initProjectColors } from "$lib/utils/projectColors";
 	import { openTaskDrawer } from "$lib/stores/drawerStore";
 	import CompletedDayGroup from "$lib/components/history/CompletedDayGroup.svelte";
+	import { reveal } from "$lib/actions/reveal";
 	import {
 		type CompletedTask,
 		toLocalDateStr,
@@ -338,7 +339,7 @@
 			>
 				<!-- Left: Title (lg+ only) -->
 				<div class="mr-10 hidden lg:flex flex-col justify-center pr-2">
-					<h1 class="text-xl font-semibold text-base-content font-mono">
+					<h1 class="text-xl font-semibold text-base-content font-mono tracking-in-expand">
 						Task History
 					</h1>
 					<p class="text-sm text-base-content/60">
@@ -348,7 +349,7 @@
 
 				<!-- Stats cluster -->
 				<div class="stats-cluster">
-					<div class="stat-card streak-card">
+					<div class="stat-card streak-card" use:reveal={{ animation: 'scale-in-center' }}>
 						<div class="stat-icon">
 							<span class="streak-fire">🔥</span>
 						</div>
@@ -360,7 +361,7 @@
 						</div>
 					</div>
 
-					<div class="stat-card">
+					<div class="stat-card" use:reveal={{ animation: 'scale-in-center', delay: 0.1 }}>
 						<div class="stat-content">
 							<span class="stat-value today-value">
 								<AnimatedDigits value={stats.todayCount.toString()} />
@@ -369,7 +370,7 @@
 						</div>
 					</div>
 
-					<div class="stat-card">
+					<div class="stat-card" use:reveal={{ animation: 'scale-in-center', delay: 0.2 }}>
 						<div class="stat-content">
 							<span class="stat-value">
 								<AnimatedDigits value={stats.bestStreak.toString()} />
@@ -378,7 +379,7 @@
 						</div>
 					</div>
 
-					<div class="stat-card">
+					<div class="stat-card" use:reveal={{ animation: 'scale-in-center', delay: 0.3 }}>
 						<div class="stat-content">
 							<span class="stat-value">
 								{stats.avgPerDay.toFixed(1)}
@@ -389,7 +390,7 @@
 				</div>
 
 				<!-- Right: Activity Graph -->
-				<div class="graph-card">
+				<div class="graph-card" use:reveal>
 					<StreakCalendar tasks={filteredTasks} weeks={16} />
 				</div>
 			</div>
@@ -418,7 +419,8 @@
 				</div>
 
 				<div class="day-list">
-					{#each tasksByDay as day (day.date)}
+					{#each tasksByDay as day, i (day.date)}
+						<div use:reveal={{ animation: 'fade-in', delay: i * 0.08 }}>
 						<CompletedDayGroup
 							{day}
 							onTaskClick={handleTaskClick}
@@ -429,6 +431,7 @@
 							{resumingTasks}
 							{memoryMap}
 						/>
+						</div>
 					{/each}
 
 					{#if tasksByDay.length === 0}

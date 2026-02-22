@@ -8,6 +8,7 @@
 	 */
 
 	import { onMount } from 'svelte';
+	import { reveal } from '$lib/actions/reveal';
 	import SchedulerControls from '$lib/components/schedules/SchedulerControls.svelte';
 	import ScheduledTasksTable from '$lib/components/schedules/ScheduledTasksTable.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
@@ -216,7 +217,7 @@
 	<!-- Header -->
 	<div class="page-header">
 		<div class="header-left">
-			<h1 class="page-title">Schedules</h1>
+			<h1 class="page-title tracking-in-expand">Schedules</h1>
 			<span class="task-count">{scheduledTasks.length} tasks</span>
 		</div>
 	</div>
@@ -231,7 +232,7 @@
 	/>
 
 	<!-- Scheduled Tasks Table -->
-	<div class="table-section">
+	<div class="table-section" use:reveal>
 		<ScheduledTasksTable
 			tasks={scheduledTasks}
 			loading={tasksLoading}

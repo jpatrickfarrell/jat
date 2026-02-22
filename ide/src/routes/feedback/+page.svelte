@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { reveal } from '$lib/actions/reveal';
 
 	let copied = $state<string | null>(null);
 	let healthStatus = $state<'checking' | 'ok' | 'error' | null>(null);
@@ -106,7 +107,7 @@ cd ide && npm run build:feedback`;
 					</svg>
 				</div>
 				<div>
-					<h1 class="font-mono text-lg font-bold" style="color: oklch(0.90 0.04 250);">
+					<h1 class="font-mono text-lg font-bold tracking-in-expand" style="color: oklch(0.90 0.04 250);">
 						Feedback Widget
 					</h1>
 					<p class="font-mono text-xs" style="color: oklch(0.50 0.04 250);">
@@ -155,10 +156,11 @@ cd ide && npm run build:feedback`;
 					{ step: '1', title: 'Add the script tag', desc: 'One script tag loads the widget. One custom element places it. Zero dependencies on your end.' },
 					{ step: '2', title: 'User submits a report', desc: 'Floating button opens a form. Users describe the bug, capture a screenshot, and hit submit.' },
 					{ step: '3', title: 'Report becomes a task', desc: 'The report POSTs to your JAT IDE. A task is created with screenshots saved to .jat/screenshots/.' },
-				] as item}
+				] as item, i}
 					<div
 						class="rounded-lg px-4 py-3"
 						style="background: oklch(0.16 0.02 250); border: 1px solid oklch(0.24 0.03 250);"
+						use:reveal={{ animation: 'scale-in-center', delay: i * 0.1 }}
 					>
 						<div class="flex items-center gap-2 mb-2">
 							<span
@@ -232,10 +234,11 @@ cd ide && npm run build:feedback`;
 					{ icon: '🐛', title: 'Console Logs', desc: 'Hooks into console.log, console.error, console.warn, and console.info. Captures the last 50 entries with timestamps, file names, and line numbers.', detail: 'Sensitive data (API keys, JWTs, passwords) is automatically redacted.' },
 					{ icon: '🎯', title: 'Element Picker', desc: 'Click any element on the page to capture its tag, classes, ID, bounding rect, XPath, and CSS selector. Useful for pointing at exactly what\'s broken.', detail: 'Highlights elements on hover. Press ESC to cancel.' },
 					{ icon: '📡', title: 'Offline Queue', desc: 'If the JAT endpoint is unreachable, reports are queued in localStorage and retried every 30 seconds. Up to 50 reports can be queued.', detail: 'Queue persists across page reloads. Auto-submits when connection returns.' },
-				] as feat}
+				] as feat, i}
 					<div
 						class="rounded-lg px-4 py-3"
 						style="background: oklch(0.16 0.02 250); border: 1px solid oklch(0.24 0.03 250);"
+						use:reveal={{ animation: 'scale-in-center', delay: i * 0.1 }}
 					>
 						<div class="flex items-center gap-2 mb-1.5">
 							<span class="text-sm">{feat.icon}</span>
@@ -420,10 +423,11 @@ cd ide && npm run build:feedback`;
 					{ step: '2', title: 'Start a tunnel to your IDE', code: 'cloudflared tunnel --url http://localhost:3333' },
 					{ step: '3', title: 'Copy the tunnel URL', code: '# Output shows:\n# +----------------------------+\n# | Your quick Tunnel has been created!\n# | https://abc-xyz.trycloudflare.com\n# +----------------------------+' },
 					{ step: '4', title: 'Update the widget', code: '' },
-				] as item}
+				] as item, i}
 					<div
 						class="rounded-lg px-4 py-3"
 						style="background: oklch(0.16 0.02 250); border: 1px solid oklch(0.24 0.03 250);"
+						use:reveal={{ animation: 'fade-in', delay: i * 0.08 }}
 					>
 						<div class="flex items-center gap-2 mb-2">
 							<span
@@ -480,10 +484,11 @@ cd ide && npm run build:feedback`;
 					{ title: 'Shadow DOM Isolation', desc: 'The widget renders inside Shadow DOM. Its styles cannot leak into or be affected by your app\'s CSS.' },
 					{ title: 'CORS', desc: 'The report API returns Access-Control-Allow-Origin: * so the widget can POST from any domain. The endpoint only accepts structured JSON payloads.' },
 					{ title: 'No External Requests', desc: 'The widget only communicates with your JAT IDE endpoint. No telemetry, no third-party services, no analytics.' },
-				] as item}
+				] as item, i}
 					<div
 						class="flex gap-3 px-4 py-2.5 rounded-lg"
 						style="background: oklch(0.16 0.02 250); border: 1px solid oklch(0.24 0.03 250);"
+						use:reveal={{ animation: 'fade-in', delay: i * 0.08 }}
 					>
 						<span class="font-mono text-[10px] font-bold shrink-0" style="color: oklch(0.75 0.08 145); min-width: 160px;">{item.title}</span>
 						<span class="font-mono text-[10px] leading-relaxed" style="color: oklch(0.55 0.03 250);">{item.desc}</span>

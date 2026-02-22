@@ -54,6 +54,7 @@
 	import SkillsEditor from '$lib/components/config/SkillsEditor.svelte';
 	import type { SlashCommand, ProjectConfig, HooksConfig } from '$lib/types/config';
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
+	import { reveal } from '$lib/actions/reveal';
 
 	// Page state
 	let isLoading = $state(true);
@@ -414,7 +415,7 @@
 		<div class="config-content" transition:fade={{ duration: 150 }}>
 			<!-- Header with tabs -->
 			<div class="config-header">
-				<h1 class="page-title">Configuration</h1>
+				<h1 class="page-title tracking-in-expand">Configuration</h1>
 				<ConfigTabs {activeTab} onTabChange={handleTabChange} />
 			</div>
 

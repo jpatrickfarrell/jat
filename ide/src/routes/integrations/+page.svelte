@@ -12,6 +12,7 @@
 	import IngestWizard from '$lib/components/ingest/IngestWizard.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import { loadProjects } from '$lib/stores/configStore.svelte';
+	import { reveal } from '$lib/actions/reveal';
 
 	// Page-level tab
 	let activeTab = $state<'installed' | 'add'>('installed');
@@ -706,7 +707,7 @@
 							{@const isExpanded = expandedSource === source.id}
 							{@const stats = sourceStats[source.id]}
 							{@const itemCount = stats?.total ?? 0}
-							<div
+							<div use:reveal={{ animation: 'fade-in', delay: i * 0.08 }}
 								class="rounded-lg overflow-hidden transition-all duration-150"
 								style="
 									background: oklch(0.18 0.02 250);
@@ -1413,7 +1414,7 @@ cd ../ide && npm run build:feedback`}</pre>
 			{:else}
 				<div class="grid gap-3" style="grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));">
 					<!-- Render each plugin as a rich card -->
-					{#each plugins as plugin}
+					{#each plugins as plugin, i}
 						{@const tmpl = templates.find(t => t.type === plugin.type)}
 						{@const isConfigured = sources.some(s => s.type === plugin.type)}
 						{@const color = tmpl?.color || {
@@ -1422,7 +1423,7 @@ cd ../ide && npm run build:feedback`}</pre>
 							text: 'oklch(0.75 0.02 250)',
 							icon: plugin.icon?.color || 'oklch(0.60 0.04 250)'
 						}}
-						<button
+						<button use:reveal={{ animation: 'scale-in-center', delay: i * 0.1 }}
 							class="group flex flex-col rounded-lg overflow-hidden text-left transition-all duration-200 cursor-pointer"
 							style="
 								background: {color.bg};

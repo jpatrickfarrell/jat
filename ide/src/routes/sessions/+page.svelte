@@ -32,6 +32,7 @@
 	import SortDropdown from '$lib/components/SortDropdown.svelte';
 	import { toLocalDateStr, formatDisplayDate, parseLocalDate } from '$lib/utils/completedTaskHelpers';
 	import DurationTrack from '$lib/components/history/DurationTrack.svelte';
+	import { reveal } from '$lib/actions/reveal';
 
 	interface TmuxSession {
 		name: string;
@@ -1778,18 +1779,18 @@
 
 					{#if !recentCollapsed}
 						<div class="recent-list">
-							{#each recentDayGroups as dayGroup (dayGroup.date)}
-								<div class="recent-day-group">
+							{#each recentDayGroups as dayGroup, gi (dayGroup.date)}
+								<div class="recent-day-group" use:reveal={{ animation: 'fade-in', delay: gi * 0.08 }}>
 									<div class="recent-day-header">
 										<span class="recent-day-date">{dayGroup.displayDate}</span>
 										<span class="recent-day-count">{dayGroup.sessions.length}</span>
 									</div>
-									{#each dayGroup.sessions as recent (recent.sessionName)}
+									{#each dayGroup.sessions as recent, ri (recent.sessionName)}
 										{@const projectColor = recent.project ? getProjectColorReactive(recent.taskId || recent.project) : null}
 										{@const stateVisual = getSessionStateVisual(recent.lastState as SessionState)}
 										{@const recentStatusDotColor = stateVisual.accent}
 										<!-- svelte-ignore a11y_no_static_element_interactions -->
-										<div
+										<div use:reveal={{ animation: 'fade-in', delay: ri * 0.05 }}
 											class="recent-row"
 											style="border-left: 3px solid {projectColor || 'oklch(0.30 0.02 250)'}; cursor: pointer;"
 											onclick={() => handleRecentRowClick(recent)}

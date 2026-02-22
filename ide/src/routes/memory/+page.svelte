@@ -11,6 +11,7 @@
 
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { reveal } from '$lib/actions/reveal';
 
 	// --- State ---
 	let activeTab = $state<'search' | 'browse' | 'status'>('status');
@@ -316,9 +317,10 @@
 					</div>
 				{:else}
 					<div class="space-y-2">
-						{#each browseFiles as file}
+						{#each browseFiles as file, i}
 							<button
 								class="w-full text-left p-4 rounded-lg transition-all hover:scale-[1.003]"
+								use:reveal={{ animation: 'fade-in', delay: i * 0.05 }}
 								style="
 									background: oklch(0.18 0.01 250);
 									border: 1px solid oklch(0.25 0.02 250);
@@ -404,9 +406,10 @@
 
 					<!-- Project cards -->
 					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-						{#each filteredStatuses as proj}
+						{#each filteredStatuses as proj, i}
 							<div
 								class="p-4 rounded-lg"
+								use:reveal={{ animation: 'scale-in-center', delay: i * 0.1 }}
 								style="
 									background: oklch(0.18 0.01 250);
 									border: 1px solid oklch(0.25 0.02 250);
@@ -518,8 +521,8 @@
 							<div class="font-mono text-xs" style="color: oklch(0.55 0.02 250);">
 								{searchResults.length} result{searchResults.length !== 1 ? 's' : ''} for "{lastSearchQuery}"
 							</div>
-							{#each searchResults as result}
-								<button
+							{#each searchResults as result, i}
+								<button use:reveal={{ animation: 'fade-in', delay: i * 0.05 }}
 									class="w-full text-left p-4 rounded-lg transition-all hover:scale-[1.005]"
 									style="
 										background: oklch(0.18 0.01 250);

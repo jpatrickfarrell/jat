@@ -61,14 +61,28 @@
 
 		// Return if no tasks to display
 		if (!tasks || tasks.length === 0) {
-			// Show empty state message
-			d3.select(svgElement)
-				.append('text')
+			// Show empty state message — use inline fill for SVG text (Tailwind color classes don't apply to SVG fill)
+			const emptyG = d3.select(svgElement)
+				.attr('width', width)
+				.attr('height', 200)
+				.attr('viewBox', `0 0 ${width} 200`)
+				.append('g');
+
+			emptyG.append('text')
 				.attr('x', width / 2)
-				.attr('y', height / 2)
+				.attr('y', 80)
 				.attr('text-anchor', 'middle')
-				.attr('class', 'text-base-content/50')
-				.text('No tasks to display');
+				.attr('fill', 'oklch(0.65 0.02 250)')
+				.attr('font-size', '16px')
+				.text('No tasks match the current filters');
+
+			emptyG.append('text')
+				.attr('x', width / 2)
+				.attr('y', 110)
+				.attr('text-anchor', 'middle')
+				.attr('fill', 'oklch(0.50 0.02 250)')
+				.attr('font-size', '13px')
+				.text('Try changing the status filter or selecting a different project');
 			return;
 		}
 
@@ -128,27 +142,33 @@
 			.range([0, innerHeight])
 			.padding(0.3);  // Increased padding for more spacing
 
-		// Add X-axis
-		g.append('g')
+		// Add X-axis — use inline fill for SVG text (Tailwind text-* classes set CSS color, not SVG fill)
+		const xAxis = g.append('g')
 			.attr('transform', `translate(0,${innerHeight})`)
-			.call(d3.axisBottom(xScale).ticks(8))
-			.attr('class', 'text-base-content/70');
+			.call(d3.axisBottom(xScale).ticks(8));
+		xAxis.selectAll('text').attr('fill', 'oklch(0.65 0.02 250)');
+		xAxis.selectAll('line, path').attr('stroke', 'oklch(0.40 0.02 250)');
 
 		// Add Y-axis
-		g.append('g')
+		const yAxis = g.append('g')
 			.call(
 				d3.axisLeft(yScale).tickFormat((taskId) => {
 					const task = tasksWithDates.find(t => t.id === taskId);
-					return task ? `${task.id}: ${task.title}` : taskId;
+					const title = task?.title ?? '';
+					const maxLen = 30;
+					const truncated = title.length > maxLen ? title.slice(0, maxLen) + '…' : title;
+					return task ? `${task.id}: ${truncated}` : taskId;
 				})
-			)
-			.attr('class', 'text-base-content/70');
+			);
+		yAxis.selectAll('text').attr('fill', 'oklch(0.65 0.02 250)');
+		yAxis.selectAll('line, path').attr('stroke', 'oklch(0.40 0.02 250)');
 
 		// Add grid lines
-		g.append('g')
-			.attr('class', 'grid')
-			.attr('opacity', 0.1)
+		const grid = g.append('g')
+			.attr('opacity', 0.15)
 			.call(d3.axisBottom(xScale).tickSize(innerHeight).tickFormat(() => ''));
+		grid.selectAll('line').attr('stroke', 'oklch(0.50 0.02 250)');
+		grid.select('.domain').remove();
 
 		// Add timeline bars
 		const bars = g
@@ -183,7 +203,8 @@
 			.attr('x', 10)
 			.attr('y', yScale.bandwidth() / 2)
 			.attr('dy', '0.35em')
-			.attr('class', 'text-sm fill-base-content')
+			.attr('font-size', '13px')
+			.attr('fill', 'oklch(0.90 0.02 250)')
 			.text((d: TaskWithDates) => `P${d.priority ?? ''} ${d.title ?? ''}`);
 
 		// Add click interaction
@@ -208,7 +229,9 @@
 			.attr('x', width / 2)
 			.attr('y', 20)
 			.attr('text-anchor', 'middle')
-			.attr('class', 'text-lg font-bold fill-base-content')
+			.attr('font-size', '18px')
+			.attr('font-weight', 'bold')
+			.attr('fill', 'oklch(0.85 0.02 250)')
 			.text('Task Timeline / Gantt Chart');
 
 		// Add legend
@@ -239,7 +262,8 @@
 				.append('text')
 				.attr('x', 24)
 				.attr('y', 12)
-				.attr('class', 'text-sm fill-base-content')
+				.attr('font-size', '13px')
+				.attr('fill', 'oklch(0.75 0.02 250)')
 				.text(item.label);
 		});
 	}
@@ -277,8 +301,3 @@
 	<svg bind:this={svgElement}></svg>
 </div>
 
-<style>
-	:global(.grid line) {
-		stroke: currentColor;
-	}
-</style>

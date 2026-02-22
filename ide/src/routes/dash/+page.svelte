@@ -104,6 +104,7 @@
 	let allTasks = $state<Task[]>([]);
 	let agents = $state<Agent[]>([]);
 	let isInitialLoad = $state(true);
+	let browserSessions = $state<Map<string, number>>(new Map());
 	let configProjects = $state<string[]>([]); // Projects from JAT config
 	let projectColorsMap = $state<Record<string, string>>({});
 
@@ -1339,6 +1340,25 @@
 		}
 	}
 
+	// Fetch browser session registry (CDP port claims per agent)
+	async function fetchBrowserSessions() {
+		try {
+			const response = await fetch('/api/browser-sessions');
+			if (response.ok) {
+				const data = await response.json();
+				const map = new Map<string, number>();
+				if (data.sessions) {
+					for (const [port, session] of Object.entries(data.sessions as Record<string, { agentName?: string; port: number }>)) {
+						if (session.agentName) map.set(session.agentName, session.port);
+					}
+				}
+				browserSessions = map;
+			}
+		} catch {
+			// Ignore - browser sessions are supplemental
+		}
+	}
+
 	// Fetch JAT config projects (for showing all configured projects)
 	async function fetchConfigProjects() {
 		try {
@@ -1408,9 +1428,12 @@
 		await fetchConfigProjects(); // Load all configured projects FIRST
 		fetchTaskData();
 		await fetchSessions();
+		fetchBrowserSessions(); // Supplemental: CDP port claims
 		// Delay usage fetch to avoid blocking UI during initial user interactions
 		// Usage parsing scans ~40K lines of JSONL files and takes 7+ seconds
 		setTimeout(() => fetchSessionUsage(), 30000);
+		// Refresh browser sessions every 30s (same cadence as usage)
+		setInterval(() => fetchBrowserSessions(), 30000);
 
 		// Subscribe to maximizeSessionPanel for click-to-center behavior
 		logger.info('Setting up maximizeSessionPanel subscription');
@@ -1762,6 +1785,7 @@
 																	isExiting={session._isExiting}
 																	isEntering={enteringSessionNames.has(session.sessionName)}
 																	onTaskDataChange={handleEpicLinkRefresh}
+																	browserPort={browserSessions.get(session.agentName) || undefined}
 																/>
 															</div>
 														{/each}
@@ -1882,6 +1906,7 @@
 																	isExiting={session._isExiting}
 																	isEntering={enteringSessionNames.has(session.sessionName)}
 																	onTaskDataChange={handleEpicLinkRefresh}
+																	browserPort={browserSessions.get(session.agentName) || undefined}
 																/>
 															</div>
 														{/each}

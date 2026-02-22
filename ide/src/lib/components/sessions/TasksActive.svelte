@@ -1056,6 +1056,7 @@
 												attached={session.attached}
 												exiting={isExiting}
 												harness={getTaskHarness(sessionTask)}
+												browserPort={browserSessions.get(sessionAgentName) || undefined}
 											/>
 											<div class="text-column">
 												<span class="task-title {animateText ? 'tracking-in-expand' : ''}" style={animateText ? 'animation-delay: 100ms;' : ''} title={sessionTask.title}>
@@ -1229,12 +1230,6 @@
 										}}
 										reviewReason={reviewStatus?.reason ?? null}
 									/>
-									{#if browserSessions.get(sessionAgentName)}
-										<span class="browser-port-badge" title="Chrome DevTools on port {browserSessions.get(sessionAgentName)}">
-											<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM4.93 4.93a8 8 0 0011.32 0M1.46 8.59A10 10 0 0010 2a10 10 0 018.54 6.59M10 18a10 10 0 01-8.54-6.59M10 18a10 10 0 008.54-6.59M2 10h16M10 2a15.3 15.3 0 014 8 15.3 15.3 0 01-4 8 15.3 15.3 0 01-4-8 15.3 15.3 0 014-8z" fill="none" stroke="currentColor" stroke-width="1.5" /></svg>
-											:{browserSessions.get(sessionAgentName)}
-										</span>
-									{/if}
 								</div>
 							{:else}
 								<!-- Non-agent sessions: simple buttons -->

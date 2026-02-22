@@ -212,6 +212,8 @@
 		isHighlighted?: boolean;
 		/** Card width in pixels (for resizable cards) */
 		cardWidth?: number;
+		/** Chrome DevTools port claimed by agent for browser automation */
+		browserPort?: number;
 		/** Called when user drags the resize handle */
 		onWidthChange?: (newWidth: number) => void;
 		/** Real-time state from WS (if available, used instead of output parsing) */
@@ -353,6 +355,8 @@
 		isHighlighted = false,
 		cardWidth,
 		onWidthChange,
+		// Browser session
+		browserPort,
 		// WS real-time state
 		sseState,
 		sseStateTimestamp,
@@ -5160,6 +5164,7 @@
 						showType={false}
 						showStatus={false}
 						onOpenTask={onTaskClick}
+						{browserPort}
 					/>
 					{#if displayTask.priority !== undefined}
 						{@const priorityLabels = ["P0", "P1", "P2", "P3"]}
@@ -5498,6 +5503,7 @@
 								showType={false}
 								showStatus={false}
 								onOpenTask={onTaskClick}
+								{browserPort}
 							/>
 						</div>
 						{#if editingTitle}

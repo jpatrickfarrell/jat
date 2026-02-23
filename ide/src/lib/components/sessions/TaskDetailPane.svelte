@@ -141,11 +141,12 @@
 		}
 	}
 
-	// Fetch active tab when browserPort becomes available
-	// untrack() prevents $effect from re-running when browserTabFetching changes inside fetchBrowserTab
+	// Fetch active tab when browserPort becomes available; poll every 4s for URL changes
 	$effect(() => {
 		if (browserPort) {
 			untrack(() => fetchBrowserTab());
+			const interval = setInterval(() => untrack(() => fetchBrowserTab()), 4000);
+			return () => clearInterval(interval);
 		} else {
 			browserTabInfo = null;
 			browserUrlHistory = [];

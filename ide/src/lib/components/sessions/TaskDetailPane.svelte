@@ -111,81 +111,78 @@
 	// Integration icon
 	const integrationIcon = $derived(integration ? getIntegrationIcon(integration.sourceType) : null);
 
-	// Browser tab state
+	// Browser tab state - fetched once on mount, then polling when user toggles on
 	let browserPortLoading = $state(false);
-	let browserTabInfo = $state<{ url: string; title: string } | null>(null);
-	let browserTabFetching = $state(false);
-	let browserUrlHistory = $state<{ url: string; title: string; fetchedAt: string }[]>([]);
+	let browserTabUrl = $state<string | null>(null);
+	let browserTabTitle = $state<string | null>(null);
+	let browserPolling = $state(false);
+	let browserPollTimer = $state<ReturnType<typeof setInterval> | null>(null);
 
 	async function fetchBrowserTab() {
-		if (!browserPort || browserTabFetching) return;
-		browserTabFetching = true;
-		try {
-			const res = await fetch(`/api/browser-sessions/${browserPort}/active-tab`);
-			const data = await res.json();
-			if (res.ok && data.url) {
-				browserTabInfo = { url: data.url, title: data.title || '' };
-				// Accumulate history (dedupe consecutive same URL)
-				const last = browserUrlHistory[browserUrlHistory.length - 1];
-				if (!last || last.url !== data.url) {
-					browserUrlHistory = [
-						...browserUrlHistory,
-						{ url: data.url, title: data.title || '', fetchedAt: new Date().toISOString() }
-					];
-				}
-			}
-		} catch {
-			// silent fail
-		} finally {
-			browserTabFetching = false;
-		}
-	}
-
-	// Fetch active tab when browserPort becomes available; poll every 4s for URL changes
-	$effect(() => {
-		if (browserPort) {
-			untrack(() => fetchBrowserTab());
-			const interval = setInterval(() => untrack(() => fetchBrowserTab()), 4000);
-			return () => clearInterval(interval);
-		} else {
-			browserTabInfo = null;
-			browserUrlHistory = [];
-		}
-	});
-
-	function truncateUrl(url: string, max = 60): string {
-		try {
-			const u = new URL(url);
-			const display = u.hostname + u.pathname + (u.search || '');
-			return display.length > max ? display.slice(0, max) + '…' : display;
-		} catch {
-			return url.length > max ? url.slice(0, max) + '…' : url;
-		}
-	}
-
-	async function handleBrowserPortClick(event: MouseEvent) {
-		event.stopPropagation();
-		event.preventDefault();
-		if (!browserPort || browserPortLoading) return;
-
+		if (!browserPort) return;
 		browserPortLoading = true;
 		try {
 			const res = await fetch(`/api/browser-sessions/${browserPort}/active-tab`);
 			const data = await res.json();
-
 			if (res.ok && data.url) {
-				window.open(data.url, '_blank');
-			} else if (data.fallbackUrl) {
-				window.open(data.fallbackUrl, '_blank');
+				browserTabUrl = data.url;
+				browserTabTitle = data.title || null;
 			} else {
-				window.open(`http://localhost:${browserPort}/json`, '_blank');
+				browserTabUrl = null;
+				browserTabTitle = null;
 			}
 		} catch {
-			window.open(`http://localhost:${browserPort}/json`, '_blank');
+			browserTabUrl = null;
+			browserTabTitle = null;
 		} finally {
 			browserPortLoading = false;
 		}
 	}
+
+	function toggleBrowserPolling() {
+		browserPolling = !browserPolling;
+		if (browserPolling) {
+			fetchBrowserTab();
+			browserPollTimer = setInterval(() => fetchBrowserTab(), 3000);
+		} else if (browserPollTimer) {
+			clearInterval(browserPollTimer);
+			browserPollTimer = null;
+		}
+	}
+
+	// Fetch once on mount when browserPort is available
+	$effect(() => {
+		if (browserPort) {
+			untrack(() => fetchBrowserTab());
+		} else {
+			browserTabUrl = null;
+			browserTabTitle = null;
+		}
+	});
+
+	// Auto-stop polling when browserPort disappears or component unmounts
+	$effect(() => {
+		return () => {
+			if (browserPollTimer) {
+				clearInterval(browserPollTimer);
+				browserPollTimer = null;
+			}
+			browserPolling = false;
+		};
+	});
+
+	function handleBrowserPortClick(event: MouseEvent) {
+		event.stopPropagation();
+		event.preventDefault();
+		if (!browserPort || browserPortLoading) return;
+
+		if (browserTabUrl && !browserTabUrl.startsWith('chrome://')) {
+			window.open(browserTabUrl, '_blank');
+		} else {
+			window.open(`http://localhost:${browserPort}/json`, '_blank');
+		}
+	}
+
 
 	// Whether the integration has interactive features (callback or actions)
 	const hasInteractiveIntegration = $derived(
@@ -833,51 +830,21 @@
 							{/if}
 						</div>
 
-						<!-- Browser session URL display -->
-						{#if browserPort}
-							<div class="browser-session-section">
-								<div class="browser-session-row">
-									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3 browser-section-icon shrink-0">
-										<path fill-rule="evenodd" d="M4.25 5.5a.75.75 0 00-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 00.75-.75v-4a.75.75 0 011.5 0v4A2.25 2.25 0 0112.75 17h-8.5A2.25 2.25 0 012 14.75v-8.5A2.25 2.25 0 014.25 4h5a.75.75 0 010 1.5h-5z" clip-rule="evenodd" />
-										<path fill-rule="evenodd" d="M6.194 12.753a.75.75 0 001.06.053L16.5 4.44v2.81a.75.75 0 001.5 0v-4.5a.75.75 0 00-.75-.75h-4.5a.75.75 0 000 1.5h2.553l-9.056 8.194a.75.75 0 00-.053 1.06z" clip-rule="evenodd" />
-									</svg>
-									{#if browserTabFetching}
-										<span class="browser-url-loading">
-											<span class="loading loading-spinner w-3 h-3"></span>
-											fetching…
-										</span>
-									{:else if browserTabInfo}
-										<!-- svelte-ignore a11y_invalid_attribute -->
-										<a href={browserTabInfo.url} target="_blank" rel="noopener noreferrer" class="browser-tab-url" title={browserTabInfo.url}>
-											{#if browserTabInfo.title && browserTabInfo.title !== browserTabInfo.url}
-												<span class="browser-tab-title">{browserTabInfo.title}</span>
-												<span class="browser-tab-url-text">{truncateUrl(browserTabInfo.url)}</span>
-											{:else}
-												<span class="browser-tab-url-text">{truncateUrl(browserTabInfo.url)}</span>
-											{/if}
-										</a>
-									{:else}
-										<span class="browser-url-empty">no active tab</span>
+						{#if browserPort && browserTabUrl && !browserTabUrl.startsWith('chrome://')}
+							<div class="browser-tab-row">
+								<span class="browser-tab-title">{browserTabTitle || 'Browser'}</span>
+								<a href={browserTabUrl} target="_blank" rel="noopener" class="browser-tab-url">
+									{browserTabUrl.length > 60 ? browserTabUrl.slice(0, 60) + '...' : browserTabUrl}
+								</a>
+								<button class="browser-tab-poll-toggle" class:active={browserPolling} onclick={toggleBrowserPolling} title={browserPolling ? 'Stop live tracking' : 'Start live tracking'}>
+									{#if browserPolling}
+										<span class="poll-dot"></span>
 									{/if}
-									<!-- svelte-ignore a11y_consider_explicit_label -->
-									<button class="browser-refresh-btn" onclick={() => fetchBrowserTab()} title="Refresh URL" disabled={browserTabFetching}>
-										<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3">
-											<path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H3.989a.75.75 0 00-.75.75v4.242a.75.75 0 001.5 0v-2.43l.31.31a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm1.23-3.723a.75.75 0 00.219-.53V2.929a.75.75 0 00-1.5 0V5.36l-.31-.31A7 7 0 003.239 8.188a.75.75 0 101.448.389A5.5 5.5 0 0113.89 6.11l.311.31h-2.432a.75.75 0 000 1.5h4.243a.75.75 0 00.53-.219z" clip-rule="evenodd" />
-										</svg>
-									</button>
-								</div>
-								{#if browserUrlHistory.length > 1}
-									<div class="browser-url-history">
-										{#each browserUrlHistory.slice().reverse().slice(0, 5) as entry, i (entry.url + entry.fetchedAt)}
-											<div class="browser-history-item" class:browser-history-current={i === 0}>
-												<span class="history-dot"></span>
-												<a href={entry.url} target="_blank" rel="noopener noreferrer" class="history-url" title={entry.url}>
-													{truncateUrl(entry.url, 55)}
-												</a>
-											</div>
-										{/each}
-									</div>
-								{/if}
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+										<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+									</svg>
+								</button>
 							</div>
 						{/if}
 
@@ -1889,6 +1856,78 @@
 		white-space: nowrap;
 	}
 
+	.browser-tab-row {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 3px 8px;
+		margin: 2px 0;
+		border-radius: 4px;
+		background: oklch(0.20 0.02 250);
+		border: 1px solid oklch(0.25 0.02 250);
+		font-size: 0.7rem;
+		cursor: pointer;
+		transition: background 0.15s;
+	}
+	.browser-tab-row:hover {
+		background: oklch(0.23 0.02 250);
+	}
+	.browser-tab-title {
+		color: oklch(0.65 0.05 250);
+		font-weight: 500;
+		flex-shrink: 0;
+		max-width: 100px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.browser-tab-url {
+		color: oklch(0.70 0.15 220);
+		text-decoration: none;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		flex: 1;
+		min-width: 0;
+	}
+	.browser-tab-url:hover {
+		text-decoration: underline;
+		color: oklch(0.78 0.15 220);
+	}
+	.browser-tab-poll-toggle {
+		flex-shrink: 0;
+		background: none;
+		border: 1px solid transparent;
+		color: oklch(0.50 0.05 250);
+		cursor: pointer;
+		padding: 2px 4px;
+		border-radius: 3px;
+		display: flex;
+		align-items: center;
+		gap: 3px;
+		transition: all 0.15s;
+	}
+	.browser-tab-poll-toggle:hover {
+		color: oklch(0.75 0.10 220);
+		background: oklch(0.25 0.02 250);
+	}
+	.browser-tab-poll-toggle.active {
+		color: oklch(0.75 0.18 145);
+		border-color: oklch(0.60 0.15 145 / 0.3);
+		background: oklch(0.60 0.15 145 / 0.08);
+	}
+	.poll-dot {
+		width: 5px;
+		height: 5px;
+		border-radius: 50%;
+		background: oklch(0.75 0.18 145);
+		animation: poll-blink 1.5s ease-in-out infinite;
+	}
+	@keyframes poll-blink {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.3; }
+	}
+
 	.details-header-meta {
 		display: flex;
 		align-items: center;
@@ -1928,146 +1967,6 @@
 		background: oklch(0.25 0.05 220);
 		border-color: oklch(0.40 0.08 220);
 		color: oklch(0.80 0.12 220);
-	}
-
-	/* Browser session URL section (below header row) */
-	.browser-session-section {
-		margin-bottom: 0.5rem;
-		padding: 0.375rem 0.5rem;
-		background: oklch(0.14 0.01 250);
-		border-radius: 0.375rem;
-		border: 1px solid oklch(0.70 0.15 55 / 0.18);
-	}
-
-	.browser-session-row {
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
-		min-width: 0;
-	}
-
-	.browser-section-icon {
-		color: oklch(0.60 0.10 55);
-		flex-shrink: 0;
-	}
-
-	.browser-tab-url {
-		display: flex;
-		flex-direction: column;
-		gap: 1px;
-		min-width: 0;
-		flex: 1;
-		text-decoration: none;
-	}
-
-	.browser-tab-url:hover .browser-tab-url-text {
-		color: oklch(0.80 0.12 220);
-		text-decoration: underline;
-	}
-
-	.browser-tab-title {
-		font-size: 0.7rem;
-		font-weight: 500;
-		color: oklch(0.75 0.05 250);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	.browser-tab-url-text {
-		font-size: 0.65rem;
-		color: oklch(0.55 0.08 220);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		font-family: monospace;
-	}
-
-	.browser-url-loading {
-		display: flex;
-		align-items: center;
-		gap: 0.25rem;
-		font-size: 0.65rem;
-		color: oklch(0.55 0.05 250);
-		flex: 1;
-	}
-
-	.browser-url-empty {
-		font-size: 0.65rem;
-		color: oklch(0.45 0.03 250);
-		flex: 1;
-		font-style: italic;
-	}
-
-	.browser-refresh-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 2px;
-		border-radius: 3px;
-		border: none;
-		background: transparent;
-		color: oklch(0.50 0.05 250);
-		cursor: pointer;
-		flex-shrink: 0;
-		transition: color 0.1s, background 0.1s;
-	}
-
-	.browser-refresh-btn:hover:not(:disabled) {
-		color: oklch(0.75 0.10 55);
-		background: oklch(0.70 0.15 55 / 0.10);
-	}
-
-	.browser-refresh-btn:disabled {
-		opacity: 0.4;
-		cursor: default;
-	}
-
-	.browser-url-history {
-		margin-top: 0.375rem;
-		padding-top: 0.375rem;
-		border-top: 1px solid oklch(0.22 0.02 250);
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-
-	.browser-history-item {
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
-		min-width: 0;
-	}
-
-	.history-dot {
-		width: 4px;
-		height: 4px;
-		border-radius: 50%;
-		background: oklch(0.40 0.05 250);
-		flex-shrink: 0;
-	}
-
-	.browser-history-item.browser-history-current .history-dot {
-		background: oklch(0.70 0.15 55);
-	}
-
-	.history-url {
-		font-size: 0.625rem;
-		color: oklch(0.50 0.06 220);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		text-decoration: none;
-		font-family: monospace;
-	}
-
-	.browser-history-item.browser-history-current .history-url {
-		color: oklch(0.65 0.10 220);
-	}
-
-	.history-url:hover {
-		color: oklch(0.75 0.12 220);
-		text-decoration: underline;
 	}
 
 	/* Notes tab - Monaco editor container */

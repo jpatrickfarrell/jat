@@ -51,19 +51,22 @@ export async function GET() {
 		const registry = JSON.parse(raw);
 		const sessions: Record<string, BrowserSession> = {};
 
-		for (const [port, entry] of Object.entries(registry.sessions || {})) {
+		for (const [key, entry] of Object.entries(registry.sessions || {})) {
 			const e = entry as any;
 			const pid = e.pid ?? null;
+			const port = e.port ?? parseInt(key);
 			const alive = pid ? isPidAlive(pid) : false;
-			const portListening = isPortListening(parseInt(port));
+			const portListening = !isNaN(port) && isPortListening(port);
+			// Extract agent name: key may be "jat-AgentName" (session name) or a port number
+			const agentName = e.agentName || (key.startsWith('jat-') ? key.slice(4) : key);
 
-			sessions[port] = {
-				port: e.port,
+			sessions[key] = {
+				port,
 				pid,
-				agentName: e.agentName,
+				agentName,
 				taskId: e.taskId,
 				project: e.project,
-				claimedAt: e.claimedAt,
+				claimedAt: e.claimedAt || e.startedAt,
 				alive,
 				portListening
 			};

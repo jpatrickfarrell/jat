@@ -349,7 +349,7 @@
 			const res = await fetch(`/api/browser-sessions/${browserPort}/active-tab`);
 			const data = await res.json();
 
-			if (res.ok && data.url) {
+			if (res.ok && data.url && !data.url.startsWith('chrome://')) {
 				window.open(data.url, '_blank');
 			} else if (data.fallbackUrl) {
 				window.open(data.fallbackUrl, '_blank');

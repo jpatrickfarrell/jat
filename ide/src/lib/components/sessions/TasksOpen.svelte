@@ -673,9 +673,9 @@
 			currentObjects.set(task.id, task);
 		}
 
-		// Skip on initial load - just set initial order (sorted by priority)
+		// Skip on initial load - just set initial order (sorted by due date → age → priority)
 		if (prevOrder.length === 0 && openTasks.length > 0) {
-			taskOrder = openTasks.sort((a, b) => a.priority - b.priority).map(t => t.id);
+			taskOrder = openTasks.sort(compareTaskSort).map(t => t.id);
 			previousTaskObjects = currentObjects;
 			return;
 		}
@@ -696,18 +696,18 @@
 			}
 		}
 
-		// Update order: keep existing order (preserve positions), add new tasks sorted by priority
+		// Update order: keep existing order (preserve positions), add new tasks sorted by due date → age → priority
 		let newOrder = [...prevOrder];
-		// Sort new tasks by priority and add them
+		// Sort new tasks and add them
 		const newTasksSorted = newIds
 			.map(id => currentObjects.get(id))
 			.filter((t): t is Task => t !== undefined)
-			.sort((a, b) => a.priority - b.priority);
+			.sort(compareTaskSort);
 		for (const task of newTasksSorted) {
-			// Insert at correct position based on priority
+			// Insert at correct position based on sort order
 			const insertIndex = newOrder.findIndex(existingId => {
 				const existing = currentObjects.get(existingId) || prevObjects.get(existingId);
-				return existing && existing.priority > task.priority;
+				return existing && compareTaskSort(task, existing) < 0;
 			});
 			if (insertIndex === -1) {
 				newOrder.push(task.id);
@@ -871,12 +871,30 @@
 		return Array.from(projects).sort();
 	});
 
-	// Derived: open tasks sorted by priority, filtered by project (only when header is shown)
+	// Task sort comparator: due date (has due date first) → age (oldest first) → priority
+	function compareTaskSort(a: Task, b: Task): number {
+		// 1. Has due date first (tasks with due_date above those without)
+		const aHasDue = a.due_date ? 1 : 0;
+		const bHasDue = b.due_date ? 1 : 0;
+		if (aHasDue !== bHasDue) return bHasDue - aHasDue;
+
+		// 2. Age: oldest first (earlier created_at first)
+		if (a.created_at && b.created_at) {
+			const aTime = new Date(a.created_at).getTime();
+			const bTime = new Date(b.created_at).getTime();
+			if (aTime !== bTime) return aTime - bTime;
+		}
+
+		// 3. Priority (P0 first)
+		return a.priority - b.priority;
+	}
+
+	// Derived: open tasks sorted by due date → age → priority, filtered by project (only when header is shown)
 	const sortedOpenTasks = $derived(
 		tasks
 			.filter(t => t.status === 'open')
 			.filter(t => !showHeader || selectedProject === null || getProjectFromTaskId(t.id) === selectedProject)
-			.sort((a, b) => a.priority - b.priority)
+			.sort(compareTaskSort)
 	);
 
 	function getProjectColorReactive(taskIdOrProject: string): string | null {

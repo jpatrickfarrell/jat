@@ -137,42 +137,32 @@
 		}
 	});
 
-	// Reactive auto-focus when drawer opens - single reliable implementation
-	// Uses requestAnimationFrame + 200ms delay to ensure drawer animation has started
-	// and input is interactable. This handles both checkbox toggle and store-based opening.
-	$effect(() => {
-		if (isOpen) {
-			requestAnimationFrame(() => {
-				setTimeout(() => {
-					if (!isOpen) return;
+	// Auto-focus when drawer opens.
+	// DaisyUI drawer-side uses a CSS visibility transition (0.1s delay + 0.3s = 400ms).
+	// focus() silently fails on visibility:hidden elements.
+	// We listen for the transitionend event on the drawer-side to know when it's visible.
+	let drawerSideEl: HTMLDivElement;
 
-					// If project selection is required, focus and open the project dropdown
-					if (projectSelectionRequired && projectDropdownBtn) {
-						openProjectDropdown();
-						// Focus the first menu item directly so arrow keys work immediately
-						// Use setTimeout to ensure DOM has rendered the dropdown menu
-						setTimeout(() => {
-							const dropdown = projectDropdownBtn?.closest('.dropdown');
-							const firstMenuItem = dropdown?.querySelector('.dropdown-content button') as HTMLButtonElement;
-							if (firstMenuItem) {
-								firstMenuItem.focus();
-							} else {
-								// Fallback to button if menu not rendered yet
-								projectDropdownBtn?.focus();
-							}
-						}, 50);
-					} else if (titleInput) {
-						// Otherwise focus the title input as usual
-						titleInput.focus();
-						// Double-check focus was applied (some browsers need this)
-						if (document.activeElement !== titleInput) {
-							titleInput.focus();
-						}
-					}
-				}, 200);
-			});
+	function handleDrawerTransitionEnd(e: TransitionEvent) {
+		// Only react to the visibility transition ending on the drawer-side itself
+		if (e.propertyName !== 'visibility' || e.target !== drawerSideEl) return;
+		if (!isOpen) return;
+
+		if (projectSelectionRequired && projectDropdownBtn) {
+			openProjectDropdown();
+			setTimeout(() => {
+				const dropdown = projectDropdownBtn?.closest('.dropdown');
+				const firstMenuItem = dropdown?.querySelector('.dropdown-content button') as HTMLButtonElement;
+				if (firstMenuItem) {
+					firstMenuItem.focus();
+				} else {
+					projectDropdownBtn?.focus();
+				}
+			}, 50);
+		} else if (titleInput) {
+			titleInput.focus();
 		}
-	});
+	}
 
 	// Process initial text when drawer opens (e.g., from Project Notes "Create Task" button)
 	$effect(() => {
@@ -1434,7 +1424,7 @@
 	<input id="task-creation-drawer" type="checkbox" class="drawer-toggle" bind:checked={isOpen} />
 
 	<!-- Drawer side -->
-	<div class="drawer-side">
+	<div class="drawer-side" bind:this={drawerSideEl} ontransitionend={handleDrawerTransitionEnd}>
 		<label aria-label="close sidebar" class="drawer-overlay" onclick={handleClose}></label>
 
 		<!-- Drawer Panel (fixed height, header/footer sticky, content scrolls) - Industrial -->
@@ -1687,7 +1677,6 @@
 								onpaste={handleTitlePaste}
 								disabled={formDisabled || isSubmitting}
 								required
-								autofocus={isOpen && !projectSelectionRequired}
 							/>
 							<VoiceInput
 								size="sm"

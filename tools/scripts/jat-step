@@ -261,15 +261,40 @@ EOF
         if [[ -z "$SOURCE_ID" || -z "$HAS_CALLBACK" ]]; then
             log_dim "No integration callback configured — skipping"
         else
-            # Read the review signal to get summary array
+            # Read the review summary from timeline JSONL (not signal file,
+            # which gets overwritten by emit_completing_signal above).
+            # The timeline preserves all signals in order — find the last review entry.
             TMUX_SESSION=$(tmux display-message -p '#S' 2>/dev/null || true)
+            TIMELINE_FILE="/tmp/jat-timeline-${TMUX_SESSION}.jsonl"
             SIGNAL_FILE="/tmp/jat-signal-tmux-${TMUX_SESSION}.json"
             SUMMARY_NOTES=""
-            if [[ -f "$SIGNAL_FILE" ]]; then
-                SUMMARY_ARRAY=$(jq -r '.summary // empty' "$SIGNAL_FILE" 2>/dev/null)
+
+            # Try timeline first (has review signal preserved)
+            if [[ -f "$TIMELINE_FILE" ]]; then
+                REVIEW_LINE=$(grep '"state":"review"' "$TIMELINE_FILE" | tail -1)
+                if [[ -n "$REVIEW_LINE" ]]; then
+                    SUMMARY_ARRAY=$(echo "$REVIEW_LINE" | jq -r '.data.summary // empty' 2>/dev/null)
+                    if [[ -n "$SUMMARY_ARRAY" && "$SUMMARY_ARRAY" != "null" ]]; then
+                        SUMMARY_NOTES=$(echo "$REVIEW_LINE" | jq -r '"## What was done\n" + ([.data.summary[] | "- " + .] | join("\n"))' 2>/dev/null || echo "")
+                    fi
+                fi
+            fi
+
+            # Fallback 1: try signal file (works if review wasn't overwritten)
+            if [[ -z "$SUMMARY_NOTES" && -f "$SIGNAL_FILE" ]]; then
+                SUMMARY_ARRAY=$(jq -r '.data.summary // empty' "$SIGNAL_FILE" 2>/dev/null)
                 if [[ -n "$SUMMARY_ARRAY" && "$SUMMARY_ARRAY" != "null" ]]; then
-                    # Format summary array as markdown
-                    SUMMARY_NOTES=$(jq -r '"## What was done\n" + ([.summary[] | "- " + .] | join("\n"))' "$SIGNAL_FILE" 2>/dev/null || echo "")
+                    SUMMARY_NOTES=$(jq -r '"## What was done\n" + ([.data.summary[] | "- " + .] | join("\n"))' "$SIGNAL_FILE" 2>/dev/null || echo "")
+                fi
+            fi
+
+            # Fallback 2: extract from git commit messages for this task
+            # (committing step already ran, so commits exist)
+            if [[ -z "$SUMMARY_NOTES" ]]; then
+                COMMITS=$(git log --oneline --grep="${TASK_ID}" -10 2>/dev/null | sed 's/^[a-f0-9]* /- /')
+                if [[ -n "$COMMITS" ]]; then
+                    SUMMARY_NOTES="## What was done"$'\n'"${COMMITS}"
+                    log_dim "No review signal found — using commit messages for dev_notes"
                 fi
             fi
 

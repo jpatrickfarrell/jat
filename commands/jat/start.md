@@ -190,19 +190,8 @@ jat-signal working '{
 
 > **NEXT SIGNAL: `review`** — When your work is complete, you MUST emit `jat-signal review` BEFORE presenting results to the user. This is mandatory for ALL task types (code changes, research, investigation, documentation). See "When You Finish Working" below.
 
-#### 3C: Sync Integration Status (non-blocking)
-
-If this task was ingested from an external source (e.g., Supabase feedback), automatically push the `in_progress` status back to the source system. This runs alongside 3A and 3B.
-
-```bash
-jat-step sync-status --task "$TASK_ID" --title "$TASK_TITLE" --agent "$AGENT_NAME" --status in_progress
-```
-
-This step:
-- Queries the IDE for integration info (callback URL, reference ID)
-- Fires `status_changed` webhook with status `in_progress`
-- Skips silently if no integration or no callback configured
-- Non-blocking: startup continues even if callback fails
+> **Note:** Integration status sync (`in_progress`) fires automatically from
+> `jt update --status in_progress` in Step 3A — no separate step needed.
 
 ---
 

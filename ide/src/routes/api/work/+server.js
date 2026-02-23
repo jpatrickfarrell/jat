@@ -54,45 +54,82 @@ const SIGNAL_STATE_MAP = {
  * @param {string} sessionName - tmux session name
  * @returns {string|null} Session state or null if no valid signal
  */
+/**
+ * Parse a signal object and return the mapped session state string.
+ * @param {{ type?: string, state?: string }} signal
+ * @returns {string|null}
+ */
+function resolveSignalState(signal) {
+	// Handle state signals (working, review, needs_input, etc.)
+	if (signal.type === 'state' && signal.state) {
+		return SIGNAL_STATE_MAP[/** @type {keyof typeof SIGNAL_STATE_MAP} */ (signal.state)] || signal.state;
+	}
+
+	// Handle completion bundles
+	if (signal.type === 'complete') {
+		return 'completed';
+	}
+
+	// Handle IDE-initiated signals with direct type (e.g., { type: 'working', data: {...} })
+	if (signal.type && SIGNAL_STATE_MAP[signal.type]) {
+		return SIGNAL_STATE_MAP[signal.type];
+	}
+
+	return null;
+}
+
 function readSignalState(sessionName) {
 	const signalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
 
 	try {
-		if (!existsSync(signalFile)) {
-			return null;
+		// Try signal file first (current state, written by jat-signal or IDE)
+		if (existsSync(signalFile)) {
+			const content = readFileSync(signalFile, 'utf-8');
+			/** @type {{ type?: string, state?: string }} */
+			const signal = JSON.parse(content);
+
+			// Check file age - use different TTL based on signal type
+			const signalState = signal.type === 'state' ? signal.state : signal.type;
+
+			// Persistent states (review, needs_input, completed, etc.) never expire.
+			// They represent human-blocked states — the agent is waiting on the user.
+			const isPersistent = signalState && SIGNAL_TTL.PERSISTENT_STATES.includes(/** @type {typeof SIGNAL_TTL.PERSISTENT_STATES[number]} */ (signalState));
+			if (isPersistent) {
+				return resolveSignalState(signal);
+			}
+
+			const stats = statSync(signalFile);
+			const ageMs = Date.now() - stats.mtimeMs;
+			const isWaiting = signalState && SIGNAL_TTL.USER_WAITING_STATES.includes(/** @type {typeof SIGNAL_TTL.USER_WAITING_STATES[number]} */ (signalState));
+			const ttl = isWaiting ? SIGNAL_TTL.USER_WAITING_MS : SIGNAL_TTL.TRANSIENT_MS;
+			if (ageMs <= ttl) {
+				return resolveSignalState(signal);
+			}
 		}
 
-		const content = readFileSync(signalFile, 'utf-8');
-		/** @type {{ type?: string, state?: string }} */
-		const signal = JSON.parse(content);
-
-		// Check file age - use different TTL based on signal type
-		// See SIGNAL_TTL in constants.ts for configuration
-		const stats = statSync(signalFile);
-		const ageMs = Date.now() - stats.mtimeMs;
-		const isAgentEmittedWaiting = signal.type === 'state' && signal.state && SIGNAL_TTL.USER_WAITING_STATES.includes(/** @type {typeof SIGNAL_TTL.USER_WAITING_STATES[number]} */ (signal.state));
-		// IDE-initiated signals use type directly (e.g., { type: 'planning' }) instead of { type: 'state', state: 'planning' }
-		const isIdeInitiatedWaiting = signal.type !== 'state' && signal.type !== 'complete' && SIGNAL_TTL.USER_WAITING_STATES.includes(/** @type {typeof SIGNAL_TTL.USER_WAITING_STATES[number]} */ (signal.type));
-		const ttl = signal.type === 'complete' || isAgentEmittedWaiting || isIdeInitiatedWaiting ? SIGNAL_TTL.USER_WAITING_MS : SIGNAL_TTL.TRANSIENT_MS;
-		if (ageMs > ttl) {
-			return null;
-		}
-
-		// Handle state signals (working, review, needs_input, etc.)
-		if (signal.type === 'state' && signal.state) {
-			const state = signal.state;
-			return SIGNAL_STATE_MAP[/** @type {keyof typeof SIGNAL_STATE_MAP} */ (state)] || state;
-		}
-
-		// Handle completion bundles - these should show as "completed" state
-		if (signal.type === 'complete') {
-			return 'completed';
-		}
-
-		// Handle IDE-initiated signals with direct type (e.g., { type: 'working', data: {...} })
-		// These are written by the IDE for instant UI feedback
-		if (signal.type && SIGNAL_STATE_MAP[signal.type]) {
-			return SIGNAL_STATE_MAP[signal.type];
+		// Fallback: read last entry from timeline JSONL (survives /tmp cleanup, reboots)
+		// This prevents state regression (e.g. review → working) when signal files are lost.
+		const timelineFile = `/tmp/jat-timeline-${sessionName}.jsonl`;
+		if (existsSync(timelineFile)) {
+			const timelineContent = readFileSync(timelineFile, 'utf-8');
+			const lines = timelineContent.trim().split('\n');
+			if (lines.length > 0) {
+				const lastLine = lines[lines.length - 1];
+				const lastEntry = JSON.parse(lastLine);
+				// Timeline entries use { state: "review" } or { type: "complete" } format
+			if (lastEntry.state) {
+					const mapped = SIGNAL_STATE_MAP[/** @type {keyof typeof SIGNAL_STATE_MAP} */ (lastEntry.state)] || lastEntry.state;
+					// Only use persistent/human-blocked states from timeline fallback.
+					// Transient states (working, starting) from the timeline shouldn't override
+					// task-status-based detection since the agent may have progressed.
+					if (SIGNAL_TTL.PERSISTENT_STATES.includes(/** @type {typeof SIGNAL_TTL.PERSISTENT_STATES[number]} */ (lastEntry.state))) {
+						return mapped;
+					}
+				} else if (lastEntry.type === 'complete') {
+					// Completion bundles have type:"complete" but no state field
+					return 'completed';
+				}
+			}
 		}
 
 		return null;

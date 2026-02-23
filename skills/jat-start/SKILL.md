@@ -118,11 +118,7 @@ jat-signal working '{
 }'
 ```
 
-**3C: Sync integration status** (non-blocking):
-```bash
-jat-step sync-status --task "$TASK_ID" --title "$TASK_TITLE" --agent "$AGENT_NAME" --status in_progress
-```
-Automatically pushes `in_progress` status to external integrations (e.g., Supabase). Skips silently if no integration configured. Non-blocking: startup continues even if this fails.
+> **Note:** Integration status sync (`in_progress`) fires automatically from `jt update --status in_progress` — no agent action needed.
 
 ### Output Banner
 

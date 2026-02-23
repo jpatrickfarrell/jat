@@ -268,26 +268,33 @@ export const JAT_DEFAULTS = {
 
 export const SIGNAL_TTL = {
 	/**
-	 * Short TTL for transitional states (working, starting, idle)
+	 * Short TTL for transitional states (starting, idle)
 	 * These states change frequently as agent works, so stale signals expire quickly
 	 */
 	TRANSIENT_MS: 60 * 1000, // 1 minute
 
 	/**
-	 * Long TTL for states waiting on human action
-	 * User may step away - signal should persist until they return
+	 * Long TTL for states where the agent is actively working
+	 * Agents can work for extended periods without emitting new signals
 	 */
 	USER_WAITING_MS: 30 * 60 * 1000, // 30 minutes
 
 	/**
 	 * States that use the longer USER_WAITING_MS TTL
-	 * - completed: waiting for user to acknowledge/cleanup
-	 * - review: waiting for user to approve and run /jat:complete
-	 * - needs_input: waiting for user to answer a question
 	 * - working: agents can work for 20+ mins without emitting new signals
 	 * - starting: resumed sessions may sit in starting state while user interacts
 	 */
-	USER_WAITING_STATES: ['completed', 'review', 'needs_input', 'working', 'planning', 'paused', 'starting'] as const
+	USER_WAITING_STATES: ['working', 'starting'] as const,
+
+	/**
+	 * States that NEVER expire (no TTL). These are human-blocked states where
+	 * the agent is explicitly waiting on user action. The signal file will be
+	 * overwritten when a new signal comes in — no need for TTL.
+	 *
+	 * Without this, expired signals cause state REGRESSION (e.g. review → working)
+	 * because the fallback sees task.status='in_progress' and shows WORKING.
+	 */
+	PERSISTENT_STATES: ['completed', 'review', 'needs_input', 'planning', 'paused'] as const
 } as const;
 
 // =============================================================================

@@ -128,6 +128,31 @@ Spawn agent
 
 To work on another task: spawn a new agent session.
 
+## Asking Questions (NEVER use plain text)
+
+**CRITICAL: When you need user input, ALWAYS use `jat-signal needs_input` + `AskUserQuestion` tool.** Never ask questions in plain text — the IDE renders AskUserQuestion as clickable buttons, plain text questions get buried in terminal output.
+
+**Common scenarios:**
+- Can't reproduce a bug → ask user for more details
+- Multiple valid approaches → ask user to choose
+- Uncertain if fix is correct → ask user to verify
+- Need credentials/access → ask user to provide
+- Task seems like a duplicate → ask user to confirm
+
+**Pattern:**
+```bash
+# 1. ALWAYS signal first (so IDE shows needs-input state)
+jat-signal needs_input '{"taskId":"ID","question":"QUESTION","questionType":"decision"}'
+
+# 2. THEN use AskUserQuestion tool with concrete options
+# AskUserQuestion(["Commit fix as-is", "Investigate further", "Close as won't-fix"])
+
+# 3. After user responds, signal working again
+jat-signal working '{"taskId":"ID","taskTitle":"TITLE","approach":"Updated approach..."}'
+```
+
+**Question types:** `clarification`, `decision`, `approval`, `blocker`, `duplicate_check`
+
 ## Completion Workflow
 
 **MANDATORY: You MUST emit `jat-signal review` BEFORE presenting any results or summary to the user.** This applies to ALL task types - code changes, research, investigation, documentation. No exceptions.
@@ -230,4 +255,5 @@ git commit -m "feat(jat-abc): Implement new endpoint"
 - **Update task status** - `in_progress` when working, `closed` when done
 - **Emit signals in order** - starting -> working -> review -> complete
 - **ALWAYS signal review before presenting results** - emit `jat-signal review` BEFORE any summary output
+- **NEVER ask questions in plain text** - always use `jat-signal needs_input` + `AskUserQuestion` tool so IDE renders buttons
 - **Push to remote** - work is NOT complete until `git push` succeeds

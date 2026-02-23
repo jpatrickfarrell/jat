@@ -17,11 +17,15 @@ External Source ──ingest──► JAT Task ──callback──► External 
 
 1. **Ingest** — The ingest daemon polls the external source and creates JAT tasks
 2. **Work** — An agent picks up the task and works on it
-3. **Auto-fire on completion** — When `/jat:complete` runs, `jat-step callback` automatically fires a webhook with the agent's completion summary
-4. **Manual sync** — Users can also click "Sync Status" in the IDE to push status on demand
-5. **User response** — The end user sees the update (e.g. in a widget), and can Accept or Reject
-6. **Reverse webhook** — Accept/Reject fires a reverse webhook back to JAT's inbound endpoint
-7. **JAT response** — Accept logs silently; Reject reopens the task with the rejection reason
+3. **Auto-sync on status change** — `jt update --status in_progress` automatically fires `status_changed` webhook
+4. **Auto-sync on close** — `jt close` automatically fires `task_closed` webhook with dev_notes
+5. **Manual sync** — Users can also click "Sync Status" in the IDE to push status on demand
+6. **User response** — The end user sees the update (e.g. in a widget), and can Accept or Reject
+7. **Reverse webhook** — Accept/Reject fires a reverse webhook back to JAT's inbound endpoint
+8. **JAT response** — Accept logs silently; Reject reopens the task with the rejection reason
+
+> **Agent-agnostic:** Callbacks fire from `jt` itself (the task CLI), not from agent skills or signals.
+> Any agent type, manual CLI use, or IDE action that changes task status will trigger the sync automatically.
 
 ### Architecture
 
@@ -29,13 +33,18 @@ External Source ──ingest──► JAT Task ──callback──► External 
 ┌─────────────────────────────────────────────────────────────────────┐
 │  OUTBOUND (JAT → External)                                          │
 │                                                                     │
-│  /jat:complete                                                      │
-│    └─► jat-step callback                                            │
+│  jt update --status in_progress                                     │
+│    └─► _fire_status_callback (background)                           │
 │          └─► GET /api/tasks/integrations?taskIds={id}               │
-│          └─► Read review signal (summary[])                         │
 │          └─► POST /api/integrations/{sourceId}/callback             │
-│                └─► Fire webhook to external system                  │
-│                └─► Log to .jat/callback-log/{task-id}.jsonl         │
+│                └─► event: "status_changed"                          │
+│                                                                     │
+│  jt close                                                           │
+│    └─► _fire_close_callback (background)                            │
+│          └─► GET /api/tasks/integrations?taskIds={id}               │
+│          └─► Build notes: review signal → git commits → assignee   │
+│          └─► POST /api/integrations/{sourceId}/callback             │
+│                └─► event: "task_closed", with dev_notes             │
 │                                                                     │
 │  Manual: User clicks "Sync Status" in IDE                           │
 │    └─► POST /api/integrations/{sourceId}/callback                   │
@@ -55,19 +64,25 @@ External Source ──ingest──► JAT Task ──callback──► External 
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Auto-Fire on Completion
+### Auto-Fire: Built into `jt`
 
-When an agent runs `/jat:complete`, the `jat-step callback` step automatically fires:
+Callbacks are built directly into the `jt` CLI (`tools/core/jt`) and fire in the background:
 
-1. Queries `GET /api/tasks/integrations?taskIds={taskId}` to find integration config
-2. If no integration or no callback → skips silently
-3. Reads the review signal file for the `summary[]` array
-4. Formats summary as markdown notes
-5. Fires `POST /api/integrations/{sourceId}/callback` with `event: "task_closed"`, mapped status, and notes
-6. Logs result to `.jat/callback-log/{task-id}.jsonl`
-7. Does NOT fail the completion if callback fails
+**On status change (`jt update --status X`):**
+1. Queries IDE for integration config — skips silently if none
+2. Fires `status_changed` webhook with mapped status
+3. Runs in background, non-blocking
 
-The auto-fire step sits at 55% progress, between closing (50%) and releasing (75%).
+**On close (`jt close`):**
+1. Queries IDE for integration config — skips silently if none
+2. Builds dev_notes from best available source:
+   - **Review signal** from timeline JSONL (structured summary from agent)
+   - **Git commit messages** for this task ID (fallback when agent skips review)
+   - **Assignee name** (last resort)
+3. Fires `task_closed` webhook with mapped status and notes
+4. Runs in background, non-blocking
+
+Both require the IDE to be running (localhost:3333). If IDE is down, callbacks skip silently — the task status change still succeeds.
 
 ### User Accept/Reject Flow
 
@@ -500,8 +515,8 @@ Failed callbacks include an `error` field. The callback log is displayed in the 
 | `ide/src/routes/api/tasks/[id]/callbacks/+server.ts` | Callback log reader |
 | `ide/src/lib/components/sessions/TaskDetailPaneB.svelte` | Integration UI (actions, status sync, callback log) |
 | `ide/src/lib/components/ingest/IngestWizard.svelte` | Wizard UI for configuring callbacks and actions |
-| `tools/scripts/jat-step` | Completion step tool (includes `callback` step) |
-| `skills/jat-complete/SKILL.md` | Completion skill (step 4.7 fires callback) |
+| `tools/core/jt` | Task CLI — `_fire_close_callback` and `_fire_status_callback` fire automatically |
+| `tools/scripts/jat-step` | Completion step tool (callback step retained for manual use) |
 | `~/code/flush/widget/src/components/RequestList.svelte` | Widget with accept/reject buttons |
 | `~/code/flush/widget/src/lib/api.ts` | Widget API (respondToReport with reason) |
 | `~/code/flush/src/routes/api/feedback/reports/[id]/respond/+server.ts` | Flush respond endpoint (fires reverse webhook) |

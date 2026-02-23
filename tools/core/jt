@@ -443,7 +443,7 @@ cmd_create() {
 
 cmd_update() {
   require_db
-  local task_id="" json_out=false new_labels=""
+  local task_id="" json_out=false new_labels="" new_status=""
   local -a sets=()
 
   # First positional arg is task_id
@@ -453,7 +453,7 @@ cmd_update() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --status)         sets+=("status = '$(sql_escape "$2")'"); shift 2 ;;
+      --status)         new_status="$2"; sets+=("status = '$(sql_escape "$2")'"); shift 2 ;;
       --priority)       require_integer "$2" "--priority"; sets+=("priority = $2"); shift 2 ;;
       --title)          sets+=("title = '$(sql_escape "$2")'"); shift 2 ;;
       --description)    sets+=("description = '$(sql_escape "$2")'"); shift 2 ;;
@@ -514,6 +514,12 @@ cmd_update() {
 
   touch_sentinel
 
+  # Fire integration status callback in background when status changes
+  # (skip 'closed' — that's handled by cmd_close's own callback)
+  if [[ -n "$new_status" && "$new_status" != "closed" ]]; then
+    _fire_status_callback "$task_id" "$new_status" &
+  fi
+
   if $json_out; then
     cmd_show "$task_id" --json
   else
@@ -549,11 +555,123 @@ cmd_close() {
 
   touch_sentinel
 
+  # Fire integration callback in background (non-blocking)
+  _fire_close_callback "$task_id" &
+
   if $json_out; then
     cmd_show "$task_id" --json
   else
     echo "Closed $task_id"
   fi
+}
+
+# Fire integration callback when a task closes.
+# Runs in background — silent on success, logs errors to stderr.
+# Only fires if the IDE is reachable and the task has an integration callback configured.
+_fire_close_callback() {
+  local task_id="$1"
+  local ide_url="http://127.0.0.1:3333"
+
+  # Quick check: is IDE reachable? (1s timeout)
+  curl -sf --max-time 1 "${ide_url}/" >/dev/null 2>&1 || return 0
+
+  # Query integration info for this task
+  local int_json
+  int_json=$(curl -sf --max-time 2 "${ide_url}/api/tasks/integrations?taskIds=${task_id}" 2>/dev/null || echo '{}')
+  local source_id reference_id has_callback
+  source_id=$(echo "$int_json" | jq -r ".integrations.\"${task_id}\".sourceId // empty" 2>/dev/null)
+  reference_id=$(echo "$int_json" | jq -r ".integrations.\"${task_id}\".referenceId // empty" 2>/dev/null)
+  has_callback=$(echo "$int_json" | jq -r ".integrations.\"${task_id}\".callback.url // empty" 2>/dev/null)
+
+  # No integration → skip silently
+  [[ -n "$source_id" && -n "$has_callback" ]] || return 0
+
+  # Build dev_notes from best available source
+  local notes=""
+
+  # Source 1: review signal from timeline JSONL
+  local tmux_session
+  tmux_session=$(tmux display-message -p '#S' 2>/dev/null || true)
+  if [[ -n "$tmux_session" ]]; then
+    local timeline="/tmp/jat-timeline-${tmux_session}.jsonl"
+    if [[ -f "$timeline" ]]; then
+      local review_line
+      review_line=$(grep '"state":"review"' "$timeline" 2>/dev/null | tail -1)
+      if [[ -n "$review_line" ]]; then
+        notes=$(echo "$review_line" | jq -r '"## What was done\n" + ([.data.summary // [] | .[] | "- " + .] | join("\n"))' 2>/dev/null || true)
+        [[ "$notes" == "## What was done" ]] && notes=""  # empty summary array
+      fi
+    fi
+  fi
+
+  # Source 2: git commit messages for this task
+  if [[ -z "$notes" ]]; then
+    local commits
+    commits=$(git -C "$PROJECT_ROOT" log --oneline --grep="${task_id}" -10 2>/dev/null | sed 's/^[a-f0-9]* /- /')
+    if [[ -n "$commits" ]]; then
+      notes="## What was done"$'\n'"${commits}"
+    fi
+  fi
+
+  # Source 3: assignee name as last resort
+  if [[ -z "$notes" ]]; then
+    local assignee
+    assignee=$(sql_json "SELECT assignee FROM tasks WHERE id = '$(sql_escape "$task_id")';" 2>/dev/null | jq -r '.[0].assignee // empty' 2>/dev/null)
+    [[ -n "$assignee" ]] && notes="Completed by ${assignee}"
+  fi
+
+  # Fire callback
+  local body
+  body=$(jq -n -c \
+    --arg taskId "$task_id" \
+    --arg event "task_closed" \
+    --arg referenceId "$reference_id" \
+    --arg taskStatus "closed" \
+    --arg notes "$notes" \
+    '{taskId: $taskId, event: $event, referenceId: $referenceId, taskStatus: $taskStatus, notes: $notes}')
+
+  curl -sf --max-time 5 -X POST "${ide_url}/api/integrations/${source_id}/callback" \
+    -H "Content-Type: application/json" \
+    -d "$body" >/dev/null 2>&1 || true
+}
+
+# Fire integration status_changed callback when task status changes.
+# Runs in background — silent if no integration or IDE not running.
+_fire_status_callback() {
+  local task_id="$1" new_status="$2"
+  local ide_url="http://127.0.0.1:3333"
+
+  # Quick check: is IDE reachable?
+  curl -sf --max-time 1 "${ide_url}/" >/dev/null 2>&1 || return 0
+
+  # Query integration info
+  local int_json
+  int_json=$(curl -sf --max-time 2 "${ide_url}/api/tasks/integrations?taskIds=${task_id}" 2>/dev/null || echo '{}')
+  local source_id reference_id has_callback
+  source_id=$(echo "$int_json" | jq -r ".integrations.\"${task_id}\".sourceId // empty" 2>/dev/null)
+  reference_id=$(echo "$int_json" | jq -r ".integrations.\"${task_id}\".referenceId // empty" 2>/dev/null)
+  has_callback=$(echo "$int_json" | jq -r ".integrations.\"${task_id}\".callback.url // empty" 2>/dev/null)
+
+  [[ -n "$source_id" && -n "$has_callback" ]] || return 0
+
+  # Only fire if this status has a mapping in the integration config.
+  # Unmapped statuses (e.g. "blocked") would violate the target DB's CHECK constraint.
+  local mapped_status
+  mapped_status=$(echo "$int_json" | jq -r ".integrations.\"${task_id}\".callback.statusMapping.\"${new_status}\" // empty" 2>/dev/null)
+  [[ -n "$mapped_status" ]] || return 0
+
+  # Fire status_changed callback
+  local body
+  body=$(jq -n -c \
+    --arg taskId "$task_id" \
+    --arg event "status_changed" \
+    --arg referenceId "$reference_id" \
+    --arg taskStatus "$new_status" \
+    '{taskId: $taskId, event: $event, referenceId: $referenceId, taskStatus: $taskStatus}')
+
+  curl -sf --max-time 5 -X POST "${ide_url}/api/integrations/${source_id}/callback" \
+    -H "Content-Type: application/json" \
+    -d "$body" >/dev/null 2>&1 || true
 }
 
 # Build JSON for a task matching bd's output format

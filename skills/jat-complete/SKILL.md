@@ -164,22 +164,11 @@ Or manually:
 jt close "$TASK_ID" --reason "Completed by $AGENT_NAME"
 ```
 
-### STEP 4.7: Fire Integration Callback
-
-If this task was ingested from an external source (e.g., Supabase feedback), automatically push a completion summary back:
-
-```bash
-jat-step callback --task "$TASK_ID" --title "$TASK_TITLE" --agent "$AGENT_NAME"
-```
-
-This step:
-- Queries the IDE for integration info (callback URL, reference ID)
-- Reads the review signal to get the summary array
-- Fires the callback webhook with status `closed` and formatted summary as notes
-- Skips silently if no integration or no callback configured
-- Non-blocking: completion continues even if callback fails
-
 ### STEP 4.5: Auto-Close Eligible Epics
+
+> **Note:** Integration callbacks (Supabase status sync, dev_notes) fire automatically
+> from `jt close` — no agent action needed. Notes are sourced from: review signal → git commits → assignee name.
+
 
 ```bash
 jt epic close-eligible
@@ -242,7 +231,6 @@ Fix issues and try again.
 | 2.5 | Update Documentation | (if appropriate) |
 | 3 | Commit Changes | jat-step committing |
 | 3.5 | Write Memory Entry | Write tool + jat-memory index |
-| 4 | Mark Task Complete | jat-step closing |
-| 4.7 | Fire Integration Callback | jat-step callback |
+| 4 | Mark Task Complete | jat-step closing (callback fires automatically) |
 | 4.5 | Auto-Close Epics | jt epic close-eligible |
 | 5 | Emit Completion Signal | jat-step complete |

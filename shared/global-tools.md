@@ -78,4 +78,9 @@ jat-secret --delete my-key                           # Delete a secret
 jat-secret --list                                    # List all secrets
 jat-secret --env stripe                              # Get env var name
 eval $(jat-secret --export)                          # Load all as env vars
+
+# Project secrets (Supabase credentials, database URLs)
+jat-secret flush-supabase-url                        # Project-prefixed name
+jat-secret flush-supabase-service-role-key           # Service role key
+jat-secret --project flush supabase_db_password      # Direct project access
 ```

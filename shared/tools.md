@@ -59,6 +59,10 @@ jat-secret <name>       # Get secret value
 jat-secret --list       # List all secrets
 jat-secret --export     # Output export statements
 jat-secret --env <name> # Get env var name for a key
+
+# Project secrets (Supabase, database URLs, etc.)
+jat-secret flush-supabase-url                        # Project-prefixed name
+jat-secret --project flush supabase_service_role_key # Direct project access
 ```
 
 **jat-skills usage:**

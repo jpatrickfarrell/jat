@@ -403,6 +403,23 @@ Configure project-specific credentials via **Settings → Project Secrets** tab:
 | `supabase_db_password` | Database password for SQL | `SUPABASE_DB_PASSWORD` |
 | `database_url` | PostgreSQL connection string | `DATABASE_URL` |
 
+**Accessing project secrets from agents:**
+```bash
+# Project-prefixed name: {project}-{secret_key_with_dashes}
+jat-secret flush-supabase-url                        # → https://xxx.supabase.co
+jat-secret flush-supabase-service-role-key           # → eyJhb...
+
+# Or use --project flag with underscore key names
+jat-secret --project flush supabase_service_role_key
+
+# Query Supabase from any agent session
+SUPABASE_URL=$(jat-secret flush-supabase-url)
+SUPABASE_KEY=$(jat-secret flush-supabase-service-role-key)
+curl -s "${SUPABASE_URL}/rest/v1/table_name?select=*" \
+  -H "apikey: ${SUPABASE_KEY}" \
+  -H "Authorization: Bearer ${SUPABASE_KEY}"
+```
+
 **Fallback chain:** The system checks credentials in this order:
 1. `~/.config/jat/credentials.json` (Settings UI)
 2. Environment variables

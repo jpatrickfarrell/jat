@@ -1031,7 +1031,7 @@
 	$effect(() => {
 		if (browser) {
 			const tabParam = $page.url.searchParams.get('tab');
-			if (tabParam && ['all', 'servers', 'terminal'].includes(tabParam)) {
+			if (tabParam && ['all', 'servers', 'terminal', 'browser'].includes(tabParam)) {
 				activeTab = tabParam;
 			} else {
 				// Default to 'agents' when no tab param or invalid param
@@ -1170,10 +1170,14 @@
 
 	// Count by type
 	const sessionCounts = $derived(() => {
-		const counts = { agent: 0, server: 0, ide: 0, other: 0, total: 0 };
+		const counts = { agent: 0, server: 0, ide: 0, other: 0, total: 0, browser: 0 };
 		for (const session of sessions) {
 			counts[session.type]++;
 			counts.total++;
+			if (session.type === 'agent') {
+				const agentName = getAgentName(session.name);
+				if (browserSessions.has(agentName)) counts.browser++;
+			}
 		}
 		return counts;
 	});
@@ -1185,6 +1189,11 @@
 			if (activeTab === 'agents') return session.type === 'agent';
 			if (activeTab === 'servers') return session.type === 'server';
 			if (activeTab === 'terminal') return session.type === 'other' || session.type === 'ide';
+			if (activeTab === 'browser') {
+				if (session.type !== 'agent') return false;
+				const agentName = getAgentName(session.name);
+				return browserSessions.has(agentName);
+			}
 			return true;
 		})
 	);

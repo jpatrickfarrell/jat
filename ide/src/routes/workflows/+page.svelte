@@ -236,7 +236,7 @@
 		}
 	}
 
-	async function saveWorkflow() {
+	async function saveWorkflow(options?: { silent?: boolean }) {
 		if (!currentId) return;
 		saving = true;
 		try {
@@ -257,13 +257,37 @@
 			}
 			dirty = false;
 			await loadWorkflows();
-			showToast('Workflow saved');
+			if (!options?.silent) showToast('Workflow saved');
 		} catch (err) {
 			showToast(`Save failed: ${(err as Error).message}`, 'error');
 		} finally {
 			saving = false;
 		}
 	}
+
+	// =========================================================================
+	// AUTO-SAVE (debounced)
+	// =========================================================================
+
+	let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function scheduleAutoSave() {
+		if (autoSaveTimer) clearTimeout(autoSaveTimer);
+		autoSaveTimer = setTimeout(() => {
+			if (dirty && currentId && !saving) {
+				saveWorkflow({ silent: true });
+			}
+		}, 1000);
+	}
+
+	$effect(() => {
+		if (dirty && currentId) {
+			scheduleAutoSave();
+		}
+		return () => {
+			if (autoSaveTimer) clearTimeout(autoSaveTimer);
+		};
+	});
 
 	async function deleteWorkflow() {
 		if (!currentId) return;
@@ -421,8 +445,17 @@
 	// =========================================================================
 
 	function handleKeydown(e: KeyboardEvent) {
-		// Ignore if typing in an input
 		const tag = (e.target as HTMLElement)?.tagName;
+
+		// Ctrl+S should work even from inputs
+		if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+			e.preventDefault();
+			if (autoSaveTimer) clearTimeout(autoSaveTimer);
+			saveWorkflow();
+			return;
+		}
+
+		// Ignore other shortcuts if typing in an input
 		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
 		if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
@@ -431,9 +464,6 @@
 		} else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
 			e.preventDefault();
 			redo();
-		} else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-			e.preventDefault();
-			saveWorkflow();
 		} else if (e.key === 'Delete' || e.key === 'Backspace') {
 			if (selectedNodeIds.size > 0) {
 				pushUndoState();
@@ -679,34 +709,26 @@
 				</svg>
 			</button>
 
-			<!-- Save button -->
-			<button
-				class="btn btn-sm gap-1.5"
-				style="background: {dirty
-					? 'oklch(0.55 0.15 145)'
-					: 'oklch(0.25 0.02 250)'}; color: {dirty
-					? 'oklch(0.15 0.01 250)'
-					: 'oklch(0.50 0.02 250)'}; border: none"
-				onclick={saveWorkflow}
-				disabled={saving || !dirty}
+			<!-- Save status indicator -->
+			<div
+				class="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs"
+				style="color: {saving ? 'oklch(0.65 0.12 200)' : dirty ? 'oklch(0.55 0.10 85)' : 'oklch(0.45 0.02 250)'}"
 			>
 				{#if saving}
-					<span class="loading loading-spinner loading-xs"></span>
-				{:else}
-					<svg
-						class="w-3.5 h-3.5"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-					>
-						<path
-							d="M17 21v-6H7v6M7 3v6h7M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"
-						/>
+					<span class="loading loading-spinner" style="width: 12px; height: 12px"></span>
+					<span>Saving...</span>
+				{:else if dirty}
+					<svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+						<circle cx="12" cy="12" r="6"/>
 					</svg>
+					<span>Unsaved</span>
+				{:else if currentId}
+					<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+						<path d="M5 13l4 4L19 7"/>
+					</svg>
+					<span>Saved</span>
 				{/if}
-				Save
-			</button>
+			</div>
 
 			<!-- Run button -->
 			<button

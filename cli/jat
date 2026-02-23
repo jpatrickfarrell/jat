@@ -443,6 +443,33 @@ do_update() {
         bash "$JAT_SOURCE_DIR/tools/scripts/symlink-tools.sh" &>/dev/null || true
     fi
 
+    # Refresh IDE npm dependencies if package.json changed
+    local ide_path="$JAT_SOURCE_DIR/ide"
+    if [[ -d "$ide_path/node_modules" ]]; then
+        # Check if package.json was modified in the pulled commits
+        local pkg_changed
+        pkg_changed=$(git -C "$JAT_SOURCE_DIR" diff --name-only HEAD@{1}..HEAD -- ide/package.json 2>/dev/null)
+        if [[ -n "$pkg_changed" ]]; then
+            echo -e "${DIM}IDE dependencies changed, running npm install...${NC}"
+            (cd "$ide_path" && npm install --legacy-peer-deps 2>&1) || {
+                echo -e "${YELLOW}  ⚠ npm install failed — run manually: cd $ide_path && npm install${NC}"
+            }
+        fi
+    fi
+
+    # Refresh ingest service npm dependencies if package.json changed
+    local ingest_path="$JAT_SOURCE_DIR/tools/ingest"
+    if [[ -d "$ingest_path/node_modules" ]]; then
+        local ingest_pkg_changed
+        ingest_pkg_changed=$(git -C "$JAT_SOURCE_DIR" diff --name-only HEAD@{1}..HEAD -- tools/ingest/package.json 2>/dev/null)
+        if [[ -n "$ingest_pkg_changed" ]]; then
+            echo -e "${DIM}Ingest dependencies changed, running npm install...${NC}"
+            (cd "$ingest_path" && npm install 2>&1) || {
+                echo -e "${YELLOW}  ⚠ npm install failed — run manually: cd $ingest_path && npm install${NC}"
+            }
+        fi
+    fi
+
     # Ensure all configured projects have .jat/ initialized
     echo -e "${DIM}Checking project databases...${NC}"
     ensure_project_dbs
@@ -832,7 +859,7 @@ launch_ide() {
         return 0
     fi
 
-    # Auto-install npm dependencies if missing
+    # Auto-install npm dependencies if missing or outdated
     if [[ ! -d "$ide_path/node_modules" ]]; then
         echo -e "${DIM}  → Installing IDE dependencies...${NC}"
         (cd "$ide_path" && npm install --legacy-peer-deps 2>&1) || {
@@ -845,6 +872,31 @@ launch_ide() {
             return 1
         }
         echo -e "${GREEN}  ✓ Dependencies installed${NC}"
+    elif [[ "$ide_path/package.json" -nt "$ide_path/node_modules/.package-lock.json" ]]; then
+        # package.json is newer than last install — dependencies may be stale
+        echo -e "${DIM}  → Updating IDE dependencies...${NC}"
+        (cd "$ide_path" && npm install --legacy-peer-deps 2>&1) || {
+            echo -e "${YELLOW}  ⚠ npm install failed — IDE may have issues${NC}"
+            echo -e "${DIM}  Try manually: cd $ide_path && npm install --legacy-peer-deps${NC}"
+        }
+    fi
+
+    # Auto-install ingest service dependencies if missing or outdated
+    local ingest_path="$JAT_SOURCE_DIR/tools/ingest"
+    if [[ -f "$ingest_path/package.json" ]]; then
+        if [[ ! -d "$ingest_path/node_modules" ]]; then
+            echo -e "${DIM}  → Installing ingest dependencies...${NC}"
+            (cd "$ingest_path" && npm install 2>&1) || {
+                echo -e "${YELLOW}  ⚠ Ingest npm install failed — /integrations may not load${NC}"
+                echo -e "${DIM}  Try manually: cd $ingest_path && npm install${NC}"
+            }
+        elif [[ "$ingest_path/package.json" -nt "$ingest_path/node_modules/.package-lock.json" ]]; then
+            echo -e "${DIM}  → Updating ingest dependencies...${NC}"
+            (cd "$ingest_path" && npm install 2>&1) || {
+                echo -e "${YELLOW}  ⚠ Ingest npm install failed — /integrations may not load${NC}"
+                echo -e "${DIM}  Try manually: cd $ingest_path && npm install${NC}"
+            }
+        fi
     fi
 
     # Protocol is always HTTP unless --https is explicitly passed to vite

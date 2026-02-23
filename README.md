@@ -26,8 +26,7 @@ JAT is the complete, self-contained environment for agentic development. Task ma
 
 <!-- [**Docs**](https://jat.tools) | [**Star this repo**](https://github.com/joewinke/jat/stargazers) -->
 
-<!-- TODO: Add screenshot -->
-![JAT IDE](./assets/ide-screenshot.png)
+![JAT IDE](./assets/jat-sessions.png)
 *The JAT IDE: agent sessions, task management, and code editor unified*
 
 ---

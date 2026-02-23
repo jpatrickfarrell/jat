@@ -6,6 +6,7 @@
 	 * Tabs: [Details] [Notes] [Activity] [Deps] [Summary]
 	 */
 
+	import { untrack } from 'svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
 	import SlideOpenButton from '$lib/components/SlideOpenButton.svelte';
@@ -110,8 +111,57 @@
 	// Integration icon
 	const integrationIcon = $derived(integration ? getIntegrationIcon(integration.sourceType) : null);
 
-	// Browser port click handler - fetches active tab and opens it
+	// Browser tab state
 	let browserPortLoading = $state(false);
+	let browserTabInfo = $state<{ url: string; title: string } | null>(null);
+	let browserTabFetching = $state(false);
+	let browserUrlHistory = $state<{ url: string; title: string; fetchedAt: string }[]>([]);
+
+	async function fetchBrowserTab() {
+		if (!browserPort || browserTabFetching) return;
+		browserTabFetching = true;
+		try {
+			const res = await fetch(`/api/browser-sessions/${browserPort}/active-tab`);
+			const data = await res.json();
+			if (res.ok && data.url) {
+				browserTabInfo = { url: data.url, title: data.title || '' };
+				// Accumulate history (dedupe consecutive same URL)
+				const last = browserUrlHistory[browserUrlHistory.length - 1];
+				if (!last || last.url !== data.url) {
+					browserUrlHistory = [
+						...browserUrlHistory,
+						{ url: data.url, title: data.title || '', fetchedAt: new Date().toISOString() }
+					];
+				}
+			}
+		} catch {
+			// silent fail
+		} finally {
+			browserTabFetching = false;
+		}
+	}
+
+	// Fetch active tab when browserPort becomes available
+	// untrack() prevents $effect from re-running when browserTabFetching changes inside fetchBrowserTab
+	$effect(() => {
+		if (browserPort) {
+			untrack(() => fetchBrowserTab());
+		} else {
+			browserTabInfo = null;
+			browserUrlHistory = [];
+		}
+	});
+
+	function truncateUrl(url: string, max = 60): string {
+		try {
+			const u = new URL(url);
+			const display = u.hostname + u.pathname + (u.search || '');
+			return display.length > max ? display.slice(0, max) + '…' : display;
+		} catch {
+			return url.length > max ? url.slice(0, max) + '…' : url;
+		}
+	}
+
 	async function handleBrowserPortClick(event: MouseEvent) {
 		event.stopPropagation();
 		event.preventDefault();
@@ -730,14 +780,18 @@
 				{#if activeTab === 'details'}
 					<!-- Details tab: Assignee/Link, Metadata, Description, Attachments, Labels -->
 					<div class="details-layout">
-						<!-- Top row: Assignee + Details link + Created/Updated -->
+						<!-- Top row: Assignee + Created/Updated + browser badge + Details link -->
 						<div class="details-header-row">
+							<!-- Row 1: assignee + badge + details button -->
+							<div class="details-header-top">
 							{#if details?.assignee}
 								<span class="details-assignee">
 									<AgentAvatar name={details.assignee} size={16} showRing={true} />
 									<span class="assignee-name">{details.assignee}</span>
 								</span>
 							{/if}
+							<!-- Spacer pushes badge+button to right -->
+							<span class="details-header-spacer"></span>
 							{#if browserPort}
 								<!-- svelte-ignore a11y_no_static_element_interactions -->
 								<span class="browser-port-badge cursor-pointer hover:brightness-125 transition-all {browserPortLoading ? 'animate-pulse-subtle' : ''}" title="Click to open agent's browser tab (port {browserPort})" onclick={handleBrowserPortClick}>
@@ -752,27 +806,79 @@
 									:{browserPort}
 								</span>
 							{/if}
-							<div class="details-header-meta">
-								{#if details?.created_at}
-									<span class="header-meta-item">
-										<span class="header-meta-label">Created</span>
-										<span class="header-meta-value">{new Date(details.created_at).toLocaleDateString()}</span>
-									</span>
-								{/if}
-								{#if details?.updated_at}
-									<span class="header-meta-item">
-										<span class="header-meta-label">Updated</span>
-										<span class="header-meta-value">{new Date(details.updated_at).toLocaleDateString()}</span>
-									</span>
-								{/if}
-							</div>
 							<button class="details-link-btn" onclick={() => onViewTask?.(task.id)}>
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
 								</svg>
 								Details
 							</button>
+							</div><!-- end details-header-top -->
+							<!-- Row 2: dates (compact) -->
+							{#if details?.created_at || details?.updated_at}
+								<div class="details-header-meta">
+									{#if details?.created_at}
+										<span class="header-meta-item" title="Created {new Date(details.created_at).toLocaleDateString()}">
+											<span class="header-meta-label">Created</span>
+											<span class="header-meta-value">{new Date(details.created_at).toLocaleDateString('en-US', {month: 'numeric', day: 'numeric'})}</span>
+										</span>
+									{/if}
+									{#if details?.updated_at}
+										<span class="header-meta-item" title="Updated {new Date(details.updated_at).toLocaleDateString()}">
+											<span class="header-meta-label">Updated</span>
+											<span class="header-meta-value">{new Date(details.updated_at).toLocaleDateString('en-US', {month: 'numeric', day: 'numeric'})}</span>
+										</span>
+									{/if}
+								</div>
+							{/if}
 						</div>
+
+						<!-- Browser session URL display -->
+						{#if browserPort}
+							<div class="browser-session-section">
+								<div class="browser-session-row">
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3 browser-section-icon shrink-0">
+										<path fill-rule="evenodd" d="M4.25 5.5a.75.75 0 00-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 00.75-.75v-4a.75.75 0 011.5 0v4A2.25 2.25 0 0112.75 17h-8.5A2.25 2.25 0 012 14.75v-8.5A2.25 2.25 0 014.25 4h5a.75.75 0 010 1.5h-5z" clip-rule="evenodd" />
+										<path fill-rule="evenodd" d="M6.194 12.753a.75.75 0 001.06.053L16.5 4.44v2.81a.75.75 0 001.5 0v-4.5a.75.75 0 00-.75-.75h-4.5a.75.75 0 000 1.5h2.553l-9.056 8.194a.75.75 0 00-.053 1.06z" clip-rule="evenodd" />
+									</svg>
+									{#if browserTabFetching}
+										<span class="browser-url-loading">
+											<span class="loading loading-spinner w-3 h-3"></span>
+											fetching…
+										</span>
+									{:else if browserTabInfo}
+										<!-- svelte-ignore a11y_invalid_attribute -->
+										<a href={browserTabInfo.url} target="_blank" rel="noopener noreferrer" class="browser-tab-url" title={browserTabInfo.url}>
+											{#if browserTabInfo.title && browserTabInfo.title !== browserTabInfo.url}
+												<span class="browser-tab-title">{browserTabInfo.title}</span>
+												<span class="browser-tab-url-text">{truncateUrl(browserTabInfo.url)}</span>
+											{:else}
+												<span class="browser-tab-url-text">{truncateUrl(browserTabInfo.url)}</span>
+											{/if}
+										</a>
+									{:else}
+										<span class="browser-url-empty">no active tab</span>
+									{/if}
+									<!-- svelte-ignore a11y_consider_explicit_label -->
+									<button class="browser-refresh-btn" onclick={() => fetchBrowserTab()} title="Refresh URL" disabled={browserTabFetching}>
+										<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3">
+											<path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H3.989a.75.75 0 00-.75.75v4.242a.75.75 0 001.5 0v-2.43l.31.31a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm1.23-3.723a.75.75 0 00.219-.53V2.929a.75.75 0 00-1.5 0V5.36l-.31-.31A7 7 0 003.239 8.188a.75.75 0 101.448.389A5.5 5.5 0 0113.89 6.11l.311.31h-2.432a.75.75 0 000 1.5h4.243a.75.75 0 00.53-.219z" clip-rule="evenodd" />
+										</svg>
+									</button>
+								</div>
+								{#if browserUrlHistory.length > 1}
+									<div class="browser-url-history">
+										{#each browserUrlHistory.slice().reverse().slice(0, 5) as entry, i (entry.url + entry.fetchedAt)}
+											<div class="browser-history-item" class:browser-history-current={i === 0}>
+												<span class="history-dot"></span>
+												<a href={entry.url} target="_blank" rel="noopener noreferrer" class="history-url" title={entry.url}>
+													{truncateUrl(entry.url, 55)}
+												</a>
+											</div>
+										{/each}
+									</div>
+								{/if}
+							</div>
+						{/if}
 
 						<!-- Integration Source -->
 						{#if integration && integrationIcon}
@@ -1726,16 +1832,27 @@
 		overflow: hidden;
 	}
 
-	/* Details tab header row (assignee + created/updated + link) */
+	/* Details tab header row (assignee + badge + link / dates) */
 	.details-header-row {
 		display: flex;
-		align-items: center;
-		gap: 0.75rem;
+		flex-direction: column;
+		gap: 0.25rem;
 		padding: 0.375rem 0.5rem;
 		background: oklch(0.14 0.01 250);
 		border-radius: 0.375rem;
 		border: 1px solid oklch(0.20 0.02 250);
 		margin-bottom: 0.5rem;
+	}
+
+	.details-header-top {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		min-width: 0;
+	}
+
+	.details-header-spacer {
+		flex: 1;
 	}
 
 	.details-assignee {
@@ -1744,10 +1861,16 @@
 		gap: 0.375rem;
 		font-size: 0.8rem;
 		color: oklch(0.75 0.02 250);
+		min-width: 0;
+		flex-shrink: 1;
+		overflow: hidden;
 	}
 
 	.assignee-name {
 		font-weight: 500;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.browser-port-badge {
@@ -1768,8 +1891,7 @@
 	.details-header-meta {
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
-		margin-left: auto;
+		gap: 0.5rem;
 	}
 
 	.header-meta-item {
@@ -1805,6 +1927,146 @@
 		background: oklch(0.25 0.05 220);
 		border-color: oklch(0.40 0.08 220);
 		color: oklch(0.80 0.12 220);
+	}
+
+	/* Browser session URL section (below header row) */
+	.browser-session-section {
+		margin-bottom: 0.5rem;
+		padding: 0.375rem 0.5rem;
+		background: oklch(0.14 0.01 250);
+		border-radius: 0.375rem;
+		border: 1px solid oklch(0.70 0.15 55 / 0.18);
+	}
+
+	.browser-session-row {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		min-width: 0;
+	}
+
+	.browser-section-icon {
+		color: oklch(0.60 0.10 55);
+		flex-shrink: 0;
+	}
+
+	.browser-tab-url {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		min-width: 0;
+		flex: 1;
+		text-decoration: none;
+	}
+
+	.browser-tab-url:hover .browser-tab-url-text {
+		color: oklch(0.80 0.12 220);
+		text-decoration: underline;
+	}
+
+	.browser-tab-title {
+		font-size: 0.7rem;
+		font-weight: 500;
+		color: oklch(0.75 0.05 250);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.browser-tab-url-text {
+		font-size: 0.65rem;
+		color: oklch(0.55 0.08 220);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		font-family: monospace;
+	}
+
+	.browser-url-loading {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.65rem;
+		color: oklch(0.55 0.05 250);
+		flex: 1;
+	}
+
+	.browser-url-empty {
+		font-size: 0.65rem;
+		color: oklch(0.45 0.03 250);
+		flex: 1;
+		font-style: italic;
+	}
+
+	.browser-refresh-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 2px;
+		border-radius: 3px;
+		border: none;
+		background: transparent;
+		color: oklch(0.50 0.05 250);
+		cursor: pointer;
+		flex-shrink: 0;
+		transition: color 0.1s, background 0.1s;
+	}
+
+	.browser-refresh-btn:hover:not(:disabled) {
+		color: oklch(0.75 0.10 55);
+		background: oklch(0.70 0.15 55 / 0.10);
+	}
+
+	.browser-refresh-btn:disabled {
+		opacity: 0.4;
+		cursor: default;
+	}
+
+	.browser-url-history {
+		margin-top: 0.375rem;
+		padding-top: 0.375rem;
+		border-top: 1px solid oklch(0.22 0.02 250);
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.browser-history-item {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		min-width: 0;
+	}
+
+	.history-dot {
+		width: 4px;
+		height: 4px;
+		border-radius: 50%;
+		background: oklch(0.40 0.05 250);
+		flex-shrink: 0;
+	}
+
+	.browser-history-item.browser-history-current .history-dot {
+		background: oklch(0.70 0.15 55);
+	}
+
+	.history-url {
+		font-size: 0.625rem;
+		color: oklch(0.50 0.06 220);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		text-decoration: none;
+		font-family: monospace;
+	}
+
+	.browser-history-item.browser-history-current .history-url {
+		color: oklch(0.65 0.10 220);
+	}
+
+	.history-url:hover {
+		color: oklch(0.75 0.12 220);
+		text-decoration: underline;
 	}
 
 	/* Notes tab - Monaco editor container */

@@ -154,6 +154,19 @@
 	// Build epic-child map from all tasks
 	const epicChildMap = $derived(buildEpicChildMap(allTasks));
 
+	// Epics where all children are closed but epic itself is still open (ready for verification)
+	const epicsReadyForVerification = $derived.by(() => {
+		const readySet = new Set<string>();
+		for (const task of allTasks) {
+			if (task.issue_type !== 'epic' || task.status !== 'open') continue;
+			const children = allTasks.filter(t => t.id !== task.id && getParentEpicId(t.id, epicChildMap) === task.id);
+			if (children.length > 0 && children.every(c => c.status === 'closed')) {
+				readySet.add(task.id);
+			}
+		}
+		return readySet;
+	});
+
 	// Get all unique projects from sessions and tasks
 	const allProjects = $derived(() => {
 		const projects = new Set<string>();
@@ -935,6 +948,7 @@
 												error={null}
 												{spawningTaskId}
 												{projectColors}
+												{epicsReadyForVerification}
 												onSpawnTask={spawnTask as any}
 												onRetry={fetchOpenTasks}
 												onTaskClick={(taskId) => openTaskDetailDrawer(taskId)}
@@ -981,6 +995,7 @@
 												error={null}
 												{spawningTaskId}
 												{projectColors}
+												{epicsReadyForVerification}
 												onSpawnTask={spawnTask as any}
 												onRetry={fetchOpenTasks}
 												onTaskClick={(taskId) => openTaskDetailDrawer(taskId)}

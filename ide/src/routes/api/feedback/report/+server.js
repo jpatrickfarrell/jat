@@ -20,6 +20,7 @@ import { resolve, join, dirname } from 'path';
 import { homedir } from 'os';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import Database from 'better-sqlite3';
 
 const execAsync = promisify(exec);
 
@@ -236,6 +237,27 @@ export async function POST({ request }) {
 			} catch (err) {
 				console.warn('[feedback-report] Failed to register attachments:', err.message);
 			}
+		}
+
+		// Register in ingest.db so lookupIntegrations finds this task
+		try {
+			const ingestDbPath = join(homedir(), '.local', 'share', 'jat', 'ingest.db');
+			if (existsSync(ingestDbPath)) {
+				const db = new Database(ingestDbPath);
+				db.prepare(
+					`INSERT OR IGNORE INTO ingested_items (source_id, item_id, task_id, title, origin_adapter_type)
+					 VALUES (?, ?, ?, ?, ?)`
+				).run(
+					'feedback-widget',
+					`feedback-${createdTask.id}`,
+					createdTask.id,
+					`[Feedback] ${title}`,
+					'feedback'
+				);
+				db.close();
+			}
+		} catch (err) {
+			console.warn('[feedback-report] Failed to register in ingest.db:', err.message);
 		}
 
 		// Invalidate caches

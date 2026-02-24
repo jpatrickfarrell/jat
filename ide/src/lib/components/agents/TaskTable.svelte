@@ -666,7 +666,12 @@
 			// Find the epic in allTasks to get its title
 			const epic = allTasks.find(t => t.id === epicId);
 			const title = epic?.title || epicId;
-			addToast({ message: `Epic Complete: ${title}`, type: 'success', details: `All children of ${epicId} are now closed`, projectId: getProjectFromTaskId(epicId) || undefined, taskId: epicId, route: `/tasks?taskDetailDrawer=${epicId}` });
+			const epicIsClosed = epic?.status === 'closed';
+			if (epicIsClosed) {
+				addToast({ message: `Epic Complete: ${title}`, type: 'success', details: `All children of ${epicId} are now closed`, projectId: getProjectFromTaskId(epicId) || undefined, taskId: epicId, route: `/tasks?taskDetailDrawer=${epicId}` });
+			} else {
+				addToast({ message: `Epic Ready for Verification: ${title}`, type: 'info', details: `All children of ${epicId} are closed — epic needs verification`, projectId: getProjectFromTaskId(epicId) || undefined, taskId: epicId, route: `/tasks?taskDetailDrawer=${epicId}` });
+			}
 		}
 
 		// If auto-close is enabled, close the epics in JAT
@@ -3653,9 +3658,11 @@
 						{@const parentAllChildren = epicChildrenAllMap.get(groupKey) || []}
 						{@const parentClosedCount = parentAllChildren.filter(t => t.status === 'closed').length}
 						{@const parentTotalCount = parentAllChildren.length}
-						{@const parentIsFullyComplete = parentClosedCount === parentTotalCount && parentTotalCount > 0}
+						{@const parentAllChildrenClosed = parentClosedCount === parentTotalCount && parentTotalCount > 0}
+						{@const parentActuallyComplete = parentAllChildrenClosed && parentTask?.status === 'closed'}
+						{@const parentReadyForVerification = parentAllChildrenClosed && parentTask?.status !== 'closed'}
 						{@const hasParentReadyChildren = typeTasks.some(t => t.status === 'open' && !t.depends_on?.some(d => d.status !== 'closed'))}
-						{@const canRunParentEpic = groupingMode === 'parent' && !isParentRunningEpic && !parentIsFullyComplete && hasParentReadyChildren}
+						{@const canRunParentEpic = groupingMode === 'parent' && !isParentRunningEpic && !parentActuallyComplete && (hasParentReadyChildren || parentReadyForVerification)}
 						{#if showGroupHeader}
 						<thead>
 							<tr
@@ -3741,20 +3748,27 @@
 										<!-- Epic progress bar (only in parent mode with >1 tasks) -->
 										{#if groupingMode === 'parent' && parentTotalCount > 1}
 											{@const progressPercent = Math.round((parentClosedCount / parentTotalCount) * 100)}
-											<div class="flex items-center gap-2 ml-3" title="{parentClosedCount} of {parentTotalCount} tasks completed">
-												<!-- Checkmark for fully complete -->
-												{#if parentIsFullyComplete}
+											<div class="flex items-center gap-2 ml-3" title="{parentReadyForVerification ? `${parentClosedCount}/${parentTotalCount} children complete — epic ready for verification` : `${parentClosedCount} of ${parentTotalCount} tasks completed`}">
+												<!-- Checkmark for fully complete / Rocket for ready-to-verify -->
+												{#if parentActuallyComplete}
 													<span class="flex items-center justify-center w-5 h-5 rounded-full bg-success/25">
 														<svg class="w-3 h-3 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
 														</svg>
 													</span>
+												{:else if parentReadyForVerification}
+													<span class="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide" style="background: oklch(0.55 0.15 200 / 0.25); color: oklch(0.80 0.15 200);">
+														<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+														</svg>
+														Verify
+													</span>
 												{/if}
 												<!-- Progress bar -->
 												<div class="w-24 h-1.5 bg-base-content/10 rounded-full overflow-hidden {isParentRunningEpic ? 'ring-1 ring-primary/30' : ''}">
 													<div
-														class="h-full rounded-full transition-all duration-300 {isParentRunningEpic ? 'animate-pulse' : ''} {parentIsFullyComplete ? 'bg-success' : isParentRunningEpic ? 'bg-warning' : ''}"
-														style="width: {progressPercent}%; {!parentIsFullyComplete && !isParentRunningEpic ? `background: ${typeVisual.accent};` : ''}"
+														class="h-full rounded-full transition-all duration-300 {isParentRunningEpic ? 'animate-pulse' : ''} {parentActuallyComplete ? 'bg-success' : parentReadyForVerification ? '' : isParentRunningEpic ? 'bg-warning' : ''}"
+														style="width: {progressPercent}%; {parentReadyForVerification ? 'background: oklch(0.65 0.15 200);' : !parentActuallyComplete && !isParentRunningEpic ? `background: ${typeVisual.accent};` : ''}"
 													></div>
 												</div>
 												<!-- X/Y complete text -->
@@ -3776,23 +3790,34 @@
 											</div>
 										{/if}
 
-										<!-- Run Epic button (only in parent mode) -->
-										{#if groupingMode === 'parent' && !parentIsFullyComplete}
+										<!-- Run/Verify Epic button (only in parent mode) -->
+										{#if groupingMode === 'parent' && !parentActuallyComplete}
 											<button
-												class="inline-flex items-center h-6 px-2 text-xs font-medium rounded gap-1 ml-2 bg-transparent text-base-content/70 hover:bg-primary/20 hover:text-primary transition-colors {canRunParentEpic ? '' : 'opacity-40 cursor-not-allowed'}"
+												class="inline-flex items-center h-6 px-2 text-xs font-medium rounded gap-1 ml-2 bg-transparent transition-colors {parentReadyForVerification ? 'text-info hover:bg-info/20 hover:text-info' : 'text-base-content/70 hover:bg-primary/20 hover:text-primary'} {canRunParentEpic ? '' : 'opacity-40 cursor-not-allowed'}"
 												onclick={(e) => {
 													e.stopPropagation();
 													if (canRunParentEpic && groupKey) {
-														openEpicSwarmModal(groupKey);
+														if (parentReadyForVerification) {
+															handleSpawnSingle(groupKey);
+														} else {
+															openEpicSwarmModal(groupKey);
+														}
 													}
 												}}
 												disabled={!canRunParentEpic}
-												title={isParentRunningEpic ? 'Epic is already running' : !hasParentReadyChildren ? 'No ready tasks to run' : 'Launch Epic Swarm'}
+												title={isParentRunningEpic ? 'Epic is already running' : parentReadyForVerification ? 'All children complete — spawn agent to verify epic' : !hasParentReadyChildren ? 'No ready tasks to run' : 'Launch Epic Swarm'}
 											>
-												<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
-												</svg>
-												<span class="hidden sm:inline text-xs">Run</span>
+												{#if parentReadyForVerification}
+													<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+													</svg>
+													<span class="hidden sm:inline text-xs">Verify</span>
+												{:else}
+													<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+														<path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+													</svg>
+													<span class="hidden sm:inline text-xs">Run</span>
+												{/if}
 											</button>
 										{/if}
 

@@ -174,6 +174,10 @@
 
 	let expandedTaskDetails = $state<ExtendedTaskDetails | null>(null);
 	let taskDetailsLoading = $state(false);
+	let expandedTaskIntegration = $state<{
+		sourceId: string; sourceType: string; sourceName: string; sourceEnabled: boolean;
+		callback?: any; actions?: any[]; itemId?: string; referenceId?: string; projectUrl?: string;
+	} | null>(null);
 
 
 	const priorityColors: Record<number, string> = {
@@ -747,20 +751,24 @@
 
 		taskDetailsLoading = true;
 		expandedTaskDetails = null;
+		expandedTaskIntegration = null;
 
 		try {
-			// Fetch task details, attachments, history, and signals in parallel
-			const [taskRes, attachmentsRes, historyRes, signalsRes] = await Promise.all([
+			// Fetch task details, attachments, history, signals, and integration in parallel
+			const [taskRes, attachmentsRes, historyRes, signalsRes, integrationRes] = await Promise.all([
 				fetch(`/api/tasks/${taskId}`),
 				fetch(`/api/tasks/${taskId}/images`),
 				fetch(`/api/tasks/${taskId}/history`),
-				fetch(`/api/tasks/${taskId}/signals`)
+				fetch(`/api/tasks/${taskId}/signals`),
+				fetch(`/api/tasks/integrations?taskIds=${taskId}`)
 			]);
 
 			const taskData = taskRes.ok ? await taskRes.json() : null;
 			const attachmentsData = attachmentsRes.ok ? await attachmentsRes.json() : { images: [] };
 			const historyData = historyRes.ok ? await historyRes.json() : { timeline: [], count: { total: 0, jat_events: 0, agent_mail: 0 } };
 			const signalsData = signalsRes.ok ? await signalsRes.json() : { signals: [] };
+			const integrationData = integrationRes.ok ? await integrationRes.json() : { integrations: {} };
+			expandedTaskIntegration = integrationData.integrations?.[taskId] || null;
 
 			// Convert signals to timeline event format and merge with history
 			const signalEvents = (signalsData.signals || []).map((signal: any) => ({
@@ -1722,6 +1730,7 @@
 													details={expandedTaskDetails}
 													loading={taskDetailsLoading}
 													height={expandedHeight}
+													integration={expandedTaskIntegration}
 													browserPort={browserSessions.get(expandedAgentName) || null}
 													onViewTask={(taskId) => { window.location.href = `/tasks?task=${taskId}`; }}
 												/>

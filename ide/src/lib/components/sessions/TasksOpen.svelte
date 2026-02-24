@@ -64,6 +64,7 @@
 		taskIntegrations = {},
 		showHeader = true,
 		highlightedTaskIds = new Set<string>(),
+		epicsReadyForVerification = new Set<string>(),
 		onSpawnTask = () => {},
 		onRetry = () => {},
 		onTaskClick = () => {},
@@ -77,6 +78,7 @@
 		taskIntegrations?: Record<string, { sourceId: string; sourceType: string; sourceName: string; sourceEnabled: boolean }>;
 		showHeader?: boolean;
 		highlightedTaskIds?: Set<string>;
+		epicsReadyForVerification?: Set<string>;
 		onSpawnTask: (task: Task, selection?: AgentSelection) => void;
 		onRetry: () => void;
 		onTaskClick: (taskId: string) => void;
@@ -1295,6 +1297,15 @@
 										<div class="text-column">
 											<span class="task-title {isNew ? 'tracking-in-expand' : ''}" style={isNew ? 'animation-delay: 100ms;' : ''} title={task.title}>
 												{task.title}
+												{#if epicsReadyForVerification.has(task.id)}
+													<span style="display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 1px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em; background: oklch(0.55 0.15 200 / 0.25); color: oklch(0.80 0.15 200); border: 1px solid oklch(0.55 0.15 200 / 0.4); vertical-align: middle;" title="All children complete — epic ready for verification">
+														<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style="width: 10px; height: 10px;">
+															<path fill-rule="evenodd" d="M4.606 12.97a.75.75 0 0 1-.134 1.051 2.494 2.494 0 0 0-.93 2.437 2.494 2.494 0 0 0 2.437-.93.75.75 0 1 1 1.186.918 3.995 3.995 0 0 1-4.482 1.332.75.75 0 0 1-.461-.461 3.994 3.994 0 0 1 1.332-4.482.75.75 0 0 1 1.052.134Z" clip-rule="evenodd" />
+															<path fill-rule="evenodd" d="M5.752 12A13.07 13.07 0 0 0 8 14.248l4.47-4.47A12.03 12.03 0 0 0 16 5.5 12.03 12.03 0 0 0 11.722 9l-.002.002L7.28 13.47A13.07 13.07 0 0 0 5.752 12ZM16 4.5a.75.75 0 0 1 .75.75v.217c0 3.528-1.55 6.885-4.234 9.16l.017-.013-.003.002A14.573 14.573 0 0 1 8 17.806a.75.75 0 0 1-.553-.098.75.75 0 0 1-.198-.146A14.573 14.573 0 0 1 4.5 12.53l.002-.003-.013.017A12.78 12.78 0 0 1 13.533 3.75H13.75a.75.75 0 0 1 .75.75Z" clip-rule="evenodd" />
+														</svg>
+														VERIFY
+													</span>
+												{/if}
 											</span>
 											{#if task.description}
 												<div class="task-description {isNew ? 'tracking-in-expand' : ''}" style={isNew ? 'animation-delay: 100ms;' : ''}>

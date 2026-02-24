@@ -127,7 +127,7 @@
 		// Update validation based on directory state
 		if (dir.hasJat) {
 			validationStatus = 'already-initialized';
-			validationMessage = 'JAT already initialized in this project';
+			validationMessage = 'JAT already initialized — will add to IDE';
 		} else if (!dir.isGitRepo) {
 			validationStatus = 'needs-git';
 			validationMessage = 'Not a git repository. Initialize git to continue.';
@@ -302,7 +302,7 @@
 				selectedDirectory = dirInfo;
 				if (dirInfo.hasJat) {
 					validationStatus = 'already-initialized';
-					validationMessage = 'JAT already initialized in this project';
+					validationMessage = 'JAT already initialized — will add to IDE';
 				} else if (!dirInfo.isGitRepo) {
 					validationStatus = 'invalid';
 					validationMessage = 'Not a git repository. Run "git init" first.';
@@ -346,10 +346,7 @@
 			return;
 		}
 
-		if (validationStatus === 'already-initialized') {
-			submitError = 'This project is already initialized with JAT';
-			return;
-		}
+		// 'already-initialized' is allowed — the API will just add it to config
 
 		submitError = null;
 		successMessage = null;
@@ -429,9 +426,9 @@
 		switch (status) {
 			case 'valid':
 			case 'will-create':
+			case 'already-initialized':
 				return 'oklch(0.70 0.18 145)'; // Green
 			case 'invalid':
-			case 'already-initialized':
 				return 'oklch(0.65 0.20 25)'; // Red/orange
 			case 'needs-git':
 				return 'oklch(0.70 0.18 85)'; // Amber/warning
@@ -901,7 +898,7 @@
 						type="submit"
 						class="btn btn-primary font-mono"
 						onclick={handleSubmit}
-						disabled={isSubmitting || validationStatus === 'checking' || validationStatus === 'invalid' || validationStatus === 'already-initialized' || validationStatus === 'needs-git' || validationStatus === 'idle'}
+						disabled={isSubmitting || validationStatus === 'checking' || validationStatus === 'invalid' || validationStatus === 'needs-git' || validationStatus === 'idle'}
 					>
 						{#if isSubmitting}
 							<span class="loading loading-spinner loading-sm"></span>

@@ -13,7 +13,7 @@ import { json } from '@sveltejs/kit';
 import { readFile, readdir, stat, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { homedir } from 'os';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { apiCache, cacheKey, CACHE_TTL, invalidateCache } from '$lib/server/cache.js';
@@ -783,8 +783,9 @@ export async function POST({ request }) {
 			}
 
 			// Resolve path (default to ~/code/{key})
+			// Use resolve() to normalize (handles trailing slashes, ./ segments, etc.)
 			const resolvedPath = projectPath
-				? projectPath.replace(/^~/, homedir())
+				? resolve(projectPath.replace(/^~/, homedir()))
 				: join(homedir(), 'code', key);
 
 			// Verify directory exists (or create it if requested)
@@ -802,10 +803,12 @@ export async function POST({ request }) {
 					}
 				} else {
 					// Return error with flag indicating directory can be created
+					console.warn(`[Projects API] Directory not found for project "${key}": input="${projectPath}", resolved="${resolvedPath}"`);
 					return json({
 						error: `Directory does not exist: ${resolvedPath}`,
 						directoryNotFound: true,
-						path: resolvedPath
+						path: resolvedPath,
+						inputPath: projectPath
 					}, { status: 400 });
 				}
 			}

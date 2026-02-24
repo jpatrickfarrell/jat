@@ -1,9 +1,11 @@
 <script lang="ts">
 	/**
-	 * CSS Scale Minimap - Uses CSS transform: scale() on a cloned terminal view
+	 * CSS Scale Minimap - Sublime Text style
 	 *
-	 * Pros: Real text, preserves ANSI colors, simple implementation
-	 * Cons: Can be slow with very long output, may have rendering issues
+	 * Uses a fixed scale factor so text remains readable regardless of content length.
+	 * When content exceeds the minimap height, only a portion is shown at a time,
+	 * scrolling in sync with the terminal. The viewport indicator shows which part
+	 * of the document is currently visible in the terminal.
 	 */
 	import { ansiToHtml } from '$lib/utils/ansiToHtml';
 
@@ -16,88 +18,110 @@
 	}: {
 		output: string;
 		height?: number;
-		/** Optional fixed scale factor (overrides auto-computed scale) */
+		/** Optional fixed scale factor (overrides default 0.12) */
 		scale?: number;
 		terminalWidth?: number;
 		onPositionClick?: (percent: number) => void;
 	} = $props();
 
+	const FIXED_SCALE = 0.12;
+
 	let minimapContainer: HTMLDivElement;
 	let measureContainer: HTMLDivElement;
-	let viewportIndicator: HTMLDivElement;
 
-	// Track viewport position (0-100%)
-	let viewportTop = $state(0);
-	let viewportHeight = $state(20); // Percentage of total content visible
-
-	// Derived HTML content
-	const htmlContent = $derived(ansiToHtml(output));
-
-	// Measure natural content height and compute scale
-	let naturalHeight = $state(0);
+	// Terminal scroll state (set externally via setViewportPosition)
+	let scrollPercent = $state(0);   // 0-100: how far the terminal has scrolled
+	let visiblePercent = $state(20); // 0-100: what % of total content the terminal shows
 	let isDragging = $state(false);
 
-	// Compute scale to fit all content in minimap height (use fixed scale if provided)
-	const computedScale = $derived(
-		_scale != null
-			? _scale
-			: naturalHeight > 0 && height > 0
-				? Math.min(1, height / naturalHeight)
-				: 0.1
-	);
+	const htmlContent = $derived(ansiToHtml(output));
+
+	let naturalHeight = $state(0);
+
+	const computedScale = $derived(_scale != null ? _scale : FIXED_SCALE);
+
+	// Total height of content after scaling
+	const scaledHeight = $derived(naturalHeight * computedScale);
+
+	// Whether the scaled content overflows the minimap container
+	const overflows = $derived(scaledHeight > height);
+
+	// Content scroll offset (px). Maps terminal scroll (0-100%) to minimap content offset.
+	const contentOffset = $derived.by(() => {
+		if (!overflows) return 0;
+		const maxOffset = scaledHeight - height;
+		return (scrollPercent / 100) * maxOffset;
+	});
+
+	// Viewport indicator position relative to the scaled content (not the container)
+	// This gives us the position in "content space" which we then adjust for the scroll offset
+	const viewportInContentY = $derived.by(() => {
+		if (scaledHeight <= 0) return 0;
+		// The viewport starts at scrollPercent% through the content, adjusted for its own size
+		const maxScrollable = scaledHeight - (visiblePercent / 100) * scaledHeight;
+		return (scrollPercent / 100) * maxScrollable;
+	});
+
+	// Viewport position in container space (subtract the content scroll offset)
+	const viewportY = $derived(viewportInContentY - contentOffset);
+
+	// Viewport indicator height in pixels
+	const viewportH = $derived.by(() => {
+		const h = (visiblePercent / 100) * scaledHeight;
+		return Math.max(10, Math.min(height, h));
+	});
 
 	$effect(() => {
 		if (measureContainer && output) {
-			// Measure content at natural size
 			naturalHeight = measureContainer.scrollHeight;
 		}
 	});
 
-	function handleMinimapClick(e: MouseEvent) {
-		e.preventDefault(); // Prevent text selection
-		if (!minimapContainer) return;
-
+	function clickToPercent(clientY: number): number {
+		if (!minimapContainer) return 0;
 		const rect = minimapContainer.getBoundingClientRect();
-		const clickY = e.clientY - rect.top;
-		const percent = (clickY / rect.height) * 100;
+		const clickY = clientY - rect.top;
 
-		onPositionClick(Math.max(0, Math.min(100, percent)));
+		if (overflows) {
+			// The click position in the container maps to a position in content space
+			const contentY = clickY + contentOffset;
+			// Convert content position to a document percentage
+			return Math.max(0, Math.min(100, (contentY / scaledHeight) * 100));
+		} else {
+			return Math.max(0, Math.min(100, (clickY / height) * 100));
+		}
+	}
+
+	function handleMinimapClick(e: MouseEvent) {
+		e.preventDefault();
+		onPositionClick(clickToPercent(e.clientY));
 	}
 
 	function handleDragStart(e: MouseEvent) {
-		e.preventDefault(); // Prevent text selection
+		e.preventDefault();
 		isDragging = true;
 		handleDrag(e);
 	}
 
 	function handleDrag(e: MouseEvent) {
-		if (!isDragging || !minimapContainer) return;
-
-		const rect = minimapContainer.getBoundingClientRect();
-		const dragY = e.clientY - rect.top;
-		const percent = (dragY / rect.height) * 100;
-
-		viewportTop = Math.max(0, Math.min(100 - viewportHeight, percent - viewportHeight / 2));
-		onPositionClick(viewportTop);
+		if (!isDragging) return;
+		onPositionClick(clickToPercent(e.clientY));
 	}
 
 	function handleDragEnd() {
 		isDragging = false;
 	}
 
-	// Update viewport indicator based on external scroll position
-	export function setViewportPosition(scrollPercent: number, visiblePercent: number) {
-		viewportHeight = visiblePercent;
-		// Scale viewportTop so viewport stays within 0-100% range
-		// When scrollPercent=0, viewportTop=0; when scrollPercent=100, viewportTop=100-viewportHeight
-		viewportTop = (scrollPercent / 100) * (100 - visiblePercent);
+	export function setViewportPosition(newScrollPercent: number, newVisiblePercent: number) {
+		scrollPercent = newScrollPercent;
+		visiblePercent = newVisiblePercent;
 	}
 </script>
 
 <svelte:window onmousemove={handleDrag} onmouseup={handleDragEnd} />
 
 <div class="minimap-css-scale" style="height: {height}px;">
-	<!-- Hidden container to measure natural content height (matches terminal width) -->
+	<!-- Hidden measure container -->
 	<div class="measure-container" bind:this={measureContainer} style="width: {terminalWidth}px;">
 		<pre class="terminal-output">{@html htmlContent}</pre>
 	</div>
@@ -109,12 +133,16 @@
 		role="slider"
 		tabindex="0"
 		aria-label="Minimap navigation"
-		aria-valuenow={viewportTop}
+		aria-valuenow={scrollPercent}
 	>
-		<!-- Scaled content -->
+		<!-- Scaled content, translated to show current portion -->
 		<div
 			class="minimap-content"
-			style="transform: scale({computedScale}); transform-origin: top left; width: {computedScale > 0 ? 100/computedScale : 1000}%;"
+			style="
+				transform: scale({computedScale}) translateY({-contentOffset / computedScale}px);
+				transform-origin: top left;
+				width: {computedScale > 0 ? 100 / computedScale : 1000}%;
+			"
 		>
 			<pre class="terminal-output">{@html htmlContent}</pre>
 		</div>
@@ -122,8 +150,7 @@
 		<!-- Viewport indicator -->
 		<div
 			class="viewport-indicator"
-			bind:this={viewportIndicator}
-			style="top: {viewportTop}%; height: {viewportHeight}%;"
+			style="top: {viewportY}px; height: {viewportH}px;"
 			onmousedown={handleDragStart}
 			role="button"
 			tabindex="0"
@@ -142,12 +169,10 @@
 		position: relative;
 	}
 
-	/* Hidden container for measuring natural content height */
 	.measure-container {
 		position: absolute;
 		visibility: hidden;
 		pointer-events: none;
-		/* Width is set inline to match terminal width */
 	}
 
 	.minimap-container {

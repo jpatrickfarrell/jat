@@ -41,7 +41,7 @@ export function lookupIntegrations(taskIds) {
 
 		const placeholders = taskIds.map(() => '?').join(',');
 		const rows = db.prepare(
-			`SELECT task_id, source_id, item_id FROM ingested_items WHERE task_id IN (${placeholders})`
+			`SELECT task_id, source_id, item_id, origin_adapter_type FROM ingested_items WHERE task_id IN (${placeholders})`
 		).all(...taskIds);
 
 		if (rows.length === 0) return {};
@@ -57,14 +57,14 @@ export function lookupIntegrations(taskIds) {
 		const integrations = {};
 		for (const row of /** @type {any[]} */ (rows)) {
 			const source = sourceMap.get(row.source_id);
-			const sourceType = source?.type || 'unknown';
+			const sourceType = source?.type || row.origin_adapter_type || 'unknown';
 			const referenceId = extractReferenceId(row.item_id, sourceType);
 
 			/** @type {any} */
 			const entry = {
 				sourceId: row.source_id,
 				sourceType,
-				sourceName: source ? (source.channel || source.feedUrl || source.chatId || source.id) : row.source_id,
+				sourceName: source ? (source.channel || source.feedUrl || source.chatId || source.id) : (row.origin_adapter_type || row.source_id),
 				sourceEnabled: source?.enabled ?? false,
 				itemId: row.item_id || null,
 				referenceId

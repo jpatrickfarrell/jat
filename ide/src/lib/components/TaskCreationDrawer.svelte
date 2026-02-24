@@ -27,7 +27,7 @@
 	import CreateTemplate from './tasks/CreateTemplate.svelte';
 	import CreateGenerator from './tasks/CreateGenerator.svelte';
 	import CreatePlan from './tasks/CreatePlan.svelte';
-	import { AGENT_PRESETS } from '$lib/types/agentProgram';
+	import { AGENT_PRESETS, type AgentProgramPreset } from '$lib/types/agentProgram';
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
 	import { loadCommands, getCommands } from '$lib/stores/configStore.svelte';
 
@@ -112,7 +112,7 @@
 		}
 	});
 
-	// Fetch project harness defaults when drawer opens
+	// Fetch project harness defaults and configured agent programs when drawer opens
 	$effect(() => {
 		if (isOpen && Object.keys(projectHarnessMap).length === 0) {
 			fetch('/api/projects?visible=true')
@@ -123,6 +123,41 @@
 						if (p.defaultHarness) map[p.name] = p.defaultHarness;
 					}
 					projectHarnessMap = map;
+				})
+				.catch(() => {});
+		}
+		if (isOpen && configuredPrograms.length === 0) {
+			fetch('/api/config/agents')
+				.then(r => r.json())
+				.then(data => {
+					if (data.success && data.programs) {
+						// Convert configured programs object into AgentProgramPreset format
+						const programs = Object.values(data.programs) as any[];
+						const presets: AgentProgramPreset[] = programs
+							.filter((p: any) => p.enabled !== false)
+							.sort((a: any, b: any) => (a.order ?? 999) - (b.order ?? 999))
+							.map((p: any) => ({
+								id: p.id,
+								name: p.name,
+								description: '',
+								config: {
+									id: p.id,
+									name: p.name,
+									command: p.command || '',
+									models: p.models || [],
+									defaultModel: p.defaultModel || '',
+									authType: p.authType || 'subscription',
+									flags: p.flags || [],
+									taskInjection: p.taskInjection || 'prompt'
+								}
+							}));
+						// Always include human option at end
+						const humanPreset = AGENT_PRESETS.find(p => p.id === 'human');
+						if (humanPreset && !presets.find(p => p.id === 'human')) {
+							presets.push(humanPreset);
+						}
+						if (presets.length > 0) configuredPrograms = presets;
+					}
 				})
 				.catch(() => {});
 		}
@@ -302,15 +337,15 @@
 	// Model selection state (extends existing harness)
 	let selectedModel = $state<string>('');
 
-	// Derive available models from selected harness
+	// Derive available models from selected harness (uses configured programs, falls back to presets)
 	const availableModels = $derived(() => {
-		const preset = AGENT_PRESETS.find(p => p.id === selectedHarness);
+		const preset = harnessPresets.find(p => p.id === selectedHarness);
 		return preset?.config.models || [];
 	});
 
 	// Update selected model when harness changes
 	$effect(() => {
-		const preset = AGENT_PRESETS.find(p => p.id === selectedHarness);
+		const preset = harnessPresets.find(p => p.id === selectedHarness);
 		if (preset) {
 			selectedModel = preset.config.defaultModel || '';
 		} else {
@@ -363,6 +398,15 @@
 	let selectedHarness = $state<string>('claude-code');
 	let harnessDropdownOpen = $state(false);
 	let projectHarnessMap = $state<Record<string, string>>({});
+
+	// Configured agent programs from /api/config/agents (replaces static AGENT_PRESETS when available)
+	let configuredPrograms = $state<AgentProgramPreset[]>([]);
+
+	// Merged harness list: configured programs (from agents.json) take priority over static presets
+	const harnessPresets = $derived.by(() => {
+		if (configuredPrograms.length > 0) return configuredPrograms;
+		return AGENT_PRESETS;
+	});
 
 	// AI suggestion state
 	let isLoadingSuggestions = $state(false);

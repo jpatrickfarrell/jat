@@ -1331,6 +1331,54 @@
 	{/if}
 </div>
 
+<!-- ===== CONTEXT MENU (list view) ===== -->
+{#if ctxWorkflow}
+<div
+	class="wf-context-menu"
+	class:wf-context-menu-hidden={!ctxVisible}
+	style="left: {ctxX}px; top: {ctxY}px;"
+>
+	<!-- Open -->
+	<button class="wf-context-menu-item" onclick={() => { closeContextMenu(); loadWorkflow(ctxWorkflow!.id); }}>
+		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"/><path fill-rule="evenodd" d="M.664 10.59a1.651 1.651 0 010-1.186A10.004 10.004 0 0110 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0110 17c-4.257 0-7.893-2.66-9.336-6.41zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/></svg>
+		Open
+	</button>
+
+	<!-- Run -->
+	<button class="wf-context-menu-item" onclick={() => { closeContextMenu(); runWorkflowFromList(ctxWorkflow!); }}>
+		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/></svg>
+		Run Now
+	</button>
+
+	<div class="wf-context-menu-divider"></div>
+
+	<!-- Enable/Disable -->
+	<button class="wf-context-menu-item" onclick={() => { closeContextMenu(); toggleWorkflowEnabled(ctxWorkflow!); }}>
+		{#if ctxWorkflow.enabled}
+			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M2 4.5A2.5 2.5 0 014.5 2h11A2.5 2.5 0 0118 4.5v11a2.5 2.5 0 01-2.5 2.5h-11A2.5 2.5 0 012 15.5v-11zm4.5 2a.5.5 0 00-.5.5v6a.5.5 0 001 0V7a.5.5 0 00-.5-.5zm7 0a.5.5 0 00-.5.5v6a.5.5 0 001 0V7a.5.5 0 00-.5-.5z"/></svg>
+			Disable
+		{:else}
+			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-11.25a.75.75 0 00-1.5 0v2.5h-2.5a.75.75 0 000 1.5h2.5v2.5a.75.75 0 001.5 0v-2.5h2.5a.75.75 0 000-1.5h-2.5v-2.5z" clip-rule="evenodd"/></svg>
+			Enable
+		{/if}
+	</button>
+
+	<!-- Duplicate -->
+	<button class="wf-context-menu-item" onclick={() => { closeContextMenu(); duplicateWorkflow(ctxWorkflow!); }}>
+		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M7 3.5A1.5 1.5 0 018.5 2h3.879a1.5 1.5 0 011.06.44l3.122 3.12A1.5 1.5 0 0117 6.622V12.5a1.5 1.5 0 01-1.5 1.5h-1v-3.379a3 3 0 00-.879-2.121L10.5 5.379A3 3 0 008.379 4.5H7v-1z"/><path d="M4.5 6A1.5 1.5 0 003 7.5v9A1.5 1.5 0 004.5 18h7a1.5 1.5 0 001.5-1.5v-5.879a1.5 1.5 0 00-.44-1.06L9.44 6.439A1.5 1.5 0 008.378 6H4.5z"/></svg>
+		Duplicate
+	</button>
+
+	<div class="wf-context-menu-divider"></div>
+
+	<!-- Delete -->
+	<button class="wf-context-menu-item wf-context-menu-item-danger" onclick={() => { closeContextMenu(); deleteWorkflowFromList(ctxWorkflow!); }}>
+		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 01.7.797l-.5 6a.75.75 0 01-1.497-.124l.5-6a.75.75 0 01.797-.672zm3.54.797a.75.75 0 10-1.497-.124l-.5 6a.75.75 0 101.498.124l.5-6z" clip-rule="evenodd"/></svg>
+		Delete
+	</button>
+</div>
+{/if}
+
 <!-- ===== DELETE CONFIRMATION MODAL ===== -->
 {#if showDeleteConfirm}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -1351,7 +1399,7 @@
 				Delete Workflow?
 			</h3>
 			<p class="text-xs mb-4" style="color: oklch(0.55 0.02 250)">
-				This will permanently delete "{workflowName}" and all its run history. This action cannot be
+				This will permanently delete "{deleteTargetName || workflowName}" and all its run history. This action cannot be
 				undone.
 			</p>
 			<div class="flex gap-2 justify-end">
@@ -1373,4 +1421,72 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	.wf-context-menu {
+		position: fixed;
+		z-index: 100;
+		min-width: 180px;
+		background: oklch(0.18 0.02 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.5rem;
+		padding: 0.375rem 0;
+		box-shadow: 0 8px 24px oklch(0 0 0 / 0.4);
+		animation: contextMenuIn 0.12s ease-out;
+	}
+
+	.wf-context-menu-hidden {
+		display: none;
+	}
+
+	@keyframes contextMenuIn {
+		from { opacity: 0; transform: scale(0.95); }
+		to { opacity: 1; transform: scale(1); }
+	}
+
+	.wf-context-menu-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.5rem 0.75rem;
+		font-size: 0.8125rem;
+		color: oklch(0.75 0.02 250);
+		background: none;
+		border: none;
+		cursor: pointer;
+		transition: background 0.1s;
+		text-align: left;
+	}
+
+	.wf-context-menu-item:hover {
+		background: oklch(0.25 0.02 250);
+	}
+
+	.wf-context-menu-item :global(svg) {
+		width: 14px;
+		height: 14px;
+		flex-shrink: 0;
+		color: oklch(0.60 0.02 250);
+	}
+
+	.wf-context-menu-item:hover :global(svg) {
+		color: oklch(0.75 0.02 250);
+	}
+
+	.wf-context-menu-item-danger:hover {
+		background: oklch(0.55 0.15 30 / 0.2);
+		color: oklch(0.75 0.18 30);
+	}
+
+	.wf-context-menu-item-danger:hover :global(svg) {
+		color: oklch(0.70 0.18 30);
+	}
+
+	.wf-context-menu-divider {
+		height: 1px;
+		background: oklch(0.28 0.02 250);
+		margin: 0.375rem 0;
+	}
+</style>
 

@@ -29,6 +29,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { readFileSync, statSync } from 'fs';
 import { apiCache, cacheKey, CACHE_TTL, singleFlight } from '$lib/server/cache.js';
+import { classifySession, getDisplayName, isServerSession, APP_PREFIX, LEGACY_SERVER_PREFIX } from '$lib/utils/sessionNaming.js';
 
 const execAsync = promisify(exec);
 
@@ -252,17 +253,7 @@ function detectCommand(output) {
 	return 'npm run dev'; // Default assumption
 }
 
-/**
- * Generate display name from project name
- * @param {string} projectName - Project name (e.g., "chimaro")
- * @returns {string} - Display name (e.g., "Chimaro Dev Server")
- */
-function generateDisplayName(projectName) {
-	if (projectName === 'ingest') return 'Integrations';
-	if (projectName === 'scheduler') return 'Scheduler';
-	const capitalized = projectName.charAt(0).toUpperCase() + projectName.slice(1);
-	return `${capitalized} Dev Server`;
-}
+// generateDisplayName removed — use getDisplayName() from sessionNaming.ts instead
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ url }) {
@@ -321,7 +312,7 @@ async function computeServersData(lines) {
 			};
 		}
 
-		// Parse sessions and filter for server-* prefix
+		// Parse sessions and filter for server sessions (new jat-app-*/jat-{service} + legacy server-*)
 		const rawSessions = sessionsOutput
 			.split('\n')
 			.filter((line) => line.length > 0)
@@ -333,7 +324,7 @@ async function computeServersData(lines) {
 					attached: attached === '1'
 				};
 			})
-			.filter((session) => session.name.startsWith('server-'));
+			.filter((session) => isServerSession(session.name));
 
 		if (rawSessions.length === 0) {
 			return {
@@ -362,7 +353,8 @@ async function computeServersData(lines) {
 
 		// Step 3: Detect ports from output + config (no subprocesses)
 		const sessionPorts = captureResults.map(({ name, output }) => {
-			const projectName = name.replace(/^server-/, '');
+			const classification = classifySession(name);
+			const projectName = classification.project || classification.service || name.replace(/^server-/, '');
 			let port = detectPort(output);
 			// Fall back to config port
 			if (!port) {
@@ -378,7 +370,8 @@ async function computeServersData(lines) {
 
 		// Step 5: Build ServerSession objects (no more subprocess calls)
 		const serverSessions = rawSessions.map((session, i) => {
-			const projectName = session.name.replace(/^server-/, '');
+			const classification = classifySession(session.name);
+			const projectName = classification.project || classification.service || session.name.replace(/^server-/, '');
 			const fullOutput = captureResults[i].output;
 			// For display, take only the requested number of lines from the end
 			const outputLines = fullOutput.split('\n');
@@ -409,7 +402,7 @@ async function computeServersData(lines) {
 
 			const status = detectStatus(output, portRunning);
 			const command = detectCommand(output);
-			const displayName = generateDisplayName(projectName);
+			const displayName = getDisplayName(session.name);
 
 			return {
 				mode: 'server',

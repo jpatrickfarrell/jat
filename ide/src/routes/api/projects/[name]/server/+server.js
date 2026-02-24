@@ -12,6 +12,7 @@ import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import { getAppSessionName } from '$lib/utils/sessionNaming.js';
 
 const execAsync = promisify(exec);
 
@@ -66,12 +67,25 @@ async function tmuxSessionExists(sessionName) {
 }
 
 /**
- * Get tmux session name for a project server
- * Uses server-{projectName} format to match /api/servers endpoint detection
+ * Get tmux session name for a project server.
+ * Uses new jat-app-{projectName} convention, with fallback to legacy server-{projectName}.
  * @param {string} projectName
  */
 function getSessionName(projectName) {
-	return `server-${projectName}`;
+	return getAppSessionName(projectName);
+}
+
+/**
+ * Check for an existing session under either new or legacy naming.
+ * @param {string} projectName
+ * @returns {Promise<string|null>} The session name that exists, or null
+ */
+async function findExistingSession(projectName) {
+	const newName = getAppSessionName(projectName);
+	if (await tmuxSessionExists(newName)) return newName;
+	const legacyName = `server-${projectName}`;
+	if (await tmuxSessionExists(legacyName)) return legacyName;
+	return null;
 }
 
 /**
@@ -85,9 +99,11 @@ export async function GET({ params }) {
 		return json({ error: 'Project not found' }, { status: 404 });
 	}
 
-	const sessionName = getSessionName(name);
-	const [sessionExists, portRunning] = await Promise.all([
-		tmuxSessionExists(sessionName),
+	// Check both new and legacy session names
+	const existingSession = await findExistingSession(name);
+	const sessionName = existingSession || getSessionName(name);
+	const [sessionRunning, portRunning] = await Promise.all([
+		Promise.resolve(!!existingSession),
 		checkPortStatus(config.port)
 	]);
 
@@ -97,7 +113,7 @@ export async function GET({ params }) {
 	// - If no port configured but session exists: 'running' (we assume it's working)
 	// - If no session: 'stopped'
 	let status = 'stopped';
-	if (sessionExists) {
+	if (sessionRunning) {
 		if (config.port) {
 			status = portRunning ? 'running' : 'starting';
 		} else {
@@ -110,7 +126,7 @@ export async function GET({ params }) {
 		project: name,
 		port: config.port,
 		sessionName,
-		sessionExists,
+		sessionExists: sessionRunning,
 		portRunning,
 		status
 	});
@@ -132,10 +148,11 @@ export async function POST({ params }) {
 		return json({ error: 'Project path not found' }, { status: 404 });
 	}
 
+	// Check if session already exists under new or legacy name
+	const existingSessionPost = await findExistingSession(name);
 	const sessionName = getSessionName(name);
 
-	// Check if session already exists
-	if (await tmuxSessionExists(sessionName)) {
+	if (existingSessionPost) {
 		const portRunning = await checkPortStatus(config.port);
 		// If no port configured, assume running; otherwise check port status
 		const status = config.port ? (portRunning ? 'running' : 'starting') : 'running';
@@ -215,10 +232,12 @@ export async function DELETE({ params }) {
 		return json({ error: 'Project not found' }, { status: 404 });
 	}
 
-	const sessionName = getSessionName(name);
+	// Find session under new or legacy name
+	const existingSessionDel = await findExistingSession(name);
 
 	// Check if session exists
-	if (!(await tmuxSessionExists(sessionName))) {
+	if (!existingSessionDel) {
+		const sessionName = getSessionName(name);
 		return json({
 			success: true,
 			message: 'Server session not running',

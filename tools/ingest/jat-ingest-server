@@ -1,12 +1,12 @@
 #!/bin/bash
-# jat-ingest-server: Start ingest daemon as a managed server (server-ingest tmux session)
+# jat-ingest-server: Start ingest daemon as a managed server (jat-integrations tmux session)
 #
-# The IDE auto-discovers server-* tmux sessions on the /servers page,
+# The IDE auto-discovers jat-* tmux sessions on the /servers page,
 # giving us live output, stop/restart controls, and status detection for free.
 
 set -euo pipefail
 
-SESSION="server-ingest"
+SESSION="jat-integrations"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DAEMON="$SCRIPT_DIR/jat-ingest"
 
@@ -14,7 +14,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     echo "jat-ingest-server - Start ingest daemon as managed server"
     echo ""
     echo "USAGE:"
-    echo "    jat-ingest-server           Start server-ingest tmux session"
+    echo "    jat-ingest-server           Start jat-integrations tmux session"
     echo "    jat-ingest-server --stop    Stop the server"
     echo "    jat-ingest-server --status  Check if running"
     echo "    jat-ingest-server --help    Show this help"

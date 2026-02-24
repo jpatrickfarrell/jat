@@ -9,6 +9,7 @@
 import { json } from '@sveltejs/kit';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { isServerSession } from '$lib/utils/sessionNaming.js';
 
 const execAsync = promisify(exec);
 
@@ -23,12 +24,12 @@ export async function DELETE({ params }) {
 		);
 	}
 
-	// Validate session name format (must start with server-)
-	if (!sessionName.startsWith('server-')) {
+	// Validate session name format (must be a server session: jat-app-*, jat-{service}, or legacy server-*)
+	if (!isServerSession(sessionName)) {
 		return json(
 			{
 				error: 'Invalid session name',
-				message: 'Server sessions must have names starting with "server-"'
+				message: 'Not a recognized server session name'
 			},
 			{ status: 400 }
 		);

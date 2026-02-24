@@ -8,6 +8,7 @@
 import { json } from '@sveltejs/kit';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { classifySession, isServerSession } from '$lib/utils/sessionNaming.js';
 
 const execAsync = promisify(exec);
 
@@ -22,12 +23,12 @@ export async function POST({ params }) {
 		);
 	}
 
-	// Validate session name format (must start with server-)
-	if (!sessionName.startsWith('server-')) {
+	// Validate session name format (must be a server session: jat-app-*, jat-{service}, or legacy server-*)
+	if (!isServerSession(sessionName)) {
 		return json(
 			{
 				error: 'Invalid session name',
-				message: 'Server sessions must have names starting with "server-"'
+				message: 'Not a recognized server session name'
 			},
 			{ status: 400 }
 		);
@@ -49,8 +50,9 @@ export async function POST({ params }) {
 			);
 		}
 
-		// Get the project name from session name
-		const projectName = sessionName.replace(/^server-/, '');
+		// Get the project name from session name (supports both new and legacy naming)
+		const classification = classifySession(sessionName);
+		const projectName = classification.project || classification.service || sessionName.replace(/^server-/, '');
 
 		// Get project config (path and port) from jat config
 		let projectPath = null;
@@ -122,7 +124,7 @@ export async function POST({ params }) {
 		let restartCommand;
 		let workDir;
 
-		if (projectName === 'ingest') {
+		if (projectName === 'ingest' || projectName === 'integrations' || classification.service === 'integrations') {
 			// Special handling for ingest daemon
 			restartCommand = 'node jat-ingest';
 			// Resolve the ingest directory directly from the jat-ingest symlink

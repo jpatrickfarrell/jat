@@ -13,6 +13,7 @@
 import { json } from '@sveltejs/kit';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { getAppSessionName, getServiceSessionName, getDisplayName, SYSTEM_SERVICES } from '$lib/utils/sessionNaming.js';
 
 const execAsync = promisify(exec);
 
@@ -37,7 +38,12 @@ export async function POST({ request }) {
 			);
 		}
 
-		const sessionName = `server-${projectName}`;
+		// Use new naming convention: system services get jat-{service}, projects get jat-app-{project}
+		// Special case: 'ingest' maps to 'integrations' service
+		const isService = projectName in SYSTEM_SERVICES || projectName === 'ingest';
+		const sessionName = isService
+			? getServiceSessionName(projectName === 'ingest' ? 'integrations' : projectName)
+			: getAppSessionName(projectName);
 
 		// Check if session already exists
 		try {
@@ -62,7 +68,7 @@ export async function POST({ request }) {
 		let serverCommand;
 		let effectivePort = null;
 
-		if (projectName === 'ingest') {
+		if (projectName === 'ingest' || projectName === 'integrations') {
 			// Resolve the ingest directory directly from the jat-ingest symlink
 			executionPath = await (async () => {
 				try {
@@ -225,7 +231,7 @@ export async function POST({ request }) {
 				mode: 'server',
 				sessionName,
 				projectName,
-				displayName: projectName === 'ingest' ? 'Integrations' : `${projectName.charAt(0).toUpperCase() + projectName.slice(1)} Dev Server`,
+				displayName: getDisplayName(sessionName),
 				port: effectivePort || null,
 				portRunning: false,
 				status: 'starting',

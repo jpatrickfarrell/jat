@@ -258,3 +258,32 @@ export function isServerSession(name: string): boolean {
 export function isLegacyName(name: string): boolean {
 	return name.startsWith(LEGACY_SERVER_PREFIX) || LEGACY_IDE_NAMES.includes(name);
 }
+
+// ---------------------------------------------------------------------------
+// Legacy compatibility
+// ---------------------------------------------------------------------------
+
+/** Legacy session type used by TmuxSession interfaces across page components. */
+export type LegacySessionType = 'agent' | 'server' | 'ide' | 'other';
+
+/**
+ * Classify a session and return a legacy-compatible type.
+ *
+ * Maps the new `'app'` and `'service'` types to `'server'` for backwards
+ * compatibility with the `TmuxSession` interface used across page components.
+ */
+export function classifySessionLegacy(name: string): { type: LegacySessionType; project?: string } {
+	const result = classifySession(name);
+	switch (result.type) {
+		case 'app':
+			return { type: 'server', project: result.project };
+		case 'service':
+			return { type: 'server', project: result.service };
+		case 'ide':
+			return { type: 'ide' };
+		case 'agent':
+			return { type: 'agent' };
+		default:
+			return { type: 'other' };
+	}
+}

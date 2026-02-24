@@ -31,7 +31,7 @@ SOURCES:
 See also:
     jat-ingest-test     Dry-run tester for individual sources
     jat-ingest-status   Show source stats and poll history
-    jat-ingest-server   Start as managed server (server-ingest tmux session)`);
+    jat-ingest-server   Start as managed server (jat-integrations tmux session)`);
   process.exit(0);
 }
 

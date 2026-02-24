@@ -299,8 +299,13 @@ async function isPortListening(port) {
  * @param {number|null} port
  */
 async function getServerStatus(projectName, port) {
-	const sessionName = `server-${projectName}`;
-	const sessionExists = await tmuxSessionExists(sessionName);
+	// Try new naming first (jat-app-{project}), fall back to legacy (server-{project})
+	const newSessionName = `jat-app-${projectName}`;
+	const legacySessionName = `server-${projectName}`;
+	let sessionExists = await tmuxSessionExists(newSessionName);
+	if (!sessionExists) {
+		sessionExists = await tmuxSessionExists(legacySessionName);
+	}
 
 	if (!sessionExists) {
 		// No session - return null (unknown/stopped)

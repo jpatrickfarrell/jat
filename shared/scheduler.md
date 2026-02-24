@@ -22,7 +22,7 @@ The scheduler polls task databases across all JAT projects and automatically spa
 │  │     → Clear next_run_at                                              │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
-│  Runs in tmux session: server-scheduler                                     │
+│  Runs in tmux session: jat-scheduler                                        │
 │  HTTP control API on port 3334                                              │
 │  Polls every 30 seconds (configurable)                                      │
 │                                                                             │
@@ -143,7 +143,7 @@ jat scheduler restart      # Stop + start
 jat scheduler logs         # Attach to tmux session (Ctrl+B D to detach)
 ```
 
-The scheduler runs in tmux session `server-scheduler`. It appears in the IDE's Servers page alongside dev servers.
+The scheduler runs in tmux session `jat-scheduler`. It appears in the IDE's Servers page alongside dev servers.
 
 ### Scheduler Daemon Arguments
 
@@ -331,6 +331,6 @@ Hidden projects (`"hidden": true` in config) are skipped.
 | Tasks not firing | `next_run_at` not set or in the future | Check with: `sqlite3 .jat/tasks.db "SELECT id,next_run_at,status FROM tasks WHERE schedule_cron IS NOT NULL"` |
 | Wrong timezone | Default is UTC | Set `defaults.timezone` in `~/.config/jat/projects.json` |
 | Spawn fails | IDE not running | Start IDE first: `jat` or `cd ide && npm run dev` |
-| Port 3334 in use | Another scheduler instance | Kill old: `tmux kill-session -t server-scheduler` |
+| Port 3334 in use | Another scheduler instance | Kill old: `tmux kill-session -t jat-scheduler` |
 | No projects found | Missing .jat directory | Run `jt init` in your project directory |
-| Shows as "active task" in IDE | Tmux session detected as agent | This is a known UI issue - scheduler tmux session `server-scheduler` may appear in session lists |
+| Shows as "active task" in IDE | Tmux session detected as agent | This is a known UI issue - scheduler tmux session `jat-scheduler` may appear in session lists |

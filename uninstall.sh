@@ -43,7 +43,7 @@ echo "  • JAT installation directory"
 echo "  • ~/.local/bin symlinks (jt, am-*, jat, browser-*, etc.)"
 echo "  • ~/.config/jat config files"
 echo "  • ~/.claude/commands/jat"
-echo "  • Running tmux sessions (server-jat, jat-*)"
+echo "  • Running tmux sessions (jat-app-ide, jat-*)"
 echo "  • Bash launcher functions from ~/.bashrc"
 echo ""
 echo -e "${RED}WARNING: This does NOT remove .jat/ from your projects${NC}"
@@ -59,7 +59,9 @@ echo ""
 
 # 1. Stop running tmux sessions
 echo -e "${BLUE}[1/7] Stopping JAT tmux sessions...${NC}"
-tmux kill-session -t server-jat 2>/dev/null && echo "  ✓ Killed server-jat" || echo "  • server-jat not running"
+tmux kill-session -t jat-app-ide 2>/dev/null && echo "  ✓ Killed jat-app-ide" || echo "  • jat-app-ide not running"
+# Legacy name support
+tmux kill-session -t server-jat 2>/dev/null && echo "  ✓ Killed server-jat (legacy)" || true
 for session in $(tmux list-sessions -F "#{session_name}" 2>/dev/null | grep "^jat-" || true); do
     tmux kill-session -t "$session" && echo "  ✓ Killed $session"
 done

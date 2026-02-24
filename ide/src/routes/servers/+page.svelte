@@ -1206,7 +1206,7 @@
 														onclick={(e) => {
 															e.stopPropagation();
 															const execPath = (project.serverPath || project.path).replace(/^\/home\/[^/]+/, '~');
-															const cmd = `tmux new-session -s server-${project.name} -c "${execPath}" 'npm run dev -- --port ${project.port}'`;
+															const cmd = `tmux new-session -s jat-app-${project.name} -c "${execPath}" 'npm run dev -- --port ${project.port}'`;
 															navigator.clipboard.writeText(cmd);
 															copiedTmuxCmd = project.name;
 															setTimeout(() => copiedTmuxCmd = null, 1500);
@@ -1250,7 +1250,7 @@
 														onclick={(e) => {
 															e.stopPropagation();
 															const execPath = (project.serverPath || project.path).replace(/^\/home\/[^/]+/, '~');
-															const cmd = `tmux new-session -s server-${project.name} -c "${execPath}" 'npm run dev -- --port ${project.port}'`;
+															const cmd = `tmux new-session -s jat-app-${project.name} -c "${execPath}" 'npm run dev -- --port ${project.port}'`;
 															navigator.clipboard.writeText(cmd);
 															copiedTmuxCmd = project.name;
 															setTimeout(() => copiedTmuxCmd = null, 1500);

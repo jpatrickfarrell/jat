@@ -9,6 +9,7 @@
 
 	import { fly } from 'svelte/transition';
 	import { getProjectColor } from '$lib/utils/projectColors';
+	import { classifySession } from '$lib/utils/sessionNaming';
 	import {
 		getServerStateVisual,
 		getServerStateActions,
@@ -17,7 +18,7 @@
 	} from '$lib/config/statusColors';
 
 	interface Props {
-		/** Session name (e.g., "server-chimaro") */
+		/** Session name (e.g., "jat-app-chimaro") */
 		sessionName: string;
 		/** Project name (e.g., "chimaro") */
 		project?: string;
@@ -60,8 +61,10 @@
 	let isExecuting = $state(false);
 	let dropdownRef: HTMLDivElement | null = null;
 
-	// Extract project from session name if not provided (server-chimaro -> chimaro)
-	const projectName = $derived(project || sessionName.replace('server-', ''));
+	// Extract project from session name if not provided (jat-app-chimaro -> chimaro)
+	const projectName = $derived(
+		project || classifySession(sessionName).project || sessionName
+	);
 	const projectColor = $derived(getProjectColor(projectName));
 
 	// Get config from centralized statusColors.ts

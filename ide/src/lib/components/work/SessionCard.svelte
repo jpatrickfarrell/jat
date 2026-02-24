@@ -19,7 +19,7 @@
 	 *
 	 * Props:
 	 * - mode: 'agent' | 'server' (default: 'agent')
-	 * - sessionName: tmux session name (e.g., "jat-WisePrairie" or "server-chimaro")
+	 * - sessionName: tmux session name (e.g., "jat-WisePrairie" or "jat-app-chimaro")
 	 * - agentName: Agent name (for agent mode)
 	 * - task: Current task object (for agent mode)
 	 * - projectName, displayName, port, portRunning: Server session props

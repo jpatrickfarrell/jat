@@ -3,11 +3,12 @@
  * GET /api/servers - Return all active dev server tmux sessions with output
  *
  * Server sessions are tmux sessions running dev servers (npm run dev, etc.)
- * They use the naming convention: server-{projectName} (e.g., "server-chimaro")
+ * They use the naming convention: jat-app-{projectName} (e.g., "jat-app-chimaro")
+ * Legacy sessions using server-{projectName} are also detected for backwards compatibility.
  *
  * Each ServerSession includes:
  * - mode: 'server' (constant)
- * - sessionName: tmux session name (e.g., "server-chimaro")
+ * - sessionName: tmux session name (e.g., "jat-app-chimaro")
  * - projectName: Project name extracted from session (e.g., "chimaro")
  * - displayName: Human-readable display name
  * - port: Detected port from output (e.g., 5173)

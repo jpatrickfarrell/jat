@@ -68,6 +68,20 @@
 	// Confirm delete
 	let showDeleteConfirm = $state(false);
 
+	// Back to list
+	function backToList() {
+		currentId = null;
+		workflowName = 'Untitled Workflow';
+		workflowDescription = '';
+		workflowEnabled = false;
+		nodes = [];
+		edges = [];
+		dirty = false;
+		lastRun = null;
+		configPanelOpen = false;
+		clearRunSelection();
+	}
+
 
 	// =========================================================================
 	// COMPUTED
@@ -572,49 +586,29 @@
 <svelte:window on:keydown={handleKeydown} />
 
 <div class="flex flex-col h-full overflow-hidden" style="background: oklch(0.13 0.01 250)">
-	<!-- ===== TOOLBAR ===== -->
+	{#if currentId}
+	<!-- ===== EDITOR TOOLBAR ===== -->
 	<div
 		class="flex items-center gap-2 px-3 py-2 shrink-0"
 		style="background: oklch(0.16 0.01 250); border-bottom: 1px solid oklch(0.22 0.02 250)"
 	>
-		<!-- Workflow selector -->
-		<div class="relative">
-			<select
-				class="select select-sm select-bordered w-[160px]"
-				style="background: oklch(0.18 0.01 250); color: oklch(0.85 0.02 250); border-color: oklch(0.25 0.02 250); font-size: 0.8125rem"
-				value={currentId || ''}
-				onchange={(e) => {
-					const val = (e.target as HTMLSelectElement).value;
-					if (val) loadWorkflow(val);
-				}}
-			>
-				<option value="" disabled>{loadingList ? 'Loading...' : 'Select workflow'}</option>
-				{#each workflows as wf}
-					<option value={wf.id}>
-						{wf.name}
-						{wf.enabled ? '' : ' (disabled)'}
-					</option>
-				{/each}
-			</select>
-		</div>
-
-		<!-- New workflow button -->
+		<!-- Back to list -->
 		<button
-			class="btn btn-sm btn-ghost"
-			style="color: oklch(0.65 0.15 145)"
-			onclick={createWorkflow}
-			title="New workflow"
+			class="btn btn-sm btn-ghost gap-1"
+			style="color: oklch(0.60 0.02 250)"
+			onclick={backToList}
+			title="Back to workflow list"
 		>
 			<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-				<path d="M12 4.5v15m7.5-7.5h-15" />
+				<path d="M15.75 19.5L8.25 12l7.5-7.5" />
 			</svg>
+			<span class="text-xs">Workflows</span>
 		</button>
 
 		<!-- Separator -->
 		<div class="w-px h-6 mx-1" style="background: oklch(0.25 0.02 250)"></div>
 
 		<!-- Workflow name (editable heading) -->
-		{#if currentId}
 			<input
 				bind:this={nameInputRef}
 				type="text"
@@ -746,14 +740,9 @@
 				{/if}
 				Run
 			</button>
-		{:else}
-			<div class="flex-1"></div>
-			<span class="text-xs" style="color: oklch(0.45 0.02 250)">Select or create a workflow</span>
-			<div class="flex-1"></div>
-		{/if}
 	</div>
 
-	<!-- ===== MAIN CONTENT ===== -->
+	<!-- ===== EDITOR CONTENT ===== -->
 	<div class="flex flex-1 overflow-hidden">
 		<!-- NODE PALETTE (left sidebar) -->
 		<div
@@ -892,69 +881,23 @@
 			role="application"
 			aria-label="Workflow canvas"
 		>
-			{#if currentId}
-				{#if loadingWorkflow}
-					<div class="absolute inset-0 flex items-center justify-center">
-						<span class="loading loading-spinner loading-lg" style="color: oklch(0.55 0.15 200)"
-						></span>
-					</div>
-				{:else}
-					<WorkflowCanvas
-						bind:this={canvasRef}
-						bind:nodes
-						bind:edges
-						bind:selectedNodeIds
-						bind:selectedEdgeIds
-						{nodeStatusOverlay}
-						onNodesChange={handleNodesChange}
-						onEdgesChange={handleEdgesChange}
-						onNodeDoubleClick={handleNodeDoubleClick}
-					/>
-				{/if}
-			{:else}
-				<!-- Empty state -->
+			{#if loadingWorkflow}
 				<div class="absolute inset-0 flex items-center justify-center">
-					<div class="text-center max-w-sm">
-						<div
-							class="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center"
-							style="background: oklch(0.20 0.02 250)"
-						>
-							<svg
-								class="w-8 h-8"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="oklch(0.40 0.02 250)"
-								stroke-width="1.5"
-							>
-								<path
-									d="M3 3h6v6H3V3zm12 0h6v6h-6V3zm-6 12h6v6H9v-6zM6 9v3a3 3 0 003 3M18 9v3a3 3 0 01-3 3"
-								/>
-							</svg>
-						</div>
-						<h3 class="text-sm font-semibold mb-1" style="color: oklch(0.60 0.02 250)">
-							No workflow selected
-						</h3>
-						<p class="text-xs mb-4" style="color: oklch(0.40 0.02 250)">
-							Select an existing workflow from the dropdown or create a new one to get started.
-						</p>
-						<button
-							class="btn btn-sm gap-1.5"
-							style="background: oklch(0.55 0.15 145); color: oklch(0.15 0.01 250); border: none"
-							onclick={createWorkflow}
-						>
-							<svg
-								class="w-4 h-4"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-							>
-								<path d="M12 4.5v15m7.5-7.5h-15" />
-							</svg>
-							New Workflow
-						</button>
-					</div>
+					<span class="loading loading-spinner loading-lg" style="color: oklch(0.55 0.15 200)"
+					></span>
 				</div>
+			{:else}
+				<WorkflowCanvas
+					bind:this={canvasRef}
+					bind:nodes
+					bind:edges
+					bind:selectedNodeIds
+					bind:selectedEdgeIds
+					{nodeStatusOverlay}
+					onNodesChange={handleNodesChange}
+					onEdgesChange={handleEdgesChange}
+					onNodeDoubleClick={handleNodeDoubleClick}
+				/>
 			{/if}
 
 			<!-- Config Panel (overlays on right) -->
@@ -974,12 +917,19 @@
 					});
 					return await res.json();
 				}}
+				onRun={async (node) => {
+					const res = await fetch('/api/workflows/test-node', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ node, dryRun: false })
+					});
+					return await res.json();
+				}}
 			/>
 		</div>
 	</div>
 
 	<!-- ===== BOTTOM PANEL (execution log + run history) ===== -->
-	{#if currentId}
 		<div
 			class="shrink-0 flex flex-col"
 			style="background: oklch(0.14 0.01 250); border-top: 1px solid oklch(0.22 0.02 250); max-height: {logExpanded ? '320px' : 'auto'}"
@@ -1101,6 +1051,172 @@
 				</div>
 			{/if}
 		</div>
+
+	{:else}
+	<!-- ===== WORKFLOW LIST VIEW ===== -->
+	<div class="flex-1 overflow-auto p-6">
+		<!-- Header -->
+		<div class="flex items-center justify-between mb-6">
+			<div class="flex items-center gap-3">
+				<div
+					class="w-10 h-10 rounded-xl flex items-center justify-center"
+					style="background: oklch(0.20 0.02 250)"
+				>
+					<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="oklch(0.55 0.15 200)" stroke-width="1.5">
+						<path d="M3 3h6v6H3V3zm12 0h6v6h-6V3zm-6 12h6v6H9v-6zM6 9v3a3 3 0 003 3M18 9v3a3 3 0 01-3 3" />
+					</svg>
+				</div>
+				<div>
+					<h1 class="text-lg font-semibold" style="color: oklch(0.90 0.02 250)">Workflows</h1>
+					<p class="text-xs" style="color: oklch(0.45 0.02 250)">
+						{workflows.length} workflow{workflows.length !== 1 ? 's' : ''}
+					</p>
+				</div>
+			</div>
+
+			<button
+				class="btn btn-sm gap-1.5"
+				style="background: oklch(0.55 0.15 145); color: oklch(0.15 0.01 250); border: none"
+				onclick={createWorkflow}
+			>
+				<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M12 4.5v15m7.5-7.5h-15" />
+				</svg>
+				New Workflow
+			</button>
+		</div>
+
+		{#if loadingList}
+			<!-- Loading skeleton -->
+			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+				{#each Array(3) as _}
+					<div class="rounded-xl p-4" style="background: oklch(0.17 0.01 250); border: 1px solid oklch(0.22 0.02 250)">
+						<div class="skeleton h-5 w-3/4 rounded mb-3" style="background: oklch(0.22 0.02 250)"></div>
+						<div class="skeleton h-3 w-full rounded mb-2" style="background: oklch(0.20 0.02 250)"></div>
+						<div class="skeleton h-3 w-1/2 rounded" style="background: oklch(0.20 0.02 250)"></div>
+					</div>
+				{/each}
+			</div>
+		{:else if workflows.length === 0}
+			<!-- Empty state -->
+			<div class="flex items-center justify-center" style="min-height: 400px">
+				<div class="text-center max-w-sm">
+					<div
+						class="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center"
+						style="background: oklch(0.20 0.02 250)"
+					>
+						<svg class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="oklch(0.40 0.02 250)" stroke-width="1.5">
+							<path d="M3 3h6v6H3V3zm12 0h6v6h-6V3zm-6 12h6v6H9v-6zM6 9v3a3 3 0 003 3M18 9v3a3 3 0 01-3 3" />
+						</svg>
+					</div>
+					<h3 class="text-sm font-semibold mb-1" style="color: oklch(0.60 0.02 250)">
+						No workflows yet
+					</h3>
+					<p class="text-xs mb-4" style="color: oklch(0.40 0.02 250)">
+						Create your first workflow to automate tasks, trigger actions, and orchestrate agents.
+					</p>
+					<button
+						class="btn btn-sm gap-1.5"
+						style="background: oklch(0.55 0.15 145); color: oklch(0.15 0.01 250); border: none"
+						onclick={createWorkflow}
+					>
+						<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<path d="M12 4.5v15m7.5-7.5h-15" />
+						</svg>
+						New Workflow
+					</button>
+				</div>
+			</div>
+		{:else}
+			<!-- Workflow cards grid -->
+			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+				{#each workflows as wf}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
+						class="rounded-xl p-4 cursor-pointer transition-all"
+						style="background: oklch(0.17 0.01 250); border: 1px solid oklch(0.22 0.02 250)"
+						onclick={() => loadWorkflow(wf.id)}
+						onkeydown={(e) => e.key === 'Enter' && loadWorkflow(wf.id)}
+						onmouseenter={(e) => {
+							(e.currentTarget as HTMLElement).style.borderColor = 'oklch(0.35 0.08 200)';
+							(e.currentTarget as HTMLElement).style.background = 'oklch(0.19 0.01 250)';
+						}}
+						onmouseleave={(e) => {
+							(e.currentTarget as HTMLElement).style.borderColor = 'oklch(0.22 0.02 250)';
+							(e.currentTarget as HTMLElement).style.background = 'oklch(0.17 0.01 250)';
+						}}
+						role="button"
+						tabindex="0"
+					>
+						<!-- Header row: name + enabled badge -->
+						<div class="flex items-start justify-between gap-2 mb-2">
+							<h3 class="text-sm font-semibold truncate" style="color: oklch(0.88 0.02 250)">
+								{wf.name}
+							</h3>
+							<span
+								class="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+								style="background: {wf.enabled ? 'oklch(0.55 0.15 145 / 0.15)' : 'oklch(0.40 0.02 250 / 0.2)'}; color: {wf.enabled ? 'oklch(0.72 0.17 145)' : 'oklch(0.50 0.02 250)'}"
+							>
+								{wf.enabled ? 'Active' : 'Disabled'}
+							</span>
+						</div>
+
+						<!-- Description -->
+						{#if wf.description}
+							<p class="text-xs mb-3 line-clamp-2" style="color: oklch(0.50 0.02 250)">
+								{wf.description}
+							</p>
+						{:else}
+							<p class="text-xs mb-3 italic" style="color: oklch(0.35 0.02 250)">
+								No description
+							</p>
+						{/if}
+
+						<!-- Stats row -->
+						<div class="flex items-center gap-3 text-[11px]" style="color: oklch(0.50 0.02 250)">
+							<!-- Node count -->
+							<div class="flex items-center gap-1">
+								<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<rect x="3" y="3" width="7" height="7" rx="1" />
+									<rect x="14" y="14" width="7" height="7" rx="1" />
+									<path d="M10 7h4m-4 10h4" />
+								</svg>
+								<span>{wf.nodeCount} node{wf.nodeCount !== 1 ? 's' : ''}</span>
+							</div>
+
+							<!-- Edge count -->
+							<div class="flex items-center gap-1">
+								<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<path d="M4.5 19.5l15-15" />
+									<circle cx="4.5" cy="19.5" r="1.5" fill="currentColor" />
+									<circle cx="19.5" cy="4.5" r="1.5" fill="currentColor" />
+								</svg>
+								<span>{wf.edgeCount}</span>
+							</div>
+
+							<!-- Separator -->
+							<div class="w-px h-3" style="background: oklch(0.25 0.02 250)"></div>
+
+							<!-- Last run status -->
+							{#if wf.lastRunStatus}
+								<div class="flex items-center gap-1">
+									<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke={getStatusColor(wf.lastRunStatus)} stroke-width="2">
+										<path d={getStatusIcon(wf.lastRunStatus)} />
+									</svg>
+									<span style="color: {getStatusColor(wf.lastRunStatus)}">{wf.lastRunStatus}</span>
+								</div>
+								{#if wf.lastRunAt}
+									<span style="color: oklch(0.40 0.02 250)">{formatTimeAgo(wf.lastRunAt)}</span>
+								{/if}
+							{:else}
+								<span style="color: oklch(0.35 0.02 250)">No runs</span>
+							{/if}
+						</div>
+					</div>
+				{/each}
+			</div>
+		{/if}
+	</div>
 	{/if}
 </div>
 

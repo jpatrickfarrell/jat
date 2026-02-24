@@ -1038,6 +1038,7 @@
 		<div
 			class="wf-context-menu"
 			style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
+			onmousedown={(e) => e.stopPropagation()}
 			onclick={(e) => e.stopPropagation()}
 		>
 			<button class="wf-ctx-item" onclick={handleContextMenuDuplicate}>

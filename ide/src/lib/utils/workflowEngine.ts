@@ -620,14 +620,15 @@ const EXECUTORS: Record<NodeType, NodeExecutor> = {
 // =============================================================================
 
 /**
- * Test a single node in isolation with a dry-run.
+ * Test a single node in isolation.
+ * By default runs in dry-run mode. Set dryRun=false to execute for real.
  * Returns the result or error message.
  */
 export async function testNode(
 	node: WorkflowNode,
-	options: { ideBaseUrl?: string; project?: string } = {}
+	options: { ideBaseUrl?: string; project?: string; dryRun?: boolean } = {}
 ): Promise<{ output?: unknown; error?: string }> {
-	const { ideBaseUrl = 'http://127.0.0.1:3333', project } = options;
+	const { ideBaseUrl = 'http://127.0.0.1:3333', project, dryRun = true } = options;
 
 	const executor = EXECUTORS[node.type];
 	if (!executor) {
@@ -638,7 +639,7 @@ export async function testNode(
 		workflowId: 'test',
 		runId: 'test-' + Date.now(),
 		startedAt: new Date().toISOString(),
-		dryRun: true,
+		dryRun,
 		ideBaseUrl,
 		project,
 		nodeResults: new Map(),

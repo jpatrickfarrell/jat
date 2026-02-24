@@ -2,10 +2,11 @@
  * Workflow Test Node API
  * POST /api/workflows/test-node
  *
- * Tests a single workflow node in dry-run mode.
+ * Tests a single workflow node. Dry-run by default.
+ * Set dryRun=false to execute the node for real (e.g., actually spawn an agent).
  *
  * Request body:
- *   { node: WorkflowNode, project?: string }
+ *   { node: WorkflowNode, project?: string, dryRun?: boolean }
  *
  * Response:
  *   200: { output?: unknown, error?: string }
@@ -18,12 +19,12 @@ import { testNode } from '$lib/utils/workflowEngine';
 
 export const POST: RequestHandler = async ({ request }) => {
 	const body = await request.json();
-	const { node, project } = body;
+	const { node, project, dryRun = true } = body;
 
 	if (!node) {
 		throw error(400, 'Node data is required');
 	}
 
-	const result = await testNode(node, { project });
+	const result = await testNode(node, { project, dryRun });
 	return json(result);
 };

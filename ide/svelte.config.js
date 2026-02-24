@@ -10,6 +10,14 @@ const config = {
 	kit: {
 		// Using adapter-node for server-side SQLite database queries
 		adapter: adapter()
+	},
+
+	vitePlugin: {
+		inspector: {
+			toggleKeyCombo: 'control-shift',
+			showToggleButton: 'always',
+			toggleButtonPos: 'bottom-left'
+		}
 	}
 };
 

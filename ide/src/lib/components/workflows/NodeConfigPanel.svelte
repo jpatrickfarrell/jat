@@ -22,7 +22,8 @@
 		onUpdate = () => {},
 		onDelete = () => {},
 		onClose = () => {},
-		onTest = async () => ({})
+		onTest = async () => ({}),
+		onRun = async () => ({})
 	}: {
 		node: WorkflowNode | null;
 		isOpen: boolean;
@@ -32,6 +33,7 @@
 		onDelete?: (nodeId: string) => void;
 		onClose?: () => void;
 		onTest?: (node: WorkflowNode) => Promise<{ output?: unknown; error?: string }>;
+		onRun?: (node: WorkflowNode) => Promise<{ output?: unknown; error?: string }>;
 	} = $props();
 
 	let meta = $derived(node ? getNodeMeta(node.type) : null);
@@ -42,6 +44,8 @@
 	let editLabel = $state('');
 	let isEditingLabel = $state(false);
 	let testResult = $state<{ output?: string; error?: string; loading: boolean }>({ loading: false });
+	let runResult = $state<{ output?: string; error?: string; loading: boolean }>({ loading: false });
+	let isActionNode = $derived(node?.type?.startsWith('action_') ?? false);
 
 	// Sync label when node changes
 	$effect(() => {
@@ -49,6 +53,7 @@
 			editLabel = node.label;
 			isEditingLabel = false;
 			testResult = { loading: false };
+			runResult = { loading: false };
 		}
 	});
 
@@ -88,6 +93,7 @@
 	async function handleTest() {
 		if (!node) return;
 		testResult = { loading: true };
+		runResult = { loading: false };
 		try {
 			const result = await onTest(node);
 			if (result.error) {
@@ -97,6 +103,22 @@
 			}
 		} catch (err) {
 			testResult = { loading: false, error: err instanceof Error ? err.message : String(err) };
+		}
+	}
+
+	async function handleRun() {
+		if (!node) return;
+		runResult = { loading: true };
+		testResult = { loading: false };
+		try {
+			const result = await onRun(node);
+			if (result.error) {
+				runResult = { loading: false, error: result.error };
+			} else {
+				runResult = { loading: false, output: typeof result.output === 'string' ? result.output : JSON.stringify(result.output, null, 2) };
+			}
+		} catch (err) {
+			runResult = { loading: false, error: err instanceof Error ? err.message : String(err) };
 		}
 	}
 </script>
@@ -237,19 +259,37 @@
 
 				<button
 					class="btn btn-sm"
-					style="background: {meta.color}; color: oklch(0.15 0.01 250); border: none"
+					style="background: oklch(0.30 0.02 250); color: oklch(0.75 0.02 250); border-color: oklch(0.30 0.02 250)"
 					onclick={handleTest}
-					disabled={testResult.loading}
+					disabled={testResult.loading || runResult.loading}
 				>
 					{#if testResult.loading}
 						<span class="loading loading-spinner loading-xs"></span>
 					{:else}
-						<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-							<path d="M8 5v14l11-7L8 5z"/>
+						<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
 						</svg>
 					{/if}
 					Test
 				</button>
+
+				{#if isActionNode}
+					<button
+						class="btn btn-sm"
+						style="background: {meta.color}; color: oklch(0.15 0.01 250); border: none"
+						onclick={handleRun}
+						disabled={testResult.loading || runResult.loading}
+					>
+						{#if runResult.loading}
+							<span class="loading loading-spinner loading-xs"></span>
+						{:else}
+							<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+								<path d="M8 5v14l11-7L8 5z"/>
+							</svg>
+						{/if}
+						Run
+					</button>
+				{/if}
 			</div>
 
 			{#if testResult.output || testResult.error}
@@ -262,6 +302,21 @@
 						<div class="rounded-lg px-3 py-2 text-xs font-mono overflow-auto max-h-40" style="background: oklch(0.55 0.15 145 / 0.10); color: oklch(0.75 0.10 145); border: 1px solid oklch(0.55 0.15 145 / 0.20)">
 							<span class="font-semibold">Dry-run output:</span>
 							<pre class="mt-1 whitespace-pre-wrap">{testResult.output}</pre>
+						</div>
+					{/if}
+				</div>
+			{/if}
+
+			{#if runResult.output || runResult.error}
+				<div class="px-3 pb-3">
+					{#if runResult.error}
+						<div class="rounded-lg px-3 py-2 text-xs font-mono" style="background: oklch(0.55 0.15 20 / 0.12); color: oklch(0.75 0.12 20); border: 1px solid oklch(0.55 0.15 20 / 0.25)">
+							<span class="font-semibold">Error:</span> {runResult.error}
+						</div>
+					{:else}
+						<div class="rounded-lg px-3 py-2 text-xs font-mono overflow-auto max-h-40" style="background: oklch(0.55 0.18 200 / 0.12); color: oklch(0.80 0.12 200); border: 1px solid oklch(0.55 0.18 200 / 0.25)">
+							<span class="font-semibold">Spawned:</span>
+							<pre class="mt-1 whitespace-pre-wrap">{runResult.output}</pre>
 						</div>
 					{/if}
 				</div>

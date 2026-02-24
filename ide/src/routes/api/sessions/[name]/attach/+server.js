@@ -25,9 +25,9 @@ const SESSION_PREFIX = 'jat-';
 
 /**
  * Default parent session names to try (in order of preference)
- * server-jat is the naming convention for the IDE dev server
+ * jat-app-ide is the new naming convention, server-jat and jat are legacy
  */
-const DEFAULT_PARENT_SESSIONS = ['server-jat', 'jat'];
+const DEFAULT_PARENT_SESSIONS = ['jat-app-ide', 'server-jat', 'jat'];
 
 /**
  * Get the full tmux session name from a name parameter.

@@ -19,7 +19,7 @@ import { getScheduledTasks } from '$lib/server/jat-tasks.js';
 
 const execAsync = promisify(exec);
 
-const SCHEDULER_SESSION = 'server-scheduler';
+const SCHEDULER_SESSION = 'jat-scheduler';
 const WORKFLOWS_DIR = join(homedir(), '.config', 'jat', 'workflows');
 const WORKFLOW_STATE_FILE = join(WORKFLOWS_DIR, '.scheduler-state.json');
 

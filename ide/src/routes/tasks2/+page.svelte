@@ -10,6 +10,7 @@
 
 	import { onMount, onDestroy } from 'svelte';
 	import { slide } from 'svelte/transition';
+	import { classifySessionLegacy } from '$lib/utils/sessionNaming';
 	import SortDropdown from '$lib/components/SortDropdown.svelte';
 	import TasksActive from '$lib/components/sessions/TasksActive.svelte';
 	import TasksOpen from '$lib/components/sessions/TasksOpen.svelte';
@@ -130,24 +131,9 @@
 
 	let projectOrder = $state<string[]>([]);
 
-	// Helpers
+	// Helpers — uses centralized session classifier
 	function categorizeSession(name: string): { type: TmuxSession['type']; project?: string } {
-		if (name.startsWith('jat-')) {
-			const agentName = name.slice(4);
-			if (agentName.startsWith('pending-')) {
-				return { type: 'agent', project: undefined };
-			}
-			const project = agentProjects.get(agentName);
-			return { type: 'agent', project };
-		}
-		if (name.startsWith('server-')) {
-			const project = name.slice(7);
-			return { type: 'server', project };
-		}
-		if (name === 'jat-ide' || name.startsWith('jat-ide')) {
-			return { type: 'ide' };
-		}
-		return { type: 'other' };
+		return classifySessionLegacy(name, (agent) => agentProjects.get(agent));
 	}
 
 	function getAgentName(sessionName: string): string {

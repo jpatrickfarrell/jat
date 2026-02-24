@@ -54,7 +54,7 @@ function getTerminal(): string {
  * Find parent session
  */
 async function findParentSession(): Promise<string | null> {
-	const candidates = ['server-jat', 'jat'];
+	const candidates = ['jat-app-ide', 'server-jat', 'jat'];
 	for (const name of candidates) {
 		if (await sessionExists(name)) {
 			return name;

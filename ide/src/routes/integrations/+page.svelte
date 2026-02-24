@@ -144,7 +144,7 @@
 			const resp = await fetch('/api/servers?lines=10');
 			const data = await resp.json();
 			if (data.success) {
-				const ingest = data.sessions?.find((s: any) => s.sessionName === 'server-ingest');
+				const ingest = data.sessions?.find((s: any) => s.sessionName === 'server-ingest' || s.sessionName === 'jat-integrations');
 				if (ingest) {
 					serviceStatus = ingest.status === 'stopped' ? 'stopped' : ingest.status === 'starting' ? 'starting' : 'running';
 				} else {
@@ -195,7 +195,8 @@
 	async function stopService() {
 		serviceAction = 'stopping';
 		try {
-			await fetch('/api/servers/server-ingest', { method: 'DELETE' });
+			await fetch('/api/servers/server-ingest', { method: 'DELETE' }).catch(() => {});
+			await fetch('/api/servers/jat-integrations', { method: 'DELETE' }).catch(() => {});
 			serviceStatus = 'stopped';
 			serviceAction = null;
 		} catch {
@@ -207,7 +208,11 @@
 	async function restartService() {
 		serviceAction = 'restarting';
 		try {
-			const resp = await fetch('/api/servers/server-ingest/restart', { method: 'POST' });
+			// Try new naming convention first, fall back to legacy
+			let resp = await fetch('/api/servers/jat-integrations/restart', { method: 'POST' });
+			if (!resp.ok) {
+				resp = await fetch('/api/servers/server-ingest/restart', { method: 'POST' });
+			}
 			const data = await resp.json();
 			if (data.success) {
 				serviceStatus = 'starting';

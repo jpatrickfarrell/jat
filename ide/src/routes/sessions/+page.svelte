@@ -13,6 +13,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
+	import { classifySessionLegacy, getDisplayName } from '$lib/utils/sessionNaming';
 	import { goto } from '$app/navigation';
 	import { getProjectColor, fetchAndGetProjectColors } from '$lib/utils/projectColors';
 	import SessionCard from '$lib/components/work/SessionCard.svelte';
@@ -265,34 +266,9 @@
 		return match ? match[1] : undefined;
 	}
 
-	/** Generate display name for server sessions (matches /servers page logic) */
-	function getServerDisplayName(project: string): string {
-		if (project === 'ingest') return 'Integrations';
-		if (project === 'scheduler') return 'Scheduler';
-		return `${project} dev server`;
-	}
-
-	// Categorize sessions
+	// Categorize sessions using centralized classifier
 	function categorizeSession(name: string): { type: TmuxSession['type']; project?: string } {
-		if (name.startsWith('jat-')) {
-			// Agent session: jat-AgentName
-			const agentName = name.slice(4);
-			if (agentName.startsWith('pending-')) {
-				return { type: 'agent', project: undefined };
-			}
-			// Look up project from agent's current task
-			const project = agentProjects.get(agentName);
-			return { type: 'agent', project };
-		}
-		if (name.startsWith('server-')) {
-			// Server session: server-ProjectName
-			const project = name.slice(7);
-			return { type: 'server', project };
-		}
-		if (name === 'jat-ide' || name.startsWith('jat-ide')) {
-			return { type: 'ide' };
-		}
-		return { type: 'other' };
+		return classifySessionLegacy(name, (agent) => agentProjects.get(agent));
 	}
 
 	// Fetch project order (same as ActionPill uses, sorted by last activity)
@@ -1459,7 +1435,7 @@
 												<div class="text-column">
 													<span class="task-title">{session.name}</span>
 													{#if session.project}
-														<div class="task-description">{getServerDisplayName(session.project)}</div>
+														<div class="task-description">{getDisplayName(session.name)}</div>
 													{/if}
 												</div>
 											</div>

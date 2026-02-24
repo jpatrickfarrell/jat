@@ -271,8 +271,14 @@ export type LegacySessionType = 'agent' | 'server' | 'ide' | 'other';
  *
  * Maps the new `'app'` and `'service'` types to `'server'` for backwards
  * compatibility with the `TmuxSession` interface used across page components.
+ *
+ * For agent sessions, an optional `agentProjectResolver` can be provided to
+ * look up the project from page-specific state (e.g. the agent's current task).
  */
-export function classifySessionLegacy(name: string): { type: LegacySessionType; project?: string } {
+export function classifySessionLegacy(
+	name: string,
+	agentProjectResolver?: (agentName: string) => string | undefined
+): { type: LegacySessionType; project?: string } {
 	const result = classifySession(name);
 	switch (result.type) {
 		case 'app':
@@ -281,8 +287,13 @@ export function classifySessionLegacy(name: string): { type: LegacySessionType; 
 			return { type: 'server', project: result.service };
 		case 'ide':
 			return { type: 'ide' };
-		case 'agent':
-			return { type: 'agent' };
+		case 'agent': {
+			const agentName = name.startsWith(SESSION_PREFIX)
+				? name.slice(SESSION_PREFIX.length)
+				: name;
+			const project = agentProjectResolver?.(agentName);
+			return { type: 'agent', project };
+		}
 		default:
 			return { type: 'other' };
 	}

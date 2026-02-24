@@ -278,8 +278,8 @@ export async function start(projectName: string, command?: string): Promise<Serv
  */
 export async function stop(sessionName: string): Promise<boolean> {
 	try {
-		// Route scheduler through its own API
-		if (sessionName === 'server-scheduler') {
+		// Route scheduler through its own API (supports both legacy and new naming)
+		if (sessionName === 'server-scheduler' || sessionName === 'jat-scheduler') {
 			const response = await globalThis.fetch('/api/scheduler/stop', { method: 'POST' });
 			if (!response.ok && response.status !== 404) {
 				const data = await response.json();
@@ -315,7 +315,7 @@ export async function stop(sessionName: string): Promise<boolean> {
 export async function restart(sessionName: string): Promise<boolean> {
 	try {
 		// Route scheduler through its own APIs (stop then start)
-		if (sessionName === 'server-scheduler') {
+		if (sessionName === 'server-scheduler' || sessionName === 'jat-scheduler') {
 			await globalThis.fetch('/api/scheduler/stop', { method: 'POST' });
 			// Brief pause for tmux cleanup
 			await new Promise((r) => setTimeout(r, 500));

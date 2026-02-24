@@ -247,7 +247,7 @@ export async function DELETE({ params }) {
 
 	try {
 		// Kill the tmux session
-		await execAsync(`tmux kill-session -t "${sessionName}"`, { timeout: 5000 });
+		await execAsync(`tmux kill-session -t "${existingSessionDel}"`, { timeout: 5000 });
 
 		// Wait for port to be released
 		await new Promise(resolve => setTimeout(resolve, 500));
@@ -255,8 +255,8 @@ export async function DELETE({ params }) {
 
 		return json({
 			success: true,
-			message: `Stopped server session: ${sessionName}`,
-			sessionName,
+			message: `Stopped server session: ${existingSessionDel}`,
+			sessionName: existingSessionDel,
 			port: config.port,
 			status: portRunning ? 'stopping' : 'stopped'
 		});

@@ -13,6 +13,7 @@
 	import BrowserConfig from './nodes/BrowserConfig.svelte';
 	import ConditionConfig from './nodes/ConditionConfig.svelte';
 	import TransformConfig from './nodes/TransformConfig.svelte';
+	import DelayConfig from './nodes/DelayConfig.svelte';
 
 	let {
 		node = $bindable(null),
@@ -218,6 +219,8 @@
 					<ConditionConfig config={cfg} onUpdate={handleConfigUpdate} />
 				{:else if node.type === 'transform'}
 					<TransformConfig config={cfg} onUpdate={handleConfigUpdate} />
+				{:else if node.type === 'delay'}
+					<DelayConfig config={cfg} onUpdate={handleConfigUpdate} />
 				{/if}
 
 				<!-- Node info -->

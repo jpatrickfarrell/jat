@@ -31,7 +31,8 @@ export type NodeType =
 	| 'action_browser'
 	// Logic
 	| 'condition'
-	| 'transform';
+	| 'transform'
+	| 'delay';
 
 /**
  * Node type categories for palette grouping
@@ -52,7 +53,8 @@ export const NODE_CATEGORIES: Record<NodeType, NodeCategory> = {
 	action_spawn_agent: 'action',
 	action_browser: 'action',
 	condition: 'logic',
-	transform: 'logic'
+	transform: 'logic',
+	delay: 'logic'
 };
 
 // =============================================================================
@@ -174,6 +176,14 @@ export interface ConditionConfig {
 	expression: string;
 }
 
+/** Delay node: pauses execution for a specified duration */
+export interface DelayConfig {
+	/** Delay duration value */
+	duration: number;
+	/** Duration unit */
+	unit: 'seconds' | 'minutes' | 'hours';
+}
+
 /** Transform node: maps/filters/transforms data */
 export interface TransformConfig {
 	/** JavaScript function body. Receives `input`, must return transformed value.
@@ -195,7 +205,8 @@ export type NodeConfig =
 	| ActionSpawnAgentConfig
 	| ActionBrowserConfig
 	| ConditionConfig
-	| TransformConfig;
+	| TransformConfig
+	| DelayConfig;
 
 /**
  * Map node types to their config interfaces
@@ -212,6 +223,7 @@ export interface NodeConfigMap {
 	action_browser: ActionBrowserConfig;
 	condition: ConditionConfig;
 	transform: TransformConfig;
+	delay: DelayConfig;
 }
 
 // =============================================================================
@@ -476,6 +488,13 @@ export function getDefaultPorts(type: NodeType): { inputs: Port[]; outputs: Port
 			return {
 				inputs: [{ id: 'data_in', type: 'data', label: 'Input' }],
 				outputs: [{ id: 'data_out', type: 'data', label: 'Result' }]
+			};
+
+		// Delay has data in, data out (passes through after waiting)
+		case 'delay':
+			return {
+				inputs: [{ id: 'data_in', type: 'data', label: 'Input' }],
+				outputs: [{ id: 'data_out', type: 'data', label: 'Output' }]
 			};
 	}
 }

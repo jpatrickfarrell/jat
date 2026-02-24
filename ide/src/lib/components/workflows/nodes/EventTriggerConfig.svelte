@@ -1,9 +1,11 @@
 <script lang="ts">
 	import type { TriggerEventConfig } from '$lib/types/workflow';
 	import { EVENT_TYPES } from '$lib/config/workflowNodes';
+	import { getIntegrationIcon } from '$lib/config/integrationIcons';
+	import type { IntegrationSource } from '$lib/types/integration';
 
 	let {
-		config = { eventType: 'task_completed' as const },
+		config = { eventType: 'task_created' as const },
 		onUpdate = () => {}
 	}: {
 		config: TriggerEventConfig;
@@ -12,8 +14,30 @@
 
 	let showHelp = $state(false);
 
+	// Integration sources (fetched when ingest_item is selected)
+	let integrationSources = $state<IntegrationSource[]>([]);
+	let integrationLoading = $state(false);
+	let integrationError = $state<string | null>(null);
+	let integrationFetched = $state(false);
+
 	const EVENT_DATA_FIELDS: Record<string, { fields: { name: string; type: string; desc: string }[]; examples: { label: string; expr: string }[] }> = {
-		task_completed: {
+		task_created: {
+			fields: [
+				{ name: 'data.taskId', type: 'string', desc: 'Task ID' },
+				{ name: 'data.title', type: 'string', desc: 'Task title' },
+				{ name: 'data.type', type: 'string', desc: 'bug, feature, task, chore, epic' },
+				{ name: 'data.priority', type: 'number', desc: 'Priority (0-4)' },
+				{ name: 'data.labels', type: 'string', desc: 'Comma-separated labels' },
+				{ name: 'data.project', type: 'string', desc: 'Project name' }
+			],
+			examples: [
+				{ label: 'High-priority bugs', expr: 'data.type === "bug" && data.priority <= 1' },
+				{ label: 'OR', expr: 'data.type === "bug" || data.type === "feature"' },
+				{ label: 'NOT', expr: 'data.type !== "chore"' },
+				{ label: 'By label', expr: 'data.labels.includes("urgent")' }
+			]
+		},
+		task_closed: {
 			fields: [
 				{ name: 'data.taskId', type: 'string', desc: 'Task ID' },
 				{ name: 'data.title', type: 'string', desc: 'Task title' },
@@ -31,30 +55,22 @@
 				{ label: 'NOT', expr: 'data.type !== "epic" && data.project !== "demo"' }
 			]
 		},
-		task_created: {
+		task_status_changed: {
 			fields: [
 				{ name: 'data.taskId', type: 'string', desc: 'Task ID' },
 				{ name: 'data.title', type: 'string', desc: 'Task title' },
+				{ name: 'data.oldStatus', type: 'string', desc: 'Previous status (open, in_progress, blocked, closed)' },
+				{ name: 'data.newStatus', type: 'string', desc: 'New status' },
 				{ name: 'data.type', type: 'string', desc: 'bug, feature, task, chore, epic' },
 				{ name: 'data.priority', type: 'number', desc: 'Priority (0-4)' },
-				{ name: 'data.labels', type: 'string', desc: 'Comma-separated labels' },
-				{ name: 'data.project', type: 'string', desc: 'Project name' }
+				{ name: 'data.project', type: 'string', desc: 'Project name' },
+				{ name: 'data.assignee', type: 'string', desc: 'Agent name' }
 			],
 			examples: [
-				{ label: 'High-priority bugs', expr: 'data.type === "bug" && data.priority <= 1' },
-				{ label: 'OR', expr: 'data.type === "bug" || data.type === "feature"' },
-				{ label: 'NOT', expr: 'data.type !== "chore"' },
-				{ label: 'By label', expr: 'data.labels.includes("urgent")' }
-			]
-		},
-		agent_idle: {
-			fields: [
-				{ name: 'data.agentName', type: 'string', desc: 'Agent name' },
-				{ name: 'data.project', type: 'string', desc: 'Project name' }
-			],
-			examples: [
-				{ label: 'Specific agent', expr: 'data.agentName === "SwiftCanyon"' },
-				{ label: 'By project', expr: 'data.project === "jat"' }
+				{ label: 'Started work', expr: 'data.newStatus === "in_progress"' },
+				{ label: 'Got blocked', expr: 'data.newStatus === "blocked"' },
+				{ label: 'Reopened', expr: 'data.oldStatus === "closed" && data.newStatus === "open"' },
+				{ label: 'Any close', expr: 'data.newStatus === "closed"' }
 			]
 		},
 		signal_received: {
@@ -73,6 +89,37 @@
 				{ label: 'Bugs only', expr: 'data.type === "complete" && data.taskType === "bug"' },
 				{ label: 'Multiple signals', expr: 'data.type === "review" || data.type === "complete"' }
 			]
+		},
+		file_changed: {
+			fields: [
+				{ name: 'data.path', type: 'string', desc: 'Relative file path' },
+				{ name: 'data.project', type: 'string', desc: 'Project name' },
+				{ name: 'data.changeType', type: 'string', desc: 'Type of change: create, modify, delete' }
+			],
+			examples: [
+				{ label: 'Config files', expr: 'data.path.endsWith(".json") || data.path.endsWith(".yaml")' },
+				{ label: 'Source code', expr: 'data.path.startsWith("src/")' },
+				{ label: 'Specific file', expr: 'data.path === "package.json"' },
+				{ label: 'Deletions', expr: 'data.changeType === "delete"' }
+			]
+		},
+		ingest_item: {
+			fields: [
+				{ name: 'data.sourceId', type: 'string', desc: 'Integration source ID (e.g., "slack-main")' },
+				{ name: 'data.sourceType', type: 'string', desc: 'Integration type (slack, gmail, rss, telegram, etc.)' },
+				{ name: 'data.title', type: 'string', desc: 'Item title' },
+				{ name: 'data.description', type: 'string', desc: 'Item body/description' },
+				{ name: 'data.author', type: 'string', desc: 'Author name' },
+				{ name: 'data.timestamp', type: 'string', desc: 'ISO timestamp of the item' },
+				{ name: 'data.project', type: 'string', desc: 'Target project' },
+				{ name: 'data.fields.*', type: 'varies', desc: 'Plugin-specific fields (e.g., data.fields.channel, data.fields.priority)' }
+			],
+			examples: [
+				{ label: 'From Slack', expr: 'data.sourceType === "slack"' },
+				{ label: 'Specific source', expr: 'data.sourceId === "slack-main"' },
+				{ label: 'By author', expr: 'data.author === "alice"' },
+				{ label: 'Title match', expr: 'data.title.includes("urgent")' }
+			]
 		}
 	};
 
@@ -88,6 +135,36 @@
 		config = { ...config, filter: value || undefined };
 		onUpdate(config);
 	}
+
+	function handleSourceClick(sourceId: string) {
+		const expr = `data.sourceId === "${sourceId}"`;
+		config = { ...config, filter: expr };
+		onUpdate(config);
+	}
+
+	async function fetchIntegrationSources() {
+		if (integrationFetched) return;
+		integrationLoading = true;
+		integrationError = null;
+		try {
+			const res = await fetch('/api/integrations');
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			const data = await res.json();
+			integrationSources = data.config?.sources ?? [];
+			integrationFetched = true;
+		} catch (err) {
+			integrationError = err instanceof Error ? err.message : 'Failed to load integrations';
+		} finally {
+			integrationLoading = false;
+		}
+	}
+
+	// Fetch integration sources when ingest_item is selected
+	$effect(() => {
+		if (config.eventType === 'ingest_item') {
+			fetchIntegrationSources();
+		}
+	});
 </script>
 
 <div class="flex flex-col gap-4">
@@ -117,6 +194,71 @@
 			{/each}
 		</div>
 	</div>
+
+	<!-- Integration source picker (only for ingest_item) -->
+	{#if config.eventType === 'ingest_item'}
+		<div class="form-control">
+			<label class="label w-full pb-1">
+				<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Filter by Source</span>
+				<span class="label-text-alt" style="color: oklch(0.55 0.02 250)">Optional</span>
+			</label>
+			<div class="rounded-lg p-3" style="background: oklch(0.14 0.01 250); border: 1px solid oklch(0.22 0.02 250)">
+				{#if integrationLoading}
+					<div class="flex items-center gap-2 text-xs" style="color: oklch(0.55 0.02 250)">
+						<span class="loading loading-spinner loading-xs"></span>
+						Loading integrations...
+					</div>
+				{:else if integrationError}
+					<div class="text-xs" style="color: oklch(0.70 0.15 25)">
+						Failed to load integrations: {integrationError}
+					</div>
+				{:else if integrationSources.length === 0}
+					<div class="text-xs" style="color: oklch(0.55 0.02 250)">
+						No integrations configured.
+						<a href="/integrations" class="underline" style="color: oklch(0.70 0.15 240)">Set up integrations</a>
+						to filter by source.
+					</div>
+				{:else}
+					<div class="text-xs mb-2" style="color: oklch(0.55 0.02 250)">Click to filter by a specific integration</div>
+					<div class="flex flex-wrap gap-2">
+						{#each integrationSources as source}
+							{@const icon = getIntegrationIcon(source.type)}
+							{@const isSelected = config.filter === `data.sourceId === "${source.id}"`}
+							<button
+								type="button"
+								class="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs transition-all cursor-pointer"
+								style="
+									background: {isSelected ? 'oklch(0.72 0.17 145 / 0.15)' : 'oklch(0.18 0.01 250)'};
+									border: 1px solid {isSelected ? 'oklch(0.72 0.17 145 / 0.5)' : 'oklch(0.28 0.02 250)'};
+									color: oklch(0.85 0.02 250);
+									opacity: {source.enabled ? '1' : '0.5'};
+								"
+								onclick={() => handleSourceClick(source.id)}
+								title="{source.type} — {source.id}{source.enabled ? '' : ' (disabled)'}"
+							>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									viewBox={icon.viewBox}
+									class="w-3.5 h-3.5 shrink-0"
+									style="color: {icon.color}"
+									fill={icon.fill ? 'currentColor' : 'none'}
+									stroke={icon.fill ? 'none' : 'currentColor'}
+									stroke-width={icon.fill ? undefined : '1.5'}
+								>
+									<path d={icon.svg} />
+								</svg>
+								<span class="font-medium">{source.id}</span>
+								{#if !source.enabled}
+									<span class="text-[0.625rem] px-1 rounded" style="background: oklch(0.30 0.02 250); color: oklch(0.55 0.02 250)">off</span>
+								{/if}
+							</button>
+						{/each}
+					</div>
+					<div class="text-xs mt-2" style="color: oklch(0.45 0.02 250)">Or write a custom filter expression below</div>
+				{/if}
+			</div>
+		</div>
+	{/if}
 
 	<div class="form-control">
 		<label class="label w-full pb-1">

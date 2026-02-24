@@ -27,7 +27,8 @@ import type {
 	ActionSpawnAgentConfig,
 	ActionBrowserConfig,
 	ConditionConfig,
-	TransformConfig
+	TransformConfig,
+	DelayConfig
 } from '$lib/types/workflow';
 import { generateRunId, saveRun } from '$lib/utils/workflows.server';
 
@@ -579,6 +580,40 @@ async function executeCondition(
 	return { branch: result ? 'true' : 'false', value: result };
 }
 
+/** Delay: pause execution then pass input through */
+async function executeDelay(
+	node: WorkflowNode,
+	input: unknown,
+	ctx: ExecutionContext
+): Promise<unknown> {
+	const config = node.config as DelayConfig;
+	const duration = config.duration || 5;
+	const unit = config.unit || 'seconds';
+
+	const ms =
+		unit === 'hours' ? duration * 3600000 :
+		unit === 'minutes' ? duration * 60000 :
+		duration * 1000;
+
+	ctx.log(node.id, `Delay: ${duration} ${unit} (${ms}ms)`);
+
+	if (ctx.dryRun) {
+		return { dryRun: true, duration, unit, ms, input };
+	}
+
+	await new Promise<void>((resolve, reject) => {
+		const timer = setTimeout(resolve, ms);
+		if (ctx.signal) {
+			ctx.signal.addEventListener('abort', () => {
+				clearTimeout(timer);
+				reject(new Error('Delay cancelled'));
+			}, { once: true });
+		}
+	});
+
+	return input;
+}
+
 /** Transform: apply JS transform to input data */
 async function executeTransform(
 	node: WorkflowNode,
@@ -612,7 +647,8 @@ const EXECUTORS: Record<NodeType, NodeExecutor> = {
 	action_spawn_agent: executeSpawnAgent,
 	action_browser: executeBrowser,
 	condition: executeCondition,
-	transform: executeTransform
+	transform: executeTransform,
+	delay: executeDelay
 };
 
 // =============================================================================

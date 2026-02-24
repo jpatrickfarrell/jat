@@ -129,7 +129,8 @@ const VALID_NODE_TYPES: NodeType[] = [
 	'action_spawn_agent',
 	'action_browser',
 	'condition',
-	'transform'
+	'transform',
+	'delay'
 ];
 
 /**

@@ -125,7 +125,7 @@ export const NODE_TYPE_META: Record<NodeType, NodeTypeMeta> = {
 		bgColor: 'oklch(0.72 0.17 145 / 0.08)',
 		portColor: 'oklch(0.72 0.17 145)',
 		helpText: 'Triggers the workflow when a specific system event occurs, such as task completion or agent idle.',
-		defaultConfig: { eventType: 'task_completed' }
+		defaultConfig: { eventType: 'task_created' }
 	},
 
 	trigger_manual: {
@@ -249,6 +249,19 @@ export const NODE_TYPE_META: Record<NodeType, NodeTypeMeta> = {
 		portColor: 'oklch(0.72 0.15 55)',
 		helpText: 'Transforms input data using a JavaScript function body. Receives `input` variable and must return the transformed value.',
 		defaultConfig: { functionBody: 'return input' }
+	},
+
+	delay: {
+		type: 'delay',
+		label: 'Delay',
+		description: 'Wait before passing data to the next node',
+		category: 'logic',
+		icon: ICONS.clock,
+		color: 'oklch(0.72 0.15 55)',
+		bgColor: 'oklch(0.72 0.15 55 / 0.08)',
+		portColor: 'oklch(0.72 0.15 55)',
+		helpText: 'Pauses workflow execution for the specified duration, then passes the input data through unchanged to the next node.',
+		defaultConfig: { duration: 5, unit: 'seconds' }
 	}
 };
 
@@ -289,12 +302,14 @@ export const CRON_PRESETS: { label: string; expr: string }[] = [
 	{ label: 'Monthly on the 1st', expr: '0 0 1 * *' }
 ];
 
-/** Event types for the event trigger */
+/** Event types for the event trigger (matches eventBus.server.ts EventType) */
 export const EVENT_TYPES: { value: string; label: string; description: string }[] = [
-	{ value: 'task_completed', label: 'Task Completed', description: 'Fires when any task is closed' },
 	{ value: 'task_created', label: 'Task Created', description: 'Fires when a new task is created' },
-	{ value: 'agent_idle', label: 'Agent Idle', description: 'Fires when an agent has no active task' },
-	{ value: 'signal_received', label: 'Signal Received', description: 'Fires on a specific JAT signal' }
+	{ value: 'task_closed', label: 'Task Closed', description: 'Fires when a task is closed/completed' },
+	{ value: 'task_status_changed', label: 'Task Status Changed', description: 'Fires when a task status changes (e.g., open → in_progress)' },
+	{ value: 'signal_received', label: 'Signal Received', description: 'Fires on a JAT agent signal (working, review, complete, etc.)' },
+	{ value: 'file_changed', label: 'File Changed', description: 'Fires when a project file is modified' },
+	{ value: 'ingest_item', label: 'Integration Item Received', description: 'Fires when a new item arrives from an integration (Slack, Gmail, RSS, etc.)' }
 ];
 
 /** Browser action types */

@@ -189,45 +189,15 @@ export function getServiceSessionName(service: string): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Produce a human-readable display name for a tmux session.
+ * Produce a display name for a tmux session.
+ * Returns the raw tmux session name as-is.
  *
- * @example getDisplayName('jat-app-benzinga')  // 'Benzinga Dev Server'
- * @example getDisplayName('jat-integrations')  // 'Integrations'
- * @example getDisplayName('jat-scheduler')     // 'Scheduler'
- * @example getDisplayName('jat-app-ide')       // 'JAT IDE'
- * @example getDisplayName('jat-FairBay')       // 'FairBay'
- * @example getDisplayName('server-benzinga')   // 'Benzinga Dev Server'
- * @example getDisplayName('server-ingest')     // 'Integrations'
+ * @example getDisplayName('jat-app-benzinga')  // 'jat-app-benzinga'
+ * @example getDisplayName('jat-integrations')  // 'jat-integrations'
+ * @example getDisplayName('jat-FairBay')       // 'jat-FairBay'
  */
 export function getDisplayName(name: string): string {
-	const classification = classifySession(name);
-
-	switch (classification.type) {
-		case 'ide':
-			return 'JAT IDE';
-
-		case 'service': {
-			const s = classification.service ?? '';
-			return s.charAt(0).toUpperCase() + s.slice(1);
-		}
-
-		case 'app': {
-			const project = classification.project ?? '';
-			const capitalized = project.charAt(0).toUpperCase() + project.slice(1);
-			return `${capitalized} Dev Server`;
-		}
-
-		case 'agent': {
-			// Extract agent name from the session name
-			if (name.startsWith(SESSION_PREFIX)) {
-				return name.slice(SESSION_PREFIX.length);
-			}
-			return name;
-		}
-
-		default:
-			return name;
-	}
+	return name;
 }
 
 // ---------------------------------------------------------------------------

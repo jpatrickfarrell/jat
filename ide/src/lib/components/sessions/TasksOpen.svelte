@@ -871,25 +871,25 @@
 		return Array.from(projects).sort();
 	});
 
-	// Task sort comparator: due date (has due date first) → age (oldest first) → priority
+	// Task sort comparator: due date (has due date first) → age (newest first) → priority
 	function compareTaskSort(a: Task, b: Task): number {
 		// 1. Has due date first (tasks with due_date above those without)
 		const aHasDue = a.due_date ? 1 : 0;
 		const bHasDue = b.due_date ? 1 : 0;
 		if (aHasDue !== bHasDue) return bHasDue - aHasDue;
 
-		// 2. Age: oldest first (earlier created_at first)
+		// 2. Age: newest first (later created_at first)
 		if (a.created_at && b.created_at) {
 			const aTime = new Date(a.created_at).getTime();
 			const bTime = new Date(b.created_at).getTime();
-			if (aTime !== bTime) return aTime - bTime;
+			if (aTime !== bTime) return bTime - aTime;
 		}
 
 		// 3. Priority (P0 first)
 		return a.priority - b.priority;
 	}
 
-	// Derived: open tasks sorted by due date → age → priority, filtered by project (only when header is shown)
+	// Derived: open tasks sorted by due date → newest first → priority, filtered by project (only when header is shown)
 	const sortedOpenTasks = $derived(
 		tasks
 			.filter(t => t.status === 'open')

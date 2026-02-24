@@ -514,8 +514,11 @@
 				>{agentName}</span>
 			{/if}
 			<!-- Row 3: Icons -->
-			{#if !isClosed && (task.priority !== undefined || (harness && agentName) || (integrationIcon && resolvedIntegration) || taskAgeInfo.label || resumed || attached || browserPort)}
+			{#if !isClosed && (showType && task.issue_type || task.priority !== undefined || (harness && agentName) || (integrationIcon && resolvedIntegration) || taskAgeInfo.label || resumed || attached || browserPort)}
 				<div class="flex items-center gap-1.5 mt-0.5">
+					{#if showType && task.issue_type}
+						<span class="text-[10px] leading-none">{typeVisual.icon}</span>
+					{/if}
 					{#if task.priority !== undefined}
 						<span
 							class="text-[9px] font-bold px-0.5 rounded leading-tight"
@@ -619,6 +622,9 @@
 
 		<!-- Icons row - outside button, below the badge -->
 		<div class="flex items-center gap-0.5 ml-1.5">
+			{#if showType && task.issue_type && !isClosed}
+				<span class={size === 'xs' ? 'text-xs' : size === 'sm' ? 'text-sm' : 'text-base'}>{typeVisual.icon}</span>
+			{/if}
 			<!-- Priority badge -->
 			{#if task.priority !== undefined}
 				{@const priorityColors = {
@@ -681,8 +687,6 @@
 				<svg class="{iconSizes[size]} text-success shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
 				</svg>
-			{:else if showType && task.issue_type}
-				<span class={size === 'xs' ? 'text-xs' : size === 'sm' ? 'text-sm' : 'text-base'}>{typeVisual.icon}</span>
 			{/if}
 
 			{#if showUnblocksCount && activeBlocks.length > 0 && !isClosed}
@@ -799,6 +803,9 @@
 
 			<!-- Icons row - outside button, below the badge -->
 			<div class="flex items-center gap-1 mt-0.5 opacity-80">
+				{#if showType && task.issue_type && !isClosed}
+					<span class={size === 'xs' ? 'text-xs' : size === 'sm' ? 'text-sm' : 'text-base'}>{typeVisual.icon}</span>
+				{/if}
 				<!-- Priority badge -->
 				{#if task.priority !== undefined}
 					{@const priorityColors = {
@@ -860,8 +867,6 @@
 					<svg class="{iconSizes[size]} shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: oklch(0.65 0.20 145);">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
 					</svg>
-				{:else if showType && task.issue_type}
-					<span class={size === 'xs' ? 'text-xs' : size === 'sm' ? 'text-sm' : 'text-base'}>{typeVisual.icon}</span>
 				{/if}
 
 				{#if showUnblocksCount && activeBlocks.length > 0 && !isClosed}

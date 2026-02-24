@@ -312,8 +312,8 @@
 		'blocked': 'badge-error'
 	};
 
-	// Active tab - now includes 'notes' and 'summary' as separate tabs
-	let activeTab = $state<'details' | 'notes' | 'activity' | 'deps' | 'summary'>('details');
+	// Active tab - now includes 'notes', 'summary', and 'integration' as separate tabs
+	let activeTab = $state<'details' | 'notes' | 'activity' | 'deps' | 'summary' | 'integration'>('details');
 
 	// Summary state
 	interface TaskSummary {
@@ -395,7 +395,7 @@
 	});
 
 	// Track previous tab to save notes when leaving notes tab
-	let previousTab = $state<'details' | 'notes' | 'activity' | 'deps' | 'summary'>('details');
+	let previousTab = $state<'details' | 'notes' | 'activity' | 'deps' | 'summary' | 'integration'>('details');
 
 	// Save notes when switching away from notes tab
 	$effect(() => {
@@ -771,6 +771,15 @@
 						{/if}
 					</button>
 				{/if}
+				{#if integration && integrationIcon}
+					<button
+						class="pane-tab"
+						class:active={activeTab === 'integration'}
+						onclick={() => activeTab = 'integration'}
+					>
+						Integration
+					</button>
+				{/if}
 			</div>
 
 			<!-- Tab content -->
@@ -845,139 +854,6 @@
 										<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
 									</svg>
 								</button>
-							</div>
-						{/if}
-
-						<!-- Integration Source -->
-						{#if integration && integrationIcon}
-							<div class="task-panel-section">
-								<span class="task-panel-label">Integration</span>
-								<div class="integration-card">
-									<!-- Header: icon, name, status -->
-									<div class="flex items-center gap-2">
-										<svg class="w-5 h-5 shrink-0" viewBox={integrationIcon.viewBox} fill={integrationIcon.fill ? 'currentColor' : 'none'} stroke={integrationIcon.fill ? 'none' : 'currentColor'} stroke-width="1.5" style="color: {integrationIcon.color};">
-											<path d={integrationIcon.svg} />
-										</svg>
-										<div class="flex flex-col min-w-0">
-											<span class="text-xs font-semibold capitalize" style="color: {integrationIcon.color};">{integration.sourceType}</span>
-											<span class="text-[10px] opacity-60 truncate" title={integration.sourceName}>{integration.sourceName}</span>
-										</div>
-										<span class="ml-auto text-[9px] px-1.5 py-0.5 rounded-full shrink-0" style="background: {integration.sourceEnabled ? 'oklch(0.35 0.12 145 / 0.3)' : 'oklch(0.35 0.02 250 / 0.3)'}; color: {integration.sourceEnabled ? 'oklch(0.70 0.15 145)' : 'oklch(0.55 0.02 250)'};">
-											{integration.sourceEnabled ? 'Active' : 'Disabled'}
-										</span>
-									</div>
-
-									{#if hasInteractiveIntegration}
-										<!-- Integration Flow Pipeline -->
-										{@const sourceName = integration.sourceType === 'supabase' ? 'Flush' : integration.sourceName || integration.sourceType}
-										{@const flowSteps = [
-											{ id: 'ingested', label: 'Reported', system: sourceName },
-											{ id: 'working', label: 'In Progress', system: 'JAT' },
-											{ id: 'complete', label: 'Complete', system: 'JAT' },
-											{ id: 'user_review', label: 'User Review', system: sourceName }
-										]}
-										{@const hasUserResponse = callbackLog.some(e => e.event === 'user_responded')}
-										{@const userResponse = callbackLog.find(e => e.event === 'user_responded')}
-										{@const hasSyncedBack = callbackLog.some(e => e.event === 'task_closed' && e.status >= 200 && e.status < 300)}
-										{@const currentStep = hasUserResponse ? 3 : task.status === 'closed' ? (hasSyncedBack ? 2 : 2) : task.status === 'in_progress' ? 1 : task.status === 'blocked' ? 1 : 0}
-										<div class="integration-flow">
-											<div class="flow-pipeline">
-												{#each flowSteps as step, i}
-													{@const isComplete = i < currentStep}
-													{@const isActive = i === currentStep}
-													{@const isFuture = i > currentStep}
-													{#if i > 0}
-														<div class="flow-connector" class:complete={isComplete} class:active={isActive}></div>
-													{/if}
-													<div class="flow-step" class:complete={isComplete} class:active={isActive} class:future={isFuture}>
-														<div class="flow-dot">
-															{#if isComplete}
-																<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-2.5 h-2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-															{/if}
-														</div>
-														<span class="flow-label">{step.label}</span>
-														<span class="flow-system">{step.system}</span>
-													</div>
-												{/each}
-											</div>
-											{#if hasUserResponse && userResponse}
-												<span class="flow-user-response" class:accepted={userResponse.response === 'accepted'} class:rejected={userResponse.response === 'rejected'}>
-													{userResponse.response === 'accepted' ? '\u2713 Accepted' : '\u2717 Rejected'}{userResponse.reason ? `: ${userResponse.reason}` : ''}
-												</span>
-											{:else if callbackLog.length > 0}
-												{@const lastSync = callbackLog[0]}
-												<span class="flow-last-sync">
-													{lastSync.status >= 200 && lastSync.status < 300 ? '\u2713' : '\u2717'}
-													Last synced {formatTimeAgo(lastSync.timestamp)}
-												</span>
-											{/if}
-										</div>
-
-										<!-- Action Buttons -->
-										{#if integration.actions && integration.actions.length > 0}
-											<div class="integration-actions">
-												{#each integration.actions as action}
-													<button
-														class="integration-action-btn"
-														class:loading={actionLoading === action.id}
-														class:success={actionResult?.actionId === action.id && actionResult?.success}
-														class:error={actionResult?.actionId === action.id && !actionResult?.success}
-														onclick={() => handleActionClick(action)}
-														disabled={actionLoading !== null}
-														title={action.description || action.label}
-													>
-														{#if actionLoading === action.id}
-															<span class="loading loading-spinner" style="width: 12px; height: 12px;"></span>
-														{:else if action.icon && ACTION_ICONS[action.icon]}
-															<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
-																<path stroke-linecap="round" stroke-linejoin="round" d={ACTION_ICONS[action.icon]} />
-															</svg>
-														{/if}
-														<span>{action.label}</span>
-														{#if actionResult?.actionId === action.id}
-															<span class="action-result-msg">{actionResult.message}</span>
-														{/if}
-													</button>
-												{/each}
-											</div>
-										{/if}
-
-										<!-- Confirm Dialog -->
-										{#if confirmAction}
-											<div class="integration-confirm">
-												<p class="text-[11px]" style="color: oklch(0.75 0.12 60);">{confirmAction.confirmMessage}</p>
-												<div class="flex gap-1.5 mt-1.5">
-													<button class="integration-action-btn" onclick={() => confirmAction = null}>Cancel</button>
-													<button class="integration-action-btn confirm-yes" onclick={confirmAndFire}>Confirm</button>
-												</div>
-											</div>
-										{/if}
-
-										<!-- Callback Log -->
-										{#if integration.callback}
-											<div class="integration-callback-log">
-												<span class="sync-label">Callback Log</span>
-												{#if callbackLogLoading}
-													<div class="flex items-center gap-1.5 py-1">
-														<span class="loading loading-spinner" style="width: 10px; height: 10px;"></span>
-														<span class="text-[10px]" style="color: oklch(0.50 0.02 250);">Loading...</span>
-													</div>
-												{:else if callbackLog.length === 0}
-													<span class="text-[10px] italic" style="color: oklch(0.45 0.02 250);">No callbacks yet</span>
-												{:else}
-													{#each callbackLog.slice(0, 5) as entry}
-														<div class="callback-log-entry" class:log-success={entry.status >= 200 && entry.status < 300} class:log-error={entry.status === 0 || entry.status >= 400}>
-															<span class="log-indicator">{entry.status >= 200 && entry.status < 300 ? '\u2713' : '\u2717'}</span>
-															<span class="log-event">{entry.event}</span>
-															<span class="log-time">{formatTimeAgo(entry.timestamp)}</span>
-															<span class="log-status">{entry.status || 'err'}</span>
-														</div>
-													{/each}
-												{/if}
-											</div>
-										{/if}
-									{/if}
-								</div>
 							</div>
 						{/if}
 
@@ -1655,6 +1531,142 @@
 							</div>
 						{/if}
 					</div>
+
+				{:else if activeTab === 'integration'}
+					<!-- Integration tab: source info, flow pipeline, actions, callback log -->
+					{#if integration && integrationIcon}
+						<div class="details-layout">
+							<div class="task-panel-section">
+								<div class="integration-card">
+									<!-- Header: icon, name, status -->
+									<div class="flex items-center gap-2">
+										<svg class="w-5 h-5 shrink-0" viewBox={integrationIcon.viewBox} fill={integrationIcon.fill ? 'currentColor' : 'none'} stroke={integrationIcon.fill ? 'none' : 'currentColor'} stroke-width="1.5" style="color: {integrationIcon.color};">
+											<path d={integrationIcon.svg} />
+										</svg>
+										<div class="flex flex-col min-w-0">
+											<span class="text-xs font-semibold capitalize" style="color: {integrationIcon.color};">{integration.sourceType}</span>
+											<span class="text-[10px] opacity-60 truncate" title={integration.sourceName}>{integration.sourceName}</span>
+										</div>
+										<span class="ml-auto text-[9px] px-1.5 py-0.5 rounded-full shrink-0" style="background: {integration.sourceEnabled ? 'oklch(0.35 0.12 145 / 0.3)' : 'oklch(0.35 0.02 250 / 0.3)'}; color: {integration.sourceEnabled ? 'oklch(0.70 0.15 145)' : 'oklch(0.55 0.02 250)'};">
+											{integration.sourceEnabled ? 'Active' : 'Disabled'}
+										</span>
+									</div>
+
+									{#if hasInteractiveIntegration}
+										<!-- Integration Flow Pipeline -->
+										{@const sourceName = integration.sourceType === 'supabase' ? 'Flush' : integration.sourceName || integration.sourceType}
+										{@const flowSteps = [
+											{ id: 'ingested', label: 'Reported', system: sourceName },
+											{ id: 'working', label: 'In Progress', system: 'JAT' },
+											{ id: 'complete', label: 'Complete', system: 'JAT' },
+											{ id: 'user_review', label: 'User Review', system: sourceName }
+										]}
+										{@const hasUserResponse = callbackLog.some(e => e.event === 'user_responded')}
+										{@const userResponse = callbackLog.find(e => e.event === 'user_responded')}
+										{@const hasSyncedBack = callbackLog.some(e => e.event === 'task_closed' && e.status >= 200 && e.status < 300)}
+										{@const currentStep = hasUserResponse ? 3 : task.status === 'closed' ? (hasSyncedBack ? 2 : 2) : task.status === 'in_progress' ? 1 : task.status === 'blocked' ? 1 : 0}
+										<div class="integration-flow">
+											<div class="flow-pipeline">
+												{#each flowSteps as step, i}
+													{@const isComplete = i < currentStep}
+													{@const isActive = i === currentStep}
+													{@const isFuture = i > currentStep}
+													{#if i > 0}
+														<div class="flow-connector" class:complete={isComplete} class:active={isActive}></div>
+													{/if}
+													<div class="flow-step" class:complete={isComplete} class:active={isActive} class:future={isFuture}>
+														<div class="flow-dot">
+															{#if isComplete}
+																<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-2.5 h-2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+															{/if}
+														</div>
+														<span class="flow-label">{step.label}</span>
+														<span class="flow-system">{step.system}</span>
+													</div>
+												{/each}
+											</div>
+											{#if hasUserResponse && userResponse}
+												<span class="flow-user-response" class:accepted={userResponse.response === 'accepted'} class:rejected={userResponse.response === 'rejected'}>
+													{userResponse.response === 'accepted' ? '\u2713 Accepted' : '\u2717 Rejected'}{userResponse.reason ? `: ${userResponse.reason}` : ''}
+												</span>
+											{:else if callbackLog.length > 0}
+												{@const lastSync = callbackLog[0]}
+												<span class="flow-last-sync">
+													{lastSync.status >= 200 && lastSync.status < 300 ? '\u2713' : '\u2717'}
+													Last synced {formatTimeAgo(lastSync.timestamp)}
+												</span>
+											{/if}
+										</div>
+
+										<!-- Action Buttons -->
+										{#if integration.actions && integration.actions.length > 0}
+											<div class="integration-actions">
+												{#each integration.actions as action}
+													<button
+														class="integration-action-btn"
+														class:loading={actionLoading === action.id}
+														class:success={actionResult?.actionId === action.id && actionResult?.success}
+														class:error={actionResult?.actionId === action.id && !actionResult?.success}
+														onclick={() => handleActionClick(action)}
+														disabled={actionLoading !== null}
+														title={action.description || action.label}
+													>
+														{#if actionLoading === action.id}
+															<span class="loading loading-spinner" style="width: 12px; height: 12px;"></span>
+														{:else if action.icon && ACTION_ICONS[action.icon]}
+															<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
+																<path stroke-linecap="round" stroke-linejoin="round" d={ACTION_ICONS[action.icon]} />
+															</svg>
+														{/if}
+														<span>{action.label}</span>
+														{#if actionResult?.actionId === action.id}
+															<span class="action-result-msg">{actionResult.message}</span>
+														{/if}
+													</button>
+												{/each}
+											</div>
+										{/if}
+
+										<!-- Confirm Dialog -->
+										{#if confirmAction}
+											<div class="integration-confirm">
+												<p class="text-[11px]" style="color: oklch(0.75 0.12 60);">{confirmAction.confirmMessage}</p>
+												<div class="flex gap-1.5 mt-1.5">
+													<button class="integration-action-btn" onclick={() => confirmAction = null}>Cancel</button>
+													<button class="integration-action-btn confirm-yes" onclick={confirmAndFire}>Confirm</button>
+												</div>
+											</div>
+										{/if}
+
+										<!-- Callback Log -->
+										{#if integration.callback}
+											<div class="integration-callback-log">
+												<span class="sync-label">Callback Log</span>
+												{#if callbackLogLoading}
+													<div class="flex items-center gap-1.5 py-1">
+														<span class="loading loading-spinner" style="width: 10px; height: 10px;"></span>
+														<span class="text-[10px]" style="color: oklch(0.50 0.02 250);">Loading...</span>
+													</div>
+												{:else if callbackLog.length === 0}
+													<span class="text-[10px] italic" style="color: oklch(0.45 0.02 250);">No callbacks yet</span>
+												{:else}
+													{#each callbackLog.slice(0, 5) as entry}
+														<div class="callback-log-entry" class:log-success={entry.status >= 200 && entry.status < 300} class:log-error={entry.status === 0 || entry.status >= 400}>
+															<span class="log-indicator">{entry.status >= 200 && entry.status < 300 ? '\u2713' : '\u2717'}</span>
+															<span class="log-event">{entry.event}</span>
+															<span class="log-time">{formatTimeAgo(entry.timestamp)}</span>
+															<span class="log-status">{entry.status || 'err'}</span>
+														</div>
+													{/each}
+												{/if}
+											</div>
+										{/if}
+									{/if}
+								</div>
+							</div>
+						</div>
+					{/if}
+
 				{/if}
 			</div>
 

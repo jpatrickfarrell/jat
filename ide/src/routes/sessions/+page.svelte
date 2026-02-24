@@ -265,6 +265,13 @@
 		return match ? match[1] : undefined;
 	}
 
+	/** Generate display name for server sessions (matches /servers page logic) */
+	function getServerDisplayName(project: string): string {
+		if (project === 'ingest') return 'Integrations';
+		if (project === 'scheduler') return 'Scheduler';
+		return `${project} dev server`;
+	}
+
 	// Categorize sessions
 	function categorizeSession(name: string): { type: TmuxSession['type']; project?: string } {
 		if (name.startsWith('jat-')) {
@@ -1452,7 +1459,7 @@
 												<div class="text-column">
 													<span class="task-title">{session.name}</span>
 													{#if session.project}
-														<div class="task-description">{session.project} dev server</div>
+														<div class="task-description">{getServerDisplayName(session.project)}</div>
 													{/if}
 												</div>
 											</div>

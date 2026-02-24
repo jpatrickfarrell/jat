@@ -283,7 +283,7 @@ async function pollSource(source) {
 
     // Process thread replies for any adapter that implements pollReplies
     try {
-      if (source.trackReplies !== false) {
+      if (source.trackReplies !== false && typeof adapter.pollReplies === 'function') {
         const threads = getActiveThreads(source.id, source.maxTrackedThreads || 50);
         if (threads.length > 0) {
           const threadResults = await adapter.pollReplies(source, threads, getSecret);

@@ -853,7 +853,10 @@ export async function POST({ request }) {
 		}
 
 		// Step 0b: Select agent and model based on routing rules or explicit params
-		const agentSelection = selectAgentAndModel({ agentId, model, task });
+		// Fall back to task's stored agent_program/model if not explicitly provided
+		const effectiveAgentId = agentId || (task && task.agent_program) || null;
+		const effectiveModel = model || (task && task.model) || null;
+		const agentSelection = selectAgentAndModel({ agentId: effectiveAgentId, model: effectiveModel, task });
 		if ('error' in agentSelection) {
 			return json({
 				error: agentSelection.error

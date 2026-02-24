@@ -1163,7 +1163,9 @@
 						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({
 							taskId: taskId,
-							project: formData.project || undefined
+							project: formData.project || undefined,
+							agentId: agentProgram || undefined,
+							model: modelValue || undefined
 						})
 					});
 

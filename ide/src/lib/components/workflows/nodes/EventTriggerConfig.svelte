@@ -310,4 +310,32 @@
 			</div>
 		{/if}
 	</div>
+
+	<!-- Output fields: what downstream nodes receive as {{input.*}} -->
+	{#if currentFields}
+		<div class="form-control">
+			<label class="label w-full pb-1">
+				<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Output Fields</span>
+				<span class="label-text-alt" style="color: oklch(0.55 0.02 250)">Available in downstream nodes</span>
+			</label>
+			<div class="rounded-lg p-2.5 text-xs" style="background: oklch(0.14 0.01 250); border: 1px solid oklch(0.22 0.02 250)">
+				<div class="mb-1.5" style="color: oklch(0.55 0.02 250)">
+					Use these in LLM Prompt, Create Task, and other downstream nodes:
+				</div>
+				<div class="flex flex-col gap-1">
+					<div class="flex items-baseline gap-2">
+						<code class="font-mono px-1 rounded" style="background: oklch(0.18 0.02 250); color: oklch(0.80 0.12 280); font-size: 0.6875rem">{`{{input}}`}</code>
+						<span style="color: oklch(0.50 0.02 250)">Full event data object (JSON)</span>
+					</div>
+					{#each currentFields.fields as field}
+						{@const inputVar = field.name.replace(/^data\./, 'input.')}
+						<div class="flex items-baseline gap-2">
+							<code class="font-mono px-1 rounded" style="background: oklch(0.18 0.02 250); color: oklch(0.80 0.12 280); font-size: 0.6875rem">{`{{${inputVar}}}`}</code>
+							<span style="color: oklch(0.50 0.02 250)">{field.desc}</span>
+						</div>
+					{/each}
+				</div>
+			</div>
+		</div>
+	{/if}
 </div>

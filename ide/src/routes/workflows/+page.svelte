@@ -67,6 +67,110 @@
 
 	// Confirm delete
 	let showDeleteConfirm = $state(false);
+	let deleteTargetId = $state<string | null>(null);
+	let deleteTargetName = $state('');
+
+	// Context menu (list view)
+	let ctxWorkflow = $state<WorkflowSummary | null>(null);
+	let ctxX = $state(0);
+	let ctxY = $state(0);
+	let ctxVisible = $state(false);
+
+	function handleCardContextMenu(wf: WorkflowSummary, event: MouseEvent) {
+		event.preventDefault();
+		event.stopPropagation();
+		const menuWidth = 180;
+		const menuHeight = 240;
+		ctxWorkflow = wf;
+		ctxX = Math.min(event.clientX, window.innerWidth - menuWidth - 8);
+		ctxY = Math.min(event.clientY, window.innerHeight - menuHeight - 8);
+		ctxVisible = true;
+	}
+
+	function closeContextMenu() {
+		ctxVisible = false;
+	}
+
+	// Close context menu on click outside or Escape
+	$effect(() => {
+		if (!ctxVisible) return;
+		function handleClick() { closeContextMenu(); }
+		function handleKeyDown(e: KeyboardEvent) { if (e.key === 'Escape') closeContextMenu(); }
+		const timer = setTimeout(() => {
+			document.addEventListener('click', handleClick);
+			document.addEventListener('keydown', handleKeyDown);
+		}, 0);
+		return () => {
+			clearTimeout(timer);
+			document.removeEventListener('click', handleClick);
+			document.removeEventListener('keydown', handleKeyDown);
+		};
+	});
+
+	async function duplicateWorkflow(wf: WorkflowSummary) {
+		try {
+			// Fetch full workflow
+			const res = await fetch(`/api/workflows/${wf.id}`);
+			if (!res.ok) throw new Error('Failed to fetch workflow');
+			const data = await res.json();
+			const source = data.workflow;
+
+			// Create duplicate
+			const createRes = await fetch('/api/workflows', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					name: `${source.name} (copy)`,
+					description: source.description || '',
+					nodes: source.nodes || [],
+					edges: source.edges || [],
+					enabled: false
+				})
+			});
+			if (!createRes.ok) throw new Error('Failed to create duplicate');
+			await loadWorkflows();
+			showToast('Workflow duplicated');
+		} catch {
+			showToast('Failed to duplicate workflow', 'error');
+		}
+	}
+
+	async function toggleWorkflowEnabled(wf: WorkflowSummary) {
+		try {
+			const res = await fetch(`/api/workflows/${wf.id}/toggle`, { method: 'POST' });
+			if (res.ok) {
+				await loadWorkflows();
+				showToast(wf.enabled ? 'Workflow disabled' : 'Workflow enabled');
+			}
+		} catch {
+			showToast('Toggle failed', 'error');
+		}
+	}
+
+	async function runWorkflowFromList(wf: WorkflowSummary) {
+		try {
+			const res = await fetch(`/api/workflows/${wf.id}/run`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ trigger: 'manual' })
+			});
+			const data = await res.json();
+			if (data.error) {
+				showToast(`Run failed: ${data.error}`, 'error');
+			} else {
+				await loadWorkflows();
+				showToast(data.status === 'success' ? 'Workflow completed' : `Run finished: ${data.status}`);
+			}
+		} catch {
+			showToast('Execution failed', 'error');
+		}
+	}
+
+	async function deleteWorkflowFromList(wf: WorkflowSummary) {
+		deleteTargetId = wf.id;
+		deleteTargetName = wf.name;
+		showDeleteConfirm = true;
+	}
 
 	// Back to list
 	function backToList() {
@@ -304,19 +408,25 @@
 	});
 
 	async function deleteWorkflow() {
-		if (!currentId) return;
+		const targetId = deleteTargetId || currentId;
+		if (!targetId) return;
 		try {
-			const res = await fetch(`/api/workflows/${currentId}`, { method: 'DELETE' });
+			const res = await fetch(`/api/workflows/${targetId}`, { method: 'DELETE' });
 			if (!res.ok) throw new Error('Delete failed');
-			currentId = null;
-			workflowName = 'Untitled Workflow';
-			workflowDescription = '';
-			workflowEnabled = false;
-			nodes = [];
-			edges = [];
-			dirty = false;
-			lastRun = null;
+			// If we deleted the one currently open in editor, reset editor state
+			if (targetId === currentId) {
+				currentId = null;
+				workflowName = 'Untitled Workflow';
+				workflowDescription = '';
+				workflowEnabled = false;
+				nodes = [];
+				edges = [];
+				dirty = false;
+				lastRun = null;
+			}
 			showDeleteConfirm = false;
+			deleteTargetId = null;
+			deleteTargetName = '';
 			await loadWorkflows();
 			showToast('Workflow deleted');
 		} catch (err) {
@@ -1136,6 +1246,7 @@
 						class="rounded-xl p-4 cursor-pointer transition-all"
 						style="background: oklch(0.17 0.01 250); border: 1px solid oklch(0.22 0.02 250)"
 						onclick={() => loadWorkflow(wf.id)}
+						oncontextmenu={(e) => handleCardContextMenu(wf, e)}
 						onkeydown={(e) => e.key === 'Enter' && loadWorkflow(wf.id)}
 						onmouseenter={(e) => {
 							(e.currentTarget as HTMLElement).style.borderColor = 'oklch(0.35 0.08 200)';

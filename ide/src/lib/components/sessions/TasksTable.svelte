@@ -19,6 +19,7 @@
 		taskPriority: number;
 		taskStatus: string;
 		taskType?: string;
+		taskAgentProgram?: string;
 		agentName?: string;
 		sessionName?: string;
 		sessionState?: string;
@@ -108,6 +109,7 @@
 									size="sm"
 									variant="agentPill"
 									agentName={row.agentName}
+									harness={row.taskAgentProgram || 'claude-code'}
 									resumed={row.resumed}
 									attached={row.attached}
 									animate={row.isNew}

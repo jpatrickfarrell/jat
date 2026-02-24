@@ -1179,7 +1179,7 @@
 			if (activeTab === 'all') return true;
 			if (activeTab === 'agents') return session.type === 'agent';
 			if (activeTab === 'servers') return session.type === 'server';
-			if (activeTab === 'terminal') return session.type === 'other' || session.type === 'ide';
+			if (activeTab === 'terminal') return session.type === 'other';
 			if (activeTab === 'browser') {
 				if (session.type !== 'agent') return false;
 				const agentName = getAgentName(session.name);

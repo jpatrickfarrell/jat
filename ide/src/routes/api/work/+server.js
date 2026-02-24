@@ -216,6 +216,7 @@ function getCachedTasks() {
  * @property {string} [closedAt] - When task was closed
  * @property {string} [updated_at] - Last update timestamp
  * @property {TaskDep[]} [depends_on] - Task dependencies
+ * @property {string} [agent_program] - Agent program for this task (e.g., 'claude-code', 'codex-cli')
  */
 
 /**
@@ -540,7 +541,8 @@ async function computeWorkData(lines, includeUsage) {
 						issue_type: t.issue_type,
 						depends_on: t.depends_on || [],
 						labels: t.labels || [],
-						created_at: t.created_at
+						created_at: t.created_at,
+						agent_program: t.agent_program
 					});
 				}
 			});
@@ -568,7 +570,8 @@ async function computeWorkData(lines, includeUsage) {
 						priority: t.priority,
 						issue_type: t.issue_type,
 						closedAt: t.updated_at,
-						created_at: t.created_at
+						created_at: t.created_at,
+						agent_program: t.agent_program
 					});
 				}
 			});

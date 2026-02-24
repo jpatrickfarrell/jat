@@ -23,7 +23,7 @@
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import ProjectSelector from './ProjectSelector.svelte';
 	import AttachmentZone from './AttachmentZone.svelte';
-	import { AGENT_PRESETS } from '$lib/types/agentProgram';
+	import { AGENT_PRESETS, type AgentProgramPreset } from '$lib/types/agentProgram';
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
 
 	interface Props {
@@ -33,6 +33,7 @@
 		hideProjectSelector?: boolean;
 		stacked?: boolean;
 		onTasksCreated?: () => void;
+		harnessPresets?: AgentProgramPreset[];
 	}
 
 	let {
@@ -42,7 +43,11 @@
 		hideProjectSelector = false,
 		stacked = false,
 		onTasksCreated = () => {},
+		harnessPresets: externalPresets = [],
 	}: Props = $props();
+
+	// Use passed-in presets (from parent's config fetch), fall back to static AGENT_PRESETS
+	const harnessPresets = $derived(externalPresets.length > 0 ? externalPresets : AGENT_PRESETS);
 
 	// State
 	let selectedProject = $state(initialProject || projects[0] || '');
@@ -53,13 +58,13 @@
 
 	// Derive available models from selected harness
 	const availableModels = $derived(() => {
-		const preset = AGENT_PRESETS.find(p => p.id === selectedHarness);
+		const preset = harnessPresets.find(p => p.id === selectedHarness);
 		return preset?.config.models || [];
 	});
 
 	// Update selected model when harness changes — pick the highest-cost-tier model (most powerful)
 	$effect(() => {
-		const preset = AGENT_PRESETS.find(p => p.id === selectedHarness);
+		const preset = harnessPresets.find(p => p.id === selectedHarness);
 		if (preset) {
 			// For planning, default to the most powerful (highest cost tier) model
 			const highModel = preset.config.models?.find(m => m.costTier === 'high');
@@ -336,7 +341,7 @@
 					>
 						<span class="flex items-center gap-2">
 							<ProviderLogo agentId={selectedHarness} size={16} />
-							<span>{AGENT_PRESETS.find(p => p.id === selectedHarness)?.config.name || selectedHarness}{#if selectedModel && selectedHarness !== 'human'}<span class="opacity-50">/{selectedModel}</span>{/if}</span>
+							<span>{harnessPresets.find(p => p.id === selectedHarness)?.config.name || selectedHarness}{#if selectedModel && selectedHarness !== 'human'}<span class="opacity-50">/{selectedModel}</span>{/if}</span>
 						</span>
 						<svg class="w-3 h-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 							<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
@@ -347,7 +352,7 @@
 						<div class="dropdown-content bg-base-200 rounded-box z-50 w-full p-2 shadow-lg border border-base-content/10 mt-1" onclick={(e) => e.stopPropagation()}>
 							<!-- Agent programs -->
 							<ul class="menu p-0">
-								{#each AGENT_PRESETS.filter(p => p.id !== 'human') as preset}
+								{#each harnessPresets.filter(p => p.id !== 'human') as preset}
 									<li>
 										<button class="flex items-center gap-2 {selectedHarness === preset.id ? 'active' : ''}"
 											onclick={() => { selectedHarness = preset.id; }}

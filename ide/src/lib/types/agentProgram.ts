@@ -439,11 +439,11 @@ export const AGENT_PRESETS: AgentProgramPreset[] = [
 			name: 'Claude Code',
 			command: 'claude',
 			models: [
-				{ id: 'claude-opus-4-5-20251101', name: 'Opus 4.5', shortName: 'opus', costTier: 'high' },
-				{ id: 'claude-sonnet-4-20250514', name: 'Sonnet 4', shortName: 'sonnet', costTier: 'medium' },
+				{ id: 'claude-opus-4-6', name: 'Opus 4.6', shortName: 'opus', costTier: 'high' },
+				{ id: 'claude-sonnet-4-6', name: 'Sonnet 4.6', shortName: 'sonnet', costTier: 'medium' },
 				{ id: 'claude-haiku-4-5', name: 'Haiku 4.5', shortName: 'haiku', costTier: 'low' }
 			],
-			defaultModel: 'opus',
+			defaultModel: 'sonnet',
 			authType: 'subscription',
 			flags: [],
 			taskInjection: 'prompt'
@@ -460,13 +460,11 @@ export const AGENT_PRESETS: AgentProgramPreset[] = [
 			name: 'Codex CLI',
 			command: 'codex',
 			models: [
+				{ id: 'gpt-5.3-codex', name: 'GPT-5.3', shortName: '5.3', costTier: 'high' },
 				{ id: 'o3', name: 'O3', shortName: 'o3', costTier: 'high' },
-				{ id: 'o4-mini', name: 'O4 Mini', shortName: 'o4-mini', costTier: 'medium' },
-				{ id: 'gpt-5.1-codex', name: 'GPT-5.1 Codex', shortName: 'gpt5-codex', costTier: 'high' },
-				{ id: 'gpt-4.1', name: 'GPT-4.1', shortName: 'gpt4.1', costTier: 'high' },
-				{ id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', shortName: 'gpt4.1-mini', costTier: 'low' }
+				{ id: 'o4-mini', name: 'O4 Mini', shortName: 'o4-mini', costTier: 'medium' }
 			],
-			defaultModel: 'o4-mini',
+			defaultModel: '5.3',
 			authType: 'subscription',  // Codex has its own auth via 'codex auth'
 			flags: [],
 			taskInjection: 'argument'  // Codex takes prompt as positional argument
@@ -616,7 +614,7 @@ export function createDefaultAgentConfig(): AgentConfigFile {
 		name: 'Claude Code',
 		command: 'claude',
 		models: claudePreset.config.models!,
-		defaultModel: 'opus',
+		defaultModel: claudePreset.config.defaultModel || 'sonnet',
 		flags: [],
 		authType: 'subscription',
 		enabled: true,

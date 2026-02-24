@@ -1616,7 +1616,7 @@
 								onclick={() => harnessDropdownOpen = !harnessDropdownOpen}
 							>
 								<ProviderLogo agentId={selectedHarness} size={14} />
-								<span>{AGENT_PRESETS.find(p => p.id === selectedHarness)?.config.name || selectedHarness}{#if selectedModel && selectedHarness !== 'human'}<span class="opacity-50">/{selectedModel}</span>{/if}</span>
+								<span>{harnessPresets.find(p => p.id === selectedHarness)?.config.name || selectedHarness}{#if selectedModel && selectedHarness !== 'human'}<span class="opacity-50">/{selectedModel}</span>{/if}</span>
 								<svg class="w-3 h-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
 								</svg>
@@ -1626,7 +1626,7 @@
 								<div class="dropdown-content bg-base-200 rounded-box z-50 w-56 p-2 shadow-lg border border-base-content/10" onclick={(e) => e.stopPropagation()}>
 									<!-- Agent programs -->
 									<ul class="menu p-0">
-										{#each AGENT_PRESETS as preset}
+										{#each harnessPresets as preset}
 											<li>
 												<button class="flex items-center gap-2 {selectedHarness === preset.id ? 'active' : ''}"
 													onclick={() => { selectedHarness = preset.id; if (preset.id === 'human') harnessDropdownOpen = false; }}
@@ -2456,6 +2456,7 @@
 						hideProjectSelector={true}
 						stacked={true}
 						onTasksCreated={handleNonTaskModeCreated}
+						harnessPresets={harnessPresets}
 					/>
 				{/if}
 			</div>

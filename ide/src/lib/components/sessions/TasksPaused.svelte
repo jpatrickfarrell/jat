@@ -20,6 +20,7 @@
 		taskPriority: number;
 		taskType?: string;
 		taskDescription?: string;
+		taskAgentProgram?: string;
 		project: string;
 		lastActivity?: string;
 	}
@@ -123,6 +124,7 @@
 										size="sm"
 										variant="agentPill"
 										agentName={session.agentName}
+										harness={session.taskAgentProgram || 'claude-code'}
 										integration={taskIntegrations[session.taskId] || null}
 										onClick={() => onViewTask?.(session.taskId)}
 									/>

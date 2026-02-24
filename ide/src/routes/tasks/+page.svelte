@@ -64,6 +64,7 @@
 		description?: string;
 		labels?: string[];
 		created_at?: string;
+		agent_program?: string;
 	}
 
 	interface AgentSessionInfo {
@@ -117,6 +118,7 @@
 		taskPriority: number;
 		taskType?: string;
 		taskDescription?: string;
+		taskAgentProgram?: string;
 		project: string;
 		lastActivity?: string;
 	}
@@ -578,6 +580,7 @@
 						description: taskSource.description,
 						labels: taskSource.labels,
 						created_at: taskSource.created_at,
+						agent_program: taskSource.agent_program,
 					});
 				} else {
 					// No task — override idle state to 'planning'

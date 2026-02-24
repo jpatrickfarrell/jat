@@ -256,7 +256,7 @@ export function classifySessionLegacy(
 		case 'service':
 			return { type: 'server', project: result.service };
 		case 'ide':
-			return { type: 'ide' };
+			return { type: 'server', project: 'ide' };
 		case 'agent': {
 			const agentName = name.startsWith(SESSION_PREFIX)
 				? name.slice(SESSION_PREFIX.length)

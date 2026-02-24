@@ -7,6 +7,7 @@
 	 */
 	import { onMount } from 'svelte';
 	import { fetchAndGetProjectColors } from '$lib/utils/projectColors';
+	import { openProjectDrawer } from '$lib/stores/drawerStore';
 
 	interface Props {
 		projects: string[];
@@ -97,6 +98,17 @@
 					{/if}
 				</button>
 			{/each}
+			<div class="dropdown-divider"></div>
+			<button
+				type="button"
+				class="dropdown-item add-project-item"
+				onclick={() => { open = false; openProjectDrawer(); }}
+			>
+				<svg class="add-icon" viewBox="0 0 20 20" fill="currentColor">
+					<path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
+				</svg>
+				<span class="item-label">Add Project</span>
+			</button>
 		</div>
 	{/if}
 </div>
@@ -218,5 +230,27 @@
 		height: 0.875rem;
 		flex-shrink: 0;
 		color: var(--project-color);
+	}
+
+	.dropdown-divider {
+		height: 1px;
+		background: oklch(0.26 0.02 250);
+		margin: 0.25rem 0;
+	}
+
+	.add-project-item {
+		color: oklch(0.65 0.12 145);
+		font-size: 0.75rem;
+	}
+
+	.add-project-item:hover {
+		background: oklch(0.24 0.06 145 / 0.3);
+		color: oklch(0.80 0.15 145);
+	}
+
+	.add-icon {
+		width: 0.75rem;
+		height: 0.75rem;
+		flex-shrink: 0;
 	}
 </style>

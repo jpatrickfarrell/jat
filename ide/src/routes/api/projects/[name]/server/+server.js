@@ -148,6 +148,16 @@ export async function POST({ params }) {
 		return json({ error: 'Project path not found' }, { status: 404 });
 	}
 
+	// Use server_path if configured (e.g., ~/code/jat/ide for the JAT project),
+	// otherwise fall back to the project root path
+	const serverPath = config.server_path
+		? config.server_path.replace(/^~/, homedir())
+		: projectPath;
+
+	if (!existsSync(serverPath)) {
+		return json({ error: `Server path not found: ${config.server_path}` }, { status: 404 });
+	}
+
 	// Check if session already exists under new or legacy name
 	const existingSessionPost = await findExistingSession(name);
 	const sessionName = getSessionName(name);
@@ -165,11 +175,11 @@ export async function POST({ params }) {
 		});
 	}
 
-	// Determine the start command based on what exists in the project
+	// Determine the start command based on what exists in the server directory
 	let startCommand = 'npm run dev';
 
-	// Check for package.json scripts
-	const packageJsonPath = join(projectPath, 'package.json');
+	// Check for package.json scripts in the server directory
+	const packageJsonPath = join(serverPath, 'package.json');
 	if (existsSync(packageJsonPath)) {
 		try {
 			const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
@@ -192,7 +202,7 @@ export async function POST({ params }) {
 		// Create tmux session and run dev server
 		// Using -d for detached, -x 80 -y 40 for consistent terminal width
 		// Setting window name to match project
-		const tmuxCommand = `tmux new-session -d -s "${sessionName}" -x 80 -y 40 -n "dev" "cd '${projectPath}' && ${startCommand}; exec bash"`;
+		const tmuxCommand = `tmux new-session -d -s "${sessionName}" -x 80 -y 40 -n "dev" "cd '${serverPath}' && ${startCommand}; exec bash"`;
 
 		await execAsync(tmuxCommand, { timeout: 5000 });
 

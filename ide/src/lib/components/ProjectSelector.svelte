@@ -12,7 +12,8 @@
 	import { getProjectColor } from "$lib/utils/projectColors";
 	import {
 		isStartDropdownOpen,
-		closeStartDropdown
+		closeStartDropdown,
+		openProjectDrawer
 	} from '$lib/stores/drawerStore';
 
 	interface ReadyTask {
@@ -258,6 +259,19 @@
 					{/if}
 				</button>
 			{/each}
+
+			<!-- Add New Project -->
+			<div class="dropdown-divider"></div>
+			<button
+				type="button"
+				class="dropdown-item action-item add-project-item"
+				onclick={() => { open = false; openProjectDrawer(); }}
+			>
+				<svg class="action-icon action-add" viewBox="0 0 20 20" fill="currentColor">
+					<path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
+				</svg>
+				<span class="item-label">Add Project</span>
+			</button>
 
 			<!-- Ready Tasks Section -->
 			{#if hasActions && projectReadyTasks.length > 0}
@@ -628,6 +642,14 @@
 
 	.action-item:hover .action-swarm {
 		color: oklch(0.92 0.15 85);
+	}
+
+	.action-add {
+		color: oklch(0.70 0.18 145);
+	}
+
+	.action-item:hover .action-add {
+		color: oklch(0.85 0.18 145);
 	}
 
 	.epic-icon {

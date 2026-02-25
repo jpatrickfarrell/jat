@@ -101,6 +101,9 @@
 	// Task → integration source mapping (lazy loaded)
 	let taskIntegrations = $state<Record<string, { sourceId: string; sourceType: string; sourceName: string; sourceEnabled: boolean }>>({});
 
+	// Task → attachment images (lazy loaded)
+	let taskImages = $state<Record<string, Array<{ path: string; id: string; uploadedAt?: string }>>>({});
+
 	// Project notes
 	let projectNotes = $state<Record<string, string>>({});
 	let projectNotesHeight = $state<Record<string, number>>({});
@@ -725,6 +728,17 @@
 		}
 	}
 
+	async function fetchTaskImages() {
+		try {
+			const response = await fetch('/api/tasks/images');
+			if (!response.ok) return;
+			const data = await response.json();
+			taskImages = data.images || {};
+		} catch {
+			// Silent fail - images are supplemental
+		}
+	}
+
 	async function fetchBrowserSessions() {
 		try {
 			const response = await fetch('/api/browser-sessions');
@@ -959,6 +973,7 @@
 			fetchCompletedTasks(),
 			fetchCompletedMemory(),
 			fetchBrowserSessions(),
+			fetchTaskImages(),
 		]);
 	}
 
@@ -2016,6 +2031,7 @@
 													{spawningTaskId}
 													{projectColors}
 													{taskIntegrations}
+													{taskImages}
 													{epicsReadyForVerification}
 													highlightedTaskIds={isSwarmHovered || isSwarmSpawning ? launchableIds : new Set()}
 													onSpawnTask={spawnTask as any}
@@ -2082,6 +2098,7 @@
 													error={null}
 													{spawningTaskId}
 													{projectColors}
+													{taskImages}
 													{epicsReadyForVerification}
 													onSpawnTask={spawnTask as any}
 													onRetry={fetchTasks}

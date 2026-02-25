@@ -62,6 +62,7 @@
 		spawningTaskId = null,
 		projectColors = {},
 		taskIntegrations = {},
+		taskImages = {},
 		showHeader = true,
 		highlightedTaskIds = new Set<string>(),
 		epicsReadyForVerification = new Set<string>(),
@@ -76,6 +77,7 @@
 		spawningTaskId: string | null;
 		projectColors: Record<string, string>;
 		taskIntegrations?: Record<string, { sourceId: string; sourceType: string; sourceName: string; sourceEnabled: boolean }>;
+		taskImages?: Record<string, Array<{ path: string; id: string; uploadedAt?: string }>>;
 		showHeader?: boolean;
 		highlightedTaskIds?: Set<string>;
 		epicsReadyForVerification?: Set<string>;
@@ -1236,6 +1238,7 @@
 							/>
 						</th>
 						<th class="th-task">Task</th>
+						<th class="th-attachment"></th>
 						<th class="th-due-date">Due</th>
 						<th class="th-actions">Actions</th>
 					</tr>
@@ -1250,6 +1253,7 @@
 						{@const isSelected = selectedTasks.has(task.id)}
 						{@const harness = getTaskHarness(task)}
 						{@const isSwarmHighlighted = highlightedTaskIds.has(task.id)}
+						{@const taskAttachments = taskImages?.[task.id]}
 						<tr
 							class="task-row {isBlocked && !isExiting ? 'opacity-70' : ''} {isNew ? 'animate-slide-in-fwd-center' : ''} {isExiting ? 'animate-slide-out-bck-center' : ''} {isSelected ? 'selected-row' : ''} {isSwarmHighlighted ? 'swarm-highlight' : ''}"
 							style="{projectColor ? `border-left: 3px solid ${projectColor};` : ''}{isExiting ? ' pointer-events: none;' : ''}"
@@ -1315,6 +1319,17 @@
 										</div>
 									</div>
 								</div>
+							</td>
+							<td class="td-attachment" style={isExiting ? 'background: transparent;' : ''}>
+								{#if taskAttachments && taskAttachments.length > 0}
+									<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+									<div class="attachment-thumb" onclick={(e) => { e.stopPropagation(); window.open(`/api/work/image/${encodeURIComponent(taskAttachments[0].path)}`, '_blank'); }} title="View attachment">
+										<img src={`/api/work/image/${encodeURIComponent(taskAttachments[0].path)}`} alt="" class="attachment-thumb-img" />
+										{#if taskAttachments.length > 1}
+											<span class="attachment-count">+{taskAttachments.length - 1}</span>
+										{/if}
+									</div>
+								{/if}
 							</td>
 							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 							<td class="td-due-date" style={isExiting ? 'background: transparent;' : ''} onclick={(e) => { if (!isExiting) openDueDatePicker(task, e); }}>
@@ -1958,6 +1973,7 @@
 
 	/* Column layout widths (badge + title merged into task column) */
 	.th-task, .td-task { width: auto; padding-left: 0.25rem; padding-right: 0.25rem; }
+	.th-attachment, .td-attachment { width: 32px; min-width: 32px; max-width: 32px; padding: 0.25rem !important; text-align: center; }
 	.th-due-date, .td-due-date { width: 80px; min-width: 80px; max-width: 80px; text-align: center; padding: 0.5rem 0.25rem !important; }
 	.th-actions, .td-actions { width: 80px; text-align: right; }
 
@@ -2035,6 +2051,45 @@
 	/* Actions column - center the rocket button */
 	.td-actions {
 		text-align: center;
+	}
+
+	/* Attachment thumbnail column */
+	.attachment-thumb {
+		width: 24px;
+		height: 24px;
+		border-radius: 4px;
+		overflow: hidden;
+		cursor: pointer;
+		position: relative;
+		display: inline-block;
+		border: 1px solid oklch(0.30 0.02 250);
+		transition: border-color 0.15s, transform 0.15s;
+	}
+
+	.attachment-thumb:hover {
+		border-color: oklch(0.50 0.10 240);
+		transform: scale(1.15);
+	}
+
+	.attachment-thumb-img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+	}
+
+	.attachment-count {
+		position: absolute;
+		bottom: -2px;
+		right: -2px;
+		font-size: 0.5rem;
+		font-weight: 700;
+		background: oklch(0.35 0.05 250);
+		color: oklch(0.85 0.02 250);
+		padding: 0 3px;
+		border-radius: 3px;
+		line-height: 1.2;
+		border: 1px solid oklch(0.20 0.02 250);
 	}
 
 	/* Due date column */
@@ -2186,6 +2241,10 @@
 
 	/* Responsive */
 	@media (max-width: 768px) {
+		.th-attachment, .td-attachment {
+			display: none;
+		}
+
 		.th-due-date, .td-due-date {
 			display: none;
 		}

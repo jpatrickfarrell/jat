@@ -40,6 +40,7 @@ export interface ReportSummary {
   revision_count: number;
   responded_at: string | null;
   page_url: string | null;
+  screenshot_urls: string[] | null;
   created_at: string;
 }
 

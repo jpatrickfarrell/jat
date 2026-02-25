@@ -15,6 +15,8 @@
     onreload: () => void;
   } = $props();
 
+  let expandedScreenshot = $state<string | null>(null);
+
   let respondingId = $state('');
   let rejectingId = $state('');
   let rejectReason = $state('');
@@ -129,12 +131,35 @@
             </span>
           </div>
 
+          {#if report.page_url}
+            <a class="report-url" href={report.page_url} target="_blank" rel="noopener noreferrer">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>{report.page_url.replace(/^https?:\/\//, '').split('?')[0]}</span>
+            </a>
+          {/if}
+
           {#if report.revision_count > 0 && report.status !== 'accepted'}
             <p class="revision-note">Revision {report.revision_count}</p>
           {/if}
 
           {#if report.description}
             <p class="report-desc">{report.description.length > 120 ? report.description.slice(0, 120) + '...' : report.description}</p>
+          {/if}
+
+          {#if report.screenshot_urls && report.screenshot_urls.length > 0}
+            <div class="report-screenshots">
+              {#each report.screenshot_urls as url, i}
+                <button class="screenshot-thumb" onclick={() => expandedScreenshot = expandedScreenshot === url ? null : url} aria-label="Screenshot {i + 1}">
+                  <img src="{endpoint}{url}" alt="Screenshot {i + 1}" loading="lazy" />
+                </button>
+              {/each}
+            </div>
+            {#if expandedScreenshot && report.screenshot_urls.includes(expandedScreenshot)}
+              <div class="screenshot-expanded">
+                <img src="{endpoint}{expandedScreenshot}" alt="Screenshot" />
+                <button class="screenshot-close" onclick={() => expandedScreenshot = null} aria-label="Close">&times;</button>
+              </div>
+            {/if}
           {/if}
 
           {#if report.dev_notes}
@@ -302,6 +327,79 @@
     text-transform: uppercase;
     letter-spacing: 0.3px;
   }
+  .report-url {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 4px 0 0;
+    font-size: 11px;
+    color: #60a5fa;
+    text-decoration: none;
+    overflow: hidden;
+    transition: color 0.15s;
+  }
+  .report-url:hover { color: #93c5fd; }
+  .report-url svg { flex-shrink: 0; }
+  .report-url span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .report-screenshots {
+    display: flex;
+    gap: 4px;
+    margin-top: 6px;
+    overflow-x: auto;
+  }
+  .screenshot-thumb {
+    flex-shrink: 0;
+    width: 52px;
+    height: 36px;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid #374151;
+    background: #111827;
+    cursor: pointer;
+    padding: 0;
+    transition: border-color 0.15s;
+  }
+  .screenshot-thumb:hover { border-color: #60a5fa; }
+  .screenshot-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .screenshot-expanded {
+    position: relative;
+    margin-top: 4px;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid #374151;
+  }
+  .screenshot-expanded img {
+    width: 100%;
+    display: block;
+    border-radius: 5px;
+  }
+  .screenshot-close {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.7);
+    color: #e5e7eb;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .screenshot-close:hover { background: rgba(0,0,0,0.9); }
   .revision-note {
     font-size: 10px;
     color: #f59e0b;

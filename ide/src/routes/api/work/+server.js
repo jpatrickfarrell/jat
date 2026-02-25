@@ -173,6 +173,44 @@ function getLastCompletedTaskFromTimeline(sessionName) {
 	}
 }
 
+/**
+ * Read task info from signal file as fallback when DB lookup fails.
+ * Signal files contain taskId/taskTitle in their data payload, which we can use
+ * to populate the task field when the task cache is stale or assignee doesn't match.
+ * @param {string} sessionName - tmux session name (e.g., "jat-DimGlade")
+ * @returns {{ id: string, title: string, status: string, priority: number|null, issue_type: string|null, description: string, depends_on: any[], labels: any[], created_at: string|null, agent_program: string|null }|null}
+ */
+function readSignalTask(sessionName) {
+	const signalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
+	try {
+		if (!existsSync(signalFile)) return null;
+		const content = readFileSync(signalFile, 'utf-8');
+		const signal = JSON.parse(content);
+
+		// Skip completed/completing signals — those are handled by lastCompletedTask from DB
+		if (signal.type === 'complete' || signal.type === 'completing') return null;
+
+		// Extract task info from signal data payload
+		const taskId = signal.task_id || signal.data?.taskId;
+		if (!taskId) return null;
+
+		return {
+			id: taskId,
+			title: signal.data?.taskTitle || taskId,
+			description: '',
+			status: 'in_progress',
+			priority: null,
+			issue_type: null,
+			depends_on: [],
+			labels: [],
+			created_at: null,
+			agent_program: null
+		};
+	} catch {
+		return null;
+	}
+}
+
 // ============================================================================
 // Task Cache - getTasks() is expensive (parses 800+ line JSONL on each call)
 // Cache for 5 seconds to prevent constant re-parsing during frequent polling
@@ -719,9 +757,11 @@ async function computeWorkData(lines, includeUsage) {
 				// renames the tmux session when registering the agent
 				const agentName = session.name.replace(/^jat-/, '');
 
-				// Get task for this agent
+				// Get task for this agent (DB lookup, then signal file fallback)
 				/** @type {Task|null} */
-				const task = /** @type {Task|undefined} */ (agentTaskMap.get(agentName)) || null;
+				const task = /** @type {Task|undefined} */ (agentTaskMap.get(agentName))
+					|| readSignalTask(session.name)
+					|| null;
 
 				// Get last completed task for this agent (for completion state display)
 				// Falls back to timeline JSONL if DB has no record (e.g., assignee was changed)

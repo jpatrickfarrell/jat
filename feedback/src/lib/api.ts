@@ -1,4 +1,4 @@
-import type { FeedbackReport } from './types';
+import type { FeedbackReport, ThreadEntry } from './types';
 
 export async function submitReport(endpoint: string, report: FeedbackReport): Promise<{ ok: boolean; id?: string; error?: string }> {
   const url = `${endpoint.replace(/\/$/, '')}/api/feedback/report`;
@@ -41,6 +41,7 @@ export interface ReportSummary {
   responded_at: string | null;
   page_url: string | null;
   screenshot_urls: string[] | null;
+  thread: ThreadEntry[] | null;
   created_at: string;
 }
 
@@ -64,14 +65,25 @@ export async function fetchReports(endpoint: string): Promise<{ reports: ReportS
   }
 }
 
-export async function respondToReport(endpoint: string, reportId: string, response: 'accepted' | 'rejected', reason?: string): Promise<{ ok: boolean; error?: string }> {
+export async function respondToReport(
+  endpoint: string,
+  reportId: string,
+  response: 'accepted' | 'rejected',
+  reason?: string,
+  options?: { screenshots?: string[]; elements?: Array<{ tagName: string; className: string; id: string; selector: string; textContent: string }> },
+): Promise<{ ok: boolean; error?: string }> {
   try {
     const url = `${endpoint.replace(/\/$/, '')}/api/feedback/reports/${reportId}/respond`;
+    const body: Record<string, unknown> = { response };
+    if (reason) body.reason = reason;
+    if (options?.screenshots && options.screenshots.length > 0) body.screenshots = options.screenshots;
+    if (options?.elements && options.elements.length > 0) body.elements = options.elements;
+
     const res = await fetch(url, {
       method: 'PATCH',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ response, ...(reason ? { reason } : {}) }),
+      body: JSON.stringify(body),
     });
 
     const data = await res.json();

@@ -15,6 +15,7 @@ import { invalidateCache } from '$lib/server/cache.js';
 import { _resetTaskCache } from '../../../api/agents/+server.js';
 import { emitEvent } from '$lib/utils/eventBus.server.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
+import { appendThreadEntry, generateEntryId } from '$lib/server/feedbackThreads.js';
 import { writeFileSync, readFileSync, mkdirSync, existsSync } from 'fs';
 import { resolve, join, dirname } from 'path';
 import { homedir } from 'os';
@@ -237,6 +238,38 @@ export async function POST({ request }) {
 			} catch (err) {
 				console.warn('[feedback-report] Failed to register attachments:', err.message);
 			}
+		}
+
+		// Create initial thread entry (submission)
+		try {
+			/** @type {{ path: string; uploadedAt: string; id: string; url?: string }[]} */
+			const threadScreenshots = savedAttachments.map((img) => ({
+				path: img.path,
+				uploadedAt: img.uploadedAt,
+				id: img.id,
+			}));
+
+			/** @type {{ tagName: string; className: string; id: string; selector: string; textContent: string }[]} */
+			const threadElements = (body.selected_elements || []).slice(0, 10).map((el) => ({
+				tagName: el.tagName || el.tag || 'element',
+				className: typeof el.className === 'string' ? el.className : '',
+				id: el.id || '',
+				selector: el.selector || '',
+				textContent: (el.textContent || '').substring(0, 100),
+			}));
+
+			appendThreadEntry(createdTask.id, {
+				id: generateEntryId(),
+				from: 'user',
+				type: 'submission',
+				message: description || title,
+				screenshots: threadScreenshots.length > 0 ? threadScreenshots : undefined,
+				elements: threadElements.length > 0 ? threadElements : undefined,
+				pageUrl: body.page_url || undefined,
+				at: new Date().toISOString(),
+			});
+		} catch (err) {
+			console.warn('[feedback-report] Failed to create thread entry:', err.message);
 		}
 
 		// Register in ingest.db so lookupIntegrations finds this task

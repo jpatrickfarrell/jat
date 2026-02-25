@@ -63,6 +63,33 @@ export interface FeedbackReport {
   } | null;
 }
 
+export interface ThreadScreenshot {
+  path: string;
+  uploadedAt: string;
+  id: string;
+  url?: string;
+}
+
+export interface ThreadElement {
+  tagName: string;
+  className: string;
+  id: string;
+  selector: string;
+  textContent: string;
+}
+
+export interface ThreadEntry {
+  id: string;
+  from: 'user' | 'dev';
+  type: 'submission' | 'completion' | 'rejection' | 'acceptance' | 'note';
+  message: string;
+  screenshots?: ThreadScreenshot[];
+  elements?: ThreadElement[];
+  summary?: string[];
+  pageUrl?: string;
+  at: string;
+}
+
 export interface WidgetConfig {
   endpoint: string;
   position: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';

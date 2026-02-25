@@ -14,6 +14,7 @@ import { join, basename } from 'path';
 import { homedir } from 'os';
 import Database from 'better-sqlite3';
 import { getTaskById } from '$lib/server/jat-tasks.js';
+import { getThread } from '$lib/server/feedbackThreads.js';
 
 const CORS_HEADERS = {
 	'Access-Control-Allow-Origin': '*',
@@ -148,6 +149,31 @@ export async function GET() {
 			// Check for dev_notes in task notes field
 			const devNotes = task.notes || null;
 
+			// Load thread data (sidecar JSON)
+			let thread = null;
+			let revisionCount = 0;
+			try {
+				const rawThread = getThread(row.task_id);
+				if (rawThread && rawThread.length > 0) {
+					// Map screenshot paths to serving URLs
+					thread = rawThread.map((entry) => {
+						if (entry.screenshots && entry.screenshots.length > 0) {
+							return {
+								...entry,
+								screenshots: entry.screenshots.map((s) => ({
+									...s,
+									url: s.path ? `/api/work/image/${basename(s.path)}` : undefined,
+								})),
+							};
+						}
+						return entry;
+					});
+					revisionCount = rawThread.filter((e) => e.type === 'rejection').length;
+				}
+			} catch {
+				// Thread loading failure is non-fatal
+			}
+
 			reports.push({
 				id: row.task_id,
 				title,
@@ -156,10 +182,11 @@ export async function GET() {
 				priority: task.priority != null ? String(task.priority) : '2',
 				status: mapTaskStatusToReportStatus(task.status, task.close_reason),
 				dev_notes: devNotes,
-				revision_count: 0,
+				revision_count: revisionCount,
 				responded_at: task.status === 'closed' ? (task.updated_at || null) : null,
 				page_url: pageUrl,
 				screenshot_urls: screenshotUrls,
+				thread,
 				created_at: task.created_at || row.ingested_at
 			});
 		}

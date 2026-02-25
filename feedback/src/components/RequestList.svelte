@@ -1,5 +1,8 @@
 <script lang="ts">
   import { respondToReport, type ReportSummary } from '../lib/api';
+  import type { ThreadEntry, ElementData } from '../lib/types';
+  import { captureViewport } from '../lib/screenshot';
+  import { startElementPicker } from '../lib/elementPicker';
 
   let {
     endpoint,
@@ -16,30 +19,77 @@
   } = $props();
 
   let expandedScreenshot = $state<string | null>(null);
+  let expandedThreadId = $state<string | null>(null);
 
   let respondingId = $state('');
   let rejectingId = $state('');
   let rejectReason = $state('');
 
+  // Enhanced rejection: screenshots and elements
+  let rejectScreenshots = $state<string[]>([]);
+  let rejectElements = $state<Array<{ tagName: string; className: string; id: string; selector: string; textContent: string }>>([]);
+  let capturingScreenshot = $state(false);
+
   function startReject(reportId: string) {
     rejectingId = reportId;
     rejectReason = '';
+    rejectScreenshots = [];
+    rejectElements = [];
   }
 
   function cancelReject() {
     rejectingId = '';
     rejectReason = '';
+    rejectScreenshots = [];
+    rejectElements = [];
+  }
+
+  async function captureRejectScreenshot() {
+    if (capturingScreenshot) return;
+    capturingScreenshot = true;
+    try {
+      const dataUrl = await captureViewport();
+      rejectScreenshots = [...rejectScreenshots, dataUrl];
+    } catch (err) {
+      console.error('Screenshot capture failed:', err);
+    }
+    capturingScreenshot = false;
+  }
+
+  function removeRejectScreenshot(index: number) {
+    rejectScreenshots = rejectScreenshots.filter((_, i) => i !== index);
+  }
+
+  function pickRejectElement() {
+    startElementPicker((data: ElementData) => {
+      rejectElements = [...rejectElements, {
+        tagName: data.tagName,
+        className: data.className,
+        id: data.id,
+        selector: data.selector,
+        textContent: data.textContent,
+      }];
+    });
+  }
+
+  function removeRejectElement(index: number) {
+    rejectElements = rejectElements.filter((_, i) => i !== index);
   }
 
   async function handleRespond(reportId: string, response: 'accepted' | 'rejected', reason?: string) {
     respondingId = reportId;
-    const result = await respondToReport(endpoint, reportId, response, reason);
+    const options = response === 'rejected' ? {
+      screenshots: rejectScreenshots.length > 0 ? rejectScreenshots : undefined,
+      elements: rejectElements.length > 0 ? rejectElements : undefined,
+    } : undefined;
+
+    const result = await respondToReport(endpoint, reportId, response, reason, options);
     if (result.ok) {
       reports = reports.map(r => {
         if (r.id === reportId) {
           return {
             ...r,
-            status: response === 'rejected' ? 'rejected' : 'accepted',
+            status: response === 'rejected' ? 'submitted' : 'accepted',
             responded_at: new Date().toISOString(),
             ...(response === 'rejected' ? { revision_count: (r.revision_count || 0) + 1 } : {}),
           };
@@ -48,11 +98,33 @@
       });
       rejectingId = '';
       rejectReason = '';
+      rejectScreenshots = [];
+      rejectElements = [];
+      // Reload to get fresh thread data
+      onreload();
     } else {
-      // surface error briefly, then clear
       rejectingId = '';
     }
     respondingId = '';
+  }
+
+  function toggleThread(reportId: string) {
+    expandedThreadId = expandedThreadId === reportId ? null : reportId;
+  }
+
+  function threadEntryCount(thread: ThreadEntry[] | null): number {
+    return thread ? thread.length : 0;
+  }
+
+  function entryTypeLabel(entry: ThreadEntry): string {
+    const labels: Record<string, string> = {
+      submission: 'Submitted',
+      completion: 'Completed',
+      rejection: 'Rejected',
+      acceptance: 'Accepted',
+      note: 'Note',
+    };
+    return labels[entry.type] || entry.type;
   }
 
   function statusLabel(status: string): string {
@@ -82,9 +154,9 @@
   }
 
   function typeIcon(type: string): string {
-    if (type === 'bug') return '🐛';
-    if (type === 'enhancement') return '✨';
-    return '📝';
+    if (type === 'bug') return '\u{1F41B}';
+    if (type === 'enhancement') return '\u{2728}';
+    return '\u{1F4DD}';
   }
 
   function timeAgo(dateStr: string): string {
@@ -115,7 +187,7 @@
     </div>
   {:else if reports.length === 0}
     <div class="empty">
-      <div class="empty-icon">📋</div>
+      <div class="empty-icon">{'\u{1F4CB}'}</div>
       <p>No requests yet</p>
       <p class="empty-sub">Submit feedback using the New Report tab</p>
     </div>
@@ -142,11 +214,76 @@
             <p class="revision-note">Revision {report.revision_count}</p>
           {/if}
 
-          {#if report.description}
+          <!-- Thread display (expandable) -->
+          {#if report.thread && report.thread.length > 0}
+            <button class="thread-toggle" onclick={() => toggleThread(report.id)}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" class="thread-toggle-icon" class:expanded={expandedThreadId === report.id}>
+                <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span>{threadEntryCount(report.thread)} {threadEntryCount(report.thread) === 1 ? 'message' : 'messages'}</span>
+            </button>
+
+            {#if expandedThreadId === report.id}
+              <div class="thread">
+                {#each report.thread as entry (entry.id)}
+                  <div class="thread-entry" class:thread-user={entry.from === 'user'} class:thread-dev={entry.from === 'dev'}>
+                    <div class="thread-entry-header">
+                      <span class="thread-from">{entry.from === 'user' ? 'You' : 'Dev'}</span>
+                      <span class="thread-type-badge" class:submission={entry.type === 'submission'} class:completion={entry.type === 'completion'} class:rejection={entry.type === 'rejection'} class:acceptance={entry.type === 'acceptance'}>
+                        {entryTypeLabel(entry)}
+                      </span>
+                      <span class="thread-time">{timeAgo(entry.at)}</span>
+                    </div>
+                    <p class="thread-message">{entry.message}</p>
+
+                    {#if entry.summary && entry.summary.length > 0}
+                      <ul class="thread-summary">
+                        {#each entry.summary as item}
+                          <li>{item}</li>
+                        {/each}
+                      </ul>
+                    {/if}
+
+                    {#if entry.screenshots && entry.screenshots.length > 0}
+                      <div class="thread-screenshots">
+                        {#each entry.screenshots as screenshot, i}
+                          {#if screenshot.url}
+                            <button class="screenshot-thumb" onclick={() => expandedScreenshot = expandedScreenshot === screenshot.url ? null : screenshot.url} aria-label="Screenshot {i + 1}">
+                              <img src="{endpoint}{screenshot.url}" alt="Screenshot {i + 1}" loading="lazy" />
+                            </button>
+                          {/if}
+                        {/each}
+                      </div>
+                      {#if expandedScreenshot}
+                        {@const matchingScreenshot = entry.screenshots.find(s => s.url === expandedScreenshot)}
+                        {#if matchingScreenshot}
+                          <div class="screenshot-expanded">
+                            <img src="{endpoint}{expandedScreenshot}" alt="Screenshot" />
+                            <button class="screenshot-close" onclick={() => expandedScreenshot = null} aria-label="Close">&times;</button>
+                          </div>
+                        {/if}
+                      {/if}
+                    {/if}
+
+                    {#if entry.elements && entry.elements.length > 0}
+                      <div class="thread-elements">
+                        {#each entry.elements as el}
+                          <span class="element-badge" title={el.selector}>
+                            &lt;{el.tagName.toLowerCase()}{el.id ? `#${el.id}` : ''}{el.className ? `.${el.className.split(' ')[0]}` : ''}&gt;
+                          </span>
+                        {/each}
+                      </div>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          {:else if report.description}
+            <!-- Fallback for reports without thread -->
             <p class="report-desc">{report.description.length > 120 ? report.description.slice(0, 120) + '...' : report.description}</p>
           {/if}
 
-          {#if report.screenshot_urls && report.screenshot_urls.length > 0}
+          {#if !report.thread && report.screenshot_urls && report.screenshot_urls.length > 0}
             <div class="report-screenshots">
               {#each report.screenshot_urls as url, i}
                 <button class="screenshot-thumb" onclick={() => expandedScreenshot = expandedScreenshot === url ? null : url} aria-label="Screenshot {i + 1}">
@@ -162,7 +299,7 @@
             {/if}
           {/if}
 
-          {#if report.dev_notes}
+          {#if report.dev_notes && !report.thread}
             <div class="dev-notes">
               <span class="dev-notes-label">Dev response:</span>
               <span>{report.dev_notes}</span>
@@ -173,9 +310,9 @@
             <span class="report-time">{timeAgo(report.created_at)}</span>
 
             {#if report.status === 'accepted'}
-              <span class="status-pill accepted">✓ Accepted</span>
+              <span class="status-pill accepted">{'\u2713'} Accepted</span>
             {:else if report.status === 'rejected'}
-              <span class="status-pill rejected">✗ Rejected</span>
+              <span class="status-pill rejected">{'\u2717'} Rejected</span>
             {:else if report.status === 'completed' || report.status === 'wontfix'}
               {#if rejectingId === report.id}
                 <div class="reject-reason-form">
@@ -185,6 +322,43 @@
                     bind:value={rejectReason}
                     rows="2"
                   ></textarea>
+
+                  <!-- Attachment buttons -->
+                  <div class="reject-attachments">
+                    <button class="attach-btn" onclick={captureRejectScreenshot} disabled={capturingScreenshot} title="Capture screenshot">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="18" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="8.5" cy="10.5" r="1.5" stroke="currentColor" stroke-width="2"/><path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      {capturingScreenshot ? '...' : 'Screenshot'}
+                    </button>
+                    <button class="attach-btn" onclick={pickRejectElement} title="Pick an element">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M7 7h10v10M7 17L17 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      Pick Element
+                    </button>
+                  </div>
+
+                  <!-- Screenshot previews -->
+                  {#if rejectScreenshots.length > 0}
+                    <div class="reject-preview-strip">
+                      {#each rejectScreenshots as screenshot, i}
+                        <div class="reject-preview-item">
+                          <img src={screenshot} alt="Screenshot {i + 1}" />
+                          <button class="reject-preview-remove" onclick={() => removeRejectScreenshot(i)} aria-label="Remove">&times;</button>
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+
+                  <!-- Element badges -->
+                  {#if rejectElements.length > 0}
+                    <div class="reject-element-strip">
+                      {#each rejectElements as el, i}
+                        <span class="element-badge removable">
+                          &lt;{el.tagName.toLowerCase()}{el.id ? `#${el.id}` : ''}&gt;
+                          <button class="element-remove" onclick={() => removeRejectElement(i)}>&times;</button>
+                        </span>
+                      {/each}
+                    </div>
+                  {/if}
+
                   <div class="reject-reason-actions">
                     <button class="cancel-btn" onclick={cancelReject}>Cancel</button>
                     <button
@@ -192,7 +366,7 @@
                       disabled={rejectReason.trim().length < 10 || respondingId === report.id}
                       onclick={() => handleRespond(report.id, 'rejected', rejectReason.trim())}
                     >
-                      {respondingId === report.id ? '...' : '✗ Reject'}
+                      {respondingId === report.id ? '...' : '\u2717 Reject'}
                     </button>
                   </div>
                   {#if rejectReason.trim().length > 0 && rejectReason.trim().length < 10}
@@ -206,14 +380,14 @@
                     disabled={respondingId === report.id}
                     onclick={() => handleRespond(report.id, 'accepted')}
                   >
-                    {respondingId === report.id ? '...' : '✓ Accept'}
+                    {respondingId === report.id ? '...' : '\u2713 Accept'}
                   </button>
                   <button
                     class="reject-btn"
                     disabled={respondingId === report.id}
                     onclick={() => startReject(report.id)}
                   >
-                    ✗ Reject
+                    {'\u2717'} Reject
                   </button>
                 </div>
               {/if}
@@ -427,6 +601,221 @@
     margin-right: 4px;
     font-size: 11px;
   }
+
+  /* Thread toggle button */
+  .thread-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+    padding: 3px 6px;
+    background: none;
+    border: none;
+    color: #9ca3af;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: inherit;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+  }
+  .thread-toggle:hover {
+    color: #d1d5db;
+    background: #111827;
+  }
+  .thread-toggle-icon {
+    transition: transform 0.15s;
+  }
+  .thread-toggle-icon.expanded {
+    transform: rotate(90deg);
+  }
+
+  /* Thread container */
+  .thread {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .thread-entry {
+    padding: 6px 8px;
+    border-radius: 5px;
+    font-size: 12px;
+    border-left: 2px solid;
+  }
+  .thread-user {
+    background: #111827;
+    border-left-color: #6b7280;
+  }
+  .thread-dev {
+    background: #0f172a;
+    border-left-color: #3b82f6;
+  }
+  .thread-entry-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+  }
+  .thread-from {
+    font-weight: 600;
+    font-size: 11px;
+    color: #d1d5db;
+  }
+  .thread-type-badge {
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .thread-type-badge.submission {
+    background: #6b728020;
+    color: #9ca3af;
+  }
+  .thread-type-badge.completion {
+    background: #3b82f620;
+    color: #60a5fa;
+  }
+  .thread-type-badge.rejection {
+    background: #ef444420;
+    color: #f87171;
+  }
+  .thread-type-badge.acceptance {
+    background: #10b98120;
+    color: #34d399;
+  }
+  .thread-time {
+    font-size: 10px;
+    color: #4b5563;
+    margin-left: auto;
+  }
+  .thread-message {
+    color: #d1d5db;
+    line-height: 1.4;
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .thread-summary {
+    margin: 4px 0 0 0;
+    padding: 0 0 0 16px;
+    font-size: 11px;
+    color: #9ca3af;
+  }
+  .thread-summary li {
+    margin: 1px 0;
+  }
+  .thread-screenshots {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+  }
+  .thread-elements {
+    display: flex;
+    gap: 3px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+  .element-badge {
+    font-size: 10px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    padding: 1px 5px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 3px;
+    color: #94a3b8;
+  }
+  .element-badge.removable {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .element-remove {
+    background: none;
+    border: none;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 0;
+    font-size: 12px;
+    line-height: 1;
+  }
+  .element-remove:hover { color: #ef4444; }
+
+  /* Enhanced rejection form */
+  .reject-attachments {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .attach-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    background: #111827;
+    border: 1px solid #374151;
+    border-radius: 4px;
+    color: #9ca3af;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .attach-btn:hover:not(:disabled) {
+    border-color: #60a5fa;
+    color: #d1d5db;
+  }
+  .attach-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .reject-preview-strip {
+    display: flex;
+    gap: 4px;
+    margin-top: 6px;
+    overflow-x: auto;
+  }
+  .reject-preview-item {
+    position: relative;
+    flex-shrink: 0;
+    width: 52px;
+    height: 36px;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid #374151;
+  }
+  .reject-preview-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .reject-preview-remove {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.7);
+    color: #e5e7eb;
+    border: none;
+    cursor: pointer;
+    font-size: 10px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .reject-preview-remove:hover { background: #ef4444; }
+  .reject-element-strip {
+    display: flex;
+    gap: 3px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+  }
+
   .report-footer {
     display: flex;
     align-items: center;

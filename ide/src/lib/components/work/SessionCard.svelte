@@ -137,6 +137,8 @@
 		priority?: number;
 		issue_type?: string;
 		depends_on?: TaskDep[];
+		agent_program?: string | null;
+		model?: string | null;
 	}
 
 	/** Extended task info for completed tasks - includes closedAt timestamp */
@@ -3791,6 +3793,7 @@
 			case "complete":
 				// Instantly write completing signal for immediate UI feedback
 				// Then send /jat:complete command (agent will update to complete when done)
+				// If agent program has completionModel set, resume session with cheaper model first
 				if (sessionName) {
 					// Get task info from multiple sources (displayTask, richSignalPayload, lastCompletedTask)
 					const taskId = displayTask?.id || richSignalPayload?.taskId as string || lastCompletedTask?.id || '';
@@ -3830,8 +3833,64 @@
 					} else {
 						console.warn('[SessionCard] No taskId available for instant completing signal - skipping');
 					}
+
+					// Check if agent program has a completion model configured for model downshift
+					const agentProgramId = displayTask?.agent_program || task?.agent_program;
+					let completionModel: string | null = null;
+					let completionCommand = '/jat:complete';
+					if (agentProgramId) {
+						try {
+							const configResp = await fetch(`/api/config/agents/${encodeURIComponent(agentProgramId)}`);
+							if (configResp.ok) {
+								const agentConfig = await configResp.json();
+								const prog = agentConfig.program;
+								if (prog?.completionModel) {
+									// Only downshift if completion model differs from the task's model (or default)
+									const currentModel = displayTask?.model || prog.defaultModel;
+									if (prog.completionModel !== currentModel) {
+										completionModel = prog.completionModel;
+										console.log(`[SessionCard] Completion model downshift: ${currentModel} → ${completionModel}`);
+									}
+								}
+								if (prog?.completionCommand) {
+									completionCommand = prog.completionCommand;
+								}
+							}
+						} catch (e) {
+							console.warn('[SessionCard] Failed to fetch agent config for completion model:', e);
+						}
+					}
+
+					if (completionModel) {
+						// Model downshift: resume session with cheaper model, then send completion command
+						try {
+							console.log(`[SessionCard] Resuming ${sessionName} with model ${completionModel} for completion`);
+							const resumeResp = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/resume`, {
+								method: 'POST',
+								headers: { 'Content-Type': 'application/json' },
+								body: JSON.stringify({ model: completionModel })
+							});
+							if (resumeResp.ok) {
+								// Wait for the resumed session to be ready before sending command
+								// Claude Code needs time to start up and show the prompt
+								console.log(`[SessionCard] Waiting for resumed session to be ready...`);
+								await new Promise(r => setTimeout(r, 5000));
+								await sendWorkflowCommand(completionCommand);
+							} else {
+								console.warn('[SessionCard] Resume failed, falling back to current session');
+								await sendWorkflowCommand(completionCommand);
+							}
+						} catch (e) {
+							console.warn('[SessionCard] Model downshift failed, falling back:', e);
+							await sendWorkflowCommand(completionCommand);
+						}
+					} else {
+						// No model downshift - send completion command to current session
+						await sendWorkflowCommand(completionCommand);
+					}
+				} else {
+					await sendWorkflowCommand("/jat:complete");
 				}
-				await sendWorkflowCommand("/jat:complete");
 				// Trigger collapse after delay (matches Ctrl+Enter pattern)
 				if (onActionComplete) {
 					setTimeout(() => onActionComplete(), 1400);
@@ -3867,10 +3926,32 @@
 							console.warn('[SessionCard] Failed to write completing signal:', e);
 						}
 					}
+
+					// Check for custom completion command from agent program config
+					let killCompletionCommand = '/jat:complete --kill';
+					const killAgentProgramId = displayTask?.agent_program || task?.agent_program;
+					if (killAgentProgramId) {
+						try {
+							const configResp = await fetch(`/api/config/agents/${encodeURIComponent(killAgentProgramId)}`);
+							if (configResp.ok) {
+								const agentConfig = await configResp.json();
+								if (agentConfig.program?.completionCommand) {
+									killCompletionCommand = `${agentConfig.program.completionCommand} --kill`;
+								}
+							}
+						} catch (e) {
+							// Non-blocking
+						}
+					}
+
+					// Note: complete-kill doesn't do model downshift since we're killing anyway
+					// Track intent so sessionEvents knows to auto-kill when signal arrives
+					setPendingAutoKill(sessionName, true);
+					await sendWorkflowCommand(killCompletionCommand);
+				} else {
+					setPendingAutoKill(sessionName, true);
+					await sendWorkflowCommand("/jat:complete --kill");
 				}
-				// Track intent so sessionEvents knows to auto-kill when signal arrives
-				setPendingAutoKill(sessionName, true);
-				await sendWorkflowCommand("/jat:complete --kill");
 				// Trigger collapse after delay (matches Ctrl+Enter pattern)
 				if (onActionComplete) {
 					setTimeout(() => onActionComplete(), 1400);

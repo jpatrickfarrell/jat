@@ -662,14 +662,23 @@ const EXECUTORS: Record<NodeType, NodeExecutor> = {
  */
 export async function testNode(
 	node: WorkflowNode,
-	options: { ideBaseUrl?: string; project?: string; dryRun?: boolean } = {}
+	options: { ideBaseUrl?: string; project?: string; dryRun?: boolean; sampleInput?: unknown } = {}
 ): Promise<{ output?: unknown; error?: string }> {
-	const { ideBaseUrl = 'http://127.0.0.1:3333', project, dryRun = true } = options;
+	const { ideBaseUrl = 'http://127.0.0.1:3333', project, dryRun = true, sampleInput } = options;
 
 	const executor = EXECUTORS[node.type];
 	if (!executor) {
 		return { error: `No executor for node type: ${node.type}` };
 	}
+
+	// Build sample input so {{input}}, {{input.field}}, etc. resolve to something useful
+	const input = sampleInput ?? {
+		title: 'Sample task from upstream node',
+		description: 'This is sample data showing how template variables resolve.',
+		url: 'https://example.com',
+		text: 'Sample text content from previous node',
+		data: { key: 'value', count: 42 }
+	};
 
 	const ctx: ExecutionContext = {
 		workflowId: 'test',
@@ -684,7 +693,7 @@ export async function testNode(
 	} as ExecutionContext & { _nodes: WorkflowNode[] };
 
 	try {
-		const output = await executor(node, undefined, ctx);
+		const output = await executor(node, input, ctx);
 		return { output };
 	} catch (err) {
 		return { error: err instanceof Error ? err.message : String(err) };

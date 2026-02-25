@@ -113,7 +113,7 @@ let isWatching = false;
 
 // Output polling configuration
 const OUTPUT_POLL_INTERVAL = 2000; // Poll every 2 seconds (was 250ms - caused memory leak)
-const OUTPUT_LINES = 100; // Number of lines to capture per session
+const OUTPUT_LINES = 500; // Number of lines to capture per session (tmux history-limit is 2000)
 const EXEC_TIMEOUT_MS = 5000; // Timeout for exec commands
 
 // Session lifecycle polling interval

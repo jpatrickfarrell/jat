@@ -158,6 +158,26 @@ export interface AgentProgram {
 	/** Order in the agent list (lower = higher priority for fallback) */
 	order?: number;
 
+	/**
+	 * Optional: Command to run when starting a task (e.g., '/jat:start').
+	 * Default: '/jat:start'
+	 */
+	startCommand?: string;
+
+	/**
+	 * Optional: Model shortName for completion phase (e.g., 'sonnet').
+	 * When set, the IDE resumes the session with this model before running /jat:complete.
+	 * This allows downshifting to a cheaper model for completion work.
+	 * If unset, completion uses the same session (no model change).
+	 */
+	completionModel?: string;
+
+	/**
+	 * Optional: Command to run during completion phase.
+	 * Default: '/jat:complete'
+	 */
+	completionCommand?: string;
+
 	/** Creation timestamp */
 	createdAt?: string;
 

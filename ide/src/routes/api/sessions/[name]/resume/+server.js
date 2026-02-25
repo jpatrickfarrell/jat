@@ -356,8 +356,8 @@ export async function POST({ params, request }) {
 			}, { status: 400 });
 		}
 
-		// Parse request body for optional session_id
-		/** @type {{project?: string, session_id?: string | null}} */
+		// Parse request body for optional session_id and model
+		/** @type {{project?: string, session_id?: string | null, model?: string | null}} */
 		let body = {};
 		try {
 			body = await request.json();
@@ -504,7 +504,8 @@ export async function POST({ params, request }) {
 		// 1. Kill any existing session with this name (in case it's stale)
 		// 2. Create new tmux session with claude -r running inside
 		// 3. Attach terminal to that session
-		const tmuxCreateCmd = `tmux kill-session -t "${sessionName}" 2>/dev/null; tmux new-session -d -s "${sessionName}" -c "${projectPath}" "claude ${claudeFlags} -r '${sessionId}'"`;
+		const modelFlag = body.model ? ` --model ${body.model}` : '';
+		const tmuxCreateCmd = `tmux kill-session -t "${sessionName}" 2>/dev/null; tmux new-session -d -s "${sessionName}" -c "${projectPath}" "claude ${claudeFlags}${modelFlag} -r '${sessionId}'"`;
 		const tmuxAttachCmd = `tmux attach-session -t "${sessionName}"`;
 
 		// First create the tmux session
@@ -585,7 +586,8 @@ export async function POST({ params, request }) {
 			sessionId,
 			projectPath,
 			terminal,
-			message: `Resuming session for ${agentName} in new terminal`,
+			model: body.model || null,
+			message: `Resuming session for ${agentName}${body.model ? ` with model ${body.model}` : ''} in new terminal`,
 			timestamp: new Date().toISOString()
 		});
 

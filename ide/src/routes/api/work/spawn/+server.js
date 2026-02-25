@@ -947,7 +947,7 @@ export async function POST({ request }) {
 			agentName,
 			taskId,
 			taskTitle: task?.title,
-			taskCommand: explicitCommand || task?.command || '/jat:start',
+			taskCommand: explicitCommand || task?.command || selectedAgent.startCommand || '/jat:start',
 			mode
 		});
 

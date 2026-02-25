@@ -6,7 +6,7 @@
  * Set dryRun=false to execute the node for real (e.g., actually spawn an agent).
  *
  * Request body:
- *   { node: WorkflowNode, project?: string, dryRun?: boolean }
+ *   { node: WorkflowNode, project?: string, dryRun?: boolean, sampleInput?: unknown }
  *
  * Response:
  *   200: { output?: unknown, error?: string }
@@ -19,12 +19,12 @@ import { testNode } from '$lib/utils/workflowEngine';
 
 export const POST: RequestHandler = async ({ request }) => {
 	const body = await request.json();
-	const { node, project, dryRun = true } = body;
+	const { node, project, dryRun = true, sampleInput } = body;
 
 	if (!node) {
 		throw error(400, 'Node data is required');
 	}
 
-	const result = await testNode(node, { project, dryRun });
+	const result = await testNode(node, { project, dryRun, sampleInput });
 	return json(result);
 };

@@ -2828,7 +2828,19 @@ main() {
         echo "${b2}${B}  │${R}${b2}${B}     \\______/${R}  ${b4}${B}/__/     \\__\\ ${R} ${b7}${B}|__|${R}         ${b7}${B}│${R}"
         echo "${b2}${B}  │${R}                                           ${b7}${B}│${R}"
         echo "${b2}${B}  │${R}${d}         ◇ Supervise the Swarm ◇${R}           ${b7}${B}│${R}"
-        echo "${b3}${B}  │${R}                                           ${b7}${B}│${R}"
+        # Version info line: commit hash + date, centered in box
+        local jat_commit jat_date jat_ver ver_len pad_left pad_right
+        jat_commit=$(git -C "$JAT_SOURCE_DIR" log -1 --format='%h' 2>/dev/null || echo "unknown")
+        jat_date=$(git -C "$JAT_SOURCE_DIR" log -1 --format='%cd' --date=short 2>/dev/null || echo "")
+        if [[ -n "$jat_date" ]]; then
+            jat_ver="${jat_commit} (${jat_date})"
+        else
+            jat_ver="${jat_commit}"
+        fi
+        ver_len=${#jat_ver}
+        pad_left=$(( (43 - ver_len) / 2 ))
+        pad_right=$(( 43 - ver_len - pad_left ))
+        printf "${b3}${B}  │${R}${d}%*s%s%*s${R}${b7}${B}│${R}\n" "$pad_left" "" "$jat_ver" "$pad_right" ""
         echo "${b3}${B}  ╚───────────────${b5}───────────────${b7}─────────────╝${R}"
         echo ""
 

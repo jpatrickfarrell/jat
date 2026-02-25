@@ -38,19 +38,21 @@
   // Filter reports by subtab
   let filteredReports = $derived.by(() => {
     if (activeSubTab === 'pending') {
-      return reports.filter(r => r.status === 'submitted');
+      // submitted = waiting for dev to pick up
+      // rejected = user rejected, waiting for dev revision
+      return reports.filter(r => r.status === 'submitted' || r.status === 'rejected');
     } else if (activeSubTab === 'in_progress') {
       return reports.filter(r => r.status === 'in_progress');
     } else {
-      // completed: completed, accepted, rejected, wontfix, closed
-      return reports.filter(r => ['completed', 'accepted', 'rejected', 'wontfix', 'closed'].includes(r.status));
+      // completed, accepted, wontfix, closed = fully resolved
+      return reports.filter(r => ['completed', 'accepted', 'wontfix', 'closed'].includes(r.status));
     }
   });
 
   // Counts for subtab badges
-  let pendingCount = $derived(reports.filter(r => r.status === 'submitted').length);
+  let pendingCount = $derived(reports.filter(r => r.status === 'submitted' || r.status === 'rejected').length);
   let inProgressCount = $derived(reports.filter(r => r.status === 'in_progress').length);
-  let completedCount = $derived(reports.filter(r => ['completed', 'accepted', 'rejected', 'wontfix', 'closed'].includes(r.status)).length);
+  let completedCount = $derived(reports.filter(r => ['completed', 'accepted', 'wontfix', 'closed'].includes(r.status)).length);
 
   function toggleCard(reportId: string) {
     expandedCardId = expandedCardId === reportId ? null : reportId;
@@ -160,11 +162,11 @@
 
   function statusLabel(status: string): string {
     const labels: Record<string, string> = {
-      submitted: 'Submitted',
+      submitted: 'Pending',
       in_progress: 'In Progress',
       completed: 'Completed',
       accepted: 'Accepted',
-      rejected: 'Rejected',
+      rejected: 'Needs Revision',
       wontfix: "Won't Fix",
       closed: 'Closed',
     };
@@ -177,7 +179,7 @@
       in_progress: '#3b82f6',
       completed: '#f59e0b',
       accepted: '#10b981',
-      rejected: '#ef4444',
+      rejected: '#f59e0b',  // amber = needs revision (not a final rejection)
       wontfix: '#6b7280',
       closed: '#6b7280',
     };
@@ -358,7 +360,7 @@
                   {/if}
                 {/if}
 
-                {#if report.dev_notes && !report.thread}
+                {#if report.dev_notes && !report.thread && report.status !== 'in_progress'}
                   <div class="dev-notes">
                     <span class="dev-notes-label">Dev response:</span>
                     <span>{report.dev_notes}</span>

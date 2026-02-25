@@ -40,6 +40,39 @@
   let open = $state(false);
   let pickerHidden = $state(false);
 
+  // Drag state
+  let isDragging = $state(false);
+  let dragOffset = { x: 0, y: 0 };
+  let rootEl: HTMLDivElement | undefined = $state();
+
+  function handlePanelDragStart(e: MouseEvent) {
+    if (!rootEl) return;
+    isDragging = true;
+    const rect = rootEl.getBoundingClientRect();
+    dragOffset = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+
+    function onMouseMove(e: MouseEvent) {
+      if (!isDragging || !rootEl) return;
+      e.preventDefault();
+      const x = e.clientX - dragOffset.x;
+      const y = e.clientY - dragOffset.y;
+      // Clear positional CSS and use top/left directly
+      rootEl.style.top = `${y}px`;
+      rootEl.style.left = `${x}px`;
+      rootEl.style.bottom = 'auto';
+      rootEl.style.right = 'auto';
+    }
+
+    function onMouseUp() {
+      isDragging = false;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    }
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }
+
   // Poll element picker state to hide/show panel
   let pickerPollInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -119,12 +152,17 @@
   });
 </script>
 
-<div class="jat-feedback-root" style="{positionStyles[config.position] || positionStyles['bottom-right']}; --jat-btn-color: {config.buttonColor}; {pickerHidden ? 'display: none;' : ''}">
-  {#if open && config.endpoint}
-    <div class="jat-feedback-panel" style="{panelPositionStyles[config.position] || panelPositionStyles['bottom-right']}">
-      <FeedbackPanel endpoint={config.endpoint} {project} {userId} {userEmail} {userName} {userRole} {orgId} {orgName} onclose={close} />
+<div class="jat-feedback-root" bind:this={rootEl} style="{positionStyles[config.position] || positionStyles['bottom-right']}; --jat-btn-color: {config.buttonColor}; {pickerHidden ? 'display: none;' : ''}">
+  {#if config.endpoint}
+    <div
+      class="jat-feedback-panel"
+      class:dragging={isDragging}
+      class:hidden={!open}
+      style="{panelPositionStyles[config.position] || panelPositionStyles['bottom-right']}"
+    >
+      <FeedbackPanel endpoint={config.endpoint} {project} {userId} {userEmail} {userName} {userRole} {orgId} {orgName} onclose={close} ongrip={handlePanelDragStart} />
     </div>
-  {:else if open && !config.endpoint}
+  {:else if open}
     <div class="jat-feedback-panel" style="{panelPositionStyles[config.position] || panelPositionStyles['bottom-right']}">
       <div class="no-endpoint">
         <p>No endpoint configured.</p>
@@ -146,6 +184,13 @@
   .jat-feedback-panel {
     position: absolute;
     animation: panel-in 0.2s ease;
+  }
+  .jat-feedback-panel.hidden {
+    display: none;
+  }
+  .jat-feedback-panel.dragging {
+    pointer-events: none;
+    opacity: 0.9;
   }
   .no-endpoint {
     width: 320px;

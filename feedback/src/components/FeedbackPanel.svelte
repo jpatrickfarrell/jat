@@ -20,6 +20,7 @@
     orgId = '',
     orgName = '',
     onclose,
+    ongrip,
   }: {
     endpoint: string;
     project: string;
@@ -30,6 +31,7 @@
     orgId?: string;
     orgName?: string;
     onclose: () => void;
+    ongrip?: (e: MouseEvent) => void;
   } = $props();
 
   let activeTab = $state<'new' | 'requests'>('new');
@@ -202,6 +204,19 @@
 
 <div class="panel">
   <div class="panel-header">
+    {#if ongrip}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="drag-handle" onmousedown={ongrip}>
+        <svg width="10" height="16" viewBox="0 0 10 16" fill="none">
+          <circle cx="3" cy="3" r="1.5" fill="currentColor"/>
+          <circle cx="7" cy="3" r="1.5" fill="currentColor"/>
+          <circle cx="3" cy="8" r="1.5" fill="currentColor"/>
+          <circle cx="7" cy="8" r="1.5" fill="currentColor"/>
+          <circle cx="3" cy="13" r="1.5" fill="currentColor"/>
+          <circle cx="7" cy="13" r="1.5" fill="currentColor"/>
+        </svg>
+      </div>
+    {/if}
     <div class="tabs">
       <button class="tab" class:active={activeTab === 'new'} onclick={() => activeTab = 'new'}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -312,7 +327,7 @@
 <style>
   .panel {
     width: 380px;
-    max-height: 540px;
+    max-height: 702px;
     background: #111827;
     border: 1px solid #374151;
     border-radius: 12px;
@@ -330,6 +345,25 @@
     justify-content: space-between;
     padding: 0 8px 0 0;
     border-bottom: 1px solid #1f2937;
+  }
+  .drag-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    padding: 0 2px 0 8px;
+    color: #6b7280;
+    cursor: grab;
+    flex-shrink: 0;
+    user-select: none;
+    transition: color 0.15s;
+  }
+  .drag-handle:hover {
+    color: #d1d5db;
+  }
+  .drag-handle:active {
+    cursor: grabbing;
+    color: #e5e7eb;
   }
   .tabs {
     display: flex;

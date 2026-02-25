@@ -20,6 +20,7 @@
 
   let expandedScreenshot = $state<string | null>(null);
   let expandedThreadId = $state<string | null>(null);
+  let expandedCardId = $state<string | null>(null);
 
   let respondingId = $state('');
   let rejectingId = $state('');
@@ -29,6 +30,36 @@
   let rejectScreenshots = $state<string[]>([]);
   let rejectElements = $state<Array<{ tagName: string; className: string; id: string; selector: string; textContent: string }>>([]);
   let capturingScreenshot = $state(false);
+
+  // Subtab state
+  type SubTab = 'pending' | 'in_progress' | 'completed';
+  let activeSubTab = $state<SubTab>('pending');
+
+  // Filter reports by subtab
+  let filteredReports = $derived.by(() => {
+    if (activeSubTab === 'pending') {
+      return reports.filter(r => r.status === 'submitted');
+    } else if (activeSubTab === 'in_progress') {
+      return reports.filter(r => r.status === 'in_progress');
+    } else {
+      // completed: completed, accepted, rejected, wontfix, closed
+      return reports.filter(r => ['completed', 'accepted', 'rejected', 'wontfix', 'closed'].includes(r.status));
+    }
+  });
+
+  // Counts for subtab badges
+  let pendingCount = $derived(reports.filter(r => r.status === 'submitted').length);
+  let inProgressCount = $derived(reports.filter(r => r.status === 'in_progress').length);
+  let completedCount = $derived(reports.filter(r => ['completed', 'accepted', 'rejected', 'wontfix', 'closed'].includes(r.status)).length);
+
+  function toggleCard(reportId: string) {
+    expandedCardId = expandedCardId === reportId ? null : reportId;
+    // Close thread/screenshot when collapsing
+    if (expandedCardId !== reportId) {
+      if (expandedThreadId === reportId) expandedThreadId = null;
+      expandedScreenshot = null;
+    }
+  }
 
   function startReject(reportId: string) {
     rejectingId = reportId;
@@ -175,236 +206,340 @@
 </script>
 
 <div class="request-list">
-  {#if loading}
-    <div class="loading">
-      <span class="spinner"></span>
-      <span>Loading your requests...</span>
-    </div>
-  {:else if error && reports.length === 0}
-    <div class="empty">
-      <p class="error-text">{error}</p>
-      <button class="retry-btn" onclick={onreload}>Retry</button>
-    </div>
-  {:else if reports.length === 0}
-    <div class="empty">
-      <div class="empty-icon">{'\u{1F4CB}'}</div>
-      <p>No requests yet</p>
-      <p class="empty-sub">Submit feedback using the New Report tab</p>
-    </div>
-  {:else}
-    <div class="reports">
-      {#each reports as report (report.id)}
-        <div class="report-card" class:awaiting={report.status === 'completed'}>
-          <div class="report-header">
-            <span class="report-type">{typeIcon(report.type)}</span>
-            <span class="report-title">{report.title}</span>
-            <span class="report-status" style="background: {statusColor(report.status)}20; color: {statusColor(report.status)}; border-color: {statusColor(report.status)}40;">
-              {statusLabel(report.status)}
-            </span>
-          </div>
+  <!-- Subtabs -->
+  <div class="subtabs">
+    <button class="subtab" class:active={activeSubTab === 'pending'} onclick={() => activeSubTab = 'pending'}>
+      Pending
+      {#if pendingCount > 0}<span class="subtab-count">{pendingCount}</span>{/if}
+    </button>
+    <button class="subtab" class:active={activeSubTab === 'in_progress'} onclick={() => activeSubTab = 'in_progress'}>
+      In Progress
+      {#if inProgressCount > 0}<span class="subtab-count active-count">{inProgressCount}</span>{/if}
+    </button>
+    <button class="subtab" class:active={activeSubTab === 'completed'} onclick={() => activeSubTab = 'completed'}>
+      Done
+      {#if completedCount > 0}<span class="subtab-count done-count">{completedCount}</span>{/if}
+    </button>
+  </div>
 
-          {#if report.page_url}
-            <a class="report-url" href={report.page_url} target="_blank" rel="noopener noreferrer">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              <span>{report.page_url.replace(/^https?:\/\//, '').split('?')[0]}</span>
-            </a>
-          {/if}
-
-          {#if report.revision_count > 0 && report.status !== 'accepted'}
-            <p class="revision-note">Revision {report.revision_count}</p>
-          {/if}
-
-          <!-- Thread display (expandable) -->
-          {#if report.thread && report.thread.length > 0}
-            <button class="thread-toggle" onclick={() => toggleThread(report.id)}>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" class="thread-toggle-icon" class:expanded={expandedThreadId === report.id}>
+  <div class="request-scroll">
+    {#if loading}
+      <div class="loading">
+        <span class="spinner"></span>
+        <span>Loading your requests...</span>
+      </div>
+    {:else if error && reports.length === 0}
+      <div class="empty">
+        <p class="error-text">{error}</p>
+        <button class="retry-btn" onclick={onreload}>Retry</button>
+      </div>
+    {:else if reports.length === 0}
+      <div class="empty">
+        <div class="empty-icon">{'\u{1F4CB}'}</div>
+        <p>No requests yet</p>
+        <p class="empty-sub">Submit feedback using the New Report tab</p>
+      </div>
+    {:else if filteredReports.length === 0}
+      <div class="empty">
+        <p class="empty-sub">No {activeSubTab === 'pending' ? 'pending' : activeSubTab === 'in_progress' ? 'in-progress' : 'completed'} requests</p>
+      </div>
+    {:else}
+      <div class="reports">
+        {#each filteredReports as report (report.id)}
+          <div class="report-card" class:awaiting={report.status === 'completed'} class:expanded={expandedCardId === report.id}>
+            <!-- Collapsed header (always visible, clickable) -->
+            <button class="card-toggle" onclick={() => toggleCard(report.id)}>
+              <span class="report-type">{typeIcon(report.type)}</span>
+              <span class="report-title">{report.title}</span>
+              <span class="report-status" style="background: {statusColor(report.status)}20; color: {statusColor(report.status)}; border-color: {statusColor(report.status)}40;">
+                {statusLabel(report.status)}
+              </span>
+              <svg class="chevron" class:chevron-open={expandedCardId === report.id} width="12" height="12" viewBox="0 0 24 24" fill="none">
                 <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
-              <span>{threadEntryCount(report.thread)} {threadEntryCount(report.thread) === 1 ? 'message' : 'messages'}</span>
             </button>
 
-            {#if expandedThreadId === report.id}
-              <div class="thread">
-                {#each report.thread as entry (entry.id)}
-                  <div class="thread-entry" class:thread-user={entry.from === 'user'} class:thread-dev={entry.from === 'dev'}>
-                    <div class="thread-entry-header">
-                      <span class="thread-from">{entry.from === 'user' ? 'You' : 'Dev'}</span>
-                      <span class="thread-type-badge" class:submission={entry.type === 'submission'} class:completion={entry.type === 'completion'} class:rejection={entry.type === 'rejection'} class:acceptance={entry.type === 'acceptance'}>
-                        {entryTypeLabel(entry)}
-                      </span>
-                      <span class="thread-time">{timeAgo(entry.at)}</span>
-                    </div>
-                    <p class="thread-message">{entry.message}</p>
+            <!-- Expanded content -->
+            {#if expandedCardId === report.id}
+              <div class="card-body">
+                {#if report.page_url}
+                  <a class="report-url" href={report.page_url} target="_blank" rel="noopener noreferrer">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span>{report.page_url.replace(/^https?:\/\//, '').split('?')[0]}</span>
+                  </a>
+                {/if}
 
-                    {#if entry.summary && entry.summary.length > 0}
-                      <ul class="thread-summary">
-                        {#each entry.summary as item}
-                          <li>{item}</li>
-                        {/each}
-                      </ul>
-                    {/if}
+                {#if report.revision_count > 0 && report.status !== 'accepted'}
+                  <p class="revision-note">Revision {report.revision_count}</p>
+                {/if}
 
-                    {#if entry.screenshots && entry.screenshots.length > 0}
-                      <div class="thread-screenshots">
-                        {#each entry.screenshots as screenshot, i}
-                          {#if screenshot.url}
-                            <button class="screenshot-thumb" onclick={() => expandedScreenshot = expandedScreenshot === screenshot.url ? null : screenshot.url} aria-label="Screenshot {i + 1}">
-                              <img src="{endpoint}{screenshot.url}" alt="Screenshot {i + 1}" loading="lazy" />
-                            </button>
-                          {/if}
-                        {/each}
-                      </div>
-                      {#if expandedScreenshot}
-                        {@const matchingScreenshot = entry.screenshots.find(s => s.url === expandedScreenshot)}
-                        {#if matchingScreenshot}
-                          <div class="screenshot-expanded">
-                            <img src="{endpoint}{expandedScreenshot}" alt="Screenshot" />
-                            <button class="screenshot-close" onclick={() => expandedScreenshot = null} aria-label="Close">&times;</button>
+                <!-- Thread display (expandable) -->
+                {#if report.thread && report.thread.length > 0}
+                  <button class="thread-toggle" onclick={() => toggleThread(report.id)}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" class="thread-toggle-icon" class:expanded={expandedThreadId === report.id}>
+                      <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span>{threadEntryCount(report.thread)} {threadEntryCount(report.thread) === 1 ? 'message' : 'messages'}</span>
+                  </button>
+
+                  {#if expandedThreadId === report.id}
+                    <div class="thread">
+                      {#each report.thread as entry (entry.id)}
+                        <div class="thread-entry" class:thread-user={entry.from === 'user'} class:thread-dev={entry.from === 'dev'}>
+                          <div class="thread-entry-header">
+                            <span class="thread-from">{entry.from === 'user' ? 'You' : 'Dev'}</span>
+                            <span class="thread-type-badge" class:submission={entry.type === 'submission'} class:completion={entry.type === 'completion'} class:rejection={entry.type === 'rejection'} class:acceptance={entry.type === 'acceptance'}>
+                              {entryTypeLabel(entry)}
+                            </span>
+                            <span class="thread-time">{timeAgo(entry.at)}</span>
                           </div>
-                        {/if}
-                      {/if}
-                    {/if}
+                          <p class="thread-message">{entry.message}</p>
 
-                    {#if entry.elements && entry.elements.length > 0}
-                      <div class="thread-elements">
-                        {#each entry.elements as el}
-                          <span class="element-badge" title={el.selector}>
-                            &lt;{el.tagName.toLowerCase()}{el.id ? `#${el.id}` : ''}{el.className ? `.${el.className.split(' ')[0]}` : ''}&gt;
-                          </span>
-                        {/each}
-                      </div>
-                    {/if}
-                  </div>
-                {/each}
-              </div>
-            {/if}
-          {:else if report.description}
-            <!-- Fallback for reports without thread -->
-            <p class="report-desc">{report.description.length > 120 ? report.description.slice(0, 120) + '...' : report.description}</p>
-          {/if}
+                          {#if entry.summary && entry.summary.length > 0}
+                            <ul class="thread-summary">
+                              {#each entry.summary as item}
+                                <li>{item}</li>
+                              {/each}
+                            </ul>
+                          {/if}
 
-          {#if !report.thread && report.screenshot_urls && report.screenshot_urls.length > 0}
-            <div class="report-screenshots">
-              {#each report.screenshot_urls as url, i}
-                <button class="screenshot-thumb" onclick={() => expandedScreenshot = expandedScreenshot === url ? null : url} aria-label="Screenshot {i + 1}">
-                  <img src="{endpoint}{url}" alt="Screenshot {i + 1}" loading="lazy" />
-                </button>
-              {/each}
-            </div>
-            {#if expandedScreenshot && report.screenshot_urls.includes(expandedScreenshot)}
-              <div class="screenshot-expanded">
-                <img src="{endpoint}{expandedScreenshot}" alt="Screenshot" />
-                <button class="screenshot-close" onclick={() => expandedScreenshot = null} aria-label="Close">&times;</button>
-              </div>
-            {/if}
-          {/if}
+                          {#if entry.screenshots && entry.screenshots.length > 0}
+                            <div class="thread-screenshots">
+                              {#each entry.screenshots as screenshot, i}
+                                {#if screenshot.url}
+                                  <button class="screenshot-thumb" onclick={() => expandedScreenshot = expandedScreenshot === screenshot.url ? null : screenshot.url} aria-label="Screenshot {i + 1}">
+                                    <img src="{endpoint}{screenshot.url}" alt="Screenshot {i + 1}" loading="lazy" />
+                                  </button>
+                                {/if}
+                              {/each}
+                            </div>
+                            {#if expandedScreenshot}
+                              {@const matchingScreenshot = entry.screenshots.find(s => s.url === expandedScreenshot)}
+                              {#if matchingScreenshot}
+                                <div class="screenshot-expanded">
+                                  <img src="{endpoint}{expandedScreenshot}" alt="Screenshot" />
+                                  <button class="screenshot-close" onclick={() => expandedScreenshot = null} aria-label="Close">&times;</button>
+                                </div>
+                              {/if}
+                            {/if}
+                          {/if}
 
-          {#if report.dev_notes && !report.thread}
-            <div class="dev-notes">
-              <span class="dev-notes-label">Dev response:</span>
-              <span>{report.dev_notes}</span>
-            </div>
-          {/if}
-
-          <div class="report-footer">
-            <span class="report-time">{timeAgo(report.created_at)}</span>
-
-            {#if report.status === 'accepted'}
-              <span class="status-pill accepted">{'\u2713'} Accepted</span>
-            {:else if report.status === 'rejected'}
-              <span class="status-pill rejected">{'\u2717'} Rejected</span>
-            {:else if report.status === 'completed' || report.status === 'wontfix'}
-              {#if rejectingId === report.id}
-                <div class="reject-reason-form">
-                  <textarea
-                    class="reject-reason-input"
-                    placeholder="Why are you rejecting? (min 10 characters)"
-                    bind:value={rejectReason}
-                    rows="2"
-                  ></textarea>
-
-                  <!-- Attachment buttons -->
-                  <div class="reject-attachments">
-                    <button class="attach-btn" onclick={captureRejectScreenshot} disabled={capturingScreenshot} title="Capture screenshot">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="18" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="8.5" cy="10.5" r="1.5" stroke="currentColor" stroke-width="2"/><path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                      {capturingScreenshot ? '...' : 'Screenshot'}
-                    </button>
-                    <button class="attach-btn" onclick={pickRejectElement} title="Pick an element">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M7 7h10v10M7 17L17 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                      Pick Element
-                    </button>
-                  </div>
-
-                  <!-- Screenshot previews -->
-                  {#if rejectScreenshots.length > 0}
-                    <div class="reject-preview-strip">
-                      {#each rejectScreenshots as screenshot, i}
-                        <div class="reject-preview-item">
-                          <img src={screenshot} alt="Screenshot {i + 1}" />
-                          <button class="reject-preview-remove" onclick={() => removeRejectScreenshot(i)} aria-label="Remove">&times;</button>
+                          {#if entry.elements && entry.elements.length > 0}
+                            <div class="thread-elements">
+                              {#each entry.elements as el}
+                                <span class="element-badge" title={el.selector}>
+                                  &lt;{el.tagName.toLowerCase()}{el.id ? `#${el.id}` : ''}{el.className ? `.${el.className.split(' ')[0]}` : ''}&gt;
+                                </span>
+                              {/each}
+                            </div>
+                          {/if}
                         </div>
                       {/each}
                     </div>
                   {/if}
+                {:else if report.description}
+                  <!-- Fallback for reports without thread -->
+                  <p class="report-desc">{report.description.length > 120 ? report.description.slice(0, 120) + '...' : report.description}</p>
+                {/if}
 
-                  <!-- Element badges -->
-                  {#if rejectElements.length > 0}
-                    <div class="reject-element-strip">
-                      {#each rejectElements as el, i}
-                        <span class="element-badge removable">
-                          &lt;{el.tagName.toLowerCase()}{el.id ? `#${el.id}` : ''}&gt;
-                          <button class="element-remove" onclick={() => removeRejectElement(i)}>&times;</button>
-                        </span>
-                      {/each}
+                {#if !report.thread && report.screenshot_urls && report.screenshot_urls.length > 0}
+                  <div class="report-screenshots">
+                    {#each report.screenshot_urls as url, i}
+                      <button class="screenshot-thumb" onclick={() => expandedScreenshot = expandedScreenshot === url ? null : url} aria-label="Screenshot {i + 1}">
+                        <img src="{endpoint}{url}" alt="Screenshot {i + 1}" loading="lazy" />
+                      </button>
+                    {/each}
+                  </div>
+                  {#if expandedScreenshot && report.screenshot_urls.includes(expandedScreenshot)}
+                    <div class="screenshot-expanded">
+                      <img src="{endpoint}{expandedScreenshot}" alt="Screenshot" />
+                      <button class="screenshot-close" onclick={() => expandedScreenshot = null} aria-label="Close">&times;</button>
                     </div>
                   {/if}
+                {/if}
 
-                  <div class="reject-reason-actions">
-                    <button class="cancel-btn" onclick={cancelReject}>Cancel</button>
-                    <button
-                      class="confirm-reject-btn"
-                      disabled={rejectReason.trim().length < 10 || respondingId === report.id}
-                      onclick={() => handleRespond(report.id, 'rejected', rejectReason.trim())}
-                    >
-                      {respondingId === report.id ? '...' : '\u2717 Reject'}
-                    </button>
+                {#if report.dev_notes && !report.thread}
+                  <div class="dev-notes">
+                    <span class="dev-notes-label">Dev response:</span>
+                    <span>{report.dev_notes}</span>
                   </div>
-                  {#if rejectReason.trim().length > 0 && rejectReason.trim().length < 10}
-                    <span class="char-hint">{10 - rejectReason.trim().length} more characters needed</span>
+                {/if}
+
+                <div class="report-footer">
+                  <span class="report-time">{timeAgo(report.created_at)}</span>
+
+                  {#if report.status === 'accepted'}
+                    <span class="status-pill accepted">{'\u2713'} Accepted</span>
+                  {:else if report.status === 'rejected'}
+                    <span class="status-pill rejected">{'\u2717'} Rejected</span>
+                  {:else if report.status === 'completed' || report.status === 'wontfix'}
+                    {#if rejectingId === report.id}
+                      <div class="reject-reason-form">
+                        <textarea
+                          class="reject-reason-input"
+                          placeholder="Why are you rejecting? (min 10 characters)"
+                          bind:value={rejectReason}
+                          rows="2"
+                        ></textarea>
+
+                        <!-- Attachment buttons -->
+                        <div class="reject-attachments">
+                          <button class="attach-btn" onclick={captureRejectScreenshot} disabled={capturingScreenshot} title="Capture screenshot">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="18" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="8.5" cy="10.5" r="1.5" stroke="currentColor" stroke-width="2"/><path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            {capturingScreenshot ? '...' : 'Screenshot'}
+                          </button>
+                          <button class="attach-btn" onclick={pickRejectElement} title="Pick an element">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M7 7h10v10M7 17L17 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            Pick Element
+                          </button>
+                        </div>
+
+                        <!-- Screenshot previews -->
+                        {#if rejectScreenshots.length > 0}
+                          <div class="reject-preview-strip">
+                            {#each rejectScreenshots as screenshot, i}
+                              <div class="reject-preview-item">
+                                <img src={screenshot} alt="Screenshot {i + 1}" />
+                                <button class="reject-preview-remove" onclick={() => removeRejectScreenshot(i)} aria-label="Remove">&times;</button>
+                              </div>
+                            {/each}
+                          </div>
+                        {/if}
+
+                        <!-- Element badges -->
+                        {#if rejectElements.length > 0}
+                          <div class="reject-element-strip">
+                            {#each rejectElements as el, i}
+                              <span class="element-badge removable">
+                                &lt;{el.tagName.toLowerCase()}{el.id ? `#${el.id}` : ''}&gt;
+                                <button class="element-remove" onclick={() => removeRejectElement(i)}>&times;</button>
+                              </span>
+                            {/each}
+                          </div>
+                        {/if}
+
+                        <div class="reject-reason-actions">
+                          <button class="cancel-btn" onclick={cancelReject}>Cancel</button>
+                          <button
+                            class="confirm-reject-btn"
+                            disabled={rejectReason.trim().length < 10 || respondingId === report.id}
+                            onclick={() => handleRespond(report.id, 'rejected', rejectReason.trim())}
+                          >
+                            {respondingId === report.id ? '...' : '\u2717 Reject'}
+                          </button>
+                        </div>
+                        {#if rejectReason.trim().length > 0 && rejectReason.trim().length < 10}
+                          <span class="char-hint">{10 - rejectReason.trim().length} more characters needed</span>
+                        {/if}
+                      </div>
+                    {:else}
+                      <div class="response-actions">
+                        <button
+                          class="accept-btn"
+                          disabled={respondingId === report.id}
+                          onclick={() => handleRespond(report.id, 'accepted')}
+                        >
+                          {respondingId === report.id ? '...' : '\u2713 Accept'}
+                        </button>
+                        <button
+                          class="reject-btn"
+                          disabled={respondingId === report.id}
+                          onclick={() => startReject(report.id)}
+                        >
+                          {'\u2717'} Reject
+                        </button>
+                      </div>
+                    {/if}
                   {/if}
                 </div>
-              {:else}
-                <div class="response-actions">
-                  <button
-                    class="accept-btn"
-                    disabled={respondingId === report.id}
-                    onclick={() => handleRespond(report.id, 'accepted')}
-                  >
-                    {respondingId === report.id ? '...' : '\u2713 Accept'}
-                  </button>
-                  <button
-                    class="reject-btn"
-                    disabled={respondingId === report.id}
-                    onclick={() => startReject(report.id)}
-                  >
-                    {'\u2717'} Reject
-                  </button>
-                </div>
-              {/if}
+              </div>
             {/if}
           </div>
-        </div>
-      {/each}
-    </div>
-  {/if}
+        {/each}
+      </div>
+    {/if}
+  </div>
 </div>
 
 <style>
   .request-list {
-    padding: 14px 16px;
-    overflow-y: auto;
-    max-height: 400px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
+
+  /* Subtabs */
+  .subtabs {
+    display: flex;
+    border-bottom: 1px solid #1f2937;
+    padding: 0 12px;
+    flex-shrink: 0;
+  }
+  .subtab {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 10px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #6b7280;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .subtab:hover { color: #d1d5db; }
+  .subtab.active {
+    color: #f9fafb;
+    border-bottom-color: #3b82f6;
+  }
+  .subtab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 3px;
+    border-radius: 7px;
+    background: #374151;
+    color: #d1d5db;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .subtab.active .subtab-count {
+    background: #3b82f6;
+    color: #fff;
+  }
+  .subtab-count.active-count {
+    background: #3b82f630;
+    color: #60a5fa;
+  }
+  .subtab.active .subtab-count.active-count {
+    background: #3b82f6;
+    color: #fff;
+  }
+  .subtab-count.done-count {
+    background: #10b98130;
+    color: #34d399;
+  }
+  .subtab.active .subtab-count.done-count {
+    background: #3b82f6;
+    color: #fff;
+  }
+
+  .request-scroll {
+    padding: 10px 12px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+  }
+
   .loading {
     display: flex;
     align-items: center;
@@ -459,30 +594,46 @@
   .reports {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
   }
   .report-card {
     background: #1f2937;
     border: 1px solid #374151;
     border-radius: 8px;
-    padding: 10px 12px;
     transition: border-color 0.15s;
+    overflow: hidden;
   }
   .report-card.awaiting {
     border-color: #f59e0b40;
     box-shadow: 0 0 0 1px #f59e0b20;
   }
-  .report-header {
+  .report-card.expanded {
+    border-color: #4b556380;
+  }
+
+  /* Collapsed card header (clickable toggle) */
+  .card-toggle {
     display: flex;
     align-items: center;
     gap: 6px;
+    width: 100%;
+    padding: 9px 10px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+    color: inherit;
+  }
+  .card-toggle:hover {
+    background: #ffffff06;
   }
   .report-type {
-    font-size: 14px;
+    font-size: 13px;
     flex-shrink: 0;
   }
   .report-title {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     color: #f3f4f6;
     flex: 1;
@@ -491,9 +642,9 @@
     white-space: nowrap;
   }
   .report-status {
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 600;
-    padding: 2px 7px;
+    padding: 1px 6px;
     border-radius: 10px;
     border: 1px solid;
     white-space: nowrap;
@@ -501,11 +652,26 @@
     text-transform: uppercase;
     letter-spacing: 0.3px;
   }
+  .chevron {
+    flex-shrink: 0;
+    color: #6b7280;
+    transition: transform 0.15s;
+  }
+  .chevron-open {
+    transform: rotate(90deg);
+  }
+
+  /* Expanded card body */
+  .card-body {
+    padding: 0 10px 10px;
+    border-top: 1px solid #ffffff08;
+  }
+
   .report-url {
     display: flex;
     align-items: center;
     gap: 4px;
-    margin: 4px 0 0;
+    margin: 6px 0 0;
     font-size: 11px;
     color: #60a5fa;
     text-decoration: none;

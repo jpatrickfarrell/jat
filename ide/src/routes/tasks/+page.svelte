@@ -1031,8 +1031,18 @@
 		}
 	}
 
-	async function restartTask(taskId: string) {
+	async function restartTask(taskId: string, agentName?: string) {
 		try {
+			// If there's an existing agent session, kill it first (releases the task too).
+			// This prevents the spawn API from rejecting with "Task already has an active agent".
+			if (agentName) {
+				const sessionName = `jat-${agentName}`;
+				try {
+					await fetch(`/api/sessions/${encodeURIComponent(sessionName)}`, { method: "DELETE" });
+				} catch {
+					// Session may already be gone — not fatal, proceed with spawn
+				}
+			}
 			const response = await fetch("/api/work/spawn", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },

@@ -65,8 +65,7 @@
 	let activeDropdown = $state<'start' | 'completion' | null>(null);
 	let cmdSearchQuery = $state('');
 	let cmdSearchInput: HTMLInputElement | undefined;
-	let startCmdDropdownRef: HTMLDivElement | undefined;
-	let completionCmdDropdownRef: HTMLDivElement | undefined;
+	let cmdDropdownRefs: Record<string, HTMLDivElement | undefined> = {};
 
 	const commandsByNamespace = $derived.by(() => {
 		const cmds = getCommands();
@@ -102,8 +101,15 @@
 		editForm[field] = invocation;
 	}
 
+	function registerDropdownRef(node: HTMLDivElement, id: string) {
+		cmdDropdownRefs[id] = node;
+		return {
+			destroy() { delete cmdDropdownRefs[id]; }
+		};
+	}
+
 	function handleCmdClickOutside(e: MouseEvent) {
-		const ref = activeDropdown === 'start' ? startCmdDropdownRef : completionCmdDropdownRef;
+		const ref = activeDropdown ? cmdDropdownRefs[activeDropdown] : undefined;
 		if (ref && !ref.contains(e.target as Node)) {
 			activeDropdown = null;
 			cmdSearchQuery = '';
@@ -591,7 +597,7 @@
 
 {#snippet commandDropdown(dropdownId: 'start' | 'completion', field: 'startCommand' | 'completionCommand', currentValue: string, placeholder: string)}
 	{@const isOpen = activeDropdown === dropdownId}
-	<div class="relative" bind:this={dropdownId === 'start' ? startCmdDropdownRef : completionCmdDropdownRef}>
+	<div class="relative" use:registerDropdownRef={dropdownId}>
 		<button
 			type="button"
 			class="w-full px-2.5 py-1 rounded-lg font-mono text-sm text-left flex items-center justify-between transition-colors min-h-8"
@@ -753,7 +759,7 @@
 								<code class="detail-value">{program.command}</code>
 							</div>
 							<div class="detail-row">
-								<span class="detail-label">Default Model:</span>
+								<span class="detail-label">Start Model:</span>
 								<span class="detail-value">{program.defaultModel}</span>
 							</div>
 							{#if program.models.length > 0}
@@ -873,19 +879,6 @@
 							bind:value={editForm.command}
 						/>
 						<p class="form-hint">The executable to run (e.g., claude, codex, aider)</p>
-					</div>
-
-					<div class="form-group">
-						<label for="edit-default-model">Default Model</label>
-						<select
-							id="edit-default-model"
-							class="select select-bordered w-full"
-							bind:value={editForm.defaultModel}
-						>
-							{#each editForm.models ?? [] as model}
-								<option value={model.shortName}>{model.name} ({model.shortName})</option>
-							{/each}
-						</select>
 					</div>
 				</div>
 
@@ -1062,8 +1055,22 @@
 
 				<div class="form-section">
 					<h4>Start Phase</h4>
+
 					<div class="form-group">
-						<label for="edit-start-command">Start Command</label>
+						<label for="edit-default-model">Model</label>
+						<select
+							id="edit-default-model"
+							class="select select-bordered w-full"
+							bind:value={editForm.defaultModel}
+						>
+							{#each editForm.models ?? [] as model}
+								<option value={model.shortName}>{model.name} ({model.shortName})</option>
+							{/each}
+						</select>
+					</div>
+
+					<div class="form-group">
+						<label for="edit-start-command">Command</label>
 						{@render commandDropdown('start', 'startCommand', editForm.startCommand || '/jat:start', '/jat:start')}
 						<p class="form-hint">Command to run when starting a task (default: /jat:start)</p>
 					</div>
@@ -1074,7 +1081,7 @@
 					<p class="form-hint" style="margin-bottom: 0.75rem;">Optionally downshift to a cheaper model when completing tasks. Saves cost without sacrificing quality on problem-solving.</p>
 
 					<div class="form-group">
-						<label for="edit-completion-model">Completion Model</label>
+						<label for="edit-completion-model">Model</label>
 						<select
 							id="edit-completion-model"
 							class="select select-bordered w-full"
@@ -1089,7 +1096,7 @@
 					</div>
 
 					<div class="form-group">
-						<label for="edit-completion-command">Completion Command</label>
+						<label for="edit-completion-command">Command</label>
 						{@render commandDropdown('completion', 'completionCommand', editForm.completionCommand || '/jat:complete', '/jat:complete')}
 						<p class="form-hint">Command to run during completion (default: /jat:complete)</p>
 					</div>

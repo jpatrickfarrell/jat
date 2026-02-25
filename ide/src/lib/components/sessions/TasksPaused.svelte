@@ -39,7 +39,7 @@
 		projectColors: Record<string, string>;
 		taskIntegrations?: Record<string, { sourceId: string; sourceType: string; sourceName: string; sourceEnabled: boolean }>;
 		onResumeSession?: (agentName: string, sessionId: string) => Promise<void>;
-		onRestartTask?: (taskId: string) => Promise<void>;
+		onRestartTask?: (taskId: string, agentName?: string) => Promise<void>;
 		onUnassignTask?: (taskId: string, agentName: string) => Promise<void>;
 		onViewTask?: (taskId: string) => void;
 	} = $props();
@@ -88,7 +88,7 @@
 			if (actionId === 'resume' && onResumeSession && session.sessionId) {
 				await onResumeSession(session.agentName, session.sessionId);
 			} else if (actionId === 'restart' && onRestartTask) {
-				await onRestartTask(session.taskId);
+				await onRestartTask(session.taskId, session.agentName);
 			} else if (actionId === 'unassign' && onUnassignTask) {
 				await onUnassignTask(session.taskId, session.agentName);
 			} else if (actionId === 'view-task' && onViewTask) {

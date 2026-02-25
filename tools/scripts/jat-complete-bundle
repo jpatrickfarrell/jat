@@ -354,7 +354,9 @@ Generate a JSON object with these fields:
   "riskLevel": "low" | "medium" | "high",  // REQUIRED: low=routine, medium=core logic, high=breaking/security
   "suggestedRename": "new title if task evolved/pivoted significantly (optional - omit if title is accurate)",
   "breakingChanges": ["list of breaking changes, or omit if none"],
-  "documentationNeeds": ["docs that need updating, or omit if none"]
+  "documentationNeeds": ["docs that need updating, or omit if none"],
+
+  "devResponse": "INCLUDE ONLY if this task originated from user feedback (bug report, feature request, etc). A friendly, plain-language message for the person who reported the issue. Write as if talking to a smart non-developer. Cover: (1) acknowledge their report, (2) confirm whether it was fixed, (3) briefly explain what was done in everyday language — no jargon, no acronyms without explanation, (4) tell them how to verify the fix (where to go, what to click, what they should see). 2-4 sentences. Omit this field entirely if the task is internal (chore, refactor, etc) with no external reporter."
 }
 
 ## Guidelines
@@ -368,6 +370,7 @@ Generate a JSON object with these fields:
 8. breakingChanges: list specific breaking changes, omit field entirely if none
 9. documentationNeeds: list specific docs needing updates, omit if none
 10. CRITICAL for suggestedTasks: Each task MUST be a STANDALONE work item. A new agent picking up this task will NOT have context from the parent task. Include specific file paths, component names, function names, and enough context that someone unfamiliar can start immediately. Vague tasks like "improve X" or "fix the issue" are useless - be SPECIFIC.
+11. devResponse: Include ONLY for tasks that came from user feedback. Write for the person who reported the issue — friendly, specific, no jargon. Tell them what was fixed and how to check it works.
 
 Output ONLY the JSON object. No markdown code blocks, no explanation text.
 PROMPT_EOF

@@ -383,6 +383,45 @@ EOF
         log_dim "Generating completion bundle via LLM..."
         jat-complete-bundle --task "$TASK_ID" --agent "$AGENT_NAME" --emit
         log_success "Completion bundle emitted"
+
+        # If the bundle contains a devResponse, fire an integration callback
+        # to update dev_notes with the user-friendly message (overrides the
+        # technical summary sent during the earlier callback step).
+        TMUX_SESSION=$(tmux display-message -p '#S' 2>/dev/null || true)
+        TIMELINE_FILE="/tmp/jat-timeline-${TMUX_SESSION}.jsonl"
+        if [[ -n "$TMUX_SESSION" && -f "$TIMELINE_FILE" ]]; then
+            COMPLETE_LINE=$(grep '"state":"complete"' "$TIMELINE_FILE" | tail -1)
+            DEV_RESPONSE=$(echo "$COMPLETE_LINE" | jq -r '.data.devResponse // empty' 2>/dev/null)
+            if [[ -n "$DEV_RESPONSE" ]]; then
+                IDE_URL="http://127.0.0.1:3333"
+                INTEGRATION_JSON=$(curl -sf "${IDE_URL}/api/tasks/integrations?taskIds=${TASK_ID}" 2>/dev/null || echo '{}')
+                SOURCE_ID=$(echo "$INTEGRATION_JSON" | jq -r ".integrations.\"${TASK_ID}\".sourceId // empty" 2>/dev/null)
+                REFERENCE_ID=$(echo "$INTEGRATION_JSON" | jq -r ".integrations.\"${TASK_ID}\".referenceId // empty" 2>/dev/null)
+                HAS_CALLBACK=$(echo "$INTEGRATION_JSON" | jq -r ".integrations.\"${TASK_ID}\".callback.url // empty" 2>/dev/null)
+
+                if [[ -n "$SOURCE_ID" && -n "$HAS_CALLBACK" ]]; then
+                    log_dim "Updating dev_notes with user-friendly response..."
+                    CALLBACK_BODY=$(jq -n -c \
+                        --arg taskId "$TASK_ID" \
+                        --arg event "task_closed" \
+                        --arg referenceId "$REFERENCE_ID" \
+                        --arg taskStatus "closed" \
+                        --arg notes "$DEV_RESPONSE" \
+                        '{taskId: $taskId, event: $event, referenceId: $referenceId, taskStatus: $taskStatus, notes: $notes}')
+
+                    CALLBACK_RESULT=$(curl -sf -X POST "${IDE_URL}/api/integrations/${SOURCE_ID}/callback" \
+                        -H "Content-Type: application/json" \
+                        -d "$CALLBACK_BODY" 2>/dev/null || echo '{"success":false}')
+
+                    CALLBACK_OK=$(echo "$CALLBACK_RESULT" | jq -r '.success // false' 2>/dev/null)
+                    if [[ "$CALLBACK_OK" == "true" ]]; then
+                        log_success "Dev response updated for reporter"
+                    else
+                        log_dim "Dev response callback failed (non-blocking)"
+                    fi
+                fi
+            fi
+        fi
         ;;
 
     *)

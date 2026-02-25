@@ -155,8 +155,8 @@ export async function fetch(lines: number = 50): Promise<void> {
 				}
 			}
 
-			// Trigger reactivity by creating new Map
-			activityHistory = new Map(activityHistory);
+			// Note: Svelte 5 $state automatically tracks Map mutations (.set, .delete)
+			// No need to reassign activityHistory - that can cause infinite reactivity loops
 
 			// SMART MERGE: Use in-place mutation to avoid re-rendering unchanged components
 			// Only replace the array when sessions are added/removed

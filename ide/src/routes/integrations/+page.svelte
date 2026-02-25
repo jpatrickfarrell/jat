@@ -427,14 +427,28 @@
 		}
 	}
 
+	const MAX_ITEMS_IN_MEMORY = 1000; // Prevent memory leak from unbounded item accumulation
+
 	async function fetchAuditItems(sourceId: string, offset = 0) {
 		auditLoading = new Set([...auditLoading, sourceId]);
 		try {
 			const resp = await fetch(`/api/ingest/${encodeURIComponent(sourceId)}/items?limit=20&offset=${offset}`);
 			const data = await resp.json();
 			const existing = offset > 0 ? (auditItems.get(sourceId) || []) : [];
+			
+			// Prevent memory leak: cap total items in memory
+			if (existing.length >= MAX_ITEMS_IN_MEMORY) {
+				console.warn(`[integrations] Max items limit (${MAX_ITEMS_IN_MEMORY}) reached for source ${sourceId}`);
+				const updated = new Set(auditLoading);
+				updated.delete(sourceId);
+				auditLoading = updated;
+				return;
+			}
+			
 			const next = new Map(auditItems);
-			next.set(sourceId, [...existing, ...data.items]);
+			const newItems = [...existing, ...data.items];
+			// Truncate if we exceed the limit
+			next.set(sourceId, newItems.slice(0, MAX_ITEMS_IN_MEMORY));
 			auditItems = next;
 			const totals = new Map(auditTotal);
 			totals.set(sourceId, data.total);
@@ -454,6 +468,14 @@
 		if (tab === 'polls' && !pollHistory.has(sourceId)) {
 			fetchPollHistory(sourceId);
 		}
+	}
+
+	function clearAndRefreshItems(sourceId: string) {
+		// Clear existing items and reload from beginning
+		const next = new Map(auditItems);
+		next.delete(sourceId);
+		auditItems = next;
+		fetchAuditItems(sourceId, 0);
 	}
 
 	async function fetchPollHistory(sourceId: string) {
@@ -966,6 +988,16 @@
 											>
 												Polls
 											</button>
+											{#if (expandedTab.get(source.id) || 'items') === 'items' && (auditItems.get(source.id) || []).length > 0}
+												<button
+													class="ml-auto font-mono text-[10px] px-2 py-1 rounded cursor-pointer transition-colors duration-100"
+													style="color: oklch(0.55 0.02 250); background: oklch(0.18 0.02 250);"
+													onclick={(e) => { e.stopPropagation(); clearAndRefreshItems(source.id); }}
+													title="Clear loaded items and refresh from the beginning"
+												>
+													↻ Refresh
+												</button>
+											{/if}
 										</div>
 
 										{#if (expandedTab.get(source.id) || 'items') === 'items'}
@@ -1051,13 +1083,19 @@
 
 												{#if items.length < total}
 													<div class="pt-2 pb-1 text-center">
-														<button
-															class="font-mono text-[10px] font-semibold px-3 py-1 rounded cursor-pointer transition-colors duration-150"
-															style="background: oklch(0.22 0.02 250); color: oklch(0.55 0.02 250); border: 1px solid oklch(0.28 0.02 250);"
-															onclick={(e) => { e.stopPropagation(); fetchAuditItems(source.id, items.length); }}
-														>
-															Load more ({total - items.length} remaining)
-														</button>
+														{#if items.length >= MAX_ITEMS_IN_MEMORY}
+															<div class="font-mono text-[10px] px-3 py-1" style="color: oklch(0.55 0.08 45);">
+																Memory limit reached ({MAX_ITEMS_IN_MEMORY} items). Refresh to see latest.
+															</div>
+														{:else}
+															<button
+																class="font-mono text-[10px] font-semibold px-3 py-1 rounded cursor-pointer transition-colors duration-150"
+																style="background: oklch(0.22 0.02 250); color: oklch(0.55 0.02 250); border: 1px solid oklch(0.28 0.02 250);"
+																onclick={(e) => { e.stopPropagation(); fetchAuditItems(source.id, items.length); }}
+															>
+																Load more ({Math.min(total - items.length, MAX_ITEMS_IN_MEMORY - items.length)} remaining)
+															</button>
+														{/if}
 													</div>
 												{/if}
 											</div>

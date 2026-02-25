@@ -122,8 +122,9 @@
 		return patterns[cron] || cron;
 	}
 
-	function formatNextRun(isoDate: string | null): { text: string; class: string } {
+	function formatNextRun(isoDate: string | null, status?: string): { text: string; class: string } {
 		if (!isoDate) return { text: '--', class: '' };
+		if (status === 'closed') return { text: '--', class: 'text-muted' };
 		const diff = new Date(isoDate).getTime() - Date.now();
 
 		if (diff < 0) {
@@ -240,7 +241,7 @@
 				</thead>
 				<tbody>
 					{#each filteredTasks as task (task.id)}
-						{@const nextRun = formatNextRun(task.next_run_at)}
+						{@const nextRun = formatNextRun(task.next_run_at, task.status)}
 						<tr class="task-row" class:row-closed={task.status === 'closed'}>
 							<td class="col-status">
 								<span class="badge badge-sm {getStatusColor(task.status)}">{task.status}</span>

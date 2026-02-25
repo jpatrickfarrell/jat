@@ -91,6 +91,15 @@ Parent task: "Daily Code Review" (schedule_cron: "0 9 * * *")
 - `parent_id` set to parent task ID
 - No `schedule_cron` (child is a one-time instance)
 
+#### Human Tasks (no agent spawn)
+
+When a task's `command` is `null`, empty, or `'/human'`, the scheduler treats it as a human task:
+
+- **Recurring:** Creates the child instance with `due_date` set, but skips agent spawn. The child appears in the user's task list for manual completion.
+- **One-shot:** Logs the task as due and clears `next_run_at`, but does not spawn an agent.
+
+Use this for recurring reminders like "Take out the trash every Friday" — the scheduler creates the task on schedule, but no AI agent is involved.
+
 #### One-Shot Tasks
 
 Set `next_run_at` but leave `schedule_cron` empty. The scheduler will:

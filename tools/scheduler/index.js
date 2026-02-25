@@ -184,6 +184,16 @@ function isWorkflow(command) {
 }
 
 /**
+ * Check if a task is a human task (no agent spawn needed).
+ * Human tasks have null, empty, or '/human' command.
+ * @param {string} command
+ * @returns {boolean}
+ */
+function isHumanTask(command) {
+  return !command || command === '' || command === '/human';
+}
+
+/**
  * Execute a workflow via the IDE API.
  * @param {object} task
  * @param {string} project
@@ -236,14 +246,20 @@ async function poll() {
       const quickCmd = isQuickCommand(task.command);
       const workflowCmd = isWorkflow(task.command);
 
+      const humanTask = isHumanTask(task.command);
+
       if (task.schedule_cron) {
         // Recurring: create child instance task, execute, update next_run_at
-        const childId = createChildTask(proj.dbPath, task);
-        const cmdLabel = quickCmd ? ' [quick-command]' : workflowCmd ? ' [workflow]' : '';
+        const childId = createChildTask(proj.dbPath, task, { dueDate: task.next_run_at });
+        const cmdLabel = quickCmd ? ' [quick-command]' : workflowCmd ? ' [workflow]' : humanTask ? ' [human]' : '';
         log(`Created child ${childId} from recurring ${task.id} (cron: ${task.schedule_cron})${cmdLabel}`);
 
         let result;
-        if (quickCmd) {
+        if (humanTask) {
+          // Human task: child created with due_date, no agent spawn needed
+          log(`Human task ${childId} created with due date (no agent spawn)`);
+          result = { success: true, human: true };
+        } else if (quickCmd) {
           // Quick command: execute via /api/quick-command, store result in child
           result = await executeQuickCommand(task, proj.name);
           if (result.success && result.result) {
@@ -268,12 +284,16 @@ async function poll() {
           project: proj.name,
           time: new Date().toISOString(),
           result: result.success ? 'ok' : 'failed',
-          type: quickCmd ? 'quick-command' : workflowCmd ? 'workflow' : 'spawn',
+          type: humanTask ? 'human' : quickCmd ? 'quick-command' : workflowCmd ? 'workflow' : 'spawn',
         });
       } else {
         // One-shot: execute directly, clear next_run_at
         let result;
-        if (quickCmd) {
+        if (humanTask) {
+          // Human task: nothing to spawn, just clear the schedule
+          log(`One-shot human task ${task.id} marked as due (no agent spawn)`);
+          result = { success: true, human: true };
+        } else if (quickCmd) {
           result = await executeQuickCommand(task, proj.name);
         } else if (workflowCmd) {
           result = await executeWorkflow(task, proj.name);
@@ -289,7 +309,7 @@ async function poll() {
           project: proj.name,
           time: new Date().toISOString(),
           result: result.success ? 'ok' : 'failed',
-          type: quickCmd ? 'quick-command' : workflowCmd ? 'workflow' : 'spawn',
+          type: humanTask ? 'human' : quickCmd ? 'quick-command' : workflowCmd ? 'workflow' : 'spawn',
         });
       }
     }

@@ -221,6 +221,7 @@
 			<span class="task-count">{scheduledTasks.length} tasks</span>
 		</div>
 	</div>
+	<p class="page-subtitle">Recurring and one-off tasks that run automatically on a schedule. The scheduler daemon polls for due tasks and spawns agent sessions to handle them.</p>
 
 	<!-- Scheduler Service Controls -->
 	<SchedulerControls
@@ -231,17 +232,38 @@
 		onRefresh={handleRefresh}
 	/>
 
-	<!-- Scheduled Tasks Table -->
-	<div class="table-section" use:reveal>
-		<ScheduledTasksTable
-			tasks={scheduledTasks}
-			loading={tasksLoading}
-			onSpawnNow={handleSpawnNow}
-			onEditSchedule={handleEditSchedule}
-			onPauseSchedule={handlePauseSchedule}
-			onViewTask={handleViewTask}
-		/>
-	</div>
+	<!-- Scheduled Tasks Table or Empty State -->
+	{#if !tasksLoading && scheduledTasks.length === 0}
+		<div class="empty-state" use:reveal>
+			<div class="empty-icon">
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+					<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+					<line x1="16" y1="2" x2="16" y2="6"></line>
+					<line x1="8" y1="2" x2="8" y2="6"></line>
+					<line x1="3" y1="10" x2="21" y2="10"></line>
+					<path d="M12 14l2 2-2 2"></path>
+				</svg>
+			</div>
+			<h3 class="empty-title">No scheduled tasks</h3>
+			<p class="empty-description">
+				To schedule a task, open any task's detail drawer and set a <strong>cron expression</strong> (for recurring tasks like <code>0 9 * * *</code> for daily at 9am) or a <strong>next run time</strong> (for one-off scheduled tasks).
+			</p>
+			<p class="empty-hint">
+				Make sure the scheduler daemon is running above to automatically spawn agents for due tasks.
+			</p>
+		</div>
+	{:else}
+		<div class="table-section" use:reveal>
+			<ScheduledTasksTable
+				tasks={scheduledTasks}
+				loading={tasksLoading}
+				onSpawnNow={handleSpawnNow}
+				onEditSchedule={handleEditSchedule}
+				onPauseSchedule={handlePauseSchedule}
+				onViewTask={handleViewTask}
+			/>
+		</div>
+	{/if}
 </div>
 
 <!-- Schedule Edit Modal -->
@@ -373,6 +395,13 @@
 		color: oklch(0.50 0.02 250);
 	}
 
+	.page-subtitle {
+		font-size: 0.8125rem;
+		color: oklch(0.55 0.02 250);
+		line-height: 1.5;
+		max-width: 640px;
+	}
+
 	.table-section {
 		flex: 1;
 		min-height: 0;
@@ -381,6 +410,60 @@
 		border: 1px solid oklch(0.25 0.02 250);
 		border-radius: 0.5rem;
 		padding: 0.75rem;
+	}
+
+	/* Empty State */
+	.empty-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.75rem;
+		padding: 3rem 2rem;
+		background: oklch(0.16 0.01 250);
+		border: 1px solid oklch(0.25 0.02 250);
+		border-radius: 0.5rem;
+		text-align: center;
+	}
+
+	.empty-icon {
+		width: 48px;
+		height: 48px;
+		color: oklch(0.40 0.02 250);
+		margin-bottom: 0.25rem;
+	}
+	.empty-icon svg {
+		width: 100%;
+		height: 100%;
+	}
+
+	.empty-title {
+		font-size: 1rem;
+		font-weight: 600;
+		color: oklch(0.75 0.02 250);
+	}
+
+	.empty-description {
+		font-size: 0.8125rem;
+		color: oklch(0.55 0.02 250);
+		line-height: 1.6;
+		max-width: 480px;
+	}
+	.empty-description strong {
+		color: oklch(0.70 0.02 250);
+	}
+	.empty-description code {
+		font-size: 0.75rem;
+		padding: 0.125rem 0.375rem;
+		background: oklch(0.22 0.02 250);
+		border-radius: 0.25rem;
+		color: oklch(0.70 0.10 200);
+	}
+
+	.empty-hint {
+		font-size: 0.75rem;
+		color: oklch(0.45 0.02 250);
+		max-width: 400px;
 	}
 
 	/* Modal */

@@ -142,9 +142,11 @@ function genId() {
  * Inherits command, agent_program, model from parent.
  * @param {string} dbPath
  * @param {object} parent - Parent task object
+ * @param {object} [options] - Optional settings
+ * @param {string} [options.dueDate] - ISO datetime for the child's due_date
  * @returns {string} ID of the created child task
  */
-export function createChildTask(dbPath, parent) {
+export function createChildTask(dbPath, parent, options = {}) {
   let db;
   try {
     db = new Database(dbPath);
@@ -157,8 +159,8 @@ export function createChildTask(dbPath, parent) {
 
     db.prepare(`
       INSERT INTO tasks (id, title, description, status, priority, issue_type,
-                         command, agent_program, model, parent_id, created_at, updated_at)
-      VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)
+                         command, agent_program, model, parent_id, due_date, created_at, updated_at)
+      VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       childId,
       title,
@@ -169,6 +171,7 @@ export function createChildTask(dbPath, parent) {
       parent.agent_program || null,
       parent.model || null,
       parent.id,
+      options.dueDate || null,
       now,
       now,
     );

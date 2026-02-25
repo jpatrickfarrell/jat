@@ -102,6 +102,21 @@
 		}
 	}
 
+	function formatScheduledDate(isoDate: string | null): string {
+		if (!isoDate) return 'Once';
+		const d = new Date(isoDate);
+		if (isNaN(d.getTime())) return 'Once';
+		const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+		const month = months[d.getMonth()];
+		const day = d.getDate();
+		const h = d.getHours();
+		const m = d.getMinutes();
+		const ampm = h >= 12 ? 'pm' : 'am';
+		const hour12 = h % 12 || 12;
+		const time = m === 0 ? `${hour12}${ampm}` : `${hour12}:${String(m).padStart(2, '0')}${ampm}`;
+		return `${month} ${day}, ${time}`;
+	}
+
 	function formatCron(cron: string | null): string {
 		if (!cron) return '--';
 		// Common cron patterns
@@ -287,7 +302,9 @@
 										{formatCron(task.schedule_cron)}
 									</span>
 								{:else}
-									<span class="oneshot-badge">one-shot</span>
+									<span class="scheduled-badge" title={task.next_run_at || 'One-time task'}>
+										{formatScheduledDate(task.next_run_at)}
+									</span>
 								{/if}
 							</td>
 							<td class="col-nextrun">
@@ -536,13 +553,13 @@
 		border: 1px solid oklch(0.40 0.08 280 / 0.3);
 	}
 
-	.oneshot-badge {
+	.scheduled-badge {
 		font-size: 0.75rem;
-		color: oklch(0.60 0.08 85);
-		background: oklch(0.25 0.04 85 / 0.2);
+		color: oklch(0.65 0.10 200);
+		background: oklch(0.25 0.04 200 / 0.2);
 		padding: 0.125rem 0.5rem;
 		border-radius: 9999px;
-		border: 1px solid oklch(0.40 0.06 85 / 0.3);
+		border: 1px solid oklch(0.40 0.06 200 / 0.3);
 	}
 
 	.action-btns {

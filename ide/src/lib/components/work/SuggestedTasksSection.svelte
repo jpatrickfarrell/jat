@@ -446,7 +446,7 @@
 
 							<!-- Task content -->
 							<div class="flex-1 min-w-0">
-								<!-- Type + Priority + Title row -->
+								<!-- Controls row: badges, dropdowns, actions -->
 								<div class="flex items-center gap-1.5 flex-wrap">
 									<!-- Priority dropdown -->
 									<select
@@ -477,50 +477,6 @@
 									<span class="text-sm opacity-70" title={typeVisual.label}>
 										{typeVisual.icon}
 									</span>
-
-									<!-- Title (inline editable) -->
-									{#if editingTitleKey === taskKey}
-										<input
-											type="text"
-											bind:value={editingTitleValue}
-											onblur={() => saveTitle(taskKey)}
-											onkeydown={(e) => handleTitleKeydown(e, taskKey)}
-											onclick={(e) => e.stopPropagation()}
-											class="flex-1 min-w-0 text-xs px-1.5 py-0.5 rounded bg-base-300 text-base-content border border-info"
-											autofocus
-										/>
-									{:else}
-										<button
-											type="button"
-											onclick={(e) => e.stopPropagation()}
-											ondblclick={(e) => startEditingTitle(taskKey, effectiveTitle, e)}
-											class="flex-1 min-w-0 text-xs text-left font-medium truncate hover:underline text-base-content"
-											title="Double-click to edit title"
-										>
-											{effectiveTitle}
-										</button>
-										<!-- Edit icon for title -->
-										<button
-											type="button"
-											onclick={(e) => startEditingTitle(taskKey, effectiveTitle, e)}
-											class="text-[10px] p-0.5 rounded opacity-40 hover:opacity-100 transition-opacity text-info"
-											title="Edit title"
-										>
-											<svg
-												class="w-3 h-3"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke="currentColor"
-												stroke-width="2"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
-												/>
-											</svg>
-										</button>
-									{/if}
 
 									<!-- Already Created indicator with clickable task ID -->
 									{#if task.alreadyCreated}
@@ -566,6 +522,9 @@
 										{/if}
 									{/if}
 
+									<!-- Spacer to push actions to the right -->
+									<span class="flex-1"></span>
+
 									<!-- Expand toggle for description -->
 									<button
 										type="button"
@@ -590,6 +549,52 @@
 										</svg>
 									</button>
 								</div>
+
+								<!-- Title (full width, allows wrapping up to 2 lines) -->
+								{#if editingTitleKey === taskKey}
+									<input
+										type="text"
+										bind:value={editingTitleValue}
+										onblur={() => saveTitle(taskKey)}
+										onkeydown={(e) => handleTitleKeydown(e, taskKey)}
+										onclick={(e) => e.stopPropagation()}
+										class="w-full text-xs px-1.5 py-0.5 mt-1 rounded bg-base-300 text-base-content border border-info"
+										autofocus
+									/>
+								{:else}
+									<div class="flex items-start gap-1 mt-1">
+										<button
+											type="button"
+											onclick={(e) => e.stopPropagation()}
+											ondblclick={(e) => startEditingTitle(taskKey, effectiveTitle, e)}
+											class="flex-1 min-w-0 text-xs text-left font-medium line-clamp-2 hover:underline text-base-content"
+											title="Double-click to edit title"
+										>
+											{effectiveTitle}
+										</button>
+										<!-- Edit icon for title -->
+										<button
+											type="button"
+											onclick={(e) => startEditingTitle(taskKey, effectiveTitle, e)}
+											class="flex-shrink-0 text-[10px] p-0.5 rounded opacity-40 hover:opacity-100 transition-opacity text-info mt-0.5"
+											title="Edit title"
+										>
+											<svg
+												class="w-3 h-3"
+												fill="none"
+												viewBox="0 0 24 24"
+												stroke="currentColor"
+												stroke-width="2"
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
+												/>
+											</svg>
+										</button>
+									</div>
+								{/if}
 
 								<!-- Description preview (when collapsed) - click to expand and edit -->
 								{#if !isExpanded && effectiveDescription}

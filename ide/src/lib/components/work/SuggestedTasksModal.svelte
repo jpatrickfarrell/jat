@@ -447,7 +447,7 @@
 
 							<!-- Task content -->
 							<div class="flex-1 min-w-0">
-								<!-- Type, Priority, Title row -->
+								<!-- Controls row: badges, dropdowns, actions -->
 								<div class="flex items-center gap-2 flex-wrap">
 									<!-- Human/Agent indicator -->
 									<span
@@ -490,13 +490,8 @@
 										{typeVisual.icon}
 									</span>
 
-									<!-- Title -->
-									<span
-										class="flex-1 min-w-0 text-sm font-medium truncate text-base-content"
-										title={task.title}
-									>
-										{task.title}
-									</span>
+									<!-- Spacer to push actions to the right -->
+									<span class="flex-1"></span>
 
 									<!-- Expand/collapse button -->
 									<button
@@ -590,6 +585,14 @@
 										</button>
 									{/if}
 								</div>
+
+								<!-- Title (full width, allows wrapping) -->
+								<p
+									class="text-sm font-medium mt-1 line-clamp-2 text-base-content"
+									title={task.title}
+								>
+									{task.title}
+								</p>
 
 								<!-- Description preview (when collapsed) -->
 								{#if !isExpanded && effectiveDescription}

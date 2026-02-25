@@ -272,7 +272,7 @@ export function updateConfig(updates: Partial<AutomationConfig>): void {
  * Toggle master automation enable/disable
  */
 export function toggleAutomation(): boolean {
-	state.config.enabled = !state.config.enabled;
+	state.config = { ...state.config, enabled: !state.config.enabled };
 	persistConfig();
 	return state.config.enabled;
 }

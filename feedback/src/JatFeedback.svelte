@@ -84,12 +84,26 @@
     'top-left': 'top: 80px; left: 0;',
   };
 
+  // Intercept Escape key in capture phase when widget is open.
+  // This prevents the event from reaching host-app drawers/modals
+  // that also listen for Escape to close themselves.
+  function handleEscapeCapture(e: KeyboardEvent) {
+    if (e.key === 'Escape' && open) {
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      close();
+    }
+  }
+
   onMount(() => {
     if (config.captureConsole) {
       startConsoleCapture(config.maxConsoleLogs);
     }
     startRetryLoop();
     startPickerPoll();
+
+    // Capture-phase Escape handler to absorb Esc before host app sees it
+    window.addEventListener('keydown', handleEscapeCapture, true);
 
     // Listen for external open requests (e.g. host app's "Report Bug" button)
     const handleOpen = () => { open = true; };
@@ -100,6 +114,7 @@
   onDestroy(() => {
     stopConsoleCapture();
     stopRetryLoop();
+    window.removeEventListener('keydown', handleEscapeCapture, true);
     if (pickerPollInterval) clearInterval(pickerPollInterval);
   });
 </script>

@@ -878,6 +878,8 @@ export function testPatternAgainstText(pattern: AutomationPattern, text: string)
 	}
 
 	// String literal matching
+	if (!pattern.pattern) return { matched: false, matches: [] };
+
 	const searchText = pattern.caseSensitive ? text : text.toLowerCase();
 	const searchPattern = pattern.caseSensitive ? pattern.pattern : pattern.pattern.toLowerCase();
 	const matches: Array<{ text: string; index: number }> = [];
@@ -889,6 +891,7 @@ export function testPatternAgainstText(pattern: AutomationPattern, text: string)
 			index
 		});
 		index += pattern.pattern.length;
+		if (matches.length >= 1000) break; // Safety limit
 	}
 
 	return {

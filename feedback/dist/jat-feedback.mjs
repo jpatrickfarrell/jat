@@ -5252,7 +5252,7 @@ function cl(e, t) {
     E(m, p.reports, !0), p.error && E(_, p.error, !0), E(b, !1);
   }
   xi(() => {
-    w();
+    n() && w();
   });
   let A = /* @__PURE__ */ U(""), k = /* @__PURE__ */ U(""), j = /* @__PURE__ */ U("bug"), R = /* @__PURE__ */ U("medium"), L = /* @__PURE__ */ U(Ge([])), q = /* @__PURE__ */ U(Ge([])), te = /* @__PURE__ */ U(Ge([])), ne = /* @__PURE__ */ U(!1), oe = /* @__PURE__ */ U(!1), Pe = /* @__PURE__ */ U(!1), Ee = /* @__PURE__ */ U(""), mt = /* @__PURE__ */ U("success"), ot = /* @__PURE__ */ U(!1);
   function De(p, $) {

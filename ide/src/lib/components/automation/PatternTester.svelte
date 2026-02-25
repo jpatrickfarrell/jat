@@ -141,8 +141,13 @@
 	// Use provided rules or sample rules
 	const activeRules = $derived(rules.length > 0 ? rules : sampleRules);
 
+	// Maximum matches to prevent runaway matching
+	const MAX_MATCHES = 1000;
+
 	// Pattern matching function - returns matches and optional error
 	function findMatches(text: string, pattern: string, isRegex: boolean, caseSensitive: boolean): { matches: RuleMatch['matches']; error?: string } {
+		if (!pattern) return { matches: [] };
+
 		const matches: RuleMatch['matches'] = [];
 
 		try {
@@ -151,6 +156,12 @@
 				const regex = new RegExp(pattern, flags);
 				let match;
 				while ((match = regex.exec(text)) !== null) {
+					// Prevent infinite loop for zero-length matches
+					if (match[0].length === 0) {
+						regex.lastIndex++;
+						continue;
+					}
+
 					const linesBefore = text.substring(0, match.index).split('\n');
 					const line = linesBefore.length;
 					const column = match.index - (linesBefore.slice(0, -1).join('\n').length + (line > 1 ? 1 : 0));
@@ -162,6 +173,8 @@
 						line,
 						column
 					});
+
+					if (matches.length >= MAX_MATCHES) break;
 				}
 			} else {
 				// String matching (literal mode)
@@ -181,6 +194,8 @@
 						column
 					});
 					pos += pattern.length;
+
+					if (matches.length >= MAX_MATCHES) break;
 				}
 			}
 		} catch (e: any) {

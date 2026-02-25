@@ -53,7 +53,9 @@
   }
 
   $effect(() => {
-    loadReports();
+    if (endpoint) {
+      loadReports();
+    }
   });
 
   let title = $state('');

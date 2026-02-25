@@ -197,10 +197,54 @@
 		}
 	}
 
+	// Flush pending save synchronously (for beforeunload / destroy)
+	function flushPendingSave() {
+		if (saveTimeout && isDirty) {
+			clearTimeout(saveTimeout);
+			saveTimeout = null;
+			// Fire-and-forget: save won't complete before unload, so use sendBeacon
+			const payload = new Blob([JSON.stringify({
+				project: projectName,
+				notes: localNotes
+			})], { type: 'application/json' });
+			navigator.sendBeacon('/api/projects/notes-sync', payload);
+			originalNotes = localNotes;
+			isDirty = false;
+		}
+	}
+
+	// Handle page unload (refresh, close tab, navigate away)
+	function handleBeforeUnload() {
+		flushPendingSave();
+	}
+
+	// Register beforeunload listener
+	$effect(() => {
+		window.addEventListener('beforeunload', handleBeforeUnload);
+		return () => {
+			window.removeEventListener('beforeunload', handleBeforeUnload);
+		};
+	});
+
 	// Cleanup
 	onDestroy(() => {
 		if (saveTimeout) {
 			clearTimeout(saveTimeout);
+			// If there are unsaved changes, save them now
+			if (isDirty && projectName && localNotes !== originalNotes) {
+				// Use fetch for component destroy (SPA navigation) since sendBeacon
+				// may not work for all cases and the page isn't unloading
+				fetch('/api/projects', {
+					method: 'PATCH',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						project: projectName,
+						notes: localNotes
+					})
+				}).catch(() => {
+					// Best effort - component is being destroyed
+				});
+			}
 		}
 	});
 </script>

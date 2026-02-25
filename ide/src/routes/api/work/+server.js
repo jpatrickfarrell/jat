@@ -138,6 +138,41 @@ function readSignalState(sessionName) {
 	}
 }
 
+/**
+ * Extract last completed task info from timeline JSONL file.
+ * Used as fallback when agentLastCompletedMap doesn't have an entry
+ * (e.g., when the task's assignee was changed to another agent).
+ * @param {string} sessionName - tmux session name (e.g., "jat-LastThicket")
+ * @returns {{ id: string, title: string, closedAt: string } | null}
+ */
+function getLastCompletedTaskFromTimeline(sessionName) {
+	const timelineFile = `/tmp/jat-timeline-${sessionName}.jsonl`;
+	try {
+		if (!existsSync(timelineFile)) return null;
+		const content = readFileSync(timelineFile, 'utf-8');
+		const lines = content.trim().split('\n');
+		// Search backwards for the most recent 'complete' entry
+		for (let i = lines.length - 1; i >= 0; i--) {
+			const entry = JSON.parse(lines[i]);
+			if (entry.type === 'complete' && entry.task_id) {
+				return {
+					id: entry.task_id,
+					title: entry.data?.taskTitle || entry.task_id,
+					closedAt: entry.timestamp || null,
+					status: 'closed',
+					priority: null,
+					issue_type: null,
+					created_at: null,
+					agent_program: null
+				};
+			}
+		}
+		return null;
+	} catch {
+		return null;
+	}
+}
+
 // ============================================================================
 // Task Cache - getTasks() is expensive (parses 800+ line JSONL on each call)
 // Cache for 5 seconds to prevent constant re-parsing during frequent polling
@@ -689,8 +724,10 @@ async function computeWorkData(lines, includeUsage) {
 				const task = /** @type {Task|undefined} */ (agentTaskMap.get(agentName)) || null;
 
 				// Get last completed task for this agent (for completion state display)
+				// Falls back to timeline JSONL if DB has no record (e.g., assignee was changed)
 				/** @type {Task|null} */
-				const lastCompletedTask = /** @type {Task|undefined} */ (agentLastCompletedMap.get(agentName)) || null;
+				const lastCompletedTask = /** @type {Task|undefined} */ (agentLastCompletedMap.get(agentName))
+					|| (!task ? getLastCompletedTaskFromTimeline(session.name) : null);
 
 				// Use pre-captured output from Step 4
 				const captured = captureMap.get(session.name) || { output: '', lineCount: 0 };

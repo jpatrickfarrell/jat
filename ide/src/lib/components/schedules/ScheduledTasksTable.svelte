@@ -6,6 +6,8 @@
 	 * Columns: status, task title, command, agent/model, schedule, next run, actions
 	 */
 
+	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
+
 	interface ScheduledTask {
 		id: string;
 		title: string;
@@ -250,13 +252,17 @@
 								<span class="badge badge-sm {getPriorityColor(task.priority)}">{getPriorityLabel(task.priority)}</span>
 							</td>
 							<td class="col-title">
-								<button class="task-title-btn" onclick={() => onViewTask(task.id)} title={task.id}>
-									<span class="task-id">{task.id}</span>
-									<span class="task-name">{task.title}</span>
-								</button>
-								{#if task.project}
-									<span class="project-badge">{task.project}</span>
-								{/if}
+								<div class="task-title-row">
+									<TaskIdBadge
+										{task}
+										size="sm"
+										copyOnly
+										onClick={() => onViewTask(task.id)}
+									/>
+									<button class="task-title-btn" onclick={() => onViewTask(task.id)}>
+										<span class="task-name">{task.title}</span>
+									</button>
+								</div>
 							</td>
 							<td class="col-command">
 								<code class="command-text">{task.command || '/jat:start'}</code>
@@ -467,11 +473,13 @@
 	.col-nextrun { width: 120px; }
 	.col-actions { width: 100px; }
 
-	.task-title-btn {
+	.task-title-row {
 		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 0.125rem;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.task-title-btn {
 		background: none;
 		border: none;
 		cursor: pointer;
@@ -482,27 +490,11 @@
 		color: oklch(0.85 0.10 200);
 	}
 
-	.task-id {
-		font-size: 0.6875rem;
-		color: oklch(0.50 0.02 250);
-		font-family: monospace;
-	}
-
 	.task-name {
 		font-size: 0.8125rem;
 		color: oklch(0.80 0.02 250);
 		font-weight: 500;
 		transition: color 0.15s;
-	}
-
-	.project-badge {
-		font-size: 0.625rem;
-		padding: 0 0.375rem;
-		border-radius: 9999px;
-		background: oklch(0.25 0.04 250);
-		color: oklch(0.60 0.04 250);
-		font-weight: 500;
-		margin-top: 0.125rem;
 	}
 
 	.command-text {

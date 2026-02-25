@@ -370,7 +370,17 @@ export function ansiToHtml(input: string): string {
  * Strip ANSI codes from a string (for plain text)
  */
 export function stripAnsi(input: string): string {
-	return input.replace(/\x1b\[[0-9;]*m/g, '');
+	return input
+		// SGR sequences: \x1b[...m (colors, bold, etc.)
+		.replace(/\x1b\[[0-9;]*m/g, '')
+		// CSI sequences: \x1b[...X (cursor, erase, scroll, etc.)
+		.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+		// OSC sequences: \x1b]...BEL or \x1b]...\x1b\\
+		.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+		// Remaining bare escapes
+		.replace(/\x1b[^[\]]\S*/g, '')
+		// Orphaned CSI fragments from delta splits (e.g., "[39m", "[1m")
+		.replace(/\[[\d;]*m/g, '');
 }
 
 /**

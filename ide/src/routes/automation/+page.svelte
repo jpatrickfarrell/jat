@@ -22,14 +22,14 @@
 		const storeEvents = getActivityEvents();
 		// DEBUG: Log what we're converting
 		console.log('[automation page] Converting', storeEvents.length, 'store events to log entries');
-		const entries = storeEvents.map(event => ({
+		const entries: ActivityLogEntry[] = storeEvents.map(event => ({
 			id: event.id,
 			timestamp: new Date(event.timestamp),
 			sessionName: event.sessionName,
 			ruleName: event.ruleName,
 			matchedPattern: event.matchedPattern,
 			actionTaken: event.actionsExecuted?.map(a => a.type).join(', ') || 'none',
-			result: event.success ? 'success' : 'failure',
+			result: (event.success ? 'success' : 'failure') as 'success' | 'failure',
 			details: event.error
 		}));
 		console.log('[automation page] Created', entries.length, 'log entries');
@@ -48,7 +48,7 @@
 				enabled: rule.enabled,
 				pattern: pattern.pattern,
 				isRegex: pattern.mode === 'regex',
-				caseSensitive: pattern.caseSensitive,
+				caseSensitive: pattern.caseSensitive ?? false,
 				action: rule.actions[0] || { type: 'notify_only' as const, value: '' },
 				cooldownMs: rule.cooldownSeconds * 1000,
 				priority: rule.priority
@@ -57,7 +57,7 @@
 	});
 
 	// Page state
-	let isLoading = $state(true);
+	let isLoading = $state(false);
 
 	// Rule editor modal state
 	let showRuleEditor = $state(false);
@@ -89,11 +89,6 @@
 		// Load existing activity events from store (events that fired before page load)
 		activityEntries = convertStoreEventsToLogEntries();
 		console.log('[automation page] activityEntries set to', activityEntries.length, 'entries');
-
-		// Simulate brief load for skeleton display
-		setTimeout(() => {
-			isLoading = false;
-		}, 300);
 
 		// Subscribe to automation triggers for activity log (new events while page is open)
 		const unsubscribe = onAutomationTrigger((sessionName, rule, match, results) => {

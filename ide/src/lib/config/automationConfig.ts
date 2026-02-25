@@ -91,10 +91,10 @@ export const AUTOMATION_PRESETS: AutomationPreset[] = [
 		rule: {
 			name: 'API Overloaded Recovery',
 			description: 'Retry when API is overloaded (529 error)',
-			enabled: true,
+			enabled: false,
 			patterns: [
 				{
-					pattern: 'overloaded_error|529|API is temporarily overloaded',
+					pattern: 'overloaded_error|529|API is temporarily overloaded|500.*Internal server error',
 					mode: 'regex',
 					caseSensitive: false
 				}
@@ -110,8 +110,8 @@ export const AUTOMATION_PRESETS: AutomationPreset[] = [
 					delay: 5000
 				}
 			],
-			cooldownSeconds: 30,
-			maxTriggersPerSession: 10,
+			cooldownSeconds: 60,
+			maxTriggersPerSession: 5,
 			category: 'recovery',
 			priority: 100
 		}
@@ -124,7 +124,7 @@ export const AUTOMATION_PRESETS: AutomationPreset[] = [
 		rule: {
 			name: 'Rate Limit Recovery',
 			description: 'Wait and retry when rate limited (429 error)',
-			enabled: true,
+			enabled: false,
 			patterns: [
 				{
 					pattern: 'rate_limit|429|Rate limit exceeded|too many requests',
@@ -190,7 +190,7 @@ export const AUTOMATION_PRESETS: AutomationPreset[] = [
 		rule: {
 			name: 'YOLO Mode Auto-Accept',
 			description: 'Auto-accept bypass permissions mode on first run (option 2 is pre-selected)',
-			enabled: true,
+			enabled: false,
 			patterns: [
 				{
 					pattern: 'Claude Code running in Bypass Permissions mode|Yes, I accept|Do you wish to proceed\\?',
@@ -285,7 +285,7 @@ export const AUTOMATION_PRESETS: AutomationPreset[] = [
 		rule: {
 			name: 'Auto-Proceed Confirmation',
 			description: 'Auto-accept proceed confirmation dialogs (selects "Yes" option)',
-			enabled: true,
+			enabled: false,
 			patterns: [
 				{
 					// Match "Do you want to proceed?" within Claude Code AskUserQuestion UI
@@ -308,8 +308,8 @@ export const AUTOMATION_PRESETS: AutomationPreset[] = [
 					delay: 500
 				}
 			],
-			cooldownSeconds: 5,
-			maxTriggersPerSession: 50,
+			cooldownSeconds: 30,
+			maxTriggersPerSession: 10,
 			category: 'prompt',
 			priority: 55
 		}
@@ -362,11 +362,12 @@ export const AUTOMATION_PRESETS: AutomationPreset[] = [
 		rule: {
 			name: 'Waiting for Input Detection',
 			description: 'Detect when Claude Code is asking the user a question or waiting for confirmation',
-			enabled: true,
+			enabled: false,
 			patterns: [
 				{
 					// Match common question/confirmation phrases agents use when waiting for user input
-					pattern: 'Do you want to proceed|Would you like to|Do you wish to|Should I|shall I|Please confirm|please choose|Which option|Enter to select|Type your choice|yes.*no.*\\?|\\[y\\/n\\]|\\[Y\\/N\\]|Proceed\\?|Continue\\?|approve|waiting for.*input',
+					// NOTE: Keep patterns narrow to avoid false matches on normal agent conversation
+					pattern: 'Enter to select|Type your choice|\\[y\\/n\\]|\\[Y\\/N\\]|waiting for.*input',
 					mode: 'regex',
 					caseSensitive: false
 				}

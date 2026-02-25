@@ -698,21 +698,23 @@ export async function processSessionOutput(
 	output: string,
 	agentName?: string
 ): Promise<void> {
-	// Always log when called for debugging (strip ANSI codes for clean console output)
-	console.log(`[automationEngine] processSessionOutput called for ${sessionName}, output length: ${output.length}`);
-
-	if (!isAutomationEnabled()) {
-		console.log('[automationEngine] Automation is disabled, skipping');
-		return;
-	}
+	if (!isAutomationEnabled()) return;
 
 	const config = getConfig();
 
-	// Find matching rules
-	const matches = findMatchingRules(sessionName, output);
-	// Strip ANSI codes from output preview to avoid corrupted console display
-	const cleanPreview = stripAnsi(output).substring(0, 50).replace(/\n/g, ' ');
-	console.log(`[automationEngine] Found ${matches.length} matching rules for "${cleanPreview}..."`);
+	if (config.debugLogging) {
+		console.log(`[automationEngine] processSessionOutput called for ${sessionName}, output length: ${output.length}`);
+	}
+
+	// Strip ANSI escape codes BEFORE pattern matching so rules match clean text
+	const cleanOutput = stripAnsi(output);
+
+	// Find matching rules against clean output
+	const matches = findMatchingRules(sessionName, cleanOutput);
+	if (config.debugLogging) {
+		const cleanPreview = cleanOutput.substring(0, 50).replace(/\n/g, ' ');
+		console.log(`[automationEngine] Found ${matches.length} matching rules for "${cleanPreview}..."`);
+	}
 	if (matches.length === 0) return;
 
 	// Process first matching rule (highest priority)

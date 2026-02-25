@@ -16,7 +16,7 @@
 /**
  * Pattern matching mode for automation rules
  */
-export type PatternMode = 'string' | 'regex';
+export type PatternMode = 'string' | 'regex' | 'contains' | 'exact' | 'startsWith' | 'endsWith';
 
 /**
  * Pattern definition for matching terminal output

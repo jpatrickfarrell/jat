@@ -928,8 +928,16 @@
 			const data = await response.json();
 			showToast(`Committed: ${data.commit?.hash?.slice(0, 7) || 'success'}`);
 			commitMessage = '';
-			await fetchStatus();
-			await fetchTimeline(); // Refresh timeline to show new commit
+
+			// Immediately update ahead/behind from commit response (bypasses stale cache)
+			if (data.status) {
+				ahead = data.status.ahead || 0;
+				behind = data.status.behind || 0;
+				tracking = data.status.tracking;
+			}
+
+			// Refresh file lists and timeline in parallel
+			await Promise.all([fetchStatus(), fetchTimeline()]);
 		} catch (err) {
 			showToast(err instanceof Error ? err.message : 'Failed to commit', 'error');
 		} finally {

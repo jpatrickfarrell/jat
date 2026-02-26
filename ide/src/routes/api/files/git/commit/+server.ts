@@ -8,6 +8,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getGitForProject, formatGitError } from '$lib/server/git.js';
+import { apiCache, cacheKey } from '$lib/server/cache.js';
 
 export const POST: RequestHandler = async ({ request }) => {
 	let body: { project?: string; message?: string };
@@ -45,6 +46,12 @@ export const POST: RequestHandler = async ({ request }) => {
 		// Commit
 		const commitResult = await git.commit(message.trim());
 
+		// Invalidate git-status cache so subsequent fetchStatus() gets fresh data
+		apiCache.delete(cacheKey('git-status', { project: projectName }));
+
+		// Get fresh status after commit (ahead/behind counts change after commit)
+		const postStatus = await git.status();
+
 		return json({
 			success: true,
 			project: projectName,
@@ -57,6 +64,13 @@ export const POST: RequestHandler = async ({ request }) => {
 					insertions: commitResult.summary.insertions,
 					deletions: commitResult.summary.deletions
 				}
+			},
+			// Include fresh git status so client can update immediately
+			status: {
+				ahead: postStatus.ahead,
+				behind: postStatus.behind,
+				tracking: postStatus.tracking,
+				isClean: postStatus.isClean()
 			}
 		});
 	} catch (err) {

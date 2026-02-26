@@ -46,7 +46,7 @@
 
 	let sortField = $state<string>('next_run_at');
 	let sortDir = $state<'asc' | 'desc'>('asc');
-	let filterStatus = $state<string>('all');
+	let filterStatus = $state<string>('open');
 
 	const filteredTasks = $derived.by(() => {
 		let result = [...tasks];

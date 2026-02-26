@@ -8,7 +8,7 @@
 	},
 	"scripts": {
 		"postinstall": "cd .. && npm install --ignore-scripts",
-		"dev": "svelte-kit sync && NODE_OPTIONS='--max-old-space-size=8192' vite dev --host 127.0.0.1",
+		"dev": "svelte-kit sync && NODE_OPTIONS='--max-old-space-size=8192 --max-http-header-size=65536' vite dev --host 127.0.0.1",
 		"dev:https": "svelte-kit sync && NODE_OPTIONS='--max-old-space-size=8192' vite dev --host 127.0.0.1 --https",
 		"build": "vite build",
 		"preview": "vite preview",

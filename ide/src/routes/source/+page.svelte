@@ -430,7 +430,7 @@
 							<!-- Multi-mode: tabs left, controls right -->
 							<div class="mode-toggle">
 								<button
-									class="mode-btn"
+									class="mode-btn mode-git"
 									class:active={activeMode === 'git'}
 									onclick={() => switchMode('git')}
 									title="Git Source Control"
@@ -445,7 +445,7 @@
 								</button>
 								{#if hasSupabase}
 									<button
-										class="mode-btn"
+										class="mode-btn mode-supabase"
 										class:active={activeMode === 'supabase'}
 										onclick={() => switchMode('supabase')}
 										title="Supabase Migrations"
@@ -458,7 +458,7 @@
 								{/if}
 								{#if hasCloudflare}
 									<button
-										class="mode-btn"
+										class="mode-btn mode-cloudflare"
 										class:active={activeMode === 'cloudflare'}
 										onclick={() => switchMode('cloudflare')}
 										title="Cloudflare Deployments"
@@ -867,6 +867,22 @@
 	.mode-btn.active {
 		color: oklch(0.90 0.02 250);
 		background: oklch(0.22 0.02 250);
+	}
+
+	/* Brand colors when active */
+	.mode-git.active {
+		color: oklch(0.70 0.18 25);
+		background: oklch(0.70 0.18 25 / 0.12);
+	}
+
+	.mode-supabase.active {
+		color: oklch(0.75 0.18 155);
+		background: oklch(0.75 0.18 155 / 0.12);
+	}
+
+	.mode-cloudflare.active {
+		color: oklch(0.75 0.16 60);
+		background: oklch(0.75 0.16 60 / 0.12);
 	}
 
 	.mode-icon {

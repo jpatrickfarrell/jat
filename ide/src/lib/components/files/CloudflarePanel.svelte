@@ -239,7 +239,7 @@
 						<div class="cf-deploy-commit">
 							{#if d.commitMessage}
 								<span class="cf-commit-msg" title={d.commitMessage}>
-									{d.commitMessage.length > 60 ? d.commitMessage.slice(0, 60) + '…' : d.commitMessage}
+									{d.commitMessage}
 								</span>
 							{/if}
 						</div>

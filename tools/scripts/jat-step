@@ -381,8 +381,27 @@ EOF
     complete)
         # No completing signal - this step emits the final complete signal
         log_dim "Generating completion bundle via LLM..."
-        jat-complete-bundle --task "$TASK_ID" --agent "$AGENT_NAME" --emit
-        log_success "Completion bundle emitted"
+        if jat-complete-bundle --task "$TASK_ID" --agent "$AGENT_NAME" --emit; then
+            log_success "Completion bundle emitted"
+        else
+            # Bundle generation failed — emit a minimal complete signal so the IDE
+            # transitions past "releasing" instead of getting stuck
+            log_warn "Bundle generation failed (exit $?) — emitting fallback complete signal"
+            jat-signal complete "$(jq -n -c \
+                --arg taskId "$TASK_ID" \
+                --arg agentName "$AGENT_NAME" \
+                '{
+                    taskId: $taskId,
+                    agentName: $agentName,
+                    completionMode: "review_required",
+                    summary: ["Task completed (completion bundle generation failed)"],
+                    quality: {tests: "skipped", build: "clean"},
+                    suggestedTasks: [],
+                    suggestedLabels: [],
+                    riskLevel: "low"
+                }')"
+            log_success "Fallback complete signal emitted"
+        fi
 
         # If the bundle contains a devResponse, fire an integration callback
         # to update dev_notes with the user-friendly message (overrides the
@@ -390,7 +409,8 @@ EOF
         TMUX_SESSION=$(tmux display-message -p '#S' 2>/dev/null || true)
         TIMELINE_FILE="/tmp/jat-timeline-${TMUX_SESSION}.jsonl"
         if [[ -n "$TMUX_SESSION" && -f "$TIMELINE_FILE" ]]; then
-            COMPLETE_LINE=$(grep '"state":"complete"' "$TIMELINE_FILE" | tail -1)
+            # complete is a data signal: stored as "type":"complete" not "state":"complete"
+            COMPLETE_LINE=$(grep '"type":"complete"' "$TIMELINE_FILE" | tail -1 || true)
             DEV_RESPONSE=$(echo "$COMPLETE_LINE" | jq -r '.data.devResponse // empty' 2>/dev/null)
             if [[ -n "$DEV_RESPONSE" ]]; then
                 IDE_URL="http://127.0.0.1:3333"

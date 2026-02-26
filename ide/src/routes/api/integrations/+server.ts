@@ -113,20 +113,34 @@ export const POST: RequestHandler = async ({ request }) => {
  */
 export const PUT: RequestHandler = async ({ request }) => {
 	try {
-		const source: IntegrationSource = await request.json();
+		const body = await request.json();
+		const { _originalId, ...source } = body as IntegrationSource & { _originalId?: string };
 
 		if (!source.id) {
 			return json({ success: false, error: 'id is required' }, { status: 400 });
 		}
 
 		const config = readConfig();
-		const index = config.sources.findIndex((s) => s.id === source.id);
+		// Use _originalId for lookup when the source has been renamed
+		const lookupId = _originalId || source.id;
+		const index = config.sources.findIndex((s) => s.id === lookupId);
 
 		if (index === -1) {
 			return json(
-				{ success: false, error: `Source "${source.id}" not found` },
+				{ success: false, error: `Source "${lookupId}" not found` },
 				{ status: 404 }
 			);
+		}
+
+		// Check for id collision when renaming (new id already taken by another source)
+		if (_originalId && source.id !== _originalId) {
+			const collision = config.sources.some((s, i) => i !== index && s.id === source.id);
+			if (collision) {
+				return json(
+					{ success: false, error: `Source with id "${source.id}" already exists` },
+					{ status: 409 }
+				);
+			}
 		}
 
 		config.sources[index] = source;

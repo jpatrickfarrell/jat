@@ -345,10 +345,14 @@
 		const method = isEdit ? 'PUT' : 'POST';
 
 		try {
+			// When editing, include original id so the backend can find the source even if renamed
+			const payload = isEdit && editSource.id !== source.id
+				? { ...source, _originalId: editSource.id }
+				: source;
 			const resp = await fetch('/api/integrations', {
 				method,
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(source)
+				body: JSON.stringify(payload)
 			});
 			const data = await resp.json();
 			if (!data.success) throw new Error(data.error);

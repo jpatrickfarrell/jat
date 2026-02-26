@@ -16,7 +16,8 @@ import {
 	setProjectSecret,
 	deleteProjectSecret,
 	getProjectSecret,
-	PROJECT_SECRET_TYPES
+	PROJECT_SECRET_TYPES,
+	INTEGRATION_SECTIONS
 } from '$lib/utils/credentials';
 
 /**
@@ -41,7 +42,8 @@ export const GET: RequestHandler = async ({ params }) => {
 			success: true,
 			project,
 			secrets,
-			secretTypes: PROJECT_SECRET_TYPES
+			secretTypes: PROJECT_SECRET_TYPES,
+			integrationSections: INTEGRATION_SECTIONS
 		});
 	} catch (error) {
 		console.error('Error fetching project secrets:', error);

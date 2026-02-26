@@ -756,7 +756,44 @@ export interface ProjectSecretType {
 	placeholder: string;
 	isUrl?: boolean;
 	envVarName?: string; // For fallback
+	integration?: string; // Which integration section this belongs to
 }
+
+/**
+ * Integration section definition for grouping secrets in the UI
+ */
+export interface IntegrationSection {
+	id: string;
+	name: string;
+	description: string;
+	icon: string; // SVG path data
+	iconViewBox?: string;
+	color: string; // oklch accent color
+}
+
+export const INTEGRATION_SECTIONS: IntegrationSection[] = [
+	{
+		id: 'supabase',
+		name: 'Supabase',
+		description: 'Database, auth, and storage',
+		icon: 'M21.362 9.354H12V.396a.396.396 0 0 0-.716-.233L2.203 12.424l-.401.562a1.04 1.04 0 0 0 .836 1.659H12v8.959a.396.396 0 0 0 .716.233l9.081-12.261.401-.562a1.04 1.04 0 0 0-.836-1.66z',
+		color: 'oklch(0.65 0.18 155)'
+	},
+	{
+		id: 'cloudflare',
+		name: 'Cloudflare',
+		description: 'CDN, DNS, Workers, and Pages',
+		icon: 'M16.309 6.282c-.163 0-.323.013-.48.04l-.248-.605a5.36 5.36 0 0 0-5.076-3.588A5.37 5.37 0 0 0 5.4 6.169l-.173-.037a4.3 4.3 0 0 0-4.96 3.353 4.3 4.3 0 0 0 3.052 5.227l13.07.012a3.004 3.004 0 0 0 2.924-3.07 3.004 3.004 0 0 0-3.004-2.94zm3.99 1.3l-1.086.452c-.154-.83-.625-1.569-1.313-2.06l.524-.96a.11.11 0 0 0-.045-.148.11.11 0 0 0-.055-.015h-.002a.11.11 0 0 0-.093.054l-.516.944a3.55 3.55 0 0 0-2.404-.413l-.29-.71a.11.11 0 0 0-.144-.06.11.11 0 0 0-.06.06l-.29.71a3.53 3.53 0 0 0-2.404.413',
+		color: 'oklch(0.70 0.15 55)'
+	},
+	{
+		id: 'database',
+		name: 'Database',
+		description: 'Direct database connections',
+		icon: 'M12 2C6.48 2 2 4.02 2 6.5v11C2 19.98 6.48 22 12 22s10-2.02 10-4.5v-11C22 4.02 17.52 2 12 2zM4 6.5C4 5.12 7.58 4 12 4s8 1.12 8 2.5S16.42 9 12 9 4 7.88 4 6.5zM20 17.5c0 1.38-3.58 2.5-8 2.5s-8-1.12-8-2.5v-3.04c1.78 1 4.74 1.54 8 1.54s6.22-.54 8-1.54v3.04zm0-5.5c0 1.38-3.58 2.5-8 2.5s-8-1.12-8-2.5V8.96c1.78 1 4.74 1.54 8 1.54s6.22-.54 8-1.54V12z',
+		color: 'oklch(0.65 0.15 200)'
+	}
+];
 
 export const PROJECT_SECRET_TYPES: ProjectSecretType[] = [
 	{
@@ -765,28 +802,40 @@ export const PROJECT_SECRET_TYPES: ProjectSecretType[] = [
 		description: 'Your Supabase project URL',
 		placeholder: 'https://xxxxx.supabase.co',
 		isUrl: true,
-		envVarName: 'SUPABASE_URL'
+		envVarName: 'SUPABASE_URL',
+		integration: 'supabase'
 	},
 	{
 		id: 'supabase_anon_key',
 		name: 'Supabase Anon Key',
 		description: 'Public anonymous key (safe for client-side)',
 		placeholder: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-		envVarName: 'SUPABASE_ANON_KEY'
+		envVarName: 'SUPABASE_ANON_KEY',
+		integration: 'supabase'
 	},
 	{
 		id: 'supabase_service_role_key',
 		name: 'Supabase Service Role Key',
 		description: 'Server-side key with full access (keep secret!)',
 		placeholder: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-		envVarName: 'SUPABASE_SERVICE_ROLE_KEY'
+		envVarName: 'SUPABASE_SERVICE_ROLE_KEY',
+		integration: 'supabase'
 	},
 	{
 		id: 'supabase_db_password',
 		name: 'Supabase DB Password',
 		description: 'Database password for SQL queries (from Supabase dashboard)',
 		placeholder: 'your-database-password',
-		envVarName: 'SUPABASE_DB_PASSWORD'
+		envVarName: 'SUPABASE_DB_PASSWORD',
+		integration: 'supabase'
+	},
+	{
+		id: 'cloudflare_api_token',
+		name: 'Cloudflare API Token',
+		description: 'API token for Workers, Pages, and DNS management',
+		placeholder: 'your-cloudflare-api-token',
+		envVarName: 'CLOUDFLARE_API_TOKEN',
+		integration: 'cloudflare'
 	},
 	{
 		id: 'database_url',
@@ -794,7 +843,8 @@ export const PROJECT_SECRET_TYPES: ProjectSecretType[] = [
 		description: 'PostgreSQL connection string',
 		placeholder: 'postgresql://user:password@host:5432/database',
 		isUrl: true,
-		envVarName: 'DATABASE_URL'
+		envVarName: 'DATABASE_URL',
+		integration: 'database'
 	}
 ];
 

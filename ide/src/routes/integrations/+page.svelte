@@ -9,6 +9,8 @@
 
 	import { onMount, onDestroy } from 'svelte';
 	import { fly, slide } from 'svelte/transition';
+	import { flip } from 'svelte/animate';
+	import { cubicOut } from 'svelte/easing';
 	import IngestWizard from '$lib/components/ingest/IngestWizard.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import { loadProjects } from '$lib/stores/configStore.svelte';
@@ -66,6 +68,34 @@
 	let wizardType = $state<string | null>(null);
 	let wizardPluginMetadata = $state<any>(null);
 	let editSource = $state<any>(null);
+
+	// Sort state for installed integrations
+	type SortMode = 'alpha' | 'created' | 'activity' | 'project' | 'provider';
+	let sortMode = $state<SortMode>('created');
+
+	const sortedSources = $derived.by(() => {
+		const list = [...sources];
+		switch (sortMode) {
+			case 'alpha':
+				list.sort((a, b) => a.id.localeCompare(b.id));
+				break;
+			case 'activity':
+				list.sort((a, b) => (sourceStats[b.id]?.total ?? 0) - (sourceStats[a.id]?.total ?? 0));
+				break;
+			case 'project':
+				list.sort((a, b) => (a.project || '').localeCompare(b.project || ''));
+				break;
+			case 'provider':
+				list.sort((a, b) => a.type.localeCompare(b.type));
+				break;
+			case 'created':
+			default:
+				break;
+		}
+		// Primary: enabled always on top
+		list.sort((a, b) => (b.enabled ? 1 : 0) - (a.enabled ? 1 : 0));
+		return list;
+	});
 
 	// Create Your Own - language toggle
 	let exampleLang = $state<'js' | 'ts'>('js');
@@ -710,35 +740,60 @@
 	</div>
 
 	<!-- Tab Switcher -->
-	<div class="flex items-center gap-0 px-6 mt-4 shrink-0" style="border-bottom: 1px solid oklch(0.22 0.02 250);">
-		<button
-			class="font-mono text-xs font-semibold px-4 py-2.5 cursor-pointer transition-colors duration-100"
-			style="
-				color: {activeTab === 'installed' ? 'oklch(0.85 0.02 250)' : 'oklch(0.50 0.02 250)'};
-				border-bottom: 2px solid {activeTab === 'installed' ? 'oklch(0.60 0.15 200)' : 'transparent'};
-			"
-			onclick={() => activeTab = 'installed'}
-		>
-			Installed
-			{#if sources.length > 0}
-				<span
-					class="ml-1.5 font-mono text-[9px] px-1.5 py-0.5 rounded"
-					style="background: oklch(0.22 0.04 250); color: oklch(0.55 0.02 250);"
-				>
-					{sources.length}
-				</span>
-			{/if}
-		</button>
-		<button
-			class="font-mono text-xs font-semibold px-4 py-2.5 cursor-pointer transition-colors duration-100"
-			style="
-				color: {activeTab === 'add' ? 'oklch(0.85 0.02 250)' : 'oklch(0.50 0.02 250)'};
-				border-bottom: 2px solid {activeTab === 'add' ? 'oklch(0.60 0.15 200)' : 'transparent'};
-			"
-			onclick={() => activeTab = 'add'}
-		>
-			Add Integration
-		</button>
+	<div class="flex items-center px-6 mt-4 shrink-0" style="border-bottom: 1px solid oklch(0.22 0.02 250);">
+		<div class="flex items-center gap-0">
+			<button
+				class="font-mono text-xs font-semibold px-4 py-2.5 cursor-pointer transition-colors duration-100"
+				style="
+					color: {activeTab === 'installed' ? 'oklch(0.85 0.02 250)' : 'oklch(0.50 0.02 250)'};
+					border-bottom: 2px solid {activeTab === 'installed' ? 'oklch(0.60 0.15 200)' : 'transparent'};
+				"
+				onclick={() => activeTab = 'installed'}
+			>
+				Installed
+				{#if sources.length > 0}
+					<span
+						class="ml-1.5 font-mono text-[9px] px-1.5 py-0.5 rounded"
+						style="background: oklch(0.22 0.04 250); color: oklch(0.55 0.02 250);"
+					>
+						{sources.length}
+					</span>
+				{/if}
+			</button>
+			<button
+				class="font-mono text-xs font-semibold px-4 py-2.5 cursor-pointer transition-colors duration-100"
+				style="
+					color: {activeTab === 'add' ? 'oklch(0.85 0.02 250)' : 'oklch(0.50 0.02 250)'};
+					border-bottom: 2px solid {activeTab === 'add' ? 'oklch(0.60 0.15 200)' : 'transparent'};
+				"
+				onclick={() => activeTab = 'add'}
+			>
+				Add Integration
+			</button>
+		</div>
+		{#if activeTab === 'installed' && sources.length > 0}
+			<div class="flex items-center gap-1 ml-auto">
+				{#each [
+					{ id: 'created', label: 'Recent' },
+					{ id: 'alpha', label: 'A-Z' },
+					{ id: 'provider', label: 'Provider' },
+					{ id: 'project', label: 'Project' },
+					{ id: 'activity', label: 'Activity' }
+				] as opt (opt.id)}
+					<button
+						class="font-mono text-[10px] px-2 py-1 rounded cursor-pointer transition-colors duration-100"
+						style="
+							background: {sortMode === opt.id ? 'oklch(0.25 0.04 250)' : 'transparent'};
+							color: {sortMode === opt.id ? 'oklch(0.80 0.02 250)' : 'oklch(0.45 0.02 250)'};
+							border: 1px solid {sortMode === opt.id ? 'oklch(0.30 0.04 250)' : 'transparent'};
+						"
+						onclick={() => sortMode = opt.id as SortMode}
+					>
+						{opt.label}
+					</button>
+				{/each}
+			</div>
+		{/if}
 	</div>
 
 	<!-- Tab Content -->
@@ -756,12 +811,13 @@
 			{:else if sources.length > 0}
 				<div>
 					<div class="space-y-2">
-						{#each [...sources].sort((a, b) => (b.enabled ? 1 : 0) - (a.enabled ? 1 : 0)) as source, i (source.id)}
+						{#each sortedSources as source, i (source.id)}
 							{@const colors = getTypeColor(source.type)}
 							{@const tmpl = templates.find(t => t.type === source.type)}
 							{@const isExpanded = expandedSource === source.id}
 							{@const stats = sourceStats[source.id]}
 							{@const itemCount = stats?.total ?? 0}
+							<div animate:flip={{ duration: 300, easing: cubicOut }}>
 							<div use:reveal={{ animation: 'fade-in', delay: i * 0.08 }}
 								class="rounded-lg overflow-hidden transition-all duration-150"
 								style="
@@ -937,6 +993,18 @@
 										>
 											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
 												<path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+											</svg>
+										</button>
+
+										<!-- Clone -->
+										<button
+											class="btn btn-xs btn-ghost"
+											onclick={() => cloneSource(source)}
+											title="Clone (disabled copy)"
+											style="color: oklch(0.55 0.08 280);"
+										>
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
 											</svg>
 										</button>
 
@@ -1182,6 +1250,7 @@
 										{/if}
 									</div>
 								{/if}
+							</div>
 							</div>
 						{/each}
 					</div>

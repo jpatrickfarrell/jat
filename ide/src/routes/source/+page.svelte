@@ -21,6 +21,8 @@
 	import FileTabBar from '$lib/components/files/FileTabBar.svelte';
 	import SupabasePanel from '$lib/components/files/SupabasePanel.svelte';
 	import MigrationViewer from '$lib/components/files/MigrationViewer.svelte';
+	import CloudflarePanel from '$lib/components/files/CloudflarePanel.svelte';
+	import type { DeploymentItem } from '$lib/components/files/CloudflarePanel.svelte';
 	import ResizableDivider from '$lib/components/ResizableDivider.svelte';
 	import { FilesSkeleton } from '$lib/components/skeleton';
 	import type { OpenFile } from '$lib/components/files/types';
@@ -41,8 +43,8 @@
 	let isLoading = $state(true);
 	let error = $state<string | null>(null);
 
-	// Mode toggle: 'git' or 'supabase'
-	type SourceMode = 'git' | 'supabase';
+	// Mode toggle: 'git', 'supabase', or 'cloudflare'
+	type SourceMode = 'git' | 'supabase' | 'cloudflare';
 	let activeMode = $state<SourceMode>('git');
 
 	// Git mode state: selected file for diff view
@@ -69,6 +71,18 @@
 
 	// Supabase project detection
 	let hasSupabase = $state(false);
+
+	// Cloudflare project detection
+	let hasCloudflare = $state(false);
+
+	// Cloudflare mode state: selected deployment for detail view
+	let selectedDeployment = $state<DeploymentItem | null>(null);
+
+	// CloudflarePanel ref for parent controls
+	let cfPanelRef: { getState: () => { totalCount: number; envFilter: string; isLoading: boolean }; setEnvFilter: (v: string) => void; refresh: () => void } | undefined = $state(undefined);
+	let cfTotalCount = $state(0);
+	let cfEnvFilter = $state('');
+	let cfIsLoading = $state(false);
 
 	// Layout state
 	let leftPanelWidth = $state(520);
@@ -281,30 +295,78 @@
 		}
 	}
 
+	// Check if project has Cloudflare Pages
+	async function checkCloudflare(projectName: string) {
+		try {
+			const response = await fetch(`/api/cloudflare/status?project=${encodeURIComponent(projectName)}`);
+			if (response.ok) {
+				const data = await response.json();
+				hasCloudflare = data.hasCloudflare || false;
+			} else {
+				hasCloudflare = false;
+			}
+		} catch {
+			hasCloudflare = false;
+		}
+	}
+
+	// Handle deployment selection from CloudflarePanel
+	function handleDeploymentSelect(deployment: DeploymentItem) {
+		selectedDeployment = deployment;
+	}
+
+	// Clear Cloudflare deployment selection
+	function handleClearDeployment() {
+		selectedDeployment = null;
+	}
+
 	// Switch mode
 	function switchMode(mode: SourceMode) {
 		activeMode = mode;
 		// Clear selections when switching
 		if (mode === 'git') {
 			handleClearMigration();
+			handleClearDeployment();
+		} else if (mode === 'supabase') {
+			handleClearSelection();
+			handleClearDeployment();
 		} else {
 			handleClearSelection();
+			handleClearMigration();
 		}
 	}
 
-	// Effect: Check supabase when project changes
+	// Effect: Check supabase and cloudflare when project changes
 	$effect(() => {
 		if (selectedProject) {
 			checkSupabase(selectedProject);
+			checkCloudflare(selectedProject);
 			// Reset mode to git when project changes
 			activeMode = 'git';
 			handleClearSelection();
 			handleClearMigration();
+			handleClearDeployment();
 		}
 	});
 
+	// Sync CF panel state to local vars for the header controls
+	function syncCfState() {
+		if (cfPanelRef) {
+			const s = cfPanelRef.getState();
+			cfTotalCount = s.totalCount;
+			cfEnvFilter = s.envFilter;
+			cfIsLoading = s.isLoading;
+		}
+	}
+
 	onMount(() => {
 		fetchProjects();
+
+		// Poll CF state while in cloudflare mode (lightweight — just reads local vars)
+		const cfInterval = setInterval(() => {
+			if (activeMode === 'cloudflare') syncCfState();
+		}, 500);
+
 
 		function handleResize() {
 			isMobileLayout = window.innerWidth < MOBILE_BREAKPOINT;
@@ -314,6 +376,7 @@
 
 		return () => {
 			window.removeEventListener('resize', handleResize);
+			clearInterval(cfInterval);
 		};
 	});
 </script>
@@ -361,26 +424,10 @@
 					class="git-panel-left"
 					style="{isMobileLayout ? `height: ${topPanelHeight}%` : `width: ${leftPanelWidth}px`};"
 				>
-					<!-- Source Control Header: Project Selector + Title + Mode Toggle -->
+					<!-- Source Control Header -->
 					<div class="panel-title-header">
-						<div class="title-left">
-							{#if activeMode === 'git'}
-								<!-- Git branch icon (Lucide-style) -->
-								<svg class="panel-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-									<line x1="6" y1="3" x2="6" y2="15"></line>
-									<circle cx="18" cy="6" r="3"></circle>
-									<circle cx="6" cy="18" r="3"></circle>
-									<path d="M18 9a9 9 0 0 1-9 9"></path>
-								</svg>
-							{:else}
-								<!-- Supabase logo (lightning bolt) -->
-								<svg class="panel-title-icon" viewBox="0 0 24 24" fill="currentColor">
-									<path d="M13.5 3L6 14h6l-1.5 7L18 10h-6l1.5-7z"/>
-								</svg>
-							{/if}
-							<span class="font-medium text-base-content/90">{selectedProject || 'No project selected'}</span>
-						</div>
-						{#if hasSupabase}
+						{#if hasSupabase || hasCloudflare}
+							<!-- Multi-mode: tabs left, controls right -->
 							<div class="mode-toggle">
 								<button
 									class="mode-btn"
@@ -388,7 +435,6 @@
 									onclick={() => switchMode('git')}
 									title="Git Source Control"
 								>
-									<!-- Git branch icon (Lucide-style) -->
 									<svg class="mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 										<line x1="6" y1="3" x2="6" y2="15"></line>
 										<circle cx="18" cy="6" r="3"></circle>
@@ -397,18 +443,69 @@
 									</svg>
 									Git
 								</button>
-								<button
-									class="mode-btn"
-									class:active={activeMode === 'supabase'}
-									onclick={() => switchMode('supabase')}
-									title="Supabase Migrations"
-								>
-									<!-- Supabase logo (lightning bolt) -->
-									<svg class="mode-icon" viewBox="0 0 24 24" fill="currentColor">
-										<path d="M13.5 3L6 14h6l-1.5 7L18 10h-6l1.5-7z"/>
-									</svg>
-									Supabase
-								</button>
+								{#if hasSupabase}
+									<button
+										class="mode-btn"
+										class:active={activeMode === 'supabase'}
+										onclick={() => switchMode('supabase')}
+										title="Supabase Migrations"
+									>
+										<svg class="mode-icon" viewBox="0 0 24 24" fill="currentColor">
+											<path d="M13.5 3L6 14h6l-1.5 7L18 10h-6l1.5-7z"/>
+										</svg>
+										Supabase
+									</button>
+								{/if}
+								{#if hasCloudflare}
+									<button
+										class="mode-btn"
+										class:active={activeMode === 'cloudflare'}
+										onclick={() => switchMode('cloudflare')}
+										title="Cloudflare Deployments"
+									>
+										<svg class="mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+											<path d="M2.25 15a4.5 4.5 0 0 1 0-9h.22A6.75 6.75 0 0 1 15.75 4.5 4.5 4.5 0 0 1 18 13.5h.75a3 3 0 1 1 0 6H2.25z"/>
+										</svg>
+										Cloudflare
+									</button>
+								{/if}
+							</div>
+							<!-- Contextual controls for cloudflare mode -->
+							{#if activeMode === 'cloudflare'}
+								<div class="header-controls">
+									{#if cfTotalCount > 0}
+										<span class="cf-header-count">{cfTotalCount}</span>
+									{/if}
+									<select
+										class="cf-header-filter"
+										value={cfEnvFilter}
+										onchange={(e) => { const v = (e.target as HTMLSelectElement).value; cfEnvFilter = v; cfPanelRef?.setEnvFilter(v); }}
+										title="Filter by environment"
+									>
+										<option value="">All</option>
+										<option value="production">Production</option>
+										<option value="preview">Preview</option>
+									</select>
+									<button class="cf-header-refresh" onclick={() => cfPanelRef?.refresh()} title="Refresh">
+										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5" class:spinning={cfIsLoading}>
+											<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+											<path d="M3 3v5h5"/>
+											<path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+											<path d="M21 21v-5h-5"/>
+										</svg>
+									</button>
+								</div>
+							{/if}
+						{:else}
+							<!-- Git-only: show project name + icon -->
+							<div class="title-left">
+								<svg class="panel-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+									<line x1="6" y1="3" x2="6" y2="15"></line>
+									<circle cx="18" cy="6" r="3"></circle>
+									<circle cx="6" cy="18" r="3"></circle>
+									<path d="M18 9a9 9 0 0 1-9 9"></path>
+								</svg>
+								<span class="font-medium text-base-content/90">{selectedProject || 'No project selected'}</span>
 							</div>
 						{/if}
 					</div>
@@ -427,10 +524,17 @@
 								onRebaseComplete={handleRebaseComplete}
 								{selectedFilePath}
 							/>
-						{:else}
+						{:else if activeMode === 'supabase'}
 							<SupabasePanel
 								project={selectedProject}
 								onMigrationSelect={handleMigrationSelect}
+							/>
+						{:else if activeMode === 'cloudflare'}
+							<CloudflarePanel
+								project={selectedProject}
+								onDeploymentSelect={handleDeploymentSelect}
+								hideHeader={true}
+								bind:this={cfPanelRef}
 							/>
 						{/if}
 					</div>
@@ -506,7 +610,7 @@
 								</div>
 							</div>
 						{/if}
-					{:else}
+					{:else if activeMode === 'supabase'}
 						{#if selectedMigrationFilename}
 							<MigrationViewer
 								content={selectedMigrationContent}
@@ -529,6 +633,102 @@
 									</p>
 									<p class="diff-placeholder-hint">
 										Click on a migration or check schema diff in the left panel
+									</p>
+								</div>
+							</div>
+						{/if}
+					{:else if activeMode === 'cloudflare'}
+						{#if selectedDeployment}
+							<div class="cf-detail-panel">
+								<div class="cf-detail-header">
+									<div class="cf-detail-title-row">
+										<span class="cf-detail-env" class:production={selectedDeployment.environment === 'production'} class:preview={selectedDeployment.environment === 'preview'}>
+											{selectedDeployment.environment}
+										</span>
+										<span class="cf-detail-id">#{selectedDeployment.shortId}</span>
+										<button class="cf-detail-close" onclick={handleClearDeployment} title="Close">
+											<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4">
+												<line x1="18" y1="6" x2="6" y2="18"></line>
+												<line x1="6" y1="6" x2="18" y2="18"></line>
+											</svg>
+										</button>
+									</div>
+									{#if selectedDeployment.commitMessage}
+										<p class="cf-detail-commit-msg">{selectedDeployment.commitMessage}</p>
+									{/if}
+								</div>
+
+								<div class="cf-detail-body">
+									<!-- Deployment Info -->
+									<div class="cf-detail-section">
+										<h4 class="cf-detail-section-title">Deployment Info</h4>
+										<div class="cf-detail-grid">
+											<div class="cf-detail-field">
+												<span class="cf-detail-label">Status</span>
+												<span class="cf-detail-value cf-status-{selectedDeployment.status}">{selectedDeployment.status}</span>
+											</div>
+											<div class="cf-detail-field">
+												<span class="cf-detail-label">Branch</span>
+												<span class="cf-detail-value">{selectedDeployment.branch}</span>
+											</div>
+											{#if selectedDeployment.commitHash}
+												<div class="cf-detail-field">
+													<span class="cf-detail-label">Commit</span>
+													<span class="cf-detail-value mono">{selectedDeployment.commitHash.slice(0, 10)}</span>
+												</div>
+											{/if}
+											<div class="cf-detail-field">
+												<span class="cf-detail-label">Trigger</span>
+												<span class="cf-detail-value">{selectedDeployment.trigger}</span>
+											</div>
+											<div class="cf-detail-field">
+												<span class="cf-detail-label">Created</span>
+												<span class="cf-detail-value">{new Date(selectedDeployment.createdOn).toLocaleString()}</span>
+											</div>
+										</div>
+									</div>
+
+									<!-- Build Stages -->
+									{#if selectedDeployment.stages && selectedDeployment.stages.length > 0}
+										<div class="cf-detail-section">
+											<h4 class="cf-detail-section-title">Build Stages</h4>
+											<div class="cf-stages-list">
+												{#each selectedDeployment.stages as stage}
+													<div class="cf-stage-row">
+														<span class="cf-stage-icon cf-status-{stage.status}">
+															{stage.status === 'success' ? '\u2713' : stage.status === 'failure' ? '\u2715' : stage.status === 'active' ? '\u25CF' : '\u25CB'}
+														</span>
+														<span class="cf-stage-name">{stage.name}</span>
+														<span class="cf-stage-status">{stage.status}</span>
+													</div>
+												{/each}
+											</div>
+										</div>
+									{/if}
+
+									<!-- URL -->
+									{#if selectedDeployment.url}
+										<div class="cf-detail-section">
+											<h4 class="cf-detail-section-title">Preview URL</h4>
+											<a href={selectedDeployment.url} target="_blank" rel="noopener noreferrer" class="cf-detail-url">
+												{selectedDeployment.url}
+											</a>
+										</div>
+									{/if}
+								</div>
+							</div>
+						{:else}
+							<div class="diff-placeholder">
+								<div class="diff-placeholder-content">
+									<!-- Cloudflare cloud icon -->
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="diff-placeholder-icon">
+										<path d="M2.25 15a4.5 4.5 0 0 1 0-9h.22A6.75 6.75 0 0 1 15.75 4.5 4.5 4.5 0 0 1 18 13.5h.75a3 3 0 1 1 0 6H2.25z"/>
+									</svg>
+									<p class="diff-placeholder-text">
+										{selectedProject ? 'Select a deployment to view details' : 'Select a project to start'}
+									</p>
+									<p class="diff-placeholder-hint">
+										Click on a deployment in the left panel to see build stages and details
 									</p>
 								</div>
 							</div>
@@ -636,7 +836,7 @@
 	/* Mode Toggle */
 	.mode-toggle {
 		display: flex;
-		gap: 0.25rem;
+		gap: 0.125rem;
 		background: oklch(0.13 0.01 250);
 		border-radius: 0.375rem;
 		padding: 0.125rem;
@@ -645,9 +845,9 @@
 	.mode-btn {
 		display: flex;
 		align-items: center;
-		gap: 0.25rem;
-		padding: 0.25rem 0.5rem;
-		font-size: 0.6875rem;
+		gap: 0.375rem;
+		padding: 0.375rem 0.625rem;
+		font-size: 0.75rem;
 		font-weight: 500;
 		text-transform: uppercase;
 		letter-spacing: 0.03em;
@@ -670,8 +870,63 @@
 	}
 
 	.mode-icon {
-		width: 0.75rem;
-		height: 0.75rem;
+		width: 0.875rem;
+		height: 0.875rem;
+	}
+
+	/* Header Controls (right side — CF count, filter, refresh) */
+	.header-controls {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		margin-left: auto;
+	}
+
+	.cf-header-count {
+		font-size: 0.625rem;
+		color: oklch(0.50 0.02 250);
+		background: oklch(0.20 0.01 250);
+		padding: 0.0625rem 0.375rem;
+		border-radius: 999px;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.cf-header-filter {
+		font-size: 0.6875rem;
+		padding: 0.125rem 0.375rem;
+		background: oklch(0.18 0.01 250);
+		border: 1px solid oklch(0.25 0.02 250);
+		border-radius: 0.25rem;
+		color: oklch(0.65 0.02 250);
+		cursor: pointer;
+	}
+
+	.cf-header-refresh {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.5rem;
+		height: 1.5rem;
+		background: transparent;
+		border: none;
+		border-radius: 0.25rem;
+		color: oklch(0.50 0.02 250);
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+
+	.cf-header-refresh:hover {
+		background: oklch(0.20 0.01 250);
+		color: oklch(0.70 0.02 250);
+	}
+
+	@keyframes cf-spin {
+		from { transform: rotate(0deg); }
+		to { transform: rotate(360deg); }
+	}
+
+	.spinning {
+		animation: cf-spin 1s linear infinite;
 	}
 
 	/* Panel Content */
@@ -862,10 +1117,195 @@
 		min-height: 0;
 	}
 
+	/* Cloudflare Detail Panel */
+	.cf-detail-panel {
+		display: flex;
+		flex-direction: column;
+		height: 100%;
+	}
+
+	.cf-detail-header {
+		padding: 0.75rem 1rem;
+		border-bottom: 1px solid oklch(0.22 0.02 250);
+		background: oklch(0.16 0.01 250);
+	}
+
+	.cf-detail-title-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.cf-detail-env {
+		font-size: 0.6875rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		padding: 0.125rem 0.5rem;
+		border-radius: 0.25rem;
+	}
+
+	.cf-detail-env.production {
+		background: oklch(0.55 0.18 145 / 0.15);
+		color: oklch(0.75 0.18 145);
+	}
+
+	.cf-detail-env.preview {
+		background: oklch(0.55 0.15 250 / 0.15);
+		color: oklch(0.75 0.15 250);
+	}
+
+	.cf-detail-id {
+		font-size: 0.75rem;
+		color: oklch(0.50 0.02 250);
+		font-family: monospace;
+	}
+
+	.cf-detail-close {
+		margin-left: auto;
+		padding: 0.25rem;
+		background: transparent;
+		border: none;
+		color: oklch(0.50 0.02 250);
+		cursor: pointer;
+		border-radius: 0.25rem;
+		transition: all 0.15s ease;
+	}
+
+	.cf-detail-close:hover {
+		background: oklch(0.25 0.02 250);
+		color: oklch(0.75 0.02 250);
+	}
+
+	.cf-detail-commit-msg {
+		margin: 0.5rem 0 0;
+		font-size: 0.8125rem;
+		color: oklch(0.70 0.02 250);
+		line-height: 1.4;
+	}
+
+	.cf-detail-body {
+		flex: 1;
+		overflow: auto;
+		padding: 1rem;
+	}
+
+	.cf-detail-section {
+		margin-bottom: 1.25rem;
+	}
+
+	.cf-detail-section-title {
+		font-size: 0.6875rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: oklch(0.50 0.02 250);
+		margin: 0 0 0.5rem;
+	}
+
+	.cf-detail-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.5rem;
+	}
+
+	.cf-detail-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+	}
+
+	.cf-detail-label {
+		font-size: 0.6875rem;
+		color: oklch(0.45 0.02 250);
+	}
+
+	.cf-detail-value {
+		font-size: 0.8125rem;
+		color: oklch(0.80 0.02 250);
+	}
+
+	.cf-detail-value.mono {
+		font-family: monospace;
+	}
+
+	/* Cloudflare Status Colors */
+	.cf-status-success {
+		color: oklch(0.75 0.18 145);
+	}
+
+	.cf-status-failure {
+		color: oklch(0.70 0.20 25);
+	}
+
+	.cf-status-active {
+		color: oklch(0.75 0.15 85);
+	}
+
+	.cf-status-canceled,
+	.cf-status-idle {
+		color: oklch(0.50 0.02 250);
+	}
+
+	/* Build Stages */
+	.cf-stages-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+	}
+
+	.cf-stage-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.375rem 0.5rem;
+		background: oklch(0.18 0.01 250);
+		border-radius: 0.375rem;
+	}
+
+	.cf-stage-icon {
+		font-size: 0.75rem;
+		width: 1rem;
+		text-align: center;
+		flex-shrink: 0;
+	}
+
+	.cf-stage-name {
+		font-size: 0.8125rem;
+		color: oklch(0.75 0.02 250);
+		flex: 1;
+		text-transform: capitalize;
+	}
+
+	.cf-stage-status {
+		font-size: 0.6875rem;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		color: oklch(0.50 0.02 250);
+	}
+
+	/* Preview URL */
+	.cf-detail-url {
+		font-size: 0.8125rem;
+		color: oklch(0.70 0.15 230);
+		text-decoration: none;
+		word-break: break-all;
+		transition: color 0.15s ease;
+	}
+
+	.cf-detail-url:hover {
+		color: oklch(0.80 0.18 230);
+		text-decoration: underline;
+	}
+
 	/* Responsive */
 	@media (max-width: 768px) {
 		.git-content {
 			padding: 0.5rem;
+		}
+
+		.cf-detail-grid {
+			grid-template-columns: 1fr;
 		}
 	}
 </style>

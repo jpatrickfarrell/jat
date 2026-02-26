@@ -16,6 +16,7 @@
 		placeholder: string;
 		isUrl?: boolean;
 		integration?: string;
+		envVarName?: string;
 	}
 
 	interface IntegrationSection {
@@ -384,6 +385,7 @@
 									<th class="col-name">Name</th>
 									<th class="col-value">Value</th>
 									<th class="col-date">Added</th>
+									<th class="col-status">Status</th>
 									<th class="col-actions"></th>
 								</tr>
 							</thead>
@@ -393,6 +395,9 @@
 									<tr class:is-set={secret?.isSet}>
 										<td class="col-name">
 											<span class="name-text">{secretType.name}</span>
+											{#if secretType.envVarName}
+												<code class="env-var-inline">${secretType.envVarName}</code>
+											{/if}
 											<span class="desc-text">{secretType.description}</span>
 										</td>
 										<td class="col-value">
@@ -405,6 +410,13 @@
 										<td class="col-date">
 											{#if secret?.isSet && secret.addedAt}
 												<span class="date-text">{formatDate(secret.addedAt)}</span>
+											{/if}
+										</td>
+										<td class="col-status">
+											{#if secret?.isSet}
+												<span class="status-badge status-configured">Configured</span>
+											{:else}
+												<span class="status-badge status-missing">Not Set</span>
 											{/if}
 										</td>
 										<td class="col-actions">
@@ -449,6 +461,7 @@
 							<th class="col-name">Env Variable</th>
 							<th class="col-value">Value</th>
 							<th class="col-date">Added</th>
+							<th class="col-status">Status</th>
 							<th class="col-actions"></th>
 						</tr>
 					</thead>
@@ -465,6 +478,9 @@
 									{#if freeform.addedAt}
 										<span class="date-text">{formatDate(freeform.addedAt)}</span>
 									{/if}
+								</td>
+								<td class="col-status">
+									<span class="status-badge status-configured">Configured</span>
 								</td>
 								<td class="col-actions">
 									{#if deletingSecret === freeform.id}
@@ -823,19 +839,23 @@
 	}
 
 	.col-name {
-		width: 35%;
-	}
-
-	.col-value {
 		width: 30%;
 	}
 
+	.col-value {
+		width: 24%;
+	}
+
 	.col-date {
-		width: 18%;
+		width: 14%;
+	}
+
+	.col-status {
+		width: 12%;
 	}
 
 	.col-actions {
-		width: 17%;
+		width: 10%;
 		text-align: right !important;
 		white-space: nowrap;
 	}
@@ -904,6 +924,19 @@
 		color: oklch(0.70 0.15 25);
 	}
 
+	.env-var-inline {
+		font-size: 0.6rem;
+		padding: 0.05rem 0.25rem;
+		background: oklch(0.20 0.03 200 / 0.25);
+		border-radius: 0.15rem;
+		color: oklch(0.65 0.08 200);
+		font-family: ui-monospace, monospace;
+		font-weight: 500;
+		display: inline-block;
+		margin-left: 0.3rem;
+		vertical-align: middle;
+	}
+
 	.env-var-badge {
 		font-size: 0.7rem;
 		padding: 0.1rem 0.35rem;
@@ -912,6 +945,24 @@
 		color: oklch(0.75 0.10 200);
 		font-family: ui-monospace, monospace;
 		font-weight: 500;
+	}
+
+	.status-badge {
+		font-size: 0.6rem;
+		font-weight: 600;
+		padding: 0.1rem 0.4rem;
+		border-radius: 0.25rem;
+		white-space: nowrap;
+	}
+
+	.status-configured {
+		background: oklch(0.30 0.08 145 / 0.3);
+		color: oklch(0.70 0.15 145);
+	}
+
+	.status-missing {
+		background: oklch(0.25 0.02 250 / 0.3);
+		color: oklch(0.45 0.02 250);
 	}
 
 	/* Modal backdrop */

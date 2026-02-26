@@ -378,6 +378,30 @@
 		}
 	}
 
+	async function cloneSource(source: any) {
+		try {
+			// Build clone: same config but disabled with a unique ID
+			const baseId = source.id.replace(/-copy(-\d+)?$/, '');
+			const existingIds = new Set(sources.map((s: any) => s.id));
+			let cloneId = `${baseId}-copy`;
+			let n = 2;
+			while (existingIds.has(cloneId)) {
+				cloneId = `${baseId}-copy-${n++}`;
+			}
+			const clone = { ...source, id: cloneId, enabled: false };
+			const resp = await fetch('/api/integrations', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(clone)
+			});
+			const data = await resp.json();
+			if (!data.success) throw new Error(data.error);
+			await fetchSources();
+		} catch (err) {
+			error = `Failed to clone source: ${err instanceof Error ? err.message : 'unknown error'}`;
+		}
+	}
+
 	async function deleteSource(source: any) {
 		try {
 			const resp = await fetch(`/api/integrations?id=${encodeURIComponent(source.id)}`, {

@@ -118,17 +118,20 @@ export interface ApiKeyProvider {
 	name: string;
 	description: string;
 	keyPrefix: string;
+	envVar: string;
 	verifyUrl: string;
 	usedBy: string[];
 	docsUrl: string;
 }
 
 export const API_KEY_PROVIDERS: ApiKeyProvider[] = [
+	// --- AI Providers ---
 	{
 		id: 'anthropic',
 		name: 'Anthropic',
 		description: 'Claude API for task suggestions and AI features',
 		keyPrefix: 'sk-ant-',
+		envVar: 'ANTHROPIC_API_KEY',
 		verifyUrl: 'https://api.anthropic.com/v1/messages',
 		usedBy: ['Task suggestions', 'Usage metrics', 'AI completions'],
 		docsUrl: 'https://console.anthropic.com/settings/keys'
@@ -138,6 +141,7 @@ export const API_KEY_PROVIDERS: ApiKeyProvider[] = [
 		name: 'Google / Gemini',
 		description: 'Gemini API for image generation and editing',
 		keyPrefix: 'AIza',
+		envVar: 'GEMINI_API_KEY',
 		verifyUrl: 'https://generativelanguage.googleapis.com/v1/models',
 		usedBy: ['gemini-edit', 'gemini-image', 'Avatar generation'],
 		docsUrl: 'https://aistudio.google.com/app/apikey'
@@ -147,6 +151,7 @@ export const API_KEY_PROVIDERS: ApiKeyProvider[] = [
 		name: 'OpenAI',
 		description: 'OpenAI API for future Codex integration',
 		keyPrefix: 'sk-',
+		envVar: 'OPENAI_API_KEY',
 		verifyUrl: 'https://api.openai.com/v1/models',
 		usedBy: ['Codex integration (future)'],
 		docsUrl: 'https://platform.openai.com/api-keys'
@@ -156,9 +161,190 @@ export const API_KEY_PROVIDERS: ApiKeyProvider[] = [
 		name: 'OpenRouter',
 		description: 'OpenRouter API for accessing 200+ models from various providers',
 		keyPrefix: 'sk-or-',
+		envVar: 'OPENROUTER_API_KEY',
 		verifyUrl: 'https://openrouter.ai/api/v1/auth/key',
 		usedBy: ['Dynamic model discovery', 'Multi-provider access'],
 		docsUrl: 'https://openrouter.ai/settings/keys'
+	},
+
+	// --- Chat / Messaging ---
+	{
+		id: 'slack',
+		name: 'Slack',
+		description: 'Slack Bot Token for workspace integrations',
+		keyPrefix: 'xoxb-',
+		envVar: 'SLACK_BOT_TOKEN',
+		verifyUrl: 'https://slack.com/api/auth.test',
+		usedBy: ['Ingest daemon', 'Slack integrations'],
+		docsUrl: 'https://api.slack.com/apps'
+	},
+	{
+		id: 'telegram',
+		name: 'Telegram',
+		description: 'Telegram Bot Token for chat integrations',
+		keyPrefix: '',
+		envVar: 'TELEGRAM_BOT_TOKEN',
+		verifyUrl: 'https://api.telegram.org/bot{key}/getMe',
+		usedBy: ['Ingest daemon', 'Telegram integrations'],
+		docsUrl: 'https://core.telegram.org/bots'
+	},
+	{
+		id: 'discord',
+		name: 'Discord',
+		description: 'Discord Bot Token for server integrations',
+		keyPrefix: '',
+		envVar: 'DISCORD_BOT_TOKEN',
+		verifyUrl: 'https://discord.com/api/v10/users/@me',
+		usedBy: ['Discord integrations'],
+		docsUrl: 'https://discord.com/developers/applications'
+	},
+	{
+		id: 'gmail',
+		name: 'Gmail',
+		description: 'Gmail App Password for email ingestion via IMAP',
+		keyPrefix: '',
+		envVar: 'GMAIL_APP_PASSWORD',
+		verifyUrl: '',
+		usedBy: ['Ingest daemon', 'Gmail integrations'],
+		docsUrl: 'https://support.google.com/accounts/answer/185833'
+	},
+
+	// --- Infrastructure / Deploy ---
+	{
+		id: 'cloudflare',
+		name: 'Cloudflare',
+		description: 'Cloudflare API Token for Workers, Pages, and DNS',
+		keyPrefix: '',
+		envVar: 'CLOUDFLARE_API_TOKEN',
+		verifyUrl: 'https://api.cloudflare.com/client/v4/user/tokens/verify',
+		usedBy: ['Cloudflare Workers', 'DNS management'],
+		docsUrl: 'https://dash.cloudflare.com/profile/api-tokens'
+	},
+	{
+		id: 'vercel',
+		name: 'Vercel',
+		description: 'Vercel Token for deployments and project management',
+		keyPrefix: '',
+		envVar: 'VERCEL_TOKEN',
+		verifyUrl: 'https://api.vercel.com/v2/user',
+		usedBy: ['Vercel deployments'],
+		docsUrl: 'https://vercel.com/account/tokens'
+	},
+	{
+		id: 'fly',
+		name: 'Fly.io',
+		description: 'Fly.io API Token for app deployments',
+		keyPrefix: 'fo1_',
+		envVar: 'FLY_API_TOKEN',
+		verifyUrl: 'https://api.machines.dev/v1/apps',
+		usedBy: ['Fly.io deployments'],
+		docsUrl: 'https://fly.io/docs/flyctl/tokens/'
+	},
+	{
+		id: 'convex',
+		name: 'Convex',
+		description: 'Convex Deploy Key for backend deployments',
+		keyPrefix: '',
+		envVar: 'CONVEX_DEPLOY_KEY',
+		verifyUrl: '',
+		usedBy: ['Convex deployments'],
+		docsUrl: 'https://docs.convex.dev/production/project-configuration'
+	},
+
+	// --- Developer Services ---
+	{
+		id: 'github',
+		name: 'GitHub',
+		description: 'GitHub Personal Access Token for API access',
+		keyPrefix: 'ghp_ or github_pat_',
+		envVar: 'GITHUB_TOKEN',
+		verifyUrl: 'https://api.github.com/user',
+		usedBy: ['GitHub API', 'Repository access'],
+		docsUrl: 'https://github.com/settings/tokens'
+	},
+	{
+		id: 'linear',
+		name: 'Linear',
+		description: 'Linear API Key for project management integration',
+		keyPrefix: 'lin_api_',
+		envVar: 'LINEAR_API_KEY',
+		verifyUrl: 'https://api.linear.app/graphql',
+		usedBy: ['Linear integration'],
+		docsUrl: 'https://linear.app/settings/api'
+	},
+	{
+		id: 'sentry',
+		name: 'Sentry',
+		description: 'Sentry Auth Token for error tracking',
+		keyPrefix: 'sntrys_',
+		envVar: 'SENTRY_AUTH_TOKEN',
+		verifyUrl: 'https://sentry.io/api/0/',
+		usedBy: ['Sentry error tracking'],
+		docsUrl: 'https://sentry.io/settings/auth-tokens/'
+	},
+
+	// --- Database / Data ---
+	{
+		id: 'turso',
+		name: 'Turso',
+		description: 'Turso Auth Token for LibSQL database access',
+		keyPrefix: '',
+		envVar: 'TURSO_AUTH_TOKEN',
+		verifyUrl: '',
+		usedBy: ['Turso database'],
+		docsUrl: 'https://turso.tech/app'
+	},
+	{
+		id: 'upstash',
+		name: 'Upstash',
+		description: 'Upstash REST Token for Redis and Kafka',
+		keyPrefix: '',
+		envVar: 'UPSTASH_REST_TOKEN',
+		verifyUrl: '',
+		usedBy: ['Upstash Redis/Kafka'],
+		docsUrl: 'https://console.upstash.com'
+	},
+	{
+		id: 'neon',
+		name: 'Neon',
+		description: 'Neon API Key for serverless Postgres management',
+		keyPrefix: '',
+		envVar: 'NEON_API_KEY',
+		verifyUrl: 'https://console.neon.tech/api/v2/projects',
+		usedBy: ['Neon Postgres'],
+		docsUrl: 'https://neon.tech/docs/manage/api-keys'
+	},
+	{
+		id: 'pinecone',
+		name: 'Pinecone',
+		description: 'Pinecone API Key for vector database',
+		keyPrefix: '',
+		envVar: 'PINECONE_API_KEY',
+		verifyUrl: '',
+		usedBy: ['Pinecone vector DB'],
+		docsUrl: 'https://app.pinecone.io'
+	},
+
+	// --- Communications ---
+	{
+		id: 'resend',
+		name: 'Resend',
+		description: 'Resend API Key for transactional email',
+		keyPrefix: 're_',
+		envVar: 'RESEND_API_KEY',
+		verifyUrl: 'https://api.resend.com/api-keys',
+		usedBy: ['Transactional email'],
+		docsUrl: 'https://resend.com/api-keys'
+	},
+	{
+		id: 'twilio',
+		name: 'Twilio',
+		description: 'Twilio Auth Token for SMS and voice',
+		keyPrefix: '',
+		envVar: 'TWILIO_AUTH_TOKEN',
+		verifyUrl: '',
+		usedBy: ['Twilio SMS/voice'],
+		docsUrl: 'https://console.twilio.com'
 	}
 ];
 
@@ -525,7 +711,76 @@ export async function verifyApiKey(
 		case 'openrouter':
 			return verifyOpenRouterKey(key);
 		default:
-			return { success: false, error: `Unknown provider: ${provider}` };
+			return verifyGenericProvider(provider, key);
+	}
+}
+
+/**
+ * Generic verification for providers with a verifyUrl.
+ * Sends a Bearer-token request to the verify URL and checks for 2xx response.
+ * Providers without a verifyUrl skip verification and return success.
+ */
+async function verifyGenericProvider(
+	provider: string,
+	key: string
+): Promise<{ success: boolean; error?: string }> {
+	const providerInfo = API_KEY_PROVIDERS.find((p) => p.id === provider);
+	if (!providerInfo) {
+		return { success: true }; // Unknown provider, skip verification
+	}
+
+	if (!providerInfo.verifyUrl) {
+		return { success: true }; // No verify URL, skip verification
+	}
+
+	try {
+		let url = providerInfo.verifyUrl;
+		const headers: Record<string, string> = {};
+
+		// Handle special URL patterns
+		if (url.includes('{key}')) {
+			// Telegram-style: key embedded in URL
+			url = url.replace('{key}', key);
+		} else if (provider === 'slack') {
+			// Slack uses Bearer token with form-encoded POST
+			headers['Authorization'] = `Bearer ${key}`;
+			headers['Content-Type'] = 'application/x-www-form-urlencoded';
+		} else if (provider === 'linear') {
+			// Linear uses Bearer token with GraphQL POST
+			headers['Authorization'] = key;
+			headers['Content-Type'] = 'application/json';
+		} else {
+			// Standard Bearer token
+			headers['Authorization'] = `Bearer ${key}`;
+		}
+
+		const isPost = provider === 'slack';
+		const res = await fetch(url, {
+			method: isPost ? 'POST' : 'GET',
+			headers
+		});
+
+		if (res.ok) {
+			return { success: true };
+		}
+
+		// Try to extract error message from response
+		try {
+			const data = await res.json();
+			const errMsg = data.error || data.message || data.errors?.[0]?.message;
+			if (errMsg) {
+				return { success: false, error: `Verification failed: ${errMsg}` };
+			}
+		} catch {
+			// Ignore JSON parse errors
+		}
+
+		return { success: false, error: `Verification failed: HTTP ${res.status}` };
+	} catch (err) {
+		return {
+			success: false,
+			error: `Verification failed: ${err instanceof Error ? err.message : 'Connection error'}`
+		};
 	}
 }
 
@@ -545,25 +800,17 @@ export function validateKeyFormat(provider: string, key: string): { valid: boole
 
 	const trimmedKey = key.trim();
 
-	// Check prefix
-	if (provider === 'anthropic' && !trimmedKey.startsWith('sk-ant-')) {
-		return { valid: false, error: 'Anthropic keys should start with sk-ant-' };
-	}
-
-	if (provider === 'google' && !trimmedKey.startsWith('AIza')) {
-		return { valid: false, error: 'Google keys should start with AIza' };
-	}
-
-	if (provider === 'openai' && !trimmedKey.startsWith('sk-')) {
-		return { valid: false, error: 'OpenAI keys should start with sk-' };
-	}
-
-	if (provider === 'openrouter' && !trimmedKey.startsWith('sk-or-')) {
-		return { valid: false, error: 'OpenRouter keys should start with sk-or-' };
+	// Check prefix from provider metadata
+	if (providerInfo.keyPrefix) {
+		const prefixes = providerInfo.keyPrefix.split(' or ').map((p: string) => p.trim());
+		const hasValidPrefix = prefixes.some((p: string) => trimmedKey.startsWith(p));
+		if (!hasValidPrefix) {
+			return { valid: false, error: `${providerInfo.name} keys should start with ${providerInfo.keyPrefix}` };
+		}
 	}
 
 	// Check minimum length
-	if (trimmedKey.length < 20) {
+	if (trimmedKey.length < 10) {
 		return { valid: false, error: 'API key seems too short' };
 	}
 
@@ -707,8 +954,8 @@ export function validateCustomKeyName(name: string): { valid: boolean; error?: s
 	}
 
 	// Check for reserved names (built-in providers)
-	const reserved = ['anthropic', 'google', 'openai'];
-	if (reserved.includes(trimmed.toLowerCase())) {
+	const reserved = new Set(API_KEY_PROVIDERS.map((p) => p.id));
+	if (reserved.has(trimmed.toLowerCase())) {
 		return { valid: false, error: 'This name is reserved for built-in providers' };
 	}
 

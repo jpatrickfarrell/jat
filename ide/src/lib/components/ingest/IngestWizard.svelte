@@ -77,14 +77,14 @@
 	let channelDetectionError = $state('');
 
 	// Telegram fields
-	let telegramSecretName = $state('telegram-bot');
+	let telegramSecretName = $state('telegram');
 	let telegramChatId = $state('');
 	let detectingChats = $state(false);
 	let detectedChats = $state<Array<{ id: number; title: string; type: string; username?: string }>>([]);
 	let detectionError = $state('');
 
 	// Gmail fields
-	let gmailSecretName = $state('gmail-app-password');
+	let gmailSecretName = $state('gmail');
 	let gmailImapUser = $state('');
 	let gmailFolder = $state('');
 	let gmailFilterFrom = $state('');
@@ -573,6 +573,16 @@
 		secretMasked = '';
 		testResult = null;
 		try {
+			// Check provider keys first (e.g., slack, telegram, gmail)
+			const provRes = await fetch('/api/config/credentials');
+			const provData = await provRes.json();
+			if (provData.success && provData.credentials?.apiKeys?.[name]?.isSet) {
+				secretStatus = 'found';
+				secretMasked = provData.credentials.apiKeys[name].masked;
+				showTokenInput = false;
+				return;
+			}
+			// Fall back to custom keys
 			const res = await fetch('/api/config/credentials/custom');
 			const data = await res.json();
 			if (data.success && data.customKeys?.[name]?.isSet) {
@@ -587,21 +597,47 @@
 		}
 	}
 
+	// Known provider IDs that should save to provider keys instead of custom keys
+	const PROVIDER_IDS = new Set(['slack', 'telegram', 'gmail', 'discord', 'cloudflare', 'vercel', 'fly', 'convex', 'github', 'linear', 'sentry', 'turso', 'upstash', 'neon', 'pinecone', 'resend', 'twilio']);
+
+	/**
+	 * Match a secret name to a provider ID.
+	 * Exact match first, then prefix match (e.g. 'cloudflare-pages-token' → 'cloudflare').
+	 */
+	function findProvider(secretName: string): string | null {
+		if (PROVIDER_IDS.has(secretName)) return secretName;
+		for (const id of PROVIDER_IDS) {
+			if (secretName.startsWith(id + '-')) return id;
+		}
+		return null;
+	}
+
 	async function saveToken(name: string, token: string, type: 'slack' | 'telegram' | 'gmail') {
 		secretStatus = 'saving';
 		error = '';
-		const envVar = type === 'slack' ? 'SLACK_BOT_TOKEN' : type === 'gmail' ? 'GMAIL_APP_PASSWORD' : 'TELEGRAM_BOT_TOKEN';
 		try {
-			const res = await fetch('/api/config/credentials/custom', {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					name,
-					value: token,
-					envVar,
-					description: `${type} bot token for jat-ingest`
-				})
-			});
+			let res;
+			if (PROVIDER_IDS.has(name)) {
+				// Save as provider key (first-class)
+				res = await fetch('/api/config/credentials', {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ provider: name, key: token })
+				});
+			} else {
+				// Fall back to custom key
+				const envVar = type === 'slack' ? 'SLACK_BOT_TOKEN' : type === 'gmail' ? 'GMAIL_APP_PASSWORD' : 'TELEGRAM_BOT_TOKEN';
+				res = await fetch('/api/config/credentials/custom', {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						name,
+						value: token,
+						envVar,
+						description: `${type} bot token for jat-ingest`
+					})
+				});
+			}
 			const data = await res.json();
 			if (data.success) {
 				secretStatus = 'found';
@@ -671,6 +707,21 @@
 		pluginSecretStatus[fieldKey] = 'checking';
 		pluginSecretMasked[fieldKey] = '';
 		try {
+			// Check provider keys first (exact match or prefix match like 'cloudflare-pages-token' → 'cloudflare')
+			const providerId = findProvider(secretName);
+			if (providerId) {
+				const provRes = await fetch('/api/config/credentials');
+				const provData = await provRes.json();
+				if (provData.success && provData.credentials?.apiKeys?.[providerId]?.isSet) {
+					pluginSecretStatus[fieldKey] = 'found';
+					pluginSecretMasked[fieldKey] = provData.credentials.apiKeys[providerId].masked;
+					pluginShowTokenInput[fieldKey] = false;
+					pluginSecretStatus = { ...pluginSecretStatus };
+					pluginSecretMasked = { ...pluginSecretMasked };
+					return;
+				}
+			}
+			// Fall back to custom keys
 			const res = await fetch('/api/config/credentials/custom');
 			const data = await res.json();
 			if (data.success && data.customKeys?.[secretName]?.isSet) {
@@ -690,18 +741,30 @@
 	async function savePluginToken(fieldKey: string, secretName: string, token: string) {
 		pluginSecretStatus[fieldKey] = 'saving';
 		error = '';
-		const envVar = secretName.toUpperCase().replace(/[^A-Z0-9]/g, '_');
 		try {
-			const res = await fetch('/api/config/credentials/custom', {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					name: secretName,
-					value: token,
-					envVar,
-					description: `${pluginMetadata?.name || sourceType} API token for jat-ingest`
-				})
-			});
+			let res;
+			const providerId = findProvider(secretName);
+			if (providerId) {
+				// Save as provider key (first-class)
+				res = await fetch('/api/config/credentials', {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ provider: providerId, key: token })
+				});
+			} else {
+				// Save as custom key
+				const envVar = secretName.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+				res = await fetch('/api/config/credentials/custom', {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						name: secretName,
+						value: token,
+						envVar,
+						description: `${pluginMetadata?.name || sourceType} API token for jat-ingest`
+					})
+				});
+			}
 			const data = await res.json();
 			if (data.success) {
 				pluginSecretStatus[fieldKey] = 'found';

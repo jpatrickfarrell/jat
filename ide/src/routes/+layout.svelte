@@ -16,6 +16,7 @@
 	import DiffPreviewDrawer from '$lib/components/files/DiffPreviewDrawer.svelte';
 	import TerminalDrawer from '$lib/components/TerminalDrawer.svelte';
 	import { getTaskCountByProject } from '$lib/utils/projectUtils';
+	import { classifySession } from '$lib/utils/sessionNaming';
 	import { setProjectsCache, type ProjectConfig } from '$lib/utils/fileLinks';
 	import { initProjectColors } from '$lib/utils/projectColors';
 	import { initAudioOnInteraction, areSoundsEnabled, enableSounds, disableSounds, playNewTaskChime, playCopySound } from '$lib/utils/soundEffects';
@@ -432,9 +433,9 @@
 			const response = await fetch('/api/sessions?filter=jat');
 			if (response.ok) {
 				const data = await response.json();
-				// Filter to only include agent sessions (jat-*, excluding jat-ide)
+				// Filter to only include actual agent sessions (not app servers, services, or IDE)
 				const agentSessions = (data.sessions || []).filter((s: { name: string }) =>
-					s.name.startsWith('jat-') && !s.name.startsWith('jat-ide')
+					classifySession(s.name).type === 'agent'
 				);
 				setActiveAgentSessionsCount(agentSessions.length);
 			}

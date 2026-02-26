@@ -12,7 +12,7 @@
 
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getCustomApiKey } from '$lib/utils/credentials';
+import { getApiKey, getCustomApiKey, API_KEY_PROVIDERS } from '$lib/utils/credentials';
 import { ImapFlow } from 'imapflow';
 
 const BUILTIN_TYPES = ['slack', 'telegram', 'telegram-chats', 'slack-channels', 'gmail'];
@@ -39,7 +39,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				);
 			}
 
-			const token = getCustomApiKey(secretName);
+			const token = getApiKey(secretName) || getCustomApiKey(secretName);
 			if (!token) {
 				return json(
 					{ success: false, error: `No token found for secret "${secretName}"` },
@@ -331,9 +331,15 @@ async function verifyPlugin(type: string, body: Record<string, any>) {
 			}
 		}
 
-		// getSecret resolves secret names via credentials store
+		// getSecret resolves secret names via credentials store (provider keys first, with prefix matching)
 		const getSecret = (name: string) => {
-			const value = getCustomApiKey(name);
+			// Try exact match on provider keys, then prefix match (e.g. 'cloudflare-pages-token' → 'cloudflare')
+			let value = getApiKey(name);
+			if (!value) {
+				const providerId = API_KEY_PROVIDERS.find(p => name.startsWith(p.id + '-'))?.id;
+				if (providerId) value = getApiKey(providerId);
+			}
+			if (!value) value = getCustomApiKey(name);
 			if (!value) throw new Error(`Secret "${name}" not found in credentials store`);
 			return value;
 		};

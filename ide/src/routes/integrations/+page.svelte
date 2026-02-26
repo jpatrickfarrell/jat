@@ -818,13 +818,12 @@
 							{@const stats = sourceStats[source.id]}
 							{@const itemCount = stats?.total ?? 0}
 							<div animate:flip={{ duration: 300, easing: cubicOut }}>
-							<div use:reveal={{ animation: 'fade-in', delay: i * 0.08 }}
+							<div
 								class="rounded-lg overflow-hidden transition-all duration-150"
 								style="
 									background: oklch(0.18 0.02 250);
 									border: 1px solid {isExpanded ? 'oklch(0.30 0.04 250)' : 'oklch(0.25 0.02 250)'};
 								"
-								transition:fly={{ y: 10, duration: 150, delay: i * 30 }}
 							>
 								<!-- Source card header (clickable) -->
 								<!-- svelte-ignore a11y_click_events_have_key_events -->

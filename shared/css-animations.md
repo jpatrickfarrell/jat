@@ -89,6 +89,74 @@ Apply these patterns when animating SaaS app pages:
 {/each}
 ```
 
+#### 6. Sortable/Reorderable Lists (FLIP slide)
+
+When a list can be re-sorted (e.g. sort pills, drag-to-reorder), use Svelte's built-in `animate:flip` to make rows slide smoothly to their new positions instead of popping.
+
+**Required imports:**
+```svelte
+<script>
+  import { flip } from "svelte/animate"
+  import { cubicOut } from "svelte/easing"
+</script>
+```
+
+**Pattern — wrap each item in a keyed `{#each}` with `animate:flip`:**
+```svelte
+{#each sortedItems as item (item.id)}
+  <div animate:flip={{ duration: 300, easing: cubicOut }}>
+    <div class="card">
+      {item.name}
+    </div>
+  </div>
+{/each}
+```
+
+**Critical gotcha — `use:reveal` conflicts with FLIP:**
+
+`use:reveal` uses IntersectionObserver to trigger a CSS entrance animation. When FLIP repositions an element downward, the observer re-fires and replays the fade-in, causing a destroy/recreate appearance instead of a smooth slide. **Remove `use:reveal` and `transition:` directives from any element inside a FLIP-animated `{#each}`.**
+
+```svelte
+<!-- ❌ WRONG — reveal re-triggers on reorder, items flicker -->
+{#each sortedItems as item (item.id)}
+  <div animate:flip={{ duration: 300, easing: cubicOut }}>
+    <div use:reveal={{ animation: 'fade-in' }}
+         transition:fly={{ y: 10 }}>
+      ...
+    </div>
+  </div>
+{/each}
+
+<!-- ✅ CORRECT — FLIP is the only motion effect -->
+{#each sortedItems as item (item.id)}
+  <div animate:flip={{ duration: 300, easing: cubicOut }}>
+    <div class="card">
+      ...
+    </div>
+  </div>
+{/each}
+```
+
+**Recommended settings:**
+
+| Context | Duration | Easing |
+|---------|----------|--------|
+| Compact chips (TopBar) | 300ms | `cubicOut` |
+| Card rows (integrations, agents) | 300ms | `cubicOut` |
+| Small items (automation rules) | 200ms | `cubicOut` |
+
+**Where this pattern is used in JAT:**
+- `TopBar.svelte` — favorite project chips slide when selected project moves to front
+- `AgentGrid.svelte` — agent cards reorder on sort change
+- `RulesList.svelte` — automation rules reorder on drag-drop
+- `integrations/+page.svelte` — installed integrations reorder on sort pill change
+
+**Limitation — does NOT work on `<tr>` table rows:**
+
+`animate:flip` relies on CSS transforms to slide elements to their new positions. Browsers ignore transforms on `<tr>` elements because the table layout engine controls row positioning. **FLIP only works on `<div>` (or other block-level) elements.**
+
+If you need reorder animation on a table-like component, use CSS grid/flexbox with `<div>` elements styled as rows (see `RulesList.svelte` for reference). The semantic `<table>`/`<tbody>`/`<tr>` components in JAT IDE (TaskTable, TasksActive, TasksOpen, ScheduledTasksTable) cannot use FLIP without a structural refactor to div-based layouts.
+
 ### Timing Reference
 
 | Pattern | Animation | Delay Between Items |
@@ -237,6 +305,7 @@ When adding new animations, follow these principles:
 | Context | Animation Style |
 |---------|-----------------|
 | Lists/tables | Slide in/out with perspective |
+| Sortable/reorderable lists | `animate:flip` (FLIP slide, see pattern #6 above) |
 | Modals/dialogs | Scale or slide from direction of trigger |
 | Notifications | Slide from edge of screen |
 | Feedback (success/error) | Glow + subtle scale |

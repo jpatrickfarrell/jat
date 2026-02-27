@@ -188,6 +188,35 @@
 		availableProjects.set(configProjects);
 	});
 
+	// Inject selected project into document title for Hyprland border color matching.
+	// Window titles like "STEELBRIDGE: Tasks | JAT IDE" match windowrule `match:title STEELBRIDGE:.*`
+	// which applies project-colored borders to the browser window.
+	$effect(() => {
+		if (!browser || !selectedProject) return;
+		const prefix = selectedProject.toUpperCase() + ': ';
+
+		function applyPrefix() {
+			const current = document.title;
+			// Strip any existing project prefix (uppercase word(s) followed by ": ")
+			const stripped = current.replace(/^[A-Z][A-Z0-9_-]*: /, '');
+			const desired = prefix + stripped;
+			if (current !== desired) {
+				document.title = desired;
+			}
+		}
+
+		// Apply immediately for current title
+		applyPrefix();
+
+		// Watch for child pages changing the title via <svelte:head>
+		const titleEl = document.querySelector('title');
+		if (!titleEl) return;
+		const observer = new MutationObserver(applyPrefix);
+		observer.observe(titleEl, { childList: true, characterData: true, subtree: true });
+
+		return () => observer.disconnect();
+	});
+
 	// Route guard: redirect to /setup when no projects exist
 	// Allows /setup and /config (settings needed during setup)
 	let configProjectsLoaded = $state(false);

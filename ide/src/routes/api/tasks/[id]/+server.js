@@ -132,6 +132,11 @@ export async function PUT({ params, request }) {
 			updateFields.due_date = updates.due_date ? updates.due_date.trim() : null;
 		}
 
+		// Tasks with a cron schedule are automatically chores
+		if (updateFields.schedule_cron) {
+			updateFields.issue_type = 'chore';
+		}
+
 		// Execute update if we have fields
 		if (Object.keys(updateFields).length > 0) {
 			updateFields.projectPath = existingTask.project_path;
@@ -299,6 +304,11 @@ export async function PATCH({ params, request }) {
 		}
 		if (updates.due_date !== undefined) {
 			updateFields.due_date = updates.due_date ? updates.due_date.trim() : null;
+		}
+
+		// Tasks with a cron schedule are automatically chores
+		if (updateFields.schedule_cron) {
+			updateFields.issue_type = 'chore';
 		}
 
 		// Update labels using lib/tasks.js (replaces all existing labels)

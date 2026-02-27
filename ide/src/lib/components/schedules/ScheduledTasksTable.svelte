@@ -7,7 +7,8 @@
 	 */
 
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
-	import { describeCron } from '$lib/utils/cronUtils';
+	import AgentSelector from '$lib/components/agents/AgentSelector.svelte';
+	import { describeCron, computeNextCronRuns } from '$lib/utils/cronUtils';
 
 	interface ScheduledTask {
 		id: string;
@@ -44,6 +45,37 @@
 		onPauseSchedule: (taskId: string) => void;
 		onViewTask: (taskId: string) => void;
 	} = $props();
+
+	// Agent selector popover state
+	let agentSelectorTask = $state<ScheduledTask | null>(null);
+	let agentSelectorPos = $state<{ x: number; y: number }>({ x: 0, y: 0 });
+
+	function openAgentSelector(task: ScheduledTask, event: MouseEvent) {
+		agentSelectorPos = { x: event.clientX, y: event.clientY + 8 };
+		agentSelectorTask = task;
+	}
+
+	async function handleAgentSave(selection: { agentId: string | null; model: string | null }) {
+		if (!agentSelectorTask) return;
+		try {
+			await fetch(`/api/tasks/${agentSelectorTask.id}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					agent_program: selection.agentId,
+					model: selection.model
+				})
+			});
+			// Update local task data
+			const idx = tasks.findIndex(t => t.id === agentSelectorTask!.id);
+			if (idx >= 0) {
+				tasks[idx] = { ...tasks[idx], agent_program: selection.agentId, model: selection.model };
+			}
+		} catch (err) {
+			console.error('Failed to save agent selection:', err);
+		}
+		agentSelectorTask = null;
+	}
 
 	let sortField = $state<string>('next_run_at');
 	let sortDir = $state<'asc' | 'desc'>('asc');
@@ -119,49 +151,61 @@
 	}
 
 
-	function formatNextRun(isoDate: string | null, status?: string): { text: string; class: string } {
-		if (!isoDate) return { text: '--', class: '' };
-		if (status === 'closed') return { text: '--', class: 'text-muted' };
-		const diff = new Date(isoDate).getTime() - Date.now();
+	/** Format a run date as short readable with relative hint, e.g. "Thu 9:00 AM (in 21h)" */
+	function formatRunDate(iso: string): { date: string; relative: string; class: string } {
+		const d = new Date(iso);
+		const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+		const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+		const h = d.getHours();
+		const m = d.getMinutes();
+		const ampm = h >= 12 ? 'PM' : 'AM';
+		const hour12 = h % 12 || 12;
+		const timeStr = m === 0 ? `${hour12} ${ampm}` : `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
 
+		const now = new Date();
+		const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+		const runDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+		const dayDiff = Math.round((runDay.getTime() - today.getTime()) / 86400000);
+
+		const monthDay = `${months[d.getMonth()]} ${d.getDate()}`;
+		let dateStr: string;
+		if (dayDiff === 0) dateStr = `Today, ${monthDay} ${timeStr}`;
+		else if (dayDiff === 1) dateStr = `Tomorrow, ${monthDay} ${timeStr}`;
+		else if (dayDiff < 7) dateStr = `${days[d.getDay()]}, ${monthDay} ${timeStr}`;
+		else dateStr = `${monthDay} ${timeStr}`;
+
+		const diff = d.getTime() - Date.now();
+		let relative: string;
+		let cls: string;
 		if (diff < 0) {
-			const absDiff = Math.abs(diff);
-			if (absDiff < 60000) return { text: 'overdue (<1m)', class: 'text-error' };
-			if (absDiff < 3600000) return { text: `overdue (${Math.floor(absDiff / 60000)}m)`, class: 'text-error' };
-			return { text: `overdue (${Math.floor(absDiff / 3600000)}h)`, class: 'text-error' };
+			relative = '';
+			cls = '';
+		} else if (diff < 3600000) {
+			relative = `in ${Math.max(1, Math.floor(diff / 60000))}m`;
+			cls = 'text-info';
+		} else if (diff < 86400000) {
+			const hrs = Math.floor(diff / 3600000);
+			const mins = Math.floor((diff % 3600000) / 60000);
+			relative = mins > 0 ? `in ${hrs}h ${mins}m` : `in ${hrs}h`;
+			cls = '';
+		} else {
+			relative = `in ${Math.floor(diff / 86400000)}d`;
+			cls = '';
 		}
-		if (diff < 60000) return { text: 'in <1m', class: 'text-warning' };
-		if (diff < 3600000) return { text: `in ${Math.floor(diff / 60000)}m`, class: 'text-info' };
-		if (diff < 86400000) {
-			const h = Math.floor(diff / 3600000);
-			const m = Math.floor((diff % 3600000) / 60000);
-			return { text: `in ${h}h ${m}m`, class: '' };
-		}
-		return { text: `in ${Math.floor(diff / 86400000)}d`, class: '' };
+
+		return { date: dateStr, relative, class: cls };
 	}
 
-	function getStatusColor(status: string): string {
-		switch (status) {
-			case 'open': return 'badge-info';
-			case 'in_progress': return 'badge-warning';
-			case 'closed': return 'badge-success';
-			case 'blocked': return 'badge-error';
-			default: return 'badge-ghost';
+	/** Get upcoming runs for a task: from cron (computed) or from next_run_at (single) */
+	function getUpcomingRuns(task: ScheduledTask): string[] {
+		if (task.status === 'closed') return [];
+		if (task.schedule_cron) {
+			return computeNextCronRuns(task.schedule_cron, 3);
 		}
-	}
-
-	function getPriorityLabel(p: number): string {
-		const labels: Record<number, string> = { 0: 'P0', 1: 'P1', 2: 'P2', 3: 'P3', 4: 'P4' };
-		return labels[p] || `P${p}`;
-	}
-
-	function getPriorityColor(p: number): string {
-		switch (p) {
-			case 0: return 'badge-error';
-			case 1: return 'badge-warning';
-			case 2: return 'badge-info';
-			default: return 'badge-ghost';
+		if (task.next_run_at) {
+			return [task.next_run_at];
 		}
+		return [];
 	}
 
 	// Unique statuses for filter
@@ -218,40 +262,29 @@
 			<table class="sched-table">
 				<thead>
 					<tr>
-						<th class="col-status" onclick={() => toggleSort('status')}>
-							Status {sortField === 'status' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
-						</th>
-						<th class="col-priority" onclick={() => toggleSort('priority')}>
-							P {sortField === 'priority' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
-						</th>
 						<th class="col-title" onclick={() => toggleSort('title')}>
 							Task {sortField === 'title' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
 						</th>
 						<th class="col-command">Command</th>
-						<th class="col-agent">Agent / Model</th>
 						<th class="col-schedule">Schedule</th>
 						<th class="col-nextrun" onclick={() => toggleSort('next_run_at')}>
-							Next Run {sortField === 'next_run_at' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+							Upcoming {sortField === 'next_run_at' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
 						</th>
 						<th class="col-actions">Actions</th>
 					</tr>
 				</thead>
 				<tbody>
 					{#each filteredTasks as task (task.id)}
-						{@const nextRun = formatNextRun(task.next_run_at, task.status)}
+						{@const runs = getUpcomingRuns(task)}
 						<tr class="task-row" class:row-closed={task.status === 'closed'}>
-							<td class="col-status">
-								<span class="badge badge-sm {getStatusColor(task.status)}">{task.status}</span>
-							</td>
-							<td class="col-priority">
-								<span class="badge badge-sm {getPriorityColor(task.priority)}">{getPriorityLabel(task.priority)}</span>
-							</td>
 							<td class="col-title">
 								<div class="task-title-row">
 									<TaskIdBadge
-										{task}
+										task={{ ...task, assignee: task.assignee || undefined }}
 										size="sm"
 										copyOnly
+										harness={task.agent_program || 'claude-code'}
+										onHarnessClick={(e) => openAgentSelector(task, e)}
 										onClick={() => onViewTask(task.id)}
 									/>
 									<button class="task-title-btn" onclick={() => onViewTask(task.id)}>
@@ -261,20 +294,6 @@
 							</td>
 							<td class="col-command">
 								<code class="command-text">{task.command || '/jat:start'}</code>
-							</td>
-							<td class="col-agent">
-								{#if task.agent_program || task.model}
-									<span class="agent-info">
-										{#if task.agent_program}
-											<span class="agent-program">{task.agent_program}</span>
-										{/if}
-										{#if task.model}
-											<span class="agent-model">{task.model}</span>
-										{/if}
-									</span>
-								{:else}
-									<span class="text-muted">default</span>
-								{/if}
 							</td>
 							<td class="col-schedule">
 								{#if task.schedule_cron}
@@ -288,7 +307,21 @@
 								{/if}
 							</td>
 							<td class="col-nextrun">
-								<span class={nextRun.class}>{nextRun.text}</span>
+								{#if runs.length === 0}
+									<span class="text-muted">—</span>
+								{:else}
+									<div class="next-runs-stack">
+										{#each runs as run, i}
+											{@const fmt = formatRunDate(run)}
+											<div class="next-run-row" class:next-run-first={i === 0}>
+												<span class="next-run-date {fmt.class}">{fmt.date}</span>
+												{#if fmt.relative}
+													<span class="next-run-rel">{fmt.relative}</span>
+												{/if}
+											</div>
+										{/each}
+									</div>
+								{/if}
 							</td>
 							<td class="col-actions">
 								<div class="action-btns">
@@ -329,6 +362,24 @@
 		</div>
 	{/if}
 </div>
+
+<!-- Agent selector popover -->
+{#if agentSelectorTask}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<div class="agent-selector-backdrop" onclick={() => agentSelectorTask = null}></div>
+	<div
+		class="agent-selector-popover"
+		style="left: {agentSelectorPos.x}px; top: {agentSelectorPos.y}px;"
+	>
+		<AgentSelector
+			task={agentSelectorTask}
+			compact
+			onchange={(sel) => handleAgentSave(sel)}
+			oncancel={() => agentSelectorTask = null}
+		/>
+	</div>
+{/if}
 
 <style>
 	.table-container {
@@ -461,13 +512,10 @@
 		opacity: 0.5;
 	}
 
-	.col-status { width: 80px; }
-	.col-priority { width: 48px; }
 	.col-title { min-width: 200px; }
 	.col-command { width: 120px; }
-	.col-agent { width: 140px; }
 	.col-schedule { width: 130px; }
-	.col-nextrun { width: 120px; }
+	.col-nextrun { width: 170px; }
 	.col-actions { width: 100px; }
 
 	.task-title-row {
@@ -500,23 +548,6 @@
 		background: oklch(0.20 0.02 145 / 0.15);
 		padding: 0.125rem 0.375rem;
 		border-radius: 0.25rem;
-	}
-
-	.agent-info {
-		display: flex;
-		flex-direction: column;
-		gap: 0.125rem;
-	}
-
-	.agent-program {
-		font-size: 0.75rem;
-		color: oklch(0.70 0.02 250);
-	}
-
-	.agent-model {
-		font-size: 0.6875rem;
-		color: oklch(0.55 0.08 200);
-		font-weight: 500;
 	}
 
 	.text-muted {
@@ -589,4 +620,52 @@
 	.text-error { color: oklch(0.70 0.18 25); }
 	.text-warning { color: oklch(0.78 0.15 85); }
 	.text-info { color: oklch(0.75 0.12 200); }
+
+	.next-runs-stack {
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+	}
+
+	.next-run-row {
+		display: flex;
+		align-items: baseline;
+		gap: 0.375rem;
+		font-size: 0.6875rem;
+		line-height: 1.3;
+		color: oklch(0.55 0.02 250);
+	}
+
+	.next-run-first {
+		font-size: 0.75rem;
+		color: oklch(0.80 0.02 250);
+		font-weight: 500;
+	}
+
+	.next-run-date {
+		white-space: nowrap;
+	}
+
+	.next-run-rel {
+		font-size: 0.625rem;
+		color: oklch(0.50 0.06 200);
+		white-space: nowrap;
+	}
+
+	.agent-selector-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 40;
+	}
+
+	.agent-selector-popover {
+		position: fixed;
+		z-index: 41;
+		min-width: 240px;
+		background: oklch(0.18 0.02 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.5rem;
+		box-shadow: 0 8px 24px oklch(0 0 0 / 0.4);
+		padding: 0.5rem;
+	}
 </style>

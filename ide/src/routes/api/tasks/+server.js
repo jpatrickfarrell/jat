@@ -196,7 +196,7 @@ export async function POST({ request }) {
 		const title = body.title.trim();
 		const description = body.description ? body.description.trim() : '';
 		const priority = body.priority !== undefined ? parseInt(body.priority) : 2; // Default to P2
-		const type = body.type.trim().toLowerCase();
+		let type = body.type.trim().toLowerCase();
 
 		// Get project path
 		let projectPath = null;
@@ -265,6 +265,11 @@ export async function POST({ request }) {
 		}
 		if (body.due_date && typeof body.due_date === 'string') {
 			schedulingFields.due_date = body.due_date.trim();
+		}
+
+		// Tasks with a cron schedule are automatically chores
+		if (schedulingFields.schedule_cron) {
+			type = 'chore';
 		}
 
 		// Create the task directly

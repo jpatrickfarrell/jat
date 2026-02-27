@@ -14,6 +14,7 @@
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 	import { openTaskDrawer } from '$lib/stores/drawerStore';
+	import { CRON_PRESETS, describeCron, validateCron, computeNextCronRun } from '$lib/utils/cronUtils';
 
 	// State
 	let schedulerStatus = $state<any>(null);
@@ -27,7 +28,6 @@
 	// Schedule edit modal
 	let editingTask = $state<any>(null);
 	let editCron = $state('');
-	let editNextRun = $state('');
 	let editCommand = $state('');
 	let editAgentProgram = $state('');
 	let editModel = $state('');
@@ -113,17 +113,9 @@
 	function handleEditSchedule(task: any) {
 		editingTask = task;
 		editCron = task.schedule_cron || '';
-		editNextRun = task.next_run_at ? formatDateForInput(task.next_run_at) : '';
 		editCommand = task.command || '/jat:start';
 		editAgentProgram = task.agent_program || '';
 		editModel = task.model || '';
-	}
-
-	function formatDateForInput(iso: string): string {
-		const d = new Date(iso);
-		// Format as YYYY-MM-DDTHH:MM for datetime-local input
-		const pad = (n: number) => n.toString().padStart(2, '0');
-		return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 	}
 
 	async function handleSaveSchedule() {
@@ -133,10 +125,10 @@
 		try {
 			const body: Record<string, any> = {
 				schedule_cron: editCron || null,
-				next_run_at: editNextRun ? new Date(editNextRun).toISOString() : null,
 				command: editCommand || '/jat:start',
 				agent_program: editAgentProgram || null,
-				model: editModel || null
+				model: editModel || null,
+				next_run_at: editCron ? computeNextCronRun(editCron) : null
 			};
 
 			const res = await fetch(`/api/tasks/${editingTask.id}`, {
@@ -275,7 +267,7 @@
 			</p>
 		</div>
 	{:else}
-		<div class="table-section" use:reveal>
+		<div class="table-section">
 			<ScheduledTasksTable
 				tasks={scheduledTasks}
 				loading={tasksLoading}
@@ -314,23 +306,42 @@
 					<input
 						id="edit-cron"
 						type="text"
-						class="form-input"
+						class="form-input font-mono"
 						bind:value={editCron}
-						placeholder="e.g., 0 9 * * * (daily at 9am)"
+						placeholder="0 9 * * *"
 					/>
-					<span class="form-hint">Leave empty for one-shot schedule</span>
+					{#if editCron && editCron.trim()}
+						{@const desc = describeCron(editCron)}
+						{@const validation = validateCron(editCron)}
+						{#if !validation.valid}
+							<span class="form-hint form-hint-error">{validation.error}</span>
+						{:else if desc !== editCron.trim()}
+							<span class="form-hint form-hint-success">{desc}</span>
+						{:else}
+							<span class="form-hint">Custom schedule</span>
+						{/if}
+					{:else}
+						<span class="form-hint">Leave empty for one-shot schedule</span>
+					{/if}
 				</div>
 
 				<div class="form-group">
-					<label class="form-label" for="edit-next-run">Next Run At</label>
-					<input
-						id="edit-next-run"
-						type="datetime-local"
-						class="form-input"
-						bind:value={editNextRun}
-					/>
-					<span class="form-hint">When the task should next be triggered</span>
+					<label class="form-label">Presets</label>
+					<div class="preset-chips">
+						{#each CRON_PRESETS as preset}
+							<button
+								type="button"
+								class="preset-chip"
+								class:active={editCron === preset.cron}
+								onclick={() => editCron = preset.cron}
+								title={preset.cron}
+							>
+								{preset.label}
+							</button>
+						{/each}
+					</div>
 				</div>
+
 
 				<div class="form-group">
 					<label class="form-label" for="edit-command">Command</label>
@@ -597,9 +608,48 @@
 		border-color: oklch(0.50 0.10 200);
 	}
 
+	.font-mono {
+		font-family: monospace;
+	}
+
 	.form-hint {
 		font-size: 0.6875rem;
 		color: oklch(0.45 0.02 250);
+	}
+
+	.form-hint-success {
+		color: oklch(0.65 0.15 145);
+	}
+
+	.form-hint-error {
+		color: oklch(0.65 0.15 25);
+	}
+
+
+	.preset-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.375rem;
+	}
+
+	.preset-chip {
+		font-size: 0.6875rem;
+		padding: 0.1875rem 0.5rem;
+		border-radius: 9999px;
+		border: 1px solid oklch(0.28 0.02 250);
+		background: oklch(0.20 0.01 250);
+		color: oklch(0.75 0.02 250);
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+	.preset-chip:hover {
+		background: oklch(0.25 0.02 250);
+		color: oklch(0.85 0.02 250);
+	}
+	.preset-chip.active {
+		background: oklch(0.35 0.10 200 / 0.3);
+		border-color: oklch(0.50 0.10 200 / 0.5);
+		color: oklch(0.85 0.10 200);
 	}
 
 	.form-row {

@@ -645,9 +645,20 @@
 					<ProviderLogo agentId="human" size={12} />
 				</span>
 			{:else if harness}
-				<span class="inline-flex scale-70 mt-0.25" title={harness}>
-					<ProviderLogo agentId={harness} size={12} />
-				</span>
+				{#if onHarnessClick}
+					<button
+						class="rounded-full shrink-0 inline-flex items-center justify-center cursor-pointer hover:brightness-125 transition-all"
+						style="width: 20px; height: 20px; background: oklch(0.20 0.02 250); border: 1.5px solid oklch(0.35 0.03 250);"
+						title="{harness} — click to change"
+						onclick={(e) => { e.stopPropagation(); onHarnessClick?.(e); }}
+					>
+						<ProviderLogo agentId={harness} size={12} />
+					</button>
+				{:else}
+					<span class="inline-flex scale-70 mt-0.25" title={harness}>
+						<ProviderLogo agentId={harness} size={12} />
+					</span>
+				{/if}
 			{/if}
 			{#if integrationIcon && resolvedIntegration}
 				<span class="inline-flex scale-70 mt-0.25" title="From {resolvedIntegration.sourceType}: {resolvedIntegration.sourceName}">

@@ -455,6 +455,32 @@ async function computeServersData(lines) {
 async function detectOrphanProcesses(managedSessions) {
 	const HOME = process.env.HOME || '';
 	try {
+		// Build set of known project paths from projects.json config
+		// This avoids hardcoding ~/code/ and supports projects stored anywhere
+		/** @type {Map<string, string>} path → projectName */
+		const knownProjectPaths = new Map();
+		const config = loadProjectsConfig();
+		if (config?.projects) {
+			for (const [key, proj] of Object.entries(config.projects)) {
+				const p = (proj.path || `~/code/${key}`).replace(/^~/, HOME);
+				knownProjectPaths.set(p, key);
+			}
+		}
+
+		/**
+		 * Check if a cwd belongs to a known project.
+		 * Returns { projectName, projectPath } or null.
+		 * @param {string} cwd
+		 */
+		function matchProject(cwd) {
+			for (const [projectPath, name] of knownProjectPaths) {
+				if (cwd === projectPath || cwd.startsWith(projectPath + '/')) {
+					return { projectName: name, projectPath };
+				}
+			}
+			return null;
+		}
+
 		// Parse ss -tlnp to get listening processes with PIDs
 		const { stdout } = await execAsync('ss -tlnp 2>/dev/null', { maxBuffer: 64 * 1024 });
 		const lines = stdout.split('\n').filter(l => l.includes('LISTEN'));
@@ -544,7 +570,8 @@ async function detectOrphanProcesses(managedSessions) {
 		} catch { /* skip uptime */ }
 		const nowSecs = bootTimeSecs; // uptime in seconds since boot
 
-		// Filter to orphans: not managed, cwd under ~/code/
+		// Filter to orphans: not managed, cwd under HOME
+		// Processes in known projects are "tracked", others are "untracked"
 		const orphans = [];
 		for (const [pid, info] of listeningProcesses) {
 			if (managedPids.has(pid)) continue;
@@ -557,14 +584,27 @@ async function detectOrphanProcesses(managedSessions) {
 				continue; // Process gone or no permission
 			}
 
-			// Must be under ~/code/
-			const codeDir = `${HOME}/code/`;
-			if (!cwd.startsWith(codeDir)) continue;
+			// Must be under HOME directory
+			if (!cwd.startsWith(HOME + '/') && cwd !== HOME) continue;
 
-			// Extract project name from cwd path
-			const relPath = cwd.slice(codeDir.length);
-			const projectName = relPath.split('/')[0];
-			if (!projectName) continue;
+			// Check if it belongs to a known project
+			const project = matchProject(cwd);
+
+			// For untracked: derive a display name from the cwd path relative to HOME
+			let projectName, projectPath;
+			let tracked = false;
+			if (project) {
+				projectName = project.projectName;
+				projectPath = project.projectPath;
+				tracked = true;
+			} else {
+				// Use relative path from HOME, trimmed to first 2 components
+				// e.g. /home/jw/experiments/my-app/src → ~/experiments/my-app
+				const relPath = cwd.slice(HOME.length + 1);
+				const parts = relPath.split('/');
+				projectName = '~/' + parts.slice(0, 2).join('/');
+				projectPath = cwd;
+			}
 
 			// Normalize process name for display (node-MainThread -> node)
 			const displayName = info.processName.startsWith('node') ? 'node' : info.processName;
@@ -596,10 +636,11 @@ async function detectOrphanProcesses(managedSessions) {
 				port: info.port,
 				processName: displayName,
 				projectName,
-				projectPath: `${codeDir}${projectName}`,
+				projectPath,
 				listenAddress: info.listenAddress,
 				rssKb,
-				uptimeSecs
+				uptimeSecs,
+				tracked
 			});
 		}
 

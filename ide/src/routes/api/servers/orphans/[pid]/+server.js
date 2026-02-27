@@ -6,13 +6,14 @@
  * - PID is numeric
  * - Process exists (/proc/{pid})
  * - Process owned by current user
- * - Process cwd is under ~/code/
+ * - Process cwd is under a known project path (from projects.json)
  * - Process name is node or workerd
  * - PID is not the IDE server process
  */
 
 import { json } from '@sveltejs/kit';
 import { readlinkSync, readFileSync, statSync } from 'fs';
+import { homedir } from 'os';
 
 /**
  * Validate and kill a single orphan process.
@@ -20,8 +21,6 @@ import { readlinkSync, readFileSync, statSync } from 'fs';
  * @returns {{ success: boolean, error?: string }}
  */
 function validateAndKill(pid) {
-	const HOME = process.env.HOME || '';
-
 	// Must not be our own process
 	if (pid === process.pid) {
 		return { success: false, error: 'Cannot kill IDE server process' };
@@ -44,7 +43,8 @@ function validateAndKill(pid) {
 		return { success: false, error: 'Cannot verify process ownership' };
 	}
 
-	// Check cwd is under ~/code/
+	// Check cwd is under user's home directory
+	const HOME = homedir();
 	let cwd;
 	try {
 		cwd = readlinkSync(`/proc/${pid}/cwd`);
@@ -52,8 +52,8 @@ function validateAndKill(pid) {
 		return { success: false, error: 'Cannot read process cwd' };
 	}
 
-	if (!cwd.startsWith(`${HOME}/code/`)) {
-		return { success: false, error: 'Process cwd is not under ~/code/' };
+	if (!cwd.startsWith(HOME + '/') && cwd !== HOME) {
+		return { success: false, error: 'Process cwd is not under home directory' };
 	}
 
 	// Check process name contains node or workerd
@@ -79,9 +79,7 @@ function validateAndKill(pid) {
 	// Check after brief delay if still alive, then SIGKILL
 	setTimeout(() => {
 		try {
-			// Check if process still exists
 			statSync(`/proc/${pid}`);
-			// Still alive, force kill
 			try {
 				process.kill(pid, 'SIGKILL');
 			} catch { /* already dead */ }

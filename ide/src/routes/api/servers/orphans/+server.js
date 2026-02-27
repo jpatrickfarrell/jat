@@ -8,6 +8,7 @@
 
 import { json } from '@sveltejs/kit';
 import { readlinkSync, readFileSync, statSync } from 'fs';
+import { homedir } from 'os';
 
 /**
  * Validate and kill a single orphan process.
@@ -16,8 +17,6 @@ import { readlinkSync, readFileSync, statSync } from 'fs';
  * @returns {boolean}
  */
 function tryKill(pid) {
-	const HOME = process.env.HOME || '';
-
 	if (pid === process.pid) return false;
 
 	try { statSync(`/proc/${pid}`); } catch { return false; }
@@ -27,9 +26,12 @@ function tryKill(pid) {
 		if (stat.uid !== process.getuid()) return false;
 	} catch { return false; }
 
+	const HOME = homedir();
 	let cwd;
 	try { cwd = readlinkSync(`/proc/${pid}/cwd`); } catch { return false; }
-	if (!cwd.startsWith(`${HOME}/code/`)) return false;
+
+	// Must be under user's home directory
+	if (!cwd.startsWith(HOME + '/') && cwd !== HOME) return false;
 
 	let processName;
 	try { processName = readFileSync(`/proc/${pid}/comm`, 'utf-8').trim(); } catch { return false; }

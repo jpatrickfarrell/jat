@@ -32,6 +32,8 @@ export interface OrphanProcess {
 	listenAddress: string;
 	rssKb: number;
 	uptimeSecs: number;
+	/** true if cwd matches a configured project in projects.json */
+	tracked: boolean;
 }
 
 /**

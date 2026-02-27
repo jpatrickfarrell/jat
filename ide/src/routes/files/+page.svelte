@@ -886,9 +886,18 @@
 
 	// Fetch git status for tab badges (changes count and ahead count)
 	let gitStatusInterval: ReturnType<typeof setInterval> | null = null;
+	// Track projects that aren't git repos to avoid repeated 400 errors
+	const nonGitProjectsFiles = new Set<string>();
 
 	async function fetchGitStatusForBadges() {
 		if (!selectedProject) {
+			setGitChangesCount(0);
+			setGitAheadCount(0);
+			return;
+		}
+
+		// Skip projects we already know aren't git repos
+		if (nonGitProjectsFiles.has(selectedProject)) {
 			setGitChangesCount(0);
 			setGitAheadCount(0);
 			return;
@@ -909,6 +918,10 @@
 			} else {
 				setGitChangesCount(0);
 				setGitAheadCount(0);
+				// Cache 400 responses (not a git repo) to stop re-polling
+				if (response.status === 400) {
+					nonGitProjectsFiles.add(selectedProject);
+				}
 			}
 		} catch {
 			// Silently fail - git status is not critical

@@ -252,15 +252,26 @@
 					<line x1="16" y1="2" x2="16" y2="6"></line>
 					<line x1="8" y1="2" x2="8" y2="6"></line>
 					<line x1="3" y1="10" x2="21" y2="10"></line>
-					<path d="M12 14l2 2-2 2"></path>
+					<path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"></path>
 				</svg>
 			</div>
 			<h3 class="empty-title">No chores yet</h3>
 			<p class="empty-description">
-				To schedule a task, open any task's detail drawer and set a <strong>cron expression</strong> (for recurring tasks like <code>0 9 * * *</code> for daily at 9am) or a <strong>next run time</strong> (for one-off scheduled tasks).
+				Chores are recurring tasks that run automatically on a schedule. Set up daily code reviews, weekly dependency checks, or any routine work you want agents to handle for you.
 			</p>
+			<div class="empty-examples">
+				<span class="example-chip">Daily at 9 AM</span>
+				<span class="example-chip">Weekdays at 5 PM</span>
+				<span class="example-chip">Weekly on Sunday</span>
+			</div>
+			<button class="btn btn-primary btn-sm gap-1.5 empty-cta" onclick={handleCreateScheduledTask}>
+				<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+				</svg>
+				Create Your First Chore
+			</button>
 			<p class="empty-hint">
-				Make sure the scheduler daemon is running above to automatically spawn agents for due tasks.
+				You can also schedule any existing task from its detail drawer.
 			</p>
 		</div>
 	{:else}
@@ -460,15 +471,25 @@
 		line-height: 1.6;
 		max-width: 480px;
 	}
-	.empty-description strong {
-		color: oklch(0.70 0.02 250);
+
+	.empty-examples {
+		display: flex;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+		justify-content: center;
 	}
-	.empty-description code {
-		font-size: 0.75rem;
-		padding: 0.125rem 0.375rem;
-		background: oklch(0.22 0.02 250);
-		border-radius: 0.25rem;
-		color: oklch(0.70 0.10 200);
+
+	.example-chip {
+		font-size: 0.6875rem;
+		padding: 0.25rem 0.625rem;
+		border-radius: 9999px;
+		background: oklch(0.25 0.06 280 / 0.2);
+		border: 1px solid oklch(0.40 0.08 280 / 0.3);
+		color: oklch(0.75 0.12 280);
+	}
+
+	.empty-cta {
+		margin-top: 0.25rem;
 	}
 
 	.empty-hint {

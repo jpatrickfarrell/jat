@@ -219,31 +219,39 @@ The IDE provides REST endpoints for managing the scheduler from the UI.
 }
 ```
 
-### IDE Servers Page
+### IDE Pages
 
-The scheduler status is displayed on the `/servers` page in the IDE:
-
+**Servers page (`/servers`):** The scheduler status is displayed alongside dev servers:
 - **Running/Stopped badge** with color indicator
 - **Uptime counter** (auto-refreshing)
 - **Next scheduled task** with countdown timer
 - **Start/Stop buttons** for quick control
 
+**Chores page (`/chores`):** Dedicated page for managing recurring tasks:
+- Lists all tasks with `schedule_cron` set across projects
+- Shows human-readable schedule descriptions (e.g., "Every weekday at 9:00 AM")
+- Displays next run time with countdown
+- Quick enable/disable toggles
+
 ### Creating Scheduled Tasks
+
+Recurring tasks use the `chore` task type. In JAT, **chore = recurring scheduled task** — a task with a cron schedule that fires automatically.
 
 #### Via IDE Task Creation Drawer
 
 The task creation UI includes scheduling fields:
 
-1. Set **Schedule (Cron)** to a cron expression (e.g., `0 9 * * *`)
-2. Optionally set **Command** (default: `/jat:start`)
-3. Optionally set **Agent Program** and **Model** overrides
+1. Set **Type** to `chore` (this is the standard type for recurring work)
+2. Set **Schedule (Cron)** to a cron expression (e.g., `0 9 * * *`) or pick a preset
+3. Optionally set **Command** (default: `/jat:start`)
+4. Optionally set **Agent Program** and **Model** overrides
 
 The scheduler picks up the task on the next poll.
 
 #### Via CLI
 
 ```bash
-# Create a recurring task
+# Create a recurring task (chore = recurring scheduled task)
 jt create "Daily Code Review" \
   --type chore \
   --priority 2 \

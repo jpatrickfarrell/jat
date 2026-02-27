@@ -85,7 +85,7 @@ JAT supports multiple AI coding assistants through a configurable agent program 
     },
     {
       "id": "chores-to-haiku",
-      "name": "Chores to Haiku",
+      "name": "Recurring chores to Haiku",
       "conditions": [
         { "type": "type", "operator": "equals", "value": "chore" }
       ],

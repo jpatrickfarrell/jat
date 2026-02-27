@@ -28,6 +28,7 @@
 	import CreateGenerator from './tasks/CreateGenerator.svelte';
 	import CreatePlan from './tasks/CreatePlan.svelte';
 	import { AGENT_PRESETS, type AgentProgramPreset } from '$lib/types/agentProgram';
+	import { CRON_PRESETS, describeCron } from '$lib/utils/cronUtils';
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
 	import { loadCommands, getCommands } from '$lib/stores/configStore.svelte';
 
@@ -2113,23 +2114,49 @@
 								</div>
 							{/if}
 
-							<!-- Recurring: cron expression -->
+							<!-- Recurring: cron preset picker + custom input -->
 							{#if formData.schedule_type === 'recurring'}
-								<div class="form-control">
-									<label class="label py-0.5" for="task-cron">
-										<span class="label-text text-xs font-mono text-base-content/60">Cron expression</span>
-									</label>
-									<input
-										id="task-cron"
-										type="text"
-										placeholder="0 9 * * MON-FRI"
-										class="input input-sm w-full font-mono bg-base-200 border-base-content/30 text-base-content"
-										bind:value={formData.schedule_cron}
-										disabled={formDisabled || isSubmitting}
-									/>
-									<label class="label py-0">
-										<span class="label-text-alt text-base-content/40">min hour day month weekday</span>
-									</label>
+								<div class="space-y-2">
+									<!-- Preset buttons -->
+									<div class="flex flex-wrap gap-1.5">
+										{#each CRON_PRESETS as preset}
+											<button
+												type="button"
+												class="btn btn-xs font-mono {formData.schedule_cron === preset.cron ? 'btn-primary' : 'btn-ghost bg-base-200'}"
+												onclick={() => formData.schedule_cron = preset.cron}
+												disabled={formDisabled || isSubmitting}
+											>
+												{preset.label}
+											</button>
+										{/each}
+										<button
+											type="button"
+											class="btn btn-xs font-mono {formData.schedule_cron && !CRON_PRESETS.some(p => p.cron === formData.schedule_cron) ? 'btn-primary' : 'btn-ghost bg-base-200'}"
+											onclick={() => formData.schedule_cron = ''}
+											disabled={formDisabled || isSubmitting}
+										>
+											Custom
+										</button>
+									</div>
+
+									<!-- Raw cron input (always visible for manual editing) -->
+									<div class="form-control">
+										<input
+											id="task-cron"
+											type="text"
+											placeholder="0 9 * * 1-5"
+											class="input input-sm w-full font-mono bg-base-200 border-base-content/30 text-base-content"
+											bind:value={formData.schedule_cron}
+											disabled={formDisabled || isSubmitting}
+										/>
+									</div>
+
+									<!-- Human-readable description -->
+									{#if formData.schedule_cron.trim()}
+										<p class="text-xs font-mono text-base-content/50 pl-0.5">
+											{describeCron(formData.schedule_cron)}
+										</p>
+									{/if}
 								</div>
 							{/if}
 						</div>

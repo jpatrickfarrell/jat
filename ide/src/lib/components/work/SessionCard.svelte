@@ -1517,7 +1517,10 @@
 			lastResizedWidth = 0;
 			lastResizedHeight = 0;
 			// Silently fail - resize is a UX enhancement, not critical
-			console.debug("Failed to resize tmux session:", error);
+			// Don't log timeout aborts (AbortSignal.timeout) — they're expected and benign
+			if (!(error instanceof DOMException && error.name === 'TimeoutError')) {
+				console.debug("Failed to resize tmux session:", error);
+			}
 		} finally {
 			// Clear pending key
 			if (pendingResizeKey === resizeKey) {

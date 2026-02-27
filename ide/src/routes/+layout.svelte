@@ -764,6 +764,8 @@
 	// Fetch git status for the active project (to show changes badge on Source)
 	// Uses the selected project, or falls back to the first config project
 	let gitStatusPollingInterval: ReturnType<typeof setInterval> | null = null;
+	// Track projects that aren't git repos to avoid repeated 400 errors
+	const nonGitProjects = new Set<string>();
 
 	async function loadGitStatus() {
 		// Get the project to check - prefer selected project (if not "All Projects"), otherwise use active project from preferences
@@ -772,6 +774,13 @@
 			: getActiveProject() || configProjects[0];
 
 		if (!projectToCheck) {
+			setGitAheadCount(0);
+			setGitChangesCount(0);
+			return;
+		}
+
+		// Skip projects we already know aren't git repos
+		if (nonGitProjects.has(projectToCheck)) {
 			setGitAheadCount(0);
 			setGitChangesCount(0);
 			return;
@@ -792,6 +801,10 @@
 			} else {
 				setGitAheadCount(0);
 				setGitChangesCount(0);
+				// Cache 400 responses (not a git repo) to stop re-polling
+				if (response.status === 400) {
+					nonGitProjects.add(projectToCheck);
+				}
 			}
 		} catch (error) {
 			// Silently fail - git status is not critical

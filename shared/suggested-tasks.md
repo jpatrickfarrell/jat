@@ -251,9 +251,9 @@ The API normalizes common type variations:
 
 | Input Type | Normalized To |
 |------------|---------------|
-| docs, documentation, doc | chore |
-| test, tests, testing | chore |
-| refactor, refactoring, cleanup | chore |
+| docs, documentation, doc | task |
+| test, tests, testing | task |
+| refactor, refactoring, cleanup | task |
 | improvement, enhancement | feature |
 | fix, hotfix | bug |
 | story | feature |
@@ -352,7 +352,7 @@ jat-signal complete '{
       "reason": "Security best practice - password-only auth is insufficient for sensitive user data"
     },
     {
-      "type": "chore",
+      "type": "task",
       "title": "Add OpenAPI documentation for all /auth/* API endpoints",
       "description": "Create or update src/routes/api/auth/openapi.yaml with OpenAPI 3.0 specs for: /auth/login, /auth/logout, /auth/register, /auth/reset-password, /auth/verify-email. Include request/response schemas, error codes, and example payloads. Add Swagger UI route at /api/docs for interactive testing. Reference existing OpenAPI patterns in src/routes/api/users/openapi.yaml.",
       "priority": 3,

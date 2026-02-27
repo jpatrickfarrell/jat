@@ -314,6 +314,11 @@ export async function stop(sessionName: string): Promise<boolean> {
 		});
 
 		if (!response.ok) {
+			// 404 means session already gone — treat as success and clean up state
+			if (response.status === 404) {
+				state.sessions = state.sessions.filter((s) => s.sessionName !== sessionName);
+				return true;
+			}
 			const data = await response.json();
 			throw new Error(data.message || data.error || 'Failed to stop server');
 		}

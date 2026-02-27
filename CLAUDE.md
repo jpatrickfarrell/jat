@@ -202,7 +202,7 @@ jt list --status open        # Lists open tasks
 cd ~/code/my-project && jt init  # Initialize a project
 ```
 
-Current task types in JAT workflows: `bug`, `feature`, `task`, `epic`, `chore`, `chat` (`chat` is used for conversational external-channel threads, typically with `/jat:chat`).
+Current task types in JAT workflows: `bug`, `feature`, `task`, `epic`, `chore` (recurring scheduled task — managed via `/chores` in the IDE), `chat` (conversational external-channel threads, typically with `/jat:chat`).
 
 ### Browser Tools (12 tools)
 ```bash

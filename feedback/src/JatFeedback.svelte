@@ -6,6 +6,7 @@
   import { DEFAULT_CONFIG } from './lib/types';
   import { startConsoleCapture, stopConsoleCapture } from './lib/consoleCapture';
   import { isElementPickerActive } from './lib/elementPicker';
+  import { isAnnotationEditorOpen } from './lib/annotation';
   import { startRetryLoop, stopRetryLoop } from './lib/queue';
   import FeedbackButton from './components/FeedbackButton.svelte';
   import FeedbackPanel from './components/FeedbackPanel.svelte';
@@ -122,6 +123,8 @@
   // that also listen for Escape to close themselves.
   function handleEscapeCapture(e: KeyboardEvent) {
     if (e.key === 'Escape' && open) {
+      // Let annotation editor handle its own Escape
+      if (isAnnotationEditorOpen()) return;
       e.stopPropagation();
       e.stopImmediatePropagation();
       close();

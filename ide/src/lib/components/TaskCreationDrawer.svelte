@@ -14,7 +14,7 @@
 	import { tick, onDestroy, untrack } from 'svelte';
 	import { slide } from 'svelte/transition';
 	import { get } from 'svelte/store';
-	import { isTaskDrawerOpen, selectedDrawerProject, availableProjects, initialTaskText, initialIssueType, drawerCreationMode, type DrawerCreationMode } from '$lib/stores/drawerStore';
+	import { isTaskDrawerOpen, selectedDrawerProject, availableProjects, initialTaskText, initialIssueType, initialScheduleType, drawerCreationMode, type DrawerCreationMode } from '$lib/stores/drawerStore';
 	import { broadcastTaskEvent } from '$lib/stores/taskEvents';
 	import { broadcastSessionEvent } from '$lib/stores/sessionEvents';
 	import { playSuccessChime, playErrorSound, playAttachmentSound } from '$lib/utils/soundEffects';
@@ -243,6 +243,17 @@
 			if (type) {
 				formData.type = type;
 				initialIssueType.set(null);
+			}
+		}
+	});
+
+	// Pre-fill schedule type when drawer opens (e.g., 'recurring' from /schedules page)
+	$effect(() => {
+		if (isOpen) {
+			const schedType = get(initialScheduleType);
+			if (schedType) {
+				formData.schedule_type = schedType;
+				initialScheduleType.set(null);
 			}
 		}
 	});

@@ -3,6 +3,7 @@
   import type { ThreadEntry, ElementData } from '../lib/types';
   import { captureViewport } from '../lib/screenshot';
   import { startElementPicker } from '../lib/elementPicker';
+  import { slide } from 'svelte/transition';
 
   let {
     endpoint,
@@ -32,27 +33,42 @@
   let capturingScreenshot = $state(false);
 
   // Subtab state
-  type SubTab = 'pending' | 'in_progress' | 'completed';
-  let activeSubTab = $state<SubTab>('pending');
+  // Submitted = waiting on dev (submitted, in_progress, rejected)
+  // Review = dev finished, user's turn to accept/reject (completed, wontfix)
+  // Done = fully resolved (accepted, closed)
+  type SubTab = 'submitted' | 'review' | 'done';
+  let activeSubTab = $state<SubTab>('submitted');
+
+  // Auto-switch to review tab when there are items needing attention
+  let hasAutoSwitched = $state(false);
+  $effect(() => {
+    if (!hasAutoSwitched && reviewCount > 0 && submittedCount === 0) {
+      activeSubTab = 'review';
+      hasAutoSwitched = true;
+    }
+  });
 
   // Filter reports by subtab
   let filteredReports = $derived.by(() => {
-    if (activeSubTab === 'pending') {
+    if (activeSubTab === 'submitted') {
       // submitted = waiting for dev to pick up
+      // in_progress = dev is working on it (shown with badge)
       // rejected = user rejected, waiting for dev revision
-      return reports.filter(r => r.status === 'submitted' || r.status === 'rejected');
-    } else if (activeSubTab === 'in_progress') {
-      return reports.filter(r => r.status === 'in_progress');
+      return reports.filter(r => ['submitted', 'in_progress', 'rejected'].includes(r.status));
+    } else if (activeSubTab === 'review') {
+      // completed = dev finished, needs user review
+      // wontfix = dev declined, user can accept or push back
+      return reports.filter(r => r.status === 'completed' || r.status === 'wontfix');
     } else {
-      // completed, accepted, wontfix, closed = fully resolved
-      return reports.filter(r => ['completed', 'accepted', 'wontfix', 'closed'].includes(r.status));
+      // accepted, closed = fully resolved
+      return reports.filter(r => r.status === 'accepted' || r.status === 'closed');
     }
   });
 
   // Counts for subtab badges
-  let pendingCount = $derived(reports.filter(r => r.status === 'submitted' || r.status === 'rejected').length);
-  let inProgressCount = $derived(reports.filter(r => r.status === 'in_progress').length);
-  let completedCount = $derived(reports.filter(r => ['completed', 'accepted', 'wontfix', 'closed'].includes(r.status)).length);
+  let submittedCount = $derived(reports.filter(r => ['submitted', 'in_progress', 'rejected'].includes(r.status)).length);
+  let reviewCount = $derived(reports.filter(r => r.status === 'completed' || r.status === 'wontfix').length);
+  let doneCount = $derived(reports.filter(r => r.status === 'accepted' || r.status === 'closed').length);
 
   function toggleCard(reportId: string) {
     expandedCardId = expandedCardId === reportId ? null : reportId;
@@ -162,11 +178,11 @@
 
   function statusLabel(status: string): string {
     const labels: Record<string, string> = {
-      submitted: 'Pending',
-      in_progress: 'In Progress',
-      completed: 'Completed',
-      accepted: 'Accepted',
-      rejected: 'Needs Revision',
+      submitted: 'Submitted',
+      in_progress: 'Working On It',
+      completed: 'Ready for Review',
+      accepted: 'Done',
+      rejected: 'Revising',
       wontfix: "Won't Fix",
       closed: 'Closed',
     };
@@ -179,7 +195,7 @@
       in_progress: '#3b82f6',
       completed: '#f59e0b',
       accepted: '#10b981',
-      rejected: '#f59e0b',  // amber = needs revision (not a final rejection)
+      rejected: '#f59e0b',
       wontfix: '#6b7280',
       closed: '#6b7280',
     };
@@ -210,21 +226,23 @@
 <div class="request-list">
   <!-- Subtabs -->
   <div class="subtabs">
-    <button class="subtab" class:active={activeSubTab === 'pending'} onclick={() => activeSubTab = 'pending'}>
-      Pending
-      {#if pendingCount > 0}<span class="subtab-count">{pendingCount}</span>{/if}
+    <button class="subtab" class:active={activeSubTab === 'submitted'} onclick={() => activeSubTab = 'submitted'}>
+      Submitted
+      {#if submittedCount > 0}<span class="subtab-count">{submittedCount}</span>{/if}
     </button>
-    <button class="subtab" class:active={activeSubTab === 'in_progress'} onclick={() => activeSubTab = 'in_progress'}>
-      In Progress
-      {#if inProgressCount > 0}<span class="subtab-count active-count">{inProgressCount}</span>{/if}
+    <button class="subtab" class:active={activeSubTab === 'review'} onclick={() => activeSubTab = 'review'}>
+      Review
+      {#if reviewCount > 0}<span class="subtab-count review-count">{reviewCount}</span>{/if}
     </button>
-    <button class="subtab" class:active={activeSubTab === 'completed'} onclick={() => activeSubTab = 'completed'}>
+    <button class="subtab" class:active={activeSubTab === 'done'} onclick={() => activeSubTab = 'done'}>
       Done
-      {#if completedCount > 0}<span class="subtab-count done-count">{completedCount}</span>{/if}
+      {#if doneCount > 0}<span class="subtab-count done-count">{doneCount}</span>{/if}
     </button>
   </div>
 
   <div class="request-scroll">
+    {#key activeSubTab}
+    <div transition:slide={{ duration: 200 }}>
     {#if loading}
       <div class="loading">
         <span class="spinner"></span>
@@ -243,7 +261,7 @@
       </div>
     {:else if filteredReports.length === 0}
       <div class="empty">
-        <p class="empty-sub">No {activeSubTab === 'pending' ? 'pending' : activeSubTab === 'in_progress' ? 'in-progress' : 'completed'} requests</p>
+        <p class="empty-sub">{activeSubTab === 'submitted' ? 'No submitted requests' : activeSubTab === 'review' ? 'Nothing to review right now' : 'No completed requests yet'}</p>
       </div>
     {:else}
       <div class="reports">
@@ -263,7 +281,7 @@
 
             <!-- Expanded content -->
             {#if expandedCardId === report.id}
-              <div class="card-body">
+              <div class="card-body" transition:slide={{ duration: 200 }}>
                 {#if report.page_url}
                   <a class="report-url" href={report.page_url} target="_blank" rel="noopener noreferrer">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -460,6 +478,8 @@
         {/each}
       </div>
     {/if}
+    </div>
+    {/key}
   </div>
 </div>
 
@@ -518,13 +538,13 @@
     background: #3b82f6;
     color: #fff;
   }
-  .subtab-count.active-count {
-    background: #3b82f630;
-    color: #60a5fa;
+  .subtab-count.review-count {
+    background: #f59e0b30;
+    color: #fbbf24;
   }
-  .subtab.active .subtab-count.active-count {
-    background: #3b82f6;
-    color: #fff;
+  .subtab.active .subtab-count.review-count {
+    background: #f59e0b;
+    color: #000;
   }
   .subtab-count.done-count {
     background: #10b98130;

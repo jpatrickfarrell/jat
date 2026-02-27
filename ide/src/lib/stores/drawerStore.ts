@@ -58,6 +58,10 @@ export const initialTaskText = writable<string | null>(null);
 // Initial issue type to pre-fill task drawer (e.g., 'epic' when creating from "Assign to Epic" menu)
 export const initialIssueType = writable<string | null>(null);
 
+// Initial schedule type to pre-fill task drawer (e.g., 'recurring' when creating from /schedules page)
+export type ScheduleType = 'none' | 'one-shot' | 'recurring';
+export const initialScheduleType = writable<ScheduleType | null>(null);
+
 // Creation mode for multi-mode task drawer (tabs: task, paste, template, generator, plan)
 export type DrawerCreationMode = 'task' | 'paste' | 'template' | 'generator' | 'plan';
 export const drawerCreationMode = writable<DrawerCreationMode>('task');
@@ -69,7 +73,7 @@ export const availableProjects = writable<string[]>([]);
 export const projectColorsStore = writable<Record<string, string>>({});
 
 // Helper functions
-export function openTaskDrawer(project?: string, text?: string, mode?: DrawerCreationMode, issueType?: string) {
+export function openTaskDrawer(project?: string, text?: string, mode?: DrawerCreationMode, issueType?: string, scheduleType?: ScheduleType) {
 	if (project && project !== 'All Projects') {
 		selectedDrawerProject.set(project);
 	} else {
@@ -81,6 +85,7 @@ export function openTaskDrawer(project?: string, text?: string, mode?: DrawerCre
 		initialTaskText.set(null);
 	}
 	initialIssueType.set(issueType || null);
+	initialScheduleType.set(scheduleType || null);
 	drawerCreationMode.set(mode || 'task');
 	isTaskDrawerOpen.set(true);
 }

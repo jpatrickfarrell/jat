@@ -5,7 +5,9 @@
   import { captureViewport } from '../lib/screenshot';
   import { startElementPicker } from '../lib/elementPicker';
   import { getCapturedLogs } from '../lib/consoleCapture';
+  import { slide } from 'svelte/transition';
   import ScreenshotPreview from './ScreenshotPreview.svelte';
+  import AnnotationEditor from './AnnotationEditor.svelte';
   import ConsoleLogList from './ConsoleLogList.svelte';
   import StatusToast from './StatusToast.svelte';
   import RequestList from './RequestList.svelte';
@@ -71,6 +73,10 @@
   let capturing = $state(false);
   let picking = $state(false);
 
+  // Annotation editor state
+  let editingScreenshotIndex = $state<number | null>(null);
+  let pendingScreenshotDataUrl = $state('');
+
   let toastMessage = $state('');
   let toastType = $state<'success' | 'error'>('success');
   let toastVisible = $state(false);
@@ -86,8 +92,9 @@
     capturing = true;
     try {
       const dataUrl = await captureViewport();
-      screenshots = [...screenshots, dataUrl];
-      showToast(`Screenshot captured (${screenshots.length})`, 'success');
+      // Open annotation editor instead of immediately appending
+      pendingScreenshotDataUrl = dataUrl;
+      editingScreenshotIndex = screenshots.length; // new index (not yet in array)
     } catch (err) {
       console.error('[jat-feedback] Screenshot failed:', err);
       showToast('Screenshot failed: ' + (err instanceof Error ? err.message : 'unknown error'), 'error');
@@ -98,6 +105,37 @@
 
   function handleRemoveScreenshot(index: number) {
     screenshots = screenshots.filter((_, i) => i !== index);
+  }
+
+  function handleEditScreenshot(index: number) {
+    pendingScreenshotDataUrl = screenshots[index];
+    editingScreenshotIndex = index;
+  }
+
+  function handleAnnotationSave(dataUrl: string) {
+    if (editingScreenshotIndex !== null) {
+      if (editingScreenshotIndex >= screenshots.length) {
+        // New capture — append
+        screenshots = [...screenshots, dataUrl];
+        showToast(`Screenshot captured (${screenshots.length})`, 'success');
+      } else {
+        // Editing existing — replace
+        screenshots = screenshots.map((s, i) => i === editingScreenshotIndex ? dataUrl : s);
+        showToast('Screenshot updated', 'success');
+      }
+    }
+    editingScreenshotIndex = null;
+    pendingScreenshotDataUrl = '';
+  }
+
+  function handleAnnotationCancel() {
+    if (editingScreenshotIndex !== null && editingScreenshotIndex >= screenshots.length) {
+      // New capture cancelled — still append the unannotated original
+      screenshots = [...screenshots, pendingScreenshotDataUrl];
+      showToast(`Screenshot captured (${screenshots.length})`, 'success');
+    }
+    editingScreenshotIndex = null;
+    pendingScreenshotDataUrl = '';
   }
 
   function handlePickElement() {
@@ -236,7 +274,7 @@
   </div>
 
   {#if activeTab === 'new'}
-    <form class="panel-body" onsubmit={handleSubmit}>
+    <form class="panel-body" transition:slide={{ duration: 200 }} onsubmit={handleSubmit}>
       <div class="field">
         <label for="jat-fb-title">Title <span class="req">*</span></label>
         <input id="jat-fb-title" type="text" bind:value={title} placeholder="Brief description" required disabled={submitting} />
@@ -267,7 +305,7 @@
       </div>
 
       <div class="tools">
-        <ScreenshotPreview {screenshots} {capturing} oncapture={handleCapture} onremove={handleRemoveScreenshot} />
+        <ScreenshotPreview {screenshots} {capturing} oncapture={handleCapture} onremove={handleRemoveScreenshot} onedit={handleEditScreenshot} />
 
         <button type="button" class="tool-btn" onclick={handlePickElement} disabled={picking}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -313,18 +351,30 @@
         </button>
       </div>
     </form>
-  {:else}
-    <RequestList
-      {endpoint}
-      bind:reports
-      loading={reportsLoading}
-      error={reportsError}
-      onreload={loadReports}
-    />
+  {/if}
+
+  {#if activeTab === 'requests'}
+    <div transition:slide={{ duration: 200 }}>
+      <RequestList
+        {endpoint}
+        bind:reports
+        loading={reportsLoading}
+        error={reportsError}
+        onreload={loadReports}
+      />
+    </div>
   {/if}
 
   <StatusToast message={toastMessage} type={toastType} visible={toastVisible} />
 </div>
+
+{#if editingScreenshotIndex !== null}
+  <AnnotationEditor
+    imageDataUrl={pendingScreenshotDataUrl}
+    onsave={handleAnnotationSave}
+    oncancel={handleAnnotationCancel}
+  />
+{/if}
 
 <style>
   .panel {

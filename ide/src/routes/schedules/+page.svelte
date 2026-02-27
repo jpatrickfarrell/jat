@@ -13,6 +13,7 @@
 	import ScheduledTasksTable from '$lib/components/schedules/ScheduledTasksTable.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
+	import { openTaskDrawer } from '$lib/stores/drawerStore';
 
 	// State
 	let schedulerStatus = $state<any>(null);
@@ -186,6 +187,10 @@
 		drawerOpen = true;
 	}
 
+	function handleCreateScheduledTask() {
+		openTaskDrawer(undefined, undefined, 'task', undefined, 'recurring');
+	}
+
 	function showToast(message: string, type: 'success' | 'error') {
 		if (type === 'error') {
 			errorToast(message);
@@ -220,6 +225,12 @@
 			<h1 class="page-title tracking-in-expand">Schedules</h1>
 			<span class="task-count">{scheduledTasks.length} tasks</span>
 		</div>
+		<button class="btn btn-primary btn-sm gap-1.5" onclick={handleCreateScheduledTask}>
+			<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+			</svg>
+			Schedule Task
+		</button>
 	</div>
 	<p class="page-subtitle">Recurring and one-off tasks that run automatically on a schedule. The scheduler daemon polls for due tasks and spawns agent sessions to handle them.</p>
 

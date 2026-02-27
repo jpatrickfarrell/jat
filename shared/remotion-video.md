@@ -2,7 +2,7 @@
 
 Programmatic video generation using [Remotion](https://www.remotion.dev/) — React-based motion graphics that render to MP4. Use this when a project needs a teaser, explainer, or product demo video.
 
-### Quick Start (5 steps)
+### Quick Start
 
 ```bash
 # 1. Create video/ subdirectory in your SvelteKit project
@@ -11,17 +11,18 @@ mkdir -p video/src/scenes video/public video/out
 # 2. Install (see package.json template below)
 cd video && npm install
 
-# 3. Preview in browser
+# 3. Preview in browser (hot-reloads on file save)
 npx remotion studio --port 3100
 
-# 4. Render to MP4
-npx remotion render CompositionId out/video.mp4 --codec h264
+# 4. Render + version + copy to static/ (one command)
+npm run publish
+# → Renders MP4 + poster, copies to ../static/ with version tag
+# → e.g. static/video-v1.0.0.mp4, static/video.mp4 (active)
 
-# 5. Generate poster image from a specific frame
-npx remotion still CompositionId --frame 900 --output ../static/poster.jpg --image-format jpeg --jpeg-quality 90
-
-# 6. Copy to SvelteKit static/
-cp out/video.mp4 ../static/
+# 5. Iterate: edit scenes, bump version, re-publish
+# In package.json: "version": "1.1.0"
+npm run publish
+# → static/video-v1.1.0.mp4 + updates static/video.mp4
 ```
 
 ### Project Structure
@@ -48,6 +49,8 @@ your-sveltekit-project/
 
 ### package.json Template
 
+The `publish` script handles render + version + copy to `static/` in one command. Version in `package.json` drives the filename (`teaser-v1.1.0.mp4`). Bump version, run `npm run publish`.
+
 ```json
 {
   "name": "project-video",
@@ -55,8 +58,11 @@ your-sveltekit-project/
   "private": true,
   "scripts": {
     "start": "remotion studio",
-    "build": "remotion render MainVideo out/video.mp4",
-    "still": "remotion still MainVideo --frame 900 --output out/poster.jpg --image-format jpeg"
+    "render": "remotion render src/index.ts MainVideo out/video.mp4 --codec h264",
+    "render:poster": "remotion still src/index.ts MainVideo out/poster.jpg --frame 900 --image-format jpeg",
+    "render:webm": "remotion render src/index.ts MainVideo out/video.webm --codec vp8",
+    "publish": "npm run render && npm run render:poster && node -e \"const v=require('./package.json').version; const {cpSync}=require('fs'); cpSync('out/video.mp4','../static/video-v'+v+'.mp4'); cpSync('out/video.mp4','../static/video.mp4'); cpSync('out/poster.jpg','../static/poster-v'+v+'.jpg'); cpSync('out/poster.jpg','../static/poster.jpg'); console.log('Published v'+v+' to static/')\"",
+    "preview": "remotion preview"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.0",
@@ -282,21 +288,87 @@ const stampRotation = interpolate(stampScale, [0, 1], [-20, -8]);
 ### Render Commands
 
 ```bash
-# MP4 (H.264) — best compatibility, ~4MB for 45s
-npx remotion render CompositionId out/video.mp4 --codec h264
+# IMPORTANT: Use src/index.ts (the registerRoot file), NOT Root.tsx
+# Remotion CLI needs the entry point that calls registerRoot()
+
+# MP4 (H.264) — best compatibility, ~5-6MB for 45s
+npx remotion render src/index.ts CompositionId out/video.mp4 --codec h264
 
 # WebM (VP8) — smaller, web-optimized
-npx remotion render CompositionId out/video.webm --codec vp8
+npx remotion render src/index.ts CompositionId out/video.webm --codec vp8
 
 # Still frame (poster image)
-npx remotion still CompositionId --frame 900 --output out/poster.jpg --image-format jpeg --jpeg-quality 90
+npx remotion still src/index.ts CompositionId --frame 900 --output out/poster.jpg --image-format jpeg
 
 # First render downloads Chrome Headless Shell (~87MB), cached after that
 # Rendering 1350 frames takes ~20-30s with 8x concurrency
 ```
 
+### Versioning Workflow
+
+Keep versioned copies so you can compare iterations and roll back:
+
+```bash
+# After each render, save a versioned copy AND update the active file
+cp video/out/video.mp4 static/video-v1.0.mp4    # versioned backup
+cp video/out/video.mp4 static/video.mp4          # active (served to users)
+cp video/out/poster.jpg static/poster-v1.0.jpg
+cp video/out/poster.jpg static/poster.jpg
+
+# Next iteration: edit scenes, re-render, save as v1.1
+cp video/out/video.mp4 static/video-v1.1.mp4
+cp video/out/video.mp4 static/video.mp4
+```
+
+**File inventory pattern:**
+```
+static/
+├── video.mp4            ← Active (always latest)
+├── video-v1.0.mp4       ← First render
+├── video-v1.1.mp4       ← Scaled up 17%
+├── video-v1.2.mp4       ← Next iteration...
+├── poster.jpg           ← Active poster
+├── poster-v1.0.jpg
+└── poster-v1.1.jpg
+```
+
+### Size Tuning Guide
+
+Videos render at 1920x1080 but display embedded at ~800px width on a page — **roughly 42% of native size**. Text that looks fine at 1080p becomes illegible when shrunk.
+
+**Recommended font sizes for embedded playback (at 1920x1080 canvas):**
+
+| Element | Minimum | Recommended | Notes |
+|---------|---------|-------------|-------|
+| Scene titles | 80px | 94-110px | Bold (800+), should dominate the frame |
+| Subtitles | 34px | 40-42px | Readable but secondary |
+| Body/labels | 26px | 30-35px | Spec labels, timeline items, list text |
+| Mono values | 28px | 33-36px | Data values, prices, dimensions |
+| Small labels | 18px | 21-24px | URL bars, dates, meta text |
+| Hero numbers | 100px | 130px+ | Prices, key metrics — make them huge |
+| CTA headline | 100px | 118px+ | The thing you want people to read |
+| Buttons | 28px | 33px | With generous padding (24px 72px) |
+
+**Element sizing:**
+
+| Element | Minimum | Recommended |
+|---------|---------|-------------|
+| Card/dropzone | 800px wide | 940px+ wide |
+| Portal mockup | 1200px wide | 1400px wide |
+| Icons (shields, checkmarks) | 160px | 188px+ |
+| Checkboxes | 36px | 42px |
+| Gaps/spacing | Scale with text | 1.17× of text scale |
+
+**Iteration process:**
+1. Render v1.0 with initial sizes
+2. Embed on page, scrub through scenes at embedded size
+3. If text feels small, bump everything ~17% (multiply by 1.17)
+4. Re-render as v1.1, compare
+5. Repeat if needed — usually 2-3 iterations to dial in
+
 ### Gotchas
 
+- **Entry point**: Use `src/index.ts` (the file with `registerRoot()`), NOT `Root.tsx`. The CLI will error if you pass the wrong file.
 - **Remotion is React, not Svelte** — the `video/` directory is a standalone React/TypeScript project. Don't mix with SvelteKit's build.
 - **First render is slow** — downloads Chrome Headless Shell (~87MB). Subsequent renders use cache.
 - **No custom fonts** — use system fonts or load via `@remotion/google-fonts` package. System fonts are the safest.
@@ -304,3 +376,5 @@ npx remotion still CompositionId --frame 900 --output out/poster.jpg --image-for
 - **Interactive CLI** — `npx create-video` is interactive and can't be used in automated scripts. Create files manually instead.
 - **Static assets** — put images/fonts in `video/public/`, reference as `/filename.png` in components.
 - **Don't commit `video/node_modules/` or `video/out/`** — add to `.gitignore`. Do commit the rendered `static/*.mp4`.
+- **431 errors on localhost** — cookie bloat from multiple dev servers. Fix: `NODE_OPTIONS="--max-http-header-size=65536"` when starting Remotion studio or the SvelteKit dev server.
+- **Embedded sizing** — 1920×1080 video at ~800px embed width means everything renders at ~42% native size. Start with large fonts and iterate down, not up.

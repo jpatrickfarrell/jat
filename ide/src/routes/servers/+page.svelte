@@ -28,8 +28,11 @@
 		sendInput as sendServerInput,
 		interrupt as interruptServer,
 		startPolling as startServerPolling,
-		stopPolling as stopServerPolling
+		stopPolling as stopServerPolling,
+		killOrphan,
+		killAllOrphans
 	} from '$lib/stores/serverSessions.svelte.js';
+	import OrphanProcessBanner from '$lib/components/servers/OrphanProcessBanner.svelte';
 	import {
 		playServerStartSound,
 		playServerStopSound
@@ -886,6 +889,13 @@
 			/>
 		{/if}
 	</div>
+
+	<!-- Orphan Process Banner (between session panel and divider) -->
+	<OrphanProcessBanner
+		orphans={serverSessionsState.orphans}
+		onKillOrphan={killOrphan}
+		onKillAll={killAllOrphans}
+	/>
 
 	<!-- Resizable Divider -->
 	<ResizableDivider

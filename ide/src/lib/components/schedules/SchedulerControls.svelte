@@ -83,90 +83,101 @@
 </script>
 
 <div class="scheduler-controls">
-	<!-- Status indicator -->
-	<div class="status-section">
-		{#if loading && !status}
-			<div class="skeleton h-4 w-20 rounded"></div>
-		{:else}
-			<div class="status-dot" class:running={status?.running} class:stopped={!status?.running}></div>
-			<span class="status-label" class:text-success={status?.running} class:text-error={!status?.running}>
-				{status?.running ? 'Running' : 'Stopped'}
-			</span>
-			{#if status?.running && status.uptime !== null}
-				<span class="uptime">({formatUptime(status.uptime)})</span>
+	<div class="controls-top">
+		<!-- Status indicator -->
+		<div class="status-section">
+			{#if loading && !status}
+				<div class="skeleton h-4 w-20 rounded"></div>
+			{:else}
+				<div class="status-dot" class:running={status?.running} class:stopped={!status?.running}></div>
+				<span class="status-label" class:text-success={status?.running} class:text-error={!status?.running}>
+					{status?.running ? 'Auto-run on' : 'Auto-run off'}
+				</span>
+				{#if status?.running && status.uptime !== null}
+					<span class="uptime">({formatUptime(status.uptime)})</span>
+				{/if}
 			{/if}
-		{/if}
-	</div>
+		</div>
 
-	<!-- Stats -->
-	<div class="stats-section">
-		{#if status}
-			<div class="stat-item" title="Scheduled tasks">
-				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="stat-icon">
-					<path fill-rule="evenodd" d="M5.75 2a.75.75 0 01.75.75V4h7V2.75a.75.75 0 011.5 0V4h.25A2.75 2.75 0 0118 6.75v8.5A2.75 2.75 0 0115.25 18H4.75A2.75 2.75 0 012 15.25v-8.5A2.75 2.75 0 014.75 4H5V2.75A.75.75 0 015.75 2zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75z" clip-rule="evenodd" />
-				</svg>
-				<span class="stat-value">{status.scheduledCount}</span>
-				<span class="stat-label">scheduled</span>
-			</div>
-
-			{#if status.nextRun}
-				<div class="stat-divider"></div>
-				<div class="stat-item" title="Next run: {status.nextRun.taskTitle} ({status.nextRun.taskId})">
+		<!-- Stats -->
+		<div class="stats-section">
+			{#if status}
+				<div class="stat-item" title="Scheduled tasks">
 					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="stat-icon">
-						<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clip-rule="evenodd" />
+						<path fill-rule="evenodd" d="M5.75 2a.75.75 0 01.75.75V4h7V2.75a.75.75 0 011.5 0V4h.25A2.75 2.75 0 0118 6.75v8.5A2.75 2.75 0 0115.25 18H4.75A2.75 2.75 0 012 15.25v-8.5A2.75 2.75 0 014.75 4H5V2.75A.75.75 0 015.75 2zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75z" clip-rule="evenodd" />
 					</svg>
-					<span class="stat-value next-run">{formatRelativeTime(status.nextRun.nextRunAt)}</span>
-					<span class="stat-label truncate max-w-[160px]" title={status.nextRun.taskTitle}>{status.nextRun.taskTitle}</span>
+					<span class="stat-value">{status.scheduledCount}</span>
+					<span class="stat-label">scheduled</span>
 				</div>
+
+				{#if status.nextRun}
+					<div class="stat-divider"></div>
+					<div class="stat-item" title="Next run: {status.nextRun.taskTitle} ({status.nextRun.taskId})">
+						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="stat-icon">
+							<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clip-rule="evenodd" />
+						</svg>
+						<span class="stat-value next-run">{formatRelativeTime(status.nextRun.nextRunAt)}</span>
+						<span class="stat-label truncate max-w-[160px]" title={status.nextRun.taskTitle}>{status.nextRun.taskTitle}</span>
+					</div>
+				{/if}
 			{/if}
-		{/if}
+		</div>
+
+		<!-- Actions -->
+		<div class="actions-section">
+			<button
+				class="btn-control btn-refresh"
+				onclick={onRefresh}
+				title="Refresh status"
+				disabled={loading}
+			>
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-icon" class:animate-spin={loading}>
+					<path d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.992 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182M21.015 4.353v4.992" />
+				</svg>
+			</button>
+
+			{#if status?.running}
+				<button
+					class="btn-control btn-stop"
+					onclick={handleStop}
+					disabled={actionLoading}
+					title="Pause automatic task spawning"
+				>
+					{#if actionLoading}
+						<span class="loading loading-spinner loading-xs"></span>
+					{:else}
+						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="action-icon">
+							<path d="M5.75 3a.75.75 0 00-.75.75v12.5c0 .414.336.75.75.75h1.5a.75.75 0 00.75-.75V3.75A.75.75 0 007.25 3h-1.5zM12.75 3a.75.75 0 00-.75.75v12.5c0 .414.336.75.75.75h1.5a.75.75 0 00.75-.75V3.75a.75.75 0 00-.75-.75h-1.5z" />
+						</svg>
+					{/if}
+					Pause
+				</button>
+			{:else}
+				<button
+					class="btn-control btn-start"
+					onclick={handleStart}
+					disabled={actionLoading}
+					title="Enable automatic task spawning"
+				>
+					{#if actionLoading}
+						<span class="loading loading-spinner loading-xs"></span>
+					{:else}
+						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="action-icon">
+							<path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+						</svg>
+					{/if}
+					Enable
+				</button>
+			{/if}
+		</div>
 	</div>
 
-	<!-- Actions -->
-	<div class="actions-section">
-		<button
-			class="btn-control btn-refresh"
-			onclick={onRefresh}
-			title="Refresh status"
-			disabled={loading}
-		>
-			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-icon" class:animate-spin={loading}>
-				<path d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.992 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182M21.015 4.353v4.992" />
-			</svg>
-		</button>
-
+	<!-- Contextual hint -->
+	<div class="controls-hint">
 		{#if status?.running}
-			<button
-				class="btn-control btn-stop"
-				onclick={handleStop}
-				disabled={actionLoading}
-				title="Stop scheduler"
-			>
-				{#if actionLoading}
-					<span class="loading loading-spinner loading-xs"></span>
-				{:else}
-					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="action-icon">
-						<path d="M5.75 3a.75.75 0 00-.75.75v12.5c0 .414.336.75.75.75h1.5a.75.75 0 00.75-.75V3.75A.75.75 0 007.25 3h-1.5zM12.75 3a.75.75 0 00-.75.75v12.5c0 .414.336.75.75.75h1.5a.75.75 0 00.75-.75V3.75a.75.75 0 00-.75-.75h-1.5z" />
-					</svg>
-				{/if}
-				Stop
-			</button>
+			Due tasks will automatically spawn agents. Polls every 30s.
 		{:else}
-			<button
-				class="btn-control btn-start"
-				onclick={handleStart}
-				disabled={actionLoading}
-				title="Start scheduler"
-			>
-				{#if actionLoading}
-					<span class="loading loading-spinner loading-xs"></span>
-				{:else}
-					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="action-icon">
-						<path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
-					</svg>
-				{/if}
-				Start
-			</button>
+			Scheduled tasks won't run until auto-run is enabled.
 		{/if}
 	</div>
 </div>
@@ -174,12 +185,24 @@
 <style>
 	.scheduler-controls {
 		display: flex;
-		align-items: center;
-		gap: 1.5rem;
+		flex-direction: column;
+		gap: 0.375rem;
 		padding: 0.625rem 1rem;
 		background: oklch(0.18 0.01 250);
 		border: 1px solid oklch(0.28 0.02 250);
 		border-radius: 0.5rem;
+	}
+
+	.controls-top {
+		display: flex;
+		align-items: center;
+		gap: 1.5rem;
+	}
+
+	.controls-hint {
+		font-size: 0.6875rem;
+		color: oklch(0.50 0.02 250);
+		padding-left: 1.125rem;
 	}
 
 	.status-section {

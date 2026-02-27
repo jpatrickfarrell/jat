@@ -7,6 +7,7 @@
 	 */
 
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
+	import { describeCron } from '$lib/utils/cronUtils';
 
 	interface ScheduledTask {
 		id: string;
@@ -117,27 +118,6 @@
 		return `${month} ${day}, ${time}`;
 	}
 
-	function formatCron(cron: string | null): string {
-		if (!cron) return '--';
-		// Common cron patterns
-		const patterns: Record<string, string> = {
-			'* * * * *': 'Every minute',
-			'*/5 * * * *': 'Every 5 min',
-			'*/15 * * * *': 'Every 15 min',
-			'*/30 * * * *': 'Every 30 min',
-			'0 * * * *': 'Hourly',
-			'0 */2 * * *': 'Every 2 hours',
-			'0 */4 * * *': 'Every 4 hours',
-			'0 */6 * * *': 'Every 6 hours',
-			'0 */12 * * *': 'Every 12 hours',
-			'0 0 * * *': 'Daily',
-			'0 9 * * *': 'Daily 9am',
-			'0 9 * * 1-5': 'Weekdays 9am',
-			'0 0 * * 0': 'Weekly',
-			'0 0 1 * *': 'Monthly'
-		};
-		return patterns[cron] || cron;
-	}
 
 	function formatNextRun(isoDate: string | null, status?: string): { text: string; class: string } {
 		if (!isoDate) return { text: '--', class: '' };
@@ -299,7 +279,7 @@
 							<td class="col-schedule">
 								{#if task.schedule_cron}
 									<span class="cron-badge" title={task.schedule_cron}>
-										{formatCron(task.schedule_cron)}
+										{describeCron(task.schedule_cron)}
 									</span>
 								{:else}
 									<span class="scheduled-badge" title={task.next_run_at || 'One-time task'}>

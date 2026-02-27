@@ -36,6 +36,7 @@
 	import { availableProjects as availableProjectsStore } from '$lib/stores/drawerStore';
 	import { loadCommands, getCommands } from '$lib/stores/configStore.svelte';
 	import { addToast } from '$lib/stores/toasts.svelte';
+	import { describeCron } from '$lib/utils/cronUtils';
 
 	// Task interface for drawer (extends API Task with additional optional fields)
 	interface DrawerTask {
@@ -405,30 +406,6 @@
 		if (diffDays === -1) return { text: '1 day overdue', isOverdue: true };
 		if (diffDays > 1) return { text: `in ${diffDays} days`, isOverdue: false };
 		return { text: `${Math.abs(diffDays)} days overdue`, isOverdue: true };
-	}
-
-	// Helper: Convert cron expression to human-readable string
-	function describeCron(cron: string | null | undefined): string {
-		if (!cron) return '';
-		const parts = cron.trim().split(/\s+/);
-		if (parts.length < 5) return cron;
-
-		const [min, hour, dom, month, dow] = parts;
-
-		// Common patterns
-		if (min === '*' && hour === '*' && dom === '*' && month === '*' && dow === '*') return 'Every minute';
-		if (hour === '*' && dom === '*' && month === '*' && dow === '*') return `Every hour at :${min.padStart(2, '0')}`;
-		if (dom === '*' && month === '*' && dow === '*') return `Daily at ${hour}:${min.padStart(2, '0')}`;
-		if (dom === '*' && month === '*' && dow === '1-5') return `Weekdays at ${hour}:${min.padStart(2, '0')}`;
-		if (dom === '*' && month === '*' && dow === '0') return `Sundays at ${hour}:${min.padStart(2, '0')}`;
-		if (dom === '*' && month === '*' && dow === '1') return `Mondays at ${hour}:${min.padStart(2, '0')}`;
-		if (dom === '1' && month === '*' && dow === '*') return `Monthly on the 1st at ${hour}:${min.padStart(2, '0')}`;
-
-		// Interval patterns
-		if (min.startsWith('*/')) return `Every ${min.slice(2)} minutes`;
-		if (hour.startsWith('*/') && dom === '*' && month === '*' && dow === '*') return `Every ${hour.slice(2)} hours at :${min.padStart(2, '0')}`;
-
-		return cron; // Fallback to raw expression
 	}
 
 	// Derived: Has any schedule-specific fields set (cron, next_run, due_date)

@@ -288,19 +288,9 @@ export function getCategorizedNodes(): { category: CategoryMeta; nodes: NodeType
 	}));
 }
 
-/** Cron preset expressions */
-export const CRON_PRESETS: { label: string; expr: string }[] = [
-	{ label: 'Every minute', expr: '* * * * *' },
-	{ label: 'Every 5 minutes', expr: '*/5 * * * *' },
-	{ label: 'Every 15 minutes', expr: '*/15 * * * *' },
-	{ label: 'Every 30 minutes', expr: '*/30 * * * *' },
-	{ label: 'Every hour', expr: '0 * * * *' },
-	{ label: 'Daily at 9 AM', expr: '0 9 * * *' },
-	{ label: 'Daily at midnight', expr: '0 0 * * *' },
-	{ label: 'Weekdays at 9 AM', expr: '0 9 * * 1-5' },
-	{ label: 'Weekly on Sunday', expr: '0 0 * * 0' },
-	{ label: 'Monthly on the 1st', expr: '0 0 1 * *' }
-];
+/** Cron preset expressions (re-exported from cronUtils with legacy `expr` field) */
+import { CRON_PRESETS as _CRON_PRESETS } from '$lib/utils/cronUtils';
+export const CRON_PRESETS: { label: string; expr: string }[] = _CRON_PRESETS.map(p => ({ label: p.label, expr: p.cron }));
 
 /** Event types for the event trigger (matches eventBus.server.ts EventType) */
 export const EVENT_TYPES: { value: string; label: string; description: string }[] = [
@@ -333,7 +323,7 @@ export const TASK_TYPES: { value: string; label: string }[] = [
 	{ value: 'task', label: 'Task' },
 	{ value: 'bug', label: 'Bug' },
 	{ value: 'feature', label: 'Feature' },
-	{ value: 'chore', label: 'Chore' }
+	{ value: 'chore', label: 'Chore (Recurring)' }
 ];
 
 /** Priority options */

@@ -28,7 +28,7 @@
 import { json } from '@sveltejs/kit';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { readFileSync, statSync } from 'fs';
+import { readFileSync, readlinkSync, statSync } from 'fs';
 import { apiCache, cacheKey, CACHE_TTL, singleFlight } from '$lib/server/cache.js';
 import { classifySession, getDisplayName, isServerSession, APP_PREFIX, LEGACY_SERVER_PREFIX } from '$lib/utils/sessionNaming.js';
 
@@ -295,20 +295,26 @@ async function computeServersData(lines) {
 			const { stdout } = await execAsync(sessionsCommand);
 			sessionsOutput = stdout.trim();
 		} catch {
-			// No tmux server or no sessions - return empty
+			// No tmux server or no sessions - still check for orphans
+			const orphans = await detectOrphanProcesses([]);
 			return {
 				success: true,
 				sessions: [],
 				count: 0,
+				orphans,
+				orphanCount: orphans.length,
 				timestamp: new Date().toISOString()
 			};
 		}
 
 		if (!sessionsOutput) {
+			const orphans = await detectOrphanProcesses([]);
 			return {
 				success: true,
 				sessions: [],
 				count: 0,
+				orphans,
+				orphanCount: orphans.length,
 				timestamp: new Date().toISOString()
 			};
 		}
@@ -328,10 +334,13 @@ async function computeServersData(lines) {
 			.filter((session) => isServerSession(session.name));
 
 		if (rawSessions.length === 0) {
+			const orphans = await detectOrphanProcesses([]);
 			return {
 				success: true,
 				sessions: [],
 				count: 0,
+				orphans,
+				orphanCount: orphans.length,
 				timestamp: new Date().toISOString()
 			};
 		}
@@ -422,11 +431,180 @@ async function computeServersData(lines) {
 			};
 		});
 
+		// Step 6: Detect orphan processes
+		const orphans = await detectOrphanProcesses(rawSessions);
+
 		// Build response
 		return {
 			success: true,
 			sessions: serverSessions,
 			count: serverSessions.length,
+			orphans,
+			orphanCount: orphans.length,
 			timestamp: new Date().toISOString()
 		};
+}
+
+/**
+ * Detect orphaned node/workerd processes listening on ports.
+ * Orphans are processes NOT managed by any jat-app-* tmux session,
+ * with cwd under ~/code/, and process name matching node|workerd.
+ * @param {Array<{name: string}>} managedSessions - Active server tmux sessions
+ * @returns {Promise<Array<{pid: number, port: number, processName: string, projectName: string, projectPath: string, listenAddress: string}>>}
+ */
+async function detectOrphanProcesses(managedSessions) {
+	const HOME = process.env.HOME || '';
+	try {
+		// Parse ss -tlnp to get listening processes with PIDs
+		const { stdout } = await execAsync('ss -tlnp 2>/dev/null', { maxBuffer: 64 * 1024 });
+		const lines = stdout.split('\n').filter(l => l.includes('LISTEN'));
+
+		// Extract pid, port, process name, listen address from each line
+		// Format: LISTEN  0  511  127.0.0.1:5173  0.0.0.0:*  users:(("node",pid=12345,fd=22))
+		/** @type {Map<number, {port: number, processName: string, listenAddress: string}>} */
+		const listeningProcesses = new Map();
+
+		for (const line of lines) {
+			// Extract port from local address field (4th column)
+			const cols = line.trim().split(/\s+/);
+			const localAddr = cols[3] || '';
+			const portMatch = localAddr.match(/:(\d+)$/);
+			if (!portMatch) continue;
+			const port = parseInt(portMatch[1], 10);
+
+			// Extract PID and process name from users field
+			const usersMatch = line.match(/users:\(\(([^)]+)\)\)/);
+			if (!usersMatch) continue;
+
+			// Parse: "node",pid=12345,fd=22
+			const userInfo = usersMatch[1];
+			const nameMatch = userInfo.match(/"([^"]+)"/);
+			const pidMatch = userInfo.match(/pid=(\d+)/);
+			if (!nameMatch || !pidMatch) continue;
+
+			const processName = nameMatch[1];
+			const pid = parseInt(pidMatch[1], 10);
+
+			// Only track node and workerd processes (node may appear as "node-MainThread")
+			if (!processName.startsWith('node') && !processName.startsWith('workerd')) continue;
+
+			// Skip our own IDE server process
+			if (pid === process.pid) continue;
+
+			const listenAddress = localAddr.replace(/:(\d+)$/, '').replace(/\[|\]/g, '') || '0.0.0.0';
+			listeningProcesses.set(pid, { port, processName, listenAddress });
+		}
+
+		if (listeningProcesses.size === 0) return [];
+
+		// Get managed PIDs from tmux server sessions
+		const managedPids = new Set();
+		for (const session of managedSessions) {
+			try {
+				// Get pane PID for this session
+				const { stdout: panePid } = await execAsync(
+					`tmux list-panes -t "${session.name}" -F "#{pane_pid}" 2>/dev/null`
+				);
+				const pids = panePid.trim().split('\n').filter(Boolean).map(Number);
+				for (const pid of pids) {
+					managedPids.add(pid);
+					// Also add all descendant PIDs
+					try {
+						const { stdout: children } = await execAsync(
+							`pgrep -P ${pid} 2>/dev/null`
+						);
+						for (const child of children.trim().split('\n').filter(Boolean)) {
+							const childPid = parseInt(child, 10);
+							managedPids.add(childPid);
+							// One more level of descendants
+							try {
+								const { stdout: grandchildren } = await execAsync(
+									`pgrep -P ${childPid} 2>/dev/null`
+								);
+								for (const gc of grandchildren.trim().split('\n').filter(Boolean)) {
+									managedPids.add(parseInt(gc, 10));
+								}
+							} catch { /* no grandchildren */ }
+						}
+					} catch { /* no children */ }
+				}
+			} catch { /* session gone */ }
+		}
+
+		// Get system boot time and clock ticks for uptime calculation
+		let clockTicks = 100; // default
+		let bootTimeSecs = 0;
+		try {
+			const { stdout: clk } = await execAsync('getconf CLK_TCK 2>/dev/null');
+			clockTicks = parseInt(clk.trim(), 10) || 100;
+		} catch { /* use default */ }
+		try {
+			const uptime = readFileSync('/proc/uptime', 'utf-8');
+			bootTimeSecs = parseFloat(uptime.split(' ')[0]) || 0;
+		} catch { /* skip uptime */ }
+		const nowSecs = bootTimeSecs; // uptime in seconds since boot
+
+		// Filter to orphans: not managed, cwd under ~/code/
+		const orphans = [];
+		for (const [pid, info] of listeningProcesses) {
+			if (managedPids.has(pid)) continue;
+
+			// Resolve cwd from /proc
+			let cwd;
+			try {
+				cwd = readlinkSync(`/proc/${pid}/cwd`);
+			} catch {
+				continue; // Process gone or no permission
+			}
+
+			// Must be under ~/code/
+			const codeDir = `${HOME}/code/`;
+			if (!cwd.startsWith(codeDir)) continue;
+
+			// Extract project name from cwd path
+			const relPath = cwd.slice(codeDir.length);
+			const projectName = relPath.split('/')[0];
+			if (!projectName) continue;
+
+			// Normalize process name for display (node-MainThread -> node)
+			const displayName = info.processName.startsWith('node') ? 'node' : info.processName;
+
+			// Read RSS memory from /proc/{pid}/status
+			let rssKb = 0;
+			try {
+				const status = readFileSync(`/proc/${pid}/status`, 'utf-8');
+				const rssMatch = status.match(/VmRSS:\s+(\d+)\s+kB/);
+				if (rssMatch) rssKb = parseInt(rssMatch[1], 10);
+			} catch { /* skip */ }
+
+			// Read process start time from /proc/{pid}/stat for uptime
+			let uptimeSecs = 0;
+			try {
+				const stat = readFileSync(`/proc/${pid}/stat`, 'utf-8');
+				// Field 22 (0-indexed: 21) is starttime in clock ticks since boot
+				const fields = stat.match(/\) \S+ (.+)/);
+				if (fields) {
+					const rest = fields[1].split(' ');
+					const startTicks = parseInt(rest[18], 10); // field 22 minus the first 3 fields parsed separately
+					const startSecs = startTicks / clockTicks;
+					uptimeSecs = Math.max(0, Math.floor(nowSecs - startSecs));
+				}
+			} catch { /* skip */ }
+
+			orphans.push({
+				pid,
+				port: info.port,
+				processName: displayName,
+				projectName,
+				projectPath: `${codeDir}${projectName}`,
+				listenAddress: info.listenAddress,
+				rssKb,
+				uptimeSecs
+			});
+		}
+
+		return orphans;
+	} catch {
+		return [];
+	}
 }

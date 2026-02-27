@@ -1,6 +1,6 @@
 {
   "name": "jat-feedback",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "description": "Embeddable feedback widget for bug reports and feature requests. Captures screenshots, console logs, and user context as a web component.",
   "type": "module",
   "main": "dist/jat-feedback.js",

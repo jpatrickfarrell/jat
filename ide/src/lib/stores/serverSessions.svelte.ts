@@ -21,6 +21,20 @@
 import type { ServerState } from '$lib/config/statusColors';
 
 /**
+ * OrphanProcess represents a node/workerd process not managed by any tmux session
+ */
+export interface OrphanProcess {
+	pid: number;
+	port: number;
+	processName: string;
+	projectName: string;
+	projectPath: string;
+	listenAddress: string;
+	rssKb: number;
+	uptimeSecs: number;
+}
+
+/**
  * ServerSession represents an active dev server tmux session
  */
 export interface ServerSession {
@@ -54,6 +68,7 @@ export interface ServerSession {
 
 interface ServerSessionsState {
 	sessions: ServerSession[];
+	orphans: OrphanProcess[];
 	isLoading: boolean;
 	error: string | null;
 	lastFetch: Date | null;
@@ -64,6 +79,7 @@ interface ServerSessionsState {
 // Reactive state using Svelte 5 runes
 let state = $state<ServerSessionsState>({
 	sessions: [],
+	orphans: [],
 	isLoading: true, // Start true to show skeleton until first fetch completes
 	error: null,
 	lastFetch: null,
@@ -157,6 +173,10 @@ export async function fetch(lines: number = 50): Promise<void> {
 
 			// Note: Svelte 5 $state automatically tracks Map mutations (.set, .delete)
 			// No need to reassign activityHistory - that can cause infinite reactivity loops
+
+			// Merge orphans
+			const newOrphans: OrphanProcess[] = data.orphans || [];
+			state.orphans = newOrphans;
 
 			// SMART MERGE: Use in-place mutation to avoid re-rendering unchanged components
 			// Only replace the array when sessions are added/removed
@@ -472,6 +492,65 @@ export function getActivityHistory(sessionName: string): number[] {
  */
 export function getActivityHistoryMap(): Map<string, number[]> {
 	return activityHistory;
+}
+
+/**
+ * Get orphan processes
+ */
+export function getOrphans(): OrphanProcess[] {
+	return state.orphans;
+}
+
+/**
+ * Kill a single orphan process by PID
+ * @param pid - Process ID to kill
+ * @returns true if kill request was successful
+ */
+export async function killOrphan(pid: number): Promise<boolean> {
+	try {
+		const response = await globalThis.fetch(`/api/servers/orphans/${pid}`, {
+			method: 'DELETE'
+		});
+
+		if (!response.ok) {
+			const data = await response.json();
+			throw new Error(data.error || 'Failed to kill process');
+		}
+
+		// Remove from local state immediately for responsive UI
+		state.orphans = state.orphans.filter(o => o.pid !== pid);
+		return true;
+	} catch (err) {
+		state.error = err instanceof Error ? err.message : 'Failed to kill process';
+		console.error('serverSessions.killOrphan error:', err);
+		return false;
+	}
+}
+
+/**
+ * Kill all orphan processes
+ * @returns number of processes killed
+ */
+export async function killAllOrphans(): Promise<number> {
+	try {
+		const response = await globalThis.fetch('/api/servers/orphans', {
+			method: 'DELETE'
+		});
+
+		const data = await response.json();
+
+		if (!response.ok) {
+			throw new Error(data.error || 'Failed to kill orphans');
+		}
+
+		// Clear orphans from local state
+		state.orphans = [];
+		return data.killed || 0;
+	} catch (err) {
+		state.error = err instanceof Error ? err.message : 'Failed to kill orphans';
+		console.error('serverSessions.killAllOrphans error:', err);
+		return 0;
+	}
 }
 
 // Export state for direct reactive access in components

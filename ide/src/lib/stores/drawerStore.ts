@@ -58,7 +58,7 @@ export const initialTaskText = writable<string | null>(null);
 // Initial issue type to pre-fill task drawer (e.g., 'epic' when creating from "Assign to Epic" menu)
 export const initialIssueType = writable<string | null>(null);
 
-// Initial schedule type to pre-fill task drawer (e.g., 'recurring' when creating from /schedules page)
+// Initial schedule type to pre-fill task drawer (e.g., 'recurring' when creating from /chores page)
 export type ScheduleType = 'none' | 'one-shot' | 'recurring';
 export const initialScheduleType = writable<ScheduleType | null>(null);
 

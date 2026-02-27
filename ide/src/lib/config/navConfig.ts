@@ -13,6 +13,7 @@
  *   /integrations - Integrations (external source configuration)
  *   /workflows - Workflows (workflow engine configuration)
  *   /automation - Automation rules configuration
+ *   /chores   - Chores (recurring task management, scheduler service controls)
  *   /memory   - Memory (agent persistent memory browser and search)
  *   /history  - History (completed task history with streak calendar)
  *   /config   - Config (JAT configuration, includes Projects tab)
@@ -25,7 +26,6 @@
  *
  * LABS (experimental):
  *   /quick-commands - Commands (single-turn quick commands + templates)
- *   /schedules - Schedules (scheduled task management, scheduler service controls)
  */
 
 export interface NavItem {
@@ -111,6 +111,13 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			category: 'main'
 		},
 		{
+			id: 'chores',
+			label: 'Chores',
+			href: '/chores',
+			icon: 'chores',
+			category: 'main'
+		},
+		{
 			id: 'search',
 			label: 'Search',
 			href: '/search',
@@ -173,13 +180,6 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			label: 'Commands',
 			href: '/quick-commands',
 			icon: 'terminal',
-			category: 'labs'
-		},
-		{
-			id: 'schedules',
-			label: 'Schedules',
-			href: '/schedules',
-			icon: 'schedules',
 			category: 'labs'
 		},
 	],

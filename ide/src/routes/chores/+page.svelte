@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * /schedules - Scheduled Tasks Management
+	 * /chores - Recurring Tasks Management
 	 *
 	 * Top bar: scheduler service status (running/stopped), Start/Stop button
 	 * Main content: filtered table of tasks with scheduling configured
@@ -218,21 +218,21 @@
 	});
 </script>
 
-<div class="schedules-page">
+<div class="chores-page">
 	<!-- Header -->
 	<div class="page-header">
 		<div class="header-left">
-			<h1 class="page-title tracking-in-expand">Schedules</h1>
-			<span class="task-count">{scheduledTasks.length} tasks</span>
+			<h1 class="page-title tracking-in-expand">Chores</h1>
+			<span class="task-count">{scheduledTasks.length} chores</span>
 		</div>
 		<button class="btn btn-primary btn-sm gap-1.5" onclick={handleCreateScheduledTask}>
 			<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
 			</svg>
-			Schedule Task
+			New Chore
 		</button>
 	</div>
-	<p class="page-subtitle">Recurring and one-off tasks that run automatically on a schedule. The scheduler daemon polls for due tasks and spawns agent sessions to handle them.</p>
+	<p class="page-subtitle">Recurring tasks that run on a schedule — daily standups, weekly reviews, or one-time scheduled work. When auto-run is on, agents are spawned automatically when chores come due.</p>
 
 	<!-- Scheduler Service Controls -->
 	<SchedulerControls
@@ -255,7 +255,7 @@
 					<path d="M12 14l2 2-2 2"></path>
 				</svg>
 			</div>
-			<h3 class="empty-title">No scheduled tasks</h3>
+			<h3 class="empty-title">No chores yet</h3>
 			<p class="empty-description">
 				To schedule a task, open any task's detail drawer and set a <strong>cron expression</strong> (for recurring tasks like <code>0 9 * * *</code> for daily at 9am) or a <strong>next run time</strong> (for one-off scheduled tasks).
 			</p>
@@ -373,7 +373,7 @@
 <TaskDetailDrawer bind:taskId={selectedTaskId} bind:isOpen={drawerOpen} />
 
 <style>
-	.schedules-page {
+	.chores-page {
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;

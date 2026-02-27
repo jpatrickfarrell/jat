@@ -247,14 +247,26 @@
 		}
 	});
 
-	// Pre-fill schedule type when drawer opens (e.g., 'recurring' from /schedules page)
+	// Pre-fill schedule type when drawer opens (e.g., 'recurring' from /chores page)
+	// Also auto-set issue_type to 'chore' for recurring tasks (chore = recurring)
 	$effect(() => {
 		if (isOpen) {
 			const schedType = get(initialScheduleType);
 			if (schedType) {
 				formData.schedule_type = schedType;
+				if (schedType === 'recurring') {
+					formData.type = 'chore';
+				}
 				initialScheduleType.set(null);
 			}
+		}
+	});
+
+	// Auto-set type to 'chore' when user selects recurring schedule
+	// (chore type now means "recurring scheduled task")
+	$effect(() => {
+		if (formData.schedule_type === 'recurring' && formData.type !== 'chore') {
+			formData.type = 'chore';
 		}
 	});
 

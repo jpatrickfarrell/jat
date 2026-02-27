@@ -166,7 +166,8 @@ export function createChildTask(dbPath, parent, options = {}) {
       title,
       parent.description || '',
       parent.priority,
-      parent.issue_type,
+      // Children of recurring chores get type 'task' (chore = recurring parent only)
+      parent.issue_type === 'chore' ? 'task' : parent.issue_type,
       parent.command || '/jat:start',
       parent.agent_program || null,
       parent.model || null,

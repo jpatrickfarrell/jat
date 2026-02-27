@@ -9,6 +9,7 @@
 	import { onMount } from 'svelte';
 	import { openTaskDrawer } from '$lib/stores/drawerStore';
 	import PromptInput from '$lib/components/quick-commands/PromptInput.svelte';
+	import { describeCron, CRON_PRESETS } from '$lib/utils/cronUtils';
 
 	// --- Types ---
 	type OutputAction = 'display' | 'clipboard' | 'write_file' | 'create_task';
@@ -873,24 +874,6 @@
 		}
 	}
 
-	function formatCron(cron: string): string {
-		const presets: Record<string, string> = {
-			'* * * * *': 'Every minute',
-			'*/5 * * * *': 'Every 5 min',
-			'*/15 * * * *': 'Every 15 min',
-			'*/30 * * * *': 'Every 30 min',
-			'0 * * * *': 'Hourly',
-			'0 */2 * * *': 'Every 2 hours',
-			'0 */6 * * *': 'Every 6 hours',
-			'0 9 * * *': 'Daily 9 AM',
-			'0 9 * * 1-5': 'Weekdays 9 AM',
-			'0 0 * * *': 'Daily midnight',
-			'0 9,17 * * *': '9 AM & 5 PM',
-			'0 0 * * 0': 'Weekly Sun',
-			'0 0 1 * *': 'Monthly 1st',
-		};
-		return presets[cron] || cron;
-	}
 
 	function formatNextRun(iso: string): string {
 		try {
@@ -1405,12 +1388,12 @@
 												<span
 													class="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded shrink-0 cursor-pointer"
 													style="background: oklch(0.25 0.06 {isAgent ? '145' : '85'}); color: oklch(0.70 0.12 {isAgent ? '145' : '85'});"
-													title={`Scheduled (${isAgent ? 'agent' : 'quick'}): ${formatCron(sched.cron)} | Next: ${sched.nextRun}`}
+													title={`Scheduled (${isAgent ? 'agent' : 'quick'}): ${describeCron(sched.cron)} | Next: ${sched.nextRun}`}
 												>
 													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
 														<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
 													</svg>
-													{formatCron(sched.cron)}
+													{describeCron(sched.cron)}
 													<span style="color: oklch(0.55 0.06 {isAgent ? '145' : '85'});">({formatNextRun(sched.nextRun)})</span>
 												</span>
 											{/if}
@@ -2346,14 +2329,7 @@
 						style="background: oklch(0.14 0.01 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.90 0.01 250);"
 					/>
 					<div class="flex flex-wrap gap-1 mt-1.5">
-						{#each [
-							{ label: 'Hourly', cron: '0 * * * *' },
-							{ label: 'Daily 9 AM', cron: '0 9 * * *' },
-							{ label: 'Weekdays 9 AM', cron: '0 9 * * 1-5' },
-							{ label: 'Every 6h', cron: '0 */6 * * *' },
-							{ label: 'Every 30m', cron: '*/30 * * * *' },
-							{ label: 'Weekly Sun', cron: '0 0 * * 0' },
-						] as preset}
+						{#each CRON_PRESETS.filter(p => ['0 * * * *', '0 9 * * *', '0 9 * * 1-5', '0 */6 * * *', '*/30 * * * *', '0 0 * * 0'].includes(p.cron)) as preset}
 							<button
 								onclick={() => scheduleCron = preset.cron}
 								class="px-2 py-0.5 rounded text-xs transition-colors"
@@ -2368,7 +2344,7 @@
 						{/each}
 					</div>
 					<p class="text-xs mt-1 font-mono" style="color: oklch(0.50 0.06 85);">
-						{formatCron(scheduleCron)}
+						{describeCron(scheduleCron)}
 					</p>
 				</div>
 

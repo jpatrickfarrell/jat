@@ -98,6 +98,34 @@ jat-signal working '{
 }'
 ```
 
+### STEP 5.5: Check Available Data Tables
+
+Before responding, check if the project has data tables relevant to the user's question:
+
+```bash
+jt data tables
+```
+
+If tables exist, their names and row counts will be listed. Query them to answer questions or update them based on user requests:
+
+```bash
+# Read data
+jt data query "SELECT item, category FROM groceries WHERE status = 'needed'"
+
+# Write data (use --force to skip confirmation)
+jt data exec "INSERT INTO groceries (item, category, status) VALUES ('pecans', 'nuts', 'needed')" --force
+
+# See table structure
+jt data schema groceries
+```
+
+**When to use data tables:**
+- User asks about stored information ("what do I need from the store?")
+- User provides new data to remember ("we're out of pecans")
+- User asks to update or remove stored data ("got the milk, cross it off")
+
+If no tables exist or the message is unrelated to stored data, skip this step.
+
 ### STEP 6: Process and Reply
 
 Read the task description carefully. It contains:

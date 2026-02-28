@@ -505,55 +505,9 @@
 			color: oklch(0.70 0.05 200);
 		"
 	>
-		<!-- Agent state dots (compact) -->
-		{#if hasStateCounts && stateCounts}
-			<div class="flex items-center gap-0.5">
-				{#if stateCounts.needsInput > 0}
-					<div class="flex items-center gap-0.5" title="{stateCounts.needsInput} needs input">
-						<span class="relative flex h-2 w-2">
-							<span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style="background: {STATE_COLORS.needsInput};"></span>
-							<span class="relative inline-flex rounded-full h-2 w-2" style="background: {STATE_COLORS.needsInput};"></span>
-						</span>
-						<span class="mt-0.75 text-[10px] font-bold" style="color: {STATE_COLORS.needsInput};">{stateCounts.needsInput}</span>
-					</div>
-				{/if}
-				{#if stateCounts.review > 0}
-					<div class="flex items-center gap-0.5" title="{stateCounts.review} in review">
-						<span class="relative flex h-2 w-2">
-							<span class="animate-pulse absolute inline-flex h-full w-full rounded-full opacity-75" style="background: {STATE_COLORS.review};"></span>
-							<span class="relative inline-flex rounded-full h-2 w-2" style="background: {STATE_COLORS.review};"></span>
-						</span>
-						<span class="mt-0.75 text-[10px] font-bold" style="color: {STATE_COLORS.review};">{stateCounts.review}</span>
-					</div>
-				{/if}
-				{#if stateCounts.working > 0}
-					<div class="flex items-center gap-0.5" title="{stateCounts.working} working">
-						<span class="inline-flex rounded-full h-2 w-2" style="background: {STATE_COLORS.working};"></span>
-						<span class="mt-0.75 text-[10px] font-bold" style="color: {STATE_COLORS.working};">{stateCounts.working}</span>
-					</div>
-				{/if}
-				{#if stateCounts.starting && stateCounts.starting > 0}
-					<div class="flex items-center gap-0.5" title="{stateCounts.starting} starting">
-						<span class="inline-flex rounded-full h-2 w-2" style="background: {STATE_COLORS.starting};"></span>
-						<span class="mt-0.75 text-[10px] font-bold" style="color: {STATE_COLORS.starting};">{stateCounts.starting}</span>
-					</div>
-				{/if}
-				{#if stateCounts.completed > 0}
-					<div class="flex items-center gap-0.5" title="{stateCounts.completed} session complete">
-						<span class="inline-flex rounded-full h-2 w-2" style="background: {STATE_COLORS.completed};"></span>
-						<span class="mt-0.75 text-[10px] font-bold" style="color: {STATE_COLORS.completed};">{stateCounts.completed}</span>
-					</div>
-				{/if}
-				{#if stateCounts.idle && stateCounts.idle > 0}
-					<div class="flex items-center gap-0.5" title="{stateCounts.idle} idle">
-						<span class="inline-flex rounded-full h-2 w-2" style="background: {STATE_COLORS.idle};"></span>
-						<span class="mt-0.75 text-[10px] font-bold" style="color: {STATE_COLORS.idle};">{stateCounts.idle}</span>
-					</div>
-				{/if}
-			</div>
-		{:else if activeAgentCount > 0}
-			<!-- Fallback: single count -->
-			<div class="flex items-center gap-1">
+		<!-- Active session count (state dots moved to project chips in TopBar) -->
+		{#if activeAgentCount > 0}
+			<div class="flex items-center gap-1" title="{activeAgentCount} active session{activeAgentCount > 1 ? 's' : ''}">
 				<span class="relative flex h-2 w-2">
 					<span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style="background: oklch(0.70 0.18 150);"></span>
 					<span class="relative inline-flex rounded-full h-2 w-2" style="background: oklch(0.70 0.18 150);"></span>
@@ -563,7 +517,7 @@
 		{/if}
 
 		<!-- Separator -->
-		{#if (hasStateCounts || activeAgentCount > 0) && completedCount > 0}
+		{#if activeAgentCount > 0 && completedCount > 0}
 			<span class="w-px h-3 mx-0.5" style="background: oklch(0.35 0.02 250);"></span>
 		{/if}
 

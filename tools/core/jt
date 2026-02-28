@@ -5,6 +5,7 @@ set -euo pipefail
 
 VERSION="0.1.0"
 DB_NAME=".jat/tasks.db"
+DATA_DB_NAME=".jat/data.db"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -25,6 +26,7 @@ find_project_root() {
 
 PROJECT_ROOT="$(find_project_root)"
 DB="$PROJECT_ROOT/$DB_NAME"
+DATA_DB="$PROJECT_ROOT/$DATA_DB_NAME"
 
 # Get project prefix from directory name
 project_prefix() {
@@ -243,7 +245,12 @@ cmd_init() {
 
   # .gitignore for .jat/
   if [[ ! -f "$jat_dir/.gitignore" ]]; then
-    printf 'tasks.db\ntasks.db-wal\ntasks.db-shm\nlast-touched\n' > "$jat_dir/.gitignore"
+    printf 'tasks.db\ntasks.db-wal\ntasks.db-shm\ndata.db\ndata.db-wal\ndata.db-shm\nlast-touched\n' > "$jat_dir/.gitignore"
+  else
+    # Migrate existing .gitignore to include data.db entries
+    if ! grep -q 'data.db' "$jat_dir/.gitignore" 2>/dev/null; then
+      printf 'data.db\ndata.db-wal\ndata.db-shm\n' >> "$jat_dir/.gitignore"
+    fi
   fi
 
   sqlite3 "$jat_dir/tasks.db" "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; $SCHEMA"
@@ -1239,6 +1246,488 @@ cmd_delete() {
   echo "Deleted $task_id"
 }
 
+# ---------------------------------------------------------------------------
+# Data subcommand
+# ---------------------------------------------------------------------------
+
+DATA_SCHEMA='
+CREATE TABLE IF NOT EXISTS _tables (
+    name TEXT PRIMARY KEY,
+    display_name TEXT,
+    description TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS _columns (
+    table_name TEXT NOT NULL,
+    column_name TEXT NOT NULL,
+    semantic_type TEXT NOT NULL,
+    config TEXT DEFAULT '"'"'{}'"'"',
+    display_name TEXT,
+    description TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (table_name, column_name)
+);
+'
+
+# Semantic type → SQLite type mapping
+semantic_to_sqlite() {
+  case "$1" in
+    text)        echo "TEXT" ;;
+    number)      echo "REAL" ;;
+    boolean)     echo "INTEGER" ;;
+    date)        echo "TEXT" ;;
+    datetime)    echo "TEXT" ;;
+    url)         echo "TEXT" ;;
+    email)       echo "TEXT" ;;
+    enum)        echo "TEXT" ;;
+    currency)    echo "REAL" ;;
+    percentage)  echo "REAL" ;;
+    relation)    echo "TEXT" ;;
+    formula)     echo "TEXT" ;;
+    *)           echo "" ;;
+  esac
+}
+
+# Run a read-only query against data.db, output JSON array
+sql_data_json() {
+  local out
+  out="$(sqlite3 -json "$DATA_DB" "$1")"
+  if [[ -z "$out" ]]; then
+    echo "[]"
+  else
+    echo "$out"
+  fi
+}
+
+# Run a write query against data.db
+sql_data_exec() {
+  sqlite3 "$DATA_DB" "PRAGMA foreign_keys=ON; $1"
+}
+
+# Validate table name: ^[a-zA-Z][a-zA-Z0-9_]{0,63}$, reject _ and sqlite_ prefixes
+validate_table_name() {
+  local name="$1"
+  [[ -n "$name" ]] || die "Table name is required"
+  [[ "$name" =~ ^[a-zA-Z][a-zA-Z0-9_]{0,63}$ ]] || die "Table name must start with a letter and contain only letters, numbers, and underscores (max 64 chars)"
+  local lower
+  lower="$(echo "$name" | tr '[:upper:]' '[:lower:]')"
+  [[ "$lower" != _* ]] || die "Table name cannot start with '_'"
+  [[ "$lower" != sqlite_* ]] || die "Table name cannot start with 'sqlite_'"
+}
+
+# Ensure data.db exists, creating if needed
+require_data_db() {
+  if [[ ! -f "$DATA_DB" ]]; then
+    local jat_dir="$PROJECT_ROOT/.jat"
+    mkdir -p "$jat_dir"
+    sqlite3 "$DATA_DB" "PRAGMA journal_mode=WAL; $DATA_SCHEMA"
+  fi
+}
+
+cmd_data() {
+  local subcmd="${1:-}"
+  [[ -n "$subcmd" ]] || { cmd_data_help; return; }
+  shift
+
+  case "$subcmd" in
+    tables)  cmd_data_tables "$@" ;;
+    schema)  cmd_data_schema "$@" ;;
+    query)   cmd_data_query "$@" ;;
+    exec)    cmd_data_exec "$@" ;;
+    create)  cmd_data_create "$@" ;;
+    drop)    cmd_data_drop "$@" ;;
+    columns) cmd_data_columns "$@" ;;
+    import)  cmd_data_import "$@" ;;
+    help|--help|-h) cmd_data_help ;;
+    *)       die "Unknown data subcommand: $subcmd. Run 'jt data help' for usage." ;;
+  esac
+}
+
+cmd_data_tables() {
+  require_data_db
+  local json_out=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_out=true; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  local result
+  result="$(sqlite3 -json "$DATA_DB" "
+    SELECT t.name, t.display_name, t.description, t.created_at, t.updated_at
+    FROM _tables t
+    ORDER BY t.name;
+  ")"
+  [[ -n "$result" ]] || result="[]"
+
+  if $json_out; then
+    echo "$result"
+  else
+    if [[ "$result" == "[]" ]]; then
+      echo "No data tables. Create one with: jt data create <table> col1:type1 col2:type2"
+    else
+      echo "$result" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for t in data:
+    print(f\"  {t['name']} - {t.get('description', '') or '(no description)'}\")
+"
+    fi
+  fi
+}
+
+cmd_data_schema() {
+  require_data_db
+  local table_name="${1:-}"
+  [[ -n "$table_name" ]] || die "Usage: jt data schema <table>"
+  validate_table_name "$table_name"
+
+  # Load column metadata from _columns if it exists
+  local meta_json="[]"
+  local has_columns_table
+  has_columns_table="$(sqlite3 "$DATA_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='_columns';" 2>/dev/null)"
+  if [[ -n "$has_columns_table" ]]; then
+    meta_json="$(sqlite3 -json "$DATA_DB" "SELECT column_name, semantic_type, config FROM _columns WHERE table_name = '$(sql_escape "$table_name")';" 2>/dev/null)"
+    [[ -n "$meta_json" ]] || meta_json="[]"
+  fi
+
+  sqlite3 "$DATA_DB" "PRAGMA table_info(\"$table_name\");" | while IFS='|' read -r cid name type notnull dflt pk; do
+    local nullable="nullable"
+    [[ "$notnull" == "0" ]] || nullable="not null"
+    local pk_str=""
+    [[ "$pk" == "0" ]] || pk_str=" (PK)"
+
+    # Look up semantic type for this column
+    local sem_type=""
+    if [[ "$meta_json" != "[]" ]]; then
+      sem_type="$(echo "$meta_json" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for r in data:
+    if r['column_name'] == '$name':
+        print(r['semantic_type'])
+        break
+" 2>/dev/null)"
+    fi
+
+    if [[ -n "$sem_type" ]]; then
+      echo "  $name $type ($sem_type) $nullable$pk_str"
+    else
+      echo "  $name $type $nullable$pk_str"
+    fi
+  done
+}
+
+cmd_data_query() {
+  require_data_db
+  local sql="${1:-}"
+  [[ -n "$sql" ]] || die "Usage: jt data query \"SELECT ...\""
+
+  # Reject write statements
+  if echo "$sql" | grep -qiE '^\s*(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|REPLACE|ATTACH|DETACH)\b'; then
+    die "Write operations not allowed in query mode. Use 'jt data exec' instead."
+  fi
+
+  # Auto-add LIMIT if missing
+  if ! echo "$sql" | grep -qiE '\bLIMIT\b'; then
+    sql="$(echo "$sql" | sed 's/;*\s*$/ LIMIT 100/')"
+  fi
+
+  sql_data_json "$sql"
+}
+
+cmd_data_exec() {
+  require_data_db
+  local sql="${1:-}" force=false
+  shift 2>/dev/null || true
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --force) force=true; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  [[ -n "$sql" ]] || die "Usage: jt data exec \"INSERT INTO ...\" [--force]"
+
+  # Only allow INSERT, UPDATE, DELETE
+  if ! echo "$sql" | grep -qiE '^\s*(INSERT|UPDATE|DELETE)\b'; then
+    die "Only INSERT, UPDATE, DELETE statements are allowed"
+  fi
+
+  if ! $force; then
+    echo "SQL: $sql"
+    read -r -p "Execute? [y/N] " confirm
+    [[ "$confirm" =~ ^[yY] ]] || { echo "Cancelled."; return; }
+  fi
+
+  sql_data_exec "$sql"
+  touch_sentinel
+  echo "OK"
+}
+
+cmd_data_create() {
+  require_data_db
+  local table_name="${1:-}"
+  [[ -n "$table_name" ]] || die "Usage: jt data create <table> col1:type1 col2:type2 ..."
+  validate_table_name "$table_name"
+  shift
+
+  [[ $# -gt 0 ]] || die "At least one column required. Format: col_name:TYPE
+Semantic types: text, number, boolean, date, datetime, url, email, enum, currency, percentage
+SQLite types:   TEXT, INTEGER, REAL, BLOB, NUMERIC"
+
+  local col_defs=""
+  local sep=""
+  # Track semantic columns for _columns metadata insertion
+  local semantic_cols=()
+  local semantic_types=()
+
+  for arg in "$@"; do
+    local col_name="${arg%%:*}"
+    local col_type="${arg##*:}"
+    [[ "$col_name" != "$arg" ]] || die "Invalid column format: $arg (expected name:type)"
+    [[ -n "$col_name" ]] || die "Column name is required"
+    [[ "$col_name" =~ ^[a-zA-Z][a-zA-Z0-9_]{0,63}$ ]] || die "Invalid column name: $col_name"
+
+    # Check if it's a semantic type (lowercase)
+    local col_type_lower
+    col_type_lower="$(echo "$col_type" | tr '[:upper:]' '[:lower:]')"
+    local sqlite_type
+    sqlite_type="$(semantic_to_sqlite "$col_type_lower")"
+
+    if [[ -n "$sqlite_type" ]]; then
+      # Semantic type → map to SQLite and track for _columns
+      col_defs="${col_defs}${sep}\"${col_name}\" ${sqlite_type}"
+      semantic_cols+=("$col_name")
+      semantic_types+=("$col_type_lower")
+    else
+      # Try raw SQLite type
+      local col_type_upper
+      col_type_upper="$(echo "$col_type" | tr '[:lower:]' '[:upper:]')"
+      case "$col_type_upper" in
+        TEXT|INTEGER|REAL|BLOB|NUMERIC) ;;
+        *) die "Invalid column type: $col_type
+Semantic types: text, number, boolean, date, datetime, url, email, enum, currency, percentage
+SQLite types:   TEXT, INTEGER, REAL, BLOB, NUMERIC" ;;
+      esac
+      col_defs="${col_defs}${sep}\"${col_name}\" ${col_type_upper}"
+    fi
+    sep=", "
+  done
+
+  # Check if table already exists
+  local exists
+  exists="$(sqlite3 "$DATA_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='$(sql_escape "$table_name")';")"
+  [[ -z "$exists" ]] || die "Table \"$table_name\" already exists"
+
+  local ts
+  ts="$(now_ts)"
+
+  # Build SQL: create table + register in _tables + insert semantic column metadata
+  local sql="
+    CREATE TABLE \"$table_name\" ($col_defs);
+    INSERT INTO _tables (name, display_name, description, created_at, updated_at)
+    VALUES ('$(sql_escape "$table_name")', '$(sql_escape "$table_name")', '', '$ts', '$ts');
+  "
+
+  # Add _columns rows for semantic types
+  local i
+  for (( i=0; i<${#semantic_cols[@]}; i++ )); do
+    sql="$sql
+    INSERT INTO _columns (table_name, column_name, semantic_type, config, display_name, description, created_at, updated_at)
+    VALUES ('$(sql_escape "$table_name")', '$(sql_escape "${semantic_cols[$i]}")', '${semantic_types[$i]}', '{}', NULL, NULL, '$ts', '$ts');
+    "
+  done
+
+  sqlite3 "$DATA_DB" "$sql"
+  touch_sentinel
+  echo "Created table: $table_name"
+}
+
+cmd_data_drop() {
+  require_data_db
+  local table_name="${1:-}" force=false
+  shift 2>/dev/null || true
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --force) force=true; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  [[ -n "$table_name" ]] || die "Usage: jt data drop <table> [--force]"
+  validate_table_name "$table_name"
+
+  if ! $force; then
+    read -r -p "Drop table \"$table_name\"? This cannot be undone. [y/N] " confirm
+    [[ "$confirm" =~ ^[yY] ]] || { echo "Cancelled."; return; }
+  fi
+
+  sqlite3 "$DATA_DB" "
+    DROP TABLE IF EXISTS \"$table_name\";
+    DELETE FROM _tables WHERE name = '$(sql_escape "$table_name")';
+    DELETE FROM _columns WHERE table_name = '$(sql_escape "$table_name")';
+  "
+  touch_sentinel
+  echo "Dropped table: $table_name"
+}
+
+cmd_data_columns() {
+  require_data_db
+  local subcmd="${1:-}"
+  [[ -n "$subcmd" ]] || die "Usage: jt data columns <list|set|remove> <table> [column] [type] [--config JSON]"
+  shift
+
+  case "$subcmd" in
+    list)
+      local table_name="${1:-}"
+      [[ -n "$table_name" ]] || die "Usage: jt data columns list <table> [--json]"
+      validate_table_name "$table_name"
+      local json_out=false
+      [[ "${2:-}" == "--json" ]] && json_out=true
+
+      local has_columns_table
+      has_columns_table="$(sqlite3 "$DATA_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='_columns';" 2>/dev/null)"
+      if [[ -z "$has_columns_table" ]]; then
+        $json_out && echo "[]" || echo "No column metadata. Set types with: jt data columns set <table> <column> <type>"
+        return
+      fi
+
+      local result
+      result="$(sqlite3 -json "$DATA_DB" "SELECT column_name, semantic_type, config FROM _columns WHERE table_name = '$(sql_escape "$table_name")' ORDER BY column_name;")"
+      [[ -n "$result" ]] || result="[]"
+
+      if $json_out; then
+        echo "$result"
+      else
+        if [[ "$result" == "[]" ]]; then
+          echo "No column metadata for $table_name. Set types with: jt data columns set $table_name <column> <type>"
+        else
+          echo "$result" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for r in data:
+    cfg = r.get('config', '{}')
+    cfg_str = ''
+    if cfg and cfg != '{}':
+        cfg_str = f'  config={cfg}'
+    print(f\"  {r['column_name']}: {r['semantic_type']}{cfg_str}\")
+"
+        fi
+      fi
+      ;;
+
+    set)
+      local table_name="${1:-}"
+      local col_name="${2:-}"
+      local sem_type="${3:-}"
+      [[ -n "$table_name" && -n "$col_name" && -n "$sem_type" ]] || die "Usage: jt data columns set <table> <column> <type> [--config JSON]"
+      validate_table_name "$table_name"
+      [[ "$col_name" =~ ^[a-zA-Z][a-zA-Z0-9_]{0,63}$ ]] || die "Invalid column name: $col_name"
+
+      sem_type="$(echo "$sem_type" | tr '[:upper:]' '[:lower:]')"
+      local sqlite_type
+      sqlite_type="$(semantic_to_sqlite "$sem_type")"
+      [[ -n "$sqlite_type" ]] || die "Invalid semantic type: $sem_type
+Valid types: text, number, boolean, date, datetime, url, email, enum, currency, percentage, relation, formula"
+
+      local config="{}"
+      shift 3
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --config) config="${2:-}"; shift 2 ;;
+          *) shift ;;
+        esac
+      done
+
+      local ts
+      ts="$(now_ts)"
+      sqlite3 "$DATA_DB" "
+        INSERT INTO _columns (table_name, column_name, semantic_type, config, display_name, description, created_at, updated_at)
+        VALUES ('$(sql_escape "$table_name")', '$(sql_escape "$col_name")', '$sem_type', '$(sql_escape "$config")', NULL, NULL, '$ts', '$ts')
+        ON CONFLICT(table_name, column_name) DO UPDATE SET
+          semantic_type = excluded.semantic_type,
+          config = excluded.config,
+          updated_at = excluded.updated_at;
+      "
+      touch_sentinel
+      echo "Set $col_name → $sem_type on $table_name"
+      ;;
+
+    remove)
+      local table_name="${1:-}"
+      local col_name="${2:-}"
+      [[ -n "$table_name" && -n "$col_name" ]] || die "Usage: jt data columns remove <table> <column>"
+      validate_table_name "$table_name"
+
+      sqlite3 "$DATA_DB" "DELETE FROM _columns WHERE table_name = '$(sql_escape "$table_name")' AND column_name = '$(sql_escape "$col_name")';"
+      touch_sentinel
+      echo "Removed metadata for $col_name on $table_name"
+      ;;
+
+    *)
+      die "Unknown columns subcommand: $subcmd. Use: list, set, remove"
+      ;;
+  esac
+}
+
+cmd_data_import() {
+  local table_name="${1:-}"
+  local file_path="${2:-}"
+  [[ -n "$table_name" ]] || die "Usage: jt data import <table> <file> [--format tsv|csv] [--dry-run]"
+  [[ -n "$file_path" ]] || die "Usage: jt data import <table> <file> [--format tsv|csv] [--dry-run]"
+  shift 2
+
+  # Resolve relative file path
+  [[ "$file_path" = /* ]] || file_path="$PWD/$file_path"
+
+  local script_dir
+  script_dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+
+  PROJECT_ROOT="$PROJECT_ROOT" node "$script_dir/jt-data-import" "$table_name" "$file_path" "$@"
+}
+
+cmd_data_help() {
+  cat <<'HELP'
+jt data - Per-project data tables
+
+Usage: jt data <command> [options]
+
+Commands:
+  tables                              List all tables (--json for JSON)
+  schema <table>                      Show columns for a table
+  query  "SELECT ..."                 Read-only SQL (auto LIMIT 100)
+  exec   "INSERT INTO ..." [--force]  Write operations (INSERT/UPDATE/DELETE)
+  create <table> col1:type1 ...       Create a new table
+  drop   <table> [--force]            Drop a table
+  import <table> <file> [opts]        Import TSV/CSV file into table
+  columns list <table> [--json]       List column metadata
+  columns set <table> <col> <type>    Set semantic type (--config JSON)
+  columns remove <table> <col>        Remove column metadata
+
+Semantic types: text, number, boolean, date, datetime, url, email, enum, currency, percentage
+SQLite types:   TEXT, INTEGER, REAL, BLOB, NUMERIC
+
+Examples:
+  jt data create groceries item:text done:boolean status:enum
+  jt data create inventory name:TEXT quantity:INTEGER
+  jt data schema groceries
+  jt data columns set groceries status enum --config '{"options":[{"value":"needed"},{"value":"bought"}]}'
+  jt data columns list groceries
+  jt data exec "INSERT INTO groceries (item, done, status) VALUES ('pecans', 0, 'needed')" --force
+  jt data query "SELECT * FROM groceries WHERE status = 'needed'"
+  jt data import assets ~/Downloads/assets.md --format tsv
+  jt data import data export.csv --dry-run
+  jt data tables --json
+  jt data drop groceries --force
+HELP
+}
+
 cmd_help() {
   cat <<'HELP'
 jt - JAT task CLI
@@ -1263,6 +1752,7 @@ Commands:
   dep     remove TASK_ID DEPENDS_ON_ID
   dep     tree TASK_ID [--reverse] [--json]
   dep     cycles
+  data    tables | schema | query | exec | create | drop | columns
   init    [--quiet]
 
 Options:
@@ -1288,6 +1778,7 @@ case "${1:-}" in
   ready)     shift; cmd_ready "$@" ;;
   search)    shift; cmd_search "$@" ;;
   dep)       shift; cmd_dep "$@" ;;
+  data)      shift; cmd_data "$@" ;;
   init)      shift; cmd_init "$@" ;;
   --version) echo "jt $VERSION" ;;
   --help|-h|help) cmd_help ;;

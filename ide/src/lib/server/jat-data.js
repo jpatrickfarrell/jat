@@ -1,0 +1,39 @@
+/**
+ * Server-side data store integration
+ * Wraps lib/data.js for use in SvelteKit server routes
+ */
+
+export {
+	// Init
+	initDataDb,
+	// Validation
+	validateTableName,
+	validateColumnName,
+	validateColumnType,
+	validateSemanticType,
+	// Tables
+	getDataTables,
+	getTableSchema,
+	createDataTable,
+	dropDataTable,
+	// Column Metadata
+	getColumnMetadata,
+	setColumnMetadata,
+	deleteColumnMetadata,
+	deleteTableColumnMetadata,
+	// Rows
+	getTableRows,
+	insertRow,
+	insertRows,
+	updateRow,
+	deleteRow,
+	duplicateRow,
+	// Column Operations
+	addColumn,
+	deleteColumn,
+	duplicateColumn,
+	renameColumn,
+	// Raw SQL
+	queryDataTable,
+	execDataSql,
+} from '../../../../lib/data.js';

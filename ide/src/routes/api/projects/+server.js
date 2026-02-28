@@ -54,13 +54,14 @@ async function readJatConfig() {
 async function readIdeSettings() {
 	try {
 		if (!existsSync(IDE_SETTINGS_FILE)) {
-			return { hiddenProjects: [] };
+			return { hiddenProjects: [], favoriteChipOrder: [] };
 		}
 		const content = await readFile(IDE_SETTINGS_FILE, 'utf-8');
-		return JSON.parse(content);
+		const parsed = JSON.parse(content);
+		return { hiddenProjects: [], favoriteChipOrder: [], ...parsed };
 	} catch (error) {
 		console.error('Failed to read IDE settings:', error);
-		return { hiddenProjects: [] };
+		return { hiddenProjects: [], favoriteChipOrder: [] };
 	}
 }
 
@@ -617,6 +618,7 @@ export async function GET({ url }) {
 		// Build response
 		const responseData = {
 			projects,
+			favoriteChipOrder: ideSettings.favoriteChipOrder || [],
 			source: jatConfig ? 'jat-config' : 'filesystem',
 			configPath: CONFIG_FILE,
 			settingsPath: IDE_SETTINGS_FILE
@@ -991,6 +993,18 @@ export async function POST({ request }) {
 				steps: [...jatResult.steps, 'Added to JAT configuration'],
 				message: `Successfully created project: ${key}`
 			});
+		}
+
+		// Handle reorder-favorites action
+		if (body.action === 'reorder-favorites') {
+			const settings = await readIdeSettings();
+			settings.favoriteChipOrder = body.order || [];
+			const success = await writeIdeSettings(settings);
+			if (!success) {
+				return json({ error: 'Failed to save settings' }, { status: 500 });
+			}
+			invalidateCache.projects();
+			return json({ success: true, favoriteChipOrder: settings.favoriteChipOrder });
 		}
 
 		// Handle visibility settings

@@ -15,7 +15,7 @@
 	import FilePreviewDrawer from '$lib/components/files/FilePreviewDrawer.svelte';
 	import DiffPreviewDrawer from '$lib/components/files/DiffPreviewDrawer.svelte';
 	import TerminalDrawer from '$lib/components/TerminalDrawer.svelte';
-	import { getTaskCountByProject } from '$lib/utils/projectUtils';
+	import { getTaskCountByProject, getProjectFromTaskId } from '$lib/utils/projectUtils';
 	import { classifySession } from '$lib/utils/sessionNaming';
 	import { setProjectsCache, type ProjectConfig } from '$lib/utils/fileLinks';
 	import { initProjectColors } from '$lib/utils/projectColors';
@@ -54,6 +54,7 @@
 	let allTasks = $state([]);
 	let configProjects = $state<string[]>([]); // Projects from JAT config (visible ones)
 	let favoriteProjects = $state<Set<string>>(new Set()); // Projects marked as favorite
+	let favoriteChipOrder = $state<string[]>([]); // User-controlled chip order
 
 	// Agent count state
 	let activeAgentCount = $state(0);
@@ -72,6 +73,35 @@
 	let stateCounts = $state<StateCounts>({ needsInput: 0, working: 0, review: 0, completed: 0, starting: 0, idle: 0 });
 	// Track previous state counts for notification change detection
 	let prevStateCounts = $state<{ needsInput: number; review: number } | null>(null);
+
+	// Per-project session state: maps project name to the "best" (most urgent) session state
+	// Priority: needs-input > ready-for-review > working > starting > completing > completed > idle
+	const SESSION_STATE_PRIORITY: Record<string, number> = {
+		'needs-input': 0,
+		'ready-for-review': 1,
+		'working': 2,
+		'starting': 3,
+		'planning': 4,
+		'recovering': 5,
+		'compacting': 6,
+		'completing': 7,
+		'completed': 8,
+		'idle': 9,
+	};
+	const projectSessionStates = $derived(() => {
+		const sessions = getWorkSessions();
+		const map = new Map<string, string>();
+		for (const session of sessions) {
+			const proj = session.project || (session.task?.id ? getProjectFromTaskId(session.task.id) : null);
+			if (!proj) continue;
+			const state = session._sseState || 'idle';
+			const existing = map.get(proj);
+			if (!existing || (SESSION_STATE_PRIORITY[state] ?? 99) < (SESSION_STATE_PRIORITY[existing] ?? 99)) {
+				map.set(proj, state);
+			}
+		}
+		return map;
+	});
 
 	// Ready task count and list for Swarm button dropdown
 	let readyTaskCount = $state(0);
@@ -679,6 +709,9 @@
 			}
 			favoriteProjects = favs;
 
+			// Extract persisted chip order
+			favoriteChipOrder = data.favoriteChipOrder || [];
+
 			// Populate the projects cache for fileLinks.ts localhost URL utilities
 			const projectsCache: Record<string, ProjectConfig> = {};
 			for (const p of projectsArray) {
@@ -718,12 +751,34 @@
 			const updated = new Set(favoriteProjects);
 			if (newFav) {
 				updated.add(project);
+				// Append to chip order
+				if (!favoriteChipOrder.includes(project)) {
+					favoriteChipOrder = [...favoriteChipOrder, project];
+				}
 			} else {
 				updated.delete(project);
+				// Remove from chip order
+				favoriteChipOrder = favoriteChipOrder.filter(p => p !== project);
 			}
 			favoriteProjects = updated;
+			// Persist the updated order
+			handleReorderFavorites(favoriteChipOrder);
 		} catch (error) {
 			console.error('[layout] Failed to toggle favorite:', error);
+		}
+	}
+
+	// Reorder favorite chips (drag-and-drop) - optimistic update + persist
+	async function handleReorderFavorites(order: string[]) {
+		favoriteChipOrder = order;
+		try {
+			await fetch('/api/projects', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'reorder-favorites', order })
+			});
+		} catch (error) {
+			console.error('[layout] Failed to save favorite chip order:', error);
 		}
 	}
 
@@ -1147,6 +1202,9 @@
 				{epicsWithReady}
 				{reviewRules}
 				{favoriteProjects}
+				{favoriteChipOrder}
+				projectSessionStates={projectSessionStates()}
+				onReorderFavorites={handleReorderFavorites}
 				onToggleFavorite={handleToggleFavorite}
 				onGlobalSearchOpen={() => { globalSearchOpen = true; }}
 				onProjectChange={handleProjectChange}

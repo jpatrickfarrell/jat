@@ -1,0 +1,252 @@
+#!/usr/bin/env node
+/**
+ * jt-data-import — Bulk import TSV/CSV into a JAT data table.
+ *
+ * Handles "sloppy TSV" from spreadsheet exports where multi-line cells
+ * are NOT quoted. Detection: lines with fewer delimiters than the header
+ * are continuation lines appended to the previous row's last field.
+ *
+ * Usage:
+ *   jt-data-import <table> <file> [--format tsv|csv] [--dry-run] [--project <path>]
+ */
+import { readFileSync, existsSync } from 'fs';
+import { resolve, join } from 'path';
+
+// ---------------------------------------------------------------------------
+// Resolve project root — same logic as jt bash script
+// ---------------------------------------------------------------------------
+function findProjectRoot(from) {
+  let dir = from;
+  while (dir !== '/') {
+    if (existsSync(join(dir, '.jat'))) return dir;
+    if (existsSync(join(dir, '.git'))) return dir;
+    dir = resolve(dir, '..');
+  }
+  return from;
+}
+
+const PROJECT_ROOT = process.env.PROJECT_ROOT || findProjectRoot(process.cwd());
+
+// ---------------------------------------------------------------------------
+// Args
+// ---------------------------------------------------------------------------
+const args = process.argv.slice(2);
+let tableName = null;
+let filePath = null;
+let format = null; // auto-detect
+let dryRun = false;
+/** @type {Record<string, string>} */
+const columnMap = {};  // file_header → table_column
+
+for (let i = 0; i < args.length; i++) {
+  const a = args[i];
+  if (a === '--format' && args[i + 1]) { format = args[++i]; continue; }
+  if (a === '--dry-run') { dryRun = true; continue; }
+  if (a === '--project' && args[i + 1]) { process.env.PROJECT_ROOT = args[++i]; continue; }
+  if (a === '--map' && args[i + 1]) {
+    // --map "asset=name,scientific_name=name_alt"
+    const mappings = args[++i].split(',');
+    for (const m of mappings) {
+      const [from, to] = m.split('=');
+      if (from && to) columnMap[from.trim()] = to.trim();
+    }
+    continue;
+  }
+  if (a === '--help' || a === '-h') { usage(); process.exit(0); }
+  if (!tableName) { tableName = a; continue; }
+  if (!filePath) { filePath = a; continue; }
+}
+
+function usage() {
+  console.log(`Usage: jt-data-import <table> <file> [--format tsv|csv] [--dry-run] [--map from=to,...]
+
+Imports TSV/CSV data into a JAT data table. Handles multi-line cells
+(common in spreadsheet exports with unquoted newlines).
+
+Options:
+  --format tsv|csv          Force delimiter (default: auto-detect)
+  --dry-run                 Parse and preview without inserting
+  --map from=to,from2=to2   Map file headers to table columns
+  --project <path>          Project root (default: auto-detect from cwd)
+
+Examples:
+  jt data import assets data.tsv
+  jt data import assets data.tsv --map "asset=name,scientific_name=name_alt"
+  jt data import items export.csv --dry-run`);
+}
+
+if (!tableName || !filePath) {
+  console.error('Error: table name and file path are required.');
+  usage();
+  process.exit(1);
+}
+
+// ---------------------------------------------------------------------------
+// Read file
+// ---------------------------------------------------------------------------
+const absPath = resolve(filePath);
+if (!existsSync(absPath)) {
+  console.error(`Error: file not found: ${absPath}`);
+  process.exit(1);
+}
+const raw = readFileSync(absPath, 'utf-8');
+
+// ---------------------------------------------------------------------------
+// TSV/CSV parser — sloppy multi-line support
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse sloppy TSV/CSV with unquoted multi-line cells.
+ *
+ * Algorithm:
+ *  1. First line = headers; count delimiters to get expected column count.
+ *  2. Subsequent lines: if delimiter count matches header, start a new row.
+ *     Otherwise, append to the previous row's last populated cell.
+ *
+ * @param {string} text  Raw file content
+ * @param {string} delimiter  '\t' or ','
+ * @returns {{ headers: string[], rows: Record<string, string>[] }}
+ */
+function parseSloppyDelimited(text, delimiter) {
+  const lines = text.split('\n');
+  if (lines.length === 0) return { headers: [], rows: [] };
+
+  // Header line
+  const headerLine = lines[0];
+  const rawHeaders = headerLine.split(delimiter);
+  const expectedDelimiters = rawHeaders.length - 1;
+
+  // Normalize headers: lowercase, spaces→underscores, strip non-alphanum
+  const headers = rawHeaders.map(h =>
+    h.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
+  ).filter(h => h.length > 0);
+
+  if (headers.length === 0) {
+    throw new Error('No valid headers found in first line');
+  }
+
+  const rows = [];
+  let currentRow = null;
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Skip completely empty lines at end of file
+    if (line.trim() === '' && i === lines.length - 1) continue;
+
+    const delimCount = (line.match(new RegExp(delimiter === '\t' ? '\t' : ',', 'g')) || []).length;
+
+    if (delimCount >= expectedDelimiters - 1) {
+      // New row — has enough delimiters (allow one missing for trailing empty columns)
+      const cells = line.split(delimiter);
+      const row = {};
+      for (let c = 0; c < headers.length; c++) {
+        row[headers[c]] = (cells[c] || '').trim();
+      }
+      rows.push(row);
+      currentRow = row;
+    } else if (currentRow) {
+      // Continuation — append to last non-empty field of current row
+      // Find the rightmost populated field
+      let lastField = null;
+      for (let c = headers.length - 1; c >= 0; c--) {
+        if (currentRow[headers[c]] && currentRow[headers[c]].length > 0) {
+          lastField = headers[c];
+          break;
+        }
+      }
+      if (lastField) {
+        currentRow[lastField] += '\n' + line;
+      }
+    }
+    // else: continuation line before any row — skip
+  }
+
+  return { headers, rows };
+}
+
+// ---------------------------------------------------------------------------
+// Auto-detect delimiter
+// ---------------------------------------------------------------------------
+function detectDelimiter(text) {
+  if (format === 'csv') return ',';
+  if (format === 'tsv') return '\t';
+
+  // From file extension
+  if (filePath.endsWith('.csv')) return ',';
+  if (filePath.endsWith('.tsv')) return '\t';
+
+  // From content: count tabs vs commas in first line
+  const firstLine = text.split('\n')[0] || '';
+  const tabs = (firstLine.match(/\t/g) || []).length;
+  const commas = (firstLine.match(/,/g) || []).length;
+  return tabs >= commas ? '\t' : ',';
+}
+
+// ---------------------------------------------------------------------------
+// Parse
+// ---------------------------------------------------------------------------
+const delimiter = detectDelimiter(raw);
+const { headers, rows } = parseSloppyDelimited(raw, delimiter);
+
+// Apply column mapping: rename keys in each row
+const hasMapping = Object.keys(columnMap).length > 0;
+if (hasMapping) {
+  for (const row of rows) {
+    for (const [from, to] of Object.entries(columnMap)) {
+      if (from in row) {
+        row[to] = row[from];
+        delete row[from];
+      }
+    }
+  }
+  // Update headers for display
+  for (let i = 0; i < headers.length; i++) {
+    if (columnMap[headers[i]]) {
+      headers[i] = columnMap[headers[i]];
+    }
+  }
+}
+
+console.log(`Parsed ${rows.length} rows with ${headers.length} columns`);
+console.log(`Columns: ${headers.join(', ')}`);
+if (hasMapping) {
+  console.log(`Mappings: ${Object.entries(columnMap).map(([f, t]) => `${f}→${t}`).join(', ')}`);
+}
+
+if (dryRun) {
+  console.log('\n--- Dry run: first 5 rows ---');
+  for (let i = 0; i < Math.min(5, rows.length); i++) {
+    console.log(`\nRow ${i + 1}:`);
+    for (const h of headers) {
+      const val = rows[i][h] || '';
+      const display = val.length > 80 ? val.slice(0, 80) + '...' : val;
+      if (display) console.log(`  ${h}: ${display}`);
+    }
+  }
+  console.log(`\n${rows.length} rows would be imported (dry run).`);
+  process.exit(0);
+}
+
+// ---------------------------------------------------------------------------
+// Import via lib/data.js
+// ---------------------------------------------------------------------------
+const projectRoot = process.env.PROJECT_ROOT || PROJECT_ROOT;
+const dbPath = join(projectRoot, '.jat', 'data.db');
+
+if (!existsSync(dbPath)) {
+  console.error(`Error: no data.db found at ${dbPath}`);
+  console.error('Run "jt data create <table> ..." first to create the table.');
+  process.exit(1);
+}
+
+// Dynamic import of lib/data.js (ESM)
+const dataLib = await import(join(PROJECT_ROOT, 'lib', 'data.js'));
+
+try {
+  const result = dataLib.insertRows(projectRoot, tableName, rows);
+  console.log(`✓ Inserted ${result.inserted} rows into "${tableName}"`);
+} catch (err) {
+  console.error(`Error inserting rows: ${err.message}`);
+  process.exit(1);
+}

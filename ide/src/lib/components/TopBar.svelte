@@ -22,6 +22,7 @@
 	import { flip } from "svelte/animate";
 	import { cubicOut } from "svelte/easing";
 	import { getProjectColor } from "$lib/utils/projectColors";
+	import { SESSION_STATE_VISUALS } from "$lib/config/statusColors";
 	import ActivityBadge from "./ActivityBadge.svelte";
 	import ServersBadge from "./ServersBadge.svelte";
 	import UserProfile from "./UserProfile.svelte";
@@ -265,8 +266,14 @@
 		taskCounts?: Map<string, number> | null;
 		/** Set of favorite project names */
 		favoriteProjects?: Set<string>;
+		/** Persisted chip order for favorites */
+		favoriteChipOrder?: string[];
+		/** Called when chips are reordered via drag-and-drop */
+		onReorderFavorites?: (order: string[]) => void;
 		/** Called when favorite star is toggled in ProjectSelector */
 		onToggleFavorite?: (project: string) => void;
+		/** Per-project session state map (project name → best session state) */
+		projectSessionStates?: Map<string, string>;
 	}
 
 	let {
@@ -289,7 +296,10 @@
 		onProjectChange,
 		taskCounts = null,
 		favoriteProjects = new Set<string>(),
+		favoriteChipOrder = [],
+		onReorderFavorites,
 		onToggleFavorite,
+		projectSessionStates = new Map(),
 	}: Props = $props();
 
 
@@ -299,15 +309,20 @@
 	// Convert projectColors Record to Map for ProjectSelector
 	const projectColorsMap = $derived(new Map(Object.entries(projectColors)));
 
-	// Favorite projects list: selected first, then rest — for FLIP animation
+	// Favorite projects list: user-controlled order via drag-and-drop
 	const favoriteChips = $derived(() => {
 		if (!favoriteProjects || favoriteProjects.size === 0) return [];
-		const favs = actualProjects.filter(p => favoriteProjects.has(p));
-		// Selected project first, then the rest
-		const selected = favs.filter(p => p === selectedProject);
-		const rest = favs.filter(p => p !== selectedProject);
-		return [...selected, ...rest];
+		const favSet = new Set(actualProjects.filter(p => favoriteProjects.has(p)));
+		// Use persisted order, filtering to only current favorites that exist
+		const ordered = favoriteChipOrder.filter(p => favSet.has(p));
+		// Append any favorites not yet in the order array (newly added)
+		const unordered = [...favSet].filter(p => !ordered.includes(p));
+		return [...ordered, ...unordered];
 	});
+
+	// Drag state for chip reordering
+	let draggedChip = $state<string | null>(null);
+	let dragOverChip = $state<string | null>(null);
 
 
 	// Max sessions from user preferences (reactive)
@@ -409,6 +424,54 @@
 		}
 	}
 
+	// Drag handlers for favorite chip reordering
+	function handleChipDragStart(e: DragEvent, project: string) {
+		draggedChip = project;
+		if (e.dataTransfer) {
+			e.dataTransfer.effectAllowed = 'move';
+			e.dataTransfer.setData('text/plain', project);
+		}
+	}
+
+	function handleChipDragOver(e: DragEvent, project: string) {
+		e.preventDefault();
+		if (draggedChip && draggedChip !== project) {
+			dragOverChip = project;
+		}
+	}
+
+	function handleChipDragLeave() {
+		dragOverChip = null;
+	}
+
+	function handleChipDrop(e: DragEvent, targetProject: string) {
+		e.preventDefault();
+		if (!draggedChip || draggedChip === targetProject) {
+			dragOverChip = null;
+			draggedChip = null;
+			return;
+		}
+		const chips = favoriteChips();
+		const fromIndex = chips.indexOf(draggedChip);
+		const toIndex = chips.indexOf(targetProject);
+		if (fromIndex === -1 || toIndex === -1) {
+			dragOverChip = null;
+			draggedChip = null;
+			return;
+		}
+		const reordered = [...chips];
+		reordered.splice(fromIndex, 1);
+		reordered.splice(toIndex, 0, draggedChip);
+		dragOverChip = null;
+		draggedChip = null;
+		onReorderFavorites?.(reordered);
+	}
+
+	function handleChipDragEnd() {
+		draggedChip = null;
+		dragOverChip = null;
+	}
+
 	// Group ready tasks by project for ActionPill
 	const tasksByProject = $derived.by(() => {
 		const groups = new Map<string, ReadyTask[]>();
@@ -480,10 +543,22 @@
 
 	<!-- Project Selector + Favorite Chips (global, always visible) -->
 	{#if actualProjects.length > 0 && onProjectChange}
-		<div class="ml-3 flex-none flex items-center gap-1.5">
+		<div class="fav-chips-scroll ml-3 flex items-center gap-1.5">
 			{#each favoriteChips() as favProject (favProject)}
 				{@const favColor = projectColorsMap.get(favProject) || getProjectColor(favProject)}
-				<div class="fav-flip-wrapper" animate:flip={{ duration: 300, easing: cubicOut }}>
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					class="fav-flip-wrapper"
+					class:fav-dragging={draggedChip === favProject}
+					class:fav-drag-over={dragOverChip === favProject}
+					animate:flip={{ duration: 300, easing: cubicOut }}
+					draggable="true"
+					ondragstart={(e) => handleChipDragStart(e, favProject)}
+					ondragover={(e) => handleChipDragOver(e, favProject)}
+					ondragleave={handleChipDragLeave}
+					ondrop={(e) => handleChipDrop(e, favProject)}
+					ondragend={handleChipDragEnd}
+				>
 					{#if favProject === selectedProject}
 						<ProjectSelector
 							projects={actualProjects}
@@ -503,14 +578,28 @@
 							onSwarm={(count, epicId) => epicId ? handleRunEpic(epicId) : handleSwarm()}
 						/>
 					{:else}
+						{@const sessionState = projectSessionStates.get(favProject)}
+						{@const stateVisual = sessionState ? SESSION_STATE_VISUALS[sessionState] : null}
+						{@const dotColor = stateVisual ? stateVisual.accent : favColor}
+						{@const dotTitle = stateVisual ? `${favProject} — ${stateVisual.shortLabel}` : favProject}
+						{@const isNeedsInput = sessionState === 'needs-input'}
+						{@const isReview = sessionState === 'ready-for-review'}
+						{@const isAnimated = isNeedsInput || isReview}
 						<div class="fav-chip" style="--fav-color: {favColor};">
 							<button
 								type="button"
 								class="fav-chip-btn"
 								onclick={() => onProjectChange?.(favProject)}
-								title={favProject}
+								title={dotTitle}
 							>
-								<span class="fav-dot"></span>
+								{#if isAnimated}
+									<span class="fav-dot-animated">
+										<span class="fav-dot-ping" class:animate-ping={isNeedsInput} class:animate-pulse={isReview} style="background: {dotColor};"></span>
+										<span class="fav-dot-core" style="background: {dotColor};"></span>
+									</span>
+								{:else}
+									<span class="fav-dot" style="background: {dotColor}; opacity: {stateVisual ? 1 : 0.6};"></span>
+								{/if}
 								<span class="fav-label">{favProject}</span>
 							</button>
 							<button
@@ -550,8 +639,10 @@
 		</div>
 	{/if}
 
-	<!-- Spacer -->
-	<div class="flex-1"></div>
+	<!-- Spacer (only fills space when no favorite chips) -->
+	{#if !actualProjects.length || !onProjectChange || favoriteProjects.size === 0}
+		<div class="flex-1"></div>
+	{/if}
 
 	<!-- Agent Sort Dropdown (on /agents page) -->
 	{#if isAgentsPage}
@@ -779,6 +870,17 @@
 </nav>
 
 <style>
+	/* Scrollable chips container — shrinks on narrow viewports */
+	.fav-chips-scroll {
+		min-width: 0;
+		flex: 1 1 0%;
+		overflow-x: auto;
+		scrollbar-width: none; /* Firefox */
+	}
+	.fav-chips-scroll::-webkit-scrollbar {
+		display: none; /* Chrome/Safari */
+	}
+
 	/* Favorite project chips — ghost style, expand on hover */
 	.fav-chip {
 		display: inline-flex;
@@ -823,13 +925,35 @@
 		width: 0.4rem;
 		height: 0.4rem;
 		border-radius: 50%;
-		background: var(--fav-color);
 		flex-shrink: 0;
-		opacity: 0.6;
 	}
 
 	.fav-chip:hover .fav-dot {
-		opacity: 1;
+		opacity: 1 !important;
+	}
+
+	/* Animated dot wrapper (needs-input ping, review pulse) */
+	.fav-dot-animated {
+		position: relative;
+		display: inline-flex;
+		width: 0.5rem;
+		height: 0.5rem;
+		flex-shrink: 0;
+	}
+
+	.fav-dot-ping {
+		position: absolute;
+		inset: 0;
+		border-radius: 50%;
+		opacity: 0.75;
+	}
+
+	.fav-dot-core {
+		position: relative;
+		display: inline-flex;
+		width: 100%;
+		height: 100%;
+		border-radius: 50%;
 	}
 
 	.fav-label {
@@ -871,5 +995,24 @@
 		width: 0.8rem;
 		height: 0.8rem;
 		flex-shrink: 0;
+	}
+
+	/* Drag feedback */
+	.fav-dragging {
+		opacity: 0.4;
+	}
+
+	.fav-drag-over {
+		border-left: 2px solid oklch(0.70 0.18 240);
+		box-shadow: -2px 0 8px oklch(0.70 0.18 240 / 0.4);
+	}
+
+	.fav-flip-wrapper {
+		cursor: grab;
+		flex-shrink: 0;
+	}
+
+	.fav-flip-wrapper:active {
+		cursor: grabbing;
 	}
 </style>

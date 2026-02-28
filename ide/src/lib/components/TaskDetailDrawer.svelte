@@ -37,6 +37,7 @@
 	import { loadCommands, getCommands } from '$lib/stores/configStore.svelte';
 	import { addToast } from '$lib/stores/toasts.svelte';
 	import { describeCron } from '$lib/utils/cronUtils';
+	import { getFileTypeInfoFromPath } from '$lib/utils/fileUtils';
 
 	// Task interface for drawer (extends API Task with additional optional fields)
 	interface DrawerTask {
@@ -261,6 +262,7 @@
 	}
 	let attachments = $state<TaskAttachment[]>([]);
 	let attachmentsLoading = $state(false);
+	let textPreviews = $state<Map<string, string>>(new Map());
 
 	// Attachment drag-drop state
 	let isDraggingOver = $state(false);
@@ -698,6 +700,9 @@
 			}
 			const data = await response.json();
 			attachments = data.images || [];
+			if (attachments.length > 0) {
+				fetchTextPreviews(attachments);
+			}
 		} catch (err: any) {
 			// Ignore abort errors
 			if (err.name === 'AbortError') {
@@ -707,6 +712,24 @@
 			attachments = [];
 		} finally {
 			attachmentsLoading = false;
+		}
+	}
+
+	// Fetch text previews for text/code/data attachments
+	async function fetchTextPreviews(atts: TaskAttachment[]) {
+		for (const att of atts) {
+			const info = getFileTypeInfoFromPath(att.path);
+			if (info.category === 'text' || info.category === 'code' || info.category === 'data') {
+				if (textPreviews.has(att.id)) continue;
+				try {
+					const resp = await fetch(`/api/work/image${att.path}`);
+					if (resp.ok) {
+						const text = await resp.text();
+						textPreviews.set(att.id, text.slice(0, 2000));
+						textPreviews = new Map(textPreviews);
+					}
+				} catch { /* ignore */ }
+			}
 		}
 	}
 
@@ -1977,6 +2000,7 @@
 			availableTasks = [];
 			attachmentsLoading = false;
 			attachments = [];
+			textPreviews = new Map();
 			logsLoading = false;
 			signalsLoading = false;
 		}
@@ -2993,6 +3017,7 @@
 							{:else if attachments.length > 0}
 								<div class="grid grid-cols-2 gap-3 p-3 rounded overflow-visible bg-base-200">
 									{#each attachments as attachment (attachment.id)}
+										{@const typeInfo = getFileTypeInfoFromPath(attachment.path)}
 										<div class="relative group">
 											<a
 												href={`/api/work/image${attachment.path}`}
@@ -3000,11 +3025,36 @@
 												rel="noopener noreferrer"
 												class="block"
 											>
-												<img
-													src={`/api/work/image${attachment.path}`}
-													alt="Task attachment"
-													class="w-full h-90 object-cover rounded border border-base-300 cursor-pointer hover:border-primary transition-colors"
-												/>
+												{#if typeInfo.category === 'image'}
+													<img
+														src={`/api/work/image${attachment.path}`}
+														alt="Task attachment"
+														class="w-full h-90 object-cover rounded border border-base-300 cursor-pointer hover:border-primary transition-colors"
+													/>
+												{:else}
+													{@const preview = textPreviews.get(attachment.id)}
+													{#if preview}
+														<div class="w-full h-90 rounded border border-base-300 cursor-pointer hover:border-primary transition-colors bg-base-100 overflow-hidden relative">
+															<div class="p-3 overflow-hidden h-full" style="mask-image: linear-gradient(to bottom, black 70%, transparent 100%); -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%);">
+																<pre class="text-[9px] leading-[1.4] font-mono text-base-content/80 whitespace-pre-wrap break-words m-0">{preview}</pre>
+															</div>
+															<div class="absolute bottom-0 left-0 right-0 px-2 py-1 flex items-center gap-1.5 bg-base-200/95">
+																<svg class="w-3 h-3 shrink-0" style="color: {typeInfo.color};" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+																	<path stroke-linecap="round" stroke-linejoin="round" d={typeInfo.icon} />
+																</svg>
+																<span class="text-[10px] text-base-content/60 truncate">{attachment.path.split('/').pop()}</span>
+															</div>
+														</div>
+													{:else}
+														<div class="w-full h-90 flex flex-col items-center justify-center rounded border border-base-300 cursor-pointer hover:border-primary transition-colors bg-base-300/30">
+															<svg class="w-16 h-16 mb-2" style="color: {typeInfo.color};" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+																<path stroke-linecap="round" stroke-linejoin="round" d={typeInfo.icon} />
+															</svg>
+															<span class="text-xs font-medium text-base-content/70">{typeInfo.label}</span>
+															<span class="text-[10px] text-base-content/50 mt-0.5 px-2 truncate max-w-full">{attachment.path.split('/').pop()}</span>
+														</div>
+													{/if}
+												{/if}
 											</a>
 											<!-- Delete button -->
 											<button
@@ -3020,12 +3070,14 @@
 													<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
 												</svg>
 											</button>
-											<div
-												class="absolute bottom-0 left-0 right-0 px-1 py-0.5 text-[10px] truncate opacity-0 group-hover:opacity-100 transition-opacity rounded-b bg-base-100/90 text-base-content/60"
-												title={attachment.path}
-											>
-												{attachment.path.split('/').pop()}
-											</div>
+											{#if typeInfo.category === 'image'}
+												<div
+													class="absolute bottom-0 left-0 right-0 px-1 py-0.5 text-[10px] truncate opacity-0 group-hover:opacity-100 transition-opacity rounded-b bg-base-100/90 text-base-content/60"
+													title={attachment.path}
+												>
+													{attachment.path.split('/').pop()}
+												</div>
+											{/if}
 										</div>
 									{/each}
 									<!-- Add more hint when attachments exist -->

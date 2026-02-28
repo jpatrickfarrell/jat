@@ -18,6 +18,7 @@
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
 	import { spawnInBatches, type SpawnResult } from '$lib/utils/spawnBatch';
 	import { formatShortDate, parseTimestamp } from '$lib/utils/dateFormatters';
+	import { getFileTypeInfoFromPath } from '$lib/utils/fileUtils';
 
 	interface AgentSelection {
 		agentId: string | null;
@@ -1322,9 +1323,16 @@
 							</td>
 							<td class="td-attachment" style={isExiting ? 'background: transparent;' : ''}>
 								{#if taskAttachments && taskAttachments.length > 0}
+									{@const firstTypeInfo = getFileTypeInfoFromPath(taskAttachments[0].path)}
 									<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 									<div class="attachment-thumb" onclick={(e) => { e.stopPropagation(); window.open(`/api/work/image/${encodeURIComponent(taskAttachments[0].path)}`, '_blank'); }} title="View attachment">
-										<img src={`/api/work/image/${encodeURIComponent(taskAttachments[0].path)}`} alt="" class="attachment-thumb-img" />
+										{#if firstTypeInfo.category === 'image'}
+											<img src={`/api/work/image/${encodeURIComponent(taskAttachments[0].path)}`} alt="" class="attachment-thumb-img" />
+										{:else}
+											<svg class="w-5 h-5" style="color: {firstTypeInfo.color};" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+												<path stroke-linecap="round" stroke-linejoin="round" d={firstTypeInfo.icon} />
+											</svg>
+										{/if}
 										{#if taskAttachments.length > 1}
 											<span class="attachment-count">+{taskAttachments.length - 1}</span>
 										{/if}
@@ -2065,7 +2073,9 @@
 		overflow: hidden;
 		cursor: pointer;
 		position: relative;
-		display: block;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 		border: 1px solid oklch(0.30 0.02 250);
 		transition: border-color 0.15s, transform 0.15s;
 	}

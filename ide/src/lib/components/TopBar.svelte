@@ -560,44 +560,24 @@
 					ondragend={handleChipDragEnd}
 				>
 					{#if favProject === selectedProject}
-						{@const selSessionStates = projectSessionStates.get(favProject) || []}
-						<div class="fav-selected-wrap">
-							{#if selSessionStates.length > 0}
-								<span class="fav-dots">
-									{#each selSessionStates as state}
-										{@const visual = SESSION_STATE_VISUALS[state]}
-										{@const color = visual?.accent || favColor}
-										{@const isNI = state === 'needs-input'}
-										{@const isRev = state === 'ready-for-review'}
-										{#if isNI || isRev}
-											<span class="fav-dot-animated">
-												<span class="fav-dot-ping" class:animate-ping={isNI} class:animate-pulse={isRev} style="background: {color};"></span>
-												<span class="fav-dot-core" style="background: {color};"></span>
-											</span>
-										{:else}
-											<span class="fav-dot" style="background: {color};"></span>
-										{/if}
-									{/each}
-								</span>
-							{/if}
-							<ProjectSelector
-								projects={actualProjects}
-								{selectedProject}
-								onProjectChange={onProjectChange}
-								{taskCounts}
-								compact={true}
-								showColors={true}
-								projectColors={projectColorsMap}
-								{favoriteProjects}
-								{onToggleFavorite}
-								{readyTasks}
-								epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount }))}
-								idleSlots={availableSlots}
-								onNewTask={handleNewTask}
-								onStart={handleSpawnSingle}
-								onSwarm={(count, epicId) => epicId ? handleRunEpic(epicId) : handleSwarm()}
-							/>
-						</div>
+						<ProjectSelector
+							projects={actualProjects}
+							{selectedProject}
+							onProjectChange={onProjectChange}
+							{taskCounts}
+							compact={true}
+							showColors={true}
+							projectColors={projectColorsMap}
+							{favoriteProjects}
+							{onToggleFavorite}
+							{readyTasks}
+							epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount }))}
+							idleSlots={availableSlots}
+							onNewTask={handleNewTask}
+							onStart={handleSpawnSingle}
+							onSwarm={(count, epicId) => epicId ? handleRunEpic(epicId) : handleSwarm()}
+							sessionStates={projectSessionStates.get(favProject) || []}
+						/>
 					{:else}
 						{@const sessionStates = projectSessionStates.get(favProject) || []}
 						{@const chipTitle = sessionStates.length > 0
@@ -948,6 +928,7 @@
 	.fav-chip:hover .fav-chip-btn {
 		color: var(--fav-color);
 	}
+
 
 	.fav-dots {
 		display: inline-flex;

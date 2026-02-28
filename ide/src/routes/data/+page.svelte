@@ -94,6 +94,9 @@
 	// Column settings popover
 	let columnSettingsOpen = $state<string | null>(null);
 
+	// Cell selection & keyboard navigation
+	let selectedCell = $state<{ rowIdx: number; colIdx: number } | null>(null);
+
 	// Inline editing (legacy — only used for columns without semantic type)
 	let editingCell = $state<{ rowid: number; column: string } | null>(null);
 	let editValue = $state('');
@@ -634,6 +637,125 @@
 		}
 	}
 
+	// Cell selection & keyboard navigation
+	let tableRef: HTMLTableElement | undefined = $state(undefined);
+
+	function selectCell(rowIdx: number, colIdx: number) {
+		selectedCell = { rowIdx, colIdx };
+		// Focus the table so keyboard events work
+		tableRef?.focus();
+	}
+
+	function clearSelection() {
+		selectedCell = null;
+	}
+
+	function startEditingSelected() {
+		if (!selectedCell) return;
+		const row = rows[selectedCell.rowIdx];
+		const col = orderedColumns[selectedCell.colIdx];
+		if (!row || !col) return;
+		// Trigger editing by dispatching dblclick on the cell-value span inside the td
+		const td = document.querySelector(
+			`[data-cell-row="${selectedCell.rowIdx}"][data-cell-col="${selectedCell.colIdx}"]`
+		);
+		if (td) {
+			const cellValue = td.querySelector('.cell-value');
+			if (cellValue) {
+				cellValue.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+			}
+		}
+	}
+
+	function handleTableKeydown(e: KeyboardEvent) {
+		// Don't interfere if a cell is being edited (input/textarea is focused)
+		const target = e.target as HTMLElement;
+		if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+
+		if (!selectedCell) return;
+
+		const maxRow = rows.length - 1;
+		const maxCol = orderedColumns.length - 1;
+
+		switch (e.key) {
+			case 'ArrowUp':
+				e.preventDefault();
+				if (selectedCell.rowIdx > 0) {
+					selectedCell = { rowIdx: selectedCell.rowIdx - 1, colIdx: selectedCell.colIdx };
+				}
+				break;
+			case 'ArrowDown':
+				e.preventDefault();
+				if (selectedCell.rowIdx < maxRow) {
+					selectedCell = { rowIdx: selectedCell.rowIdx + 1, colIdx: selectedCell.colIdx };
+				}
+				break;
+			case 'ArrowLeft':
+				e.preventDefault();
+				if (selectedCell.colIdx > 0) {
+					selectedCell = { rowIdx: selectedCell.rowIdx, colIdx: selectedCell.colIdx - 1 };
+				}
+				break;
+			case 'ArrowRight':
+				e.preventDefault();
+				if (selectedCell.colIdx < maxCol) {
+					selectedCell = { rowIdx: selectedCell.rowIdx, colIdx: selectedCell.colIdx + 1 };
+				}
+				break;
+			case 'Tab':
+				e.preventDefault();
+				if (e.shiftKey) {
+					// Move left, or wrap to previous row
+					if (selectedCell.colIdx > 0) {
+						selectedCell = { rowIdx: selectedCell.rowIdx, colIdx: selectedCell.colIdx - 1 };
+					} else if (selectedCell.rowIdx > 0) {
+						selectedCell = { rowIdx: selectedCell.rowIdx - 1, colIdx: maxCol };
+					}
+				} else {
+					// Move right, or wrap to next row
+					if (selectedCell.colIdx < maxCol) {
+						selectedCell = { rowIdx: selectedCell.rowIdx, colIdx: selectedCell.colIdx + 1 };
+					} else if (selectedCell.rowIdx < maxRow) {
+						selectedCell = { rowIdx: selectedCell.rowIdx + 1, colIdx: 0 };
+					}
+				}
+				break;
+			case 'Enter':
+				e.preventDefault();
+				startEditingSelected();
+				break;
+			case 'Escape':
+				e.preventDefault();
+				clearSelection();
+				break;
+			default:
+				// Printable character — start editing
+				if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+					e.preventDefault();
+					startEditingSelected();
+				}
+				break;
+		}
+	}
+
+	// Keep selected cell in view
+	$effect(() => {
+		if (selectedCell) {
+			const td = document.querySelector(
+				`[data-cell-row="${selectedCell.rowIdx}"][data-cell-col="${selectedCell.colIdx}"]`
+			);
+			if (td) {
+				td.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+			}
+		}
+	});
+
+	// Clear selection when table changes
+	$effect(() => {
+		selectedTable;  // track dependency
+		selectedCell = null;
+	});
+
 	// Inline cell editing
 	function startEdit(rowid: number, column: string, currentValue: any) {
 		editingCell = { rowid, column };
@@ -681,6 +803,8 @@
 			});
 			if (res.ok) {
 				await fetchTableData();
+				// Re-focus table for continued keyboard navigation
+				requestAnimationFrame(() => tableRef?.focus());
 			} else {
 				const data = await res.json();
 				errorToast(data.error || 'Failed to update');
@@ -1540,7 +1664,8 @@
 								<span class="loading loading-spinner loading-sm"></span>
 							</div>
 						{:else}
-							<table class="data-table">
+							<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+							<table class="data-table" tabindex="0" onkeydown={handleTableKeydown} bind:this={tableRef}>
 								<thead>
 									<tr>
 										<th class="row-id-col">#</th>
@@ -1602,13 +1727,22 @@
 									{#each rows as row, rowIdx}
 										<tr oncontextmenu={(e) => handleRowContextMenu(row, rowIdx, e)}>
 											<td class="row-id-col">{row.rowid}</td>
-											{#each orderedColumns as col}
+											{#each orderedColumns as col, colIdx}
 											{@const cellMeta = columnMeta[col.name]}
-												<td class="data-cell">
+											{@const isCellSelected = selectedCell?.rowIdx === rowIdx && selectedCell?.colIdx === colIdx}
+												<!-- svelte-ignore a11y_click_events_have_key_events -->
+												<td
+													class="data-cell"
+													class:cell-selected={isCellSelected}
+													data-cell-row={rowIdx}
+													data-cell-col={colIdx}
+													onclick={() => selectCell(rowIdx, colIdx)}
+												>
 													<DataCell
 														value={row[col.name]}
 														semanticType={cellMeta?.semanticType}
 														config={cellMeta?.config || {}}
+														selected={isCellSelected}
 														onSave={(val) => handleCellSave(row.rowid, col.name, val)}
 													/>
 												</td>
@@ -2521,6 +2655,7 @@
 		width: 100%;
 		border-collapse: collapse;
 		font-size: 0.8125rem;
+		outline: none;
 	}
 
 	.data-table th {
@@ -2642,6 +2777,11 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+	.data-cell.cell-selected {
+		outline: 2px solid oklch(0.60 0.15 240);
+		outline-offset: -2px;
+		background: oklch(0.60 0.15 240 / 0.08);
 	}
 
 	.cell-value {

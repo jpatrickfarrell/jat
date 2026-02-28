@@ -10,6 +10,7 @@
 	 * Click +: opens task creation drawer for current project
 	 */
 	import { getProjectColor } from "$lib/utils/projectColors";
+	import { SESSION_STATE_VISUALS } from "$lib/config/statusColors";
 	import {
 		isStartDropdownOpen,
 		closeStartDropdown,
@@ -49,6 +50,8 @@
 		onNewTask?: (project: string) => void;
 		onStart?: (taskId: string) => void;
 		onSwarm?: (count: number, epicId?: string) => void;
+		/** Session states for the selected project (one per agent) */
+		sessionStates?: string[];
 	}
 
 	let {
@@ -67,6 +70,7 @@
 		onNewTask,
 		onStart,
 		onSwarm,
+		sessionStates = [],
 	}: Props = $props();
 
 	// Sort projects: favorites first, then the rest
@@ -196,7 +200,26 @@
 			class:compact
 			onclick={() => open = !open}
 		>
-			<span class="chip-dot"></span>
+			{#if sessionStates.length > 0}
+				<span class="chip-dots">
+					{#each sessionStates as state}
+						{@const visual = SESSION_STATE_VISUALS[state]}
+						{@const color = visual?.accent || selectedColor}
+						{@const isNI = state === 'needs-input'}
+						{@const isRev = state === 'ready-for-review'}
+						{#if isNI || isRev}
+							<span class="chip-dot-animated">
+								<span class="chip-dot-ping" class:animate-ping={isNI} class:animate-pulse={isRev} style="background: {color};"></span>
+								<span class="chip-dot-core" style="background: {color};"></span>
+							</span>
+						{:else}
+							<span class="chip-dot" style="background: {color};"></span>
+						{/if}
+					{/each}
+				</span>
+			{:else}
+				<span class="chip-dot"></span>
+			{/if}
 			<span class="chip-label">{selectedProject}</span>
 			<svg class="chevron" class:open viewBox="0 0 16 16" fill="currentColor">
 				<path fill-rule="evenodd" d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
@@ -402,6 +425,37 @@
 		border-radius: 50%;
 		background: var(--project-color);
 		flex-shrink: 0;
+	}
+
+	.chip-dots {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.2rem;
+		flex-shrink: 0;
+	}
+
+	.chip-dot-animated {
+		position: relative;
+		display: inline-flex;
+		width: 0.5rem;
+		height: 0.5rem;
+		flex-shrink: 0;
+		overflow: hidden;
+	}
+
+	.chip-dot-ping {
+		position: absolute;
+		inset: 0;
+		border-radius: 50%;
+		opacity: 0.75;
+	}
+
+	.chip-dot-core {
+		position: relative;
+		display: inline-flex;
+		width: 100%;
+		height: 100%;
+		border-radius: 50%;
 	}
 
 	.chip-label {

@@ -13,11 +13,13 @@
 		value = null,
 		semanticType,
 		config = {},
+		selected = false,
 		onSave,
 	}: {
 		value: any;
 		semanticType?: SemanticType;
 		config?: ColumnConfig;
+		selected?: boolean;
 		onSave: (val: any) => void;
 	} = $props();
 

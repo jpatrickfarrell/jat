@@ -272,8 +272,8 @@
 		onReorderFavorites?: (order: string[]) => void;
 		/** Called when favorite star is toggled in ProjectSelector */
 		onToggleFavorite?: (project: string) => void;
-		/** Per-project session state map (project name → best session state) */
-		projectSessionStates?: Map<string, string>;
+		/** Per-project session states (project name → array of session states, one per agent) */
+		projectSessionStates?: Map<string, string[]>;
 	}
 
 	let {
@@ -578,27 +578,34 @@
 							onSwarm={(count, epicId) => epicId ? handleRunEpic(epicId) : handleSwarm()}
 						/>
 					{:else}
-						{@const sessionState = projectSessionStates.get(favProject)}
-						{@const stateVisual = sessionState ? SESSION_STATE_VISUALS[sessionState] : null}
-						{@const dotColor = stateVisual ? stateVisual.accent : favColor}
-						{@const dotTitle = stateVisual ? `${favProject} — ${stateVisual.shortLabel}` : favProject}
-						{@const isNeedsInput = sessionState === 'needs-input'}
-						{@const isReview = sessionState === 'ready-for-review'}
-						{@const isAnimated = isNeedsInput || isReview}
+						{@const sessionStates = projectSessionStates.get(favProject) || []}
+						{@const chipTitle = sessionStates.length > 0
+							? `${favProject} — ${sessionStates.map(s => SESSION_STATE_VISUALS[s]?.shortLabel || s).join(', ')}`
+							: favProject}
 						<div class="fav-chip" style="--fav-color: {favColor};">
 							<button
 								type="button"
 								class="fav-chip-btn"
 								onclick={() => onProjectChange?.(favProject)}
-								title={dotTitle}
+								title={chipTitle}
 							>
-								{#if isAnimated}
-									<span class="fav-dot-animated">
-										<span class="fav-dot-ping" class:animate-ping={isNeedsInput} class:animate-pulse={isReview} style="background: {dotColor};"></span>
-										<span class="fav-dot-core" style="background: {dotColor};"></span>
+								{#if sessionStates.length > 0}
+									<span class="fav-dots">
+										{#each sessionStates as state}
+											{@const visual = SESSION_STATE_VISUALS[state]}
+											{@const color = visual?.accent || favColor}
+											{@const isNI = state === 'needs-input'}
+											{@const isRev = state === 'ready-for-review'}
+											{#if isNI || isRev}
+												<span class="fav-dot-animated">
+													<span class="fav-dot-ping" class:animate-ping={isNI} class:animate-pulse={isRev} style="background: {color};"></span>
+													<span class="fav-dot-core" style="background: {color};"></span>
+												</span>
+											{:else}
+												<span class="fav-dot" style="background: {color};"></span>
+											{/if}
+										{/each}
 									</span>
-								{:else}
-									<span class="fav-dot" style="background: {dotColor}; opacity: {stateVisual ? 1 : 0.6};"></span>
 								{/if}
 								<span class="fav-label">{favProject}</span>
 							</button>
@@ -921,15 +928,18 @@
 		color: var(--fav-color);
 	}
 
-	.fav-dot {
-		width: 0.4rem;
-		height: 0.4rem;
-		border-radius: 50%;
+	.fav-dots {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
 		flex-shrink: 0;
 	}
 
-	.fav-chip:hover .fav-dot {
-		opacity: 1 !important;
+	.fav-dot {
+		width: 0.45rem;
+		height: 0.45rem;
+		border-radius: 50%;
+		flex-shrink: 0;
 	}
 
 	/* Animated dot wrapper (needs-input ping, review pulse) */
@@ -939,6 +949,7 @@
 		width: 0.5rem;
 		height: 0.5rem;
 		flex-shrink: 0;
+		overflow: hidden;
 	}
 
 	.fav-dot-ping {

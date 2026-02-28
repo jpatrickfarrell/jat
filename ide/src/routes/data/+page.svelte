@@ -7,7 +7,8 @@
 	 * - Right: Table view with inline editing, add/delete rows, SQL console
 	 */
 
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
+	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { reveal } from '$lib/actions/reveal';
@@ -139,9 +140,17 @@
 	// Column order (persisted per project+table in localStorage)
 	let columnOrder = $state<string[]>([]);
 
+	// Column widths (persisted per project+table in localStorage)
+	let columnWidths = $state<Record<string, number>>({});
+
 	// Column drag state
 	let colDraggedIndex = $state<number | null>(null);
 	let colDragOverIndex = $state<number | null>(null);
+
+	// Column resize state
+	let colResizing = $state<string | null>(null);
+	let colResizeStartX = 0;
+	let colResizeStartWidth = 0;
 
 	// Sync selectedProject from URL
 	$effect(() => {
@@ -1009,6 +1018,14 @@
 			} catch {
 				columnOrder = [];
 			}
+
+			const widthKey = `jat-data-colwidths-${selectedProject}-${selectedTable}`;
+			try {
+				const stored = localStorage.getItem(widthKey);
+				columnWidths = stored ? JSON.parse(stored) : {};
+			} catch {
+				columnWidths = {};
+			}
 		}
 	});
 
@@ -1027,6 +1044,16 @@
 		const key = `jat-data-colorder-${selectedProject}-${selectedTable}`;
 		if (columnOrder.length > 0) {
 			localStorage.setItem(key, JSON.stringify(columnOrder));
+		} else {
+			localStorage.removeItem(key);
+		}
+	}
+
+	function persistColumnWidths() {
+		if (!selectedProject || !selectedTable) return;
+		const key = `jat-data-colwidths-${selectedProject}-${selectedTable}`;
+		if (Object.keys(columnWidths).length > 0) {
+			localStorage.setItem(key, JSON.stringify(columnWidths));
 		} else {
 			localStorage.removeItem(key);
 		}
@@ -1166,6 +1193,44 @@
 		colDraggedIndex = null;
 		colDragOverIndex = null;
 	}
+
+	// Column resize handlers
+	function handleResizeStart(e: MouseEvent, colName: string) {
+		e.preventDefault();
+		e.stopPropagation();
+		colResizing = colName;
+		colResizeStartX = e.clientX;
+		const th = (e.target as HTMLElement).parentElement;
+		colResizeStartWidth = th ? th.offsetWidth : 120;
+		document.body.style.cursor = 'col-resize';
+		document.body.style.userSelect = 'none';
+		document.addEventListener('mousemove', handleResizeMove);
+		document.addEventListener('mouseup', handleResizeEnd);
+	}
+
+	function handleResizeMove(e: MouseEvent) {
+		if (!colResizing) return;
+		const diff = e.clientX - colResizeStartX;
+		const newWidth = Math.max(50, colResizeStartWidth + diff);
+		columnWidths = { ...columnWidths, [colResizing]: newWidth };
+	}
+
+	function handleResizeEnd() {
+		document.body.style.cursor = '';
+		document.body.style.userSelect = '';
+		if (colResizing) {
+			persistColumnWidths();
+			colResizing = null;
+		}
+		document.removeEventListener('mousemove', handleResizeMove);
+		document.removeEventListener('mouseup', handleResizeEnd);
+	}
+
+	onDestroy(() => {
+		if (!browser) return;
+		document.removeEventListener('mousemove', handleResizeMove);
+		document.removeEventListener('mouseup', handleResizeEnd);
+	});
 
 	async function handleCtxDuplicate() {
 		if (!ctxCol) return;
@@ -1481,12 +1546,15 @@
 										<th class="row-id-col">#</th>
 										{#each orderedColumns as col, colIdx}
 										{@const meta = columnMeta[col.name]}
+										{@const colWidth = columnWidths[col.name]}
 											<th
 												class="col-header-cell"
 												class:col-dragging={colDraggedIndex === colIdx}
 												class:col-drag-over-left={colDragOverIndex === colIdx && colDraggedIndex !== null && colDraggedIndex > colIdx}
 												class:col-drag-over-right={colDragOverIndex === colIdx && colDraggedIndex !== null && colDraggedIndex < colIdx}
-												draggable="true"
+												class:col-resizing={colResizing === col.name}
+												style={colWidth ? `width: ${colWidth}px; min-width: ${colWidth}px; max-width: ${colWidth}px;` : ''}
+												draggable={colResizing ? 'false' : 'true'}
 												ondragstart={(e) => handleColDragStart(e, colIdx)}
 												ondragend={handleColDragEnd}
 												ondragover={(e) => handleColDragOver(e, colIdx)}
@@ -1520,6 +1588,11 @@
 														onClose={() => columnSettingsOpen = null}
 													/>
 												{/if}
+												<!-- svelte-ignore a11y_no_static_element_interactions -->
+												<div
+													class="col-resize-handle"
+													onmousedown={(e) => handleResizeStart(e, col.name)}
+												></div>
 											</th>
 										{/each}
 										<th class="actions-col"></th>
@@ -2106,6 +2179,16 @@
 	</button>
 	{/if}
 
+	<!-- Reset Column Widths -->
+	{#if Object.keys(columnWidths).length > 0}
+	<button class="col-context-menu-item" onclick={() => { columnWidths = {}; persistColumnWidths(); closeColContextMenu(); }}>
+		<svg xmlns="http://www.w3.org/2000/svg" class="ctx-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+			<path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+		</svg>
+		Reset Column Widths
+	</button>
+	{/if}
+
 	<div class="col-context-menu-divider"></div>
 
 	<!-- Duplicate -->
@@ -2508,6 +2591,19 @@
 	.col-drag-over-right {
 		box-shadow: inset -3px 0 0 0 oklch(0.65 0.15 200);
 	}
+	.col-resize-handle {
+		position: absolute;
+		right: 0;
+		top: 0;
+		bottom: 0;
+		width: 5px;
+		cursor: col-resize;
+		z-index: 2;
+	}
+	.col-resize-handle:hover,
+	.col-resizing .col-resize-handle {
+		background: oklch(0.55 0.15 200);
+	}
 
 	.col-type {
 		font-size: 0.5625rem;
@@ -2543,7 +2639,6 @@
 
 	.data-cell {
 		cursor: default;
-		max-width: 300px;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;

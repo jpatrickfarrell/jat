@@ -88,17 +88,21 @@
 		'completed': 8,
 		'idle': 9,
 	};
+	// Collect all session states per project (one entry per agent session), sorted by priority
 	const projectSessionStates = $derived(() => {
 		const sessions = getWorkSessions();
-		const map = new Map<string, string>();
+		const map = new Map<string, string[]>();
 		for (const session of sessions) {
 			const proj = session.project || (session.task?.id ? getProjectFromTaskId(session.task.id) : null);
 			if (!proj) continue;
 			const state = session._sseState || 'idle';
-			const existing = map.get(proj);
-			if (!existing || (SESSION_STATE_PRIORITY[state] ?? 99) < (SESSION_STATE_PRIORITY[existing] ?? 99)) {
-				map.set(proj, state);
-			}
+			const arr = map.get(proj) || [];
+			arr.push(state);
+			map.set(proj, arr);
+		}
+		// Sort each project's states by priority (most urgent first)
+		for (const [proj, states] of map) {
+			states.sort((a, b) => (SESSION_STATE_PRIORITY[a] ?? 99) - (SESSION_STATE_PRIORITY[b] ?? 99));
 		}
 		return map;
 	});

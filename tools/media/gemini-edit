@@ -16,10 +16,10 @@ Edit an existing image with a text instruction using Gemini.
 Arguments:
   INPUT               Path to input image file (required)
   INSTRUCTION         Text instruction for editing (required)
-  OUTPUT              Output file path (default: /tmp/gemini-edit-TIMESTAMP.png)
+  OUTPUT              Output file path (default: ~/Pictures/gemini-edit-TIMESTAMP.png)
 
 Options:
-  --model MODEL       Model to use (default: gemini-2.5-flash-image)
+  --model MODEL       Model to use (default: gemini-3.1-flash-image-preview)
   --help, -h          Show this help
 
 Examples:
@@ -83,7 +83,7 @@ gemini_check_deps
 
 # Default output path
 if [[ -z "$OUTPUT" ]]; then
-    OUTPUT="/tmp/gemini-edit-$(date +%Y%m%d-%H%M%S).png"
+    OUTPUT="$HOME/Pictures/gemini-edit-$(date +%Y%m%d-%H%M%S).png"
 fi
 
 # Encode image and get MIME type

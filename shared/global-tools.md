@@ -16,7 +16,7 @@ AI image generation via Google Gemini API. **Requires:** `GEMINI_API_KEY` enviro
 | `gemini-edit` | Edit existing image with instruction | `gemini-edit INPUT "INSTRUCTION" [OUTPUT]` |
 | `gemini-compose` | Combine 2-14 images into one | `gemini-compose IMG1 IMG2 "INSTRUCTION" [--output PATH]` |
 
-**Models:** `gemini-2.5-flash-image` (default, fast), `gemini-3-pro-image-preview` (quality, 4K)
+**Models:** `gemini-3.1-flash-image-preview` (default, Nano Banana 2), `gemini-3-pro-image-preview` (quality, 4K)
 
 **Examples:**
 ```bash

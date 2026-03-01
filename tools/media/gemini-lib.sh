@@ -4,7 +4,7 @@
 
 # Configuration
 export GEMINI_API_URL="${GEMINI_API_URL:-https://generativelanguage.googleapis.com/v1beta/models}"
-export GEMINI_DEFAULT_MODEL="${GEMINI_DEFAULT_MODEL:-gemini-2.5-flash-image}"
+export GEMINI_DEFAULT_MODEL="${GEMINI_DEFAULT_MODEL:-gemini-3.1-flash-image-preview}"
 
 # Check GEMINI_API_KEY is set
 gemini_check_api_key() {

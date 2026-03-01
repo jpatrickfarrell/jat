@@ -18,8 +18,8 @@ Arguments:
   INSTRUCTION           Text instruction for composition (required)
 
 Options:
-  --output PATH         Output file path (default: /tmp/gemini-compose-TIMESTAMP.png)
-  --model MODEL         Model to use (default: gemini-2.5-flash-image)
+  --output PATH         Output file path (default: ~/Pictures/gemini-compose-TIMESTAMP.png)
+  --model MODEL         Model to use (default: gemini-3.1-flash-image-preview)
   --help, -h            Show this help
 
 Detection:
@@ -92,7 +92,7 @@ gemini_check_deps
 
 # Default output path
 if [[ -z "$OUTPUT" ]]; then
-    OUTPUT="/tmp/gemini-compose-$(date +%Y%m%d-%H%M%S).png"
+    OUTPUT="$HOME/Pictures/gemini-compose-$(date +%Y%m%d-%H%M%S).png"
 fi
 
 # Build parts array: instruction first, then all images

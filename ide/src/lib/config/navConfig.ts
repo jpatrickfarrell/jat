@@ -125,6 +125,13 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			category: 'main'
 		},
 		{
+			id: 'bases',
+			label: 'Bases',
+			href: '/bases',
+			icon: 'bases',
+			category: 'main'
+		},
+		{
 			id: 'search',
 			label: 'Search',
 			href: '/search',

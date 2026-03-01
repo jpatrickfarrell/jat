@@ -38,6 +38,8 @@
 	import { addToast } from '$lib/stores/toasts.svelte';
 	import { describeCron } from '$lib/utils/cronUtils';
 	import { getFileTypeInfoFromPath } from '$lib/utils/fileUtils';
+	import BaseAttachChips from './bases/BaseAttachChips.svelte';
+	import type { KnowledgeBase } from '$lib/types/knowledgeBase';
 
 	// Task interface for drawer (extends API Task with additional optional fields)
 	interface DrawerTask {
@@ -187,6 +189,10 @@
 	let summaryData = $state<TaskSummary | null>(null);
 	let summaryLoading = $state(false);
 	let summaryError = $state<string | null>(null);
+
+	// Knowledge bases state
+	let taskBases = $state<KnowledgeBase[]>([]);
+	let taskBaseIds = $derived(taskBases.map(b => b.id));
 
 	// Update timer for elapsed time display (every 30s)
 	let timerInterval: ReturnType<typeof setInterval> | null = null;
@@ -632,10 +638,11 @@
 			task = data.task;
 			originalTask = { ...data.task };
 
-			// Fetch task history, attachments, signals, and available tasks in parallel
+			// Fetch task history, attachments, bases, signals, and available tasks in parallel
 			// Pass the signal to allow cancellation
 			fetchTaskHistory(id, signal);
 			fetchAttachments(id, signal);
+			fetchTaskBases(id, signal);
 			fetchTaskSignals(id, signal);  // New structured signals (primary)
 			fetchSessionLogs(id, signal);   // Legacy logs (fallback)
 			fetchAvailableTasks(id, signal);
@@ -685,6 +692,62 @@
 		} finally {
 			historyLoading = false;
 		}
+	}
+
+	// Fetch knowledge bases attached to task
+	async function fetchTaskBases(id: string, signal?: AbortSignal) {
+		if (!id) return;
+		const project = task?.project || getProjectFromTaskId(id);
+		if (!project) return;
+		try {
+			const response = await fetch(`/api/tasks/${id}/bases?project=${encodeURIComponent(project)}`, { signal });
+			if (response.ok) {
+				const data = await response.json();
+				taskBases = data.bases || [];
+			}
+		} catch (err: any) {
+			if (err.name === 'AbortError') return;
+			console.error('Error fetching task bases:', err);
+		}
+	}
+
+	// Handle knowledge base changes (attach/detach)
+	async function handleBasesChange(newIds: string[]) {
+		if (!task?.id) return;
+		const project = task.project || getProjectFromTaskId(task.id);
+		if (!project) return;
+
+		const currentIds = new Set(taskBaseIds);
+		const newSet = new Set(newIds);
+
+		// Detach removed bases
+		for (const id of currentIds) {
+			if (!newSet.has(id)) {
+				try {
+					await fetch(`/api/tasks/${task.id}/bases/${id}?project=${encodeURIComponent(project)}`, { method: 'DELETE' });
+				} catch (err) {
+					console.warn(`Failed to detach base ${id}:`, err);
+				}
+			}
+		}
+
+		// Attach new bases
+		for (const id of newSet) {
+			if (!currentIds.has(id)) {
+				try {
+					await fetch(`/api/tasks/${task.id}/bases`, {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ project, baseId: id })
+					});
+				} catch (err) {
+					console.warn(`Failed to attach base ${id}:`, err);
+				}
+			}
+		}
+
+		// Refresh from server
+		fetchTaskBases(task.id);
 	}
 
 	// Fetch task attachments
@@ -2469,6 +2532,16 @@
 									{/if}
 								</button>
 							{/if}
+						</div>
+
+						<!-- Knowledge Bases -->
+						<div>
+							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider text-base-content/60">Knowledge</h4>
+							<BaseAttachChips
+								selectedIds={taskBaseIds}
+								project={task.project || getProjectFromTaskId(task.id)}
+								onChange={handleBasesChange}
+							/>
 						</div>
 
 						<!-- Description (Inline Editable) - Industrial -->

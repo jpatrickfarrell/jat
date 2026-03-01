@@ -3,9 +3,10 @@
 	 * BaseEditor - Create/edit drawer for knowledge bases.
 	 * Full-screen overlay with form for base properties.
 	 */
-	import type { KnowledgeBase, SourceType, CreateBaseInput, UpdateBaseInput } from '$lib/types/knowledgeBase';
+	import type { KnowledgeBase, SourceType, CreateBaseInput, UpdateBaseInput, ExternalSourceConfig } from '$lib/types/knowledgeBase';
 	import { SOURCE_TYPE_INFO, SOURCE_TYPES } from '$lib/types/knowledgeBase';
 	import { createBase, updateBase } from '$lib/stores/bases.svelte';
+	import { CRON_PRESETS, describeCron, validateCron } from '$lib/utils/cronUtils';
 	import { fly } from 'svelte/transition';
 
 	interface Props {
@@ -28,6 +29,15 @@
 	let saving = $state(false);
 	let error = $state<string | null>(null);
 
+	// External source state
+	let externalUrl = $state('');
+	let sourceSubtype = $state<'url' | 'coda' | 'gsheet'>('url');
+	let refreshCron = $state('');
+	let customCron = $state('');
+	let useCustomCron = $state(false);
+	let testing = $state(false);
+	let testResult = $state<{ ok: boolean; content?: string; error?: string } | null>(null);
+
 	const isEditMode = $derived(base !== null);
 
 	// Reset form when base/isOpen changes
@@ -40,6 +50,21 @@
 				content = base.content || '';
 				contextQuery = base.context_query || '';
 				alwaysInject = base.always_inject;
+				// Populate external fields
+				const cfg = (base.source_config || {}) as ExternalSourceConfig;
+				externalUrl = cfg.url || '';
+				sourceSubtype = cfg.source_subtype || 'url';
+				const cron = cfg.refresh_cron || '';
+				const isPreset = CRON_PRESETS.some(p => p.cron === cron);
+				if (cron && !isPreset) {
+					useCustomCron = true;
+					customCron = cron;
+					refreshCron = '';
+				} else {
+					useCustomCron = false;
+					customCron = '';
+					refreshCron = cron;
+				}
 			} else {
 				name = '';
 				description = '';
@@ -47,10 +72,31 @@
 				content = '';
 				contextQuery = '';
 				alwaysInject = false;
+				externalUrl = '';
+				sourceSubtype = 'url';
+				refreshCron = '';
+				customCron = '';
+				useCustomCron = false;
 			}
 			error = null;
+			testResult = null;
+			testing = false;
 		}
 	});
+
+	function buildExternalSourceConfig(): ExternalSourceConfig | undefined {
+		if (sourceType !== 'external') return undefined;
+		const cron = useCustomCron ? customCron.trim() : refreshCron;
+		const config: ExternalSourceConfig = {
+			url: externalUrl.trim() || undefined,
+			source_subtype: sourceSubtype,
+		};
+		if (cron) {
+			config.refresh_cron = cron;
+			config.next_refresh_at = new Date().toISOString();
+		}
+		return config;
+	}
 
 	async function handleSave() {
 		if (!name.trim()) {
@@ -58,10 +104,27 @@
 			return;
 		}
 
+		if (sourceType === 'external') {
+			if (!externalUrl.trim()) {
+				error = 'URL is required for external sources';
+				return;
+			}
+			const cron = useCustomCron ? customCron.trim() : refreshCron;
+			if (cron) {
+				const validation = validateCron(cron);
+				if (!validation.valid) {
+					error = `Invalid cron: ${validation.error}`;
+					return;
+				}
+			}
+		}
+
 		saving = true;
 		error = null;
 
 		try {
+			const sourceConfig = buildExternalSourceConfig();
+
 			if (isEditMode && base) {
 				const input: UpdateBaseInput = {
 					name: name.trim(),
@@ -69,7 +132,8 @@
 					source_type: sourceType,
 					content: sourceType === 'manual' || sourceType === 'conversation' ? content : undefined,
 					context_query: sourceType === 'data_table' ? contextQuery : undefined,
-					always_inject: alwaysInject
+					always_inject: alwaysInject,
+					source_config: sourceConfig
 				};
 				const updated = await updateBase(base.id, input);
 				if (updated) onSave?.(updated);
@@ -80,7 +144,8 @@
 					source_type: sourceType,
 					content: sourceType === 'manual' || sourceType === 'conversation' ? content : undefined,
 					context_query: sourceType === 'data_table' ? contextQuery : undefined,
-					always_inject: alwaysInject
+					always_inject: alwaysInject,
+					source_config: sourceConfig
 				};
 				const created = await createBase(input);
 				if (created) onSave?.(created);
@@ -97,6 +162,36 @@
 		isOpen = false;
 		onCancel?.();
 	}
+
+	async function handleTestConnection() {
+		if (!externalUrl.trim()) {
+			error = 'Enter a URL to test';
+			return;
+		}
+		testing = true;
+		testResult = null;
+		error = null;
+		try {
+			const res = await fetch('/api/bases/test-fetch', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ url: externalUrl.trim() })
+			});
+			const data = await res.json();
+			if (res.ok) {
+				testResult = { ok: true, content: data.content?.substring(0, 2000) };
+			} else {
+				testResult = { ok: false, error: data.error || `HTTP ${res.status}` };
+			}
+		} catch (err) {
+			testResult = { ok: false, error: err instanceof Error ? err.message : 'Fetch failed' };
+		} finally {
+			testing = false;
+		}
+	}
+
+	const activeCron = $derived(useCustomCron ? customCron.trim() : refreshCron);
+	const cronDescription = $derived(describeCron(activeCron));
 
 	function getSourceDescription(type: SourceType): string {
 		return SOURCE_TYPE_INFO.find(s => s.type === type)?.description || '';
@@ -226,10 +321,137 @@
 					</div>
 				{/if}
 
-				<!-- External URL (external) -->
+				<!-- External Source Config -->
 				{#if sourceType === 'external'}
-					<div class="px-3 py-2 rounded-lg text-sm" style="background: oklch(0.20 0.02 240 / 0.2); color: oklch(0.70 0.10 240); border: 1px solid oklch(0.40 0.10 240 / 0.2);">
-						External source ingestion is configured via the scheduler. Set up URL, cron schedule, and TTL in the base config after creation.
+					<div class="space-y-3">
+						<!-- Source Subtype -->
+						<div>
+							<label class="block text-xs font-medium mb-1" style="color: oklch(0.65 0.01 250);">Source Type</label>
+							<div class="flex gap-2">
+								{#each [{ value: 'url', label: 'URL', icon: '🌐' }, { value: 'coda', label: 'Coda', icon: '📋' }, { value: 'gsheet', label: 'Google Sheet', icon: '📊' }] as opt}
+									<button
+										type="button"
+										class="px-3 py-1.5 rounded-lg border text-xs font-medium transition-all"
+										style="
+											background: {sourceSubtype === opt.value ? 'oklch(0.25 0.04 240 / 0.3)' : 'oklch(0.20 0.01 250)'};
+											border-color: {sourceSubtype === opt.value ? 'oklch(0.55 0.12 240 / 0.5)' : 'oklch(0.28 0.01 250)'};
+											color: oklch(0.85 0.01 250);
+										"
+										onclick={() => sourceSubtype = opt.value}
+									>
+										{opt.icon} {opt.label}
+									</button>
+								{/each}
+							</div>
+						</div>
+
+						<!-- URL Input -->
+						<div>
+							<label class="block text-xs font-medium mb-1" style="color: oklch(0.65 0.01 250);">
+								{sourceSubtype === 'url' ? 'URL' : sourceSubtype === 'coda' ? 'Coda Doc URL' : 'Google Sheet URL'}
+							</label>
+							<div class="flex gap-2">
+								<input
+									type="url"
+									bind:value={externalUrl}
+									placeholder={sourceSubtype === 'url' ? 'https://example.com/page' : sourceSubtype === 'coda' ? 'https://coda.io/d/doc-id' : 'https://docs.google.com/spreadsheets/d/...'}
+									class="input input-sm flex-1 border text-sm"
+									style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.01 250); color: oklch(0.90 0.01 250);"
+								/>
+								<button
+									type="button"
+									class="btn btn-sm border"
+									style="background: oklch(0.22 0.02 200); border-color: oklch(0.35 0.06 200); color: oklch(0.80 0.08 200);"
+									onclick={handleTestConnection}
+									disabled={testing || !externalUrl.trim()}
+								>
+									{#if testing}
+										<span class="loading loading-spinner loading-xs"></span>
+									{:else}
+										Test
+									{/if}
+								</button>
+							</div>
+						</div>
+
+						<!-- Test Result -->
+						{#if testResult}
+							<div
+								class="px-3 py-2 rounded-lg text-sm"
+								style="
+									background: {testResult.ok ? 'oklch(0.20 0.04 145 / 0.2)' : 'oklch(0.20 0.04 25 / 0.2)'};
+									color: {testResult.ok ? 'oklch(0.70 0.12 145)' : 'oklch(0.70 0.12 25)'};
+									border: 1px solid {testResult.ok ? 'oklch(0.40 0.12 145 / 0.3)' : 'oklch(0.40 0.12 25 / 0.3)'};
+								"
+							>
+								{#if testResult.ok}
+									<div class="font-medium mb-1">Connection successful</div>
+									{#if testResult.content}
+										<pre class="text-xs whitespace-pre-wrap max-h-40 overflow-auto mt-1 opacity-80" style="font-family: monospace;">{testResult.content}</pre>
+									{/if}
+								{:else}
+									<div class="font-medium">Connection failed</div>
+									<div class="text-xs mt-0.5 opacity-80">{testResult.error}</div>
+								{/if}
+							</div>
+						{/if}
+
+						<!-- Refresh Schedule -->
+						<div>
+							<label class="block text-xs font-medium mb-1" style="color: oklch(0.65 0.01 250);">
+								Refresh Schedule
+								<span class="text-xs font-normal opacity-60">(optional)</span>
+							</label>
+							{#if !useCustomCron}
+								<select
+									bind:value={refreshCron}
+									class="select select-sm w-full border text-sm"
+									style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.01 250); color: oklch(0.90 0.01 250);"
+								>
+									<option value="">No automatic refresh</option>
+									{#each CRON_PRESETS as preset}
+										<option value={preset.cron}>{preset.label}</option>
+									{/each}
+								</select>
+							{:else}
+								<input
+									type="text"
+									bind:value={customCron}
+									placeholder="* * * * *  (min hour dom month dow)"
+									class="input input-sm w-full border text-sm font-mono"
+									style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.01 250); color: oklch(0.90 0.01 250);"
+								/>
+							{/if}
+							<div class="flex items-center justify-between mt-1">
+								<button
+									type="button"
+									class="text-xs underline"
+									style="color: oklch(0.60 0.08 240);"
+									onclick={() => { useCustomCron = !useCustomCron; }}
+								>
+									{useCustomCron ? 'Use preset' : 'Custom cron'}
+								</button>
+								{#if cronDescription}
+									<span class="text-xs" style="color: oklch(0.55 0.01 250);">{cronDescription}</span>
+								{/if}
+							</div>
+						</div>
+
+						<!-- Cached Content Preview (edit mode) -->
+						{#if isEditMode && base?.content}
+							<div>
+								<label class="block text-xs font-medium mb-1" style="color: oklch(0.65 0.01 250);">
+									Cached Content
+									<span class="text-xs font-normal opacity-60">
+										({base.token_estimate ? `~${base.token_estimate} tokens` : 'size unknown'})
+									</span>
+								</label>
+								<pre
+									class="text-xs whitespace-pre-wrap max-h-48 overflow-auto p-2 rounded-lg border"
+									style="background: oklch(0.18 0.01 250); border-color: oklch(0.28 0.01 250); color: oklch(0.70 0.01 250); font-family: monospace;"
+								>{base.content.substring(0, 3000)}{base.content.length > 3000 ? '\n\n... (truncated)' : ''}</pre>
+							</div>
+						{/if}
 					</div>
 				{/if}
 

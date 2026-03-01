@@ -41,6 +41,7 @@ import {
 } from '$lib/utils/agentConfig.js';
 import { getAgentModel } from '$lib/types/agentProgram.js';
 import { getApiKey, getCustomApiKey, getCustomApiKeyMeta } from '$lib/utils/credentials.js';
+import { getTaskBases, getBases, renderBase } from '$lib/server/jat-bases.js';
 
 const DB_PATH = process.env.AGENT_MAIL_DB || `${process.env.HOME}/.agent-mail.db`;
 
@@ -503,9 +504,10 @@ function buildNonNativePrompt({ agentName, taskId, taskTitle, taskCommand, projN
  * @param {string} [params.taskTitle] - Task title for task injection
  * @param {string} [params.taskCommand] - Task command (e.g. '/jat:start', '/jat:chat')
  * @param {string} [params.mode] - Spawn mode (e.g. 'planning')
+ * @param {string} [params.basesContent] - Pre-rendered knowledge bases XML block
  * @returns {{ command: string, env: Record<string, string>, needsJatStart: boolean }}
  */
-function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, taskId, taskTitle, taskCommand, mode }) {
+function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, taskId, taskTitle, taskCommand, mode, basesContent }) {
 	// Build environment variables
 	/** @type {Record<string, string>} */
 	const env = { AGENT_MAIL_URL };
@@ -616,7 +618,12 @@ function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, 
 				agentCmd += ` --append-system-prompt '${jatBootstrap}'`;
 				agentCmd += ' --permission-mode plan';
 			} else {
-				agentCmd += ` --append-system-prompt 'You are a JAT agent.'`;
+				const systemPromptParts = ['You are a JAT agent.'];
+				if (basesContent) {
+					systemPromptParts.push(basesContent);
+				}
+				const systemPrompt = systemPromptParts.join('\n\n').replace(/'/g, "'\\''");
+				agentCmd += ` --append-system-prompt '${systemPrompt}'`;
 				// Pass initial command as positional argument — Claude processes it
 				// as the first user message in interactive mode. If a YOLO permissions
 				// dialog appears, the prompt queues behind it automatically.
@@ -636,6 +643,7 @@ function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, 
 
 			const skillsSummary = getEnabledSkillsSummary();
 			if (skillsSummary) promptParts.push(skillsSummary);
+			if (basesContent) promptParts.push(basesContent);
 
 			const prompt = promptParts.join(' ');
 			const escapedPrompt = prompt.replace(/"/g, '\\"');
@@ -649,6 +657,7 @@ function buildAgentCommand({ agent, model, projectPath, jatDefaults, agentName, 
 
 			const skillsSummary = getEnabledSkillsSummary();
 			if (skillsSummary) promptParts.push(skillsSummary);
+			if (basesContent) promptParts.push(basesContent);
 
 			const prompt = promptParts.join(' ');
 			const escapedPrompt = prompt.replace(/'/g, "'\\''");
@@ -938,6 +947,51 @@ export async function POST({ request }) {
 		const TMUX_INITIAL_WIDTH = 80;
 		const TMUX_INITIAL_HEIGHT = 40;
 
+		// Render knowledge bases content for injection into agent prompt
+		let basesContent = '';
+		if (taskId && projectPath) {
+			try {
+				// Collect task-attached bases + always-inject bases, deduplicate
+				const taskBases = getTaskBases(projectPath, taskId);
+				const alwaysInjectBases = getBases(projectPath, { alwaysInjectOnly: true });
+				const seenIds = new Set();
+				const allBaseIds = [];
+				for (const b of taskBases) {
+					if (!seenIds.has(b.id)) { seenIds.add(b.id); allBaseIds.push(b.id); }
+				}
+				for (const b of alwaysInjectBases) {
+					if (!seenIds.has(b.id)) { seenIds.add(b.id); allBaseIds.push(b.id); }
+				}
+
+				if (allBaseIds.length > 0) {
+					const TOKEN_BUDGET = 8000;
+					let totalTokens = 0;
+					const renderedParts = [];
+
+					for (const baseId of allBaseIds) {
+						try {
+							const rendered = renderBase(projectPath, baseId);
+							if (totalTokens + rendered.token_estimate > TOKEN_BUDGET) {
+								console.log(`[spawn] Skipping base "${rendered.name}" (${rendered.token_estimate} tokens) - would exceed budget`);
+								continue;
+							}
+							totalTokens += rendered.token_estimate;
+							renderedParts.push(`<base name="${rendered.name}" type="${rendered.source_type}">\n${rendered.content}\n</base>`);
+						} catch (err) {
+							console.warn(`[spawn] Failed to render base ${baseId}:`, err.message);
+						}
+					}
+
+					if (renderedParts.length > 0) {
+						basesContent = `<knowledge-bases>\n${renderedParts.join('\n')}\n</knowledge-bases>`;
+						console.log(`[spawn] Injecting ${renderedParts.length} knowledge base(s) (~${totalTokens} tokens)`);
+					}
+				}
+			} catch (err) {
+				console.warn('[spawn] Failed to load knowledge bases:', err.message);
+			}
+		}
+
 		// Build the agent command dynamically based on selected agent program
 		const { command: agentCmd, needsJatStart } = buildAgentCommand({
 			agent: selectedAgent,
@@ -948,7 +1002,8 @@ export async function POST({ request }) {
 			taskId,
 			taskTitle: task?.title,
 			taskCommand: explicitCommand || task?.command || selectedAgent.startCommand || '/jat:start',
-			mode
+			mode,
+			basesContent
 		});
 
 		console.log(`[spawn] Agent command: ${agentCmd.substring(0, 100)}...`);

@@ -227,6 +227,138 @@ async function executeWorkflow(task, project) {
   }
 }
 
+// --- Base refresh: fetch external content ---
+
+/**
+ * Fetch content from a URL and extract text as markdown.
+ * @param {string} url
+ * @returns {Promise<{content: string, error?: string}>}
+ */
+async function fetchUrlContent(url) {
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'JAT-Scheduler/1.0', 'Accept': 'text/html, text/plain, application/json, */*' },
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!res.ok) {
+      return { content: '', error: `HTTP ${res.status}: ${res.statusText}` };
+    }
+    const contentType = res.headers.get('content-type') || '';
+    const text = await res.text();
+
+    if (contentType.includes('application/json')) {
+      // Pretty-print JSON
+      try {
+        return { content: '```json\n' + JSON.stringify(JSON.parse(text), null, 2) + '\n```' };
+      } catch { return { content: text }; }
+    }
+    if (contentType.includes('text/html')) {
+      // Strip HTML tags for a rough markdown extraction
+      return { content: htmlToMarkdown(text) };
+    }
+    // Plain text or other
+    return { content: text };
+  } catch (err) {
+    return { content: '', error: err.message };
+  }
+}
+
+/**
+ * Basic HTML to markdown conversion (strips tags, preserves structure).
+ * @param {string} html
+ * @returns {string}
+ */
+function htmlToMarkdown(html) {
+  let md = html;
+  // Remove script and style blocks
+  md = md.replace(/<script[\s\S]*?<\/script>/gi, '');
+  md = md.replace(/<style[\s\S]*?<\/style>/gi, '');
+  // Convert headers
+  md = md.replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, '# $1\n');
+  md = md.replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, '## $1\n');
+  md = md.replace(/<h3[^>]*>([\s\S]*?)<\/h3>/gi, '### $1\n');
+  md = md.replace(/<h4[^>]*>([\s\S]*?)<\/h4>/gi, '#### $1\n');
+  // Convert paragraphs and line breaks
+  md = md.replace(/<br\s*\/?>/gi, '\n');
+  md = md.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '$1\n\n');
+  // Convert lists
+  md = md.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '- $1\n');
+  // Convert bold and italic
+  md = md.replace(/<(?:b|strong)[^>]*>([\s\S]*?)<\/(?:b|strong)>/gi, '**$1**');
+  md = md.replace(/<(?:i|em)[^>]*>([\s\S]*?)<\/(?:i|em)>/gi, '*$1*');
+  // Convert links
+  md = md.replace(/<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, '[$2]($1)');
+  // Convert code
+  md = md.replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, '`$1`');
+  md = md.replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, '```\n$1\n```\n');
+  // Strip remaining tags
+  md = md.replace(/<[^>]+>/g, '');
+  // Decode common HTML entities
+  md = md.replace(/&amp;/g, '&');
+  md = md.replace(/&lt;/g, '<');
+  md = md.replace(/&gt;/g, '>');
+  md = md.replace(/&quot;/g, '"');
+  md = md.replace(/&#39;/g, "'");
+  md = md.replace(/&nbsp;/g, ' ');
+  // Collapse excessive whitespace
+  md = md.replace(/\n{3,}/g, '\n\n');
+  return md.trim();
+}
+
+/**
+ * Refresh a single external base by fetching its content.
+ * @param {object} base - Base object with parsed source_config
+ * @param {string} basesDbPath - Path to bases.db
+ * @param {string} projectName - Project name for logging
+ * @param {string} tz - Timezone
+ */
+async function refreshBase(base, basesDbPath, projectName, tz) {
+  const config = base.source_config;
+  const subtype = config.source_subtype || 'url';
+
+  log(`Refreshing base "${base.name}" (${subtype}) in ${projectName}`);
+
+  let result;
+  if (subtype === 'url' && config.url) {
+    result = await fetchUrlContent(config.url);
+  } else {
+    // Unsupported subtype for now
+    log(`Unsupported source_subtype "${subtype}" for base ${base.id}`);
+    result = { content: '', error: `Unsupported source subtype: ${subtype}` };
+  }
+
+  const updatedConfig = { ...config, fetchedAt: new Date().toISOString() };
+
+  if (result.error) {
+    updatedConfig.last_error = result.error;
+    log(`Refresh error for "${base.name}": ${result.error}`);
+  } else {
+    delete updatedConfig.last_error;
+  }
+
+  // Compute next refresh
+  if (config.refresh_cron) {
+    updatedConfig.next_refresh_at = nextCronRun(config.refresh_cron, tz);
+    debug(`Next refresh for "${base.name}": ${updatedConfig.next_refresh_at}`);
+  }
+
+  const content = result.content || base.content || '';
+  const tokenEstimate = Math.ceil(content.length / 4);
+
+  if (DRY_RUN) {
+    log(`[DRY-RUN] Would update base "${base.name}" (${content.length} chars, ~${tokenEstimate} tokens)`);
+    return;
+  }
+
+  updateBaseRefresh(basesDbPath, base.id, {
+    content,
+    token_estimate: tokenEstimate,
+    source_config: updatedConfig,
+  });
+
+  log(`Refreshed "${base.name}" (${content.length} chars, ~${tokenEstimate} tokens)`);
+}
+
 // --- Main poll loop ---
 async function poll() {
   pollCount++;
@@ -312,6 +444,27 @@ async function poll() {
           type: humanTask ? 'human' : quickCmd ? 'quick-command' : workflowCmd ? 'workflow' : 'spawn',
         });
       }
+    }
+  }
+
+  // --- Base refresh scheduling ---
+  for (const proj of projects) {
+    const basesDbPath = join(proj.path, '.jat', 'bases.db');
+    const dueBases = getDueBaseRefreshes(basesDbPath);
+    if (dueBases.length === 0) continue;
+
+    debug(`${proj.name}: ${dueBases.length} base(s) due for refresh`);
+
+    for (const base of dueBases) {
+      await refreshBase(base, basesDbPath, proj.name, tz);
+
+      spawned.push({
+        taskId: `base:${base.id}`,
+        project: proj.name,
+        time: new Date().toISOString(),
+        result: 'ok',
+        type: 'base-refresh',
+      });
     }
   }
 

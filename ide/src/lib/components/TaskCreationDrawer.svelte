@@ -22,6 +22,7 @@
 	import { getFileTypeInfo, formatFileSize, getAcceptAttribute, type FileCategory } from '$lib/utils/fileUtils';
 	import { getProjectColor } from '$lib/utils/projectColors';
 	import VoiceInput from './VoiceInput.svelte';
+	import BaseAttachChips from './bases/BaseAttachChips.svelte';
 	import PromptInput from './quick-commands/PromptInput.svelte';
 	import CreatePaste from './tasks/CreatePaste.svelte';
 	import CreateTemplate from './tasks/CreateTemplate.svelte';
@@ -301,6 +302,9 @@
 		schedule_cron: '',
 		next_run_at: ''
 	});
+
+	// Knowledge base selection
+	let selectedBaseIds = $state<string[]>([]);
 
 	// Command dropdown state (searchable, namespace-grouped)
 	let cmdDropdownOpen = $state(false);
@@ -1152,6 +1156,22 @@
 				}
 			}
 
+			// Attach knowledge bases if any
+			if (selectedBaseIds.length > 0) {
+				const project = formData.project || getActiveProject();
+				for (const baseId of selectedBaseIds) {
+					try {
+						await fetch(`/api/tasks/${taskId}/bases`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ project, baseId })
+						});
+					} catch (err) {
+						console.warn(`Failed to attach base ${baseId}:`, err);
+					}
+				}
+			}
+
 			// Success!
 			successMessage = `Task ${taskId} created successfully!`;
 			playSuccessChime();
@@ -1268,6 +1288,7 @@
 			next_run_at: ''
 		};
 		selectedModel = '';
+		selectedBaseIds = [];
 		validationErrors = {};
 		submitError = null;
 		successMessage = null;
@@ -1953,6 +1974,20 @@
 					{#if validationErrors.type}
 						<div class="text-xs text-error -mt-2">{validationErrors.type}</div>
 					{/if}
+
+					<!-- Knowledge Bases (Optional) -->
+					<div class="form-control">
+						<label class="label py-0.5">
+							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
+								Knowledge
+							</span>
+						</label>
+						<BaseAttachChips
+							bind:selectedIds={selectedBaseIds}
+							project={formData.project || getActiveProject()}
+							compact={false}
+						/>
+					</div>
 
 					<!-- Command / Due Date — 2-col grid -->
 					<div class="grid grid-cols-2 gap-3">

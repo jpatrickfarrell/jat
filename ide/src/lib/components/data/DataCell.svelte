@@ -14,12 +14,14 @@
 		semanticType,
 		config = {},
 		selected = false,
+		editing = false,
 		onSave,
 	}: {
 		value: any;
 		semanticType?: SemanticType;
 		config?: ColumnConfig;
 		selected?: boolean;
+		editing?: boolean;
 		onSave: (val: any) => void;
 	} = $props();
 
@@ -30,17 +32,17 @@
 {#if semanticType === 'boolean'}
 	<BooleanCell {value} {onSave} />
 {:else if semanticType === 'date' || semanticType === 'datetime'}
-	<DateCell {value} config={typedConfig} {onSave} />
+	<DateCell {value} config={typedConfig} {editing} {onSave} />
 {:else if semanticType === 'url'}
-	<UrlCell {value} {onSave} />
+	<UrlCell {value} {editing} {onSave} />
 {:else if semanticType === 'email'}
-	<EmailCell {value} {onSave} />
+	<EmailCell {value} {editing} {onSave} />
 {:else if semanticType === 'enum'}
-	<EnumCell {value} config={typedConfig} {onSave} />
+	<EnumCell {value} config={typedConfig} {editing} {onSave} />
 {:else if semanticType === 'currency'}
-	<CurrencyCell {value} config={typedConfig} {onSave} />
+	<CurrencyCell {value} config={typedConfig} {editing} {onSave} />
 {:else if semanticType === 'percentage'}
-	<PercentageCell {value} config={typedConfig} {onSave} />
+	<PercentageCell {value} config={typedConfig} {editing} {onSave} />
 {:else}
-	<TextCell {value} {onSave} />
+	<TextCell {value} {editing} {onSave} />
 {/if}

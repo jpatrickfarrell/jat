@@ -96,6 +96,7 @@
 
 	// Cell selection & keyboard navigation
 	let selectedCell = $state<{ rowIdx: number; colIdx: number } | null>(null);
+	let editingSelectedCell = $state(false);
 
 	// Inline editing (legacy — only used for columns without semantic type)
 	let editingCell = $state<{ rowid: number; column: string } | null>(null);
@@ -641,12 +642,14 @@
 	let tableRef: HTMLTableElement | undefined = $state(undefined);
 
 	function selectCell(rowIdx: number, colIdx: number) {
+		editingSelectedCell = false;
 		selectedCell = { rowIdx, colIdx };
 		// Focus the table so keyboard events work
 		tableRef?.focus();
 	}
 
 	function clearSelection() {
+		editingSelectedCell = false;
 		selectedCell = null;
 	}
 
@@ -655,16 +658,7 @@
 		const row = rows[selectedCell.rowIdx];
 		const col = orderedColumns[selectedCell.colIdx];
 		if (!row || !col) return;
-		// Trigger editing by dispatching dblclick on the cell-value span inside the td
-		const td = document.querySelector(
-			`[data-cell-row="${selectedCell.rowIdx}"][data-cell-col="${selectedCell.colIdx}"]`
-		);
-		if (td) {
-			const cellValue = td.querySelector('.cell-value');
-			if (cellValue) {
-				cellValue.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
-			}
-		}
+		editingSelectedCell = true;
 	}
 
 	function handleTableKeydown(e: KeyboardEvent) {
@@ -754,6 +748,7 @@
 	$effect(() => {
 		selectedTable;  // track dependency
 		selectedCell = null;
+		editingSelectedCell = false;
 	});
 
 	// Inline cell editing
@@ -791,7 +786,14 @@
 
 	// Save cell value via DataCell component
 	async function handleCellSave(rowid: number, column: string, value: any) {
+		editingSelectedCell = false;
 		if (!selectedProject || !selectedTable) return;
+		// Check if value actually changed — skip API call for no-ops (cancel, unchanged save)
+		const row = rows.find(r => r.rowid === rowid);
+		if (row && row[column] === value) {
+			requestAnimationFrame(() => tableRef?.focus());
+			return;
+		}
 		try {
 			const res = await fetch(`/api/data/tables/${encodeURIComponent(selectedTable)}/rows/${rowid}`, {
 				method: 'PUT',
@@ -1743,6 +1745,7 @@
 														semanticType={cellMeta?.semanticType}
 														config={cellMeta?.config || {}}
 														selected={isCellSelected}
+														editing={isCellSelected && editingSelectedCell}
 														onSave={(val) => handleCellSave(row.rowid, col.name, val)}
 													/>
 												</td>

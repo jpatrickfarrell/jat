@@ -1,14 +1,20 @@
 <script lang="ts">
 	let {
 		value = null,
+		editing: editingProp = false,
 		onSave,
 	}: {
 		value: any;
+		editing?: boolean;
 		onSave: (val: any) => void;
 	} = $props();
 
 	let editing = $state(false);
 	let editValue = $state('');
+
+	$effect(() => {
+		if (editingProp && !editing) startEdit();
+	});
 
 	const displayUrl = $derived.by(() => {
 		if (!value) return null;
@@ -28,11 +34,12 @@
 	function save() {
 		editing = false;
 		const newVal = editValue.trim() === '' ? null : editValue.trim();
-		if (newVal !== value) onSave(newVal);
+		onSave(newVal);
 	}
 
 	function cancel() {
 		editing = false;
+		onSave(value);
 	}
 </script>
 

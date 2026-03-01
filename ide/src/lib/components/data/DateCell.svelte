@@ -4,15 +4,21 @@
 	let {
 		value = null,
 		config = {},
+		editing: editingProp = false,
 		onSave,
 	}: {
 		value: any;
 		config?: DateConfig;
+		editing?: boolean;
 		onSave: (val: any) => void;
 	} = $props();
 
 	let editing = $state(false);
 	let editValue = $state('');
+
+	$effect(() => {
+		if (editingProp && !editing) startEdit();
+	});
 
 	const format = $derived(config?.format || 'short');
 
@@ -58,11 +64,12 @@
 	function save() {
 		editing = false;
 		const newVal = editValue || null;
-		if (newVal !== value) onSave(newVal);
+		onSave(newVal);
 	}
 
 	function cancel() {
 		editing = false;
+		onSave(value);
 	}
 </script>
 

@@ -4,14 +4,20 @@
 	let {
 		value = null,
 		config = { options: [] },
+		editing: editingProp = false,
 		onSave,
 	}: {
 		value: any;
 		config?: EnumConfig;
+		editing?: boolean;
 		onSave: (val: any) => void;
 	} = $props();
 
 	let editing = $state(false);
+
+	$effect(() => {
+		if (editingProp && !editing) startEdit();
+	});
 
 	const options = $derived(config?.options || []);
 
@@ -27,12 +33,15 @@
 
 	function select(val: string) {
 		editing = false;
-		if (val !== value) onSave(val);
+		onSave(val);
 	}
 
 	function handleBlur() {
 		// Small delay to allow click on option
-		setTimeout(() => { editing = false; }, 150);
+		setTimeout(() => {
+			editing = false;
+			onSave(value); // Signal parent to reset editingSelectedCell
+		}, 150);
 	}
 </script>
 

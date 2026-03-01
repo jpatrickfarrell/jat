@@ -1,14 +1,21 @@
 <script lang="ts">
 	let {
 		value = null,
+		editing: editingProp = false,
 		onSave,
 	}: {
 		value: any;
+		editing?: boolean;
 		onSave: (val: any) => void;
 	} = $props();
 
 	let editing = $state(false);
 	let editValue = $state('');
+
+	// React to parent requesting edit mode
+	$effect(() => {
+		if (editingProp && !editing) startEdit();
+	});
 
 	function startEdit() {
 		editValue = value === null ? '' : String(value);
@@ -18,11 +25,12 @@
 	function save() {
 		editing = false;
 		const newVal = editValue.trim() === '' ? null : editValue;
-		if (newVal !== value) onSave(newVal);
+		onSave(newVal);
 	}
 
 	function cancel() {
 		editing = false;
+		onSave(value); // Signal parent to reset editingSelectedCell
 	}
 </script>
 

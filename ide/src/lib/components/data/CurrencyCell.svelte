@@ -4,15 +4,21 @@
 	let {
 		value = null,
 		config = {},
+		editing: editingProp = false,
 		onSave,
 	}: {
 		value: any;
 		config?: CurrencyConfig;
+		editing?: boolean;
 		onSave: (val: any) => void;
 	} = $props();
 
 	let editing = $state(false);
 	let editValue = $state('');
+
+	$effect(() => {
+		if (editingProp && !editing) startEdit();
+	});
 
 	const symbol = $derived(config?.symbol || '$');
 	const decimals = $derived(config?.decimals ?? 2);
@@ -34,16 +40,17 @@
 	function save() {
 		editing = false;
 		if (editValue.trim() === '') {
-			if (value !== null) onSave(null);
+			onSave(null);
 			return;
 		}
 		const cleaned = editValue.replace(/[,$€£¥]/g, '').trim();
 		const num = Number(cleaned);
-		if (!isNaN(num) && num !== value) onSave(num);
+		onSave(!isNaN(num) ? num : value);
 	}
 
 	function cancel() {
 		editing = false;
+		onSave(value);
 	}
 </script>
 

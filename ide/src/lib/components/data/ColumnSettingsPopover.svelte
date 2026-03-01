@@ -7,12 +7,14 @@
 		column,
 		semanticType,
 		config = {},
+		colIndex = 0,
 		onSave,
 		onClose,
 	}: {
 		column: string;
 		semanticType?: SemanticType;
 		config?: ColumnConfig;
+		colIndex?: number;
 		onSave: (type: SemanticType, config: ColumnConfig) => void;
 		onClose: () => void;
 	} = $props();
@@ -43,7 +45,7 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="popover-overlay" onclick={onClose}></div>
-<div class="popover">
+<div class="popover" class:popover-left={colIndex <= 1}>
 	<div class="popover-header">
 		<span class="popover-title">Column: <code>{column}</code></span>
 		<button class="popover-close" onclick={onClose}>×</button>
@@ -136,6 +138,10 @@
 		border-radius: 0.5rem;
 		box-shadow: 0 4px 24px oklch(0 0 0 / 0.5);
 		margin-top: 0.25rem;
+	}
+	.popover.popover-left {
+		right: auto;
+		left: 0;
 	}
 	.popover-header {
 		display: flex;

@@ -1,0 +1,392 @@
+#!/usr/bin/env bash
+# coda-import — Fetch Coda.io tables via API and import into JAT data tables.
+#
+# Avoids clipboard paste corruption (tabs in cells breaking TSV delimiters).
+# Uses Coda REST API with pagination to fetch all rows as clean JSON.
+#
+# Usage:
+#   coda-import docs                          List all Coda docs
+#   coda-import tables <doc-id>               List tables in a doc
+#   coda-import fetch <doc-id> <table-id>     Fetch rows as JSON to stdout
+#   coda-import import <doc-id> <table-id>    Fetch + create table + import into JAT
+#
+# Options:
+#   --project <name>    JAT project name (default: current directory name)
+#   --table <name>      JAT table name (default: derived from Coda table name)
+#   --limit <n>         Max rows per API page (default: 100, max: 500)
+#   --dry-run           Show what would be imported without doing it
+#   --json              Output JSON for docs/tables commands
+#   --help              Show this help
+#
+# Requires:
+#   CODA_API_KEY or jat-secret coda-api-key
+#
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+CODA_BASE="https://coda.io/apis/v1"
+PAGE_LIMIT=100
+DRY_RUN=false
+JSON_OUTPUT=false
+PROJECT_NAME=""
+TABLE_NAME=""
+
+# ---------------------------------------------------------------------------
+# Get API key
+# ---------------------------------------------------------------------------
+get_api_key() {
+    if [[ -n "${CODA_API_KEY:-}" ]]; then
+        echo "$CODA_API_KEY"
+        return
+    fi
+    local key
+    key=$(jat-secret coda-api-key 2>/dev/null) || true
+    if [[ -z "$key" ]]; then
+        echo "Error: No Coda API key found." >&2
+        echo "Set CODA_API_KEY env var or run: jat-secret --set coda-api-key <key> --env CODA_API_KEY" >&2
+        exit 1
+    fi
+    echo "$key"
+}
+
+# ---------------------------------------------------------------------------
+# API helpers
+# ---------------------------------------------------------------------------
+api_get() {
+    local path="$1"
+    local query="${2:-}"
+    local url="${CODA_BASE}${path}"
+    [[ -n "$query" ]] && url="${url}?${query}"
+
+    local response
+    response=$(curl -sf -H "Authorization: Bearer $(get_api_key)" "$url" 2>/dev/null) || {
+        echo "Error: API request failed for ${path}" >&2
+        echo "URL: ${url}" >&2
+        exit 1
+    }
+    echo "$response"
+}
+
+# Paginated fetch — collects all items across pages
+api_get_all() {
+    local path="$1"
+    local base_query="${2:-}"
+    local all_items="[]"
+    local page_token=""
+    local page=1
+
+    while true; do
+        local query="${base_query}"
+        [[ -n "$page_token" ]] && {
+            [[ -n "$query" ]] && query="${query}&" || true
+            query="${query}pageToken=${page_token}"
+        }
+
+        local response
+        response=$(api_get "$path" "$query")
+
+        local items
+        items=$(echo "$response" | jq '.items // []')
+        local count
+        count=$(echo "$items" | jq 'length')
+
+        all_items=$(echo "$all_items" "$items" | jq -s '.[0] + .[1]')
+
+        echo "  Page ${page}: ${count} items" >&2
+
+        page_token=$(echo "$response" | jq -r '.nextPageToken // empty')
+        [[ -z "$page_token" ]] && break
+        page=$((page + 1))
+    done
+
+    echo "$all_items"
+}
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+cmd_docs() {
+    echo "Fetching Coda docs..." >&2
+    local docs
+    docs=$(api_get_all "/docs" "limit=${PAGE_LIMIT}")
+
+    if $JSON_OUTPUT; then
+        echo "$docs" | jq '.'
+    else
+        echo ""
+        echo "$docs" | jq -r '.[] | "  \(.id)  \(.name)  (\(.folder.name // "no folder"))"'
+        echo ""
+        local count
+        count=$(echo "$docs" | jq 'length')
+        echo "${count} docs found."
+    fi
+}
+
+cmd_tables() {
+    local doc_id="$1"
+    [[ -z "$doc_id" ]] && { echo "Error: doc-id required. Usage: coda-import tables <doc-id>" >&2; exit 1; }
+
+    echo "Fetching tables for doc ${doc_id}..." >&2
+    local tables
+    tables=$(api_get_all "/docs/${doc_id}/tables" "limit=${PAGE_LIMIT}")
+
+    if $JSON_OUTPUT; then
+        echo "$tables" | jq '.'
+    else
+        echo ""
+        echo "$tables" | jq -r '.[] | "  \(.id)  \(.name)  (\(.rowCount // "?") rows, \(.type // "table"))"'
+        echo ""
+        local count
+        count=$(echo "$tables" | jq 'length')
+        echo "${count} tables found."
+    fi
+}
+
+cmd_fetch() {
+    local doc_id="$1"
+    local table_id="$2"
+    [[ -z "$doc_id" || -z "$table_id" ]] && {
+        echo "Error: doc-id and table-id required." >&2
+        echo "Usage: coda-import fetch <doc-id> <table-id>" >&2
+        exit 1
+    }
+
+    echo "Fetching rows from ${doc_id} / ${table_id}..." >&2
+
+    # Fetch all rows with column names (not IDs)
+    local rows
+    rows=$(api_get_all "/docs/${doc_id}/tables/${table_id}/rows" "limit=${PAGE_LIMIT}&useColumnNames=true&valueFormat=simple")
+
+    # Extract just the values from each row into clean objects
+    local clean_rows
+    clean_rows=$(echo "$rows" | jq '[.[] | .values]')
+
+    local count
+    count=$(echo "$clean_rows" | jq 'length')
+    echo "Fetched ${count} rows." >&2
+
+    # Output clean JSON to stdout
+    echo "$clean_rows"
+}
+
+cmd_import() {
+    local doc_id="$1"
+    local table_id="$2"
+    [[ -z "$doc_id" || -z "$table_id" ]] && {
+        echo "Error: doc-id and table-id required." >&2
+        echo "Usage: coda-import import <doc-id> <table-id> [--project X] [--table Y]" >&2
+        exit 1
+    }
+
+    # Resolve project name
+    if [[ -z "$PROJECT_NAME" ]]; then
+        PROJECT_NAME=$(basename "$(pwd)")
+    fi
+
+    # Get table metadata for name
+    echo "Fetching table metadata..." >&2
+    local table_meta
+    table_meta=$(api_get "/docs/${doc_id}/tables/${table_id}")
+    local coda_table_name
+    coda_table_name=$(echo "$table_meta" | jq -r '.name')
+    local row_count
+    row_count=$(echo "$table_meta" | jq -r '.rowCount // "unknown"')
+    echo "Coda table: '${coda_table_name}' (${row_count} rows)" >&2
+
+    # Derive JAT table name if not specified
+    if [[ -z "$TABLE_NAME" ]]; then
+        TABLE_NAME=$(echo "$coda_table_name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g' | sed 's/__*/_/g' | sed 's/^_//;s/_$//')
+    fi
+
+    # Fetch all rows
+    echo "Fetching all rows..." >&2
+    local rows
+    rows=$(api_get_all "/docs/${doc_id}/tables/${table_id}/rows" "limit=${PAGE_LIMIT}&useColumnNames=true&valueFormat=simple")
+
+    # Clean rows: extract values objects
+    local clean_rows
+    clean_rows=$(echo "$rows" | jq '[.[] | .values]')
+    local fetched_count
+    fetched_count=$(echo "$clean_rows" | jq 'length')
+
+    echo "Fetched ${fetched_count} rows." >&2
+
+    if [[ "$fetched_count" -eq 0 ]]; then
+        echo "No rows to import." >&2
+        exit 0
+    fi
+
+    # Extract column names and infer types from first row values
+    local columns
+    columns=$(echo "$clean_rows" | jq '
+        .[0] | to_entries | [.[] | {
+            name: (.key | gsub("[^a-zA-Z0-9_]"; "_") | gsub("__+"; "_") | gsub("^_|_$"; "") | ascii_downcase),
+            originalName: .key,
+            type: (
+                if .value == null then "TEXT"
+                elif (.value | type) == "number" then
+                    if ((.value | tostring) | test("\\.")) then "REAL" else "INTEGER" end
+                elif (.value | type) == "boolean" then "INTEGER"
+                elif (.value | type) == "array" then "TEXT"
+                else "TEXT"
+                end
+            )
+        }]
+    ')
+
+    # Remap row keys to sanitized column names
+    local column_map
+    column_map=$(echo "$columns" | jq 'map({(.originalName): .name}) | add')
+
+    local remapped_rows
+    remapped_rows=$(echo "$clean_rows" | jq --argjson map "$column_map" '
+        [.[] | . as $row | reduce ($map | to_entries[]) as $entry (
+            {};
+            . + {($entry.value): ($row[$entry.key] // null | if type == "array" then (map(tostring) | join(", ")) elif type == "boolean" then (if . then 1 else 0 end) elif type == "object" then tostring else . end)}
+        )]
+    ')
+
+    echo "" >&2
+    echo "Target table: ${TABLE_NAME}" >&2
+    echo "Project: ${PROJECT_NAME}" >&2
+    echo "Columns:" >&2
+    echo "$columns" | jq -r '.[] | "  \(.name) (\(.type)) ← \(.originalName)"' >&2
+    echo "Rows: ${fetched_count}" >&2
+
+    if $DRY_RUN; then
+        echo "" >&2
+        echo "--- Dry run: first 3 rows ---" >&2
+        echo "$remapped_rows" | jq '.[0:3]' >&2
+        echo "" >&2
+        echo "${fetched_count} rows would be imported (dry run)." >&2
+        exit 0
+    fi
+
+    # Detect IDE port
+    local ide_port=3333
+    if ! curl -sf "http://127.0.0.1:${ide_port}/api/data/tables?project=${PROJECT_NAME}" > /dev/null 2>&1; then
+        ide_port=5174
+        if ! curl -sf "http://127.0.0.1:${ide_port}/api/data/tables?project=${PROJECT_NAME}" > /dev/null 2>&1; then
+            echo "Error: IDE not reachable on port 3333 or 5174." >&2
+            echo "Start the IDE first: cd ide && npm run dev" >&2
+            echo "" >&2
+            echo "Alternative: use 'coda-import fetch' to output JSON, then import manually." >&2
+            exit 1
+        fi
+    fi
+
+    local base_url="http://127.0.0.1:${ide_port}"
+
+    # Check if table exists
+    local existing_tables
+    existing_tables=$(curl -sf "${base_url}/api/data/tables?project=${PROJECT_NAME}" | jq -r '.tables[].name' 2>/dev/null) || true
+
+    if echo "$existing_tables" | grep -qx "$TABLE_NAME"; then
+        echo "Table '${TABLE_NAME}' already exists — importing rows into it." >&2
+    else
+        echo "Creating table '${TABLE_NAME}'..." >&2
+
+        local col_defs
+        col_defs=$(echo "$columns" | jq '[.[] | {name: .name, type: .type}]')
+
+        local create_response
+        create_response=$(curl -sf -X POST "${base_url}/api/data/tables" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg project "$PROJECT_NAME" --arg name "$TABLE_NAME" --argjson columns "$col_defs" \
+                '{project: $project, name: $name, columns: $columns}')" 2>&1) || {
+            echo "Error creating table: ${create_response}" >&2
+            exit 1
+        }
+
+        local success
+        success=$(echo "$create_response" | jq -r '.success // false')
+        if [[ "$success" != "true" ]]; then
+            echo "Error creating table: $(echo "$create_response" | jq -r '.error // "unknown"')" >&2
+            exit 1
+        fi
+        echo "✓ Table created." >&2
+    fi
+
+    # Import rows via API
+    echo "Importing ${fetched_count} rows..." >&2
+
+    local import_response
+    import_response=$(curl -sf -X POST "${base_url}/api/data/tables/${TABLE_NAME}/import" \
+        -H "Content-Type: application/json" \
+        -d "$(jq -n --arg project "$PROJECT_NAME" --argjson rows "$remapped_rows" \
+            '{project: $project, rows: $rows}')" 2>&1) || {
+        echo "Error importing rows: ${import_response}" >&2
+        exit 1
+    }
+
+    local inserted
+    inserted=$(echo "$import_response" | jq -r '.inserted // 0')
+
+    echo "✓ Imported ${inserted} rows into '${TABLE_NAME}' (project: ${PROJECT_NAME})." >&2
+}
+
+# ---------------------------------------------------------------------------
+# Usage
+# ---------------------------------------------------------------------------
+usage() {
+    cat <<'EOF'
+coda-import — Fetch Coda.io tables and import into JAT data tables.
+
+Usage:
+  coda-import docs                          List all Coda docs
+  coda-import tables <doc-id>               List tables in a doc
+  coda-import fetch <doc-id> <table-id>     Fetch rows as JSON to stdout
+  coda-import import <doc-id> <table-id>    Fetch + create table + import into JAT
+
+Options:
+  --project <name>    JAT project name (default: current directory name)
+  --table <name>      JAT table name (default: derived from Coda table name)
+  --limit <n>         Rows per API page (default: 100, max: 500)
+  --dry-run           Preview without importing
+  --json              JSON output for docs/tables commands
+  --help              Show this help
+
+Examples:
+  coda-import docs
+  coda-import tables wZitc5jGgO
+  coda-import fetch wZitc5jGgO grid-abc123 > data.json
+  coda-import import wZitc5jGgO grid-abc123 --project jat --table contacts
+  coda-import import wZitc5jGgO grid-abc123 --dry-run
+
+Requires: CODA_API_KEY env var or jat-secret coda-api-key
+EOF
+}
+
+# ---------------------------------------------------------------------------
+# Parse args
+# ---------------------------------------------------------------------------
+COMMAND=""
+POSITIONAL=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --project)  PROJECT_NAME="$2"; shift 2 ;;
+        --table)    TABLE_NAME="$2"; shift 2 ;;
+        --limit)    PAGE_LIMIT="$2"; shift 2 ;;
+        --dry-run)  DRY_RUN=true; shift ;;
+        --json)     JSON_OUTPUT=true; shift ;;
+        --help|-h)  usage; exit 0 ;;
+        -*)         echo "Unknown option: $1" >&2; usage; exit 1 ;;
+        *)          POSITIONAL+=("$1"); shift ;;
+    esac
+done
+
+COMMAND="${POSITIONAL[0]:-}"
+ARG1="${POSITIONAL[1]:-}"
+ARG2="${POSITIONAL[2]:-}"
+
+case "$COMMAND" in
+    docs)    cmd_docs ;;
+    tables)  cmd_tables "$ARG1" ;;
+    fetch)   cmd_fetch "$ARG1" "$ARG2" ;;
+    import)  cmd_import "$ARG1" "$ARG2" ;;
+    "")      usage; exit 0 ;;
+    *)       echo "Unknown command: ${COMMAND}" >&2; usage; exit 1 ;;
+esac

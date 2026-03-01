@@ -7,24 +7,16 @@
 	 * - Right: Table view with inline editing, add/delete rows, SQL console
 	 */
 
-	import { onMount, onDestroy } from 'svelte';
+	import { onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
 	import { reveal } from '$lib/actions/reveal';
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
-	import { setActiveProject } from '$lib/stores/preferences.svelte';
 	import type { SemanticType, ColumnConfig, ColumnSchema } from '$lib/types/dataTable';
 	import { SEMANTIC_TYPE_INFO, SEMANTIC_TO_SQLITE } from '$lib/types/dataTable';
 	import DataCell from '$lib/components/data/DataCell.svelte';
 	import ColumnTypeSelector from '$lib/components/data/ColumnTypeSelector.svelte';
 	import ColumnSettingsPopover from '$lib/components/data/ColumnSettingsPopover.svelte';
-
-	interface Project {
-		name: string;
-		displayName: string;
-		path: string;
-	}
 
 	interface TableInfo {
 		name: string;
@@ -48,8 +40,7 @@
 		columnDescription?: string;
 	}
 
-	// State
-	let projects = $state<Project[]>([]);
+	// State — selectedProject synced from URL ?project= param (set by TopBar ProjectSelector)
 	let selectedProject = $state<string | null>(null);
 	let tables = $state<TableInfo[]>([]);
 	let selectedTable = $state<string | null>(null);
@@ -58,7 +49,6 @@
 	let totalRows = $state(0);
 
 	// Loading states
-	let projectsLoading = $state(true);
 	let tablesLoading = $state(false);
 	let tableDataLoading = $state(false);
 
@@ -156,14 +146,11 @@
 	let colResizeStartX = 0;
 	let colResizeStartWidth = 0;
 
-	// Sync selectedProject from URL
+	// Sync selectedProject from URL ?project= param (set by TopBar ProjectSelector)
 	$effect(() => {
 		const projectParam = $page.url.searchParams.get('project');
-		if (projectParam && projects.length > 0) {
-			const projectExists = projects.some(p => p.name === projectParam);
-			if (projectExists && selectedProject !== projectParam) {
-				selectedProject = projectParam;
-			}
+		if (projectParam && selectedProject !== projectParam) {
+			selectedProject = projectParam;
 		}
 	});
 
@@ -183,18 +170,6 @@
 			fetchTableData();
 		}
 	});
-
-	async function fetchProjects() {
-		try {
-			const res = await fetch('/api/projects?visible=true&stats=true');
-			const data = await res.json();
-			projects = data.projects || [];
-		} catch (e) {
-			console.error('Failed to fetch projects:', e);
-		} finally {
-			projectsLoading = false;
-		}
-	}
 
 	async function fetchTables() {
 		if (!selectedProject) return;
@@ -236,14 +211,6 @@
 		} finally {
 			tableDataLoading = false;
 		}
-	}
-
-	function selectProject(name: string) {
-		selectedProject = name;
-		setActiveProject(name);
-		const url = new URL(window.location.href);
-		url.searchParams.set('project', name);
-		goto(url.pathname + url.search, { replaceState: true });
 	}
 
 	function selectTable(name: string) {
@@ -1089,22 +1056,6 @@
 		}
 	}
 
-	// Init
-	onMount(() => {
-		fetchProjects();
-	});
-
-	// Auto-select first project when loaded
-	$effect(() => {
-		if (projects.length > 0 && !selectedProject) {
-			const urlProject = $page.url.searchParams.get('project');
-			if (urlProject && projects.some(p => p.name === urlProject)) {
-				selectedProject = urlProject;
-			} else {
-				selectProject(projects[0].name);
-			}
-		}
-	});
 
 	// Editable columns (exclude rowid and hidden columns)
 	const editableColumns = $derived(schema.filter(c => c.name !== 'rowid' && !hiddenColumns.has(c.name)));
@@ -1505,17 +1456,6 @@
 	<div class="page-header">
 		<div class="header-left">
 			<h1 class="page-title tracking-in-expand">Data Tables</h1>
-			{#if selectedProject}
-				<select
-					class="project-select"
-					value={selectedProject}
-					onchange={(e) => selectProject((e.target as HTMLSelectElement).value)}
-				>
-					{#each projects as project}
-						<option value={project.name}>{project.displayName || project.name}</option>
-					{/each}
-				</select>
-			{/if}
 		</div>
 		{#if selectedProject}
 			<button class="btn btn-primary btn-sm gap-1.5" onclick={() => showCreateModal = true}>
@@ -1527,11 +1467,7 @@
 		{/if}
 	</div>
 
-	{#if projectsLoading}
-		<div class="loading-state">
-			<span class="loading loading-spinner loading-md"></span>
-		</div>
-	{:else if !selectedProject}
+	{#if !selectedProject}
 		<div class="empty-state" use:reveal>
 			<div class="empty-icon">
 				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1711,6 +1647,7 @@
 														column={col.name}
 														semanticType={meta?.semanticType}
 														config={meta?.config || {}}
+														colIndex={colIdx}
 														onSave={(type, cfg) => saveColumnSettings(col.name, type, cfg)}
 														onClose={() => columnSettingsOpen = null}
 													/>
@@ -2445,19 +2382,6 @@
 		font-weight: 700;
 		color: oklch(0.90 0.02 250);
 		letter-spacing: -0.01em;
-	}
-
-	.project-select {
-		padding: 0.25rem 0.5rem;
-		font-size: 0.8125rem;
-		background: oklch(0.20 0.01 250);
-		border: 1px solid oklch(0.30 0.02 250);
-		border-radius: 0.375rem;
-		color: oklch(0.80 0.02 250);
-		outline: none;
-	}
-	.project-select:focus {
-		border-color: oklch(0.50 0.10 200);
 	}
 
 	/* Panels */

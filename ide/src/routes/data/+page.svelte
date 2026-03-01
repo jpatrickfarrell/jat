@@ -156,6 +156,12 @@
 	let moveLoading = $state(false);
 	let moveMode = $state<'move' | 'copy'>('move');
 
+	// Table context menu (right-click on table list items)
+	let tblCtxTable = $state<TableInfo | null>(null);
+	let tblCtxX = $state(0);
+	let tblCtxY = $state(0);
+	let tblCtxVisible = $state(false);
+
 	// Sync selectedProject from URL ?project= param (set by TopBar ProjectSelector)
 	$effect(() => {
 		const projectParam = $page.url.searchParams.get('project');
@@ -613,6 +619,154 @@
 		} catch (e) {
 			errorToast('Failed to drop table');
 		}
+	}
+
+	// ─── Table list context menu ─────────────────────────────────
+	function handleTableContextMenu(table: TableInfo, event: MouseEvent) {
+		event.preventDefault();
+		tblCtxTable = table;
+		tblCtxX = Math.min(event.clientX, window.innerWidth - 220);
+		tblCtxY = Math.min(event.clientY, window.innerHeight - 300);
+		tblCtxVisible = true;
+		// Close other context menus
+		ctxVisible = false;
+		rowCtxVisible = false;
+		setTimeout(() => {
+			document.addEventListener('click', handleTblCtxOutsideClick, { once: true });
+		}, 0);
+		document.addEventListener('keydown', handleTblCtxEscape);
+	}
+
+	function closeTblContextMenu() {
+		tblCtxVisible = false;
+		document.removeEventListener('keydown', handleTblCtxEscape);
+	}
+
+	function handleTblCtxOutsideClick(e: MouseEvent) {
+		const menu = document.querySelector('.table-list-context-menu');
+		if (menu && !menu.contains(e.target as Node)) {
+			closeTblContextMenu();
+		} else if (tblCtxVisible) {
+			setTimeout(() => {
+				document.addEventListener('click', handleTblCtxOutsideClick, { once: true });
+			}, 0);
+		}
+	}
+
+	function handleTblCtxEscape(e: KeyboardEvent) {
+		if (e.key === 'Escape') closeTblContextMenu();
+	}
+
+	async function handleTblCtxRename() {
+		if (!tblCtxTable || !selectedProject) return;
+		const tableName = tblCtxTable.name;
+		closeTblContextMenu();
+		const newName = prompt(`Rename table "${tableName}" to:`, tableName);
+		if (!newName || !newName.trim() || newName.trim() === tableName) return;
+		try {
+			const res = await fetch(`/api/data/tables/${encodeURIComponent(tableName)}/rename`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ project: selectedProject, newName: newName.trim() })
+			});
+			const data = await res.json();
+			if (res.ok) {
+				successToast(`Table renamed to "${newName.trim()}"`);
+				if (selectedTable === tableName) {
+					selectedTable = newName.trim();
+				}
+				await fetchTables();
+			} else {
+				errorToast(data.error || 'Failed to rename table');
+			}
+		} catch (e) {
+			errorToast('Failed to rename table');
+		}
+	}
+
+	async function handleTblCtxDuplicate() {
+		if (!tblCtxTable || !selectedProject) return;
+		const tableName = tblCtxTable.name;
+		closeTblContextMenu();
+		const newName = prompt(`Duplicate table "${tableName}" as:`, `${tableName}_copy`);
+		if (!newName || !newName.trim()) return;
+		try {
+			const res = await fetch(`/api/data/tables/${encodeURIComponent(tableName)}/duplicate`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ project: selectedProject, newName: newName.trim() })
+			});
+			const data = await res.json();
+			if (res.ok) {
+				successToast(`Table duplicated as "${newName.trim()}"`);
+				await fetchTables();
+				selectTable(newName.trim());
+			} else {
+				errorToast(data.error || 'Failed to duplicate table');
+			}
+		} catch (e) {
+			errorToast('Failed to duplicate table');
+		}
+	}
+
+	async function handleTblCtxExportCsv() {
+		if (!tblCtxTable || !selectedProject) return;
+		const tableName = tblCtxTable.name;
+		closeTblContextMenu();
+		try {
+			const res = await fetch(`/api/data/tables/${encodeURIComponent(tableName)}?project=${encodeURIComponent(selectedProject)}&limit=999999`);
+			const data = await res.json();
+			if (!res.ok) { errorToast(data.error || 'Failed to export'); return; }
+			const cols = (data.schema || []).filter((c: any) => c.name !== 'rowid').map((c: any) => c.name);
+			const csvRows = [cols.join(',')];
+			for (const row of (data.rows || [])) {
+				csvRows.push(cols.map((c: string) => {
+					const val = row[c];
+					if (val == null) return '';
+					const s = String(val);
+					return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+				}).join(','));
+			}
+			const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `${tableName}.csv`;
+			a.click();
+			URL.revokeObjectURL(url);
+			successToast(`Exported ${tableName}.csv`);
+		} catch (e) {
+			errorToast('Failed to export CSV');
+		}
+	}
+
+	async function handleTblCtxExportJson() {
+		if (!tblCtxTable || !selectedProject) return;
+		const tableName = tblCtxTable.name;
+		closeTblContextMenu();
+		try {
+			const res = await fetch(`/api/data/tables/${encodeURIComponent(tableName)}?project=${encodeURIComponent(selectedProject)}&limit=999999`);
+			const data = await res.json();
+			if (!res.ok) { errorToast(data.error || 'Failed to export'); return; }
+			const allRows = (data.rows || []).map((r: any) => { const { rowid, ...rest } = r; return rest; });
+			const blob = new Blob([JSON.stringify(allRows, null, 2)], { type: 'application/json' });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `${tableName}.json`;
+			a.click();
+			URL.revokeObjectURL(url);
+			successToast(`Exported ${tableName}.json`);
+		} catch (e) {
+			errorToast('Failed to export JSON');
+		}
+	}
+
+	function handleTblCtxDelete() {
+		if (!tblCtxTable) return;
+		const tableName = tblCtxTable.name;
+		closeTblContextMenu();
+		handleDropTable(tableName);
 	}
 
 	// Cell selection & keyboard navigation
@@ -1641,6 +1795,7 @@
 								class="table-item"
 								class:selected={selectedTable === table.name}
 								onclick={() => selectTable(table.name)}
+								oncontextmenu={(e) => handleTableContextMenu(table, e)}
 							>
 								<span class="table-name">{table.display_name || table.name}</span>
 								<span class="table-meta">{table.row_count} rows</span>
@@ -2597,6 +2752,59 @@
 			<path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
 		</svg>
 		Delete Row
+	</button>
+</div>
+{/if}
+
+<!-- Table List Context Menu -->
+{#if tblCtxTable}
+<div
+	class="col-context-menu table-list-context-menu"
+	class:col-context-menu-hidden={!tblCtxVisible}
+	style="left: {tblCtxX}px; top: {tblCtxY}px;"
+>
+	<!-- Rename -->
+	<button class="col-context-menu-item" onclick={handleTblCtxRename}>
+		<svg xmlns="http://www.w3.org/2000/svg" class="ctx-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+			<path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+		</svg>
+		Rename
+	</button>
+
+	<!-- Duplicate -->
+	<button class="col-context-menu-item" onclick={handleTblCtxDuplicate}>
+		<svg xmlns="http://www.w3.org/2000/svg" class="ctx-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+			<path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+		</svg>
+		Duplicate
+	</button>
+
+	<div class="col-context-menu-divider"></div>
+
+	<!-- Export CSV -->
+	<button class="col-context-menu-item" onclick={handleTblCtxExportCsv}>
+		<svg xmlns="http://www.w3.org/2000/svg" class="ctx-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+			<path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+		</svg>
+		Export CSV
+	</button>
+
+	<!-- Export JSON -->
+	<button class="col-context-menu-item" onclick={handleTblCtxExportJson}>
+		<svg xmlns="http://www.w3.org/2000/svg" class="ctx-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+			<path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+		</svg>
+		Export JSON
+	</button>
+
+	<div class="col-context-menu-divider"></div>
+
+	<!-- Delete (danger) -->
+	<button class="col-context-menu-item col-context-menu-danger" onclick={handleTblCtxDelete}>
+		<svg xmlns="http://www.w3.org/2000/svg" class="ctx-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+			<path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+		</svg>
+		Delete Table
 	</button>
 </div>
 {/if}

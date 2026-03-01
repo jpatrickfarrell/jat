@@ -16,6 +16,8 @@ export {
 	getTableSchema,
 	createDataTable,
 	dropDataTable,
+	renameDataTable,
+	duplicateDataTable,
 	// Column Metadata
 	getColumnMetadata,
 	setColumnMetadata,

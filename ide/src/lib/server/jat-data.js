@@ -35,6 +35,10 @@ export {
 	deleteColumn,
 	duplicateColumn,
 	renameColumn,
+	// Context Views
+	getContextView,
+	setContextView,
+	previewContextQuery,
 	// Raw SQL
 	queryDataTable,
 	execDataSql,

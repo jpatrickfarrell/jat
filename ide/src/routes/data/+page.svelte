@@ -156,6 +156,17 @@
 	let moveLoading = $state(false);
 	let moveMode = $state<'move' | 'copy'>('move');
 
+	// Context View
+	let contextViewOpen = $state(false);
+	let contextQuery = $state('');
+	let contextDescription = $state('');
+	let contextPreview = $state<{ markdown: string; rowCount: number; columnCount: number } | null>(null);
+	let contextPreviewError = $state<string | null>(null);
+	let contextSaving = $state(false);
+	let contextPreviewing = $state(false);
+	let linkedBase = $state<any>(null);
+	let enableBase = $state(false);
+
 	// Table context menu (right-click on table list items)
 	let tblCtxTable = $state<TableInfo | null>(null);
 	let tblCtxX = $state(0);
@@ -184,6 +195,7 @@
 	$effect(() => {
 		if (selectedProject && selectedTable) {
 			fetchTableData();
+			fetchContextView();
 		}
 	});
 
@@ -1065,6 +1077,78 @@
 			sqlError = 'Failed to execute query';
 		} finally {
 			sqlRunning = false;
+		}
+	}
+
+	// Context View
+	async function fetchContextView() {
+		if (!selectedProject || !selectedTable) return;
+		try {
+			const res = await fetch(`/api/data/tables/${encodeURIComponent(selectedTable)}/context-view?project=${encodeURIComponent(selectedProject)}`);
+			const data = await res.json();
+			if (res.ok) {
+				contextQuery = data.context_query || '';
+				contextDescription = data.context_description || '';
+				linkedBase = data.linkedBase || null;
+				enableBase = !!data.linkedBase;
+				contextPreview = null;
+				contextPreviewError = null;
+			}
+		} catch { /* ignore */ }
+	}
+
+	async function saveContextView() {
+		if (!selectedProject || !selectedTable) return;
+		contextSaving = true;
+		try {
+			const res = await fetch(`/api/data/tables/${encodeURIComponent(selectedTable)}/context-view`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					project: selectedProject,
+					context_query: contextQuery || null,
+					context_description: contextDescription || null,
+					enableBase,
+				})
+			});
+			const data = await res.json();
+			if (res.ok) {
+				linkedBase = data.linkedBase || null;
+				successToast('Context view saved');
+			} else {
+				errorToast(data.error || 'Failed to save context view');
+			}
+		} catch {
+			errorToast('Failed to save context view');
+		} finally {
+			contextSaving = false;
+		}
+	}
+
+	async function previewContextQuery() {
+		if (!selectedProject || !contextQuery.trim()) return;
+		contextPreviewing = true;
+		contextPreviewError = null;
+		contextPreview = null;
+		try {
+			const res = await fetch(`/api/data/tables/${encodeURIComponent(selectedTable!)}/context-view`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					project: selectedProject,
+					sql: contextQuery.trim(),
+				})
+			});
+			const data = await res.json();
+			if (res.ok) {
+				contextPreview = data;
+			} else {
+				contextPreviewError = data.error || 'Preview failed';
+			}
+		} catch {
+			contextPreviewError = 'Failed to preview query';
+		} finally {
+			contextPreviewing = false;
 		}
 	}
 
@@ -2133,6 +2217,80 @@
 								{:else if sqlResult?.success}
 									<div class="sql-success">{sqlResult.changes} row(s) affected</div>
 								{/if}
+							</div>
+						{/if}
+					</div>
+
+					<!-- Context View -->
+					<div class="context-view-section">
+						<button class="sql-toggle" onclick={() => contextViewOpen = !contextViewOpen}>
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 toggle-icon" class:rotated={contextViewOpen} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+							</svg>
+							Context View
+							{#if linkedBase}
+								<span class="context-base-badge">Knowledge Base</span>
+							{/if}
+						</button>
+						{#if contextViewOpen}
+							<div class="context-view-body">
+								<div class="context-field">
+									<label class="context-label">Description</label>
+									<input
+										type="text"
+										class="context-input"
+										bind:value={contextDescription}
+										placeholder="What this context view provides to agents..."
+									/>
+								</div>
+
+								<div class="context-field">
+									<label class="context-label">SQL Query</label>
+									<textarea
+										class="sql-input"
+										bind:value={contextQuery}
+										placeholder={`SELECT * FROM ${selectedTable} WHERE ...`}
+										rows="3"
+										onkeydown={(e) => {
+											if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) previewContextQuery();
+										}}
+									></textarea>
+									<div class="context-query-actions">
+										<button class="btn-sql" onclick={previewContextQuery} disabled={contextPreviewing || !contextQuery.trim()}>
+											{#if contextPreviewing}<span class="loading loading-spinner loading-xs"></span>{/if}
+											Preview
+										</button>
+										<span class="sql-hint">Ctrl+Enter to preview</span>
+									</div>
+								</div>
+
+								{#if contextPreviewError}
+									<div class="sql-error">{contextPreviewError}</div>
+								{/if}
+
+								{#if contextPreview}
+									<div class="context-preview">
+										<div class="context-preview-header">
+											<span class="context-preview-meta">{contextPreview.rowCount} rows, {contextPreview.columnCount} columns</span>
+										</div>
+										<pre class="context-preview-md">{contextPreview.markdown}</pre>
+									</div>
+								{/if}
+
+								<div class="context-base-toggle">
+									<label class="context-base-label">
+										<input type="checkbox" class="toggle toggle-sm toggle-primary" bind:checked={enableBase} />
+										<span>Enable as Knowledge Base</span>
+									</label>
+									<span class="context-base-hint">When enabled, query results are available for injection into agent prompts</span>
+								</div>
+
+								<div class="context-save-row">
+									<button class="btn-sql" onclick={saveContextView} disabled={contextSaving}>
+										{#if contextSaving}<span class="loading loading-spinner loading-xs"></span>{/if}
+										Save
+									</button>
+								</div>
 							</div>
 						{/if}
 					</div>
@@ -3383,6 +3541,120 @@
 		padding: 0.25rem 0.5rem;
 		border-top: 1px solid oklch(0.25 0.02 250);
 		background: oklch(0.18 0.01 250);
+	}
+
+	/* Context View */
+	.context-view-section {
+		border-top: 1px solid oklch(0.25 0.02 250);
+		flex-shrink: 0;
+	}
+
+	.context-view-body {
+		padding: 0 0.75rem 0.75rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.625rem;
+	}
+
+	.context-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.context-label {
+		font-size: 0.6875rem;
+		font-weight: 500;
+		color: oklch(0.55 0.02 250);
+	}
+
+	.context-input {
+		width: 100%;
+		font-size: 0.8125rem;
+		padding: 0.375rem 0.5rem;
+		background: oklch(0.14 0.01 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.375rem;
+		color: oklch(0.85 0.02 250);
+		outline: none;
+	}
+	.context-input:focus {
+		border-color: oklch(0.50 0.10 200);
+	}
+
+	.context-query-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+	}
+
+	.context-preview {
+		border: 1px solid oklch(0.25 0.02 250);
+		border-radius: 0.375rem;
+		overflow: hidden;
+	}
+
+	.context-preview-header {
+		padding: 0.25rem 0.5rem;
+		background: oklch(0.18 0.01 250);
+		border-bottom: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.context-preview-meta {
+		font-size: 0.625rem;
+		color: oklch(0.50 0.02 250);
+	}
+
+	.context-preview-md {
+		font-family: monospace;
+		font-size: 0.75rem;
+		padding: 0.5rem;
+		margin: 0;
+		max-height: 200px;
+		overflow: auto;
+		color: oklch(0.80 0.02 250);
+		background: oklch(0.14 0.01 250);
+		white-space: pre;
+		line-height: 1.4;
+	}
+
+	.context-base-toggle {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		padding: 0.5rem;
+		background: oklch(0.16 0.01 250);
+		border: 1px solid oklch(0.25 0.02 250);
+		border-radius: 0.375rem;
+	}
+
+	.context-base-label {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.8125rem;
+		color: oklch(0.80 0.02 250);
+		cursor: pointer;
+	}
+
+	.context-base-hint {
+		font-size: 0.625rem;
+		color: oklch(0.45 0.02 250);
+		padding-left: 2.25rem;
+	}
+
+	.context-base-badge {
+		font-size: 0.5625rem;
+		padding: 0.0625rem 0.375rem;
+		background: oklch(0.30 0.10 200 / 0.3);
+		color: oklch(0.75 0.12 200);
+		border-radius: 0.25rem;
+		margin-left: auto;
+	}
+
+	.context-save-row {
+		display: flex;
+		justify-content: flex-end;
 	}
 
 	/* Loading / Empty states */

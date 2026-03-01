@@ -6,6 +6,7 @@ set -euo pipefail
 VERSION="0.1.0"
 DB_NAME=".jat/tasks.db"
 DATA_DB_NAME=".jat/data.db"
+BASES_DB_NAME=".jat/bases.db"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -27,6 +28,7 @@ find_project_root() {
 PROJECT_ROOT="$(find_project_root)"
 DB="$PROJECT_ROOT/$DB_NAME"
 DATA_DB="$PROJECT_ROOT/$DATA_DB_NAME"
+BASES_DB="$PROJECT_ROOT/$BASES_DB_NAME"
 
 # Get project prefix from directory name
 project_prefix() {
@@ -1728,6 +1730,498 @@ Examples:
 HELP
 }
 
+# ---------------------------------------------------------------------------
+# Knowledge Bases
+# ---------------------------------------------------------------------------
+
+BASES_SCHEMA='
+CREATE TABLE IF NOT EXISTS bases (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    source_type TEXT NOT NULL CHECK (source_type IN ('"'"'manual'"'"', '"'"'data_table'"'"', '"'"'conversation'"'"', '"'"'external'"'"')),
+    content TEXT,
+    context_query TEXT,
+    source_config TEXT DEFAULT '"'"'{}'"'"',
+    always_inject INTEGER NOT NULL DEFAULT 0,
+    token_estimate INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS task_bases (
+    task_id TEXT NOT NULL,
+    base_id TEXT NOT NULL,
+    attached_at TEXT NOT NULL,
+    PRIMARY KEY (task_id, base_id),
+    FOREIGN KEY (base_id) REFERENCES bases(id) ON DELETE CASCADE
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS bases_fts USING fts5(
+    name, description, content,
+    content='"'"'bases'"'"', content_rowid='"'"'rowid'"'"'
+);
+CREATE TRIGGER IF NOT EXISTS bases_ai AFTER INSERT ON bases BEGIN
+    INSERT INTO bases_fts(rowid, name, description, content)
+    VALUES (new.rowid, new.name, new.description, new.content);
+END;
+CREATE TRIGGER IF NOT EXISTS bases_ad AFTER DELETE ON bases BEGIN
+    INSERT INTO bases_fts(bases_fts, rowid, name, description, content)
+    VALUES ('"'"'delete'"'"', old.rowid, old.name, old.description, old.content);
+END;
+CREATE TRIGGER IF NOT EXISTS bases_au AFTER UPDATE ON bases BEGIN
+    INSERT INTO bases_fts(bases_fts, rowid, name, description, content)
+    VALUES ('"'"'delete'"'"', old.rowid, old.name, old.description, old.content);
+    INSERT INTO bases_fts(rowid, name, description, content)
+    VALUES (new.rowid, new.name, new.description, new.content);
+END;
+'
+
+# Generate 8-char hex ID for bases
+gen_base_id() {
+  od -An -tx1 -N4 /dev/urandom | tr -d ' \n'
+}
+
+# Run a read-only query against bases.db, output JSON array
+sql_bases_json() {
+  local out
+  out="$(sqlite3 -json "$BASES_DB" "$1")"
+  if [[ -z "$out" ]]; then
+    echo "[]"
+  else
+    echo "$out"
+  fi
+}
+
+# Run a write query against bases.db
+sql_bases_exec() {
+  sqlite3 "$BASES_DB" "PRAGMA foreign_keys=ON; $1"
+}
+
+# Ensure bases.db exists, creating if needed
+require_bases_db() {
+  if [[ ! -f "$BASES_DB" ]]; then
+    local jat_dir="$PROJECT_ROOT/.jat"
+    mkdir -p "$jat_dir"
+    sqlite3 "$BASES_DB" "PRAGMA journal_mode=WAL; $BASES_SCHEMA"
+  fi
+}
+
+# Validate source_type
+validate_source_type() {
+  case "$1" in
+    manual|data_table|conversation|external) ;;
+    *) die "Invalid source type: $1. Must be one of: manual, data_table, conversation, external" ;;
+  esac
+}
+
+cmd_bases() {
+  local subcmd="${1:-}"
+  [[ -n "$subcmd" ]] || { cmd_bases_help; return; }
+  shift
+
+  case "$subcmd" in
+    list)    cmd_bases_list "$@" ;;
+    show)    cmd_bases_show "$@" ;;
+    create)  cmd_bases_create "$@" ;;
+    delete)  cmd_bases_delete "$@" ;;
+    attach)  cmd_bases_attach "$@" ;;
+    detach)  cmd_bases_detach "$@" ;;
+    render)  cmd_bases_render "$@" ;;
+    search)  cmd_bases_search "$@" ;;
+    help|--help|-h) cmd_bases_help ;;
+    *)       die "Unknown bases subcommand: $subcmd. Run 'jt bases help' for usage." ;;
+  esac
+}
+
+cmd_bases_list() {
+  require_bases_db
+  local json_out=false always_inject=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json)           json_out=true; shift ;;
+      --always-inject)  always_inject=true; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  local where=""
+  if $always_inject; then
+    where="WHERE always_inject = 1"
+  fi
+
+  local result
+  result="$(sql_bases_json "SELECT * FROM bases $where ORDER BY name;")"
+
+  if $json_out; then
+    echo "$result"
+  else
+    if [[ "$result" == "[]" ]]; then
+      echo "No knowledge bases. Create one with: jt bases create --name \"Name\" --type manual --content \"...\""
+    else
+      echo "$result" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for b in data:
+    inject = ' [always-inject]' if b.get('always_inject', 0) == 1 else ''
+    tokens = f' ~{b[\"token_estimate\"]}tok' if b.get('token_estimate') else ''
+    desc = b.get('description') or ''
+    if desc and len(desc) > 40:
+        desc = desc[:37] + '...'
+    desc_str = f' - {desc}' if desc else ''
+    print(f'  {b[\"id\"]}  [{b[\"source_type\"]}] {b[\"name\"]}{inject}{tokens}{desc_str}')
+"
+    fi
+  fi
+}
+
+cmd_bases_show() {
+  require_bases_db
+  local id="" json_out=false
+
+  if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
+    id="$1"; shift
+  fi
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_out=true; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  [[ -n "$id" ]] || die "Usage: jt bases show ID [--json]"
+
+  local result
+  result="$(sql_bases_json "SELECT * FROM bases WHERE id = '$(sql_escape "$id")';")"
+
+  if [[ "$result" == "[]" ]]; then
+    die "Base not found: $id"
+  fi
+
+  if $json_out; then
+    echo "$result"
+  else
+    echo "$result" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+b = data[0]
+print(f'ID:          {b[\"id\"]}')
+print(f'Name:        {b[\"name\"]}')
+print(f'Type:        {b[\"source_type\"]}')
+if b.get('description'):
+    print(f'Description: {b[\"description\"]}')
+if b.get('always_inject') == 1:
+    print('Inject:      always')
+if b.get('token_estimate'):
+    print(f'Tokens:      ~{b[\"token_estimate\"]}')
+if b.get('context_query'):
+    print(f'Query:       {b[\"context_query\"]}')
+if b.get('content'):
+    content = b['content']
+    if len(content) > 200:
+        content = content[:197] + '...'
+    print(f'Content:     {content}')
+print(f'Created:     {b[\"created_at\"]}')
+print(f'Updated:     {b[\"updated_at\"]}')
+"
+    # Show attached tasks
+    local tasks
+    tasks="$(sql_bases_json "SELECT task_id, attached_at FROM task_bases WHERE base_id = '$(sql_escape "$id")' ORDER BY attached_at;")"
+    if [[ "$tasks" != "[]" ]]; then
+      echo ""
+      echo "Attached to tasks:"
+      echo "$tasks" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for t in data:
+    print(f'  {t[\"task_id\"]}  (attached {t[\"attached_at\"]})')
+"
+    fi
+  fi
+}
+
+cmd_bases_create() {
+  require_bases_db
+  local name="" source_type="" content="" description="" context_query=""
+  local always_inject=0 token_estimate="" json_out=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --name)          name="$2"; shift 2 ;;
+      --type)          source_type="$2"; shift 2 ;;
+      --content)       content="$2"; shift 2 ;;
+      --description)   description="$2"; shift 2 ;;
+      --query)         context_query="$2"; shift 2 ;;
+      --always-inject) always_inject=1; shift ;;
+      --tokens)        token_estimate="$2"; shift 2 ;;
+      --json)          json_out=true; shift ;;
+      *)               shift ;;
+    esac
+  done
+
+  [[ -n "$name" ]] || die "Usage: jt bases create --name \"Name\" --type TYPE [--content \"...\"] [--description \"...\"] [--query \"SELECT ...\"] [--always-inject] [--tokens N] [--json]"
+  [[ -n "$source_type" ]] || die "Source type required (--type). Must be: manual, data_table, conversation, external"
+  validate_source_type "$source_type"
+
+  local id ts
+  id="$(gen_base_id)"
+  ts="$(now_ts)"
+
+  local esc_name esc_desc esc_content esc_query
+  esc_name="$(sql_escape "$name")"
+  esc_desc="$(sql_escape "$description")"
+  esc_content="$(sql_escape "$content")"
+  esc_query="$(sql_escape "$context_query")"
+
+  local tok_val="NULL"
+  if [[ -n "$token_estimate" ]]; then
+    require_integer "$token_estimate" "token_estimate"
+    tok_val="$token_estimate"
+  fi
+
+  sql_bases_exec "INSERT INTO bases (id, name, description, source_type, content, context_query, source_config, always_inject, token_estimate, created_at, updated_at) VALUES ('$id', '$esc_name', '$esc_desc', '$source_type', '$esc_content', '$esc_query', '{}', $always_inject, $tok_val, '$ts', '$ts');"
+  touch_sentinel
+
+  if $json_out; then
+    sql_bases_json "SELECT * FROM bases WHERE id = '$id';"
+  else
+    echo "Created base: $id ($name) [$source_type]"
+  fi
+}
+
+cmd_bases_delete() {
+  require_bases_db
+  local id="${1:-}" force=false
+  shift 2>/dev/null || true
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --force) force=true; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  [[ -n "$id" ]] || die "Usage: jt bases delete ID [--force]"
+
+  # Verify exists
+  local exists
+  exists="$(sql_bases_json "SELECT id, name FROM bases WHERE id = '$(sql_escape "$id")';")"
+  [[ "$exists" != "[]" ]] || die "Base not found: $id"
+
+  if ! $force; then
+    local bname
+    bname="$(echo "$exists" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['name'])")"
+    read -r -p "Delete base \"$bname\" ($id)? Task attachments will also be removed. [y/N] " confirm
+    [[ "$confirm" =~ ^[yY] ]] || { echo "Cancelled."; return; }
+  fi
+
+  sql_bases_exec "DELETE FROM bases WHERE id = '$(sql_escape "$id")';"
+  touch_sentinel
+  echo "Deleted base: $id"
+}
+
+cmd_bases_attach() {
+  require_bases_db
+  local base_id="" task_id=""
+
+  if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
+    base_id="$1"; shift
+  fi
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --task) task_id="$2"; shift 2 ;;
+      *)      shift ;;
+    esac
+  done
+
+  [[ -n "$base_id" && -n "$task_id" ]] || die "Usage: jt bases attach BASE_ID --task TASK_ID"
+
+  # Verify base exists
+  local exists
+  exists="$(sql_bases_json "SELECT id FROM bases WHERE id = '$(sql_escape "$base_id")';")"
+  [[ "$exists" != "[]" ]] || die "Base not found: $base_id"
+
+  local ts
+  ts="$(now_ts)"
+
+  sql_bases_exec "INSERT OR IGNORE INTO task_bases (task_id, base_id, attached_at) VALUES ('$(sql_escape "$task_id")', '$(sql_escape "$base_id")', '$ts');"
+  touch_sentinel
+  echo "Attached base $base_id to task $task_id"
+}
+
+cmd_bases_detach() {
+  require_bases_db
+  local base_id="" task_id=""
+
+  if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
+    base_id="$1"; shift
+  fi
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --task) task_id="$2"; shift 2 ;;
+      *)      shift ;;
+    esac
+  done
+
+  [[ -n "$base_id" && -n "$task_id" ]] || die "Usage: jt bases detach BASE_ID --task TASK_ID"
+
+  sql_bases_exec "DELETE FROM task_bases WHERE task_id = '$(sql_escape "$task_id")' AND base_id = '$(sql_escape "$base_id")';"
+  touch_sentinel
+  echo "Detached base $base_id from task $task_id"
+}
+
+cmd_bases_render() {
+  require_bases_db
+  local id="${1:-}"
+  [[ -n "$id" ]] || die "Usage: jt bases render ID"
+
+  local result
+  result="$(sql_bases_json "SELECT * FROM bases WHERE id = '$(sql_escape "$id")';")"
+  [[ "$result" != "[]" ]] || die "Base not found: $id"
+
+  local source_type content context_query
+  source_type="$(echo "$result" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['source_type'])")"
+  content="$(echo "$result" | python3 -c "import sys,json; print(json.load(sys.stdin)[0].get('content') or '')")"
+  context_query="$(echo "$result" | python3 -c "import sys,json; print(json.load(sys.stdin)[0].get('context_query') or '')")"
+
+  case "$source_type" in
+    manual|conversation|external)
+      echo "$content"
+      ;;
+    data_table)
+      if [[ -z "$context_query" ]]; then
+        if [[ -n "$content" ]]; then
+          echo "$content"
+        else
+          echo "(no context query defined)"
+        fi
+        return
+      fi
+      if [[ ! -f "$DATA_DB" ]]; then
+        echo "(data.db not found)"
+        return
+      fi
+      # Safety: only allow SELECT
+      if ! echo "$context_query" | grep -qiE '^\s*SELECT\b'; then
+        echo "(context_query must be a SELECT statement)"
+        return
+      fi
+      # Auto-add LIMIT if missing
+      local sql="$context_query"
+      if ! echo "$sql" | grep -qiE '\bLIMIT\b'; then
+        sql="$(echo "$sql" | sed 's/;*\s*$/ LIMIT 100/')"
+      fi
+      local rows
+      rows="$(sql_data_json "$sql" 2>/dev/null)" || { echo "(query error)"; return; }
+      if [[ "$rows" == "[]" || -z "$rows" ]]; then
+        echo "(no results)"
+      else
+        echo "$rows" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+if not data:
+    print('(no results)')
+    sys.exit()
+cols = list(data[0].keys())
+print('| ' + ' | '.join(cols) + ' |')
+print('| ' + ' | '.join(['---'] * len(cols)) + ' |')
+for row in data:
+    print('| ' + ' | '.join(str(row.get(c, '')) for c in cols) + ' |')
+"
+      fi
+      ;;
+    *)
+      echo "$content"
+      ;;
+  esac
+}
+
+cmd_bases_search() {
+  require_bases_db
+  local query="" limit=20 json_out=false
+
+  if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
+    query="$1"; shift
+  fi
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --limit) limit="$2"; shift 2 ;;
+      --json)  json_out=true; shift ;;
+      *)       shift ;;
+    esac
+  done
+
+  [[ -n "$query" ]] || die "Usage: jt bases search \"query\" [--limit N] [--json]"
+
+  local fts_query
+  fts_query="$(escape_fts_query "$query")"
+
+  local result
+  result="$(sql_bases_json "SELECT b.*, rank FROM bases_fts fts JOIN bases b ON b.rowid = fts.rowid WHERE bases_fts MATCH '$(sql_escape "$fts_query")' ORDER BY rank LIMIT $limit;" 2>/dev/null)" || result="[]"
+
+  if $json_out; then
+    echo "$result"
+  else
+    if [[ "$result" == "[]" ]]; then
+      echo "No matches for: $query"
+    else
+      echo "$result" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for b in data:
+    desc = b.get('description') or ''
+    if desc and len(desc) > 40:
+        desc = desc[:37] + '...'
+    desc_str = f' - {desc}' if desc else ''
+    print(f'  {b[\"id\"]}  [{b[\"source_type\"]}] {b[\"name\"]}{desc_str}')
+"
+    fi
+  fi
+}
+
+cmd_bases_help() {
+  cat <<'HELP'
+jt bases - Manage knowledge bases
+
+Usage: jt bases <command> [options]
+
+Commands:
+  list    [--json] [--always-inject]            List all knowledge bases
+  show    ID [--json]                            Show a single base with details
+  create  --name "..." --type TYPE [options]     Create a new base
+  delete  ID [--force]                           Delete a base
+  attach  BASE_ID --task TASK_ID                 Attach base to a task
+  detach  BASE_ID --task TASK_ID                 Detach base from a task
+  render  ID                                     Render base content for injection
+  search  "query" [--limit N] [--json]           Full-text search
+
+Source types: manual, data_table, conversation, external
+
+Create options:
+  --name "..."          Base name (required)
+  --type TYPE           Source type (required)
+  --content "..."       Text content (for manual/conversation/external)
+  --description "..."   Description
+  --query "SELECT ..."  SQL query (for data_table type, runs against data.db)
+  --always-inject       Always include in agent prompts
+  --tokens N            Estimated token count
+  --json                Output as JSON
+
+Examples:
+  jt bases create --name "API Guidelines" --type manual --content "Always use REST..."
+  jt bases create --name "Asset Inventory" --type data_table --query "SELECT name, status FROM assets"
+  jt bases list --json
+  jt bases show abc12345
+  jt bases attach abc12345 --task jat-xyz
+  jt bases render abc12345
+  jt bases search "guidelines"
+  jt bases delete abc12345 --force
+HELP
+}
+
 cmd_help() {
   cat <<'HELP'
 jt - JAT task CLI
@@ -1753,6 +2247,7 @@ Commands:
   dep     tree TASK_ID [--reverse] [--json]
   dep     cycles
   data    tables | schema | query | exec | create | drop | columns
+  bases   list | show | create | delete | attach | detach | render | search
   init    [--quiet]
 
 Options:
@@ -1779,6 +2274,7 @@ case "${1:-}" in
   search)    shift; cmd_search "$@" ;;
   dep)       shift; cmd_dep "$@" ;;
   data)      shift; cmd_data "$@" ;;
+  bases)     shift; cmd_bases "$@" ;;
   init)      shift; cmd_init "$@" ;;
   --version) echo "jt $VERSION" ;;
   --help|-h|help) cmd_help ;;

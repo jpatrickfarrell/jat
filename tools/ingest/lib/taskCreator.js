@@ -10,6 +10,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const JAT_ROOT = join(__dirname, '..', '..', '..');
 const TASK_IMAGES_PATH = join(JAT_ROOT, '.jat', 'task-images.json');
 
+// Lazy-load bases library for conversation memory auto-attach
+let _basesLib = null;
+async function getBasesLib() {
+  if (!_basesLib) {
+    try {
+      _basesLib = await import(join(JAT_ROOT, 'lib', 'bases.js'));
+    } catch (err) {
+      logger.warn(`Failed to load bases library: ${err.message}`);
+      _basesLib = null;
+    }
+  }
+  return _basesLib;
+}
+
 const IDE_BASE_URL = process.env.JAT_IDE_URL || 'http://127.0.0.1:3333';
 
 // Messaging/chat source types where /jat:chat is the appropriate default command
@@ -75,6 +89,14 @@ export function createTask(source, item, downloadedAttachments = []) {
     }
 
     logger.info(`created task ${taskId}: ${item.title.slice(0, 60)}`, source.id);
+
+    // Auto-attach conversation base for chat tasks (fire-and-forget)
+    if (isChat && taskId && item.author) {
+      autoAttachConversationBase(taskId, item, source).catch(err => {
+        logger.warn(`conversation base auto-attach failed for ${taskId}: ${err.message}`, source.id);
+      });
+    }
+
     return taskId;
   } catch (err) {
     logger.error(`jt create failed: ${err.message}`, source.id);
@@ -122,6 +144,36 @@ function buildDescription(item, attachments) {
   }
 
   return parts.join('\n');
+}
+
+/**
+ * Auto-attach a conversation base to a newly created chat task.
+ * Looks up existing conversation base by sender_key, attaches if found.
+ *
+ * @param {string} taskId - Created task ID
+ * @param {Object} item - Ingested item with author and origin
+ * @param {Object} source - Source config
+ */
+async function autoAttachConversationBase(taskId, item, source) {
+  const bases = await getBasesLib();
+  if (!bases) return;
+
+  const author = item.author || '';
+  const adapterType = item.origin?.adapterType || source.type || 'unknown';
+  const channelId = item.origin?.channelId || '';
+
+  const senderKey = [adapterType, channelId, author].filter(Boolean).join(':');
+  if (!senderKey) return;
+
+  const projectPath = getProjectPath(source.project);
+  const existing = bases.findBySenderKey(projectPath, senderKey);
+
+  if (existing) {
+    const result = bases.attachBaseToTask(projectPath, taskId, existing.id, { attached_by: 'conversation' });
+    if (result.attached) {
+      logger.info(`auto-attached conversation base '${existing.name}' to ${taskId}`, source.id);
+    }
+  }
 }
 
 /**

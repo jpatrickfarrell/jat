@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS _tables (
     name TEXT PRIMARY KEY,
     display_name TEXT,
     description TEXT,
+    context_query TEXT,
+    context_description TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );

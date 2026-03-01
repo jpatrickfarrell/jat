@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS task_bases (
     task_id TEXT NOT NULL,
     base_id TEXT NOT NULL,
     attached_at TEXT NOT NULL,
+    attached_by TEXT,
     PRIMARY KEY (task_id, base_id),
     FOREIGN KEY (base_id) REFERENCES bases(id) ON DELETE CASCADE
 );

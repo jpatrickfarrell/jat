@@ -260,8 +260,9 @@ if [[ -f "package.json" ]]; then
     fi
 fi
 
-# 6. Get project name from current directory
-PROJECT_NAME=$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")
+# 6. Get project name and path from current directory
+PROJECT_NAME_PATH=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+PROJECT_NAME=$(basename "$PROJECT_NAME_PATH")
 
 # 7. Format files list for prompt (limit to first 20)
 FILES_FOR_PROMPT=""
@@ -442,6 +443,27 @@ if [[ -n "$NEXT_TASK_ID" ]]; then
 fi
 
 log_success "Generated completion bundle successfully"
+
+# ============================================================================
+# CONVERSATION MEMORY (chat tasks only)
+# ============================================================================
+
+if [[ "$TASK_TYPE" == "chat" ]]; then
+    log_dim "Chat task detected — upserting conversation memory..."
+    SUMMARY_JSON=$(echo "$BUNDLE_JSON" | jq -c '.summary // []')
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    CONV_SCRIPT="$SCRIPT_DIR/conversation-memory-upsert.js"
+
+    if [[ -f "$CONV_SCRIPT" ]]; then
+        CONV_OUTPUT=$(node "$CONV_SCRIPT" \
+            --task "$TASK_ID" \
+            --project "$PROJECT_NAME_PATH" \
+            --summary "$SUMMARY_JSON" 2>&1) || true
+        log_dim "  $CONV_OUTPUT"
+    else
+        log_warn "  conversation-memory-upsert.js not found, skipping"
+    fi
+fi
 
 # Either emit the signal or output the JSON
 if [[ "$EMIT_SIGNAL" == true ]]; then

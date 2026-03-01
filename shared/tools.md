@@ -6,7 +6,7 @@
 
 ```
 tools/
-├── core/         # Database, monitoring, credentials, task review, skills (18 tools)
+├── core/         # Database, monitoring, credentials, task review, skills, imports (19 tools)
 ├── agents/       # Agent Registry (identity)
 ├── browser/      # Browser automation via CDP (12 tools)
 ├── media/        # Image generation with Gemini (7 tools)
@@ -52,6 +52,37 @@ Database, monitoring, credentials, and task review tools.
 | `backup-jat.sh` | Backup task database |
 | `rollback-jat.sh` | Rollback task database to backup |
 | `jat-skills` | Skill catalog, installer, and local management |
+| `coda-import` | Fetch Coda.io tables via API and import into JAT data tables |
+
+**coda-import usage:**
+```bash
+# List all Coda docs accessible to your API key
+coda-import docs
+
+# List tables in a specific doc
+coda-import tables <doc-id>
+
+# Fetch rows as clean JSON to stdout (pipe to file or jq)
+coda-import fetch <doc-id> <table-id> > data.json
+
+# Fetch + create table + import into JAT (end-to-end)
+coda-import import <doc-id> <table-id> --project personal --table vendors
+
+# Preview without importing
+coda-import import <doc-id> <table-id> --dry-run
+```
+
+**Options:** `--project <name>` (default: cwd name), `--table <name>` (default: derived from Coda table name), `--limit <n>` (rows per API page, max 500), `--dry-run`, `--json`
+
+**Requires:** `CODA_API_KEY` env var or `jat-secret coda-api-key`
+
+**What it does:**
+- Fetches all rows via Coda REST API with automatic pagination
+- Sanitizes column names (lowercase, alphanumeric + underscore)
+- Infers column types from values (TEXT, INTEGER, REAL)
+- Creates table via IDE API if it doesn't exist
+- Imports rows via `POST /api/data/tables/[name]/import`
+- Handles boolean→int, array→comma-separated string conversions
 
 **jat-secret usage:**
 ```bash

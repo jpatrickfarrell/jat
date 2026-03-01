@@ -878,15 +878,15 @@
 </nav>
 
 <style>
-	/* Scrollable chips container — shrinks on narrow viewports */
+	/* Chips container — shrinks on narrow viewports.
+	   Uses overflow-x: clip (not auto/hidden) so that the ProjectSelector
+	   dropdown can overflow vertically.  auto/hidden on one axis forces the
+	   other axis to auto as well per CSS spec, which clips the dropdown. */
 	.fav-chips-scroll {
 		min-width: 0;
 		flex: 1 1 0%;
-		overflow-x: auto;
-		scrollbar-width: none; /* Firefox */
-	}
-	.fav-chips-scroll::-webkit-scrollbar {
-		display: none; /* Chrome/Safari */
+		overflow-x: clip;
+		overflow-y: visible;
 	}
 
 	/* Favorite project chips — ghost style, expand on hover */

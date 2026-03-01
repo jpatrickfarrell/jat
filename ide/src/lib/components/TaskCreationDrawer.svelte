@@ -763,6 +763,11 @@
 					formData.labels = suggestions.labels.join(', ');
 				}
 
+				// Knowledge Bases
+				if (!userModifiedFields.has('bases') && suggestions.bases?.length > 0) {
+					selectedBaseIds = suggestions.bases;
+				}
+
 				// Dependencies - add to selected list
 				if (suggestions.dependencies?.length > 0) {
 					// Wait for available tasks to load if project was just set
@@ -788,6 +793,7 @@
 				if (!userModifiedFields.has('type') && suggestions.type) flashSet.add('type');
 				if (!userModifiedFields.has('priority') && suggestions.priority !== undefined) flashSet.add('priority');
 				if (!userModifiedFields.has('labels') && suggestions.labels?.length > 0) flashSet.add('labels');
+				if (!userModifiedFields.has('bases') && suggestions.bases?.length > 0) flashSet.add('bases');
 				if (flashSet.size > 0) {
 					aiFlashFields = flashSet;
 					setTimeout(() => { aiFlashFields = new Set(); }, 600);
@@ -1982,11 +1988,17 @@
 								Knowledge
 							</span>
 						</label>
+						<div class={aiFlashFields.has('bases') ? 'ai-suggest-flash' : ''}>
 						<BaseAttachChips
 							bind:selectedIds={selectedBaseIds}
 							project={formData.project || getActiveProject()}
 							compact={false}
+							onChange={() => markFieldModified('bases')}
 						/>
+						{#if suggestionsApplied && !userModifiedFields.has('bases') && selectedBaseIds.length > 0}
+							<span class="ml-1 text-[10px] text-info/60 italic">AI suggested</span>
+						{/if}
+					</div>
 					</div>
 
 					<!-- Command / Due Date — 2-col grid -->

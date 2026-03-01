@@ -6,6 +6,7 @@
  * - Type (task, bug, feature, epic, chore)
  * - Labels (relevant tags)
  * - Dependencies (related open tasks)
+ * - Knowledge bases (relevant context to attach)
  *
  * NOTE: Project is NOT suggested - user must select project before opening
  * the task creation drawer. Only the selected project's context is sent
@@ -15,12 +16,14 @@
  *
  * Task: jat-3qgk - Auto prioritize and type a task
  * Fix: jat-6z5ix - Only send selected project context (not all projects)
+ * Feature: jat-cx1h5 - Add knowledge base suggestions
  */
 
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { getApiKeyWithFallback } from '$lib/utils/credentials';
 import { claudeCliCall } from '$lib/server/claudeCli';
+import { getBases } from '$lib/server/jat-bases.js';
 
 // Get API key with fallback chain:
 // 1. ~/.config/jat/credentials.json (preferred)
@@ -52,9 +55,10 @@ function formatOpenTasks(tasks) {
  * @param {Array<{ id?: string, title?: string, priority?: number, issue_type?: string }>} openTasks
  * @param {string} selectedProject - The user's pre-selected project
  * @param {string} projectDescription - Description of the selected project
+ * @param {Array<{ id: string, name: string, description?: string, source_type: string, token_estimate?: number }>} availableBases
  * @returns {string}
  */
-function buildPrompt(title, description, openTasks, selectedProject, projectDescription = '') {
+function buildPrompt(title, description, openTasks, selectedProject, projectDescription = '', availableBases = []) {
 	const taskList = openTasks
 		.map((/** @type {{ id?: string, title?: string, priority?: number, issue_type?: string }} */ t) => `- ${t.id}: ${t.title} (P${t.priority}, ${t.issue_type})`)
 		.join('\n');
@@ -64,6 +68,14 @@ function buildPrompt(title, description, openTasks, selectedProject, projectDesc
 		? `PROJECT: ${selectedProject}
 Description: ${projectDescription}`
 		: `PROJECT: ${selectedProject}`;
+
+	// Knowledge bases section
+	const basesSection = availableBases.length > 0
+		? `AVAILABLE KNOWLEDGE BASES:
+${availableBases.map((/** @type {{ id: string, name: string, description?: string, source_type: string, token_estimate?: number }} */ b) =>
+	`- ${b.id}: "${b.name}" (${b.source_type}${b.token_estimate ? `, ~${Math.round(b.token_estimate / 1000)}K tokens` : ''})${b.description ? ` - ${b.description}` : ''}`
+).join('\n')}`
+		: '';
 
 	return `You are a task triage assistant. Analyze this new task and suggest appropriate metadata.
 
@@ -75,13 +87,13 @@ ${projectSection}
 
 OPEN TASKS (for potential dependencies):
 ${taskList || 'No open tasks'}
-
+${basesSection ? '\n' + basesSection + '\n' : ''}
 Based on the task title and description, provide your suggestions in this exact JSON format:
 {
   "priority": <number 0-4>,
   "type": "<task|bug|feature|epic|chore>",
   "labels": ["<label1>", "<label2>"],
-  "dependencies": ["<task-id1>", "<task-id2>"],
+  "dependencies": ["<task-id1>", "<task-id2>"],${availableBases.length > 0 ? '\n  "bases": ["<base-id1>", "<base-id2>"],' : ''}
   "reasoning": "<brief explanation of your choices>"
 }
 
@@ -89,7 +101,7 @@ Guidelines:
 - Priority: P0=critical/blocking, P1=high/important, P2=medium/normal, P3=low, P4=backlog
 - Type: bug=defect/error, feature=new functionality, task=general work, epic=large multi-part, chore=maintenance
 - Labels: 2-4 relevant tags (e.g., "frontend", "api", "urgent", "documentation")
-- Dependencies: Only include task IDs that this new task clearly depends on
+- Dependencies: Only include task IDs that this new task clearly depends on${availableBases.length > 0 ? '\n- Bases: Only include base IDs whose content would be relevant context for working on this task. Select 0-3 bases.' : ''}
 
 Respond with ONLY the JSON object, no other text.`;
 }
@@ -107,13 +119,31 @@ export async function POST({ request }) {
 		// Use client-provided open tasks (pre-fetched when drawer opened)
 		const openTasks = formatOpenTasks(clientOpenTasks || []);
 
+		// Load available knowledge bases for the project
+		/** @type {Array<{ id: string, name: string, description: string, source_type: string, token_estimate: number }>} */
+		let availableBases = [];
+		try {
+			const projectPath = `${process.env.HOME}/code/${selectedProject || 'jat'}`;
+			const bases = /** @type {Array<{ id: string, name: string, description?: string, source_type: string, token_estimate?: number }>} */ (getBases(projectPath));
+			availableBases = bases.map((b) => ({
+				id: b.id,
+				name: b.name,
+				description: b.description || '',
+				source_type: b.source_type,
+				token_estimate: b.token_estimate || 0
+			}));
+		} catch {
+			// Bases not available for this project - continue without them
+		}
+
 		// Build prompt with selected project context only
 		const prompt = buildPrompt(
 			title.trim(),
 			description?.trim() || '',
 			openTasks,
 			selectedProject || 'unknown',
-			projectDescription || ''
+			projectDescription || '',
+			availableBases
 		);
 
 		// Get API key (may be null - will use CLI fallback)
@@ -213,6 +243,7 @@ export async function POST({ request }) {
 
 		// Validate and sanitize suggestions
 		// Note: We no longer suggest projects - user has already selected one
+		const availableBaseIds = new Set(availableBases.map((/** @type {{ id: string }} */ b) => b.id));
 		const sanitized = {
 			priority: Math.max(0, Math.min(4, parseInt(suggestions.priority) || 2)),
 			type: ['task', 'bug', 'feature', 'epic', 'chore'].includes(suggestions.type)
@@ -225,6 +256,11 @@ export async function POST({ request }) {
 			dependencies: Array.isArray(suggestions.dependencies)
 				? suggestions.dependencies
 						.filter((/** @type {unknown} */ d) => typeof d === 'string' && openTasks.some((/** @type {{ id?: string }} */ t) => t.id === d))
+						.slice(0, 3)
+				: [],
+			bases: Array.isArray(suggestions.bases)
+				? suggestions.bases
+						.filter((/** @type {unknown} */ b) => typeof b === 'string' && availableBaseIds.has(b))
 						.slice(0, 3)
 				: [],
 			reasoning: suggestions.reasoning || ''

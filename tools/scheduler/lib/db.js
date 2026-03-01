@@ -124,6 +124,90 @@ export function updateChildResult(dbPath, childId, result, durationMs) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Bases refresh scheduling
+// ---------------------------------------------------------------------------
+
+/**
+ * Get external bases that are due for refresh.
+ * Scans .jat/bases.db for bases where source_type='external'
+ * and source_config contains refresh_cron + next_refresh_at <= now.
+ * @param {string} basesDbPath - Path to .jat/bases.db
+ * @returns {Array<object>}
+ */
+export function getDueBaseRefreshes(basesDbPath) {
+  let db;
+  try {
+    if (!existsSync(basesDbPath)) return [];
+    db = new Database(basesDbPath, { readonly: true });
+    const now = new Date().toISOString();
+    const rows = db.prepare(`
+      SELECT id, name, source_type, content, source_config, token_estimate
+      FROM bases
+      WHERE source_type = 'external'
+    `).all(now);
+
+    // Filter in JS since source_config is JSON
+    return rows.filter(row => {
+      try {
+        const config = JSON.parse(row.source_config || '{}');
+        return config.refresh_cron
+          && config.next_refresh_at
+          && config.next_refresh_at <= now;
+      } catch { return false; }
+    }).map(row => ({
+      ...row,
+      source_config: JSON.parse(row.source_config || '{}'),
+    }));
+  } catch (err) {
+    console.error(`[scheduler] Error reading bases ${basesDbPath}: ${err.message}`);
+    return [];
+  } finally {
+    if (db) db.close();
+  }
+}
+
+/**
+ * Update a base after refresh: new content, token estimate, and next_refresh_at.
+ * @param {string} basesDbPath
+ * @param {string} baseId
+ * @param {object} updates
+ * @param {string} [updates.content] - New fetched content
+ * @param {number} [updates.token_estimate] - Rough token count
+ * @param {object} [updates.source_config] - Updated source config (merged)
+ */
+export function updateBaseRefresh(basesDbPath, baseId, updates) {
+  let db;
+  try {
+    db = new Database(basesDbPath);
+    const now = new Date().toISOString();
+    const fields = ['updated_at = ?'];
+    const values = [now];
+
+    if (updates.content !== undefined) {
+      fields.push('content = ?');
+      values.push(updates.content);
+    }
+    if (updates.token_estimate !== undefined) {
+      fields.push('token_estimate = ?');
+      values.push(updates.token_estimate);
+    }
+    if (updates.source_config !== undefined) {
+      fields.push('source_config = ?');
+      values.push(JSON.stringify(updates.source_config));
+    }
+
+    values.push(baseId);
+    db.prepare(`UPDATE bases SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  } finally {
+    if (db) db.close();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Task child creation
+// ---------------------------------------------------------------------------
+
 /**
  * Generate a short random ID for child tasks.
  * @returns {string} 5-character alphanumeric ID

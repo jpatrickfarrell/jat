@@ -37,11 +37,21 @@ export interface ConversationSourceConfig {
 	platform?: string;
 }
 
-/** Config for external sources — stores URL and cache metadata */
+/** Config for external sources — stores URL, schedule, and cache metadata */
 export interface ExternalSourceConfig {
 	url?: string;
+	source_subtype?: 'url' | 'coda' | 'gsheet';
 	fetchedAt?: string;
 	ttlSeconds?: number;
+	refresh_cron?: string;
+	next_refresh_at?: string;
+	last_error?: string;
+	/** Coda-specific fields */
+	coda_doc_id?: string;
+	coda_table_id?: string;
+	/** Google Sheets-specific fields */
+	gsheet_id?: string;
+	gsheet_range?: string;
 }
 
 /** Union of all source config shapes — stored as JSON in bases.source_config */

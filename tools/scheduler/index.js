@@ -30,7 +30,7 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { createServer } from 'node:http';
-import { discoverProjects, getDueTasks, updateNextRun, createChildTask, updateChildResult } from './lib/db.js';
+import { discoverProjects, getDueTasks, updateNextRun, createChildTask, updateChildResult, getDueBaseRefreshes, updateBaseRefresh } from './lib/db.js';
 import { nextCronRun } from './lib/cron.js';
 import { getDueWorkflows, updateWorkflowNextRun, discoverCronWorkflows, getWorkflowState } from './lib/workflows.js';
 

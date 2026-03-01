@@ -97,6 +97,13 @@ export function createTask(source, item, downloadedAttachments = []) {
       });
     }
 
+    // Auto-attach default bases from source config (fire-and-forget)
+    if (taskId && defaults.bases?.length > 0) {
+      autoAttachDefaultBases(taskId, defaults.bases, source).catch(err => {
+        logger.warn(`default bases auto-attach failed for ${taskId}: ${err.message}`, source.id);
+      });
+    }
+
     return taskId;
   } catch (err) {
     logger.error(`jt create failed: ${err.message}`, source.id);
@@ -172,6 +179,32 @@ async function autoAttachConversationBase(taskId, item, source) {
     const result = bases.attachBaseToTask(projectPath, taskId, existing.id, { attached_by: 'conversation' });
     if (result.attached) {
       logger.info(`auto-attached conversation base '${existing.name}' to ${taskId}`, source.id);
+    }
+  }
+}
+
+/**
+ * Auto-attach default bases from source.taskDefaults.bases config.
+ * Each entry can be a base ID string or a name to look up.
+ *
+ * @param {string} taskId - Created task ID
+ * @param {string[]} baseIds - Array of base IDs to attach
+ * @param {Object} source - Source config
+ */
+async function autoAttachDefaultBases(taskId, baseIds, source) {
+  const bases = await getBasesLib();
+  if (!bases) return;
+
+  const projectPath = getProjectPath(source.project);
+
+  for (const baseId of baseIds) {
+    try {
+      const result = bases.attachBaseToTask(projectPath, taskId, baseId, { attached_by: 'source_default' });
+      if (result.attached) {
+        logger.info(`auto-attached default base '${baseId}' to ${taskId}`, source.id);
+      }
+    } catch (err) {
+      logger.warn(`failed to attach default base '${baseId}' to ${taskId}: ${err.message}`, source.id);
     }
   }
 }

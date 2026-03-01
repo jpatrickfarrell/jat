@@ -26,7 +26,7 @@
 	// Initialize store on mount
 	onMount(async () => {
 		if (!isStoreInitialized()) {
-			await initializeStore(project);
+			await initializeStore(project ?? '');
 		}
 		isLoading = false;
 	});

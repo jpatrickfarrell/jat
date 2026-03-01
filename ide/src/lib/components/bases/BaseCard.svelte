@@ -41,17 +41,18 @@
 	}
 </script>
 
-<button
-	type="button"
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+	role="option"
+	aria-selected={selected}
+	tabindex="0"
 	class="w-full text-left p-3 rounded-lg border transition-all duration-150 cursor-pointer group {className}"
-	class:border-info={selected}
-	class:bg-base-100={!selected}
-	class:bg-info={false}
 	style="
 		background: {selected ? 'oklch(0.22 0.03 240 / 0.3)' : 'oklch(0.18 0.015 250)'};
 		border-color: {selected ? 'oklch(0.60 0.15 240 / 0.5)' : 'oklch(0.25 0.01 250)'};
 	"
 	onclick={handleClick}
+	onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(); } }}
 >
 	<!-- Top row: icon + name + toggle -->
 	<div class="flex items-center gap-2">
@@ -109,4 +110,4 @@
 			Edit
 		</button>
 	</div>
-</button>
+</div>

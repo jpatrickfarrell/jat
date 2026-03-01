@@ -146,6 +146,16 @@
 	let colResizeStartX = 0;
 	let colResizeStartWidth = 0;
 
+	// Export dropdown
+	let showExportDropdown = $state(false);
+	let exporting = $state(false);
+
+	// Move table modal
+	let showMoveModal = $state(false);
+	let moveProjects = $state<Array<{ name: string; hasDataDb: boolean }>>([]);
+	let moveLoading = $state(false);
+	let moveMode = $state<'move' | 'copy'>('move');
+
 	// Sync selectedProject from URL ?project= param (set by TopBar ProjectSelector)
 	$effect(() => {
 		const projectParam = $page.url.searchParams.get('project');
@@ -1345,6 +1355,133 @@
 		successToast(`Copied ${data.length} rows as JSON`);
 	}
 
+	// ─── Export & Move ────────────────────────────────────────────
+
+	async function fetchAllRows(): Promise<any[]> {
+		if (!selectedProject || !selectedTable) return [];
+		const url = `/api/data/tables/${encodeURIComponent(selectedTable)}?project=${encodeURIComponent(selectedProject)}&limit=999999&offset=0`;
+		const res = await fetch(url);
+		if (!res.ok) return [];
+		const data = await res.json();
+		return data.rows || [];
+	}
+
+	function triggerDownload(content: string, filename: string, mimeType: string) {
+		const blob = new Blob([content], { type: mimeType });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = filename;
+		document.body.appendChild(a);
+		a.click();
+		document.body.removeChild(a);
+		URL.revokeObjectURL(url);
+	}
+
+	function escapeCsvField(value: any): string {
+		if (value === null || value === undefined) return '';
+		const str = String(value);
+		if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+			return `"${str.replace(/"/g, '""')}"`;
+		}
+		return str;
+	}
+
+	async function handleExportCsv() {
+		if (!selectedTable) return;
+		exporting = true;
+		showExportDropdown = false;
+		try {
+			const allRows = await fetchAllRows();
+			const cols = editableColumns.map(c => c.name);
+			const header = cols.map(escapeCsvField).join(',');
+			const dataRows = allRows.map(row =>
+				cols.map(col => escapeCsvField(row[col])).join(',')
+			);
+			const csv = [header, ...dataRows].join('\n');
+			triggerDownload(csv, `${selectedTable}.csv`, 'text/csv;charset=utf-8');
+			successToast(`Exported ${allRows.length} rows as CSV`);
+		} catch (e) {
+			errorToast('Failed to export CSV');
+		} finally {
+			exporting = false;
+		}
+	}
+
+	async function handleExportJson() {
+		if (!selectedTable) return;
+		exporting = true;
+		showExportDropdown = false;
+		try {
+			const allRows = await fetchAllRows();
+			const cols = editableColumns.map(c => c.name);
+			const cleanRows = allRows.map(row => {
+				const obj: Record<string, any> = {};
+				for (const col of cols) obj[col] = row[col];
+				return obj;
+			});
+			const jsonStr = JSON.stringify(cleanRows, null, 2);
+			triggerDownload(jsonStr, `${selectedTable}.json`, 'application/json');
+			successToast(`Exported ${cleanRows.length} rows as JSON`);
+		} catch (e) {
+			errorToast('Failed to export JSON');
+		} finally {
+			exporting = false;
+		}
+	}
+
+	async function openMoveModal() {
+		showMoveModal = true;
+		moveLoading = true;
+		try {
+			const res = await fetch('/api/data/projects');
+			if (res.ok) {
+				const data = await res.json();
+				moveProjects = (data.projects || []).filter(
+					(p: { name: string }) => p.name !== selectedProject
+				);
+			}
+		} catch {
+			errorToast('Failed to load projects');
+		} finally {
+			moveLoading = false;
+		}
+	}
+
+	async function handleMoveTable(destProject: string) {
+		if (!selectedProject || !selectedTable) return;
+		moveLoading = true;
+		try {
+			const res = await fetch(`/api/data/tables/${encodeURIComponent(selectedTable)}/move`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					sourceProject: selectedProject,
+					destinationProject: destProject,
+					deleteSource: moveMode === 'move',
+				}),
+			});
+			const data = await res.json();
+			if (!res.ok) {
+				errorToast(data.error || 'Failed to move table');
+				return;
+			}
+			const action = moveMode === 'move' ? 'Moved' : 'Copied';
+			successToast(`${action} "${selectedTable}" to ${destProject} (${data.rowCount} rows)`);
+			showMoveModal = false;
+			if (moveMode === 'move') {
+				selectedTable = null;
+				schema = [];
+				rows = [];
+			}
+			fetchTables();
+		} catch {
+			errorToast('Failed to move table');
+		} finally {
+			moveLoading = false;
+		}
+	}
+
 	async function handleCtxDelete() {
 		if (!ctxCol) return;
 		if (!confirm(`Delete column "${ctxCol.name}"? This cannot be undone.`)) return;
@@ -1586,6 +1723,48 @@
 									<path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
 								</svg>
 								Copy JSON
+							</button>
+							<!-- Export dropdown -->
+							<div class="export-dropdown-wrapper">
+								<button
+									class="btn-action"
+									disabled={exporting}
+									onclick={() => showExportDropdown = !showExportDropdown}
+									title="Export table"
+								>
+									{#if exporting}
+										<span class="loading loading-spinner" style="width:14px;height:14px"></span>
+									{:else}
+										<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+										</svg>
+									{/if}
+									Export
+								</button>
+								{#if showExportDropdown}
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
+									<div class="export-dropdown" onmouseleave={() => showExportDropdown = false}>
+										<button class="export-dropdown-item" onclick={handleExportCsv}>
+											<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+											</svg>
+											Export as CSV
+										</button>
+										<button class="export-dropdown-item" onclick={handleExportJson}>
+											<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+											</svg>
+											Export as JSON
+										</button>
+									</div>
+								{/if}
+							</div>
+							<!-- Move/Copy table -->
+							<button class="btn-action" onclick={openMoveModal} title="Move or copy table to another project">
+								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+								</svg>
+								Move
 							</button>
 							<button class="btn-action btn-danger" onclick={() => selectedTable && handleDropTable(selectedTable)} title="Drop table">
 								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -2116,6 +2295,74 @@
 					{/if}
 					Import
 				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Move/Copy Table Modal -->
+{#if showMoveModal}
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="modal-overlay" onclick={() => showMoveModal = false} role="dialog" aria-modal="true">
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="modal-panel move-modal" onclick={(e) => e.stopPropagation()}>
+			<div class="modal-header">
+				<h3>{moveMode === 'move' ? 'Move' : 'Copy'} table "{selectedTable}"</h3>
+				<button class="modal-close" onclick={() => showMoveModal = false} aria-label="Close">
+					<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+				</button>
+			</div>
+			<div class="move-modal-body">
+				<!-- Move / Copy toggle -->
+				<div class="move-mode-toggle">
+					<button
+						class="move-mode-btn"
+						class:active={moveMode === 'move'}
+						onclick={() => moveMode = 'move'}
+					>Move</button>
+					<button
+						class="move-mode-btn"
+						class:active={moveMode === 'copy'}
+						onclick={() => moveMode = 'copy'}
+					>Copy</button>
+				</div>
+				<p class="move-hint">
+					{moveMode === 'move' ? 'Table will be removed from this project after transfer.' : 'Table will exist in both projects.'}
+				</p>
+
+				{#if moveLoading && moveProjects.length === 0}
+					<div class="panel-loading" style="padding: 2rem 0;">
+						<span class="loading loading-spinner loading-sm"></span>
+					</div>
+				{:else if moveProjects.length === 0}
+					<p class="move-empty">No other projects found.</p>
+				{:else}
+					<div class="move-project-list">
+						{#each moveProjects as project}
+							<button
+								class="move-project-btn"
+								disabled={moveLoading}
+								onclick={() => handleMoveTable(project.name)}
+							>
+								<span class="move-project-name">{project.name}</span>
+								{#if project.hasDataDb}
+									<span class="move-project-badge">has data</span>
+								{/if}
+								{#if moveLoading}
+									<span class="loading loading-spinner" style="width:14px;height:14px"></span>
+								{:else}
+									<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" style="opacity:0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+									</svg>
+								{/if}
+							</button>
+						{/each}
+					</div>
+				{/if}
 			</div>
 		</div>
 	</div>
@@ -3631,5 +3878,139 @@
 		border-top: 1px solid oklch(0.25 0.02 250);
 		margin-top: 0.125rem;
 		padding-top: 0.375rem;
+	}
+
+	/* Export dropdown */
+	.export-dropdown-wrapper {
+		position: relative;
+	}
+
+	.export-dropdown {
+		position: absolute;
+		top: 100%;
+		right: 0;
+		margin-top: 0.25rem;
+		min-width: 10rem;
+		background: oklch(0.18 0.02 250);
+		border: 1px solid oklch(0.30 0.02 250);
+		border-radius: 0.375rem;
+		box-shadow: 0 4px 12px oklch(0 0 0 / 0.4);
+		z-index: 50;
+		padding: 0.25rem;
+	}
+
+	.export-dropdown-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.375rem 0.625rem;
+		background: none;
+		border: none;
+		color: oklch(0.75 0.02 250);
+		font-size: 0.75rem;
+		cursor: pointer;
+		border-radius: 0.25rem;
+		text-align: left;
+	}
+	.export-dropdown-item:hover {
+		background: oklch(0.25 0.04 200 / 0.3);
+		color: oklch(0.90 0.02 250);
+	}
+
+	/* Move modal */
+	.move-modal {
+		width: 24rem;
+		max-width: 95vw;
+	}
+
+	.move-modal-body {
+		padding: 1rem 1.25rem;
+	}
+
+	.move-mode-toggle {
+		display: flex;
+		gap: 0.25rem;
+		margin-bottom: 0.75rem;
+		padding: 0.1875rem;
+		background: oklch(0.15 0.01 250);
+		border-radius: 0.375rem;
+		border: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.move-mode-btn {
+		flex: 1;
+		padding: 0.375rem 0.75rem;
+		font-size: 0.75rem;
+		font-weight: 500;
+		border: none;
+		border-radius: 0.25rem;
+		cursor: pointer;
+		background: transparent;
+		color: oklch(0.60 0.02 250);
+		transition: background 0.15s, color 0.15s;
+	}
+	.move-mode-btn.active {
+		background: oklch(0.25 0.04 200 / 0.4);
+		color: oklch(0.90 0.10 200);
+	}
+	.move-mode-btn:hover:not(.active) {
+		color: oklch(0.80 0.02 250);
+	}
+
+	.move-hint {
+		font-size: 0.6875rem;
+		color: oklch(0.55 0.02 250);
+		margin-bottom: 1rem;
+	}
+
+	.move-empty {
+		text-align: center;
+		font-size: 0.8125rem;
+		color: oklch(0.50 0.02 250);
+		padding: 1.5rem 0;
+	}
+
+	.move-project-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+	}
+
+	.move-project-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.625rem 0.75rem;
+		background: oklch(0.18 0.01 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.375rem;
+		color: oklch(0.80 0.02 250);
+		font-size: 0.8125rem;
+		cursor: pointer;
+		transition: background 0.15s, border-color 0.15s;
+	}
+	.move-project-btn:hover:not(:disabled) {
+		background: oklch(0.22 0.03 200 / 0.3);
+		border-color: oklch(0.40 0.08 200 / 0.5);
+	}
+	.move-project-btn:disabled {
+		opacity: 0.6;
+		cursor: wait;
+	}
+
+	.move-project-name {
+		flex: 1;
+		text-align: left;
+		font-weight: 500;
+	}
+
+	.move-project-badge {
+		font-size: 0.625rem;
+		padding: 0.125rem 0.375rem;
+		background: oklch(0.25 0.04 145 / 0.3);
+		color: oklch(0.70 0.12 145);
+		border-radius: 0.25rem;
 	}
 </style>

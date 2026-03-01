@@ -1,12 +1,12 @@
 <script lang="ts">
 	/**
 	 * VoiceInput Component
-	 * A compact mic button that uses LOCAL whisper.cpp for speech-to-text.
+	 * A compact mic button for local speech-to-text (voxtype or whisper-cli).
 	 *
 	 * Features:
 	 * - Simple mic button that toggles recording
 	 * - Uses MediaRecorder API to capture audio
-	 * - Sends to local /api/transcribe (whisper.cpp)
+	 * - Sends to local /api/transcribe (auto-detects engine)
 	 * - 100% local - no data leaves your machine
 	 * - Visual feedback for recording and processing states
 	 */
@@ -62,20 +62,20 @@
 		lg: 20
 	};
 
-	// Check for MediaRecorder support and whisper availability
+	// Check for MediaRecorder support and transcription engine availability
 	onMount(async () => {
 		isSupported = typeof MediaRecorder !== 'undefined' && navigator.mediaDevices?.getUserMedia !== undefined;
 
-		// Check if whisper backend is available
+		// Check if any transcription backend is available (voxtype or whisper-cli)
 		if (isSupported) {
 			try {
 				const response = await fetch('/api/transcribe');
 				if (response.ok) {
 					const data = await response.json();
-					isWhisperAvailable = data.status === 'ok' && data.model_exists === true;
+					isWhisperAvailable = data.status === 'ok';
 				}
 			} catch {
-				// API not available or whisper not installed
+				// No transcription engine available
 				isWhisperAvailable = false;
 			}
 		}
@@ -183,7 +183,7 @@
 	// Server has 2 minute timeout, client needs slightly more to receive timeout response
 	const TRANSCRIPTION_TIMEOUT_MS = 150000;
 
-	// Process recorded audio through local whisper
+	// Process recorded audio through local voxtype
 	async function processAudio() {
 		if (audioChunks.length === 0) {
 			statusText = '';
@@ -280,7 +280,7 @@
 			onclick={toggleRecording}
 			onkeydown={handleKeydown}
 			disabled={disabled || isProcessing}
-			title={isProcessing ? 'Processing...' : isRecording ? 'Stop recording' : 'Start voice input (local whisper)'}
+			title={isProcessing ? 'Processing...' : isRecording ? 'Stop recording' : 'Start voice input (local transcription)'}
 			aria-label={isProcessing ? 'Processing...' : isRecording ? 'Stop recording' : 'Start voice input'}
 		>
 			{#if isProcessing}
@@ -348,8 +348,8 @@
 		</button>
 	</div>
 {/if}
-<!-- Note: If whisper is not installed (isSupported && !isWhisperAvailable), nothing renders.
-     This is intentional - users without whisper won't see a confusing disabled button. -->
+<!-- Note: If no transcription engine is installed (isSupported && !isWhisperAvailable), nothing renders.
+     This is intentional - users without a transcription engine won't see a confusing disabled button. -->
 
 <style>
 	/* Recording start animation - mic icon grows and pulses when starting */

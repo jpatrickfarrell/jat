@@ -59,6 +59,25 @@
 	// Tab filter state - synced with URL
 	let activeTab = $state('agents');
 
+	// Open tasks state (for selected project)
+	interface OpenTask {
+		id: string;
+		title: string;
+		status: string;
+		priority: number;
+		issue_type?: string;
+		assignee?: string;
+		labels?: string[];
+		created_at?: string;
+		integration?: { sourceId: string; sourceType: string; sourceName: string } | null;
+	}
+	let openTasks = $state<OpenTask[]>([]);
+	let openTasksCollapsed = $state(false);
+	let openTasksLoading = $state(false);
+
+	// Selected project (synced from URL ?project= param, managed by TopBar)
+	let selectedProject = $state<string | null>(null);
+
 	// Recently closed sessions state
 	interface RecentSession {
 		sessionName: string;
@@ -403,6 +422,34 @@
 		// Lazy fetch recently closed sessions (non-blocking)
 		fetchRecentSessions();
 	}
+
+	// Fetch open tasks for a project
+	async function fetchOpenTasks(project: string | null) {
+		if (!project) {
+			openTasks = [];
+			return;
+		}
+		openTasksLoading = true;
+		try {
+			const response = await fetch(`/api/tasks?status=open&project=${encodeURIComponent(project)}`);
+			if (!response.ok) return;
+			const data = await response.json();
+			openTasks = data.tasks || [];
+		} catch {
+			// Silent fail
+		} finally {
+			openTasksLoading = false;
+		}
+	}
+
+	// Sync selectedProject from URL and fetch open tasks when project changes
+	$effect(() => {
+		if (browser) {
+			const projectParam = $page.url.searchParams.get('project');
+			selectedProject = projectParam || null;
+			fetchOpenTasks(projectParam || null);
+		}
+	});
 
 	// Track optimistic task status overrides (survives re-fetches)
 	let recentTaskStatusOverrides = new Map<string, string>();
@@ -1755,6 +1802,81 @@
 				</table>
 			</div>
 
+			<!-- Open Tasks (agents tab only, when project is selected) -->
+			{#if activeTab === 'agents' && selectedProject && (openTasks.length > 0 || openTasksLoading)}
+				<div class="open-tasks-section">
+					<button
+						class="open-tasks-header"
+						onclick={() => openTasksCollapsed = !openTasksCollapsed}
+					>
+						<div class="open-tasks-header-left">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="1.5"
+								stroke="currentColor"
+								class="open-tasks-chevron"
+								class:collapsed={openTasksCollapsed}
+							>
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+							</svg>
+							<span class="open-tasks-title">Open Tasks</span>
+							<span class="open-tasks-count">{openTasks.length}</span>
+							<span class="open-tasks-project">{selectedProject}</span>
+						</div>
+					</button>
+
+					{#if !openTasksCollapsed}
+						<div class="open-tasks-list">
+							{#if openTasksLoading && openTasks.length === 0}
+								<div class="open-tasks-loading">
+									<span class="loading loading-spinner loading-xs"></span>
+									<span>Loading tasks...</span>
+								</div>
+							{:else}
+								{#each openTasks as task, i (task.id)}
+									{@const projectColor = getProjectColorReactive(task.id)}
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
+									<div
+										class="open-task-row group"
+										use:reveal={{ animation: 'fade-in', delay: i * 0.04 }}
+										onclick={() => openTaskDetailDrawer(task.id)}
+									>
+										<div class="open-task-badge">
+											<TaskIdBadge
+												task={{ id: task.id, status: task.status, title: task.title, issue_type: task.issue_type, integration: task.integration || null }}
+												size="sm"
+												variant="agentPill"
+												showType={false}
+											/>
+										</div>
+										<div class="open-task-info">
+											<span class="open-task-title" title={task.title}>{task.title}</span>
+											{#if task.assignee}
+												<span class="open-task-meta">assigned to {task.assignee}</span>
+											{/if}
+										</div>
+										<div class="open-task-actions">
+											{#if task.labels && task.labels.length > 0}
+												<div class="open-task-labels">
+													{#each task.labels.slice(0, 2) as label}
+														<span class="open-task-label">{label}</span>
+													{/each}
+												</div>
+											{/if}
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="open-task-arrow">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+											</svg>
+										</div>
+									</div>
+								{/each}
+							{/if}
+						</div>
+					{/if}
+				</div>
+			{/if}
+
 			<!-- Recently Closed Sessions (agents tab only) -->
 			{#if activeTab === 'agents' && recentSessions.length > 0}
 				<div class="recent-section">
@@ -2594,6 +2716,170 @@
 		border: 1px solid oklch(0.70 0.15 55 / 0.25);
 		flex-shrink: 0;
 		white-space: nowrap;
+	}
+
+	/* Open Tasks Section */
+	.open-tasks-section {
+		margin-top: 1.5rem;
+	}
+
+	.open-tasks-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		background: oklch(0.16 0.01 250);
+		border: 1px solid oklch(0.22 0.02 250);
+		border-radius: 6px 6px 0 0;
+		cursor: pointer;
+		width: 100%;
+		text-align: left;
+		transition: background 0.15s;
+	}
+
+	.open-tasks-header:hover {
+		background: oklch(0.18 0.01 250);
+	}
+
+	.open-tasks-header-left {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.open-tasks-chevron {
+		width: 14px;
+		height: 14px;
+		color: oklch(0.55 0.02 250);
+		transition: transform 0.2s;
+	}
+
+	.open-tasks-chevron.collapsed {
+		transform: rotate(-90deg);
+	}
+
+	.open-tasks-title {
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: oklch(0.65 0.02 250);
+	}
+
+	.open-tasks-count {
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: oklch(0.55 0.02 250);
+		background: oklch(0.22 0.02 250);
+		padding: 0.05rem 0.4rem;
+		border-radius: 9999px;
+		font-family: ui-monospace, monospace;
+	}
+
+	.open-tasks-project {
+		font-size: 0.65rem;
+		font-weight: 500;
+		color: oklch(0.50 0.08 200);
+		background: oklch(0.22 0.04 200);
+		padding: 0.05rem 0.4rem;
+		border-radius: 9999px;
+		font-family: ui-monospace, monospace;
+	}
+
+	.open-tasks-list {
+		border: 1px solid oklch(0.22 0.02 250);
+		border-top: none;
+		border-radius: 0 0 6px 6px;
+		overflow: hidden;
+	}
+
+	.open-tasks-loading {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.75rem 1rem;
+		font-size: 0.8rem;
+		color: oklch(0.55 0.02 250);
+	}
+
+	.open-task-row {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.5rem 1rem;
+		background: transparent;
+		cursor: pointer;
+		transition: background 0.15s ease;
+		border-bottom: 1px solid oklch(from var(--color-base-300) l c h / 60%);
+	}
+
+	.open-task-row:last-child {
+		border-bottom: none;
+	}
+
+	.open-task-row:hover {
+		background: var(--color-base-200);
+	}
+
+	.open-task-badge {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		flex-shrink: 0;
+	}
+
+	.open-task-info {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+	}
+
+	.open-task-title {
+		font-size: 0.85rem;
+		color: var(--color-base-content);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.open-task-meta {
+		font-size: 0.7rem;
+		color: oklch(0.55 0.02 250);
+	}
+
+	.open-task-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-shrink: 0;
+	}
+
+	.open-task-labels {
+		display: flex;
+		gap: 0.25rem;
+	}
+
+	.open-task-label {
+		font-size: 0.6rem;
+		font-weight: 500;
+		padding: 1px 5px;
+		border-radius: 4px;
+		background: oklch(0.25 0.02 250);
+		color: oklch(0.60 0.02 250);
+		white-space: nowrap;
+	}
+
+	.open-task-arrow {
+		width: 16px;
+		height: 16px;
+		color: oklch(from var(--color-base-content) l c h / 45%);
+		flex-shrink: 0;
+		transition: color 0.15s ease, transform 0.15s ease;
+	}
+
+	.open-task-row:hover .open-task-arrow {
+		color: oklch(from var(--color-base-content) l c h / 65%);
+		transform: translateX(2px);
 	}
 
 	/* Recently Closed Sessions */

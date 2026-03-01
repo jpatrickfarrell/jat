@@ -1100,7 +1100,7 @@
 						</li>
 						<li class="flex items-start gap-2">
 							<span class="text-base-content/50">•</span>
-							<span>Recording uses local whisper.cpp (privacy-first, no data sent externally)</span>
+							<span>Recording uses local transcription (privacy-first, no data sent externally)</span>
 						</li>
 					</ul>
 				</div>

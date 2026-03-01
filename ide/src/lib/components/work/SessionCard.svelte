@@ -7699,7 +7699,7 @@
 						{/if}
 					</div>
 
-					<!-- Voice input (local whisper) -->
+					<!-- Voice input (local transcription) -->
 					<div class="pb-0.5">
 						<VoiceInput
 							size="sm"

@@ -642,28 +642,21 @@ See `ide/CLAUDE.md` for full details.
 
 ## Voice-to-Text (Optional)
 
-The IDE supports voice input using local whisper.cpp - 100% private, no data leaves your machine.
+The IDE supports voice input using local transcription - 100% private, no data leaves your machine. It auto-detects the best available engine.
 
-### Installation
+### Supported Engines
 
-```bash
-# During initial install, select "Yes" when prompted for Voice-to-Text
+| Engine | Platform | Install |
+|--------|----------|---------|
+| voxtype | Linux (Arch) | `yay -S voxtype-bin && voxtype setup model` |
+| whisper-cli (whisper.cpp) | Cross-platform | `brew install whisper-cpp` (macOS) or build from source |
 
-# Or install later:
-bash ~/code/jat/tools/scripts/install-whisper.sh
-```
+The `/api/transcribe` endpoint detects which engine is available at startup and uses it automatically. If neither is installed, the mic button simply doesn't appear.
 
 ### Requirements
 
-- **Disk space**: ~2GB (whisper.cpp + model)
-- **Build tools**: cmake, g++, make
-- **Audio**: ffmpeg + development libraries
-
-### What Gets Installed
-
-- `~/.local/share/jat/whisper/` - whisper.cpp source and build
-- `~/.local/share/jat/whisper/build/bin/whisper-cli` - transcription binary
-- `~/.local/share/jat/whisper/models/ggml-large-v3-turbo-q5_1.bin` - 624MB model
+- **ffmpeg**: Audio format conversion (WebM → WAV)
+- **One of the engines above**
 
 ### Where Voice Input Appears
 
@@ -675,7 +668,7 @@ bash ~/code/jat/tools/scripts/install-whisper.sh
 1. Click mic button → browser records audio (MediaRecorder API)
 2. Audio sent to `/api/transcribe` (local endpoint)
 3. ffmpeg converts WebM → WAV (16kHz mono)
-4. whisper-cli transcribes audio locally
+4. Detected engine transcribes audio locally
 5. Text appears in input field
 
 ## Adding New Projects
@@ -895,19 +888,13 @@ source ~/.bashrc
 
 ### Voice input not working
 ```bash
-# Check if whisper is installed
-ls ~/.local/share/jat/whisper/build/bin/whisper-cli
-
-# If not found, install it
-bash ~/code/jat/tools/scripts/install-whisper.sh
-
-# If whisper-cli exists but fails, rebuild (ffmpeg updated)
-cd ~/.local/share/jat/whisper/build
-cmake .. -DWHISPER_FFMPEG=ON && make -j$(nproc) whisper-cli
-
-# Test transcription API
+# Test transcription API (shows which engine is detected)
 curl http://localhost:3333/api/transcribe
-# Should return: {"status":"ok","whisper_cli":"...","model_exists":true}
+# Should return: {"status":"ok","engine":"voxtype","version":"..."}
+
+# Install an engine if none detected:
+# Linux (Arch): yay -S voxtype-bin && voxtype setup model
+# macOS: brew install whisper-cpp
 ```
 
 ## References

@@ -40,9 +40,46 @@
 		columnDescription?: string;
 	}
 
+	// Table sort options
+	type TableSortMode = 'name-asc' | 'name-desc' | 'rows-desc' | 'rows-asc' | 'newest' | 'oldest';
+	const TABLE_SORT_CYCLE: TableSortMode[] = ['name-asc', 'name-desc', 'rows-desc', 'rows-asc', 'newest', 'oldest'];
+	const TABLE_SORT_LABELS: Record<TableSortMode, string> = {
+		'name-asc': 'A–Z',
+		'name-desc': 'Z–A',
+		'rows-desc': 'Most rows',
+		'rows-asc': 'Fewest rows',
+		'newest': 'Newest',
+		'oldest': 'Oldest',
+	};
+
 	// State — selectedProject synced from URL ?project= param (set by TopBar ProjectSelector)
 	let selectedProject = $state<string | null>(null);
 	let tables = $state<TableInfo[]>([]);
+	let tableSortMode = $state<TableSortMode>('name-asc');
+	let sortedTables = $derived.by(() => {
+		const sorted = [...tables];
+		switch (tableSortMode) {
+			case 'name-asc':
+				sorted.sort((a, b) => (a.display_name || a.name).localeCompare(b.display_name || b.name));
+				break;
+			case 'name-desc':
+				sorted.sort((a, b) => (b.display_name || b.name).localeCompare(a.display_name || a.name));
+				break;
+			case 'rows-desc':
+				sorted.sort((a, b) => b.row_count - a.row_count);
+				break;
+			case 'rows-asc':
+				sorted.sort((a, b) => a.row_count - b.row_count);
+				break;
+			case 'newest':
+				sorted.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+				break;
+			case 'oldest':
+				sorted.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+				break;
+		}
+		return sorted;
+	});
 	let selectedTable = $state<string | null>(null);
 	let schema = $state<ColumnInfo[]>([]);
 	let rows = $state<any[]>([]);
@@ -606,6 +643,11 @@
 		} finally {
 			createSaving = false;
 		}
+	}
+
+	function cycleTableSort() {
+		const idx = TABLE_SORT_CYCLE.indexOf(tableSortMode);
+		tableSortMode = TABLE_SORT_CYCLE[(idx + 1) % TABLE_SORT_CYCLE.length];
 	}
 
 	// Drop table
@@ -1859,7 +1901,25 @@
 			<div class="table-list-panel">
 				<div class="panel-header">
 					<span class="panel-title">Tables</span>
-					<span class="panel-count">{tables.length}</span>
+					<div class="panel-header-right">
+						<button
+							class="table-sort-btn"
+							title="Sort: {TABLE_SORT_LABELS[tableSortMode]}"
+							onclick={cycleTableSort}
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" class="sort-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								{#if tableSortMode.startsWith('name')}
+									<path stroke-linecap="round" stroke-linejoin="round" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+								{:else if tableSortMode.startsWith('rows')}
+									<path stroke-linecap="round" stroke-linejoin="round" d="M7 20l4-4m0 0l4 4m-4-4v12M3 4h18M3 8h14M3 12h10" transform="scale(1,-1) translate(0,-24)" />
+								{:else}
+									<path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+								{/if}
+							</svg>
+							<span class="sort-label">{TABLE_SORT_LABELS[tableSortMode]}</span>
+						</button>
+						<span class="panel-count">{tables.length}</span>
+					</div>
 				</div>
 				{#if tablesLoading}
 					<div class="panel-loading">
@@ -1874,7 +1934,7 @@
 					</div>
 				{:else}
 					<div class="table-items">
-						{#each tables as table}
+						{#each sortedTables as table}
 							<button
 								class="table-item"
 								class:selected={selectedTable === table.name}
@@ -3032,6 +3092,40 @@
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		color: oklch(0.55 0.02 250);
+	}
+
+	.panel-header-right {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+	}
+
+	.table-sort-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.125rem 0.375rem;
+		border: none;
+		border-radius: 0.25rem;
+		background: transparent;
+		color: oklch(0.50 0.02 250);
+		font-size: 0.5625rem;
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+
+	.table-sort-btn:hover {
+		background: oklch(0.25 0.02 250);
+		color: oklch(0.70 0.02 250);
+	}
+
+	.sort-icon {
+		width: 0.75rem;
+		height: 0.75rem;
+	}
+
+	.sort-label {
+		white-space: nowrap;
 	}
 
 	.panel-count {

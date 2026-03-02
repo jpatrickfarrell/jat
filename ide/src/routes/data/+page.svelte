@@ -201,6 +201,9 @@
 	let showManageColumns = $state(false);
 	let mcDragIdx = $state<number | null>(null);
 	let mcDragOverIdx = $state<number | null>(null);
+	let mcAddColOpen = $state(false);
+	let mcRenamingCol = $state<string | null>(null);
+	let mcRenameValue = $state('');
 
 	// Cell selection & keyboard navigation
 	let selectedCell = $state<{ rowIdx: number; colIdx: number } | null>(null);
@@ -1782,6 +1785,36 @@
 		await colOperation('add', { column: name.trim(), sqliteType, semanticType });
 	}
 
+	async function handleMcAddColumn(semanticType: string, sqliteType: string) {
+		const name = prompt('Column name:');
+		if (!name?.trim()) return;
+		mcAddColOpen = false;
+		await colOperation('add', { column: name.trim(), sqliteType, semanticType });
+	}
+
+	function startMcRename(colName: string) {
+		mcRenamingCol = colName;
+		mcRenameValue = colName;
+	}
+
+	async function commitMcRename() {
+		if (!mcRenamingCol) return;
+		const newName = mcRenameValue.trim();
+		const oldName = mcRenamingCol;
+		mcRenamingCol = null;
+		if (!newName || newName === oldName) return;
+		await colOperation('rename', { column: oldName, newName });
+	}
+
+	function cancelMcRename() {
+		mcRenamingCol = null;
+	}
+
+	async function handleMcDeleteColumn(colName: string) {
+		if (!confirm(`Delete column "${colName}"? This cannot be undone.`)) return;
+		await colOperation('delete', { column: colName });
+	}
+
 	function handleCtxHideColumn() {
 		if (!ctxCol) return;
 		hiddenColumns = new Set([...hiddenColumns, ctxCol.name]);
@@ -2360,10 +2393,11 @@
 									<div class="manage-cols-dropdown">
 										<div class="manage-cols-header">
 											<span class="manage-cols-title">Manage Columns</span>
-											<span class="manage-cols-count">{allColumnsManage.length} total</span>
+											<span class="manage-cols-count">{#if hiddenColumns.size > 0}{allColumnsManage.length - hiddenColumns.size}/{allColumnsManage.length} visible{:else}{allColumnsManage.length} total{/if}</span>
 										</div>
 										<div class="manage-cols-list">
 											{#each allColumnsManage as col, idx}
+												{@const typeInfo = SEMANTIC_TYPE_INFO.find(t => t.type === (columnMeta[col.name]?.semanticType || col.semanticType))}
 												<!-- svelte-ignore a11y_no_static_element_interactions -->
 												<div
 													class="manage-cols-item"
@@ -2380,9 +2414,40 @@
 															<path stroke-linecap="round" stroke-linejoin="round" d="M4 8h16M4 16h16" />
 														</svg>
 													</span>
-													<span class="mc-col-name" class:mc-col-hidden={hiddenColumns.has(col.name)}>
-														{col.displayName || col.name}
-													</span>
+													{#if mcRenamingCol === col.name}
+														<!-- svelte-ignore a11y_autofocus -->
+														<input
+															class="mc-rename-input"
+															bind:value={mcRenameValue}
+															autofocus
+															onblur={commitMcRename}
+															onkeydown={(e) => { if (e.key === 'Enter') commitMcRename(); if (e.key === 'Escape') cancelMcRename(); }}
+														/>
+													{:else}
+														{#if typeInfo}
+															<span class="mc-type-icon" title={typeInfo.label}>{typeInfo.icon}</span>
+														{:else}
+															<span class="mc-type-icon mc-type-plain" title={col.type}>{col.type.substring(0, 3).toLowerCase()}</span>
+														{/if}
+														<!-- svelte-ignore a11y_no_static_element_interactions -->
+														<span
+															class="mc-col-name"
+															class:mc-col-hidden={hiddenColumns.has(col.name)}
+															ondblclick={() => startMcRename(col.name)}
+															title="Double-click to rename"
+														>
+															{col.displayName || col.name}
+														</span>
+													{/if}
+													<button
+														class="mc-delete-btn"
+														onclick={() => handleMcDeleteColumn(col.name)}
+														title="Delete column"
+													>
+														<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+														</svg>
+													</button>
 													<button
 														class="mc-vis-btn"
 														class:mc-vis-hidden={hiddenColumns.has(col.name)}
@@ -2403,16 +2468,52 @@
 												</div>
 											{/each}
 										</div>
-										{#if hiddenColumns.size > 0 || columnOrder.length > 0}
-											<div class="manage-cols-footer">
+										<div class="manage-cols-footer">
 												{#if hiddenColumns.size > 0}
 													<button class="manage-cols-reset" onclick={unhideAll}>Show all columns</button>
 												{/if}
 												{#if columnOrder.length > 0}
 													<button class="manage-cols-reset" onclick={() => { columnOrder = []; persistColumnOrder(); }}>Reset order</button>
 												{/if}
+												<!-- svelte-ignore a11y_no_static_element_interactions -->
+												<div
+													class="mc-add-col-wrapper"
+													onmouseenter={() => mcAddColOpen = true}
+													onmouseleave={() => mcAddColOpen = false}
+												>
+													<button class="manage-cols-add">
+														<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+														</svg>
+														Column
+													</button>
+													{#if mcAddColOpen}
+														<div class="mc-add-col-submenu">
+															<div class="submenu-group-label">basic</div>
+															{#each SEMANTIC_TYPE_INFO.filter(t => t.group === 'basic') as typeInfo}
+																<button class="col-context-menu-item" onclick={() => handleMcAddColumn(typeInfo.type, typeInfo.sqliteType)}>
+																	<span class="type-icon">{typeInfo.icon}</span>
+																	{typeInfo.label}
+																</button>
+															{/each}
+															<div class="submenu-group-label">rich</div>
+															{#each SEMANTIC_TYPE_INFO.filter(t => t.group === 'rich') as typeInfo}
+																<button class="col-context-menu-item" onclick={() => handleMcAddColumn(typeInfo.type, typeInfo.sqliteType)}>
+																	<span class="type-icon">{typeInfo.icon}</span>
+																	{typeInfo.label}
+																</button>
+															{/each}
+															<div class="submenu-group-label">advanced</div>
+															{#each SEMANTIC_TYPE_INFO.filter(t => t.group === 'advanced') as typeInfo}
+																<button class="col-context-menu-item" onclick={() => handleMcAddColumn(typeInfo.type, typeInfo.sqliteType)}>
+																	<span class="type-icon">{typeInfo.icon}</span>
+																	{typeInfo.label}
+																</button>
+															{/each}
+														</div>
+													{/if}
+												</div>
 											</div>
-										{/if}
 									</div>
 								{/if}
 							</div>
@@ -5368,6 +5469,58 @@
 		text-decoration: line-through;
 	}
 
+	.mc-type-icon {
+		flex-shrink: 0;
+		font-size: 0.625rem;
+		width: 1.125rem;
+		text-align: center;
+		color: oklch(0.55 0.08 200);
+	}
+
+	.mc-type-plain {
+		font-family: monospace;
+		font-size: 0.5625rem;
+		color: oklch(0.45 0.03 250);
+	}
+
+	.mc-rename-input {
+		flex: 1;
+		font-size: 0.75rem;
+		font-family: monospace;
+		padding: 0 0.25rem;
+		background: oklch(0.22 0.02 250);
+		border: 1px solid oklch(0.45 0.10 200);
+		border-radius: 0.1875rem;
+		color: oklch(0.90 0.02 250);
+		outline: none;
+		min-width: 0;
+	}
+
+	.mc-delete-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.25rem;
+		height: 1.25rem;
+		border: none;
+		background: none;
+		color: oklch(0.40 0.02 250);
+		border-radius: 0.25rem;
+		cursor: pointer;
+		flex-shrink: 0;
+		opacity: 0;
+		transition: opacity 0.1s;
+	}
+
+	.manage-cols-item:hover .mc-delete-btn {
+		opacity: 1;
+	}
+
+	.mc-delete-btn:hover {
+		background: oklch(0.30 0.08 25);
+		color: oklch(0.75 0.15 25);
+	}
+
 	.mc-vis-btn {
 		display: flex;
 		align-items: center;
@@ -5416,6 +5569,45 @@
 	.manage-cols-reset:hover {
 		background: oklch(0.25 0.02 250);
 		color: oklch(0.80 0.02 250);
+	}
+
+	.mc-add-col-wrapper {
+		position: relative;
+		margin-left: auto;
+	}
+
+	.manage-cols-add {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.625rem;
+		padding: 0.1875rem 0.375rem;
+		border: 1px solid oklch(0.30 0.08 200);
+		background: oklch(0.20 0.02 200);
+		color: oklch(0.65 0.10 200);
+		border-radius: 0.25rem;
+		cursor: pointer;
+	}
+
+	.manage-cols-add:hover {
+		background: oklch(0.25 0.04 200);
+		color: oklch(0.85 0.10 200);
+	}
+
+	.mc-add-col-submenu {
+		position: absolute;
+		bottom: 100%;
+		right: 0;
+		min-width: 180px;
+		max-height: 320px;
+		overflow-y: auto;
+		background: oklch(0.18 0.02 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.5rem;
+		padding: 0.25rem 0;
+		box-shadow: 0 -8px 30px oklch(0 0 0 / 0.5);
+		margin-bottom: 0.25rem;
+		animation: contextMenuIn 0.1s ease-out;
 	}
 
 	.mc-badge {

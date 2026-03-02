@@ -1967,66 +1967,68 @@
 					</div>
 				{/if}
 
-				<!-- Due Date Filter Chips -->
-				<div class="date-filter-bar">
-					{#each DATE_FILTER_OPTIONS as opt}
-						{@const count = filterCounts[opt.id]}
-						<button
-							class="date-filter-chip"
-							class:active={dueDateFilter === opt.id}
-							class:has-overdue={opt.id === "overdue" && count > 0}
-							onclick={() => (dueDateFilter = opt.id)}
-						>
-							<span class="chip-icon">{opt.icon}</span>
-							<span class="chip-label">{opt.label}</span>
-							{#if count > 0}
-								<span class="chip-count">{count}</span>
-							{/if}
-						</button>
-					{/each}
-				</div>
-
 				<!-- Open Tasks Section -->
 				{#if tasksByEpic.size > 0}
 					<div class="subsection">
-						<button
-							class="subsection-header"
-							onclick={() =>
-								toggleSubsectionCollapse(
-									selectedProject!,
-									"tasks",
-								)}
-							aria-expanded={!isSubsectionCollapsed(
-								selectedProject!,
-								"tasks",
-							)}
-						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								fill="none"
-								viewBox="0 0 24 24"
-								stroke-width="2"
-								stroke="currentColor"
-								class="subsection-collapse-icon"
-								class:collapsed={isSubsectionCollapsed(
+						<div class="subsection-header-row">
+							<button
+								class="subsection-header"
+								onclick={() =>
+									toggleSubsectionCollapse(
+										selectedProject!,
+										"tasks",
+									)}
+								aria-expanded={!isSubsectionCollapsed(
 									selectedProject!,
 									"tasks",
 								)}
 							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M19 9l-7 7-7-7"
-								/>
-							</svg>
-							<span>Open Tasks</span>
-							<span class="subsection-count"
-								>{Array.from(tasksByEpic.values()).reduce(
-									(sum, tasks) => sum + tasks.length,
-									0,
-								)}</span
-							>
-						</button>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke-width="2"
+									stroke="currentColor"
+									class="subsection-collapse-icon"
+									class:collapsed={isSubsectionCollapsed(
+										selectedProject!,
+										"tasks",
+									)}
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M19 9l-7 7-7-7"
+									/>
+								</svg>
+								<span>Open Tasks</span>
+								<span class="subsection-count"
+									>{Array.from(tasksByEpic.values()).reduce(
+										(sum, tasks) => sum + tasks.length,
+										0,
+									)}</span
+								>
+							</button>
+							<!-- Due Date Filter Chips (visible when section expanded) -->
+							{#if !isSubsectionCollapsed(selectedProject!, "tasks")}
+								<div class="date-filter-chips" onclick={(e) => e.stopPropagation()}>
+									{#each DATE_FILTER_OPTIONS as opt}
+										{@const count = filterCounts[opt.id]}
+										<button
+											class="date-filter-chip"
+											class:active={dueDateFilter === opt.id}
+											class:has-overdue={opt.id === "overdue" && count > 0}
+											onclick={() => (dueDateFilter = opt.id)}
+										>
+											<span class="chip-label">{opt.label}</span>
+											{#if count > 0}
+												<span class="chip-count">{count}</span>
+											{/if}
+										</button>
+									{/each}
+								</div>
+							{/if}
+						</div>
 
 						{#if !isSubsectionCollapsed(selectedProject!, "tasks")}
 							<!-- Group by Epic - sorted: epics by priority first, standalone last -->
@@ -2416,28 +2418,36 @@
 		gap: 0.5rem;
 	}
 
-	/* Due Date Filter Bar */
-	.date-filter-bar {
+	/* Due Date Filter Chips (inline in Open Tasks header) */
+	.subsection-header-row {
 		display: flex;
-		gap: 0.5rem;
-		padding: 0.75rem 1rem;
-		border-bottom: 1px solid oklch(0.25 0.02 250);
+		align-items: center;
+	}
+	.subsection-header-row .subsection-header {
+		flex-shrink: 0;
+		width: auto;
+	}
+	.date-filter-chips {
+		display: flex;
+		gap: 0.375rem;
 		overflow-x: auto;
 		scrollbar-width: none;
+		margin-left: auto;
+		padding-right: 0.25rem;
 	}
-	.date-filter-bar::-webkit-scrollbar {
+	.date-filter-chips::-webkit-scrollbar {
 		display: none;
 	}
 	.date-filter-chip {
 		display: flex;
 		align-items: center;
-		gap: 0.375rem;
-		padding: 0.375rem 0.75rem;
+		gap: 0.25rem;
+		padding: 0.25rem 0.5rem;
 		border-radius: 999px;
 		border: 1px solid oklch(0.30 0.02 250);
 		background: oklch(0.20 0.01 250);
 		color: oklch(0.65 0.02 250);
-		font-size: 0.8125rem;
+		font-size: 0.75rem;
 		font-weight: 500;
 		cursor: pointer;
 		transition: all 0.15s ease;
@@ -2461,9 +2471,6 @@
 		background: oklch(0.28 0.08 25);
 		border-color: oklch(0.55 0.15 25);
 		color: oklch(0.90 0.08 25);
-	}
-	.chip-icon {
-		font-size: 0.75rem;
 	}
 	.chip-label {
 		line-height: 1;

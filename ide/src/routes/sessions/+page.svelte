@@ -952,7 +952,7 @@
 					taskImages={openTaskImages}
 					showHeader={false}
 					onSpawnTask={handleSpawnOpenTask}
-					onRetry={fetchOpenTasks}
+					onRetry={() => fetchOpenTasks(selectedProject)}
 					onTaskClick={(id) => openTaskDetailDrawer(id)}
 				/>
 				{/if}
@@ -989,7 +989,7 @@
 					}).then(res => {
 						if (res.ok) {
 							addToast({ message: 'Task duplicated', type: 'success', duration: 2000 });
-							fetchOpenTasks();
+							fetchOpenTasks(selectedProject);
 						}
 					}).catch(() => {});
 				}}

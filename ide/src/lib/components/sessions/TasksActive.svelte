@@ -251,9 +251,12 @@
 			const agentName = sessionName.startsWith('jat-') ? sessionName.slice(4) : sessionName;
 			const sseState = agentSessionInfo.get(agentName)?.activityState;
 
-			// Clear optimistic state if WS reports same state or a "later" state
-			if (sseState === optimisticState ||
-				(optimisticState === 'completing' && (sseState === 'completed' || sseState === 'idle'))) {
+			// Clear optimistic state when SSE reports a "later" state
+			// For 'completing': only clear on completed/idle (NOT on exact match,
+			// because SSE can briefly report 'working' between signal emissions,
+			// causing the badge to flicker completing→working→completing)
+			if ((optimisticState === 'completing' && (sseState === 'completed' || sseState === 'idle')) ||
+				(optimisticState !== 'completing' && sseState === optimisticState)) {
 				newOptimistic.delete(sessionName);
 				changed = true;
 				console.log('[TasksActive] Cleared optimistic state for', sessionName, '- SSE caught up:', sseState);

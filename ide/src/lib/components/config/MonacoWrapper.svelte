@@ -4,6 +4,15 @@
 	import type * as Monaco from 'monaco-editor';
 	import { getMonacoTheme } from '$lib/utils/themeManager';
 
+	/** Completion item returned by the completionProvider callback */
+	export interface CompletionItem {
+		label: string;
+		kind: 'file' | 'base' | 'data';
+		detail?: string;
+		documentation?: string;
+		insertText: string;
+	}
+
 	// Props
 	let {
 		value = $bindable(''),
@@ -13,7 +22,8 @@
 		onchange = undefined,
 		disableSuggestions = false,
 		onSendToLLM = undefined,
-		onCreateTask = undefined
+		onCreateTask = undefined,
+		completionProvider = undefined,
 	}: {
 		value?: string;
 		language?: string;
@@ -25,6 +35,8 @@
 		onSendToLLM?: (selectedText: string) => void;
 		/** Callback when user selects "Create Task" from context menu. Receives selected text. */
 		onCreateTask?: (selectedText: string) => void;
+		/** Async callback that returns completion items when user types @. */
+		completionProvider?: (prefix: string) => Promise<CompletionItem[]>;
 	} = $props();
 
 	// State
@@ -36,6 +48,7 @@
 	let resizeObserver: ResizeObserver | null = null;
 	let themeObserver: MutationObserver | null = null;
 	let isEditorFocused = $state(false);
+	let completionDisposable: Monaco.IDisposable | null = null;
 
 	// Track the current DaisyUI theme for reactivity
 	let daisyTheme = $state('nord');
@@ -282,6 +295,53 @@
 			});
 			resizeObserver.observe(containerRef);
 
+			// Register @-reference completion provider if callback provided
+			if (completionProvider) {
+				completionDisposable = monacoInstance.languages.registerCompletionItemProvider(language, {
+					triggerCharacters: ['@'],
+					provideCompletionItems: async (model: Monaco.editor.ITextModel, position: Monaco.Position) => {
+						const lineContent = model.getLineContent(position.lineNumber);
+						const textUntilPosition = lineContent.substring(0, position.column - 1);
+
+						// Find the @ trigger position
+						const atIndex = textUntilPosition.lastIndexOf('@');
+						if (atIndex === -1) return { suggestions: [] };
+
+						const prefix = textUntilPosition.substring(atIndex + 1);
+
+						try {
+							const items = await completionProvider(prefix);
+							const range = new monacoInstance.Range(
+								position.lineNumber,
+								atIndex + 1,
+								position.lineNumber,
+								position.column
+							);
+
+							const KIND_MAP: Record<string, number> = {
+								file: monacoInstance.languages.CompletionItemKind.File,
+								base: monacoInstance.languages.CompletionItemKind.Reference,
+								data: monacoInstance.languages.CompletionItemKind.Struct,
+							};
+
+							return {
+								suggestions: items.map((item, i) => ({
+									label: item.label,
+									kind: KIND_MAP[item.kind] ?? monacoInstance.languages.CompletionItemKind.Text,
+									detail: item.detail,
+									documentation: item.documentation,
+									insertText: item.insertText,
+									range,
+									sortText: String(i).padStart(4, '0'),
+								}))
+							};
+						} catch {
+							return { suggestions: [] };
+						}
+					}
+				});
+			}
+
 			isReady = true;
 		} catch (err) {
 			console.error('Failed to initialize Monaco Editor:', err);
@@ -291,6 +351,7 @@
 
 	// Handle cleanup
 	onDestroy(() => {
+		completionDisposable?.dispose();
 		themeObserver?.disconnect();
 		resizeObserver?.disconnect();
 		editor?.dispose();

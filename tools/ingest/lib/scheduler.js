@@ -200,7 +200,13 @@ async function pollSource(source) {
 
       // Handle rejections (reopen task with rejection notes)
       if (item.rejection) {
-        const rejResult = handleRejection(source, item);
+        // Download rejection attachments if present
+        let rejDownloaded = [];
+        if (item.attachments?.length > 0) {
+          const authHeaders = getAuthHeaders(source);
+          rejDownloaded = await downloadAttachments(source.id, item.attachments, authHeaders);
+        }
+        const rejResult = handleRejection(source, item, rejDownloaded);
         if (rejResult.handled) {
           recordItem(source.id, item.id, item.hash, rejResult.taskId, `rejection`, item.origin);
         }

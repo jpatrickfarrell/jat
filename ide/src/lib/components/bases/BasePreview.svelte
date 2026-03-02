@@ -10,8 +10,8 @@
 	 */
 	import type { KnowledgeBase, RenderedBase } from '$lib/types/knowledgeBase';
 	import { SOURCE_TYPE_INFO } from '$lib/types/knowledgeBase';
-	import { renderBase, updateBase } from '$lib/stores/bases.svelte';
-	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
+	import { renderBase, updateBase, getBases, getCurrentProject } from '$lib/stores/bases.svelte';
+	import MonacoWrapper, { type CompletionItem } from '$lib/components/config/MonacoWrapper.svelte';
 	import MarkdownPreview from '$lib/components/files/MarkdownPreview.svelte';
 
 	interface Props {
@@ -58,7 +58,7 @@
 		renderLoading = true;
 		renderError = null;
 		try {
-			rendered = await renderBase(baseId);
+			rendered = await renderBase(baseId, { collapsible: true });
 		} catch (err) {
 			renderError = err instanceof Error ? err.message : 'Render failed';
 		} finally {
@@ -110,6 +110,103 @@
 			month: 'short', day: 'numeric', year: 'numeric',
 			hour: '2-digit', minute: '2-digit'
 		});
+	}
+
+	/** Provide @-reference autocomplete items for the Monaco editor. */
+	async function handleCompletionProvider(prefix: string): Promise<CompletionItem[]> {
+		const items: CompletionItem[] = [];
+
+		// Determine which category to show based on prefix
+		const lowerPrefix = prefix.toLowerCase();
+		const showBases = !lowerPrefix.startsWith('file:') && !lowerPrefix.startsWith('data:');
+		const showData = !lowerPrefix.startsWith('file:') && !lowerPrefix.startsWith('base:');
+		const showFile = !lowerPrefix.startsWith('base:') && !lowerPrefix.startsWith('data:');
+
+		// Extract the query after the type prefix (e.g. "base:my" → "my")
+		const baseQuery = lowerPrefix.startsWith('base:') ? lowerPrefix.slice(5) : '';
+		const dataQuery = lowerPrefix.startsWith('data:') ? lowerPrefix.slice(5) : '';
+
+		if (showBases) {
+			const allBases = getBases();
+			const filtered = baseQuery
+				? allBases.filter(b => b.name.toLowerCase().includes(baseQuery))
+				: allBases;
+			for (const b of filtered) {
+				if (b.id === base?.id) continue; // skip self-reference
+				items.push({
+					label: `@base:${b.name}`,
+					kind: 'base',
+					detail: b.source_type,
+					documentation: b.description || undefined,
+					insertText: `@base:${b.name}`,
+				});
+			}
+		}
+
+		if (showData) {
+			try {
+				const project = getCurrentProject();
+				if (!project) return items;
+				const resp = await fetch(`/api/data/tables?project=${encodeURIComponent(project)}`);
+				if (resp.ok) {
+					const { tables } = await resp.json();
+					const filtered = dataQuery
+						? tables.filter((t: { name: string }) => t.name.toLowerCase().includes(dataQuery))
+						: tables;
+					for (const t of filtered) {
+						items.push({
+							label: `@data:${t.name}`,
+							kind: 'data',
+							detail: `Data table${t.row_count != null ? ` (${t.row_count} rows)` : ''}`,
+							insertText: `@data:${t.name}`,
+						});
+					}
+				}
+			} catch { /* ignore fetch errors */ }
+		}
+
+		if (showFile && !lowerPrefix.startsWith('base:') && !lowerPrefix.startsWith('data:')) {
+			const fileQuery = lowerPrefix.startsWith('file:') ? prefix.slice(5) : '';
+			if (lowerPrefix.startsWith('file:') && fileQuery.length > 0) {
+				// Search project files when user types @file:query
+				try {
+					const project = getCurrentProject();
+					if (project) {
+						const resp = await fetch(`/api/files/search?project=${encodeURIComponent(project)}&query=${encodeURIComponent(fileQuery)}&limit=20`);
+						if (resp.ok) {
+							const { files } = await resp.json();
+							for (const f of files) {
+								items.push({
+									label: `@file:${f.path}`,
+									kind: 'file',
+									detail: f.folder || '(root)',
+									insertText: `@file:${f.path}`,
+								});
+							}
+						}
+					}
+				} catch { /* ignore fetch errors */ }
+			} else if (lowerPrefix.startsWith('file:')) {
+				// @file: with no query yet — show typing hint
+				items.push({
+					label: '@file:...',
+					kind: 'file',
+					detail: 'Type a filename to search',
+					insertText: '@file:',
+				});
+			} else {
+				// Bare @ — show category hint for @file:
+				items.push({
+					label: '@file:...',
+					kind: 'file',
+					detail: 'Reference a project file',
+					documentation: 'Type @file: then a filename to search',
+					insertText: '@file:',
+				});
+			}
+		}
+
+		return items;
 	}
 </script>
 
@@ -248,6 +345,7 @@
 					value={editorContent}
 					language="markdown"
 					onchange={handleContentChange}
+					completionProvider={handleCompletionProvider}
 				/>
 			{:else if renderLoading}
 				<div class="flex items-center gap-2 p-4" style="color: oklch(0.55 0.01 250);">

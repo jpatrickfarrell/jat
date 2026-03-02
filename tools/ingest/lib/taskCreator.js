@@ -718,12 +718,14 @@ function computeDelayMs(delay, unit) {
 /**
  * Handle a rejection item by reopening the task and appending rejection notes.
  * @param {Object} source - Source config
- * @param {Object} item - Item with item.rejection.taskId and item.rejection.reason
+ * @param {Object} item - Item with item.rejection.taskId, item.rejection.reason, item.rejection.elements
+ * @param {Array} [downloaded] - Downloaded attachment files (rejection screenshots)
  * @returns {{ handled: boolean, taskId: string }}
  */
-export function handleRejection(source, item) {
+export function handleRejection(source, item, downloaded = []) {
   const taskId = item.rejection.taskId;
   const reason = item.rejection.reason;
+  const elements = item.rejection.elements;
   const cwd = getProjectPath(source.project);
 
   // Reopen the task
@@ -736,12 +738,40 @@ export function handleRejection(source, item) {
     return { handled: false, taskId };
   }
 
+  // Build rejection text with optional elements info
+  let rejectionText = `**User rejected this report:** ${reason || 'No reason provided'}`;
+
+  if (elements && Array.isArray(elements) && elements.length > 0) {
+    const elementLines = elements.map(el => {
+      const tag = el.tagName || 'unknown';
+      const sel = el.selector || '';
+      const text = el.textContent ? ` — "${el.textContent.slice(0, 80)}"` : '';
+      return `  - \`${sel || tag}\`${text}`;
+    }).join('\n');
+    rejectionText += `\n\n**Highlighted elements:**\n${elementLines}`;
+  }
+
+  if (downloaded.length > 0) {
+    const filePaths = downloaded
+      .filter(f => f.localPath)
+      .map((f, i) => `  ${i + 1}. ${f.localPath}`)
+      .join('\n');
+    if (filePaths) {
+      rejectionText += `\n\n**Rejection screenshots:**\n${filePaths}\n(Use Read tool to view)`;
+    }
+  }
+
   // Append rejection notes to task description
   appendToTask(taskId, [{
-    text: `**User rejected this report:** ${reason || 'No reason provided'}`,
+    text: rejectionText,
     author: item.author || 'user',
     timestamp: new Date().toISOString()
   }], source.project);
+
+  // Register rejection screenshots as task attachments
+  if (downloaded.length > 0) {
+    registerTaskAttachments(taskId, downloaded, source.project);
+  }
 
   logger.info(`Reopened task ${taskId} (rejection: ${reason})`, source.id);
   return { handled: true, taskId };

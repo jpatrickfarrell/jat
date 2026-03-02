@@ -12,7 +12,7 @@ export async function POST({ params, request }) {
 
 	try {
 		const body = await request.json();
-		const { project } = body;
+		const { project, collapsible } = body;
 
 		if (!project) {
 			return json({ error: 'Missing required field: project' }, { status: 400 });
@@ -23,7 +23,7 @@ export async function POST({ params, request }) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
 		}
 
-		const rendered = renderBase(path, baseId);
+		const rendered = renderBase(path, baseId, { collapsible: !!collapsible });
 		return json({ rendered });
 	} catch (error) {
 		if (error.message.includes('not found')) {

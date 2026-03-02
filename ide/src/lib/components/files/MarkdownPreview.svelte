@@ -116,6 +116,7 @@
 		overflow-y: auto;
 		padding: 2rem 2.5rem;
 		background: oklch(0.14 0.01 250);
+		container-type: inline-size;
 	}
 
 	/* Scrollbar */
@@ -140,6 +141,7 @@
 		line-height: 1.7;
 		max-width: 52rem;
 	}
+
 
 	/* Headings */
 	:global(.md-preview .doc-heading) {
@@ -277,6 +279,7 @@
 	:global(.md-preview .table-wrapper) {
 		overflow-x: auto;
 		margin: 1rem 0;
+		width: 100cqi;
 	}
 	:global(.md-preview .doc-table) {
 		width: 100%;
@@ -338,5 +341,53 @@
 	:global(.md-preview input[type='checkbox']) {
 		margin-right: 0.5rem;
 		accent-color: oklch(0.65 0.15 200);
+	}
+
+	/* Collapsible @-reference sections */
+	:global(.md-preview details.ref-collapse) {
+		margin: 0.75rem 0;
+		border: 1px solid oklch(0.25 0.02 250);
+		border-radius: 8px;
+		overflow: hidden;
+		background: oklch(0.12 0.01 250);
+	}
+	:global(.md-preview details.ref-collapse summary) {
+		padding: 0.5rem 0.75rem;
+		cursor: pointer;
+		font-family: ui-monospace, monospace;
+		font-size: 0.8rem;
+		font-weight: 500;
+		color: oklch(0.70 0.10 200);
+		background: oklch(0.16 0.02 250);
+		border-bottom: 1px solid oklch(0.22 0.02 250);
+		user-select: none;
+		list-style: none;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	:global(.md-preview details.ref-collapse summary::-webkit-details-marker) {
+		display: none;
+	}
+	:global(.md-preview details.ref-collapse summary::before) {
+		content: '▶';
+		font-size: 0.65rem;
+		color: oklch(0.50 0.02 250);
+		transition: transform 0.15s ease;
+	}
+	:global(.md-preview details.ref-collapse[open] summary::before) {
+		transform: rotate(90deg);
+	}
+	:global(.md-preview details.ref-collapse[open] summary) {
+		border-bottom: 1px solid oklch(0.25 0.02 250);
+	}
+	:global(.md-preview details.ref-collapse:not([open]) summary) {
+		border-bottom: none;
+	}
+	:global(.md-preview details.ref-collapse > :not(summary)) {
+		padding: 0 0.75rem;
+	}
+	:global(.md-preview details.ref-collapse summary:hover) {
+		background: oklch(0.18 0.02 250);
 	}
 </style>

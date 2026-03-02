@@ -147,15 +147,16 @@ export async function toggleAlwaysInject(id: string): Promise<boolean> {
 
 /**
  * Render a base (get preview content).
+ * @param opts.collapsible - Wrap resolved @-references in collapsible <details> elements
  */
-export async function renderBase(id: string): Promise<RenderedBase | null> {
+export async function renderBase(id: string, opts?: { collapsible?: boolean }): Promise<RenderedBase | null> {
 	if (!state.currentProject) return null;
 
 	try {
 		const res = await fetch(`/api/bases/${id}/render`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ project: state.currentProject })
+			body: JSON.stringify({ project: state.currentProject, collapsible: opts?.collapsible })
 		});
 		if (!res.ok) throw new Error(`Render failed: ${res.status}`);
 		const data = await res.json();

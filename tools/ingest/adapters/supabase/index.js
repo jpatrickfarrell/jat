@@ -388,6 +388,21 @@ export default class SupabaseAdapter extends BaseAdapter {
         .update(`reject-${rowId}-${Date.now()}`)
         .digest('hex');
 
+      // Build attachments from rejection screenshots
+      const rejectionAttachments = [];
+      if (row.rejection_screenshot_paths && Array.isArray(row.rejection_screenshot_paths) && source.storageBucket) {
+        for (const storagePath of row.rejection_screenshot_paths) {
+          if (!storagePath) continue;
+          const signedUrl = await getSignedUrl(
+            projectUrl, serviceRoleKey,
+            source.storageBucket, storagePath
+          );
+          if (signedUrl) {
+            rejectionAttachments.push(makeAttachment(signedUrl, 'image', storagePath.split('/').pop()));
+          }
+        }
+      }
+
       items.push({
         id: `supabase-reject-${rowId}-${Date.now()}`,
         title: row[titleCol] || 'Rejected report',
@@ -395,9 +410,11 @@ export default class SupabaseAdapter extends BaseAdapter {
         hash,
         author: authorCol ? row[authorCol] : null,
         timestamp: row[timestampCol] || new Date().toISOString(),
+        attachments: rejectionAttachments.length > 0 ? rejectionAttachments : undefined,
         rejection: {
           taskId,
-          reason: row.rejection_reason || row.user_response || 'rejected'
+          reason: row.rejection_reason || row.user_response || 'rejected',
+          elements: row.rejection_elements || undefined
         },
         origin: {
           adapterType: 'supabase',

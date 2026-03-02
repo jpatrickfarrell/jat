@@ -25,6 +25,19 @@ CREATE TABLE IF NOT EXISTS task_bases (
     FOREIGN KEY (base_id) REFERENCES bases(id) ON DELETE CASCADE
 );
 
+-- Direct data table attachments to tasks (no base record needed).
+-- table_name references a user table in data.db.
+-- context_query overrides the table's default context_query if set.
+CREATE TABLE IF NOT EXISTS task_tables (
+    task_id TEXT NOT NULL,
+    table_name TEXT NOT NULL,
+    project TEXT NOT NULL,
+    context_query TEXT,
+    attached_at TEXT NOT NULL,
+    attached_by TEXT,
+    PRIMARY KEY (task_id, table_name, project)
+);
+
 -- FTS5 virtual table for keyword search across bases
 CREATE VIRTUAL TABLE IF NOT EXISTS bases_fts USING fts5(
     name,

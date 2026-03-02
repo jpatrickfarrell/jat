@@ -964,18 +964,11 @@ export async function POST({ request }) {
 				}
 
 				if (allBaseIds.length > 0) {
-					const TOKEN_BUDGET = 8000;
-					let totalTokens = 0;
 					const renderedParts = [];
 
 					for (const baseId of allBaseIds) {
 						try {
 							const rendered = renderBase(projectPath, baseId);
-							if (totalTokens + rendered.token_estimate > TOKEN_BUDGET) {
-								console.log(`[spawn] Skipping base "${rendered.name}" (${rendered.token_estimate} tokens) - would exceed budget`);
-								continue;
-							}
-							totalTokens += rendered.token_estimate;
 							renderedParts.push(`<base name="${rendered.name}" type="${rendered.source_type}">\n${rendered.content}\n</base>`);
 						} catch (err) {
 							console.warn(`[spawn] Failed to render base ${baseId}:`, err.message);
@@ -984,7 +977,7 @@ export async function POST({ request }) {
 
 					if (renderedParts.length > 0) {
 						basesContent = `<knowledge-bases>\n${renderedParts.join('\n')}\n</knowledge-bases>`;
-						console.log(`[spawn] Injecting ${renderedParts.length} knowledge base(s) (~${totalTokens} tokens)`);
+						console.log(`[spawn] Injecting ${renderedParts.length} knowledge base(s)`);
 					}
 				}
 			} catch (err) {

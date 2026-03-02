@@ -23,6 +23,7 @@
 	import { getProjectColor } from '$lib/utils/projectColors';
 	import VoiceInput from './VoiceInput.svelte';
 	import BaseAttachChips from './bases/BaseAttachChips.svelte';
+	import DataTableAttachChips from './bases/DataTableAttachChips.svelte';
 	import { getBases as getBasesFromStore, isStoreInitialized as isBasesStoreInitialized } from '$lib/stores/bases.svelte';
 	import PromptInput from './quick-commands/PromptInput.svelte';
 	import CreatePaste from './tasks/CreatePaste.svelte';
@@ -320,6 +321,9 @@
 
 	// Knowledge base selection
 	let selectedBaseIds = $state<string[]>([]);
+
+	// Data table selection
+	let selectedTableNames = $state<string[]>([]);
 
 	// Command dropdown state (searchable, namespace-grouped)
 	let cmdDropdownOpen = $state(false);
@@ -1189,6 +1193,22 @@
 						});
 					} catch (err) {
 						console.warn(`Failed to attach base ${baseId}:`, err);
+					}
+				}
+			}
+
+			// Attach data tables if any
+			if (selectedTableNames.length > 0) {
+				const project = formData.project || getActiveProject();
+				for (const tableName of selectedTableNames) {
+					try {
+						await fetch(`/api/tasks/${taskId}/tables`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ project, tableName })
+						});
+					} catch (err) {
+						console.warn(`Failed to attach table ${tableName}:`, err);
 					}
 				}
 			}

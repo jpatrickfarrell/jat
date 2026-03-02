@@ -14,10 +14,15 @@ export {
 	createBase,
 	updateBase,
 	deleteBase,
-	// Task attachment
+	// Task ↔ Base attachment
 	attachBaseToTask,
 	detachBaseFromTask,
 	getTaskBases,
+	// Task ↔ Data Table attachment
+	attachTableToTask,
+	detachTableFromTask,
+	getTaskTables,
+	renderDataTable,
 	// Search
 	searchBases,
 	// Render

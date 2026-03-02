@@ -23,6 +23,7 @@
 	import { getProjectColor } from '$lib/utils/projectColors';
 	import VoiceInput from './VoiceInput.svelte';
 	import BaseAttachChips from './bases/BaseAttachChips.svelte';
+	import { getBases as getBasesFromStore, isStoreInitialized as isBasesStoreInitialized } from '$lib/stores/bases.svelte';
 	import PromptInput from './quick-commands/PromptInput.svelte';
 	import CreatePaste from './tasks/CreatePaste.svelte';
 	import CreateTemplate from './tasks/CreateTemplate.svelte';
@@ -260,6 +261,20 @@
 					formData.type = 'chore';
 				}
 				initialScheduleType.set(null);
+			}
+		}
+	});
+
+	// Pre-fill always-inject bases when drawer opens and bases store is ready.
+	// Runs once per drawer-open: when the store becomes initialized, seed selectedBaseIds
+	// with always_inject bases (unless user or AI has already modified the field).
+	$effect(() => {
+		if (isOpen && isBasesStoreInitialized() && !userModifiedFields.has('bases') && selectedBaseIds.length === 0) {
+			const alwaysInjectIds = getBasesFromStore()
+				.filter(b => b.always_inject)
+				.map(b => b.id);
+			if (alwaysInjectIds.length > 0) {
+				selectedBaseIds = alwaysInjectIds;
 			}
 		}
 	});

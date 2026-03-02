@@ -34,6 +34,10 @@
 	import { toLocalDateStr, formatDisplayDate, parseLocalDate } from '$lib/utils/completedTaskHelpers';
 	import DurationTrack from '$lib/components/history/DurationTrack.svelte';
 	import { reveal } from '$lib/actions/reveal';
+	import { formatShortDate, parseTimestamp } from '$lib/utils/dateFormatters';
+	import { isHumanTask } from '$lib/utils/badgeHelpers';
+	import { getFileTypeInfoFromPath } from '$lib/utils/fileUtils';
+	import { addToast } from '$lib/stores/toasts.svelte';
 
 	interface TmuxSession {
 		name: string;
@@ -69,11 +73,21 @@
 		assignee?: string;
 		labels?: string[];
 		created_at?: string;
+		due_date?: string | null;
 		integration?: { sourceId: string; sourceType: string; sourceName: string } | null;
 	}
 	let openTasks = $state<OpenTask[]>([]);
 	let openTasksCollapsed = $state(false);
 	let openTasksLoading = $state(false);
+	let openTaskImages = $state<Record<string, Array<{ path: string; id: string; uploadedAt?: string }>>>({});
+	let spawningTaskId = $state<string | null>(null);
+
+	// Due date picker state
+	let dueDatePickerTaskId = $state<string | null>(null);
+	let dueDatePickerPos = $state<{ x: number; y: number } | null>(null);
+	let dueDateTempValue = $state('');
+	let dueDateTempTime = $state('');
+	let dueDateSaving = $state(false);
 
 	// Selected project (synced from URL ?project= param, managed by TopBar)
 	let selectedProject = $state<string | null>(null);
@@ -442,12 +456,164 @@
 		}
 	}
 
+	// Fetch task images for open tasks
+	async function fetchOpenTaskImages() {
+		try {
+			const response = await fetch('/api/tasks/images');
+			if (!response.ok) return;
+			const data = await response.json();
+			openTaskImages = data.images || {};
+		} catch {
+			// Silent fail
+		}
+	}
+
+	// Due date helpers
+	function formatDueDate(dateStr: string | null | undefined): string {
+		if (!dateStr) return '';
+		const date = parseTimestamp(dateStr);
+		if (!date) return '';
+		return formatShortDate(dateStr);
+	}
+
+	function getDueDateColor(dateStr: string | null | undefined): string {
+		if (!dateStr) return '';
+		const date = parseTimestamp(dateStr);
+		if (!date) return '';
+		const now = new Date();
+		const diffMs = date.getTime() - now.getTime();
+		const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+		if (diffDays < 0)  return 'oklch(0.70 0.18 30)';
+		if (diffDays <= 1) return 'oklch(0.75 0.18 50)';
+		if (diffDays <= 3) return 'oklch(0.75 0.15 85)';
+		return 'oklch(0.60 0.02 250)';
+	}
+
+	function openDueDatePicker(task: OpenTask, e: MouseEvent) {
+		e.stopPropagation();
+		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		dueDatePickerTaskId = task.id;
+		if (task.due_date) {
+			const d = parseTimestamp(task.due_date);
+			if (d) {
+				const year = d.getFullYear();
+				const month = String(d.getMonth() + 1).padStart(2, '0');
+				const day = String(d.getDate()).padStart(2, '0');
+				dueDateTempValue = `${year}-${month}-${day}`;
+				const hours = d.getHours();
+				const mins = d.getMinutes();
+				dueDateTempTime = (hours !== 0 || mins !== 0) ? `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}` : '';
+			} else {
+				dueDateTempValue = '';
+				dueDateTempTime = '';
+			}
+		} else {
+			dueDateTempValue = '';
+			dueDateTempTime = '';
+		}
+		const pickerHeight = 200;
+		const pickerWidth = 260;
+		const spaceBelow = window.innerHeight - rect.bottom;
+		const y = spaceBelow < pickerHeight + 8
+			? Math.max(8, rect.top - pickerHeight - 4)
+			: rect.bottom + 4;
+		const x = Math.min(rect.left, window.innerWidth - pickerWidth - 8);
+		dueDatePickerPos = { x, y };
+	}
+
+	function closeDueDatePicker() {
+		dueDatePickerTaskId = null;
+		dueDatePickerPos = null;
+	}
+
+	async function saveDueDate() {
+		if (!dueDatePickerTaskId) return;
+		dueDateSaving = true;
+		try {
+			let dueDate: string | null = null;
+			if (dueDateTempValue) {
+				dueDate = dueDateTempTime ? `${dueDateTempValue}T${dueDateTempTime}:00` : `${dueDateTempValue}T00:00:00`;
+			}
+			const res = await fetch(`/api/tasks/${dueDatePickerTaskId}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ due_date: dueDate })
+			});
+			if (res.ok) {
+				const idx = openTasks.findIndex(t => t.id === dueDatePickerTaskId);
+				if (idx !== -1) {
+					openTasks[idx] = { ...openTasks[idx], due_date: dueDate };
+					openTasks = [...openTasks];
+				}
+				closeDueDatePicker();
+			} else {
+				addToast({ message: 'Failed to update due date', type: 'error' });
+			}
+		} catch {
+			addToast({ message: 'Failed to update due date', type: 'error' });
+		} finally {
+			dueDateSaving = false;
+		}
+	}
+
+	async function clearDueDate() {
+		if (!dueDatePickerTaskId) return;
+		dueDateSaving = true;
+		try {
+			const res = await fetch(`/api/tasks/${dueDatePickerTaskId}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ due_date: null })
+			});
+			if (res.ok) {
+				const idx = openTasks.findIndex(t => t.id === dueDatePickerTaskId);
+				if (idx !== -1) {
+					openTasks[idx] = { ...openTasks[idx], due_date: null };
+					openTasks = [...openTasks];
+				}
+				closeDueDatePicker();
+			} else {
+				addToast({ message: 'Failed to clear due date', type: 'error' });
+			}
+		} catch {
+			addToast({ message: 'Failed to clear due date', type: 'error' });
+		} finally {
+			dueDateSaving = false;
+		}
+	}
+
+	// Spawn handler
+	async function handleSpawnOpenTask(task: OpenTask) {
+		spawningTaskId = task.id;
+		try {
+			const response = await fetch('/api/work/spawn', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ taskId: task.id, autoStart: true })
+			});
+			if (response.ok) {
+				const data = await response.json();
+				addToast({ message: `Spawned ${data.session?.agentName || 'agent'} for ${task.id}`, type: 'success' });
+				// Refresh open tasks (the spawned task will move to in_progress)
+				fetchOpenTasks(selectedProject);
+			} else {
+				const data = await response.json().catch(() => ({}));
+				addToast({ message: data.error || 'Failed to spawn agent', type: 'error' });
+			}
+		} catch {
+			addToast({ message: 'Failed to spawn agent', type: 'error' });
+		} finally {
+			spawningTaskId = null;
+		}
+	}
+
 	// Sync selectedProject from URL and fetch open tasks when project changes
 	$effect(() => {
 		if (browser) {
 			const projectParam = $page.url.searchParams.get('project');
 			selectedProject = projectParam || null;
 			fetchOpenTasks(projectParam || null);
+			fetchOpenTaskImages();
 		}
 	});
 
@@ -1837,18 +2003,20 @@
 							{:else}
 								{#each openTasks as task, i (task.id)}
 									{@const projectColor = getProjectColorReactive(task.id)}
+									{@const taskAttachments = openTaskImages?.[task.id]}
 									<!-- svelte-ignore a11y_no_static_element_interactions -->
+									<!-- svelte-ignore a11y_click_events_have_key_events -->
 									<div
 										class="open-task-row group"
 										use:reveal={{ animation: 'fade-in', delay: i * 0.04 }}
 										onclick={() => openTaskDetailDrawer(task.id)}
 									>
+
 										<div class="open-task-badge">
 											<TaskIdBadge
-												task={{ id: task.id, status: task.status, title: task.title, issue_type: task.issue_type, integration: task.integration || null }}
+												task={{ id: task.id, status: task.status, title: task.title, issue_type: task.issue_type, priority: task.priority, created_at: task.created_at, labels: task.labels, integration: task.integration || null }}
 												size="sm"
 												variant="agentPill"
-												showType={false}
 											/>
 										</div>
 										<div class="open-task-info">
@@ -1857,14 +2025,68 @@
 												<span class="open-task-meta">assigned to {task.assignee}</span>
 											{/if}
 										</div>
-										<div class="open-task-actions">
-											{#if task.labels && task.labels.length > 0}
-												<div class="open-task-labels">
-													{#each task.labels.slice(0, 2) as label}
-														<span class="open-task-label">{label}</span>
-													{/each}
+										<!-- Attachment thumbnail -->
+										<div class="open-task-attachment">
+											{#if taskAttachments && taskAttachments.length > 0}
+												{@const firstTypeInfo = getFileTypeInfoFromPath(taskAttachments[0].path)}
+												<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+												<div class="ot-attachment-thumb" onclick={(e) => { e.stopPropagation(); window.open(`/api/work/image/${encodeURIComponent(taskAttachments[0].path)}`, '_blank'); }} title="View attachment">
+													{#if firstTypeInfo.category === 'image'}
+														<img src={`/api/work/image/${encodeURIComponent(taskAttachments[0].path)}`} alt="" class="ot-attachment-img" />
+													{:else}
+														<svg class="w-4 h-4" style="color: {firstTypeInfo.color};" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+															<path stroke-linecap="round" stroke-linejoin="round" d={firstTypeInfo.icon} />
+														</svg>
+													{/if}
+													{#if taskAttachments.length > 1}
+														<span class="ot-attachment-count">+{taskAttachments.length - 1}</span>
+													{/if}
 												</div>
 											{/if}
+										</div>
+
+										<div class="open-task-actions">
+											<!-- Due date -->
+											<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+											<div class="ot-due-date" onclick={(e) => { e.stopPropagation(); openDueDatePicker(task, e); }}>
+												{#if task.due_date}
+													<span style="color: {getDueDateColor(task.due_date)}" title={task.due_date}>{formatDueDate(task.due_date)}</span>
+												{:else}
+													<svg class="ot-calendar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
+														<rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+													</svg>
+												{/if}
+											</div>
+											<!-- Spawn button -->
+											<div class="ot-spawn">
+												{#if isHumanTask(task)}
+													<div class="ot-human-icon" title="Human task — complete manually">
+														<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4" style="color: oklch(0.70 0.18 45);">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+														</svg>
+													</div>
+												{:else}
+													<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+													<button
+														class="ot-spawn-btn"
+														class:ot-spawning={spawningTaskId === task.id}
+														onclick={(e) => { e.stopPropagation(); handleSpawnOpenTask(task); }}
+														disabled={spawningTaskId === task.id}
+														title="Launch agent"
+													>
+														{#if spawningTaskId === task.id}
+															<svg class="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round" /></svg>
+														{:else}
+															<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none">
+																<path d="M12 2C12 2 8 6 8 12C8 15 9 17 10 18L10 21C10 21.5 10.5 22 11 22H13C13.5 22 14 21.5 14 21L14 18C15 17 16 15 16 12C16 6 12 2 12 2Z" fill="currentColor" />
+																<circle cx="12" cy="10" r="2" fill="oklch(0.75 0.15 200)" />
+																<path d="M8 14L5 17L6 18L8 16Z" fill="currentColor" />
+																<path d="M16 14L19 17L18 18L16 16Z" fill="currentColor" />
+															</svg>
+														{/if}
+													</button>
+												{/if}
+											</div>
 											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="open-task-arrow">
 												<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
 											</svg>
@@ -1874,6 +2096,28 @@
 							{/if}
 						</div>
 					{/if}
+				</div>
+			{/if}
+
+			<!-- Due date picker popover (fixed positioned) -->
+			{#if dueDatePickerTaskId && dueDatePickerPos}
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<!-- svelte-ignore a11y_click_events_have_key_events -->
+				<div class="fixed inset-0 z-40" onclick={closeDueDatePicker}></div>
+				<div class="ot-due-date-picker z-50" style="position: fixed; top: {dueDatePickerPos.y}px; left: {dueDatePickerPos.x}px;">
+					<div class="ot-picker-header">Set Due Date</div>
+					<div class="ot-picker-fields">
+						<input type="date" class="ot-picker-input" bind:value={dueDateTempValue} />
+						<input type="time" class="ot-picker-input ot-picker-time" bind:value={dueDateTempTime} />
+					</div>
+					<div class="ot-picker-actions">
+						<button class="ot-picker-btn ot-picker-clear" onclick={clearDueDate} disabled={dueDateSaving}>Clear</button>
+						<div class="ot-picker-spacer"></div>
+						<button class="ot-picker-btn ot-picker-cancel" onclick={closeDueDatePicker}>Cancel</button>
+						<button class="ot-picker-btn ot-picker-save" onclick={saveDueDate} disabled={dueDateSaving || !dueDateTempValue}>
+							{#if dueDateSaving}Saving...{:else}Save{/if}
+						</button>
+					</div>
 				</div>
 			{/if}
 
@@ -2854,21 +3098,6 @@
 		flex-shrink: 0;
 	}
 
-	.open-task-labels {
-		display: flex;
-		gap: 0.25rem;
-	}
-
-	.open-task-label {
-		font-size: 0.6rem;
-		font-weight: 500;
-		padding: 1px 5px;
-		border-radius: 4px;
-		background: oklch(0.25 0.02 250);
-		color: oklch(0.60 0.02 250);
-		white-space: nowrap;
-	}
-
 	.open-task-arrow {
 		width: 16px;
 		height: 16px;
@@ -2880,6 +3109,223 @@
 	.open-task-row:hover .open-task-arrow {
 		color: oklch(from var(--color-base-content) l c h / 65%);
 		transform: translateX(2px);
+	}
+
+	/* Attachment thumbnail */
+	.open-task-attachment {
+		width: 28px;
+		height: 28px;
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.ot-attachment-thumb {
+		position: relative;
+		width: 28px;
+		height: 28px;
+		border-radius: 4px;
+		overflow: hidden;
+		cursor: pointer;
+		border: 1px solid oklch(0.30 0.02 250);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: oklch(0.18 0.01 250);
+		transition: border-color 0.15s;
+	}
+
+	.ot-attachment-thumb:hover {
+		border-color: oklch(0.45 0.05 250);
+	}
+
+	.ot-attachment-img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+
+	.ot-attachment-count {
+		position: absolute;
+		bottom: -2px;
+		right: -2px;
+		font-size: 0.5rem;
+		font-weight: 700;
+		background: oklch(0.35 0.10 240);
+		color: oklch(0.90 0.05 240);
+		padding: 0px 3px;
+		border-radius: 4px;
+		line-height: 1.2;
+	}
+
+	/* Due date */
+	.ot-due-date {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 60px;
+		padding: 2px 4px;
+		border-radius: 4px;
+		cursor: pointer;
+		font-size: 0.7rem;
+		font-weight: 500;
+		transition: background 0.15s;
+		flex-shrink: 0;
+	}
+
+	.ot-due-date:hover {
+		background: oklch(0.22 0.02 250);
+	}
+
+	.ot-calendar-icon {
+		opacity: 0;
+		color: oklch(0.45 0.02 250);
+		transition: opacity 0.15s;
+	}
+
+	.open-task-row:hover .ot-calendar-icon {
+		opacity: 0.5;
+	}
+
+	/* Spawn button */
+	.ot-spawn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+	}
+
+	.ot-human-icon {
+		width: 28px;
+		height: 28px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		opacity: 0.5;
+		cursor: default;
+	}
+
+	.ot-spawn-btn {
+		width: 28px;
+		height: 28px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: none;
+		background: transparent;
+		border-radius: 4px;
+		cursor: pointer;
+		color: oklch(0.55 0.02 250);
+		transition: background 0.15s, color 0.15s;
+		padding: 0;
+	}
+
+	.ot-spawn-btn:hover {
+		background: oklch(0.25 0.08 200);
+		color: oklch(0.80 0.15 200);
+	}
+
+	.ot-spawn-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.ot-spawn-btn.ot-spawning {
+		color: oklch(0.70 0.15 200);
+	}
+
+	/* Due date picker popover */
+	.ot-due-date-picker {
+		background: oklch(0.18 0.02 250);
+		border: 1px solid oklch(0.28 0.03 250);
+		border-radius: 8px;
+		padding: 0.75rem;
+		min-width: 220px;
+		box-shadow: 0 8px 32px oklch(0 0 0 / 0.5);
+	}
+
+	.ot-picker-header {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: oklch(0.70 0.02 250);
+		margin-bottom: 0.5rem;
+	}
+
+	.ot-picker-fields {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+		margin-bottom: 0.625rem;
+	}
+
+	.ot-picker-input {
+		width: 100%;
+		padding: 0.35rem 0.5rem;
+		font-size: 0.75rem;
+		background: oklch(0.14 0.01 250);
+		border: 1px solid oklch(0.25 0.02 250);
+		border-radius: 4px;
+		color: var(--color-base-content);
+		outline: none;
+	}
+
+	.ot-picker-input:focus {
+		border-color: oklch(0.50 0.15 200);
+	}
+
+	.ot-picker-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+	}
+
+	.ot-picker-spacer {
+		flex: 1;
+	}
+
+	.ot-picker-btn {
+		padding: 0.25rem 0.625rem;
+		font-size: 0.7rem;
+		font-weight: 500;
+		border-radius: 4px;
+		border: 1px solid oklch(0.25 0.02 250);
+		cursor: pointer;
+		transition: background 0.15s, border-color 0.15s;
+	}
+
+	.ot-picker-clear {
+		background: transparent;
+		color: oklch(0.65 0.15 25);
+		border-color: oklch(0.40 0.10 25 / 0.3);
+	}
+
+	.ot-picker-clear:hover {
+		background: oklch(0.25 0.08 25 / 0.2);
+	}
+
+	.ot-picker-cancel {
+		background: transparent;
+		color: oklch(0.60 0.02 250);
+	}
+
+	.ot-picker-cancel:hover {
+		background: oklch(0.22 0.02 250);
+	}
+
+	.ot-picker-save {
+		background: oklch(0.35 0.12 200);
+		color: oklch(0.90 0.05 200);
+		border-color: oklch(0.45 0.12 200);
+	}
+
+	.ot-picker-save:hover {
+		background: oklch(0.40 0.14 200);
+	}
+
+	.ot-picker-save:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 
 	/* Recently Closed Sessions */

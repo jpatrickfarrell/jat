@@ -109,7 +109,7 @@
 	let createSaving = $state(false);
 
 	// Create table mode
-	let createMode = $state<'manual' | 'csv' | 'json' | 'sql'>('manual');
+	let createMode = $state<'manual' | 'csv' | 'json' | 'sql' | 'external'>('manual');
 	let createCsvText = $state('');
 	let createCsvFormat = $state<'auto' | 'tsv' | 'csv'>('auto');
 	let createJsonText = $state('');
@@ -117,6 +117,33 @@
 	let inferredColumns = $state<Array<{name: string, type: string, semanticType: SemanticType}>>([]);
 	let inferredRows = $state<Array<Record<string, any>>>([]);
 	let createPreviewError = $state('');
+
+	// External source state
+	let externalSource = $state<'coda' | 'gsheet' | 'notion' | 'airtable' | 'csv-url'>('coda');
+	let externalFetching = $state(false);
+	let externalError = $state('');
+	let externalAuthStatus = $state<Record<string, boolean | null>>({});
+
+	// Coda
+	let codaDocId = $state('');
+	let codaTableId = $state('');
+	let codaDocTables = $state<{id: string, name: string, rowCount: number}[]>([]);
+	let codaTablesLoading = $state(false);
+
+	// Google Sheets
+	let gsheetUrl = $state('');
+
+	// Notion
+	let notionDatabaseId = $state('');
+
+	// Airtable
+	let airtableBaseId = $state('');
+	let airtableTableId = $state('');
+	let airtableTables = $state<{id: string, name: string}[]>([]);
+	let airtableTablesLoading = $state(false);
+
+	// CSV URL
+	let csvUrl = $state('');
 
 	// Column settings popover
 	let columnSettingsOpen = $state<string | null>(null);
@@ -536,12 +563,144 @@
 		}
 	}
 
+	// ─── External source functions ─────────────────────────────────
+
+	async function checkExternalAuth(source: string) {
+		try {
+			const res = await fetch('/api/data/external-fetch', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ source, action: 'check-auth' })
+			});
+			const data = await res.json();
+			externalAuthStatus = { ...externalAuthStatus, [source]: data.hasKey };
+		} catch {
+			externalAuthStatus = { ...externalAuthStatus, [source]: null };
+		}
+	}
+
+	async function listExternalTables() {
+		const source = externalSource;
+		externalError = '';
+
+		if (source === 'coda') {
+			if (!codaDocId.trim()) { externalError = 'Enter a Coda doc ID or URL'; return; }
+			codaTablesLoading = true;
+			try {
+				const res = await fetch('/api/data/external-fetch', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ source: 'coda', action: 'list-tables', docId: codaDocId.trim() })
+				});
+				const data = await res.json();
+				if (!res.ok) throw new Error(data.error || 'Failed to list tables');
+				codaDocTables = data.tables || [];
+				if (codaDocTables.length === 1) codaTableId = codaDocTables[0].id;
+			} catch (e: any) {
+				externalError = e.message;
+			} finally {
+				codaTablesLoading = false;
+			}
+		} else if (source === 'airtable') {
+			if (!airtableBaseId.trim()) { externalError = 'Enter an Airtable base ID or URL'; return; }
+			airtableTablesLoading = true;
+			try {
+				const res = await fetch('/api/data/external-fetch', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ source: 'airtable', action: 'list-tables', baseId: airtableBaseId.trim() })
+				});
+				const data = await res.json();
+				if (!res.ok) throw new Error(data.error || 'Failed to list tables');
+				airtableTables = data.tables || [];
+				if (airtableTables.length === 1) airtableTableId = airtableTables[0].id;
+			} catch (e: any) {
+				externalError = e.message;
+			} finally {
+				airtableTablesLoading = false;
+			}
+		}
+	}
+
+	async function fetchExternal() {
+		externalError = '';
+		externalFetching = true;
+		inferredColumns = [];
+		inferredRows = [];
+
+		try {
+			let body: Record<string, any> = { source: externalSource };
+
+			switch (externalSource) {
+				case 'coda':
+					if (!codaDocId.trim() || !codaTableId.trim()) { externalError = 'Select a doc and table'; return; }
+					body.docId = codaDocId.trim();
+					body.tableId = codaTableId.trim();
+					break;
+				case 'gsheet':
+					if (!gsheetUrl.trim()) { externalError = 'Enter a Google Sheets URL'; return; }
+					body.url = gsheetUrl.trim();
+					break;
+				case 'notion':
+					if (!notionDatabaseId.trim()) { externalError = 'Enter a Notion database ID or URL'; return; }
+					body.databaseId = notionDatabaseId.trim();
+					break;
+				case 'airtable':
+					if (!airtableBaseId.trim() || !airtableTableId.trim()) { externalError = 'Select a base and table'; return; }
+					body.baseId = airtableBaseId.trim();
+					body.tableId = airtableTableId.trim();
+					break;
+				case 'csv-url':
+					if (!csvUrl.trim()) { externalError = 'Enter a URL'; return; }
+					body.url = csvUrl.trim();
+					break;
+			}
+
+			const res = await fetch('/api/data/external-fetch', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body)
+			});
+			const data = await res.json();
+			if (!res.ok) throw new Error(data.error || 'Fetch failed');
+
+			if (!data.rows || data.rows.length === 0) {
+				externalError = 'No rows returned from source';
+				return;
+			}
+
+			// Convert columns to inferredColumns format with semantic type inference
+			inferredColumns = (data.columns || []).map((col: any) => {
+				const vals = data.rows.map((r: any) => r[col.name]);
+				const st = inferSemanticType(vals);
+				return { name: col.name, type: SEMANTIC_TO_SQLITE[st], semanticType: st };
+			});
+			inferredRows = data.rows;
+
+			// Auto-fill table name
+			if (!newTableName.trim() && data.metadata?.suggestedTableName) {
+				newTableName = data.metadata.suggestedTableName;
+			}
+
+			successToast(`Fetched ${data.rows.length} rows from ${data.metadata?.sourceName || externalSource}`);
+		} catch (e: any) {
+			externalError = e.message;
+		} finally {
+			externalFetching = false;
+		}
+	}
+
 	// Reset mode-specific state when switching modes
 	function switchCreateMode(mode: typeof createMode) {
 		createMode = mode;
 		inferredColumns = [];
 		inferredRows = [];
 		createPreviewError = '';
+		externalError = '';
+		// Check auth when switching to external mode
+		if (mode === 'external') {
+			checkExternalAuth(externalSource);
+		}
 	}
 
 	async function handleCreateTable() {
@@ -560,9 +719,9 @@
 				errorToast('At least one column is required');
 				return;
 			}
-		} else if (createMode === 'csv' || createMode === 'json') {
+		} else if (createMode === 'csv' || createMode === 'json' || createMode === 'external') {
 			if (inferredColumns.length === 0) {
-				errorToast('Parse your data first to detect columns');
+				errorToast(createMode === 'external' ? 'Fetch data first to detect columns' : 'Parse your data first to detect columns');
 				return;
 			}
 			columns = inferredColumns.map(c => ({
@@ -636,6 +795,16 @@
 			inferredColumns = [];
 			inferredRows = [];
 			createPreviewError = '';
+			externalError = '';
+			codaDocId = '';
+			codaTableId = '';
+			codaDocTables = [];
+			gsheetUrl = '';
+			notionDatabaseId = '';
+			airtableBaseId = '';
+			airtableTableId = '';
+			airtableTables = [];
+			csvUrl = '';
 			await fetchTables();
 			selectTable(data.table);
 		} catch (e) {
@@ -2378,6 +2547,7 @@
 					<button class="create-mode-btn" class:active={createMode === 'csv'} onclick={() => switchCreateMode('csv')}>CSV / TSV</button>
 					<button class="create-mode-btn" class:active={createMode === 'json'} onclick={() => switchCreateMode('json')}>JSON</button>
 					<button class="create-mode-btn" class:active={createMode === 'sql'} onclick={() => switchCreateMode('sql')}>SQL</button>
+					<button class="create-mode-btn" class:active={createMode === 'external'} onclick={() => switchCreateMode('external')}>External</button>
 				</div>
 
 				<div class="form-group">
@@ -2476,6 +2646,123 @@
 						</button>
 						<span class="form-hint">Only column definitions are used. Constraints and indexes are ignored.</span>
 					</div>
+
+				<!-- External Source Mode -->
+				{:else if createMode === 'external'}
+					<div class="form-group">
+						<!-- Source pills -->
+						<div class="external-source-pills">
+							<button class="format-pill" class:active={externalSource === 'coda'} onclick={() => { externalSource = 'coda'; checkExternalAuth('coda'); }}>Coda</button>
+							<button class="format-pill" class:active={externalSource === 'gsheet'} onclick={() => { externalSource = 'gsheet'; checkExternalAuth('gsheet'); }}>Google Sheets</button>
+							<button class="format-pill" class:active={externalSource === 'notion'} onclick={() => { externalSource = 'notion'; checkExternalAuth('notion'); }}>Notion</button>
+							<button class="format-pill" class:active={externalSource === 'airtable'} onclick={() => { externalSource = 'airtable'; checkExternalAuth('airtable'); }}>Airtable</button>
+							<button class="format-pill" class:active={externalSource === 'csv-url'} onclick={() => { externalSource = 'csv-url'; }}>CSV URL</button>
+						</div>
+
+						<!-- Auth status -->
+						{#if externalSource !== 'csv-url'}
+							{#if externalAuthStatus[externalSource] === true}
+								<span class="ext-auth-badge ext-auth-ok">
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" style="width:12px;height:12px"><path fill-rule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd" /></svg>
+									Key configured
+								</span>
+							{:else if externalAuthStatus[externalSource] === false}
+								<span class="ext-auth-badge ext-auth-missing">
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" style="width:12px;height:12px"><path fill-rule="evenodd" d="M6.701 2.25c.577-1 2.02-1 2.598 0l5.196 9a1.5 1.5 0 0 1-1.299 2.25H2.804a1.5 1.5 0 0 1-1.3-2.25l5.197-9ZM8 4a.75.75 0 0 1 .75.75v3a.75.75 0 0 1-1.5 0v-3A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" /></svg>
+									API key needed — <a href="/config?tab=keys" style="color:inherit;text-decoration:underline;">Settings</a>
+								</span>
+							{/if}
+						{/if}
+					</div>
+
+					<!-- Source-specific inputs -->
+					{#if externalSource === 'coda'}
+						<div class="form-group">
+							<label class="form-label">Doc ID or URL</label>
+							<div style="display:flex;gap:0.5rem;align-items:center;">
+								<input type="text" class="form-input font-mono flex-1" bind:value={codaDocId} placeholder="dAbCdEfGhI or coda.io/d/..." />
+								<button class="btn-add-col" onclick={listExternalTables} disabled={codaTablesLoading || !codaDocId.trim()}>
+									{#if codaTablesLoading}<span class="loading loading-spinner loading-xs"></span>{/if}
+									List Tables
+								</button>
+							</div>
+						</div>
+						{#if codaDocTables.length > 0}
+							<div class="form-group">
+								<label class="form-label">Table</label>
+								<select class="form-input" bind:value={codaTableId}>
+									<option value="">Select a table...</option>
+									{#each codaDocTables as t}
+										<option value={t.id}>{t.name} ({t.rowCount} rows)</option>
+									{/each}
+								</select>
+							</div>
+						{:else if !codaTablesLoading && codaDocId.trim()}
+							<div class="form-group">
+								<label class="form-label">Table ID</label>
+								<input type="text" class="form-input font-mono" bind:value={codaTableId} placeholder="grid-abcdef" />
+							</div>
+						{/if}
+
+					{:else if externalSource === 'gsheet'}
+						<div class="form-group">
+							<label class="form-label">Sheet URL or ID</label>
+							<input type="text" class="form-input font-mono" bind:value={gsheetUrl} placeholder="https://docs.google.com/spreadsheets/d/..." />
+							<span class="form-hint">Public sheets work without an API key. Private sheets need a Google API key.</span>
+						</div>
+
+					{:else if externalSource === 'notion'}
+						<div class="form-group">
+							<label class="form-label">Database URL or ID</label>
+							<input type="text" class="form-input font-mono" bind:value={notionDatabaseId} placeholder="https://notion.so/... or 32-char ID" />
+						</div>
+
+					{:else if externalSource === 'airtable'}
+						<div class="form-group">
+							<label class="form-label">Base ID or URL</label>
+							<div style="display:flex;gap:0.5rem;align-items:center;">
+								<input type="text" class="form-input font-mono flex-1" bind:value={airtableBaseId} placeholder="appAbCdEfGhIj or airtable.com/app..." />
+								<button class="btn-add-col" onclick={listExternalTables} disabled={airtableTablesLoading || !airtableBaseId.trim()}>
+									{#if airtableTablesLoading}<span class="loading loading-spinner loading-xs"></span>{/if}
+									List Tables
+								</button>
+							</div>
+						</div>
+						{#if airtableTables.length > 0}
+							<div class="form-group">
+								<label class="form-label">Table</label>
+								<select class="form-input" bind:value={airtableTableId}>
+									<option value="">Select a table...</option>
+									{#each airtableTables as t}
+										<option value={t.id}>{t.name}</option>
+									{/each}
+								</select>
+							</div>
+						{:else if !airtableTablesLoading && airtableBaseId.trim()}
+							<div class="form-group">
+								<label class="form-label">Table ID or Name</label>
+								<input type="text" class="form-input font-mono" bind:value={airtableTableId} placeholder="tblAbCdEfGh or Table Name" />
+							</div>
+						{/if}
+
+					{:else if externalSource === 'csv-url'}
+						<div class="form-group">
+							<label class="form-label">CSV/TSV URL</label>
+							<input type="text" class="form-input font-mono" bind:value={csvUrl} placeholder="https://example.com/data.csv" />
+							<span class="form-hint">Any public URL that returns CSV or TSV data.</span>
+						</div>
+					{/if}
+
+					<!-- Fetch button -->
+					<button class="btn-add-col" onclick={fetchExternal} disabled={externalFetching} style="align-self:flex-start">
+						{#if externalFetching}<span class="loading loading-spinner loading-xs"></span>{/if}
+						Fetch & Preview
+					</button>
+
+					<!-- External error -->
+					{#if externalError}
+						<div class="create-preview-error">{externalError}</div>
+					{/if}
 				{/if}
 
 				<!-- Inferred columns preview (shared by csv/json/sql) -->
@@ -4056,6 +4343,29 @@
 		background: oklch(0.30 0.08 240);
 		color: oklch(0.90 0.05 240);
 		border-color: oklch(0.40 0.10 240);
+	}
+
+	.external-source-pills {
+		display: flex;
+		gap: 0.25rem;
+		flex-wrap: wrap;
+		margin-bottom: 0.5rem;
+	}
+	.ext-auth-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.6875rem;
+		padding: 0.125rem 0.5rem;
+		border-radius: 1rem;
+	}
+	.ext-auth-ok {
+		background: oklch(0.30 0.08 145);
+		color: oklch(0.85 0.10 145);
+	}
+	.ext-auth-missing {
+		background: oklch(0.30 0.08 45);
+		color: oklch(0.85 0.12 45);
 	}
 
 	.create-textarea {

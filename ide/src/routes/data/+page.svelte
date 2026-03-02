@@ -1628,22 +1628,26 @@
 		return [...ordered, ...unordered];
 	});
 
-	// All columns for manage panel (including hidden, respecting order)
+	// All columns for manage panel (including hidden, respecting display order)
 	const allColumnsManage = $derived.by(() => {
-		const cols = schema.filter(c => c.name !== 'rowid');
-		if (columnOrder.length === 0) return cols;
-		const orderMap = new Map(columnOrder.map((name, i) => [name, i]));
-		const ordered: ColumnInfo[] = [];
-		const unordered: ColumnInfo[] = [];
-		for (const col of cols) {
-			if (orderMap.has(col.name)) {
-				ordered.push(col);
-			} else {
-				unordered.push(col);
+		const allCols = schema.filter(c => c.name !== 'rowid');
+		if (columnOrder.length === 0) return allCols;
+
+		// Use columnOrder as direct sequence for guaranteed order match with table
+		const byName = new Map(allCols.map(c => [c.name, c]));
+		const result: ColumnInfo[] = [];
+		for (const name of columnOrder) {
+			const col = byName.get(name);
+			if (col) {
+				result.push(col);
+				byName.delete(name);
 			}
 		}
-		ordered.sort((a, b) => (orderMap.get(a.name) ?? 0) - (orderMap.get(b.name) ?? 0));
-		return [...ordered, ...unordered];
+		// Append any new columns not yet in the saved order
+		for (const col of byName.values()) {
+			result.push(col);
+		}
+		return result;
 	});
 
 	// Load hidden columns and column order from localStorage when project/table changes

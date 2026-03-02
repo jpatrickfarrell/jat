@@ -78,9 +78,52 @@
 	}
 	let openTasks = $state<OpenTask[]>([]);
 	let openTasksCollapsed = $state(false);
+	let sessionsCollapsed = $state(false);
 	let openTasksLoading = $state(false);
 	let openTaskImages = $state<Record<string, Array<{ path: string; id: string; uploadedAt?: string }>>>({});
 	let spawningTaskId = $state<string | null>(null);
+
+	// Open tasks bulk selection
+	let otSelectedTasks = $state<Set<string>>(new Set());
+	let otLastClicked = $state<string | null>(null);
+
+	// Open tasks selection helpers
+	const otSelectionCount = $derived(otSelectedTasks.size);
+	const otAllSelected = $derived.by(() => {
+		return openTasks.length > 0 && openTasks.every(t => otSelectedTasks.has(t.id));
+	});
+	const otSomeSelected = $derived.by(() => {
+		return openTasks.some(t => otSelectedTasks.has(t.id)) && !otAllSelected;
+	});
+
+	function otToggleTask(taskId: string, event?: MouseEvent) {
+		if (event?.shiftKey && otLastClicked) {
+			const ids = openTasks.map(t => t.id);
+			const a = ids.indexOf(otLastClicked);
+			const b = ids.indexOf(taskId);
+			if (a !== -1 && b !== -1) {
+				const [start, end] = a < b ? [a, b] : [b, a];
+				const next = new Set(otSelectedTasks);
+				for (let i = start; i <= end; i++) next.add(ids[i]);
+				otSelectedTasks = next;
+				otLastClicked = taskId;
+				return;
+			}
+		}
+		const next = new Set(otSelectedTasks);
+		if (next.has(taskId)) next.delete(taskId); else next.add(taskId);
+		otSelectedTasks = next;
+		otLastClicked = taskId;
+	}
+
+	function otToggleAll() {
+		const ids = openTasks.map(t => t.id);
+		if (otAllSelected) {
+			otSelectedTasks = new Set();
+		} else {
+			otSelectedTasks = new Set(ids);
+		}
+	}
 
 	// Due date picker state
 	let dueDatePickerTaskId = $state<string | null>(null);
@@ -1546,11 +1589,26 @@
 		<div class="tmux-content">
 		<!-- Session type tabs + Sort control (above table) -->
 		<div class="table-controls">
-			<SessionsTabs
-				{activeTab}
-				counts={sessionCounts()}
-				onTabChange={handleTabChange}
-			/>
+			<div class="table-controls-left">
+				<SessionsTabs
+					{activeTab}
+					counts={sessionCounts()}
+					onTabChange={handleTabChange}
+				/>
+				<div class="tmux-tip-wrapper">
+					<button class="tmux-tip-btn" aria-label="tmux commands tip">
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="tmux-tip-icon">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
+						</svg>
+						<div class="tmux-tip-tooltip">
+							<span class="tmux-tip-label">Tip:</span>
+							<code class="tmux-tip-code">tmux list-sessions</code>
+							<span class="tmux-tip-sep">or</span>
+							<code class="tmux-tip-code">tmux a -t {"<session>"}</code>
+						</div>
+					</button>
+				</div>
+			</div>
 			<SortDropdown
 				options={SORT_OPTIONS as any}
 				{sortBy}
@@ -1595,6 +1653,27 @@
 		{:else}
 			<!-- Sessions table -->
 			<div class="sessions-table-wrapper">
+				<button
+					class="sessions-collapse-header"
+					onclick={() => sessionsCollapsed = !sessionsCollapsed}
+				>
+					<div class="sessions-collapse-header-left">
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke-width="1.5"
+							stroke="currentColor"
+							class="sessions-collapse-chevron"
+							class:collapsed={sessionsCollapsed}
+						>
+							<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+						</svg>
+						<span class="sessions-collapse-title">Active Sessions</span>
+						<span class="sessions-collapse-count">{filteredSessions.length}</span>
+					</div>
+				</button>
+				{#if !sessionsCollapsed}
 				<table class="sessions-table">
 					<thead>
 						<tr>
@@ -1966,6 +2045,7 @@
 						{/each}
 					</tbody>
 				</table>
+				{/if}
 			</div>
 
 			<!-- Open Tasks (agents tab only, when project is selected) -->
@@ -2008,10 +2088,15 @@
 									<!-- svelte-ignore a11y_click_events_have_key_events -->
 									<div
 										class="open-task-row group"
+										class:ot-has-selection={otSelectionCount > 0}
 										use:reveal={{ animation: 'fade-in', delay: i * 0.04 }}
 										onclick={() => openTaskDetailDrawer(task.id)}
 									>
 
+										<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+										<div class="ot-checkbox" onclick={(e) => { e.stopPropagation(); otToggleTask(task.id, e); }}>
+											<input type="checkbox" checked={otSelectedTasks.has(task.id)} style="pointer-events: none;" />
+										</div>
 										<div class="open-task-badge">
 											<TaskIdBadge
 												task={{ id: task.id, status: task.status, title: task.title, issue_type: task.issue_type, priority: task.priority, created_at: task.created_at, labels: task.labels, integration: task.integration || null }}
@@ -2259,13 +2344,6 @@
 				</div>
 			{/if}
 
-			<!-- Command hint -->
-			<div class="command-hint">
-				<span class="hint-label">Tip:</span>
-				<code class="hint-code">tmux list-sessions</code>
-				<span class="hint-text">or</span>
-				<code class="hint-code">tmux a -t {"<session>"}</code>
-			</div>
 		{/if}
 		</div>
 	</div>
@@ -2654,6 +2732,12 @@
 		margin-bottom: 0.75rem;
 	}
 
+	.table-controls-left {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
 	/* Content wrapper - full width */
 	.tmux-content-wrapper {
 		position: relative;
@@ -2962,6 +3046,58 @@
 		white-space: nowrap;
 	}
 
+	/* Sessions Collapse Header */
+	.sessions-collapse-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		background: oklch(0.18 0.01 250);
+		border: none;
+		border-bottom: 1px solid oklch(0.22 0.02 250);
+		cursor: pointer;
+		width: 100%;
+		text-align: left;
+		transition: background 0.15s;
+	}
+
+	.sessions-collapse-header:hover {
+		background: oklch(0.18 0.01 250);
+	}
+
+	.sessions-collapse-header-left {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.sessions-collapse-chevron {
+		width: 14px;
+		height: 14px;
+		color: oklch(0.55 0.02 250);
+		transition: transform 0.2s;
+	}
+
+	.sessions-collapse-chevron.collapsed {
+		transform: rotate(-90deg);
+	}
+
+	.sessions-collapse-title {
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: oklch(0.65 0.02 250);
+	}
+
+	.sessions-collapse-count {
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: oklch(0.55 0.02 250);
+		background: oklch(0.22 0.02 250);
+		padding: 0.05rem 0.4rem;
+		border-radius: 9999px;
+		font-family: ui-monospace, monospace;
+	}
+
 	/* Open Tasks Section */
 	.open-tasks-section {
 		margin-top: 1.5rem;
@@ -3061,6 +3197,32 @@
 
 	.open-task-row:hover {
 		background: var(--color-base-200);
+	}
+
+	/* Checkbox column */
+	.ot-checkbox {
+		width: 28px;
+		min-width: 28px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		cursor: pointer;
+	}
+
+	.ot-checkbox input {
+		width: 14px;
+		height: 14px;
+		cursor: pointer;
+		accent-color: oklch(0.70 0.18 240);
+		opacity: 0;
+		transition: opacity 0.15s;
+	}
+
+	.open-task-row:hover .ot-checkbox input,
+	.ot-checkbox input:checked,
+	.ot-has-selection .ot-checkbox input {
+		opacity: 1;
 	}
 
 	.open-task-badge {
@@ -3595,34 +3757,71 @@
 		cursor: not-allowed;
 	}
 
-	/* Command hint */
-	.command-hint {
-		margin-top: 1.5rem;
-		padding: 0.75rem 1rem;
-		background: oklch(0.18 0.01 250);
-		border: 1px solid oklch(0.25 0.02 250);
-		border-radius: 6px;
-		font-size: 0.8rem;
-		color: oklch(0.55 0.02 250);
+	/* Tmux tip tooltip (next to SessionsTabs) */
+	.tmux-tip-wrapper {
+		position: relative;
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		flex-wrap: wrap;
 	}
 
-	.hint-label {
+	.tmux-tip-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 0.25rem;
+		border-radius: 4px;
+		color: oklch(0.45 0.02 250);
+		transition: color 0.15s ease;
+	}
+
+	.tmux-tip-btn:hover {
+		color: oklch(0.70 0.10 200);
+	}
+
+	.tmux-tip-icon {
+		width: 16px;
+		height: 16px;
+	}
+
+	.tmux-tip-tooltip {
+		display: none;
+		position: absolute;
+		top: calc(100% + 6px);
+		left: 0;
+		white-space: nowrap;
+		padding: 0.5rem 0.75rem;
+		background: oklch(0.18 0.02 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 6px;
+		box-shadow: 0 4px 12px oklch(0.05 0 0 / 0.4);
+		font-size: 0.8rem;
+		color: oklch(0.55 0.02 250);
+		gap: 0.375rem;
+		align-items: center;
+		z-index: 50;
+	}
+
+	.tmux-tip-btn:hover .tmux-tip-tooltip {
+		display: flex;
+	}
+
+	.tmux-tip-label {
 		color: oklch(0.60 0.02 250);
 	}
 
-	.hint-code {
+	.tmux-tip-code {
 		background: oklch(0.22 0.02 250);
-		padding: 0.2rem 0.5rem;
+		padding: 0.15rem 0.4rem;
 		border-radius: 4px;
 		font-family: ui-monospace, monospace;
 		color: oklch(0.75 0.12 200);
+		font-size: 0.75rem;
 	}
 
-	.hint-text {
+	.tmux-tip-sep {
 		color: oklch(0.45 0.02 250);
 	}
 

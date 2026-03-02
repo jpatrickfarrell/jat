@@ -135,18 +135,90 @@ async function fetchAllPages(url, headers, getItems, getNextUrl) {
 
 // ─── Coda ──────────────────────────────────────────────────────────
 
+/**
+ * Resolve a Coda doc ID from user input (URL, URL slug, or raw API ID).
+ *
+ * Coda URL formats:
+ *   https://coda.io/d/DocName_dXXXXX                    (doc root)
+ *   https://coda.io/d/DocName_dXXXXX/PageName_sYYYYY    (specific page)
+ * The `_dXXXXX` part is a URL slug — `d` is a type prefix, actual API ID is `XXXXX`.
+ *
+ * Uses URL regex extraction first (fast), then falls back to resolveBrowserLink API.
+ */
+async function resolveCodaDocId(rawInput, apiKey) {
+	if (!rawInput) return null;
+
+	// Full URL — try regex extraction first (no API call needed)
+	if (rawInput.includes('coda.io')) {
+		// Match _d{docId} in the URL path: /d/Name_d{docId} or /d/Name_d{docId}/...
+		const slugMatch = rawInput.match(/coda\.io\/d\/[^/]*_d([A-Za-z0-9_-]+)/);
+		if (slugMatch) {
+			// Validate extracted ID against the API
+			try {
+				const res = await fetch(`https://coda.io/apis/v1/docs/${slugMatch[1]}`, {
+					headers: { Authorization: `Bearer ${apiKey}` }
+				});
+				if (res.ok) return slugMatch[1];
+			} catch { /* fall through to resolveBrowserLink */ }
+		}
+	}
+
+	// Full URL — use resolveBrowserLink as fallback
+	if (rawInput.includes('coda.io')) {
+		try {
+			const res = await fetch(
+				`https://coda.io/apis/v1/resolveBrowserLink?url=${encodeURIComponent(rawInput)}`,
+				{ headers: { Authorization: `Bearer ${apiKey}` } }
+			);
+			if (res.ok) {
+				const data = await res.json();
+				// resolveBrowserLink may return a doc or a page resource.
+				// For pages, the doc ID is embedded in the href: /docs/{docId}/pages/...
+				if (data.resource?.type === 'doc' && data.resource?.id) {
+					return data.resource.id;
+				}
+				if (data.resource?.href) {
+					const docMatch = data.resource.href.match(/\/docs\/([^/]+)/);
+					if (docMatch) return docMatch[1];
+				}
+				if (data.resource?.id) return data.resource.id;
+			}
+		} catch { /* fall through */ }
+	}
+
+	// Try as a raw API ID first (e.g., wZitc5jGgO)
+	try {
+		const res = await fetch(`https://coda.io/apis/v1/docs/${rawInput}`, {
+			headers: { Authorization: `Bearer ${apiKey}` }
+		});
+		if (res.ok) return rawInput;
+	} catch { /* fall through */ }
+
+	// Might be a URL slug with `d` prefix (e.g., dHcmBh6Lxhn from URL _dHcmBh6Lxhn)
+	// Try resolving via resolveBrowserLink with a constructed URL
+	try {
+		const syntheticUrl = `https://coda.io/d/_${rawInput}`;
+		const res = await fetch(
+			`https://coda.io/apis/v1/resolveBrowserLink?url=${encodeURIComponent(syntheticUrl)}`,
+			{ headers: { Authorization: `Bearer ${apiKey}` } }
+		);
+		if (res.ok) {
+			const data = await res.json();
+			if (data.resource?.id) return data.resource.id;
+		}
+	} catch { /* fall through */ }
+
+	// Last resort: return as-is (will fail with a clear API error)
+	return rawInput;
+}
+
 function parseCodaInput(body) {
 	let { docId, tableId } = body;
 
-	// Parse URL if docId looks like a URL
-	if (docId && docId.includes('coda.io')) {
-		const match = docId.match(/\/d\/([\w-]+)/);
-		if (match) docId = match[1];
-		// Also try to get table ID from URL
-		if (!tableId) {
-			const tblMatch = docId.match(/[?&]table=([\w-]+)/) || body.docId?.match(/\/table\/([\w-]+)/);
-			if (tblMatch) tableId = tblMatch[1];
-		}
+	// Extract table ID from URL if present
+	if (docId && docId.includes('coda.io') && !tableId) {
+		const tblMatch = docId.match(/[?&]table=([\w-]+)/) || docId.match(/\/table\/([\w-]+)/);
+		if (tblMatch) tableId = tblMatch[1];
 	}
 
 	return { docId, tableId };
@@ -154,8 +226,10 @@ function parseCodaInput(body) {
 
 async function listCodaTables(body) {
 	const key = requireKey('coda');
-	const { docId } = parseCodaInput(body);
-	if (!docId) return json({ error: 'Missing docId' }, { status: 400 });
+	const { docId: rawDocId } = parseCodaInput(body);
+	if (!rawDocId) return json({ error: 'Missing docId' }, { status: 400 });
+
+	const docId = await resolveCodaDocId(rawDocId, key);
 
 	const tables = await fetchAllPages(
 		`https://coda.io/apis/v1/docs/${docId}/tables?limit=100`,
@@ -168,17 +242,19 @@ async function listCodaTables(body) {
 		tables: tables.map(t => ({
 			id: t.id,
 			name: t.name,
-			rowCount: t.rowCount ?? 0
+			rowCount: t.rowCount ?? null
 		}))
 	});
 }
 
 async function fetchCoda(body) {
 	const key = requireKey('coda');
-	const { docId, tableId } = parseCodaInput(body);
-	if (!docId || !tableId) {
+	const { docId: rawDocId, tableId } = parseCodaInput(body);
+	if (!rawDocId || !tableId) {
 		return json({ error: 'Missing docId or tableId' }, { status: 400 });
 	}
+
+	const docId = await resolveCodaDocId(rawDocId, key);
 
 	const allRows = await fetchAllPages(
 		`https://coda.io/apis/v1/docs/${docId}/tables/${tableId}/rows?useColumnNames=true&valueFormat=simple&limit=500`,

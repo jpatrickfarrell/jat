@@ -20,8 +20,9 @@
 	 */
 
 	import { page } from '$app/stores';
-	import { unifiedNavConfig } from '$lib/config/navConfig';
+	import { unifiedNavConfig, NAV_GROUPS, type NavGroup } from '$lib/config/navConfig';
 	import { isSidebarCollapsed, gitChangesCount, activeSessionsCount, runningServersCount, activeAgentSessionsCount, fileChangesCount } from '$lib/stores/drawerStore';
+	import { getCollapsedNavGroups, toggleCollapsedNavGroup, isNavGroupCollapsed } from '$lib/stores/preferences.svelte';
 
 	// Current project from URL (for preserving ?project= across navigation)
 	const currentProject = $derived($page.url.searchParams.get('project'));
@@ -37,50 +38,151 @@
 	// Helper to check if nav item is active
 	function isActive(href: string): boolean {
 		const currentPath = $page.url.pathname;
-		// Prefix match for routes (e.g., /work, /dash, /projects)
-		// Note: No root route (/) in nav anymore - redirects to /work
 		if (currentPath.startsWith(href)) {
 			return true;
 		}
 		return false;
 	}
 
+	// Group items by category for rendering
+	function getGroupItems(groupId: NavGroup) {
+		return unifiedNavConfig.navItems.filter((item) => item.category === groupId);
+	}
+
+	// Check if group has any active item (to keep it visible even when collapsed)
+	function groupHasActiveItem(groupId: NavGroup): boolean {
+		return getGroupItems(groupId).some(item => isActive(item.href));
+	}
+
+	// Get badge count for a nav item (returns 0 if no badge)
+	function getBadgeCount(itemId: string): number {
+		switch (itemId) {
+			case 'tasks': return $activeAgentSessionsCount;
+			case 'sessions': return $activeSessionsCount;
+			case 'source': return $gitChangesCount;
+			case 'servers': return $runningServersCount;
+			case 'files': return $fileChangesCount;
+			default: return 0;
+		}
+	}
+
+	// Badge color configs per item
+	const badgeColors: Record<string, { bg: string; text: string; border: string; dot: string }> = {
+		tasks: { bg: 'oklch(0.55 0.15 85 / 0.25)', text: 'oklch(0.80 0.15 85)', border: 'oklch(0.55 0.15 85 / 0.4)', dot: 'oklch(0.75 0.15 85)' },
+		sessions: { bg: 'oklch(0.55 0.15 145 / 0.25)', text: 'oklch(0.75 0.15 145)', border: 'oklch(0.55 0.15 145 / 0.4)', dot: 'oklch(0.70 0.15 145)' },
+		source: { bg: 'oklch(0.55 0.15 220 / 0.25)', text: 'oklch(0.80 0.12 220)', border: 'oklch(0.55 0.15 220 / 0.4)', dot: 'oklch(0.75 0.12 220)' },
+		servers: { bg: 'oklch(0.50 0.02 250 / 0.3)', text: 'oklch(0.75 0.02 250)', border: 'oklch(0.50 0.02 250 / 0.4)', dot: 'oklch(0.65 0.02 250)' },
+		files: { bg: 'oklch(0.55 0.18 310 / 0.25)', text: 'oklch(0.80 0.15 310)', border: 'oklch(0.55 0.18 310 / 0.4)', dot: 'oklch(0.75 0.18 310)' },
+	};
+
+	// Badge title text per item
+	function getBadgeTitle(itemId: string, count: number): string {
+		switch (itemId) {
+			case 'tasks': return `${count} active agent${count === 1 ? '' : 's'}`;
+			case 'sessions': return `${count} active session${count === 1 ? '' : 's'}`;
+			case 'source': return `${count} file${count === 1 ? '' : 's'} with changes`;
+			case 'servers': return `${count} running server${count === 1 ? '' : 's'}`;
+			case 'files': return `${count} file${count === 1 ? '' : 's'} changed on disk`;
+			default: return '';
+		}
+	}
+
 	// Icon SVG paths (Heroicons outline)
 	const icons: Record<string, string> = {
-		// MAIN: Core workflow
+		// WORK: Daily workflow
 		tasks: 'M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z',
+		tmux: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
+		history: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
+		// CODE: Development tools
 		files: 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z',
 		source: 'M6 3v12M6 21a3 3 0 100-6 3 3 0 000 6zM18 9a3 3 0 100-6 3 3 0 000 6zM18 9a9 9 0 01-9 9',
 		servers: 'M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z',
-		integrations: 'M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z',
-		tmux: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
-		dashboard: 'M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z',
-		search: 'M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z',
-		automation: 'M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z',
-		history: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
-		chores: 'M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5m-9-6h.008v.008H12v-.008zM12 15h.008v.008H12V15zm0 2.25h.008v.008H12v-.008zM9.75 15h.008v.008H9.75V15zm0 2.25h.008v.008H9.75v-.008zM7.5 15h.008v.008H7.5V15zm0 2.25h.008v.008H7.5v-.008zm6.75-4.5h.008v.008h-.008v-.008zm0 2.25h.008v.008h-.008V15zm0 2.25h.008v.008h-.008v-.008zm2.25-4.5h.008v.008H16.5v-.008zm0 2.25h.008v.008H16.5V15z',
+		// KNOWLEDGE: Data & context
 		data: 'M3.75 5.25h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5M3.75 3v18M9.75 3v18M15.75 3v18M20.25 3v18',
 		bases: 'M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25',
-		terminal: 'M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5',
-		settings: 'M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
-		projects: 'M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z',
 		memory: 'M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125',
+		search: 'M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z',
+		// CONFIGURE: System setup
+		integrations: 'M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z',
+		workflows: 'M3 3h6v6H3V3zm12 0h6v6h-6V3zm-6 12h6v6H9v-6zM6 9v3a3 3 0 003 3M18 9v3a3 3 0 01-3 3',
+		automation: 'M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z',
+		chores: 'M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5m-9-6h.008v.008H12v-.008zM12 15h.008v.008H12V15zm0 2.25h.008v.008H12v-.008zM9.75 15h.008v.008H9.75V15zm0 2.25h.008v.008H9.75v-.008zM7.5 15h.008v.008H7.5V15zm0 2.25h.008v.008H7.5v-.008zm6.75-4.5h.008v.008h-.008v-.008zm0 2.25h.008v.008h-.008V15zm0 2.25h.008v.008h-.008v-.008zm2.25-4.5h.008v.008H16.5v-.008zm0 2.25h.008v.008H16.5V15z',
+		settings: 'M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
 		// VIEWS: Alternative visualizations
+		dashboard: 'M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z',
 		graph: 'M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z',
 		timeline: 'M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z',
 		columns: 'M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z',
 		// LABS: Experimental features
-		workflows: 'M3 3h6v6H3V3zm12 0h6v6h-6V3zm-6 12h6v6H9v-6zM6 9v3a3 3 0 003 3M18 9v3a3 3 0 01-3 3',
-		swarm: 'M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z',
+		terminal: 'M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5',
 		beaker: 'M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 5.607c.28 1.12-.62 2.093-1.772 2.093H4.57c-1.152 0-2.052-.973-1.772-2.093L5 14.5',
 		// Utilities
-		help: 'M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+		help: 'M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+		// Chevron for group collapse
+		chevronDown: 'M19.5 8.25l-7.5 7.5-7.5-7.5',
+		chevronRight: 'M8.25 4.5l7.5 7.5-7.5 7.5',
 	};
 
-	// Filter nav items by category
-	const mainItems = unifiedNavConfig.navItems.filter((item) => item.category === 'main');
-	const viewsItems = unifiedNavConfig.navItems.filter((item) => item.category === 'views');
-	const labsItems = unifiedNavConfig.navItems.filter((item) => item.category === 'labs');
+	// Visual style config per group style
+	const groupStyles = {
+		main: {
+			// Full size items with main blue accent
+			itemPy: 'py-2.5',
+			iconSize: 'w-6 h-6',
+			svgSize: 'w-4.5 h-4.5',
+			activeAccent: 'oklch(0.70 0.18 240)',
+			activeBg: 'oklch(0.70 0.18 240 / 0.2)',
+			activeText: 'oklch(0.80 0.15 240)',
+			activeIcon: 'oklch(0.75 0.16 240)',
+			activeIconBg: 'oklch(0.70 0.18 240 / 0.15)',
+			activeIconGlow: '0 0 10px oklch(0.70 0.18 240 / 0.3)',
+			inactiveText: 'oklch(0.65 0.02 250)',
+			inactiveIcon: 'oklch(0.55 0.02 250)',
+			labelSize: 'text-xs',
+			lineColor: 'oklch(0.70 0.18 240 / 0.4)',
+			headerColor: 'oklch(0.45 0.02 250)',
+			strokeActive: 2,
+			strokeInactive: 1.5,
+		},
+		views: {
+			// Slightly smaller, dimmer styling
+			itemPy: 'py-2',
+			iconSize: 'w-5 h-5',
+			svgSize: 'w-4 h-4',
+			activeAccent: 'oklch(0.70 0.18 240 / 0.7)',
+			activeBg: 'oklch(0.70 0.18 240 / 0.15)',
+			activeText: 'oklch(0.75 0.12 240)',
+			activeIcon: 'oklch(0.70 0.14 240)',
+			activeIconBg: 'oklch(0.70 0.18 240 / 0.1)',
+			activeIconGlow: 'none',
+			inactiveText: 'oklch(0.55 0.02 250)',
+			inactiveIcon: 'oklch(0.50 0.02 250)',
+			labelSize: 'text-[10px]',
+			lineColor: 'oklch(0.70 0.18 240 / 0.3)',
+			headerColor: 'oklch(0.45 0.02 250)',
+			strokeActive: 1.75,
+			strokeInactive: 1.5,
+		},
+		labs: {
+			// Smallest, purple accent, dimmed
+			itemPy: 'py-2',
+			iconSize: 'w-5 h-5',
+			svgSize: 'w-4 h-4',
+			activeAccent: 'oklch(0.55 0.12 300 / 0.7)',
+			activeBg: 'oklch(0.55 0.12 300 / 0.15)',
+			activeText: 'oklch(0.65 0.10 300)',
+			activeIcon: 'oklch(0.60 0.10 300)',
+			activeIconBg: 'oklch(0.55 0.12 300 / 0.1)',
+			activeIconGlow: 'none',
+			inactiveText: 'oklch(0.45 0.02 250)',
+			inactiveIcon: 'oklch(0.45 0.05 300)',
+			labelSize: 'text-[10px]',
+			lineColor: 'oklch(0.55 0.12 300 / 0.3)',
+			headerColor: 'oklch(0.50 0.12 300)',
+			strokeActive: 1.75,
+			strokeInactive: 1.5,
+		},
+	};
 
 	// Help modal state
 	let showHelpModal = $state(false);
@@ -140,344 +242,127 @@
 			></div>
 		</div>
 
-		<!-- Main navigation items -->
-		<nav class="flex-1 px-2 py-3 space-y-1 overflow-y-auto overflow-x-hidden">
-			<!-- MAIN: Core workflow -->
-			{#each mainItems as navItem, index}
-				{@const active = isActive(navItem.href)}
-				<a
-					href={getNavHref(navItem.href)}
-					class="w-full flex items-center gap-3 px-3 py-2.5 rounded transition-all duration-200 group relative
-						{$isSidebarCollapsed ? 'justify-center tooltip tooltip-right fade-in-left fade-in-delay-' + index : ''}
-						{active ? '' : 'industrial-hover'}"
-					style="
-						background: {active ? 'linear-gradient(90deg, oklch(0.70 0.18 240 / 0.2) 0%, transparent 100%)' : 'transparent'};
-						border-left: 2px solid {active ? 'oklch(0.70 0.18 240)' : 'transparent'};
-						color: {active ? 'oklch(0.80 0.15 240)' : 'oklch(0.65 0.02 250)'};
-						text-decoration: none;
-					"
-					data-tip={navItem.label}
-				>
-					<!-- Icon with glow on active -->
-					<div
-						class="flex items-center justify-center w-6 h-6 rounded transition-all {$isSidebarCollapsed ? 'puff-in-center' : ''}"
-						style="
-							background: {active ? 'oklch(0.70 0.18 240 / 0.15)' : 'transparent'};
-							box-shadow: {active ? '0 0 10px oklch(0.70 0.18 240 / 0.3)' : 'none'};
-						"
+		<!-- Navigation groups (collapsible) -->
+		<nav class="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto overflow-x-hidden">
+			{#each NAV_GROUPS as group, groupIndex}
+				{@const style = groupStyles[group.style]}
+				{@const items = getGroupItems(group.id)}
+				{@const collapsed = isNavGroupCollapsed(group.id)}
+				{@const hasActive = groupHasActiveItem(group.id)}
+
+				<!-- Group header -->
+				{#if !$isSidebarCollapsed}
+					<button
+						onclick={() => toggleCollapsedNavGroup(group.id)}
+						class="w-full flex items-center gap-1.5 px-3 cursor-pointer transition-colors duration-150 hover:opacity-80
+							{groupIndex === 0 ? 'pt-1 pb-1' : 'pt-3 pb-1'}"
 					>
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							fill="none"
-							viewBox="0 0 24 24"
-							stroke-width={active ? 2 : 1.5}
-							stroke="currentColor"
-							class="w-4.5 h-4.5 transition-all {active ? '' : 'group-hover:scale-110'}"
-							style="color: {active ? 'oklch(0.75 0.16 240)' : 'oklch(0.55 0.02 250)'};"
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+							stroke-width="1.5" stroke="currentColor"
+							class="w-2.5 h-2.5 transition-transform duration-200 {collapsed ? '' : 'rotate-90'}"
+							style="color: {style.headerColor};"
 						>
-							<path stroke-linecap="round" stroke-linejoin="round" d={icons[navItem.icon]} />
+							<path stroke-linecap="round" stroke-linejoin="round" d={icons.chevronRight} />
 						</svg>
-					</div>
-
-					<!-- Label (hidden when collapsed) -->
-					{#if !$isSidebarCollapsed}
-						<span
-							class="fade-in font-mono text-xs tracking-wider uppercase transition-colors
-								{active ? '' : 'group-hover:text-base-content/80'}"
-							style="text-shadow: {active ? '0 0 10px oklch(0.70 0.18 240 / 0.4)' : 'none'};"
-						>
-							<span class="tracking-in-expand">{navItem.label}</span>
+						<span class="font-mono text-[9px] tracking-widest uppercase select-none"
+							style="color: {style.headerColor};">
+							{group.label}
 						</span>
+						<div class="flex-1 h-px"
+							style="background: linear-gradient(90deg, {style.lineColor}, transparent);">
+						</div>
+					</button>
+				{:else if groupIndex > 0}
+					<!-- Collapsed sidebar: thin divider between groups -->
+					<div class="h-px mx-2 my-2" style="background: {style.lineColor};"></div>
+				{/if}
 
-						<!-- Git changes badge for Source (VSCode convention: show changed files count on source control) -->
-						{#if navItem.id === 'source' && $gitChangesCount > 0}
-							<span
-								class="font-mono text-[10px] px-1.5 pt-0.5 rounded-full ml-auto"
+				<!-- Group items (hidden when collapsed, unless has active item or sidebar is narrow) -->
+				{#if !collapsed || hasActive || $isSidebarCollapsed}
+					{#each items as navItem, index}
+						{@const active = isActive(navItem.href)}
+						{@const badgeCount = getBadgeCount(navItem.id)}
+						{@const colors = badgeColors[navItem.id]}
+						{#if !collapsed || active || $isSidebarCollapsed}
+							<a
+								href={getNavHref(navItem.href)}
+								class="w-full flex items-center gap-3 px-3 {style.itemPy} rounded transition-all duration-200 group relative
+									{$isSidebarCollapsed ? 'justify-center tooltip tooltip-right' : ''}
+									{active ? '' : 'industrial-hover'}"
 								style="
-									background: oklch(0.55 0.15 220 / 0.25);
-									color: oklch(0.80 0.12 220);
-									border: 1px solid oklch(0.55 0.15 220 / 0.4);
+									background: {active ? `linear-gradient(90deg, ${style.activeBg} 0%, transparent 100%)` : 'transparent'};
+									border-left: 2px solid {active ? style.activeAccent : 'transparent'};
+									color: {active ? style.activeText : style.inactiveText};
+									{group.style === 'labs' && !active ? 'opacity: 0.7;' : ''}
+									text-decoration: none;
 								"
-								title="{$gitChangesCount} file{$gitChangesCount === 1 ? '' : 's'} with changes"
+								data-tip="{navItem.label}{group.style === 'labs' ? ' (experimental)' : ''}"
 							>
-								{$gitChangesCount}
-							</span>
+								<!-- Icon with glow on active -->
+								<div
+									class="flex items-center justify-center {style.iconSize} rounded transition-all {$isSidebarCollapsed ? 'puff-in-center' : ''}"
+									style="
+										background: {active ? style.activeIconBg : 'transparent'};
+										box-shadow: {active ? style.activeIconGlow : 'none'};
+									"
+								>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke-width={active ? style.strokeActive : style.strokeInactive}
+										stroke="currentColor"
+										class="{style.svgSize} transition-all {active ? '' : 'group-hover:scale-110'}"
+										style="color: {active ? style.activeIcon : style.inactiveIcon};"
+									>
+										<path stroke-linecap="round" stroke-linejoin="round" d={icons[navItem.icon]} />
+									</svg>
+								</div>
+
+								<!-- Label (hidden when sidebar collapsed) -->
+								{#if !$isSidebarCollapsed}
+									<span
+										class="fade-in font-mono {style.labelSize} tracking-wider uppercase transition-colors
+											{active ? '' : 'group-hover:text-base-content/80'}"
+										style="text-shadow: {active && group.style === 'main' ? '0 0 10px oklch(0.70 0.18 240 / 0.4)' : 'none'};"
+									>
+										<span class="tracking-in-expand">{navItem.label}</span>
+									</span>
+
+									<!-- Badge (expanded sidebar) -->
+									{#if badgeCount > 0 && colors}
+										<span
+											class="font-mono text-[10px] px-1.5 pt-0.5 rounded-full ml-auto"
+											style="
+												background: {colors.bg};
+												color: {colors.text};
+												border: 1px solid {colors.border};
+											"
+											title={getBadgeTitle(navItem.id, badgeCount)}
+										>
+											{badgeCount}
+										</span>
+									{/if}
+
+									<!-- Active indicator line (when no badge showing) -->
+									{#if active && !(badgeCount > 0 && colors)}
+										<div
+											class="flex-1 h-px"
+											style="background: linear-gradient(90deg, {style.lineColor}, transparent);"
+										></div>
+									{/if}
+								{:else if badgeCount > 0 && colors}
+									<!-- Badge dot (collapsed sidebar) -->
+									<span
+										class="absolute top-1 right-0 w-2.5 h-2.5 rounded-full"
+										style="background: {colors.dot}; box-shadow: 0 0 6px {colors.dot}99;"
+										title={getBadgeTitle(navItem.id, badgeCount)}
+									></span>
+								{/if}
+							</a>
 						{/if}
-
-						<!-- Active sessions badge for Sessions -->
-						{#if navItem.id === 'sessions' && $activeSessionsCount > 0}
-							<span
-								class="font-mono text-[10px] px-1.5 pt-0.5 rounded-full ml-auto"
-								style="
-									background: oklch(0.55 0.15 145 / 0.25);
-									color: oklch(0.75 0.15 145);
-									border: 1px solid oklch(0.55 0.15 145 / 0.4);
-								"
-								title="{$activeSessionsCount} active session{$activeSessionsCount === 1 ? '' : 's'}"
-							>
-								{$activeSessionsCount}
-							</span>
-						{/if}
-
-						<!-- Running servers badge for Servers -->
-						{#if navItem.id === 'servers' && $runningServersCount > 0}
-							<span
-								class="font-mono text-[10px] px-1.5 pt-0.5 rounded-full ml-auto"
-								style="
-									background: oklch(0.50 0.02 250 / 0.3);
-									color: oklch(0.75 0.02 250);
-									border: 1px solid oklch(0.50 0.02 250 / 0.4);
-								"
-								title="{$runningServersCount} running server{$runningServersCount === 1 ? '' : 's'}"
-							>
-								{$runningServersCount}
-							</span>
-						{/if}
-
-						<!-- Active agent sessions badge for Tasks (agents working on tasks) -->
-						{#if navItem.id === 'tasks' && $activeAgentSessionsCount > 0}
-							<span
-								class="font-mono text-[10px] px-1.5 pt-0.5 rounded-full ml-auto"
-								style="
-									background: oklch(0.55 0.15 85 / 0.25);
-									color: oklch(0.80 0.15 85);
-									border: 1px solid oklch(0.55 0.15 85 / 0.4);
-								"
-								title="{$activeAgentSessionsCount} active agent{$activeAgentSessionsCount === 1 ? '' : 's'}"
-							>
-								{$activeAgentSessionsCount}
-							</span>
-						{/if}
-
-						<!-- File tree changes badge for Files (external changes detected) -->
-						{#if navItem.id === 'files' && $fileChangesCount > 0}
-							<span
-								class="font-mono text-[10px] px-1.5 pt-0.5 rounded-full ml-auto"
-								style="
-									background: oklch(0.55 0.18 310 / 0.25);
-									color: oklch(0.80 0.15 310);
-									border: 1px solid oklch(0.55 0.18 310 / 0.4);
-								"
-								title="{$fileChangesCount} file{$fileChangesCount === 1 ? '' : 's'} changed on disk"
-							>
-								{$fileChangesCount}
-							</span>
-						{/if}
-
-						<!-- Active indicator line (extended) -->
-						{#if active && !(navItem.id === 'source' && $gitChangesCount > 0) && !(navItem.id === 'sessions' && $activeSessionsCount > 0) && !(navItem.id === 'servers' && $runningServersCount > 0) && !(navItem.id === 'tasks' && $activeAgentSessionsCount > 0) && !(navItem.id === 'files' && $fileChangesCount > 0)}
-							<div
-								class="flex-1 h-px"
-								style="background: linear-gradient(90deg, oklch(0.70 0.18 240 / 0.4), transparent);"
-							></div>
-						{/if}
-					{:else if navItem.id === 'source' && $gitChangesCount > 0}
-						<!-- Changes badge shown when sidebar is collapsed (as dot indicator on Source) -->
-						<span
-							class="absolute top-1 right-0 w-2.5 h-2.5 rounded-full"
-							style="background: oklch(0.75 0.12 220); box-shadow: 0 0 6px oklch(0.75 0.12 220 / 0.6);"
-							title="{$gitChangesCount} file{$gitChangesCount === 1 ? '' : 's'} with changes"
-						></span>
-					{:else if navItem.id === 'sessions' && $activeSessionsCount > 0}
-						<!-- Sessions badge shown when sidebar is collapsed (as dot indicator) -->
-						<span
-							class="absolute top-1 right-0 w-2.5 h-2.5 rounded-full"
-							style="background: oklch(0.70 0.15 145); box-shadow: 0 0 6px oklch(0.70 0.15 145 / 0.6);"
-							title="{$activeSessionsCount} active session{$activeSessionsCount === 1 ? '' : 's'}"
-						></span>
-					{:else if navItem.id === 'servers' && $runningServersCount > 0}
-						<!-- Servers badge shown when sidebar is collapsed (as dot indicator) -->
-						<span
-							class="absolute top-1 right-0 w-2.5 h-2.5 rounded-full"
-							style="background: oklch(0.65 0.02 250); box-shadow: 0 0 6px oklch(0.65 0.02 250 / 0.6);"
-							title="{$runningServersCount} running server{$runningServersCount === 1 ? '' : 's'}"
-						></span>
-					{:else if navItem.id === 'tasks' && $activeAgentSessionsCount > 0}
-						<!-- Tasks badge shown when sidebar is collapsed (as dot indicator for active agents) -->
-						<span
-							class="absolute top-1 right-0 w-2.5 h-2.5 rounded-full"
-							style="background: oklch(0.75 0.15 85); box-shadow: 0 0 6px oklch(0.75 0.15 85 / 0.6);"
-							title="{$activeAgentSessionsCount} active agent{$activeAgentSessionsCount === 1 ? '' : 's'}"
-						></span>
-					{:else if navItem.id === 'files' && $fileChangesCount > 0}
-						<!-- Files badge shown when sidebar is collapsed (as dot indicator for external changes) -->
-						<span
-							class="absolute top-1 right-0 w-2.5 h-2.5 rounded-full"
-							style="background: oklch(0.75 0.18 310); box-shadow: 0 0 6px oklch(0.75 0.18 310 / 0.6);"
-							title="File tree has external changes"
-						></span>
-					{/if}
-				</a>
-			{/each}
-
-			<!-- VIEWS section header -->
-			{#if !$isSidebarCollapsed}
-				<div class="pt-4 pb-1 px-3">
-					<span class="font-mono text-[9px] tracking-widest uppercase" style="color: oklch(0.45 0.02 250);">
-						Views
-					</span>
-				</div>
-			{:else}
-				<div class="h-px mx-2 my-2" style="background: oklch(0.30 0.02 250);"></div>
-			{/if}
-
-			<!-- VIEWS: Alternative visualizations -->
-			{#each viewsItems as navItem, index}
-				{@const active = isActive(navItem.href)}
-				<a
-					href={getNavHref(navItem.href)}
-					class="w-full flex items-center gap-3 px-3 py-2 rounded transition-all duration-200 group relative
-						{$isSidebarCollapsed ? 'justify-center tooltip tooltip-right fade-in-left fade-in-delay-' + (mainItems.length + index) : ''}
-						{active ? '' : 'industrial-hover'}"
-					style="
-						background: {active ? 'linear-gradient(90deg, oklch(0.70 0.18 240 / 0.15) 0%, transparent 100%)' : 'transparent'};
-						border-left: 2px solid {active ? 'oklch(0.70 0.18 240 / 0.7)' : 'transparent'};
-						color: {active ? 'oklch(0.75 0.12 240)' : 'oklch(0.55 0.02 250)'};
-						text-decoration: none;
-					"
-					data-tip={navItem.label}
-				>
-					<!-- Icon (smaller for views) -->
-					<div
-						class="flex items-center justify-center w-5 h-5 rounded transition-all {$isSidebarCollapsed ? 'puff-in-center' : ''}"
-						style="
-							background: {active ? 'oklch(0.70 0.18 240 / 0.1)' : 'transparent'};
-						"
-					>
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							fill="none"
-							viewBox="0 0 24 24"
-							stroke-width={active ? 1.75 : 1.5}
-							stroke="currentColor"
-							class="w-4 h-4 transition-all {active ? '' : 'group-hover:scale-110'}"
-							style="color: {active ? 'oklch(0.70 0.14 240)' : 'oklch(0.50 0.02 250)'};"
-						>
-							<path stroke-linecap="round" stroke-linejoin="round" d={icons[navItem.icon]} />
-						</svg>
-					</div>
-
-					<!-- Label (hidden when collapsed) -->
-					{#if !$isSidebarCollapsed}
-						<span
-							class="fade-in font-mono text-[10px] tracking-wider uppercase transition-colors
-								{active ? '' : 'group-hover:text-base-content/70'}"
-							style="color: {active ? 'oklch(0.70 0.10 240)' : 'oklch(0.50 0.02 250)'};"
-						>
-							<span class="tracking-in-expand">{navItem.label}</span>
-						</span>
-
-						<!-- Active sessions badge for Sessions -->
-						{#if navItem.id === 'sessions' && $activeSessionsCount > 0}
-							<span
-								class="font-mono text-[10px] px-1.5 pt-0.5 rounded-full ml-auto"
-								style="
-									background: oklch(0.55 0.15 145 / 0.25);
-									color: oklch(0.75 0.15 145);
-									border: 1px solid oklch(0.55 0.15 145 / 0.4);
-								"
-								title="{$activeSessionsCount} active session{$activeSessionsCount === 1 ? '' : 's'}"
-							>
-								{$activeSessionsCount}
-							</span>
-						{/if}
-
-						<!-- Active indicator line (extended) -->
-						{#if active && !(navItem.id === 'sessions' && $activeSessionsCount > 0)}
-							<div
-								class="flex-1 h-px"
-								style="background: linear-gradient(90deg, oklch(0.70 0.18 240 / 0.3), transparent);"
-							></div>
-						{/if}
-					{:else if navItem.id === 'sessions' && $activeSessionsCount > 0}
-						<!-- Sessions badge shown when sidebar is collapsed (as dot indicator) -->
-						<span
-							class="absolute top-1 right-0 w-2.5 h-2.5 rounded-full"
-							style="background: oklch(0.70 0.15 145); box-shadow: 0 0 6px oklch(0.70 0.15 145 / 0.6);"
-							title="{$activeSessionsCount} active session{$activeSessionsCount === 1 ? '' : 's'}"
-						></span>
-					{/if}
-				</a>
-			{/each}
-
-			<!-- LABS section header with beaker icon -->
-			{#if !$isSidebarCollapsed}
-				<div class="pt-4 pb-1 px-3 flex items-center gap-1.5">
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke-width="1.5"
-						stroke="currentColor"
-						class="w-3 h-3"
-						style="color: oklch(0.50 0.12 300);"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d={icons.beaker} />
-					</svg>
-					<span class="font-mono text-[9px] tracking-widest uppercase" style="color: oklch(0.50 0.12 300);">
-						Labs
-					</span>
-				</div>
-			{:else}
-				<div class="h-px mx-2 my-2" style="background: oklch(0.35 0.08 300);"></div>
-			{/if}
-
-			<!-- LABS: Experimental features (dimmed styling) -->
-			{#each labsItems as navItem, index}
-				{@const active = isActive(navItem.href)}
-				<a
-					href={getNavHref(navItem.href)}
-					class="w-full flex items-center gap-3 px-3 py-2 rounded transition-all duration-200 group
-						{$isSidebarCollapsed ? 'justify-center tooltip tooltip-right fade-in-left fade-in-delay-' + (mainItems.length + viewsItems.length + index) : ''}
-						{active ? '' : 'industrial-hover'}"
-					style="
-						background: {active ? 'linear-gradient(90deg, oklch(0.55 0.12 300 / 0.15) 0%, transparent 100%)' : 'transparent'};
-						border-left: 2px solid {active ? 'oklch(0.55 0.12 300 / 0.7)' : 'transparent'};
-						color: {active ? 'oklch(0.65 0.10 300)' : 'oklch(0.45 0.02 250)'};
-						opacity: {active ? 1 : 0.7};
-						text-decoration: none;
-					"
-					data-tip="{navItem.label} (experimental)"
-				>
-					<!-- Icon (smaller, dimmed for labs) -->
-					<div
-						class="flex items-center justify-center w-5 h-5 rounded transition-all {$isSidebarCollapsed ? 'puff-in-center' : ''}"
-						style="
-							background: {active ? 'oklch(0.55 0.12 300 / 0.1)' : 'transparent'};
-						"
-					>
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							fill="none"
-							viewBox="0 0 24 24"
-							stroke-width={active ? 1.75 : 1.5}
-							stroke="currentColor"
-							class="w-4 h-4 transition-all {active ? '' : 'group-hover:scale-110'}"
-							style="color: {active ? 'oklch(0.60 0.10 300)' : 'oklch(0.45 0.05 300)'};"
-						>
-							<path stroke-linecap="round" stroke-linejoin="round" d={icons[navItem.icon]} />
-						</svg>
-					</div>
-
-					<!-- Label (hidden when collapsed) -->
-					{#if !$isSidebarCollapsed}
-						<span
-							class="fade-in font-mono text-[10px] tracking-wider uppercase transition-colors
-								{active ? '' : 'group-hover:text-base-content/60'}"
-							style="color: {active ? 'oklch(0.60 0.08 300)' : 'oklch(0.45 0.02 250)'};"
-						>
-							<span class="tracking-in-expand">{navItem.label}</span>
-						</span>
-
-						<!-- Active indicator line (extended, purple tint for labs) -->
-						{#if active}
-							<div
-								class="flex-1 h-px"
-								style="background: linear-gradient(90deg, oklch(0.55 0.12 300 / 0.3), transparent);"
-							></div>
-						{/if}
-					{/if}
-				</a>
+					{/each}
+				{/if}
 			{/each}
 		</nav>
 
@@ -494,7 +379,7 @@
 				onclick={toggleHelp}
 				aria-label="Show help guide"
 				class="w-full flex items-center gap-3 px-3 py-2.5 rounded transition-all duration-200 group
-					{$isSidebarCollapsed ? 'justify-center tooltip tooltip-right fade-in-left fade-in-delay-' + (mainItems.length + viewsItems.length + labsItems.length) : ''}
+					{$isSidebarCollapsed ? 'justify-center tooltip tooltip-right fade-in-left fade-in-delay-' + (unifiedNavConfig.navItems.length) : ''}
 					industrial-hover"
 				style="color: oklch(0.60 0.02 250);"
 				data-tip="Help & Shortcuts"

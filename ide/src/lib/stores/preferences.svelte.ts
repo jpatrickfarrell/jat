@@ -32,7 +32,8 @@ const STORAGE_KEYS = {
 	toastNeedsInput: 'toast-needs-input', // Toast when agent needs input
 	toastReview: 'toast-review', // Toast when agent ready for review
 	toastComplete: 'toast-complete', // Toast when agent completes task
-	debugMode: 'debug-mode-enabled' // Debug mode (shows feedback widget, dev tools)
+	debugMode: 'debug-mode-enabled', // Debug mode (shows feedback widget, dev tools)
+	collapsedNavGroups: 'collapsed-nav-groups' // Sidebar nav groups that are collapsed
 } as const;
 
 // Terminal font family options
@@ -99,6 +100,7 @@ const DEFAULTS = {
 	epicAutoClose: false, // Automatically close epic when all children complete
 	maxSessions: 12 as MaxSessions, // Maximum concurrent agent sessions
 	collapsedEpics: [] as string[], // Task IDs of collapsed epics/groups in TaskTable
+	collapsedNavGroups: [] as string[], // Nav group IDs that are collapsed in sidebar
 	activeProject: null as string | null, // Currently selected project (consistent across pages)
 	notificationsEnabled: true, // Browser push notifications (requires permission)
 	faviconBadgeEnabled: true, // Show count on favicon when agents need attention
@@ -135,6 +137,7 @@ let epicCelebration = $state(DEFAULTS.epicCelebration);
 let epicAutoClose = $state(DEFAULTS.epicAutoClose);
 let maxSessions = $state<MaxSessions>(DEFAULTS.maxSessions);
 let collapsedEpics = $state<string[]>(DEFAULTS.collapsedEpics);
+let collapsedNavGroups = $state<string[]>(DEFAULTS.collapsedNavGroups);
 let activeProject = $state<string | null>(DEFAULTS.activeProject);
 let notificationsEnabled = $state(DEFAULTS.notificationsEnabled);
 let faviconBadgeEnabled = $state(DEFAULTS.faviconBadgeEnabled);
@@ -221,6 +224,18 @@ export function initPreferences(): void {
 		}
 	} else {
 		collapsedEpics = DEFAULTS.collapsedEpics;
+	}
+
+	const storedCollapsedNavGroups = localStorage.getItem(STORAGE_KEYS.collapsedNavGroups);
+	if (storedCollapsedNavGroups) {
+		try {
+			const parsed = JSON.parse(storedCollapsedNavGroups);
+			collapsedNavGroups = Array.isArray(parsed) ? parsed : DEFAULTS.collapsedNavGroups;
+		} catch {
+			collapsedNavGroups = DEFAULTS.collapsedNavGroups;
+		}
+	} else {
+		collapsedNavGroups = DEFAULTS.collapsedNavGroups;
 	}
 
 	// Load active project (string or null)
@@ -567,6 +582,32 @@ export function cleanupCollapsedEpics(existingTaskIds: Set<string>): void {
 		setCollapsedEpics(cleaned);
 		console.log(`[preferences] Cleaned up ${before - cleaned.length} stale collapsed epic IDs`);
 	}
+}
+
+// ============================================================================
+// Collapsed Nav Groups (Sidebar collapsible group state persistence)
+// ============================================================================
+
+export function getCollapsedNavGroups(): string[] {
+	return collapsedNavGroups;
+}
+
+export function setCollapsedNavGroups(value: string[]): void {
+	collapsedNavGroups = value;
+	if (browser) {
+		localStorage.setItem(STORAGE_KEYS.collapsedNavGroups, JSON.stringify(value));
+	}
+}
+
+export function toggleCollapsedNavGroup(groupId: string): void {
+	const newValue = collapsedNavGroups.includes(groupId)
+		? collapsedNavGroups.filter(id => id !== groupId)
+		: [...collapsedNavGroups, groupId];
+	setCollapsedNavGroups(newValue);
+}
+
+export function isNavGroupCollapsed(groupId: string): boolean {
+	return collapsedNavGroups.includes(groupId);
 }
 
 // ============================================================================

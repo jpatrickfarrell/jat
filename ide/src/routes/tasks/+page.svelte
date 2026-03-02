@@ -1594,25 +1594,6 @@
 					{projectColor}
 				/>
 
-				<!-- Due Date Filter Chips -->
-				<div class="date-filter-bar">
-					{#each DATE_FILTER_OPTIONS as opt}
-						{@const count = filterCounts[opt.id]}
-						<button
-							class="date-filter-chip"
-							class:active={dueDateFilter === opt.id}
-							class:has-overdue={opt.id === "overdue" && count > 0}
-							onclick={() => (dueDateFilter = opt.id)}
-						>
-							<span class="chip-icon">{opt.icon}</span>
-							<span class="chip-label">{opt.label}</span>
-							{#if count > 0}
-								<span class="chip-count">{count}</span>
-							{/if}
-						</button>
-					{/each}
-				</div>
-
 				<!-- Active Sessions Section -->
 				{#if projectSessions.length > 0}
 					<div class="subsection bg-base-100">
@@ -1985,6 +1966,25 @@
 						{/if}
 					</div>
 				{/if}
+
+				<!-- Due Date Filter Chips -->
+				<div class="date-filter-bar">
+					{#each DATE_FILTER_OPTIONS as opt}
+						{@const count = filterCounts[opt.id]}
+						<button
+							class="date-filter-chip"
+							class:active={dueDateFilter === opt.id}
+							class:has-overdue={opt.id === "overdue" && count > 0}
+							onclick={() => (dueDateFilter = opt.id)}
+						>
+							<span class="chip-icon">{opt.icon}</span>
+							<span class="chip-label">{opt.label}</span>
+							{#if count > 0}
+								<span class="chip-count">{count}</span>
+							{/if}
+						</button>
+					{/each}
+				</div>
 
 				<!-- Open Tasks Section -->
 				{#if tasksByEpic.size > 0}

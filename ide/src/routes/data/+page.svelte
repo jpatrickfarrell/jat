@@ -7,7 +7,7 @@
 	 * - Right: Table view with inline editing, add/delete rows, SQL console
 	 */
 
-	import { onDestroy } from 'svelte';
+	import { onDestroy, tick } from 'svelte';
 	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
 	import { reveal } from '$lib/actions/reveal';
@@ -114,7 +114,7 @@
 	let createCsvFormat = $state<'auto' | 'tsv' | 'csv'>('auto');
 	let createJsonText = $state('');
 	let createSqlText = $state('');
-	let inferredColumns = $state<Array<{name: string, type: string, semanticType: SemanticType}>>([]);
+	let inferredColumns = $state<Array<{name: string, type: string, semanticType: SemanticType, enabled: boolean, rename: string}>>([]);
 	let inferredRows = $state<Array<Record<string, any>>>([]);
 	let createPreviewError = $state('');
 
@@ -127,7 +127,7 @@
 	// Coda
 	let codaDocId = $state('');
 	let codaTableId = $state('');
-	let codaDocTables = $state<{id: string, name: string, rowCount: number}[]>([]);
+	let codaDocTables = $state<{id: string, name: string, rowCount: number | null}[]>([]);
 	let codaTablesLoading = $state(false);
 
 	// Google Sheets
@@ -142,11 +142,65 @@
 	let airtableTables = $state<{id: string, name: string}[]>([]);
 	let airtableTablesLoading = $state(false);
 
+	// Searchable table dropdown (shared for Coda & Airtable)
+	let tblDropdownOpen = $state(false);
+	let tblSearchQuery = $state('');
+	let tblSearchInput: HTMLInputElement | undefined;
+	let tblDropdownRef: HTMLDivElement | undefined;
+
+	const filteredCodaTables = $derived.by(() => {
+		const sorted = [...codaDocTables].sort((a, b) => a.name.localeCompare(b.name));
+		if (!tblSearchQuery.trim()) return sorted;
+		const q = tblSearchQuery.toLowerCase();
+		return sorted.filter(t => t.name.toLowerCase().includes(q));
+	});
+
+	const filteredAirtableTables = $derived.by(() => {
+		const sorted = [...airtableTables].sort((a, b) => a.name.localeCompare(b.name));
+		if (!tblSearchQuery.trim()) return sorted;
+		const q = tblSearchQuery.toLowerCase();
+		return sorted.filter(t => t.name.toLowerCase().includes(q));
+	});
+
+	function selectCodaTable(id: string) {
+		codaTableId = id;
+		tblDropdownOpen = false;
+		tblSearchQuery = '';
+		if (id) fetchExternal();
+	}
+
+	function selectAirtableTable(id: string) {
+		airtableTableId = id;
+		tblDropdownOpen = false;
+		tblSearchQuery = '';
+		if (id) fetchExternal();
+	}
+
+	function handleTblClickOutside(e: MouseEvent) {
+		if (tblDropdownRef && !tblDropdownRef.contains(e.target as Node)) {
+			tblDropdownOpen = false;
+			tblSearchQuery = '';
+		}
+	}
+
+	$effect(() => {
+		if (tblDropdownOpen) {
+			document.addEventListener('mousedown', handleTblClickOutside);
+			tick().then(() => tblSearchInput?.focus());
+			return () => document.removeEventListener('mousedown', handleTblClickOutside);
+		}
+	});
+
 	// CSV URL
 	let csvUrl = $state('');
 
 	// Column settings popover
 	let columnSettingsOpen = $state<string | null>(null);
+
+	// Manage columns dropdown
+	let showManageColumns = $state(false);
+	let mcDragIdx = $state<number | null>(null);
+	let mcDragOverIdx = $state<number | null>(null);
 
 	// Cell selection & keyboard navigation
 	let selectedCell = $state<{ rowIdx: number; colIdx: number } | null>(null);
@@ -427,7 +481,7 @@
 		inferredColumns = headers.map(h => {
 			const vals = parsed.map(r => r[h]);
 			const st = inferSemanticType(vals);
-			return { name: h, type: SEMANTIC_TO_SQLITE[st], semanticType: st };
+			return { name: h, type: SEMANTIC_TO_SQLITE[st], semanticType: st, enabled: true, rename: '' };
 		});
 		inferredRows = parsed;
 
@@ -490,7 +544,7 @@
 		inferredColumns = normalizedHeaders.map(h => {
 			const vals = parsed.map(r => r[h]);
 			const st = inferSemanticType(vals);
-			return { name: h, type: SEMANTIC_TO_SQLITE[st], semanticType: st };
+			return { name: h, type: SEMANTIC_TO_SQLITE[st], semanticType: st, enabled: true, rename: '' };
 		});
 		inferredRows = parsed;
 
@@ -547,7 +601,7 @@
 			else if (['DATE'].includes(sqlType)) st = 'date';
 			else if (['DATETIME', 'TIMESTAMP'].includes(sqlType)) st = 'datetime';
 
-			cols.push({ name: colName, type: SEMANTIC_TO_SQLITE[st], semanticType: st });
+			cols.push({ name: colName, type: SEMANTIC_TO_SQLITE[st], semanticType: st, enabled: true, rename: '' });
 		}
 
 		if (cols.length === 0) {
@@ -579,6 +633,24 @@
 		}
 	}
 
+	async function handleCodaPaste() {
+		await tick();
+		if (codaDocId.trim() && !codaTablesLoading) {
+			codaDocTables = [];
+			codaTableId = '';
+			listExternalTables();
+		}
+	}
+
+	async function handleAirtablePaste() {
+		await tick();
+		if (airtableBaseId.trim() && !airtableTablesLoading) {
+			airtableTables = [];
+			airtableTableId = '';
+			listExternalTables();
+		}
+	}
+
 	async function listExternalTables() {
 		const source = externalSource;
 		externalError = '';
@@ -595,7 +667,10 @@
 				const data = await res.json();
 				if (!res.ok) throw new Error(data.error || 'Failed to list tables');
 				codaDocTables = data.tables || [];
-				if (codaDocTables.length === 1) codaTableId = codaDocTables[0].id;
+				if (codaDocTables.length === 1) {
+					codaTableId = codaDocTables[0].id;
+					fetchExternal();
+				}
 			} catch (e: any) {
 				externalError = e.message;
 			} finally {
@@ -613,7 +688,10 @@
 				const data = await res.json();
 				if (!res.ok) throw new Error(data.error || 'Failed to list tables');
 				airtableTables = data.tables || [];
-				if (airtableTables.length === 1) airtableTableId = airtableTables[0].id;
+				if (airtableTables.length === 1) {
+					airtableTableId = airtableTables[0].id;
+					fetchExternal();
+				}
 			} catch (e: any) {
 				externalError = e.message;
 			} finally {
@@ -673,7 +751,7 @@
 			inferredColumns = (data.columns || []).map((col: any) => {
 				const vals = data.rows.map((r: any) => r[col.name]);
 				const st = inferSemanticType(vals);
-				return { name: col.name, type: SEMANTIC_TO_SQLITE[st], semanticType: st };
+				return { name: col.name, type: SEMANTIC_TO_SQLITE[st], semanticType: st, enabled: true, rename: '' };
 			});
 			inferredRows = data.rows;
 
@@ -720,24 +798,36 @@
 				return;
 			}
 		} else if (createMode === 'csv' || createMode === 'json' || createMode === 'external') {
-			if (inferredColumns.length === 0) {
-				errorToast(createMode === 'external' ? 'Fetch data first to detect columns' : 'Parse your data first to detect columns');
+			const enabledCols = inferredColumns.filter(c => c.enabled);
+			if (enabledCols.length === 0) {
+				errorToast(inferredColumns.length === 0
+					? (createMode === 'external' ? 'Fetch data first to detect columns' : 'Parse your data first to detect columns')
+					: 'Enable at least one column to import');
 				return;
 			}
-			columns = inferredColumns.map(c => ({
-				name: c.name,
+			columns = enabledCols.map(c => ({
+				name: (c.rename.trim() || c.name),
 				type: c.type,
 				semanticType: c.semanticType !== 'text' ? c.semanticType : undefined,
 			}));
-			rowsToImport = inferredRows;
+			// Remap rows: only include enabled columns, apply renames
+			const colMap = enabledCols.map(c => ({ from: c.name, to: (c.rename.trim() || c.name) }));
+			rowsToImport = inferredRows.map(row => {
+				const obj: Record<string, any> = {};
+				for (const { from, to } of colMap) {
+					obj[to] = row[from];
+				}
+				return obj;
+			});
 		} else {
 			// SQL mode
-			if (inferredColumns.length === 0) {
-				errorToast('Parse your SQL first to detect columns');
+			const enabledCols = inferredColumns.filter(c => c.enabled);
+			if (enabledCols.length === 0) {
+				errorToast(inferredColumns.length === 0 ? 'Parse your SQL first to detect columns' : 'Enable at least one column to import');
 				return;
 			}
-			columns = inferredColumns.map(c => ({
-				name: c.name,
+			columns = enabledCols.map(c => ({
+				name: (c.rename.trim() || c.name),
 				type: c.type,
 				semanticType: c.semanticType !== 'text' ? c.semanticType : undefined,
 			}));
@@ -805,6 +895,8 @@
 			airtableTableId = '';
 			airtableTables = [];
 			csvUrl = '';
+			tblDropdownOpen = false;
+			tblSearchQuery = '';
 			await fetchTables();
 			selectTable(data.table);
 		} catch (e) {
@@ -1536,6 +1628,24 @@
 		return [...ordered, ...unordered];
 	});
 
+	// All columns for manage panel (including hidden, respecting order)
+	const allColumnsManage = $derived.by(() => {
+		const cols = schema.filter(c => c.name !== 'rowid');
+		if (columnOrder.length === 0) return cols;
+		const orderMap = new Map(columnOrder.map((name, i) => [name, i]));
+		const ordered: ColumnInfo[] = [];
+		const unordered: ColumnInfo[] = [];
+		for (const col of cols) {
+			if (orderMap.has(col.name)) {
+				ordered.push(col);
+			} else {
+				unordered.push(col);
+			}
+		}
+		ordered.sort((a, b) => (orderMap.get(a.name) ?? 0) - (orderMap.get(b.name) ?? 0));
+		return [...ordered, ...unordered];
+	});
+
 	// Load hidden columns and column order from localStorage when project/table changes
 	$effect(() => {
 		if (selectedProject && selectedTable) {
@@ -1729,6 +1839,64 @@
 		colDraggedIndex = null;
 		colDragOverIndex = null;
 	}
+
+	// Manage columns dropdown handlers
+	function toggleColumnVisibility(colName: string) {
+		const next = new Set(hiddenColumns);
+		if (next.has(colName)) {
+			next.delete(colName);
+		} else {
+			next.add(colName);
+		}
+		hiddenColumns = next;
+		persistHiddenColumns();
+	}
+
+	function handleMcDragStart(e: DragEvent, idx: number) {
+		if (!e.dataTransfer) return;
+		mcDragIdx = idx;
+		e.dataTransfer.effectAllowed = 'move';
+		e.dataTransfer.setData('text/plain', idx.toString());
+	}
+
+	function handleMcDragEnd() {
+		mcDragIdx = null;
+		mcDragOverIdx = null;
+	}
+
+	function handleMcDragOver(e: DragEvent, idx: number) {
+		e.preventDefault();
+		if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+		if (mcDragIdx !== null && mcDragIdx !== idx) mcDragOverIdx = idx;
+	}
+
+	function handleMcDrop(e: DragEvent, idx: number) {
+		e.preventDefault();
+		if (mcDragIdx !== null && mcDragIdx !== idx) {
+			const cols = allColumnsManage.map(c => c.name);
+			const [moved] = cols.splice(mcDragIdx, 1);
+			cols.splice(idx, 0, moved);
+			columnOrder = cols;
+			persistColumnOrder();
+		}
+		mcDragIdx = null;
+		mcDragOverIdx = null;
+	}
+
+	// Click-outside to close manage columns
+	$effect(() => {
+		if (showManageColumns) {
+			const handler = (e: MouseEvent) => {
+				const dropdown = document.querySelector('.manage-cols-dropdown');
+				const trigger = (e.target as HTMLElement)?.closest('.mc-trigger');
+				if (dropdown && !dropdown.contains(e.target as Node) && !trigger) {
+					showManageColumns = false;
+				}
+			};
+			document.addEventListener('mousedown', handler);
+			return () => document.removeEventListener('mousedown', handler);
+		}
+	});
 
 	// Column resize handlers
 	function handleResizeStart(e: MouseEvent, colName: string) {
@@ -2168,6 +2336,82 @@
 							{/if}
 						</div>
 						<div class="view-actions">
+							<!-- Manage Columns dropdown -->
+							<div class="export-dropdown-wrapper">
+								<button
+									class="btn-action mc-trigger"
+									onclick={() => showManageColumns = !showManageColumns}
+									title="Manage columns: reorder, show/hide"
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M9 4v16M15 4v16M4 9h16M4 15h16" />
+									</svg>
+									Columns
+									{#if hiddenColumns.size > 0}
+										<span class="mc-badge">{hiddenColumns.size} hidden</span>
+									{/if}
+								</button>
+								{#if showManageColumns}
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
+									<div class="manage-cols-dropdown">
+										<div class="manage-cols-header">
+											<span class="manage-cols-title">Manage Columns</span>
+											<span class="manage-cols-count">{allColumnsManage.length} total</span>
+										</div>
+										<div class="manage-cols-list">
+											{#each allColumnsManage as col, idx}
+												<!-- svelte-ignore a11y_no_static_element_interactions -->
+												<div
+													class="manage-cols-item"
+													class:mc-dragging={mcDragIdx === idx}
+													class:mc-drag-over={mcDragOverIdx === idx && mcDragIdx !== null}
+													draggable="true"
+													ondragstart={(e) => handleMcDragStart(e, idx)}
+													ondragend={handleMcDragEnd}
+													ondragover={(e) => handleMcDragOver(e, idx)}
+													ondrop={(e) => handleMcDrop(e, idx)}
+												>
+													<span class="mc-drag-handle">
+														<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M4 8h16M4 16h16" />
+														</svg>
+													</span>
+													<span class="mc-col-name" class:mc-col-hidden={hiddenColumns.has(col.name)}>
+														{col.displayName || col.name}
+													</span>
+													<button
+														class="mc-vis-btn"
+														class:mc-vis-hidden={hiddenColumns.has(col.name)}
+														onclick={() => toggleColumnVisibility(col.name)}
+														title={hiddenColumns.has(col.name) ? 'Show column' : 'Hide column'}
+													>
+														{#if hiddenColumns.has(col.name)}
+															<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+																<path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+															</svg>
+														{:else}
+															<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+																<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+																<path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+															</svg>
+														{/if}
+													</button>
+												</div>
+											{/each}
+										</div>
+										{#if hiddenColumns.size > 0 || columnOrder.length > 0}
+											<div class="manage-cols-footer">
+												{#if hiddenColumns.size > 0}
+													<button class="manage-cols-reset" onclick={unhideAll}>Show all columns</button>
+												{/if}
+												{#if columnOrder.length > 0}
+													<button class="manage-cols-reset" onclick={() => { columnOrder = []; persistColumnOrder(); }}>Reset order</button>
+												{/if}
+											</div>
+										{/if}
+									</div>
+								{/if}
+							</div>
 							<button class="btn-action" onclick={startAddRow} title="Add row">
 								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
@@ -2680,7 +2924,7 @@
 						<div class="form-group">
 							<label class="form-label">Doc ID or URL</label>
 							<div style="display:flex;gap:0.5rem;align-items:center;">
-								<input type="text" class="form-input font-mono flex-1" bind:value={codaDocId} placeholder="dAbCdEfGhI or coda.io/d/..." />
+								<input type="text" class="form-input font-mono flex-1" bind:value={codaDocId} placeholder="dAbCdEfGhI or coda.io/d/..." onpaste={handleCodaPaste} />
 								<button class="btn-add-col" onclick={listExternalTables} disabled={codaTablesLoading || !codaDocId.trim()}>
 									{#if codaTablesLoading}<span class="loading loading-spinner loading-xs"></span>{/if}
 									List Tables
@@ -2689,13 +2933,76 @@
 						</div>
 						{#if codaDocTables.length > 0}
 							<div class="form-group">
-								<label class="form-label">Table</label>
-								<select class="form-input" bind:value={codaTableId}>
-									<option value="">Select a table...</option>
-									{#each codaDocTables as t}
-										<option value={t.id}>{t.name} ({t.rowCount} rows)</option>
-									{/each}
-								</select>
+								<label class="form-label">Table <span class="tbl-count-badge">{codaDocTables.length}</span></label>
+								<div class="relative" bind:this={tblDropdownRef}>
+									<button
+										type="button"
+										class="w-full px-2.5 py-1.5 rounded-lg font-mono text-sm text-left flex items-center justify-between transition-colors tbl-dropdown-trigger"
+										onclick={() => { tblDropdownOpen = !tblDropdownOpen; }}
+									>
+										<span class="truncate" style="color: {codaTableId ? 'oklch(0.85 0.02 250)' : 'oklch(0.45 0.02 250)'};">
+											{codaDocTables.find(t => t.id === codaTableId)?.name || 'Select a table...'}
+										</span>
+										<svg class="w-3 h-3 flex-shrink-0 transition-transform {tblDropdownOpen ? 'rotate-180' : ''}" style="color: oklch(0.50 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+										</svg>
+									</button>
+
+									{#if tblDropdownOpen}
+										<div
+											class="absolute z-50 mt-1 w-full rounded-lg overflow-hidden shadow-xl"
+											style="background: oklch(0.16 0.01 250); border: 1px solid oklch(0.25 0.02 250);"
+										>
+											<div class="px-2.5 py-1.5 tbl-dropdown-search-border">
+												<div class="relative flex items-center gap-1.5">
+													<svg class="w-3 h-3 flex-shrink-0" style="color: oklch(0.45 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+														<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+													</svg>
+													<input
+														bind:this={tblSearchInput}
+														bind:value={tblSearchQuery}
+														onkeydown={(e) => {
+															if (e.key === 'Escape') { e.stopPropagation(); tblDropdownOpen = false; tblSearchQuery = ''; }
+														}}
+														type="text"
+														placeholder="Filter tables..."
+														class="w-full bg-transparent text-xs font-mono focus:outline-none"
+														style="color: oklch(0.75 0.02 250);"
+														autocomplete="off"
+													/>
+													{#if tblSearchQuery}
+														<button type="button" onclick={() => { tblSearchQuery = ''; tblSearchInput?.focus(); }} style="color: oklch(0.40 0.02 250);" class="hover:opacity-80 transition-opacity">
+															<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+														</button>
+													{/if}
+												</div>
+											</div>
+											<ul class="py-0.5 max-h-[280px] overflow-y-auto">
+												{#if filteredCodaTables.length > 0}
+													{#each filteredCodaTables as t}
+														<li>
+															<button
+																type="button"
+																onclick={() => selectCodaTable(t.id)}
+																class="w-full px-3 py-1.5 flex items-center gap-2 text-left text-xs font-mono transition-colors {codaTableId === t.id ? 'tbl-item-selected' : 'tbl-item-default'}"
+															>
+																<span class="truncate" style="color: oklch(0.80 0.02 250);">{t.name}</span>
+																{#if t.rowCount != null}
+																	<span class="ml-auto flex-shrink-0 text-[10px]" style="color: oklch(0.45 0.02 250);">{t.rowCount} rows</span>
+																{/if}
+																{#if codaTableId === t.id}
+																	<svg class="w-3 h-3 flex-shrink-0" style="color: oklch(0.70 0.15 145);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+																{/if}
+															</button>
+														</li>
+													{/each}
+												{:else}
+													<li class="px-3 py-3 text-center text-[10px] font-mono" style="color: oklch(0.45 0.02 250);">No tables match "{tblSearchQuery}"</li>
+												{/if}
+											</ul>
+										</div>
+									{/if}
+								</div>
 							</div>
 						{:else if !codaTablesLoading && codaDocId.trim()}
 							<div class="form-group">
@@ -2721,7 +3028,7 @@
 						<div class="form-group">
 							<label class="form-label">Base ID or URL</label>
 							<div style="display:flex;gap:0.5rem;align-items:center;">
-								<input type="text" class="form-input font-mono flex-1" bind:value={airtableBaseId} placeholder="appAbCdEfGhIj or airtable.com/app..." />
+								<input type="text" class="form-input font-mono flex-1" bind:value={airtableBaseId} placeholder="appAbCdEfGhIj or airtable.com/app..." onpaste={handleAirtablePaste} />
 								<button class="btn-add-col" onclick={listExternalTables} disabled={airtableTablesLoading || !airtableBaseId.trim()}>
 									{#if airtableTablesLoading}<span class="loading loading-spinner loading-xs"></span>{/if}
 									List Tables
@@ -2730,13 +3037,73 @@
 						</div>
 						{#if airtableTables.length > 0}
 							<div class="form-group">
-								<label class="form-label">Table</label>
-								<select class="form-input" bind:value={airtableTableId}>
-									<option value="">Select a table...</option>
-									{#each airtableTables as t}
-										<option value={t.id}>{t.name}</option>
-									{/each}
-								</select>
+								<label class="form-label">Table <span class="tbl-count-badge">{airtableTables.length}</span></label>
+								<div class="relative" bind:this={tblDropdownRef}>
+									<button
+										type="button"
+										class="w-full px-2.5 py-1.5 rounded-lg font-mono text-sm text-left flex items-center justify-between transition-colors tbl-dropdown-trigger"
+										onclick={() => { tblDropdownOpen = !tblDropdownOpen; }}
+									>
+										<span class="truncate" style="color: {airtableTableId ? 'oklch(0.85 0.02 250)' : 'oklch(0.45 0.02 250)'};">
+											{airtableTables.find(t => t.id === airtableTableId)?.name || 'Select a table...'}
+										</span>
+										<svg class="w-3 h-3 flex-shrink-0 transition-transform {tblDropdownOpen ? 'rotate-180' : ''}" style="color: oklch(0.50 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+										</svg>
+									</button>
+
+									{#if tblDropdownOpen}
+										<div
+											class="absolute z-50 mt-1 w-full rounded-lg overflow-hidden shadow-xl"
+											style="background: oklch(0.16 0.01 250); border: 1px solid oklch(0.25 0.02 250);"
+										>
+											<div class="px-2.5 py-1.5 tbl-dropdown-search-border">
+												<div class="relative flex items-center gap-1.5">
+													<svg class="w-3 h-3 flex-shrink-0" style="color: oklch(0.45 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+														<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+													</svg>
+													<input
+														bind:this={tblSearchInput}
+														bind:value={tblSearchQuery}
+														onkeydown={(e) => {
+															if (e.key === 'Escape') { e.stopPropagation(); tblDropdownOpen = false; tblSearchQuery = ''; }
+														}}
+														type="text"
+														placeholder="Filter tables..."
+														class="w-full bg-transparent text-xs font-mono focus:outline-none"
+														style="color: oklch(0.75 0.02 250);"
+														autocomplete="off"
+													/>
+													{#if tblSearchQuery}
+														<button type="button" onclick={() => { tblSearchQuery = ''; tblSearchInput?.focus(); }} style="color: oklch(0.40 0.02 250);" class="hover:opacity-80 transition-opacity">
+															<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+														</button>
+													{/if}
+												</div>
+											</div>
+											<ul class="py-0.5 max-h-[280px] overflow-y-auto">
+												{#if filteredAirtableTables.length > 0}
+													{#each filteredAirtableTables as t}
+														<li>
+															<button
+																type="button"
+																onclick={() => selectAirtableTable(t.id)}
+																class="w-full px-3 py-1.5 flex items-center gap-2 text-left text-xs font-mono transition-colors {airtableTableId === t.id ? 'tbl-item-selected' : 'tbl-item-default'}"
+															>
+																<span class="truncate" style="color: oklch(0.80 0.02 250);">{t.name}</span>
+																{#if airtableTableId === t.id}
+																	<svg class="w-3 h-3 flex-shrink-0 ml-auto" style="color: oklch(0.70 0.15 145);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+																{/if}
+															</button>
+														</li>
+													{/each}
+												{:else}
+													<li class="px-3 py-3 text-center text-[10px] font-mono" style="color: oklch(0.45 0.02 250);">No tables match "{tblSearchQuery}"</li>
+												{/if}
+											</ul>
+										</div>
+									{/if}
+								</div>
 							</div>
 						{:else if !airtableTablesLoading && airtableBaseId.trim()}
 							<div class="form-group">
@@ -2773,11 +3140,23 @@
 							{#if inferredRows.length > 0}
 								<span class="inferred-badge">{inferredRows.length} row{inferredRows.length !== 1 ? 's' : ''}</span>
 							{/if}
+							<span class="inferred-badge" style="background:oklch(0.55 0.15 200 / 0.3); color:oklch(0.80 0.12 200);">{inferredColumns.filter(c => c.enabled).length}/{inferredColumns.length} cols</span>
 						</div>
 						<div class="inferred-table-wrap">
 							<table class="inferred-table">
 								<thead>
 									<tr>
+										<th style="width:1.5rem; padding:0.25rem;">
+											<input type="checkbox"
+												checked={inferredColumns.every(c => c.enabled)}
+												onchange={(e) => {
+													const checked = /** @type {HTMLInputElement} */ (e.target).checked;
+													inferredColumns = inferredColumns.map(c => ({ ...c, enabled: checked }));
+												}}
+												class="col-checkbox"
+												title="Toggle all columns"
+											/>
+										</th>
 										<th>Column</th>
 										<th>Type</th>
 										{#if inferredRows.length > 0}
@@ -2787,8 +3166,33 @@
 								</thead>
 								<tbody>
 									{#each inferredColumns as col, i}
-										<tr>
-											<td class="font-mono">{col.name}</td>
+										<tr class:col-disabled={!col.enabled}>
+											<td style="width:1.5rem; padding:0.25rem;">
+												<input type="checkbox"
+													checked={col.enabled}
+													onchange={() => {
+														inferredColumns[i] = { ...col, enabled: !col.enabled };
+														inferredColumns = [...inferredColumns];
+													}}
+													class="col-checkbox"
+												/>
+											</td>
+											<td class="font-mono col-name-cell">
+												<input type="text"
+													class="col-rename-input"
+													value={col.rename || col.name}
+													placeholder={col.name}
+													oninput={(e) => {
+														const val = /** @type {HTMLInputElement} */ (e.target).value;
+														inferredColumns[i] = { ...col, rename: val === col.name ? '' : val };
+														inferredColumns = [...inferredColumns];
+													}}
+													disabled={!col.enabled}
+												/>
+												{#if col.rename && col.rename !== col.name}
+													<span class="col-original-name" title="Original: {col.name}">{col.name}</span>
+												{/if}
+											</td>
 											<td>
 												<ColumnTypeSelector
 													value={col.semanticType}
@@ -2817,7 +3221,7 @@
 
 			<div class="modal-footer">
 				<button class="btn-cancel" onclick={() => showCreateModal = false}>Cancel</button>
-				<button class="btn-save" onclick={handleCreateTable} disabled={createSaving || !newTableName.trim() || (createMode !== 'manual' && inferredColumns.length === 0)}>
+				<button class="btn-save" onclick={handleCreateTable} disabled={createSaving || !newTableName.trim() || (createMode !== 'manual' && inferredColumns.filter(c => c.enabled).length === 0)}>
 					{#if createSaving}
 						<span class="loading loading-spinner loading-xs"></span>
 					{/if}
@@ -3309,6 +3713,39 @@
 {/if}
 
 <style>
+	/* Searchable table dropdown */
+	.tbl-dropdown-trigger {
+		background: oklch(0.16 0.01 250);
+		border: 1px solid oklch(0.25 0.02 250);
+	}
+	.tbl-dropdown-trigger:hover {
+		background: oklch(0.18 0.01 250);
+		border-color: oklch(0.30 0.02 250);
+	}
+	.tbl-dropdown-search-border {
+		border-bottom: 1px solid oklch(0.22 0.02 250);
+	}
+	.tbl-item-selected {
+		background: oklch(0.20 0.02 250);
+		border-left: 2px solid oklch(0.65 0.15 250);
+	}
+	.tbl-item-default {
+		background: transparent;
+		border-left: 2px solid transparent;
+	}
+	.tbl-item-default:hover {
+		background: oklch(0.19 0.01 250);
+	}
+	.tbl-count-badge {
+		font-size: 0.625rem;
+		font-weight: 600;
+		padding: 0.05rem 0.35rem;
+		border-radius: 9999px;
+		background: oklch(0.25 0.02 250);
+		color: oklch(0.60 0.02 250);
+		margin-left: 0.25rem;
+	}
+
 	.data-page {
 		display: flex;
 		flex-direction: column;
@@ -3568,6 +4005,7 @@
 
 	.data-table {
 		width: 100%;
+		table-layout: fixed;
 		border-collapse: collapse;
 		font-size: 0.8125rem;
 		outline: none;
@@ -4412,10 +4850,11 @@
 		text-align: left;
 		font-weight: 600;
 		color: oklch(0.60 0.02 250);
-		background: oklch(0.18 0.01 250);
+		background: oklch(0.22 0.015 250);
 		border-bottom: 1px solid oklch(0.28 0.02 250);
 		position: sticky;
 		top: 0;
+		z-index: 2;
 	}
 	.inferred-table td {
 		padding: 0.25rem 0.5rem;
@@ -4429,6 +4868,46 @@
 		white-space: nowrap;
 		color: oklch(0.55 0.02 250) !important;
 		font-style: italic;
+	}
+
+	.col-checkbox {
+		width: 0.875rem;
+		height: 0.875rem;
+		accent-color: oklch(0.65 0.18 200);
+		cursor: pointer;
+	}
+	.col-disabled {
+		opacity: 0.35;
+	}
+	.col-name-cell {
+		position: relative;
+	}
+	.col-rename-input {
+		background: transparent;
+		border: 1px solid transparent;
+		color: inherit;
+		font: inherit;
+		padding: 0.1rem 0.25rem;
+		border-radius: 0.25rem;
+		width: 100%;
+		min-width: 5rem;
+	}
+	.col-rename-input:hover:not(:disabled) {
+		border-color: oklch(0.35 0.02 250);
+	}
+	.col-rename-input:focus {
+		border-color: oklch(0.55 0.15 200);
+		outline: none;
+		background: oklch(0.16 0.01 250);
+	}
+	.col-rename-input:disabled {
+		cursor: default;
+	}
+	.col-original-name {
+		font-size: 0.625rem;
+		color: oklch(0.45 0.02 250);
+		display: block;
+		padding-left: 0.25rem;
 	}
 
 	.create-preview-error {
@@ -4794,6 +5273,154 @@
 	.export-dropdown-item:hover {
 		background: oklch(0.25 0.04 200 / 0.3);
 		color: oklch(0.90 0.02 250);
+	}
+
+	/* Manage Columns dropdown */
+	.manage-cols-dropdown {
+		position: absolute;
+		top: 100%;
+		right: 0;
+		margin-top: 0.25rem;
+		width: 16rem;
+		background: oklch(0.18 0.01 250);
+		border: 1px solid oklch(0.30 0.02 250);
+		border-radius: 0.375rem;
+		box-shadow: 0 8px 24px oklch(0 0 0 / 0.4);
+		z-index: 40;
+		overflow: hidden;
+	}
+
+	.manage-cols-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.5rem 0.625rem;
+		border-bottom: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.manage-cols-title {
+		font-size: 0.6875rem;
+		font-weight: 600;
+		color: oklch(0.75 0.02 250);
+	}
+
+	.manage-cols-count {
+		font-size: 0.625rem;
+		color: oklch(0.45 0.02 250);
+	}
+
+	.manage-cols-list {
+		max-height: 20rem;
+		overflow-y: auto;
+		padding: 0.25rem 0;
+	}
+
+	.manage-cols-item {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.3125rem 0.5rem;
+		cursor: grab;
+		transition: background 0.1s;
+	}
+
+	.manage-cols-item:hover {
+		background: oklch(0.22 0.01 250);
+	}
+
+	.manage-cols-item.mc-dragging {
+		opacity: 0.4;
+	}
+
+	.manage-cols-item.mc-drag-over {
+		border-top: 2px solid oklch(0.60 0.15 200);
+		padding-top: calc(0.3125rem - 2px);
+	}
+
+	.mc-drag-handle {
+		display: flex;
+		align-items: center;
+		color: oklch(0.40 0.02 250);
+		cursor: grab;
+		flex-shrink: 0;
+	}
+
+	.mc-drag-handle:hover {
+		color: oklch(0.60 0.02 250);
+	}
+
+	.mc-col-name {
+		flex: 1;
+		font-size: 0.75rem;
+		font-family: monospace;
+		color: oklch(0.80 0.02 250);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.mc-col-name.mc-col-hidden {
+		color: oklch(0.45 0.02 250);
+		text-decoration: line-through;
+	}
+
+	.mc-vis-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.5rem;
+		height: 1.5rem;
+		border: none;
+		background: none;
+		color: oklch(0.60 0.10 200);
+		border-radius: 0.25rem;
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+
+	.mc-vis-btn:hover {
+		background: oklch(0.25 0.02 250);
+		color: oklch(0.80 0.10 200);
+	}
+
+	.mc-vis-btn.mc-vis-hidden {
+		color: oklch(0.40 0.02 250);
+	}
+
+	.mc-vis-btn.mc-vis-hidden:hover {
+		color: oklch(0.70 0.02 250);
+		background: oklch(0.25 0.02 250);
+	}
+
+	.manage-cols-footer {
+		display: flex;
+		gap: 0.375rem;
+		padding: 0.375rem 0.5rem;
+		border-top: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.manage-cols-reset {
+		font-size: 0.625rem;
+		padding: 0.1875rem 0.375rem;
+		border: 1px solid oklch(0.30 0.02 250);
+		background: oklch(0.20 0.01 250);
+		color: oklch(0.60 0.02 250);
+		border-radius: 0.25rem;
+		cursor: pointer;
+	}
+
+	.manage-cols-reset:hover {
+		background: oklch(0.25 0.02 250);
+		color: oklch(0.80 0.02 250);
+	}
+
+	.mc-badge {
+		font-size: 0.5625rem;
+		padding: 0.0625rem 0.3125rem;
+		background: oklch(0.35 0.08 25 / 0.3);
+		color: oklch(0.75 0.12 25);
+		border-radius: 0.1875rem;
+		margin-left: 0.125rem;
 	}
 
 	/* Move modal */

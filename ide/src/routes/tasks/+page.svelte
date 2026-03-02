@@ -1967,8 +1967,8 @@
 					</div>
 				{/if}
 
-				<!-- Open Tasks Section -->
-				{#if tasksByEpic.size > 0}
+				<!-- Open Tasks Section (show if filtered tasks exist OR unfiltered tasks exist but filter hides them) -->
+				{#if tasksByEpic.size > 0 || (dueDateFilter !== "all" && filterCounts.all > 0)}
 					<div class="subsection">
 						<div class="subsection-header-row">
 							<button
@@ -2030,7 +2030,14 @@
 							{/if}
 						</div>
 
-						{#if !isSubsectionCollapsed(selectedProject!, "tasks")}
+						{#if !isSubsectionCollapsed(selectedProject!, "tasks") && tasksByEpic.size === 0 && dueDateFilter !== "all"}
+							<div class="filter-empty-state">
+								<span>No tasks matching "{DATE_FILTER_OPTIONS.find(o => o.id === dueDateFilter)?.label}" filter</span>
+								<button class="filter-reset-btn" onclick={() => (dueDateFilter = "all")}>Show all tasks</button>
+							</div>
+						{/if}
+
+						{#if !isSubsectionCollapsed(selectedProject!, "tasks") && tasksByEpic.size > 0}
 							<!-- Group by Epic - sorted: epics by priority first, standalone last -->
 							{@const sortedTaskEntries = Array.from(
 								tasksByEpic.entries(),
@@ -2324,7 +2331,7 @@
 				{/if}
 
 				<!-- Empty state for selected project -->
-				{#if projectSessions.length === 0 && tasksByEpic.size === 0 && projectPausedSessions.length === 0 && projectChatSessions.length === 0 && completedCount === 0}
+				{#if projectSessions.length === 0 && tasksByEpic.size === 0 && filterCounts.all === 0 && projectPausedSessions.length === 0 && projectChatSessions.length === 0 && completedCount === 0}
 					<div class="project-empty-state">
 						<span
 							>No active sessions or open tasks for {selectedProject}</span
@@ -2492,6 +2499,30 @@
 	.date-filter-chip.has-overdue.active .chip-count {
 		background: oklch(0.45 0.12 25);
 		color: oklch(0.95 0.02 25);
+	}
+
+	.filter-empty-state {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.75rem 1rem;
+		color: oklch(0.55 0.02 250);
+		font-size: 0.8125rem;
+	}
+	.filter-reset-btn {
+		padding: 0.25rem 0.625rem;
+		border-radius: 999px;
+		border: 1px solid oklch(0.35 0.06 200);
+		background: oklch(0.22 0.03 200);
+		color: oklch(0.75 0.10 200);
+		font-size: 0.75rem;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+	.filter-reset-btn:hover {
+		background: oklch(0.28 0.06 200);
+		border-color: oklch(0.45 0.10 200);
+		color: oklch(0.85 0.08 200);
 	}
 
 	/* Project Content Area */

@@ -31,21 +31,26 @@
 	let saveTimer: ReturnType<typeof setTimeout> | null = null;
 	let saving = $state(false);
 	let saveError = $state<string | null>(null);
+	let previousBaseId = $state<string | null>(null);
 
 	const sourceInfo = $derived(base ? SOURCE_TYPE_INFO.find(s => s.type === base.source_type) : null);
 	const isEditable = $derived(base != null && (base.source_type === 'manual' || base.source_type === 'conversation'));
 
-	// Re-render when base changes
+	// Reset editing only when a different base is selected (not on content updates from auto-save)
 	$effect(() => {
-		if (base) {
-			editing = false;
-			editorContent = base.content ?? '';
-			saveError = null;
-			loadRender(base.id);
-		} else {
-			rendered = null;
-			renderError = null;
-			editing = false;
+		const currentId = base?.id ?? null;
+		if (currentId !== previousBaseId) {
+			previousBaseId = currentId;
+			if (base) {
+				editing = false;
+				editorContent = base.content ?? '';
+				saveError = null;
+				loadRender(base.id);
+			} else {
+				rendered = null;
+				renderError = null;
+				editing = false;
+			}
 		}
 	});
 

@@ -39,7 +39,9 @@
 	import { describeCron } from '$lib/utils/cronUtils';
 	import { getFileTypeInfoFromPath } from '$lib/utils/fileUtils';
 	import BaseAttachChips from './bases/BaseAttachChips.svelte';
-	import type { KnowledgeBase } from '$lib/types/knowledgeBase';
+	import DataTableAttachChips from './bases/DataTableAttachChips.svelte';
+	import type { KnowledgeBase, RenderedBase } from '$lib/types/knowledgeBase';
+	import { SOURCE_TYPE_INFO } from '$lib/types/knowledgeBase';
 
 	// Task interface for drawer (extends API Task with additional optional fields)
 	interface DrawerTask {
@@ -193,6 +195,16 @@
 	// Knowledge bases state
 	let taskBases = $state<KnowledgeBase[]>([]);
 	let taskBaseIds = $derived(taskBases.map(b => b.id));
+
+	// Data tables state
+	let taskTables = $state<Array<{ task_id: string; table_name: string; project: string; context_query?: string; attached_at: string }>>([]);
+	let taskTableNames = $derived(taskTables.map(t => t.table_name));
+
+	// Rendered context previews
+	let renderedBases = $state<Map<string, RenderedBase>>(new Map());
+	let renderedTables = $state<Map<string, { table_name: string; content: string; token_estimate: number }>>(new Map());
+	let renderingContext = $state(false);
+	let expandedContext = $state<Set<string>>(new Set());
 
 	// Update timer for elapsed time display (every 30s)
 	let timerInterval: ReturnType<typeof setInterval> | null = null;
@@ -628,6 +640,9 @@
 		taskHistory = null;
 		availableTasksLoading = false;
 		availableTasks = [];
+		renderedBases = new Map();
+		renderedTables = new Map();
+		expandedContext = new Set();
 
 		try {
 			const response = await fetch(`/api/tasks/${id}`, { signal });
@@ -643,6 +658,7 @@
 			fetchTaskHistory(id, signal);
 			fetchAttachments(id, signal);
 			fetchTaskBases(id, signal);
+			fetchTaskTables(id, signal);
 			fetchTaskSignals(id, signal);  // New structured signals (primary)
 			fetchSessionLogs(id, signal);   // Legacy logs (fallback)
 			fetchAvailableTasks(id, signal);
@@ -704,6 +720,8 @@
 			if (response.ok) {
 				const data = await response.json();
 				taskBases = data.bases || [];
+				// Render previews for attached bases
+				if (taskBases.length > 0) fetchRenderedPreviews(signal);
 			}
 		} catch (err: any) {
 			if (err.name === 'AbortError') return;
@@ -748,6 +766,130 @@
 
 		// Refresh from server
 		fetchTaskBases(task.id);
+	}
+
+	// Fetch data tables attached to task
+	async function fetchTaskTables(id: string, signal?: AbortSignal) {
+		if (!id) return;
+		const project = task?.project || getProjectFromTaskId(id);
+		if (!project) return;
+		try {
+			const response = await fetch(`/api/tasks/${id}/tables?project=${encodeURIComponent(project)}`, { signal });
+			if (response.ok) {
+				const data = await response.json();
+				taskTables = data.tables || [];
+				// Render previews for attached tables
+				if (taskTables.length > 0) fetchRenderedPreviews(signal);
+			}
+		} catch (err: any) {
+			if (err.name === 'AbortError') return;
+			console.error('Error fetching task tables:', err);
+		}
+	}
+
+	// Handle data table changes (attach/detach)
+	async function handleTablesChange(newNames: string[]) {
+		if (!task?.id) return;
+		const project = task.project || getProjectFromTaskId(task.id);
+		if (!project) return;
+
+		const currentNames = new Set(taskTableNames);
+		const newSet = new Set(newNames);
+
+		// Detach removed tables
+		for (const name of currentNames) {
+			if (!newSet.has(name)) {
+				try {
+					await fetch(`/api/tasks/${task.id}/tables/${encodeURIComponent(name)}?project=${encodeURIComponent(project)}`, { method: 'DELETE' });
+				} catch (err) {
+					console.warn(`Failed to detach table ${name}:`, err);
+				}
+			}
+		}
+
+		// Attach new tables
+		for (const name of newSet) {
+			if (!currentNames.has(name)) {
+				try {
+					await fetch(`/api/tasks/${task.id}/tables`, {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ project, tableName: name })
+					});
+				} catch (err) {
+					console.warn(`Failed to attach table ${name}:`, err);
+				}
+			}
+		}
+
+		// Refresh from server
+		fetchTaskTables(task.id);
+	}
+
+	// Fetch rendered previews for attached bases and data tables
+	async function fetchRenderedPreviews(signal?: AbortSignal) {
+		if (!task) return;
+		const project = task.project || getProjectFromTaskId(task.id);
+		if (!project) return;
+
+		renderingContext = true;
+
+		// Render knowledge bases
+		const basePromises = taskBases.map(async (base) => {
+			try {
+				const res = await fetch(`/api/bases/${base.id}/render`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ project }),
+					signal
+				});
+				if (res.ok) {
+					const data = await res.json();
+					if (data.rendered) {
+						renderedBases = new Map(renderedBases).set(base.id, data.rendered);
+					}
+				}
+			} catch (err: any) {
+				if (err.name === 'AbortError') return;
+			}
+		});
+
+		// Render data tables
+		const tablePromises = taskTables.map(async (tbl) => {
+			try {
+				const res = await fetch(`/api/data/tables/${encodeURIComponent(tbl.table_name)}/render`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ project, contextQuery: tbl.context_query }),
+					signal
+				});
+				if (res.ok) {
+					const data = await res.json();
+					if (data.rendered) {
+						renderedTables = new Map(renderedTables).set(tbl.table_name, data.rendered);
+					}
+				}
+			} catch (err: any) {
+				if (err.name === 'AbortError') return;
+			}
+		});
+
+		await Promise.all([...basePromises, ...tablePromises]);
+		renderingContext = false;
+	}
+
+	function toggleContextExpand(key: string) {
+		const next = new Set(expandedContext);
+		if (next.has(key)) next.delete(key);
+		else next.add(key);
+		expandedContext = next;
+	}
+
+	function formatContextTokens(n: number | null | undefined): string {
+		if (n == null) return '';
+		if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+		if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+		return String(n);
 	}
 
 	// Fetch task attachments
@@ -2534,14 +2676,150 @@
 							{/if}
 						</div>
 
-						<!-- Knowledge Bases -->
+						<!-- Context (Knowledge Bases + Data Tables) -->
 						<div>
-							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider text-base-content/60">Knowledge</h4>
-							<BaseAttachChips
-								selectedIds={taskBaseIds}
-								project={task.project || getProjectFromTaskId(task.id)}
-								onChange={handleBasesChange}
-							/>
+							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider text-base-content/60">Context</h4>
+							<div class="flex flex-wrap items-center gap-1.5">
+								<BaseAttachChips
+									selectedIds={taskBaseIds}
+									project={task.project || getProjectFromTaskId(task.id)}
+									onChange={handleBasesChange}
+								/>
+								<DataTableAttachChips
+									selectedTables={taskTableNames}
+									project={task.project || getProjectFromTaskId(task.id)}
+									onChange={handleTablesChange}
+								/>
+							</div>
+
+							<!-- Rendered context previews -->
+							{#if taskBases.length > 0 || taskTables.length > 0}
+								<div class="flex flex-col gap-1.5 mt-2">
+									{#if renderingContext && renderedBases.size === 0 && renderedTables.size === 0}
+										<div class="flex items-center gap-2 px-2.5 py-1.5 text-xs" style="color: oklch(0.55 0.01 250);">
+											<span class="loading loading-spinner loading-xs"></span>
+											Loading previews...
+										</div>
+									{/if}
+
+									<!-- Knowledge base previews -->
+									{#each taskBases as base (base.id)}
+										{@const preview = renderedBases.get(base.id)}
+										{@const expanded = expandedContext.has(`base-${base.id}`)}
+										{@const sourceInfo = SOURCE_TYPE_INFO.find(s => s.type === base.source_type)}
+										<div
+											class="rounded-lg overflow-hidden"
+											style="border: 1px solid oklch(0.25 0.01 250); background: oklch(0.16 0.01 250);"
+										>
+											<!-- Header row -->
+											<button
+												type="button"
+												class="w-full flex items-center gap-2 px-2.5 py-1.5 text-left transition-colors"
+												style="background: oklch(0.16 0.01 250);"
+												onmouseenter={(e) => { (e.currentTarget as HTMLElement).style.background = 'oklch(0.19 0.01 250)'; }}
+												onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.background = 'oklch(0.16 0.01 250)'; }}
+												onclick={() => toggleContextExpand(`base-${base.id}`)}
+											>
+												<span class="text-xs flex-shrink-0">{sourceInfo?.icon || '📄'}</span>
+												<span class="text-xs font-medium truncate flex-1" style="color: oklch(0.85 0.01 250);">
+													{base.name}
+												</span>
+												{#if preview?.token_estimate}
+													<span class="text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0" style="background: oklch(0.22 0.02 250); color: oklch(0.60 0.01 250);">
+														~{formatContextTokens(preview.token_estimate)} tok
+													</span>
+												{:else if !preview && renderingContext}
+													<span class="loading loading-spinner loading-xs flex-shrink-0" style="color: oklch(0.45 0.01 250);"></span>
+												{/if}
+												<svg
+													class="w-3 h-3 flex-shrink-0 transition-transform {expanded ? 'rotate-180' : ''}"
+													style="color: oklch(0.45 0.01 250);"
+													fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+												>
+													<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+												</svg>
+											</button>
+
+											<!-- Expanded content -->
+											{#if expanded && preview}
+												<div
+													class="px-2.5 pb-2.5 overflow-auto text-xs font-mono whitespace-pre-wrap"
+													style="max-height: 240px; color: oklch(0.70 0.01 250); border-top: 1px solid oklch(0.22 0.01 250); line-height: 1.5;"
+													transition:slide={{ duration: 150 }}
+												>
+													{preview.content}
+												</div>
+											{:else if expanded && !preview}
+												<div
+													class="px-2.5 py-2 text-xs italic"
+													style="color: oklch(0.50 0.01 250); border-top: 1px solid oklch(0.22 0.01 250);"
+													transition:slide={{ duration: 150 }}
+												>
+													{renderingContext ? 'Rendering...' : 'No preview available'}
+												</div>
+											{/if}
+										</div>
+									{/each}
+
+									<!-- Data table previews -->
+									{#each taskTables as tbl (tbl.table_name)}
+										{@const preview = renderedTables.get(tbl.table_name)}
+										{@const expanded = expandedContext.has(`table-${tbl.table_name}`)}
+										<div
+											class="rounded-lg overflow-hidden"
+											style="border: 1px solid oklch(0.25 0.02 145 / 0.3); background: oklch(0.16 0.01 250);"
+										>
+											<!-- Header row -->
+											<button
+												type="button"
+												class="w-full flex items-center gap-2 px-2.5 py-1.5 text-left transition-colors"
+												style="background: oklch(0.16 0.01 250);"
+												onmouseenter={(e) => { (e.currentTarget as HTMLElement).style.background = 'oklch(0.19 0.01 250)'; }}
+												onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.background = 'oklch(0.16 0.01 250)'; }}
+												onclick={() => toggleContextExpand(`table-${tbl.table_name}`)}
+											>
+												<span class="text-xs flex-shrink-0">🗃️</span>
+												<span class="text-xs font-medium truncate flex-1" style="color: oklch(0.85 0.01 250);">
+													{tbl.table_name}
+												</span>
+												{#if preview?.token_estimate}
+													<span class="text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0" style="background: oklch(0.22 0.02 250); color: oklch(0.60 0.01 250);">
+														~{formatContextTokens(preview.token_estimate)} tok
+													</span>
+												{:else if !preview && renderingContext}
+													<span class="loading loading-spinner loading-xs flex-shrink-0" style="color: oklch(0.45 0.01 250);"></span>
+												{/if}
+												<svg
+													class="w-3 h-3 flex-shrink-0 transition-transform {expanded ? 'rotate-180' : ''}"
+													style="color: oklch(0.45 0.01 250);"
+													fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+												>
+													<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+												</svg>
+											</button>
+
+											<!-- Expanded content -->
+											{#if expanded && preview}
+												<div
+													class="px-2.5 pb-2.5 overflow-auto text-xs font-mono whitespace-pre-wrap"
+													style="max-height: 240px; color: oklch(0.70 0.01 250); border-top: 1px solid oklch(0.22 0.01 250); line-height: 1.5;"
+													transition:slide={{ duration: 150 }}
+												>
+													{preview.content}
+												</div>
+											{:else if expanded && !preview}
+												<div
+													class="px-2.5 py-2 text-xs italic"
+													style="color: oklch(0.50 0.01 250); border-top: 1px solid oklch(0.22 0.01 250);"
+													transition:slide={{ duration: 150 }}
+												>
+													{renderingContext ? 'Rendering...' : 'No preview available'}
+												</div>
+											{/if}
+										</div>
+									{/each}
+								</div>
+							{/if}
 						</div>
 
 						<!-- Description (Inline Editable) - Industrial -->

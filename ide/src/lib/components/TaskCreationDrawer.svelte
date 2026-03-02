@@ -1330,6 +1330,7 @@
 		};
 		selectedModel = '';
 		selectedBaseIds = [];
+		selectedTableNames = [];
 		validationErrors = {};
 		submitError = null;
 		successMessage = null;
@@ -2016,24 +2017,31 @@
 						<div class="text-xs text-error -mt-2">{validationErrors.type}</div>
 					{/if}
 
-					<!-- Knowledge Bases (Optional) -->
+					<!-- Context (Knowledge Bases + Data Tables) -->
 					<div class="form-control">
 						<label class="label py-0.5">
 							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
-								Knowledge
+								Context
 							</span>
 						</label>
-						<div class={aiFlashFields.has('bases') ? 'ai-suggest-flash' : ''}>
-						<BaseAttachChips
-							bind:selectedIds={selectedBaseIds}
-							project={formData.project || getActiveProject()}
-							compact={false}
-							onChange={() => markFieldModified('bases')}
-						/>
-						{#if suggestionsApplied && !userModifiedFields.has('bases') && selectedBaseIds.length > 0}
-							<span class="ml-1 text-[10px] text-info/60 italic">AI suggested</span>
-						{/if}
-					</div>
+						<div class="flex flex-wrap items-center gap-1.5">
+							<div class="inline-flex flex-wrap items-center gap-1 {aiFlashFields.has('bases') ? 'ai-suggest-flash' : ''}">
+								<BaseAttachChips
+									bind:selectedIds={selectedBaseIds}
+									project={formData.project || getActiveProject()}
+									compact={false}
+									onChange={() => markFieldModified('bases')}
+								/>
+								{#if suggestionsApplied && !userModifiedFields.has('bases') && selectedBaseIds.length > 0}
+									<span class="ml-1 text-[10px] text-info/60 italic">AI suggested</span>
+								{/if}
+							</div>
+							<DataTableAttachChips
+								bind:selectedTables={selectedTableNames}
+								project={formData.project || getActiveProject()}
+								compact={false}
+							/>
+						</div>
 					</div>
 
 					<!-- Command / Due Date — 2-col grid -->

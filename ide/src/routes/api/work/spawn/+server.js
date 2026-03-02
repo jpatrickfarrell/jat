@@ -41,7 +41,7 @@ import {
 } from '$lib/utils/agentConfig.js';
 import { getAgentModel } from '$lib/types/agentProgram.js';
 import { getApiKey, getCustomApiKey, getCustomApiKeyMeta } from '$lib/utils/credentials.js';
-import { getTaskBases, getBases, renderBase } from '$lib/server/jat-bases.js';
+import { getTaskBases, getBases, renderBase, getTaskTables, renderDataTable } from '$lib/server/jat-bases.js';
 
 const DB_PATH = process.env.AGENT_MAIL_DB || `${process.env.HOME}/.agent-mail.db`;
 
@@ -982,6 +982,30 @@ export async function POST({ request }) {
 				}
 			} catch (err) {
 				console.warn('[spawn] Failed to load knowledge bases:', err.message);
+			}
+
+			// Render attached data tables
+			try {
+				const tables = getTaskTables(projectPath, taskId);
+				if (tables.length > 0) {
+					const renderedTableParts = [];
+
+					for (const tbl of tables) {
+						try {
+							const rendered = renderDataTable(projectPath, tbl.table_name, tbl.context_query);
+							renderedTableParts.push(`<data-table name="${rendered.table_name}">\n${rendered.content}\n</data-table>`);
+						} catch (err) {
+							console.warn(`[spawn] Failed to render data table ${tbl.table_name}:`, err.message);
+						}
+					}
+
+					if (renderedTableParts.length > 0) {
+						basesContent += `\n<data-tables>\n${renderedTableParts.join('\n')}\n</data-tables>`;
+						console.log(`[spawn] Injecting ${renderedTableParts.length} data table(s)`);
+					}
+				}
+			} catch (err) {
+				console.warn('[spawn] Failed to load data tables:', err.message);
 			}
 		}
 

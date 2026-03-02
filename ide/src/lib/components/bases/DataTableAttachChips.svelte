@@ -89,20 +89,18 @@
 			</span>
 		{/each}
 
-		<!-- Add button -->
-		{#if availableTables.length > 0}
-			<button
-				type="button"
-				class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-colors"
-				style="background: oklch(0.22 0.01 250); color: oklch(0.60 0.01 250); border: 1px dashed oklch(0.35 0.01 250);"
-				onclick={(e) => { e.stopPropagation(); showDropdown = !showDropdown; }}
-			>
-				<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-				</svg>
-				{compact ? '' : 'Data Table'}
-			</button>
-		{/if}
+		<!-- Add button (always visible) -->
+		<button
+			type="button"
+			class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-colors"
+			style="background: oklch(0.22 0.01 250); color: oklch(0.60 0.01 250); border: 1px dashed oklch(0.35 0.01 250);"
+			onclick={(e) => { e.stopPropagation(); showDropdown = !showDropdown; }}
+		>
+			<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+			</svg>
+			{compact ? '' : 'Data Table'}
+		</button>
 	</div>
 
 	<!-- Dropdown -->

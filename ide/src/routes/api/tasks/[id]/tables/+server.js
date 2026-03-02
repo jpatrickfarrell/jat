@@ -52,7 +52,7 @@ export async function POST({ params, request }) {
 		// Auto-init bases.db if needed
 		initBasesDb(path);
 
-		const result = attachTableToTask(path, taskId, tableName, project, { contextQuery });
+		const result = attachTableToTask(path, taskId, tableName, project, { context_query: contextQuery });
 		return json({ success: true, attached: result.attached });
 	} catch (error) {
 		return json({ error: error.message }, { status: 500 });

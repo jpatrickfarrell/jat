@@ -33,32 +33,15 @@
   let capturingScreenshot = $state(false);
 
   // Subtab state
-  // Submitted = waiting on dev (submitted, in_progress, rejected)
-  // Review = dev finished, user's turn to accept/reject (completed, wontfix)
-  // Done = fully resolved (accepted, closed)
-  type SubTab = 'submitted' | 'review' | 'done';
-  let activeSubTab = $state<SubTab>('submitted');
-
-  // Auto-switch to review tab when there are items needing attention
-  let hasAutoSwitched = $state(false);
-  $effect(() => {
-    if (!hasAutoSwitched && reviewCount > 0 && submittedCount === 0) {
-      activeSubTab = 'review';
-      hasAutoSwitched = true;
-    }
-  });
+  // In Progress = all active/actionable items (submitted, in_progress, rejected, completed, wontfix)
+  // Done = fully resolved / archival (accepted, closed)
+  type SubTab = 'active' | 'done';
+  let activeSubTab = $state<SubTab>('active');
 
   // Filter reports by subtab
   let filteredReports = $derived.by(() => {
-    if (activeSubTab === 'submitted') {
-      // submitted = waiting for dev to pick up
-      // in_progress = dev is working on it (shown with badge)
-      // rejected = user rejected, waiting for dev revision
-      return reports.filter(r => ['submitted', 'in_progress', 'rejected'].includes(r.status));
-    } else if (activeSubTab === 'review') {
-      // completed = dev finished, needs user review
-      // wontfix = dev declined, user can accept or push back
-      return reports.filter(r => r.status === 'completed' || r.status === 'wontfix');
+    if (activeSubTab === 'active') {
+      return reports.filter(r => ['submitted', 'in_progress', 'rejected', 'completed', 'wontfix'].includes(r.status));
     } else {
       // accepted, closed = fully resolved
       return reports.filter(r => r.status === 'accepted' || r.status === 'closed');
@@ -66,8 +49,7 @@
   });
 
   // Counts for subtab badges
-  let submittedCount = $derived(reports.filter(r => ['submitted', 'in_progress', 'rejected'].includes(r.status)).length);
-  let reviewCount = $derived(reports.filter(r => r.status === 'completed' || r.status === 'wontfix').length);
+  let activeCount = $derived(reports.filter(r => ['submitted', 'in_progress', 'rejected', 'completed', 'wontfix'].includes(r.status)).length);
   let doneCount = $derived(reports.filter(r => r.status === 'accepted' || r.status === 'closed').length);
 
   function toggleCard(reportId: string) {
@@ -226,13 +208,9 @@
 <div class="request-list">
   <!-- Subtabs -->
   <div class="subtabs">
-    <button class="subtab" class:active={activeSubTab === 'submitted'} onclick={() => activeSubTab = 'submitted'}>
-      Submitted
-      {#if submittedCount > 0}<span class="subtab-count">{submittedCount}</span>{/if}
-    </button>
-    <button class="subtab" class:active={activeSubTab === 'review'} onclick={() => activeSubTab = 'review'}>
-      Review
-      {#if reviewCount > 0}<span class="subtab-count review-count">{reviewCount}</span>{/if}
+    <button class="subtab" class:active={activeSubTab === 'active'} onclick={() => activeSubTab = 'active'}>
+      In Progress
+      {#if activeCount > 0}<span class="subtab-count">{activeCount}</span>{/if}
     </button>
     <button class="subtab" class:active={activeSubTab === 'done'} onclick={() => activeSubTab = 'done'}>
       Done
@@ -537,14 +515,6 @@
   .subtab.active .subtab-count {
     background: #3b82f6;
     color: #fff;
-  }
-  .subtab-count.review-count {
-    background: #f59e0b30;
-    color: #fbbf24;
-  }
-  .subtab.active .subtab-count.review-count {
-    background: #f59e0b;
-    color: #000;
   }
   .subtab-count.done-count {
     background: #10b98130;

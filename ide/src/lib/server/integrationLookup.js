@@ -22,7 +22,16 @@ function loadIntegrationsConfig() {
 function extractReferenceId(/** @type {string} */ itemId, /** @type {string} */ sourceType) {
 	if (!itemId) return null;
 	if (sourceType === 'supabase' && itemId.startsWith('supabase-')) {
-		return itemId.slice('supabase-'.length);
+		let stripped = itemId.slice('supabase-'.length);
+		// Handle rejection items: "supabase-reject-{uuid}-{timestamp}"
+		// The ingest daemon creates these when a user rejects a feedback report.
+		// Extract just the UUID so callbacks send a valid reference ID.
+		if (stripped.startsWith('reject-')) {
+			const afterReject = stripped.slice('reject-'.length);
+			const uuidMatch = afterReject.match(/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+			if (uuidMatch) return uuidMatch[1];
+		}
+		return stripped;
 	}
 	return itemId;
 }
@@ -56,6 +65,12 @@ export function lookupIntegrations(taskIds) {
 		/** @type {Record<string, any>} */
 		const integrations = {};
 		for (const row of /** @type {any[]} */ (rows)) {
+			// Prefer non-rejection entries: if we already have a normal entry for this
+			// task, skip rejection rows (item_id contains "-reject-") to avoid corrupted
+			// referenceIds in callbacks.
+			const isRejection = row.item_id && row.item_id.includes('-reject-');
+			if (isRejection && integrations[row.task_id]) continue;
+
 			const source = sourceMap.get(row.source_id);
 			const sourceType = source?.type || row.origin_adapter_type || 'unknown';
 			const referenceId = extractReferenceId(row.item_id, sourceType);

@@ -582,7 +582,10 @@ _fire_close_callback() {
   local ide_url="http://127.0.0.1:3333"
 
   # Quick check: is IDE reachable? (1s timeout)
-  curl -sf --max-time 1 "${ide_url}/" >/dev/null 2>&1 || return 0
+  if ! curl -sf --max-time 1 "${ide_url}/" >/dev/null 2>&1; then
+    echo "Warning: IDE not reachable at ${ide_url}, skipping integration callback for ${task_id}" >&2
+    return 0
+  fi
 
   # Query integration info for this task
   local int_json
@@ -651,7 +654,10 @@ _fire_status_callback() {
   local ide_url="http://127.0.0.1:3333"
 
   # Quick check: is IDE reachable?
-  curl -sf --max-time 1 "${ide_url}/" >/dev/null 2>&1 || return 0
+  if ! curl -sf --max-time 1 "${ide_url}/" >/dev/null 2>&1; then
+    echo "Warning: IDE not reachable at ${ide_url}, skipping status callback for ${task_id}" >&2
+    return 0
+  fi
 
   # Query integration info
   local int_json

@@ -64,6 +64,8 @@
 	}
 	let openTasks = $state<OpenTask[]>([]);
 	let openTasksCollapsed = $state(false);
+	let otDueDateFilter = $state<'today' | 'tomorrow' | 'week' | 'overdue' | 'unscheduled' | 'all'>('all');
+	let otFilterCounts = $state<Record<string, number>>({});
 	let sessionsCollapsed = $state(false);
 	let openTasksLoading = $state(false);
 	let openTaskImages = $state<Record<string, Array<{ path: string; id: string; uploadedAt?: string }>>>({});
@@ -922,26 +924,54 @@
 			<!-- Open Tasks (agents tab only, when project is selected) -->
 			{#if activeTab === 'agents' && selectedProject && (openTasks.length > 0 || openTasksLoading)}
 			<div class="open-tasks-section" style="margin-top: 1.5rem;">
-				<button
-					class="open-tasks-header"
-					onclick={() => openTasksCollapsed = !openTasksCollapsed}
-				>
-					<div class="open-tasks-header-left">
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							fill="none"
-							viewBox="0 0 24 24"
-							stroke-width="1.5"
-							stroke="currentColor"
-							class="open-tasks-chevron"
-							class:collapsed={openTasksCollapsed}
-						>
-							<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-						</svg>
-						<span class="open-tasks-title">Open Tasks</span>
-						<span class="open-tasks-count">{openTasks.length}</span>
+				<div class="open-tasks-header-row">
+					<button
+						class="open-tasks-header"
+						onclick={() => openTasksCollapsed = !openTasksCollapsed}
+					>
+						<div class="open-tasks-header-left">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="1.5"
+								stroke="currentColor"
+								class="open-tasks-chevron"
+								class:collapsed={openTasksCollapsed}
+							>
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+							</svg>
+							<span class="open-tasks-title">Open Tasks</span>
+							<span class="open-tasks-count">{openTasks.length}</span>
+						</div>
+					</button>
+					{#if !openTasksCollapsed}
+					<div class="ot-date-filter-chips">
+						{#each [
+							{ id: 'today', label: 'Today' },
+							{ id: 'tomorrow', label: 'Tomorrow' },
+							{ id: 'week', label: 'This Week' },
+							{ id: 'overdue', label: 'Overdue' },
+							{ id: 'unscheduled', label: 'Unscheduled' },
+							{ id: 'all', label: 'All' },
+						] as opt}
+							{@const count = otFilterCounts[opt.id] || 0}
+							<button
+								type="button"
+								class="ot-date-chip"
+								class:active={otDueDateFilter === opt.id}
+								class:has-overdue={opt.id === 'overdue' && count > 0}
+								onclick={() => (otDueDateFilter = opt.id as typeof otDueDateFilter)}
+							>
+								<span class="chip-label">{opt.label}</span>
+								{#if count > 0}
+									<span class="chip-count">{count}</span>
+								{/if}
+							</button>
+						{/each}
 					</div>
-				</button>
+					{/if}
+				</div>
 				{#if !openTasksCollapsed}
 				<TasksOpen
 					tasks={openTasks}
@@ -951,9 +981,11 @@
 					projectColors={projectColors}
 					taskImages={openTaskImages}
 					showHeader={false}
+					bind:dueDateFilter={otDueDateFilter}
 					onSpawnTask={handleSpawnOpenTask}
 					onRetry={() => fetchOpenTasks(selectedProject)}
 					onTaskClick={(id) => openTaskDetailDrawer(id)}
+					onFilterCountsChange={(counts) => { otFilterCounts = counts; }}
 				/>
 				{/if}
 			</div>
@@ -1298,6 +1330,88 @@
 		padding: 0.05rem 0.4rem;
 		border-radius: 9999px;
 		font-family: ui-monospace, monospace;
+	}
+
+	.open-tasks-header-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.open-tasks-header-row .open-tasks-header {
+		flex-shrink: 0;
+		width: auto;
+		border-radius: 6px 0 0 0;
+	}
+
+	.ot-date-filter-chips {
+		display: flex;
+		gap: 0.375rem;
+		overflow-x: auto;
+		scrollbar-width: none;
+		margin-left: auto;
+		padding: 0.5rem 0.75rem 0.5rem 0;
+		background: oklch(0.16 0.01 250);
+		border: 1px solid oklch(0.22 0.02 250);
+		border-left: none;
+		border-radius: 0 6px 0 0;
+		flex: 1;
+		min-width: 0;
+	}
+	.ot-date-filter-chips::-webkit-scrollbar { display: none; }
+
+	.ot-date-chip {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.25rem 0.5rem;
+		border-radius: 999px;
+		border: 1px solid oklch(0.30 0.02 250);
+		background: oklch(0.20 0.01 250);
+		color: oklch(0.65 0.02 250);
+		font-size: 0.75rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.15s ease;
+		white-space: nowrap;
+		flex-shrink: 0;
+	}
+	.ot-date-chip:hover {
+		background: oklch(0.24 0.02 250);
+		border-color: oklch(0.38 0.03 250);
+		color: oklch(0.80 0.02 250);
+	}
+	.ot-date-chip.active {
+		background: oklch(0.28 0.08 200);
+		border-color: oklch(0.55 0.12 200);
+		color: oklch(0.90 0.05 200);
+	}
+	.ot-date-chip.has-overdue {
+		border-color: oklch(0.50 0.15 25);
+	}
+	.ot-date-chip.has-overdue.active {
+		background: oklch(0.28 0.08 25);
+		border-color: oklch(0.55 0.15 25);
+		color: oklch(0.90 0.08 25);
+	}
+	.ot-date-chip .chip-label { line-height: 1; }
+	.ot-date-chip .chip-count {
+		font-size: 0.6875rem;
+		font-weight: 600;
+		background: oklch(0.30 0.03 250);
+		color: oklch(0.75 0.02 250);
+		padding: 0.0625rem 0.375rem;
+		border-radius: 999px;
+		min-width: 1.25rem;
+		text-align: center;
+	}
+	.ot-date-chip.active .chip-count {
+		background: oklch(0.40 0.10 200);
+		color: oklch(0.95 0.02 200);
+	}
+	.ot-date-chip.has-overdue.active .chip-count {
+		background: oklch(0.45 0.12 25);
+		color: oklch(0.95 0.02 25);
 	}
 
 	.tmux-tip-wrapper {

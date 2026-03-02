@@ -56,6 +56,8 @@
 		agent_program?: string | null;
 	}
 
+	type DueDateFilterType = 'today' | 'tomorrow' | 'week' | 'overdue' | 'unscheduled' | 'all';
+
 	let {
 		tasks = [],
 		loading = false,
@@ -67,10 +69,12 @@
 		showHeader = true,
 		highlightedTaskIds = new Set<string>(),
 		epicsReadyForVerification = new Set<string>(),
+		dueDateFilter = $bindable('all' as DueDateFilterType),
 		onSpawnTask = () => {},
 		onRetry = () => {},
 		onTaskClick = () => {},
-		onAddTask = null
+		onAddTask = null,
+		onFilterCountsChange = (_counts: Record<string, number>) => {}
 	}: {
 		tasks: Task[];
 		loading: boolean;
@@ -82,10 +86,12 @@
 		showHeader?: boolean;
 		highlightedTaskIds?: Set<string>;
 		epicsReadyForVerification?: Set<string>;
+		dueDateFilter?: DueDateFilterType;
 		onSpawnTask: (task: Task, selection?: AgentSelection) => void;
 		onRetry: () => void;
 		onTaskClick: (taskId: string) => void;
 		onAddTask?: (() => void) | null;
+		onFilterCountsChange?: (counts: Record<string, number>) => void;
 	} = $props();
 
 	// Alt key tracking for agent picker
@@ -635,8 +641,6 @@
 	let selectedProject = $state<string | null>(null);
 
 	// === Due Date Filter ===
-	type DueDateFilter = 'today' | 'tomorrow' | 'week' | 'overdue' | 'unscheduled' | 'all';
-	let dueDateFilter = $state<DueDateFilter>('all');
 
 	function getLocalDateString(date: Date): string {
 		return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -645,7 +649,7 @@
 	function getTomorrow(): string { const d = new Date(); d.setDate(d.getDate() + 1); return getLocalDateString(d); }
 	function getEndOfWeek(): string { const d = new Date(); const day = d.getDay(); const daysUntilSunday = day === 0 ? 0 : 7 - day; d.setDate(d.getDate() + daysUntilSunday); return getLocalDateString(d); }
 
-	function taskMatchesDateFilter(task: Task, filter: DueDateFilter): boolean {
+	function taskMatchesDateFilter(task: Task, filter: DueDateFilterType): boolean {
 		const dueDate = task.due_date;
 		switch (filter) {
 			case 'all': return true;
@@ -658,7 +662,7 @@
 		}
 	}
 
-	const DATE_FILTER_OPTIONS: { id: DueDateFilter; label: string }[] = [
+	const DATE_FILTER_OPTIONS: { id: DueDateFilterType; label: string }[] = [
 		{ id: 'today', label: 'Today' },
 		{ id: 'tomorrow', label: 'Tomorrow' },
 		{ id: 'week', label: 'This Week' },
@@ -673,7 +677,7 @@
 			t.status === 'open' && t.issue_type !== 'epic' &&
 			(!showHeader || selectedProject === null || getProjectFromTaskId(t.id) === selectedProject)
 		);
-		const counts: Record<DueDateFilter, number> = { today: 0, tomorrow: 0, week: 0, overdue: 0, unscheduled: 0, all: candidates.length };
+		const counts: Record<DueDateFilterType, number> = { today: 0, tomorrow: 0, week: 0, overdue: 0, unscheduled: 0, all: candidates.length };
 		for (const task of candidates) {
 			if (taskMatchesDateFilter(task, 'today')) counts.today++;
 			if (taskMatchesDateFilter(task, 'tomorrow')) counts.tomorrow++;
@@ -682,6 +686,11 @@
 			if (taskMatchesDateFilter(task, 'unscheduled')) counts.unscheduled++;
 		}
 		return counts;
+	});
+
+	// Notify parent of filter count changes
+	$effect(() => {
+		onFilterCountsChange(filterCounts);
 	});
 
 	// Load persisted filter on mount
@@ -1236,29 +1245,35 @@
 				</div>
 			{/if}
 
+			<!-- Due Date Filter Chips -->
+			<div class="date-filter-chips">
+				{#each DATE_FILTER_OPTIONS as opt}
+					{@const count = filterCounts[opt.id]}
+					<button
+						type="button"
+						class="date-filter-chip"
+						class:active={dueDateFilter === opt.id}
+						class:has-overdue={opt.id === 'overdue' && count > 0}
+						onclick={() => (dueDateFilter = opt.id)}
+					>
+						<span class="chip-label">{opt.label}</span>
+						{#if count > 0}
+							<span class="chip-count">{count}</span>
+						{/if}
+					</button>
+				{/each}
 			</div>
+		</div>
+
+		{#if sortedOpenTasks.length === 0 && dueDateFilter !== 'all' && filterCounts.all > 0}
+			<div class="filter-empty-state">
+				<span>No tasks matching "{DATE_FILTER_OPTIONS.find(o => o.id === dueDateFilter)?.label}" filter</span>
+				<button type="button" class="filter-reset-btn" onclick={() => (dueDateFilter = 'all')}>Show all tasks</button>
+			</div>
+		{/if}
 	{/if}
 
-	<!-- Due Date Filter Chips (always visible, even without header) -->
-	<div class="date-filter-chips" class:no-header-chips={!showHeader}>
-		{#each DATE_FILTER_OPTIONS as opt}
-			{@const count = filterCounts[opt.id]}
-			<button
-				type="button"
-				class="date-filter-chip"
-				class:active={dueDateFilter === opt.id}
-				class:has-overdue={opt.id === 'overdue' && count > 0}
-				onclick={() => (dueDateFilter = opt.id)}
-			>
-				<span class="chip-label">{opt.label}</span>
-				{#if count > 0}
-					<span class="chip-count">{count}</span>
-				{/if}
-			</button>
-		{/each}
-	</div>
-
-	{#if sortedOpenTasks.length === 0 && dueDateFilter !== 'all' && filterCounts.all > 0}
+	{#if !showHeader && sortedOpenTasks.length === 0 && dueDateFilter !== 'all' && filterCounts.all > 0}
 		<div class="filter-empty-state">
 			<span>No tasks matching "{DATE_FILTER_OPTIONS.find(o => o.id === dueDateFilter)?.label}" filter</span>
 			<button type="button" class="filter-reset-btn" onclick={() => (dueDateFilter = 'all')}>Show all tasks</button>
@@ -1948,10 +1963,6 @@
 
 	/* Due Date Filter Chips */
 	.section-header:has(.project-filter) .date-filter-chips {
-		margin-left: 0;
-	}
-	.date-filter-chips.no-header-chips {
-		padding: 0.5rem 0.75rem 0.25rem;
 		margin-left: 0;
 	}
 	.date-filter-chips {

@@ -1236,32 +1236,33 @@
 				</div>
 			{/if}
 
-			<!-- Due Date Filter Chips -->
-			<div class="date-filter-chips">
-				{#each DATE_FILTER_OPTIONS as opt}
-					{@const count = filterCounts[opt.id]}
-					<button
-						type="button"
-						class="date-filter-chip"
-						class:active={dueDateFilter === opt.id}
-						class:has-overdue={opt.id === 'overdue' && count > 0}
-						onclick={() => (dueDateFilter = opt.id)}
-					>
-						<span class="chip-label">{opt.label}</span>
-						{#if count > 0}
-							<span class="chip-count">{count}</span>
-						{/if}
-					</button>
-				{/each}
 			</div>
-		</div>
+	{/if}
 
-		{#if sortedOpenTasks.length === 0 && dueDateFilter !== 'all' && filterCounts.all > 0}
-			<div class="filter-empty-state">
-				<span>No tasks matching "{DATE_FILTER_OPTIONS.find(o => o.id === dueDateFilter)?.label}" filter</span>
-				<button type="button" class="filter-reset-btn" onclick={() => (dueDateFilter = 'all')}>Show all tasks</button>
-			</div>
-		{/if}
+	<!-- Due Date Filter Chips (always visible, even without header) -->
+	<div class="date-filter-chips" class:no-header-chips={!showHeader}>
+		{#each DATE_FILTER_OPTIONS as opt}
+			{@const count = filterCounts[opt.id]}
+			<button
+				type="button"
+				class="date-filter-chip"
+				class:active={dueDateFilter === opt.id}
+				class:has-overdue={opt.id === 'overdue' && count > 0}
+				onclick={() => (dueDateFilter = opt.id)}
+			>
+				<span class="chip-label">{opt.label}</span>
+				{#if count > 0}
+					<span class="chip-count">{count}</span>
+				{/if}
+			</button>
+		{/each}
+	</div>
+
+	{#if sortedOpenTasks.length === 0 && dueDateFilter !== 'all' && filterCounts.all > 0}
+		<div class="filter-empty-state">
+			<span>No tasks matching "{DATE_FILTER_OPTIONS.find(o => o.id === dueDateFilter)?.label}" filter</span>
+			<button type="button" class="filter-reset-btn" onclick={() => (dueDateFilter = 'all')}>Show all tasks</button>
+		</div>
 	{/if}
 
 	{#if loading && tasks.length === 0}
@@ -1947,6 +1948,10 @@
 
 	/* Due Date Filter Chips */
 	.section-header:has(.project-filter) .date-filter-chips {
+		margin-left: 0;
+	}
+	.date-filter-chips.no-header-chips {
+		padding: 0.5rem 0.75rem 0.25rem;
 		margin-left: 0;
 	}
 	.date-filter-chips {

@@ -634,6 +634,56 @@
 	// State for project filter
 	let selectedProject = $state<string | null>(null);
 
+	// === Due Date Filter ===
+	type DueDateFilter = 'today' | 'tomorrow' | 'week' | 'overdue' | 'unscheduled' | 'all';
+	let dueDateFilter = $state<DueDateFilter>('all');
+
+	function getLocalDateString(date: Date): string {
+		return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+	}
+	function getToday(): string { return getLocalDateString(new Date()); }
+	function getTomorrow(): string { const d = new Date(); d.setDate(d.getDate() + 1); return getLocalDateString(d); }
+	function getEndOfWeek(): string { const d = new Date(); const day = d.getDay(); const daysUntilSunday = day === 0 ? 0 : 7 - day; d.setDate(d.getDate() + daysUntilSunday); return getLocalDateString(d); }
+
+	function taskMatchesDateFilter(task: Task, filter: DueDateFilter): boolean {
+		const dueDate = task.due_date;
+		switch (filter) {
+			case 'all': return true;
+			case 'unscheduled': return !dueDate;
+			case 'overdue': return !!dueDate && dueDate < getToday();
+			case 'today': return !!dueDate && dueDate <= getToday();
+			case 'tomorrow': return !!dueDate && dueDate <= getTomorrow();
+			case 'week': return !!dueDate && dueDate <= getEndOfWeek();
+			default: return true;
+		}
+	}
+
+	const DATE_FILTER_OPTIONS: { id: DueDateFilter; label: string }[] = [
+		{ id: 'today', label: 'Today' },
+		{ id: 'tomorrow', label: 'Tomorrow' },
+		{ id: 'week', label: 'This Week' },
+		{ id: 'overdue', label: 'Overdue' },
+		{ id: 'unscheduled', label: 'Unscheduled' },
+		{ id: 'all', label: 'All' },
+	];
+
+	// Counts for filter chips
+	const filterCounts = $derived.by(() => {
+		const candidates = tasks.filter(t =>
+			t.status === 'open' && t.issue_type !== 'epic' &&
+			(!showHeader || selectedProject === null || getProjectFromTaskId(t.id) === selectedProject)
+		);
+		const counts: Record<DueDateFilter, number> = { today: 0, tomorrow: 0, week: 0, overdue: 0, unscheduled: 0, all: candidates.length };
+		for (const task of candidates) {
+			if (taskMatchesDateFilter(task, 'today')) counts.today++;
+			if (taskMatchesDateFilter(task, 'tomorrow')) counts.tomorrow++;
+			if (taskMatchesDateFilter(task, 'week')) counts.week++;
+			if (taskMatchesDateFilter(task, 'overdue')) counts.overdue++;
+			if (taskMatchesDateFilter(task, 'unscheduled')) counts.unscheduled++;
+		}
+		return counts;
+	});
+
 	// Load persisted filter on mount
 	onMount(() => {
 		const saved = localStorage.getItem(STORAGE_KEY);
@@ -836,7 +886,10 @@
 			if (task) {
 				const taskProject = getProjectFromTaskId(task.id);
 				// Only apply project filter when header is shown (filter UI is visible)
-				const matchesFilter = !showHeader || selectedProject === null || taskProject === selectedProject;
+				const matchesProject = !showHeader || selectedProject === null || taskProject === selectedProject;
+				// Apply date filter (epics and non-open tasks pass through)
+				const matchesDate = dueDateFilter === 'all' || task.issue_type === 'epic' || task.status !== 'open' || taskMatchesDateFilter(task, dueDateFilter);
+				const matchesFilter = matchesProject && matchesDate;
 				const isFilterExiting = filterExitingTaskIds.has(id);
 
 				// Include task if it matches filter OR if it's animating out due to filter change
@@ -894,11 +947,12 @@
 		return a.priority - b.priority;
 	}
 
-	// Derived: open tasks sorted by due date → newest first → priority, filtered by project (only when header is shown)
+	// Derived: open tasks sorted by due date → newest first → priority, filtered by project + date (only when header is shown)
 	const sortedOpenTasks = $derived(
 		tasks
 			.filter(t => t.status === 'open')
 			.filter(t => !showHeader || selectedProject === null || getProjectFromTaskId(t.id) === selectedProject)
+			.filter(t => dueDateFilter === 'all' || t.issue_type === 'epic' || taskMatchesDateFilter(t, dueDateFilter))
 			.sort(compareTaskSort)
 	);
 
@@ -1181,7 +1235,33 @@
 					{/if}
 				</div>
 			{/if}
+
+			<!-- Due Date Filter Chips -->
+			<div class="date-filter-chips">
+				{#each DATE_FILTER_OPTIONS as opt}
+					{@const count = filterCounts[opt.id]}
+					<button
+						type="button"
+						class="date-filter-chip"
+						class:active={dueDateFilter === opt.id}
+						class:has-overdue={opt.id === 'overdue' && count > 0}
+						onclick={() => (dueDateFilter = opt.id)}
+					>
+						<span class="chip-label">{opt.label}</span>
+						{#if count > 0}
+							<span class="chip-count">{count}</span>
+						{/if}
+					</button>
+				{/each}
+			</div>
 		</div>
+
+		{#if sortedOpenTasks.length === 0 && dueDateFilter !== 'all' && filterCounts.all > 0}
+			<div class="filter-empty-state">
+				<span>No tasks matching "{DATE_FILTER_OPTIONS.find(o => o.id === dueDateFilter)?.label}" filter</span>
+				<button type="button" class="filter-reset-btn" onclick={() => (dueDateFilter = 'all')}>Show all tasks</button>
+			</div>
+		{/if}
 	{/if}
 
 	{#if loading && tasks.length === 0}
@@ -1863,6 +1943,98 @@
 
 	.project-filter-btn.all-btn {
 		--project-color: oklch(0.70 0.02 250);
+	}
+
+	/* Due Date Filter Chips */
+	.section-header:has(.project-filter) .date-filter-chips {
+		margin-left: 0;
+	}
+	.date-filter-chips {
+		display: flex;
+		gap: 0.375rem;
+		overflow-x: auto;
+		scrollbar-width: none;
+		margin-left: auto;
+		padding-right: 0.25rem;
+	}
+	.date-filter-chips::-webkit-scrollbar { display: none; }
+	.date-filter-chip {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.25rem 0.5rem;
+		border-radius: 999px;
+		border: 1px solid oklch(0.30 0.02 250);
+		background: oklch(0.20 0.01 250);
+		color: oklch(0.65 0.02 250);
+		font-size: 0.75rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.15s ease;
+		white-space: nowrap;
+		flex-shrink: 0;
+	}
+	.date-filter-chip:hover {
+		background: oklch(0.24 0.02 250);
+		border-color: oklch(0.38 0.03 250);
+		color: oklch(0.80 0.02 250);
+	}
+	.date-filter-chip.active {
+		background: oklch(0.28 0.08 200);
+		border-color: oklch(0.55 0.12 200);
+		color: oklch(0.90 0.05 200);
+	}
+	.date-filter-chip.has-overdue {
+		border-color: oklch(0.50 0.15 25);
+	}
+	.date-filter-chip.has-overdue.active {
+		background: oklch(0.28 0.08 25);
+		border-color: oklch(0.55 0.15 25);
+		color: oklch(0.90 0.08 25);
+	}
+	.chip-label { line-height: 1; }
+	.chip-count {
+		font-size: 0.6875rem;
+		font-weight: 600;
+		background: oklch(0.30 0.03 250);
+		color: oklch(0.75 0.02 250);
+		padding: 0.0625rem 0.375rem;
+		border-radius: 999px;
+		min-width: 1.25rem;
+		text-align: center;
+	}
+	.date-filter-chip.active .chip-count {
+		background: oklch(0.40 0.10 200);
+		color: oklch(0.95 0.02 200);
+	}
+	.date-filter-chip.has-overdue.active .chip-count {
+		background: oklch(0.45 0.12 25);
+		color: oklch(0.95 0.02 25);
+	}
+
+	/* Filter empty state */
+	.filter-empty-state {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.75rem 1rem;
+		color: oklch(0.55 0.02 250);
+		font-size: 0.8125rem;
+	}
+	.filter-reset-btn {
+		padding: 0.25rem 0.625rem;
+		border-radius: 999px;
+		border: 1px solid oklch(0.35 0.06 200);
+		background: oklch(0.22 0.03 200);
+		color: oklch(0.75 0.10 200);
+		font-size: 0.75rem;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+	.filter-reset-btn:hover {
+		background: oklch(0.28 0.06 200);
+		border-color: oklch(0.45 0.10 200);
+		color: oklch(0.85 0.08 200);
 	}
 
 	/* Loading skeleton */

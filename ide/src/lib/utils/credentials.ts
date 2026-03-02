@@ -125,6 +125,18 @@ export interface ApiKeyProvider {
 }
 
 export const API_KEY_PROVIDERS: ApiKeyProvider[] = [
+	// --- Secret Backend ---
+	{
+		id: '1password',
+		name: '1Password',
+		description: 'Service Account Token for 1Password vault integration. Enables jat-secret to read secrets from your 1Password JAT vault.',
+		keyPrefix: 'ops_',
+		envVar: 'OP_SERVICE_ACCOUNT_TOKEN',
+		verifyUrl: '',
+		usedBy: ['jat-secret fallback', '1Password vault access', 'Agent credential retrieval'],
+		docsUrl: 'https://developer.1password.com/docs/service-accounts/'
+	},
+
 	// --- AI Providers ---
 	{
 		id: 'anthropic',

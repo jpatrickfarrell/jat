@@ -861,10 +861,13 @@
 	}
 
 	td.col-actions {
-		display: flex;
-		align-items: center;
-		justify-content: flex-end;
-		gap: 0.2rem;
+		vertical-align: middle;
+		text-align: right;
+		white-space: nowrap;
+	}
+
+	td.col-actions > * + * {
+		margin-left: 0.2rem;
 	}
 
 	.name-text {

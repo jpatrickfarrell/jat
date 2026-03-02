@@ -4,7 +4,6 @@
 	import { saveProject } from '$lib/stores/configStore.svelte';
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 	import ProjectSecretsEditor from './ProjectSecretsEditor.svelte';
-	import SupabaseSetupWizard from './SupabaseSetupWizard.svelte';
 	import { AGENT_PRESETS } from '$lib/types/agentProgram';
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
 
@@ -34,19 +33,6 @@
 	let editingActiveColor = $state(false);
 	let editingInactiveColor = $state(false);
 
-	// Supabase wizard state
-	let showSupabaseWizard = $state(false);
-
-	// Supabase secrets status
-	let supabaseSecretsInfo = $state<Record<string, { isSet: boolean; masked: string }>>({});
-	let supabaseConfigured = $derived.by(() => {
-		const keys = ['supabase_url', 'supabase_anon_key', 'supabase_service_role_key', 'supabase_db_password'];
-		return keys.every(k => supabaseSecretsInfo[k]?.isSet);
-	});
-	let supabasePartialCount = $derived.by(() => {
-		const keys = ['supabase_url', 'supabase_anon_key', 'supabase_service_role_key', 'supabase_db_password'];
-		return keys.filter(k => supabaseSecretsInfo[k]?.isSet).length;
-	});
 
 	// Predefined color palette for quick selection - using oklch for perceptual uniformity
 	const COLOR_PALETTE = [
@@ -164,9 +150,7 @@
 			// Reset color picker state
 			editingActiveColor = false;
 			editingInactiveColor = false;
-			// Reset supabase wizard state
-			showSupabaseWizard = false;
-		}
+			}
 	});
 
 	// Auto-generate key from name for new projects
@@ -414,25 +398,6 @@
 		return parts.join('/');
 	});
 
-	// Fetch Supabase secrets status when editing an existing project
-	async function fetchSupabaseSecretsStatus() {
-		if (!key) return;
-		try {
-			const response = await fetch(`/api/config/credentials/${encodeURIComponent(key)}`);
-			const data = await response.json();
-			if (data.success && data.secrets) {
-				supabaseSecretsInfo = data.secrets;
-			}
-		} catch {
-			// Ignore errors - status will just show as unconfigured
-		}
-	}
-
-	$effect(() => {
-		if (isOpen && !isNewProject && key) {
-			fetchSupabaseSecretsStatus();
-		}
-	});
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -650,80 +615,7 @@
 				{/if}
 			</div>
 
-			<!-- Supabase Configuration Section (only for existing projects) -->
-			{#if !isNewProject && key}
-				<div class="space-y-4">
-					<h3 class="text-sm font-medium text-base-content/70 uppercase tracking-wide">Supabase Integration</h3>
-
-					<div class="p-4 rounded-lg border" style="background: oklch(0.16 0.02 250); border-color: {supabaseConfigured ? 'oklch(0.55 0.15 145 / 0.4)' : supabasePartialCount > 0 ? 'oklch(0.55 0.15 85 / 0.3)' : 'oklch(0.25 0.02 250)'}">
-						<div class="flex items-start gap-4">
-							<div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background: oklch(0.55 0.15 145 / 0.15);">
-								<svg class="w-6 h-6" viewBox="0 0 109 113" fill="none" xmlns="http://www.w3.org/2000/svg">
-									<path d="M63.7076 110.284C60.8481 113.885 55.0502 111.912 54.9813 107.314L53.9738 40.0627L99.1935 40.0627C107.384 40.0627 111.952 49.5228 106.859 55.9374L63.7076 110.284Z" fill="url(#sg-a)"/>
-									<path d="M45.317 2.07103C48.1765 -1.53037 53.9745 0.442937 54.0434 5.04076L54.4849 72.2922H9.83113C1.64038 72.2922 -2.92775 62.8321 2.16584 56.4175L45.317 2.07103Z" fill="#3ECF8E"/>
-									<defs>
-										<linearGradient id="sg-a" x1="53.9738" y1="54.974" x2="94.1635" y2="71.8295" gradientUnits="userSpaceOnUse">
-											<stop stop-color="#249361"/>
-											<stop offset="1" stop-color="#3ECF8E"/>
-										</linearGradient>
-									</defs>
-								</svg>
-							</div>
-							<div class="flex-1">
-								{#if supabaseConfigured}
-									<h4 class="font-medium text-sm mb-1" style="color: oklch(0.75 0.15 145);">Supabase Connected</h4>
-									<p class="text-xs text-base-content/60 mb-3">
-										All Supabase credentials are configured for this project.
-									</p>
-									<button
-										class="btn btn-sm"
-										style="background: oklch(0.55 0.15 145 / 0.15); color: oklch(0.75 0.15 145); border-color: oklch(0.55 0.15 145 / 0.3);"
-										onclick={() => showSupabaseWizard = true}
-									>
-										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-										</svg>
-										Reconfigure
-									</button>
-								{:else if supabasePartialCount > 0}
-									<h4 class="font-medium text-sm mb-1" style="color: oklch(0.75 0.15 85);">Supabase Partially Configured</h4>
-									<p class="text-xs text-base-content/60 mb-3">
-										{supabasePartialCount} of 4 credentials set. Complete the setup to enable all features.
-									</p>
-									<button
-										class="btn btn-sm"
-										style="background: oklch(0.55 0.15 85 / 0.15); color: oklch(0.75 0.15 85); border-color: oklch(0.55 0.15 85 / 0.3);"
-										onclick={() => showSupabaseWizard = true}
-									>
-										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-										</svg>
-										Complete Setup
-									</button>
-								{:else}
-									<h4 class="font-medium text-sm mb-1">Connect to Supabase</h4>
-									<p class="text-xs text-base-content/60 mb-3">
-										Set up Supabase CLI linking, configure API keys, and manage database credentials for this project.
-									</p>
-									<button
-										class="btn btn-sm"
-										style="background: oklch(0.55 0.15 145 / 0.15); color: oklch(0.75 0.15 145); border-color: oklch(0.55 0.15 145 / 0.3);"
-										onclick={() => showSupabaseWizard = true}
-									>
-										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-										</svg>
-										Configure Supabase
-									</button>
-								{/if}
-							</div>
-						</div>
-					</div>
-				</div>
-			{/if}
-
-			<!-- Display Colors Section -->
+				<!-- Display Colors Section -->
 			<div class="space-y-4">
 				<h3 class="text-sm font-medium text-base-content/70 uppercase tracking-wide">Display Colors</h3>
 
@@ -1116,28 +1008,4 @@
 		</div>
 	{/if}
 
-	<!-- Supabase Setup Wizard Modal -->
-	{#if showSupabaseWizard}
-		<div
-			class="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4"
-			transition:fade={{ duration: 150 }}
-			onclick={(e) => e.target === e.currentTarget && (showSupabaseWizard = false)}
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="supabase-wizard-title"
-		>
-			<div
-				class="bg-base-100 rounded-xl shadow-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto"
-				transition:fly={{ y: 20, duration: 200 }}
-			>
-				<SupabaseSetupWizard
-					project={key}
-					projectPath={path}
-					existingSecrets={supabaseSecretsInfo}
-					onComplete={() => { showSupabaseWizard = false; fetchSupabaseSecretsStatus(); successToast('Supabase configured', 'Project is now connected to Supabase'); }}
-					onCancel={() => showSupabaseWizard = false}
-				/>
-			</div>
-		</div>
-	{/if}
 {/if}

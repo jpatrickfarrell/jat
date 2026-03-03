@@ -1647,7 +1647,7 @@
 	});
 
 	// Handle native paste event — no permission prompt, works with multi-select
-	function handleTablePaste(e: ClipboardEvent) {
+	async function handleTablePaste(e: ClipboardEvent) {
 		// Don't interfere if editing a cell
 		const target = e.target as HTMLElement;
 		if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
@@ -1668,13 +1668,19 @@
 			targets.push(selectedCell);
 		}
 
-		// Paste into each target cell
+		// Paste into each target cell (await so scroll happens after refresh)
 		for (const t of targets) {
 			const row = rows[t.rowIdx];
 			const col = orderedColumns[t.colIdx];
 			if (row && col) {
-				handleCellSave(row.rowid, col.name, text);
+				await handleCellSave(row.rowid, col.name, text);
 			}
+		}
+
+		// After paste + table refresh, re-trigger scroll-to-cell effect
+		// so the viewport stays at the pasted cell, not the copied cell
+		if (selectedCell) {
+			selectedCell = { ...selectedCell };
 		}
 	}
 

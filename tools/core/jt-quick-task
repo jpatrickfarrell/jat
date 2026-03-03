@@ -1,0 +1,160 @@
+#!/bin/bash
+# jt-quick-task - Desktop quick task capture via Walker dmenu
+#
+# Usage:
+#   jt-quick-task              # Interactive: pick project, type title
+#   jt-quick-task --help       # Show help
+#
+# Bound to Super+Shift+T in Hyprland
+
+set -euo pipefail
+
+VERSION="0.1.0"
+PROJECTS_FILE="$HOME/.config/jat/projects.json"
+LAST_PROJECT_FILE="$HOME/.config/jat/quick-task-last-project"
+
+show_help() {
+    cat <<'EOF'
+jt-quick-task - Desktop quick task capture
+
+USAGE:
+  jt-quick-task              Pick project via Walker, type title, create task
+  jt-quick-task --help       Show this help
+  jt-quick-task --version    Show version
+
+FLOW:
+  1. Select project from Walker dmenu (favorites first, last-used marked)
+  2. Type task title in Walker input
+  3. Task created via jt create
+
+KEYBINDING:
+  Super+Shift+T
+
+STATE:
+  Last-used project saved to ~/.config/jat/quick-task-last-project
+EOF
+}
+
+case "${1:-}" in
+    -h|--help)
+        show_help
+        exit 0
+        ;;
+    --version)
+        echo "jt-quick-task $VERSION"
+        exit 0
+        ;;
+esac
+
+# Verify dependencies
+if ! command -v walker &>/dev/null; then
+    notify-send -u critical "Quick Task" "walker not found"
+    exit 1
+fi
+if ! command -v jt &>/dev/null; then
+    notify-send -u critical "Quick Task" "jt not found"
+    exit 1
+fi
+if [[ ! -f "$PROJECTS_FILE" ]]; then
+    notify-send -u critical "Quick Task" "projects.json not found"
+    exit 1
+fi
+
+# Read last-used project key
+LAST_PROJECT=""
+if [[ -f "$LAST_PROJECT_FILE" ]]; then
+    LAST_PROJECT=$(<"$LAST_PROJECT_FILE")
+fi
+
+# Build project list from projects.json
+# Filter: not hidden, path exists on disk
+# Order: last-used (↻) → favorites (★) → rest (alphabetical)
+PROJECT_LIST=$(jq -r --arg last "$LAST_PROJECT" '
+    .projects | to_entries
+    | map(select(
+        (.value.hidden // false) == false
+    ))
+    | map({
+        key: .key,
+        name: (.value.name // .key),
+        path: (.value.path | gsub("^~"; env.HOME)),
+        favorite: (.value.favorite // false),
+        is_last: (.key == $last)
+    })
+    | map(select(.path as $p | $p | test("^/") and ([$p] | map(. as $path | try (path(inputs) | halt_error) catch true) | length > 0 or true)))
+    | sort_by(.name | ascii_downcase)
+    | group_by(
+        if .is_last then "0"
+        elif .favorite then "1"
+        else "2"
+        end
+    )
+    | map(sort_by(.name | ascii_downcase))
+    | flatten
+    | map(
+        (if .is_last then "↻ "
+         elif .favorite then "★ "
+         else "  " end) + .name + "\t" + .key
+    )
+    | join("\n")
+' "$PROJECTS_FILE")
+
+# Filter to only projects whose path actually exists
+FILTERED_LIST=""
+while IFS=$'\t' read -r display key; do
+    path=$(jq -r --arg k "$key" '.projects[$k].path | gsub("^~"; env.HOME)' "$PROJECTS_FILE")
+    if [[ -d "$path" ]]; then
+        if [[ -n "$FILTERED_LIST" ]]; then
+            FILTERED_LIST+=$'\n'
+        fi
+        FILTERED_LIST+="${display}"$'\t'"${key}"
+    fi
+done <<< "$PROJECT_LIST"
+
+if [[ -z "$FILTERED_LIST" ]]; then
+    notify-send -u critical "Quick Task" "No projects found"
+    exit 1
+fi
+
+# Show Walker dmenu with display names only (strip key after tab)
+DISPLAY_LIST=$(echo "$FILTERED_LIST" | cut -f1)
+SELECTED_DISPLAY=$(echo "$DISPLAY_LIST" | walker --dmenu -p "Project" 2>/dev/null) || exit 0
+
+# Empty selection = cancelled
+if [[ -z "$SELECTED_DISPLAY" ]]; then
+    exit 0
+fi
+
+# Find the matching project key
+SELECTED_KEY=$(echo "$FILTERED_LIST" | grep -F "$SELECTED_DISPLAY"$'\t' | head -1 | cut -f2)
+
+if [[ -z "$SELECTED_KEY" ]]; then
+    notify-send -u critical "Quick Task" "Could not match project selection"
+    exit 1
+fi
+
+# Get project path
+PROJECT_PATH=$(jq -r --arg k "$SELECTED_KEY" '.projects[$k].path | gsub("^~"; env.HOME)' "$PROJECTS_FILE")
+PROJECT_NAME=$(jq -r --arg k "$SELECTED_KEY" '.projects[$k].name // $k' "$PROJECTS_FILE")
+
+# Show Walker input for task title
+TASK_TITLE=$(walker --dmenu -I -p "Task ($PROJECT_NAME)" 2>/dev/null) || exit 0
+
+if [[ -z "$TASK_TITLE" ]]; then
+    exit 0
+fi
+
+# Create the task
+RESULT=$(cd "$PROJECT_PATH" && jt create "$TASK_TITLE" 2>&1) || {
+    notify-send -u critical "Quick Task" "Failed to create task:\n$RESULT"
+    exit 1
+}
+
+# Extract task ID from output (format: "Created <id>: <title>")
+TASK_ID=$(echo "$RESULT" | grep -oP '^Created \K\S+' | sed 's/:$//')
+
+# Save last-used project
+echo "$SELECTED_KEY" > "$LAST_PROJECT_FILE"
+
+# Notify success
+notify-send -t 3000 "Quick Task" "Created ${TASK_ID:-task} in $PROJECT_NAME\n$TASK_TITLE"

@@ -53,6 +53,7 @@ Database, monitoring, credentials, and task review tools.
 | `rollback-jat.sh` | Rollback task database to backup |
 | `jat-skills` | Skill catalog, installer, and local management |
 | `coda-import` | Fetch Coda.io tables via API and import into JAT data tables |
+| `jt-quick-task` | Desktop quick task capture — pick project + type title |
 
 **coda-import usage:**
 ```bash
@@ -83,6 +84,18 @@ coda-import import <doc-id> <table-id> --dry-run
 - Creates table via IDE API if it doesn't exist
 - Imports rows via `POST /api/data/tables/[name]/import`
 - Handles boolean→int, array→comma-separated string conversions
+
+**jt-quick-task usage:**
+```bash
+jt-quick-task              # Interactive: pick project, type title, create task
+jt-quick-task --help       # Show help
+```
+
+**Keybinding:** `Super+Shift+T` (Hyprland/macOS)
+
+**Flow:** Project picker → title input → `jt create` → notification. Last-used project remembered with ↻ prefix, favorites shown with ★. Tasks are tagged with the `quick-task` integration source (lightning bolt icon in IDE).
+
+**Platform support:** Uses Walker dmenu on Linux, `osascript` dialogs on macOS.
 
 **jat-secret usage:**
 ```bash

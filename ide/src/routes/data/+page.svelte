@@ -2163,6 +2163,19 @@
 		return [...ordered, ...unordered];
 	});
 
+	// Default width for columns without an explicit user-set width
+	const DEFAULT_COL_WIDTH = 150;
+
+	// Computed minimum table width: sum of all column widths so the table can
+	// grow wider than its container and enable horizontal scrolling
+	const tableMinWidth = $derived.by(() => {
+		const fixedWidth = 48 + 36; // row-id-col + actions-col
+		const colsWidth = orderedColumns.reduce((sum, col) => {
+			return sum + (columnWidths[col.name] || DEFAULT_COL_WIDTH);
+		}, 0);
+		return fixedWidth + colsWidth;
+	});
+
 	// All columns for manage panel (including hidden, respecting display order)
 	const allColumnsManage = $derived.by(() => {
 		const allCols = schema.filter(c => c.name !== 'rowid');
@@ -3224,7 +3237,7 @@
 							</div>
 						{:else}
 							<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-							<table class="data-table" tabindex="0" onkeydown={handleTableKeydown} onpaste={handleTablePaste} bind:this={tableRef}>
+							<table class="data-table" tabindex="0" onkeydown={handleTableKeydown} onpaste={handleTablePaste} bind:this={tableRef} style="min-width: {tableMinWidth}px">
 								<thead>
 									<tr>
 										<th class="row-id-col">#</th>
@@ -5171,9 +5184,32 @@
 
 	.row-id-col {
 		width: 48px;
+		min-width: 48px;
 		color: oklch(0.45 0.02 250);
 		font-family: monospace;
 		font-size: 0.6875rem;
+		position: sticky;
+		left: 0;
+		z-index: 5;
+	}
+
+	/* Sticky column needs opaque background so content doesn't show through */
+	td.row-id-col {
+		background: oklch(0.16 0.01 250);
+	}
+
+	/* Row-id header cell needs both sticky-top and sticky-left */
+	th.row-id-col {
+		z-index: 11;
+		background: oklch(0.19 0.01 250);
+	}
+
+	/* Ensure row-id cells get opaque background for hover/selection states */
+	.data-table tbody tr:hover .row-id-col {
+		background: oklch(0.20 0.02 250);
+	}
+	.data-table tbody tr.row-has-selection .row-id-col {
+		background: oklch(0.17 0.015 250);
 	}
 
 	.actions-col {

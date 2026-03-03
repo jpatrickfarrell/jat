@@ -2,7 +2,7 @@
   import type { ConsoleLogEntry, ElementData, FeedbackReport } from '../lib/types';
   import { submitReport, fetchReports, type ReportSummary } from '../lib/api';
   import { enqueue } from '../lib/queue';
-  import { captureViewport } from '../lib/screenshot';
+  import { captureViewport, captureViewportQuick } from '../lib/screenshot';
   import { startElementPicker } from '../lib/elementPicker';
   import { getCapturedLogs } from '../lib/consoleCapture';
   import { slide } from 'svelte/transition';
@@ -15,6 +15,7 @@
   let {
     endpoint,
     project,
+    isOpen = false,
     userId = '',
     userEmail = '',
     userName = '',
@@ -26,6 +27,7 @@
   }: {
     endpoint: string;
     project: string;
+    isOpen?: boolean;
     userId?: string;
     userEmail?: string;
     userName?: string;
@@ -76,6 +78,29 @@
   // Annotation editor state
   let editingScreenshotIndex = $state<number | null>(null);
   let pendingScreenshotDataUrl = $state('');
+
+  // Auto-capture on open: screenshot in bg + focus title
+  let titleInput = $state<HTMLInputElement | undefined>();
+  let wasOpen = false;
+  $effect(() => {
+    if (isOpen && !wasOpen) {
+      // Just opened — focus title after layout settles
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          titleInput?.focus();
+        });
+      });
+      if (activeTab === 'new' && screenshots.length === 0) {
+        // Silent quick capture — don't set `capturing` so form stays interactive
+        setTimeout(() => {
+          captureViewportQuick().then((dataUrl) => {
+            screenshots = [...screenshots, dataUrl];
+          }).catch(() => {});
+        }, 300);
+      }
+    }
+    wasOpen = isOpen;
+  });
 
   let toastMessage = $state('');
   let toastType = $state<'success' | 'error'>('success');
@@ -277,7 +302,7 @@
     <form class="panel-body" transition:slide={{ duration: 200 }} onsubmit={handleSubmit}>
       <div class="field">
         <label for="jat-fb-title">Title <span class="req">*</span></label>
-        <input id="jat-fb-title" type="text" bind:value={title} placeholder="Brief description" required disabled={submitting} />
+        <input id="jat-fb-title" type="text" bind:value={title} bind:this={titleInput} placeholder="Brief description" required disabled={submitting} />
       </div>
 
       <div class="field">

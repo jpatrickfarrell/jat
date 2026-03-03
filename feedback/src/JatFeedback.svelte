@@ -163,7 +163,7 @@
       class:hidden={!open}
       style="{panelPositionStyles[config.position] || panelPositionStyles['bottom-right']}"
     >
-      <FeedbackPanel endpoint={config.endpoint} {project} {userId} {userEmail} {userName} {userRole} {orgId} {orgName} onclose={close} ongrip={handlePanelDragStart} />
+      <FeedbackPanel endpoint={config.endpoint} {project} isOpen={open} {userId} {userEmail} {userName} {userRole} {orgId} {orgName} onclose={close} ongrip={handlePanelDragStart} />
     </div>
   {:else if open}
     <div class="jat-feedback-panel" style="{panelPositionStyles[config.position] || panelPositionStyles['bottom-right']}">

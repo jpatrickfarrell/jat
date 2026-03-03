@@ -78,7 +78,7 @@ function validate(config) {
     if (!src.type) {
       throw new Error(`Source ${src.id} must have a "type" field`);
     }
-    if (!src.project) {
+    if (!src.project && src.type !== 'quick-task') {
       throw new Error(`Source ${src.id} must have a "project" field`);
     }
     if (src.type === 'rss' && !src.feedUrl) {

@@ -42,4 +42,12 @@ export {
 	// Raw SQL
 	queryDataTable,
 	execDataSql,
+	// Views
+	getViews,
+	getAllViews,
+	getView,
+	createView,
+	updateView,
+	deleteView,
+	getViewRows,
 } from '../../../../lib/data.js';

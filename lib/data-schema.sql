@@ -26,3 +26,23 @@ CREATE TABLE IF NOT EXISTS _columns (
     updated_at TEXT NOT NULL,
     PRIMARY KEY (table_name, column_name)
 );
+
+-- Named views for data tables.
+-- Each view defines a filtered/sorted subset of a parent table's data.
+-- Filters are stored as JSON rules, converted to SQL WHERE at runtime.
+CREATE TABLE IF NOT EXISTS _views (
+    id TEXT PRIMARY KEY,
+    table_name TEXT NOT NULL,
+    name TEXT NOT NULL,
+    display_name TEXT,
+    description TEXT,
+    filters TEXT DEFAULT '[]',
+    filter_conjunction TEXT DEFAULT 'AND',
+    visible_columns TEXT,
+    sort_column TEXT,
+    sort_direction TEXT DEFAULT 'ASC',
+    context_query TEXT,
+    context_description TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);

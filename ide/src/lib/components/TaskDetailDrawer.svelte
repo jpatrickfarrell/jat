@@ -2404,12 +2404,57 @@
 							<!-- Assignee / Actions -->
 							<span class="flex items-center gap-1.5">
 								{#if actionMode === 'spawn'}
-									<!-- Unassigned: Show Launch button -->
+									<!-- Unassigned: Show Launch button + Resume if previous sessions exist -->
+									{#if uniqueSessions.length > 0}
+										<!-- Resume previous session -->
+										{#if uniqueSessions.length === 1}
+											<button
+												class="btn btn-xs btn-primary gap-1"
+												onclick={() => handleResumeSession(uniqueSessions[0].session_id, uniqueSessions[0].agent_name)}
+												disabled={resumingSessionId !== null}
+												title="Resume {uniqueSessions[0].agent_name}'s previous session"
+											>
+												{#if resumingSessionId === uniqueSessions[0].session_id}
+													<span class="loading loading-spinner loading-xs"></span>
+												{:else}
+													<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+														<path d="M8 5v14l11-7z"/>
+													</svg>
+												{/if}
+												<span>Resume</span>
+											</button>
+										{:else}
+											<div class="dropdown dropdown-end">
+												<button
+													class="btn btn-xs btn-primary gap-1"
+													disabled={resumingSessionId !== null}
+												>
+													<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+														<path d="M8 5v14l11-7z"/>
+													</svg>
+													<span>Resume</span>
+												</button>
+												<ul class="dropdown-content z-50 menu p-1 shadow-lg bg-base-200 rounded-box w-48">
+													{#each uniqueSessions as session}
+														<li>
+															<button
+																class="text-xs"
+																onclick={() => handleResumeSession(session.session_id, session.agent_name)}
+																disabled={resumingSessionId !== null}
+															>
+																{session.agent_name}
+															</button>
+														</li>
+													{/each}
+												</ul>
+											</div>
+										{/if}
+									{/if}
 									<button
-										class="btn btn-xs btn-primary gap-1"
+										class="btn btn-xs {uniqueSessions.length > 0 ? 'btn-ghost' : 'btn-primary'} gap-1"
 										onclick={handleSpawn}
 										disabled={isSpawning || depStatus.hasBlockers}
-										title={depStatus.hasBlockers ? depStatus.blockingReason : 'Launch agent to work on this task'}
+										title={depStatus.hasBlockers ? depStatus.blockingReason : uniqueSessions.length > 0 ? 'Launch new agent session' : 'Launch agent to work on this task'}
 									>
 										{#if isSpawning}
 											<span class="loading loading-spinner loading-xs"></span>
@@ -2418,7 +2463,7 @@
 												<path d="M12 2C12 2 8 6 8 12C8 15 9 17 10 18L10 21C10 21.5 10.5 22 11 22H13C13.5 22 14 21.5 14 21L14 18C15 17 16 15 16 12C16 6 12 2 12 2Z" />
 											</svg>
 										{/if}
-										<span>Launch</span>
+										<span>{uniqueSessions.length > 0 ? 'New' : 'Launch'}</span>
 									</button>
 									{#if depStatus.hasBlockers}
 										<span class="text-xs text-warning" title={depStatus.blockingReason}>⚠</span>

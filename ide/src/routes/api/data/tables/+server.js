@@ -5,7 +5,7 @@
  * DELETE /api/data/tables?project=X&table=Y - Drop table
  */
 import { json } from '@sveltejs/kit';
-import { getDataTables, createDataTable, dropDataTable, initDataDb } from '$lib/server/jat-data.js';
+import { getDataTables, createDataTable, dropDataTable, initDataDb, getAllViews } from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 
 /** @type {import('./$types').RequestHandler} */
@@ -22,7 +22,8 @@ export async function GET({ url }) {
 		}
 
 		const tables = getDataTables(path);
-		return json({ tables });
+		const views = getAllViews(path);
+		return json({ tables, views });
 	} catch (error) {
 		return json({ error: error.message }, { status: 500 });
 	}

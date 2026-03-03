@@ -27,6 +27,23 @@
 		created_at: string;
 	}
 
+	interface ViewInfo {
+		id: string;
+		table_name: string;
+		name: string;
+		display_name: string | null;
+		description: string | null;
+		filters: any[];
+		filter_conjunction: string;
+		visible_columns: string | null;
+		sort_column: string | null;
+		sort_direction: string;
+		context_query: string | null;
+		context_description: string | null;
+		created_at: string;
+		updated_at: string;
+	}
+
 	interface ColumnInfo {
 		cid: number;
 		name: string;
@@ -84,6 +101,24 @@
 	let schema = $state<ColumnInfo[]>([]);
 	let rows = $state<any[]>([]);
 	let totalRows = $state(0);
+
+	// Views
+	let views = $state<ViewInfo[]>([]);
+	let selectedView = $state<ViewInfo | null>(null);
+	let expandedTables = $state<Set<string>>(new Set());
+	let showCreateViewModal = $state(false);
+	let createViewForTable = $state<string | null>(null);
+
+	// Group views by table name
+	const viewsByTable = $derived.by(() => {
+		const map = new Map<string, ViewInfo[]>();
+		for (const v of views) {
+			const arr = map.get(v.table_name) || [];
+			arr.push(v);
+			map.set(v.table_name, arr);
+		}
+		return map;
+	});
 
 	// Loading states
 	let tablesLoading = $state(false);
@@ -294,6 +329,12 @@
 	let tblCtxY = $state(0);
 	let tblCtxVisible = $state(false);
 
+	// View context menu (right-click on view items)
+	let viewCtxView = $state<ViewInfo | null>(null);
+	let viewCtxX = $state(0);
+	let viewCtxY = $state(0);
+	let viewCtxVisible = $state(false);
+
 	// Sync selectedProject from URL ?project= param (set by TopBar ProjectSelector)
 	$effect(() => {
 		const projectParam = $page.url.searchParams.get('project');
@@ -307,6 +348,7 @@
 		if (selectedProject) {
 			fetchTables();
 			selectedTable = null;
+			selectedView = null;
 			schema = [];
 			rows = [];
 		}
@@ -328,12 +370,15 @@
 			const data = await res.json();
 			if (res.ok) {
 				tables = data.tables || [];
+				views = data.views || [];
 			} else {
 				tables = [];
+				views = [];
 			}
 		} catch (e) {
 			console.error('Failed to fetch tables:', e);
 			tables = [];
+			views = [];
 		} finally {
 			tablesLoading = false;
 		}
@@ -364,9 +409,69 @@
 
 	function selectTable(name: string) {
 		selectedTable = name;
+		selectedView = null;
 		offset = 0;
 		orderBy = undefined;
 		orderDir = 'ASC';
+	}
+
+	function toggleTableExpand(name: string) {
+		const next = new Set(expandedTables);
+		if (next.has(name)) {
+			next.delete(name);
+		} else {
+			next.add(name);
+		}
+		expandedTables = next;
+	}
+
+	function selectView(view: ViewInfo) {
+		selectedView = view;
+		selectedTable = view.table_name;
+		offset = 0;
+		fetchViewRows(view.id);
+	}
+
+	async function fetchViewRows(viewId: string) {
+		if (!selectedProject) return;
+		tableDataLoading = true;
+		try {
+			let url = `/api/data/views/${encodeURIComponent(viewId)}/rows?project=${encodeURIComponent(selectedProject)}&limit=${limit}&offset=${offset}`;
+			if (orderBy) url += `&orderBy=${encodeURIComponent(orderBy)}&orderDir=${orderDir}`;
+			const res = await fetch(url);
+			const data = await res.json();
+			if (res.ok) {
+				schema = data.schema || [];
+				rows = data.rows || [];
+				totalRows = data.total || 0;
+				columnMeta = data.columnMeta || {};
+			} else {
+				errorToast(data.error || 'Failed to load view');
+			}
+		} catch (e) {
+			errorToast('Failed to load view data');
+		} finally {
+			tableDataLoading = false;
+		}
+	}
+
+	async function deleteView(viewId: string) {
+		if (!selectedProject) return;
+		try {
+			const res = await fetch(`/api/data/views/${encodeURIComponent(viewId)}?project=${encodeURIComponent(selectedProject)}`, { method: 'DELETE' });
+			if (res.ok) {
+				successToast('View deleted');
+				if (selectedView?.id === viewId) {
+					selectedView = null;
+				}
+				await fetchTables();
+			} else {
+				const data = await res.json();
+				errorToast(data.error || 'Failed to delete view');
+			}
+		} catch {
+			errorToast('Failed to delete view');
+		}
 	}
 
 	function toggleSort(column: string) {
@@ -949,6 +1054,7 @@
 		// Close other context menus
 		ctxVisible = false;
 		rowCtxVisible = false;
+		viewCtxVisible = false;
 		setTimeout(() => {
 			document.addEventListener('click', handleTblCtxOutsideClick, { once: true });
 		}, 0);
@@ -1085,6 +1191,215 @@
 		const tableName = tblCtxTable.name;
 		closeTblContextMenu();
 		handleDropTable(tableName);
+	}
+
+	function handleTblCtxCreateView() {
+		if (!tblCtxTable) return;
+		createViewForTable = tblCtxTable.name;
+		fetchModalSchema(tblCtxTable.name);
+		closeTblContextMenu();
+		showCreateViewModal = true;
+		// Auto-expand the table to show new views
+		const next = new Set(expandedTables);
+		next.add(tblCtxTable.name);
+		expandedTables = next;
+	}
+
+	// ─── View context menu ─────────────────────────────────
+	function handleViewContextMenu(view: ViewInfo, event: MouseEvent) {
+		event.preventDefault();
+		event.stopPropagation();
+		viewCtxView = view;
+		viewCtxX = Math.min(event.clientX, window.innerWidth - 200);
+		viewCtxY = Math.min(event.clientY, window.innerHeight - 200);
+		viewCtxVisible = true;
+		ctxVisible = false;
+		rowCtxVisible = false;
+		tblCtxVisible = false;
+		setTimeout(() => {
+			document.addEventListener('click', handleViewCtxOutsideClick, { once: true });
+		}, 0);
+		document.addEventListener('keydown', handleViewCtxEscape);
+	}
+
+	function closeViewContextMenu() {
+		viewCtxVisible = false;
+		document.removeEventListener('keydown', handleViewCtxEscape);
+	}
+
+	function handleViewCtxOutsideClick(e: MouseEvent) {
+		const menu = document.querySelector('.view-context-menu');
+		if (menu && !menu.contains(e.target as Node)) {
+			closeViewContextMenu();
+		} else if (viewCtxVisible) {
+			setTimeout(() => {
+				document.addEventListener('click', handleViewCtxOutsideClick, { once: true });
+			}, 0);
+		}
+	}
+
+	function handleViewCtxEscape(e: KeyboardEvent) {
+		if (e.key === 'Escape') closeViewContextMenu();
+	}
+
+	function handleViewCtxDelete() {
+		if (!viewCtxView) return;
+		const viewId = viewCtxView.id;
+		const viewName = viewCtxView.display_name || viewCtxView.name;
+		closeViewContextMenu();
+		if (confirm(`Delete view "${viewName}"? This cannot be undone.`)) {
+			deleteView(viewId);
+		}
+	}
+
+	function handleViewCtxEdit() {
+		if (!viewCtxView) return;
+		createViewForTable = viewCtxView.table_name;
+		newViewName = viewCtxView.name;
+		newViewDisplayName = viewCtxView.display_name || '';
+		newViewDescription = viewCtxView.description || '';
+		editingViewId = viewCtxView.id;
+		viewFilters = Array.isArray(viewCtxView.filters) ? viewCtxView.filters.map((f: any) => ({
+			column: f.column || '',
+			operator: f.operator || 'equals',
+			value: f.value || ''
+		})) : [];
+		viewFilterConjunction = (viewCtxView.filter_conjunction === 'OR') ? 'OR' : 'AND';
+		fetchModalSchema(viewCtxView.table_name);
+		closeViewContextMenu();
+		showCreateViewModal = true;
+	}
+
+	// ─── Create/Edit View modal ─────────────────────────────
+	interface FilterRule {
+		column: string;
+		operator: string;
+		value: string;
+	}
+
+	const FILTER_OPERATORS = [
+		{ value: 'equals', label: 'equals' },
+		{ value: 'not_equals', label: 'not equals' },
+		{ value: 'contains', label: 'contains' },
+		{ value: 'not_contains', label: 'not contains' },
+		{ value: 'starts_with', label: 'starts with' },
+		{ value: 'ends_with', label: 'ends with' },
+		{ value: 'greater_than', label: '>' },
+		{ value: 'less_than', label: '<' },
+		{ value: 'greater_equal', label: '>=' },
+		{ value: 'less_equal', label: '<=' },
+		{ value: 'is_empty', label: 'is empty' },
+		{ value: 'is_not_empty', label: 'is not empty' },
+	];
+
+	const NO_VALUE_OPERATORS = ['is_empty', 'is_not_empty'];
+
+	let newViewName = $state('');
+	let newViewDisplayName = $state('');
+	let newViewDescription = $state('');
+	let editingViewId = $state<string | null>(null);
+	let createViewSaving = $state(false);
+	let viewFilters = $state<FilterRule[]>([]);
+	let viewFilterConjunction = $state<'AND' | 'OR'>('AND');
+	let modalSchema = $state<ColumnInfo[]>([]);
+
+	function addFilter() {
+		const col = modalSchema.length > 0 ? modalSchema[0].name : '';
+		viewFilters = [...viewFilters, { column: col, operator: 'equals', value: '' }];
+	}
+
+	function removeFilter(index: number) {
+		viewFilters = viewFilters.filter((_, i) => i !== index);
+	}
+
+	async function fetchModalSchema(tableName: string) {
+		if (!selectedProject) return;
+		try {
+			const res = await fetch(`/api/data/tables/${encodeURIComponent(tableName)}?project=${encodeURIComponent(selectedProject)}&limit=0`);
+			const data = await res.json();
+			if (res.ok) {
+				modalSchema = data.schema || [];
+			}
+		} catch { /* ignore */ }
+	}
+
+	async function handleCreateView() {
+		if (!selectedProject || !createViewForTable || !newViewName.trim()) return;
+		createViewSaving = true;
+
+		// Clean filters: remove empty/incomplete rules
+		const cleanFilters = viewFilters.filter(f =>
+			f.column && f.operator && (NO_VALUE_OPERATORS.includes(f.operator) || f.value.trim())
+		);
+
+		try {
+			if (editingViewId) {
+				// Update existing view
+				const res = await fetch(`/api/data/views/${encodeURIComponent(editingViewId)}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						project: selectedProject,
+						name: newViewName.trim(),
+						display_name: newViewDisplayName.trim() || null,
+						description: newViewDescription.trim() || null,
+						filters: cleanFilters,
+						filter_conjunction: viewFilterConjunction
+					})
+				});
+				const data = await res.json();
+				if (res.ok) {
+					successToast(`View "${newViewName.trim()}" updated`);
+					if (selectedView?.id === editingViewId) {
+						selectedView = data.view;
+						// Refresh view rows with new filters
+						fetchViewRows(editingViewId);
+					}
+				} else {
+					errorToast(data.error || 'Failed to update view');
+					return;
+				}
+			} else {
+				// Create new view
+				const res = await fetch(`/api/data/tables/${encodeURIComponent(createViewForTable)}/views`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						project: selectedProject,
+						name: newViewName.trim(),
+						display_name: newViewDisplayName.trim() || null,
+						description: newViewDescription.trim() || null,
+						filters: cleanFilters,
+						filter_conjunction: viewFilterConjunction
+					})
+				});
+				const data = await res.json();
+				if (res.ok) {
+					successToast(`View "${newViewName.trim()}" created`);
+				} else {
+					errorToast(data.error || 'Failed to create view');
+					return;
+				}
+			}
+			showCreateViewModal = false;
+			resetViewForm();
+			await fetchTables();
+		} catch {
+			errorToast('Failed to save view');
+		} finally {
+			createViewSaving = false;
+		}
+	}
+
+	function resetViewForm() {
+		newViewName = '';
+		newViewDisplayName = '';
+		newViewDescription = '';
+		editingViewId = null;
+		createViewForTable = null;
+		viewFilters = [];
+		viewFilterConjunction = 'AND';
+		modalSchema = [];
 	}
 
 	// Cell selection & keyboard navigation
@@ -2303,15 +2618,54 @@
 				{:else}
 					<div class="table-items">
 						{#each sortedTables as table}
-							<button
-								class="table-item"
-								class:selected={selectedTable === table.name}
-								onclick={() => selectTable(table.name)}
-								oncontextmenu={(e) => handleTableContextMenu(table, e)}
-							>
-								<span class="table-name">{table.display_name || table.name}</span>
-								<span class="table-meta">{table.row_count} rows</span>
-							</button>
+							{@const tableViews = viewsByTable.get(table.name) || []}
+							{@const isExpanded = expandedTables.has(table.name)}
+							{@const hasViews = tableViews.length > 0}
+							<div class="table-tree-node">
+								<div class="table-tree-row"
+									class:selected={selectedTable === table.name && !selectedView}
+								>
+									<button
+										class="table-expand-btn"
+										class:has-views={hasViews}
+										onclick={() => hasViews && toggleTableExpand(table.name)}
+										tabindex={hasViews ? 0 : -1}
+									>
+										{#if hasViews}
+											<svg xmlns="http://www.w3.org/2000/svg" class="expand-chevron" class:expanded={isExpanded} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+											</svg>
+										{:else}
+											<span class="expand-spacer"></span>
+										{/if}
+									</button>
+									<button
+										class="table-item-label"
+										onclick={() => selectTable(table.name)}
+										oncontextmenu={(e) => handleTableContextMenu(table, e)}
+									>
+										<span class="table-name">{table.display_name || table.name}</span>
+										<span class="table-meta">{table.row_count}</span>
+									</button>
+								</div>
+								{#if hasViews && isExpanded}
+									<div class="view-items">
+										{#each tableViews as view}
+											<button
+												class="view-item"
+												class:selected={selectedView?.id === view.id}
+												onclick={() => selectView(view)}
+												oncontextmenu={(e) => handleViewContextMenu(view, e)}
+											>
+												<svg xmlns="http://www.w3.org/2000/svg" class="view-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+												</svg>
+												<span class="view-name">{view.display_name || view.name}</span>
+											</button>
+										{/each}
+									</div>
+								{/if}
+							</div>
 						{/each}
 					</div>
 				{/if}
@@ -2348,7 +2702,15 @@
 					<div class="view-header">
 						<div class="view-title-row">
 							<h2 class="view-title">{selectedTable}</h2>
-							<span class="view-meta">{totalRows} rows, {editableColumns.length} columns</span>
+							{#if selectedView}
+								<span class="view-badge">
+									<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+									</svg>
+									{selectedView.display_name || selectedView.name}
+								</span>
+							{/if}
+							<span class="view-meta">{totalRows} rows{selectedView ? ' (filtered)' : `, ${editableColumns.length} columns`}</span>
 							{#if hiddenColumns.size > 0}
 								<div class="hidden-cols-indicator">
 									<button class="hidden-cols-btn" onclick={unhideAll}>
@@ -3787,6 +4149,14 @@
 		Duplicate
 	</button>
 
+	<!-- Create View -->
+	<button class="col-context-menu-item" onclick={handleTblCtxCreateView}>
+		<svg xmlns="http://www.w3.org/2000/svg" class="ctx-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+			<path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+		</svg>
+		Create View
+	</button>
+
 	<div class="col-context-menu-divider"></div>
 
 	<!-- Export CSV -->
@@ -3813,6 +4183,183 @@
 			<path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
 		</svg>
 		Delete Table
+	</button>
+</div>
+{/if}
+
+<!-- Create/Edit View Modal -->
+{#if showCreateViewModal}
+<div class="modal-backdrop" onclick={() => { showCreateViewModal = false; resetViewForm(); }}>
+	<div class="create-view-modal" onclick={(e) => e.stopPropagation()}>
+		<div class="create-view-header">
+			<h3>{editingViewId ? 'Edit View' : 'Create View'}</h3>
+			{#if createViewForTable}
+				<span class="create-view-table-badge">{createViewForTable}</span>
+			{/if}
+			<button class="modal-close" onclick={() => { showCreateViewModal = false; resetViewForm(); }} aria-label="Close">
+				<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+				</svg>
+			</button>
+		</div>
+		<div class="create-view-body">
+			<div class="create-view-field">
+				<label for="view-name">Name <span class="required">*</span></label>
+				<input
+					id="view-name"
+					type="text"
+					bind:value={newViewName}
+					placeholder="e.g. groceries, medicine, active-items"
+					class="create-view-input"
+				/>
+			</div>
+			<div class="create-view-field">
+				<label for="view-display-name">Display Name</label>
+				<input
+					id="view-display-name"
+					type="text"
+					bind:value={newViewDisplayName}
+					placeholder="e.g. Grocery Items"
+					class="create-view-input"
+				/>
+			</div>
+			<div class="create-view-field">
+				<label for="view-description">Description</label>
+				<input
+					id="view-description"
+					type="text"
+					bind:value={newViewDescription}
+					placeholder="What this view shows"
+					class="create-view-input"
+				/>
+			</div>
+
+			<!-- Filter Builder -->
+			<div class="filter-builder">
+				<div class="filter-builder-header">
+					<span class="filter-builder-title">Filters</span>
+					{#if viewFilters.length > 1}
+						<div class="filter-conjunction-toggle">
+							<button
+								class="conjunction-btn"
+								class:active={viewFilterConjunction === 'AND'}
+								onclick={() => { viewFilterConjunction = 'AND'; }}
+							>AND</button>
+							<button
+								class="conjunction-btn"
+								class:active={viewFilterConjunction === 'OR'}
+								onclick={() => { viewFilterConjunction = 'OR'; }}
+							>OR</button>
+						</div>
+					{/if}
+					<button class="filter-add-btn" onclick={addFilter} title="Add filter">
+						<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+						</svg>
+						Add
+					</button>
+				</div>
+
+				{#if viewFilters.length === 0}
+					<p class="filter-empty-hint">No filters — this view shows all rows.</p>
+				{:else}
+					<div class="filter-rows">
+						{#each viewFilters as filter, i}
+							<div class="filter-row">
+								{#if i > 0}
+									<span class="filter-conjunction-label">{viewFilterConjunction}</span>
+								{:else}
+									<span class="filter-conjunction-label filter-where-label">Where</span>
+								{/if}
+
+								<select
+									class="filter-select filter-col-select"
+									bind:value={filter.column}
+								>
+									{#if modalSchema.length === 0}
+										<option value="">Loading...</option>
+									{:else}
+										{#each modalSchema as col}
+											<option value={col.name}>{col.name}</option>
+										{/each}
+									{/if}
+								</select>
+
+								<select
+									class="filter-select filter-op-select"
+									bind:value={filter.operator}
+								>
+									{#each FILTER_OPERATORS as op}
+										<option value={op.value}>{op.label}</option>
+									{/each}
+								</select>
+
+								{#if !NO_VALUE_OPERATORS.includes(filter.operator)}
+									<input
+										type="text"
+										class="filter-value-input"
+										bind:value={filter.value}
+										placeholder="value"
+									/>
+								{:else}
+									<div class="filter-value-placeholder"></div>
+								{/if}
+
+								<button
+									class="filter-remove-btn"
+									onclick={() => removeFilter(i)}
+									title="Remove filter"
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+									</svg>
+								</button>
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</div>
+		</div>
+		<div class="create-view-footer">
+			<button class="btn-cancel" onclick={() => { showCreateViewModal = false; resetViewForm(); }}>Cancel</button>
+			<button
+				class="btn-save"
+				onclick={handleCreateView}
+				disabled={!newViewName.trim() || createViewSaving}
+			>
+				{#if createViewSaving}
+					<span class="loading loading-spinner loading-xs"></span>
+				{/if}
+				{editingViewId ? 'Save' : 'Create'}
+			</button>
+		</div>
+	</div>
+</div>
+{/if}
+
+<!-- View Context Menu -->
+{#if viewCtxView}
+<div
+	class="col-context-menu view-context-menu"
+	class:col-context-menu-hidden={!viewCtxVisible}
+	style="left: {viewCtxX}px; top: {viewCtxY}px;"
+>
+	<!-- Edit -->
+	<button class="col-context-menu-item" onclick={handleViewCtxEdit}>
+		<svg xmlns="http://www.w3.org/2000/svg" class="ctx-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+			<path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+		</svg>
+		Edit View
+	</button>
+
+	<div class="col-context-menu-divider"></div>
+
+	<!-- Delete (danger) -->
+	<button class="col-context-menu-item col-context-menu-danger" onclick={handleViewCtxDelete}>
+		<svg xmlns="http://www.w3.org/2000/svg" class="ctx-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+			<path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+		</svg>
+		Delete View
 	</button>
 </div>
 {/if}
@@ -3996,31 +4543,132 @@
 		flex: 1;
 	}
 
-	.table-item {
+	/* Tree node structure */
+	.table-tree-node {
+		border-bottom: 1px solid oklch(0.22 0.01 250);
+	}
+
+	.table-tree-row {
 		display: flex;
-		flex-direction: column;
-		gap: 0.125rem;
-		width: 100%;
-		padding: 0.5rem 0.75rem;
+		align-items: center;
+		transition: background 0.1s;
+	}
+	.table-tree-row:hover {
+		background: oklch(0.20 0.02 250);
+	}
+	.table-tree-row.selected {
+		background: oklch(0.25 0.06 200 / 0.2);
+		border-left: 2px solid oklch(0.60 0.15 200);
+	}
+
+	.table-expand-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.25rem;
+		flex-shrink: 0;
+		padding: 0;
+		border: none;
+		background: transparent;
+		color: oklch(0.50 0.02 250);
+		margin-left: 0.25rem;
+	}
+	.table-expand-btn.has-views {
+		cursor: pointer;
+	}
+	.table-expand-btn.has-views:hover {
+		color: oklch(0.75 0.02 250);
+	}
+
+	.expand-chevron {
+		width: 0.625rem;
+		height: 0.625rem;
+		transition: transform 0.15s;
+	}
+	.expand-chevron.expanded {
+		transform: rotate(90deg);
+	}
+
+	.expand-spacer {
+		display: inline-block;
+		width: 0.625rem;
+	}
+
+	.table-item-label {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.25rem;
+		flex: 1;
+		padding: 0.4375rem 0.5rem 0.4375rem 0.125rem;
 		border: none;
 		background: transparent;
 		cursor: pointer;
 		text-align: left;
-		border-bottom: 1px solid oklch(0.22 0.01 250);
+		min-width: 0;
+	}
+
+	/* Nested view items */
+	.view-items {
+		background: oklch(0.14 0.01 250);
+	}
+
+	.view-item {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		width: 100%;
+		padding: 0.3125rem 0.5rem 0.3125rem 2rem;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		text-align: left;
+		font-size: 0.75rem;
+		color: oklch(0.70 0.02 250);
 		transition: background 0.1s;
 	}
-	.table-item:hover {
+	.view-item:hover {
 		background: oklch(0.20 0.02 250);
 	}
-	.table-item.selected {
-		background: oklch(0.25 0.06 200 / 0.2);
-		border-left: 2px solid oklch(0.60 0.15 200);
+	.view-item.selected {
+		background: oklch(0.25 0.08 270 / 0.2);
+		border-left: 2px solid oklch(0.60 0.15 270);
+	}
+
+	.view-icon {
+		width: 0.75rem;
+		height: 0.75rem;
+		flex-shrink: 0;
+		color: oklch(0.55 0.10 270);
+	}
+
+	.view-name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	/* View badge in header */
+	.view-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.6875rem;
+		font-weight: 500;
+		padding: 0.125rem 0.5rem;
+		border-radius: 9999px;
+		background: oklch(0.25 0.08 270 / 0.3);
+		color: oklch(0.75 0.12 270);
+		border: 1px solid oklch(0.40 0.10 270 / 0.3);
 	}
 
 	.table-name {
 		font-size: 0.8125rem;
 		font-weight: 500;
 		color: oklch(0.85 0.02 250);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.table-meta {
@@ -5713,5 +6361,292 @@
 		background: oklch(0.25 0.04 145 / 0.3);
 		color: oklch(0.70 0.12 145);
 		border-radius: 0.25rem;
+	}
+
+	/* Create/Edit View Modal */
+	.modal-backdrop {
+		position: fixed;
+		inset: 0;
+		background: oklch(0.10 0.01 250 / 0.7);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 50;
+	}
+
+	.create-view-modal {
+		background: oklch(0.18 0.01 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.5rem;
+		width: 36rem;
+		max-width: 90vw;
+		max-height: 80vh;
+		overflow-y: auto;
+		box-shadow: 0 20px 50px oklch(0 0 0 / 0.5);
+	}
+
+	.create-view-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.75rem 1rem;
+		border-bottom: 1px solid oklch(0.25 0.02 250);
+	}
+	.create-view-header h3 {
+		font-size: 0.875rem;
+		font-weight: 600;
+		color: oklch(0.90 0.02 250);
+	}
+	.create-view-header .modal-close {
+		margin-left: auto;
+		padding: 0.25rem;
+		border: none;
+		background: transparent;
+		color: oklch(0.50 0.02 250);
+		cursor: pointer;
+		border-radius: 0.25rem;
+	}
+	.create-view-header .modal-close:hover {
+		background: oklch(0.25 0.02 250);
+		color: oklch(0.80 0.02 250);
+	}
+
+	.create-view-table-badge {
+		font-size: 0.625rem;
+		font-weight: 500;
+		padding: 0.0625rem 0.375rem;
+		border-radius: 9999px;
+		background: oklch(0.25 0.06 200 / 0.3);
+		color: oklch(0.70 0.12 200);
+	}
+
+	.create-view-body {
+		padding: 1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.create-view-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+	.create-view-field label {
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: oklch(0.65 0.02 250);
+	}
+	.create-view-field .required {
+		color: oklch(0.70 0.18 25);
+	}
+
+	.create-view-input {
+		width: 100%;
+		padding: 0.375rem 0.5rem;
+		font-size: 0.8125rem;
+		background: oklch(0.14 0.01 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.375rem;
+		color: oklch(0.90 0.02 250);
+		outline: none;
+	}
+	.create-view-input:focus {
+		border-color: oklch(0.55 0.15 270);
+	}
+	.create-view-input::placeholder {
+		color: oklch(0.40 0.02 250);
+	}
+
+	.create-view-hint {
+		font-size: 0.6875rem;
+		color: oklch(0.50 0.02 250);
+		font-style: italic;
+	}
+
+	.create-view-footer {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.5rem;
+		padding: 0.75rem 1rem;
+		border-top: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.btn-save {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.375rem 0.75rem;
+		font-size: 0.8125rem;
+		font-weight: 500;
+		border: none;
+		border-radius: 0.375rem;
+		background: oklch(0.55 0.15 270);
+		color: oklch(0.95 0.02 250);
+		cursor: pointer;
+	}
+	.btn-save:hover:not(:disabled) {
+		background: oklch(0.60 0.17 270);
+	}
+	.btn-save:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	/* ─── Filter Builder ─── */
+	.filter-builder {
+		margin-top: 0.75rem;
+		padding-top: 0.75rem;
+		border-top: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.filter-builder-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 0.5rem;
+	}
+
+	.filter-builder-title {
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: oklch(0.75 0.02 250);
+	}
+
+	.filter-conjunction-toggle {
+		display: flex;
+		border-radius: 0.25rem;
+		overflow: hidden;
+		border: 1px solid oklch(0.30 0.02 250);
+	}
+
+	.conjunction-btn {
+		padding: 0.125rem 0.5rem;
+		font-size: 0.6875rem;
+		font-weight: 600;
+		border: none;
+		background: oklch(0.18 0.01 250);
+		color: oklch(0.50 0.02 250);
+		cursor: pointer;
+		letter-spacing: 0.03em;
+	}
+	.conjunction-btn.active {
+		background: oklch(0.35 0.10 270);
+		color: oklch(0.90 0.05 270);
+	}
+	.conjunction-btn:hover:not(.active) {
+		background: oklch(0.22 0.02 250);
+	}
+
+	.filter-add-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		margin-left: auto;
+		padding: 0.1875rem 0.5rem;
+		font-size: 0.6875rem;
+		font-weight: 500;
+		border: 1px solid oklch(0.30 0.02 250);
+		border-radius: 0.25rem;
+		background: transparent;
+		color: oklch(0.65 0.10 270);
+		cursor: pointer;
+	}
+	.filter-add-btn:hover {
+		background: oklch(0.20 0.02 250);
+		border-color: oklch(0.40 0.10 270);
+	}
+
+	.filter-empty-hint {
+		font-size: 0.6875rem;
+		color: oklch(0.45 0.02 250);
+		font-style: italic;
+		padding: 0.25rem 0;
+	}
+
+	.filter-rows {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+	}
+
+	.filter-row {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+	}
+
+	.filter-conjunction-label {
+		font-size: 0.6875rem;
+		font-weight: 600;
+		color: oklch(0.55 0.10 270);
+		min-width: 2.25rem;
+		text-align: right;
+		flex-shrink: 0;
+		text-transform: uppercase;
+	}
+	.filter-where-label {
+		color: oklch(0.55 0.02 250);
+	}
+
+	.filter-select {
+		padding: 0.25rem 0.375rem;
+		font-size: 0.75rem;
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.25rem;
+		background: oklch(0.16 0.01 250);
+		color: oklch(0.80 0.02 250);
+		outline: none;
+	}
+	.filter-select:focus {
+		border-color: oklch(0.50 0.15 270);
+	}
+
+	.filter-col-select {
+		min-width: 7rem;
+		max-width: 10rem;
+	}
+	.filter-op-select {
+		min-width: 6rem;
+	}
+
+	.filter-value-input {
+		flex: 1;
+		min-width: 4rem;
+		padding: 0.25rem 0.375rem;
+		font-size: 0.75rem;
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.25rem;
+		background: oklch(0.16 0.01 250);
+		color: oklch(0.85 0.02 250);
+		outline: none;
+	}
+	.filter-value-input:focus {
+		border-color: oklch(0.50 0.15 270);
+	}
+	.filter-value-input::placeholder {
+		color: oklch(0.40 0.02 250);
+	}
+
+	.filter-value-placeholder {
+		flex: 1;
+		min-width: 4rem;
+	}
+
+	.filter-remove-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.25rem;
+		border: none;
+		border-radius: 0.25rem;
+		background: transparent;
+		color: oklch(0.50 0.02 250);
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+	.filter-remove-btn:hover {
+		background: oklch(0.25 0.08 25);
+		color: oklch(0.70 0.15 25);
 	}
 </style>

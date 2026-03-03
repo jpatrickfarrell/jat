@@ -32,6 +32,32 @@
 	let saving = $state(false);
 	let saveError = $state<string | null>(null);
 	let previousBaseId = $state<string | null>(null);
+	let copied = $state(false);
+
+	function getExportContent(): string | null {
+		return rendered?.content ?? base?.content ?? null;
+	}
+
+	function handleCopy() {
+		const content = getExportContent();
+		if (!content) return;
+		navigator.clipboard.writeText(content);
+		copied = true;
+		setTimeout(() => copied = false, 2000);
+	}
+
+	function handleExport() {
+		const content = getExportContent();
+		if (!content || !base) return;
+		const slug = base.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+		const blob = new Blob([content], { type: 'text/markdown' });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = `${slug}.md`;
+		a.click();
+		URL.revokeObjectURL(url);
+	}
 
 	const sourceInfo = $derived(base ? SOURCE_TYPE_INFO.find(s => s.type === base.source_type) : null);
 	const isEditable = $derived(base != null && (base.source_type === 'manual' || base.source_type === 'conversation'));
@@ -243,6 +269,40 @@
 				<!-- Save indicator -->
 				{#if saving}
 					<span class="loading loading-spinner loading-xs" style="color: oklch(0.70 0.12 240);"></span>
+				{/if}
+
+				<!-- Copy to clipboard -->
+				{#if rendered?.content || base?.content}
+					<button
+						class="btn btn-ghost btn-xs"
+						style="color: {copied ? 'oklch(0.75 0.15 145)' : 'oklch(0.60 0.02 250)'};"
+						onclick={handleCopy}
+						title={copied ? 'Copied!' : 'Copy rendered markdown'}
+					>
+						{#if copied}
+							<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+							</svg>
+						{:else}
+							<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+							</svg>
+						{/if}
+					</button>
+				{/if}
+
+				<!-- Export as .md -->
+				{#if rendered?.content || base?.content}
+					<button
+						class="btn btn-ghost btn-xs"
+						style="color: oklch(0.60 0.02 250);"
+						onclick={handleExport}
+						title="Download as .md"
+					>
+						<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+						</svg>
+					</button>
 				{/if}
 
 				<!-- Edit/View toggle for editable types -->

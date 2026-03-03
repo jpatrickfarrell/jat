@@ -139,7 +139,6 @@
 		color: oklch(0.85 0.02 250);
 		font-size: 0.9rem;
 		line-height: 1.7;
-		max-width: 52rem;
 	}
 
 
@@ -291,6 +290,7 @@
 		padding: 0.625rem 0.75rem;
 		text-align: left;
 		border: 1px solid oklch(0.25 0.02 250);
+		min-width: 8rem;
 	}
 	:global(.md-preview .doc-table th) {
 		background: oklch(0.18 0.02 250);

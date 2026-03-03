@@ -515,6 +515,21 @@ export function getCommandGroups(): CommandGroup[] {
 }
 
 /**
+ * Get commands formatted as SearchDropdownGroup[] for use with SearchDropdown component.
+ * Groups commands by namespace with sorted namespaces (jat first, then local, then alphabetical).
+ */
+export function getCommandDropdownGroups(): Array<{ label: string; options: Array<{ value: string; label: string }> }> {
+	const groups = getCommandGroups();
+	return groups.map(g => ({
+		label: `/${g.namespace}`,
+		options: g.commands.map(cmd => ({
+			value: cmd.invocation,
+			label: cmd.invocation
+		}))
+	}));
+}
+
+/**
  * Get visible projects (not hidden)
  */
 export function getVisibleProjects(): ProjectConfig[] {

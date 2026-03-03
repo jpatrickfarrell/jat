@@ -16,12 +16,13 @@
 	 * @see shared/agent-programs.md for architecture documentation
 	 */
 
-	import { onMount, tick } from 'svelte';
+	import { onMount } from 'svelte';
 	import { fade, slide } from 'svelte/transition';
 	import type { AgentProgram, AgentStatus, AgentModel, AgentAuthType } from '$lib/types/agentProgram';
 	import { AGENT_PRESETS } from '$lib/types/agentProgram';
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
-	import { loadCommands, getCommands } from '$lib/stores/configStore.svelte';
+	import { loadCommands, getCommandDropdownGroups } from '$lib/stores/configStore.svelte';
+	import SearchDropdown from '$lib/components/SearchDropdown.svelte';
 
 	// Types
 	interface AgentProgramWithStatus extends AgentProgram {
@@ -61,68 +62,8 @@
 	} | null>(null);
 	let skipVerification = $state(false);
 
-	// Command dropdown state (shared between start and completion dropdowns)
-	let activeDropdown = $state<'start' | 'completion' | null>(null);
-	let cmdSearchQuery = $state('');
-	let cmdSearchInput: HTMLInputElement | undefined;
-	let cmdDropdownRefs: Record<string, HTMLDivElement | undefined> = {};
-
-	const commandsByNamespace = $derived.by(() => {
-		const cmds = getCommands();
-		const groups = new Map<string, Array<{ invocation: string; name: string }>>();
-		for (const cmd of cmds) {
-			const ns = cmd.namespace || 'local';
-			if (!groups.has(ns)) groups.set(ns, []);
-			groups.get(ns)!.push({ invocation: cmd.invocation, name: cmd.name });
-		}
-		return Array.from(groups.entries()).sort(([a], [b]) => {
-			if (a === 'jat') return -1;
-			if (b === 'jat') return 1;
-			if (a === 'local') return -1;
-			if (b === 'local') return 1;
-			return a.localeCompare(b);
-		});
-	});
-
-	const filteredCommandsByNamespace = $derived.by(() => {
-		if (!cmdSearchQuery.trim()) return commandsByNamespace;
-		const q = cmdSearchQuery.toLowerCase();
-		const result: Array<[string, Array<{ invocation: string; name: string }>]> = [];
-		for (const [ns, cmds] of commandsByNamespace) {
-			const filtered = cmds.filter(c => c.invocation.toLowerCase().includes(q) || c.name.toLowerCase().includes(q));
-			if (filtered.length > 0) result.push([ns, filtered]);
-		}
-		return result;
-	});
-
-	function selectCommand(field: 'startCommand' | 'completionCommand', invocation: string) {
-		activeDropdown = null;
-		cmdSearchQuery = '';
-		editForm[field] = invocation;
-	}
-
-	function registerDropdownRef(node: HTMLDivElement, id: string) {
-		cmdDropdownRefs[id] = node;
-		return {
-			destroy() { delete cmdDropdownRefs[id]; }
-		};
-	}
-
-	function handleCmdClickOutside(e: MouseEvent) {
-		const ref = activeDropdown ? cmdDropdownRefs[activeDropdown] : undefined;
-		if (ref && !ref.contains(e.target as Node)) {
-			activeDropdown = null;
-			cmdSearchQuery = '';
-		}
-	}
-
-	$effect(() => {
-		if (activeDropdown) {
-			document.addEventListener('mousedown', handleCmdClickOutside);
-			tick().then(() => cmdSearchInput?.focus());
-			return () => document.removeEventListener('mousedown', handleCmdClickOutside);
-		}
-	});
+	// Command dropdown groups for SearchDropdown
+	const commandGroups = $derived(getCommandDropdownGroups());
 
 	// Delete confirmation state
 	let deletingProgram = $state<string | null>(null);
@@ -196,8 +137,6 @@
 		editingProgram = null;
 		editForm = {};
 		editError = null;
-		activeDropdown = null;
-		cmdSearchQuery = '';
 	}
 
 	async function saveProgram() {
@@ -594,85 +533,6 @@
 		newFormFlags = newFormFlags.filter((_, i) => i !== index);
 	}
 </script>
-
-{#snippet commandDropdown(dropdownId: 'start' | 'completion', field: 'startCommand' | 'completionCommand', currentValue: string, placeholder: string)}
-	{@const isOpen = activeDropdown === dropdownId}
-	<div class="relative" use:registerDropdownRef={dropdownId}>
-		<button
-			type="button"
-			class="w-full px-2.5 py-1 rounded-lg font-mono text-sm text-left flex items-center justify-between transition-colors min-h-8"
-			style="background: oklch(0.16 0.01 250); border: 1px solid oklch(0.25 0.02 250); color: oklch(0.85 0.02 250);"
-			onclick={() => { activeDropdown = isOpen ? null : dropdownId; cmdSearchQuery = ''; }}
-		>
-			<span class="truncate">{currentValue}</span>
-			<svg class="w-3 h-3 flex-shrink-0 transition-transform {isOpen ? 'rotate-180' : ''}" style="color: oklch(0.50 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-				<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-			</svg>
-		</button>
-
-		{#if isOpen}
-			<div
-				class="absolute z-50 mt-1 w-full rounded-lg overflow-hidden shadow-xl"
-				style="background: oklch(0.16 0.01 250); border: 1px solid oklch(0.25 0.02 250);"
-				transition:slide={{ duration: 120 }}
-			>
-				<div class="px-2.5 py-1.5" style="border-bottom: 1px solid oklch(0.22 0.02 250);">
-					<div class="relative flex items-center gap-1.5">
-						<svg class="w-3 h-3 flex-shrink-0" style="color: oklch(0.45 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-						</svg>
-						<input
-							bind:this={cmdSearchInput}
-							bind:value={cmdSearchQuery}
-							onkeydown={(e) => {
-								if (e.key === 'Escape') { e.stopPropagation(); activeDropdown = null; cmdSearchQuery = ''; }
-							}}
-							type="text"
-							placeholder="Filter commands..."
-							class="w-full bg-transparent text-[10px] font-mono focus:outline-none"
-							style="color: oklch(0.75 0.02 250);"
-							autocomplete="off"
-						/>
-						{#if cmdSearchQuery}
-							<button type="button" onclick={() => { cmdSearchQuery = ''; cmdSearchInput?.focus(); }} style="color: oklch(0.40 0.02 250);" class="hover:opacity-80 transition-opacity">
-								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-							</button>
-						{/if}
-					</div>
-				</div>
-
-				<ul class="py-0.5 max-h-[280px] overflow-y-auto">
-					{#if filteredCommandsByNamespace.length > 0}
-						{#each filteredCommandsByNamespace as [namespace, cmds]}
-							<li class="px-3 pt-1.5 pb-0.5">
-								<span class="text-[9px] font-mono font-semibold uppercase tracking-wider" style="color: oklch(0.50 0.10 250);">/{namespace}</span>
-							</li>
-							{#each cmds as cmd}
-								<li>
-									<button
-										type="button"
-										onclick={() => selectCommand(field, cmd.invocation)}
-										class="w-full px-3 py-1.5 flex items-center gap-2 text-left text-[11px] font-mono transition-colors"
-										style="color: oklch(0.80 0.02 250); {currentValue === cmd.invocation ? 'background: oklch(0.22 0.03 250);' : ''}"
-										onmouseenter={(e) => { (e.currentTarget as HTMLElement).style.background = 'oklch(0.20 0.02 250)'; }}
-										onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.background = currentValue === cmd.invocation ? 'oklch(0.22 0.03 250)' : ''; }}
-									>
-										<span class="truncate">{cmd.invocation}</span>
-										{#if currentValue === cmd.invocation}
-											<svg class="w-3 h-3 flex-shrink-0 ml-auto" style="color: oklch(0.70 0.15 145);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
-										{/if}
-									</button>
-								</li>
-							{/each}
-						{/each}
-					{:else}
-						<li class="px-3 py-3 text-center text-[10px] font-mono" style="color: oklch(0.45 0.02 250);">No commands match "{cmdSearchQuery}"</li>
-					{/if}
-				</ul>
-			</div>
-		{/if}
-	</div>
-{/snippet}
 
 <div class="agent-programs-editor">
 	<div class="section-header">
@@ -1071,7 +931,12 @@
 
 					<div class="form-group">
 						<label for="edit-start-command">Command</label>
-						{@render commandDropdown('start', 'startCommand', editForm.startCommand || '/jat:start', '/jat:start')}
+						<SearchDropdown
+							value={editForm.startCommand || '/jat:start'}
+							groups={commandGroups}
+							placeholder="Filter commands..."
+							onChange={(v) => { editForm.startCommand = v; }}
+						/>
 						<p class="form-hint">Command to run when starting a task (default: /jat:start)</p>
 					</div>
 				</div>
@@ -1097,7 +962,12 @@
 
 					<div class="form-group">
 						<label for="edit-completion-command">Command</label>
-						{@render commandDropdown('completion', 'completionCommand', editForm.completionCommand || '/jat:complete', '/jat:complete')}
+						<SearchDropdown
+							value={editForm.completionCommand || '/jat:complete'}
+							groups={commandGroups}
+							placeholder="Filter commands..."
+							onChange={(v) => { editForm.completionCommand = v; }}
+						/>
 						<p class="form-hint">Command to run during completion (default: /jat:complete)</p>
 					</div>
 				</div>

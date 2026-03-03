@@ -73,6 +73,8 @@
 	let selectedProject = $state<string | null>(null);
 	let tables = $state<TableInfo[]>([]);
 	let tableSortMode = $state<TableSortMode>('name-asc');
+	// Favorite views (persisted per project in localStorage)
+	let favoriteViews = $state<Set<string>>(new Set());
 	let sortedTables = $derived.by(() => {
 		const sorted = [...tables];
 		switch (tableSortMode) {
@@ -102,6 +104,41 @@
 	let rows = $state<any[]>([]);
 	let totalRows = $state(0);
 
+	function getFavStorageKey(project: string): string {
+		return `jat-data-fav-views-${project}`;
+	}
+
+	function loadFavorites(project: string) {
+		if (!browser) return;
+		try {
+			const raw = localStorage.getItem(getFavStorageKey(project));
+			if (raw) {
+				const arr = JSON.parse(raw);
+				if (Array.isArray(arr)) {
+					favoriteViews = new Set(arr);
+					return;
+				}
+			}
+		} catch {}
+		favoriteViews = new Set();
+	}
+
+	function saveFavorites(project: string) {
+		if (!browser) return;
+		localStorage.setItem(getFavStorageKey(project), JSON.stringify([...favoriteViews]));
+	}
+
+	function toggleFavorite(viewId: string) {
+		const updated = new Set(favoriteViews);
+		if (updated.has(viewId)) {
+			updated.delete(viewId);
+		} else {
+			updated.add(viewId);
+		}
+		favoriteViews = updated;
+		if (selectedProject) saveFavorites(selectedProject);
+	}
+
 	// Views
 	let views = $state<ViewInfo[]>([]);
 	let selectedView = $state<ViewInfo | null>(null);
@@ -118,6 +155,12 @@
 			map.set(v.table_name, arr);
 		}
 		return map;
+	});
+
+	// Favorited views resolved to full objects for the favorites section
+	const favoriteViewsList = $derived.by(() => {
+		if (favoriteViews.size === 0) return [];
+		return views.filter(v => favoriteViews.has(v.id));
 	});
 
 	// Loading states
@@ -242,7 +285,15 @@
 
 	// Cell selection & keyboard navigation
 	let selectedCell = $state<{ rowIdx: number; colIdx: number } | null>(null);
+	let selectedCells = $state<Set<string>>(new Set()); // "rowIdx:colIdx" keys for multi-select
 	let editingSelectedCell = $state(false);
+	let initialEditChar = $state<string | null>(null);
+	let copiedCell = $state<{ rowIdx: number; colIdx: number; value: any } | null>(null);
+
+	function cellKey(rowIdx: number, colIdx: number) { return `${rowIdx}:${colIdx}`; }
+	function isCellInSelection(rowIdx: number, colIdx: number) {
+		return selectedCells.has(cellKey(rowIdx, colIdx));
+	}
 
 	// Inline editing (legacy — only used for columns without semantic type)
 	let editingCell = $state<{ rowid: number; column: string } | null>(null);
@@ -343,10 +394,11 @@
 		}
 	});
 
-	// When project changes, fetch tables
+	// When project changes, fetch tables and load favorites
 	$effect(() => {
 		if (selectedProject) {
 			fetchTables();
+			loadFavorites(selectedProject);
 			selectedTable = null;
 			selectedView = null;
 			schema = [];
@@ -1270,6 +1322,22 @@
 		showCreateViewModal = true;
 	}
 
+	function openViewEditor(view: ViewInfo) {
+		createViewForTable = view.table_name;
+		newViewName = view.name;
+		newViewDisplayName = view.display_name || '';
+		newViewDescription = view.description || '';
+		editingViewId = view.id;
+		viewFilters = Array.isArray(view.filters) ? view.filters.map((f: any) => ({
+			column: f.column || '',
+			operator: f.operator || 'equals',
+			value: f.value || ''
+		})) : [];
+		viewFilterConjunction = (view.filter_conjunction === 'OR') ? 'OR' : 'AND';
+		fetchModalSchema(view.table_name);
+		showCreateViewModal = true;
+	}
+
 	// ─── Create/Edit View modal ─────────────────────────────
 	interface FilterRule {
 		column: string;
@@ -1405,9 +1473,45 @@
 	// Cell selection & keyboard navigation
 	let tableRef: HTMLTableElement | undefined = $state(undefined);
 
-	function selectCell(rowIdx: number, colIdx: number) {
+	function selectCell(rowIdx: number, colIdx: number, e?: MouseEvent) {
 		editingSelectedCell = false;
-		selectedCell = { rowIdx, colIdx };
+
+		if (e && (e.ctrlKey || e.metaKey) && e.shiftKey && selectedCell) {
+			// Ctrl+Shift+Click: add range from anchor to clicked cell (same column)
+			const col = selectedCell.colIdx;
+			const fromRow = Math.min(selectedCell.rowIdx, rowIdx);
+			const toRow = Math.max(selectedCell.rowIdx, rowIdx);
+			const next = new Set(selectedCells);
+			for (let r = fromRow; r <= toRow; r++) next.add(cellKey(r, col));
+			selectedCells = next;
+			// Keep anchor, move cursor
+			selectedCell = { rowIdx, colIdx: col };
+		} else if (e && (e.ctrlKey || e.metaKey)) {
+			// Ctrl+Click: toggle individual cell in/out of selection
+			const key = cellKey(rowIdx, colIdx);
+			const next = new Set(selectedCells);
+			if (next.has(key)) {
+				next.delete(key);
+			} else {
+				next.add(key);
+			}
+			selectedCells = next;
+			selectedCell = { rowIdx, colIdx };
+		} else if (e && e.shiftKey && selectedCell) {
+			// Shift+Click: select range from anchor to clicked cell (same column)
+			const col = selectedCell.colIdx;
+			const fromRow = Math.min(selectedCell.rowIdx, rowIdx);
+			const toRow = Math.max(selectedCell.rowIdx, rowIdx);
+			const next = new Set<string>();
+			for (let r = fromRow; r <= toRow; r++) next.add(cellKey(r, col));
+			selectedCells = next;
+			selectedCell = { rowIdx, colIdx: col };
+		} else {
+			// Plain click: single cell selection, clear multi-select
+			selectedCell = { rowIdx, colIdx };
+			selectedCells = new Set();
+		}
+
 		// Focus the table so keyboard events work
 		tableRef?.focus();
 	}
@@ -1415,6 +1519,7 @@
 	function clearSelection() {
 		editingSelectedCell = false;
 		selectedCell = null;
+		selectedCells = new Set();
 	}
 
 	function startEditingSelected() {
@@ -1432,8 +1537,25 @@
 
 		if (!selectedCell) return;
 
+		// If editing is active but input hasn't received focus yet,
+		// only allow Escape (to cancel); ignore all other keys so they
+		// aren't consumed before the input can capture them.
+		if (editingSelectedCell) {
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				editingSelectedCell = false;
+				initialEditChar = null;
+			}
+			return;
+		}
+
 		const maxRow = rows.length - 1;
 		const maxCol = orderedColumns.length - 1;
+
+		// Arrow/Tab navigation clears multi-selection
+		if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+			selectedCells = new Set();
+		}
 
 		switch (e.key) {
 			case 'ArrowUp':
@@ -1480,6 +1602,7 @@
 				break;
 			case 'Enter':
 				e.preventDefault();
+				initialEditChar = null;
 				startEditingSelected();
 				break;
 			case 'Escape':
@@ -1487,9 +1610,24 @@
 				clearSelection();
 				break;
 			default:
+				// Ctrl+C / Cmd+C — copy cell value
+				if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+					e.preventDefault();
+					const row = rows[selectedCell.rowIdx];
+					const col = orderedColumns[selectedCell.colIdx];
+					if (row && col) {
+						const val = row[col.name];
+						copiedCell = { rowIdx: selectedCell.rowIdx, colIdx: selectedCell.colIdx, value: val };
+						navigator.clipboard.writeText(val != null ? String(val) : '').catch(() => {});
+					}
+					break;
+				}
 				// Printable character — start editing
 				if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
 					e.preventDefault();
+					// Space = edit with cursor at end (append mode)
+					// Other chars = overwrite with typed character
+					initialEditChar = e.key === ' ' ? null : e.key;
 					startEditingSelected();
 				}
 				break;
@@ -1508,11 +1646,45 @@
 		}
 	});
 
+	// Handle native paste event — no permission prompt, works with multi-select
+	function handleTablePaste(e: ClipboardEvent) {
+		// Don't interfere if editing a cell
+		const target = e.target as HTMLElement;
+		if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+
+		const text = e.clipboardData?.getData('text/plain');
+		if (text == null) return;
+
+		e.preventDefault();
+
+		// Collect all target cells: multi-selection OR single selected cell
+		const targets: { rowIdx: number; colIdx: number }[] = [];
+		if (selectedCells.size > 0) {
+			for (const key of selectedCells) {
+				const [r, c] = key.split(':').map(Number);
+				targets.push({ rowIdx: r, colIdx: c });
+			}
+		} else if (selectedCell) {
+			targets.push(selectedCell);
+		}
+
+		// Paste into each target cell
+		for (const t of targets) {
+			const row = rows[t.rowIdx];
+			const col = orderedColumns[t.colIdx];
+			if (row && col) {
+				handleCellSave(row.rowid, col.name, text);
+			}
+		}
+	}
+
 	// Clear selection when table changes
 	$effect(() => {
 		selectedTable;  // track dependency
 		selectedCell = null;
+		selectedCells = new Set();
 		editingSelectedCell = false;
+		copiedCell = null;
 	});
 
 	// Inline cell editing
@@ -1551,6 +1723,7 @@
 	// Save cell value via DataCell component
 	async function handleCellSave(rowid: number, column: string, value: any) {
 		editingSelectedCell = false;
+		initialEditChar = null;
 		if (!selectedProject || !selectedTable) return;
 		// Check if value actually changed — skip API call for no-ops (cancel, unchanged save)
 		const row = rows.find(r => r.rowid === rowid);
@@ -2616,6 +2789,39 @@
 						</button>
 					</div>
 				{:else}
+					{#if favoriteViewsList.length > 0}
+						<div class="fav-views-section">
+							<div class="fav-views-header">
+								<svg viewBox="0 0 24 24" fill="currentColor" class="fav-header-icon">
+									<path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clip-rule="evenodd" />
+								</svg>
+								<span>Favorites</span>
+							</div>
+							{#each favoriteViewsList as view}
+								<div class="fav-view-item" class:selected={selectedView?.id === view.id}>
+									<button
+										class="fav-view-btn"
+										onclick={() => selectView(view)}
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" class="view-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+										</svg>
+										<span class="view-name">{view.display_name || view.name}</span>
+										<span class="fav-view-table">{view.table_name}</span>
+									</button>
+									<button
+										class="view-fav-btn is-favorite"
+										onclick={(e) => { e.stopPropagation(); toggleFavorite(view.id); }}
+										title="Remove from favorites"
+									>
+										<svg viewBox="0 0 24 24" fill="currentColor">
+											<path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clip-rule="evenodd" />
+										</svg>
+									</button>
+								</div>
+							{/each}
+						</div>
+					{/if}
 					<div class="table-items">
 						{#each sortedTables as table}
 							{@const tableViews = viewsByTable.get(table.name) || []}
@@ -2648,20 +2854,39 @@
 										<span class="table-meta">{table.row_count}</span>
 									</button>
 								</div>
-								{#if hasViews && isExpanded}
+							{#if hasViews && isExpanded}
 									<div class="view-items">
 										{#each tableViews as view}
-											<button
-												class="view-item"
-												class:selected={selectedView?.id === view.id}
-												onclick={() => selectView(view)}
-												oncontextmenu={(e) => handleViewContextMenu(view, e)}
-											>
-												<svg xmlns="http://www.w3.org/2000/svg" class="view-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-												</svg>
-												<span class="view-name">{view.display_name || view.name}</span>
-											</button>
+											{@const isViewFav = favoriteViews.has(view.id)}
+											<div class="view-item-row" class:selected={selectedView?.id === view.id}>
+												<button
+													class="view-item"
+													class:selected={selectedView?.id === view.id}
+													onclick={() => selectView(view)}
+													oncontextmenu={(e) => handleViewContextMenu(view, e)}
+												>
+													<svg xmlns="http://www.w3.org/2000/svg" class="view-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+														<path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+													</svg>
+													<span class="view-name">{view.display_name || view.name}</span>
+												</button>
+												<button
+													class="view-fav-btn"
+													class:is-favorite={isViewFav}
+													onclick={(e) => { e.stopPropagation(); toggleFavorite(view.id); }}
+													title={isViewFav ? 'Remove from favorites' : 'Add to favorites'}
+												>
+													{#if isViewFav}
+														<svg viewBox="0 0 24 24" fill="currentColor">
+															<path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clip-rule="evenodd" />
+														</svg>
+													{:else}
+														<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+														</svg>
+													{/if}
+												</button>
+											</div>
 										{/each}
 									</div>
 								{/if}
@@ -2703,12 +2928,12 @@
 						<div class="view-title-row">
 							<h2 class="view-title">{selectedTable}</h2>
 							{#if selectedView}
-								<span class="view-badge">
+								<button class="view-badge" onclick={() => openViewEditor(selectedView)} title="Edit view filters">
 									<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 										<path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
 									</svg>
 									{selectedView.display_name || selectedView.name}
-								</span>
+								</button>
 							{/if}
 							<span class="view-meta">{totalRows} rows{selectedView ? ' (filtered)' : `, ${editableColumns.length} columns`}</span>
 							{#if hiddenColumns.size > 0}
@@ -2955,7 +3180,7 @@
 							</div>
 						{:else}
 							<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-							<table class="data-table" tabindex="0" onkeydown={handleTableKeydown} bind:this={tableRef}>
+							<table class="data-table" tabindex="0" onkeydown={handleTableKeydown} onpaste={handleTablePaste} bind:this={tableRef}>
 								<thead>
 									<tr>
 										<th class="row-id-col">#</th>
@@ -3020,14 +3245,16 @@
 											<td class="row-id-col">{row.rowid}</td>
 											{#each orderedColumns as col, colIdx}
 											{@const cellMeta = columnMeta[col.name]}
-											{@const isCellSelected = selectedCell?.rowIdx === rowIdx && selectedCell?.colIdx === colIdx}
+											{@const isCellSelected = (selectedCell?.rowIdx === rowIdx && selectedCell?.colIdx === colIdx) || isCellInSelection(rowIdx, colIdx)}
+											{@const isCellCopied = copiedCell?.rowIdx === rowIdx && copiedCell?.colIdx === colIdx}
 												<!-- svelte-ignore a11y_click_events_have_key_events -->
 												<td
 													class="data-cell"
 													class:cell-selected={isCellSelected}
+													class:cell-copied={isCellCopied}
 													data-cell-row={rowIdx}
 													data-cell-col={colIdx}
-													onclick={() => selectCell(rowIdx, colIdx)}
+													onclick={(e) => selectCell(rowIdx, colIdx, e)}
 												>
 													<DataCell
 														value={row[col.name]}
@@ -3035,6 +3262,7 @@
 														config={cellMeta?.config || {}}
 														selected={isCellSelected}
 														editing={isCellSelected && editingSelectedCell}
+														initialEditChar={isCellSelected && editingSelectedCell ? initialEditChar : null}
 														onSave={(val) => handleCellSave(row.rowid, col.name, val)}
 													/>
 												</td>
@@ -4608,6 +4836,105 @@
 		min-width: 0;
 	}
 
+	/* Favorite views section */
+	.fav-views-section {
+		border-bottom: 1px solid oklch(0.25 0.02 250);
+		padding-bottom: 0.25rem;
+		margin-bottom: 0.25rem;
+	}
+	.fav-views-header {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.3125rem 0.5rem;
+		font-size: 0.6875rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: oklch(0.55 0.02 250);
+	}
+	.fav-header-icon {
+		width: 0.6875rem;
+		height: 0.6875rem;
+		color: oklch(0.70 0.15 85);
+	}
+	.fav-view-item {
+		display: flex;
+		align-items: center;
+		transition: background 0.1s;
+	}
+	.fav-view-item:hover {
+		background: oklch(0.20 0.02 250);
+	}
+	.fav-view-item.selected {
+		background: oklch(0.25 0.06 200 / 0.2);
+	}
+	.fav-view-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		flex: 1;
+		padding: 0.3125rem 0.5rem 0.3125rem 0.75rem;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		text-align: left;
+		min-width: 0;
+		color: inherit;
+		font-size: inherit;
+	}
+	.fav-view-table {
+		margin-left: auto;
+		font-size: 0.6875rem;
+		color: oklch(0.45 0.02 250);
+		flex-shrink: 0;
+	}
+
+	/* View item row wrapper */
+	.view-item-row {
+		display: flex;
+		align-items: center;
+	}
+	.view-item-row:hover {
+		background: oklch(0.18 0.01 250);
+	}
+	.view-item-row .view-item {
+		flex: 1;
+	}
+
+	/* Favorite star button on views */
+	.view-fav-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.25rem;
+		height: 1.25rem;
+		flex-shrink: 0;
+		padding: 0;
+		border: none;
+		background: transparent;
+		color: oklch(0.45 0.02 250);
+		cursor: pointer;
+		opacity: 0;
+		transition: opacity 0.15s, color 0.15s;
+		margin-right: 0.375rem;
+	}
+	.view-fav-btn svg {
+		width: 0.75rem;
+		height: 0.75rem;
+	}
+	.view-item-row:hover .view-fav-btn,
+	.fav-view-item:hover .view-fav-btn {
+		opacity: 1;
+	}
+	.view-fav-btn:hover {
+		color: oklch(0.80 0.18 85);
+	}
+	.view-fav-btn.is-favorite {
+		opacity: 1;
+		color: oklch(0.80 0.18 85);
+	}
+
 	/* Nested view items */
 	.view-items {
 		background: oklch(0.14 0.01 250);
@@ -4660,6 +4987,12 @@
 		background: oklch(0.25 0.08 270 / 0.3);
 		color: oklch(0.75 0.12 270);
 		border: 1px solid oklch(0.40 0.10 270 / 0.3);
+		cursor: pointer;
+		transition: background 0.15s, border-color 0.15s;
+	}
+	.view-badge:hover {
+		background: oklch(0.30 0.10 270 / 0.4);
+		border-color: oklch(0.50 0.12 270 / 0.5);
 	}
 
 	.table-name {
@@ -4888,6 +5221,11 @@
 		outline: 2px solid oklch(0.60 0.15 240);
 		outline-offset: -2px;
 		background: oklch(0.60 0.15 240 / 0.08);
+	}
+	.data-cell.cell-copied {
+		outline: 2px dashed oklch(0.65 0.18 145);
+		outline-offset: -2px;
+		background: oklch(0.65 0.18 145 / 0.06);
 	}
 
 	.cell-value {

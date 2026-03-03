@@ -872,13 +872,14 @@
 	let ctxY = $state(0);
 	let ctxVisible = $state(false);
 	let ctxStatusSubmenuOpen = $state(false);
+	let ctxStateSubmenuOpen = $state(false);
 
 	function handleContextMenu(session: TmuxSession, event: MouseEvent) {
 		if (session.type !== 'agent') return;
 		event.preventDefault();
 		event.stopPropagation();
 		const menuWidth = 200;
-		const menuHeight = 340;
+		const menuHeight = 380;
 		const agentName = getAgentName(session.name);
 		const task = agentTasks.get(agentName);
 		const info = agentSessionInfo.get(agentName);
@@ -892,11 +893,13 @@
 		ctxY = Math.min(event.clientY, window.innerHeight - menuHeight - 8);
 		ctxVisible = true;
 		ctxStatusSubmenuOpen = false;
+		ctxStateSubmenuOpen = false;
 	}
 
 	function closeCtxMenu() {
 		ctxVisible = false;
 		ctxStatusSubmenuOpen = false;
+		ctxStateSubmenuOpen = false;
 	}
 
 	// Close context menu on click outside or Escape
@@ -926,6 +929,28 @@
 			if (!response.ok) console.error('Failed to update task status');
 		} catch (err) {
 			console.error('Failed to update task status:', err);
+		}
+	}
+
+	async function ctxChangeState(sessionName: string, newState: string) {
+		closeCtxMenu();
+		// Optimistic UI update
+		optimisticStates.set(sessionName, newState);
+		optimisticStates = new Map(optimisticStates);
+		try {
+			const taskId = ctxData?.task?.id || '';
+			const taskTitle = ctxData?.task?.title || '';
+			const agentName = ctxData?.agentName || '';
+			await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					type: newState,
+					data: { taskId, taskTitle, agentName, reason: 'Manual state override via context menu' }
+				})
+			});
+		} catch (err) {
+			console.error('Failed to change session state:', err);
 		}
 	}
 
@@ -1704,7 +1729,7 @@
 	>
 		<!-- View Details -->
 		{#if ctxData.task}
-			<button class="active-context-menu-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; }} onclick={() => { const id = ctxData!.task!.id; closeCtxMenu(); onViewTask?.(id); ctxData = null; }}>
+			<button class="active-context-menu-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; }} onclick={() => { const id = ctxData!.task!.id; closeCtxMenu(); onViewTask?.(id); ctxData = null; }}>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
 					<circle cx="12" cy="12" r="3" />
@@ -1714,7 +1739,7 @@
 		{/if}
 
 		<!-- Attach Terminal -->
-		<button class="active-context-menu-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; }} onclick={() => { const name = ctxData!.session.name; closeCtxMenu(); handleAttachSession(name); ctxData = null; }}>
+		<button class="active-context-menu-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; }} onclick={() => { const name = ctxData!.session.name; closeCtxMenu(); handleAttachSession(name); ctxData = null; }}>
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<polyline points="4 17 10 11 4 5" />
 				<line x1="12" y1="19" x2="20" y2="19" />
@@ -1729,7 +1754,7 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="active-context-submenu-container"
-				onmouseenter={() => { ctxStatusSubmenuOpen = true; }}
+				onmouseenter={() => { ctxStatusSubmenuOpen = true; ctxStateSubmenuOpen = false; }}
 				onmouseleave={() => { ctxStatusSubmenuOpen = false; }}
 			>
 				<button class="active-context-menu-item active-context-menu-item-has-submenu">
@@ -1768,9 +1793,55 @@
 			</div>
 		{/if}
 
+		<!-- Change State (submenu) -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="active-context-submenu-container"
+			onmouseenter={() => { ctxStateSubmenuOpen = true; ctxStatusSubmenuOpen = false; }}
+			onmouseleave={() => { ctxStateSubmenuOpen = false; }}
+		>
+			<button class="active-context-menu-item active-context-menu-item-has-submenu">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281" />
+					<circle cx="12" cy="12" r="3" />
+					<path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+				</svg>
+				<span>Force State</span>
+				<svg class="active-context-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<polyline points="9 18 15 12 9 6" />
+				</svg>
+			</button>
+			{#if ctxStateSubmenuOpen}
+				<div class="active-context-submenu">
+					{#each [
+						{ value: 'working', label: 'Working', color: 'oklch(0.70 0.18 250)', emoji: '🔧' },
+						{ value: 'needs-input', label: 'Needs Input', color: 'oklch(0.75 0.20 45)', emoji: '❓' },
+						{ value: 'ready-for-review', label: 'Review', color: 'oklch(0.70 0.20 85)', emoji: '🔍' },
+						{ value: 'completing', label: 'Completing', color: 'oklch(0.65 0.15 175)', emoji: '⏳' },
+						{ value: 'completed', label: 'Completed', color: 'oklch(0.65 0.18 145)', emoji: '✅' },
+						{ value: 'paused', label: 'Paused', color: 'oklch(0.60 0.10 250)', emoji: '⏸' },
+						{ value: 'idle', label: 'Idle', color: 'oklch(0.60 0.03 250)', emoji: '💤' }
+					] as state}
+						<button
+							class="active-context-menu-item {ctxData?.activityState === state.value ? 'active-context-menu-item-active' : ''}"
+							onclick={() => ctxChangeState(ctxData!.session.name, state.value)}
+						>
+							<span class="active-status-dot" style="background: {state.color};"></span>
+							<span>{state.emoji} {state.label}</span>
+							{#if ctxData?.activityState === state.value}
+								<svg class="active-context-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+									<polyline points="20 6 9 17 4 12" />
+								</svg>
+							{/if}
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
+
 		<!-- Duplicate -->
 		{#if ctxData.task}
-			<button class="active-context-menu-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; }} onclick={() => ctxDuplicateTask(ctxData!.task!)}>
+			<button class="active-context-menu-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; }} onclick={() => ctxDuplicateTask(ctxData!.task!)}>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
 					<path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
@@ -1782,7 +1853,7 @@
 		<div class="active-context-menu-divider"></div>
 
 		<!-- Interrupt -->
-		<button class="active-context-menu-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; }} onclick={async () => {
+		<button class="active-context-menu-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; }} onclick={async () => {
 			const name = ctxData!.session.name;
 			closeCtxMenu();
 			ctxData = null;
@@ -1801,7 +1872,7 @@
 
 		<!-- Pause -->
 		{#if ctxData.task}
-			<button class="active-context-menu-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; }} onclick={async () => {
+			<button class="active-context-menu-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; }} onclick={async () => {
 				const d = ctxData!;
 				closeCtxMenu();
 				ctxData = null;
@@ -1833,7 +1904,7 @@
 
 		<!-- Complete -->
 		{#if ctxData.task}
-			<button class="active-context-menu-item active-context-menu-item-success" onmouseenter={() => { ctxStatusSubmenuOpen = false; }} onclick={async () => {
+			<button class="active-context-menu-item active-context-menu-item-success" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; }} onclick={async () => {
 				const d = ctxData!;
 				closeCtxMenu();
 				ctxData = null;
@@ -1871,7 +1942,7 @@
 		<div class="active-context-menu-divider"></div>
 
 		<!-- Kill Session -->
-		<button class="active-context-menu-item active-context-menu-item-danger" onmouseenter={() => { ctxStatusSubmenuOpen = false; }} onclick={async () => {
+		<button class="active-context-menu-item active-context-menu-item-danger" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; }} onclick={async () => {
 			const d = ctxData!;
 			closeCtxMenu();
 			ctxData = null;

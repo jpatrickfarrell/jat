@@ -13,7 +13,7 @@
 	 * - Task actions: Spawn, Attach, Release, Send Message
 	 */
 
-	import { onMount, onDestroy, tick } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { slide } from 'svelte/transition';
 	import { browser } from '$app/environment';
 	import { formatDate, formatSavedTime, formatRelativeTimestamp } from '$lib/utils/dateFormatters';
@@ -34,7 +34,8 @@
 	import type { SuggestedTaskWithState } from '$lib/types/signals';
 	import { getProjectFromTaskId } from '$lib/utils/projectUtils';
 	import { availableProjects as availableProjectsStore } from '$lib/stores/drawerStore';
-	import { loadCommands, getCommands } from '$lib/stores/configStore.svelte';
+	import { loadCommands, getCommandDropdownGroups } from '$lib/stores/configStore.svelte';
+	import SearchDropdown from '$lib/components/SearchDropdown.svelte';
 	import { addToast } from '$lib/stores/toasts.svelte';
 	import { describeCron } from '$lib/utils/cronUtils';
 	import { getFileTypeInfoFromPath } from '$lib/utils/fileUtils';
@@ -507,63 +508,8 @@
 		}
 	});
 
-	// Command dropdown state (searchable dropdown from /integrations)
-	let cmdDropdownOpen = $state(false);
-	let cmdSearchQuery = $state('');
-	let cmdSearchInput: HTMLInputElement | undefined;
-	let cmdDropdownRef: HTMLDivElement | undefined;
-
-	// Group commands by namespace for the dropdown
-	const commandsByNamespace = $derived.by(() => {
-		const cmds = getCommands();
-		const groups = new Map<string, Array<{ invocation: string; name: string }>>();
-		for (const cmd of cmds) {
-			const ns = cmd.namespace || 'local';
-			if (!groups.has(ns)) groups.set(ns, []);
-			groups.get(ns)!.push({ invocation: cmd.invocation, name: cmd.name });
-		}
-		const sorted = Array.from(groups.entries()).sort(([a], [b]) => {
-			if (a === 'jat') return -1;
-			if (b === 'jat') return 1;
-			if (a === 'local') return -1;
-			if (b === 'local') return 1;
-			return a.localeCompare(b);
-		});
-		return sorted;
-	});
-
-	// Filtered commands for search
-	const filteredCommandsByNamespace = $derived.by(() => {
-		if (!cmdSearchQuery.trim()) return commandsByNamespace;
-		const q = cmdSearchQuery.toLowerCase();
-		const result: Array<[string, Array<{ invocation: string; name: string }>]> = [];
-		for (const [ns, cmds] of commandsByNamespace) {
-			const filtered = cmds.filter(c => c.invocation.toLowerCase().includes(q) || c.name.toLowerCase().includes(q));
-			if (filtered.length > 0) result.push([ns, filtered]);
-		}
-		return result;
-	});
-
-	function selectCommandDropdown(invocation: string) {
-		cmdDropdownOpen = false;
-		cmdSearchQuery = '';
-		autoSave('command', invocation);
-	}
-
-	function handleCmdClickOutside(e: MouseEvent) {
-		if (cmdDropdownRef && !cmdDropdownRef.contains(e.target as Node)) {
-			cmdDropdownOpen = false;
-			cmdSearchQuery = '';
-		}
-	}
-
-	$effect(() => {
-		if (cmdDropdownOpen) {
-			document.addEventListener('mousedown', handleCmdClickOutside);
-			tick().then(() => cmdSearchInput?.focus());
-			return () => document.removeEventListener('mousedown', handleCmdClickOutside);
-		}
-	});
+	// Command dropdown groups for SearchDropdown
+	const commandGroups = $derived(getCommandDropdownGroups());
 
 	// Timeline filter state
 	let timelineFilter = $state<'all' | 'tasks' | 'messages'>('all');
@@ -2891,78 +2837,13 @@
 								<!-- Command (searchable dropdown) -->
 									<div class="flex items-start gap-2">
 										<span class="text-xs text-base-content/50 w-20 shrink-0 pt-0.5">Command</span>
-										<div class="flex-1 relative" bind:this={cmdDropdownRef}>
-											<button
-												type="button"
-												class="w-full px-2.5 py-1 rounded-lg font-mono text-sm text-left flex items-center justify-between transition-colors cmd-dropdown-trigger min-h-6"
-												onclick={() => { cmdDropdownOpen = !cmdDropdownOpen; }}
-											>
-												<span class="truncate" style="color: oklch(0.85 0.02 250);">{task.command || '/jat:start'}</span>
-												<svg class="w-3 h-3 flex-shrink-0 transition-transform {cmdDropdownOpen ? 'rotate-180' : ''}" style="color: oklch(0.50 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-												</svg>
-											</button>
-
-											{#if cmdDropdownOpen}
-												<div
-													class="absolute z-50 mt-1 w-full rounded-lg overflow-hidden shadow-xl"
-													style="background: oklch(0.16 0.01 250); border: 1px solid oklch(0.25 0.02 250);"
-													transition:slide={{ duration: 120 }}
-												>
-													<!-- Search -->
-													<div class="px-2.5 py-1.5 cmd-dropdown-search-border">
-														<div class="relative flex items-center gap-1.5">
-															<svg class="w-3 h-3 flex-shrink-0" style="color: oklch(0.45 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-																<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-															</svg>
-															<input
-																bind:this={cmdSearchInput}
-																bind:value={cmdSearchQuery}
-																onkeydown={(e) => {
-																	if (e.key === 'Escape') { e.stopPropagation(); cmdDropdownOpen = false; cmdSearchQuery = ''; }
-																}}
-																type="text"
-																placeholder="Filter commands..."
-																class="w-full bg-transparent text-[10px] font-mono focus:outline-none"
-																style="color: oklch(0.75 0.02 250);"
-																autocomplete="off"
-															/>
-															{#if cmdSearchQuery}
-																<button type="button" onclick={() => { cmdSearchQuery = ''; cmdSearchInput?.focus(); }} style="color: oklch(0.40 0.02 250);" class="hover:opacity-80 transition-opacity">
-																	<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-																</button>
-															{/if}
-														</div>
-													</div>
-
-													<!-- Command list -->
-													<ul class="py-0.5 max-h-[280px] overflow-y-auto">
-														{#if filteredCommandsByNamespace.length > 0}
-															{#each filteredCommandsByNamespace as [namespace, cmds]}
-																<li class="px-3 pt-1.5 pb-0.5">
-																	<span class="text-[9px] font-mono font-semibold uppercase tracking-wider" style="color: oklch(0.50 0.10 250);">/{namespace}</span>
-																</li>
-																{#each cmds as cmd}
-																	<li>
-																		<button
-																			type="button"
-																			onclick={() => selectCommandDropdown(cmd.invocation)}
-																			class="w-full px-3 py-1.5 flex items-center gap-2 text-left text-[11px] font-mono transition-colors {task.command === cmd.invocation ? 'cmd-item-selected' : 'cmd-item-default'}"
-																		>
-																			<span class="truncate" style="color: oklch(0.80 0.02 250);">{cmd.invocation}</span>
-																			{#if task.command === cmd.invocation}
-																				<svg class="w-3 h-3 flex-shrink-0 ml-auto" style="color: oklch(0.70 0.15 145);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
-																			{/if}
-																		</button>
-																	</li>
-																{/each}
-															{/each}
-														{:else}
-															<li class="px-3 py-3 text-center text-[10px] font-mono" style="color: oklch(0.45 0.02 250);">No commands match "{cmdSearchQuery}"</li>
-														{/if}
-													</ul>
-												</div>
-											{/if}
+										<div class="flex-1">
+											<SearchDropdown
+												value={task.command || '/jat:start'}
+												groups={commandGroups}
+												placeholder="Filter commands..."
+												onChange={(v) => autoSave('command', v)}
+											/>
 										</div>
 									</div>
 
@@ -4416,9 +4297,6 @@
 	.cmd-dropdown-trigger:hover {
 		background: oklch(0.18 0.01 250);
 		border-color: oklch(0.30 0.02 250);
-	}
-	.cmd-dropdown-search-border {
-		border-bottom: 1px solid oklch(0.22 0.02 250);
 	}
 	.cmd-item-selected {
 		background: oklch(0.20 0.02 250);

@@ -4463,7 +4463,7 @@
 <!-- Create/Edit View Modal -->
 {#if showCreateViewModal}
 <div class="modal-backdrop" onclick={() => { showCreateViewModal = false; resetViewForm(); }}>
-	<div class="create-view-modal" onclick={(e) => e.stopPropagation()}>
+	<div class="create-view-modal" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.ctrlKey && e.key === 'Enter' && newViewName.trim() && !createViewSaving) { e.preventDefault(); handleCreateView(); } }}>
 		<div class="create-view-header">
 			<h3>{editingViewId ? 'Edit View' : 'Create View'}</h3>
 			{#if createViewForTable}

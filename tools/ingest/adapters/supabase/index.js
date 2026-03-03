@@ -328,7 +328,19 @@ export default class SupabaseAdapter extends BaseAdapter {
       // Build description from template or fall back to description column
       let description;
       if (source.descriptionTemplate) {
-        description = renderTemplate(source.descriptionTemplate, row);
+        // Pre-process row: add formatted virtual columns for complex fields
+        const templateRow = { ...row };
+        if (Array.isArray(row.selected_elements) && row.selected_elements.length > 0) {
+          const lines = row.selected_elements.map((el, i) => {
+            const sel = el.selector || el.tagName || 'element';
+            const text = el.textContent ? ` — "${el.textContent.slice(0, 80)}"` : '';
+            return `${i + 1}. \`${sel}\`${text}`;
+          });
+          templateRow.selected_elements_formatted = '**Selected Elements:**\n' + lines.join('\n');
+        } else {
+          templateRow.selected_elements_formatted = '';
+        }
+        description = renderTemplate(source.descriptionTemplate, templateRow);
       } else {
         description = row.description || '';
       }

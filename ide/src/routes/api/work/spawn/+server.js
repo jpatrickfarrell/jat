@@ -45,6 +45,13 @@ import { getTaskBases, getBases, renderBase, getTaskTables, renderDataTable } fr
 
 const DB_PATH = process.env.AGENT_MAIL_DB || `${process.env.HOME}/.agent-mail.db`;
 
+// Maximum size (in chars) for bases content to be inlined into the --append-system-prompt
+// CLI argument. Beyond this, content is written to a file and the agent is told to read it.
+// Limit exists because the spawn command is typed into the terminal via tmux send-keys,
+// and very long commands (>~32KB) can exceed terminal input buffer limits or readline
+// buffer sizes, causing the command to be silently truncated and Claude to fail to launch.
+const MAX_INLINE_BASES_SIZE = 16_000;
+
 // Name components - nature/geography themed words
 // 72 adjectives × 72 nouns = 5,184 unique combinations
 const ADJECTIVES = [
@@ -1009,6 +1016,24 @@ export async function POST({ request }) {
 			}
 		}
 
+		// If bases content is too large to inline in the CLI argument, write it to a file
+		// and replace with a short reference. This prevents tmux send-keys from exceeding
+		// terminal input buffer limits (~64KB) which silently truncates the command.
+		let inlineBases = basesContent;
+		let basesFilePath = '';
+		if (basesContent && basesContent.length > MAX_INLINE_BASES_SIZE) {
+			try {
+				basesFilePath = `/tmp/jat-bases-${sessionName}.md`;
+				writeFileSync(basesFilePath, basesContent, 'utf-8');
+				inlineBases = `[Project context written to ${basesFilePath} — read this file before starting work]`;
+				console.log(`[spawn] Bases content too large (${basesContent.length} chars), wrote to ${basesFilePath}`);
+			} catch (err) {
+				console.warn(`[spawn] Failed to write bases file, falling back to inline:`, err.message);
+				inlineBases = basesContent;
+				basesFilePath = '';
+			}
+		}
+
 		// Build the agent command dynamically based on selected agent program
 		const { command: agentCmd, needsJatStart } = buildAgentCommand({
 			agent: selectedAgent,
@@ -1020,7 +1045,7 @@ export async function POST({ request }) {
 			taskTitle: task?.title,
 			taskCommand: explicitCommand || task?.command || selectedAgent.startCommand || '/jat:start',
 			mode,
-			basesContent
+			basesContent: inlineBases
 		});
 
 		console.log(`[spawn] Agent command: ${agentCmd.substring(0, 100)}...`);

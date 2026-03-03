@@ -43,6 +43,10 @@
 			onSave(value); // Signal parent to reset editingSelectedCell
 		}, 150);
 	}
+
+	function focusInput(node: HTMLSelectElement) {
+		node.focus();
+	}
 </script>
 
 {#if editing}
@@ -51,7 +55,7 @@
 			class="cell-edit-input"
 			value={value ?? ''}
 			onchange={(e) => select(e.currentTarget.value)}
-			autofocus
+			use:focusInput
 		>
 			<option value="">— none —</option>
 			{#each options as opt}

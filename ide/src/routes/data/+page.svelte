@@ -460,11 +460,17 @@
 	}
 
 	function selectTable(name: string) {
+		const wasViewActive = selectedView !== null;
 		selectedTable = name;
 		selectedView = null;
 		offset = 0;
 		orderBy = undefined;
 		orderDir = 'ASC';
+		// When switching from a view on the same table, selectedTable doesn't
+		// change so the $effect won't re-fire — fetch explicitly.
+		if (wasViewActive) {
+			fetchTableData();
+		}
 	}
 
 	function toggleTableExpand(name: string) {
@@ -1737,6 +1743,11 @@
 			requestAnimationFrame(() => tableRef?.focus());
 			return;
 		}
+		// Optimistic local update — avoids table blink from tableDataLoading spinner
+		if (row) {
+			rows = rows.map(r => r.rowid === rowid ? { ...r, [column]: value } : r);
+		}
+		requestAnimationFrame(() => tableRef?.focus());
 		try {
 			const res = await fetch(`/api/data/tables/${encodeURIComponent(selectedTable)}/rows/${rowid}`, {
 				method: 'PUT',
@@ -1747,16 +1758,43 @@
 				})
 			});
 			if (res.ok) {
-				await fetchTableData();
-				// Re-focus table for continued keyboard navigation
-				requestAnimationFrame(() => tableRef?.focus());
+				// Silent background refetch (skip tableDataLoading to avoid table blink)
+				const url = buildTableFetchUrl();
+				const refetch = await fetch(url);
+				const data = await refetch.json();
+				if (refetch.ok) {
+					schema = data.schema || [];
+					rows = data.rows || [];
+					totalRows = data.total || 0;
+					columnMeta = data.columnMeta || {};
+				}
 			} else {
+				// Revert optimistic update on error
+				if (row) {
+					rows = rows.map(r => r.rowid === rowid ? row : r);
+				}
 				const data = await res.json();
 				errorToast(data.error || 'Failed to update');
 			}
 		} catch (e) {
+			// Revert optimistic update on error
+			if (row) {
+				rows = rows.map(r => r.rowid === rowid ? row : r);
+			}
 			errorToast('Failed to update row');
 		}
+	}
+
+	function buildTableFetchUrl(): string {
+		let url: string;
+		if (selectedView) {
+			url = `/api/data/views/${encodeURIComponent(selectedView.id)}/rows?project=${encodeURIComponent(selectedProject!)}`;
+		} else {
+			url = `/api/data/tables/${encodeURIComponent(selectedTable!)}?project=${encodeURIComponent(selectedProject!)}`;
+		}
+		url += `&limit=${limit}&offset=${offset}`;
+		if (orderBy) url += `&orderBy=${encodeURIComponent(orderBy)}&orderDir=${orderDir}`;
+		return url;
 	}
 
 	// Save column settings (semantic type + config)
@@ -3247,7 +3285,8 @@
 								</thead>
 								<tbody>
 									{#each rows as row, rowIdx}
-										<tr oncontextmenu={(e) => handleRowContextMenu(row, rowIdx, e)}>
+									{@const isSelectedRow = selectedCell?.rowIdx === rowIdx}
+										<tr class:row-has-selection={isSelectedRow} oncontextmenu={(e) => handleRowContextMenu(row, rowIdx, e)}>
 											<td class="row-id-col">{row.rowid}</td>
 											{#each orderedColumns as col, colIdx}
 											{@const cellMeta = columnMeta[col.name]}
@@ -5125,6 +5164,9 @@
 
 	.data-table tbody tr:hover {
 		background: oklch(0.20 0.02 250);
+	}
+	.data-table tbody tr.row-has-selection {
+		background: oklch(0.60 0.15 240 / 0.04);
 	}
 
 	.row-id-col {

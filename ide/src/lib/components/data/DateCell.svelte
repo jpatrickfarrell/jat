@@ -71,6 +71,10 @@
 		editing = false;
 		onSave(value);
 	}
+
+	function focusInput(node: HTMLInputElement) {
+		node.focus();
+	}
 </script>
 
 {#if editing}
@@ -83,7 +87,7 @@
 			if (e.key === 'Escape') cancel();
 		}}
 		onblur={save}
-		autofocus
+		use:focusInput
 	/>
 {:else}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->

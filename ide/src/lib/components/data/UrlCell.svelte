@@ -2,10 +2,12 @@
 	let {
 		value = null,
 		editing: editingProp = false,
+		initialEditChar = null,
 		onSave,
 	}: {
 		value: any;
 		editing?: boolean;
+		initialEditChar?: string | null;
 		onSave: (val: any) => void;
 	} = $props();
 
@@ -27,8 +29,16 @@
 	});
 
 	function startEdit() {
-		editValue = value === null ? '' : String(value);
+		if (initialEditChar != null) {
+			editValue = initialEditChar;
+		} else {
+			editValue = value === null ? '' : String(value);
+		}
 		editing = true;
+	}
+
+	function focusInput(node: HTMLInputElement) {
+		node.focus();
 	}
 
 	function save() {
@@ -54,7 +64,7 @@
 			if (e.key === 'Escape') cancel();
 		}}
 		onblur={save}
-		autofocus
+		use:focusInput
 	/>
 {:else if value}
 	<span class="url-cell">

@@ -207,13 +207,23 @@
 
 	// --- Initialize contenteditable with existing formula value ---
 	// Parse {column} references into chips on mount
+	let chipsInitialized = false;
 	$effect(() => {
 		if (!chipInputRef) return;
 		const el = chipInputRef.getElement();
 		if (!el || !value) return;
 
-		// Only run once on mount (when DOM is empty and value has content)
-		if (el.childNodes.length > 0) return;
+		// Only run once per mount — skip if we already created chips
+		if (chipsInitialized) return;
+
+		// Check if chips already exist (component reuse)
+		const hasChips = el.querySelector('.formula-column-chip');
+		if (hasChips) { chipsInitialized = true; return; }
+
+		// Skip if value has no column references to chipify
+		if (!value.includes('{')) { chipsInitialized = true; return; }
+
+		chipsInitialized = true;
 
 		// Parse value and create chips for {column} references
 		const regex = /\{([^}]+)\}/g;

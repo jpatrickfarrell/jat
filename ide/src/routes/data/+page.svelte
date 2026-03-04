@@ -289,6 +289,7 @@
 	let editingSelectedCell = $state(false);
 	let initialEditChar = $state<string | null>(null);
 	let copiedCell = $state<{ rowIdx: number; colIdx: number; value: any } | null>(null);
+	let undoStack = $state<Array<{ rowid: number; column: string; oldValue: any }>>([]);
 
 	function cellKey(rowIdx: number, colIdx: number) { return `${rowIdx}:${colIdx}`; }
 	function isCellInSelection(rowIdx: number, colIdx: number) {
@@ -466,6 +467,7 @@
 		offset = 0;
 		orderBy = undefined;
 		orderDir = 'ASC';
+		undoStack = [];
 		// When switching from a view on the same table, selectedTable doesn't
 		// change so the $effect won't re-fire — fetch explicitly.
 		if (wasViewActive) {
@@ -1533,6 +1535,9 @@
 		const row = rows[selectedCell.rowIdx];
 		const col = orderedColumns[selectedCell.colIdx];
 		if (!row || !col) return;
+		// Formula columns are computed — not directly editable
+		const meta = columnMeta[col.name];
+		if (meta?.semanticType === 'formula') return;
 		editingSelectedCell = true;
 	}
 
@@ -1540,6 +1545,18 @@
 		// Don't interfere if a cell is being edited (input/textarea is focused)
 		const target = e.target as HTMLElement;
 		if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+
+		// Ctrl+Z / Cmd+Z — undo last cell edit (works even without selection,
+		// e.g. when a filtered view hid the row after editing)
+		if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+			e.preventDefault();
+			if (undoStack.length > 0) {
+				const entry = undoStack[undoStack.length - 1];
+				undoStack = undoStack.slice(0, -1);
+				handleCellSave(entry.rowid, entry.column, entry.oldValue, true);
+			}
+			return;
+		}
 
 		if (!selectedCell) return;
 
@@ -1733,7 +1750,7 @@
 	}
 
 	// Save cell value via DataCell component
-	async function handleCellSave(rowid: number, column: string, value: any) {
+	async function handleCellSave(rowid: number, column: string, value: any, skipUndo = false) {
 		editingSelectedCell = false;
 		initialEditChar = null;
 		if (!selectedProject || !selectedTable) return;
@@ -1742,6 +1759,10 @@
 		if (row && row[column] === value) {
 			requestAnimationFrame(() => tableRef?.focus());
 			return;
+		}
+		// Push to undo stack before changing (skip when called from undo itself)
+		if (row && !skipUndo) {
+			undoStack = [...undoStack, { rowid, column, oldValue: row[column] }];
 		}
 		// Optimistic local update — avoids table blink from tableDataLoading spinner
 		if (row) {
@@ -3282,6 +3303,7 @@
 														semanticType={meta?.semanticType}
 														config={meta?.config || {}}
 														colIndex={colIdx}
+														columns={orderedColumns.map(c => c.name)}
 														onSave={(type, cfg) => saveColumnSettings(col.name, type, cfg)}
 														onClose={() => columnSettingsOpen = null}
 													/>
@@ -3310,6 +3332,7 @@
 													class="data-cell"
 													class:cell-selected={isCellSelected}
 													class:cell-copied={isCellCopied}
+													class:cell-editing={isCellSelected && editingSelectedCell}
 													data-cell-row={rowIdx}
 													data-cell-col={colIdx}
 													onclick={(e) => selectCell(rowIdx, colIdx, e)}
@@ -3322,6 +3345,7 @@
 														editing={isCellSelected && editingSelectedCell}
 														initialEditChar={isCellSelected && editingSelectedCell ? initialEditChar : null}
 														onSave={(val) => handleCellSave(row.rowid, col.name, val)}
+														row={cellMeta?.semanticType === 'formula' ? row : undefined}
 													/>
 												</td>
 											{/each}
@@ -5301,6 +5325,10 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
+	.data-cell.cell-editing {
+		overflow: visible;
+		white-space: normal;
+	}
 	.data-cell.cell-selected {
 		outline: 2px solid oklch(0.60 0.15 240);
 		outline-offset: -2px;
@@ -5329,6 +5357,13 @@
 		border-radius: 0.1875rem;
 		color: oklch(0.90 0.02 250);
 		outline: none;
+	}
+	.cell-edit-textarea {
+		resize: none;
+		max-height: 200px;
+		line-height: 1.4;
+		font-family: inherit;
+		display: block;
 	}
 
 	.row-delete-btn {

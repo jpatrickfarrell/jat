@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { SemanticType, ColumnConfig } from '$lib/types/dataTable';
+	import type { SemanticType, ColumnConfig, FormulaConfig } from '$lib/types/dataTable';
 	import TextCell from './TextCell.svelte';
 	import BooleanCell from './BooleanCell.svelte';
 	import DateCell from './DateCell.svelte';
@@ -8,6 +8,7 @@
 	import EnumCell from './EnumCell.svelte';
 	import CurrencyCell from './CurrencyCell.svelte';
 	import PercentageCell from './PercentageCell.svelte';
+	import FormulaCell from './FormulaCell.svelte';
 
 	let {
 		value = null,
@@ -16,6 +17,7 @@
 		selected = false,
 		editing = false,
 		initialEditChar = null,
+		row = {},
 		onSave,
 	}: {
 		value: any;
@@ -24,6 +26,7 @@
 		selected?: boolean;
 		editing?: boolean;
 		initialEditChar?: string | null;
+		row?: Record<string, any>;
 		onSave: (val: any) => void;
 	} = $props();
 
@@ -45,6 +48,8 @@
 	<CurrencyCell {value} config={typedConfig} {editing} {initialEditChar} {onSave} />
 {:else if semanticType === 'percentage'}
 	<PercentageCell {value} config={typedConfig} {editing} {initialEditChar} {onSave} />
+{:else if semanticType === 'formula'}
+	<FormulaCell {row} config={typedConfig as FormulaConfig} />
 {:else}
 	<TextCell {value} {editing} {initialEditChar} {onSave} />
 {/if}

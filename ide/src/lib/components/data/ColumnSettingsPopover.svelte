@@ -1,13 +1,16 @@
 <script lang="ts">
-	import type { SemanticType, ColumnConfig, EnumConfig, CurrencyConfig, DateConfig, PercentageConfig } from '$lib/types/dataTable';
+	import type { SemanticType, ColumnConfig, EnumConfig, CurrencyConfig, DateConfig, PercentageConfig, FormulaConfig } from '$lib/types/dataTable';
+	import { SEMANTIC_TYPE_INFO } from '$lib/types/dataTable';
 	import ColumnTypeSelector from './ColumnTypeSelector.svelte';
 	import EnumOptionsEditor from './EnumOptionsEditor.svelte';
+	import { validateFormula, extractColumnRefs } from '$lib/utils/formulaEval';
 
 	let {
 		column,
 		semanticType,
 		config = {},
 		colIndex = 0,
+		columns = [],
 		onSave,
 		onClose,
 	}: {
@@ -15,12 +18,17 @@
 		semanticType?: SemanticType;
 		config?: ColumnConfig;
 		colIndex?: number;
+		columns?: string[];
 		onSave: (type: SemanticType, config: ColumnConfig) => void;
 		onClose: () => void;
 	} = $props();
 
 	let selectedType = $state<SemanticType>(semanticType || 'text');
 	let editConfig = $state<Record<string, any>>({ ...config });
+	let formulaError = $state<string | null>(null);
+
+	// Available columns for formula references (exclude current column)
+	const availableColumns = $derived(columns.filter(c => c !== column));
 
 	function handleTypeChange(type: SemanticType) {
 		selectedType = type;
@@ -33,19 +41,48 @@
 			editConfig = { format: 'short' };
 		} else if (type === 'percentage') {
 			editConfig = { decimals: 0, showBar: false };
+		} else if (type === 'formula') {
+			editConfig = {
+				expression: (config as FormulaConfig)?.expression || '',
+				outputType: (config as FormulaConfig)?.outputType || 'number',
+				outputConfig: (config as FormulaConfig)?.outputConfig || {},
+			};
+			formulaError = null;
 		} else {
 			editConfig = {};
 		}
 	}
 
+	function insertColumnRef(colName: string) {
+		editConfig = { ...editConfig, expression: (editConfig.expression || '') + `{${colName}}` };
+		formulaError = null;
+	}
+
+	function handleExpressionInput(e: Event) {
+		const val = (e.target as HTMLTextAreaElement).value;
+		editConfig = { ...editConfig, expression: val };
+		if (val.trim()) {
+			formulaError = validateFormula(val);
+		} else {
+			formulaError = null;
+		}
+	}
+
 	function save() {
+		if (selectedType === 'formula') {
+			const err = validateFormula(editConfig.expression);
+			if (err) {
+				formulaError = err;
+				return;
+			}
+		}
 		onSave(selectedType, editConfig);
 	}
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="popover-overlay" onclick={onClose}></div>
-<div class="popover" class:popover-left={colIndex <= 1}>
+<div class="popover" class:popover-left={colIndex <= 1} class:popover-wide={selectedType === 'formula'}>
 	<div class="popover-header">
 		<span class="popover-title">Column: <code>{column}</code></span>
 		<button class="popover-close" onclick={onClose}>×</button>
@@ -113,6 +150,64 @@
 				</div>
 			</div>
 		{/if}
+
+		{#if selectedType === 'formula'}
+			<div class="field">
+				<label class="field-label">Expression</label>
+				<textarea
+					class="field-input formula-input"
+					class:formula-invalid={formulaError}
+					value={editConfig.expression || ''}
+					oninput={handleExpressionInput}
+					placeholder={'{price} * {quantity}'}
+					rows="2"
+				></textarea>
+				{#if formulaError}
+					<span class="formula-error">{formulaError}</span>
+				{/if}
+			</div>
+
+			{#if availableColumns.length > 0}
+				<div class="field">
+					<label class="field-label">Insert column</label>
+					<div class="column-chips">
+						{#each availableColumns as col}
+							<button class="column-chip" onclick={() => insertColumnRef(col)} title="Insert {col}">
+								{col}
+							</button>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			<div class="field">
+				<label class="field-label">Output format</label>
+				<select class="field-input" bind:value={editConfig.outputType}>
+					<option value="number">Number</option>
+					<option value="text">Text</option>
+					<option value="currency">Currency</option>
+					<option value="percentage">Percent</option>
+				</select>
+			</div>
+
+			{#if editConfig.outputType === 'currency'}
+				<div class="field-row">
+					<div class="field">
+						<label class="field-label">Symbol</label>
+						<input type="text" class="field-input small" value={editConfig.outputConfig?.symbol || '$'} oninput={(e) => editConfig = { ...editConfig, outputConfig: { ...editConfig.outputConfig, symbol: (e.target as HTMLInputElement).value } }} />
+					</div>
+					<div class="field">
+						<label class="field-label">Decimals</label>
+						<input type="number" class="field-input small" value={editConfig.outputConfig?.decimals ?? 2} min="0" max="6" oninput={(e) => editConfig = { ...editConfig, outputConfig: { ...editConfig.outputConfig, decimals: parseInt((e.target as HTMLInputElement).value) } }} />
+					</div>
+				</div>
+			{/if}
+
+			<div class="formula-help">
+				<span class="help-title">Syntax</span>
+				<code>{'{column}'}</code> reference &middot; <code>+ - * /</code> math &middot; <code>round()</code> <code>abs()</code> <code>min()</code> <code>max()</code> functions
+			</div>
+		{/if}
 	</div>
 
 	<div class="popover-footer">
@@ -142,6 +237,9 @@
 	.popover.popover-left {
 		right: auto;
 		left: 0;
+	}
+	.popover.popover-wide {
+		min-width: 320px;
 	}
 	.popover-header {
 		display: flex;
@@ -206,6 +304,54 @@
 	}
 	.field-input.small {
 		width: 5rem;
+	}
+	.formula-input {
+		font-family: 'JetBrains Mono', 'Fira Code', monospace;
+		font-size: 0.6875rem;
+		resize: vertical;
+		min-height: 2.5rem;
+	}
+	.formula-input.formula-invalid {
+		border-color: oklch(0.55 0.18 25);
+	}
+	.formula-error {
+		font-size: 0.625rem;
+		color: oklch(0.65 0.18 25);
+	}
+	.column-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem;
+	}
+	.column-chip {
+		font-size: 0.625rem;
+		padding: 0.125rem 0.375rem;
+		background: oklch(0.22 0.02 250);
+		border: 1px solid oklch(0.30 0.02 250);
+		border-radius: 0.25rem;
+		color: oklch(0.70 0.10 200);
+		cursor: pointer;
+		font-family: 'JetBrains Mono', 'Fira Code', monospace;
+	}
+	.column-chip:hover {
+		background: oklch(0.28 0.04 200);
+		border-color: oklch(0.40 0.08 200);
+	}
+	.formula-help {
+		font-size: 0.5625rem;
+		color: oklch(0.50 0.02 250);
+		line-height: 1.4;
+	}
+	.formula-help .help-title {
+		font-weight: 600;
+		color: oklch(0.55 0.02 250);
+	}
+	.formula-help code {
+		font-size: 0.5625rem;
+		color: oklch(0.65 0.08 200);
+		background: oklch(0.20 0.01 250);
+		padding: 0 0.1875rem;
+		border-radius: 0.125rem;
 	}
 	.popover-footer {
 		display: flex;

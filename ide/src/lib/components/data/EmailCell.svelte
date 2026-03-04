@@ -67,6 +67,17 @@
 {/if}
 
 <style>
+	.cell-edit-input {
+		width: 100%;
+		padding: 0.125rem 0.25rem;
+		font-size: 0.8125rem;
+		background: oklch(0.14 0.01 250);
+		border: 1px solid oklch(0.50 0.10 200);
+		border-radius: 0.1875rem;
+		color: oklch(0.90 0.02 250);
+		outline: none;
+		box-sizing: border-box;
+	}
 	.email-cell {
 		min-width: 0;
 	}

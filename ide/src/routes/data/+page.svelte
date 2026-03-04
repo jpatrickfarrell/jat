@@ -272,6 +272,116 @@
 	// CSV URL
 	let csvUrl = $state('');
 
+	// File picker for CSV/JSON/SQL modes
+	let filePickerOpen = $state(false);
+	let filePickerQuery = $state('');
+	let filePickerResults = $state<Array<{path: string, name: string, folder: string}>>([]);
+	let filePickerLoading = $state(false);
+	let filePickerRef: HTMLDivElement | undefined;
+	let filePickerInputRef: HTMLInputElement | undefined;
+
+	const filePickerExtensions: Record<string, string> = {
+		csv: '.csv,.tsv,.txt',
+		json: '.json,.jsonl',
+		sql: '.sql'
+	};
+
+	async function searchFiles(query: string) {
+		if (!selectedProject) return;
+		filePickerLoading = true;
+		try {
+			const ext = filePickerExtensions[createMode] || '';
+			const params = new URLSearchParams({
+				project: selectedProject,
+				limit: '30',
+				extensions: ext
+			});
+			if (query.trim()) params.set('query', query.trim());
+			const res = await fetch(`/api/files/search?${params}`);
+			if (res.ok) {
+				const data = await res.json();
+				filePickerResults = data.files || [];
+			}
+		} catch {
+			// ignore
+		} finally {
+			filePickerLoading = false;
+		}
+	}
+
+	async function loadFileContent(filePath: string) {
+		if (!selectedProject) return;
+		filePickerOpen = false;
+		filePickerQuery = '';
+		try {
+			const params = new URLSearchParams({
+				project: selectedProject,
+				path: filePath
+			});
+			const res = await fetch(`/api/files/content?${params}`);
+			if (!res.ok) {
+				const err = await res.json();
+				createPreviewError = err.error || 'Failed to load file';
+				return;
+			}
+			const data = await res.json();
+			const content = data.content || '';
+
+			// Populate the textarea and auto-parse
+			if (createMode === 'csv') {
+				createCsvText = content;
+				// Auto-detect format from extension
+				if (filePath.endsWith('.tsv')) createCsvFormat = 'tsv';
+				else if (filePath.endsWith('.csv')) createCsvFormat = 'csv';
+				parseAndInferCsv(content, createCsvFormat);
+			} else if (createMode === 'json') {
+				createJsonText = content;
+				parseAndInferJson(content);
+			} else if (createMode === 'sql') {
+				createSqlText = content;
+				parseSqlCreate(content);
+			}
+
+			// Auto-fill table name from filename if empty
+			if (!newTableName.trim()) {
+				const basename = filePath.split('/').pop() || '';
+				const nameNoExt = basename.replace(/\.[^.]+$/, '');
+				newTableName = nameNoExt.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+			}
+		} catch {
+			createPreviewError = 'Failed to load file';
+		}
+	}
+
+	function openFilePicker() {
+		filePickerOpen = true;
+		filePickerQuery = '';
+		filePickerResults = [];
+		searchFiles('');
+		tick().then(() => filePickerInputRef?.focus());
+	}
+
+	function handleFilePickerClickOutside(e: MouseEvent) {
+		if (filePickerRef && !filePickerRef.contains(e.target as Node)) {
+			filePickerOpen = false;
+			filePickerQuery = '';
+		}
+	}
+
+	$effect(() => {
+		if (filePickerOpen) {
+			document.addEventListener('mousedown', handleFilePickerClickOutside);
+			return () => document.removeEventListener('mousedown', handleFilePickerClickOutside);
+		}
+	});
+
+	let filePickerDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+	function handleFilePickerInput(value: string) {
+		filePickerQuery = value;
+		if (filePickerDebounceTimer) clearTimeout(filePickerDebounceTimer);
+		filePickerDebounceTimer = setTimeout(() => searchFiles(value), 200);
+	}
+
 	// Column settings popover
 	let columnSettingsOpen = $state<string | null>(null);
 
@@ -659,6 +769,55 @@
 		}
 	}
 
+	/**
+	 * Recursively search an object for the largest array of objects.
+	 * Handles nested structures like { meta: {}, baseFormulas: { Math: [...] } }
+	 * Also flattens object-of-arrays: { cat1: [{...}], cat2: [{...}] } → merged array with _category key.
+	 * Returns the largest candidate found across all levels.
+	 */
+	function findArrayInObject(obj: any, maxDepth = 3): any[] | null {
+		if (maxDepth <= 0 || typeof obj !== 'object' || obj === null) return null;
+
+		const candidates: any[][] = [];
+		const keys = Object.keys(obj);
+
+		// Check direct array values
+		for (const k of keys) {
+			const v = obj[k];
+			if (Array.isArray(v) && v.length > 0 && typeof v[0] === 'object' && v[0] !== null) {
+				candidates.push(v);
+			}
+		}
+
+		// Recurse into nested objects — check for grouped data (object-of-arrays) and single arrays
+		for (const k of keys) {
+			const v = obj[k];
+			if (typeof v === 'object' && !Array.isArray(v) && v !== null) {
+				const nestedKeys = Object.keys(v);
+				const arrayKeys = nestedKeys.filter(nk => Array.isArray(v[nk]) && v[nk].length > 0 && typeof v[nk][0] === 'object' && v[nk][0] !== null);
+
+				// If most values are arrays of objects, merge them with a _category column
+				if (arrayKeys.length >= 2 && arrayKeys.length >= nestedKeys.length * 0.5) {
+					const merged: any[] = [];
+					for (const ak of arrayKeys) {
+						for (const item of v[ak]) {
+							merged.push({ _category: ak, ...item });
+						}
+					}
+					if (merged.length > 0) candidates.push(merged);
+				}
+
+				// Also recurse deeper
+				const found = findArrayInObject(v, maxDepth - 1);
+				if (found) candidates.push(found);
+			}
+		}
+
+		if (candidates.length === 0) return null;
+		// Return the largest candidate
+		return candidates.reduce((a, b) => a.length >= b.length ? a : b);
+	}
+
 	function parseAndInferJson(text: string) {
 		createPreviewError = '';
 		inferredColumns = [];
@@ -673,8 +832,15 @@
 		}
 
 		if (!Array.isArray(data)) {
-			createPreviewError = 'JSON must be an array of objects';
-			return;
+			// Try to find an array of objects inside the JSON
+			// e.g. { "items": [...] } or { "category": { "sub": [...] } }
+			const found = findArrayInObject(data);
+			if (found) {
+				data = found;
+			} else {
+				createPreviewError = 'JSON must be an array of objects (or an object containing one)';
+				return;
+			}
 		}
 		if (data.length === 0) {
 			createPreviewError = 'JSON array is empty';
@@ -704,7 +870,11 @@
 			const row: Record<string, any> = {};
 			headers.forEach((h, i) => {
 				const nh = normalizedHeaders[i];
-				if (nh) row[nh] = obj[h] ?? '';
+				if (nh) {
+					const val = obj[h];
+					// Flatten arrays and objects to string for table display
+					row[nh] = (Array.isArray(val) ? val.join(', ') : (typeof val === 'object' && val !== null ? JSON.stringify(val) : val)) ?? '';
+				}
 			});
 			return row;
 		});
@@ -2808,6 +2978,67 @@
 	}
 </script>
 
+{#snippet filePickerDropdown()}
+	<div
+		class="absolute right-0 mt-1 w-72 rounded-lg overflow-hidden shadow-xl"
+		style="background: oklch(0.16 0.01 250); border: 1px solid oklch(0.25 0.02 250); z-index: 50;"
+	>
+		<div class="px-2.5 py-1.5" style="border-bottom: 1px solid oklch(0.22 0.02 250);">
+			<div class="relative flex items-center gap-1.5">
+				<svg class="w-3 h-3 flex-shrink-0" style="color: oklch(0.45 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+				</svg>
+				<input
+					bind:this={filePickerInputRef}
+					value={filePickerQuery}
+					oninput={(e) => handleFilePickerInput((/** @type {HTMLInputElement} */ (e.currentTarget)).value)}
+					onkeydown={(e) => {
+						if (e.key === 'Escape') { e.stopPropagation(); filePickerOpen = false; filePickerQuery = ''; }
+					}}
+					type="text"
+					placeholder="Search files..."
+					class="w-full bg-transparent text-xs font-mono focus:outline-none"
+					style="color: oklch(0.75 0.02 250);"
+					autocomplete="off"
+				/>
+				{#if filePickerLoading}
+					<span class="loading loading-spinner loading-xs" style="color: oklch(0.50 0.02 250);"></span>
+				{/if}
+			</div>
+		</div>
+		<ul class="py-0.5 max-h-[280px] overflow-y-auto">
+			{#if filePickerResults.length > 0}
+				{#each filePickerResults as file}
+					<li>
+						<button
+							type="button"
+							onclick={() => loadFileContent(file.path)}
+							class="w-full px-3 py-1.5 flex items-start gap-2 text-left text-xs font-mono transition-colors"
+							style="color: oklch(0.80 0.02 250);"
+							onmouseenter={(e) => { /** @type {HTMLElement} */ (e.currentTarget).style.background = 'oklch(0.22 0.02 250)'; }}
+							onmouseleave={(e) => { /** @type {HTMLElement} */ (e.currentTarget).style.background = 'transparent'; }}
+						>
+							<svg class="w-3 h-3 flex-shrink-0 mt-0.5" style="color: oklch(0.55 0.12 200);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+							</svg>
+							<div class="flex flex-col min-w-0">
+								<span class="truncate">{file.name}</span>
+								{#if file.folder}
+									<span class="truncate" style="color: oklch(0.45 0.02 250); font-size: 10px;">{file.folder}</span>
+								{/if}
+							</div>
+						</button>
+					</li>
+				{/each}
+			{:else if !filePickerLoading}
+				<li class="px-3 py-3 text-center text-[10px] font-mono" style="color: oklch(0.45 0.02 250);">
+					{filePickerQuery ? `No files match "${filePickerQuery}"` : 'No matching files found'}
+				</li>
+			{/if}
+		</ul>
+	</div>
+{/snippet}
+
 <div class="data-page">
 	<!-- Header -->
 	<div class="page-header">
@@ -3625,6 +3856,17 @@
 								<button class="format-pill" class:active={createCsvFormat === 'tsv'} onclick={() => createCsvFormat = 'tsv'}>TSV</button>
 								<button class="format-pill" class:active={createCsvFormat === 'csv'} onclick={() => createCsvFormat = 'csv'}>CSV</button>
 							</div>
+							<div class="relative ml-auto" bind:this={filePickerRef}>
+								<button class="file-picker-btn" onclick={openFilePicker} title="Load from project file">
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style="width:14px;height:14px;">
+										<path fill-rule="evenodd" d="M2 4.75C2 3.784 2.784 3 3.75 3h4.836c.464 0 .909.184 1.237.513l1.414 1.414a.25.25 0 00.177.073h4.836c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0116.25 17H3.75A1.75 1.75 0 012 15.25V4.75z" clip-rule="evenodd" />
+									</svg>
+									Load file
+								</button>
+								{#if filePickerOpen && createMode === 'csv'}
+									{@render filePickerDropdown()}
+								{/if}
+							</div>
 						</div>
 						<textarea
 							class="create-textarea"
@@ -3640,7 +3882,20 @@
 				<!-- JSON Mode -->
 				{:else if createMode === 'json'}
 					<div class="form-group">
-						<label class="form-label">JSON Array</label>
+						<div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.25rem;">
+							<label class="form-label" style="margin:0">JSON Array</label>
+							<div class="relative ml-auto" bind:this={filePickerRef}>
+								<button class="file-picker-btn" onclick={openFilePicker} title="Load from project file">
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style="width:14px;height:14px;">
+										<path fill-rule="evenodd" d="M2 4.75C2 3.784 2.784 3 3.75 3h4.836c.464 0 .909.184 1.237.513l1.414 1.414a.25.25 0 00.177.073h4.836c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0116.25 17H3.75A1.75 1.75 0 012 15.25V4.75z" clip-rule="evenodd" />
+									</svg>
+									Load file
+								</button>
+								{#if filePickerOpen && createMode === 'json'}
+									{@render filePickerDropdown()}
+								{/if}
+							</div>
+						</div>
 						<textarea
 							class="create-textarea"
 							bind:value={createJsonText}
@@ -3655,7 +3910,20 @@
 				<!-- SQL Mode -->
 				{:else if createMode === 'sql'}
 					<div class="form-group">
-						<label class="form-label">CREATE TABLE Statement</label>
+						<div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.25rem;">
+							<label class="form-label" style="margin:0">CREATE TABLE Statement</label>
+							<div class="relative ml-auto" bind:this={filePickerRef}>
+								<button class="file-picker-btn" onclick={openFilePicker} title="Load from project file">
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style="width:14px;height:14px;">
+										<path fill-rule="evenodd" d="M2 4.75C2 3.784 2.784 3 3.75 3h4.836c.464 0 .909.184 1.237.513l1.414 1.414a.25.25 0 00.177.073h4.836c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0116.25 17H3.75A1.75 1.75 0 012 15.25V4.75z" clip-rule="evenodd" />
+									</svg>
+									Load file
+								</button>
+								{#if filePickerOpen && createMode === 'sql'}
+									{@render filePickerDropdown()}
+								{/if}
+							</div>
+						</div>
 						<textarea
 							class="create-textarea"
 							bind:value={createSqlText}
@@ -6152,6 +6420,8 @@
 		border-radius: 0.375rem;
 		color: oklch(0.70 0.02 250);
 		cursor: pointer;
+	}
+	.import-source-row .file-picker-btn {
 		flex: 1;
 	}
 	.file-picker-btn:hover {

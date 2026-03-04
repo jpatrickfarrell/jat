@@ -1,0 +1,2186 @@
+{
+  "meta": {
+    "source": "https://coda.io/formulas",
+    "scraped": "2026-03-04T09:18:25.134Z",
+    "description": "Coda formula reference - base and action formulas",
+    "totalFormulas": 219,
+    "totalCategories": 17
+  },
+  "baseFormulas": {
+    "Collections": [
+      {
+        "name": "Count",
+        "signature": "Count(list)",
+        "description": "Counts the size of a list",
+        "parameters": [
+          "list"
+        ],
+        "output": "Outputs the count of non-blank values in list(s)."
+      },
+      {
+        "name": "CountUnique",
+        "signature": "CountUnique(value)",
+        "description": "Counts number of unique values",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs a count of all of the unique value(s) ignoring duplicates and blank values. Counts each unique item in a value if it is a list."
+      },
+      {
+        "name": "Find",
+        "signature": "Find(needle, haystack, startAt, ignoreCase, ignoreAccents)",
+        "description": "Get the position of a value",
+        "parameters": [
+          "needle",
+          "haystack",
+          "startAt",
+          "ignoreCase",
+          "ignoreAccents"
+        ],
+        "output": "Outputs the first position of needle in haystack starting at startAt, or -1 if not found. Works with text and lists."
+      },
+      {
+        "name": "MaxBy",
+        "signature": "MaxBy(list, compareBy)",
+        "description": "Get the row of a table with the maximum value in the provided column, or item in a list with the maximum value by the provided formula.",
+        "parameters": [
+          "list",
+          "compareBy"
+        ],
+        "output": "Outputs the maximum item inlist based on evaluating compareBy over each item. This will return the item in the original list, not the value that is used for comparison - use Max(list.compareBy) instead to only fetch the maximum compared value."
+      },
+      {
+        "name": "MinBy",
+        "signature": "MinBy(list, compareBy)",
+        "description": "Get the row of a table with the minimum value in the provided column, or item in a list with the minimum value by the provided formula.",
+        "parameters": [
+          "list",
+          "compareBy"
+        ],
+        "output": "Outputs the minimum item in list based on evaluating compareBy over each item. This will return the item in the original list, not the value that is used for comparison - use Min(list.compareBy) instead to only fetch the minimum compared value."
+      },
+      {
+        "name": "Slice",
+        "signature": "Slice(value, start, end)",
+        "description": "Get part of a list or text",
+        "parameters": [
+          "value",
+          "start",
+          "end"
+        ],
+        "output": "Outputs a part of the provided value based on the start and end positions."
+      },
+      {
+        "name": "Sort",
+        "signature": "Sort(dataset, ascending, sortBy, sortByCount)",
+        "description": "Sort a list or column",
+        "parameters": [
+          "dataset",
+          "ascending",
+          "sortBy",
+          "sortByCount"
+        ],
+        "output": "Outputs dataset in sorted order. Sort order and criteria are specified by the ascending, sortBy and sortByCount inputs."
+      },
+      {
+        "name": "Splice",
+        "signature": "Splice(value, start, deleteCount, insertValue)",
+        "description": "Remove and add to a list or text",
+        "parameters": [
+          "value",
+          "start",
+          "deleteCount",
+          "insertValue"
+        ],
+        "output": "Outputs value with deleteCount values removed and insertValue(s) added at start position."
+      }
+    ],
+    "Dates": [
+      {
+        "name": "Created",
+        "signature": "Created(object)",
+        "description": "Get the created date/time for a row or other object",
+        "parameters": [
+          "object"
+        ],
+        "output": "Outputs the created date/time for object."
+      },
+      {
+        "name": "CurrentTimezone",
+        "signature": "CurrentTimezone()",
+        "description": "Get the user's current time zone",
+        "parameters": [],
+        "output": "Outputs the user's current time zone."
+      },
+      {
+        "name": "Date",
+        "signature": "Date(year, month, day)",
+        "description": "Create a date value",
+        "parameters": [
+          "year",
+          "month",
+          "day"
+        ],
+        "output": "Outputs the date of the provided year, month, and day."
+      },
+      {
+        "name": "DateTime",
+        "signature": "DateTime(year, month, day, hour, minute, second)",
+        "description": "Create a date time value",
+        "parameters": [
+          "year",
+          "month",
+          "day",
+          "hour",
+          "minute",
+          "second"
+        ],
+        "output": "Outputs the date of the provided year, month, day, hour, minute, and second."
+      },
+      {
+        "name": "DateTimeTruncate",
+        "signature": "DateTimeTruncate(dateOrTime, unit)",
+        "description": "Round a date/time",
+        "parameters": [
+          "dateOrTime",
+          "unit"
+        ],
+        "output": "Outputs dateOrTime rounded to the nearest unit."
+      },
+      {
+        "name": "DateToEpoch",
+        "signature": "DateToEpoch(date)",
+        "description": "Convert date to epoch",
+        "parameters": [
+          "date"
+        ],
+        "output": "Outputs date as an epoch time (the number of seconds since Jan 1st, 1970)."
+      },
+      {
+        "name": "Day",
+        "signature": "Day(dateTime)",
+        "description": "Get the day-of-month from a date/time",
+        "parameters": [
+          "dateTime"
+        ],
+        "output": "Outputs the day of month of the given dateTime as a number."
+      },
+      {
+        "name": "DocumentTimezone",
+        "signature": "DocumentTimezone()",
+        "description": "Get the document's timezone",
+        "parameters": [],
+        "output": "Outputs the document's timezone."
+      },
+      {
+        "name": "EndOfMonth",
+        "signature": "EndOfMonth(dateTime, monthOffset)",
+        "description": "Get the last day of a given month",
+        "parameters": [
+          "dateTime",
+          "monthOffset"
+        ],
+        "output": "Outputs the date for the last day of the month of dateTime plus monthOffset."
+      },
+      {
+        "name": "EpochToDate",
+        "signature": "EpochToDate(epochTime)",
+        "description": "Convert epoch time to date",
+        "parameters": [
+          "epochTime"
+        ],
+        "output": "Outputs epochTime as a date."
+      },
+      {
+        "name": "Hour",
+        "signature": "Hour(dateOrTime)",
+        "description": "Get the hour from a date/time",
+        "parameters": [
+          "dateOrTime"
+        ],
+        "output": "Outputs the hour of the given dateOrTime as a number."
+      },
+      {
+        "name": "IsoWeekNumber",
+        "signature": "IsoWeekNumber(dateTime)",
+        "description": "Get the week number of a date in the ISO week numbering system,\n      where week 1 contains the first Thursday of the year and weeks start on Monday",
+        "parameters": [
+          "dateTime"
+        ],
+        "output": "Outputs the week of dateTime as a number between 1 and 52."
+      },
+      {
+        "name": "IsoWeekday",
+        "signature": "IsoWeekday(dateTime)",
+        "description": "Get the day-of-week of a date/time as a number in the ISO week numbering system, where Monday is 1.",
+        "parameters": [
+          "dateTime"
+        ],
+        "output": "Outputs the day-of-week of dateTime as a number between 1 and 7."
+      },
+      {
+        "name": "Minute",
+        "signature": "Minute(dateOrTime)",
+        "description": "Get the minute from a date/time",
+        "parameters": [
+          "dateOrTime"
+        ],
+        "output": "Outputs the minute of the given dateOrTime as a number."
+      },
+      {
+        "name": "Modified",
+        "signature": "Modified(object)",
+        "description": "Get the modified date/time for a row or other object",
+        "parameters": [
+          "object"
+        ],
+        "output": "Outputs the modified date/time for object."
+      },
+      {
+        "name": "Month",
+        "signature": "Month(dateTime)",
+        "description": "Get the month from a date",
+        "parameters": [
+          "dateTime"
+        ],
+        "output": "Outputs the month of the given dateTime as a number."
+      },
+      {
+        "name": "MonthName",
+        "signature": "MonthName(dateTime, format)",
+        "description": "Get the month name for a date",
+        "parameters": [
+          "dateTime",
+          "format"
+        ],
+        "output": "Outputs the month name for given dateTime as text."
+      },
+      {
+        "name": "NetWorkingDays",
+        "signature": "NetWorkingDays(startDate, endDate, holidays)",
+        "description": "Count working days between dates. Customize working days in region and date settings.",
+        "parameters": [
+          "startDate",
+          "endDate",
+          "holidays"
+        ],
+        "output": "Outputs the count of working days between startDate and endDate excluding holidays. Customize working days in region and date settings."
+      },
+      {
+        "name": "Now",
+        "signature": "Now(precision)",
+        "description": "Get the current date/time",
+        "parameters": [
+          "precision"
+        ],
+        "output": "Outputs the current date and time. Updates based on precision specified."
+      },
+      {
+        "name": "RelativeDate",
+        "signature": "RelativeDate(dateTime, months)",
+        "description": "Add months to a date/time",
+        "parameters": [
+          "dateTime",
+          "months"
+        ],
+        "output": "Outputs months added to dateTime rounded to the day."
+      },
+      {
+        "name": "Second",
+        "signature": "Second(dateOrTime)",
+        "description": "Get the \"second\" from a date/time",
+        "parameters": [
+          "dateOrTime"
+        ],
+        "output": "Outputs the seconds part of the given dateOrTime as a number."
+      },
+      {
+        "name": "Time",
+        "signature": "Time(hour, minute, second)",
+        "description": "Create a time value",
+        "parameters": [
+          "hour",
+          "minute",
+          "second"
+        ],
+        "output": "Outputs the time of the provided hour, minute, and second."
+      },
+      {
+        "name": "TimeValue",
+        "signature": "TimeValue(time)",
+        "description": "Convert a time to a number",
+        "parameters": [
+          "time"
+        ],
+        "output": "Outputs time as a decimal ratio of the day."
+      },
+      {
+        "name": "ToDate",
+        "signature": "ToDate(text)",
+        "description": "Convert text into a date value. Respects the doc's date order setting.",
+        "parameters": [
+          "text"
+        ],
+        "output": "Outputs the value of text parsed into a date. Outputs blank if text can't be parsed."
+      },
+      {
+        "name": "ToDateTime",
+        "signature": "ToDateTime(datetime)",
+        "description": "Converts text into a date/time. Respects the doc's date order setting.",
+        "parameters": [
+          "datetime"
+        ],
+        "output": "Outputs the value of datetime parsed into a date and time. Outputs blank if datetimecan't be parsed."
+      },
+      {
+        "name": "ToTime",
+        "signature": "ToTime(value)",
+        "description": "Converts a value into a time",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs the value of value parsed into a time. Outputs blank if valuecan't be parsed."
+      },
+      {
+        "name": "Today",
+        "signature": "Today()",
+        "description": "Get today's date",
+        "parameters": [],
+        "output": "Outputs the current date. Updates daily."
+      },
+      {
+        "name": "WeekNumber",
+        "signature": "WeekNumber(dateTime, returnType)",
+        "description": "Get the week number of a date, where week 1 contains Jan 1. Respects the doc\u2019s first day of week setting.\n      Use \"IsoWeekNumber()\" if week 1 should contain the first Thursday of the year.",
+        "parameters": [
+          "dateTime",
+          "returnType"
+        ],
+        "output": "Outputs the week of dateTime as a number between 1 and 52."
+      },
+      {
+        "name": "Weekday",
+        "signature": "Weekday(dateTime, returnType)",
+        "description": "Get the day-of-week of a date/time as a number. Respects the doc\u2019s first day of week setting.",
+        "parameters": [
+          "dateTime",
+          "returnType"
+        ],
+        "output": "Outputs the day-of-week of dateTime as a number between 1 and 7."
+      },
+      {
+        "name": "WeekdayName",
+        "signature": "WeekdayName(dateTime)",
+        "description": "Get the day-of-week of a date as text",
+        "parameters": [
+          "dateTime"
+        ],
+        "output": "Outputs the day-of-week of dateTime as text (\"Monday\", \"Tuesday\", etc.)."
+      },
+      {
+        "name": "Workday",
+        "signature": "Workday(startDate, numWorkingDays, holidays)",
+        "description": "Adds working days to a date. Customize working days in region and date settings.",
+        "parameters": [
+          "startDate",
+          "numWorkingDays",
+          "holidays"
+        ],
+        "output": "Outputs a date based on your startDate plus the numWorkingDays you wish to move forward skipping over any dates included in holidays."
+      },
+      {
+        "name": "Year",
+        "signature": "Year(dateTime)",
+        "description": "Get the year of a date",
+        "parameters": [
+          "dateTime"
+        ],
+        "output": "Outputs the year of the given dateTime as a number."
+      }
+    ],
+    "Duration": [
+      {
+        "name": "Days",
+        "signature": "Days(days)",
+        "description": "Create a time duration (for days)",
+        "parameters": [
+          "days"
+        ],
+        "output": "Outputs a time duration for the specified number of days."
+      },
+      {
+        "name": "Duration",
+        "signature": "Duration(days, hours, minutes, seconds)",
+        "description": "Create a time duration",
+        "parameters": [
+          "days",
+          "hours",
+          "minutes",
+          "seconds"
+        ],
+        "output": "Outputs a time duration for the specified number of days, hours, minutes, and seconds."
+      },
+      {
+        "name": "Hours",
+        "signature": "Hours(hours)",
+        "description": "Create a time duration (for hours)",
+        "parameters": [
+          "hours"
+        ],
+        "output": "Outputs a time duration for the specified number of hours."
+      },
+      {
+        "name": "Minutes",
+        "signature": "Minutes(minutes)",
+        "description": "Create a time duration (for minutes)",
+        "parameters": [
+          "minutes"
+        ],
+        "output": "Outputs a time duration for the specified number of minutes."
+      },
+      {
+        "name": "Seconds",
+        "signature": "Seconds(seconds)",
+        "description": "Create a time duration (for seconds)",
+        "parameters": [
+          "seconds"
+        ],
+        "output": "Outputs a time duration for the specified number of seconds."
+      },
+      {
+        "name": "ToDays",
+        "signature": "ToDays(duration)",
+        "description": "Convert a time duration into a number of days",
+        "parameters": [
+          "duration"
+        ],
+        "output": "Outputs a number of days for the specified duration."
+      },
+      {
+        "name": "ToHours",
+        "signature": "ToHours(duration)",
+        "description": "Convert a time duration into a number of hours",
+        "parameters": [
+          "duration"
+        ],
+        "output": "Outputs a number of hours for the specified duration."
+      },
+      {
+        "name": "ToMinutes",
+        "signature": "ToMinutes(duration)",
+        "description": "Convert a time duration into a number of minutes",
+        "parameters": [
+          "duration"
+        ],
+        "output": "Outputs a number of minutes for the specified duration."
+      },
+      {
+        "name": "ToSeconds",
+        "signature": "ToSeconds(duration)",
+        "description": "Convert a time duration into a number of seconds",
+        "parameters": [
+          "duration"
+        ],
+        "output": "Outputs a number of seconds for the specified duration."
+      }
+    ],
+    "Filters": [
+      {
+        "name": "AverageIf",
+        "signature": "AverageIf(list, expression)",
+        "description": "Compute the average of a filtered list of numbers",
+        "parameters": [
+          "list",
+          "expression"
+        ],
+        "output": "Outputs the average of a list of numbers for values matching expression. Blank values are ignored."
+      },
+      {
+        "name": "CountIf",
+        "signature": "CountIf(list, expression)",
+        "description": "Get the count for a filtered list",
+        "parameters": [
+          "list",
+          "expression"
+        ],
+        "output": "Outputs the count of values in list for values matching expression. Blank values are ignored."
+      },
+      {
+        "name": "Filter",
+        "signature": "Filter(list, expression)",
+        "description": "Gets a list of values that match your filter",
+        "parameters": [
+          "list",
+          "expression"
+        ],
+        "output": "Outputs a list of all values in list that match expression."
+      },
+      {
+        "name": "IsFromTable",
+        "signature": "IsFromTable(row, table)",
+        "description": "Check if a reference is from a table",
+        "parameters": [
+          "row",
+          "table"
+        ],
+        "output": "Outputs True if row is a row in table. Otherwise outputs False."
+      },
+      {
+        "name": "Lookup",
+        "signature": "Lookup(table, column, match value)",
+        "description": "Get the rows from a table that match your filter",
+        "parameters": [
+          "table",
+          "column",
+          "match value"
+        ],
+        "output": "Outputs the rows from a table where column is the same as match value. We recommend using Table.Filter() instead."
+      },
+      {
+        "name": "Matches",
+        "signature": "Matches(value, control)",
+        "description": "Checks if a Coda control matches a value",
+        "parameters": [
+          "value",
+          "control"
+        ],
+        "output": "Outputs True if the given value matches the control. Otherwise outputs False."
+      },
+      {
+        "name": "SumIf",
+        "signature": "SumIf(list, expression)",
+        "description": "Compute the sum for a filtered list",
+        "parameters": [
+          "list",
+          "expression"
+        ],
+        "output": "Outputs the sum of a list of numbers for values matching expression. Blank values are ignored."
+      }
+    ],
+    "Formats": [
+      {
+        "name": "FormatCurrency",
+        "signature": "FormatCurrency(currency code, value, format, precision, symbol position)",
+        "description": "Formats the provided number to a currency",
+        "parameters": [
+          "currency code",
+          "value",
+          "format",
+          "precision",
+          "symbol position"
+        ],
+        "output": ""
+      },
+      {
+        "name": "FormatNumber",
+        "signature": "FormatNumber(value, grouping, precision)",
+        "description": "Formats the provided number",
+        "parameters": [
+          "value",
+          "grouping",
+          "precision"
+        ],
+        "output": ""
+      },
+      {
+        "name": "FormatPercent",
+        "signature": "FormatPercent(value, grouping, precision)",
+        "description": "Formats the provided number to a percentage",
+        "parameters": [
+          "value",
+          "grouping",
+          "precision"
+        ],
+        "output": ""
+      }
+    ],
+    "Info": [
+      {
+        "name": "IsAnyText",
+        "signature": "IsAnyText(value)",
+        "description": "Checks if a value is plain text or rich text",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs True if the given value is plain text or rich text. Otherwise, outputs False."
+      },
+      {
+        "name": "IsBlank",
+        "signature": "IsBlank(value)",
+        "description": "Check if a value is blank",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs True  if the given value is blank. Otherwise, outputs False."
+      },
+      {
+        "name": "IsDate",
+        "signature": "IsDate(value)",
+        "description": "Checks if a value is a date",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs True if the given value is a date. Otherwise, outputs False."
+      },
+      {
+        "name": "IsLogical",
+        "signature": "IsLogical(value)",
+        "description": "Checks if a value is true or false",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs True if the given value is True or False. Outputs False if it's neither."
+      },
+      {
+        "name": "IsNotBlank",
+        "signature": "IsNotBlank(value)",
+        "description": "Checks if a value is not blank",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs True if the given value is not blank. Otherwise, outputs False."
+      },
+      {
+        "name": "IsNotText",
+        "signature": "IsNotText(value)",
+        "description": "Checks if a value is not text",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs True if the given value is not blank. Otherwise, outputs False."
+      },
+      {
+        "name": "IsNumber",
+        "signature": "IsNumber(value)",
+        "description": "Checks if a value is a number",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs True if the given value is a number. Otherwise, outputs False."
+      },
+      {
+        "name": "IsPlainText",
+        "signature": "IsPlainText(value)",
+        "description": "Checks if a value is plain text",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs True if the given value is plain text. Otherwise, outputs False. Will output False if value is rich text."
+      },
+      {
+        "name": "IsRichText",
+        "signature": "IsRichText(value)",
+        "description": "Checks if a value is rich text",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs True if the given value is rich text. Otherwise, outputs False. Will output False if value is plain text."
+      },
+      {
+        "name": "ToNumber",
+        "signature": "ToNumber(value, base)",
+        "description": "Convert a value to a number",
+        "parameters": [
+          "value",
+          "base"
+        ],
+        "output": "Outputs value as a number if conversion with base is possible. Otherwise outputs value."
+      },
+      {
+        "name": "ToText",
+        "signature": "ToText(value)",
+        "description": "Convert a value to text",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs value as text."
+      }
+    ],
+    "Lists": [
+      {
+        "name": "All",
+        "signature": "All(list, expression)",
+        "description": "Checks if an expression evaluates to true for all values in a list",
+        "parameters": [
+          "list",
+          "expression"
+        ],
+        "output": "Outputs True if the result for evaluating expression on every value in list is true."
+      },
+      {
+        "name": "Any",
+        "signature": "Any(list, expression)",
+        "description": "Checks if an expression evaluates to true for any value in a list",
+        "parameters": [
+          "list",
+          "expression"
+        ],
+        "output": "Outputs True if the result for evaluating expression on any value in list is true."
+      },
+      {
+        "name": "Contains",
+        "signature": "Contains(value, search)",
+        "description": "Checks if a list contains any value from a list",
+        "parameters": [
+          "value",
+          "search"
+        ],
+        "output": "Outputs True if any value in search exists in value."
+      },
+      {
+        "name": "ContainsAll",
+        "signature": "ContainsAll(value, search)",
+        "description": "Checks if a list contains all values from a list",
+        "parameters": [
+          "value",
+          "search"
+        ],
+        "output": "Outputs True if all values in search exists in value."
+      },
+      {
+        "name": "ContainsOnly",
+        "signature": "ContainsOnly(value, search)",
+        "description": "Checks if a list contains only values from a list",
+        "parameters": [
+          "value",
+          "search"
+        ],
+        "output": "Outputs True if only values in search exist in value."
+      },
+      {
+        "name": "CountAll",
+        "signature": "CountAll(list)",
+        "description": "Counts the size of a list including blank values",
+        "parameters": [
+          "list"
+        ],
+        "output": "Outputs the count of values in list, including blank values."
+      },
+      {
+        "name": "Duplicates",
+        "signature": "Duplicates(value)",
+        "description": "Get duplicate values",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs a list of values which appear multiple times."
+      },
+      {
+        "name": "First",
+        "signature": "First(list)",
+        "description": "Get the first value from a list",
+        "parameters": [
+          "list"
+        ],
+        "output": "Outputs the first value in list or blank if the list is empty."
+      },
+      {
+        "name": "ForEach",
+        "signature": "ForEach(list, formula)",
+        "description": "Run a formula for every item in a list",
+        "parameters": [
+          "list",
+          "formula"
+        ],
+        "output": "Evaluates formula for every value in list and outputs a list of all formula outputs."
+      },
+      {
+        "name": "FormulaMap",
+        "signature": "FormulaMap(list, formula)",
+        "description": "Run a formula for every item in a list",
+        "parameters": [
+          "list",
+          "formula"
+        ],
+        "output": "Evaluates formula for every value in list and outputs a list of all formula outputs."
+      },
+      {
+        "name": "In",
+        "signature": "In(search, value)",
+        "description": "Checks if a value is in a list",
+        "parameters": [
+          "search",
+          "value"
+        ],
+        "output": "Outputs True if search is found in value."
+      },
+      {
+        "name": "Last",
+        "signature": "Last(list)",
+        "description": "Get the last value from a list",
+        "parameters": [
+          "list"
+        ],
+        "output": "Outputs the last value in list or blank if the list is empty."
+      },
+      {
+        "name": "List",
+        "signature": "List(value)",
+        "description": "Make a list of values",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs a list of value(s) or an empty list if no value is provided."
+      },
+      {
+        "name": "ListCombine",
+        "signature": "ListCombine(value)",
+        "description": "Merge and flatten lists",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs a list of all value(s). Nested lists are flattened in the output."
+      },
+      {
+        "name": "Nth",
+        "signature": "Nth(list, position)",
+        "description": "Returns the nth item in a list from the number provided",
+        "parameters": [
+          "list",
+          "position"
+        ],
+        "output": "Outputs the value from list at position. Results in an error if position is outside of list."
+      },
+      {
+        "name": "RandomItem",
+        "signature": "RandomItem(list, updateContinuously)",
+        "description": "Select a random item from a list",
+        "parameters": [
+          "list",
+          "updateContinuously"
+        ],
+        "output": "Outputs a random item from list. Regenerates on every edit by default."
+      },
+      {
+        "name": "RandomSample",
+        "signature": "RandomSample(list, count, withReplacement, updateContinuously)",
+        "description": "Generate a random sample of items from a list",
+        "parameters": [
+          "list",
+          "count",
+          "withReplacement",
+          "updateContinuously"
+        ],
+        "output": "Outputs a random sample of count items from list. By default, samples without replacement and regenerates on every edit."
+      },
+      {
+        "name": "ReverseList",
+        "signature": "ReverseList(list)",
+        "description": "Reverse the values in a list",
+        "parameters": [
+          "list"
+        ],
+        "output": "Returns list reversed."
+      },
+      {
+        "name": "Sequence",
+        "signature": "Sequence(start, end, by)",
+        "description": "Returns a list of numbers between the provided from and to parameters",
+        "parameters": [
+          "start",
+          "end",
+          "by"
+        ],
+        "output": "Outputs a list of numbers from start to end. Step size is controlled via the by input."
+      },
+      {
+        "name": "Unique",
+        "signature": "Unique(value)",
+        "description": "Deduplicate values",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs a list of unique value(s). Deduplicates against each item in a value if it is a list."
+      }
+    ],
+    "Logical": [
+      {
+        "name": "And",
+        "signature": "And(value)",
+        "description": "Returns true if all the items are true, otherwise false",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs True if all value(s) are true. Otherwise returns False."
+      },
+      {
+        "name": "False",
+        "signature": "False()",
+        "description": "Outputs false",
+        "parameters": [],
+        "output": "Outputs False."
+      },
+      {
+        "name": "If",
+        "signature": "If(condition, ifTrue, ifFalse)",
+        "description": "Get a value conditionally (single condition)",
+        "parameters": [
+          "condition",
+          "ifTrue",
+          "ifFalse"
+        ],
+        "output": "Outputs ifTrue if the condition is true. Otherwise outputs ifFalse."
+      },
+      {
+        "name": "IfBlank",
+        "signature": "IfBlank(value, ifBlank)",
+        "description": "Get a value with fallback if blank",
+        "parameters": [
+          "value",
+          "ifBlank"
+        ],
+        "output": "Outputs ifBlank if value is blank. Otherwise outputs value."
+      },
+      {
+        "name": "Not",
+        "signature": "Not(value)",
+        "description": "Negate a true or false value",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs True if valueis false and False if value is true."
+      },
+      {
+        "name": "Or",
+        "signature": "Or(value)",
+        "description": "Check if any input is true",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs True if any value is true. Otherwise outputs False."
+      },
+      {
+        "name": "Switch",
+        "signature": "Switch(expression, value, result, arg)",
+        "description": "Get a value conditionally. Handles multiple conditions",
+        "parameters": [
+          "expression",
+          "value",
+          "result",
+          "arg"
+        ],
+        "output": "Outputs the first result where value matches expression. Outputs an optional final value if no value matches."
+      },
+      {
+        "name": "SwitchIf",
+        "signature": "SwitchIf(condition, ifTrue, arg)",
+        "description": "Get a value conditionally. Handles multiple conditions with a fallback",
+        "parameters": [
+          "condition",
+          "ifTrue",
+          "arg"
+        ],
+        "output": "Outputs the first ifTrue value where condition is true. Outputs the an optional final value if no condition is true."
+      },
+      {
+        "name": "True",
+        "signature": "True()",
+        "description": "Outputs true",
+        "parameters": [],
+        "output": "Outputs true."
+      }
+    ],
+    "Math": [
+      {
+        "name": "AbsoluteValue",
+        "signature": "AbsoluteValue(number)",
+        "description": "Get the absolute value of a number",
+        "parameters": [
+          "number"
+        ],
+        "output": "Outputs number without the sign, so negative numbers become positive in the output."
+      },
+      {
+        "name": "Average",
+        "signature": "Average(value)",
+        "description": "Averages a list of numbers ignoring any blank values",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs the average value. Blank values are ignored. All items in value are averaged if value is a list."
+      },
+      {
+        "name": "BinomialCoefficient",
+        "signature": "BinomialCoefficient(n, k)",
+        "description": "Calculates the Binomial Coefficient",
+        "parameters": [
+          "n",
+          "k"
+        ],
+        "output": "Outputs the number of ways to choose k items out of n possibilities. In math, the symbols nCk and (n k) can denote a bionmial coefficient, and are sometimes read as \"n choose k\"."
+      },
+      {
+        "name": "Ceiling",
+        "signature": "Ceiling(value, factor)",
+        "description": "Rounds a number up to the nearest multiple",
+        "parameters": [
+          "value",
+          "factor"
+        ],
+        "output": "Outputs value rounded up to the nearest multiple of factor."
+      },
+      {
+        "name": "Even",
+        "signature": "Even(value)",
+        "description": "Rounds a number up to the nearest even number",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs value rounded up to the nearest even number."
+      },
+      {
+        "name": "Exponent",
+        "signature": "Exponent(value)",
+        "description": "Returns Euler's number e (~2.718) raised to a power",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs Euler's number for value e (~2.718) raised to a power."
+      },
+      {
+        "name": "Factorial",
+        "signature": "Factorial(value)",
+        "description": "Calculates the product of an integer and all the integers below it",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs the product of an integer value and all the integers below it. If the number if a decimal will only use the initial integer.\n Note: Inputs greater than 19 may cause precision errors."
+      },
+      {
+        "name": "Floor",
+        "signature": "Floor(value, factor)",
+        "description": "Rounds a number down to the nearest multiple",
+        "parameters": [
+          "value",
+          "factor"
+        ],
+        "output": "Outputs value rounded down to the nearest multiple of factor."
+      },
+      {
+        "name": "IsEven",
+        "signature": "IsEven(value)",
+        "description": "Checks if a value is even",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs True if value is even. Otherwise returns False."
+      },
+      {
+        "name": "IsOdd",
+        "signature": "IsOdd(value)",
+        "description": "Checks if a value is odd",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs True if value is odd. Otherwise returns False."
+      },
+      {
+        "name": "Ln",
+        "signature": "Ln(number)",
+        "description": "Get the natural logarithm of a number. (Base e)",
+        "parameters": [
+          "number"
+        ],
+        "output": "Outputs the logarithm of number, base e (Euler's number)."
+      },
+      {
+        "name": "Log",
+        "signature": "Log(number, base)",
+        "description": "Get the logarithm of a number for a given base",
+        "parameters": [
+          "number",
+          "base"
+        ],
+        "output": "Outputs the logarithm of number to base."
+      },
+      {
+        "name": "Log10",
+        "signature": "Log10(number)",
+        "description": "Get the logarithm of a number (base 10)",
+        "parameters": [
+          "number"
+        ],
+        "output": "Get the logarithm of number (base 10)."
+      },
+      {
+        "name": "Max",
+        "signature": "Max(value)",
+        "description": "Get the maximum number or date/time",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs the maximum value. Blank values are ignored. Checks all items in value if value is a list. Use MaxBy instead to get the maximum value by a specific criteria."
+      },
+      {
+        "name": "Median",
+        "signature": "Median(value)",
+        "description": "Get the median number or date/time",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs the median value. Blank values are ignored. Checks all items in value if value is a list."
+      },
+      {
+        "name": "Min",
+        "signature": "Min(value)",
+        "description": "Gets the minimum number or date/time",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs the minimum value. Blank values are ignored. Checks all items in value if value is a list. Use MinBy instead to get the minimum value by a specific criteria."
+      },
+      {
+        "name": "Mode",
+        "signature": "Mode(value)",
+        "description": "Get the most common value",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs the mode (most frequently occurring) value. Blank values are ignored. Checks all items in value if value is  a list."
+      },
+      {
+        "name": "Odd",
+        "signature": "Odd(value)",
+        "description": "Rounds a number up to the nearest odd number",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs value rounded up to the nearest odd number."
+      },
+      {
+        "name": "Percentile",
+        "signature": "Percentile(dataset, percentile)",
+        "description": "Get the value at a given percentile of a dataset",
+        "parameters": [
+          "dataset",
+          "percentile"
+        ],
+        "output": "Outputs the interpolated value at the given percentile within dataset."
+      },
+      {
+        "name": "PercentileRank",
+        "signature": "PercentileRank(dataset, value)",
+        "description": "Get percentile rank of a value in a dataset",
+        "parameters": [
+          "dataset",
+          "value"
+        ],
+        "output": "Outputs the percentile rank of value within dataset."
+      },
+      {
+        "name": "Pi",
+        "signature": "Pi()",
+        "description": "The mathematical \u03c0 (pi) constant",
+        "parameters": [],
+        "output": "Outputs the mathematical \u03c0 (pi) constant."
+      },
+      {
+        "name": "Power",
+        "signature": "Power(number, exponent)",
+        "description": "Calculates a number raised to a power",
+        "parameters": [
+          "number",
+          "exponent"
+        ],
+        "output": "Outputs number raised to exponent."
+      },
+      {
+        "name": "Product",
+        "signature": "Product(value)",
+        "description": "Multiplies numbers together",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs the mathematical product of all values.\nBlank values are ignored. Multiplies all items in value if value is a list."
+      },
+      {
+        "name": "Quotient",
+        "signature": "Quotient(dividend, divisor)",
+        "description": "Divide one number by another",
+        "parameters": [
+          "dividend",
+          "divisor"
+        ],
+        "output": "Outputs dividend divided by divisor."
+      },
+      {
+        "name": "Random",
+        "signature": "Random(updateContinuously)",
+        "description": "Generate a random number",
+        "parameters": [
+          "updateContinuously"
+        ],
+        "output": "Outputs a random number between 0 and 1 (including 0, excluding 1). Regenerates on every edit by default."
+      },
+      {
+        "name": "RandomInteger",
+        "signature": "RandomInteger(low, high, updateContinuously)",
+        "description": "Generate a random number between two values",
+        "parameters": [
+          "low",
+          "high",
+          "updateContinuously"
+        ],
+        "output": "Outputs a random number between low and high."
+      },
+      {
+        "name": "Rank",
+        "signature": "Rank(value, dataset, ascending)",
+        "description": "Returns the ordered position of a value in a list",
+        "parameters": [
+          "value",
+          "dataset",
+          "ascending"
+        ],
+        "output": "Outputs the position of a value within dataset when sorted."
+      },
+      {
+        "name": "Remainder",
+        "signature": "Remainder(dividend, divisor)",
+        "description": "Gets the remainder from dividing two numbers",
+        "parameters": [
+          "dividend",
+          "divisor"
+        ],
+        "output": "Outputs the remainder when dividend is divided by divisor."
+      },
+      {
+        "name": "Round",
+        "signature": "Round(number, places)",
+        "description": "Round a number",
+        "parameters": [
+          "number",
+          "places"
+        ],
+        "output": "Outputs number rounded to the specific number of decimal places."
+      },
+      {
+        "name": "RoundDown",
+        "signature": "RoundDown(number, places)",
+        "description": "Round a number down",
+        "parameters": [
+          "number",
+          "places"
+        ],
+        "output": "Outputs number rounded down to the specified number of decimal places."
+      },
+      {
+        "name": "RoundTo",
+        "signature": "RoundTo(value, factor)",
+        "description": "Rounds one number to the nearest integer multiple of another",
+        "parameters": [
+          "value",
+          "factor"
+        ],
+        "output": "Outputs value rounded to the nearest multiple of factor. If no factor is specified rounds to the nearest integer."
+      },
+      {
+        "name": "RoundUp",
+        "signature": "RoundUp(number, places)",
+        "description": "Round a number up",
+        "parameters": [
+          "number",
+          "places"
+        ],
+        "output": "Outputs number rounded up to the specified number of decimal places."
+      },
+      {
+        "name": "Sign",
+        "signature": "Sign(number)",
+        "description": "Get the sign of a number",
+        "parameters": [
+          "number"
+        ],
+        "output": "Outputs -1 if number is negative, 0 if number is zero, or 1 if number is positive."
+      },
+      {
+        "name": "SquareRoot",
+        "signature": "SquareRoot(number)",
+        "description": "Calculates the square root of a number",
+        "parameters": [
+          "number"
+        ],
+        "output": "Outputs the square root of number."
+      },
+      {
+        "name": "StandardDeviation",
+        "signature": "StandardDeviation(value)",
+        "description": "Estimates the standard deviation of a population based on a sample of values",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs the estimated standard deviation based on the sample in values. Blank values are ignored. All items in value are considered if value is a list."
+      },
+      {
+        "name": "StandardDeviationPopulation",
+        "signature": "StandardDeviationPopulation(value)",
+        "description": "Calculates the standard deviation based on an entire population",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs the standard deviation based on values that make up the entire population. Blank values are ignored. All items in value are considered if value is a list."
+      },
+      {
+        "name": "Sum",
+        "signature": "Sum(value)",
+        "description": "Adds numbers together",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs the mathematical sum of all values. Blank values are ignored. Sum all items in value if value is a list."
+      },
+      {
+        "name": "SumProduct",
+        "signature": "SumProduct(list1, list2)",
+        "description": "Calculates the total from multiplying two lists",
+        "parameters": [
+          "list1",
+          "list2"
+        ],
+        "output": "Outputs the total sum of the products of list1 and list2. Each list must be of equal size."
+      },
+      {
+        "name": "Truncate",
+        "signature": "Truncate(number, places)",
+        "description": "Truncates a number",
+        "parameters": [
+          "number",
+          "places"
+        ],
+        "output": "Outputs number truncated to places."
+      }
+    ],
+    "Misc": [
+      {
+        "name": "DocId",
+        "signature": "DocId(url)",
+        "description": "Gets the document ID from a Coda doc URL.",
+        "parameters": [
+          "url"
+        ],
+        "output": "Outputs the document ID from the given url."
+      },
+      {
+        "name": "ObjectLink",
+        "signature": "ObjectLink(object, displayText)",
+        "description": "Get the url for an object",
+        "parameters": [
+          "object",
+          "displayText"
+        ],
+        "output": "Outputs a URL for object."
+      },
+      {
+        "name": "PageName",
+        "signature": "PageName(object)",
+        "description": "Get the name of the page an object belongs to",
+        "parameters": [
+          "object"
+        ],
+        "output": "Outputs the name of the page that object belongs to."
+      },
+      {
+        "name": "ParseCSV",
+        "signature": "ParseCSV(csvString, delimiter)",
+        "description": "Converts a CSV to list",
+        "parameters": [
+          "csvString",
+          "delimiter"
+        ],
+        "output": "Outputs a list of items by parsing a csvString delimited by a delimiter. The delimiter can be changed to work with other formats like TSV.\nYou can also use our CSV importer for one-off imports."
+      },
+      {
+        "name": "SwapDocIdInUrl",
+        "signature": "SwapDocIdInUrl(url, docId)",
+        "description": "Updates a Coda doc URL to point to a new doc id.",
+        "parameters": [
+          "url",
+          "docId"
+        ],
+        "output": "Outputs the updated URL."
+      }
+    ],
+    "Object": [
+      {
+        "name": "ParseJSON",
+        "signature": "ParseJSON(jsonString, path)",
+        "description": "Parses a JSON string",
+        "parameters": [
+          "jsonString",
+          "path"
+        ],
+        "output": "Outputs the value parsed from jsonString at path. If path is not specified, outputs the entire parsed value."
+      }
+    ],
+    "People": [
+      {
+        "name": "CreatedBy",
+        "signature": "CreatedBy(object)",
+        "description": "Get the creator for a row or other object",
+        "parameters": [
+          "object"
+        ],
+        "output": "Outputs the user who created object."
+      },
+      {
+        "name": "IsSignedIn",
+        "signature": "IsSignedIn()",
+        "description": "Checks if the current user is logged in",
+        "parameters": [],
+        "output": "Outputs True if the current user is logged in. Otherwise, outputs False."
+      },
+      {
+        "name": "ModifiedBy",
+        "signature": "ModifiedBy(object)",
+        "description": "Returns the user who modified the previous item",
+        "parameters": [
+          "object"
+        ],
+        "output": "Outputs the user who modified object most recently."
+      },
+      {
+        "name": "User",
+        "signature": "User()",
+        "description": "Get the current logged in user",
+        "parameters": [],
+        "output": "Outputs the current user. Will be different for every user.\nNote:\n* User().email returns the current user emails\n* User().name returns the current users name\n*User().photo returns the current users photo\n*User().state returns the current users doc access (e.g. write access)."
+      }
+    ],
+    "Relational": [
+      {
+        "name": "Let",
+        "signature": "Let(value, name, expression)",
+        "description": "Names a value so you can refer to it inside an expression. Useful if you want to use a value multiple times (i.e., as a local variable) or give it a clearer name. If you have a nested formula with an inner and outer CurrentValue, you can give each of them distinct names",
+        "parameters": [
+          "value",
+          "name",
+          "expression"
+        ],
+        "output": "Outputs the result of expression."
+      },
+      {
+        "name": "RowId",
+        "signature": "RowId(row)",
+        "description": "A unique ID for a row",
+        "parameters": [
+          "row"
+        ],
+        "output": "Outputs a unique ID for row."
+      },
+      {
+        "name": "WithName",
+        "signature": "WithName(value, name, expression)",
+        "description": "Names a value so you can refer to it inside an expression. Useful if you want to use a value multiple times (i.e., as a local variable) or give it a clearer name. If you have a nested formula with an inner and outer CurrentValue, you can give each of them distinct names",
+        "parameters": [
+          "value",
+          "name",
+          "expression"
+        ],
+        "output": "Outputs the result of expression."
+      }
+    ],
+    "RichText": [
+      {
+        "name": "BulletedList",
+        "signature": "BulletedList(value)",
+        "description": "Create a bulleted list of values",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs a bulleted list of given value(s)."
+      },
+      {
+        "name": "IndentBy",
+        "signature": "IndentBy(text, levels)",
+        "description": "Change the relative indent of content",
+        "parameters": [
+          "text",
+          "levels"
+        ],
+        "output": "Outputs text with indent adjusted by levels."
+      },
+      {
+        "name": "NumberedList",
+        "signature": "NumberedList(value)",
+        "description": "Create a numbered list of values",
+        "parameters": [
+          "value"
+        ],
+        "output": "Outputs a numbered list of given value(s)."
+      }
+    ],
+    "Shape": [
+      {
+        "name": "ClipCircle",
+        "signature": "ClipCircle(image)",
+        "description": "Crops an image into a circle",
+        "parameters": [
+          "image"
+        ],
+        "output": "Outputs a cropped circular image."
+      },
+      {
+        "name": "Embed",
+        "signature": "Embed(url, width, height, force)",
+        "description": "Get an HTML embed for a URL",
+        "parameters": [
+          "url",
+          "width",
+          "height",
+          "force"
+        ],
+        "output": "Outputs an HTML embed for url with the specified width and height."
+      },
+      {
+        "name": "Hyperlink",
+        "signature": "Hyperlink(url, displayValue)",
+        "description": "Create a link",
+        "parameters": [
+          "url",
+          "displayValue"
+        ],
+        "output": "Outputs a link that shows the given displayValue and navigates to url."
+      },
+      {
+        "name": "HyperlinkCard",
+        "signature": "HyperlinkCard(url)",
+        "description": "Creates rich url card",
+        "parameters": [
+          "url"
+        ],
+        "output": "Outputs a card for the given url."
+      },
+      {
+        "name": "Image",
+        "signature": "Image(url, width, height, name, style, outline)",
+        "description": "Gets an image for a URL",
+        "parameters": [
+          "url",
+          "width",
+          "height",
+          "name",
+          "style",
+          "outline"
+        ],
+        "output": "Outputs an image for url with the specified width, height, name, style, and outline."
+      },
+      {
+        "name": "Rectangle",
+        "signature": "Rectangle(width, height, color, name)",
+        "description": "Generates a rectangle",
+        "parameters": [
+          "width",
+          "height",
+          "color",
+          "name"
+        ],
+        "output": "Outputs a rectangle with specified width, height, color, and name."
+      }
+    ],
+    "Spatial": [
+      {
+        "name": "Distance",
+        "signature": "Distance(location1, location2, unit)",
+        "description": "Returns the distance (in kilometers) between two locations (lat/long) on earth using the Haversine formula",
+        "parameters": [
+          "location1",
+          "location2",
+          "unit"
+        ],
+        "output": "Outputs the distance in specified unit between location1 and location2 using the Haversine formula."
+      },
+      {
+        "name": "Location",
+        "signature": "Location(latitude, longitude, altitude, heading, speed, accuracy, altitudeAccuracy)",
+        "description": "Get location for the provided lat-long",
+        "parameters": [
+          "latitude",
+          "longitude",
+          "altitude",
+          "heading",
+          "speed",
+          "accuracy",
+          "altitudeAccuracy"
+        ],
+        "output": "Outputs a single location object using latitude and longitude. Can also optionally include altitude, heading, speed, accuracy, and altitudeAccuracy.\nUseful with Distance()."
+      }
+    ],
+    "String": [
+      {
+        "name": "Character",
+        "signature": "Character(charNumber)",
+        "description": "Create a unicode character (symbol)",
+        "parameters": [
+          "charNumber"
+        ],
+        "output": "Outputs a single unicode character matching the charNumber given. https://en.wikipedia.org/wiki/List_of_Unicode_characters."
+      },
+      {
+        "name": "Concatenate",
+        "signature": "Concatenate(text)",
+        "description": "Combine multiple text values",
+        "parameters": [
+          "text"
+        ],
+        "output": "Outputs the combined text of all text values as a single text value."
+      },
+      {
+        "name": "ContainsText",
+        "signature": "ContainsText(text, searchText, ignoreCase, ignoreAccents, ignorePunctuation)",
+        "description": "Check if one text contains another.",
+        "parameters": [
+          "text",
+          "searchText",
+          "ignoreCase",
+          "ignoreAccents",
+          "ignorePunctuation"
+        ],
+        "output": "Outputs True if text contains searchText."
+      },
+      {
+        "name": "DecodeFromBase64",
+        "signature": "DecodeFromBase64(base64Text)",
+        "description": "Decodes base64 encoded text",
+        "parameters": [
+          "base64Text"
+        ],
+        "output": "Outputs base64Text as a string."
+      },
+      {
+        "name": "EncodeAsBase64",
+        "signature": "EncodeAsBase64(text)",
+        "description": "Encodes text as base64",
+        "parameters": [
+          "text"
+        ],
+        "output": "Outputs text base64 encoded."
+      },
+      {
+        "name": "EncodeForUrl",
+        "signature": "EncodeForUrl(text)",
+        "description": "Encodes text use in a URL",
+        "parameters": [
+          "text"
+        ],
+        "output": "Outputs text formatted so it can be used in the query string of a URL."
+      },
+      {
+        "name": "EndsWith",
+        "signature": "EndsWith(text, suffix, ignoreCase, ignoreAccents)",
+        "description": "Check if text ends with a suffix",
+        "parameters": [
+          "text",
+          "suffix",
+          "ignoreCase",
+          "ignoreAccents"
+        ],
+        "output": "Outputs True if text ends with suffix. Otherwise outputs False."
+      },
+      {
+        "name": "Format",
+        "signature": "Format(template, text)",
+        "description": "Substitute values into a text template",
+        "parameters": [
+          "template",
+          "text"
+        ],
+        "output": "Outputs text with all {X} values in template replaced with the matching text."
+      },
+      {
+        "name": "Join",
+        "signature": "Join(delimiter, text)",
+        "description": "Combine multiple text values with a delimiter",
+        "parameters": [
+          "delimiter",
+          "text"
+        ],
+        "output": "Outputs text combining all text(s) with delimiter in-between every item."
+      },
+      {
+        "name": "Left",
+        "signature": "Left(text, numberOfCharacters)",
+        "description": "Extract starting characters from text",
+        "parameters": [
+          "text",
+          "numberOfCharacters"
+        ],
+        "output": "Outputs the starting numberOfCharacters from text."
+      },
+      {
+        "name": "LeftPad",
+        "signature": "LeftPad(text, targetLength, padString)",
+        "description": "Pad text from the left",
+        "parameters": [
+          "text",
+          "targetLength",
+          "padString"
+        ],
+        "output": "Outputs text padded with padString at the start so that the resulting text has the given targetLength."
+      },
+      {
+        "name": "Length",
+        "signature": "Length(text)",
+        "description": "Returns length of the given text",
+        "parameters": [
+          "text"
+        ],
+        "output": "Outputs the number of characters in text."
+      },
+      {
+        "name": "LineBreak",
+        "signature": "LineBreak(softLineBreak)",
+        "description": "Returns a line break",
+        "parameters": [
+          "softLineBreak"
+        ],
+        "output": "Outputs a line break."
+      },
+      {
+        "name": "Lower",
+        "signature": "Lower(text)",
+        "description": "Convert text to lower case",
+        "parameters": [
+          "text"
+        ],
+        "output": "Outputs text with all characters made lower case."
+      },
+      {
+        "name": "Middle",
+        "signature": "Middle(text, start, numberOfCharacters)",
+        "description": "Extract characters from the middle of text",
+        "parameters": [
+          "text",
+          "start",
+          "numberOfCharacters"
+        ],
+        "output": "Outputs numberOfCharacters from text starting at position."
+      },
+      {
+        "name": "RegexExtract",
+        "signature": "RegexExtract(text, regularExpression, regexFlags)",
+        "description": "Return the parts of text that match a regular expression",
+        "parameters": [
+          "text",
+          "regularExpression",
+          "regexFlags"
+        ],
+        "output": "Outputs the portions of text that match regularExpression"
+      },
+      {
+        "name": "RegexMatch",
+        "signature": "RegexMatch(text, regularExpression)",
+        "description": "Check if text matches a regular expression",
+        "parameters": [
+          "text",
+          "regularExpression"
+        ],
+        "output": "Outputs True if text matches regularExpression."
+      },
+      {
+        "name": "RegexReplace",
+        "signature": "RegexReplace(text, regularExpression, replacementText)",
+        "description": "Substitute regular expression matches",
+        "parameters": [
+          "text",
+          "regularExpression",
+          "replacementText"
+        ],
+        "output": "Outputs text with all regularExpression matches replaced with replacementText."
+      },
+      {
+        "name": "Repeat",
+        "signature": "Repeat(text, repetitions)",
+        "description": "Repeats text multiple times",
+        "parameters": [
+          "text",
+          "repetitions"
+        ],
+        "output": "Outputs text based on repeating text by the number of repetitions specified."
+      },
+      {
+        "name": "Replace",
+        "signature": "Replace(text, start, numberOfCharacters, replacementText)",
+        "description": "Replace a range within text",
+        "parameters": [
+          "text",
+          "start",
+          "numberOfCharacters",
+          "replacementText"
+        ],
+        "output": "Outputs text with numberOfCharacters removed starting at and replaced with replacementText."
+      },
+      {
+        "name": "Right",
+        "signature": "Right(text, numberOfCharacters)",
+        "description": "Extract ending characters from text",
+        "parameters": [
+          "text",
+          "numberOfCharacters"
+        ],
+        "output": "Outputs ending characters of text."
+      },
+      {
+        "name": "RightPad",
+        "signature": "RightPad(text, targetLength, padText)",
+        "description": "Pad text from the right",
+        "parameters": [
+          "text",
+          "targetLength",
+          "padText"
+        ],
+        "output": "Outputs text padded with padText at the end so that the resulting text has the given targetLength."
+      },
+      {
+        "name": "Split",
+        "signature": "Split(text, delimiter)",
+        "description": "Split text on a delimiter",
+        "parameters": [
+          "text",
+          "delimiter"
+        ],
+        "output": "Outputs a list generated from splitting text by the delimiter character."
+      },
+      {
+        "name": "StartsWith",
+        "signature": "StartsWith(text, prefix, ignoreCase, ignoreAccents)",
+        "description": "Check if text starts with specified characters",
+        "parameters": [
+          "text",
+          "prefix",
+          "ignoreCase",
+          "ignoreAccents"
+        ],
+        "output": "Outputs True if text starts with prefix. Otherwise outputs False."
+      },
+      {
+        "name": "Substitute",
+        "signature": "Substitute(text, searchFor, replacementText)",
+        "description": "Replace the first matching substring in some text",
+        "parameters": [
+          "text",
+          "searchFor",
+          "replacementText"
+        ],
+        "output": "Outputs text with the first searchFor match replaced with replacementText."
+      },
+      {
+        "name": "SubstituteAll",
+        "signature": "SubstituteAll(text, searchFor, replacementText)",
+        "description": "Replace all matching substrings in some text",
+        "parameters": [
+          "text",
+          "searchFor",
+          "replacementText"
+        ],
+        "output": "Outputs text with all searchFor matches replaced with replacementText."
+      },
+      {
+        "name": "ToByteSize",
+        "signature": "ToByteSize(byteCount, base)",
+        "description": "Pretty-print a byte count (KB, MB, GB, etc.)",
+        "parameters": [
+          "byteCount",
+          "base"
+        ],
+        "output": "Outputs a text rendering of byteCount (KB, MB, GB, etc.)."
+      },
+      {
+        "name": "ToHexadecimal",
+        "signature": "ToHexadecimal(decimalNumber, targetLength)",
+        "description": "Convert a number to a hexadecimal string",
+        "parameters": [
+          "decimalNumber",
+          "targetLength"
+        ],
+        "output": "Outputs a text of decimalNumber converted to hexadecimal. Left-pads result with 0's to satisfy targetLength if specified."
+      },
+      {
+        "name": "Trim",
+        "signature": "Trim(text)",
+        "description": "Trim starting and ending spaces from text",
+        "parameters": [
+          "text"
+        ],
+        "output": "Outputs text with all of the leading and trailing spaces removed."
+      },
+      {
+        "name": "Upper",
+        "signature": "Upper(text)",
+        "description": "Convert text to upper case",
+        "parameters": [
+          "text"
+        ],
+        "output": "Outputs text with all characters made upper case."
+      }
+    ]
+  },
+  "actionFormulas": [
+    {
+      "name": "Activate",
+      "signature": "Activate(object)",
+      "description": "Places the cursor on the given object",
+      "parameters": [
+        "object"
+      ],
+      "output": "Outputs an action which (when run) will place the cursor on object."
+    },
+    {
+      "name": "AddOrModifyRows",
+      "signature": "AddOrModifyRows(table, expression, column, columnValue)",
+      "description": "Modify matching rows or add one if none match",
+      "parameters": [
+        "table",
+        "expression",
+        "column",
+        "columnValue"
+      ],
+      "output": "Outputs an action which (when run) will modify all rows in table matching expression with specified columnValue(s). If no rows match, will add a new row."
+    },
+    {
+      "name": "AddRow",
+      "signature": "AddRow(table, column, columnValue)",
+      "description": "Add a row to the table",
+      "parameters": [
+        "table",
+        "column",
+        "columnValue"
+      ],
+      "output": "Outputs an action which (when run) will add a new row to table and update the specified column(s) with columnValue(s)."
+    },
+    {
+      "name": "CopyDoc",
+      "signature": "CopyDoc(title, url, folder)",
+      "description": "Copy a document to your document list",
+      "parameters": [
+        "title",
+        "url",
+        "folder"
+      ],
+      "output": "Outputs an action which (when run) will copy this or another document."
+    },
+    {
+      "name": "CopyPageToDoc",
+      "signature": "CopyPageToDoc(page)",
+      "description": "Copies the current page to a new doc or to another doc",
+      "parameters": [
+        "page"
+      ],
+      "output": "An action which when triggered will copy the current page."
+    },
+    {
+      "name": "CopyToClipboard",
+      "signature": "CopyToClipboard(content)",
+      "description": "Copy content to your clipboard",
+      "parameters": [
+        "content"
+      ],
+      "output": "Outputs an action which (when run) will copy content to your clipboard. Rich text formatting will not be preserved."
+    },
+    {
+      "name": "DeleteRows",
+      "signature": "DeleteRows(rows)",
+      "description": "Deletes specified rows",
+      "parameters": [
+        "rows"
+      ],
+      "output": "Outputs an action which (when run) will delete each row in rows."
+    },
+    {
+      "name": "DuplicatePage",
+      "signature": "DuplicatePage(page, name, parentPage, copySubpages, duplicateOptions, rowOptions, makeVisible)",
+      "description": "Duplicates a page",
+      "parameters": [
+        "page",
+        "name",
+        "parentPage",
+        "copySubpages",
+        "duplicateOptions",
+        "rowOptions",
+        "makeVisible"
+      ],
+      "output": "Outputs an action (when run) which will create a duplicate page of page with the given name."
+    },
+    {
+      "name": "DuplicateRows",
+      "signature": "DuplicateRows(rows, column, columnValue)",
+      "description": "Duplicates one or more rows",
+      "parameters": [
+        "rows",
+        "column",
+        "columnValue"
+      ],
+      "output": "Outputs an action value which (when run) will duplicate the target rows and modify the specified column(s) with columnValue."
+    },
+    {
+      "name": "ExportCSV",
+      "signature": "ExportCSV(table, filename)",
+      "description": "Export a table or view as a CSV file",
+      "parameters": [
+        "table",
+        "filename"
+      ],
+      "output": "Outputs an action which (when run) will export the specified table/view as CSV."
+    },
+    {
+      "name": "ModifyRows",
+      "signature": "ModifyRows(rows, column, columnValue)",
+      "description": "Modify values in one or more rows",
+      "parameters": [
+        "rows",
+        "column",
+        "columnValue"
+      ],
+      "output": "Outputs an action value which (when run) will modify the specified column(s) with columnValue(s) for each row in rows."
+    },
+    {
+      "name": "NoAction",
+      "signature": "NoAction()",
+      "description": "Does nothing.",
+      "parameters": [],
+      "output": "Outputs an action which (when run) does nothing."
+    },
+    {
+      "name": "Notify",
+      "signature": "Notify(people, message)",
+      "description": "Notify doc users",
+      "parameters": [
+        "people",
+        "message"
+      ],
+      "output": "Outputs an action which (when run) will send message to people via an email and in-app notification."
+    },
+    {
+      "name": "OnActionError",
+      "signature": "OnActionError(action, actionOnError)",
+      "description": "Runs a main action first and then runs a secondary action only if an error was detected",
+      "parameters": [
+        "action",
+        "actionOnError"
+      ],
+      "output": "Outputs an action which (when run) will run action. actionOnError will run if there was an error detected with action."
+    },
+    {
+      "name": "OpenRow",
+      "signature": "OpenRow(row, viewOrLayout, viewMode)",
+      "description": "Opens the row",
+      "parameters": [
+        "row",
+        "viewOrLayout",
+        "viewMode"
+      ],
+      "output": "Outputs an action which (when run) will open the row."
+    },
+    {
+      "name": "OpenWindow",
+      "signature": "OpenWindow(url)",
+      "description": "Open a link in a new tab",
+      "parameters": [
+        "url"
+      ],
+      "output": "Outputs an action which (when run) will open url in a new browser tab."
+    },
+    {
+      "name": "RefreshAssistant",
+      "signature": "RefreshAssistant(references)",
+      "description": "Refresh assistant related things",
+      "parameters": [
+        "references"
+      ],
+      "output": "Outputs an action which (when run) refreshes assistant data in references(s)."
+    },
+    {
+      "name": "RefreshColumn",
+      "signature": "RefreshColumn(column)",
+      "description": "Refresh Pack columns",
+      "parameters": [
+        "column"
+      ],
+      "output": "Outputs an action which (when run) refreshes Pack data in column(s)."
+    },
+    {
+      "name": "RefreshTable",
+      "signature": "RefreshTable(tableRef)",
+      "description": "Refreshes the given Pack table. This is not supported in automations.",
+      "parameters": [
+        "tableRef"
+      ],
+      "output": "Outputs an action which (when run) queues up a sync of the given table. Subsequent actions may complete before the sync starts, but syncs in the queue are processed sequentially."
+    },
+    {
+      "name": "ResetControlValue",
+      "signature": "ResetControlValue(control)",
+      "description": "Resets the value of a control",
+      "parameters": [
+        "control"
+      ],
+      "output": "Outputs an action value which (when run) will reset the value of control."
+    },
+    {
+      "name": "RunActions",
+      "signature": "RunActions(action)",
+      "description": "Run one or more actions",
+      "parameters": [
+        "action"
+      ],
+      "output": "Outputs an action which (when run) will run all provided action(s)."
+    },
+    {
+      "name": "SetControlValue",
+      "signature": "SetControlValue(control, value)",
+      "description": "Set the value of a control",
+      "parameters": [
+        "control",
+        "value"
+      ],
+      "output": "Outputs an action value which (when run) will set the specified control with value."
+    },
+    {
+      "name": "SetCrossDocSyncFilter",
+      "signature": "SetCrossDocSyncFilter(tableUrl, formula)",
+      "description": "Update the sync filter for a cross doc.",
+      "parameters": [
+        "tableUrl",
+        "formula"
+      ],
+      "output": ""
+    },
+    {
+      "name": "SetPackSyncTableConfigValue",
+      "signature": "SetPackSyncTableConfigValue(targetUrl, settingName, settingValue)",
+      "description": "Set the sync field setting for a sync table.",
+      "parameters": [
+        "targetUrl",
+        "settingName",
+        "settingValue"
+      ],
+      "output": ""
+    },
+    {
+      "name": "SetPageName",
+      "signature": "SetPageName(page, name)",
+      "description": "Update the name of the target page",
+      "parameters": [
+        "page",
+        "name"
+      ],
+      "output": "An action which when triggered will set the name of the target page."
+    },
+    {
+      "name": "SetPageVisibility",
+      "signature": "SetPageVisibility(page, visibility)",
+      "description": "Update the visibility of the target page",
+      "parameters": [
+        "page",
+        "visibility"
+      ],
+      "output": "An action which when triggered will set the visibility of the target page."
+    },
+    {
+      "name": "SignUpForCoda",
+      "signature": "SignUpForCoda()",
+      "description": "Open a dialog that prompts the user to sign up for Coda",
+      "parameters": [],
+      "output": "An action which when triggered will allow the user to sign up/sign in to Coda if they are not already signed in."
+    }
+  ]
+}

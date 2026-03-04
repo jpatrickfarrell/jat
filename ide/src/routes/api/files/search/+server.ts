@@ -126,7 +126,8 @@ async function scanDirectory(
 	results: FileResult[],
 	limit: number,
 	filesScanned: { count: number },
-	depth: number = 0
+	depth: number = 0,
+	extensions?: Set<string>
 ): Promise<void> {
 	// Stop conditions
 	if (depth > MAX_DEPTH) return;
@@ -159,9 +160,29 @@ async function scanDirectory(
 					results,
 					limit,
 					filesScanned,
-					depth + 1
+					depth + 1,
+					extensions
 				);
 			} else if (entry.isFile()) {
+				// Filter by extension if specified
+				if (extensions && extensions.size > 0) {
+					const ext = entry.name.includes('.') ? '.' + entry.name.split('.').pop()!.toLowerCase() : '';
+					if (!extensions.has(ext)) continue;
+				}
+
+				// If no query, include all (extension-filtered) files
+				if (!query) {
+					const relativePath = relative(projectPath, entryPath);
+					const folder = dirname(relativePath);
+					results.push({
+						path: relativePath,
+						name: entry.name,
+						folder: folder === '.' ? '' : folder
+					});
+					(results[results.length - 1] as FileResult & { score?: number }).score = 0;
+					continue;
+				}
+
 				// Check if file matches query
 				const { match, score } = fuzzyMatch(query, entry.name);
 				if (match) {
@@ -192,6 +213,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		const query = url.searchParams.get('query') || '';
 		const limitParam = parseInt(url.searchParams.get('limit') || String(DEFAULT_LIMIT), 10);
 		const limit = Math.min(Math.max(1, limitParam), MAX_LIMIT);
+		const extensionsParam = url.searchParams.get('extensions') || '';
 
 		if (!projectName) {
 			return json({ error: 'Project name is required' }, { status: 400 });
@@ -205,8 +227,13 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		const projectPath = expandHome(projectInfo.path);
 
-		// If no query, return empty results (don't list all files)
-		if (!query.trim()) {
+		// Parse extensions filter (comma-separated, e.g. ".json,.csv,.tsv")
+		const extensions = extensionsParam
+			? new Set(extensionsParam.split(',').map(e => e.trim().toLowerCase()).filter(Boolean))
+			: undefined;
+
+		// If no query and no extensions, return empty results
+		if (!query.trim() && !extensions) {
 			return json({
 				files: [],
 				count: 0,
@@ -224,7 +251,9 @@ export const GET: RequestHandler = async ({ url }) => {
 			query.trim(),
 			results,
 			limit * 2, // Get more results for sorting, then trim
-			filesScanned
+			filesScanned,
+			0,
+			extensions
 		);
 
 		// Sort by score (highest first)

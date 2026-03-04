@@ -1,11 +1,11 @@
 <script lang="ts">
-  let { onclick, open = false }: { onclick: () => void; open: boolean } = $props();
+  let { onmousedown, open = false }: { onmousedown: (e: MouseEvent) => void; open: boolean } = $props();
 </script>
 
 <button
   class="jat-fb-btn"
   class:open
-  onclick={onclick}
+  onmousedown={onmousedown}
   aria-label={open ? 'Close feedback' : 'Send feedback'}
   title={open ? 'Close feedback' : 'Send feedback'}
 >

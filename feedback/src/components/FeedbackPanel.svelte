@@ -383,6 +383,7 @@
       {/if}
 
       <div class="actions">
+        <span class="panel-version">v{version}</span>
         <button type="button" class="cancel-btn" onclick={onclose} disabled={submitting}>Cancel</button>
         <button type="submit" class="submit-btn" disabled={submitting || !title.trim()}>
           {#if submitting}
@@ -409,7 +410,6 @@
   {/if}
 
   <StatusToast message={toastMessage} type={toastType} visible={toastVisible} />
-  <div class="panel-version">v{version}</div>
 </div>
 
 {#if editingScreenshotIndex !== null}
@@ -716,9 +716,10 @@
     to { transform: rotate(360deg); }
   }
   .panel-version {
-    padding: 4px 10px 6px;
     font-size: 10px;
     color: #4b5563;
-    line-height: 1;
+    margin-right: auto;
+    align-self: flex-end;
+    padding-bottom: 6px;
   }
 </style>

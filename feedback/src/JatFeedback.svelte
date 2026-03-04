@@ -46,18 +46,26 @@
   let dragOffset = { x: 0, y: 0 };
   let rootEl: HTMLDivElement | undefined = $state();
 
-  function handlePanelDragStart(e: MouseEvent) {
+  const DRAG_THRESHOLD = 5; // px before we consider it a drag
+
+  function startDrag(e: MouseEvent, { onDragEnd }: { onDragEnd?: (didDrag: boolean) => void } = {}) {
     if (!rootEl) return;
-    isDragging = true;
+    const startX = e.clientX;
+    const startY = e.clientY;
     const rect = rootEl.getBoundingClientRect();
     dragOffset = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    let didDrag = false;
 
     function onMouseMove(e: MouseEvent) {
-      if (!isDragging || !rootEl) return;
+      if (!rootEl) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (!didDrag && Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return;
+      didDrag = true;
+      isDragging = true;
       e.preventDefault();
       const x = e.clientX - dragOffset.x;
       const y = e.clientY - dragOffset.y;
-      // Clear positional CSS and use top/left directly
       rootEl.style.top = `${y}px`;
       rootEl.style.left = `${x}px`;
       rootEl.style.bottom = 'auto';
@@ -68,10 +76,26 @@
       isDragging = false;
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
+      onDragEnd?.(didDrag);
     }
 
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
+  }
+
+  function handlePanelDragStart(e: MouseEvent) {
+    startDrag(e);
+  }
+
+  function handleButtonMouseDown(e: MouseEvent) {
+    // Only handle left button
+    if (e.button !== 0) return;
+    e.preventDefault();
+    startDrag(e, {
+      onDragEnd(didDrag) {
+        if (!didDrag) toggle();
+      }
+    });
   }
 
   // Poll element picker state to hide/show panel
@@ -175,7 +199,7 @@
     </div>
   {/if}
 
-  <FeedbackButton onclick={toggle} {open} />
+  <FeedbackButton onmousedown={handleButtonMouseDown} {open} />
 </div>
 
 <style>

@@ -3536,6 +3536,7 @@
 														colIndex={colIdx}
 														columns={orderedColumns.map(c => c.name)}
 														sampleRow={rows[0] || null}
+														allRows={rows}
 														onSave={(type, cfg) => saveColumnSettings(col.name, type, cfg)}
 														onClose={() => columnSettingsOpen = null}
 													/>
@@ -3578,6 +3579,7 @@
 														initialEditChar={isCellSelected && editingSelectedCell ? initialEditChar : null}
 														onSave={(val) => handleCellSave(row.rowid, col.name, val)}
 														row={cellMeta?.semanticType === 'formula' ? row : undefined}
+														allRows={cellMeta?.semanticType === 'formula' ? rows : undefined}
 													/>
 												</td>
 											{/each}

@@ -5,13 +5,15 @@
 	let {
 		row = {},
 		config = {} as FormulaConfig,
+		allRows = undefined,
 	}: {
 		row: Record<string, any>;
 		config: FormulaConfig;
+		allRows?: Record<string, any>[];
 	} = $props();
 
 	const computed = $derived(
-		config?.expression ? evaluateFormula(config.expression, row) : null
+		config?.expression ? evaluateFormula(config.expression, row, allRows) : null
 	);
 
 	const isError = $derived(typeof computed === 'string' && computed.startsWith('#'));

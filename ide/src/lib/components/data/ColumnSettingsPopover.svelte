@@ -3,6 +3,7 @@
 	import { SEMANTIC_TYPE_INFO } from '$lib/types/dataTable';
 	import ColumnTypeSelector from './ColumnTypeSelector.svelte';
 	import EnumOptionsEditor from './EnumOptionsEditor.svelte';
+	import FormulaInput from './FormulaInput.svelte';
 	import { validateFormula, extractColumnRefs, evaluateFormula } from '$lib/utils/formulaEval';
 
 	let {
@@ -12,6 +13,7 @@
 		colIndex = 0,
 		columns = [],
 		sampleRow = null,
+		allRows = undefined,
 		onSave,
 		onClose,
 	}: {
@@ -21,12 +23,17 @@
 		colIndex?: number;
 		columns?: string[];
 		sampleRow?: Record<string, any> | null;
+		allRows?: Record<string, any>[];
 		onSave: (type: SemanticType, config: ColumnConfig) => void;
 		onClose: () => void;
 	} = $props();
 
 	let selectedType = $state<SemanticType>(semanticType || 'text');
-	let editConfig = $state<Record<string, any>>({ ...config });
+	let editConfig = $state<Record<string, any>>({
+		...config,
+		// Ensure expression is always a string for FormulaInput bind:value
+		...(semanticType === 'formula' && { expression: (config as FormulaConfig)?.expression ?? '' }),
+	});
 	let formulaError = $state<string | null>(null);
 
 	// Available columns for formula references (exclude current column)
@@ -41,7 +48,7 @@
 		if (err) return { error: true, value: err };
 		if (!sampleRow) return { error: false, value: 'No data to preview' as string, muted: true };
 		try {
-			const result = evaluateFormula(expr, sampleRow);
+			const result = evaluateFormula(expr, sampleRow, allRows);
 			if (result === null || result === undefined) return { error: false, value: '(empty)', muted: true };
 			const str = String(result);
 			if (str.startsWith('#')) return { error: true, value: str };
@@ -74,14 +81,8 @@
 		}
 	}
 
-	function insertColumnRef(colName: string) {
-		editConfig = { ...editConfig, expression: (editConfig.expression || '') + `{${colName}}` };
-		formulaError = null;
-	}
-
-	function handleExpressionInput(e: Event) {
-		const val = (e.target as HTMLTextAreaElement).value;
-		editConfig = { ...editConfig, expression: val };
+	function handleExpressionInput() {
+		const val = editConfig.expression || '';
 		if (val.trim()) {
 			formulaError = validateFormula(val);
 		} else {
@@ -175,14 +176,13 @@
 		{#if selectedType === 'formula'}
 			<div class="field">
 				<label class="field-label">Expression</label>
-				<textarea
-					class="field-input formula-input"
-					class:formula-invalid={formulaError}
-					value={editConfig.expression || ''}
+				<FormulaInput
+					bind:value={editConfig.expression}
+					columns={availableColumns}
 					oninput={handleExpressionInput}
 					placeholder={'{price} * {quantity}'}
-					rows="2"
-				></textarea>
+					invalid={!!formulaError}
+				/>
 				{#if formulaError}
 					<span class="formula-error">{formulaError}</span>
 				{/if}
@@ -193,19 +193,6 @@
 					</div>
 				{/if}
 			</div>
-
-			{#if availableColumns.length > 0}
-				<div class="field">
-					<label class="field-label">Insert column</label>
-					<div class="column-chips">
-						{#each availableColumns as col}
-							<button class="column-chip" onclick={() => insertColumnRef(col)} title="Insert {col}">
-								{col}
-							</button>
-						{/each}
-					</div>
-				</div>
-			{/if}
 
 			<div class="field">
 				<label class="field-label">Output format</label>
@@ -332,15 +319,6 @@
 	.field-input.small {
 		width: 5rem;
 	}
-	.formula-input {
-		font-family: 'JetBrains Mono', 'Fira Code', monospace;
-		font-size: 0.6875rem;
-		resize: vertical;
-		min-height: 2.5rem;
-	}
-	.formula-input.formula-invalid {
-		border-color: oklch(0.55 0.18 25);
-	}
 	.formula-error {
 		font-size: 0.625rem;
 		color: oklch(0.65 0.18 25);
@@ -375,25 +353,6 @@
 	.formula-preview-muted .formula-preview-value {
 		color: oklch(0.50 0.02 250);
 		font-style: italic;
-	}
-	.column-chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.25rem;
-	}
-	.column-chip {
-		font-size: 0.625rem;
-		padding: 0.125rem 0.375rem;
-		background: oklch(0.22 0.02 250);
-		border: 1px solid oklch(0.30 0.02 250);
-		border-radius: 0.25rem;
-		color: oklch(0.70 0.10 200);
-		cursor: pointer;
-		font-family: 'JetBrains Mono', 'Fira Code', monospace;
-	}
-	.column-chip:hover {
-		background: oklch(0.28 0.04 200);
-		border-color: oklch(0.40 0.08 200);
 	}
 	.formula-help {
 		font-size: 0.5625rem;

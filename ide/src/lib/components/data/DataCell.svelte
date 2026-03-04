@@ -18,6 +18,7 @@
 		editing = false,
 		initialEditChar = null,
 		row = {},
+		allRows = undefined,
 		onSave,
 	}: {
 		value: any;
@@ -27,6 +28,7 @@
 		editing?: boolean;
 		initialEditChar?: string | null;
 		row?: Record<string, any>;
+		allRows?: Record<string, any>[];
 		onSave: (val: any) => void;
 	} = $props();
 
@@ -49,7 +51,7 @@
 {:else if semanticType === 'percentage'}
 	<PercentageCell {value} config={typedConfig} {editing} {initialEditChar} {onSave} />
 {:else if semanticType === 'formula'}
-	<FormulaCell {row} config={typedConfig as FormulaConfig} />
+	<FormulaCell {row} {allRows} config={typedConfig as FormulaConfig} />
 {:else}
 	<TextCell {value} {editing} {initialEditChar} {onSave} />
 {/if}

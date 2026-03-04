@@ -13,12 +13,18 @@
  *  - Built-in functions: round, floor, ceil, abs, min, max, len, upper, lower, trim,
  *    concat, if, and, or, not, switch, switchif, ifblank, isblank, isnotblank,
  *    isnumber, tonumber, totext, formatcurrency, formatnumber, formatpercent
+ *  - Method-call syntax: {col}.lower(), {col}.trim().upper(), {col}.left(3)
+ *    (syntactic sugar — maps to the same built-in functions)
  *
  *  - Date/time functions: Now, Today, Date, Year, Month, Day, Hour, Minute, Second,
  *    Weekday, WeekdayName, MonthName, WeekNumber, DateToEpoch, EpochToDate,
  *    RelativeDate, EndOfMonth, ToDate, ToDateTime
  *  - Duration functions: Days, Hours, Minutes, Seconds, ToDays, ToHours, ToMinutes, ToSeconds
  *  - Date arithmetic: Date + Duration = Date, Date - Date = Duration, Date - Duration = Date
+ *
+ *  - Cross-row aggregate functions (require allRows):
+ *    CountIf, SumIf, AverageIf, Median, Mode, Percentile, Rank,
+ *    StandardDeviation, Filter, Lookup
  *
  * No eval() — uses a simple recursive descent parser.
  */
@@ -40,6 +46,23 @@ export class Duration {
 /** Check if a value is a Duration instance */
 export function isDuration(v: any): v is Duration {
 	return v instanceof Duration;
+}
+
+// ---------------------------------------------------------------------------
+// ColumnRef wrapper — marks a value as a column name reference for aggregates
+// ---------------------------------------------------------------------------
+
+/** Wrapper that distinguishes column name references from plain strings in aggregate functions */
+export class ColumnRef {
+	readonly name: string;
+	constructor(name: string) {
+		this.name = name;
+	}
+}
+
+/** Check if a value is a ColumnRef */
+export function isColumnRef(v: any): v is ColumnRef {
+	return v instanceof ColumnRef;
 }
 
 /** Check if a value is a valid Date instance */
@@ -85,6 +108,7 @@ type TokenType =
 	| 'QUESTION'
 	| 'COLON'
 	| 'FUNC'
+	| 'DOT'
 	| 'EOF';
 
 interface Token {
@@ -396,7 +420,189 @@ const FUNCTIONS: Record<string, (...args: any[]) => any> = {
 	toseconds: (v: any) => (isDuration(v) ? v._ms / MS_PER_SECOND : (Number(v) || 0) / MS_PER_SECOND),
 };
 
-const FUNC_NAMES = new Set(Object.keys(FUNCTIONS));
+// ---------------------------------------------------------------------------
+// Cross-row aggregate functions — receive allRows as hidden context
+// Arguments that are ColumnRef instances get resolved to column value arrays.
+// ---------------------------------------------------------------------------
+
+/** Extract numeric column values from allRows, filtering nulls/NaN */
+function extractNumbers(allRows: Record<string, any>[], colName: string): number[] {
+	const result: number[] = [];
+	for (const row of allRows) {
+		const v = row[colName];
+		if (v == null || v === '') continue;
+		const n = Number(v);
+		if (!isNaN(n)) result.push(n);
+	}
+	return result;
+}
+
+/** Extract all column values from allRows (including non-numeric) */
+function extractValues(allRows: Record<string, any>[], colName: string): any[] {
+	return allRows.map((row) => row[colName]);
+}
+
+/** Resolve a value: if ColumnRef, return column name string; otherwise return the value */
+function resolveColName(v: any): string {
+	if (isColumnRef(v)) return v.name;
+	return String(v);
+}
+
+/** Match a condition against a value (supports string equality, number comparison, regex) */
+function matchesCondition(value: any, condition: any): boolean {
+	if (value == null && condition == null) return true;
+	if (value == null || condition == null) return false;
+	// String equality (case-insensitive)
+	return String(value).toLowerCase() === String(condition).toLowerCase();
+}
+
+/**
+ * Aggregate function registry.
+ * Each function receives (allRows, ...userArgs).
+ * ColumnRef args are NOT pre-resolved — functions use resolveColName() to get column names.
+ */
+const AGGREGATE_FUNCTIONS: Record<string, (allRows: Record<string, any>[], currentRow: Record<string, any>, ...args: any[]) => any> = {
+	countif: (allRows, _row, column, condition) => {
+		const colName = resolveColName(column);
+		let count = 0;
+		for (const row of allRows) {
+			if (matchesCondition(row[colName], condition)) count++;
+		}
+		return count;
+	},
+
+	sumif: (allRows, _row, sumColumn, condColumn, condition) => {
+		const sumCol = resolveColName(sumColumn);
+		const condCol = resolveColName(condColumn);
+		let total = 0;
+		for (const row of allRows) {
+			if (matchesCondition(row[condCol], condition)) {
+				const v = Number(row[sumCol]);
+				if (!isNaN(v)) total += v;
+			}
+		}
+		return total;
+	},
+
+	averageif: (allRows, _row, avgColumn, condColumn, condition) => {
+		const avgCol = resolveColName(avgColumn);
+		const condCol = resolveColName(condColumn);
+		let total = 0;
+		let count = 0;
+		for (const row of allRows) {
+			if (matchesCondition(row[condCol], condition)) {
+				const v = Number(row[avgCol]);
+				if (!isNaN(v)) {
+					total += v;
+					count++;
+				}
+			}
+		}
+		return count === 0 ? 0 : total / count;
+	},
+
+	median: (allRows, _row, column) => {
+		const colName = resolveColName(column);
+		const nums = extractNumbers(allRows, colName).sort((a, b) => a - b);
+		if (nums.length === 0) return 0;
+		const mid = Math.floor(nums.length / 2);
+		return nums.length % 2 !== 0 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
+	},
+
+	mode: (allRows, _row, column) => {
+		const colName = resolveColName(column);
+		const freq = new Map<string, number>();
+		for (const row of allRows) {
+			const v = row[colName];
+			if (v == null || v === '') continue;
+			const key = String(v);
+			freq.set(key, (freq.get(key) || 0) + 1);
+		}
+		if (freq.size === 0) return null;
+		let maxCount = 0;
+		let modeVal = '';
+		for (const [key, count] of freq) {
+			if (count > maxCount) {
+				maxCount = count;
+				modeVal = key;
+			}
+		}
+		// Return as number if possible
+		const n = Number(modeVal);
+		return isNaN(n) ? modeVal : n;
+	},
+
+	percentile: (allRows, _row, column, p) => {
+		const colName = resolveColName(column);
+		const pct = Number(p) || 0;
+		const nums = extractNumbers(allRows, colName).sort((a, b) => a - b);
+		if (nums.length === 0) return 0;
+		const index = (pct / 100) * (nums.length - 1);
+		const lower = Math.floor(index);
+		const upper = Math.ceil(index);
+		if (lower === upper) return nums[lower];
+		return nums[lower] + (nums[upper] - nums[lower]) * (index - lower);
+	},
+
+	rank: (allRows, currentRow, column, order) => {
+		const colName = resolveColName(column);
+		const nums = extractNumbers(allRows, colName);
+		const descending = order === 'desc' || order === 0;
+		const sorted = [...nums].sort((a, b) => descending ? b - a : a - b);
+		const val = Number(currentRow[colName]);
+		if (isNaN(val)) return '#ERR: current row has no numeric value';
+		const idx = sorted.indexOf(val);
+		return idx === -1 ? NaN : idx + 1;
+	},
+
+	standarddeviation: (allRows, _row, column) => {
+		const colName = resolveColName(column);
+		const nums = extractNumbers(allRows, colName);
+		if (nums.length < 2) return 0;
+		const mean = nums.reduce((a, b) => a + b, 0) / nums.length;
+		const variance = nums.reduce((sum, n) => sum + (n - mean) ** 2, 0) / (nums.length - 1);
+		return Math.sqrt(variance);
+	},
+
+	filter: (allRows, _row, column, condition) => {
+		const colName = resolveColName(column);
+		const results: any[] = [];
+		for (const row of allRows) {
+			if (matchesCondition(row[colName], condition)) {
+				results.push(row[colName]);
+			}
+		}
+		return results.join(', ');
+	},
+
+	filterby: (allRows, _row, returnColumn, condColumn, condition) => {
+		const returnCol = resolveColName(returnColumn);
+		const condCol = resolveColName(condColumn);
+		const results: any[] = [];
+		for (const row of allRows) {
+			if (matchesCondition(row[condCol], condition)) {
+				const v = row[returnCol];
+				if (v != null && v !== '') results.push(v);
+			}
+		}
+		return results.join(', ');
+	},
+
+	lookup: (allRows, _row, searchCol, searchVal, returnCol) => {
+		const searchColName = resolveColName(searchCol);
+		const returnColName = resolveColName(returnCol);
+		for (const row of allRows) {
+			if (matchesCondition(row[searchColName], searchVal)) {
+				return row[returnColName] ?? null;
+			}
+		}
+		return null;
+	},
+};
+
+const AGGREGATE_FUNC_NAMES = new Set(Object.keys(AGGREGATE_FUNCTIONS));
+
+export const FUNC_NAMES = new Set([...Object.keys(FUNCTIONS), ...AGGREGATE_FUNC_NAMES]);
 
 function tokenize(expr: string): Token[] {
 	const tokens: Token[] = [];
@@ -438,6 +644,16 @@ function tokenize(expr: string): Token[] {
 			i++; // skip closing quote
 			tokens.push({ type: 'STRING', value: s });
 			continue;
+		}
+
+		// DOT for method calls: {col}.method(), "str".method(), (...).method()
+		if (ch === '.') {
+			const prev = tokens.length > 0 ? tokens[tokens.length - 1] : null;
+			if (prev && (prev.type === 'COLUMN_REF' || prev.type === 'RPAREN' || prev.type === 'STRING')) {
+				tokens.push({ type: 'DOT', value: '.' });
+				i++;
+				continue;
+			}
 		}
 
 		// Number
@@ -527,13 +743,39 @@ function tokenize(expr: string): Token[] {
 	return tokens;
 }
 
+/** Resolve a column reference value from a row — handles dates, numbers, strings */
+function resolveColumnValue(val: any): { value: any; type: TokenType } {
+	if (val === null || val === undefined || val === '') {
+		return { value: null, type: 'NUMBER' };
+	}
+	if (val instanceof Date) {
+		return { value: val, type: 'STRING' }; // sentinel
+	}
+	if (typeof val === 'string' && ISO_DATE_RE.test(val)) {
+		const parsed = new Date(val);
+		if (!isNaN(parsed.getTime())) {
+			return { value: parsed, type: 'STRING' }; // sentinel
+		}
+		return { value: val, type: 'STRING' };
+	}
+	if (typeof val === 'number' || (typeof val === 'string' && !isNaN(Number(val)) && val.trim() !== '')) {
+		return { value: Number(val), type: 'NUMBER' };
+	}
+	return { value: String(val), type: 'STRING' };
+}
+
 // Recursive descent parser
 class Parser {
 	private tokens: Token[];
 	private pos = 0;
+	private row: Record<string, any>;
+	private allRows: Record<string, any>[] | null;
+	private inAggregate = false;
 
-	constructor(tokens: Token[]) {
+	constructor(tokens: Token[], row: Record<string, any>, allRows?: Record<string, any>[]) {
 		this.tokens = tokens;
+		this.row = row;
+		this.allRows = allRows || null;
 	}
 
 	private peek(): Token {
@@ -677,27 +919,80 @@ class Parser {
 
 	private parsePrimary(): any {
 		const t = this.peek();
+		let result: any;
 
 		if (t.type === 'NUMBER') {
 			this.consume();
-			return t.value;
-		}
-
-		if (t.type === 'STRING') {
+			result = t.value;
+		} else if (t.type === 'STRING') {
 			this.consume();
-			return t.value;
-		}
-
-		if (t.type === 'COLUMN_REF') {
+			result = t.value;
+		} else if (t.type === 'COLUMN_REF') {
 			this.consume();
-			// Value should be pre-substituted; this is a sentinel
-			return t.value;
-		}
-
-		if (t.type === 'FUNC') {
+			const colName = t.value as string;
+			// Inside aggregate functions, keep as ColumnRef for column iteration
+			if (this.inAggregate) {
+				result = new ColumnRef(colName);
+			} else {
+				// Resolve from current row
+				const resolved = resolveColumnValue(this.row[colName]);
+				result = resolved.value;
+			}
+		} else if (t.type === 'FUNC') {
 			const funcName = this.consume().value as string;
+			const isAggregate = AGGREGATE_FUNC_NAMES.has(funcName);
+
+			if (isAggregate) {
+				// Parse args in aggregate mode — COLUMN_REF stays as ColumnRef
+				const prevInAggregate = this.inAggregate;
+				this.inAggregate = true;
+				this.consume('LPAREN');
+				const args: any[] = [];
+				if (this.peek().type !== 'RPAREN') {
+					args.push(this.parseTernary());
+					while (this.peek().type === 'COMMA') {
+						this.consume();
+						args.push(this.parseTernary());
+					}
+				}
+				this.consume('RPAREN');
+				this.inAggregate = prevInAggregate;
+
+				if (!this.allRows) {
+					throw new Error(`${funcName}() requires cross-row data (allRows not provided)`);
+				}
+				const fn = AGGREGATE_FUNCTIONS[funcName];
+				if (!fn) throw new Error(`Unknown aggregate function: ${funcName}`);
+				result = fn(this.allRows, this.row, ...args);
+			} else {
+				this.consume('LPAREN');
+				const args: any[] = [];
+				if (this.peek().type !== 'RPAREN') {
+					args.push(this.parseTernary());
+					while (this.peek().type === 'COMMA') {
+						this.consume();
+						args.push(this.parseTernary());
+					}
+				}
+				this.consume('RPAREN');
+				const fn = FUNCTIONS[funcName];
+				if (!fn) throw new Error(`Unknown function: ${funcName}`);
+				result = fn(...args);
+			}
+		} else if (t.type === 'LPAREN') {
+			this.consume();
+			result = this.parseTernary();
+			this.consume('RPAREN');
+		} else {
+			throw new Error(`Unexpected: ${t.value}`);
+		}
+
+		// Handle method calls: value.method(args...) with chaining support
+		while (this.peek().type === 'DOT') {
+			this.consume(); // DOT
+			const methodName = this.consume('FUNC').value as string;
 			this.consume('LPAREN');
-			const args: any[] = [];
+			const args: any[] = [result]; // prepend object as first arg
 			if (this.peek().type !== 'RPAREN') {
 				args.push(this.parseTernary());
 				while (this.peek().type === 'COMMA') {
@@ -706,19 +1001,12 @@ class Parser {
 				}
 			}
 			this.consume('RPAREN');
-			const fn = FUNCTIONS[funcName];
-			if (!fn) throw new Error(`Unknown function: ${funcName}`);
-			return fn(...args);
+			const fn = FUNCTIONS[methodName];
+			if (!fn) throw new Error(`Unknown method: ${methodName}`);
+			result = fn(...args);
 		}
 
-		if (t.type === 'LPAREN') {
-			this.consume();
-			const result = this.parseTernary();
-			this.consume('RPAREN');
-			return result;
-		}
-
-		throw new Error(`Unexpected: ${t.value}`);
+		return result;
 	}
 }
 
@@ -727,49 +1015,23 @@ class Parser {
  *
  * @param expression - Formula like "{price} * {quantity}"
  * @param row - Row data object like { price: 10, quantity: 5 }
+ * @param allRows - Optional: all rows in the table (needed for aggregate functions)
  * @returns Computed value, or an error string prefixed with '#'
  */
-export function evaluateFormula(expression: string, row: Record<string, any>): any {
+export function evaluateFormula(
+	expression: string,
+	row: Record<string, any>,
+	allRows?: Record<string, any>[]
+): any {
 	if (!expression || !expression.trim()) return null;
 
 	try {
-		// First, substitute column references with their values and tokenize
-		// We need to handle this at the token level so the parser sees resolved values
+		// Tokenize — column references are kept as COLUMN_REF tokens.
+		// The parser resolves them from `row` on demand, and keeps them
+		// as ColumnRef objects inside aggregate function calls.
 		const tokens = tokenize(expression);
 
-		// Resolve column references — detect dates, numbers, and strings
-		for (const token of tokens) {
-			if (token.type === 'COLUMN_REF') {
-				const colName = token.value as string;
-				const val = row[colName];
-				if (val === null || val === undefined || val === '') {
-					token.value = null as any;
-					token.type = 'NUMBER';
-				} else if (val instanceof Date) {
-					// Already a Date object (from function return)
-					token.value = val as any;
-					token.type = 'STRING'; // sentinel — parser returns the value directly
-				} else if (typeof val === 'string' && ISO_DATE_RE.test(val)) {
-					// ISO date string — parse to Date for date-aware operations
-					const parsed = new Date(val);
-					if (!isNaN(parsed.getTime())) {
-						token.value = parsed as any;
-						token.type = 'STRING'; // sentinel
-					} else {
-						token.value = val;
-						token.type = 'STRING';
-					}
-				} else if (typeof val === 'number' || (typeof val === 'string' && !isNaN(Number(val)) && val.trim() !== '')) {
-					token.value = Number(val);
-					token.type = 'NUMBER';
-				} else {
-					token.value = String(val);
-					token.type = 'STRING';
-				}
-			}
-		}
-
-		const parser = new Parser(tokens);
+		const parser = new Parser(tokens, row, allRows);
 		const result = parser.parse();
 
 		if (typeof result === 'number' && isNaN(result)) return '#ERR';
@@ -803,16 +1065,17 @@ export function extractColumnRefs(expression: string): string[] {
 export function validateFormula(expression: string): string | null {
 	if (!expression || !expression.trim()) return 'Expression is empty';
 	try {
-		// Tokenize with dummy column values
 		const tokens = tokenize(expression);
-		// Replace column refs with dummy number values for validation
+		// Build dummy row: all column refs map to 0
+		const dummyRow: Record<string, any> = {};
 		for (const token of tokens) {
 			if (token.type === 'COLUMN_REF') {
-				token.value = 0;
-				token.type = 'NUMBER';
+				dummyRow[token.value as string] = 0;
 			}
 		}
-		const parser = new Parser(tokens);
+		// Provide dummy allRows so aggregate functions don't error during validation
+		const dummyRows = [dummyRow];
+		const parser = new Parser(tokens, dummyRow, dummyRows);
 		parser.parse();
 		return null;
 	} catch (e: any) {

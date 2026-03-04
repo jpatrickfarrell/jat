@@ -3535,6 +3535,9 @@
 														config={meta?.config || {}}
 														colIndex={colIdx}
 														columns={orderedColumns.map(c => c.name)}
+														columnTypes={Object.fromEntries(
+															orderedColumns.map(c => [c.name, columnMeta[c.name]?.semanticType || 'text'])
+														)}
 														sampleRow={rows[0] || null}
 														allRows={rows}
 														onSave={(type, cfg) => saveColumnSettings(col.name, type, cfg)}

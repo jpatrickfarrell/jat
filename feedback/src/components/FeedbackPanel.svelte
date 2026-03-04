@@ -12,6 +12,9 @@
   import StatusToast from './StatusToast.svelte';
   import RequestList from './RequestList.svelte';
 
+  declare const __JAT_FEEDBACK_VERSION__: string;
+  const version = __JAT_FEEDBACK_VERSION__;
+
   let {
     endpoint,
     project,
@@ -330,18 +333,33 @@
       </div>
 
       <div class="tools">
-        <ScreenshotPreview {screenshots} {capturing} oncapture={handleCapture} onremove={handleRemoveScreenshot} onedit={handleEditScreenshot} />
+        <div class="tool-buttons">
+          <button type="button" class="tool-btn" onclick={handleCapture} disabled={capturing}>
+            {#if capturing}
+              <span class="capture-spinner"></span>
+              Capturing...
+            {:else}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/>
+                <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+              </svg>
+              Screenshot{#if screenshots.length > 0} <span class="tool-count">{screenshots.length}</span>{/if}
+            {/if}
+          </button>
 
-        <button type="button" class="tool-btn" onclick={handlePickElement} disabled={picking}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <path d="M7 2L7 22M17 2V22M2 7H22M2 17H22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-          {#if picking}
-            Click an element...
-          {:else}
-            Pick Element{#if selectedElements.length > 0} <span class="tool-count">{selectedElements.length}</span>{/if}
-          {/if}
-        </button>
+          <button type="button" class="tool-btn" onclick={handlePickElement} disabled={picking}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M7 2L7 22M17 2V22M2 7H22M2 17H22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            {#if picking}
+              Click an element...
+            {:else}
+              Pick Element{#if selectedElements.length > 0} <span class="tool-count">{selectedElements.length}</span>{/if}
+            {/if}
+          </button>
+        </div>
+
+        <ScreenshotPreview {screenshots} {capturing} oncapture={handleCapture} onremove={handleRemoveScreenshot} onedit={handleEditScreenshot} />
       </div>
 
       {#if selectedElements.length > 0}
@@ -391,6 +409,7 @@
   {/if}
 
   <StatusToast message={toastMessage} type={toastType} visible={toastVisible} />
+  <div class="panel-version">v{version}</div>
 </div>
 
 {#if editingScreenshotIndex !== null}
@@ -551,6 +570,13 @@
     flex-direction: column;
     gap: 6px;
   }
+  .tool-buttons {
+    display: flex;
+    gap: 6px;
+  }
+  .tool-buttons .tool-btn {
+    flex: 1;
+  }
   .tool-btn {
     display: inline-flex;
     align-items: center;
@@ -565,7 +591,20 @@
     font-family: inherit;
     transition: background 0.15s;
   }
-  .tool-btn:hover { background: #374151; }
+  .tool-btn:hover:not(:disabled) { background: #374151; }
+  .tool-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .capture-spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255,255,255,0.2);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: capture-spin 0.6s linear infinite;
+  }
+  @keyframes capture-spin {
+    to { transform: rotate(360deg); }
+  }
 
   .tool-count {
     display: inline-flex;
@@ -675,5 +714,11 @@
   }
   @keyframes spin {
     to { transform: rotate(360deg); }
+  }
+  .panel-version {
+    padding: 4px 10px 6px;
+    font-size: 10px;
+    color: #4b5563;
+    line-height: 1;
   }
 </style>

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { SemanticType, ColumnConfig, EnumConfig, CurrencyConfig, DateConfig, PercentageConfig, FormulaConfig } from '$lib/types/dataTable';
+	import type { ColumnInfo as FormulaColumnInfo } from './FormulaInput.svelte';
 	import { SEMANTIC_TYPE_INFO } from '$lib/types/dataTable';
 	import ColumnTypeSelector from './ColumnTypeSelector.svelte';
 	import EnumOptionsEditor from './EnumOptionsEditor.svelte';
@@ -12,6 +13,7 @@
 		config = {},
 		colIndex = 0,
 		columns = [],
+		columnTypes = {},
 		sampleRow = null,
 		allRows = undefined,
 		onSave,
@@ -22,6 +24,8 @@
 		config?: ColumnConfig;
 		colIndex?: number;
 		columns?: string[];
+		/** Optional map of column name → semantic type for chip coloring */
+		columnTypes?: Record<string, string>;
 		sampleRow?: Record<string, any> | null;
 		allRows?: Record<string, any>[];
 		onSave: (type: SemanticType, config: ColumnConfig) => void;
@@ -37,7 +41,13 @@
 	let formulaError = $state<string | null>(null);
 
 	// Available columns for formula references (exclude current column)
-	const availableColumns = $derived(columns.filter(c => c !== column));
+	// Pass as ColumnInfo[] with type info so FormulaInput can color chips by type
+	const availableColumns = $derived<FormulaColumnInfo[]>(
+		columns.filter(c => c !== column).map(c => ({
+			name: c,
+			type: columnTypes[c] || 'text',
+		}))
+	);
 
 	// Live formula preview: evaluate against sample row
 	const formulaPreview = $derived.by(() => {

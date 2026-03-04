@@ -14,70 +14,29 @@
   } = $props();
 </script>
 
-<div class="screenshot-section">
-  <button class="capture-btn" onclick={oncapture} disabled={capturing}>
-    {#if capturing}
-      <span class="spinner"></span>
-      Capturing...
-    {:else}
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-        <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/>
-        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
-      </svg>
-      Screenshot
+{#if screenshots.length > 0}
+  <div class="thumb-strip">
+    {#each screenshots.slice(-3) as src, i}
+      {@const actualIndex = screenshots.length > 3 ? screenshots.length - 3 + i : i}
+      <div class="thumb-wrap">
+        <img class="thumb" src={src} alt="Screenshot {i + 1}" />
+        {#if onedit}
+          <button class="thumb-edit" onclick={() => onedit(actualIndex)} aria-label="Edit screenshot">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+              <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        {/if}
+        <button class="thumb-remove" onclick={() => onremove(actualIndex)} aria-label="Remove screenshot">&times;</button>
+      </div>
+    {/each}
+    {#if screenshots.length > 3}
+      <span class="more-badge">+{screenshots.length - 3}</span>
     {/if}
-  </button>
-
-  {#if screenshots.length > 0}
-    <div class="thumb-strip">
-      {#each screenshots.slice(-3) as src, i}
-        {@const actualIndex = screenshots.length > 3 ? screenshots.length - 3 + i : i}
-        <div class="thumb-wrap">
-          <img class="thumb" src={src} alt="Screenshot {i + 1}" />
-          {#if onedit}
-            <button class="thumb-edit" onclick={() => onedit(actualIndex)} aria-label="Edit screenshot">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
-                <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-          {/if}
-          <button class="thumb-remove" onclick={() => onremove(actualIndex)} aria-label="Remove screenshot">&times;</button>
-        </div>
-      {/each}
-      {#if screenshots.length > 3}
-        <span class="more-badge">+{screenshots.length - 3}</span>
-      {/if}
-    </div>
-  {/if}
-</div>
+  </div>
+{/if}
 
 <style>
-  .screenshot-section {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .capture-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    background: #1f2937;
-    border: 1px solid #374151;
-    border-radius: 5px;
-    color: #d1d5db;
-    font-size: 12px;
-    cursor: pointer;
-    font-family: inherit;
-    transition: background 0.15s;
-  }
-  .capture-btn:hover:not(:disabled) {
-    background: #374151;
-  }
-  .capture-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
   .thumb-strip {
     display: flex;
     gap: 6px;
@@ -139,17 +98,5 @@
     font-size: 11px;
     color: #6b7280;
     padding: 0 4px;
-  }
-  .spinner {
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    border: 2px solid rgba(255,255,255,0.2);
-    border-top-color: white;
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
-  }
-  @keyframes spin {
-    to { transform: rotate(360deg); }
   }
 </style>

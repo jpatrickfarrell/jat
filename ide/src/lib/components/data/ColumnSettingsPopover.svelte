@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { SemanticType, ColumnConfig, EnumConfig, CurrencyConfig, DateConfig, PercentageConfig, FormulaConfig } from '$lib/types/dataTable';
+	import type { SemanticType, ColumnConfig, EnumConfig, CurrencyConfig, DateConfig, PercentageConfig, FormulaConfig, RelationConfig } from '$lib/types/dataTable';
 	import type { ColumnInfo as FormulaColumnInfo } from './FormulaInput.svelte';
 	import { SEMANTIC_TYPE_INFO } from '$lib/types/dataTable';
 	import ColumnTypeSelector from './ColumnTypeSelector.svelte';
@@ -16,6 +16,8 @@
 		columnTypes = {},
 		sampleRow = null,
 		allRows = undefined,
+		selectedProject = null,
+		availableTables = [],
 		onSave,
 		onClose,
 	}: {
@@ -28,6 +30,10 @@
 		columnTypes?: Record<string, string>;
 		sampleRow?: Record<string, any> | null;
 		allRows?: Record<string, any>[];
+		/** Current project for fetching relation target tables */
+		selectedProject?: string | null;
+		/** List of available table names for relation linking */
+		availableTables?: string[];
 		onSave: (type: SemanticType, config: ColumnConfig) => void;
 		onClose: () => void;
 	} = $props();
@@ -37,8 +43,44 @@
 		...config,
 		// Ensure expression is always a string for FormulaInput bind:value
 		...(semanticType === 'formula' && { expression: (config as FormulaConfig)?.expression ?? '' }),
+		// Ensure relation config fields are populated
+		...(semanticType === 'relation' && {
+			targetTable: (config as RelationConfig)?.targetTable ?? '',
+			displayColumn: (config as RelationConfig)?.displayColumn ?? '',
+			multiSelect: (config as RelationConfig)?.multiSelect ?? false,
+		}),
 	});
 	let formulaError = $state<string | null>(null);
+
+	// Relation: columns of the selected target table
+	let targetTableColumns = $state<string[]>([]);
+	let targetTableLoading = $state(false);
+
+	// Fetch target table columns when targetTable changes
+	$effect(() => {
+		if (selectedType === 'relation' && editConfig.targetTable && selectedProject) {
+			fetchTargetColumns(editConfig.targetTable);
+		} else if (selectedType === 'relation') {
+			targetTableColumns = [];
+		}
+	});
+
+	async function fetchTargetColumns(tableName: string) {
+		if (!selectedProject) return;
+		targetTableLoading = true;
+		try {
+			const res = await fetch(
+				`/api/data/tables/${encodeURIComponent(tableName)}?project=${encodeURIComponent(selectedProject)}&limit=0`
+			);
+			if (res.ok) {
+				const data = await res.json();
+				targetTableColumns = (data.schema || [])
+					.filter((c: any) => c.name !== 'rowid')
+					.map((c: any) => c.name);
+			}
+		} catch { /* ignore */ }
+		targetTableLoading = false;
+	}
 
 	// Available columns for formula references (exclude current column)
 	// Pass as ColumnInfo[] with type info so FormulaInput can color chips by type
@@ -79,6 +121,12 @@
 			editConfig = { format: 'short' };
 		} else if (type === 'percentage') {
 			editConfig = { decimals: 0, showBar: false };
+		} else if (type === 'relation') {
+			editConfig = {
+				targetTable: (config as RelationConfig)?.targetTable || '',
+				displayColumn: (config as RelationConfig)?.displayColumn || '',
+				multiSelect: (config as RelationConfig)?.multiSelect || false,
+			};
 		} else if (type === 'formula') {
 			editConfig = {
 				expression: (config as FormulaConfig)?.expression || '',
@@ -114,7 +162,7 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="popover-overlay" onclick={onClose}></div>
-<div class="popover" class:popover-left={colIndex <= 1} class:popover-wide={selectedType === 'formula'}>
+<div class="popover" class:popover-left={colIndex <= 1} class:popover-wide={selectedType === 'formula' || selectedType === 'relation'}>
 	<div class="popover-header">
 		<span class="popover-title">Column: <code>{column}</code></span>
 		<button class="popover-close" onclick={onClose}>×</button>
@@ -180,6 +228,45 @@
 						Show bar
 					</label>
 				</div>
+			</div>
+		{/if}
+
+		{#if selectedType === 'relation'}
+			<div class="field">
+				<label class="field-label">Link to table</label>
+				<select
+					class="field-input"
+					bind:value={editConfig.targetTable}
+					onchange={() => { editConfig.displayColumn = ''; }}
+				>
+					<option value="">— select table —</option>
+					{#each availableTables as tbl}
+						<option value={tbl}>{tbl}</option>
+					{/each}
+				</select>
+			</div>
+
+			{#if editConfig.targetTable}
+				<div class="field">
+					<label class="field-label">Display column</label>
+					{#if targetTableLoading}
+						<span class="field-hint">Loading columns...</span>
+					{:else}
+						<select class="field-input" bind:value={editConfig.displayColumn}>
+							<option value="">— select column —</option>
+							{#each targetTableColumns as col}
+								<option value={col}>{col}</option>
+							{/each}
+						</select>
+					{/if}
+				</div>
+			{/if}
+
+			<div class="field">
+				<label class="field-label">
+					<input type="checkbox" bind:checked={editConfig.multiSelect} />
+					Allow multiple selections
+				</label>
 			</div>
 		{/if}
 
@@ -328,6 +415,11 @@
 	}
 	.field-input.small {
 		width: 5rem;
+	}
+	.field-hint {
+		font-size: 0.625rem;
+		color: oklch(0.50 0.02 250);
+		font-style: italic;
 	}
 	.formula-error {
 		font-size: 0.625rem;

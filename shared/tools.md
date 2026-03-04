@@ -322,6 +322,46 @@ jat-step <step> --task <id> --title <title> --agent <name> [--type <type>]
 
 ---
 
+### Data Tables & Views (jt data)
+
+Per-project data tables stored in `.jat/data.db`. Views are filtered subsets of tables with saved filter/sort/column settings.
+
+**Table Commands:**
+
+| Command | Purpose |
+|---------|---------|
+| `jt data tables [--json]` | List all tables (includes view count) |
+| `jt data schema <table>` | Show columns + semantic types |
+| `jt data query "SELECT ..."` | Read-only SQL (auto LIMIT 100) |
+| `jt data exec "SQL" --force` | Write SQL (INSERT/UPDATE/DELETE) |
+| `jt data create <table> col:type ...` | Create table |
+| `jt data drop <table> [--force]` | Drop table |
+| `jt data import <table> <file>` | Import TSV/CSV |
+
+**View Commands:**
+
+| Command | Purpose |
+|---------|---------|
+| `jt data views [table] [--json]` | List all views, or views for a specific table |
+| `jt data view <id> [--json]` | Show view details (filters, visible columns, sort) |
+| `jt data view-rows <id> [--json] [--limit N]` | Query filtered rows from a view |
+
+**Examples:**
+```bash
+jt data tables                        # List tables with view counts
+jt data views                         # List all views across tables
+jt data views assets                  # List views for 'assets' table
+jt data view 85qyrn                   # Show view filters and settings
+jt data view-rows 85qyrn              # Get filtered rows (markdown table)
+jt data view-rows 85qyrn --json       # Get filtered rows as JSON
+jt data view-rows 85qyrn --limit 20   # Limit results
+jt data query "SELECT * FROM assets WHERE type='Food'"  # Direct SQL
+```
+
+**Views vs direct SQL:** Views apply saved filters, column visibility, and sort order automatically. Use views when you want a pre-configured subset of a table. Use `jt data query` for ad-hoc SQL.
+
+---
+
 ### Quick Patterns
 
 **Declare files → Work → Close (auto-clears):**

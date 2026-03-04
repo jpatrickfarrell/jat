@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { SemanticType, ColumnConfig, FormulaConfig } from '$lib/types/dataTable';
+	import type { SemanticType, ColumnConfig, FormulaConfig, RelationConfig } from '$lib/types/dataTable';
 	import TextCell from './TextCell.svelte';
 	import BooleanCell from './BooleanCell.svelte';
 	import DateCell from './DateCell.svelte';
@@ -9,6 +9,7 @@
 	import CurrencyCell from './CurrencyCell.svelte';
 	import PercentageCell from './PercentageCell.svelte';
 	import FormulaCell from './FormulaCell.svelte';
+	import RelationCell from './RelationCell.svelte';
 
 	let {
 		value = null,
@@ -19,6 +20,7 @@
 		initialEditChar = null,
 		row = {},
 		allRows = undefined,
+		selectedProject = null,
 		onSave,
 	}: {
 		value: any;
@@ -29,6 +31,7 @@
 		initialEditChar?: string | null;
 		row?: Record<string, any>;
 		allRows?: Record<string, any>[];
+		selectedProject?: string | null;
 		onSave: (val: any) => void;
 	} = $props();
 
@@ -50,6 +53,8 @@
 	<CurrencyCell {value} config={typedConfig} {editing} {initialEditChar} {onSave} />
 {:else if semanticType === 'percentage'}
 	<PercentageCell {value} config={typedConfig} {editing} {initialEditChar} {onSave} />
+{:else if semanticType === 'relation'}
+	<RelationCell {value} config={typedConfig as RelationConfig} {editing} {selectedProject} {onSave} />
 {:else if semanticType === 'formula'}
 	<FormulaCell {row} {allRows} config={typedConfig as FormulaConfig} />
 {:else}

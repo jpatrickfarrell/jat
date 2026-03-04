@@ -100,7 +100,7 @@
 				}
 			}
 			matches.sort((a, b) => b.score - a.score || a.label.localeCompare(b.label));
-			if (matches.length === 0) return null;
+			if (matches.length === 0) { detailEntry = null; detailColumn = null; return null; }
 
 			detailEntry = null;
 			detailColumn = matches[0] ? normalizedColumns.find(c => c.name === matches[0].value) || null : null;
@@ -125,10 +125,10 @@
 				if (beforeCursor[j] === '{') { inBrace = true; break; }
 				if (beforeCursor[j] === '}') break;
 			}
-			if (inBrace) return null;
+			if (inBrace) { detailEntry = null; detailColumn = null; return null; }
 
 			const partial = beforeCursor.slice(wordStart).toLowerCase();
-			if (partial.length === 0) return null;
+			if (partial.length === 0) { detailEntry = null; detailColumn = null; return null; }
 
 			const matches: (ChipSuggestion & { score: number; entry: FormulaEntry })[] = [];
 			for (const entry of FORMULA_CATALOG) {
@@ -147,7 +147,7 @@
 				}
 			}
 			matches.sort((a, b) => b.score - a.score || a.label.localeCompare(b.label));
-			if (matches.length === 0) return null;
+			if (matches.length === 0) { detailEntry = null; detailColumn = null; return null; }
 
 			// For functions, we insert raw text, not chips
 			detailEntry = matches[0]?.entry || null;
@@ -156,10 +156,16 @@
 			return [{ label: 'Functions', items: matches.slice(0, 8) }];
 		}
 
+		detailEntry = null;
+		detailColumn = null;
 		return null;
 	}
 
 	function handleChipCreate(suggestion: ChipSuggestion): ChipInfo {
+		// Clear detail panel when suggestion is selected
+		detailEntry = null;
+		detailColumn = null;
+
 		// If it's a column, create a chip
 		if (suggestion.category === 'Column') {
 			const colors = getTypeColors(suggestion.data?.type);

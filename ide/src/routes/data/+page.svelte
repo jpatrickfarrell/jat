@@ -599,7 +599,28 @@
 		selectedView = view;
 		selectedTable = view.table_name;
 		offset = 0;
-		fetchViewRows(view.id);
+		fetchViewRows(view.id).then(() => {
+			// If the view has saved visible_columns, derive hiddenColumns from it
+			if (view.visible_columns) {
+				const visCols = typeof view.visible_columns === 'string'
+					? JSON.parse(view.visible_columns)
+					: view.visible_columns;
+				if (Array.isArray(visCols) && visCols.length > 0) {
+					const visSet = new Set(visCols);
+					const allCols = schema.filter(c => c.name !== 'rowid').map(c => c.name);
+					hiddenColumns = new Set(allCols.filter(c => !visSet.has(c)));
+					return;
+				}
+			}
+			// Otherwise load from localStorage (table-level default)
+			const hiddenKey = `jat-data-hidden-${selectedProject}-${selectedTable}`;
+			try {
+				const stored = localStorage.getItem(hiddenKey);
+				hiddenColumns = stored ? new Set(JSON.parse(stored)) : new Set();
+			} catch {
+				hiddenColumns = new Set();
+			}
+		});
 	}
 
 	async function fetchViewRows(viewId: string) {
@@ -1815,6 +1836,21 @@
 					}
 					break;
 				}
+				// Spacebar on boolean cell — toggle value directly
+				if (e.key === ' ' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+					const col = orderedColumns[selectedCell.colIdx];
+					const meta = col ? columnMeta[col.name] : null;
+					if (meta?.semanticType === 'boolean' || col?.semanticType === 'boolean') {
+						e.preventDefault();
+						const row = rows[selectedCell.rowIdx];
+						if (row && col) {
+							const current = row[col.name];
+							const toggled = (current === 1 || current === true || current === 'true' || current === '1') ? 0 : 1;
+							handleCellSave(row.rowid, col.name, toggled);
+						}
+						break;
+					}
+				}
 				// Printable character — start editing
 				if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
 					e.preventDefault();
@@ -2425,6 +2461,19 @@
 			localStorage.setItem(key, JSON.stringify([...hiddenColumns]));
 		} else {
 			localStorage.removeItem(key);
+		}
+
+		// Persist visible_columns to view when a view is active
+		if (selectedView) {
+			const allCols = schema.filter(c => c.name !== 'rowid').map(c => c.name);
+			const visCols = allCols.filter(c => !hiddenColumns.has(c));
+			// Only save if some columns are hidden; clear if all visible
+			const visibleColumns = hiddenColumns.size > 0 ? visCols : null;
+			fetch(`/api/data/views/${encodeURIComponent(selectedView.id)}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ project: selectedProject, visible_columns: visibleColumns })
+			});
 		}
 	}
 
@@ -3540,6 +3589,8 @@
 														)}
 														sampleRow={rows[0] || null}
 														allRows={rows}
+														{selectedProject}
+														availableTables={tables.map(t => t.name)}
 														onSave={(type, cfg) => saveColumnSettings(col.name, type, cfg)}
 														onClose={() => columnSettingsOpen = null}
 													/>
@@ -3583,6 +3634,7 @@
 														onSave={(val) => handleCellSave(row.rowid, col.name, val)}
 														row={cellMeta?.semanticType === 'formula' ? row : undefined}
 														allRows={cellMeta?.semanticType === 'formula' ? rows : undefined}
+														selectedProject={cellMeta?.semanticType === 'relation' ? selectedProject : undefined}
 													/>
 												</td>
 											{/each}

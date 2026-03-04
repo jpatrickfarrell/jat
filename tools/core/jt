@@ -1340,14 +1340,17 @@ cmd_data() {
   shift
 
   case "$subcmd" in
-    tables)  cmd_data_tables "$@" ;;
-    schema)  cmd_data_schema "$@" ;;
-    query)   cmd_data_query "$@" ;;
-    exec)    cmd_data_exec "$@" ;;
-    create)  cmd_data_create "$@" ;;
-    drop)    cmd_data_drop "$@" ;;
-    columns) cmd_data_columns "$@" ;;
-    import)  cmd_data_import "$@" ;;
+    tables)    cmd_data_tables "$@" ;;
+    schema)    cmd_data_schema "$@" ;;
+    query)     cmd_data_query "$@" ;;
+    exec)      cmd_data_exec "$@" ;;
+    create)    cmd_data_create "$@" ;;
+    drop)      cmd_data_drop "$@" ;;
+    columns)   cmd_data_columns "$@" ;;
+    import)    cmd_data_import "$@" ;;
+    views)     cmd_data_views "$@" ;;
+    view)      cmd_data_view "$@" ;;
+    view-rows) cmd_data_view_rows "$@" ;;
     help|--help|-h) cmd_data_help ;;
     *)       die "Unknown data subcommand: $subcmd. Run 'jt data help' for usage." ;;
   esac
@@ -1363,12 +1366,25 @@ cmd_data_tables() {
     esac
   done
 
+  # Check if _views table exists for view counts
+  local has_views
+  has_views="$(sqlite3 "$DATA_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='_views';" 2>/dev/null)"
+
   local result
-  result="$(sqlite3 -json "$DATA_DB" "
-    SELECT t.name, t.display_name, t.description, t.created_at, t.updated_at
-    FROM _tables t
-    ORDER BY t.name;
-  ")"
+  if [[ -n "$has_views" ]]; then
+    result="$(sqlite3 -json "$DATA_DB" "
+      SELECT t.name, t.display_name, t.description, t.created_at, t.updated_at,
+             (SELECT COUNT(*) FROM _views v WHERE v.table_name = t.name) as view_count
+      FROM _tables t
+      ORDER BY t.name;
+    ")"
+  else
+    result="$(sqlite3 -json "$DATA_DB" "
+      SELECT t.name, t.display_name, t.description, t.created_at, t.updated_at, 0 as view_count
+      FROM _tables t
+      ORDER BY t.name;
+    ")"
+  fi
   [[ -n "$result" ]] || result="[]"
 
   if $json_out; then
@@ -1381,7 +1397,9 @@ cmd_data_tables() {
 import sys, json
 data = json.load(sys.stdin)
 for t in data:
-    print(f\"  {t['name']} - {t.get('description', '') or '(no description)'}\")
+    vc = t.get('view_count', 0)
+    views_str = f' ({vc} view{\"s\" if vc != 1 else \"\"})' if vc else ''
+    print(f\"  {t['name']}{views_str} - {t.get('description', '') or '(no description)'}\")
 "
     fi
   fi
@@ -1700,13 +1718,290 @@ cmd_data_import() {
   PROJECT_ROOT="$PROJECT_ROOT" node "$script_dir/jt-data-import" "$table_name" "$file_path" "$@"
 }
 
+# ---------------------------------------------------------------------------
+# Data Views
+# ---------------------------------------------------------------------------
+
+cmd_data_views() {
+  require_data_db
+  local table_name="" json_out=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_out=true; shift ;;
+      --table) table_name="${2:-}"; shift 2 ;;
+      -*) shift ;;
+      *)
+        # positional arg = table name
+        if [[ -z "$table_name" ]]; then
+          table_name="$1"
+        fi
+        shift ;;
+    esac
+  done
+
+  # Check if _views table exists
+  local has_views
+  has_views="$(sqlite3 "$DATA_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='_views';" 2>/dev/null)"
+  if [[ -z "$has_views" ]]; then
+    if $json_out; then echo "[]"; else echo "No views. Create views in the IDE at /data."; fi
+    return
+  fi
+
+  local result
+  if [[ -n "$table_name" ]]; then
+    result="$(sqlite3 -json "$DATA_DB" "
+      SELECT v.id, v.table_name, v.name, v.display_name, v.description,
+             v.filters, v.filter_conjunction, v.sort_column, v.sort_direction,
+             v.context_query, v.context_description
+      FROM _views v
+      WHERE v.table_name = '$(sql_escape "$table_name")'
+      ORDER BY v.name;
+    ")"
+  else
+    result="$(sqlite3 -json "$DATA_DB" "
+      SELECT v.id, v.table_name, v.name, v.display_name, v.description,
+             v.filters, v.filter_conjunction, v.sort_column, v.sort_direction,
+             v.context_query, v.context_description
+      FROM _views v
+      ORDER BY v.table_name, v.name;
+    ")"
+  fi
+  [[ -n "$result" ]] || result="[]"
+
+  if $json_out; then
+    echo "$result"
+  else
+    if [[ "$result" == "[]" ]]; then
+      if [[ -n "$table_name" ]]; then
+        echo "No views for table '$table_name'. Create views in the IDE at /data."
+      else
+        echo "No views. Create views in the IDE at /data."
+      fi
+    else
+      echo "$result" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+cur_table = ''
+for v in data:
+    if v['table_name'] != cur_table:
+        cur_table = v['table_name']
+        print(f'  {cur_table}:')
+    desc = v.get('description') or ''
+    filters = json.loads(v['filters']) if isinstance(v['filters'], str) else (v.get('filters') or [])
+    n_filters = len(filters)
+    filter_str = f' ({n_filters} filter{\"s\" if n_filters != 1 else \"\"})' if n_filters else ''
+    ctx = ' [context-view]' if v.get('context_query') else ''
+    print(f'    {v[\"id\"]}  {v.get(\"display_name\") or v[\"name\"]}{filter_str}{ctx} - {desc or \"(no description)\"}')
+"
+    fi
+  fi
+}
+
+cmd_data_view() {
+  require_data_db
+  local view_id="${1:-}" json_out=false
+  shift 2>/dev/null || true
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_out=true; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  [[ -n "$view_id" ]] || die "Usage: jt data view <view-id> [--json]"
+
+  local has_views
+  has_views="$(sqlite3 "$DATA_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='_views';" 2>/dev/null)"
+  [[ -n "$has_views" ]] || die "No views table found"
+
+  local result
+  result="$(sqlite3 -json "$DATA_DB" "SELECT * FROM _views WHERE id = '$(sql_escape "$view_id")';")"
+  [[ -n "$result" && "$result" != "[]" ]] || die "View not found: $view_id"
+
+  if $json_out; then
+    echo "$result" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)[0]
+# Parse JSON string fields
+for k in ['filters', 'visible_columns']:
+    if isinstance(data.get(k), str):
+        try: data[k] = json.loads(data[k])
+        except: pass
+json.dump(data, sys.stdout, indent=2)
+print()
+"
+  else
+    echo "$result" | python3 -c "
+import sys, json
+v = json.load(sys.stdin)[0]
+filters = json.loads(v['filters']) if isinstance(v['filters'], str) else (v.get('filters') or [])
+vis_cols = json.loads(v['visible_columns']) if isinstance(v.get('visible_columns'), str) and v['visible_columns'] else v.get('visible_columns')
+print(f'View: {v.get(\"display_name\") or v[\"name\"]}')
+print(f'  ID:    {v[\"id\"]}')
+print(f'  Table: {v[\"table_name\"]}')
+if v.get('description'):
+    print(f'  Desc:  {v[\"description\"]}')
+if filters:
+    conj = v.get('filter_conjunction', 'AND')
+    print(f'  Filters ({conj}):')
+    for f in filters:
+        print(f'    {f[\"column\"]} {f[\"operator\"]} {f.get(\"value\", \"\")}')
+if vis_cols:
+    print(f'  Visible columns: {\", \".join(vis_cols)}')
+if v.get('sort_column'):
+    print(f'  Sort: {v[\"sort_column\"]} {v.get(\"sort_direction\", \"ASC\")}')
+if v.get('context_query'):
+    print(f'  Context query: {v[\"context_query\"]}')
+if v.get('context_description'):
+    print(f'  Context desc:  {v[\"context_description\"]}')
+"
+  fi
+}
+
+cmd_data_view_rows() {
+  require_data_db
+  local view_id="${1:-}" json_out=false limit=100
+  shift 2>/dev/null || true
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_out=true; shift ;;
+      --limit) limit="${2:-100}"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+
+  [[ -n "$view_id" ]] || die "Usage: jt data view-rows <view-id> [--json] [--limit N]"
+
+  local has_views
+  has_views="$(sqlite3 "$DATA_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='_views';" 2>/dev/null)"
+  [[ -n "$has_views" ]] || die "No views table found"
+
+  # Get view metadata
+  local view_json
+  view_json="$(sqlite3 -json "$DATA_DB" "SELECT * FROM _views WHERE id = '$(sql_escape "$view_id")';")"
+  [[ -n "$view_json" && "$view_json" != "[]" ]] || die "View not found: $view_id"
+
+  # Build and execute the filtered query using python for JSON parsing
+  python3 -c "
+import sys, json, subprocess, sqlite3 as s3
+
+view = json.load(sys.stdin)[0]
+table = view['table_name']
+filters = json.loads(view['filters']) if isinstance(view['filters'], str) else (view.get('filters') or [])
+conjunction = view.get('filter_conjunction', 'AND')
+vis_cols = json.loads(view['visible_columns']) if isinstance(view.get('visible_columns'), str) and view['visible_columns'] else view.get('visible_columns')
+sort_col = view.get('sort_column')
+sort_dir = view.get('sort_direction', 'ASC')
+limit = int('$limit')
+json_out = '$json_out' == 'true'
+
+db = s3.connect('$DATA_DB')
+db.row_factory = s3.Row
+
+# Build WHERE clause from filters
+where_parts = []
+params = []
+op_map = {
+    'equals': '= ?', 'not_equals': '!= ?',
+    'contains': 'LIKE ?', 'not_contains': 'NOT LIKE ?',
+    'starts_with': 'LIKE ?', 'ends_with': 'LIKE ?',
+    'greater_than': '> ?', 'less_than': '< ?',
+    'greater_equal': '>= ?', 'less_equal': '<= ?',
+    'is_empty': 'IS NULL OR \"{}\" = \"\"', 'is_not_empty': 'IS NOT NULL AND \"{}\" != \"\"',
+}
+for f in filters:
+    col = f['column']
+    op = f['operator']
+    val = f.get('value', '')
+    if op == 'is_empty':
+        where_parts.append(f'(\"{col}\" IS NULL OR \"{col}\" = \"\")')
+    elif op == 'is_not_empty':
+        where_parts.append(f'(\"{col}\" IS NOT NULL AND \"{col}\" != \"\")')
+    elif op == 'contains':
+        where_parts.append(f'\"{col}\" LIKE ?')
+        params.append(f'%{val}%')
+    elif op == 'not_contains':
+        where_parts.append(f'\"{col}\" NOT LIKE ?')
+        params.append(f'%{val}%')
+    elif op == 'starts_with':
+        where_parts.append(f'\"{col}\" LIKE ?')
+        params.append(f'{val}%')
+    elif op == 'ends_with':
+        where_parts.append(f'\"{col}\" LIKE ?')
+        params.append(f'%{val}')
+    else:
+        sql_op = op_map.get(op, '= ?')
+        where_parts.append(f'\"{col}\" {sql_op}')
+        params.append(val)
+
+where_sql = ''
+if where_parts:
+    joiner = f' {conjunction} '
+    where_sql = 'WHERE ' + joiner.join(where_parts)
+
+# Build SELECT columns
+if vis_cols:
+    col_list = ', '.join(f'\"{c}\"' for c in vis_cols)
+    select_cols = col_list
+else:
+    select_cols = '*'
+
+# Build ORDER BY
+order_sql = ''
+if sort_col:
+    d = 'DESC' if sort_dir.upper() == 'DESC' else 'ASC'
+    order_sql = f'ORDER BY \"{sort_col}\" {d}'
+else:
+    order_sql = 'ORDER BY rowid ASC'
+
+sql = f'SELECT {select_cols} FROM \"{table}\" {where_sql} {order_sql} LIMIT {limit}'
+
+try:
+    rows = db.execute(sql, params).fetchall()
+except Exception as e:
+    print(f'Query error: {e}', file=sys.stderr)
+    sys.exit(1)
+
+if not rows:
+    if json_out:
+        print('[]')
+    else:
+        print('(no rows match view filters)')
+    sys.exit(0)
+
+cols = [desc[0] for desc in rows[0].keys()] if hasattr(rows[0], 'keys') else []
+cols = list(dict(zip([d[0] for d in db.execute(sql, params).description], range(100))).keys())
+data = [dict(zip(cols, row)) for row in rows]
+
+if json_out:
+    # Strip rowid from JSON output
+    clean = [{k: v for k, v in row.items() if k != 'rowid'} for row in data]
+    json.dump(clean, sys.stdout, indent=2, default=str)
+    print()
+else:
+    # Markdown table
+    def sanitize(v):
+        s = str(v if v is not None else '').replace('\\n', ' ').replace('|', '\\\\|')
+        return s[:117] + '...' if len(s) > 120 else s
+    # Skip rowid from display (if present from SELECT *)
+    display_cols = [c for c in cols if c != 'rowid']
+    print('| ' + ' | '.join(display_cols) + ' |')
+    print('| ' + ' | '.join('---' for _ in display_cols) + ' |')
+    for row in data:
+        print('| ' + ' | '.join(sanitize(row.get(c)) for c in display_cols) + ' |')
+    print(f'\\n({len(data)} rows)')
+
+db.close()
+" <<< "$view_json"
+}
+
 cmd_data_help() {
   cat <<'HELP'
-jt data - Per-project data tables
+jt data - Per-project data tables and views
 
 Usage: jt data <command> [options]
 
-Commands:
+Tables:
   tables                              List all tables (--json for JSON)
   schema <table>                      Show columns for a table
   query  "SELECT ..."                 Read-only SQL (auto LIMIT 100)
@@ -1718,21 +2013,27 @@ Commands:
   columns set <table> <col> <type>    Set semantic type (--config JSON)
   columns remove <table> <col>        Remove column metadata
 
+Views:
+  views [table] [--json]              List all views, or views for a table
+  view <view-id> [--json]             Show view details (filters, columns, sort)
+  view-rows <view-id> [--json] [--limit N]  Query filtered rows from a view
+
 Semantic types: text, number, boolean, date, datetime, url, email, enum, currency, percentage
 SQLite types:   TEXT, INTEGER, REAL, BLOB, NUMERIC
 
 Examples:
   jt data create groceries item:text done:boolean status:enum
-  jt data create inventory name:TEXT quantity:INTEGER
   jt data schema groceries
-  jt data columns set groceries status enum --config '{"options":[{"value":"needed"},{"value":"bought"}]}'
-  jt data columns list groceries
   jt data exec "INSERT INTO groceries (item, done, status) VALUES ('pecans', 0, 'needed')" --force
   jt data query "SELECT * FROM groceries WHERE status = 'needed'"
   jt data import assets ~/Downloads/assets.md --format tsv
-  jt data import data export.csv --dry-run
   jt data tables --json
   jt data drop groceries --force
+  jt data views                       List all views across tables
+  jt data views assets                List views for the assets table
+  jt data view abc123 --json          Show view details as JSON
+  jt data view-rows abc123            Query rows matching view filters
+  jt data view-rows abc123 --limit 50 Limit results
 HELP
 }
 

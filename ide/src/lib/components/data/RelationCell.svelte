@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { RelationConfig } from '$lib/types/dataTable';
+	import { tick } from 'svelte';
 
 	let {
 		value = null,
@@ -20,9 +21,29 @@
 	let targetRows = $state<Record<string, any>[]>([]);
 	let loading = $state(false);
 	let selectedValues = $state<Set<string>>(new Set());
+	let inputRef = $state<HTMLInputElement | null>(null);
+	let dropdownRef = $state<HTMLDivElement | null>(null);
 
 	$effect(() => {
 		if (editingProp && !editing) startEdit();
+	});
+
+	// Close dropdown when clicking outside
+	$effect(() => {
+		if (!editing) return;
+		function handleOutsideClick(e: MouseEvent) {
+			if (dropdownRef && !dropdownRef.contains(e.target as Node)) {
+				closeDropdown();
+			}
+		}
+		// Use capture phase + setTimeout so the click that opened us doesn't immediately close
+		const timer = setTimeout(() => {
+			document.addEventListener('mousedown', handleOutsideClick, true);
+		}, 0);
+		return () => {
+			clearTimeout(timer);
+			document.removeEventListener('mousedown', handleOutsideClick, true);
+		};
 	});
 
 	// Parse stored value (comma-separated rowids for multi, single rowid for single)
@@ -60,9 +81,23 @@
 	async function startEdit() {
 		editing = true;
 		searchQuery = '';
-		// Initialize selected values from current value
 		selectedValues = new Set(storedValues);
-		await fetchTargetRows();
+		fetchTargetRows();
+		// Focus input after Svelte renders the dropdown
+		await tick();
+		inputRef?.focus();
+	}
+
+	function closeDropdown() {
+		if (!editing) return;
+		if (config.multiSelect) {
+			editing = false;
+			const val = [...selectedValues].join(',');
+			onSave(val || null);
+		} else {
+			editing = false;
+			onSave(value);
+		}
 	}
 
 	async function fetchTargetRows() {
@@ -109,29 +144,17 @@
 		onSave(val || null);
 	}
 
-	function handleBlur(e: FocusEvent) {
-		// Don't close if clicking within the dropdown
-		const related = e.relatedTarget as HTMLElement | null;
-		if (related && (e.currentTarget as HTMLElement)?.contains(related)) return;
-		setTimeout(() => {
-			if (editing) {
-				if (config.multiSelect) {
-					confirmMultiSelect();
-				} else {
-					editing = false;
-					onSave(value);
-				}
-			}
-		}, 200);
-	}
-
 	function clearValue() {
 		editing = false;
 		onSave(null);
 	}
 
-	function focusInput(node: HTMLInputElement) {
-		node.focus();
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			e.stopPropagation();
+			closeDropdown();
+		}
 	}
 
 	// Display text for view mode
@@ -144,14 +167,21 @@
 
 {#if editing}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="relation-dropdown" tabindex="-1" onblur={handleBlur}>
+	<!-- Stop propagation so clicks inside don't reach the table cell's onclick -->
+	<div
+		class="relation-dropdown"
+		bind:this={dropdownRef}
+		onclick={(e) => e.stopPropagation()}
+		onmousedown={(e) => e.stopPropagation()}
+		onkeydown={handleKeydown}
+	>
 		<div class="relation-search">
 			<input
 				type="text"
 				class="search-input"
 				placeholder="Search {config.targetTable}..."
 				bind:value={searchQuery}
-				use:focusInput
+				bind:this={inputRef}
 			/>
 			{#if value}
 				<button class="clear-btn" onclick={clearValue} title="Clear">×</button>

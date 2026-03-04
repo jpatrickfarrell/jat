@@ -18,6 +18,7 @@
 		allRows = undefined,
 		selectedProject = null,
 		availableTables = [],
+		autoFocusExpression = false,
 		onSave,
 		onClose,
 	}: {
@@ -34,6 +35,8 @@
 		selectedProject?: string | null;
 		/** List of available table names for relation linking */
 		availableTables?: string[];
+		/** Auto-focus the formula expression input on mount */
+		autoFocusExpression?: boolean;
 		onSave: (type: SemanticType, config: ColumnConfig) => void;
 		onClose: () => void;
 	} = $props();
@@ -51,6 +54,15 @@
 		}),
 	});
 	let formulaError = $state<string | null>(null);
+	let formulaInputRef: { focus: () => void } | undefined = $state();
+
+	// Auto-focus formula expression when opened via = key
+	$effect(() => {
+		if (autoFocusExpression && selectedType === 'formula' && formulaInputRef) {
+			// Tick delay to let FormulaInput mount and initialize chips
+			requestAnimationFrame(() => formulaInputRef?.focus());
+		}
+	});
 
 	// Relation: columns of the selected target table
 	let targetTableColumns = $state<string[]>([]);
@@ -162,7 +174,8 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="popover-overlay" onclick={onClose}></div>
-<div class="popover" class:popover-left={colIndex <= 1} class:popover-wide={selectedType === 'formula' || selectedType === 'relation'}>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="popover" class:popover-left={colIndex <= 1} class:popover-wide={selectedType === 'formula' || selectedType === 'relation'} onkeydown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); } }}>
 	<div class="popover-header">
 		<span class="popover-title">Column: <code>{column}</code></span>
 		<button class="popover-close" onclick={onClose}>×</button>
@@ -274,6 +287,7 @@
 			<div class="field">
 				<label class="field-label">Expression</label>
 				<FormulaInput
+					bind:this={formulaInputRef}
 					bind:value={editConfig.expression}
 					columns={availableColumns}
 					oninput={handleExpressionInput}

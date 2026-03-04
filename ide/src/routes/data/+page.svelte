@@ -104,6 +104,54 @@
 	let rows = $state<any[]>([]);
 	let totalRows = $state(0);
 
+	// Relation column display lookups: { colName: { rowid: displayValue } }
+	let relationLookups = $state<Record<string, Record<string, string>>>({});
+
+	// Rows with relation values resolved to display text (for formula evaluation)
+	let resolvedRows = $derived((() => {
+		const relCols = Object.keys(relationLookups);
+		if (relCols.length === 0) return rows;
+		return rows.map(row => {
+			const resolved = { ...row };
+			for (const col of relCols) {
+				const lookup = relationLookups[col];
+				const raw = row[col];
+				if (raw != null && raw !== '' && lookup) {
+					const ids = String(raw).split(',').map(s => s.trim()).filter(Boolean);
+					resolved[col] = ids.map(id => lookup[id] ?? id).join(', ');
+				}
+			}
+			return resolved;
+		});
+	})());
+
+	async function fetchRelationLookups() {
+		if (!selectedProject || !columnMeta) return;
+		const newLookups: Record<string, Record<string, string>> = {};
+		const fetches: Promise<void>[] = [];
+		for (const [colName, meta] of Object.entries(columnMeta)) {
+			if (meta.semanticType !== 'relation') continue;
+			const cfg = meta.config as import('$lib/types/dataTable').RelationConfig;
+			if (!cfg?.targetTable || !cfg?.displayColumn) continue;
+			fetches.push(
+				fetch(`/api/data/tables/${encodeURIComponent(cfg.targetTable)}?project=${encodeURIComponent(selectedProject)}&limit=999`)
+					.then(r => r.json())
+					.then(data => {
+						if (data.rows) {
+							const map: Record<string, string> = {};
+							for (const r of data.rows) {
+								map[String(r.rowid)] = r[cfg.displayColumn] ?? `Row ${r.rowid}`;
+							}
+							newLookups[colName] = map;
+						}
+					})
+					.catch(() => {}) // silently skip failed lookups
+			);
+		}
+		await Promise.all(fetches);
+		relationLookups = newLookups;
+	}
+
 	function getFavStorageKey(project: string): string {
 		return `jat-data-fav-views-${project}`;
 	}
@@ -384,6 +432,7 @@
 
 	// Column settings popover
 	let columnSettingsOpen = $state<string | null>(null);
+	let autoFocusExpression = $state(false);
 
 	// Manage columns dropdown
 	let showManageColumns = $state(false);
@@ -1848,6 +1897,17 @@
 							const toggled = (current === 1 || current === true || current === 'true' || current === '1') ? 0 : 1;
 							handleCellSave(row.rowid, col.name, toggled);
 						}
+						break;
+					}
+				}
+				// = key on formula column — open formula editor with expression focused
+				if (e.key === '=' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+					const col = orderedColumns[selectedCell.colIdx];
+					const meta = col ? columnMeta[col.name] : null;
+					if (meta?.semanticType === 'formula') {
+						e.preventDefault();
+						columnSettingsOpen = col.name;
+						autoFocusExpression = true;
 						break;
 					}
 				}
@@ -3591,8 +3651,9 @@
 														allRows={rows}
 														{selectedProject}
 														availableTables={tables.map(t => t.name)}
+														{autoFocusExpression}
 														onSave={(type, cfg) => saveColumnSettings(col.name, type, cfg)}
-														onClose={() => columnSettingsOpen = null}
+														onClose={() => { columnSettingsOpen = null; autoFocusExpression = false; }}
 													/>
 												{/if}
 												<!-- svelte-ignore a11y_no_static_element_interactions -->

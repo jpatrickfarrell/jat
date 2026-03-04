@@ -41,6 +41,11 @@
 
 	let chipInputRef: { focus: () => void; clear: () => void; setText: (t: string) => void; getElement: () => HTMLDivElement | null } | undefined = $state();
 
+	/** Focus the formula expression input */
+	export function focus() {
+		chipInputRef?.focus();
+	}
+
 	// --- Color mapping for column types ---
 	const TYPE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
 		number:     { bg: 'oklch(0.25 0.08 240 / 0.4)', border: 'oklch(0.40 0.12 240 / 0.5)', text: 'oklch(0.80 0.10 240)' },

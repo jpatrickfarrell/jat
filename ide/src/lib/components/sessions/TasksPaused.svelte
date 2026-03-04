@@ -33,6 +33,7 @@
 		onResumeSession,
 		onRestartTask,
 		onUnassignTask,
+		onKillSession,
 		onViewTask
 	}: {
 		sessions: PausedSession[];
@@ -41,6 +42,7 @@
 		onResumeSession?: (agentName: string, sessionId: string) => Promise<void>;
 		onRestartTask?: (taskId: string, agentName?: string) => Promise<void>;
 		onUnassignTask?: (taskId: string, agentName: string) => Promise<void>;
+		onKillSession?: (taskId: string, agentName: string) => Promise<void>;
 		onViewTask?: (taskId: string) => void;
 	} = $props();
 
@@ -91,6 +93,8 @@
 				await onRestartTask(session.taskId, session.agentName);
 			} else if (actionId === 'unassign' && onUnassignTask) {
 				await onUnassignTask(session.taskId, session.agentName);
+			} else if ((actionId === 'kill' || actionId === 'cleanup') && onKillSession) {
+				await onKillSession(session.taskId, session.agentName);
 			} else if (actionId === 'view-task' && onViewTask) {
 				onViewTask(session.taskId);
 			}

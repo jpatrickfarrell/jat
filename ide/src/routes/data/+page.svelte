@@ -17,6 +17,8 @@
 	import DataCell from '$lib/components/data/DataCell.svelte';
 	import ColumnTypeSelector from '$lib/components/data/ColumnTypeSelector.svelte';
 	import ColumnSettingsPopover from '$lib/components/data/ColumnSettingsPopover.svelte';
+	import { evaluateFormula } from '$lib/utils/formulaEval';
+	import type { FormulaConfig } from '$lib/types/dataTable';
 
 	interface TableInfo {
 		name: string;
@@ -609,6 +611,7 @@
 				rows = data.rows || [];
 				totalRows = data.total || 0;
 				columnMeta = data.columnMeta || {};
+				fetchRelationLookups();
 			} else {
 				errorToast(data.error || 'Failed to load table');
 			}
@@ -685,6 +688,7 @@
 				rows = data.rows || [];
 				totalRows = data.total || 0;
 				columnMeta = data.columnMeta || {};
+				fetchRelationLookups();
 			} else {
 				errorToast(data.error || 'Failed to load view');
 			}
@@ -2054,6 +2058,7 @@
 					rows = data.rows || [];
 					totalRows = data.total || 0;
 					columnMeta = data.columnMeta || {};
+				fetchRelationLookups();
 				}
 			} else {
 				// Revert optimistic update on error
@@ -2837,19 +2842,52 @@
 	function handleCtxCopyColJson() {
 		if (!ctxCol) return;
 		closeColContextMenu();
-		const values = rows.map(row => row[ctxCol!.name]);
+		const colDef = editableColumns.find(c => c.name === ctxCol!.name);
+		const values = rows.map((row, i) => {
+			if (!colDef) return row[ctxCol!.name];
+			const exported = buildExportRow(row, i, [colDef]);
+			return exported[ctxCol!.name];
+		});
 		navigator.clipboard.writeText(JSON.stringify(values, null, 2));
 		successToast(`Copied ${values.length} values from "${ctxCol.name}"`);
 	}
 
-	function handleCopyTableJson() {
-		const data = rows.map(row => {
-			const obj: Record<string, any> = {};
-			for (const col of editableColumns) {
+	/** Build an export-friendly row: resolve relations to display values, compute formulas */
+	function buildExportRow(row: Record<string, any>, rowIdx: number, cols: typeof editableColumns): Record<string, any> {
+		const obj: Record<string, any> = {};
+		const resolved = resolvedRows[rowIdx] || row;
+		for (const col of cols) {
+			const meta = columnMeta[col.name];
+			if (meta?.semanticType === 'formula') {
+				const cfg = meta.config as FormulaConfig;
+				if (cfg?.expression) {
+					try {
+						const result = evaluateFormula(cfg.expression, resolved, resolvedRows);
+						obj[col.name] = result != null ? result : null;
+					} catch {
+						obj[col.name] = null;
+					}
+				} else {
+					obj[col.name] = null;
+				}
+			} else if (meta?.semanticType === 'relation' && relationLookups[col.name]) {
+				const raw = row[col.name];
+				if (raw != null && raw !== '') {
+					const lookup = relationLookups[col.name];
+					const ids = String(raw).split(',').map(s => s.trim()).filter(Boolean);
+					obj[col.name] = ids.map(id => lookup[id] ?? id).join(', ');
+				} else {
+					obj[col.name] = raw;
+				}
+			} else {
 				obj[col.name] = row[col.name];
 			}
-			return obj;
-		});
+		}
+		return obj;
+	}
+
+	function handleCopyTableJson() {
+		const data = rows.map((row, i) => buildExportRow(row, i, editableColumns));
 		navigator.clipboard.writeText(JSON.stringify(data, null, 2));
 		successToast(`Copied ${data.length} rows as JSON`);
 	}
@@ -3078,10 +3116,10 @@
 	function handleRowCtxCopyRowJson() {
 		if (!rowCtxRow) return;
 		closeRowContextMenu();
-		const data: Record<string, any> = {};
-		for (const col of editableColumns) {
-			data[col.name] = rowCtxRow[col.name];
-		}
+		const rowIdx = rows.indexOf(rowCtxRow);
+		const data = rowIdx >= 0
+			? buildExportRow(rowCtxRow, rowIdx, editableColumns)
+			: Object.fromEntries(editableColumns.map(col => [col.name, rowCtxRow[col.name]]));
 		navigator.clipboard.writeText(JSON.stringify(data, null, 2));
 		successToast('Row copied as JSON');
 	}
@@ -3647,8 +3685,8 @@
 														columnTypes={Object.fromEntries(
 															orderedColumns.map(c => [c.name, columnMeta[c.name]?.semanticType || 'text'])
 														)}
-														sampleRow={rows[0] || null}
-														allRows={rows}
+														sampleRow={resolvedRows[0] || null}
+														allRows={resolvedRows}
 														{selectedProject}
 														availableTables={tables.map(t => t.name)}
 														{autoFocusExpression}
@@ -3693,8 +3731,8 @@
 														editing={isCellSelected && editingSelectedCell}
 														initialEditChar={isCellSelected && editingSelectedCell ? initialEditChar : null}
 														onSave={(val) => handleCellSave(row.rowid, col.name, val)}
-														row={cellMeta?.semanticType === 'formula' ? row : undefined}
-														allRows={cellMeta?.semanticType === 'formula' ? rows : undefined}
+														row={cellMeta?.semanticType === 'formula' ? resolvedRows[rowIdx] : undefined}
+														allRows={cellMeta?.semanticType === 'formula' ? resolvedRows : undefined}
 														selectedProject={cellMeta?.semanticType === 'relation' ? selectedProject : undefined}
 													/>
 												</td>

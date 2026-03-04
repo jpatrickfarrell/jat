@@ -1,15 +1,18 @@
 /**
  * Single Table API
  * GET /api/data/tables/[name]?project=X  - Schema + rows + column metadata
+ *     &resolve=true  - Resolve relation columns to display values and evaluate formulas
  */
 import { json } from '@sveltejs/kit';
-import { getTableSchema, getTableRows, getColumnMetadata } from '$lib/server/jat-data.js';
+import { getTableSchema, getTableRows, getColumnMetadata, resolveRelationColumns } from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
+import { evaluateFormula } from '$lib/utils/formulaEval';
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ params, url }) {
 	const project = url.searchParams.get('project');
 	const tableName = params.name;
+	const resolve = url.searchParams.get('resolve') === 'true';
 
 	if (!project) {
 		return json({ error: 'Missing required parameter: project' }, { status: 400 });
@@ -27,7 +30,7 @@ export async function GET({ params, url }) {
 		}
 
 		const schema = getTableSchema(path, tableName);
-		const { rows, total } = getTableRows(path, tableName, { limit, offset, orderBy, orderDir });
+		let { rows, total } = getTableRows(path, tableName, { limit, offset, orderBy, orderDir });
 
 		// Build columnMeta map { columnName: { semanticType, config, displayName, description } }
 		const metaRows = getColumnMetadata(path, tableName);
@@ -39,6 +42,22 @@ export async function GET({ params, url }) {
 				displayName: m.display_name,
 				description: m.description,
 			};
+		}
+
+		if (resolve) {
+			// 1. Resolve relation columns first
+			rows = resolveRelationColumns(path, tableName, rows, metaRows);
+
+			// 2. Evaluate formula columns (using resolved rows so formulas see display values)
+			for (const [colName, meta] of Object.entries(columnMeta)) {
+				if (meta.semanticType === 'formula' && meta.config?.expression) {
+					for (const row of rows) {
+						try {
+							row[colName] = evaluateFormula(meta.config.expression, row, rows);
+						} catch { row[colName] = null; }
+					}
+				}
+			}
 		}
 
 		return json({ schema, rows, total, columnMeta });

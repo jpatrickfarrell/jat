@@ -50,4 +50,6 @@ export {
 	updateView,
 	deleteView,
 	getViewRows,
+	// Resolution
+	resolveRelationColumns,
 } from '../../../../lib/data.js';

@@ -1189,6 +1189,29 @@
 		}
 	}
 
+	async function killPausedSession(taskId: string, agentName: string) {
+		try {
+			// 1. Release the task (set status back to open, clear assignee)
+			await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ status: "open", assignee: "" }),
+			});
+
+			// 2. Clean up signal file so the session doesn't linger
+			const sessionName = `jat-${agentName}`;
+			try {
+				await fetch(`/api/sessions/${encodeURIComponent(sessionName)}`, { method: "DELETE" });
+			} catch {
+				// Session may already be gone — not fatal
+			}
+
+			await fetchAllData();
+		} catch (err) {
+			console.error("Failed to kill paused session:", err);
+		}
+	}
+
 	async function spawnTask(task: Task, selection?: { agentId: string | null; model: string | null }) {
 		spawningTaskId = task.id;
 		try {
@@ -1888,6 +1911,7 @@
 									onResumeSession={resumeSession}
 									onRestartTask={restartTask}
 									onUnassignTask={unassignTask}
+									onKillSession={killPausedSession}
 									onViewTask={(taskId) =>
 										openTaskDetailDrawer(taskId)}
 								/>
@@ -1959,6 +1983,7 @@
 									onResumeSession={resumeSession}
 									onRestartTask={restartTask}
 									onUnassignTask={unassignTask}
+									onKillSession={killPausedSession}
 									onViewTask={(taskId) =>
 										openTaskDetailDrawer(taskId)}
 								/>

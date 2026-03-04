@@ -3,7 +3,7 @@
 	import { SEMANTIC_TYPE_INFO } from '$lib/types/dataTable';
 	import ColumnTypeSelector from './ColumnTypeSelector.svelte';
 	import EnumOptionsEditor from './EnumOptionsEditor.svelte';
-	import { validateFormula, extractColumnRefs } from '$lib/utils/formulaEval';
+	import { validateFormula, extractColumnRefs, evaluateFormula } from '$lib/utils/formulaEval';
 
 	let {
 		column,
@@ -11,6 +11,7 @@
 		config = {},
 		colIndex = 0,
 		columns = [],
+		sampleRow = null,
 		onSave,
 		onClose,
 	}: {
@@ -19,6 +20,7 @@
 		config?: ColumnConfig;
 		colIndex?: number;
 		columns?: string[];
+		sampleRow?: Record<string, any> | null;
 		onSave: (type: SemanticType, config: ColumnConfig) => void;
 		onClose: () => void;
 	} = $props();
@@ -29,6 +31,25 @@
 
 	// Available columns for formula references (exclude current column)
 	const availableColumns = $derived(columns.filter(c => c !== column));
+
+	// Live formula preview: evaluate against sample row
+	const formulaPreview = $derived.by(() => {
+		if (selectedType !== 'formula') return null;
+		const expr = editConfig.expression?.trim();
+		if (!expr) return null;
+		const err = validateFormula(expr);
+		if (err) return { error: true, value: err };
+		if (!sampleRow) return { error: false, value: 'No data to preview' as string, muted: true };
+		try {
+			const result = evaluateFormula(expr, sampleRow);
+			if (result === null || result === undefined) return { error: false, value: '(empty)', muted: true };
+			const str = String(result);
+			if (str.startsWith('#')) return { error: true, value: str };
+			return { error: false, value: str };
+		} catch {
+			return { error: true, value: '#ERR' };
+		}
+	});
 
 	function handleTypeChange(type: SemanticType) {
 		selectedType = type;
@@ -164,6 +185,12 @@
 				></textarea>
 				{#if formulaError}
 					<span class="formula-error">{formulaError}</span>
+				{/if}
+				{#if formulaPreview}
+					<div class="formula-preview" class:formula-preview-error={formulaPreview.error} class:formula-preview-muted={formulaPreview.muted}>
+						<span class="formula-preview-label">Result:</span>
+						<span class="formula-preview-value">{formulaPreview.value}</span>
+					</div>
 				{/if}
 			</div>
 
@@ -317,6 +344,37 @@
 	.formula-error {
 		font-size: 0.625rem;
 		color: oklch(0.65 0.18 25);
+	}
+	.formula-preview {
+		display: flex;
+		align-items: baseline;
+		gap: 0.375rem;
+		padding: 0.25rem 0.375rem;
+		background: oklch(0.16 0.02 145 / 0.3);
+		border: 1px solid oklch(0.35 0.08 145 / 0.4);
+		border-radius: 0.25rem;
+		font-size: 0.6875rem;
+	}
+	.formula-preview-label {
+		color: oklch(0.55 0.02 250);
+		font-size: 0.625rem;
+		flex-shrink: 0;
+	}
+	.formula-preview-value {
+		font-family: 'JetBrains Mono', 'Fira Code', monospace;
+		color: oklch(0.75 0.15 145);
+		word-break: break-all;
+	}
+	.formula-preview-error {
+		background: oklch(0.16 0.02 25 / 0.3);
+		border-color: oklch(0.35 0.08 25 / 0.4);
+	}
+	.formula-preview-error .formula-preview-value {
+		color: oklch(0.65 0.18 25);
+	}
+	.formula-preview-muted .formula-preview-value {
+		color: oklch(0.50 0.02 250);
+		font-style: italic;
 	}
 	.column-chips {
 		display: flex;

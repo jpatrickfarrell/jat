@@ -3535,6 +3535,7 @@
 														config={meta?.config || {}}
 														colIndex={colIdx}
 														columns={orderedColumns.map(c => c.name)}
+														sampleRow={rows[0] || null}
 														onSave={(type, cfg) => saveColumnSettings(col.name, type, cfg)}
 														onClose={() => columnSettingsOpen = null}
 													/>

@@ -1872,6 +1872,46 @@ cmd_data_view_rows() {
 
   [[ -n "$view_id" ]] || die "Usage: jt data view-rows <view-id> [--json] [--limit N]"
 
+  # Try IDE API first (resolves relation columns + formulas)
+  local project_name
+  project_name="$(basename "$PROJECT_ROOT")"
+  local ide_url="http://127.0.0.1:3333"
+  local api_result
+  if api_result="$(curl -sf --max-time 2 "${ide_url}/api/data/views/${view_id}/rows?project=${project_name}&resolve=true&limit=${limit}" 2>/dev/null)"; then
+    # API succeeded — extract rows and format output
+    python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+rows = data.get('rows', [])
+json_out = '$json_out' == 'true'
+
+if not rows:
+    if json_out:
+        print('[]')
+    else:
+        print('(no rows match view filters)')
+    sys.exit(0)
+
+cols = [k for k in rows[0].keys() if k != 'rowid']
+
+if json_out:
+    clean = [{k: v for k, v in row.items() if k != 'rowid'} for row in rows]
+    json.dump(clean, sys.stdout, indent=2, default=str)
+    print()
+else:
+    def sanitize(v):
+        s = str(v if v is not None else '').replace('\\n', ' ').replace('|', '\\\\|')
+        return s[:117] + '...' if len(s) > 120 else s
+    print('| ' + ' | '.join(cols) + ' |')
+    print('| ' + ' | '.join('---' for _ in cols) + ' |')
+    for row in rows:
+        print('| ' + ' | '.join(sanitize(row.get(c)) for c in cols) + ' |')
+    print(f'\\n({len(rows)} rows)')
+" <<< "$api_result"
+    return
+  fi
+
+  # Fallback: direct SQLite (no relation/formula resolution)
   local has_views
   has_views="$(sqlite3 "$DATA_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='_views';" 2>/dev/null)"
   [[ -n "$has_views" ]] || die "No views table found"

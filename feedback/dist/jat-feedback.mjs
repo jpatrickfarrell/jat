@@ -3663,8 +3663,7 @@ async function rl(e, t) {
 async function Pf(e) {
   try {
     const t = `${e.replace(/\/$/, "")}/api/feedback/reports`, n = await fetch(t, {
-      method: "GET",
-      credentials: "include"
+      method: "GET"
     });
     if (!n.ok) {
       const s = await n.json().catch(() => ({ error: `HTTP ${n.status}` }));
@@ -3681,7 +3680,6 @@ async function Of(e, t, n, r, s) {
     r && (i.reason = r), s != null && s.screenshots && s.screenshots.length > 0 && (i.screenshots = s.screenshots), s != null && s.elements && s.elements.length > 0 && (i.elements = s.elements);
     const a = await fetch(o, {
       method: "PATCH",
-      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(i)
     }), c = await a.json();
@@ -5846,7 +5844,7 @@ const Ev = {
 };
 function jl(e, t) {
   xn(t, !0), Fn(e, Ev);
-  const n = "1.6.3";
+  const n = "1.6.4";
   let r = V(t, "endpoint", 7), s = V(t, "project", 7), o = V(t, "isOpen", 7, !1), i = V(t, "userId", 7, ""), a = V(t, "userEmail", 7, ""), c = V(t, "userName", 7, ""), u = V(t, "userRole", 7, ""), f = V(t, "orgId", 7, ""), d = V(t, "orgName", 7, ""), v = V(t, "onclose", 7), h = V(t, "ongrip", 7), b = /* @__PURE__ */ D("new"), _ = /* @__PURE__ */ D(Le([])), p = /* @__PURE__ */ D(!1), m = /* @__PURE__ */ D(""), T = /* @__PURE__ */ Zt(() => l(_).filter((R) => R.status === "completed").length);
   async function k() {
     y(p, !0), y(m, "");

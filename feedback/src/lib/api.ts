@@ -50,7 +50,6 @@ export async function fetchReports(endpoint: string): Promise<{ reports: ReportS
     const url = `${endpoint.replace(/\/$/, '')}/api/feedback/reports`;
     const response = await fetch(url, {
       method: 'GET',
-      credentials: 'include',
     });
 
     if (!response.ok) {
@@ -81,7 +80,6 @@ export async function respondToReport(
 
     const res = await fetch(url, {
       method: 'PATCH',
-      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });

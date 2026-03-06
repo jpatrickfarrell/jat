@@ -274,6 +274,19 @@
       "source": "curated"
     },
     {
+      "id": "frontend-slides",
+      "name": "Frontend Slides",
+      "description": "Create stunning, animation-rich HTML presentations from scratch or by converting PowerPoint files. Helps non-designers discover their aesthetic through visual exploration rather than abstract choices.",
+      "author": "zarazhangrui",
+      "version": "1.0",
+      "repoUrl": "https://github.com/zarazhangrui/frontend-slides",
+      "skillMdUrl": "https://github.com/zarazhangrui/frontend-slides/blob/main/SKILL.md",
+      "tags": ["presentations", "slides", "html", "animation", "powerpoint"],
+      "installCount": 100,
+      "compatible": true,
+      "source": "curated"
+    },
+    {
       "id": "resend",
       "name": "Resend Email Router",
       "description": "Use when working with Resend email platform. Routes to specific sub-skills for sending, receiving, audiences, or broadcasts.",

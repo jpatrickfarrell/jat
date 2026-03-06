@@ -19,6 +19,7 @@
 	import { goto } from '$app/navigation';
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
+	import FxText from '$lib/components/FxText.svelte';
 	import ProjectSelector from '$lib/components/ProjectSelector.svelte';
 
 	// --- Types ---
@@ -1159,7 +1160,7 @@
 	>
 		<div class="flex items-center gap-1.5 min-w-0">
 			<div class="flex-none"><TaskIdBadge {task} size="xs" /></div>
-			<p class="text-xs font-medium truncate min-w-0" style="color: oklch(0.88 0.02 250);">{task.title}</p>
+			<p class="text-xs font-medium truncate min-w-0" style="color: oklch(0.88 0.02 250);"><FxText text={task.title} /></p>
 		</div>
 		{#if task.snippet || task.description}
 			<p class="text-[11px] mt-0.5 line-clamp-2" style="color: oklch(0.50 0.02 250);">
@@ -1247,7 +1248,7 @@
 			>
 				<div class="flex items-center gap-2 min-w-0">
 					<div class="flex-none"><TaskIdBadge {task} size="xs" /></div>
-					<p class="text-sm font-medium truncate min-w-0" style="color: oklch(0.88 0.02 250);">{task.title}</p>
+					<p class="text-sm font-medium truncate min-w-0" style="color: oklch(0.88 0.02 250);"><FxText text={task.title} /></p>
 				</div>
 				{#if task.snippet || task.description}
 					<p class="text-xs mt-1 line-clamp-2" style="color: oklch(0.55 0.02 250);">

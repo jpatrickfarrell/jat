@@ -18,6 +18,11 @@
 	import { getSessionStateVisual, type SessionState } from '$lib/config/statusColors';
 	import { getNotesUpdateSignal, clearNotesUpdateSignal } from '$lib/stores/taskNotesUpdate.svelte';
 	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
+	import FxText from '$lib/components/FxText.svelte';
+
+	function activeTaskCtx(t: AgentTask): Record<string, any> {
+		return { title: t.title, status: t.status, priority: t.priority, type: t.issue_type, labels: t.labels?.join(', '), created_at: t.created_at };
+	}
 
 	// Types
 	interface TmuxSession {
@@ -1088,11 +1093,11 @@
 											/>
 											<div class="text-column">
 												<span class="task-title {animateText ? 'tracking-in-expand' : ''}" style={animateText ? 'animation-delay: 100ms;' : ''} title={sessionTask.title}>
-													{sessionTask.title || sessionTask.id}
+													<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
 												</span>
 												{#if sessionTask.description}
 													<div class="task-description {animateText ? 'tracking-in-expand' : ''}" style={animateText ? 'animation-delay: 100ms;' : ''}>
-														{sessionTask.description}
+														<FxText text={sessionTask.description} context={activeTaskCtx(sessionTask)} />
 													</div>
 												{/if}
 											</div>

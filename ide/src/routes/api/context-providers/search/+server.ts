@@ -15,6 +15,7 @@ import { json } from '@sveltejs/kit';
 import { execFile } from 'child_process';
 import type { RequestHandler } from './$types';
 import { getProjectPath } from '$lib/server/projectPaths';
+import { FORMULA_CATALOG } from '$lib/config/formulaCatalog';
 
 interface ProviderResult {
 	value: string;
@@ -96,6 +97,20 @@ async function searchMemory(query: string, cwd: string): Promise<ProviderResult[
 	}
 }
 
+function searchFormulas(query: string): ProviderResult[] {
+	const q = query.toLowerCase();
+	const matches = q
+		? FORMULA_CATALOG.filter(e =>
+			e.name.includes(q) || e.category.toLowerCase().includes(q)
+		)
+		: FORMULA_CATALOG;
+	return matches.slice(0, 20).map(e => ({
+		value: e.name,
+		label: e.signature,
+		description: `${e.category} — ${e.description}`
+	}));
+}
+
 export const GET: RequestHandler = async ({ url }) => {
 	const provider = url.searchParams.get('provider') || '';
 	const query = url.searchParams.get('query') || '';
@@ -131,6 +146,9 @@ export const GET: RequestHandler = async ({ url }) => {
 		case 'url':
 			// No autocomplete for URLs
 			results = [];
+			break;
+		case 'fx':
+			results = searchFormulas(query);
 			break;
 		default:
 			return json({ error: `Unknown provider: ${provider}` }, { status: 400 });

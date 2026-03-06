@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { getProjectColor } from '$lib/utils/projectColors';
+	import FxText from '$lib/components/FxText.svelte';
 	import {
 		isStartDropdownOpen,
 		startDropdownOpenedViaKeyboard,
@@ -277,7 +278,7 @@
 							{#if task.priority !== undefined}
 								<span class="priority-badge priority-{task.priority}">P{task.priority}</span>
 							{/if}
-							<span class="dropdown-item-label task-title">{task.title}</span>
+							<span class="dropdown-item-label task-title"><FxText text={task.title} /></span>
 						</button>
 					{/each}
 				</div>
@@ -335,7 +336,7 @@
 							onclick={() => handleSwarmSelect(Math.min(epic.childCount || 4, idleSlots), epic.id)}
 						>
 							<span class="dropdown-icon">🎯</span>
-							<span class="dropdown-item-label task-title">{epic.title}</span>
+							<span class="dropdown-item-label task-title"><FxText text={epic.title} /></span>
 							{#if epic.childCount}
 								<span class="dropdown-hint">{epic.childCount} tasks</span>
 							{/if}

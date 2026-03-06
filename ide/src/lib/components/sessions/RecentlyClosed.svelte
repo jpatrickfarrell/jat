@@ -15,6 +15,11 @@
 	import { openTaskDetailDrawer } from '$lib/stores/drawerStore';
 	import { toLocalDateStr, formatDisplayDate, parseLocalDate } from '$lib/utils/completedTaskHelpers';
 	import { addToast } from '$lib/stores/toasts.svelte';
+	import FxText from '$lib/components/FxText.svelte';
+
+	function recentCtx(r: RecentSession): Record<string, any> {
+		return { title: r.taskTitle, priority: r.taskPriority, type: r.taskType, project: r.project, created_at: r.taskCreatedAt };
+	}
 
 	interface RecentSession {
 		sessionName: string;
@@ -234,7 +239,7 @@
 							</div>
 							<div class="recent-info">
 								{#if recent.taskTitle}
-									<span class="recent-task-title" title={recent.taskTitle}>{recent.taskTitle}</span>
+									<span class="recent-task-title" title={recent.taskTitle}><FxText text={recent.taskTitle || ''} context={recentCtx(recent)} /></span>
 								{/if}
 								{#if recent.agentName}
 									<span class="recent-meta">by {recent.agentName}</span>

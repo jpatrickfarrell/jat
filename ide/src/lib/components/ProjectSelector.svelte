@@ -10,6 +10,7 @@
 	 * Click +: opens task creation drawer for current project
 	 */
 	import { getProjectColor } from "$lib/utils/projectColors";
+	import FxText from '$lib/components/FxText.svelte';
 	import { SESSION_STATE_VISUALS } from "$lib/config/statusColors";
 	import {
 		isStartDropdownOpen,
@@ -310,7 +311,7 @@
 							{#if task.priority !== undefined}
 								<span class="priority-badge priority-{task.priority}">P{task.priority}</span>
 							{/if}
-							<span class="item-label task-title">{task.title}</span>
+							<span class="item-label task-title"><FxText text={task.title} /></span>
 						</button>
 					{/each}
 				</div>
@@ -356,7 +357,7 @@
 						disabled={idleSlots === 0}
 					>
 						<span class="epic-icon">&#127919;</span>
-						<span class="item-label task-title">{epic.title}</span>
+						<span class="item-label task-title"><FxText text={epic.title} /></span>
 						{#if epic.childCount}
 							<span class="dropdown-hint">{epic.childCount} tasks</span>
 						{/if}

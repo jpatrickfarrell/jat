@@ -18,6 +18,7 @@
 	import Sparkline from './Sparkline.svelte';
 	import TaskHistoryDrawer from './TaskHistoryDrawer.svelte';
 	import TaskDetailDrawer from './TaskDetailDrawer.svelte';
+	import FxText from '$lib/components/FxText.svelte';
 	import { SESSION_STATE_VISUALS } from '$lib/config/statusColors';
 	import { getProjectColor } from '$lib/utils/projectColors';
 
@@ -730,7 +731,7 @@
 								<div class="flex items-start justify-between gap-2 w-full">
 									<div class="flex-1 min-w-0 text-left">
 										<div class="text-xs font-mono truncate" style="color: oklch(0.85 0.02 250);">
-											{task.title || task.id}
+											<FxText text={task.title || task.id} context={{ title: task.title, status: task.status, priority: task.priority }} />
 										</div>
 										<div class="flex items-center gap-2 mt-0.5">
 											<span class="text-[10px] font-mono" style="color: {getProjectColor(task.id)};">

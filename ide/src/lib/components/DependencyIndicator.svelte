@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Task } from '$lib/stores/agents.svelte';
+	import FxText from '$lib/components/FxText.svelte';
 	import {
 		analyzeDependencies,
 		getDependencyBadge,
@@ -99,7 +100,7 @@
 										<div class="flex items-center gap-1">
 											<span class="badge badge-xs badge-error">P{blocker.priority}</span>
 											<span class="font-medium truncate text-base-content/90" title={blocker.title}>
-												{blocker.title}
+												<FxText text={blocker.title} />
 											</span>
 										</div>
 										<div
@@ -146,7 +147,7 @@
 										<div class="flex items-center gap-1">
 											<span class="badge badge-xs badge-warning">P{blocked.priority}</span>
 											<span class="font-medium truncate text-base-content/90" title={blocked.title}>
-												{blocked.title}
+												<FxText text={blocked.title} />
 											</span>
 										</div>
 										<div

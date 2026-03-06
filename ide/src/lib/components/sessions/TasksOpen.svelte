@@ -19,6 +19,11 @@
 	import { spawnInBatches, type SpawnResult } from '$lib/utils/spawnBatch';
 	import { formatShortDate, parseTimestamp } from '$lib/utils/dateFormatters';
 	import { getFileTypeInfoFromPath } from '$lib/utils/fileUtils';
+	import FxText from '$lib/components/FxText.svelte';
+
+	function taskCtx(t: Task): Record<string, any> {
+		return { title: t.title, status: t.status, priority: t.priority, type: t.issue_type, assignee: t.assignee, labels: t.labels?.join(', '), created_at: t.created_at, due_date: t.due_date };
+	}
 
 	interface AgentSelection {
 		agentId: string | null;
@@ -1397,7 +1402,7 @@
 										/>
 										<div class="text-column">
 											<span class="task-title {isNew ? 'tracking-in-expand' : ''}" style={isNew ? 'animation-delay: 100ms;' : ''} title={task.title}>
-												{task.title}
+												<FxText text={task.title} context={taskCtx(task)} />
 												{#if epicsReadyForVerification.has(task.id)}
 													<span style="display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 1px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em; background: oklch(0.55 0.15 200 / 0.25); color: oklch(0.80 0.15 200); border: 1px solid oklch(0.55 0.15 200 / 0.4); vertical-align: middle;" title="All children complete — epic ready for verification">
 														<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style="width: 10px; height: 10px;">
@@ -1410,7 +1415,7 @@
 											</span>
 											{#if task.description}
 												<div class="task-description {isNew ? 'tracking-in-expand' : ''}" style={isNew ? 'animation-delay: 100ms;' : ''}>
-													{task.description}
+													<FxText text={task.description} context={taskCtx(task)} />
 												</div>
 											{/if}
 										</div>

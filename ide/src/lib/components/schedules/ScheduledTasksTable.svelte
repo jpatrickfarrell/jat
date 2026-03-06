@@ -9,6 +9,7 @@
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 	import AgentSelector from '$lib/components/agents/AgentSelector.svelte';
 	import { describeCron, computeNextCronRuns } from '$lib/utils/cronUtils';
+	import FxText from '$lib/components/FxText.svelte';
 
 	interface ScheduledTask {
 		id: string;
@@ -288,7 +289,7 @@
 										onClick={() => onViewTask(task.id)}
 									/>
 									<button class="task-title-btn" onclick={() => onViewTask(task.id)}>
-										<span class="task-name">{task.title}</span>
+										<span class="task-name"><FxText text={task.title} context={{ title: task.title, status: task.status, priority: task.priority, type: task.issue_type, project: task.project }} /></span>
 									</button>
 								</div>
 							</td>

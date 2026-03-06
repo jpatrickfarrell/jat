@@ -2226,6 +2226,7 @@
 								disabled={isSaving}
 								class="text-2xl font-bold flex-1 min-w-0"
 								truncate={true}
+								formulaContext={{ title: task.title, status: task.status, priority: task.priority, type: task.type, assignee: task.assignee, labels: task.labels?.join(', '), project: task.project, created_at: task.created_at, updated_at: task.updated_at, due_date: task.due_date }}
 							/>
 							<!-- Pencil icon hint (shows on hover) -->
 							<svg
@@ -2826,6 +2827,7 @@
 								disabled={isSaving}
 								rows={4}
 								class="text-sm"
+								formulaContext={{ title: task.title, status: task.status, priority: task.priority, type: task.type, assignee: task.assignee, labels: task.labels?.join(', '), project: task.project, created_at: task.created_at, updated_at: task.updated_at, due_date: task.due_date }}
 							/>
 						</div>
 

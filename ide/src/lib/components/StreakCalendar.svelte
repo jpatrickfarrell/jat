@@ -14,6 +14,8 @@
 		closed_at?: string;
 	}
 
+	import FxText from '$lib/components/FxText.svelte';
+
 	interface Props {
 		tasks: CompletedTask[];
 		weeks?: number;
@@ -230,7 +232,7 @@
 		{#if hoveredDay.tasks.length > 0}
 			<div class="tooltip-tasks">
 				{#each hoveredDay.tasks.slice(0, 3) as task}
-					<div class="tooltip-task" title={task.title}>{task.title}</div>
+					<div class="tooltip-task" title={task.title}><FxText text={task.title} /></div>
 				{/each}
 				{#if hoveredDay.tasks.length > 3}
 					<div class="tooltip-more">+{hoveredDay.tasks.length - 3} more</div>

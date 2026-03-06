@@ -11,7 +11,10 @@
 	 * - Hover state to indicate editability
 	 * - Auto-focus when editing starts
 	 * - Disabled state during saves
+	 * - Formula-aware display: @fx:expression renders as evaluated value
 	 */
+
+	import { parseFx, hasFx } from '$lib/utils/formulaDisplay';
 
 	interface Props {
 		/** Current value */
@@ -32,6 +35,8 @@
 		showButtons?: boolean;
 		/** Truncate long text with ellipsis (shows full text on hover) */
 		truncate?: boolean;
+		/** Row context for evaluating @fx: formulas */
+		formulaContext?: Record<string, any>;
 	}
 
 	let {
@@ -43,8 +48,13 @@
 		class: className = '',
 		rows = 3,
 		showButtons = false,
-		truncate = false
+		truncate = false,
+		formulaContext = {}
 	}: Props = $props();
+
+	// --- Formula rendering ---
+	let hasFormulas = $derived(hasFx(value));
+	let displaySegments = $derived(hasFormulas ? parseFx(value, formulaContext) : []);
 
 	// Internal state
 	let isEditing = $state(false);
@@ -215,7 +225,17 @@
 		title={truncate && value ? value : undefined}
 	>
 		{#if value}
-			{#if type === 'textarea'}
+			{#if hasFormulas}
+				<span class={type === 'textarea' ? 'whitespace-pre-wrap' : (truncate ? 'truncate-text' : '')}>
+					{#each displaySegments as seg}
+						{#if seg.type === 'formula'}
+							<span class="inline-fx-result" title={seg.tooltip}>{seg.display}</span>
+						{:else}
+							{seg.display}
+						{/if}
+					{/each}
+				</span>
+			{:else if type === 'textarea'}
 				<span class="whitespace-pre-wrap">{value}</span>
 			{:else}
 				<span class={truncate ? 'truncate-text' : ''}>{value}</span>
@@ -249,5 +269,17 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		max-width: 100%;
+	}
+
+	.inline-fx-result {
+		display: inline;
+		padding: 0 4px;
+		border-radius: 3px;
+		background: oklch(0.25 0.06 80 / 0.4);
+		border: 1px solid oklch(0.35 0.08 80 / 0.3);
+		color: oklch(0.82 0.10 80);
+		font-family: 'JetBrains Mono', ui-monospace, monospace;
+		font-size: 0.85em;
+		cursor: help;
 	}
 </style>

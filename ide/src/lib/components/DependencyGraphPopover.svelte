@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { getProjectColor as getProjectColorFromHash } from '$lib/utils/projectColors';
 	import { TASK_STATUS_VISUALS } from '$lib/config/statusColors';
+	import FxText from '$lib/components/FxText.svelte';
 
 	interface DepNode {
 		id: string;
@@ -102,7 +103,7 @@
 										<circle cx="12" cy="12" r="10" />
 									</svg>
 								</div>
-								<p class="text-xs text-base-content/70 truncate mt-0.5">{dep.title}</p>
+								<p class="text-xs text-base-content/70 truncate mt-0.5"><FxText text={dep.title} /></p>
 							</div>
 							<svg class="w-3.5 h-3.5 text-base-content/30 group-hover:text-base-content/60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
@@ -153,7 +154,7 @@
 										<circle cx="12" cy="12" r="10" />
 									</svg>
 								</div>
-								<p class="text-xs text-base-content/70 truncate mt-0.5">{dep.title}</p>
+								<p class="text-xs text-base-content/70 truncate mt-0.5"><FxText text={dep.title} /></p>
 							</div>
 							<svg class="w-3.5 h-3.5 text-base-content/30 group-hover:text-base-content/60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />

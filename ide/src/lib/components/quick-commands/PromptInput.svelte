@@ -3,9 +3,12 @@
 	 * PromptInput - Reusable @ reference chip + autocomplete input
 	 *
 	 * Provides a contenteditable input with inline chips for @file, @task:,
-	 * @git:, @memory:, and @url: context references. Used by the main command
-	 * input and pipeline step editors.
+	 * @git:, @memory:, @url:, and @fx: context references. Used by the main
+	 * command input and pipeline step editors.
 	 */
+
+	import { FORMULA_CATALOG_MAP } from '$lib/config/formulaCatalog';
+	import { evaluateFormula } from '$lib/utils/formulaEval';
 
 	// --- Types ---
 	interface FileResult {
@@ -47,6 +50,7 @@
 		onfocus,
 		onblur,
 		onkeydown: externalKeydown,
+		formulaContext = {},
 	}: {
 		value: string;
 		references?: Reference[];
@@ -59,6 +63,7 @@
 		onfocus?: (e: FocusEvent) => void;
 		onblur?: (e: FocusEvent) => void;
 		onkeydown?: (e: KeyboardEvent) => void;
+		formulaContext?: Record<string, any>;
 	} = $props();
 
 	// --- Constants ---
@@ -67,7 +72,8 @@
 		{ prefix: 'task:', label: 'Task', icon: '📋', description: 'Inject task details by ID' },
 		{ prefix: 'git:', label: 'Git', icon: '🔀', description: 'Inject git diff, log, or branch info' },
 		{ prefix: 'memory:', label: 'Memory', icon: '🧠', description: 'Search project memory for context' },
-		{ prefix: 'url:', label: 'URL', icon: '🔗', description: 'Fetch and inject URL content' }
+		{ prefix: 'url:', label: 'URL', icon: '🔗', description: 'Fetch and inject URL content' },
+		{ prefix: 'fx:', label: 'Formula', icon: 'ƒx', description: 'Insert a formula expression' }
 	];
 
 	// --- State ---
@@ -139,6 +145,12 @@
 
 	// --- Detection ---
 	function detectAutocompleteMode(beforeCursor: string): { mode: AutocompleteMode; provider: string | null; query: string } | null {
+		// fx: only trigger autocomplete for function name part (before opening paren)
+		const fxMatch = beforeCursor.match(/@fx:(\w*)$/);
+		if (fxMatch) {
+			return { mode: 'provider-search', provider: 'fx', query: fxMatch[1] };
+		}
+
 		const providerMatch = beforeCursor.match(/@(task|git|memory|url):([\w\-\.\/:%?&#=+~]*)$/);
 		if (providerMatch) {
 			return { mode: 'provider-search', provider: providerMatch[1], query: providerMatch[2] };
@@ -234,6 +246,37 @@
 	}
 
 	function handleTextareaKeydown(e: KeyboardEvent) {
+		// Auto-create chip for @fx: when Tab/Enter pressed with balanced expression
+		if (!showFileAutocomplete && (e.key === 'Tab' || e.key === 'Enter')) {
+			if (textareaRef) {
+				const sel = window.getSelection();
+				if (sel && sel.rangeCount > 0) {
+					const range = sel.getRangeAt(0);
+					let tn: Node = range.startContainer;
+					let cp = range.startOffset;
+					if (tn.nodeType !== Node.TEXT_NODE) {
+						const children = Array.from(tn.childNodes);
+						const prev = children[cp - 1];
+						if (prev && prev.nodeType === Node.TEXT_NODE) {
+							tn = prev;
+							cp = (prev.textContent || '').length;
+						}
+					}
+					if (tn.nodeType === Node.TEXT_NODE) {
+						const txt = tn.textContent || '';
+						const before = txt.slice(0, cp);
+						const fxExpr = before.match(/@fx:(.+)$/);
+						if (fxExpr && fxExpr[1].includes('(') && hasBalancedParens(fxExpr[1])) {
+							e.preventDefault();
+							createFxChip(tn, cp, fxExpr);
+							externalKeydown?.(e);
+							return;
+						}
+					}
+				}
+			}
+		}
+
 		// Auto-create chip for @url: when user presses Space, Tab, or Enter
 		if (activeProvider === 'url' && (e.key === ' ' || e.key === 'Tab' || e.key === 'Enter')) {
 			if (textareaRef) {
@@ -401,6 +444,12 @@
 
 	// --- Provider Result Selection ---
 	function selectProviderResult(result: ProviderResult) {
+		// fx: insert function template as text (not chip) so user can type arguments
+		if (activeProvider === 'fx') {
+			insertFxTemplate(result);
+			return;
+		}
+
 		const fullRef = `@${activeProvider}:${result.value}`;
 
 		if (!textareaRef) return;
@@ -438,9 +487,9 @@
 		const chip = document.createElement('span');
 		chip.contentEditable = 'false';
 		chip.dataset.providerRef = fullRef;
-		chip.className = 'inline-provider-chip';
+		chip.className = activeProvider === 'fx' ? 'inline-formula-chip' : 'inline-provider-chip';
 
-		const providerIcons: Record<string, string> = { task: '📋', git: '🔀', memory: '🧠', url: '🔗' };
+		const providerIcons: Record<string, string> = { task: '📋', git: '🔀', memory: '🧠', url: '🔗', fx: 'ƒx' };
 		const icon = providerIcons[activeProvider || ''] || '📎';
 		chip.textContent = `${icon} ${fullRef.slice(1)}`;
 
@@ -579,6 +628,155 @@
 		value = getPromptText(textareaRef);
 		lastSyncedValue = value;
 		onchange?.(value);
+	}
+
+	// --- Formula Helpers ---
+	function evalFxExpression(expr: string): { value: string; error: boolean } {
+		try {
+			const result = evaluateFormula(expr, formulaContext);
+			if (result === null || result === undefined) return { value: expr, error: true };
+			return { value: String(result), error: false };
+		} catch {
+			return { value: expr, error: true };
+		}
+	}
+
+	function makeFxChipEl(fullExpr: string, fullRef: string): HTMLSpanElement {
+		const { value, error } = evalFxExpression(fullExpr);
+		const chip = document.createElement('span');
+		chip.contentEditable = 'false';
+		chip.dataset.providerRef = fullRef;
+		chip.dataset.fxExpr = fullExpr;
+		chip.className = 'inline-formula-chip';
+		chip.title = `ƒx ${fullExpr}`;
+		if (error) {
+			// Can't evaluate — show formula text
+			chip.textContent = `ƒx ${fullExpr}`;
+		} else {
+			chip.textContent = `ƒx ${value}`;
+		}
+		// Click to edit: replace chip with editable text
+		chip.addEventListener('click', () => {
+			if (disabled) return;
+			const parent = chip.parentNode;
+			if (!parent) return;
+			const textNode = document.createTextNode(fullRef);
+			parent.replaceChild(textNode, chip);
+			// Place cursor at end of the inserted text
+			const sel = window.getSelection();
+			if (sel) {
+				const range = document.createRange();
+				range.setStart(textNode, textNode.length);
+				range.collapse(true);
+				sel.removeAllRanges();
+				sel.addRange(range);
+			}
+			textareaRef?.focus();
+			syncCommandPrompt();
+		});
+		return chip;
+	}
+
+	function hasBalancedParens(text: string): boolean {
+		let depth = 0;
+		let inString = false;
+		let stringChar = '';
+		for (const ch of text) {
+			if (inString) {
+				if (ch === stringChar) inString = false;
+				continue;
+			}
+			if (ch === '"' || ch === "'") {
+				inString = true;
+				stringChar = ch;
+				continue;
+			}
+			if (ch === '(') depth++;
+			if (ch === ')') depth--;
+			if (depth < 0) return false;
+		}
+		return depth === 0;
+	}
+
+	function insertFxTemplate(result: ProviderResult) {
+		if (!textareaRef) return;
+		const sel = window.getSelection();
+		if (!sel || sel.rangeCount === 0) return;
+
+		const range = sel.getRangeAt(0);
+		let textNode: Node = range.startContainer;
+		let cursorPos = range.startOffset;
+
+		if (textNode.nodeType !== Node.TEXT_NODE) {
+			const children = Array.from(textNode.childNodes);
+			const prev = children[cursorPos - 1];
+			if (prev && prev.nodeType === Node.TEXT_NODE) {
+				textNode = prev;
+				cursorPos = (prev.textContent || '').length;
+			} else return;
+		}
+
+		const text = textNode.textContent || '';
+		const beforeCursor = text.slice(0, cursorPos);
+		const atMatch = beforeCursor.match(/@fx:\w*$/);
+		if (!atMatch) return;
+
+		const entry = FORMULA_CATALOG_MAP.get(result.value.toLowerCase());
+		const insertText = entry ? entry.insertText : result.value + '(';
+
+		const atPos = cursorPos - atMatch[0].length;
+		const newText = text.slice(0, atPos) + '@fx:' + insertText + text.slice(cursorPos);
+		textNode.textContent = newText;
+
+		const newCursorPos = atPos + '@fx:'.length + insertText.length;
+		const newRange = document.createRange();
+		newRange.setStart(textNode, newCursorPos);
+		newRange.collapse(true);
+		sel.removeAllRanges();
+		sel.addRange(newRange);
+
+		showFileAutocomplete = false;
+		providerSearchResults = [];
+		autocompleteMode = 'file';
+		activeProvider = null;
+		syncCommandPrompt();
+	}
+
+	function createFxChip(textNode: Node, cursorPos: number, fxMatch: RegExpMatchArray) {
+		const text = textNode.textContent || '';
+		const fullExpr = fxMatch[1];
+		const fullRef = `@fx:${fullExpr}`;
+
+		const atPos = cursorPos - fxMatch[0].length;
+		const beforeText = text.slice(0, atPos);
+		const afterText = text.slice(cursorPos);
+
+		const parent = textNode.parentNode!;
+
+		if (beforeText) {
+			parent.insertBefore(document.createTextNode(beforeText), textNode);
+		}
+
+		const chip = makeFxChipEl(fullExpr, fullRef);
+
+		parent.insertBefore(chip, textNode);
+
+		const afterNode = document.createTextNode('\u00A0' + afterText);
+		parent.insertBefore(afterNode, textNode);
+		parent.removeChild(textNode);
+
+		const sel = window.getSelection()!;
+		const newRange = document.createRange();
+		newRange.setStart(afterNode, 1);
+		newRange.collapse(true);
+		sel.removeAllRanges();
+		sel.addRange(newRange);
+
+		syncCommandPrompt();
+		showFileAutocomplete = false;
+		providerSearchResults = [];
+		autocompleteMode = 'file';
+		activeProvider = null;
 	}
 
 	function handlePaste(e: ClipboardEvent) {
@@ -828,6 +1026,30 @@
 	:global(.inline-provider-chip:hover) {
 		background: oklch(0.28 0.07 145 / 0.5);
 		border-color: oklch(0.40 0.10 145 / 0.5);
+	}
+
+	:global(.inline-formula-chip) {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		padding: 1px 7px 1px 5px;
+		margin: 0 2px;
+		border-radius: 4px;
+		background: oklch(0.25 0.06 80 / 0.4);
+		border: 1px solid oklch(0.35 0.08 80 / 0.4);
+		color: oklch(0.80 0.10 80);
+		font-family: 'JetBrains Mono', ui-monospace, monospace;
+		font-size: 0.75rem;
+		line-height: 1.4;
+		vertical-align: baseline;
+		user-select: none;
+		cursor: pointer;
+		white-space: nowrap;
+	}
+
+	:global(.inline-formula-chip:hover) {
+		background: oklch(0.28 0.07 80 / 0.5);
+		border-color: oklch(0.40 0.10 80 / 0.5);
 	}
 
 	:global([contenteditable='true']:focus) {

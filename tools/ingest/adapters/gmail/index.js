@@ -93,7 +93,7 @@ export default class GmailAdapter extends BaseAdapter {
   }
 
   _createClient(source, secret) {
-    return new ImapFlow({
+    const client = new ImapFlow({
       host: 'imap.gmail.com',
       port: 993,
       secure: true,
@@ -103,6 +103,11 @@ export default class GmailAdapter extends BaseAdapter {
       },
       logger: false
     });
+    // Prevent unhandled 'error' events from crashing the process
+    client.on('error', (err) => {
+      logger.error(`IMAP error: ${err.message}`, source.id);
+    });
+    return client;
   }
 
   async poll(source, adapterState, getSecret) {

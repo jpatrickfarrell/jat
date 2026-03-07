@@ -66,14 +66,22 @@ if [[ -d ~/.claude/commands/jat ]]; then
         warn "$CMD_COUNT commands installed ($BROKEN broken symlinks)"
         echo "    Broken symlinks:"
         find ~/.claude/commands/jat -type l ! -exec test -e {} \; -print 2>/dev/null | while read f; do
-            echo "      - $(basename "$f")"
+            echo "      - $(basename "$f") → $(readlink "$f")"
         done
-        echo "    Fix: rm ~/.claude/commands/jat/*.md && ./install.sh (from JAT dir)"
+        if [[ -n "$JAT_DIR" ]]; then
+            echo "    Fix: bash $JAT_DIR/tools/scripts/setup-global-claude-md.sh"
+        else
+            echo "    Fix: jat update  (or ./install.sh from JAT dir)"
+        fi
     else
         pass "$CMD_COUNT agent commands installed"
     fi
 else
-    fail "Agent commands not installed - run: ./install.sh (from JAT dir)"
+    if [[ -n "$JAT_DIR" ]]; then
+        fail "Agent commands not installed - run: bash $JAT_DIR/tools/scripts/setup-global-claude-md.sh"
+    else
+        fail "Agent commands not installed - run: jat update  (or ./install.sh from JAT dir)"
+    fi
 fi
 
 # 5. Check core tools

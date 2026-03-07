@@ -443,6 +443,12 @@ do_update() {
         bash "$JAT_SOURCE_DIR/tools/scripts/symlink-tools.sh" &>/dev/null || true
     fi
 
+    # Refresh Claude Code commands (~/.claude/commands/jat/)
+    echo -e "${DIM}Refreshing Claude Code commands...${NC}"
+    if [[ -f "$JAT_SOURCE_DIR/tools/scripts/setup-global-claude-md.sh" ]]; then
+        bash "$JAT_SOURCE_DIR/tools/scripts/setup-global-claude-md.sh" &>/dev/null || true
+    fi
+
     # Refresh IDE npm dependencies if package.json changed
     local ide_path="$JAT_SOURCE_DIR/ide"
     if [[ -d "$ide_path/node_modules" ]]; then

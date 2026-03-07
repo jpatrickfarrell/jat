@@ -27,7 +27,7 @@ fi
 # Symlink Agent Mail tools
 echo "  → Symlinking Agent Mail tools to ~/.local/bin..."
 TOOLS_INSTALLED=0
-for tool in "$SCRIPT_DIR/mail"/am-*; do
+for tool in "$SCRIPT_DIR/agents"/am-*; do
     if [ -f "$tool" ] && [ -x "$tool" ]; then
         tool_name=$(basename "$tool")
         # Skip .sh files except am-lib.sh (required by all tools)
@@ -46,8 +46,8 @@ echo -e "${GREEN}  ✓ Installed $TOOLS_INSTALLED Agent Mail tools${NC}"
 
 # Initialize database
 if [ ! -f "$AGENT_MAIL_DB" ]; then
-    if [ -f "$SCRIPT_DIR/mail/schema.sql" ]; then
-        sqlite3 "$AGENT_MAIL_DB" < "$SCRIPT_DIR/mail/schema.sql"
+    if [ -f "$SCRIPT_DIR/agents/schema.sql" ]; then
+        sqlite3 "$AGENT_MAIL_DB" < "$SCRIPT_DIR/agents/schema.sql"
         echo -e "${GREEN}  ✓ Created database: $AGENT_MAIL_DB${NC}"
     fi
 else

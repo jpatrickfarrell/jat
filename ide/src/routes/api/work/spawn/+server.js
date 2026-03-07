@@ -198,6 +198,44 @@ function generateUniqueName(existingNames, maxAttempts = 100) {
 }
 
 /**
+ * Ensure the Agent Mail database has required tables.
+ * Handles fresh installs where the schema wasn't initialized.
+ * @param {import('better-sqlite3').Database} db
+ */
+function ensureAgentMailSchema(db) {
+	const hasProjects = db.prepare(
+		"SELECT name FROM sqlite_master WHERE type='table' AND name='projects'"
+	).get();
+	if (!hasProjects) {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS projects (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				slug TEXT NOT NULL UNIQUE,
+				human_key TEXT NOT NULL,
+				created_at TEXT NOT NULL DEFAULT (datetime('now'))
+			);
+			CREATE INDEX IF NOT EXISTS idx_projects_slug ON projects(slug);
+			CREATE INDEX IF NOT EXISTS idx_projects_human_key ON projects(human_key);
+			CREATE TABLE IF NOT EXISTS agents (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				project_id INTEGER NOT NULL,
+				name TEXT NOT NULL,
+				program TEXT NOT NULL,
+				model TEXT NOT NULL,
+				task_description TEXT DEFAULT '',
+				inception_ts TEXT NOT NULL DEFAULT (datetime('now')),
+				last_active_ts TEXT NOT NULL DEFAULT (datetime('now')),
+				FOREIGN KEY (project_id) REFERENCES projects(id),
+				UNIQUE (project_id, name)
+			);
+			CREATE INDEX IF NOT EXISTS idx_agents_project_id ON agents(project_id);
+			CREATE INDEX IF NOT EXISTS idx_agents_name ON agents(name);
+			CREATE INDEX IF NOT EXISTS idx_agents_last_active ON agents(last_active_ts);
+		`);
+	}
+}
+
+/**
  * Get or create project in Agent Mail database
  * @param {import('better-sqlite3').Database} db - Database connection
  * @param {string} projectPath - Full project path
@@ -236,6 +274,7 @@ function registerAgentInDb(agentName, projectPath, model, program = 'claude-code
 		const db = new Database(DB_PATH);
 
 		try {
+			ensureAgentMailSchema(db);
 			const projectId = getOrCreateProject(db, projectPath);
 
 			// Check if agent already exists for this project

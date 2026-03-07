@@ -230,8 +230,9 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    // Always stop propagation to prevent host-app shortcuts from firing
+    e.stopPropagation();
     if (e.key === 'Escape' && drawState !== 'typing') {
-      e.stopPropagation();
       handleCancel();
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
@@ -260,7 +261,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="annotation-backdrop" onkeydown={handleKeydown}>
+<div class="annotation-backdrop" onkeydown={handleKeydown} onkeyup={(e) => e.stopPropagation()} onkeypress={(e) => e.stopPropagation()}>
   <div class="annotation-toolbar">
     <div class="tool-group">
       {#each tools as t}

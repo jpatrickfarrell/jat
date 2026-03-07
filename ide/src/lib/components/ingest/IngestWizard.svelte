@@ -147,6 +147,38 @@
 	let testResult = $state<{ success: boolean; info?: any; error?: string } | null>(null);
 	let testingConnection = $state(false);
 
+	// Secret selection mode for new integrations: pick existing or create new
+	let secretMode = $state<'select' | 'create'>('create');
+	let existingSecrets = $state<Array<{ name: string; masked: string; source: 'provider' | 'custom' }>>([]);
+	let loadingSecrets = $state(false);
+
+	const isEditing = $derived(editSource != null);
+
+	async function fetchExistingSecrets() {
+		loadingSecrets = true;
+		const secrets: Array<{ name: string; masked: string; source: 'provider' | 'custom' }> = [];
+		try {
+			const [provRes, customRes] = await Promise.all([
+				fetch('/api/config/credentials'),
+				fetch('/api/config/credentials/custom')
+			]);
+			const provData = await provRes.json();
+			const customData = await customRes.json();
+			if (provData.success && provData.credentials?.apiKeys) {
+				for (const [name, info] of Object.entries(provData.credentials.apiKeys) as any) {
+					if (info?.isSet) secrets.push({ name, masked: info.masked, source: 'provider' });
+				}
+			}
+			if (customData.success && customData.customKeys) {
+				for (const [name, info] of Object.entries(customData.customKeys) as any) {
+					if (info?.isSet) secrets.push({ name, masked: info.masked, source: 'custom' });
+				}
+			}
+		} catch { /* ignore */ }
+		existingSecrets = secrets;
+		loadingSecrets = false;
+	}
+
 	// Derive projects list
 	const projects = $derived(getProjects());
 	const projectNames = $derived(projects.map(p => p.name?.toLowerCase() || p.path?.split('/').pop() || '').filter(Boolean));
@@ -245,6 +277,13 @@
 		}
 	});
 
+	// Fetch existing secrets when opening token step for new integrations
+	$effect(() => {
+		if (open && step === 0 && !isEditing && (sourceType === 'slack' || sourceType === 'telegram' || sourceType === 'gmail')) {
+			fetchExistingSecrets();
+		}
+	});
+
 	// Check secrets for plugin-type secret fields when wizard opens
 	$effect(() => {
 		if (open && isPluginType && pluginMetadata?.configFields) {
@@ -286,7 +325,7 @@
 			// This avoids reading the reactive proxies (e.g. pluginSecretStatus[key] = ...)
 			// which would register them as dependencies and cause infinite re-triggering.
 			const newPluginFields: Record<string, any> = {};
-			const newPluginSecretStatus: Record<string, string> = {};
+			const newPluginSecretStatus: Record<string, 'checking' | 'found' | 'missing' | 'saving' | 'error'> = {};
 
 			// Reset filter conditions (initialize from defaultFilter if available)
 			filterConditions = pluginMetadata?.defaultFilter ? [...pluginMetadata.defaultFilter] : [];
@@ -351,6 +390,8 @@
 		detectingChannels = false;
 		detectedChannels = [];
 		channelDetectionError = '';
+		secretMode = 'create';
+		existingSecrets = [];
 		gmailSecretName = 'gmail-app-password';
 		gmailImapUser = '';
 		gmailFolder = '';
@@ -1773,10 +1814,10 @@
 													<p class="font-mono text-[11px]" style="color: oklch(0.75 0.10 145);">
 														{testResult.info?.message || 'Connection successful'}
 													</p>
-													{#if testResult.sampleItems?.length}
+													{#if testResult.info?.sampleItems?.length}
 														<div class="mt-2 space-y-1">
 															<p class="font-mono text-[10px]" style="color: oklch(0.55 0.02 250);">Sample items:</p>
-															{#each testResult.sampleItems.slice(0, 3) as item}
+															{#each testResult.info?.sampleItems.slice(0, 3) as item}
 																<p class="font-mono text-[10px] truncate" style="color: oklch(0.65 0.02 250);">
 																	{item.title}
 																</p>
@@ -1873,201 +1914,157 @@
 
 <!-- Token step snippet (shared by Slack, Telegram, and Gmail) -->
 {#snippet tokenStep(type: 'slack' | 'telegram' | 'gmail', secretName: string)}
-	<div>
-		<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Secret Name</label>
-		{#if type === 'slack'}
-			<input
-				type="text"
-				class="input input-bordered w-full font-mono text-sm"
-				placeholder="slack"
-				bind:value={slackSecretName}
-				oninput={handleSecretNameChange}
-				autofocus
-			/>
-		{:else if type === 'gmail'}
-			<input
-				type="text"
-				class="input input-bordered w-full font-mono text-sm"
-				placeholder="gmail-app-password"
-				bind:value={gmailSecretName}
-				oninput={handleSecretNameChange}
-				autofocus
-			/>
-		{:else}
-			<input
-				type="text"
-				class="input input-bordered w-full font-mono text-sm"
-				placeholder="telegram-bot"
-				bind:value={telegramSecretName}
-				oninput={handleSecretNameChange}
-				autofocus
-			/>
-		{/if}
-		<p class="font-mono text-[10px] mt-1.5" style="color: oklch(0.45 0.02 250);">
-			Name used in <code>jat-secret</code> to retrieve the {type === 'gmail' ? 'App Password' : 'token'}
-		</p>
-	</div>
-
-	<!-- Secret status -->
-	{#if secretStatus === 'checking'}
-		<div
-			class="flex items-center gap-2 px-3 py-2.5 rounded-lg"
-			style="background: oklch(0.20 0.02 250 / 0.5); border: 1px solid oklch(0.28 0.02 250);"
-		>
-			<span class="loading loading-spinner loading-xs" style="color: oklch(0.55 0.02 250);"></span>
-			<span class="font-mono text-[11px]" style="color: oklch(0.55 0.02 250);">Checking for token...</span>
-		</div>
-	{:else if secretStatus === 'found' && !showTokenInput}
-		<!-- Token found -->
-		<div
-			class="px-3 py-2.5 rounded-lg"
-			style="background: oklch(0.20 0.06 145 / 0.3); border: 1px solid oklch(0.35 0.10 145);"
-		>
-			<div class="flex items-center justify-between">
-				<div class="flex items-center gap-2">
-					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5" style="color: oklch(0.70 0.18 145);">
-						<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
-					</svg>
-					<span class="font-mono text-[11px]" style="color: oklch(0.75 0.12 145);">
-						Token found: <code style="color: oklch(0.65 0.02 250);">{secretMasked}</code>
-					</span>
-				</div>
-				<button
-					class="font-mono text-[10px] px-2 py-0.5 rounded"
-					style="color: oklch(0.60 0.02 250); background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);"
-					onclick={() => { showTokenInput = true; }}
-				>
-					Change
-				</button>
-			</div>
+	{#if isEditing}
+		<!-- EDITING: show current secret name (read-only) with option to change token -->
+		<div>
+			<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Secret Name</label>
+			<div
+				class="px-3 py-2 rounded-lg font-mono text-sm"
+				style="background: oklch(0.18 0.02 250); border: 1px solid oklch(0.28 0.02 250); color: oklch(0.70 0.02 250);"
+			>{secretName}</div>
+			<p class="font-mono text-[10px] mt-1.5" style="color: oklch(0.45 0.02 250);">
+				Secret name cannot be changed after creation
+			</p>
 		</div>
 
-		<!-- Test connection button and result -->
-		<div class="space-y-2">
+		{@render tokenStatus(type, secretName)}
+	{:else}
+		<!-- NEW INTEGRATION: choose existing secret or create new -->
+		<div class="flex gap-1 p-0.5 rounded-lg" style="background: oklch(0.16 0.02 250); border: 1px solid oklch(0.25 0.02 250);">
 			<button
-				class="font-mono text-[11px] px-3 py-1.5 rounded-lg flex items-center gap-2"
-				style="background: oklch(0.22 0.04 220); color: oklch(0.75 0.10 220); border: 1px solid oklch(0.32 0.06 220);"
-				onclick={() => testConnection(type, secretName)}
-				disabled={testingConnection}
+				class="flex-1 font-mono text-[11px] px-3 py-1.5 rounded-md transition-all duration-100"
+				style="
+					background: {secretMode === 'select' ? 'oklch(0.25 0.06 220)' : 'transparent'};
+					color: {secretMode === 'select' ? 'oklch(0.85 0.10 220)' : 'oklch(0.50 0.02 250)'};
+					border: 1px solid {secretMode === 'select' ? 'oklch(0.35 0.08 220)' : 'transparent'};
+				"
+				onclick={() => { secretMode = 'select'; secretStatus = 'checking'; testResult = null; tokenInput = ''; showTokenInput = false; }}
 			>
-				{#if testingConnection}
-					<span class="loading loading-spinner loading-xs"></span>
-					Testing...
-				{:else}
-					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5">
-						<path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H4.28a.75.75 0 00-.75.75v3.955a.75.75 0 001.5 0v-2.134l.235.234a7 7 0 0011.712-3.138.75.75 0 00-1.449-.388zm1.7-5.69a.75.75 0 00-.987-.565 7 7 0 00-11.712 3.138.75.75 0 001.449.388 5.5 5.5 0 019.2-2.466l.313.311h-2.433a.75.75 0 000 1.5H15.8a.75.75 0 00.75-.75V3.778a.75.75 0 00-.538-.044z" clip-rule="evenodd" />
-					</svg>
-					Test Connection
-				{/if}
+				Use Existing
 			</button>
+			<button
+				class="flex-1 font-mono text-[11px] px-3 py-1.5 rounded-md transition-all duration-100"
+				style="
+					background: {secretMode === 'create' ? 'oklch(0.25 0.06 145)' : 'transparent'};
+					color: {secretMode === 'create' ? 'oklch(0.85 0.10 145)' : 'oklch(0.50 0.02 250)'};
+					border: 1px solid {secretMode === 'create' ? 'oklch(0.35 0.08 145)' : 'transparent'};
+				"
+				onclick={() => { secretMode = 'create'; secretStatus = 'checking'; testResult = null; }}
+			>
+				Create New
+			</button>
+		</div>
 
-			{#if testResult}
-				{#if testResult.success}
-					<div
-						class="px-3 py-2 rounded-lg"
-						style="background: oklch(0.20 0.06 145 / 0.2); border: 1px solid oklch(0.30 0.08 145);"
-					>
-						{#if type === 'slack'}
-							<p class="font-mono text-[11px]" style="color: oklch(0.75 0.10 145);">
-								Connected to workspace <strong style="color: oklch(0.85 0.02 250);">"{testResult.info.workspace}"</strong>
-							</p>
-							<p class="font-mono text-[10px] mt-0.5" style="color: oklch(0.60 0.06 145);">
-								Bot: @{testResult.info.botName}
-							</p>
-						{:else if type === 'gmail'}
-							<p class="font-mono text-[11px]" style="color: oklch(0.75 0.10 145);">
-								Connected to <strong style="color: oklch(0.85 0.02 250);">{testResult.info.email}</strong>
-							</p>
-							<p class="font-mono text-[10px] mt-0.5" style="color: oklch(0.60 0.06 145);">
-								Folder: {testResult.info.folder} ({testResult.info.messageCount} messages)
-							</p>
-						{:else}
-							<p class="font-mono text-[11px]" style="color: oklch(0.75 0.10 145);">
-								Connected to bot <strong style="color: oklch(0.85 0.02 250);">"{testResult.info.botName}"</strong>
-							</p>
-							<p class="font-mono text-[10px] mt-0.5" style="color: oklch(0.60 0.06 145);">
-								@{testResult.info.botUsername}
-							</p>
-						{/if}
+		{#if secretMode === 'select'}
+			<!-- Select from existing secrets -->
+			<div class="space-y-3">
+				{#if loadingSecrets}
+					<div class="flex items-center gap-2 px-3 py-2.5 rounded-lg" style="background: oklch(0.20 0.02 250 / 0.5); border: 1px solid oklch(0.28 0.02 250);">
+						<span class="loading loading-spinner loading-xs" style="color: oklch(0.55 0.02 250);"></span>
+						<span class="font-mono text-[11px]" style="color: oklch(0.55 0.02 250);">Loading secrets...</span>
 					</div>
-				{:else}
-					<div
-						class="px-3 py-2 rounded-lg"
-						style="background: oklch(0.22 0.06 25 / 0.3); border: 1px solid oklch(0.35 0.08 25);"
-					>
-						<p class="font-mono text-[11px]" style="color: oklch(0.75 0.12 25);">
-							{testResult.error}
+				{:else if existingSecrets.length === 0}
+					<div class="px-3 py-2.5 rounded-lg" style="background: oklch(0.20 0.04 60 / 0.2); border: 1px solid oklch(0.30 0.06 60);">
+						<p class="font-mono text-[11px]" style="color: oklch(0.70 0.10 60);">
+							No existing secrets found. Switch to <strong>"Create New"</strong> to add one.
 						</p>
 					</div>
-				{/if}
-			{/if}
-		</div>
-	{:else if secretStatus === 'missing' || secretStatus === 'error' || showTokenInput}
-		<!-- Token missing or user clicked "Change" -->
-		<div
-			class="px-3 py-2.5 rounded-lg space-y-3"
-			style="background: oklch(0.20 0.04 60 / 0.2); border: 1px solid oklch(0.35 0.08 60);"
-		>
-			{#if !showTokenInput}
-				<div class="flex items-center gap-2">
-					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5" style="color: oklch(0.75 0.15 60);">
-						<path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
-					</svg>
-					<span class="font-mono text-[11px]" style="color: oklch(0.75 0.12 60);">
-						No token found for "{secretName}"
-					</span>
-				</div>
-			{/if}
+				{:else}
+					<div class="space-y-1.5">
+						<label class="font-mono text-[10px] font-semibold block" style="color: oklch(0.55 0.02 250);">
+							Select a saved secret
+						</label>
+						{#each existingSecrets as secret}
+							{@const isSelected = secretName === secret.name}
+							<button
+								class="w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-all duration-100"
+								style="
+									background: {isSelected ? 'oklch(0.22 0.08 220 / 0.5)' : 'oklch(0.18 0.02 250 / 0.5)'};
+									border: 1px solid {isSelected ? 'oklch(0.40 0.12 220)' : 'oklch(0.25 0.02 250)'};
+								"
+								onclick={() => {
+									if (type === 'slack') slackSecretName = secret.name;
+									else if (type === 'gmail') gmailSecretName = secret.name;
+									else telegramSecretName = secret.name;
+									secretStatus = 'found';
+									secretMasked = secret.masked;
+									testResult = null;
+								}}
+							>
+								<div class="flex-1 min-w-0">
+									<p class="font-mono text-[11px] font-semibold truncate" style="color: oklch(0.80 0.02 250);">
+										{secret.name}
+									</p>
+									<p class="font-mono text-[9px]" style="color: oklch(0.45 0.02 250);">
+										{secret.masked}
+									</p>
+								</div>
+								{#if isSelected}
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 shrink-0" style="color: oklch(0.70 0.18 145);">
+										<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
+									</svg>
+								{/if}
+							</button>
+						{/each}
+					</div>
 
-			<div>
-				<label class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.60 0.02 250);">
-					{type === 'gmail' ? 'App Password' : 'Bot Token'}
-				</label>
-				<input
-					type="password"
-					class="input input-bordered w-full font-mono text-sm"
-					placeholder={type === 'slack' ? 'xoxb-...' : type === 'gmail' ? 'xxxx xxxx xxxx xxxx' : '123456:ABC-DEF...'}
-					bind:value={tokenInput}
-				/>
-				<p class="font-mono text-[10px] mt-1" style="color: oklch(0.45 0.02 250);">
+					<!-- Test connection when an existing secret is selected -->
+					{#if secretStatus === 'found'}
+						{@render testConnectionButton(type, secretName)}
+					{/if}
+				{/if}
+			</div>
+		{:else}
+			<!-- Create new secret -->
+			<div class="space-y-3">
+				<div>
+					<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Secret Name</label>
 					{#if type === 'slack'}
-						Create a Slack app &rarr; OAuth &amp; Permissions &rarr; Bot User OAuth Token
+						<input
+							type="text"
+							class="input input-bordered w-full font-mono text-sm"
+							placeholder="slack-my-workspace"
+							bind:value={slackSecretName}
+							oninput={handleSecretNameChange}
+							autofocus
+						/>
 					{:else if type === 'gmail'}
-						Google Account &rarr; Security &rarr; 2-Step Verification &rarr; App Passwords
+						<input
+							type="text"
+							class="input input-bordered w-full font-mono text-sm"
+							placeholder="gmail-app-password"
+							bind:value={gmailSecretName}
+							oninput={handleSecretNameChange}
+							autofocus
+						/>
 					{:else}
-						Message @BotFather on Telegram &rarr; /newbot &rarr; copy the token
+						<input
+							type="text"
+							class="input input-bordered w-full font-mono text-sm"
+							placeholder="telegram-bot-family"
+							bind:value={telegramSecretName}
+							oninput={handleSecretNameChange}
+							autofocus
+						/>
 					{/if}
-				</p>
-			</div>
+					<!-- Warn if name already exists -->
+					{#if existingSecrets.some(s => s.name === secretName)}
+						<p class="font-mono text-[10px] mt-1.5 flex items-center gap-1" style="color: oklch(0.75 0.15 60);">
+							<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3 shrink-0">
+								<path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
+							</svg>
+							This name already exists. Use "Use Existing" to select it, or pick a different name.
+						</p>
+					{:else}
+						<p class="font-mono text-[10px] mt-1.5" style="color: oklch(0.45 0.02 250);">
+							Choose a unique name for this secret
+						</p>
+					{/if}
+				</div>
 
-			<div class="flex gap-2">
-				<button
-					class="font-mono text-[11px] px-3 py-1.5 rounded-lg"
-					style="background: oklch(0.35 0.12 145); color: oklch(0.95 0.02 250); border: 1px solid oklch(0.45 0.12 145);"
-					onclick={() => {
-						if (tokenInput.trim()) {
-							saveToken(secretName, tokenInput.trim(), type);
-						}
-					}}
-					disabled={!tokenInput.trim() || secretStatus === 'saving'}
-				>
-					{#if secretStatus === 'saving'}
-						<span class="loading loading-spinner loading-xs"></span>
-					{:else}
-						Save Token
-					{/if}
-				</button>
-				{#if showTokenInput}
-					<button
-						class="font-mono text-[10px] px-2 py-1 rounded"
-						style="color: oklch(0.55 0.02 250);"
-						onclick={() => { showTokenInput = false; tokenInput = ''; }}
-					>
-						Cancel
-					</button>
-				{/if}
+				{@render tokenStatus(type, secretName)}
 			</div>
-		</div>
+		{/if}
 	{/if}
 
 	<!-- Setup guide -->
@@ -2141,6 +2138,176 @@
 			</div>
 		</details>
 	{/if}
+{/snippet}
+
+<!-- Token status display (checking / found / missing) -->
+{#snippet tokenStatus(type: 'slack' | 'telegram' | 'gmail', secretName: string)}
+	{#if secretStatus === 'checking'}
+		<div
+			class="flex items-center gap-2 px-3 py-2.5 rounded-lg"
+			style="background: oklch(0.20 0.02 250 / 0.5); border: 1px solid oklch(0.28 0.02 250);"
+		>
+			<span class="loading loading-spinner loading-xs" style="color: oklch(0.55 0.02 250);"></span>
+			<span class="font-mono text-[11px]" style="color: oklch(0.55 0.02 250);">Checking for token...</span>
+		</div>
+	{:else if secretStatus === 'found' && !showTokenInput}
+		<div
+			class="px-3 py-2.5 rounded-lg"
+			style="background: oklch(0.20 0.06 145 / 0.3); border: 1px solid oklch(0.35 0.10 145);"
+		>
+			<div class="flex items-center justify-between">
+				<div class="flex items-center gap-2">
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5" style="color: oklch(0.70 0.18 145);">
+						<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
+					</svg>
+					<span class="font-mono text-[11px]" style="color: oklch(0.75 0.12 145);">
+						Token found: <code style="color: oklch(0.65 0.02 250);">{secretMasked}</code>
+					</span>
+				</div>
+				<button
+					class="font-mono text-[10px] px-2 py-0.5 rounded"
+					style="color: oklch(0.60 0.02 250); background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);"
+					onclick={() => { showTokenInput = true; }}
+				>
+					Change
+				</button>
+			</div>
+		</div>
+
+		{@render testConnectionButton(type, secretName)}
+	{:else if secretStatus === 'missing' || secretStatus === 'error' || showTokenInput}
+		<div
+			class="px-3 py-2.5 rounded-lg space-y-3"
+			style="background: oklch(0.20 0.04 60 / 0.2); border: 1px solid oklch(0.35 0.08 60);"
+		>
+			{#if !showTokenInput}
+				<div class="flex items-center gap-2">
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5" style="color: oklch(0.75 0.15 60);">
+						<path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
+					</svg>
+					<span class="font-mono text-[11px]" style="color: oklch(0.75 0.12 60);">
+						{#if secretMode === 'create' && !isEditing}
+							Enter the {type === 'gmail' ? 'App Password' : 'token'} for this new secret
+						{:else}
+							No token found for "{secretName}"
+						{/if}
+					</span>
+				</div>
+			{/if}
+
+			<div>
+				<label class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.60 0.02 250);">
+					{type === 'gmail' ? 'App Password' : 'Bot Token'}
+				</label>
+				<input
+					type="password"
+					class="input input-bordered w-full font-mono text-sm"
+					placeholder={type === 'slack' ? 'xoxb-...' : type === 'gmail' ? 'xxxx xxxx xxxx xxxx' : '123456:ABC-DEF...'}
+					bind:value={tokenInput}
+				/>
+				<p class="font-mono text-[10px] mt-1" style="color: oklch(0.45 0.02 250);">
+					{#if type === 'slack'}
+						Create a Slack app &rarr; OAuth &amp; Permissions &rarr; Bot User OAuth Token
+					{:else if type === 'gmail'}
+						Google Account &rarr; Security &rarr; 2-Step Verification &rarr; App Passwords
+					{:else}
+						Message @BotFather on Telegram &rarr; /newbot &rarr; copy the token
+					{/if}
+				</p>
+			</div>
+
+			<div class="flex gap-2">
+				<button
+					class="font-mono text-[11px] px-3 py-1.5 rounded-lg"
+					style="background: oklch(0.35 0.12 145); color: oklch(0.95 0.02 250); border: 1px solid oklch(0.45 0.12 145);"
+					onclick={() => {
+						if (tokenInput.trim()) {
+							saveToken(secretName, tokenInput.trim(), type);
+						}
+					}}
+					disabled={!tokenInput.trim() || secretStatus === 'saving' || (secretMode === 'create' && !isEditing && existingSecrets.some(s => s.name === secretName))}
+				>
+					{#if secretStatus === 'saving'}
+						<span class="loading loading-spinner loading-xs"></span>
+					{:else}
+						Save Token
+					{/if}
+				</button>
+				{#if showTokenInput}
+					<button
+						class="font-mono text-[10px] px-2 py-1 rounded"
+						style="color: oklch(0.55 0.02 250);"
+						onclick={() => { showTokenInput = false; tokenInput = ''; }}
+					>
+						Cancel
+					</button>
+				{/if}
+			</div>
+		</div>
+	{/if}
+{/snippet}
+
+<!-- Test connection button + result -->
+{#snippet testConnectionButton(type: 'slack' | 'telegram' | 'gmail', secretName: string)}
+	<div class="space-y-2">
+		<button
+			class="font-mono text-[11px] px-3 py-1.5 rounded-lg flex items-center gap-2"
+			style="background: oklch(0.22 0.04 220); color: oklch(0.75 0.10 220); border: 1px solid oklch(0.32 0.06 220);"
+			onclick={() => testConnection(type, secretName)}
+			disabled={testingConnection}
+		>
+			{#if testingConnection}
+				<span class="loading loading-spinner loading-xs"></span>
+				Testing...
+			{:else}
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5">
+					<path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H4.28a.75.75 0 00-.75.75v3.955a.75.75 0 001.5 0v-2.134l.235.234a7 7 0 0011.712-3.138.75.75 0 00-1.449-.388zm1.7-5.69a.75.75 0 00-.987-.565 7 7 0 00-11.712 3.138.75.75 0 001.449.388 5.5 5.5 0 019.2-2.466l.313.311h-2.433a.75.75 0 000 1.5H15.8a.75.75 0 00.75-.75V3.778a.75.75 0 00-.538-.044z" clip-rule="evenodd" />
+				</svg>
+				Test Connection
+			{/if}
+		</button>
+
+		{#if testResult}
+			{#if testResult.success}
+				<div
+					class="px-3 py-2 rounded-lg"
+					style="background: oklch(0.20 0.06 145 / 0.2); border: 1px solid oklch(0.30 0.08 145);"
+				>
+					{#if type === 'slack'}
+						<p class="font-mono text-[11px]" style="color: oklch(0.75 0.10 145);">
+							Connected to workspace <strong style="color: oklch(0.85 0.02 250);">"{testResult.info.workspace}"</strong>
+						</p>
+						<p class="font-mono text-[10px] mt-0.5" style="color: oklch(0.60 0.06 145);">
+							Bot: @{testResult.info.botName}
+						</p>
+					{:else if type === 'gmail'}
+						<p class="font-mono text-[11px]" style="color: oklch(0.75 0.10 145);">
+							Connected to <strong style="color: oklch(0.85 0.02 250);">{testResult.info.email}</strong>
+						</p>
+						<p class="font-mono text-[10px] mt-0.5" style="color: oklch(0.60 0.06 145);">
+							Folder: {testResult.info.folder} ({testResult.info.messageCount} messages)
+						</p>
+					{:else}
+						<p class="font-mono text-[11px]" style="color: oklch(0.75 0.10 145);">
+							Connected to bot <strong style="color: oklch(0.85 0.02 250);">"{testResult.info.botName}"</strong>
+						</p>
+						<p class="font-mono text-[10px] mt-0.5" style="color: oklch(0.60 0.06 145);">
+							@{testResult.info.botUsername}
+						</p>
+					{/if}
+				</div>
+			{:else}
+				<div
+					class="px-3 py-2 rounded-lg"
+					style="background: oklch(0.22 0.06 25 / 0.3); border: 1px solid oklch(0.35 0.08 25);"
+				>
+					<p class="font-mono text-[11px]" style="color: oklch(0.75 0.12 25);">
+						{testResult.error}
+					</p>
+				</div>
+			{/if}
+		{/if}
+	</div>
 {/snippet}
 
 <!-- Shared step snippets -->

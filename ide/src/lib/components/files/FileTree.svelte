@@ -1101,8 +1101,9 @@
 
 	// Handle keyboard shortcuts
 	function handleKeyDown(e: KeyboardEvent) {
-		// Don't handle if we're in an input field
-		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+		// Don't handle if we're in an input field or contenteditable element (e.g. Monaco editor)
+		const target = e.target as HTMLElement;
+		if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable || target.closest?.('.monaco-editor')) {
 			return;
 		}
 

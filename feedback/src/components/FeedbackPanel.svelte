@@ -252,6 +252,13 @@
     refreshLogs();
   });
 
+  // Stop keyboard events from bubbling out of the widget to the host app.
+  // Without this, typing in the title/description fields leaks keydown events
+  // through the shadow DOM boundary, triggering host-app keyboard shortcuts.
+  function containKeyboard(e: KeyboardEvent) {
+    e.stopPropagation();
+  }
+
   const typeOptions = [
     { value: 'bug', label: 'Bug' },
     { value: 'enhancement', label: 'Enhancement' },
@@ -270,7 +277,8 @@
   }
 </script>
 
-<div class="panel">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="panel" onkeydown={containKeyboard} onkeyup={containKeyboard} onkeypress={containKeyboard}>
   <div class="panel-header">
     {#if ongrip}
       <!-- svelte-ignore a11y_no_static_element_interactions -->

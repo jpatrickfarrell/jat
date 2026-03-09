@@ -288,6 +288,7 @@ export async function saveProject(project: ProjectConfig): Promise<boolean> {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
 				project: projectKey,
+				name: project.name,
 				description: project.description,
 				port: project.port,
 				server_path: project.server_path,

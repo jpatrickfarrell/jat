@@ -211,9 +211,9 @@
 	const builtinStepConfigs = $derived.by(() => {
 		const base: Record<string, string[]> = {
 			rss: ['Feed URL', 'Project', 'Options'],
-			slack: ['Slack Token', 'Channel', 'Project', 'Options'],
-			telegram: ['Bot Token', 'Chat', 'Project', 'Options'],
-			gmail: ['App Password', 'Gmail Settings', 'Project', 'Options'],
+			slack: ['Project', 'Slack Token', 'Channel', 'Options'],
+			telegram: ['Project', 'Bot Token', 'Chat', 'Options'],
+			gmail: ['Project', 'App Password', 'Gmail Settings', 'Options'],
 			custom: ['Command', 'Project', 'Options']
 		};
 		// Add Automation, Callbacks, Actions, optional Filters, then Review
@@ -257,50 +257,50 @@
 		saving ||
 		// RSS: step 0 = Feed URL
 		(sourceType === 'rss' && step === 0 && !feedUrl.trim()) ||
-		// Slack: step 0 = token saved, step 1 = channel
-		(sourceType === 'slack' && step === 0 && (secretStatus !== 'found' || !slackSecretName.trim())) ||
-		(sourceType === 'slack' && step === 1 && !slackChannel.trim()) ||
-		// Telegram: step 0 = token saved, step 1 = chat ID
-		(sourceType === 'telegram' && step === 0 && (secretStatus !== 'found' || !telegramSecretName.trim())) ||
-		(sourceType === 'telegram' && step === 1 && !telegramChatId.trim()) ||
-		// Gmail: step 0 = token saved, step 1 = email + folder
-		(sourceType === 'gmail' && step === 0 && (secretStatus !== 'found' || !gmailSecretName.trim())) ||
-		(sourceType === 'gmail' && step === 1 && (!gmailImapUser.trim() || !gmailFolder.trim())) ||
+		// Slack: step 0 = project, step 1 = token saved, step 2 = channel
+		(sourceType === 'slack' && step === 0 && !project.trim()) ||
+		(sourceType === 'slack' && step === 1 && (secretStatus !== 'found' || !slackSecretName.trim())) ||
+		(sourceType === 'slack' && step === 2 && !slackChannel.trim()) ||
+		// Telegram: step 0 = project, step 1 = token saved, step 2 = chat ID
+		(sourceType === 'telegram' && step === 0 && !project.trim()) ||
+		(sourceType === 'telegram' && step === 1 && (secretStatus !== 'found' || !telegramSecretName.trim())) ||
+		(sourceType === 'telegram' && step === 2 && !telegramChatId.trim()) ||
+		// Gmail: step 0 = project, step 1 = token saved, step 2 = email + folder
+		(sourceType === 'gmail' && step === 0 && !project.trim()) ||
+		(sourceType === 'gmail' && step === 1 && (secretStatus !== 'found' || !gmailSecretName.trim())) ||
+		(sourceType === 'gmail' && step === 2 && (!gmailImapUser.trim() || !gmailFolder.trim())) ||
 		// Custom: step 0 = command
 		(sourceType === 'custom' && step === 0 && !customCommand.trim()) ||
-		// Project step (varies by type): project required
+		// Project step for RSS and custom (step 1)
 		(sourceType === 'rss' && step === 1 && !project.trim()) ||
-		(sourceType === 'slack' && step === 2 && !project.trim()) ||
-		(sourceType === 'telegram' && step === 2 && !project.trim()) ||
-		(sourceType === 'gmail' && step === 2 && !project.trim()) ||
 		(sourceType === 'custom' && step === 1 && !project.trim()) ||
 		// Plugin types
 		(isPluginType && step === 0 && pluginRequiredFieldsMissing()) ||
 		(isPluginType && step === 1 && !project.trim())
 	);
 
-	// Check secret when on step 0 for Slack/Telegram
+	// Check secret when on token step (step 1) for Slack/Telegram/Gmail
 	$effect(() => {
-		if (open && step === 0 && sourceType === 'slack' && slackSecretName.trim()) {
+		if (open && step === 1 && sourceType === 'slack' && slackSecretName.trim()) {
 			checkSecret(slackSecretName.trim());
 		}
 	});
 
 	$effect(() => {
-		if (open && step === 0 && sourceType === 'telegram' && telegramSecretName.trim()) {
+		if (open && step === 1 && sourceType === 'telegram' && telegramSecretName.trim()) {
 			checkSecret(telegramSecretName.trim());
 		}
 	});
 
 	$effect(() => {
-		if (open && step === 0 && sourceType === 'gmail' && gmailSecretName.trim()) {
+		if (open && step === 1 && sourceType === 'gmail' && gmailSecretName.trim()) {
 			checkSecret(gmailSecretName.trim());
 		}
 	});
 
-	// Fetch existing secrets when opening token step for new integrations
+	// Fetch existing secrets when opening token step (step 1) for new integrations
 	$effect(() => {
-		if (open && step === 0 && !isEditing && (sourceType === 'slack' || sourceType === 'telegram' || sourceType === 'gmail')) {
+		if (open && step === 1 && !isEditing && (sourceType === 'slack' || sourceType === 'telegram' || sourceType === 'gmail')) {
 			fetchExistingSecrets();
 		}
 	});
@@ -872,62 +872,62 @@
 		}
 
 		if (sourceType === 'slack') {
-			if (step === 0 && !slackSecretName.trim()) {
+			if (step === 0 && !project.trim()) {
+				error = 'Select a project';
+				return false;
+			}
+			if (step === 1 && !slackSecretName.trim()) {
 				error = 'Secret name is required';
 				return false;
 			}
-			if (step === 0 && secretStatus !== 'found') {
+			if (step === 1 && secretStatus !== 'found') {
 				error = 'Save a valid token before continuing';
 				return false;
 			}
-			if (step === 1 && !slackChannel.trim()) {
+			if (step === 2 && !slackChannel.trim()) {
 				error = 'Channel ID is required';
-				return false;
-			}
-			if (step === 2 && !project.trim()) {
-				error = 'Select a project';
 				return false;
 			}
 		}
 
 		if (sourceType === 'telegram') {
-			if (step === 0 && !telegramSecretName.trim()) {
+			if (step === 0 && !project.trim()) {
+				error = 'Select a project';
+				return false;
+			}
+			if (step === 1 && !telegramSecretName.trim()) {
 				error = 'Secret name is required';
 				return false;
 			}
-			if (step === 0 && secretStatus !== 'found') {
+			if (step === 1 && secretStatus !== 'found') {
 				error = 'Save a valid token before continuing';
 				return false;
 			}
-			if (step === 1 && !telegramChatId.trim()) {
+			if (step === 2 && !telegramChatId.trim()) {
 				error = 'Chat ID is required';
-				return false;
-			}
-			if (step === 2 && !project.trim()) {
-				error = 'Select a project';
 				return false;
 			}
 		}
 
 		if (sourceType === 'gmail') {
-			if (step === 0 && !gmailSecretName.trim()) {
+			if (step === 0 && !project.trim()) {
+				error = 'Select a project';
+				return false;
+			}
+			if (step === 1 && !gmailSecretName.trim()) {
 				error = 'Secret name is required';
 				return false;
 			}
-			if (step === 0 && secretStatus !== 'found') {
+			if (step === 1 && secretStatus !== 'found') {
 				error = 'Save a valid App Password before continuing';
 				return false;
 			}
-			if (step === 1 && !gmailImapUser.trim()) {
+			if (step === 2 && !gmailImapUser.trim()) {
 				error = 'Email address is required';
 				return false;
 			}
-			if (step === 1 && !gmailFolder.trim()) {
+			if (step === 2 && !gmailFolder.trim()) {
 				error = 'Gmail label/folder is required';
-				return false;
-			}
-			if (step === 2 && !project.trim()) {
-				error = 'Select a project';
 				return false;
 			}
 		}
@@ -1323,9 +1323,13 @@
 				{#if sourceType === 'slack'}
 					{#if step === 0}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
-							{@render tokenStep('slack', slackSecretName)}
+							{@render projectStep()}
 						</div>
 					{:else if step === 1}
+						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
+							{@render tokenStep('slack', slackSecretName)}
+						</div>
+					{:else if step === 2}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
 							<!-- Detect channels button -->
 							<button
@@ -1433,10 +1437,6 @@
 								</label>
 							</div>
 						</div>
-					{:else if step === 2}
-						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
-							{@render projectStep()}
-						</div>
 					{:else if step === 3}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
 							{@render optionsStep()}
@@ -1468,9 +1468,13 @@
 				{#if sourceType === 'telegram'}
 					{#if step === 0}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
-							{@render tokenStep('telegram', telegramSecretName)}
+							{@render projectStep()}
 						</div>
 					{:else if step === 1}
+						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
+							{@render tokenStep('telegram', telegramSecretName)}
+						</div>
+					{:else if step === 2}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
 							<!-- Instructions -->
 							<details open
@@ -1590,10 +1594,6 @@
 								</div>
 							</details>
 						</div>
-					{:else if step === 2}
-						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
-							{@render projectStep()}
-						</div>
 					{:else if step === 3}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
 							{@render optionsStep()}
@@ -1626,9 +1626,13 @@
 				{#if sourceType === 'gmail'}
 					{#if step === 0}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
-							{@render tokenStep('gmail', gmailSecretName)}
+							{@render projectStep()}
 						</div>
 					{:else if step === 1}
+						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
+							{@render tokenStep('gmail', gmailSecretName)}
+						</div>
+					{:else if step === 2}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
 							<div>
 								<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Email Address</label>
@@ -1716,10 +1720,6 @@
 									</label>
 								</div>
 							</details>
-						</div>
-					{:else if step === 2}
-						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
-							{@render projectStep()}
 						</div>
 					{:else if step === 3}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>

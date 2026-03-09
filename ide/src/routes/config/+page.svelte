@@ -260,12 +260,14 @@
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
 						project: key,
+						name: config.name,
 						description: config.description,
 						port: config.port,
 						server_path: config.server_path,
 						database_url: config.database_url,
 						active_color: config.colors?.active,
-						inactive_color: config.colors?.inactive
+						inactive_color: config.colors?.inactive,
+						default_harness: config.default_harness
 					})
 				});
 

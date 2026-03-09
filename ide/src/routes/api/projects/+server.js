@@ -774,7 +774,7 @@ function validateProjectKey(key) {
 
 /**
  * PATCH /api/projects - Update project fields
- * Body: { project: string, description?: string, port?: number | null, server_path?: string, database_url?: string, active_color?: string, inactive_color?: string, notes?: string, notes_height?: number }
+ * Body: { project: string, name?: string, description?: string, port?: number | null, server_path?: string, database_url?: string, active_color?: string, inactive_color?: string, notes?: string, notes_height?: number }
  *
  * Colors should be in "rgb(rrggbb)" format for consistency with JAT config.
  * Example: "rgb(5588ff)" for blue, "rgb(00d4aa)" for teal
@@ -782,7 +782,7 @@ function validateProjectKey(key) {
 export async function PATCH({ request }) {
 	try {
 		const body = await request.json();
-		const { project, description, port, server_path, database_url, active_color, inactive_color, notes, notes_height, default_harness, favorite } = body;
+		const { project, name, description, port, server_path, database_url, active_color, inactive_color, notes, notes_height, default_harness, favorite } = body;
 
 		if (!project) {
 			return json({ error: 'Project name required' }, { status: 400 });
@@ -794,6 +794,9 @@ export async function PATCH({ request }) {
 		}
 
 		// Update fields if provided
+		if (name !== undefined) {
+			jatConfig.projects[project].name = name || project.toUpperCase();
+		}
 		if (description !== undefined) {
 			jatConfig.projects[project].description = description || null;
 		}

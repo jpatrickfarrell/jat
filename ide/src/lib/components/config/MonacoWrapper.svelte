@@ -23,6 +23,8 @@
 		disableSuggestions = false,
 		onSendToLLM = undefined,
 		onCreateTask = undefined,
+		onCtrlEnter = undefined,
+		onCtrlS = undefined,
 		completionProvider = undefined,
 	}: {
 		value?: string;
@@ -35,6 +37,10 @@
 		onSendToLLM?: (selectedText: string) => void;
 		/** Callback when user selects "Create Task" from context menu. Receives selected text. */
 		onCreateTask?: (selectedText: string) => void;
+		/** Callback when user presses Ctrl+Enter / Cmd+Enter. */
+		onCtrlEnter?: () => void;
+		/** Callback when user presses Ctrl+S / Cmd+S. Prevents browser save dialog. */
+		onCtrlS?: () => void;
 		/** Async callback that returns completion items when user types @. */
 		completionProvider?: (prefix: string) => Promise<CompletionItem[]>;
 	} = $props();
@@ -285,6 +291,30 @@
 								}
 							}
 						}
+					}
+				});
+			}
+
+			// Add Ctrl+Enter / Cmd+Enter keybinding
+			if (onCtrlEnter) {
+				editorInstance.addAction({
+					id: 'editor.action.ctrlEnter',
+					label: 'Save and Close',
+					keybindings: [monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.Enter],
+					run: () => {
+						onCtrlEnter();
+					}
+				});
+			}
+
+			// Add Ctrl+S / Cmd+S keybinding (prevents browser save dialog)
+			if (onCtrlS) {
+				editorInstance.addAction({
+					id: 'editor.action.ctrlS',
+					label: 'Save',
+					keybindings: [monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS],
+					run: () => {
+						onCtrlS();
 					}
 				});
 			}

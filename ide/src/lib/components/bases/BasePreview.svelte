@@ -111,6 +111,24 @@
 		saveTimer = setTimeout(() => autoSave(value), 500);
 	}
 
+	function handleCtrlEnter() {
+		// Flush any pending auto-save immediately
+		if (saveTimer) {
+			clearTimeout(saveTimer);
+			saveTimer = null;
+		}
+		if (editorContent !== base?.content) {
+			autoSave(editorContent);
+		}
+		toggleEditing();
+	}
+
+	function handleViewClick() {
+		if (isEditable) {
+			toggleEditing();
+		}
+	}
+
 	async function autoSave(content: string) {
 		if (!base) return;
 		saving = true;
@@ -234,7 +252,16 @@
 
 		return items;
 	}
+
+	function handleWindowKeydown(e: KeyboardEvent) {
+		if ((e.ctrlKey || e.metaKey) && e.key === 's' && editing) {
+			e.preventDefault();
+			handleCtrlEnter();
+		}
+	}
 </script>
+
+<svelte:window onkeydown={handleWindowKeydown} />
 
 <div
 	class="flex flex-col border rounded-xl overflow-hidden {className}"
@@ -405,6 +432,7 @@
 					value={editorContent}
 					language="markdown"
 					onchange={handleContentChange}
+					onCtrlEnter={handleCtrlEnter}
 					completionProvider={handleCompletionProvider}
 				/>
 			{:else if renderLoading}
@@ -417,7 +445,16 @@
 					Failed to render: {renderError}
 				</div>
 			{:else if rendered?.content}
-				<MarkdownPreview content={rendered.content} />
+				<!-- svelte-ignore a11y_click_events_have_key_events -->
+				<div
+					onclick={handleViewClick}
+					role={isEditable ? 'button' : undefined}
+					tabindex={isEditable ? 0 : undefined}
+					class="h-full {isEditable ? 'cursor-pointer' : ''}"
+					title={isEditable ? 'Click to edit (Ctrl+Enter to save)' : undefined}
+				>
+					<MarkdownPreview content={rendered.content} />
+				</div>
 			{:else}
 				<p class="text-sm p-4" style="color: oklch(0.50 0.01 250);">No content available</p>
 			{/if}

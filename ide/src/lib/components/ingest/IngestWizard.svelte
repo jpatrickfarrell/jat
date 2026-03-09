@@ -68,7 +68,7 @@
 	let feedUrl = $state('');
 
 	// Slack fields
-	let slackSecretName = $state('slack');
+	let slackSecretName = $state('slack-bot-token');
 	let slackChannel = $state('');
 	let includeBots = $state(false);
 
@@ -78,14 +78,14 @@
 	let channelDetectionError = $state('');
 
 	// Telegram fields
-	let telegramSecretName = $state('telegram');
+	let telegramSecretName = $state('telegram-bot-token');
 	let telegramChatId = $state('');
 	let detectingChats = $state(false);
 	let detectedChats = $state<Array<{ id: number; title: string; type: string; username?: string }>>([]);
 	let detectionError = $state('');
 
 	// Gmail fields
-	let gmailSecretName = $state('gmail');
+	let gmailSecretName = $state('gmail-app-password');
 	let gmailImapUser = $state('');
 	let gmailFolder = $state('');
 	let gmailFilterFrom = $state('');
@@ -149,18 +149,25 @@
 
 	// Secret selection mode for new integrations: pick existing or create new
 	let secretMode = $state<'select' | 'create'>('create');
-	let existingSecrets = $state<Array<{ name: string; masked: string; source: 'provider' | 'custom' }>>([]);
+	let existingSecrets = $state<Array<{ name: string; masked: string; source: 'provider' | 'custom' | 'project' }>>([]);
 	let loadingSecrets = $state(false);
+
+	// Pending token: stored in memory until save() persists it as a project secret
+	let pendingToken = $state('');
 
 	const isEditing = $derived(editSource != null);
 
 	async function fetchExistingSecrets() {
 		loadingSecrets = true;
-		const secrets: Array<{ name: string; masked: string; source: 'provider' | 'custom' }> = [];
+		const secrets: Array<{ name: string; masked: string; source: 'provider' | 'custom' | 'project' }> = [];
 		try {
-			const [provRes, customRes] = await Promise.all([
+			// Fetch provider keys, custom keys, and project secrets in parallel
+			const projectList = projects.map(p => p.name?.toLowerCase() || p.path?.split('/').pop() || '').filter(Boolean);
+			const projectFetches = projectList.map(p => fetch(`/api/config/credentials/${encodeURIComponent(p)}`).then(r => r.json()).catch(() => null));
+			const [provRes, customRes, ...projectResults] = await Promise.all([
 				fetch('/api/config/credentials'),
-				fetch('/api/config/credentials/custom')
+				fetch('/api/config/credentials/custom'),
+				...projectFetches
 			]);
 			const provData = await provRes.json();
 			const customData = await customRes.json();
@@ -172,6 +179,20 @@
 			if (customData.success && customData.customKeys) {
 				for (const [name, info] of Object.entries(customData.customKeys) as any) {
 					if (info?.isSet) secrets.push({ name, masked: info.masked, source: 'custom' });
+				}
+			}
+			// Add project secrets with project-prefixed names
+			for (let i = 0; i < projectList.length; i++) {
+				const projData = projectResults[i];
+				const projName = projectList[i];
+				if (projData?.success && projData?.secrets) {
+					for (const [key, info] of Object.entries(projData.secrets) as any) {
+						if (info?.isSet) {
+							// Convert underscore key to dash-prefixed name: e.g., project "jat" + key "telegram_bot_token" → "jat-telegram-bot-token"
+							const dashKey = key.replace(/_/g, '-');
+							secrets.push({ name: `${projName}-${dashKey}`, masked: info.masked, source: 'project' });
+						}
+					}
 				}
 			}
 		} catch { /* ignore */ }
@@ -379,10 +400,10 @@
 		taskPriority = 2;
 		taskLabels = sourceType ? `from-${sourceType}` : '';
 		feedUrl = '';
-		slackSecretName = 'slack';
+		slackSecretName = 'slack-bot-token';
 		slackChannel = '';
 		includeBots = false;
-		telegramSecretName = 'telegram-bot';
+		telegramSecretName = 'telegram-bot-token';
 		telegramChatId = '';
 		detectingChats = false;
 		detectedChats = [];
@@ -392,6 +413,7 @@
 		channelDetectionError = '';
 		secretMode = 'create';
 		existingSecrets = [];
+		pendingToken = '';
 		gmailSecretName = 'gmail-app-password';
 		gmailImapUser = '';
 		gmailFolder = '';
@@ -567,15 +589,30 @@
 				return;
 			}
 			// Fall back to custom keys
-			const res = await fetch('/api/config/credentials/custom');
-			const data = await res.json();
-			if (data.success && data.customKeys?.[name]?.isSet) {
+			const customRes = await fetch('/api/config/credentials/custom');
+			const customData = await customRes.json();
+			if (customData.success && customData.customKeys?.[name]?.isSet) {
 				secretStatus = 'found';
-				secretMasked = data.customKeys[name].masked;
+				secretMasked = customData.customKeys[name].masked;
 				showTokenInput = false;
-			} else {
-				secretStatus = 'missing';
+				return;
 			}
+			// Fall back to project secrets: try {project}-{key-with-dashes} → projectSecrets.{project}.{key_with_underscores}
+			const dashIdx = name.indexOf('-');
+			if (dashIdx > 0) {
+				const projectKey = name.substring(0, dashIdx);
+				const secretKeyDashes = name.substring(dashIdx + 1);
+				const secretKeyUnderscores = secretKeyDashes.replace(/-/g, '_');
+				const projRes = await fetch(`/api/config/credentials/${encodeURIComponent(projectKey)}`);
+				const projData = await projRes.json();
+				if (projData.success && projData.secrets?.[secretKeyUnderscores]?.isSet) {
+					secretStatus = 'found';
+					secretMasked = projData.secrets[secretKeyUnderscores].masked;
+					showTokenInput = false;
+					return;
+				}
+			}
+			secretStatus = 'missing';
 		} catch {
 			secretStatus = 'error';
 		}
@@ -596,46 +633,16 @@
 		return null;
 	}
 
-	async function saveToken(name: string, token: string, type: 'slack' | 'telegram' | 'gmail') {
-		secretStatus = 'saving';
-		error = '';
-		try {
-			let res;
-			if (PROVIDER_IDS.has(name)) {
-				// Save as provider key (first-class)
-				res = await fetch('/api/config/credentials', {
-					method: 'PUT',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ provider: name, key: token })
-				});
-			} else {
-				// Fall back to custom key
-				const envVar = type === 'slack' ? 'SLACK_BOT_TOKEN' : type === 'gmail' ? 'GMAIL_APP_PASSWORD' : 'TELEGRAM_BOT_TOKEN';
-				res = await fetch('/api/config/credentials/custom', {
-					method: 'PUT',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({
-						name,
-						value: token,
-						envVar,
-						description: `${type} bot token for jat-ingest`
-					})
-				});
-			}
-			const data = await res.json();
-			if (data.success) {
-				secretStatus = 'found';
-				secretMasked = token.slice(0, 6) + '...' + token.slice(-4);
-				tokenInput = '';
-				showTokenInput = false;
-			} else {
-				secretStatus = 'missing';
-				error = data.error || 'Failed to save token';
-			}
-		} catch {
-			secretStatus = 'missing';
-			error = 'Failed to save token';
-		}
+	/**
+	 * Store token in memory (pendingToken). Actual persistence happens in save()
+	 * when the project is known, as a project-scoped secret.
+	 */
+	function saveToken(_name: string, token: string, _type: 'slack' | 'telegram' | 'gmail') {
+		pendingToken = token;
+		secretStatus = 'found';
+		secretMasked = token.slice(0, 6) + '...' + token.slice(-4);
+		tokenInput = '';
+		showTokenInput = false;
 	}
 
 	async function testConnection(type: 'slack' | 'telegram' | 'gmail', secretName: string) {
@@ -643,6 +650,10 @@
 		testResult = null;
 		try {
 			const body: any = { type, secretName };
+			// If we have a pending (unsaved) token, pass it directly for testing
+			if (pendingToken) {
+				body.rawToken = pendingToken;
+			}
 			if (type === 'gmail') {
 				body.imapUser = gmailImapUser.trim();
 				body.folder = gmailFolder.trim() || 'INBOX';
@@ -774,10 +785,12 @@
 		detectionError = '';
 		detectedChats = [];
 		try {
+			const body: any = { type: 'telegram-chats', secretName: telegramSecretName };
+			if (pendingToken) body.rawToken = pendingToken;
 			const res = await fetch('/api/integrations/verify', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ type: 'telegram-chats', secretName: telegramSecretName })
+				body: JSON.stringify(body)
 			});
 			const data = await res.json();
 			if (data.success) {
@@ -800,10 +813,12 @@
 		channelDetectionError = '';
 		detectedChannels = [];
 		try {
+			const body: any = { type: 'slack-channels', secretName: slackSecretName };
+			if (pendingToken) body.rawToken = pendingToken;
 			const res = await fetch('/api/integrations/verify', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ type: 'slack-channels', secretName: slackSecretName })
+				body: JSON.stringify(body)
 			});
 			const data = await res.json();
 			if (data.success) {
@@ -997,26 +1012,78 @@
 			base.connectionMode = 'realtime';
 		}
 
+		// Persist pending token as a project secret before building source config
+		const projName = project.trim();
+		if (pendingToken && projName) {
+			let saveSecretKey: string;
+			let saveProject: string;
+			if (isEditing) {
+				// When editing, secretName is already project-prefixed (e.g., "jat-telegram-bot-token")
+				// Extract project and key from the existing secretName
+				const existingName = sourceType === 'slack' ? slackSecretName.trim()
+					: sourceType === 'gmail' ? gmailSecretName.trim()
+					: telegramSecretName.trim();
+				const dashIdx = existingName.indexOf('-');
+				if (dashIdx > 0) {
+					saveProject = existingName.substring(0, dashIdx);
+					saveSecretKey = existingName.substring(dashIdx + 1).replace(/-/g, '_');
+				} else {
+					saveProject = projName;
+					saveSecretKey = existingName.replace(/-/g, '_');
+				}
+			} else {
+				// New integration: secretName is just the key part (e.g., "telegram-bot-token")
+				saveProject = projName;
+				saveSecretKey = (sourceType === 'slack' ? slackSecretName.trim()
+					: sourceType === 'gmail' ? gmailSecretName.trim()
+					: telegramSecretName.trim()).replace(/-/g, '_');
+			}
+			try {
+				await fetch(`/api/config/credentials/${encodeURIComponent(saveProject)}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						secretKey: saveSecretKey,
+						value: pendingToken,
+						description: `${sourceType} token for ${saveProject} ingest`
+					})
+				});
+			} catch {
+				error = 'Failed to save token as project secret';
+				saving = false;
+				return;
+			}
+		}
+
+		// Build the secret name for config:
+		// - New secrets (pendingToken set, not editing): prefix with project name for project-scoped resolution
+		//   e.g., project "jat" + secretName "telegram-bot-token" → "jat-telegram-bot-token"
+		// - Editing or existing secrets: use as-is (already fully qualified)
+		const shouldPrefix = pendingToken && projName && !isEditing;
+		const resolvedSlackSecretName = shouldPrefix ? `${projName}-${slackSecretName.trim()}` : slackSecretName.trim();
+		const resolvedTelegramSecretName = shouldPrefix ? `${projName}-${telegramSecretName.trim()}` : telegramSecretName.trim();
+		const resolvedGmailSecretName = shouldPrefix ? `${projName}-${gmailSecretName.trim()}` : gmailSecretName.trim();
+
 		let source: any;
 		if (sourceType === 'rss') {
 			source = { ...base, feedUrl: feedUrl.trim() };
 		} else if (sourceType === 'slack') {
 			source = {
 				...base,
-				secretName: slackSecretName.trim(),
+				secretName: resolvedSlackSecretName,
 				channel: slackChannel.trim(),
 				includeBots
 			};
 		} else if (sourceType === 'telegram') {
 			source = {
 				...base,
-				secretName: telegramSecretName.trim(),
+				secretName: resolvedTelegramSecretName,
 				chatId: telegramChatId.trim()
 			};
 		} else if (sourceType === 'gmail') {
 			source = {
 				...base,
-				secretName: gmailSecretName.trim(),
+				secretName: resolvedGmailSecretName,
 				imapUser: gmailImapUser.trim(),
 				folder: gmailFolder.trim(),
 				...(gmailFilterFrom.trim() && { filterFrom: gmailFilterFrom.trim() }),
@@ -1992,9 +2059,17 @@
 								}}
 							>
 								<div class="flex-1 min-w-0">
-									<p class="font-mono text-[11px] font-semibold truncate" style="color: oklch(0.80 0.02 250);">
-										{secret.name}
-									</p>
+									<div class="flex items-center gap-1.5">
+										<p class="font-mono text-[11px] font-semibold truncate" style="color: oklch(0.80 0.02 250);">
+											{secret.name}
+										</p>
+										<span
+											class="font-mono text-[8px] px-1 py-0.5 rounded shrink-0"
+											style="background: {secret.source === 'project' ? 'oklch(0.25 0.08 145 / 0.5)' : secret.source === 'provider' ? 'oklch(0.25 0.08 220 / 0.5)' : 'oklch(0.25 0.04 250 / 0.5)'}; color: {secret.source === 'project' ? 'oklch(0.70 0.12 145)' : secret.source === 'provider' ? 'oklch(0.70 0.12 220)' : 'oklch(0.60 0.02 250)'};"
+										>
+											{secret.source}
+										</span>
+									</div>
 									<p class="font-mono text-[9px]" style="color: oklch(0.45 0.02 250);">
 										{secret.masked}
 									</p>
@@ -2023,7 +2098,7 @@
 						<input
 							type="text"
 							class="input input-bordered w-full font-mono text-sm"
-							placeholder="slack-my-workspace"
+							placeholder="slack-bot-token"
 							bind:value={slackSecretName}
 							oninput={handleSecretNameChange}
 							autofocus
@@ -2041,7 +2116,7 @@
 						<input
 							type="text"
 							class="input input-bordered w-full font-mono text-sm"
-							placeholder="telegram-bot-family"
+							placeholder="telegram-bot-token"
 							bind:value={telegramSecretName}
 							oninput={handleSecretNameChange}
 							autofocus
@@ -2057,7 +2132,7 @@
 						</p>
 					{:else}
 						<p class="font-mono text-[10px] mt-1.5" style="color: oklch(0.45 0.02 250);">
-							Choose a unique name for this secret
+							Name for this secret. Will be saved as a project secret when you finish.
 						</p>
 					{/if}
 				</div>

@@ -12,10 +12,35 @@
 
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getApiKey, getCustomApiKey, API_KEY_PROVIDERS } from '$lib/utils/credentials';
+import { getApiKey, getCustomApiKey, getProjectSecret, API_KEY_PROVIDERS } from '$lib/utils/credentials';
 import { ImapFlow } from 'imapflow';
 
 const BUILTIN_TYPES = ['slack', 'telegram', 'telegram-chats', 'slack-channels', 'gmail'];
+
+/**
+ * Resolve a secret by name, checking all storage locations.
+ * Mirrors jat-secret's try_project_secret() for project-prefixed names.
+ * Order: raw token → provider keys → custom keys → project secrets (by prefix)
+ */
+function resolveSecret(secretName: string, rawToken?: string): string | undefined {
+	if (rawToken) return rawToken;
+	// Provider keys
+	const providerKey = getApiKey(secretName);
+	if (providerKey) return providerKey;
+	// Custom keys
+	const customKey = getCustomApiKey(secretName);
+	if (customKey) return customKey;
+	// Project secrets: try {project}-{key-with-dashes} → projectSecrets.{project}.{key_with_underscores}
+	const dashIdx = secretName.indexOf('-');
+	if (dashIdx > 0) {
+		const projectKey = secretName.substring(0, dashIdx);
+		const secretKeyDashes = secretName.substring(dashIdx + 1);
+		const secretKeyUnderscores = secretKeyDashes.replace(/-/g, '_');
+		const projectSecret = getProjectSecret(projectKey, secretKeyUnderscores);
+		if (projectSecret) return projectSecret;
+	}
+	return undefined;
+}
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
@@ -29,17 +54,17 @@ export const POST: RequestHandler = async ({ request }) => {
 			);
 		}
 
-		// Built-in types require secretName resolved upfront
+		// Built-in types require secretName or rawToken
 		if (BUILTIN_TYPES.includes(type)) {
-			const { secretName } = body;
-			if (!secretName) {
+			const { secretName, rawToken } = body;
+			if (!secretName && !rawToken) {
 				return json(
-					{ success: false, error: 'secretName is required' },
+					{ success: false, error: 'secretName or rawToken is required' },
 					{ status: 400 }
 				);
 			}
 
-			const token = getApiKey(secretName) || getCustomApiKey(secretName);
+			const token = resolveSecret(secretName || '', rawToken);
 			if (!token) {
 				return json(
 					{ success: false, error: `No token found for secret "${secretName}"` },
@@ -331,7 +356,7 @@ async function verifyPlugin(type: string, body: Record<string, any>) {
 			}
 		}
 
-		// getSecret resolves secret names via credentials store (provider keys first, with prefix matching)
+		// getSecret resolves secret names via credentials store (provider keys, custom keys, project secrets)
 		const getSecret = (name: string) => {
 			// Try exact match on provider keys, then prefix match (e.g. 'cloudflare-pages-token' → 'cloudflare')
 			let value = getApiKey(name);
@@ -340,6 +365,8 @@ async function verifyPlugin(type: string, body: Record<string, any>) {
 				if (providerId) value = getApiKey(providerId);
 			}
 			if (!value) value = getCustomApiKey(name);
+			// Try project secret resolution (e.g. 'jat-telegram-bot-token' → projectSecrets.jat.telegram_bot_token)
+			if (!value) value = resolveSecret(name);
 			if (!value) throw new Error(`Secret "${name}" not found in credentials store`);
 			return value;
 		};

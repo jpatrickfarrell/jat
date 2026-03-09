@@ -9,6 +9,7 @@
 	 * Click chip: dropdown with projects, ready tasks, and actions
 	 * Click +: opens task creation drawer for current project
 	 */
+	import { onMount } from "svelte";
 	import { getProjectColor } from "$lib/utils/projectColors";
 	import FxText from '$lib/components/FxText.svelte';
 	import { SESSION_STATE_VISUALS } from "$lib/config/statusColors";
@@ -17,6 +18,17 @@
 		closeStartDropdown,
 		openProjectDrawer
 	} from '$lib/stores/drawerStore';
+	import {
+		start as startServer,
+		stop as stopServer,
+		restart as restartServer,
+		getSessionByProject,
+		serverSessionsState,
+	} from "$lib/stores/serverSessions.svelte";
+	import {
+		playServerStartSound,
+		playServerStopSound,
+	} from "$lib/utils/soundEffects";
 
 	interface ReadyTask {
 		id: string;
@@ -115,6 +127,112 @@
 	);
 
 	const hasActions = $derived(!!onStart || !!onSwarm || !!onNewTask);
+
+	// Server state for selected project
+	interface ProjectServerInfo {
+		key: string;
+		port: number;
+		serverPath: string | null;
+	}
+	let projectServerConfigs = $state<Map<string, ProjectServerInfo>>(new Map());
+	let serverLoadingAction = $state<string | null>(null);
+	let serverError = $state<string | null>(null);
+
+	// Get server session for the selected project
+	const selectedServerSession = $derived(
+		getSessionByProject(selectedProject)
+	);
+	const selectedServerConfig = $derived(
+		projectServerConfigs.get(selectedProject)
+	);
+	const serverIsRunning = $derived(
+		selectedServerSession?.status === 'running' || selectedServerSession?.status === 'starting'
+	);
+	const hasServerConfig = $derived(!!selectedServerConfig);
+
+	// Fetch project server configs on mount
+	onMount(async () => {
+		try {
+			const response = await fetch("/api/projects");
+			if (!response.ok) return;
+			const data = await response.json();
+			const configs = new Map<string, ProjectServerInfo>();
+			for (const p of (data.projects || [])) {
+				if (p.port || p.serverPath) {
+					configs.set(p.name, {
+						key: p.name,
+						port: p.port || 5173,
+						serverPath: p.serverPath || null,
+					});
+				}
+			}
+			projectServerConfigs = configs;
+		} catch {
+			// Silently ignore - server controls just won't show
+		}
+	});
+
+	// Also update configs from running sessions that don't have config
+	const effectiveServerConfig = $derived.by(() => {
+		if (selectedServerConfig) return selectedServerConfig;
+		// Check if there's a running session without config
+		if (selectedServerSession) {
+			return {
+				key: selectedProject,
+				port: selectedServerSession.port ?? 0,
+				serverPath: null,
+			};
+		}
+		return null;
+	});
+
+	async function handleServerStart() {
+		serverLoadingAction = selectedProject;
+		serverError = null;
+		try {
+			await startServer(selectedProject);
+			playServerStartSound();
+		} catch (e) {
+			serverError = `Failed to start ${selectedProject}`;
+		} finally {
+			serverLoadingAction = null;
+		}
+	}
+
+	async function handleServerStop() {
+		if (!selectedServerSession) return;
+		serverLoadingAction = selectedProject;
+		serverError = null;
+		try {
+			await stopServer(selectedServerSession.sessionName);
+			playServerStopSound();
+		} catch (e) {
+			serverError = `Failed to stop ${selectedProject}`;
+		} finally {
+			serverLoadingAction = null;
+		}
+	}
+
+	async function handleServerRestart() {
+		if (!selectedServerSession) return;
+		serverLoadingAction = selectedProject;
+		serverError = null;
+		try {
+			await restartServer(selectedServerSession.sessionName);
+			playServerStartSound();
+		} catch (e) {
+			serverError = `Failed to restart ${selectedProject}`;
+		} finally {
+			serverLoadingAction = null;
+		}
+	}
+
+	function handleServerOpenBrowser() {
+		const config = effectiveServerConfig;
+		if (config && config.port) {
+			window.open(`http://localhost:${config.port}`, "_blank");
+		}
+	}
 
 	function handleSelect(project: string) {
 		onProjectChange(project);
@@ -296,6 +414,80 @@
 				</svg>
 				<span class="item-label">Add Project</span>
 			</button>
+
+			<!-- Server Section -->
+			{#if effectiveServerConfig || serverIsRunning}
+				<div class="dropdown-divider"></div>
+				<div class="dropdown-section-header">
+					Server
+					{#if effectiveServerConfig?.port}
+						<span class="server-port">:{effectiveServerConfig.port}</span>
+					{/if}
+				</div>
+				{#if serverError}
+					<div class="server-error">{serverError}</div>
+				{/if}
+				<div class="server-actions-row">
+					{#if serverLoadingAction === selectedProject}
+						<span class="loading loading-spinner loading-xs" style="color: oklch(0.65 0.02 250);"></span>
+					{:else if serverIsRunning}
+						<!-- Open browser -->
+						<button
+							type="button"
+							class="server-action-btn"
+							onclick={handleServerOpenBrowser}
+							title="Open in browser"
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+							</svg>
+							<span>Open</span>
+						</button>
+						<!-- Restart -->
+						<button
+							type="button"
+							class="server-action-btn"
+							onclick={handleServerRestart}
+							title="Restart server"
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+							</svg>
+							<span>Restart</span>
+						</button>
+						<!-- Stop -->
+						<button
+							type="button"
+							class="server-action-btn server-action-btn-danger"
+							onclick={handleServerStop}
+							title="Stop server"
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" />
+							</svg>
+							<span>Stop</span>
+						</button>
+					{:else}
+						<!-- Start -->
+						<button
+							type="button"
+							class="server-action-btn server-action-btn-success"
+							onclick={handleServerStart}
+							title="Start server"
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+							</svg>
+							<span>Start Server</span>
+						</button>
+					{/if}
+					{#if serverIsRunning}
+						<span class="server-status-dot server-status-running" title="Running"></span>
+					{:else}
+						<span class="server-status-dot server-status-stopped" title="Stopped"></span>
+					{/if}
+				</div>
+			{/if}
 
 			<!-- Ready Tasks Section -->
 			{#if hasActions && projectReadyTasks.length > 0}
@@ -768,5 +960,86 @@
 	.dropdown-scroll::-webkit-scrollbar-thumb {
 		background: oklch(0.35 0.02 250);
 		border-radius: 0.2rem;
+	}
+
+	/* Server section */
+	.server-port {
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		font-size: 0.5625rem;
+		color: oklch(0.55 0.02 250);
+		margin-left: 0.25rem;
+	}
+
+	.server-error {
+		padding: 0.25rem 0.5rem;
+		font-size: 0.6875rem;
+		color: oklch(0.75 0.15 30);
+		background: oklch(0.25 0.08 30 / 0.2);
+		border-radius: 0.25rem;
+		margin: 0.125rem 0.25rem;
+	}
+
+	.server-actions-row {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.375rem 0.5rem;
+	}
+
+	.server-action-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.25rem 0.5rem;
+		background: oklch(0.22 0.02 250);
+		border: 1px solid oklch(0.32 0.02 250);
+		border-radius: 0.3rem;
+		color: oklch(0.70 0.02 250);
+		font-size: 0.6875rem;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.server-action-btn:hover {
+		background: oklch(0.28 0.04 250);
+		color: oklch(0.88 0.02 250);
+	}
+
+	.server-action-btn-success {
+		border-color: oklch(0.45 0.12 145 / 0.5);
+		color: oklch(0.65 0.12 145);
+	}
+
+	.server-action-btn-success:hover {
+		background: oklch(0.28 0.08 145 / 0.3);
+		color: oklch(0.85 0.15 145);
+	}
+
+	.server-action-btn-danger {
+		border-color: oklch(0.45 0.12 30 / 0.5);
+		color: oklch(0.65 0.12 30);
+	}
+
+	.server-action-btn-danger:hover {
+		background: oklch(0.28 0.08 30 / 0.3);
+		color: oklch(0.85 0.15 30);
+	}
+
+	.server-status-dot {
+		width: 0.4rem;
+		height: 0.4rem;
+		border-radius: 50%;
+		margin-left: auto;
+		flex-shrink: 0;
+	}
+
+	.server-status-running {
+		background: oklch(0.70 0.18 145);
+		box-shadow: 0 0 4px oklch(0.70 0.18 145);
+	}
+
+	.server-status-stopped {
+		background: oklch(0.45 0.02 250);
 	}
 </style>

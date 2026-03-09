@@ -130,10 +130,11 @@ Deno.serve(async (req) => {
   }
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from(reference_table)
     .update(update)
     .eq("id", reference_id)
+    .select("id")
 
   if (error) {
     console.error(`JAT webhook failed: ${error.message}`, {
@@ -147,10 +148,29 @@ Deno.serve(async (req) => {
     )
   }
 
-  console.log(`JAT webhook: ${event} → ${reference_table}[${reference_id}]`, update)
+  if (!data || data.length === 0) {
+    console.warn(`JAT webhook: no rows matched ${reference_table}[${reference_id}]`, update)
+    return new Response(
+      JSON.stringify({
+        error: `No rows matched: ${reference_table} id=${reference_id}`,
+        table: reference_table,
+        id: reference_id,
+        rowsAffected: 0,
+      }),
+      { status: 404, headers: { "Content-Type": "application/json" } },
+    )
+  }
+
+  console.log(`JAT webhook: ${event} → ${reference_table}[${reference_id}] (${data.length} row(s))`, update)
 
   return new Response(
-    JSON.stringify({ success: true, table: reference_table, id: reference_id, updated: update }),
+    JSON.stringify({
+      success: true,
+      table: reference_table,
+      id: reference_id,
+      updated: update,
+      rowsAffected: data.length,
+    }),
     { status: 200, headers: { "Content-Type": "application/json" } },
   )
 })

@@ -22,6 +22,7 @@
   let expandedScreenshot = $state<string | null>(null);
   let expandedThreadId = $state<string | null>(null);
   let expandedCardId = $state<string | null>(null);
+  let scrollEl = $state<HTMLElement | undefined>();
 
   let respondingId = $state('');
   let rejectingId = $state('');
@@ -52,12 +53,43 @@
   let activeCount = $derived(reports.filter(r => ['submitted', 'in_progress', 'rejected', 'completed', 'wontfix'].includes(r.status)).length);
   let doneCount = $derived(reports.filter(r => r.status === 'accepted' || r.status === 'closed').length);
 
+  function renderMarkdown(text: string): string {
+    if (!text) return '';
+    // XSS-escape raw text first
+    const escaped = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+    return escaped
+      // Headers: ## Heading → <strong>
+      .replace(/^#{1,3} (.+)$/gm, '<strong style="display:block;margin-top:6px;color:#f3f4f6">$1</strong>')
+      // Bold: **text**
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      // Italic: *text*
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      // Bullet list items: - item or * item
+      .replace(/^[-*] (.+)$/gm, '<span style="display:block;padding-left:10px">• $1</span>')
+      // Line breaks
+      .replace(/\n/g, '<br>');
+  }
+
   function toggleCard(reportId: string) {
-    expandedCardId = expandedCardId === reportId ? null : reportId;
+    const wasExpanded = expandedCardId === reportId;
+    expandedCardId = wasExpanded ? null : reportId;
     // Close thread/screenshot when collapsing
-    if (expandedCardId !== reportId) {
+    if (wasExpanded) {
       if (expandedThreadId === reportId) expandedThreadId = null;
       expandedScreenshot = null;
+    } else {
+      // Scroll expanded card into view after slide animation completes
+      setTimeout(() => {
+        if (!scrollEl) return;
+        const card = scrollEl.querySelector(`[data-card-id="${reportId}"]`) as HTMLElement | null;
+        if (card) {
+          card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 220);
     }
   }
 
@@ -218,7 +250,7 @@
     </button>
   </div>
 
-  <div class="request-scroll">
+  <div class="request-scroll" bind:this={scrollEl}>
     {#key activeSubTab}
     <div transition:slide={{ duration: 200 }}>
     {#if loading}
@@ -244,7 +276,7 @@
     {:else}
       <div class="reports">
         {#each filteredReports as report (report.id)}
-          <div class="report-card" class:awaiting={report.status === 'completed'} class:expanded={expandedCardId === report.id}>
+          <div class="report-card" data-card-id={report.id} class:awaiting={report.status === 'completed'} class:expanded={expandedCardId === report.id}>
             <!-- Collapsed header (always visible, clickable) -->
             <button class="card-toggle" onclick={() => toggleCard(report.id)}>
               <span class="report-type">{typeIcon(report.type)}</span>
@@ -291,7 +323,7 @@
                             </span>
                             <span class="thread-time">{timeAgo(entry.at)}</span>
                           </div>
-                          <p class="thread-message">{entry.message}</p>
+                          <p class="thread-message">{@html renderMarkdown(entry.message)}</p>
 
                           {#if entry.summary && entry.summary.length > 0}
                             <ul class="thread-summary">
@@ -359,7 +391,7 @@
                 {#if report.dev_notes && !report.thread && report.status !== 'in_progress'}
                   <div class="dev-notes">
                     <span class="dev-notes-label">Dev response:</span>
-                    <span>{report.dev_notes}</span>
+                    <span class="dev-notes-content">{@html renderMarkdown(report.dev_notes)}</span>
                   </div>
                 {/if}
 
@@ -466,6 +498,8 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    flex: 1;
+    min-height: 0;
   }
 
   /* Subtabs */
@@ -527,6 +561,7 @@
 
   .request-scroll {
     padding: 10px 12px;
+    padding-bottom: 80px;
     overflow-y: auto;
     flex: 1;
     min-height: 0;
@@ -759,6 +794,9 @@
     margin-right: 4px;
     font-size: 11px;
   }
+  .dev-notes-content {
+    line-height: 1.5;
+  }
 
   /* Thread toggle button */
   .thread-toggle {
@@ -850,9 +888,8 @@
   }
   .thread-message {
     color: #d1d5db;
-    line-height: 1.4;
+    line-height: 1.5;
     margin: 0;
-    white-space: pre-wrap;
     word-break: break-word;
   }
   .thread-summary {

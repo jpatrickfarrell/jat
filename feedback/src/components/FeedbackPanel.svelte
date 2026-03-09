@@ -406,7 +406,7 @@
   {/if}
 
   {#if activeTab === 'requests'}
-    <div transition:slide={{ duration: 200 }}>
+    <div class="requests-wrapper" transition:slide={{ duration: 200 }}>
       <RequestList
         {endpoint}
         bind:reports
@@ -722,6 +722,13 @@
   }
   @keyframes spin {
     to { transform: rotate(360deg); }
+  }
+  .requests-wrapper {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
   .panel-version {
     font-size: 10px;

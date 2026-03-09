@@ -50,6 +50,7 @@ export async function fetchReports(endpoint: string): Promise<{ reports: ReportS
     const url = `${endpoint.replace(/\/$/, '')}/api/feedback/reports`;
     const response = await fetch(url, {
       method: 'GET',
+      credentials: 'same-origin',
     });
 
     if (!response.ok) {

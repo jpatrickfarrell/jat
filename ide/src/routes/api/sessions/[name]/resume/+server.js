@@ -482,8 +482,15 @@ export async function POST({ params, request }) {
 			// Derive project name from path (e.g., /home/jw/code/jat -> jat)
 			const projectName = projectPath.split('/').filter(Boolean).pop() || '';
 
+			// Determine the appropriate signal type for the resumed session.
+			// If there's an active task, signal 'working'. If no task, signal 'idle'
+			// (NOT 'starting') because 'starting' is a USER_WAITING state with a
+			// 30-minute TTL that would overwrite persistent states like 'completed'.
+			// 'idle' has a 1-minute transient TTL and self-corrects quickly via
+			// terminal output-based detection once the agent emits new signals.
+			const signalType = taskId ? 'working' : 'idle';
 			const signalData = {
-				type: taskId ? 'working' : 'starting',
+				type: signalType,
 				agentName,
 				sessionId: sessionName,
 				project: projectName,
@@ -494,7 +501,7 @@ export async function POST({ params, request }) {
 			};
 			const signalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
 			writeFileSync(signalFile, JSON.stringify(signalData, null, 2), 'utf-8');
-			console.log(`[resume] Wrote IDE-initiated signal: ${signalFile} (type: ${signalData.type})`);
+			console.log(`[resume] Wrote IDE-initiated signal: ${signalFile} (type: ${signalType})`);
 		} catch (e) {
 			// Non-fatal - UI will eventually get state from agent signals
 			console.warn('[resume] Failed to write signal file:', e);

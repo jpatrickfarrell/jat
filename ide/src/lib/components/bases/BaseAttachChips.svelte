@@ -5,7 +5,7 @@
 	 */
 	import type { KnowledgeBase } from '$lib/types/knowledgeBase';
 	import { SOURCE_TYPE_INFO } from '$lib/types/knowledgeBase';
-	import { getBases, isStoreInitialized, initializeStore } from '$lib/stores/bases.svelte';
+	import { getBases, isStoreInitialized, initializeStore, getCurrentProject } from '$lib/stores/bases.svelte';
 
 	interface Props {
 		selectedIds?: string[];
@@ -19,9 +19,9 @@
 
 	let showDropdown = $state(false);
 
-	// Ensure store is initialized
+	// Ensure store is initialized for the correct project
 	$effect(() => {
-		if (project && !isStoreInitialized()) {
+		if (project && (!isStoreInitialized() || getCurrentProject() !== project)) {
 			initializeStore(project);
 		}
 	});

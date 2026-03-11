@@ -24,7 +24,7 @@
 	import VoiceInput from './VoiceInput.svelte';
 	import BaseAttachChips from './bases/BaseAttachChips.svelte';
 	import DataTableAttachChips from './bases/DataTableAttachChips.svelte';
-	import { getBases as getBasesFromStore, isStoreInitialized as isBasesStoreInitialized } from '$lib/stores/bases.svelte';
+	import { getBases as getBasesFromStore, isStoreInitialized as isBasesStoreInitialized, getCurrentProject as getBasesCurrentProject } from '$lib/stores/bases.svelte';
 	import PromptInput from './quick-commands/PromptInput.svelte';
 	import CreatePaste from './tasks/CreatePaste.svelte';
 	import CreateTemplate from './tasks/CreateTemplate.svelte';
@@ -270,8 +270,15 @@
 	// Pre-fill always-inject bases when drawer opens and bases store is ready.
 	// Runs once per drawer-open: when the store becomes initialized, seed selectedBaseIds
 	// with always_inject bases (unless user or AI has already modified the field).
+	// IMPORTANT: Only pre-fill if the bases store is loaded for the SAME project as the task.
+	// Otherwise we'd inject bases from a different project (e.g., personal project bases into jat tasks).
 	$effect(() => {
 		if (isOpen && isBasesStoreInitialized() && !userModifiedFields.has('bases') && selectedBaseIds.length === 0) {
+			// Only use always-inject bases if the store is loaded for the current task's project
+			const basesProject = getBasesCurrentProject();
+			if (basesProject && formData.project && basesProject !== formData.project) {
+				return; // Store has bases from a different project — don't pre-fill
+			}
 			const alwaysInjectIds = getBasesFromStore()
 				.filter(b => b.always_inject)
 				.map(b => b.id);

@@ -340,6 +340,30 @@ export default class SupabaseAdapter extends BaseAdapter {
         } else {
           templateRow.selected_elements_formatted = '';
         }
+        // Format console logs — prioritize errors/warns, then most recent
+        if (Array.isArray(row.console_logs) && row.console_logs.length > 0) {
+          const allLogs = row.console_logs;
+          const errors = allLogs.filter(l => l.type === 'error' || l.type === 'warn');
+          const recent = allLogs.slice(-10);
+          const seen = new Set();
+          const prioritized = [];
+          for (const log of [...errors, ...recent]) {
+            const key = `${log.timestamp || ''}|${log.message || ''}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              prioritized.push(log);
+            }
+          }
+          const selected = prioritized.slice(-20);
+          const logLines = selected.map(log => {
+            const level = log.type || log.level || 'log';
+            const msg = typeof log.message === 'string' ? log.message : JSON.stringify(log.message);
+            return `- [${level}] ${msg.substring(0, 500)}`;
+          });
+          templateRow.console_logs_formatted = `**Console Logs** (${allLogs.length} total, ${selected.length} shown):\n${logLines.join('\n')}`;
+        } else {
+          templateRow.console_logs_formatted = '';
+        }
         description = renderTemplate(source.descriptionTemplate, templateRow);
       } else {
         description = row.description || '';

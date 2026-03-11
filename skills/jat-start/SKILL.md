@@ -135,6 +135,27 @@ Approach:
   {YOUR_APPROACH_DESCRIPTION}
 ```
 
+## Credentials & Authentication
+
+**CRITICAL: Never hardcode or invent passwords. Never reset user passwords for testing.**
+
+When you need credentials (API keys, database URLs, service role keys, login credentials), use `jat-secret`:
+
+```bash
+jat-secret --list                          # List all available secrets
+jat-secret <project>-supabase-url          # Project Supabase URL
+jat-secret <project>-supabase-service-role-key  # Service role key
+eval $(jat-secret --export)                # Load all as env vars
+```
+
+**For browser testing that requires login:**
+- Use the stored admin credentials: `jat-secret flush-admin-email` and `jat-secret flush-admin-password`
+- **NEVER** reset a real user's password via the admin API to log in for testing
+- **NEVER** use `auth.admin.updateUserById()` or `PUT /auth/v1/admin/users/` to set a password for browser verification
+- If the stored credentials don't work, emit `needs_input` and ask the user — do NOT reset the password
+
+Resetting passwords to test UI is destructive — it locks real users out of their accounts.
+
 ## Asking Questions During Work
 
 **Always emit `needs_input` signal BEFORE asking questions:**

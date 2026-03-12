@@ -7,6 +7,7 @@
  * - agentName: Agent name extracted from session (e.g., "WisePrairie")
  * - task: Current in_progress task for this agent (or null)
  * - lastCompletedTask: Most recently closed task by this agent (for completion state display)
+ * - project: Project name derived from task ID or signal data (for TopBar chip grouping)
  * - output: Recent terminal output with ANSI codes
  * - lineCount: Number of output lines
  * - tokens: Token usage for today
@@ -180,6 +181,36 @@ function getLastCompletedTaskFromTimeline(sessionName) {
  * @param {string} sessionName - tmux session name (e.g., "jat-DimGlade")
  * @returns {{ id: string, title: string, status: string, priority: number|null, issue_type: string|null, description: string, depends_on: any[], labels: any[], created_at: string|null, agent_program: string|null }|null}
  */
+/**
+ * Extract project name from a task ID (e.g., "jat-abc" → "jat", "chimaro-xyz" → "chimaro").
+ * Uses a lazy match to handle multi-segment project names (e.g., "my-app-abc" → "my-app").
+ * @param {string|null|undefined} taskId
+ * @returns {string|null}
+ */
+function getProjectFromTaskId(taskId) {
+	if (!taskId) return null;
+	const match = taskId.match(/^([a-zA-Z0-9_-]+?)-[a-zA-Z0-9.]+$/);
+	return match ? match[1] : null;
+}
+
+/**
+ * Read the project from a session's signal file.
+ * Signal data contains `data.project` set by the agent's starting signal.
+ * @param {string} sessionName
+ * @returns {string|null}
+ */
+function readSignalProject(sessionName) {
+	const signalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
+	try {
+		if (!existsSync(signalFile)) return null;
+		const content = readFileSync(signalFile, 'utf-8');
+		const signal = JSON.parse(content);
+		return signal.data?.project || signal.project || null;
+	} catch {
+		return null;
+	}
+}
+
 function readSignalTask(sessionName) {
 	const signalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
 	try {
@@ -253,6 +284,7 @@ function getCachedTasks() {
  * @property {number} cost - Cost in USD for today
  * @property {SparklineDataPoint[]} sparklineData - Hourly token usage (last 24h)
  * @property {number|null} contextPercent - Context remaining percentage (0-100)
+ * @property {string|null} project - Project name (from task ID or signal data)
  * @property {string} created - Session creation timestamp
  * @property {boolean} attached - Whether session is attached
  * @property {string} sessionState - Detected session state (starting, working, needs-input, ready-for-review, completing, completed, idle)
@@ -658,6 +690,8 @@ async function computeWorkData(lines, includeUsage) {
 		// capturing their terminal output is wasted work.
 		/** @type {Map<string, string>} */
 		const preSignalStates = new Map();
+		/** @type {Map<string, string>} session name → project name (from signal data) */
+		const preSignalProjects = new Map();
 		/** @type {Set<string>} */
 		const activeSessionNames = new Set();
 
@@ -666,7 +700,13 @@ async function computeWorkData(lines, includeUsage) {
 			const signalState = readSignalState(session.name);
 			if (signalState) {
 				preSignalStates.set(session.name, signalState);
-			} else if (existsSync(`/tmp/jat-resumed-${session.name}.json`)) {
+			}
+			// Always try to read project from signal (even if state expired)
+			const signalProject = readSignalProject(session.name);
+			if (signalProject) {
+				preSignalProjects.set(session.name, signalProject);
+			}
+			if (!signalState && existsSync(`/tmp/jat-resumed-${session.name}.json`)) {
 				// Fallback: resumed session with no signal file (pre-fix or expired signal).
 				// Use resume marker to avoid misclassifying as "planning session".
 				preSignalStates.set(session.name, 'starting');
@@ -847,11 +887,18 @@ async function computeWorkData(lines, includeUsage) {
 					sessionState = detectSessionState(output, task, lastCompletedTask, session.name);
 				}
 
+				// Determine project: task ID → lastCompletedTask ID → signal data
+				const project = getProjectFromTaskId(task?.id)
+					|| getProjectFromTaskId(lastCompletedTask?.id)
+					|| preSignalProjects.get(session.name)
+					|| null;
+
 				return {
 					sessionName: session.name,
 					agentName,
 					task,
 					lastCompletedTask,
+					project,
 					output,
 					lineCount,
 					tokens,

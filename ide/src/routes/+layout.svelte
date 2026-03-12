@@ -93,7 +93,8 @@
 		const sessions = getWorkSessions();
 		const map = new Map<string, string[]>();
 		for (const session of sessions) {
-			const proj = session.project || (session.task?.id ? getProjectFromTaskId(session.task.id) : null);
+			const taskId = session.task?.id || session.lastCompletedTask?.id;
+			const proj = session.project || (taskId ? getProjectFromTaskId(taskId) : null);
 			if (!proj) continue;
 			const state = session._sseState || 'idle';
 			const arr = map.get(proj) || [];

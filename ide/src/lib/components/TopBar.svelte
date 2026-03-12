@@ -583,7 +583,7 @@
 						{@const chipTitle = sessionStates.length > 0
 							? `${favProject} — ${sessionStates.map(s => SESSION_STATE_VISUALS[s]?.shortLabel || s).join(', ')}`
 							: favProject}
-						<div class="fav-chip" style="--fav-color: {favColor};">
+						<div class="fav-chip" class:has-agents={sessionStates.length > 0} style="--fav-color: {favColor};">
 							<button
 								type="button"
 								class="fav-chip-btn"
@@ -901,7 +901,13 @@
 		opacity: 0.5;
 	}
 
-	.fav-chip:hover {
+	.fav-chip.has-agents {
+		opacity: 0.85;
+		border-color: color-mix(in oklch, var(--fav-color) 35%, transparent);
+	}
+
+	.fav-chip:hover,
+	.fav-chip.has-agents:hover {
 		opacity: 1;
 		background: color-mix(in oklch, var(--fav-color) 18%, transparent);
 		border-color: color-mix(in oklch, var(--fav-color) 45%, transparent);
@@ -938,8 +944,8 @@
 	}
 
 	.fav-dot {
-		width: 0.45rem;
-		height: 0.45rem;
+		width: 0.5rem;
+		height: 0.5rem;
 		border-radius: 50%;
 		flex-shrink: 0;
 	}

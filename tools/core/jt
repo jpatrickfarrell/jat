@@ -2569,6 +2569,159 @@ Examples:
 HELP
 }
 
+# ---------------------------------------------------------------------------
+# Audit — check project context injection compliance
+# ---------------------------------------------------------------------------
+
+cmd_audit() {
+  local json_out=false fix_mode=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) json_out=true; shift ;;
+      --fix)  fix_mode=true; shift ;;
+      --help|-h) echo "Usage: jt audit [--json] [--fix]"; echo ""; echo "Check project context injection compliance."; echo "Validates: thin CLAUDE.md, Project Index base, Tech Stack base."; echo ""; echo "Options:"; echo "  --json    Output results as JSON"; echo "  --fix     Print fix commands for failing checks"; return 0 ;;
+      *) shift ;;
+    esac
+  done
+
+  local project_name
+  project_name="$(basename "$PROJECT_ROOT")"
+  local checks_passed=0 checks_failed=0 checks_warned=0
+  local issues=() warnings=() fixes=()
+
+  # Check 1: CLAUDE.md exists and is thin (< 100 lines)
+  local claude_md="$PROJECT_ROOT/CLAUDE.md"
+  if [[ -f "$claude_md" ]]; then
+    local lines
+    lines=$(wc -l < "$claude_md")
+    if (( lines > 100 )); then
+      issues+=("CLAUDE.md is $lines lines (should be < 100)")
+      fixes+=("Run /jat:migrate to extract context into knowledge bases")
+      checks_failed=$((checks_failed + 1))
+    elif (( lines > 50 )); then
+      warnings+=("CLAUDE.md is $lines lines (ideally < 50)")
+      checks_warned=$((checks_warned + 1))
+    else
+      checks_passed=$((checks_passed + 1))
+    fi
+  else
+    warnings+=("No CLAUDE.md found")
+    checks_warned=$((checks_warned + 1))
+  fi
+
+  # Check 2: CLAUDE.md points to JAT bases (contains "jt bases" or "knowledge bases")
+  if [[ -f "$claude_md" ]]; then
+    if grep -qi 'jt bases\|knowledge bases\|JAT.*bases' "$claude_md" 2>/dev/null; then
+      checks_passed=$((checks_passed + 1))
+    else
+      issues+=("CLAUDE.md doesn't reference JAT knowledge bases")
+      fixes+=("Add: 'Full project context is in JAT knowledge bases — run \`jt bases list\` to see all available context.'")
+      checks_failed=$((checks_failed + 1))
+    fi
+  fi
+
+  # Check 3: Project Index always-inject base exists
+  if [[ -f "$BASES_DB" ]]; then
+    local pi_count
+    pi_count=$(sqlite3 "$BASES_DB" "SELECT COUNT(*) FROM bases WHERE always_inject = 1 AND lower(name) LIKE '%project index%';" 2>/dev/null || echo "0")
+    if (( pi_count > 0 )); then
+      checks_passed=$((checks_passed + 1))
+    else
+      issues+=("No 'Project Index' always-inject base found")
+      fixes+=("jt bases create --name \"Project Index\" --type manual --always-inject --content \"...\"")
+      checks_failed=$((checks_failed + 1))
+    fi
+  else
+    issues+=("No bases database (.jat/bases.db)")
+    fixes+=("jt init && jt bases create --name \"Project Index\" --type manual --always-inject --content \"...\"")
+    checks_failed=$((checks_failed + 1))
+  fi
+
+  # Check 4: Tech Stack always-inject base exists
+  if [[ -f "$BASES_DB" ]]; then
+    local ts_count
+    ts_count=$(sqlite3 "$BASES_DB" "SELECT COUNT(*) FROM bases WHERE always_inject = 1 AND lower(name) LIKE '%tech stack%';" 2>/dev/null || echo "0")
+    if (( ts_count > 0 )); then
+      checks_passed=$((checks_passed + 1))
+    else
+      issues+=("No 'Tech Stack' always-inject base found")
+      fixes+=("jt bases create --name \"Tech Stack\" --type manual --always-inject --content \"...\"")
+      checks_failed=$((checks_failed + 1))
+    fi
+  fi
+
+  # Check 5: At least one knowledge base exists
+  if [[ -f "$BASES_DB" ]]; then
+    local base_count
+    base_count=$(sqlite3 "$BASES_DB" "SELECT COUNT(*) FROM bases;" 2>/dev/null || echo "0")
+    if (( base_count > 0 )); then
+      checks_passed=$((checks_passed + 1))
+    else
+      issues+=("No knowledge bases found")
+      fixes+=("Run /jat:migrate or /jat:onboard to create knowledge bases")
+      checks_failed=$((checks_failed + 1))
+    fi
+  fi
+
+  # Output
+  if $json_out; then
+    local issues_json="[]" warnings_json="[]" fixes_json="[]"
+    if (( ${#issues[@]} > 0 )); then
+      issues_json=$(printf '%s\n' "${issues[@]}" | python3 -c "import sys,json; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))")
+    fi
+    if (( ${#warnings[@]} > 0 )); then
+      warnings_json=$(printf '%s\n' "${warnings[@]}" | python3 -c "import sys,json; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))")
+    fi
+    if (( ${#fixes[@]} > 0 )); then
+      fixes_json=$(printf '%s\n' "${fixes[@]}" | python3 -c "import sys,json; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))")
+    fi
+    python3 -c "
+import json
+print(json.dumps({
+  'project': '$project_name',
+  'path': '$PROJECT_ROOT',
+  'passed': $checks_passed,
+  'failed': $checks_failed,
+  'warned': $checks_warned,
+  'compliant': $checks_failed == 0,
+  'issues': $issues_json,
+  'warnings': $warnings_json,
+  'fixes': $fixes_json
+}))
+"
+  else
+    local total=$((checks_passed + checks_failed + checks_warned))
+
+    if (( checks_failed == 0 && checks_warned == 0 )); then
+      echo "  $project_name: COMPLIANT ($checks_passed/$total checks passed)"
+    elif (( checks_failed == 0 )); then
+      echo "  $project_name: OK ($checks_passed passed, $checks_warned warnings)"
+      for w in "${warnings[@]}"; do
+        echo "    ! $w"
+      done
+    else
+      echo "  $project_name: NEEDS WORK ($checks_failed issues, $checks_warned warnings)"
+      for i in "${issues[@]}"; do
+        echo "    x $i"
+      done
+      for w in "${warnings[@]}"; do
+        echo "    ! $w"
+      done
+    fi
+
+    if $fix_mode && (( ${#fixes[@]} > 0 )); then
+      echo ""
+      echo "  Fixes:"
+      for f in "${fixes[@]}"; do
+        echo "    $ $f"
+      done
+    fi
+  fi
+
+  # Exit code: 0 if compliant, 1 if issues
+  (( checks_failed == 0 ))
+}
+
 cmd_help() {
   cat <<'HELP'
 jt - JAT task CLI
@@ -2595,6 +2748,7 @@ Commands:
   dep     cycles
   data    tables | schema | query | exec | create | drop | columns
   bases   list | show | create | delete | attach | detach | render | search
+  audit   [--json] [--fix]    Check project context injection compliance
   init    [--quiet]
 
 Options:
@@ -2622,6 +2776,7 @@ case "${1:-}" in
   dep)       shift; cmd_dep "$@" ;;
   data)      shift; cmd_data "$@" ;;
   bases)     shift; cmd_bases "$@" ;;
+  audit)     shift; cmd_audit "$@" ;;
   init)      shift; cmd_init "$@" ;;
   --version) echo "jt $VERSION" ;;
   --help|-h|help) cmd_help ;;

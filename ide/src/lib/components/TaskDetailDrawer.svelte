@@ -283,8 +283,9 @@
 	let attachmentsLoading = $state(false);
 	let textPreviews = $state<Map<string, string>>(new Map());
 
-	// Attachment drag-drop state
+	// Attachment drag-drop state (whole-drawer dropzone, matching TaskCreationDrawer)
 	let isDraggingOver = $state(false);
+	let drawerDragCounter = $state(0); // Track nested drag enter/leave on drawer
 	let isUploading = $state(false);
 
 	// Session logs state
@@ -884,26 +885,12 @@
 		}
 	}
 
-	// Drag-drop handlers for attachments
-	function handleDragOver(event: DragEvent) {
-		event.preventDefault();
-		event.stopPropagation();
-		if (event.dataTransfer) {
-			event.dataTransfer.dropEffect = 'copy';
-		}
-		isDraggingOver = true;
-	}
-
-	function handleDragLeave(event: DragEvent) {
+	// Drawer-wide drag-drop handlers for attachments (matches TaskCreationDrawer pattern)
+	async function handleDrawerDrop(event: DragEvent) {
 		event.preventDefault();
 		event.stopPropagation();
 		isDraggingOver = false;
-	}
-
-	async function handleFileDrop(event: DragEvent) {
-		event.preventDefault();
-		event.stopPropagation();
-		isDraggingOver = false;
+		drawerDragCounter = 0;
 
 		if (!event.dataTransfer || !taskId) return;
 
@@ -924,6 +911,36 @@
 			showToast('error', 'Failed to upload file');
 		} finally {
 			isUploading = false;
+		}
+	}
+
+	// Handle drag over on drawer (must preventDefault to allow drop)
+	function handleDrawerDragOver(event: DragEvent) {
+		event.preventDefault();
+		event.stopPropagation();
+		if (event.dataTransfer) {
+			event.dataTransfer.dropEffect = 'copy';
+		}
+	}
+
+	// Handle drag enter on drawer (use counter to handle nested elements)
+	function handleDrawerDragEnter(event: DragEvent) {
+		event.preventDefault();
+		event.stopPropagation();
+		drawerDragCounter++;
+		if (drawerDragCounter > 0) {
+			isDraggingOver = true;
+		}
+	}
+
+	// Handle drag leave on drawer
+	function handleDrawerDragLeave(event: DragEvent) {
+		event.preventDefault();
+		event.stopPropagation();
+		drawerDragCounter--;
+		if (drawerDragCounter <= 0) {
+			drawerDragCounter = 0;
+			isDraggingOver = false;
 		}
 	}
 
@@ -2152,6 +2169,8 @@
 			attachmentsLoading = false;
 			attachments = [];
 			textPreviews = new Map();
+			isDraggingOver = false;
+			drawerDragCounter = 0;
 			logsLoading = false;
 			signalsLoading = false;
 		}
@@ -2201,9 +2220,26 @@
 		></label>
 
 		<!-- Drawer Panel (fixed height, header/footer sticky, content scrolls) - Industrial -->
+		<!-- Entire drawer is a drop zone for attachments (matches TaskCreationDrawer) -->
 		<div
-			class="h-full w-full max-w-2xl flex flex-col shadow-2xl bg-base-100 border-l border-base-300"
+			class="h-full w-full max-w-2xl flex flex-col shadow-2xl bg-base-100 border-l border-base-300 relative"
+			ondrop={handleDrawerDrop}
+			ondragover={handleDrawerDragOver}
+			ondragenter={handleDrawerDragEnter}
+			ondragleave={handleDrawerDragLeave}
 		>
+			<!-- Full-drawer drop overlay -->
+			{#if isDraggingOver && taskId}
+				<div class="absolute inset-0 z-50 flex items-center justify-center bg-base-100/80 backdrop-blur-sm border-2 border-dashed border-primary rounded-lg pointer-events-none">
+					<div class="text-center">
+						<svg class="w-16 h-16 mx-auto mb-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+						</svg>
+						<p class="font-mono text-lg font-semibold text-primary">Drop files anywhere</p>
+						<p class="font-mono text-sm mt-1 text-base-content/60">Files will be added as attachments</p>
+					</div>
+				</div>
+			{/if}
 			<!-- Header - Industrial -->
 			<div
 				class="flex items-center justify-between p-6 relative bg-base-200 border-b border-base-300"
@@ -3261,13 +3297,9 @@
 							</div>
 						{/if}
 
-						<!-- Attachments - Industrial with Drag-Drop -->
-						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<!-- Attachments - Industrial (drop zone is now the whole drawer) -->
 						<div
-							ondragover={handleDragOver}
-							ondragleave={handleDragLeave}
-							ondrop={handleFileDrop}
-							class="relative rounded transition-all duration-200 {isDraggingOver ? 'bg-success/15 border-2 border-dashed border-success' : ''}"
+							class="relative rounded transition-all duration-200"
 						>
 							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider text-base-content/60">
 								Attachments
@@ -3285,13 +3317,6 @@
 								<div class="flex items-center gap-2 p-3 rounded bg-base-200">
 									<span class="loading loading-spinner loading-sm"></span>
 									<span class="text-sm text-base-content/60">Loading attachments...</span>
-								</div>
-							{:else if isDraggingOver}
-								<div class="p-6 rounded text-center bg-success/20">
-									<svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 mx-auto mb-2 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-									</svg>
-									<span class="text-sm font-medium text-success">Drop files to attach</span>
 								</div>
 							{:else if attachments.length > 0}
 								<div class="grid grid-cols-2 gap-3 p-3 rounded overflow-visible bg-base-200">

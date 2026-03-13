@@ -42,6 +42,7 @@ ROUND 1 (parallel) ──► ROUND 2 (parallel) ──► ROUND 3 (parallel) ─
   Identity                 Starting signal        Task update
   Task details             Memory search           Working signal
   Git status               Prior task search       Integration sync
+  Context audit
 ```
 
 ---
@@ -79,7 +80,15 @@ jt ready --json | jq -r '.[] | "  [\(.priority)] \(.id) - \(.title)"'
 git branch --show-current && git diff-index --quiet HEAD -- && echo "clean" || echo "dirty"
 ```
 
-**All three calls above go out in one parallel batch.** Wait for results before Round 2.
+#### 1D: Context Audit
+
+```bash
+jt audit 2>&1 || true
+```
+
+This checks if the project follows the context injection standard (thin CLAUDE.md + always-inject bases). **Non-blocking** — warn in the banner but don't stop work.
+
+**All four calls above go out in one parallel batch.** Wait for results before Round 2.
 
 #### Manual Registration (only if NO_PRE_REG)
 
@@ -207,6 +216,7 @@ Agent: {AGENT_NAME}
 Task: {TASK_TITLE}
 Priority: P{X}
 Memory: {N relevant entries found | no index yet | no matches}
+Context: {COMPLIANT | "X issues — run /jat:migrate to fix"}
 
 APPROACH:
   {YOUR_APPROACH_DESCRIPTION}

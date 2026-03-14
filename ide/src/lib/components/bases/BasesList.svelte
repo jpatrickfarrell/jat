@@ -33,10 +33,14 @@
 		return list.filter(b => b.source_type === filterType);
 	});
 
-	// Group by source_type
+	// Separate system bases from regular bases
+	const systemBases = $derived(displayBases.filter(b => b._system));
+	const regularBases = $derived(displayBases.filter(b => !b._system));
+
+	// Group regular bases by source_type
 	const grouped = $derived.by(() => {
 		const groups = new Map<string, KnowledgeBase[]>();
-		for (const base of displayBases) {
+		for (const base of regularBases) {
 			const key = base.source_type;
 			if (!groups.has(key)) groups.set(key, []);
 			groups.get(key)!.push(base);
@@ -141,7 +145,27 @@
 				{/if}
 			</div>
 		{:else if filterType === 'all' && !searchQuery}
-			<!-- Grouped view -->
+			<!-- System bases group (always first) -->
+			{#if systemBases.length > 0}
+				<div class="mb-2">
+					<div class="flex items-center gap-1.5 px-1 py-1">
+						<span class="text-sm">🔒</span>
+						<span class="text-xs font-medium uppercase tracking-wider" style="color: oklch(0.60 0.08 270);">
+							System
+						</span>
+						<span class="text-xs" style="color: oklch(0.45 0.01 250);">({systemBases.length})</span>
+					</div>
+					{#each systemBases as base (base.id)}
+						<BaseCard
+							{base}
+							selected={selectedBase?.id === base.id}
+							{onSelect}
+						/>
+					{/each}
+				</div>
+			{/if}
+
+			<!-- Grouped view (regular bases) -->
 			{#each [...grouped.entries()] as [type, bases]}
 				<div class="mb-2">
 					<div class="flex items-center gap-1.5 px-1 py-1">

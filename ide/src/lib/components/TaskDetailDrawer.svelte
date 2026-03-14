@@ -905,7 +905,7 @@
 			}
 			// Refresh attachments after upload
 			await fetchAttachments(taskId);
-			showToast('success', `✓ Uploaded ${files.length} file${files.length > 1 ? 's' : ''}`);
+			showToast('success', `Uploaded ${files.length} file${files.length > 1 ? 's' : ''}`);
 		} catch (err) {
 			console.error('Failed to upload attachment:', err);
 			showToast('error', 'Failed to upload file');
@@ -1421,7 +1421,7 @@
 				lastSaved = new Date();
 
 				// Show success toast
-				showToast('success', '✓ Saved');
+				showToast('success', 'Saved');
 
 			} catch (error: any) {
 				// Rollback on error
@@ -1506,7 +1506,7 @@
 			isOpen = false;
 
 			// Show success toast with new task ID (user can find it in the list)
-			showToast('success', `✓ Migrated: ${data.oldTaskId} → ${data.newTaskId}`);
+			showToast('success', `Migrated: ${data.oldTaskId} → ${data.newTaskId}`);
 
 		} catch (error: any) {
 			showToast('error', `✗ ${error.message}`);
@@ -1553,7 +1553,7 @@
 			// Hide dropdown
 			showDependencyDropdown = false;
 
-			showToast('success', `✓ Added dependency ${depId}`);
+			showToast('success', `Added dependency ${depId}`);
 		} catch (error: any) {
 			showToast('error', `✗ ${error.message}`);
 		} finally {
@@ -1595,7 +1595,7 @@
 			// Refresh available tasks (to add the one we just removed)
 			fetchAvailableTasks(taskId);
 
-			showToast('success', `✓ Removed dependency ${depId}`);
+			showToast('success', `Removed dependency ${depId}`);
 		} catch (error: any) {
 			showToast('error', `✗ ${error.message}`);
 		} finally {
@@ -1633,7 +1633,7 @@
 			}
 
 			// Show success message
-			showToast('success', '✓ Task deleted');
+			showToast('success', 'Task deleted');
 
 			// Reset state and close drawer
 			isDeleting = false;
@@ -1729,7 +1729,7 @@
 			// Broadcast event so pages refresh immediately
 			broadcastTaskEvent('task-released', taskId);
 
-			showToast('success', '✓ Task released');
+			showToast('success', 'Task released');
 
 			// Refetch task to get updated status
 			await fetchTask(taskId);
@@ -1859,7 +1859,7 @@
 
 			// Show toast feedback
 			if (results.success.length > 0) {
-				showToast('success', `✓ Created ${results.success.length} task${results.success.length > 1 ? 's' : ''}`);
+				showToast('success', `Created ${results.success.length} task${results.success.length > 1 ? 's' : ''}`);
 				// Broadcast task event to refresh task lists
 				broadcastTaskEvent({ type: 'tasks-created', taskIds: results.success.map((r: any) => r.taskId) });
 			}
@@ -2032,16 +2032,16 @@
 					});
 					if (!spawnResponse.ok) {
 						console.error('Failed to spawn session:', await spawnResponse.text());
-						showToast('warning', '✓ Task reopened, but failed to spawn session');
+						showToast('warning', 'Task reopened, but failed to spawn session');
 					} else {
-						showToast('success', '✓ Task reopened and session started');
+						showToast('success', 'Task reopened and session started');
 					}
 				} catch (spawnErr) {
 					console.error('Spawn error:', spawnErr);
-					showToast('warning', '✓ Task reopened, but failed to spawn session');
+					showToast('warning', 'Task reopened, but failed to spawn session');
 				}
 			} else {
-				showToast('success', '✓ Task reopened');
+				showToast('success', 'Task reopened');
 			}
 
 			showReopenModal = false;
@@ -2115,7 +2115,7 @@
 			task = data.task;
 			originalTask = { ...data.task };
 
-			showToast('success', '✓ Task marked as complete');
+			showToast('success', 'Task marked as complete');
 		} catch (error: any) {
 			console.error('Mark complete error:', error);
 			saveError = error.message;

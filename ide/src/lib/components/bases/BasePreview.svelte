@@ -60,7 +60,8 @@
 	}
 
 	const sourceInfo = $derived(base ? SOURCE_TYPE_INFO.find(s => s.type === base.source_type) : null);
-	const isEditable = $derived(base != null && (base.source_type === 'manual' || base.source_type === 'conversation'));
+	const isSystem = $derived(!!base?._system);
+	const isEditable = $derived(base != null && !isSystem && (base.source_type === 'manual' || base.source_type === 'conversation'));
 
 	// Reset editing only when a different base is selected (not on content updates from auto-save)
 	$effect(() => {
@@ -71,7 +72,20 @@
 				editing = false;
 				editorContent = base.content ?? '';
 				saveError = null;
-				loadRender(base.id);
+				if (base._system) {
+					// System bases use content directly (no API render)
+					rendered = {
+						id: base.id,
+						name: base.name,
+						source_type: base.source_type,
+						content: base.content ?? '',
+						token_estimate: base.token_estimate ?? 0,
+					};
+					renderLoading = false;
+					renderError = null;
+				} else {
+					loadRender(base.id);
+				}
 			} else {
 				rendered = null;
 				renderError = null;
@@ -283,7 +297,7 @@
 			class="px-4 py-3 flex items-center gap-2 border-b"
 			style="background: oklch(0.19 0.01 250); border-color: oklch(0.25 0.01 250);"
 		>
-			<span class="text-lg">{sourceInfo?.icon || '📄'}</span>
+			<span class="text-lg">{isSystem ? '🔒' : (sourceInfo?.icon || '📄')}</span>
 			<div class="flex-1 min-w-0">
 				<h3 class="font-semibold text-sm truncate" style="color: oklch(0.90 0.01 250);">{base.name}</h3>
 				{#if base.description}
@@ -356,7 +370,7 @@
 				{/if}
 
 				<!-- Metadata edit (gear icon) — opens the BaseEditor modal -->
-				{#if onEdit}
+				{#if onEdit && !isSystem}
 					<button
 						class="btn btn-ghost btn-xs"
 						style="color: oklch(0.60 0.02 250);"
@@ -370,7 +384,7 @@
 					</button>
 				{/if}
 
-				{#if onDelete}
+				{#if onDelete && !isSystem}
 					<button
 						class="btn btn-ghost btn-xs"
 						style="color: oklch(0.70 0.15 25);"
@@ -386,19 +400,34 @@
 
 		<!-- Metadata row -->
 		<div class="px-4 py-2 flex items-center gap-3 text-xs border-b" style="border-color: oklch(0.22 0.01 250); color: oklch(0.55 0.01 250);">
-			<span
-				class="px-1.5 py-0.5 rounded"
-				style="background: oklch(0.25 0.02 250); color: oklch(0.70 0.01 250);"
-			>
-				{sourceInfo?.label}
-			</span>
-			{#if base.always_inject}
+			{#if isSystem}
+				<span
+					class="px-1.5 py-0.5 rounded"
+					style="background: oklch(0.40 0.10 270 / 0.3); color: oklch(0.80 0.10 270);"
+				>
+					System
+				</span>
 				<span
 					class="px-1.5 py-0.5 rounded"
 					style="background: oklch(0.45 0.15 145 / 0.2); color: oklch(0.75 0.15 145);"
 				>
-					Always Inject
+					Always Injected
 				</span>
+			{:else}
+				<span
+					class="px-1.5 py-0.5 rounded"
+					style="background: oklch(0.25 0.02 250); color: oklch(0.70 0.01 250);"
+				>
+					{sourceInfo?.label}
+				</span>
+				{#if base.always_inject}
+					<span
+						class="px-1.5 py-0.5 rounded"
+						style="background: oklch(0.45 0.15 145 / 0.2); color: oklch(0.75 0.15 145);"
+					>
+						Always Inject
+					</span>
+				{/if}
 			{/if}
 			{#if editing}
 				<span

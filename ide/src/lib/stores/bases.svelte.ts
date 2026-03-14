@@ -139,7 +139,7 @@ export async function deleteBase(id: string): Promise<boolean> {
  */
 export async function toggleAlwaysInject(id: string): Promise<boolean> {
 	const base = state.bases.find(b => b.id === id);
-	if (!base) return false;
+	if (!base || base._system) return false; // System bases are always injected
 
 	const updated = await updateBase(id, { always_inject: !base.always_inject });
 	return updated !== null;

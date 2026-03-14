@@ -6,8 +6,8 @@
 import { json } from '@sveltejs/kit';
 import { getBases, createBase, initBasesDb } from '$lib/server/jat-bases.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
-import { existsSync, readdirSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
+import { join, basename } from 'path';
 import { homedir } from 'os';
 
 const GLOBAL_BASES_DIR = join(homedir(), '.config', 'jat', 'bases');
@@ -35,6 +35,58 @@ function getGlobalBases() {
 	}
 }
 
+/**
+ * Estimate token count from text content (~4 chars per token).
+ * @param {string} text
+ * @returns {number}
+ */
+function estimateTokens(text) {
+	return Math.ceil(text.length / 4);
+}
+
+/**
+ * Detect system bases (CLAUDE.md, AGENTS.md) from a project directory.
+ * These are always-injected by Claude Code itself, so we surface them
+ * as read-only system bases for visibility.
+ * @param {string} projectPath
+ * @returns {Array<Object>}
+ */
+function getSystemBases(projectPath) {
+	const systemFiles = [
+		{ file: 'CLAUDE.md', name: 'CLAUDE.md', description: 'Project instructions — always loaded by Claude Code' },
+		{ file: 'AGENTS.md', name: 'AGENTS.md', description: 'Agent workflow instructions — always loaded by Claude Code' },
+	];
+
+	const bases = [];
+	for (const { file, name, description } of systemFiles) {
+		const filePath = join(projectPath, file);
+		if (!existsSync(filePath)) continue;
+
+		try {
+			const stat = statSync(filePath);
+			const content = readFileSync(filePath, 'utf-8');
+			bases.push({
+				id: `_system_${file.toLowerCase().replace('.', '_')}`,
+				name,
+				description,
+				source_type: 'manual',
+				content,
+				context_query: null,
+				source_config: {},
+				always_inject: true,
+				token_estimate: estimateTokens(content),
+				created_at: stat.birthtime.toISOString(),
+				updated_at: stat.mtime.toISOString(),
+				_system: true,
+				_systemPath: file,
+			});
+		} catch {
+			// Skip unreadable files
+		}
+	}
+	return bases;
+}
+
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ url }) {
 	const project = url.searchParams.get('project');
@@ -43,6 +95,7 @@ export async function GET({ url }) {
 	}
 
 	const includeGlobal = url.searchParams.get('includeGlobal') === 'true';
+	const includeSystem = url.searchParams.get('includeSystem') !== 'false'; // default true
 	const alwaysInjectOnly = url.searchParams.get('alwaysInjectOnly') === 'true';
 
 	try {
@@ -52,13 +105,19 @@ export async function GET({ url }) {
 		}
 
 		const bases = getBases(path, { alwaysInjectOnly });
+		let allBases = [...bases];
+
+		if (includeSystem) {
+			const systemBases = getSystemBases(path);
+			allBases = [...systemBases, ...allBases];
+		}
 
 		if (includeGlobal) {
 			const globalBases = getGlobalBases();
-			return json({ bases: [...bases, ...globalBases] });
+			allBases = [...allBases, ...globalBases];
 		}
 
-		return json({ bases });
+		return json({ bases: allBases });
 	} catch (error) {
 		return json({ error: error.message }, { status: 500 });
 	}

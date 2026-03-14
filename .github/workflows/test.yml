@@ -34,14 +34,8 @@ jobs:
     - name: Install Node dependencies
       run: npm ci
 
-    - name: Create mock JAT directories for tests
-      run: |
-        mkdir -p ~/code/jomarchy-agent-tools/.jat
-        mkdir -p ~/code/chimaro/.jat
-        mkdir -p ~/code/test-project/.jat
-        # Create minimal test databases for query layer tests
-        echo "Creating test JAT databases..."
-        # Note: The actual test databases will be created by test scripts
+    - name: Seed test databases
+      run: bash test/seed-test-dbs.sh
 
     - name: Run all tests
       run: bash test/run-all-tests.sh
@@ -73,7 +67,7 @@ jobs:
       run: |
         echo "Verifying executable permissions..."
         # Check that all .sh files are executable
-        find tools/agents examples/workflows test -name "*.sh" -type f ! -executable -print | while read file; do
+        find tools/agents test -name "*.sh" -type f ! -executable -print | while read file; do
           echo "Warning: $file is not executable"
         done
 

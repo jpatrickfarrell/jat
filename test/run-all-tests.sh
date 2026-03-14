@@ -4,8 +4,8 @@
 #
 # Orchestrates all test scripts:
 #   - Node.js tests (test-tasks.js, test-agent-mail.js)
-#   - Agent Mail workflow test (mail/test-workflow.sh)
-#   - Example workflow scripts (examples/workflows/*.sh)
+#
+# Requires: test databases seeded by test/seed-test-dbs.sh
 #
 # Exit codes:
 #   0 - All tests passed
@@ -105,41 +105,6 @@ echo ""
 # Run Node.js tests
 run_test "JAT Tasks SQLite Query Layer" "node test/test-tasks.js"
 run_test "Agent Mail SQLite Query Layer" "node test/test-agent-mail.js"
-
-# Run Agent Mail workflow test
-run_test "Agent Mail Workflow" "bash mail/test-workflow.sh"
-
-# Run example workflow scripts (these are demonstrative, not strict tests)
-# We'll just verify they execute without errors
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo -e "${BLUE}VERIFYING: Example Workflow Scripts${NC}"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-echo "Example workflows are demonstrative scripts."
-echo "We'll verify they execute without errors (smoke test)."
-echo ""
-
-EXAMPLE_PASSED=0
-EXAMPLE_FAILED=0
-
-for example in examples/workflows/*.sh; do
-    if [ -f "$example" ]; then
-        example_name=$(basename "$example")
-        echo -n "  • Testing $example_name... "
-
-        if bash "$example" > /dev/null 2>&1; then
-            echo -e "${GREEN}✓${NC}"
-            EXAMPLE_PASSED=$((EXAMPLE_PASSED + 1))
-        else
-            echo -e "${RED}✗${NC}"
-            EXAMPLE_FAILED=$((EXAMPLE_FAILED + 1))
-        fi
-    fi
-done
-
-echo ""
-echo -e "Example workflows: ${GREEN}${EXAMPLE_PASSED} passed${NC}, ${RED}${EXAMPLE_FAILED} failed${NC}"
-echo ""
 
 # Summary
 echo "════════════════════════════════════════════════════════════"

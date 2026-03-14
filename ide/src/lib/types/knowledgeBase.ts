@@ -77,6 +77,12 @@ export interface KnowledgeBase {
 	token_estimate: number | null;
 	created_at: string;
 	updated_at: string;
+	/** Marked true for global bases loaded from ~/.config/jat/bases/ */
+	_global?: boolean;
+	/** Marked true for system bases (CLAUDE.md, AGENTS.md) auto-detected from project */
+	_system?: boolean;
+	/** For system bases: the file path relative to project root */
+	_systemPath?: string;
 }
 
 // ---------------------------------------------------------------------------

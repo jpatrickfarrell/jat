@@ -15,10 +15,13 @@
 	import type { SemanticType, ColumnConfig, ColumnSchema } from '$lib/types/dataTable';
 	import { SEMANTIC_TYPE_INFO, SEMANTIC_TO_SQLITE } from '$lib/types/dataTable';
 	import DataCell from '$lib/components/data/DataCell.svelte';
+	import RelationCell from '$lib/components/data/RelationCell.svelte';
+	import BooleanCell from '$lib/components/data/BooleanCell.svelte';
+	import EnumCell from '$lib/components/data/EnumCell.svelte';
 	import ColumnTypeSelector from '$lib/components/data/ColumnTypeSelector.svelte';
 	import ColumnSettingsPopover from '$lib/components/data/ColumnSettingsPopover.svelte';
 	import { evaluateFormula } from '$lib/utils/formulaEval';
-	import type { FormulaConfig } from '$lib/types/dataTable';
+	import type { FormulaConfig, RelationConfig } from '$lib/types/dataTable';
 
 	interface TableInfo {
 		name: string;
@@ -464,6 +467,7 @@
 	// Add row
 	let addingRow = $state(false);
 	let newRowData = $state<Record<string, string>>({});
+	let addRowEditingRelation = $state<string | null>(null);
 
 	// SQL console
 	let sqlConsoleOpen = $state(false);
@@ -2118,6 +2122,7 @@
 	// Add row
 	function startAddRow() {
 		addingRow = true;
+		addRowEditingRelation = null;
 		newRowData = {};
 		for (const col of schema) {
 			if (col.name !== 'rowid') {
@@ -3751,16 +3756,44 @@
 										<tr class="add-row">
 											<td class="row-id-col">+</td>
 											{#each orderedColumns as col}
+												{@const addRowMeta = columnMeta[col.name]}
 												<td>
-													<input
-														class="cell-edit-input"
-														bind:value={newRowData[col.name]}
-														placeholder={col.name}
-														onkeydown={(e) => {
-															if (e.key === 'Enter') saveNewRow();
-															if (e.key === 'Escape') { addingRow = false; }
-														}}
-													/>
+													{#if addRowMeta?.semanticType === 'relation'}
+														<RelationCell
+															value={newRowData[col.name] || null}
+															config={addRowMeta.config as RelationConfig}
+															editing={addRowEditingRelation === col.name}
+															selectedProject={selectedProject}
+															onSave={(val) => { newRowData[col.name] = val ?? ''; newRowData = newRowData; addRowEditingRelation = null; }}
+														/>
+														{#if addRowEditingRelation !== col.name}
+															<!-- svelte-ignore a11y_click_events_have_key_events -->
+															<!-- svelte-ignore a11y_no_static_element_interactions -->
+															<div class="add-row-relation-click" onclick={() => { addRowEditingRelation = col.name; }}></div>
+														{/if}
+													{:else if addRowMeta?.semanticType === 'boolean'}
+														<BooleanCell
+															value={newRowData[col.name] || null}
+															onSave={(val) => { newRowData[col.name] = val ?? ''; newRowData = newRowData; }}
+														/>
+													{:else if addRowMeta?.semanticType === 'enum'}
+														<EnumCell
+															value={newRowData[col.name] || null}
+															config={addRowMeta.config as import('$lib/types/dataTable').EnumConfig}
+															editing={true}
+															onSave={(val) => { newRowData[col.name] = val ?? ''; newRowData = newRowData; }}
+														/>
+													{:else}
+														<input
+															class="cell-edit-input"
+															bind:value={newRowData[col.name]}
+															placeholder={col.name}
+															onkeydown={(e) => {
+																if (e.key === 'Enter') saveNewRow();
+																if (e.key === 'Escape') { addingRow = false; }
+															}}
+														/>
+													{/if}
 												</td>
 											{/each}
 											<td class="actions-col">
@@ -5829,6 +5862,13 @@
 
 	.add-row td {
 		background: oklch(0.18 0.02 145 / 0.1);
+		position: relative;
+	}
+
+	.add-row-relation-click {
+		position: absolute;
+		inset: 0;
+		cursor: pointer;
 	}
 
 	/* Pagination */

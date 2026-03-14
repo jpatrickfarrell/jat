@@ -23,6 +23,7 @@
 	let selectedValues = $state<Set<string>>(new Set());
 	let inputRef = $state<HTMLInputElement | null>(null);
 	let dropdownRef = $state<HTMLDivElement | null>(null);
+	let dropdownStyle = $state('');
 
 	$effect(() => {
 		if (editingProp && !editing) startEdit();
@@ -78,6 +79,19 @@
 		} catch { /* ignore */ }
 	}
 
+	function updateDropdownPosition() {
+		if (!inputRef) return;
+		const rect = inputRef.getBoundingClientRect();
+		const spaceBelow = window.innerHeight - rect.bottom;
+		const maxH = 200;
+		// If not enough room below, open above
+		if (spaceBelow < maxH + 10) {
+			dropdownStyle = `position:fixed; left:${rect.left}px; bottom:${window.innerHeight - rect.top + 2}px; width:${rect.width}px; max-height:${Math.min(maxH, rect.top - 10)}px;`;
+		} else {
+			dropdownStyle = `position:fixed; left:${rect.left}px; top:${rect.bottom + 2}px; width:${rect.width}px; max-height:${maxH}px;`;
+		}
+	}
+
 	async function startEdit() {
 		editing = true;
 		searchQuery = '';
@@ -86,6 +100,7 @@
 		// Focus input after Svelte renders the dropdown
 		await tick();
 		inputRef?.focus();
+		updateDropdownPosition();
 	}
 
 	function closeDropdown() {
@@ -187,7 +202,7 @@
 				<button class="clear-btn" onclick={clearValue} title="Clear">×</button>
 			{/if}
 		</div>
-		<div class="relation-options">
+		<div class="relation-options" style={dropdownStyle}>
 			{#if loading}
 				<div class="relation-loading">Loading...</div>
 			{:else if !config.targetTable}
@@ -212,14 +227,14 @@
 					</button>
 				{/each}
 			{/if}
+			{#if config.multiSelect && selectedValues.size > 0}
+				<div class="relation-footer">
+					<button class="done-btn" onclick={confirmMultiSelect}>
+						Done ({selectedValues.size} selected)
+					</button>
+				</div>
+			{/if}
 		</div>
-		{#if config.multiSelect && selectedValues.size > 0}
-			<div class="relation-footer">
-				<button class="done-btn" onclick={confirmMultiSelect}>
-					Done ({selectedValues.size} selected)
-				</button>
-			</div>
-		{/if}
 	</div>
 {:else if displayText}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -265,17 +280,12 @@
 		color: oklch(0.80 0.15 25);
 	}
 	.relation-options {
-		position: absolute;
-		top: 100%;
-		left: 0;
-		right: 0;
-		max-height: 200px;
+		/* position: fixed is set via inline style with computed coordinates */
 		overflow-y: auto;
 		background: oklch(0.16 0.01 250);
 		border: 1px solid oklch(0.30 0.02 250);
 		border-radius: 0.25rem;
-		margin-top: 0.125rem;
-		z-index: 40;
+		z-index: 9999;
 		box-shadow: 0 4px 12px oklch(0 0 0 / 0.4);
 	}
 	.relation-option {
@@ -317,10 +327,6 @@
 		padding: 0.25rem 0.5rem;
 		border-top: 1px solid oklch(0.25 0.02 250);
 		background: oklch(0.16 0.01 250);
-		position: absolute;
-		bottom: auto;
-		left: 0;
-		right: 0;
 	}
 	.done-btn {
 		width: 100%;

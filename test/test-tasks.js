@@ -85,9 +85,9 @@ if (allTasks.length > 0) {
         console.log(`    • ${dep.id} - ${dep.title} (${dep.status})`);
       });
     }
-    console.log(`  Dependents: ${taskDetails.dependents.length} task(s)`);
-    if (taskDetails.dependents.length > 0) {
-      taskDetails.dependents.forEach(dep => {
+    console.log(`  Blocked by: ${taskDetails.blocked_by.length} task(s)`);
+    if (taskDetails.blocked_by.length > 0) {
+      taskDetails.blocked_by.forEach(dep => {
         console.log(`    • ${dep.id} - ${dep.title} (${dep.status})`);
       });
     }

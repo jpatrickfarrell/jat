@@ -125,6 +125,62 @@ function shellEscape(str) {
 }
 
 /**
+ * Global system bases from the JAT installation directory.
+ * Injected into ALL agent sessions so they know about JAT tools and system capabilities.
+ */
+const GLOBAL_SYSTEM_BASES = [
+	{ file: 'shared/JAT.md', name: 'JAT.md', type: 'system' },
+	{ file: 'shared/global-tools.md', name: 'Global Tools', type: 'system' },
+];
+
+/**
+ * Detect JAT installation path.
+ * @returns {string|null}
+ */
+function getJatInstallPath() {
+	const cwd = process.cwd();
+	const candidates = [];
+
+	if (cwd.endsWith('/ide') || cwd.endsWith('\\ide')) {
+		candidates.push(resolve(cwd, '..'));
+	}
+	candidates.push(cwd);
+	if (process.env.JAT_INSTALL_DIR) {
+		candidates.push(process.env.JAT_INSTALL_DIR);
+	}
+	const home = homedir();
+	candidates.push(resolve(home, '.local', 'share', 'jat'));
+	candidates.push(resolve(home, 'code', 'jat'));
+
+	for (const dir of candidates) {
+		if (existsSync(resolve(dir, 'shared', 'JAT.md'))) return dir;
+	}
+	return null;
+}
+
+/**
+ * Get rendered XML parts for all global system bases.
+ * @returns {string[]} Array of <base> XML strings
+ */
+function getGlobalSystemBaseParts() {
+	const jatPath = getJatInstallPath();
+	if (!jatPath) return [];
+
+	const parts = [];
+	for (const { file, name, type } of GLOBAL_SYSTEM_BASES) {
+		const filePath = resolve(jatPath, file);
+		if (!existsSync(filePath)) continue;
+		try {
+			const content = readFileSync(filePath, 'utf-8');
+			parts.push(`<base name="${name}" type="${type}">\n${content}\n</base>`);
+		} catch {
+			// Skip unreadable files
+		}
+	}
+	return parts;
+}
+
+/**
  * Get a compact summary of enabled skills from jat-skills installed.json.
  * Used to inject skill awareness into non-native agent prompts (Codex, Gemini, etc.)
  * @returns {string} Multi-line text block listing available skills, or empty string
@@ -1026,6 +1082,7 @@ export async function POST({ request }) {
 						console.log(`[spawn] Injecting ${renderedParts.length} knowledge base(s)`);
 					}
 				}
+
 			} catch (err) {
 				console.warn('[spawn] Failed to load knowledge bases:', err.message);
 			}
@@ -1053,6 +1110,22 @@ export async function POST({ request }) {
 			} catch (err) {
 				console.warn('[spawn] Failed to load data tables:', err.message);
 			}
+		}
+
+		// Inject global system bases (JAT.md, Global Tools, etc.)
+		// Injected outside the taskId check so planning sessions also get them
+		try {
+			const globalParts = getGlobalSystemBaseParts();
+			if (globalParts.length > 0) {
+				if (basesContent) {
+					basesContent = basesContent.replace('</knowledge-bases>', `${globalParts.join('\n')}\n</knowledge-bases>`);
+				} else {
+					basesContent = `<knowledge-bases>\n${globalParts.join('\n')}\n</knowledge-bases>`;
+				}
+				console.log(`[spawn] Injecting ${globalParts.length} global system base(s)`);
+			}
+		} catch (err) {
+			console.warn('[spawn] Failed to load global system bases:', err.message);
 		}
 
 		// If bases content is too large to inline in the CLI argument, write it to a file

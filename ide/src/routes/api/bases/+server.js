@@ -7,7 +7,7 @@ import { json } from '@sveltejs/kit';
 import { getBases, createBase, initBasesDb } from '$lib/server/jat-bases.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
-import { join, basename } from 'path';
+import { join, basename, dirname } from 'path';
 import { homedir } from 'os';
 
 const GLOBAL_BASES_DIR = join(homedir(), '.config', 'jat', 'bases');
@@ -87,6 +87,84 @@ function getSystemBases(projectPath) {
 	return bases;
 }
 
+/**
+ * Detect JAT installation path.
+ * IDE runs from {jat}/ide, so we go up one level from cwd.
+ * @returns {string|null}
+ */
+function getJatPath() {
+	const cwd = process.cwd();
+
+	// If we're in the IDE directory, go up one level
+	if (cwd.endsWith('/ide') || cwd.endsWith('\\ide')) {
+		const parent = dirname(cwd);
+		if (existsSync(join(parent, 'shared', 'JAT.md'))) return parent;
+	}
+
+	// If cwd is JAT root
+	if (existsSync(join(cwd, 'shared', 'JAT.md'))) return cwd;
+
+	// Check JAT_INSTALL_DIR env
+	const envPath = process.env.JAT_INSTALL_DIR;
+	if (envPath && existsSync(join(envPath, 'shared', 'JAT.md'))) return envPath;
+
+	// Well-known locations
+	const home = homedir();
+	for (const candidate of [join(home, '.local', 'share', 'jat'), join(home, 'code', 'jat')]) {
+		if (existsSync(join(candidate, 'shared', 'JAT.md'))) return candidate;
+	}
+
+	return null;
+}
+
+/**
+ * Global system bases from the JAT installation directory.
+ * These are injected into ALL projects so agents know about JAT tools and system capabilities.
+ */
+const GLOBAL_SYSTEM_BASES = [
+	{ file: 'shared/JAT.md', id: '_system_jat_essentials', name: 'JAT.md', description: 'JAT tools and capabilities — available to all agents' },
+	{ file: 'shared/global-tools.md', id: '_system_global_tools', name: 'Global Tools', description: 'System tools — image generation, browser automation, database, credentials' },
+];
+
+/**
+ * Get global system bases from the JAT installation directory.
+ * @returns {Array<Object>}
+ */
+function getGlobalSystemBases() {
+	const jatPath = getJatPath();
+	if (!jatPath) return [];
+
+	const bases = [];
+	for (const { file, id, name, description } of GLOBAL_SYSTEM_BASES) {
+		const filePath = join(jatPath, file);
+		if (!existsSync(filePath)) continue;
+
+		try {
+			const stat = statSync(filePath);
+			const content = readFileSync(filePath, 'utf-8');
+			bases.push({
+				id,
+				name,
+				description,
+				source_type: 'manual',
+				content,
+				context_query: null,
+				source_config: {},
+				always_inject: true,
+				token_estimate: estimateTokens(content),
+				created_at: stat.birthtime.toISOString(),
+				updated_at: stat.mtime.toISOString(),
+				_system: true,
+				_global: true,
+				_systemPath: file,
+			});
+		} catch {
+			// Skip unreadable files
+		}
+	}
+	return bases;
+}
+
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ url }) {
 	const project = url.searchParams.get('project');
@@ -110,6 +188,10 @@ export async function GET({ url }) {
 		if (includeSystem) {
 			const systemBases = getSystemBases(path);
 			allBases = [...systemBases, ...allBases];
+
+			// Include global system bases (JAT.md, Global Tools, etc.)
+			const globalSystemBases = getGlobalSystemBases();
+			allBases = [...allBases, ...globalSystemBases];
 		}
 
 		if (includeGlobal) {

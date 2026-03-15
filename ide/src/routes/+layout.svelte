@@ -959,7 +959,7 @@
 	const globalActionHandlers: Record<string, () => Promise<void> | void> = {
 		// Global actions
 		'new-task': () => {
-			openTaskDrawer();
+			openTaskDrawer(getActiveProject() || undefined);
 		},
 
 		'epic-swarm': () => {

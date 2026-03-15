@@ -21,7 +21,8 @@
 	import ColumnTypeSelector from '$lib/components/data/ColumnTypeSelector.svelte';
 	import ColumnSettingsPopover from '$lib/components/data/ColumnSettingsPopover.svelte';
 	import { evaluateFormula } from '$lib/utils/formulaEval';
-	import type { FormulaConfig, RelationConfig } from '$lib/types/dataTable';
+	import type { FormulaConfig, RelationConfig, TableConditionalFormat } from '$lib/types/dataTable';
+	import { getCellStyle, cellStyleToCSS, computeColumnRange } from '$lib/utils/conditionalFormat';
 
 	interface TableInfo {
 		name: string;
@@ -228,6 +229,21 @@
 
 	// Column metadata
 	let columnMeta = $state<Record<string, { semanticType: SemanticType; config: ColumnConfig }>>({});
+
+	// Table-level conditional formatting
+	let tableConditionalFormat = $state<TableConditionalFormat | null>(null);
+
+	// Precompute column ranges for color scales
+	const columnRanges = $derived.by(() => {
+		if (!tableConditionalFormat?.colorScales?.length) return {};
+		const ranges: Record<string, { min: number; max: number }> = {};
+		for (const scale of tableConditionalFormat.colorScales) {
+			if (scale.enabled && !ranges[scale.column]) {
+				ranges[scale.column] = computeColumnRange(rows, scale.column);
+			}
+		}
+		return ranges;
+	});
 
 	// Create table modal
 	let showCreateModal = $state(false);
@@ -616,6 +632,7 @@
 				totalRows = data.total || 0;
 				columnMeta = data.columnMeta || {};
 				fetchRelationLookups();
+				fetchConditionalFormat();
 			} else {
 				errorToast(data.error || 'Failed to load table');
 			}
@@ -623,6 +640,41 @@
 			errorToast('Failed to load table data');
 		} finally {
 			tableDataLoading = false;
+		}
+	}
+
+	async function fetchConditionalFormat() {
+		if (!selectedProject || !selectedTable) { tableConditionalFormat = null; return; }
+		try {
+			const res = await fetch(`/api/data/tables/${encodeURIComponent(selectedTable)}/conditional-format?project=${encodeURIComponent(selectedProject)}`);
+			if (res.ok) {
+				const data = await res.json();
+				tableConditionalFormat = (data.rules?.length || data.colorScales?.length) ? data : null;
+			} else {
+				tableConditionalFormat = null;
+			}
+		} catch {
+			tableConditionalFormat = null;
+		}
+	}
+
+	async function saveConditionalFormat(format: TableConditionalFormat) {
+		if (!selectedProject || !selectedTable) return;
+		try {
+			const res = await fetch(`/api/data/tables/${encodeURIComponent(selectedTable)}/conditional-format`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ project: selectedProject, ...format }),
+			});
+			if (res.ok) {
+				tableConditionalFormat = (format.rules?.length || format.colorScales?.length) ? format : null;
+				successToast('Conditional formatting saved');
+			} else {
+				const data = await res.json();
+				errorToast(data.error || 'Failed to save formatting');
+			}
+		} catch {
+			errorToast('Failed to save formatting');
 		}
 	}
 
@@ -3718,6 +3770,7 @@
 											{@const cellMeta = columnMeta[col.name]}
 											{@const isCellSelected = (selectedCell?.rowIdx === rowIdx && selectedCell?.colIdx === colIdx) || isCellInSelection(rowIdx, colIdx)}
 											{@const isCellCopied = copiedCell?.rowIdx === rowIdx && copiedCell?.colIdx === colIdx}
+											{@const cfStyle = tableConditionalFormat ? cellStyleToCSS(getCellStyle(col.name, row, tableConditionalFormat, columnRanges)) : ''}
 												<!-- svelte-ignore a11y_click_events_have_key_events -->
 												<td
 													class="data-cell"
@@ -3726,6 +3779,7 @@
 													class:cell-editing={isCellSelected && editingSelectedCell}
 													data-cell-row={rowIdx}
 													data-cell-col={colIdx}
+													style={cfStyle}
 													onclick={(e) => selectCell(rowIdx, colIdx, e)}
 												>
 													<DataCell

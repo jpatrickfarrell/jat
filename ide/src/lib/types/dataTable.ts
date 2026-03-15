@@ -88,6 +88,189 @@ export interface FormulaConfig {
 	outputConfig?: Record<string, unknown>;
 }
 
+// ---------------------------------------------------------------------------
+// Conditional formatting — table-level rules (Coda-style)
+// ---------------------------------------------------------------------------
+
+/** Operators for comparing cell values in conditions */
+export const FORMAT_OPERATORS = [
+	'>', '>=', '<', '<=', '==', '!=',
+	'contains', 'not_contains', 'starts_with', 'ends_with',
+	'is_empty', 'is_not_empty',
+	'between',
+] as const;
+
+export type FormatOperator = (typeof FORMAT_OPERATORS)[number];
+
+/** A single condition that checks a column's value */
+export interface FormatCondition {
+	column: string;
+	operator: FormatOperator;
+	value?: string;       // comparison value (not needed for is_empty/is_not_empty)
+	value2?: string;      // second value for 'between'
+}
+
+/** Text formatting flags */
+export interface TextFormatting {
+	bold?: boolean;
+	italic?: boolean;
+	underline?: boolean;
+	strikethrough?: boolean;
+}
+
+/** A single conditional format rule */
+export interface ConditionalFormatRule {
+	id: string;
+	conditions: FormatCondition[];   // AND'd together
+	textColor?: string;              // oklch color string
+	backgroundColor?: string;        // oklch color string
+	formatting?: TextFormatting;
+	applyTo: 'all_columns' | string[]; // which columns get styled
+	enabled: boolean;
+}
+
+/** Color scale rule — gradient across numeric range */
+export interface ColorStop {
+	position: number; // 0-100 (percentage of range)
+	color: string;    // oklch color string
+}
+
+export interface ColorScaleRule {
+	id: string;
+	type: 'color_scale';
+	column: string;           // which column's values drive the gradient
+	colorStops: ColorStop[];
+	rangeMode: 'auto' | 'manual';
+	manualMin?: number;
+	manualMax?: number;
+	applyTo: 'value_column' | string[]; // 'value_column' = same column
+	enabled: boolean;
+}
+
+/** Table-level conditional format config stored via _columns with reserved name */
+export interface TableConditionalFormat {
+	rules: ConditionalFormatRule[];
+	colorScales: ColorScaleRule[];
+}
+
+/** Preset color palettes for the color picker grid */
+export const FORMAT_COLOR_PALETTE = {
+	text: [
+		// Row 1: pure hues
+		'oklch(0.55 0.22 28)',   // red
+		'oklch(0.60 0.20 50)',   // orange
+		'oklch(0.75 0.18 90)',   // yellow
+		'oklch(0.55 0.20 145)',  // green
+		'oklch(0.55 0.15 200)',  // teal
+		'oklch(0.55 0.18 250)',  // blue
+		'oklch(0.55 0.18 290)',  // purple
+		'oklch(0.55 0.15 330)',  // pink
+		// Row 2: lighter
+		'oklch(0.70 0.18 28)',
+		'oklch(0.75 0.16 50)',
+		'oklch(0.85 0.14 90)',
+		'oklch(0.70 0.16 145)',
+		'oklch(0.70 0.12 200)',
+		'oklch(0.70 0.14 250)',
+		'oklch(0.70 0.14 290)',
+		'oklch(0.70 0.12 330)',
+		// Row 3: darker
+		'oklch(0.40 0.16 28)',
+		'oklch(0.45 0.14 50)',
+		'oklch(0.55 0.12 90)',
+		'oklch(0.40 0.14 145)',
+		'oklch(0.40 0.10 200)',
+		'oklch(0.40 0.12 250)',
+		'oklch(0.40 0.12 290)',
+		'oklch(0.40 0.10 330)',
+		// Row 4: neutrals
+		'oklch(0.99 0.00 0)',    // white
+		'oklch(0.85 0.00 0)',    // light gray
+		'oklch(0.65 0.00 0)',    // gray
+		'oklch(0.45 0.00 0)',    // dark gray
+		'oklch(0.30 0.00 0)',    // charcoal
+		'oklch(0.15 0.00 0)',    // near-black
+		'oklch(0.80 0.05 90)',   // warm gray
+		'oklch(0.80 0.05 250)',  // cool gray
+	],
+	background: [
+		// Row 1: vivid backgrounds
+		'oklch(0.55 0.22 28)',
+		'oklch(0.65 0.20 50)',
+		'oklch(0.80 0.18 90)',
+		'oklch(0.52 0.17 145)',
+		'oklch(0.55 0.15 200)',
+		'oklch(0.50 0.18 250)',
+		'oklch(0.50 0.18 290)',
+		'oklch(0.55 0.15 330)',
+		// Row 2: medium
+		'oklch(0.65 0.16 28)',
+		'oklch(0.72 0.15 50)',
+		'oklch(0.85 0.12 90)',
+		'oklch(0.65 0.13 145)',
+		'oklch(0.65 0.10 200)',
+		'oklch(0.62 0.14 250)',
+		'oklch(0.62 0.14 290)',
+		'oklch(0.65 0.10 330)',
+		// Row 3: pastel/subtle
+		'oklch(0.80 0.08 28)',
+		'oklch(0.85 0.08 50)',
+		'oklch(0.92 0.06 90)',
+		'oklch(0.80 0.06 145)',
+		'oklch(0.80 0.05 200)',
+		'oklch(0.80 0.07 250)',
+		'oklch(0.80 0.07 290)',
+		'oklch(0.80 0.05 330)',
+		// Row 4: neutrals
+		'oklch(0.99 0.00 0)',
+		'oklch(0.90 0.00 0)',
+		'oklch(0.75 0.00 0)',
+		'oklch(0.55 0.00 0)',
+		'oklch(0.35 0.00 0)',
+		'oklch(0.18 0.00 0)',
+		'oklch(0.88 0.04 90)',
+		'oklch(0.88 0.04 250)',
+	],
+};
+
+/** Preset color scale definitions */
+export const COLOR_SCALE_PRESETS: Record<string, { label: string; description: string; colorStops: ColorStop[] }> = {
+	'green-yellow-red': {
+		label: 'Green → Yellow → Red',
+		description: 'Low = good (green), high = bad (red)',
+		colorStops: [
+			{ position: 0, color: 'oklch(0.52 0.17 145)' },
+			{ position: 50, color: 'oklch(0.80 0.18 90)' },
+			{ position: 100, color: 'oklch(0.55 0.22 28)' },
+		],
+	},
+	'red-yellow-green': {
+		label: 'Red → Yellow → Green',
+		description: 'Low = bad (red), high = good (green)',
+		colorStops: [
+			{ position: 0, color: 'oklch(0.55 0.22 28)' },
+			{ position: 50, color: 'oklch(0.80 0.18 90)' },
+			{ position: 100, color: 'oklch(0.52 0.17 145)' },
+		],
+	},
+	'white-blue': {
+		label: 'White → Blue',
+		description: 'Intensity scale from white to blue',
+		colorStops: [
+			{ position: 0, color: 'oklch(0.95 0.01 250)' },
+			{ position: 100, color: 'oklch(0.50 0.20 250)' },
+		],
+	},
+	'yellow-black': {
+		label: 'Yellow → Black',
+		description: 'Bright yellow to dark',
+		colorStops: [
+			{ position: 0, color: 'oklch(0.20 0.02 90)' },
+			{ position: 100, color: 'oklch(0.88 0.18 90)' },
+		],
+	},
+};
+
 /** Union of all possible config shapes — stored as JSON in _columns.config */
 export type ColumnConfig =
 	| EnumConfig

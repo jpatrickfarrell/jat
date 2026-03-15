@@ -143,6 +143,13 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			category: 'knowledge'
 		},
 		{
+			id: 'canvas',
+			label: 'Canvas',
+			href: '/canvas',
+			icon: 'canvas',
+			category: 'knowledge'
+		},
+		{
 			id: 'memory',
 			label: 'Memory',
 			href: '/memory',

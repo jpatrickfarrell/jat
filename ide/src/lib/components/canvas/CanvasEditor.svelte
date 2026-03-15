@@ -8,12 +8,16 @@
 
 	let {
 		page,
+		project = null,
 		onUpdatePage,
-		onTitleChange
+		onTitleChange,
+		onControlChange = () => {},
 	}: {
 		page: CanvasPage | null;
+		project?: string | null;
 		onUpdatePage: (blocks: CanvasBlock[]) => void;
 		onTitleChange: (name: string) => void;
+		onControlChange?: (controlName: string, value: unknown) => void;
 	} = $props();
 
 	let editingTitle = $state(false);
@@ -86,6 +90,19 @@
 	function toggleAddMenu(index: number) {
 		addMenuIndex = addMenuIndex === index ? null : index;
 	}
+
+	function updateBlock(updatedBlock: CanvasBlock) {
+		if (!page) return;
+		const blocks = page.blocks.map((b) => (b.id === updatedBlock.id ? updatedBlock : b));
+		onUpdatePage(blocks);
+	}
+
+	// Collect control names for uniqueness validation
+	const controlNames = $derived(
+		page ? page.blocks
+			.filter((b): b is import('$lib/types/canvas').ControlBlock => b.type === 'control' && !!b.name)
+			.map(b => b.name) : []
+	);
 </script>
 
 <svelte:window onclick={() => { addMenuIndex = null; }} />
@@ -130,57 +147,24 @@
 					{/if}
 				</div>
 
-				<!-- Add block button at top -->
-				<div class="add-block-zone">
-					<button
-						class="add-block-btn"
-						onclick={(e) => { e.stopPropagation(); toggleAddMenu(0); }}
-						title="Add block"
-					>
-						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-						</svg>
-					</button>
-					{#if addMenuIndex === 0}
-						<!-- svelte-ignore a11y_click_events_have_key_events -->
-						<!-- svelte-ignore a11y_no_static_element_interactions -->
-						<div class="add-block-menu" onclick={(e) => e.stopPropagation()}>
-							{#each blockTypes as bt}
-								<button onclick={() => addBlock(bt.type, 0)}>
-									<span class="block-type-icon">{bt.icon}</span>
-									<div>
-										<div class="text-xs font-medium" style="color: oklch(0.80 0.02 250);">{bt.label}</div>
-										<div class="text-[10px]" style="color: oklch(0.45 0.02 250);">{bt.desc}</div>
-									</div>
-								</button>
-							{/each}
-						</div>
-					{/if}
-				</div>
-
-				<!-- Blocks -->
-				{#each page.blocks as block, i (block.id)}
-					<div class="canvas-block group">
-						<BlockRenderer {block} />
-					</div>
-
-					<!-- Add block button between/after blocks -->
-					<div class="add-block-zone">
+				{#if page.blocks.length === 0}
+					<!-- Empty state: prominent add block button -->
+					<div class="empty-add-block">
 						<button
-							class="add-block-btn"
-							onclick={(e) => { e.stopPropagation(); toggleAddMenu(i + 1); }}
-							title="Add block"
+							class="empty-add-btn"
+							onclick={(e) => { e.stopPropagation(); toggleAddMenu(0); }}
 						>
-							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
 							</svg>
+							<span>Add a block</span>
 						</button>
-						{#if addMenuIndex === i + 1}
+						{#if addMenuIndex === 0}
 							<!-- svelte-ignore a11y_click_events_have_key_events -->
 							<!-- svelte-ignore a11y_no_static_element_interactions -->
-							<div class="add-block-menu" onclick={(e) => e.stopPropagation()}>
+							<div class="add-block-menu add-block-menu-empty" onclick={(e) => e.stopPropagation()}>
 								{#each blockTypes as bt}
-									<button onclick={() => addBlock(bt.type, i + 1)}>
+									<button onclick={() => addBlock(bt.type, 0)}>
 										<span class="block-type-icon">{bt.icon}</span>
 										<div>
 											<div class="text-xs font-medium" style="color: oklch(0.80 0.02 250);">{bt.label}</div>
@@ -191,13 +175,69 @@
 							</div>
 						{/if}
 					</div>
-				{/each}
-
-				{#if page.blocks.length === 0}
-					<div class="text-center py-8">
-						<p class="text-sm mb-2" style="color: oklch(0.50 0.02 250);">This page is empty</p>
-						<p class="text-xs" style="color: oklch(0.40 0.02 250);">Click the <strong>+</strong> button above to add your first block</p>
+				{:else}
+					<!-- Add block button at top -->
+					<div class="add-block-zone">
+						<button
+							class="add-block-btn"
+							onclick={(e) => { e.stopPropagation(); toggleAddMenu(0); }}
+							title="Add block"
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+							</svg>
+						</button>
+						{#if addMenuIndex === 0}
+							<!-- svelte-ignore a11y_click_events_have_key_events -->
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div class="add-block-menu" onclick={(e) => e.stopPropagation()}>
+								{#each blockTypes as bt}
+									<button onclick={() => addBlock(bt.type, 0)}>
+										<span class="block-type-icon">{bt.icon}</span>
+										<div>
+											<div class="text-xs font-medium" style="color: oklch(0.80 0.02 250);">{bt.label}</div>
+											<div class="text-[10px]" style="color: oklch(0.45 0.02 250);">{bt.desc}</div>
+										</div>
+									</button>
+								{/each}
+							</div>
+						{/if}
 					</div>
+
+					<!-- Blocks -->
+					{#each page.blocks as block, i (block.id)}
+						<div class="canvas-block group">
+							<BlockRenderer {block} {project} existingControlNames={controlNames} onBlockUpdate={updateBlock} {onControlChange} />
+						</div>
+
+						<!-- Add block button between/after blocks -->
+						<div class="add-block-zone">
+							<button
+								class="add-block-btn"
+								onclick={(e) => { e.stopPropagation(); toggleAddMenu(i + 1); }}
+								title="Add block"
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+								</svg>
+							</button>
+							{#if addMenuIndex === i + 1}
+								<!-- svelte-ignore a11y_click_events_have_key_events -->
+								<!-- svelte-ignore a11y_no_static_element_interactions -->
+								<div class="add-block-menu" onclick={(e) => e.stopPropagation()}>
+									{#each blockTypes as bt}
+										<button onclick={() => addBlock(bt.type, i + 1)}>
+											<span class="block-type-icon">{bt.icon}</span>
+											<div>
+												<div class="text-xs font-medium" style="color: oklch(0.80 0.02 250);">{bt.label}</div>
+												<div class="text-[10px]" style="color: oklch(0.45 0.02 250);">{bt.desc}</div>
+											</div>
+										</button>
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{/each}
 				{/if}
 			</div>
 		</div>
@@ -232,17 +272,20 @@
 		width: 20px;
 		height: 20px;
 		border-radius: 50%;
-		border: 1px solid oklch(0.30 0.02 250);
-		background: oklch(0.18 0.01 250);
-		color: oklch(0.50 0.02 250);
+		border: 1px solid oklch(0.25 0.02 250);
+		background: oklch(0.16 0.01 250);
+		color: oklch(0.40 0.02 250);
 		cursor: pointer;
-		opacity: 0;
+		opacity: 0.4;
 		transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
 	}
 
 	.add-block-zone:hover .add-block-btn,
 	.add-block-btn:focus {
 		opacity: 1;
+		border-color: oklch(0.30 0.02 250);
+		background: oklch(0.18 0.01 250);
+		color: oklch(0.50 0.02 250);
 	}
 
 	.add-block-btn:hover {
@@ -298,8 +341,51 @@
 		flex-shrink: 0;
 	}
 
+	/* Empty state add block */
+	.empty-add-block {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 2rem 0;
+	}
+
+	.empty-add-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.625rem 1.25rem;
+		border-radius: 0.5rem;
+		border: 1px dashed oklch(0.35 0.02 250);
+		background: oklch(0.17 0.01 250);
+		color: oklch(0.55 0.02 250);
+		font-size: 0.85rem;
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+
+	.empty-add-btn:hover {
+		border-color: oklch(0.70 0.18 240 / 0.5);
+		background: oklch(0.70 0.18 240 / 0.08);
+		color: oklch(0.75 0.15 240);
+	}
+
+	.add-block-menu-empty {
+		top: auto;
+		margin-top: 0.5rem;
+		position: relative;
+		left: auto;
+		transform: none;
+		animation: animate-scale-in-center 0.12s ease-out;
+	}
+
 	@keyframes animate-scale-in {
 		from { opacity: 0; transform: translateX(-50%) scale(0.95); }
 		to { opacity: 1; transform: translateX(-50%) scale(1); }
+	}
+
+	@keyframes animate-scale-in-center {
+		from { opacity: 0; transform: scale(0.95); }
+		to { opacity: 1; transform: scale(1); }
 	}
 </style>

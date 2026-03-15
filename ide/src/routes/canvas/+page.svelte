@@ -21,6 +21,10 @@
 	let isLoading = $state(true);
 	let error = $state<string | null>(null);
 
+	// Control values map: { [controlName]: value }
+	// Updated when any control block changes, used by formula/table_view blocks
+	let controlValues = $state<Record<string, unknown>>({});
+
 	// Resizable panel state
 	let leftPanelWidth = $state(280);
 	const MIN_PANEL_WIDTH = 200;
@@ -162,6 +166,18 @@
 	// Select a page
 	function handleSelect(pageSel: CanvasPage) {
 		selectedPage = pageSel;
+		// Initialize controlValues from control blocks
+		controlValues = {};
+		for (const block of pageSel.blocks) {
+			if (block.type === 'control' && block.name) {
+				controlValues[block.name] = block.value;
+			}
+		}
+	}
+
+	// Handle control value changes
+	function handleControlChange(controlName: string, value: unknown) {
+		controlValues = { ...controlValues, [controlName]: value };
 	}
 
 	// Update page title (from CanvasEditor inline edit)
@@ -270,8 +286,10 @@
 			<div class="canvas-panel-right">
 				<CanvasEditor
 					page={selectedPage}
+					{project}
 					onUpdatePage={handleUpdateBlocks}
 					onTitleChange={handleTitleChange}
+					onControlChange={handleControlChange}
 				/>
 			</div>
 		</div>

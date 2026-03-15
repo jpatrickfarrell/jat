@@ -9,15 +9,33 @@
 	import FormulaBlock from './blocks/FormulaBlock.svelte';
 	import DividerBlock from './blocks/DividerBlock.svelte';
 
-	let { block }: { block: CanvasBlock } = $props();
+	let {
+		block,
+		project = null,
+		existingControlNames = [],
+		onBlockUpdate,
+		onControlChange = () => {},
+	}: {
+		block: CanvasBlock;
+		project?: string | null;
+		existingControlNames?: string[];
+		onBlockUpdate?: (block: CanvasBlock) => void;
+		onControlChange?: (controlName: string, value: unknown) => void;
+	} = $props();
 </script>
 
 {#if block.type === 'text'}
-	<TextBlock {block} />
+	<TextBlock {block} onUpdate={onBlockUpdate} />
 {:else if block.type === 'table_view'}
 	<TableViewBlock {block} />
 {:else if block.type === 'control'}
-	<ControlBlock {block} />
+	<ControlBlock
+		{block}
+		{project}
+		existingNames={existingControlNames}
+		onBlockUpdate={(updated) => onBlockUpdate?.(updated)}
+		onControlChange={(name, value) => onControlChange(name, value)}
+	/>
 {:else if block.type === 'formula'}
 	<FormulaBlock {block} />
 {:else if block.type === 'divider'}

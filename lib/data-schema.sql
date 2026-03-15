@@ -46,3 +46,14 @@ CREATE TABLE IF NOT EXISTS _views (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+-- Canvas pages for interactive block-based documents.
+-- Blocks are stored as a JSON array (like views store filters).
+CREATE TABLE IF NOT EXISTS _canvas_pages (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    project TEXT NOT NULL,
+    blocks TEXT DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);

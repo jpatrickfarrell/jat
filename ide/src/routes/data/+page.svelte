@@ -23,6 +23,7 @@
 	import { evaluateFormula } from '$lib/utils/formulaEval';
 	import type { FormulaConfig, RelationConfig, TableConditionalFormat } from '$lib/types/dataTable';
 	import { getCellStyle, cellStyleToCSS, computeColumnRange } from '$lib/utils/conditionalFormat';
+	import ConditionalFormatPanel from '$lib/components/data/ConditionalFormatPanel.svelte';
 
 	interface TableInfo {
 		name: string;
@@ -232,6 +233,8 @@
 
 	// Table-level conditional formatting
 	let tableConditionalFormat = $state<TableConditionalFormat | null>(null);
+	let savedConditionalFormat = $state<TableConditionalFormat | null>(null); // snapshot for cancel-restore
+	let showConditionalFormatPanel = $state(false);
 
 	// Precompute column ranges for color scales
 	const columnRanges = $derived.by(() => {
@@ -3677,6 +3680,22 @@
 								</svg>
 								Move
 							</button>
+							<button
+								class="btn-action"
+								class:btn-action-active={showConditionalFormatPanel}
+								onclick={() => {
+									if (!showConditionalFormatPanel) {
+										savedConditionalFormat = tableConditionalFormat ? JSON.parse(JSON.stringify(tableConditionalFormat)) : null;
+									}
+									showConditionalFormatPanel = !showConditionalFormatPanel;
+								}}
+								title="Conditional formatting"
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+								</svg>
+								Format
+							</button>
 							<button class="btn-action btn-danger" onclick={() => selectedTable && handleDropTable(selectedTable)} title="Drop table">
 								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -3685,7 +3704,8 @@
 						</div>
 					</div>
 
-					<!-- Data table -->
+					<!-- Data table + conditional format panel -->
+					<div class="data-table-with-panel" class:has-cf-panel={showConditionalFormatPanel}>
 					<div class="data-table-container">
 						{#if tableDataLoading}
 							<div class="panel-loading">
@@ -3862,6 +3882,18 @@
 								</tbody>
 							</table>
 						{/if}
+					</div>
+					{#if showConditionalFormatPanel}
+						<div class="cf-panel-container">
+							<ConditionalFormatPanel
+								format={tableConditionalFormat || { rules: [], colorScales: [] }}
+								columns={orderedColumns.map(c => ({ name: c.name, type: c.type }))}
+								onSave={(f) => { saveConditionalFormat(f); savedConditionalFormat = null; showConditionalFormatPanel = false; }}
+								onClose={() => { tableConditionalFormat = savedConditionalFormat; savedConditionalFormat = null; showConditionalFormatPanel = false; }}
+								onPreview={(f) => { tableConditionalFormat = (f.rules?.length || f.colorScales?.length) ? f : null; }}
+							/>
+						</div>
+					{/if}
 					</div>
 
 					<!-- Pagination -->
@@ -5674,6 +5706,27 @@
 		background: oklch(0.30 0.10 25 / 0.2);
 		border-color: oklch(0.50 0.15 25 / 0.4);
 		color: oklch(0.75 0.15 25);
+	}
+	.btn-action-active {
+		background: oklch(0.30 0.08 200);
+		border-color: oklch(0.50 0.12 200);
+		color: oklch(0.85 0.10 200);
+	}
+
+	/* Data table + conditional format panel wrapper */
+	.data-table-with-panel {
+		flex: 1;
+		display: flex;
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	.cf-panel-container {
+		width: 320px;
+		min-width: 280px;
+		flex-shrink: 0;
+		overflow-y: auto;
+		border-left: 1px solid oklch(0.25 0.02 250);
 	}
 
 	/* Data table */

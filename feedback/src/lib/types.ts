@@ -45,6 +45,13 @@ export interface FeedbackOrganization {
   name?: string;
 }
 
+export interface FileAttachment {
+  name: string;
+  type: string;
+  data: string; // data URL (base64)
+  size: number; // bytes
+}
+
 export interface FeedbackReport {
   title: string;
   description: string;
@@ -56,6 +63,7 @@ export interface FeedbackReport {
   console_logs: ConsoleLogEntry[] | null;
   selected_elements: ElementData[] | null;
   screenshots: string[] | null;
+  attachments: FileAttachment[] | null;
   metadata: {
     reporter?: FeedbackReporter;
     organization?: FeedbackOrganization;

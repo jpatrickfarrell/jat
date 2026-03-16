@@ -127,6 +127,55 @@
 	let dueDateTempTime = $state('');
 	let dueDateSaving = $state(false);
 
+	const DAY_NAMES_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+	function getQuickSetDays(): Array<{ label: string; dayNum: number; badge: string | null; dateValue: string }> {
+		const today = new Date();
+		const days: Array<{ label: string; dayNum: number; badge: string | null; dateValue: string }> = [];
+		for (let i = 0; i < 5; i++) {
+			const d = new Date(today);
+			d.setDate(today.getDate() + i);
+			const badge = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : null;
+			const year = d.getFullYear();
+			const month = String(d.getMonth() + 1).padStart(2, '0');
+			const day = String(d.getDate()).padStart(2, '0');
+			days.push({
+				label: DAY_NAMES_SHORT[d.getDay()],
+				dayNum: d.getDate(),
+				badge,
+				dateValue: `${year}-${month}-${day}`
+			});
+		}
+		return days;
+	}
+
+	async function quickSetDueDate(dateValue: string) {
+		if (!dueDatePickerTaskId) return;
+		dueDateSaving = true;
+		try {
+			const dueDate = `${dateValue}T00:00:00`;
+			const res = await fetch(`/api/tasks/${dueDatePickerTaskId}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ due_date: dueDate })
+			});
+			if (res.ok) {
+				const idx = tasks.findIndex(t => t.id === dueDatePickerTaskId);
+				if (idx !== -1) {
+					tasks[idx] = { ...tasks[idx], due_date: dueDate };
+					tasks = [...tasks];
+				}
+				closeDueDatePicker();
+			} else {
+				addToast({ message: 'Failed to update due date', type: 'error' });
+			}
+		} catch {
+			addToast({ message: 'Failed to update due date', type: 'error' });
+		} finally {
+			dueDateSaving = false;
+		}
+	}
+
 	function formatDueDate(dateStr: string | null | undefined): string {
 		if (!dateStr) return '';
 		const date = parseTimestamp(dateStr);
@@ -1573,6 +1622,30 @@
 		onclick={(e) => e.stopPropagation()}
 	>
 		<div class="due-date-picker-header">Due Date</div>
+		<div class="due-date-quick-set">
+			<div class="quick-day-row">
+				{#each getQuickSetDays() as day}
+					<button
+						class="quick-day-btn"
+						class:quick-day-selected={dueDateTempValue === day.dateValue}
+						onclick={() => quickSetDueDate(day.dateValue)}
+						disabled={dueDateSaving}
+					>
+						<span class="quick-day-name">{day.label}</span>
+						<span class="quick-day-num">{day.dayNum}</span>
+					</button>
+				{/each}
+			</div>
+			<div class="quick-day-labels">
+				{#each getQuickSetDays() as day}
+					<span class="quick-day-label-slot">
+						{#if day.badge}
+							<span class="quick-day-badge">{day.badge}</span>
+						{/if}
+					</span>
+				{/each}
+			</div>
+		</div>
 		<div class="due-date-picker-body">
 			<input
 				type="date"
@@ -2344,6 +2417,83 @@
 		letter-spacing: 0.05em;
 		color: oklch(0.55 0.02 250);
 		border-bottom: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.due-date-quick-set {
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		padding: 0.625rem 0.75rem 0.375rem;
+		border-bottom: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.quick-day-row {
+		display: flex;
+		gap: 0.25rem;
+	}
+
+	.quick-day-btn {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.125rem;
+		padding: 0.375rem 0.25rem;
+		background: oklch(0.14 0.01 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.375rem;
+		cursor: pointer;
+		transition: all 0.1s;
+	}
+
+	.quick-day-btn:hover:not(:disabled) {
+		background: oklch(0.22 0.02 250);
+		border-color: oklch(0.40 0.08 250);
+	}
+
+	.quick-day-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.quick-day-selected {
+		background: oklch(0.30 0.10 250);
+		border-color: oklch(0.50 0.15 250);
+	}
+
+	.quick-day-name {
+		font-size: 0.625rem;
+		font-weight: 500;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		color: oklch(0.55 0.02 250);
+	}
+
+	.quick-day-num {
+		font-size: 0.9375rem;
+		font-weight: 600;
+		color: oklch(0.85 0.02 250);
+		line-height: 1;
+	}
+
+	.quick-day-labels {
+		display: flex;
+		gap: 0.25rem;
+	}
+
+	.quick-day-label-slot {
+		flex: 1;
+		display: flex;
+		justify-content: center;
+		min-height: 0.875rem;
+	}
+
+	.quick-day-badge {
+		font-size: 0.5625rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: oklch(0.80 0.15 200);
 	}
 
 	.due-date-picker-body {

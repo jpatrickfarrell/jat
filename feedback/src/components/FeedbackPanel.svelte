@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ConsoleLogEntry, ElementData, FeedbackReport } from '../lib/types';
+  import type { ConsoleLogEntry, ElementData, FileAttachment, FeedbackReport } from '../lib/types';
   import { submitReport, fetchReports, type ReportSummary } from '../lib/api';
   import { enqueue } from '../lib/queue';
   import { captureViewport, captureViewportQuick } from '../lib/screenshot';
@@ -71,8 +71,68 @@
   let priority = $state<'low' | 'medium' | 'high' | 'critical'>('medium');
 
   let screenshots = $state<string[]>([]);
+  let attachments = $state<FileAttachment[]>([]);
   let selectedElements = $state<ElementData[]>([]);
   let consoleLogs = $state<ConsoleLogEntry[]>([]);
+
+  let fileInput = $state<HTMLInputElement | undefined>();
+
+  const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'];
+
+  function handleFileUpload() {
+    fileInput?.click();
+  }
+
+  async function handleFilesSelected(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const files = input.files;
+    if (!files || files.length === 0) return;
+
+    for (const file of files) {
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+
+        if (IMAGE_TYPES.includes(file.type)) {
+          // Images go into screenshots array
+          screenshots = [...screenshots, dataUrl];
+          showToast(`Image added: ${file.name}`, 'success');
+        } else {
+          // Non-image files go into attachments
+          attachments = [...attachments, {
+            name: file.name,
+            type: file.type || 'application/octet-stream',
+            data: dataUrl,
+            size: file.size,
+          }];
+          showToast(`File attached: ${file.name}`, 'success');
+        }
+      } catch (err) {
+        showToast(`Failed to read: ${file.name}`, 'error');
+      }
+    }
+
+    // Reset input so the same file can be re-selected
+    input.value = '';
+  }
+
+  function readFileAsDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function handleRemoveAttachment(index: number) {
+    attachments = attachments.filter((_, i) => i !== index);
+  }
+
+  function formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+  }
 
   let submitting = $state(false);
   let capturing = $state(false);
@@ -214,6 +274,7 @@
       console_logs: consoleLogs.length > 0 ? consoleLogs : null,
       selected_elements: selectedElements.length > 0 ? selectedElements : null,
       screenshots: screenshots.length > 0 ? screenshots : null,
+      attachments: attachments.length > 0 ? attachments : null,
       metadata: Object.keys(metadata).length > 0 ? metadata : null,
     };
 
@@ -243,6 +304,7 @@
     type = 'bug';
     priority = 'medium';
     screenshots = [];
+    attachments = [];
     selectedElements = [];
     consoleLogs = [];
   }
@@ -273,7 +335,7 @@
   ] as const;
 
   function attachmentCount(): number {
-    return screenshots.length + selectedElements.length;
+    return screenshots.length + attachments.length + selectedElements.length;
   }
 </script>
 
@@ -365,10 +427,46 @@
               Pick Element{#if selectedElements.length > 0} <span class="tool-count">{selectedElements.length}</span>{/if}
             {/if}
           </button>
+
+          <button type="button" class="tool-btn" onclick={handleFileUpload} disabled={submitting}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Upload{#if attachments.length > 0} <span class="tool-count">{attachments.length}</span>{/if}
+          </button>
+          <input
+            type="file"
+            multiple
+            accept="image/*,video/*,.md,.txt,.pdf,.doc,.docx,.csv,.json,.xml,.html,.log"
+            bind:this={fileInput}
+            onchange={handleFilesSelected}
+            style="display:none"
+          />
         </div>
 
         <ScreenshotPreview {screenshots} {capturing} oncapture={handleCapture} onremove={handleRemoveScreenshot} onedit={handleEditScreenshot} />
       </div>
+
+      {#if attachments.length > 0}
+        <div class="attachments-list">
+          {#each attachments as file, i}
+            <div class="attachment-item">
+              <span class="attachment-icon">
+                {#if file.type.includes('pdf')}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" stroke-width="2"/><path d="M14 2v6h6" stroke="currentColor" stroke-width="2"/></svg>
+                {:else if file.type.includes('markdown') || file.name.endsWith('.md')}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M4 4h16v16H4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M7 15V9l3 4 3-4v6M17 12h-3v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                {:else}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" stroke-width="2"/><path d="M14 2v6h6" stroke="currentColor" stroke-width="2"/></svg>
+                {/if}
+              </span>
+              <span class="attachment-name">{file.name}</span>
+              <span class="attachment-size">{formatFileSize(file.size)}</span>
+              <button class="attachment-remove" onclick={() => handleRemoveAttachment(i)} aria-label="Remove">&times;</button>
+            </div>
+          {/each}
+        </div>
+      {/if}
 
       {#if selectedElements.length > 0}
         <div class="elements-list">
@@ -668,6 +766,50 @@
     flex-shrink: 0;
   }
   .element-remove:hover { color: #ef4444; }
+  .attachments-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .attachment-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    background: #1e2d3f;
+    border: 1px solid #374151;
+    border-radius: 5px;
+    font-size: 11px;
+    color: #d1d5db;
+  }
+  .attachment-icon {
+    display: flex;
+    align-items: center;
+    color: #9ca3af;
+    flex-shrink: 0;
+  }
+  .attachment-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .attachment-size {
+    color: #6b7280;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+  .attachment-remove {
+    background: none;
+    border: none;
+    color: #6b7280;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 2px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .attachment-remove:hover { color: #ef4444; }
   .attach-summary {
     font-size: 11px;
     color: #6b7280;

@@ -52,6 +52,7 @@
 		status: 'open' | 'in_progress' | 'blocked' | 'closed';
 		priority: number;
 		type?: string;
+		issue_type?: string;
 		project?: string;
 		project_path?: string;
 		assignee?: string;
@@ -135,6 +136,31 @@
 	let availableTasks = $state<AvailableTask[]>([]);
 	let availableTasksLoading = $state(false);
 	let showDependencyDropdown = $state(false);
+
+	// Epic children state
+	interface EpicChild {
+		id: string;
+		title: string;
+		priority: number;
+		status: string;
+		issue_type: string;
+		assignee?: string;
+		isBlocked: boolean;
+		blockedBy: string[];
+	}
+
+	interface EpicSummary {
+		total: number;
+		open: number;
+		inProgress: number;
+		closed: number;
+		blocked: number;
+		ready: number;
+	}
+
+	let epicChildren = $state<EpicChild[]>([]);
+	let epicSummary = $state<EpicSummary | null>(null);
+	let epicChildrenLoading = $state(false);
 
 	// Auto-save state
 	let isSaving = $state(false);
@@ -615,6 +641,14 @@
 				fetchSummary(id, signal);
 			}
 
+			// Fetch children for epic tasks
+			if (data.task?.type === 'epic' || data.task?.issue_type === 'epic') {
+				fetchEpicChildren(id, signal);
+			} else {
+				epicChildren = [];
+				epicSummary = null;
+			}
+
 			// Fetch recoverable session info for in_progress tasks (to show Resume button when paused)
 			if (data.task?.status === 'in_progress' && data.task?.assignee) {
 				fetchRecoverableSession(id, signal);
@@ -731,6 +765,25 @@
 		} catch (err: any) {
 			if (err.name === 'AbortError') return;
 			console.error('Error fetching task tables:', err);
+		}
+	}
+
+	// Fetch epic children (only for epic tasks)
+	async function fetchEpicChildren(id: string, signal?: AbortSignal) {
+		if (!id) return;
+		epicChildrenLoading = true;
+		try {
+			const response = await fetch(`/api/epics/${encodeURIComponent(id)}/children`, { signal });
+			if (response.ok) {
+				const data = await response.json();
+				epicChildren = data.children || [];
+				epicSummary = data.summary || null;
+			}
+		} catch (err: any) {
+			if (err.name === 'AbortError') return;
+			console.error('Error fetching epic children:', err);
+		} finally {
+			epicChildrenLoading = false;
 		}
 	}
 
@@ -3803,6 +3856,89 @@
 										</div>
 									{/each}
 								</div>
+							</div>
+						{/if}
+
+						<!-- Epic Children Section (only for epic tasks) -->
+						{#if (task.type === 'epic' || task.issue_type === 'epic') && (epicChildren.length > 0 || epicChildrenLoading)}
+							<div>
+								<div class="flex items-center justify-between mb-2">
+									<h4 class="text-xs font-semibold font-mono uppercase tracking-wider text-base-content/60">
+										Children
+										{#if epicSummary}
+											<span class="font-normal text-base-content/40 ml-1">({epicSummary.total})</span>
+										{/if}
+									</h4>
+									{#if epicSummary && epicSummary.total > 0}
+										<div class="flex items-center gap-1.5 text-[10px] font-mono">
+											{#if epicSummary.ready > 0}
+												<span class="text-info">{epicSummary.ready} ready</span>
+											{/if}
+											{#if epicSummary.inProgress > 0}
+												<span class="text-warning">{epicSummary.inProgress} active</span>
+											{/if}
+											{#if epicSummary.blocked > 0}
+												<span class="text-error">{epicSummary.blocked} blocked</span>
+											{/if}
+											{#if epicSummary.closed > 0}
+												<span class="text-success">{epicSummary.closed} done</span>
+											{/if}
+										</div>
+									{/if}
+								</div>
+
+								<!-- Progress bar -->
+								{#if epicSummary && epicSummary.total > 0}
+									{@const pct = Math.round((epicSummary.closed / epicSummary.total) * 100)}
+									<div class="w-full h-1.5 bg-base-300 rounded-full mb-3 overflow-hidden">
+										<div
+											class="h-full rounded-full bg-success transition-all duration-300"
+											style="width: {pct}%;"
+										></div>
+									</div>
+								{/if}
+
+								{#if epicChildrenLoading}
+									<div class="flex items-center gap-2 py-3 text-xs text-base-content/50">
+										<span class="loading loading-spinner loading-xs"></span>
+										Loading children...
+									</div>
+								{:else}
+									<div class="space-y-1">
+										{#each epicChildren as child}
+											{@const isChildClosed = child.status === 'closed'}
+											<button
+												class="group flex items-center gap-2 text-sm p-2 rounded w-full text-left transition-colors bg-base-200 border-l-2 {child.isBlocked ? 'border-error/50' : isChildClosed ? 'border-success/50' : child.status === 'in_progress' ? 'border-warning/50' : 'border-info/50'} hover:bg-base-300"
+												onclick={() => { if (taskId !== undefined) taskId = child.id; }}
+												title="Open {child.id}"
+											>
+												<span class="badge badge-sm {statusColors[child.status] || 'badge-ghost'}">
+													{child.status === 'in_progress' ? 'active' : child.status}
+												</span>
+												<span class="badge badge-sm {priorityColors[child.priority] || 'badge-ghost'}">
+													P{child.priority ?? '?'}
+												</span>
+												<span class="font-mono text-xs text-base-content/50">{child.id}</span>
+												<span class="flex-1 truncate {isChildClosed ? 'line-through text-base-content/40' : ''}">{child.title || 'Untitled'}</span>
+												{#if child.assignee}
+													<span class="text-xs text-base-content/40 font-mono">{child.assignee}</span>
+												{/if}
+												{#if child.isBlocked}
+													<span class="text-[10px] text-error font-mono" title="Blocked by: {child.blockedBy.join(', ')}">blocked</span>
+												{/if}
+												{#if !isChildClosed && !child.isBlocked && !child.assignee}
+													<span
+														class="opacity-0 group-hover:opacity-100 text-xs cursor-pointer"
+														title="Launch agent for this task"
+														role="button"
+														tabindex="-1"
+														onclick={(e) => { e.stopPropagation(); onspawn(child.id); }}
+													>🚀</span>
+												{/if}
+											</button>
+										{/each}
+									</div>
+								{/if}
 							</div>
 						{/if}
 

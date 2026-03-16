@@ -3247,9 +3247,16 @@
 														{epicVisual.label}
 													</span>
 
-													<!-- Epic title -->
+													<!-- Epic title (clickable to open detail drawer) -->
 													{#if parentTask?.title}
-														<span class="ml-2 text-sm text-base-content/70 truncate max-w-md" title={parentTask.title}>
+														<span
+															class="ml-2 text-sm text-base-content/70 truncate max-w-md cursor-pointer rounded px-1.5 py-0.5 -my-0.5 transition-colors hover:bg-base-content/10 hover:text-base-content/90"
+															title="Click to edit epic"
+															role="button"
+															tabindex="-1"
+															onclick={(e) => { e.stopPropagation(); ontaskclick(epicKey); }}
+															onkeydown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); ontaskclick(epicKey); } }}
+														>
 															{parentTask.title}
 														</span>
 													{/if}
@@ -3715,9 +3722,16 @@
 											{typeVisual.label}
 										</span>
 
-										<!-- Parent task title (shown in parent mode) -->
-										{#if groupingMode === 'parent' && parentTask?.title}
-											<span class="ml-2 text-sm text-base-content/70 truncate max-w-md" title={parentTask.title}>
+										<!-- Parent task title (shown in parent mode, clickable to open detail drawer) -->
+										{#if groupingMode === 'parent' && parentTask?.title && groupKey}
+											<span
+												class="ml-2 text-sm text-base-content/70 truncate max-w-md cursor-pointer rounded px-1.5 py-0.5 -my-0.5 transition-colors hover:bg-base-content/10 hover:text-base-content/90"
+												title="Click to edit epic"
+												role="button"
+												tabindex="-1"
+												onclick={(e) => { e.stopPropagation(); ontaskclick(groupKey); }}
+												onkeydown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); ontaskclick(groupKey); } }}
+											>
 												{parentTask.title}
 											</span>
 										{/if}

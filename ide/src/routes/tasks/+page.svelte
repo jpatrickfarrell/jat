@@ -1719,7 +1719,12 @@
 												}}
 												size="sm"
 											/>
-											<span class="epic-title"
+											<span class="epic-title epic-title-clickable"
+												role="button"
+												tabindex="-1"
+												onclick={(e) => { e.stopPropagation(); openTaskDetailDrawer(epicId); }}
+												onkeydown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); openTaskDetailDrawer(epicId); } }}
+												title="Click to edit epic"
 												>{epic?.title ||
 													"Untitled Epic"}</span
 											>
@@ -2128,7 +2133,12 @@
 												}}
 												size="sm"
 											/>
-											<span class="epic-title"
+											<span class="epic-title epic-title-clickable"
+												role="button"
+												tabindex="-1"
+												onclick={(e) => { e.stopPropagation(); openTaskDetailDrawer(epicId); }}
+												onkeydown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); openTaskDetailDrawer(epicId); } }}
+												title="Click to edit epic"
 												>{epic?.title ||
 													"Untitled Epic"}</span
 											>
@@ -2749,6 +2759,19 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	.epic-title-clickable {
+		cursor: pointer;
+		border-radius: 0.25rem;
+		padding: 0.125rem 0.375rem;
+		margin: -0.125rem -0.375rem;
+		transition: background-color 0.15s, color 0.15s;
+	}
+
+	.epic-title-clickable:hover {
+		background: oklch(0.85 0.02 250 / 0.12);
+		color: oklch(0.92 0.04 250);
 	}
 
 	.epic-count {

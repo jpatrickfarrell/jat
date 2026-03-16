@@ -114,7 +114,7 @@ export async function POST({ request }) {
 		}
 
 		// Save screenshots to standard task-images location
-		/** @type {{ path: string; uploadedAt: string; id: string }[]} */
+		/** @type {{ path: string; uploadedAt: string; id: string; originalName?: string }[]} */
 		const savedAttachments = [];
 		if (body.screenshots && Array.isArray(body.screenshots) && body.screenshots.length > 0) {
 			const imagesDir = join(homedir(), '.local', 'share', 'jat', 'task-images');
@@ -150,6 +150,48 @@ export async function POST({ request }) {
 
 			if (savedAttachments.length > 0) {
 				descParts.push(`**Screenshots:** ${savedAttachments.length} attached`);
+			}
+		}
+
+		// Save file attachments (non-image files)
+		if (body.attachments && Array.isArray(body.attachments) && body.attachments.length > 0) {
+			const imagesDir = join(homedir(), '.local', 'share', 'jat', 'task-images');
+			if (!existsSync(imagesDir)) {
+				mkdirSync(imagesDir, { recursive: true });
+			}
+
+			const timestamp = Date.now();
+			for (let i = 0; i < body.attachments.length; i++) {
+				try {
+					const attachment = body.attachments[i];
+					if (!attachment.data || typeof attachment.data !== 'string' || !attachment.data.startsWith('data:')) continue;
+
+					const [header, base64] = attachment.data.split(',');
+					if (!base64) continue;
+
+					// Preserve original extension from filename
+					const origName = attachment.name || `file-${i}`;
+					const extMatch = origName.match(/\.([a-zA-Z0-9]+)$/);
+					const ext = extMatch ? extMatch[1] : 'bin';
+					const rand = Math.random().toString(36).substring(2, 8);
+					const filename = `upload-feedback-${timestamp}-${rand}.${ext}`;
+					const filepath = join(imagesDir, filename);
+
+					writeFileSync(filepath, Buffer.from(base64, 'base64'));
+					savedAttachments.push({
+						path: filepath,
+						uploadedAt: new Date().toISOString(),
+						id: `feedback-file-${timestamp}-${i}`,
+						originalName: origName,
+					});
+				} catch (err) {
+					console.warn(`[feedback-report] Attachment save failed (${i}):`, err.message);
+				}
+			}
+
+			if (body.attachments.length > 0 && savedAttachments.length > 0) {
+				const fileNames = body.attachments.map(a => a.name || 'file').join(', ');
+				descParts.push(`**File Attachments:** ${fileNames}`);
 			}
 		}
 
@@ -230,9 +272,20 @@ export async function POST({ request }) {
 				}
 				writeFileSync(imageStorePath, JSON.stringify(taskImages, null, 2), 'utf-8');
 
-				// Sync image paths to task notes so agents see them via `jt show`
-				const imageList = savedAttachments.map((img, i) => `  ${i + 1}. ${img.path}`).join('\n');
-				const notes = `📷 Attached screenshots:\n${imageList}\n(Use Read tool to view these images)`;
+				// Sync attachment paths to task notes so agents see them via `jt show`
+				const images = savedAttachments.filter(a => !a.originalName);
+				const files = savedAttachments.filter(a => a.originalName);
+				const parts = [];
+				if (images.length > 0) {
+					const imageList = images.map((img, i) => `  ${i + 1}. ${img.path}`).join('\n');
+					parts.push(`📷 Attached screenshots:\n${imageList}`);
+				}
+				if (files.length > 0) {
+					const fileList = files.map((f, i) => `  ${i + 1}. ${f.originalName} → ${f.path}`).join('\n');
+					parts.push(`📎 Attached files:\n${fileList}`);
+				}
+				parts.push('(Use Read tool to view these files)');
+				const notes = parts.join('\n');
 				const escapedNotes = notes.replace(/"/g, '\\"');
 				await execAsync(`cd "${projectPath}" && jt update ${createdTask.id} --notes "${escapedNotes}"`);
 			} catch (err) {

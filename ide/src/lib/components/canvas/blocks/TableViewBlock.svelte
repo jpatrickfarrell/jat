@@ -61,6 +61,9 @@
 	// New filter being added
 	let newFilterColumn = $state('');
 	let newFilterControl = $state('');
+	// Dynamic table source
+	let settingsSourceMode = $state<'static' | 'dynamic'>('static');
+	let settingsSourceControl = $state('');
 
 	// Compute active control names for the filter dropdown
 	const activeControlNames = $derived(Object.keys(controlValues));
@@ -161,6 +164,16 @@
 		newFilterColumn = '';
 		newFilterControl = '';
 
+		// Detect dynamic table source: tableName is exactly "{controlName}"
+		const dynamicMatch = settingsTableName.match(/^\{(\w+)\}$/);
+		if (dynamicMatch && activeControlNames.includes(dynamicMatch[1])) {
+			settingsSourceMode = 'dynamic';
+			settingsSourceControl = dynamicMatch[1];
+		} else {
+			settingsSourceMode = 'static';
+			settingsSourceControl = '';
+		}
+
 		// Fetch available tables
 		if (project) {
 			try {
@@ -172,8 +185,8 @@
 			} catch { /* ignore */ }
 		}
 
-		// Fetch columns for current table
-		if (settingsTableName) {
+		// Fetch columns for current table (only in static mode)
+		if (settingsSourceMode === 'static' && settingsTableName) {
 			await fetchColumnsForTable(settingsTableName);
 		}
 
@@ -225,9 +238,12 @@
 
 	function saveSettings() {
 		if (!onBlockUpdate) return;
+		const tableName = settingsSourceMode === 'dynamic' && settingsSourceControl
+			? `{${settingsSourceControl}}`
+			: settingsTableName;
 		const updated: TableViewBlock = {
 			...block,
-			tableName: settingsTableName,
+			tableName,
 			controlFilters: settingsFilters,
 			visibleColumns: settingsVisibleColumns.length > 0 ? settingsVisibleColumns : undefined,
 			sort: settingsSort,
@@ -384,20 +400,85 @@
 	<div class="settings-panel" onclick={(e) => e.stopPropagation()}>
 		<div class="settings-title">Table View Settings</div>
 
-		<!-- Table Selection -->
+		<!-- Table Source -->
 		<div class="settings-field">
-			<label class="settings-label">Table</label>
-			<select
-				class="settings-select"
-				bind:value={settingsTableName}
-				onchange={(e) => handleSettingsTableChange((e.target as HTMLSelectElement).value)}
-			>
-				<option value="">— Select table —</option>
-				{#each availableTables as t}
-					<option value={t}>{t}</option>
-				{/each}
-			</select>
+			<label class="settings-label">Table Source</label>
+			<div class="source-toggle">
+				<button
+					class="source-toggle-btn"
+					class:active={settingsSourceMode === 'static'}
+					onclick={() => {
+						settingsSourceMode = 'static';
+						if (settingsSourceControl) {
+							settingsTableName = '';
+							settingsSourceControl = '';
+							availableColumns = [];
+							settingsVisibleColumns = [];
+							settingsSort = undefined;
+							settingsFilters = {};
+						}
+					}}
+				>Static</button>
+				<button
+					class="source-toggle-btn"
+					class:active={settingsSourceMode === 'dynamic'}
+					disabled={activeControlNames.length === 0}
+					title={activeControlNames.length === 0 ? 'Add a control block to use dynamic table source' : 'Table name comes from a control value'}
+					onclick={() => {
+						settingsSourceMode = 'dynamic';
+						settingsTableName = '';
+						availableColumns = [];
+						settingsVisibleColumns = [];
+						settingsSort = undefined;
+					}}
+				>Dynamic</button>
+			</div>
 		</div>
+
+		{#if settingsSourceMode === 'static'}
+			<!-- Static: Table dropdown -->
+			<div class="settings-field">
+				<label class="settings-label">Table</label>
+				<select
+					class="settings-select"
+					bind:value={settingsTableName}
+					onchange={(e) => handleSettingsTableChange((e.target as HTMLSelectElement).value)}
+				>
+					<option value="">— Select table —</option>
+					{#each availableTables as t}
+						<option value={t}>{t}</option>
+					{/each}
+				</select>
+			</div>
+		{:else}
+			<!-- Dynamic: Control selector -->
+			<div class="settings-field">
+				<label class="settings-label">Source Control</label>
+				<select
+					class="settings-select"
+					bind:value={settingsSourceControl}
+					onchange={() => {
+						availableColumns = [];
+						settingsVisibleColumns = [];
+						settingsSort = undefined;
+						settingsFilters = {};
+					}}
+				>
+					<option value="">— Select control —</option>
+					{#each activeControlNames as name}
+						<option value={name}>{name}</option>
+					{/each}
+				</select>
+				{#if settingsSourceControl}
+					<div class="source-preview">
+						tableName = <code>{`{${settingsSourceControl}}`}</code>
+					</div>
+				{/if}
+				<div class="source-hint">
+					The table name is resolved from the control's current value at runtime. When the user changes the control, this table view automatically switches to the new table.
+				</div>
+			</div>
+		{/if}
 
 		<!-- Visible Columns -->
 		{#if availableColumns.length > 0}
@@ -741,6 +822,61 @@
 
 	.settings-select:focus {
 		border-color: oklch(0.60 0.15 200);
+	}
+
+	/* Source toggle */
+	.source-toggle {
+		display: flex;
+		gap: 1px;
+		border-radius: 0.25rem;
+		overflow: hidden;
+		border: 1px solid oklch(0.28 0.02 250);
+	}
+
+	.source-toggle-btn {
+		flex: 1;
+		padding: 0.25rem 0.5rem;
+		border: none;
+		background: oklch(0.15 0.01 250);
+		color: oklch(0.55 0.02 250);
+		font-size: 0.6875rem;
+		cursor: pointer;
+		transition: background 0.1s, color 0.1s;
+	}
+
+	.source-toggle-btn:hover:not(:disabled) {
+		background: oklch(0.20 0.02 250);
+	}
+
+	.source-toggle-btn.active {
+		background: oklch(0.55 0.15 200 / 0.2);
+		color: oklch(0.80 0.12 200);
+	}
+
+	.source-toggle-btn:disabled {
+		opacity: 0.35;
+		cursor: default;
+	}
+
+	.source-preview {
+		margin-top: 0.375rem;
+		padding: 0.25rem 0.5rem;
+		border-radius: 0.25rem;
+		background: oklch(0.22 0.02 250);
+		font-size: 0.6875rem;
+		color: oklch(0.60 0.02 250);
+	}
+
+	.source-preview code {
+		color: oklch(0.75 0.12 280);
+		font-family: monospace;
+	}
+
+	.source-hint {
+		margin-top: 0.375rem;
+		font-size: 0.625rem;
+		line-height: 1.4;
+		color: oklch(0.45 0.02 250);
 	}
 
 	/* Column checkboxes */

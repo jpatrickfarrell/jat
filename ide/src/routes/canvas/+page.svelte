@@ -8,12 +8,16 @@
 
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
-	import type { CanvasPage, CanvasBlock } from '$lib/types/canvas';
+	import { goto } from '$app/navigation';
+	import type { CanvasPage, CanvasBlock, ControlBlock, TableViewBlock } from '$lib/types/canvas';
 	import CanvasPageList from '$lib/components/canvas/CanvasPageList.svelte';
 	import CanvasEditor from '$lib/components/canvas/CanvasEditor.svelte';
 
-	// Get project from URL
+	// Get project and page ID from URL
 	const project = $derived($page.url.searchParams.get('project'));
+	const pageIdParam = $derived($page.url.searchParams.get('page'));
+	// Table name passed from /data "Create Canvas" context menu
+	const tableParam = $derived($page.url.searchParams.get('table'));
 
 	// Page state
 	let pages = $state<CanvasPage[]>([]);
@@ -111,7 +115,7 @@
 			await fetchPages();
 			// Select the newly created page
 			const newPage = pages.find(p => p.id === data.page.id);
-			if (newPage) selectedPage = newPage;
+			if (newPage) handleSelect(newPage);
 		} catch (err) {
 			console.error('Failed to create canvas page:', err);
 		}
@@ -134,6 +138,7 @@
 
 			if (selectedPage?.id === pageToDel.id) {
 				selectedPage = null;
+				updateUrlPageParam(null);
 			}
 			await fetchPages();
 		} catch (err) {
@@ -163,7 +168,7 @@
 		}
 	}
 
-	// Select a page
+	// Select a page and sync URL
 	function handleSelect(pageSel: CanvasPage) {
 		selectedPage = pageSel;
 		// Initialize controlValues from control blocks
@@ -173,6 +178,21 @@
 				controlValues[block.name] = block.value;
 			}
 		}
+		// Sync page ID to URL for deep linking
+		updateUrlPageParam(pageSel.id);
+	}
+
+	// Update URL ?page= param without navigation
+	function updateUrlPageParam(pageId: string | null) {
+		const url = new URL(window.location.href);
+		if (pageId) {
+			url.searchParams.set('page', pageId);
+		} else {
+			url.searchParams.delete('page');
+		}
+		// Remove table param after use
+		url.searchParams.delete('table');
+		goto(url.pathname + url.search, { replaceState: true, noScroll: true });
 	}
 
 	// Handle control value changes
@@ -200,6 +220,11 @@
 	async function handleUpdateBlocks(blocks: CanvasBlock[]) {
 		if (!selectedPage || !project) return;
 
+		// Optimistically update local state so concurrent saves (e.g. control
+		// value debounce firing while a settings save is in-flight) read the
+		// latest blocks instead of stale page data.
+		selectedPage = { ...selectedPage, blocks, updated_at: new Date().toISOString() };
+
 		try {
 			await fetch(`/api/canvas/${selectedPage.id}`, {
 				method: 'PUT',
@@ -209,11 +234,88 @@
 			await fetchPages();
 		} catch (err) {
 			console.error('Failed to update blocks:', err);
+			await fetchPages(); // Restore correct state on error
 		}
 	}
 
-	onMount(() => {
-		fetchPages();
+	// Auto-select page from URL ?page= param after pages load
+	function autoSelectFromUrl() {
+		if (pageIdParam && pages.length > 0 && !selectedPage) {
+			const target = pages.find(p => p.id === pageIdParam);
+			if (target) handleSelect(target);
+		}
+	}
+
+	// Create canvas from /data table param (?table=tableName)
+	async function createCanvasFromTable(tableName: string) {
+		if (!project) return;
+
+		try {
+			// Fetch table schema to detect relation columns
+			const schemaRes = await fetch(`/api/data/tables/${encodeURIComponent(tableName)}?project=${encodeURIComponent(project)}`);
+			const schemaData = schemaRes.ok ? await schemaRes.json() : null;
+
+			const blocks: CanvasBlock[] = [];
+			const controlFilters: Record<string, string> = {};
+
+			// Auto-detect relation columns → create select controls
+			if (schemaData?.columnMeta) {
+				for (const [colName, meta] of Object.entries(schemaData.columnMeta) as [string, any][]) {
+					if (meta.semanticType === 'relation' && meta.config?.targetTable && meta.config?.displayColumn) {
+						const controlName = colName.replace(/_id$/, '').replace(/_/g, ' ');
+						const controlId = crypto.randomUUID();
+						blocks.push({
+							type: 'control',
+							id: controlId,
+							name: controlName,
+							controlType: 'select',
+							config: {
+								sourceTable: meta.config.targetTable,
+								displayColumn: meta.config.displayColumn,
+							},
+							value: null,
+						} as ControlBlock);
+						controlFilters[colName] = controlName;
+					}
+				}
+			}
+
+			// Add the table view block
+			blocks.push({
+				type: 'table_view',
+				id: crypto.randomUUID(),
+				tableName,
+				controlFilters,
+			} as TableViewBlock);
+
+			// Create the page
+			const res = await fetch('/api/canvas', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ project, name: tableName, blocks })
+			});
+
+			if (!res.ok) {
+				const data = await res.json();
+				throw new Error(data.error || 'Failed to create page');
+			}
+
+			const data = await res.json();
+			await fetchPages();
+			const newPage = pages.find(p => p.id === data.page.id);
+			if (newPage) handleSelect(newPage);
+		} catch (err) {
+			console.error('Failed to create canvas from table:', err);
+		}
+	}
+
+	onMount(async () => {
+		await fetchPages();
+		autoSelectFromUrl();
+		// Handle ?table= param from /data context menu
+		if (tableParam && project) {
+			await createCanvasFromTable(tableParam);
+		}
 	});
 
 	// Refetch when project changes
@@ -227,11 +329,26 @@
 </script>
 
 <svelte:head>
-	<title>Canvas | JAT IDE</title>
+	<title>{selectedPage ? `${selectedPage.name} - Canvas` : 'Canvas'} | JAT IDE</title>
 	<meta name="description" content="Create interactive canvas pages with controls, table views, and formulas." />
 </svelte:head>
 
 <div class="h-full flex flex-col overflow-hidden" style="background: oklch(0.14 0.01 250);">
+	<!-- Breadcrumb Navigation -->
+	{#if selectedPage}
+		<div class="flex items-center gap-1.5 px-4 py-2" style="border-bottom: 1px solid oklch(0.22 0.02 250); background: oklch(0.15 0.01 250);">
+			<button
+				onclick={() => { selectedPage = null; updateUrlPageParam(null); }}
+				class="text-xs font-mono tracking-wide uppercase hover:underline cursor-pointer"
+				style="color: oklch(0.55 0.02 250); background: none; border: none; padding: 0;"
+			>Canvas</button>
+			<span class="text-xs" style="color: oklch(0.40 0.02 250);">›</span>
+			<span class="text-xs font-medium truncate" style="color: oklch(0.80 0.12 240); max-width: 300px;">
+				{selectedPage.name}
+			</span>
+		</div>
+	{/if}
+
 	{#if isLoading}
 		<!-- Skeleton Loading State -->
 		<div class="flex-1 flex overflow-hidden">

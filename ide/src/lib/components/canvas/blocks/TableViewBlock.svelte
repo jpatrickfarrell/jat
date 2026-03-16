@@ -113,7 +113,7 @@
 					if (cellVal === null || cellVal === undefined) return false;
 					// Support comma-separated multi-values from multi-select controls
 					const filterVals = String(value).split(',').map(v => v.trim());
-					return filterVals.some(fv => String(cellVal) === fv || String(cellVal).includes(fv));
+					return filterVals.some(fv => String(cellVal).toLowerCase().includes(fv.toLowerCase()));
 				});
 			}
 

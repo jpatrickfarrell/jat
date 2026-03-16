@@ -85,8 +85,13 @@
 <div class="h-full flex flex-col overflow-hidden" style="background: oklch(0.16 0.01 250);">
 	<!-- Header -->
 	<div class="flex items-center justify-between px-4 py-3" style="border-bottom: 1px solid oklch(0.25 0.02 250);">
-		<h2 class="font-mono text-xs tracking-wider uppercase" style="color: oklch(0.65 0.02 250);">
+		<h2 class="font-mono text-xs tracking-wider uppercase flex items-center gap-2" style="color: oklch(0.65 0.02 250);">
 			Canvas Pages
+			{#if pages.length > 0}
+				<span class="text-[10px] font-mono px-1.5 py-0.5 rounded-full" style="background: oklch(0.25 0.02 250); color: oklch(0.55 0.02 250);">
+					{pages.length}
+				</span>
+			{/if}
 		</h2>
 		<button
 			onclick={onAdd}

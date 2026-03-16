@@ -10,6 +10,7 @@
 	import { onDestroy, tick } from 'svelte';
 	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import { reveal } from '$lib/actions/reveal';
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 	import type { SemanticType, ColumnConfig, ColumnSchema } from '$lib/types/dataTable';
@@ -1494,6 +1495,14 @@
 		} catch (e) {
 			errorToast('Failed to duplicate table');
 		}
+	}
+
+	function handleTblCtxCreateCanvas() {
+		if (!tblCtxTable || !selectedProject) return;
+		const tableName = tblCtxTable.name;
+		closeTblContextMenu();
+		// Navigate to /canvas with table param — canvas page will auto-create with relation controls
+		goto(`/canvas?project=${encodeURIComponent(selectedProject)}&table=${encodeURIComponent(tableName)}`);
 	}
 
 	async function handleTblCtxExportCsv() {
@@ -5009,6 +5018,14 @@
 			<path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
 		</svg>
 		Create View
+	</button>
+
+	<!-- Create Canvas -->
+	<button class="col-context-menu-item" onclick={handleTblCtxCreateCanvas}>
+		<svg xmlns="http://www.w3.org/2000/svg" class="ctx-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+			<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+		</svg>
+		Create Canvas
 	</button>
 
 	<div class="col-context-menu-divider"></div>

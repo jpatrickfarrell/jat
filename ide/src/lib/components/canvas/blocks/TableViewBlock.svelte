@@ -74,6 +74,16 @@
 		return cols;
 	});
 
+	// Resolve {controlName} placeholders in tableName using control values
+	const resolvedTableName = $derived.by(() => {
+		if (!block.tableName) return '';
+		return block.tableName.replace(/\{(\w+)\}/g, (_match, name) => {
+			const val = controlValues[name];
+			if (val === undefined || val === null || val === '') return '';
+			return String(val);
+		});
+	});
+
 	// Build relevant control values for this block's filters
 	const relevantFilterValues = $derived.by(() => {
 		const vals: Record<string, string> = {};
@@ -89,17 +99,17 @@
 
 	// Fetch data whenever table name, sort, or filter values change
 	$effect(() => {
-		if (block.tableName && project) {
+		if (resolvedTableName && project) {
 			// Touch reactive dependencies explicitly
 			const _filters = relevantFilterValues;
 			const _sort = block.sort;
-			const _table = block.tableName;
+			const _table = resolvedTableName;
 			fetchRows();
 		}
 	});
 
 	async function fetchRows() {
-		if (!block.tableName || !project) return;
+		if (!resolvedTableName || !project) return;
 
 		loading = true;
 		error = null;
@@ -121,7 +131,7 @@
 				params.set(`filter.${column}`, String(value));
 			}
 
-			const res = await fetch(`/api/data/tables/${encodeURIComponent(block.tableName)}?${params}`);
+			const res = await fetch(`/api/data/tables/${encodeURIComponent(resolvedTableName)}?${params}`);
 			if (!res.ok) {
 				const data = await res.json();
 				throw new Error(data.error || 'Failed to fetch table data');
@@ -255,7 +265,7 @@
 				<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 5.25h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5M3.75 3v18M9.75 3v18M15.75 3v18M20.25 3v18" />
 			</svg>
 			<span class="text-xs font-mono" style="color: oklch(0.65 0.12 200);">
-				{block.tableName || 'No table selected'}
+				{resolvedTableName || block.tableName || 'No table selected'}
 			</span>
 			{#if rows.length > 0 || total > 0}
 				<span class="text-[10px] px-1.5 py-0.5 rounded" style="background: oklch(0.22 0.02 250); color: oklch(0.55 0.02 250);">

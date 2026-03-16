@@ -100,7 +100,7 @@
 		editing = true;
 		editExpression = block.expression;
 		// Focus after DOM updates
-		setTimeout(() => inputRef?.focus(), 0);
+		setTimeout(() => inputRef?.focus({ preventScroll: true }), 0);
 	}
 
 	function commitEdit() {

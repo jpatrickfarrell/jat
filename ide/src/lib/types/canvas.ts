@@ -2,7 +2,7 @@
  * Canvas page types for JAT's block-based interactive documents.
  *
  * Canvas pages contain an ordered array of typed blocks:
- * text, table-view, control, formula, and divider.
+ * text, table-view, control, formula, divider, and action.
  */
 
 // ---------------------------------------------------------------------------
@@ -15,6 +15,7 @@ export const CANVAS_BLOCK_TYPES = [
 	'control',
 	'formula',
 	'divider',
+	'action',
 ] as const;
 
 export type CanvasBlockType = (typeof CANVAS_BLOCK_TYPES)[number];
@@ -113,6 +114,29 @@ export interface DividerBlock {
 	id: string;
 }
 
+export type ActionBlockStyle = 'primary' | 'secondary' | 'danger' | 'success';
+
+export interface ActionBlock {
+	type: 'action';
+	id: string;
+	label: string;
+	icon?: string;
+	actionType: string;
+	actionConfig: Record<string, unknown>;
+	confirmBeforeRun?: boolean;
+	style?: ActionBlockStyle;
+}
+
+// ---------------------------------------------------------------------------
+// Action result (returned by action executors)
+// ---------------------------------------------------------------------------
+
+export interface ActionResult {
+	success: boolean;
+	message?: string;
+	data?: unknown;
+}
+
 // ---------------------------------------------------------------------------
 // Union type
 // ---------------------------------------------------------------------------
@@ -122,7 +146,8 @@ export type CanvasBlock =
 	| TableViewBlock
 	| ControlBlock
 	| FormulaBlock
-	| DividerBlock;
+	| DividerBlock
+	| ActionBlock;
 
 // ---------------------------------------------------------------------------
 // Canvas page
@@ -133,6 +158,7 @@ export interface CanvasPage {
 	name: string;
 	project: string;
 	blocks: CanvasBlock[];
+	is_base: boolean;
 	created_at: string;
 	updated_at: string;
 }

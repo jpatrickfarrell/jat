@@ -8,6 +8,7 @@
 	import ControlBlock from './blocks/ControlBlock.svelte';
 	import FormulaBlock from './blocks/FormulaBlock.svelte';
 	import DividerBlock from './blocks/DividerBlock.svelte';
+	import CanvasActionBlock from './blocks/CanvasActionBlock.svelte';
 
 	let {
 		block,
@@ -44,6 +45,8 @@
 	<FormulaBlock {block} {controlValues} {project} {pageId} onBlockUpdate={(updated) => onBlockUpdate?.(updated)} />
 {:else if block.type === 'divider'}
 	<DividerBlock {block} />
+{:else if block.type === 'action'}
+	<CanvasActionBlock {block} {controlValues} {project} {pageId} onBlockUpdate={(updated) => onBlockUpdate?.(updated)} />
 {:else}
 	<div class="text-xs" style="color: oklch(0.60 0.15 30);">Unknown block type: {(block as any).type}</div>
 {/if}

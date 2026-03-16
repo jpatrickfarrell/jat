@@ -22,6 +22,7 @@
 
 	let renamingId = $state<string | null>(null);
 	let renameValue = $state('');
+	let renameInputEl: HTMLInputElement | undefined = $state(undefined);
 	let contextMenuPage = $state<CanvasPage | null>(null);
 	let contextX = $state(0);
 	let contextY = $state(0);
@@ -43,6 +44,9 @@
 		renamingId = page.id;
 		renameValue = page.name;
 		closeContextMenu();
+		requestAnimationFrame(() => {
+			renameInputEl?.focus({ preventScroll: true });
+		});
 	}
 
 	function commitRename(page: CanvasPage) {
@@ -131,13 +135,12 @@
 				>
 					<div class="flex-1 min-w-0">
 						{#if renamingId === page.id}
-							<!-- svelte-ignore a11y_autofocus -->
 							<input
 								type="text"
+								bind:this={renameInputEl}
 								bind:value={renameValue}
 								onblur={() => commitRename(page)}
 								onkeydown={(e) => handleRenameKeydown(e, page)}
-								autofocus
 								class="w-full bg-transparent border-none outline-none text-sm font-medium px-0"
 								style="color: oklch(0.85 0.02 250);"
 							/>

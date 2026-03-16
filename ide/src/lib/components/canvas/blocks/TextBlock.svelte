@@ -89,7 +89,7 @@
 		// Focus textarea after it mounts
 		requestAnimationFrame(() => {
 			if (textareaEl) {
-				textareaEl.focus();
+				textareaEl.focus({ preventScroll: true });
 				textareaEl.selectionStart = textareaEl.selectionEnd = textareaEl.value.length;
 				autoResize();
 			}

@@ -150,7 +150,7 @@
 			fetchTargetRows();
 		}
 		await tick();
-		inputRef?.focus();
+		inputRef?.focus({ preventScroll: true });
 		updateDropdownPosition();
 	}
 

@@ -10,3 +10,10 @@ export {
 	updateCanvasPage,
 	deleteCanvasPage,
 } from '../../../../lib/canvas.js';
+
+export {
+	getTemplates,
+	getTemplate,
+	instantiateTemplate,
+	seedCanvasTemplates,
+} from '../../../../lib/canvas-templates.js';

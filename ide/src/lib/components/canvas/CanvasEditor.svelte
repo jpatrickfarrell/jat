@@ -25,6 +25,7 @@
 
 	let editingTitle = $state(false);
 	let titleValue = $state('');
+	let titleInputEl: HTMLInputElement | undefined = $state(undefined);
 	let addMenuIndex = $state<number | null>(null);
 
 	// Drag-and-drop state
@@ -45,6 +46,7 @@
 		{ type: 'control', label: 'Text Input', icon: 'A', desc: 'Free-form text entry', controlType: 'text_input' },
 		{ type: 'control', label: 'Checkbox', icon: '☑', desc: 'Boolean toggle', controlType: 'checkbox' },
 		{ type: 'formula', label: 'Formula', icon: '=', desc: 'Computed value' },
+		{ type: 'action', label: 'Action', icon: '▶', desc: 'Clickable action button' },
 		{ type: 'divider', label: 'Divider', icon: '—', desc: 'Horizontal separator' },
 	];
 
@@ -54,6 +56,7 @@
 		table_view: '⊞',
 		control: '◉',
 		formula: '=',
+		action: '▶',
 		divider: '—',
 	};
 
@@ -61,6 +64,9 @@
 		if (!page) return;
 		editingTitle = true;
 		titleValue = page.name;
+		requestAnimationFrame(() => {
+			titleInputEl?.focus({ preventScroll: true });
+		});
 	}
 
 	function commitTitle() {
@@ -106,6 +112,9 @@
 			}
 			case 'formula':
 				newBlock = { type: 'formula', id, expression: '' };
+				break;
+			case 'action':
+				newBlock = { type: 'action', id, label: '', actionType: '', actionConfig: {} };
 				break;
 			case 'divider':
 				newBlock = { type: 'divider', id };
@@ -210,6 +219,7 @@
 		if (block.type === 'formula') return !block.expression?.trim();
 		if (block.type === 'control') return !block.name?.trim();
 		if (block.type === 'table_view') return !block.tableName?.trim();
+		if (block.type === 'action') return !block.label?.trim() && !block.actionType?.trim();
 		return false;
 	}
 
@@ -280,13 +290,12 @@
 				<!-- Page title (inline editable) -->
 				<div class="mb-6">
 					{#if editingTitle}
-						<!-- svelte-ignore a11y_autofocus -->
 						<input
 							type="text"
+							bind:this={titleInputEl}
 							bind:value={titleValue}
 							onblur={commitTitle}
 							onkeydown={handleTitleKeydown}
-							autofocus
 							class="w-full bg-transparent border-none outline-none text-2xl font-bold"
 							style="color: oklch(0.90 0.02 250);"
 						/>

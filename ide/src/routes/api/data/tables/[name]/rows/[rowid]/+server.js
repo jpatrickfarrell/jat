@@ -4,7 +4,7 @@
  * DELETE /api/data/tables/[name]/rows/[rowid]  - Delete row
  */
 import { json } from '@sveltejs/kit';
-import { updateRow, deleteRow } from '$lib/server/jat-data.js';
+import { updateRow, deleteRow, isSystemTable } from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 
 /** @type {import('./$types').RequestHandler} */
@@ -14,6 +14,10 @@ export async function PUT({ params, request }) {
 		const { project, ...data } = body;
 		const tableName = params.name;
 		const rowid = parseInt(params.rowid);
+
+		if (isSystemTable(tableName)) {
+			return json({ error: 'Cannot modify system table (read-only)' }, { status: 403 });
+		}
 
 		if (!project) {
 			return json({ error: 'Missing required field: project' }, { status: 400 });
@@ -42,6 +46,10 @@ export async function DELETE({ params, url }) {
 	const project = url.searchParams.get('project');
 	const tableName = params.name;
 	const rowid = parseInt(params.rowid);
+
+	if (isSystemTable(tableName)) {
+		return json({ error: 'Cannot modify system table (read-only)' }, { status: 403 });
+	}
 
 	if (!project) {
 		return json({ error: 'Missing required parameter: project' }, { status: 400 });

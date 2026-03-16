@@ -3,12 +3,16 @@
  * POST /api/data/tables/[name]/rename  - Rename a table
  */
 import { json } from '@sveltejs/kit';
-import { renameDataTable } from '$lib/server/jat-data.js';
+import { renameDataTable, isSystemTable } from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 
 /** @type {import('./$types').RequestHandler} */
 export async function POST({ params, request }) {
 	const oldName = params.name;
+
+	if (isSystemTable(oldName)) {
+		return json({ error: 'Cannot rename system table (read-only)' }, { status: 403 });
+	}
 
 	let body;
 	try {

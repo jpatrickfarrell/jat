@@ -5,7 +5,7 @@
  * DELETE /api/data/tables?project=X&table=Y - Drop table
  */
 import { json } from '@sveltejs/kit';
-import { getDataTables, createDataTable, dropDataTable, initDataDb, getAllViews } from '$lib/server/jat-data.js';
+import { getDataTables, createDataTable, dropDataTable, initDataDb, getAllViews, getSystemTables, isSystemTable } from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 
 /** @type {import('./$types').RequestHandler} */
@@ -23,7 +23,8 @@ export async function GET({ url }) {
 
 		const tables = getDataTables(path);
 		const views = getAllViews(path);
-		return json({ tables, views });
+		const systemTables = getSystemTables(path);
+		return json({ tables, views, systemTables });
 	} catch (error) {
 		return json({ error: error.message }, { status: 500 });
 	}
@@ -72,6 +73,10 @@ export async function DELETE({ url }) {
 
 	if (!project || !table) {
 		return json({ error: 'Missing required parameters: project, table' }, { status: 400 });
+	}
+
+	if (isSystemTable(table)) {
+		return json({ error: 'Cannot delete system table' }, { status: 403 });
 	}
 
 	try {

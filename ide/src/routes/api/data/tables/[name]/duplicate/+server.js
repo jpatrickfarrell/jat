@@ -3,12 +3,16 @@
  * POST /api/data/tables/[name]/duplicate  - Duplicate a table (schema + data + metadata)
  */
 import { json } from '@sveltejs/kit';
-import { duplicateDataTable } from '$lib/server/jat-data.js';
+import { duplicateDataTable, isSystemTable } from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 
 /** @type {import('./$types').RequestHandler} */
 export async function POST({ params, request }) {
 	const sourceName = params.name;
+
+	if (isSystemTable(sourceName)) {
+		return json({ error: 'Cannot duplicate system table' }, { status: 403 });
+	}
 
 	let body;
 	try {

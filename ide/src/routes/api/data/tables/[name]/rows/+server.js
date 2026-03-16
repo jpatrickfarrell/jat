@@ -5,7 +5,7 @@
  *   Body: { project, action: "duplicate", rowid }  - Duplicate existing row
  */
 import { json } from '@sveltejs/kit';
-import { insertRow, duplicateRow, initDataDb } from '$lib/server/jat-data.js';
+import { insertRow, duplicateRow, initDataDb, isSystemTable } from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 
 /** @type {import('./$types').RequestHandler} */
@@ -14,6 +14,10 @@ export async function POST({ params, request }) {
 		const body = await request.json();
 		const { project, action } = body;
 		const tableName = params.name;
+
+		if (isSystemTable(tableName)) {
+			return json({ error: 'Cannot modify system table (read-only)' }, { status: 403 });
+		}
 
 		if (!project) {
 			return json({ error: 'Missing required field: project' }, { status: 400 });

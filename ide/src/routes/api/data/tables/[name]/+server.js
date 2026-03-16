@@ -4,7 +4,7 @@
  *     &resolve=true  - Resolve relation columns to display values and evaluate formulas
  */
 import { json } from '@sveltejs/kit';
-import { getTableSchema, getTableRows, getColumnMetadata, resolveRelationColumns } from '$lib/server/jat-data.js';
+import { getTableSchema, getTableRows, getColumnMetadata, resolveRelationColumns, isSystemTable, getSystemTableSchema, getSystemTableRows } from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 import { evaluateFormula } from '$lib/utils/formulaEval';
 
@@ -27,6 +27,13 @@ export async function GET({ params, url }) {
 		const { path, exists } = await getProjectPath(project);
 		if (!exists) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
+		}
+
+		// System tables (tasks.db) — read-only, no column metadata
+		if (isSystemTable(tableName)) {
+			const schema = getSystemTableSchema(path, tableName);
+			const { rows, total } = getSystemTableRows(path, tableName, { limit, offset, orderBy, orderDir });
+			return json({ schema, rows, total, columnMeta: {}, _system: true });
 		}
 
 		const schema = getTableSchema(path, tableName);

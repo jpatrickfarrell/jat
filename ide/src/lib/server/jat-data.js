@@ -52,4 +52,9 @@ export {
 	getViewRows,
 	// Resolution
 	resolveRelationColumns,
+	// System Tables
+	isSystemTable,
+	getSystemTables,
+	getSystemTableSchema,
+	getSystemTableRows,
 } from '../../../../lib/data.js';

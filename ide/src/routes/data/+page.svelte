@@ -33,6 +33,7 @@
 		column_count: number;
 		row_count: number;
 		created_at: string;
+		_system?: boolean;
 	}
 
 	interface ViewInfo {
@@ -107,7 +108,16 @@
 		}
 		return sorted;
 	});
+	// System tables (read-only from tasks.db)
+	let systemTables = $state<TableInfo[]>([]);
+	let systemTablesExpanded = $state(false);
+
 	let selectedTable = $state<string | null>(null);
+
+	// Track whether the selected table is a system table
+	let isSystemTableSelected = $derived(
+		selectedTable != null && systemTables.some(t => t.name === selectedTable)
+	);
 	let schema = $state<ColumnInfo[]>([]);
 	let rows = $state<any[]>([]);
 	let totalRows = $state(0);
@@ -609,14 +619,17 @@
 			if (res.ok) {
 				tables = data.tables || [];
 				views = data.views || [];
+				systemTables = data.systemTables || [];
 			} else {
 				tables = [];
 				views = [];
+				systemTables = [];
 			}
 		} catch (e) {
 			console.error('Failed to fetch tables:', e);
 			tables = [];
 			views = [];
+			systemTables = [];
 		} finally {
 			tablesLoading = false;
 		}
@@ -3419,6 +3432,46 @@
 						{/each}
 					</div>
 				{/if}
+
+				<!-- System Tables Section (bottom, collapsible) -->
+				{#if systemTables.length > 0}
+					<div class="system-tables-section">
+						<button
+							class="system-tables-header"
+							onclick={() => systemTablesExpanded = !systemTablesExpanded}
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" class="expand-chevron" class:expanded={systemTablesExpanded} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+							</svg>
+							<svg xmlns="http://www.w3.org/2000/svg" class="system-lock-icon" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+							</svg>
+							<span class="system-tables-label">System</span>
+							<span class="system-tables-count">{systemTables.length}</span>
+						</button>
+						{#if systemTablesExpanded}
+							<div class="table-items system-table-items">
+								{#each systemTables as table}
+									<div class="table-tree-node">
+										<div class="table-tree-row"
+											class:selected={selectedTable === table.name && !selectedView}
+										>
+											<span class="expand-spacer"></span>
+											<button
+												class="table-item-label"
+												onclick={() => selectTable(table.name)}
+											>
+												<span class="table-name">{table.display_name || table.name}</span>
+												<span class="system-badge-inline">read-only</span>
+												<span class="table-meta">{table.row_count}</span>
+											</button>
+										</div>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				{/if}
 			</div>
 
 			<!-- Right: Table View -->
@@ -3452,6 +3505,14 @@
 					<div class="view-header">
 						<div class="view-title-row">
 							<h2 class="view-title">{selectedTable}</h2>
+							{#if isSystemTableSelected}
+								<span class="system-table-badge">
+									<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+									</svg>
+									SYSTEM
+								</span>
+							{/if}
 							{#if selectedView}
 								<button class="view-badge" onclick={() => openViewEditor(selectedView)} title="Edit view filters">
 									<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -3629,6 +3690,7 @@
 									</div>
 								{/if}
 							</div>
+							{#if !isSystemTableSelected}
 							<button class="btn-action" onclick={startAddRow} title="Add row">
 								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
@@ -3641,6 +3703,7 @@
 								</svg>
 								Import
 							</button>
+							{/if}
 							<button class="btn-action" onclick={handleCopyTableJson} title="Copy table as JSON">
 								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
@@ -3787,7 +3850,7 @@
 												></div>
 											</th>
 										{/each}
-										<th class="actions-col"></th>
+										{#if !isSystemTableSelected}<th class="actions-col"></th>{/if}
 									</tr>
 								</thead>
 								<tbody>
@@ -3815,16 +3878,17 @@
 														value={row[col.name]}
 														semanticType={cellMeta?.semanticType}
 														config={cellMeta?.config || {}}
-														selected={isCellSelected}
-														editing={isCellSelected && editingSelectedCell}
-														initialEditChar={isCellSelected && editingSelectedCell ? initialEditChar : null}
-														onSave={(val) => handleCellSave(row.rowid, col.name, val)}
+														selected={isCellSelected && !isSystemTableSelected}
+														editing={isCellSelected && editingSelectedCell && !isSystemTableSelected}
+														initialEditChar={isCellSelected && editingSelectedCell && !isSystemTableSelected ? initialEditChar : null}
+														onSave={isSystemTableSelected ? () => {} : (val) => handleCellSave(row.rowid, col.name, val)}
 														row={cellMeta?.semanticType === 'formula' ? resolvedRows[rowIdx] : undefined}
 														allRows={cellMeta?.semanticType === 'formula' ? resolvedRows : undefined}
 														selectedProject={cellMeta?.semanticType === 'relation' ? selectedProject : undefined}
 													/>
 												</td>
 											{/each}
+											{#if !isSystemTableSelected}
 											<td class="actions-col">
 												<button class="row-delete-btn" onclick={() => deleteRow(row.rowid)} title="Delete row">
 													<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -3832,6 +3896,7 @@
 													</svg>
 												</button>
 											</td>
+											{/if}
 										</tr>
 									{/each}
 									<!-- Add row -->
@@ -5650,6 +5715,71 @@
 	.table-meta {
 		font-size: 0.6875rem;
 		color: oklch(0.50 0.02 250);
+	}
+
+	/* System tables section */
+	.system-tables-section {
+		margin-top: 0.5rem;
+		padding-top: 0.5rem;
+		border-top: 1px solid oklch(0.22 0.02 250);
+	}
+	.system-tables-header {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.25rem 0.5rem;
+		width: 100%;
+		border: none;
+		background: none;
+		cursor: pointer;
+		color: oklch(0.55 0.08 270);
+		font-size: 0.6875rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+	.system-tables-header:hover {
+		color: oklch(0.65 0.10 270);
+	}
+	.system-lock-icon {
+		width: 0.75rem;
+		height: 0.75rem;
+		flex-shrink: 0;
+	}
+	.system-tables-label {
+		flex: 1;
+		text-align: left;
+	}
+	.system-tables-count {
+		font-size: 0.625rem;
+		color: oklch(0.45 0.01 250);
+		font-weight: 400;
+	}
+	.system-table-items {
+		opacity: 0.85;
+	}
+	.system-badge-inline {
+		font-size: 0.5625rem;
+		padding: 0.0625rem 0.3rem;
+		border-radius: 0.25rem;
+		background: oklch(0.25 0.04 270);
+		color: oklch(0.60 0.08 270);
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		flex-shrink: 0;
+	}
+	.system-table-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.625rem;
+		padding: 0.125rem 0.5rem;
+		border-radius: 0.25rem;
+		background: oklch(0.25 0.04 270);
+		color: oklch(0.65 0.10 270);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		font-weight: 600;
 	}
 
 	/* Table view */

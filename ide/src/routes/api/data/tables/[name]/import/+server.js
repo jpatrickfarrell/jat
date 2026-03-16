@@ -7,7 +7,7 @@
  *   { rows: [{col: val}, ...] }
  */
 import { json } from '@sveltejs/kit';
-import { initDataDb, insertRows, getTableSchema } from '$lib/server/jat-data.js';
+import { initDataDb, insertRows, getTableSchema, isSystemTable } from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 import { parseDelimited } from '$lib/server/tsvParser.js';
 
@@ -17,6 +17,10 @@ export async function POST({ params, request }) {
 		const body = await request.json();
 		const { project, text, format, columnMap, rows: rawRows } = body;
 		const tableName = params.name;
+
+		if (isSystemTable(tableName)) {
+			return json({ error: 'Cannot import into system table (read-only)' }, { status: 403 });
+		}
 
 		if (!project) {
 			return json({ error: 'Missing required field: project' }, { status: 400 });

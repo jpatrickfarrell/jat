@@ -358,11 +358,11 @@
     <div class="tabs">
       <button class="tab" class:active={activeTab === 'new'} onclick={() => activeTab = 'new'}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        New Report
+        New
       </button>
       <button class="tab" class:active={activeTab === 'requests'} onclick={() => activeTab = 'requests'}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        My Requests
+        History
         {#if pendingCount > 0}
           <span class="tab-badge">{pendingCount}</span>
         {/if}
@@ -424,7 +424,7 @@
             {#if picking}
               Click an element...
             {:else}
-              Pick Element{#if selectedElements.length > 0} <span class="tool-count">{selectedElements.length}</span>{/if}
+              Pick{#if selectedElements.length > 0} <span class="tool-count">{selectedElements.length}</span>{/if}
             {/if}
           </button>
 

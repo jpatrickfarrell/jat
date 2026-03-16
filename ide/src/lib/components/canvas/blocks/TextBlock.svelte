@@ -13,6 +13,7 @@
 	let editing = $state(false);
 	let editValue = $state('');
 	let textareaEl: HTMLTextAreaElement | undefined = $state(undefined);
+	let blockEl: HTMLDivElement | undefined = $state(undefined);
 	let saveTimeout: ReturnType<typeof setTimeout> | undefined;
 
 	// Configure marked for inline canvas rendering
@@ -84,6 +85,11 @@
 	}
 
 	function startEditing() {
+		// Lock the container height to prevent scroll position clamping when
+		// the rendered HTML (potentially very tall) is swapped for a textarea.
+		if (blockEl) {
+			blockEl.style.minHeight = blockEl.offsetHeight + 'px';
+		}
 		editing = true;
 		editValue = block.content;
 		// Focus textarea after it mounts
@@ -93,6 +99,10 @@
 				textareaEl.selectionStart = textareaEl.selectionEnd = textareaEl.value.length;
 				autoResize();
 			}
+			// Release the height lock after textarea has been sized
+			if (blockEl) {
+				blockEl.style.minHeight = '';
+			}
 		});
 	}
 
@@ -101,7 +111,14 @@
 		if (editValue !== block.content) {
 			onUpdate?.({ ...block, content: editValue });
 		}
+		// Lock height during textarea→HTML transition to prevent scroll clamping
+		if (blockEl) {
+			blockEl.style.minHeight = blockEl.offsetHeight + 'px';
+		}
 		editing = false;
+		requestAnimationFrame(() => {
+			if (blockEl) blockEl.style.minHeight = '';
+		});
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
@@ -130,7 +147,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="canvas-text-block">
+<div class="canvas-text-block" bind:this={blockEl}>
 	{#if editing}
 		<textarea
 			bind:this={textareaEl}

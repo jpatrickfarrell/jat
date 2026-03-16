@@ -32,13 +32,56 @@
 		return `<div class="canvas-code-block"><pre><code class="language-${language}">${escaped}</code></pre></div>`;
 	};
 
+	// Track checkbox index during rendering for interactive toggling
+	let checkboxIndex = 0;
+	const originalListItem = renderer.listitem.bind(renderer);
+	renderer.listitem = function (token) {
+		const html = originalListItem(token);
+		// Replace disabled checkboxes with interactive ones carrying a data index
+		if (html.includes('type="checkbox"')) {
+			const idx = checkboxIndex++;
+			return html.replace(
+				/<input (checked="" )?disabled="" type="checkbox">/,
+				`<input $1type="checkbox" data-checkbox-index="${idx}">`
+			);
+		}
+		return html;
+	};
+
 	marked.setOptions({
 		renderer,
 		gfm: true,
 		breaks: true
 	} as MarkedOptions);
 
-	let renderedHtml = $derived(block.content ? (marked.parse(block.content) as string) : '');
+	let renderedHtml = $derived.by(() => {
+		checkboxIndex = 0; // Reset index on each render
+		return block.content ? (marked.parse(block.content) as string) : '';
+	});
+
+	function handleCheckboxClick(e: MouseEvent) {
+		const target = e.target as HTMLElement;
+		if (target.tagName !== 'INPUT' || target.getAttribute('type') !== 'checkbox') return;
+
+		e.preventDefault();
+		e.stopPropagation();
+
+		const idx = parseInt(target.getAttribute('data-checkbox-index') || '-1');
+		if (idx < 0) return;
+
+		// Find the Nth checkbox pattern in the markdown and toggle it
+		let count = 0;
+		const newContent = block.content.replace(/- \[([ xX])\]/g, (match, check) => {
+			if (count++ === idx) {
+				return check === ' ' ? '- [x]' : '- [ ]';
+			}
+			return match;
+		});
+
+		if (newContent !== block.content) {
+			onUpdate?.({ ...block, content: newContent });
+		}
+	}
 
 	function startEditing() {
 		editing = true;
@@ -99,7 +142,15 @@
 			placeholder="Type markdown here..."
 		></textarea>
 	{:else if block.content}
-		<div class="canvas-text-content" onclick={startEditing}>
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<div class="canvas-text-content" onclick={(e) => {
+			const target = e.target as HTMLElement;
+			if (target.tagName === 'INPUT' && target.getAttribute('type') === 'checkbox') {
+				handleCheckboxClick(e);
+			} else {
+				startEditing();
+			}
+		}}>
 			{@html renderedHtml}
 		</div>
 	{:else}
@@ -265,5 +316,28 @@
 	:global(.canvas-text-content input[type='checkbox']) {
 		margin-right: 0.4rem;
 		accent-color: oklch(0.65 0.15 200);
+		cursor: pointer;
+		width: 0.95rem;
+		height: 0.95rem;
+		vertical-align: middle;
+		position: relative;
+		top: -1px;
+	}
+
+	:global(.canvas-text-content input[type='checkbox']:hover) {
+		accent-color: oklch(0.75 0.18 200);
+	}
+
+	/* Style checked items with strikethrough */
+	:global(.canvas-text-content li:has(input[type='checkbox']:checked)) {
+		color: oklch(0.50 0.02 250);
+		text-decoration: line-through;
+		text-decoration-color: oklch(0.40 0.02 250);
+	}
+
+	/* Remove default list bullet for checkbox items */
+	:global(.canvas-text-content li:has(input[type='checkbox'])) {
+		list-style: none;
+		margin-left: -1.25rem;
 	}
 </style>

@@ -204,15 +204,20 @@
 	async function handleTitleChange(newName: string) {
 		if (!selectedPage || !project) return;
 
+		// Optimistic update — avoids fetchPages which resets scroll
+		const updatedAt = new Date().toISOString();
+		selectedPage = { ...selectedPage, name: newName, updated_at: updatedAt };
+		pages = pages.map(p => p.id === selectedPage!.id ? { ...p, name: newName, updated_at: updatedAt } : p);
+
 		try {
 			await fetch(`/api/canvas/${selectedPage.id}`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ project, name: newName })
 			});
-			await fetchPages();
 		} catch (err) {
 			console.error('Failed to update title:', err);
+			await fetchPages();
 		}
 	}
 
@@ -223,7 +228,12 @@
 		// Optimistically update local state so concurrent saves (e.g. control
 		// value debounce firing while a settings save is in-flight) read the
 		// latest blocks instead of stale page data.
-		selectedPage = { ...selectedPage, blocks, updated_at: new Date().toISOString() };
+		const updatedAt = new Date().toISOString();
+		selectedPage = { ...selectedPage, blocks, updated_at: updatedAt };
+
+		// Update the pages list timestamp for the sidebar without re-fetching
+		// (avoids selectedPage reassignment which resets scroll position)
+		pages = pages.map(p => p.id === selectedPage!.id ? { ...p, blocks, updated_at: updatedAt } : p);
 
 		try {
 			await fetch(`/api/canvas/${selectedPage.id}`, {
@@ -231,7 +241,6 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ project, blocks })
 			});
-			await fetchPages();
 		} catch (err) {
 			console.error('Failed to update blocks:', err);
 			await fetchPages(); // Restore correct state on error

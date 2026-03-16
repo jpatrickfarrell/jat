@@ -23,6 +23,15 @@ export async function GET({ params, url }) {
 	const orderBy = url.searchParams.get('orderBy') || undefined;
 	const orderDir = url.searchParams.get('orderDir') || 'ASC';
 
+	// Parse filter.column=value params for server-side WHERE filtering
+	const filters = {};
+	for (const [key, value] of url.searchParams.entries()) {
+		if (key.startsWith('filter.') && value) {
+			const column = key.slice(7); // strip 'filter.' prefix
+			filters[column] = value;
+		}
+	}
+
 	try {
 		const { path, exists } = await getProjectPath(project);
 		if (!exists) {
@@ -32,12 +41,12 @@ export async function GET({ params, url }) {
 		// System tables (tasks.db) — read-only, no column metadata
 		if (isSystemTable(tableName)) {
 			const schema = getSystemTableSchema(path, tableName);
-			const { rows, total } = getSystemTableRows(path, tableName, { limit, offset, orderBy, orderDir });
+			const { rows, total } = getSystemTableRows(path, tableName, { limit, offset, orderBy, orderDir, filters });
 			return json({ schema, rows, total, columnMeta: {}, _system: true });
 		}
 
 		const schema = getTableSchema(path, tableName);
-		let { rows, total } = getTableRows(path, tableName, { limit, offset, orderBy, orderDir });
+		let { rows, total } = getTableRows(path, tableName, { limit, offset, orderBy, orderDir, filters });
 
 		// Build columnMeta map { columnName: { semanticType, config, displayName, description } }
 		const metaRows = getColumnMetadata(path, tableName);

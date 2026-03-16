@@ -115,6 +115,12 @@
 				params.set('orderDir', block.sort.direction || 'ASC');
 			}
 
+			// Send control filters as server-side WHERE params (filter.column=value)
+			// This ensures filtering happens before LIMIT, returning correct results
+			for (const [column, value] of Object.entries(relevantFilterValues)) {
+				params.set(`filter.${column}`, String(value));
+			}
+
 			const res = await fetch(`/api/data/tables/${encodeURIComponent(block.tableName)}?${params}`);
 			if (!res.ok) {
 				const data = await res.json();
@@ -126,19 +132,7 @@
 			columnMeta = data.columnMeta || {};
 			total = data.total || 0;
 
-			// Apply control filters client-side (WHERE column = controlValue)
-			let filtered = data.rows || [];
-			for (const [column, value] of Object.entries(relevantFilterValues)) {
-				filtered = filtered.filter((row: Record<string, any>) => {
-					const cellVal = row[column];
-					if (cellVal === null || cellVal === undefined) return false;
-					// Support comma-separated multi-values from multi-select controls
-					const filterVals = String(value).split(',').map(v => v.trim());
-					return filterVals.some(fv => String(cellVal).toLowerCase().includes(fv.toLowerCase()));
-				});
-			}
-
-			rows = filtered;
+			rows = data.rows || [];
 		} catch (err) {
 			error = (err as Error).message;
 			rows = [];

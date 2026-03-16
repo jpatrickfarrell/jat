@@ -5,6 +5,7 @@
  */
 import { json } from '@sveltejs/kit';
 import { getBases, createBase, initBasesDb } from '$lib/server/jat-bases.js';
+import { listCanvasBasePages, serializeCanvasToMarkdown } from '$lib/server/jat-canvas.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join, basename, dirname } from 'path';
@@ -197,6 +198,32 @@ export async function GET({ url }) {
 		if (includeGlobal) {
 			const globalBases = getGlobalBases();
 			allBases = [...allBases, ...globalBases];
+		}
+
+		// Canvas bases: pages flagged as knowledge bases
+		try {
+			const canvasPages = listCanvasBasePages(path, project);
+			const canvasBases = canvasPages.map(page => {
+				const content = serializeCanvasToMarkdown(page, path);
+				return {
+					id: `_canvas_${page.id}`,
+					name: page.name,
+					description: `Canvas page — editable at /canvas?project=${project}&page=${page.id}`,
+					source_type: 'canvas',
+					content,
+					context_query: null,
+					source_config: { canvas_page_id: page.id },
+					always_inject: false,
+					token_estimate: Math.ceil(content.length / 4),
+					created_at: page.created_at,
+					updated_at: page.updated_at,
+					_canvas: true,
+					_canvasPageId: page.id,
+				};
+			});
+			allBases = [...allBases, ...canvasBases];
+		} catch {
+			// Canvas table may not exist yet — skip silently
 		}
 
 		return json({ bases: allBases });

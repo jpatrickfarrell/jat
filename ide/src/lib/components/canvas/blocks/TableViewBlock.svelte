@@ -13,11 +13,13 @@
 		block,
 		project = null,
 		controlValues = {},
+		refreshToken = 0,
 		onBlockUpdate,
 	}: {
 		block: TableViewBlock;
 		project?: string | null;
 		controlValues?: Record<string, unknown>;
+		refreshToken?: number;
 		onBlockUpdate?: (block: TableViewBlock) => void;
 	} = $props();
 
@@ -28,6 +30,25 @@
 	let total = $state(0);
 	let loading = $state(false);
 	let error = $state<string | null>(null);
+	let refreshing = $state(false);
+
+	// Debounced refresh from live data events
+	let refreshDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+	$effect(() => {
+		if (refreshToken > 0 && block.tableName && !loading) {
+			// Debounce re-fetches at 2 seconds
+			clearTimeout(refreshDebounceTimer);
+			refreshDebounceTimer = setTimeout(() => {
+				refreshing = true;
+				fetchRows().finally(() => {
+					// Show shimmer for 600ms minimum so it's visible
+					setTimeout(() => { refreshing = false; }, 600);
+				});
+			}, 2000);
+		}
+		return () => clearTimeout(refreshDebounceTimer);
+	});
 
 	// --- Settings state ---
 	let settingsOpen = $state(false);
@@ -232,7 +253,7 @@
 	}
 </script>
 
-<div class="canvas-table-view">
+<div class="canvas-table-view" class:table-refreshing={refreshing}>
 	<!-- Header -->
 	<div class="table-header">
 		<div class="flex items-center gap-2">
@@ -854,5 +875,32 @@
 	@keyframes animate-scale-in {
 		from { opacity: 0; transform: scale(0.95); }
 		to { opacity: 1; transform: scale(1); }
+	}
+
+	/* Live refresh shimmer */
+	.table-refreshing .table-scroll {
+		position: relative;
+		overflow: hidden;
+	}
+
+	.table-refreshing .table-scroll::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(
+			90deg,
+			transparent 0%,
+			oklch(0.70 0.15 200 / 0.08) 25%,
+			oklch(0.75 0.18 200 / 0.12) 50%,
+			oklch(0.70 0.15 200 / 0.08) 75%,
+			transparent 100%
+		);
+		animation: table-refresh-shimmer 1.2s ease-in-out infinite;
+		pointer-events: none;
+	}
+
+	@keyframes table-refresh-shimmer {
+		0% { transform: translateX(-100%); }
+		100% { transform: translateX(100%); }
 	}
 </style>

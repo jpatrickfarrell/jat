@@ -16,6 +16,7 @@
 		pageId = null,
 		controlValues = {},
 		existingControlNames = [],
+		refreshTokens = {},
 		onBlockUpdate,
 		onControlChange = () => {},
 	}: {
@@ -24,6 +25,7 @@
 		pageId?: string | null;
 		controlValues?: Record<string, unknown>;
 		existingControlNames?: string[];
+		refreshTokens?: Record<string, number>;
 		onBlockUpdate?: (block: CanvasBlock) => void;
 		onControlChange?: (controlName: string, value: unknown) => void;
 	} = $props();
@@ -32,7 +34,7 @@
 {#if block.type === 'text'}
 	<TextBlock {block} onUpdate={onBlockUpdate} />
 {:else if block.type === 'table_view'}
-	<TableViewBlock {block} {project} {controlValues} onBlockUpdate={(updated) => onBlockUpdate?.(updated)} />
+	<TableViewBlock {block} {project} {controlValues} refreshToken={block.tableName ? (refreshTokens[block.tableName] || 0) : 0} onBlockUpdate={(updated) => onBlockUpdate?.(updated)} />
 {:else if block.type === 'control'}
 	<ControlBlock
 		{block}

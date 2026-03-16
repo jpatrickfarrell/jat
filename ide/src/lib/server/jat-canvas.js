@@ -9,6 +9,8 @@ export {
 	createCanvasPage,
 	updateCanvasPage,
 	deleteCanvasPage,
+	listCanvasBasePages,
+	serializeCanvasToMarkdown,
 } from '../../../../lib/canvas.js';
 
 export {

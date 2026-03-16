@@ -83,6 +83,10 @@ export interface KnowledgeBase {
 	_system?: boolean;
 	/** For system bases: the file path relative to project root */
 	_systemPath?: string;
+	/** Marked true for canvas-based knowledge bases */
+	_canvas?: boolean;
+	/** Canvas page ID for canvas bases */
+	_canvasPageId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -168,5 +172,11 @@ export const SOURCE_TYPE_INFO: SourceTypeInfo[] = [
 		label: 'External',
 		icon: '🌐',
 		description: 'Cached content from an external URL or API',
+	},
+	{
+		type: 'canvas' as SourceType,
+		label: 'Canvas',
+		icon: '🎨',
+		description: 'Canvas page flagged as a knowledge base',
 	},
 ];

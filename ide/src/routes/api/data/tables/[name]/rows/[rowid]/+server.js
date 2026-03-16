@@ -6,6 +6,7 @@
 import { json } from '@sveltejs/kit';
 import { updateRow, deleteRow, isSystemTable } from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
+import { broadcastDataChanged } from '$lib/server/websocket';
 
 /** @type {import('./$types').RequestHandler} */
 export async function PUT({ params, request }) {
@@ -35,6 +36,7 @@ export async function PUT({ params, request }) {
 		if (result.changes === 0) {
 			return json({ error: `Row ${rowid} not found in ${tableName}` }, { status: 404 });
 		}
+		broadcastDataChanged(tableName, project, 'update');
 		return json({ success: true });
 	} catch (error) {
 		return json({ error: error.message }, { status: 400 });
@@ -68,6 +70,7 @@ export async function DELETE({ params, url }) {
 		if (result.changes === 0) {
 			return json({ error: `Row ${rowid} not found in ${tableName}` }, { status: 404 });
 		}
+		broadcastDataChanged(tableName, project, 'delete');
 		return json({ success: true });
 	} catch (error) {
 		return json({ error: error.message }, { status: 400 });

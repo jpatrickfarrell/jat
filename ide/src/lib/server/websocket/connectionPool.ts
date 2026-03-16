@@ -49,11 +49,14 @@ export interface ChannelMessages {
 		data: unknown;
 	};
 	tasks: {
-		type: 'task-change' | 'task-updated' | 'task-created' | 'task-deleted';
+		type: 'task-change' | 'task-updated' | 'task-created' | 'task-deleted' | 'data-changed';
 		taskId?: string;
 		newTasks?: string[];
 		removedTasks?: string[];
 		data?: unknown;
+		tableName?: string;
+		project?: string;
+		operation?: string;
 	};
 	output: {
 		type: 'output-update';
@@ -632,6 +635,23 @@ export function broadcastTaskUpdate(
 		type: 'task-updated',
 		taskId,
 		data
+	});
+}
+
+/**
+ * Broadcast data table change (normal priority)
+ * Used by data write APIs to notify canvas table views of changes.
+ */
+export function broadcastDataChanged(
+	tableName: string,
+	project: string,
+	operation: 'insert' | 'update' | 'delete' | 'import'
+): { sent: number; queued: number } {
+	return broadcast('tasks', {
+		type: 'data-changed',
+		tableName,
+		project,
+		operation
 	});
 }
 

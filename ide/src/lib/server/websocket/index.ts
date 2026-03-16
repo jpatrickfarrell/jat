@@ -28,6 +28,7 @@ export {
 	broadcastAgentUsage,
 	broadcastTaskChange,
 	broadcastTaskUpdate,
+	broadcastDataChanged,
 	broadcastOutput,
 	broadcastNewMessage,
 

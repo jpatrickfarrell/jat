@@ -33,9 +33,10 @@
 		return list.filter(b => b.source_type === filterType);
 	});
 
-	// Separate system bases from regular bases
+	// Separate system, canvas, and regular bases
 	const systemBases = $derived(displayBases.filter(b => b._system));
-	const regularBases = $derived(displayBases.filter(b => !b._system));
+	const canvasBases = $derived(displayBases.filter(b => (b as any)._canvas));
+	const regularBases = $derived(displayBases.filter(b => !b._system && !(b as any)._canvas));
 
 	// Group regular bases by source_type
 	const grouped = $derived.by(() => {
@@ -156,6 +157,26 @@
 						<span class="text-xs" style="color: oklch(0.45 0.01 250);">({systemBases.length})</span>
 					</div>
 					{#each systemBases as base (base.id)}
+						<BaseCard
+							{base}
+							selected={selectedBase?.id === base.id}
+							{onSelect}
+						/>
+					{/each}
+				</div>
+			{/if}
+
+			<!-- Canvas bases group -->
+			{#if canvasBases.length > 0}
+				<div class="mb-2">
+					<div class="flex items-center gap-1.5 px-1 py-1">
+						<span class="text-sm">🎨</span>
+						<span class="text-xs font-medium uppercase tracking-wider" style="color: oklch(0.60 0.15 145);">
+							Canvas
+						</span>
+						<span class="text-xs" style="color: oklch(0.45 0.01 250);">({canvasBases.length})</span>
+					</div>
+					{#each canvasBases as base (base.id)}
 						<BaseCard
 							{base}
 							selected={selectedBase?.id === base.id}

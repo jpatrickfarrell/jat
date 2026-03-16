@@ -6,10 +6,11 @@
 	 * Follows the /bases page pattern for resizable split panels.
 	 */
 
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import type { CanvasPage, CanvasBlock, ControlBlock, TableViewBlock } from '$lib/types/canvas';
+	import { onMessage, type WebSocketMessage } from '$lib/stores/websocket.svelte';
 	import CanvasPageList from '$lib/components/canvas/CanvasPageList.svelte';
 	import CanvasEditor from '$lib/components/canvas/CanvasEditor.svelte';
 
@@ -28,6 +29,30 @@
 	// Control values map: { [controlName]: value }
 	// Updated when any control block changes, used by formula/table_view blocks
 	let controlValues = $state<Record<string, unknown>>({});
+
+	// Live refresh tokens: { [tableName]: number }
+	// Incremented when data changes are detected via WS, triggers debounced re-fetch in TableViewBlocks
+	let refreshTokens = $state<Record<string, number>>({});
+
+	// System table names that map to task events
+	const TASK_SYSTEM_TABLES = ['tasks', 'dependencies', 'labels', 'comments'];
+
+	// Collect table names used by the current page's table_view blocks
+	const activeTableNames = $derived(
+		selectedPage
+			? selectedPage.blocks
+				.filter((b): b is import('$lib/types/canvas').TableViewBlock => b.type === 'table_view' && !!b.tableName)
+				.map(b => b.tableName)
+			: []
+	);
+
+	function bumpRefreshToken(tableName: string) {
+		refreshTokens = { ...refreshTokens, [tableName]: (refreshTokens[tableName] || 0) + 1 };
+	}
+
+	// Subscribe to WS 'tasks' channel for data change events
+	let unsubTasks: (() => void) | null = null;
+	let unsubSessions: (() => void) | null = null;
 
 	// Resizable panel state
 	let leftPanelWidth = $state(280);
@@ -92,6 +117,31 @@
 			error = (err as Error).message;
 		} finally {
 			isLoading = false;
+		}
+	}
+
+	// Create a page from a template
+	async function handleCreateFromTemplate(templateId: string) {
+		if (!project) return;
+
+		try {
+			const res = await fetch('/api/canvas/templates', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ project, templateId })
+			});
+
+			if (!res.ok) {
+				const data = await res.json();
+				throw new Error(data.error || 'Failed to create page from template');
+			}
+
+			const data = await res.json();
+			await fetchPages();
+			const newPage = pages.find(p => p.id === data.page.id);
+			if (newPage) handleSelect(newPage);
+		} catch (err) {
+			console.error('Failed to create from template:', err);
 		}
 	}
 
@@ -221,6 +271,26 @@
 		}
 	}
 
+	// Toggle is_base flag on a canvas page
+	async function handleToggleBase(isBase: boolean) {
+		if (!selectedPage || !project) return;
+
+		// Optimistic update
+		selectedPage = { ...selectedPage, is_base: isBase };
+		pages = pages.map(p => p.id === selectedPage!.id ? { ...p, is_base: isBase } : p);
+
+		try {
+			await fetch(`/api/canvas/${selectedPage.id}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ project, is_base: isBase })
+			});
+		} catch (err) {
+			console.error('Failed to toggle base flag:', err);
+			await fetchPages();
+		}
+	}
+
 	// Update page blocks (from CanvasEditor block add/remove)
 	async function handleUpdateBlocks(blocks: CanvasBlock[]) {
 		if (!selectedPage || !project) return;
@@ -325,6 +395,36 @@
 		if (tableParam && project) {
 			await createCanvasFromTable(tableParam);
 		}
+
+		// Subscribe to WS events for live table refresh
+		unsubTasks = onMessage('tasks', (msg: WebSocketMessage) => {
+			if (msg.type === 'data-changed') {
+				// User data table changed — bump if any table_view shows this table
+				const tableName = (msg as any).tableName as string;
+				if (tableName && activeTableNames.includes(tableName)) {
+					bumpRefreshToken(tableName);
+				}
+			} else if (msg.type === 'task-change' || msg.type === 'task-updated' || msg.type === 'task-created') {
+				// System task table changed — bump all system tables shown
+				for (const t of TASK_SYSTEM_TABLES) {
+					if (activeTableNames.includes(t)) {
+						bumpRefreshToken(t);
+					}
+				}
+			}
+		});
+
+		unsubSessions = onMessage('sessions', (msg: WebSocketMessage) => {
+			if (msg.type === 'session-signal' || msg.type === 'session-state') {
+				// Agent activity — refresh agents-related system tables if shown
+				// (agents are not in system tables currently, but future-proof)
+			}
+		});
+	});
+
+	onDestroy(() => {
+		unsubTasks?.();
+		unsubSessions?.();
 	});
 
 	// Refetch when project changes
@@ -390,6 +490,7 @@
 					onAdd={handleAdd}
 					onDelete={handleDelete}
 					onRename={handleRename}
+					onCreateFromTemplate={handleCreateFromTemplate}
 				/>
 			</div>
 
@@ -414,9 +515,11 @@
 					page={selectedPage}
 					{project}
 					{controlValues}
+					{refreshTokens}
 					onUpdatePage={handleUpdateBlocks}
 					onTitleChange={handleTitleChange}
 					onControlChange={handleControlChange}
+					onToggleBase={handleToggleBase}
 				/>
 			</div>
 		</div>

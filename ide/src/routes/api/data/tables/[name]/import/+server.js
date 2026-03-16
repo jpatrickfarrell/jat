@@ -10,6 +10,7 @@ import { json } from '@sveltejs/kit';
 import { initDataDb, insertRows, getTableSchema, isSystemTable } from '$lib/server/jat-data.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 import { parseDelimited } from '$lib/server/tsvParser.js';
+import { broadcastDataChanged } from '$lib/server/websocket';
 
 /** @type {import('./$types').RequestHandler} */
 export async function POST({ params, request }) {
@@ -62,6 +63,7 @@ export async function POST({ params, request }) {
 		const unmatched = headers.filter((/** @type {string} */ h) => !tableColumns.includes(h));
 
 		const result = insertRows(path, tableName, rows);
+		broadcastDataChanged(tableName, project, 'import');
 
 		return json({
 			success: true,

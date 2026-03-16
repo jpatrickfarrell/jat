@@ -11,16 +11,20 @@
 		page,
 		project = null,
 		controlValues = {},
+		refreshTokens = {},
 		onUpdatePage,
 		onTitleChange,
 		onControlChange = () => {},
+		onToggleBase = () => {},
 	}: {
 		page: CanvasPage | null;
 		project?: string | null;
 		controlValues?: Record<string, unknown>;
+		refreshTokens?: Record<string, number>;
 		onUpdatePage: (blocks: CanvasBlock[]) => void;
 		onTitleChange: (name: string) => void;
 		onControlChange?: (controlName: string, value: unknown) => void;
+		onToggleBase?: (isBase: boolean) => void;
 	} = $props();
 
 	let editingTitle = $state(false);
@@ -288,7 +292,7 @@
 		<div class="flex-1 overflow-y-auto">
 			<div class="max-w-3xl mx-auto px-8 py-6">
 				<!-- Page title (inline editable) -->
-				<div class="mb-6">
+				<div class="mb-2">
 					{#if editingTitle}
 						<input
 							type="text"
@@ -310,6 +314,28 @@
 						>
 							{page.name}
 						</h1>
+					{/if}
+				</div>
+
+				<!-- Knowledge Base toggle -->
+				<div class="mb-6 flex items-center gap-2">
+					<label class="canvas-base-toggle">
+						<input
+							type="checkbox"
+							checked={page.is_base}
+							onchange={() => onToggleBase(!page?.is_base)}
+						/>
+						<span class="toggle-track">
+							<span class="toggle-thumb"></span>
+						</span>
+						<span class="toggle-label" class:active={page.is_base}>
+							{page.is_base ? 'Knowledge Base' : 'Use as Knowledge Base'}
+						</span>
+					</label>
+					{#if page.is_base}
+						<span class="text-[10px] px-1.5 py-0.5 rounded" style="background: oklch(0.65 0.20 145 / 0.15); color: oklch(0.70 0.18 145); border: 1px solid oklch(0.65 0.20 145 / 0.3);">
+							Injected into agent prompts
+						</span>
 					{/if}
 				</div>
 
@@ -436,7 +462,7 @@
 
 							<!-- Block content -->
 							<div class="canvas-block">
-								<BlockRenderer {block} {project} pageId={page?.id ?? null} {controlValues} existingControlNames={controlNames} onBlockUpdate={updateBlock} {onControlChange} />
+								<BlockRenderer {block} {project} pageId={page?.id ?? null} {controlValues} {refreshTokens} existingControlNames={controlNames} onBlockUpdate={updateBlock} {onControlChange} />
 							</div>
 						</div>
 
@@ -725,5 +751,60 @@
 	@keyframes animate-scale-in-center {
 		from { opacity: 0; transform: scale(0.95); }
 		to { opacity: 1; transform: scale(1); }
+	}
+
+	/* Knowledge Base toggle */
+	.canvas-base-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		cursor: pointer;
+		user-select: none;
+	}
+
+	.canvas-base-toggle input {
+		display: none;
+	}
+
+	.toggle-track {
+		position: relative;
+		width: 32px;
+		height: 18px;
+		border-radius: 9px;
+		background: oklch(0.25 0.02 250);
+		border: 1px solid oklch(0.35 0.02 250);
+		transition: background 0.2s, border-color 0.2s;
+		flex-shrink: 0;
+	}
+
+	.canvas-base-toggle input:checked + .toggle-track {
+		background: oklch(0.55 0.18 145 / 0.4);
+		border-color: oklch(0.65 0.20 145 / 0.6);
+	}
+
+	.toggle-thumb {
+		position: absolute;
+		top: 2px;
+		left: 2px;
+		width: 12px;
+		height: 12px;
+		border-radius: 50%;
+		background: oklch(0.55 0.02 250);
+		transition: transform 0.2s, background 0.2s;
+	}
+
+	.canvas-base-toggle input:checked + .toggle-track .toggle-thumb {
+		transform: translateX(14px);
+		background: oklch(0.75 0.20 145);
+	}
+
+	.toggle-label {
+		font-size: 0.75rem;
+		color: oklch(0.50 0.02 250);
+		transition: color 0.2s;
+	}
+
+	.toggle-label.active {
+		color: oklch(0.70 0.18 145);
 	}
 </style>

@@ -1,8 +1,15 @@
 <script lang="ts">
 	/**
-	 * CanvasPageList - Left panel showing list of canvas pages with CRUD
+	 * CanvasPageList - Left panel showing list of canvas pages with CRUD + templates
 	 */
 	import type { CanvasPage } from '$lib/types/canvas';
+
+	interface CanvasTemplate {
+		id: string;
+		name: string;
+		description: string;
+		category: string;
+	}
 
 	let {
 		pages,
@@ -10,7 +17,8 @@
 		onSelect,
 		onAdd,
 		onDelete,
-		onRename
+		onRename,
+		onCreateFromTemplate
 	}: {
 		pages: CanvasPage[];
 		selectedPageId: string | null;
@@ -18,6 +26,7 @@
 		onAdd: () => void;
 		onDelete: (page: CanvasPage) => void;
 		onRename: (page: CanvasPage, newName: string) => void;
+		onCreateFromTemplate: (templateId: string) => void;
 	} = $props();
 
 	let renamingId = $state<string | null>(null);
@@ -27,6 +36,44 @@
 	let contextX = $state(0);
 	let contextY = $state(0);
 	let contextVisible = $state(false);
+
+	// Template state
+	let templates = $state<CanvasTemplate[]>([]);
+	let showTemplates = $state(false);
+	let templatesLoaded = $state(false);
+
+	async function loadTemplates() {
+		if (templatesLoaded) return;
+		try {
+			const res = await fetch('/api/canvas/templates');
+			if (res.ok) {
+				const data = await res.json();
+				templates = data.templates || [];
+			}
+		} catch {
+			// Silently fail — templates are optional
+		}
+		templatesLoaded = true;
+	}
+
+	function toggleTemplates() {
+		showTemplates = !showTemplates;
+		if (showTemplates && !templatesLoaded) {
+			loadTemplates();
+		}
+	}
+
+	function handleTemplateClick(templateId: string) {
+		onCreateFromTemplate(templateId);
+		showTemplates = false;
+	}
+
+	const categoryIcons: Record<string, string> = {
+		general: '📄',
+		data: '📊',
+		project: '📋',
+		agent: '🤖',
+	};
 
 	function handleContextMenu(e: MouseEvent, page: CanvasPage) {
 		e.preventDefault();
@@ -97,18 +144,68 @@
 				</span>
 			{/if}
 		</h2>
-		<button
-			onclick={onAdd}
-			class="flex items-center gap-1 px-2 py-1 rounded text-xs font-mono transition-all duration-150 hover:scale-105 cursor-pointer"
-			style="background: oklch(0.70 0.18 240 / 0.15); color: oklch(0.75 0.15 240); border: 1px solid oklch(0.70 0.18 240 / 0.3);"
-			title="Create new canvas page"
-		>
-			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
-				<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-			</svg>
-			New
-		</button>
+		<div class="flex items-center gap-1">
+			<!-- Template button -->
+			<button
+				onclick={toggleTemplates}
+				class="flex items-center gap-1 px-2 py-1 rounded text-xs font-mono transition-all duration-150 hover:scale-105 cursor-pointer"
+				style="background: {showTemplates ? 'oklch(0.55 0.15 280 / 0.2)' : 'oklch(0.55 0.15 280 / 0.1)'}; color: oklch(0.70 0.12 280); border: 1px solid oklch(0.55 0.15 280 / 0.25);"
+				title="Create from template"
+			>
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+				</svg>
+			</button>
+			<!-- New blank page button -->
+			<button
+				onclick={onAdd}
+				class="flex items-center gap-1 px-2 py-1 rounded text-xs font-mono transition-all duration-150 hover:scale-105 cursor-pointer"
+				style="background: oklch(0.70 0.18 240 / 0.15); color: oklch(0.75 0.15 240); border: 1px solid oklch(0.70 0.18 240 / 0.3);"
+				title="Create new blank page"
+			>
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+				</svg>
+				New
+			</button>
+		</div>
 	</div>
+
+	<!-- Template Panel (collapsible) -->
+	{#if showTemplates}
+		<div class="px-2 py-2 space-y-1" style="border-bottom: 1px solid oklch(0.25 0.02 250); background: oklch(0.14 0.01 260);">
+			<div class="text-[10px] font-mono uppercase tracking-wider px-2 pb-1" style="color: oklch(0.50 0.08 280);">
+				Templates
+			</div>
+			{#if !templatesLoaded}
+				<div class="flex items-center justify-center py-3">
+					<div class="w-4 h-4 border-2 rounded-full animate-spin" style="border-color: oklch(0.55 0.15 280 / 0.3); border-top-color: oklch(0.65 0.15 280);"></div>
+				</div>
+			{:else if templates.length === 0}
+				<p class="text-[11px] px-2 py-1" style="color: oklch(0.45 0.02 250);">No templates available.</p>
+			{:else}
+				{#each templates as tmpl}
+					<button
+						onclick={() => handleTemplateClick(tmpl.id)}
+						class="w-full text-left px-2.5 py-2 rounded transition-all duration-100 cursor-pointer group"
+						style="background: transparent; border: none;"
+					>
+						<div class="flex items-start gap-2">
+							<span class="text-sm mt-0.5 shrink-0">{categoryIcons[tmpl.category] || '📄'}</span>
+							<div class="min-w-0">
+								<div class="text-xs font-medium group-hover:underline" style="color: oklch(0.78 0.10 280);">
+									{tmpl.name}
+								</div>
+								<div class="text-[10px] mt-0.5 line-clamp-2" style="color: oklch(0.45 0.02 250);">
+									{tmpl.description}
+								</div>
+							</div>
+						</div>
+					</button>
+				{/each}
+			{/if}
+		</div>
+	{/if}
 
 	<!-- Page List -->
 	<div class="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
@@ -118,7 +215,7 @@
 					<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
 				</svg>
 				<p class="text-xs text-center" style="color: oklch(0.45 0.02 250);">
-					No canvas pages yet.<br />Click <strong>New</strong> to create one.
+					No canvas pages yet.<br />Click <strong>New</strong> or use a template.
 				</p>
 			</div>
 		{:else}
@@ -145,8 +242,13 @@
 								style="color: oklch(0.85 0.02 250);"
 							/>
 						{:else}
-							<div class="text-sm font-medium truncate" style="color: {selectedPageId === page.id ? 'oklch(0.85 0.12 240)' : 'oklch(0.75 0.02 250)'};">
-								{page.name}
+							<div class="flex items-center gap-1.5">
+								<div class="text-sm font-medium truncate" style="color: {selectedPageId === page.id ? 'oklch(0.85 0.12 240)' : 'oklch(0.75 0.02 250)'};">
+									{page.name}
+								</div>
+								{#if page.is_base}
+									<span class="shrink-0 text-[9px] font-mono px-1 py-0.5 rounded" style="background: oklch(0.55 0.15 145 / 0.15); color: oklch(0.70 0.15 145); border: 1px solid oklch(0.55 0.15 145 / 0.25);">KB</span>
+								{/if}
 							</div>
 							<div class="text-[10px] mt-0.5" style="color: oklch(0.45 0.02 250);">
 								{page.blocks.length} block{page.blocks.length !== 1 ? 's' : ''} · {formatDate(page.updated_at)}
@@ -212,5 +314,17 @@
 
 	.canvas-context-menu button:hover {
 		background: oklch(0.28 0.02 250);
+	}
+
+	/* Template button hover */
+	.group:hover {
+		background: oklch(0.55 0.15 280 / 0.08) !important;
+	}
+
+	.line-clamp-2 {
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
 	}
 </style>

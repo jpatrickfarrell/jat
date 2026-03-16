@@ -12,12 +12,16 @@
 	let {
 		block,
 		project = null,
+		pageId = null,
+		controlValues = {},
 		existingControlNames = [],
 		onBlockUpdate,
 		onControlChange = () => {},
 	}: {
 		block: CanvasBlock;
 		project?: string | null;
+		pageId?: string | null;
+		controlValues?: Record<string, unknown>;
 		existingControlNames?: string[];
 		onBlockUpdate?: (block: CanvasBlock) => void;
 		onControlChange?: (controlName: string, value: unknown) => void;
@@ -27,7 +31,7 @@
 {#if block.type === 'text'}
 	<TextBlock {block} onUpdate={onBlockUpdate} />
 {:else if block.type === 'table_view'}
-	<TableViewBlock {block} />
+	<TableViewBlock {block} {project} {controlValues} onBlockUpdate={(updated) => onBlockUpdate?.(updated)} />
 {:else if block.type === 'control'}
 	<ControlBlock
 		{block}
@@ -37,7 +41,7 @@
 		onControlChange={(name, value) => onControlChange(name, value)}
 	/>
 {:else if block.type === 'formula'}
-	<FormulaBlock {block} />
+	<FormulaBlock {block} {controlValues} {project} {pageId} onBlockUpdate={(updated) => onBlockUpdate?.(updated)} />
 {:else if block.type === 'divider'}
 	<DividerBlock {block} />
 {:else}

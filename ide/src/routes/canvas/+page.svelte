@@ -287,6 +287,7 @@
 				<CanvasEditor
 					page={selectedPage}
 					{project}
+					{controlValues}
 					onUpdatePage={handleUpdateBlocks}
 					onTitleChange={handleTitleChange}
 					onControlChange={handleControlChange}

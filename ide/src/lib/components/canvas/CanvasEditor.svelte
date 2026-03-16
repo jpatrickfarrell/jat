@@ -2,6 +2,7 @@
 	/**
 	 * CanvasEditor - Right panel for editing a canvas page
 	 * Renders blocks vertically with + buttons between them for inserting new blocks.
+	 * Supports drag-to-reorder and delete functionality for blocks.
 	 */
 	import type { CanvasPage, CanvasBlock, CanvasBlockType } from '$lib/types/canvas';
 	import BlockRenderer from './BlockRenderer.svelte';
@@ -9,12 +10,14 @@
 	let {
 		page,
 		project = null,
+		controlValues = {},
 		onUpdatePage,
 		onTitleChange,
 		onControlChange = () => {},
 	}: {
 		page: CanvasPage | null;
 		project?: string | null;
+		controlValues?: Record<string, unknown>;
 		onUpdatePage: (blocks: CanvasBlock[]) => void;
 		onTitleChange: (name: string) => void;
 		onControlChange?: (controlName: string, value: unknown) => void;
@@ -24,14 +27,35 @@
 	let titleValue = $state('');
 	let addMenuIndex = $state<number | null>(null);
 
-	// Block type menu options
-	const blockTypes: { type: CanvasBlockType; label: string; icon: string; desc: string }[] = [
+	// Drag-and-drop state
+	let draggedIndex = $state<number | null>(null);
+	let dropTargetIndex = $state<number | null>(null);
+
+	// Delete confirmation state
+	let confirmDeleteIndex = $state<number | null>(null);
+
+	// Block type menu options — control types expanded for direct selection
+	type BlockMenuOption = { type: CanvasBlockType; label: string; icon: string; desc: string; controlType?: string };
+	const blockTypes: BlockMenuOption[] = [
 		{ type: 'text', label: 'Text', icon: 'T', desc: 'Rich text content' },
 		{ type: 'table_view', label: 'Table View', icon: '⊞', desc: 'Embed a data table' },
-		{ type: 'control', label: 'Control', icon: '◉', desc: 'Interactive select/slider' },
+		{ type: 'control', label: 'Select', icon: '▾', desc: 'Dropdown from data table', controlType: 'select' },
+		{ type: 'control', label: 'Slider', icon: '≡', desc: 'Numeric range slider', controlType: 'slider' },
+		{ type: 'control', label: 'Date', icon: '◷', desc: 'Date or date range picker', controlType: 'date' },
+		{ type: 'control', label: 'Text Input', icon: 'A', desc: 'Free-form text entry', controlType: 'text_input' },
+		{ type: 'control', label: 'Checkbox', icon: '☑', desc: 'Boolean toggle', controlType: 'checkbox' },
 		{ type: 'formula', label: 'Formula', icon: '=', desc: 'Computed value' },
 		{ type: 'divider', label: 'Divider', icon: '—', desc: 'Horizontal separator' },
 	];
+
+	// Block type icons for the toolbar
+	const blockTypeIcons: Record<string, string> = {
+		text: 'T',
+		table_view: '⊞',
+		control: '◉',
+		formula: '=',
+		divider: '—',
+	};
 
 	function startEditTitle() {
 		if (!page) return;
@@ -55,11 +79,12 @@
 		return 'blk_' + Math.random().toString(36).substring(2, 10);
 	}
 
-	function addBlock(type: CanvasBlockType, atIndex: number) {
+	function addBlock(type: CanvasBlockType, atIndex: number, controlType?: string) {
 		if (!page) return;
 
 		let newBlock: CanvasBlock;
 		const id = generateId();
+		const ct = (controlType || 'select') as import('$lib/types/canvas').ControlType;
 
 		switch (type) {
 			case 'text':
@@ -68,9 +93,17 @@
 			case 'table_view':
 				newBlock = { type: 'table_view', id, tableName: '', controlFilters: {} };
 				break;
-			case 'control':
-				newBlock = { type: 'control', id, name: '', controlType: 'select', config: {}, value: null };
+			case 'control': {
+				const defaultConfigs: Record<string, any> = {
+					select: {},
+					slider: { min: 0, max: 100, step: 1 },
+					date: {},
+					text_input: {},
+					checkbox: {},
+				};
+				newBlock = { type: 'control', id, name: '', controlType: ct, config: defaultConfigs[ct] || {}, value: null };
 				break;
+			}
 			case 'formula':
 				newBlock = { type: 'formula', id, expression: '' };
 				break;
@@ -97,6 +130,130 @@
 		onUpdatePage(blocks);
 	}
 
+	// --- Drag-and-drop handlers ---
+	function handleDragStart(e: DragEvent, index: number) {
+		if (!e.dataTransfer) return;
+		draggedIndex = index;
+		e.dataTransfer.effectAllowed = 'move';
+		e.dataTransfer.setData('text/plain', index.toString());
+	}
+
+	function handleDragEnd() {
+		draggedIndex = null;
+		dropTargetIndex = null;
+	}
+
+	function handleDragOver(e: DragEvent, index: number) {
+		e.preventDefault();
+		if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+		if (draggedIndex !== null && draggedIndex !== index) {
+			dropTargetIndex = index;
+		}
+	}
+
+	function handleDragLeave(e: DragEvent) {
+		const related = e.relatedTarget as HTMLElement | null;
+		if (!related?.closest('.canvas-block-wrapper')) {
+			dropTargetIndex = null;
+		}
+	}
+
+	function handleDrop(e: DragEvent, index: number) {
+		e.preventDefault();
+		if (!page || draggedIndex === null || draggedIndex === index) {
+			draggedIndex = null;
+			dropTargetIndex = null;
+			return;
+		}
+		const blocks = [...page.blocks];
+		const [moved] = blocks.splice(draggedIndex, 1);
+		blocks.splice(index > draggedIndex ? index - 1 : index, 0, moved);
+		onUpdatePage(blocks);
+		draggedIndex = null;
+		dropTargetIndex = null;
+	}
+
+	// --- Drop zone handlers (between blocks) ---
+	function handleZoneDragOver(e: DragEvent, insertAt: number) {
+		e.preventDefault();
+		if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+		if (draggedIndex !== null) {
+			dropTargetIndex = insertAt;
+		}
+	}
+
+	function handleZoneDragLeave() {
+		// Only clear if leaving to non-zone area
+	}
+
+	function handleZoneDrop(e: DragEvent, insertAt: number) {
+		e.preventDefault();
+		if (!page || draggedIndex === null) {
+			draggedIndex = null;
+			dropTargetIndex = null;
+			return;
+		}
+		const blocks = [...page.blocks];
+		const [moved] = blocks.splice(draggedIndex, 1);
+		// Adjust insert position if we removed from before
+		const adjustedIndex = insertAt > draggedIndex ? insertAt - 1 : insertAt;
+		blocks.splice(adjustedIndex, 0, moved);
+		onUpdatePage(blocks);
+		draggedIndex = null;
+		dropTargetIndex = null;
+	}
+
+	// --- Delete handlers ---
+	function isBlockEmpty(block: CanvasBlock): boolean {
+		if (block.type === 'text') return !block.content?.trim();
+		if (block.type === 'divider') return true;
+		if (block.type === 'formula') return !block.expression?.trim();
+		if (block.type === 'control') return !block.name?.trim();
+		if (block.type === 'table_view') return !block.tableName?.trim();
+		return false;
+	}
+
+	function deleteBlock(index: number) {
+		if (!page) return;
+		const block = page.blocks[index];
+		if (!block) return;
+
+		if (isBlockEmpty(block)) {
+			// Delete immediately for empty blocks
+			const blocks = [...page.blocks];
+			blocks.splice(index, 1);
+			onUpdatePage(blocks);
+			confirmDeleteIndex = null;
+		} else if (confirmDeleteIndex === index) {
+			// Second click = confirm
+			const blocks = [...page.blocks];
+			blocks.splice(index, 1);
+			onUpdatePage(blocks);
+			confirmDeleteIndex = null;
+		} else {
+			// First click on non-empty = show confirmation
+			confirmDeleteIndex = index;
+		}
+	}
+
+	function handleBlockKeydown(e: KeyboardEvent, index: number) {
+		if (!page) return;
+		const block = page.blocks[index];
+		if (!block) return;
+
+		// Delete/Backspace on empty text block removes it
+		if ((e.key === 'Delete' || e.key === 'Backspace') && block.type === 'text' && isBlockEmpty(block)) {
+			// Only delete if the event target is the block wrapper, not an inner input/textarea
+			const target = e.target as HTMLElement;
+			if (!target.closest('textarea') && !target.closest('input') && !target.closest('[contenteditable]')) {
+				e.preventDefault();
+				const blocks = [...page.blocks];
+				blocks.splice(index, 1);
+				onUpdatePage(blocks);
+			}
+		}
+	}
+
 	// Collect control names for uniqueness validation
 	const controlNames = $derived(
 		page ? page.blocks
@@ -105,7 +262,7 @@
 	);
 </script>
 
-<svelte:window onclick={() => { addMenuIndex = null; }} />
+<svelte:window onclick={() => { addMenuIndex = null; confirmDeleteIndex = null; }} />
 
 <div class="h-full flex flex-col overflow-hidden" style="background: oklch(0.14 0.01 250);">
 	{#if !page}
@@ -164,7 +321,7 @@
 							<!-- svelte-ignore a11y_no_static_element_interactions -->
 							<div class="add-block-menu add-block-menu-empty" onclick={(e) => e.stopPropagation()}>
 								{#each blockTypes as bt}
-									<button onclick={() => addBlock(bt.type, 0)}>
+									<button onclick={() => addBlock(bt.type, 0, bt.controlType)}>
 										<span class="block-type-icon">{bt.icon}</span>
 										<div>
 											<div class="text-xs font-medium" style="color: oklch(0.80 0.02 250);">{bt.label}</div>
@@ -176,8 +333,14 @@
 						{/if}
 					</div>
 				{:else}
-					<!-- Add block button at top -->
-					<div class="add-block-zone">
+					<!-- Drop zone at top -->
+					<div
+						class="add-block-zone"
+						class:drop-indicator-active={draggedIndex !== null && dropTargetIndex === 0 && draggedIndex !== 0}
+						ondragover={(e) => handleZoneDragOver(e, 0)}
+						ondragleave={handleZoneDragLeave}
+						ondrop={(e) => handleZoneDrop(e, 0)}
+					>
 						<button
 							class="add-block-btn"
 							onclick={(e) => { e.stopPropagation(); toggleAddMenu(0); }}
@@ -192,7 +355,7 @@
 							<!-- svelte-ignore a11y_no_static_element_interactions -->
 							<div class="add-block-menu" onclick={(e) => e.stopPropagation()}>
 								{#each blockTypes as bt}
-									<button onclick={() => addBlock(bt.type, 0)}>
+									<button onclick={() => addBlock(bt.type, 0, bt.controlType)}>
 										<span class="block-type-icon">{bt.icon}</span>
 										<div>
 											<div class="text-xs font-medium" style="color: oklch(0.80 0.02 250);">{bt.label}</div>
@@ -206,12 +369,76 @@
 
 					<!-- Blocks -->
 					{#each page.blocks as block, i (block.id)}
-						<div class="canvas-block group">
-							<BlockRenderer {block} {project} existingControlNames={controlNames} onBlockUpdate={updateBlock} {onControlChange} />
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div
+							class="canvas-block-wrapper group"
+							class:dragging={draggedIndex === i}
+							class:drop-above={dropTargetIndex === i && draggedIndex !== null && draggedIndex > i}
+							class:drop-below={dropTargetIndex === i && draggedIndex !== null && draggedIndex < i}
+							draggable="false"
+							ondragover={(e) => handleDragOver(e, i)}
+							ondragleave={handleDragLeave}
+							ondrop={(e) => handleDrop(e, i)}
+							onkeydown={(e) => handleBlockKeydown(e, i)}
+						>
+							<!-- Block toolbar (visible on hover) -->
+							<div class="block-toolbar">
+								<!-- Drag handle -->
+								<!-- svelte-ignore a11y_no_static_element_interactions -->
+								<div
+									class="toolbar-btn drag-handle"
+									draggable="true"
+									ondragstart={(e) => handleDragStart(e, i)}
+									ondragend={handleDragEnd}
+									title="Drag to reorder"
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 16 16" class="w-3.5 h-3.5">
+										<circle cx="5.5" cy="3.5" r="1.25" />
+										<circle cx="10.5" cy="3.5" r="1.25" />
+										<circle cx="5.5" cy="8" r="1.25" />
+										<circle cx="10.5" cy="8" r="1.25" />
+										<circle cx="5.5" cy="12.5" r="1.25" />
+										<circle cx="10.5" cy="12.5" r="1.25" />
+									</svg>
+								</div>
+
+								<!-- Block type indicator -->
+								<span class="toolbar-type-icon">{blockTypeIcons[block.type] || '?'}</span>
+
+								<!-- Spacer -->
+								<div class="flex-1"></div>
+
+								<!-- Delete button -->
+								<button
+									class="toolbar-btn delete-btn"
+									class:confirm-delete={confirmDeleteIndex === i}
+									onclick={(e) => { e.stopPropagation(); deleteBlock(i); }}
+									title={confirmDeleteIndex === i ? 'Click again to confirm delete' : 'Delete block'}
+								>
+									{#if confirmDeleteIndex === i}
+										<span class="text-[10px] font-medium" style="color: oklch(0.80 0.18 25);">Delete?</span>
+									{:else}
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+										</svg>
+									{/if}
+								</button>
+							</div>
+
+							<!-- Block content -->
+							<div class="canvas-block">
+								<BlockRenderer {block} {project} pageId={page?.id ?? null} {controlValues} existingControlNames={controlNames} onBlockUpdate={updateBlock} {onControlChange} />
+							</div>
 						</div>
 
-						<!-- Add block button between/after blocks -->
-						<div class="add-block-zone">
+						<!-- Add block button / drop zone between/after blocks -->
+						<div
+							class="add-block-zone"
+							class:drop-indicator-active={draggedIndex !== null && dropTargetIndex === i + 1 && draggedIndex !== i && draggedIndex !== i + 1}
+							ondragover={(e) => handleZoneDragOver(e, i + 1)}
+							ondragleave={handleZoneDragLeave}
+							ondrop={(e) => handleZoneDrop(e, i + 1)}
+						>
 							<button
 								class="add-block-btn"
 								onclick={(e) => { e.stopPropagation(); toggleAddMenu(i + 1); }}
@@ -226,7 +453,7 @@
 								<!-- svelte-ignore a11y_no_static_element_interactions -->
 								<div class="add-block-menu" onclick={(e) => e.stopPropagation()}>
 									{#each blockTypes as bt}
-										<button onclick={() => addBlock(bt.type, i + 1)}>
+										<button onclick={() => addBlock(bt.type, i + 1, bt.controlType)}>
 											<span class="block-type-icon">{bt.icon}</span>
 											<div>
 												<div class="text-xs font-medium" style="color: oklch(0.80 0.02 250);">{bt.label}</div>
@@ -245,6 +472,95 @@
 </div>
 
 <style>
+	/* --- Block wrapper with toolbar --- */
+	.canvas-block-wrapper {
+		position: relative;
+		border-radius: 0.5rem;
+		transition: opacity 0.2s, transform 0.2s;
+	}
+
+	.canvas-block-wrapper.dragging {
+		opacity: 0.4;
+		transform: scale(0.98);
+	}
+
+	/* Drop indicators on blocks */
+	.canvas-block-wrapper.drop-above {
+		border-top: 2px solid oklch(0.65 0.15 200);
+	}
+
+	.canvas-block-wrapper.drop-below {
+		border-bottom: 2px solid oklch(0.65 0.15 200);
+	}
+
+	/* Block toolbar - left side on hover */
+	.block-toolbar {
+		position: absolute;
+		left: -36px;
+		top: 0.5rem;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 2px;
+		opacity: 0;
+		transition: opacity 0.15s;
+		z-index: 10;
+	}
+
+	.canvas-block-wrapper:hover .block-toolbar {
+		opacity: 1;
+	}
+
+	.toolbar-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		border-radius: 4px;
+		border: none;
+		background: transparent;
+		color: oklch(0.45 0.02 250);
+		cursor: pointer;
+		transition: background 0.1s, color 0.1s;
+	}
+
+	.toolbar-btn:hover {
+		background: oklch(0.25 0.02 250);
+		color: oklch(0.70 0.02 250);
+	}
+
+	.drag-handle {
+		cursor: grab;
+	}
+
+	.drag-handle:active {
+		cursor: grabbing;
+	}
+
+	.toolbar-type-icon {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		font-size: 10px;
+		font-weight: 600;
+		color: oklch(0.40 0.05 240);
+		pointer-events: none;
+	}
+
+	.delete-btn:hover {
+		background: oklch(0.50 0.12 25 / 0.2);
+		color: oklch(0.70 0.18 25);
+	}
+
+	.delete-btn.confirm-delete {
+		background: oklch(0.50 0.12 25 / 0.25);
+		width: auto;
+		padding: 0 6px;
+	}
+
 	.canvas-block {
 		padding: 0.75rem 1rem;
 		border-radius: 0.5rem;
@@ -252,17 +568,30 @@
 		transition: border-color 0.15s, background 0.15s;
 	}
 
-	.canvas-block:hover {
+	.canvas-block-wrapper:hover .canvas-block {
 		border-color: oklch(0.30 0.02 250);
 		background: oklch(0.17 0.01 250);
 	}
 
+	/* --- Drop indicator on add-block zones --- */
 	.add-block-zone {
 		position: relative;
 		display: flex;
 		justify-content: center;
 		height: 20px;
 		margin: 2px 0;
+		transition: height 0.15s;
+	}
+
+	.add-block-zone.drop-indicator-active {
+		height: 4px;
+		background: oklch(0.65 0.15 200);
+		border-radius: 2px;
+		margin: 4px 0;
+	}
+
+	.add-block-zone.drop-indicator-active .add-block-btn {
+		display: none;
 	}
 
 	.add-block-btn {

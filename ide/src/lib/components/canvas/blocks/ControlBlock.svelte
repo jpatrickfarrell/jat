@@ -1,6 +1,10 @@
 <script lang="ts">
 	import type { ControlBlock } from '$lib/types/canvas';
 	import CanvasSelectControl from './CanvasSelectControl.svelte';
+	import CanvasSliderControl from './CanvasSliderControl.svelte';
+	import CanvasDateControl from './CanvasDateControl.svelte';
+	import CanvasTextInputControl from './CanvasTextInputControl.svelte';
+	import CanvasCheckboxControl from './CanvasCheckboxControl.svelte';
 
 	let {
 		block,
@@ -25,14 +29,34 @@
 		{onBlockUpdate}
 		{onControlChange}
 	/>
+{:else if block.controlType === 'slider'}
+	<CanvasSliderControl
+		{block}
+		{existingNames}
+		{onBlockUpdate}
+		{onControlChange}
+	/>
+{:else if block.controlType === 'date'}
+	<CanvasDateControl
+		{block}
+		{existingNames}
+		{onBlockUpdate}
+		{onControlChange}
+	/>
+{:else if block.controlType === 'text_input'}
+	<CanvasTextInputControl
+		{block}
+		{existingNames}
+		{onBlockUpdate}
+		{onControlChange}
+	/>
+{:else if block.controlType === 'checkbox'}
+	<CanvasCheckboxControl
+		{block}
+		{existingNames}
+		{onBlockUpdate}
+		{onControlChange}
+	/>
 {:else}
-	<!-- Stub for other control types (task jat-y3zof.9) -->
-	<div class="flex items-center gap-3">
-		<span class="text-xs font-mono font-semibold px-2 py-0.5 rounded" style="background: oklch(0.55 0.12 300 / 0.15); color: oklch(0.75 0.12 300); border: 1px solid oklch(0.55 0.12 300 / 0.3);">
-			{block.name || 'unnamed'}
-		</span>
-		<span class="text-xs" style="color: oklch(0.50 0.02 250);">
-			{block.controlType} control — coming in jat-y3zof.9
-		</span>
-	</div>
+	<div class="text-xs" style="color: oklch(0.60 0.15 30);">Unknown control type: {block.controlType}</div>
 {/if}

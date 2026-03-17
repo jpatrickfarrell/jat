@@ -187,6 +187,18 @@
 		return formatShortDate(dateStr);
 	}
 
+	function formatDueTime(dateStr: string | null | undefined): string | null {
+		if (!dateStr) return null;
+		const d = parseTimestamp(dateStr);
+		if (!d) return null;
+		const hours = d.getHours();
+		const mins = d.getMinutes();
+		if (hours === 0 && mins === 0) return null;
+		const h = hours % 12 || 12;
+		const ampm = hours < 12 ? 'am' : 'pm';
+		return mins === 0 ? `${h}${ampm}` : `${h}:${String(mins).padStart(2, '0')}${ampm}`;
+	}
+
 	function getDueDateColor(dateStr: string | null | undefined): string {
 		if (!dateStr) return '';
 		const date = parseTimestamp(dateStr);
@@ -1492,8 +1504,12 @@
 							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 							<td class="td-due-date" style={isExiting ? 'background: transparent;' : ''} onclick={(e) => { if (!isExiting) openDueDatePicker(task, e); }}>
 								{#if task.due_date}
+									{@const timeStr = formatDueTime(task.due_date)}
 									<span class="due-date-display" style="color: {getDueDateColor(task.due_date)}" title={task.due_date}>
 										{formatDueDate(task.due_date)}
+										{#if timeStr}
+											<span class="due-date-time-display">{timeStr}</span>
+										{/if}
 									</span>
 								{:else}
 									<span class="due-date-empty">
@@ -2386,6 +2402,16 @@
 		font-size: 0.75rem;
 		font-weight: 500;
 		white-space: nowrap;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.0625rem;
+	}
+
+	.due-date-time-display {
+		font-size: 0.625rem;
+		font-weight: 400;
+		opacity: 0.7;
 	}
 
 	.due-date-empty {

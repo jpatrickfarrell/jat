@@ -78,6 +78,10 @@
 	let showDeleteConfirm = $state(false);
 	let migrationToDelete = $state<MigrationStatus | null>(null);
 
+	// Link state
+	let isLinking = $state(false);
+	let linkError = $state<string | null>(null);
+
 	// Section collapse state
 	let diffCollapsed = $state(false);
 	let newMigrationCollapsed = $state(false);
@@ -218,6 +222,86 @@
 			error = err instanceof Error ? err.message : 'Failed to fetch status';
 		} finally {
 			isLoading = false;
+		}
+	}
+
+	/**
+	 * Link project to Supabase remote using stored credentials
+	 */
+	async function linkProject() {
+		isLinking = true;
+		linkError = null;
+
+		try {
+			// Fetch project secrets to get URL and password
+			const credsResponse = await fetch(`/api/config/credentials/${encodeURIComponent(project)}`);
+			const credsData = await credsResponse.json();
+
+			if (!credsResponse.ok) {
+				throw new Error('Failed to fetch project credentials');
+			}
+
+			const secrets = credsData.secrets || {};
+			const supabaseUrl = secrets.supabase_url;
+			const dbPassword = secrets.supabase_db_password;
+
+			if (!supabaseUrl?.isSet) {
+				throw new Error('Supabase URL not configured. Add it in Project Settings → Secrets.');
+			}
+
+			// Extract project ref from URL (e.g., https://svgmzkgkoipa.supabase.co → svgmzkgkoipa)
+			// The actual URL value is masked, so we need to get the real value from the API
+			const secretResponse = await fetch(`/api/supabase/link`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					project,
+					projectRef: 'from-url',  // Signal to extract from stored URL
+					dbPassword: dbPassword?.isSet ? 'from-credentials' : undefined
+				})
+			});
+
+			const linkData = await secretResponse.json();
+
+			if (!secretResponse.ok) {
+				throw new Error(linkData.error || 'Failed to start link process');
+			}
+
+			showToast('Supabase link started — check terminal window');
+
+			// Poll for completion
+			const pollInterval = setInterval(async () => {
+				try {
+					const checkResponse = await fetch(`/api/supabase/link?project=${encodeURIComponent(project)}`);
+					const checkData = await checkResponse.json();
+
+					if (checkData.isLinked) {
+						clearInterval(pollInterval);
+						showToast('Supabase project linked successfully!');
+						await fetchStatus();
+						isLinking = false;
+					} else if (!checkData.sessionExists) {
+						clearInterval(pollInterval);
+						// Session ended but not linked - refresh status to check
+						await fetchStatus();
+						isLinking = false;
+					}
+				} catch {
+					// Ignore polling errors
+				}
+			}, 2000);
+
+			// Timeout after 60 seconds
+			setTimeout(() => {
+				clearInterval(pollInterval);
+				if (isLinking) {
+					isLinking = false;
+					fetchStatus();
+				}
+			}, 60000);
+		} catch (err) {
+			linkError = err instanceof Error ? err.message : 'Failed to link project';
+			isLinking = false;
 		}
 	}
 
@@ -629,15 +713,33 @@
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
 						</svg>
 						Not linked
-					</span>
-				{/if}
+				</span>
+				<button
+					class="btn-link-project"
+					onclick={() => linkProject()}
+					disabled={isLinking}
+					title="Link to Supabase remote project using stored credentials"
+				>
+					{#if isLinking}
+						<span class="loading loading-spinner loading-xs"></span>
+						Linking...
+					{:else}
+						<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+						</svg>
+						Link
+					{/if}
+				</button>
+			{/if}
 				<button class="btn-refresh" onclick={() => fetchStatus()} title="Refresh">
 					<svg class="refresh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
 					</svg>
 				</button>
 			</div>
-			{#if status.hint}
+			{#if linkError}
+				<p class="status-hint" style="color: oklch(0.65 0.15 25);">{linkError}</p>
+			{:else if status.hint}
 				<p class="status-hint">{status.hint}</p>
 			{/if}
 		</div>
@@ -1339,6 +1441,31 @@
 
 	.project-ref.clickable:active {
 		transform: scale(0.95);
+	}
+
+	.btn-link-project {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.2rem 0.5rem;
+		font-size: 0.7rem;
+		font-weight: 500;
+		color: oklch(0.85 0.12 155);
+		background: oklch(0.25 0.08 155 / 0.3);
+		border: 1px solid oklch(0.40 0.10 155 / 0.4);
+		border-radius: 0.3rem;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.btn-link-project:hover:not(:disabled) {
+		background: oklch(0.30 0.10 155 / 0.4);
+		border-color: oklch(0.50 0.12 155 / 0.5);
+	}
+
+	.btn-link-project:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
 	}
 
 	.btn-refresh {

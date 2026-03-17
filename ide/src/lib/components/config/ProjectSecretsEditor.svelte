@@ -786,6 +786,7 @@
 	/* Secrets Table */
 	.secrets-table {
 		width: 100%;
+		table-layout: fixed;
 		border-collapse: collapse;
 		border-top: 1px solid oklch(0.22 0.02 250);
 	}
@@ -839,11 +840,11 @@
 	}
 
 	.col-name {
-		width: 30%;
+		width: 35%;
 	}
 
 	.col-value {
-		width: 24%;
+		width: 22%;
 	}
 
 	.col-date {
@@ -851,11 +852,11 @@
 	}
 
 	.col-status {
-		width: 12%;
+		width: 14%;
 	}
 
 	.col-actions {
-		width: 10%;
+		width: 15%;
 		text-align: right !important;
 		white-space: nowrap;
 	}
@@ -875,6 +876,9 @@
 		color: oklch(0.85 0.02 250);
 		display: block;
 		font-size: 0.75rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.desc-text {
@@ -891,6 +895,11 @@
 		border-radius: 0.2rem;
 		color: oklch(0.70 0.08 145);
 		font-family: ui-monospace, monospace;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		display: inline-block;
+		max-width: 100%;
 	}
 
 	.not-set {

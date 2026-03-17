@@ -13,6 +13,7 @@ import { promisify } from 'util';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { getProjectSecret } from '$lib/utils/credentials';
 
 const execAsync = promisify(exec);
 
@@ -67,14 +68,37 @@ async function findParentSession(): Promise<string | null> {
 export async function POST({ request }) {
 	try {
 		const body = await request.json();
-		const { project, projectRef, dbPassword } = body;
+		const { project } = body;
+		let { projectRef, dbPassword } = body;
 
 		if (!project) {
 			return json({ error: 'Missing project parameter' }, { status: 400 });
 		}
 
+		// Resolve project ref from stored Supabase URL if needed
+		if (!projectRef || projectRef === 'from-url') {
+			const supabaseUrl = getProjectSecret(project, 'supabase_url');
+			if (supabaseUrl) {
+				// Extract project ref from URL: https://xxxxx.supabase.co → xxxxx
+				const urlMatch = supabaseUrl.match(/https?:\/\/([^.]+)\.supabase\./);
+				if (urlMatch) {
+					projectRef = urlMatch[1];
+				}
+			}
+		}
+
+		// Resolve DB password from stored credentials if needed
+		if (!dbPassword || dbPassword === 'from-credentials') {
+			const storedPassword = getProjectSecret(project, 'supabase_db_password');
+			if (storedPassword) {
+				dbPassword = storedPassword;
+			} else {
+				dbPassword = undefined;
+			}
+		}
+
 		if (!projectRef) {
-			return json({ error: 'Missing projectRef parameter' }, { status: 400 });
+			return json({ error: 'Cannot determine project ref. Add Supabase URL in Project Settings → Secrets.' }, { status: 400 });
 		}
 
 		// Resolve project path
@@ -90,6 +114,20 @@ export async function POST({ request }) {
 				{ error: 'Supabase not initialized. Run `supabase init` first.' },
 				{ status: 400 }
 			);
+		}
+
+		// Ensure config.toml exists (supabase link requires it)
+		const configTomlPath = join(supabasePath, 'config.toml');
+		if (!existsSync(configTomlPath)) {
+			try {
+				const supabaseCmd = `${homedir()}/.local/bin/supabase`;
+				await execAsync(`cd "${projectPath}" && ${supabaseCmd} init --force`, { timeout: 15000 });
+			} catch (initError) {
+				return json(
+					{ error: 'Failed to initialize Supabase config. Run `supabase init` manually.' },
+					{ status: 500 }
+				);
+			}
 		}
 
 		// Session name for linking

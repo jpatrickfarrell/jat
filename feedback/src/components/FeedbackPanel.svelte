@@ -72,11 +72,18 @@
         model: agentModel || undefined,
         maxSteps: 20,
         appContext: agentContext || undefined,
+        endpoint,
+        project,
         onMessagesChange: (msgs) => { agentMessages = msgs; },
         onStateChange: (state, step) => { agentState = state; agentStep = step; },
       });
     }
     return bridge;
+  }
+
+  /** Called by NotesPanel when user edits notes — invalidates agent's cached context */
+  function handleNotesChanged() {
+    bridge?.invalidateNotesCache();
   }
 
   // Initialize bridge on first agent tab open
@@ -627,7 +634,7 @@
 
   {#if activeTab === 'notes' && notesTabOpened}
     <div class="notes-wrapper" transition:slide={{ duration: 200 }}>
-      <NotesPanel {endpoint} {project} />
+      <NotesPanel {endpoint} {project} onnoteschanged={handleNotesChanged} />
     </div>
   {/if}
 

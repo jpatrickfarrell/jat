@@ -6,9 +6,11 @@
   let {
     endpoint,
     project,
+    onnoteschanged,
   }: {
     endpoint: string;
     project: string;
+    onnoteschanged?: () => void;
   } = $props();
 
   // State
@@ -106,6 +108,7 @@
       });
       if (result.ok && result.note) {
         notes = [...notes, result.note];
+        onnoteschanged?.();
         goBack();
       } else {
         error = result.error || 'Failed to create note';
@@ -119,6 +122,7 @@
         notes = notes.map(n =>
           n.id === editingNote!.id ? { ...n, title: editTitle.trim(), content: editContent, updated_at: new Date().toISOString() } : n
         );
+        onnoteschanged?.();
         goBack();
       } else {
         error = result.error || 'Failed to update note';
@@ -137,6 +141,7 @@
     const result = await deleteNote(endpoint, editingNote.id);
     if (result.ok) {
       notes = notes.filter(n => n.id !== editingNote!.id);
+      onnoteschanged?.();
       goBack();
     } else {
       error = result.error || 'Failed to delete note';

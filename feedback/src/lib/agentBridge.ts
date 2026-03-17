@@ -15,7 +15,8 @@ import type {
   ExecutionResult,
   PageAgentCoreConfig,
 } from '../page-agent';
-import type { ChatMessage, AgentState } from './types';
+import type { ChatMessage, AgentState, AgentNote } from './types';
+import { fetchNotes } from './api';
 import { z } from 'zod/v4';
 
 export interface AgentBridgeConfig {
@@ -27,6 +28,10 @@ export interface AgentBridgeConfig {
   maxSteps?: number;
   /** App-specific context instructions (from agent-context attribute) */
   appContext?: string;
+  /** Feedback endpoint URL (for fetching notes) */
+  endpoint?: string;
+  /** Project identifier (for fetching notes) */
+  project?: string;
   /** Callback when messages change */
   onMessagesChange: (messages: ChatMessage[]) => void;
   /** Callback when agent state changes */
@@ -77,6 +82,10 @@ export class AgentBridge {
   private currentStep = 0;
   private config: AgentBridgeConfig;
   private disposed = false;
+  private agentConfig: PageAgentCoreConfig | null = null;
+
+  /** Cached notes from the backend */
+  private notesCache: AgentNote[] | null = null;
 
   /** Whether to skip approval prompts */
   autoApprove = false;
@@ -86,6 +95,52 @@ export class AgentBridge {
 
   constructor(config: AgentBridgeConfig) {
     this.config = config;
+  }
+
+  /** Fetch notes from backend and cache them */
+  private async loadNotes(): Promise<AgentNote[]> {
+    if (this.notesCache !== null) return this.notesCache;
+    if (!this.config.endpoint || !this.config.project) {
+      this.notesCache = [];
+      return this.notesCache;
+    }
+    const result = await fetchNotes(this.config.endpoint, this.config.project);
+    this.notesCache = result.notes || [];
+    return this.notesCache;
+  }
+
+  /** Build the combined system prompt from appContext + notes */
+  private buildSystemPrompt(notes: AgentNote[]): string | undefined {
+    const sections: string[] = [];
+
+    if (this.config.appContext) {
+      sections.push(`[Developer context]\n${this.config.appContext}`);
+    }
+
+    const siteWide = notes.filter((n) => n.route === null);
+    if (siteWide.length > 0) {
+      sections.push(`[Site-wide notes]\n${siteWide.map((n) => n.content).join('\n\n')}`);
+    }
+
+    return sections.length > 0 ? sections.join('\n\n') : undefined;
+  }
+
+  /** Get route-specific note content for a URL */
+  private getRouteNotes(url: string): string | undefined {
+    if (!this.notesCache || this.notesCache.length === 0) return undefined;
+    try {
+      const pathname = new URL(url).pathname;
+      const routeNotes = this.notesCache.filter((n) => n.route !== null && n.route === pathname);
+      if (routeNotes.length === 0) return undefined;
+      return `[Page notes: ${pathname}]\n${routeNotes.map((n) => n.content).join('\n\n')}`;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Invalidate the notes cache so next execute() re-fetches */
+  invalidateNotesCache(): void {
+    this.notesCache = null;
   }
 
   /** Lazy-initialize controller and agent on first use */
@@ -101,7 +156,7 @@ export class AgentBridge {
 
     const bridge = this;
 
-    const agentConfig: PageAgentCoreConfig = {
+    this.agentConfig = {
       pageController: this.controller,
       baseURL: this.config.proxyUrl,
       apiKey: 'proxy', // Proxy handles auth server-side
@@ -109,6 +164,10 @@ export class AgentBridge {
       maxSteps: this.config.maxSteps || 20,
       // Route LLM calls through the host app's proxy endpoint
       customFetch: this.createProxyFetch(),
+      instructions: {
+        // getPageInstructions is called before each step — returns route-specific notes
+        getPageInstructions: (url: string) => bridge.getRouteNotes(url),
+      },
       // Override DOM-modifying tools with approval-gated versions
       customTools: {
         click_element_by_index: tool({
@@ -154,14 +213,7 @@ export class AgentBridge {
       },
     };
 
-    // Add app-specific context if provided
-    if (this.config.appContext) {
-      agentConfig.instructions = {
-        system: this.config.appContext,
-      };
-    }
-
-    this.agent = new PageAgentCore(agentConfig);
+    this.agent = new PageAgentCore(this.agentConfig);
 
     // Listen to activity events for real-time UI feedback
     this.agent.addEventListener('activity', ((e: CustomEvent<AgentActivity>) => {
@@ -377,7 +429,11 @@ export class AgentBridge {
     if (this.disposed) return;
 
     this.init();
-    if (!this.agent) return;
+    if (!this.agent || !this.agentConfig) return;
+
+    // Fetch notes (uses cache if available) and update system prompt
+    const notes = await this.loadNotes();
+    this.agentConfig.instructions!.system = this.buildSystemPrompt(notes);
 
     // Add user message
     this.addMessage({

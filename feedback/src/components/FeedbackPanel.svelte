@@ -12,6 +12,7 @@
   import StatusToast from './StatusToast.svelte';
   import RequestList from './RequestList.svelte';
   import AgentPanel from './AgentPanel.svelte';
+  import NotesPanel from './NotesPanel.svelte';
   import type { ChatMessage, AgentState } from '../lib/types';
   import { AgentBridge } from '../lib/agentBridge';
   import { onDestroy } from 'svelte';
@@ -51,10 +52,11 @@
     ongrip?: (e: MouseEvent) => void;
   } = $props();
 
-  let activeTab = $state<'new' | 'requests' | 'agent'>('new');
+  let activeTab = $state<'new' | 'requests' | 'agent' | 'notes'>('new');
 
-  // Lazy init: don't mount AgentPanel until user first opens the tab
+  // Lazy init: don't mount AgentPanel/NotesPanel until user first opens the tab
   let agentTabOpened = $state(false);
+  let notesTabOpened = $state(false);
 
   // Agent state — managed by AgentBridge, fed to AgentPanel as props
   let agentMessages = $state<ChatMessage[]>([]);
@@ -81,6 +83,13 @@
   $effect(() => {
     if (activeTab === 'agent' && !agentTabOpened) {
       agentTabOpened = true;
+    }
+  });
+
+  // Initialize notes on first tab open
+  $effect(() => {
+    if (activeTab === 'notes' && !notesTabOpened) {
+      notesTabOpened = true;
     }
   });
 
@@ -444,6 +453,13 @@
           Agent
         </button>
       {/if}
+      <button class="tab" class:active={activeTab === 'notes'} onclick={() => { activeTab = 'notes'; notesTabOpened = true; }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        Notes
+      </button>
     </div>
     <button class="close-btn" onclick={onclose} aria-label="Close">&times;</button>
   </div>
@@ -606,6 +622,12 @@
         onskip={handleAgentSkip}
         onautoapprovechange={handleAutoApproveChange}
       />
+    </div>
+  {/if}
+
+  {#if activeTab === 'notes' && notesTabOpened}
+    <div class="notes-wrapper" transition:slide={{ duration: 200 }}>
+      <NotesPanel {endpoint} {project} />
     </div>
   {/if}
 
@@ -967,6 +989,13 @@
     overflow: hidden;
   }
   .agent-wrapper {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .notes-wrapper {
     flex: 1;
     min-height: 0;
     display: flex;

@@ -32,6 +32,8 @@
     onclose,
     ongrip,
     agentProxy = '',
+    agentModel = '',
+    agentContext = '',
   }: {
     endpoint: string;
     project: string;
@@ -43,6 +45,8 @@
     orgId?: string;
     orgName?: string;
     agentProxy?: string;
+    agentModel?: string;
+    agentContext?: string;
     onclose: () => void;
     ongrip?: (e: MouseEvent) => void;
   } = $props();
@@ -56,13 +60,16 @@
   let agentMessages = $state<ChatMessage[]>([]);
   let agentState = $state<AgentState>('idle');
   let agentStep = $state(0);
+  let agentAutoApprove = $state(false);
   let bridge = $state<AgentBridge | null>(null);
 
   function getAgentBridge(): AgentBridge {
     if (!bridge) {
       bridge = new AgentBridge({
         proxyUrl: agentProxy,
+        model: agentModel || undefined,
         maxSteps: 20,
+        appContext: agentContext || undefined,
         onMessagesChange: (msgs) => { agentMessages = msgs; },
         onStateChange: (state, step) => { agentState = state; agentStep = step; },
       });
@@ -83,6 +90,19 @@
 
   function handleAgentStop() {
     bridge?.stop();
+  }
+
+  function handleAgentApprove(messageId: string) {
+    bridge?.approve(messageId);
+  }
+
+  function handleAgentSkip(messageId: string) {
+    bridge?.skip(messageId);
+  }
+
+  function handleAutoApproveChange(value: boolean) {
+    agentAutoApprove = value;
+    if (bridge) bridge.autoApprove = value;
   }
 
   onDestroy(() => {
@@ -579,8 +599,12 @@
         agentState={agentState}
         currentStep={agentStep}
         maxSteps={bridge?.getMaxSteps() ?? 20}
+        autoApprove={agentAutoApprove}
         onsend={handleAgentSend}
         onstop={handleAgentStop}
+        onapprove={handleAgentApprove}
+        onskip={handleAgentSkip}
+        onautoapprovechange={handleAutoApproveChange}
       />
     </div>
   {/if}

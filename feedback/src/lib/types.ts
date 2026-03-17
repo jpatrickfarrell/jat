@@ -99,7 +99,7 @@ export interface ThreadEntry {
 }
 
 // Agent chat types (used by AgentPanel + AgentBridge)
-export type MessageRole = 'user' | 'thinking' | 'action' | 'result' | 'error';
+export type MessageRole = 'user' | 'thinking' | 'action' | 'result' | 'error' | 'approval';
 
 export interface ChatMessage {
   id: string;
@@ -112,9 +112,11 @@ export interface ChatMessage {
   /** Step index (1-based) for action/result messages */
   step?: number;
   timestamp: number;
+  /** For approval messages: current approval status */
+  approvalStatus?: 'pending' | 'approved' | 'skipped';
 }
 
-export type AgentState = 'idle' | 'thinking' | 'acting' | 'error';
+export type AgentState = 'idle' | 'thinking' | 'acting' | 'awaiting_approval' | 'error';
 
 export interface WidgetConfig {
   endpoint: string;

@@ -3,9 +3,12 @@
  *
  * Manages PageController + PageAgentCore lifecycle, converts agent events
  * to ChatMessage[], and provides execute/stop/dispose methods.
+ *
+ * Supports human-in-the-loop approval: DOM-modifying actions pause for
+ * user approval before executing. Auto-approve mode skips the prompt.
  */
 
-import { PageAgentCore, PageController } from '../page-agent';
+import { PageAgentCore, PageController, tool } from '../page-agent';
 import type {
   AgentActivity,
   AgentStepEvent,
@@ -13,11 +16,12 @@ import type {
   PageAgentCoreConfig,
 } from '../page-agent';
 import type { ChatMessage, AgentState } from './types';
+import { z } from 'zod/v4';
 
 export interface AgentBridgeConfig {
   /** Proxy endpoint URL for LLM API calls (host app implements this) */
   proxyUrl: string;
-  /** LLM model to use (default: 'gpt-4o') */
+  /** LLM model to use (default: 'claude-sonnet-4-6') */
   model?: string;
   /** Max steps per command (default: 20) */
   maxSteps?: number;
@@ -29,9 +33,34 @@ export interface AgentBridgeConfig {
   onStateChange: (state: AgentState, step: number) => void;
 }
 
+/** Tools that require user approval before execution */
+const APPROVAL_REQUIRED_TOOLS = new Set([
+  'click_element_by_index',
+  'input_text',
+  'select_dropdown_option',
+  'execute_javascript',
+]);
+
 let nextMsgId = 0;
 function msgId(): string {
   return `msg-${++nextMsgId}`;
+}
+
+/** Human-readable descriptions for agent actions */
+function describeAction(toolName: string, input: unknown): string {
+  const inp = input as Record<string, unknown>;
+  switch (toolName) {
+    case 'click_element_by_index':
+      return `Click element [${inp.index}]`;
+    case 'input_text':
+      return `Type "${truncate(String(inp.text || ''), 40)}" into element [${inp.index}]`;
+    case 'select_dropdown_option':
+      return `Select "${truncate(String(inp.text || ''), 40)}" in dropdown [${inp.index}]`;
+    case 'execute_javascript':
+      return `Run script: ${truncate(String(inp.script || ''), 60)}`;
+    default:
+      return `${toolName}(${summarizeInput(input)})`;
+  }
 }
 
 /**
@@ -49,6 +78,12 @@ export class AgentBridge {
   private config: AgentBridgeConfig;
   private disposed = false;
 
+  /** Whether to skip approval prompts */
+  autoApprove = false;
+
+  /** Pending approval resolvers keyed by message ID */
+  private pendingApprovals = new Map<string, (approved: boolean) => void>();
+
   constructor(config: AgentBridgeConfig) {
     this.config = config;
   }
@@ -64,14 +99,59 @@ export class AgentBridge {
       // and page-agent respects this attribute to skip elements during indexing.
     });
 
+    const bridge = this;
+
     const agentConfig: PageAgentCoreConfig = {
       pageController: this.controller,
       baseURL: this.config.proxyUrl,
       apiKey: 'proxy', // Proxy handles auth server-side
-      model: this.config.model || 'gpt-4o',
+      model: this.config.model || 'claude-sonnet-4-6',
       maxSteps: this.config.maxSteps || 20,
       // Route LLM calls through the host app's proxy endpoint
       customFetch: this.createProxyFetch(),
+      // Override DOM-modifying tools with approval-gated versions
+      customTools: {
+        click_element_by_index: tool({
+          description: 'Click element by index',
+          inputSchema: z.object({ index: z.int().min(0) }),
+          async execute(input) {
+            const approved = await bridge.requestApproval('click_element_by_index', input);
+            if (!approved) return '⏭️ Action skipped by user. Re-plan with a different approach.';
+            const result = await this.pageController.clickElement(input.index);
+            return result.message;
+          },
+        }),
+        input_text: tool({
+          description: 'Click and type text into an interactive input element',
+          inputSchema: z.object({ index: z.int().min(0), text: z.string() }),
+          async execute(input) {
+            const approved = await bridge.requestApproval('input_text', input);
+            if (!approved) return '⏭️ Action skipped by user. Re-plan with a different approach.';
+            const result = await this.pageController.inputText(input.index, input.text);
+            return result.message;
+          },
+        }),
+        select_dropdown_option: tool({
+          description: 'Select dropdown option for interactive element index by the text of the option you want to select',
+          inputSchema: z.object({ index: z.int().min(0), text: z.string() }),
+          async execute(input) {
+            const approved = await bridge.requestApproval('select_dropdown_option', input);
+            if (!approved) return '⏭️ Action skipped by user. Re-plan with a different approach.';
+            const result = await this.pageController.selectOption(input.index, input.text);
+            return result.message;
+          },
+        }),
+        execute_javascript: tool({
+          description: 'Execute JavaScript code on the current page. Supports async/await syntax. Use with caution!',
+          inputSchema: z.object({ script: z.string() }),
+          async execute(input) {
+            const approved = await bridge.requestApproval('execute_javascript', input);
+            if (!approved) return '⏭️ Action skipped by user. Re-plan with a different approach.';
+            const result = await this.pageController.executeJavascript(input.script);
+            return result.message;
+          },
+        }),
+      },
     };
 
     // Add app-specific context if provided
@@ -95,8 +175,65 @@ export class AgentBridge {
   }
 
   /**
+   * Request user approval for an action.
+   * Returns true if approved, false if skipped.
+   * Resolves immediately if autoApprove is enabled.
+   */
+  private async requestApproval(toolName: string, input: unknown): Promise<boolean> {
+    if (this.autoApprove) return true;
+
+    const id = msgId();
+    const description = describeAction(toolName, input);
+
+    this.addMessage({
+      id,
+      role: 'approval',
+      text: description,
+      tool: toolName,
+      step: this.currentStep,
+      timestamp: Date.now(),
+      approvalStatus: 'pending',
+    });
+
+    this.config.onStateChange('awaiting_approval', this.currentStep);
+
+    return new Promise<boolean>((resolve) => {
+      this.pendingApprovals.set(id, resolve);
+    });
+  }
+
+  /** Approve a pending action */
+  approve(messageId: string): void {
+    const resolve = this.pendingApprovals.get(messageId);
+    if (!resolve) return;
+    this.pendingApprovals.delete(messageId);
+    this.updateMessageApproval(messageId, 'approved');
+    this.config.onStateChange('acting', this.currentStep);
+    resolve(true);
+  }
+
+  /** Skip a pending action */
+  skip(messageId: string): void {
+    const resolve = this.pendingApprovals.get(messageId);
+    if (!resolve) return;
+    this.pendingApprovals.delete(messageId);
+    this.updateMessageApproval(messageId, 'skipped');
+    this.config.onStateChange('thinking', this.currentStep);
+    resolve(false);
+  }
+
+  /** Update approval status on an existing message */
+  private updateMessageApproval(id: string, status: 'approved' | 'skipped'): void {
+    this.messages = this.messages.map((msg) =>
+      msg.id === id ? { ...msg, approvalStatus: status } : msg
+    );
+    this.config.onMessagesChange(this.messages);
+  }
+
+  /**
    * Create a custom fetch that routes through the proxy endpoint.
    * The proxy receives standard OpenAI-format requests and forwards to the LLM.
+   * Handles proxy errors (401, 500, timeout) with user-friendly messages.
    */
   private createProxyFetch(): typeof globalThis.fetch {
     const proxyUrl = this.config.proxyUrl;
@@ -110,13 +247,47 @@ export class AgentBridge {
 
       const proxyTarget = proxyUrl.endsWith('/') ? proxyUrl + path : proxyUrl + '/' + path;
 
-      return globalThis.fetch(proxyTarget, {
-        ...init,
-        headers: {
-          ...Object.fromEntries(new Headers(init?.headers).entries()),
-          'Content-Type': 'application/json',
-        },
-      });
+      // Add timeout (60s default — LLM calls can be slow)
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60_000);
+
+      let response: Response;
+      try {
+        response = await globalThis.fetch(proxyTarget, {
+          ...init,
+          signal: controller.signal,
+          headers: {
+            ...Object.fromEntries(new Headers(init?.headers).entries()),
+            'Content-Type': 'application/json',
+          },
+        });
+      } catch (err) {
+        clearTimeout(timeout);
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          throw new Error('Agent proxy request timed out. The server may be overloaded — try again.');
+        }
+        throw new Error(`Cannot reach agent proxy at ${proxyUrl}. Check that your server is running.`);
+      }
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const status = response.status;
+        let detail = '';
+        try { detail = await response.text(); } catch { /* ignore */ }
+
+        if (status === 401 || status === 403) {
+          throw new Error('Agent proxy returned 401 Unauthorized. Check that the server has a valid API key configured.');
+        }
+        if (status === 429) {
+          throw new Error('Agent proxy rate limited (429). Too many requests — wait a moment and try again.');
+        }
+        if (status >= 500) {
+          throw new Error(`Agent proxy server error (${status}). ${detail ? detail.slice(0, 200) : 'Check server logs for details.'}`);
+        }
+        throw new Error(`Agent proxy error (${status}): ${detail ? detail.slice(0, 200) : 'Unknown error'}`);
+      }
+
+      return response;
     };
   }
 
@@ -129,15 +300,19 @@ export class AgentBridge {
 
       case 'executing':
         this.currentStep++;
-        this.config.onStateChange('acting', this.currentStep);
-        this.addMessage({
-          id: msgId(),
-          role: 'action',
-          text: `${activity.tool}(${summarizeInput(activity.input)})`,
-          tool: activity.tool,
-          step: this.currentStep,
-          timestamp: Date.now(),
-        });
+        // For approval-gated tools, the approval message is already shown.
+        // Only show action message for non-approval tools.
+        if (!APPROVAL_REQUIRED_TOOLS.has(activity.tool)) {
+          this.config.onStateChange('acting', this.currentStep);
+          this.addMessage({
+            id: msgId(),
+            role: 'action',
+            text: `${activity.tool}(${summarizeInput(activity.input)})`,
+            tool: activity.tool,
+            step: this.currentStep,
+            timestamp: Date.now(),
+          });
+        }
         break;
 
       case 'executed':
@@ -260,6 +435,13 @@ export class AgentBridge {
 
   /** Stop the agent mid-execution */
   stop(): void {
+    // Reject any pending approvals
+    for (const [id, resolve] of this.pendingApprovals) {
+      this.updateMessageApproval(id, 'skipped');
+      resolve(false);
+    }
+    this.pendingApprovals.clear();
+
     if (this.agent && this.agent.status === 'running') {
       this.agent.stop();
       this.addMessage({
@@ -285,6 +467,12 @@ export class AgentBridge {
   /** Dispose agent and controller */
   dispose(): void {
     this.disposed = true;
+    // Reject pending approvals
+    for (const [, resolve] of this.pendingApprovals) {
+      resolve(false);
+    }
+    this.pendingApprovals.clear();
+
     if (this.agent) {
       this.agent.dispose();
       this.agent = null;

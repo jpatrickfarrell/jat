@@ -3,8 +3,11 @@
    * AgentPanel — Chat UI for page-agent interaction.
    *
    * Events emitted:
-   *   onsend(text)  — user submits a command
-   *   onstop()      — user clicks stop button
+   *   onsend(text)       — user submits a command
+   *   onstop()           — user clicks stop button
+   *   onapprove(msgId)   — user approves a pending action
+   *   onskip(msgId)      — user skips a pending action
+   *   onautoapprovechange(value) — user toggles auto-approve
    */
 
   import type { ChatMessage, AgentState, MessageRole } from '../lib/types';
@@ -14,15 +17,23 @@
     agentState = 'idle',
     currentStep = 0,
     maxSteps = 40,
+    autoApprove = false,
     onsend,
     onstop,
+    onapprove,
+    onskip,
+    onautoapprovechange,
   }: {
     messages?: ChatMessage[];
     agentState?: AgentState;
     currentStep?: number;
     maxSteps?: number;
+    autoApprove?: boolean;
     onsend?: (text: string) => void;
     onstop?: () => void;
+    onapprove?: (messageId: string) => void;
+    onskip?: (messageId: string) => void;
+    onautoapprovechange?: (value: boolean) => void;
   } = $props();
 
   let inputText = $state('');
@@ -58,7 +69,9 @@
     onstop?.();
   }
 
-  const isRunning = $derived(agentState === 'thinking' || agentState === 'acting');
+  const isRunning = $derived(
+    agentState === 'thinking' || agentState === 'acting' || agentState === 'awaiting_approval'
+  );
 
   // Role icons and labels
   function roleIcon(role: MessageRole): string {
@@ -68,6 +81,7 @@
       case 'action': return '⚡';
       case 'result': return '✓';
       case 'error': return '✕';
+      case 'approval': return '?';
     }
   }
 
@@ -80,7 +94,7 @@
 <div class="agent-panel">
   <!-- Status bar -->
   <div class="status-bar">
-    <div class="status-indicator" class:idle={agentState === 'idle'} class:thinking={agentState === 'thinking'} class:acting={agentState === 'acting'} class:error={agentState === 'error'}>
+    <div class="status-indicator" class:idle={agentState === 'idle'} class:thinking={agentState === 'thinking'} class:acting={agentState === 'acting'} class:awaiting={agentState === 'awaiting_approval'} class:error={agentState === 'error'}>
       <span class="status-dot"></span>
       <span class="status-text">
         {#if agentState === 'idle'}
@@ -89,14 +103,26 @@
           Thinking...
         {:else if agentState === 'acting'}
           Acting...
+        {:else if agentState === 'awaiting_approval'}
+          Awaiting approval
         {:else}
           Error
         {/if}
       </span>
     </div>
-    {#if currentStep > 0}
-      <span class="step-counter">Step {currentStep}/{maxSteps}</span>
-    {/if}
+    <div class="status-right">
+      {#if currentStep > 0}
+        <span class="step-counter">Step {currentStep}/{maxSteps}</span>
+      {/if}
+      <label class="auto-approve-toggle" title="Auto-approve all actions">
+        <input
+          type="checkbox"
+          checked={autoApprove}
+          onchange={(e) => onautoapprovechange?.((e.target as HTMLInputElement).checked)}
+        />
+        <span class="toggle-label">Auto</span>
+      </label>
+    </div>
   </div>
 
   <!-- Message list -->
@@ -114,21 +140,62 @@
       </div>
     {:else}
       {#each messages as msg (msg.id)}
-        <div class="message msg-{msg.role}">
-          <span class="msg-icon">{roleIcon(msg.role)}</span>
-          <div class="msg-body">
-            {#if msg.role === 'action' && msg.tool}
-              <span class="msg-tool">{msg.tool}</span>
-            {/if}
-            <span class="msg-text">{msg.text}</span>
-            {#if msg.duration != null}
-              <span class="msg-duration">{formatDuration(msg.duration)}</span>
+        {#if msg.role === 'approval'}
+          <!-- Approval message with action buttons -->
+          <div class="message msg-approval" class:pending={msg.approvalStatus === 'pending'} class:approved={msg.approvalStatus === 'approved'} class:skipped={msg.approvalStatus === 'skipped'}>
+            <span class="msg-icon">
+              {#if msg.approvalStatus === 'approved'}
+                ✓
+              {:else if msg.approvalStatus === 'skipped'}
+                ⏭
+              {:else}
+                ?
+              {/if}
+            </span>
+            <div class="msg-body">
+              {#if msg.tool}
+                <span class="msg-tool">{msg.tool}</span>
+              {/if}
+              <span class="msg-text">{msg.text}</span>
+              {#if msg.approvalStatus === 'pending'}
+                <div class="approval-buttons">
+                  <button class="approve-btn" onclick={() => onapprove?.(msg.id)}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    Approve
+                  </button>
+                  <button class="skip-btn" onclick={() => onskip?.(msg.id)}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 5l14 14M19 5L5 19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    Skip
+                  </button>
+                </div>
+              {:else}
+                <span class="approval-badge" class:badge-approved={msg.approvalStatus === 'approved'} class:badge-skipped={msg.approvalStatus === 'skipped'}>
+                  {msg.approvalStatus}
+                </span>
+              {/if}
+            </div>
+            {#if msg.step}
+              <span class="msg-step">{msg.step}</span>
             {/if}
           </div>
-          {#if msg.step}
-            <span class="msg-step">{msg.step}</span>
-          {/if}
-        </div>
+        {:else}
+          <!-- Standard message -->
+          <div class="message msg-{msg.role}">
+            <span class="msg-icon">{roleIcon(msg.role)}</span>
+            <div class="msg-body">
+              {#if msg.role === 'action' && msg.tool}
+                <span class="msg-tool">{msg.tool}</span>
+              {/if}
+              <span class="msg-text">{msg.text}</span>
+              {#if msg.duration != null}
+                <span class="msg-duration">{formatDuration(msg.duration)}</span>
+              {/if}
+            </div>
+            {#if msg.step}
+              <span class="msg-step">{msg.step}</span>
+            {/if}
+          </div>
+        {/if}
       {/each}
 
       <!-- Live thinking indicator -->
@@ -224,6 +291,11 @@
     animation: pulse-dot 1.2s ease-in-out infinite;
   }
   .status-indicator.acting .status-text { color: #93c5fd; }
+  .status-indicator.awaiting .status-dot {
+    background: #a855f7;
+    animation: pulse-dot 1.2s ease-in-out infinite;
+  }
+  .status-indicator.awaiting .status-text { color: #c4b5fd; }
   .status-indicator.error .status-dot { background: #ef4444; }
   .status-indicator.error .status-text { color: #f87171; }
 
@@ -232,10 +304,37 @@
     50% { opacity: 0.5; transform: scale(0.8); }
   }
 
+  .status-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
   .step-counter {
     font-size: 11px;
     color: #6b7280;
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Auto-approve toggle */
+  .auto-approve-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    color: #6b7280;
+    user-select: none;
+  }
+  .auto-approve-toggle input {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    accent-color: #a855f7;
+    cursor: pointer;
+  }
+  .toggle-label {
+    white-space: nowrap;
   }
 
   /* Messages */
@@ -386,6 +485,102 @@
   }
   .msg-error .msg-text {
     color: #f87171;
+  }
+
+  /* Approval messages */
+  .msg-approval {
+    background: rgba(168, 85, 247, 0.08);
+    border: 1px solid rgba(168, 85, 247, 0.2);
+    border-radius: 6px;
+    margin: 4px 8px;
+    padding: 8px 12px;
+  }
+  .msg-approval.pending {
+    border-color: rgba(168, 85, 247, 0.4);
+    animation: approval-pulse 2s ease-in-out infinite;
+  }
+  .msg-approval.approved {
+    background: rgba(16, 185, 129, 0.06);
+    border-color: rgba(16, 185, 129, 0.2);
+  }
+  .msg-approval.skipped {
+    background: rgba(107, 114, 128, 0.06);
+    border-color: rgba(107, 114, 128, 0.2);
+    opacity: 0.7;
+  }
+  .msg-approval .msg-icon {
+    color: #a855f7;
+  }
+  .msg-approval.approved .msg-icon {
+    color: #10b981;
+  }
+  .msg-approval.skipped .msg-icon {
+    color: #6b7280;
+  }
+  .msg-approval .msg-text {
+    color: #e5e7eb;
+  }
+  .msg-approval .msg-tool {
+    background: #2e1065;
+    color: #c4b5fd;
+  }
+
+  @keyframes approval-pulse {
+    0%, 100% { border-color: rgba(168, 85, 247, 0.4); }
+    50% { border-color: rgba(168, 85, 247, 0.15); }
+  }
+
+  .approval-buttons {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .approve-btn, .skip-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .approve-btn {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #34d399;
+  }
+  .approve-btn:hover {
+    background: rgba(16, 185, 129, 0.25);
+  }
+  .skip-btn {
+    background: rgba(107, 114, 128, 0.15);
+    border: 1px solid rgba(107, 114, 128, 0.3);
+    color: #9ca3af;
+  }
+  .skip-btn:hover {
+    background: rgba(107, 114, 128, 0.25);
+  }
+
+  .approval-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 4px;
+  }
+  .badge-approved {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+  }
+  .badge-skipped {
+    background: rgba(107, 114, 128, 0.15);
+    color: #9ca3af;
   }
 
   /* Live thinking indicator */

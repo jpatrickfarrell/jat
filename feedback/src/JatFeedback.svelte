@@ -25,6 +25,8 @@
     'org-id': orgId = '',
     'org-name': orgName = '',
     'agent-proxy': agentProxy = '',
+    'agent-model': agentModel = '',
+    'agent-context': agentContext = '',
   }: {
     endpoint: string;
     project: string;
@@ -38,6 +40,8 @@
     'org-id': string;
     'org-name': string;
     'agent-proxy': string;
+    'agent-model': string;
+    'agent-context': string;
   } = $props();
 
   let open = $state(false);
@@ -189,7 +193,7 @@
       class:hidden={!open}
       style="{panelPositionStyles[config.position] || panelPositionStyles['bottom-right']}"
     >
-      <FeedbackPanel endpoint={config.endpoint} {project} isOpen={open} {userId} {userEmail} {userName} {userRole} {orgId} {orgName} {agentProxy} onclose={close} ongrip={handlePanelDragStart} />
+      <FeedbackPanel endpoint={config.endpoint} {project} isOpen={open} {userId} {userEmail} {userName} {userRole} {orgId} {orgName} {agentProxy} {agentModel} {agentContext} onclose={close} ongrip={handlePanelDragStart} />
     </div>
   {:else if open}
     <div class="jat-feedback-panel" style="{panelPositionStyles[config.position] || panelPositionStyles['bottom-right']}">

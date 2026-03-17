@@ -32,6 +32,112 @@ The package includes the widget bundle, Supabase migration, and edge function �
 | `user-role` | No | `''` | User's role (e.g., `admin`, `user`) |
 | `org-id` | No | `''` | Organization/tenant ID |
 | `org-name` | No | `''` | Organization name |
+| `agent-proxy` | No | `''` | URL path for the LLM proxy endpoint (e.g., `'/api/feedback/agent'`). Enables the Agent tab. |
+| `agent-model` | No | `'claude-sonnet-4-6'` | LLM model identifier passed to the proxy endpoint |
+
+## Agent Tab: LLM Proxy Endpoint
+
+The Agent tab lets users control the host page with natural language commands (powered by [page-agent](https://github.com/alibaba/page-agent)). To use it, set `agent-proxy` to a URL on your server that forwards LLM API calls. **API keys stay server-side — the widget never sees them.**
+
+### How It Works
+
+```
+Widget (browser)                    Your Server                     LLM Provider
+─────────────────                   ────────────                    ────────────
+User types command
+  → page-agent builds prompt
+  → POST /api/feedback/agent ────→ Receives request
+                                    Adds API key from env
+                                    POST api.anthropic.com ──────→ Processes request
+                                    ← Response ◄──────────────────── Returns completion
+  ← JSON response ◄──────────────
+  → Agent executes action on page
+```
+
+### Proxy Endpoint Spec
+
+Your server implements a single endpoint:
+
+- **Method:** `POST`
+- **Path:** Whatever you set in `agent-proxy` (e.g., `/api/feedback/agent`)
+- **Request body:** OpenAI-compatible chat completion request
+
+```json
+{
+  "model": "claude-sonnet-4-6",
+  "messages": [
+    { "role": "system", "content": "..." },
+    { "role": "user", "content": "Click the login button" }
+  ],
+  "tools": [...]
+}
+```
+
+- **Response:** OpenAI-compatible chat completion response
+- **Auth:** Your endpoint adds the API key server-side — the widget sends no auth headers
+
+### SvelteKit Example
+
+Create `src/routes/api/feedback/agent/[...path]/+server.ts`:
+
+```typescript
+import { json, error } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
+import { ANTHROPIC_API_KEY } from '$env/static/private';
+
+export const POST: RequestHandler = async ({ request, params }) => {
+  const path = params.path || 'chat/completions';
+  const body = await request.json();
+
+  const response = await fetch(`https://api.anthropic.com/v1/${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw error(response.status, `LLM API error: ${detail.slice(0, 200)}`);
+  }
+
+  const data = await response.json();
+  return json(data);
+};
+```
+
+**Environment variable** (`.env`):
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### Widget Usage
+
+```html
+<jat-feedback
+  endpoint="http://localhost:5173"
+  project="my-app"
+  agent-proxy="/api/feedback/agent"
+  agent-model="claude-sonnet-4-6"
+></jat-feedback>
+```
+
+The Agent tab appears automatically when `agent-proxy` is set. Without it, only the feedback form and history tabs are shown.
+
+### Error Handling
+
+The widget handles proxy errors gracefully:
+
+| HTTP Status | User Message |
+|-------------|-------------|
+| 401 / 403 | "Check that the server has a valid API key configured" |
+| 429 | "Too many requests — wait a moment and try again" |
+| 500+ | Server error with detail from response body |
+| Timeout (60s) | "The server may be overloaded — try again" |
+| Network error | "Check that your server is running" |
 
 ## What the Widget Captures
 

@@ -98,6 +98,24 @@ export interface ThreadEntry {
   at: string;
 }
 
+// Agent chat types (used by AgentPanel + AgentBridge)
+export type MessageRole = 'user' | 'thinking' | 'action' | 'result' | 'error';
+
+export interface ChatMessage {
+  id: string;
+  role: MessageRole;
+  text: string;
+  /** For action messages: tool name */
+  tool?: string;
+  /** For action messages: duration in ms */
+  duration?: number;
+  /** Step index (1-based) for action/result messages */
+  step?: number;
+  timestamp: number;
+}
+
+export type AgentState = 'idle' | 'thinking' | 'acting' | 'error';
+
 export interface WidgetConfig {
   endpoint: string;
   position: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';

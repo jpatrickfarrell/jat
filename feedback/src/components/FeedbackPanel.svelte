@@ -12,6 +12,9 @@
   import StatusToast from './StatusToast.svelte';
   import RequestList from './RequestList.svelte';
   import AgentPanel from './AgentPanel.svelte';
+  import type { ChatMessage, AgentState } from '../lib/types';
+  import { AgentBridge } from '../lib/agentBridge';
+  import { onDestroy } from 'svelte';
 
   declare const __JAT_FEEDBACK_VERSION__: string;
   const version = __JAT_FEEDBACK_VERSION__;
@@ -48,6 +51,43 @@
 
   // Lazy init: don't mount AgentPanel until user first opens the tab
   let agentTabOpened = $state(false);
+
+  // Agent state — managed by AgentBridge, fed to AgentPanel as props
+  let agentMessages = $state<ChatMessage[]>([]);
+  let agentState = $state<AgentState>('idle');
+  let agentStep = $state(0);
+  let bridge = $state<AgentBridge | null>(null);
+
+  function getAgentBridge(): AgentBridge {
+    if (!bridge) {
+      bridge = new AgentBridge({
+        proxyUrl: agentProxy,
+        maxSteps: 20,
+        onMessagesChange: (msgs) => { agentMessages = msgs; },
+        onStateChange: (state, step) => { agentState = state; agentStep = step; },
+      });
+    }
+    return bridge;
+  }
+
+  // Initialize bridge on first agent tab open
+  $effect(() => {
+    if (activeTab === 'agent' && !agentTabOpened) {
+      agentTabOpened = true;
+    }
+  });
+
+  function handleAgentSend(text: string) {
+    getAgentBridge().execute(text);
+  }
+
+  function handleAgentStop() {
+    bridge?.stop();
+  }
+
+  onDestroy(() => {
+    bridge?.dispose();
+  });
 
   // Reports state — loaded eagerly so badge count is available before tab is clicked
   let reports = $state<ReportSummary[]>([]);
@@ -534,7 +574,14 @@
 
   {#if activeTab === 'agent' && agentTabOpened}
     <div class="agent-wrapper" transition:slide={{ duration: 200 }}>
-      <AgentPanel />
+      <AgentPanel
+        messages={agentMessages}
+        agentState={agentState}
+        currentStep={agentStep}
+        maxSteps={bridge?.getMaxSteps() ?? 20}
+        onsend={handleAgentSend}
+        onstop={handleAgentStop}
+      />
     </div>
   {/if}
 

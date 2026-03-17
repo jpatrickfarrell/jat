@@ -2,31 +2,12 @@
   /**
    * AgentPanel — Chat UI for page-agent interaction.
    *
-   * This is the UI layer only. Actual page-agent integration (PageAgentCore,
-   * PageController) is wired up in task jat-9ugx6.3.
-   *
    * Events emitted:
    *   onsend(text)  — user submits a command
    *   onstop()      — user clicks stop button
    */
 
-  // Message types for the chat UI
-  export type MessageRole = 'user' | 'thinking' | 'action' | 'result' | 'error';
-
-  export interface ChatMessage {
-    id: string;
-    role: MessageRole;
-    text: string;
-    /** For action messages: tool name */
-    tool?: string;
-    /** For action messages: duration in ms */
-    duration?: number;
-    /** Step index (1-based) for action/result messages */
-    step?: number;
-    timestamp: number;
-  }
-
-  export type AgentState = 'idle' | 'thinking' | 'acting' | 'error';
+  import type { ChatMessage, AgentState, MessageRole } from '../lib/types';
 
   let {
     messages = [],

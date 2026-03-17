@@ -12,7 +12,7 @@ import type {
   ExecutionResult,
   PageAgentCoreConfig,
 } from '../page-agent';
-import type { ChatMessage, AgentState } from '../components/AgentPanel.svelte';
+import type { ChatMessage, AgentState } from './types';
 
 export interface AgentBridgeConfig {
   /** Proxy endpoint URL for LLM API calls (host app implements this) */

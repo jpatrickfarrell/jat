@@ -181,7 +181,7 @@
   });
 </script>
 
-<div class="jat-feedback-root" bind:this={rootEl} style="{positionStyles[config.position] || positionStyles['bottom-right']}; --jat-btn-color: {config.buttonColor}; {pickerHidden ? 'display: none;' : ''}">
+<div class="jat-feedback-root" data-page-agent-not-interactive bind:this={rootEl} style="{positionStyles[config.position] || positionStyles['bottom-right']}; --jat-btn-color: {config.buttonColor}; {pickerHidden ? 'display: none;' : ''}">
   {#if config.endpoint}
     <div
       class="jat-feedback-panel"

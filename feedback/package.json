@@ -37,6 +37,8 @@
     "vite": "^6.4.1"
   },
   "dependencies": {
-    "modern-screenshot": "^4.6.8"
+    "@page-agent/core": "^1.5.8",
+    "modern-screenshot": "^4.6.8",
+    "zod": "^3.25.76"
   }
 }

@@ -34,6 +34,7 @@ The package includes the widget bundle, Supabase migration, and edge function �
 | `org-name` | No | `''` | Organization name |
 | `agent-proxy` | No | `''` | URL path for the LLM proxy endpoint (e.g., `'/api/feedback/agent'`). Enables the Agent tab. |
 | `agent-model` | No | `'claude-sonnet-4-6'` | LLM model identifier passed to the proxy endpoint |
+| `agent-context` | No | `''` | Static app context injected into Agent system prompt (describe your app, key pages, nav) |
 
 ## Agent Tab: LLM Proxy Endpoint
 
@@ -138,6 +139,162 @@ The widget handles proxy errors gracefully:
 | 500+ | Server error with detail from response body |
 | Timeout (60s) | "The server may be overloaded — try again" |
 | Network error | "Check that your server is running" |
+
+## Agent Notes: CRUD Endpoints
+
+Agent notes store user-written markdown context that gets injected into the page-agent's system prompt. Notes have two scopes: **site-wide** (`route` is `null`) and **per-route** (keyed by URL pathname). Requires the `1.8.0_add_agent_notes.sql` migration.
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/feedback/notes?project=X` | List all notes for a project |
+| `GET` | `/api/feedback/notes?project=X&route=/path` | Get note for a specific route |
+| `PUT` | `/api/feedback/notes` | Create or update a note (upsert by project+route) |
+| `DELETE` | `/api/feedback/notes/:id` | Delete a note |
+
+### SvelteKit Example
+
+Create `src/routes/api/feedback/notes/+server.ts`:
+
+```typescript
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Max-Age': '86400'
+};
+
+export const OPTIONS: RequestHandler = async () => {
+  return new Response(null, { status: 204, headers: CORS_HEADERS });
+};
+
+// GET /api/feedback/notes?project=X[&route=/path]
+export const GET: RequestHandler = async ({ url, locals }) => {
+  const project = url.searchParams.get('project');
+  if (!project) {
+    return json({ error: 'project parameter is required' }, { status: 400, headers: CORS_HEADERS });
+  }
+
+  const supabase = locals.supabaseServiceRole;
+  let query = supabase.from('agent_notes').select('*').eq('project', project);
+
+  const route = url.searchParams.get('route');
+  if (route !== null) {
+    query = query.eq('route', route);
+  }
+
+  const { data, error } = await query.order('updated_at', { ascending: false });
+
+  if (error) {
+    return json({ error: error.message }, { status: 500, headers: CORS_HEADERS });
+  }
+
+  return json({ notes: data }, { headers: CORS_HEADERS });
+};
+
+// PUT /api/feedback/notes — upsert by project + route
+export const PUT: RequestHandler = async ({ request, locals }) => {
+  const body = await request.json();
+
+  if (!body.project || typeof body.project !== 'string') {
+    return json({ error: 'project is required' }, { status: 400, headers: CORS_HEADERS });
+  }
+
+  const supabase = locals.supabaseServiceRole;
+  const route = body.route ?? null;
+
+  // Check if note already exists for this project+route
+  let query = supabase.from('agent_notes').select('id').eq('project', body.project);
+  if (route === null) {
+    query = query.is('route', null);
+  } else {
+    query = query.eq('route', route);
+  }
+  const { data: existing } = await query.maybeSingle();
+
+  let data, error;
+  if (existing) {
+    // Update existing note
+    ({ data, error } = await supabase
+      .from('agent_notes')
+      .update({ title: body.title ?? '', content: body.content ?? '' })
+      .eq('id', existing.id)
+      .select()
+      .single());
+  } else {
+    // Insert new note
+    ({ data, error } = await supabase
+      .from('agent_notes')
+      .insert({ project: body.project, route, title: body.title ?? '', content: body.content ?? '' })
+      .select()
+      .single());
+  }
+
+  if (error) {
+    return json({ error: error.message }, { status: 500, headers: CORS_HEADERS });
+  }
+
+  return json({ ok: true, note: data }, { status: existing ? 200 : 201, headers: CORS_HEADERS });
+};
+```
+
+Create `src/routes/api/feedback/notes/[id]/+server.ts`:
+
+```typescript
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Max-Age': '86400'
+};
+
+export const OPTIONS: RequestHandler = async () => {
+  return new Response(null, { status: 204, headers: CORS_HEADERS });
+};
+
+// DELETE /api/feedback/notes/:id
+export const DELETE: RequestHandler = async ({ params, locals }) => {
+  const supabase = locals.supabaseServiceRole;
+
+  const { error } = await supabase
+    .from('agent_notes')
+    .delete()
+    .eq('id', params.id);
+
+  if (error) {
+    return json({ error: error.message }, { status: 500, headers: CORS_HEADERS });
+  }
+
+  return json({ ok: true }, { headers: CORS_HEADERS });
+};
+```
+
+### Upsert Behavior
+
+The `PUT` endpoint checks for an existing note matching `project` + `route`, then inserts or updates accordingly. The database has a unique index on `(project, COALESCE(route, ''))` as a safety net.
+
+- If no note exists for the given `project` + `route` → creates a new note (returns `201`)
+- If a note already exists for that combination → updates `title`, `content`, and `updated_at` (returns `200`)
+- Site-wide notes use `route: null` (only one per project)
+- Per-route notes use the URL pathname (e.g., `route: "/invoices"`)
+
+### CORS
+
+All endpoints include permissive CORS headers (`Access-Control-Allow-Origin: *`) so the widget can call them cross-origin. For production, restrict the origin to your widget's domain:
+
+```typescript
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': 'https://your-app.com',
+  // ...
+};
+```
 
 ## What the Widget Captures
 

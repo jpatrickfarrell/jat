@@ -1,4 +1,4 @@
-import type { FeedbackReport, ThreadEntry } from './types';
+import type { FeedbackReport, ThreadEntry, AgentNote } from './types';
 
 export async function submitReport(endpoint: string, report: FeedbackReport): Promise<{ ok: boolean; id?: string; error?: string }> {
   const url = `${endpoint.replace(/\/$/, '')}/api/feedback/report`;
@@ -94,5 +94,95 @@ export async function respondToReport(
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'Failed to respond' };
+  }
+}
+
+// --- Agent Notes CRUD ---
+
+const notesUrl = (endpoint: string) => `${endpoint.replace(/\/$/, '')}/api/feedback/notes`;
+
+export async function fetchNotes(
+  endpoint: string,
+  project: string,
+  route?: string,
+): Promise<{ notes: AgentNote[]; error?: string }> {
+  try {
+    let url = `${notesUrl(endpoint)}?project=${encodeURIComponent(project)}`;
+    if (route !== undefined) url += `&route=${encodeURIComponent(route)}`;
+    const res = await fetch(url, { credentials: 'same-origin' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      return { notes: [], error: data.error || `HTTP ${res.status}` };
+    }
+    const data = await res.json();
+    return { notes: data.notes || [] };
+  } catch (err) {
+    return { notes: [], error: err instanceof Error ? err.message : 'Failed to fetch notes' };
+  }
+}
+
+export async function createNote(
+  endpoint: string,
+  note: { project: string; route: string | null; title: string; content: string },
+): Promise<{ ok: boolean; note?: AgentNote; error?: string }> {
+  try {
+    const res = await fetch(notesUrl(endpoint), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(note),
+    });
+    const data = await res.json();
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ok: true, note: data.note };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to create note' };
+  }
+}
+
+export async function updateNote(
+  endpoint: string,
+  id: string,
+  updates: { title?: string; content?: string },
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${notesUrl(endpoint)}/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    const data = await res.json();
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to update note' };
+  }
+}
+
+export async function upsertNote(
+  endpoint: string,
+  note: { project: string; route: string | null; title: string; content: string },
+): Promise<{ ok: boolean; note?: AgentNote; error?: string }> {
+  try {
+    const res = await fetch(notesUrl(endpoint), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(note),
+    });
+    const data = await res.json();
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ok: true, note: data.note };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to upsert note' };
+  }
+}
+
+export async function deleteNote(endpoint: string, id: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${notesUrl(endpoint)}/${id}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to delete note' };
   }
 }

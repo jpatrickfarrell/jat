@@ -118,6 +118,16 @@ export interface ChatMessage {
 
 export type AgentState = 'idle' | 'thinking' | 'acting' | 'awaiting_approval' | 'error';
 
+export interface AgentNote {
+  id: string;
+  project: string;
+  route: string | null;
+  title: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface WidgetConfig {
   endpoint: string;
   position: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';

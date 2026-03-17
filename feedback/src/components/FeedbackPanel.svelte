@@ -11,6 +11,7 @@
   import ConsoleLogList from './ConsoleLogList.svelte';
   import StatusToast from './StatusToast.svelte';
   import RequestList from './RequestList.svelte';
+  import AgentPanel from './AgentPanel.svelte';
 
   declare const __JAT_FEEDBACK_VERSION__: string;
   const version = __JAT_FEEDBACK_VERSION__;
@@ -27,6 +28,7 @@
     orgName = '',
     onclose,
     ongrip,
+    agentProxy = '',
   }: {
     endpoint: string;
     project: string;
@@ -37,11 +39,15 @@
     userRole?: string;
     orgId?: string;
     orgName?: string;
+    agentProxy?: string;
     onclose: () => void;
     ongrip?: (e: MouseEvent) => void;
   } = $props();
 
-  let activeTab = $state<'new' | 'requests'>('new');
+  let activeTab = $state<'new' | 'requests' | 'agent'>('new');
+
+  // Lazy init: don't mount AgentPanel until user first opens the tab
+  let agentTabOpened = $state(false);
 
   // Reports state — loaded eagerly so badge count is available before tab is clicked
   let reports = $state<ReportSummary[]>([]);
@@ -367,6 +373,17 @@
           <span class="tab-badge">{pendingCount}</span>
         {/if}
       </button>
+      {#if agentProxy}
+        <button class="tab" class:active={activeTab === 'agent'} onclick={() => { activeTab = 'agent'; agentTabOpened = true; }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <rect x="4" y="4" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.8"/>
+            <circle cx="9" cy="10" r="1.5" fill="currentColor"/>
+            <circle cx="15" cy="10" r="1.5" fill="currentColor"/>
+            <path d="M8 20h8M12 16v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          Agent
+        </button>
+      {/if}
     </div>
     <button class="close-btn" onclick={onclose} aria-label="Close">&times;</button>
   </div>
@@ -512,6 +529,12 @@
         error={reportsError}
         onreload={loadReports}
       />
+    </div>
+  {/if}
+
+  {#if activeTab === 'agent' && agentTabOpened}
+    <div class="agent-wrapper" transition:slide={{ duration: 200 }}>
+      <AgentPanel />
     </div>
   {/if}
 
@@ -866,6 +889,13 @@
     to { transform: rotate(360deg); }
   }
   .requests-wrapper {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .agent-wrapper {
     flex: 1;
     min-height: 0;
     display: flex;

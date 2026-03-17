@@ -4,6 +4,7 @@
 
 export { PageAgentCore, tool } from '@page-agent/core';
 export type {
+  AgentActivity,
   PageAgentCoreConfig,
   AgentStatus,
   AgentStepEvent,

@@ -40,7 +40,7 @@
 	<body data-sveltekit-preload-data="hover">
 		<div style="display: contents">%sveltekit.body%</div>
 	<script src="https://unpkg.com/jat-feedback@^2/dist/jat-feedback.js"></script>
-	<jat-feedback project="jat" theme="dark" style="display:none"></jat-feedback>
+	<jat-feedback project="jat" theme="dark" agent-proxy="/api/feedback/agent" agent-context="JAT IDE — multi-agent development environment. Key pages: /tasks (task list), /work (agent sessions), /agents (agent grid), /kanban (kanban board), /files (file explorer), /config (settings). TopBar has project selector, spawn button, search. Sidebar has navigation." style="display:none"></jat-feedback>
 	<script>
 		(function() {
 			var el = document.querySelector('jat-feedback');

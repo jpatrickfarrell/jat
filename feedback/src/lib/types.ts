@@ -99,7 +99,7 @@ export interface ThreadEntry {
 }
 
 // Agent chat types (used by AgentPanel + AgentBridge)
-export type MessageRole = 'user' | 'thinking' | 'action' | 'result' | 'error' | 'approval';
+export type MessageRole = 'user' | 'thinking' | 'action' | 'result' | 'error' | 'info' | 'approval';
 
 export interface ChatMessage {
   id: string;

@@ -81,6 +81,7 @@
       case 'action': return '⚡';
       case 'result': return '✓';
       case 'error': return '✕';
+      case 'info': return '●';
       case 'approval': return '?';
     }
   }
@@ -485,6 +486,20 @@
   }
   .msg-error .msg-text {
     color: #f87171;
+  }
+
+  /* Info messages (e.g. "Stopped by user") */
+  .msg-info {
+    background: rgba(148, 163, 184, 0.08);
+    border-radius: 6px;
+    margin: 2px 8px;
+    padding: 8px 12px;
+  }
+  .msg-info .msg-icon {
+    color: #94a3b8;
+  }
+  .msg-info .msg-text {
+    color: #cbd5e1;
   }
 
   /* Approval messages */

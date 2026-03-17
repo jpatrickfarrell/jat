@@ -82,6 +82,7 @@ export class AgentBridge {
   private currentStep = 0;
   private config: AgentBridgeConfig;
   private disposed = false;
+  private stopped = false;
   private agentConfig: PageAgentCoreConfig | null = null;
 
   /** Cached notes from the backend */
@@ -345,6 +346,9 @@ export class AgentBridge {
 
   /** Handle real-time activity events from the agent */
   private handleActivity(activity: AgentActivity): void {
+    // Suppress all activity events after user-initiated stop
+    if (this.stopped) return;
+
     switch (activity.type) {
       case 'thinking':
         this.config.onStateChange('thinking', this.currentStep);
@@ -444,21 +448,14 @@ export class AgentBridge {
     });
 
     this.currentStep = 0;
+    this.stopped = false;
     this.config.onStateChange('thinking', 0);
 
     try {
       const result: ExecutionResult = await this.agent.execute(command);
 
-      // Add step reflections as thinking messages (from history)
-      for (const event of result.history) {
-        if (event.type === 'step') {
-          const step = event as AgentStepEvent;
-          if (step.reflection.next_goal) {
-            // Only add if not already represented by activity events
-            // The reflection provides the "why" behind actions
-          }
-        }
-      }
+      // If stopped by user during execution, don't show completion messages
+      if (this.stopped) return;
 
       // Final result message
       if (result.success) {
@@ -477,6 +474,23 @@ export class AgentBridge {
         });
       }
     } catch (err) {
+      // If stopped by user, the stop() method already showed "Stopped by user" — don't add more errors
+      if (this.stopped) return;
+
+      // Check for AbortError (user clicked stop while fetch was in-flight)
+      const isAbort = err instanceof DOMException && err.name === 'AbortError'
+        || (err instanceof Error && err.message === 'AbortError');
+      if (isAbort) {
+        this.addMessage({
+          id: msgId(),
+          role: 'info',
+          text: 'Stopped by user.',
+          timestamp: Date.now(),
+        });
+        this.config.onStateChange('idle', this.currentStep);
+        return;
+      }
+
       this.addMessage({
         id: msgId(),
         role: 'error',
@@ -484,6 +498,7 @@ export class AgentBridge {
         timestamp: Date.now(),
       });
       this.config.onStateChange('error', this.currentStep);
+      return;
     }
 
     this.config.onStateChange('idle', this.currentStep);
@@ -491,6 +506,8 @@ export class AgentBridge {
 
   /** Stop the agent mid-execution */
   stop(): void {
+    this.stopped = true;
+
     // Reject any pending approvals
     for (const [id, resolve] of this.pendingApprovals) {
       this.updateMessageApproval(id, 'skipped');
@@ -500,14 +517,15 @@ export class AgentBridge {
 
     if (this.agent && this.agent.status === 'running') {
       this.agent.stop();
-      this.addMessage({
-        id: msgId(),
-        role: 'error',
-        text: 'Stopped by user.',
-        timestamp: Date.now(),
-      });
-      this.config.onStateChange('idle', this.currentStep);
     }
+
+    this.addMessage({
+      id: msgId(),
+      role: 'info',
+      text: 'Stopped by user.',
+      timestamp: Date.now(),
+    });
+    this.config.onStateChange('idle', this.currentStep);
   }
 
   /** Get current messages */

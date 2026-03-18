@@ -657,11 +657,19 @@ mkdir -p supabase/functions/jat-webhook
 cp node_modules/jat-feedback/supabase/functions/jat-webhook/index.ts \
    supabase/functions/jat-webhook/index.ts
 
-# Deploy to Supabase
-supabase functions deploy jat-webhook
+# Deploy to Supabase (--no-verify-jwt required for service role key auth)
+supabase functions deploy jat-webhook --no-verify-jwt
 ```
 
-The function uses `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` — both are injected automatically by Supabase, no extra configuration needed.
+The function uses `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` — both are injected automatically by Supabase.
+
+**If callbacks fail with "Invalid authorization":** Newer Supabase projects use an `sb_secret_` format for the runtime `SUPABASE_SERVICE_ROLE_KEY`, which doesn't match the JWT service role key that JAT sends. Set a custom secret:
+
+```bash
+supabase secrets set JAT_WEBHOOK_SECRET="eyJhbG..."  # paste your JWT service role key from API settings
+```
+
+The function checks `JAT_WEBHOOK_SECRET` first, falling back to `SUPABASE_SERVICE_ROLE_KEY`.
 
 **Skip this step** if you don't need bidirectional status sync (i.e., you only want JAT to ingest reports, not push status back to Supabase).
 
@@ -746,7 +754,7 @@ supabase db push
 cp node_modules/jat-feedback/supabase/functions/jat-webhook/index.ts \
    supabase/functions/jat-webhook/index.ts
 
-supabase functions deploy jat-webhook
+supabase functions deploy jat-webhook --no-verify-jwt
 ```
 
 ## Versioning

@@ -4,6 +4,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 
+// JAT sends the project's JWT service role key as the Bearer token.
+// On newer Supabase projects, SUPABASE_SERVICE_ROLE_KEY in the runtime
+// may use the sb_secret_ format instead of the JWT format. JAT_WEBHOOK_SECRET
+// is a custom secret set to the JWT service role key for those projects.
+const webhookSecret = Deno.env.get("JAT_WEBHOOK_SECRET") || supabaseServiceKey
+
 /**
  * JAT Webhook — generic status-sync endpoint.
  *
@@ -12,9 +18,16 @@ const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
  * `supabase/functions/jat-webhook/` directory and deploy it.
  *
  * Deploy:
- *   supabase functions deploy jat-webhook
+ *   supabase functions deploy jat-webhook --no-verify-jwt
  *
- * Expected payload from JAT ingest daemon:
+ * Setup (if auth fails with "Invalid authorization"):
+ *   Your project's SUPABASE_SERVICE_ROLE_KEY runtime var may use the
+ *   new sb_secret_ format. Set JAT_WEBHOOK_SECRET to the JWT service
+ *   role key from your project's API settings:
+ *
+ *   supabase secrets set JAT_WEBHOOK_SECRET="eyJhbG..."
+ *
+ * Expected payload:
  * {
  *   source: "jat",
  *   event: "status_changed" | "task_closed",
@@ -27,9 +40,7 @@ const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
  *   }
  * }
  *
- * Auth: Bearer token must match the Supabase service role key.
- * SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected automatically
- * by Supabase when the function runs — no configuration needed.
+ * Auth: Bearer token must match JAT_WEBHOOK_SECRET or SUPABASE_SERVICE_ROLE_KEY.
  *
  * integrations.json callback config:
  * {
@@ -82,7 +93,7 @@ Deno.serve(async (req) => {
     })
   }
   const token = authHeader.slice(7)
-  if (token !== supabaseServiceKey) {
+  if (token !== webhookSecret && token !== supabaseServiceKey) {
     return new Response(JSON.stringify({ error: "Invalid authorization" }), {
       status: 403,
       headers: { "Content-Type": "application/json" },
@@ -130,25 +141,25 @@ Deno.serve(async (req) => {
   }
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
-  const { data, error } = await supabase
+  const result = await supabase
     .from(reference_table)
     .update(update)
     .eq("id", reference_id)
     .select("id")
 
-  if (error) {
-    console.error(`JAT webhook failed: ${error.message}`, {
+  if (result.error) {
+    console.error(`JAT webhook failed: ${result.error.message}`, {
       reference_table,
       reference_id,
       update,
     })
     return new Response(
-      JSON.stringify({ error: `Update failed: ${error.message}` }),
+      JSON.stringify({ error: `Update failed: ${result.error.message}` }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     )
   }
 
-  if (!data || data.length === 0) {
+  if (!result.data || result.data.length === 0) {
     console.warn(`JAT webhook: no rows matched ${reference_table}[${reference_id}]`, update)
     return new Response(
       JSON.stringify({
@@ -161,7 +172,7 @@ Deno.serve(async (req) => {
     )
   }
 
-  console.log(`JAT webhook: ${event} → ${reference_table}[${reference_id}] (${data.length} row(s))`, update)
+  console.log(`JAT webhook: ${event} → ${reference_table}[${reference_id}] (${result.data.length} row(s))`, update)
 
   return new Response(
     JSON.stringify({
@@ -169,7 +180,7 @@ Deno.serve(async (req) => {
       table: reference_table,
       id: reference_id,
       updated: update,
-      rowsAffected: data.length,
+      rowsAffected: result.data.length,
     }),
     { status: 200, headers: { "Content-Type": "application/json" } },
   )

@@ -86,3 +86,11 @@ After publishing, update consuming projects:
 - `steelbridge` — `npm install jat-feedback@latest`
 
 Check each project's `supabase/migrations/` against the new migration files and apply any new ones.
+
+If the edge function was updated, redeploy to all consuming projects:
+```bash
+for proj in flush steelbridge headcount; do
+  cp feedback/supabase/functions/jat-webhook/index.ts ~/code/$proj/supabase/functions/jat-webhook/index.ts
+  cd ~/code/$proj && npx supabase functions deploy jat-webhook --no-verify-jwt && cd ~/code/jat
+done
+```

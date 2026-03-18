@@ -642,6 +642,7 @@
 					onNewTask={handleNewTask}
 					onStart={handleSpawnSingle}
 					onSwarm={(count, epicId) => epicId ? handleRunEpic(epicId) : handleSwarm()}
+					sessionStates={projectSessionStates.get(selectedProject) || []}
 				/>
 			{/if}
 		</div>

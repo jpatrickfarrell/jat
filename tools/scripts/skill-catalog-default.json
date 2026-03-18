@@ -1,6 +1,19 @@
 {
   "skills": [
     {
+      "id": "remotion-video",
+      "name": "Remotion Video",
+      "description": "Programmatic video generation using Remotion (React-based motion graphics) for SvelteKit projects. Renders teaser, explainer, and product demo videos to MP4 with scene templates, animations, and versioned output.",
+      "author": "jat",
+      "version": "1.0.0",
+      "repoUrl": "https://github.com/joewinke/jat",
+      "skillMdUrl": "https://github.com/joewinke/jat/blob/master/shared/remotion-video.md",
+      "tags": ["video", "remotion", "react", "animation", "mp4", "sveltekit"],
+      "installCount": 10,
+      "compatible": true,
+      "source": "curated"
+    },
+    {
       "id": "github-pr",
       "name": "GitHub Pull Requests",
       "description": "Create, review, and manage GitHub pull requests. Supports draft PRs, review comments, merge strategies, and CI status checks.",

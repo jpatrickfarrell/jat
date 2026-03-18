@@ -132,40 +132,127 @@ The Agent tab appears automatically when `agent-proxy` is set. Without it, only 
 
 Register custom tools that the agent can call during its execution loop. Tools run client-side with full access to your app's state, auth context, and data — the LLM decides when to call them and reasons over the results.
 
+#### `registerTools()` API Reference
+
 ```typescript
+interface ToolDefinition {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>; // JSON Schema object
+  handler: (args: Record<string, unknown>) => Promise<unknown>;
+}
+
 const widget = document.querySelector('jat-feedback');
-widget.registerTools([
-  {
-    name: 'get_current_user',
-    description: 'Get the currently authenticated user profile',
-    parameters: { type: 'object', properties: {} },
-    handler: async () => {
-      const { data } = await supabase.auth.getUser();
-      return { id: data.user?.id, email: data.user?.email };
-    },
-  },
-  {
-    name: 'update_report_status',
-    description: 'Update a feedback report status',
-    parameters: {
-      type: 'object',
-      properties: {
-        report_id: { type: 'string' },
-        status: { type: 'string', enum: ['open', 'in_progress', 'resolved'] },
-      },
-      required: ['report_id', 'status'],
-    },
-    handler: async (args) => {
-      const { error } = await supabase
-        .from('feedback_reports')
-        .update({ status: args.status })
-        .eq('id', args.report_id);
-      if (error) throw new Error(error.message);
-      return { success: true };
-    },
-  },
-]);
+widget.registerTools(tools: ToolDefinition[]): void
 ```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `string` | Unique tool name (snake_case). The LLM uses this to call the tool. |
+| `description` | `string` | Tells the LLM what the tool does and when to use it. |
+| `parameters` | `object` | JSON Schema describing the tool's arguments. Use `{ type: 'object', properties: {} }` for no-arg tools. |
+| `handler` | `async (args) => any` | Runs client-side when the LLM calls the tool. Receives parsed args, returns any JSON-serializable value. |
+
+**Behavior:**
+- Multiple `registerTools()` calls **accumulate** — tools are added, not replaced
+- Register tools before the user opens the Agent tab (typically in `onMount`)
+- If a handler throws, the error message is returned to the LLM so it can recover gracefully
+- Handlers have full access to the page's DOM, stores, and JS context
+
+#### Example: Global Tools in SvelteKit
+
+Register tools in your root `+layout.svelte` so they're available on every page. For page-specific tools, call `registerTools()` again in that page's layout or component — tools accumulate across calls.
+
+```svelte
+<script lang="ts">
+  import { page } from "$app/stores"
+  import { onMount } from "svelte"
+
+  onMount(() => {
+    const widget = document.querySelector("jat-feedback")
+    if (!widget?.registerTools) return
+
+    widget.registerTools([
+      {
+        name: "get_current_user",
+        description: "Get the currently authenticated user profile",
+        parameters: { type: "object", properties: {} },
+        handler: async () => {
+          const session = $page.data.session
+          if (!session?.user) return { authenticated: false }
+          const u = session.user
+          return {
+            authenticated: true,
+            id: u.id,
+            email: u.email,
+            name: u.user_metadata?.full_name ?? null,
+          }
+        },
+      },
+      {
+        name: "get_current_route",
+        description: "Get the current page URL, pathname, and route parameters",
+        parameters: { type: "object", properties: {} },
+        handler: async () => ({
+          pathname: $page.url.pathname,
+          params: $page.params,
+          search: Object.fromEntries($page.url.searchParams),
+        }),
+      },
+      {
+        name: "get_page_data",
+        description: "Get data exposed by the current page's load function",
+        parameters: { type: "object", properties: {} },
+        handler: async () => {
+          const { supabase, session, ...rest } = $page.data
+          return rest
+        },
+      },
+    ])
+  })
+</script>
+```
+
+#### Example: Page-Specific Tools
+
+Add tools that only make sense on a specific page:
+
+```svelte
+<!-- src/routes/admin/reports/+page.svelte -->
+<script lang="ts">
+  import { onMount } from "svelte"
+
+  onMount(() => {
+    const widget = document.querySelector("jat-feedback")
+    if (!widget?.registerTools) return
+
+    widget.registerTools([
+      {
+        name: "update_report_status",
+        description: "Update a feedback report status",
+        parameters: {
+          type: "object",
+          properties: {
+            report_id: { type: "string" },
+            status: { type: "string", enum: ["open", "in_progress", "resolved"] },
+          },
+          required: ["report_id", "status"],
+        },
+        handler: async (args) => {
+          const { error } = await supabase
+            .from("feedback_reports")
+            .update({ status: args.status })
+            .eq("id", args.report_id)
+          if (error) throw new Error(error.message)
+          return { success: true }
+        },
+      },
+    ])
+  })
+</script>
+```
+
+#### How Tools Work
 
 Tools are integrated into the page-agent's action loop:
 - The LLM sees registered tools alongside built-in browser actions (click, type, scroll, etc.)

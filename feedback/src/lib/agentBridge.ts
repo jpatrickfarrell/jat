@@ -14,6 +14,7 @@ import type {
   AgentStepEvent,
   ExecutionResult,
   PageAgentCoreConfig,
+  PageAgentTool,
 } from '../page-agent';
 import type { ChatMessage, AgentState, AgentNote, ToolDefinition } from './types';
 import { fetchNotes } from './api';
@@ -171,8 +172,10 @@ export class AgentBridge {
         // getPageInstructions is called before each step — returns route-specific notes
         getPageInstructions: (url: string) => bridge.getRouteNotes(url),
       },
-      // Override DOM-modifying tools with approval-gated versions
+      // Override DOM-modifying tools with approval-gated versions,
+      // plus any host-page registered tools converted to PageAgentTool format
       customTools: {
+        ...this.buildRegisteredCustomTools(),
         click_element_by_index: tool({
           description: 'Click element by index',
           inputSchema: z.object({ index: z.int().min(0) }),
@@ -286,20 +289,37 @@ export class AgentBridge {
   }
 
   /**
-   * Convert registered ToolDefinitions to OpenAI function_calling format.
-   * Strips the handler (not serializable) — only sends name/description/parameters.
+   * Convert registered ToolDefinitions to PageAgentTool format for customTools.
+   *
+   * PageAgentCore uses a MacroTool pattern: all tools are merged into a single
+   * "AgentOutput" tool with a union action schema. The LLM picks an action per
+   * step, the macro executor runs it, and the result feeds back on the next step.
+   *
+   * We register host page tools as customTools so they appear in the action union
+   * and execute through the same loop — no separate tool_call interception needed.
    */
-  private serializeRegisteredTools(): Array<{ type: 'function'; function: { name: string; description: string; parameters: Record<string, unknown> } }> {
+  private buildRegisteredCustomTools(): Record<string, PageAgentTool> {
     const tools = this.getRegisteredTools();
-    if (tools.length === 0) return [];
-    return tools.map((t) => ({
-      type: 'function' as const,
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: t.parameters,
-      },
-    }));
+    const result: Record<string, PageAgentTool> = {};
+    for (const t of tools) {
+      // Include JSON Schema in description so the LLM knows the parameter shape.
+      // The inputSchema uses z.record(z.any()) as a permissive pass-through —
+      // the LLM is guided by the description, not the Zod schema.
+      const paramDesc = JSON.stringify(t.parameters);
+      result[t.name] = tool({
+        description: `${t.description}\nParameters: ${paramDesc}`,
+        inputSchema: z.record(z.string(), z.any()),
+        async execute(input) {
+          try {
+            const value = await t.handler(input as Record<string, unknown>);
+            return typeof value === 'string' ? value : JSON.stringify(value);
+          } catch (err) {
+            return `Error: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        },
+      });
+    }
+    return result;
   }
 
   private createProxyFetch(): typeof globalThis.fetch {
@@ -313,18 +333,6 @@ export class AgentBridge {
       const path = pathMatch ? pathMatch[1] : 'chat/completions';
 
       const proxyTarget = proxyUrl.endsWith('/') ? proxyUrl + path : proxyUrl + '/' + path;
-
-      // Inject registered tools into the request body (if any)
-      const registeredTools = this.serializeRegisteredTools();
-      if (registeredTools.length > 0 && init?.body) {
-        try {
-          const body = JSON.parse(init.body as string);
-          body.tools = [...(body.tools || []), ...registeredTools];
-          init = { ...init, body: JSON.stringify(body) };
-        } catch {
-          // Body not JSON — pass through unchanged
-        }
-      }
 
       // Add timeout (60s default — LLM calls can be slow)
       const controller = new AbortController();

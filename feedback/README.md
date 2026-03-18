@@ -128,6 +128,51 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 The Agent tab appears automatically when `agent-proxy` is set. Without it, only the feedback form and history tabs are shown.
 
+### Page-Level Tool Registration
+
+Register custom tools that the agent can call during its execution loop. Tools run client-side with full access to your app's state, auth context, and data — the LLM decides when to call them and reasons over the results.
+
+```typescript
+const widget = document.querySelector('jat-feedback');
+widget.registerTools([
+  {
+    name: 'get_current_user',
+    description: 'Get the currently authenticated user profile',
+    parameters: { type: 'object', properties: {} },
+    handler: async () => {
+      const { data } = await supabase.auth.getUser();
+      return { id: data.user?.id, email: data.user?.email };
+    },
+  },
+  {
+    name: 'update_report_status',
+    description: 'Update a feedback report status',
+    parameters: {
+      type: 'object',
+      properties: {
+        report_id: { type: 'string' },
+        status: { type: 'string', enum: ['open', 'in_progress', 'resolved'] },
+      },
+      required: ['report_id', 'status'],
+    },
+    handler: async (args) => {
+      const { error } = await supabase
+        .from('feedback_reports')
+        .update({ status: args.status })
+        .eq('id', args.report_id);
+      if (error) throw new Error(error.message);
+      return { success: true };
+    },
+  },
+]);
+```
+
+Tools are integrated into the page-agent's action loop:
+- The LLM sees registered tools alongside built-in browser actions (click, type, scroll, etc.)
+- Each agent step picks one action — either a browser action or a registered tool
+- Tool results feed back to the LLM on the next step automatically
+- If a handler throws, the error message is returned to the LLM so it can recover gracefully
+
 ### Error Handling
 
 The widget handles proxy errors gracefully:

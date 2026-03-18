@@ -286,10 +286,22 @@ export class AgentBridge {
   }
 
   /**
-   * Create a custom fetch that routes through the proxy endpoint.
-   * The proxy receives standard OpenAI-format requests and forwards to the LLM.
-   * Handles proxy errors (401, 500, timeout) with user-friendly messages.
+   * Convert registered ToolDefinitions to OpenAI function_calling format.
+   * Strips the handler (not serializable) — only sends name/description/parameters.
    */
+  private serializeRegisteredTools(): Array<{ type: 'function'; function: { name: string; description: string; parameters: Record<string, unknown> } }> {
+    const tools = this.getRegisteredTools();
+    if (tools.length === 0) return [];
+    return tools.map((t) => ({
+      type: 'function' as const,
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    }));
+  }
+
   private createProxyFetch(): typeof globalThis.fetch {
     const proxyUrl = this.config.proxyUrl;
     return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -301,6 +313,18 @@ export class AgentBridge {
       const path = pathMatch ? pathMatch[1] : 'chat/completions';
 
       const proxyTarget = proxyUrl.endsWith('/') ? proxyUrl + path : proxyUrl + '/' + path;
+
+      // Inject registered tools into the request body (if any)
+      const registeredTools = this.serializeRegisteredTools();
+      if (registeredTools.length > 0 && init?.body) {
+        try {
+          const body = JSON.parse(init.body as string);
+          body.tools = [...(body.tools || []), ...registeredTools];
+          init = { ...init, body: JSON.stringify(body) };
+        } catch {
+          // Body not JSON — pass through unchanged
+        }
+      }
 
       // Add timeout (60s default — LLM calls can be slow)
       const controller = new AbortController();

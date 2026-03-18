@@ -37,8 +37,9 @@ docs/videos/
 ├── <projectId>-features.md               ← Feature curriculum (also used for academy)
 ├── <projectId>-storyboard.md             ← Video storyboard + narration scripts
 ├── <projectId>-remotion-<feature>.json   ← Remotion config per feature
-└── screenshots/                          ← Captured app UI
-    ├── <feature>-1.png
+└── screenshots/                          ← Captured app UI (one per feature)
+    ├── <feature>.png                     ← Raw browser screenshot
+    ├── <feature>-enhanced.png            ← Gemini-polished version (if enhanced)
     └── ...
 
 static/videos/
@@ -98,9 +99,9 @@ Orchestrator (this skill)
   │    Runs gemini-edit on raw screenshots to polish them
   │    Output: docs/videos/screenshots/<feature>-*-enhanced.png
   │
-  ├─ Phase 4: Video Subagents (sonnet, ALL parallel)
-  │    Input:  remotion JSON config + screenshots + backgrounds + audio
-  │    Output: static/videos/<feature>.mp4 + poster
+  ├─ Phase 4: Video Render Subagent (sonnet, single shared Remotion project)
+  │    Input:  ALL remotion JSON configs + screenshots + backgrounds + audio
+  │    Output: static/videos/<feature>.mp4 + poster (batch render, 3 at a time)
   │
   ├─ Phase 5: Post-processing (parallel)
   │    ├─ Tour Subagent → static/videos/tour.mp4
@@ -384,44 +385,97 @@ Spawn ALL THREE subagents in parallel in a single message.
 
 ### 4A: Screenshot Subagent
 
+**This subagent uses MCP Chrome DevTools tools** (`mcp__chrome-devtools__*`) to capture real app screenshots at video resolution. It does NOT use the CLI browser tools (`browser-*.js`).
+
 ```
 You are capturing screenshots of a running web app for use in feature videos.
+You have access to MCP Chrome DevTools tools for browser automation.
 
 ## Project
 - Path: <projectDir>
-- Dev server port: <port>
+- Dev server port: <port> (from projects.json)
 
 ## Read
 <projectDir>/docs/videos/<projectId>-features.md (for the Routes field per feature)
-<projectDir>/docs/videos/<projectId>-storyboard.md (for which screenshots each scene needs)
 
 ## Instructions
 
-1. Start the dev server if not running:
-   cd <projectDir> && npm run dev &
-   Wait for it to be ready (check with curl http://localhost:<port>)
+### 1. Find or start the dev server
 
-2. Start browser automation:
-   browser-start.js
+Check if the app is already running on common ports:
+  curl -s -o /dev/null -w "%{http_code}" http://localhost:<port>/
+  curl -s -o /dev/null -w "%{http_code}" http://localhost:3200/
+  curl -s -o /dev/null -w "%{http_code}" http://localhost:5173/
 
-3. For each feature, check the storyboard for screenshot references (screenshots/<slug>-N.png).
-   Navigate to the route listed in features.md and capture screenshots:
+Use whichever port returns 200. If none, start the dev server:
+  cd <projectDir> && eval $(jat-secret --export) && npm run dev -- --port <port> &
+  Wait up to 10s for it to respond.
 
-   browser-nav.js http://localhost:<port>/<route>
-   browser-wait.js --text "<something on the page>" || sleep 2
-   browser-screenshot.js --output <projectDir>/docs/videos/screenshots/<slug>-N.png
+Set BASE_URL to the working URL (e.g., http://localhost:3200).
 
-4. Capture key states:
-   - <slug>-1.png: Main view / landing state of the feature
-   - <slug>-2.png: Feature in action (filled form, active dashboard, etc.)
-   - <slug>-3.png: Success / result state (if applicable)
+### 2. Set up browser viewport
 
-5. If a route requires auth, try the preview/demo routes first (e.g., /preview/*)
-   If no preview route exists, note which screenshots couldn't be captured.
+Open a new page and resize to video resolution (1920x1080):
+
+  mcp__chrome-devtools__new_page  url: ${BASE_URL}/
+  mcp__chrome-devtools__resize_page  width: 1920, height: 1080
+
+### 3. Check authentication
+
+Navigate to a protected route (e.g., /portal or /admin) and take a test screenshot.
+If it shows a login page or redirect:
+  - Check if other browser tabs are already authenticated on the same domain
+    (mcp__chrome-devtools__list_pages — look for existing tabs on the same origin)
+  - If authenticated tabs exist, the cookies should carry over
+  - If not, try navigating to /login and check for Supabase session
+  - As a last resort, note which routes need auth and capture only public routes
+
+### 4. Create output directories
+
+  mkdir -p <projectDir>/docs/videos/screenshots
+  mkdir -p <projectDir>/video/public
+
+### 5. Capture screenshots
+
+For each feature in features.md, use the **Routes** field to determine which URL to visit.
+Pick the most representative route for each feature (the one that shows the feature best).
+
+**Screenshot naming: one screenshot per feature, named `<slug>.png`**
+
+For each feature:
+  a) Navigate to the route:
+     mcp__chrome-devtools__navigate_page  url: ${BASE_URL}/<route>
+
+  b) Wait for content to load:
+     mcp__chrome-devtools__wait_for  text: ["<expected heading or label>"]
+     (Use a heading or key text that appears when the page is fully loaded)
+
+  c) Take a full-page screenshot:
+     mcp__chrome-devtools__take_screenshot
+       filePath: <projectDir>/docs/videos/screenshots/<slug>.png
+       format: png
+       fullPage: true
+
+**Route-to-feature mapping (derive from features.md Routes field):**
+- Public routes: /, /apply, /services, /team, etc.
+- Client portal: /portal, /portal/intake, /portal/oha, /portal/checkins, /portal/book
+- Facilitator: /facilitator, /facilitator/schedule, /facilitator/clients
+- Admin: /admin, /admin/intakes, /admin/emails, /admin/payouts, /admin/inventory, /admin/compliance, /admin/outcomes
+
+### 6. Copy to Remotion public directory
+
+After all screenshots are captured, copy them so Remotion can use them as static files:
+  cp <projectDir>/docs/videos/screenshots/*.png <projectDir>/video/public/
+
+### 7. Verify
+
+List all captured screenshots with file sizes. Report any features that couldn't be captured
+(auth issues, empty pages, errors) and suggest manual alternatives.
 
 ## Output
-Write all screenshots to <projectDir>/docs/videos/screenshots/
-Report which features got screenshots and which ones couldn't be captured.
+- Screenshots: <projectDir>/docs/videos/screenshots/<slug>.png (one per feature)
+- Copies: <projectDir>/video/public/<slug>.png (for Remotion)
+- Report: which features succeeded/failed + file sizes
 ```
 
 ### 4B: Voiceover Subagent
@@ -535,90 +589,149 @@ After the screenshot subagent and imagery subagent both complete, run `gemini-ed
 This is a quick sequential step (not a subagent) — the orchestrator runs it directly:
 
 ```bash
-# For each feature config that has screenshotEdits:
-# Read the imagery.screenshotEdits from the JSON config
-# Run gemini-edit on each screenshot
+# For each feature config that has imagery.screenshotEdits:
+# Read the edit instruction from the JSON config
+# Run gemini-edit on the raw screenshot → enhanced version
 
-gemini-edit <projectDir>/docs/videos/screenshots/<slug>-1.png \
+gemini-edit <projectDir>/docs/videos/screenshots/<slug>.png \
   "<edit instruction from config>" \
-  <projectDir>/docs/videos/screenshots/<slug>-1-enhanced.png
+  <projectDir>/docs/videos/screenshots/<slug>-enhanced.png
 
-gemini-edit <projectDir>/docs/videos/screenshots/<slug>-2.png \
-  "<edit instruction>" \
-  <projectDir>/docs/videos/screenshots/<slug>-2-enhanced.png
+# Copy enhanced versions to Remotion public dir
+cp <projectDir>/docs/videos/screenshots/*-enhanced.png <projectDir>/video/public/
 ```
 
-The video subagents (Phase 5) will prefer `*-enhanced.png` if they exist, falling back to raw screenshots.
+The video renderer (Phase 5) will prefer `<slug>-enhanced.png` if it exists, falling back to `<slug>.png`.
+
+**Also copy backgrounds and audio to Remotion public dir:**
+```bash
+cp <projectDir>/docs/videos/backgrounds/*.png <projectDir>/video/public/ 2>/dev/null
+cp <projectDir>/static/videos/*-narration.mp3 <projectDir>/video/public/ 2>/dev/null
+```
 
 ---
 
-## STEP 5: Video Subagents (parallel)
+## STEP 5: Video Render (single shared Remotion project)
 
 **Skip if:** `--dry-run`
 
-For each remotion JSON config, spawn a subagent. **Spawn ALL in parallel.**
+**Architecture:** Use ONE shared Remotion project at `<projectDir>/video/` with all features registered as separate Compositions. This avoids 15 separate `npm install`s and allows batch rendering.
 
-If `--only <slug>` was specified, spawn only the matching one.
+If `--only <slug>` was specified, render just that one composition.
 
-Each subagent prompt:
+Spawn a single subagent:
 
 ```
-You are building a Remotion video. Read the config, use the screenshots and audio, render to MP4.
-
-## Config
-Read: <projectDir>/docs/videos/<projectId>-remotion-<slug>.json
+You are building and rendering Remotion feature videos from JSON specs.
 
 ## Reference
-Read: ~/code/jat/shared/remotion-video.md
+Read: ~/code/jat/shared/remotion-video.md (patterns, gotchas, size tuning)
 
 ## Available Assets
-- Screenshots: <projectDir>/docs/videos/screenshots/<slug>-*-enhanced.png (preferred) or <slug>-*.png (fallback)
-- Background: <projectDir>/docs/videos/backgrounds/<slug>-bg.png (if exists)
-- Narration audio: <projectDir>/static/videos/<slug>-narration.mp3 (if exists)
-- Thumbnail: <projectDir>/static/videos/<slug>-thumbnail.png (already generated, no action needed)
+- JSON specs: <projectDir>/docs/videos/<projectId>-remotion-*.json (one per feature)
+- Screenshots: <projectDir>/video/public/<slug>.png (captured by screenshot subagent)
+- Enhanced screenshots: <projectDir>/video/public/<slug>-enhanced.png (if gemini-edit ran)
+- Backgrounds: <projectDir>/video/public/<slug>-bg.png (if Gemini imagery ran)
+- Narration audio: <projectDir>/video/public/<slug>-narration.mp3 (if voiceover ran)
 
 ## Instructions
 
-1. Create Remotion project at <projectDir>/video/<slug>/
-   mkdir -p <projectDir>/video/<slug>/src/scenes <projectDir>/video/<slug>/public <projectDir>/video/<slug>/out
+### 1. Set up shared Remotion project
 
-2. Create boilerplate (package.json, tsconfig.json, remotion.config.ts, src/index.ts, src/Root.tsx, src/theme.ts) per remotion-video.md.
+Create ONE project at <projectDir>/video/ (if it doesn't already exist):
+  mkdir -p <projectDir>/video/src/scenes <projectDir>/video/public <projectDir>/video/out
 
-3. Copy assets to public/:
-   - Copy enhanced screenshots (prefer *-enhanced.png, fall back to raw *.png) → video/<slug>/public/
-   - Copy background image (<slug>-bg.png) → video/<slug>/public/ (if exists)
-   - Copy <slug>-narration.mp3 → video/<slug>/public/ (if exists)
+Create boilerplate files per remotion-video.md:
+- package.json (name: "<projectId>-videos")
+- tsconfig.json (with resolveJsonModule: true — needed to import JSON specs)
+- remotion.config.ts
+- src/index.ts (registerRoot)
 
-4. Create src/MainVideo.tsx — sequence all scenes with overlaps.
-   If narration audio exists, add: <Audio src={staticFile("narration.mp3")} />
-   Import Audio from remotion: import { Audio } from "remotion";
-   Import staticFile from remotion: import { staticFile } from "remotion";
+### 2. Create shared theme + animation utilities
 
-5. Create src/scenes/Scene1.tsx through SceneN.tsx:
-   - Use headlines, items, subtitles from config
-   - If a background image exists, use it as the scene background layer:
-     <Img src={staticFile("<slug>-bg.png")} style={{ position: "absolute", width: "100%", height: "100%", objectFit: "cover", opacity: 0.3 }} />
-     (Use low opacity so text remains readable over the atmospheric background)
-   - If a scene has a screenshot reference, use <Img> to display it:
-     import { Img, staticFile } from "remotion";
-     <Img src={staticFile("<slug>-2-enhanced.png")} style={{ width: 1400, borderRadius: 16, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }} />
-     (Prefer *-enhanced.png, fall back to raw if enhanced doesn't exist)
-   - Apply animations from config
-   - LARGE font sizes (size tuning guide)
-   - Fade out in final 30 frames
+**src/theme.ts** — extract colors from the JSON spec theme object.
+**src/types.ts** — TypeScript interfaces for VideoSpec, SceneSpec, AnimationSpec.
+**src/animations.ts** — reusable animation functions:
+  - fadeIn, fadeOut, slideUpFade, trackingInExpand (letter-spacing)
+  - springEntrance, scaleInSpring, stampEntrance, slideInLeft
+  - sceneExit (fade out in final 30 frames of each scene)
 
-6. Install + render:
-   cd <projectDir>/video/<slug>
-   npm install
-   npx remotion render src/index.ts MainVideo out/<slug>.mp4 --codec h264
-   npx remotion still src/index.ts MainVideo out/<slug>-poster.jpg --frame 300 --image-format jpeg
+### 3. Create data-driven scene components
 
-7. Copy outputs:
-   mkdir -p <projectDir>/static/videos
-   cp out/<slug>.mp4 <projectDir>/static/videos/
-   cp out/<slug>-poster.jpg <projectDir>/static/videos/
+Build 5 scene components that accept the JSON spec data as props:
 
-Report: video path, file size, render duration, any errors.
+**src/scenes/HookScene.tsx** — handles scene.id === "hook"
+  - Animated headline (tracking-in-expand or fade-in-bottom)
+  - Optional subtitle
+  - Optional stat cards (scale-in-stagger) or progress bar (sequential-fill)
+  - Logo mark + radial gradient background
+
+**src/scenes/ChallengeScene.tsx** — handles scene.id === "challenge"
+  - Headline (fade-in-bottom)
+  - Pain point items (stagger-slide-in-left with red indicators)
+  - Subtle chaos icons in background (low opacity)
+
+**src/scenes/HowItWorksScene.tsx** — handles scene.id === "how-it-works"
+  - **LEFT SIDE: Real app screenshot** in a browser chrome frame
+    - Browser chrome: traffic light dots (red/yellow/green) + URL bar showing "projectdomain.com"
+    - Screenshot image: `<Img src={staticFile("<slug>.png")}/>` (prefer <slug>-enhanced.png if exists)
+    - Spring entrance from bottom (translateY animation)
+    - Crop to viewport height (objectFit: "cover", objectPosition: "top", height: ~480px)
+    - If no screenshot file exists, fall back to a placeholder mockup card
+  - **RIGHT SIDE: Headline + feature bullet items**
+    - Headline (fade-in-bottom)
+    - Items with checkmark indicators (stagger-slide-in-left)
+  - Optional warning banner overlay on screenshot (health-intake hard disqualifier)
+
+**src/scenes/ResultScene.tsx** — handles scene.id === "result"
+  - Headline (fade-in-bottom)
+  - Metric badge (scale-in with spring)
+  - Optional stamp badge ("AUTO-APPROVED" with stamp-entrance)
+  - Optional ring-pulse animation
+  - Dark card container with border glow
+
+**src/scenes/CTAScene.tsx** — handles scene.id === "cta"
+  - Headline (tracking-in-expand — always use this for CTA)
+  - Logo with gentle opacity pulse
+  - URL text below
+  - Radial gradient background
+
+### 4. Create composition router
+
+**src/FeatureVideo.tsx** — sequences the 5 scenes using `<Sequence>` with startFrame/durationFrames from JSON spec. Routes each scene.id to the correct component. Passes the featureSlug to HowItWorksScene so it can load the right screenshot.
+
+**src/Root.tsx** — imports ALL JSON specs and registers each as a Composition:
+  import specData from "../../docs/videos/<projectId>-remotion-<slug>.json"
+  Convert slug to PascalCase for composition ID (e.g., "client-portal" → "ClientPortal")
+
+### 5. Create batch render script
+
+**render-all.mjs** — renders all compositions in parallel batches:
+  - Read all JSON specs from docs/videos/
+  - Render 3 at a time (CONCURRENCY=3) to avoid OOM
+  - For each: `npx remotion render src/index.ts <CompositionId> out/<slug>.mp4 --codec h264 --concurrency 4`
+  - Also render poster frame: `npx remotion still src/index.ts <CompositionId> --frame 700 --output out/<slug>-poster.jpg --image-format jpeg`
+  - Copy each output to <projectDir>/static/videos/
+  - Report: success/fail count, file sizes, total time
+
+### 6. Install and render
+
+  cd <projectDir>/video && npm install
+  node render-all.mjs
+
+### 7. Verify
+
+  ls -lhS <projectDir>/static/videos/*.mp4
+  Verify all features have video + poster files.
+  Report: video count, total size, any failures.
+
+## Key Implementation Notes
+- Use `import { Img, staticFile } from "remotion"` for all image references
+- Screenshots in video/public/ are served as static files via staticFile()
+- JSON specs are imported directly (resolveJsonModule in tsconfig)
+- Font sizes must be LARGE (see size tuning guide) — 94px headlines, 34px body
+- All scenes fade out in final 30 frames for smooth crossfade transitions
+- The HowItWorksScene screenshot browser chrome should show the project's domain, not localhost
 ```
 
 ---

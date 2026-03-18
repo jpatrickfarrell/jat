@@ -2,7 +2,7 @@
 
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import type { WidgetConfig } from './lib/types';
+  import type { WidgetConfig, ToolDefinition } from './lib/types';
   import { DEFAULT_CONFIG } from './lib/types';
   import { startConsoleCapture, stopConsoleCapture } from './lib/consoleCapture';
   import { isElementPickerActive } from './lib/elementPicker';
@@ -46,6 +46,9 @@
 
   let open = $state(false);
   let pickerHidden = $state(false);
+
+  /** Tools registered by the host page for the agent to call */
+  let registeredTools = $state<ToolDefinition[]>([]);
 
   // Drag state
   let isDragging = $state(false);
@@ -174,6 +177,14 @@
     // Listen for external open requests (e.g. host app's "Report Bug" button)
     const handleOpen = () => { open = true; };
     window.addEventListener('jat-feedback:open', handleOpen);
+
+    // Expose registerTools() on the custom element host so the page can
+    // register tools the agent can call (e.g. get_current_user, get_page_data)
+    const host = $host<HTMLElement & { registerTools?: (tools: ToolDefinition[]) => void }>();
+    host.registerTools = (tools: ToolDefinition[]) => {
+      registeredTools = [...registeredTools, ...tools];
+    };
+
     return () => window.removeEventListener('jat-feedback:open', handleOpen);
   });
 
@@ -193,7 +204,7 @@
       class:hidden={!open}
       style="{panelPositionStyles[config.position] || panelPositionStyles['bottom-right']}"
     >
-      <FeedbackPanel endpoint={config.endpoint} {project} isOpen={open} {userId} {userEmail} {userName} {userRole} {orgId} {orgName} {agentProxy} {agentModel} {agentContext} onclose={close} ongrip={handlePanelDragStart} />
+      <FeedbackPanel endpoint={config.endpoint} {project} isOpen={open} {userId} {userEmail} {userName} {userRole} {orgId} {orgName} {agentProxy} {agentModel} {agentContext} {registeredTools} onclose={close} ongrip={handlePanelDragStart} />
     </div>
   {:else if open}
     <div class="jat-feedback-panel" style="{panelPositionStyles[config.position] || panelPositionStyles['bottom-right']}">

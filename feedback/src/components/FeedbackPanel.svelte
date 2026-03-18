@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ConsoleLogEntry, ElementData, FileAttachment, FeedbackReport } from '../lib/types';
+  import type { ConsoleLogEntry, ElementData, FileAttachment, FeedbackReport, ToolDefinition } from '../lib/types';
   import { submitReport, fetchReports, type ReportSummary } from '../lib/api';
   import { enqueue } from '../lib/queue';
   import { captureViewport, captureViewportQuick } from '../lib/screenshot';
@@ -35,6 +35,7 @@
     agentProxy = '',
     agentModel = '',
     agentContext = '',
+    registeredTools = [],
   }: {
     endpoint: string;
     project: string;
@@ -48,6 +49,7 @@
     agentProxy?: string;
     agentModel?: string;
     agentContext?: string;
+    registeredTools?: ToolDefinition[];
     onclose: () => void;
     ongrip?: (e: MouseEvent) => void;
   } = $props();
@@ -74,6 +76,7 @@
         appContext: agentContext || undefined,
         endpoint,
         project,
+        registeredTools,
         onMessagesChange: (msgs) => { agentMessages = msgs; },
         onStateChange: (state, step) => { agentState = state; agentStep = step; },
       });

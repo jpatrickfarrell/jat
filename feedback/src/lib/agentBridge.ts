@@ -15,7 +15,7 @@ import type {
   ExecutionResult,
   PageAgentCoreConfig,
 } from '../page-agent';
-import type { ChatMessage, AgentState, AgentNote } from './types';
+import type { ChatMessage, AgentState, AgentNote, ToolDefinition } from './types';
 import { fetchNotes } from './api';
 import { z } from 'zod/v4';
 
@@ -28,6 +28,8 @@ export interface AgentBridgeConfig {
   maxSteps?: number;
   /** App-specific context instructions (from agent-context attribute) */
   appContext?: string;
+  /** Tools registered by the host page (via registerTools()) */
+  registeredTools?: ToolDefinition[];
   /** Feedback endpoint URL (for fetching notes) */
   endpoint?: string;
   /** Project identifier (for fetching notes) */
@@ -536,6 +538,11 @@ export class AgentBridge {
   /** Get max steps config */
   getMaxSteps(): number {
     return this.config.maxSteps || 20;
+  }
+
+  /** Get tools registered by the host page (for forwarding to LLM proxy in task .2) */
+  getRegisteredTools(): ToolDefinition[] {
+    return this.config.registeredTools || [];
   }
 
   /** Dispose agent and controller */

@@ -128,6 +128,18 @@ export interface AgentNote {
   updated_at: string;
 }
 
+/** Tool registered by the host page for the agent to call */
+export interface ToolDefinition {
+  /** Unique tool name (snake_case recommended) */
+  name: string;
+  /** Description of what the tool does (shown to the LLM) */
+  description: string;
+  /** JSON Schema for the tool's input parameters */
+  parameters: Record<string, unknown>;
+  /** Async handler that receives parsed args and returns a JSON-serializable value */
+  handler: (args: Record<string, unknown>) => Promise<unknown>;
+}
+
 export interface WidgetConfig {
   endpoint: string;
   position: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';

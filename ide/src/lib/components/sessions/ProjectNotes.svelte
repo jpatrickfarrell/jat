@@ -55,13 +55,19 @@
 	// Track which project we've synced to avoid overwriting user edits
 	let syncedProjectName = $state('');
 
-	// Sync notes from props to local state ONLY when project changes
+	// Sync notes from props to local state when project changes
+	// OR when notes prop updates asynchronously (e.g., fetchProjectNotes completes after render)
 	$effect(() => {
 		if (projectName !== syncedProjectName) {
 			syncedProjectName = projectName;
 			localNotes = notes;
 			originalNotes = notes;
 			isDirty = false;
+		} else if (notes !== originalNotes && !isDirty) {
+			// Props updated with new data for the same project (async fetch completed)
+			// Only sync if user hasn't made edits
+			localNotes = notes;
+			originalNotes = notes;
 		}
 	});
 

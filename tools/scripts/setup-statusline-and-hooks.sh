@@ -239,6 +239,16 @@ else
     echo -e "  ${YELLOW}⚠ log-tool-activity hook not found: $LOG_TOOL_HOOK${NC}"
 fi
 
+# Copy session-end-cleanup hook to global directory (kills orphaned MCP processes)
+SESSION_END_HOOK="$JAT_DIR/.claude/hooks/session-end-cleanup.sh"
+if [ -f "$SESSION_END_HOOK" ]; then
+    cp "$SESSION_END_HOOK" "$GLOBAL_HOOKS_DIR/session-end-cleanup.sh"
+    chmod +x "$GLOBAL_HOOKS_DIR/session-end-cleanup.sh"
+    echo -e "  ${GREEN}✓ Installed session-end-cleanup.sh to ~/.claude/hooks/${NC}"
+else
+    echo -e "  ${YELLOW}⚠ session-end-cleanup hook not found: $SESSION_END_HOOK${NC}"
+fi
+
 echo ""
 
 # ============================================================================
@@ -310,6 +320,31 @@ if grep -q '"SessionStart"' "$SETTINGS_LOCAL" 2>/dev/null; then
         fi
     else
         echo -e "  ${GREEN}✓${NC} UserPromptSubmit hook already configured"
+    fi
+
+    # Add SessionEnd if missing (upgrade path for older installs)
+    if ! grep -q '"SessionEnd"' "$SETTINGS_LOCAL" 2>/dev/null; then
+        TEMP_SETTINGS=$(mktemp)
+        if jq '.hooks = (.hooks // {}) * {
+            "SessionEnd": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "~/.claude/hooks/session-end-cleanup.sh"
+                        }
+                    ]
+                }
+            ]
+        }' "$SETTINGS_LOCAL" > "$TEMP_SETTINGS" 2>/dev/null; then
+            mv "$TEMP_SETTINGS" "$SETTINGS_LOCAL"
+            echo -e "  ${GREEN}✓ Added SessionEnd hook to settings.local.json${NC}"
+        else
+            echo -e "  ${YELLOW}⚠ Failed to add SessionEnd hook${NC}"
+            rm -f "$TEMP_SETTINGS"
+        fi
+    else
+        echo -e "  ${GREEN}✓${NC} SessionEnd hook already configured"
     fi
 
     # Add log-tool-activity PostToolUse hooks if missing (upgrade path)
@@ -419,11 +454,21 @@ else
                         }
                     ]
                 }
+            ],
+            "SessionEnd": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "~/.claude/hooks/session-end-cleanup.sh"
+                        }
+                    ]
+                }
             ]
         })
     }' "$SETTINGS_LOCAL" | sed 's/NONBASH_MATCHER_PLACEHOLDER/^(?!Bash$).*/' > "$TEMP_SETTINGS" 2>/dev/null; then
         mv "$TEMP_SETTINGS" "$SETTINGS_LOCAL"
-        echo -e "  ${GREEN}✓ Added SessionStart, PreCompact, PostToolUse, and UserPromptSubmit hooks to settings.local.json${NC}"
+        echo -e "  ${GREEN}✓ Added SessionStart, PreCompact, PostToolUse, UserPromptSubmit, and SessionEnd hooks to settings.local.json${NC}"
     else
         echo -e "  ${YELLOW}⚠ Failed to update settings.local.json${NC}"
         rm -f "$TEMP_SETTINGS"
@@ -592,6 +637,7 @@ echo "    - ~/.claude/hooks/post-bash-agent-state-refresh.sh (PostToolUse)"
 echo "    - ~/.claude/hooks/post-bash-jat-signal.sh (PostToolUse)"
 echo "    - ~/.claude/hooks/log-tool-activity.sh (PostToolUse - activity timeline)"
 echo "    - ~/.claude/hooks/user-prompt-signal.sh (UserPromptSubmit)"
+echo "    - ~/.claude/hooks/session-end-cleanup.sh (SessionEnd - orphan process cleanup)"
 echo "    - ~/.claude/hooks/monitor-output.sh (helper for user-prompt-signal)"
 echo ""
 echo "  Total repos found: $REPOS_FOUND"

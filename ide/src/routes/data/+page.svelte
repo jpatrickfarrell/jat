@@ -1871,6 +1871,13 @@
 		const target = e.target as HTMLElement;
 		if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
 
+		// Ctrl+Enter / Cmd+Enter — add new row (works with or without selection)
+		if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !isSystemTableSelected) {
+			e.preventDefault();
+			if (!addingRow) startAddRow(selectedCell?.colIdx ?? 0);
+			return;
+		}
+
 		// Ctrl+Z / Cmd+Z — undo last cell edit (works even without selection,
 		// e.g. when a filtered view hid the row after editing)
 		if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
@@ -1945,6 +1952,9 @@
 						selectedCell = { rowIdx: selectedCell.rowIdx, colIdx: selectedCell.colIdx + 1 };
 					} else if (selectedCell.rowIdx < maxRow) {
 						selectedCell = { rowIdx: selectedCell.rowIdx + 1, colIdx: 0 };
+					} else if (!isSystemTableSelected && !addingRow) {
+						// Tab past last cell of last row → create new row
+						startAddRow(0);
 					}
 				}
 				break;
@@ -2197,7 +2207,7 @@
 	}
 
 	// Add row
-	function startAddRow() {
+	function startAddRow(focusColIdx?: number) {
 		addingRow = true;
 		addRowEditingRelation = null;
 		newRowData = {};
@@ -2206,6 +2216,13 @@
 				newRowData[col.name] = '';
 			}
 		}
+		// Focus the matching column input in the add-row after DOM updates
+		tick().then(() => {
+			const inputs = document.querySelectorAll('.add-row input.cell-edit-input');
+			const targetIdx = Math.min(focusColIdx ?? 0, inputs.length - 1);
+			const target = inputs[targetIdx] as HTMLInputElement;
+			if (target) target.focus();
+		});
 	}
 
 	async function saveNewRow() {
@@ -2224,6 +2241,11 @@
 				newRowData = {};
 				await fetchTableData();
 				await fetchTables(); // Update row counts
+				// Auto-select first cell of the new row (last row after refresh)
+				if (rows.length > 0) {
+					selectedCell = { rowIdx: rows.length - 1, colIdx: 0 };
+					editingSelectedCell = false;
+				}
 				successToast('Row added');
 			} else {
 				const data = await res.json();
@@ -3899,6 +3921,14 @@
 											{/if}
 										</tr>
 									{/each}
+									<!-- Pseudo add-row button (Coda/Excel style) -->
+									{#if !addingRow && !isSystemTableSelected}
+										<tr class="add-row-hint" onclick={startAddRow}>
+											<td colspan={orderedColumns.length + 2}>
+												<span class="add-row-hint-btn">+</span>
+											</td>
+										</tr>
+									{/if}
 									<!-- Add row -->
 									{#if addingRow}
 										<tr class="add-row">
@@ -6112,6 +6142,27 @@
 	}
 	.row-save-btn:hover {
 		background: oklch(0.30 0.10 145 / 0.2);
+	}
+
+	.add-row-hint {
+		cursor: pointer;
+	}
+	.add-row-hint td {
+		padding: 0.125rem 0.5rem;
+		border-bottom: none;
+	}
+	.add-row-hint-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.75rem;
+		color: oklch(0.55 0.02 250);
+		opacity: 0.6;
+		transition: opacity 0.15s, color 0.15s;
+	}
+	.add-row-hint:hover .add-row-hint-btn {
+		opacity: 1;
+		color: oklch(0.70 0.12 200);
 	}
 
 	.add-row td {

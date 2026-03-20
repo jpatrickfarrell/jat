@@ -352,6 +352,7 @@ cmd_create() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --title)          title="$2"; shift 2 ;;
       --type)           type="$2"; shift 2 ;;
       --priority)       priority="$2"; shift 2 ;;
       --description)    description="$2"; shift 2 ;;
@@ -372,7 +373,7 @@ cmd_create() {
     esac
   done
 
-  [[ -n "$title" ]] || die "Usage: jt create \"title\" [--type X] [--priority N] [--description \"...\"] [--labels \"a,b\"] [--deps \"id1,id2\"] [--assignee \"X\"] [--files \"glob1,glob2\"] [--parent EPIC_ID] [--command CMD] [--agent-program X] [--model X] [--schedule-cron EXPR] [--next-run-at ISO] [--due-date ISO] [--json]"
+  [[ -n "$title" ]] || die "Usage: jt create \"title\" [--title X] [--type X] [--priority N] [--description \"...\"] [--labels \"a,b\"] [--deps \"id1,id2\"] [--assignee \"X\"] [--files \"glob1,glob2\"] [--parent EPIC_ID] [--command CMD] [--agent-program X] [--model X] [--schedule-cron EXPR] [--next-run-at ISO] [--due-date ISO] [--json]"
 
   require_integer "$priority" "--priority"
   local id="${explicit_id:-$(gen_id)}"
@@ -2729,7 +2730,7 @@ jt - JAT task CLI
 Usage: jt <command> [options]
 
 Commands:
-  create  "title" [--type X] [--priority N] [--description "..."]
+  create  "title" [--title X] [--type X] [--priority N] [--description "..."]
                    [--labels "a,b"] [--deps "id1,id2"] [--assignee "X"]
                    [--files "glob1,glob2"] [--parent EPIC_ID] [--json]
   update  TASK_ID  [--status X] [--priority N] [--assignee X] [--title X]

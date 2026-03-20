@@ -89,7 +89,7 @@
 		'idle': 9,
 	};
 	// Collect all session states per project (one entry per agent session), sorted by priority
-	const projectSessionStates = $derived(() => {
+	const projectSessionStates = $derived.by(() => {
 		const sessions = getWorkSessions();
 		const map = new Map<string, string[]>();
 		for (const session of sessions) {
@@ -1208,7 +1208,7 @@
 				{reviewRules}
 				{favoriteProjects}
 				{favoriteChipOrder}
-				projectSessionStates={projectSessionStates()}
+				projectSessionStates={projectSessionStates}
 				onReorderFavorites={handleReorderFavorites}
 				onToggleFavorite={handleToggleFavorite}
 				onGlobalSearchOpen={() => { globalSearchOpen = true; }}

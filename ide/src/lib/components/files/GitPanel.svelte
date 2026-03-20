@@ -154,9 +154,11 @@
 
 	function handleGlobalKeyNavigation(e: KeyboardEvent) {
 		if (!selectedFilePath) return;
-		// Don't intercept when typing in inputs
-		const tag = (e.target as HTMLElement)?.tagName;
+		// Don't intercept when typing in inputs or contenteditable elements
+		const target = e.target as HTMLElement;
+		const tag = target?.tagName;
 		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+		if (target?.isContentEditable || target?.closest?.('[contenteditable]')) return;
 		// Don't intercept when modifier keys are held (let other shortcuts work)
 		if (e.ctrlKey || e.metaKey || e.altKey) return;
 

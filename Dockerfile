@@ -1,99 +1,77 @@
-# JAT — Jomarchy Agent Tools
-# Multi-stage Docker build for JAT IDE server
-#
-# Build:  docker build -t jat .
-# Run:    docker compose up -d
+# JAT (Jomarchy Agent Tools) - Docker Build
+# Multi-stage build for minimal production image
 
-# ─── Stage 1: Build the IDE ───────────────────────────────────────────────────
-FROM node:22-bookworm-slim AS builder
+# ── Stage 1: Build ───────────────────────────────────────────────────────────
+FROM node:22-slim AS builder
 
-WORKDIR /build
+WORKDIR /app
 
-# Copy package files first for better layer caching
+# Install build tools for native modules (better-sqlite3)
+RUN apt-get update && apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install root dependencies
 COPY package.json package-lock.json ./
-COPY ide/package.json ide/package-lock.json* ide/
+RUN npm ci
 
-# Install all dependencies (including devDependencies for build)
-RUN cd /build && npm ci --ignore-scripts && \
-    cd /build/ide && npm ci --legacy-peer-deps
+# Install IDE dependencies
+COPY ide/package.json ide/package-lock.json ./ide/
+RUN cd ide && npm ci --legacy-peer-deps
 
-# Copy source code
+# Copy source
 COPY . .
 
-# Rebuild native modules (better-sqlite3) for the container arch
-RUN cd /build && npm rebuild better-sqlite3 && \
-    cd /build/ide && npm rebuild better-sqlite3
+# Build IDE for production (adapter-node output)
+RUN cd ide && npm run build
 
-# Build the SvelteKit app
-RUN cd /build/ide && npm run build
+# ── Stage 2: Runtime ─────────────────────────────────────────────────────────
+FROM node:22-slim
 
-# ─── Stage 2: Runtime ─────────────────────────────────────────────────────────
-FROM node:22-bookworm-slim AS runtime
-
-# System dependencies JAT needs at runtime
+# Runtime deps: tmux for agent sessions, sqlite3 for CLI, jq for JSON, git
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tmux \
     sqlite3 \
     jq \
     git \
-    curl \
     bash \
-    procps \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
-RUN useradd -m -s /bin/bash jat
+WORKDIR /app
 
-# Set up directory structure
-RUN mkdir -p /home/jat/.local/bin \
-    /home/jat/.config/jat \
-    /home/jat/data/jat \
-    /home/jat/projects \
-    && chown -R jat:jat /home/jat
+# Copy root package + deps (for lib/tasks.js and shared modules)
+COPY --from=builder /app/package.json /app/package-lock.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/lib ./lib
+COPY --from=builder /app/shared ./shared
 
-USER jat
-WORKDIR /home/jat
+# Copy built IDE
+COPY --from=builder /app/ide/build ./ide/build
+COPY --from=builder /app/ide/package.json ./ide/package.json
+COPY --from=builder /app/ide/node_modules ./ide/node_modules
 
-# Copy JAT source (tools, CLI, libs, scripts)
-COPY --chown=jat:jat tools/ /home/jat/jat/tools/
-COPY --chown=jat:jat cli/ /home/jat/jat/cli/
-COPY --chown=jat:jat lib/ /home/jat/jat/lib/
-COPY --chown=jat:jat commands/ /home/jat/jat/commands/
-COPY --chown=jat:jat skills/ /home/jat/jat/skills/
-COPY --chown=jat:jat shared/ /home/jat/jat/shared/
-COPY --chown=jat:jat install.sh /home/jat/jat/install.sh
-COPY --chown=jat:jat package.json /home/jat/jat/package.json
-COPY --chown=jat:jat CLAUDE.md AGENTS.md /home/jat/jat/
+# Copy CLI tools and scripts
+COPY --from=builder /app/cli ./cli
+COPY --from=builder /app/tools ./tools
+COPY --from=builder /app/skills ./skills
+COPY --from=builder /app/templates ./templates
+COPY --from=builder /app/commands ./commands
 
-# Copy root node_modules (better-sqlite3 for lib/tasks.js)
-COPY --from=builder --chown=jat:jat /build/node_modules/ /home/jat/jat/node_modules/
+# Symlink tools into PATH
+RUN mkdir -p /usr/local/bin && \
+    bash tools/scripts/symlink-tools.sh 2>/dev/null || true
 
-# Copy built IDE + production dependencies
-COPY --from=builder --chown=jat:jat /build/ide/build/ /home/jat/jat/ide/build/
-COPY --from=builder --chown=jat:jat /build/ide/package.json /home/jat/jat/ide/package.json
-COPY --from=builder --chown=jat:jat /build/ide/node_modules/ /home/jat/jat/ide/node_modules/
+# Create directories for mounted volumes
+RUN mkdir -p /root/.config/jat /root/.claude/sessions /tmp
 
-# Copy IDE config files needed at runtime
-COPY --chown=jat:jat ide/svelte.config.js /home/jat/jat/ide/
-COPY --chown=jat:jat ide/vite.config.ts /home/jat/jat/ide/
+ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV PORT=3333
 
-# Copy browser tools dependencies
-COPY --chown=jat:jat tools/browser/package.json /home/jat/jat/tools/browser/
-
-# Symlink all JAT tools to ~/.local/bin
-RUN bash /home/jat/jat/tools/scripts/symlink-tools.sh
-
-# Ensure ~/.local/bin is in PATH
-ENV PATH="/home/jat/.local/bin:${PATH}"
-ENV JAT_INSTALL_DIR="/home/jat/jat"
-ENV NODE_ENV="production"
-
-# IDE server port
 EXPOSE 3333
 
-# Health check - the IDE server responds on /api/health or just /
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -sf http://localhost:3333/ || exit 1
-
-# Start the IDE server
-CMD ["node", "/home/jat/jat/ide/build/index.js"]
+# Start the built SvelteKit server
+CMD ["node", "ide/build/index.js"]

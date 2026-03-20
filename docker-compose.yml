@@ -1,39 +1,39 @@
-# JAT — Jomarchy Agent Tools
-# Docker Compose stack for VPS deployment
-#
-# Quick start:
-#   docker compose up -d
-#
-# Upgrade:
-#   docker compose pull && docker compose up -d
-#
-# Logs:
-#   docker compose logs -f jat
-
 services:
   jat:
-    image: ghcr.io/joewinke/jat:latest
-    build: .
-    container_name: jat
-    restart: always
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jat-ide
     ports:
       - "3333:3333"
     volumes:
-      # Persistent data (databases, config)
-      - ${JAT_DATA_DIR:-~/data/jat}:/home/jat/data/jat
-      - ${JAT_CONFIG_DIR:-~/.config/jat}:/home/jat/.config/jat
-      # Project repositories
-      - ${JAT_PROJECTS_DIR:-~/projects}:/home/jat/projects
-      # Agent registry database
-      - ${JAT_DATA_DIR:-~/data/jat}/agent-mail.db:/home/jat/.agent-mail.db
+      # Host config — credentials, project registry, review rules
+      - ${HOME}/.config/jat:/root/.config/jat
+
+      # Claude Code — settings, hooks, session identity files
+      - ${HOME}/.claude:/root/.claude
+
+      # Agent Mail database
+      - ${HOME}/.agent-mail.db:/root/.agent-mail.db
+
+      # Project directories (add your own project paths here)
+      # The IDE scans these for .jat/ task databases
+      - ${JAT_PROJECTS:-${HOME}/code}:/root/code
+
+      # Signal files — shared with host tmux agent sessions
+      - /tmp:/tmp
+
     environment:
-      - PORT=3333
-      - HOST=0.0.0.0
       - NODE_ENV=production
-      - ORIGIN=${JAT_ORIGIN:-http://localhost:3333}
+      - HOST=0.0.0.0
+      - PORT=3333
+
+    restart: unless-stopped
+
+    # Health check — IDE responds on /api/config/defaults
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3333/"]
       interval: 30s
       timeout: 5s
-      start_period: 10s
       retries: 3
+      start_period: 10s

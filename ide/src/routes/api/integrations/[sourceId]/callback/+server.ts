@@ -144,36 +144,55 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 	};
 
-	// Fire webhook
+	// Fire webhook with retry on transient failures (5xx, network errors)
+	const MAX_RETRIES = 2;
+	const RETRY_DELAYS = [2000, 5000]; // ms between retries
 	const startTime = Date.now();
 	let responseStatus = 0;
 	let responseBody: Record<string, unknown> | null = null;
 	let errorMsg: string | undefined;
+	let attempts = 0;
 
-	try {
-		const response = await fetch(callback.url, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				'Authorization': `Bearer ${secret}`
-			},
-			body: JSON.stringify(payload),
-			signal: AbortSignal.timeout(15000)
-		});
-
-		responseStatus = response.status;
-		try {
-			responseBody = await response.json();
-		} catch {
-			responseBody = { text: await response.text().catch(() => '') };
-		}
-
-		if (!response.ok) {
-			errorMsg = `HTTP ${response.status}: ${JSON.stringify(responseBody)}`;
-		}
-	} catch (err: any) {
+	for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+		attempts = attempt + 1;
 		responseStatus = 0;
-		errorMsg = err.message || 'Network error';
+		responseBody = null;
+		errorMsg = undefined;
+
+		if (attempt > 0) {
+			await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt - 1]));
+		}
+
+		try {
+			const response = await fetch(callback.url, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${secret}`
+				},
+				body: JSON.stringify(payload),
+				signal: AbortSignal.timeout(15000)
+			});
+
+			responseStatus = response.status;
+			try {
+				responseBody = await response.json();
+			} catch {
+				responseBody = { text: await response.text().catch(() => '') };
+			}
+
+			if (!response.ok) {
+				errorMsg = `HTTP ${response.status}: ${JSON.stringify(responseBody)}`;
+			}
+		} catch (err: any) {
+			responseStatus = 0;
+			errorMsg = err.message || 'Network error';
+		}
+
+		// Success or non-retryable error (4xx) — stop retrying
+		if (!errorMsg || (responseStatus >= 400 && responseStatus < 500)) {
+			break;
+		}
 	}
 
 	const durationMs = Date.now() - startTime;
@@ -186,6 +205,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		status: responseStatus,
 		response: responseBody,
 		duration_ms: durationMs,
+		...(attempts > 1 ? { attempts } : {}),
 		...(errorMsg ? { error: errorMsg } : {})
 	};
 	appendCallbackLog(taskId, logEntry);

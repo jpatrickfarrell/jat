@@ -2225,6 +2225,15 @@
 		});
 	}
 
+	function cancelAddRow() {
+		addingRow = false;
+		// Restore focus to the table grid so arrow keys work
+		if (rows.length > 0) {
+			selectedCell = selectedCell ?? { rowIdx: rows.length - 1, colIdx: 0 };
+		}
+		tick().then(() => tableRef?.focus());
+	}
+
 	async function saveNewRow() {
 		if (!selectedProject || !selectedTable) return;
 		try {
@@ -3713,7 +3722,7 @@
 								{/if}
 							</div>
 							{#if !isSystemTableSelected}
-							<button class="btn-action" onclick={startAddRow} title="Add row">
+							<button class="btn-action" onclick={() => startAddRow()} title="Add row">
 								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
 								</svg>
@@ -3923,7 +3932,7 @@
 									{/each}
 									<!-- Pseudo add-row button (Coda/Excel style) -->
 									{#if !addingRow && !isSystemTableSelected}
-										<tr class="add-row-hint" onclick={startAddRow}>
+										<tr class="add-row-hint" onclick={() => startAddRow()}>
 											<td colspan={orderedColumns.length + 2}>
 												<span class="add-row-hint-btn">+</span>
 											</td>
@@ -3968,7 +3977,7 @@
 															placeholder={col.name}
 															onkeydown={(e) => {
 																if (e.key === 'Enter') saveNewRow();
-																if (e.key === 'Escape') { addingRow = false; }
+																if (e.key === 'Escape') { cancelAddRow(); }
 															}}
 														/>
 													{/if}

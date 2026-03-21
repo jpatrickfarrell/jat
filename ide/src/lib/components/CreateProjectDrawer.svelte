@@ -74,6 +74,110 @@
 		inactiveColor: '',
 	});
 
+	// ─── Manual Override Tracking ──────────────────────────────────
+	// Once a user manually edits a derived field, stop auto-deriving it
+	let nameManuallyEdited = $state(false);
+	let keyManuallyEdited = $state(false);
+	let inactiveColorManuallyEdited = $state(false);
+
+	// ─── Color Palette ─────────────────────────────────────────────
+	const COLOR_PALETTE = [
+		'#5588ff', '#00d4aa', '#bb66ff', '#ff6644', '#ffdd00',
+		'#17ace6', '#ff44aa', '#44cc44', '#ff8800', '#8572d6',
+		'#3df1ae', '#e63946', '#2ec4b6', '#ff9f1c', '#6a4c93',
+		'#1982c4', '#8ac926', '#ff595e',
+	] as const;
+
+	// Track existing project colors to avoid duplicates
+	let existingProjectColors = $state<string[]>([]);
+	let existingPorts = $state<number[]>([]);
+
+	// Fetch existing project data for color/port suggestions
+	async function fetchExistingProjectData() {
+		try {
+			const response = await fetch('/api/projects');
+			if (response.ok) {
+				const data = await response.json();
+				const projects = data.projects || {};
+				existingProjectColors = Object.values(projects)
+					.map((p: any) => (p.active_color || '').toLowerCase())
+					.filter(Boolean);
+				existingPorts = Object.values(projects)
+					.map((p: any) => p.port)
+					.filter((p: any): p is number => typeof p === 'number' && p > 0);
+			}
+		} catch { /* ignore */ }
+	}
+
+	// Auto-suggest first unused port starting from 3000
+	const suggestedPort = $derived.by(() => {
+		let port = 3000;
+		while (existingPorts.includes(port) && port < 65535) {
+			port += 100;
+		}
+		return port;
+	});
+
+	// Auto-suggest first unused color
+	const suggestedColor = $derived.by(() => {
+		const lower = existingProjectColors.map(c => c.toLowerCase());
+		return COLOR_PALETTE.find(c => !lower.includes(c.toLowerCase())) || COLOR_PALETTE[0];
+	});
+
+	// Derive darker shade for inactive color
+	function darkenColor(hex: string): string {
+		const clean = hex.replace('#', '');
+		const r = Math.max(0, Math.round(parseInt(clean.substring(0, 2), 16) * 0.75));
+		const g = Math.max(0, Math.round(parseInt(clean.substring(2, 4), 16) * 0.75));
+		const b = Math.max(0, Math.round(parseInt(clean.substring(4, 6), 16) * 0.75));
+		return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+	}
+
+	// Auto-derive name from path basename
+	$effect(() => {
+		if (!nameManuallyEdited && wizardData.path) {
+			const parts = wizardData.path.replace(/\/+$/, '').split('/');
+			wizardData.projectName = parts[parts.length - 1] || '';
+		}
+	});
+
+	// Auto-derive key from name
+	$effect(() => {
+		if (!keyManuallyEdited && wizardData.projectName) {
+			wizardData.projectKey = wizardData.projectName
+				.toLowerCase()
+				.replace(/[^a-z0-9]+/g, '-')
+				.replace(/^-|-$/g, '');
+		}
+	});
+
+	// Auto-derive inactive color from active color
+	$effect(() => {
+		if (!inactiveColorManuallyEdited && wizardData.activeColor) {
+			wizardData.inactiveColor = darkenColor(wizardData.activeColor);
+		}
+	});
+
+	// Set default port and color when entering step 2/3
+	$effect(() => {
+		if (currentStep === 2 && wizardData.port === 3000 && existingPorts.length > 0) {
+			wizardData.port = suggestedPort;
+		}
+	});
+
+	$effect(() => {
+		if (currentStep === 3 && !wizardData.activeColor) {
+			wizardData.activeColor = suggestedColor;
+		}
+	});
+
+	// Fetch project data when drawer opens
+	$effect(() => {
+		if (isOpen) {
+			fetchExistingProjectData();
+		}
+	});
+
 	const isFirstStep = $derived(currentStep === 0);
 	const isLastStep = $derived(currentStep === STEPS.length - 1);
 
@@ -150,15 +254,24 @@
 	const isStepValid = $derived.by(() => {
 		switch (currentStep) {
 			case 0:
-				// Step 0 is valid when a source type has been selected
 				return wizardData.sourceType !== null;
 			case 1:
-				// Placeholder — always valid for now
-				return true;
-			case 2:
-				return true;
+				// For git: valid once clone succeeded (path is set)
+				if (wizardData.sourceType === 'git') {
+					return cloneSuccess && wizardData.path.length > 0;
+				}
+				return wizardData.projectName.trim().length > 0 && wizardData.projectKey.trim().length > 0;
+			case 2: {
+				const p = wizardData.port;
+				const portValid = p >= 1024 && p <= 65535;
+				// For git source, step 2 also includes basics fields
+				if (wizardData.sourceType === 'git') {
+					return portValid && wizardData.projectName.trim().length > 0 && wizardData.projectKey.trim().length > 0;
+				}
+				return portValid;
+			}
 			case 3:
-				return true;
+				return wizardData.activeColor.length > 0;
 			case 4:
 				return true;
 			default:
@@ -174,6 +287,16 @@
 
 	// Git initialization state
 	let isInitializingGit = $state(false);
+
+	// ─── Git Clone state (Step 1 when sourceType='git') ──────────
+	let gitUrl = $state('');
+	let gitTargetPath = $state('');
+	let gitBranch = $state('');
+	let gitUrlError = $state<string | null>(null);
+	let gitRepoName = $state('');
+	let isCloning = $state(false);
+	let cloneError = $state<string | null>(null);
+	let cloneSuccess = $state(false);
 
 	// Auto-focus when drawer opens
 	$effect(() => {
@@ -409,6 +532,117 @@
 		validationTimeout = setTimeout(validatePath, 500);
 	}
 
+	// ─── Git Clone functions ──────────────────────────────────────
+
+	/** Validate and parse a git URL, extracting the repo name */
+	function parseGitUrl(url: string): { valid: boolean; repoName: string } {
+		const cleaned = url.trim().replace(/\/+$/, '');
+		const httpsPattern = /^https?:\/\/[^/]+\/[^/]+\/[^/]+(\.git)?$/;
+		const sshPattern = /^git@[^:]+:[^/]+\/[^/]+(\.git)?$/;
+		const gitProtocol = /^git:\/\/[^/]+\/[^/]+\/[^/]+(\.git)?$/;
+
+		const valid = httpsPattern.test(cleaned) || sshPattern.test(cleaned) || gitProtocol.test(cleaned);
+		let repoName = '';
+		if (valid) {
+			const parts = cleaned.replace(/:/, '/').split('/');
+			repoName = parts[parts.length - 1].replace(/\.git$/, '');
+		}
+		return { valid, repoName };
+	}
+
+	/** Handle git URL input — validate and auto-populate target path */
+	function handleGitUrlInput() {
+		gitUrlError = null;
+		cloneError = null;
+		cloneSuccess = false;
+
+		if (!gitUrl.trim()) {
+			gitRepoName = '';
+			gitTargetPath = '';
+			return;
+		}
+
+		const { valid, repoName } = parseGitUrl(gitUrl);
+		if (valid) {
+			gitRepoName = repoName;
+			// Only auto-populate if user hasn't manually edited the path
+			if (!gitTargetPath || gitTargetPath === `~/code/${gitRepoName}` || gitTargetPath.match(/^~\/code\/[^/]*$/)) {
+				gitTargetPath = `~/code/${repoName}`;
+			}
+			gitUrlError = null;
+		} else {
+			gitRepoName = '';
+			gitUrlError = 'Enter a valid git URL (HTTPS or SSH)';
+		}
+	}
+
+	/** Handle paste in URL input — clean GitHub URLs */
+	function handleGitUrlPaste(e: ClipboardEvent) {
+		const pasted = e.clipboardData?.getData('text')?.trim();
+		if (!pasted) return;
+
+		// Clean GitHub browser URLs: strip trailing slash, normalize .git
+		let cleaned = pasted.replace(/\/+$/, '');
+		// If it looks like a GitHub URL without .git, that's fine — our regex handles both
+		gitUrl = cleaned;
+
+		// Prevent default so we control the value
+		e.preventDefault();
+
+		// Trigger validation
+		handleGitUrlInput();
+	}
+
+	/** Execute git clone */
+	async function handleGitClone() {
+		if (!gitUrl.trim()) return;
+
+		const { valid } = parseGitUrl(gitUrl);
+		if (!valid) {
+			gitUrlError = 'Invalid git URL';
+			return;
+		}
+
+		isCloning = true;
+		cloneError = null;
+		cloneSuccess = false;
+
+		try {
+			const response = await fetch('/api/projects/clone', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					url: gitUrl.trim(),
+					targetPath: gitTargetPath.trim() || undefined,
+					branch: gitBranch.trim() || undefined
+				})
+			});
+
+			const data = await response.json();
+
+			if (!response.ok || data.error) {
+				cloneError = data.message || 'Clone failed';
+				playErrorSound();
+				return;
+			}
+
+			// Success — update wizard data and advance
+			cloneSuccess = true;
+			wizardData.path = data.path;
+			playSuccessChime();
+
+			// Auto-advance to next step after brief delay
+			setTimeout(() => {
+				goToStep(currentStep + 1);
+			}, 600);
+		} catch (error) {
+			cloneError = error instanceof Error ? error.message : 'Failed to clone repository';
+			playErrorSound();
+		} finally {
+			isCloning = false;
+		}
+	}
+
 	// ─── Submit (final step) ───────────────────────────────────────
 
 	async function handleSubmit(e?: Event) {
@@ -475,6 +709,9 @@
 			activeColor: '',
 			inactiveColor: '',
 		};
+		nameManuallyEdited = false;
+		keyManuallyEdited = false;
+		inactiveColorManuallyEdited = false;
 		pathInput = '';
 		directories = [];
 		basePath = '';
@@ -492,6 +729,14 @@
 		isCreatingFolder = false;
 		folderError = null;
 		isInitializingGit = false;
+		gitUrl = '';
+		gitTargetPath = '';
+		gitBranch = '';
+		gitUrlError = null;
+		gitRepoName = '';
+		isCloning = false;
+		cloneError = null;
+		cloneSuccess = false;
 	}
 
 	function handleClose() {
@@ -718,65 +963,481 @@
 							</div>
 						</div>
 
-					<!-- ═══════ STEP 1: Project Basics (placeholder) ═══════ -->
+					<!-- ═══════ STEP 1: Source-specific sub-step ═══════ -->
 					{:else if currentStep === 1}
-						<div class="p-6 flex flex-col gap-6">
-							<div class="text-center py-12">
-								<div
-									class="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center"
-									style="background: oklch(0.25 0.08 240 / 0.3); border: 1px solid oklch(0.40 0.12 240 / 0.3);"
-								>
-									<svg class="w-8 h-8" style="color: oklch(0.65 0.15 240);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-									</svg>
+						{#if wizardData.sourceType === 'git'}
+							<!-- Git Clone sub-step -->
+							<div class="p-6 flex flex-col gap-5">
+								<div>
+									<h3 class="text-base font-semibold font-mono" style="color: oklch(0.80 0.02 250);">
+										Clone Repository
+									</h3>
+									<p class="text-sm mt-1" style="color: oklch(0.50 0.02 250);">
+										Paste a repository URL and we'll clone it for you.
+									</p>
 								</div>
-								<h3 class="text-lg font-semibold font-mono" style="color: oklch(0.80 0.02 250);">Project Basics</h3>
-								<p class="text-sm mt-2" style="color: oklch(0.55 0.02 250);">
-									Name, key, and description will be configured here.
-								</p>
-								<p class="text-xs mt-4 font-mono" style="color: oklch(0.45 0.02 250);">
-									Path: {wizardData.path}
-								</p>
-							</div>
-						</div>
 
-					<!-- ═══════ STEP 2: Dev Config (placeholder) ═══════ -->
+								<!-- URL Input -->
+								<div class="flex flex-col gap-1.5">
+									<label class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+										Repository URL
+									</label>
+									<input
+										type="text"
+										class="input input-bordered w-full font-mono text-sm"
+										placeholder="https://github.com/user/repo.git"
+										bind:value={gitUrl}
+										oninput={handleGitUrlInput}
+										onpaste={handleGitUrlPaste}
+										disabled={isCloning || cloneSuccess}
+										style="background: oklch(0.20 0.01 250); border-color: {gitUrlError ? 'oklch(0.55 0.18 25)' : gitRepoName ? 'oklch(0.50 0.15 145)' : 'oklch(0.30 0.02 250)'}; color: oklch(0.85 0.02 250);"
+									/>
+									{#if gitUrlError}
+										<p class="text-xs" style="color: oklch(0.65 0.18 25);">{gitUrlError}</p>
+									{:else if gitRepoName}
+										<p class="text-xs" style="color: oklch(0.60 0.12 145);">
+											Repository: {gitRepoName}
+										</p>
+									{/if}
+								</div>
+
+								<!-- Target Path -->
+								<div class="flex flex-col gap-1.5">
+									<label class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+										Target Directory
+									</label>
+									<input
+										type="text"
+										class="input input-bordered w-full font-mono text-sm"
+										placeholder="~/code/my-project"
+										bind:value={gitTargetPath}
+										disabled={isCloning || cloneSuccess}
+										style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
+									/>
+									<p class="text-xs" style="color: oklch(0.45 0.02 250);">
+										Where to clone the repository
+									</p>
+								</div>
+
+								<!-- Branch (optional) -->
+								<div class="flex flex-col gap-1.5">
+									<label class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+										Branch <span style="color: oklch(0.40 0.02 250);">(optional)</span>
+									</label>
+									<input
+										type="text"
+										class="input input-bordered w-full font-mono text-sm"
+										placeholder="main"
+										bind:value={gitBranch}
+										disabled={isCloning || cloneSuccess}
+										style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
+									/>
+									<p class="text-xs" style="color: oklch(0.45 0.02 250);">
+										Leave blank for the default branch
+									</p>
+								</div>
+
+								<!-- Clone Button -->
+								{#if !cloneSuccess}
+									<button
+										type="button"
+										class="btn w-full font-mono"
+										style="background: oklch(0.40 0.15 25); border: 1px solid oklch(0.55 0.18 25); color: oklch(0.95 0.02 250);"
+										onclick={handleGitClone}
+										disabled={isCloning || !gitRepoName || !!gitUrlError}
+									>
+										{#if isCloning}
+											<span class="loading loading-spinner loading-sm"></span>
+											Cloning...
+										{:else}
+											<svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M6 3v12m0 0a3 3 0 103 3H9a3 3 0 10-3-3m0 0h12a3 3 0 103-3m-3 3V6a3 3 0 10-3-3" />
+											</svg>
+											Clone Repository
+										{/if}
+									</button>
+								{/if}
+
+								<!-- Clone Error -->
+								{#if cloneError}
+									<div
+										class="rounded-lg p-3 text-sm"
+										style="background: oklch(0.25 0.10 25 / 0.3); border: 1px solid oklch(0.45 0.15 25 / 0.4); color: oklch(0.75 0.12 25);"
+									>
+										{cloneError}
+									</div>
+								{/if}
+
+								<!-- Clone Success -->
+								{#if cloneSuccess}
+									<div
+										class="rounded-lg p-3 flex items-center gap-3"
+										style="background: oklch(0.22 0.08 145 / 0.3); border: 1px solid oklch(0.45 0.15 145 / 0.4);"
+									>
+										<div
+											class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+											style="background: oklch(0.40 0.15 145); color: oklch(0.95 0.02 250);"
+										>
+											<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+											</svg>
+										</div>
+										<div>
+											<p class="text-sm font-semibold" style="color: oklch(0.80 0.08 145);">Repository cloned!</p>
+											<p class="text-xs font-mono" style="color: oklch(0.60 0.04 145);">{wizardData.path}</p>
+										</div>
+									</div>
+								{/if}
+							</div>
+						{:else}
+							<!-- Basics form for local/template -->
+							<div class="p-6 flex flex-col gap-5">
+								<div>
+									<h3 class="text-base font-semibold font-mono" style="color: oklch(0.80 0.02 250);">
+										Project Basics
+									</h3>
+									<p class="text-sm mt-1" style="color: oklch(0.50 0.02 250);">
+										Name your project and set its task ID prefix.
+									</p>
+								</div>
+
+								<!-- Project Name -->
+								<div class="form-control">
+									<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+										Project Name
+									</label>
+									<input
+										type="text"
+										class="input input-bordered w-full font-mono text-sm"
+										style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250);"
+										placeholder="My SaaS App"
+										bind:value={wizardData.projectName}
+										oninput={() => { nameManuallyEdited = true; }}
+									/>
+									{#if wizardData.path && !nameManuallyEdited}
+										<span class="text-[11px] mt-1 font-mono" style="color: oklch(0.45 0.02 250);">
+											Auto-derived from path
+										</span>
+									{/if}
+								</div>
+
+								<!-- Project Key -->
+								<div class="form-control">
+									<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+										Project Key
+									</label>
+									<input
+										type="text"
+										class="input input-bordered w-full font-mono text-sm"
+										style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250);"
+										placeholder="my-saas-app"
+										bind:value={wizardData.projectKey}
+										oninput={() => { keyManuallyEdited = true; }}
+									/>
+									{#if wizardData.projectKey}
+										<span class="text-[11px] mt-1 font-mono" style="color: oklch(0.50 0.05 240);">
+											Task IDs will look like: <strong>{wizardData.projectKey}-abc123</strong>
+										</span>
+									{:else if !keyManuallyEdited}
+										<span class="text-[11px] mt-1 font-mono" style="color: oklch(0.45 0.02 250);">
+											Auto-derived from name
+										</span>
+									{/if}
+								</div>
+
+								<!-- Description -->
+								<div class="form-control">
+									<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+										Description <span style="color: oklch(0.40 0.02 250);">(optional)</span>
+									</label>
+									<textarea
+										class="textarea textarea-bordered w-full font-mono text-sm resize-none"
+										style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250); min-height: 80px;"
+										placeholder="What is this project about?"
+										bind:value={wizardData.description}
+										rows="3"
+									></textarea>
+								</div>
+
+								<!-- Path display -->
+								{#if wizardData.path}
+									<div
+										class="rounded-lg px-3 py-2 flex items-center gap-2"
+										style="background: oklch(0.20 0.03 250); border: 1px solid oklch(0.28 0.02 250);"
+									>
+										<svg class="w-4 h-4 flex-shrink-0" style="color: oklch(0.50 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+										</svg>
+										<span class="text-xs font-mono truncate" style="color: oklch(0.55 0.02 250);">
+											{wizardData.path}
+										</span>
+									</div>
+								{/if}
+							</div>
+						{/if}
+
+					<!-- ═══════ STEP 2: Dev Config ═══════ -->
 					{:else if currentStep === 2}
-						<div class="p-6 flex flex-col gap-6">
-							<div class="text-center py-12">
-								<div
-									class="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center"
-									style="background: oklch(0.25 0.08 85 / 0.3); border: 1px solid oklch(0.40 0.12 85 / 0.3);"
-								>
-									<svg class="w-8 h-8" style="color: oklch(0.65 0.15 85);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17l-5.2-3a2 2 0 010-3.46l5.2-3a2 2 0 012.16 0l5.2 3a2 2 0 010 3.46l-5.2 3a2 2 0 01-2.16 0z" />
-										<path stroke-linecap="round" stroke-linejoin="round" d="M12 22V12" />
-									</svg>
-								</div>
-								<h3 class="text-lg font-semibold font-mono" style="color: oklch(0.80 0.02 250);">Development Config</h3>
-								<p class="text-sm mt-2" style="color: oklch(0.55 0.02 250);">
-									Harness, port, and dev command will be configured here.
+						<div class="p-6 flex flex-col gap-5">
+							<div>
+								<h3 class="text-base font-semibold font-mono" style="color: oklch(0.80 0.02 250);">
+									Development Config
+								</h3>
+								<p class="text-sm mt-1" style="color: oklch(0.50 0.02 250);">
+									Configure your development environment.
 								</p>
+							</div>
+
+							<!-- For git source: show basics fields inline since step 1 was clone -->
+							{#if wizardData.sourceType === 'git'}
+								<!-- Project Name -->
+								<div class="form-control">
+									<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+										Project Name
+									</label>
+									<input
+										type="text"
+										class="input input-bordered w-full font-mono text-sm"
+										style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250);"
+										placeholder="My SaaS App"
+										bind:value={wizardData.projectName}
+										oninput={() => { nameManuallyEdited = true; }}
+									/>
+									{#if wizardData.path && !nameManuallyEdited}
+										<span class="text-[11px] mt-1 font-mono" style="color: oklch(0.45 0.02 250);">
+											Auto-derived from cloned repo
+										</span>
+									{/if}
+								</div>
+
+								<!-- Project Key -->
+								<div class="form-control">
+									<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+										Project Key
+									</label>
+									<input
+										type="text"
+										class="input input-bordered w-full font-mono text-sm"
+										style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250);"
+										placeholder="my-saas-app"
+										bind:value={wizardData.projectKey}
+										oninput={() => { keyManuallyEdited = true; }}
+									/>
+									{#if wizardData.projectKey}
+										<span class="text-[11px] mt-1 font-mono" style="color: oklch(0.50 0.05 240);">
+											Task IDs: <strong>{wizardData.projectKey}-abc123</strong>
+										</span>
+									{/if}
+								</div>
+
+								<!-- Description -->
+								<div class="form-control">
+									<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+										Description <span style="color: oklch(0.40 0.02 250);">(optional)</span>
+									</label>
+									<textarea
+										class="textarea textarea-bordered w-full font-mono text-sm resize-none"
+										style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250); min-height: 64px;"
+										placeholder="What is this project about?"
+										bind:value={wizardData.description}
+										rows="2"
+									></textarea>
+								</div>
+
+								<div style="height: 1px; background: oklch(0.28 0.02 250); margin: 4px 0;"></div>
+							{/if}
+
+							<!-- Default Agent Harness -->
+							<div class="form-control">
+								<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+									Default Agent Harness
+								</label>
+								<select
+									class="select select-bordered w-full font-mono text-sm"
+									style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250);"
+									bind:value={wizardData.harness}
+								>
+									<option value="claude-code">Claude Code</option>
+									<option value="pi">Pi</option>
+									<option value="codex">Codex</option>
+								</select>
+								<span class="text-[11px] mt-1" style="color: oklch(0.45 0.02 250);">
+									Which AI coding agent to use by default
+								</span>
+							</div>
+
+							<!-- Dev Server Port -->
+							<div class="form-control">
+								<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+									Dev Server Port
+								</label>
+								<input
+									type="number"
+									class="input input-bordered w-full font-mono text-sm"
+									style="background: oklch(0.20 0.01 250); border-color: {wizardData.port >= 1024 && wizardData.port <= 65535 ? 'oklch(0.35 0.02 250)' : 'oklch(0.55 0.15 25)'}; color: oklch(0.90 0.02 250);"
+									min="1024"
+									max="65535"
+									bind:value={wizardData.port}
+								/>
+								{#if wizardData.port < 1024 || wizardData.port > 65535}
+									<span class="text-[11px] mt-1" style="color: oklch(0.70 0.15 25);">
+										Port must be between 1024 and 65535
+									</span>
+								{:else}
+									<span class="text-[11px] mt-1" style="color: oklch(0.45 0.02 250);">
+										Port for the development server (e.g., npm run dev)
+									</span>
+								{/if}
+							</div>
+
+							<!-- Dev Command -->
+							<div class="form-control">
+								<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+									Dev Command <span style="color: oklch(0.40 0.02 250);">(optional)</span>
+								</label>
+								<input
+									type="text"
+									class="input input-bordered w-full font-mono text-sm"
+									style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250);"
+									placeholder="npm run dev"
+									bind:value={wizardData.devCommand}
+								/>
+								<span class="text-[11px] mt-1" style="color: oklch(0.45 0.02 250);">
+									Command to start the dev server
+								</span>
+							</div>
+
+							<!-- Server Path -->
+							<div class="form-control">
+								<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+									Server Path <span style="color: oklch(0.40 0.02 250);">(optional)</span>
+								</label>
+								<input
+									type="text"
+									class="input input-bordered w-full font-mono text-sm"
+									style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250);"
+									placeholder="/"
+									bind:value={wizardData.serverPath}
+								/>
+								<span class="text-[11px] mt-1" style="color: oklch(0.45 0.02 250);">
+									Subdirectory where server runs (if not project root)
+								</span>
 							</div>
 						</div>
 
-					<!-- ═══════ STEP 3: Appearance (placeholder) ═══════ -->
+					<!-- ═══════ STEP 3: Appearance ═══════ -->
 					{:else if currentStep === 3}
-						<div class="p-6 flex flex-col gap-6">
-							<div class="text-center py-12">
-								<div
-									class="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center"
-									style="background: oklch(0.25 0.08 320 / 0.3); border: 1px solid oklch(0.40 0.12 320 / 0.3);"
-								>
-									<svg class="w-8 h-8" style="color: oklch(0.65 0.15 320);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M4.098 19.902a3.75 3.75 0 005.304 0l6.401-6.402M6.75 21A3.75 3.75 0 013 17.25V4.125C3 3.504 3.504 3 4.125 3h5.25c.621 0 1.125.504 1.125 1.125v4.072M6.75 21a3.75 3.75 0 003.75-3.75V8.197M6.75 21h13.125c.621 0 1.125-.504 1.125-1.125v-5.25c0-.621-.504-1.125-1.125-1.125h-4.072M10.5 8.197l2.88-2.88c.438-.439 1.15-.439 1.59 0l3.712 3.713c.44.44.44 1.152 0 1.59l-2.879 2.88M6.75 17.25h.008v.008H6.75v-.008z" />
-									</svg>
-								</div>
-								<h3 class="text-lg font-semibold font-mono" style="color: oklch(0.80 0.02 250);">Appearance</h3>
-								<p class="text-sm mt-2" style="color: oklch(0.55 0.02 250);">
-									Project colors will be configured here.
+						<div class="p-6 flex flex-col gap-5">
+							<div>
+								<h3 class="text-base font-semibold font-mono" style="color: oklch(0.80 0.02 250);">
+									Appearance
+								</h3>
+								<p class="text-sm mt-1" style="color: oklch(0.50 0.02 250);">
+									Choose a color for your project badge.
 								</p>
 							</div>
+
+							<!-- Active Color -->
+							<div class="form-control">
+								<label class="text-xs font-mono uppercase tracking-wider mb-2" style="color: oklch(0.60 0.02 250);">
+									Active Color
+								</label>
+								<!-- Color Swatches -->
+								<div class="flex flex-wrap gap-2 mb-3">
+									{#each COLOR_PALETTE as color}
+										<button
+											type="button"
+											class="color-swatch"
+											class:color-swatch-selected={wizardData.activeColor === color}
+											style="background: {color};"
+											title={color}
+											onclick={() => { wizardData.activeColor = color; inactiveColorManuallyEdited = false; }}
+										></button>
+									{/each}
+								</div>
+								<!-- Custom Color Input -->
+								<div class="flex items-center gap-2">
+									<input
+										type="color"
+										class="w-8 h-8 rounded cursor-pointer"
+										style="border: 1px solid oklch(0.35 0.02 250);"
+										value={wizardData.activeColor || '#5588ff'}
+										oninput={(e) => { wizardData.activeColor = (e.target as HTMLInputElement).value; inactiveColorManuallyEdited = false; }}
+									/>
+									<input
+										type="text"
+										class="input input-bordered input-sm font-mono text-xs flex-1"
+										style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250);"
+										placeholder="#5588ff"
+										value={wizardData.activeColor}
+										oninput={(e) => { wizardData.activeColor = (e.target as HTMLInputElement).value; inactiveColorManuallyEdited = false; }}
+									/>
+								</div>
+							</div>
+
+							<!-- Inactive Color -->
+							<div class="form-control">
+								<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+									Inactive Color
+									{#if !inactiveColorManuallyEdited}
+										<span style="color: oklch(0.40 0.02 250);">(auto-derived)</span>
+									{/if}
+								</label>
+								<div class="flex items-center gap-2">
+									<input
+										type="color"
+										class="w-8 h-8 rounded cursor-pointer"
+										style="border: 1px solid oklch(0.35 0.02 250);"
+										value={wizardData.inactiveColor || '#3366dd'}
+										oninput={(e) => { wizardData.inactiveColor = (e.target as HTMLInputElement).value; inactiveColorManuallyEdited = true; }}
+									/>
+									<input
+										type="text"
+										class="input input-bordered input-sm font-mono text-xs flex-1"
+										style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250);"
+										placeholder="#3366dd"
+										value={wizardData.inactiveColor}
+										oninput={(e) => { wizardData.inactiveColor = (e.target as HTMLInputElement).value; inactiveColorManuallyEdited = true; }}
+									/>
+								</div>
+							</div>
+
+							<!-- Preview Badge -->
+							{#if wizardData.activeColor}
+								<div class="form-control">
+									<label class="text-xs font-mono uppercase tracking-wider mb-2" style="color: oklch(0.60 0.02 250);">
+										Preview
+									</label>
+									<div
+										class="rounded-lg px-4 py-3 flex items-center gap-3"
+										style="background: oklch(0.20 0.03 250); border: 1px solid oklch(0.28 0.02 250);"
+									>
+										<div class="flex items-center gap-2">
+											<div
+												class="w-3 h-3 rounded-full"
+												style="background: {wizardData.activeColor}; box-shadow: 0 0 6px {wizardData.activeColor}80;"
+											></div>
+											<span class="text-xs font-mono font-bold uppercase" style="color: {wizardData.activeColor};">
+												{wizardData.projectKey || wizardData.projectName || 'project'}
+											</span>
+										</div>
+										<span class="text-[10px]" style="color: oklch(0.40 0.02 250);">active</span>
+
+										<div style="width: 1px; height: 20px; background: oklch(0.30 0.02 250);"></div>
+
+										<div class="flex items-center gap-2">
+											<div
+												class="w-3 h-3 rounded-full"
+												style="background: {wizardData.inactiveColor};"
+											></div>
+											<span class="text-xs font-mono font-bold uppercase" style="color: {wizardData.inactiveColor};">
+												{wizardData.projectKey || wizardData.projectName || 'project'}
+											</span>
+										</div>
+										<span class="text-[10px]" style="color: oklch(0.40 0.02 250);">inactive</span>
+									</div>
+								</div>
+							{/if}
 						</div>
 
 					<!-- ═══════ STEP 4: Review & Create ═══════ -->
@@ -1058,5 +1719,25 @@
 
 	.source-card:hover .source-card-icon {
 		transform: scale(1.05);
+	}
+
+	/* Color swatches */
+	.color-swatch {
+		width: 2rem;
+		height: 2rem;
+		border-radius: 0.5rem;
+		border: 2px solid oklch(0.30 0.02 250);
+		cursor: pointer;
+		transition: all 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+	}
+
+	.color-swatch:hover {
+		transform: scale(1.1);
+		border-color: oklch(0.60 0.02 250);
+	}
+
+	.color-swatch-selected {
+		border-color: oklch(0.95 0.02 250);
+		transform: scale(1.15);
 	}
 </style>

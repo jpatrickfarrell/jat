@@ -3,14 +3,15 @@
 	 * CreateProjectDrawer Component — Multi-Step Wizard
 	 *
 	 * 5-step wizard for creating new projects:
-	 *   Step 0: Source Selection (local path / git clone / template)
-	 *   Step 1: Project Basics (name, key, description)
-	 *   Step 2: Dev Config (harness, port, dev command)
-	 *   Step 3: Appearance (colors)
-	 *   Step 4: Review & Create
+	 *   Step 0: Source Selection — three entry point cards (git / local / template)
+	 *   Step 1: Project Basics (name, key, description) — placeholder
+	 *   Step 2: Dev Config (harness, port, dev command) — placeholder
+	 *   Step 3: Appearance (colors) — placeholder
+	 *   Step 4: Review & Create — placeholder
 	 *
-	 * Current implementation has Step 0 fully functional (existing path entry flow).
-	 * Steps 1-4 are placeholder shells for sibling tasks to fill in.
+	 * Step 0 presents three cards. Clicking a card sets wizardData.sourceType
+	 * and advances to Step 1. Subsequent steps vary by sourceType (sibling tasks).
+	 * Path entry functions remain in script for the local/git sub-steps.
 	 */
 
 	import { tick } from 'svelte';
@@ -87,12 +88,12 @@
 
 	function nextStep() {
 		if (!isStepValid || isLastStep) return;
-		// Sync path into wizardData when leaving step 0
-		if (currentStep === 0) {
-			wizardData.path = pathInput.trim();
-			wizardData.sourceType = 'local';
-		}
 		goToStep(currentStep + 1);
+	}
+
+	function selectSource(type: 'git' | 'local' | 'template') {
+		wizardData.sourceType = type;
+		goToStep(1);
 	}
 
 	function prevStep() {
@@ -149,8 +150,8 @@
 	const isStepValid = $derived.by(() => {
 		switch (currentStep) {
 			case 0:
-				// Step 0 is valid when we have a path and it's validated
-				return (validationStatus === 'valid' || validationStatus === 'already-initialized' || validationStatus === 'will-create') && pathInput.trim() !== '';
+				// Step 0 is valid when a source type has been selected
+				return wizardData.sourceType !== null;
 			case 1:
 				// Placeholder — always valid for now
 				return true;
@@ -636,277 +637,86 @@
 				>
 					<!-- ═══════ STEP 0: Source Selection ═══════ -->
 					{#if currentStep === 0}
-						<form onsubmit={(e) => { e.preventDefault(); nextStep(); }} class="p-6 flex flex-col gap-6">
-							<!-- Path Input -->
-							<div class="form-control">
-								<label class="label" for="project-path">
-									<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
-										Project Path
-										<span class="text-error">*</span>
-									</span>
-								</label>
-								<div class="flex items-center gap-2">
-									<input
-										id="project-path"
-										type="text"
-										placeholder="/path/to/my-project"
-										class="input flex-1 font-mono"
-										style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.80 0.02 250);"
-										bind:this={pathInputRef}
-										bind:value={pathInput}
-										oninput={handlePathInput}
-										disabled={isSubmitting}
-										required
-									/>
-									<button
-										type="button"
-										class="btn btn-sm"
-										style="background: oklch(0.25 0.02 250); border: 1px solid oklch(0.40 0.02 250); color: oklch(0.75 0.02 250);"
-										onclick={() => { showBrowser = !showBrowser; if (showBrowser && directories.length === 0) loadDirectories(); }}
-										disabled={isSubmitting}
-									>
-										{showBrowser ? 'Hide' : 'Browse'}
-									</button>
-								</div>
-
-								<!-- Validation status -->
-								{#if validationStatus !== 'idle'}
-									<div class="flex items-center gap-2 mt-2">
-										{#if validationStatus === 'checking'}
-											<span class="loading loading-spinner loading-xs" style="color: oklch(0.70 0.18 240);"></span>
-										{:else}
-											<span
-												class="w-2 h-2 rounded-full"
-												style="background: {getStatusColor(validationStatus)};"
-											></span>
-										{/if}
-										<span class="text-xs font-mono" style="color: {getStatusColor(validationStatus)};">
-											{validationMessage}
-										</span>
-									</div>
-
-									<!-- Initialize Git button -->
-									{#if validationStatus === 'needs-git'}
-										<div class="mt-3">
-											<button
-												type="button"
-												class="btn btn-sm"
-												style="background: oklch(0.30 0.12 85); border: 1px solid oklch(0.45 0.15 85); color: oklch(0.95 0.02 250);"
-												onclick={initializeGit}
-												disabled={isInitializingGit || isSubmitting}
-											>
-												{#if isInitializingGit}
-													<span class="loading loading-spinner loading-xs"></span>
-													Initializing Git...
-												{:else}
-													<svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-													</svg>
-													Initialize Git Repository
-												{/if}
-											</button>
-											<p class="text-xs mt-2" style="color: oklch(0.55 0.02 250);">
-												This will run <code class="px-1 py-0.5 rounded" style="background: oklch(0.22 0.01 250);">git init</code> in the selected folder.
-											</p>
-										</div>
-									{/if}
-
-									<!-- Will-create info -->
-									{#if validationStatus === 'will-create'}
-										<div class="mt-3 space-y-1">
-											<p class="text-xs font-semibold" style="color: oklch(0.70 0.18 145);">
-												On submit, we will:
-											</p>
-											<ul class="text-xs space-y-0.5" style="color: oklch(0.60 0.02 250);">
-												<li class="flex items-center gap-1.5">
-													<span style="color: oklch(0.70 0.18 145);">1.</span>
-													Create directory at {pathInput}
-												</li>
-												<li class="flex items-center gap-1.5">
-													<span style="color: oklch(0.70 0.18 145);">2.</span>
-													Initialize git repository
-												</li>
-												<li class="flex items-center gap-1.5">
-													<span style="color: oklch(0.70 0.18 145);">3.</span>
-													Set up JAT task management
-												</li>
-												<li class="flex items-center gap-1.5">
-													<span style="color: oklch(0.70 0.18 145);">4.</span>
-													Add to JAT configuration
-												</li>
-											</ul>
-										</div>
-									{/if}
-								{/if}
+						<div class="p-6 flex flex-col gap-6">
+							<!-- Heading -->
+							<div>
+								<h3 class="text-base font-semibold font-mono" style="color: oklch(0.80 0.02 250);">
+									How would you like to start?
+								</h3>
+								<p class="text-sm mt-1" style="color: oklch(0.50 0.02 250);">
+									Choose how to bring your project into JAT.
+								</p>
 							</div>
 
-							<!-- Directory Browser -->
-							{#if showBrowser}
-								<div
-									class="rounded-lg p-4"
-									style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.30 0.02 250);"
+							<!-- Source Cards -->
+							<div class="flex flex-col gap-3">
+								<!-- Clone from Git -->
+								<button
+									type="button"
+									class="source-card group"
+									class:source-card-selected={wizardData.sourceType === 'git'}
+									onclick={() => selectSource('git')}
 								>
-									<div class="flex items-center justify-between mb-3">
-										<span class="text-xs font-mono" style="color: oklch(0.55 0.02 250);">
-											{basePath}
-										</span>
-										<div class="flex items-center gap-2">
-											<button
-												type="button"
-												class="btn btn-xs"
-												style="background: oklch(0.30 0.10 145); border: 1px solid oklch(0.40 0.15 145); color: oklch(0.95 0.02 250);"
-												onclick={() => { showNewFolderInput = !showNewFolderInput; folderError = null; newFolderName = ''; }}
-												disabled={isLoadingDirectories || isCreatingFolder}
-											>
-												{#if showNewFolderInput}
-													Cancel
-												{:else}
-													<svg class="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-													</svg>
-													New Folder
-												{/if}
-											</button>
-											<button
-												type="button"
-												class="btn btn-xs btn-ghost"
-												onclick={() => loadDirectories()}
-												disabled={isLoadingDirectories}
-											>
-												{#if isLoadingDirectories}
-													<span class="loading loading-spinner loading-xs"></span>
-												{:else}
-													Refresh
-												{/if}
-											</button>
-										</div>
+									<div class="source-card-icon" style="background: oklch(0.25 0.10 25 / 0.3); border-color: oklch(0.40 0.15 25 / 0.4);">
+										<svg class="w-6 h-6" style="color: oklch(0.75 0.15 25);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M6 3v12m0 0a3 3 0 103 3H9a3 3 0 10-3-3m0 0h12a3 3 0 103-3m-3 3V6a3 3 0 10-3-3" />
+										</svg>
 									</div>
+									<div class="flex-1 text-left">
+										<h4 class="text-sm font-semibold font-mono" style="color: oklch(0.85 0.02 250);">Clone from Git</h4>
+										<p class="text-xs mt-0.5" style="color: oklch(0.60 0.02 250);">Clone a GitHub or Git repository</p>
+										<p class="text-[11px] mt-1" style="color: oklch(0.45 0.02 250);">Paste a repo URL and JAT handles the rest</p>
+									</div>
+									<svg class="w-5 h-5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" style="color: oklch(0.50 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+									</svg>
+								</button>
 
-									<!-- New Folder Input -->
-									{#if showNewFolderInput}
-										<div class="mb-3 p-3 rounded" style="background: oklch(0.22 0.01 250); border: 1px solid oklch(0.35 0.02 250);">
-											<label class="text-xs font-mono mb-2 block" style="color: oklch(0.55 0.02 250);">
-												New folder name
-											</label>
-											<div class="flex items-center gap-2">
-												<input
-													type="text"
-													placeholder="my-new-project"
-													class="input input-sm flex-1 font-mono"
-													style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.80 0.02 250);"
-													bind:value={newFolderName}
-													disabled={isCreatingFolder}
-													onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); createNewFolder(); } }}
-												/>
-												<button
-													type="button"
-													class="btn btn-sm"
-													style="background: oklch(0.35 0.15 145); border: 1px solid oklch(0.45 0.18 145); color: oklch(0.95 0.02 250);"
-													onclick={createNewFolder}
-													disabled={isCreatingFolder || !newFolderName.trim()}
-												>
-													{#if isCreatingFolder}
-														<span class="loading loading-spinner loading-xs"></span>
-													{:else}
-														Create
-													{/if}
-												</button>
-											</div>
-											{#if folderError}
-												<p class="text-xs mt-2" style="color: oklch(0.65 0.20 25);">{folderError}</p>
-											{/if}
-										</div>
-									{/if}
-
-									{#if directoryError}
-										<div class="text-sm text-error">{directoryError}</div>
-									{:else if directories.length === 0 && !isLoadingDirectories}
-										<div class="text-sm" style="color: oklch(0.55 0.02 250);">
-											No directories found
-										</div>
-									{:else}
-										<div class="max-h-64 overflow-y-auto space-y-1">
-											{#each directories as dir}
-												<button
-													type="button"
-													class="w-full text-left px-3 py-2 rounded transition-colors flex items-center gap-2"
-													style="
-														background: {pathInput === dir.path ? 'oklch(0.30 0.08 240 / 0.3)' : 'transparent'};
-														border: 1px solid {pathInput === dir.path ? 'oklch(0.50 0.15 240 / 0.5)' : 'transparent'};
-													"
-													onclick={() => selectDirectory(dir)}
-													disabled={isSubmitting}
-												>
-													<svg class="w-4 h-4 flex-shrink-0" style="color: oklch(0.60 0.10 85);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-													</svg>
-
-													<span class="flex-1 font-mono text-sm truncate" style="color: oklch(0.80 0.02 250);">
-														{dir.name}
-													</span>
-
-													<div class="flex items-center gap-1">
-														{#if dir.hasJat}
-															<span
-																class="badge badge-xs"
-																style="background: oklch(0.35 0.15 145); color: oklch(0.90 0.02 250);"
-															>
-																JAT
-															</span>
-														{/if}
-														{#if dir.isGitRepo}
-															<span
-																class="badge badge-xs"
-																style="background: oklch(0.35 0.10 250); color: oklch(0.90 0.02 250);"
-															>
-																Git
-															</span>
-														{:else}
-															<span
-																class="badge badge-xs"
-																style="background: oklch(0.35 0.15 25); color: oklch(0.90 0.02 250);"
-															>
-																No Git
-															</span>
-														{/if}
-													</div>
-												</button>
-											{/each}
-										</div>
-									{/if}
-								</div>
-							{/if}
-
-							<!-- Info box -->
-							<div
-								class="rounded-lg p-4"
-								style="background: oklch(0.20 0.05 240 / 0.15); border: 1px solid oklch(0.40 0.10 240 / 0.3);"
-							>
-								<h4 class="text-xs font-semibold font-mono uppercase tracking-wider mb-2" style="color: oklch(0.70 0.15 240);">
-									Unified Onboarding
-								</h4>
-								<ul class="space-y-1 text-sm" style="color: oklch(0.65 0.02 250);">
-									<li class="flex items-center gap-2">
-										<svg class="w-4 h-4 flex-shrink-0" style="color: oklch(0.70 0.18 145);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+								<!-- Add Local Project -->
+								<button
+									type="button"
+									class="source-card group"
+									class:source-card-selected={wizardData.sourceType === 'local'}
+									onclick={() => selectSource('local')}
+								>
+									<div class="source-card-icon" style="background: oklch(0.25 0.10 240 / 0.3); border-color: oklch(0.40 0.15 240 / 0.4);">
+										<svg class="w-6 h-6" style="color: oklch(0.75 0.15 240);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
 										</svg>
-										<span>New paths under <code class="px-1 py-0.5 rounded" style="background: oklch(0.22 0.01 250);">~/</code> are auto-created</span>
-									</li>
-									<li class="flex items-center gap-2">
-										<svg class="w-4 h-4 flex-shrink-0" style="color: oklch(0.70 0.18 145);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+									</div>
+									<div class="flex-1 text-left">
+										<h4 class="text-sm font-semibold font-mono" style="color: oklch(0.85 0.02 250);">Local Project</h4>
+										<p class="text-xs mt-0.5" style="color: oklch(0.60 0.02 250);">Add a project already on your machine</p>
+										<p class="text-[11px] mt-1" style="color: oklch(0.45 0.02 250);">Point to an existing directory</p>
+									</div>
+									<svg class="w-5 h-5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" style="color: oklch(0.50 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+									</svg>
+								</button>
+
+								<!-- Create from Template -->
+								<button
+									type="button"
+									class="source-card group"
+									class:source-card-selected={wizardData.sourceType === 'template'}
+									onclick={() => selectSource('template')}
+								>
+									<div class="source-card-icon" style="background: oklch(0.25 0.10 300 / 0.3); border-color: oklch(0.40 0.15 300 / 0.4);">
+										<svg class="w-6 h-6" style="color: oklch(0.75 0.15 300);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
 										</svg>
-										<span>Git initialized automatically if needed</span>
-									</li>
-									<li class="flex items-center gap-2">
-										<svg class="w-4 h-4 flex-shrink-0" style="color: oklch(0.70 0.18 145);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-										</svg>
-										<span>JAT task management set up for you</span>
-									</li>
-								</ul>
+									</div>
+									<div class="flex-1 text-left">
+										<h4 class="text-sm font-semibold font-mono" style="color: oklch(0.85 0.02 250);">Start from Template</h4>
+										<p class="text-xs mt-0.5" style="color: oklch(0.60 0.02 250);">Scaffold a new SaaS app from JST</p>
+										<p class="text-[11px] mt-1" style="color: oklch(0.45 0.02 250);">Describe your idea and we build it</p>
+									</div>
+									<svg class="w-5 h-5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" style="color: oklch(0.50 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+									</svg>
+								</button>
 							</div>
-						</form>
+						</div>
 
 					<!-- ═══════ STEP 1: Project Basics (placeholder) ═══════ -->
 					{:else if currentStep === 1}
@@ -1207,5 +1017,46 @@
 		.wizard-slide-in-left {
 			animation: none !important;
 		}
+	}
+
+	/* Source selection cards */
+	.source-card {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		padding: 1rem 1.25rem;
+		border-radius: 0.75rem;
+		background: oklch(0.20 0.01 250);
+		border: 1px solid oklch(0.30 0.02 250);
+		cursor: pointer;
+		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+	}
+
+	.source-card:hover {
+		background: oklch(0.22 0.02 250);
+		border-color: oklch(0.40 0.04 250);
+		transform: translateX(4px);
+	}
+
+	.source-card-selected {
+		border-color: oklch(0.55 0.18 240);
+		background: oklch(0.22 0.05 240 / 0.2);
+		box-shadow: 0 0 12px oklch(0.55 0.18 240 / 0.15);
+	}
+
+	.source-card-icon {
+		width: 3rem;
+		height: 3rem;
+		border-radius: 0.75rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		border: 1px solid;
+		transition: transform 0.2s;
+	}
+
+	.source-card:hover .source-card-icon {
+		transform: scale(1.05);
 	}
 </style>

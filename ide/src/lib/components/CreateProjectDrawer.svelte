@@ -192,6 +192,10 @@
 
 	function nextStep() {
 		if (!isStepValid || isLastStep) return;
+		// Sync pathInput into wizardData.path for local source when leaving source step
+		if (wizardData.sourceType === 'local' && !wizardData.path && pathInput.trim()) {
+			wizardData.path = pathInput.trim();
+		}
 		goToStep(currentStep + 1);
 	}
 
@@ -243,6 +247,14 @@
 	let successMessage = $state<string | null>(null);
 	let createdProjectKey = $state<string | null>(null);
 	let creationSteps = $state<string[]>([]);
+
+	// Creation progress tracking
+	interface CreationStep {
+		label: string;
+		status: 'pending' | 'active' | 'done' | 'error';
+	}
+	let creationProgress = $state<CreationStep[]>([]);
+	let failedStepIndex = $state<number>(-1);
 
 	// Validation state
 	let validationStatus = $state<'idle' | 'checking' | 'valid' | 'invalid' | 'already-initialized' | 'needs-git' | 'will-create'>('idle');
@@ -645,6 +657,22 @@
 
 	// ─── Submit (final step) ───────────────────────────────────────
 
+	function buildCreationSteps(): CreationStep[] {
+		const steps: CreationStep[] = [];
+		if (wizardData.sourceType === 'git') {
+			steps.push({ label: 'Cloned repository', status: 'done' });
+		} else if (wizardData.sourceType === 'local') {
+			steps.push({ label: 'Created directory (if needed)', status: 'pending' });
+		}
+		steps.push({ label: 'Initialized git (if needed)', status: 'pending' });
+		steps.push({ label: 'Initialized JAT Tasks', status: 'pending' });
+		steps.push({ label: 'Added to projects.json', status: 'pending' });
+		if (wizardData.activeColor) {
+			steps.push({ label: 'Configured project colors', status: 'pending' });
+		}
+		return steps;
+	}
+
 	async function handleSubmit(e?: Event) {
 		e?.preventDefault();
 
@@ -656,13 +684,54 @@
 
 		submitError = null;
 		successMessage = null;
+		failedStepIndex = -1;
 		isSubmitting = true;
 
+		// Build and show progress steps
+		creationProgress = buildCreationSteps();
+
+		// Animate steps to "active" one by one
+		let stepIdx = 0;
+		const advanceStep = () => {
+			if (stepIdx < creationProgress.length) {
+				creationProgress[stepIdx].status = 'active';
+				creationProgress = [...creationProgress];
+			}
+		};
+		advanceStep();
+
+		const stepInterval = setInterval(() => {
+			// Mark previous step as done, advance to next
+			if (stepIdx < creationProgress.length) {
+				creationProgress[stepIdx].status = 'done';
+			}
+			stepIdx++;
+			if (stepIdx < creationProgress.length) {
+				advanceStep();
+			} else {
+				clearInterval(stepInterval);
+			}
+			creationProgress = [...creationProgress];
+		}, 400);
+
 		try {
+			const body: Record<string, any> = {
+				path,
+				name: wizardData.projectName || undefined,
+				prefix: wizardData.projectKey || undefined,
+				description: wizardData.description || undefined,
+				port: wizardData.port || undefined,
+				dev_command: wizardData.devCommand || undefined,
+				server_path: wizardData.serverPath || undefined,
+				agent_program: wizardData.harness || undefined,
+				active_color: wizardData.activeColor || undefined,
+				inactive_color: wizardData.inactiveColor || undefined,
+			};
+
 			const response = await fetch('/api/projects/init', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ path })
+				body: JSON.stringify(body)
 			});
 
 			const data = await response.json();
@@ -671,8 +740,12 @@
 				throw new Error(data.message || 'Failed to initialize project');
 			}
 
+			// Stop step animation and mark all done
+			clearInterval(stepInterval);
+			creationProgress = creationProgress.map(s => ({ ...s, status: 'done' as const }));
+
 			successMessage = data.message || `Successfully added ${data.project?.name}`;
-			createdProjectKey = data.project?.name?.toLowerCase() || null;
+			createdProjectKey = data.project?.prefix || data.project?.name?.toLowerCase() || null;
 			creationSteps = data.steps || [];
 			playSuccessChime();
 
@@ -683,6 +756,14 @@
 				onProjectCreated();
 			}
 		} catch (error) {
+			// Stop step animation and mark failed
+			clearInterval(stepInterval);
+			failedStepIndex = stepIdx;
+			if (stepIdx < creationProgress.length) {
+				creationProgress[stepIdx].status = 'error';
+			}
+			creationProgress = [...creationProgress];
+
 			submitError = error instanceof Error ? error.message : 'Failed to add project';
 			playErrorSound();
 		} finally {
@@ -723,6 +804,8 @@
 		successMessage = null;
 		createdProjectKey = null;
 		creationSteps = [];
+		creationProgress = [];
+		failedStepIndex = -1;
 		directoryError = null;
 		showNewFolderInput = false;
 		newFolderName = '';
@@ -1442,64 +1525,46 @@
 
 					<!-- ═══════ STEP 4: Review & Create ═══════ -->
 					{:else if currentStep === 4}
-						<div class="p-6 flex flex-col gap-6">
+						<div class="p-6 flex flex-col gap-5">
 							{#if successMessage}
-								<!-- Success state -->
+								<!-- ─── Success state ─── -->
 								<div
-									class="rounded-lg p-4 space-y-4"
+									class="rounded-lg p-5 space-y-4"
 									style="background: oklch(0.20 0.08 150 / 0.2); border: 1px solid oklch(0.45 0.12 150 / 0.4);"
 								>
 									<div class="flex items-center gap-3">
 										<div
-											class="w-10 h-10 rounded-full flex items-center justify-center"
+											class="w-12 h-12 rounded-full flex items-center justify-center"
 											style="background: oklch(0.40 0.15 150); color: oklch(0.95 0.02 250);"
 										>
-											<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
 											</svg>
 										</div>
 										<div>
-											<p class="font-semibold" style="color: oklch(0.85 0.08 150);">Project Created!</p>
+											<p class="text-lg font-bold font-mono" style="color: oklch(0.85 0.08 150);">Project Created!</p>
 											<p class="text-sm" style="color: oklch(0.65 0.04 150);">{successMessage}</p>
 										</div>
 									</div>
 
 									{#if creationSteps.length > 0}
-										<div class="space-y-1">
-											<p class="text-xs font-semibold uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
-												Steps completed:
-											</p>
-											<ul class="text-sm space-y-0.5" style="color: oklch(0.70 0.02 250);">
-												{#each creationSteps as step}
-													<li class="flex items-center gap-2">
-														<svg class="w-3 h-3 flex-shrink-0" style="color: oklch(0.70 0.18 145);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-														</svg>
-														<span>{step}</span>
-													</li>
-												{/each}
-											</ul>
+										<div class="space-y-1.5">
+											{#each creationSteps as step}
+												<div class="flex items-center gap-2">
+													<svg class="w-4 h-4 flex-shrink-0" style="color: oklch(0.70 0.18 145);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+														<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+													</svg>
+													<span class="text-sm" style="color: oklch(0.70 0.02 250);">{step}</span>
+												</div>
+											{/each}
 										</div>
 									{/if}
 
-									<div class="flex items-center gap-3 pt-2">
-										{#if createdProjectKey}
-											<a
-												href="/config?tab=projects&edit={encodeURIComponent(createdProjectKey)}"
-												class="btn btn-sm"
-												style="background: oklch(0.30 0.10 240); border: 1px solid oklch(0.45 0.12 240); color: oklch(0.90 0.02 250);"
-												onclick={() => { resetForm(); closeProjectDrawer(); }}
-											>
-												<svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-												</svg>
-												Configure Settings
-											</a>
-										{/if}
+									<div class="flex flex-wrap items-center gap-2 pt-3" style="border-top: 1px solid oklch(0.35 0.08 150 / 0.3);">
 										<button
 											type="button"
-											class="btn btn-sm btn-ghost"
+											class="btn btn-sm font-mono"
+											style="background: oklch(0.35 0.12 145); border: 1px solid oklch(0.50 0.15 145); color: oklch(0.95 0.02 250);"
 											onclick={() => {
 												const project = createdProjectKey;
 												resetForm();
@@ -1510,49 +1575,199 @@
 												goto('/tasks');
 											}}
 										>
-											Done
+											<svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+											</svg>
+											Open in IDE
+										</button>
+										<button
+											type="button"
+											class="btn btn-sm btn-ghost font-mono"
+											onclick={resetForm}
+										>
+											Create Another
+										</button>
+										<button
+											type="button"
+											class="btn btn-sm btn-ghost font-mono"
+											onclick={() => { resetForm(); closeProjectDrawer(); }}
+										>
+											Close
 										</button>
 									</div>
 								</div>
-							{:else}
-								<!-- Review summary (placeholder for now) -->
-								<div class="text-center py-8">
-									<div
-										class="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center"
-										style="background: oklch(0.25 0.08 145 / 0.3); border: 1px solid oklch(0.40 0.12 145 / 0.3);"
-									>
-										<svg class="w-8 h-8" style="color: oklch(0.65 0.15 145);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-										</svg>
+
+							{:else if isSubmitting}
+								<!-- ─── Creation progress ─── -->
+								<div>
+									<h3 class="text-base font-semibold font-mono mb-4" style="color: oklch(0.80 0.02 250);">
+										Creating Project...
+									</h3>
+									<div class="flex flex-col gap-2">
+										{#each creationProgress as step}
+											<div class="flex items-center gap-3 py-1.5">
+												{#if step.status === 'done'}
+													<div class="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" style="background: oklch(0.40 0.15 145);">
+														<svg class="w-3 h-3" style="color: oklch(0.95 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+														</svg>
+													</div>
+												{:else if step.status === 'active'}
+													<span class="loading loading-spinner loading-xs flex-shrink-0" style="color: oklch(0.70 0.15 240);"></span>
+												{:else if step.status === 'error'}
+													<div class="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" style="background: oklch(0.45 0.18 25);">
+														<svg class="w-3 h-3" style="color: oklch(0.95 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+														</svg>
+													</div>
+												{:else}
+													<div class="w-5 h-5 rounded-full flex-shrink-0" style="border: 2px solid oklch(0.30 0.02 250);"></div>
+												{/if}
+												<span
+													class="text-sm font-mono"
+													style="color: {step.status === 'done' ? 'oklch(0.70 0.10 145)' : step.status === 'active' ? 'oklch(0.80 0.02 250)' : step.status === 'error' ? 'oklch(0.70 0.15 25)' : 'oklch(0.45 0.02 250)'};"
+												>
+													{step.label}
+												</span>
+											</div>
+										{/each}
 									</div>
-									<h3 class="text-lg font-semibold font-mono" style="color: oklch(0.80 0.02 250);">Review & Create</h3>
-									<p class="text-sm mt-2" style="color: oklch(0.55 0.02 250);">
-										Full review panel will be built by a sibling task.
+								</div>
+
+							{:else}
+								<!-- ─── Review summary ─── -->
+								<div>
+									<h3 class="text-base font-semibold font-mono" style="color: oklch(0.80 0.02 250);">
+										Review Your Project
+									</h3>
+									<p class="text-sm mt-1" style="color: oklch(0.50 0.02 250);">
+										Confirm your settings before creating.
 									</p>
 								</div>
 
-								<!-- Quick summary of path for now -->
-								<div
-									class="rounded-lg p-4"
-									style="background: oklch(0.20 0.03 250); border: 1px solid oklch(0.30 0.02 250);"
-								>
-									<div class="flex items-center gap-2 mb-2">
-										<span class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Source</span>
+								<!-- Source Section -->
+								<div class="review-section">
+									<div class="review-section-header">
+										<span class="review-section-label">Source</span>
+										<button type="button" class="review-edit-link" onclick={() => goToStep(0)}>Edit</button>
 									</div>
-									<p class="text-sm font-mono" style="color: oklch(0.75 0.02 250);">{wizardData.path}</p>
+									<div class="review-section-body">
+										<div class="review-row">
+											<span class="review-key">Type</span>
+											<span class="review-value">
+												{wizardData.sourceType === 'git' ? 'Cloned from Git' : wizardData.sourceType === 'template' ? 'JST Template' : 'Local Project'}
+											</span>
+										</div>
+										<div class="review-row">
+											<span class="review-key">Path</span>
+											<span class="review-value font-mono text-xs">{wizardData.path || pathInput}</span>
+										</div>
+									</div>
+								</div>
+
+								<!-- Basics Section -->
+								<div class="review-section">
+									<div class="review-section-header">
+										<span class="review-section-label">Basics</span>
+										<button type="button" class="review-edit-link" onclick={() => goToStep(wizardData.sourceType === 'git' ? 2 : 1)}>Edit</button>
+									</div>
+									<div class="review-section-body">
+										<div class="review-row">
+											<span class="review-key">Name</span>
+											<span class="review-value">{wizardData.projectName || '(not set)'}</span>
+										</div>
+										<div class="review-row">
+											<span class="review-key">Key</span>
+											<span class="review-value font-mono">{wizardData.projectKey || '(not set)'}</span>
+										</div>
+										{#if wizardData.description}
+											<div class="review-row">
+												<span class="review-key">Description</span>
+												<span class="review-value text-xs">{wizardData.description}</span>
+											</div>
+										{/if}
+									</div>
+								</div>
+
+								<!-- Dev Config Section -->
+								<div class="review-section">
+									<div class="review-section-header">
+										<span class="review-section-label">Config</span>
+										<button type="button" class="review-edit-link" onclick={() => goToStep(2)}>Edit</button>
+									</div>
+									<div class="review-section-body">
+										<div class="review-row">
+											<span class="review-key">Harness</span>
+											<span class="review-value">
+												{wizardData.harness === 'claude-code' ? 'Claude Code' : wizardData.harness === 'pi' ? 'Pi' : 'Codex'}
+											</span>
+										</div>
+										<div class="review-row">
+											<span class="review-key">Port</span>
+											<span class="review-value font-mono">{wizardData.port}</span>
+										</div>
+										{#if wizardData.devCommand}
+											<div class="review-row">
+												<span class="review-key">Dev Command</span>
+												<span class="review-value font-mono text-xs">{wizardData.devCommand}</span>
+											</div>
+										{/if}
+										{#if wizardData.serverPath && wizardData.serverPath !== '/'}
+											<div class="review-row">
+												<span class="review-key">Server Path</span>
+												<span class="review-value font-mono text-xs">{wizardData.serverPath}</span>
+											</div>
+										{/if}
+									</div>
+								</div>
+
+								<!-- Colors Section -->
+								<div class="review-section">
+									<div class="review-section-header">
+										<span class="review-section-label">Colors</span>
+										<button type="button" class="review-edit-link" onclick={() => goToStep(3)}>Edit</button>
+									</div>
+									<div class="review-section-body">
+										<div class="flex items-center gap-4 py-1">
+											<div class="flex items-center gap-2">
+												<div
+													class="w-4 h-4 rounded-full"
+													style="background: {wizardData.activeColor}; box-shadow: 0 0 6px {wizardData.activeColor}80;"
+												></div>
+												<span class="text-xs font-mono" style="color: oklch(0.65 0.02 250);">Active</span>
+											</div>
+											<div class="flex items-center gap-2">
+												<div
+													class="w-4 h-4 rounded-full"
+													style="background: {wizardData.inactiveColor};"
+												></div>
+												<span class="text-xs font-mono" style="color: oklch(0.65 0.02 250);">Inactive</span>
+											</div>
+										</div>
+									</div>
 								</div>
 							{/if}
 
 							<!-- Error Message -->
 							{#if submitError}
 								<div
-									class="alert font-mono text-sm"
-									style="background: oklch(0.35 0.15 25); border: 1px solid oklch(0.50 0.18 25); color: oklch(0.95 0.02 250);"
+									class="rounded-lg p-3 flex items-center gap-3"
+									style="background: oklch(0.25 0.10 25 / 0.3); border: 1px solid oklch(0.45 0.15 25 / 0.4);"
 								>
-									<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+									<svg class="w-5 h-5 flex-shrink-0" style="color: oklch(0.70 0.15 25);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
 									</svg>
-									<span>{submitError}</span>
+									<div>
+										<p class="text-sm font-semibold" style="color: oklch(0.75 0.12 25);">Creation failed</p>
+										<p class="text-xs mt-0.5" style="color: oklch(0.60 0.08 25);">{submitError}</p>
+									</div>
+									<button
+										type="button"
+										class="btn btn-xs btn-ghost ml-auto"
+										onclick={handleSubmit}
+									>
+										Retry
+									</button>
 								</div>
 							{/if}
 						</div>
@@ -1560,8 +1775,8 @@
 				</div>
 			</div>
 
-			<!-- Footer Navigation (hidden after success) -->
-			{#if !successMessage}
+			<!-- Footer Navigation (hidden after success or during creation) -->
+			{#if !successMessage && !isSubmitting}
 				<div
 					class="p-6"
 					style="
@@ -1719,6 +1934,72 @@
 
 	.source-card:hover .source-card-icon {
 		transform: scale(1.05);
+	}
+
+	/* Review sections */
+	.review-section {
+		border-radius: 0.5rem;
+		overflow: hidden;
+		border: 1px solid oklch(0.28 0.02 250);
+		background: oklch(0.19 0.01 250);
+	}
+
+	.review-section-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.5rem 0.75rem;
+		background: oklch(0.22 0.01 250);
+		border-bottom: 1px solid oklch(0.28 0.02 250);
+	}
+
+	.review-section-label {
+		font-size: 0.6875rem;
+		font-family: monospace;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		font-weight: 600;
+		color: oklch(0.60 0.02 250);
+	}
+
+	.review-edit-link {
+		font-size: 0.6875rem;
+		font-family: monospace;
+		color: oklch(0.65 0.15 240);
+		cursor: pointer;
+		background: none;
+		border: none;
+		padding: 0;
+		transition: color 0.15s;
+	}
+
+	.review-edit-link:hover {
+		color: oklch(0.80 0.18 240);
+		text-decoration: underline;
+	}
+
+	.review-section-body {
+		padding: 0.5rem 0.75rem;
+	}
+
+	.review-row {
+		display: flex;
+		align-items: baseline;
+		gap: 0.75rem;
+		padding: 0.25rem 0;
+	}
+
+	.review-key {
+		font-size: 0.75rem;
+		color: oklch(0.50 0.02 250);
+		min-width: 5.5rem;
+		flex-shrink: 0;
+	}
+
+	.review-value {
+		font-size: 0.8125rem;
+		color: oklch(0.80 0.02 250);
+		word-break: break-all;
 	}
 
 	/* Color swatches */

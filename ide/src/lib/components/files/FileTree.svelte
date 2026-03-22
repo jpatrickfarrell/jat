@@ -946,6 +946,73 @@
 		contextMenu = null;
 	}
 
+	// Duplicate a file
+	async function duplicateFile(sourcePath: string) {
+		closeContextMenu();
+		try {
+			// Read source file content
+			const readRes = await fetch(`/api/files/content?project=${encodeURIComponent(project)}&path=${encodeURIComponent(sourcePath)}`);
+			if (!readRes.ok) {
+				const data = await readRes.json();
+				if (onError) onError(getOperationErrorMessage(data.error || 'Failed to read file', readRes.status, 'duplicate', sourcePath.split('/').pop() || sourcePath));
+				return;
+			}
+			const { content } = await readRes.json();
+
+			// Generate copy name: "file (copy).ext", "file (copy 2).ext", etc.
+			const fileName = sourcePath.split('/').pop() || sourcePath;
+			const parentPath = sourcePath.includes('/') ? sourcePath.substring(0, sourcePath.lastIndexOf('/')) : '';
+			const dotIndex = fileName.lastIndexOf('.');
+			const baseName = dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName;
+			const ext = dotIndex > 0 ? fileName.substring(dotIndex) : '';
+
+			let copyName = `${baseName} (copy)${ext}`;
+			let attempt = 2;
+
+			// Try creating with incrementing suffix until one works
+			while (true) {
+				const createRes = await fetch(
+					`/api/files/content?project=${encodeURIComponent(project)}&path=${encodeURIComponent(parentPath)}&name=${encodeURIComponent(copyName)}&type=file`,
+					{
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ content })
+					}
+				);
+
+				if (createRes.ok) {
+					// Refresh parent folder to show the new file
+					if (!parentPath) {
+						await loadRoot();
+					} else if (loadedFolders.has(parentPath)) {
+						const entries = await fetchDirectory(parentPath);
+						const newLoaded = new Map(loadedFolders);
+						newLoaded.set(parentPath, entries);
+						loadedFolders = newLoaded;
+					}
+					// Select the new file
+					const newPath = parentPath ? `${parentPath}/${copyName}` : copyName;
+					onFileSelect(newPath);
+					if (onSuccess) onSuccess(`Created "${copyName}"`);
+					return;
+				}
+
+				const data = await createRes.json();
+				if (createRes.status === 409 && attempt <= 20) {
+					// Name conflict — try next number
+					copyName = `${baseName} (copy ${attempt})${ext}`;
+					attempt++;
+					continue;
+				}
+
+				if (onError) onError(getOperationErrorMessage(data.error || 'Failed to duplicate', createRes.status, 'duplicate', fileName));
+				return;
+			}
+		} catch (err) {
+			if (onError) onError(err instanceof Error ? err.message : 'Failed to duplicate file');
+		}
+	}
+
 	// Open create modal
 	function openCreateModal(type: 'file' | 'folder', parentPath: string) {
 		createModal = { parentPath, type };
@@ -1659,6 +1726,15 @@
 					<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
 				</svg>
 				<span>{starredFiles.has(contextMenu.entry.path) ? 'Unstar' : 'Star'}</span>
+			</button>
+		{/if}
+		{#if contextMenu.entry.type === 'file'}
+			<button class="context-menu-item" onclick={() => duplicateFile(contextMenu!.entry.path)}>
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<rect x="8" y="8" width="12" height="14" rx="2" />
+					<path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2h2" />
+				</svg>
+				<span>Duplicate</span>
 			</button>
 		{/if}
 		<button class="context-menu-item" onclick={() => { copyPathToClipboard(contextMenu!.entry.path); closeContextMenu(); }}>

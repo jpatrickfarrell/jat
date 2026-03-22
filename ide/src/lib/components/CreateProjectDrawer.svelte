@@ -18,6 +18,7 @@
 	import { isProjectDrawerOpen, closeProjectDrawer, signalProjectCreated } from '$lib/stores/drawerStore';
 	import { playSuccessChime, playErrorSound } from '$lib/utils/soundEffects';
 	import { invalidateAll, goto } from '$app/navigation';
+	import ColorSwatchPicker from '$lib/components/ui/ColorSwatchPicker.svelte';
 
 	// Props
 	interface Props {
@@ -45,6 +46,9 @@
 		projectName: string;
 		projectKey: string;
 		description: string;
+		// Step 1 (template): App idea
+		templateIdea: string;
+		templatePrdContent: string;
 		// Step 2: Dev Config (placeholder)
 		harness: string;
 		port: number;
@@ -66,6 +70,8 @@
 		projectName: '',
 		projectKey: '',
 		description: '',
+		templateIdea: '',
+		templatePrdContent: '',
 		harness: 'claude-code',
 		port: 3000,
 		devCommand: 'npm run dev',
@@ -325,6 +331,14 @@
 		if (wizardData.sourceType === 'local' && !wizardData.path && pathInput.trim()) {
 			wizardData.path = pathInput.trim();
 		}
+		// Sync template path and auto-derive name/key when leaving template step
+		if (wizardData.sourceType === 'template' && currentStep === 1) {
+			wizardData.path = templateTargetPath.trim();
+			if (!wizardData.projectName) {
+				const parts = templateTargetPath.replace(/\/+$/, '').split('/');
+				wizardData.projectName = parts[parts.length - 1] || '';
+			}
+		}
 		goToStep(currentStep + 1);
 	}
 
@@ -401,12 +415,17 @@
 				if (wizardData.sourceType === 'git') {
 					return cloneSuccess && wizardData.path.length > 0;
 				}
+				// For template: need an idea/PRD and a target path
+				if (wizardData.sourceType === 'template') {
+					return (wizardData.templateIdea.trim().length > 10 || wizardData.templatePrdContent.trim().length > 10)
+						&& templateTargetPath.trim().length > 0;
+				}
 				return wizardData.projectName.trim().length > 0 && wizardData.projectKey.trim().length > 0;
 			case 2: {
 				const p = wizardData.port;
 				const portValid = p >= 1024 && p <= 65535;
-				// For git source, step 2 also includes basics fields
-				if (wizardData.sourceType === 'git') {
+				// For git/template source, step 2 also includes basics fields
+				if (wizardData.sourceType === 'git' || wizardData.sourceType === 'template') {
 					return portValid && wizardData.projectName.trim().length > 0 && wizardData.projectKey.trim().length > 0;
 				}
 				return portValid;
@@ -438,6 +457,30 @@
 	let isCloning = $state(false);
 	let cloneError = $state<string | null>(null);
 	let cloneSuccess = $state(false);
+
+	// ─── Template Scaffold state (Step 1 when sourceType='template') ──
+	let isScaffolding = $state(false);
+	let scaffoldError = $state<string | null>(null);
+	let scaffoldSuccess = $state(false);
+	let templateTargetPath = $state('');
+	let templatePathManuallyEdited = $state(false);
+
+	// Auto-derive template target path from idea
+	function deriveTemplatePathFromIdea(idea: string): string {
+		const words = idea
+			.toLowerCase()
+			.replace(/[^a-z0-9\s]/g, '')
+			.split(/\s+/)
+			.filter((w: string) => w.length > 1 && !['a', 'an', 'the', 'for', 'and', 'or', 'with', 'that', 'this', 'from'].includes(w))
+			.slice(0, 3);
+		return `~/code/${words.join('-') || 'new-project'}`;
+	}
+
+	$effect(() => {
+		if (wizardData.sourceType === 'template' && wizardData.templateIdea && !templatePathManuallyEdited) {
+			templateTargetPath = deriveTemplatePathFromIdea(wizardData.templateIdea);
+		}
+	});
 
 	// Auto-focus when drawer opens
 	$effect(() => {
@@ -817,14 +860,24 @@
 
 	function buildCreationSteps(): CreationStep[] {
 		const steps: CreationStep[] = [];
-		if (wizardData.sourceType === 'git') {
-			steps.push({ label: 'Cloned repository', status: 'done' });
-		} else if (wizardData.sourceType === 'local') {
-			steps.push({ label: 'Created directory (if needed)', status: 'pending' });
+		if (wizardData.sourceType === 'template') {
+			steps.push({ label: 'Copied JST template', status: 'pending' });
+			steps.push({ label: 'Initialized git repository', status: 'pending' });
+			steps.push({ label: 'Updated project config', status: 'pending' });
+			steps.push({ label: 'Installed dependencies', status: 'pending' });
+			steps.push({ label: 'Stored app idea', status: 'pending' });
+			steps.push({ label: 'Initialized JAT Tasks', status: 'pending' });
+			steps.push({ label: 'Added to projects.json', status: 'pending' });
+		} else {
+			if (wizardData.sourceType === 'git') {
+				steps.push({ label: 'Cloned repository', status: 'done' });
+			} else if (wizardData.sourceType === 'local') {
+				steps.push({ label: 'Created directory (if needed)', status: 'pending' });
+			}
+			steps.push({ label: 'Initialized git (if needed)', status: 'pending' });
+			steps.push({ label: 'Initialized JAT Tasks', status: 'pending' });
+			steps.push({ label: 'Added to projects.json', status: 'pending' });
 		}
-		steps.push({ label: 'Initialized git (if needed)', status: 'pending' });
-		steps.push({ label: 'Initialized JAT Tasks', status: 'pending' });
-		steps.push({ label: 'Added to projects.json', status: 'pending' });
 		if (wizardData.activeColor) {
 			steps.push({ label: 'Configured project colors', status: 'pending' });
 		}
@@ -837,9 +890,10 @@
 	async function handleSubmit(e?: Event) {
 		e?.preventDefault();
 
-		const path = wizardData.path || pathInput.trim();
+		const isTemplate = wizardData.sourceType === 'template';
+		const path = isTemplate ? templateTargetPath.trim() : (wizardData.path || pathInput.trim());
 		if (!path) {
-			submitError = 'Please enter a path or select a directory';
+			submitError = isTemplate ? 'Please specify a target path' : 'Please enter a path or select a directory';
 			return;
 		}
 
@@ -876,8 +930,45 @@
 		}, 400);
 
 		try {
+			let scaffoldPath = path;
+
+			// Template flow: scaffold first, then init
+			if (isTemplate) {
+				const scaffoldBody = {
+					idea: wizardData.templateIdea || undefined,
+					prdContent: wizardData.templatePrdContent || undefined,
+					targetPath: path,
+					projectName: wizardData.projectName || undefined,
+				};
+
+				const scaffoldResponse = await fetch('/api/projects/scaffold', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(scaffoldBody)
+				});
+
+				const scaffoldData = await scaffoldResponse.json();
+
+				if (!scaffoldResponse.ok || scaffoldData.error) {
+					throw new Error(scaffoldData.message || 'Failed to scaffold project');
+				}
+
+				scaffoldPath = scaffoldData.path;
+				wizardData.path = scaffoldPath;
+
+				// Auto-fill name if not set
+				if (!wizardData.projectName && scaffoldData.projectName) {
+					wizardData.projectName = scaffoldData.projectName;
+				}
+
+				// Use idea as description if no description set
+				if (!wizardData.description && wizardData.templateIdea) {
+					wizardData.description = wizardData.templateIdea.slice(0, 300);
+				}
+			}
+
 			const body: Record<string, any> = {
-				path,
+				path: scaffoldPath,
 				name: wizardData.projectName || undefined,
 				prefix: wizardData.projectKey || undefined,
 				description: wizardData.description || undefined,
@@ -973,6 +1064,8 @@
 			projectName: '',
 			projectKey: '',
 			description: '',
+			templateIdea: '',
+			templatePrdContent: '',
 			harness: 'claude-code',
 			port: 3000,
 			devCommand: 'npm run dev',
@@ -1010,6 +1103,11 @@
 		isCloning = false;
 		cloneError = null;
 		cloneSuccess = false;
+		isScaffolding = false;
+		scaffoldError = null;
+		scaffoldSuccess = false;
+		templateTargetPath = '';
+		templatePathManuallyEdited = false;
 		repoMeta = null;
 		selectedStarterTasks = new Set();
 		starterTasksInitialized = false;
@@ -1365,8 +1463,102 @@
 									</div>
 								{/if}
 							</div>
+						{:else if wizardData.sourceType === 'template'}
+							<!-- Template scaffold sub-step -->
+							<div class="p-6 flex flex-col gap-5">
+								<div>
+									<h3 class="text-base font-semibold font-mono" style="color: oklch(0.80 0.02 250);">
+										Describe Your App
+									</h3>
+									<p class="text-sm mt-1" style="color: oklch(0.50 0.02 250);">
+										Tell us what you want to build. We'll scaffold it from the JST SaaS template.
+									</p>
+								</div>
+
+								<!-- App Idea Textarea -->
+								<div class="flex flex-col gap-1.5">
+									<label class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+										App Idea
+									</label>
+									<textarea
+										class="textarea textarea-bordered w-full font-mono text-sm resize-none"
+										style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250); min-height: 120px;"
+										placeholder="Describe your app idea... e.g., A booking platform for dog groomers with Stripe payments and email notifications"
+										bind:value={wizardData.templateIdea}
+										rows="5"
+									></textarea>
+									<p class="text-xs" style="color: oklch(0.45 0.02 250);">
+										Or paste a PRD / requirements document below instead
+									</p>
+								</div>
+
+								<!-- PRD Content (collapsible) -->
+								{#if !wizardData.templateIdea.trim()}
+									<div class="flex flex-col gap-1.5">
+										<label class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+											PRD / Requirements <span style="color: oklch(0.40 0.02 250);">(alternative to idea)</span>
+										</label>
+										<textarea
+											class="textarea textarea-bordered w-full font-mono text-sm resize-none"
+											style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250); min-height: 160px;"
+											placeholder="Paste your PRD, spec, or requirements document here..."
+											bind:value={wizardData.templatePrdContent}
+											rows="7"
+										></textarea>
+									</div>
+								{/if}
+
+								<!-- Template Info -->
+								<div
+									class="rounded-lg p-3"
+									style="background: oklch(0.20 0.03 300 / 0.15); border: 1px solid oklch(0.35 0.10 300 / 0.3);"
+								>
+									<p class="text-xs font-semibold font-mono mb-2" style="color: oklch(0.70 0.10 300);">
+										JST Template includes:
+									</p>
+									<div class="grid grid-cols-2 gap-x-4 gap-y-1">
+										{#each [
+											'SvelteKit 5 + Tailwind + DaisyUI',
+											'Supabase auth + database',
+											'Stripe payments',
+											'Team management',
+											'Email with Resend',
+											'Feedback widget'
+										] as feature}
+											<div class="flex items-center gap-1.5">
+												<svg class="w-3 h-3 flex-shrink-0" style="color: oklch(0.65 0.15 300);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+												</svg>
+												<span class="text-[11px]" style="color: oklch(0.60 0.04 300);">{feature}</span>
+											</div>
+										{/each}
+									</div>
+								</div>
+
+								<!-- Target Path -->
+								<div class="flex flex-col gap-1.5">
+									<label class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+										Project Location
+									</label>
+									<input
+										type="text"
+										class="input input-bordered w-full font-mono text-sm"
+										placeholder="~/code/my-app"
+										bind:value={templateTargetPath}
+										oninput={() => { templatePathManuallyEdited = true; }}
+										style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
+									/>
+									<p class="text-xs" style="color: oklch(0.45 0.02 250);">
+										{#if templateTargetPath && wizardData.templateIdea}
+											Auto-derived from your idea — edit to customize
+										{:else}
+											Where to create the project
+										{/if}
+									</p>
+								</div>
+							</div>
 						{:else}
-							<!-- Basics form for local/template -->
+							<!-- Basics form for local -->
 							<div class="p-6 flex flex-col gap-5">
 								<div>
 									<h3 class="text-base font-semibold font-mono" style="color: oklch(0.80 0.02 250);">
@@ -1464,8 +1656,8 @@
 								</p>
 							</div>
 
-							<!-- For git source: show basics fields inline since step 1 was clone -->
-							{#if wizardData.sourceType === 'git'}
+							<!-- For git/template: show basics fields inline since step 1 was clone/idea -->
+							{#if wizardData.sourceType === 'git' || wizardData.sourceType === 'template'}
 								<!-- Project Name -->
 								<div class="form-control">
 									<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
@@ -1481,7 +1673,7 @@
 									/>
 									{#if wizardData.path && !nameManuallyEdited}
 										<span class="text-[11px] mt-1 font-mono" style="color: oklch(0.45 0.02 250);">
-											Auto-derived from cloned repo
+											Auto-derived from {wizardData.sourceType === 'template' ? 'project path' : 'cloned repo'}
 										</span>
 									{/if}
 								</div>
@@ -1613,68 +1805,27 @@
 								</p>
 							</div>
 
-							<!-- Active Color -->
-							<div class="form-control">
-								<label class="text-xs font-mono uppercase tracking-wider mb-2" style="color: oklch(0.60 0.02 250);">
-									Active Color
-								</label>
-								<!-- Color Swatches -->
-								<div class="flex flex-wrap gap-2 mb-3">
-									{#each COLOR_PALETTE as color}
-										<button
-											type="button"
-											class="color-swatch"
-											class:color-swatch-selected={wizardData.activeColor === color}
-											style="background: {color};"
-											title={color}
-											onclick={() => { wizardData.activeColor = color; inactiveColorManuallyEdited = false; }}
-										></button>
-									{/each}
-								</div>
-								<!-- Custom Color Input -->
-								<div class="flex items-center gap-2">
-									<input
-										type="color"
-										class="w-8 h-8 rounded cursor-pointer"
-										style="border: 1px solid oklch(0.35 0.02 250);"
-										value={wizardData.activeColor || '#5588ff'}
-										oninput={(e) => { wizardData.activeColor = (e.target as HTMLInputElement).value; inactiveColorManuallyEdited = false; }}
-									/>
-									<input
-										type="text"
-										class="input input-bordered input-sm font-mono text-xs flex-1"
-										style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250);"
-										placeholder="#5588ff"
+							<!-- Color Swatches — click to pick -->
+							<div class="flex items-center gap-6">
+								<div class="flex flex-col items-center gap-1.5">
+									<ColorSwatchPicker
 										value={wizardData.activeColor}
-										oninput={(e) => { wizardData.activeColor = (e.target as HTMLInputElement).value; inactiveColorManuallyEdited = false; }}
+										palette={COLOR_PALETTE}
+										onchange={(color) => { wizardData.activeColor = color; inactiveColorManuallyEdited = false; }}
+										label="Active"
 									/>
 								</div>
-							</div>
 
-							<!-- Inactive Color -->
-							<div class="form-control">
-								<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
-									Inactive Color
-									{#if !inactiveColorManuallyEdited}
-										<span style="color: oklch(0.40 0.02 250);">(auto-derived)</span>
-									{/if}
-								</label>
-								<div class="flex items-center gap-2">
-									<input
-										type="color"
-										class="w-8 h-8 rounded cursor-pointer"
-										style="border: 1px solid oklch(0.35 0.02 250);"
-										value={wizardData.inactiveColor || '#3366dd'}
-										oninput={(e) => { wizardData.inactiveColor = (e.target as HTMLInputElement).value; inactiveColorManuallyEdited = true; }}
-									/>
-									<input
-										type="text"
-										class="input input-bordered input-sm font-mono text-xs flex-1"
-										style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250);"
-										placeholder="#3366dd"
+								<div class="flex flex-col items-center gap-1.5">
+									<ColorSwatchPicker
 										value={wizardData.inactiveColor}
-										oninput={(e) => { wizardData.inactiveColor = (e.target as HTMLInputElement).value; inactiveColorManuallyEdited = true; }}
+										palette={COLOR_PALETTE}
+										onchange={(color) => { wizardData.inactiveColor = color; inactiveColorManuallyEdited = true; }}
+										label="Inactive"
 									/>
+									{#if !inactiveColorManuallyEdited && wizardData.inactiveColor}
+										<span class="text-[10px]" style="color: oklch(0.40 0.02 250);">auto-derived</span>
+									{/if}
 								</div>
 							</div>
 
@@ -1852,6 +2003,14 @@
 											<span class="review-key">Path</span>
 											<span class="review-value font-mono text-xs">{wizardData.path || pathInput}</span>
 										</div>
+										{#if wizardData.sourceType === 'template' && wizardData.templateIdea}
+											<div class="review-row">
+												<span class="review-key">Idea</span>
+												<span class="review-value text-xs" style="max-height: 60px; overflow: hidden;">
+													{wizardData.templateIdea.slice(0, 200)}{wizardData.templateIdea.length > 200 ? '...' : ''}
+												</span>
+											</div>
+										{/if}
 									</div>
 								</div>
 
@@ -1859,7 +2018,7 @@
 								<div class="review-section">
 									<div class="review-section-header">
 										<span class="review-section-label">Basics</span>
-										<button type="button" class="review-edit-link" onclick={() => goToStep(wizardData.sourceType === 'git' ? 2 : 1)}>Edit</button>
+										<button type="button" class="review-edit-link" onclick={() => goToStep(wizardData.sourceType === 'git' || wizardData.sourceType === 'template' ? 2 : 1)}>Edit</button>
 									</div>
 									<div class="review-section-body">
 										<div class="review-row">
@@ -2270,23 +2429,4 @@
 		word-break: break-all;
 	}
 
-	/* Color swatches */
-	.color-swatch {
-		width: 2rem;
-		height: 2rem;
-		border-radius: 0.5rem;
-		border: 2px solid oklch(0.30 0.02 250);
-		cursor: pointer;
-		transition: all 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-	}
-
-	.color-swatch:hover {
-		transform: scale(1.1);
-		border-color: oklch(0.60 0.02 250);
-	}
-
-	.color-swatch-selected {
-		border-color: oklch(0.95 0.02 250);
-		transform: scale(1.15);
-	}
 </style>

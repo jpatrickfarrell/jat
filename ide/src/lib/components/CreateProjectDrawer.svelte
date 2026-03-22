@@ -74,6 +74,126 @@
 		inactiveColor: '',
 	});
 
+	// ─── GitHub Metadata (from clone response) ────────────────────
+	interface RepoMeta {
+		description: string;
+		language: string;
+		defaultBranch: string;
+		openIssuesCount: number;
+		homepage: string;
+		topics: string[];
+	}
+	let repoMeta = $state<RepoMeta | null>(null);
+
+	// ─── Starter Task Templates ────────────────────────────────────
+
+	interface StarterTask {
+		id: string;
+		label: string;
+		description: string;
+		taskDescription: string;  // Full description sent to the agent
+		type: 'task';
+		priority: number;
+		labels: string[];
+		condition: (meta: RepoMeta | null) => boolean;
+		preChecked: (meta: RepoMeta | null) => boolean;
+		detail: (meta: RepoMeta | null) => string;  // Dynamic subtitle
+	}
+
+	const STARTER_TASKS: StarterTask[] = [
+		{
+			id: 'setup-kb',
+			label: 'Set up project knowledge bases',
+			description: 'Agent reads codebase and creates KB entries',
+			taskDescription: `Analyze the project codebase and create structured knowledge bases for agents working on this project.\n\n**Steps:**\n1. Read README.md, package.json/requirements.txt/Cargo.toml, and key config files\n2. Create a "Tech Stack" knowledge base (always-inject) with: language, framework, dependencies, build tools, testing setup\n3. Create an "Architecture" knowledge base with: directory structure, key modules, data flow, API patterns\n4. Create a "Development" knowledge base with: setup instructions, environment variables, common commands, gotchas\n5. If there's a CLAUDE.md or AGENTS.md, incorporate its contents\n\nUse the IDE's knowledge base API (POST /api/bases) to create each base.`,
+			type: 'task',
+			priority: 1,
+			labels: ['onboarding', 'knowledge-base'],
+			condition: () => true,
+			preChecked: () => true,
+			detail: () => 'Creates Tech Stack, Architecture, and Development knowledge bases',
+		},
+		{
+			id: 'verify-dev',
+			label: 'Verify dev environment',
+			description: 'Install deps, run server, confirm everything works',
+			taskDescription: `Verify the development environment is fully working.\n\n**Steps:**\n1. Install dependencies (npm install / pip install / cargo build)\n2. Run the dev server and confirm it starts without errors\n3. Run the test suite (if any) and note pass/fail counts\n4. Check for any missing environment variables or config\n5. Document any setup issues or gotchas found\n\nUpdate the task with findings. If there are issues, create follow-up tasks.`,
+			type: 'task',
+			priority: 2,
+			labels: ['onboarding', 'dev-environment'],
+			condition: () => true,
+			preChecked: () => true,
+			detail: () => 'Installs deps, runs server, runs tests',
+		},
+		{
+			id: 'import-issues',
+			label: 'Import GitHub issues as tasks',
+			description: 'Fetch open issues and create JAT tasks',
+			taskDescription: `Import open GitHub issues into JAT Tasks.\n\n**Steps:**\n1. Use the GitHub API to fetch all open issues from this repository\n2. For each issue, create a JAT task with:\n   - Title from issue title\n   - Description from issue body\n   - Labels mapped from GitHub labels\n   - Priority mapped from labels (bug → P1, enhancement → P2, etc.)\n3. Skip pull requests (only import issues)\n4. Add a comment on each task noting the original GitHub issue URL\n\nReport how many issues were imported.`,
+			type: 'task',
+			priority: 2,
+			labels: ['onboarding', 'github'],
+			condition: (meta) => (meta?.openIssuesCount ?? 0) > 0,
+			preChecked: (meta) => (meta?.openIssuesCount ?? 0) > 0,
+			detail: (meta) => `${meta?.openIssuesCount ?? 0} open issues found`,
+		},
+		{
+			id: 'scrape-website',
+			label: 'Scrape website for branding context',
+			description: 'Extract colors, fonts, and copy from project website',
+			taskDescription: `Visit the project's website and extract branding information for agents.\n\n**Steps:**\n1. Navigate to the project homepage using browser automation tools\n2. Take screenshots of key pages (home, about, features)\n3. Extract: primary/secondary colors, fonts, logo, tagline, key copy\n4. Create a "Branding" knowledge base with the extracted information\n5. If the site has a docs section, note the URL structure for future reference\n\nStore findings in a knowledge base so agents can maintain brand consistency.`,
+			type: 'task',
+			priority: 3,
+			labels: ['onboarding', 'branding'],
+			condition: (meta) => !!(meta?.homepage),
+			preChecked: (meta) => !!(meta?.homepage),
+			detail: (meta) => meta?.homepage || '',
+		},
+		{
+			id: 'analyze-todos',
+			label: 'Analyze codebase for task backlog',
+			description: 'Find TODOs, FIXMEs, and missing tests',
+			taskDescription: `Scan the codebase for actionable items and create a task backlog.\n\n**Steps:**\n1. Search for TODO, FIXME, HACK, XXX comments across the codebase\n2. Identify files/modules with no test coverage\n3. Look for deprecated dependencies or outdated patterns\n4. Create a JAT task for each significant finding with:\n   - Clear title describing the work needed\n   - File path and line number in description\n   - Appropriate priority (FIXME → P1, TODO → P2, nice-to-have → P3)\n5. Group related items into a single task where appropriate\n\nReport summary of findings.`,
+			type: 'task',
+			priority: 3,
+			labels: ['onboarding', 'codebase-analysis'],
+			condition: () => true,
+			preChecked: () => false,
+			detail: () => 'Finds TODOs, FIXMEs, missing tests',
+		},
+		{
+			id: 'security-audit',
+			label: 'Security audit',
+			description: 'Check deps, secrets, vulnerabilities',
+			taskDescription: `Perform a security audit of the project.\n\n**Steps:**\n1. Run dependency vulnerability check (npm audit / pip-audit / cargo audit)\n2. Scan for hardcoded secrets, API keys, or credentials in the codebase\n3. Check .gitignore for sensitive file patterns (.env, credentials, keys)\n4. Review authentication and authorization patterns if present\n5. Check for common web vulnerabilities (XSS, injection, CSRF) if applicable\n6. Create tasks for any findings, prioritized by severity\n\nReport summary with severity levels.`,
+			type: 'task',
+			priority: 3,
+			labels: ['onboarding', 'security'],
+			condition: () => true,
+			preChecked: () => false,
+			detail: () => 'Checks deps, secrets, vulnerabilities',
+		},
+	];
+
+	// Track which starter tasks the user has selected
+	let selectedStarterTasks = $state<Set<string>>(new Set());
+
+	// Initialize starter task selections based on conditions and pre-check logic
+	function initStarterTaskSelections() {
+		const selected = new Set<string>();
+		for (const task of STARTER_TASKS) {
+			if (task.condition(repoMeta) && task.preChecked(repoMeta)) {
+				selected.add(task.id);
+			}
+		}
+		selectedStarterTasks = selected;
+	}
+
+	// Available starter tasks (filtered by condition)
+	const availableStarterTasks = $derived(
+		STARTER_TASKS.filter(t => t.condition(repoMeta))
+	);
+
 	// ─── Manual Override Tracking ──────────────────────────────────
 	// Once a user manually edits a derived field, stop auto-deriving it
 	let nameManuallyEdited = $state(false);
@@ -168,6 +288,15 @@
 	$effect(() => {
 		if (currentStep === 3 && !wizardData.activeColor) {
 			wizardData.activeColor = suggestedColor;
+		}
+	});
+
+	// Initialize starter task selections when entering review step (first time only)
+	let starterTasksInitialized = $state(false);
+	$effect(() => {
+		if (currentStep === 4 && !starterTasksInitialized) {
+			starterTasksInitialized = true;
+			initStarterTaskSelections();
 		}
 	});
 
@@ -641,6 +770,35 @@
 			// Success — update wizard data and advance
 			cloneSuccess = true;
 			wizardData.path = data.path;
+
+			// Store GitHub metadata and auto-fill fields
+			if (data.repoMeta) {
+				repoMeta = data.repoMeta;
+				initStarterTaskSelections();
+
+				if (data.repoMeta.description && !wizardData.description) {
+					wizardData.description = data.repoMeta.description;
+				}
+				if (data.repoMeta.language && wizardData.devCommand === 'npm run dev') {
+					const langCommands: Record<string, string> = {
+						'TypeScript': 'npm run dev',
+						'JavaScript': 'npm run dev',
+						'Python': 'python manage.py runserver',
+						'Rust': 'cargo run',
+						'Go': 'go run .',
+						'Ruby': 'bin/rails server',
+						'PHP': 'php artisan serve',
+						'Java': './gradlew bootRun',
+						'Kotlin': './gradlew bootRun',
+						'Elixir': 'mix phx.server',
+						'Dart': 'flutter run',
+						'Swift': 'swift run',
+					};
+					const suggested = langCommands[data.repoMeta.language];
+					if (suggested) wizardData.devCommand = suggested;
+				}
+			}
+
 			playSuccessChime();
 
 			// Auto-advance to next step after brief delay
@@ -669,6 +827,9 @@
 		steps.push({ label: 'Added to projects.json', status: 'pending' });
 		if (wizardData.activeColor) {
 			steps.push({ label: 'Configured project colors', status: 'pending' });
+		}
+		if (selectedStarterTasks.size > 0) {
+			steps.push({ label: `Created ${selectedStarterTasks.size} starter task${selectedStarterTasks.size === 1 ? '' : 's'}`, status: 'pending' });
 		}
 		return steps;
 	}
@@ -744,9 +905,38 @@
 			clearInterval(stepInterval);
 			creationProgress = creationProgress.map(s => ({ ...s, status: 'done' as const }));
 
-			successMessage = data.message || `Successfully added ${data.project?.name}`;
 			createdProjectKey = data.project?.prefix || data.project?.name?.toLowerCase() || null;
-			creationSteps = data.steps || [];
+
+			// Create starter tasks (best-effort, don't fail the whole flow)
+			if (selectedStarterTasks.size > 0 && createdProjectKey) {
+				const tasksToCreate = STARTER_TASKS.filter(t => selectedStarterTasks.has(t.id));
+				const taskResults = await Promise.allSettled(
+					tasksToCreate.map(task =>
+						fetch('/api/tasks', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								title: task.label,
+								description: task.taskDescription,
+								type: task.type,
+								priority: task.priority,
+								labels: task.labels,
+								project: createdProjectKey,
+							})
+						})
+					)
+				);
+				const created = taskResults.filter(r => r.status === 'fulfilled').length;
+				if (created > 0) {
+					creationSteps = [...(data.steps || []), `Created ${created} starter task${created === 1 ? '' : 's'}`];
+				} else {
+					creationSteps = data.steps || [];
+				}
+			} else {
+				creationSteps = data.steps || [];
+			}
+
+			successMessage = data.message || `Successfully added ${data.project?.name}`;
 			playSuccessChime();
 
 			await invalidateAll();
@@ -820,6 +1010,9 @@
 		isCloning = false;
 		cloneError = null;
 		cloneSuccess = false;
+		repoMeta = null;
+		selectedStarterTasks = new Set();
+		starterTasksInitialized = false;
 	}
 
 	function handleClose() {
@@ -1110,7 +1303,7 @@
 									<input
 										type="text"
 										class="input input-bordered w-full font-mono text-sm"
-										placeholder="main"
+										placeholder="master"
 										bind:value={gitBranch}
 										disabled={isCloning || cloneSuccess}
 										style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
@@ -1569,10 +1762,7 @@
 												const project = createdProjectKey;
 												resetForm();
 												closeProjectDrawer();
-												if (project) {
-													localStorage.setItem('tasks3-selected-project', project);
-												}
-												goto('/tasks');
+												goto(project ? `/tasks?project=${encodeURIComponent(project)}` : '/tasks');
 											}}
 										>
 											<svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -1745,6 +1935,84 @@
 											</div>
 										</div>
 									</div>
+								</div>
+							{/if}
+
+							<!-- Starter Tasks Section -->
+							{#if availableStarterTasks.length > 0}
+								<div class="review-section">
+									<div class="review-section-header">
+										<span class="review-section-label">Starter Tasks</span>
+										<button
+											type="button"
+											class="review-edit-link"
+											onclick={() => {
+												if (selectedStarterTasks.size === availableStarterTasks.length) {
+													selectedStarterTasks = new Set();
+												} else {
+													selectedStarterTasks = new Set(availableStarterTasks.map(t => t.id));
+												}
+											}}
+										>
+											{selectedStarterTasks.size === availableStarterTasks.length ? 'Deselect all' : 'Select all'}
+										</button>
+									</div>
+									<div class="review-section-body" style="padding: 0;">
+										{#each availableStarterTasks as task}
+											<label
+												class="flex items-start gap-3 px-3 py-2.5 cursor-pointer transition-colors"
+												style="border-bottom: 1px solid oklch(0.25 0.02 250); {selectedStarterTasks.has(task.id) ? 'background: oklch(0.22 0.03 240 / 0.3);' : ''}"
+											>
+												<input
+													type="checkbox"
+													class="checkbox checkbox-sm mt-0.5"
+													checked={selectedStarterTasks.has(task.id)}
+													onchange={() => {
+														const next = new Set(selectedStarterTasks);
+														if (next.has(task.id)) {
+															next.delete(task.id);
+														} else {
+															next.add(task.id);
+														}
+														selectedStarterTasks = next;
+													}}
+													style="border-color: oklch(0.40 0.02 250); {selectedStarterTasks.has(task.id) ? 'background: oklch(0.50 0.18 240); border-color: oklch(0.60 0.18 240);' : ''}"
+												/>
+												<div class="flex-1 min-w-0">
+													<div class="text-sm font-mono" style="color: {selectedStarterTasks.has(task.id) ? 'oklch(0.85 0.02 250)' : 'oklch(0.65 0.02 250)'};">
+														{task.label}
+													</div>
+													<div class="text-xs mt-0.5" style="color: oklch(0.50 0.02 250);">
+														{task.detail(repoMeta)}
+													</div>
+												</div>
+												<div class="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+													{#each task.labels.slice(1) as label}
+														<span
+															class="text-[10px] font-mono px-1.5 py-0.5 rounded"
+															style="background: oklch(0.25 0.04 250); color: oklch(0.55 0.04 250);"
+														>
+															{label}
+														</span>
+													{/each}
+													<span
+														class="text-[10px] font-mono px-1.5 py-0.5 rounded"
+														style="background: oklch(0.25 0.02 250); color: oklch(0.50 0.02 250);"
+													>
+														P{task.priority}
+													</span>
+												</div>
+											</label>
+										{/each}
+									</div>
+									{#if selectedStarterTasks.size > 0}
+										<div
+											class="px-3 py-2 text-xs font-mono"
+											style="color: oklch(0.55 0.08 240); background: oklch(0.18 0.02 240 / 0.3); border-top: 1px solid oklch(0.25 0.02 250);"
+										>
+											{selectedStarterTasks.size} task{selectedStarterTasks.size === 1 ? '' : 's'} will be created for agents to pick up
+										</div>
+									{/if}
 								</div>
 							{/if}
 

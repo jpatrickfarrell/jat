@@ -6,14 +6,14 @@
  *   { url: string, targetPath?: string, branch?: string }
  *
  * Response:
- *   { success: true, path: string, repoName: string }
+ *   { success: true, path: string, repoName: string, repoMeta: { description, language, defaultBranch } }
  *   or { error: true, message: string, type: string }
  */
 
 import { json } from '@sveltejs/kit';
 import { existsSync } from 'fs';
 import { homedir } from 'os';
-import { resolve, basename, normalize } from 'path';
+import { resolve, normalize } from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -24,7 +24,7 @@ const CLONE_TIMEOUT = 60000; // 60 seconds
 /**
  * Validate a git URL (HTTPS or SSH)
  * @param {string} url
- * @returns {{ valid: boolean, repoName: string }}
+ * @returns {{ valid: boolean, repoName: string, owner: string, host: string }}
  */
 function validateGitUrl(url) {
 	// Clean up URL: strip trailing slashes
@@ -41,15 +41,28 @@ function validateGitUrl(url) {
 
 	const valid = httpsPattern.test(cleaned) || sshPattern.test(cleaned) || gitProtocolPattern.test(cleaned);
 
-	// Extract repo name from URL
+	// Extract repo name and owner from URL
 	let repoName = '';
+	let owner = '';
+	let host = '';
 	if (valid) {
-		// Get last path segment, remove .git suffix
-		const parts = cleaned.replace(/:/, '/').split('/');
+		// Normalize SSH (git@host:owner/repo) to slash-separated for parsing
+		const normalized = cleaned.replace(/:/, '/');
+		const parts = normalized.split('/');
 		repoName = parts[parts.length - 1].replace(/\.git$/, '');
+		owner = parts[parts.length - 2] || '';
+
+		// Extract host
+		try {
+			if (cleaned.startsWith('git@')) {
+				host = cleaned.split('@')[1].split(':')[0];
+			} else {
+				host = new URL(cleaned).hostname;
+			}
+		} catch { /* ignore */ }
 	}
 
-	return { valid, repoName };
+	return { valid, repoName, owner, host };
 }
 
 /**
@@ -90,7 +103,7 @@ export async function POST({ request }) {
 		}
 
 		const url = body.url.trim();
-		const { valid, repoName } = validateGitUrl(url);
+		const { valid, repoName, owner, host } = validateGitUrl(url);
 
 		if (!valid) {
 			return json(
@@ -152,10 +165,31 @@ export async function POST({ request }) {
 			);
 		}
 
+		// Fetch GitHub metadata (best-effort, doesn't block on failure)
+		let repoMeta = { description: '', language: '', defaultBranch: '', openIssuesCount: 0, homepage: '', topics: [] };
+		if (host === 'github.com' && owner && repoName) {
+			try {
+				const ghResponse = await fetch(`https://api.github.com/repos/${owner}/${repoName}`, {
+					headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'jat-ide' },
+					signal: AbortSignal.timeout(5000)
+				});
+				if (ghResponse.ok) {
+					const ghData = await ghResponse.json();
+					repoMeta.description = ghData.description || '';
+					repoMeta.language = ghData.language || '';
+					repoMeta.defaultBranch = ghData.default_branch || '';
+					repoMeta.openIssuesCount = ghData.open_issues_count || 0;
+					repoMeta.homepage = ghData.homepage || '';
+					repoMeta.topics = ghData.topics || [];
+				}
+			} catch { /* best-effort */ }
+		}
+
 		return json({
 			success: true,
 			path: absolutePath,
-			repoName
+			repoName,
+			repoMeta
 		}, { status: 200 });
 
 	} catch (error) {

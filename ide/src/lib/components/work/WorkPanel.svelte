@@ -50,6 +50,8 @@
 		contextPercent?: number | null;
 		created: string;
 		attached: boolean;
+		/** Session location - 'local' or 'remote' (VPS) */
+		location?: 'local' | 'remote';
 		/** Real-time state from WS (working, needs-input, ready-for-review, etc.) */
 		_sseState?: string;
 		/** Timestamp when WS state was last updated */

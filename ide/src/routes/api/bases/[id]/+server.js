@@ -1,7 +1,7 @@
 /**
- * Single Base API
- * GET    /api/bases/[id]?project=X  - Get single base
- * PUT    /api/bases/[id]            - Update base
+ * Single Base API (Unified)
+ * GET    /api/bases/[id]?project=X  - Get single base (with blocks)
+ * PUT    /api/bases/[id]            - Update base (name, blocks, description, always_inject, etc.)
  * DELETE /api/bases/[id]?project=X  - Delete base
  */
 import { json } from '@sveltejs/kit';
@@ -46,6 +46,18 @@ export async function PUT({ params, request }) {
 			return json({ error: 'Missing required field: project' }, { status: 400 });
 		}
 
+		// Validate blocks structure if provided
+		if (updates.blocks !== undefined) {
+			if (!Array.isArray(updates.blocks)) {
+				return json({ error: 'blocks must be an array' }, { status: 400 });
+			}
+			for (const block of updates.blocks) {
+				if (!block.type || !block.id) {
+					return json({ error: 'Each block must have a type and id' }, { status: 400 });
+				}
+			}
+		}
+
 		const { path, exists } = await getProjectPath(project);
 		if (!exists) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
@@ -56,9 +68,6 @@ export async function PUT({ params, request }) {
 	} catch (error) {
 		if (error.message.includes('not found')) {
 			return json({ error: error.message }, { status: 404 });
-		}
-		if (error.message.includes('Source type')) {
-			return json({ error: error.message }, { status: 400 });
 		}
 		return json({ error: error.message }, { status: 500 });
 	}

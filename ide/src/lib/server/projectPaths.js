@@ -161,7 +161,12 @@ export async function getJatDefaults() {
 		agent_stagger: 15,
 		claude_startup_timeout: 20,
 		auto_proceed_delay: 2,
-		skip_permissions: false
+		skip_permissions: false,
+		max_local_agents: 0,
+		vps_host: '',
+		vps_user: '',
+		vps_max_agents: 8,
+		vps_project_path: '~/code'
 	};
 
 	// Override with config values if present
@@ -176,6 +181,11 @@ export async function getJatDefaults() {
 		if (typeof configDefaults.claude_startup_timeout === 'number') defaults.claude_startup_timeout = configDefaults.claude_startup_timeout;
 		if (typeof configDefaults.auto_proceed_delay === 'number') defaults.auto_proceed_delay = configDefaults.auto_proceed_delay;
 		if (typeof configDefaults.skip_permissions === 'boolean') defaults.skip_permissions = configDefaults.skip_permissions;
+		if (typeof configDefaults.max_local_agents === 'number') defaults.max_local_agents = configDefaults.max_local_agents;
+		if (configDefaults.vps_host) defaults.vps_host = configDefaults.vps_host;
+		if (configDefaults.vps_user) defaults.vps_user = configDefaults.vps_user;
+		if (typeof configDefaults.vps_max_agents === 'number') defaults.vps_max_agents = configDefaults.vps_max_agents;
+		if (configDefaults.vps_project_path) defaults.vps_project_path = configDefaults.vps_project_path;
 	}
 
 	return defaults;

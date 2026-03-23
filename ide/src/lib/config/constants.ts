@@ -239,6 +239,16 @@ export const JAT_DEFAULTS = {
 	auto_pause_idle_timeout: 300,
 	/** Auto-start ingest daemon when launching IDE */
 	ingest_autostart: false,
+	/** Maximum local agent sessions before overflow to VPS. 0 = auto-detect from CPU cores. */
+	max_local_agents: 0,
+	/** VPS overflow configuration. When local slots are full, spawn agents here via SSH. */
+	vps_host: '',
+	/** SSH user for VPS connection */
+	vps_user: '',
+	/** Maximum concurrent agents on the VPS */
+	vps_max_agents: 8,
+	/** Project base path on VPS (where repos are cloned) */
+	vps_project_path: '~/code',
 	/**
 	 * Directories to ignore when detecting file tree changes.
 	 * Changes in these directories won't trigger the "changes detected" badge.

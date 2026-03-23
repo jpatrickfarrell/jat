@@ -51,7 +51,7 @@
 		if (needsServer && project && pageId) {
 			// Server-side evaluation via API
 			try {
-				const res = await fetch(`/api/canvas/${pageId}/evaluate`, {
+				const res = await fetch(`/api/bases/${pageId}/evaluate`, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({ project, controlValues: cv }),

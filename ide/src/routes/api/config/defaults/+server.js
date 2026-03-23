@@ -95,7 +95,7 @@ export async function PUT({ request }) {
 		}
 
 		// Validate numeric fields
-		const numericFields = ['agent_stagger', 'claude_startup_timeout', 'projects_session_height', 'projects_task_height', 'auto_kill_delay', 'max_sessions', 'default_agent_count', 'auto_pause_idle_timeout'];
+		const numericFields = ['agent_stagger', 'claude_startup_timeout', 'projects_session_height', 'projects_task_height', 'auto_kill_delay', 'max_sessions', 'default_agent_count', 'auto_pause_idle_timeout', 'max_local_agents', 'vps_max_agents'];
 		for (const field of numericFields) {
 			if (field in newDefaults && typeof newDefaults[field] !== 'number') {
 				return json({

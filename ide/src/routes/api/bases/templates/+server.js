@@ -1,12 +1,12 @@
 /**
- * Canvas Templates API
- * GET  /api/canvas/templates           - List all available templates
- * POST /api/canvas/templates           - Create page from template
- * POST /api/canvas/templates?seed=true - Seed all templates for project
+ * Base Templates API
+ * GET  /api/bases/templates           - List all available templates
+ * POST /api/bases/templates           - Create base from template
+ * POST /api/bases/templates?seed=true - Seed all templates for project
  */
 import { json } from '@sveltejs/kit';
 import { getTemplates, instantiateTemplate, seedCanvasTemplates } from '$lib/server/jat-canvas.js';
-import { createCanvasPage } from '$lib/server/jat-canvas.js';
+import { createBase } from '$lib/server/jat-bases.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 
 /** @type {import('./$types').RequestHandler} */
@@ -52,13 +52,13 @@ export async function POST({ request, url }) {
 			return json({ error: `Template not found: ${templateId}` }, { status: 404 });
 		}
 
-		const page = createCanvasPage(path, {
+		const base = createBase(path, {
 			name: instance.name,
 			project,
 			blocks: instance.blocks,
 		});
 
-		return json({ success: true, page }, { status: 201 });
+		return json({ success: true, base }, { status: 201 });
 	} catch (error) {
 		return json({ error: error.message }, { status: 500 });
 	}

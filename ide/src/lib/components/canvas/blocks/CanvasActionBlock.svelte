@@ -72,7 +72,7 @@
 		try {
 			const resolvedConfig = resolveConfig(block.actionConfig);
 
-			const response = await fetch(`/api/canvas/${pageId}/action`, {
+			const response = await fetch(`/api/bases/${pageId}/action`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({

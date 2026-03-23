@@ -2816,6 +2816,274 @@ print(json.dumps({
   (( checks_failed == 0 ))
 }
 
+# ---------------------------------------------------------------------------
+# SSH — Quick VPS connect
+# ---------------------------------------------------------------------------
+
+_read_jat_config() {
+  local config_file="${HOME}/.config/jat/projects.json"
+  [[ -f "$config_file" ]] || die "JAT config not found: $config_file"
+  cat "$config_file"
+}
+
+cmd_ssh() {
+  local agent_name="" list_mode=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --list|-l) list_mode=true; shift ;;
+      --help|-h)
+        cat <<'SSH_HELP'
+jt ssh - Quick VPS connect
+
+Usage:
+  jt ssh                    Connect to configured VPS
+  jt ssh <agent-name>       Attach to remote agent's tmux session
+  jt ssh --list             List tmux sessions on VPS
+
+Config (in ~/.config/jat/projects.json defaults):
+  vps_host    VPS IP or hostname (e.g. Tailscale IP)
+  vps_user    SSH username
+SSH_HELP
+        return 0
+        ;;
+      *) agent_name="$1"; shift ;;
+    esac
+  done
+
+  local config
+  config="$(_read_jat_config)"
+
+  local vps_host vps_user
+  vps_host="$(echo "$config" | jq -r '.defaults.vps_host // empty')"
+  vps_user="$(echo "$config" | jq -r '.defaults.vps_user // empty')"
+
+  [[ -n "$vps_host" ]] || die "No vps_host configured. Set defaults.vps_host in ~/.config/jat/projects.json"
+  [[ -n "$vps_user" ]] || die "No vps_user configured. Set defaults.vps_user in ~/.config/jat/projects.json"
+
+  local ssh_target="${vps_user}@${vps_host}"
+
+  if $list_mode; then
+    echo "Tmux sessions on ${ssh_target}:"
+    ssh -t "$ssh_target" "tmux list-sessions 2>/dev/null || echo '  (no sessions)'"
+    return 0
+  fi
+
+  if [[ -n "$agent_name" ]]; then
+    local tmux_session="jat-${agent_name}"
+    echo "Attaching to ${tmux_session} on ${ssh_target}..."
+    exec ssh -t "$ssh_target" "tmux attach-session -t ${tmux_session}"
+  else
+    echo "Connecting to VPS ${ssh_target}..."
+    exec ssh "$ssh_target"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Agents — List active agents with real-time state
+# ---------------------------------------------------------------------------
+
+cmd_agents() {
+  local json_mode=false
+  local project_filter=""
+  local all_mode=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json)    json_mode=true; shift ;;
+      --project) project_filter="$2"; shift 2 ;;
+      --all)     all_mode=true; shift ;;
+      --help|-h) cat <<'EOF'
+jt agents - List active agents
+
+Usage: jt agents [--json] [--project NAME] [--all]
+
+Options:
+  --json       Output as JSON array
+  --project X  Filter by project name
+  --all        Include inactive agents (no live tmux session)
+
+Sources:
+  tmux sessions    Which agents are alive (jat-* sessions)
+  Signal files     Real-time state: working, review, needs_input, etc.
+  tasks.db         Assigned task, reserved files
+  agent-mail.db    Program, model, registration info
+EOF
+        return 0 ;;
+      *) die "Unknown option: $1" ;;
+    esac
+  done
+
+  local agent_mail_db="${AGENT_MAIL_DB:-$HOME/.agent-mail.db}"
+
+  # Collect live tmux sessions (jat-AgentName pattern)
+  # Agent names are PascalCase (start with uppercase), skip jat-app-* etc.
+  local -a live_sessions=()
+  while IFS= read -r session; do
+    local agent_name="${session#jat-}"
+    if [[ "$agent_name" =~ ^[A-Z] ]]; then
+      live_sessions+=("$agent_name")
+    fi
+  done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^jat-' || true)
+
+  # If --all, also pull recently active agents from agent-mail.db
+  local -a agent_list=()
+  if $all_mode && [[ -f "$agent_mail_db" ]]; then
+    while IFS= read -r name; do
+      agent_list+=("$name")
+    done < <(sqlite3 "$agent_mail_db" "SELECT name FROM agents ORDER BY last_active_ts DESC LIMIT 50" 2>/dev/null || true)
+    # Merge live sessions not already in list
+    for name in "${live_sessions[@]}"; do
+      local found=false
+      for existing in "${agent_list[@]}"; do
+        [[ "$existing" == "$name" ]] && found=true && break
+      done
+      $found || agent_list+=("$name")
+    done
+  else
+    agent_list=("${live_sessions[@]}")
+  fi
+
+  if [[ ${#agent_list[@]} -eq 0 ]]; then
+    $json_mode && echo "[]" || echo "No active agents found."
+    return 0
+  fi
+
+  # Build JSON array from multiple data sources per agent
+  local json_out="["
+  local first=true
+
+  for agent_name in "${agent_list[@]}"; do
+    local signal_file="/tmp/jat-signal-tmux-jat-${agent_name}.json"
+
+    # Is this agent alive in tmux?
+    local alive=false
+    for s in "${live_sessions[@]}"; do
+      [[ "$s" == "$agent_name" ]] && alive=true && break
+    done
+
+    # Read signal file for real-time state
+    local state="" task_id="" task_title="" sig_project="" sig_model=""
+    local git_branch="" approach=""
+    if [[ -f "$signal_file" ]]; then
+      # Single python3 call to extract all fields at once
+      local sig_data
+      sig_data=$(python3 -c "
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        s = json.load(f)
+    d = s.get('data', {})
+    print(s.get('state', ''))
+    print(s.get('task_id', '') or d.get('taskId', ''))
+    print(d.get('taskTitle', ''))
+    print(d.get('project', ''))
+    print(d.get('model', ''))
+    print(d.get('gitBranch', ''))
+    print(d.get('approach', ''))
+except: print('\n\n\n\n\n\n')
+" "$signal_file" 2>/dev/null || printf '\n\n\n\n\n\n')
+      {
+        IFS= read -r state
+        IFS= read -r task_id
+        IFS= read -r task_title
+        IFS= read -r sig_project
+        IFS= read -r sig_model
+        IFS= read -r git_branch
+        IFS= read -r approach
+      } <<< "$sig_data"
+    fi
+
+    # Apply project filter
+    if [[ -n "$project_filter" && "$sig_project" != "$project_filter" ]]; then
+      continue
+    fi
+
+    # Read from agent-mail.db for program/model
+    local program=""
+    if [[ -f "$agent_mail_db" ]]; then
+      local am_data
+      am_data=$(sqlite3 "$agent_mail_db" "SELECT program, model FROM agents WHERE name='$(sql_escape "$agent_name")' LIMIT 1" 2>/dev/null || echo "|")
+      program="${am_data%%|*}"
+      [[ -z "$sig_model" ]] && sig_model="${am_data#*|}"
+    fi
+
+    # Read reserved files from tasks.db
+    local reserved_files=""
+    if [[ -n "$task_id" && -f "$DB" ]]; then
+      reserved_files=$(sqlite3 "$DB" "SELECT COALESCE(reserved_files,'') FROM tasks WHERE id='$(sql_escape "$task_id")'" 2>/dev/null || echo "")
+    fi
+
+    # Shorten model name for display
+    local model_short="$sig_model"
+    model_short="${model_short/claude-opus-4-6/opus}"
+    model_short="${model_short/claude-sonnet-4-6/sonnet}"
+    model_short="${model_short/claude-haiku-4-5-20251001/haiku}"
+    model_short="${model_short/claude-opus-4-5-20251101/opus}"
+    model_short="${model_short/claude-sonnet-4-5-20250514/sonnet}"
+
+    # Build JSON object
+    $first || json_out+=","
+    first=false
+    json_out+=$(python3 -c "
+import json, sys
+d = {
+    'name': sys.argv[1],
+    'alive': sys.argv[2] == 'true',
+    'state': sys.argv[3] or None,
+    'taskId': sys.argv[4] or None,
+    'taskTitle': sys.argv[5] or None,
+    'project': sys.argv[6] or None,
+    'model': sys.argv[7] or None,
+    'program': sys.argv[8] or None,
+    'gitBranch': sys.argv[9] or None,
+    'reservedFiles': sys.argv[10] or None,
+    'approach': sys.argv[11] or None,
+    'location': 'local'
+}
+print(json.dumps(d))
+" "$agent_name" "$alive" "$state" "$task_id" "$task_title" "$sig_project" "$model_short" "$program" "$git_branch" "$reserved_files" "$approach" 2>/dev/null)
+  done
+
+  json_out+="]"
+
+  if $json_mode; then
+    echo "$json_out"
+    return 0
+  fi
+
+  # Formatted table output
+  printf "\033[1m%-16s %-10s %-14s %-8s %-10s %s\033[0m\n" "AGENT" "STATE" "TASK" "MODEL" "PROJECT" "FILES"
+  printf "%-16s %-10s %-14s %-8s %-10s %s\n" "─────" "─────" "────" "─────" "───────" "─────"
+
+  echo "$json_out" | python3 -c "
+import json, sys
+agents = json.load(sys.stdin)
+# State colors (ANSI)
+colors = {
+    'working': '\033[33m',   # amber
+    'starting': '\033[36m',  # cyan
+    'review': '\033[32m',    # green
+    'needs_input': '\033[35m', # magenta
+    'idle': '\033[90m',      # gray
+    'completing': '\033[32m', # green
+    'dead': '\033[90m',      # gray
+}
+reset = '\033[0m'
+for a in agents:
+    state = a['state'] or ''
+    if not a['alive'] and state:
+        state = 'dead'
+    color = colors.get(state, '')
+    name = a['name'] or ''
+    task = a['taskId'] or ''
+    model = a['model'] or ''
+    project = a['project'] or ''
+    files = a['reservedFiles'] or ''
+    print(f'{color}{name:<16s} {state:<10s} {task:<14s} {model:<8s} {project:<10s} {files}{reset}')
+"
+}
+
 cmd_help() {
   cat <<'HELP'
 jt - JAT task CLI
@@ -2842,6 +3110,8 @@ Commands:
   dep     cycles
   data    tables | schema | query | exec | create | drop | columns
   bases   list | show | create | delete | attach | detach | render | search
+  agents  [--json] [--project X] [--all]  List active agents
+  ssh     [agent-name]         Connect to VPS or attach to remote agent session
   audit   [--json] [--fix]    Check project context injection compliance
   init    [--quiet]
 
@@ -2870,6 +3140,8 @@ case "${1:-}" in
   dep)       shift; cmd_dep "$@" ;;
   data)      shift; cmd_data "$@" ;;
   bases)     shift; cmd_bases "$@" ;;
+  agents)    shift; cmd_agents "$@" ;;
+  ssh)       shift; cmd_ssh "$@" ;;
   audit)     shift; cmd_audit "$@" ;;
   init)      shift; cmd_init "$@" ;;
   --version) echo "jt $VERSION" ;;

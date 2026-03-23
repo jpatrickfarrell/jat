@@ -45,7 +45,7 @@
 	async function loadTemplates() {
 		if (templatesLoaded) return;
 		try {
-			const res = await fetch('/api/canvas/templates');
+			const res = await fetch('/api/bases/templates');
 			if (res.ok) {
 				const data = await res.json();
 				templates = data.templates || [];

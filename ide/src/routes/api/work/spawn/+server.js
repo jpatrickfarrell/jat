@@ -1070,8 +1070,8 @@ export async function POST({ request }) {
 
 					for (const baseId of allBaseIds) {
 						try {
-							const rendered = renderBase(projectPath, baseId);
-							renderedParts.push(`<base name="${rendered.name}" type="${rendered.source_type}">\n${rendered.content}\n</base>`);
+							const rendered = await renderBase(projectPath, baseId);
+							renderedParts.push(`<base name="${rendered.name}" type="${rendered.type}">\n${rendered.content}\n</base>`);
 						} catch (err) {
 							console.warn(`[spawn] Failed to render base ${baseId}:`, err.message);
 						}

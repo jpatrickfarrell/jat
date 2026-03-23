@@ -1,11 +1,13 @@
 /**
- * Knowledge Bases API
- * GET  /api/bases?project=X[&includeGlobal=true]  - List bases
+ * Knowledge Bases API (Unified)
+ * GET  /api/bases?project=X[&includeGlobal=true]  - List all bases
  * POST /api/bases                                  - Create base
+ *
+ * All bases are canvas pages (block-based documents). The old distinction
+ * between "bases" and "canvas pages" no longer exists.
  */
 import { json } from '@sveltejs/kit';
 import { getBases, createBase, initBasesDb } from '$lib/server/jat-bases.js';
-import { listCanvasBasePages, serializeCanvasToMarkdown } from '$lib/server/jat-canvas.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join, basename, dirname } from 'path';
@@ -200,32 +202,6 @@ export async function GET({ url }) {
 			allBases = [...allBases, ...globalBases];
 		}
 
-		// Canvas bases: pages flagged as knowledge bases
-		try {
-			const canvasPages = listCanvasBasePages(path, project);
-			const canvasBases = canvasPages.map(page => {
-				const content = serializeCanvasToMarkdown(page, path);
-				return {
-					id: `_canvas_${page.id}`,
-					name: page.name,
-					description: `Canvas page — editable at /canvas?project=${project}&page=${page.id}`,
-					source_type: 'canvas',
-					content,
-					context_query: null,
-					source_config: { canvas_page_id: page.id },
-					always_inject: false,
-					token_estimate: Math.ceil(content.length / 4),
-					created_at: page.created_at,
-					updated_at: page.updated_at,
-					_canvas: true,
-					_canvasPageId: page.id,
-				};
-			});
-			allBases = [...allBases, ...canvasBases];
-		} catch {
-			// Canvas table may not exist yet — skip silently
-		}
-
 		return json({ bases: allBases });
 	} catch (error) {
 		return json({ error: error.message }, { status: 500 });
@@ -236,7 +212,7 @@ export async function GET({ url }) {
 export async function POST({ request }) {
 	try {
 		const body = await request.json();
-		const { project, name, description, source_type, content, context_query, source_config, always_inject, token_estimate } = body;
+		const { project, name, description, blocks, content, source_type, context_query, source_config, always_inject, token_estimate } = body;
 
 		if (!project) {
 			return json({ error: 'Missing required field: project' }, { status: 400 });
@@ -244,13 +220,22 @@ export async function POST({ request }) {
 		if (!name) {
 			return json({ error: 'Missing required field: name' }, { status: 400 });
 		}
-		if (!source_type) {
-			return json({ error: 'Missing required field: source_type' }, { status: 400 });
-		}
 
 		const { path, exists } = await getProjectPath(project);
 		if (!exists) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
+		}
+
+		// Validate blocks structure if provided
+		if (blocks !== undefined) {
+			if (!Array.isArray(blocks)) {
+				return json({ error: 'blocks must be an array' }, { status: 400 });
+			}
+			for (const block of blocks) {
+				if (!block.type || !block.id) {
+					return json({ error: 'Each block must have a type and id' }, { status: 400 });
+				}
+			}
 		}
 
 		// Auto-init bases tables in data.db if needed
@@ -258,9 +243,12 @@ export async function POST({ request }) {
 
 		const base = createBase(path, {
 			name,
+			project,
 			description,
-			source_type,
+			blocks,
+			// Legacy fields — createBase handles conversion to blocks
 			content,
+			source_type,
 			context_query,
 			source_config,
 			always_inject,
@@ -269,7 +257,6 @@ export async function POST({ request }) {
 
 		return json({ success: true, base }, { status: 201 });
 	} catch (error) {
-		const status = error.message.includes('Source type') ? 400 : 500;
-		return json({ error: error.message }, { status });
+		return json({ error: error.message }, { status: 500 });
 	}
 }

@@ -20,40 +20,39 @@ import { invalidateCache } from '$lib/server/cache.js';
 const execAsync = promisify(exec);
 
 /**
- * Canvas action executor endpoint.
+ * Base action executor endpoint.
  * Dispatches action requests to the appropriate executor based on actionType.
  *
- * POST /api/canvas/:pageId/action
+ * POST /api/bases/:baseId/action
  * Body: { actionType: string, actionConfig: Record<string, unknown>, project?: string }
  * Returns: { success: boolean, message?: string, data?: unknown, rowsAffected?: number }
  *
- * Data actions (jat-i1r8u): AddRow, ModifyRows, DeleteRows, RunFormula
- * JAT actions (jat-qk1n6): SpawnAgent, CreateTask, UpdateTask, RunCommand
+ * Data actions: AddRow, ModifyRows, DeleteRows, RunFormula
+ * JAT actions: SpawnAgent, CreateTask, UpdateTask, RunCommand
  */
 
 /** @type {import('./$types').RequestHandler} */
 export async function POST({ params, request, fetch }) {
 	try {
 		const { actionType, actionConfig, project } = await request.json();
-		const pageId = params.id;
+		const baseId = params.id;
 
 		if (!actionType) {
 			return json({ success: false, error: 'Missing actionType' }, { status: 400 });
 		}
 
-		// Dispatch to executor based on actionType
 		const executor = ACTION_EXECUTORS[actionType];
 		if (!executor) {
 			return json(
 				{
 					success: false,
-					error: `Unknown action type: ${actionType}. Available: ${Object.keys(ACTION_EXECUTORS).join(', ') || 'none (executors not yet registered)'}`,
+					error: `Unknown action type: ${actionType}. Available: ${Object.keys(ACTION_EXECUTORS).join(', ')}`,
 				},
 				{ status: 400 }
 			);
 		}
 
-		const result = await executor({ actionConfig, project, pageId, fetch });
+		const result = await executor({ actionConfig, project, baseId, fetch });
 		return json(result);
 	} catch (err) {
 		return json(
@@ -67,9 +66,6 @@ export async function POST({ params, request, fetch }) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Resolve project path and initialize the data DB. Returns { path } or throws.
- */
 async function resolveProject(project) {
 	if (!project) throw new Error('Missing required field: project');
 	const { path, exists } = await getProjectPath(project);
@@ -78,10 +74,6 @@ async function resolveProject(project) {
 	return path;
 }
 
-/**
- * Build a WHERE clause and params array from a filter object.
- * filter: { column: value, ... }  →  "col1 = ? AND col2 = ?"  +  [val1, val2]
- */
 function buildWhereClause(filter, validColumns) {
 	const conditions = [];
 	const params = [];
@@ -103,8 +95,7 @@ function buildWhereClause(filter, validColumns) {
 const ACTION_EXECUTORS = {};
 
 // ---------------------------------------------------------------------------
-// AddRow — Insert a new row into a data table
-// Config: { table: string, values: { col: val, ... } }
+// AddRow
 // ---------------------------------------------------------------------------
 
 ACTION_EXECUTORS['AddRow'] = async ({ actionConfig, project }) => {
@@ -119,7 +110,6 @@ ACTION_EXECUTORS['AddRow'] = async ({ actionConfig, project }) => {
 	const result = insertRow(projectPath, table, values);
 	broadcastDataChanged(table, project, 'insert');
 
-	// Fetch the newly inserted row to return it
 	let newRow = null;
 	try {
 		const { rows } = getTableRows(projectPath, table, {
@@ -128,7 +118,7 @@ ACTION_EXECUTORS['AddRow'] = async ({ actionConfig, project }) => {
 		});
 		newRow = rows[0] || null;
 	} catch {
-		// Non-fatal — we still succeeded at inserting
+		// Non-fatal
 	}
 
 	return {
@@ -140,8 +130,7 @@ ACTION_EXECUTORS['AddRow'] = async ({ actionConfig, project }) => {
 };
 
 // ---------------------------------------------------------------------------
-// ModifyRows — Update rows matching a filter
-// Config: { table: string, filter: { col: val }, updates: { col: val } }
+// ModifyRows
 // ---------------------------------------------------------------------------
 
 ACTION_EXECUTORS['ModifyRows'] = async ({ actionConfig, project }) => {
@@ -160,7 +149,6 @@ ACTION_EXECUTORS['ModifyRows'] = async ({ actionConfig, project }) => {
 
 	const projectPath = await resolveProject(project);
 
-	// Validate filter and update columns against schema
 	const schema = getTableSchema(projectPath, table);
 	const validColumns = schema.map((c) => c.name);
 	for (const col of Object.keys(filter)) {
@@ -174,11 +162,9 @@ ACTION_EXECUTORS['ModifyRows'] = async ({ actionConfig, project }) => {
 		}
 	}
 
-	// Convert filter values to strings for getTableRows (it expects string values)
 	const stringFilter = {};
 	for (const [k, v] of Object.entries(filter)) stringFilter[k] = String(v);
 
-	// Find matching rows
 	const { rows: matchingRows } = getTableRows(projectPath, table, {
 		filters: stringFilter,
 		limit: 10000,
@@ -188,7 +174,6 @@ ACTION_EXECUTORS['ModifyRows'] = async ({ actionConfig, project }) => {
 		return { success: true, message: 'No rows matched the filter', rowsAffected: 0 };
 	}
 
-	// Update each matching row
 	let updated = 0;
 	for (const row of matchingRows) {
 		const result = updateRow(projectPath, table, row.rowid, updates);
@@ -205,8 +190,7 @@ ACTION_EXECUTORS['ModifyRows'] = async ({ actionConfig, project }) => {
 };
 
 // ---------------------------------------------------------------------------
-// DeleteRows — Delete rows matching a filter
-// Config: { table: string, filter: { col: val } }
+// DeleteRows
 // ---------------------------------------------------------------------------
 
 ACTION_EXECUTORS['DeleteRows'] = async ({ actionConfig, project }) => {
@@ -222,7 +206,6 @@ ACTION_EXECUTORS['DeleteRows'] = async ({ actionConfig, project }) => {
 
 	const projectPath = await resolveProject(project);
 
-	// Validate filter columns against schema
 	const schema = getTableSchema(projectPath, table);
 	const validColumns = schema.map((c) => c.name);
 	for (const col of Object.keys(filter)) {
@@ -231,11 +214,9 @@ ACTION_EXECUTORS['DeleteRows'] = async ({ actionConfig, project }) => {
 		}
 	}
 
-	// Convert filter values to strings for getTableRows
 	const stringFilter = {};
 	for (const [k, v] of Object.entries(filter)) stringFilter[k] = String(v);
 
-	// Find matching rows
 	const { rows: matchingRows } = getTableRows(projectPath, table, {
 		filters: stringFilter,
 		limit: 10000,
@@ -245,7 +226,6 @@ ACTION_EXECUTORS['DeleteRows'] = async ({ actionConfig, project }) => {
 		return { success: true, message: 'No rows matched the filter', rowsAffected: 0 };
 	}
 
-	// Delete each matching row
 	let deleted = 0;
 	for (const row of matchingRows) {
 		const result = deleteRow(projectPath, table, row.rowid);
@@ -262,11 +242,7 @@ ACTION_EXECUTORS['DeleteRows'] = async ({ actionConfig, project }) => {
 };
 
 // ---------------------------------------------------------------------------
-// RunFormula — Evaluate a formula expression with controlValues as context
-// Config: { expression: string }
-// The controlValues are already resolved into the config by the client-side
-// resolveConfig() in CanvasActionBlock — so {controlName} references in the
-// expression string have already been replaced with actual values.
+// RunFormula
 // ---------------------------------------------------------------------------
 
 ACTION_EXECUTORS['RunFormula'] = async ({ actionConfig }) => {
@@ -276,12 +252,8 @@ ACTION_EXECUTORS['RunFormula'] = async ({ actionConfig }) => {
 	}
 
 	try {
-		// evaluateFormula expects { column: value } as the row context.
-		// Since control variables are already resolved into the expression string
-		// by the client, we pass an empty row context.
 		const result = evaluateFormula(expression, {});
 
-		// Check for formula error (evaluateFormula returns '#ERROR: ...' strings)
 		if (typeof result === 'string' && result.startsWith('#')) {
 			return { success: false, message: `Formula error: ${result}` };
 		}
@@ -299,14 +271,10 @@ ACTION_EXECUTORS['RunFormula'] = async ({ actionConfig }) => {
 	}
 };
 
-// ===========================================================================
-// JAT Actions (jat-qk1n6)
-// ===========================================================================
+// ---------------------------------------------------------------------------
+// SpawnAgent
+// ---------------------------------------------------------------------------
 
-/**
- * Resolve a project name to its filesystem path.
- * Falls back to the IDE's parent directory if no project specified.
- */
 async function resolveProjectPath(project) {
 	if (project) {
 		const info = await getProjectPath(project);
@@ -314,11 +282,6 @@ async function resolveProjectPath(project) {
 	}
 	return process.cwd().replace(/\/ide$/, '');
 }
-
-// ---------------------------------------------------------------------------
-// SpawnAgent — spawn a new agent session via the existing spawn API
-// Config: { taskId?: string, model?: string }
-// ---------------------------------------------------------------------------
 
 ACTION_EXECUTORS['SpawnAgent'] = async ({ actionConfig, project, fetch }) => {
 	const { taskId, model } = actionConfig;
@@ -355,8 +318,7 @@ ACTION_EXECUTORS['SpawnAgent'] = async ({ actionConfig, project, fetch }) => {
 };
 
 // ---------------------------------------------------------------------------
-// CreateTask — create a new task via the tasks library
-// Config: { title: string, type?: string, priority?: number, description?: string, labels?: string[] }
+// CreateTask
 // ---------------------------------------------------------------------------
 
 ACTION_EXECUTORS['CreateTask'] = async ({ actionConfig, project }) => {
@@ -393,8 +355,7 @@ ACTION_EXECUTORS['CreateTask'] = async ({ actionConfig, project }) => {
 };
 
 // ---------------------------------------------------------------------------
-// UpdateTask — update an existing task
-// Config: { taskId: string, status?: string, assignee?: string, priority?: number, ... }
+// UpdateTask
 // ---------------------------------------------------------------------------
 
 ACTION_EXECUTORS['UpdateTask'] = async ({ actionConfig }) => {
@@ -434,22 +395,20 @@ ACTION_EXECUTORS['UpdateTask'] = async ({ actionConfig }) => {
 };
 
 // ---------------------------------------------------------------------------
-// RunCommand — execute a whitelisted shell command
-// Config: { command: string }
-// Security: Only commands starting with known safe prefixes are allowed.
+// RunCommand
 // ---------------------------------------------------------------------------
 
 const COMMAND_WHITELIST = [
-	'jt ',           // JAT Tasks CLI
-	'jt-',           // JAT Tasks helpers
-	'jat-signal ',   // Signal emission
-	'jat-search ',   // Search
-	'jat-memory ',   // Memory operations
-	'am-',           // Agent Mail tools
-	'git status',    // Git read-only
-	'git log',       // Git read-only
-	'git diff',      // Git read-only
-	'git branch',    // Git read-only
+	'jt ',
+	'jt-',
+	'jat-signal ',
+	'jat-search ',
+	'jat-memory ',
+	'am-',
+	'git status',
+	'git log',
+	'git diff',
+	'git branch',
 ];
 
 function isCommandAllowed(command) {

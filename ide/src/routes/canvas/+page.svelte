@@ -94,13 +94,13 @@
 		}
 
 		try {
-			const res = await fetch(`/api/canvas?project=${encodeURIComponent(project)}`);
+			const res = await fetch(`/api/bases?project=${encodeURIComponent(project)}&includeSystem=false`);
 			if (!res.ok) {
 				const data = await res.json();
 				throw new Error(data.error || 'Failed to fetch canvas pages');
 			}
 			const data = await res.json();
-			pages = (data.pages || []).sort((a: CanvasPage, b: CanvasPage) =>
+			pages = (data.bases || []).sort((a: CanvasPage, b: CanvasPage) =>
 				new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
 			);
 
@@ -125,7 +125,7 @@
 		if (!project) return;
 
 		try {
-			const res = await fetch('/api/canvas/templates', {
+			const res = await fetch('/api/bases/templates', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ project, templateId })
@@ -138,7 +138,7 @@
 
 			const data = await res.json();
 			await fetchPages();
-			const newPage = pages.find(p => p.id === data.page.id);
+			const newPage = pages.find(p => p.id === data.base.id);
 			if (newPage) handleSelect(newPage);
 		} catch (err) {
 			console.error('Failed to create from template:', err);
@@ -150,7 +150,7 @@
 		if (!project) return;
 
 		try {
-			const res = await fetch('/api/canvas', {
+			const res = await fetch('/api/bases', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ project, name: 'Untitled Page', blocks: [] })
@@ -164,7 +164,7 @@
 			const data = await res.json();
 			await fetchPages();
 			// Select the newly created page
-			const newPage = pages.find(p => p.id === data.page.id);
+			const newPage = pages.find(p => p.id === data.base.id);
 			if (newPage) handleSelect(newPage);
 		} catch (err) {
 			console.error('Failed to create canvas page:', err);
@@ -177,7 +177,7 @@
 		if (!confirm(`Delete "${pageToDel.name}"? This cannot be undone.`)) return;
 
 		try {
-			const res = await fetch(`/api/canvas/${pageToDel.id}?project=${encodeURIComponent(project)}`, {
+			const res = await fetch(`/api/bases/${pageToDel.id}?project=${encodeURIComponent(project)}`, {
 				method: 'DELETE'
 			});
 
@@ -201,7 +201,7 @@
 		if (!project) return;
 
 		try {
-			const res = await fetch(`/api/canvas/${pageToRename.id}`, {
+			const res = await fetch(`/api/bases/${pageToRename.id}`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ project, name: newName })
@@ -260,7 +260,7 @@
 		pages = pages.map(p => p.id === selectedPage!.id ? { ...p, name: newName, updated_at: updatedAt } : p);
 
 		try {
-			await fetch(`/api/canvas/${selectedPage.id}`, {
+			await fetch(`/api/bases/${selectedPage.id}`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ project, name: newName })
@@ -280,7 +280,7 @@
 		pages = pages.map(p => p.id === selectedPage!.id ? { ...p, is_base: isBase } : p);
 
 		try {
-			await fetch(`/api/canvas/${selectedPage.id}`, {
+			await fetch(`/api/bases/${selectedPage.id}`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ project, is_base: isBase })
@@ -306,7 +306,7 @@
 		pages = pages.map(p => p.id === selectedPage!.id ? { ...p, blocks, updated_at: updatedAt } : p);
 
 		try {
-			await fetch(`/api/canvas/${selectedPage.id}`, {
+			await fetch(`/api/bases/${selectedPage.id}`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ project, blocks })
@@ -368,7 +368,7 @@
 			} as TableViewBlock);
 
 			// Create the page
-			const res = await fetch('/api/canvas', {
+			const res = await fetch('/api/bases', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ project, name: tableName, blocks })
@@ -381,7 +381,7 @@
 
 			const data = await res.json();
 			await fetchPages();
-			const newPage = pages.find(p => p.id === data.page.id);
+			const newPage = pages.find(p => p.id === data.base.id);
 			if (newPage) handleSelect(newPage);
 		} catch (err) {
 			console.error('Failed to create canvas from table:', err);

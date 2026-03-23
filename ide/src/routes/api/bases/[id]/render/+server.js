@@ -23,7 +23,7 @@ export async function POST({ params, request }) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
 		}
 
-		const rendered = renderBase(path, baseId, { collapsible: !!collapsible });
+		const rendered = await renderBase(path, baseId, { collapsible: !!collapsible });
 		return json({ rendered });
 	} catch (error) {
 		if (error.message.includes('not found')) {

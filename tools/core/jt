@@ -2984,14 +2984,20 @@ try:
 except: print('\n\n\n\n\n\n')
 " "$signal_file" 2>/dev/null || printf '\n\n\n\n\n\n')
       {
-        IFS= read -r state
-        IFS= read -r task_id
-        IFS= read -r task_title
-        IFS= read -r sig_project
-        IFS= read -r sig_model
-        IFS= read -r git_branch
-        IFS= read -r approach
+        IFS= read -r state || true
+        IFS= read -r task_id || true
+        IFS= read -r task_title || true
+        IFS= read -r sig_project || true
+        IFS= read -r sig_model || true
+        IFS= read -r git_branch || true
+        IFS= read -r approach || true
       } <<< "$sig_data"
+    fi
+
+    # Derive project from task_id prefix if not in signal data
+    if [[ -z "$sig_project" && -n "$task_id" ]]; then
+      # task_id format: "project-hash" or "project-hash.N"
+      sig_project="${task_id%%-*}"
     fi
 
     # Apply project filter

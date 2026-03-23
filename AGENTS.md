@@ -82,6 +82,12 @@ am-register --name AgentName --program pi --model sonnet
 am-whoami
 am-agents                                         # List all agents
 
+# See what other agents are doing (real-time state from tmux + signals)
+jt agents                                         # Active agents with state, task, files
+jt agents --json                                  # JSON output for programmatic use
+jt agents --project jat                           # Filter by project
+jt agents --all                                   # Include inactive agents
+
 # File Declarations (prevent conflicts) - via jt on the task itself
 jt update task-id --status in_progress --assignee AgentName --files "src/**/*.ts"
 ```
@@ -185,13 +191,14 @@ All tools are bash commands in `~/.local/bin/`. Every tool has `--help`.
 | Tool | Purpose |
 |------|---------|
 | `jt` | JAT Tasks CLI for task management |
+| `jt agents` | List active agents with real-time state, task, and reserved files |
 | `jt-epic-child` | Set epic-child dependency correctly |
 
 ### Agent Registry
 | Tool | Purpose |
 |------|---------|
 | `am-register` | Create agent identity |
-| `am-agents` | List agents |
+| `am-agents` | List agents (registry only) |
 | `am-whoami` | Current identity |
 
 ### Signals

@@ -63,6 +63,15 @@
 	// Form state - autonomous mode
 	let skipPermissions = $state(false);
 
+	// Form state - VPS overflow settings
+	let maxLocalAgents = $state(JAT_DEFAULTS.max_local_agents);
+	let vpsHost = $state(JAT_DEFAULTS.vps_host as string);
+	let vpsUser = $state(JAT_DEFAULTS.vps_user as string);
+	let vpsMaxAgents = $state(JAT_DEFAULTS.vps_max_agents);
+	let vpsProjectPath = $state(JAT_DEFAULTS.vps_project_path as string);
+	let vpsTesting = $state(false);
+	let vpsTestResult = $state<{ ok: boolean; latencyMs?: number; error?: string } | null>(null);
+
 	// Model options
 	const modelOptions = [
 		{ value: 'opus', label: 'Claude Opus', description: 'Most capable, higher cost' },
@@ -117,6 +126,11 @@
 			autoKillP3 = defaults.auto_kill_p3 ?? true;
 			autoKillP4 = defaults.auto_kill_p4 ?? true;
 			skipPermissions = defaults.skip_permissions ?? false;
+			maxLocalAgents = defaults.max_local_agents ?? JAT_DEFAULTS.max_local_agents;
+			vpsHost = defaults.vps_host ?? (JAT_DEFAULTS.vps_host as string);
+			vpsUser = defaults.vps_user ?? (JAT_DEFAULTS.vps_user as string);
+			vpsMaxAgents = defaults.vps_max_agents ?? JAT_DEFAULTS.vps_max_agents;
+			vpsProjectPath = defaults.vps_project_path ?? (JAT_DEFAULTS.vps_project_path as string);
 
 			// Sync max_sessions to client-side preferences store (localStorage)
 			setMaxSessions(toMaxSessions(maxSessions));
@@ -152,7 +166,12 @@
 						auto_kill_p2: autoKillP2,
 						auto_kill_p3: autoKillP3,
 						auto_kill_p4: autoKillP4,
-						skip_permissions: skipPermissions
+						skip_permissions: skipPermissions,
+						max_local_agents: maxLocalAgents,
+						vps_host: vpsHost,
+						vps_user: vpsUser,
+						vps_max_agents: vpsMaxAgents,
+						vps_project_path: vpsProjectPath
 					}
 				})
 			});
@@ -233,6 +252,20 @@
 		autoPauseEnabled = JAT_DEFAULTS.auto_pause_enabled as boolean;
 		autoPauseIdleTimeout = JAT_DEFAULTS.auto_pause_idle_timeout as number;
 		autoSave();
+	}
+
+	// Test VPS SSH connection
+	async function testVpsConnection() {
+		vpsTesting = true;
+		vpsTestResult = null;
+		try {
+			const response = await fetch('/api/config/vps', { method: 'POST' });
+			vpsTestResult = await response.json();
+		} catch (error) {
+			vpsTestResult = { ok: false, error: error instanceof Error ? error.message : 'Connection failed' };
+		} finally {
+			vpsTesting = false;
+		}
 	}
 
 	// Reset auto-kill to factory defaults and auto-save
@@ -537,6 +570,139 @@
 				<ReviewRulesEditor />
 			</div>
 		{/if}
+
+		<!-- VPS Overflow Section -->
+		<div class="settings-section">
+			<div class="section-header-with-actions">
+				<div class="section-header">
+					<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
+					</svg>
+					<span>VPS Overflow</span>
+				</div>
+				{#if vpsHost && vpsUser}
+					<button
+						class="btn btn-ghost btn-sm"
+						onclick={testVpsConnection}
+						disabled={vpsTesting}
+					>
+						{#if vpsTesting}
+							<span class="loading loading-spinner loading-xs"></span>
+						{:else}
+							Test Connection
+						{/if}
+					</button>
+				{/if}
+			</div>
+
+			<p class="text-xs mb-3" style="color: oklch(0.50 0.02 250);">
+				When local agent slots are full, new agents automatically spawn on the VPS via SSH.
+			</p>
+
+			{#if vpsTestResult}
+				<div class="mb-3 px-3 py-2 rounded text-sm" style="background: {vpsTestResult.ok ? 'oklch(0.55 0.18 145 / 0.15)' : 'oklch(0.55 0.18 25 / 0.15)'}; border: 1px solid {vpsTestResult.ok ? 'oklch(0.55 0.18 145 / 0.3)' : 'oklch(0.55 0.18 25 / 0.3)'}; color: {vpsTestResult.ok ? 'oklch(0.75 0.15 145)' : 'oklch(0.75 0.15 25)'};">
+					{#if vpsTestResult.ok}
+						Connected ({vpsTestResult.latencyMs}ms)
+					{:else}
+						Failed: {vpsTestResult.error}
+					{/if}
+				</div>
+			{/if}
+
+			<div class="settings-grid">
+				<div class="form-control">
+					<label class="label">
+						<span class="label-text font-semibold">Max Local Agents</span>
+					</label>
+					<input
+						type="number"
+						class="input input-bordered"
+						bind:value={maxLocalAgents}
+						oninput={scheduleAutoSave}
+						min="0"
+						max="20"
+					/>
+					<label class="label">
+						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
+							0 = auto-detect from CPU/RAM
+						</span>
+					</label>
+				</div>
+
+				<div class="form-control">
+					<label class="label">
+						<span class="label-text font-semibold">VPS Host</span>
+					</label>
+					<input
+						type="text"
+						class="input input-bordered"
+						bind:value={vpsHost}
+						oninput={scheduleAutoSave}
+						placeholder="100.93.152.114"
+					/>
+					<label class="label">
+						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
+							Tailscale IP or hostname
+						</span>
+					</label>
+				</div>
+
+				<div class="form-control">
+					<label class="label">
+						<span class="label-text font-semibold">VPS User</span>
+					</label>
+					<input
+						type="text"
+						class="input input-bordered"
+						bind:value={vpsUser}
+						oninput={scheduleAutoSave}
+						placeholder="jw"
+					/>
+					<label class="label">
+						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
+							SSH user (requires key auth)
+						</span>
+					</label>
+				</div>
+
+				<div class="form-control">
+					<label class="label">
+						<span class="label-text font-semibold">VPS Max Agents</span>
+					</label>
+					<input
+						type="number"
+						class="input input-bordered"
+						bind:value={vpsMaxAgents}
+						oninput={scheduleAutoSave}
+						min="1"
+						max="20"
+					/>
+					<label class="label">
+						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
+							Max concurrent agents on VPS
+						</span>
+					</label>
+				</div>
+
+				<div class="form-control">
+					<label class="label">
+						<span class="label-text font-semibold">VPS Project Path</span>
+					</label>
+					<input
+						type="text"
+						class="input input-bordered"
+						bind:value={vpsProjectPath}
+						oninput={scheduleAutoSave}
+						placeholder="~/code"
+					/>
+					<label class="label">
+						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
+							Base path where repos are cloned on VPS
+						</span>
+					</label>
+				</div>
+			</div>
+		</div>
 
 		<!-- Spawn Settings Section (moved to bottom) -->
 		<div class="settings-section">

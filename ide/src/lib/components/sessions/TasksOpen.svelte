@@ -20,6 +20,7 @@
 	import { formatShortDate, parseTimestamp } from '$lib/utils/dateFormatters';
 	import { getFileTypeInfoFromPath } from '$lib/utils/fileUtils';
 	import FxText from '$lib/components/FxText.svelte';
+	import FeedbackReplyModal from '$lib/components/FeedbackReplyModal.svelte';
 
 	function taskCtx(t: Task): Record<string, any> {
 		return { title: t.title, status: t.status, priority: t.priority, type: t.issue_type, assignee: t.assignee, labels: t.labels?.join(', '), created_at: t.created_at, due_date: t.due_date };
@@ -1084,6 +1085,21 @@
 	let creatingEpic = $state(false);
 	let newEpicInput: HTMLInputElement;
 
+	// === Feedback Reply Modal ===
+	let replyModalOpen = $state(false);
+	let replyModalTaskId = $state('');
+	let replyModalTaskTitle = $state('');
+
+	function isFeedbackTask(task: Task): boolean {
+		return task.title.startsWith('[Feedback]');
+	}
+
+	function openReplyModal(task: Task) {
+		replyModalTaskId = task.id;
+		replyModalTaskTitle = task.title;
+		replyModalOpen = true;
+	}
+
 	function handleContextMenu(task: Task, event: MouseEvent) {
 		event.preventDefault();
 		event.stopPropagation();
@@ -1807,6 +1823,16 @@
 			<span>View Details</span>
 		</button>
 
+		<!-- Reply (feedback tasks only) -->
+		{#if isFeedbackTask(ctxTask)}
+			<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => { const t = ctxTask!; closeContextMenu(); openReplyModal(t); }}>
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+				</svg>
+				<span>Reply & Close</span>
+			</button>
+		{/if}
+
 		<div class="task-context-menu-divider"></div>
 
 		<!-- Change Status (submenu) -->
@@ -1979,6 +2005,16 @@
 		</div>
 	{/if}
 {/if}
+
+<!-- Feedback Reply Modal -->
+<FeedbackReplyModal
+	bind:taskId={replyModalTaskId}
+	bind:taskTitle={replyModalTaskTitle}
+	bind:isOpen={replyModalOpen}
+	onComplete={() => {
+		addToast({ message: 'Reply sent', type: 'success' });
+	}}
+/>
 
 <style>
 	/* Section styling */

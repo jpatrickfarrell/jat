@@ -33,6 +33,7 @@ import {
 } from '$lib/config/spawnConfig.js';
 import { getTaskById } from '$lib/server/jat-tasks.js';
 import { getProjectPath, getJatDefaults } from '$lib/server/projectPaths.js';
+import { routeAgent } from '$lib/server/agentRouter.js';
 import {
 	evaluateRouting,
 	getAgentProgram,
@@ -1023,8 +1024,17 @@ export async function POST({ request }) {
 			}
 		}
 
+		// Step 2b: Route agent to local or VPS
+		const routing = await routeAgent({
+			defaults: jatDefaults,
+			forceLocal: body.forceLocal || false,
+			forceRemote: body.forceRemote || false
+		});
+		console.log(`[spawn] Routing decision: ${routing.target} (${routing.reason}) - local: ${routing.localCount}/${routing.maxLocal}${routing.remoteCount !== undefined ? `, remote: ${routing.remoteCount}` : ''}`);
+
 		// Step 3: Create tmux session with Claude Code
 		const sessionName = `jat-${agentName}`;
+		const isRemote = routing.target === 'remote';
 
 		// Step 3a: Write agent identity file for session-start hook to restore
 		// The hook (session-start-agent-identity.sh) uses this to set up .claude/sessions/agent-{sessionId}.txt
@@ -1171,30 +1181,84 @@ export async function POST({ request }) {
 		const escapedProjectPath = shellEscape(projectPath);
 		const escapedAgentCmd = shellEscape(agentCmd);
 
-		const createSessionCmd = `tmux new-session -d -s ${escapedSessionName} -x ${TMUX_INITIAL_WIDTH} -y ${TMUX_INITIAL_HEIGHT} -c ${escapedProjectPath} && sleep 0.3 && tmux send-keys -t ${escapedSessionName} ${escapedAgentCmd} Enter`;
+		if (isRemote) {
+			// Remote spawn: SSH to VPS and create tmux session there
+			const vpsHost = jatDefaults.vps_host;
+			const vpsUser = jatDefaults.vps_user;
+			const vpsProjectPath = jatDefaults.vps_project_path || '~/code';
+			const remoteProjectName = projectName || 'jat';
+			const remoteProjectDir = `${vpsProjectPath}/${remoteProjectName}`;
 
-		try {
-			await execAsync(createSessionCmd);
-		} catch (err) {
-			const execErr = /** @type {{ stderr?: string, message?: string }} */ (err);
-			const errorMessage = execErr.stderr || (err instanceof Error ? err.message : String(err));
+			// Build the remote tmux command
+			// The remote shell needs: tmux session creation + agent command
+			const remoteTmuxCmd = `tmux new-session -d -s ${escapedSessionName} -x ${TMUX_INITIAL_WIDTH} -y ${TMUX_INITIAL_HEIGHT} -c '${remoteProjectDir}' && sleep 0.3 && tmux send-keys -t ${escapedSessionName} ${escapedAgentCmd} Enter`;
 
-			// If session already exists, that's a conflict
-			if (errorMessage.includes('duplicate session')) {
+			// Escape the command for SSH (double-escape single quotes)
+			const sshCmd = `ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new ${vpsUser}@${vpsHost} ${shellEscape(remoteTmuxCmd)}`;
+
+			console.log(`[spawn] Remote spawn via SSH: ${vpsUser}@${vpsHost}`);
+
+			try {
+				await execAsync(sshCmd, { timeout: 30000 });
+				console.log(`[spawn] Remote session ${sessionName} created on ${vpsHost}`);
+			} catch (err) {
+				const execErr = /** @type {{ stderr?: string, message?: string }} */ (err);
+				const errorMessage = execErr.stderr || (err instanceof Error ? err.message : String(err));
+
+				if (errorMessage.includes('duplicate session')) {
+					return json({
+						error: 'Session already exists',
+						message: `Remote session '${sessionName}' already exists on ${vpsHost}`,
+						sessionName,
+						agentName,
+						remote: true,
+						vpsHost
+					}, { status: 409 });
+				}
+
+				console.error(`[spawn] Remote spawn failed, falling back to local:`, errorMessage);
+				// Fall back to local spawn on SSH failure
+				const localCreateCmd = `tmux new-session -d -s ${escapedSessionName} -x ${TMUX_INITIAL_WIDTH} -y ${TMUX_INITIAL_HEIGHT} -c ${escapedProjectPath} && sleep 0.3 && tmux send-keys -t ${escapedSessionName} ${escapedAgentCmd} Enter`;
+				try {
+					await execAsync(localCreateCmd);
+					console.log(`[spawn] Fallback to local session ${sessionName} after remote failure`);
+				} catch (localErr) {
+					const localExecErr = /** @type {{ stderr?: string, message?: string }} */ (localErr);
+					const localErrorMessage = localExecErr.stderr || (localErr instanceof Error ? localErr.message : String(localErr));
+					return json({
+						error: 'Failed to create session (remote and local)',
+						message: `Remote: ${errorMessage}. Local: ${localErrorMessage}`,
+						sessionName,
+						agentName
+					}, { status: 500 });
+				}
+			}
+		} else {
+			// Local spawn: create tmux session on this machine
+			const createSessionCmd = `tmux new-session -d -s ${escapedSessionName} -x ${TMUX_INITIAL_WIDTH} -y ${TMUX_INITIAL_HEIGHT} -c ${escapedProjectPath} && sleep 0.3 && tmux send-keys -t ${escapedSessionName} ${escapedAgentCmd} Enter`;
+
+			try {
+				await execAsync(createSessionCmd);
+			} catch (err) {
+				const execErr = /** @type {{ stderr?: string, message?: string }} */ (err);
+				const errorMessage = execErr.stderr || (err instanceof Error ? err.message : String(err));
+
+				if (errorMessage.includes('duplicate session')) {
+					return json({
+						error: 'Session already exists',
+						message: `Session '${sessionName}' already exists`,
+						sessionName,
+						agentName
+					}, { status: 409 });
+				}
+
 				return json({
-					error: 'Session already exists',
-					message: `Session '${sessionName}' already exists`,
+					error: 'Failed to create session',
+					message: errorMessage,
 					sessionName,
 					agentName
-				}, { status: 409 });
+				}, { status: 500 });
 			}
-
-			return json({
-				error: 'Failed to create session',
-				message: errorMessage,
-				sessionName,
-				agentName
-			}, { status: 500 });
 		}
 
 		// Write IDE-initiated signal for instant UI feedback
@@ -1210,6 +1274,8 @@ export async function POST({ request }) {
 				agentProgram: selectedAgent.id,
 				taskId: taskId || null,
 				taskTitle: task?.title || null,
+				remote: isRemote,
+				vpsHost: isRemote ? jatDefaults.vps_host : null,
 				timestamp: new Date().toISOString()
 			};
 			const signalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
@@ -1377,6 +1443,7 @@ export async function POST({ request }) {
 		}
 
 		// Step 6: Return WorkSession with agent selection info
+		const locationLabel = isRemote ? ` on VPS ${jatDefaults.vps_host}` : '';
 		return json({
 			success: true,
 			session: {
@@ -1395,11 +1462,17 @@ export async function POST({ request }) {
 				attached: attach,
 				// Agent selection info
 				matchedRule: matchedRule?.id || null,
-				selectionReason
+				selectionReason,
+				// Routing info
+				remote: isRemote,
+				vpsHost: isRemote ? jatDefaults.vps_host : null,
+				routingReason: routing.reason,
+				localAgentCount: routing.localCount,
+				maxLocalAgents: routing.maxLocal
 			},
 			message: taskId
-				? `Spawned ${selectedAgent.name} agent ${agentName} (${selectedModel.name}) for task ${taskId}${imagePath ? ' (with attached image)' : ''}`
-				: `Spawned ${selectedAgent.name} planning session for agent ${agentName} (${selectedModel.name})`,
+				? `Spawned ${selectedAgent.name} agent ${agentName} (${selectedModel.name}) for task ${taskId}${locationLabel}${imagePath ? ' (with attached image)' : ''}`
+				: `Spawned ${selectedAgent.name} planning session for agent ${agentName} (${selectedModel.name})${locationLabel}`,
 			timestamp: new Date().toISOString()
 		});
 	} catch (error) {

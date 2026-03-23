@@ -43,6 +43,7 @@
 	import DataTableAttachChips from './bases/DataTableAttachChips.svelte';
 	import type { KnowledgeBase, RenderedBase } from '$lib/types/knowledgeBase';
 	import { SOURCE_TYPE_INFO } from '$lib/types/knowledgeBase';
+	import FeedbackReplyModal from '$lib/components/FeedbackReplyModal.svelte';
 
 	// Task interface for drawer (extends API Task with additional optional fields)
 	interface DrawerTask {
@@ -189,6 +190,9 @@
 	let showReopenModal = $state(false);
 	let reopenReason = $state('');
 	let isReopening = $state(false);
+
+	// Feedback reply modal
+	let feedbackReplyOpen = $state(false);
 
 	// Summary state (for closed tasks)
 	interface TaskSummary {
@@ -2504,6 +2508,18 @@
 									{#if depStatus.hasBlockers}
 										<span class="text-xs text-warning" title={depStatus.blockingReason}>⚠</span>
 									{/if}
+									{#if task?.title?.startsWith('[Feedback]')}
+										<button
+											class="btn btn-xs btn-ghost gap-1"
+											onclick={() => { feedbackReplyOpen = true; }}
+											title="Reply to feedback without launching an agent"
+										>
+											<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+											</svg>
+											<span>Reply</span>
+										</button>
+									{/if}
 								{:else if (actionMode === 'in_progress' || actionMode === 'blocked') && task?.assignee}
 									<!-- Assigned: Show agent + actions (only when there's an actual assignee) -->
 									<div class="flex items-center gap-1">
@@ -4450,6 +4466,19 @@
 			</div>
 		</div>
 	{/if}
+
+<!-- Feedback Reply Modal -->
+{#if task}
+	<FeedbackReplyModal
+		taskId={taskId || ''}
+		taskTitle={task.title || ''}
+		bind:isOpen={feedbackReplyOpen}
+		onComplete={() => {
+			addToast({ message: 'Reply sent and task closed', type: 'success' });
+			fetchTask();
+		}}
+	/>
+{/if}
 
 <style>
 	/* Command dropdown styling (matching IngestWizard) */

@@ -13,7 +13,7 @@ export const DEFAULT_MODEL = 'opus';
 // Agent Mail server URL (for inter-agent communication)
 export const AGENT_MAIL_URL = 'http://localhost:8765';
 
-// Maximum concurrent tmux sessions (system limit)
+// Maximum concurrent tmux sessions (system limit, across local + remote)
 export const MAX_TMUX_SESSIONS = 12;
 
 // Default number of agents to spawn (if enough tasks available)

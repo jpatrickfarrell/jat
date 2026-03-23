@@ -1089,9 +1089,20 @@
 	let replyModalOpen = $state(false);
 	let replyModalTaskId = $state('');
 	let replyModalTaskTitle = $state('');
+	let integratedTaskIds = $state<Set<string>>(new Set());
 
-	function isFeedbackTask(task: Task): boolean {
-		return task.title.startsWith('[Feedback]');
+	// Fetch integrated task IDs on mount
+	$effect(() => {
+		fetch('/api/ingest/task-ids')
+			.then(r => r.json())
+			.then(data => {
+				integratedTaskIds = new Set(data.taskIds || []);
+			})
+			.catch(() => {});
+	});
+
+	function isIntegratedTask(task: Task): boolean {
+		return integratedTaskIds.has(task.id) || task.title.startsWith('[Feedback]');
 	}
 
 	function openReplyModal(task: Task) {
@@ -1823,8 +1834,8 @@
 			<span>View Details</span>
 		</button>
 
-		<!-- Reply (feedback tasks only) -->
-		{#if isFeedbackTask(ctxTask)}
+		<!-- Reply (integrated tasks from ingest — feedback widget, Supabase, Telegram, Slack, etc.) -->
+		{#if isIntegratedTask(ctxTask)}
 			<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => { const t = ctxTask!; closeContextMenu(); openReplyModal(t); }}>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />

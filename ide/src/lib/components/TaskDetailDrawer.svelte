@@ -193,6 +193,15 @@
 
 	// Feedback reply modal
 	let feedbackReplyOpen = $state(false);
+	let integratedTaskIds = $state<Set<string>>(new Set());
+
+	// Fetch integrated task IDs
+	$effect(() => {
+		fetch('/api/ingest/task-ids')
+			.then(r => r.json())
+			.then(data => { integratedTaskIds = new Set(data.taskIds || []); })
+			.catch(() => {});
+	});
 
 	// Summary state (for closed tasks)
 	interface TaskSummary {
@@ -2508,7 +2517,7 @@
 									{#if depStatus.hasBlockers}
 										<span class="text-xs text-warning" title={depStatus.blockingReason}>⚠</span>
 									{/if}
-									{#if task?.title?.startsWith('[Feedback]')}
+									{#if task && (integratedTaskIds.has(task.id) || task.title?.startsWith('[Feedback]'))}
 										<button
 											class="btn btn-xs btn-ghost gap-1"
 											onclick={() => { feedbackReplyOpen = true; }}

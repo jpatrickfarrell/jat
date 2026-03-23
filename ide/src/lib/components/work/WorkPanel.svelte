@@ -467,6 +467,7 @@
 							contextPercent={session.contextPercent ?? undefined}
 							created={session.created}
 							attached={session.attached}
+							location={session.location}
 							sseState={session._sseState}
 							sseStateTimestamp={session._sseStateTimestamp}
 							isRecovering={session._isRecovering}

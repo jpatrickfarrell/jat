@@ -78,6 +78,8 @@ export interface WorkSession {
 	contextPercent?: number | null;
 	created: string;
 	attached: boolean;
+	/** Session location - 'local' or 'remote' (VPS) */
+	location?: 'local' | 'remote';
 	/** Real-time state from WS (working, needs-input, ready-for-review, etc.) */
 	_sseState?: string;
 	/** Timestamp when WS state was last updated */
@@ -497,6 +499,98 @@ export async function fetchUsage(): Promise<void> {
 		if (!isTimeoutOrAbort) {
 			console.error(`workSessions.fetchUsage error (backing off ${backoffMs / 1000}s):`, err);
 		}
+	}
+}
+
+// ============================================================================
+// Remote Session Fetching (VPS)
+// ============================================================================
+
+let remoteFailureCount = 0;
+let remoteBackoffUntil = 0;
+
+/**
+ * Fetch remote agent sessions from VPS and merge into session list.
+ * Called at lower frequency than main polling (e.g., every 10s).
+ */
+export async function fetchRemote(): Promise<void> {
+	const now = Date.now();
+	if (now < remoteBackoffUntil) return;
+
+	try {
+		const response = await globalThis.fetch('/api/work/remote', { signal: AbortSignal.timeout(20000) });
+		const data = await response.json();
+
+		if (!response.ok || !data.success || !data.sessions?.length) {
+			// No remote sessions — remove any stale remote sessions from state
+			const hadRemote = state.sessions.some(s => s.location === 'remote');
+			if (hadRemote) {
+				state.sessions = state.sessions.filter(s => s.location !== 'remote');
+			}
+			remoteFailureCount = 0;
+			return;
+		}
+
+		remoteFailureCount = 0;
+
+		// Build a set of remote session names from fresh data
+		const remoteSessionNames = new Set(data.sessions.map((s: { sessionName: string }) => s.sessionName));
+
+		// Map remote sessions to WorkSession format
+		const remoteSessions: WorkSession[] = data.sessions.map((s: {
+			sessionName: string;
+			agentName: string;
+			created: string | null;
+			attached: boolean;
+			location: 'remote';
+			sessionState: string | null;
+			task: { id: string; title: string | null; status: string } | null;
+			project: string | null;
+			model: string | null;
+			approach: string | null;
+		}) => ({
+			sessionName: s.sessionName,
+			agentName: s.agentName,
+			task: s.task,
+			lastCompletedTask: null,
+			project: s.project || undefined,
+			output: '',
+			lineCount: 0,
+			tokens: 0,
+			cost: 0,
+			created: s.created || '',
+			attached: s.attached,
+			location: 'remote' as const,
+			_sseState: s.sessionState || undefined,
+			_sseStateTimestamp: s.sessionState ? Date.now() : undefined
+		}));
+
+		// Merge: keep local sessions + update/add remote sessions
+		const localSessions = state.sessions.filter(s => s.location !== 'remote');
+		const existingRemoteMap = new Map(
+			state.sessions.filter(s => s.location === 'remote').map(s => [s.sessionName, s])
+		);
+
+		// For existing remote sessions, preserve output/tokens/cost that may have been fetched
+		const mergedRemote = remoteSessions.map(rs => {
+			const existing = existingRemoteMap.get(rs.sessionName);
+			if (existing) {
+				return {
+					...rs,
+					output: existing.output || rs.output,
+					lineCount: existing.lineCount || rs.lineCount,
+					tokens: existing.tokens || rs.tokens,
+					cost: existing.cost || rs.cost
+				};
+			}
+			return rs;
+		});
+
+		state.sessions = [...localSessions, ...mergedRemote];
+	} catch (err) {
+		remoteFailureCount++;
+		const backoffMs = Math.min(BASE_BACKOFF_MS * Math.pow(2, remoteFailureCount - 1), MAX_BACKOFF_MS);
+		remoteBackoffUntil = Date.now() + backoffMs;
 	}
 }
 

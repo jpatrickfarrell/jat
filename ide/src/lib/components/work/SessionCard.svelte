@@ -162,6 +162,8 @@
 		task?: Task | null; // Agent mode only
 		/** Most recently closed task by this agent (for completion state display) */
 		lastCompletedTask?: CompletedTask | null; // Agent mode only
+		/** Session location - 'local' or 'remote' (VPS) */
+		location?: 'local' | 'remote';
 		// Server mode props
 		projectName?: string; // Server mode: project name
 		displayName?: string; // Server mode: display name
@@ -313,6 +315,7 @@
 		agentName = "",
 		task = null,
 		lastCompletedTask = null,
+		location = "local",
 		// Server mode props
 		projectName = "",
 		displayName = "",
@@ -5098,6 +5101,17 @@
 				>
 					{agentName}
 				</span>
+				{#if location === 'remote'}
+					<span
+						class="shrink-0 flex items-center"
+						title="Remote agent (VPS)"
+						style="color: oklch(0.70 0.10 220 / 0.8);"
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5">
+							<path d="M1 12.5A4.5 4.5 0 005.5 17H15a4 4 0 00.88-7.903A5.002 5.002 0 006.4 6.106 3.5 3.5 0 001 12.5z" />
+						</svg>
+					</span>
+				{/if}
 			</div>
 
 			<!-- Right: Sparkline + Status dropdown -->
@@ -5720,6 +5734,17 @@
 							style={!(outputActivityState === 'generating' || outputActivityState === 'thinking') ? `color: ${displayAccent};` : ""}
 						>
 							{agentName}
+							{#if location === 'remote'}
+								<span
+									class="inline-flex items-center ml-1"
+									title="Remote agent (VPS)"
+									style="color: oklch(0.70 0.10 220 / 0.8);"
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5">
+										<path d="M1 12.5A4.5 4.5 0 005.5 17H15a4 4 0 00.88-7.903A5.002 5.002 0 006.4 6.106 3.5 3.5 0 001 12.5z" />
+									</svg>
+								</span>
+							{/if}
 						</span>
 						<!-- Elapsed time (styled like server uptime) -->
 						{#if startTime}

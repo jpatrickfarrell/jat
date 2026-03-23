@@ -30,6 +30,7 @@
 		workSessionsState,
 		fetch as fetchSessions,
 		fetchUsage as fetchSessionUsage,
+		fetchRemote as fetchRemoteSessions,
 		spawn,
 		kill,
 		sendInput,
@@ -1432,6 +1433,9 @@
 		// Delay usage fetch to avoid blocking UI during initial user interactions
 		// Usage parsing scans ~40K lines of JSONL files and takes 7+ seconds
 		setTimeout(() => fetchSessionUsage(), 30000);
+		// Fetch remote VPS sessions (lower frequency, SSH is expensive)
+		setTimeout(() => fetchRemoteSessions(), 2000);
+		setInterval(() => fetchRemoteSessions(), 10000);
 		// Refresh browser sessions every 30s (same cadence as usage)
 		setInterval(() => fetchBrowserSessions(), 30000);
 

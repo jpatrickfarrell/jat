@@ -47,9 +47,7 @@ export async function POST({ params, request }) {
 			);
 		}
 
-		const projectPath = process.cwd().replace(/\/ide$/, '');
-
-		// Validate task exists
+		// Validate task exists (searches all projects)
 		const task = getTaskById(id);
 		if (!task) {
 			return json(
@@ -58,6 +56,8 @@ export async function POST({ params, request }) {
 			);
 		}
 
+		// Use the task's own project path so cross-project tasks resolve correctly
+		const taskProjectPath = task.project_path || undefined;
 		const trimmedMessage = message.trim();
 
 		// 1. Append thread entry
@@ -80,12 +80,12 @@ export async function POST({ params, request }) {
 
 		if (close) {
 			// Close with clarification reason
-			closeTask(id, `Needs clarification: ${trimmedMessage.slice(0, 200)}`, projectPath);
+			closeTask(id, `Needs clarification: ${trimmedMessage.slice(0, 200)}`, taskProjectPath);
 			// Also update notes since closeTask doesn't set notes
-			updateTask(id, { notes: updatedNotes, projectPath });
+			updateTask(id, { notes: updatedNotes, projectPath: taskProjectPath });
 		} else {
 			// Keep open but add notes
-			updateTask(id, { notes: updatedNotes, projectPath });
+			updateTask(id, { notes: updatedNotes, projectPath: taskProjectPath });
 		}
 
 		// 3. Route reply back to origin channel (non-blocking, best-effort)

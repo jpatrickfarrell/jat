@@ -907,7 +907,8 @@ async function computeWorkData(lines, includeUsage) {
 					contextPercent,
 					created: session.created,
 					attached: session.attached,
-					sessionState
+					sessionState,
+					location: 'local'
 				};
 			})
 		);

@@ -1514,8 +1514,8 @@
 		if (!tblCtxTable || !selectedProject) return;
 		const tableName = tblCtxTable.name;
 		closeTblContextMenu();
-		// Navigate to /canvas with table param — canvas page will auto-create with relation controls
-		goto(`/canvas?project=${encodeURIComponent(selectedProject)}&table=${encodeURIComponent(tableName)}`);
+		// Navigate to /bases with table param — will auto-create canvas page with relation controls
+		goto(`/bases?project=${encodeURIComponent(selectedProject)}&table=${encodeURIComponent(tableName)}`);
 	}
 
 	async function handleTblCtxExportCsv() {

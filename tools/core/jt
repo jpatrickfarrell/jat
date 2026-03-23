@@ -2817,6 +2817,112 @@ print(json.dumps({
 }
 
 # ---------------------------------------------------------------------------
+# Spawn — Spawn an agent session via IDE API
+# ---------------------------------------------------------------------------
+
+cmd_spawn() {
+  local task_id="" model="" project="" attach=false
+  local force_local=false force_remote=false
+  local ide_url="http://127.0.0.1:3333"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --remote)   force_remote=true; shift ;;
+      --local)    force_local=true; shift ;;
+      --model)    model="$2"; shift 2 ;;
+      --project)  project="$2"; shift 2 ;;
+      --attach)   attach=true; shift ;;
+      --help|-h)
+        cat <<'SPAWN_HELP'
+jt spawn - Spawn an agent session
+
+Usage:
+  jt spawn [TASK_ID] [--remote] [--local] [--model MODEL] [--attach]
+
+Options:
+  --remote      Force spawn on VPS (regardless of local slot availability)
+  --local       Force spawn locally (even if slots are full)
+  --model M     Model override: opus, sonnet, haiku (default: from config)
+  --project P   Project name (inferred from task if omitted)
+  --attach      Open terminal attached to session immediately
+
+Without --remote or --local, auto-routing applies:
+  local slots available → spawn locally
+  local slots full + VPS configured → spawn on VPS
+
+Examples:
+  jt spawn jat-abc123              Auto-route agent for task
+  jt spawn jat-abc123 --remote     Force to VPS (overnight work, save local resources)
+  jt spawn jat-abc123 --local      Force local even if slots full
+  jt spawn --remote --model opus   Planning session on VPS with opus
+SPAWN_HELP
+        return 0
+        ;;
+      -*)  die "Unknown option: $1. Run 'jt spawn --help' for usage." ;;
+      *)   task_id="$1"; shift ;;
+    esac
+  done
+
+  if $force_local && $force_remote; then
+    die "Cannot use both --remote and --local"
+  fi
+
+  # Check IDE is reachable
+  if ! curl -sf --max-time 2 "${ide_url}/" >/dev/null 2>&1; then
+    die "IDE not running at ${ide_url}. Start with: jat"
+  fi
+
+  # Build JSON body
+  local body="{}"
+  [[ -n "$task_id" ]]  && body=$(echo "$body" | jq --arg v "$task_id" '. + {taskId: $v}')
+  [[ -n "$model" ]]    && body=$(echo "$body" | jq --arg v "$model" '. + {model: $v}')
+  [[ -n "$project" ]]  && body=$(echo "$body" | jq --arg v "$project" '. + {project: $v}')
+  $attach              && body=$(echo "$body" | jq '. + {attach: true}')
+  $force_local         && body=$(echo "$body" | jq '. + {forceLocal: true}')
+  $force_remote        && body=$(echo "$body" | jq '. + {forceRemote: true}')
+
+  # Spawn via IDE API
+  local response http_code
+  response=$(curl -sf --max-time 30 -w '\n%{http_code}' \
+    -X POST "${ide_url}/api/work/spawn" \
+    -H "Content-Type: application/json" \
+    -d "$body" 2>&1) || true
+
+  http_code=$(echo "$response" | tail -1)
+  local body_out
+  body_out=$(echo "$response" | sed '$d')
+
+  if [[ "$http_code" != "200" ]]; then
+    local error_msg
+    error_msg=$(echo "$body_out" | jq -r '.error // .message // "Unknown error"' 2>/dev/null || echo "$body_out")
+    die "Spawn failed (HTTP ${http_code}): ${error_msg}"
+  fi
+
+  # Parse success response
+  local agent_name session_name is_remote
+  agent_name=$(echo "$body_out" | jq -r '.session.agentName // "unknown"')
+  session_name=$(echo "$body_out" | jq -r '.session.sessionName // "unknown"')
+  is_remote=$(echo "$body_out" | jq -r '.session.remote // false')
+
+  local location="local" location_icon="💻"
+  if [[ "$is_remote" == "true" ]]; then
+    location="remote"
+    location_icon="☁️"
+  fi
+
+  echo "${location_icon} Spawned ${agent_name} (${session_name})"
+  [[ -n "$task_id" ]] && echo "   Task: ${task_id}"
+  echo "   Location: ${location}"
+  [[ -n "$model" ]] && echo "   Model: ${model}"
+
+  if $attach; then
+    echo "   Attaching..."
+  else
+    echo "   Attach: tmux attach -t ${session_name}"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # SSH — Quick VPS connect
 # ---------------------------------------------------------------------------
 
@@ -2887,27 +2993,31 @@ cmd_agents() {
   local json_mode=false
   local project_filter=""
   local all_mode=false
+  local remote_only=false
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --json)    json_mode=true; shift ;;
       --project) project_filter="$2"; shift 2 ;;
       --all)     all_mode=true; shift ;;
+      --remote)  remote_only=true; shift ;;
       --help|-h) cat <<'EOF'
-jt agents - List active agents
+jt agents - List active agents (local + remote)
 
-Usage: jt agents [--json] [--project NAME] [--all]
+Usage: jt agents [--json] [--project NAME] [--all] [--remote]
 
 Options:
   --json       Output as JSON array
   --project X  Filter by project name
   --all        Include inactive agents (no live tmux session)
+  --remote     Show only remote (VPS) agents
 
 Sources:
-  tmux sessions    Which agents are alive (jat-* sessions)
-  Signal files     Real-time state: working, review, needs_input, etc.
-  tasks.db         Assigned task, reserved files
-  agent-mail.db    Program, model, registration info
+  Local tmux     Which agents are alive locally (jat-* sessions)
+  Remote tmux    VPS agents via SSH (if vps_host configured)
+  Signal files   Real-time state: working, review, needs_input, etc.
+  tasks.db       Assigned task, reserved files
+  agent-mail.db  Program, model, registration info
 EOF
         return 0 ;;
       *) die "Unknown option: $1" ;;
@@ -2916,33 +3026,118 @@ EOF
 
   local agent_mail_db="${AGENT_MAIL_DB:-$HOME/.agent-mail.db}"
 
-  # Collect live tmux sessions (jat-AgentName pattern)
-  # Agent names are PascalCase (start with uppercase), skip jat-app-* etc.
+  # Collect live LOCAL tmux sessions (jat-AgentName pattern)
   local -a live_sessions=()
-  while IFS= read -r session; do
-    local agent_name="${session#jat-}"
-    if [[ "$agent_name" =~ ^[A-Z] ]]; then
-      live_sessions+=("$agent_name")
-    fi
-  done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^jat-' || true)
+  local -a remote_sessions=()
 
-  # If --all, also pull recently active agents from agent-mail.db
+  if ! $remote_only; then
+    while IFS= read -r session; do
+      local agent_name="${session#jat-}"
+      if [[ "$agent_name" =~ ^[A-Z] ]]; then
+        live_sessions+=("$agent_name")
+      fi
+    done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^jat-' || true)
+  fi
+
+  # Collect REMOTE tmux sessions from VPS (if configured)
+  local vps_host="" vps_user=""
+  local config_file="${HOME}/.config/jat/projects.json"
+  if [[ -f "$config_file" ]]; then
+    vps_host="$(jq -r '.defaults.vps_host // empty' "$config_file")"
+    vps_user="$(jq -r '.defaults.vps_user // empty' "$config_file")"
+  fi
+
+  declare -A remote_signal_data  # agent_name -> signal JSON
+  if [[ -n "$vps_host" && -n "$vps_user" ]]; then
+    local ssh_target="${vps_user}@${vps_host}"
+    # Single SSH call: list sessions + read all signal files
+    local remote_data
+    remote_data=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new "$ssh_target" '
+      echo "---SESSIONS---"
+      tmux list-sessions -F "#{session_name}" 2>/dev/null | grep "^jat-" || true
+      echo "---SIGNALS---"
+      for f in /tmp/jat-signal-tmux-jat-*.json; do
+        [ -f "$f" ] || continue
+        agent=$(basename "$f" | sed "s/^jat-signal-tmux-jat-//;s/\.json$//")
+        echo "AGENT:${agent}"
+        cat "$f"
+        echo ""
+      done
+    ' 2>/dev/null || true)
+
+    if [[ -n "$remote_data" ]]; then
+      local in_sessions=false in_signals=false current_agent=""
+      local signal_json=""
+      while IFS= read -r line; do
+        if [[ "$line" == "---SESSIONS---" ]]; then
+          in_sessions=true; in_signals=false; continue
+        elif [[ "$line" == "---SIGNALS---" ]]; then
+          in_sessions=false; in_signals=true; continue
+        fi
+
+        if $in_sessions && [[ -n "$line" ]]; then
+          local rname="${line#jat-}"
+          if [[ "$rname" =~ ^[A-Z] ]]; then
+            # Skip if already in local sessions
+            local is_local=false
+            for ls in "${live_sessions[@]}"; do
+              [[ "$ls" == "$rname" ]] && is_local=true && break
+            done
+            $is_local || remote_sessions+=("$rname")
+          fi
+        fi
+
+        if $in_signals; then
+          if [[ "$line" == AGENT:* ]]; then
+            if [[ -n "$current_agent" && -n "$signal_json" ]]; then
+              remote_signal_data["$current_agent"]="$signal_json"
+            fi
+            current_agent="${line#AGENT:}"
+            signal_json=""
+          elif [[ -n "$current_agent" ]]; then
+            signal_json+="$line"
+          fi
+        fi
+      done <<< "$remote_data"
+      if [[ -n "$current_agent" && -n "$signal_json" ]]; then
+        remote_signal_data["$current_agent"]="$signal_json"
+      fi
+    fi
+  fi
+
+  # Build agent list with location tracking
   local -a agent_list=()
+  declare -A agent_location  # agent_name -> "local" | "remote"
+
   if $all_mode && [[ -f "$agent_mail_db" ]]; then
     while IFS= read -r name; do
       agent_list+=("$name")
+      agent_location["$name"]="local"
     done < <(sqlite3 "$agent_mail_db" "SELECT name FROM agents ORDER BY last_active_ts DESC LIMIT 50" 2>/dev/null || true)
-    # Merge live sessions not already in list
     for name in "${live_sessions[@]}"; do
       local found=false
       for existing in "${agent_list[@]}"; do
         [[ "$existing" == "$name" ]] && found=true && break
       done
       $found || agent_list+=("$name")
+      agent_location["$name"]="local"
     done
-  else
-    agent_list=("${live_sessions[@]}")
+  elif ! $remote_only; then
+    for name in "${live_sessions[@]}"; do
+      agent_list+=("$name")
+      agent_location["$name"]="local"
+    done
   fi
+
+  # Add remote sessions
+  for name in "${remote_sessions[@]}"; do
+    local found=false
+    for existing in "${agent_list[@]}"; do
+      [[ "$existing" == "$name" ]] && found=true && break
+    done
+    $found || agent_list+=("$name")
+    agent_location["$name"]="remote"
+  done
 
   if [[ ${#agent_list[@]} -eq 0 ]]; then
     $json_mode && echo "[]" || echo "No active agents found."
@@ -2954,25 +3149,37 @@ EOF
   local first=true
 
   for agent_name in "${agent_list[@]}"; do
+    local location="${agent_location[$agent_name]:-local}"
     local signal_file="/tmp/jat-signal-tmux-jat-${agent_name}.json"
 
-    # Is this agent alive in tmux?
+    # Is this agent alive?
     local alive=false
-    for s in "${live_sessions[@]}"; do
-      [[ "$s" == "$agent_name" ]] && alive=true && break
-    done
+    if [[ "$location" == "remote" ]]; then
+      for s in "${remote_sessions[@]}"; do
+        [[ "$s" == "$agent_name" ]] && alive=true && break
+      done
+    else
+      for s in "${live_sessions[@]}"; do
+        [[ "$s" == "$agent_name" ]] && alive=true && break
+      done
+    fi
 
-    # Read signal file for real-time state
+    # Read signal data — remote from SSH cache, local from file
     local state="" task_id="" task_title="" sig_project="" sig_model=""
     local git_branch="" approach=""
-    if [[ -f "$signal_file" ]]; then
-      # Single python3 call to extract all fields at once
+    local sig_json=""
+    if [[ "$location" == "remote" && -n "${remote_signal_data[$agent_name]:-}" ]]; then
+      sig_json="${remote_signal_data[$agent_name]}"
+    elif [[ "$location" == "local" && -f "$signal_file" ]]; then
+      sig_json="$(cat "$signal_file" 2>/dev/null || true)"
+    fi
+
+    if [[ -n "$sig_json" ]]; then
       local sig_data
       sig_data=$(python3 -c "
 import json, sys
 try:
-    with open(sys.argv[1]) as f:
-        s = json.load(f)
+    s = json.loads(sys.argv[1])
     d = s.get('data', {})
     print(s.get('state', ''))
     print(s.get('task_id', '') or d.get('taskId', ''))
@@ -2982,7 +3189,7 @@ try:
     print(d.get('gitBranch', ''))
     print(d.get('approach', ''))
 except: print('\n\n\n\n\n\n')
-" "$signal_file" 2>/dev/null || printf '\n\n\n\n\n\n')
+" "$sig_json" 2>/dev/null || printf '\n\n\n\n\n\n')
       {
         IFS= read -r state || true
         IFS= read -r task_id || true
@@ -2996,7 +3203,6 @@ except: print('\n\n\n\n\n\n')
 
     # Derive project from task_id prefix if not in signal data
     if [[ -z "$sig_project" && -n "$task_id" ]]; then
-      # task_id format: "project-hash" or "project-hash.N"
       sig_project="${task_id%%-*}"
     fi
 
@@ -3045,10 +3251,10 @@ d = {
     'gitBranch': sys.argv[9] or None,
     'reservedFiles': sys.argv[10] or None,
     'approach': sys.argv[11] or None,
-    'location': 'local'
+    'location': sys.argv[12]
 }
 print(json.dumps(d))
-" "$agent_name" "$alive" "$state" "$task_id" "$task_title" "$sig_project" "$model_short" "$program" "$git_branch" "$reserved_files" "$approach" 2>/dev/null)
+" "$agent_name" "$alive" "$state" "$task_id" "$task_title" "$sig_project" "$model_short" "$program" "$git_branch" "$reserved_files" "$approach" "$location" 2>/dev/null)
   done
 
   json_out+="]"
@@ -3058,24 +3264,25 @@ print(json.dumps(d))
     return 0
   fi
 
-  # Formatted table output
-  printf "\033[1m%-16s %-10s %-14s %-8s %-10s %s\033[0m\n" "AGENT" "STATE" "TASK" "MODEL" "PROJECT" "FILES"
-  printf "%-16s %-10s %-14s %-8s %-10s %s\n" "─────" "─────" "────" "─────" "───────" "─────"
+  # Formatted table output with location column
+  printf "\033[1m%-16s %-8s %-10s %-14s %-8s %-10s %s\033[0m\n" "AGENT" "LOC" "STATE" "TASK" "MODEL" "PROJECT" "FILES"
+  printf "%-16s %-8s %-10s %-14s %-8s %-10s %s\n" "─────" "───" "─────" "────" "─────" "───────" "─────"
 
   echo "$json_out" | python3 -c "
 import json, sys
 agents = json.load(sys.stdin)
-# State colors (ANSI)
 colors = {
-    'working': '\033[33m',   # amber
-    'starting': '\033[36m',  # cyan
-    'review': '\033[32m',    # green
-    'needs_input': '\033[35m', # magenta
-    'idle': '\033[90m',      # gray
-    'completing': '\033[32m', # green
-    'dead': '\033[90m',      # gray
+    'working': '\033[33m',
+    'starting': '\033[36m',
+    'review': '\033[32m',
+    'needs_input': '\033[35m',
+    'idle': '\033[90m',
+    'completing': '\033[32m',
+    'dead': '\033[90m',
 }
 reset = '\033[0m'
+cloud = '\u2601'
+local_icon = '\u2302'
 for a in agents:
     state = a['state'] or ''
     if not a['alive'] and state:
@@ -3086,8 +3293,122 @@ for a in agents:
     model = a['model'] or ''
     project = a['project'] or ''
     files = a['reservedFiles'] or ''
-    print(f'{color}{name:<16s} {state:<10s} {task:<14s} {model:<8s} {project:<10s} {files}{reset}')
+    loc = cloud + ' VPS' if a.get('location') == 'remote' else local_icon + ' local'
+    print(f'{color}{name:<16s} {loc:<8s} {state:<10s} {task:<14s} {model:<8s} {project:<10s} {files}{reset}')
 "
+}
+
+# ---------------------------------------------------------------------------
+# Logs — Stream agent tmux session output (local or remote)
+# ---------------------------------------------------------------------------
+
+cmd_logs() {
+  local agent_name="" follow_mode=false remote_mode=false lines=100
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --follow|-f) follow_mode=true; shift ;;
+      --remote|-r) remote_mode=true; shift ;;
+      --lines|-n)  lines="$2"; shift 2 ;;
+      --help|-h)
+        cat <<'LOGS_HELP'
+jt logs - Stream agent tmux session output
+
+Usage:
+  jt logs <agent-name>               Stream local agent output
+  jt logs <agent-name> --remote      Stream remote (VPS) agent output
+  jt logs <agent-name> --follow      Continuous streaming (tail -f style)
+  jt logs <agent-name> --lines 200   Number of lines to capture (default: 100)
+
+Auto-detection:
+  Without --remote, tries local tmux first. If the agent isn't found
+  locally and VPS is configured, automatically tries the VPS.
+
+Config (in ~/.config/jat/projects.json defaults):
+  vps_host    VPS IP or hostname
+  vps_user    SSH username
+LOGS_HELP
+        return 0
+        ;;
+      *) agent_name="$1"; shift ;;
+    esac
+  done
+
+  [[ -n "$agent_name" ]] || die "Usage: jt logs <agent-name> [--remote] [--follow] [--lines N]"
+
+  local tmux_session="jat-${agent_name}"
+
+  # Helper: capture from local tmux
+  _logs_local() {
+    tmux capture-pane -p -e -t "$tmux_session" -S "-${lines}" 2>/dev/null
+  }
+
+  # Helper: capture from remote tmux via SSH
+  _logs_remote() {
+    local config
+    config="$(_read_jat_config)"
+    local vps_host vps_user
+    vps_host="$(echo "$config" | jq -r '.defaults.vps_host // empty')"
+    vps_user="$(echo "$config" | jq -r '.defaults.vps_user // empty')"
+    [[ -n "$vps_host" ]] || die "No vps_host configured. Set defaults.vps_host in ~/.config/jat/projects.json"
+    [[ -n "$vps_user" ]] || die "No vps_user configured. Set defaults.vps_user in ~/.config/jat/projects.json"
+    ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new "${vps_user}@${vps_host}" \
+      "tmux capture-pane -p -e -t '${tmux_session}' -S '-${lines}' 2>/dev/null"
+  }
+
+  # Determine location
+  local location=""
+  if $remote_mode; then
+    location="remote"
+  elif tmux has-session -t "$tmux_session" 2>/dev/null; then
+    location="local"
+  else
+    # Auto-detect: not found locally, try remote if VPS configured
+    local config_file="${HOME}/.config/jat/projects.json"
+    if [[ -f "$config_file" ]]; then
+      local vps_host
+      vps_host="$(jq -r '.defaults.vps_host // empty' "$config_file")"
+      if [[ -n "$vps_host" ]]; then
+        echo "Agent '${agent_name}' not found locally, trying VPS..." >&2
+        location="remote"
+      else
+        die "Session '${tmux_session}' not found locally and no VPS configured"
+      fi
+    else
+      die "Session '${tmux_session}' not found"
+    fi
+  fi
+
+  if $follow_mode; then
+    # Continuous streaming: poll every 1 second
+    local location_label
+    [[ "$location" == "remote" ]] && location_label="☁ VPS" || location_label="local"
+    echo "Streaming ${agent_name} (${location_label})... Press Ctrl+C to stop" >&2
+    local prev_hash=""
+    while true; do
+      local output
+      if [[ "$location" == "remote" ]]; then
+        output="$(_logs_remote 2>/dev/null)" || { echo "Connection lost" >&2; exit 1; }
+      else
+        output="$(_logs_local 2>/dev/null)" || { echo "Session ended" >&2; exit 0; }
+      fi
+      local cur_hash
+      cur_hash="$(echo "$output" | md5sum | cut -d' ' -f1)"
+      if [[ "$cur_hash" != "$prev_hash" ]]; then
+        clear
+        echo "$output"
+        prev_hash="$cur_hash"
+      fi
+      sleep 1
+    done
+  else
+    # Single capture
+    if [[ "$location" == "remote" ]]; then
+      _logs_remote
+    else
+      _logs_local
+    fi
+  fi
 }
 
 cmd_help() {
@@ -3116,7 +3437,9 @@ Commands:
   dep     cycles
   data    tables | schema | query | exec | create | drop | columns
   bases   list | show | create | delete | attach | detach | render | search
+  spawn   [TASK_ID] [--remote] [--local] [--model M] [--attach]
   agents  [--json] [--project X] [--all]  List active agents
+  logs    <agent-name> [--remote] [--follow] [--lines N]  Stream agent output
   ssh     [agent-name]         Connect to VPS or attach to remote agent session
   audit   [--json] [--fix]    Check project context injection compliance
   init    [--quiet]
@@ -3146,7 +3469,9 @@ case "${1:-}" in
   dep)       shift; cmd_dep "$@" ;;
   data)      shift; cmd_data "$@" ;;
   bases)     shift; cmd_bases "$@" ;;
+  spawn)     shift; cmd_spawn "$@" ;;
   agents)    shift; cmd_agents "$@" ;;
+  logs)      shift; cmd_logs "$@" ;;
   ssh)       shift; cmd_ssh "$@" ;;
   audit)     shift; cmd_audit "$@" ;;
   init)      shift; cmd_init "$@" ;;

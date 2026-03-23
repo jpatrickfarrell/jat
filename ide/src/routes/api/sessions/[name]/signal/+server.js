@@ -23,10 +23,12 @@
 
 import { json } from '@sveltejs/kit';
 import { readFileSync, writeFileSync, appendFileSync, unlinkSync, existsSync } from 'fs';
-import { execFile } from 'child_process';
+import { execFile, exec } from 'child_process';
 import { promisify } from 'util';
+import { getVpsConfig } from '$lib/server/sessions.js';
 
 const execFileAsync = promisify(execFile);
+const execAsync = promisify(exec);
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ params }) {
@@ -44,33 +46,60 @@ export async function GET({ params }) {
 		signalFile = `/tmp/jat-signal-${sessionName}.json`;
 	}
 
-	if (!existsSync(signalFile)) {
-		return json({
-			hasSignal: false,
-			sessionName,
-			message: 'No signal file found'
-		});
+	// Found locally
+	if (existsSync(signalFile)) {
+		try {
+			const content = readFileSync(signalFile, 'utf-8');
+			const signal = JSON.parse(content);
+
+			return json({
+				hasSignal: true,
+				sessionName,
+				signal,
+				location: 'local',
+				file: signalFile
+			});
+		} catch (err) {
+			const error = /** @type {Error} */ (err);
+			return json({
+				hasSignal: false,
+				sessionName,
+				error: 'Failed to read signal file',
+				message: error.message
+			}, { status: 500 });
+		}
 	}
 
-	try {
-		const content = readFileSync(signalFile, 'utf-8');
-		const signal = JSON.parse(content);
+	// Not found locally — try reading from VPS
+	const vps = getVpsConfig();
+	if (vps) {
+		try {
+			const remoteFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
+			const { stdout } = await execAsync(
+				`ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=accept-new ${vps.user}@${vps.host} 'cat "${remoteFile}" 2>/dev/null'`,
+				{ timeout: 8000 }
+			);
 
-		return json({
-			hasSignal: true,
-			sessionName,
-			signal,
-			file: signalFile
-		});
-	} catch (err) {
-		const error = /** @type {Error} */ (err);
-		return json({
-			hasSignal: false,
-			sessionName,
-			error: 'Failed to read signal file',
-			message: error.message
-		}, { status: 500 });
+			if (stdout.trim()) {
+				const signal = JSON.parse(stdout.trim());
+				return json({
+					hasSignal: true,
+					sessionName,
+					signal,
+					location: 'remote',
+					file: remoteFile
+				});
+			}
+		} catch {
+			// Remote read failed, fall through to no signal
+		}
 	}
+
+	return json({
+		hasSignal: false,
+		sessionName,
+		message: 'No signal file found'
+	});
 }
 
 /** @type {import('./$types').RequestHandler} */

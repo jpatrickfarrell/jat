@@ -5,6 +5,8 @@
 
 import { execSync, exec } from 'child_process';
 import { promisify } from 'util';
+import { readFileSync } from 'fs';
+import { homedir } from 'os';
 
 const execAsync = promisify(exec);
 
@@ -459,6 +461,111 @@ export async function captureOutputAsync(agentName, options = {}) {
  */
 export function getVisibleContent(agentName) {
 	return captureOutput(agentName, { lines: 0 });
+}
+
+/**
+ * Read VPS config from ~/.config/jat/projects.json
+ * @returns {{ host: string, user: string } | null}
+ */
+export function getVpsConfig() {
+	try {
+		const configPath = `${homedir()}/.config/jat/projects.json`;
+		const config = JSON.parse(readFileSync(configPath, 'utf8'));
+		const host = config?.defaults?.vps_host;
+		const user = config?.defaults?.vps_user;
+		if (host && user) return { host, user };
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Capture output from a REMOTE tmux session on VPS via SSH
+ * @param {string} agentName - Agent name
+ * @param {Object} [options] - Capture options
+ * @param {number} [options.lines=100] - Number of lines to capture
+ * @param {boolean} [options.escapeSequences=false] - Include ANSI escape sequences
+ * @returns {Promise<{ success: boolean, output?: string, error?: string, remote: true }>}
+ */
+export async function captureRemoteOutput(agentName, options = {}) {
+	const vps = getVpsConfig();
+	if (!vps) {
+		return { success: false, error: 'No VPS configured', remote: true };
+	}
+
+	const sessionName = `${SESSION_PREFIX}${agentName}`;
+	const { lines = 100, escapeSequences = false } = options;
+
+	let remoteCmd = `tmux capture-pane -t "${sessionName}" -p -S -${lines}`;
+	if (escapeSequences) {
+		remoteCmd += ' -e';
+	}
+
+	try {
+		const { stdout } = await execAsync(
+			`ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new ${vps.user}@${vps.host} '${remoteCmd}'`,
+			{ timeout: 15000, maxBuffer: 1024 * 1024 * 10 }
+		);
+
+		return { success: true, output: stdout.trimEnd(), remote: true };
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		if (msg.includes("can't find session")) {
+			return { success: false, error: `Remote session '${sessionName}' not found on VPS`, remote: true };
+		}
+		return { success: false, error: msg, remote: true };
+	}
+}
+
+/**
+ * Read a remote agent's signal file from VPS
+ * @param {string} agentName - Agent name
+ * @returns {Promise<{ success: boolean, signal?: object, error?: string }>}
+ */
+export async function readRemoteSignal(agentName) {
+	const vps = getVpsConfig();
+	if (!vps) {
+		return { success: false, error: 'No VPS configured' };
+	}
+
+	const signalFile = `/tmp/jat-signal-tmux-jat-${agentName}.json`;
+
+	try {
+		const { stdout } = await execAsync(
+			`ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new ${vps.user}@${vps.host} 'cat "${signalFile}" 2>/dev/null || echo "{}"'`,
+			{ timeout: 10000 }
+		);
+
+		const signal = JSON.parse(stdout.trim() || '{}');
+		return { success: true, signal };
+	} catch (err) {
+		return { success: false, error: err instanceof Error ? err.message : String(err) };
+	}
+}
+
+/**
+ * List remote agent tmux sessions on VPS
+ * @returns {Promise<string[]>} Array of agent names running on VPS
+ */
+export async function listRemoteSessions() {
+	const vps = getVpsConfig();
+	if (!vps) return [];
+
+	try {
+		const { stdout } = await execAsync(
+			`ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new ${vps.user}@${vps.host} 'tmux list-sessions -F "#{session_name}" 2>/dev/null || true'`,
+			{ timeout: 10000 }
+		);
+
+		return stdout.trim()
+			.split('\n')
+			.filter(name => name.startsWith('jat-') && !name.startsWith('jat-app-'))
+			.map(name => name.replace(/^jat-/, ''))
+			.filter(name => /^[A-Z]/.test(name));
+	} catch {
+		return [];
+	}
 }
 
 /**

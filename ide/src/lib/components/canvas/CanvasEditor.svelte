@@ -4,8 +4,17 @@
 	 * Renders blocks vertically with + buttons between them for inserting new blocks.
 	 * Supports drag-to-reorder and delete functionality for blocks.
 	 */
-	import type { CanvasPage, CanvasBlock, CanvasBlockType } from '$lib/types/canvas';
+	import type { CanvasBlock, CanvasBlockType } from '$lib/types/canvas';
 	import BlockRenderer from './BlockRenderer.svelte';
+
+	// Accept any object with the required page shape (CanvasPage or KnowledgeBase)
+	interface PageLike {
+		id: string;
+		name: string;
+		blocks: CanvasBlock[];
+		is_base?: boolean;
+		always_inject?: boolean;
+	}
 
 	let {
 		page,
@@ -17,7 +26,7 @@
 		onControlChange = () => {},
 		onToggleBase = () => {},
 	}: {
-		page: CanvasPage | null;
+		page: PageLike | null;
 		project?: string | null;
 		controlValues?: Record<string, unknown>;
 		refreshTokens?: Record<string, number>;
@@ -318,26 +327,29 @@
 				</div>
 
 				<!-- Knowledge Base toggle -->
+				{#if true}
+				{@const isKB = !!(page.is_base || page.always_inject)}
 				<div class="mb-6 flex items-center gap-2">
 					<label class="canvas-base-toggle">
 						<input
 							type="checkbox"
-							checked={page.is_base}
-							onchange={() => onToggleBase(!page?.is_base)}
+							checked={isKB}
+							onchange={() => onToggleBase(!isKB)}
 						/>
 						<span class="toggle-track">
 							<span class="toggle-thumb"></span>
 						</span>
-						<span class="toggle-label" class:active={page.is_base}>
-							{page.is_base ? 'Knowledge Base' : 'Use as Knowledge Base'}
+						<span class="toggle-label" class:active={isKB}>
+							{isKB ? 'Always Inject' : 'Inject into Agent Prompts'}
 						</span>
 					</label>
-					{#if page.is_base}
+					{#if isKB}
 						<span class="text-[10px] px-1.5 py-0.5 rounded" style="background: oklch(0.65 0.20 145 / 0.15); color: oklch(0.70 0.18 145); border: 1px solid oklch(0.65 0.20 145 / 0.3);">
 							Injected into agent prompts
 						</span>
 					{/if}
 				</div>
+				{/if}
 
 				{#if page.blocks.length === 0}
 					<!-- Empty state: prominent add block button -->

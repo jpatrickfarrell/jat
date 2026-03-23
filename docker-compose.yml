@@ -1,0 +1,39 @@
+# JAT — Jomarchy Agent Tools
+# Docker Compose stack for VPS deployment
+#
+# Quick start:
+#   docker compose up -d
+#
+# Upgrade:
+#   docker compose pull && docker compose up -d
+#
+# Logs:
+#   docker compose logs -f jat
+
+services:
+  jat:
+    image: ghcr.io/joewinke/jat:latest
+    build: .
+    container_name: jat
+    restart: always
+    ports:
+      - "3333:3333"
+    volumes:
+      # Persistent data (databases, config)
+      - ${JAT_DATA_DIR:-~/data/jat}:/home/jat/data/jat
+      - ${JAT_CONFIG_DIR:-~/.config/jat}:/home/jat/.config/jat
+      # Project repositories
+      - ${JAT_PROJECTS_DIR:-~/projects}:/home/jat/projects
+      # Agent registry database
+      - ${JAT_DATA_DIR:-~/data/jat}/agent-mail.db:/home/jat/.agent-mail.db
+    environment:
+      - PORT=3333
+      - HOST=0.0.0.0
+      - NODE_ENV=production
+      - ORIGIN=${JAT_ORIGIN:-http://localhost:3333}
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3333/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

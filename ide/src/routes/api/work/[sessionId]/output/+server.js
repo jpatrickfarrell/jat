@@ -20,6 +20,7 @@ import { promisify } from 'util';
 import { readdir, readFile, stat } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
+import { getVpsConfig } from '$lib/server/sessions.js';
 
 const execAsync = promisify(exec);
 
@@ -67,18 +68,34 @@ export async function GET({ params, url }) {
 			}, { status: 400 });
 		}
 
-		// Check if session exists
+		// Check if session exists locally
 		let sessionAlive = true;
+		let isRemote = false;
 		try {
 			await execAsync(`tmux has-session -t "${sessionId}" 2>/dev/null`);
 		} catch {
 			sessionAlive = false;
 		}
 
-		// If session is gone, return empty output with sessionEnded flag
-		// instead of 404 to prevent console error spam from polling clients
+		// If not found locally, check if it's a remote VPS session
 		if (!sessionAlive) {
-			// Still check for session log history
+			const vps = getVpsConfig();
+			if (vps) {
+				try {
+					await execAsync(
+						`ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=accept-new ${vps.user}@${vps.host} 'tmux has-session -t "${sessionId}" 2>/dev/null'`,
+						{ timeout: 8000 }
+					);
+					sessionAlive = true;
+					isRemote = true;
+				} catch {
+					// Not found on VPS either
+				}
+			}
+		}
+
+		// If session is gone everywhere, return empty output with sessionEnded flag
+		if (!sessionAlive) {
 			let sessionLog = null;
 			if (includePreCompact) {
 				sessionLog = await readSessionLog(sessionId);
@@ -100,20 +117,24 @@ export async function GET({ params, url }) {
 			});
 		}
 
-		// Capture output
+		// Capture output (local or remote)
 		let output = '';
 		let lineCount = 0;
+		const captureCommand = `tmux capture-pane -p -e -t "${sessionId}" -S -${lines}`;
+
 		try {
-			// -p: print to stdout
-			// -e: include escape sequences (ANSI colors)
-			// -S -N: capture last N lines of scrollback
-			const captureCommand = `tmux capture-pane -p -e -t "${sessionId}" -S -${lines}`;
-			const { stdout } = await execAsync(captureCommand, { maxBuffer: 5 * 1024 * 1024 });
-			output = stdout;
-			lineCount = stdout.split('\n').length;
+			if (isRemote) {
+				const vps = getVpsConfig();
+				const sshCmd = `ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new ${vps.user}@${vps.host} '${captureCommand}'`;
+				const { stdout } = await execAsync(sshCmd, { maxBuffer: 5 * 1024 * 1024, timeout: 15000 });
+				output = stdout;
+			} else {
+				const { stdout } = await execAsync(captureCommand, { maxBuffer: 5 * 1024 * 1024 });
+				output = stdout;
+			}
+			lineCount = output.split('\n').length;
 		} catch (err) {
 			console.error('Failed to capture session output:', err);
-			// Return empty output instead of error
 		}
 
 		// Check for unified session log if enabled
@@ -141,6 +162,7 @@ export async function GET({ params, url }) {
 			output: combinedOutput,
 			lineCount: combinedOutput.split('\n').length,
 			lines,
+			location: isRemote ? 'remote' : 'local',
 			hasSessionHistory,
 			sessionLogInfo: sessionLog ? {
 				filename: sessionLog.filename,

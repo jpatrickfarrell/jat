@@ -75,7 +75,7 @@
 		harness: 'claude-code',
 		port: 3000,
 		devCommand: 'npm run dev',
-		serverPath: '/',
+		serverPath: '',
 		activeColor: '',
 		inactiveColor: '',
 	});
@@ -877,6 +877,7 @@
 			steps.push({ label: 'Initialized git (if needed)', status: 'pending' });
 			steps.push({ label: 'Initialized JAT Tasks', status: 'pending' });
 			steps.push({ label: 'Added to projects.json', status: 'pending' });
+			steps.push({ label: 'Installed dependencies', status: 'pending' });
 		}
 		if (wizardData.activeColor) {
 			steps.push({ label: 'Configured project colors', status: 'pending' });
@@ -1069,7 +1070,7 @@
 			harness: 'claude-code',
 			port: 3000,
 			devCommand: 'npm run dev',
-			serverPath: '/',
+			serverPath: '',
 			activeColor: '',
 			inactiveColor: '',
 		};
@@ -1784,7 +1785,7 @@
 									type="text"
 									class="input input-bordered w-full font-mono text-sm"
 									style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250);"
-									placeholder="/"
+									placeholder="e.g. frontend, packages/web"
 									bind:value={wizardData.serverPath}
 								/>
 								<span class="text-[11px] mt-1" style="color: oklch(0.45 0.02 250);">

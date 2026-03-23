@@ -37,6 +37,46 @@ import { initProject } from '$lib/server/jat-tasks.js';
 const execAsync = promisify(exec);
 
 const CONFIG_DIR = join(homedir(), '.config', 'jat');
+
+/**
+ * Detect package manager from lock files and install dependencies
+ * @param {string} projectPath - Absolute path to project
+ * @returns {Promise<{installed: boolean, manager: string|null, error: string|null}>}
+ */
+async function installDependencies(projectPath) {
+	// Check for package.json first — no point installing without it
+	if (!existsSync(join(projectPath, 'package.json'))) {
+		return { installed: false, manager: null, error: null };
+	}
+
+	// Already has node_modules — skip install
+	if (existsSync(join(projectPath, 'node_modules'))) {
+		return { installed: false, manager: null, error: null };
+	}
+
+	// Detect package manager from lock files
+	let manager = 'npm';
+	let installCmd = 'npm install';
+
+	if (existsSync(join(projectPath, 'pnpm-lock.yaml'))) {
+		manager = 'pnpm';
+		installCmd = 'pnpm install';
+	} else if (existsSync(join(projectPath, 'yarn.lock'))) {
+		manager = 'yarn';
+		installCmd = 'yarn install';
+	} else if (existsSync(join(projectPath, 'bun.lockb')) || existsSync(join(projectPath, 'bun.lock'))) {
+		manager = 'bun';
+		installCmd = 'bun install';
+	}
+
+	try {
+		await execAsync(installCmd, { cwd: projectPath, timeout: 120000 });
+		return { installed: true, manager, error: null };
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		return { installed: false, manager, error: msg };
+	}
+}
 const CONFIG_FILE = join(CONFIG_DIR, 'projects.json');
 
 /**
@@ -297,6 +337,14 @@ export async function POST({ request }) {
 				if (secretsStored.length > 0) steps.push(`Stored ${secretsStored.length} secret(s)`);
 			}
 
+			// Auto-install dependencies if package.json exists
+			const installResult = await installDependencies(absolutePath);
+			if (installResult.installed) {
+				steps.push(`Installed dependencies (${installResult.manager})`);
+			} else if (installResult.error) {
+				steps.push(`Warning: ${installResult.manager} install failed: ${installResult.error}`);
+			}
+
 			return json({
 				success: true,
 				project: buildProjectResponse(secretsStored),
@@ -322,6 +370,14 @@ export async function POST({ request }) {
 			if (body.secrets && typeof body.secrets === 'object') {
 				secretsStored = await storeSecrets(projectKey, body.secrets);
 				if (secretsStored.length > 0) steps.push(`Stored ${secretsStored.length} secret(s)`);
+			}
+
+			// STEP 5: Auto-install dependencies if package.json exists
+			const installResult = await installDependencies(absolutePath);
+			if (installResult.installed) {
+				steps.push(`Installed dependencies (${installResult.manager})`);
+			} else if (installResult.error) {
+				steps.push(`Warning: ${installResult.manager} install failed: ${installResult.error}`);
 			}
 
 			// Invalidate projects cache

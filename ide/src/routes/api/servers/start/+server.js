@@ -134,7 +134,7 @@ export async function POST({ request }) {
 				if (path) {
 					projectPath = path.replace(/^~/, process.env.HOME || '');
 				}
-				if (srvPath) {
+				if (srvPath && srvPath !== '/' && srvPath !== 'null') {
 					serverPath = srvPath.replace(/^~/, process.env.HOME || '');
 					// Resolve relative server_path against project path
 					if (serverPath && !serverPath.startsWith('/') && projectPath) {

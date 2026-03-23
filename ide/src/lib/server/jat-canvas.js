@@ -1,6 +1,6 @@
 /**
  * Server-side canvas integration
- * Wraps lib/canvas.js for use in SvelteKit server routes
+ * Re-exports from unified lib/bases.js for use in SvelteKit server routes
  */
 
 export {
@@ -11,7 +11,7 @@ export {
 	deleteCanvasPage,
 	listCanvasBasePages,
 	serializeCanvasToMarkdown,
-} from '../../../../lib/canvas.js';
+} from '../../../../lib/bases.js';
 
 export {
 	getTemplates,

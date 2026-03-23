@@ -253,7 +253,7 @@ export async function POST({ request }) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
 		}
 
-		// Auto-init bases.db if needed
+		// Auto-init bases tables in data.db if needed
 		initBasesDb(path);
 
 		const base = createBase(path, {

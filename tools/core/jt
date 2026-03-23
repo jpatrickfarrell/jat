@@ -6,7 +6,7 @@ set -euo pipefail
 VERSION="0.1.0"
 DB_NAME=".jat/tasks.db"
 DATA_DB_NAME=".jat/data.db"
-BASES_DB_NAME=".jat/bases.db"
+BASES_DB_NAME=".jat/data.db"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -2086,13 +2086,12 @@ BASES_SCHEMA='
 CREATE TABLE IF NOT EXISTS bases (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    project TEXT NOT NULL,
+    blocks TEXT DEFAULT '"'"'[]'"'"',
     description TEXT,
-    source_type TEXT NOT NULL CHECK (source_type IN ('"'"'manual'"'"', '"'"'data_table'"'"', '"'"'conversation'"'"', '"'"'external'"'"')),
-    content TEXT,
-    context_query TEXT,
-    source_config TEXT DEFAULT '"'"'{}'"'"',
     always_inject INTEGER NOT NULL DEFAULT 0,
     token_estimate INTEGER,
+    source_config TEXT DEFAULT '"'"'{}'"'"',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -2100,26 +2099,36 @@ CREATE TABLE IF NOT EXISTS task_bases (
     task_id TEXT NOT NULL,
     base_id TEXT NOT NULL,
     attached_at TEXT NOT NULL,
+    attached_by TEXT,
     PRIMARY KEY (task_id, base_id),
     FOREIGN KEY (base_id) REFERENCES bases(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS task_tables (
+    task_id TEXT NOT NULL,
+    table_name TEXT NOT NULL,
+    project TEXT NOT NULL,
+    context_query TEXT,
+    attached_at TEXT NOT NULL,
+    attached_by TEXT,
+    PRIMARY KEY (task_id, table_name, project)
+);
 CREATE VIRTUAL TABLE IF NOT EXISTS bases_fts USING fts5(
-    name, description, content,
+    name, description,
     content='"'"'bases'"'"', content_rowid='"'"'rowid'"'"'
 );
-CREATE TRIGGER IF NOT EXISTS bases_ai AFTER INSERT ON bases BEGIN
-    INSERT INTO bases_fts(rowid, name, description, content)
-    VALUES (new.rowid, new.name, new.description, new.content);
+CREATE TRIGGER IF NOT EXISTS bases_fts_ai AFTER INSERT ON bases BEGIN
+    INSERT INTO bases_fts(rowid, name, description)
+    VALUES (new.rowid, new.name, new.description);
 END;
-CREATE TRIGGER IF NOT EXISTS bases_ad AFTER DELETE ON bases BEGIN
-    INSERT INTO bases_fts(bases_fts, rowid, name, description, content)
-    VALUES ('"'"'delete'"'"', old.rowid, old.name, old.description, old.content);
+CREATE TRIGGER IF NOT EXISTS bases_fts_ad AFTER DELETE ON bases BEGIN
+    INSERT INTO bases_fts(bases_fts, rowid, name, description)
+    VALUES ('"'"'delete'"'"', old.rowid, old.name, old.description);
 END;
-CREATE TRIGGER IF NOT EXISTS bases_au AFTER UPDATE ON bases BEGIN
-    INSERT INTO bases_fts(bases_fts, rowid, name, description, content)
-    VALUES ('"'"'delete'"'"', old.rowid, old.name, old.description, old.content);
-    INSERT INTO bases_fts(rowid, name, description, content)
-    VALUES (new.rowid, new.name, new.description, new.content);
+CREATE TRIGGER IF NOT EXISTS bases_fts_au AFTER UPDATE ON bases BEGIN
+    INSERT INTO bases_fts(bases_fts, rowid, name, description)
+    VALUES ('"'"'delete'"'"', old.rowid, old.name, old.description);
+    INSERT INTO bases_fts(rowid, name, description)
+    VALUES (new.rowid, new.name, new.description);
 END;
 '
 
@@ -2144,12 +2153,19 @@ sql_bases_exec() {
   sqlite3 "$BASES_DB" "PRAGMA foreign_keys=ON; $1"
 }
 
-# Ensure bases.db exists, creating if needed
+# Ensure bases table exists in data.db, creating if needed
 require_bases_db() {
   if [[ ! -f "$BASES_DB" ]]; then
     local jat_dir="$PROJECT_ROOT/.jat"
     mkdir -p "$jat_dir"
     sqlite3 "$BASES_DB" "PRAGMA journal_mode=WAL; $BASES_SCHEMA"
+  else
+    # Check if bases table exists (may have _canvas_pages from pre-migration)
+    local has_bases
+    has_bases="$(sqlite3 "$BASES_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='bases';" 2>/dev/null)"
+    if [[ -z "$has_bases" ]]; then
+      sqlite3 "$BASES_DB" "PRAGMA journal_mode=WAL; $BASES_SCHEMA"
+    fi
   fi
 }
 
@@ -2216,7 +2232,10 @@ for b in data:
     if desc and len(desc) > 40:
         desc = desc[:37] + '...'
     desc_str = f' - {desc}' if desc else ''
-    print(f'  {b[\"id\"]}  [{b[\"source_type\"]}] {b[\"name\"]}{inject}{tokens}{desc_str}')
+    # Infer type from source_config
+    cfg = json.loads(b.get('source_config', '{}') or '{}')
+    src_type = cfg.get('_migrated_source_type', 'manual')
+    print(f'  {b[\"id\"]}  [{src_type}] {b[\"name\"]}{inject}{tokens}{desc_str}')
 "
     fi
   fi
@@ -2253,19 +2272,25 @@ cmd_bases_show() {
 import sys, json
 data = json.load(sys.stdin)
 b = data[0]
+cfg = json.loads(b.get('source_config', '{}') or '{}')
+src_type = cfg.get('_migrated_source_type', 'manual')
 print(f'ID:          {b[\"id\"]}')
 print(f'Name:        {b[\"name\"]}')
-print(f'Type:        {b[\"source_type\"]}')
+print(f'Project:     {b.get(\"project\", \"\")}')
+print(f'Type:        {src_type}')
 if b.get('description'):
     print(f'Description: {b[\"description\"]}')
 if b.get('always_inject') == 1:
     print('Inject:      always')
 if b.get('token_estimate'):
     print(f'Tokens:      ~{b[\"token_estimate\"]}')
-if b.get('context_query'):
-    print(f'Query:       {b[\"context_query\"]}')
-if b.get('content'):
-    content = b['content']
+if cfg.get('context_query'):
+    print(f'Query:       {cfg[\"context_query\"]}')
+# Extract text content from blocks
+blocks = json.loads(b.get('blocks', '[]') or '[]')
+text_parts = [bl['content'] for bl in blocks if bl.get('type') == 'text' and bl.get('content')]
+if text_parts:
+    content = '\n\n'.join(text_parts)
     if len(content) > 200:
         content = content[:197] + '...'
     print(f'Content:     {content}')
@@ -2290,7 +2315,7 @@ for t in data:
 
 cmd_bases_create() {
   require_bases_db
-  local name="" source_type="" content="" description="" context_query=""
+  local name="" source_type="" content="" description="" context_query="" project=""
   local always_inject=0 token_estimate="" json_out=false
 
   while [[ $# -gt 0 ]]; do
@@ -2300,6 +2325,7 @@ cmd_bases_create() {
       --content)       content="$2"; shift 2 ;;
       --description)   description="$2"; shift 2 ;;
       --query)         context_query="$2"; shift 2 ;;
+      --project)       project="$2"; shift 2 ;;
       --always-inject) always_inject=1; shift ;;
       --tokens)        token_estimate="$2"; shift 2 ;;
       --json)          json_out=true; shift ;;
@@ -2307,19 +2333,45 @@ cmd_bases_create() {
     esac
   done
 
-  [[ -n "$name" ]] || die "Usage: jt bases create --name \"Name\" --type TYPE [--content \"...\"] [--description \"...\"] [--query \"SELECT ...\"] [--always-inject] [--tokens N] [--json]"
-  [[ -n "$source_type" ]] || die "Source type required (--type). Must be: manual, data_table, conversation, external"
-  validate_source_type "$source_type"
+  [[ -n "$name" ]] || die "Usage: jt bases create --name \"Name\" [--type TYPE] [--content \"...\"] [--description \"...\"] [--query \"SELECT ...\"] [--project NAME] [--always-inject] [--tokens N] [--json]"
+
+  # Default project from directory name
+  if [[ -z "$project" ]]; then
+    project="$(basename "$PROJECT_ROOT")"
+  fi
 
   local id ts
   id="$(gen_base_id)"
   ts="$(now_ts)"
 
-  local esc_name esc_desc esc_content esc_query
+  # Convert content to blocks JSON
+  local blocks_json='[]'
+  if [[ -n "$content" ]]; then
+    local esc_block_content
+    esc_block_content="$(echo "$content" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')"
+    local block_id
+    block_id="$(gen_base_id)"
+    blocks_json="[{\"type\":\"text\",\"id\":\"$block_id\",\"content\":$esc_block_content}]"
+  fi
+
+  # Build source_config
+  local source_config='{}'
+  if [[ -n "$source_type" ]]; then
+    validate_source_type "$source_type"
+    source_config="{\"_migrated_source_type\":\"$source_type\"}"
+  fi
+  if [[ -n "$context_query" ]]; then
+    local esc_cq
+    esc_cq="$(echo "$context_query" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read().strip()))')"
+    source_config="$(echo "$source_config" | python3 -c "import sys,json; d=json.load(sys.stdin); d['context_query']=$esc_cq; print(json.dumps(d))")"
+  fi
+
+  local esc_name esc_desc esc_blocks esc_config esc_project
   esc_name="$(sql_escape "$name")"
   esc_desc="$(sql_escape "$description")"
-  esc_content="$(sql_escape "$content")"
-  esc_query="$(sql_escape "$context_query")"
+  esc_blocks="$(sql_escape "$blocks_json")"
+  esc_config="$(sql_escape "$source_config")"
+  esc_project="$(sql_escape "$project")"
 
   local tok_val="NULL"
   if [[ -n "$token_estimate" ]]; then
@@ -2327,13 +2379,14 @@ cmd_bases_create() {
     tok_val="$token_estimate"
   fi
 
-  sql_bases_exec "INSERT INTO bases (id, name, description, source_type, content, context_query, source_config, always_inject, token_estimate, created_at, updated_at) VALUES ('$id', '$esc_name', '$esc_desc', '$source_type', '$esc_content', '$esc_query', '{}', $always_inject, $tok_val, '$ts', '$ts');"
+  sql_bases_exec "INSERT INTO bases (id, name, project, blocks, description, always_inject, token_estimate, source_config, created_at, updated_at) VALUES ('$id', '$esc_name', '$esc_project', '$esc_blocks', '$esc_desc', $always_inject, $tok_val, '$esc_config', '$ts', '$ts');"
   touch_sentinel
 
   if $json_out; then
     sql_bases_json "SELECT * FROM bases WHERE id = '$id';"
   else
-    echo "Created base: $id ($name) [$source_type]"
+    local type_label="${source_type:-manual}"
+    echo "Created base: $id ($name) [$type_label]"
   fi
 }
 
@@ -2429,10 +2482,41 @@ cmd_bases_render() {
   result="$(sql_bases_json "SELECT * FROM bases WHERE id = '$(sql_escape "$id")';")"
   [[ "$result" != "[]" ]] || die "Base not found: $id"
 
+  # Extract source_type, content, and context_query from blocks/source_config JSON
   local source_type content context_query
-  source_type="$(echo "$result" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['source_type'])")"
-  content="$(echo "$result" | python3 -c "import sys,json; print(json.load(sys.stdin)[0].get('content') or '')")"
-  context_query="$(echo "$result" | python3 -c "import sys,json; print(json.load(sys.stdin)[0].get('context_query') or '')")"
+  source_type="$(echo "$result" | python3 -c "
+import sys, json
+b = json.load(sys.stdin)[0]
+blocks = json.loads(b.get('blocks') or '[]')
+config = json.loads(b.get('source_config') or '{}')
+st = config.get('_migrated_source_type', 'manual')
+if not st or st == 'manual':
+    for bl in blocks:
+        if bl.get('type') == 'table_view':
+            st = 'data_table'
+            break
+print(st)
+")"
+  content="$(echo "$result" | python3 -c "
+import sys, json
+b = json.load(sys.stdin)[0]
+blocks = json.loads(b.get('blocks') or '[]')
+text_parts = [bl.get('content','') for bl in blocks if bl.get('type') == 'text']
+print('\n\n'.join(text_parts))
+")"
+  context_query="$(echo "$result" | python3 -c "
+import sys, json
+b = json.load(sys.stdin)[0]
+blocks = json.loads(b.get('blocks') or '[]')
+config = json.loads(b.get('source_config') or '{}')
+cq = config.get('context_query', '')
+if not cq:
+    for bl in blocks:
+        if bl.get('type') == 'table_view' and bl.get('query'):
+            cq = bl['query']
+            break
+print(cq)
+")"
 
   case "$source_type" in
     manual|conversation|external)
@@ -2524,7 +2608,16 @@ for b in data:
     if desc and len(desc) > 40:
         desc = desc[:37] + '...'
     desc_str = f' - {desc}' if desc else ''
-    print(f'  {b[\"id\"]}  [{b[\"source_type\"]}] {b[\"name\"]}{desc_str}')
+    # Infer source_type from source_config and blocks
+    config = json.loads(b.get('source_config') or '{}')
+    blocks = json.loads(b.get('blocks') or '[]')
+    st = config.get('_migrated_source_type', 'manual')
+    if not st or st == 'manual':
+        for bl in blocks:
+            if bl.get('type') == 'table_view':
+                st = 'data_table'
+                break
+    print(f'  {b[\"id\"]}  [{st}] {b[\"name\"]}{desc_str}')
 "
     fi
   fi
@@ -2633,7 +2726,7 @@ cmd_audit() {
       checks_failed=$((checks_failed + 1))
     fi
   else
-    issues+=("No bases database (.jat/bases.db)")
+    issues+=("No data database (.jat/data.db)")
     fixes+=("jt init && jt bases create --name \"Project Index\" --type manual --always-inject --content \"...\"")
     checks_failed=$((checks_failed + 1))
   fi

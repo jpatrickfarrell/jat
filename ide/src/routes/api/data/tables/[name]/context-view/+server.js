@@ -34,7 +34,7 @@ export async function GET({ params, url }) {
 				b.source_type === 'data_table' &&
 				b.source_config?.tableName === tableName
 			) || null;
-		} catch { /* bases.db may not exist yet */ }
+		} catch { /* bases tables may not exist yet */ }
 
 		return json({ ...view, linkedBase });
 	} catch (error) {

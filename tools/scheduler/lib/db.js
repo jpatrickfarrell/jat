@@ -9,6 +9,16 @@ import { join, basename } from 'node:path';
 import { homedir } from 'node:os';
 
 /**
+ * Extract text content from a blocks JSON string.
+ */
+function extractTextContent(blocksStr) {
+  try {
+    const blocks = JSON.parse(blocksStr || '[]');
+    return blocks.filter(b => b.type === 'text').map(b => b.content).join('\n\n') || '';
+  } catch { return ''; }
+}
+
+/**
  * Discover all projects with .jat/tasks.db.
  * Checks both ~/code/ directories and projects.json config.
  * @returns {Array<{name: string, path: string, dbPath: string}>}
@@ -130,22 +140,27 @@ export function updateChildResult(dbPath, childId, result, durationMs) {
 
 /**
  * Get external bases that are due for refresh.
- * Scans .jat/bases.db for bases where source_type='external'
- * and source_config contains refresh_cron + next_refresh_at <= now.
- * @param {string} basesDbPath - Path to .jat/bases.db
+ * Scans .jat/data.db for bases where source_config contains
+ * _migrated_source_type='external' + refresh_cron + next_refresh_at <= now.
+ * @param {string} dataDbPath - Path to .jat/data.db
  * @returns {Array<object>}
  */
-export function getDueBaseRefreshes(basesDbPath) {
+export function getDueBaseRefreshes(dataDbPath) {
   let db;
   try {
-    if (!existsSync(basesDbPath)) return [];
-    db = new Database(basesDbPath, { readonly: true });
+    if (!existsSync(dataDbPath)) return [];
+    db = new Database(dataDbPath, { readonly: true });
+
+    // Check if bases table exists
+    const hasTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='bases'").get();
+    if (!hasTable) return [];
+
     const now = new Date().toISOString();
     const rows = db.prepare(`
-      SELECT id, name, source_type, content, source_config, token_estimate
+      SELECT id, name, blocks, source_config, token_estimate
       FROM bases
-      WHERE source_type = 'external'
-    `).all(now);
+      WHERE json_extract(source_config, '$._migrated_source_type') = 'external'
+    `).all();
 
     // Filter in JS since source_config is JSON
     return rows.filter(row => {
@@ -158,9 +173,11 @@ export function getDueBaseRefreshes(basesDbPath) {
     }).map(row => ({
       ...row,
       source_config: JSON.parse(row.source_config || '{}'),
+      // Extract text content from blocks for backward compat
+      content: extractTextContent(row.blocks),
     }));
   } catch (err) {
-    console.error(`[scheduler] Error reading bases ${basesDbPath}: ${err.message}`);
+    console.error(`[scheduler] Error reading bases ${dataDbPath}: ${err.message}`);
     return [];
   } finally {
     if (db) db.close();
@@ -168,25 +185,37 @@ export function getDueBaseRefreshes(basesDbPath) {
 }
 
 /**
- * Update a base after refresh: new content, token estimate, and next_refresh_at.
- * @param {string} basesDbPath
+ * Update a base after refresh: new content (as text block), token estimate, and next_refresh_at.
+ * @param {string} dataDbPath - Path to .jat/data.db
  * @param {string} baseId
  * @param {object} updates
- * @param {string} [updates.content] - New fetched content
+ * @param {string} [updates.content] - New fetched content (stored as text block)
  * @param {number} [updates.token_estimate] - Rough token count
  * @param {object} [updates.source_config] - Updated source config (merged)
  */
-export function updateBaseRefresh(basesDbPath, baseId, updates) {
+export function updateBaseRefresh(dataDbPath, baseId, updates) {
   let db;
   try {
-    db = new Database(basesDbPath);
+    db = new Database(dataDbPath);
     const now = new Date().toISOString();
     const fields = ['updated_at = ?'];
     const values = [now];
 
     if (updates.content !== undefined) {
-      fields.push('content = ?');
-      values.push(updates.content);
+      // Update content by replacing the text block in blocks JSON
+      const row = db.prepare('SELECT blocks FROM bases WHERE id = ?').get(baseId);
+      const blocks = row?.blocks ? JSON.parse(row.blocks) : [];
+      const textBlock = blocks.find(b => b.type === 'text');
+      if (textBlock) {
+        textBlock.content = updates.content;
+      } else {
+        const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+        let id = '';
+        for (let i = 0; i < 8; i++) id += chars[Math.floor(Math.random() * chars.length)];
+        blocks.unshift({ type: 'text', id, content: updates.content });
+      }
+      fields.push('blocks = ?');
+      values.push(JSON.stringify(blocks));
     }
     if (updates.token_estimate !== undefined) {
       fields.push('token_estimate = ?');

@@ -23,8 +23,18 @@ export {
 	detachTableFromTask,
 	getTaskTables,
 	renderDataTable,
+	renderDataView,
 	// Search
 	searchBases,
 	// Render
 	renderBase,
+	resolveReferences,
+	// Canvas compatibility
+	listCanvasPages,
+	getCanvasPage,
+	createCanvasPage,
+	updateCanvasPage,
+	deleteCanvasPage,
+	listCanvasBasePages,
+	serializeCanvasToMarkdown,
 } from '../../../../lib/bases.js';

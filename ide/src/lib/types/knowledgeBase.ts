@@ -1,14 +1,17 @@
 /**
  * Knowledge Base types for JAT.
  *
- * A knowledge base is a named unit of context that can be attached to tasks
- * and injected into agent prompts at spawn time. Sources include hand-written
- * content (manual), SQL views over data.db tables (data_table), conversation
- * transcripts (conversation), and cached external content (external).
+ * A knowledge base is a block-based document stored in .jat/data.db.
+ * Every base contains an ordered array of typed blocks (text, table_view,
+ * control, formula, divider, action). Legacy source types (manual, data_table,
+ * conversation, external) are inferred from blocks and source_config for
+ * backward compatibility.
  */
 
+import type { CanvasBlock } from './canvas.js';
+
 // ---------------------------------------------------------------------------
-// Source type enum
+// Source type enum (legacy — inferred from blocks/source_config)
 // ---------------------------------------------------------------------------
 
 export const SOURCE_TYPES = [
@@ -28,6 +31,7 @@ export type SourceType = (typeof SOURCE_TYPES)[number];
 export interface DataTableSourceConfig {
 	tableName: string;
 	projectPath?: string;
+	_migrated_source_type?: 'data_table';
 }
 
 /** Config for conversation sources — stores channel/person identifiers */
@@ -35,6 +39,7 @@ export interface ConversationSourceConfig {
 	channel?: string;
 	person?: string;
 	platform?: string;
+	_migrated_source_type?: 'conversation';
 }
 
 /** Config for external sources — stores URL, schedule, and cache metadata */
@@ -46,6 +51,7 @@ export interface ExternalSourceConfig {
 	refresh_cron?: string;
 	next_refresh_at?: string;
 	last_error?: string;
+	_migrated_source_type?: 'external';
 	/** Coda-specific fields */
 	coda_doc_id?: string;
 	coda_table_id?: string;
@@ -62,31 +68,37 @@ export type SourceConfig =
 	| Record<string, unknown>;
 
 // ---------------------------------------------------------------------------
-// Base record (matches bases table)
+// Base record (matches bases table in data.db)
 // ---------------------------------------------------------------------------
 
 export interface KnowledgeBase {
 	id: string;
 	name: string;
 	description: string | null;
-	source_type: SourceType;
-	content: string | null;
-	context_query: string | null;
+	project: string | null;
+	/** Block-based content — the canonical storage format */
+	blocks: CanvasBlock[];
+	/** Source config with optional _migrated_source_type for backward compat */
 	source_config: SourceConfig;
 	always_inject: boolean;
 	token_estimate: number | null;
 	created_at: string;
 	updated_at: string;
+
+	// --- Backward-compatible fields (synthesized by parseBaseRow) ---
+	/** Legacy source type — inferred from blocks and source_config */
+	source_type?: SourceType;
+	/** Legacy content — extracted from text blocks */
+	content?: string | null;
+	/** Legacy context_query — extracted from source_config or table_view blocks */
+	context_query?: string | null;
+
 	/** Marked true for global bases loaded from ~/.config/jat/bases/ */
 	_global?: boolean;
 	/** Marked true for system bases (CLAUDE.md, AGENTS.md) auto-detected from project */
 	_system?: boolean;
 	/** For system bases: the file path relative to project root */
 	_systemPath?: string;
-	/** Marked true for canvas-based knowledge bases */
-	_canvas?: boolean;
-	/** Canvas page ID for canvas bases */
-	_canvasPageId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -106,9 +118,14 @@ export interface TaskBase {
 export interface CreateBaseInput {
 	name: string;
 	description?: string;
-	source_type: SourceType;
+	/** Legacy source_type — used for backward-compatible creation */
+	source_type?: SourceType;
+	/** Legacy content — converted to text block internally */
 	content?: string;
+	/** Legacy context_query — stored in source_config */
 	context_query?: string;
+	/** Direct block-based creation */
+	blocks?: CanvasBlock[];
 	source_config?: SourceConfig;
 	always_inject?: boolean;
 	token_estimate?: number;
@@ -117,9 +134,14 @@ export interface CreateBaseInput {
 export interface UpdateBaseInput {
 	name?: string;
 	description?: string;
+	/** Legacy source_type — used for backward-compatible updates */
 	source_type?: SourceType;
+	/** Legacy content — updates the text block internally */
 	content?: string;
+	/** Legacy context_query — stored in source_config */
 	context_query?: string;
+	/** Direct block-based update */
+	blocks?: CanvasBlock[];
 	source_config?: SourceConfig;
 	always_inject?: boolean;
 	token_estimate?: number;
@@ -172,11 +194,5 @@ export const SOURCE_TYPE_INFO: SourceTypeInfo[] = [
 		label: 'External',
 		icon: '🌐',
 		description: 'Cached content from an external URL or API',
-	},
-	{
-		type: 'canvas' as SourceType,
-		label: 'Canvas',
-		icon: '🎨',
-		description: 'Canvas page flagged as a knowledge base',
 	},
 ];

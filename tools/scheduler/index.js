@@ -308,11 +308,11 @@ function htmlToMarkdown(html) {
 /**
  * Refresh a single external base by fetching its content.
  * @param {object} base - Base object with parsed source_config
- * @param {string} basesDbPath - Path to bases.db
+ * @param {string} dataDbPath - Path to data.db
  * @param {string} projectName - Project name for logging
  * @param {string} tz - Timezone
  */
-async function refreshBase(base, basesDbPath, projectName, tz) {
+async function refreshBase(base, dataDbPath, projectName, tz) {
   const config = base.source_config;
   const subtype = config.source_subtype || 'url';
 
@@ -350,7 +350,7 @@ async function refreshBase(base, basesDbPath, projectName, tz) {
     return;
   }
 
-  updateBaseRefresh(basesDbPath, base.id, {
+  updateBaseRefresh(dataDbPath, base.id, {
     content,
     token_estimate: tokenEstimate,
     source_config: updatedConfig,
@@ -449,14 +449,14 @@ async function poll() {
 
   // --- Base refresh scheduling ---
   for (const proj of projects) {
-    const basesDbPath = join(proj.path, '.jat', 'bases.db');
-    const dueBases = getDueBaseRefreshes(basesDbPath);
+    const dataDbPath = join(proj.path, '.jat', 'data.db');
+    const dueBases = getDueBaseRefreshes(dataDbPath);
     if (dueBases.length === 0) continue;
 
     debug(`${proj.name}: ${dueBases.length} base(s) due for refresh`);
 
     for (const base of dueBases) {
-      await refreshBase(base, basesDbPath, proj.name, tz);
+      await refreshBase(base, dataDbPath, proj.name, tz);
 
       spawned.push({
         taskId: `base:${base.id}`,

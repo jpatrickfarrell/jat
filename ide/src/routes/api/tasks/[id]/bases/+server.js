@@ -49,7 +49,7 @@ export async function POST({ params, request }) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });
 		}
 
-		// Auto-init bases.db if needed
+		// Auto-init bases tables in data.db if needed
 		initBasesDb(path);
 
 		const result = attachBaseToTask(path, taskId, baseId);

@@ -1,8 +1,9 @@
 /**
- * Canvas page types for JAT's block-based interactive documents.
+ * Canvas/Base block types for JAT's block-based interactive documents.
  *
- * Canvas pages contain an ordered array of typed blocks:
- * text, table-view, control, formula, divider, and action.
+ * All knowledge bases are now block-based documents stored in the unified
+ * `bases` table in .jat/data.db. Each base contains an ordered array of
+ * typed blocks: text, table_view, control, formula, divider, and action.
  */
 
 // ---------------------------------------------------------------------------
@@ -151,7 +152,7 @@ export type CanvasBlock =
 	| ActionBlock;
 
 // ---------------------------------------------------------------------------
-// Canvas page
+// Canvas page (now an alias for a base record with parsed blocks)
 // ---------------------------------------------------------------------------
 
 export interface CanvasPage {
@@ -159,7 +160,10 @@ export interface CanvasPage {
 	name: string;
 	project: string;
 	blocks: CanvasBlock[];
-	is_base: boolean;
+	description?: string | null;
+	always_inject?: boolean;
+	source_config?: Record<string, unknown>;
+	token_estimate?: number | null;
 	created_at: string;
 	updated_at: string;
 }

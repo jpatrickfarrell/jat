@@ -31,6 +31,7 @@
 		openTaskDrawer,
 		toggleSidebar,
 		isSidebarCollapsed,
+		openProjectDrawer,
 	} from "$lib/stores/drawerStore";
 	import {
 		startSpawning,
@@ -58,9 +59,6 @@
 	import { getMaxSessions } from "$lib/stores/preferences.svelte";
 	import { spawnInBatches } from "$lib/utils/spawnBatch";
 	import ProjectSelector from "./ProjectSelector.svelte";
-	import { openProjectDrawer } from "$lib/stores/drawerStore";
-	import { getProjectColor as getProjectColorUtil } from "$lib/utils/projectColors";
-
 	// Initialize sort stores on mount
 	onMount(() => {
 		initAgentSort();
@@ -75,7 +73,13 @@
 	function toggleProjectSwitcher() {
 		if (!showProjectSwitcher && projectSwitcherEl) {
 			const rect = projectSwitcherEl.getBoundingClientRect();
-			projectSwitcherPos = { top: rect.bottom + 4, left: rect.left };
+			const dropdownWidth = 224; // min-width: 14rem ≈ 224px
+			let left = rect.left;
+			// Clamp to viewport so dropdown doesn't overflow right edge
+			if (left + dropdownWidth > window.innerWidth - 8) {
+				left = window.innerWidth - dropdownWidth - 8;
+			}
+			projectSwitcherPos = { top: rect.bottom + 4, left };
 		}
 		showProjectSwitcher = !showProjectSwitcher;
 	}
@@ -104,7 +108,7 @@
 	// Helper to get color for a project
 	function getSwitcherColor(project: string): string {
 		if (projectColors[project]) return projectColors[project];
-		return getProjectColorUtil(project);
+		return getProjectColor(project);
 	}
 
 	// Check which page we're on for showing appropriate sort dropdown
@@ -603,15 +607,10 @@
 				>
 					{#if favProject === selectedProject}
 						<ProjectSelector
-							projects={actualProjects}
 							{selectedProject}
-							onProjectChange={onProjectChange}
-							{taskCounts}
 							compact={true}
 							showColors={true}
 							projectColors={projectColorsMap}
-							{favoriteProjects}
-							{onToggleFavorite}
 							{readyTasks}
 							epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount }))}
 							idleSlots={availableSlots}
@@ -669,15 +668,10 @@
 			<!-- Fallback: if selected project is NOT a favorite, show selector outside the each -->
 			{#if !favoriteProjects.has(selectedProject)}
 				<ProjectSelector
-					projects={actualProjects}
 					{selectedProject}
-					onProjectChange={onProjectChange}
-					{taskCounts}
 					compact={true}
 					showColors={true}
 					projectColors={projectColorsMap}
-					{favoriteProjects}
-					{onToggleFavorite}
 					{readyTasks}
 					epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount }))}
 					idleSlots={availableSlots}

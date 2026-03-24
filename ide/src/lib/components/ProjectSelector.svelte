@@ -1,12 +1,13 @@
 <script lang="ts">
 	/**
 	 * ProjectSelector Component
-	 * Unified project selector + action hub for the TopBar.
-	 * Combines project switching with task creation, start, and swarm actions.
+	 * Project action hub for the TopBar.
+	 * Shows project-relevant features: server controls, ready tasks, actions, and epics.
+	 * Project switching is handled by the TopBar's project switcher button.
 	 *
 	 * Default: [● jat ▾] - compact project chip
 	 * Hover:  [● jat ▾|+] - plus button slides out
-	 * Click chip: dropdown with projects, ready tasks, and actions
+	 * Click chip: dropdown with server, ready tasks, and actions
 	 * Click +: opens task creation drawer for current project
 	 */
 	import { onMount } from "svelte";
@@ -16,7 +17,6 @@
 	import {
 		isStartDropdownOpen,
 		closeStartDropdown,
-		openProjectDrawer
 	} from '$lib/stores/drawerStore';
 	import {
 		start as startServer,
@@ -45,18 +45,15 @@
 	}
 
 	interface Props {
-		projects: string[];
+		/** List of all projects (used by non-TopBar callers for project list in dropdown) */
+		projects?: string[];
 		selectedProject: string;
-		onProjectChange: (project: string) => void;
-		taskCounts?: Map<string, number> | null;
+		/** Called when user selects a project (used by non-TopBar callers) */
+		onProjectChange?: (project: string) => void;
 		compact?: boolean;
 		showColors?: boolean;
 		/** Optional map of project name -> color. If provided, used instead of getProjectColor() */
 		projectColors?: Map<string, string> | null;
-		/** Set of project names that are favorites (sorted to top of dropdown) */
-		favoriteProjects?: Set<string> | null;
-		/** Called when favorite star is toggled for a project */
-		onToggleFavorite?: (project: string) => void;
 		readyTasks?: ReadyTask[];
 		epics?: Epic[];
 		idleSlots?: number;
@@ -68,15 +65,12 @@
 	}
 
 	let {
-		projects,
+		projects = [],
 		selectedProject,
 		onProjectChange,
-		taskCounts = null,
 		compact = false,
 		showColors = false,
 		projectColors = null,
-		favoriteProjects = null,
-		onToggleFavorite,
 		readyTasks = [],
 		epics = [],
 		idleSlots = 0,
@@ -86,17 +80,9 @@
 		sessionStates = [],
 	}: Props = $props();
 
-	// Sort projects: favorites first, then the rest
-	const sortedProjects = $derived(
-		favoriteProjects && favoriteProjects.size > 0
-			? [...projects].sort((a, b) => {
-				const aFav = favoriteProjects.has(a) ? 1 : 0;
-				const bFav = favoriteProjects.has(b) ? 1 : 0;
-				if (aFav !== bFav) return bFav - aFav;
-				return 0; // preserve original order within groups
-			})
-			: projects
-	);
+	// If projects list is provided (non-TopBar usage), show projects section in dropdown
+	const showProjectsList = $derived(projects.length > 0 && !!onProjectChange);
+
 
 	let open = $state(false);
 	let containerEl = $state<HTMLDivElement | null>(null);
@@ -235,19 +221,6 @@
 		}
 	}
 
-	function handleSelect(project: string) {
-		onProjectChange(project);
-		open = false;
-	}
-
-	// Format project option with task count if available
-	function formatProjectOption(project: string): string {
-		if (taskCounts && taskCounts.has(project)) {
-			const count = taskCounts.get(project);
-			return `${project} (${count})`;
-		}
-		return project;
-	}
 
 	function handleClickOutside(e: MouseEvent) {
 		if (containerEl && !containerEl.contains(e.target as Node)) {
@@ -285,10 +258,6 @@
 		onNewTask?.(selectedProject);
 	}
 
-	function handleToggleFavorite(e: MouseEvent, project: string) {
-		e.stopPropagation();
-		onToggleFavorite?.(project);
-	}
 
 	// Alt+S keyboard shortcut support - open dropdown to show ready tasks
 	$effect(() => {
@@ -372,9 +341,32 @@
 
 	{#if open}
 		<div class="dropdown-menu" style="top: {dropdownPos.top}px; left: {dropdownPos.left}px;">
+			<!-- Projects Section (only shown when used outside TopBar, e.g. IngestWizard, McpConfigEditor) -->
+			{#if showProjectsList}
+				<div class="dropdown-section-header">Projects</div>
+				{#each projects as project}
+					{@const projColor = getColor(project)}
+					<button
+						type="button"
+						class="dropdown-item project-item"
+						class:active={selectedProject === project}
+						style="--project-color: {projColor};"
+						onclick={() => { onProjectChange?.(project); open = false; }}
+					>
+						<span class="item-dot"></span>
+						<span class="item-label">{project}</span>
+						{#if selectedProject === project}
+							<svg class="check-icon" viewBox="0 0 16 16" fill="currentColor">
+								<path fill-rule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd" />
+							</svg>
+						{/if}
+					</button>
+				{/each}
+			{/if}
+
 			<!-- Server Section -->
 			{#if effectiveServerConfig || serverIsRunning}
-				<div class="dropdown-divider"></div>
+				{#if showProjectsList}<div class="dropdown-divider"></div>{/if}
 				<div class="dropdown-section-header">
 					Server
 					{#if effectiveServerConfig?.port}
@@ -448,7 +440,7 @@
 
 			<!-- Ready Tasks Section -->
 			{#if hasActions && projectReadyTasks.length > 0}
-				<div class="dropdown-divider"></div>
+				{#if showProjectsList || effectiveServerConfig || serverIsRunning}<div class="dropdown-divider"></div>{/if}
 				<div class="dropdown-section-header">Ready Tasks ({projectReadyTasks.length})</div>
 				<div class="dropdown-scroll">
 					{#each projectReadyTasks as task}
@@ -722,7 +714,7 @@
 		cursor: not-allowed;
 	}
 
-	/* Project items */
+	/* Project items (shown in non-TopBar usage) */
 	.project-item {
 		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
 		font-weight: 600;
@@ -753,46 +745,11 @@
 		box-shadow: 0 0 5px color-mix(in oklch, var(--project-color) 50%, transparent);
 	}
 
-	.favorite-star-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 1.25rem;
-		height: 1.25rem;
+	.check-icon {
+		width: 0.875rem;
+		height: 0.875rem;
 		flex-shrink: 0;
-		padding: 0;
-		border: none;
-		border-radius: 0.25rem;
-		background: transparent;
-		cursor: pointer;
-		color: oklch(0.40 0.02 250);
-		opacity: 0;
-		transition: all 0.15s ease;
-	}
-
-	.favorite-star-btn svg {
-		width: 0.8rem;
-		height: 0.8rem;
-	}
-
-	/* Show on row hover */
-	.project-item:hover .favorite-star-btn {
-		opacity: 1;
-	}
-
-	/* Always visible when favorited */
-	.favorite-star-btn.is-favorite {
-		opacity: 1;
-		color: oklch(0.80 0.18 85);
-	}
-
-	.favorite-star-btn:hover {
-		color: oklch(0.85 0.15 85);
-		background: oklch(0.28 0.08 85 / 0.3);
-	}
-
-	.favorite-star-btn.is-favorite:hover {
-		color: oklch(0.60 0.10 85);
+		color: var(--project-color);
 	}
 
 	.item-label {
@@ -805,13 +762,6 @@
 
 	.task-title {
 		max-width: none;
-	}
-
-	.check-icon {
-		width: 0.875rem;
-		height: 0.875rem;
-		flex-shrink: 0;
-		color: var(--project-color);
 	}
 
 	/* Task items */
@@ -844,14 +794,6 @@
 
 	.action-item:hover .action-swarm {
 		color: oklch(0.92 0.15 85);
-	}
-
-	.action-add {
-		color: oklch(0.70 0.18 145);
-	}
-
-	.action-item:hover .action-add {
-		color: oklch(0.85 0.18 145);
 	}
 
 	.epic-icon {

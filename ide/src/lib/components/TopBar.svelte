@@ -618,6 +618,8 @@
 						onSwarm={(count, epicId) => epicId ? handleRunEpic(epicId) : handleSwarm()}
 						sessionStates={projectSessionStates.get(favProject) || []}
 						isActive={favProject === selectedProject}
+						onSelect={() => onProjectChange?.(favProject)}
+						openOnHover={true}
 					/>
 				</div>
 			{/each}
@@ -635,6 +637,7 @@
 					onStart={handleSpawnSingle}
 					onSwarm={(count, epicId) => epicId ? handleRunEpic(epicId) : handleSwarm()}
 					sessionStates={projectSessionStates.get(selectedProject) || []}
+					openOnHover={true}
 				/>
 			{/if}
 

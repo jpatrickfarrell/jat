@@ -64,6 +64,10 @@
 		sessionStates?: string[];
 		/** Whether this is the globally active/selected project (affects chip opacity) */
 		isActive?: boolean;
+		/** Called when an inactive chip is clicked (to switch project). If provided, click switches project instead of opening dropdown. */
+		onSelect?: () => void;
+		/** If true, hovering the chip opens the dropdown instead of clicking (TopBar mode) */
+		openOnHover?: boolean;
 	}
 
 	let {
@@ -81,6 +85,8 @@
 		onSwarm,
 		sessionStates = [],
 		isActive = true,
+		onSelect,
+		openOnHover = false,
 	}: Props = $props();
 
 	// If projects list is provided (non-TopBar usage), show projects section in dropdown
@@ -90,6 +96,40 @@
 	let open = $state(false);
 	let containerEl = $state<HTMLDivElement | null>(null);
 	let dropdownPos = $state({ top: 0, left: 0 });
+	let hoverCloseTimer = $state<ReturnType<typeof setTimeout> | null>(null);
+
+	function computeDropdownPos() {
+		if (!containerEl) return;
+		const rect = containerEl.getBoundingClientRect();
+		const dropdownWidth = 220;
+		let left = rect.left;
+		if (left + dropdownWidth > window.innerWidth - 8) {
+			left = window.innerWidth - dropdownWidth - 8;
+		}
+		dropdownPos = { top: rect.bottom + 4, left };
+	}
+
+	function handleMouseEnter() {
+		if (!openOnHover) return;
+		if (hoverCloseTimer) { clearTimeout(hoverCloseTimer); hoverCloseTimer = null; }
+		if (!open) {
+			computeDropdownPos();
+			open = true;
+		}
+	}
+
+	function handleMouseLeave() {
+		if (!openOnHover) return;
+		hoverCloseTimer = setTimeout(() => {
+			open = false;
+			closeStartDropdown();
+		}, 180);
+	}
+
+	function handleDropdownMouseEnter() {
+		if (!openOnHover) return;
+		if (hoverCloseTimer) { clearTimeout(hoverCloseTimer); hoverCloseTimer = null; }
+	}
 
 	// Get color for a project - prefer passed projectColors, fall back to utility
 	function getColor(project: string): string {
@@ -266,10 +306,7 @@
 	$effect(() => {
 		const unsubscribe = isStartDropdownOpen.subscribe((isOpen: boolean) => {
 			if (isOpen && readyTasks.length > 0) {
-				if (containerEl) {
-					const rect = containerEl.getBoundingClientRect();
-					dropdownPos = { top: rect.bottom + 4, left: rect.left };
-				}
+				computeDropdownPos();
 				open = true;
 			}
 		});
@@ -288,18 +325,26 @@
 	});
 </script>
 
-<div class="selector-container" bind:this={containerEl}>
+<div class="selector-container" bind:this={containerEl}
+	onmouseenter={handleMouseEnter}
+	onmouseleave={handleMouseLeave}
+>
 	<div class="chip-group" class:inactive={!isActive} style="--project-color: {selectedColor};">
 		<button
 			type="button"
 			class="trigger-btn"
 			class:compact
 			onclick={() => {
-				if (!open && containerEl) {
-					const rect = containerEl.getBoundingClientRect();
-					dropdownPos = { top: rect.bottom + 4, left: rect.left };
+				if (!isActive && onSelect) {
+					// Inactive chip: switch project, close any open dropdown
+					onSelect();
+					open = false;
+				} else if (!openOnHover) {
+					// Active chip (or non-hover mode): toggle dropdown manually
+					if (!open) computeDropdownPos();
+					open = !open;
 				}
-				open = !open;
+				// In openOnHover mode, active chip click does nothing (hover handles it)
 			}}
 		>
 			{#if sessionStates.length > 0}
@@ -341,7 +386,10 @@
 	</div>
 
 	{#if open}
-		<div class="dropdown-menu" style="top: {dropdownPos.top}px; left: {dropdownPos.left}px;">
+		<div class="dropdown-menu" style="top: {dropdownPos.top}px; left: {dropdownPos.left}px;"
+			onmouseenter={handleDropdownMouseEnter}
+			onmouseleave={handleMouseLeave}
+		>
 			<!-- Projects Section (only shown when used outside TopBar, e.g. IngestWizard, McpConfigEditor) -->
 			{#if showProjectsList}
 				<div class="dropdown-section-header">Projects</div>

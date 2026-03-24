@@ -5931,9 +5931,21 @@
 
 	/* Data table */
 	.data-table-container {
+		position: relative;
 		flex: 1;
 		overflow: auto;
 		min-height: 0;
+	}
+
+	/* Vertical guide line during column resize */
+	.resize-guide {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		width: 1px;
+		border-left: 1px dashed oklch(0.65 0.15 200 / 0.6);
+		pointer-events: none;
+		z-index: 3;
 	}
 
 	.data-table {

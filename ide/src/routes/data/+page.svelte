@@ -548,6 +548,8 @@
 	let colResizing = $state<string | null>(null);
 	let colResizeStartX = 0;
 	let colResizeStartWidth = 0;
+	let resizeGuideX = $state<number | null>(null);
+	let dataTableContainerEl: HTMLDivElement | undefined = $state();
 
 	// Export dropdown
 	let showExportDropdown = $state(false);
@@ -2906,6 +2908,7 @@
 		colResizeStartX = e.clientX;
 		const th = (e.target as HTMLElement).parentElement;
 		colResizeStartWidth = th ? th.offsetWidth : 120;
+		updateResizeGuide(e.clientX);
 		document.body.style.cursor = 'col-resize';
 		document.body.style.userSelect = 'none';
 		document.addEventListener('mousemove', handleResizeMove);
@@ -2917,6 +2920,13 @@
 		const diff = e.clientX - colResizeStartX;
 		const newWidth = Math.max(50, colResizeStartWidth + diff);
 		columnWidths = { ...columnWidths, [colResizing]: newWidth };
+		updateResizeGuide(e.clientX);
+	}
+
+	function updateResizeGuide(clientX: number) {
+		if (!dataTableContainerEl) return;
+		const rect = dataTableContainerEl.getBoundingClientRect();
+		resizeGuideX = clientX - rect.left + dataTableContainerEl.scrollLeft;
 	}
 
 	function handleResizeEnd() {
@@ -2926,6 +2936,7 @@
 			persistColumnWidths();
 			colResizing = null;
 		}
+		resizeGuideX = null;
 		document.removeEventListener('mousemove', handleResizeMove);
 		document.removeEventListener('mouseup', handleResizeEnd);
 	}
@@ -3809,7 +3820,10 @@
 
 					<!-- Data table + conditional format panel -->
 					<div class="data-table-with-panel" class:has-cf-panel={showConditionalFormatPanel}>
-					<div class="data-table-container">
+					<div class="data-table-container" bind:this={dataTableContainerEl}>
+						{#if resizeGuideX !== null}
+							<div class="resize-guide" style="left: {resizeGuideX}px;"></div>
+						{/if}
 						{#if tableDataLoading}
 							<div class="panel-loading">
 								<span class="loading loading-spinner loading-sm"></span>

@@ -5,6 +5,7 @@
 	 * Fetches rows from /api/data/tables/[name], renders typed cells via DataCell,
 	 * and reactively re-fetches when controlValues change.
 	 */
+	import { onDestroy } from 'svelte';
 	import type { TableViewBlock } from '$lib/types/canvas';
 	import type { SemanticType, ColumnConfig } from '$lib/types/dataTable';
 	import DataCell from '$lib/components/data/DataCell.svelte';
@@ -48,6 +49,57 @@
 			}, 2000);
 		}
 		return () => clearTimeout(refreshDebounceTimer);
+	});
+
+	// --- Column resize state ---
+	const DEFAULT_COL_WIDTH = 150;
+	let columnWidths = $state<Record<string, number>>({});
+	let colResizing = $state<string | null>(null);
+	let colResizeStartX = 0;
+	let colResizeStartWidth = 0;
+	let resizeGuideX = $state<number | null>(null);
+	let tableScrollEl: HTMLDivElement | undefined = $state();
+
+	function handleResizeStart(e: MouseEvent, colName: string) {
+		e.preventDefault();
+		e.stopPropagation();
+		colResizing = colName;
+		colResizeStartX = e.clientX;
+		const th = (e.target as HTMLElement).parentElement;
+		colResizeStartWidth = th ? th.offsetWidth : DEFAULT_COL_WIDTH;
+		updateGuidePosition(e.clientX);
+		document.body.style.cursor = 'col-resize';
+		document.body.style.userSelect = 'none';
+		document.addEventListener('mousemove', handleResizeMove);
+		document.addEventListener('mouseup', handleResizeEnd);
+	}
+
+	function handleResizeMove(e: MouseEvent) {
+		if (!colResizing) return;
+		const diff = e.clientX - colResizeStartX;
+		const newWidth = Math.max(50, colResizeStartWidth + diff);
+		columnWidths = { ...columnWidths, [colResizing]: newWidth };
+		updateGuidePosition(e.clientX);
+	}
+
+	function updateGuidePosition(clientX: number) {
+		if (!tableScrollEl) return;
+		const rect = tableScrollEl.getBoundingClientRect();
+		resizeGuideX = clientX - rect.left + tableScrollEl.scrollLeft;
+	}
+
+	function handleResizeEnd() {
+		document.body.style.cursor = '';
+		document.body.style.userSelect = '';
+		colResizing = null;
+		resizeGuideX = null;
+		document.removeEventListener('mousemove', handleResizeMove);
+		document.removeEventListener('mouseup', handleResizeEnd);
+	}
+
+	onDestroy(() => {
+		document.removeEventListener('mousemove', handleResizeMove);
+		document.removeEventListener('mouseup', handleResizeEnd);
 	});
 
 	// --- Settings state ---
@@ -294,16 +346,30 @@
 				</span>
 			{/if}
 		</div>
-		<button
-			class="settings-btn"
-			onclick={openSettings}
-			title="Table settings"
-		>
+		<div class="flex items-center gap-1">
+			{#if Object.keys(columnWidths).length > 0}
+				<button
+					class="settings-btn"
+					style="opacity: 1;"
+					onclick={() => { columnWidths = {}; }}
+					title="Reset column widths"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M9 9V4.5M9 9H4.5M9 9 3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5 5.25 5.25" />
+					</svg>
+				</button>
+			{/if}
+			<button
+				class="settings-btn"
+				onclick={openSettings}
+				title="Table settings"
+			>
 			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28z" />
 				<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
 			</svg>
 		</button>
+		</div>
 	</div>
 
 	<!-- Content -->
@@ -342,16 +408,22 @@
 		</div>
 	{:else}
 		<!-- Data table -->
-		<div class="table-scroll">
+		<div class="table-scroll" bind:this={tableScrollEl}>
+			{#if resizeGuideX !== null}
+				<div class="resize-guide" style="left: {resizeGuideX}px;"></div>
+			{/if}
 			<table class="canvas-data-table">
 				<thead>
 					<tr>
 						{#each displayColumns as col}
 							{@const meta = columnMeta[col.name]}
 							{@const isSorted = block.sort?.column === col.name}
+							{@const colWidth = columnWidths[col.name]}
 							<th
 								class="canvas-th"
 								class:sorted={isSorted}
+								class:col-resizing={colResizing === col.name}
+								style={colWidth ? `width: ${colWidth}px; min-width: ${colWidth}px; max-width: ${colWidth}px;` : ''}
 								onclick={() => toggleSort(col.name)}
 								title="Click to sort by {meta?.displayName || col.name}"
 							>
@@ -359,6 +431,11 @@
 								{#if isSorted}
 									<span class="sort-arrow">{block.sort?.direction === 'DESC' ? '↓' : '↑'}</span>
 								{/if}
+								<!-- svelte-ignore a11y_no_static_element_interactions -->
+								<div
+									class="col-resize-handle"
+									onmousedown={(e) => handleResizeStart(e, col.name)}
+								></div>
 							</th>
 						{/each}
 					</tr>
@@ -703,6 +780,7 @@
 
 	/* Table */
 	.table-scroll {
+		position: relative;
 		overflow-x: auto;
 		border-radius: 0.375rem;
 		border: 1px solid oklch(0.22 0.02 250);
@@ -710,11 +788,13 @@
 
 	.canvas-data-table {
 		width: 100%;
+		table-layout: fixed;
 		border-collapse: collapse;
 		font-size: 0.75rem;
 	}
 
 	.canvas-th {
+		position: relative;
 		text-align: left;
 		padding: 0.375rem 0.625rem;
 		font-size: 0.6875rem;
@@ -753,13 +833,40 @@
 		background: oklch(0.18 0.01 250);
 	}
 
+	/* Column resize handle */
+	.col-resize-handle {
+		position: absolute;
+		right: 0;
+		top: 0;
+		bottom: 0;
+		width: 5px;
+		cursor: col-resize;
+		z-index: 2;
+	}
+
+	.col-resize-handle:hover,
+	.col-resizing .col-resize-handle {
+		background: oklch(0.55 0.15 200);
+	}
+
+	/* Vertical guide line during column resize */
+	.resize-guide {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		width: 1px;
+		border-left: 1px dashed oklch(0.65 0.15 200 / 0.6);
+		pointer-events: none;
+		z-index: 3;
+	}
+
 	.canvas-td {
 		padding: 0.3125rem 0.625rem;
 		border-bottom: 1px solid oklch(0.20 0.01 250);
 		color: oklch(0.80 0.02 250);
-		max-width: 250px;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	/* Settings overlay */

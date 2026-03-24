@@ -965,11 +965,15 @@ launch_ide() {
     # GUI (local): use dev server for hot reload
     local ide_cmd
     if [[ -z "${DISPLAY:-}" ]] && [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
-        echo -e "${DIM}  → Building IDE for production (headless mode)...${NC}"
-        (cd "$ide_path" && npm run build 2>&1) || {
-            echo -e "${RED}  ✗ IDE build failed${NC}"
-            return 1
-        }
+        if [[ ! -d "$ide_path/build" ]] || [[ "$ide_path/package.json" -nt "$ide_path/build/index.js" ]]; then
+            echo -e "${DIM}  → Building IDE for production (headless mode)...${NC}"
+            (cd "$ide_path" && npm run build 2>&1) || {
+                echo -e "${RED}  ✗ IDE build failed — build locally and sync: scp -r ide/build/ vps:~/.local/share/jat/ide/build/${NC}"
+                return 1
+            }
+        else
+            echo -e "${DIM}  → Using existing production build${NC}"
+        fi
         ide_cmd="PORT=$ide_port HOST=0.0.0.0 node build"
     else
         # Clear Vite cache to prevent stale chunk errors

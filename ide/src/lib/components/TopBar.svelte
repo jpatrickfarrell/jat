@@ -605,64 +605,20 @@
 					ondrop={(e) => handleChipDrop(e, favProject)}
 					ondragend={handleChipDragEnd}
 				>
-					{#if favProject === selectedProject}
-						<ProjectSelector
-							{selectedProject}
-							compact={true}
-							showColors={true}
-							projectColors={projectColorsMap}
-							{readyTasks}
-							epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount }))}
-							idleSlots={availableSlots}
-							onNewTask={handleNewTask}
-							onStart={handleSpawnSingle}
-							onSwarm={(count, epicId) => epicId ? handleRunEpic(epicId) : handleSwarm()}
-							sessionStates={projectSessionStates.get(favProject) || []}
-						/>
-					{:else}
-						{@const sessionStates = projectSessionStates.get(favProject) || []}
-						{@const chipTitle = sessionStates.length > 0
-							? `${favProject} — ${sessionStates.map(s => SESSION_STATE_VISUALS[s]?.shortLabel || s).join(', ')}`
-							: favProject}
-						<div class="fav-chip" class:has-agents={sessionStates.length > 0} style="--fav-color: {favColor};">
-							<button
-								type="button"
-								class="fav-chip-btn"
-								onclick={() => onProjectChange?.(favProject)}
-								title={chipTitle}
-							>
-								{#if sessionStates.length > 0}
-									<span class="fav-dots">
-										{#each sessionStates as state}
-											{@const visual = SESSION_STATE_VISUALS[state]}
-											{@const color = visual?.accent || favColor}
-											{@const isNI = state === 'needs-input'}
-											{@const isRev = state === 'ready-for-review'}
-											{#if isNI || isRev}
-												<span class="fav-dot-animated">
-													<span class="fav-dot-ping" class:animate-ping={isNI} class:animate-pulse={isRev} style="background: {color};"></span>
-													<span class="fav-dot-core" style="background: {color};"></span>
-												</span>
-											{:else}
-												<span class="fav-dot" style="background: {color};"></span>
-											{/if}
-										{/each}
-									</span>
-								{/if}
-								<span class="fav-label">{favProject}</span>
-							</button>
-							<button
-								type="button"
-								class="fav-new-btn"
-								onclick={() => handleNewTask(favProject)}
-								title="New task in {favProject}"
-							>
-								<svg viewBox="0 0 20 20" fill="currentColor">
-									<path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
-								</svg>
-							</button>
-						</div>
-					{/if}
+					<ProjectSelector
+						selectedProject={favProject}
+						compact={true}
+						showColors={true}
+						projectColors={projectColorsMap}
+						{readyTasks}
+						epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount }))}
+						idleSlots={availableSlots}
+						onNewTask={handleNewTask}
+						onStart={handleSpawnSingle}
+						onSwarm={(count, epicId) => epicId ? handleRunEpic(epicId) : handleSwarm()}
+						sessionStates={projectSessionStates.get(favProject) || []}
+						isActive={favProject === selectedProject}
+					/>
 				</div>
 			{/each}
 			<!-- Fallback: if selected project is NOT a favorite, show selector outside the each -->
@@ -1146,6 +1102,7 @@
 		position: relative;
 		display: inline-flex;
 		flex-shrink: 0;
+		margin: 0 10px 0 4px;
 	}
 
 	.project-switcher-btn {

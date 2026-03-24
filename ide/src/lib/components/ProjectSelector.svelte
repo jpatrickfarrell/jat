@@ -62,6 +62,8 @@
 		onSwarm?: (count: number, epicId?: string) => void;
 		/** Session states for the selected project (one per agent) */
 		sessionStates?: string[];
+		/** Whether this is the globally active/selected project (affects chip opacity) */
+		isActive?: boolean;
 	}
 
 	let {
@@ -78,6 +80,7 @@
 		onStart,
 		onSwarm,
 		sessionStates = [],
+		isActive = true,
 	}: Props = $props();
 
 	// If projects list is provided (non-TopBar usage), show projects section in dropdown
@@ -286,7 +289,7 @@
 </script>
 
 <div class="selector-container" bind:this={containerEl}>
-	<div class="chip-group" style="--project-color: {selectedColor};">
+	<div class="chip-group" class:inactive={!isActive} style="--project-color: {selectedColor};">
 		<button
 			type="button"
 			class="trigger-btn"
@@ -316,8 +319,6 @@
 						{/if}
 					{/each}
 				</span>
-			{:else}
-				<span class="chip-dot"></span>
 			{/if}
 			<span class="chip-label">{selectedProject}</span>
 			<svg class="chevron" class:open viewBox="0 0 16 16" fill="currentColor">
@@ -532,6 +533,22 @@
 		border-color: color-mix(in oklch, var(--project-color) 65%, transparent);
 		box-shadow: 0 0 10px color-mix(in oklch, var(--project-color) 25%, transparent);
 		transform: scale(1.15);
+	}
+
+	/* Muted styling for non-active project chips */
+	.chip-group.inactive {
+		background: transparent;
+		border-color: color-mix(in oklch, var(--project-color) 20%, transparent);
+		box-shadow: none;
+		opacity: 0.5;
+	}
+
+	.chip-group.inactive:hover {
+		opacity: 1;
+		background: color-mix(in oklch, var(--project-color) 18%, transparent);
+		border-color: color-mix(in oklch, var(--project-color) 45%, transparent);
+		box-shadow: 0 0 6px color-mix(in oklch, var(--project-color) 15%, transparent);
+		transform: scale(1.05);
 	}
 
 	/* Main trigger button */

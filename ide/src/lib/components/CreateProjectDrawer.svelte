@@ -420,7 +420,8 @@
 					return (wizardData.templateIdea.trim().length > 10 || wizardData.templatePrdContent.trim().length > 10)
 						&& templateTargetPath.trim().length > 0;
 				}
-				return wizardData.projectName.trim().length > 0 && wizardData.projectKey.trim().length > 0;
+				return wizardData.projectName.trim().length > 0 && wizardData.projectKey.trim().length > 0
+				&& (wizardData.path.length > 0 || pathInput.trim().length > 0);
 			case 2: {
 				const p = wizardData.port;
 				const portValid = p >= 1024 && p <= 65535;
@@ -1563,12 +1564,91 @@
 							<div class="p-6 flex flex-col gap-5">
 								<div>
 									<h3 class="text-base font-semibold font-mono" style="color: oklch(0.80 0.02 250);">
-										Project Basics
+										Local Project
 									</h3>
 									<p class="text-sm mt-1" style="color: oklch(0.50 0.02 250);">
-										Name your project and set its task ID prefix.
+										Point to an existing directory or enter a path.
 									</p>
 								</div>
+
+								<!-- Path Input + Browse -->
+								<div class="form-control">
+									<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+										Project Path
+									</label>
+									<div class="flex gap-2">
+										<input
+											type="text"
+											class="input input-bordered flex-1 font-mono text-sm"
+											style="background: oklch(0.20 0.01 250); border-color: {pathInput.trim() || wizardData.path ? 'oklch(0.50 0.15 145)' : 'oklch(0.35 0.02 250)'}; color: oklch(0.90 0.02 250);"
+											placeholder="~/projects/my-project"
+											bind:value={pathInput}
+											bind:this={pathInputRef}
+											oninput={() => {
+												wizardData.path = pathInput.trim();
+												validatePath();
+											}}
+										/>
+										<button
+											type="button"
+											class="btn btn-sm font-mono"
+											style="background: oklch(0.25 0.02 250); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.75 0.02 250); height: auto;"
+											onclick={() => { showBrowser = !showBrowser; }}
+										>
+											<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+											</svg>
+											Browse
+										</button>
+									</div>
+									{#if validationMessage}
+										<span class="text-[11px] mt-1 font-mono" style="color: {validationStatus === 'valid' || validationStatus === 'already-initialized' ? 'oklch(0.60 0.12 145)' : validationStatus === 'invalid' ? 'oklch(0.65 0.18 25)' : 'oklch(0.55 0.10 60)'};">
+											{validationMessage}
+										</span>
+									{/if}
+								</div>
+
+								<!-- Directory Browser (inline) -->
+								{#if showBrowser}
+									<div
+										class="rounded-lg overflow-hidden"
+										style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.28 0.02 250); max-height: 200px; overflow-y: auto;"
+									>
+										{#if isLoadingDirectories}
+											<div class="p-3 text-center">
+												<span class="loading loading-spinner loading-sm"></span>
+											</div>
+										{:else if directoryError}
+											<div class="p-3 text-xs" style="color: oklch(0.65 0.18 25);">{directoryError}</div>
+										{:else}
+											<div class="text-xs font-mono px-3 py-1.5" style="color: oklch(0.45 0.02 250); border-bottom: 1px solid oklch(0.25 0.02 250);">
+												{basePath}
+											</div>
+											{#each directories as dir}
+												<button
+													type="button"
+													class="w-full text-left px-3 py-1.5 text-xs font-mono flex items-center gap-2 hover:bg-[oklch(0.22_0.02_250)] transition-colors"
+													style="color: oklch(0.75 0.02 250);"
+													onclick={() => {
+														selectDirectory(dir);
+														wizardData.path = pathInput;
+													}}
+												>
+													<svg class="w-3.5 h-3.5 flex-shrink-0" style="color: {dir.isGitRepo ? 'oklch(0.55 0.12 145)' : 'oklch(0.45 0.02 250)'};" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+														<path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+													</svg>
+													{dir.name}
+													{#if dir.hasJat}
+														<span class="text-[10px] px-1 rounded" style="background: oklch(0.30 0.08 240); color: oklch(0.65 0.10 240);">JAT</span>
+													{/if}
+													{#if dir.isGitRepo && !dir.hasJat}
+														<span class="text-[10px]" style="color: oklch(0.45 0.05 145);">git</span>
+													{/if}
+												</button>
+											{/each}
+										{/if}
+									</div>
+								{/if}
 
 								<!-- Project Name -->
 								<div class="form-control">
@@ -1627,21 +1707,6 @@
 										rows="3"
 									></textarea>
 								</div>
-
-								<!-- Path display -->
-								{#if wizardData.path}
-									<div
-										class="rounded-lg px-3 py-2 flex items-center gap-2"
-										style="background: oklch(0.20 0.03 250); border: 1px solid oklch(0.28 0.02 250);"
-									>
-										<svg class="w-4 h-4 flex-shrink-0" style="color: oklch(0.50 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-										</svg>
-										<span class="text-xs font-mono truncate" style="color: oklch(0.55 0.02 250);">
-											{wizardData.path}
-										</span>
-									</div>
-								{/if}
 							</div>
 						{/if}
 
@@ -1807,7 +1872,7 @@
 							</div>
 
 							<!-- Color Swatches — click to pick -->
-							<div class="flex items-center gap-6">
+							<div class="flex items-start gap-6">
 								<div class="flex flex-col items-center gap-1.5">
 									<ColorSwatchPicker
 										value={wizardData.activeColor}

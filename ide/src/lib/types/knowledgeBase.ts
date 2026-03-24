@@ -82,6 +82,10 @@ export interface KnowledgeBase {
 	source_config: SourceConfig;
 	always_inject: boolean;
 	token_estimate: number | null;
+	/** Emoji icon for visual identification */
+	icon: string | null;
+	/** Sort order for manual reordering (lower = first) */
+	sort_order: number;
 	created_at: string;
 	updated_at: string;
 

@@ -57,9 +57,9 @@ prompt_yes_no() {
 }
 
 # --- Root check ---
+# Running as root is fine on a fresh VPS (Linode/DigitalOcean default)
 if [ "$EUID" -eq 0 ]; then
-    echo -e "${RED}ERROR: Do not run as root. Run as your normal user — sudo is used when needed.${NC}"
-    exit 1
+    sudo() { "$@"; }
 fi
 
 # --- Detect distro ---
@@ -171,7 +171,7 @@ NODE_OK=false
 if command -v node &>/dev/null; then
     NODE_VER=$(node -v 2>/dev/null | sed 's/v//')
     NODE_MAJOR=$(echo "$NODE_VER" | cut -d. -f1)
-    if [ "$NODE_MAJOR" = "22" ] || [ "$NODE_MAJOR" = "20" ]; then
+    if [ "$NODE_MAJOR" -ge 20 ]; then
         ok "Node.js v$NODE_VER already installed"
         NODE_OK=true
     else
@@ -356,6 +356,11 @@ else
     info "GitHub CLI authentication"
     echo ""
     if prompt_yes_no "${BLUE}Run 'gh auth login' now? [Y/n]${NC} " "y"; then
+        echo ""
+        echo -e "  ${DIM}Tips:${NC}"
+        echo -e "  ${DIM}  • Protocol: SSH (not HTTPS) — agents clone and push non-interactively${NC}"
+        echo -e "  ${DIM}  • SSH key: generate a new one (name it e.g. 'vps-linode')${NC}"
+        echo -e "  ${DIM}  • Passphrase: none — agents can't enter passwords${NC}"
         echo ""
         gh auth login
         echo ""

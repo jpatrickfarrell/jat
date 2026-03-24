@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { randomUUID } from '$lib/utils/uuid';
 	/**
 	 * IngestWizard Component
 	 *
@@ -542,7 +543,7 @@
 		if (src.actions && Array.isArray(src.actions) && src.actions.length > 0) {
 			actionsEnabled = true;
 			wizardActions = src.actions.map((a: any) => ({
-				id: a.id || crypto.randomUUID().slice(0, 8),
+				id: a.id || randomUUID().slice(0, 8),
 				label: a.label || '',
 				type: a.type || 'callback',
 				event: a.event,
@@ -2848,7 +2849,7 @@
 					style="background: oklch(0.18 0.01 250); border: 1px dashed oklch(0.30 0.02 250); color: oklch(0.55 0.02 250);"
 					onclick={() => {
 						wizardActions = [...wizardActions, {
-							id: crypto.randomUUID().slice(0, 8),
+							id: randomUUID().slice(0, 8),
 							label: '',
 							type: 'callback',
 							event: 'status_changed',

@@ -63,9 +63,9 @@ function hasJat(dirPath) {
 
 export async function GET({ url }) {
 	try {
-		// Get path from query param, default to ~/code
+		// Get path from query param, default to home directory
 		const pathParam = url.searchParams.get('path');
-		const scanDir = pathParam ? expandPath(pathParam) : join(homedir(), 'code');
+		const scanDir = pathParam ? expandPath(pathParam) : homedir();
 
 		// Security check: only allow paths under home directory
 		if (!isPathSafe(scanDir)) {

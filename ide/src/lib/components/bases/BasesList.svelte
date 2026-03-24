@@ -3,8 +3,14 @@
 	 * BasesList - Unified left panel for /bases route.
 	 * Shows all bases (canvas pages) in a flat list with system bases separate.
 	 * Includes search, templates, context menu (rename/delete), always_inject toggle.
+	 * Supports drag-and-drop reordering via svelte-dnd-action.
+	 * Each base can have an emoji icon for quick visual identification.
 	 */
 	import type { KnowledgeBase } from '$lib/types/knowledgeBase';
+	import { dndzone, TRIGGERS, SHADOW_ITEM_MARKER_PROPERTY_NAME } from 'svelte-dnd-action';
+	import { flip } from 'svelte/animate';
+	import { cubicOut } from 'svelte/easing';
+	import EmojiPicker from '$lib/components/ui/EmojiPicker.svelte';
 
 	interface CanvasTemplate {
 		id: string;
@@ -22,6 +28,8 @@
 		onRename,
 		onCreateFromTemplate,
 		onToggleAlwaysInject,
+		onIconChange,
+		onReorder,
 	}: {
 		bases: KnowledgeBase[];
 		selectedBaseId: string | null;
@@ -31,6 +39,8 @@
 		onRename: (base: KnowledgeBase, newName: string) => void;
 		onCreateFromTemplate: (templateId: string) => void;
 		onToggleAlwaysInject: (base: KnowledgeBase) => void;
+		onIconChange: (base: KnowledgeBase, icon: string | null) => void;
+		onReorder: (orderedIds: string[]) => void;
 	} = $props();
 
 	// Search state
@@ -58,11 +68,21 @@
 	const systemBases = $derived(bases.filter(b => b._system));
 	const userBases = $derived(bases.filter(b => !b._system));
 
+	// DnD items — mutable copy for svelte-dnd-action
+	let dndItems = $state<KnowledgeBase[]>([]);
+	const isSearching = $derived(!!searchQuery.trim());
+
+	// Sync dndItems when userBases change (but not during drag)
+	$effect(() => {
+		if (!isSearching) {
+			dndItems = [...userBases];
+		}
+	});
+
 	// Apply search filter
 	const displayBases = $derived.by(() => {
-		const list = searchResults ?? userBases;
-		if (!searchQuery.trim()) return list;
-		return list;
+		if (isSearching) return searchResults ?? userBases;
+		return dndItems;
 	});
 
 	// Debounced search
@@ -125,7 +145,7 @@
 
 	// Context menu
 	function handleContextMenu(e: MouseEvent, base: KnowledgeBase) {
-		if (base._system) return; // No context menu for system bases
+		if (base._system) return;
 		e.preventDefault();
 		ctxBase = base;
 		ctxX = e.clientX;
@@ -169,6 +189,22 @@
 		onToggleAlwaysInject(base);
 	}
 
+	function handleIconSelect(base: KnowledgeBase, icon: string | null) {
+		onIconChange(base, icon);
+	}
+
+	// DnD handlers
+	function handleDndConsider(e: CustomEvent<{ items: KnowledgeBase[] }>) {
+		dndItems = e.detail.items;
+	}
+
+	function handleDndFinalize(e: CustomEvent<{ items: KnowledgeBase[] }>) {
+		dndItems = e.detail.items;
+		// Emit reorder with new ID order
+		const ids = dndItems.filter(item => !(item as any)[SHADOW_ITEM_MARKER_PROPERTY_NAME]).map(item => item.id);
+		onReorder(ids);
+	}
+
 	function formatTokens(n: number | null): string {
 		if (n == null) return '';
 		if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -182,11 +218,11 @@
 		const diffMs = now.getTime() - d.getTime();
 		const diffMins = Math.floor(diffMs / 60000);
 		if (diffMins < 1) return 'just now';
-		if (diffMins < 60) return `${diffMins}m ago`;
+		if (diffMins < 60) return `${diffMins}m`;
 		const diffHours = Math.floor(diffMins / 60);
-		if (diffHours < 24) return `${diffHours}h ago`;
+		if (diffHours < 24) return `${diffHours}h`;
 		const diffDays = Math.floor(diffHours / 24);
-		if (diffDays < 7) return `${diffDays}d ago`;
+		if (diffDays < 7) return `${diffDays}d`;
 		return d.toLocaleDateString();
 	}
 </script>
@@ -335,70 +371,100 @@
 				{/if}
 			{/if}
 
-			<!-- User bases -->
-			{#each displayBases as base (base.id)}
+			<!-- User bases — DnD zone when not searching -->
+			{#if isSearching}
+				{#each displayBases as base (base.id)}
+					{@render baseItem(base)}
+				{/each}
+			{:else}
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
-					class="group flex items-center gap-2 px-3 py-2.5 rounded cursor-pointer transition-all duration-150"
-					style="
-						background: {selectedBaseId === base.id ? 'oklch(0.70 0.18 240 / 0.12)' : 'transparent'};
-						border-left: 2px solid {selectedBaseId === base.id ? 'oklch(0.70 0.18 240 / 0.6)' : 'transparent'};
-					"
-					onclick={() => onSelect(base)}
-					oncontextmenu={(e) => handleContextMenu(e, base)}
+					use:dndzone={{ items: dndItems, flipDurationMs: 200, dropTargetStyle: { outline: '1px solid oklch(0.55 0.15 240 / 0.4)', borderRadius: '0.375rem' } }}
+					onconsider={handleDndConsider}
+					onfinalize={handleDndFinalize}
+					class="space-y-0.5"
 				>
-					<div class="flex-1 min-w-0">
-						{#if renamingId === base.id}
-							<input
-								type="text"
-								bind:this={renameInputEl}
-								bind:value={renameValue}
-								onblur={() => commitRename(base)}
-								onkeydown={(e) => handleRenameKeydown(e, base)}
-								class="w-full bg-transparent border-none outline-none text-sm font-medium px-0"
-								style="color: oklch(0.85 0.02 250);"
-							/>
-						{:else}
-							<div class="flex items-center gap-1.5">
-								<div class="text-sm font-medium truncate" style="color: {selectedBaseId === base.id ? 'oklch(0.85 0.12 240)' : 'oklch(0.75 0.02 250)'};">
-									{base.name}
-								</div>
-								{#if base.always_inject}
-									<span class="shrink-0 text-[9px] font-mono px-1 py-0.5 rounded" style="background: oklch(0.55 0.15 145 / 0.15); color: oklch(0.70 0.15 145); border: 1px solid oklch(0.55 0.15 145 / 0.25);">AI</span>
-								{/if}
-							</div>
-							<div class="flex items-center gap-1.5 mt-0.5">
-								<span class="text-[10px]" style="color: oklch(0.45 0.02 250);">
-									{(base.blocks?.length ?? 0)} block{(base.blocks?.length ?? 0) !== 1 ? 's' : ''}
-								</span>
-								{#if base.token_estimate}
-									<span class="text-[10px]" style="color: oklch(0.40 0.02 250);">·</span>
-									<span class="text-[10px]" style="color: oklch(0.45 0.02 250);">
-										~{formatTokens(base.token_estimate)} tok
-									</span>
-								{/if}
-								<span class="text-[10px]" style="color: oklch(0.40 0.02 250);">·</span>
-								<span class="text-[10px]" style="color: oklch(0.45 0.02 250);">
-									{formatDate(base.updated_at)}
-								</span>
-							</div>
-						{/if}
-					</div>
-
-					<!-- Always-inject toggle (hover visible for non-injected) -->
-					<button
-						class="shrink-0 text-[9px] font-mono px-1.5 py-0.5 rounded transition-all duration-150 cursor-pointer {base.always_inject ? '' : 'opacity-0 group-hover:opacity-100'}"
-						style="background: {base.always_inject ? 'oklch(0.45 0.15 145 / 0.3)' : 'oklch(0.30 0.01 250)'}; color: {base.always_inject ? 'oklch(0.75 0.15 145)' : 'oklch(0.55 0.01 250)'}; border: none;"
-						onclick={(e) => handleToggle(e, base)}
-						title={base.always_inject ? 'Always injected into agent prompts (click to disable)' : 'Click to always inject into agent prompts'}
-					>
-						{base.always_inject ? 'ON' : 'OFF'}
-					</button>
+					{#each dndItems as base (base.id)}
+						<div animate:flip={{ duration: 200, easing: cubicOut }}>
+							{@render baseItem(base)}
+						</div>
+					{/each}
 				</div>
-			{/each}
+			{/if}
 		{/if}
 	</div>
 </div>
+
+{#snippet baseItem(base: KnowledgeBase)}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		class="group flex items-start gap-2 px-2 py-2 rounded cursor-pointer transition-all duration-150"
+		style="
+			background: {selectedBaseId === base.id ? 'oklch(0.70 0.18 240 / 0.12)' : 'transparent'};
+			border-left: 2px solid {selectedBaseId === base.id ? 'oklch(0.70 0.18 240 / 0.6)' : 'transparent'};
+		"
+		onclick={() => onSelect(base)}
+		oncontextmenu={(e) => handleContextMenu(e, base)}
+	>
+		<!-- Icon (emoji picker or default) -->
+		<div class="shrink-0 mt-0.5" onclick={(e) => e.stopPropagation()}>
+			<EmojiPicker
+				selected={base.icon ?? null}
+				onSelect={(icon) => handleIconSelect(base, icon)}
+				size="sm"
+			/>
+		</div>
+
+		<!-- Name + metadata -->
+		<div class="flex-1 min-w-0">
+			{#if renamingId === base.id}
+				<input
+					type="text"
+					bind:this={renameInputEl}
+					bind:value={renameValue}
+					onblur={() => commitRename(base)}
+					onkeydown={(e) => handleRenameKeydown(e, base)}
+					class="w-full bg-transparent border-none outline-none text-sm font-medium px-0"
+					style="color: oklch(0.85 0.02 250);"
+				/>
+			{:else}
+				<div class="flex items-center gap-1.5">
+					<div class="text-sm font-medium truncate" style="color: {selectedBaseId === base.id ? 'oklch(0.85 0.12 240)' : 'oklch(0.75 0.02 250)'};">
+						{base.name}
+					</div>
+					{#if base.always_inject}
+						<span class="shrink-0 text-[9px] font-mono px-1 py-0.5 rounded" style="background: oklch(0.55 0.15 145 / 0.15); color: oklch(0.70 0.15 145); border: 1px solid oklch(0.55 0.15 145 / 0.25);">AI</span>
+					{/if}
+				</div>
+				<div class="flex items-center gap-1.5 mt-0.5">
+					<span class="text-[10px]" style="color: oklch(0.45 0.02 250);">
+						{(base.blocks?.length ?? 0)} block{(base.blocks?.length ?? 0) !== 1 ? 's' : ''}
+					</span>
+					{#if base.token_estimate}
+						<span class="text-[10px]" style="color: oklch(0.40 0.02 250);">·</span>
+						<span class="text-[10px]" style="color: oklch(0.45 0.02 250);">
+							~{formatTokens(base.token_estimate)} tok
+						</span>
+					{/if}
+					<span class="text-[10px]" style="color: oklch(0.40 0.02 250);">·</span>
+					<span class="text-[10px]" style="color: oklch(0.45 0.02 250);">
+						{formatDate(base.updated_at)}
+					</span>
+				</div>
+			{/if}
+		</div>
+
+		<!-- Always-inject toggle (hover visible for non-injected) -->
+		<button
+			class="shrink-0 mt-0.5 text-[9px] font-mono px-1.5 py-0.5 rounded transition-all duration-150 cursor-pointer {base.always_inject ? '' : 'opacity-0 group-hover:opacity-100'}"
+			style="background: {base.always_inject ? 'oklch(0.45 0.15 145 / 0.3)' : 'oklch(0.30 0.01 250)'}; color: {base.always_inject ? 'oklch(0.75 0.15 145)' : 'oklch(0.55 0.01 250)'}; border: none;"
+			onclick={(e) => handleToggle(e, base)}
+			title={base.always_inject ? 'Always injected into agent prompts (click to disable)' : 'Click to always inject into agent prompts'}
+		>
+			{base.always_inject ? 'ON' : 'OFF'}
+		</button>
+	</div>
+{/snippet}
 
 <!-- Context Menu -->
 {#if ctxBase}
@@ -453,11 +519,6 @@
 
 	.bases-context-menu button:hover {
 		background: oklch(0.28 0.02 250);
-	}
-
-	/* Template button hover */
-	:global(.group:hover) {
-		background: oklch(0.55 0.15 280 / 0.08);
 	}
 
 	.line-clamp-2 {

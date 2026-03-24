@@ -53,6 +53,7 @@ export async function initializeStore(project: string): Promise<void> {
 		state.initialized = true;
 	} catch (err) {
 		state.error = err instanceof Error ? err.message : 'Unknown error';
+		state.initialized = true; // Prevent infinite retry loops on persistent errors
 		console.error('[bases] Failed to initialize:', err);
 	} finally {
 		state.loading = false;

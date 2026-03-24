@@ -72,9 +72,7 @@ prompt_yes_no() {
 
 # Check if running as root
 if [ "$EUID" -eq 0 ]; then
-    echo -e "${RED}ERROR: Do not run this script as root${NC}"
-    echo "Run as normal user - sudo will be used when needed"
-    exit 1
+    sudo() { "$@"; }
 fi
 
 # Check for required dependencies
@@ -537,7 +535,21 @@ echo "The IDE will guide you through adding your first project."
 echo ""
 echo "Documentation: https://github.com/joewinke/jat"
 echo ""
-if prompt_yes_no "${BOLD}Launch JAT now? [Y/n]${NC} " "y"; then
+if [ -z "$DISPLAY" ] && [ -z "$WAYLAND_DISPLAY" ]; then
+    TS_IP=$(tailscale ip -4 2>/dev/null || echo "<tailscale-ip>")
+    if prompt_yes_no "${BOLD}Start JAT IDE server now? [Y/n]${NC} " "y"; then
+        echo ""
+        "$HOME/.local/bin/jat" &
+        sleep 4
+        echo -e "  ${GREEN}✓${NC} JAT IDE server started"
+        echo ""
+        echo -e "  Open on any Tailscale device: ${BOLD}http://${TS_IP}:5174${NC}"
+    else
+        echo -e "  Start later with: ${BOLD}jat${NC}"
+        echo -e "  Then open: ${BOLD}http://${TS_IP}:5174${NC}"
+    fi
+    echo ""
+elif prompt_yes_no "${BOLD}Launch JAT now? [Y/n]${NC} " "y"; then
     echo ""
     exec "$HOME/.local/bin/jat"
 fi

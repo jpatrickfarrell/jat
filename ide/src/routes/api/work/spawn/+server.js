@@ -1034,7 +1034,7 @@ export async function POST({ request }) {
 
 		// Step 3: Create tmux session with Claude Code
 		const sessionName = `jat-${agentName}`;
-		const isRemote = routing.target === 'remote';
+		let isRemote = routing.target === 'remote';
 
 		// Step 3a: Write agent identity file for session-start hook to restore
 		// The hook (session-start-agent-identity.sh) uses this to set up .claude/sessions/agent-{sessionId}.txt
@@ -1217,6 +1217,7 @@ export async function POST({ request }) {
 				}
 
 				console.error(`[spawn] Remote spawn failed, falling back to local:`, errorMessage);
+				isRemote = false;
 				// Fall back to local spawn on SSH failure
 				const localCreateCmd = `tmux new-session -d -s ${escapedSessionName} -x ${TMUX_INITIAL_WIDTH} -y ${TMUX_INITIAL_HEIGHT} -c ${escapedProjectPath} && sleep 0.3 && tmux send-keys -t ${escapedSessionName} ${escapedAgentCmd} Enter`;
 				try {

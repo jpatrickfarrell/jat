@@ -82,7 +82,7 @@ export async function POST() {
 		});
 
 		return json({
-			success: result.ok,
+			ok: result.ok,
 			host: defaults.vps_host,
 			user: defaults.vps_user,
 			latencyMs: result.latencyMs || null,

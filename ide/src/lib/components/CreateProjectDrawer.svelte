@@ -473,7 +473,7 @@
 			.split(/\s+/)
 			.filter((w: string) => w.length > 1 && !['a', 'an', 'the', 'for', 'and', 'or', 'with', 'that', 'this', 'from'].includes(w))
 			.slice(0, 3);
-		return `~/code/${words.join('-') || 'new-project'}`;
+		return `~/${words.join('-') || 'new-project'}`;
 	}
 
 	$effect(() => {
@@ -750,8 +750,8 @@
 		if (valid) {
 			gitRepoName = repoName;
 			// Only auto-populate if user hasn't manually edited the path
-			if (!gitTargetPath || gitTargetPath === `~/code/${gitRepoName}` || gitTargetPath.match(/^~\/code\/[^/]*$/)) {
-				gitTargetPath = `~/code/${repoName}`;
+			if (!gitTargetPath || gitTargetPath === `~/projects/${gitRepoName}` || gitTargetPath.match(/^~\/projects\/[^/]*$/)) {
+				gitTargetPath = `~/projects/${repoName}`;
 			}
 			gitUrlError = null;
 		} else {
@@ -1384,7 +1384,7 @@
 									<input
 										type="text"
 										class="input input-bordered w-full font-mono text-sm"
-										placeholder="~/code/my-project"
+										placeholder="~/projects/my-project"
 										bind:value={gitTargetPath}
 										disabled={isCloning || cloneSuccess}
 										style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
@@ -1544,7 +1544,7 @@
 									<input
 										type="text"
 										class="input input-bordered w-full font-mono text-sm"
-										placeholder="~/code/my-app"
+										placeholder="~/projects/my-app"
 										bind:value={templateTargetPath}
 										oninput={() => { templatePathManuallyEdited = true; }}
 										style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"

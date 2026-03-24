@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { randomUUID } from '$lib/utils/uuid';
 	/**
 	 * ActivityLog Component
 	 *
@@ -111,7 +112,7 @@
 	export function addEntry(entry: Omit<ActivityLogEntry, 'id'>) {
 		const newEntry: ActivityLogEntry = {
 			...entry,
-			id: crypto.randomUUID()
+			id: randomUUID()
 		};
 		entries = [newEntry, ...entries].slice(0, maxEntries);
 	}

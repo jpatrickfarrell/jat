@@ -24,6 +24,7 @@
  */
 
 import { browser } from '$app/environment';
+import { randomUUID } from '$lib/utils/uuid';
 
 // ============================================================================
 // Types
@@ -101,7 +102,7 @@ let wsUnsubscribe: ((channels: Channel[]) => void) | null = null;
 export function initLeaderElection(): void {
 	if (!browser) return;
 
-	tabId = crypto.randomUUID();
+	tabId = randomUUID();
 	bc = new BroadcastChannel(CHANNEL_NAME);
 	bc.onmessage = handleBroadcastMessage;
 

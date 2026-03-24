@@ -14,6 +14,7 @@ export {
 	createBase,
 	updateBase,
 	deleteBase,
+	reorderBases,
 	// Task ↔ Base attachment
 	attachBaseToTask,
 	detachBaseFromTask,

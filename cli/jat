@@ -175,8 +175,13 @@ detect_default_terminal() {
 TERMINAL="$(detect_default_terminal)"
 
 if ! terminal_available "$TERMINAL"; then
-    echo -e "${RED}No supported terminal found. Install one of: ghostty, iTerm2, Terminal.app, alacritty, kitty, gnome-terminal, konsole, xterm.${NC}" >&2
-    exit 1
+    if command -v tmux &>/dev/null && [[ -z "${DISPLAY:-}" ]] && [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
+        # Headless server (VPS) — use tmux as terminal replacement
+        TERMINAL="tmux"
+    else
+        echo -e "${RED}No supported terminal found. Install one of: ghostty, iTerm2, Terminal.app, alacritty, kitty, gnome-terminal, konsole, xterm.${NC}" >&2
+        exit 1
+    fi
 fi
 
 # Cross-platform: kill process listening on a TCP port
@@ -240,6 +245,14 @@ launch_terminal_window() {
             ;;
         alacritty)
             alacritty -T "$title" -e bash -c "$cmd" &
+            ;;
+        tmux)
+            # Headless/VPS fallback — run in a detached tmux session
+            local session_name
+            session_name="jat-$(echo "$title" | tr ' :/' '-' | tr '[:upper:]' '[:lower:]' | sed 's/-\+/-/g')"
+            tmux new-session -d -s "$session_name" -x 220 -y 50 2>/dev/null || true
+            tmux send-keys -t "$session_name" "$cmd" Enter
+            echo -e "${DIM}  → Running in tmux session: $session_name${NC}"
             ;;
         *)
             echo -e "${RED}Unsupported terminal '$TERMINAL'.${NC}" >&2
@@ -948,14 +961,27 @@ launch_ide() {
 
     echo -e "${DIM}  → IDE ${ide_protocol}://localhost:$ide_port${NC}"
 
-    # Clear Vite cache to prevent stale chunk errors
-    rm -rf "$ide_path/.svelte-kit" "$ide_path/node_modules/.vite" 2>/dev/null
+    # Headless (VPS): build once and run the production server — uses ~150MB vs ~800MB for dev
+    # GUI (local): use dev server for hot reload
+    local ide_cmd
+    if [[ -z "${DISPLAY:-}" ]] && [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
+        echo -e "${DIM}  → Building IDE for production (headless mode)...${NC}"
+        (cd "$ide_path" && npm run build 2>&1) || {
+            echo -e "${RED}  ✗ IDE build failed${NC}"
+            return 1
+        }
+        ide_cmd="PORT=$ide_port HOST=0.0.0.0 node build"
+    else
+        # Clear Vite cache to prevent stale chunk errors
+        rm -rf "$ide_path/.svelte-kit" "$ide_path/node_modules/.vite" 2>/dev/null
+        ide_cmd="npm run dev -- --port $ide_port --host"
+    fi
 
-    # Launch IDE dev server in a detached tmux session (no terminal window)
+    # Launch in a detached tmux session
     # The session is discoverable by the /api/servers endpoint via the jat-app-ide name
     tmux new-session -d -s "$session_name" -x 120 -y 40 -c "$ide_path"
     sleep 0.3
-    tmux send-keys -t "$session_name" "npm run dev -- --port $ide_port" Enter
+    tmux send-keys -t "$session_name" "$ide_cmd" Enter
 
     # Open browser after delay for server to start
     (
@@ -964,6 +990,14 @@ launch_ide() {
             xdg-open "${ide_protocol}://localhost:$ide_port" &>/dev/null
         elif command -v open &>/dev/null; then
             open "${ide_protocol}://localhost:$ide_port"
+        elif [[ -z "${DISPLAY:-}" ]] && [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
+            # Headless server — print accessible URL instead of opening browser
+            local ts_ip
+            ts_ip=$(tailscale ip -4 2>/dev/null || echo "localhost")
+            echo ""
+            echo -e "${GREEN}  ✓ JAT IDE running${NC}"
+            echo -e "  Open on any Tailscale device: ${BOLD}${ide_protocol}://${ts_ip}:${ide_port}${NC}"
+            echo ""
         fi
     ) &
 }

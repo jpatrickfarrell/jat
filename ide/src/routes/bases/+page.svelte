@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { randomUUID } from '$lib/utils/uuid';
 	/**
 	 * Knowledge Bases Page - Unified /bases route
 	 *
@@ -290,6 +291,50 @@
 		}
 	}
 
+	// Change icon on a base
+	async function handleIconChange(base: KnowledgeBase, icon: string | null) {
+		if (!project) return;
+		// Optimistic update
+		bases = bases.map(b => b.id === base.id ? { ...b, icon } : b);
+		if (selectedBase?.id === base.id) {
+			selectedBase = { ...selectedBase!, icon };
+		}
+		try {
+			await fetch(`/api/bases/${base.id}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ project, icon })
+			});
+		} catch (err) {
+			console.error('Failed to update icon:', err);
+			await fetchBases();
+		}
+	}
+
+	// Reorder bases via drag-and-drop
+	async function handleReorder(orderedIds: string[]) {
+		if (!project) return;
+		const order = orderedIds.map((id, i) => ({ id, sort_order: i }));
+		const orderMap = new Map(order.map(o => [o.id, o.sort_order]));
+		// Optimistic: rebuild bases array in the new order so BasesList $effect stays correct
+		const userReordered = orderedIds
+			.map(id => bases.find(b => b.id === id))
+			.filter((b): b is KnowledgeBase => !!b)
+			.map(b => ({ ...b, sort_order: orderMap.get(b.id)! }));
+		const rest = bases.filter(b => !orderMap.has(b.id));
+		bases = [...userReordered, ...rest];
+		try {
+			await fetch('/api/bases/reorder', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ project, order })
+			});
+		} catch (err) {
+			console.error('Failed to reorder bases:', err);
+			await fetchBases();
+		}
+	}
+
 	// Update base blocks (from CanvasEditor)
 	async function handleUpdateBlocks(blocks: CanvasBlock[]) {
 		if (!selectedBase || !project) return;
@@ -330,7 +375,7 @@
 				for (const [colName, meta] of Object.entries(schemaData.columnMeta) as [string, any][]) {
 					if (meta.semanticType === 'relation' && meta.config?.targetTable && meta.config?.displayColumn) {
 						const controlName = colName.replace(/_id$/, '').replace(/_/g, ' ');
-						const controlId = crypto.randomUUID();
+						const controlId = randomUUID();
 						blocks.push({
 							type: 'control',
 							id: controlId,
@@ -349,7 +394,7 @@
 
 			blocks.push({
 				type: 'table_view',
-				id: crypto.randomUUID(),
+				id: randomUUID(),
 				tableName,
 				controlFilters,
 			} as TableViewBlock);
@@ -458,6 +503,8 @@
 					onRename={handleRename}
 					onCreateFromTemplate={handleCreateFromTemplate}
 					onToggleAlwaysInject={handleToggleAlwaysInject}
+					onIconChange={handleIconChange}
+					onReorder={handleReorder}
 				/>
 			</div>
 

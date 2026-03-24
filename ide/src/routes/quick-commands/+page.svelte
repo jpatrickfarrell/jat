@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { randomUUID } from '$lib/utils/uuid';
 	/**
 	 * Quick Commands Page
 	 *
@@ -246,8 +247,8 @@
 		pipelineEditorDescription = '';
 		pipelineEditorProject = '';
 		pipelineEditorSteps = [
-			{ id: crypto.randomUUID(), templateId: null, prompt: '', model: 'haiku', label: 'Step 1' },
-			{ id: crypto.randomUUID(), templateId: null, prompt: '', model: 'sonnet', label: 'Step 2' }
+			{ id: randomUUID(), templateId: null, prompt: '', model: 'haiku', label: 'Step 1' },
+			{ id: randomUUID(), templateId: null, prompt: '', model: 'sonnet', label: 'Step 2' }
 		];
 		pipelineEditorError = '';
 		showPipelineEditor = true;
@@ -273,7 +274,7 @@
 		const n = pipelineEditorSteps.length + 1;
 		pipelineEditorSteps = [
 			...pipelineEditorSteps,
-			{ id: crypto.randomUUID(), templateId: null, prompt: '', model: 'haiku', label: `Step ${n}` }
+			{ id: randomUUID(), templateId: null, prompt: '', model: 'haiku', label: `Step ${n}` }
 		];
 	}
 
@@ -482,7 +483,7 @@
 			const totalMs = pipelineRunSteps.reduce((sum, s) => sum + (s.durationMs || 0), 0);
 			const finalResult = pipelineRunSteps[pipelineRunSteps.length - 1]?.result || '';
 			addToHistory({
-				id: crypto.randomUUID(),
+				id: randomUUID(),
 				prompt: `[Pipeline: ${runningPipeline.name}] ${pipelineRunSteps.length} steps`,
 				result: finalResult,
 				model: 'pipeline',
@@ -495,7 +496,7 @@
 
 			// Route final output
 			await routeOutput({
-				id: crypto.randomUUID(),
+				id: randomUUID(),
 				prompt: '',
 				result: finalResult,
 				model: 'pipeline',
@@ -561,7 +562,7 @@
 			const data = await res.json();
 
 			const entry: ExecutionResult = {
-				id: crypto.randomUUID(),
+				id: randomUUID(),
 				prompt,
 				result: data.success ? data.result : '',
 				model: data.model || model,
@@ -586,7 +587,7 @@
 			}
 		} catch (e: any) {
 			const entry: ExecutionResult = {
-				id: crypto.randomUUID(),
+				id: randomUUID(),
 				prompt,
 				result: '',
 				model,

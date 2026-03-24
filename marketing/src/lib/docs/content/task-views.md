@@ -74,8 +74,6 @@ Press Alt+N or click "New Task" to open the creation drawer. It supports multipl
 
 Task suggestions use the Claude API (or fall back to `claude -p` CLI) to analyze your description and propose type, priority, and labels. The suggestions appear as clickable chips you can accept or override.
 
-Voice input is available if whisper.cpp is installed. Click the microphone icon next to the title or description field to dictate instead of typing.
-
 ## Multi-project filtering
 
 Projects are detected automatically from task ID prefixes. A task with ID `jat-abc` belongs to the `jat` project, `chimaro-xyz` belongs to `chimaro`.

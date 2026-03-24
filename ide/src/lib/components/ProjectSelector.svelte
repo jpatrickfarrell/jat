@@ -100,6 +100,7 @@
 
 	let open = $state(false);
 	let containerEl = $state<HTMLDivElement | null>(null);
+	let dropdownPos = $state({ top: 0, left: 0 });
 
 	// Get color for a project - prefer passed projectColors, fall back to utility
 	function getColor(project: string): string {
@@ -293,6 +294,10 @@
 	$effect(() => {
 		const unsubscribe = isStartDropdownOpen.subscribe((isOpen: boolean) => {
 			if (isOpen && readyTasks.length > 0) {
+				if (containerEl) {
+					const rect = containerEl.getBoundingClientRect();
+					dropdownPos = { top: rect.bottom + 4, left: rect.left };
+				}
 				open = true;
 			}
 		});
@@ -317,7 +322,13 @@
 			type="button"
 			class="trigger-btn"
 			class:compact
-			onclick={() => open = !open}
+			onclick={() => {
+				if (!open && containerEl) {
+					const rect = containerEl.getBoundingClientRect();
+					dropdownPos = { top: rect.bottom + 4, left: rect.left };
+				}
+				open = !open;
+			}}
 		>
 			{#if sessionStates.length > 0}
 				<span class="chip-dots">
@@ -360,7 +371,7 @@
 	</div>
 
 	{#if open}
-		<div class="dropdown-menu">
+		<div class="dropdown-menu" style="top: {dropdownPos.top}px; left: {dropdownPos.left}px;">
 			<!-- Projects Section -->
 			<div class="dropdown-section-header">Projects</div>
 			{#each sortedProjects as project}
@@ -705,9 +716,7 @@
 
 	/* Dropdown */
 	.dropdown-menu {
-		position: absolute;
-		top: calc(100% + 4px);
-		left: 0;
+		position: fixed;
 		min-width: 16rem;
 		max-width: 22rem;
 		padding: 0.25rem;

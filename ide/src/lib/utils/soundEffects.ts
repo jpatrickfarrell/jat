@@ -596,63 +596,6 @@ function playDropTones(ctx: AudioContext): void {
 }
 
 // =============================================================================
-// VOICE INPUT SOUNDS
-// =============================================================================
-
-/**
- * Play recording start sound - beep
- * Used when voice recording starts
- */
-export function playRecordingStartSound(): void {
-	if (!areSoundsEnabled()) return;
-
-	const ctx = getAudioContext();
-	if (!ctx) return;
-
-	if (ctx.state === 'suspended') {
-		ctx.resume().then(() => playRecordingStartTones(ctx)).catch(() => {});
-		return;
-	}
-
-	playRecordingStartTones(ctx);
-}
-
-function playRecordingStartTones(ctx: AudioContext): void {
-	const now = ctx.currentTime;
-	const volume = 0.10;
-
-	// Single recording beep
-	playTone(ctx, 880, now, 0.08, volume);  // A5
-}
-
-/**
- * Play recording stop sound - double beep
- * Used when voice recording stops
- */
-export function playRecordingStopSound(): void {
-	if (!areSoundsEnabled()) return;
-
-	const ctx = getAudioContext();
-	if (!ctx) return;
-
-	if (ctx.state === 'suspended') {
-		ctx.resume().then(() => playRecordingStopTones(ctx)).catch(() => {});
-		return;
-	}
-
-	playRecordingStopTones(ctx);
-}
-
-function playRecordingStopTones(ctx: AudioContext): void {
-	const now = ctx.currentTime;
-	const volume = 0.10;
-
-	// Double beep to indicate stop
-	playTone(ctx, 880, now, 0.06, volume);        // A5
-	playTone(ctx, 880, now + 0.1, 0.06, volume);  // A5
-}
-
-// =============================================================================
 // MULTI-AGENT SOUNDS
 // =============================================================================
 

@@ -2323,7 +2323,6 @@ Sound effects can be enabled/disabled via the UserProfile dropdown in the top na
 | **State Transitions** | `playNeedsInputSound`, `playReadyForReviewSound` | SessionCard state changes |
 | **Feedback** | `playSuccessChime`, `playErrorSound` | Form submissions |
 | **Drag-Drop** | `playPickupSound`, `playDropSound` | WorkDropZone interactions |
-| **Voice Input** | `playRecordingStartSound`, `playRecordingStopSound` | VoiceInput component |
 | **Misc** | `playAgentJoinSound`, `playSwarmSound`, `playCopySound`, `playDeleteSound`, `playAttachmentSound`, `playCelebrationSound`, `playOpenSound` | Various UI interactions |
 
 ### Integration Points
@@ -2334,7 +2333,6 @@ Sound effects can be enabled/disabled via the UserProfile dropdown in the top na
 | `SessionCard.svelte` | needs-input, ready-for-review, task-complete |
 | `TaskCreationDrawer.svelte` | success, error, attachment |
 | `WorkDropZone.svelte` | pickup, drop |
-| `VoiceInput.svelte` | recording-start, recording-stop |
 | `servers/+page.svelte` | server-start, server-stop |
 
 ### Adding New Sounds

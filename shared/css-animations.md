@@ -617,7 +617,6 @@ These animations are unique to specific components and don't need consolidation:
 | MonacoWrapper | `search-highlight-pulse`, `search-glyph-fade` | Editor search highlighting |
 | AgentAvatar | `avatarFlipIn` | Avatar 3D flip entrance |
 | SessionCard | `shimmer`, `complete-flash` | Card-specific effects |
-| VoiceInput | `mic-start-pulse`, `mic-stop-shrink` | Microphone feedback |
 | ThemeSelector | `theme-spin`, `dot-pulse` | Theme switching animation |
 | UserProfile | `toggle-pulse`, `toggle-bounce` | Toggle animations |
 | StreakCelebration | `star-move`, `star-sparkles`, `rotate` | Celebration effects |

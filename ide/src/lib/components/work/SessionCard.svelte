@@ -45,8 +45,7 @@
 		playNewTaskChime,
 		playCopySound,
 	} from "$lib/utils/soundEffects";
-	import VoiceInput from "$lib/components/VoiceInput.svelte";
-	import StatusActionBadge from "./StatusActionBadge.svelte";
+import StatusActionBadge from "./StatusActionBadge.svelte";
 	import ServerStatusBadge from "./ServerStatusBadge.svelte";
 	import TerminalActivitySparkline from "./TerminalActivitySparkline.svelte";
 	import { workSessionsState } from "$lib/stores/workSessions.svelte";
@@ -1640,7 +1639,6 @@
 	let tabFlash = $state(false); // Brief flash when Tab autocomplete is sent
 	let copyFlash = $state(false); // Brief flash when text is copied
 	let submitFlash = $state(false); // Brief flash when command is submitted
-	let voiceFlash = $state(false); // Brief flash when voice recording starts/stops
 	let attachFlash = $state(false); // Brief flash when image is attached
 	let inputTextFlash = $state(false); // Brief flash when text is dropped into input
 	let arrowFlash = $state(false); // Brief flash when arrow key navigates
@@ -4886,25 +4884,6 @@
 		}
 	}
 
-	// Handle voice transcription - append text to input
-	function handleVoiceTranscription(event: CustomEvent<string>) {
-		const text = event.detail;
-		if (text) {
-			// Append to existing text with space separator if needed
-			if (inputText.trim()) {
-				inputText = inputText.trim() + " " + text;
-			} else {
-				inputText = text;
-			}
-		}
-	}
-
-	// Handle voice input error
-	function handleVoiceError(event: CustomEvent<string>) {
-		console.error("Voice input error:", event.detail);
-		// Could show error toast here, but for now just log
-	}
-
 	// Manual paste button - reads clipboard and handles text or images
 	async function handlePasteButton() {
 		if (!onSendInput) return;
@@ -7633,7 +7612,7 @@
 							class="textarea textarea-xs w-full font-mono pr-6 resize-none overflow-hidden leading-tight {liveStreamEnabled &&
 							inputText
 								? 'ring-1 ring-info/50'
-								: ''} {escapeFlash ? 'escape-flash' : ''} {pasteFlash ? 'paste-flash' : ''} {tabFlash ? 'tab-flash' : ''} {copyFlash ? 'copy-flash' : ''} {submitFlash ? 'submit-flash' : ''} {voiceFlash ? 'voice-flash' : ''} {attachFlash ? 'attach-flash' : ''} {inputTextFlash ? 'input-text-flash' : ''} {arrowFlash ? 'arrow-flash' : ''}"
+								: ''} {escapeFlash ? 'escape-flash' : ''} {pasteFlash ? 'paste-flash' : ''} {tabFlash ? 'tab-flash' : ''} {copyFlash ? 'copy-flash' : ''} {submitFlash ? 'submit-flash' : ''} {attachFlash ? 'attach-flash' : ''} {inputTextFlash ? 'input-text-flash' : ''} {arrowFlash ? 'arrow-flash' : ''}"
 							style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.80 0.02 250); min-height: 24px; max-height: 96px;"
 							disabled={sendingInput || !onSendInput}
 							data-session-input="true"
@@ -7722,28 +7701,6 @@
 								title="Streaming to terminal"
 							></div>
 						{/if}
-					</div>
-
-					<!-- Voice input (local transcription) -->
-					<div class="pb-0.5">
-						<VoiceInput
-							size="sm"
-							ontranscription={handleVoiceTranscription}
-							onerror={handleVoiceError}
-							onstart={() => {
-								voiceFlash = true;
-								setTimeout(() => {
-									voiceFlash = false;
-								}, 300);
-							}}
-							onend={() => {
-								voiceFlash = true;
-								setTimeout(() => {
-									voiceFlash = false;
-								}, 300);
-							}}
-							disabled={sendingInput || !onSendInput}
-						/>
 					</div>
 
 					<!-- RIGHT: Action buttons (context-dependent) -->

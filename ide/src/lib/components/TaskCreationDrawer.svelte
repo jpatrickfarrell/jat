@@ -1787,14 +1787,6 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 								disabled={formDisabled || isSubmitting}
 								required
 							/>
-							<VoiceInput
-								size="sm"
-								disabled={formDisabled || isSubmitting}
-								ontranscription={handleTitleTranscription}
-								onerror={handleVoiceInputError}
-								onstart={() => isTitleRecording = true}
-								onend={() => isTitleRecording = false}
-							/>
 						</div>
 						{#if validationErrors.title}
 							<label class="label">
@@ -1807,22 +1799,12 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 					<div class="form-control">
 						<label class="label py-0.5" for="task-description">
 							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">Description</span>
-							<span class="flex items-center gap-1.5 -mt-2">
-								{#if isLoadingSuggestions}
-									<span class="flex items-center gap-1.5 text-xs text-primary">
-										<span class="loading loading-spinner loading-xs"></span>
-										Analyzing...
-									</span>
-								{/if}
-								<VoiceInput
-									size="sm"
-									disabled={formDisabled || isSubmitting}
-									ontranscription={handleDescriptionTranscription}
-									onerror={handleVoiceInputError}
-									onstart={() => isDescriptionRecording = true}
-									onend={() => isDescriptionRecording = false}
-								/>
-							</span>
+							{#if isLoadingSuggestions}
+								<span class="flex items-center gap-1.5 text-xs text-primary -mt-2">
+									<span class="loading loading-spinner loading-xs"></span>
+									Analyzing...
+								</span>
+							{/if}
 						</label>
 						<PromptInput
 							bind:this={descriptionInputRef}
@@ -1844,29 +1826,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 						</label>
 					</div>
 
-					<!-- Voice Input Error Message -->
-					{#if voiceInputError}
-						<div
-							class="rounded-lg p-3 bg-error/20 border border-error/30"
-						>
-							<div class="flex items-center gap-2">
-								<svg class="w-4 h-4 flex-shrink-0 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-								</svg>
-								<span class="text-sm text-base-content">
-									{voiceInputError}
-								</span>
-								<button
-									type="button"
-									class="btn btn-xs btn-ghost ml-auto"
-									onclick={() => voiceInputError = null}
-								>
-									Dismiss
-								</button>
-							</div>
-						</div>
-					{/if}
-
+	
 					<!-- Notes (Optional) — collapsed disclosure -->
 					<details class="group">
 						<summary class="cursor-pointer list-none flex items-center gap-1.5 text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70 py-1">

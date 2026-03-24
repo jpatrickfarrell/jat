@@ -715,26 +715,6 @@
 	animation: submit-flash 0.3s ease-out forwards;
 }
 
-/* Voice recording flash - uses --anim-secondary (purple) for voice actions */
-@keyframes voice-flash {
-	0% {
-		border-color: var(--anim-secondary);
-		box-shadow: 0 0 8px 2px color-mix(in oklch, var(--anim-secondary) 60%, transparent);
-	}
-	50% {
-		border-color: var(--anim-secondary-dim);
-		box-shadow: 0 0 12px 3px color-mix(in oklch, var(--anim-secondary-dim) 40%, transparent);
-	}
-	100% {
-		border-color: var(--anim-base-hover);
-		box-shadow: none;
-	}
-}
-
-.voice-flash {
-	animation: voice-flash 0.3s ease-out forwards;
-}
-
 /* Attachment flash - uses --anim-warning (amber) for file attachments */
 @keyframes attach-flash {
 	0% {

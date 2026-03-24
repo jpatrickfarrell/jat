@@ -248,15 +248,6 @@ jt init
 # Refresh IDE
 ```
 
-### "Voice input mic button doesn't work"
-
-**Cause:** Whisper not installed
-
-**Fix:**
-```bash
-bash ~/code/jat/tools/scripts/install-whisper.sh
-```
-
 ### "Browser automation tools not found"
 
 **Cause:** npm dependencies not installed

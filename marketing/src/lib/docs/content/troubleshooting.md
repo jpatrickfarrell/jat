@@ -115,34 +115,6 @@ mkdir -p .claude/sessions
 echo "YourAgentName" > ".claude/sessions/agent-${SESSION_ID}.txt"
 ```
 
-## Voice input not working
-
-First check if whisper.cpp is installed:
-
-```bash
-ls ~/.local/share/jat/whisper/build/bin/whisper-cli
-```
-
-If not found, install it:
-
-```bash
-bash ~/code/jat/tools/scripts/install-whisper.sh
-```
-
-If the binary exists but transcription fails, the model or ffmpeg might need rebuilding:
-
-```bash
-cd ~/.local/share/jat/whisper/build
-cmake .. -DWHISPER_FFMPEG=ON && make -j$(nproc) whisper-cli
-```
-
-Test the transcription API:
-
-```bash
-curl http://localhost:3333/api/transcribe
-# Should return: {"status":"ok","whisper_cli":"...","model_exists":true}
-```
-
 ## Common error codes
 
 | Error | Cause | Fix |

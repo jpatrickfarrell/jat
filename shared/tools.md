@@ -268,7 +268,6 @@ Installation, setup, and utility scripts.
 | `setup-global-claude-md.sh` | Setup global CLAUDE.md |
 | `install-agent-mail.sh` | Initialize Agent Registry database |
 | `install-hooks.sh` | Install Claude Code hooks |
-| `install-whisper.sh` | Install whisper.cpp for voice input |
 
 **JAT Workflow:**
 | Script | Purpose |

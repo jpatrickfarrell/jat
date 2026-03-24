@@ -8,12 +8,10 @@
 	 * - Quick action buttons: ^C, ^D, ^U, ESC, Tab
 	 * - Keyboard shortcuts: Tab, Escape, Arrow keys, Delete/Backspace (when empty)
 	 * - Visual flash feedback (escape-flash, tab-flash, arrow-flash, submit-flash)
-	 * - Optional features: live streaming mode, Ctrl+C intercept, voice input
+	 * - Optional features: live streaming mode, Ctrl+C intercept
 	 */
 
 	import { browser } from '$app/environment';
-	import VoiceInput from '$lib/components/VoiceInput.svelte';
-
 	// Props
 	let {
 		sessionName = '',
@@ -22,7 +20,6 @@
 		disabled = false,
 		placeholder = 'Type and press Enter...',
 		// Optional features
-		showVoiceInput = false,
 		showStreamToggle = false,
 		showArrowButtons = false,
 		showFullKeyboardMenu = false,
@@ -32,16 +29,13 @@
 		ctrlCInterceptEnabled = $bindable(true),
 		// Callbacks
 		onStreamToggle = (_enabled: boolean) => {},
-		onCtrlCToggle = (_enabled: boolean) => {},
-		onVoiceTranscription = (_text: string) => {},
-		onVoiceError = (_error: string) => {}
+		onCtrlCToggle = (_enabled: boolean) => {}
 	}: {
 		sessionName?: string;
 		inputText?: string;
 		onSendInput?: (input: string, type: 'text' | 'key') => Promise<void>;
 		disabled?: boolean;
 		placeholder?: string;
-		showVoiceInput?: boolean;
 		showStreamToggle?: boolean;
 		showArrowButtons?: boolean;
 		showFullKeyboardMenu?: boolean;
@@ -50,8 +44,6 @@
 		ctrlCInterceptEnabled?: boolean;
 		onStreamToggle?: (enabled: boolean) => void;
 		onCtrlCToggle?: (enabled: boolean) => void;
-		onVoiceTranscription?: (text: string) => void;
-		onVoiceError?: (error: string) => void;
 	} = $props();
 
 	// Internal state
@@ -64,7 +56,6 @@
 	let arrowFlash = $state(false);
 	let submitFlash = $state(false);
 	let copyFlash = $state(false);
-	let voiceFlash = $state(false);
 
 	// Flash helper
 	function triggerFlash(flashSetter: (v: boolean) => void) {
@@ -165,13 +156,6 @@
 		const textarea = inputRef as HTMLTextAreaElement;
 		textarea.style.height = 'auto';
 		textarea.style.height = Math.min(textarea.scrollHeight, 96) + 'px';
-	}
-
-	// Handle voice transcription
-	function handleVoiceTranscription(text: string) {
-		inputText = inputText ? inputText + ' ' + text : text;
-		onVoiceTranscription(text);
-		triggerFlash((v) => (voiceFlash = v));
 	}
 
 	// Focus the input
@@ -421,8 +405,7 @@
 					{tabFlash ? 'tab-flash' : ''}
 					{arrowFlash ? 'arrow-flash' : ''}
 					{submitFlash ? 'submit-flash' : ''}
-					{copyFlash ? 'copy-flash' : ''}
-					{voiceFlash ? 'voice-flash' : ''}"
+					{copyFlash ? 'copy-flash' : ''}"
 				style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.80 0.02 250); min-height: 24px; max-height: 96px;"
 				disabled={sendingInput || disabled}
 				data-session-input="true"
@@ -481,20 +464,6 @@
 			></div>
 		{/if}
 	</div>
-
-	<!-- Voice input -->
-	{#if showVoiceInput}
-		<div class="pb-0.5">
-			<VoiceInput
-				size="sm"
-				ontranscription={(e) => handleVoiceTranscription(e.detail)}
-				onerror={(e) => onVoiceError(e.detail)}
-				onstart={() => triggerFlash((v) => (voiceFlash = v))}
-				onend={() => triggerFlash((v) => (voiceFlash = v))}
-				disabled={sendingInput || disabled}
-			/>
-		</div>
-	{/if}
 
 	<!-- RIGHT: Send button -->
 	<div class="flex items-center gap-0.5 flex-shrink-0 pb-0.5">

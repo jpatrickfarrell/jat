@@ -425,29 +425,6 @@ echo -e "${BOLD}Step 8/9: Voice-to-Text (Optional)${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-# Ask about Voice-to-Text
-INSTALL_WHISPER="no"
-echo "Voice-to-Text enables speech input in the IDE."
-echo "Requires: ~2GB disk, cmake, g++, ffmpeg"
-echo ""
-if command -v gum &> /dev/null && [ -t 0 ]; then
-    if gum confirm "Install Voice-to-Text (whisper.cpp)?"; then
-        INSTALL_WHISPER="yes"
-    fi
-else
-    if prompt_yes_no "Install Voice-to-Text (whisper.cpp)? [y/N] " "n"; then
-        INSTALL_WHISPER="yes"
-    fi
-fi
-
-if [ "$INSTALL_WHISPER" = "yes" ]; then
-    bash "$INSTALL_DIR/tools/scripts/install-whisper.sh"
-else
-    echo ""
-    echo "  Skipping Voice-to-Text installation"
-    echo "  Run later with: bash $INSTALL_DIR/tools/scripts/install-whisper.sh"
-fi
-
 # Install Pi skills if Pi is available
 INSTALL_PI_SKILLS="no"
 if command -v pi &> /dev/null; then
@@ -499,9 +476,6 @@ echo "  ✓ Database Tools (4 tools: db-query, db-schema, etc.)"
 echo "  ✓ Signal Tools (2 tools: jat-signal, jat-signal-validate)"
 if [ ! -z "$SELECTED_STACKS" ] && echo "$SELECTED_STACKS" | grep -q "SvelteKit"; then
     echo "  ✓ SvelteKit + Supabase Stack (11 additional tools)"
-fi
-if [ "$INSTALL_WHISPER" = "yes" ]; then
-    echo "  ✓ Voice-to-Text (whisper.cpp + large-v3-turbo model)"
 fi
 if [ "$INSTALL_PI_SKILLS" = "yes" ]; then
     echo "  ✓ Pi Skills (jat-start, jat-complete, jat-verify + AGENTS.md)"

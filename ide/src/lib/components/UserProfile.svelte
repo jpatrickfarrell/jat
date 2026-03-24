@@ -1090,21 +1090,6 @@
 					</ul>
 				</div>
 
-				<!-- Voice Input -->
-				<div>
-					<h3 class="text-sm font-semibold mb-2 text-primary">Voice Input</h3>
-					<ul class="text-sm space-y-1 text-base-content/65">
-						<li class="flex items-start gap-2">
-							<span class="text-base-content/50">•</span>
-							<span>Click the microphone icon to start voice recording</span>
-						</li>
-						<li class="flex items-start gap-2">
-							<span class="text-base-content/50">•</span>
-							<span>Recording uses local transcription (privacy-first, no data sent externally)</span>
-						</li>
-					</ul>
-				</div>
-
 				<!-- Links -->
 				<div class="pt-2 border-t border-base-content/20">
 					<h3 class="text-sm font-semibold mb-2 text-primary">Resources</h3>

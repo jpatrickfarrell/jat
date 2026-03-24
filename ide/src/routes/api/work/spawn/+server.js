@@ -1189,9 +1189,24 @@ export async function POST({ request }) {
 			const remoteProjectName = projectName || 'jat';
 			const remoteProjectDir = `${vpsProjectPath}/${remoteProjectName}`;
 
+			// Rebuild agent command with remote project path (the original uses local path)
+			const { command: remoteAgentCmd } = buildAgentCommand({
+				agent: selectedAgent,
+				model: selectedModel,
+				projectPath: remoteProjectDir,
+				jatDefaults,
+				agentName,
+				taskId,
+				taskTitle: task?.title,
+				taskCommand: explicitCommand || task?.command || selectedAgent.startCommand || '/jat:start',
+				mode,
+				basesContent: inlineBases
+			});
+			const escapedRemoteAgentCmd = shellEscape(remoteAgentCmd);
+
 			// Build the remote tmux command
 			// The remote shell needs: tmux session creation + agent command
-			const remoteTmuxCmd = `tmux new-session -d -s ${escapedSessionName} -x ${TMUX_INITIAL_WIDTH} -y ${TMUX_INITIAL_HEIGHT} -c '${remoteProjectDir}' && sleep 0.3 && tmux send-keys -t ${escapedSessionName} ${escapedAgentCmd} Enter`;
+			const remoteTmuxCmd = `tmux new-session -d -s ${escapedSessionName} -x ${TMUX_INITIAL_WIDTH} -y ${TMUX_INITIAL_HEIGHT} -c '${remoteProjectDir}' && sleep 0.3 && tmux send-keys -t ${escapedSessionName} ${escapedRemoteAgentCmd} Enter`;
 
 			// Escape the command for SSH (double-escape single quotes)
 			const sshCmd = `ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new ${vpsUser}@${vpsHost} ${shellEscape(remoteTmuxCmd)}`;

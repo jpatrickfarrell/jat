@@ -58,12 +58,54 @@
 	import { getMaxSessions } from "$lib/stores/preferences.svelte";
 	import { spawnInBatches } from "$lib/utils/spawnBatch";
 	import ProjectSelector from "./ProjectSelector.svelte";
+	import { openProjectDrawer } from "$lib/stores/drawerStore";
+	import { getProjectColor as getProjectColorUtil } from "$lib/utils/projectColors";
 
 	// Initialize sort stores on mount
 	onMount(() => {
 		initAgentSort();
 		initServerSort();
 	});
+
+	// Project switcher dropdown state (the + button at end of favorites)
+	let showProjectSwitcher = $state(false);
+	let projectSwitcherEl = $state<HTMLDivElement | null>(null);
+	let projectSwitcherPos = $state({ top: 0, left: 0 });
+
+	function toggleProjectSwitcher() {
+		if (!showProjectSwitcher && projectSwitcherEl) {
+			const rect = projectSwitcherEl.getBoundingClientRect();
+			projectSwitcherPos = { top: rect.bottom + 4, left: rect.left };
+		}
+		showProjectSwitcher = !showProjectSwitcher;
+	}
+
+	function handleProjectSwitcherClickOutside(e: MouseEvent) {
+		if (projectSwitcherEl && !projectSwitcherEl.contains(e.target as Node)) {
+			showProjectSwitcher = false;
+		}
+	}
+
+	function handleProjectSwitcherKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') showProjectSwitcher = false;
+	}
+
+	$effect(() => {
+		if (showProjectSwitcher) {
+			document.addEventListener('click', handleProjectSwitcherClickOutside, true);
+			document.addEventListener('keydown', handleProjectSwitcherKeydown);
+		}
+		return () => {
+			document.removeEventListener('click', handleProjectSwitcherClickOutside, true);
+			document.removeEventListener('keydown', handleProjectSwitcherKeydown);
+		};
+	});
+
+	// Helper to get color for a project
+	function getSwitcherColor(project: string): string {
+		if (projectColors[project]) return projectColors[project];
+		return getProjectColorUtil(project);
+	}
 
 	// Check which page we're on for showing appropriate sort dropdown
 	const isAgentsPage = $derived($page.url.pathname === "/agents");
@@ -645,6 +687,74 @@
 					sessionStates={projectSessionStates.get(selectedProject) || []}
 				/>
 			{/if}
+
+			<!-- Project switcher: switch projects or add new -->
+			<div class="project-switcher-container" bind:this={projectSwitcherEl}>
+				<button
+					type="button"
+					class="project-switcher-btn"
+					onclick={toggleProjectSwitcher}
+					title="Switch project or add new (Alt+Shift+P)"
+				>
+					<svg viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3">
+						<path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
+					</svg>
+				</button>
+
+				{#if showProjectSwitcher}
+					<div class="project-switcher-dropdown" style="top: {projectSwitcherPos.top}px; left: {projectSwitcherPos.left}px;">
+						<div class="psd-header">Switch Project</div>
+						<div class="psd-scroll">
+							{#each actualProjects as project}
+								{@const projColor = getSwitcherColor(project)}
+								{@const isFavorite = favoriteProjects?.has(project)}
+								{@const count = taskCounts?.get(project)}
+								<button
+									type="button"
+									class="psd-item"
+									class:psd-active={selectedProject === project}
+									style="--psd-color: {projColor};"
+									onclick={() => { onProjectChange?.(project); showProjectSwitcher = false; }}
+								>
+									<span class="psd-dot"></span>
+									<span class="psd-label">{project}{count ? ` (${count})` : ''}</span>
+									{#if onToggleFavorite}
+										<button
+											type="button"
+											class="psd-star"
+											class:psd-star-active={isFavorite}
+											onclick={(e) => { e.stopPropagation(); onToggleFavorite?.(project); }}
+											title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+										>
+											{#if isFavorite}
+												<svg viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clip-rule="evenodd" /></svg>
+											{:else}
+												<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" /></svg>
+											{/if}
+										</button>
+									{/if}
+									{#if selectedProject === project}
+										<svg class="psd-check" viewBox="0 0 16 16" fill="currentColor">
+											<path fill-rule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd" />
+										</svg>
+									{/if}
+								</button>
+							{/each}
+						</div>
+						<div class="psd-divider"></div>
+						<button
+							type="button"
+							class="psd-item psd-add-item"
+							onclick={() => { showProjectSwitcher = false; openProjectDrawer(); }}
+						>
+							<svg viewBox="0 0 20 20" fill="currentColor" class="psd-add-icon">
+								<path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
+							</svg>
+							<span class="psd-label">Add Project</span>
+						</button>
+					</div>
+				{/if}
+			</div>
 		</div>
 	{/if}
 
@@ -1035,5 +1145,199 @@
 
 	.fav-flip-wrapper:active {
 		cursor: grabbing;
+	}
+
+	/* ── Project Switcher (+ button & dropdown) ── */
+	.project-switcher-container {
+		position: relative;
+		display: inline-flex;
+		flex-shrink: 0;
+	}
+
+	.project-switcher-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.5rem;
+		height: 1.5rem;
+		border-radius: 0.375rem;
+		border: 1px dashed oklch(0.45 0.02 250);
+		background: transparent;
+		color: oklch(0.55 0.02 250);
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.project-switcher-btn:hover {
+		border-color: oklch(0.65 0.12 200);
+		color: oklch(0.75 0.15 200);
+		background: oklch(0.25 0.04 200 / 0.2);
+		box-shadow: 0 0 6px oklch(0.65 0.12 200 / 0.2);
+	}
+
+	.project-switcher-dropdown {
+		position: fixed;
+		min-width: 14rem;
+		max-width: 20rem;
+		padding: 0.25rem;
+		border-radius: 0.5rem;
+		background: oklch(0.18 0.01 250);
+		border: 1px solid oklch(0.28 0.02 250 / 0.5);
+		box-shadow: 0 8px 24px oklch(0 0 0 / 0.4);
+		z-index: 60;
+		animation: psd-in 0.12s ease-out;
+	}
+
+	@keyframes psd-in {
+		from { opacity: 0; transform: translateY(-4px); }
+		to { opacity: 1; transform: translateY(0); }
+	}
+
+	.psd-header {
+		font-size: 0.625rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: oklch(0.50 0.02 250);
+		padding: 0.375rem 0.5rem 0.25rem;
+	}
+
+	.psd-scroll {
+		max-height: 14rem;
+		overflow-y: auto;
+		scrollbar-width: thin;
+		scrollbar-color: oklch(0.35 0.02 250) transparent;
+	}
+
+	.psd-scroll::-webkit-scrollbar {
+		width: 0.4rem;
+	}
+	.psd-scroll::-webkit-scrollbar-track {
+		background: transparent;
+	}
+	.psd-scroll::-webkit-scrollbar-thumb {
+		background: oklch(0.35 0.02 250);
+		border-radius: 0.2rem;
+	}
+
+	.psd-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.375rem 0.5rem;
+		border-radius: 0.375rem;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		font-size: 0.75rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
+		color: oklch(0.75 0.02 250);
+		transition: background 0.1s ease;
+		text-align: left;
+	}
+
+	.psd-item:hover {
+		background: color-mix(in oklch, var(--psd-color, oklch(0.60 0.02 250)) 15%, transparent);
+		color: var(--psd-color, oklch(0.92 0.02 250));
+	}
+
+	.psd-item.psd-active {
+		color: var(--psd-color);
+	}
+
+	.psd-dot {
+		width: 0.5rem;
+		height: 0.5rem;
+		border-radius: 50%;
+		background: var(--psd-color);
+		flex-shrink: 0;
+		opacity: 0.8;
+	}
+
+	.psd-item.psd-active .psd-dot {
+		opacity: 1;
+		box-shadow: 0 0 5px color-mix(in oklch, var(--psd-color) 50%, transparent);
+	}
+
+	.psd-label {
+		flex: 1;
+		text-align: left;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.psd-star {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.25rem;
+		height: 1.25rem;
+		flex-shrink: 0;
+		padding: 0;
+		border: none;
+		border-radius: 0.25rem;
+		background: transparent;
+		cursor: pointer;
+		color: oklch(0.40 0.02 250);
+		opacity: 0;
+		transition: all 0.15s ease;
+	}
+
+	.psd-star svg {
+		width: 0.8rem;
+		height: 0.8rem;
+	}
+
+	.psd-item:hover .psd-star {
+		opacity: 1;
+	}
+
+	.psd-star.psd-star-active {
+		opacity: 1;
+		color: oklch(0.80 0.18 85);
+	}
+
+	.psd-star:hover {
+		color: oklch(0.85 0.15 85);
+		background: oklch(0.28 0.08 85 / 0.3);
+	}
+
+	.psd-star.psd-star-active:hover {
+		color: oklch(0.60 0.10 85);
+	}
+
+	.psd-check {
+		width: 0.875rem;
+		height: 0.875rem;
+		flex-shrink: 0;
+		color: var(--psd-color);
+	}
+
+	.psd-divider {
+		height: 1px;
+		background: oklch(0.26 0.02 250);
+		margin: 0.25rem 0;
+	}
+
+	.psd-add-item {
+		font-weight: 500;
+		text-transform: none;
+		letter-spacing: normal;
+	}
+
+	.psd-add-icon {
+		width: 0.875rem;
+		height: 0.875rem;
+		flex-shrink: 0;
+		color: oklch(0.70 0.18 145);
+	}
+
+	.psd-add-item:hover .psd-add-icon {
+		color: oklch(0.85 0.18 145);
 	}
 </style>

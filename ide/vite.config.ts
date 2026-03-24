@@ -85,5 +85,10 @@ export default defineConfig({
 	},
 	ssr: {
 		external: ['sqlite-vec']
+	},
+	build: {
+		rollupOptions: {
+			external: ['sqlite-vec']
+		}
 	}
 });

@@ -4,7 +4,6 @@
 	 * Reusable in TaskCreationDrawer and TaskDetailDrawer.
 	 */
 	import type { KnowledgeBase } from '$lib/types/knowledgeBase';
-	import { SOURCE_TYPE_INFO } from '$lib/types/knowledgeBase';
 	import { getBases, isStoreInitialized, initializeStore, getCurrentProject } from '$lib/stores/bases.svelte';
 
 	interface Props {
@@ -30,8 +29,8 @@
 	const selectedBases = $derived(allBases.filter(b => selectedIds.includes(b.id)));
 	const availableBases = $derived(allBases.filter(b => !selectedIds.includes(b.id)));
 
-	function getSourceIcon(type: string): string {
-		return SOURCE_TYPE_INFO.find(s => s.type === type)?.icon || '📄';
+	function getBaseIcon(base: KnowledgeBase): string {
+		return base.icon || '📄';
 	}
 
 	function addBase(id: string) {
@@ -62,7 +61,7 @@
 				class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
 				style="background: oklch(0.28 0.04 240 / 0.4); color: oklch(0.80 0.10 240); border: 1px solid oklch(0.40 0.10 240 / 0.3);"
 			>
-				<span>{getSourceIcon(base.source_type)}</span>
+				<span>{getBaseIcon(base)}</span>
 				<span class="truncate max-w-[120px]">{base.name}</span>
 				<button
 					type="button"
@@ -102,7 +101,7 @@
 					class="w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-base-300"
 					onclick={() => { addBase(base.id); showDropdown = false; }}
 				>
-					<span>{getSourceIcon(base.source_type)}</span>
+					<span>{getBaseIcon(base)}</span>
 					<span class="flex-1 truncate" style="color: oklch(0.80 0.01 250);">{base.name}</span>
 					{#if base.token_estimate}
 						<span style="color: oklch(0.50 0.01 250);">~{Math.round(base.token_estimate / 1000)}K</span>

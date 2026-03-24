@@ -5,7 +5,6 @@
 	 * System bases (CLAUDE.md, AGENTS.md) are read-only with a SYSTEM badge.
 	 */
 	import type { KnowledgeBase } from '$lib/types/knowledgeBase';
-	import { SOURCE_TYPE_INFO } from '$lib/types/knowledgeBase';
 	import { toggleAlwaysInject } from '$lib/stores/bases.svelte';
 
 	interface Props {
@@ -17,8 +16,6 @@
 	}
 
 	let { base, selected = false, onSelect, onEdit, class: className = '' }: Props = $props();
-
-	const sourceInfo = $derived(SOURCE_TYPE_INFO.find(s => s.type === base.source_type));
 	const isSystem = $derived(!!base._system);
 
 	function formatTokens(n: number | null): string {
@@ -59,9 +56,9 @@
 >
 	<!-- Top row: icon + name + toggle/badge -->
 	<div class="flex items-center gap-2">
-		<!-- Source type icon -->
-		<span class="text-base flex-shrink-0" title={isSystem ? 'System' : sourceInfo?.label}>
-			{isSystem ? '🔒' : (sourceInfo?.icon || '📄')}
+		<!-- Base icon -->
+		<span class="text-base flex-shrink-0" title={isSystem ? 'System' : base.name}>
+			{isSystem ? '🔒' : (base.icon || '📄')}
 		</span>
 
 		<!-- Name -->
@@ -97,7 +94,7 @@
 
 	<!-- Bottom row: type badge + token estimate + edit button -->
 	<div class="flex items-center gap-2 mt-2">
-		<!-- Source type badge -->
+		<!-- Scope badge -->
 		{#if isSystem}
 			<span
 				class="text-xs px-1.5 py-0.5 rounded"
@@ -105,12 +102,12 @@
 			>
 				Always Injected
 			</span>
-		{:else}
+		{:else if base.always_inject}
 			<span
 				class="text-xs px-1.5 py-0.5 rounded"
-				style="background: oklch(0.25 0.02 250); color: oklch(0.70 0.01 250);"
+				style="background: oklch(0.25 0.03 145); color: oklch(0.65 0.08 145);"
 			>
-				{sourceInfo?.label || base.source_type}
+				Always Injected
 			</span>
 		{/if}
 

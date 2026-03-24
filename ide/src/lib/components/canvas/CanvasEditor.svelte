@@ -7,12 +7,11 @@
 	import type { CanvasBlock, CanvasBlockType } from '$lib/types/canvas';
 	import BlockRenderer from './BlockRenderer.svelte';
 
-	// Accept any object with the required page shape (CanvasPage or KnowledgeBase)
+	// Accept any object with the required page shape (KnowledgeBase)
 	interface PageLike {
 		id: string;
 		name: string;
 		blocks: CanvasBlock[];
-		is_base?: boolean;
 		always_inject?: boolean;
 	}
 
@@ -328,7 +327,7 @@
 
 				<!-- Knowledge Base toggle -->
 				{#if true}
-				{@const isKB = !!(page.is_base || page.always_inject)}
+				{@const isKB = !!page.always_inject}
 				<div class="mb-6 flex items-center gap-2">
 					<label class="canvas-base-toggle">
 						<input

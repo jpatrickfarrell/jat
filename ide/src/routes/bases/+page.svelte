@@ -262,7 +262,7 @@
 			await fetch(`/api/bases/${selectedBase!.id}`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ project, is_base: isBase })
+				body: JSON.stringify({ project, always_inject: isBase })
 			});
 		} catch (err) {
 			console.error('Failed to toggle base flag:', err);
@@ -283,7 +283,7 @@
 			await fetch(`/api/bases/${base.id}`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ project, is_base: newValue })
+				body: JSON.stringify({ project, always_inject: newValue })
 			});
 		} catch (err) {
 			console.error('Failed to toggle always_inject:', err);

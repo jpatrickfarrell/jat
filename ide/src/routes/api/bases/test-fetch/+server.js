@@ -2,7 +2,7 @@
  * POST /api/bases/test-fetch
  *
  * Test-fetch a URL and return the extracted content.
- * Used by BaseEditor's "Test" button to preview external source content.
+ * Used to preview external source content before saving.
  */
 import { json } from '@sveltejs/kit';
 

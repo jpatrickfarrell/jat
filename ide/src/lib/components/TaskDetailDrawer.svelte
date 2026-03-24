@@ -42,7 +42,6 @@
 	import BaseAttachChips from './bases/BaseAttachChips.svelte';
 	import DataTableAttachChips from './bases/DataTableAttachChips.svelte';
 	import type { KnowledgeBase, RenderedBase } from '$lib/types/knowledgeBase';
-	import { SOURCE_TYPE_INFO } from '$lib/types/knowledgeBase';
 	import FeedbackReplyModal from '$lib/components/FeedbackReplyModal.svelte';
 
 	// Task interface for drawer (extends API Task with additional optional fields)
@@ -2812,8 +2811,7 @@
 									{#each taskBases as base (base.id)}
 										{@const preview = renderedBases.get(base.id)}
 										{@const expanded = expandedContext.has(`base-${base.id}`)}
-										{@const sourceInfo = SOURCE_TYPE_INFO.find(s => s.type === base.source_type)}
-										<div
+											<div
 											class="rounded-lg overflow-hidden"
 											style="border: 1px solid oklch(0.25 0.01 250); background: oklch(0.16 0.01 250);"
 										>
@@ -2826,7 +2824,7 @@
 												onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.background = 'oklch(0.16 0.01 250)'; }}
 												onclick={() => toggleContextExpand(`base-${base.id}`)}
 											>
-												<span class="text-xs flex-shrink-0">{sourceInfo?.icon || '📄'}</span>
+												<span class="text-xs flex-shrink-0">{base.icon || '📄'}</span>
 												<span class="text-xs font-medium truncate flex-1" style="color: oklch(0.85 0.01 250);">
 													{base.name}
 												</span>

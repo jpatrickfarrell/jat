@@ -21,8 +21,7 @@
 	import { getActiveProject, setActiveProject } from '$lib/stores/preferences.svelte';
 	import { getFileTypeInfo, formatFileSize, getAcceptAttribute, type FileCategory } from '$lib/utils/fileUtils';
 	import { getProjectColor } from '$lib/utils/projectColors';
-	import VoiceInput from './VoiceInput.svelte';
-	import BaseAttachChips from './bases/BaseAttachChips.svelte';
+import BaseAttachChips from './bases/BaseAttachChips.svelte';
 	import DataTableAttachChips from './bases/DataTableAttachChips.svelte';
 	import { getBases as getBasesFromStore, isStoreInitialized as isBasesStoreInitialized, getCurrentProject as getBasesCurrentProject } from '$lib/stores/bases.svelte';
 	import PromptInput from './quick-commands/PromptInput.svelte';
@@ -492,11 +491,6 @@
 		}
 	});
 
-	// Voice input state
-	let voiceInputError = $state<string | null>(null);
-	let isTitleRecording = $state(false);
-	let isDescriptionRecording = $state(false);
-
 	// Paste detection for multi-line text parsing
 	// When user pastes text with line breaks, parse first line as title and rest as description
 	async function handleTitlePaste(event: ClipboardEvent) {
@@ -561,35 +555,6 @@
 			// Move cursor to end of title for easy editing
 			titleInput.selectionStart = titleInput.selectionEnd = formData.title.length;
 		}
-	}
-
-	// Voice input handlers
-	function handleTitleTranscription(event: CustomEvent<string>) {
-		const text = event.detail;
-		if (text) {
-			// Append to existing title with space if needed
-			formData.title = formData.title
-				? formData.title + ' ' + text
-				: text;
-		}
-		voiceInputError = null;
-	}
-
-	function handleDescriptionTranscription(event: CustomEvent<string>) {
-		const text = event.detail;
-		if (text) {
-			const prefix = formData.description ? ' ' : '';
-			descriptionInputRef?.appendText(prefix + text);
-		}
-		voiceInputError = null;
-	}
-
-	function handleVoiceInputError(event: CustomEvent<string>) {
-		voiceInputError = event.detail;
-		// Auto-clear error after 5 seconds
-		setTimeout(() => {
-			voiceInputError = null;
-		}, 5000);
 	}
 
 	// Available options

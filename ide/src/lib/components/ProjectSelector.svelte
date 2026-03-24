@@ -369,6 +369,7 @@
 			<svg class="chevron" class:open viewBox="0 0 16 16" fill="currentColor">
 				<path fill-rule="evenodd" d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
 			</svg>
+
 		</button>
 
 		{#if onNewTask}
@@ -674,13 +675,35 @@
 	.chevron {
 		width: 0.875rem;
 		height: 0.875rem;
-		opacity: 0.7;
-		transition: transform 0.15s ease;
 		flex-shrink: 0;
+		max-width: 0;
+		opacity: 0;
+		overflow: hidden;
+		transition: max-width 0.2s ease, opacity 0.2s ease;
+	}
+
+	.chip-group:hover .chevron {
+		max-width: 0.875rem;
+		opacity: 0.7;
+		animation: chevron-spin-in 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 	}
 
 	.chevron.open {
+		max-width: 0.875rem;
+		opacity: 0.7;
 		transform: rotate(180deg);
+		animation: none;
+	}
+
+	@keyframes chevron-spin-in {
+		0% {
+			transform: rotate(-180deg) scale(0.5);
+			opacity: 0;
+		}
+		100% {
+			transform: rotate(0deg) scale(1);
+			opacity: 0.7;
+		}
 	}
 
 	/* Hover-expand + button */

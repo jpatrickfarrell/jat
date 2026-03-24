@@ -17,6 +17,7 @@
 
 	let { base, selected = false, onSelect, onEdit, class: className = '' }: Props = $props();
 	const isSystem = $derived(!!base._system);
+	const isProjectNotes = $derived(!!base._projectNotes || base.id?.startsWith('_notes_'));
 
 	function formatTokens(n: number | null): string {
 		if (n == null) return '—';
@@ -57,8 +58,8 @@
 	<!-- Top row: icon + name + toggle/badge -->
 	<div class="flex items-center gap-2">
 		<!-- Base icon -->
-		<span class="text-base flex-shrink-0" title={isSystem ? 'System' : base.name}>
-			{isSystem ? '🔒' : (base.icon || '📄')}
+		<span class="text-base flex-shrink-0" title={isSystem ? 'System' : isProjectNotes ? 'Project Notes' : base.name}>
+			{isSystem ? '🔒' : isProjectNotes ? '📝' : (base.icon || '📄')}
 		</span>
 
 		<!-- Name -->
@@ -66,13 +67,20 @@
 			{base.name}
 		</span>
 
-		<!-- System badge (read-only) or Always-inject toggle -->
+		<!-- System badge (read-only), Notes badge, or Always-inject toggle -->
 		{#if isSystem}
 			<span
 				class="text-xs px-1.5 py-0.5 rounded-full font-medium flex-shrink-0"
 				style="background: oklch(0.40 0.10 270 / 0.3); color: oklch(0.80 0.10 270);"
 			>
 				SYSTEM
+			</span>
+		{:else if isProjectNotes}
+			<span
+				class="text-xs px-1.5 py-0.5 rounded-full font-medium flex-shrink-0"
+				style="background: oklch(0.40 0.12 85 / 0.3); color: oklch(0.80 0.12 85);"
+			>
+				NOTES
 			</span>
 		{:else}
 			<label class="swap swap-rotate flex-shrink-0" onclick={handleToggle}>

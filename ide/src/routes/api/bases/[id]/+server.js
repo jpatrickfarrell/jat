@@ -83,6 +83,11 @@ export async function DELETE({ params, url }) {
 	}
 
 	try {
+		// Prevent deletion of project notes bases
+		if (baseId.startsWith('_notes_')) {
+			return json({ error: 'Project Notes base cannot be deleted' }, { status: 403 });
+		}
+
 		const { path, exists } = await getProjectPath(project);
 		if (!exists) {
 			return json({ error: `Project not found: ${project}` }, { status: 404 });

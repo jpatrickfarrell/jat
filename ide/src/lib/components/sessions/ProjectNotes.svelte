@@ -99,7 +99,7 @@
 		}, 1000);
 	}
 
-	// Save notes to API
+	// Save notes to bases API
 	async function saveNotes() {
 		if (!projectName || localNotes === originalNotes) return;
 
@@ -107,12 +107,12 @@
 		saveError = null;
 
 		try {
-			const response = await fetch('/api/projects', {
-				method: 'PATCH',
+			const response = await fetch('/api/bases/notes', {
+				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					project: projectName,
-					notes: localNotes
+					content: localNotes
 				})
 			});
 
@@ -211,9 +211,9 @@
 			// Fire-and-forget: save won't complete before unload, so use sendBeacon
 			const payload = new Blob([JSON.stringify({
 				project: projectName,
-				notes: localNotes
+				content: localNotes
 			})], { type: 'application/json' });
-			navigator.sendBeacon('/api/projects/notes-sync', payload);
+			navigator.sendBeacon('/api/bases/notes', payload);
 			originalNotes = localNotes;
 			isDirty = false;
 		}
@@ -240,12 +240,12 @@
 			if (isDirty && projectName && localNotes !== originalNotes) {
 				// Use fetch for component destroy (SPA navigation) since sendBeacon
 				// may not work for all cases and the page isn't unloading
-				fetch('/api/projects', {
-					method: 'PATCH',
+				fetch('/api/bases/notes', {
+					method: 'PUT',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
 						project: projectName,
-						notes: localNotes
+						content: localNotes
 					})
 				}).catch(() => {
 					// Best effort - component is being destroyed

@@ -432,6 +432,9 @@
 					<div class="text-sm font-medium truncate" style="color: {selectedBaseId === base.id ? 'oklch(0.85 0.12 240)' : 'oklch(0.75 0.02 250)'};">
 						{base.name}
 					</div>
+					{#if base._projectNotes || base.id?.startsWith('_notes_')}
+						<span class="shrink-0 text-[9px] font-mono px-1 py-0.5 rounded" style="background: oklch(0.55 0.12 85 / 0.15); color: oklch(0.70 0.12 85); border: 1px solid oklch(0.55 0.12 85 / 0.25);">NOTES</span>
+					{/if}
 					{#if base.always_inject}
 						<span class="shrink-0 text-[9px] font-mono px-1 py-0.5 rounded" style="background: oklch(0.55 0.15 145 / 0.15); color: oklch(0.70 0.15 145); border: 1px solid oklch(0.55 0.15 145 / 0.25);">AI</span>
 					{/if}
@@ -479,12 +482,14 @@
 			</svg>
 			Rename
 		</button>
+		{#if !ctxBase?._projectNotes && !ctxBase?.id?.startsWith('_notes_')}
 		<button onclick={() => { if (ctxBase) handleDeleteClick(ctxBase); }} style="color: oklch(0.70 0.15 30);">
 			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
 			</svg>
 			Delete
 		</button>
+		{/if}
 	</div>
 {/if}
 

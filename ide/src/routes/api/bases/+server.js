@@ -186,7 +186,13 @@ export async function GET({ url }) {
 		}
 
 		const bases = getBases(path, { alwaysInjectOnly });
-		let allBases = [...bases];
+		// Mark project notes bases with _projectNotes flag
+		let allBases = bases.map(b => {
+			if (b.id?.startsWith('_notes_')) {
+				return { ...b, _projectNotes: true };
+			}
+			return b;
+		});
 
 		if (includeSystem) {
 			const systemBases = getSystemBases(path);

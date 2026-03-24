@@ -162,7 +162,6 @@
 
 	// Project notes
 	let projectNotes = $state<Record<string, string>>({});
-	let projectNotesHeight = $state<Record<string, number>>({});
 
 	// Configured projects (from projects.json - includes empty projects)
 	let configuredProjects = $state<string[]>([]);
@@ -769,30 +768,32 @@
 
 	async function fetchProjectNotes() {
 		try {
+			// Fetch project list for configuredProjects
 			const response = await fetch("/api/projects?visible=true");
 			if (!response.ok) return;
 			const data = await response.json();
-			const notes: Record<string, string> = {};
-			const heights: Record<string, number> = {};
 			const projectKeys: string[] = [];
 			for (const project of data.projects || []) {
-				// Skip hidden projects
 				if (project.hidden) continue;
-
 				const projectKey = project.key || project.name;
-				if (projectKey) {
-					projectKeys.push(projectKey);
-					if (project.notes) {
-						notes[projectKey] = project.notes;
-					}
-					if (project.notesHeight) {
-						heights[projectKey] = project.notesHeight;
-					}
-				}
+				if (projectKey) projectKeys.push(projectKey);
 			}
-			projectNotes = notes;
-			projectNotesHeight = heights;
 			configuredProjects = projectKeys;
+
+			// Fetch notes for all visible projects from bases API
+			const notes: Record<string, string> = {};
+			await Promise.all(projectKeys.map(async (key) => {
+				try {
+					const res = await fetch(`/api/bases/notes?project=${encodeURIComponent(key)}`);
+					if (res.ok) {
+						const d = await res.json();
+						if (d.content) notes[key] = d.content;
+					}
+				} catch {
+					// Skip individual project failures
+				}
+			}));
+			projectNotes = notes;
 		} catch (err) {
 			console.warn("Failed to fetch project notes:", err);
 		}

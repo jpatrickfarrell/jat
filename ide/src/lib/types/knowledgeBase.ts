@@ -103,6 +103,8 @@ export interface KnowledgeBase {
 	_system?: boolean;
 	/** For system bases: the file path relative to project root */
 	_systemPath?: string;
+	/** Marked true for the Project Notes base (non-deletable, editable from /tasks) */
+	_projectNotes?: boolean;
 }
 
 // ---------------------------------------------------------------------------

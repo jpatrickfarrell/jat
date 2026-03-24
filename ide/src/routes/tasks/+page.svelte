@@ -1616,6 +1616,10 @@
 					projectName={selectedProject}
 					notes={projectNotes[selectedProject] || ""}
 					{projectColor}
+					onSave={(project, content) => {
+						projectNotes[project] = content;
+						projectNotes = projectNotes;
+					}}
 				/>
 
 				<!-- Active Sessions Section -->

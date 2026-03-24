@@ -10,12 +10,14 @@
 		projectName,
 		notes = '',
 		isCollapsed = false,
-		projectColor = 'oklch(0.70 0.15 200)'
+		projectColor = 'oklch(0.70 0.15 200)',
+		onSave
 	}: {
 		projectName: string;
 		notes?: string;
 		isCollapsed?: boolean;
 		projectColor?: string;
+		onSave?: (project: string, content: string) => void;
 	} = $props();
 
 	// Internal collapse state (not bound to parent)
@@ -124,6 +126,8 @@
 			// Update the original notes to mark as clean
 			originalNotes = localNotes;
 			isDirty = false;
+			// Notify parent so its state stays in sync
+			onSave?.(projectName, localNotes);
 		} catch (error) {
 			saveError = error instanceof Error ? error.message : 'Failed to save';
 			console.error('Failed to save project notes:', error);

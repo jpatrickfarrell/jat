@@ -86,9 +86,34 @@ echo -e "${DIM}Detected: $DISTRO ($PKG)${NC}"
 echo ""
 
 # ============================================================================
-# Step 1: Fix stale packages
+# Step 1: Swap (for small VPS instances)
 # ============================================================================
-header "Step 1/7: System packages"
+header "Step 1/9: Swap configuration"
+
+# IDE production build needs ~1.5GB — 1GB VPS instances OOM without swap
+TOTAL_MEM_MB=$(free -m | awk '/^Mem:/{print $2}')
+if [ "$TOTAL_MEM_MB" -lt 2048 ] && ! swapon --show | grep -q '/'; then
+    info "RAM: ${TOTAL_MEM_MB}MB — adding 2GB swap for build step..."
+    sudo fallocate -l 2G /swapfile
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile
+    sudo swapon /swapfile
+    # Persist across reboots
+    if ! grep -q '/swapfile' /etc/fstab; then
+        echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab > /dev/null
+    fi
+    ok "2GB swap enabled (${TOTAL_MEM_MB}MB RAM + 2048MB swap)"
+elif swapon --show | grep -q '/'; then
+    SWAP_MB=$(free -m | awk '/^Swap:/{print $2}')
+    ok "Swap already active (${SWAP_MB}MB)"
+else
+    ok "RAM: ${TOTAL_MEM_MB}MB — swap not needed"
+fi
+
+# ============================================================================
+# Step 2: Fix stale packages
+# ============================================================================
+header "Step 2/9: System packages"
 
 if [ "$PKG" = "pacman" ]; then
     # Arch: remove orphaned firmware directories that block pacman -Syu
@@ -113,7 +138,7 @@ if [ "$PKG" = "pacman" ]; then
     ok "System updated"
 
     info "Installing base dependencies..."
-    sudo pacman -S --needed --noconfirm base-devel git tmux sqlite jq curl wget
+    sudo pacman -S --needed --noconfirm base-devel git tmux sqlite jq curl wget rsync
     ok "Base dependencies installed"
 
 elif [ "$PKG" = "apt" ]; then
@@ -124,7 +149,7 @@ elif [ "$PKG" = "apt" ]; then
     ok "System updated"
 
     info "Installing base dependencies..."
-    sudo apt install -y build-essential git tmux sqlite3 jq curl wget
+    sudo apt install -y build-essential git tmux sqlite3 jq curl wget rsync
     ok "Base dependencies installed"
 
 elif [ "$PKG" = "dnf" ]; then
@@ -140,7 +165,7 @@ fi
 # ============================================================================
 # Step 2: Install Tailscale
 # ============================================================================
-header "Step 2/7: Tailscale (private networking)"
+header "Step 3/9: Tailscale (private networking)"
 
 if command -v tailscale &>/dev/null; then
     ok "Tailscale already installed ($(tailscale version 2>/dev/null | head -1))"
@@ -165,7 +190,7 @@ fi
 # ============================================================================
 # Step 3: Install Node.js 22 LTS
 # ============================================================================
-header "Step 3/7: Node.js 22 LTS"
+header "Step 4/9: Node.js 22 LTS"
 
 NODE_OK=false
 if command -v node &>/dev/null; then
@@ -200,7 +225,7 @@ fi
 # ============================================================================
 # Step 4: Install Claude Code + gh CLI
 # ============================================================================
-header "Step 4/7: Claude Code + GitHub CLI"
+header "Step 5/9: Claude Code + GitHub CLI"
 
 # Claude Code (npm global)
 if command -v claude &>/dev/null; then
@@ -235,9 +260,12 @@ fi
 # ============================================================================
 # Step 5: Firewall (iptables)
 # ============================================================================
-header "Step 5/7: Firewall configuration"
+header "Step 6/9: Firewall configuration"
 
-if prompt_yes_no "${BLUE}Configure iptables firewall? (SSH + Tailscale only) [Y/n]${NC} " "y"; then
+# Skip if firewall rules already persisted
+if [ -f /etc/iptables/iptables.rules ] || [ -f /etc/iptables/rules.v4 ]; then
+    ok "Firewall already configured"
+elif prompt_yes_no "${BLUE}Configure iptables firewall? (SSH + Tailscale only) [Y/n]${NC} " "y"; then
     info "Configuring iptables rules..."
 
     # Detect Tailscale interface
@@ -298,7 +326,7 @@ fi
 # ============================================================================
 # Step 6: Directory structure + Auth
 # ============================================================================
-header "Step 6/7: Directories & authentication"
+header "Step 7/9: Directories & authentication"
 
 # Create directories
 mkdir -p ~/projects ~/data/jat ~/.local/bin ~/.config/jat
@@ -336,9 +364,10 @@ fi
 echo ""
 
 # --- Claude Code auth ---
-if claude --version &>/dev/null 2>&1; then
+if [ -d "$HOME/.claude" ] && ls "$HOME/.claude"/.credentials* &>/dev/null 2>&1; then
+    ok "Claude Code already authenticated"
+elif claude --version &>/dev/null 2>&1; then
     info "Claude Code setup"
-    echo -e "  ${DIM}Run 'claude' to authenticate if not already done.${NC}"
     echo -e "  ${DIM}For headless servers, use: claude --setup-token${NC}"
     echo ""
     if prompt_yes_no "${BLUE}Run Claude Code auth now? [Y/n]${NC} " "y"; then
@@ -373,7 +402,7 @@ fi
 # ============================================================================
 # Step 7: Install JAT
 # ============================================================================
-header "Step 7/7: Install JAT"
+header "Step 8/9: Install JAT"
 
 JAT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/jat"
 
@@ -394,6 +423,68 @@ echo ""
 bash "$JAT_DIR/install.sh"
 
 # ============================================================================
+# Step 9: Systemd service (auto-start + crash recovery)
+# ============================================================================
+header "Step 9/9: JAT IDE service"
+
+SERVICE_FILE="/etc/systemd/system/jat-ide.service"
+if [ -f "$SERVICE_FILE" ]; then
+    ok "jat-ide.service already installed"
+    # Reload in case the unit file changed
+    sudo systemctl daemon-reload
+else
+    info "Creating systemd service for JAT IDE..."
+    sudo tee "$SERVICE_FILE" > /dev/null <<'UNIT'
+[Unit]
+Description=JAT IDE Server
+After=network.target tailscaled.service
+Wants=tailscaled.service
+# Restart up to 5 times within 60s, then stop trying
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/.local/share/jat/ide
+Environment=PORT=3333
+Environment=NODE_ENV=production
+Environment=PATH=/root/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/node --import tsx server.js
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jat-ide
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    ok "Created $SERVICE_FILE"
+fi
+
+# Enable and start
+sudo systemctl enable jat-ide 2>/dev/null
+if systemctl is-active --quiet jat-ide 2>/dev/null; then
+    info "Restarting jat-ide service..."
+    sudo systemctl restart jat-ide
+else
+    info "Starting jat-ide service..."
+    sudo systemctl start jat-ide
+fi
+
+# Wait for it to come up
+sleep 2
+if systemctl is-active --quiet jat-ide 2>/dev/null; then
+    ok "JAT IDE service running (auto-starts on boot, restarts on crash)"
+else
+    warn "Service failed to start — check: journalctl -u jat-ide -n 20"
+fi
+
+# Kill any manually-started instances (they'd conflict on the port)
+pkill -f "node build" --oldest 2>/dev/null || true
+
+# ============================================================================
 # Done
 # ============================================================================
 echo ""
@@ -412,13 +503,19 @@ echo "  ✓ Claude Code"
 echo "  ✓ GitHub CLI"
 { [ -f /etc/iptables/iptables.rules ] || [ -f /etc/iptables/rules.v4 ]; } && echo "  ✓ Firewall (SSH + Tailscale only)" || true
 echo "  ✓ JAT (tools, IDE, agent registry)"
+echo "  ✓ JAT IDE systemd service (auto-start + crash recovery)"
 echo ""
 TS_IP=$(tailscale ip -4 2>/dev/null || echo "N/A")
 echo -e "Tailscale IP: ${BOLD}$TS_IP${NC}"
-echo -e "JAT IDE:      ${BOLD}http://$TS_IP:5174${NC}"
+echo -e "JAT IDE:      ${BOLD}http://$TS_IP:3333${NC}"
+echo ""
+echo "Service management:"
+echo "  systemctl status jat-ide     # Check status"
+echo "  journalctl -u jat-ide -f     # Live logs"
+echo "  systemctl restart jat-ide    # Restart"
 echo ""
 echo "Next steps:"
-echo "  1. Run 'jat' to start the IDE"
+echo "  1. Open http://$TS_IP:3333 in your browser"
 echo "  2. Add your first project in the IDE"
 echo "  3. Spawn agents from your local machine via 'jt spawn --remote'"
 echo ""

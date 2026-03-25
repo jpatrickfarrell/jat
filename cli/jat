@@ -648,6 +648,12 @@ update_cmd() {
                 echo -e "  ${DIM}Git branch:${NC}   $branch"
                 echo -e "  ${DIM}Version:${NC}      $current_version"
                 echo -e "  ${DIM}Last commit:${NC}  $(git -C "$JAT_SOURCE_DIR" log -1 --format='%s' 2>/dev/null)"
+            elif [[ -f "$JAT_SOURCE_DIR/VERSION" ]]; then
+                local ver_hash ver_date
+                ver_hash=$(awk '{print $1}' "$JAT_SOURCE_DIR/VERSION")
+                ver_date=$(awk '{print $2}' "$JAT_SOURCE_DIR/VERSION")
+                echo -e "  ${DIM}Version:${NC}      $ver_hash (deployed $ver_date)"
+                echo -e "  ${DIM}Source:${NC}       rsync deploy (no .git)"
             else
                 echo -e "  ${YELLOW}Not a git repository - updates disabled${NC}"
             fi
@@ -2874,8 +2880,14 @@ main() {
         echo "${b2}${B}  │${R}${d}         ◇ Supervise the Swarm ◇${R}           ${b7}${B}│${R}"
         # Version info line: commit hash + date, centered in box
         local jat_commit jat_date jat_ver ver_len pad_left pad_right
-        jat_commit=$(git -C "$JAT_SOURCE_DIR" log -1 --format='%h' 2>/dev/null || echo "unknown")
+        jat_commit=$(git -C "$JAT_SOURCE_DIR" log -1 --format='%h' 2>/dev/null || echo "")
         jat_date=$(git -C "$JAT_SOURCE_DIR" log -1 --format='%cd' --date=short 2>/dev/null || echo "")
+        # Fallback to VERSION file (written by vps-update.sh when .git is excluded)
+        if [[ -z "$jat_commit" ]] && [[ -f "$JAT_SOURCE_DIR/VERSION" ]]; then
+            jat_commit=$(awk '{print $1}' "$JAT_SOURCE_DIR/VERSION")
+            jat_date=$(awk '{print $2}' "$JAT_SOURCE_DIR/VERSION")
+        fi
+        jat_commit="${jat_commit:-unknown}"
         if [[ -n "$jat_date" ]]; then
             jat_ver="${jat_commit} (${jat_date})"
         else

@@ -408,6 +408,12 @@
 		overflow: hidden;
 	}
 
+	@media (max-width: 1023px) {
+		.project-notes {
+			border-radius: 0;
+		}
+	}
+
 	.notes-header {
 		display: flex;
 		align-items: center;

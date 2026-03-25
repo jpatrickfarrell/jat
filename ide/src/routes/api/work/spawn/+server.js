@@ -302,11 +302,13 @@ function getOrCreateProject(db, projectPath) {
 	// Use project name as slug (last segment of path)
 	const slug = projectPath.split('/').filter(Boolean).pop() || 'unknown';
 
-	// Check if project exists
+	// Check if project exists by path or slug
 	const existing = /** @type {{ id: number } | undefined} */ (
-		db.prepare('SELECT id FROM projects WHERE human_key = ?').get(projectPath)
+		db.prepare('SELECT id FROM projects WHERE human_key = ? OR slug = ?').get(projectPath, slug)
 	);
 	if (existing) {
+		// Update human_key if path changed (e.g. local vs VPS path)
+		db.prepare('UPDATE projects SET human_key = ? WHERE id = ?').run(projectPath, existing.id);
 		return existing.id;
 	}
 

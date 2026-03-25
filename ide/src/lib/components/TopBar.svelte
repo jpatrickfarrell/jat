@@ -878,8 +878,8 @@
 		</div>
 	{/if}
 
-	<!-- Middle: Command Palette + Global Search -->
-	<div class="flex-none flex items-center gap-2">
+	<!-- Middle: Command Palette + Global Search (hidden on small screens) -->
+	<div class="hidden lg:flex flex-none items-center gap-2">
 		<CommandPalette />
 
 		<!-- Global File Search Button -->
@@ -915,26 +915,30 @@
 		{/if}
 	</div>
 
-	<!-- Vertical separator -->
+	<!-- Vertical separator (hidden on small screens) -->
 	<div
-		class="w-px h-6 mx-3 bg-gradient-to-b from-transparent via-base-content/45 to-transparent"
+		class="hidden lg:block w-px h-6 mx-3 bg-gradient-to-b from-transparent via-base-content/45 to-transparent"
 	></div>
 
 	<!-- Right side: Activity Badge + Servers + User Profile -->
 	<div class="flex-none flex items-center gap-2.5 pr-3">
-		<!-- Combined Activity Badge (Agents + Tasks + Tokens in dropdown) -->
-		<ActivityBadge
-			{activeAgentCount}
-			{stateCounts}
-			{tokensToday}
-			{costToday}
-			{sparklineData}
-			{multiProjectData}
-			{projectColors}
-		/>
+		<!-- Combined Activity Badge (hidden on small screens) -->
+		<div class="hidden lg:block">
+			<ActivityBadge
+				{activeAgentCount}
+				{stateCounts}
+				{tokensToday}
+				{costToday}
+				{sparklineData}
+				{multiProjectData}
+				{projectColors}
+			/>
+		</div>
 
-		<!-- Dev Servers + WebSocket Status -->
-		<ServersBadge />
+		<!-- Dev Servers + WebSocket Status (hidden on small screens) -->
+		<div class="hidden lg:block">
+			<ServersBadge />
+		</div>
 
 		<!-- User Profile -->
 		<UserProfile />

@@ -90,7 +90,17 @@ export async function GET({ url }) {
 		}
 
 		// Read all entries in the directory
-		const entries = await readdir(scanDir, { withFileTypes: true });
+		let entries;
+		try {
+			entries = await readdir(scanDir, { withFileTypes: true });
+		} catch (readErr) {
+			return json({
+				directories: [],
+				basePath: scanDir,
+				homeDir: homedir(),
+				error: readErr instanceof Error ? readErr.message : 'Cannot read directory'
+			}, { status: 400 });
+		}
 
 		// Filter to directories only, excluding hidden folders
 		const directories = entries

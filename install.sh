@@ -269,13 +269,16 @@ echo "  • 50+ CLI tools (agent mail, browser, media, db)"
 echo "  • Works with Claude Code, Codex, Gemini, Aider"
 echo "  • 100% local, open source (MIT)"
 echo ""
-echo -e "${YELLOW}Press ENTER to continue or Ctrl+C to cancel${NC}"
-
-# Wait for user acknowledgment (non-blocking in non-interactive mode)
-if [ -t 0 ] || [ -e /dev/tty ]; then
-    read </dev/tty 2>/dev/null || true
+# Only pause for confirmation on first install, not re-runs
+if [ ! -x "$HOME/.local/bin/jat" ]; then
+    echo -e "${YELLOW}Press ENTER to continue or Ctrl+C to cancel${NC}"
+    if [ -t 0 ] || [ -e /dev/tty ]; then
+        read </dev/tty 2>/dev/null || true
+    else
+        echo -e "${BLUE}  (non-interactive mode - continuing automatically)${NC}"
+    fi
 else
-    echo -e "${BLUE}  (non-interactive mode - continuing automatically)${NC}"
+    echo -e "${DIM}Re-run detected — updating...${NC}"
 fi
 
 echo ""
@@ -356,6 +359,21 @@ if command -v npm &> /dev/null; then
         echo "  → Installing IDE dependencies..."
         if (cd "$INSTALL_DIR/ide" && npm install --legacy-peer-deps --engine-strict=false 2>&1); then
             echo -e "  ${GREEN}✓${NC} IDE dependencies installed"
+
+            # On headless servers, pre-build the IDE for production
+            # (Vite dev server uses ~800MB — too much for small VPS instances)
+            if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+                echo "  → Building IDE for production (headless server)..."
+                if (cd "$INSTALL_DIR/ide" && NODE_OPTIONS="--max-old-space-size=2048" npx vite build 2>&1); then
+                    echo -e "  ${GREEN}✓${NC} IDE production build complete"
+                else
+                    echo -e "  ${YELLOW}⚠${NC} IDE build failed — build locally and sync:"
+                    echo -e "    ${BOLD}cd ide && npm run build${NC}"
+                    echo -e "    ${BOLD}tar -czf /tmp/ide-build.tar.gz build/${NC}"
+                    echo -e "    ${BOLD}scp /tmp/ide-build.tar.gz root@<vps>:/tmp/${NC}"
+                    echo -e "    ${BOLD}ssh root@<vps> 'cd ~/.local/share/jat/ide && tar -xzf /tmp/ide-build.tar.gz'${NC}"
+                fi
+            fi
         else
             echo -e "  ${YELLOW}⚠${NC} IDE npm install failed (run manually: cd ide && npm install --legacy-peer-deps)"
             if [ "$(uname -s)" = "Darwin" ]; then
@@ -396,27 +414,33 @@ echo ""
 
 # Ask about optional tech stacks
 SELECTED_STACKS=""
-echo "Optional tech stack tools available:"
-echo "  • SvelteKit + Supabase (11 tools: component-deps, route-list, error-log, etc.)"
-echo ""
 
-if command -v gum &> /dev/null && [ -t 0 ]; then
-    SELECTED_STACKS=$(gum choose --no-limit \
-        "SvelteKit + Supabase" \
-        "Skip - No additional stacks")
+# On headless servers, skip interactive stack selection — agents don't need these
+if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    echo "  Headless server — skipping optional stacks"
 else
-    if prompt_yes_no "Install SvelteKit + Supabase tools? [y/N] " "n"; then
-        SELECTED_STACKS="SvelteKit"
+    echo "Optional tech stack tools available:"
+    echo "  • SvelteKit + Supabase (11 tools: component-deps, route-list, error-log, etc.)"
+    echo ""
+
+    if command -v gum &> /dev/null && [ -t 0 ]; then
+        SELECTED_STACKS=$(gum choose --no-limit \
+            "SvelteKit + Supabase" \
+            "Skip - No additional stacks")
+    else
+        if prompt_yes_no "Install SvelteKit + Supabase tools? [y/N] " "n"; then
+            SELECTED_STACKS="SvelteKit"
+        fi
     fi
-fi
 
-if echo "$SELECTED_STACKS" | grep -q "SvelteKit"; then
-    echo ""
-    echo "Installing SvelteKit + Supabase stack..."
-    bash "$INSTALL_DIR/stacks/sveltekit-supabase/install.sh"
-else
-    echo ""
-    echo "Skipping stack installation"
+    if echo "$SELECTED_STACKS" | grep -q "SvelteKit"; then
+        echo ""
+        echo "Installing SvelteKit + Supabase stack..."
+        bash "$INSTALL_DIR/stacks/sveltekit-supabase/install.sh"
+    else
+        echo ""
+        echo "Skipping stack installation"
+    fi
 fi
 
 echo ""
@@ -425,8 +449,14 @@ echo -e "${BOLD}Step 8/9: Voice-to-Text (Optional)${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
+# Skip voice/Pi on headless servers
+if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    echo "  Headless server — skipping voice-to-text + Pi skills"
+fi
+
 # Install Pi skills if Pi is available
 INSTALL_PI_SKILLS="no"
+if [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
 if command -v pi &> /dev/null; then
     echo ""
     echo "Pi coding agent detected ($(pi --version 2>/dev/null))."
@@ -450,6 +480,7 @@ if command -v pi &> /dev/null; then
         echo "  Run later with: bash $INSTALL_DIR/tools/scripts/install-pi-skills.sh"
     fi
 fi
+fi  # end headless guard
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -517,10 +548,10 @@ if [ -z "$DISPLAY" ] && [ -z "$WAYLAND_DISPLAY" ]; then
         sleep 4
         echo -e "  ${GREEN}✓${NC} JAT IDE server started"
         echo ""
-        echo -e "  Open on any Tailscale device: ${BOLD}http://${TS_IP}:5174${NC}"
+        echo -e "  Open on any Tailscale device: ${BOLD}http://${TS_IP}:3333${NC}"
     else
         echo -e "  Start later with: ${BOLD}jat${NC}"
-        echo -e "  Then open: ${BOLD}http://${TS_IP}:5174${NC}"
+        echo -e "  Then open: ${BOLD}http://${TS_IP}:3333${NC}"
     fi
     echo ""
 elif prompt_yes_no "${BOLD}Launch JAT now? [Y/n]${NC} " "y"; then

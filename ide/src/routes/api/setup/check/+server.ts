@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { execSync } from 'child_process';
-import { platform } from 'os';
+import { platform, homedir } from 'os';
 
 interface PrerequisiteCheck {
 	name: string;
@@ -10,9 +10,12 @@ interface PrerequisiteCheck {
 	fixHint: string;
 }
 
+// Ensure ~/.local/bin is in PATH for tool checks (production builds may not inherit it)
+const toolPath = `${homedir()}/.local/bin:${process.env.PATH || ''}`;
+
 function checkTool(name: string, versionCmd: string): { installed: boolean; version: string | null } {
 	try {
-		const output = execSync(versionCmd, { timeout: 5000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+		const output = execSync(versionCmd, { timeout: 5000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, PATH: toolPath } }).trim();
 		// Extract version number from output
 		const versionMatch = output.match(/(\d+\.\d+[\.\d]*)/);
 		return { installed: true, version: versionMatch ? versionMatch[1] : output.split('\n')[0].slice(0, 30) };
@@ -28,7 +31,7 @@ function getFixHint(name: string, plat: string): string {
 		sqlite3: isMac ? 'brew install sqlite' : 'sudo pacman -S sqlite  # or: sudo apt install sqlite3',
 		jq: isMac ? 'brew install jq' : 'sudo pacman -S jq  # or: sudo apt install jq',
 		git: isMac ? 'brew install git' : 'sudo pacman -S git  # or: sudo apt install git',
-		jt: 'cd ~/code/jat && ./install.sh',
+		jt: 'cd ~/.local/share/jat && ./install.sh  # or: cd ~/code/jat && ./install.sh',
 		node: isMac ? 'brew install node' : 'sudo pacman -S nodejs npm  # or: nvm install --lts'
 	};
 	return hints[name] || `Install ${name}`;

@@ -103,7 +103,8 @@
 		browserSessions = new Map(),
 		onKillSession,
 		onAttachSession,
-		onViewTask
+		onViewTask,
+		mobile = false
 	}: {
 		sessions: TmuxSession[];
 		agentTasks: Map<string, AgentTask>;
@@ -115,6 +116,7 @@
 		onKillSession?: (sessionName: string) => Promise<void>;
 		onAttachSession?: (sessionName: string) => Promise<void>;
 		onViewTask?: (taskId: string) => void;
+		mobile?: boolean;
 	} = $props();
 
 	// Status and priority colors
@@ -997,6 +999,192 @@
 		<p class="empty-hint">Start a new agent or dev server to see sessions here.</p>
 	</div>
 {:else}
+	{#if mobile}
+	<!-- MOBILE LAYOUT: Card-based, 2-row compact design -->
+	<div class="mobile-sessions-list">
+		{#each orderedSessions as { session, isExiting, isNew, hadTaskOnEntry } (session.name)}
+			{@const sessionAgentName = getAgentName(session.name)}
+			{@const sessionTask = agentTasks.get(sessionAgentName) || (isExiting ? cachedAgentTasks.get(sessionAgentName) : null)}
+			{@const sessionInfo = agentSessionInfo.get(sessionAgentName)}
+			{@const activityState = sessionInfo?.activityState}
+			{@const rawEffectiveState = optimisticStates.get(session.name) || activityState || 'idle'}
+			{@const effectiveState = rawEffectiveState === 'completing' && sessionTask?.status === 'closed' ? 'completed' : rawEffectiveState}
+			{@const statusDotColor = getSessionStateVisual(effectiveState).accent}
+			{@const derivedProject = agentProjects.get(sessionAgentName) || session.project || null}
+			{@const elapsed = getElapsedFormatted(session.created)}
+			{@const isExpanded = expandedSession === session.name}
+			{@const isCollapsing = collapsingSession === session.name}
+
+			<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+			<div
+				class="mobile-session-card {isNew ? 'animate-slide-in-fwd-center' : ''} {isExiting ? 'animate-slide-out-bck-center exit-delayed' : ''}"
+				class:attached={session.attached}
+				style="{isExiting ? 'pointer-events: none;' : ''}"
+				onclick={() => !isExiting && toggleExpanded(session.name)}
+			>
+				{#if session.type === 'server'}
+					<!-- Server session -->
+					<div class="mobile-card-row1">
+						<span class="mobile-title">{session.name}</span>
+					</div>
+				{:else if sessionTask}
+					<!-- Agent session with task -->
+					{@const reviewStatus = computeReviewStatus(sessionTask, getReviewRules())}
+					{@const reviewBasedDefault = reviewStatus?.action !== 'auto'}
+					{@const autoCompleteDisabled = autoCompleteDisabledMap.get(session.name) ?? reviewBasedDefault}
+					<div class="mobile-card-row1">
+						<div class="mobile-left">
+							<span class="mobile-title" title={sessionTask.title}>
+								<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
+							</span>
+							<div class="mobile-card-row2">
+								<AgentAvatar name={sessionAgentName} size={16} showRing={true} sessionState={effectiveState} />
+								<span class="mobile-agent-name">{sessionAgentName}</span>
+								<span class="mobile-separator">·</span>
+								<span class="mobile-task-id" style="color: {statusDotColor};">{sessionTask.id}</span>
+								{#if sessionTask.priority != null && sessionTask.priority <= 2}
+									<span class="mobile-separator">·</span>
+									<span class="mobile-priority mobile-priority-{sessionTask.priority}">P{sessionTask.priority}</span>
+								{/if}
+								{#if browserSessions.get(sessionAgentName)}
+									<span class="mobile-separator">·</span>
+									<span class="mobile-port">🌐 {browserSessions.get(sessionAgentName)}</span>
+								{/if}
+							</div>
+						</div>
+						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+						<div class="mobile-status" onclick={(e) => e.stopPropagation()}>
+							<StatusActionBadge
+								sessionState={effectiveState as SessionState}
+								{elapsed}
+								stacked={true}
+								sessionName={session.name}
+								alignRight={true}
+								animate={isNew}
+								showCommands={true}
+								showEpic={true}
+								onCommand={(cmd) => sendWorkflowCommand(session.name, cmd)}
+								onAction={async (actionId) => {
+									if (actionId === 'attach') {
+										await handleAttachSession(session.name);
+									} else if (actionId === 'kill' || actionId === 'cleanup') {
+										await handleKillSession(session.name);
+									} else if (actionId === 'view-task' && sessionTask) {
+										onViewTask?.(sessionTask.id);
+									} else if (actionId === 'complete' || actionId === 'complete-kill') {
+										optimisticStates.set(session.name, 'completing');
+										optimisticStates = new Map(optimisticStates);
+										if (sessionTask) {
+											try {
+												await fetch(`/api/sessions/${encodeURIComponent(session.name)}/signal`, {
+													method: 'POST',
+													headers: { 'Content-Type': 'application/json' },
+													body: JSON.stringify({
+														type: 'completing',
+														data: { taskId: sessionTask.id, taskTitle: sessionTask.title, currentStep: 'verifying', progress: 0, stepsCompleted: [], stepsRemaining: ['verifying', 'committing', 'closing', 'releasing'] }
+													})
+												});
+											} catch (e) { console.warn('[TasksActive] Failed to write completing signal:', e); }
+										}
+										const cmd = actionId === 'complete-kill' ? '/jat:complete --kill' : '/jat:complete';
+										await sendWorkflowCommand(session.name, cmd);
+									} else if (actionId === 'interrupt') {
+										await fetch(`/api/work/${encodeURIComponent(session.name)}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'ctrl-c' }) });
+									} else if (actionId === 'escape') {
+										await fetch(`/api/work/${encodeURIComponent(session.name)}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'escape' }) });
+									} else if (actionId === 'close-kill') {
+										if (sessionTask) {
+											try { await fetch(`/api/tasks/${encodeURIComponent(sessionTask.id)}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Abandoned via Close & Kill' }) }); } catch (e) { console.warn('[TasksActive] Failed to close task:', e); }
+										}
+										await handleKillSession(session.name);
+									} else if (actionId === 'pause') {
+										optimisticStates.set(session.name, 'paused');
+										optimisticStates = new Map(optimisticStates);
+										if (sessionTask) {
+											try { await fetch(`/api/sessions/${encodeURIComponent(session.name)}/pause`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: sessionTask.id, taskTitle: sessionTask.title, reason: 'Paused via StatusActionBadge', killSession: true, agentName: sessionAgentName, project: session.project }) }); } catch (e) { console.warn('[TasksActive] Failed to pause session:', e); }
+										} else { await handleKillSession(session.name); }
+									}
+								}}
+								task={{ id: sessionTask.id, issue_type: sessionTask.issue_type, priority: sessionTask.priority }}
+								project={session.project || null}
+								onViewEpic={(epicId) => onViewTask?.(epicId)}
+								autoCompleteEnabled={!autoCompleteDisabled}
+								onAutoCompleteToggle={() => {
+									const newMap = new Map(autoCompleteDisabledMap);
+									newMap.set(session.name, !autoCompleteDisabled);
+									autoCompleteDisabledMap = newMap;
+								}}
+								reviewReason={reviewStatus?.reason ?? null}
+							/>
+						</div>
+					</div>
+				{:else}
+					<!-- Planning / no-task session -->
+					<div class="mobile-card-row1">
+						<span class="mobile-title" style="color: oklch(0.70 0.12 270);">
+							{effectiveState === 'planning' ? 'Planning session' : 'No active task'}
+						</span>
+					</div>
+					<div class="mobile-card-row2">
+						<AgentAvatar name={sessionAgentName} size={16} showRing={true} sessionState={effectiveState} />
+						<span class="mobile-agent-name">{sessionAgentName}</span>
+						{#if derivedProject}
+							<span class="mobile-separator">·</span>
+							<span class="mobile-project">{derivedProject}</span>
+						{/if}
+					</div>
+				{/if}
+			</div>
+
+			<!-- Expanded SessionCard -->
+			{#if isExpanded}
+				{@const expandedAgentName = getAgentName(session.name)}
+				{@const expandedTask = agentTasks.get(expandedAgentName)}
+				{@const expandedSessionInfo = agentSessionInfo.get(expandedAgentName)}
+				<div class="mobile-expanded-card {isExiting ? 'animate-slide-out-bck-top' : ''}" style={isExiting ? 'pointer-events: none;' : ''}>
+					<div class="expanded-session-card" style="height: {expandedHeight}px;">
+						<SessionCard
+							mode={session.type === 'server' ? 'server' : 'agent'}
+							sessionName={session.name}
+							agentName={expandedAgentName}
+							headerless={true}
+							task={expandedTask ? {
+								id: expandedTask.id,
+								title: expandedTask.title,
+								status: expandedTask.status,
+								priority: expandedTask.priority,
+								issue_type: expandedTask.issue_type,
+								description: expandedTask.description
+							} : null}
+							output={expandedOutput}
+							tokens={expandedSessionInfo?.tokens ?? 0}
+							cost={expandedSessionInfo?.cost ?? 0}
+							sseState={expandedSessionInfo?.activityState}
+							sseStateTimestamp={expandedSessionInfo?.activityStateTimestamp}
+							startTime={session.created ? new Date(session.created) : null}
+							created={session.created}
+							attached={session.attached}
+							onSendInput={(text: string, type?: 'text' | 'key' | 'raw') => sendExpandedInput(text, type)}
+							onKillSession={() => {
+								expandedSession = null;
+								handleKillSession(session.name);
+							}}
+							onInterrupt={() => {
+								fetch(`/api/work/${encodeURIComponent(session.name)}/input`, {
+									method: 'POST',
+									headers: { 'Content-Type': 'application/json' },
+									body: JSON.stringify({ type: 'ctrl-c' })
+								});
+							}}
+							onAttachTerminal={() => handleAttachSession(session.name)}
+							onTaskClick={(taskId: string) => onViewTask?.(taskId)}
+						/>
+					</div>
+				</div>
+			{/if}
+		{/each}
+	</div>
+	{:else}
 	<div class="sessions-table-wrapper">
 		<!-- "All done" flash overlay -->
 		{#if allDoneFlash}
@@ -1537,6 +1725,7 @@
 			</tbody>
 		</table>
 	</div>
+	{/if}
 {/if}
 
 <!-- LLM File Result Drawer -->
@@ -2659,5 +2848,146 @@
 	.exit-delayed {
 		animation-delay: 0.25s;
 		animation-fill-mode: both;
+	}
+
+	/* ========== MOBILE LAYOUT ========== */
+
+	.mobile-sessions-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0;
+	}
+
+	.mobile-session-card {
+		background: oklch(0.16 0.01 250);
+		border: 1px solid oklch(0.25 0.02 250);
+		border-bottom: none;
+		border-radius: 0;
+		padding: 0.25rem 0.75rem;
+		cursor: pointer;
+		transition: background 0.15s;
+	}
+
+	.mobile-session-card:first-child {
+		border-radius: 8px 8px 0 0;
+	}
+
+	.mobile-session-card:last-child {
+		border-radius: 0 0 8px 8px;
+		border-bottom: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.mobile-session-card:only-child {
+		border-radius: 8px;
+		border-bottom: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.mobile-session-card:active {
+		background: oklch(0.20 0.02 250);
+	}
+
+	.mobile-session-card.attached {
+		border-color: oklch(0.55 0.15 145 / 0.5);
+		background: oklch(0.65 0.15 145 / 0.06);
+	}
+
+	/* Row 1: Title + Status side by side */
+	.mobile-card-row1 {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		min-width: 0;
+	}
+
+	.mobile-left {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.mobile-title {
+		min-width: 0;
+		font-size: 0.875rem;
+		font-weight: 600;
+		color: oklch(0.88 0.02 250);
+		font-family: system-ui, -apple-system, sans-serif;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.mobile-status {
+		flex-shrink: 0;
+	}
+
+	/* Row 2: Compact metadata line */
+	.mobile-card-row2 {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		margin-top: 0;
+		font-size: 0.6875rem;
+		font-family: ui-monospace, monospace;
+		color: oklch(0.55 0.02 250);
+	}
+
+	.mobile-agent-name {
+		font-weight: 500;
+		color: oklch(0.65 0.02 250);
+	}
+
+	.mobile-separator {
+		color: oklch(0.40 0.01 250);
+	}
+
+	.mobile-task-id {
+		font-weight: 600;
+	}
+
+	.mobile-priority {
+		font-weight: 700;
+		font-size: 0.625rem;
+		padding: 0 0.25rem;
+		border-radius: 3px;
+	}
+
+	.mobile-priority-0 {
+		color: oklch(0.80 0.18 25);
+		background: oklch(0.80 0.18 25 / 0.12);
+	}
+
+	.mobile-priority-1 {
+		color: oklch(0.80 0.15 85);
+		background: oklch(0.80 0.15 85 / 0.12);
+	}
+
+	.mobile-priority-2 {
+		color: oklch(0.70 0.12 200);
+		background: oklch(0.70 0.12 200 / 0.12);
+	}
+
+	.mobile-project {
+		font-weight: 500;
+		color: oklch(0.60 0.05 250);
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+	}
+
+	.mobile-port {
+		font-size: 0.625rem;
+		color: oklch(0.75 0.15 55);
+	}
+
+	/* Expanded card within mobile */
+	.mobile-expanded-card {
+		background: oklch(0.14 0.01 250);
+		border: 1px solid oklch(0.25 0.02 250);
+		border-top: none;
+		border-radius: 0 0 8px 8px;
+		margin-top: -0.5rem;
+		padding-top: 0.5rem;
+		overflow: hidden;
 	}
 </style>

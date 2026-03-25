@@ -128,7 +128,7 @@ symlink_tools() {
         fi
 
         # Create symlink
-        ln -s "$tool" "$TARGET"
+        ln -sf "$tool" "$TARGET"
         echo -e "  ${GREEN}+${NC} $TOOL_NAME (linked)"
         LINKED_COUNT=$((LINKED_COUNT + 1))
     done
@@ -172,11 +172,11 @@ if [ -f "$JAT_CLI_SOURCE" ]; then
         else
             echo -e "  ${YELLOW}↻${NC} jat (updating link)"
             rm "$JAT_CLI_TARGET"
-            ln -s "$JAT_CLI_SOURCE" "$JAT_CLI_TARGET"
+            ln -sf "$JAT_CLI_SOURCE" "$JAT_CLI_TARGET"
         fi
     else
         echo -e "  ${GREEN}+${NC} jat (linked)"
-        ln -s "$JAT_CLI_SOURCE" "$JAT_CLI_TARGET"
+        ln -sf "$JAT_CLI_SOURCE" "$JAT_CLI_TARGET"
     fi
 else
     echo -e "  ${YELLOW}⚠${NC} jat CLI not found at $JAT_CLI_SOURCE"
@@ -198,11 +198,11 @@ if [ -f "$BUNDLE_SOURCE" ]; then
         else
             echo -e "  ${YELLOW}↻${NC} jat-complete-bundle (updating link)"
             rm "$BUNDLE_TARGET"
-            ln -s "$BUNDLE_SOURCE" "$BUNDLE_TARGET"
+            ln -sf "$BUNDLE_SOURCE" "$BUNDLE_TARGET"
         fi
     else
         echo -e "  ${GREEN}+${NC} jat-complete-bundle (linked)"
-        ln -s "$BUNDLE_SOURCE" "$BUNDLE_TARGET"
+        ln -sf "$BUNDLE_SOURCE" "$BUNDLE_TARGET"
     fi
 else
     echo -e "  ${YELLOW}⚠${NC} jat-complete-bundle not found at $BUNDLE_SOURCE"
@@ -224,11 +224,11 @@ if [ -f "$SESSION_ID_SOURCE" ]; then
         else
             echo -e "  ${YELLOW}↻${NC} get-current-session-id (updating link)"
             rm "$SESSION_ID_TARGET"
-            ln -s "$SESSION_ID_SOURCE" "$SESSION_ID_TARGET"
+            ln -sf "$SESSION_ID_SOURCE" "$SESSION_ID_TARGET"
         fi
     else
         echo -e "  ${GREEN}+${NC} get-current-session-id (linked)"
-        ln -s "$SESSION_ID_SOURCE" "$SESSION_ID_TARGET"
+        ln -sf "$SESSION_ID_SOURCE" "$SESSION_ID_TARGET"
     fi
 else
     echo -e "  ${YELLOW}⚠${NC} get-current-session-id not found at $SESSION_ID_SOURCE"
@@ -250,11 +250,11 @@ if [ -f "$JT_EPIC_SOURCE" ]; then
         else
             echo -e "  ${YELLOW}↻${NC} jt-epic-child (updating link)"
             rm "$JT_EPIC_TARGET"
-            ln -s "$JT_EPIC_SOURCE" "$JT_EPIC_TARGET"
+            ln -sf "$JT_EPIC_SOURCE" "$JT_EPIC_TARGET"
         fi
     else
         echo -e "  ${GREEN}+${NC} jt-epic-child (linked)"
-        ln -s "$JT_EPIC_SOURCE" "$JT_EPIC_TARGET"
+        ln -sf "$JT_EPIC_SOURCE" "$JT_EPIC_TARGET"
     fi
 else
     echo -e "  ${YELLOW}⚠${NC} jt-epic-child not found at $JT_EPIC_SOURCE"
@@ -276,11 +276,11 @@ if [ -f "$LOG_ACTIVITY_SOURCE" ]; then
         else
             echo -e "  ${YELLOW}↻${NC} log-agent-activity (updating link)"
             rm "$LOG_ACTIVITY_TARGET"
-            ln -s "$LOG_ACTIVITY_SOURCE" "$LOG_ACTIVITY_TARGET"
+            ln -sf "$LOG_ACTIVITY_SOURCE" "$LOG_ACTIVITY_TARGET"
         fi
     else
         echo -e "  ${GREEN}+${NC} log-agent-activity (linked)"
-        ln -s "$LOG_ACTIVITY_SOURCE" "$LOG_ACTIVITY_TARGET"
+        ln -sf "$LOG_ACTIVITY_SOURCE" "$LOG_ACTIVITY_TARGET"
     fi
 else
     echo -e "  ${YELLOW}⚠${NC} log-agent-activity not found at $LOG_ACTIVITY_SOURCE"
@@ -302,11 +302,11 @@ if [ -f "$JAT_DEMO_SOURCE" ]; then
         else
             echo -e "  ${YELLOW}↻${NC} jat-demo (updating link)"
             rm "$JAT_DEMO_TARGET"
-            ln -s "$JAT_DEMO_SOURCE" "$JAT_DEMO_TARGET"
+            ln -sf "$JAT_DEMO_SOURCE" "$JAT_DEMO_TARGET"
         fi
     else
         echo -e "  ${GREEN}+${NC} jat-demo (linked)"
-        ln -s "$JAT_DEMO_SOURCE" "$JAT_DEMO_TARGET"
+        ln -sf "$JAT_DEMO_SOURCE" "$JAT_DEMO_TARGET"
     fi
 else
     echo -e "  ${YELLOW}⚠${NC} jat-demo not found at $JAT_DEMO_SOURCE"
@@ -328,11 +328,11 @@ if [ -f "$JAT_STEP_SOURCE" ]; then
         else
             echo -e "  ${YELLOW}↻${NC} jat-step (updating link)"
             rm "$JAT_STEP_TARGET"
-            ln -s "$JAT_STEP_SOURCE" "$JAT_STEP_TARGET"
+            ln -sf "$JAT_STEP_SOURCE" "$JAT_STEP_TARGET"
         fi
     else
         echo -e "  ${GREEN}+${NC} jat-step (linked)"
-        ln -s "$JAT_STEP_SOURCE" "$JAT_STEP_TARGET"
+        ln -sf "$JAT_STEP_SOURCE" "$JAT_STEP_TARGET"
     fi
 else
     echo -e "  ${YELLOW}⚠${NC} jat-step not found at $JAT_STEP_SOURCE"
@@ -354,11 +354,11 @@ if [ -f "$UNINSTALL_SOURCE" ]; then
         else
             echo -e "  ${YELLOW}↻${NC} jat-uninstall (updating link)"
             rm "$UNINSTALL_TARGET"
-            ln -s "$UNINSTALL_SOURCE" "$UNINSTALL_TARGET"
+            ln -sf "$UNINSTALL_SOURCE" "$UNINSTALL_TARGET"
         fi
     else
         echo -e "  ${GREEN}+${NC} jat-uninstall (linked)"
-        ln -s "$UNINSTALL_SOURCE" "$UNINSTALL_TARGET"
+        ln -sf "$UNINSTALL_SOURCE" "$UNINSTALL_TARGET"
     fi
 else
     echo -e "  ${YELLOW}⚠${NC} jat-uninstall not found at $UNINSTALL_SOURCE"

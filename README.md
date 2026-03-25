@@ -65,6 +65,12 @@ git clone https://github.com/joewinke/jat.git ~/code/jat
 cd ~/code/jat && ./install.sh
 ```
 
+**VPS / Remote Server** (Arch Linux or Ubuntu):
+```bash
+curl -sSL https://raw.githubusercontent.com/joewinke/jat/master/tools/scripts/vps-setup.sh | bash
+```
+Sets up everything — swap, Node.js, Tailscale, Claude Code, firewall, JAT, and a systemd service that auto-starts on boot and restarts on crash. Access via `http://<tailscale-ip>:3333`.
+
 ---
 
 ## Complete IDE Features
@@ -437,7 +443,7 @@ Yes. The ingest daemon connects to Telegram bots, Slack channels, RSS feeds, and
 Yes. Set a cron expression on any task and the scheduler daemon will spawn agents automatically. See [scheduler docs](./shared/scheduler.md).
 
 **Is there a hosted version?**
-No. JAT runs 100% locally. Code never leaves your machine.
+No hosted service. JAT runs on your own machine or your own VPS — code never leaves infrastructure you control.
 
 ---
 

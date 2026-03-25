@@ -1771,6 +1771,7 @@
 														openTaskDetailDrawer(
 															taskId,
 														)}
+													mobile={true}
 												/>
 											</div>
 										{/if}
@@ -1848,6 +1849,7 @@
 														openTaskDetailDrawer(
 															taskId,
 														)}
+													mobile={true}
 												/>
 											</div>
 										{/if}

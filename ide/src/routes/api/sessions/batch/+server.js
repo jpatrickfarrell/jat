@@ -141,9 +141,10 @@ function ensureAgentMailSchema(db) {
 function getOrCreateProject(db, projectPath) {
 	const slug = projectPath.split('/').filter(Boolean).pop() || 'unknown';
 	const existing = /** @type {{ id: number } | undefined} */ (
-		db.prepare('SELECT id FROM projects WHERE human_key = ?').get(projectPath)
+		db.prepare('SELECT id FROM projects WHERE human_key = ? OR slug = ?').get(projectPath, slug)
 	);
 	if (existing) {
+		db.prepare('UPDATE projects SET human_key = ? WHERE id = ?').run(projectPath, existing.id);
 		return existing.id;
 	}
 	const result = db.prepare('INSERT INTO projects (slug, human_key) VALUES (?, ?)').run(slug, projectPath);

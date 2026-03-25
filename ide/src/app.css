@@ -1190,6 +1190,13 @@
 
 /* Sidebar tooltips need high z-index to appear above main content */
 /* When collapsed, drawer-side needs higher z-index so tooltips can escape */
+/* Remove DaisyUI drawer-content rounded corners on small screens */
+@media (max-width: 1023px) {
+	.drawer-content {
+		border-radius: 0 !important;
+	}
+}
+
 .drawer-side.overflow-visible {
 	z-index: 50;
 }

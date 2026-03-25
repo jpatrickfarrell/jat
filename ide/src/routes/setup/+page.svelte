@@ -48,16 +48,18 @@
 		}
 	});
 
-	async function loadPrerequisites() {
-		// Use cache if valid
-		const cached = getPrerequisiteResults();
-		if (cached && isCacheValid()) {
-			checks = cached;
-			loading = false;
-			// Check if all required tools passed from cached results
-			prereqsPassed = cached.every((c: PrerequisiteResult) => !c.required || c.installed);
-			if (prereqsPassed && currentStep === 1) currentStep = 2;
-			return;
+	async function loadPrerequisites(forceRefresh = false) {
+		// Use cache if valid (unless force-refreshing)
+		if (!forceRefresh) {
+			const cached = getPrerequisiteResults();
+			if (cached && isCacheValid()) {
+				checks = cached;
+				loading = false;
+				// Check if all required tools passed from cached results
+				prereqsPassed = cached.every((c: PrerequisiteResult) => !c.required || c.installed);
+				if (prereqsPassed && currentStep === 1) currentStep = 2;
+				return;
+			}
 		}
 
 		loading = true;
@@ -365,7 +367,7 @@
 				<p class="text-[11px] ml-7 mb-2" style="color: oklch(0.50 0.02 250);">
 					Required tools for running agent sessions
 				</p>
-				<PrerequisiteChecks {checks} {loading} onRecheck={loadPrerequisites} />
+				<PrerequisiteChecks {checks} {loading} onRecheck={() => loadPrerequisites(true)} />
 			</div>
 
 			<!-- Step 2: Agent Harness -->

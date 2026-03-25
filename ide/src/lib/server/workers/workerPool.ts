@@ -16,6 +16,7 @@ import { Worker } from 'worker_threads';
 import * as path from 'path';
 import * as os from 'os';
 import { fileURLToPath } from 'url';
+import { existsSync } from 'fs';
 
 // ============================================================================
 // Types
@@ -60,11 +61,21 @@ class WorkerPool {
 		this.poolSize = Math.min(Math.max(options.poolSize ?? cpuCount - 1, 1), 4);
 		this.taskTimeout = options.taskTimeout ?? 30000; // 30 second default timeout
 
-		// Worker file path - use import.meta.url for ESM compatibility
-		// This resolves to the directory containing this file
+		// Worker file path - resolve relative to this file first (dev mode),
+		// then fall back to source tree (production build where Vite doesn't bundle workers)
 		const __filename = fileURLToPath(import.meta.url);
 		const __dirname = path.dirname(__filename);
-		this.workerPath = path.join(__dirname, 'jsonlWorker.ts');
+		const localTs = path.join(__dirname, 'jsonlWorker.ts');
+		const localJs = path.join(__dirname, 'jsonlWorker.js');
+		// In production, __dirname is build/server/chunks/ — worker isn't there.
+		// Walk up to find the project root (has package.json) and use src/ directly.
+		let projectRoot = __dirname;
+		for (let i = 0; i < 10; i++) {
+			if (existsSync(path.join(projectRoot, 'package.json'))) break;
+			projectRoot = path.dirname(projectRoot);
+		}
+		const srcTs = path.join(projectRoot, 'src/lib/server/workers/jsonlWorker.ts');
+		this.workerPath = existsSync(localTs) ? localTs : existsSync(localJs) ? localJs : srcTs;
 	}
 
 	/**

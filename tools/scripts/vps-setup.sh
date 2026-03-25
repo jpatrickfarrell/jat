@@ -59,7 +59,11 @@ prompt_yes_no() {
 # --- Root check ---
 # Running as root is fine on a fresh VPS (Linode/DigitalOcean default)
 if [ "$EUID" -eq 0 ]; then
-    sudo() { "$@"; }
+    # When already root, strip sudo flags (-E, -u, etc.) and just run the command
+    sudo() {
+        while [[ "${1:-}" == -* ]]; do shift; done
+        "$@"
+    }
 fi
 
 # --- Detect distro ---

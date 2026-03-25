@@ -83,7 +83,7 @@ if [ -z "$VPS_TARGET" ]; then
     fail "No target specified. Usage: vps-update.sh user@host"
 fi
 
-REMOTE_JAT="~/.local/share/jat"
+REMOTE_JAT="/home/jat/.local/share/jat"
 
 header "JAT VPS Update"
 info "Local:  $LOCAL_JAT"
@@ -135,30 +135,16 @@ info "Syncing code + build artifacts..."
 # Delete old build first — stale chunks from previous builds cause bugs
 ssh "$VPS_TARGET" "rm -rf $REMOTE_JAT/ide/build"
 
-# Sync everything needed on VPS (no --delete to preserve VPS-only data like .jat/)
+# Sync everything, excluding only dev/heavy stuff
+# rsync exit 24 = "some files vanished" (SQLite temp files) — treat as success
 rsync -az --info=stats1 \
-    --exclude='node_modules' \
     --exclude='.git' \
-    --exclude='ide/node_modules' \
+    --exclude='node_modules' \
     --exclude='ide/.svelte-kit' \
-    --include='ide/build/***' \
-    --include='ide/server.js' \
-    --include='ide/package.json' \
-    --include='ide/package-lock.json' \
-    --include='ide/src/***' \
-    --include='ide/svelte.config.js' \
-    --include='ide/vite.config.ts' \
-    --include='ide/tsconfig.json' \
-    --include='ide/' \
-    --include='lib/***' \
-    --include='tools/***' \
-    --include='shared/***' \
-    --include='commands/***' \
-    --include='install.sh' \
-    --include='package.json' \
-    --include='README.md' \
-    --exclude='*' \
-    "$LOCAL_JAT/" "$VPS_TARGET:$REMOTE_JAT/"
+    --exclude='ingest-files' \
+    --exclude='*.db-shm' \
+    --exclude='*.db-wal' \
+    "$LOCAL_JAT/" "$VPS_TARGET:$REMOTE_JAT/" || [ $? -eq 24 ]
 
 ok "Code synced"
 

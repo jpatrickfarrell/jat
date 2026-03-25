@@ -2210,6 +2210,7 @@
 															taskId,
 														)}
 													showHeader={false}
+													mobile={true}
 													onAddTask={() => openTaskDrawer(selectedProject ?? undefined)}
 												/>
 											</div>
@@ -2276,6 +2277,7 @@
 															taskId,
 														)}
 													showHeader={false}
+													mobile={true}
 													onAddTask={() => openTaskDrawer(selectedProject ?? undefined)}
 												/>
 											</div>

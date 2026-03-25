@@ -327,11 +327,11 @@
 
 	const selectionCount = $derived(selectedTasks.size);
 	const allVisibleSelected = $derived.by(() => {
-		const visible = orderedTasks().filter(e => !e.isExiting);
+		const visible = orderedTasks.filter(e => !e.isExiting);
 		return visible.length > 0 && visible.every(e => selectedTasks.has(e.task.id));
 	});
 	const someVisibleSelected = $derived.by(() => {
-		const visible = orderedTasks().filter(e => !e.isExiting);
+		const visible = orderedTasks.filter(e => !e.isExiting);
 		return visible.some(e => selectedTasks.has(e.task.id)) && !allVisibleSelected;
 	});
 
@@ -347,7 +347,7 @@
 	});
 
 	function toggleTask(taskId: string, event?: MouseEvent) {
-		const visible = orderedTasks().filter(e => !e.isExiting);
+		const visible = orderedTasks.filter(e => !e.isExiting);
 		if (event?.shiftKey && lastClickedTaskId) {
 			const ids = visible.map(e => e.task.id);
 			const a = ids.indexOf(lastClickedTaskId);
@@ -372,7 +372,7 @@
 	}
 
 	function toggleAllVisible() {
-		const visible = orderedTasks().filter(e => !e.isExiting).map(e => e.task.id);
+		const visible = orderedTasks.filter(e => !e.isExiting).map(e => e.task.id);
 		const allSelected = visible.length > 0 && visible.every(id => selectedTasks.has(id));
 		if (allSelected) {
 			selectedTasks = new Set();
@@ -852,6 +852,29 @@
 			}
 		}
 
+		// Detect sort-relevant property changes on existing tasks (priority, due_date)
+		// and re-sort when they change — this triggers FLIP animation on mobile cards
+		let sortChanged = false;
+		for (const id of currentIds) {
+			const prev = prevObjects.get(id);
+			const curr = currentObjects.get(id);
+			if (prev && curr && (prev.priority !== curr.priority || prev.due_date !== curr.due_date)) {
+				sortChanged = true;
+				break;
+			}
+		}
+		if (sortChanged) {
+			// Re-sort the existing order using current task data
+			newOrder = newOrder
+				.filter(id => currentIds.has(id) || exitIds.has(id) || prevExiting.has(id))
+				.sort((a, b) => {
+					const taskA = currentObjects.get(a) || prevObjects.get(a);
+					const taskB = currentObjects.get(b) || prevObjects.get(b);
+					if (!taskA || !taskB) return 0;
+					return compareTaskSort(taskA, taskB);
+				});
+		}
+
 		// Remove tasks that have finished exiting
 		newOrder = newOrder.filter(id => currentIds.has(id) || exitIds.has(id) || prevExiting.has(id));
 
@@ -960,7 +983,7 @@
 	});
 
 	// Derived: tasks to render in order (includes exiting tasks in their original position)
-	const orderedTasks = $derived(() => {
+	const orderedTasks = $derived.by(() => {
 		const result: Array<{ task: Task; isExiting: boolean; isNew: boolean }> = [];
 		for (const id of taskOrder) {
 			const task = tasks.find(t => t.id === id && t.status === 'open') || previousTaskObjects.get(id);
@@ -1010,22 +1033,24 @@
 		return Array.from(projects).sort();
 	});
 
-	// Task sort comparator: due date (has due date first) → age (newest first) → priority
+	// Task sort comparator: due date (has due date first) → priority (P0 first) → age (newest first)
 	function compareTaskSort(a: Task, b: Task): number {
 		// 1. Has due date first (tasks with due_date above those without)
 		const aHasDue = a.due_date ? 1 : 0;
 		const bHasDue = b.due_date ? 1 : 0;
 		if (aHasDue !== bHasDue) return bHasDue - aHasDue;
 
-		// 2. Age: newest first (later created_at first)
+		// 2. Priority (P0 first)
+		if (a.priority !== b.priority) return a.priority - b.priority;
+
+		// 3. Age: newest first (later created_at first)
 		if (a.created_at && b.created_at) {
 			const aTime = new Date(a.created_at).getTime();
 			const bTime = new Date(b.created_at).getTime();
 			if (aTime !== bTime) return bTime - aTime;
 		}
 
-		// 3. Priority (P0 first)
-		return a.priority - b.priority;
+		return 0;
 	}
 
 	// Derived: open tasks sorted by due date → newest first → priority, filtered by project + date (only when header is shown)
@@ -1223,15 +1248,31 @@
 
 	async function handleChangePriority(taskId: string, newPriority: number) {
 		closeContextMenu();
+
+		// Optimistic local re-sort: update task in previousTaskObjects and re-sort taskOrder
+		// immediately so FLIP can measure before/after positions in one update cycle.
+		const updated = previousTaskObjects.get(taskId);
+		if (updated) {
+			const patched = { ...updated, priority: newPriority };
+			previousTaskObjects = new Map(previousTaskObjects).set(taskId, patched);
+			// Re-sort taskOrder using current data
+			const objects = previousTaskObjects;
+			taskOrder = [...taskOrder].sort((a, b) => {
+				const ta = objects.get(a);
+				const tb = objects.get(b);
+				if (!ta || !tb) return 0;
+				return compareTaskSort(ta, tb);
+			});
+		}
+
+		// Fire API call + background refresh
 		try {
-			const response = await fetch(`/api/tasks/${taskId}`, {
+			await fetch(`/api/tasks/${taskId}`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ priority: newPriority })
 			});
-			if (response.ok) {
-				onRetry(); // Refresh task list — triggers re-sort → FLIP animation
-			}
+			onRetry(); // Sync with server
 		} catch (err) {
 			console.error('Failed to update task priority:', err);
 		}
@@ -1455,7 +1496,7 @@
 		{#if mobile}
 		<!-- MOBILE LAYOUT: Card-based with FLIP sort animations -->
 		<div class="mobile-tasks-list">
-			{#each orderedTasks() as { task, isExiting, isNew } (task.id)}
+			{#each orderedTasks as { task, isExiting, isNew } (task.id)}
 				{@const projectColor = getProjectColorReactive(task.id)}
 				{@const isBlocked = hasUnresolvedBlockers(task)}
 				{@const typeVisual = getIssueTypeVisual(task.issue_type)}
@@ -1538,7 +1579,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each orderedTasks() as { task, isExiting, isNew } (task.id)}
+					{#each orderedTasks as { task, isExiting, isNew } (task.id)}
 						{@const projectColor = getProjectColorReactive(task.id)}
 						{@const isBlocked = hasUnresolvedBlockers(task)}
 						{@const blockReason = isBlocked ? getBlockingReason(task) : ''}

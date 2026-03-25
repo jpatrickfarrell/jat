@@ -1213,6 +1213,29 @@
 		}
 	}
 
+	async function closeOrphanedTask(taskId: string, agentName: string) {
+		try {
+			// 1. Close the task
+			await fetch(`/api/tasks/${encodeURIComponent(taskId)}/close`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ reason: "Closed orphaned task" }),
+			});
+
+			// 2. Clean up session artifacts
+			const sessionName = `jat-${agentName}`;
+			try {
+				await fetch(`/api/sessions/${encodeURIComponent(sessionName)}`, { method: "DELETE" });
+			} catch {
+				// Session may already be gone — not fatal
+			}
+
+			await fetchAllData();
+		} catch (err) {
+			console.error("Failed to close orphaned task:", err);
+		}
+	}
+
 	async function spawnTask(task: Task, selection?: { agentId: string | null; model: string | null }) {
 		spawningTaskId = task.id;
 		try {
@@ -1922,6 +1945,7 @@
 									onRestartTask={restartTask}
 									onUnassignTask={unassignTask}
 									onKillSession={killPausedSession}
+									onCloseTask={closeOrphanedTask}
 									onViewTask={(taskId) =>
 										openTaskDetailDrawer(taskId)}
 								/>
@@ -1994,6 +2018,7 @@
 									onRestartTask={restartTask}
 									onUnassignTask={unassignTask}
 									onKillSession={killPausedSession}
+									onCloseTask={closeOrphanedTask}
 									onViewTask={(taskId) =>
 										openTaskDetailDrawer(taskId)}
 								/>

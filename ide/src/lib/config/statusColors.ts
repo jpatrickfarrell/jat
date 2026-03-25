@@ -1100,6 +1100,13 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			icon: 'M6 18L18 6M6 6l12 12',
 			variant: 'error',
 			description: 'Terminate tmux session'
+		},
+		{
+			id: 'close-task',
+			label: 'Close Task',
+			icon: 'M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+			variant: 'error',
+			description: 'Close the task and clean up session'
 		}
 	],
 	orphaned: [
@@ -1123,6 +1130,20 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			icon: 'M22 10.5h-6m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z',
 			variant: 'warning',
 			description: 'Remove assignee and set task to open'
+		},
+		{
+			id: 'kill',
+			label: 'Kill Session',
+			icon: 'M6 18L18 6M6 6l12 12',
+			variant: 'error',
+			description: 'Kill session and release task back to open'
+		},
+		{
+			id: 'close-task',
+			label: 'Close Task',
+			icon: 'M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+			variant: 'error',
+			description: 'Close the task and clean up orphaned session'
 		}
 	],
 	idle: [

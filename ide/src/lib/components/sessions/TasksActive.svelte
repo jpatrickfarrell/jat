@@ -15,7 +15,8 @@
 	import TaskDetailPane from '$lib/components/sessions/TaskDetailPane.svelte';
 	import { getReviewRules } from '$lib/stores/reviewRules.svelte';
 	import { computeReviewStatus } from '$lib/utils/reviewStatusUtils';
-	import { getSessionStateVisual, type SessionState } from '$lib/config/statusColors';
+	import { getSessionStateVisual, getIssueTypeVisual, type SessionState } from '$lib/config/statusColors';
+	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
 	import { getNotesUpdateSignal, clearNotesUpdateSignal } from '$lib/stores/taskNotesUpdate.svelte';
 	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
 	import FxText from '$lib/components/FxText.svelte';
@@ -414,6 +415,20 @@
 	// Helper functions
 	function getTaskHarness(task: AgentTask | null): string {
 		return task?.agent_program || 'claude-code';
+	}
+
+	function getTaskAge(dateStr: string | undefined): { label: string; color: string } {
+		if (!dateStr) return { label: '', color: '' };
+		const ms = Date.now() - new Date(dateStr).getTime();
+		if (ms < 0) return { label: '', color: '' };
+		const mins = Math.floor(ms / 60000);
+		const hours = Math.floor(mins / 60);
+		const days = Math.floor(hours / 24);
+		const weeks = Math.floor(days / 7);
+		const months = Math.floor(days / 30);
+		const label = mins < 1 ? '<1m' : mins < 60 ? `${mins}m` : hours < 24 ? `${hours}h` : days < 7 ? `${days}d` : weeks < 5 ? `${weeks}w` : `${months}mo`;
+		const color = hours < 1 ? 'oklch(0.80 0.20 145)' : hours < 6 ? 'oklch(0.72 0.15 145)' : hours < 24 ? 'oklch(0.62 0.08 160)' : days < 3 ? 'oklch(0.55 0.03 200)' : 'oklch(0.45 0.01 250)';
+		return { label, color };
 	}
 
 	function getAgentName(sessionName: string): string {
@@ -1032,19 +1047,38 @@
 					{@const reviewStatus = computeReviewStatus(sessionTask, getReviewRules())}
 					{@const reviewBasedDefault = reviewStatus?.action !== 'auto'}
 					{@const autoCompleteDisabled = autoCompleteDisabledMap.get(session.name) ?? reviewBasedDefault}
+					{@const taskAge = getTaskAge(sessionTask.created_at)}
+					{@const typeVisual = getIssueTypeVisual(sessionTask.issue_type)}
+					{@const harness = getTaskHarness(sessionTask)}
 					<div class="mobile-card-row1">
 						<div class="mobile-left">
 							<span class="mobile-title" title={sessionTask.title}>
 								<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
 							</span>
 							<div class="mobile-card-row2">
+								<span class="mobile-task-id" style="color: {statusDotColor};">{sessionTask.id}</span>
+								{#if elapsed}
+									<span class="mobile-separator">·</span>
+									<span class="mobile-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
+								{/if}
+								<span class="mobile-separator">·</span>
 								<AgentAvatar name={sessionAgentName} size={16} showRing={true} sessionState={effectiveState} />
 								<span class="mobile-agent-name">{sessionAgentName}</span>
-								<span class="mobile-separator">·</span>
-								<span class="mobile-task-id" style="color: {statusDotColor};">{sessionTask.id}</span>
+								{#if sessionTask.issue_type}
+									<span class="mobile-separator">·</span>
+									<span class="mobile-type-icon" title={typeVisual.label}>{typeVisual.icon}</span>
+								{/if}
+								{#if harness}
+									<span class="mobile-separator">·</span>
+									<span class="mobile-harness" title={harness}><ProviderLogo agentId={harness} size={11} /></span>
+								{/if}
 								{#if sessionTask.priority != null && sessionTask.priority <= 2}
 									<span class="mobile-separator">·</span>
 									<span class="mobile-priority mobile-priority-{sessionTask.priority}">P{sessionTask.priority}</span>
+								{/if}
+								{#if taskAge.label}
+									<span class="mobile-separator">·</span>
+									<span class="mobile-age" style="color: {taskAge.color};">{taskAge.label}</span>
 								{/if}
 								{#if browserSessions.get(sessionAgentName)}
 									<span class="mobile-separator">·</span>
@@ -1056,7 +1090,6 @@
 						<div class="mobile-status" onclick={(e) => e.stopPropagation()}>
 							<StatusActionBadge
 								sessionState={effectiveState as SessionState}
-								{elapsed}
 								stacked={true}
 								sessionName={session.name}
 								alignRight={true}
@@ -2944,6 +2977,27 @@
 
 	.mobile-task-id {
 		font-weight: 600;
+	}
+
+	.mobile-elapsed {
+		font-weight: 500;
+		color: oklch(0.60 0.02 250);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.mobile-type-icon {
+		font-size: 0.625rem;
+		line-height: 1;
+	}
+
+	.mobile-harness {
+		display: inline-flex;
+		align-items: center;
+	}
+
+	.mobile-age {
+		font-weight: 600;
+		font-size: 0.5625rem;
 	}
 
 	.mobile-priority {

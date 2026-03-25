@@ -132,7 +132,10 @@ header "Step 2/4 — Sync to VPS"
 
 info "Syncing code + build artifacts..."
 
-# Sync everything needed on VPS (no --delete to preserve VPS-only data)
+# Delete old build first — stale chunks from previous builds cause bugs
+ssh "$VPS_TARGET" "rm -rf $REMOTE_JAT/ide/build"
+
+# Sync everything needed on VPS (no --delete to preserve VPS-only data like .jat/)
 rsync -az --info=stats1 \
     --exclude='node_modules' \
     --exclude='.git' \
@@ -158,6 +161,14 @@ rsync -az --info=stats1 \
     "$LOCAL_JAT/" "$VPS_TARGET:$REMOTE_JAT/"
 
 ok "Code synced"
+
+# Sync fresh Claude credentials to VPS jat user (tokens expire, keep them fresh)
+VPS_JAT_HOME=$(ssh "$VPS_TARGET" 'getent passwd jat | cut -d: -f6' 2>/dev/null || echo "/home/jat")
+if [ -f "$HOME/.claude/.credentials.json" ] && [ -n "$VPS_JAT_HOME" ]; then
+    scp -q "$HOME/.claude/.credentials.json" "$VPS_TARGET:$VPS_JAT_HOME/.claude/.credentials.json"
+    ssh "$VPS_TARGET" "chown jat:jat $VPS_JAT_HOME/.claude/.credentials.json 2>/dev/null; true"
+    ok "Claude credentials refreshed"
+fi
 
 # Write VERSION file so jat CLI can show commit info without .git
 DEPLOY_HASH=$(git -C "$LOCAL_JAT" log -1 --format='%h' 2>/dev/null || echo "unknown")
@@ -201,12 +212,34 @@ if [ -d "$JAT_DIR/tools/agent-mail" ]; then
 fi
 
 echo "  Symlinked $TOOL_COUNT tools + jt CLI"
+
+# Resymlink jat commands to ~/.claude/commands/jat/
+CMD_DIR="$HOME/.claude/commands/jat"
+mkdir -p "$CMD_DIR"
+find "$CMD_DIR" -type l -delete
+for f in "$JAT_DIR/commands/jat"/*.md; do
+    [ -f "$f" ] || continue
+    ln -sf "$f" "$CMD_DIR/$(basename "$f")"
+done
+echo "  Relinked jat commands"
 REMOTE_SCRIPT
 
-ok "CLI tools updated"
+ok "CLI tools + commands updated"
 
 # --- Step 4: Restart service ---
 header "Step 4/4 — Restart service"
+
+# Sync API keys into systemd service environment
+GEMINI_KEY=$(jq -r '.apiKeys.google.key // empty' "$HOME/.config/jat/credentials.json" 2>/dev/null || true)
+if [ -n "$GEMINI_KEY" ]; then
+    ssh "$VPS_TARGET" "
+        SERVICE=/etc/systemd/system/jat-ide.service
+        sed -i '/Environment=GEMINI_API_KEY/d' \$SERVICE
+        sed -i '/Environment=NODE_ENV=production/a Environment=GEMINI_API_KEY=$GEMINI_KEY' \$SERVICE
+        systemctl daemon-reload
+    "
+    ok "GEMINI_API_KEY synced to service"
+fi
 
 SERVICE_STATUS=$(ssh "$VPS_TARGET" "systemctl is-active jat-ide 2>/dev/null || true")
 

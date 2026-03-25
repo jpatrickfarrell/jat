@@ -485,6 +485,76 @@ fi
 pkill -f "node build" --oldest 2>/dev/null || true
 
 # ============================================================================
+# Pre-configure Claude Code for headless agent operation
+# Sets flags that would otherwise require interactive prompts on first run
+# ============================================================================
+header "Configuring Claude Code for headless operation"
+
+CLAUDE_JSON="$HOME/.claude.json"
+CLAUDE_SETTINGS="$HOME/.claude/settings.json"
+
+# 1. Mark onboarding complete + trust project directories
+if [ -f "$CLAUDE_JSON" ]; then
+    python3 - <<PYEOF
+import json, os
+
+with open("$CLAUDE_JSON") as f:
+    d = json.load(f)
+
+d["hasCompletedOnboarding"] = True
+
+project_template = {
+    "allowedTools": [],
+    "mcpContextUris": [],
+    "mcpServers": {},
+    "enabledMcpjsonServers": [],
+    "disabledMcpjsonServers": [],
+    "hasTrustDialogAccepted": True,
+    "projectOnboardingSeenCount": 1,
+    "hasClaudeMdExternalIncludesApproved": True,
+    "hasClaudeMdExternalIncludesWarningShown": True,
+    "lastCost": 0, "lastAPIDuration": 0,
+    "lastAPIDurationWithoutRetries": 0, "lastToolDuration": 0
+}
+
+home = os.path.expanduser("~")
+if "projects" not in d:
+    d["projects"] = {}
+
+for path in [home, f"{home}/.claude", f"{home}/projects/personal", f"{home}/projects"]:
+    if path not in d["projects"]:
+        d["projects"][path] = project_template.copy()
+    else:
+        d["projects"][path]["hasTrustDialogAccepted"] = True
+        d["projects"][path]["hasClaudeMdExternalIncludesApproved"] = True
+
+with open("$CLAUDE_JSON", "w") as f:
+    json.dump(d, f, indent=2)
+
+print("  hasCompletedOnboarding = true, project dirs pre-trusted")
+PYEOF
+    ok "Claude onboarding configured"
+else
+    warn ".claude.json not found — run 'claude -p hello' once to initialize, then re-run this step"
+fi
+
+# 2. Skip bypass permissions warning (required for --dangerously-skip-permissions)
+if [ -f "$CLAUDE_SETTINGS" ]; then
+    python3 -c "
+import json
+with open('$CLAUDE_SETTINGS') as f:
+    d = json.load(f)
+d['skipDangerousModePermissionPrompt'] = True
+with open('$CLAUDE_SETTINGS', 'w') as f:
+    json.dump(d, f, indent=2)
+print('  skipDangerousModePermissionPrompt = true')
+"
+else
+    echo '{"skipDangerousModePermissionPrompt": true}' > "$CLAUDE_SETTINGS"
+fi
+ok "Bypass permissions prompt suppressed"
+
+# ============================================================================
 # Done
 # ============================================================================
 echo ""

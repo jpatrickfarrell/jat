@@ -155,16 +155,40 @@ get-current-session-id
 ```
 
 #### 1C: Get Current Task
+
+**Use multiple detection methods in order — the first match wins:**
+
+**Method 1: Signal file (most reliable)**
 ```bash
-# Get task (in_progress tasks for this agent)
+# Read task ID from signal file — this is set by /jat:start's working signal
+TMUX_SESSION=$(tmux display-message -p '#S' 2>/dev/null)
+SIGNAL_FILE="/tmp/jat-signal-tmux-${TMUX_SESSION}.json"
+cat "$SIGNAL_FILE" 2>/dev/null | jq -r '.task_id // .data.taskId // empty'
+```
+
+**Method 2: jt list — in_progress tasks for this agent**
+```bash
 jt list --json | jq -r --arg agent "$agent_name" \
   '.[] | select(.assignee == $agent and .status == "in_progress") | .id' | head -1
 ```
 
+**Method 3: jt list — any non-closed task for this agent**
+```bash
+jt list --json | jq -r --arg agent "$agent_name" \
+  '.[] | select(.assignee == $agent and .status != "closed") | .id' | head -1
+```
+
+**After finding a task ID, verify it exists:**
+```bash
+jt show "$task_id" --json
+```
+
+If the task exists but is still `open` (not `in_progress`), that's OK — proceed with closing it anyway. The agent worked on it; the status just wasn't updated properly.
+
 **Error handling:**
 - If no session ID found → error "No active session. Run /jat:start first"
 - If no agent name found → error "No agent registered. Run /jat:start first"
-- If no in_progress task → **continue to Step 1D** (spontaneous work detection)
+- If no task found by any method → **continue to Step 1D** (spontaneous work detection)
 
 ---
 

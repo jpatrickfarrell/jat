@@ -9,7 +9,10 @@
 	import { untrack, onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
+	import { flip } from 'svelte/animate';
+	import { cubicOut } from 'svelte/easing';
 	import { getProjectColor } from '$lib/utils/projectColors';
+	import { getIssueTypeVisual } from '$lib/config/statusColors';
 	import AgentSelector from '$lib/components/agents/AgentSelector.svelte';
 	import { bulkApiOperation, fetchWithTimeout, createDeleteRequest, handleApiError, formatBulkResultMessage } from '$lib/utils/bulkApiHelpers';
 	import { isHumanTask } from '$lib/utils/badgeHelpers';
@@ -80,7 +83,8 @@
 		onRetry = () => {},
 		onTaskClick = () => {},
 		onAddTask = null,
-		onFilterCountsChange = (_counts: Record<string, number>) => {}
+		onFilterCountsChange = (_counts: Record<string, number>) => {},
+		mobile = false
 	}: {
 		tasks: Task[];
 		loading: boolean;
@@ -98,6 +102,7 @@
 		onTaskClick: (taskId: string) => void;
 		onAddTask?: (() => void) | null;
 		onFilterCountsChange?: (counts: Record<string, number>) => void;
+		mobile?: boolean;
 	} = $props();
 
 	// Alt key tracking for agent picker
@@ -1038,6 +1043,20 @@
 		return projectColors[projectPrefix] || getProjectColor(taskIdOrProject);
 	}
 
+	function getTaskAge(dateStr: string | undefined): { label: string; color: string } {
+		if (!dateStr) return { label: '', color: '' };
+		const ms = Date.now() - new Date(dateStr).getTime();
+		if (ms < 0) return { label: '', color: '' };
+		const mins = Math.floor(ms / 60000);
+		const hours = Math.floor(mins / 60);
+		const days = Math.floor(hours / 24);
+		const weeks = Math.floor(days / 7);
+		const months = Math.floor(days / 30);
+		const label = mins < 1 ? '<1m' : mins < 60 ? `${mins}m` : hours < 24 ? `${hours}h` : days < 7 ? `${days}d` : weeks < 5 ? `${weeks}w` : `${months}mo`;
+		const color = hours < 1 ? 'oklch(0.80 0.20 145)' : hours < 6 ? 'oklch(0.72 0.15 145)' : hours < 24 ? 'oklch(0.62 0.08 160)' : days < 3 ? 'oklch(0.55 0.03 200)' : 'oklch(0.45 0.01 250)';
+		return { label, color };
+	}
+
 	function hasUnresolvedBlockers(task: Task): boolean {
 		if (!task.depends_on || task.depends_on.length === 0) return false;
 		return task.depends_on.some(dep => dep.status !== 'closed');
@@ -1077,6 +1096,7 @@
 	let ctxY = $state(0);
 	let ctxVisible = $state(false);
 	let statusSubmenuOpen = $state(false);
+	let prioritySubmenuOpen = $state(false);
 	let epicSubmenuOpen = $state(false);
 	let epics = $state<Epic[]>([]);
 	let epicsLoading = $state(false);
@@ -1124,12 +1144,14 @@
 		ctxY = Math.min(event.clientY, window.innerHeight - menuHeight - 8);
 		ctxVisible = true;
 		statusSubmenuOpen = false;
+		prioritySubmenuOpen = false;
 		epicSubmenuOpen = false;
 	}
 
 	function closeContextMenu() {
 		ctxVisible = false;
 		statusSubmenuOpen = false;
+		prioritySubmenuOpen = false;
 		epicSubmenuOpen = false;
 		showCreateEpic = false;
 		newEpicTitle = '';
@@ -1196,6 +1218,22 @@
 			}
 		} catch (err) {
 			console.error('Failed to update task status:', err);
+		}
+	}
+
+	async function handleChangePriority(taskId: string, newPriority: number) {
+		closeContextMenu();
+		try {
+			const response = await fetch(`/api/tasks/${taskId}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ priority: newPriority })
+			});
+			if (response.ok) {
+				onRetry(); // Refresh task list — triggers re-sort → FLIP animation
+			}
+		} catch (err) {
+			console.error('Failed to update task priority:', err);
 		}
 	}
 
@@ -1414,6 +1452,72 @@
 				</button>
 			</div>
 		{/if}
+		{#if mobile}
+		<!-- MOBILE LAYOUT: Card-based with FLIP sort animations -->
+		<div class="mobile-tasks-list">
+			{#each orderedTasks() as { task, isExiting, isNew } (task.id)}
+				{@const projectColor = getProjectColorReactive(task.id)}
+				{@const isBlocked = hasUnresolvedBlockers(task)}
+				{@const typeVisual = getIssueTypeVisual(task.issue_type)}
+				{@const taskAge = getTaskAge(task.created_at)}
+				{@const harness = getTaskHarness(task)}
+				<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+				<div
+					animate:flip={{ duration: 300, easing: cubicOut }}
+					class="mobile-task-card {isBlocked && !isExiting ? 'mobile-task-blocked' : ''} {isNew ? 'animate-slide-in-fwd-center' : ''} {isExiting ? 'animate-slide-out-bck-center' : ''}"
+					style="{projectColor ? `border-left: 3px solid ${projectColor};` : ''}{isExiting ? ' pointer-events: none;' : ''}"
+					onclick={() => !isExiting && handleRowClick(task.id)}
+					oncontextmenu={(e) => !isExiting && handleContextMenu(task, e)}
+				>
+					<div class="mobile-task-row1">
+						<span class="mobile-task-title" title={task.title}>
+							<FxText text={task.title} context={taskCtx(task)} />
+						</span>
+						{#if !isBlocked && !isHumanTask(task)}
+							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+							<div class="mobile-task-launch" onclick={(e) => { e.stopPropagation(); onSpawnTask(task); }} title="Launch agent">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="14" height="14">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 0 1-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 0 0 6.16-12.12A14.98 14.98 0 0 0 9.631 8.41m5.96 5.96a14.926 14.926 0 0 1-5.841 2.58m-.119-8.54a6 6 0 0 0-7.381 5.84h4.8m2.58-5.84a14.927 14.927 0 0 0-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 0 1-2.448-2.448 14.9 14.9 0 0 1 .06-.312m-2.24 2.39a4.493 4.493 0 0 0-1.757 4.306 4.493 4.493 0 0 0 4.306-1.758M16.5 9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" />
+								</svg>
+							</div>
+						{/if}
+					</div>
+					<div class="mobile-task-row2">
+						<TaskIdBadge
+							{task}
+							size="xs"
+							variant="agentPill"
+							integration={taskIntegrations[task.id] || null}
+							onClick={() => !isExiting && handleRowClick(task.id)}
+							{harness}
+						/>
+						{#if typeVisual}
+							<span class="mobile-task-separator">·</span>
+							<span class="mobile-task-type" title={typeVisual.label}>{typeVisual.icon}</span>
+						{/if}
+						{#if task.priority != null && task.priority <= 2}
+							<span class="mobile-task-separator">·</span>
+							<span class="mobile-task-priority mobile-task-priority-{task.priority}">P{task.priority}</span>
+						{/if}
+						{#if taskAge.label}
+							<span class="mobile-task-separator">·</span>
+							<span class="mobile-task-age" style="color: {taskAge.color};">{taskAge.label}</span>
+						{/if}
+						{#if task.labels && task.labels.length > 0}
+							<span class="mobile-task-separator">·</span>
+							{#each task.labels.slice(0, 2) as label}
+								<span class="mobile-task-label">{label}</span>
+							{/each}
+							{#if task.labels.length > 2}
+								<span class="mobile-task-label-more">+{task.labels.length - 2}</span>
+							{/if}
+						{/if}
+					</div>
+				</div>
+			{/each}
+		</div>
+		{:else}
+		<!-- DESKTOP LAYOUT: Table-based -->
 		<div class="tasks-table-wrapper">
 			<table class="tasks-table" onmousedown={(e) => { if (e.shiftKey) e.preventDefault(); }}>
 				<thead>
@@ -1651,6 +1755,7 @@
 				</tbody>
 			</table>
 		</div>
+		{/if}
 	{/if}
 </section>
 
@@ -1817,7 +1922,7 @@
 		onclick={(e) => e.stopPropagation()}
 	>
 		<!-- Launch -->
-		<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => { const t = ctxTask!; closeContextMenu(); onSpawnTask(t); ctxTask = null; }}>
+		<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => { const t = ctxTask!; closeContextMenu(); onSpawnTask(t); ctxTask = null; }}>
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<path d="M12 2C12 2 8 6 8 12C8 15 9 17 10 18L10 21C10 21.5 10.5 22 11 22H13C13.5 22 14 21.5 14 21L14 18C15 17 16 15 16 12C16 6 12 2 12 2Z" />
 				<circle cx="12" cy="10" r="2" />
@@ -1826,7 +1931,7 @@
 		</button>
 
 		<!-- View Details -->
-		<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => { const id = ctxTask!.id; closeContextMenu(); onTaskClick(id); ctxTask = null; }}>
+		<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => { const id = ctxTask!.id; closeContextMenu(); onTaskClick(id); ctxTask = null; }}>
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
 				<circle cx="12" cy="12" r="3" />
@@ -1836,7 +1941,7 @@
 
 		<!-- Reply (integrated tasks from ingest — feedback widget, Supabase, Telegram, Slack, etc.) -->
 		{#if isIntegratedTask(ctxTask)}
-			<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => { const t = ctxTask!; closeContextMenu(); openReplyModal(t); }}>
+			<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => { const t = ctxTask!; closeContextMenu(); openReplyModal(t); }}>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
 				</svg>
@@ -1850,7 +1955,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="task-context-menu-submenu-container"
-			onmouseenter={() => { statusSubmenuOpen = true; epicSubmenuOpen = false; }}
+			onmouseenter={() => { statusSubmenuOpen = true; prioritySubmenuOpen = false; epicSubmenuOpen = false; }}
 			onmouseleave={() => { statusSubmenuOpen = false; }}
 		>
 			<button class="task-context-menu-item task-context-menu-item-has-submenu">
@@ -1888,11 +1993,53 @@
 			{/if}
 		</div>
 
+		<!-- Change Priority (submenu) -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="task-context-menu-submenu-container"
+			onmouseenter={() => { prioritySubmenuOpen = true; statusSubmenuOpen = false; epicSubmenuOpen = false; }}
+			onmouseleave={() => { prioritySubmenuOpen = false; }}
+		>
+			<button class="task-context-menu-item task-context-menu-item-has-submenu">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M3 3v18h18" /><path d="m7 16 4-8 4 4 4-6" />
+				</svg>
+				<span>Change Priority</span>
+				<svg class="task-context-menu-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<polyline points="9 18 15 12 9 6" />
+				</svg>
+			</button>
+			{#if prioritySubmenuOpen}
+				<div class="task-context-submenu">
+					{#each [
+						{ value: 0, label: 'P0 — Critical', color: 'oklch(0.70 0.20 25)' },
+						{ value: 1, label: 'P1 — High', color: 'oklch(0.75 0.15 85)' },
+						{ value: 2, label: 'P2 — Medium', color: 'oklch(0.70 0.15 200)' },
+						{ value: 3, label: 'P3 — Low', color: 'oklch(0.55 0.03 250)' },
+						{ value: 4, label: 'P4 — Lowest', color: 'oklch(0.45 0.01 250)' }
+					] as pri}
+						<button
+							class="task-context-menu-item {ctxTask!.priority === pri.value ? 'task-context-menu-item-active' : ''}"
+							onclick={() => handleChangePriority(ctxTask!.id, pri.value)}
+						>
+							<span class="task-status-dot" style="background: {pri.color};"></span>
+							<span>{pri.label}</span>
+							{#if ctxTask!.priority === pri.value}
+								<svg class="task-context-menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+									<polyline points="20 6 9 17 4 12" />
+								</svg>
+							{/if}
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
+
 		<!-- Assign to Epic (submenu) -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="task-context-menu-submenu-container"
-			onmouseenter={() => { epicSubmenuOpen = true; statusSubmenuOpen = false; if (ctxTask) { const p = getProjectFromTaskId(ctxTask.id); fetchEpics(p); } }}
+			onmouseenter={() => { epicSubmenuOpen = true; statusSubmenuOpen = false; prioritySubmenuOpen = false; if (ctxTask) { const p = getProjectFromTaskId(ctxTask.id); fetchEpics(p); } }}
 			onmouseleave={() => { epicSubmenuOpen = false; }}
 		>
 			<button class="task-context-menu-item task-context-menu-item-has-submenu">
@@ -1964,7 +2111,7 @@
 		<div class="task-context-menu-divider"></div>
 
 		<!-- Duplicate -->
-		<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => handleDuplicateTask(ctxTask!)}>
+		<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => handleDuplicateTask(ctxTask!)}>
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
 				<path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
@@ -1973,7 +2120,7 @@
 		</button>
 
 		<!-- Close Task -->
-		<button class="task-context-menu-item task-context-menu-item-danger" onmouseenter={() => { statusSubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => handleChangeStatus(ctxTask!.id, 'closed')}>
+		<button class="task-context-menu-item task-context-menu-item-danger" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => handleChangeStatus(ctxTask!.id, 'closed')}>
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<circle cx="12" cy="12" r="10" />
 				<line x1="15" y1="9" x2="9" y2="15" />
@@ -1983,7 +2130,7 @@
 		</button>
 
 		<!-- Delete Task -->
-		<button class="task-context-menu-item task-context-menu-item-danger" onmouseenter={() => { statusSubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => handleDeleteTask(ctxTask!.id)}>
+		<button class="task-context-menu-item task-context-menu-item-danger" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => handleDeleteTask(ctxTask!.id)}>
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<polyline points="3 6 5 6 21 6" />
 				<path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
@@ -3167,5 +3314,139 @@
 		position: fixed;
 		inset: 0;
 		z-index: 49;
+	}
+
+	/* === Mobile Task Cards === */
+	.mobile-tasks-list {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.mobile-task-card {
+		background: oklch(0.16 0.01 250);
+		border: 1px solid oklch(0.25 0.02 250);
+		border-bottom: none;
+		border-radius: 0;
+		padding: 0.375rem 0.75rem;
+		cursor: pointer;
+		transition: background 0.15s;
+	}
+
+	.mobile-task-card:first-child {
+		border-radius: 8px 8px 0 0;
+	}
+
+	.mobile-task-card:last-child {
+		border-radius: 0 0 8px 8px;
+		border-bottom: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.mobile-task-card:only-child {
+		border-radius: 8px;
+		border-bottom: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.mobile-task-card:active {
+		background: oklch(0.20 0.02 250);
+	}
+
+	.mobile-task-blocked {
+		opacity: 0.7;
+	}
+
+	.mobile-task-row1 {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		min-width: 0;
+	}
+
+	.mobile-task-title {
+		flex: 1;
+		min-width: 0;
+		font-size: 0.875rem;
+		font-weight: 600;
+		color: oklch(0.88 0.02 250);
+		font-family: system-ui, -apple-system, sans-serif;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.mobile-task-launch {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		border-radius: 6px;
+		color: oklch(0.70 0.15 200);
+		transition: all 0.15s;
+	}
+
+	.mobile-task-launch:hover {
+		background: oklch(0.70 0.15 200 / 0.15);
+		color: oklch(0.85 0.15 200);
+	}
+
+	.mobile-task-row2 {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		margin-top: 0.125rem;
+		font-size: 0.6875rem;
+		font-family: ui-monospace, monospace;
+		color: oklch(0.55 0.02 250);
+	}
+
+	.mobile-task-separator {
+		color: oklch(0.40 0.01 250);
+	}
+
+	.mobile-task-type {
+		font-size: 0.625rem;
+		line-height: 1;
+	}
+
+	.mobile-task-priority {
+		font-weight: 700;
+		font-size: 0.625rem;
+		padding: 0 0.25rem;
+		border-radius: 3px;
+	}
+
+	.mobile-task-priority-0 {
+		color: oklch(0.80 0.18 25);
+		background: oklch(0.80 0.18 25 / 0.12);
+	}
+
+	.mobile-task-priority-1 {
+		color: oklch(0.80 0.15 85);
+		background: oklch(0.80 0.15 85 / 0.12);
+	}
+
+	.mobile-task-priority-2 {
+		color: oklch(0.75 0.12 200);
+		background: oklch(0.75 0.12 200 / 0.12);
+	}
+
+	.mobile-task-age {
+		font-weight: 600;
+		font-size: 0.5625rem;
+	}
+
+	.mobile-task-label {
+		font-size: 0.5625rem;
+		font-weight: 500;
+		padding: 0 0.25rem;
+		border-radius: 3px;
+		background: oklch(0.30 0.02 250);
+		color: oklch(0.65 0.02 250);
+	}
+
+	.mobile-task-label-more {
+		font-size: 0.5625rem;
+		color: oklch(0.50 0.02 250);
 	}
 </style>

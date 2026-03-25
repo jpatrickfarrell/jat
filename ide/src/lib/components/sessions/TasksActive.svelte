@@ -20,6 +20,7 @@
 	import { getNotesUpdateSignal, clearNotesUpdateSignal } from '$lib/stores/taskNotesUpdate.svelte';
 	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
 	import FxText from '$lib/components/FxText.svelte';
+	import MobileSessionFullscreen from '$lib/components/work/MobileSessionFullscreen.svelte';
 
 	function activeTaskCtx(t: AgentTask): Record<string, any> {
 		return { title: t.title, status: t.status, priority: t.priority, type: t.issue_type, labels: t.labels?.join(', '), created_at: t.created_at };
@@ -127,6 +128,9 @@
 		blocked: 'badge-error',
 		closed: 'badge-success'
 	};
+
+	// Mobile fullscreen state
+	let fullscreenSession = $state<string | null>(null);
 
 	// Internal state
 	let expandedSession = $state<string | null>(null);
@@ -940,6 +944,13 @@
 		};
 	});
 
+	// Auto-close fullscreen if the session is killed/removed
+	$effect(() => {
+		if (fullscreenSession && !sessions.some(s => s.name === fullscreenSession)) {
+			fullscreenSession = null;
+		}
+	});
+
 	async function ctxChangeStatus(taskId: string, newStatus: string) {
 		closeCtxMenu();
 		try {
@@ -1035,7 +1046,7 @@
 				class="mobile-session-card {isNew ? 'animate-slide-in-fwd-center' : ''} {isExiting ? 'animate-slide-out-bck-center exit-delayed' : ''}"
 				class:attached={session.attached}
 				style="{isExiting ? 'pointer-events: none;' : ''}"
-				onclick={() => !isExiting && toggleExpanded(session.name)}
+				onclick={() => !isExiting && (fullscreenSession = session.name)}
 			>
 				{#if session.type === 'server'}
 					<!-- Server session -->
@@ -1169,53 +1180,69 @@
 				{/if}
 			</div>
 
-			<!-- Expanded SessionCard -->
-			{#if isExpanded}
-				{@const expandedAgentName = getAgentName(session.name)}
-				{@const expandedTask = agentTasks.get(expandedAgentName)}
-				{@const expandedSessionInfo = agentSessionInfo.get(expandedAgentName)}
-				<div class="mobile-expanded-card {isExiting ? 'animate-slide-out-bck-top' : ''}" style={isExiting ? 'pointer-events: none;' : ''}>
-					<div class="expanded-session-card" style="height: {expandedHeight}px;">
-						<SessionCard
-							mode={session.type === 'server' ? 'server' : 'agent'}
-							sessionName={session.name}
-							agentName={expandedAgentName}
-							headerless={true}
-							task={expandedTask ? {
-								id: expandedTask.id,
-								title: expandedTask.title,
-								status: expandedTask.status,
-								priority: expandedTask.priority,
-								issue_type: expandedTask.issue_type,
-								description: expandedTask.description
-							} : null}
-							output={expandedOutput}
-							tokens={expandedSessionInfo?.tokens ?? 0}
-							cost={expandedSessionInfo?.cost ?? 0}
-							sseState={expandedSessionInfo?.activityState}
-							sseStateTimestamp={expandedSessionInfo?.activityStateTimestamp}
-							startTime={session.created ? new Date(session.created) : null}
-							created={session.created}
-							attached={session.attached}
-							onSendInput={(text: string, type?: 'text' | 'key' | 'raw') => sendExpandedInput(text, type)}
-							onKillSession={() => {
-								expandedSession = null;
-								handleKillSession(session.name);
-							}}
-							onInterrupt={() => {
-								fetch(`/api/work/${encodeURIComponent(session.name)}/input`, {
+			{/each}
+
+		<!-- Mobile Fullscreen Overlay -->
+		{#if fullscreenSession}
+			{@const fsAgentName = getAgentName(fullscreenSession)}
+			{@const fsTask = agentTasks.get(fsAgentName)}
+			{@const fsSessionInfo = agentSessionInfo.get(fsAgentName)}
+			{@const fsState = (optimisticStates.get(fullscreenSession) || fsSessionInfo?.activityState || 'idle') as SessionState}
+			{@const fsSession = sessions.find(s => s.name === fullscreenSession)}
+			<MobileSessionFullscreen
+				sessionName={fullscreenSession}
+				agentName={fsAgentName}
+				taskId={fsTask?.id || ''}
+				taskTitle={fsTask?.title || ''}
+				sessionState={fsState}
+				project={fsSession?.project || null}
+				onClose={() => fullscreenSession = null}
+				onAction={async (actionId) => {
+					const sName = fullscreenSession!;
+					if (actionId === 'attach') {
+						await handleAttachSession(sName);
+					} else if (actionId === 'kill' || actionId === 'cleanup') {
+						fullscreenSession = null;
+						await handleKillSession(sName);
+					} else if (actionId === 'view-task' && fsTask) {
+						onViewTask?.(fsTask.id);
+					} else if (actionId === 'complete' || actionId === 'complete-kill') {
+						optimisticStates.set(sName, 'completing');
+						optimisticStates = new Map(optimisticStates);
+						if (fsTask) {
+							try {
+								await fetch(`/api/sessions/${encodeURIComponent(sName)}/signal`, {
 									method: 'POST',
 									headers: { 'Content-Type': 'application/json' },
-									body: JSON.stringify({ type: 'ctrl-c' })
+									body: JSON.stringify({
+										type: 'completing',
+										data: { taskId: fsTask.id, taskTitle: fsTask.title, currentStep: 'verifying', progress: 0, stepsCompleted: [], stepsRemaining: ['verifying', 'committing', 'closing', 'releasing'] }
+									})
 								});
-							}}
-							onAttachTerminal={() => handleAttachSession(session.name)}
-							onTaskClick={(taskId: string) => onViewTask?.(taskId)}
-						/>
-					</div>
-				</div>
-			{/if}
-		{/each}
+							} catch (e) { console.warn('[TasksActive] Failed to write completing signal:', e); }
+						}
+						const cmd = actionId === 'complete-kill' ? '/jat:complete --kill' : '/jat:complete';
+						await sendWorkflowCommand(sName, cmd);
+					} else if (actionId === 'interrupt') {
+						await fetch(`/api/work/${encodeURIComponent(sName)}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'ctrl-c' }) });
+					} else if (actionId === 'pause') {
+						optimisticStates.set(sName, 'paused');
+						optimisticStates = new Map(optimisticStates);
+						if (fsTask) {
+							try { await fetch(`/api/sessions/${encodeURIComponent(sName)}/pause`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: fsTask.id, taskTitle: fsTask.title, reason: 'Paused via fullscreen', killSession: true, agentName: fsAgentName, project: fsSession?.project }) }); } catch (e) { console.warn('[TasksActive] Failed to pause session:', e); }
+						} else { await handleKillSession(sName); }
+						fullscreenSession = null;
+					} else if (actionId === 'close-kill') {
+						if (fsTask) {
+							try { await fetch(`/api/tasks/${encodeURIComponent(fsTask.id)}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Abandoned via Close & Kill' }) }); } catch (e) { console.warn('[TasksActive] Failed to close task:', e); }
+						}
+						fullscreenSession = null;
+						await handleKillSession(sName);
+					}
+				}}
+				onViewTask={(taskId) => onViewTask?.(taskId)}
+			/>
+		{/if}
 	</div>
 	{:else}
 	<div class="sessions-table-wrapper">

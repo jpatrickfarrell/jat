@@ -148,6 +148,10 @@
 	let agentTasks = $state<Map<string, AgentTask>>(new Map());
 	let agentSessionInfo = $state<Map<string, AgentSessionInfo>>(new Map());
 
+	// Mobile detection
+	let isMobile = $state(false);
+	let mobileCleanup: (() => void) | null = null;
+
 	// Project colors
 	let projectColors = $state<Record<string, string>>({});
 
@@ -1475,6 +1479,14 @@
 	onMount(() => {
 		loadCollapseState();
 
+		// Mobile detection via matchMedia
+		const mql = window.matchMedia('(max-width: 768px)');
+		isMobile = mql.matches;
+		const handleMobileChange = (e: MediaQueryListEvent) => { isMobile = e.matches; };
+		mql.addEventListener('change', handleMobileChange);
+		// Store cleanup function for onDestroy
+		mobileCleanup = () => mql.removeEventListener('change', handleMobileChange);
+
 		// Phase 1: Critical data for initial render (clears loading skeleton ASAP)
 		fetchCriticalData();
 
@@ -1521,6 +1533,7 @@
 		if (recoveryPollInterval) {
 			clearInterval(recoveryPollInterval);
 		}
+		mobileCleanup?.();
 	});
 
 	// Refresh data when a new project is created via CreateProjectDrawer.
@@ -2234,6 +2247,7 @@
 														)}
 													showHeader={false}
 													onAddTask={() => openTaskDrawer(selectedProject ?? undefined)}
+													mobile={isMobile}
 												/>
 											</div>
 										{/if}
@@ -2300,6 +2314,7 @@
 														)}
 													showHeader={false}
 													onAddTask={() => openTaskDrawer(selectedProject ?? undefined)}
+													mobile={isMobile}
 												/>
 											</div>
 										{/if}

@@ -11,6 +11,7 @@
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
 	import TopBar from '$lib/components/TopBar.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
+	import MobileDock from '$lib/components/MobileDock.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import FilePreviewDrawer from '$lib/components/files/FilePreviewDrawer.svelte';
 	import DiffPreviewDrawer from '$lib/components/files/DiffPreviewDrawer.svelte';
@@ -1216,8 +1217,8 @@
 				{taskCounts}
 			/>
 
-			<!-- Page content -->
-			<main class="flex-1 min-h-0 overflow-y-auto" style="scrollbar-gutter: stable;">
+			<!-- Page content (pb-14 on mobile for dock clearance) -->
+			<main class="flex-1 min-h-0 overflow-y-auto pb-14 md:pb-0" style="scrollbar-gutter: stable;">
 				{@render children()}
 			</main>
 
@@ -1237,6 +1238,9 @@
 		<!-- Sidebar (Sidebar component provides the drawer-side wrapper) -->
 		<Sidebar />
 	</div>
+
+	<!-- Mobile bottom dock navigation (outside drawer for proper click handling) -->
+	<MobileDock />
 {/if}
 
 <!-- Global Task Detail Drawer (for inspecting tasks from anywhere) -->

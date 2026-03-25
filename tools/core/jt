@@ -17,12 +17,24 @@ die() { echo "Error: $*" >&2; exit 1; }
 # Find the project root (walk up looking for .jat/ or .git/)
 find_project_root() {
   local dir="$PWD"
+  local first_jat=""
   while [[ "$dir" != "/" ]]; do
-    [[ -d "$dir/.jat" ]] && echo "$dir" && return 0
-    [[ -d "$dir/.git" ]] && echo "$dir" && return 0
+    # A dir with both .jat and .git is the true project root
+    if [[ -d "$dir/.jat" && -d "$dir/.git" ]]; then
+      echo "$dir" && return 0
+    fi
+    # Remember the first .jat we find as fallback
+    if [[ -d "$dir/.jat" && -z "$first_jat" ]]; then
+      first_jat="$dir"
+    fi
+    # .git without .jat is also a valid root
+    if [[ -d "$dir/.git" ]]; then
+      echo "$dir" && return 0
+    fi
     dir="$(dirname "$dir")"
   done
-  echo "$PWD"
+  # Fall back to first .jat found, or PWD
+  echo "${first_jat:-$PWD}"
 }
 
 PROJECT_ROOT="$(find_project_root)"

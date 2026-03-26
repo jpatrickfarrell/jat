@@ -21,6 +21,8 @@
 	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
 	import FxText from '$lib/components/FxText.svelte';
 	import MobileSessionFullscreen from '$lib/components/work/MobileSessionFullscreen.svelte';
+	import { getSwipeConfig, getSwipeActionDef, initSwipeActions } from '$lib/config/swipeActions';
+	import { onMount } from 'svelte';
 
 	function activeTaskCtx(t: AgentTask): Record<string, any> {
 		return { title: t.title, status: t.status, priority: t.priority, type: t.issue_type, labels: t.labels?.join(', '), created_at: t.created_at };
@@ -886,6 +888,171 @@
 		}
 	}
 
+	// === Swipe-to-Reveal State ===
+	interface SwipeState {
+		sessionName: string;
+		startX: number;
+		startY: number;
+		currentX: number;
+		startTime: number;
+		swiping: boolean;
+		committed: boolean;
+	}
+
+	let swipeState = $state<SwipeState | null>(null);
+	let swipeOffsets = $state<Map<string, number>>(new Map());
+	let swipeConfig = $state(getSwipeConfig());
+	const SWIPE_THRESHOLD = 80;
+	const SWIPE_COMMIT_THRESHOLD = 140;
+	const VELOCITY_THRESHOLD = 0.5;
+	const SWIPE_DEADZONE = 10;
+	const ACTION_TRAY_WIDTH = 100;
+
+	// Reactive action definitions from config
+	const rightAction = $derived(getSwipeActionDef(swipeConfig.rightSwipe));
+	const leftAction = $derived(getSwipeActionDef(swipeConfig.leftSwipe));
+
+	onMount(() => {
+		initSwipeActions();
+		swipeConfig = getSwipeConfig();
+	});
+
+	function handleSwipeTouchStart(e: TouchEvent, sessionName: string) {
+		if (e.touches.length !== 1) return;
+		const touch = e.touches[0];
+		swipeState = {
+			sessionName,
+			startX: touch.clientX,
+			startY: touch.clientY,
+			currentX: touch.clientX,
+			startTime: Date.now(),
+			swiping: false,
+			committed: false
+		};
+	}
+
+	function handleSwipeTouchMove(e: TouchEvent) {
+		if (!swipeState || swipeState.committed) return;
+		const touch = e.touches[0];
+		const deltaX = touch.clientX - swipeState.startX;
+		const deltaY = touch.clientY - swipeState.startY;
+
+		if (!swipeState.swiping) {
+			if (Math.abs(deltaY) > SWIPE_DEADZONE) {
+				swipeState = null;
+				return;
+			}
+			if (Math.abs(deltaX) > SWIPE_DEADZONE) {
+				swipeState.swiping = true;
+			} else {
+				return;
+			}
+		}
+
+		e.preventDefault();
+		swipeState.currentX = touch.clientX;
+
+		const rawOffset = deltaX;
+		const maxOffset = ACTION_TRAY_WIDTH;
+		let clampedOffset: number;
+		if (Math.abs(rawOffset) <= maxOffset) {
+			clampedOffset = rawOffset;
+		} else {
+			const excess = Math.abs(rawOffset) - maxOffset;
+			clampedOffset = Math.sign(rawOffset) * (maxOffset + excess * 0.3);
+		}
+
+		const newMap = new Map(swipeOffsets);
+		newMap.set(swipeState.sessionName, clampedOffset);
+		swipeOffsets = newMap;
+	}
+
+	function handleSwipeTouchEnd() {
+		if (!swipeState || swipeState.committed) {
+			swipeState = null;
+			return;
+		}
+
+		const { sessionName, swiping } = swipeState;
+		if (!swiping) {
+			swipeState = null;
+			return;
+		}
+
+		const offset = swipeOffsets.get(sessionName) || 0;
+		const elapsed = Date.now() - swipeState.startTime;
+		const velocity = Math.abs(offset) / elapsed;
+		const isCommit = Math.abs(offset) >= SWIPE_COMMIT_THRESHOLD || (velocity >= VELOCITY_THRESHOLD && Math.abs(offset) > SWIPE_THRESHOLD);
+
+		if (isCommit) {
+			swipeState.committed = true;
+			const direction = offset > 0 ? 'right' : 'left';
+			const actionId = direction === 'right' ? swipeConfig.rightSwipe : swipeConfig.leftSwipe;
+			executeSwipeAction(sessionName, actionId);
+		}
+
+		resetSwipe(sessionName);
+		swipeState = null;
+	}
+
+	function resetSwipe(sessionName: string) {
+		const newMap = new Map(swipeOffsets);
+		newMap.set(sessionName, 0);
+		swipeOffsets = newMap;
+		setTimeout(() => {
+			const m = new Map(swipeOffsets);
+			m.delete(sessionName);
+			swipeOffsets = m;
+		}, 300);
+	}
+
+	function executeSwipeAction(sessionName: string, actionId: string) {
+		const session = sessions.find(s => s.name === sessionName);
+		if (!session) return;
+		const agentName = getAgentName(sessionName);
+		const task = agentTasks.get(agentName);
+
+		if (actionId === 'attach') {
+			handleAttachSession(sessionName);
+		} else if (actionId === 'view-task') {
+			if (task) onViewTask?.(task.id);
+		} else if (actionId === 'complete') {
+			if (task) {
+				optimisticStates.set(sessionName, 'completing');
+				optimisticStates = new Map(optimisticStates);
+				fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						type: 'completing',
+						data: { taskId: task.id, taskTitle: task.title, currentStep: 'verifying', progress: 0, stepsCompleted: [], stepsRemaining: ['verifying', 'committing', 'closing', 'releasing'] }
+					})
+				}).catch(() => {});
+				sendWorkflowCommand(sessionName, '/jat:complete');
+			}
+		} else if (actionId === 'pause') {
+			optimisticStates.set(sessionName, 'paused');
+			optimisticStates = new Map(optimisticStates);
+			if (task) {
+				fetch(`/api/sessions/${encodeURIComponent(sessionName)}/pause`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ taskId: task.id, taskTitle: task.title, reason: 'Paused via swipe', killSession: true, agentName, project: session.project })
+				}).catch(() => {});
+			} else {
+				handleKillSession(sessionName);
+			}
+		} else if (actionId === 'kill') {
+			handleKillSession(sessionName);
+		} else if (actionId === 'interrupt') {
+			fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ type: 'ctrl-c' })
+			}).catch(() => {});
+		}
+	}
+
 	// === Context Menu State ===
 	interface CtxSession {
 		session: TmuxSession;
@@ -1042,12 +1209,39 @@
 			{@const isCollapsing = collapsingSession === session.name}
 
 			<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-			<div
-				class="mobile-session-card {isNew ? 'animate-slide-in-fwd-center' : ''} {isExiting ? 'animate-slide-out-bck-center exit-delayed' : ''}"
-				class:attached={session.attached}
-				style="{isExiting ? 'pointer-events: none;' : ''}"
-				onclick={() => !isExiting && (fullscreenSession = session.name)}
-			>
+			{@const swipeOffset = swipeOffsets.get(session.name) || 0}
+			{@const isSwiping = swipeState?.sessionName === session.name && swipeState.swiping}
+			<div class="swipe-container {isNew ? 'animate-slide-in-fwd-center' : ''} {isExiting ? 'animate-slide-out-bck-center exit-delayed' : ''}">
+				<!-- Left tray (revealed on right/left-to-right swipe) -->
+				{#if rightAction}
+				<div class="swipe-tray swipe-tray-left" class:swipe-tray-visible={swipeOffset > SWIPE_DEADZONE}>
+					<button class="swipe-action" style="background: {rightAction.color};" onclick={() => { executeSwipeAction(session.name, swipeConfig.rightSwipe); resetSwipe(session.name); }}>
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="22" height="22"><path stroke-linecap="round" stroke-linejoin="round" d={rightAction.icon} /></svg>
+						<span>{rightAction.label}</span>
+					</button>
+				</div>
+				{/if}
+				<!-- Right tray (revealed on left/right-to-left swipe) -->
+				{#if leftAction}
+				<div class="swipe-tray swipe-tray-right" class:swipe-tray-visible={swipeOffset < -SWIPE_DEADZONE}>
+					<button class="swipe-action" style="background: {leftAction.color};" onclick={() => { executeSwipeAction(session.name, swipeConfig.leftSwipe); resetSwipe(session.name); }}>
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="22" height="22"><path stroke-linecap="round" stroke-linejoin="round" d={leftAction.icon} /></svg>
+						<span>{leftAction.label}</span>
+					</button>
+				</div>
+				{/if}
+				<!-- The actual card that slides -->
+				<div
+					class="mobile-session-card"
+					class:attached={session.attached}
+					class:swiping={isSwiping}
+					style="{isExiting ? 'pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
+					onclick={() => !isExiting && !swipeState?.swiping && (fullscreenSession = session.name)}
+					ontouchstart={(e) => handleSwipeTouchStart(e, session.name)}
+					ontouchmove={handleSwipeTouchMove}
+					ontouchend={handleSwipeTouchEnd}
+					ontouchcancel={handleSwipeTouchEnd}
+				>
 				{#if session.type === 'server'}
 					<!-- Server session -->
 					<div class="mobile-card-row1">
@@ -1179,6 +1373,7 @@
 					</div>
 				{/if}
 			</div>
+			</div><!-- /swipe-container -->
 
 			{/each}
 
@@ -2919,6 +3114,8 @@
 	}
 
 	.mobile-session-card {
+		position: relative;
+		z-index: 1;
 		background: oklch(0.16 0.01 250);
 		border: 1px solid oklch(0.25 0.02 250);
 		border-bottom: none;
@@ -2926,6 +3123,8 @@
 		padding: 0.25rem 0.75rem;
 		cursor: pointer;
 		transition: background 0.15s;
+		touch-action: pan-y;
+		will-change: transform;
 	}
 
 	.mobile-session-card:first-child {
@@ -3059,6 +3258,109 @@
 	.mobile-port {
 		font-size: 0.625rem;
 		color: oklch(0.75 0.15 55);
+	}
+
+	/* ========== SWIPE-TO-REVEAL ========== */
+
+	.swipe-container {
+		position: relative;
+		overflow: hidden;
+	}
+
+	.swipe-container:first-child .mobile-session-card {
+		border-radius: 8px 8px 0 0;
+	}
+
+	.swipe-container:last-child .mobile-session-card {
+		border-radius: 0 0 8px 8px;
+		border-bottom: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.swipe-container:only-child .mobile-session-card {
+		border-radius: 8px;
+		border-bottom: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.swipe-tray {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		display: flex;
+		align-items: stretch;
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity 0.15s;
+	}
+
+	.swipe-tray-visible {
+		opacity: 1;
+		pointer-events: auto;
+	}
+
+	.swipe-tray-left {
+		left: 0;
+		flex-direction: row;
+	}
+
+	.swipe-tray-right {
+		right: 0;
+		flex-direction: row;
+	}
+
+	.swipe-action {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.25rem;
+		width: 100px;
+		border: none;
+		cursor: pointer;
+		font-size: 0.625rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: white;
+		transition: filter 0.15s;
+	}
+
+	.swipe-action:active {
+		filter: brightness(1.3);
+	}
+
+	.swipe-action span {
+		font-size: 0.625rem;
+	}
+
+	.mobile-session-card.swiping {
+		/* Disable :active state during swipe */
+		background: oklch(0.16 0.01 250);
+	}
+
+	.mobile-session-card.swiping.attached {
+		background: oklch(0.65 0.15 145 / 0.06);
+	}
+
+	/* Override first/last/only-child on .mobile-session-card since .swipe-container owns that now */
+	.mobile-session-card:first-child {
+		border-radius: 0;
+	}
+	.mobile-session-card:last-child {
+		border-radius: 0;
+		border-bottom: none;
+	}
+	.mobile-session-card:only-child {
+		border-radius: 0;
+		border-bottom: none;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.mobile-session-card {
+			transition: none !important;
+		}
+		.swipe-tray {
+			transition: none !important;
+		}
 	}
 
 	/* Expanded card within mobile */

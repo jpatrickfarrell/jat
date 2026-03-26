@@ -188,6 +188,79 @@
 		setTimeout(onClose, 300); // Wait for exit animation
 	}
 
+	// === Swipe-right-to-dismiss (matches TaskDetailDrawer pattern) ===
+	let swipeStartX = 0;
+	let swipeStartY = 0;
+	let swipeDragging = false;
+	let swipeTranslateX = $state(0);
+	let swipeTransitioning = $state(false);
+	const SWIPE_DEADZONE = 10;
+	const SWIPE_THRESHOLD = 80;
+	const SWIPE_VELOCITY = 0.4;
+	let swipeStartTime = 0;
+
+	function handlePanelTouchStart(e: TouchEvent) {
+		if (e.touches.length !== 1) return;
+		swipeStartX = e.touches[0].clientX;
+		swipeStartY = e.touches[0].clientY;
+		swipeStartTime = Date.now();
+		swipeDragging = false;
+		swipeTranslateX = 0;
+		swipeTransitioning = false;
+	}
+
+	function handlePanelTouchMove(e: TouchEvent) {
+		const touch = e.touches[0];
+		const deltaX = touch.clientX - swipeStartX;
+		const deltaY = touch.clientY - swipeStartY;
+
+		if (!swipeDragging) {
+			if (Math.abs(deltaY) > SWIPE_DEADZONE) return; // vertical scroll — ignore
+			if (deltaX > SWIPE_DEADZONE) {
+				swipeDragging = true;
+			} else {
+				return;
+			}
+		}
+
+		// Only allow rightward swipe (positive = toward dismiss)
+		if (deltaX > 0) {
+			e.preventDefault();
+			swipeTranslateX = deltaX;
+		} else {
+			swipeTranslateX = 0;
+		}
+	}
+
+	function handlePanelTouchEnd() {
+		if (!swipeDragging) return;
+		const elapsed = Math.max(1, Date.now() - swipeStartTime);
+		const velocity = swipeTranslateX / elapsed;
+		const shouldDismiss = swipeTranslateX > SWIPE_THRESHOLD || (velocity > SWIPE_VELOCITY && swipeTranslateX > 30);
+
+		if (shouldDismiss) {
+			swipeTranslateX = window.innerWidth;
+			swipeTransitioning = true;
+			swipeDragging = false;
+			setTimeout(() => {
+				swipeTransitioning = false;
+				onClose();
+			}, 200);
+		} else {
+			swipeTransitioning = true;
+			swipeTranslateX = 0;
+			swipeDragging = false;
+			setTimeout(() => swipeTransitioning = false, 200);
+		}
+	}
+
+	function handlePanelTouchCancel() {
+		swipeDragging = false;
+		swipeTransitioning = true;
+		swipeTranslateX = 0;
+		setTimeout(() => swipeTransitioning = false, 200);
+	}
+
 	// Drag-and-drop state
 	let isDragOver = $state(false);
 
@@ -574,10 +647,15 @@
 	<div
 		class="fullscreen-panel"
 		transition:slideUp={{ duration: 300 }}
+		style="{swipeTranslateX > 0 ? `transform: translateX(${swipeTranslateX}px);` : ''} {swipeTransitioning ? 'transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''} {swipeDragging ? 'will-change: transform;' : ''}"
 		ondragover={handleDragOver}
 		ondragleave={handleDragLeave}
 		ondragenter={handleDragEnter}
 		ondrop={handleDrop}
+		ontouchstart={handlePanelTouchStart}
+		ontouchmove={handlePanelTouchMove}
+		ontouchend={handlePanelTouchEnd}
+		ontouchcancel={handlePanelTouchCancel}
 	>
 		<!-- File drop overlay -->
 		{#if isDragOver}
@@ -784,6 +862,10 @@
 		padding-top: max(0.625rem, env(safe-area-inset-top));
 	}
 
+	.fullscreen-panel {
+		touch-action: pan-y;
+	}
+
 	.back-btn {
 		display: flex;
 		align-items: center;
@@ -850,13 +932,14 @@
 		position: absolute;
 		inset: 0;
 		overflow-y: auto;
-		overflow-x: auto;
+		overflow-x: hidden;
 		padding: 0.5rem 0.75rem;
 		-webkit-overflow-scrolling: touch;
 	}
 
 	.output-pre {
-		white-space: pre;
+		white-space: pre-wrap;
+		word-break: break-all;
 		margin: 0;
 		font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', monospace;
 		font-size: 0.75rem;

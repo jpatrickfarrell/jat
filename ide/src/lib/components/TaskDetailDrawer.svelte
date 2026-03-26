@@ -2190,6 +2190,91 @@
 		}
 	}
 
+	// === Swipe-to-dismiss (touch only) ===
+	let swipeTouchStartX = 0;
+	let swipeTouchStartY = 0;
+	let swipeTouchStartTime = 0;
+	let swipeDragging = false;
+	let swipeTranslateX = $state(0);
+	let swipeTransitioning = $state(false);
+	const DRAWER_SWIPE_DEADZONE = 10;
+	const DRAWER_SWIPE_THRESHOLD = 80;
+	const DRAWER_VELOCITY_THRESHOLD = 0.4;
+
+	function handleDrawerTouchStart(e: TouchEvent) {
+		if (e.touches.length !== 1) return;
+		swipeTouchStartX = e.touches[0].clientX;
+		swipeTouchStartY = e.touches[0].clientY;
+		swipeTouchStartTime = Date.now();
+		swipeDragging = false;
+		swipeTranslateX = 0;
+		swipeTransitioning = false;
+	}
+
+	function handleDrawerTouchMove(e: TouchEvent) {
+		const touch = e.touches[0];
+		const deltaX = touch.clientX - swipeTouchStartX;
+		const deltaY = touch.clientY - swipeTouchStartY;
+
+		if (!swipeDragging) {
+			if (Math.abs(deltaY) > DRAWER_SWIPE_DEADZONE) return;
+			if (Math.abs(deltaX) > DRAWER_SWIPE_DEADZONE) {
+				swipeDragging = true;
+			} else {
+				return;
+			}
+		}
+
+		// Only allow swiping right (positive = toward closing the drawer-end)
+		if (deltaX > 0) {
+			e.preventDefault();
+			swipeTranslateX = deltaX;
+		} else {
+			swipeTranslateX = 0;
+		}
+	}
+
+	function handleDrawerTouchEnd() {
+		if (!swipeDragging) return;
+		const elapsed = Math.max(1, Date.now() - swipeTouchStartTime);
+		const velocity = swipeTranslateX / elapsed; // px/ms
+		const shouldDismiss = swipeTranslateX > DRAWER_SWIPE_THRESHOLD || (velocity > DRAWER_VELOCITY_THRESHOLD && swipeTranslateX > 30);
+
+		if (shouldDismiss) {
+			// Animate offscreen, then close — keep translateX high so there's no snap-back
+			swipeTranslateX = window.innerWidth;
+			swipeTransitioning = true;
+			swipeDragging = false;
+			setTimeout(() => {
+				swipeTransitioning = false;
+				handleClose();
+				// translateX stays offscreen — reset happens in $effect when drawer reopens
+			}, 200);
+		} else {
+			// Snap back
+			swipeTransitioning = true;
+			swipeTranslateX = 0;
+			swipeDragging = false;
+			setTimeout(() => swipeTransitioning = false, 200);
+		}
+	}
+
+	function handleDrawerTouchCancel() {
+		swipeDragging = false;
+		swipeTransitioning = true;
+		swipeTranslateX = 0;
+		setTimeout(() => swipeTransitioning = false, 200);
+	}
+
+	// Reset swipe state when drawer opens (clean slate for next interaction)
+	$effect(() => {
+		if (isOpen) {
+			swipeTranslateX = 0;
+			swipeTransitioning = false;
+			swipeDragging = false;
+		}
+	});
+
 	// Handle drawer close
 	function handleClose() {
 		// Clear any pending save
@@ -2288,10 +2373,15 @@
 		<!-- Entire drawer is a drop zone for attachments (matches TaskCreationDrawer) -->
 		<div
 			class="h-full w-full max-w-2xl flex flex-col shadow-2xl bg-base-100 border-l border-base-300 relative"
+			style="{swipeTranslateX > 0 ? `transform: translateX(${swipeTranslateX}px);` : ''} {swipeTransitioning ? 'transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''} {swipeDragging ? 'will-change: transform;' : ''}"
 			ondrop={handleDrawerDrop}
 			ondragover={handleDrawerDragOver}
 			ondragenter={handleDrawerDragEnter}
 			ondragleave={handleDrawerDragLeave}
+			ontouchstart={handleDrawerTouchStart}
+			ontouchmove={handleDrawerTouchMove}
+			ontouchend={handleDrawerTouchEnd}
+			ontouchcancel={handleDrawerTouchCancel}
 		>
 			<!-- Full-drawer drop overlay -->
 			{#if isDraggingOver && taskId}

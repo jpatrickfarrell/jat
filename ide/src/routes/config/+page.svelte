@@ -44,6 +44,7 @@
 	import TemplatesEditor from '$lib/components/config/TemplatesEditor.svelte';
 	import StateActionsEditor from '$lib/components/config/StateActionsEditor.svelte';
 	import KeyboardShortcutsEditor from '$lib/components/config/KeyboardShortcutsEditor.svelte';
+	import SwipeActionsEditor from '$lib/components/config/SwipeActionsEditor.svelte';
 	import SwarmSettingsEditor from '$lib/components/config/SwarmSettingsEditor.svelte';
 	import ToolsList from '$lib/components/config/ToolsList.svelte';
 	import ToolsEditor from '$lib/components/config/ToolsEditor.svelte';
@@ -607,6 +608,7 @@
 						transition:fade={{ duration: 150 }}
 					>
 						<KeyboardShortcutsEditor />
+						<SwipeActionsEditor />
 					</div>
 				{:else if activeTab === 'commit'}
 					<!-- Commit Message Settings Tab -->

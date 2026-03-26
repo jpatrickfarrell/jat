@@ -190,3 +190,33 @@ export async function getJatDefaults() {
 
 	return defaults;
 }
+
+/**
+ * Get the full project config entry from projects.json for a given project name.
+ *
+ * Returns agent-relevant fields only (excludes colors, hidden, favorite, notes, database_url).
+ * Used to inject project context into agent sessions at spawn time.
+ *
+ * @param {string} projectName - Project name (e.g., "meadow", "jat")
+ * @returns {Promise<{name: string, port: number|null, description: string|null, server_path: string|null, dev_command: string|null, path: string} | null>}
+ */
+export async function getProjectConfig(projectName) {
+	const normalizedName = normalizeProjectName(projectName);
+	const jatConfig = await readJatConfig();
+	if (!jatConfig?.projects) return null;
+
+	for (const [key, config] of Object.entries(jatConfig.projects)) {
+		if (normalizeProjectName(key) === normalizedName) {
+			return {
+				name: config.name || key,
+				port: config.port || null,
+				description: config.description || null,
+				server_path: config.server_path || null,
+				dev_command: config.dev_command || null,
+				path: config.path?.replace(/^~/, homedir()) || join(homedir(), 'code', key)
+			};
+		}
+	}
+
+	return null;
+}

@@ -32,7 +32,7 @@ import {
 	AGENT_MAIL_URL
 } from '$lib/config/spawnConfig.js';
 import { getTaskById } from '$lib/server/jat-tasks.js';
-import { getProjectPath, getJatDefaults } from '$lib/server/projectPaths.js';
+import { getProjectPath, getJatDefaults, getProjectConfig } from '$lib/server/projectPaths.js';
 import { routeAgent } from '$lib/server/agentRouter.js';
 import {
 	evaluateRouting,
@@ -1138,6 +1138,31 @@ export async function POST({ request }) {
 			}
 		} catch (err) {
 			console.warn('[spawn] Failed to load global system bases:', err.message);
+		}
+
+		// Inject project config from projects.json so agents know dev port, URL, etc.
+		if (projectName) {
+			try {
+				const projectConfig = await getProjectConfig(projectName);
+				if (projectConfig) {
+					const lines = [`# ${projectConfig.name} — Project Config`];
+					if (projectConfig.port) lines.push(`- **Dev port:** ${projectConfig.port} → http://localhost:${projectConfig.port}`);
+					if (projectConfig.description) lines.push(`- **Description:** ${projectConfig.description}`);
+					if (projectConfig.server_path) lines.push(`- **Server path:** ${projectConfig.server_path}`);
+					if (projectConfig.dev_command) lines.push(`- **Dev command:** ${projectConfig.dev_command}`);
+					lines.push(`- **Project path:** ${projectConfig.path}`);
+
+					const configBase = `<base name="Project Config" type="system">\n${lines.join('\n')}\n</base>`;
+					if (basesContent) {
+						basesContent = basesContent.replace('</knowledge-bases>', `${configBase}\n</knowledge-bases>`);
+					} else {
+						basesContent = `<knowledge-bases>\n${configBase}\n</knowledge-bases>`;
+					}
+					console.log(`[spawn] Injecting project config for ${projectConfig.name} (port: ${projectConfig.port})`);
+				}
+			} catch (err) {
+				console.warn('[spawn] Failed to load project config:', err.message);
+			}
 		}
 
 		// If bases content is too large to inline in the CLI argument, write it to a file

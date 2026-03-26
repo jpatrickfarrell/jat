@@ -1260,6 +1260,9 @@
 							<span class="mobile-title" title={sessionTask.title}>
 								<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
 							</span>
+							{#if sessionTask.description}
+								<span class="mobile-description" title={sessionTask.description}>{sessionTask.description}</span>
+							{/if}
 							<div class="mobile-card-row2">
 								<span class="mobile-task-id" style="color: {statusDotColor};">{sessionTask.id}</span>
 								{#if elapsed}
@@ -3120,7 +3123,7 @@
 		border: 1px solid oklch(0.25 0.02 250);
 		border-bottom: none;
 		border-radius: 0;
-		padding: 0.25rem 0.75rem;
+		padding: 0.5rem 0.75rem;
 		cursor: pointer;
 		transition: background 0.15s;
 		touch-action: pan-y;
@@ -3175,6 +3178,55 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+		max-height: 1.3em;
+		transition: max-height 0.4s cubic-bezier(0.55, 0.085, 0.68, 0.53);
+	}
+
+	.mobile-description {
+		min-width: 0;
+		font-size: 0.75rem;
+		color: oklch(0.60 0.02 250);
+		overflow: hidden;
+		line-height: 1.4;
+		max-height: 2.8em;
+		/* Exit: tracking contracts, then height shrinks */
+		transition: max-height 0.4s 0.25s cubic-bezier(0.55, 0.085, 0.68, 0.53),
+					letter-spacing 0.35s cubic-bezier(0.55, 0.085, 0.68, 0.53),
+					opacity 0.35s cubic-bezier(0.55, 0.085, 0.68, 0.53);
+	}
+
+	.mobile-left:hover .mobile-title {
+		white-space: normal;
+		display: -webkit-box;
+		-webkit-line-clamp: 5;
+		-webkit-box-orient: vertical;
+		max-height: 6.5em;
+		transition: max-height 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+	}
+
+	.mobile-left:hover .mobile-description {
+		max-height: 7em;
+		letter-spacing: 0.02em;
+		/* Enter: height expands, then tracking reveals */
+		transition: max-height 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+					letter-spacing 0.5s 0.1s cubic-bezier(0.215, 0.61, 0.355, 1),
+					opacity 0.5s 0.1s cubic-bezier(0.215, 0.61, 0.355, 1);
+		animation: mobile-text-reveal 0.5s cubic-bezier(0.215, 0.61, 0.355, 1) both;
+	}
+
+	/* Enter: letters expand in from compressed */
+	@keyframes mobile-text-reveal {
+		0% {
+			letter-spacing: -0.15em;
+			opacity: 0.6;
+		}
+		60% {
+			opacity: 0.9;
+		}
+		100% {
+			letter-spacing: 0.02em;
+			opacity: 1;
+		}
 	}
 
 	.mobile-status {
@@ -3360,6 +3412,11 @@
 		}
 		.swipe-tray {
 			transition: none !important;
+		}
+		.mobile-title,
+		.mobile-description {
+			transition: none !important;
+			animation: none !important;
 		}
 	}
 

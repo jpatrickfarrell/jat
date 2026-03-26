@@ -10,7 +10,7 @@
 
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { activeAgentSessionsCount, openTaskDrawer } from '$lib/stores/drawerStore';
+	import { activeAgentSessionsCount, openTaskDrawer, isMobileFullscreenOpen } from '$lib/stores/drawerStore';
 	import { getActiveProject } from '$lib/stores/preferences.svelte';
 
 	// Current path for active state
@@ -38,7 +38,8 @@
 	}
 </script>
 
-<!-- Mobile dock: only visible below md breakpoint -->
+<!-- Mobile dock: only visible below md breakpoint, hidden when fullscreen overlay is open -->
+{#if !$isMobileFullscreenOpen}
 <div class="dock dock-sm md:hidden">
 	<!-- Tasks -->
 	<button class:dock-active={isActive('/tasks')} onclick={() => navigate('/tasks')}>
@@ -85,3 +86,4 @@
 		<span class="dock-label">New Task</span>
 	</button>
 </div>
+{/if}

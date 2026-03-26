@@ -14,11 +14,13 @@
 	 */
 
 	import { onMount, onDestroy } from 'svelte';
-	import { cubicOut } from 'svelte/easing';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import StatusActionBadge from '$lib/components/work/StatusActionBadge.svelte';
 	import { ansiToHtmlWithLinks } from '$lib/utils/ansiToHtml';
-	import { getSessionStateVisual, type SessionState } from '$lib/config/statusColors';
+	import { getSessionStateVisual, type SessionState, type SessionStateAction } from '$lib/config/statusColors';
+	import { setHoveredSession } from '$lib/stores/hoveredSession';
+	import { getActions, loadUserConfig, getIsLoaded } from '$lib/stores/stateActionsConfig.svelte';
+	import { isMobileFullscreenOpen } from '$lib/stores/drawerStore';
 
 	// Props
 	let {
@@ -64,6 +66,17 @@
 	let historyIndex = $state(-1); // -1 = not browsing history
 	let savedInput = ''; // Stash current input when browsing history
 
+	// Portal action: move element to document.body so it escapes all ancestor
+	// scroll containers, overflow constraints, and stacking contexts.
+	function portalToBody(node: HTMLElement) {
+		document.body.appendChild(node);
+		return {
+			destroy() {
+				node.remove();
+			}
+		};
+	}
+
 	// Path autocomplete state (triggered by @ in input)
 	let showPathAutocomplete = $state(false);
 	let pathSearchResults = $state<Array<{path: string; name: string; folder: string}>>([]);
@@ -76,6 +89,64 @@
 
 	// Status visual
 	const stateVisual = $derived(getSessionStateVisual(sessionState));
+
+	// Load user action config on mount
+	$effect(() => {
+		if (!getIsLoaded()) {
+			loadUserConfig();
+		}
+	});
+
+	// Dynamic actions from configurable state actions (same system as StatusActionBadge)
+	// Filter to a curated set suitable for mobile pill display
+	const MOBILE_PILL_ACTIONS = new Set(['complete', 'complete-kill', 'cleanup', 'pause', 'interrupt', 'attach', 'kill', 'escape', 'convert-to-tasks']);
+	const stateActions = $derived.by(() => {
+		const actions = getActions(sessionState);
+		// Filter to mobile-appropriate actions and add rewind
+		const pills: SessionStateAction[] = actions.filter(a => MOBILE_PILL_ACTIONS.has(a.id));
+		// Always add rewind action (clear input + 2x Escape to rollback prompt)
+		pills.push({
+			id: 'rewind',
+			label: 'Rewind',
+			icon: 'M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3',
+			variant: 'default',
+			description: 'Clear input and send 2x Escape to rollback'
+		});
+		return pills;
+	});
+
+	// Execute a pill action
+	async function executePillAction(action: SessionStateAction) {
+		if (action.id === 'rewind') {
+			// Clear input + send 2x Escape to rollback to previous prompt
+			inputText = '';
+			setTimeout(autoResizeTextarea, 0);
+			await handleSendInput('escape', 'key');
+			await new Promise(r => setTimeout(r, 50));
+			await handleSendInput('escape', 'key');
+			escapeFlash = true;
+			setTimeout(() => { escapeFlash = false; }, 300);
+		} else if (action.id === 'interrupt') {
+			await handleSendInput('ctrl-c', 'key');
+		} else if (action.id === 'escape') {
+			await handleSendInput('escape', 'key');
+			await new Promise(r => setTimeout(r, 50));
+			await handleSendInput('escape', 'key');
+		} else {
+			await onAction(action.id);
+		}
+	}
+
+	// Pill color mapping from action variant
+	function getPillColorClass(variant: SessionStateAction['variant']): string {
+		switch (variant) {
+			case 'success': return 'action-complete';
+			case 'warning': return 'action-pause';
+			case 'error': return 'action-interrupt';
+			case 'info': return 'action-info';
+			default: return '';
+		}
+	}
 
 	// Fetch terminal output
 	async function fetchOutput() {
@@ -144,22 +215,17 @@
 		}
 	}
 
-	// Slide-up transition
-	function slideUp(node: HTMLElement, { duration = 300 }: { duration?: number } = {}) {
-		return {
-			duration,
-			css: (t: number) => {
-				const eased = cubicOut(t);
-				return `transform: translateY(${(1 - eased) * 100}%)`;
-			}
-		};
-	}
-
 	onMount(() => {
 		// Trigger entrance animation
 		requestAnimationFrame(() => {
 			visible = true;
 		});
+
+		// Hide MobileDock while fullscreen is open
+		isMobileFullscreenOpen.set(true);
+
+		// Set hovered session so global shortcuts (Alt+A, Alt+K, Alt+I, Alt+P) work
+		setHoveredSession(sessionName);
 
 		// Focus input after slide-up transition completes
 		setTimeout(() => {
@@ -181,10 +247,15 @@
 			clearInterval(pollInterval);
 		}
 		document.body.style.overflow = '';
+		// Show MobileDock again
+		isMobileFullscreenOpen.set(false);
+		// Clear hovered session when closing
+		setHoveredSession(null);
 	});
 
 	function handleClose() {
 		visible = false;
+		setHoveredSession(null);
 		setTimeout(onClose, 300); // Wait for exit animation
 	}
 
@@ -636,6 +707,7 @@
 </script>
 
 {#if visible}
+<div use:portalToBody>
 	<!-- Backdrop -->
 	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 	<div
@@ -646,7 +718,6 @@
 	<!-- Fullscreen Panel -->
 	<div
 		class="fullscreen-panel"
-		transition:slideUp={{ duration: 300 }}
 		style="{swipeTranslateX > 0 ? `transform: translateX(${swipeTranslateX}px);` : ''} {swipeTransitioning ? 'transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''} {swipeDragging ? 'will-change: transform;' : ''}"
 		ondragover={handleDragOver}
 		ondragleave={handleDragLeave}
@@ -723,26 +794,20 @@
 			{/if}
 		</div>
 
-		<!-- Quick Action Pills -->
+		<!-- Quick Action Pills (dynamic from state actions config) -->
 		<div class="quick-actions">
-			<button class="action-pill action-complete" onclick={() => onAction('complete')}>
-				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-				</svg>
-				Complete
-			</button>
-			<button class="action-pill action-pause" onclick={() => onAction('pause')}>
-				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
-				</svg>
-				Pause
-			</button>
-			<button class="action-pill action-interrupt" onclick={() => handleSendInput('ctrl-c', 'key')}>
-				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-				</svg>
-				Interrupt
-			</button>
+			{#each stateActions as action (action.id)}
+				<button
+					class="action-pill {getPillColorClass(action.variant)}"
+					onclick={() => executePillAction(action)}
+					title={action.description || action.label}
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+						<path stroke-linecap="round" stroke-linejoin="round" d={action.icon} />
+					</svg>
+					{action.label}
+				</button>
+			{/each}
 		</div>
 
 		<!-- Input Bar -->
@@ -830,6 +895,7 @@
 			</div>
 		</div>
 	</div>
+</div>
 {/if}
 
 <style>
@@ -838,6 +904,12 @@
 		inset: 0;
 		background: oklch(0 0 0 / 0.6);
 		z-index: 49;
+		animation: fullscreen-fade-in 0.3s ease forwards;
+	}
+
+	@keyframes fullscreen-fade-in {
+		from { opacity: 0; }
+		to { opacity: 1; }
 	}
 
 	.fullscreen-panel {
@@ -847,6 +919,12 @@
 		display: flex;
 		flex-direction: column;
 		background: oklch(0.14 0.01 250);
+		animation: fullscreen-slide-up 0.3s cubic-bezier(0.33, 1, 0.68, 1) forwards;
+	}
+
+	@keyframes fullscreen-slide-up {
+		from { transform: translateY(100%); }
+		to { transform: translateY(0); }
 	}
 
 	/* Top Bar */
@@ -1035,6 +1113,15 @@
 
 	.action-interrupt:active {
 		background: oklch(0.25 0.06 25);
+	}
+
+	.action-info {
+		border-color: oklch(0.45 0.12 240 / 0.5);
+		color: oklch(0.70 0.15 240);
+	}
+
+	.action-info:active {
+		background: oklch(0.25 0.08 240);
 	}
 
 	/* Input Bar */

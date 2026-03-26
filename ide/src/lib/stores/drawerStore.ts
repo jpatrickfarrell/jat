@@ -326,3 +326,6 @@ export function setFileChangesCount(count: number) {
 export function getFileChangesCount(): number {
 	return get(fileChangesCount);
 }
+
+// Mobile fullscreen overlay state (hides MobileDock when open)
+export const isMobileFullscreenOpen = writable(false);

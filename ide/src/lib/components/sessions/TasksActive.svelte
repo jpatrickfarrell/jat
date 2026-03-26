@@ -1204,7 +1204,14 @@
 			{@const effectiveState = rawEffectiveState === 'completing' && sessionTask?.status === 'closed' ? 'completed' : rawEffectiveState}
 			{@const statusDotColor = getSessionStateVisual(effectiveState).accent}
 			{@const derivedProject = agentProjects.get(sessionAgentName) || session.project || null}
+			{@const rowProjectColor = sessionTask?.id
+				? getProjectColorReactive(sessionTask.id)
+				: derivedProject
+					? getProjectColorReactive(`${derivedProject}-x`)
+					: null
+			}
 			{@const elapsed = getElapsedFormatted(session.created)}
+			{@const isPlanning = effectiveState === 'planning'}
 			{@const isExpanded = expandedSession === session.name}
 			{@const isCollapsing = collapsingSession === session.name}
 
@@ -1235,7 +1242,7 @@
 					class="mobile-session-card"
 					class:attached={session.attached}
 					class:swiping={isSwiping}
-					style="{isExiting ? 'pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
+					style="{rowProjectColor ? `border-left: 3px solid ${rowProjectColor};` : isPlanning ? 'border-left: 3px solid oklch(0.68 0.20 270);' : ''}{isExiting ? ' pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
 					onclick={() => !isExiting && !swipeState?.swiping && (fullscreenSession = session.name)}
 					ontouchstart={(e) => handleSwipeTouchStart(e, session.name)}
 					ontouchmove={handleSwipeTouchMove}
@@ -3130,17 +3137,17 @@
 		will-change: transform;
 	}
 
-	.mobile-session-card:first-child {
+	/*.mobile-session-card:first-child {
 		border-radius: 8px 8px 0 0;
-	}
+	}*/
 
 	.mobile-session-card:last-child {
-		border-radius: 0 0 8px 8px;
+		/*border-radius: 0 0 8px 8px;*/
 		border-bottom: 1px solid oklch(0.25 0.02 250);
 	}
 
 	.mobile-session-card:only-child {
-		border-radius: 8px;
+		/*border-radius: 8px;*/
 		border-bottom: 1px solid oklch(0.25 0.02 250);
 	}
 
@@ -3282,7 +3289,7 @@
 		font-weight: 700;
 		font-size: 0.625rem;
 		padding: 0 0.25rem;
-		border-radius: 3px;
+		/*border-radius: 3px;*/
 	}
 
 	.mobile-priority-0 {
@@ -3320,16 +3327,16 @@
 	}
 
 	.swipe-container:first-child .mobile-session-card {
-		border-radius: 8px 8px 0 0;
+		/*border-radius: 8px 8px 0 0;*/
 	}
 
 	.swipe-container:last-child .mobile-session-card {
-		border-radius: 0 0 8px 8px;
+		/*border-radius: 0 0 8px 8px;*/
 		border-bottom: 1px solid oklch(0.25 0.02 250);
 	}
 
 	.swipe-container:only-child .mobile-session-card {
-		border-radius: 8px;
+		/*border-radius: 8px;*/
 		border-bottom: 1px solid oklch(0.25 0.02 250);
 	}
 
@@ -3425,7 +3432,7 @@
 		background: oklch(0.14 0.01 250);
 		border: 1px solid oklch(0.25 0.02 250);
 		border-top: none;
-		border-radius: 0 0 8px 8px;
+		/*border-radius: 0 0 8px 8px;*/
 		margin-top: -0.5rem;
 		padding-top: 0.5rem;
 		overflow: hidden;

@@ -8,6 +8,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
+	import { DEFAULT_ROUTE } from '$lib/config/constants';
 	import CreateForm from '$lib/components/tasks/CreateForm.svelte';
 	import CreatePaste from '$lib/components/tasks/CreatePaste.svelte';
 	import CreateTemplate from '$lib/components/tasks/CreateTemplate.svelte';
@@ -57,7 +58,7 @@
 	});
 
 	function handleTasksCreated() {
-		goto('/tasks');
+		goto(DEFAULT_ROUTE);
 	}
 
 	const tabs: { id: Tab; label: string; icon: string; desc: string; available: boolean }[] = [
@@ -74,12 +75,12 @@
 	<div class="workspace-header">
 		<button
 			class="btn btn-sm btn-ghost gap-1.5"
-			onclick={() => goto('/tasks')}
+			onclick={() => goto(DEFAULT_ROUTE)}
 		>
 			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
 				<path fill-rule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clip-rule="evenodd" />
 			</svg>
-			Back to Tasks
+			Back
 		</button>
 		<h1 class="text-lg font-bold">Create Tasks</h1>
 	</div>

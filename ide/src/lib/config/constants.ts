@@ -6,6 +6,16 @@
  */
 
 // =============================================================================
+// ROUTING
+// =============================================================================
+
+/**
+ * Default route for the IDE. Unknown routes redirect here.
+ * Change this single value to update the default landing page everywhere.
+ */
+export const DEFAULT_ROUTE = '/mobile';
+
+// =============================================================================
 // TIMEOUTS (in milliseconds)
 // =============================================================================
 

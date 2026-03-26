@@ -7,6 +7,7 @@
 	import FirstTaskPrompt from '$lib/components/onboarding/FirstTaskPrompt.svelte';
 	import AutonomousSetupStep from '$lib/components/onboarding/AutonomousSetupStep.svelte';
 	import { openProjectDrawer, projectCreatedSignal } from '$lib/stores/drawerStore';
+	import { DEFAULT_ROUTE } from '$lib/config/constants';
 	import {
 		getPrerequisiteResults,
 		setPrerequisiteResults,
@@ -117,11 +118,11 @@
 
 	function handleSkip() {
 		skipSetup();
-		goto('/tasks', { replaceState: true });
+		goto(DEFAULT_ROUTE, { replaceState: true });
 	}
 
 	function handleGoToTasks() {
-		goto('/tasks', { replaceState: true });
+		goto(DEFAULT_ROUTE, { replaceState: true });
 	}
 
 	function handleCreateFirstTask() {

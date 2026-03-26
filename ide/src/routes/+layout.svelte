@@ -185,8 +185,17 @@
 	const taskCounts = $derived(getTaskCountByProject(allTasks, 'open'));
 
 
-	// Sync selected project: URL param > localStorage > first config project
+	// Sync selected project: URL param > localStorage > first favorite > first config project
+	// The "first favorite" is favoriteChipOrder[0] — the drag-drop ordered TopBar chip list.
 	let projectInitialized = false;
+
+	/** Pick the best default project: first favorite chip, then first config project */
+	function getDefaultProject(): string {
+		const firstFav = favoriteChipOrder.find(p => configProjects.includes(p));
+		if (firstFav) return firstFav;
+		return configProjects[0];
+	}
+
 	$effect(() => {
 		const projectParam = $page.url.searchParams.get('project');
 		if (projectParam && configProjects.includes(projectParam)) {
@@ -194,12 +203,12 @@
 			selectedProject = projectParam;
 			projectInitialized = true;
 		} else if (!projectInitialized && configProjects.length > 0) {
-			// First load: try localStorage, fall back to first project
+			// First load: try localStorage, fall back to first favorite, then first project
 			const stored = getActiveProject();
 			if (stored && configProjects.includes(stored)) {
 				selectedProject = stored;
 			} else {
-				selectedProject = configProjects[0];
+				selectedProject = getDefaultProject();
 			}
 			projectInitialized = true;
 			// Set URL param for the restored project
@@ -210,7 +219,7 @@
 			// URL param missing (e.g., sidebar link to /tasks without ?project=)
 			// Restore it so child pages that read from URL get the project.
 			if (!configProjects.includes(selectedProject)) {
-				selectedProject = configProjects[0];
+				selectedProject = getDefaultProject();
 			}
 			const url = new URL(window.location.href);
 			url.searchParams.set('project', selectedProject);

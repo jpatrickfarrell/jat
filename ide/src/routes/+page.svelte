@@ -2,8 +2,9 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { isSetupSkipped } from '$lib/stores/onboardingStore.svelte';
+	import { DEFAULT_ROUTE } from '$lib/config/constants';
 
-	// Smart redirect: /setup if no projects, /tasks if projects exist
+	// Smart redirect: /setup if no projects, DEFAULT_ROUTE if projects exist
 	onMount(async () => {
 		try {
 			const response = await fetch('/api/projects?visible=true');
@@ -13,11 +14,10 @@
 			if (projects.length === 0 && !isSetupSkipped()) {
 				goto('/setup', { replaceState: true });
 			} else {
-				goto('/tasks', { replaceState: true });
+				goto(DEFAULT_ROUTE, { replaceState: true });
 			}
 		} catch {
-			// On error, fall back to /tasks
-			goto('/tasks', { replaceState: true });
+			goto(DEFAULT_ROUTE, { replaceState: true });
 		}
 	});
 </script>

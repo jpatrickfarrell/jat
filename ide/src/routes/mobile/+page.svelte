@@ -16,8 +16,8 @@
 	import TasksPaused from "$lib/components/sessions/TasksPaused.svelte";
 	import TasksOpen from "$lib/components/sessions/TasksOpen.svelte";
 	import ProjectNotes from "$lib/components/sessions/ProjectNotes.svelte";
-	import TaskIdBadge from "$lib/components/TaskIdBadge.svelte";
 	import WorkingAgentBadge from "$lib/components/WorkingAgentBadge.svelte";
+	import EpicBar from "$lib/components/sessions/EpicBar.svelte";
 	import { fetchAndGetProjectColors } from "$lib/utils/projectColors";
 	import { openTaskDetailDrawer, openProjectDrawer, projectCreatedSignal, openTaskDrawer } from "$lib/stores/drawerStore";
 	import {
@@ -501,6 +501,15 @@
 	// Get epic task by ID
 	function getEpicTask(epicId: string): Task | undefined {
 		return allTasks.find((t) => t.id === epicId);
+	}
+
+	// Get epic progress: { closed, total } across ALL children
+	function getEpicProgress(epicId: string): { closed: number; total: number } {
+		const children = allTasks.filter(
+			(t) => t.id !== epicId && getParentEpicId(t.id, epicChildMap) === epicId
+		);
+		const closed = children.filter((t) => t.status === "closed").length;
+		return { closed, total: children.length };
 	}
 
 	// Toggle epic collapse
@@ -1690,6 +1699,7 @@
 
 								{#if epicId && epicSessions.length > 0}
 									<!-- Epic Group - only show if there are active sessions -->
+									{@const progress = getEpicProgress(epicId)}
 									<div class="epic-group">
 										<button
 											class="epic-header"
@@ -1716,38 +1726,14 @@
 													d="M19 9l-7 7-7-7"
 												/>
 											</svg>
-											<TaskIdBadge
-												task={epic || {
-													id: epicId,
-													status: "open",
-													issue_type: "epic",
-												}}
-												size="sm"
+											<EpicBar
+												{epicId}
+												title={epic?.title || "Untitled Epic"}
+												{progress}
+												countLabel="{epicSessions.length} active"
+												agents={epicSessions.map(s => ({ name: getAgentName(s.name) }))}
+												AgentBadge={WorkingAgentBadge}
 											/>
-											<span class="epic-title epic-title-clickable"
-												role="button"
-												tabindex="-1"
-												onclick={(e) => { e.stopPropagation(); openTaskDetailDrawer(epicId); }}
-												onkeydown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); openTaskDetailDrawer(epicId); } }}
-												title="Click to edit epic"
-												>{epic?.title ||
-													"Untitled Epic"}</span
-											>
-											<div class="epic-agents">
-												{#each epicSessions as session}
-													<WorkingAgentBadge
-														name={getAgentName(
-															session.name,
-														)}
-														size={18}
-														variant="avatar"
-														isWorking={true}
-													/>
-												{/each}
-											</div>
-											<span class="epic-count"
-												>{epicSessions.length} active</span
-											>
 										</button>
 
 										{#if isExpanded}
@@ -2106,6 +2092,7 @@
 									{@const launchableCount = launchableIds.size}
 									{@const isSwarmHovered = swarmHoveredEpicId === epicId}
 									{@const isSwarmSpawning = swarmSpawningEpicId === epicId}
+									{@const progress = getEpicProgress(epicId)}
 									<div class="epic-group">
 										<div class="epic-header-row">
 										<button
@@ -2132,26 +2119,11 @@
 													d="M19 9l-7 7-7-7"
 												/>
 											</svg>
-											<TaskIdBadge
-												task={epic || {
-													id: epicId,
-													status: "open",
-													issue_type: "epic",
-												}}
-												size="sm"
+											<EpicBar
+												{epicId}
+												title={epic?.title || "Untitled Epic"}
+												{progress}
 											/>
-											<span class="epic-title epic-title-clickable"
-												role="button"
-												tabindex="-1"
-												onclick={(e) => { e.stopPropagation(); openTaskDetailDrawer(epicId); }}
-												onkeydown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); openTaskDetailDrawer(epicId); } }}
-												title="Click to edit epic"
-												>{epic?.title ||
-													"Untitled Epic"}</span
-											>
-											<span class="epic-count"
-												>{epicTasks.length} open</span
-											>
 										</button>
 										{#if launchableCount > 0}
 											<button

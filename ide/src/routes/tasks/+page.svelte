@@ -17,6 +17,7 @@
 	import TasksOpen from "$lib/components/sessions/TasksOpen.svelte";
 	import ProjectNotes from "$lib/components/sessions/ProjectNotes.svelte";
 	import WorkingAgentBadge from "$lib/components/WorkingAgentBadge.svelte";
+	import EpicBar from "$lib/components/sessions/EpicBar.svelte";
 	import { fetchAndGetProjectColors } from "$lib/utils/projectColors";
 	import { openTaskDetailDrawer, openProjectDrawer, projectCreatedSignal, openTaskDrawer } from "$lib/stores/drawerStore";
 	import {
@@ -1761,47 +1762,14 @@
 													d="M19 9l-7 7-7-7"
 												/>
 											</svg>
-											<span class="epic-id" style="color: oklch(0.6 0.18 300);">
-												<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-												<span
-													class="epic-id-link"
-													onclick={(e) => { e.stopPropagation(); openTaskDetailDrawer(epicId); }}
-													title={epicId}
-												>{epicId}</span>
-											</span>
-											<span class="epic-dot">·</span>
-											<span class="epic-title epic-title-clickable"
-												role="button"
-												tabindex="-1"
-												onclick={(e) => { e.stopPropagation(); openTaskDetailDrawer(epicId); }}
-												onkeydown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); openTaskDetailDrawer(epicId); } }}
-												title="Click to edit epic"
-												>{epic?.title ||
-													"Untitled Epic"}</span
-											>
-											<div class="epic-agents">
-												{#each epicSessions as session}
-													<WorkingAgentBadge
-														name={getAgentName(
-															session.name,
-														)}
-														size={18}
-														variant="avatar"
-														isWorking={true}
-													/>
-												{/each}
-											</div>
-											{#if progress.total > 0}
-												<div class="epic-progress" title="{progress.closed}/{progress.total} complete">
-													<div class="epic-progress-bar">
-														<div class="epic-progress-fill" style="width: {(progress.closed / progress.total) * 100}%"></div>
-													</div>
-													<span class="epic-progress-text">{progress.closed}/{progress.total}</span>
-												</div>
-											{/if}
-											<span class="epic-count"
-												>{epicSessions.length} active</span
-											>
+											<EpicBar
+												{epicId}
+												title={epic?.title || "Untitled Epic"}
+												{progress}
+												countLabel="{epicSessions.length} active"
+												agents={epicSessions.map(s => ({ name: getAgentName(s.name) }))}
+												AgentBadge={WorkingAgentBadge}
+											/>
 										</button>
 
 										{#if isExpanded}
@@ -2187,32 +2155,11 @@
 													d="M19 9l-7 7-7-7"
 												/>
 											</svg>
-											<span class="epic-id" style="color: oklch(0.6 0.18 300);">
-												<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-												<span
-													class="epic-id-link"
-													onclick={(e) => { e.stopPropagation(); openTaskDetailDrawer(epicId); }}
-													title={epicId}
-												>{epicId}</span>
-											</span>
-											<span class="epic-dot">·</span>
-											<span class="epic-title epic-title-clickable"
-												role="button"
-												tabindex="-1"
-												onclick={(e) => { e.stopPropagation(); openTaskDetailDrawer(epicId); }}
-												onkeydown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); openTaskDetailDrawer(epicId); } }}
-												title="Click to edit epic"
-												>{epic?.title ||
-													"Untitled Epic"}</span
-											>
-											{#if progress.total > 0}
-												<div class="epic-progress" title="{progress.closed}/{progress.total} complete">
-													<div class="epic-progress-bar">
-														<div class="epic-progress-fill" style="width: {(progress.closed / progress.total) * 100}%"></div>
-													</div>
-													<span class="epic-progress-text">{progress.closed}/{progress.total}</span>
-												</div>
-											{/if}
+											<EpicBar
+												{epicId}
+												title={epic?.title || "Untitled Epic"}
+												{progress}
+											/>
 										</button>
 										{#if launchableCount > 0}
 											<button
@@ -2854,61 +2801,6 @@
 	.epic-title-clickable:hover {
 		background: oklch(0.85 0.02 250 / 0.12);
 		color: oklch(0.92 0.04 250);
-	}
-
-	.epic-id {
-		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
-		font-size: 0.75rem;
-		font-weight: 500;
-		white-space: nowrap;
-		flex-shrink: 0;
-	}
-
-	.epic-id-link {
-		cursor: pointer;
-		border-radius: 0.25rem;
-		padding: 0.125rem 0.375rem;
-		transition: background-color 0.15s;
-	}
-
-	.epic-id-link:hover {
-		background: oklch(0.6 0.18 300 / 0.15);
-	}
-
-	.epic-dot {
-		color: oklch(0.45 0.02 250);
-		font-size: 0.75rem;
-		flex-shrink: 0;
-	}
-
-	.epic-progress {
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
-		flex-shrink: 0;
-	}
-
-	.epic-progress-bar {
-		width: 3rem;
-		height: 0.3125rem;
-		border-radius: 9999px;
-		background: oklch(0.25 0.02 250);
-		overflow: hidden;
-	}
-
-	.epic-progress-fill {
-		height: 100%;
-		border-radius: 9999px;
-		background: oklch(0.65 0.18 145);
-		transition: width 0.3s ease;
-	}
-
-	.epic-progress-text {
-		font-size: 0.6875rem;
-		font-weight: 500;
-		color: oklch(0.6 0.02 250);
-		font-variant-numeric: tabular-nums;
-		white-space: nowrap;
 	}
 
 	.epic-count {

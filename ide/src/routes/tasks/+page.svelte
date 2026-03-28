@@ -32,6 +32,7 @@
 		type DayGroup,
 		groupTasksByDay,
 	} from "$lib/utils/completedTaskHelpers";
+	import { isHumanTask } from "$lib/utils/badgeHelpers";
 
 	interface TmuxSession {
 		name: string;
@@ -1300,7 +1301,7 @@
 		for (const task of projectTasks) {
 			if (task.status !== "open" || task.issue_type === "epic") continue;
 			// Skip human tasks - can't be automated
-			if (task.issue_type === "human" || task.labels?.some(l => l === "human" || l.startsWith("human:"))) continue;
+			if (isHumanTask(task)) continue;
 			const parentEpic = getParentEpicId(task.id, epicChildMap);
 			if (parentEpic !== epicId) continue;
 			// Check if blocked

@@ -2702,7 +2702,7 @@
 					<input
 						type="text"
 						class="input input-bordered w-full font-mono text-sm"
-						placeholder="e.g. feedback_reports"
+						placeholder="e.g. project_tasks"
 						bind:value={callbackReferenceTable}
 					/>
 				</div>

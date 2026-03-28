@@ -193,7 +193,7 @@ export async function GET() {
 
 		return json({ reports }, { headers: CORS_HEADERS });
 	} catch (err) {
-		console.error('[feedback-reports] Error:', err);
+		console.error('[project-tasks] Error:', err);
 		return json(
 			{ reports: [], error: err.message || 'Failed to fetch reports' },
 			{ status: 500, headers: CORS_HEADERS }

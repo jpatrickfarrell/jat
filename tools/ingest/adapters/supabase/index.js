@@ -48,7 +48,7 @@ export const metadata = {
       label: 'Table Name',
       type: 'string',
       required: true,
-      placeholder: 'feedback_reports',
+      placeholder: 'project_tasks',
       helpText: 'The table to watch for new rows'
     },
 

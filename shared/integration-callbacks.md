@@ -117,7 +117,7 @@ Add a `callback` section to your integration source in `~/.config/jat/integratio
   "project": "myapp",
   "secretName": "my-supabase-service-role",
   "projectUrl": "https://xxxxxxxxxxxx.supabase.co",
-  "table": "feedback_reports",
+  "table": "project_tasks",
   "statusColumn": "jat_status",
   "statusNew": "new",
   "statusDone": "ingested",
@@ -132,7 +132,7 @@ Add a `callback` section to your integration source in `~/.config/jat/integratio
       "in_progress": "in_progress",
       "closed": "completed"
     },
-    "referenceTable": "feedback_reports",
+    "referenceTable": "project_tasks",
     "referenceIdFrom": "item_id"
   }
 }
@@ -252,7 +252,7 @@ const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 
 // Tables and columns the webhook can update
 const TABLE_CONFIG: Record<string, { statusCol: string; taskIdCol: string }> = {
-  feedback_reports: { statusCol: "status", taskIdCol: "jat_task_id" },
+  project_tasks: { statusCol: "status", taskIdCol: "jat_task_id" },
   // Add more tables here as needed
 }
 
@@ -323,19 +323,19 @@ Your external table needs a column for each status value in `statusMapping`, plu
 
 ```sql
 -- User-facing status column (updated by jat-webhook)
-ALTER TABLE feedback_reports
+ALTER TABLE project_tasks
   ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'submitted'
     CHECK (status IN ('submitted', 'in_progress', 'completed', 'wontfix', 'closed'));
 
 -- Developer notes (passed through from JAT on completion)
-ALTER TABLE feedback_reports
+ALTER TABLE project_tasks
   ADD COLUMN IF NOT EXISTS dev_notes TEXT;
 
 -- User response columns (for accept/reject flow)
-ALTER TABLE feedback_reports
+ALTER TABLE project_tasks
   ADD COLUMN IF NOT EXISTS user_response TEXT
     CHECK (user_response IN ('accepted', 'rejected'));
-ALTER TABLE feedback_reports
+ALTER TABLE project_tasks
   ADD COLUMN IF NOT EXISTS user_response_at TIMESTAMPTZ;
 ```
 
@@ -369,7 +369,7 @@ The callback endpoint sends this payload to `callback.url`:
 {
   "source": "jat",
   "event": "status_changed",
-  "reference_table": "feedback_reports",
+  "reference_table": "project_tasks",
   "reference_id": "f402c915-7412-4e5e-a2eb-f94b7c68be54",
   "data": {
     "status": "in_progress",
@@ -438,7 +438,7 @@ curl -X POST "https://xxxxxxxxxxxx.supabase.co/functions/v1/jat-webhook" \
   -d '{
     "source": "jat",
     "event": "status_changed",
-    "reference_table": "feedback_reports",
+    "reference_table": "project_tasks",
     "reference_id": "uuid-of-record",
     "data": { "status": "in_progress", "task_id": "myapp-abc" }
   }'

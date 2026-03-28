@@ -39,10 +39,10 @@ Any column added in a `1.x` release **must** be nullable with no required defaul
 
 ```sql
 -- CORRECT: safe for 1.x (consuming projects won't break without migration)
-ALTER TABLE feedback_reports ADD COLUMN org_id TEXT;
+ALTER TABLE project_tasks ADD COLUMN org_id TEXT;
 
 -- WRONG: non-nullable without default = breaking = must be 2.0.0
-ALTER TABLE feedback_reports ADD COLUMN org_id TEXT NOT NULL;
+ALTER TABLE project_tasks ADD COLUMN org_id TEXT NOT NULL;
 ```
 
 If a new column is required at insert time, that's a breaking change — bump to the next major.

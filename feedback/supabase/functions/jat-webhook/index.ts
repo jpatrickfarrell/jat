@@ -31,12 +31,17 @@ const webhookSecret = Deno.env.get("JAT_WEBHOOK_SECRET") || supabaseServiceKey
  * {
  *   source: "jat",
  *   event: "status_changed" | "task_closed",
- *   reference_table: "feedback_reports",
+ *   reference_table: "project_tasks",
  *   reference_id: "uuid-of-row",
  *   data: {
  *     status: "in_progress" | "completed" | ...,
  *     task_id: "myproject-abc",
- *     notes?: "optional developer note"
+ *     notes?: "optional developer note",
+ *     issue_type?: "bug" | "feature" | "task" | "epic",
+ *     assignee?: "agent or user name",
+ *     labels?: ["label1", "label2"],
+ *     due_date?: "2026-04-01T00:00:00Z",
+ *     source?: "jat"
  *   }
  * }
  *
@@ -52,7 +57,7 @@ const webhookSecret = Deno.env.get("JAT_WEBHOOK_SECRET") || supabaseServiceKey
  *       "in_progress": "in_progress",
  *       "closed": "completed"
  *     },
- *     "referenceTable": "feedback_reports",
+ *     "referenceTable": "project_tasks",
  *     "referenceIdFrom": "item_id"
  *   }
  * }
@@ -67,12 +72,19 @@ interface WebhookPayload {
     status?: string
     task_id?: string
     notes?: string
+    issue_type?: string
+    assignee?: string
+    labels?: string[]
+    due_date?: string
+    source?: string
   }
 }
 
 // Tables and the columns that JAT is allowed to update.
 // Add more tables here if you want JAT to sync status for other record types.
+// "feedback_reports" kept as alias for backward compat with pre-v3 callers.
 const TABLE_CONFIG: Record<string, { statusCol: string; taskIdCol: string }> = {
+  project_tasks: { statusCol: "status", taskIdCol: "jat_task_id" },
   feedback_reports: { statusCol: "status", taskIdCol: "jat_task_id" },
 }
 
@@ -127,11 +139,19 @@ Deno.serve(async (req) => {
     )
   }
 
+  // Resolve actual table name — "feedback_reports" alias maps to "project_tasks"
+  const actualTable = reference_table === "feedback_reports" ? "project_tasks" : reference_table
+
   // Build the update object from the payload fields
   const update: Record<string, unknown> = {}
   if (data.status) update[config.statusCol] = data.status
   if (data.task_id) update[config.taskIdCol] = data.task_id
   if (data.notes) update.dev_notes = data.notes
+  if (data.issue_type) update.issue_type = data.issue_type
+  if (data.assignee) update.assignee = data.assignee
+  if (data.labels) update.labels = data.labels
+  if (data.due_date) update.due_date = data.due_date
+  if (data.source) update.source = data.source
 
   if (Object.keys(update).length === 0) {
     return new Response(
@@ -142,14 +162,14 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
   const result = await supabase
-    .from(reference_table)
+    .from(actualTable)
     .update(update)
     .eq("id", reference_id)
     .select("id")
 
   if (result.error) {
     console.error(`JAT webhook failed: ${result.error.message}`, {
-      reference_table,
+      table: actualTable,
       reference_id,
       update,
     })
@@ -160,11 +180,11 @@ Deno.serve(async (req) => {
   }
 
   if (!result.data || result.data.length === 0) {
-    console.warn(`JAT webhook: no rows matched ${reference_table}[${reference_id}]`, update)
+    console.warn(`JAT webhook: no rows matched ${actualTable}[${reference_id}]`, update)
     return new Response(
       JSON.stringify({
-        error: `No rows matched: ${reference_table} id=${reference_id}`,
-        table: reference_table,
+        error: `No rows matched: ${actualTable} id=${reference_id}`,
+        table: actualTable,
         id: reference_id,
         rowsAffected: 0,
       }),
@@ -172,12 +192,12 @@ Deno.serve(async (req) => {
     )
   }
 
-  console.log(`JAT webhook: ${event} → ${reference_table}[${reference_id}] (${result.data.length} row(s))`, update)
+  console.log(`JAT webhook: ${event} → ${actualTable}[${reference_id}] (${result.data.length} row(s))`, update)
 
   return new Response(
     JSON.stringify({
       success: true,
-      table: reference_table,
+      table: actualTable,
       id: reference_id,
       updated: update,
       rowsAffected: result.data.length,

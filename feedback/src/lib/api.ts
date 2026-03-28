@@ -33,6 +33,7 @@ export interface ReportSummary {
   id: string;
   title: string;
   description: string;
+  /** source_type: bug, enhancement, other (renamed from `type` in v3.0.0) */
   type: string;
   priority: string;
   status: string;
@@ -43,6 +44,14 @@ export interface ReportSummary {
   screenshot_urls: string[] | null;
   thread: ThreadEntry[] | null;
   created_at: string;
+  /** Source of the item: feedback, jat, or manual (v3.0.0+) */
+  source?: 'feedback' | 'jat' | 'manual';
+  /** Issue classification: bug, feature, task, epic (v3.0.0+) */
+  issue_type?: string;
+  /** Assigned agent or person (v3.0.0+) */
+  assignee?: string | null;
+  /** Labels for categorization (v3.0.0+) */
+  labels?: string[] | null;
 }
 
 export async function fetchReports(endpoint: string): Promise<{ reports: ReportSummary[]; error?: string }> {

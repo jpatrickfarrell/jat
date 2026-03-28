@@ -33,25 +33,38 @@
   let rejectElements = $state<Array<{ tagName: string; className: string; id: string; selector: string; textContent: string }>>([]);
   let capturingScreenshot = $state(false);
 
-  // Subtab state
+  // Status subtab state
   // In Progress = all active/actionable items (submitted, in_progress, rejected, completed, wontfix)
   // Done = fully resolved / archival (accepted, closed)
   type SubTab = 'active' | 'done';
   let activeSubTab = $state<SubTab>('active');
 
-  // Filter reports by subtab
+  // Source filter: All | Feedback | Tasks
+  type SourceFilter = 'all' | 'feedback' | 'jat';
+  let sourceFilter = $state<SourceFilter>('all');
+
+  // Filter reports by source, then by status subtab
+  let sourceFilteredReports = $derived.by(() => {
+    if (sourceFilter === 'all') return reports;
+    return reports.filter(r => (r.source || 'feedback') === sourceFilter);
+  });
+
   let filteredReports = $derived.by(() => {
     if (activeSubTab === 'active') {
-      return reports.filter(r => ['submitted', 'in_progress', 'rejected', 'completed', 'wontfix'].includes(r.status));
+      return sourceFilteredReports.filter(r => ['submitted', 'in_progress', 'rejected', 'completed', 'wontfix'].includes(r.status));
     } else {
-      // accepted, closed = fully resolved
-      return reports.filter(r => r.status === 'accepted' || r.status === 'closed');
+      return sourceFilteredReports.filter(r => r.status === 'accepted' || r.status === 'closed');
     }
   });
 
-  // Counts for subtab badges
-  let activeCount = $derived(reports.filter(r => ['submitted', 'in_progress', 'rejected', 'completed', 'wontfix'].includes(r.status)).length);
-  let doneCount = $derived(reports.filter(r => r.status === 'accepted' || r.status === 'closed').length);
+  // Counts for subtab badges (respect source filter)
+  let activeCount = $derived(sourceFilteredReports.filter(r => ['submitted', 'in_progress', 'rejected', 'completed', 'wontfix'].includes(r.status)).length);
+  let doneCount = $derived(sourceFilteredReports.filter(r => r.status === 'accepted' || r.status === 'closed').length);
+
+  // Source counts for filter pills
+  let feedbackCount = $derived(reports.filter(r => (r.source || 'feedback') === 'feedback').length);
+  let taskCount = $derived(reports.filter(r => r.source === 'jat').length);
+  let hasMultipleSources = $derived(feedbackCount > 0 && taskCount > 0);
 
   function renderMarkdown(text: string): string {
     if (!text) return '';
@@ -216,9 +229,13 @@
     return colors[status] || '#6b7280';
   }
 
-  function typeIcon(type: string): string {
-    if (type === 'bug') return '\u{1F41B}';
-    if (type === 'enhancement') return '\u{2728}';
+  function typeIcon(report: ReportSummary): string {
+    // Use issue_type if available (v3.0.0+), fall back to source_type
+    const t = report.issue_type || report.type;
+    if (t === 'bug') return '\u{1F41B}';
+    if (t === 'enhancement' || t === 'feature') return '\u{2728}';
+    if (t === 'task') return '\u{2705}';
+    if (t === 'epic') return '\u{1F3AF}';
     return '\u{1F4DD}';
   }
 
@@ -238,6 +255,21 @@
 </script>
 
 <div class="request-list">
+  <!-- Source filter (only shown when items from multiple sources exist) -->
+  {#if hasMultipleSources}
+    <div class="source-filters">
+      <button class="source-pill" class:active={sourceFilter === 'all'} onclick={() => sourceFilter = 'all'}>
+        All <span class="source-pill-count">{reports.length}</span>
+      </button>
+      <button class="source-pill" class:active={sourceFilter === 'feedback'} onclick={() => sourceFilter = 'feedback'}>
+        Feedback <span class="source-pill-count">{feedbackCount}</span>
+      </button>
+      <button class="source-pill" class:active={sourceFilter === 'jat'} onclick={() => sourceFilter = 'jat'}>
+        Tasks <span class="source-pill-count">{taskCount}</span>
+      </button>
+    </div>
+  {/if}
+
   <!-- Subtabs -->
   <div class="subtabs">
     <button class="subtab" class:active={activeSubTab === 'active'} onclick={() => activeSubTab = 'active'}>
@@ -279,7 +311,7 @@
           <div class="report-card" data-card-id={report.id} class:awaiting={report.status === 'completed'} class:expanded={expandedCardId === report.id}>
             <!-- Collapsed header (always visible, clickable) -->
             <button class="card-toggle" onclick={() => toggleCard(report.id)}>
-              <span class="report-type">{typeIcon(report.type)}</span>
+              <span class="report-type">{typeIcon(report)}</span>
               <span class="report-title">{report.title}</span>
               <span class="report-status" style="background: {statusColor(report.status)}20; color: {statusColor(report.status)}; border-color: {statusColor(report.status)}40;">
                 {statusLabel(report.status)}
@@ -500,6 +532,42 @@
     overflow: hidden;
     flex: 1;
     min-height: 0;
+  }
+
+  /* Source filters */
+  .source-filters {
+    display: flex;
+    gap: 4px;
+    padding: 8px 12px 4px;
+    flex-shrink: 0;
+  }
+  .source-pill {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px 8px;
+    background: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 12px;
+    color: #9ca3af;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .source-pill:hover {
+    border-color: #4b5563;
+    color: #d1d5db;
+  }
+  .source-pill.active {
+    background: #3b82f620;
+    border-color: #3b82f640;
+    color: #60a5fa;
+  }
+  .source-pill-count {
+    font-size: 9px;
+    opacity: 0.7;
   }
 
   /* Subtabs */

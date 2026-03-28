@@ -6,7 +6,7 @@ Reports are stored in your Supabase database. The JAT ingest daemon polls for ne
 
 ```
 User clicks "Report Bug" → Widget captures context → POST /api/feedback/report
-  → Supabase feedback_reports table → JAT ingest daemon → JAT task created
+  → Supabase project_tasks table → JAT ingest daemon → JAT task created
 ```
 
 ## Install
@@ -240,7 +240,7 @@ Add tools that only make sense on a specific page:
         },
         handler: async (args) => {
           const { error } = await supabase
-            .from("feedback_reports")
+            .from("project_tasks")
             .update({ status: args.status })
             .eq("id", args.report_id)
           if (error) throw new Error(error.message)
@@ -570,7 +570,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     const reporter = body.metadata?.reporter || {};
 
     const { data: row, error: insertError } = await supabase
-      .from('feedback_reports')
+      .from('project_tasks')
       .insert({
         title: body.title.trim(),
         description: body.description?.trim() || '',
@@ -611,18 +611,21 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 ### Step 3: Run the Supabase Migration
 
-The `feedback_reports` table schema is included in this package. Copy it into your migrations folder and push:
+The `project_tasks` table schema is included in this package. Copy it into your migrations folder and push:
 
 ```bash
-# Copy the migration (rename to match your timestamp convention)
-cp node_modules/jat-feedback/supabase/migrations/1.0.0_feedback_reports.sql \
-   supabase/migrations/$(date +%Y%m%d%H%M%S)_feedback_reports.sql
+# Copy ALL migrations (rename to match your timestamp convention)
+for f in node_modules/jat-feedback/supabase/migrations/*.sql; do
+  base=$(basename "$f" .sql)
+  cp "$f" "supabase/migrations/$(date +%Y%m%d%H%M%S)_feedback_${base}.sql"
+  sleep 1  # ensure unique timestamps
+done
 
 # Push to Supabase
 supabase db push
 ```
 
-**When upgrading jat-feedback:** check `node_modules/jat-feedback/supabase/migrations/` for new versioned files (e.g. `1.1.0_*.sql`) and copy+apply any you haven't run yet.
+**When upgrading jat-feedback:** check `node_modules/jat-feedback/supabase/migrations/` for new versioned files and copy+apply any you haven't run yet. The `3.0.0_rename_to_project_tasks.sql` migration renames `feedback_reports` to `project_tasks`.
 
 ### Step 4: Wire User Context
 
@@ -687,7 +690,7 @@ Add this entry to the `sources` array.
     "priority": 2,
     "labels": ["widget", "feedback"]
   },
-  "table": "feedback_reports",
+  "table": "project_tasks",
   "statusColumn": "status",
   "statusNew": "submitted",
   "taskIdColumn": "jat_task_id",
@@ -718,7 +721,7 @@ Add this entry to the `sources` array.
   },
   "projectUrl": "https://YOUR_SUPABASE_PROJECT_ID.supabase.co",
   "secretName": "YOUR_PROJECT-supabase-service-role",
-  "table": "feedback_reports",
+  "table": "project_tasks",
   "statusColumn": "status",
   "statusNew": "submitted",
   "taskIdColumn": "jat_task_id",
@@ -749,7 +752,7 @@ Add this entry to the `sources` array.
       "in_progress": "in_progress",
       "closed": "completed"
     },
-    "referenceTable": "feedback_reports",
+    "referenceTable": "project_tasks",
     "referenceIdFrom": "item_id"
   },
   "actions": [
@@ -766,7 +769,7 @@ Add this entry to the `sources` array.
       "label": "View in Supabase",
       "description": "Open the original feedback report in Supabase dashboard",
       "type": "link",
-      "urlTemplate": "{projectUrl}/project/default/editor/feedback_reports?filter=id%3Deq.{referenceId}",
+      "urlTemplate": "{projectUrl}/project/default/editor/project_tasks?filter=id%3Deq.{referenceId}",
       "icon": "external-link"
     }
   ]
@@ -781,7 +784,7 @@ The ingest daemon picks up config changes automatically (no restart needed).
 
 ### Step 6: Deploy the JAT Webhook Edge Function (for callbacks)
 
-The `jat-webhook` Supabase Edge Function receives status-change callbacks from JAT and updates your `feedback_reports` rows. It's included in this package — copy it into your project and deploy it.
+The `jat-webhook` Supabase Edge Function receives status-change callbacks from JAT and updates your `project_tasks` rows. It's included in this package — copy it into your project and deploy it.
 
 ```bash
 # Copy the function into your project
@@ -817,7 +820,7 @@ jat ingest status
 # → Should list your project's feedback source
 
 # Submit a test report via the widget, then check:
-# 1. Row appears in feedback_reports table
+# 1. Row appears in project_tasks table
 # 2. JAT task gets created after next poll cycle (pollInterval seconds)
 ```
 
@@ -842,14 +845,22 @@ jat ingest status
 
 ## Column Reference
 
-The `feedback_reports` table columns used by the pipeline:
+The `project_tasks` table columns used by the pipeline:
 
-| Column | Type | Purpose |
-|--------|------|---------|
-| `status` | TEXT | Lifecycle: `submitted` → `in_progress` → `completed` → `accepted` \| `rejected` |
-| `jat_task_id` | TEXT | JAT task ID written back after ingest (e.g., `myapp-abc`) |
-| `rejection_reason` | TEXT | User-provided reason when rejecting a completed report |
-| `dev_notes` | TEXT | Developer notes pushed back via callback |
+| Column | Type | Since | Purpose |
+|--------|------|-------|---------|
+| `status` | TEXT | 1.0.0 | Lifecycle: `submitted` → `in_progress` → `completed` → `accepted` \| `rejected` |
+| `jat_task_id` | TEXT | 1.0.0 | JAT task ID written back after ingest (e.g., `myapp-abc`) |
+| `rejection_reason` | TEXT | 1.0.0 | User-provided reason when rejecting a completed report |
+| `dev_notes` | TEXT | 1.0.0 | Developer notes pushed back via callback |
+| `source_type` | TEXT | 3.0.0 | Original `type` column renamed — `bug`, `enhancement`, `other` |
+| `source` | TEXT | 3.0.0 | Where the item came from: `feedback`, `jat`, `manual` |
+| `issue_type` | TEXT | 3.0.0 | Classification: `bug`, `feature`, `task`, `epic` |
+| `assignee` | TEXT | 3.0.0 | Assigned agent or person |
+| `due_date` | TIMESTAMPTZ | 3.0.0 | Due date for the task |
+| `labels` | TEXT[] | 3.0.0 | Flexible categorization labels |
+| `parent_id` | UUID | 3.0.0 | Self-referential parent for hierarchical tasks |
+| `updated_at` | TIMESTAMPTZ | 3.0.0 | Auto-updated timestamp |
 
 ## Upgrading
 

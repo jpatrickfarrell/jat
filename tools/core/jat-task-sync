@@ -1,0 +1,303 @@
+#!/usr/bin/env bash
+# jat-task-sync — Outbound sync: push JAT local tasks to Supabase project_tasks
+#
+# Usage:
+#   jat-task-sync <task-id>              # Sync a single task (if customer-visible)
+#   jat-task-sync <task-id> --force      # Sync even without customer-visible label
+#   jat-task-sync --help                 # Show help
+#
+# Triggered automatically by `jt update` and `jt close` when a task has the
+# "customer-visible" label. Can also be called manually.
+#
+# Requires: jq, curl, jat-secret, sqlite3
+# Config: integrations.json must have an outbound section on the matching supabase source
+
+set -euo pipefail
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+die() { echo "Error: $*" >&2; exit 1; }
+
+usage() {
+  cat <<'EOF'
+jat-task-sync — Push JAT tasks to Supabase project_tasks
+
+Usage:
+  jat-task-sync <task-id>              Sync task if it has "customer-visible" label
+  jat-task-sync <task-id> --force      Sync regardless of label
+  jat-task-sync --help                 Show this help
+
+The task's project is extracted from the task ID prefix. An outbound config
+must exist in integrations.json for the matching supabase source.
+
+Config example (in integrations.json source):
+  "outbound": {
+    "enabled": true,
+    "label": "customer-visible",
+    "statusMapping": {
+      "open": "submitted",
+      "in_progress": "in_progress",
+      "blocked": "submitted",
+      "closed": "completed"
+    }
+  }
+EOF
+  exit 0
+}
+
+# ── Args ─────────────────────────────────────────────────────────────────────
+
+TASK_ID=""
+FORCE=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --help|-h) usage ;;
+    --force)   FORCE=true; shift ;;
+    *)         [[ -z "$TASK_ID" ]] && TASK_ID="$1"; shift ;;
+  esac
+done
+
+[[ -n "$TASK_ID" ]] || die "Usage: jat-task-sync <task-id> [--force]"
+
+# ── Extract project from task ID ─────────────────────────────────────────────
+
+# Task IDs: "flush-abc", "steelbridge-xyz", "jat-djw9g.5"
+# For child tasks like "jat-djw9g.5", project is "jat"
+# Extract everything before the last hyphen-then-alphanumeric-hash
+extract_project() {
+  local id="$1"
+  # Remove child suffix (.N) first: jat-djw9g.5 → jat-djw9g
+  local base="${id%%.*}"
+  # If there's a dot-suffix in the hash part, we still need the project prefix
+  # Strategy: The project is everything before the LAST hyphen
+  echo "${base%-*}"
+}
+
+PROJECT=$(extract_project "$TASK_ID")
+[[ -n "$PROJECT" ]] || die "Cannot extract project from task ID: $TASK_ID"
+
+# ── Find project .jat/tasks.db ───────────────────────────────────────────────
+
+# Try common project locations
+TASKS_DB=""
+for candidate in "$HOME/code/$PROJECT/.jat/tasks.db" "./.jat/tasks.db"; do
+  if [[ -f "$candidate" ]]; then
+    TASKS_DB="$candidate"
+    break
+  fi
+done
+
+[[ -n "$TASKS_DB" ]] || die "Cannot find tasks.db for project '$PROJECT'"
+
+# ── Load task from local DB ──────────────────────────────────────────────────
+
+TASK_JSON=$(sqlite3 -json "$TASKS_DB" "
+  SELECT t.id, t.title, t.description, t.issue_type, t.priority, t.status,
+         t.assignee, t.due_date, t.close_reason, t.created_at, t.updated_at
+  FROM tasks t
+  WHERE t.id = '$TASK_ID'
+  LIMIT 1;
+" 2>/dev/null) || die "Failed to query task '$TASK_ID'"
+
+[[ "$TASK_JSON" != "[]" && -n "$TASK_JSON" ]] || die "Task not found: $TASK_ID"
+
+# Parse task fields
+TITLE=$(echo "$TASK_JSON" | jq -r '.[0].title // empty')
+DESCRIPTION=$(echo "$TASK_JSON" | jq -r '.[0].description // empty')
+ISSUE_TYPE=$(echo "$TASK_JSON" | jq -r '.[0].issue_type // "task"')
+PRIORITY=$(echo "$TASK_JSON" | jq -r '.[0].priority // 2')
+STATUS=$(echo "$TASK_JSON" | jq -r '.[0].status // "open"')
+ASSIGNEE=$(echo "$TASK_JSON" | jq -r '.[0].assignee // empty')
+DUE_DATE=$(echo "$TASK_JSON" | jq -r '.[0].due_date // empty')
+CLOSE_REASON=$(echo "$TASK_JSON" | jq -r '.[0].close_reason // empty')
+
+# ── Load labels ──────────────────────────────────────────────────────────────
+
+LABELS_JSON=$(sqlite3 -json "$TASKS_DB" "
+  SELECT label FROM labels WHERE issue_id = '$TASK_ID';
+" 2>/dev/null) || LABELS_JSON="[]"
+
+# ── Load integrations config ───���─────────────────────────────────────────────
+
+INTEGRATIONS_FILE="$HOME/.config/jat/integrations.json"
+[[ -f "$INTEGRATIONS_FILE" ]] || die "integrations.json not found at $INTEGRATIONS_FILE"
+
+# Find a supabase source for this project with outbound enabled
+SOURCE_CONFIG=$(jq -c --arg proj "$PROJECT" '
+  .sources[]
+  | select(.type == "supabase" and .project == $proj and .outbound.enabled == true)
+' "$INTEGRATIONS_FILE" 2>/dev/null | head -1)
+
+[[ -n "$SOURCE_CONFIG" ]] || { $FORCE || exit 0; die "No outbound-enabled supabase source found for project '$PROJECT'"; }
+
+# Get the required label from config (default: "customer-visible")
+SYNC_LABEL=$(echo "$SOURCE_CONFIG" | jq -r '.outbound.label // "customer-visible"')
+
+# Check if task has the sync label
+HAS_LABEL=$(echo "$LABELS_JSON" | jq -r --arg lbl "$SYNC_LABEL" '[.[].label] | any(. == $lbl)' 2>/dev/null || echo "false")
+
+if [[ "$HAS_LABEL" != "true" && "$FORCE" != "true" ]]; then
+  # No sync label and not forced — skip silently
+  exit 0
+fi
+
+# Build labels array for Supabase (exclude the sync label itself)
+LABELS_ARRAY=$(echo "$LABELS_JSON" | jq -c --arg lbl "$SYNC_LABEL" '[.[].label | select(. != $lbl)]')
+
+# Extract config fields
+SUPABASE_URL=$(echo "$SOURCE_CONFIG" | jq -r '.projectUrl')
+SECRET_NAME=$(echo "$SOURCE_CONFIG" | jq -r '.outbound.secretName // .secretName')
+TABLE=$(echo "$SOURCE_CONFIG" | jq -r '.table // "project_tasks"')
+SOURCE_ID=$(echo "$SOURCE_CONFIG" | jq -r '.id')
+
+[[ -n "$SUPABASE_URL" && "$SUPABASE_URL" != "null" ]] || die "No projectUrl in source config for '$PROJECT'"
+[[ -n "$SECRET_NAME" && "$SECRET_NAME" != "null" ]] || die "No secretName in source/outbound config for '$PROJECT'"
+
+# ── Map status ───────────────────────────────────────────────────────────────
+
+MAPPED_STATUS=$(echo "$SOURCE_CONFIG" | jq -r --arg s "$STATUS" '.outbound.statusMapping[$s] // empty')
+
+if [[ -z "$MAPPED_STATUS" ]]; then
+  # Default mapping if not specified
+  case "$STATUS" in
+    open)        MAPPED_STATUS="submitted" ;;
+    in_progress) MAPPED_STATUS="in_progress" ;;
+    blocked)     MAPPED_STATUS="submitted" ;;
+    closed)      MAPPED_STATUS="completed" ;;
+    *)           MAPPED_STATUS="submitted" ;;
+  esac
+fi
+
+# ── Resolve secret ───────────────────────────────────────────────────────────
+
+API_KEY=$(jat-secret "$SECRET_NAME" 2>/dev/null) || die "Failed to resolve secret '$SECRET_NAME'"
+[[ -n "$API_KEY" ]] || die "Secret '$SECRET_NAME' is empty"
+
+# ── Build dev_notes for closed tasks ─────────────────────────────────────────
+
+DEV_NOTES=""
+if [[ "$STATUS" == "closed" ]]; then
+  # Try to get review summary from timeline
+  TMUX_SESSION=$(tmux display-message -p '#S' 2>/dev/null || true)
+  if [[ -n "$TMUX_SESSION" ]]; then
+    TIMELINE="/tmp/jat-timeline-${TMUX_SESSION}.jsonl"
+    if [[ -f "$TIMELINE" ]]; then
+      REVIEW_LINE=$(grep '"state":"review"' "$TIMELINE" 2>/dev/null | tail -1)
+      if [[ -n "$REVIEW_LINE" ]]; then
+        DEV_NOTES=$(echo "$REVIEW_LINE" | jq -r '"## What was done\n" + ([.data.summary // [] | .[] | "- " + .] | join("\n"))' 2>/dev/null || true)
+        [[ "$DEV_NOTES" == "## What was done" ]] && DEV_NOTES=""
+      fi
+    fi
+  fi
+
+  # Fallback: git commits
+  if [[ -z "$DEV_NOTES" ]]; then
+    PROJECT_ROOT="$HOME/code/$PROJECT"
+    if [[ -d "$PROJECT_ROOT/.git" ]]; then
+      COMMITS=$(git -C "$PROJECT_ROOT" log --oneline --grep="$TASK_ID" -10 2>/dev/null | sed 's/^[a-f0-9]* /- /')
+      [[ -n "$COMMITS" ]] && DEV_NOTES="## What was done"$'\n'"$COMMITS"
+    fi
+  fi
+
+  # Fallback: close reason
+  if [[ -z "$DEV_NOTES" && -n "$CLOSE_REASON" ]]; then
+    DEV_NOTES="$CLOSE_REASON"
+  fi
+fi
+
+# ── Check if row exists in Supabase ──────────────────────────────────────────
+
+REST_URL="${SUPABASE_URL}/rest/v1/${TABLE}"
+
+EXISTING=$(curl -s --max-time 10 \
+  "${REST_URL}?jat_task_id=eq.${TASK_ID}&select=id" \
+  -H "apikey: ${API_KEY}" \
+  -H "Authorization: Bearer ${API_KEY}" \
+  2>/dev/null) || EXISTING="[]"
+
+# If Supabase returned an error object instead of an array, treat as empty
+if ! echo "$EXISTING" | jq -e 'type == "array"' >/dev/null 2>&1; then
+  EXISTING="[]"
+fi
+
+EXISTING_ID=$(echo "$EXISTING" | jq -r '.[0].id // empty' 2>/dev/null)
+
+# ── Build payload ────────────────────────────────────────────────────────────
+
+build_payload() {
+  local payload
+  payload=$(jq -n -c \
+    --arg title "$TITLE" \
+    --arg description "$DESCRIPTION" \
+    --arg issue_type "$ISSUE_TYPE" \
+    --arg status "$MAPPED_STATUS" \
+    --arg source "jat" \
+    --arg jat_task_id "$TASK_ID" \
+    --arg assignee "$ASSIGNEE" \
+    --argjson labels "$LABELS_ARRAY" \
+    --arg dev_notes "$DEV_NOTES" \
+    --arg due_date "$DUE_DATE" \
+    --argjson priority "$PRIORITY" \
+    '{
+      title: $title,
+      status: $status,
+      source: "jat",
+      issue_type: $issue_type,
+      jat_task_id: $jat_task_id,
+      labels: $labels
+    }
+    + (if $description != "" then {description: $description} else {} end)
+    + (if $assignee != "" then {assignee: $assignee} else {} end)
+    + (if $due_date != "" then {due_date: $due_date} else {} end)
+    + (if $dev_notes != "" then {dev_notes: $dev_notes} else {} end)
+    ')
+  echo "$payload"
+}
+
+PAYLOAD=$(build_payload)
+
+# ── Upsert to Supabase ──────────────────────────────────────────────────────
+
+if [[ -n "$EXISTING_ID" ]]; then
+  # UPDATE existing row
+  HTTP_CODE=$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' \
+    -X PATCH "${REST_URL}?id=eq.${EXISTING_ID}" \
+    -H "apikey: ${API_KEY}" \
+    -H "Authorization: Bearer ${API_KEY}" \
+    -H "Content-Type: application/json" \
+    -H "Prefer: return=minimal" \
+    -d "$PAYLOAD" \
+    2>/dev/null)
+
+  if [[ "$HTTP_CODE" =~ ^2 ]]; then
+    echo "Synced $TASK_ID → $PROJECT project_tasks (updated ${EXISTING_ID})"
+  else
+    echo "Warning: Failed to update $TASK_ID in Supabase (HTTP $HTTP_CODE)" >&2
+    exit 1
+  fi
+else
+  # INSERT new row
+  HTTP_CODE=$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' \
+    -X POST "${REST_URL}" \
+    -H "apikey: ${API_KEY}" \
+    -H "Authorization: Bearer ${API_KEY}" \
+    -H "Content-Type: application/json" \
+    -H "Prefer: return=minimal" \
+    -d "$PAYLOAD" \
+    2>/dev/null)
+
+  if [[ "$HTTP_CODE" =~ ^2 ]]; then
+    echo "Synced $TASK_ID → $PROJECT project_tasks (created new row)"
+  else
+    echo "Warning: Failed to insert $TASK_ID into Supabase (HTTP $HTTP_CODE)" >&2
+    exit 1
+  fi
+fi
+
+# ── Log the sync ─────────────────────────────────────────────────────────────
+
+LOG_DIR="$HOME/code/$PROJECT/.jat/sync-log"
+mkdir -p "$LOG_DIR" 2>/dev/null || true
+echo "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"taskId\":\"$TASK_ID\",\"action\":\"$([ -n "$EXISTING_ID" ] && echo "update" || echo "insert")\",\"status\":\"$MAPPED_STATUS\",\"sourceId\":\"$SOURCE_ID\"}" \
+  >> "$LOG_DIR/${TASK_ID}.jsonl" 2>/dev/null || true

@@ -542,6 +542,9 @@ cmd_update() {
     _fire_status_callback "$task_id" "$new_status" &
   fi
 
+  # Fire outbound sync to Supabase project_tasks (if customer-visible label)
+  command -v jat-task-sync >/dev/null 2>&1 && jat-task-sync "$task_id" &
+
   if $json_out; then
     cmd_show "$task_id" --json
   else
@@ -579,6 +582,9 @@ cmd_close() {
 
   # Fire integration callback in background (non-blocking)
   _fire_close_callback "$task_id" &
+
+  # Fire outbound sync to Supabase project_tasks (if customer-visible label)
+  command -v jat-task-sync >/dev/null 2>&1 && jat-task-sync "$task_id" &
 
   if $json_out; then
     cmd_show "$task_id" --json

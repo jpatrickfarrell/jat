@@ -31,14 +31,24 @@ export const load: PageServerLoad = async ({
     query = query.eq("priority", priority)
   }
 
-  const { data: tasks, error } = await query.limit(100)
+  // Fetch tasks and team members in parallel
+  // NOTE: Customize the role filter for your project's profile roles
+  const [tasksResult, teamResult] = await Promise.all([
+    query.limit(100),
+    supabase
+      .from("profiles")
+      .select("id, full_name, role")
+      .not("full_name", "is", null)
+      .order("full_name"),
+  ])
 
-  if (error) {
-    console.error("Failed to load tasks:", error.message)
+  if (tasksResult.error) {
+    console.error("Failed to load tasks:", tasksResult.error.message)
   }
 
   return {
-    tasks: tasks ?? [],
+    tasks: tasksResult.data ?? [],
+    teamMembers: teamResult.data ?? [],
     filters: { status, issueType, priority },
     user,
   }

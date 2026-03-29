@@ -2,6 +2,8 @@
   import { goto, invalidate } from "$app/navigation"
   import { page } from "$app/state"
   import { onMount } from "svelte"
+  import { SearchDropdown, InlineEdit } from "@joewinke/jatui"
+  import type { SearchDropdownGroup } from "@joewinke/jatui"
 
   let { data } = $props()
 
@@ -229,6 +231,72 @@
     }
     return 0
   }
+
+  // ── Assignee dropdown ──
+  const assigneeGroups: SearchDropdownGroup[] = $derived.by(() => {
+    const members = data.teamMembers || []
+    const options = [
+      { value: "", label: "Unassigned" },
+      ...members
+        .filter((m: { full_name: string | null }) => m.full_name)
+        .map((m: { full_name: string | null }) => ({
+          value: m.full_name!,
+          label: m.full_name!,
+        })),
+    ]
+    return [{ label: "Team", options }]
+  })
+
+  // ── Generic task update ──
+  async function updateTask(taskId: string, field: string, value: string | null) {
+    const { error } = await data.supabase
+      .from("project_tasks")
+      .update({ [field]: value })
+      .eq("id", taskId)
+
+    if (error) {
+      console.error(`Failed to update ${field}:`, error.message)
+      return
+    }
+
+    tasks = tasks.map((t) =>
+      t.id === taskId ? { ...t, [field]: value } : t,
+    )
+    if (selectedTask?.id === taskId) {
+      selectedTask = { ...selectedTask, [field]: value }
+    }
+  }
+
+  // ── Dropdown groups for editable fields ──
+  const typeGroups: SearchDropdownGroup[] = [
+    { label: "Type", options: [
+      { value: "bug", label: "Bug", icon: "🐛" },
+      { value: "feature", label: "Feature", icon: "✨" },
+      { value: "task", label: "Task", icon: "📋" },
+      { value: "epic", label: "Epic", icon: "🏔️" },
+    ]},
+  ]
+
+  const statusGroups: SearchDropdownGroup[] = [
+    { label: "Status", options: [
+      { value: "submitted", label: "Submitted" },
+      { value: "in_progress", label: "In Progress" },
+      { value: "completed", label: "Completed" },
+      { value: "accepted", label: "Accepted" },
+      { value: "rejected", label: "Rejected" },
+      { value: "wontfix", label: "Won't Fix" },
+      { value: "closed", label: "Closed" },
+    ]},
+  ]
+
+  const priorityGroups: SearchDropdownGroup[] = [
+    { label: "Priority", options: [
+      { value: "critical", label: "Critical" },
+      { value: "high", label: "High" },
+      { value: "medium", label: "Medium" },
+      { value: "low", label: "Low" },
+    ]},
+  ]
 </script>
 
 <svelte:head>
@@ -307,8 +375,8 @@
   </div>
 {:else}
   <!-- Desktop table -->
-  <div class="hidden sm:block overflow-x-auto">
-    <table class="table table-sm">
+  <div class="hidden sm:block overflow-x-auto w-full">
+    <table class="table table-sm w-full">
       <thead>
         <tr class="text-base-content/60">
           <th>Title</th>
@@ -326,24 +394,45 @@
             class="hover:bg-base-200/50 cursor-pointer transition-colors"
             onclick={() => openTask(task)}
           >
-            <td class="font-medium max-w-xs truncate">{task.title}</td>
-            <td>
-              <span class="text-sm" title={task.issue_type}>
-                {typeIcon(task.issue_type)} {task.issue_type}
-              </span>
+            <td class="font-medium max-w-xs" onclick={(e) => e.stopPropagation()}>
+              <InlineEdit
+                value={task.title}
+                onSave={(v) => updateTask(task.id, "title", v)}
+                truncate
+                placeholder="Untitled"
+              />
             </td>
-            <td>
-              <span class="badge badge-sm {statusColor(task.status)}">
-                {statusLabel(task.status)}
-              </span>
+            <td onclick={(e) => e.stopPropagation()}>
+              <SearchDropdown
+                value={task.issue_type}
+                groups={typeGroups}
+                placeholder="Type..."
+                onChange={(v) => updateTask(task.id, "issue_type", v)}
+              />
             </td>
-            <td>
-              <span class={priorityColor(task.priority)}>
-                {task.priority || "—"}
-              </span>
+            <td onclick={(e) => e.stopPropagation()}>
+              <SearchDropdown
+                value={task.status}
+                groups={statusGroups}
+                placeholder="Status..."
+                onChange={(v) => updateTask(task.id, "status", v)}
+              />
             </td>
-            <td class="text-sm text-base-content/60">
-              {task.assignee || "—"}
+            <td onclick={(e) => e.stopPropagation()}>
+              <SearchDropdown
+                value={task.priority || ""}
+                groups={priorityGroups}
+                placeholder="Priority..."
+                onChange={(v) => updateTask(task.id, "priority", v || null)}
+              />
+            </td>
+            <td class="text-sm" onclick={(e) => e.stopPropagation()}>
+              <SearchDropdown
+                value={task.assignee || ""}
+                groups={assigneeGroups}
+                placeholder="Assign..."
+                onChange={(v) => updateAssignee(task.id, v)}
+              />
             </td>
             <td class="text-sm text-base-content/60">
               {formatDate(task.created_at)}
@@ -379,9 +468,14 @@
         </div>
         <div class="flex items-center gap-3 mt-2 text-xs text-base-content/50">
           <span class={priorityColor(task.priority)}>{task.priority || "—"}</span>
-          {#if task.assignee}
-            <span>{task.assignee}</span>
-          {/if}
+          <span onclick={(e) => e.stopPropagation()}>
+            <SearchDropdown
+              value={task.assignee || ""}
+              groups={assigneeGroups}
+              placeholder="Assign..."
+              onChange={(v) => updateAssignee(task.id, v)}
+            />
+          </span>
           <span>{formatDate(task.created_at)}</span>
           {#if commentCount(task) > 0}
             <span>💬 {commentCount(task)}</span>
@@ -406,9 +500,14 @@
   <div class="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-base-100 shadow-xl flex flex-col overflow-hidden">
     <!-- Header -->
     <div class="flex items-center justify-between px-5 py-4 border-b border-base-300">
-      <div class="flex items-center gap-2 min-w-0">
+      <div class="flex items-center gap-2 min-w-0 flex-1">
         <span>{typeIcon(selectedTask.issue_type)}</span>
-        <h2 class="text-lg font-bold truncate">{selectedTask.title}</h2>
+        <InlineEdit
+          value={selectedTask.title}
+          onSave={(v) => updateTask(selectedTask!.id, "title", v)}
+          class="text-lg font-bold"
+          placeholder="Untitled"
+        />
       </div>
       <button class="btn btn-ghost btn-sm btn-square" onclick={closeDrawer}>
         ✕
@@ -417,17 +516,26 @@
 
     <!-- Scrollable content -->
     <div class="flex-1 overflow-y-auto px-5 py-4">
-      <!-- Meta badges -->
+      <!-- Editable fields -->
       <div class="flex flex-wrap gap-2 mb-4">
-        <span class="badge {statusColor(selectedTask.status)}">
-          {statusLabel(selectedTask.status)}
-        </span>
-        <span class="badge badge-outline">{selectedTask.issue_type}</span>
-        {#if selectedTask.priority}
-          <span class="badge badge-outline {priorityColor(selectedTask.priority)}">
-            {selectedTask.priority}
-          </span>
-        {/if}
+        <SearchDropdown
+          value={selectedTask.status}
+          groups={statusGroups}
+          placeholder="Status..."
+          onChange={(v) => updateTask(selectedTask!.id, "status", v)}
+        />
+        <SearchDropdown
+          value={selectedTask.issue_type}
+          groups={typeGroups}
+          placeholder="Type..."
+          onChange={(v) => updateTask(selectedTask!.id, "issue_type", v)}
+        />
+        <SearchDropdown
+          value={selectedTask.priority || ""}
+          groups={priorityGroups}
+          placeholder="Priority..."
+          onChange={(v) => updateTask(selectedTask!.id, "priority", v || null)}
+        />
         {#if selectedTask.source && selectedTask.source !== "feedback"}
           <span class="badge badge-ghost">{selectedTask.source}</span>
         {/if}
@@ -435,10 +543,15 @@
 
       <!-- Details grid -->
       <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-6">
-        {#if selectedTask.assignee}
-          <div class="text-base-content/50">Assignee</div>
-          <div>{selectedTask.assignee}</div>
-        {/if}
+        <div class="text-base-content/50">Assignee</div>
+        <div>
+          <SearchDropdown
+            value={selectedTask.assignee || ""}
+            groups={assigneeGroups}
+            placeholder="Assign..."
+            onChange={(v) => updateAssignee(selectedTask!.id, v)}
+          />
+        </div>
         {#if selectedTask.due_date}
           <div class="text-base-content/50">Due date</div>
           <div>{formatDate(selectedTask.due_date)}</div>
@@ -554,3 +667,27 @@
     </div>
   </div>
 {/if}
+
+<style>
+  /* Elevate table cells and cards when a SearchDropdown is open,
+     so the panel renders above subsequent sibling rows/cards */
+  :global(td:has(.sd-panel)) {
+    position: relative;
+    z-index: 100;
+  }
+  :global(button.card:has(.sd-panel)) {
+    z-index: 100;
+  }
+  /* Ensure panel has an opaque, elevated background */
+  :global(.sd-panel) {
+    background: var(--color-base-300, var(--color-base-100, Canvas)) !important;
+    box-shadow: 0 8px 32px oklch(0 0 0 / 0.5) !important;
+  }
+  /* Hover highlight on dropdown options */
+  :global(.sd-panel .sd-option:hover) {
+    background: color-mix(in oklch, var(--color-base-content, CanvasText) 10%, var(--color-base-300, Canvas)) !important;
+  }
+  :global(.sd-panel .sd-option-selected) {
+    background: color-mix(in oklch, var(--color-primary, LinkText) 15%, var(--color-base-300, Canvas)) !important;
+  }
+</style>

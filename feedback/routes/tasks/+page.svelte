@@ -485,8 +485,9 @@
           <h3 class="text-sm font-semibold text-base-content/60 mb-2">Screenshots</h3>
           <div class="flex gap-2 flex-wrap">
             {#each selectedTask.screenshot_paths as path}
-              <a href={path} target="_blank" rel="noopener" class="block">
-                <img src={path} alt="Screenshot" class="w-32 h-24 object-cover rounded border border-base-300" />
+              {@const proxyUrl = `/api/feedback/screenshots/${path}`}
+              <a href={proxyUrl} target="_blank" rel="noopener" class="block">
+                <img src={proxyUrl} alt="Screenshot" class="w-32 h-24 object-cover rounded border border-base-300" />
               </a>
             {/each}
           </div>

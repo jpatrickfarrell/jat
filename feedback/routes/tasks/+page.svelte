@@ -1,8 +1,50 @@
 <script lang="ts">
-  import { goto } from "$app/navigation"
+  import { goto, invalidate } from "$app/navigation"
   import { page } from "$app/state"
+  import { onMount } from "svelte"
 
   let { data } = $props()
+
+  // ── Reactive task list (server data + realtime inserts) ──
+  let tasks = $state(data.tasks)
+
+  // Sync when server data changes (e.g. filter navigation)
+  $effect(() => {
+    tasks = data.tasks
+  })
+
+  // Realtime subscription — new/updated rows refresh the list
+  onMount(() => {
+    const channel = data.supabase
+      .channel("project_tasks_changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "project_tasks" },
+        async () => {
+          // Re-fetch with current filters applied
+          let query = data.supabase
+            .from("project_tasks")
+            .select("*, project_tasks_comments(count)")
+            .order("created_at", { ascending: false })
+            .limit(100)
+
+          const status = page.url.searchParams.get("status")
+          const issueType = page.url.searchParams.get("type")
+          const priority = page.url.searchParams.get("priority")
+          if (status) query = query.eq("status", status)
+          if (issueType) query = query.eq("issue_type", issueType)
+          if (priority) query = query.eq("priority", priority)
+
+          const { data: fresh } = await query
+          if (fresh) tasks = fresh
+        },
+      )
+      .subscribe()
+
+    return () => {
+      data.supabase.removeChannel(channel)
+    }
+  })
 
   // ── Task detail drawer state ──
   let selectedTask: (typeof data.tasks)[0] | null = $state(null)
@@ -204,7 +246,7 @@
     </p>
   </div>
   <div class="text-sm text-base-content/50">
-    {data.tasks.length} task{data.tasks.length !== 1 ? "s" : ""}
+    {tasks.length} task{tasks.length !== 1 ? "s" : ""}
   </div>
 </div>
 
@@ -251,7 +293,7 @@
 </div>
 
 <!-- Task list -->
-{#if data.tasks.length === 0}
+{#if tasks.length === 0}
   <div class="text-center py-16 text-base-content/50">
     <div class="text-4xl mb-3">📭</div>
     <p class="text-lg font-medium">No tasks found</p>
@@ -279,7 +321,7 @@
         </tr>
       </thead>
       <tbody>
-        {#each data.tasks as task}
+        {#each tasks as task (task.id)}
           <tr
             class="hover:bg-base-200/50 cursor-pointer transition-colors"
             onclick={() => openTask(task)}
@@ -321,7 +363,7 @@
 
   <!-- Mobile cards -->
   <div class="sm:hidden flex flex-col gap-3">
-    {#each data.tasks as task}
+    {#each tasks as task (task.id)}
       <button
         class="card bg-base-100 shadow-sm border border-base-300 p-4 text-left w-full"
         onclick={() => openTask(task)}

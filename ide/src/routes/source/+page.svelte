@@ -91,10 +91,10 @@
 
 	// Mobile layout state
 	let isMobileLayout = $state(false);
-	let topPanelHeight = $state(40);
+	let topPanelHeight = $state(80);
 	const MOBILE_BREAKPOINT = 768;
 	const MIN_PANEL_HEIGHT_PERCENT = 15;
-	const MAX_PANEL_HEIGHT_PERCENT = 70;
+	const MAX_PANEL_HEIGHT_PERCENT = 95;
 
 	// Divider drag state
 	let isDragging = $state(false);
@@ -1131,6 +1131,28 @@
 		min-width: 0;
 		flex: 1;
 		min-height: 0;
+	}
+
+	.git-body.mobile-layout .diff-placeholder {
+		padding: 0.5rem;
+	}
+
+	.git-body.mobile-layout .diff-placeholder-content {
+		padding: 0.75rem;
+	}
+
+	.git-body.mobile-layout .diff-placeholder-icon {
+		width: 2rem;
+		height: 2rem;
+		margin-bottom: 0.5rem;
+	}
+
+	.git-body.mobile-layout .diff-placeholder-text {
+		font-size: 0.8125rem;
+	}
+
+	.git-body.mobile-layout .diff-placeholder-hint {
+		font-size: 0.75rem;
 	}
 
 	/* Cloudflare Detail Panel */

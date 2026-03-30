@@ -16,6 +16,8 @@
 	 */
 
 	import { onMount, onDestroy } from 'svelte';
+	import { fly, fade } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 	import SessionCard from '$lib/components/work/SessionCard.svelte';
 	import { isMobileFullscreenOpen } from '$lib/stores/drawerStore';
 	import { setHoveredSession } from '$lib/stores/hoveredSession';
@@ -70,7 +72,7 @@
 	} = $props();
 
 	// === Page State ===
-	const PAGES = ['Terminal', 'Task Detail'] as const;
+	const PAGES = ['Terminal', 'Task Detail', 'Attachments', 'Notes'] as const;
 	let currentPage = $state(0);
 	let pageTranslateX = $state(0); // drag offset during swipe
 	let pageTransitioning = $state(false);
@@ -89,6 +91,7 @@
 	// Mobile input state
 	let inputText = $state('');
 	let keyboardOpen = $state(false);
+	let inputRef: HTMLInputElement | null = $state(null);
 
 	// Minimap show-on-scroll state
 	let mobileScrolling = $state(false);
@@ -222,8 +225,8 @@
 		currentPage = page;
 		setTimeout(() => pageTransitioning = false, 300);
 
-		// Fetch full task detail when navigating to task page
-		if (page === 1 && task?.id && !fullTask) {
+		// Fetch full task detail when navigating to any detail page
+		if (page >= 1 && task?.id && !fullTask) {
 			fetchTaskDetail();
 		}
 	}
@@ -231,7 +234,8 @@
 	function dismissDrawer() {
 		visible = false;
 		setHoveredSession(null);
-		setTimeout(onClose, 300);
+		// Wait for Svelte out-transition (300ms) then notify parent
+		setTimeout(onClose, 350);
 	}
 
 	// Portal action
@@ -260,6 +264,22 @@
 		return {
 			destroy() {
 				node.removeEventListener('keydown', handler);
+			}
+		};
+	}
+
+	// Focus input when hovering/touching the drawer (input is the main interaction)
+	function focusInputOnHover(node: HTMLElement) {
+		function focusInput(e: Event) {
+			// Don't steal focus from buttons or other interactive elements
+			const target = e.target as HTMLElement;
+			if (target.tagName === 'BUTTON' || target.tagName === 'A' || target.closest('button, a')) return;
+			inputRef?.focus({ preventScroll: true });
+		}
+		node.addEventListener('mouseenter', focusInput);
+		return {
+			destroy() {
+				node.removeEventListener('mouseenter', focusInput);
 			}
 		};
 	}
@@ -417,15 +437,17 @@
 	}
 
 	// Pager transform calculation
-	// Each page is 50% of the pager container (which is 200% of viewport).
-	// So moving one page = translateX(-50%).
+	// Each page is (100/PAGES.length)% of the pager container (which is PAGES.length * 100% of viewport).
+	// So moving one page = translateX(-(100/PAGES.length)%).
+	const pagePercent = 100 / PAGES.length;
 	const pagerTransform = $derived(() => {
-		const baseOffset = -(currentPage * 50);
-		const dragPercent = (pageTranslateX / window.innerWidth) * 50;
+		const baseOffset = -(currentPage * pagePercent);
+		const dragPercent = (pageTranslateX / window.innerWidth) * pagePercent;
 		return `translateX(${baseOffset + dragPercent}%)`;
 	});
 
 	onMount(() => {
+		// Delay visible by one tick so Svelte transitions trigger on insert
 		requestAnimationFrame(() => visible = true);
 		isMobileFullscreenOpen.set(true);
 		setHoveredSession(sessionName);
@@ -433,6 +455,9 @@
 		// Start polling output
 		fetchOutput();
 		pollInterval = setInterval(fetchOutput, 1000);
+
+		// Auto-focus input after slide-up animation (300ms)
+		setTimeout(() => inputRef?.focus({ preventScroll: true }), 350);
 	});
 
 	onDestroy(() => {
@@ -450,19 +475,21 @@
 </script>
 
 <div use:portalToBody>
+	{#if visible}
 	<!-- Backdrop -->
 	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 	<div
 		class="drawer-backdrop"
-		class:visible
+		transition:fade={{ duration: 300 }}
 		use:directClick={dismissDrawer}
 	></div>
 
-	<!-- Drawer Panel (full screen) -->
+	<!-- Drawer Panel (full screen, slides up from bottom) -->
 	<div
 		class="drawer-panel"
-		class:visible
+		transition:fly={{ y: globalThis.innerHeight || 900, duration: 300, easing: cubicOut }}
 		use:touchHandlers
+		use:focusInputOnHover
 	>
 		<!-- Top bar: back button + page dots + page label -->
 		<div class="drawer-topbar">
@@ -472,20 +499,15 @@
 				</svg>
 			</button>
 
-			<div class="topbar-center">
-				<span class="page-label">{PAGES[currentPage]}</span>
-				<div class="page-dots">
-					{#each PAGES as _, i}
-						<button
-							class="dot"
-							class:active={i === currentPage}
-							use:directClick={() => navigateToPage(i)}
-						></button>
-					{/each}
-				</div>
+			<div class="topbar-tabs">
+				{#each PAGES as page, i}
+					<button
+						class="topbar-tab"
+						class:active={i === currentPage}
+						use:directClick={() => navigateToPage(i)}
+					>{page}</button>
+				{/each}
 			</div>
-
-			<div class="topbar-spacer"></div>
 		</div>
 
 		<!-- Horizontal pager -->
@@ -606,6 +628,7 @@
 						class="mobile-input"
 						placeholder="Type and press Enter..."
 						bind:value={inputText}
+						bind:this={inputRef}
 						use:directKeydown={(e) => {
 							if (e.key === 'Enter' && inputText.trim()) {
 								onSendInput(inputText.trim(), 'text');
@@ -782,8 +805,56 @@
 					{/if}
 				</div>
 			</div>
+
+				<!-- Page 2: Attachments -->
+				<div class="pager-page">
+					<div class="task-detail-page">
+						<div class="detail-section">
+							<h4 class="section-label">Attachments</h4>
+							{#if fullTask?.attachments?.length}
+								<div class="attachments-list">
+									{#each fullTask.attachments as attachment}
+										<div class="attachment-item">
+											<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="16" height="16">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+											</svg>
+											<span class="attachment-name">{attachment.name || attachment.filename || 'Attachment'}</span>
+										</div>
+									{/each}
+								</div>
+							{:else}
+								<div class="empty-page-message">
+									<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="32" height="32">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+									</svg>
+									<p>No attachments</p>
+								</div>
+							{/if}
+						</div>
+					</div>
+				</div>
+
+				<!-- Page 3: Notes -->
+				<div class="pager-page">
+					<div class="task-detail-page">
+						<div class="detail-section">
+							<h4 class="section-label">Notes</h4>
+							{#if fullTask?.notes}
+								<div class="description-content">{fullTask.notes}</div>
+							{:else}
+								<div class="empty-page-message">
+									<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="32" height="32">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+									</svg>
+									<p>No notes</p>
+								</div>
+							{/if}
+						</div>
+					</div>
+				</div>
+			</div>
 		</div>
-	</div>
+	{/if}
 </div>
 
 <style>
@@ -792,12 +863,6 @@
 		inset: 0;
 		z-index: 49;
 		background: oklch(0 0 0 / 0.6);
-		opacity: 0;
-		transition: opacity 0.3s ease;
-	}
-
-	.drawer-backdrop.visible {
-		opacity: 1;
 	}
 
 	.drawer-panel {
@@ -807,13 +872,7 @@
 		display: flex;
 		flex-direction: column;
 		background: oklch(0.14 0.01 250);
-		transform: translateX(100%);
-		transition: transform 0.3s cubic-bezier(0.33, 1, 0.68, 1);
 		overflow: hidden;
-	}
-
-	.drawer-panel.visible {
-		transform: translateX(0);
 	}
 
 	/* Top bar */
@@ -847,60 +906,51 @@
 		background: oklch(0.25 0.02 250);
 	}
 
-	.topbar-center {
+	.topbar-tabs {
 		flex: 1;
 		display: flex;
-		flex-direction: column;
+		gap: 0.125rem;
 		align-items: center;
-		gap: 0.25rem;
+		overflow-x: auto;
+		scrollbar-width: none;
 	}
 
-	.page-label {
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: oklch(0.80 0.02 250);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
+	.topbar-tabs::-webkit-scrollbar {
+		display: none;
 	}
 
-	.page-dots {
-		display: flex;
-		gap: 0.375rem;
-		align-items: center;
-	}
-
-	.dot {
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		background: oklch(0.35 0.02 250);
+	.topbar-tab {
+		padding: 0.25rem 0.5rem;
+		font-size: 0.6875rem;
+		font-weight: 500;
+		color: oklch(0.50 0.02 250);
+		background: transparent;
 		border: none;
-		padding: 0;
+		border-radius: 0.375rem;
 		cursor: pointer;
-		transition: all 0.2s ease;
+		white-space: nowrap;
+		transition: all 0.15s;
 	}
 
-	.dot.active {
-		width: 18px;
-		border-radius: 3px;
-		background: oklch(0.70 0.15 230);
+	.topbar-tab.active {
+		color: oklch(0.90 0.02 250);
+		background: oklch(0.25 0.02 250);
 	}
 
-	.topbar-spacer {
-		width: 2rem;
-		flex-shrink: 0;
+	.topbar-tab:active {
+		background: oklch(0.22 0.02 250);
 	}
 
 	/* Horizontal pager */
 	.pager-container {
 		flex: 1;
 		display: flex;
-		width: 200%; /* 2 pages */
+		width: 400%; /* 4 pages */
 		min-height: 0;
 	}
 
 	.pager-page {
-		width: 50%; /* Each page = 100% of viewport */
+		width: 25%; /* Each page = 100% of viewport */
 		flex-shrink: 0;
 		display: flex;
 		flex-direction: column;
@@ -1142,6 +1192,43 @@
 		height: 100%;
 		color: oklch(0.45 0.02 250);
 		font-size: 0.875rem;
+	}
+
+	.empty-page-message {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 3rem 1rem;
+		color: oklch(0.40 0.02 250);
+	}
+
+	.empty-page-message p {
+		font-size: 0.875rem;
+	}
+
+	.attachments-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.attachment-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		background: oklch(0.18 0.01 250);
+		border-radius: 0.375rem;
+		border: 1px solid oklch(0.25 0.02 250);
+		color: oklch(0.75 0.02 250);
+		font-size: 0.8125rem;
+	}
+
+	.attachment-name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	/* === Mobile Action Buttons Row === */

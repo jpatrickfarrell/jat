@@ -93,6 +93,13 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			category: 'work'
 		},
 		{
+			id: 'mobilenew',
+			label: 'Mobile New',
+			href: '/mobilenew',
+			icon: 'mobile',
+			category: 'work'
+		},
+		{
 			id: 'tasks',
 			label: 'Tasks',
 			href: '/tasks',

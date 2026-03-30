@@ -156,6 +156,8 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 		mode?: "agent" | "server" | "compact";
 		/** Headerless mode: hides agent header and task section (for embedding in tables that already show this info) */
 		headerless?: boolean;
+		/** Hide input section (for mobile drawer that renders its own input bar) */
+		hideInput?: boolean;
 		sessionName: string;
 		agentName?: string; // Required for agent mode
 		task?: Task | null; // Agent mode only
@@ -310,6 +312,7 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 	let {
 		mode = "agent",
 		headerless = false,
+		hideInput = false,
 		sessionName,
 		agentName = "",
 		task = null,
@@ -6325,6 +6328,7 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 			{/if}
 
 			<!-- Input Section (z-[55] to layer above collapsed AND expanded EventStack z-50) -->
+			{#if !hideInput}
 			<div
 				class="relative px-3 py-2 flex-shrink-0 z-5"
 				style="border-top: 1px solid oklch(0.5 0 0 / 0.08); background: oklch(0.18 0.01 250);"
@@ -7864,6 +7868,7 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 					</div>
 				</div>
 			</div>
+			{/if}
 		</div>
 	</div>
 {/if}

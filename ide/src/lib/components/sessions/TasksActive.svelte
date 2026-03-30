@@ -108,6 +108,7 @@
 		onKillSession,
 		onAttachSession,
 		onViewTask,
+		onMobileCardClick,
 		mobile = false
 	}: {
 		sessions: TmuxSession[];
@@ -120,6 +121,7 @@
 		onKillSession?: (sessionName: string) => Promise<void>;
 		onAttachSession?: (sessionName: string) => Promise<void>;
 		onViewTask?: (taskId: string) => void;
+		onMobileCardClick?: (sessionName: string) => void;
 		mobile?: boolean;
 	} = $props();
 
@@ -1243,7 +1245,7 @@
 					class:attached={session.attached}
 					class:swiping={isSwiping}
 					style="{rowProjectColor ? `border-left: 3px solid ${rowProjectColor};` : isPlanning ? 'border-left: 3px solid oklch(0.68 0.20 270);' : ''}{isExiting ? ' pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
-					onclick={() => !isExiting && !swipeState?.swiping && (fullscreenSession = session.name)}
+					onclick={() => !isExiting && !swipeState?.swiping && (onMobileCardClick ? onMobileCardClick(session.name) : (fullscreenSession = session.name))}
 					ontouchstart={(e) => handleSwipeTouchStart(e, session.name)}
 					ontouchmove={handleSwipeTouchMove}
 					ontouchend={handleSwipeTouchEnd}

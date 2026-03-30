@@ -247,6 +247,11 @@
     return [{ label: "Team", options }]
   })
 
+  // ── Assignee update (wraps generic update, clears to null for empty) ──
+  function updateAssignee(taskId: string, value: string) {
+    updateTask(taskId, "assignee", value || null)
+  }
+
   // ── Generic task update ──
   async function updateTask(taskId: string, field: string, value: string | null) {
     const { error } = await data.supabase

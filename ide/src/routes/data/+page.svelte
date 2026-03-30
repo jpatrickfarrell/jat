@@ -483,7 +483,7 @@
 	let editingSelectedCell = $state(false);
 	let initialEditChar = $state<string | null>(null);
 	let copiedCell = $state<{ rowIdx: number; colIdx: number; value: any } | null>(null);
-	let undoStack = $state<Array<{ rowid: number; column: string; oldValue: any }>>([]);
+	let undoStack = $state<Array<{ type?: 'cell' | 'add-row'; rowid: number; column: string; oldValue: any }>>([]);
 
 	function cellKey(rowIdx: number, colIdx: number) { return `${rowIdx}:${colIdx}`; }
 	function isCellInSelection(rowIdx: number, colIdx: number) {
@@ -1887,7 +1887,11 @@
 			if (undoStack.length > 0) {
 				const entry = undoStack[undoStack.length - 1];
 				undoStack = undoStack.slice(0, -1);
-				handleCellSave(entry.rowid, entry.column, entry.oldValue, true);
+				if (entry.type === 'add-row') {
+					undoDeleteRow(entry.rowid);
+				} else {
+					handleCellSave(entry.rowid, entry.column, entry.oldValue, true);
+				}
 			}
 			return;
 		}
@@ -2236,7 +2240,7 @@
 		tick().then(() => tableRef?.focus());
 	}
 
-	async function saveNewRow() {
+	async function saveNewRow(opts?: { startNewRow?: boolean }) {
 		if (!selectedProject || !selectedTable) return;
 		try {
 			const res = await fetch(`/api/data/tables/${encodeURIComponent(selectedTable)}/rows`, {
@@ -2248,6 +2252,7 @@
 				})
 			});
 			if (res.ok) {
+				const result = await res.json();
 				addingRow = false;
 				newRowData = {};
 				await fetchTableData();
@@ -2257,7 +2262,15 @@
 					selectedCell = { rowIdx: rows.length - 1, colIdx: 0 };
 					editingSelectedCell = false;
 				}
+				if (result.rowid != null) {
+					undoStack = [...undoStack, { type: 'add-row', rowid: result.rowid, column: '', oldValue: null }];
+				}
 				successToast('Row added');
+				if (opts?.startNewRow) {
+					startAddRow(0);
+				} else {
+					tick().then(() => tableRef?.focus());
+				}
 			} else {
 				const data = await res.json();
 				errorToast(data.error || 'Failed to add row');
@@ -2285,6 +2298,25 @@
 			}
 		} catch (e) {
 			errorToast('Failed to delete row');
+		}
+	}
+
+	async function undoDeleteRow(rowid: number) {
+		if (!selectedProject || !selectedTable) return;
+		try {
+			const res = await fetch(`/api/data/tables/${encodeURIComponent(selectedTable)}/rows/${rowid}?project=${encodeURIComponent(selectedProject)}`, {
+				method: 'DELETE'
+			});
+			if (res.ok) {
+				await fetchTableData();
+				await fetchTables();
+				successToast('Row addition undone');
+			} else {
+				const data = await res.json();
+				errorToast(data.error || 'Failed to undo row');
+			}
+		} catch (e) {
+			errorToast('Failed to undo row');
 		}
 	}
 
@@ -2746,15 +2778,34 @@
 	async function handleCtxInsertColumn(semanticType: string, sqliteType: string, position: 'before' | 'after') {
 		const name = prompt('Column name:');
 		if (!name?.trim()) return;
+		const trimmed = name.trim();
+		const refCol = ctxCol?.name;
+		// Capture current column order BEFORE the add (fetchTableData will append new col at end)
+		const colsBefore = orderedColumns.map(c => c.name);
 		closeColContextMenu();
-		await colOperation('add', { column: name.trim(), sqliteType, semanticType });
+		const ok = await colOperation('add', { column: trimmed, sqliteType, semanticType });
+		if (ok && refCol) {
+			const refIdx = colsBefore.indexOf(refCol);
+			if (refIdx !== -1) {
+				const insertIdx = position === 'before' ? refIdx : refIdx + 1;
+				colsBefore.splice(insertIdx, 0, trimmed);
+				columnOrder = colsBefore;
+				persistColumnOrder();
+			}
+		}
 	}
 
 	async function handleMcAddColumn(semanticType: string, sqliteType: string) {
 		const name = prompt('Column name:');
 		if (!name?.trim()) return;
+		const trimmed = name.trim();
+		const colsBefore = orderedColumns.map(c => c.name);
 		mcAddColOpen = false;
-		await colOperation('add', { column: name.trim(), sqliteType, semanticType });
+		const ok = await colOperation('add', { column: trimmed, sqliteType, semanticType });
+		if (ok) {
+			columnOrder = [...colsBefore, trimmed];
+			persistColumnOrder();
+		}
 	}
 
 	function startMcRename(colName: string) {
@@ -2949,10 +3000,21 @@
 
 	async function handleCtxDuplicate() {
 		if (!ctxCol) return;
-		const name = prompt('New column name:', `${ctxCol.name}_copy`);
+		const refCol = ctxCol.name;
+		const name = prompt('New column name:', `${refCol}_copy`);
 		if (!name?.trim()) return;
+		const trimmed = name.trim();
+		const colsBefore = orderedColumns.map(c => c.name);
 		closeColContextMenu();
-		await colOperation('duplicate', { sourceColumn: ctxCol.name, newName: name.trim() });
+		const ok = await colOperation('duplicate', { sourceColumn: refCol, newName: trimmed });
+		if (ok) {
+			const refIdx = colsBefore.indexOf(refCol);
+			if (refIdx !== -1) {
+				colsBefore.splice(refIdx + 1, 0, trimmed);
+				columnOrder = colsBefore;
+				persistColumnOrder();
+			}
+		}
 	}
 
 	async function handleCtxRename() {
@@ -3990,7 +4052,10 @@
 															bind:value={newRowData[col.name]}
 															placeholder={col.name}
 															onkeydown={(e) => {
-																if (e.key === 'Enter') saveNewRow();
+																if (e.key === 'Enter') {
+																	e.preventDefault();
+																	saveNewRow({ startNewRow: e.ctrlKey || e.metaKey });
+																}
 																if (e.key === 'Escape') { cancelAddRow(); }
 															}}
 														/>
@@ -3998,7 +4063,7 @@
 												</td>
 											{/each}
 											<td class="actions-col">
-												<button class="row-save-btn" onclick={saveNewRow} title="Save">
+												<button class="row-save-btn" onclick={() => saveNewRow()} title="Save">
 													<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 														<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
 													</svg>

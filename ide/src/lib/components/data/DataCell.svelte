@@ -42,7 +42,7 @@
 {#if semanticType === 'boolean'}
 	<BooleanCell {value} {onSave} />
 {:else if semanticType === 'date' || semanticType === 'datetime'}
-	<DateCell {value} config={typedConfig} {editing} {onSave} />
+	<DateCell {value} config={typedConfig} {editing} {onSave} {semanticType} />
 {:else if semanticType === 'url'}
 	<UrlCell {value} {editing} {initialEditChar} {onSave} />
 {:else if semanticType === 'email'}

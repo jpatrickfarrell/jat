@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Content ingestion daemon for JAT - watches Telegram, Slack, RSS, WhatsApp and creates tasks",
   "type": "module",
+  "overrides": {
+    "axios": "1.14.0"
+  },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.16",
     "better-sqlite3": "^11.10.0",

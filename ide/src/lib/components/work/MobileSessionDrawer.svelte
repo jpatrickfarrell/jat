@@ -19,9 +19,11 @@
 	import { fly, fade } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import SessionCard from '$lib/components/work/SessionCard.svelte';
+	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import { isMobileFullscreenOpen } from '$lib/stores/drawerStore';
 	import { setHoveredSession } from '$lib/stores/hoveredSession';
 	import type { SessionState } from '$lib/config/statusColors';
+	import { getIssueTypeVisual } from '$lib/config/statusColors';
 
 	interface AgentTask {
 		id: string;
@@ -92,6 +94,26 @@
 	let inputText = $state('');
 	let keyboardOpen = $state(false);
 	let inputRef: HTMLInputElement | null = $state(null);
+
+	// Elapsed time
+	let now = $state(Date.now());
+	$effect(() => {
+		const interval = setInterval(() => now = Date.now(), 1000);
+		return () => clearInterval(interval);
+	});
+	const elapsed = $derived.by(() => {
+		if (!created) return null;
+		const diff = Math.max(0, Math.floor((now - new Date(created).getTime()) / 1000));
+		const h = Math.floor(diff / 3600);
+		const m = Math.floor((diff % 3600) / 60);
+		const s = diff % 60;
+		return {
+			hours: String(h).padStart(2, '0'),
+			minutes: String(m).padStart(2, '0'),
+			seconds: String(s).padStart(2, '0'),
+			showHours: h > 0
+		};
+	});
 
 	// Minimap show-on-scroll state
 	let mobileScrolling = $state(false);
@@ -440,10 +462,18 @@
 	// Each page is (100/PAGES.length)% of the pager container (which is PAGES.length * 100% of viewport).
 	// So moving one page = translateX(-(100/PAGES.length)%).
 	const pagePercent = 100 / PAGES.length;
-	const pagerTransform = $derived(() => {
+	const pagerTransform = $derived.by(() => {
 		const baseOffset = -(currentPage * pagePercent);
 		const dragPercent = (pageTranslateX / window.innerWidth) * pagePercent;
 		return `translateX(${baseOffset + dragPercent}%)`;
+	});
+
+	// Auto-focus input as soon as it's mounted in the DOM
+	$effect(() => {
+		if (inputRef && visible) {
+			// Focus immediately — don't wait for transition to finish
+			inputRef.focus({ preventScroll: true });
+		}
 	});
 
 	onMount(() => {
@@ -455,9 +485,6 @@
 		// Start polling output
 		fetchOutput();
 		pollInterval = setInterval(fetchOutput, 1000);
-
-		// Auto-focus input after slide-up animation (300ms)
-		setTimeout(() => inputRef?.focus({ preventScroll: true }), 350);
 	});
 
 	onDestroy(() => {
@@ -513,10 +540,38 @@
 		<!-- Horizontal pager -->
 		<div
 			class="pager-container"
-			style="transform: {pagerTransform()}; {pageTransitioning ? 'transition: transform 0.3s cubic-bezier(0.33, 1, 0.68, 1);' : ''} {swipeDragging ? 'will-change: transform;' : ''}"
+			style="transform: {pagerTransform}; {pageTransitioning ? 'transition: transform 0.3s cubic-bezier(0.33, 1, 0.68, 1);' : ''} {swipeDragging ? 'will-change: transform;' : ''}"
 		>
 			<!-- Page 0: Terminal / SessionCard -->
 			<div class="pager-page">
+				<!-- Custom mobile header matching TasksActive mobile layout -->
+				{#if task}
+					{@const typeVisual = getIssueTypeVisual(task.issue_type)}
+					<div class="mobile-task-header">
+						<div class="mobile-task-title">{task.title || task.id}</div>
+						{#if task.description}
+							<div class="mobile-task-desc">{task.description}</div>
+						{/if}
+						<div class="mobile-task-meta">
+							<span class="mobile-task-id-badge" style="color: oklch(0.65 0.15 200);">{task.id}</span>
+							{#if elapsed}
+								<span class="meta-sep">·</span>
+								<span class="mobile-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
+							{/if}
+							<span class="meta-sep">·</span>
+							<AgentAvatar name={agentName} size={16} showRing={true} sessionState={sseState || 'idle'} />
+							<span class="mobile-agent">{agentName}</span>
+							{#if task.issue_type}
+								<span class="meta-sep">·</span>
+								<span class="mobile-type" title={typeVisual.label}>{typeVisual.icon}</span>
+							{/if}
+							{#if task.priority != null && task.priority <= 2}
+								<span class="meta-sep">·</span>
+								<span class="mobile-priority-badge mobile-priority-{task.priority}">P{task.priority}</span>
+							{/if}
+						</div>
+					</div>
+				{/if}
 				<div class="session-card-wrapper" class:mobile-scrolling={mobileScrolling} bind:this={wrapperRef}>
 					<SessionCard
 						mode="agent"
@@ -530,7 +585,7 @@
 						{sseStateTimestamp}
 						{created}
 						{attached}
-						headerless={false}
+						headerless={true}
 						hideInput={true}
 						onKillSession={() => {
 							dismissDrawer();
@@ -1229,6 +1284,88 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	/* Custom mobile header (matches TasksActive mobile layout) */
+	.mobile-task-header {
+		padding: 0.5rem 0.75rem;
+		border-bottom: 1px solid oklch(0.22 0.02 250);
+		flex-shrink: 0;
+	}
+
+	.mobile-task-title {
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: oklch(0.90 0.02 250);
+		line-height: 1.3;
+	}
+
+	.mobile-task-desc {
+		font-size: 0.6875rem;
+		color: oklch(0.55 0.02 250);
+		margin-top: 0.125rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.mobile-task-meta {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		margin-top: 0.375rem;
+		font-size: 0.6875rem;
+		color: oklch(0.55 0.02 250);
+		flex-wrap: wrap;
+	}
+
+	.mobile-task-id-badge {
+		font-family: monospace;
+		font-size: 0.625rem;
+	}
+
+	.mobile-elapsed {
+		font-family: monospace;
+		font-size: 0.625rem;
+		color: oklch(0.50 0.02 250);
+	}
+
+	.meta-sep {
+		color: oklch(0.35 0.02 250);
+	}
+
+	.mobile-agent {
+		font-size: 0.625rem;
+		font-weight: 600;
+		color: oklch(0.70 0.02 250);
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+	}
+
+	.mobile-type {
+		font-size: 0.75rem;
+	}
+
+	.mobile-priority-badge {
+		font-size: 0.5625rem;
+		font-weight: 700;
+		padding: 0.0625rem 0.25rem;
+		border-radius: 0.25rem;
+	}
+
+	.mobile-priority-0 {
+		color: oklch(0.85 0.18 25);
+		background: oklch(0.85 0.18 25 / 0.15);
+	}
+
+	.mobile-priority-1 {
+		color: oklch(0.80 0.15 85);
+		background: oklch(0.80 0.15 85 / 0.15);
+	}
+
+	.mobile-priority-2 {
+		color: oklch(0.75 0.12 230);
+		background: oklch(0.75 0.12 230 / 0.15);
 	}
 
 	/* === Mobile Action Buttons Row === */

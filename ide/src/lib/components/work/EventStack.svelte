@@ -156,6 +156,8 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let isExpanded = $state(false);
+	let clickLocked = false; // Prevents mouseleave from closing after click-to-open
+	let swipeStartY = 0;
 	let actionSubmitting = $state(false);
 	let copiedEventKey = $state<string | null>(null);
 	let copiedField = $state<string | null>(null);  // Track which field was copied (e.g., "sessionId-abc123")
@@ -1499,8 +1501,17 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="relative {className}"
+			onclick={(e) => {
+				// Don't toggle if clicking inside the expanded popup (buttons, etc.)
+				if (isExpanded) return;
+				isExpanded = true;
+				// Prevent mouseleave from immediately closing after click-to-open
+				clickLocked = true;
+				setTimeout(() => clickLocked = false, 400);
+			}}
 			onmouseenter={() => (isExpanded = true)}
 			onmouseleave={() => {
+				if (clickLocked) return;
 				isExpanded = false;
 				expandedEventIdx = null;
 			}}
@@ -1514,6 +1525,20 @@
 				style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.30 0.02 250); box-shadow: 0 -4px 20px oklch(0 0 0 / 0.5); max-height: {expandedEventIdx !== null ? 'calc(100vh - 12rem)' : '32rem'};"
 				transition:slide={{ duration: 200, easing: cubicOut }}
 			>
+				<!-- Swipe-down handle / tap to collapse -->
+				<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+				<div
+					class="sticky top-0 z-10 flex items-center justify-center py-1.5 cursor-pointer"
+					style="background: oklch(0.18 0.01 250); border-bottom: 1px solid oklch(0.25 0.02 250);"
+					onclick={() => { isExpanded = false; expandedEventIdx = null; }}
+					ontouchstart={(e) => { swipeStartY = e.touches[0].clientY; }}
+					ontouchmove={(e) => {
+						const dy = e.touches[0].clientY - swipeStartY;
+						if (dy > 40) { isExpanded = false; expandedEventIdx = null; }
+					}}
+				>
+					<div style="width: 2rem; height: 0.25rem; border-radius: 9999px; background: oklch(0.40 0.02 250);"></div>
+				</div>
 				<div class="p-2 flex flex-col-reverse gap-1">
 					{#each filteredEvents as event, idx (event.timestamp + '-' + idx)}
 						{@const style = getEventStyle(event)}

@@ -46,12 +46,22 @@
 		assignee?: string | null;
 	}
 
+	interface EpicChild {
+		id: string;
+		title: string;
+		status: string;
+		priority: number;
+		isBlocked: boolean;
+		assignee?: string;
+	}
+
 	interface Epic {
 		id: string;
 		title: string;
 		project?: string;
 		childCount?: number;
 		readyChildIds?: string[];
+		children?: EpicChild[];
 	}
 
 	interface Props {
@@ -551,21 +561,23 @@
 				<div class="dropdown-scroll">
 					<!-- Epic groups -->
 					{#each projectEpics as epic}
-						{@const epicTasks = epicTaskGroups.groups.get(epic.id) || []}
-						{#if epicTasks.length > 0}
+						{@const allChildren = epic.children || []}
+						{@const readySet = new Set(epic.readyChildIds || [])}
+						{@const readyCount = readySet.size}
+						{#if allChildren.length > 0}
 							<div class="epic-group">
 								<div class="epic-bar" style="--project-color: {selectedColor};">
 									<span class="epic-bar-icon">🏔️</span>
 									<span class="epic-bar-label"><FxText text={epic.title} /></span>
-									<span class="epic-bar-count">{epicTasks.length}</span>
-									{#if idleSlots > 0 && onSwarm}
+									<span class="epic-bar-count">{readyCount}/{allChildren.length}</span>
+									{#if readyCount > 0 && idleSlots > 0 && onSwarm}
 										<button
 											type="button"
 											class="epic-bar-attack"
-											onclick={(e) => { e.stopPropagation(); handleSwarmClick(Math.min(epic.childCount || epicTasks.length, idleSlots), epic.id); }}
+											onclick={(e) => { e.stopPropagation(); handleSwarmClick(Math.min(readyCount, idleSlots), epic.id); }}
 											onmouseenter={() => { hoveredAttackEpicId = epic.id; }}
 											onmouseleave={() => { if (hoveredAttackEpicId === epic.id) hoveredAttackEpicId = null; }}
-											title="Attack epic"
+											title="Attack epic ({readyCount} ready)"
 										>
 											<svg viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3">
 												<path d="M11.983 1.907a.75.75 0 00-1.292-.657l-8.5 9.5A.75.75 0 002.75 12h6.572l-1.305 6.093a.75.75 0 001.292.657l8.5-9.5A.75.75 0 0017.25 8h-6.572l1.305-6.093z" />
@@ -573,27 +585,44 @@
 										</button>
 									{/if}
 								</div>
-								{#each epicTasks as task}
-									<div class="dropdown-item task-item epic-child-item" class:attack-highlight={hoveredAttackEpicId === epic.id}>
+								{#each allChildren as child}
+									{@const isReady = readySet.has(child.id)}
+									{@const isActive = child.status === 'in_progress'}
+									{@const isClosed = child.status === 'closed'}
+									<div
+										class="dropdown-item task-item epic-child-item"
+										class:attack-highlight={isReady && hoveredAttackEpicId === epic.id}
+										class:child-inactive={!isReady && !isActive}
+										class:child-closed={isClosed}
+									>
 										<button
 											type="button"
 											class="task-info-btn"
-											onclick={() => handleViewTask(task.id)}
+											onclick={() => handleViewTask(child.id)}
 										>
-											{#if task.priority !== undefined}
-												<span class="priority-badge priority-{task.priority}">P{task.priority}</span>
+											{#if isActive}
+												<span class="active-dot"></span>
+											{:else if child.isBlocked}
+												<span class="blocked-dot"></span>
+											{:else if isClosed}
+												<span class="closed-dot"></span>
 											{/if}
-											<span class="item-label task-title"><FxText text={task.title} /></span>
+											{#if child.priority !== undefined}
+												<span class="priority-badge priority-{child.priority}">P{child.priority}</span>
+											{/if}
+											<span class="item-label task-title"><FxText text={child.title} /></span>
 										</button>
-										{#if onStart}
+										{#if isReady && onStart}
 											<button
 												type="button"
 												class="task-launch-btn"
-												onclick={(e) => { e.stopPropagation(); handleStartTask(task.id); }}
+												onclick={(e) => { e.stopPropagation(); handleStartTask(child.id); }}
 												title="Launch agent"
 											>
 												<svg viewBox="0 0 20 20" fill="currentColor"><path d="M6.3 2.84A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.27l9.344-5.891a1.5 1.5 0 000-2.538L6.3 2.841z" /></svg>
 											</button>
+										{:else if isActive && child.assignee}
+											<span class="task-assignee">{child.assignee}</span>
 										{/if}
 									</div>
 								{/each}
@@ -1264,6 +1293,33 @@
 		background: oklch(0.75 0.15 85);
 		box-shadow: 0 0 4px oklch(0.75 0.15 85 / 0.5);
 		flex-shrink: 0;
+	}
+
+	.blocked-dot {
+		width: 0.375rem;
+		height: 0.375rem;
+		border-radius: 50%;
+		background: oklch(0.65 0.15 25);
+		flex-shrink: 0;
+	}
+
+	.closed-dot {
+		width: 0.375rem;
+		height: 0.375rem;
+		border-radius: 50%;
+		background: oklch(0.55 0.12 145);
+		flex-shrink: 0;
+	}
+
+	.child-inactive {
+		opacity: 0.55;
+	}
+
+	.child-closed {
+		opacity: 0.35;
+	}
+	.child-closed .task-title {
+		text-decoration: line-through;
 	}
 
 	.task-assignee {

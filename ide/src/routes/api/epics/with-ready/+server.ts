@@ -13,6 +13,15 @@ import { json } from '@sveltejs/kit';
 import { getTasks } from '$lib/server/jat-tasks.js';
 import type { RequestHandler } from './$types';
 
+interface EpicChild {
+	id: string;
+	title: string;
+	status: string;
+	priority: number;
+	isBlocked: boolean;
+	assignee?: string;
+}
+
 interface EpicWithReady {
 	id: string;
 	title: string;
@@ -20,6 +29,7 @@ interface EpicWithReady {
 	readyCount: number;
 	totalCount: number;
 	readyChildIds: string[];
+	children: EpicChild[];
 }
 
 export const GET: RequestHandler = async ({ url }) => {
@@ -68,31 +78,53 @@ export const GET: RequestHandler = async ({ url }) => {
 				if (t) childStatusMap.set(id, t.status);
 			}
 
-			// Find ready children (not closed, not in_progress, not blocked by sibling)
+			// Build children array with blocking info and find ready ones
 			const readyChildIds: string[] = [];
+			const children: EpicChild[] = [];
 			for (const id of childIds) {
-				const child = taskMap.get(id);
-				if (!child || child.status === 'closed' || child.status === 'in_progress') continue;
+				const child = taskMap.get(id) as any;
+				if (!child) continue;
 
-				// Check if blocked by a sibling that's not closed
-				const isBlocked = (child.depends_on || []).some((dep: any) => {
+				const isBlocked = child.status !== 'closed' && (child.depends_on || []).some((dep: any) => {
 					const depStatus = childStatusMap.get(dep.id);
 					return childIds.has(dep.id) && depStatus && depStatus !== 'closed';
 				});
 
-				if (!isBlocked) {
+				children.push({
+					id: child.id,
+					title: child.title,
+					status: child.status,
+					priority: child.priority,
+					isBlocked,
+					assignee: child.assignee || undefined
+				});
+
+				if (!isBlocked && child.status !== 'closed' && child.status !== 'in_progress') {
 					readyChildIds.push(id);
 				}
 			}
 
 			if (readyChildIds.length > 0) {
+				// Sort: ready first, then in_progress, then blocked, then closed
+				const statusOrder: Record<string, number> = { open: 0, in_progress: 1, blocked: 2, closed: 3 };
+				children.sort((a, b) => {
+					const aReady = !a.isBlocked && a.status !== 'closed' && a.status !== 'in_progress';
+					const bReady = !b.isBlocked && b.status !== 'closed' && b.status !== 'in_progress';
+					if (aReady !== bReady) return aReady ? -1 : 1;
+					const aOrder = a.isBlocked ? 2 : (statusOrder[a.status] ?? 4);
+					const bOrder = b.isBlocked ? 2 : (statusOrder[b.status] ?? 4);
+					if (aOrder !== bOrder) return aOrder - bOrder;
+					return a.priority - b.priority;
+				});
+
 				results.push({
 					id: epic.id,
 					title: epic.title,
 					project: epic.project || epic.id.split('-')[0],
 					readyCount: readyChildIds.length,
 					totalCount: childIds.size,
-					readyChildIds
+					readyChildIds,
+					children
 				});
 			}
 		}

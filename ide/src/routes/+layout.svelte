@@ -117,6 +117,14 @@
 	let activeTasks = $state<Array<{ id: string; title: string; priority: number; type: string; project: string; assignee: string | null }>>([]);
 
 	// Epics with ready children for Run Epic feature
+	interface EpicChild {
+		id: string;
+		title: string;
+		status: string;
+		priority: number;
+		isBlocked: boolean;
+		assignee?: string;
+	}
 	interface EpicWithReady {
 		id: string;
 		title: string;
@@ -124,6 +132,7 @@
 		readyCount: number;
 		totalCount: number;
 		readyChildIds: string[];
+		children: EpicChild[];
 	}
 	let epicsWithReady = $state<EpicWithReady[]>([]);
 

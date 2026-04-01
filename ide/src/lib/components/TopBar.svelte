@@ -256,6 +256,14 @@
 	}
 
 	/** Epic with ready children for Run Epic feature */
+	interface EpicChild {
+		id: string;
+		title: string;
+		status: string;
+		priority: number;
+		isBlocked: boolean;
+		assignee?: string;
+	}
 	interface EpicWithReady {
 		id: string;
 		title: string;
@@ -263,6 +271,7 @@
 		readyCount: number;
 		totalCount: number;
 		readyChildIds: string[];
+		children: EpicChild[];
 	}
 
 	/** Review rule structure */
@@ -616,7 +625,7 @@
 						projectColors={projectColorsMap}
 						{readyTasks}
 						{activeTasks}
-						epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount, readyChildIds: e.readyChildIds }))}
+						epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount, readyChildIds: e.readyChildIds, children: e.children }))}
 						idleSlots={availableSlots}
 						onNewTask={handleNewTask}
 						onStart={handleSpawnSingle}
@@ -639,7 +648,7 @@
 					projectColors={projectColorsMap}
 					{readyTasks}
 					{activeTasks}
-					epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount, readyChildIds: e.readyChildIds }))}
+					epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount, readyChildIds: e.readyChildIds, children: e.children }))}
 					idleSlots={availableSlots}
 					onNewTask={handleNewTask}
 					onStart={handleSpawnSingle}

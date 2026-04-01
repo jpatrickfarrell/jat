@@ -1037,10 +1037,9 @@
 		overflow-x: hidden;
 	}
 
-	/* Terminal scroll container: override inline right:60px, disable x-scroll */
+	/* Terminal scroll container: always full-width, minimap overlays on top */
 	.session-card-wrapper :global(.relative.flex-1.min-h-0 > .absolute.inset-0) {
 		right: 0 !important;
-		transition: right 0.3s ease;
 		overflow-x: hidden !important;
 	}
 
@@ -1050,20 +1049,20 @@
 		word-break: break-all;
 	}
 
-	/* Minimap container (second child): hidden by default */
+	/* Minimap container: hidden by default, slides in from right as overlay */
 	.session-card-wrapper :global(.relative.flex-1.min-h-0 > .absolute.top-0.right-0.bottom-0) {
 		opacity: 0;
-		transition: opacity 0.3s ease;
+		transform: translateX(100%);
+		transition: opacity 0.25s ease, transform 0.25s ease;
 		pointer-events: none;
+		/* Semi-transparent so user can still read text behind it */
+		backdrop-filter: blur(1px);
 	}
 
-	/* When scrolling, make room for minimap and reveal it */
-	.session-card-wrapper.mobile-scrolling :global(.relative.flex-1.min-h-0 > .absolute.inset-0) {
-		right: 60px !important;
-	}
-
+	/* When scrolling, slide minimap in from right — no layout shift */
 	.session-card-wrapper.mobile-scrolling :global(.relative.flex-1.min-h-0 > .absolute.top-0.right-0.bottom-0) {
-		opacity: 1;
+		opacity: 0.9;
+		transform: translateX(0);
 		pointer-events: auto;
 	}
 

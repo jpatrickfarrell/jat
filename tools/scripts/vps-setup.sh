@@ -92,7 +92,7 @@ echo ""
 # ============================================================================
 # Step 1: Swap (for small VPS instances)
 # ============================================================================
-header "Step 1/9: Swap configuration"
+header "Step 1/11: Swap configuration"
 
 # IDE production build needs ~1.5GB — 1GB VPS instances OOM without swap
 TOTAL_MEM_MB=$(free -m | awk '/^Mem:/{print $2}')
@@ -117,7 +117,7 @@ fi
 # ============================================================================
 # Step 2: Fix stale packages
 # ============================================================================
-header "Step 2/9: System packages"
+header "Step 2/11: System packages"
 
 if [ "$PKG" = "pacman" ]; then
     # Arch: remove orphaned firmware directories that block pacman -Syu
@@ -169,7 +169,7 @@ fi
 # ============================================================================
 # Step 2: Install Tailscale
 # ============================================================================
-header "Step 3/9: Tailscale (private networking)"
+header "Step 3/11: Tailscale (private networking)"
 
 if command -v tailscale &>/dev/null; then
     ok "Tailscale already installed ($(tailscale version 2>/dev/null | head -1))"
@@ -194,7 +194,7 @@ fi
 # ============================================================================
 # Step 3: Install Node.js 22 LTS
 # ============================================================================
-header "Step 4/9: Node.js 22 LTS"
+header "Step 4/11: Node.js 22 LTS"
 
 NODE_OK=false
 if command -v node &>/dev/null; then
@@ -229,7 +229,7 @@ fi
 # ============================================================================
 # Step 4: Install Claude Code + gh CLI
 # ============================================================================
-header "Step 5/9: Claude Code + GitHub CLI"
+header "Step 5/11: Claude Code + GitHub CLI"
 
 # Claude Code (npm global)
 if command -v claude &>/dev/null; then
@@ -264,7 +264,7 @@ fi
 # ============================================================================
 # Step 5: Firewall (iptables)
 # ============================================================================
-header "Step 6/9: Firewall configuration"
+header "Step 6/11: Firewall configuration"
 
 # Skip if firewall rules already persisted
 if [ -f /etc/iptables/iptables.rules ] || [ -f /etc/iptables/rules.v4 ]; then
@@ -330,7 +330,7 @@ fi
 # ============================================================================
 # Step 6: Directory structure + Auth
 # ============================================================================
-header "Step 7/9: Directories & authentication"
+header "Step 7/11: Directories & authentication"
 
 # Create directories
 mkdir -p ~/projects ~/data/jat ~/.local/bin ~/.config/jat
@@ -406,7 +406,7 @@ fi
 # ============================================================================
 # Step 7: Install JAT
 # ============================================================================
-header "Step 8/9: Install JAT"
+header "Step 8/11: Install JAT"
 
 JAT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/jat"
 
@@ -427,9 +427,122 @@ echo ""
 bash "$JAT_DIR/install.sh"
 
 # ============================================================================
-# Step 9: Systemd service (auto-start + crash recovery)
+# Step 9: Self-hosted Supabase (optional)
 # ============================================================================
-header "Step 9/9: JAT IDE service"
+header "Step 9/11: Self-hosted Supabase (Docker)"
+
+if [ -d "/opt/supabase-docker" ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -q supabase-db; then
+    ok "Supabase already running"
+elif prompt_yes_no "${BLUE}Install self-hosted Supabase? [y/N]${NC} " "n"; then
+    # Install Docker if not present
+    if ! command -v docker &>/dev/null; then
+        info "Installing Docker..."
+        if [ "$PKG" = "pacman" ]; then
+            sudo pacman -S --needed --noconfirm docker docker-compose
+            sudo systemctl enable --now docker
+        elif [ "$PKG" = "apt" ]; then
+            install -m 0755 -d /etc/apt/keyrings
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+            chmod a+r /etc/apt/keyrings/docker.asc
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+            sudo apt-get update
+            sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+        fi
+        ok "Docker installed ($(docker --version))"
+    else
+        ok "Docker already installed"
+    fi
+
+    # Clone and configure Supabase
+    info "Setting up Supabase..."
+    cd /opt
+    git clone --depth 1 https://github.com/supabase/supabase
+    mkdir -p supabase-docker
+    cp -rf supabase/docker/* supabase-docker/
+    cp supabase/docker/.env.example supabase-docker/.env
+    cd supabase-docker
+
+    # Generate secrets
+    info "Generating secrets..."
+    sh ./utils/generate-keys.sh --update-env
+
+    # Get Tailscale IP for binding
+    TS_IP=$(tailscale ip -4 2>/dev/null || echo "")
+    if [ -z "$TS_IP" ]; then
+        warn "Tailscale not connected — binding to localhost only"
+        TS_IP="127.0.0.1"
+    fi
+
+    # Configure URLs
+    sed -i \
+        -e "s|^SUPABASE_PUBLIC_URL=.*|SUPABASE_PUBLIC_URL=http://${TS_IP}:8000|" \
+        -e "s|^API_EXTERNAL_URL=.*|API_EXTERNAL_URL=http://${TS_IP}:8000|" \
+        -e "s|^SITE_URL=.*|SITE_URL=http://localhost:5173|" \
+        -e "s|^ENABLE_EMAIL_AUTOCONFIRM=.*|ENABLE_EMAIL_AUTOCONFIRM=true|" \
+        -e "s|^POOLER_TENANT_ID=.*|POOLER_TENANT_ID=$(hostname)|" \
+        .env
+
+    # Bind all ports to Tailscale IP only
+    sed -i \
+        -e "s|^\(.*\)- \${KONG_HTTP_PORT}:8000/tcp|\1- ${TS_IP}:\${KONG_HTTP_PORT}:8000/tcp|" \
+        -e "s|^\(.*\)- \${KONG_HTTPS_PORT}:8443/tcp|\1- ${TS_IP}:\${KONG_HTTPS_PORT}:8443/tcp|" \
+        -e "s|^\(.*\)- \${POSTGRES_PORT}:5432|\1- ${TS_IP}:\${POSTGRES_PORT}:5432|" \
+        -e "s|^\(.*\)- \${POOLER_PROXY_PORT_TRANSACTION}:6543|\1- ${TS_IP}:\${POOLER_PROXY_PORT_TRANSACTION}:6543|" \
+        docker-compose.yml
+
+    ok "Ports bound to Tailscale IP ($TS_IP) only"
+
+    # Pull and start
+    info "Pulling Supabase images (this takes a few minutes)..."
+    docker compose pull
+    info "Starting Supabase..."
+    docker compose up -d
+
+    # Wait for health
+    sleep 10
+    HEALTHY=$(docker ps --filter "name=supabase" --filter "health=healthy" --format '{{.Names}}' | wc -l)
+    ok "Supabase running ($HEALTHY containers healthy)"
+
+    # Set up daily backup
+    info "Setting up daily backups..."
+    mkdir -p /opt/backups/supabase
+    cat > /opt/supabase-docker/backup.sh << 'BACKUP'
+#!/bin/bash
+BACKUP_DIR=/opt/backups/supabase
+KEEP_DAYS=30
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+mkdir -p "$BACKUP_DIR"
+docker exec supabase-db pg_dump -U postgres -d postgres \
+    --clean --if-exists -n public -n auth -n storage \
+    -F custom -f /tmp/backup.dump
+docker cp supabase-db:/tmp/backup.dump "$BACKUP_DIR/supabase_$TIMESTAMP.dump"
+docker exec supabase-db rm /tmp/backup.dump
+gzip "$BACKUP_DIR/supabase_$TIMESTAMP.dump"
+find "$BACKUP_DIR" -name "*.dump.gz" -mtime +$KEEP_DAYS -delete
+echo "$(date): Backup complete: supabase_$TIMESTAMP.dump.gz ($(du -h "$BACKUP_DIR/supabase_$TIMESTAMP.dump.gz" | cut -f1))"
+BACKUP
+    chmod +x /opt/supabase-docker/backup.sh
+    (crontab -l 2>/dev/null; echo "0 2 * * * /opt/supabase-docker/backup.sh >> /var/log/supabase-backup.log 2>&1") | crontab -
+    ok "Daily backup cron set (2am, 30-day retention)"
+
+    echo ""
+    info "Supabase access (Tailscale only):"
+    echo -e "  Studio:   ${BOLD}http://${TS_IP}:8000${NC}"
+    echo -e "  REST API: ${BOLD}http://${TS_IP}:8000/rest/v1/${NC}"
+    echo -e "  Postgres: ${BOLD}postgresql://postgres.$(hostname):PASS@${TS_IP}:5432/postgres${NC}"
+    echo ""
+    info "Credentials are in /opt/supabase-docker/.env"
+    echo ""
+
+    cd ~
+else
+    info "Skipping Supabase (run this script again to install later)"
+fi
+
+# ============================================================================
+# Step 10: Systemd service (auto-start + crash recovery)
+# ============================================================================
+header "Step 10/11: JAT IDE service"
 
 SERVICE_FILE="/etc/systemd/system/jat-ide.service"
 if [ -f "$SERVICE_FILE" ]; then
@@ -492,7 +605,7 @@ pkill -f "node build" --oldest 2>/dev/null || true
 # Pre-configure Claude Code for headless agent operation
 # Sets flags that would otherwise require interactive prompts on first run
 # ============================================================================
-header "Configuring Claude Code for headless operation"
+header "Step 11/11: Configuring Claude Code for headless operation"
 
 CLAUDE_JSON="$HOME/.claude.json"
 CLAUDE_SETTINGS="$HOME/.claude/settings.json"
@@ -578,15 +691,19 @@ echo "  ✓ GitHub CLI"
 { [ -f /etc/iptables/iptables.rules ] || [ -f /etc/iptables/rules.v4 ]; } && echo "  ✓ Firewall (SSH + Tailscale only)" || true
 echo "  ✓ JAT (tools, IDE, agent registry)"
 echo "  ✓ JAT IDE systemd service (auto-start + crash recovery)"
+[ -d "/opt/supabase-docker" ] && echo "  ✓ Self-hosted Supabase (Tailscale-only, daily backups)" || true
 echo ""
 TS_IP=$(tailscale ip -4 2>/dev/null || echo "N/A")
 echo -e "Tailscale IP: ${BOLD}$TS_IP${NC}"
 echo -e "JAT IDE:      ${BOLD}http://$TS_IP:3333${NC}"
+[ -d "/opt/supabase-docker" ] && echo -e "Supabase:     ${BOLD}http://$TS_IP:8000${NC}" || true
 echo ""
 echo "Service management:"
 echo "  systemctl status jat-ide     # Check status"
 echo "  journalctl -u jat-ide -f     # Live logs"
 echo "  systemctl restart jat-ide    # Restart"
+[ -d "/opt/supabase-docker" ] && echo "  cd /opt/supabase-docker && docker compose ps   # Supabase status" || true
+[ -d "/opt/supabase-docker" ] && echo "  /opt/supabase-docker/backup.sh                 # Manual backup" || true
 echo ""
 echo "Next steps:"
 echo "  1. Open http://$TS_IP:3333 in your browser"

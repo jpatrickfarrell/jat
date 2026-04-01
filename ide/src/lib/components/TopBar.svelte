@@ -620,6 +620,8 @@
 						isActive={favProject === selectedProject}
 						onSelect={() => onProjectChange?.(favProject)}
 						openOnHover={true}
+						isFavorite={favoriteProjects.has(favProject)}
+						{onToggleFavorite}
 					/>
 				</div>
 			{/each}
@@ -638,6 +640,8 @@
 					onSwarm={(count, epicId) => epicId ? handleRunEpic(epicId) : handleSwarm()}
 					sessionStates={projectSessionStates.get(selectedProject) || []}
 					openOnHover={true}
+					isFavorite={favoriteProjects.has(selectedProject)}
+					{onToggleFavorite}
 				/>
 			{/if}
 

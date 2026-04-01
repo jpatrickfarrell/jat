@@ -201,6 +201,13 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			category: 'configure'
 		},
 		{
+			id: 'clients',
+			label: 'Clients',
+			href: '/clients',
+			icon: 'clients',
+			category: 'configure'
+		},
+		{
 			id: 'config',
 			label: 'Config',
 			href: '/config',

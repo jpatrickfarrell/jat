@@ -7,7 +7,7 @@
  */
 
 import { json } from '@sveltejs/kit';
-import { getReadyTasks } from '$lib/server/jat-tasks.js';
+import { getReadyTasks, getTasks } from '$lib/server/jat-tasks.js';
 import { apiCache, cacheKey, CACHE_TTL } from '$lib/server/cache.js';
 
 /** @type {import('./$types').RequestHandler} */
@@ -22,6 +22,9 @@ export async function GET() {
 		// Get ready tasks from all projects using the jat-tasks.js library
 		const tasks = getReadyTasks();
 
+		// Get active (in_progress) tasks across all projects
+		const inProgressTasks = getTasks({ status: 'in_progress' });
+
 		const responseData = {
 			count: tasks.length,
 			tasks: tasks.map((t) => ({
@@ -30,6 +33,14 @@ export async function GET() {
 				priority: t.priority,
 				type: t.issue_type,
 				project: t.project
+			})),
+			activeTasks: inProgressTasks.map((t) => ({
+				id: t.id,
+				title: t.title,
+				priority: t.priority,
+				type: t.issue_type,
+				project: t.project,
+				assignee: t.assignee || null
 			})),
 			timestamp: new Date().toISOString()
 		};
@@ -41,6 +52,7 @@ export async function GET() {
 		return json({
 			count: 0,
 			tasks: [],
+			activeTasks: [],
 			error: error instanceof Error ? error.message : 'Failed to get ready tasks',
 			timestamp: new Date().toISOString()
 		});

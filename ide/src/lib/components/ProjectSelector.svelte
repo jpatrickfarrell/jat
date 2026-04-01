@@ -17,6 +17,7 @@
 	import {
 		isStartDropdownOpen,
 		closeStartDropdown,
+		openTaskDetailDrawer,
 	} from '$lib/stores/drawerStore';
 	import {
 		start as startServer,
@@ -37,11 +38,20 @@
 		priority?: number;
 	}
 
+	interface ActiveTask {
+		id: string;
+		title: string;
+		project?: string;
+		priority?: number;
+		assignee?: string | null;
+	}
+
 	interface Epic {
 		id: string;
 		title: string;
 		project?: string;
 		childCount?: number;
+		readyChildIds?: string[];
 	}
 
 	interface Props {
@@ -55,6 +65,7 @@
 		/** Optional map of project name -> color. If provided, used instead of getProjectColor() */
 		projectColors?: Map<string, string> | null;
 		readyTasks?: ReadyTask[];
+		activeTasks?: ActiveTask[];
 		epics?: Epic[];
 		idleSlots?: number;
 		onNewTask?: (project: string) => void;
@@ -82,6 +93,7 @@
 		showColors = false,
 		projectColors = null,
 		readyTasks = [],
+		activeTasks = [],
 		epics = [],
 		idleSlots = 0,
 		onNewTask,
@@ -101,6 +113,7 @@
 
 	let open = $state(false);
 	let containerEl = $state<HTMLDivElement | null>(null);
+	let hoveredAttackEpicId = $state<string | null>(null);
 	let dropdownPos = $state({ top: 0, left: 0 });
 	let hoverCloseTimer = $state<ReturnType<typeof setTimeout> | null>(null);
 
@@ -157,10 +170,46 @@
 		})
 	);
 
+	// Filter active tasks for the selected project
+	const projectActiveTasks = $derived(
+		activeTasks.filter(t => {
+			const taskProject = t.project || t.id.split('-')[0];
+			return taskProject === selectedProject;
+		})
+	);
+
 	// Filter epics for the selected project
 	const projectEpics = $derived(
 		epics.filter(e => e.project === selectedProject)
 	);
+
+	// Group ready tasks: epic children vs standalone
+	// Uses readyChildIds from the epics API (dependency-based) instead of dot-notation only
+	const epicTaskGroups = $derived.by(() => {
+		// Build a map: task ID → epic ID (from readyChildIds provided by the API)
+		const taskToEpic = new Map<string, string>();
+		for (const epic of projectEpics) {
+			if (epic.readyChildIds) {
+				for (const childId of epic.readyChildIds) {
+					taskToEpic.set(childId, epic.id);
+				}
+			}
+		}
+
+		const groups = new Map<string, ReadyTask[]>();
+		const standalone: ReadyTask[] = [];
+
+		for (const task of projectReadyTasks) {
+			const epicId = taskToEpic.get(task.id);
+			if (epicId) {
+				if (!groups.has(epicId)) groups.set(epicId, []);
+				groups.get(epicId)!.push(task);
+			} else {
+				standalone.push(task);
+			}
+		}
+		return { groups, standalone };
+	});
 
 	const hasActions = $derived(!!onStart || !!onSwarm || !!onNewTask);
 
@@ -291,10 +340,10 @@
 		onStart?.(taskId);
 	}
 
-	function handleStartTop() {
-		if (projectReadyTasks.length > 0) {
-			handleStartTask(projectReadyTasks[0].id);
-		}
+	function handleViewTask(taskId: string) {
+		open = false;
+		closeStartDropdown();
+		openTaskDetailDrawer(taskId);
 	}
 
 	function handleSwarmClick(count: number, epicId?: string) {
@@ -397,11 +446,40 @@
 			onmouseenter={handleDropdownMouseEnter}
 			onmouseleave={handleMouseLeave}
 		>
-			<!-- Favorite toggle (shown when onToggleFavorite is available) -->
-			{#if onToggleFavorite}
-				<div class="dropdown-fav-row" style="--project-color: {selectedColor};">
-					<span class="dropdown-fav-dot"></span>
-					<span class="dropdown-fav-label">{selectedProject}</span>
+			<!-- Header row: project name + server controls + star -->
+			<div class="dropdown-header-row" style="--project-color: {selectedColor};">
+				<span class="dropdown-fav-dot"></span>
+				<span class="dropdown-fav-label">{selectedProject}</span>
+
+				<!-- Inline server controls -->
+				{#if effectiveServerConfig || serverIsRunning}
+					<div class="header-server-controls">
+						{#if serverLoadingAction === selectedProject}
+							<span class="loading loading-spinner loading-xs" style="color: oklch(0.65 0.02 250); width: 0.75rem; height: 0.75rem;"></span>
+						{:else if serverIsRunning}
+							<button type="button" class="header-server-btn" onclick={handleServerOpenBrowser} title="Open in browser">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+							</button>
+							<button type="button" class="header-server-btn" onclick={handleServerRestart} title="Restart server">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+							</button>
+							<button type="button" class="header-server-btn header-server-btn-danger" onclick={handleServerStop} title="Stop server">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" /></svg>
+							</button>
+							<span class="server-status-dot server-status-running" title="Running"></span>
+						{:else}
+							<button type="button" class="header-server-btn header-server-btn-success" onclick={handleServerStart} title="Start server">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" /></svg>
+							</button>
+						{/if}
+					</div>
+				{/if}
+
+				{#if serverError}
+					<span class="header-server-error" title={serverError}>!</span>
+				{/if}
+
+				{#if onToggleFavorite}
 					<button
 						type="button"
 						class="dropdown-fav-star"
@@ -415,9 +493,9 @@
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" /></svg>
 						{/if}
 					</button>
-				</div>
-				<div class="dropdown-divider"></div>
-			{/if}
+				{/if}
+			</div>
+			<div class="dropdown-divider"></div>
 
 			<!-- Projects Section (only shown when used outside TopBar, e.g. IngestWizard, McpConfigEditor) -->
 			{#if showProjectsList}
@@ -442,146 +520,122 @@
 				{/each}
 			{/if}
 
-			<!-- Server Section -->
-			{#if effectiveServerConfig || serverIsRunning}
+			<!-- Active Tasks Section -->
+			{#if projectActiveTasks.length > 0}
 				{#if showProjectsList}<div class="dropdown-divider"></div>{/if}
-				<div class="dropdown-section-header">
-					Server
-					{#if effectiveServerConfig?.port}
-						<span class="server-port">:{effectiveServerConfig.port}</span>
-					{/if}
-				</div>
-				{#if serverError}
-					<div class="server-error">{serverError}</div>
-				{/if}
-				<div class="server-actions-row">
-					{#if serverLoadingAction === selectedProject}
-						<span class="loading loading-spinner loading-xs" style="color: oklch(0.65 0.02 250);"></span>
-					{:else if serverIsRunning}
-						<!-- Open browser -->
+				<div class="dropdown-section-header">Active ({projectActiveTasks.length})</div>
+				{#each projectActiveTasks as task}
+					<div class="dropdown-item task-item active-task-item">
 						<button
 							type="button"
-							class="server-action-btn"
-							onclick={handleServerOpenBrowser}
-							title="Open in browser"
+							class="task-info-btn"
+							onclick={() => handleViewTask(task.id)}
 						>
-							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-							</svg>
-							<span>Open</span>
-						</button>
-						<!-- Restart -->
-						<button
-							type="button"
-							class="server-action-btn"
-							onclick={handleServerRestart}
-							title="Restart server"
-						>
-							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-							</svg>
-							<span>Restart</span>
-						</button>
-						<!-- Stop -->
-						<button
-							type="button"
-							class="server-action-btn server-action-btn-danger"
-							onclick={handleServerStop}
-							title="Stop server"
-						>
-							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" />
-							</svg>
-							<span>Stop</span>
-						</button>
-					{:else}
-						<!-- Start -->
-						<button
-							type="button"
-							class="server-action-btn server-action-btn-success"
-							onclick={handleServerStart}
-							title="Start server"
-						>
-							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
-							</svg>
-							<span>Start Server</span>
-						</button>
-					{/if}
-					{#if serverIsRunning}
-						<span class="server-status-dot server-status-running" title="Running"></span>
-					{:else}
-						<span class="server-status-dot server-status-stopped" title="Stopped"></span>
-					{/if}
-				</div>
-			{/if}
-
-			<!-- Ready Tasks Section -->
-			{#if hasActions && projectReadyTasks.length > 0}
-				{#if showProjectsList || effectiveServerConfig || serverIsRunning}<div class="dropdown-divider"></div>{/if}
-				<div class="dropdown-section-header">Ready Tasks ({projectReadyTasks.length})</div>
-				<div class="dropdown-scroll">
-					{#each projectReadyTasks as task}
-						<button
-							type="button"
-							class="dropdown-item task-item"
-							onclick={() => handleStartTask(task.id)}
-						>
+							<span class="active-dot"></span>
 							{#if task.priority !== undefined}
 								<span class="priority-badge priority-{task.priority}">P{task.priority}</span>
 							{/if}
 							<span class="item-label task-title"><FxText text={task.title} /></span>
 						</button>
-					{/each}
-				</div>
-			{/if}
-
-			<!-- Quick Actions Section -->
-			{#if hasActions && projectReadyTasks.length > 0}
-				<div class="dropdown-divider"></div>
-				<div class="dropdown-section-header">Actions</div>
-				<button
-					type="button"
-					class="dropdown-item action-item"
-					onclick={handleStartTop}
-				>
-					<svg class="action-icon action-start" viewBox="0 0 20 20" fill="currentColor">
-						<path d="M6.3 2.84A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.27l9.344-5.891a1.5 1.5 0 000-2.538L6.3 2.841z" />
-					</svg>
-					<span class="item-label">Start top task</span>
-				</button>
-				{#if idleSlots > 0 && onSwarm}
-					<button
-						type="button"
-						class="dropdown-item action-item"
-						onclick={() => handleSwarmClick(Math.min(projectReadyTasks.length, idleSlots))}
-					>
-						<svg class="action-icon action-swarm" viewBox="0 0 20 20" fill="currentColor">
-							<path d="M11.983 1.907a.75.75 0 00-1.292-.657l-8.5 9.5A.75.75 0 002.75 12h6.572l-1.305 6.093a.75.75 0 001.292.657l8.5-9.5A.75.75 0 0017.25 8h-6.572l1.305-6.093z" />
-						</svg>
-						<span class="item-label">Swarm ({Math.min(projectReadyTasks.length, idleSlots)} agents)</span>
-					</button>
-				{/if}
-			{/if}
-
-			<!-- Epics Section -->
-			{#if hasActions && projectEpics.length > 0}
-				<div class="dropdown-divider"></div>
-				<div class="dropdown-section-header">Attack Epic</div>
-				{#each projectEpics.slice(0, 3) as epic}
-					<button
-						type="button"
-						class="dropdown-item action-item"
-						onclick={() => handleSwarmClick(Math.min(epic.childCount || 4, idleSlots), epic.id)}
-						disabled={idleSlots === 0}
-					>
-						<span class="epic-icon">&#127919;</span>
-						<span class="item-label task-title"><FxText text={epic.title} /></span>
-						{#if epic.childCount}
-							<span class="dropdown-hint">{epic.childCount} tasks</span>
+						{#if task.assignee}
+							<span class="task-assignee">{task.assignee}</span>
 						{/if}
-					</button>
+					</div>
 				{/each}
+			{/if}
+
+			<!-- Ready Tasks Section (grouped by epics, then standalone) -->
+			{#if hasActions && projectReadyTasks.length > 0}
+				{#if showProjectsList || projectActiveTasks.length > 0}<div class="dropdown-divider"></div>{/if}
+				<div class="dropdown-section-header">Ready ({projectReadyTasks.length})</div>
+				<div class="dropdown-scroll">
+					<!-- Epic groups -->
+					{#each projectEpics as epic}
+						{@const epicTasks = epicTaskGroups.groups.get(epic.id) || []}
+						{#if epicTasks.length > 0}
+							<div class="epic-group">
+								<div class="epic-bar" style="--project-color: {selectedColor};">
+									<span class="epic-bar-icon">🏔️</span>
+									<span class="epic-bar-label"><FxText text={epic.title} /></span>
+									<span class="epic-bar-count">{epicTasks.length}</span>
+									{#if idleSlots > 0 && onSwarm}
+										<button
+											type="button"
+											class="epic-bar-attack"
+											onclick={(e) => { e.stopPropagation(); handleSwarmClick(Math.min(epic.childCount || epicTasks.length, idleSlots), epic.id); }}
+											onmouseenter={() => { hoveredAttackEpicId = epic.id; }}
+											onmouseleave={() => { if (hoveredAttackEpicId === epic.id) hoveredAttackEpicId = null; }}
+											title="Attack epic"
+										>
+											<svg viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3">
+												<path d="M11.983 1.907a.75.75 0 00-1.292-.657l-8.5 9.5A.75.75 0 002.75 12h6.572l-1.305 6.093a.75.75 0 001.292.657l8.5-9.5A.75.75 0 0017.25 8h-6.572l1.305-6.093z" />
+											</svg>
+										</button>
+									{/if}
+								</div>
+								{#each epicTasks as task}
+									<div class="dropdown-item task-item epic-child-item" class:attack-highlight={hoveredAttackEpicId === epic.id}>
+										<button
+											type="button"
+											class="task-info-btn"
+											onclick={() => handleViewTask(task.id)}
+										>
+											{#if task.priority !== undefined}
+												<span class="priority-badge priority-{task.priority}">P{task.priority}</span>
+											{/if}
+											<span class="item-label task-title"><FxText text={task.title} /></span>
+										</button>
+										{#if onStart}
+											<button
+												type="button"
+												class="task-launch-btn"
+												onclick={(e) => { e.stopPropagation(); handleStartTask(task.id); }}
+												title="Launch agent"
+											>
+												<svg viewBox="0 0 20 20" fill="currentColor"><path d="M6.3 2.84A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.27l9.344-5.891a1.5 1.5 0 000-2.538L6.3 2.841z" /></svg>
+											</button>
+										{/if}
+									</div>
+								{/each}
+							</div>
+						{/if}
+					{/each}
+
+					<!-- Standalone tasks -->
+					{#if epicTaskGroups.standalone.length > 0}
+						{#if projectEpics.some(e => (epicTaskGroups.groups.get(e.id) || []).length > 0)}
+							<div class="dropdown-divider"></div>
+						{/if}
+						{#each epicTaskGroups.standalone as task}
+							<div class="dropdown-item task-item">
+								<button
+									type="button"
+									class="task-info-btn"
+									onclick={() => handleViewTask(task.id)}
+								>
+									{#if task.priority !== undefined}
+										<span class="priority-badge priority-{task.priority}">P{task.priority}</span>
+									{/if}
+									<span class="item-label task-title"><FxText text={task.title} /></span>
+								</button>
+								{#if onStart}
+									<button
+										type="button"
+										class="task-launch-btn"
+										onclick={(e) => { e.stopPropagation(); handleStartTask(task.id); }}
+										title="Launch agent"
+									>
+										<svg viewBox="0 0 20 20" fill="currentColor"><path d="M6.3 2.84A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.27l9.344-5.891a1.5 1.5 0 000-2.538L6.3 2.841z" /></svg>
+									</button>
+								{/if}
+							</div>
+						{/each}
+					{/if}
+				</div>
+
+			{:else if hasActions}
+				{#if showProjectsList || effectiveServerConfig || serverIsRunning}<div class="dropdown-divider"></div>{/if}
+				<div class="dropdown-empty">No ready tasks</div>
 			{/if}
 		</div>
 	{/if}
@@ -885,38 +939,6 @@
 		font-size: 0.8125rem;
 	}
 
-	/* Action items */
-	.action-item {
-		font-size: 0.8125rem;
-	}
-
-	.action-icon {
-		width: 0.875rem;
-		height: 0.875rem;
-		flex-shrink: 0;
-	}
-
-	.action-start {
-		color: oklch(0.75 0.15 200);
-	}
-
-	.action-swarm {
-		color: oklch(0.80 0.15 85);
-	}
-
-	.action-item:hover .action-start {
-		color: oklch(0.90 0.15 200);
-	}
-
-	.action-item:hover .action-swarm {
-		color: oklch(0.92 0.15 85);
-	}
-
-	.epic-icon {
-		font-size: 0.875rem;
-		flex-shrink: 0;
-	}
-
 	.dropdown-hint {
 		margin-left: auto;
 		font-size: 0.6875rem;
@@ -975,70 +997,6 @@
 		border-radius: 0.2rem;
 	}
 
-	/* Server section */
-	.server-port {
-		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
-		font-size: 0.5625rem;
-		color: oklch(0.55 0.02 250);
-		margin-left: 0.25rem;
-	}
-
-	.server-error {
-		padding: 0.25rem 0.5rem;
-		font-size: 0.6875rem;
-		color: oklch(0.75 0.15 30);
-		background: oklch(0.25 0.08 30 / 0.2);
-		border-radius: 0.25rem;
-		margin: 0.125rem 0.25rem;
-	}
-
-	.server-actions-row {
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
-		padding: 0.375rem 0.5rem;
-	}
-
-	.server-action-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.25rem;
-		padding: 0.25rem 0.5rem;
-		background: oklch(0.22 0.02 250);
-		border: 1px solid oklch(0.32 0.02 250);
-		border-radius: 0.3rem;
-		color: oklch(0.70 0.02 250);
-		font-size: 0.6875rem;
-		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
-		cursor: pointer;
-		transition: all 0.15s ease;
-	}
-
-	.server-action-btn:hover {
-		background: oklch(0.28 0.04 250);
-		color: oklch(0.88 0.02 250);
-	}
-
-	.server-action-btn-success {
-		border-color: oklch(0.45 0.12 145 / 0.5);
-		color: oklch(0.65 0.12 145);
-	}
-
-	.server-action-btn-success:hover {
-		background: oklch(0.28 0.08 145 / 0.3);
-		color: oklch(0.85 0.15 145);
-	}
-
-	.server-action-btn-danger {
-		border-color: oklch(0.45 0.12 30 / 0.5);
-		color: oklch(0.65 0.12 30);
-	}
-
-	.server-action-btn-danger:hover {
-		background: oklch(0.28 0.08 30 / 0.3);
-		color: oklch(0.85 0.15 30);
-	}
-
 	.server-status-dot {
 		width: 0.4rem;
 		height: 0.4rem;
@@ -1056,8 +1014,8 @@
 		background: oklch(0.45 0.02 250);
 	}
 
-	/* Favorite toggle row at top of dropdown */
-	.dropdown-fav-row {
+	/* Header row: project name + server + star */
+	.dropdown-header-row {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
@@ -1113,5 +1071,218 @@
 
 	.dropdown-fav-star-active:hover {
 		color: oklch(0.65 0.10 85);
+	}
+
+	/* Inline server controls in header row */
+	.header-server-controls {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		margin-left: auto;
+	}
+
+	.header-server-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.25rem;
+		height: 1.25rem;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		color: oklch(0.55 0.02 250);
+		padding: 0;
+		border-radius: 0.25rem;
+		transition: all 0.1s ease;
+	}
+
+	.header-server-btn svg {
+		width: 0.75rem;
+		height: 0.75rem;
+	}
+
+	.header-server-btn:hover {
+		color: oklch(0.85 0.02 250);
+		background: oklch(0.28 0.02 250);
+	}
+
+	.header-server-btn-success {
+		color: oklch(0.55 0.12 145);
+	}
+
+	.header-server-btn-success:hover {
+		color: oklch(0.85 0.15 145);
+		background: oklch(0.28 0.08 145 / 0.3);
+	}
+
+	.header-server-btn-danger {
+		color: oklch(0.55 0.10 30);
+	}
+
+	.header-server-btn-danger:hover {
+		color: oklch(0.85 0.15 30);
+		background: oklch(0.28 0.08 30 / 0.3);
+	}
+
+	.header-server-error {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1rem;
+		height: 1rem;
+		font-size: 0.625rem;
+		font-weight: 700;
+		color: oklch(0.75 0.15 30);
+		background: oklch(0.30 0.10 30 / 0.3);
+		border-radius: 50%;
+		flex-shrink: 0;
+	}
+
+	/* Epic group */
+	.epic-group {
+		margin-bottom: 0.125rem;
+	}
+
+	.epic-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.25rem 0.5rem;
+		background: color-mix(in oklch, var(--project-color) 8%, transparent);
+		border-left: 2px solid color-mix(in oklch, var(--project-color) 50%, transparent);
+		margin: 0.125rem 0;
+	}
+
+	.epic-bar-icon {
+		font-size: 0.6875rem;
+		flex-shrink: 0;
+		line-height: 1;
+	}
+
+	.epic-bar-label {
+		flex: 1;
+		font-size: 0.6875rem;
+		font-weight: 600;
+		color: oklch(0.65 0.02 250);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.epic-bar-count {
+		font-size: 0.5625rem;
+		font-weight: 700;
+		color: oklch(0.55 0.02 250);
+		background: oklch(0.22 0.02 250);
+		padding: 0.0625rem 0.3rem;
+		border-radius: 0.25rem;
+		flex-shrink: 0;
+	}
+
+	.epic-bar-attack {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		color: oklch(0.55 0.10 85);
+		padding: 0.125rem;
+		border-radius: 0.25rem;
+		transition: all 0.1s ease;
+		flex-shrink: 0;
+	}
+
+	.epic-bar-attack:hover {
+		color: oklch(0.85 0.15 85);
+		background: oklch(0.30 0.08 85 / 0.2);
+	}
+
+	.epic-child-item {
+		padding-left: 1.25rem;
+		font-size: 0.75rem;
+		transition: background 0.15s ease, border-color 0.15s ease;
+	}
+
+	.epic-child-item.attack-highlight {
+		background: oklch(0.75 0.15 85 / 0.12);
+		border-left: 2px solid oklch(0.75 0.15 85 / 0.5);
+	}
+
+	/* Task row: info button (fills space) + launch button (right) */
+	.task-info-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex: 1;
+		min-width: 0;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		font-size: inherit;
+		color: inherit;
+		text-align: left;
+		padding: 0;
+	}
+
+	.task-launch-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.25rem;
+		height: 1.25rem;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		color: oklch(0.45 0.02 250);
+		flex-shrink: 0;
+		padding: 0;
+		border-radius: 0.25rem;
+		transition: all 0.1s ease;
+		opacity: 0;
+	}
+
+	.task-launch-btn svg {
+		width: 0.75rem;
+		height: 0.75rem;
+	}
+
+	.dropdown-item:hover .task-launch-btn {
+		opacity: 1;
+	}
+
+	.task-launch-btn:hover {
+		color: oklch(0.85 0.15 200);
+		background: oklch(0.30 0.08 200 / 0.2);
+	}
+
+	/* Active task items */
+	.active-dot {
+		width: 0.375rem;
+		height: 0.375rem;
+		border-radius: 50%;
+		background: oklch(0.75 0.15 85);
+		box-shadow: 0 0 4px oklch(0.75 0.15 85 / 0.5);
+		flex-shrink: 0;
+	}
+
+	.task-assignee {
+		font-size: 0.5625rem;
+		color: oklch(0.50 0.02 250);
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		flex-shrink: 0;
+		max-width: 5rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	/* Empty state */
+	.dropdown-empty {
+		padding: 0.5rem;
+		font-size: 0.6875rem;
+		color: oklch(0.45 0.02 250);
+		text-align: center;
+		font-style: italic;
 	}
 </style>

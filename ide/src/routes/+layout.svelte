@@ -113,6 +113,9 @@
 	let readyTaskCount = $state(0);
 	let readyTasks = $state<Array<{ id: string; title: string; priority: number; type: string; project: string }>>([]);
 
+	// Active (in_progress) tasks for ProjectSelector dropdown
+	let activeTasks = $state<Array<{ id: string; title: string; priority: number; type: string; project: string; assignee: string | null }>>([]);
+
 	// Epics with ready children for Run Epic feature
 	interface EpicWithReady {
 		id: string;
@@ -120,6 +123,7 @@
 		project: string;
 		readyCount: number;
 		totalCount: number;
+		readyChildIds: string[];
 	}
 	let epicsWithReady = $state<EpicWithReady[]>([]);
 
@@ -637,6 +641,7 @@
 			const data = await response.json();
 			readyTaskCount = data.count || 0;
 			readyTasks = data.tasks || [];
+			activeTasks = data.activeTasks || [];
 		} catch (error) {
 			console.error('Failed to fetch ready task count:', error);
 			if (retries > 0) {
@@ -652,35 +657,10 @@
 	// Retries on failure since network may not be ready during page load
 	async function loadEpicsWithReady(retries = 3) {
 		try {
-			// Get all tasks and filter for open epics
-			const response = await fetch('/api/tasks?status=open');
+			// Single bulk endpoint: returns all epics (open + recently closed) with ready children
+			const response = await fetch('/api/epics/with-ready');
 			const data = await response.json();
-			const epics = (data.tasks || []).filter((t: any) => t.issue_type === 'epic');
-
-			// For each epic, get its ready children count
-			const epicsData: EpicWithReady[] = [];
-
-			for (const epic of epics) {
-				try {
-					const childResponse = await fetch(`/api/epics/${epic.id}/children`);
-					if (childResponse.ok) {
-						const childData = await childResponse.json();
-						if (childData.summary?.ready > 0) {
-							epicsData.push({
-								id: epic.id,
-								title: epic.title,
-								project: epic.project || epic.id.split('-')[0],
-								readyCount: childData.summary.ready,
-								totalCount: childData.summary.total
-							});
-						}
-					}
-				} catch {
-					// Skip epics we can't fetch children for
-				}
-			}
-
-			epicsWithReady = epicsData.sort((a, b) => b.readyCount - a.readyCount);
+			epicsWithReady = (data.epics || []) as EpicWithReady[];
 		} catch (error) {
 			console.error('Failed to fetch epics with ready:', error);
 			if (retries > 0) {
@@ -1212,6 +1192,7 @@
 				{projectColors}
 				{readyTaskCount}
 				{readyTasks}
+				{activeTasks}
 				{projects}
 				{selectedProject}
 				{epicsWithReady}

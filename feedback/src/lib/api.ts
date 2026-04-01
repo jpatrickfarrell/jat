@@ -63,6 +63,10 @@ export async function fetchReports(endpoint: string): Promise<{ reports: ReportS
     });
 
     if (!response.ok) {
+      // 401/403 = not logged in → just show empty reports, not an error
+      if (response.status === 401 || response.status === 403) {
+        return { reports: [] };
+      }
       const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
       return { reports: [], error: data.error || `HTTP ${response.status}` };
     }

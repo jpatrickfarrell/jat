@@ -262,6 +262,7 @@
 		project: string;
 		readyCount: number;
 		totalCount: number;
+		readyChildIds: string[];
 	}
 
 	/** Review rule structure */
@@ -296,6 +297,8 @@
 		readyTaskCount?: number;
 		/** Ready tasks list for swarm dropdown */
 		readyTasks?: ReadyTask[];
+		/** Active (in_progress) tasks for ProjectSelector dropdown */
+		activeTasks?: Array<{ id: string; title: string; priority: number; type: string; project: string; assignee: string | null }>;
 		/** Available projects for session spawning */
 		projects?: string[];
 		/** Currently selected project filter (for auto-detection) */
@@ -334,6 +337,7 @@
 		projectColors = {},
 		readyTaskCount = 0,
 		readyTasks = [],
+		activeTasks = [],
 		projects = [],
 		selectedProject = "All Projects",
 		epicsWithReady = [],
@@ -611,7 +615,8 @@
 						showColors={true}
 						projectColors={projectColorsMap}
 						{readyTasks}
-						epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount }))}
+						{activeTasks}
+						epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount, readyChildIds: e.readyChildIds }))}
 						idleSlots={availableSlots}
 						onNewTask={handleNewTask}
 						onStart={handleSpawnSingle}
@@ -633,7 +638,8 @@
 					showColors={true}
 					projectColors={projectColorsMap}
 					{readyTasks}
-					epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount }))}
+					{activeTasks}
+					epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount, readyChildIds: e.readyChildIds }))}
 					idleSlots={availableSlots}
 					onNewTask={handleNewTask}
 					onStart={handleSpawnSingle}

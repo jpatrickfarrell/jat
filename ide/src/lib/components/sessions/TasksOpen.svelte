@@ -17,6 +17,7 @@
 	import { bulkApiOperation, fetchWithTimeout, createDeleteRequest, handleApiError, formatBulkResultMessage } from '$lib/utils/bulkApiHelpers';
 	import { isHumanTask } from '$lib/utils/badgeHelpers';
 	import { addToast } from '$lib/stores/toasts.svelte';
+	import { broadcastTaskEvent } from '$lib/stores/taskEvents';
 	import { AGENT_PRESETS } from '$lib/types/agentProgram';
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
 	import { spawnInBatches, type SpawnResult } from '$lib/utils/spawnBatch';
@@ -1230,6 +1231,36 @@
 	});
 
 	// Context menu actions
+	let resumingTaskId = $state<string | null>(null);
+
+	async function handleResumeTask(task: Task) {
+		if (!task.assignee) return;
+		closeContextMenu();
+		resumingTaskId = task.id;
+		try {
+			const response = await fetch(`/api/sessions/${task.assignee}/resume`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+			});
+			if (!response.ok) {
+				const data = await response.json();
+				if (response.status === 404) {
+					addToast({ message: 'Resume failed', type: 'error', details: 'Session expired — launch a new session instead' });
+				} else {
+					addToast({ message: 'Resume failed', type: 'error', details: data.message || data.error || 'Could not resume session' });
+				}
+			} else {
+				addToast({ message: 'Session resumed', type: 'success', details: `Resuming ${task.assignee}'s session` });
+				broadcastTaskEvent('session-resumed', task.id);
+			}
+		} catch (err) {
+			addToast({ message: 'Resume failed', type: 'error', details: 'Network error' });
+			console.error('Resume error:', err);
+		} finally {
+			resumingTaskId = null;
+		}
+	}
+
 	async function handleChangeStatus(taskId: string, newStatus: string) {
 		closeContextMenu();
 		try {
@@ -1970,6 +2001,16 @@
 			</svg>
 			<span>Launch</span>
 		</button>
+
+		<!-- Resume (only for tasks with a previous assignee) -->
+		{#if ctxTask.assignee}
+			<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => { const t = ctxTask!; handleResumeTask(t); ctxTask = null; }} disabled={resumingTaskId === ctxTask.id}>
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+				</svg>
+				<span>Resume</span>
+			</button>
+		{/if}
 
 		<!-- View Details -->
 		<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => { const id = ctxTask!.id; closeContextMenu(); onTaskClick(id); ctxTask = null; }}>

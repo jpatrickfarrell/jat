@@ -183,6 +183,109 @@ async function fetchProjectData(projectKey: string, projectName: string): Promis
 	return { name: projectName, projectKey, contracts };
 }
 
+/**
+ * Write to a Supabase project's REST API (INSERT)
+ */
+async function supabaseInsert(
+	supabaseUrl: string,
+	serviceRoleKey: string,
+	table: string,
+	rows: Record<string, unknown> | Record<string, unknown>[]
+): Promise<{ data: unknown[] | null; error: string | null }> {
+	const url = `${supabaseUrl}/rest/v1/${table}`;
+
+	try {
+		const response = await fetch(url, {
+			method: 'POST',
+			headers: {
+				'apikey': serviceRoleKey,
+				'Authorization': `Bearer ${serviceRoleKey}`,
+				'Content-Type': 'application/json',
+				'Prefer': 'return=representation'
+			},
+			body: JSON.stringify(rows)
+		});
+
+		if (!response.ok) {
+			const text = await response.text();
+			return { data: null, error: `HTTP ${response.status}: ${text.slice(0, 200)}` };
+		}
+
+		const data = await response.json();
+		return { data: Array.isArray(data) ? data : [data], error: null };
+	} catch (err) {
+		return { data: null, error: (err as Error).message };
+	}
+}
+
+/**
+ * Update rows in a Supabase project's REST API (PATCH)
+ */
+async function supabaseUpdate(
+	supabaseUrl: string,
+	serviceRoleKey: string,
+	table: string,
+	query: string,
+	updates: Record<string, unknown>
+): Promise<{ data: unknown[] | null; error: string | null }> {
+	const url = `${supabaseUrl}/rest/v1/${table}?${query}`;
+
+	try {
+		const response = await fetch(url, {
+			method: 'PATCH',
+			headers: {
+				'apikey': serviceRoleKey,
+				'Authorization': `Bearer ${serviceRoleKey}`,
+				'Content-Type': 'application/json',
+				'Prefer': 'return=representation'
+			},
+			body: JSON.stringify(updates)
+		});
+
+		if (!response.ok) {
+			const text = await response.text();
+			return { data: null, error: `HTTP ${response.status}: ${text.slice(0, 200)}` };
+		}
+
+		const data = await response.json();
+		return { data: Array.isArray(data) ? data : [data], error: null };
+	} catch (err) {
+		return { data: null, error: (err as Error).message };
+	}
+}
+
+/**
+ * Delete from a Supabase project's REST API
+ */
+async function supabaseDelete(
+	supabaseUrl: string,
+	serviceRoleKey: string,
+	table: string,
+	query: string
+): Promise<{ error: string | null }> {
+	const url = `${supabaseUrl}/rest/v1/${table}?${query}`;
+
+	try {
+		const response = await fetch(url, {
+			method: 'DELETE',
+			headers: {
+				'apikey': serviceRoleKey,
+				'Authorization': `Bearer ${serviceRoleKey}`,
+				'Content-Type': 'application/json'
+			}
+		});
+
+		if (!response.ok) {
+			const text = await response.text();
+			return { error: `HTTP ${response.status}: ${text.slice(0, 200)}` };
+		}
+
+		return { error: null };
+	} catch (err) {
+		return { error: (err as Error).message };
+	}
+}
+
 export const GET: RequestHandler = async ({ url }) => {
 	const forceRefresh = url.searchParams.has('refresh');
 
@@ -269,3 +372,165 @@ function computeSummary(projects: ProjectData[]) {
 		paidMilestones
 	};
 }
+
+/**
+ * POST /api/clients
+ *
+ * Create a new contract in a specific project's Supabase instance.
+ * Writes contract + milestones via REST API with service role key.
+ *
+ * Request body:
+ * {
+ *   projectKey: string,
+ *   title: string,
+ *   totalAmount: number (cents),
+ *   currency: string,
+ *   clientEmail?: string,
+ *   notes?: string,
+ *   milestones: Array<{ name, percentage, description?, acceptance_criteria? }>
+ * }
+ */
+export const POST: RequestHandler = async ({ request }) => {
+	const body = await request.json();
+	const { projectKey, title, totalAmount, currency, clientEmail, notes, milestones } = body;
+
+	if (!projectKey) {
+		return json({ error: 'projectKey is required' }, { status: 400 });
+	}
+	if (!totalAmount || totalAmount <= 0) {
+		return json({ error: 'totalAmount must be a positive number (in cents)' }, { status: 400 });
+	}
+	if (!milestones || !Array.isArray(milestones) || milestones.length === 0) {
+		return json({ error: 'At least one milestone is required' }, { status: 400 });
+	}
+
+	// Validate percentages sum to 100
+	const totalPct = milestones.reduce((sum: number, m: { percentage: number }) => sum + (m.percentage || 0), 0);
+	if (Math.abs(totalPct - 100) > 0.01) {
+		return json({ error: `Milestone percentages must total 100% (currently ${totalPct}%)` }, { status: 400 });
+	}
+
+	// Get Supabase credentials for this project
+	const supabaseUrl = getProjectSecret(projectKey, 'supabase_url');
+	const serviceRoleKey = getProjectSecret(projectKey, 'supabase_service_role_key');
+
+	if (!supabaseUrl || !serviceRoleKey) {
+		return json({ error: `Missing Supabase credentials for project "${projectKey}"` }, { status: 400 });
+	}
+
+	// Look up the team_id from the project's teams table
+	const teamsResult = await supabaseQuery(supabaseUrl, serviceRoleKey, 'teams', 'select=id&limit=1');
+	if (teamsResult.error || !teamsResult.data || teamsResult.data.length === 0) {
+		return json({ error: 'Could not find a team in the target project. Ensure the contracts migration has been run.' }, { status: 400 });
+	}
+	const teamId = (teamsResult.data[0] as { id: string }).id;
+
+	// Create the contract
+	const contractData = {
+		team_id: teamId,
+		title: title || 'Service Agreement',
+		total_amount: totalAmount,
+		currency: currency || 'usd',
+		notes: notes || null,
+		status: 'draft'
+	};
+
+	const contractResult = await supabaseInsert(supabaseUrl, serviceRoleKey, 'contracts', contractData);
+	if (contractResult.error || !contractResult.data || contractResult.data.length === 0) {
+		return json({ error: `Failed to create contract: ${contractResult.error}` }, { status: 500 });
+	}
+
+	const contract = contractResult.data[0] as { id: string };
+
+	// Create milestones
+	const milestoneRows = milestones.map((m: { name: string; percentage: number; description?: string; acceptance_criteria?: string }, i: number) => ({
+		contract_id: contract.id,
+		name: m.name,
+		description: m.description || null,
+		percentage: m.percentage,
+		amount: Math.round(totalAmount * (m.percentage / 100)),
+		acceptance_criteria: m.acceptance_criteria || null,
+		sort_order: i,
+		status: 'pending'
+	}));
+
+	const msResult = await supabaseInsert(supabaseUrl, serviceRoleKey, 'milestones', milestoneRows);
+	if (msResult.error) {
+		// Clean up the contract
+		await supabaseDelete(supabaseUrl, serviceRoleKey, 'contracts', `id=eq.${contract.id}`);
+		return json({ error: `Failed to create milestones: ${msResult.error}` }, { status: 500 });
+	}
+
+	// Invalidate cache so the list refreshes
+	cache = null;
+
+	return json({
+		success: true,
+		contract: {
+			id: contract.id,
+			projectKey,
+			title: contractData.title,
+			totalAmount,
+			currency: contractData.currency,
+			milestoneCount: milestones.length
+		}
+	}, { status: 201 });
+};
+
+/**
+ * PATCH /api/clients
+ *
+ * Update a contract or milestone status in a project's Supabase.
+ *
+ * Request body:
+ * {
+ *   projectKey: string,
+ *   type: 'contract' | 'milestone',
+ *   id: string,
+ *   updates: { status?: string, notes?: string, title?: string, ... }
+ * }
+ */
+export const PATCH: RequestHandler = async ({ request }) => {
+	const body = await request.json();
+	const { projectKey, type, id, updates } = body;
+
+	if (!projectKey || !type || !id || !updates) {
+		return json({ error: 'projectKey, type, id, and updates are required' }, { status: 400 });
+	}
+
+	if (type !== 'contract' && type !== 'milestone') {
+		return json({ error: 'type must be "contract" or "milestone"' }, { status: 400 });
+	}
+
+	const supabaseUrl = getProjectSecret(projectKey, 'supabase_url');
+	const serviceRoleKey = getProjectSecret(projectKey, 'supabase_service_role_key');
+
+	if (!supabaseUrl || !serviceRoleKey) {
+		return json({ error: `Missing Supabase credentials for project "${projectKey}"` }, { status: 400 });
+	}
+
+	const table = type === 'contract' ? 'contracts' : 'milestones';
+
+	// Add timestamp fields for milestone status changes
+	const patchData = { ...updates };
+	if (type === 'milestone' && updates.status) {
+		const now = new Date().toISOString();
+		if (updates.status === 'delivered') patchData.delivered_at = now;
+		if (updates.status === 'accepted') patchData.accepted_at = now;
+		if (updates.status === 'paid') patchData.paid_at = now;
+	}
+
+	const result = await supabaseUpdate(supabaseUrl, serviceRoleKey, table, `id=eq.${id}`, patchData);
+
+	if (result.error) {
+		return json({ error: `Failed to update ${type}: ${result.error}` }, { status: 500 });
+	}
+
+	// Invalidate cache
+	cache = null;
+
+	return json({
+		success: true,
+		updated: result.data?.[0] || null
+	});
+};

@@ -11,6 +11,7 @@
 	 * Click +: opens task creation drawer for current project
 	 */
 	import { onMount } from "svelte";
+	import { slide } from "svelte/transition";
 	import { getProjectColor } from "$lib/utils/projectColors";
 	import FxText from '$lib/components/FxText.svelte';
 	import { SESSION_STATE_VISUALS } from "$lib/config/statusColors";
@@ -124,6 +125,7 @@
 	let open = $state(false);
 	let containerEl = $state<HTMLDivElement | null>(null);
 	let hoveredAttackEpicId = $state<string | null>(null);
+	let expandedEpics = $state(new Set<string>());
 	let dropdownPos = $state({ top: 0, left: 0 });
 	let hoverCloseTimer = $state<ReturnType<typeof setTimeout> | null>(null);
 
@@ -565,8 +567,17 @@
 						{@const readySet = new Set(epic.readyChildIds || [])}
 						{@const readyCount = readySet.size}
 						{#if allChildren.length > 0}
+							{@const isExpanded = expandedEpics.has(epic.id)}
 							<div class="epic-group">
-								<div class="epic-bar" style="--project-color: {selectedColor};">
+								<button
+									type="button"
+									class="epic-bar"
+									style="--project-color: {selectedColor};"
+									onclick={() => { const next = new Set(expandedEpics); if (next.has(epic.id)) next.delete(epic.id); else next.add(epic.id); expandedEpics = next; }}
+								>
+									<svg class="epic-bar-chevron" class:epic-bar-chevron-open={isExpanded} viewBox="0 0 16 16" fill="currentColor">
+										<path fill-rule="evenodd" d="M6.22 4.22a.75.75 0 0 1 1.06 0l3.25 3.25a.75.75 0 0 1 0 1.06l-3.25 3.25a.75.75 0 0 1-1.06-1.06L8.94 8 6.22 5.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+									</svg>
 									<span class="epic-bar-icon">🏔️</span>
 									<span class="epic-bar-label"><FxText text={epic.title} /></span>
 									<span class="epic-bar-count">{readyCount}/{allChildren.length}</span>
@@ -575,7 +586,7 @@
 											type="button"
 											class="epic-bar-attack"
 											onclick={(e) => { e.stopPropagation(); handleSwarmClick(Math.min(readyCount, idleSlots), epic.id); }}
-											onmouseenter={() => { hoveredAttackEpicId = epic.id; }}
+											onmouseenter={(e) => { e.stopPropagation(); hoveredAttackEpicId = epic.id; }}
 											onmouseleave={() => { if (hoveredAttackEpicId === epic.id) hoveredAttackEpicId = null; }}
 											title="Attack epic ({readyCount} ready)"
 										>
@@ -584,7 +595,9 @@
 											</svg>
 										</button>
 									{/if}
-								</div>
+								</button>
+								{#if isExpanded}
+								<div class="epic-children" transition:slide={{ duration: 150 }}>
 								{#each allChildren as child}
 									{@const isReady = readySet.has(child.id)}
 									{@const isActive = child.status === 'in_progress'}
@@ -626,6 +639,8 @@
 										{/if}
 									</div>
 								{/each}
+								</div>
+								{/if}
 							</div>
 						{/if}
 					{/each}
@@ -1178,8 +1193,26 @@
 		gap: 0.375rem;
 		padding: 0.25rem 0.5rem;
 		background: color-mix(in oklch, var(--project-color) 8%, transparent);
+		border: none;
 		border-left: 2px solid color-mix(in oklch, var(--project-color) 50%, transparent);
 		margin: 0.125rem 0;
+		width: 100%;
+		cursor: pointer;
+		text-align: left;
+	}
+	.epic-bar:hover {
+		background: color-mix(in oklch, var(--project-color) 14%, transparent);
+	}
+
+	.epic-bar-chevron {
+		width: 0.75rem;
+		height: 0.75rem;
+		flex-shrink: 0;
+		color: oklch(0.55 0.02 250);
+		transition: transform 0.15s ease;
+	}
+	.epic-bar-chevron-open {
+		transform: rotate(90deg);
 	}
 
 	.epic-bar-icon {

@@ -49,6 +49,26 @@
 		paidMilestones: number;
 	}
 
+	interface MilestoneTemplate {
+		id: string;
+		name: string;
+		description?: string;
+		is_default?: boolean;
+		milestones: Array<{
+			name: string;
+			percentage: number;
+			description?: string;
+			acceptance_criteria?: string;
+		}>;
+	}
+
+	interface MilestoneRow {
+		name: string;
+		percentage: number;
+		description: string;
+		acceptance_criteria: string;
+	}
+
 	let projects = $state<ProjectData[]>([]);
 	let summary = $state<Summary | null>(null);
 	let loading = $state(true);
@@ -57,6 +77,69 @@
 
 	// Expanded project cards
 	let expandedProjects = $state<Set<string>>(new Set());
+
+	// Expanded contract detail
+	let expandedContract = $state<string | null>(null);
+	let updatingItem = $state<string | null>(null); // id of item being updated
+
+	function toggleContract(contractId: string) {
+		expandedContract = expandedContract === contractId ? null : contractId;
+	}
+
+	const CONTRACT_STATUSES = ['draft', 'sent', 'signed', 'active', 'completed', 'cancelled'] as const;
+	const MILESTONE_STATUSES = ['pending', 'delivered', 'accepted', 'paid'] as const;
+
+	async function updateStatus(projectKey: string, type: 'contract' | 'milestone', id: string, status: string) {
+		updatingItem = id;
+		try {
+			const res = await fetch('/api/clients', {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ projectKey, type, id, updates: { status } })
+			});
+			if (!res.ok) {
+				const data = await res.json();
+				console.error('Update failed:', data.error);
+				return;
+			}
+			await fetchData(true);
+		} finally {
+			updatingItem = null;
+		}
+	}
+
+	// Contract creation modal state
+	let showCreateModal = $state(false);
+	let createError = $state<string | null>(null);
+	let createSuccess = $state<string | null>(null);
+	let creating = $state(false);
+
+	// Form fields
+	let selectedProject = $state('');
+	let contractTitle = $state('Service Agreement');
+	let totalAmount = $state('');
+	let currency = $state('usd');
+	let clientEmail = $state('');
+	let contractNotes = $state('');
+
+	// Milestone state
+	let templates = $state<MilestoneTemplate[]>([]);
+	let selectedTemplateId = $state<string | null>(null);
+	let milestones = $state<MilestoneRow[]>([]);
+	let loadingTemplates = $state(false);
+
+	let totalPercentage = $derived(milestones.reduce((sum, m) => sum + (m.percentage || 0), 0));
+	let percentageValid = $derived(Math.abs(totalPercentage - 100) < 0.01);
+
+	let computedAmounts = $derived(
+		milestones.map(m => {
+			const cents = Math.round(parseFloat(totalAmount || '0') * 100 * (m.percentage / 100));
+			return cents / 100;
+		})
+	);
+
+	// Available projects (those with Supabase credentials)
+	let availableProjects = $derived(projects.filter(p => !p.error || p.contracts.length > 0));
 
 	function toggleProject(key: string) {
 		const next = new Set(expandedProjects);
@@ -90,6 +173,10 @@
 			minimumFractionDigits: 0,
 			maximumFractionDigits: 0
 		}).format(cents / 100);
+	}
+
+	function formatDollars(amount: number): string {
+		return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 	}
 
 	function formatDate(dateStr: string | null): string {
@@ -159,6 +246,130 @@
 	const projectsWithoutContracts = $derived(projects.filter(p => p.contracts.length === 0 && !p.error));
 	const projectsWithErrors = $derived(projects.filter(p => p.error));
 
+	// Contract creation functions
+	async function openCreateModal() {
+		showCreateModal = true;
+		createError = null;
+		createSuccess = null;
+		contractTitle = 'Service Agreement';
+		totalAmount = '';
+		currency = 'usd';
+		clientEmail = '';
+		contractNotes = '';
+		milestones = [];
+		selectedTemplateId = null;
+		templates = [];
+
+		// Auto-select first project if only one available
+		if (availableProjects.length === 1) {
+			selectedProject = availableProjects[0].projectKey;
+			await fetchTemplates(selectedProject);
+		} else {
+			selectedProject = '';
+		}
+	}
+
+	async function fetchTemplates(projectKey: string) {
+		loadingTemplates = true;
+		try {
+			const res = await fetch(`/api/clients/templates?project=${encodeURIComponent(projectKey)}`);
+			const data = await res.json();
+			templates = data.templates || [];
+
+			// Auto-apply default template
+			const defaultTemplate = templates.find(t => t.is_default) || templates[0];
+			if (defaultTemplate) {
+				applyTemplate(defaultTemplate.id);
+			}
+		} catch {
+			templates = [];
+		} finally {
+			loadingTemplates = false;
+		}
+	}
+
+	function applyTemplate(templateId: string | null) {
+		selectedTemplateId = templateId;
+		if (!templateId) {
+			milestones = [{ name: '', percentage: 0, description: '', acceptance_criteria: '' }];
+			return;
+		}
+		const template = templates.find(t => t.id === templateId);
+		if (!template) return;
+		milestones = template.milestones.map(m => ({
+			name: m.name || '',
+			percentage: m.percentage || 0,
+			description: m.description || '',
+			acceptance_criteria: m.acceptance_criteria || ''
+		}));
+	}
+
+	function addMilestone() {
+		milestones = [...milestones, { name: '', percentage: 0, description: '', acceptance_criteria: '' }];
+	}
+
+	function removeMilestone(index: number) {
+		milestones = milestones.filter((_, i) => i !== index);
+	}
+
+	let prevSelectedProject = $state('');
+
+	$effect(() => {
+		if (selectedProject && selectedProject !== prevSelectedProject) {
+			prevSelectedProject = selectedProject;
+			milestones = [];
+			selectedTemplateId = null;
+			templates = [];
+			fetchTemplates(selectedProject);
+		}
+	});
+
+	async function createContract() {
+		if (!selectedProject || !totalAmount || milestones.length === 0 || !percentageValid) return;
+
+		creating = true;
+		createError = null;
+		createSuccess = null;
+
+		try {
+			const res = await fetch('/api/clients', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					projectKey: selectedProject,
+					title: contractTitle,
+					totalAmount: Math.round(parseFloat(totalAmount) * 100),
+					currency,
+					clientEmail: clientEmail || undefined,
+					notes: contractNotes || undefined,
+					milestones
+				})
+			});
+
+			const data = await res.json();
+
+			if (!res.ok) {
+				createError = data.error || 'Failed to create contract';
+				return;
+			}
+
+			createSuccess = `Contract "${data.contract.title}" created in ${selectedProject} with ${data.contract.milestoneCount} milestones.`;
+
+			// Refresh data
+			await fetchData(true);
+
+			// Close modal after delay
+			setTimeout(() => {
+				showCreateModal = false;
+				createSuccess = null;
+			}, 2000);
+		} catch (e) {
+			createError = (e as Error).message;
+		} finally {
+			creating = false;
+		}
+	}
+
 	onMount(() => {
 		fetchData();
 	});
@@ -193,6 +404,15 @@
 				{:else}
 					Refresh
 				{/if}
+			</button>
+			<button
+				class="btn btn-sm btn-primary"
+				onclick={openCreateModal}
+			>
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+				</svg>
+				New Contract
 			</button>
 		</div>
 	</div>
@@ -269,7 +489,7 @@
 						<div class="card-body items-center text-center py-12">
 							<p class="opacity-60">No contracts found in any project.</p>
 							<p class="text-sm opacity-40 mt-1">
-								Contracts will appear here once created via the admin config in client apps.
+								Click "New Contract" to create one.
 							</p>
 						</div>
 					</div>
@@ -323,7 +543,11 @@
 													{@const paid = (contract.milestones || [])
 														.filter(m => m.status === 'paid')
 														.reduce((s, m) => s + m.amount, 0)}
-													<tr>
+													<tr
+														class="cursor-pointer hover:bg-base-300/50 transition-colors"
+														class:bg-base-300={expandedContract === contract.id}
+														onclick={() => toggleContract(contract.id)}
+													>
 														<td class="font-medium">{contract.title}</td>
 														<td>
 															<span class="badge badge-sm {statusBadgeClass(contract.status)}">
@@ -351,6 +575,146 @@
 															</div>
 														</td>
 													</tr>
+
+													<!-- Expanded Contract Detail -->
+													{#if expandedContract === contract.id}
+														<tr>
+															<td colspan="6" class="p-0 overflow-visible">
+																<div class="bg-base-300/30 p-4 space-y-4 border-t border-base-300 overflow-visible">
+																	<!-- Contract Info & Actions -->
+																	<div class="flex items-start justify-between gap-4">
+																		<div class="space-y-1">
+																			{#if contract.notes}
+																				<p class="text-sm opacity-60">{contract.notes}</p>
+																			{/if}
+																			<p class="text-xs opacity-40">
+																				Created {formatDate(contract.created_at)}
+																				{#if contract.signed_at} · Signed {formatDate(contract.signed_at)}{/if}
+																			</p>
+																		</div>
+																		<div class="flex items-center gap-2 shrink-0">
+																			<span class="text-xs opacity-40">Status:</span>
+																			<div class="dropdown dropdown-end">
+																				<div
+																					tabindex="0"
+																					role="button"
+																					class="badge badge-sm {statusBadgeClass(contract.status)} cursor-pointer gap-1"
+																					onclick={(e) => e.stopPropagation()}
+																				>
+																					{contract.status}
+																					{#if updatingItem === contract.id}
+																						<span class="loading loading-spinner loading-xs"></span>
+																					{:else}
+																						<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+																						</svg>
+																					{/if}
+																				</div>
+																				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+																				<ul tabindex="0" class="dropdown-content z-40 menu menu-sm shadow-lg bg-base-100 rounded-box w-40 p-1">
+																					{#each CONTRACT_STATUSES as s}
+																						<li>
+																							<button
+																								class:active={contract.status === s}
+																								onclick={(e) => { e.stopPropagation(); updateStatus(project.projectKey, 'contract', contract.id, s); }}
+																								disabled={contract.status === s}
+																							>
+																								<span class="badge badge-xs {statusBadgeClass(s)}"></span>
+																								{s}
+																							</button>
+																						</li>
+																					{/each}
+																				</ul>
+																			</div>
+																		</div>
+																	</div>
+
+																	<!-- Milestone Table -->
+																	{#if contract.milestones && contract.milestones.length > 0}
+																		<div>
+																			<h5 class="text-xs font-semibold uppercase opacity-50 mb-2">Milestones</h5>
+																			<div class="overflow-visible">
+																				<table class="table table-xs">
+																					<thead>
+																						<tr>
+																							<th class="w-8">#</th>
+																							<th>Name</th>
+																							<th>Status</th>
+																							<th class="text-right">%</th>
+																							<th class="text-right">Amount</th>
+																							<th>Date</th>
+																						</tr>
+																					</thead>
+																					<tbody>
+																						{#each contract.milestones as milestone, mi}
+																							<tr class="hover:bg-base-300/30">
+																								<td class="opacity-40">{mi + 1}</td>
+																								<td>
+																									<div>
+																										<span class="font-medium">{milestone.name}</span>
+																										{#if milestone.description}
+																											<p class="text-xs opacity-50 mt-0.5">{milestone.description}</p>
+																										{/if}
+																									</div>
+																								</td>
+																								<td>
+																									<div class="dropdown dropdown-end">
+																										<div
+																											tabindex="0"
+																											role="button"
+																											class="badge badge-xs {statusBadgeClass(milestone.status)} cursor-pointer gap-1"
+																											onclick={(e) => e.stopPropagation()}
+																										>
+																											{milestone.status}
+																											{#if updatingItem === milestone.id}
+																												<span class="loading loading-spinner" style="width:8px;height:8px"></span>
+																											{:else}
+																												<svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+																												</svg>
+																											{/if}
+																										</div>
+																										<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+																										<ul tabindex="0" class="dropdown-content z-40 menu menu-xs shadow-lg bg-base-100 rounded-box w-36 p-1">
+																											{#each MILESTONE_STATUSES as s}
+																												<li>
+																													<button
+																														class:active={milestone.status === s}
+																														onclick={(e) => { e.stopPropagation(); updateStatus(project.projectKey, 'milestone', milestone.id, s); }}
+																														disabled={milestone.status === s}
+																													>
+																														<span class="badge badge-xs {statusBadgeClass(s)}"></span>
+																														{s}
+																													</button>
+																												</li>
+																											{/each}
+																										</ul>
+																									</div>
+																								</td>
+																								<td class="text-right font-mono opacity-60">{milestone.percentage}%</td>
+																								<td class="text-right font-mono">{formatCents(milestone.amount, contract.currency)}</td>
+																								<td class="text-xs opacity-50">
+																									{#if milestone.paid_at}
+																										Paid {formatDate(milestone.paid_at)}
+																									{:else if milestone.accepted_at}
+																										Accepted {formatDate(milestone.accepted_at)}
+																									{:else if milestone.delivered_at}
+																										Delivered {formatDate(milestone.delivered_at)}
+																									{:else}
+																										—
+																									{/if}
+																								</td>
+																							</tr>
+																						{/each}
+																					</tbody>
+																				</table>
+																			</div>
+																		</div>
+																	{/if}
+																</div>
+															</td>
+														</tr>
+													{/if}
 												{/each}
 											</tbody>
 										</table>
@@ -442,3 +806,266 @@
 		</div>
 	{/if}
 </div>
+
+<!-- Contract Creation Modal -->
+{#if showCreateModal}
+	<div class="modal modal-open">
+		<div class="modal-box max-w-2xl max-h-[90vh] overflow-y-auto">
+			<div class="flex items-center justify-between mb-4">
+				<h3 class="text-lg font-bold">New Contract</h3>
+				<button class="btn btn-sm btn-ghost btn-circle" onclick={() => showCreateModal = false}>
+					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+				</button>
+			</div>
+
+			{#if createError}
+				<div class="alert alert-error mb-4">
+					<span>{createError}</span>
+				</div>
+			{/if}
+
+			{#if createSuccess}
+				<div class="alert alert-success mb-4">
+					<span>{createSuccess}</span>
+				</div>
+			{:else}
+				<!-- Project Selector -->
+				<div class="form-control mb-4">
+					<label class="label" for="create-project">
+						<span class="label-text font-semibold">Project</span>
+					</label>
+					<select
+						id="create-project"
+						class="select select-bordered w-full"
+						bind:value={selectedProject}
+					>
+						<option value="" disabled>Select a project...</option>
+						{#each projects as project}
+							{#if !project.error}
+								<option value={project.projectKey}>{project.name}</option>
+							{/if}
+						{/each}
+					</select>
+					<label class="label">
+						<span class="label-text-alt opacity-50">Contract will be created in this project's Supabase</span>
+					</label>
+				</div>
+
+				{#if selectedProject}
+					<!-- Contract Details -->
+					<div class="space-y-4 mb-6">
+						<h4 class="font-semibold text-sm uppercase opacity-60">Contract Details</h4>
+
+						<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+							<div class="form-control">
+								<label class="label" for="create-title">
+									<span class="label-text">Title</span>
+								</label>
+								<input
+									id="create-title"
+									type="text"
+									class="input input-bordered"
+									bind:value={contractTitle}
+								/>
+							</div>
+
+							<div class="form-control">
+								<label class="label" for="create-email">
+									<span class="label-text">Client Email</span>
+								</label>
+								<input
+									id="create-email"
+									type="email"
+									class="input input-bordered"
+									bind:value={clientEmail}
+									placeholder="client@example.com"
+								/>
+								<label class="label">
+									<span class="label-text-alt opacity-50">Optional</span>
+								</label>
+							</div>
+
+							<div class="form-control">
+								<label class="label" for="create-amount">
+									<span class="label-text">Total Amount</span>
+								</label>
+								<div class="join w-full">
+									<span class="join-item btn btn-disabled">$</span>
+									<input
+										id="create-amount"
+										type="number"
+										step="0.01"
+										min="0"
+										class="input input-bordered join-item flex-1"
+										bind:value={totalAmount}
+										placeholder="50000.00"
+									/>
+								</div>
+							</div>
+
+							<div class="form-control">
+								<label class="label" for="create-currency">
+									<span class="label-text">Currency</span>
+								</label>
+								<select id="create-currency" class="select select-bordered" bind:value={currency}>
+									<option value="usd">USD</option>
+									<option value="eur">EUR</option>
+									<option value="gbp">GBP</option>
+								</select>
+							</div>
+						</div>
+
+						<div class="form-control">
+							<label class="label" for="create-notes">
+								<span class="label-text">Notes</span>
+							</label>
+							<textarea
+								id="create-notes"
+								class="textarea textarea-bordered"
+								rows="2"
+								bind:value={contractNotes}
+								placeholder="Internal notes about this contract..."
+							></textarea>
+						</div>
+					</div>
+
+					<!-- Milestones Section -->
+					<div class="space-y-4">
+						<div class="flex items-center justify-between">
+							<h4 class="font-semibold text-sm uppercase opacity-60">Milestones</h4>
+							<div>
+								{#if milestones.length > 0}
+									{#if !percentageValid}
+										<span class="text-sm text-error">{totalPercentage.toFixed(1)}% (must be 100%)</span>
+									{:else}
+										<span class="text-sm text-success">100%</span>
+									{/if}
+								{/if}
+							</div>
+						</div>
+
+						<!-- Template Selector -->
+						{#if loadingTemplates}
+							<div class="flex items-center gap-2">
+								<span class="loading loading-spinner loading-xs"></span>
+								<span class="text-sm opacity-60">Loading templates...</span>
+							</div>
+						{:else if templates.length > 0}
+							<div class="flex flex-wrap gap-2">
+								{#each templates as template (template.id)}
+									<button
+										type="button"
+										class="btn btn-sm {selectedTemplateId === template.id ? 'btn-primary' : 'btn-outline'}"
+										onclick={() => applyTemplate(template.id)}
+									>
+										{template.name}
+									</button>
+								{/each}
+								<button
+									type="button"
+									class="btn btn-sm {selectedTemplateId === null && milestones.length > 0 ? 'btn-primary' : 'btn-outline'}"
+									onclick={() => applyTemplate(null)}
+								>
+									Custom
+								</button>
+							</div>
+						{/if}
+
+						<!-- Milestone Rows -->
+						{#if milestones.length > 0}
+							<div class="space-y-3">
+								{#each milestones as milestone, i}
+									<div class="border border-base-300 rounded-lg p-3 space-y-2">
+										<div class="flex items-center justify-between">
+											<span class="text-xs font-bold opacity-50">Milestone {i + 1}</span>
+											<div class="flex items-center gap-2">
+												{#if totalAmount}
+													<span class="text-xs font-mono opacity-50">{formatDollars(computedAmounts[i])}</span>
+												{/if}
+												{#if milestones.length > 1}
+													<button
+														type="button"
+														class="btn btn-ghost btn-xs text-error"
+														onclick={() => removeMilestone(i)}
+													>
+														<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+														</svg>
+													</button>
+												{/if}
+											</div>
+										</div>
+
+										<div class="grid grid-cols-4 gap-2">
+											<div class="col-span-3">
+												<input
+													type="text"
+													class="input input-bordered input-sm w-full"
+													bind:value={milestone.name}
+													placeholder="Milestone name"
+												/>
+											</div>
+											<div class="join w-full">
+												<input
+													type="number"
+													class="input input-bordered input-sm join-item w-full"
+													bind:value={milestone.percentage}
+													step="0.01"
+													min="0"
+													max="100"
+													placeholder="%"
+												/>
+												<span class="join-item btn btn-sm btn-disabled">%</span>
+											</div>
+										</div>
+
+										<input
+											type="text"
+											class="input input-bordered input-sm w-full"
+											bind:value={milestone.description}
+											placeholder="Description (optional)"
+										/>
+
+										<input
+											type="text"
+											class="input input-bordered input-sm w-full"
+											bind:value={milestone.acceptance_criteria}
+											placeholder="Acceptance criteria (optional)"
+										/>
+									</div>
+								{/each}
+							</div>
+
+							<button type="button" class="btn btn-outline btn-sm" onclick={addMilestone}>
+								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+								</svg>
+								Add Milestone
+							</button>
+						{/if}
+					</div>
+
+					<!-- Actions -->
+					<div class="modal-action">
+						<button class="btn btn-ghost" onclick={() => showCreateModal = false}>
+							Cancel
+						</button>
+						<button
+							class="btn btn-primary"
+							onclick={createContract}
+							disabled={creating || !percentageValid || !totalAmount || milestones.length === 0 || !selectedProject}
+						>
+							{#if creating}
+								<span class="loading loading-spinner loading-sm"></span>
+							{/if}
+							Create Contract
+						</button>
+					</div>
+				{/if}
+			{/if}
+		</div>
+		<label class="modal-backdrop" onclick={() => showCreateModal = false}></label>
+	</div>
+{/if}

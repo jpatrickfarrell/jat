@@ -112,6 +112,41 @@
 		isDragging = false;
 	}
 
+	// Direct event listeners — bypass Svelte 5 delegation so this works inside portals
+	function directMinimapEvents(node: HTMLElement) {
+		function onClick(e: MouseEvent) {
+			e.preventDefault();
+			onPositionClick(clickToPercent(e.clientY));
+		}
+		function onMouseDown(e: MouseEvent) {
+			e.preventDefault();
+			isDragging = true;
+			onPositionClick(clickToPercent(e.clientY));
+		}
+		function onTouchStart(e: TouchEvent) {
+			e.preventDefault();
+			e.stopPropagation();
+			if (e.touches.length > 0) onPositionClick(clickToPercent(e.touches[0].clientY));
+		}
+		function onTouchMove(e: TouchEvent) {
+			e.preventDefault();
+			e.stopPropagation();
+			if (e.touches.length > 0) onPositionClick(clickToPercent(e.touches[0].clientY));
+		}
+		node.addEventListener('click', onClick);
+		node.addEventListener('mousedown', onMouseDown);
+		node.addEventListener('touchstart', onTouchStart, { passive: false });
+		node.addEventListener('touchmove', onTouchMove, { passive: false });
+		return {
+			destroy() {
+				node.removeEventListener('click', onClick);
+				node.removeEventListener('mousedown', onMouseDown);
+				node.removeEventListener('touchstart', onTouchStart);
+				node.removeEventListener('touchmove', onTouchMove);
+			}
+		};
+	}
+
 	export function setViewportPosition(newScrollPercent: number, newVisiblePercent: number) {
 		scrollPercent = newScrollPercent;
 		visiblePercent = newVisiblePercent;
@@ -129,7 +164,7 @@
 	<div
 		class="minimap-container"
 		bind:this={minimapContainer}
-		onclick={handleMinimapClick}
+		use:directMinimapEvents
 		role="slider"
 		tabindex="0"
 		aria-label="Minimap navigation"

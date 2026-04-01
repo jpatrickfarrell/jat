@@ -1597,7 +1597,9 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 		const { scrollHeight, clientHeight } = scrollContainerRef;
 		const maxScroll = scrollHeight - clientHeight;
 		const targetScroll = (percent / 100) * maxScroll;
-		scrollContainerRef.scrollTo({ top: targetScroll, behavior: 'smooth' });
+		// Use 'instant' on touch devices for snappy response; 'smooth' on desktop
+		const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
+		scrollContainerRef.scrollTo({ top: targetScroll, behavior: isTouchDevice ? 'instant' : 'smooth' });
 	}
 
 	// Control button loading states

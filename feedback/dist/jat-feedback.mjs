@@ -4823,6 +4823,9 @@ const sharedOptions = {
   fetch: {
     placeholderImage: PLACEHOLDER
   },
+  features: {
+    restoreScrollPosition: !0
+  },
   filter: (e) => {
     var t;
     return !(e instanceof HTMLElement && (e.tagName === "JAT-FEEDBACK" || (t = e.id) != null && t.startsWith("jat-feedback-")));
@@ -12289,7 +12292,7 @@ const $$css$1 = {
 };
 function FeedbackPanel(e, t) {
   push(t, !0), append_styles(e, $$css$1);
-  const n = "3.0.1";
+  const n = "3.0.2";
   let r = prop(t, "endpoint", 7), o = prop(t, "project", 7), s = prop(t, "isOpen", 7, !1), i = prop(t, "userId", 7, ""), a = prop(t, "userEmail", 7, ""), l = prop(t, "userName", 7, ""), c = prop(t, "userRole", 7, ""), u = prop(t, "orgId", 7, ""), d = prop(t, "orgName", 7, ""), f = prop(t, "onclose", 7), v = prop(t, "ongrip", 7), _ = prop(t, "agentProxy", 7, ""), y = prop(t, "agentModel", 7, ""), h = prop(t, "agentContext", 7, ""), p = prop(t, "registeredTools", 23, () => []), b = /* @__PURE__ */ state("new"), m = /* @__PURE__ */ state(!1), E = /* @__PURE__ */ state(!1), k = /* @__PURE__ */ state(proxy([])), N = /* @__PURE__ */ state("idle"), P = /* @__PURE__ */ state(0), Z = /* @__PURE__ */ state(!1), Q = /* @__PURE__ */ state(null);
   function re() {
     return get(Q) || set(

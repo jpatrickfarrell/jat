@@ -46,6 +46,9 @@ const sharedOptions = {
   fetch: {
     placeholderImage: PLACEHOLDER,
   },
+  features: {
+    restoreScrollPosition: true,
+  },
   filter: (el: Node) => {
     if (el instanceof HTMLElement) {
       if (el.tagName === 'JAT-FEEDBACK' || el.id?.startsWith('jat-feedback-')) return false;

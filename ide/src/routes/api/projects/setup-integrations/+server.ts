@@ -1,25 +1,31 @@
 /**
- * JST Project Integrations Setup API
- *
  * POST /api/projects/setup-integrations
  *
- * Stores credentials and creates ingest integration sources for a JST-based
- * project. Idempotent — safe to call multiple times; existing sources are
- * updated in-place.
+ * Generic integration setup: stores secrets and creates/updates ingest sources
+ * based on a jat.config.json integration declaration.
  *
  * Body:
  *   {
- *     projectKey: string,            // e.g. "flush"
- *     supabase?: {
- *       url: string,                 // https://xxx.supabase.co
- *       serviceKey: string           // service role JWT
+ *     projectKey: string,                // e.g. "myapp"
+ *     secrets: {                         // Key→value map of secrets to store
+ *       "supabase-url": "https://...",
+ *       "supabase-service-role-key": "eyJ..."
  *     },
- *     cloudflare?: {
- *       accountId: string,           // CF account ID
- *       apiToken: string,            // CF API token (Pages:Read)
- *       pagesProject: string         // CF Pages project slug
- *     }
+ *     integrations: Array<{              // Integration definitions from jat.config.json
+ *       id: string,                      // Integration ID suffix: {projectKey}-{id}
+ *       type: string,                    // Ingest adapter type
+ *       label?: string,
+ *       pollInterval?: number,
+ *       taskDefaults?: object,
+ *       config: object,                  // Adapter-specific config (supports $key / @key interpolation)
+ *       automation?: object
+ *     }>
  *   }
+ *
+ * Config interpolation:
+ *   "$key"  → replaced with the VALUE of secret {projectKey}-{key}
+ *   "@key"  → replaced with the KEY NAME "{projectKey}-{key}" (for adapters that store secret names)
+ *   literal → passed through as-is
  *
  * Response:
  *   { success: true, steps: string[], integrations: string[] }
@@ -84,152 +90,118 @@ async function storeSecret(name: string, value: string, desc?: string): Promise<
 	await execAsync(cmd, { timeout: 10_000 });
 }
 
+/**
+ * Interpolate config values:
+ *   "$key"  → resolvedSecrets["{projectKey}-{key}"]
+ *   "@key"  → "{projectKey}-{key}"
+ *   other   → pass through unchanged
+ */
+function interpolateConfig(
+	configObj: Record<string, any>,
+	projectKey: string,
+	resolvedSecrets: Record<string, string>
+): Record<string, any> {
+	const result: Record<string, any> = {};
+
+	for (const [field, value] of Object.entries(configObj)) {
+		if (typeof value === 'string') {
+			if (value.startsWith('$')) {
+				// Substitute with secret value
+				const secretKey = `${projectKey}-${value.slice(1)}`;
+				result[field] = resolvedSecrets[secretKey] ?? '';
+			} else if (value.startsWith('@')) {
+				// Substitute with secret key name
+				result[field] = `${projectKey}-${value.slice(1)}`;
+			} else {
+				result[field] = value;
+			}
+		} else {
+			// Objects and arrays pass through unchanged
+			result[field] = value;
+		}
+	}
+
+	return result;
+}
+
 // ── Request handler ─────────────────────────────────────────────────────────
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const body = await request.json();
-		const { projectKey, supabase, cloudflare } = body;
+		const { projectKey, secrets = {}, integrations = [] } = body;
 
 		if (!projectKey || typeof projectKey !== 'string') {
 			return json({ success: false, error: 'projectKey is required' }, { status: 400 });
 		}
 
-		const steps: string[] = [];
-		const integrations: string[] = [];
-		const config = readIntegrations();
-
-		// ── Supabase feedback integration ──────────────────────────────────
-		if (supabase?.url && supabase?.serviceKey) {
-			const secretName = `${projectKey}-supabase-service-role-key`;
-
-			// Store service role key secret
-			try {
-				await storeSecret(secretName, supabase.serviceKey, `${projectKey} Supabase service role key`);
-				steps.push(`Stored Supabase service role key as "${secretName}"`);
-			} catch (err: any) {
-				steps.push(`Warning: failed to store Supabase secret — ${err?.message || 'unknown error'}`);
-			}
-
-			// Also store the URL as a project secret so agents can use it
-			const urlSecretName = `${projectKey}-supabase-url`;
-			try {
-				await storeSecret(urlSecretName, supabase.url, `${projectKey} Supabase project URL`);
-				steps.push(`Stored Supabase URL as "${urlSecretName}"`);
-			} catch {
-				// Non-fatal — URL is also stored directly in the integration config
-			}
-
-			// Build feedback integration source
-			const sourceId = `${projectKey}-feedback`;
-			const source = {
-				id: sourceId,
-				type: 'supabase',
-				enabled: true,
-				project: projectKey,
-				pollInterval: 120,
-				taskDefaults: {
-					type: 'bug',
-					priority: 2,
-					labels: ['widget', 'feedback']
-				},
-				projectUrl: supabase.url,
-				secretName,
-				table: 'feedback_reports',
-				statusColumn: 'status',
-				statusNew: 'submitted',
-				taskIdColumn: 'jat_task_id',
-				titleColumn: 'title',
-				descriptionTemplate:
-					'**Reporter:** {reporter_name} ({reporter_email})\n**Page:** {page_url}\n\n{description}',
-				authorColumn: 'reporter_email',
-				timestampColumn: 'created_at',
-				attachmentColumn: 'screenshot_paths',
-				storageBucket: 'feedback-screenshots',
-				automation: {
-					action: 'delay',
-					command: '/jat:start',
-					delay: 5,
-					delayUnit: 'minutes'
-				}
-			};
-
-			const created = upsertSource(config, source);
-			integrations.push(sourceId);
-			steps.push(
-				created
-					? `Created Supabase feedback integration "${sourceId}"`
-					: `Updated Supabase feedback integration "${sourceId}"`
-			);
+		if (integrations.length === 0) {
+			return json({ success: false, error: 'No integrations provided' }, { status: 400 });
 		}
 
-		// ── Cloudflare Pages deployment monitoring integration ─────────────
-		if (cloudflare?.accountId && cloudflare?.apiToken && cloudflare?.pagesProject) {
-			const secretName = `${projectKey}-cloudflare-pages-token`;
+		const steps: string[] = [];
+		const createdIntegrations: string[] = [];
 
-			// Store API token secret
+		// ── Store all secrets first ─────────────────────────────────────
+		// Build a resolved map: "{projectKey}-{key}" → value
+		const resolvedSecrets: Record<string, string> = {};
+
+		for (const [key, value] of Object.entries(secrets)) {
+			if (typeof value !== 'string' || !value.trim()) continue;
+
+			const secretName = `${projectKey}-${key}`;
+			resolvedSecrets[secretName] = value;
+
 			try {
-				await storeSecret(
-					secretName,
-					cloudflare.apiToken,
-					`${projectKey} Cloudflare Pages API token`
-				);
-				steps.push(`Stored Cloudflare API token as "${secretName}"`);
+				await storeSecret(secretName, value, `${projectKey} ${key}`);
+				steps.push(`Stored secret "${secretName}"`);
 			} catch (err: any) {
-				steps.push(
-					`Warning: failed to store Cloudflare secret — ${err?.message || 'unknown error'}`
-				);
+				steps.push(`Warning: failed to store "${secretName}" — ${err?.message || 'unknown error'}`);
 			}
+		}
 
-			// Build deployment monitoring source
-			const sourceId = `${projectKey}-deployments`;
-			const source = {
+		// ── Process each integration ────────────────────────────────────
+		const integrationsConfig = readIntegrations();
+
+		for (const integ of integrations) {
+			const { id, type, label, pollInterval, taskDefaults, config: integConfig = {}, automation } = integ;
+
+			if (!id || !type) continue;
+
+			const sourceId = `${projectKey}-${id}`;
+
+			// Interpolate adapter-specific config
+			const interpolated = interpolateConfig(integConfig, projectKey, resolvedSecrets);
+
+			// Build the source object
+			const source: Record<string, any> = {
 				id: sourceId,
-				type: 'cloudflare-pages',
+				type,
 				enabled: true,
 				project: projectKey,
-				pollInterval: 60,
-				taskDefaults: {
-					type: 'task',
-					priority: 2,
-					labels: ['from-cloudflare-pages']
-				},
-				accountId: cloudflare.accountId,
-				pagesProject: cloudflare.pagesProject,
-				secretName,
-				fetchLogs: true,
-				filter: [{ field: 'status', operator: 'equals', value: 'failure' }],
-				automation: {
-					action: 'delay',
-					command: '/jat:start',
-					delay: 2,
-					delayUnit: 'minutes'
-				}
+				...(pollInterval != null && { pollInterval }),
+				...(taskDefaults && { taskDefaults }),
+				...interpolated, // Flat merge of adapter config fields
+				...(automation && { automation }),
 			};
 
-			const created = upsertSource(config, source);
-			integrations.push(sourceId);
+			const created = upsertSource(integrationsConfig, source);
+			createdIntegrations.push(sourceId);
 			steps.push(
 				created
-					? `Created Cloudflare Pages monitoring integration "${sourceId}"`
-					: `Updated Cloudflare Pages monitoring integration "${sourceId}"`
+					? `Created ${label || type} integration "${sourceId}"`
+					: `Updated ${label || type} integration "${sourceId}"`
 			);
 		}
 
 		if (steps.length === 0) {
-			return json(
-				{
-					success: false,
-					error: 'No integration credentials provided. Provide supabase or cloudflare config.'
-				},
-				{ status: 400 }
-			);
+			return json({ success: false, error: 'No secrets or integrations were processed' }, { status: 400 });
 		}
 
 		// Persist updated integrations config
-		writeIntegrations(config);
+		writeIntegrations(integrationsConfig);
 
-		return json({ success: true, steps, integrations });
+		return json({ success: true, steps, integrations: createdIntegrations });
 	} catch (error) {
 		return json(
 			{

@@ -57,12 +57,6 @@
 		// Step 3: Appearance (placeholder)
 		activeColor: string;
 		inactiveColor: string;
-		// Integrations (JST projects — optional, any source type)
-		supabaseUrl: string;
-		supabaseServiceKey: string;
-		cloudflareAccountId: string;
-		cloudflareApiToken: string;
-		cloudflarePagesProject: string;
 	}
 
 	// ─── Wizard State ──────────────────────────────────────────────
@@ -84,11 +78,6 @@
 		serverPath: '',
 		activeColor: '',
 		inactiveColor: '',
-		supabaseUrl: '',
-		supabaseServiceKey: '',
-		cloudflareAccountId: '',
-		cloudflareApiToken: '',
-		cloudflarePagesProject: '',
 	});
 
 	// ─── GitHub Metadata (from clone response) ────────────────────
@@ -470,14 +459,75 @@
 	let cloneError = $state<string | null>(null);
 	let cloneSuccess = $state(false);
 
-	// ─── JST Integration state (Step 4 — optional for any source type) ──
-	let showJstIntegrations = $state(false);
+	// ─── jat.config.json integration state (Step 4) ──────────────────
+	interface JatConfigSecret {
+		key: string;
+		label: string;
+		type: string;
+		required?: boolean;
+		placeholder?: string;
+		description?: string;
+		group?: string;
+	}
+	interface JatConfigIntegration {
+		id: string;
+		type: string;
+		label?: string;
+		description?: string;
+		enabled?: boolean;
+		requires?: string[];
+		pollInterval?: number;
+		taskDefaults?: Record<string, any>;
+		config?: Record<string, any>;
+		automation?: Record<string, any>;
+	}
+	interface JatConfig {
+		version: number;
+		name?: string;
+		description?: string;
+		port?: number;
+		devCommand?: string;
+		secrets?: JatConfigSecret[];
+		integrations?: JatConfigIntegration[];
+	}
 
-	// Auto-expand integrations section for template (JST) projects
+	let projectConfig = $state<JatConfig | null>(null);
+	let configLoading = $state(false);
+	let secretValues = $state<Record<string, string>>({});
+	let selectedIntegrations = $state<Set<string>>(new Set());
+
+	// Fetch jat.config.json when entering the review step
 	$effect(() => {
-		if (currentStep === 4 && wizardData.sourceType === 'template') {
-			showJstIntegrations = true;
-		}
+		if (currentStep !== 4) return;
+
+		const isTemplate = wizardData.sourceType === 'template';
+		const path = isTemplate ? templateTargetPath.trim() : (wizardData.path || pathInput.trim());
+		if (!path) return;
+
+		configLoading = true;
+		fetch(`/api/projects/config?path=${encodeURIComponent(path)}`)
+			.then((r) => r.json())
+			.then((data) => {
+				if (data.success && data.config) {
+					projectConfig = data.config;
+					// Pre-select integrations that are enabled by default
+					const preSelected = new Set<string>();
+					for (const integ of data.config.integrations ?? []) {
+						if (integ.enabled !== false) preSelected.add(integ.id);
+					}
+					selectedIntegrations = preSelected;
+					// Initialize secret values as empty
+					const vals: Record<string, string> = {};
+					for (const s of data.config.secrets ?? []) {
+						vals[s.key] = '';
+					}
+					secretValues = vals;
+				} else {
+					projectConfig = null;
+				}
+			})
+			.catch(() => { projectConfig = null; })
+			.finally(() => { configLoading = false; });
 	});
 
 	// ─── Template Scaffold state (Step 1 when sourceType='template') ──
@@ -883,7 +933,7 @@
 	function buildCreationSteps(): CreationStep[] {
 		const steps: CreationStep[] = [];
 		if (wizardData.sourceType === 'template') {
-			steps.push({ label: 'Copied JST template', status: 'pending' });
+			steps.push({ label: 'Copied template', status: 'pending' });
 			steps.push({ label: 'Initialized git repository', status: 'pending' });
 			steps.push({ label: 'Updated project config', status: 'pending' });
 			steps.push({ label: 'Installed dependencies', status: 'pending' });
@@ -1050,33 +1100,33 @@
 				creationSteps = data.steps || [];
 			}
 
-			// Set up JST integrations (best-effort — never fail the whole flow)
-			if (
-				createdProjectKey &&
-				(
-					(wizardData.supabaseUrl && wizardData.supabaseServiceKey) ||
-					(wizardData.cloudflareAccountId && wizardData.cloudflareApiToken && wizardData.cloudflarePagesProject)
-				)
-			) {
+			// Set up integrations from jat.config.json (best-effort — never fail the whole flow)
+			if (createdProjectKey && projectConfig && selectedIntegrations.size > 0) {
 				try {
-					const integBody: Record<string, any> = { projectKey: createdProjectKey };
-					if (wizardData.supabaseUrl && wizardData.supabaseServiceKey) {
-						integBody.supabase = {
-							url: wizardData.supabaseUrl,
-							serviceKey: wizardData.supabaseServiceKey,
-						};
+					// Collect secrets for selected integrations
+					const requiredKeys = new Set<string>();
+					const selectedIntegDefs: JatConfigIntegration[] = [];
+					for (const integ of projectConfig.integrations ?? []) {
+						if (selectedIntegrations.has(integ.id)) {
+							selectedIntegDefs.push(integ);
+							for (const k of integ.requires ?? []) requiredKeys.add(k);
+						}
 					}
-					if (wizardData.cloudflareAccountId && wizardData.cloudflareApiToken && wizardData.cloudflarePagesProject) {
-						integBody.cloudflare = {
-							accountId: wizardData.cloudflareAccountId,
-							apiToken: wizardData.cloudflareApiToken,
-							pagesProject: wizardData.cloudflarePagesProject,
-						};
+
+					// Build secrets map: only include keys with values
+					const secretsPayload: Record<string, string> = {};
+					for (const k of requiredKeys) {
+						if (secretValues[k]?.trim()) secretsPayload[k] = secretValues[k].trim();
 					}
+
 					const integRes = await fetch('/api/projects/setup-integrations', {
 						method: 'POST',
 						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify(integBody),
+						body: JSON.stringify({
+							projectKey: createdProjectKey,
+							secrets: secretsPayload,
+							integrations: selectedIntegDefs,
+						}),
 					});
 					const integData = await integRes.json();
 					if (integData.success && integData.steps?.length > 0) {
@@ -1132,13 +1182,11 @@
 			serverPath: '',
 			activeColor: '',
 			inactiveColor: '',
-			supabaseUrl: '',
-			supabaseServiceKey: '',
-			cloudflareAccountId: '',
-			cloudflareApiToken: '',
-			cloudflarePagesProject: '',
 		};
-		showJstIntegrations = false;
+		projectConfig = null;
+		configLoading = false;
+		secretValues = {};
+		selectedIntegrations = new Set();
 		nameManuallyEdited = false;
 		keyManuallyEdited = false;
 		inactiveColorManuallyEdited = false;
@@ -1393,7 +1441,7 @@
 									</div>
 									<div class="flex-1 text-left">
 										<h4 class="text-sm font-semibold font-mono" style="color: oklch(0.85 0.02 250);">Start from Template</h4>
-										<p class="text-xs mt-0.5" style="color: oklch(0.60 0.02 250);">Scaffold a new SaaS app from JST</p>
+										<p class="text-xs mt-0.5" style="color: oklch(0.60 0.02 250);">Scaffold a new SaaS app from a template</p>
 										<p class="text-[11px] mt-1" style="color: oklch(0.45 0.02 250);">Describe your idea and we build it</p>
 									</div>
 									<svg class="w-5 h-5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" style="color: oklch(0.50 0.02 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -1537,7 +1585,7 @@
 										Describe Your App
 									</h3>
 									<p class="text-sm mt-1" style="color: oklch(0.50 0.02 250);">
-										Tell us what you want to build. We'll scaffold it from the JST SaaS template.
+										Tell us what you want to build. We'll scaffold it from the SaaS template.
 									</p>
 								</div>
 
@@ -1580,7 +1628,7 @@
 									style="background: oklch(0.20 0.03 300 / 0.15); border: 1px solid oklch(0.35 0.10 300 / 0.3);"
 								>
 									<p class="text-xs font-semibold font-mono mb-2" style="color: oklch(0.70 0.10 300);">
-										JST Template includes:
+										Template includes:
 									</p>
 									<div class="grid grid-cols-2 gap-x-4 gap-y-1">
 										{#each [
@@ -2126,7 +2174,7 @@
 										<div class="review-row">
 											<span class="review-key">Type</span>
 											<span class="review-value">
-												{wizardData.sourceType === 'git' ? 'Cloned from Git' : wizardData.sourceType === 'template' ? 'JST Template' : 'Local Project'}
+												{wizardData.sourceType === 'git' ? 'Cloned from Git' : wizardData.sourceType === 'template' ? 'Template' : 'Local Project'}
 											</span>
 										</div>
 										<div class="review-row">
@@ -2227,114 +2275,107 @@
 								</div>
 							{/if}
 
-							<!-- JST Integrations Section -->
-							<div class="review-section">
-								<div class="review-section-header">
-									<span class="review-section-label">Integrations</span>
-									{#if wizardData.sourceType !== 'template'}
-										<button
-											type="button"
-											class="review-edit-link"
-											onclick={() => { showJstIntegrations = !showJstIntegrations; }}
-										>
-											{showJstIntegrations ? 'Hide' : 'Set up JST integrations'}
-										</button>
-									{:else}
-										<span class="text-[11px]" style="color: oklch(0.55 0.12 145);">Recommended</span>
-									{/if}
+							<!-- Integrations (from jat.config.json) -->
+							{#if configLoading}
+								<div class="review-section">
+									<div class="review-section-header">
+										<span class="review-section-label">Integrations</span>
+										<span class="loading loading-spinner loading-xs" style="color: oklch(0.60 0.12 240);"></span>
+									</div>
 								</div>
-
-								{#if showJstIntegrations}
+							{:else if projectConfig && (projectConfig.integrations?.length ?? 0) > 0}
+								<div class="review-section">
+									<div class="review-section-header">
+										<span class="review-section-label">Integrations</span>
+										<span class="text-[11px]" style="color: oklch(0.55 0.12 145);">from jat.config.json</span>
+									</div>
 									<div class="review-section-body flex flex-col gap-4">
 										<p class="text-xs" style="color: oklch(0.55 0.02 250);">
-											Connect Supabase (user feedback) and Cloudflare Pages (deploy monitoring) so JAT agents
-											automatically respond to feedback submissions and deployment failures.
+											Select the integrations to enable. Credentials are stored via <code class="font-mono">jat-secret</code>.
 										</p>
 
-										<!-- Supabase -->
-										<div class="flex flex-col gap-2">
-											<div class="text-xs font-mono font-semibold uppercase tracking-wider" style="color: oklch(0.60 0.12 145);">
-												Supabase — Feedback Integration
-											</div>
-											<div class="flex flex-col gap-1.5">
-												<label class="text-xs" style="color: oklch(0.55 0.02 250);" for="jst-supabase-url">Project URL</label>
+										<!-- Integration checkboxes -->
+										{#each projectConfig.integrations ?? [] as integ}
+											{@const isSelected = selectedIntegrations.has(integ.id)}
+											<label
+												class="flex items-start gap-3 cursor-pointer"
+												style="padding: 0.5rem 0;"
+											>
 												<input
-													id="jst-supabase-url"
-													type="url"
-													class="input input-bordered input-sm w-full font-mono text-xs"
-													placeholder="https://xxx.supabase.co"
-													bind:value={wizardData.supabaseUrl}
-													style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
+													type="checkbox"
+													class="checkbox checkbox-sm mt-0.5"
+													checked={isSelected}
+													onchange={() => {
+														const next = new Set(selectedIntegrations);
+														if (isSelected) next.delete(integ.id);
+														else next.add(integ.id);
+														selectedIntegrations = next;
+													}}
 												/>
-											</div>
-											<div class="flex flex-col gap-1.5">
-												<label class="text-xs" style="color: oklch(0.55 0.02 250);" for="jst-supabase-key">Service Role Key</label>
-												<input
-													id="jst-supabase-key"
-													type="password"
-													class="input input-bordered input-sm w-full font-mono text-xs"
-													placeholder="eyJhbGciOiJI..."
-													bind:value={wizardData.supabaseServiceKey}
-													style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
-												/>
-											</div>
-										</div>
+												<div class="flex flex-col gap-0.5">
+													<span class="text-xs font-semibold" style="color: oklch(0.80 0.02 250);">
+														{integ.label ?? integ.id}
+													</span>
+													{#if integ.description}
+														<span class="text-[11px]" style="color: oklch(0.50 0.02 250);">{integ.description}</span>
+													{/if}
+												</div>
+											</label>
+										{/each}
 
-										<!-- Cloudflare -->
-										<div class="flex flex-col gap-2">
-											<div class="text-xs font-mono font-semibold uppercase tracking-wider" style="color: oklch(0.65 0.12 45);">
-												Cloudflare Pages — Deploy Monitoring
-											</div>
-											<div class="flex flex-col gap-1.5">
-												<label class="text-xs" style="color: oklch(0.55 0.02 250);" for="jst-cf-account">Account ID</label>
-												<input
-													id="jst-cf-account"
-													type="text"
-													class="input input-bordered input-sm w-full font-mono text-xs"
-													placeholder="48c159dd1001b17350a706f21b4651c3"
-													bind:value={wizardData.cloudflareAccountId}
-													style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
-												/>
-											</div>
-											<div class="flex flex-col gap-1.5">
-												<label class="text-xs" style="color: oklch(0.55 0.02 250);" for="jst-cf-token">API Token</label>
-												<input
-													id="jst-cf-token"
-													type="password"
-													class="input input-bordered input-sm w-full font-mono text-xs"
-													placeholder="Your Cloudflare API token (Pages:Read)"
-													bind:value={wizardData.cloudflareApiToken}
-													style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
-												/>
-											</div>
-											<div class="flex flex-col gap-1.5">
-												<label class="text-xs" style="color: oklch(0.55 0.02 250);" for="jst-cf-project">Pages Project Name</label>
-												<input
-													id="jst-cf-project"
-													type="text"
-													class="input input-bordered input-sm w-full font-mono text-xs"
-													placeholder="my-app"
-													bind:value={wizardData.cloudflarePagesProject}
-													style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
-												/>
-												<p class="text-[11px]" style="color: oklch(0.45 0.02 250);">
-													The slug of your Cloudflare Pages project (found in dash.cloudflare.com → Pages)
-												</p>
-											</div>
-										</div>
-
-										<p class="text-[11px]" style="color: oklch(0.45 0.02 250);">
-											Credentials are stored via <code class="font-mono">jat-secret</code>. Leave fields blank to skip an integration.
-										</p>
+										<!-- Secret fields for selected integrations -->
+										{@const requiredKeys = [...new Set(
+											(projectConfig.integrations ?? [])
+												.filter(i => selectedIntegrations.has(i.id))
+												.flatMap(i => i.requires ?? [])
+										)]}
+										{#if requiredKeys.length > 0}
+											{@const secretsByGroup = (() => {
+												const groups: Map<string, JatConfigSecret[]> = new Map();
+												for (const k of requiredKeys) {
+													const def = (projectConfig.secrets ?? []).find(s => s.key === k);
+													const group = def?.group ?? '';
+													if (!groups.has(group)) groups.set(group, []);
+													groups.get(group)!.push(def ?? { key: k, label: k, type: 'secret' });
+												}
+												return groups;
+											})()}
+											{#each [...secretsByGroup.entries()] as [group, groupSecrets]}
+												<div class="flex flex-col gap-2">
+													{#if group}
+														<div class="text-xs font-mono font-semibold uppercase tracking-wider" style="color: oklch(0.60 0.12 240);">
+															{group}
+														</div>
+													{/if}
+													{#each groupSecrets as secret}
+														<div class="flex flex-col gap-1.5">
+															<label
+																class="text-xs"
+																style="color: oklch(0.55 0.02 250);"
+																for="config-secret-{secret.key}"
+															>
+																{secret.label ?? secret.key}
+																{#if !secret.required}<span style="color: oklch(0.45 0.02 250);"> (optional)</span>{/if}
+															</label>
+															<input
+																id="config-secret-{secret.key}"
+																type={secret.type === 'secret' ? 'password' : (secret.type === 'url' ? 'url' : 'text')}
+																class="input input-bordered input-sm w-full font-mono text-xs"
+																placeholder={secret.placeholder ?? ''}
+																bind:value={secretValues[secret.key]}
+																style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
+															/>
+															{#if secret.description}
+																<p class="text-[11px]" style="color: oklch(0.45 0.02 250);">{secret.description}</p>
+															{/if}
+														</div>
+													{/each}
+												</div>
+											{/each}
+										{/if}
 									</div>
-								{:else if wizardData.sourceType !== 'template'}
-									<div class="px-3 py-2">
-										<p class="text-xs" style="color: oklch(0.45 0.02 250);">
-											If this is a JST-based project, click "Set up JST integrations" to connect Supabase feedback and Cloudflare deployment monitoring.
-										</p>
-									</div>
-								{/if}
-							</div>
+								</div>
+							{/if}
 
 							<!-- Starter Tasks Section -->
 							{#if availableStarterTasks.length > 0}

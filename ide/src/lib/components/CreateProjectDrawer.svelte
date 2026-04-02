@@ -261,6 +261,7 @@
 		label: string;
 		description: string;
 		accentColor: string;
+		icon: string;
 		secrets: JatConfigSecret[];
 		integration?: Omit<JatConfigIntegration, 'requires'> & { requires?: string[] };
 	}
@@ -271,6 +272,7 @@
 			label: 'Supabase',
 			description: 'Database, auth & storage',
 			accentColor: 'oklch(0.55 0.18 145)',
+			icon: '<svg viewBox="0 0 109 113" fill="none"><path d="M63.7 110.3c-2.6 3.3-8.1 1.6-8.2-2.6l-1.6-56.5h37.8c6.9 0 10.6 8 6.2 13.3L63.7 110.3z" fill="url(#sb1)"/><defs><linearGradient id="sb1" x1="53.97" y1="54.97" x2="94.17" y2="71.82" gradientUnits="userSpaceOnUse"><stop stop-color="#249361"/><stop offset="1" stop-color="#3ECF8E"/></linearGradient></defs><path d="M45.3 2.1c2.6-3.3 8.2-1.6 8.2 2.6l.7 56.5H17.8c-6.8 0-10.6-8-6.2-13.4L45.3 2.1z" fill="#3ECF8E"/></svg>',
 			secrets: [
 				{ key: 'supabase-url', label: 'Project URL', type: 'url', required: true, placeholder: 'https://xxx.supabase.co', group: 'Supabase' },
 				{ key: 'supabase-service-role-key', label: 'Service Role Key', type: 'secret', required: true, placeholder: 'eyJ...', group: 'Supabase' },
@@ -297,6 +299,7 @@
 			label: 'Stripe',
 			description: 'Payments & subscriptions',
 			accentColor: 'oklch(0.55 0.18 270)',
+			icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.591-7.305z"/></svg>',
 			secrets: [
 				{ key: 'stripe-secret-key', label: 'Secret Key', type: 'secret', required: true, placeholder: 'sk_live_...', group: 'Stripe' },
 				{ key: 'stripe-webhook-secret', label: 'Webhook Secret', type: 'secret', required: false, placeholder: 'whsec_...', group: 'Stripe' },
@@ -307,6 +310,7 @@
 			label: 'Cloudflare Pages',
 			description: 'Deployment monitoring',
 			accentColor: 'oklch(0.65 0.15 45)',
+			icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.51 15.86l.55-1.89c.12-.41.08-.79-.11-1.07-.17-.25-.45-.4-.78-.42l-8.07-.1a.17.17 0 01-.15-.09.17.17 0 01.01-.18c.04-.06.1-.1.17-.1l8.16-.1c.83-.05 1.74-.72 2.07-1.53l.42-1.03a.35.35 0 00.02-.18A5.82 5.82 0 0013.26 4a5.84 5.84 0 00-5.32 3.45 2.56 2.56 0 00-3.97 1.75A4.09 4.09 0 000 13.25a.16.16 0 00.16.17h15.87c.08 0 .14-.04.17-.11l.31-.95v-.5zM20.16 9.22a.09.09 0 00-.09.02.09.09 0 00-.04.08 3.37 3.37 0 01-.13.81l-.53 1.81c-.12.41-.08.79.11 1.07.17.25.45.4.78.42l2.1.1c.06 0 .12.04.15.09a.17.17 0 01-.01.18c-.04.06-.1.1-.17.1l-2.19.1c-.84.05-1.74.72-2.07 1.53l-.12.3a.08.08 0 00.04.1.08.08 0 00.05.02h5.73A.22.22 0 0024 15.8 5.59 5.59 0 0020.16 9.22z"/></svg>',
 			secrets: [
 				{ key: 'cloudflare-api-token', label: 'API Token', type: 'secret', required: true, placeholder: 'Token with Pages:Read', group: 'Cloudflare' },
 				{ key: 'cloudflare-account-id', label: 'Account ID', type: 'string', required: true, placeholder: '48c159dd...', group: 'Cloudflare' },
@@ -331,6 +335,7 @@
 			label: 'Resend',
 			description: 'Transactional email',
 			accentColor: 'oklch(0.60 0.15 0)',
+			icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 6a2 2 0 012-2h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6zm2.4 0L12 11.6 19.6 6H4.4zM20 7.87l-8 5.93-8-5.93V18h16V7.87z"/></svg>',
 			secrets: [
 				{ key: 'resend-api-key', label: 'API Key', type: 'secret', required: true, placeholder: 're_...', group: 'Resend' },
 			],
@@ -340,6 +345,7 @@
 			label: 'OpenAI',
 			description: 'GPT & embeddings',
 			accentColor: 'oklch(0.60 0.12 160)',
+			icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M22.28 9.37a6.04 6.04 0 00-.52-4.93 6.1 6.1 0 00-6.57-2.93A6.06 6.06 0 0010.68 0a6.1 6.1 0 00-5.82 4.23 6.05 6.05 0 00-4.03 2.93 6.1 6.1 0 00.75 7.15 6.04 6.04 0 00.52 4.93 6.1 6.1 0 006.57 2.93A6.06 6.06 0 0013.18 24a6.1 6.1 0 005.82-4.22 6.05 6.05 0 004.03-2.93 6.1 6.1 0 00-.75-7.48zM13.18 22.44a4.56 4.56 0 01-2.93-1.06l.15-.08 4.86-2.81a.79.79 0 00.4-.69v-6.86l2.05 1.19a.07.07 0 01.04.06v5.68a4.58 4.58 0 01-4.57 4.57zM3.6 18.31a4.54 4.54 0 01-.55-3.06l.15.09 4.86 2.81a.79.79 0 00.79 0l5.93-3.43v2.37a.07.07 0 01-.03.06l-4.91 2.84a4.58 4.58 0 01-6.24-1.68zM2.34 7.9A4.54 4.54 0 014.72 5.9v5.78a.79.79 0 00.4.68l5.93 3.43-2.05 1.18a.08.08 0 01-.07 0l-4.91-2.83A4.58 4.58 0 012.34 7.9zm17.23 4.01l-5.93-3.43 2.05-1.18a.08.08 0 01.07 0l4.91 2.83a4.57 4.57 0 01-.7 8.24v-5.78a.79.79 0 00-.4-.68zm2.04-3.08l-.15-.09-4.86-2.81a.79.79 0 00-.79 0L9.88 9.36V6.99a.07.07 0 01.03-.06l4.91-2.83a4.57 4.57 0 016.79 4.73zM8.72 12.87l-2.05-1.19a.07.07 0 01-.04-.06V5.94a4.57 4.57 0 017.5-3.5l-.15.08-4.86 2.81a.79.79 0 00-.4.69v6.85zm1.11-2.4l2.64-1.53 2.64 1.52v3.05l-2.64 1.53-2.64-1.53v-3.04z"/></svg>',
 			secrets: [
 				{ key: 'openai-api-key', label: 'API Key', type: 'secret', required: true, placeholder: 'sk-...', group: 'OpenAI' },
 			],
@@ -349,6 +355,7 @@
 			label: 'Anthropic',
 			description: 'Claude AI',
 			accentColor: 'oklch(0.60 0.18 30)',
+			icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.83 2L21 22h-4.3l-7.17-20h4.3zM7.17 2L0 22h4.3l7.17-20H7.17z"/></svg>',
 			secrets: [
 				{ key: 'anthropic-api-key', label: 'API Key', type: 'secret', required: true, placeholder: 'sk-ant-...', group: 'Anthropic' },
 			],
@@ -1801,12 +1808,15 @@
 										}}
 									>
 										<div class="flex items-center justify-between">
-											<span class="text-sm font-semibold font-mono" style="color: {isSelected ? svc.accentColor : 'oklch(0.75 0.02 250)'};">{svc.label}</span>
+											<div class="flex items-center gap-2">
+												<span class="w-5 h-5 flex-shrink-0" style="color: {isSelected ? svc.accentColor : 'oklch(0.50 0.02 250)'};">{@html svc.icon}</span>
+												<span class="text-sm font-semibold font-mono" style="color: {isSelected ? svc.accentColor : 'oklch(0.75 0.02 250)'};">{svc.label}</span>
+											</div>
 											{#if isSelected}
 												<svg class="w-4 h-4 flex-shrink-0" style="color: {svc.accentColor};" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
 											{/if}
 										</div>
-										<span class="text-xs" style="color: oklch(0.50 0.02 250);">{svc.description}</span>
+										<span class="text-xs ml-7" style="color: oklch(0.50 0.02 250);">{svc.description}</span>
 									</button>
 								{/each}
 							</div>

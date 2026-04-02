@@ -1069,6 +1069,37 @@
 		);
 	}
 
+	// Map of taskId → agentName for tasks with previous sessions (passed to TasksOpen context menu)
+	let resumableTasks = $state(new Map<string, string>());
+
+	async function fetchResumableTasks() {
+		try {
+			const taskIds = openTasks
+				.filter(t => t.status === 'open' && t.issue_type !== 'epic')
+				.map(t => t.id);
+			if (taskIds.length === 0) return;
+			const response = await fetch('/api/tasks/sessions', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ taskIds })
+			});
+			if (!response.ok) return;
+			const data = await response.json();
+			const map = new Map<string, string>();
+			for (const [taskId, sessions] of Object.entries(data.sessions || {})) {
+				const arr = sessions as Array<{ agentName: string; sessionId: string | null; isOnline: boolean }>;
+				// Find the first offline session (resume API will locate the session ID)
+				const resumable = arr.find(s => !s.isOnline);
+				if (resumable) {
+					map.set(taskId, resumable.agentName);
+				}
+			}
+			resumableTasks = map;
+		} catch {
+			// Silent fail
+		}
+	}
+
 	// Critical data for initial render (tasks + sessions clear the loading skeleton)
 	async function fetchCriticalData() {
 		await Promise.all([
@@ -1088,6 +1119,7 @@
 			fetchCompletedMemory(),
 			fetchBrowserSessions(),
 			fetchTaskImages(),
+			fetchResumableTasks(),
 		]);
 	}
 
@@ -2211,6 +2243,7 @@
 													{taskIntegrations}
 													{taskImages}
 													{epicsReadyForVerification}
+													{resumableTasks}
 													highlightedTaskIds={isSwarmHovered || isSwarmSpawning ? launchableIds : new Set()}
 													onSpawnTask={spawnTask as any}
 													onRetry={fetchTasks}
@@ -2279,6 +2312,7 @@
 													{projectColors}
 													{taskImages}
 													{epicsReadyForVerification}
+													{resumableTasks}
 													onSpawnTask={spawnTask as any}
 													onRetry={fetchTasks}
 													onTaskClick={(taskId) =>

@@ -85,7 +85,8 @@
 		onTaskClick = () => {},
 		onAddTask = null,
 		onFilterCountsChange = (_counts: Record<string, number>) => {},
-		mobile = false
+		mobile = false,
+		resumableTasks = new Map<string, string>()
 	}: {
 		tasks: Task[];
 		loading: boolean;
@@ -104,6 +105,8 @@
 		onAddTask?: (() => void) | null;
 		onFilterCountsChange?: (counts: Record<string, number>) => void;
 		mobile?: boolean;
+		/** Map of taskId → agentName for tasks with resumable sessions */
+		resumableTasks?: Map<string, string>;
 	} = $props();
 
 	// Alt key tracking for agent picker
@@ -1234,11 +1237,12 @@
 	let resumingTaskId = $state<string | null>(null);
 
 	async function handleResumeTask(task: Task) {
-		if (!task.assignee) return;
+		const agentName = task.assignee || resumableTasks.get(task.id);
+		if (!agentName) return;
 		closeContextMenu();
 		resumingTaskId = task.id;
 		try {
-			const response = await fetch(`/api/sessions/${task.assignee}/resume`, {
+			const response = await fetch(`/api/sessions/${agentName}/resume`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 			});
@@ -1250,7 +1254,7 @@
 					addToast({ message: 'Resume failed', type: 'error', details: data.message || data.error || 'Could not resume session' });
 				}
 			} else {
-				addToast({ message: 'Session resumed', type: 'success', details: `Resuming ${task.assignee}'s session` });
+				addToast({ message: 'Session resumed', type: 'success', details: `Resuming ${agentName}'s session` });
 				broadcastTaskEvent('session-resumed', task.id);
 			}
 		} catch (err) {
@@ -2002,8 +2006,8 @@
 			<span>Launch</span>
 		</button>
 
-		<!-- Resume (only for tasks with a previous assignee) -->
-		{#if ctxTask.assignee}
+		<!-- Resume (only for tasks with a resumable session) -->
+		{#if ctxTask.assignee || resumableTasks.has(ctxTask.id)}
 			<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => { const t = ctxTask!; handleResumeTask(t); ctxTask = null; }} disabled={resumingTaskId === ctxTask.id}>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />

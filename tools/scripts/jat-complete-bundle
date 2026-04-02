@@ -429,9 +429,10 @@ fi
 # Ensure required fields are present
 BUNDLE_JSON=$(echo "$BUNDLE_JSON" | jq \
     --arg taskId "$TASK_ID" \
+    --arg taskTitle "$TASK_TITLE" \
     --arg agentName "$AGENT_NAME" \
     --arg mode "$COMPLETION_MODE" \
-    '. + {taskId: $taskId, agentName: $agentName, completionMode: $mode}')
+    '. + {taskId: $taskId, taskTitle: $taskTitle, agentName: $agentName, completionMode: $mode}')
 
 # Add nextTaskId if provided
 if [[ -n "$NEXT_TASK_ID" ]]; then

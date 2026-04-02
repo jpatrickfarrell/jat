@@ -243,8 +243,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			return json({ sessions: {} });
 		}
 
-		// Limit to prevent abuse
-		const limitedTaskIds = taskIds.slice(0, 100);
+		// Limit to prevent abuse (scanning /tmp is O(files) not O(taskIds), so this is generous)
+		const limitedTaskIds = taskIds.slice(0, 500);
 		const taskIdSet = new Set(limitedTaskIds);
 
 		const projectPath = getProjectPath();

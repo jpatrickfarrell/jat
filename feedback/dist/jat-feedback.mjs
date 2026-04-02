@@ -4,7 +4,7 @@ var er = (e) => {
 };
 var gr = (e, t, n) => t in e ? hr(e, t, { enumerable: !0, configurable: !0, writable: !0, value: n }) : e[t] = n;
 var ne = (e, t, n) => gr(e, typeof t != "symbol" ? t + "" : t, n), Gn = (e, t, n) => t.has(e) || er("Cannot " + n);
-var $ = (e, t, n) => (Gn(e, t, "read from private field"), n ? n.call(e) : t.get(e)), fe = (e, t, n) => t.has(e) ? er("Cannot add the same private member more than once") : t instanceof WeakSet ? t.add(e) : t.set(e, n), le = (e, t, n, r) => (Gn(e, t, "write to private field"), r ? r.call(e, n) : t.set(e, n), n), je = (e, t, n) => (Gn(e, t, "access private method"), n);
+var T = (e, t, n) => (Gn(e, t, "read from private field"), n ? n.call(e) : t.get(e)), fe = (e, t, n) => t.has(e) ? er("Cannot add the same private member more than once") : t instanceof WeakSet ? t.add(e) : t.set(e, n), le = (e, t, n, r) => (Gn(e, t, "write to private field"), r ? r.call(e, n) : t.set(e, n), n), je = (e, t, n) => (Gn(e, t, "access private method"), n);
 const PUBLIC_VERSION = "5";
 var tr;
 typeof window < "u" && ((tr = window.__svelte ?? (window.__svelte = {})).v ?? (tr.v = /* @__PURE__ */ new Set())).add("5");
@@ -304,14 +304,14 @@ const Qn = class Qn {
     fe(this, an, !1);
   }
   is_deferred() {
-    return this.is_fork || $(this, sn) > 0;
+    return this.is_fork || T(this, sn) > 0;
   }
   /**
    * Add an effect to the #skipped_branches map and reset its children
    * @param {Effect} effect
    */
   skip_effect(t) {
-    $(this, Mt).has(t) || $(this, Mt).set(t, { d: [], m: [] });
+    T(this, Mt).has(t) || T(this, Mt).set(t, { d: [], m: [] });
   }
   /**
    * Remove an effect from the #skipped_branches map and reschedule
@@ -319,9 +319,9 @@ const Qn = class Qn {
    * @param {Effect} effect
    */
   unskip_effect(t) {
-    var n = $(this, Mt).get(t);
+    var n = T(this, Mt).get(t);
     if (n) {
-      $(this, Mt).delete(t);
+      T(this, Mt).delete(t);
       for (var r of n.d)
         set_signal_status(r, DIRTY), schedule_effect(r);
       for (r of n.m)
@@ -340,11 +340,11 @@ const Qn = class Qn {
       je(this, At, Yn).call(this, s, n, r);
     if (this.is_deferred()) {
       je(this, At, Xn).call(this, r), je(this, At, Xn).call(this, n);
-      for (const [s, i] of $(this, Mt))
+      for (const [s, i] of T(this, Mt))
         reset_branch(s, i);
     } else {
-      for (const s of $(this, rn)) s();
-      $(this, rn).clear(), $(this, Gt) === 0 && je(this, At, ar).call(this), previous_batch = this, current_batch = null, flush_queued_effects(r), flush_queued_effects(n), previous_batch = null, (o = $(this, wn)) == null || o.resolve();
+      for (const s of T(this, rn)) s();
+      T(this, rn).clear(), T(this, Gt) === 0 && je(this, At, ar).call(this), previous_batch = this, current_batch = null, flush_queued_effects(r), flush_queued_effects(n), previous_batch = null, (o = T(this, wn)) == null || o.resolve();
     }
     batch_values = null;
   }
@@ -367,46 +367,46 @@ const Qn = class Qn {
     if (this.activate(), queued_root_effects.length > 0) {
       if (flush_effects(), current_batch !== null && current_batch !== this)
         return;
-    } else $(this, Gt) === 0 && this.process([]);
+    } else T(this, Gt) === 0 && this.process([]);
     this.deactivate();
   }
   discard() {
-    for (const t of $(this, on)) t(this);
-    $(this, on).clear();
+    for (const t of T(this, on)) t(this);
+    T(this, on).clear();
   }
   /**
    *
    * @param {boolean} blocking
    */
   increment(t) {
-    le(this, Gt, $(this, Gt) + 1), t && le(this, sn, $(this, sn) + 1);
+    le(this, Gt, T(this, Gt) + 1), t && le(this, sn, T(this, sn) + 1);
   }
   /**
    *
    * @param {boolean} blocking
    */
   decrement(t) {
-    le(this, Gt, $(this, Gt) - 1), t && le(this, sn, $(this, sn) - 1), !$(this, an) && (le(this, an, !0), queue_micro_task(() => {
+    le(this, Gt, T(this, Gt) - 1), t && le(this, sn, T(this, sn) - 1), !T(this, an) && (le(this, an, !0), queue_micro_task(() => {
       le(this, an, !1), this.is_deferred() ? queued_root_effects.length > 0 && this.flush() : this.revive();
     }));
   }
   revive() {
-    for (const t of $(this, xn))
-      $(this, Yt).delete(t), set_signal_status(t, DIRTY), schedule_effect(t);
-    for (const t of $(this, Yt))
+    for (const t of T(this, xn))
+      T(this, Yt).delete(t), set_signal_status(t, DIRTY), schedule_effect(t);
+    for (const t of T(this, Yt))
       set_signal_status(t, MAYBE_DIRTY), schedule_effect(t);
     this.flush();
   }
   /** @param {() => void} fn */
   oncommit(t) {
-    $(this, rn).add(t);
+    T(this, rn).add(t);
   }
   /** @param {(batch: Batch) => void} fn */
   ondiscard(t) {
-    $(this, on).add(t);
+    T(this, on).add(t);
   }
   settled() {
-    return ($(this, wn) ?? le(this, wn, deferred())).promise;
+    return (T(this, wn) ?? le(this, wn, deferred())).promise;
   }
   static ensure() {
     if (current_batch === null) {
@@ -430,9 +430,9 @@ rn = new WeakMap(), on = new WeakMap(), Gt = new WeakMap(), sn = new WeakMap(), 
 Yn = function(t, n, r) {
   t.f ^= CLEAN;
   for (var o = t.first, s = null; o !== null; ) {
-    var i = o.f, a = (i & (BRANCH_EFFECT | ROOT_EFFECT)) !== 0, l = a && (i & CLEAN) !== 0, c = l || (i & INERT) !== 0 || $(this, Mt).has(o);
+    var i = o.f, a = (i & (BRANCH_EFFECT | ROOT_EFFECT)) !== 0, l = a && (i & CLEAN) !== 0, c = l || (i & INERT) !== 0 || T(this, Mt).has(o);
     if (!c && o.fn !== null) {
-      a ? o.f ^= CLEAN : s !== null && (i & (EFFECT | RENDER_EFFECT | MANAGED_EFFECT)) !== 0 ? s.b.defer_effect(o) : (i & EFFECT) !== 0 ? n.push(o) : is_dirty(o) && ((i & BLOCK_EFFECT) !== 0 && $(this, Yt).add(o), update_effect(o));
+      a ? o.f ^= CLEAN : s !== null && (i & (EFFECT | RENDER_EFFECT | MANAGED_EFFECT)) !== 0 ? s.b.defer_effect(o) : (i & EFFECT) !== 0 ? n.push(o) : is_dirty(o) && ((i & BLOCK_EFFECT) !== 0 && T(this, Yt).add(o), update_effect(o));
       var u = o.first;
       if (u !== null) {
         o = u;
@@ -448,7 +448,7 @@ Yn = function(t, n, r) {
  */
 Xn = function(t) {
   for (var n = 0; n < t.length; n += 1)
-    defer_effect(t[n], $(this, xn), $(this, Yt));
+    defer_effect(t[n], T(this, xn), T(this, Yt));
 }, ar = function() {
   var o;
   if (batches.size > 1) {
@@ -672,16 +672,16 @@ class Boundary {
      * @type {Source<number> | null}
      */
     fe(this, Zt, null);
-    fe(this, Mn, createSubscriber(() => (le(this, Zt, source($(this, Kt))), () => {
+    fe(this, Mn, createSubscriber(() => (le(this, Zt, source(T(this, Kt))), () => {
       le(this, Zt, null);
     })));
     le(this, nt, t), le(this, Tt, n), le(this, Xt, r), this.parent = /** @type {Effect} */
-    active_effect.b, this.is_pending = !!$(this, Tt).pending, le(this, St, block(() => {
+    active_effect.b, this.is_pending = !!T(this, Tt).pending, le(this, St, block(() => {
       if (active_effect.b = this, hydrating) {
-        const s = $(this, kn);
+        const s = T(this, kn);
         hydrate_next(), /** @type {Comment} */
         s.nodeType === COMMENT_NODE && /** @type {Comment} */
-        s.data === HYDRATION_START_ELSE ? je(this, Me, cr).call(this) : (je(this, Me, lr).call(this), $(this, Dt) === 0 && (this.is_pending = !1));
+        s.data === HYDRATION_START_ELSE ? je(this, Me, cr).call(this) : (je(this, Me, lr).call(this), T(this, Dt) === 0 && (this.is_pending = !1));
       } else {
         var o = je(this, Me, Kn).call(this);
         try {
@@ -689,11 +689,11 @@ class Boundary {
         } catch (s) {
           this.error(s);
         }
-        $(this, Dt) > 0 ? je(this, Me, Pn).call(this) : this.is_pending = !1;
+        T(this, Dt) > 0 ? je(this, Me, Pn).call(this) : this.is_pending = !1;
       }
       return () => {
         var s;
-        (s = $(this, Ht)) == null || s.remove();
+        (s = T(this, Ht)) == null || s.remove();
       };
     }, flags)), hydrating && le(this, nt, hydrate_node);
   }
@@ -702,7 +702,7 @@ class Boundary {
    * @param {Effect} effect
    */
   defer_effect(t) {
-    defer_effect(t, $(this, cn), $(this, un));
+    defer_effect(t, T(this, cn), T(this, un));
   }
   /**
    * Returns `false` if the effect exists inside a boundary whose pending snippet is shown
@@ -712,7 +712,7 @@ class Boundary {
     return !this.is_pending && (!this.parent || this.parent.is_rendered());
   }
   has_pending_snippet() {
-    return !!$(this, Tt).pending;
+    return !!T(this, Tt).pending;
   }
   /**
    * Update the source that powers `$effect.pending()` inside this boundary,
@@ -721,25 +721,25 @@ class Boundary {
    * @param {1 | -1} d
    */
   update_pending_count(t) {
-    je(this, Me, Jn).call(this, t), le(this, Kt, $(this, Kt) + t), !(!$(this, Zt) || $(this, ln)) && (le(this, ln, !0), queue_micro_task(() => {
-      le(this, ln, !1), $(this, Zt) && internal_set($(this, Zt), $(this, Kt));
+    je(this, Me, Jn).call(this, t), le(this, Kt, T(this, Kt) + t), !(!T(this, Zt) || T(this, ln)) && (le(this, ln, !0), queue_micro_task(() => {
+      le(this, ln, !1), T(this, Zt) && internal_set(T(this, Zt), T(this, Kt));
     }));
   }
   get_effect_pending() {
-    return $(this, Mn).call(this), get(
+    return T(this, Mn).call(this), get(
       /** @type {Source<number>} */
-      $(this, Zt)
+      T(this, Zt)
     );
   }
   /** @param {unknown} error */
   error(t) {
-    var n = $(this, Tt).onerror;
-    let r = $(this, Tt).failed;
-    if ($(this, Jt) || !n && !r)
+    var n = T(this, Tt).onerror;
+    let r = T(this, Tt).failed;
+    if (T(this, Jt) || !n && !r)
       throw t;
-    $(this, st) && (destroy_effect($(this, st)), le(this, st, null)), $(this, Xe) && (destroy_effect($(this, Xe)), le(this, Xe, null)), $(this, Ct) && (destroy_effect($(this, Ct)), le(this, Ct, null)), hydrating && (set_hydrate_node(
+    T(this, st) && (destroy_effect(T(this, st)), le(this, st, null)), T(this, Xe) && (destroy_effect(T(this, Xe)), le(this, Xe, null)), T(this, Ct) && (destroy_effect(T(this, Ct)), le(this, Ct, null)), hydrating && (set_hydrate_node(
       /** @type {TemplateNode} */
-      $(this, kn)
+      T(this, kn)
     ), next(), set_hydrate_node(skip_nodes()));
     var o = !1, s = !1;
     const i = () => {
@@ -747,22 +747,22 @@ class Boundary {
         svelte_boundary_reset_noop();
         return;
       }
-      o = !0, s && svelte_boundary_reset_onerror(), Batch.ensure(), le(this, Kt, 0), $(this, Ct) !== null && pause_effect($(this, Ct), () => {
+      o = !0, s && svelte_boundary_reset_onerror(), Batch.ensure(), le(this, Kt, 0), T(this, Ct) !== null && pause_effect(T(this, Ct), () => {
         le(this, Ct, null);
-      }), this.is_pending = this.has_pending_snippet(), le(this, st, je(this, Me, Ln).call(this, () => (le(this, Jt, !1), branch(() => $(this, Xt).call(this, $(this, nt)))))), $(this, Dt) > 0 ? je(this, Me, Pn).call(this) : this.is_pending = !1;
+      }), this.is_pending = this.has_pending_snippet(), le(this, st, je(this, Me, Ln).call(this, () => (le(this, Jt, !1), branch(() => T(this, Xt).call(this, T(this, nt)))))), T(this, Dt) > 0 ? je(this, Me, Pn).call(this) : this.is_pending = !1;
     };
     queue_micro_task(() => {
       try {
         s = !0, n == null || n(t, i), s = !1;
       } catch (a) {
-        invoke_error_boundary(a, $(this, St) && $(this, St).parent);
+        invoke_error_boundary(a, T(this, St) && T(this, St).parent);
       }
       r && le(this, Ct, je(this, Me, Ln).call(this, () => {
         Batch.ensure(), le(this, Jt, !0);
         try {
           return branch(() => {
             r(
-              $(this, nt),
+              T(this, nt),
               () => t,
               () => i
             );
@@ -771,7 +771,7 @@ class Boundary {
           return invoke_error_boundary(
             a,
             /** @type {Effect} */
-            $(this, St).parent
+            T(this, St).parent
           ), null;
         } finally {
           le(this, Jt, !1);
@@ -782,31 +782,31 @@ class Boundary {
 }
 nt = new WeakMap(), kn = new WeakMap(), Tt = new WeakMap(), Xt = new WeakMap(), St = new WeakMap(), st = new WeakMap(), Xe = new WeakMap(), Ct = new WeakMap(), Ft = new WeakMap(), Ht = new WeakMap(), Kt = new WeakMap(), Dt = new WeakMap(), ln = new WeakMap(), Jt = new WeakMap(), cn = new WeakMap(), un = new WeakMap(), Zt = new WeakMap(), Mn = new WeakMap(), Me = new WeakSet(), lr = function() {
   try {
-    le(this, st, branch(() => $(this, Xt).call(this, $(this, nt))));
+    le(this, st, branch(() => T(this, Xt).call(this, T(this, nt))));
   } catch (t) {
     this.error(t);
   }
 }, cr = function() {
-  const t = $(this, Tt).pending;
-  t && (le(this, Xe, branch(() => t($(this, nt)))), queue_micro_task(() => {
+  const t = T(this, Tt).pending;
+  t && (le(this, Xe, branch(() => t(T(this, nt)))), queue_micro_task(() => {
     var n = je(this, Me, Kn).call(this);
-    le(this, st, je(this, Me, Ln).call(this, () => (Batch.ensure(), branch(() => $(this, Xt).call(this, n))))), $(this, Dt) > 0 ? je(this, Me, Pn).call(this) : (pause_effect(
+    le(this, st, je(this, Me, Ln).call(this, () => (Batch.ensure(), branch(() => T(this, Xt).call(this, n))))), T(this, Dt) > 0 ? je(this, Me, Pn).call(this) : (pause_effect(
       /** @type {Effect} */
-      $(this, Xe),
+      T(this, Xe),
       () => {
         le(this, Xe, null);
       }
     ), this.is_pending = !1);
   }));
 }, Kn = function() {
-  var t = $(this, nt);
-  return this.is_pending && (le(this, Ht, create_text()), $(this, nt).before($(this, Ht)), t = $(this, Ht)), t;
+  var t = T(this, nt);
+  return this.is_pending && (le(this, Ht, create_text()), T(this, nt).before(T(this, Ht)), t = T(this, Ht)), t;
 }, /**
  * @param {() => Effect | null} fn
  */
 Ln = function(t) {
   var n = active_effect, r = active_reaction, o = component_context;
-  set_active_effect($(this, St)), set_active_reaction($(this, St)), set_component_context($(this, St).ctx);
+  set_active_effect(T(this, St)), set_active_reaction(T(this, St)), set_component_context(T(this, St).ctx);
   try {
     return t();
   } catch (s) {
@@ -817,12 +817,12 @@ Ln = function(t) {
 }, Pn = function() {
   const t = (
     /** @type {(anchor: Node) => void} */
-    $(this, Tt).pending
+    T(this, Tt).pending
   );
-  $(this, st) !== null && (le(this, Ft, document.createDocumentFragment()), $(this, Ft).append(
+  T(this, st) !== null && (le(this, Ft, document.createDocumentFragment()), T(this, Ft).append(
     /** @type {TemplateNode} */
-    $(this, Ht)
-  ), move_effect($(this, st), $(this, Ft))), $(this, Xe) === null && le(this, Xe, branch(() => t($(this, nt))));
+    T(this, Ht)
+  ), move_effect(T(this, st), T(this, Ft))), T(this, Xe) === null && le(this, Xe, branch(() => t(T(this, nt))));
 }, /**
  * Updates the pending count associated with the currently visible pending snippet,
  * if any, such that we can replace the snippet with content once work is done
@@ -834,15 +834,15 @@ Jn = function(t) {
     this.parent && je(n = this.parent, Me, Jn).call(n, t);
     return;
   }
-  if (le(this, Dt, $(this, Dt) + t), $(this, Dt) === 0) {
+  if (le(this, Dt, T(this, Dt) + t), T(this, Dt) === 0) {
     this.is_pending = !1;
-    for (const r of $(this, cn))
+    for (const r of T(this, cn))
       set_signal_status(r, DIRTY), schedule_effect(r);
-    for (const r of $(this, un))
+    for (const r of T(this, un))
       set_signal_status(r, MAYBE_DIRTY), schedule_effect(r);
-    $(this, cn).clear(), $(this, un).clear(), $(this, Xe) && pause_effect($(this, Xe), () => {
+    T(this, cn).clear(), T(this, un).clear(), T(this, Xe) && pause_effect(T(this, Xe), () => {
       le(this, Xe, null);
-    }), $(this, Ft) && ($(this, nt).before($(this, Ft)), le(this, Ft, null));
+    }), T(this, Ft) && (T(this, nt).before(T(this, Ft)), le(this, Ft, null));
   }
 };
 function flatten(e, t, n, r) {
@@ -2200,34 +2200,34 @@ class BranchManager {
         /** @type {Batch} */
         current_batch
       );
-      if ($(this, vt).has(t)) {
+      if (T(this, vt).has(t)) {
         var n = (
           /** @type {Key} */
-          $(this, vt).get(t)
-        ), r = $(this, zt).get(n);
+          T(this, vt).get(t)
+        ), r = T(this, zt).get(n);
         if (r)
-          resume_effect(r), $(this, Qt).delete(n);
+          resume_effect(r), T(this, Qt).delete(n);
         else {
-          var o = $(this, rt).get(n);
-          o && ($(this, zt).set(n, o.effect), $(this, rt).delete(n), o.fragment.lastChild.remove(), this.anchor.before(o.fragment), r = o.effect);
+          var o = T(this, rt).get(n);
+          o && (T(this, zt).set(n, o.effect), T(this, rt).delete(n), o.fragment.lastChild.remove(), this.anchor.before(o.fragment), r = o.effect);
         }
-        for (const [s, i] of $(this, vt)) {
-          if ($(this, vt).delete(s), s === t)
+        for (const [s, i] of T(this, vt)) {
+          if (T(this, vt).delete(s), s === t)
             break;
-          const a = $(this, rt).get(i);
-          a && (destroy_effect(a.effect), $(this, rt).delete(i));
+          const a = T(this, rt).get(i);
+          a && (destroy_effect(a.effect), T(this, rt).delete(i));
         }
-        for (const [s, i] of $(this, zt)) {
-          if (s === n || $(this, Qt).has(s)) continue;
+        for (const [s, i] of T(this, zt)) {
+          if (s === n || T(this, Qt).has(s)) continue;
           const a = () => {
-            if (Array.from($(this, vt).values()).includes(s)) {
+            if (Array.from(T(this, vt).values()).includes(s)) {
               var c = document.createDocumentFragment();
-              move_effect(i, c), c.append(create_text()), $(this, rt).set(s, { effect: i, fragment: c });
+              move_effect(i, c), c.append(create_text()), T(this, rt).set(s, { effect: i, fragment: c });
             } else
               destroy_effect(i);
-            $(this, Qt).delete(s), $(this, zt).delete(s);
+            T(this, Qt).delete(s), T(this, zt).delete(s);
           };
-          $(this, En) || !r ? ($(this, Qt).add(s), pause_effect(i, a, !1)) : a();
+          T(this, En) || !r ? (T(this, Qt).add(s), pause_effect(i, a, !1)) : a();
         }
       }
     });
@@ -2235,10 +2235,10 @@ class BranchManager {
      * @param {Batch} batch
      */
     fe(this, Fn, (t) => {
-      $(this, vt).delete(t);
-      const n = Array.from($(this, vt).values());
-      for (const [r, o] of $(this, rt))
-        n.includes(r) || (destroy_effect(o.effect), $(this, rt).delete(r));
+      T(this, vt).delete(t);
+      const n = Array.from(T(this, vt).values());
+      for (const [r, o] of T(this, rt))
+        n.includes(r) || (destroy_effect(o.effect), T(this, rt).delete(r));
     });
     this.anchor = t, le(this, En, n);
   }
@@ -2252,26 +2252,26 @@ class BranchManager {
       /** @type {Batch} */
       current_batch
     ), o = should_defer_append();
-    if (n && !$(this, zt).has(t) && !$(this, rt).has(t))
+    if (n && !T(this, zt).has(t) && !T(this, rt).has(t))
       if (o) {
         var s = document.createDocumentFragment(), i = create_text();
-        s.append(i), $(this, rt).set(t, {
+        s.append(i), T(this, rt).set(t, {
           effect: branch(() => n(i)),
           fragment: s
         });
       } else
-        $(this, zt).set(
+        T(this, zt).set(
           t,
           branch(() => n(this.anchor))
         );
-    if ($(this, vt).set(r, t), o) {
-      for (const [a, l] of $(this, zt))
+    if (T(this, vt).set(r, t), o) {
+      for (const [a, l] of T(this, zt))
         a === t ? r.unskip_effect(l) : r.skip_effect(l);
-      for (const [a, l] of $(this, rt))
+      for (const [a, l] of T(this, rt))
         a === t ? r.unskip_effect(l.effect) : r.skip_effect(l.effect);
-      r.oncommit($(this, $n)), r.ondiscard($(this, Fn));
+      r.oncommit(T(this, $n)), r.ondiscard(T(this, Fn));
     } else
-      hydrating && (this.anchor = hydrate_node), $(this, $n).call(this);
+      hydrating && (this.anchor = hydrate_node), T(this, $n).call(this);
   }
 }
 vt = new WeakMap(), zt = new WeakMap(), rt = new WeakMap(), Qt = new WeakMap(), En = new WeakMap(), $n = new WeakMap(), Fn = new WeakMap();
@@ -3088,27 +3088,27 @@ class Svelte4Component {
       intro: t.intro ?? !1,
       recover: t.recover
     })), (!((s = t == null ? void 0 : t.props) != null && s.$$host) || t.sync === !1) && flushSync(), le(this, jt, o.$$events);
-    for (const i of Object.keys($(this, it)))
+    for (const i of Object.keys(T(this, it)))
       i === "$set" || i === "$destroy" || i === "$on" || define_property(this, i, {
         get() {
-          return $(this, it)[i];
+          return T(this, it)[i];
         },
         /** @param {any} value */
         set(a) {
-          $(this, it)[i] = a;
+          T(this, it)[i] = a;
         },
         enumerable: !0
       });
-    $(this, it).$set = /** @param {Record<string, any>} next */
+    T(this, it).$set = /** @param {Record<string, any>} next */
     (i) => {
       Object.assign(o, i);
-    }, $(this, it).$destroy = () => {
-      unmount($(this, it));
+    }, T(this, it).$destroy = () => {
+      unmount(T(this, it));
     };
   }
   /** @param {Record<string, any>} props */
   $set(t) {
-    $(this, it).$set(t);
+    T(this, it).$set(t);
   }
   /**
    * @param {string} event
@@ -3116,17 +3116,17 @@ class Svelte4Component {
    * @returns {any}
    */
   $on(t, n) {
-    $(this, jt)[t] = $(this, jt)[t] || [];
+    T(this, jt)[t] = T(this, jt)[t] || [];
     const r = (...o) => n.call(this, ...o);
-    return $(this, jt)[t].push(r), () => {
-      $(this, jt)[t] = $(this, jt)[t].filter(
+    return T(this, jt)[t].push(r), () => {
+      T(this, jt)[t] = T(this, jt)[t].filter(
         /** @param {any} fn */
         (o) => o !== r
       );
     };
   }
   $destroy() {
-    $(this, it).$destroy();
+    T(this, it).$destroy();
   }
 }
 jt = new WeakMap(), it = new WeakMap();
@@ -5159,8 +5159,8 @@ function AnnotationEditor(e, t) {
     set oncancel(z) {
       o(z), flushSync();
     }
-  }, C = root$5(), V = child(C), U = child(V);
-  each(U, 21, () => A, index, (z, w) => {
+  }, C = root$5(), V = child(C), j = child(V);
+  each(j, 21, () => A, index, (z, w) => {
     var I = root_1$6();
     let L;
     var X = child(I);
@@ -5182,9 +5182,9 @@ function AnnotationEditor(e, t) {
     }), delegated("click", I, () => {
       set(s, get(w), !0);
     }), append(z, I);
-  }), reset(U);
-  var j = sibling(U, 4);
-  each(j, 21, () => ANNOTATION_COLORS, index, (z, w) => {
+  }), reset(j);
+  var U = sibling(j, 4);
+  each(U, 21, () => ANNOTATION_COLORS, index, (z, w) => {
     var I = root_4$3();
     let L;
     template_effect(() => {
@@ -5192,8 +5192,8 @@ function AnnotationEditor(e, t) {
     }), delegated("click", I, () => {
       set(i, get(w), !0);
     }), append(z, I);
-  }), reset(j);
-  var W = sibling(j, 4), K = child(W), oe = sibling(K, 2);
+  }), reset(U);
+  var W = sibling(U, 4), K = child(W), oe = sibling(K, 2);
   reset(W);
   var R = sibling(W, 4), M = child(R), G = sibling(M, 2);
   reset(R), reset(V);
@@ -5519,7 +5519,7 @@ function RequestList(e, t) {
     const q = Math.floor(H / 24);
     return q < 30 ? `${q}d ago` : new Date(w).toLocaleDateString();
   }
-  var U = {
+  var j = {
     get endpoint() {
       return n();
     },
@@ -5550,7 +5550,7 @@ function RequestList(e, t) {
     set onreload(w) {
       i(w), flushSync();
     }
-  }, j = root$4(), W = child(j);
+  }, U = root$4(), W = child(U);
   {
     var K = (w) => {
       var I = root_1$3(), L = child(I);
@@ -5641,8 +5641,8 @@ function RequestList(e, t) {
                 var en = (he) => {
                   var ye = root_12$2(), Le = sibling(child(ye), 2), We = child(Le, !0);
                   reset(Le), reset(ye), template_effect(
-                    (T) => {
-                      set_attribute(ye, "href", get(B).page_url), set_text(We, T);
+                    ($) => {
+                      set_attribute(ye, "href", get(B).page_url), set_text(We, $);
                     },
                     [
                       () => get(B).page_url.replace(/^https?:\/\//, "").split("?")[0]
@@ -5667,7 +5667,7 @@ function RequestList(e, t) {
               {
                 var Dn = (he) => {
                   var ye = root_14$3(), Le = first_child(ye), We = child(Le);
-                  let T;
+                  let $;
                   var D = sibling(We, 2), se = child(D);
                   reset(D), reset(Le);
                   var te = sibling(Le, 2);
@@ -5791,7 +5791,7 @@ function RequestList(e, t) {
                   }
                   template_effect(
                     (Se, Ge) => {
-                      T = set_class(We, 0, "thread-toggle-icon svelte-1fnmin5", null, T, { expanded: get(l) === get(B).id }), set_text(se, `${Se ?? ""} ${Ge ?? ""}`);
+                      $ = set_class(We, 0, "thread-toggle-icon svelte-1fnmin5", null, $, { expanded: get(l) === get(B).id }), set_text(se, `${Se ?? ""} ${Ge ?? ""}`);
                     },
                     [
                       () => x(get(B).thread),
@@ -5820,12 +5820,12 @@ function RequestList(e, t) {
                   }), reset(Le);
                   var We = sibling(Le, 2);
                   {
-                    var T = (se) => {
+                    var $ = (se) => {
                       var te = root_29(), Ie = child(te), Se = sibling(Ie, 2);
                       reset(te), template_effect(() => set_attribute(Ie, "src", `${n() ?? ""}${get(a) ?? ""}`)), delegated("click", Se, () => set(a, null)), append(se, te);
                     }, D = /* @__PURE__ */ user_derived(() => get(a) && get(B).screenshot_urls.includes(get(a)));
                     if_block(We, (se) => {
-                      get(D) && se(T);
+                      get(D) && se($);
                     });
                   }
                   append(he, ye);
@@ -5912,7 +5912,7 @@ function RequestList(e, t) {
                           () => get(v).trim().length < 10 || get(d) === get(B).id
                         ]
                       ), bind_value(te, () => get(v), (Pe) => set(v, Pe)), delegated("click", Se, ge), delegated("click", It, xe), delegated("click", yt, we), delegated("click", ct, () => me(get(B).id, "rejected", get(v).trim())), append(D, se);
-                    }, T = (D) => {
+                    }, $ = (D) => {
                       var se = root_40(), te = child(se), Ie = child(te, !0);
                       reset(te);
                       var Se = sibling(te, 2);
@@ -5921,7 +5921,7 @@ function RequestList(e, t) {
                       }), delegated("click", te, () => me(get(B).id, "accepted")), delegated("click", Se, () => ie(get(B).id)), append(D, se);
                     };
                     if_block(Le, (D) => {
-                      get(f) === get(B).id ? D(We) : D(T, !1);
+                      get(f) === get(B).id ? D(We) : D($, !1);
                     });
                   }
                   append(he, ye);
@@ -5958,9 +5958,9 @@ function RequestList(e, t) {
       });
     }
     reset(I), transition(3, I, () => slide, () => ({ duration: 200 })), append(w, I);
-  }), reset(Ae), bind_this(Ae, (w) => set(u, w), () => get(u)), reset(j), template_effect(() => {
+  }), reset(Ae), bind_this(Ae, (w) => set(u, w), () => get(u)), reset(U), template_effect(() => {
     M = set_class(R, 1, "subtab svelte-1fnmin5", null, M, { active: get(p) === "active" }), _e = set_class(ue, 1, "subtab svelte-1fnmin5", null, _e, { active: get(p) === "done" });
-  }), delegated("click", R, () => set(p, "active")), delegated("click", ue, () => set(p, "done")), append(e, j), pop(U);
+  }), delegated("click", R, () => set(p, "active")), delegated("click", ue, () => set(p, "done")), append(e, U), pop(j);
 }
 delegate(["click"]);
 create_custom_element(
@@ -6322,17 +6322,17 @@ function AgentPanel(e, t) {
     });
   }
   reset(S), bind_this(S, (R) => set(v, R), () => get(v));
-  var V = sibling(S, 2), U = child(V);
+  var V = sibling(S, 2), j = child(V);
   {
-    var j = (R) => {
+    var U = (R) => {
       var M = root_23();
       delegated("click", M, h), append(R, M);
     };
-    if_block(U, (R) => {
-      get(p) && R(j);
+    if_block(j, (R) => {
+      get(p) && R(U);
     });
   }
-  var W = sibling(U, 2), K = child(W);
+  var W = sibling(j, 2), K = child(W);
   remove_input_defaults(K);
   var oe = sibling(K, 2);
   return reset(W), reset(V), reset(k), template_effect(
@@ -6497,10 +6497,10 @@ function NotesPanel(e, t) {
         var V = (W) => {
           var K = root_2$2();
           append(W, K);
-        }, U = (W) => {
+        }, j = (W) => {
           var K = root_3$1(), oe = child(K), R = sibling(oe);
           reset(K), template_effect(() => set_text(oe, `${get(a) ?? ""} `)), delegated("click", R, k), append(W, K);
-        }, j = (W) => {
+        }, U = (W) => {
           var K = root_4$1(), oe = first_child(K);
           {
             var R = (z) => {
@@ -6583,17 +6583,17 @@ function NotesPanel(e, t) {
           append(W, K);
         };
         if_block(C, (W) => {
-          get(i) ? W(V) : get(a) ? W(U, 1) : W(j, !1);
+          get(i) ? W(V) : get(a) ? W(j, 1) : W(U, !1);
         });
       }
       reset(S), template_effect(() => O.disabled = !!get(b)), delegated("click", O, () => P(null)), transition(3, S, () => slide, () => ({ duration: 200 })), append(x, S);
     }, g = (x) => {
       var S = root_12$1(), A = child(S), O = child(A), C = sibling(O, 2), V = child(C, !0);
       reset(C);
-      var U = sibling(C, 2);
-      let j;
-      var W = child(U, !0);
-      reset(U), reset(A);
+      var j = sibling(C, 2);
+      let U;
+      var W = child(j, !0);
+      reset(j), reset(A);
       var K = sibling(A, 2), oe = child(K), R = sibling(child(oe), 2);
       remove_input_defaults(R), reset(oe);
       var M = sibling(oe, 2);
@@ -6647,10 +6647,10 @@ function NotesPanel(e, t) {
       var X = sibling(I);
       reset(w), reset(Y), reset(S), template_effect(
         (F) => {
-          set_text(V, get(y) ? get(y) : "Site-wide"), j = set_class(U, 1, "preview-toggle svelte-zp32f3", null, j, { active: get(h) }), set_text(W, get(h) ? "Edit" : "Preview"), R.disabled = get(l), z.disabled = get(l), w.disabled = F, set_text(X, ` ${get(f) ? "Create" : "Save"}`);
+          set_text(V, get(y) ? get(y) : "Site-wide"), U = set_class(j, 1, "preview-toggle svelte-zp32f3", null, U, { active: get(h) }), set_text(W, get(h) ? "Edit" : "Preview"), R.disabled = get(l), z.disabled = get(l), w.disabled = F, set_text(X, ` ${get(f) ? "Create" : "Save"}`);
         },
         [() => get(l) || !get(v).trim()]
-      ), delegated("click", O, Z), delegated("click", U, () => set(h, !get(h))), bind_value(R, () => get(v), (F) => set(v, F)), delegated("click", z, Z), delegated("click", w, Q), transition(3, S, () => slide, () => ({ duration: 200 })), append(x, S);
+      ), delegated("click", O, Z), delegated("click", j, () => set(h, !get(h))), bind_value(R, () => get(v), (F) => set(v, F)), delegated("click", z, Z), delegated("click", w, Q), transition(3, S, () => slide, () => ({ duration: 200 })), append(x, S);
     };
     if_block(ve, (x) => {
       get(u) === "list" ? x(me) : get(u) === "edit" && x(g, 1);
@@ -10703,10 +10703,10 @@ const domTree = /* @__PURE__ */ __name$1((e = {
   function m(g, x, S = null) {
     if (!g) return x;
     const A = [];
-    let O = null, C = 20, V = 16, U = null;
+    let O = null, C = 20, V = 16, j = null;
     try {
-      let j = document.getElementById(b);
-      j || (j = document.createElement("div"), j.id = b, j.style.position = "fixed", j.style.pointerEvents = "none", j.style.top = "0", j.style.left = "0", j.style.width = "100%", j.style.height = "100%", j.style.zIndex = "2147483640", j.style.backgroundColor = "transparent", document.body.appendChild(j));
+      let U = document.getElementById(b);
+      U || (U = document.createElement("div"), U.id = b, U.style.position = "fixed", U.style.pointerEvents = "none", U.style.top = "0", U.style.left = "0", U.style.width = "100%", U.style.height = "100%", U.style.zIndex = "2147483640", U.style.backgroundColor = "transparent", document.body.appendChild(U));
       const W = g.getClientRects();
       if (!W || W.length === 0) return x;
       const K = [
@@ -10773,12 +10773,12 @@ const domTree = /* @__PURE__ */ __name$1((e = {
           (F.width < C + 4 || F.height < V + 4) && (ke = H - V - 2, ae = q + F.width - C, ae < X.x && (ae = q)), ke = Math.max(0, Math.min(ke, window.innerHeight - V)), ae = Math.max(0, Math.min(ae, window.innerWidth - C)), O.style.top = `${ke}px`, O.style.left = `${ae}px`, O.style.display = "block";
         } else O && (O.style.display = "none");
       }, "updatePositions"), 16);
-      return window.addEventListener("scroll", I, !0), window.addEventListener("resize", I), U = /* @__PURE__ */ __name$1(() => {
+      return window.addEventListener("scroll", I, !0), window.addEventListener("resize", I), j = /* @__PURE__ */ __name$1(() => {
         window.removeEventListener("scroll", I, !0), window.removeEventListener("resize", I), A.forEach((L) => L.element.remove()), O && O.remove();
-      }, "cleanupFn"), j.appendChild(ee), x + 1;
+      }, "cleanupFn"), U.appendChild(ee), x + 1;
     } finally {
-      U && (window._highlightCleanupFunctions = window._highlightCleanupFunctions || []).push(
-        U
+      j && (window._highlightCleanupFunctions = window._highlightCleanupFunctions || []).push(
+        j
       );
     }
   }
@@ -10794,8 +10794,8 @@ const domTree = /* @__PURE__ */ __name$1((e = {
     const A = x.overflowX, O = x.overflowY, C = A === "auto" || A === "scroll", V = O === "auto" || O === "scroll";
     if (!C && !V)
       return null;
-    const U = g.scrollWidth - g.clientWidth, j = g.scrollHeight - g.clientHeight, W = 4;
-    if (U < W && j < W || !V && U < W || !C && j < W)
+    const j = g.scrollWidth - g.clientWidth, U = g.scrollHeight - g.clientHeight, W = 4;
+    if (j < W && U < W || !V && j < W || !C && U < W)
       return null;
     const K = g.scrollTop, oe = g.scrollLeft, R = g.scrollWidth - g.clientWidth - g.scrollLeft, M = g.scrollHeight - g.clientHeight - g.scrollTop, G = {
       top: K,
@@ -10820,8 +10820,8 @@ const domTree = /* @__PURE__ */ __name$1((e = {
             checkVisibilityCSS: !0
           });
         } catch {
-          const j = window.getComputedStyle(V);
-          return j.display !== "none" && j.visibility !== "hidden" && j.opacity !== "0";
+          const U = window.getComputedStyle(V);
+          return U.display !== "none" && U.visibility !== "hidden" && U.opacity !== "0";
         }
       }
       const x = document.createRange();
@@ -10845,8 +10845,8 @@ const domTree = /* @__PURE__ */ __name$1((e = {
           checkVisibilityCSS: !0
         });
       } catch {
-        const U = window.getComputedStyle(C);
-        return U.display !== "none" && U.visibility !== "hidden" && U.opacity !== "0";
+        const j = window.getComputedStyle(C);
+        return j.display !== "none" && j.visibility !== "hidden" && j.opacity !== "0";
       }
     } catch (x) {
       return console.warn("Error checking text node visibility:", x), !1;
@@ -10969,7 +10969,7 @@ const domTree = /* @__PURE__ */ __name$1((e = {
     }
     if (__name$1(C, "doesElementHaveInteractivePointer"), C(g))
       return !0;
-    const U = /* @__PURE__ */ new Set([
+    const j = /* @__PURE__ */ new Set([
       "a",
       // Links
       "button",
@@ -10994,7 +10994,7 @@ const domTree = /* @__PURE__ */ __name$1((e = {
       // Form fieldsets (can be interactive with legend)
       "legend"
       // Fieldset legends
-    ]), j = /* @__PURE__ */ new Set([
+    ]), U = /* @__PURE__ */ new Set([
       "disabled",
       // Standard disabled attribute
       // 'aria-disabled',      // ARIA disabled state
@@ -11008,10 +11008,10 @@ const domTree = /* @__PURE__ */ __name$1((e = {
       // 'tabindex="-1"',     // Removed from tab order
       // 'aria-hidden="true"' // Hidden from screen readers
     ]);
-    if (U.has(x)) {
+    if (j.has(x)) {
       if (S != null && S.cursor && O.has(S.cursor))
         return !1;
-      for (const ee of j)
+      for (const ee of U)
         if (g.hasAttribute(ee) || g.getAttribute(ee) === "true" || g.getAttribute(ee) === "")
           return !1;
       return !(g.disabled || g.readOnly || g.inert);
@@ -11058,7 +11058,7 @@ const domTree = /* @__PURE__ */ __name$1((e = {
       "scrollbar"
       // Scrollable control
     ]);
-    if (U.has(x) || W && oe.has(W) || K && oe.has(K)) return !0;
+    if (j.has(x) || W && oe.has(W) || K && oe.has(K)) return !0;
     try {
       if (typeof getEventListeners == "function") {
         const _e = getEventListeners(g), Y = ["click", "mousedown", "mouseup", "dblclick"];
@@ -11101,9 +11101,9 @@ const domTree = /* @__PURE__ */ __name$1((e = {
     if (!x || x.length === 0)
       return !1;
     let S = !1;
-    for (const j of x)
-      if (j.width > 0 && j.height > 0 && !// Only check non-empty rects
-      (j.bottom < -a || j.top > window.innerHeight + a || j.right < -a || j.left > window.innerWidth + a)) {
+    for (const U of x)
+      if (U.width > 0 && U.height > 0 && !// Only check non-empty rects
+      (U.bottom < -a || U.top > window.innerHeight + a || U.right < -a || U.left > window.innerWidth + a)) {
         S = !0;
         break;
       }
@@ -11111,14 +11111,14 @@ const domTree = /* @__PURE__ */ __name$1((e = {
       return !1;
     if (g.ownerDocument !== window.document)
       return !0;
-    let O = Array.from(x).find((j) => j.width > 0 && j.height > 0);
+    let O = Array.from(x).find((U) => U.width > 0 && U.height > 0);
     if (!O)
       return !1;
     const C = g.getRootNode();
     if (C instanceof ShadowRoot) {
-      const j = O.left + O.width / 2, W = O.top + O.height / 2;
+      const U = O.left + O.width / 2, W = O.top + O.height / 2;
       try {
-        const K = C.elementFromPoint(j, W);
+        const K = C.elementFromPoint(U, W);
         if (!K) return !1;
         let oe = K;
         for (; oe && oe !== C; ) {
@@ -11140,9 +11140,9 @@ const domTree = /* @__PURE__ */ __name$1((e = {
       // { x: rect.left + margin, y: rect.bottom - margin },  // bottom left
       { x: O.right - V, y: O.bottom - V }
       // bottom right
-    ].some(({ x: j, y: W }) => {
+    ].some(({ x: U, y: W }) => {
       try {
-        const K = document.elementFromPoint(j, W);
+        const K = document.elementFromPoint(U, W);
         if (!K) return !1;
         let oe = K;
         for (; oe && oe !== document.documentElement; ) {
@@ -11232,7 +11232,7 @@ const domTree = /* @__PURE__ */ __name$1((e = {
     try {
       const C = ((O = (A = g == null ? void 0 : g.ownerDocument) == null ? void 0 : A.defaultView) == null ? void 0 : O.getEventListenersForNode) || window.getEventListenersForNode;
       if (typeof C == "function") {
-        const U = C(g), j = [
+        const j = C(g), U = [
           "click",
           "mousedown",
           "mouseup",
@@ -11244,8 +11244,8 @@ const domTree = /* @__PURE__ */ __name$1((e = {
           "focus",
           "blur"
         ];
-        for (const W of j)
-          for (const K of U)
+        for (const W of U)
+          for (const K of j)
             if (K.type === W)
               return !0;
       }
@@ -11259,7 +11259,7 @@ const domTree = /* @__PURE__ */ __name$1((e = {
         "oninput",
         "onfocus",
         "onblur"
-      ].some((U) => g.hasAttribute(U)))
+      ].some((j) => g.hasAttribute(j)))
         return !0;
     } catch {
     }
@@ -11273,8 +11273,8 @@ const domTree = /* @__PURE__ */ __name$1((e = {
   }
   __name$1(xe, "handleHighlighting");
   function ve(g, x = null, S = !1) {
-    var V, U, j, W, K, oe, R;
-    if (!g || g.id === b || g.nodeType !== Node.ELEMENT_NODE && g.nodeType !== Node.TEXT_NODE || !g || g.id === b || ((V = g.dataset) == null ? void 0 : V.browserUseIgnore) === "true" || ((U = g.dataset) == null ? void 0 : U.pageAgentIgnore) === "true" || g.getAttribute && g.getAttribute("aria-hidden") === "true")
+    var V, j, U, W, K, oe, R;
+    if (!g || g.id === b || g.nodeType !== Node.ELEMENT_NODE && g.nodeType !== Node.TEXT_NODE || !g || g.id === b || ((V = g.dataset) == null ? void 0 : V.browserUseIgnore) === "true" || ((j = g.dataset) == null ? void 0 : j.pageAgentIgnore) === "true" || g.getAttribute && g.getAttribute("aria-hidden") === "true")
       return null;
     if (g === document.body) {
       const M = {
@@ -11293,7 +11293,7 @@ const domTree = /* @__PURE__ */ __name$1((e = {
     if (g.nodeType !== Node.ELEMENT_NODE && g.nodeType !== Node.TEXT_NODE)
       return null;
     if (g.nodeType === Node.TEXT_NODE) {
-      const M = (j = g.textContent) == null ? void 0 : j.trim();
+      const M = (U = g.textContent) == null ? void 0 : U.trim();
       if (!M)
         return null;
       const G = g.parentElement;
@@ -12305,57 +12305,57 @@ function FeedbackPanel(e, t) {
         endpoint: r(),
         project: o(),
         registeredTools: p(),
-        onMessagesChange: (T) => {
-          set(k, T, !0);
+        onMessagesChange: ($) => {
+          set(k, $, !0);
         },
-        onStateChange: (T, D) => {
-          set(N, T, !0), set(P, D, !0);
+        onStateChange: ($, D) => {
+          set(N, $, !0), set(P, D, !0);
         }
       }),
       !0
     ), get(Q);
   }
   function ce() {
-    var T;
-    (T = get(Q)) == null || T.invalidateNotesCache();
+    var $;
+    ($ = get(Q)) == null || $.invalidateNotesCache();
   }
   user_effect(() => {
     get(b) === "agent" && !get(m) && set(m, !0);
   }), user_effect(() => {
     get(b) === "notes" && !get(E) && set(E, !0);
   });
-  function ie(T) {
-    re().execute(T);
+  function ie($) {
+    re().execute($);
   }
   function we() {
-    var T;
-    (T = get(Q)) == null || T.stop();
+    var $;
+    ($ = get(Q)) == null || $.stop();
   }
-  function ge(T) {
+  function ge($) {
     var D;
-    (D = get(Q)) == null || D.approve(T);
+    (D = get(Q)) == null || D.approve($);
   }
-  function Ce(T) {
+  function Ce($) {
     var D;
-    (D = get(Q)) == null || D.skip(T);
+    (D = get(Q)) == null || D.skip($);
   }
-  function xe(T) {
-    set(Z, T, !0), get(Q) && (get(Q).autoApprove = T);
+  function xe($) {
+    set(Z, $, !0), get(Q) && (get(Q).autoApprove = $);
   }
   onDestroy(() => {
-    var T;
-    (T = get(Q)) == null || T.dispose();
+    var $;
+    ($ = get(Q)) == null || $.dispose();
   });
-  let ve = /* @__PURE__ */ state(proxy([])), me = /* @__PURE__ */ state(!1), g = /* @__PURE__ */ state(""), x = /* @__PURE__ */ user_derived(() => get(ve).filter((T) => T.status === "completed").length);
+  let ve = /* @__PURE__ */ state(proxy([])), me = /* @__PURE__ */ state(!1), g = /* @__PURE__ */ state(""), x = /* @__PURE__ */ user_derived(() => get(ve).filter(($) => $.status === "completed").length);
   async function S() {
     set(me, !0), set(g, "");
-    const T = await fetchReports(r());
-    set(ve, T.reports, !0), T.error && set(g, T.error, !0), set(me, !1);
+    const $ = await fetchReports(r());
+    set(ve, $.reports, !0), $.error && set(g, $.error, !0), set(me, !1);
   }
   user_effect(() => {
     r() && S();
   });
-  let A = /* @__PURE__ */ state(""), O = /* @__PURE__ */ state(""), C = /* @__PURE__ */ state("bug"), V = /* @__PURE__ */ state("medium"), U = /* @__PURE__ */ state(proxy([])), j = /* @__PURE__ */ state(proxy([])), W = /* @__PURE__ */ state(proxy([])), K = /* @__PURE__ */ state(proxy([])), oe = /* @__PURE__ */ state(void 0);
+  let A = /* @__PURE__ */ state(""), O = /* @__PURE__ */ state(""), C = /* @__PURE__ */ state("bug"), V = /* @__PURE__ */ state("medium"), j = /* @__PURE__ */ state(proxy([])), U = /* @__PURE__ */ state(proxy([])), W = /* @__PURE__ */ state(proxy([])), K = /* @__PURE__ */ state(proxy([])), oe = /* @__PURE__ */ state(void 0);
   const R = [
     "image/png",
     "image/jpeg",
@@ -12364,19 +12364,19 @@ function FeedbackPanel(e, t) {
     "image/svg+xml"
   ];
   function M() {
-    var T;
-    (T = get(oe)) == null || T.click();
+    var $;
+    ($ = get(oe)) == null || $.click();
   }
-  async function G(T) {
-    const D = T.target, se = D.files;
+  async function G($) {
+    const D = $.target, se = D.files;
     if (!(!se || se.length === 0)) {
       for (const te of se)
         try {
           const Ie = await ee(te);
-          R.includes(te.type) ? (set(U, [...get(U), Ie], !0), q(`Image added: ${te.name}`, "success")) : (set(
-            j,
+          R.includes(te.type) ? (set(j, [...get(j), Ie], !0), q(`Image added: ${te.name}`, "success")) : (set(
+            U,
             [
-              ...get(j),
+              ...get(U),
               {
                 name: te.name,
                 type: te.type || "application/octet-stream",
@@ -12392,29 +12392,29 @@ function FeedbackPanel(e, t) {
       D.value = "";
     }
   }
-  function ee(T) {
+  function ee($) {
     return new Promise((D, se) => {
       const te = new FileReader();
-      te.onload = () => D(te.result), te.onerror = () => se(te.error), te.readAsDataURL(T);
+      te.onload = () => D(te.result), te.onerror = () => se(te.error), te.readAsDataURL($);
     });
   }
-  function ue(T) {
-    set(j, get(j).filter((D, se) => se !== T), !0);
+  function ue($) {
+    set(U, get(U).filter((D, se) => se !== $), !0);
   }
-  function _e(T) {
-    return T < 1024 ? `${T}B` : T < 1024 * 1024 ? `${(T / 1024).toFixed(1)}KB` : `${(T / (1024 * 1024)).toFixed(1)}MB`;
+  function _e($) {
+    return $ < 1024 ? `${$}B` : $ < 1024 * 1024 ? `${($ / 1024).toFixed(1)}KB` : `${($ / (1024 * 1024)).toFixed(1)}MB`;
   }
   let Y = /* @__PURE__ */ state(!1), Te = /* @__PURE__ */ state(!1), Ae = /* @__PURE__ */ state(!1), z = /* @__PURE__ */ state(null), w = /* @__PURE__ */ state(""), I = /* @__PURE__ */ state(void 0), L = !1;
   user_effect(() => {
     s() && !L && (requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        var T;
-        (T = get(I)) == null || T.focus();
+        var $;
+        ($ = get(I)) == null || $.focus();
       });
-    }), get(b) === "new" && get(U).length === 0 && setTimeout(
+    }), get(b) === "new" && setTimeout(
       () => {
-        captureViewportQuick().then((T) => {
-          set(U, [...get(U), T], !0);
+        captureViewportQuick().then(($) => {
+          get(j).length === 0 ? set(j, [$], !0) : set(j, [$, ...get(j).slice(1)], !0);
         }).catch(() => {
         });
       },
@@ -12422,8 +12422,8 @@ function FeedbackPanel(e, t) {
     )), L = s();
   });
   let X = /* @__PURE__ */ state(""), F = /* @__PURE__ */ state("success"), H = /* @__PURE__ */ state(!1);
-  function q(T, D) {
-    set(X, T, !0), set(F, D, !0), set(H, !0), setTimeout(
+  function q($, D) {
+    set(X, $, !0), set(F, D, !0), set(H, !0), setTimeout(
       () => {
         set(H, !1);
       },
@@ -12433,39 +12433,39 @@ function FeedbackPanel(e, t) {
   async function ke() {
     set(Te, !0);
     try {
-      const T = await captureViewport();
-      set(w, T, !0), set(z, get(
-        U
+      const $ = await captureViewport();
+      set(w, $, !0), set(z, get(
+        j
         // new index (not yet in array)
       ).length, !0);
-    } catch (T) {
-      console.error("[jat-feedback] Screenshot failed:", T), q("Screenshot failed: " + (T instanceof Error ? T.message : "unknown error"), "error");
+    } catch ($) {
+      console.error("[jat-feedback] Screenshot failed:", $), q("Screenshot failed: " + ($ instanceof Error ? $.message : "unknown error"), "error");
     } finally {
       set(Te, !1);
     }
   }
-  function ae(T) {
-    set(U, get(U).filter((D, se) => se !== T), !0);
+  function ae($) {
+    set(j, get(j).filter((D, se) => se !== $), !0);
   }
-  function pe(T) {
-    set(w, get(U)[T], !0), set(z, T, !0);
+  function pe($) {
+    set(w, get(j)[$], !0), set(z, $, !0);
   }
-  function Ee(T) {
-    get(z) !== null && (get(z) >= get(U).length ? (set(U, [...get(U), T], !0), q(`Screenshot captured (${get(U).length})`, "success")) : (set(U, get(U).map((D, se) => se === get(z) ? T : D), !0), q("Screenshot updated", "success"))), set(z, null), set(w, "");
+  function Ee($) {
+    get(z) !== null && (get(z) >= get(j).length ? (set(j, [...get(j), $], !0), q(`Screenshot captured (${get(j).length})`, "success")) : (set(j, get(j).map((D, se) => se === get(z) ? $ : D), !0), q("Screenshot updated", "success"))), set(z, null), set(w, "");
   }
   function B() {
-    get(z) !== null && get(z) >= get(U).length && (set(U, [...get(U), get(w)], !0), q(`Screenshot captured (${get(U).length})`, "success")), set(z, null), set(w, "");
+    get(z) !== null && get(z) >= get(j).length && (set(j, [...get(j), get(w)], !0), q(`Screenshot captured (${get(j).length})`, "success")), set(z, null), set(w, "");
   }
   function Oe() {
-    set(Ae, !0), startElementPicker((T) => {
-      set(W, [...get(W), T], !0), set(Ae, !1), q(`Element captured: <${T.tagName.toLowerCase()}>`, "success");
+    set(Ae, !0), startElementPicker(($) => {
+      set(W, [...get(W), $], !0), set(Ae, !1), q(`Element captured: <${$.tagName.toLowerCase()}>`, "success");
     });
   }
   function Ke() {
     set(K, getCapturedLogs(), !0);
   }
-  async function Re(T) {
-    if (T.preventDefault(), !get(A).trim()) return;
+  async function Re($) {
+    if ($.preventDefault(), !get(A).trim()) return;
     set(Y, !0), Ke();
     const D = {};
     (i() || a() || l() || c()) && (D.reporter = {}, i() && (D.reporter.userId = i()), a() && (D.reporter.email = a()), l() && (D.reporter.name = l()), c() && (D.reporter.role = c())), (u() || d()) && (D.organization = {}, u() && (D.organization.id = u()), d() && (D.organization.name = d()));
@@ -12479,8 +12479,8 @@ function FeedbackPanel(e, t) {
       user_agent: navigator.userAgent,
       console_logs: get(K).length > 0 ? get(K) : null,
       selected_elements: get(W).length > 0 ? get(W) : null,
-      screenshots: get(U).length > 0 ? get(U) : null,
-      attachments: get(j).length > 0 ? get(j) : null,
+      screenshots: get(j).length > 0 ? get(j) : null,
+      attachments: get(U).length > 0 ? get(U) : null,
       metadata: Object.keys(D).length > 0 ? D : null
     };
     try {
@@ -12498,13 +12498,13 @@ function FeedbackPanel(e, t) {
     }
   }
   function Fe() {
-    set(A, ""), set(O, ""), set(C, "bug"), set(V, "medium"), set(U, [], !0), set(j, [], !0), set(W, [], !0), set(K, [], !0);
+    set(A, ""), set(O, ""), set(C, "bug"), set(V, "medium"), set(j, [], !0), set(U, [], !0), set(W, [], !0), set(K, [], !0);
   }
   user_effect(() => {
     Ke();
   });
-  function Je(T) {
-    T.stopPropagation();
+  function Je($) {
+    $.stopPropagation();
   }
   const Rt = [
     { value: "bug", label: "Bug" },
@@ -12517,110 +12517,110 @@ function FeedbackPanel(e, t) {
     { value: "critical", label: "Critical" }
   ];
   function be() {
-    return get(U).length + get(j).length + get(W).length;
+    return get(j).length + get(U).length + get(W).length;
   }
   var ze = {
     get endpoint() {
       return r();
     },
-    set endpoint(T) {
-      r(T), flushSync();
+    set endpoint($) {
+      r($), flushSync();
     },
     get project() {
       return o();
     },
-    set project(T) {
-      o(T), flushSync();
+    set project($) {
+      o($), flushSync();
     },
     get isOpen() {
       return s();
     },
-    set isOpen(T = !1) {
-      s(T), flushSync();
+    set isOpen($ = !1) {
+      s($), flushSync();
     },
     get userId() {
       return i();
     },
-    set userId(T = "") {
-      i(T), flushSync();
+    set userId($ = "") {
+      i($), flushSync();
     },
     get userEmail() {
       return a();
     },
-    set userEmail(T = "") {
-      a(T), flushSync();
+    set userEmail($ = "") {
+      a($), flushSync();
     },
     get userName() {
       return l();
     },
-    set userName(T = "") {
-      l(T), flushSync();
+    set userName($ = "") {
+      l($), flushSync();
     },
     get userRole() {
       return c();
     },
-    set userRole(T = "") {
-      c(T), flushSync();
+    set userRole($ = "") {
+      c($), flushSync();
     },
     get orgId() {
       return u();
     },
-    set orgId(T = "") {
-      u(T), flushSync();
+    set orgId($ = "") {
+      u($), flushSync();
     },
     get orgName() {
       return d();
     },
-    set orgName(T = "") {
-      d(T), flushSync();
+    set orgName($ = "") {
+      d($), flushSync();
     },
     get onclose() {
       return f();
     },
-    set onclose(T) {
-      f(T), flushSync();
+    set onclose($) {
+      f($), flushSync();
     },
     get ongrip() {
       return v();
     },
-    set ongrip(T) {
-      v(T), flushSync();
+    set ongrip($) {
+      v($), flushSync();
     },
     get agentProxy() {
       return _();
     },
-    set agentProxy(T = "") {
-      _(T), flushSync();
+    set agentProxy($ = "") {
+      _($), flushSync();
     },
     get agentModel() {
       return y();
     },
-    set agentModel(T = "") {
-      y(T), flushSync();
+    set agentModel($ = "") {
+      y($), flushSync();
     },
     get agentContext() {
       return h();
     },
-    set agentContext(T = "") {
-      h(T), flushSync();
+    set agentContext($ = "") {
+      h($), flushSync();
     },
     get registeredTools() {
       return p();
     },
-    set registeredTools(T = []) {
-      p(T), flushSync();
+    set registeredTools($ = []) {
+      p($), flushSync();
     }
   }, qe = root$1(), Qe = first_child(qe), at = child(Qe), Tn = child(at);
   {
-    var qt = (T) => {
+    var qt = ($) => {
       var D = root_1$1();
       delegated("mousedown", D, function(...se) {
         var te;
         (te = v()) == null || te.apply(this, se);
-      }), append(T, D);
+      }), append($, D);
     };
-    if_block(Tn, (T) => {
-      v() && T(qt);
+    if_block(Tn, ($) => {
+      v() && $(qt);
     });
   }
   var _t = sibling(Tn, 2), Ut = child(_t);
@@ -12629,26 +12629,26 @@ function FeedbackPanel(e, t) {
   let Sn;
   var Cn = sibling(child(mt), 2);
   {
-    var Dn = (T) => {
+    var Dn = ($) => {
       var D = root_2$1(), se = child(D, !0);
-      reset(D), template_effect(() => set_text(se, get(x))), append(T, D);
+      reset(D), template_effect(() => set_text(se, get(x))), append($, D);
     };
-    if_block(Cn, (T) => {
-      get(x) > 0 && T(Dn);
+    if_block(Cn, ($) => {
+      get(x) > 0 && $(Dn);
     });
   }
   reset(mt);
   var zn = sibling(mt, 2);
   {
-    var An = (T) => {
+    var An = ($) => {
       var D = root_3();
       let se;
       template_effect(() => se = set_class(D, 1, "tab svelte-nv4d5v", null, se, { active: get(b) === "agent" })), delegated("click", D, () => {
         set(b, "agent"), set(m, !0);
-      }), append(T, D);
+      }), append($, D);
     };
-    if_block(zn, (T) => {
-      _() && T(An);
+    if_block(zn, ($) => {
+      _() && $(An);
     });
   }
   var Rn = sibling(zn, 2);
@@ -12658,7 +12658,7 @@ function FeedbackPanel(e, t) {
   reset(at);
   var pn = sibling(at, 2);
   {
-    var hn = (T) => {
+    var hn = ($) => {
       var D = root_4(), se = child(D), te = sibling(child(se), 2);
       remove_input_defaults(te), bind_this(te, (J) => set(I, J), () => get(I)), reset(se);
       var Ie = sibling(se, 2), Se = sibling(child(Ie), 2);
@@ -12691,10 +12691,10 @@ function FeedbackPanel(e, t) {
           {
             var De = (Ze) => {
               var He = root_9(), ht = child(He, !0);
-              reset(He), template_effect(() => set_text(ht, get(U).length)), append(Ze, He);
+              reset(He), template_effect(() => set_text(ht, get(j).length)), append(Ze, He);
             };
             if_block(Ne, (Ze) => {
-              get(U).length > 0 && Ze(De);
+              get(j).length > 0 && Ze(De);
             });
           }
           append(J, de);
@@ -12731,10 +12731,10 @@ function FeedbackPanel(e, t) {
       {
         var Lt = (J) => {
           var de = root_13(), Ne = child(de, !0);
-          reset(de), template_effect(() => set_text(Ne, get(j).length)), append(J, de);
+          reset(de), template_effect(() => set_text(Ne, get(U).length)), append(J, de);
         };
         if_block(ut, (J) => {
-          get(j).length > 0 && J(Lt);
+          get(U).length > 0 && J(Lt);
         });
       }
       reset(Ye);
@@ -12743,7 +12743,7 @@ function FeedbackPanel(e, t) {
       var xt = sibling(lt, 2);
       ScreenshotPreview(xt, {
         get screenshots() {
-          return get(U);
+          return get(j);
         },
         get capturing() {
           return get(Te);
@@ -12756,7 +12756,7 @@ function FeedbackPanel(e, t) {
       {
         var Ue = (J) => {
           var de = root_14();
-          each(de, 21, () => get(j), index, (Ne, De, Ze) => {
+          each(de, 21, () => get(U), index, (Ne, De, Ze) => {
             var He = root_15(), ht = child(He), Bn = child(ht);
             {
               var mn = (gt) => {
@@ -12788,7 +12788,7 @@ function FeedbackPanel(e, t) {
           }), reset(de), append(J, de);
         };
         if_block(Bt, (J) => {
-          get(j).length > 0 && J(Ue);
+          get(U).length > 0 && J(Ue);
         });
       }
       var Ve = sibling(Bt, 2);
@@ -12860,15 +12860,15 @@ function FeedbackPanel(e, t) {
       ), event("submit", D, Re), bind_value(te, () => get(A), (J) => set(A, J)), bind_value(Se, () => get(O), (J) => set(O, J)), bind_select_value($e, () => get(C), (J) => set(C, J)), bind_select_value(bt, () => get(V), (J) => set(V, J)), delegated("click", yt, ke), delegated("click", wt, Oe), delegated("click", Ye, M), delegated("change", ot, G), delegated("click", ft, function(...J) {
         var de;
         (de = f()) == null || de.apply(this, J);
-      }), transition(3, D, () => slide, () => ({ duration: 200 })), append(T, D);
+      }), transition(3, D, () => slide, () => ({ duration: 200 })), append($, D);
     };
-    if_block(pn, (T) => {
-      get(b) === "new" && T(hn);
+    if_block(pn, ($) => {
+      get(b) === "new" && $(hn);
     });
   }
   var In = sibling(pn, 2);
   {
-    var jn = (T) => {
+    var jn = ($) => {
       var D = root_24(), se = child(D);
       RequestList(se, {
         get endpoint() {
@@ -12887,15 +12887,15 @@ function FeedbackPanel(e, t) {
         set reports(te) {
           set(ve, te, !0);
         }
-      }), reset(D), transition(3, D, () => slide, () => ({ duration: 200 })), append(T, D);
+      }), reset(D), transition(3, D, () => slide, () => ({ duration: 200 })), append($, D);
     };
-    if_block(In, (T) => {
-      get(b) === "requests" && T(jn);
+    if_block(In, ($) => {
+      get(b) === "requests" && $(jn);
     });
   }
   var Nn = sibling(In, 2);
   {
-    var Un = (T) => {
+    var Un = ($) => {
       var D = root_25(), se = child(D);
       {
         let te = /* @__PURE__ */ user_derived(() => {
@@ -12925,15 +12925,15 @@ function FeedbackPanel(e, t) {
           onautoapprovechange: xe
         });
       }
-      reset(D), transition(3, D, () => slide, () => ({ duration: 200 })), append(T, D);
+      reset(D), transition(3, D, () => slide, () => ({ duration: 200 })), append($, D);
     };
-    if_block(Nn, (T) => {
-      get(b) === "agent" && get(m) && T(Un);
+    if_block(Nn, ($) => {
+      get(b) === "agent" && get(m) && $(Un);
     });
   }
   var On = sibling(Nn, 2);
   {
-    var he = (T) => {
+    var he = ($) => {
       var D = root_26(), se = child(D);
       NotesPanel(se, {
         get endpoint() {
@@ -12943,10 +12943,10 @@ function FeedbackPanel(e, t) {
           return o();
         },
         onnoteschanged: ce
-      }), reset(D), transition(3, D, () => slide, () => ({ duration: 200 })), append(T, D);
+      }), reset(D), transition(3, D, () => slide, () => ({ duration: 200 })), append($, D);
     };
-    if_block(On, (T) => {
-      get(b) === "notes" && get(E) && T(he);
+    if_block(On, ($) => {
+      get(b) === "notes" && get(E) && $(he);
     });
   }
   var ye = sibling(On, 2);
@@ -12963,8 +12963,8 @@ function FeedbackPanel(e, t) {
   }), reset(Qe);
   var Le = sibling(Qe, 2);
   {
-    var We = (T) => {
-      AnnotationEditor(T, {
+    var We = ($) => {
+      AnnotationEditor($, {
         get imageDataUrl() {
           return get(w);
         },
@@ -12972,17 +12972,17 @@ function FeedbackPanel(e, t) {
         oncancel: B
       });
     };
-    if_block(Le, (T) => {
-      get(z) !== null && T(We);
+    if_block(Le, ($) => {
+      get(z) !== null && $(We);
     });
   }
   return template_effect(() => {
     en = set_class(Ut, 1, "tab svelte-nv4d5v", null, en, { active: get(b) === "new" }), Sn = set_class(mt, 1, "tab svelte-nv4d5v", null, Sn, { active: get(b) === "requests" }), fn = set_class(Rn, 1, "tab svelte-nv4d5v", null, fn, { active: get(b) === "notes" });
   }), delegated("keydown", Qe, Je), delegated("keyup", Qe, Je), event("keypress", Qe, Je), delegated("click", Ut, () => set(b, "new")), delegated("click", mt, () => set(b, "requests")), delegated("click", Rn, () => {
     set(b, "notes"), set(E, !0);
-  }), delegated("click", Zn, function(...T) {
+  }), delegated("click", Zn, function(...$) {
     var D;
-    (D = f()) == null || D.apply(this, T);
+    (D = f()) == null || D.apply(this, $);
   }), append(e, qe), pop(ze);
 }
 delegate(["keydown", "keyup", "mousedown", "click", "change"]);
@@ -13025,12 +13025,12 @@ function JatFeedback(e, t) {
   const N = 5;
   function P(C, { onDragEnd: V } = {}) {
     if (!get(k)) return;
-    const U = C.clientX, j = C.clientY, W = get(k).getBoundingClientRect();
+    const j = C.clientX, U = C.clientY, W = get(k).getBoundingClientRect();
     E = { x: C.clientX - W.left, y: C.clientY - W.top };
     let K = !1;
     function oe(M) {
       if (!get(k)) return;
-      const G = M.clientX - U, ee = M.clientY - j;
+      const G = M.clientX - j, ee = M.clientY - U;
       if (!K && Math.abs(G) + Math.abs(ee) < N) return;
       K = !0, set(m, !0), M.preventDefault();
       const ue = M.clientX - E.x, _e = M.clientY - E.y;
@@ -13098,8 +13098,8 @@ function JatFeedback(e, t) {
     };
     window.addEventListener("jat-feedback:open", C);
     const V = t.$$host;
-    return V.registerTools = (U) => {
-      set(b, [...get(b), ...U], !0);
+    return V.registerTools = (j) => {
+      set(b, [...get(b), ...j], !0);
     }, () => window.removeEventListener("jat-feedback:open", C);
   }), onDestroy(() => {
     stopConsoleCapture(), stopRetryLoop(), window.removeEventListener("keydown", ve, !0), re && clearInterval(re);
@@ -13193,9 +13193,9 @@ function JatFeedback(e, t) {
   {
     var S = (C) => {
       var V = root_1();
-      let U;
-      var j = child(V);
-      FeedbackPanel(j, {
+      let j;
+      var U = child(V);
+      FeedbackPanel(U, {
         get endpoint() {
           return get(ie).endpoint;
         },
@@ -13238,7 +13238,7 @@ function JatFeedback(e, t) {
         onclose: ge,
         ongrip: Z
       }), reset(V), template_effect(() => {
-        U = set_class(V, 1, "jat-feedback-panel svelte-qpyrvv", null, U, { dragging: get(m), hidden: !get(h) }), set_style(V, xe[get(ie).position] || xe["bottom-right"]);
+        j = set_class(V, 1, "jat-feedback-panel svelte-qpyrvv", null, j, { dragging: get(m), hidden: !get(h) }), set_style(V, xe[get(ie).position] || xe["bottom-right"]);
       }), append(C, V);
     }, A = (C) => {
       var V = root_2();

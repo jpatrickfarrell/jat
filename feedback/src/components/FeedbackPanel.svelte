@@ -238,11 +238,16 @@
           titleInput?.focus();
         });
       });
-      if (activeTab === 'new' && screenshots.length === 0) {
-        // Silent quick capture — don't set `capturing` so form stays interactive
+      if (activeTab === 'new') {
+        // Always capture fresh screenshot on open so it reflects current page state
         setTimeout(() => {
           captureViewportQuick().then((dataUrl) => {
-            screenshots = [...screenshots, dataUrl];
+            if (screenshots.length === 0) {
+              screenshots = [dataUrl];
+            } else {
+              // Replace the first (auto-captured) screenshot with fresh one
+              screenshots = [dataUrl, ...screenshots.slice(1)];
+            }
           }).catch(() => {});
         }, 300);
       }

@@ -11,7 +11,7 @@
 
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -36,5 +36,20 @@ export const GET: RequestHandler = async ({ url }) => {
 		return json({ success: true, config });
 	} catch {
 		return json({ success: false, error: 'Failed to parse jat.config.json' });
+	}
+};
+
+export const POST: RequestHandler = async ({ request }) => {
+	const { path, config } = await request.json();
+	if (!path || !config) {
+		return json({ success: false, error: 'path and config required' }, { status: 400 });
+	}
+	const resolvedPath = path.startsWith('~') ? path.replace('~', homedir()) : path;
+	const configPath = join(resolvedPath, 'jat.config.json');
+	try {
+		writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+		return json({ success: true });
+	} catch (err: any) {
+		return json({ success: false, error: err.message }, { status: 500 });
 	}
 };

@@ -37,9 +37,30 @@
 		docsUrl: string;
 	}
 
+	interface MaskedCustomApiKey {
+		masked: string;
+		envVar: string;
+		description?: string;
+		addedAt: string;
+	}
+
+	interface MaskedProjectSecret {
+		masked: string;
+		addedAt: string;
+		isSet: boolean;
+	}
+
 	interface Credentials {
 		apiKeys: {
 			[key: string]: MaskedApiKeyEntry | undefined;
+		};
+		customApiKeys?: {
+			[name: string]: MaskedCustomApiKey;
+		};
+		projectSecrets?: {
+			[projectKey: string]: {
+				[secretKey: string]: MaskedProjectSecret | undefined;
+			};
 		};
 	}
 
@@ -48,6 +69,33 @@
 	let error = $state<string | null>(null);
 	let credentials = $state<Credentials | null>(null);
 	let providers = $state<ApiKeyProvider[]>([]);
+
+	// Reveal state for masked values
+	let revealedKeys = $state<Set<string>>(new Set());
+
+	function toggleReveal(key: string) {
+		const next = new Set(revealedKeys);
+		if (next.has(key)) {
+			next.delete(key);
+		} else {
+			next.add(key);
+		}
+		revealedKeys = next;
+	}
+
+	// Derived: sorted custom keys
+	let sortedCustomKeys = $derived(
+		credentials?.customApiKeys
+			? Object.entries(credentials.customApiKeys).sort(([a], [b]) => a.localeCompare(b))
+			: []
+	);
+
+	// Derived: sorted project secrets
+	let sortedProjects = $derived(
+		credentials?.projectSecrets
+			? Object.entries(credentials.projectSecrets).sort(([a], [b]) => a.localeCompare(b))
+			: []
+	);
 
 	// Edit modal state
 	let editingProvider = $state<string | null>(null);
@@ -570,6 +618,129 @@
 				{/each}
 			</tbody>
 		</table>
+
+		<!-- Custom Keys Section -->
+		{#if sortedCustomKeys.length > 0}
+			<div class="section-subheader" style="margin-top: 2rem;">
+				<h3>Custom Keys <span class="section-count">{sortedCustomKeys.length}</span></h3>
+				<p class="section-subdescription">User-defined API keys, bot tokens, and service credentials</p>
+			</div>
+
+			<table class="vault-table">
+				<thead>
+					<tr>
+						<th class="vt-ck-name">Name</th>
+						<th class="vt-ck-env">Env Var</th>
+						<th class="vt-ck-value">Value</th>
+						<th class="vt-ck-date">Added</th>
+						<th class="vt-ck-actions"></th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each sortedCustomKeys as [name, entry]}
+						<tr class="is-set">
+							<td class="vt-ck-name">
+								<span class="vt-name-text">{name}</span>
+								{#if entry.description}
+									<span class="vt-desc-text">{entry.description}</span>
+								{/if}
+							</td>
+							<td class="vt-ck-env">
+								<code class="vt-env-badge">${entry.envVar}</code>
+							</td>
+							<td class="vt-ck-value">
+								{#if revealedKeys.has(`custom:${name}`)}
+									<code class="vt-revealed">{entry.masked}</code>
+								{:else}
+									<code class="vt-masked">{'*'.repeat(12)}</code>
+								{/if}
+							</td>
+							<td class="vt-ck-date">
+								<span class="vt-date-text">{formatDate(entry.addedAt)}</span>
+							</td>
+							<td class="vt-ck-actions">
+								<button
+									class="vt-action-btn"
+									onclick={() => toggleReveal(`custom:${name}`)}
+									title={revealedKeys.has(`custom:${name}`) ? 'Hide' : 'Reveal'}
+								>
+									{#if revealedKeys.has(`custom:${name}`)}
+										<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" /></svg>
+									{:else}
+										<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+									{/if}
+								</button>
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		{/if}
+
+		<!-- Project Secrets Section -->
+		{#if sortedProjects.length > 0}
+			<div class="section-subheader" style="margin-top: 2rem;">
+				<h3>Project Secrets <span class="section-count">{sortedProjects.length} projects</span></h3>
+				<p class="section-subdescription">Per-project credentials (Supabase, database URLs, service keys)</p>
+			</div>
+
+			{#each sortedProjects as [projectKey, secrets]}
+				{@const secretEntries = Object.entries(secrets).filter(([, v]) => v).sort(([a], [b]) => a.localeCompare(b))}
+				{#if secretEntries.length > 0}
+					<div class="project-group">
+						<div class="project-group-header">
+							<span class="project-name">{projectKey}</span>
+							<span class="project-count">{secretEntries.length} secrets</span>
+						</div>
+						<table class="vault-table vault-table-nested">
+							<thead>
+								<tr>
+									<th class="vt-ps-name">Secret</th>
+									<th class="vt-ps-value">Value</th>
+									<th class="vt-ps-date">Added</th>
+									<th class="vt-ps-actions"></th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each secretEntries as [secretKey, entry]}
+									{#if entry}
+										<tr class="is-set">
+											<td class="vt-ps-name">
+												<span class="vt-name-text">{secretKey.replace(/_/g, ' ')}</span>
+												<code class="vt-desc-text">{projectKey}-{secretKey.replace(/_/g, '-')}</code>
+											</td>
+											<td class="vt-ps-value">
+												{#if revealedKeys.has(`project:${projectKey}:${secretKey}`)}
+													<code class="vt-revealed">{entry.masked}</code>
+												{:else}
+													<code class="vt-masked">{'*'.repeat(12)}</code>
+												{/if}
+											</td>
+											<td class="vt-ps-date">
+												<span class="vt-date-text">{formatDate(entry.addedAt)}</span>
+											</td>
+											<td class="vt-ps-actions">
+												<button
+													class="vt-action-btn"
+													onclick={() => toggleReveal(`project:${projectKey}:${secretKey}`)}
+													title={revealedKeys.has(`project:${projectKey}:${secretKey}`) ? 'Hide' : 'Reveal'}
+												>
+													{#if revealedKeys.has(`project:${projectKey}:${secretKey}`)}
+														<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" /></svg>
+													{:else}
+														<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+													{/if}
+												</button>
+											</td>
+										</tr>
+									{/if}
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/if}
+			{/each}
+		{/if}
 	{/if}
 </div>
 
@@ -1227,6 +1398,80 @@
 
 	.provider-instructions :global(code) {
 		color: oklch(0.65 0.02 250);
+	}
+
+	/* Section count badge */
+	.section-count {
+		font-size: 0.7rem;
+		font-weight: 500;
+		color: oklch(0.55 0.02 250);
+		background: oklch(0.22 0.02 250);
+		padding: 0.1rem 0.5rem;
+		border-radius: 10px;
+		margin-left: 0.25rem;
+	}
+
+	/* Revealed value style */
+	.vt-revealed {
+		font-size: 0.6rem;
+		padding: 0.15rem 0.35rem;
+		background: oklch(0.12 0.01 250);
+		border-radius: 0.2rem;
+		color: oklch(0.75 0.06 55);
+		font-family: ui-monospace, monospace;
+		word-break: break-all;
+	}
+
+	/* Custom Keys table columns */
+	th.vt-ck-name, td.vt-ck-name { width: 28%; }
+	th.vt-ck-env, td.vt-ck-env { width: 22%; }
+	th.vt-ck-value, td.vt-ck-value { width: 26%; }
+	th.vt-ck-date, td.vt-ck-date { width: 14%; }
+	th.vt-ck-actions, td.vt-ck-actions {
+		width: 10%;
+		text-align: right !important;
+	}
+
+	/* Project Secrets table columns */
+	th.vt-ps-name, td.vt-ps-name { width: 30%; }
+	th.vt-ps-value, td.vt-ps-value { width: 38%; }
+	th.vt-ps-date, td.vt-ps-date { width: 20%; }
+	th.vt-ps-actions, td.vt-ps-actions {
+		width: 12%;
+		text-align: right !important;
+	}
+
+	/* Project group */
+	.project-group {
+		margin-bottom: 1.5rem;
+	}
+
+	.project-group-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.4rem 0;
+		margin-bottom: 0.25rem;
+	}
+
+	.project-name {
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: oklch(0.80 0.10 200);
+		font-family: ui-monospace, monospace;
+	}
+
+	.project-count {
+		font-size: 0.6rem;
+		color: oklch(0.50 0.02 250);
+		background: oklch(0.20 0.02 250);
+		padding: 0.05rem 0.4rem;
+		border-radius: 9999px;
+	}
+
+	.vault-table-nested {
+		margin-left: 0.75rem;
+		width: calc(100% - 0.75rem);
 	}
 
 </style>

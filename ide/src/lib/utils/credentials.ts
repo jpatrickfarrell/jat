@@ -99,6 +99,13 @@ export interface Credentials {
 	};
 }
 
+export interface MaskedCustomApiKey {
+	masked: string;
+	envVar: string;
+	description?: string;
+	addedAt: string;
+}
+
 export interface MaskedCredentials {
 	apiKeys: {
 		anthropic?: MaskedApiKeyEntry;
@@ -107,6 +114,9 @@ export interface MaskedCredentials {
 		[key: string]: MaskedApiKeyEntry | undefined;
 	};
 	codingAgents?: Credentials['codingAgents'];
+	customApiKeys?: {
+		[name: string]: MaskedCustomApiKey;
+	};
 	projectSecrets?: {
 		[projectKey: string]: MaskedProjectSecrets;
 	};
@@ -479,6 +489,21 @@ export function getMaskedCredentials(): MaskedCredentials {
 		}
 	}
 
+	// Mask custom API keys
+	const maskedCustomApiKeys: MaskedCredentials['customApiKeys'] = {};
+	if (creds.customApiKeys) {
+		for (const [name, entry] of Object.entries(creds.customApiKeys)) {
+			if (entry) {
+				maskedCustomApiKeys[name] = {
+					masked: maskSecret(entry.value),
+					envVar: entry.envVar,
+					description: entry.description,
+					addedAt: entry.addedAt
+				};
+			}
+		}
+	}
+
 	// Mask project secrets
 	const maskedProjectSecrets: MaskedCredentials['projectSecrets'] = {};
 	if (creds.projectSecrets) {
@@ -499,6 +524,7 @@ export function getMaskedCredentials(): MaskedCredentials {
 	return {
 		apiKeys: maskedApiKeys,
 		codingAgents: creds.codingAgents,
+		customApiKeys: maskedCustomApiKeys,
 		projectSecrets: maskedProjectSecrets
 	};
 }

@@ -665,6 +665,7 @@
 																											role="button"
 																											class="badge badge-xs {statusBadgeClass(milestone.status)} cursor-pointer gap-1"
 																											onclick={(e) => e.stopPropagation()}
+																											onkeydown={(e) => e.stopPropagation()}
 																										>
 																											{milestone.status}
 																											{#if updatingItem === milestone.id}

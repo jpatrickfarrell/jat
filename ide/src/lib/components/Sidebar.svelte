@@ -22,7 +22,7 @@
 	import { page } from '$app/stores';
 	import { unifiedNavConfig, NAV_GROUPS, type NavGroup } from '$lib/config/navConfig';
 	import { isSidebarCollapsed, gitChangesCount, activeSessionsCount, runningServersCount, activeAgentSessionsCount, fileChangesCount } from '$lib/stores/drawerStore';
-	import { getCollapsedNavGroups, toggleCollapsedNavGroup, isNavGroupCollapsed } from '$lib/stores/preferences.svelte';
+	import { getCollapsedNavGroups, toggleCollapsedNavGroup, isNavGroupCollapsed, getDebugMode } from '$lib/stores/preferences.svelte';
 
 	// Current project from URL (for preserving ?project= across navigation)
 	const currentProject = $derived($page.url.searchParams.get('project'));
@@ -44,9 +44,13 @@
 		return false;
 	}
 
-	// Group items by category for rendering
+	// Group items by category for rendering (hides mobile routes outside of debug mode)
 	function getGroupItems(groupId: NavGroup) {
-		return unifiedNavConfig.navItems.filter((item) => item.category === groupId);
+		const debugMode = getDebugMode();
+		return unifiedNavConfig.navItems.filter((item) => {
+			if (!debugMode && (item.id === 'mobile' || item.id === 'mobilenew')) return false;
+			return item.category === groupId;
+		});
 	}
 
 	// Check if group has any active item (to keep it visible even when collapsed)

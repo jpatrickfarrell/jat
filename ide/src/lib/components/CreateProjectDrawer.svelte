@@ -2170,7 +2170,6 @@
 										{/if}
 									</div>
 								</div>
-							{/if}
 
 							<!-- Starter Tasks Section -->
 							{#if availableStarterTasks.length > 0}

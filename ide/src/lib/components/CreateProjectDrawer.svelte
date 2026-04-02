@@ -57,6 +57,12 @@
 		// Step 3: Appearance (placeholder)
 		activeColor: string;
 		inactiveColor: string;
+		// Integrations (JST projects — optional, any source type)
+		supabaseUrl: string;
+		supabaseServiceKey: string;
+		cloudflareAccountId: string;
+		cloudflareApiToken: string;
+		cloudflarePagesProject: string;
 	}
 
 	// ─── Wizard State ──────────────────────────────────────────────
@@ -78,6 +84,11 @@
 		serverPath: '',
 		activeColor: '',
 		inactiveColor: '',
+		supabaseUrl: '',
+		supabaseServiceKey: '',
+		cloudflareAccountId: '',
+		cloudflareApiToken: '',
+		cloudflarePagesProject: '',
 	});
 
 	// ─── GitHub Metadata (from clone response) ────────────────────
@@ -458,6 +469,16 @@
 	let isCloning = $state(false);
 	let cloneError = $state<string | null>(null);
 	let cloneSuccess = $state(false);
+
+	// ─── JST Integration state (Step 4 — optional for any source type) ──
+	let showJstIntegrations = $state(false);
+
+	// Auto-expand integrations section for template (JST) projects
+	$effect(() => {
+		if (currentStep === 4 && wizardData.sourceType === 'template') {
+			showJstIntegrations = true;
+		}
+	});
 
 	// ─── Template Scaffold state (Step 1 when sourceType='template') ──
 	let isScaffolding = $state(false);
@@ -1029,6 +1050,43 @@
 				creationSteps = data.steps || [];
 			}
 
+			// Set up JST integrations (best-effort — never fail the whole flow)
+			if (
+				createdProjectKey &&
+				(
+					(wizardData.supabaseUrl && wizardData.supabaseServiceKey) ||
+					(wizardData.cloudflareAccountId && wizardData.cloudflareApiToken && wizardData.cloudflarePagesProject)
+				)
+			) {
+				try {
+					const integBody: Record<string, any> = { projectKey: createdProjectKey };
+					if (wizardData.supabaseUrl && wizardData.supabaseServiceKey) {
+						integBody.supabase = {
+							url: wizardData.supabaseUrl,
+							serviceKey: wizardData.supabaseServiceKey,
+						};
+					}
+					if (wizardData.cloudflareAccountId && wizardData.cloudflareApiToken && wizardData.cloudflarePagesProject) {
+						integBody.cloudflare = {
+							accountId: wizardData.cloudflareAccountId,
+							apiToken: wizardData.cloudflareApiToken,
+							pagesProject: wizardData.cloudflarePagesProject,
+						};
+					}
+					const integRes = await fetch('/api/projects/setup-integrations', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify(integBody),
+					});
+					const integData = await integRes.json();
+					if (integData.success && integData.steps?.length > 0) {
+						creationSteps = [...creationSteps, ...integData.steps];
+					}
+				} catch {
+					// Integration setup failure is non-blocking
+				}
+			}
+
 			successMessage = data.message || `Successfully added ${data.project?.name}`;
 			playSuccessChime();
 
@@ -1074,7 +1132,13 @@
 			serverPath: '',
 			activeColor: '',
 			inactiveColor: '',
+			supabaseUrl: '',
+			supabaseServiceKey: '',
+			cloudflareAccountId: '',
+			cloudflareApiToken: '',
+			cloudflarePagesProject: '',
 		};
+		showJstIntegrations = false;
 		nameManuallyEdited = false;
 		keyManuallyEdited = false;
 		inactiveColorManuallyEdited = false;
@@ -2162,6 +2226,115 @@
 									</div>
 								</div>
 							{/if}
+
+							<!-- JST Integrations Section -->
+							<div class="review-section">
+								<div class="review-section-header">
+									<span class="review-section-label">Integrations</span>
+									{#if wizardData.sourceType !== 'template'}
+										<button
+											type="button"
+											class="review-edit-link"
+											onclick={() => { showJstIntegrations = !showJstIntegrations; }}
+										>
+											{showJstIntegrations ? 'Hide' : 'Set up JST integrations'}
+										</button>
+									{:else}
+										<span class="text-[11px]" style="color: oklch(0.55 0.12 145);">Recommended</span>
+									{/if}
+								</div>
+
+								{#if showJstIntegrations}
+									<div class="review-section-body flex flex-col gap-4">
+										<p class="text-xs" style="color: oklch(0.55 0.02 250);">
+											Connect Supabase (user feedback) and Cloudflare Pages (deploy monitoring) so JAT agents
+											automatically respond to feedback submissions and deployment failures.
+										</p>
+
+										<!-- Supabase -->
+										<div class="flex flex-col gap-2">
+											<div class="text-xs font-mono font-semibold uppercase tracking-wider" style="color: oklch(0.60 0.12 145);">
+												Supabase — Feedback Integration
+											</div>
+											<div class="flex flex-col gap-1.5">
+												<label class="text-xs" style="color: oklch(0.55 0.02 250);" for="jst-supabase-url">Project URL</label>
+												<input
+													id="jst-supabase-url"
+													type="url"
+													class="input input-bordered input-sm w-full font-mono text-xs"
+													placeholder="https://xxx.supabase.co"
+													bind:value={wizardData.supabaseUrl}
+													style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
+												/>
+											</div>
+											<div class="flex flex-col gap-1.5">
+												<label class="text-xs" style="color: oklch(0.55 0.02 250);" for="jst-supabase-key">Service Role Key</label>
+												<input
+													id="jst-supabase-key"
+													type="password"
+													class="input input-bordered input-sm w-full font-mono text-xs"
+													placeholder="eyJhbGciOiJI..."
+													bind:value={wizardData.supabaseServiceKey}
+													style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
+												/>
+											</div>
+										</div>
+
+										<!-- Cloudflare -->
+										<div class="flex flex-col gap-2">
+											<div class="text-xs font-mono font-semibold uppercase tracking-wider" style="color: oklch(0.65 0.12 45);">
+												Cloudflare Pages — Deploy Monitoring
+											</div>
+											<div class="flex flex-col gap-1.5">
+												<label class="text-xs" style="color: oklch(0.55 0.02 250);" for="jst-cf-account">Account ID</label>
+												<input
+													id="jst-cf-account"
+													type="text"
+													class="input input-bordered input-sm w-full font-mono text-xs"
+													placeholder="48c159dd1001b17350a706f21b4651c3"
+													bind:value={wizardData.cloudflareAccountId}
+													style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
+												/>
+											</div>
+											<div class="flex flex-col gap-1.5">
+												<label class="text-xs" style="color: oklch(0.55 0.02 250);" for="jst-cf-token">API Token</label>
+												<input
+													id="jst-cf-token"
+													type="password"
+													class="input input-bordered input-sm w-full font-mono text-xs"
+													placeholder="Your Cloudflare API token (Pages:Read)"
+													bind:value={wizardData.cloudflareApiToken}
+													style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
+												/>
+											</div>
+											<div class="flex flex-col gap-1.5">
+												<label class="text-xs" style="color: oklch(0.55 0.02 250);" for="jst-cf-project">Pages Project Name</label>
+												<input
+													id="jst-cf-project"
+													type="text"
+													class="input input-bordered input-sm w-full font-mono text-xs"
+													placeholder="my-app"
+													bind:value={wizardData.cloudflarePagesProject}
+													style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
+												/>
+												<p class="text-[11px]" style="color: oklch(0.45 0.02 250);">
+													The slug of your Cloudflare Pages project (found in dash.cloudflare.com → Pages)
+												</p>
+											</div>
+										</div>
+
+										<p class="text-[11px]" style="color: oklch(0.45 0.02 250);">
+											Credentials are stored via <code class="font-mono">jat-secret</code>. Leave fields blank to skip an integration.
+										</p>
+									</div>
+								{:else if wizardData.sourceType !== 'template'}
+									<div class="px-3 py-2">
+										<p class="text-xs" style="color: oklch(0.45 0.02 250);">
+											If this is a JST-based project, click "Set up JST integrations" to connect Supabase feedback and Cloudflare deployment monitoring.
+										</p>
+									</div>
+								{/if}
+							</div>
 
 							<!-- Starter Tasks Section -->
 							{#if availableStarterTasks.length > 0}

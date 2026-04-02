@@ -15,10 +15,11 @@ import { createTask } from '$lib/server/jat-tasks.js';
 import { invalidateCache } from '$lib/server/cache.js';
 import { _resetTaskCache } from '../../../api/agents/+server.js';
 import { emitEvent } from '$lib/utils/eventBus.server.js';
-import { writeFileSync, unlinkSync, mkdirSync, statSync, appendFileSync } from 'fs';
+import { writeFileSync, unlinkSync, mkdirSync, statSync, appendFileSync, readFileSync, existsSync } from 'fs';
 import { exec, execSync } from 'child_process';
 import { randomBytes } from 'crypto';
 import { join } from 'path';
+import { homedir } from 'os';
 
 const TEMP_DIR = '/tmp/jat-voice';
 
@@ -52,12 +53,38 @@ function getAudioDate(filePath) {
 const VOICE_TIMELINE_FILE = '/tmp/jat-timeline-jat-voice.jsonl';
 
 /**
+ * Load project names and descriptions from ~/.config/jat/projects.json.
+ * Returns an array of { name, description } for projects that have descriptions.
+ * @returns {Array<{name: string, description: string}>}
+ */
+function loadProjects() {
+	try {
+		const configPath = join(homedir(), '.config', 'jat', 'projects.json');
+		if (!existsSync(configPath)) return [];
+		const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+		return Object.entries(config.projects || {})
+			.filter(([, p]) => p.description && !p.hidden)
+			.map(([name, p]) => ({ name, description: p.description }));
+	} catch {
+		return [];
+	}
+}
+
+/**
  * Call local ollama to organize a transcript into structured tasks (JSON).
  * Returns an array of SuggestedTask objects.
  * @param {string} transcript
+ * @param {Array<{name: string, description: string}>} projects
  * @returns {Promise<Array>}
  */
-async function organizeTranscript(transcript) {
+async function organizeTranscript(transcript, projects = []) {
+	const projectSection = projects.length > 0
+		? `Available projects (assign each task to the most relevant one based on context):
+${projects.map(p => `- ${p.name}: ${p.description}`).join('\n')}
+
+If a task doesn't clearly belong to any project, omit the "project" field.`
+		: '';
+
 	const prompt = `You are a task organizer. Extract every actionable task from this voice note transcript.
 
 Return ONLY a JSON object with this exact structure (no markdown, no explanation):
@@ -68,6 +95,7 @@ Return ONLY a JSON object with this exact structure (no markdown, no explanation
       "title": "Short actionable title in imperative form",
       "description": "More context if the transcript provides it",
       "priority": 2,
+      "project": "project-name-here",
       "labels": "voice"
     }
   ]
@@ -78,6 +106,7 @@ Priority: 0=critical 1=high 2=medium 3=low 4=lowest
 
 Use priority cues from the transcript ("urgent", "first thing", "must", "deadline" → lower number).
 Group related items into one task rather than splitting trivially.
+${projectSection}
 
 Transcript:
 ${transcript}`;
@@ -178,7 +207,8 @@ function transcribeAndOrganize(audioPath, title, priority) {
 
 			// Step 3: Organize transcript into structured tasks via ollama
 			try {
-				const tasks = await organizeTranscript(text);
+				const projects = loadProjects();
+				const tasks = await organizeTranscript(text, projects);
 				appendToVoiceTimeline(tasks);
 				console.log(`[voice] Organized ${tasks.length} task(s) into voice inbox`);
 			} catch (organizeErr) {
@@ -230,7 +260,8 @@ export async function POST({ request }) {
 			}
 
 			// Organize in background, don't block the response
-			organizeTranscript(text).then((tasks) => {
+			const projects = loadProjects();
+			organizeTranscript(text, projects).then((tasks) => {
 				appendToVoiceTimeline(tasks);
 				console.log(`[voice] Organized ${tasks.length} task(s) from text into voice inbox`);
 			}).catch((err) => {

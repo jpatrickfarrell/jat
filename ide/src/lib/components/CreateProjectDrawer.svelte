@@ -496,6 +496,28 @@
 	let secretValues = $state<Record<string, string>>({});
 	let selectedIntegrations = $state<Set<string>>(new Set());
 
+	// Derived: required secret keys for the currently selected integrations
+	const configRequiredKeys = $derived.by(() => {
+		if (!projectConfig) return [] as string[];
+		return [...new Set(
+			(projectConfig.integrations ?? [])
+				.filter(i => selectedIntegrations.has(i.id))
+				.flatMap(i => i.requires ?? [])
+		)];
+	});
+
+	// Derived: secrets grouped by their group field
+	const configSecretsByGroup = $derived.by(() => {
+		const groups: Map<string, JatConfigSecret[]> = new Map();
+		for (const k of configRequiredKeys) {
+			const def = (projectConfig?.secrets ?? []).find(s => s.key === k);
+			const group = def?.group ?? '';
+			if (!groups.has(group)) groups.set(group, []);
+			groups.get(group)!.push(def ?? { key: k, label: k, type: 'secret' });
+		}
+		return [...groups.entries()];
+	});
+
 	// Fetch jat.config.json when entering the review step
 	$effect(() => {
 		if (currentStep !== 4) return;
@@ -2324,23 +2346,8 @@
 										{/each}
 
 										<!-- Secret fields for selected integrations -->
-										{@const requiredKeys = [...new Set(
-											(projectConfig.integrations ?? [])
-												.filter(i => selectedIntegrations.has(i.id))
-												.flatMap(i => i.requires ?? [])
-										)]}
-										{#if requiredKeys.length > 0}
-											{@const secretsByGroup = (() => {
-												const groups: Map<string, JatConfigSecret[]> = new Map();
-												for (const k of requiredKeys) {
-													const def = (projectConfig.secrets ?? []).find(s => s.key === k);
-													const group = def?.group ?? '';
-													if (!groups.has(group)) groups.set(group, []);
-													groups.get(group)!.push(def ?? { key: k, label: k, type: 'secret' });
-												}
-												return groups;
-											})()}
-											{#each [...secretsByGroup.entries()] as [group, groupSecrets]}
+										{#if configRequiredKeys.length > 0}
+											{#each configSecretsByGroup as [group, groupSecrets]}
 												<div class="flex flex-col gap-2">
 													{#if group}
 														<div class="text-xs font-mono font-semibold uppercase tracking-wider" style="color: oklch(0.60 0.12 240);">

@@ -628,6 +628,8 @@
 		renderedBases = new Map();
 		renderedTables = new Map();
 		expandedContext = new Set();
+		summaryData = null;
+		summaryError = null;
 
 		try {
 			const response = await fetch(`/api/tasks/${id}`, { signal });

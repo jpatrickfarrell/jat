@@ -318,6 +318,7 @@
 		style="left: {ctxX}px; top: {ctxY}px;"
 		role="menu"
 		onclick={(e) => e.stopPropagation()}
+		onkeydown={(e) => e.stopPropagation()}
 	>
 		<!-- View Details -->
 		{#if ctxData.taskId && ctxData.taskId !== 'unknown'}

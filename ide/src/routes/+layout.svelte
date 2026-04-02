@@ -1171,7 +1171,7 @@
 
 {#if isSetupPage}
 	<!-- Setup page: focused layout without sidebar/topbar -->
-	<div class="h-screen overflow-y-auto" role="group" onclick={handleFirstInteraction}>
+	<div class="h-screen overflow-y-auto" role="group" onclick={handleFirstInteraction} onkeydown={handleFirstInteraction}>
 		{@render children()}
 
 		<!-- Drawers still available during setup (project creation, task creation) -->
@@ -1180,7 +1180,7 @@
 	</div>
 {:else}
 	<!-- Drawer Structure -->
-	<div class="drawer lg:drawer-open" role="group" onclick={handleFirstInteraction}>
+	<div class="drawer lg:drawer-open" role="group" onclick={handleFirstInteraction} onkeydown={handleFirstInteraction}>
 		<!-- Drawer toggle (hidden checkbox for mobile sidebar) -->
 		<input id="main-drawer" type="checkbox" class="drawer-toggle" />
 

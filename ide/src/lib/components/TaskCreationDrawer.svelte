@@ -1687,7 +1687,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 								</svg>
 							</button>
 							{#if harnessDropdownOpen}
-								<div class="dropdown-content bg-base-200 rounded-box z-50 w-56 p-2 shadow-lg border border-base-content/10" role="group" onclick={(e) => e.stopPropagation()}>
+								<div class="dropdown-content bg-base-200 rounded-box z-50 w-56 p-2 shadow-lg border border-base-content/10" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 									<!-- Agent programs -->
 									<ul class="menu p-0">
 										{#each harnessPresets as preset}

@@ -130,6 +130,7 @@
 			bind:this={settingsRef}
 			onclick={(e) => e.stopPropagation()}
 			onmousedown={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
 			role="group"
 		>
 			<div class="settings-header">

@@ -1207,7 +1207,7 @@
 								<td class="td-name">
 									{#if session.type === 'server'}
 										<!-- Server session display -->
-										<div class="server-row" role="group" onclick={(e) => e.stopPropagation()}>
+										<div class="server-row" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 											<ServerSessionBadge
 												sessionName={session.name}
 												project={session.project}

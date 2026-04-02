@@ -2103,7 +2103,7 @@
 							</button>
 							<!-- Due Date Filter Chips (visible when section expanded) -->
 							{#if !isSubsectionCollapsed(selectedProject!, "tasks")}
-								<div class="date-filter-chips" role="group" onclick={(e) => e.stopPropagation()}>
+								<div class="date-filter-chips" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 									{#each DATE_FILTER_OPTIONS as opt}
 										{@const count = filterCounts[opt.id]}
 										<button
@@ -2453,7 +2453,7 @@
 
 {#if memoryViewerOpen}
 	<div class="memory-overlay" role="presentation" onclick={() => (memoryViewerOpen = false)} onkeydown={(e) => e.key === "Escape" && (memoryViewerOpen = false)}>
-		<div class="memory-panel" role="group" onclick={(e) => e.stopPropagation()}>
+		<div class="memory-panel" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="memory-header">
 				<h3 class="memory-header-title">{memoryTitle}</h3>
 				<button type="button" class="memory-close" onclick={() => (memoryViewerOpen = false)}>

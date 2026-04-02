@@ -1305,7 +1305,7 @@
 								{/if}
 							</div>
 						</div>
-						<div class="mobile-status" role="group" onclick={(e) => e.stopPropagation()}>
+						<div class="mobile-status" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							<StatusActionBadge
 								sessionState={effectiveState as SessionState}
 								stacked={true}
@@ -1507,7 +1507,7 @@
 						<td class="td-task">
 							{#if session.type === 'server'}
 								<!-- Server session display -->
-								<div class="server-row" role="group" onclick={(e) => e.stopPropagation()}>
+								<div class="server-row" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 									<ServerSessionBadge
 										sessionName={session.name}
 										project={session.project}
@@ -2187,6 +2187,7 @@
 		style="left: {ctxX}px; top: {ctxY}px;"
 		role="menu"
 		onclick={(e) => e.stopPropagation()}
+		onkeydown={(e) => e.stopPropagation()}
 	>
 		<!-- View Details -->
 		{#if ctxData.task}

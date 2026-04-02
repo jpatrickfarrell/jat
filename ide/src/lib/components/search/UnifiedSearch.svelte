@@ -770,7 +770,7 @@
 	</div>
 {:else if isOpen}
 	<div class="us-overlay" onkeydown={handleKeydown} onclick={onClose} role="presentation">
-		<div class="us-modal" onclick={(e) => e.stopPropagation()}>
+		<div class="us-modal" role="dialog" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			{@render searchUI(true)}
 		</div>
 	</div>

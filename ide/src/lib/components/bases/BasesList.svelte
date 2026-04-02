@@ -411,7 +411,7 @@
 		tabindex="0"
 	>
 		<!-- Icon (emoji picker or default) -->
-		<div class="shrink-0 mt-0.5" onclick={(e) => e.stopPropagation()}>
+		<div class="shrink-0 mt-0.5" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<EmojiPicker
 				selected={base.icon ?? null}
 				onSelect={(icon) => handleIconSelect(base, icon)}

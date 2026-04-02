@@ -472,7 +472,7 @@
 <!-- Memory Viewer Modal -->
 {#if memoryViewerOpen}
 	<div class="memory-overlay" role="presentation" onclick={() => (memoryViewerOpen = false)} onkeydown={(e) => e.key === "Escape" && (memoryViewerOpen = false)}>
-		<div class="memory-panel" role="group" onclick={(e) => e.stopPropagation()}>
+		<div class="memory-panel" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="memory-header">
 				<h3 class="memory-header-title">{memoryTitle}</h3>
 				<button type="button" class="memory-close" onclick={() => (memoryViewerOpen = false)}>

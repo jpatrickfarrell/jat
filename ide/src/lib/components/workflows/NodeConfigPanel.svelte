@@ -126,18 +126,19 @@
 
 <!-- Panel overlay -->
 {#if isOpen && node && meta}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="fixed inset-0 z-50"
+		role="presentation"
 		onclick={handleClose}
 		onkeydown={(e) => e.key === 'Escape' && handleClose()}
 	>
 		<!-- Panel -->
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="absolute right-0 top-0 bottom-0 flex flex-col shadow-2xl"
+			role="dialog"
 			style="width: min(420px, 90vw); background: oklch(0.15 0.01 250); border-left: 1px solid oklch(0.22 0.02 250)"
 			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
 		>
 			<!-- Header -->
 			<div

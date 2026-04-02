@@ -43,9 +43,9 @@
 
 <div class="flex flex-col gap-4">
 	<div class="form-control">
-		<label class="label w-full pb-1">
+		<div class="label w-full pb-1">
 			<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Action</span>
-		</label>
+		</div>
 		<div class="flex flex-col gap-1.5">
 			{#each BROWSER_ACTIONS as action}
 				<label
@@ -71,10 +71,11 @@
 
 	{#if showUrl}
 		<div class="form-control">
-			<label class="label w-full pb-1">
+			<label class="label w-full pb-1" for="wf-browser-url">
 				<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">URL</span>
 			</label>
 			<input
+				id="wf-browser-url"
 				type="text"
 				class="input input-sm input-bordered w-full"
 				style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"
@@ -87,10 +88,11 @@
 
 	{#if showSelector}
 		<div class="form-control">
-			<label class="label w-full pb-1">
+			<label class="label w-full pb-1" for="wf-browser-selector">
 				<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">CSS Selector</span>
 			</label>
 			<input
+				id="wf-browser-selector"
 				type="text"
 				class="input input-sm input-bordered font-mono w-full"
 				style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"
@@ -103,10 +105,11 @@
 
 	{#if showJsCode}
 		<div class="form-control">
-			<label class="label w-full pb-1">
+			<label class="label w-full pb-1" for="wf-browser-js">
 				<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">JavaScript Code</span>
 			</label>
 			<textarea
+				id="wf-browser-js"
 				class="textarea textarea-bordered text-sm font-mono leading-relaxed w-full"
 				style="background: oklch(0.14 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.85 0.10 145); min-height: 80px"
 				value={config.jsCode || ''}
@@ -184,10 +187,11 @@
 
 	{#if showTimeout}
 		<div class="form-control">
-			<label class="label w-full pb-1">
+			<label class="label w-full pb-1" for="wf-browser-timeout">
 				<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Timeout (ms)</span>
 			</label>
 			<input
+				id="wf-browser-timeout"
 				type="number"
 				class="input input-sm input-bordered w-full"
 				style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"

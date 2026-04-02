@@ -408,6 +408,7 @@
 		class="fixed inset-0 bg-black/50 z-40"
 		transition:fade={{ duration: 200 }}
 		onclick={handleBackdropClick}
+		onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCancel(); } }}
 		role="button"
 		tabindex="-1"
 	></div>
@@ -452,14 +453,14 @@
 						onblur={() => validateField('key', key)}
 					/>
 					{#if touched['key'] && errors['key']}
-						<label class="label">
+						<div class="label">
 							<span class="label-text-alt text-error">{errors['key']}</span>
-						</label>
+						</div>
 					{/if}
 					{#if !isNewProject}
-						<label class="label">
+						<div class="label">
 							<span class="label-text-alt text-base-content/50">Key cannot be changed for existing projects</span>
-						</label>
+						</div>
 					{/if}
 				</div>
 
@@ -479,9 +480,9 @@
 						onblur={() => { generateKeyFromName(); validateField('name', name); }}
 					/>
 					{#if touched['name'] && errors['name']}
-						<label class="label">
+						<div class="label">
 							<span class="label-text-alt text-error">{errors['name']}</span>
-						</label>
+						</div>
 					{/if}
 				</div>
 
@@ -501,9 +502,9 @@
 						onblur={() => validateField('path', path)}
 					/>
 					{#if touched['path'] && errors['path']}
-						<label class="label">
+						<div class="label">
 							<span class="label-text-alt text-error">{errors['path']}</span>
-						</label>
+						</div>
 					{/if}
 				</div>
 
@@ -548,9 +549,9 @@
 							</button>
 						{/each}
 					</div>
-					<label class="label">
+					<div class="label">
 						<span class="label-text-alt text-base-content/50">Agent program used when creating new tasks for this project</span>
-					</label>
+					</div>
 				</div>
 			</div>
 
@@ -577,9 +578,9 @@
 						onblur={() => validateField('port', port)}
 					/>
 					{#if touched['port'] && errors['port']}
-						<label class="label">
+						<div class="label">
 							<span class="label-text-alt text-error">{errors['port']}</span>
-						</label>
+						</div>
 					{/if}
 				</div>
 
@@ -595,9 +596,9 @@
 						placeholder="server"
 						bind:value={serverPath}
 					/>
-					<label class="label">
+					<div class="label">
 						<span class="label-text-alt text-base-content/50">Just the folder name, e.g. server</span>
-					</label>
+					</div>
 				</div>
 
 				<!-- Project Secrets (only for existing projects) -->
@@ -692,9 +693,9 @@
 								onblur={() => validateField('activeColor', activeColor)}
 							/>
 							{#if touched['activeColor'] && errors['activeColor']}
-								<label class="label py-1">
+								<div class="label py-1">
 									<span class="label-text-alt text-error">{errors['activeColor']}</span>
-								</label>
+								</div>
 							{/if}
 						</div>
 					</div>
@@ -773,9 +774,9 @@
 								onblur={() => validateField('inactiveColor', inactiveColor)}
 							/>
 							{#if touched['inactiveColor'] && errors['inactiveColor']}
-								<label class="label py-1">
+								<div class="label py-1">
 									<span class="label-text-alt text-error">{errors['inactiveColor']}</span>
-								</label>
+								</div>
 							{/if}
 						</div>
 					</div>
@@ -828,6 +829,7 @@
 			class="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4"
 			transition:fade={{ duration: 150 }}
 			onclick={(e) => e.target === e.currentTarget && (showDeleteConfirm = false)}
+			onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showDeleteConfirm = false; } }}
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="delete-confirm-title"
@@ -900,6 +902,7 @@
 			class="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4"
 			transition:fade={{ duration: 150 }}
 			onclick={(e) => e.target === e.currentTarget && !isRenaming && (showRenameModal = false)}
+			onkeydown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !isRenaming) { e.preventDefault(); showRenameModal = false; } }}
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="rename-modal-title"
@@ -946,11 +949,11 @@
 							oninput={() => renameError = null}
 							disabled={isRenaming}
 						/>
-						<label class="label">
+						<div class="label">
 							<span class="label-text-alt text-base-content/50">
 								Lowercase letters, numbers, and hyphens only
 							</span>
-						</label>
+						</div>
 					</div>
 
 					<!-- Preview new path -->

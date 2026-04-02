@@ -1145,7 +1145,7 @@
 	<input id="create-project-drawer" type="checkbox" class="drawer-toggle" bind:checked={isOpen} />
 
 	<div class="drawer-side">
-		<label aria-label="close sidebar" class="drawer-overlay" onclick={handleClose}></label>
+		<div aria-label="close sidebar" class="drawer-overlay" role="button" tabindex="-1" onclick={handleClose} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClose(); } }}></div>
 
 		<div
 			class="h-full w-full max-w-xl flex flex-col shadow-2xl"
@@ -1355,9 +1355,9 @@
 
 								<!-- URL Input -->
 								<div class="flex flex-col gap-1.5">
-									<label class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+									<div class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
 										Repository URL
-									</label>
+									</div>
 									<input
 										type="text"
 										class="input input-bordered w-full font-mono text-sm"
@@ -1379,9 +1379,9 @@
 
 								<!-- Target Path -->
 								<div class="flex flex-col gap-1.5">
-									<label class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+									<div class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
 										Target Directory
-									</label>
+									</div>
 									<input
 										type="text"
 										class="input input-bordered w-full font-mono text-sm"
@@ -1397,9 +1397,9 @@
 
 								<!-- Branch (optional) -->
 								<div class="flex flex-col gap-1.5">
-									<label class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+									<div class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
 										Branch <span style="color: oklch(0.40 0.02 250);">(optional)</span>
-									</label>
+									</div>
 									<input
 										type="text"
 										class="input input-bordered w-full font-mono text-sm"
@@ -1479,9 +1479,9 @@
 
 								<!-- App Idea Textarea -->
 								<div class="flex flex-col gap-1.5">
-									<label class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+									<div class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
 										App Idea
-									</label>
+									</div>
 									<textarea
 										class="textarea textarea-bordered w-full font-mono text-sm resize-none"
 										style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250); min-height: 120px;"
@@ -1497,9 +1497,9 @@
 								<!-- PRD Content (collapsible) -->
 								{#if !wizardData.templateIdea.trim()}
 									<div class="flex flex-col gap-1.5">
-										<label class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+										<div class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
 											PRD / Requirements <span style="color: oklch(0.40 0.02 250);">(alternative to idea)</span>
-										</label>
+										</div>
 										<textarea
 											class="textarea textarea-bordered w-full font-mono text-sm resize-none"
 											style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250); min-height: 160px;"
@@ -1539,9 +1539,9 @@
 
 								<!-- Target Path -->
 								<div class="flex flex-col gap-1.5">
-									<label class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
+									<div class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">
 										Project Location
-									</label>
+									</div>
 									<input
 										type="text"
 										class="input input-bordered w-full font-mono text-sm"
@@ -1573,9 +1573,9 @@
 
 								<!-- Path Input + Browse -->
 								<div class="form-control">
-									<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+									<div class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
 										Project Path
-									</label>
+									</div>
 									<div class="flex gap-2">
 										<input
 											type="text"
@@ -1652,9 +1652,9 @@
 
 								<!-- Project Name -->
 								<div class="form-control">
-									<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+									<div class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
 										Project Name
-									</label>
+									</div>
 									<input
 										type="text"
 										class="input input-bordered w-full font-mono text-sm"
@@ -1672,9 +1672,9 @@
 
 								<!-- Project Key -->
 								<div class="form-control">
-									<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+									<div class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
 										Project Key
-									</label>
+									</div>
 									<input
 										type="text"
 										class="input input-bordered w-full font-mono text-sm"
@@ -1696,9 +1696,9 @@
 
 								<!-- Description -->
 								<div class="form-control">
-									<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+									<div class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
 										Description <span style="color: oklch(0.40 0.02 250);">(optional)</span>
-									</label>
+									</div>
 									<textarea
 										class="textarea textarea-bordered w-full font-mono text-sm resize-none"
 										style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250); min-height: 80px;"
@@ -1726,9 +1726,9 @@
 							{#if wizardData.sourceType === 'git' || wizardData.sourceType === 'template'}
 								<!-- Project Name -->
 								<div class="form-control">
-									<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+									<div class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
 										Project Name
-									</label>
+									</div>
 									<input
 										type="text"
 										class="input input-bordered w-full font-mono text-sm"
@@ -1746,9 +1746,9 @@
 
 								<!-- Project Key -->
 								<div class="form-control">
-									<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+									<div class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
 										Project Key
-									</label>
+									</div>
 									<input
 										type="text"
 										class="input input-bordered w-full font-mono text-sm"
@@ -1766,9 +1766,9 @@
 
 								<!-- Description -->
 								<div class="form-control">
-									<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+									<div class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
 										Description <span style="color: oklch(0.40 0.02 250);">(optional)</span>
-									</label>
+									</div>
 									<textarea
 										class="textarea textarea-bordered w-full font-mono text-sm resize-none"
 										style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250); min-height: 64px;"
@@ -1783,9 +1783,9 @@
 
 							<!-- Default Agent Harness -->
 							<div class="form-control">
-								<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+								<div class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
 									Default Agent Harness
-								</label>
+								</div>
 								<select
 									class="select select-bordered w-full font-mono text-sm"
 									style="background: oklch(0.20 0.01 250); border-color: oklch(0.35 0.02 250); color: oklch(0.90 0.02 250);"
@@ -1802,9 +1802,9 @@
 
 							<!-- Dev Server Port -->
 							<div class="form-control">
-								<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+								<div class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
 									Dev Server Port
-								</label>
+								</div>
 								<input
 									type="number"
 									class="input input-bordered w-full font-mono text-sm"
@@ -1826,9 +1826,9 @@
 
 							<!-- Dev Command -->
 							<div class="form-control">
-								<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+								<div class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
 									Dev Command <span style="color: oklch(0.40 0.02 250);">(optional)</span>
-								</label>
+								</div>
 								<input
 									type="text"
 									class="input input-bordered w-full font-mono text-sm"
@@ -1843,9 +1843,9 @@
 
 							<!-- Server Path -->
 							<div class="form-control">
-								<label class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
+								<div class="text-xs font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.60 0.02 250);">
 									Server Path <span style="color: oklch(0.40 0.02 250);">(optional)</span>
-								</label>
+								</div>
 								<input
 									type="text"
 									class="input input-bordered w-full font-mono text-sm"
@@ -1898,9 +1898,9 @@
 							<!-- Preview Badge -->
 							{#if wizardData.activeColor}
 								<div class="form-control">
-									<label class="text-xs font-mono uppercase tracking-wider mb-2" style="color: oklch(0.60 0.02 250);">
+									<div class="text-xs font-mono uppercase tracking-wider mb-2" style="color: oklch(0.60 0.02 250);">
 										Preview
-									</label>
+									</div>
 									<div
 										class="rounded-lg px-4 py-3 flex items-center gap-3"
 										style="background: oklch(0.20 0.03 250); border: 1px solid oklch(0.28 0.02 250);"

@@ -54,6 +54,7 @@
 		onmouseenter={handleMouseEnter}
 		onmousemove={handleMouseMove}
 		onmouseleave={handleMouseLeave}
+		role="group"
 	>
 		<span
 			class="badge badge-{size} {badge.color} gap-1 cursor-help"

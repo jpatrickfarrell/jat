@@ -550,7 +550,7 @@
 
 <!-- Editor Drawer -->
 {#if isEditorOpen}
-	<div class="drawer-overlay" onclick={handleClose} transition:fade={{ duration: 150 }}></div>
+	<div class="drawer-overlay" role="presentation" onclick={handleClose} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClose(); } }} transition:fade={{ duration: 150 }}></div>
 	<div class="drawer" transition:slide={{ axis: 'x', duration: 200 }}>
 		<div class="drawer-header">
 			<h3>{editingTemplate ? 'Edit Template' : 'New Template'}</h3>
@@ -656,7 +656,7 @@
 				<!-- Variables -->
 				<div class="form-field full">
 					<div class="vars-header">
-						<label>Variables</label>
+						<span>Variables</span>
 						<button type="button" class="add-var-btn" onclick={addVariable}>
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />

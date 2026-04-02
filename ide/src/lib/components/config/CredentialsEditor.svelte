@@ -746,8 +746,8 @@
 
 <!-- Edit Modal -->
 {#if editingProvider && editingProviderInfo}
-	<div class="modal-overlay" onclick={closeEditModal} transition:fade={{ duration: 150 }}>
-		<div class="modal-content" onclick={(e) => e.stopPropagation()}>
+	<div class="modal-overlay" role="presentation" onclick={closeEditModal} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeEditModal(); } }} transition:fade={{ duration: 150 }}>
+		<div class="modal-content" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="modal-header">
 				<h3>{credentials?.apiKeys[editingProvider]?.isSet ? 'Update' : 'Add'} {editingProviderInfo.name} API Key</h3>
 				<button class="btn btn-ghost btn-sm btn-circle" onclick={closeEditModal}>
@@ -840,8 +840,8 @@
 <!-- Delete Confirmation Modal -->
 {#if deletingProvider}
 	{@const providerInfo = getProviderInfo(deletingProvider)}
-	<div class="modal-overlay" onclick={closeDeleteConfirm} transition:fade={{ duration: 150 }}>
-		<div class="modal-content modal-sm" onclick={(e) => e.stopPropagation()}>
+	<div class="modal-overlay" role="presentation" onclick={closeDeleteConfirm} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeDeleteConfirm(); } }} transition:fade={{ duration: 150 }}>
+		<div class="modal-content modal-sm" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="modal-header">
 				<h3>Delete API Key</h3>
 			</div>

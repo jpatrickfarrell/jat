@@ -5243,8 +5243,8 @@
 
 <!-- Create/Edit View Modal -->
 {#if showCreateViewModal}
-<div class="modal-backdrop" onclick={() => { showCreateViewModal = false; resetViewForm(); }}>
-	<div class="create-view-modal" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.ctrlKey && e.key === 'Enter' && newViewName.trim() && !createViewSaving) { e.preventDefault(); handleCreateView(); } }}>
+<div class="modal-backdrop" role="presentation" onclick={() => { showCreateViewModal = false; resetViewForm(); }} onkeydown={(e) => { if (e.key === 'Escape') { showCreateViewModal = false; resetViewForm(); } }}>
+	<div class="create-view-modal" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.ctrlKey && e.key === 'Enter' && newViewName.trim() && !createViewSaving) { e.preventDefault(); handleCreateView(); } }}>
 		<div class="create-view-header">
 			<h3>{editingViewId ? 'Edit View' : 'Create View'}</h3>
 			{#if createViewForTable}

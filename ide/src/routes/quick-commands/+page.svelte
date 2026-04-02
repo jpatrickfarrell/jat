@@ -1498,7 +1498,10 @@
 							<div
 								class="group rounded-lg p-3 transition-all cursor-pointer"
 								style="background: oklch(0.20 0.01 250); border: 1px solid oklch(0.25 0.01 250);"
+								role="button"
+								tabindex="0"
 								onclick={() => rerunFromHistory(entry)}
+								onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); rerunFromHistory(entry); } }}
 								title="Click to load into command input"
 							>
 								<div class="flex items-center justify-between gap-3">
@@ -1652,7 +1655,9 @@
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center"
 		style="background: oklch(0.10 0.01 250 / 0.7);"
+		role="presentation"
 		onclick={(e) => { if (e.target === e.currentTarget) showPipelineEditor = false; }}
+		onkeydown={(e) => { if (e.key === 'Escape') showPipelineEditor = false; }}
 	>
 		<div
 			class="rounded-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-5 animate-scale-in"
@@ -1712,6 +1717,7 @@
 							<div
 								class="rounded-lg p-3 relative transition-all"
 								style="background: oklch(0.16 0.01 250); border: 1px solid {dragOverStepIndex === i ? 'oklch(0.50 0.12 270)' : 'oklch(0.28 0.02 250)'};"
+								role="group"
 								draggable="true"
 								ondragstart={() => handleStepDragStart(i)}
 								ondragover={(e) => handleStepDragOver(e, i)}
@@ -1856,7 +1862,9 @@
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center"
 		style="background: oklch(0.10 0.01 250 / 0.7);"
+		role="presentation"
 		onclick={(e) => { if (e.target === e.currentTarget && !pipelineRunning) closePipelineRunner(); }}
+		onkeydown={(e) => { if (e.key === 'Escape' && !pipelineRunning) closePipelineRunner(); }}
 	>
 		<div
 			class="rounded-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-5 animate-scale-in"
@@ -2003,7 +2011,9 @@
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center"
 		style="background: oklch(0.10 0.01 250 / 0.7);"
+		role="presentation"
 		onclick={(e) => { if (e.target === e.currentTarget) showTemplateEditor = false; }}
+		onkeydown={(e) => { if (e.key === 'Escape') showTemplateEditor = false; }}
 	>
 		<div
 			class="rounded-xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-5 animate-scale-in"
@@ -2175,7 +2185,9 @@
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center"
 		style="background: oklch(0.10 0.01 250 / 0.7);"
+		role="presentation"
 		onclick={(e) => { if (e.target === e.currentTarget) showSaveAsTemplate = false; }}
+		onkeydown={(e) => { if (e.key === 'Escape') showSaveAsTemplate = false; }}
 	>
 		<div
 			class="rounded-xl w-full max-w-sm p-5 animate-scale-in"
@@ -2213,12 +2225,18 @@
 
 <!-- Write to File Modal -->
 {#if showWriteFileModal}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center"
 		style="background: oklch(0.10 0.01 250 / 0.7);"
+		role="presentation"
 		onclick={(e) => {
 			if (e.target === e.currentTarget) {
+				showWriteFileModal = false;
+				pendingWriteResult = null;
+			}
+		}}
+		onkeydown={(e) => {
+			if (e.key === 'Escape') {
 				showWriteFileModal = false;
 				pendingWriteResult = null;
 			}
@@ -2279,11 +2297,12 @@
 
 <!-- Schedule Modal -->
 {#if showScheduleModal && schedulingTemplate}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center"
 		style="background: oklch(0.10 0.01 250 / 0.7);"
+		role="presentation"
 		onclick={(e) => { if (e.target === e.currentTarget) showScheduleModal = false; }}
+		onkeydown={(e) => { if (e.key === 'Escape') showScheduleModal = false; }}
 	>
 		<div
 			class="rounded-xl w-full max-w-md max-h-[85vh] overflow-y-auto p-5 animate-scale-in"

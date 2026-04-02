@@ -133,7 +133,7 @@
 	class:dragging={isDragging}
 	role="separator"
 	aria-orientation="horizontal"
-	aria-expanded={!isCollapsed}
+	aria-valuenow={isCollapsed ? 0 : 1}
 	tabindex="0"
 	onmousedown={handleMouseDown}
 	onmouseenter={handleMouseEnter}

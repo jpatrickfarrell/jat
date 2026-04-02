@@ -407,6 +407,7 @@
 									{#if isEditing}
 										<div class="flex flex-col items-end gap-1">
 											<div class="flex items-center gap-2">
+												<!-- svelte-ignore a11y_autofocus -->
 												<input
 													type="text"
 													class="input input-bordered input-sm w-40 font-mono text-center"
@@ -578,6 +579,7 @@
 									{#if isEditing}
 										<div class="flex flex-col items-end gap-1">
 											<div class="flex items-center gap-2">
+												<!-- svelte-ignore a11y_autofocus -->
 												<input
 													type="text"
 													class="input input-bordered input-sm w-40 font-mono text-center"

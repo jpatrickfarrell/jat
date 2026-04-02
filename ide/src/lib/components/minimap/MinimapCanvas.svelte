@@ -249,6 +249,7 @@
 		bind:this={container}
 		onclick={handleClick}
 		onmousedown={handleDragStart}
+		onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(e); } }}
 		role="slider"
 		tabindex="0"
 		aria-label="Canvas minimap navigation"

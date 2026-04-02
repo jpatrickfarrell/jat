@@ -600,6 +600,7 @@
 																					role="button"
 																					class="badge badge-sm {statusBadgeClass(contract.status)} cursor-pointer gap-1"
 																					onclick={(e) => e.stopPropagation()}
+																					onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
 																				>
 																					{contract.status}
 																					{#if updatingItem === contract.id}
@@ -1066,6 +1067,6 @@
 				{/if}
 			{/if}
 		</div>
-		<label class="modal-backdrop" onclick={() => showCreateModal = false}></label>
+		<label class="modal-backdrop" onclick={() => showCreateModal = false} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showCreateModal = false; } }}></label>
 	</div>
 {/if}

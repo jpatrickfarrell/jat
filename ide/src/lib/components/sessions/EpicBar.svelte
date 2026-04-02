@@ -19,10 +19,11 @@
 </script>
 
 <span class="epic-id">
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 	<span
 		class="epic-id-link"
+		role="button" tabindex="0"
 		onclick={(e) => { e.stopPropagation(); openTaskDetailDrawer(epicId); }}
+		onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openTaskDetailDrawer(epicId); } }}
 		title={epicId}
 	>{epicId}</span>
 </span>

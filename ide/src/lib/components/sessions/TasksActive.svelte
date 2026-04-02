@@ -1245,7 +1245,9 @@
 					class:attached={session.attached}
 					class:swiping={isSwiping}
 					style="{rowProjectColor ? `border-left: 3px solid ${rowProjectColor};` : isPlanning ? 'border-left: 3px solid oklch(0.68 0.20 270);' : ''}{isExiting ? ' pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
+					role="button" tabindex="0"
 					onclick={() => !isExiting && !swipeState?.swiping && (onMobileCardClick ? onMobileCardClick(session.name) : (fullscreenSession = session.name))}
+					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); !isExiting && !swipeState?.swiping && (onMobileCardClick ? onMobileCardClick(session.name) : (fullscreenSession = session.name)); } }}
 					ontouchstart={(e) => handleSwipeTouchStart(e, session.name)}
 					ontouchmove={handleSwipeTouchMove}
 					ontouchend={handleSwipeTouchEnd}
@@ -1303,8 +1305,7 @@
 								{/if}
 							</div>
 						</div>
-						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-						<div class="mobile-status" onclick={(e) => e.stopPropagation()}>
+						<div class="mobile-status" role="group" onclick={(e) => e.stopPropagation()}>
 							<StatusActionBadge
 								sessionState={effectiveState as SessionState}
 								stacked={true}
@@ -1506,8 +1507,7 @@
 						<td class="td-task">
 							{#if session.type === 'server'}
 								<!-- Server session display -->
-								<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-								<div class="server-row" onclick={(e) => e.stopPropagation()}>
+								<div class="server-row" role="group" onclick={(e) => e.stopPropagation()}>
 									<ServerSessionBadge
 										sessionName={session.name}
 										project={session.project}
@@ -2181,11 +2181,11 @@
 
 <!-- Context Menu -->
 {#if ctxData}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="active-context-menu"
 		class:active-context-menu-hidden={!ctxVisible}
 		style="left: {ctxX}px; top: {ctxY}px;"
+		role="menu"
 		onclick={(e) => e.stopPropagation()}
 	>
 		<!-- View Details -->

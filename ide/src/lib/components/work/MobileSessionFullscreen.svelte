@@ -709,15 +709,17 @@
 {#if visible}
 <div use:portalToBody>
 	<!-- Backdrop -->
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 	<div
 		class="fullscreen-backdrop"
+		role="presentation"
 		onclick={handleClose}
+		onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClose(); } }}
 	></div>
 
 	<!-- Fullscreen Panel -->
 	<div
 		class="fullscreen-panel"
+		role="group"
 		style="{swipeTranslateX > 0 ? `transform: translateX(${swipeTranslateX}px);` : ''} {swipeTransitioning ? 'transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''} {swipeDragging ? 'will-change: transform;' : ''}"
 		ondragover={handleDragOver}
 		ondragleave={handleDragLeave}
@@ -748,7 +750,7 @@
 				</svg>
 			</button>
 
-			<div class="topbar-info" onclick={() => taskId && onViewTask(taskId)}>
+			<div class="topbar-info" role="button" tabindex="0" onclick={() => taskId && onViewTask(taskId)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); taskId && onViewTask(taskId); } }}>
 				<AgentAvatar name={agentName} size={28} showRing={true} sessionState={sessionState} />
 				<div class="topbar-text">
 					<span class="topbar-agent">{agentName}</span>
@@ -756,7 +758,7 @@
 				</div>
 			</div>
 
-			<div class="topbar-status" onclick={(e) => e.stopPropagation()}>
+			<div class="topbar-status" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 				<StatusActionBadge
 					{sessionState}
 					stacked={true}

@@ -138,12 +138,12 @@
 
 	<!-- Settings Popover -->
 	{#if settingsOpen}
-		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<div
 			class="settings-popover"
 			bind:this={settingsRef}
 			onclick={(e) => e.stopPropagation()}
 			onmousedown={(e) => e.stopPropagation()}
+			role="group"
 		>
 			<div class="settings-header">
 				<span class="settings-title">Text Input Settings</span>

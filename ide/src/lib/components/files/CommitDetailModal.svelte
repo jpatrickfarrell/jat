@@ -218,11 +218,12 @@
 
 {#if isOpen}
 	<!-- Modal backdrop -->
-	<div class="modal-backdrop" onclick={onClose} role="button" tabindex="-1">
+	<div class="modal-backdrop" onclick={onClose} role="presentation" tabindex="-1" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }}>
 		<!-- Modal content -->
 		<div
 			class="modal-content"
 			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="commit-modal-title"
@@ -343,6 +344,7 @@
 									{@const typeInfo = getFileTypeInfo(file.type)}
 									{@const fileName = getFileName(file.path)}
 									{@const directory = getDirectory(file.path)}
+									<!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
 									<li class="file-item file-item-clickable" onclick={() => handleFileClick(file.path)} role="button" tabindex="0" onkeydown={(e) => e.key === 'Enter' && handleFileClick(file.path)}>
 										<span
 											class="file-type"

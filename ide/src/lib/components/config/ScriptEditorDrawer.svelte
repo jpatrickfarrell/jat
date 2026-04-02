@@ -171,8 +171,7 @@
 <svelte:window onkeydown={handleKeyDown} />
 
 {#if isOpen}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="drawer-overlay" onclick={handleOverlayClick}>
+	<div class="drawer-overlay" role="presentation" onclick={handleOverlayClick} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClose(); } }}>
 		<div class="drawer-panel">
 			<!-- Header -->
 			<div class="drawer-header">

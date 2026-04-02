@@ -1093,7 +1093,9 @@
 											<!-- Color picker dropdown -->
 											<div
 												class="absolute top-0 left-1/2 -translate-x-1/2 z-50 p-2 rounded-lg shadow-xl bg-base-200 border border-base-content/25"
+												role="group"
 												onclick={(e) => e.stopPropagation()}
+												onkeydown={(e) => e.stopPropagation()}
 											>
 												<!-- Palette grid -->
 												<div class="grid grid-cols-5 gap-1.5 mb-2">
@@ -1168,6 +1170,7 @@
 											<span class="text-base-content/45 font-mono text-xs italic">—</span>
 										{/if}
 									{:else if editingPort === project.name}
+										<!-- svelte-ignore a11y_autofocus -->
 										<input
 											type="text"
 											class="w-16 px-2 py-1 rounded font-mono text-xs outline-none bg-base-300 border border-info/50 text-base-content/90"
@@ -1365,6 +1368,7 @@
 										</span>
 									{:else if editingDescription === project.name}
 										<div class="flex items-center gap-2">
+											<!-- svelte-ignore a11y_autofocus -->
 											<input
 												type="text"
 												class="flex-1 px-2 py-1 rounded font-mono text-xs outline-none bg-base-300 border border-info/50 text-base-content/90"

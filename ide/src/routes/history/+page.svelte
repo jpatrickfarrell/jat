@@ -471,10 +471,8 @@
 
 <!-- Memory Viewer Modal -->
 {#if memoryViewerOpen}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="memory-overlay" onclick={() => (memoryViewerOpen = false)} onkeydown={(e) => e.key === "Escape" && (memoryViewerOpen = false)}>
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="memory-panel" onclick={(e) => e.stopPropagation()}>
+	<div class="memory-overlay" role="presentation" onclick={() => (memoryViewerOpen = false)} onkeydown={(e) => e.key === "Escape" && (memoryViewerOpen = false)}>
+		<div class="memory-panel" role="group" onclick={(e) => e.stopPropagation()}>
 			<div class="memory-header">
 				<h3 class="memory-header-title">{memoryTitle}</h3>
 				<button type="button" class="memory-close" onclick={() => (memoryViewerOpen = false)}>

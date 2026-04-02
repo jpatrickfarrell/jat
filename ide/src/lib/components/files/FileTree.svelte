@@ -1593,9 +1593,8 @@
 
 <!-- Rename Modal -->
 {#if renameModal}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="modal-overlay" onclick={closeRenameModal}>
-		<div class="modal-dialog" onclick={(e) => e.stopPropagation()}>
+	<div class="modal-overlay" role="presentation" onclick={closeRenameModal} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeRenameModal(); } }}>
+		<div class="modal-dialog" role="dialog" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="modal-header">
 				<h3 class="modal-title">Rename {renameModal.isFolder ? 'Folder' : 'File'}</h3>
 				<button class="modal-close" onclick={closeRenameModal} aria-label="Close">
@@ -1607,6 +1606,7 @@
 			<div class="modal-body">
 				<label class="modal-label">
 					<span>New name</span>
+					<!-- svelte-ignore a11y_autofocus -->
 					<input
 						type="text"
 						class="modal-input"
@@ -1640,9 +1640,8 @@
 
 <!-- Delete Confirmation Modal -->
 {#if deleteModal}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="modal-overlay" onclick={closeDeleteModal}>
-		<div class="modal-dialog" onclick={(e) => e.stopPropagation()}>
+	<div class="modal-overlay" role="presentation" onclick={closeDeleteModal} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeDeleteModal(); } }}>
+		<div class="modal-dialog" role="dialog" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="modal-header">
 				<div class="modal-icon modal-icon-danger">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1687,8 +1686,10 @@
 {#if contextMenu}
 	<div
 		class="context-menu"
+		role="menu"
 		style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
 		onclick={(e) => e.stopPropagation()}
+		onkeydown={(e) => e.stopPropagation()}
 	>
 		{#if contextMenu.entry.type === 'folder'}
 			<button class="context-menu-item" onclick={() => openCreateModal('file', contextMenu!.entry.path)}>
@@ -1757,9 +1758,8 @@
 
 <!-- Create Modal with FilePathPicker -->
 {#if createModal}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="modal-overlay" onclick={closeCreateModal}>
-		<div class="modal-dialog modal-dialog-picker" onclick={(e) => e.stopPropagation()}>
+	<div class="modal-overlay" role="presentation" onclick={closeCreateModal} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeCreateModal(); } }}>
+		<div class="modal-dialog modal-dialog-picker" role="dialog" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="modal-header">
 				<h3 class="modal-title">New {createModal.type === 'folder' ? 'Folder' : 'File'}</h3>
 				<button class="modal-close" onclick={closeCreateModal} aria-label="Close">

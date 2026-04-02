@@ -405,100 +405,100 @@
 				</p>
 
 				<div class="form-control w-full mb-4">
-					<label class="label">
+					<div class="label">
 						<span class="label-text font-semibold">Project Reference <span class="text-error">*</span></span>
-					</label>
+					</div>
 					<input
 						type="text"
 						placeholder="e.g., rpqhowthvegohrjjxywf"
 						class="input input-bordered w-full"
 						bind:value={projectRef}
 					/>
-					<label class="label">
+					<div class="label">
 						<span class="label-text-alt text-base-content/60">
 							Found in Project Settings → General → Reference ID
 						</span>
-					</label>
+					</div>
 				</div>
 
 				<div class="form-control w-full mb-4">
-					<label class="label">
+					<div class="label">
 						<span class="label-text font-semibold">Supabase URL</span>
 						{#if prefilled.supabaseUrl && !supabaseUrl}
 							<span class="label-text-alt" style="color: oklch(0.75 0.15 145);">Already saved</span>
 						{/if}
-					</label>
+					</div>
 					<input
 						type="text"
 						placeholder={prefilled.supabaseUrl ? 'Already saved — leave blank to keep' : 'https://your-project.supabase.co'}
 						class="input input-bordered w-full"
 						bind:value={supabaseUrl}
 					/>
-					<label class="label">
+					<div class="label">
 						<span class="label-text-alt text-base-content/60">
 							Auto-generated from project ref, or find in API settings
 						</span>
-					</label>
+					</div>
 				</div>
 
 				<div class="form-control w-full mb-4">
-					<label class="label">
+					<div class="label">
 						<span class="label-text font-semibold">Anon (Public) Key</span>
 						{#if prefilled.anonKey && !anonKey}
 							<span class="label-text-alt" style="color: oklch(0.75 0.15 145);">Already saved</span>
 						{/if}
-					</label>
+					</div>
 					<input
 						type="password"
 						placeholder={prefilled.anonKey ? 'Already saved — leave blank to keep' : 'eyJhbGciOiJIUzI1NiIs...'}
 						class="input input-bordered w-full font-mono text-sm"
 						bind:value={anonKey}
 					/>
-					<label class="label">
+					<div class="label">
 						<span class="label-text-alt text-base-content/60">
 							Safe to expose in browser - used for client-side requests
 						</span>
-					</label>
+					</div>
 				</div>
 
 				<div class="form-control w-full mb-4">
-					<label class="label">
+					<div class="label">
 						<span class="label-text font-semibold">Service Role Key</span>
 						{#if prefilled.serviceRoleKey && !serviceRoleKey}
 							<span class="label-text-alt" style="color: oklch(0.75 0.15 145);">Already saved</span>
 						{/if}
-					</label>
+					</div>
 					<input
 						type="password"
 						placeholder={prefilled.serviceRoleKey ? 'Already saved — leave blank to keep' : 'eyJhbGciOiJIUzI1NiIs...'}
 						class="input input-bordered w-full font-mono text-sm"
 						bind:value={serviceRoleKey}
 					/>
-					<label class="label">
+					<div class="label">
 						<span class="label-text-alt text-warning">
 							⚠️ Keep secret! Server-side only - bypasses RLS
 						</span>
-					</label>
+					</div>
 				</div>
 
 				<div class="form-control w-full mb-4">
-					<label class="label">
+					<div class="label">
 						<span class="label-text font-semibold">Database Password</span>
 						{#if prefilled.dbPassword && !dbPassword}
 							<span class="label-text-alt" style="color: oklch(0.75 0.15 145);">Already saved</span>
 						{/if}
-					</label>
+					</div>
 					<input
 						type="password"
 						placeholder={prefilled.dbPassword ? 'Already saved — leave blank to keep' : 'Your database password'}
 						class="input input-bordered w-full"
 						bind:value={dbPassword}
 					/>
-					<label class="label">
+					<div class="label">
 						<span class="label-text-alt text-base-content/60">
 							Used for direct database connections and migrations
 						</span>
-					</label>
+					</div>
 				</div>
 
 				<div class="flex gap-2 mt-6">

@@ -27,10 +27,11 @@
 
 <div class="flex flex-col gap-4">
 	<div class="form-control">
-		<label class="label w-full pb-1">
+		<label class="label w-full pb-1" for="wf-cron-expr">
 			<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Cron Expression</span>
 		</label>
 		<input
+			id="wf-cron-expr"
 			type="text"
 			class="input input-sm input-bordered font-mono w-full"
 			style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"
@@ -38,15 +39,15 @@
 			oninput={(e) => handleCronChange(e.currentTarget.value)}
 			placeholder="0 9 * * *"
 		/>
-		<label class="label w-full pt-1">
+		<div class="label w-full pt-1">
 			<span class="label-text-alt" style="color: oklch(0.55 0.02 250)">minute hour day-of-month month day-of-week</span>
-		</label>
+		</div>
 	</div>
 
 	<div class="form-control">
-		<label class="label w-full pb-1">
+		<div class="label w-full pb-1">
 			<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Presets</span>
-		</label>
+		</div>
 		<div class="flex flex-wrap gap-1.5">
 			{#each CRON_PRESETS as preset}
 				<button
@@ -63,11 +64,12 @@
 	</div>
 
 	<div class="form-control">
-		<label class="label w-full pb-1">
+		<label class="label w-full pb-1" for="wf-cron-tz">
 			<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Timezone</span>
 			<span class="label-text-alt" style="color: oklch(0.55 0.02 250)">Optional</span>
 		</label>
 		<input
+			id="wf-cron-tz"
 			type="text"
 			class="input input-sm input-bordered w-full"
 			style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"

@@ -452,10 +452,12 @@
 				<div
 					class="card bg-base-100 border border-base-300 hover:border-primary cursor-pointer transition-all mb-4 {!dragDisabled ? 'opacity-50' : ''} {depStatus.hasBlockers ? 'opacity-60 border-error/30' : ''}"
 					draggable="true"
+					role="button" tabindex="0"
 					data-task-id={task.id}
 					ondragstart={handleDragStart}
 					ondragend={handleDragEnd}
 					onclick={() => handleTaskClick(task.id)}
+					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleTaskClick(task.id); } }}
 					title={depStatus.hasBlockers ? `⚠️ ${depStatus.blockingReason}` : ''}
 				>
 					<div class="card-body p-3 relative">

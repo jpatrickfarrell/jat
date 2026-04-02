@@ -386,6 +386,7 @@
 						ondragover={(e) => handleZoneDragOver(e, 0)}
 						ondragleave={handleZoneDragLeave}
 						ondrop={(e) => handleZoneDrop(e, 0)}
+						role="group"
 					>
 						<button
 							class="add-block-btn"
@@ -484,6 +485,7 @@
 							ondragover={(e) => handleZoneDragOver(e, i + 1)}
 							ondragleave={handleZoneDragLeave}
 							ondrop={(e) => handleZoneDrop(e, i + 1)}
+							role="group"
 						>
 							<button
 								class="add-block-btn"

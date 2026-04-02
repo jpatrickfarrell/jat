@@ -659,6 +659,7 @@
 		class="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4"
 		transition:fade={{ duration: 150 }}
 		onclick={(e) => e.target === e.currentTarget && handleCreateDirectoryCancel()}
+		onkeydown={(e) => { if (e.key === 'Escape') handleCreateDirectoryCancel(); }}
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="create-dir-title"

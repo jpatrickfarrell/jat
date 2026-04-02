@@ -2500,10 +2500,12 @@
 						<div class="expansion-files">
 							{#each expandedCommitDetail.files as file}
 								{@const typeInfo = getFileTypeInfo(file.type)}
-								<!-- svelte-ignore a11y_no_static_element_interactions -->
 								<div
 									class="expansion-file"
+									role="button"
+									tabindex="0"
 									onclick={(e) => { e.stopPropagation(); handleExpansionFileClick(file); }}
+									onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); handleExpansionFileClick(file); } }}
 								>
 									<span class="expansion-file-type" style="color: {typeInfo.color}; background: {typeInfo.bgColor};">{file.type}</span>
 									<span class="expansion-file-name" title={file.path}>{getFileName(file.path)}</span>

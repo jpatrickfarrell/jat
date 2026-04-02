@@ -110,8 +110,7 @@
 
 <!-- Modal -->
 {#if isOpen}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div class="modal modal-open z-[100]" onclick={(e) => e.target === e.currentTarget && handleClose()}>
+	<div class="modal modal-open z-[100]" role="presentation" onclick={(e) => e.target === e.currentTarget && handleClose()} onkeydown={(e) => { if (e.key === 'Escape') handleClose(); }}>
 		<div
 			class="modal-box max-w-md"
 			style="

@@ -178,6 +178,8 @@
 			class="bg-base-300 rounded-lg shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col relative"
 			style="background: oklch(0.18 0.02 250);"
 			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+			role="presentation"
 		>
 			<!-- Header -->
 			<div class="flex items-center justify-between px-4 py-3 border-b border-base-content/10">
@@ -200,10 +202,10 @@
 			<div class="flex-1 overflow-auto p-4 space-y-4">
 				<!-- Selected text preview -->
 				<div>
-					<label class="label py-1">
+					<div class="label py-1">
 						<span class="label-text text-xs text-base-content/60">Selected Text</span>
 						<span class="label-text-alt text-xs text-base-content/40">{selectedText.length} chars</span>
-					</label>
+					</div>
 					<div
 						class="font-mono text-xs p-3 rounded border border-base-content/10 max-h-32 overflow-auto whitespace-pre-wrap"
 						style="background: oklch(0.14 0.01 250);"
@@ -214,10 +216,10 @@
 
 				<!-- Instructions input -->
 				<div>
-					<label class="label py-1">
+					<div class="label py-1">
 						<span class="label-text text-xs text-base-content/60">Instructions</span>
 						<span class="label-text-alt text-xs text-base-content/40">Ctrl+Enter to submit</span>
-					</label>
+					</div>
 					<PromptInput
 						bind:this={promptInputRef}
 						bind:value={instructions}
@@ -231,10 +233,10 @@
 				<!-- Result display (when available) -->
 				{#if result}
 					<div>
-						<label class="label py-1">
+						<div class="label py-1">
 							<span class="label-text text-xs text-success">Result</span>
 							<span class="label-text-alt text-xs text-base-content/40">{result.length} chars</span>
-						</label>
+						</div>
 						<div
 							class="font-mono text-xs p-3 rounded border border-success/30 max-h-48 overflow-auto whitespace-pre-wrap"
 							style="background: oklch(0.14 0.01 250);"

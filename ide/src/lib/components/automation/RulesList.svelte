@@ -394,6 +394,7 @@
 									ondragleave={handleDragLeave}
 									ondrop={(e) => handleDrop(e, rule.id)}
 									ondragend={handleDragEnd}
+									role="group"
 									animate:flip={{ duration: 200 }}
 									transition:slide={{ duration: 150, axis: 'y' }}
 								>

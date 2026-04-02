@@ -114,21 +114,21 @@
 	}
 </script>
 
-<div class="form-container" onkeydown={handleKeydown}>
+<div class="form-container" onkeydown={handleKeydown} role="form">
 	<!-- Project selector -->
 	<div class="mb-3">
-		<label class="label py-1">
+		<div class="label py-1">
 			<span class="label-text text-sm font-medium">Project</span>
-		</label>
+		</div>
 		<ProjectSelector {projects} selected={project} onSelect={(p) => project = p} />
 	</div>
 
 	<!-- Type + Priority -->
 	<div class="grid grid-cols-2 gap-3 mb-4">
 		<div class="form-control">
-			<label class="label py-1">
+			<div class="label py-1">
 				<span class="label-text text-sm font-medium">Type</span>
-			</label>
+			</div>
 			<select class="select select-sm select-bordered" bind:value={type}>
 				<option value="task">Task</option>
 				<option value="bug">Bug</option>
@@ -138,9 +138,9 @@
 			</select>
 		</div>
 		<div class="form-control">
-			<label class="label py-1">
+			<div class="label py-1">
 				<span class="label-text text-sm font-medium">Priority</span>
-			</label>
+			</div>
 			<select class="select select-sm select-bordered" bind:value={priority}>
 				<option value={0}>P0 — Critical</option>
 				<option value={1}>P1 — High</option>
@@ -153,9 +153,10 @@
 
 	<!-- Title -->
 	<div class="form-control mb-3">
-		<label class="label py-1">
+		<div class="label py-1">
 			<span class="label-text text-sm font-medium">Title <span class="text-error">*</span></span>
-		</label>
+		</div>
+		<!-- svelte-ignore a11y_autofocus -->
 		<input
 			class="input input-sm input-bordered w-full"
 			placeholder="What needs to be done?"
@@ -166,9 +167,9 @@
 
 	<!-- Description -->
 	<div class="form-control mb-3">
-		<label class="label py-1">
+		<div class="label py-1">
 			<span class="label-text text-sm font-medium">Description</span>
-		</label>
+		</div>
 		<textarea
 			class="textarea textarea-bordered w-full text-sm"
 			rows={6}
@@ -180,9 +181,9 @@
 	<!-- Labels + Dependencies -->
 	<div class="grid grid-cols-2 gap-3 mb-4">
 		<div>
-			<label class="label py-1">
+			<div class="label py-1">
 				<span class="label-text text-sm font-medium">Labels</span>
-			</label>
+			</div>
 			<input
 				class="input input-sm input-bordered w-full"
 				placeholder="security, api, frontend"
@@ -190,9 +191,9 @@
 			/>
 		</div>
 		<div>
-			<label class="label py-1">
+			<div class="label py-1">
 				<span class="label-text text-sm font-medium">Dependencies</span>
-			</label>
+			</div>
 			<input
 				class="input input-sm input-bordered w-full font-mono text-sm"
 				placeholder="jat-abc, jat-def"
@@ -203,9 +204,9 @@
 
 	<!-- Attachments -->
 	<div class="mb-4">
-		<label class="label py-1">
+		<div class="label py-1">
 			<span class="label-text text-sm font-medium">Attachments</span>
-		</label>
+		</div>
 		<AttachmentZone disabled={isSubmitting} bind:attachments />
 	</div>
 

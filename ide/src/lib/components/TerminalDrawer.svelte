@@ -392,6 +392,7 @@
 		style="background: oklch(0.14 0.01 250); border-left: 1px solid oklch(0.30 0.02 250);"
 		transition:slide={{ axis: 'x', duration: 200 }}
 		onmouseenter={handleDrawerMouseEnter}
+		role="group"
 	>
 		<!-- Header -->
 		<div
@@ -595,7 +596,7 @@
 
 		<!-- Input Section -->
 		{#if sessions.length > 0 && currentSession()}
-			<div onmouseenter={handleDrawerMouseEnter}>
+			<div onmouseenter={handleDrawerMouseEnter} role="group">
 				<TerminalInput
 					bind:this={terminalInputRef}
 					bind:inputText

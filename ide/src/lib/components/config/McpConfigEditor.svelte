@@ -662,7 +662,7 @@
 
 					<!-- Transport Type -->
 					<div class="form-group">
-						<label class="form-label">Transport Type</label>
+						<div class="form-label">Transport Type</div>
 						<div class="transport-toggle">
 							<button
 								class="toggle-btn"
@@ -707,7 +707,7 @@
 						</div>
 
 						<div class="form-group">
-							<label class="form-label">Environment Variables</label>
+							<div class="form-label">Environment Variables</div>
 							{#each formEnvPairs as pair, index}
 								<div class="key-value-row">
 									<input
@@ -765,7 +765,7 @@
 						</div>
 
 						<div class="form-group">
-							<label class="form-label">HTTP Headers</label>
+							<div class="form-label">HTTP Headers</div>
 							{#each formHeaders as header, index}
 								<div class="key-value-row">
 									<input

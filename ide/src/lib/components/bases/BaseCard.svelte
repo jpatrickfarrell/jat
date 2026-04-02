@@ -83,7 +83,8 @@
 				NOTES
 			</span>
 		{:else}
-			<label class="swap swap-rotate flex-shrink-0" onclick={handleToggle}>
+			<!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
+			<label class="swap swap-rotate flex-shrink-0" onclick={handleToggle} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleToggle(e); } }} role="button" tabindex="0">
 				<input type="checkbox" checked={base.always_inject} />
 				<span
 					class="text-xs px-1.5 py-0.5 rounded-full font-medium"

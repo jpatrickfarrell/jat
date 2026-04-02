@@ -765,12 +765,11 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 
 {#if mode === 'route'}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="flex flex-col h-full overflow-hidden" style="background: oklch(0.16 0.01 250);" onkeydown={handleKeydown}>
+	<div class="flex flex-col h-full overflow-hidden" style="background: oklch(0.16 0.01 250);" onkeydown={handleKeydown} role="search">
 		{@render searchUI(false)}
 	</div>
 {:else if isOpen}
-	<div class="us-overlay" onkeydown={handleKeydown} onclick={onClose}>
+	<div class="us-overlay" onkeydown={handleKeydown} onclick={onClose} role="presentation">
 		<div class="us-modal" onclick={(e) => e.stopPropagation()}>
 			{@render searchUI(true)}
 		</div>

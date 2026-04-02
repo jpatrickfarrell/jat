@@ -395,6 +395,7 @@
 <div class="selector-container" bind:this={containerEl}
 	onmouseenter={handleMouseEnter}
 	onmouseleave={handleMouseLeave}
+	role="group"
 >
 	<div class="chip-group" class:inactive={!isActive} style="--project-color: {selectedColor};">
 		<button
@@ -481,6 +482,7 @@
 		<div class="dropdown-menu" style="top: {dropdownPos.top}px; left: {dropdownPos.left}px;"
 			onmouseenter={handleDropdownMouseEnter}
 			onmouseleave={handleMouseLeave}
+			role="group"
 		>
 			<!-- Header row: project name + star -->
 			<div class="dropdown-header-row" style="--project-color: {selectedColor};">

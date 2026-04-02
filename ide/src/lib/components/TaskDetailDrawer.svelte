@@ -2363,17 +2363,21 @@
 
 	<!-- Drawer side -->
 	<div class="drawer-side">
-		<label
+		<div
 			aria-label="close sidebar"
 			class="drawer-overlay"
+			role="button"
+			tabindex="-1"
 			onclick={handleClose}
-		></label>
+			onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClose(); } }}
+		></div>
 
 		<!-- Drawer Panel (fixed height, header/footer sticky, content scrolls) - Industrial -->
 		<!-- Entire drawer is a drop zone for attachments (matches TaskCreationDrawer) -->
 		<div
 			class="h-full w-full max-w-2xl flex flex-col shadow-2xl bg-base-100 border-l border-base-300 relative"
 			style="{swipeTranslateX > 0 ? `transform: translateX(${swipeTranslateX}px);` : ''} {swipeTransitioning ? 'transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''} {swipeDragging ? 'will-change: transform;' : ''}"
+			role="group"
 			ondrop={handleDrawerDrop}
 			ondragover={handleDrawerDragOver}
 			ondragenter={handleDrawerDragEnter}
@@ -4046,6 +4050,7 @@
 														role="button"
 														tabindex="-1"
 														onclick={(e) => { e.stopPropagation(); onspawn(child.id); }}
+														onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onspawn(child.id); } }}
 													>🚀</span>
 												{/if}
 											</button>
@@ -4434,9 +4439,9 @@
 				<!-- Modal Body -->
 				<div class="p-5">
 					<div class="form-control">
-						<label class="label">
+						<div class="label">
 							<span class="label-text font-mono text-xs uppercase tracking-wider text-base-content/60">Message</span>
-						</label>
+						</div>
 						<textarea
 							class="textarea font-mono text-sm bg-base-200 border border-base-300 text-base-content min-h-[120px]"
 							placeholder="Type your message..."
@@ -4519,11 +4524,11 @@
 					</p>
 
 					<div class="form-control">
-						<label class="label">
+						<div class="label">
 							<span class="label-text font-mono text-xs uppercase tracking-wider text-base-content/60">
 								Reason for Reopening <span class="text-warning">*</span>
 							</span>
-						</label>
+						</div>
 						<textarea
 							class="textarea font-mono text-sm w-full bg-base-200 border border-base-300 text-base-content min-h-[100px]"
 							placeholder="e.g., Add Alt+C shortcut for complete action"

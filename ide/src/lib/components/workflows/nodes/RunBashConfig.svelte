@@ -30,10 +30,11 @@
 
 <div class="flex flex-col gap-4">
 	<div class="form-control">
-		<label class="label w-full pb-1">
+		<label class="label w-full pb-1" for="wf-bash-cmd">
 			<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Command</span>
 		</label>
 		<textarea
+			id="wf-bash-cmd"
 			class="textarea textarea-bordered text-sm font-mono leading-relaxed w-full"
 			style="background: oklch(0.14 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.85 0.10 145); min-height: 100px"
 			value={config.command}
@@ -87,10 +88,11 @@
 
 	<div class="grid grid-cols-2 gap-3">
 		<div class="form-control">
-			<label class="label w-full pb-1">
+			<label class="label w-full pb-1" for="wf-bash-timeout">
 				<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Timeout (seconds)</span>
 			</label>
 			<input
+				id="wf-bash-timeout"
 				type="number"
 				class="input input-sm input-bordered w-full"
 				style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"
@@ -102,10 +104,11 @@
 		</div>
 
 		<div class="form-control">
-			<label class="label w-full pb-1">
+			<label class="label w-full pb-1" for="wf-bash-cwd">
 				<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Working Directory</span>
 			</label>
 			<input
+				id="wf-bash-cwd"
 				type="text"
 				class="input input-sm input-bordered w-full"
 				style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"

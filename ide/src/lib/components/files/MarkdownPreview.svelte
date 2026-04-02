@@ -103,8 +103,7 @@
 	}
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-<div class="md-preview" bind:this={contentEl} onclick={handleClick}>
+<div class="md-preview" role="document" bind:this={contentEl} onclick={handleClick} onkeydown={(e) => { if (e.key === 'Enter') handleClick(e); }}>
 	<div class="markdown-content">
 		{@html renderedHtml}
 	</div>

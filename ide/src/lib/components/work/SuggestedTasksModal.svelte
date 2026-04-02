@@ -286,8 +286,7 @@
 </script>
 
 {#if isOpen}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div class="modal modal-open" onclick={handleBackdropClick}>
+	<div class="modal modal-open" role="presentation" onclick={handleBackdropClick} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleBackdropClick(e); } }}>
 		<div
 			class="modal-box max-w-2xl max-h-[85vh] flex flex-col bg-base-200 border border-base-300"
 		>

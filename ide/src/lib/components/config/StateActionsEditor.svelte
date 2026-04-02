@@ -703,9 +703,9 @@
 
 				<!-- Label -->
 				<div class="form-control">
-					<label class="label">
+					<div class="label">
 						<span class="label-text">Display Label</span>
-					</label>
+					</div>
 					<input
 						type="text"
 						class="input input-bordered input-sm"
@@ -716,9 +716,9 @@
 
 				<!-- Description -->
 				<div class="form-control">
-					<label class="label">
+					<div class="label">
 						<span class="label-text">Description (tooltip)</span>
-					</label>
+					</div>
 					<input
 						type="text"
 						class="input input-bordered input-sm"
@@ -729,9 +729,9 @@
 
 				<!-- Variant -->
 				<div class="form-control">
-					<label class="label">
+					<div class="label">
 						<span class="label-text">Button Variant</span>
-					</label>
+					</div>
 					<select class="select select-bordered select-sm" bind:value={commandFormData.variant}>
 						<option value="default">Default (Gray)</option>
 						<option value="success">Success (Green)</option>
@@ -743,9 +743,9 @@
 
 				<!-- Icon Selection (simplified - just show current) -->
 				<div class="form-control">
-					<label class="label">
+					<div class="label">
 						<span class="label-text">Icon</span>
-					</label>
+					</div>
 					<div class="flex items-center gap-3 p-2 bg-base-200 rounded-lg">
 						<svg class="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 							<path stroke-linecap="round" stroke-linejoin="round" d={commandFormData.icon} />
@@ -766,7 +766,7 @@
 				</button>
 			</div>
 		</div>
-		<div class="modal-backdrop" onclick={closeCommandModal}></div>
+		<div class="modal-backdrop" role="presentation" onclick={closeCommandModal} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeCommandModal(); } }}></div>
 	</div>
 {/if}
 

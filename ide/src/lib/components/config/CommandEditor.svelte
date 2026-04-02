@@ -608,11 +608,14 @@ Command content here...
 
 	<div class="drawer-side">
 		<!-- Overlay -->
-		<label
+		<div
 			class="drawer-overlay"
 			onclick={handleClose}
+			onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClose(); } }}
 			aria-label="Close editor"
-		></label>
+			role="button"
+			tabindex="-1"
+		></div>
 
 		<!-- Drawer content -->
 		<div
@@ -837,9 +840,9 @@ Command content here...
 												/>
 											{/if}
 											{#if variable.hint}
-												<label class="label py-0.5">
+												<div class="label py-0.5">
 													<span class="label-text-alt opacity-70">{variable.hint}</span>
-												</label>
+												</div>
 											{/if}
 										</div>
 									{/each}
@@ -1087,17 +1090,17 @@ Command content here...
 								{/if}
 							</div>
 							{#if shortcutError}
-								<label class="label">
+								<div class="label">
 									<span class="label-text-alt text-error">{shortcutError}</span>
-								</label>
+								</div>
 							{:else if shortcutWarning}
-								<label class="label">
+								<div class="label">
 									<span class="label-text-alt text-warning">{shortcutWarning}</span>
-								</label>
+								</div>
 							{:else}
-								<label class="label">
+								<div class="label">
 									<span class="label-text-alt opacity-60">Must include Alt, Ctrl, or Meta/Cmd modifier</span>
-								</label>
+								</div>
 							{/if}
 						</div>
 					</div>

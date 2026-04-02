@@ -200,6 +200,7 @@
 		class="minimap-container"
 		bind:this={container}
 		onclick={handleClick}
+		onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(e); } }}
 		role="slider"
 		tabindex="0"
 		aria-label="Block minimap navigation"

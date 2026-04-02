@@ -525,9 +525,9 @@
 					style="background: oklch(0.14 0.01 250); border-color: oklch(0.28 0.02 250); color: oklch(0.90 0.02 250);"
 				/>
 				{#if editError}
-					<label class="label">
+					<div class="label">
 						<span class="label-text-alt text-error">{editError}</span>
-					</label>
+					</div>
 				{/if}
 			</div>
 
@@ -559,9 +559,9 @@
 
 			<div class="flex flex-col gap-3">
 				<div class="form-control">
-					<label class="label py-1">
+					<div class="label py-1">
 						<span class="label-text text-sm" style="color: oklch(0.75 0.02 250);">Name (optional)</span>
-					</label>
+					</div>
 					<input
 						type="text"
 						class="input input-bordered input-sm w-full"
@@ -572,9 +572,9 @@
 				</div>
 
 				<div class="form-control">
-					<label class="label py-1">
+					<div class="label py-1">
 						<span class="label-text text-sm" style="color: oklch(0.75 0.02 250);">Environment Variable *</span>
-					</label>
+					</div>
 					<input
 						type="text"
 						class="input input-bordered input-sm w-full font-mono"
@@ -586,9 +586,9 @@
 				</div>
 
 				<div class="form-control">
-					<label class="label py-1">
+					<div class="label py-1">
 						<span class="label-text text-sm" style="color: oklch(0.75 0.02 250);">Value *</span>
-					</label>
+					</div>
 					<input
 						type="text"
 						class="input input-bordered input-sm w-full"
@@ -599,9 +599,9 @@
 				</div>
 
 				<div class="form-control">
-					<label class="label py-1">
+					<div class="label py-1">
 						<span class="label-text text-sm" style="color: oklch(0.75 0.02 250);">Description (optional)</span>
-					</label>
+					</div>
 					<input
 						type="text"
 						class="input input-bordered input-sm w-full"

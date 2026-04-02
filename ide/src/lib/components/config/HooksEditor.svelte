@@ -837,12 +837,12 @@
 									<div class="entry-card" transition:slide={{ duration: 150 }}>
 										<div class="entry-header">
 											<div class="entry-matcher">
-												<label class="matcher-label">
+												<div class="matcher-label">
 													Matcher (regex)
 													{#if matcherHasMatch}
 														<span class="match-indicator">match</span>
 													{/if}
-												</label>
+												</div>
 												<input
 													type="text"
 													class="matcher-input"
@@ -924,12 +924,12 @@
 													<div class="hook-fields">
 														<!-- Command -->
 														<div class="field-group">
-															<label class="field-label">
+															<div class="field-label">
 																Command
 																{#if commandHasMatch}
 																	<span class="match-indicator">match</span>
 																{/if}
-															</label>
+															</div>
 															<div class="command-input-wrapper">
 																<input
 																	type="text"
@@ -1040,7 +1040,7 @@
 
 														<!-- Status Message -->
 														<div class="field-group">
-															<label class="field-label">Status Message (optional)</label>
+															<div class="field-label">Status Message (optional)</div>
 															<input
 																type="text"
 																class="field-input"

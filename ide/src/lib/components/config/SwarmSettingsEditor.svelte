@@ -326,11 +326,11 @@
 						Enable autonomous mode
 					</span>
 				</label>
-				<label class="label">
+				<div class="label">
 					<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
 						Pass --dangerously-skip-permissions to Claude and --full-auto to Codex.
 					</span>
-				</label>
+				</div>
 			</div>
 
 			{#if skipPermissions}
@@ -471,9 +471,9 @@
 			{#if autoKillEnabled}
 				<!-- Per-Priority Toggles -->
 				<div class="mt-4">
-					<label class="label">
+					<div class="label">
 						<span class="label-text font-semibold">Priorities to Auto-Cleanup</span>
-					</label>
+					</div>
 					<div class="priority-toggles">
 						<label class="priority-toggle" for="swarm-auto-kill-p0">
 							<input
@@ -611,9 +611,9 @@
 
 			<div class="settings-grid">
 				<div class="form-control">
-					<label class="label">
+					<div class="label">
 						<span class="label-text font-semibold">Max Local Agents</span>
-					</label>
+					</div>
 					<input
 						type="number"
 						class="input input-bordered"
@@ -622,17 +622,17 @@
 						min="0"
 						max="20"
 					/>
-					<label class="label">
+					<div class="label">
 						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
 							0 = auto-detect from CPU/RAM
 						</span>
-					</label>
+					</div>
 				</div>
 
 				<div class="form-control">
-					<label class="label">
+					<div class="label">
 						<span class="label-text font-semibold">VPS Host</span>
-					</label>
+					</div>
 					<input
 						type="text"
 						class="input input-bordered"
@@ -640,17 +640,17 @@
 						oninput={scheduleAutoSave}
 						placeholder="100.93.152.114"
 					/>
-					<label class="label">
+					<div class="label">
 						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
 							Tailscale IP or hostname
 						</span>
-					</label>
+					</div>
 				</div>
 
 				<div class="form-control">
-					<label class="label">
+					<div class="label">
 						<span class="label-text font-semibold">VPS User</span>
-					</label>
+					</div>
 					<input
 						type="text"
 						class="input input-bordered"
@@ -658,17 +658,17 @@
 						oninput={scheduleAutoSave}
 						placeholder="jw"
 					/>
-					<label class="label">
+					<div class="label">
 						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
 							SSH user (requires key auth)
 						</span>
-					</label>
+					</div>
 				</div>
 
 				<div class="form-control">
-					<label class="label">
+					<div class="label">
 						<span class="label-text font-semibold">VPS Max Agents</span>
-					</label>
+					</div>
 					<input
 						type="number"
 						class="input input-bordered"
@@ -677,17 +677,17 @@
 						min="1"
 						max="20"
 					/>
-					<label class="label">
+					<div class="label">
 						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
 							Max concurrent agents on VPS
 						</span>
-					</label>
+					</div>
 				</div>
 
 				<div class="form-control">
-					<label class="label">
+					<div class="label">
 						<span class="label-text font-semibold">VPS Project Path</span>
-					</label>
+					</div>
 					<input
 						type="text"
 						class="input input-bordered"
@@ -695,11 +695,11 @@
 						oninput={scheduleAutoSave}
 						placeholder="~/code"
 					/>
-					<label class="label">
+					<div class="label">
 						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
 							Base path where repos are cloned on VPS
 						</span>
-					</label>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -739,26 +739,26 @@
 			<div class="settings-grid">
 				<!-- Model Selection -->
 				<div class="form-control">
-					<label class="label">
+					<div class="label">
 						<span class="label-text font-semibold">Default Model</span>
-					</label>
+					</div>
 					<select class="select select-bordered" bind:value={model} onchange={() => autoSave()}>
 						{#each modelOptions as option}
 							<option value={option.value}>{option.label}</option>
 						{/each}
 					</select>
-					<label class="label">
+					<div class="label">
 						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
 							{modelOptions.find((o) => o.value === model)?.description}
 						</span>
-					</label>
+					</div>
 				</div>
 
 				<!-- Max Sessions -->
 				<div class="form-control">
-					<label class="label">
+					<div class="label">
 						<span class="label-text font-semibold">Max Concurrent Sessions</span>
-					</label>
+					</div>
 					<input
 						type="number"
 						class="input input-bordered"
@@ -767,18 +767,18 @@
 						min="1"
 						max="20"
 					/>
-					<label class="label">
+					<div class="label">
 						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
 							Maximum tmux sessions allowed (1-20)
 						</span>
-					</label>
+					</div>
 				</div>
 
 				<!-- Default Agent Count -->
 				<div class="form-control">
-					<label class="label">
+					<div class="label">
 						<span class="label-text font-semibold">Default Agent Count</span>
-					</label>
+					</div>
 					<input
 						type="number"
 						class="input input-bordered"
@@ -787,18 +787,18 @@
 						min="1"
 						max={maxSessions}
 					/>
-					<label class="label">
+					<div class="label">
 						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
 							Default number of agents to spawn in swarm
 						</span>
-					</label>
+					</div>
 				</div>
 
 				<!-- Agent Stagger -->
 				<div class="form-control">
-					<label class="label">
+					<div class="label">
 						<span class="label-text font-semibold">Spawn Stagger (seconds)</span>
-					</label>
+					</div>
 					<input
 						type="number"
 						class="input input-bordered"
@@ -807,18 +807,18 @@
 						min="1"
 						max="120"
 					/>
-					<label class="label">
+					<div class="label">
 						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
 							Delay between spawning each agent (1-120s)
 						</span>
-					</label>
+					</div>
 				</div>
 
 				<!-- Claude Startup Timeout -->
 				<div class="form-control">
-					<label class="label">
+					<div class="label">
 						<span class="label-text font-semibold">Claude Startup Timeout (seconds)</span>
-					</label>
+					</div>
 					<input
 						type="number"
 						class="input input-bordered"
@@ -827,11 +827,11 @@
 						min="5"
 						max="120"
 					/>
-					<label class="label">
+					<div class="label">
 						<span class="label-text-alt" style="color: oklch(0.50 0.02 250);">
 							How long to wait for Claude Code TUI to start
 						</span>
-					</label>
+					</div>
 				</div>
 			</div>
 		</div>

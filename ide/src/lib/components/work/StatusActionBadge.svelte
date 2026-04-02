@@ -1272,6 +1272,7 @@
 										{#if showCreateEpic}
 											<div class="px-2 py-2">
 												<div class="flex flex-col gap-1.5">
+													<!-- svelte-ignore a11y_autofocus -->
 													<input
 														bind:this={newEpicInput}
 														bind:value={newEpicTitle}

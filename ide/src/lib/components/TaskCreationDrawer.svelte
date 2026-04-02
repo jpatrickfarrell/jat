@@ -1534,7 +1534,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 
 	<!-- Drawer side -->
 	<div class="drawer-side" bind:this={drawerSideEl} ontransitionend={handleDrawerTransitionEnd}>
-		<label aria-label="close sidebar" class="drawer-overlay" onclick={handleClose}></label>
+		<div aria-label="close sidebar" class="drawer-overlay" onclick={handleClose} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClose(); } }} role="button" tabindex="-1"></div>
 
 		<!-- Drawer Panel (fixed height, header/footer sticky, content scrolls) - Industrial -->
 		<!-- Entire drawer is a drop zone to prevent browser navigation on missed drops -->
@@ -1687,8 +1687,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 								</svg>
 							</button>
 							{#if harnessDropdownOpen}
-								<!-- svelte-ignore a11y_no_static_element_interactions -->
-								<div class="dropdown-content bg-base-200 rounded-box z-50 w-56 p-2 shadow-lg border border-base-content/10" onclick={(e) => e.stopPropagation()}>
+								<div class="dropdown-content bg-base-200 rounded-box z-50 w-56 p-2 shadow-lg border border-base-content/10" role="group" onclick={(e) => e.stopPropagation()}>
 									<!-- Agent programs -->
 									<ul class="menu p-0">
 										{#each harnessPresets as preset}
@@ -1789,9 +1788,9 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 							/>
 						</div>
 						{#if validationErrors.title}
-							<label class="label">
+							<div class="label">
 								<span class="label-text-alt text-error">{validationErrors.title}</span>
-							</label>
+							</div>
 						{/if}
 					</div>
 
@@ -1815,7 +1814,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 							disabled={formDisabled || isSubmitting}
 							onblur={handleDescriptionBlur}
 						/>
-						<label class="label">
+						<div class="label">
 							<span class="label-text-alt text-base-content/60">
 								{#if suggestionsApplied}
 									AI suggestions applied - adjust as needed
@@ -1823,7 +1822,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 									Supports markdown • Tab out to auto-fill fields
 								{/if}
 							</span>
-						</label>
+						</div>
 					</div>
 
 	
@@ -1955,11 +1954,11 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 
 					<!-- Context (Knowledge Bases + Data Tables) -->
 					<div class="form-control">
-						<label class="label py-0.5">
+						<div class="label py-0.5">
 							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
 								Context
 							</span>
-						</label>
+						</div>
 						<div class="flex flex-wrap items-center gap-1.5">
 							<div class="inline-flex flex-wrap items-center gap-1 {aiFlashFields.has('bases') ? 'ai-suggest-flash' : ''}">
 								<BaseAttachChips
@@ -1984,11 +1983,11 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 					<div class="grid grid-cols-2 gap-3">
 						<!-- Command (searchable dropdown) -->
 						<div class="form-control">
-							<label class="label py-0.5">
+							<div class="label py-0.5">
 								<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
 									Command
 								</span>
-							</label>
+							</div>
 							<SearchDropdown
 								value={formData.command || '/jat:start'}
 								groups={commandGroups}
@@ -2123,7 +2122,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 
 					<!-- Attachments Dropzone - Industrial -->
 					<div class="form-control">
-						<label class="label py-0.5">
+						<div class="label py-0.5">
 							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
 								Attachments
 							</span>
@@ -2132,7 +2131,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 									{pendingAttachments.length} file{pendingAttachments.length !== 1 ? 's' : ''}
 								</span>
 							{/if}
-						</label>
+						</div>
 
 						<!-- Hidden file input -->
 						<input
@@ -2209,7 +2208,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 
 					<!-- Review Override — compact join -->
 					<div class="form-control">
-						<label class="label py-0.5">
+						<div class="label py-0.5">
 							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
 								Review Override
 							</span>
@@ -2220,7 +2219,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 									Default: <span class="{computedReviewAction === 'review' ? 'text-info' : 'text-success'}">{computedReviewAction === 'review' ? 'Review' : 'Auto-proceed'}</span>
 								</span>
 							{/if}
-						</label>
+						</div>
 						<div class="join w-full {formDisabled ? 'opacity-50' : ''}">
 							<button
 								type="button"

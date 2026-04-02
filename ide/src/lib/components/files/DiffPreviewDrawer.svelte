@@ -383,7 +383,8 @@
 	<div
 		class="fixed inset-0 bg-black/50 z-40"
 		onclick={handleClose}
-		role="button"
+		onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClose(); } }}
+		role="presentation"
 		tabindex="-1"
 		aria-label="Close diff preview"
 	></div>

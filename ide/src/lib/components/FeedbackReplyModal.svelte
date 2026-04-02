@@ -84,8 +84,7 @@
 	onkeydown={handleKeydown}
 >
 	<!-- Overlay -->
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="absolute inset-0 bg-black/60" onclick={handleClose}></div>
+	<div class="absolute inset-0 bg-black/60" onclick={handleClose} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClose(); } }} role="presentation"></div>
 
 	<!-- Modal -->
 	<div class="relative w-full max-w-lg mx-4 rounded-xl border shadow-2xl"
@@ -116,6 +115,7 @@
 			</div>
 
 			<!-- Message textarea -->
+			<!-- svelte-ignore a11y_autofocus -->
 			<textarea
 				class="w-full rounded-lg px-3.5 py-2.5 text-sm resize-none focus:outline-none focus:ring-2"
 				style="background: oklch(0.14 0.01 250); border: 1px solid oklch(0.26 0.02 250); color: oklch(0.88 0.02 250); min-height: 120px; focus-ring-color: oklch(0.60 0.15 200);"

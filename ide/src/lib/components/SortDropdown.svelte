@@ -110,8 +110,7 @@
 
 <div class="flex items-center gap-1">
 	<!-- Sort dropdown -->
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div class="dropdown dropdown-end flex-shrink-0" onclick={(e) => e.stopPropagation()}>
+	<div class="dropdown dropdown-end flex-shrink-0" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="group">
 		<button
 			tabindex="0"
 			class="btn {buttonSizeClass} btn-ghost gap-1 font-mono text-[10px] uppercase tracking-wider opacity-70 hover:opacity-100"
@@ -142,8 +141,7 @@
 
 	<!-- Filter input (optional) -->
 	{#if showFilter}
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-		<div class="flex-shrink-0" onclick={(e) => e.stopPropagation()}>
+		<div class="flex-shrink-0" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="group">
 			<input
 				type="text"
 				placeholder={filterPlaceholder}

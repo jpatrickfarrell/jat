@@ -348,7 +348,9 @@
 			class="flex flex-col w-full max-w-[550px] rounded-xl overflow-hidden bg-base-200 border border-base-300 shadow-2xl"
 			style="max-height: calc(100vh - 2rem);"
 			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
 			transition:fly={{ y: 20, duration: 200 }}
+			role="presentation"
 		>
 			<!-- Modal Header -->
 			<header class="flex items-center justify-between px-5 py-4 bg-base-300 border-b border-base-300">

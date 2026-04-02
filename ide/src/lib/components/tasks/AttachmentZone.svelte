@@ -104,6 +104,7 @@
 	ondragover={handleDragOver}
 	ondragenter={handleDragEnter}
 	ondragleave={handleDragLeave}
+	role="group"
 >
 	{#if attachments.length === 0}
 		<!-- Empty state: click or drag prompt -->

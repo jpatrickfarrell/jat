@@ -30,10 +30,11 @@
 
 <div class="flex flex-col gap-4">
 	<div class="form-control">
-		<label class="label w-full pb-1">
+		<label class="label w-full pb-1" for="wf-task-title">
 			<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Title</span>
 		</label>
 		<input
+			id="wf-task-title"
 			type="text"
 			class="input input-sm input-bordered w-full"
 			style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"
@@ -44,11 +45,12 @@
 	</div>
 
 	<div class="form-control">
-		<label class="label w-full pb-1">
+		<label class="label w-full pb-1" for="wf-task-desc">
 			<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Description</span>
 			<span class="label-text-alt" style="color: oklch(0.55 0.02 250)">Optional</span>
 		</label>
 		<textarea
+			id="wf-task-desc"
 			class="textarea textarea-bordered text-sm w-full"
 			style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250); min-height: 80px"
 			value={config.description || ''}
@@ -95,10 +97,11 @@
 
 	<div class="grid grid-cols-2 gap-3">
 		<div class="form-control">
-			<label class="label w-full pb-1">
+			<label class="label w-full pb-1" for="wf-task-type">
 				<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Type</span>
 			</label>
 			<select
+				id="wf-task-type"
 				class="select select-sm select-bordered w-full"
 				style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"
 				value={config.type || 'task'}
@@ -111,10 +114,11 @@
 		</div>
 
 		<div class="form-control">
-			<label class="label w-full pb-1">
+			<label class="label w-full pb-1" for="wf-task-priority">
 				<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Priority</span>
 			</label>
 			<select
+				id="wf-task-priority"
 				class="select select-sm select-bordered w-full"
 				style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"
 				value={config.priority ?? 2}
@@ -128,11 +132,12 @@
 	</div>
 
 	<div class="form-control">
-		<label class="label w-full pb-1">
+		<label class="label w-full pb-1" for="wf-task-labels">
 			<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Labels</span>
 			<span class="label-text-alt" style="color: oklch(0.55 0.02 250)">Comma-separated</span>
 		</label>
 		<input
+			id="wf-task-labels"
 			type="text"
 			class="input input-sm input-bordered w-full"
 			style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"
@@ -143,11 +148,12 @@
 	</div>
 
 	<div class="form-control">
-		<label class="label w-full pb-1">
+		<label class="label w-full pb-1" for="wf-task-project">
 			<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Project</span>
 			<span class="label-text-alt" style="color: oklch(0.55 0.02 250)">Optional</span>
 		</label>
 		<select
+			id="wf-task-project"
 			class="select select-sm select-bordered w-full"
 			style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"
 			value={config.project || ''}

@@ -568,10 +568,10 @@
 
 				<!-- Current ignored directories -->
 				<div class="form-group">
-					<label class="form-label">
+					<div class="form-label">
 						Ignored Directories
 						<span class="label-hint">Directories to exclude from change detection</span>
-					</label>
+					</div>
 
 					{#if fileWatcherIgnoredDirs.length > 0}
 						<div class="ignored-dirs-list">
@@ -665,8 +665,8 @@
 
 <!-- Reset Confirmation Modal -->
 {#if showResetConfirm}
-	<div class="modal-overlay" onclick={() => showResetConfirm = false}>
-		<div class="modal-content" onclick={(e) => e.stopPropagation()}>
+	<div class="modal-overlay" role="presentation" onclick={() => showResetConfirm = false} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showResetConfirm = false; } }}>
+		<div class="modal-content" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="modal-header">
 				<svg class="modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>

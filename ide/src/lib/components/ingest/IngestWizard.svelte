@@ -1223,6 +1223,8 @@
 			style="background: oklch(0.16 0.02 250); border-left: 1px solid oklch(0.28 0.02 250);"
 			transition:fly={{ x: 400, duration: 250 }}
 			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+			role="presentation"
 		>
 			<!-- Header -->
 			<div
@@ -1276,7 +1278,8 @@
 					{#if step === 0}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
 							<div>
-								<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Feed URL</label>
+								<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Feed URL</div>
+								<!-- svelte-ignore a11y_autofocus -->
 								<input
 									type="url"
 									class="input input-bordered w-full font-mono text-sm"
@@ -1636,7 +1639,8 @@
 					{:else if step === 2}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
 							<div>
-								<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Email Address</label>
+								<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Email Address</div>
+								<!-- svelte-ignore a11y_autofocus -->
 								<input
 									type="email"
 									class="input input-bordered w-full font-mono text-sm"
@@ -1650,7 +1654,7 @@
 							</div>
 
 							<div>
-								<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Gmail Label / Folder <span style="color: oklch(0.70 0.12 25);">*required</span></label>
+								<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Gmail Label / Folder <span style="color: oklch(0.70 0.12 25);">*required</span></div>
 								<input
 									type="text"
 									class="input input-bordered w-full font-mono text-sm"
@@ -1708,11 +1712,11 @@
 								</summary>
 								<div class="px-3 pb-3 pt-1 space-y-3">
 									<div>
-										<label class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.60 0.02 250);">Filter by sender</label>
+										<div class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.60 0.02 250);">Filter by sender</div>
 										<input type="text" class="input input-bordered w-full font-mono text-sm" placeholder="alerts@example.com" bind:value={gmailFilterFrom} />
 									</div>
 									<div>
-										<label class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.60 0.02 250);">Filter by subject (regex)</label>
+										<div class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.60 0.02 250);">Filter by subject (regex)</div>
 										<input type="text" class="input input-bordered w-full font-mono text-sm" bind:value={gmailFilterSubject} />
 									</div>
 									<label class="flex items-center gap-2 cursor-pointer">
@@ -1754,7 +1758,7 @@
 					{#if step === 0}
 						<div class="space-y-4" transition:fly={{ x: 30, duration: 150 }}>
 							<div>
-								<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Command</label>
+								<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Command</div>
 								<textarea
 									class="textarea textarea-bordered w-full font-mono text-sm"
 									placeholder="curl -s https://api.example.com/items | jq '.[]'"
@@ -1985,7 +1989,7 @@
 	{#if isEditing}
 		<!-- EDITING: show current secret name (read-only) with option to change token -->
 		<div>
-			<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Secret Name</label>
+			<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Secret Name</div>
 			<div
 				class="px-3 py-2 rounded-lg font-mono text-sm"
 				style="background: oklch(0.18 0.02 250); border: 1px solid oklch(0.28 0.02 250); color: oklch(0.70 0.02 250);"
@@ -2039,9 +2043,9 @@
 					</div>
 				{:else}
 					<div class="space-y-1.5">
-						<label class="font-mono text-[10px] font-semibold block" style="color: oklch(0.55 0.02 250);">
+						<div class="font-mono text-[10px] font-semibold block" style="color: oklch(0.55 0.02 250);">
 							Select a saved secret
-						</label>
+						</div>
 						{#each existingSecrets as secret}
 							{@const isSelected = secretName === secret.name}
 							<button
@@ -2094,8 +2098,9 @@
 			<!-- Create new secret -->
 			<div class="space-y-3">
 				<div>
-					<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Secret Name</label>
+					<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Secret Name</div>
 					{#if type === 'slack'}
+						<!-- svelte-ignore a11y_autofocus -->
 						<input
 							type="text"
 							class="input input-bordered w-full font-mono text-sm"
@@ -2105,6 +2110,7 @@
 							autofocus
 						/>
 					{:else if type === 'gmail'}
+						<!-- svelte-ignore a11y_autofocus -->
 						<input
 							type="text"
 							class="input input-bordered w-full font-mono text-sm"
@@ -2114,6 +2120,7 @@
 							autofocus
 						/>
 					{:else}
+						<!-- svelte-ignore a11y_autofocus -->
 						<input
 							type="text"
 							class="input input-bordered w-full font-mono text-sm"
@@ -2272,9 +2279,9 @@
 			{/if}
 
 			<div>
-				<label class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.60 0.02 250);">
+				<div class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.60 0.02 250);">
 					{type === 'gmail' ? 'App Password' : 'Bot Token'}
-				</label>
+				</div>
 				<input
 					type="password"
 					class="input input-bordered w-full font-mono text-sm"
@@ -2389,7 +2396,7 @@
 <!-- Shared step snippets -->
 {#snippet projectStep()}
 	<div>
-		<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Target Project</label>
+		<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Target Project</div>
 		<ProjectSelector
 			projects={projectNames}
 			selectedProject={project || projectNames[0] || ''}
@@ -2401,7 +2408,7 @@
 		</p>
 	</div>
 	<div>
-		<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Source Name</label>
+		<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Source Name</div>
 		<input
 			type="text"
 			class="input input-bordered w-full font-mono text-sm"
@@ -2417,7 +2424,7 @@
 {#snippet optionsStep()}
 	{#if pluginMetadata?.capabilities?.realtime}
 		<div>
-			<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Connection Mode</label>
+			<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Connection Mode</div>
 			<div class="space-y-2">
 				<button
 					type="button"
@@ -2442,7 +2449,7 @@
 	{/if}
 	{#if connectionMode !== 'realtime'}
 	<div>
-		<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Poll Interval (seconds)</label>
+		<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Poll Interval (seconds)</div>
 		<input
 			type="number"
 			class="input input-bordered w-full font-mono text-sm"
@@ -2453,7 +2460,7 @@
 	</div>
 	{/if}
 	<div>
-		<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Task Type</label>
+		<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Task Type</div>
 		<select class="select select-bordered w-full font-mono text-sm" bind:value={taskType}>
 			<option value="task">task</option>
 			<option value="bug">bug</option>
@@ -2462,7 +2469,7 @@
 		</select>
 	</div>
 	<div>
-		<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Priority</label>
+		<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Priority</div>
 		<select class="select select-bordered w-full font-mono text-sm" bind:value={taskPriority}>
 			<option value={0}>P0 - Critical</option>
 			<option value={1}>P1 - High</option>
@@ -2472,7 +2479,7 @@
 		</select>
 	</div>
 	<div>
-		<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Labels (comma-separated)</label>
+		<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Labels (comma-separated)</div>
 		<input
 			type="text"
 			class="input input-bordered w-full font-mono text-sm"
@@ -2547,7 +2554,7 @@
 				style="background: oklch(0.16 0.01 250); border: 1px solid oklch(0.25 0.02 250);"
 			>
 				<div>
-					<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Command to run</label>
+					<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Command to run</div>
 					<SearchDropdown
 						value={autoCommand || '/jat:start'}
 						groups={commandGroups}
@@ -2561,7 +2568,7 @@
 
 				{#if autoAction === 'schedule'}
 					<div>
-						<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Run at time</label>
+						<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Run at time</div>
 						<input
 							type="time"
 							class="input input-bordered w-full font-mono text-sm"
@@ -2575,7 +2582,7 @@
 
 				{#if autoAction === 'delay'}
 					<div>
-						<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Delay</label>
+						<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Delay</div>
 						<div class="flex gap-2">
 							<input
 								type="number"
@@ -2625,9 +2632,9 @@
 			>
 				<!-- Webhook URL -->
 				<div>
-					<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">
+					<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">
 						Webhook URL <span style="color: oklch(0.70 0.12 25);">*</span>
-					</label>
+					</div>
 					<input
 						type="url"
 						class="input input-bordered w-full font-mono text-sm"
@@ -2638,7 +2645,7 @@
 
 				<!-- Secret name -->
 				<div>
-					<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Secret Name</label>
+					<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Secret Name</div>
 					<input
 						type="text"
 						class="input input-bordered w-full font-mono text-sm"
@@ -2652,7 +2659,7 @@
 
 				<!-- Events -->
 				<div>
-					<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Events</label>
+					<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Events</div>
 					<div class="flex flex-col gap-1.5">
 						{#each ['status_changed', 'task_closed'] as evt}
 							<label class="flex items-center gap-2 cursor-pointer">
@@ -2676,7 +2683,7 @@
 
 				<!-- Status Mapping -->
 				<div>
-					<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Status Mapping</label>
+					<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Status Mapping</div>
 					<p class="font-mono text-[10px] mb-2" style="color: oklch(0.45 0.02 250);">
 						Map JAT statuses to external system statuses.
 					</p>
@@ -2698,7 +2705,7 @@
 
 				<!-- Reference Table -->
 				<div>
-					<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Reference Table</label>
+					<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Reference Table</div>
 					<input
 						type="text"
 						class="input input-bordered w-full font-mono text-sm"
@@ -2709,7 +2716,7 @@
 
 				<!-- Reference ID From -->
 				<div>
-					<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Reference ID From</label>
+					<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">Reference ID From</div>
 					<input
 						type="text"
 						class="input input-bordered w-full font-mono text-sm"
@@ -2765,7 +2772,7 @@
 
 						<!-- Label -->
 						<div>
-							<label class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.55 0.02 250);">Label</label>
+							<div class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.55 0.02 250);">Label</div>
 							<input
 								type="text"
 								class="input input-bordered input-sm w-full font-mono text-xs"
@@ -2776,7 +2783,7 @@
 
 						<!-- Type -->
 						<div>
-							<label class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.55 0.02 250);">Type</label>
+							<div class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.55 0.02 250);">Type</div>
 							<select
 								class="select select-bordered select-sm w-full font-mono text-xs"
 								bind:value={wizardActions[i].type}
@@ -2789,7 +2796,7 @@
 						<!-- Type-specific fields -->
 						{#if action.type === 'callback'}
 							<div>
-								<label class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.55 0.02 250);">Event</label>
+								<div class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.55 0.02 250);">Event</div>
 								<select
 									class="select select-bordered select-sm w-full font-mono text-xs"
 									bind:value={wizardActions[i].event}
@@ -2800,7 +2807,7 @@
 							</div>
 						{:else}
 							<div>
-								<label class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.55 0.02 250);">URL Template</label>
+								<div class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.55 0.02 250);">URL Template</div>
 								<input
 									type="text"
 									class="input input-bordered input-sm w-full font-mono text-xs"
@@ -2815,7 +2822,7 @@
 
 						<!-- Icon -->
 						<div>
-							<label class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.55 0.02 250);">Icon</label>
+							<div class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.55 0.02 250);">Icon</div>
 							<select
 								class="select select-bordered select-sm w-full font-mono text-xs"
 								bind:value={wizardActions[i].icon}
@@ -2831,7 +2838,7 @@
 
 						<!-- Confirm Message -->
 						<div>
-							<label class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.55 0.02 250);">Confirm Message (optional)</label>
+							<div class="font-mono text-[10px] font-semibold block mb-1" style="color: oklch(0.55 0.02 250);">Confirm Message (optional)</div>
 							<input
 								type="text"
 								class="input input-bordered input-sm w-full font-mono text-xs"
@@ -2958,12 +2965,12 @@
 
 {#snippet pluginFieldInput(field: any)}
 	<div>
-		<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">
+		<div class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">
 			{field.label || field.key}
 			{#if field.required}
 				<span style="color: oklch(0.70 0.12 25);">*</span>
 			{/if}
-		</label>
+		</div>
 
 		{#if field.type === 'string' || field.type === 'number'}
 			<input

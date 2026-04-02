@@ -1171,8 +1171,7 @@
 
 {#if isSetupPage}
 	<!-- Setup page: focused layout without sidebar/topbar -->
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div class="h-screen overflow-y-auto" onclick={handleFirstInteraction}>
+	<div class="h-screen overflow-y-auto" role="group" onclick={handleFirstInteraction}>
 		{@render children()}
 
 		<!-- Drawers still available during setup (project creation, task creation) -->
@@ -1181,8 +1180,7 @@
 	</div>
 {:else}
 	<!-- Drawer Structure -->
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div class="drawer lg:drawer-open" onclick={handleFirstInteraction}>
+	<div class="drawer lg:drawer-open" role="group" onclick={handleFirstInteraction}>
 		<!-- Drawer toggle (hidden checkbox for mobile sidebar) -->
 		<input id="main-drawer" type="checkbox" class="drawer-toggle" />
 

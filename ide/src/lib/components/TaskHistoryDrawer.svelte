@@ -299,10 +299,11 @@
 
 {#if isOpen}
 	<!-- Overlay -->
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 	<div
 		class="drawer-overlay"
+		role="button" tabindex="0"
 		onclick={handleOverlayClick}
+		onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOverlayClick(); } }}
 		transition:fade={{ duration: 200 }}
 	></div>
 

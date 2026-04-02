@@ -156,18 +156,18 @@
 		<!-- Project selector -->
 		{#if !hideProjectSelector}
 		<div class="mb-3">
-			<label class="label py-1">
+			<div class="label py-1">
 				<span class="label-text text-sm font-medium">Project</span>
-			</label>
+			</div>
 			<ProjectSelector projects={projects} selected={selectedProject} onSelect={(p) => selectedProject = p} />
 		</div>
 		{/if}
 
 		<!-- Format -->
 		<div class="form-control mb-3">
-			<label class="label py-1">
+			<div class="label py-1">
 				<span class="label-text text-sm font-medium">Format</span>
-			</label>
+			</div>
 			<select
 				class="select select-sm select-bordered"
 				bind:value={selectedFormat}
@@ -197,9 +197,9 @@
 			<h4 class="text-xs font-medium opacity-50 mb-2">Defaults (applied when fields are missing)</h4>
 			<div class="grid grid-cols-3 gap-3">
 				<div class="form-control">
-					<label class="label py-0.5">
+					<div class="label py-0.5">
 						<span class="label-text text-xs">Type</span>
-					</label>
+					</div>
 					<select class="select select-sm select-bordered" bind:value={defaultType}>
 						<option value="task">Task</option>
 						<option value="bug">Bug</option>
@@ -209,9 +209,9 @@
 					</select>
 				</div>
 				<div class="form-control">
-					<label class="label py-0.5">
+					<div class="label py-0.5">
 						<span class="label-text text-xs">Priority</span>
-					</label>
+					</div>
 					<select class="select select-sm select-bordered" bind:value={defaultPriority}>
 						<option value={0}>P0 — Critical</option>
 						<option value={1}>P1 — High</option>
@@ -221,9 +221,9 @@
 					</select>
 				</div>
 				<div class="form-control">
-					<label class="label py-0.5">
+					<div class="label py-0.5">
 						<span class="label-text text-xs">Labels</span>
-					</label>
+					</div>
 					<input
 						class="input input-sm input-bordered"
 						placeholder="comma, separated"

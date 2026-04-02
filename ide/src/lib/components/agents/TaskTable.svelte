@@ -2877,6 +2877,7 @@
 	<!-- ondragover/ondrop prevent browser from navigating to dropped files -->
 	<div
 		class="flex-1 overflow-x-auto overflow-y-auto bg-base-200"
+		role="group"
 		ondragover={(e) => e.preventDefault()}
 		ondrop={(e) => e.preventDefault()}
 	>

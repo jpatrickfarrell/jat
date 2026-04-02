@@ -5344,6 +5344,7 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 		class="card h-full flex flex-col relative rounded-none {className} {effectiveHighlighted
 			? 'agent-highlight-flash ring-2 ring-info ring-offset-2 ring-offset-base-100'
 			: ''} {isCompleteFlashing ? 'complete-flash-animation' : ''} {isExiting ? 'session-exit' : ''} {isEntering ? 'session-entrance' : ''}"
+		role="group"
 		style="
 			background: linear-gradient(135deg, oklch(0.22 0.02 250) 0%, oklch(0.18 0.01 250) 50%, oklch(0.16 0.01 250) 100%);
 			border: 1px solid {isCompleteFlashing
@@ -5566,6 +5567,7 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 				<!-- Shown above agent bar because task is primary focus -->
 				<div
 				class="pl-3 pr-3 pt-2 flex-shrink-0 flex-grow-0"
+				role="group"
 				style="border-bottom: 1px solid oklch(0.30 0.02 250);"
 				onmouseenter={handleTaskMouseEnter}
 				onmouseleave={handleTaskMouseLeave}
@@ -5599,20 +5601,21 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 								disabled={savingTitle}
 							/>
 						{:else}
-							<h3
-								class="mt-2 font-mono font-bold text-sm tracking-wide min-w-0 flex-1 cursor-text hover:border-b hover:border-dashed hover:border-base-content/30 transition-all duration-300 ease-out {taskHovered
+							<span
+								class="mt-2 font-mono font-bold text-sm tracking-wide min-w-0 flex-1 cursor-text hover:border-b hover:border-dashed hover:border-base-content/30 transition-all duration-300 ease-out block {taskHovered
 									? ''
 									: 'truncate'}"
 								style="color: {sessionState === 'completed'
 									? 'oklch(0.75 0.02 250)'
 									: 'oklch(0.90 0.02 250)'};"
 								onclick={startEditingTitle}
+								onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startEditingTitle(); } }}
 								role="button"
 								tabindex="0"
 								title="Click to edit title"
 							>
 								{displayTask.title || displayTask.id}
-							</h3>
+							</span>
 						{/if}
 					</div>
 					<!-- Row 2: Description (hover to expand) -->

@@ -342,6 +342,7 @@
 						{#if showRouteMenu && !isProcessing}
 							<div
 								class="absolute left-0 right-0 bottom-full mb-1 z-10"
+								role="menu"
 								transition:fade={{ duration: 100 }}
 								onkeydown={(e) => {
 									if (e.key === 'Escape') {

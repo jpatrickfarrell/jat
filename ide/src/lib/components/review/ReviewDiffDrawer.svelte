@@ -436,6 +436,7 @@
 	<div
 		class="fixed inset-0 bg-black/60 z-40"
 		onclick={handleClose}
+		onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClose(); } }}
 		role="button"
 		tabindex="-1"
 		aria-label="Close review diff drawer"

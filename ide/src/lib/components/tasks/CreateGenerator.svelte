@@ -186,18 +186,18 @@
 		<!-- Project selector -->
 		{#if !hideProjectSelector}
 		<div class="mb-3">
-			<label class="label py-1">
+			<div class="label py-1">
 				<span class="label-text text-sm font-medium">Project</span>
-			</label>
+			</div>
 			<ProjectSelector projects={projects} selected={selectedProject} onSelect={(p) => selectedProject = p} />
 		</div>
 		{/if}
 
 		<!-- Max tasks -->
 		<div class="form-control mb-3">
-			<label class="label py-1">
+			<div class="label py-1">
 				<span class="label-text text-sm font-medium">Max tasks</span>
-			</label>
+			</div>
 			<select class="select select-sm select-bordered" bind:value={maxTasks}>
 				<option value={5}>5</option>
 				<option value={8}>8</option>
@@ -208,9 +208,9 @@
 		</div>
 
 		<div class="form-control">
-			<label class="label py-1">
+			<div class="label py-1">
 				<span class="label-text text-sm font-medium">Feature description</span>
-			</label>
+			</div>
 			<textarea
 				class="textarea textarea-bordered w-full text-sm"
 				rows={10}

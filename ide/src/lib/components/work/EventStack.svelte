@@ -1498,9 +1498,9 @@
 		</div>
 	{:else}
 		<!-- Popup layout: hover to expand (original behavior) -->
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="relative {className}"
+			role="group"
 			onclick={(e) => {
 				// Don't toggle if clicking inside the expanded popup (buttons, etc.)
 				if (isExpanded) return;
@@ -1509,6 +1509,7 @@
 				clickLocked = true;
 				setTimeout(() => clickLocked = false, 400);
 			}}
+			onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!isExpanded) { isExpanded = true; clickLocked = true; setTimeout(() => clickLocked = false, 400); } } }}
 			onmouseenter={() => (isExpanded = true)}
 			onmouseleave={() => {
 				if (clickLocked) return;
@@ -1526,11 +1527,13 @@
 				transition:slide={{ duration: 200, easing: cubicOut }}
 			>
 				<!-- Swipe-down handle / tap to collapse -->
-				<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
 				<div
 					class="sticky top-0 z-10 flex items-center justify-center py-1.5 cursor-pointer"
+					role="button"
+					tabindex="0"
 					style="background: oklch(0.18 0.01 250); border-bottom: 1px solid oklch(0.25 0.02 250);"
 					onclick={() => { isExpanded = false; expandedEventIdx = null; }}
+					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); isExpanded = false; expandedEventIdx = null; } }}
 					ontouchstart={(e) => { swipeStartY = e.touches[0].clientY; }}
 					ontouchmove={(e) => {
 						const dy = e.touches[0].clientY - swipeStartY;
@@ -1613,9 +1616,11 @@
 								{@const eventKey = getEventKey(event)}
 								<div
 									class="px-3 pb-2 pt-1"
+									role="group"
 									style="border-top: 1px solid oklch(0.30 0.02 250 / 0.3);"
 									transition:slide={{ duration: 150 }}
 									onclick={(e) => e.stopPropagation()}
+									onkeydown={(e) => e.stopPropagation()}
 								>
 									{#if event.type === 'tasks' && event.data && Array.isArray(event.data)}
 										<!-- Rich Suggested Tasks UI -->

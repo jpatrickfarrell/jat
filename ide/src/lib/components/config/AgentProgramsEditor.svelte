@@ -642,8 +642,7 @@
 							{/if}
 						</div>
 
-						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-						<div class="program-actions" onclick={(e) => e.stopPropagation()}>
+						<div class="program-actions" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							<label class="toggle-label">
 								<input
 									type="checkbox"
@@ -704,8 +703,8 @@
 
 <!-- Edit Drawer -->
 {#if editingProgram}
-	<div class="drawer-overlay" onclick={closeEditDrawer} transition:fade={{ duration: 150 }}>
-		<div class="drawer-content" onclick={(e) => e.stopPropagation()} transition:slide={{ duration: 200, axis: 'x' }}>
+	<div class="drawer-overlay" role="presentation" onclick={closeEditDrawer} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeEditDrawer(); } }} transition:fade={{ duration: 150 }}>
+		<div class="drawer-content" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} transition:slide={{ duration: 200, axis: 'x' }}>
 			<div class="drawer-header">
 				<h3>Configure {editingProgram.name}</h3>
 				<button class="btn btn-ghost btn-sm btn-circle" onclick={closeEditDrawer}>
@@ -998,8 +997,8 @@
 
 <!-- Add Harness Modal -->
 {#if showAddModal}
-	<div class="modal-overlay" onclick={closeAddModal} transition:fade={{ duration: 150 }}>
-		<div class="modal-content modal-lg" onclick={(e) => e.stopPropagation()}>
+	<div class="modal-overlay" role="presentation" onclick={closeAddModal} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeAddModal(); } }} transition:fade={{ duration: 150 }}>
+		<div class="modal-content modal-lg" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="modal-header">
 				<h3>Add Agent Harness</h3>
 				<button class="btn btn-ghost btn-sm btn-circle" onclick={closeAddModal}>
@@ -1359,8 +1358,8 @@
 <!-- Delete Confirmation Modal -->
 {#if deletingProgram}
 	{@const program = programs.find(p => p.id === deletingProgram)}
-	<div class="modal-overlay" onclick={closeDeleteConfirm} transition:fade={{ duration: 150 }}>
-		<div class="modal-content modal-sm" onclick={(e) => e.stopPropagation()}>
+	<div class="modal-overlay" role="presentation" onclick={closeDeleteConfirm} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeDeleteConfirm(); } }} transition:fade={{ duration: 150 }}>
+		<div class="modal-content modal-sm" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="modal-header">
 				<h3>Delete Agent Harness</h3>
 			</div>

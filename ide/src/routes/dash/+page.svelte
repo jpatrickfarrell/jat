@@ -2030,7 +2030,7 @@
 					</button>
 				</div>
 			</div>
-			<div class="modal-backdrop bg-black/50" onclick={() => projectToHide = null}></div>
+			<div class="modal-backdrop bg-black/50" role="presentation" onclick={() => projectToHide = null} onkeydown={(e) => { if (e.key === 'Escape') projectToHide = null; }}></div>
 		</div>
 	{/if}
 </div>

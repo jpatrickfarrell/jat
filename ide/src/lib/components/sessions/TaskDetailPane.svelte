@@ -800,8 +800,7 @@
 							<!-- Spacer pushes badge+button to right -->
 							<span class="details-header-spacer"></span>
 							{#if browserPort}
-								<!-- svelte-ignore a11y_no_static_element_interactions -->
-								<span class="browser-port-badge cursor-pointer hover:brightness-125 transition-all {browserPortLoading ? 'animate-pulse-subtle' : ''}" title="Click to open agent's browser tab (port {browserPort})" onclick={handleBrowserPortClick}>
+								<span class="browser-port-badge cursor-pointer hover:brightness-125 transition-all {browserPortLoading ? 'animate-pulse-subtle' : ''}" title="Click to open agent's browser tab (port {browserPort})" role="button" tabindex="0" onclick={handleBrowserPortClick} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleBrowserPortClick(e as any); } }}>
 									{#if browserPortLoading}
 										<span class="loading loading-spinner w-3 h-3"></span>
 									{:else}

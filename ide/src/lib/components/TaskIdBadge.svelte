@@ -502,14 +502,16 @@
 		<!-- Task ID + Agent Name + Icons (stacked rows) -->
 		<div class="flex flex-col items-start min-w-0 justify-center mt-1.5 mr-0.5 mb-1 ml-0.5">
 			<!-- Row 1: Task ID -->
-			<span class="cursor-pointer hover:opacity-80 {animate ? 'tracking-in-expand' : ''} {isClosed ? 'line-through opacity-70' : ''}" style={animate ? 'animation-delay: 100ms;' : ''} onclick={copyId} role="button" tabindex="-1">{task.id}</span>
+			<span class="cursor-pointer hover:opacity-80 {animate ? 'tracking-in-expand' : ''} {isClosed ? 'line-through opacity-70' : ''}" style={animate ? 'animation-delay: 100ms;' : ''} onclick={copyId} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); navigator.clipboard.writeText(task.id); copied = true; dropdownOpen = false; setTimeout(() => (copied = false), 1500); } }} role="button" tabindex="-1">{task.id}</span>
 			<!-- Row 2: Agent name -->
 			{#if agentName}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<span
+					<span
 					class="mt-0.25 mb-0.5 text-[10px] font-medium leading-none {onAgentClick ? 'cursor-pointer hover:opacity-100 hover:underline' : ''} opacity-70"
 					style="color: {ringColor};"
+					role={onAgentClick ? 'button' : undefined}
+					tabindex={onAgentClick ? 0 : undefined}
 					onclick={(e) => { if (onAgentClick) { e.stopPropagation(); onAgentClick(agentName); } }}
+					onkeydown={(e) => { if (onAgentClick && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.stopPropagation(); onAgentClick(agentName); } }}
 					title={onAgentClick ? `Jump to ${agentName}'s session` : agentName}
 				>{agentName}</span>
 			{/if}
@@ -555,12 +557,13 @@
 						</span>
 					{/if}
 				{#if browserPort}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<span
 						class="inline-flex items-center gap-0.5 cursor-pointer hover:brightness-125 transition-all {browserPortLoading ? 'animate-pulse-subtle' : ''}"
 						title="Click to open agent's browser tab (port {browserPort})"
 						style="color: oklch(0.75 0.15 30);"
+						role="button" tabindex="0"
 						onclick={handleBrowserPortClick}
+						onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleBrowserPortClick(e as any); } }}
 					>
 						{#if browserPortLoading}
 							<span class="loading loading-spinner" style="width: 10px; height: 10px;"></span>
@@ -675,12 +678,13 @@
 				>{taskAgeInfo.label}</span>
 			{/if}
 			{#if browserPort}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<span
 					class="inline-flex items-center gap-0.5 scale-70 mt-0.25 cursor-pointer hover:brightness-125 transition-all {browserPortLoading ? 'animate-pulse-subtle' : ''}"
 					title="Click to open agent's browser tab (port {browserPort})"
 					style="color: oklch(0.75 0.15 30);"
+					role="button" tabindex="0"
 					onclick={handleBrowserPortClick}
+					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleBrowserPortClick(e as any); } }}
 				>
 					{#if browserPortLoading}
 						<span class="loading loading-spinner" style="width: 10px; height: 10px;"></span>
@@ -801,6 +805,7 @@
 		<div
 			class="dropdown {dropdownAlign === 'end' ? 'dropdown-left' : 'dropdown-right'}"
 			bind:this={dropdownRef}
+			role="group"
 			onmouseenter={handleDropdownEnter}
 			onmouseleave={handleDropdownLeave}
 		>
@@ -856,12 +861,13 @@
 					>{taskAgeInfo.label}</span>
 				{/if}
 				{#if browserPort}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<span
 						class="inline-flex items-center gap-0.5 cursor-pointer hover:brightness-125 transition-all {browserPortLoading ? 'animate-pulse-subtle' : ''}"
 						title="Click to open agent's browser tab (port {browserPort})"
 						style="color: oklch(0.75 0.15 30);"
+						role="button" tabindex="0"
 						onclick={handleBrowserPortClick}
+						onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleBrowserPortClick(e as any); } }}
 					>
 						{#if browserPortLoading}
 							<span class="loading loading-spinner" style="width: 10px; height: 10px;"></span>
@@ -922,6 +928,7 @@
 				use:portalAction
 				class="fixed p-2 shadow-lg bg-base-100 rounded-lg border border-base-300 min-w-56 max-w-72"
 				style="top: {dropdownPosition.top}px; left: {dropdownPosition.left}px; z-index: 2147483647;"
+				role="group"
 				onmouseenter={handleDropdownContentEnter}
 				onmouseleave={handleDropdownLeave}
 			>

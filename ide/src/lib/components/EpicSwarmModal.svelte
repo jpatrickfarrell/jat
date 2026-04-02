@@ -465,8 +465,7 @@
 
 <!-- Modal -->
 {#if isOpen}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div class="modal modal-open" onclick={(e) => e.target === e.currentTarget && handleClose()}>
+	<div class="modal modal-open" onclick={(e) => e.target === e.currentTarget && handleClose()} onkeydown={(e) => { if (e.key === 'Escape') handleClose(); }} role="presentation">
 		<div
 			class="modal-box max-w-3xl epic-modal-box"
 		>
@@ -525,9 +524,9 @@
 			{:else}
 				<!-- Epic Dropdown -->
 				<div class="mb-4">
-					<label class="text-xs font-semibold font-mono uppercase tracking-wider block mb-2 text-base-content/50">
+					<div class="text-xs font-semibold font-mono uppercase tracking-wider block mb-2 text-base-content/50">
 						Select Epic
-					</label>
+					</div>
 					<select
 						class="select select-bordered w-full font-mono bg-base-200"
 						bind:value={selectedEpicId}
@@ -822,11 +821,11 @@
 					<div class="grid grid-cols-2 gap-4">
 					<!-- Execution Mode Toggle -->
 					<div>
-						<label
+						<div
 							class="text-xs font-semibold font-mono uppercase tracking-wider block mb-2 text-base-content/60"
 						>
 							Execution Mode
-						</label>
+						</div>
 						<div class="btn-group">
 							<button
 								class="btn btn-sm font-mono"
@@ -885,11 +884,11 @@
 					<!-- Max Concurrent Agents Slider -->
 					<div>
 						<div class="flex justify-between items-center mb-2">
-							<label
+							<div
 								class="text-xs font-semibold font-mono uppercase tracking-wider text-base-content/60"
 							>
 								Max Concurrent Agents
-							</label>
+							</div>
 							<span class="text-lg font-bold font-mono text-base-content">
 								{maxConcurrent}
 							</span>
@@ -910,11 +909,11 @@
 
 					<!-- Review Threshold Dropdown -->
 					<div>
-						<label
+						<div
 							class="text-xs font-semibold font-mono uppercase tracking-wider block mb-2 text-base-content/60"
 						>
 							Review Threshold
-						</label>
+						</div>
 						<select
 							class="select select-bordered select-sm w-full font-mono bg-base-300 border-base-content/20"
 							bind:value={reviewThreshold}
@@ -931,11 +930,11 @@
 
 					<!-- Auto-spawn Blocked Tasks Checkbox -->
 					<div>
-						<label
+						<div
 							class="text-xs font-semibold font-mono uppercase tracking-wider block mb-2 text-base-content/60"
 						>
 							Blocked Task Handling
-						</label>
+						</div>
 						<label class="flex items-center gap-2 cursor-pointer">
 							<input
 								type="checkbox"

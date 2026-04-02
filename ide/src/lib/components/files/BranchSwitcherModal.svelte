@@ -240,11 +240,12 @@
 
 {#if isOpen}
 	<!-- Modal backdrop -->
-	<div class="modal-backdrop" onclick={onClose} role="button" tabindex="-1">
+	<div class="modal-backdrop" onclick={onClose} role="presentation" tabindex="-1" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }}>
 		<!-- Modal content -->
 		<div
 			class="modal-content"
 			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="branch-modal-title"
@@ -275,6 +276,7 @@
 					<circle cx="11" cy="11" r="8" />
 					<line x1="21" y1="21" x2="16.65" y2="16.65" />
 				</svg>
+				<!-- svelte-ignore a11y_autofocus -->
 				<input
 					type="text"
 					class="search-input"
@@ -305,12 +307,14 @@
 								<h4 class="section-title">Local Branches</h4>
 								<ul class="branch-list">
 									{#each localBranches as branch}
+										<!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
 										<li
 											class="branch-item"
 											class:current={branch.name === currentBranch}
 											class:selected={branch.name === selectedBranch}
 											onclick={() => handleBranchClick(branch.name)}
 											ondblclick={() => handleBranchDoubleClick(branch.name)}
+											onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleBranchDoubleClick(branch.name); } else if (e.key === ' ') { e.preventDefault(); handleBranchClick(branch.name); } }}
 											role="button"
 											tabindex="0"
 										>
@@ -338,11 +342,13 @@
 								<h4 class="section-title">Remote Branches</h4>
 								<ul class="branch-list">
 									{#each remoteBranches as branch}
+										<!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
 										<li
 											class="branch-item remote"
 											class:selected={branch.name === selectedBranch}
 											onclick={() => handleBranchClick(branch.name)}
 											ondblclick={() => handleBranchDoubleClick(branch.name)}
+											onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleBranchDoubleClick(branch.name); } else if (e.key === ' ') { e.preventDefault(); handleBranchClick(branch.name); } }}
 											role="button"
 											tabindex="0"
 										>
@@ -470,8 +476,8 @@
 
 	<!-- Dirty Tree Warning Modal -->
 	{#if showDirtyWarning}
-		<div class="warning-backdrop" onclick={cancelDirtySwitch} role="button" tabindex="-1">
-			<div class="warning-modal" onclick={(e) => e.stopPropagation()} role="alertdialog">
+		<div class="warning-backdrop" onclick={cancelDirtySwitch} role="presentation" tabindex="-1" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cancelDirtySwitch(); } }}>
+			<div class="warning-modal" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="alertdialog">
 				<div class="warning-header">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 						<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />

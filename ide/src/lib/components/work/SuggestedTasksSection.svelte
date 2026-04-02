@@ -552,6 +552,7 @@
 
 								<!-- Title (full width, allows wrapping up to 2 lines) -->
 								{#if editingTitleKey === taskKey}
+									<!-- svelte-ignore a11y_autofocus -->
 									<input
 										type="text"
 										bind:value={editingTitleValue}
@@ -621,14 +622,16 @@
 						{#if isExpanded}
 							<div
 								class="px-2 pb-2 pt-1 ml-7 space-y-2"
+								role="group"
 								transition:slide={{ duration: 150 }}
 								onclick={(e) => e.stopPropagation()}
+								onkeydown={(e) => e.stopPropagation()}
 							>
 								<!-- Description -->
 								<div>
-									<label class="text-[9px] font-semibold opacity-60 block mb-0.5 text-base-content/60">
+									<div class="text-[9px] font-semibold opacity-60 block mb-0.5 text-base-content/60">
 										Description
-									</label>
+									</div>
 									<textarea
 										value={effectiveDescription}
 										oninput={(e) => {
@@ -646,9 +649,9 @@
 								<!-- Project and Labels row -->
 								<div class="grid grid-cols-2 gap-2">
 									<div>
-										<label class="text-[9px] font-semibold opacity-60 block mb-0.5 text-base-content/60">
+										<div class="text-[9px] font-semibold opacity-60 block mb-0.5 text-base-content/60">
 											Project
-										</label>
+										</div>
 										{#if availableProjects.length > 0}
 											<select
 												value={effectiveProject}
@@ -671,9 +674,9 @@
 										{/if}
 									</div>
 									<div>
-										<label class="text-[9px] font-semibold opacity-60 block mb-0.5 text-base-content/60">
+										<div class="text-[9px] font-semibold opacity-60 block mb-0.5 text-base-content/60">
 											Labels
-										</label>
+										</div>
 										<input
 											type="text"
 											value={effectiveLabels}
@@ -686,9 +689,9 @@
 
 								<!-- Dependencies -->
 								<div>
-									<label class="text-[9px] font-semibold opacity-60 block mb-0.5 text-base-content/60">
+									<div class="text-[9px] font-semibold opacity-60 block mb-0.5 text-base-content/60">
 										Depends On (task IDs)
-									</label>
+									</div>
 									<input
 										type="text"
 										value={effectiveDependsOn.join(', ')}

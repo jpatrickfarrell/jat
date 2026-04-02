@@ -603,9 +603,9 @@
 			<div class="bg-base-100 rounded-lg p-3">
 				<div class="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
 					<div class="form-control">
-						<label class="label py-0.5">
+						<div class="label py-0.5">
 							<span class="label-text text-xs">Type</span>
-						</label>
+						</div>
 						<select
 							class="select select-bordered select-xs"
 							bind:value={previewTask.type}
@@ -617,9 +617,9 @@
 						</select>
 					</div>
 					<div class="form-control">
-						<label class="label py-0.5">
+						<div class="label py-0.5">
 							<span class="label-text text-xs">Priority</span>
-						</label>
+						</div>
 						<select
 							class="select select-bordered select-xs"
 							bind:value={previewTask.priority}
@@ -631,9 +631,9 @@
 						</select>
 					</div>
 					<div class="form-control">
-						<label class="label py-0.5">
+						<div class="label py-0.5">
 							<span class="label-text text-xs">Labels</span>
-						</label>
+						</div>
 						<input
 							type="text"
 							class="input input-bordered input-xs"
@@ -643,9 +643,9 @@
 						/>
 					</div>
 					<div class="form-control">
-						<label class="label py-0.5">
+						<div class="label py-0.5">
 							<span class="label-text text-xs">Project</span>
-						</label>
+						</div>
 						<input
 							type="text"
 							class="input input-bordered input-xs"
@@ -655,9 +655,9 @@
 						/>
 					</div>
 					<div class="form-control">
-						<label class="label py-0.5">
+						<div class="label py-0.5">
 							<span class="label-text text-xs">Epic</span>
-						</label>
+						</div>
 						<input
 							type="text"
 							class="input input-bordered input-xs"
@@ -717,9 +717,9 @@
 			<div class="space-y-4">
 				<!-- Rule Name -->
 				<div class="form-control">
-					<label class="label">
+					<div class="label">
 						<span class="label-text font-semibold">Rule Name</span>
-					</label>
+					</div>
 					<input
 						type="text"
 						class="input input-bordered"
@@ -730,9 +730,9 @@
 
 				<!-- Description -->
 				<div class="form-control">
-					<label class="label">
+					<div class="label">
 						<span class="label-text">Description (optional)</span>
-					</label>
+					</div>
 					<input
 						type="text"
 						class="input input-bordered input-sm"
@@ -743,10 +743,10 @@
 
 				<!-- Conditions -->
 				<div class="form-control">
-					<label class="label">
+					<div class="label">
 						<span class="label-text font-semibold">Conditions</span>
 						<span class="label-text-alt opacity-60">All must match (AND)</span>
-					</label>
+					</div>
 					<div class="space-y-2">
 						{#if editingRule.conditions.length === 0}
 							<div class="text-xs opacity-60 py-2 text-center">
@@ -851,9 +851,9 @@
 
 				<!-- Agent Selection -->
 				<div class="form-control">
-					<label class="label">
+					<div class="label">
 						<span class="label-text font-semibold">Route to Agent</span>
-					</label>
+					</div>
 					<select class="select select-bordered" bind:value={editingRule.agentId}>
 						{#each agents as agent}
 							<option value={agent.id}>{agent.name}</option>
@@ -863,10 +863,10 @@
 
 				<!-- Model Override -->
 				<div class="form-control">
-					<label class="label">
+					<div class="label">
 						<span class="label-text">Model Override (optional)</span>
 						<span class="label-text-alt opacity-60">Leave empty for agent's default</span>
-					</label>
+					</div>
 					<select class="select select-bordered select-sm" bind:value={editingRule.modelOverride}>
 						<option value={undefined}>Use agent default</option>
 						{#each getModelsForAgent(editingRule.agentId) as model}
@@ -891,6 +891,6 @@
 				</button>
 			</div>
 		</div>
-		<div class="modal-backdrop" onclick={cancelEdit}></div>
+		<div class="modal-backdrop" role="presentation" onclick={cancelEdit} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cancelEdit(); } }}></div>
 	</div>
 {/if}

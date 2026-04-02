@@ -342,7 +342,6 @@
 						<span class="text-[10px]" style="color: oklch(0.40 0.02 250);">({systemBases.length})</span>
 					</div>
 					{#each systemBases as base (base.id)}
-						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div
 							class="flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition-all duration-150"
 							style="
@@ -350,6 +349,9 @@
 								border-left: 2px solid {selectedBaseId === base.id ? 'oklch(0.70 0.18 240 / 0.6)' : 'transparent'};
 							"
 							onclick={() => onSelect(base)}
+							onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(base); } }}
+							role="button"
+							tabindex="0"
 						>
 							<span class="text-sm shrink-0">🔒</span>
 							<div class="flex-1 min-w-0">
@@ -377,12 +379,12 @@
 					{@render baseItem(base)}
 				{/each}
 			{:else}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
 					use:dndzone={{ items: dndItems, flipDurationMs: 200, dropTargetStyle: { outline: '1px solid oklch(0.55 0.15 240 / 0.4)', borderRadius: '0.375rem' } }}
 					onconsider={handleDndConsider}
 					onfinalize={handleDndFinalize}
 					class="space-y-0.5"
+					role="group"
 				>
 					{#each dndItems as base (base.id)}
 						<div animate:flip={{ duration: 200, easing: cubicOut }}>
@@ -396,7 +398,6 @@
 </div>
 
 {#snippet baseItem(base: KnowledgeBase)}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="group flex items-start gap-2 px-2 py-2 rounded cursor-pointer transition-all duration-150"
 		style="
@@ -404,7 +405,10 @@
 			border-left: 2px solid {selectedBaseId === base.id ? 'oklch(0.70 0.18 240 / 0.6)' : 'transparent'};
 		"
 		onclick={() => onSelect(base)}
+		onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(base); } }}
 		oncontextmenu={(e) => handleContextMenu(e, base)}
+		role="button"
+		tabindex="0"
 	>
 		<!-- Icon (emoji picker or default) -->
 		<div class="shrink-0 mt-0.5" onclick={(e) => e.stopPropagation()}>

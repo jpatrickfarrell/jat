@@ -820,8 +820,11 @@
 						stroke="transparent"
 						stroke-width={EDGE_HIT_WIDTH / zoom}
 						fill="none"
+						role="button"
+						tabindex="0"
 						style="cursor: pointer; pointer-events: stroke;"
 						onclick={(e) => handleEdgeClick(e, edge.id)}
+						onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleEdgeClick(e, edge.id); } }}
 					/>
 					<!-- Selected glow -->
 					{#if isSelected}

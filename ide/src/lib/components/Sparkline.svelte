@@ -620,7 +620,8 @@
 		<div
 			class="sparkline-controls-panel"
 			transition:slide={{ duration: 200 }}
-			onmouseenter={() => {
+			role="group"
+		onmouseenter={() => {
 				if (hideControlsTimeout) clearTimeout(hideControlsTimeout);
 				showControls = true;
 			}}

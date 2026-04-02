@@ -184,15 +184,15 @@
 		<div class="space-y-6">
 			<!-- Provider Mode -->
 			<div class="form-control">
-				<label class="label">
+				<div class="label">
 					<span class="label-text font-medium">Provider Mode</span>
-				</label>
+				</div>
 				<select class="select select-bordered w-full max-w-md" bind:value={config.mode}>
 					<option value="auto">Auto (API with CLI fallback)</option>
 					<option value="api">API Only (requires API key)</option>
 					<option value="cli">CLI Only (requires Claude Code)</option>
 				</select>
-				<label class="label">
+				<div class="label">
 					<span class="label-text-alt text-base-content/60">
 						{#if config.mode === 'auto'}
 							Uses Anthropic API when available, falls back to Claude CLI if API is unavailable.
@@ -202,47 +202,47 @@
 							Requires Claude Code CLI to be installed and authenticated.
 						{/if}
 					</span>
-				</label>
+				</div>
 			</div>
 
 			<!-- API Model -->
 			<div class="form-control">
-				<label class="label">
+				<div class="label">
 					<span class="label-text font-medium">API Model</span>
-				</label>
+				</div>
 				<select class="select select-bordered w-full max-w-md" bind:value={config.api_model}>
 					<option value="claude-haiku-4-5">Claude 4.5 Haiku (Fast, Cost-effective)</option>
 					<option value="claude-sonnet-4-20250514">Claude Sonnet 4 (Balanced)</option>
 				</select>
-				<label class="label">
+				<div class="label">
 					<span class="label-text-alt text-base-content/60">
 						Model used when making direct API calls. Haiku recommended for suggestions and summaries.
 					</span>
-				</label>
+				</div>
 			</div>
 
 			<!-- CLI Model -->
 			<div class="form-control">
-				<label class="label">
+				<div class="label">
 					<span class="label-text font-medium">CLI Model</span>
-				</label>
+				</div>
 				<select class="select select-bordered w-full max-w-md" bind:value={config.cli_model}>
 					<option value="haiku">Haiku (Fast, Cost-effective)</option>
 					<option value="sonnet">Sonnet (Balanced)</option>
 					<option value="opus">Opus (Most capable)</option>
 				</select>
-				<label class="label">
+				<div class="label">
 					<span class="label-text-alt text-base-content/60">
 						Model used when making CLI calls. CLI uses your Claude Code subscription.
 					</span>
-				</label>
+				</div>
 			</div>
 
 			<!-- CLI Timeout -->
 			<div class="form-control">
-				<label class="label">
+				<div class="label">
 					<span class="label-text font-medium">CLI Timeout (seconds)</span>
-				</label>
+				</div>
 				<input
 					type="number"
 					class="input input-bordered w-full max-w-xs"
@@ -251,11 +251,11 @@
 					max="120000"
 					step="1000"
 				/>
-				<label class="label">
+				<div class="label">
 					<span class="label-text-alt text-base-content/60">
 						Maximum time to wait for CLI response ({(config.cli_timeout_ms / 1000).toFixed(0)} seconds).
 					</span>
-				</label>
+				</div>
 			</div>
 
 			<!-- Show Provider Status -->
@@ -268,11 +268,11 @@
 					/>
 					<span class="label-text">Show provider status in responses</span>
 				</label>
-				<label class="label pt-0">
+				<div class="label pt-0">
 					<span class="label-text-alt text-base-content/60">
 						When enabled, API responses include which provider (API/CLI) was used.
 					</span>
-				</label>
+				</div>
 			</div>
 		</div>
 

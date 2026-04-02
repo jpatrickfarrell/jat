@@ -262,8 +262,10 @@
 				<div
 					class="task-row"
 					class:selected={index === selectedIndex}
-					onclick={() => selectedIndex = index}
 					role="row"
+					tabindex="0"
+					onclick={() => selectedIndex = index}
+					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectedIndex = index; } }}
 				>
 					<span class="row-priority" style="background: {priorityColors[task.priority]}">P{task.priority}</span>
 					<span class="row-status" style="color: {statusColors[task.status]}">{task.status.replace('_', ' ')}</span>
@@ -334,8 +336,8 @@
 
 	<!-- Help overlay -->
 	{#if showHelp}
-		<div class="help-overlay" onclick={() => showHelp = false} role="dialog">
-			<div class="help-modal" onclick={(e) => e.stopPropagation()}>
+		<div class="help-overlay" role="dialog" onclick={() => showHelp = false} onkeydown={(e) => { if (e.key === 'Escape') showHelp = false; }}>
+			<div class="help-modal" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 				<h3>Keyboard Shortcuts</h3>
 				<div class="shortcuts-grid">
 					<div class="shortcut"><kbd>j</kbd> / <kbd>↓</kbd> <span>Next task</span></div>

@@ -172,10 +172,8 @@
 	}
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="popover-overlay" onclick={onClose}></div>
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="popover" class:popover-left={colIndex <= 1} class:popover-wide={selectedType === 'formula' || selectedType === 'relation'} onkeydown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); } }}>
+<div class="popover-overlay" onclick={onClose} onkeydown={(e) => { if (e.key === 'Escape') onClose(); }} role="presentation"></div>
+<div class="popover" class:popover-left={colIndex <= 1} class:popover-wide={selectedType === 'formula' || selectedType === 'relation'} onkeydown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); } }} role="group">
 	<div class="popover-header">
 		<span class="popover-title">Column: <code>{column}</code></span>
 		<button class="popover-close" onclick={onClose}>×</button>

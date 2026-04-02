@@ -315,9 +315,9 @@
 			<!-- Project selector -->
 			{#if !hideProjectSelector}
 			<div class="mb-3">
-				<label class="label py-1">
+				<div class="label py-1">
 					<span class="label-text text-sm font-medium">Project</span>
-				</label>
+				</div>
 				<ProjectSelector
 					projects={projects}
 					selected={selectedProject}
@@ -329,9 +329,9 @@
 
 			<!-- Agent / Model -->
 			<div class="form-control mb-3">
-				<label class="label py-1">
+				<div class="label py-1">
 					<span class="label-text text-sm font-medium">Agent / Model</span>
-				</label>
+				</div>
 				<div class="dropdown dropdown-end w-full" class:dropdown-open={harnessDropdownOpen}>
 					<button type="button"
 						class="btn btn-sm w-full justify-between gap-2 font-mono text-xs"
@@ -348,8 +348,7 @@
 						</svg>
 					</button>
 					{#if harnessDropdownOpen}
-						<!-- svelte-ignore a11y_no_static_element_interactions -->
-						<div class="dropdown-content bg-base-200 rounded-box z-50 w-full p-2 shadow-lg border border-base-content/10 mt-1" onclick={(e) => e.stopPropagation()}>
+						<div class="dropdown-content bg-base-200 rounded-box z-50 w-full p-2 shadow-lg border border-base-content/10 mt-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="group">
 							<!-- Agent programs -->
 							<ul class="menu p-0">
 								{#each harnessPresets.filter(p => p.id !== 'human') as preset}
@@ -396,9 +395,9 @@
 
 			<!-- Planning description -->
 			<div class="form-control">
-				<label class="label py-1">
+				<div class="label py-1">
 					<span class="label-text text-sm font-medium">What do you want to plan?</span>
-				</label>
+				</div>
 				<textarea
 					class="textarea textarea-bordered w-full text-sm"
 					rows={8}

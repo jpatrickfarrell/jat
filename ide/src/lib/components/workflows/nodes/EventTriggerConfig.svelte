@@ -169,9 +169,9 @@
 
 <div class="flex flex-col gap-4">
 	<div class="form-control">
-		<label class="label w-full pb-1">
+		<div class="label w-full pb-1">
 			<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Event Type</span>
-		</label>
+		</div>
 		<div class="flex flex-col gap-2">
 			{#each EVENT_TYPES as event}
 				<label
@@ -198,10 +198,10 @@
 	<!-- Integration source picker (only for ingest_item) -->
 	{#if config.eventType === 'ingest_item'}
 		<div class="form-control">
-			<label class="label w-full pb-1">
+			<div class="label w-full pb-1">
 				<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Filter by Source</span>
 				<span class="label-text-alt" style="color: oklch(0.55 0.02 250)">Optional</span>
-			</label>
+			</div>
 			<div class="rounded-lg p-3" style="background: oklch(0.14 0.01 250); border: 1px solid oklch(0.22 0.02 250)">
 				{#if integrationLoading}
 					<div class="flex items-center gap-2 text-xs" style="color: oklch(0.55 0.02 250)">
@@ -261,11 +261,12 @@
 	{/if}
 
 	<div class="form-control">
-		<label class="label w-full pb-1">
+		<label class="label w-full pb-1" for="wf-event-filter">
 			<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Filter Expression</span>
 			<span class="label-text-alt" style="color: oklch(0.55 0.02 250)">Optional</span>
 		</label>
 		<input
+			id="wf-event-filter"
 			type="text"
 			class="input input-sm input-bordered w-full"
 			style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"
@@ -314,10 +315,10 @@
 	<!-- Output fields: what downstream nodes receive as {{input.*}} -->
 	{#if currentFields}
 		<div class="form-control">
-			<label class="label w-full pb-1">
+			<div class="label w-full pb-1">
 				<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Output Fields</span>
 				<span class="label-text-alt" style="color: oklch(0.55 0.02 250)">Available in downstream nodes</span>
-			</label>
+			</div>
 			<div class="rounded-lg p-2.5 text-xs" style="background: oklch(0.14 0.01 250); border: 1px solid oklch(0.22 0.02 250)">
 				<div class="mb-1.5" style="color: oklch(0.55 0.02 250)">
 					Use these in LLM Prompt, Create Task, and other downstream nodes:

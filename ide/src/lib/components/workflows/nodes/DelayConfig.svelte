@@ -48,10 +48,11 @@
 <div class="flex flex-col gap-4">
 	<div class="grid grid-cols-2 gap-3">
 		<div class="form-control">
-			<label class="label w-full pb-1">
+			<label class="label w-full pb-1" for="wf-delay-duration">
 				<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Duration</span>
 			</label>
 			<input
+				id="wf-delay-duration"
 				type="number"
 				class="input input-sm input-bordered w-full"
 				style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"
@@ -63,10 +64,11 @@
 		</div>
 
 		<div class="form-control">
-			<label class="label w-full pb-1">
+			<label class="label w-full pb-1" for="wf-delay-unit">
 				<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Unit</span>
 			</label>
 			<select
+				id="wf-delay-unit"
 				class="select select-sm select-bordered w-full"
 				style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"
 				value={config.unit}
@@ -91,9 +93,9 @@
 
 	<!-- Presets -->
 	<div class="form-control">
-		<label class="label w-full pb-1">
+		<div class="label w-full pb-1">
 			<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Quick Presets</span>
-		</label>
+		</div>
 		<div class="flex flex-wrap gap-1.5">
 			{#each PRESETS as preset}
 				{@const isActive = config.duration === preset.duration && config.unit === preset.unit}

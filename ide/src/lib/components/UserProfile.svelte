@@ -1002,15 +1002,17 @@
 
 <!-- Help Modal -->
 {#if showHelpModal}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
 		onclick={() => showHelpModal = false}
+		onkeydown={(e) => { if (e.key === 'Escape') showHelpModal = false; }}
+		role="presentation"
 	>
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 		<div
 			class="relative w-full max-w-lg mx-4 rounded-lg shadow-2xl overflow-hidden bg-base-300 border border-base-content/20"
 			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+			role="presentation"
 		>
 			<!-- Header -->
 			<div class="flex items-center justify-between px-5 py-4 border-b border-base-content/20">

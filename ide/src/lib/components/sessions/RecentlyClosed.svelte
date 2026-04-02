@@ -208,10 +208,11 @@
 						{@const projectColor = recent.project ? getColor(recent.taskId || recent.project) : null}
 						{@const stateVisual = getSessionStateVisual(recent.lastState as SessionState)}
 						{@const recentStatusDotColor = stateVisual.accent}
-						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div use:reveal={{ animation: 'fade-in', delay: ri * 0.05 }}
 							class="recent-row group"
+							role="button" tabindex="0"
 							onclick={() => handleRowClick(recent)}
+							onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleRowClick(recent); } }}
 							oncontextmenu={(e) => handleContextMenu(recent, e)}
 						>
 							{#if recent.taskCreatedAt}
@@ -311,11 +312,11 @@
 
 <!-- Context Menu -->
 {#if ctxData}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="ctx-menu"
 		class:ctx-menu-hidden={!ctxVisible}
 		style="left: {ctxX}px; top: {ctxY}px;"
+		role="menu"
 		onclick={(e) => e.stopPropagation()}
 	>
 		<!-- View Details -->

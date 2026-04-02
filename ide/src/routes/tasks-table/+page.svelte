@@ -1207,8 +1207,7 @@
 								<td class="td-name">
 									{#if session.type === 'server'}
 										<!-- Server session display -->
-										<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-										<div class="server-row" onclick={(e) => e.stopPropagation()}>
+										<div class="server-row" role="group" onclick={(e) => e.stopPropagation()}>
 											<ServerSessionBadge
 												sessionName={session.name}
 												project={session.project}

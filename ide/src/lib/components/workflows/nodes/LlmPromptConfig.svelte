@@ -66,10 +66,11 @@
 
 <div class="flex flex-col gap-4">
 	<div class="form-control">
-		<label class="label w-full pb-1">
+		<label class="label w-full pb-1" for="wf-llm-prompt">
 			<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Prompt</span>
 		</label>
 		<textarea
+			id="wf-llm-prompt"
 			class="textarea textarea-bordered text-sm font-mono leading-relaxed w-full"
 			style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250); min-height: 120px"
 			value={config.prompt}
@@ -129,9 +130,9 @@
 	</div>
 
 	<div class="form-control">
-		<label class="label w-full pb-1">
+		<div class="label w-full pb-1">
 			<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Model</span>
-		</label>
+		</div>
 		<div class="flex gap-2">
 			{#each MODEL_OPTIONS as model}
 				<button
@@ -151,11 +152,12 @@
 	</div>
 
 	<div class="form-control">
-		<label class="label w-full pb-1">
+		<label class="label w-full pb-1" for="wf-llm-project">
 			<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Project</span>
 			<span class="label-text-alt" style="color: oklch(0.55 0.02 250)">Optional</span>
 		</label>
 		<select
+			id="wf-llm-project"
 			class="select select-sm select-bordered w-full"
 			style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"
 			value={config.project || ''}
@@ -169,11 +171,12 @@
 	</div>
 
 	<div class="form-control">
-		<label class="label w-full pb-1">
+		<label class="label w-full pb-1" for="wf-llm-maxtokens">
 			<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Max Tokens</span>
 			<span class="label-text-alt" style="color: oklch(0.55 0.02 250)">Optional</span>
 		</label>
 		<input
+			id="wf-llm-maxtokens"
 			type="number"
 			class="input input-sm input-bordered w-full"
 			style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"
@@ -186,10 +189,10 @@
 	</div>
 
 	<div class="form-control">
-		<label class="label w-full pb-1">
+		<div class="label w-full pb-1">
 			<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Variables</span>
 			<span class="label-text-alt" style="color: oklch(0.55 0.02 250)">Optional</span>
-		</label>
+		</div>
 		<div class="flex flex-col gap-2">
 			{#each variableEntries as [key, value], i}
 				<div class="flex items-center gap-2">

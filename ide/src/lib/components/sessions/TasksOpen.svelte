@@ -1504,8 +1504,7 @@
 	{:else if sortedOpenTasks.length === 0}
 		<div class="empty-state">
 			{#if onAddTask}
-				<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-				<div class="add-task-button" onclick={onAddTask}>
+				<div class="add-task-button" role="button" tabindex="0" onclick={onAddTask} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAddTask(); } }}>
 					<div class="add-task-icon">
 						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
 							<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -1537,12 +1536,13 @@
 				{@const typeVisual = getIssueTypeVisual(task.issue_type)}
 				{@const taskAge = getTaskAge(task.created_at)}
 				{@const harness = getTaskHarness(task)}
-				<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 				<div
 					animate:flip={{ duration: 300, easing: cubicOut }}
 					class="mobile-task-card {isBlocked && !isExiting ? 'mobile-task-blocked' : ''} {isNew ? 'animate-slide-in-fwd-center' : ''} {isExiting ? 'animate-slide-out-bck-center' : ''}"
 					style="{projectColor ? `border-left: 3px solid ${projectColor};` : ''}{isExiting ? ' pointer-events: none;' : ''}"
+					role="button" tabindex="0"
 					onclick={() => !isExiting && handleRowClick(task.id)}
+					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); !isExiting && handleRowClick(task.id); } }}
 					oncontextmenu={(e) => !isExiting && handleContextMenu(task, e)}
 				>
 					<div class="mobile-task-row1">
@@ -1550,8 +1550,7 @@
 							<FxText text={task.title} context={taskCtx(task)} />
 						</span>
 						{#if !isBlocked && !isHumanTask(task)}
-							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-							<div class="mobile-task-launch" onclick={(e) => { e.stopPropagation(); onSpawnTask(task); }} title="Launch agent">
+							<div class="mobile-task-launch" role="button" tabindex="0" onclick={(e) => { e.stopPropagation(); onSpawnTask(task); }} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onSpawnTask(task); } }} title="Launch agent">
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="14" height="14">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 0 1-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 0 0 6.16-12.12A14.98 14.98 0 0 0 9.631 8.41m5.96 5.96a14.926 14.926 0 0 1-5.841 2.58m-.119-8.54a6 6 0 0 0-7.381 5.84h4.8m2.58-5.84a14.927 14.927 0 0 0-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 0 1-2.448-2.448 14.9 14.9 0 0 1 .06-.312m-2.24 2.39a4.493 4.493 0 0 0-1.757 4.306 4.493 4.493 0 0 0 4.306-1.758M16.5 9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" />
 								</svg>
@@ -1693,8 +1692,7 @@
 							<td class="td-attachment" style={isExiting ? 'background: transparent;' : ''}>
 								{#if taskAttachments && taskAttachments.length > 0}
 									{@const firstTypeInfo = getFileTypeInfoFromPath(taskAttachments[0].path)}
-									<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-									<div class="attachment-thumb" onclick={(e) => { e.stopPropagation(); window.open(`/api/work/image/${encodeURIComponent(taskAttachments[0].path)}`, '_blank'); }} title="View attachment">
+									<div class="attachment-thumb" role="button" tabindex="0" onclick={(e) => { e.stopPropagation(); window.open(`/api/work/image/${encodeURIComponent(taskAttachments[0].path)}`, '_blank'); }} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); window.open(`/api/work/image/${encodeURIComponent(taskAttachments[0].path)}`, '_blank'); } }} title="View attachment">
 										{#if firstTypeInfo.category === 'image'}
 											<img src={`/api/work/image/${encodeURIComponent(taskAttachments[0].path)}`} alt="" class="attachment-thumb-img" />
 										{:else}
@@ -1837,12 +1835,11 @@
 
 <!-- Due Date Picker Popover -->
 {#if dueDatePickerTaskId && dueDatePickerPos}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div class="fixed inset-0 z-40" onclick={closeDueDatePicker}></div>
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<div class="fixed inset-0 z-40" role="button" tabindex="0" onclick={closeDueDatePicker} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeDueDatePicker(); } }}></div>
 	<div
 		class="due-date-picker fixed z-50"
 		style="left: {dueDatePickerPos.x}px; top: {dueDatePickerPos.y}px;"
+		role="group"
 		onclick={(e) => e.stopPropagation()}
 	>
 		<div class="due-date-picker-header">Due Date</div>
@@ -1934,7 +1931,7 @@
 		</button>
 		<div class="floating-divider"></div>
 		<!-- Priority dropdown -->
-		<div class="floating-dropdown-wrapper" onclick={(e) => e.stopPropagation()}>
+		<div class="floating-dropdown-wrapper" role="group" onclick={(e) => e.stopPropagation()}>
 			<button type="button" class="floating-btn floating-btn-priority" onclick={() => { priorityDropdownOpen = !priorityDropdownOpen; harnessDropdownOpen = false; }} disabled={bulkActionLoading}>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
 					<path d="M3 3v18h18" /><path d="M18 9l-5-6-4 4-4 2" />
@@ -1959,7 +1956,7 @@
 			{/if}
 		</div>
 		<!-- Harness dropdown -->
-		<div class="floating-dropdown-wrapper" onclick={(e) => e.stopPropagation()}>
+		<div class="floating-dropdown-wrapper" role="group" onclick={(e) => e.stopPropagation()}>
 			<button type="button" class="floating-btn floating-btn-harness" onclick={() => { harnessDropdownOpen = !harnessDropdownOpen; priorityDropdownOpen = false; }} disabled={bulkActionLoading}>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
 					<path d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28z" />
@@ -1990,11 +1987,11 @@
 
 <!-- Context Menu -->
 {#if ctxTask}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="task-context-menu"
 		class:task-context-menu-hidden={!ctxVisible}
 		style="left: {ctxX}px; top: {ctxY}px;"
+		role="menu"
 		onclick={(e) => e.stopPropagation()}
 	>
 		<!-- Launch -->
@@ -2232,12 +2229,11 @@
 {#if harnessPickerTaskId}
 	{@const pickerTask = tasks.find(t => t.id === harnessPickerTaskId)}
 	{#if pickerTask}
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<!-- svelte-ignore a11y_click_events_have_key_events -->
-		<div class="harness-picker-backdrop" onclick={() => harnessPickerTaskId = null}></div>
+		<div class="harness-picker-backdrop" role="button" tabindex="0" onclick={() => harnessPickerTaskId = null} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); harnessPickerTaskId = null; } }}></div>
 		<div
 			class="fixed z-50 overflow-y-auto rounded-lg"
 			style="left: {harnessPickerPos.x}px; {harnessPickerPos.openUp ? `bottom: ${harnessPickerPos.y}px;` : `top: ${harnessPickerPos.y}px;`} max-height: {harnessPickerPos.maxH}px;"
+			role="group"
 			onclick={(e) => e.stopPropagation()}
 		>
 			<AgentSelector

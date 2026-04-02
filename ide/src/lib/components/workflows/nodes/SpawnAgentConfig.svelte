@@ -55,9 +55,9 @@
 
 <div class="flex flex-col gap-4">
 	<div class="form-control">
-		<label class="label w-full pb-1">
+		<div class="label w-full pb-1">
 			<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Task Source</span>
-		</label>
+		</div>
 		<div class="flex gap-2">
 			<button
 				class="btn btn-sm flex-1"
@@ -82,10 +82,11 @@
 
 	{#if mode === 'new'}
 		<div class="form-control">
-			<label class="label w-full pb-1">
+			<label class="label w-full pb-1" for="wf-spawn-title">
 				<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Task Title</span>
 			</label>
 			<input
+				id="wf-spawn-title"
 				type="text"
 				class="input input-sm input-bordered w-full"
 				style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"
@@ -102,11 +103,12 @@
 		</div>
 
 		<div class="form-control">
-			<label class="label w-full pb-1">
+			<label class="label w-full pb-1" for="wf-spawn-desc">
 				<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Task Description</span>
 				<span class="label-text-alt" style="color: oklch(0.55 0.02 250)">Optional</span>
 			</label>
 			<textarea
+				id="wf-spawn-desc"
 				class="textarea textarea-bordered text-sm w-full"
 				style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250); min-height: 80px"
 				value={config.taskDescription || ''}
@@ -122,10 +124,11 @@
 		</div>
 	{:else}
 		<div class="form-control">
-			<label class="label w-full pb-1">
+			<label class="label w-full pb-1" for="wf-spawn-taskid">
 				<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Task ID</span>
 			</label>
 			<input
+				id="wf-spawn-taskid"
 				type="text"
 				class="input input-sm input-bordered font-mono w-full"
 				style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"
@@ -137,9 +140,9 @@
 	{/if}
 
 	<div class="form-control">
-		<label class="label w-full pb-1">
+		<div class="label w-full pb-1">
 			<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Agent & Model</span>
-		</label>
+		</div>
 		<AgentSelector
 			task={selectorTask}
 			compact={true}
@@ -151,9 +154,9 @@
 	<div class="grid grid-cols-2 gap-3">
 		<!-- Command (searchable dropdown) -->
 		<div class="form-control">
-			<label class="label w-full pb-1">
+			<div class="label w-full pb-1">
 				<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Command</span>
-			</label>
+			</div>
 			<SearchDropdown
 				value={config.command || '/jat:start'}
 				groups={commandGroups}
@@ -164,10 +167,11 @@
 
 		<!-- Project -->
 		<div class="form-control">
-			<label class="label w-full pb-1">
+			<label class="label w-full pb-1" for="wf-spawn-project">
 				<span class="label-text font-semibold text-sm" style="color: oklch(0.85 0.02 250)">Project</span>
 			</label>
 			<select
+				id="wf-spawn-project"
 				class="select select-sm select-bordered w-full"
 				style="background: oklch(0.16 0.01 250); border-color: oklch(0.25 0.02 250); color: oklch(0.90 0.02 250)"
 				value={config.project || ''}

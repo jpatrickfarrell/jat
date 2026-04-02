@@ -84,6 +84,8 @@
 			class="emoji-picker-dropdown absolute left-0 top-full mt-1 z-50 rounded-lg overflow-hidden"
 			style="background: oklch(0.18 0.02 250); border: 1px solid oklch(0.30 0.02 250); box-shadow: 0 8px 32px oklch(0 0 0 / 0.5); width: 280px;"
 			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+			role="group"
 		>
 			<!-- Search -->
 			<div class="px-2 py-1.5" style="border-bottom: 1px solid oklch(0.24 0.01 250);">

@@ -33,6 +33,7 @@
 		groupTasksByDay,
 	} from "$lib/utils/completedTaskHelpers";
 	import { isHumanTask } from "$lib/utils/badgeHelpers";
+	import VoiceInbox from "$lib/components/voice/VoiceInbox.svelte";
 
 	interface TmuxSession {
 		name: string;
@@ -1671,6 +1672,12 @@
 			<span>No projects with active sessions or open tasks</span>
 		</div>
 	{:else}
+		<!-- Voice Inbox: pending suggestions from iOS voice notes (hidden when empty) -->
+		<VoiceInbox
+			availableProjects={projects}
+			defaultProject={selectedProject || ''}
+		/>
+
 		<!-- Selected Project Content -->
 		{#if selectedProject}
 			{@const projectSessions =

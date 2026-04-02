@@ -153,6 +153,7 @@
 	} = $props();
 
 	let events = $state<TimelineEvent[]>([]);
+	let dismissedEventKeys = $state(new Set<string>());
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let isExpanded = $state(false);
@@ -361,6 +362,12 @@
 			} else {
 				merged.push(current);
 			}
+		}
+
+		// Filter dismissed events
+		if (dismissedEventKeys.size > 0) {
+			result = merged.filter((e) => !dismissedEventKeys.has(getEventKey(e)));
+			return result;
 		}
 
 		return merged;
@@ -1050,63 +1057,74 @@
 					style="background: {style.bg}; border: 1px solid {style.border}; border-left: 3px solid {style.accent || style.border};"
 				>
 					<!-- Event header (always visible) -->
-					<button
-						class="w-full px-3 py-2 flex items-center justify-between text-left"
-						onclick={() => toggleEventExpand(idx)}
-					>
-						<div class="flex items-center gap-2 flex-1 min-w-0">
-							<span class="text-sm flex-shrink-0">{style.icon}</span>
-							{#if isUnansweredQuestion}
+					<div class="flex items-center">
+						<button
+							class="flex-1 px-3 py-2 flex items-center justify-between text-left min-w-0"
+							onclick={() => toggleEventExpand(idx)}
+						>
+							<div class="flex items-center gap-2 flex-1 min-w-0">
+								<span class="text-sm flex-shrink-0">{style.icon}</span>
+								{#if isUnansweredQuestion}
+									<span
+										class="px-1.5 py-0.5 rounded text-[9px] font-bold animate-pulse flex-shrink-0"
+										style="background: oklch(0.45 0.15 280); color: oklch(0.95 0.05 280);"
+									>
+										NEEDS ANSWER
+									</span>
+								{/if}
 								<span
-									class="px-1.5 py-0.5 rounded text-[9px] font-bold animate-pulse flex-shrink-0"
-									style="background: oklch(0.45 0.15 280); color: oklch(0.95 0.05 280);"
+									class="font-mono text-xs font-medium truncate min-w-0"
+									style="color: {style.text};"
 								>
-									NEEDS ANSWER
+									{getEventLabel(event)}
 								</span>
-							{/if}
-							<span
-								class="font-mono text-xs font-medium truncate min-w-0"
-								style="color: {style.text};"
-							>
-								{getEventLabel(event)}
-							</span>
-							{#if event.git_sha}
-								<span
-									class="px-1 py-0.5 rounded text-[9px] font-mono bg-base-300 text-base-content/60 flex-shrink-0"
+								{#if event.git_sha}
+									<span
+										class="px-1 py-0.5 rounded text-[9px] font-mono bg-base-300 text-base-content/60 flex-shrink-0"
+									>
+										{event.git_sha.slice(0, 7)}
+									</span>
+								{/if}
+							</div>
+							<div class="flex items-center gap-2 flex-shrink-0">
+								{#if event.data?.agent_name || event.data?.agentName}
+									<span class="text-[10px] font-mono text-base-content/60">
+										{event.data.agent_name || event.data.agentName}
+									</span>
+								{/if}
+								<span class="font-mono text-[10px] text-base-content/50">
+									{formatTime(event.timestamp)}
+								</span>
+								{#if event.git_sha && onRollback}
+									<button
+										class="px-1.5 py-0.5 rounded text-[9px] font-mono transition-colors btn-ghost hover:btn-info"
+										onclick={(e) => { e.stopPropagation(); handleRollback(event); }}
+										title="Rollback to this point"
+									>
+										rollback
+									</button>
+								{/if}
+								<svg
+									class="w-3 h-3 transition-transform text-base-content/50 {expandedEventIdx === idx ? 'rotate-180' : ''}"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+									stroke-width="2"
 								>
-									{event.git_sha.slice(0, 7)}
-								</span>
-							{/if}
-						</div>
-						<div class="flex items-center gap-2 flex-shrink-0">
-							{#if event.data?.agent_name || event.data?.agentName}
-								<span class="text-[10px] font-mono text-base-content/60">
-									{event.data.agent_name || event.data.agentName}
-								</span>
-							{/if}
-							<span class="font-mono text-[10px] text-base-content/50">
-								{formatTime(event.timestamp)}
-							</span>
-							{#if event.git_sha && onRollback}
-								<button
-									class="px-1.5 py-0.5 rounded text-[9px] font-mono transition-colors btn-ghost hover:btn-info"
-									onclick={(e) => { e.stopPropagation(); handleRollback(event); }}
-									title="Rollback to this point"
-								>
-									rollback
-								</button>
-							{/if}
-							<svg
-								class="w-3 h-3 transition-transform text-base-content/50 {expandedEventIdx === idx ? 'rotate-180' : ''}"
-								fill="none"
-								viewBox="0 0 24 24"
-								stroke="currentColor"
-								stroke-width="2"
-							>
-								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+									<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+								</svg>
+							</div>
+						</button>
+						<button
+							class="px-2 py-2 flex items-center justify-center text-base-content/30 hover:text-base-content/70 hover:bg-base-300 transition-colors flex-shrink-0 rounded-tr-lg"
+							onclick={() => { dismissedEventKeys = new Set([...dismissedEventKeys, eventKey]); }}
+							title="Dismiss"
+						>
+							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 							</svg>
-						</div>
-					</button>
+						</button>
+					</div>
 
 					<!-- Expanded details -->
 					{#if expandedEventIdx === idx}

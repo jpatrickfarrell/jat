@@ -2271,10 +2271,10 @@
 									</button>
 								</div>
 							{/if}
+						{/if}
 						</div>
 					{/if}
 				</div>
-				{/if}
 			</div>
 
 			<!-- Footer Navigation (hidden after success or during creation) -->

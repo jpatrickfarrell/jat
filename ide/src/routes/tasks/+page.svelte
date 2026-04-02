@@ -1674,7 +1674,7 @@
 	{:else}
 		<!-- Voice Inbox: pending suggestions from iOS voice notes (hidden when empty) -->
 		<VoiceInbox
-			availableProjects={projects}
+			availableProjects={allProjects}
 			defaultProject={selectedProject || ''}
 		/>
 

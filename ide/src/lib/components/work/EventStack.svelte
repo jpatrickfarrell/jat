@@ -621,6 +621,11 @@
 					}
 				}
 				existingTaskTitles = updatedTitles;
+
+				// Auto-dismiss the event after a short delay so the user sees the feedback
+				setTimeout(() => {
+					dismissedEventKeys = new Set([...dismissedEventKeys, eventKey]);
+				}, 2000);
 			}
 		} catch (err: any) {
 			createResults = { success: [], failed: [{ title: 'Error', error: err.message }] };
@@ -666,6 +671,11 @@
 					}
 				}
 				existingTaskTitles = updatedTitles;
+
+				// Auto-dismiss the event after a short delay so the user sees the feedback
+				setTimeout(() => {
+					dismissedEventKeys = new Set([...dismissedEventKeys, eventKey]);
+				}, 2000);
 			}
 		} catch (err: any) {
 			createResults = { success: [], failed: [{ title: 'Error', error: err.message }] };

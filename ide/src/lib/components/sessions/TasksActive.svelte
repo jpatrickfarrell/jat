@@ -903,21 +903,8 @@
 
 	let swipeState = $state<SwipeState | null>(null);
 	let swipeOffsets = $state<Map<string, number>>(new Map());
-	let expandedStrips = $state<Set<string>>(new Set());
-
-	function toggleStrip(sessionName: string, e: MouseEvent) {
-		e.stopPropagation();
-		const next = new Set(expandedStrips);
-		if (next.has(sessionName)) { next.delete(sessionName); } else { next.add(sessionName); }
-		expandedStrips = next;
-	}
 
 	async function handleMobileAction(actionId: string, sessionName: string, sessionTask: AgentTask | null, agentName: string, project: string | null) {
-		// Collapse tray after action
-		const next = new Set(expandedStrips);
-		next.delete(sessionName);
-		expandedStrips = next;
-
 		if (actionId === 'attach') {
 			await handleAttachSession(sessionName);
 		} else if (actionId === 'kill' || actionId === 'cleanup') {
@@ -1325,16 +1312,8 @@
 					class:swiping={isSwiping}
 					style="{isExiting ? 'pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
 					role="button" tabindex="0"
-					onclick={(e) => {
-						if (isExiting || swipeState?.swiping) return;
-						if (expandedStrips.has(session.name)) {
-							// Close tray on card body click
-							const next = new Set(expandedStrips); next.delete(session.name); expandedStrips = next;
-						} else {
-							onMobileCardClick ? onMobileCardClick(session.name) : (fullscreenSession = session.name);
-						}
-					}}
-					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!isExiting && !swipeState?.swiping && !expandedStrips.has(session.name)) { onMobileCardClick ? onMobileCardClick(session.name) : (fullscreenSession = session.name); } } }}
+					onclick={() => !isExiting && !swipeState?.swiping && (onMobileCardClick ? onMobileCardClick(session.name) : (fullscreenSession = session.name))}
+					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); !isExiting && !swipeState?.swiping && (onMobileCardClick ? onMobileCardClick(session.name) : (fullscreenSession = session.name)); } }}
 					ontouchstart={(e) => handleSwipeTouchStart(e, session.name)}
 					ontouchmove={handleSwipeTouchMove}
 					ontouchend={handleSwipeTouchEnd}
@@ -1343,10 +1322,10 @@
 				{#if session.type === 'server'}
 					<!-- Server session -->
 					{@const cardActions = getSessionStateActions(effectiveState)}
-					<div class="mobile-card-inner" class:tray-open={expandedStrips.has(session.name)}>
-						<button class="mobile-state-strip" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};" onclick={(e) => toggleStrip(session.name, e)} title="Toggle actions">
+					<div class="mobile-card-inner">
+						<div class="mobile-state-strip" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};" aria-hidden="true">
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" width="13" height="13" style="stroke: {stateVisual.accent};"><path stroke-linecap="round" stroke-linejoin="round" d={stateVisual.icon} /></svg>
-						</button>
+						</div>
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							{#each cardActions.slice(0, 4) as action}
 								<button class="mobile-tray-btn mobile-tray-btn-{action.variant}" title={action.description} onclick={() => handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null)}>
@@ -1365,10 +1344,10 @@
 					{@const typeVisual = getIssueTypeVisual(sessionTask.issue_type)}
 					{@const harness = getTaskHarness(sessionTask)}
 					{@const cardActions = getSessionStateActions(effectiveState)}
-					<div class="mobile-card-inner" class:tray-open={expandedStrips.has(session.name)}>
-						<button class="mobile-state-strip" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};" onclick={(e) => toggleStrip(session.name, e)} title="Toggle actions">
+					<div class="mobile-card-inner">
+						<div class="mobile-state-strip" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};" aria-hidden="true">
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" width="13" height="13" style="stroke: {stateVisual.accent};"><path stroke-linecap="round" stroke-linejoin="round" d={stateVisual.icon} /></svg>
-						</button>
+						</div>
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							{#each cardActions.slice(0, 4) as action}
 								<button class="mobile-tray-btn mobile-tray-btn-{action.variant}" title={action.description} onclick={() => handleMobileAction(action.id, session.name, sessionTask, sessionAgentName, session.project || null)}>
@@ -1419,10 +1398,10 @@
 				{:else}
 					<!-- Planning / no-task session -->
 					{@const cardActions = getSessionStateActions(effectiveState)}
-					<div class="mobile-card-inner" class:tray-open={expandedStrips.has(session.name)}>
-						<button class="mobile-state-strip" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};" onclick={(e) => toggleStrip(session.name, e)} title="Toggle actions">
+					<div class="mobile-card-inner">
+						<div class="mobile-state-strip" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};" aria-hidden="true">
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" width="13" height="13" style="stroke: {stateVisual.accent};"><path stroke-linecap="round" stroke-linejoin="round" d={stateVisual.icon} /></svg>
-						</button>
+						</div>
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							{#each cardActions.slice(0, 4) as action}
 								<button class="mobile-tray-btn mobile-tray-btn-{action.variant}" title={action.description} onclick={() => handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null)}>

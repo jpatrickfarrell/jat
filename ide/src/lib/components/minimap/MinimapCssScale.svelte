@@ -11,13 +11,11 @@
 
 	let {
 		output = '',
-		height = 200,
 		scale: _scale,
 		terminalWidth = 800,
 		onPositionClick = (percent: number) => {}
 	}: {
 		output: string;
-		height?: number;
 		/** Optional fixed scale factor (overrides default 0.12) */
 		scale?: number;
 		terminalWidth?: number;
@@ -28,6 +26,10 @@
 
 	let minimapContainer: HTMLDivElement;
 	let measureContainer: HTMLDivElement;
+
+	// Measured height of the minimap container — bound internally so it's always in sync
+	// with the actual rendered size. Avoids stale values from external bind:clientHeight.
+	let height = $state(0);
 
 	// Terminal scroll state (set externally via setViewportPosition)
 	let scrollPercent = $state(0);   // 0-100: how far the terminal has scrolled
@@ -155,7 +157,7 @@
 
 <svelte:window onmousemove={handleDrag} onmouseup={handleDragEnd} />
 
-<div class="minimap-css-scale" style="height: {height}px;">
+<div class="minimap-css-scale">
 	<!-- Hidden measure container -->
 	<div class="measure-container" bind:this={measureContainer} style="width: {terminalWidth}px;">
 		<pre class="terminal-output">{@html htmlContent}</pre>
@@ -164,6 +166,7 @@
 	<div
 		class="minimap-container"
 		bind:this={minimapContainer}
+		bind:clientHeight={height}
 		use:directMinimapEvents
 		role="slider"
 		tabindex="0"

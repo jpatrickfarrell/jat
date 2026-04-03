@@ -1312,7 +1312,6 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 
 	// Minimap state
 	let minimapRef: MinimapCssScale | null = $state(null);
-	let outputContainerHeight = $state(0);
 	let terminalWidth = $state(800);
 
 	// Suggested tasks panel expanded state (inline) and modal state
@@ -6226,12 +6225,10 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 					<div
 						class="absolute top-0 right-0 bottom-0 w-[60px] border-l overflow-hidden"
 						style="border-color: oklch(0.25 0.02 250); background: oklch(0.12 0.01 250);"
-						bind:clientHeight={outputContainerHeight}
 					>
 						<MinimapCssScale
 							bind:this={minimapRef}
 							output={output}
-							height={outputContainerHeight}
 							onPositionClick={handleMinimapClick}
 						/>
 					</div>

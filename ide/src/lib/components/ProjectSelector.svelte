@@ -446,16 +446,18 @@
 				{#if serverLoadingAction === selectedProject}
 					<span class="loading loading-spinner loading-xs" style="color: oklch(0.65 0.02 250); width: 0.625rem; height: 0.625rem;"></span>
 				{:else if serverIsRunning}
-					<button type="button" class="chip-server-btn" onclick={(e) => { e.stopPropagation(); handleServerOpenBrowser(); }} title="Open in browser">
-						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
-					</button>
-					<button type="button" class="chip-server-btn" onclick={(e) => { e.stopPropagation(); handleServerRestart(); }} title="Restart server">
-						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
-					</button>
-					<button type="button" class="chip-server-btn chip-server-btn-danger" onclick={(e) => { e.stopPropagation(); handleServerStop(); }} title="Stop server">
-						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" /></svg>
-					</button>
-					<span class="chip-server-dot chip-server-running"></span>
+					{#if isActive}
+						<button type="button" class="chip-server-btn" onclick={(e) => { e.stopPropagation(); handleServerOpenBrowser(); }} title="Open in browser">
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+						</button>
+						<button type="button" class="chip-server-btn" onclick={(e) => { e.stopPropagation(); handleServerRestart(); }} title="Restart server">
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+						</button>
+						<button type="button" class="chip-server-btn chip-server-btn-danger" onclick={(e) => { e.stopPropagation(); handleServerStop(); }} title="Stop server">
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" /></svg>
+						</button>
+					{/if}
+					<span class="chip-server-dot chip-server-running" style="margin: 0 0.25rem;"></span>
 				{:else}
 					<button type="button" class="chip-server-btn chip-server-btn-success" onclick={(e) => { e.stopPropagation(); handleServerStart(); }} title="Start server">
 						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" /></svg>
@@ -510,6 +512,40 @@
 				{/if}
 			</div>
 			<div class="dropdown-divider"></div>
+
+			<!-- Server Section (shown when project has server config or running session) -->
+			{#if effectiveServerConfig}
+				<div class="dropdown-server-row">
+					<div class="dropdown-server-info">
+						<span class="dropdown-server-dot" class:dropdown-server-dot-running={serverIsRunning}></span>
+						<span class="dropdown-server-port">:{effectiveServerConfig.port}</span>
+						<span class="dropdown-server-status">{serverIsRunning ? 'Running' : 'Stopped'}</span>
+					</div>
+					<div class="dropdown-server-actions">
+						{#if serverLoadingAction === selectedProject}
+							<span class="loading loading-spinner loading-xs" style="color: oklch(0.65 0.02 250);"></span>
+						{:else if serverIsRunning}
+							<button type="button" class="dropdown-server-btn" onclick={(e) => { e.stopPropagation(); handleServerOpenBrowser(); }} title="Open in browser">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+							</button>
+							<button type="button" class="dropdown-server-btn" onclick={(e) => { e.stopPropagation(); handleServerRestart(); }} title="Restart server">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+							</button>
+							<button type="button" class="dropdown-server-btn dropdown-server-btn-danger" onclick={(e) => { e.stopPropagation(); handleServerStop(); }} title="Stop server">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" /></svg>
+							</button>
+						{:else}
+							<button type="button" class="dropdown-server-btn dropdown-server-btn-success" onclick={(e) => { e.stopPropagation(); handleServerStart(); }} title="Start server">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" /></svg>
+							</button>
+						{/if}
+					</div>
+				</div>
+				{#if serverError}
+					<div class="dropdown-server-error">{serverError}</div>
+				{/if}
+				<div class="dropdown-divider"></div>
+			{/if}
 
 			<!-- Projects Section (only shown when used outside TopBar, e.g. IngestWizard, McpConfigEditor) -->
 			{#if showProjectsList}
@@ -1067,6 +1103,105 @@
 	/* Task items */
 	.task-item {
 		font-size: 0.8125rem;
+	}
+
+	/* Dropdown server section */
+	.dropdown-server-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.3rem 0.5rem;
+	}
+
+	.dropdown-server-info {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+	}
+
+	.dropdown-server-dot {
+		width: 0.4rem;
+		height: 0.4rem;
+		border-radius: 50%;
+		background: oklch(0.45 0.02 250);
+		flex-shrink: 0;
+	}
+
+	.dropdown-server-dot-running {
+		background: oklch(0.70 0.18 145);
+		box-shadow: 0 0 4px oklch(0.70 0.18 145);
+	}
+
+	.dropdown-server-port {
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		font-size: 0.6875rem;
+		color: oklch(0.60 0.02 250);
+	}
+
+	.dropdown-server-status {
+		font-size: 0.6875rem;
+		color: oklch(0.50 0.02 250);
+	}
+
+	.dropdown-server-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+
+	.dropdown-server-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.25rem;
+		height: 1.25rem;
+		padding: 0;
+		background: oklch(0.24 0.02 250);
+		border: 1px solid oklch(0.32 0.02 250);
+		border-radius: 0.25rem;
+		color: oklch(0.60 0.02 250);
+		cursor: pointer;
+		transition: all 0.1s ease;
+		flex-shrink: 0;
+	}
+
+	.dropdown-server-btn svg {
+		width: 0.6rem;
+		height: 0.6rem;
+	}
+
+	.dropdown-server-btn:hover {
+		background: oklch(0.30 0.04 250);
+		color: oklch(0.85 0.02 250);
+	}
+
+	.dropdown-server-btn-success {
+		border-color: oklch(0.40 0.12 145 / 0.5);
+		color: oklch(0.60 0.12 145);
+	}
+
+	.dropdown-server-btn-success:hover {
+		background: oklch(0.28 0.08 145 / 0.3);
+		color: oklch(0.80 0.15 145);
+	}
+
+	.dropdown-server-btn-danger {
+		border-color: oklch(0.40 0.10 30 / 0.5);
+		color: oklch(0.60 0.10 30);
+	}
+
+	.dropdown-server-btn-danger:hover {
+		background: oklch(0.28 0.08 30 / 0.3);
+		color: oklch(0.80 0.15 30);
+	}
+
+	.dropdown-server-error {
+		padding: 0.25rem 0.5rem;
+		font-size: 0.6875rem;
+		color: oklch(0.70 0.15 30);
+		background: oklch(0.22 0.05 30 / 0.2);
+		border-radius: 0.25rem;
+		margin: 0 0.25rem 0.25rem;
 	}
 
 	.dropdown-hint {

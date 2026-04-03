@@ -7,13 +7,14 @@
 	 * - Right: Table view with inline editing, add/delete rows, SQL console
 	 */
 
-	import { onDestroy, tick } from 'svelte';
+	import { tick } from 'svelte';
 	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { reveal } from '$lib/actions/reveal';
 	import { saveColumnSettings as saveColumnSettingsUtil, loadColumnSettings as loadColumnSettingsUtil } from '$lib/utils/columnStorage';
 	import { toggleSort as toggleSortUtil } from '$lib/utils/tableSort';
+	import { columnResize } from '$lib/actions/columnResize';
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 	import type { SemanticType, ColumnConfig, ColumnSchema } from '$lib/types/dataTable';
 	import { SEMANTIC_TYPE_INFO, SEMANTIC_TO_SQLITE } from '$lib/types/dataTable';
@@ -546,10 +547,7 @@
 	let colDraggedIndex = $state<number | null>(null);
 	let colDragOverIndex = $state<number | null>(null);
 
-	// Column resize state
-	let colResizing = $state<string | null>(null);
-	let colResizeStartX = 0;
-	let colResizeStartWidth = 0;
+	// Column resize state (guide line only — resize logic is in the columnResize action)
 	let resizeGuideX = $state<number | null>(null);
 	let dataTableContainerEl: HTMLDivElement | undefined = $state();
 
@@ -2929,52 +2927,7 @@
 		}
 	});
 
-	// Column resize handlers
-	function handleResizeStart(e: MouseEvent, colName: string) {
-		e.preventDefault();
-		e.stopPropagation();
-		colResizing = colName;
-		colResizeStartX = e.clientX;
-		const th = (e.target as HTMLElement).parentElement;
-		colResizeStartWidth = th ? th.offsetWidth : 120;
-		updateResizeGuide(e.clientX);
-		document.body.style.cursor = 'col-resize';
-		document.body.style.userSelect = 'none';
-		document.addEventListener('mousemove', handleResizeMove);
-		document.addEventListener('mouseup', handleResizeEnd);
-	}
-
-	function handleResizeMove(e: MouseEvent) {
-		if (!colResizing) return;
-		const diff = e.clientX - colResizeStartX;
-		const newWidth = Math.max(50, colResizeStartWidth + diff);
-		columnWidths = { ...columnWidths, [colResizing]: newWidth };
-		updateResizeGuide(e.clientX);
-	}
-
-	function updateResizeGuide(clientX: number) {
-		if (!dataTableContainerEl) return;
-		const rect = dataTableContainerEl.getBoundingClientRect();
-		resizeGuideX = clientX - rect.left + dataTableContainerEl.scrollLeft;
-	}
-
-	function handleResizeEnd() {
-		document.body.style.cursor = '';
-		document.body.style.userSelect = '';
-		if (colResizing) {
-			persistColumnWidths();
-			colResizing = null;
-		}
-		resizeGuideX = null;
-		document.removeEventListener('mousemove', handleResizeMove);
-		document.removeEventListener('mouseup', handleResizeEnd);
-	}
-
-	onDestroy(() => {
-		if (!browser) return;
-		document.removeEventListener('mousemove', handleResizeMove);
-		document.removeEventListener('mouseup', handleResizeEnd);
-	});
+	// Column resize is now handled by the columnResize action on each <th>.
 
 	async function handleCtxDuplicate() {
 		if (!ctxCol) return;
@@ -3882,15 +3835,21 @@
 												class:col-dragging={colDraggedIndex === colIdx}
 												class:col-drag-over-left={colDragOverIndex === colIdx && colDraggedIndex !== null && colDraggedIndex > colIdx}
 												class:col-drag-over-right={colDragOverIndex === colIdx && colDraggedIndex !== null && colDraggedIndex < colIdx}
-												class:col-resizing={colResizing === col.name}
 												style={colWidth ? `width: ${colWidth}px; min-width: ${colWidth}px; max-width: ${colWidth}px;` : ''}
-												draggable={colResizing ? 'false' : 'true'}
+												draggable="true"
 												ondragstart={(e) => handleColDragStart(e, colIdx)}
 												ondragend={handleColDragEnd}
 												ondragover={(e) => handleColDragOver(e, colIdx)}
 												ondragleave={handleColDragLeave}
 												ondrop={(e) => handleColDrop(e, colIdx)}
 												oncontextmenu={(e) => handleColContextMenu(col, colIdx, e)}
+												use:columnResize={{
+													minWidth: 50,
+													onResizeStart: () => { resizeGuideX = 0; },
+													onResize: (w) => { columnWidths = { ...columnWidths, [col.name]: w }; },
+													onResizeEnd: () => { resizeGuideX = null; persistColumnWidths(); },
+													getGuideContainer: () => dataTableContainerEl ?? null,
+												}}
 											>
 												<button class="sort-btn" onclick={() => toggleSort(col.name)}>
 													{col.name}
@@ -3928,11 +3887,6 @@
 														onClose={() => { columnSettingsOpen = null; autoFocusExpression = false; }}
 													/>
 												{/if}
-												<!-- svelte-ignore a11y_no_static_element_interactions -->
-												<div
-													class="col-resize-handle"
-													onmousedown={(e) => handleResizeStart(e, col.name)}
-												></div>
 											</th>
 										{/each}
 										{#if !isSystemTableSelected}<th class="actions-col"></th>{/if}
@@ -6093,7 +6047,7 @@
 	.col-drag-over-right {
 		box-shadow: inset -3px 0 0 0 oklch(0.65 0.15 200);
 	}
-	.col-resize-handle {
+	:global(.col-resize-handle) {
 		position: absolute;
 		right: 0;
 		top: 0;
@@ -6102,8 +6056,7 @@
 		cursor: col-resize;
 		z-index: 2;
 	}
-	.col-resize-handle:hover,
-	.col-resizing .col-resize-handle {
+	:global(.col-resize-handle:hover) {
 		background: oklch(0.55 0.15 200);
 	}
 

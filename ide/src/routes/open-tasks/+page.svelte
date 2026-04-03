@@ -12,6 +12,7 @@
 	import { saveColumnSettings as saveColumnSettingsUtil, loadColumnSettings as loadColumnSettingsUtil } from '$lib/utils/columnStorage';
 	import { toggleSort as toggleSortUtil } from '$lib/utils/tableSort';
 	import ManageColumnsDropdown from '$lib/components/ManageColumnsDropdown.svelte';
+	import { columnResize } from '$lib/actions/columnResize';
 
 	interface Task {
 		id: string;
@@ -122,10 +123,7 @@
 	let columnWidths = $state<Record<string, number>>({});
 	let hiddenColumns = $state<Set<string>>(new Set());
 
-	// Column resize state
-	let colResizing = $state<string | null>(null);
-	let colResizeStartX = $state(0);
-	let colResizeStartW = $state(0);
+	// Column resize state (guide line only — actual resize logic is in the columnResize action)
 	let resizeGuideX = $state<number | null>(null);
 	let tableContainerEl: HTMLElement | undefined = $state();
 
@@ -168,48 +166,6 @@
 		const w = getColWidth(col);
 		if (w === 0) return ''; // flex column (title)
 		return `width: ${w}px; min-width: ${col.minWidth}px;`;
-	}
-
-	// --- Column resize ---
-	function updateResizeGuide(clientX: number) {
-		if (!tableContainerEl) return;
-		const rect = tableContainerEl.getBoundingClientRect();
-		resizeGuideX = clientX - rect.left + tableContainerEl.scrollLeft;
-	}
-
-	function handleResizeStart(colId: string, e: MouseEvent) {
-		e.preventDefault();
-		e.stopPropagation();
-		colResizing = colId;
-		colResizeStartX = e.clientX;
-		const col = ALL_COLUMNS.find(c => c.id === colId)!;
-		colResizeStartW = getColWidth(col);
-		updateResizeGuide(e.clientX);
-		document.body.style.cursor = 'col-resize';
-		document.body.style.userSelect = 'none';
-		window.addEventListener('mousemove', handleResizeMove);
-		window.addEventListener('mouseup', handleResizeEnd);
-	}
-
-	function handleResizeMove(e: MouseEvent) {
-		if (!colResizing) return;
-		const col = ALL_COLUMNS.find(c => c.id === colResizing)!;
-		const diff = e.clientX - colResizeStartX;
-		const newW = Math.max(col.minWidth, colResizeStartW + diff);
-		columnWidths = { ...columnWidths, [colResizing]: newW };
-		updateResizeGuide(e.clientX);
-	}
-
-	function handleResizeEnd() {
-		document.body.style.cursor = '';
-		document.body.style.userSelect = '';
-		if (colResizing) {
-			colResizing = null;
-			saveColumnSettings();
-		}
-		resizeGuideX = null;
-		window.removeEventListener('mousemove', handleResizeMove);
-		window.removeEventListener('mouseup', handleResizeEnd);
 	}
 
 	// --- Column drag reorder (header) ---
@@ -881,7 +837,6 @@
 						{#each visibleColumns as col, i}
 							<th
 								class="th-cell"
-								class:col-resizing={colResizing === col.id}
 								class:th-dragging={colDraggedIndex === i}
 								class:th-drag-over={colDragOverIndex === i && colDraggedIndex !== null && colDraggedIndex !== i}
 								draggable="true"
@@ -891,6 +846,14 @@
 								ondrop={(e) => handleColDrop(i, e)}
 								onclick={() => { if (col.sortable && col.sortField) toggleSort(col.sortField); }}
 								style={col.id === 'type' ? 'text-align: center;' : ''}
+								use:columnResize={{
+									disabled: col.id === 'actions',
+									minWidth: col.minWidth,
+									onResizeStart: () => { resizeGuideX = 0; },
+									onResize: (w) => { columnWidths = { ...columnWidths, [col.id]: w }; },
+									onResizeEnd: () => { resizeGuideX = null; saveColumnSettings(); },
+									getGuideContainer: () => tableContainerEl ?? null,
+								}}
 							>
 								<span class="th-label">
 									{col.label}
@@ -898,13 +861,6 @@
 										{sortDir === 'asc' ? '↑' : '↓'}
 									{/if}
 								</span>
-								{#if col.id !== 'actions'}
-									<!-- svelte-ignore a11y_no_static_element_interactions -->
-									<div
-										class="col-resize-handle"
-										onmousedown={(e) => handleResizeStart(col.id, e)}
-									></div>
-								{/if}
 							</th>
 						{/each}
 					</tr>
@@ -1534,8 +1490,8 @@
 		pointer-events: none;
 	}
 
-	/* Column resize handle */
-	.col-resize-handle {
+	/* Column resize handle (action-injected, must use :global since div is created dynamically) */
+	:global(.col-resize-handle) {
 		position: absolute;
 		right: 0;
 		top: 0;
@@ -1544,8 +1500,7 @@
 		cursor: col-resize;
 		z-index: 2;
 	}
-	.col-resize-handle:hover,
-	.col-resizing .col-resize-handle {
+	:global(.col-resize-handle:hover) {
 		background: oklch(0.55 0.15 200);
 	}
 

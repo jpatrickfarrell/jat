@@ -9,7 +9,7 @@
 	let {
 		projectName,
 		notes = '',
-		isCollapsed = false,
+		isCollapsed = true,
 		projectColor = 'oklch(0.70 0.15 200)',
 		onSave
 	}: {

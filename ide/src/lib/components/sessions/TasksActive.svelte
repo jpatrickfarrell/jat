@@ -3413,7 +3413,7 @@
 	.mobile-card-body {
 		flex: 1;
 		min-width: 0;
-		padding: 0.5rem 0.75rem;
+		padding: 0.75rem 0.75rem;
 		display: flex;
 		flex-direction: column;
 		gap: 0.25rem;
@@ -3421,14 +3421,14 @@
 
 	.mobile-title {
 		min-width: 0;
-		font-size: 0.875rem;
+		font-size: 1rem;
 		font-weight: 600;
 		color: oklch(0.88 0.02 250);
 		font-family: system-ui, -apple-system, sans-serif;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		max-height: 1.3em;
+		max-height: 1.6em;
 		transition: max-height 0.4s cubic-bezier(0.55, 0.085, 0.68, 0.53);
 	}
 

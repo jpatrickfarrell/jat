@@ -13,7 +13,6 @@
 	import { classifySessionLegacy } from "$lib/utils/sessionNaming";
 	import SortDropdown from "$lib/components/SortDropdown.svelte";
 	import TasksActive from "$lib/components/sessions/TasksActive.svelte";
-	import MobileSessionDrawer from "$lib/components/work/MobileSessionDrawer.svelte";
 	import TasksPaused from "$lib/components/sessions/TasksPaused.svelte";
 	import TasksOpen from "$lib/components/sessions/TasksOpen.svelte";
 	import ProjectNotes from "$lib/components/sessions/ProjectNotes.svelte";
@@ -154,20 +153,6 @@
 	// Mobile detection
 	let isMobile = $state(false);
 	let mobileCleanup: (() => void) | null = null;
-
-	// Session drawer state (mobile: SessionCard in drawer instead of inline expand)
-	let drawerSessionName = $state<string | null>(null);
-
-	function getAgentNameFromSession(sessionName: string): string {
-		return sessionName.replace(/^jat-/, '');
-	}
-
-	// Close drawer if session disappears
-	$effect(() => {
-		if (drawerSessionName && !sessions.some(s => s.name === drawerSessionName)) {
-			drawerSessionName = null;
-		}
-	});
 
 	// Project colors
 	let projectColors = $state<Record<string, string>>({});
@@ -1849,7 +1834,6 @@
 															taskId,
 														)}
 													mobile={isMobile}
-													onMobileCardClick={isMobile ? (sn) => drawerSessionName = sn : undefined}
 												/>
 											</div>
 										{/if}
@@ -1928,7 +1912,6 @@
 															taskId,
 														)}
 													mobile={isMobile}
-													onMobileCardClick={isMobile ? (sn) => drawerSessionName = sn : undefined}
 												/>
 											</div>
 										{/if}
@@ -2493,50 +2476,6 @@
 	</div>
 {/if}
 
-<!-- MobileSessionDrawer: SessionCard in a swipe-to-dismiss drawer (mobile only) -->
-{#if drawerSessionName}
-	{@const drawerAgent = getAgentNameFromSession(drawerSessionName)}
-	{@const drawerTask = agentTasks.get(drawerAgent)}
-	{@const drawerInfo = agentSessionInfo.get(drawerAgent)}
-	{@const drawerSession = sessions.find(s => s.name === drawerSessionName)}
-	<MobileSessionDrawer
-		sessionName={drawerSessionName}
-		agentName={drawerAgent}
-		task={drawerTask ? {
-			id: drawerTask.id,
-			title: drawerTask.title,
-			status: drawerTask.status,
-			priority: drawerTask.priority,
-			issue_type: drawerTask.issue_type,
-			description: drawerTask.description
-		} : null}
-		tokens={drawerInfo?.tokens ?? 0}
-		cost={drawerInfo?.cost ?? 0}
-		sseState={drawerInfo?.activityState}
-		sseStateTimestamp={drawerInfo?.activityStateTimestamp}
-		created={drawerSession?.created ?? ''}
-		attached={drawerSession?.attached ?? false}
-		onClose={() => drawerSessionName = null}
-		onKillSession={async () => {
-			const sn = drawerSessionName!;
-			drawerSessionName = null;
-			await killSession(sn);
-		}}
-		onAttachSession={async () => {
-			if (drawerSessionName) await attachSession(drawerSessionName);
-		}}
-		onViewTask={(taskId) => openTaskDetailDrawer(taskId)}
-		onSendInput={async (text, type) => {
-			if (!drawerSessionName) return;
-			await fetch(`/api/work/${encodeURIComponent(drawerSessionName)}/input`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ input: text, type: type || 'text' })
-			});
-		}}
-	/>
-{/if}
-
 <style>
 	.tasks-page {
 		min-height: 100vh;
@@ -2757,7 +2696,7 @@
 
 	/* Epic Groups */
 	.epic-group {
-		margin: 0.5rem 0.75rem;
+		margin: 0.5rem 0rem;
 		background: oklch(0.16 0.01 250);
 		border-radius: 0.5rem;
 		border: 1px solid oklch(0.23 0.02 250);

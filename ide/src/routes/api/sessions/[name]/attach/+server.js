@@ -347,8 +347,9 @@ async function applyHyprlandColorsToNewWindow(windowsBefore, projectName) {
  * Attach to an existing tmux session by creating a window in the parent session
  */
 /** @type {import('./$types').RequestHandler} */
-export async function POST({ params }) {
+export async function POST({ params, url }) {
 	try {
+		const forceTerminal = url.searchParams.get('forceTerminal') === 'true';
 		const { agentName, sessionName } = resolveSessionName(params.name);
 
 		if (!agentName) {
@@ -400,8 +401,8 @@ export async function POST({ params }) {
 			? [parentSessionConfig, ...DEFAULT_PARENT_SESSIONS]
 			: DEFAULT_PARENT_SESSIONS;
 
-		// Find the parent session
-		const parentSession = await findParentSession(parentCandidates);
+		// Find the parent session (skip if forceTerminal requested)
+		const parentSession = forceTerminal ? null : await findParentSession(parentCandidates);
 
 		if (parentSession) {
 			// Create a new window in the parent session that attaches to the agent session

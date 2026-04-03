@@ -331,6 +331,17 @@
 		}
 	}
 
+	async function handleServerAttach() {
+		if (!selectedServerSession) return;
+		try {
+			await fetch(`/api/sessions/${encodeURIComponent(selectedServerSession.sessionName)}/attach?forceTerminal=true`, {
+				method: 'POST'
+			});
+		} catch (e) {
+			// Fire-and-forget — terminal opens independently
+		}
+	}
+
 
 	function handleClickOutside(e: MouseEvent) {
 		if (containerEl && !containerEl.contains(e.target as Node)) {
@@ -456,6 +467,9 @@
 						<button type="button" class="chip-server-btn chip-server-btn-danger" onclick={(e) => { e.stopPropagation(); handleServerStop(); }} title="Stop server">
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" /></svg>
 						</button>
+						<button type="button" class="chip-server-btn" onclick={(e) => { e.stopPropagation(); handleServerAttach(); }} title="Attach in tmux">
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" /></svg>
+						</button>
 					{/if}
 					<span class="chip-server-dot chip-server-running" style="margin: 0 0.25rem;"></span>
 				{:else}
@@ -533,6 +547,9 @@
 							</button>
 							<button type="button" class="dropdown-server-btn dropdown-server-btn-danger" onclick={(e) => { e.stopPropagation(); handleServerStop(); }} title="Stop server">
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" /></svg>
+							</button>
+							<button type="button" class="dropdown-server-btn" onclick={(e) => { e.stopPropagation(); handleServerAttach(); }} title="Attach in tmux">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" /></svg>
 							</button>
 						{:else}
 							<button type="button" class="dropdown-server-btn dropdown-server-btn-success" onclick={(e) => { e.stopPropagation(); handleServerStart(); }} title="Start server">

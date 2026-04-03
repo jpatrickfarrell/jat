@@ -1230,7 +1230,8 @@
 			{@const activityState = sessionInfo?.activityState}
 			{@const rawEffectiveState = optimisticStates.get(session.name) || activityState || 'idle'}
 			{@const effectiveState = rawEffectiveState === 'completing' && sessionTask?.status === 'closed' ? 'completed' : rawEffectiveState}
-			{@const statusDotColor = getSessionStateVisual(effectiveState).accent}
+			{@const stateVisual = getSessionStateVisual(effectiveState)}
+			{@const statusDotColor = stateVisual.accent}
 			{@const derivedProject = agentProjects.get(sessionAgentName) || session.project || null}
 			{@const rowProjectColor = sessionTask?.id
 				? getProjectColorReactive(sessionTask.id)
@@ -1270,7 +1271,7 @@
 					class="mobile-session-card"
 					class:attached={session.attached}
 					class:swiping={isSwiping}
-					style="{rowProjectColor ? `border-left: 3px solid ${rowProjectColor};` : isPlanning ? 'border-left: 3px solid oklch(0.68 0.20 270);' : ''}{isExiting ? ' pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
+					style="{isExiting ? 'pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
 					role="button" tabindex="0"
 					onclick={() => !isExiting && !swipeState?.swiping && (onMobileCardClick ? onMobileCardClick(session.name) : (fullscreenSession = session.name))}
 					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); !isExiting && !swipeState?.swiping && (onMobileCardClick ? onMobileCardClick(session.name) : (fullscreenSession = session.name)); } }}
@@ -1281,19 +1282,24 @@
 				>
 				{#if session.type === 'server'}
 					<!-- Server session -->
-					<div class="mobile-card-row1">
-						<span class="mobile-title">{session.name}</span>
+					<div class="mobile-card-inner">
+						<div class="mobile-state-strip" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};">
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" width="13" height="13" style="stroke: {stateVisual.accent};"><path stroke-linecap="round" stroke-linejoin="round" d={stateVisual.icon} /></svg>
+						</div>
+						<div class="mobile-card-body">
+							<span class="mobile-title">{session.name}</span>
+						</div>
 					</div>
 				{:else if sessionTask}
 					<!-- Agent session with task -->
-					{@const reviewStatus = computeReviewStatus(sessionTask, getReviewRules())}
-					{@const reviewBasedDefault = reviewStatus?.action !== 'auto'}
-					{@const autoCompleteDisabled = autoCompleteDisabledMap.get(session.name) ?? reviewBasedDefault}
 					{@const taskAge = getTaskAge(sessionTask.created_at)}
 					{@const typeVisual = getIssueTypeVisual(sessionTask.issue_type)}
 					{@const harness = getTaskHarness(sessionTask)}
-					<div class="mobile-card-row1">
-						<div class="mobile-left">
+					<div class="mobile-card-inner">
+						<div class="mobile-state-strip" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};">
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" width="13" height="13" style="stroke: {stateVisual.accent};"><path stroke-linecap="round" stroke-linejoin="round" d={stateVisual.icon} /></svg>
+						</div>
+						<div class="mobile-card-body">
 							<span class="mobile-title" title={sessionTask.title}>
 								<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
 							</span>
@@ -1331,84 +1337,26 @@
 								{/if}
 							</div>
 						</div>
-						<div class="mobile-status" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
-							<StatusActionBadge
-								sessionState={effectiveState as SessionState}
-								stacked={true}
-								sessionName={session.name}
-								alignRight={true}
-								animate={isNew}
-								showCommands={true}
-								showEpic={true}
-								onCommand={(cmd) => sendWorkflowCommand(session.name, cmd)}
-								onAction={async (actionId) => {
-									if (actionId === 'attach') {
-										await handleAttachSession(session.name);
-									} else if (actionId === 'kill' || actionId === 'cleanup') {
-										await handleKillSession(session.name);
-									} else if (actionId === 'view-task' && sessionTask) {
-										onViewTask?.(sessionTask.id);
-									} else if (actionId === 'complete' || actionId === 'complete-kill') {
-										optimisticStates.set(session.name, 'completing');
-										optimisticStates = new Map(optimisticStates);
-										if (sessionTask) {
-											try {
-												await fetch(`/api/sessions/${encodeURIComponent(session.name)}/signal`, {
-													method: 'POST',
-													headers: { 'Content-Type': 'application/json' },
-													body: JSON.stringify({
-														type: 'completing',
-														data: { taskId: sessionTask.id, taskTitle: sessionTask.title, currentStep: 'verifying', progress: 0, stepsCompleted: [], stepsRemaining: ['verifying', 'committing', 'closing', 'releasing'] }
-													})
-												});
-											} catch (e) { console.warn('[TasksActive] Failed to write completing signal:', e); }
-										}
-										const cmd = actionId === 'complete-kill' ? '/jat:complete --kill' : '/jat:complete';
-										await sendWorkflowCommand(session.name, cmd);
-									} else if (actionId === 'interrupt') {
-										await fetch(`/api/work/${encodeURIComponent(session.name)}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'ctrl-c' }) });
-									} else if (actionId === 'escape') {
-										await fetch(`/api/work/${encodeURIComponent(session.name)}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'escape' }) });
-									} else if (actionId === 'close-kill') {
-										if (sessionTask) {
-											try { await fetch(`/api/tasks/${encodeURIComponent(sessionTask.id)}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Abandoned via Close & Kill' }) }); } catch (e) { console.warn('[TasksActive] Failed to close task:', e); }
-										}
-										await handleKillSession(session.name);
-									} else if (actionId === 'pause') {
-										optimisticStates.set(session.name, 'paused');
-										optimisticStates = new Map(optimisticStates);
-										if (sessionTask) {
-											try { await fetch(`/api/sessions/${encodeURIComponent(session.name)}/pause`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: sessionTask.id, taskTitle: sessionTask.title, reason: 'Paused via StatusActionBadge', killSession: true, agentName: sessionAgentName, project: session.project }) }); } catch (e) { console.warn('[TasksActive] Failed to pause session:', e); }
-										} else { await handleKillSession(session.name); }
-									}
-								}}
-								task={{ id: sessionTask.id, issue_type: sessionTask.issue_type, priority: sessionTask.priority }}
-								project={session.project || null}
-								onViewEpic={(epicId) => onViewTask?.(epicId)}
-								autoCompleteEnabled={!autoCompleteDisabled}
-								onAutoCompleteToggle={() => {
-									const newMap = new Map(autoCompleteDisabledMap);
-									newMap.set(session.name, !autoCompleteDisabled);
-									autoCompleteDisabledMap = newMap;
-								}}
-								reviewReason={reviewStatus?.reason ?? null}
-							/>
-						</div>
 					</div>
 				{:else}
 					<!-- Planning / no-task session -->
-					<div class="mobile-card-row1">
-						<span class="mobile-title" style="color: oklch(0.70 0.12 270);">
-							{effectiveState === 'planning' ? 'Planning session' : 'No active task'}
-						</span>
-					</div>
-					<div class="mobile-card-row2">
-						<AgentAvatar name={sessionAgentName} size={16} showRing={true} sessionState={effectiveState} />
-						<span class="mobile-agent-name">{sessionAgentName}</span>
-						{#if derivedProject}
-							<span class="mobile-separator">·</span>
-							<span class="mobile-project">{derivedProject}</span>
-						{/if}
+					<div class="mobile-card-inner">
+						<div class="mobile-state-strip" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};">
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" width="13" height="13" style="stroke: {stateVisual.accent};"><path stroke-linecap="round" stroke-linejoin="round" d={stateVisual.icon} /></svg>
+						</div>
+						<div class="mobile-card-body">
+							<span class="mobile-title" style="color: oklch(0.70 0.12 270);">
+								{effectiveState === 'planning' ? 'Planning session' : 'No active task'}
+							</span>
+							<div class="mobile-card-row2">
+								<AgentAvatar name={sessionAgentName} size={16} showRing={true} sessionState={effectiveState} />
+								<span class="mobile-agent-name">{sessionAgentName}</span>
+								{#if derivedProject}
+									<span class="mobile-separator">·</span>
+									<span class="mobile-project">{derivedProject}</span>
+								{/if}
+							</div>
+						</div>
 					</div>
 				{/if}
 			</div>
@@ -3204,11 +3152,12 @@
 		border: 1px solid oklch(0.25 0.02 250);
 		border-bottom: none;
 		border-radius: 0;
-		padding: 0.5rem 0.75rem;
+		padding: 0;
 		cursor: pointer;
 		transition: background 0.15s;
 		touch-action: pan-y;
 		will-change: transform;
+		overflow: hidden;
 	}
 
 	/*.mobile-session-card:first-child {
@@ -3234,17 +3183,27 @@
 		background: oklch(0.65 0.15 145 / 0.06);
 	}
 
-	/* Row 1: Title + Status side by side */
-	.mobile-card-row1 {
+	/* Inner flex container: state strip + content body */
+	.mobile-card-inner {
 		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		min-width: 0;
+		align-items: stretch;
+		min-height: 0;
 	}
 
-	.mobile-left {
+	/* State indicator strip (left edge) */
+	.mobile-state-strip {
+		width: 28px;
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	/* Content area (full width minus strip) */
+	.mobile-card-body {
 		flex: 1;
 		min-width: 0;
+		padding: 0.5rem 0.75rem;
 		display: flex;
 		flex-direction: column;
 		gap: 0.25rem;
@@ -3276,7 +3235,7 @@
 					opacity 0.35s cubic-bezier(0.55, 0.085, 0.68, 0.53);
 	}
 
-	.mobile-left:hover .mobile-title {
+	.mobile-card-body:hover .mobile-title {
 		white-space: normal;
 		display: -webkit-box;
 		-webkit-line-clamp: 5;
@@ -3285,7 +3244,7 @@
 		transition: max-height 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 	}
 
-	.mobile-left:hover .mobile-description {
+	.mobile-card-body:hover .mobile-description {
 		max-height: 7em;
 		letter-spacing: 0.02em;
 		/* Enter: height expands, then tracking reveals */
@@ -3310,10 +3269,6 @@
 		}
 	}
 
-	.mobile-status {
-		flex-shrink: 0;
-	}
-
 	/* Row 2: Compact metadata line */
 	.mobile-card-row2 {
 		display: flex;
@@ -3323,6 +3278,8 @@
 		font-size: 0.6875rem;
 		font-family: ui-monospace, monospace;
 		color: oklch(0.55 0.02 250);
+		overflow: hidden;
+		flex-wrap: nowrap;
 	}
 
 	.mobile-agent-name {
@@ -3336,6 +3293,8 @@
 
 	.mobile-task-id {
 		font-weight: 600;
+		white-space: nowrap;
+		flex-shrink: 0;
 	}
 
 	.mobile-elapsed {

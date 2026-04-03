@@ -68,6 +68,7 @@ export function columnResize(node: HTMLElement, options: ColumnResizeOptions): {
 	let startX = 0;
 	let startWidth = 0;
 	let currentWidth = 0;
+	let resizing = false;
 
 	function updateGuide(clientX: number) {
 		const container = opts.getGuideContainer?.();
@@ -95,6 +96,10 @@ export function columnResize(node: HTMLElement, options: ColumnResizeOptions): {
 		opts.onResizeEnd?.(currentWidth);
 		document.removeEventListener('mousemove', onMouseMove);
 		document.removeEventListener('mouseup', onMouseUp);
+		// Suppress the click event that fires after mouseup on the host <th>,
+		// which would otherwise trigger a column sort.
+		resizing = true;
+		requestAnimationFrame(() => { resizing = false; });
 	}
 
 	function onMouseDown(e: MouseEvent) {
@@ -111,7 +116,17 @@ export function columnResize(node: HTMLElement, options: ColumnResizeOptions): {
 		document.addEventListener('mouseup', onMouseUp);
 	}
 
+	// Suppress click events on the host element that fire right after a resize ends.
+	// Without this, mouseup after dragging the resize handle triggers the host's onclick (e.g. sort).
+	function onHostClick(e: MouseEvent) {
+		if (resizing) {
+			e.stopImmediatePropagation();
+			e.preventDefault();
+		}
+	}
+
 	handle.addEventListener('mousedown', onMouseDown);
+	node.addEventListener('click', onHostClick, true);
 
 	return {
 		update(newOptions: ColumnResizeOptions) {
@@ -119,6 +134,7 @@ export function columnResize(node: HTMLElement, options: ColumnResizeOptions): {
 		},
 		destroy() {
 			handle.removeEventListener('mousedown', onMouseDown);
+			node.removeEventListener('click', onHostClick, true);
 			document.removeEventListener('mousemove', onMouseMove);
 			document.removeEventListener('mouseup', onMouseUp);
 			if (handle.parentNode === node) {

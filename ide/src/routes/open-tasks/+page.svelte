@@ -139,6 +139,8 @@
 		columnOrder = saved.order;
 		columnWidths = saved.widths;
 		hiddenColumns = new Set(saved.hidden);
+		if (saved.sortField) sortField = saved.sortField;
+		if (saved.sortDir) sortDir = saved.sortDir;
 	}
 
 	function saveColumnSettings() {
@@ -147,6 +149,8 @@
 			order: columnOrder,
 			widths: columnWidths,
 			hidden: [...hiddenColumns],
+			sortField,
+			sortDir,
 		});
 	}
 
@@ -357,6 +361,7 @@
 		const result = toggleSortUtil(sortField, sortDir, field);
 		sortField = result.field;
 		sortDir = result.dir;
+		saveColumnSettings();
 	}
 
 	function openTaskDrawer(taskId: string) {
@@ -936,7 +941,7 @@
 										</button>
 									</td>
 								{:else if col.id === 'due_date'}
-									<td>
+									<td style="padding: 0;">
 										<button
 											class="due-date-cell {dueDateClass(task.due_date)}"
 											onclick={(e) => openDueDatePicker(task.id, e)}
@@ -1597,6 +1602,8 @@
 
 	/* Due date cell */
 	.due-date-cell {
+		display: block;
+		width: 100%;
 		background: none;
 		border: none;
 		font: inherit;
@@ -1605,8 +1612,8 @@
 		cursor: pointer;
 		white-space: nowrap;
 		color: oklch(0.65 0.02 250);
-		padding: 0.125rem 0.25rem;
-		border-radius: 0.25rem;
+		padding: 0.4rem 0.75rem;
+		text-align: center;
 		transition: background 0.1s, color 0.1s;
 	}
 	.due-date-cell:hover {

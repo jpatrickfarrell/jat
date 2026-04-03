@@ -405,12 +405,23 @@
 						class="industrial-input w-48"
 						bind:value={searchQuery}
 					/>
-					{#if searchQuery}
+					<select
+						class="industrial-input"
+						style="min-width: 130px; padding-right: 1.5rem;"
+						bind:value={selectedProject}
+					>
+						<option value="">All Projects</option>
+						{#each projects as project}
+							<option value={project.name}>{project.name}</option>
+						{/each}
+					</select>
+					{#if searchQuery || selectedProject}
 						<button
 							type="button"
 							class="btn btn-ghost btn-xs text-base-content/60 hover:text-base-content"
 							onclick={() => {
 								searchQuery = "";
+								selectedProject = "";
 							}}
 						>
 							Clear filters
@@ -452,7 +463,7 @@
 							</svg>
 							<p>No completed tasks found</p>
 							<p class="empty-hint">
-								{#if searchQuery}
+								{#if searchQuery || selectedProject}
 									Try adjusting your filters
 								{:else}
 									Tasks will appear here when marked complete

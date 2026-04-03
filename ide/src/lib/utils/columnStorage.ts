@@ -2,6 +2,8 @@ export interface ColumnSettings {
 	order: string[];
 	widths: Record<string, number>;
 	hidden: string[];
+	sortField?: string;
+	sortDir?: 'asc' | 'desc';
 }
 
 /**
@@ -43,7 +45,13 @@ export function loadColumnSettings(key: string, allColumnIds: string[]): ColumnS
 		const hidden: string[] =
 			saved.hidden && Array.isArray(saved.hidden) ? saved.hidden : [];
 
-		return { order, widths, hidden };
+		const sortField: string | undefined =
+			typeof saved.sortField === 'string' ? saved.sortField : undefined;
+
+		const sortDir: 'asc' | 'desc' | undefined =
+			saved.sortDir === 'asc' || saved.sortDir === 'desc' ? saved.sortDir : undefined;
+
+		return { order, widths, hidden, sortField, sortDir };
 	} catch {
 		return null;
 	}

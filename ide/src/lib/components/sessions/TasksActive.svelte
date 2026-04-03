@@ -3332,7 +3332,8 @@
 		flex-shrink: 0;
 	}
 
-	.mobile-session-card:hover .mobile-action-tray {
+	.mobile-state-strip:hover ~ .mobile-action-tray,
+	.mobile-action-tray:hover {
 		max-width: 320px;
 	}
 

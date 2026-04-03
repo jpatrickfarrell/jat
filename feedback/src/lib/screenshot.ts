@@ -3,6 +3,37 @@ import { domToCanvas } from 'modern-screenshot';
 const PLACEHOLDER = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
 /**
+ * Check whether a canvas has actual rendered content.
+ * An empty/transparent canvas converts to solid black in JPEG —
+ * detect this before returning a broken screenshot.
+ * Samples ~50 pixels across the canvas diagonally + randomly.
+ */
+function canvasHasContent(canvas: HTMLCanvasElement): boolean {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return false;
+  const { width, height } = canvas;
+  if (width === 0 || height === 0) return false;
+
+  const data = ctx.getImageData(0, 0, width, height).data;
+  const totalPixels = width * height;
+  // Sample ~50 pixels: diagonal + scattered
+  const sampleCount = Math.min(50, totalPixels);
+  const step = Math.max(1, Math.floor(totalPixels / sampleCount));
+
+  for (let i = 0; i < totalPixels; i += step) {
+    const off = i * 4;
+    const a = data[off + 3];
+    // Any non-transparent pixel means the canvas has content
+    if (a > 10) {
+      const r = data[off], g = data[off + 1], b = data[off + 2];
+      // Also check it's not just solid black (which would be from a failed render)
+      if (r > 5 || g > 5 || b > 5) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Check if a URL is a same-page fragment reference (#id).
  * These resolve to the current page URL and cause slow 404 fetches
  * when modern-screenshot tries to load them as resources.
@@ -68,6 +99,19 @@ export async function captureViewport(): Promise<string> {
       },
     });
 
+    if (!canvasHasContent(canvas)) {
+      // Retry once targeting document.body (foreignObject can fail on <html>)
+      const retry = await domToCanvas(document.body, {
+        ...sharedOptions,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+      if (!canvasHasContent(retry)) {
+        throw new Error('Screenshot produced a blank image');
+      }
+      return retry.toDataURL('image/jpeg', 0.8);
+    }
+
     return canvas.toDataURL('image/jpeg', 0.8);
   });
 }
@@ -88,6 +132,20 @@ export async function captureViewportQuick(): Promise<string> {
       },
     });
 
+    if (!canvasHasContent(canvas)) {
+      // Retry once targeting document.body
+      const retry = await domToCanvas(document.body, {
+        ...sharedOptions,
+        scale: 0.5,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+      if (!canvasHasContent(retry)) {
+        throw new Error('Screenshot produced a blank image');
+      }
+      return retry.toDataURL('image/jpeg', 0.6);
+    }
+
     return canvas.toDataURL('image/jpeg', 0.6);
   });
 }
@@ -97,6 +155,10 @@ export async function captureElement(el: Element): Promise<string> {
     const canvas = await domToCanvas(el as HTMLElement, {
       ...sharedOptions,
     });
+
+    if (!canvasHasContent(canvas)) {
+      throw new Error('Element screenshot produced a blank image');
+    }
 
     return canvas.toDataURL('image/jpeg', 0.85);
   });

@@ -4802,6 +4802,21 @@ async function domToCanvas(e, t) {
   return await imageToCanvas(s, n);
 }
 const PLACEHOLDER = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+function canvasHasContent(e) {
+  const t = e.getContext("2d");
+  if (!t) return !1;
+  const { width: n, height: r } = e;
+  if (n === 0 || r === 0) return !1;
+  const o = t.getImageData(0, 0, n, r).data, s = n * r, i = Math.min(50, s), a = Math.max(1, Math.floor(s / i));
+  for (let l = 0; l < s; l += a) {
+    const c = l * 4;
+    if (o[c + 3] > 10) {
+      const d = o[c], f = o[c + 1], v = o[c + 2];
+      if (d > 5 || f > 5 || v > 5) return !0;
+    }
+  }
+  return !1;
+}
 function isFragmentUrl(e) {
   try {
     const t = new URL(e, window.location.href);
@@ -4832,25 +4847,52 @@ const sharedOptions = {
   }
 };
 async function captureViewport() {
-  return withFetchIntercept(async () => (await domToCanvas(document.documentElement, {
-    ...sharedOptions,
-    width: window.innerWidth,
-    height: window.innerHeight,
-    style: {
-      transform: `translate(-${window.scrollX}px, -${window.scrollY}px)`
+  return withFetchIntercept(async () => {
+    const e = await domToCanvas(document.documentElement, {
+      ...sharedOptions,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      style: {
+        transform: `translate(-${window.scrollX}px, -${window.scrollY}px)`
+      }
+    });
+    if (!canvasHasContent(e)) {
+      const t = await domToCanvas(document.body, {
+        ...sharedOptions,
+        width: window.innerWidth,
+        height: window.innerHeight
+      });
+      if (!canvasHasContent(t))
+        throw new Error("Screenshot produced a blank image");
+      return t.toDataURL("image/jpeg", 0.8);
     }
-  })).toDataURL("image/jpeg", 0.8));
+    return e.toDataURL("image/jpeg", 0.8);
+  });
 }
 async function captureViewportQuick() {
-  return withFetchIntercept(async () => (await domToCanvas(document.documentElement, {
-    ...sharedOptions,
-    scale: 0.5,
-    width: window.innerWidth,
-    height: window.innerHeight,
-    style: {
-      transform: `translate(-${window.scrollX}px, -${window.scrollY}px)`
+  return withFetchIntercept(async () => {
+    const e = await domToCanvas(document.documentElement, {
+      ...sharedOptions,
+      scale: 0.5,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      style: {
+        transform: `translate(-${window.scrollX}px, -${window.scrollY}px)`
+      }
+    });
+    if (!canvasHasContent(e)) {
+      const t = await domToCanvas(document.body, {
+        ...sharedOptions,
+        scale: 0.5,
+        width: window.innerWidth,
+        height: window.innerHeight
+      });
+      if (!canvasHasContent(t))
+        throw new Error("Screenshot produced a blank image");
+      return t.toDataURL("image/jpeg", 0.6);
     }
-  })).toDataURL("image/jpeg", 0.6));
+    return e.toDataURL("image/jpeg", 0.6);
+  });
 }
 function cubic_out(e) {
   const t = e - 1;

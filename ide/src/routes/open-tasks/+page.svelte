@@ -10,6 +10,7 @@
 	import type { SearchDropdownGroup } from '$lib/components/SearchDropdown.svelte';
 	import { openProjectDrawer } from '$lib/stores/drawerStore';
 	import { saveColumnSettings as saveColumnSettingsUtil, loadColumnSettings as loadColumnSettingsUtil } from '$lib/utils/columnStorage';
+	import { toggleSort as toggleSortUtil } from '$lib/utils/tableSort';
 
 	interface Task {
 		id: string;
@@ -441,12 +442,9 @@
 	}
 
 	function toggleSort(field: string) {
-		if (sortField === field) {
-			sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-		} else {
-			sortField = field;
-			sortDir = 'asc';
-		}
+		const result = toggleSortUtil(sortField, sortDir, field);
+		sortField = result.field;
+		sortDir = result.dir;
 	}
 
 	function openTaskDrawer(taskId: string) {

@@ -13,6 +13,7 @@
 	import { goto } from '$app/navigation';
 	import { reveal } from '$lib/actions/reveal';
 	import { saveColumnSettings as saveColumnSettingsUtil, loadColumnSettings as loadColumnSettingsUtil } from '$lib/utils/columnStorage';
+	import { toggleSort as toggleSortUtil } from '$lib/utils/tableSort';
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 	import type { SemanticType, ColumnConfig, ColumnSchema } from '$lib/types/dataTable';
 	import { SEMANTIC_TYPE_INFO, SEMANTIC_TO_SQLITE } from '$lib/types/dataTable';
@@ -795,12 +796,9 @@
 	}
 
 	function toggleSort(column: string) {
-		if (orderBy === column) {
-			orderDir = orderDir === 'ASC' ? 'DESC' : 'ASC';
-		} else {
-			orderBy = column;
-			orderDir = 'ASC';
-		}
+		const result = toggleSortUtil(orderBy, orderDir.toLowerCase() as 'asc' | 'desc', column);
+		orderBy = result.field;
+		orderDir = result.dir.toUpperCase() as 'ASC' | 'DESC';
 		offset = 0;
 		fetchTableData();
 	}

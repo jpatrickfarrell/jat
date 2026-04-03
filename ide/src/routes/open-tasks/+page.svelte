@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
@@ -134,6 +134,12 @@
 
 	// Manage columns dropdown
 	let mcOpen = $state(false);
+	let mcSearch = $state('');
+	let mcSearchInput: HTMLInputElement | undefined;
+
+	$effect(() => {
+		if (mcOpen) tick().then(() => mcSearchInput?.focus());
+	});
 	let mcDraggedIndex = $state<number | null>(null);
 	let mcDragOverIndex = $state<number | null>(null);
 
@@ -874,28 +880,47 @@
 			/>
 			<!-- Manage Columns -->
 			<div class="mc-wrapper">
-				<button class="mc-trigger" onclick={() => { mcOpen = !mcOpen; }}>
+				<button class="mc-trigger" onclick={() => { mcOpen = !mcOpen; if (!mcOpen) mcSearch = ''; }}>
 					<span>Columns</span>
 					<svg class="mc-chevron" class:mc-chevron-open={mcOpen} viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
 				</button>
 				{#if mcOpen}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<div class="fixed inset-0 z-40" onclick={() => { mcOpen = false; }} onkeydown={() => {}}></div>
+					<div class="fixed inset-0 z-40" onclick={() => { mcOpen = false; mcSearch = ''; }} onkeydown={() => {}}></div>
 					<div class="mc-dropdown">
+						<div class="mc-search">
+							<svg class="mc-search-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+							</svg>
+							<input
+								bind:this={mcSearchInput}
+								bind:value={mcSearch}
+								type="text"
+								placeholder="Filter columns..."
+								class="mc-search-input"
+								onkeydown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); mcOpen = false; mcSearch = ''; } }}
+								autocomplete="off"
+							/>
+							{#if mcSearch}
+								<button type="button" class="mc-search-clear" onclick={() => { mcSearch = ''; mcSearchInput?.focus(); }}>
+									<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+								</button>
+							{/if}
+						</div>
 						{#each columnOrder as colId, i}
 							{@const col = ALL_COLUMNS.find(c => c.id === colId)}
-							{#if col}
+							{#if col && (!mcSearch || col.label.toLowerCase().includes(mcSearch.toLowerCase()))}
 								<!-- svelte-ignore a11y_no_static_element_interactions -->
 								<div
 									class="mc-row"
 									class:mc-drag-over={mcDragOverIndex === i && mcDraggedIndex !== null && mcDraggedIndex !== i}
-									draggable="true"
-									ondragstart={(e) => handleMcDragStart(i, e)}
-									ondragover={(e) => handleMcDragOver(i, e)}
-									ondragend={handleMcDragEnd}
-									ondrop={(e) => handleMcDrop(i, e)}
+									draggable={!mcSearch}
+									ondragstart={(e) => !mcSearch && handleMcDragStart(i, e)}
+									ondragover={(e) => !mcSearch && handleMcDragOver(i, e)}
+									ondragend={() => !mcSearch && handleMcDragEnd()}
+									ondrop={(e) => !mcSearch && handleMcDrop(i, e)}
 								>
-									<span class="mc-grip">⠿</span>
+									<span class="mc-grip" class:mc-grip-disabled={!!mcSearch}>⠿</span>
 									<label class="mc-label">
 										<input
 											type="checkbox"
@@ -907,6 +932,9 @@
 								</div>
 							{/if}
 						{/each}
+						{#if mcSearch && !columnOrder.some(id => { const c = ALL_COLUMNS.find(c => c.id === id); return c && c.label.toLowerCase().includes(mcSearch.toLowerCase()); })}
+							<div class="mc-empty">No columns match "{mcSearch}"</div>
+						{/if}
 					</div>
 				{/if}
 			</div>
@@ -1597,8 +1625,58 @@
 		border: 1px solid oklch(0.28 0.02 250);
 		border-radius: 0.375rem;
 		box-shadow: 0 8px 24px oklch(0 0 0 / 0.4);
-		padding: 0.375rem 0;
-		min-width: 160px;
+		padding: 0;
+		min-width: 180px;
+		max-height: 320px;
+		overflow-y: auto;
+	}
+	.mc-search {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.375rem 0.625rem;
+		border-bottom: 1px solid oklch(0.22 0.02 250);
+		position: sticky;
+		top: 0;
+		background: oklch(0.16 0.01 250);
+	}
+	.mc-search-icon {
+		width: 0.75rem;
+		height: 0.75rem;
+		flex-shrink: 0;
+		color: oklch(0.45 0.02 250);
+	}
+	.mc-search-input {
+		flex: 1;
+		background: transparent;
+		border: none;
+		outline: none;
+		font-size: 0.625rem;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		color: oklch(0.80 0.02 250);
+	}
+	.mc-search-input::placeholder {
+		color: oklch(0.40 0.02 250);
+	}
+	.mc-search-clear {
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 0;
+		display: flex;
+		color: oklch(0.40 0.02 250);
+	}
+	.mc-search-clear:hover { opacity: 0.8; }
+	.mc-empty {
+		padding: 0.5rem 0.75rem;
+		font-size: 0.625rem;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		color: oklch(0.45 0.02 250);
+		text-align: center;
+	}
+	.mc-grip-disabled {
+		opacity: 0.2;
+		cursor: default;
 	}
 	.mc-row {
 		display: flex;

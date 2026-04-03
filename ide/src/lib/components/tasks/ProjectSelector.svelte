@@ -2,12 +2,14 @@
 	/**
 	 * ProjectSelector — Branded project dropdown
 	 *
-	 * Shows selected project as a colored chip. Click to reveal dropdown of all projects.
+	 * Shows selected project as a colored chip. Click to reveal SearchDropdown.
 	 * Fetches project colors from API with 30s cache.
 	 */
 	import { onMount } from 'svelte';
-	import { fetchAndGetProjectColors } from '$lib/utils/projectColors';
+	import { fetchAndGetProjectColors, getProjectColor } from '$lib/utils/projectColors';
 	import { openProjectDrawer } from '$lib/stores/drawerStore';
+	import SearchDropdown from '$lib/components/SearchDropdown.svelte';
+	import type { SearchDropdownGroup } from '$lib/components/SearchDropdown.svelte';
 
 	interface Props {
 		projects: string[];
@@ -24,233 +26,60 @@
 	}: Props = $props();
 
 	let projectColors = $state<Record<string, string>>({});
-	let open = $state(false);
-	let containerEl = $state<HTMLDivElement | null>(null);
-
-	let selectedColor = $derived(getColor(selected));
 
 	onMount(async () => {
 		projectColors = await fetchAndGetProjectColors();
 	});
 
 	function getColor(project: string): string {
-		return projectColors[project.toLowerCase()] || '#6b7280';
+		return projectColors[project.toLowerCase()] || getProjectColor(project + '-x');
 	}
 
-	function handleSelect(proj: string) {
-		onSelect(proj);
-		open = false;
-	}
-
-	function handleClickOutside(e: MouseEvent) {
-		if (containerEl && !containerEl.contains(e.target as Node)) {
-			open = false;
-		}
-	}
-
-	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') open = false;
-	}
-
-	$effect(() => {
-		if (open) {
-			document.addEventListener('click', handleClickOutside, true);
-			document.addEventListener('keydown', handleKeydown);
-		}
-		return () => {
-			document.removeEventListener('click', handleClickOutside, true);
-			document.removeEventListener('keydown', handleKeydown);
-		};
-	});
+	const groups = $derived.by<SearchDropdownGroup[]>(() => [{
+		label: 'Projects',
+		options: projects.map(p => ({ value: p, label: p }))
+	}]);
 </script>
 
-<div class="selector-container" bind:this={containerEl}>
-	<button
-		type="button"
-		class="trigger-chip"
-		style="--project-color: {selectedColor};"
-		onclick={() => { if (!disabled) open = !open; }}
-		{disabled}
-	>
-		<span class="chip-label">{selected || 'Select project'}</span>
-		<svg class="chevron" class:open viewBox="0 0 16 16" fill="currentColor">
-			<path fill-rule="evenodd" d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
-		</svg>
-	</button>
-
-	{#if open}
-		<div class="dropdown-menu">
-			{#each projects as proj}
-				{@const projColor = getColor(proj)}
-				<button
-					type="button"
-					class="dropdown-item"
-					class:active={selected === proj}
-					style="--project-color: {projColor};"
-					onclick={() => handleSelect(proj)}
-				>
-					<span class="item-dot"></span>
-					<span class="item-label">{proj}</span>
-					{#if selected === proj}
-						<svg class="check-icon" viewBox="0 0 16 16" fill="currentColor">
-							<path fill-rule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd" />
-						</svg>
-					{/if}
-				</button>
-			{/each}
-			<div class="dropdown-divider"></div>
-			<button
-				type="button"
-				class="dropdown-item add-project-item"
-				onclick={() => { open = false; openProjectDrawer(); }}
-			>
-				<svg class="add-icon" viewBox="0 0 20 20" fill="currentColor">
-					<path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
-				</svg>
-				<span class="item-label">Add Project</span>
-			</button>
-		</div>
-	{/if}
-</div>
+<SearchDropdown
+	value={selected}
+	{groups}
+	placeholder="Select project"
+	{disabled}
+	colorFn={(v) => getColor(v)}
+	onChange={onSelect}
+>
+	{#snippet footer()}
+		<button
+			type="button"
+			class="sd-add-project"
+			onclick={(e) => { e.stopPropagation(); openProjectDrawer(); }}
+		>
+			<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+			</svg>
+			<span>Add Project</span>
+		</button>
+	{/snippet}
+</SearchDropdown>
 
 <style>
-	.selector-container {
-		position: relative;
-		display: inline-block;
-	}
-
-	.trigger-chip {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.375rem;
-		padding: 0.25rem 0.5rem;
-		border-radius: 0.375rem;
-		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
-		font-size: 0.75rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.025em;
-		cursor: pointer;
-		transition: all 0.15s ease;
-		background: color-mix(in oklch, var(--project-color) 25%, transparent);
-		border: 1px solid color-mix(in oklch, var(--project-color) 50%, transparent);
-		color: var(--project-color);
-		box-shadow: 0 0 6px color-mix(in oklch, var(--project-color) 15%, transparent);
-	}
-
-	.trigger-chip:hover:not(:disabled) {
-		background: color-mix(in oklch, var(--project-color) 35%, transparent);
-		border-color: color-mix(in oklch, var(--project-color) 65%, transparent);
-		box-shadow: 0 0 10px color-mix(in oklch, var(--project-color) 25%, transparent);
-	}
-
-	.trigger-chip:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.chevron {
-		width: 0.875rem;
-		height: 0.875rem;
-		opacity: 0.7;
-		transition: transform 0.15s ease;
-	}
-
-	.chevron.open {
-		transform: rotate(180deg);
-	}
-
-	.dropdown-menu {
-		position: absolute;
-		top: calc(100% + 4px);
-		left: 0;
-		min-width: 10rem;
-		padding: 0.25rem;
-		border-radius: 0.5rem;
-		background: oklch(0.18 0.01 250);
-		border: 1px solid oklch(0.28 0.02 250 / 0.5);
-		box-shadow: 0 8px 24px oklch(0 0 0 / 0.4);
-		z-index: 40;
-		animation: dropdown-in 0.12s ease-out;
-	}
-
-	@keyframes dropdown-in {
-		from { opacity: 0; transform: translateY(-4px); }
-		to { opacity: 1; transform: translateY(0); }
-	}
-
-	.dropdown-item {
+	.sd-add-project {
+		width: 100%;
+		padding: 0.375rem 0.75rem;
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		width: 100%;
-		padding: 0.375rem 0.5rem;
-		border-radius: 0.375rem;
-		border: none;
 		background: transparent;
+		border: none;
 		cursor: pointer;
+		font-size: 0.6875rem;
 		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
-		font-size: 0.75rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.025em;
-		color: oklch(0.75 0.02 250);
-		transition: background 0.1s ease;
-	}
-
-	.dropdown-item:hover {
-		background: oklch(0.24 0.02 250 / 0.6);
-	}
-
-	.dropdown-item.active {
-		color: var(--project-color);
-	}
-
-	.item-dot {
-		width: 0.5rem;
-		height: 0.5rem;
-		border-radius: 50%;
-		background: var(--project-color);
-		flex-shrink: 0;
-		opacity: 0.8;
-	}
-
-	.dropdown-item.active .item-dot {
-		opacity: 1;
-		box-shadow: 0 0 5px color-mix(in oklch, var(--project-color) 50%, transparent);
-	}
-
-	.item-label {
-		flex: 1;
-		text-align: left;
-	}
-
-	.check-icon {
-		width: 0.875rem;
-		height: 0.875rem;
-		flex-shrink: 0;
-		color: var(--project-color);
-	}
-
-	.dropdown-divider {
-		height: 1px;
-		background: oklch(0.26 0.02 250);
-		margin: 0.25rem 0;
-	}
-
-	.add-project-item {
 		color: oklch(0.65 0.12 145);
-		font-size: 0.75rem;
+		transition: background 0.1s, color 0.1s;
 	}
-
-	.add-project-item:hover {
+	.sd-add-project:hover {
 		background: oklch(0.24 0.06 145 / 0.3);
 		color: oklch(0.80 0.15 145);
-	}
-
-	.add-icon {
-		width: 0.75rem;
-		height: 0.75rem;
-		flex-shrink: 0;
 	}
 </style>

@@ -15,6 +15,8 @@
 	import { tick } from 'svelte';
 	import { slide } from 'svelte/transition';
 
+	import type { Snippet } from 'svelte';
+
 	let {
 		value = '',
 		groups = [],
@@ -22,6 +24,7 @@
 		disabled = false,
 		displayValue,
 		colorFn,
+		footer,
 		onChange,
 	}: {
 		value: string;
@@ -30,6 +33,7 @@
 		disabled?: boolean;
 		displayValue?: string;
 		colorFn?: (value: string) => string | undefined;
+		footer?: Snippet;
 		onChange: (value: string) => void;
 	} = $props();
 
@@ -163,6 +167,11 @@
 					<li class="sd-empty">No matches for "{searchQuery}"</li>
 				{/if}
 			</ul>
+			{#if footer}
+				<div class="sd-footer">
+					{@render footer()}
+				</div>
+			{/if}
 		</div>
 	{/if}
 </div>
@@ -334,6 +343,10 @@
 		flex-shrink: 0;
 		margin-left: auto;
 		color: oklch(0.70 0.15 145);
+	}
+
+	.sd-footer {
+		border-top: 1px solid oklch(0.22 0.02 250);
 	}
 
 	.sd-empty {

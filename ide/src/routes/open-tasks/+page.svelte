@@ -8,6 +8,7 @@
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 	import SearchDropdown from '$lib/components/SearchDropdown.svelte';
 	import type { SearchDropdownGroup } from '$lib/components/SearchDropdown.svelte';
+	import { openProjectDrawer } from '$lib/stores/drawerStore';
 
 	interface Task {
 		id: string;
@@ -846,7 +847,16 @@
 					placeholder="All Projects"
 					colorFn={(v) => v !== 'all' ? getProjectColor(v + '-x') : undefined}
 					onChange={(v) => { selectedProject = v; }}
-				/>
+				>
+					{#snippet footer()}
+						<button class="sd-add-project" onclick={() => openProjectDrawer()}>
+							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+							</svg>
+							<span>Add Project</span>
+						</button>
+					{/snippet}
+				</SearchDropdown>
 			</div>
 			<div class="filter type-filter">
 				<input class="btn btn-sm filter-reset" type="radio" name="type-filter" aria-label="All" checked={selectedType === 'all'} onchange={() => { selectedType = 'all'; }} />
@@ -1513,6 +1523,24 @@
 	}
 	.project-dropdown-wrapper {
 		width: 160px;
+	}
+	.sd-add-project {
+		width: 100%;
+		padding: 0.375rem 0.75rem;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		background: transparent;
+		border: none;
+		cursor: pointer;
+		font-size: 0.6875rem;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		color: oklch(0.65 0.12 145);
+		transition: background 0.1s, color 0.1s;
+	}
+	.sd-add-project:hover {
+		background: oklch(0.24 0.06 145 / 0.3);
+		color: oklch(0.80 0.15 145);
 	}
 	.filter-select {
 		padding: 0.375rem 0.5rem;

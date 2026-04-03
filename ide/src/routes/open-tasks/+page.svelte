@@ -848,12 +848,12 @@
 					onChange={(v) => { selectedProject = v; }}
 				/>
 			</div>
-			<select class="filter-select" bind:value={selectedType}>
-				<option value="all">All Types</option>
+			<div class="filter type-filter">
+				<input class="btn btn-sm filter-reset" type="radio" name="type-filter" aria-label="All" checked={selectedType === 'all'} onchange={() => { selectedType = 'all'; }} />
 				{#each taskTypes as type}
-					<option value={type}>{typeIcon(type)} {type}</option>
+					<input class="btn btn-sm" type="radio" name="type-filter" aria-label="{typeIcon(type)} {type}" checked={selectedType === type} onchange={() => { selectedType = type; }} />
 				{/each}
-			</select>
+			</div>
 			<!-- Manage Columns -->
 			<div class="mc-wrapper">
 				<button class="filter-select mc-trigger" onclick={() => { mcOpen = !mcOpen; }}>
@@ -1526,6 +1526,23 @@
 	}
 	.filter-select:focus {
 		border-color: oklch(0.55 0.12 220);
+	}
+
+	/* Type filter (DaisyUI filter component) */
+	.type-filter {
+		gap: 0;
+	}
+	.type-filter .btn {
+		font-size: 0.75rem;
+		font-weight: 500;
+		border-color: oklch(0.28 0.02 250);
+		background: oklch(0.16 0.01 250);
+		color: oklch(0.65 0.02 250);
+	}
+	.type-filter .btn:checked {
+		background: oklch(0.28 0.08 220);
+		border-color: oklch(0.50 0.12 220);
+		color: oklch(0.92 0.03 220);
 	}
 
 	/* Manage columns dropdown */

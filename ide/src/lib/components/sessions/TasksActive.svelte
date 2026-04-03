@@ -1378,7 +1378,7 @@
 					{@const cardActions = getSessionStateActions(effectiveState)}
 					<div class="mobile-card-inner">
 						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};">
-							<AgentAvatar name={sessionAgentName} size={22} showRing={true} sessionState={effectiveState} />
+							<AgentAvatar name={sessionAgentName} size={40} showRing={true} sessionState={effectiveState} />
 						</div>
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							{#each cardActions.slice(0, 4) as action}
@@ -1435,7 +1435,7 @@
 					{@const cardActions = getSessionStateActions(effectiveState)}
 					<div class="mobile-card-inner">
 						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};">
-							<AgentAvatar name={sessionAgentName} size={22} showRing={true} sessionState={effectiveState} />
+							<AgentAvatar name={sessionAgentName} size={40} showRing={true} sessionState={effectiveState} />
 						</div>
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							{#each cardActions.slice(0, 4) as action}
@@ -3308,7 +3308,8 @@
 
 	/* Agent variant: wider to fit avatar comfortably */
 	.mobile-state-strip-agent {
-		width: 40px;
+		width: 62px;
+		padding: 0 6px;
 	}
 
 	/* Brighten strip on card hover */

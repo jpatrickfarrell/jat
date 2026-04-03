@@ -3256,36 +3256,38 @@
 		min-height: 0;
 	}
 
-	/* State indicator strip — clickable handle */
+	/* State indicator strip */
 	.mobile-state-strip {
 		width: 28px;
 		flex-shrink: 0;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: none;
-		border: none;
-		cursor: pointer;
-		padding: 0;
-		transition: width 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.15s;
+		transition: filter 0.2s;
 	}
 
-	.mobile-card-inner.tray-open .mobile-state-strip {
-		opacity: 0.7;
+	/* Brighten strip on card hover */
+	.mobile-session-card:hover .mobile-state-strip {
+		filter: brightness(1.8) saturate(1.3);
 	}
 
-	/* Action tray — slides out from strip on click */
+	/* Subtle row highlight when tray is active */
+	.mobile-session-card:hover {
+		background: oklch(0.19 0.015 250);
+	}
+
+	/* Action tray — slides out on hover */
 	.mobile-action-tray {
 		display: flex;
 		align-items: stretch;
 		max-width: 0;
 		overflow: hidden;
-		transition: max-width 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+		transition: max-width 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 		flex-shrink: 0;
 	}
 
-	.mobile-card-inner.tray-open .mobile-action-tray {
-		max-width: 240px;
+	.mobile-session-card:hover .mobile-action-tray {
+		max-width: 320px;
 	}
 
 	/* Tray action buttons */
@@ -3294,23 +3296,27 @@
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		gap: 3px;
-		padding: 0 10px;
-		min-width: 54px;
+		gap: 4px;
+		padding: 6px 10px;
+		min-width: 68px;
 		border: none;
-		border-right: 1px solid oklch(0 0 0 / 0.15);
+		border-right: 1px solid oklch(0 0 0 / 0.18);
 		cursor: pointer;
 		font-size: 0.5625rem;
 		font-weight: 700;
+		line-height: 1.25;
 		color: oklch(0.95 0 0);
-		white-space: nowrap;
 		font-family: system-ui, -apple-system, sans-serif;
-		letter-spacing: 0.02em;
+		letter-spacing: 0.03em;
+		text-align: center;
 		text-transform: uppercase;
+		overflow-wrap: normal;
+		hyphens: none;
 		transition: filter 0.1s;
 	}
 
-	.mobile-tray-btn:active { filter: brightness(1.15); }
+	.mobile-tray-btn:hover  { filter: brightness(1.12); }
+	.mobile-tray-btn:active { filter: brightness(1.25); }
 	.mobile-tray-btn:last-child { border-right: none; }
 
 	.mobile-tray-btn-success  { background: oklch(0.48 0.16 145); }

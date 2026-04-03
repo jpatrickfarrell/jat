@@ -722,12 +722,12 @@
 	}
 
 	/* Elevate the task card containing an open dropdown above its siblings.
-	   The SearchDropdown auto-focuses its search input on open, which triggers
-	   :focus-within and creates a stacking context above sibling cards. */
+	   :has(:global(.sd-panel)) fires the moment the dropdown panel enters the DOM,
+	   creating a stacking context above sibling cards without any focus timing gap. */
 	.task-card {
 		position: relative;
 	}
-	.task-card:focus-within {
+	.task-card:has(:global(.sd-panel)) {
 		z-index: 10;
 	}
 

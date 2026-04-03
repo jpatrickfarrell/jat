@@ -398,7 +398,8 @@
 	function formatDueDate(date: string | null | undefined): string {
 		if (!date) return '';
 		try {
-			const d = new Date(date);
+			// Parse date-only strings as local time (not UTC) by appending T00:00:00
+			const d = new Date(date.includes('T') ? date : date + 'T00:00:00');
 			if (isNaN(d.getTime())) return date;
 			const today = new Date();
 			today.setHours(0, 0, 0, 0);
@@ -420,7 +421,7 @@
 	function dueDateClass(date: string | null | undefined): string {
 		if (!date) return '';
 		try {
-			const d = new Date(date);
+			const d = new Date(date.includes('T') ? date : date + 'T00:00:00');
 			const today = new Date();
 			today.setHours(0, 0, 0, 0);
 			const target = new Date(d);
@@ -483,6 +484,7 @@
 		if (x + pickerWidth > window.innerWidth) x = window.innerWidth - pickerWidth - 8;
 		if (y + pickerHeight > window.innerHeight) y = rect.top - pickerHeight - 4;
 		if (x < 8) x = 8;
+		if (y < 8) y = 8;
 
 		dueDatePickerTaskId = taskId;
 		dueDatePickerPos = { x, y };
@@ -513,7 +515,7 @@
 		for (let i = 0; i < 7; i++) {
 			const d = new Date(today);
 			d.setDate(d.getDate() + i);
-			const dateValue = d.toISOString().split('T')[0];
+			const dateValue = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 			const dayNum = d.getDate();
 			const label = i === 0 ? 'Today' : i === 1 ? 'Tmrw' : dayNames[d.getDay()];
 			let badge = '';

@@ -1514,12 +1514,14 @@
 		align-items: center;
 	}
 	.search-input {
-		padding: 0.375rem 0.75rem;
+		padding: 0.25rem 0.5rem;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
 		font-size: 0.8125rem;
 		background: oklch(0.16 0.01 250);
-		border: 1px solid oklch(0.28 0.02 250);
-		border-radius: 0.375rem;
+		border: 1px solid oklch(0.25 0.02 250);
+		border-radius: 0.5rem;
 		color: oklch(0.90 0.02 250);
+		min-height: 2rem;
 		outline: none;
 		width: 240px;
 		transition: border-color 0.15s;
@@ -1764,7 +1766,7 @@
 	.task-id-btn {
 		background: none;
 		border: none;
-		font-family: monospace;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
 		font-size: 0.6875rem;
 		color: oklch(0.50 0.02 250);
 		cursor: pointer;
@@ -2223,7 +2225,7 @@
 	}
 	.task-epic-id {
 		font-size: 0.6875rem;
-		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
 		color: oklch(0.60 0.02 250);
 		flex-shrink: 0;
 	}

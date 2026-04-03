@@ -15,7 +15,7 @@
 	import TaskDetailPane from '$lib/components/sessions/TaskDetailPane.svelte';
 	import { getReviewRules } from '$lib/stores/reviewRules.svelte';
 	import { computeReviewStatus } from '$lib/utils/reviewStatusUtils';
-	import { getSessionStateVisual, getIssueTypeVisual, type SessionState } from '$lib/config/statusColors';
+	import { getSessionStateVisual, getSessionStateActions, getIssueTypeVisual, type SessionState } from '$lib/config/statusColors';
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
 	import { getNotesUpdateSignal, clearNotesUpdateSignal } from '$lib/stores/taskNotesUpdate.svelte';
 	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
@@ -903,6 +903,58 @@
 
 	let swipeState = $state<SwipeState | null>(null);
 	let swipeOffsets = $state<Map<string, number>>(new Map());
+	let expandedStrips = $state<Set<string>>(new Set());
+
+	function toggleStrip(sessionName: string, e: MouseEvent) {
+		e.stopPropagation();
+		const next = new Set(expandedStrips);
+		if (next.has(sessionName)) { next.delete(sessionName); } else { next.add(sessionName); }
+		expandedStrips = next;
+	}
+
+	async function handleMobileAction(actionId: string, sessionName: string, sessionTask: AgentTask | null, agentName: string, project: string | null) {
+		// Collapse tray after action
+		const next = new Set(expandedStrips);
+		next.delete(sessionName);
+		expandedStrips = next;
+
+		if (actionId === 'attach') {
+			await handleAttachSession(sessionName);
+		} else if (actionId === 'kill' || actionId === 'cleanup') {
+			await handleKillSession(sessionName);
+		} else if (actionId === 'view-task' && sessionTask) {
+			onViewTask?.(sessionTask.id);
+		} else if (actionId === 'complete' || actionId === 'complete-kill') {
+			optimisticStates.set(sessionName, 'completing');
+			optimisticStates = new Map(optimisticStates);
+			if (sessionTask) {
+				try {
+					await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
+						method: 'POST', headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ type: 'completing', data: { taskId: sessionTask.id, taskTitle: sessionTask.title, currentStep: 'verifying', progress: 0, stepsCompleted: [], stepsRemaining: ['verifying', 'committing', 'closing', 'releasing'] } })
+					});
+				} catch (e) { console.warn('[TasksActive] Failed to write completing signal:', e); }
+			}
+			await sendWorkflowCommand(sessionName, actionId === 'complete-kill' ? '/jat:complete --kill' : '/jat:complete');
+		} else if (actionId === 'interrupt') {
+			await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'ctrl-c' }) });
+		} else if (actionId === 'escape') {
+			await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'escape' }) });
+		} else if (actionId === 'close-kill') {
+			if (sessionTask) {
+				try { await fetch(`/api/tasks/${encodeURIComponent(sessionTask.id)}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Abandoned via Close & Kill' }) }); } catch (e) { console.warn('[TasksActive] close task failed:', e); }
+			}
+			await handleKillSession(sessionName);
+		} else if (actionId === 'pause') {
+			optimisticStates.set(sessionName, 'paused');
+			optimisticStates = new Map(optimisticStates);
+			if (sessionTask) {
+				try { await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/pause`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: sessionTask.id, taskTitle: sessionTask.title, reason: 'Paused via mobile tray', killSession: true, agentName, project }) }); } catch (e) { console.warn('[TasksActive] pause failed:', e); }
+			} else { await handleKillSession(sessionName); }
+		} else if (actionId === 'convert-to-tasks') {
+			await sendWorkflowCommand(sessionName, '/jat:tasktree');
+		}
+	}
 	let swipeConfig = $state(getSwipeConfig());
 	const SWIPE_THRESHOLD = 80;
 	const SWIPE_COMMIT_THRESHOLD = 140;
@@ -1273,8 +1325,16 @@
 					class:swiping={isSwiping}
 					style="{isExiting ? 'pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
 					role="button" tabindex="0"
-					onclick={() => !isExiting && !swipeState?.swiping && (onMobileCardClick ? onMobileCardClick(session.name) : (fullscreenSession = session.name))}
-					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); !isExiting && !swipeState?.swiping && (onMobileCardClick ? onMobileCardClick(session.name) : (fullscreenSession = session.name)); } }}
+					onclick={(e) => {
+						if (isExiting || swipeState?.swiping) return;
+						if (expandedStrips.has(session.name)) {
+							// Close tray on card body click
+							const next = new Set(expandedStrips); next.delete(session.name); expandedStrips = next;
+						} else {
+							onMobileCardClick ? onMobileCardClick(session.name) : (fullscreenSession = session.name);
+						}
+					}}
+					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!isExiting && !swipeState?.swiping && !expandedStrips.has(session.name)) { onMobileCardClick ? onMobileCardClick(session.name) : (fullscreenSession = session.name); } } }}
 					ontouchstart={(e) => handleSwipeTouchStart(e, session.name)}
 					ontouchmove={handleSwipeTouchMove}
 					ontouchend={handleSwipeTouchEnd}
@@ -1282,9 +1342,18 @@
 				>
 				{#if session.type === 'server'}
 					<!-- Server session -->
-					<div class="mobile-card-inner">
-						<div class="mobile-state-strip" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};">
+					{@const cardActions = getSessionStateActions(effectiveState)}
+					<div class="mobile-card-inner" class:tray-open={expandedStrips.has(session.name)}>
+						<button class="mobile-state-strip" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};" onclick={(e) => toggleStrip(session.name, e)} title="Toggle actions">
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" width="13" height="13" style="stroke: {stateVisual.accent};"><path stroke-linecap="round" stroke-linejoin="round" d={stateVisual.icon} /></svg>
+						</button>
+						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+							{#each cardActions.slice(0, 4) as action}
+								<button class="mobile-tray-btn mobile-tray-btn-{action.variant}" title={action.description} onclick={() => handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null)}>
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d={action.icon} /></svg>
+									<span>{action.label}</span>
+								</button>
+							{/each}
 						</div>
 						<div class="mobile-card-body">
 							<span class="mobile-title">{session.name}</span>
@@ -1295,9 +1364,18 @@
 					{@const taskAge = getTaskAge(sessionTask.created_at)}
 					{@const typeVisual = getIssueTypeVisual(sessionTask.issue_type)}
 					{@const harness = getTaskHarness(sessionTask)}
-					<div class="mobile-card-inner">
-						<div class="mobile-state-strip" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};">
+					{@const cardActions = getSessionStateActions(effectiveState)}
+					<div class="mobile-card-inner" class:tray-open={expandedStrips.has(session.name)}>
+						<button class="mobile-state-strip" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};" onclick={(e) => toggleStrip(session.name, e)} title="Toggle actions">
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" width="13" height="13" style="stroke: {stateVisual.accent};"><path stroke-linecap="round" stroke-linejoin="round" d={stateVisual.icon} /></svg>
+						</button>
+						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+							{#each cardActions.slice(0, 4) as action}
+								<button class="mobile-tray-btn mobile-tray-btn-{action.variant}" title={action.description} onclick={() => handleMobileAction(action.id, session.name, sessionTask, sessionAgentName, session.project || null)}>
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d={action.icon} /></svg>
+									<span>{action.label}</span>
+								</button>
+							{/each}
 						</div>
 						<div class="mobile-card-body">
 							<span class="mobile-title" title={sessionTask.title}>
@@ -1340,9 +1418,18 @@
 					</div>
 				{:else}
 					<!-- Planning / no-task session -->
-					<div class="mobile-card-inner">
-						<div class="mobile-state-strip" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};">
+					{@const cardActions = getSessionStateActions(effectiveState)}
+					<div class="mobile-card-inner" class:tray-open={expandedStrips.has(session.name)}>
+						<button class="mobile-state-strip" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};" onclick={(e) => toggleStrip(session.name, e)} title="Toggle actions">
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" width="13" height="13" style="stroke: {stateVisual.accent};"><path stroke-linecap="round" stroke-linejoin="round" d={stateVisual.icon} /></svg>
+						</button>
+						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+							{#each cardActions.slice(0, 4) as action}
+								<button class="mobile-tray-btn mobile-tray-btn-{action.variant}" title={action.description} onclick={() => handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null)}>
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d={action.icon} /></svg>
+									<span>{action.label}</span>
+								</button>
+							{/each}
 						</div>
 						<div class="mobile-card-body">
 							<span class="mobile-title" style="color: oklch(0.70 0.12 270);">
@@ -3190,14 +3277,68 @@
 		min-height: 0;
 	}
 
-	/* State indicator strip (left edge) */
+	/* State indicator strip — clickable handle */
 	.mobile-state-strip {
 		width: 28px;
 		flex-shrink: 0;
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 0;
+		transition: width 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.15s;
 	}
+
+	.mobile-card-inner.tray-open .mobile-state-strip {
+		opacity: 0.7;
+	}
+
+	/* Action tray — slides out from strip on click */
+	.mobile-action-tray {
+		display: flex;
+		align-items: stretch;
+		max-width: 0;
+		overflow: hidden;
+		transition: max-width 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+		flex-shrink: 0;
+	}
+
+	.mobile-card-inner.tray-open .mobile-action-tray {
+		max-width: 240px;
+	}
+
+	/* Tray action buttons */
+	.mobile-tray-btn {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 3px;
+		padding: 0 10px;
+		min-width: 54px;
+		border: none;
+		border-right: 1px solid oklch(0 0 0 / 0.15);
+		cursor: pointer;
+		font-size: 0.5625rem;
+		font-weight: 700;
+		color: oklch(0.95 0 0);
+		white-space: nowrap;
+		font-family: system-ui, -apple-system, sans-serif;
+		letter-spacing: 0.02em;
+		text-transform: uppercase;
+		transition: filter 0.1s;
+	}
+
+	.mobile-tray-btn:active { filter: brightness(1.15); }
+	.mobile-tray-btn:last-child { border-right: none; }
+
+	.mobile-tray-btn-success  { background: oklch(0.48 0.16 145); }
+	.mobile-tray-btn-warning  { background: oklch(0.52 0.14 70); }
+	.mobile-tray-btn-error    { background: oklch(0.45 0.16 25); }
+	.mobile-tray-btn-info     { background: oklch(0.48 0.14 220); }
+	.mobile-tray-btn-default  { background: oklch(0.30 0.02 250); }
 
 	/* Content area (full width minus strip) */
 	.mobile-card-body {

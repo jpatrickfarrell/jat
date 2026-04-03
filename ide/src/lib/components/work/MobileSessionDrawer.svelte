@@ -476,6 +476,13 @@
 		}
 	});
 
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			dismissDrawer();
+		}
+	}
+
 	onMount(() => {
 		// Delay visible by one tick so Svelte transitions trigger on insert
 		requestAnimationFrame(() => visible = true);
@@ -500,6 +507,8 @@
 		setHoveredSession(null);
 	});
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <div use:portalToBody>
 	{#if visible}

@@ -339,6 +339,8 @@
 	}
 </script>
 
+<svelte:window onkeydown={(e) => { if (e.key === 'Escape' && showCommandModal) showCommandModal = false; }} />
+
 <div class="state-actions-editor">
 	<!-- Loading State -->
 	{#if isLoading}

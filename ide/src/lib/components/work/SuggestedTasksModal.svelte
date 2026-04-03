@@ -285,6 +285,8 @@
 	}
 </script>
 
+<svelte:window onkeydown={(e) => { if (isOpen && e.key === 'Escape') handleClose(); }} />
+
 {#if isOpen}
 	<div class="modal modal-open" role="presentation" onclick={handleBackdropClick} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleBackdropClick(e); } }}>
 		<div

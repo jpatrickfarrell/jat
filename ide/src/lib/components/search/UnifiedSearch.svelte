@@ -20,7 +20,9 @@
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
 	import FxText from '$lib/components/FxText.svelte';
-	import ProjectSelector from '$lib/components/ProjectSelector.svelte';
+	import SearchDropdown from '$lib/components/SearchDropdown.svelte';
+	import type { SearchDropdownGroup } from '$lib/components/SearchDropdown.svelte';
+	import { fetchAndGetProjectColors, getProjectColor } from '$lib/utils/projectColors';
 
 	// --- Types ---
 	interface TaskResult {
@@ -125,6 +127,20 @@
 	let query = $state(initialQuery);
 	let activeTab = $state<SourceTab>(initialTab);
 	let selectedProject = $state(projectProp);
+	let projectColors = $state<Record<string, string>>({});
+
+	const projectGroups = $derived.by<SearchDropdownGroup[]>(() => [{
+		label: 'Projects',
+		options: [
+			{ value: '', label: 'All Projects' },
+			...projects.map(p => ({ value: p, label: p }))
+		]
+	}]);
+
+	function getSearchProjectColor(project: string): string | undefined {
+		if (!project) return undefined;
+		return projectColors[project.toLowerCase()] || getProjectColor(project + '-x');
+	}
 
 	// All/Tasks/Memory results (from /api/search)
 	let taskResults = $state<TaskResult[]>([]);
@@ -738,7 +754,9 @@
 	];
 
 	// --- Lifecycle ---
-	onMount(() => {
+	onMount(async () => {
+		projectColors = await fetchAndGetProjectColors();
+
 		if (mode === 'route') {
 			const params = new URL(window.location.href).searchParams;
 			const tabParam = params.get('tab') as SourceTab | null;
@@ -860,14 +878,16 @@
 			</div>
 
 			<!-- Project filter -->
-			{#if projects.length > 1}
-				<ProjectSelector
-					{projects}
-					{selectedProject}
-					onProjectChange={handleProjectSelect}
-					compact
-					showColors
-				/>
+			{#if projects.length > 0}
+				<div style="min-width: 140px;">
+					<SearchDropdown
+						value={selectedProject}
+						groups={projectGroups}
+						placeholder="All Projects"
+						colorFn={getSearchProjectColor}
+						onChange={handleProjectSelect}
+					/>
+				</div>
 			{/if}
 		</div>
 

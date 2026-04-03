@@ -721,6 +721,16 @@
 		user-select: none;
 	}
 
+	/* Elevate the task card containing an open dropdown above its siblings.
+	   The SearchDropdown auto-focuses its search input on open, which triggers
+	   :focus-within and creates a stacking context above sibling cards. */
+	.task-card {
+		position: relative;
+	}
+	.task-card:focus-within {
+		z-index: 10;
+	}
+
 	.line-clamp-2 {
 		display: -webkit-box;
 		-webkit-line-clamp: 2;

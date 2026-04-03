@@ -16,6 +16,8 @@
 </script>
 
 <!-- Help Modal -->
+<svelte:window onkeydown={(e) => { if (isOpen && e.key === 'Escape') closeModal(); }} />
+
 {#if isOpen}
 	<div class="modal modal-open">
 		<div class="modal-box max-w-4xl max-h-[90vh] overflow-y-auto">

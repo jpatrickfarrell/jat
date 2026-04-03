@@ -309,7 +309,19 @@
 			year: 'numeric'
 		});
 	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') {
+			if (editingSecret) {
+				editingSecret = null;
+			} else if (addingFreeform) {
+				addingFreeform = false;
+			}
+		}
+	}
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <div class="project-secrets">
 	<div class="secrets-header">

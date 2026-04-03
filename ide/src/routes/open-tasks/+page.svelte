@@ -312,6 +312,16 @@
 		return { total, withDueDate, overdue, p0p1 };
 	});
 
+	// Bulk selection derived
+	const selectionCount = $derived(selectedTasks.size);
+	const allVisibleSelected = $derived.by(() => {
+		const visible = filteredTasks;
+		return visible.length > 0 && visible.every(t => selectedTasks.has(t.id));
+	});
+	const someVisibleSelected = $derived.by(() => {
+		return filteredTasks.some(t => selectedTasks.has(t.id)) && !allVisibleSelected;
+	});
+
 	async function fetchTasks() {
 		try {
 			const res = await fetch('/api/tasks?status=open');
@@ -588,6 +598,36 @@
 		};
 	});
 
+	// Clean up stale selections when tasks change
+	$effect(() => {
+		const allIds = new Set(tasks.map(t => t.id));
+		const stale = [...selectedTasks].filter(id => !allIds.has(id));
+		if (stale.length > 0) {
+			const next = new Set(selectedTasks);
+			for (const id of stale) next.delete(id);
+			selectedTasks = next;
+		}
+	});
+
+	// Close floating bar dropdowns on click outside
+	$effect(() => {
+		if (!priorityDropdownOpen && !harnessDropdownOpen) return;
+		function handleClickOutside(e: MouseEvent) {
+			const target = e.target as HTMLElement;
+			if (!target.closest('.floating-dropdown-wrapper')) {
+				priorityDropdownOpen = false;
+				harnessDropdownOpen = false;
+			}
+		}
+		const timer = setTimeout(() => {
+			document.addEventListener('click', handleClickOutside);
+		}, 0);
+		return () => {
+			clearTimeout(timer);
+			document.removeEventListener('click', handleClickOutside);
+		};
+	});
+
 	async function ctxChangeStatus(taskId: string, newStatus: string) {
 		closeContextMenu();
 		try {
@@ -722,6 +762,199 @@
 		finally { creatingEpic = false; }
 	}
 
+	// === Bulk Selection Functions ===
+	function toggleTask(taskId: string, event?: MouseEvent) {
+		const visible = filteredTasks;
+		if (event?.shiftKey && lastClickedTaskId) {
+			const ids = visible.map(t => t.id);
+			const a = ids.indexOf(lastClickedTaskId);
+			const b = ids.indexOf(taskId);
+			if (a !== -1 && b !== -1) {
+				const [start, end] = a < b ? [a, b] : [b, a];
+				const next = new Set(selectedTasks);
+				for (let i = start; i <= end; i++) next.add(ids[i]);
+				selectedTasks = next;
+				lastClickedTaskId = taskId;
+				return;
+			}
+		}
+		const next = new Set(selectedTasks);
+		if (next.has(taskId)) {
+			next.delete(taskId);
+		} else {
+			next.add(taskId);
+		}
+		selectedTasks = next;
+		lastClickedTaskId = taskId;
+	}
+
+	function toggleAllVisible() {
+		const visible = filteredTasks.map(t => t.id);
+		const allSelected = visible.length > 0 && visible.every(id => selectedTasks.has(id));
+		if (allSelected) {
+			selectedTasks = new Set();
+		} else {
+			selectedTasks = new Set(visible);
+		}
+	}
+
+	function clearSelection() {
+		selectedTasks = new Set();
+		lastClickedTaskId = null;
+		priorityDropdownOpen = false;
+		harnessDropdownOpen = false;
+	}
+
+	// === Bulk Actions ===
+	async function handleBulkDelete() {
+		const ids = [...selectedTasks];
+		if (ids.length === 0) return;
+		if (!confirm(`Delete ${ids.length} task${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
+		bulkActionLoading = true;
+		bulkActionError = '';
+		try {
+			const result = await bulkApiOperation(ids, async (taskId) => {
+				const response = await fetchWithTimeout(`/api/tasks/${taskId}`, createDeleteRequest());
+				if (!response.ok) {
+					throw new Error(await handleApiError(response, `delete task ${taskId}`));
+				}
+			});
+			if (!result.success) {
+				bulkActionError = formatBulkResultMessage(result, 'task');
+			}
+			clearSelection();
+			fetchTasks();
+		} catch (err) {
+			bulkActionError = err instanceof Error ? err.message : String(err);
+		} finally {
+			bulkActionLoading = false;
+		}
+	}
+
+	async function handleBulkClose() {
+		const ids = [...selectedTasks];
+		if (ids.length === 0) return;
+		if (!confirm(`Close ${ids.length} task${ids.length > 1 ? 's' : ''}?`)) return;
+		bulkActionLoading = true;
+		bulkActionError = '';
+		try {
+			const result = await bulkApiOperation(ids, async (taskId) => {
+				const response = await fetchWithTimeout(`/api/tasks/${taskId}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ status: 'closed' })
+				});
+				if (!response.ok) {
+					throw new Error(await handleApiError(response, `close task ${taskId}`));
+				}
+			});
+			if (!result.success) {
+				bulkActionError = formatBulkResultMessage(result, 'task');
+			}
+			clearSelection();
+			fetchTasks();
+		} catch (err) {
+			bulkActionError = err instanceof Error ? err.message : String(err);
+		} finally {
+			bulkActionLoading = false;
+		}
+	}
+
+	async function handleBulkSpawn() {
+		const ids = [...selectedTasks];
+		if (ids.length === 0) return;
+		if (!confirm(`Spawn ${ids.length} agent${ids.length > 1 ? 's' : ''}? One per selected task.`)) return;
+		bulkActionLoading = true;
+		bulkActionError = '';
+		spawnProgress = `Spawning 0/${ids.length}...`;
+		try {
+			const results = await spawnInBatches(ids, {
+				onSpawn(result: SpawnResult, index: number, total: number) {
+					spawnProgress = `Spawning ${index + 1}/${total}...`;
+				},
+				onBatchComplete(batchResults: SpawnResult[], batchIndex: number, totalBatches: number) {
+					if (totalBatches > 1) {
+						spawnProgress = `Batch ${batchIndex + 1}/${totalBatches} done...`;
+					}
+				}
+			});
+			const succeeded = results.filter(r => r.success).length;
+			const failed = results.filter(r => !r.success);
+			if (failed.length === 0) {
+				addToast({ message: `Spawned ${succeeded} agent${succeeded !== 1 ? 's' : ''}`, type: 'success' });
+			} else if (succeeded > 0) {
+				addToast({ message: `Spawned ${succeeded}/${results.length} (${failed.length} failed)`, type: 'warning' });
+			} else {
+				const firstError = failed[0]?.error || 'Unknown error';
+				addToast({ message: `Spawn failed: ${firstError}`, type: 'error' });
+			}
+			clearSelection();
+		} catch (err) {
+			bulkActionError = err instanceof Error ? err.message : String(err);
+		} finally {
+			bulkActionLoading = false;
+			spawnProgress = '';
+		}
+	}
+
+	async function handleBulkPriority(priority: number) {
+		const ids = [...selectedTasks];
+		if (ids.length === 0) return;
+		priorityDropdownOpen = false;
+		bulkActionLoading = true;
+		bulkActionError = '';
+		try {
+			const result = await bulkApiOperation(ids, async (taskId) => {
+				const response = await fetchWithTimeout(`/api/tasks/${taskId}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ priority })
+				});
+				if (!response.ok) {
+					throw new Error(await handleApiError(response, `update priority for ${taskId}`));
+				}
+			});
+			if (!result.success) {
+				bulkActionError = formatBulkResultMessage(result, 'task');
+			}
+			clearSelection();
+			fetchTasks();
+		} catch (err) {
+			bulkActionError = err instanceof Error ? err.message : String(err);
+		} finally {
+			bulkActionLoading = false;
+		}
+	}
+
+	async function handleBulkHarness(agentId: string) {
+		const ids = [...selectedTasks];
+		if (ids.length === 0) return;
+		harnessDropdownOpen = false;
+		bulkActionLoading = true;
+		bulkActionError = '';
+		try {
+			const result = await bulkApiOperation(ids, async (taskId) => {
+				const response = await fetchWithTimeout(`/api/tasks/${taskId}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ agent_program: agentId === 'claude-code' ? null : agentId })
+				});
+				if (!response.ok) {
+					throw new Error(await handleApiError(response, `update harness for ${taskId}`));
+				}
+			});
+			if (!result.success) {
+				bulkActionError = formatBulkResultMessage(result, 'task');
+			}
+			clearSelection();
+			fetchTasks();
+		} catch (err) {
+			bulkActionError = err instanceof Error ? err.message : String(err);
+		} finally {
+			bulkActionLoading = false;
+		}
+	}
+
 	onMount(() => {
 		if (browser) {
 			loadColumnSettings();
@@ -838,12 +1071,23 @@
 			</p>
 		</div>
 	{:else}
+		{#if bulkActionError}
+			<div class="bulk-error">
+				<span>{bulkActionError}</span>
+				<button type="button" onclick={() => bulkActionError = ''}>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+						<line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+					</svg>
+				</button>
+			</div>
+		{/if}
 		<div class="table-container" bind:this={tableContainerEl}>
 			{#if resizeGuideX !== null}
 				<div class="resize-guide" style="left: {resizeGuideX}px;"></div>
 			{/if}
-			<table class="tasks-table" style="table-layout: fixed;">
+			<table class="tasks-table" style="table-layout: fixed;" class:has-selection={selectionCount > 0}>
 				<colgroup>
+					<col style="width: 32px; min-width: 32px; max-width: 32px;" />
 					{#each visibleColumns as col}
 						{#if getColWidth(col) === 0}
 							<col />
@@ -854,6 +1098,15 @@
 				</colgroup>
 				<thead>
 					<tr>
+						<th class="th-checkbox">
+							<input
+								type="checkbox"
+								class="bulk-checkbox select-all-checkbox"
+								checked={allVisibleSelected}
+								indeterminate={someVisibleSelected}
+								onclick={(e) => { e.stopPropagation(); toggleAllVisible(); }}
+							/>
+						</th>
 						{#each visibleColumns as col, i}
 							<th
 								class="th-cell"
@@ -888,11 +1141,22 @@
 				<tbody>
 					{#each filteredTasks as task (task.id)}
 						{@const isSaving = saving === task.id}
+						{@const isSelected = selectedTasks.has(task.id)}
 						<tr
 							class="task-row"
 							class:saving={isSaving}
+							class:selected-row={isSelected}
 							oncontextmenu={(e) => handleContextMenu(task, e)}
 						>
+							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+							<td class="td-checkbox" onclick={(e) => { e.stopPropagation(); toggleTask(task.id, e); }}>
+								<input
+									type="checkbox"
+									class="bulk-checkbox"
+									checked={isSelected}
+									style="pointer-events: none;"
+								/>
+							</td>
 							{#each visibleColumns as col}
 								{#if col.id === 'project'}
 									<td>
@@ -1338,6 +1602,86 @@
 			</svg>
 			<span>Delete Task</span>
 		</button>
+	</div>
+{/if}
+
+<!-- Floating Bulk Action Bar -->
+{#if selectionCount > 0}
+	<div class="floating-action-bar" transition:fade={{ duration: 150 }}>
+		<span class="floating-count">{selectionCount} selected</span>
+		<div class="floating-divider"></div>
+		<button type="button" class="floating-btn floating-btn-spawn" onclick={handleBulkSpawn} disabled={bulkActionLoading}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+				<path d="M12 2C12 2 8 6 8 12C8 15 9 17 10 18L10 21C10 21.5 10.5 22 11 22H13C13.5 22 14 21.5 14 21L14 18C15 17 16 15 16 12C16 6 12 2 12 2Z" />
+				<circle cx="12" cy="10" r="2" />
+			</svg>
+			{spawnProgress || 'Spawn'}
+		</button>
+		<button type="button" class="floating-btn floating-btn-close" onclick={handleBulkClose} disabled={bulkActionLoading}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+				<circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
+			</svg>
+			Close
+		</button>
+		<button type="button" class="floating-btn floating-btn-delete" onclick={handleBulkDelete} disabled={bulkActionLoading}>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+				<polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+			</svg>
+			Delete
+		</button>
+		<div class="floating-divider"></div>
+		<!-- Priority dropdown -->
+		<div class="floating-dropdown-wrapper" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+			<button type="button" class="floating-btn floating-btn-priority" onclick={() => { priorityDropdownOpen = !priorityDropdownOpen; harnessDropdownOpen = false; }} disabled={bulkActionLoading}>
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+					<path d="M3 3v18h18" /><path d="M18 9l-5-6-4 4-4 2" />
+				</svg>
+				Priority
+			</button>
+			{#if priorityDropdownOpen}
+				<div class="floating-dropdown" transition:fade={{ duration: 100 }}>
+					{#each [
+						{ p: 0, label: 'P0 Critical', color: 'oklch(0.75 0.18 25)' },
+						{ p: 1, label: 'P1 High', color: 'oklch(0.80 0.15 85)' },
+						{ p: 2, label: 'P2 Medium', color: 'oklch(0.75 0.12 200)' },
+						{ p: 3, label: 'P3 Low', color: 'oklch(0.65 0.02 250)' },
+						{ p: 4, label: 'P4 Lowest', color: 'oklch(0.55 0.02 250)' }
+					] as item}
+						<button class="floating-dropdown-item" onclick={() => handleBulkPriority(item.p)}>
+							<span class="floating-priority-dot" style="background: {item.color};"></span>
+							{item.label}
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
+		<!-- Harness dropdown -->
+		<div class="floating-dropdown-wrapper" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+			<button type="button" class="floating-btn floating-btn-harness" onclick={() => { harnessDropdownOpen = !harnessDropdownOpen; priorityDropdownOpen = false; }} disabled={bulkActionLoading}>
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+					<path d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28z" />
+					<circle cx="12" cy="12" r="3" />
+				</svg>
+				Harness
+			</button>
+			{#if harnessDropdownOpen}
+				<div class="floating-dropdown" transition:fade={{ duration: 100 }}>
+					{#each AGENT_PRESETS as preset}
+						<button class="floating-dropdown-item" onclick={() => handleBulkHarness(preset.id)}>
+							<ProviderLogo agentId={preset.id} size={14} />
+							<span>{preset.name}</span>
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
+		<div class="floating-divider"></div>
+		<button type="button" class="floating-btn floating-btn-clear" onclick={clearSelection} disabled={bulkActionLoading}>
+			Clear
+		</button>
+		{#if bulkActionLoading}
+			<div class="floating-spinner"></div>
+		{/if}
 	</div>
 {/if}
 
@@ -2082,5 +2426,217 @@
 	.task-epic-create-btn:disabled {
 		opacity: 0.4;
 		cursor: default;
+	}
+
+	/* === Bulk Selection === */
+	.th-checkbox, .td-checkbox {
+		width: 32px;
+		min-width: 32px;
+		max-width: 32px;
+		text-align: center;
+		padding: 0 !important;
+	}
+	.td-checkbox {
+		cursor: pointer;
+	}
+	.bulk-checkbox {
+		width: 14px;
+		height: 14px;
+		cursor: pointer;
+		accent-color: oklch(0.70 0.18 240);
+		opacity: 0;
+		transition: opacity 0.15s;
+	}
+	.task-row:hover .bulk-checkbox,
+	.bulk-checkbox:checked,
+	.has-selection .bulk-checkbox {
+		opacity: 1;
+	}
+	.select-all-checkbox {
+		opacity: 0;
+		transition: opacity 0.15s;
+	}
+	.has-selection .select-all-checkbox,
+	.tasks-table thead:hover .select-all-checkbox {
+		opacity: 1;
+	}
+	.selected-row {
+		background: oklch(0.70 0.18 240 / 0.08) !important;
+	}
+	.selected-row:hover {
+		background: oklch(0.70 0.18 240 / 0.12) !important;
+	}
+	.bulk-error {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 1rem;
+		background: oklch(0.55 0.15 30 / 0.12);
+		border-bottom: 1px solid oklch(0.55 0.15 30 / 0.25);
+		color: oklch(0.75 0.15 30);
+		font-size: 0.8125rem;
+		flex-shrink: 0;
+	}
+	.bulk-error span {
+		flex: 1;
+	}
+	.bulk-error button {
+		display: flex;
+		align-items: center;
+		background: transparent;
+		border: none;
+		color: oklch(0.65 0.10 30);
+		cursor: pointer;
+		padding: 0.125rem;
+		border-radius: 0.25rem;
+	}
+	.bulk-error button:hover {
+		color: oklch(0.80 0.15 30);
+		background: oklch(0.55 0.15 30 / 0.15);
+	}
+
+	/* === Floating Action Bar === */
+	.floating-action-bar {
+		position: fixed;
+		bottom: 1.5rem;
+		left: 50%;
+		transform: translateX(-50%);
+		z-index: 50;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		background: oklch(0.16 0.02 250);
+		border: 1px solid oklch(0.30 0.02 250);
+		border-radius: 0.75rem;
+		box-shadow: 0 8px 32px oklch(0.05 0 0 / 0.6), 0 2px 8px oklch(0.05 0 0 / 0.3);
+	}
+	.floating-count {
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: oklch(0.85 0.02 250);
+		white-space: nowrap;
+	}
+	.floating-divider {
+		width: 1px;
+		height: 1.25rem;
+		background: oklch(0.30 0.02 250);
+	}
+	.floating-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.375rem 0.625rem;
+		border: 1px solid transparent;
+		border-radius: 0.375rem;
+		font-size: 0.75rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.15s;
+		white-space: nowrap;
+	}
+	.floating-btn:disabled {
+		opacity: 0.5;
+		pointer-events: none;
+	}
+	.floating-btn-spawn {
+		background: oklch(0.65 0.18 250 / 0.15);
+		color: oklch(0.82 0.14 250);
+		border-color: oklch(0.65 0.18 250 / 0.3);
+	}
+	.floating-btn-spawn:hover {
+		background: oklch(0.65 0.18 250 / 0.25);
+	}
+	.floating-btn-close {
+		background: oklch(0.75 0.15 85 / 0.12);
+		color: oklch(0.80 0.12 85);
+		border-color: oklch(0.75 0.15 85 / 0.25);
+	}
+	.floating-btn-close:hover {
+		background: oklch(0.75 0.15 85 / 0.22);
+	}
+	.floating-btn-delete {
+		background: oklch(0.55 0.18 30 / 0.15);
+		color: oklch(0.80 0.15 30);
+		border-color: oklch(0.55 0.18 30 / 0.3);
+	}
+	.floating-btn-delete:hover {
+		background: oklch(0.55 0.18 30 / 0.25);
+	}
+	.floating-btn-clear {
+		background: transparent;
+		color: oklch(0.65 0.02 250);
+	}
+	.floating-btn-clear:hover {
+		background: oklch(0.25 0.02 250);
+		color: oklch(0.80 0.02 250);
+	}
+	.floating-btn-priority {
+		background: oklch(0.55 0.15 200 / 0.15);
+		color: oklch(0.80 0.12 200);
+		border-color: oklch(0.55 0.15 200 / 0.3);
+	}
+	.floating-btn-priority:hover {
+		background: oklch(0.55 0.15 200 / 0.25);
+	}
+	.floating-btn-harness {
+		background: oklch(0.55 0.15 300 / 0.15);
+		color: oklch(0.80 0.12 300);
+		border-color: oklch(0.55 0.15 300 / 0.3);
+	}
+	.floating-btn-harness:hover {
+		background: oklch(0.55 0.15 300 / 0.25);
+	}
+	.floating-spinner {
+		width: 14px;
+		height: 14px;
+		border: 2px solid oklch(0.35 0.02 250);
+		border-top-color: oklch(0.70 0.15 240);
+		border-radius: 50%;
+		animation: floating-spin 0.6s linear infinite;
+	}
+	@keyframes floating-spin {
+		to { transform: rotate(360deg); }
+	}
+	.floating-dropdown-wrapper {
+		position: relative;
+	}
+	.floating-dropdown {
+		position: absolute;
+		bottom: calc(100% + 8px);
+		left: 50%;
+		transform: translateX(-50%);
+		min-width: 160px;
+		background: oklch(0.18 0.02 250);
+		border: 1px solid oklch(0.30 0.02 250);
+		border-radius: 0.5rem;
+		padding: 0.375rem;
+		box-shadow: 0 8px 24px oklch(0.05 0 0 / 0.5);
+		z-index: 60;
+	}
+	.floating-dropdown-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.375rem 0.625rem;
+		border: none;
+		background: transparent;
+		color: oklch(0.80 0.02 250);
+		font-size: 0.75rem;
+		text-align: left;
+		border-radius: 0.375rem;
+		cursor: pointer;
+		transition: background 0.1s;
+		white-space: nowrap;
+	}
+	.floating-dropdown-item:hover {
+		background: oklch(0.25 0.02 250);
+	}
+	.floating-priority-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		flex-shrink: 0;
 	}
 </style>

@@ -13,6 +13,12 @@
 	import { toggleSort as toggleSortUtil } from '$lib/utils/tableSort';
 	import ManageColumnsDropdown from '$lib/components/ManageColumnsDropdown.svelte';
 	import { columnResize } from '$lib/actions/columnResize';
+	import { fade } from 'svelte/transition';
+	import { bulkApiOperation, fetchWithTimeout, createDeleteRequest, handleApiError, formatBulkResultMessage } from '$lib/utils/bulkApiHelpers';
+	import { addToast } from '$lib/stores/toasts.svelte';
+	import { AGENT_PRESETS } from '$lib/types/agentProgram';
+	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
+	import { spawnInBatches, type SpawnResult } from '$lib/utils/spawnBatch';
 
 	interface Task {
 		id: string;
@@ -126,6 +132,15 @@
 	// Column resize state (guide line only — actual resize logic is in the columnResize action)
 	let resizeGuideX = $state<number | null>(null);
 	let tableContainerEl: HTMLElement | undefined = $state();
+
+	// Bulk selection
+	let selectedTasks = $state<Set<string>>(new Set());
+	let lastClickedTaskId = $state<string | null>(null);
+	let bulkActionLoading = $state(false);
+	let bulkActionError = $state('');
+	let spawnProgress = $state('');
+	let priorityDropdownOpen = $state(false);
+	let harnessDropdownOpen = $state(false);
 
 	// Column drag-reorder state
 	let colDraggedIndex = $state<number | null>(null);

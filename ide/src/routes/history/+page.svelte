@@ -17,8 +17,10 @@
 	import AnimatedDigits from "$lib/components/AnimatedDigits.svelte";
 	import TaskDetailDrawer from "$lib/components/TaskDetailDrawer.svelte";
 	import { HistorySkeleton } from "$lib/components/skeleton";
-	import { initProjectColors } from "$lib/utils/projectColors";
+	import { initProjectColors, fetchAndGetProjectColors, getProjectColor } from "$lib/utils/projectColors";
 	import { openTaskDrawer } from "$lib/stores/drawerStore";
+	import SearchDropdown from "$lib/components/SearchDropdown.svelte";
+	import type { SearchDropdownGroup } from "$lib/components/SearchDropdown.svelte";
 	import CompletedDayGroup from "$lib/components/history/CompletedDayGroup.svelte";
 	import { reveal } from "$lib/actions/reveal";
 	import {
@@ -39,9 +41,26 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
+	// Project colors for dropdown
+	let projectColors = $state<Record<string, string>>({});
+
 	// Filters
 	let searchQuery = $state("");
 	let selectedProject = $state("");
+
+	// Project dropdown groups (All Projects + each project)
+	const projectGroups = $derived.by<SearchDropdownGroup[]>(() => [{
+		label: 'Projects',
+		options: [
+			{ value: '', label: 'All Projects' },
+			...projects.map(p => ({ value: p.name, label: p.name }))
+		]
+	}]);
+
+	function getProjectColorFn(project: string): string | undefined {
+		if (!project) return undefined;
+		return projectColors[project.toLowerCase()] || getProjectColor(project + '-x');
+	}
 
 	// Task detail drawer
 	let selectedTaskId = $state<string | null>(null);
@@ -60,11 +79,12 @@
 	});
 
 	// Fetch data on mount
-	onMount(() => {
+	onMount(async () => {
 		initProjectColors();
 		fetchProjects();
 		fetchTasks();
 		fetchMemory();
+		projectColors = await fetchAndGetProjectColors();
 	});
 
 	async function fetchProjects() {
@@ -405,16 +425,15 @@
 						class="industrial-input w-48"
 						bind:value={searchQuery}
 					/>
-					<select
-						class="industrial-input"
-						style="min-width: 130px; padding-right: 1.5rem;"
-						bind:value={selectedProject}
-					>
-						<option value="">All Projects</option>
-						{#each projects as project}
-							<option value={project.name}>{project.name}</option>
-						{/each}
-					</select>
+					<div style="min-width: 140px;">
+						<SearchDropdown
+							value={selectedProject}
+							groups={projectGroups}
+							placeholder="All Projects"
+							colorFn={getProjectColorFn}
+							onChange={(v) => { selectedProject = v; }}
+						/>
+					</div>
 					{#if searchQuery || selectedProject}
 						<button
 							type="button"

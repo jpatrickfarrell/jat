@@ -12,12 +12,32 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { reveal } from '$lib/actions/reveal';
+	import SearchDropdown from '$lib/components/SearchDropdown.svelte';
+	import type { SearchDropdownGroup } from '$lib/components/SearchDropdown.svelte';
+	import { fetchAndGetProjectColors, getProjectColor } from '$lib/utils/projectColors';
 
 	// --- State ---
 	let activeTab = $state<'search' | 'browse' | 'status'>('status');
 
 	// Project filter from URL (set by TopBar ProjectSelector)
 	let filterProject = $state('');
+
+	// Project colors for dropdown
+	let projectColors = $state<Record<string, string>>({});
+
+	// Project dropdown groups (derived from projectStatuses)
+	const projectFilterGroups = $derived.by<SearchDropdownGroup[]>(() => [{
+		label: 'Projects',
+		options: [
+			{ value: '', label: 'All Projects' },
+			...projectStatuses.map(p => ({ value: p.project, label: p.project }))
+		]
+	}]);
+
+	function getMemoryProjectColor(project: string): string | undefined {
+		if (!project) return undefined;
+		return projectColors[project.toLowerCase()] || getProjectColor(project + '-x');
+	}
 
 	// Search state
 	let searchQuery = $state('');
@@ -191,8 +211,9 @@
 		if (browseProject) fetchBrowseFiles();
 	});
 
-	onMount(() => {
+	onMount(async () => {
 		fetchStatus();
+		projectColors = await fetchAndGetProjectColors();
 	});
 </script>
 
@@ -282,19 +303,17 @@
 		{/each}
 
 		<!-- Project filter -->
-		<div class="ml-auto flex items-center gap-2">
-			<span class="font-mono text-xs" style="color: oklch(0.45 0.02 250);">Project:</span>
-			<select
-				bind:value={filterProject}
-				class="px-2 py-1 rounded font-mono text-xs outline-none"
-				style="background: oklch(0.22 0.01 250); border: 1px solid oklch(0.30 0.02 250); color: oklch(0.75 0.05 250);"
-				onchange={() => { if (activeTab === 'browse' && filterProject && filterProject !== 'All Projects') browseProject = filterProject; }}
-			>
-				<option value="">All Projects</option>
-				{#each projectStatuses as proj}
-					<option value={proj.project}>{proj.project}</option>
-				{/each}
-			</select>
+		<div class="ml-auto" style="min-width: 140px;">
+			<SearchDropdown
+				value={filterProject}
+				groups={projectFilterGroups}
+				placeholder="All Projects"
+				colorFn={getMemoryProjectColor}
+				onChange={(v) => {
+					filterProject = v;
+					if (activeTab === 'browse' && v) browseProject = v;
+				}}
+			/>
 		</div>
 	</div>
 

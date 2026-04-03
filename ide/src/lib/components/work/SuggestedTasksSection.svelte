@@ -307,7 +307,7 @@
 </script>
 
 <div
-	class="suggested-tasks-section rounded-lg overflow-hidden bg-base-200 border border-base-300"
+	class="suggested-tasks-section rounded-lg bg-base-200 border border-base-300"
 >
 	<!-- Header (always visible, click to collapse/expand) -->
 	<button

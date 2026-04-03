@@ -12,7 +12,7 @@
 	 *   - Left-to-right on page 0: dismiss drawer
 	 *   - Left-to-right on page 1+: previous page
 	 *
-	 * Used by /mobilenew and /tasks routes for mobile session viewing.
+	 * Used by /tasks route for mobile session viewing.
 	 */
 
 	import { onMount, onDestroy } from 'svelte';

@@ -5,8 +5,7 @@
  * NAVIGATION STRUCTURE (collapsible groups):
  *
  * WORK (daily workflow):
- *   /mobile   - Mobile (mobile-optimized task view)
- *   /tasks    - Tasks (active sessions + open tasks with spawn)
+ *   /tasks    - Tasks (active sessions + open tasks with spawn, mobile drawer support)
  *   /sessions - Sessions (all tmux sessions: agents, servers, other)
  *   /history  - History (completed task history with streak calendar)
  *
@@ -85,20 +84,6 @@ export interface UnifiedNavConfig {
 export const unifiedNavConfig: UnifiedNavConfig = {
 	navItems: [
 		// WORK: Daily workflow
-		{
-			id: 'mobile',
-			label: 'Mobile',
-			href: '/mobile',
-			icon: 'mobile',
-			category: 'work'
-		},
-		{
-			id: 'mobilenew',
-			label: 'Mobile New',
-			href: '/mobilenew',
-			icon: 'mobile',
-			category: 'work'
-		},
 		{
 			id: 'tasks',
 			label: 'Tasks',

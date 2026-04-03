@@ -235,6 +235,10 @@
 	// Action loading state
 	let actionLoading = $state<string | null>(null);
 
+	// Per-action visual feedback — tracks which button was just clicked per session
+	// key: "sessionName:actionId", value: feedback variant ('success' | 'warning' | 'error' | 'info' | 'working')
+	let actionFeedback = $state<Map<string, string>>(new Map());
+
 	// Per-session auto-complete disabled state (when user manually overrides)
 	let autoCompleteDisabledMap = $state<Map<string, boolean>>(new Map());
 
@@ -904,14 +908,32 @@
 	let swipeState = $state<SwipeState | null>(null);
 	let swipeOffsets = $state<Map<string, number>>(new Map());
 
+	// Set visual feedback on a tray button, auto-clears after animation
+	function setActionFeedback(sessionName: string, actionId: string, variant: string, durationMs = 800) {
+		const key = `${sessionName}:${actionId}`;
+		actionFeedback.set(key, variant);
+		actionFeedback = new Map(actionFeedback);
+		setTimeout(() => {
+			actionFeedback.delete(key);
+			actionFeedback = new Map(actionFeedback);
+		}, durationMs);
+	}
+
 	async function handleMobileAction(actionId: string, sessionName: string, sessionTask: AgentTask | null, agentName: string, project: string | null) {
+		// Prevent double-clicks while feedback is active
+		const feedbackKey = `${sessionName}:${actionId}`;
+		if (actionFeedback.has(feedbackKey)) return;
+
 		if (actionId === 'attach') {
+			setActionFeedback(sessionName, actionId, 'info');
 			await handleAttachSession(sessionName);
 		} else if (actionId === 'kill' || actionId === 'cleanup') {
+			setActionFeedback(sessionName, actionId, 'error', 1200);
 			await handleKillSession(sessionName);
 		} else if (actionId === 'view-task' && sessionTask) {
 			onViewTask?.(sessionTask.id);
 		} else if (actionId === 'complete' || actionId === 'complete-kill') {
+			setActionFeedback(sessionName, actionId, 'success', 1500);
 			optimisticStates.set(sessionName, 'completing');
 			optimisticStates = new Map(optimisticStates);
 			if (sessionTask) {
@@ -924,21 +946,26 @@
 			}
 			await sendWorkflowCommand(sessionName, actionId === 'complete-kill' ? '/jat:complete --kill' : '/jat:complete');
 		} else if (actionId === 'interrupt') {
+			setActionFeedback(sessionName, actionId, 'warning');
 			await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'ctrl-c' }) });
 		} else if (actionId === 'escape') {
+			setActionFeedback(sessionName, actionId, 'warning');
 			await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'escape' }) });
 		} else if (actionId === 'close-kill') {
+			setActionFeedback(sessionName, actionId, 'error', 1200);
 			if (sessionTask) {
 				try { await fetch(`/api/tasks/${encodeURIComponent(sessionTask.id)}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Abandoned via Close & Kill' }) }); } catch (e) { console.warn('[TasksActive] close task failed:', e); }
 			}
 			await handleKillSession(sessionName);
 		} else if (actionId === 'pause') {
+			setActionFeedback(sessionName, actionId, 'info', 1200);
 			optimisticStates.set(sessionName, 'paused');
 			optimisticStates = new Map(optimisticStates);
 			if (sessionTask) {
 				try { await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/pause`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: sessionTask.id, taskTitle: sessionTask.title, reason: 'Paused via mobile tray', killSession: true, agentName, project }) }); } catch (e) { console.warn('[TasksActive] pause failed:', e); }
 			} else { await handleKillSession(sessionName); }
 		} else if (actionId === 'convert-to-tasks') {
+			setActionFeedback(sessionName, actionId, 'info');
 			await sendWorkflowCommand(sessionName, '/jat:tasktree');
 		}
 	}
@@ -1328,9 +1355,14 @@
 						</div>
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							{#each cardActions.slice(0, 4) as action}
-								<button class="mobile-tray-btn mobile-tray-btn-{action.variant}" title={action.description} onclick={() => handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null)}>
-									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d={action.icon} /></svg>
-									<span>{action.label}</span>
+								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
+								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} title={action.description} disabled={!!fb} onclick={() => handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null)}>
+									{#if fb}
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+									{:else}
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d={action.icon} /></svg>
+									{/if}
+									<span>{fb ? 'Done' : action.label}</span>
 								</button>
 							{/each}
 						</div>
@@ -1345,14 +1377,19 @@
 					{@const harness = getTaskHarness(sessionTask)}
 					{@const cardActions = getSessionStateActions(effectiveState)}
 					<div class="mobile-card-inner">
-						<div class="mobile-state-strip" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};" aria-hidden="true">
-							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" width="13" height="13" style="stroke: {stateVisual.accent};"><path stroke-linecap="round" stroke-linejoin="round" d={stateVisual.icon} /></svg>
+						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};">
+							<AgentAvatar name={sessionAgentName} size={22} showRing={true} sessionState={effectiveState} />
 						</div>
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							{#each cardActions.slice(0, 4) as action}
-								<button class="mobile-tray-btn mobile-tray-btn-{action.variant}" title={action.description} onclick={() => handleMobileAction(action.id, session.name, sessionTask, sessionAgentName, session.project || null)}>
-									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d={action.icon} /></svg>
-									<span>{action.label}</span>
+								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
+								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} title={action.description} disabled={!!fb} onclick={() => handleMobileAction(action.id, session.name, sessionTask, sessionAgentName, session.project || null)}>
+									{#if fb}
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+									{:else}
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d={action.icon} /></svg>
+									{/if}
+									<span>{fb ? 'Done' : action.label}</span>
 								</button>
 							{/each}
 						</div>
@@ -1369,8 +1406,6 @@
 									<span class="mobile-separator">·</span>
 									<span class="mobile-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
 								{/if}
-								<span class="mobile-separator">·</span>
-								<AgentAvatar name={sessionAgentName} size={16} showRing={true} sessionState={effectiveState} />
 								<span class="mobile-agent-name">{sessionAgentName}</span>
 								{#if sessionTask.issue_type}
 									<span class="mobile-separator">·</span>
@@ -1399,14 +1434,19 @@
 					<!-- Planning / no-task session -->
 					{@const cardActions = getSessionStateActions(effectiveState)}
 					<div class="mobile-card-inner">
-						<div class="mobile-state-strip" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};" aria-hidden="true">
-							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" width="13" height="13" style="stroke: {stateVisual.accent};"><path stroke-linecap="round" stroke-linejoin="round" d={stateVisual.icon} /></svg>
+						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};">
+							<AgentAvatar name={sessionAgentName} size={22} showRing={true} sessionState={effectiveState} />
 						</div>
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							{#each cardActions.slice(0, 4) as action}
-								<button class="mobile-tray-btn mobile-tray-btn-{action.variant}" title={action.description} onclick={() => handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null)}>
-									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d={action.icon} /></svg>
-									<span>{action.label}</span>
+								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
+								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} title={action.description} disabled={!!fb} onclick={() => handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null)}>
+									{#if fb}
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+									{:else}
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d={action.icon} /></svg>
+									{/if}
+									<span>{fb ? 'Done' : action.label}</span>
 								</button>
 							{/each}
 						</div>
@@ -3266,9 +3306,14 @@
 		transition: filter 0.2s;
 	}
 
+	/* Agent variant: wider to fit avatar comfortably */
+	.mobile-state-strip-agent {
+		width: 40px;
+	}
+
 	/* Brighten strip on card hover */
 	.mobile-session-card:hover .mobile-state-strip {
-		filter: brightness(1.8) saturate(1.3);
+		filter: brightness(1.15) saturate(1.2);
 	}
 
 	/* Subtle row highlight when tray is active */
@@ -3324,6 +3369,45 @@
 	.mobile-tray-btn-error    { background: oklch(0.45 0.16 25); }
 	.mobile-tray-btn-info     { background: oklch(0.48 0.14 220); }
 	.mobile-tray-btn-default  { background: oklch(0.30 0.02 250); }
+	.mobile-tray-btn-working  { background: oklch(0.52 0.14 70); }
+
+	/* Feedback flash animation — plays when a tray button is clicked */
+	.mobile-tray-btn-feedback {
+		animation: tray-btn-confirm 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+		pointer-events: none;
+	}
+
+	.mobile-tray-btn-feedback.mobile-tray-btn-success {
+		background: oklch(0.58 0.20 145);
+	}
+	.mobile-tray-btn-feedback.mobile-tray-btn-error {
+		background: oklch(0.55 0.20 25);
+	}
+	.mobile-tray-btn-feedback.mobile-tray-btn-warning {
+		background: oklch(0.60 0.16 70);
+	}
+	.mobile-tray-btn-feedback.mobile-tray-btn-info {
+		background: oklch(0.56 0.16 220);
+	}
+
+	@keyframes tray-btn-confirm {
+		0% {
+			transform: scale(1);
+			filter: brightness(1);
+		}
+		30% {
+			transform: scale(1.12);
+			filter: brightness(1.4);
+		}
+		60% {
+			transform: scale(0.97);
+			filter: brightness(1.2);
+		}
+		100% {
+			transform: scale(1);
+			filter: brightness(1.15);
+		}
+	}
 
 	/* Content area (full width minus strip) */
 	.mobile-card-body {

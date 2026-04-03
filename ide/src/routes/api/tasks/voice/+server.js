@@ -22,6 +22,13 @@ import { join } from 'path';
 import { homedir } from 'os';
 
 const TEMP_DIR = '/tmp/jat-voice';
+const VOICE_LOG_FILE = '/tmp/jat-voice.log';
+
+function vlog(msg) {
+	const line = `[${new Date().toISOString()}] ${msg}\n`;
+	try { appendFileSync(VOICE_LOG_FILE, line); } catch {}
+	console.log('[voice]', msg);
+}
 
 /**
  * Extract creation date from audio file metadata via ffprobe.
@@ -118,18 +125,51 @@ ${transcript}`;
 			model: process.env.ORGANIZE_TASKS_MODEL || 'qwen2.5:7b',
 			prompt,
 			format: 'json',
-			stream: false,
+			stream: true,
 			options: { temperature: 0.3, num_predict: 2048 }
 		}),
-		signal: AbortSignal.timeout(120_000)
+		signal: AbortSignal.timeout(300_000)
 	});
 
 	if (!response.ok) {
 		throw new Error(`ollama request failed: ${response.status}`);
 	}
 
-	const data = await response.json();
-	const parsed = JSON.parse(data.response);
+	// Stream response, logging progress every 200 tokens
+	let fullResponse = '';
+	let tokenCount = 0;
+	let lastLogAt = 0;
+	let firstTokenAt = null;
+	const ollamaStart = Date.now();
+	const reader = response.body.getReader();
+	const decoder = new TextDecoder();
+
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		for (const line of decoder.decode(value).split('\n')) {
+			if (!line.trim()) continue;
+			try {
+				const chunk = JSON.parse(line);
+				if (chunk.response) {
+					if (!firstTokenAt) {
+						firstTokenAt = Date.now();
+						vlog(`ollama prefill done in ${((firstTokenAt - ollamaStart) / 1000).toFixed(1)}s — generating...`);
+					}
+					fullResponse += chunk.response;
+					tokenCount++;
+					if (tokenCount - lastLogAt >= 200) {
+						vlog(`ollama generating... ${tokenCount} tokens`);
+						lastLogAt = tokenCount;
+					}
+				}
+			} catch {}
+		}
+	}
+
+	vlog(`ollama done: ${tokenCount} tokens generated in ${((Date.now() - (firstTokenAt || ollamaStart)) / 1000).toFixed(1)}s`);
+
+	const parsed = JSON.parse(fullResponse);
 	const tasks = parsed.tasks;
 
 	if (!Array.isArray(tasks) || tasks.length === 0) {
@@ -166,7 +206,10 @@ function transcribeAndOrganize(audioPath, title, priority) {
 	const id = randomBytes(4).toString('hex');
 	const wavPath = join(TEMP_DIR, `transcribe-${id}.wav`);
 
+	vlog(`Received audio: ${audioPath}`);
+
 	// Step 1: Convert to 16kHz mono WAV
+	vlog('Converting to WAV...');
 	exec(`ffmpeg -i "${audioPath}" -ar 16000 -ac 1 -y "${wavPath}" 2>/dev/null`, {
 		timeout: 120_000
 	}, (convertErr) => {
@@ -174,12 +217,13 @@ function transcribeAndOrganize(audioPath, title, priority) {
 		try { unlinkSync(audioPath); } catch {}
 
 		if (convertErr) {
-			console.error('[voice] ffmpeg conversion failed:', convertErr.message);
+			vlog(`ERROR: ffmpeg conversion failed: ${convertErr.message}`);
 			try { unlinkSync(wavPath); } catch {}
 			return;
 		}
 
 		// Step 2: Transcribe with voxtype
+		vlog('Transcribing with voxtype...');
 		exec(`voxtype transcribe "${wavPath}" 2>/dev/null`, {
 			timeout: 600_000,
 			encoding: 'utf-8',
@@ -189,7 +233,7 @@ function transcribeAndOrganize(audioPath, title, priority) {
 			try { unlinkSync(wavPath); } catch {}
 
 			if (transcribeErr) {
-				console.error('[voice] voxtype transcription failed:', transcribeErr.message);
+				vlog(`ERROR: voxtype transcription failed: ${transcribeErr.message}`);
 				return;
 			}
 
@@ -201,18 +245,20 @@ function transcribeAndOrganize(audioPath, title, priority) {
 
 			const text = lines.join('\n').trim();
 			if (!text) {
-				console.error('[voice] Transcription produced no output');
+				vlog('ERROR: Transcription produced no output');
 				return;
 			}
+
+			vlog(`Transcription complete (${text.length} chars). Organizing with ollama...`);
 
 			// Step 3: Organize transcript into structured tasks via ollama
 			try {
 				const projects = loadProjects();
 				const tasks = await organizeTranscript(text, projects);
 				appendToVoiceTimeline(tasks);
-				console.log(`[voice] Organized ${tasks.length} task(s) into voice inbox`);
+				vlog(`Done — ${tasks.length} task(s) added to voice inbox`);
 			} catch (organizeErr) {
-				console.error('[voice] organize failed, falling back to single task:', organizeErr.message);
+				vlog(`ERROR: organize failed, falling back to single task: ${organizeErr.message}`);
 
 				// Fallback: create a single task from the transcript directly
 				const projectPath = process.cwd().replace(/\/ide$/, '');
@@ -236,9 +282,9 @@ function transcribeAndOrganize(audioPath, title, priority) {
 						source: 'voice_api',
 						data: { taskId: createdTask.id, title, type: 'task', priority, labels: ['voice'] }
 					});
-					console.log(`[voice] Fallback: task ${createdTask.id} created: "${title}"`);
+					vlog(`Fallback: task ${createdTask.id} created: "${title}"`);
 				} catch (e) {
-					console.error('[voice] Fallback task creation also failed:', e);
+					vlog(`ERROR: Fallback task creation also failed: ${e.message}`);
 				}
 			}
 		});
@@ -342,6 +388,8 @@ export async function POST({ request }) {
 				hour: 'numeric', minute: '2-digit', hour12: true
 			});
 			if (!title) title = `Voice note ${timestamp}`;
+
+			try { const sz = statSync(audioTempPath).size; vlog(`Audio received: "${title}" (${(sz/1024).toFixed(0)}KB) — queuing transcription`); } catch { vlog(`Audio received: "${title}" — queuing transcription`); }
 
 			// Fire and forget — transcription + organize happens in background
 			transcribeAndOrganize(audioTempPath, title, priority);

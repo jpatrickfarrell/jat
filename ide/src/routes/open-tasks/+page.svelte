@@ -9,6 +9,7 @@
 	import SearchDropdown from '$lib/components/SearchDropdown.svelte';
 	import type { SearchDropdownGroup } from '$lib/components/SearchDropdown.svelte';
 	import { openProjectDrawer } from '$lib/stores/drawerStore';
+	import { saveColumnSettings as saveColumnSettingsUtil, loadColumnSettings as loadColumnSettingsUtil } from '$lib/utils/columnStorage';
 
 	interface Task {
 		id: string;
@@ -48,8 +49,6 @@
 		{ id: 'assignee', label: 'Assignee', defaultWidth: 100, minWidth: 60, sortable: false },
 		{ id: 'actions', label: 'Actions', defaultWidth: 72, minWidth: 50, sortable: false },
 	];
-
-	const STORAGE_KEY = 'jat-open-tasks-columns';
 
 	// Data state
 	let tasks = $state<Task[]>([]);
@@ -146,33 +145,20 @@
 	// Load persisted column settings
 	function loadColumnSettings() {
 		if (!browser) return;
-		try {
-			const raw = localStorage.getItem(STORAGE_KEY);
-			if (!raw) return;
-			const saved = JSON.parse(raw);
-			if (saved.order && Array.isArray(saved.order)) {
-				// Merge: keep saved order, append any new columns
-				const known = new Set(ALL_COLUMNS.map(c => c.id));
-				const validOrder = saved.order.filter((id: string) => known.has(id));
-				const missing = ALL_COLUMNS.map(c => c.id).filter(id => !validOrder.includes(id));
-				columnOrder = [...validOrder, ...missing];
-			}
-			if (saved.widths && typeof saved.widths === 'object') {
-				columnWidths = saved.widths;
-			}
-			if (saved.hidden && Array.isArray(saved.hidden)) {
-				hiddenColumns = new Set(saved.hidden);
-			}
-		} catch { /* ignore corrupt data */ }
+		const saved = loadColumnSettingsUtil('jat-open-tasks-columns', ALL_COLUMNS.map(c => c.id));
+		if (!saved) return;
+		columnOrder = saved.order;
+		columnWidths = saved.widths;
+		hiddenColumns = new Set(saved.hidden);
 	}
 
 	function saveColumnSettings() {
 		if (!browser) return;
-		localStorage.setItem(STORAGE_KEY, JSON.stringify({
+		saveColumnSettingsUtil('jat-open-tasks-columns', {
 			order: columnOrder,
 			widths: columnWidths,
 			hidden: [...hiddenColumns],
-		}));
+		});
 	}
 
 	// Visible columns in order

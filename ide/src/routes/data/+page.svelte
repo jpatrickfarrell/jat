@@ -12,6 +12,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { reveal } from '$lib/actions/reveal';
+	import { saveColumnSettings as saveColumnSettingsUtil, loadColumnSettings as loadColumnSettingsUtil } from '$lib/utils/columnStorage';
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 	import type { SemanticType, ColumnConfig, ColumnSchema } from '$lib/types/dataTable';
 	import { SEMANTIC_TYPE_INFO, SEMANTIC_TO_SQLITE } from '$lib/types/dataTable';
@@ -2640,40 +2641,21 @@
 	// Load hidden columns and column order from localStorage when project/table changes
 	$effect(() => {
 		if (selectedProject && selectedTable) {
-			const hiddenKey = `jat-data-hidden-${selectedProject}-${selectedTable}`;
-			try {
-				const stored = localStorage.getItem(hiddenKey);
-				hiddenColumns = stored ? new Set(JSON.parse(stored)) : new Set();
-			} catch {
-				hiddenColumns = new Set();
-			}
-
-			const orderKey = `jat-data-colorder-${selectedProject}-${selectedTable}`;
-			try {
-				const stored = localStorage.getItem(orderKey);
-				columnOrder = stored ? JSON.parse(stored) : [];
-			} catch {
-				columnOrder = [];
-			}
-
-			const widthKey = `jat-data-colwidths-${selectedProject}-${selectedTable}`;
-			try {
-				const stored = localStorage.getItem(widthKey);
-				columnWidths = stored ? JSON.parse(stored) : {};
-			} catch {
-				columnWidths = {};
-			}
+			const key = `jat-data-cols-${selectedProject}-${selectedTable}`;
+			const saved = loadColumnSettingsUtil(key, []);
+			hiddenColumns = saved ? new Set(saved.hidden) : new Set();
+			columnOrder = saved ? saved.order : [];
+			columnWidths = saved ? saved.widths : {};
 		}
 	});
 
 	function persistHiddenColumns() {
 		if (!selectedProject || !selectedTable) return;
-		const key = `jat-data-hidden-${selectedProject}-${selectedTable}`;
-		if (hiddenColumns.size > 0) {
-			localStorage.setItem(key, JSON.stringify([...hiddenColumns]));
-		} else {
-			localStorage.removeItem(key);
-		}
+		saveColumnSettingsUtil(`jat-data-cols-${selectedProject}-${selectedTable}`, {
+			order: columnOrder,
+			widths: columnWidths,
+			hidden: [...hiddenColumns],
+		});
 
 		// Persist visible_columns to view when a view is active
 		if (selectedView) {
@@ -2691,22 +2673,20 @@
 
 	function persistColumnOrder() {
 		if (!selectedProject || !selectedTable) return;
-		const key = `jat-data-colorder-${selectedProject}-${selectedTable}`;
-		if (columnOrder.length > 0) {
-			localStorage.setItem(key, JSON.stringify(columnOrder));
-		} else {
-			localStorage.removeItem(key);
-		}
+		saveColumnSettingsUtil(`jat-data-cols-${selectedProject}-${selectedTable}`, {
+			order: columnOrder,
+			widths: columnWidths,
+			hidden: [...hiddenColumns],
+		});
 	}
 
 	function persistColumnWidths() {
 		if (!selectedProject || !selectedTable) return;
-		const key = `jat-data-colwidths-${selectedProject}-${selectedTable}`;
-		if (Object.keys(columnWidths).length > 0) {
-			localStorage.setItem(key, JSON.stringify(columnWidths));
-		} else {
-			localStorage.removeItem(key);
-		}
+		saveColumnSettingsUtil(`jat-data-cols-${selectedProject}-${selectedTable}`, {
+			order: columnOrder,
+			widths: columnWidths,
+			hidden: [...hiddenColumns],
+		});
 	}
 
 	// Column context menu handlers

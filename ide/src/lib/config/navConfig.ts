@@ -107,6 +107,13 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			category: 'work'
 		},
 		{
+			id: 'open-tasks',
+			label: 'Open Tasks',
+			href: '/open-tasks',
+			icon: 'data',
+			category: 'work'
+		},
+		{
 			id: 'sessions',
 			label: 'Sessions',
 			href: '/sessions',

@@ -1127,6 +1127,7 @@
 	let statusSubmenuOpen = $state(false);
 	let prioritySubmenuOpen = $state(false);
 	let epicSubmenuOpen = $state(false);
+	let projectSubmenuOpen = $state(false);
 	let epics = $state<Epic[]>([]);
 	let epicsLoading = $state(false);
 	let showCreateEpic = $state(false);
@@ -1175,6 +1176,7 @@
 		statusSubmenuOpen = false;
 		prioritySubmenuOpen = false;
 		epicSubmenuOpen = false;
+		projectSubmenuOpen = false;
 	}
 
 	function closeContextMenu() {
@@ -1182,6 +1184,7 @@
 		statusSubmenuOpen = false;
 		prioritySubmenuOpen = false;
 		epicSubmenuOpen = false;
+		projectSubmenuOpen = false;
 		showCreateEpic = false;
 		newEpicTitle = '';
 		// Note: ctxTask is intentionally NOT cleared so the DOM persists
@@ -1384,6 +1387,29 @@
 			addToast({ message: 'Failed to create epic', type: 'error' });
 		} finally {
 			creatingEpic = false;
+		}
+	}
+
+	// All unique project names for "Change Project" submenu
+	const allProjectNames = $derived.by(() => {
+		const set = new Set<string>();
+		for (const t of tasks) set.add(getProjectFromTaskId(t.id));
+		return [...set].sort();
+	});
+
+	async function handleChangeProject(taskId: string, newProject: string) {
+		closeContextMenu();
+		try {
+			const response = await fetch(`/api/tasks/${taskId}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ project: newProject }),
+			});
+			if (response.ok) {
+				onRetry();
+			}
+		} catch (err) {
+			console.error('Failed to change project:', err);
 		}
 	}
 
@@ -1997,7 +2023,7 @@
 		onkeydown={(e) => e.stopPropagation()}
 	>
 		<!-- Launch -->
-		<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => { const t = ctxTask!; closeContextMenu(); onSpawnTask(t); ctxTask = null; }}>
+		<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; projectSubmenuOpen = false; }} onclick={() => { const t = ctxTask!; closeContextMenu(); onSpawnTask(t); ctxTask = null; }}>
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<path d="M12 2C12 2 8 6 8 12C8 15 9 17 10 18L10 21C10 21.5 10.5 22 11 22H13C13.5 22 14 21.5 14 21L14 18C15 17 16 15 16 12C16 6 12 2 12 2Z" />
 				<circle cx="12" cy="10" r="2" />
@@ -2007,7 +2033,7 @@
 
 		<!-- Resume (only for tasks with a resumable session) -->
 		{#if ctxTask.assignee || resumableTasks.has(ctxTask.id)}
-			<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => { const t = ctxTask!; handleResumeTask(t); ctxTask = null; }} disabled={resumingTaskId === ctxTask.id}>
+			<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; projectSubmenuOpen = false; }} onclick={() => { const t = ctxTask!; handleResumeTask(t); ctxTask = null; }} disabled={resumingTaskId === ctxTask.id}>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
 				</svg>
@@ -2016,7 +2042,7 @@
 		{/if}
 
 		<!-- View Details -->
-		<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => { const id = ctxTask!.id; closeContextMenu(); onTaskClick(id); ctxTask = null; }}>
+		<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; projectSubmenuOpen = false; }} onclick={() => { const id = ctxTask!.id; closeContextMenu(); onTaskClick(id); ctxTask = null; }}>
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
 				<circle cx="12" cy="12" r="3" />
@@ -2026,7 +2052,7 @@
 
 		<!-- Reply (integrated tasks from ingest — feedback widget, Supabase, Telegram, Slack, etc.) -->
 		{#if isIntegratedTask(ctxTask)}
-			<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => { const t = ctxTask!; closeContextMenu(); openReplyModal(t); }}>
+			<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; projectSubmenuOpen = false; }} onclick={() => { const t = ctxTask!; closeContextMenu(); openReplyModal(t); }}>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
 				</svg>
@@ -2040,7 +2066,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="task-context-menu-submenu-container"
-			onmouseenter={() => { statusSubmenuOpen = true; prioritySubmenuOpen = false; epicSubmenuOpen = false; }}
+			onmouseenter={() => { statusSubmenuOpen = true; prioritySubmenuOpen = false; epicSubmenuOpen = false; projectSubmenuOpen = false; }}
 			onmouseleave={() => { statusSubmenuOpen = false; }}
 		>
 			<button class="task-context-menu-item task-context-menu-item-has-submenu">
@@ -2082,7 +2108,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="task-context-menu-submenu-container"
-			onmouseenter={() => { prioritySubmenuOpen = true; statusSubmenuOpen = false; epicSubmenuOpen = false; }}
+			onmouseenter={() => { prioritySubmenuOpen = true; statusSubmenuOpen = false; epicSubmenuOpen = false; projectSubmenuOpen = false; }}
 			onmouseleave={() => { prioritySubmenuOpen = false; }}
 		>
 			<button class="task-context-menu-item task-context-menu-item-has-submenu">
@@ -2124,7 +2150,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="task-context-menu-submenu-container"
-			onmouseenter={() => { epicSubmenuOpen = true; statusSubmenuOpen = false; prioritySubmenuOpen = false; if (ctxTask) { const p = getProjectFromTaskId(ctxTask.id); fetchEpics(p); } }}
+			onmouseenter={() => { epicSubmenuOpen = true; statusSubmenuOpen = false; prioritySubmenuOpen = false; projectSubmenuOpen = false; if (ctxTask) { const p = getProjectFromTaskId(ctxTask.id); fetchEpics(p); } }}
 			onmouseleave={() => { epicSubmenuOpen = false; }}
 		>
 			<button class="task-context-menu-item task-context-menu-item-has-submenu">
@@ -2193,10 +2219,48 @@
 			{/if}
 		</div>
 
+		<!-- Change Project (submenu) -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="task-context-menu-submenu-container"
+			onmouseenter={() => { projectSubmenuOpen = true; statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; }}
+			onmouseleave={() => { projectSubmenuOpen = false; }}
+		>
+			<button class="task-context-menu-item task-context-menu-item-has-submenu">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" />
+					<path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
+				</svg>
+				<span>Change Project</span>
+				<svg class="task-context-menu-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<polyline points="9 18 15 12 9 6" />
+				</svg>
+			</button>
+			{#if projectSubmenuOpen}
+				<div class="task-context-submenu task-context-submenu-project">
+					{#each allProjectNames as proj}
+						{@const currentProject = getProjectFromTaskId(ctxTask!.id)}
+						<button
+							class="task-context-menu-item {currentProject === proj ? 'task-context-menu-item-active' : ''}"
+							onclick={() => handleChangeProject(ctxTask!.id, proj)}
+						>
+							<span class="task-status-dot" style="background: {projectColors[proj] || getProjectColor(proj + '-x')};"></span>
+							<span>{proj}</span>
+							{#if currentProject === proj}
+								<svg class="task-context-menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+									<polyline points="20 6 9 17 4 12" />
+								</svg>
+							{/if}
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
+
 		<div class="task-context-menu-divider"></div>
 
 		<!-- Duplicate -->
-		<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => handleDuplicateTask(ctxTask!)}>
+		<button class="task-context-menu-item" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; projectSubmenuOpen = false; }} onclick={() => handleDuplicateTask(ctxTask!)}>
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
 				<path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
@@ -2205,7 +2269,7 @@
 		</button>
 
 		<!-- Close Task -->
-		<button class="task-context-menu-item task-context-menu-item-danger" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => handleChangeStatus(ctxTask!.id, 'closed')}>
+		<button class="task-context-menu-item task-context-menu-item-danger" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; projectSubmenuOpen = false; }} onclick={() => handleChangeStatus(ctxTask!.id, 'closed')}>
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<circle cx="12" cy="12" r="10" />
 				<line x1="15" y1="9" x2="9" y2="15" />
@@ -2215,7 +2279,7 @@
 		</button>
 
 		<!-- Delete Task -->
-		<button class="task-context-menu-item task-context-menu-item-danger" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; }} onclick={() => handleDeleteTask(ctxTask!.id)}>
+		<button class="task-context-menu-item task-context-menu-item-danger" onmouseenter={() => { statusSubmenuOpen = false; prioritySubmenuOpen = false; epicSubmenuOpen = false; projectSubmenuOpen = false; }} onclick={() => handleDeleteTask(ctxTask!.id)}>
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<polyline points="3 6 5 6 21 6" />
 				<path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
@@ -3010,6 +3074,11 @@
 	.task-context-submenu-epic {
 		min-width: 220px;
 		max-height: 240px;
+		overflow-y: auto;
+	}
+
+	.task-context-submenu-project {
+		max-height: 300px;
 		overflow-y: auto;
 	}
 

@@ -1068,6 +1068,7 @@
 	let ctxVisible = $state(false);
 	let ctxStatusSubmenuOpen = $state(false);
 	let ctxStateSubmenuOpen = $state(false);
+	let ctxProjectSubmenuOpen = $state(false);
 
 	function handleContextMenu(session: TmuxSession, event: MouseEvent) {
 		if (session.type !== 'agent') return;
@@ -1089,12 +1090,14 @@
 		ctxVisible = true;
 		ctxStatusSubmenuOpen = false;
 		ctxStateSubmenuOpen = false;
+		ctxProjectSubmenuOpen = false;
 	}
 
 	function closeCtxMenu() {
 		ctxVisible = false;
 		ctxStatusSubmenuOpen = false;
 		ctxStateSubmenuOpen = false;
+		ctxProjectSubmenuOpen = false;
 	}
 
 	// Close context menu on click outside or Escape
@@ -1173,6 +1176,26 @@
 			});
 		} catch (err) {
 			console.error('Failed to duplicate task:', err);
+		}
+	}
+
+	const ctxAllProjectNames = $derived.by(() => {
+		const set = new Set<string>();
+		for (const [, task] of agentTasks) set.add(task.id.split('-')[0]);
+		return [...set].sort();
+	});
+
+	async function ctxChangeProject(taskId: string, newProject: string) {
+		closeCtxMenu();
+		try {
+			const response = await fetch(`/api/tasks/${taskId}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ project: newProject }),
+			});
+			if (!response.ok) console.error('Failed to change project');
+		} catch (err) {
+			console.error('Failed to change project:', err);
 		}
 	}
 
@@ -2191,7 +2214,7 @@
 	>
 		<!-- View Details -->
 		{#if ctxData.task}
-			<button class="active-context-menu-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; }} onclick={() => { const id = ctxData!.task!.id; closeCtxMenu(); onViewTask?.(id); ctxData = null; }}>
+			<button class="active-context-menu-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; ctxProjectSubmenuOpen = false; }} onclick={() => { const id = ctxData!.task!.id; closeCtxMenu(); onViewTask?.(id); ctxData = null; }}>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
 					<circle cx="12" cy="12" r="3" />
@@ -2201,7 +2224,7 @@
 		{/if}
 
 		<!-- Attach Terminal -->
-		<button class="active-context-menu-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; }} onclick={() => { const name = ctxData!.session.name; closeCtxMenu(); handleAttachSession(name); ctxData = null; }}>
+		<button class="active-context-menu-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; ctxProjectSubmenuOpen = false; }} onclick={() => { const name = ctxData!.session.name; closeCtxMenu(); handleAttachSession(name); ctxData = null; }}>
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<polyline points="4 17 10 11 4 5" />
 				<line x1="12" y1="19" x2="20" y2="19" />
@@ -2216,7 +2239,7 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="active-context-submenu-container"
-				onmouseenter={() => { ctxStatusSubmenuOpen = true; ctxStateSubmenuOpen = false; }}
+				onmouseenter={() => { ctxStatusSubmenuOpen = true; ctxStateSubmenuOpen = false; ctxProjectSubmenuOpen = false; }}
 				onmouseleave={() => { ctxStatusSubmenuOpen = false; }}
 			>
 				<button class="active-context-menu-item active-context-menu-item-has-submenu">
@@ -2259,7 +2282,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="active-context-submenu-container"
-			onmouseenter={() => { ctxStateSubmenuOpen = true; ctxStatusSubmenuOpen = false; }}
+			onmouseenter={() => { ctxStateSubmenuOpen = true; ctxStatusSubmenuOpen = false; ctxProjectSubmenuOpen = false; }}
 			onmouseleave={() => { ctxStateSubmenuOpen = false; }}
 		>
 			<button class="active-context-menu-item active-context-menu-item-has-submenu">
@@ -2301,9 +2324,49 @@
 			{/if}
 		</div>
 
+		<!-- Change Project (submenu) -->
+		{#if ctxData.task}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="active-context-submenu-container"
+				onmouseenter={() => { ctxProjectSubmenuOpen = true; ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; }}
+				onmouseleave={() => { ctxProjectSubmenuOpen = false; }}
+			>
+				<button class="active-context-menu-item active-context-menu-item-has-submenu">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" />
+						<path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
+					</svg>
+					<span>Change Project</span>
+					<svg class="active-context-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<polyline points="9 18 15 12 9 6" />
+					</svg>
+				</button>
+				{#if ctxProjectSubmenuOpen}
+					<div class="active-context-submenu active-context-submenu-project">
+						{#each ctxAllProjectNames as proj}
+							{@const currentProject = ctxData!.task!.id.split('-')[0]}
+							<button
+								class="active-context-menu-item {currentProject === proj ? 'active-context-menu-item-active' : ''}"
+								onclick={() => ctxChangeProject(ctxData!.task!.id, proj)}
+							>
+								<span class="active-status-dot" style="background: {projectColors[proj] || getProjectColorReactive(proj + '-x') || 'oklch(0.65 0.15 250)'};"></span>
+								<span>{proj}</span>
+								{#if currentProject === proj}
+									<svg class="active-context-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+										<polyline points="20 6 9 17 4 12" />
+									</svg>
+								{/if}
+							</button>
+						{/each}
+					</div>
+				{/if}
+			</div>
+		{/if}
+
 		<!-- Duplicate -->
 		{#if ctxData.task}
-			<button class="active-context-menu-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; }} onclick={() => ctxDuplicateTask(ctxData!.task!)}>
+			<button class="active-context-menu-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; ctxProjectSubmenuOpen = false; }} onclick={() => ctxDuplicateTask(ctxData!.task!)}>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
 					<path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
@@ -2315,7 +2378,7 @@
 		<div class="active-context-menu-divider"></div>
 
 		<!-- Interrupt -->
-		<button class="active-context-menu-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; }} onclick={async () => {
+		<button class="active-context-menu-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; ctxProjectSubmenuOpen = false; }} onclick={async () => {
 			const name = ctxData!.session.name;
 			closeCtxMenu();
 			ctxData = null;
@@ -2334,7 +2397,7 @@
 
 		<!-- Pause -->
 		{#if ctxData.task}
-			<button class="active-context-menu-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; }} onclick={async () => {
+			<button class="active-context-menu-item" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; ctxProjectSubmenuOpen = false; }} onclick={async () => {
 				const d = ctxData!;
 				closeCtxMenu();
 				ctxData = null;
@@ -2366,7 +2429,7 @@
 
 		<!-- Complete -->
 		{#if ctxData.task}
-			<button class="active-context-menu-item active-context-menu-item-success" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; }} onclick={async () => {
+			<button class="active-context-menu-item active-context-menu-item-success" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; ctxProjectSubmenuOpen = false; }} onclick={async () => {
 				const d = ctxData!;
 				closeCtxMenu();
 				ctxData = null;
@@ -2404,7 +2467,7 @@
 		<div class="active-context-menu-divider"></div>
 
 		<!-- Kill Session -->
-		<button class="active-context-menu-item active-context-menu-item-danger" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; }} onclick={async () => {
+		<button class="active-context-menu-item active-context-menu-item-danger" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; ctxProjectSubmenuOpen = false; }} onclick={async () => {
 			const d = ctxData!;
 			closeCtxMenu();
 			ctxData = null;
@@ -3110,6 +3173,11 @@
 		padding: 0.375rem;
 		box-shadow: 0 10px 30px oklch(0.05 0 0 / 0.5);
 		animation: activeCtxIn 0.1s ease;
+	}
+
+	.active-context-submenu-project {
+		max-height: 300px;
+		overflow-y: auto;
 	}
 
 	/* Delay row exit animation so avatar flip-out plays first */

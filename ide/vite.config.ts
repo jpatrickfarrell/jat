@@ -83,6 +83,9 @@ export default defineConfig({
 		host: '127.0.0.1',
 		https: getHttpsConfig()
 	},
+	optimizeDeps: {
+		include: ['svelte-dnd-action']
+	},
 	ssr: {
 		external: ['sqlite-vec']
 	},

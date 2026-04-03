@@ -97,10 +97,23 @@
 
 	// Due date picker state
 	let dueDatePickerTaskId = $state<string | null>(null);
-	let dueDatePickerPos = $state<{ x: number; y: number } | null>(null);
+	let dueDatePickerPos = $state<{ x: number; y: number; anchorBottom: number; anchorTop: number } | null>(null);
+	let dueDatePickerEl = $state<HTMLElement | null>(null);
 	let dueDateTempValue = $state('');
 	let dueDateTempTime = $state('');
 	let dueDateSaving = $state(false);
+
+	// Reposition picker after it renders using its actual height
+	$effect(() => {
+		if (!dueDatePickerEl || !dueDatePickerPos) return;
+		const { anchorBottom, anchorTop, x } = dueDatePickerPos;
+		const pickerHeight = dueDatePickerEl.offsetHeight;
+		const spaceBelow = window.innerHeight - anchorBottom;
+		let y = spaceBelow >= pickerHeight + 8
+			? anchorBottom + 4
+			: Math.max(8, anchorTop - pickerHeight - 4);
+		if (dueDatePickerPos.y !== y) dueDatePickerPos = { ...dueDatePickerPos, y };
+	});
 
 	// Drawer state
 	let drawerOpen = $state(false);
@@ -473,21 +486,15 @@
 		const task = tasks.find(t => t.id === taskId);
 		if (!task) return;
 
-		// Position near the clicked cell
 		const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
 		const pickerWidth = 280;
-		const pickerHeight = 320;
 		let x = rect.left;
-		let y = rect.bottom + 4;
-
-		// Keep within viewport
 		if (x + pickerWidth > window.innerWidth) x = window.innerWidth - pickerWidth - 8;
-		if (y + pickerHeight > window.innerHeight) y = rect.top - pickerHeight - 4;
 		if (x < 8) x = 8;
-		if (y < 8) y = 8;
 
+		// Store anchor coords; y will be finalized after the picker renders
 		dueDatePickerTaskId = taskId;
-		dueDatePickerPos = { x, y };
+		dueDatePickerPos = { x, y: rect.bottom + 4, anchorBottom: rect.bottom, anchorTop: rect.top };
 
 		// Parse existing due date
 		if (task.due_date) {
@@ -503,6 +510,7 @@
 	function closeDueDatePicker() {
 		dueDatePickerTaskId = null;
 		dueDatePickerPos = null;
+		dueDatePickerEl = null;
 		dueDateTempValue = '';
 		dueDateTempTime = '';
 	}
@@ -1294,6 +1302,7 @@
 	<div
 		class="due-date-picker fixed z-50"
 		style="left: {dueDatePickerPos.x}px; top: {dueDatePickerPos.y}px;"
+		bind:this={dueDatePickerEl}
 		role="group"
 		onclick={(e) => e.stopPropagation()}
 		onkeydown={(e) => e.stopPropagation()}

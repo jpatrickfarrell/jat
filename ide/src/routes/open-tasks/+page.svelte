@@ -874,8 +874,9 @@
 			/>
 			<!-- Manage Columns -->
 			<div class="mc-wrapper">
-				<button class="filter-select mc-trigger" onclick={() => { mcOpen = !mcOpen; }}>
-					Columns ▾
+				<button class="mc-trigger" onclick={() => { mcOpen = !mcOpen; }}>
+					<span>Columns</span>
+					<svg class="mc-chevron" class:mc-chevron-open={mcOpen} viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
 				</button>
 				{#if mcOpen}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -1550,19 +1551,6 @@
 		background: oklch(0.24 0.06 145 / 0.3);
 		color: oklch(0.80 0.15 145);
 	}
-	.filter-select {
-		padding: 0.375rem 0.5rem;
-		font-size: 0.8125rem;
-		background: oklch(0.16 0.01 250);
-		border: 1px solid oklch(0.28 0.02 250);
-		border-radius: 0.375rem;
-		color: oklch(0.90 0.02 250);
-		outline: none;
-		cursor: pointer;
-	}
-	.filter-select:focus {
-		border-color: oklch(0.55 0.12 220);
-	}
 
 
 	/* Manage columns dropdown */
@@ -1570,7 +1558,33 @@
 		position: relative;
 	}
 	.mc-trigger {
+		padding: 0.25rem 0.5rem;
+		border-radius: 0.5rem;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		font-size: 0.8125rem;
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		min-height: 2rem;
+		cursor: pointer;
+		background: oklch(0.16 0.01 250);
+		border: 1px solid oklch(0.25 0.02 250);
+		color: oklch(0.85 0.02 250);
+		transition: background 0.15s, border-color 0.15s;
 		white-space: nowrap;
+	}
+	.mc-trigger:hover {
+		background: oklch(0.18 0.01 250);
+		border-color: oklch(0.30 0.02 250);
+	}
+	.mc-chevron {
+		width: 14px;
+		height: 14px;
+		opacity: 0.5;
+		transition: transform 0.15s;
+	}
+	.mc-chevron-open {
+		transform: rotate(180deg);
 	}
 	.mc-dropdown {
 		position: absolute;

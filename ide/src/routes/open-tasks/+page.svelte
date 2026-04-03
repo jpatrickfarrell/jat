@@ -835,6 +835,7 @@
 					value={selectedProject}
 					groups={projectDropdownGroups}
 					placeholder="All Projects"
+					colorFn={(v) => v !== 'all' ? getProjectColor(v + '-x') : undefined}
 					onChange={(v) => { selectedProject = v; }}
 				/>
 			</div>

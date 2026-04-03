@@ -21,6 +21,7 @@
 		placeholder = 'Filter...',
 		disabled = false,
 		displayValue,
+		colorFn,
 		onChange,
 	}: {
 		value: string;
@@ -28,6 +29,7 @@
 		placeholder?: string;
 		disabled?: boolean;
 		displayValue?: string;
+		colorFn?: (value: string) => string | undefined;
 		onChange: (value: string) => void;
 	} = $props();
 
@@ -47,6 +49,7 @@
 
 	const triggerLabel = $derived(displayValue || selectedOption?.label || value || placeholder);
 	const triggerIcon = $derived(selectedOption?.icon || '');
+	const activeColor = $derived(colorFn ? colorFn(value) : undefined);
 
 	const filteredGroups = $derived.by(() => {
 		if (!searchQuery.trim()) return groups;
@@ -88,6 +91,7 @@
 		type="button"
 		class="sd-trigger"
 		class:sd-disabled={disabled}
+		style={activeColor ? `border-left-color: ${activeColor}; border-left-width: 3px; color: ${activeColor};` : ''}
 		onclick={() => { if (!disabled) open = !open; }}
 		{disabled}
 	>
@@ -144,6 +148,7 @@
 									onclick={() => select(option.value)}
 									class="sd-option"
 									class:sd-option-selected={value === option.value}
+									style={colorFn && colorFn(option.value) ? `border-left-color: ${colorFn(option.value)}; color: ${colorFn(option.value)};` : ''}
 								>
 									{#if option.icon}<span class="sd-option-icon">{option.icon}</span>{/if}
 									<span class="truncate">{option.label}</span>

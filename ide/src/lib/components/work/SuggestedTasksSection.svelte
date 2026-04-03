@@ -25,6 +25,7 @@
 	import { getIssueTypeVisual } from '$lib/config/statusColors';
 	import type { SuggestedTask } from '$lib/types/signals';
 	import SlideOpenButton from '$lib/components/SlideOpenButton.svelte';
+	import ProjectSelector from '$lib/components/tasks/ProjectSelector.svelte';
 
 	/** Extended SuggestedTask with local UI state */
 	interface SuggestedTaskWithState extends SuggestedTask {
@@ -207,6 +208,7 @@
 	function saveTitle(taskKey: string) {
 		if (onEditTask && editingTitleValue.trim()) {
 			onEditTask(taskKey, { title: editingTitleValue.trim() });
+			autoSelect(taskKey);
 		}
 		editingTitleKey = null;
 		editingTitleValue = '';
@@ -228,11 +230,20 @@
 		}
 	}
 
+	// Auto-select a task when the user edits it
+	function autoSelect(taskKey: string) {
+		const task = tasks.find((t, i) => getTaskKey(t, i) === taskKey);
+		if (task && !task.selected && !task.alreadyCreated) {
+			onToggleSelection(taskKey);
+		}
+	}
+
 	// Update priority
 	function updatePriority(taskKey: string, priority: number, event: Event) {
 		event.stopPropagation();
 		if (onEditTask) {
 			onEditTask(taskKey, { priority });
+			autoSelect(taskKey);
 		}
 	}
 
@@ -241,6 +252,7 @@
 		event.stopPropagation();
 		if (onEditTask) {
 			onEditTask(taskKey, { type });
+			autoSelect(taskKey);
 		}
 	}
 
@@ -248,6 +260,7 @@
 	function updateDescription(taskKey: string, description: string) {
 		if (onEditTask) {
 			onEditTask(taskKey, { description });
+			autoSelect(taskKey);
 		}
 	}
 
@@ -255,6 +268,7 @@
 	function updateProject(taskKey: string, project: string) {
 		if (onEditTask) {
 			onEditTask(taskKey, { project });
+			autoSelect(taskKey);
 		}
 	}
 
@@ -397,160 +411,66 @@
 									: 'task-card-agent-selected'
 								: 'task-card-default'}"
 					>
-						<!-- Main task row -->
+						<!-- Main task row — single compact line -->
 						<div
-							class="flex items-start gap-2 p-2 {task.alreadyCreated ? '' : 'cursor-pointer'} group"
+							class="flex items-center gap-2 px-2 py-1.5 {task.alreadyCreated ? '' : 'cursor-pointer'} group"
 							onclick={() => !task.alreadyCreated && onToggleSelection(taskKey)}
 							onkeydown={(e) => e.key === 'Enter' && !task.alreadyCreated && onToggleSelection(taskKey)}
 							role="checkbox"
 							aria-checked={task.alreadyCreated ? true : task.selected}
 							tabindex="0"
 						>
-							<!-- Checkbox (or Created indicator) -->
+							<!-- Checkbox -->
 							<div
-								class="task-checkbox flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center mt-0.5 transition-colors {task.alreadyCreated
+								class="task-checkbox flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors {task.alreadyCreated
 									? 'checkbox-created'
 									: task.selected
-										? isHuman
-											? 'checkbox-human-selected'
-											: 'checkbox-agent-selected'
+										? isHuman ? 'checkbox-human-selected' : 'checkbox-agent-selected'
 										: 'checkbox-default'}"
 								title={task.alreadyCreated ? 'Already created in JAT' : ''}
 							>
 								{#if task.alreadyCreated || task.selected}
-									<svg
-										class="w-3 h-3 {task.alreadyCreated ? 'text-success' : 'text-base-100'}"
-										fill="none"
-										viewBox="0 0 24 24"
-										stroke="currentColor"
-										stroke-width="3"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M5 13l4 4L19 7"
-										/>
+									<svg class="w-2.5 h-2.5 {task.alreadyCreated ? 'text-success' : 'text-base-100'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
 									</svg>
 								{/if}
 							</div>
 
-							<!-- Human/Agent indicator -->
-							<span
-								class="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded font-mono font-bold mt-0.5 text-base-100 {isHuman ? 'badge-human' : 'badge-agent'}"
-								title={isHuman
-									? 'Human task (requires manual action)'
-									: 'Agent task (can be automated)'}
+							<!-- Priority dropdown -->
+							<select
+								class="text-[9px] px-1 py-0.5 rounded font-mono font-bold cursor-pointer appearance-none priority-select flex-shrink-0 {priorityClass}"
+								value={effectivePriority}
+								onclick={(e) => e.stopPropagation()}
+								onchange={(e) => updatePriority(taskKey, parseInt(e.currentTarget.value), e)}
 							>
-								{isHuman ? '🧑' : '🤖'}
-							</span>
+								{#each PRIORITIES as p}
+									<option value={p.value}>{p.label}</option>
+								{/each}
+							</select>
 
-							<!-- Task content -->
+							<!-- Type dropdown -->
+							<select
+								class="text-[9px] px-1 py-0.5 rounded font-mono cursor-pointer appearance-none capitalize type-select bg-base-300 text-base-content border border-base-content/20 flex-shrink-0"
+								value={effectiveType}
+								onclick={(e) => e.stopPropagation()}
+								onchange={(e) => updateType(taskKey, e.currentTarget.value, e)}
+							>
+								{#each TASK_TYPES as t}
+									<option value={t}>{t}</option>
+								{/each}
+							</select>
+
+							<!-- Project selector -->
+							<div onclick={(e) => e.stopPropagation()} class="flex-shrink-0">
+								<ProjectSelector
+									projects={availableProjects}
+									selected={effectiveProject}
+									onSelect={(p) => updateProject(taskKey, p)}
+								/>
+							</div>
+
+							<!-- Title · description inline -->
 							<div class="flex-1 min-w-0">
-								<!-- Controls row: badges, dropdowns, actions -->
-								<div class="flex items-center gap-1.5 flex-wrap">
-									<!-- Priority dropdown -->
-									<select
-										class="text-[9px] px-1.5 py-0.5 rounded font-mono font-bold cursor-pointer appearance-none priority-select {priorityClass}"
-										value={effectivePriority}
-										onclick={(e) => e.stopPropagation()}
-										onchange={(e) =>
-											updatePriority(taskKey, parseInt(e.currentTarget.value), e)}
-									>
-										{#each PRIORITIES as p}
-											<option value={p.value}>{p.label}</option>
-										{/each}
-									</select>
-
-									<!-- Type dropdown -->
-									<select
-										class="text-[9px] px-1.5 py-0.5 rounded font-mono cursor-pointer appearance-none capitalize type-select bg-base-300 text-base-content border border-base-content/20"
-										value={effectiveType}
-										onclick={(e) => e.stopPropagation()}
-										onchange={(e) => updateType(taskKey, e.currentTarget.value, e)}
-									>
-										{#each TASK_TYPES as t}
-											<option value={t}>{t}</option>
-										{/each}
-									</select>
-
-									<!-- Type icon -->
-									<span class="text-sm opacity-70" title={typeVisual.label}>
-										{typeVisual.icon}
-									</span>
-
-									<!-- Already Created indicator with clickable task ID -->
-									{#if task.alreadyCreated}
-										{#if task.taskId && onTaskClick}
-											<button
-												type="button"
-												onclick={(e) => { e.stopPropagation(); onTaskClick(task.taskId!); }}
-												class="badge badge-xs badge-success font-mono gap-1 cursor-pointer hover:brightness-110 transition-all"
-												title="Click to view task {task.taskId}"
-											>
-												<svg class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-												</svg>
-												{task.taskId}
-											</button>
-										{:else}
-											<span
-												class="badge badge-xs badge-success font-mono gap-1"
-												title="This task already exists in JAT"
-											>
-												<svg class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-												</svg>
-												Created
-											</span>
-										{/if}
-									{/if}
-
-									<!-- Edited indicator with revert button -->
-									{#if task.edited && !task.alreadyCreated}
-										<span class="badge badge-xs badge-warning font-mono">
-											edited
-										</span>
-										{#if onClearEdits}
-											<button
-												type="button"
-												onclick={(e) => handleClearEdits(taskKey, e)}
-												class="text-[10px] opacity-60 hover:opacity-100 transition-opacity"
-												title="Revert changes"
-											>
-												↩
-											</button>
-										{/if}
-									{/if}
-
-									<!-- Spacer to push actions to the right -->
-									<span class="flex-1"></span>
-
-									<!-- Expand toggle for description -->
-									<button
-										type="button"
-										onclick={(e) => toggleExpand(taskKey, e)}
-										class="text-[10px] p-0.5 rounded opacity-50 hover:opacity-100 transition-opacity"
-										title={isExpanded ? 'Collapse description' : 'Expand description'}
-									>
-										<svg
-											class="w-3.5 h-3.5 transition-transform {isExpanded
-												? 'rotate-180'
-												: ''}"
-											fill="none"
-											viewBox="0 0 24 24"
-											stroke="currentColor"
-											stroke-width="2"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M19 9l-7 7-7-7"
-											/>
-										</svg>
-									</button>
-								</div>
-
-								<!-- Title (full width, allows wrapping up to 2 lines) -->
 								{#if editingTitleKey === taskKey}
 									<!-- svelte-ignore a11y_autofocus -->
 									<input
@@ -559,63 +479,52 @@
 										onblur={() => saveTitle(taskKey)}
 										onkeydown={(e) => handleTitleKeydown(e, taskKey)}
 										onclick={(e) => e.stopPropagation()}
-										class="w-full text-xs px-1.5 py-0.5 mt-1 rounded bg-base-300 text-base-content border border-info"
+										class="w-full text-xs px-1.5 py-0.5 rounded bg-base-300 text-base-content border border-info"
 										autofocus
 									/>
 								{:else}
-									<div class="flex items-start gap-1 mt-1">
-										<button
-											type="button"
-											onclick={(e) => e.stopPropagation()}
-											ondblclick={(e) => startEditingTitle(taskKey, effectiveTitle, e)}
-											class="flex-1 min-w-0 text-xs text-left font-medium line-clamp-2 hover:underline text-base-content"
-											title="Double-click to edit title"
-										>
-											{effectiveTitle}
-										</button>
-										<!-- Edit icon for title -->
-										<button
-											type="button"
-											onclick={(e) => startEditingTitle(taskKey, effectiveTitle, e)}
-											class="flex-shrink-0 text-[10px] p-0.5 rounded opacity-40 hover:opacity-100 transition-opacity text-info mt-0.5"
-											title="Edit title"
-										>
-											<svg
-												class="w-3 h-3"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke="currentColor"
-												stroke-width="2"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
-												/>
-											</svg>
-										</button>
-									</div>
-								{/if}
-
-								<!-- Description preview (when collapsed) - click to expand and edit -->
-								{#if !isExpanded && effectiveDescription}
 									<button
 										type="button"
-										onclick={(e) => toggleExpand(taskKey, e)}
-										class="text-xs mt-0.5 line-clamp-2 text-left hover:underline cursor-pointer w-full text-base-content/60"
-										title="Click to expand and edit description"
+										onclick={(e) => e.stopPropagation()}
+										ondblclick={(e) => startEditingTitle(taskKey, effectiveTitle, e)}
+										class="w-full text-xs text-left font-medium text-base-content truncate block"
+										title="Double-click to edit title"
 									>
-										{effectiveDescription}
+										{effectiveTitle}{#if effectiveDescription}<span class="text-base-content/40 font-normal"> · {effectiveDescription}</span>{/if}
 									</button>
 								{/if}
-
-								<!-- Reason (if provided) -->
-								{#if task.reason && !isExpanded}
-									<p class="text-xs mt-1 italic text-info/80">
-										💡 {task.reason}
-									</p>
-								{/if}
 							</div>
+
+							<!-- Already created badge -->
+							{#if task.alreadyCreated}
+								{#if task.taskId && onTaskClick}
+									<button type="button" onclick={(e) => { e.stopPropagation(); onTaskClick(task.taskId!); }} class="badge badge-xs badge-success font-mono flex-shrink-0 cursor-pointer hover:brightness-110">
+										✓ {task.taskId}
+									</button>
+								{:else}
+									<span class="badge badge-xs badge-success font-mono flex-shrink-0">✓ Created</span>
+								{/if}
+							{/if}
+
+							<!-- Edited indicator -->
+							{#if task.edited && !task.alreadyCreated}
+								<span class="badge badge-xs badge-warning font-mono flex-shrink-0">edited</span>
+								{#if onClearEdits}
+									<button type="button" onclick={(e) => handleClearEdits(taskKey, e)} class="text-[10px] opacity-60 hover:opacity-100 transition-opacity flex-shrink-0" title="Revert">↩</button>
+								{/if}
+							{/if}
+
+							<!-- Expand toggle -->
+							<button
+								type="button"
+								onclick={(e) => toggleExpand(taskKey, e)}
+								class="flex-shrink-0 p-0.5 rounded opacity-40 hover:opacity-100 transition-opacity"
+								title={isExpanded ? 'Collapse' : 'Expand'}
+							>
+								<svg class="w-3.5 h-3.5 transition-transform {isExpanded ? 'rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+								</svg>
+							</button>
 						</div>
 
 						<!-- Expanded task editor (all fields) -->

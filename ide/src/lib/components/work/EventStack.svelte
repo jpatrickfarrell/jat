@@ -153,7 +153,23 @@
 	} = $props();
 
 	let events = $state<TimelineEvent[]>([]);
+
+	function dismissStorageKey() {
+		return `jat-dismissed-events-${sessionName || 'default'}`;
+	}
 	let dismissedEventKeys = $state(new Set<string>());
+	let confirmingDismissKey = $state<string | null>(null);
+	onMount(() => {
+		try {
+			const saved = localStorage.getItem(dismissStorageKey());
+			if (saved) dismissedEventKeys = new Set(JSON.parse(saved));
+		} catch {}
+	});
+	$effect(() => {
+		if (dismissedEventKeys.size > 0) {
+			try { localStorage.setItem(dismissStorageKey(), JSON.stringify([...dismissedEventKeys])); } catch {}
+		}
+	});
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let isExpanded = $state(false);
@@ -946,6 +962,13 @@
 			}
 		}
 
+		// Voice inbox: tasks events show count + time
+		if (event.type === 'tasks' && Array.isArray(event.data)) {
+			const count = event.data.length;
+			const t = new Date(event.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+			return `Voice Inbox — ${count} suggestion${count !== 1 ? 's' : ''} · ${t}`;
+		}
+
 		// Fallback to uppercase label with task ID
 		const label = signalType.toUpperCase().replace('_', ' ');
 		if (event.task_id) {
@@ -1007,6 +1030,7 @@
 	}
 
 	function toggleEventExpand(idx: number) {
+		confirmingDismissKey = null;
 		expandedEventIdx = expandedEventIdx === idx ? null : idx;
 	}
 
@@ -1046,7 +1070,7 @@
 {#if events.length > 0}
 	{#if layoutMode === 'inline'}
 		<!-- Inline layout: always expanded, no hover interaction -->
-		<div class="space-y-2 {className}">
+		<div class="space-y-2 mt-1 mb-2 {className}">
 			{#each filteredEvents as event, idx (event.timestamp + '-' + idx)}
 				{@const style = getEventStyle(event)}
 				{@const isQuestionEvent = event.type === 'question' || event.state === 'question'}
@@ -1115,15 +1139,29 @@
 								</svg>
 							</div>
 						</button>
-						<button
-							class="px-2 py-2 flex items-center justify-center text-base-content/30 hover:text-base-content/70 hover:bg-base-300 transition-colors flex-shrink-0 rounded-tr-lg"
-							onclick={() => { dismissedEventKeys = new Set([...dismissedEventKeys, eventKey]); }}
-							title="Dismiss"
-						>
-							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-							</svg>
-						</button>
+						{#if confirmingDismissKey === eventKey}
+							<div class="flex items-center gap-1 px-2 py-1.5 flex-shrink-0">
+								<span class="text-[10px] text-base-content/60 font-mono">dismiss?</span>
+								<button
+									class="text-[10px] px-1.5 py-0.5 rounded bg-error/20 text-error hover:bg-error/40 transition-colors font-mono"
+									onclick={() => { confirmingDismissKey = null; dismissedEventKeys = new Set([...dismissedEventKeys, eventKey]); }}
+								>yes</button>
+								<button
+									class="text-[10px] px-1.5 py-0.5 rounded bg-base-300 text-base-content/60 hover:bg-base-300/80 transition-colors font-mono"
+									onclick={() => { confirmingDismissKey = null; }}
+								>no</button>
+							</div>
+						{:else}
+							<button
+								class="px-2 py-2 flex items-center justify-center text-base-content/30 hover:text-base-content/70 hover:bg-base-300 transition-colors flex-shrink-0 rounded-tr-lg"
+								onclick={() => { confirmingDismissKey = eventKey; }}
+								title="Dismiss"
+							>
+								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+								</svg>
+							</button>
+						{/if}
 					</div>
 
 					<!-- Expanded details -->
@@ -1235,6 +1273,7 @@
 									{#if bundle.suggestedTasks && bundle.suggestedTasks.length > 0}
 										{@const bundleTasksWithState = getCompleteBundleTasksWithState(bundle.suggestedTasks, eventKey)}
 										{@const bundleSelectedCount = getSelectedCount(eventKey)}
+										{@const bundleProject = bundle.project || (bundle.taskId || event.task_id || '').split('-')[0] || defaultProject}
 										<div>
 											<div class="text-[10px] font-medium mb-1 text-info">📋 SUGGESTED FOLLOW-UP ({bundle.suggestedTasks.length})</div>
 											<SuggestedTasksSection
@@ -1251,7 +1290,7 @@
 												showFeedback={showCreateFeedback}
 												onDismissFeedback={dismissFeedback}
 												{availableProjects}
-												{defaultProject}
+												defaultProject={bundleProject}
 												{onTaskClick}
 											/>
 										</div>
@@ -1755,6 +1794,7 @@
 											{#if bundle.suggestedTasks && bundle.suggestedTasks.length > 0}
 												{@const bundleTasksWithState = getCompleteBundleTasksWithState(bundle.suggestedTasks, eventKey)}
 												{@const bundleSelectedCount = getSelectedCount(eventKey)}
+												{@const bundleProject = bundle.project || (bundle.taskId || event.task_id || '').split('-')[0] || defaultProject}
 												<div>
 													<div class="text-[10px] font-medium mb-1" style="color: oklch(0.65 0.12 280);">
 														📋 SUGGESTED FOLLOW-UP ({bundle.suggestedTasks.length})
@@ -1773,7 +1813,7 @@
 														showFeedback={showCreateFeedback}
 														onDismissFeedback={dismissFeedback}
 														{availableProjects}
-														{defaultProject}
+														defaultProject={bundleProject}
 														{onTaskClick}
 													/>
 												</div>

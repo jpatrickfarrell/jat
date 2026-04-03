@@ -1393,6 +1393,9 @@
 	// All unique project names for "Change Project" submenu
 	const allProjectNames = $derived.by(() => {
 		const set = new Set<string>();
+		// Include all known projects from projectColors (covers all configured projects)
+		for (const key of Object.keys(projectColors)) set.add(key);
+		// Also include any projects visible in the current task list
 		for (const t of tasks) set.add(getProjectFromTaskId(t.id));
 		return [...set].sort();
 	});

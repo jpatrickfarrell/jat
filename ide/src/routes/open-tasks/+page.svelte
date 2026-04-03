@@ -388,8 +388,17 @@
 				...t,
 				project: t.project || extractProject(t.id),
 			}));
-			// Extract unique projects
+			// Extract unique projects from tasks
 			const projectSet = new Set(tasks.map(t => t.project).filter(Boolean));
+			// Also fetch all configured projects so Change Project submenu shows all options
+			try {
+				const projRes = await fetch('/api/projects?visible=true');
+				if (projRes.ok) {
+					const projData = await projRes.json();
+					const configuredProjects: string[] = (projData.projects || []).map((p: any) => p.name || p.human_key || p.slug);
+					for (const p of configuredProjects) if (p) projectSet.add(p);
+				}
+			} catch { /* ignore */ }
 			projects = [...projectSet].sort();
 
 			if (loading) {

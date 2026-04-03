@@ -1181,6 +1181,9 @@
 
 	const ctxAllProjectNames = $derived.by(() => {
 		const set = new Set<string>();
+		// Include all known projects from projectColors (covers all configured projects)
+		for (const key of Object.keys(projectColors)) set.add(key);
+		// Also include any projects from active tasks
 		for (const [, task] of agentTasks) set.add(task.id.split('-')[0]);
 		return [...set].sort();
 	});

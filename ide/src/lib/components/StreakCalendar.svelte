@@ -142,9 +142,20 @@
 	let tooltipX = $state(0);
 	let tooltipY = $state(0);
 
+	// Portal action: move tooltip to document.body so position:fixed works
+	// even when ancestors have CSS transforms (e.g. use:reveal animations)
+	function portal(node: HTMLElement) {
+		document.body.appendChild(node);
+		return { destroy() { node.remove(); } };
+	}
+
 	function handleMouseEnter(event: MouseEvent, day: DayData) {
 		const rect = (event.target as HTMLElement).getBoundingClientRect();
-		tooltipX = rect.left + rect.width / 2;
+		const padding = 12;
+		const tooltipHalf = 144; // half of max-width (280px) + padding
+		let x = rect.left + rect.width / 2;
+		x = Math.max(padding + tooltipHalf, Math.min(x, window.innerWidth - padding - tooltipHalf));
+		tooltipX = x;
 		tooltipY = rect.top - 8;
 		hoveredDay = day;
 	}
@@ -198,10 +209,7 @@
 							onmouseenter={(e) => handleMouseEnter(e, day)}
 							onmouseleave={handleMouseLeave}
 							onfocus={(e) => {
-								const rect = (e.target as HTMLElement).getBoundingClientRect();
-								tooltipX = rect.left + rect.width / 2;
-								tooltipY = rect.top - 8;
-								hoveredDay = day;
+								handleMouseEnter(e as unknown as MouseEvent, day);
 							}}
 							onblur={handleMouseLeave}
 							tabindex="0"
@@ -217,9 +225,10 @@
 
 </div>
 
-<!-- Tooltip portal -->
+<!-- Tooltip portal (use:portal moves to body so fixed positioning works) -->
 {#if hoveredDay}
 	<div
+		use:portal
 		class="calendar-tooltip"
 		style="left: {tooltipX}px; top: {tooltipY}px"
 	>

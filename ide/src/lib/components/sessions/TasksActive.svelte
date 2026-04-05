@@ -28,6 +28,12 @@
 		return { title: t.title, status: t.status, priority: t.priority, type: t.issue_type, labels: t.labels?.join(', '), created_at: t.created_at };
 	}
 
+	/** Split an agent name on camelCase boundaries: "GentleCoast" → ["Gentle", "Coast"]. */
+	function splitAgentName(name: string): string[] {
+		if (!name) return [];
+		return name.replace(/([a-z])([A-Z])/g, '$1\u0000$2').split('\u0000');
+	}
+
 	// Types
 	interface TmuxSession {
 		name: string;
@@ -1378,7 +1384,12 @@
 					{@const cardActions = getSessionStateActions(effectiveState)}
 					<div class="mobile-card-inner">
 						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};">
-							<AgentAvatar name={sessionAgentName} size={40} showRing={true} sessionState={effectiveState} />
+							<AgentAvatar name={sessionAgentName} size={36} showRing={true} sessionState={effectiveState} />
+							<div class="mobile-strip-agent-label" title={sessionAgentName}>
+								{#each splitAgentName(sessionAgentName) as part}
+									<span>{part}</span>
+								{/each}
+							</div>
 						</div>
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							{#each cardActions.slice(0, 4) as action}
@@ -1406,7 +1417,6 @@
 									<span class="mobile-separator">·</span>
 									<span class="mobile-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
 								{/if}
-								<span class="mobile-agent-name">{sessionAgentName}</span>
 								{#if sessionTask.issue_type}
 									<span class="mobile-separator">·</span>
 									<span class="mobile-type-icon" title={typeVisual.label}>{typeVisual.icon}</span>
@@ -3306,10 +3316,37 @@
 		transition: filter 0.2s;
 	}
 
-	/* Agent variant: wider to fit avatar comfortably */
+	/* Agent variant: wider to fit avatar + name below */
 	.mobile-state-strip-agent {
 		width: 62px;
-		padding: 0 6px;
+		padding: 6px 4px;
+		flex-direction: column;
+		gap: 4px;
+	}
+
+	/* Agent name below avatar — camelCase split stacked, matches tray-btn label styling */
+	.mobile-strip-agent-label {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		line-height: 1.1;
+		font-size: 0.5rem;
+		font-weight: 500;
+		letter-spacing: 0.02em;
+		text-transform: uppercase;
+		color: oklch(0.60 0.015 250);
+		font-family: system-ui, -apple-system, sans-serif;
+		text-align: center;
+		max-width: 100%;
+		overflow: hidden;
+		opacity: 0.85;
+	}
+
+	.mobile-strip-agent-label span {
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	/* Brighten strip on card hover */

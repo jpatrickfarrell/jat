@@ -1,6 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 
+	interface LinkedTask {
+		id: string;
+		title: string;
+		status: string;
+		issue_type: string;
+	}
+
 	interface Milestone {
 		id: string;
 		contract_id: string;
@@ -16,6 +23,7 @@
 		stripe_invoice_id: string | null;
 		created_at: string;
 		updated_at: string;
+		linked_tasks?: LinkedTask[];
 	}
 
 	interface Contract {
@@ -62,11 +70,21 @@
 		}>;
 	}
 
+	interface ProjectTask {
+		id: string;
+		title: string;
+		status: string;
+		issue_type: string;
+		priority: string;
+		assignee: string | null;
+	}
+
 	interface MilestoneRow {
 		name: string;
 		percentage: number;
 		description: string;
 		acceptance_criteria: string;
+		taskIds: string[];
 	}
 
 	let projects = $state<ProjectData[]>([]);
@@ -127,6 +145,60 @@
 	let selectedTemplateId = $state<string | null>(null);
 	let milestones = $state<MilestoneRow[]>([]);
 	let loadingTemplates = $state(false);
+
+	// Task picker state
+	let projectTasks = $state<ProjectTask[]>([]);
+	let loadingTasks = $state(false);
+	let taskSearchTerm = $state('');
+	let taskPickerMilestoneIndex = $state<number | null>(null);
+
+	let filteredTasks = $derived.by(() => {
+		if (!taskSearchTerm) return projectTasks;
+		const term = taskSearchTerm.toLowerCase();
+		return projectTasks.filter(t =>
+			t.title.toLowerCase().includes(term) ||
+			t.status.toLowerCase().includes(term) ||
+			t.issue_type.toLowerCase().includes(term)
+		);
+	});
+
+	async function fetchProjectTasks(projectKey: string) {
+		loadingTasks = true;
+		try {
+			const res = await fetch(`/api/clients/tasks?project=${encodeURIComponent(projectKey)}`);
+			const data = await res.json();
+			projectTasks = data.tasks || [];
+		} catch {
+			projectTasks = [];
+		} finally {
+			loadingTasks = false;
+		}
+	}
+
+	function openTaskPicker(milestoneIndex: number) {
+		taskPickerMilestoneIndex = milestoneIndex;
+		taskSearchTerm = '';
+	}
+
+	function closeTaskPicker() {
+		taskPickerMilestoneIndex = null;
+		taskSearchTerm = '';
+	}
+
+	function toggleTaskLink(milestoneIndex: number, taskId: string) {
+		const current = milestones[milestoneIndex].taskIds;
+		if (current.includes(taskId)) {
+			milestones[milestoneIndex].taskIds = current.filter(id => id !== taskId);
+		} else {
+			milestones[milestoneIndex].taskIds = [...current, taskId];
+		}
+	}
+
+	function getLinkedTaskNames(taskIds: string[]): string[] {
+		return taskIds
+			.map(id => projectTasks.find(t => t.id === id)?.title)
+			.filter((t): t is string => !!t);
+	}
 
 	let totalPercentage = $derived(milestones.reduce((sum, m) => sum + (m.percentage || 0), 0));
 	let percentageValid = $derived(Math.abs(totalPercentage - 100) < 0.01);
@@ -259,11 +331,14 @@
 		milestones = [];
 		selectedTemplateId = null;
 		templates = [];
+		projectTasks = [];
+		taskPickerMilestoneIndex = null;
 
 		// Auto-select first project if only one available
 		if (availableProjects.length === 1) {
 			selectedProject = availableProjects[0].projectKey;
 			await fetchTemplates(selectedProject);
+			await fetchProjectTasks(selectedProject);
 		} else {
 			selectedProject = '';
 		}
@@ -291,7 +366,7 @@
 	function applyTemplate(templateId: string | null) {
 		selectedTemplateId = templateId;
 		if (!templateId) {
-			milestones = [{ name: '', percentage: 0, description: '', acceptance_criteria: '' }];
+			milestones = [{ name: '', percentage: 0, description: '', acceptance_criteria: '', taskIds: [] }];
 			return;
 		}
 		const template = templates.find(t => t.id === templateId);
@@ -300,12 +375,13 @@
 			name: m.name || '',
 			percentage: m.percentage || 0,
 			description: m.description || '',
-			acceptance_criteria: m.acceptance_criteria || ''
+			acceptance_criteria: m.acceptance_criteria || '',
+			taskIds: []
 		}));
 	}
 
 	function addMilestone() {
-		milestones = [...milestones, { name: '', percentage: 0, description: '', acceptance_criteria: '' }];
+		milestones = [...milestones, { name: '', percentage: 0, description: '', acceptance_criteria: '', taskIds: [] }];
 	}
 
 	function removeMilestone(index: number) {
@@ -320,7 +396,9 @@
 			milestones = [];
 			selectedTemplateId = null;
 			templates = [];
+			projectTasks = [];
 			fetchTemplates(selectedProject);
+			fetchProjectTasks(selectedProject);
 		}
 	});
 
@@ -707,6 +785,21 @@
 																									{/if}
 																								</td>
 																							</tr>
+																							{#if milestone.linked_tasks && milestone.linked_tasks.length > 0}
+																								<tr>
+																									<td></td>
+																									<td colspan="5" class="pt-0 pb-2">
+																										<div class="flex flex-wrap gap-1">
+																											{#each milestone.linked_tasks as task}
+																												<span class="badge badge-xs badge-outline gap-1" title="{task.title} ({task.status})">
+																													<span class="w-1.5 h-1.5 rounded-full {task.status === 'completed' || task.status === 'accepted' ? 'bg-success' : task.status === 'in_progress' ? 'bg-warning' : 'bg-base-300'}"></span>
+																													<span class="max-w-[120px] truncate">{task.title}</span>
+																												</span>
+																											{/each}
+																										</div>
+																									</td>
+																								</tr>
+																							{/if}
 																						{/each}
 																					</tbody>
 																				</table>
@@ -1001,14 +1094,15 @@
 										</div>
 
 										<div class="grid grid-cols-4 gap-2">
-											<div class="col-span-3">
+											<label class="floating-label col-span-3">
+												<span>Name</span>
 												<input
 													type="text"
 													class="input input-bordered input-sm w-full"
 													bind:value={milestone.name}
-													placeholder="Milestone name"
+													placeholder="Name"
 												/>
-											</div>
+											</label>
 											<div class="join w-full">
 												<input
 													type="number"
@@ -1023,19 +1117,60 @@
 											</div>
 										</div>
 
-										<input
-											type="text"
-											class="input input-bordered input-sm w-full"
-											bind:value={milestone.description}
-											placeholder="Description (optional)"
-										/>
+										<label class="floating-label">
+											<span>Description</span>
+											<input
+												type="text"
+												class="input input-bordered input-sm w-full"
+												bind:value={milestone.description}
+												placeholder="Description"
+											/>
+										</label>
 
-										<input
-											type="text"
-											class="input input-bordered input-sm w-full"
-											bind:value={milestone.acceptance_criteria}
-											placeholder="Acceptance criteria (optional)"
-										/>
+										<label class="floating-label">
+											<span>Acceptance criteria</span>
+											<input
+												type="text"
+												class="input input-bordered input-sm w-full"
+												bind:value={milestone.acceptance_criteria}
+												placeholder="Acceptance criteria"
+											/>
+										</label>
+
+										<!-- Linked Tasks -->
+										<div class="flex flex-wrap items-center gap-1.5 mt-1">
+											{#if milestone.taskIds.length > 0}
+												{#each milestone.taskIds as taskId}
+													{@const task = projectTasks.find(t => t.id === taskId)}
+													{#if task}
+														<span class="badge badge-sm badge-outline gap-1">
+															<span class="opacity-60">{task.issue_type}</span>
+															<span class="max-w-[140px] truncate">{task.title}</span>
+															<button
+																type="button"
+																class="ml-0.5 opacity-50 hover:opacity-100"
+																onclick={() => toggleTaskLink(i, taskId)}
+															>
+																<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																	<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+																</svg>
+															</button>
+														</span>
+													{/if}
+												{/each}
+											{/if}
+											<button
+												type="button"
+												class="btn btn-ghost btn-xs gap-1 opacity-60 hover:opacity-100"
+												onclick={() => openTaskPicker(i)}
+												disabled={loadingTasks}
+											>
+												<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+												</svg>
+												{milestone.taskIds.length > 0 ? 'Link more tasks' : 'Link tasks'}
+											</button>
+										</div>
 									</div>
 								{/each}
 							</div>
@@ -1069,5 +1204,99 @@
 			{/if}
 		</div>
 		<label class="modal-backdrop" onclick={() => showCreateModal = false} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showCreateModal = false; } }}></label>
+	</div>
+{/if}
+
+<!-- Task Picker Modal -->
+{#if taskPickerMilestoneIndex !== null}
+	<div class="modal modal-open">
+		<div class="modal-box max-w-lg">
+			<h3 class="font-bold text-lg mb-3">
+				Link Tasks to Milestone {taskPickerMilestoneIndex + 1}
+				{#if milestones[taskPickerMilestoneIndex]?.name}
+					<span class="text-sm font-normal opacity-60">— {milestones[taskPickerMilestoneIndex].name}</span>
+				{/if}
+			</h3>
+
+			<p class="text-xs opacity-50 mb-3">
+				When all linked tasks are completed or accepted, this milestone will be auto-delivered and invoiced.
+			</p>
+
+			<!-- Search -->
+			<div class="form-control mb-3">
+				<input
+					type="text"
+					class="input input-bordered input-sm"
+					placeholder="Search tasks..."
+					bind:value={taskSearchTerm}
+				/>
+			</div>
+
+			{#if loadingTasks}
+				<div class="flex items-center justify-center py-8">
+					<span class="loading loading-spinner loading-md"></span>
+				</div>
+			{:else if projectTasks.length === 0}
+				<div class="text-center py-8 opacity-50">
+					<p>No tasks found in this project.</p>
+					<p class="text-xs mt-1">Tasks are created via the feedback widget or admin panel.</p>
+				</div>
+			{:else}
+				<div class="max-h-72 overflow-y-auto space-y-1">
+					{#each filteredTasks as task (task.id)}
+						{@const isLinked = milestones[taskPickerMilestoneIndex]?.taskIds.includes(task.id)}
+						{@const isLinkedElsewhere = !isLinked && milestones.some((m, idx) => idx !== taskPickerMilestoneIndex && m.taskIds.includes(task.id))}
+						<button
+							type="button"
+							class="w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors
+								{isLinked ? 'bg-primary/10 border border-primary/30' : isLinkedElsewhere ? 'opacity-40 cursor-not-allowed' : 'hover:bg-base-200'}"
+							onclick={() => {
+								if (!isLinkedElsewhere && taskPickerMilestoneIndex !== null) {
+									toggleTaskLink(taskPickerMilestoneIndex, task.id);
+								}
+							}}
+							disabled={isLinkedElsewhere}
+						>
+							<!-- Checkbox indicator -->
+							<div class="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0
+								{isLinked ? 'bg-primary border-primary' : 'border-base-300'}">
+								{#if isLinked}
+									<svg class="w-3 h-3 text-primary-content" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+									</svg>
+								{/if}
+							</div>
+
+							<div class="flex-1 min-w-0">
+								<div class="flex items-center gap-1.5">
+									<span class="badge badge-xs badge-ghost">{task.issue_type}</span>
+									<span class="badge badge-xs {task.status === 'completed' || task.status === 'accepted' ? 'badge-success' : task.status === 'in_progress' ? 'badge-warning' : 'badge-ghost'}">{task.status}</span>
+									{#if task.priority}
+										<span class="badge badge-xs badge-outline">{task.priority}</span>
+									{/if}
+								</div>
+								<p class="text-sm truncate mt-0.5">{task.title}</p>
+							</div>
+
+							{#if isLinkedElsewhere}
+								<span class="text-xs opacity-50 flex-shrink-0">linked elsewhere</span>
+							{/if}
+						</button>
+					{/each}
+				</div>
+
+				{#if filteredTasks.length === 0 && taskSearchTerm}
+					<p class="text-center py-4 opacity-50 text-sm">No tasks match "{taskSearchTerm}"</p>
+				{/if}
+			{/if}
+
+			<div class="modal-action">
+				<span class="text-xs opacity-50 mr-auto">
+					{milestones[taskPickerMilestoneIndex]?.taskIds.length || 0} task{milestones[taskPickerMilestoneIndex]?.taskIds.length === 1 ? '' : 's'} linked
+				</span>
+				<button class="btn btn-sm btn-primary" onclick={closeTaskPicker}>Done</button>
+			</div>
+		</div>
+		<label class="modal-backdrop" onclick={closeTaskPicker} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTaskPicker(); } }}></label>
 	</div>
 {/if}

@@ -168,9 +168,55 @@ async function fetchProjectData(projectKey: string, projectName: string): Promis
 
 	const milestones = (milestonesResult.data || []) as Milestone[];
 
-	// Attach milestones to contracts
+	// Fetch milestone_tasks links (non-blocking — table may not exist yet)
+	const milestoneIds = milestones.map(m => m.id);
+	let milestoneTaskLinks: Array<{ milestone_id: string; task_id: string }> = [];
+
+	if (milestoneIds.length > 0) {
+		const linksResult = await supabaseQuery(
+			supabaseUrl,
+			serviceRoleKey,
+			'milestone_tasks',
+			`select=milestone_id,task_id&milestone_id=in.(${milestoneIds.join(',')})`
+		);
+		if (!linksResult.error && linksResult.data) {
+			milestoneTaskLinks = linksResult.data as Array<{ milestone_id: string; task_id: string }>;
+		}
+	}
+
+	// Fetch linked task details if any links exist
+	const linkedTaskIds = [...new Set(milestoneTaskLinks.map(l => l.task_id))];
+	let linkedTasks: Array<{ id: string; title: string; status: string; issue_type: string }> = [];
+
+	if (linkedTaskIds.length > 0) {
+		const tasksResult = await supabaseQuery(
+			supabaseUrl,
+			serviceRoleKey,
+			'project_tasks',
+			`select=id,title,status,issue_type&id=in.(${linkedTaskIds.join(',')})`
+		);
+		if (!tasksResult.error && tasksResult.data) {
+			linkedTasks = tasksResult.data as Array<{ id: string; title: string; status: string; issue_type: string }>;
+		}
+	}
+
+	// Build task lookup
+	const taskById = new Map(linkedTasks.map(t => [t.id, t]));
+
+	// Build milestone → tasks mapping
+	const tasksByMilestone = new Map<string, Array<{ id: string; title: string; status: string; issue_type: string }>>();
+	for (const link of milestoneTaskLinks) {
+		const task = taskById.get(link.task_id);
+		if (!task) continue;
+		const arr = tasksByMilestone.get(link.milestone_id) || [];
+		arr.push(task);
+		tasksByMilestone.set(link.milestone_id, arr);
+	}
+
+	// Attach milestones to contracts (with linked tasks)
 	const milestonesByContract = new Map<string, Milestone[]>();
 	for (const m of milestones) {
+		(m as any).linked_tasks = tasksByMilestone.get(m.id) || [];
 		const arr = milestonesByContract.get(m.contract_id) || [];
 		arr.push(m);
 		milestonesByContract.set(m.contract_id, arr);
@@ -178,6 +224,26 @@ async function fetchProjectData(projectKey: string, projectName: string): Promis
 
 	for (const contract of contracts) {
 		contract.milestones = milestonesByContract.get(contract.id) || [];
+	}
+
+	// Auto-invoice: trigger Edge Function for delivered milestones with linked tasks but no invoice
+	for (const m of milestones) {
+		if (m.status === 'delivered' && !m.stripe_invoice_id) {
+			const tasks = tasksByMilestone.get(m.id);
+			if (tasks && tasks.length > 0) {
+				// Fire-and-forget: call the auto-invoice Edge Function
+				fetch(`${supabaseUrl}/functions/v1/milestone-auto-invoice`, {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						'Authorization': `Bearer ${serviceRoleKey}`
+					},
+					body: JSON.stringify({ milestoneId: m.id })
+				}).catch(err => {
+					console.warn(`[clients] Auto-invoice call failed for milestone ${m.id}: ${err.message}`);
+				});
+			}
+		}
 	}
 
 	return { name: projectName, projectKey, contracts };
@@ -387,7 +453,7 @@ function computeSummary(projects: ProjectData[]) {
  *   currency: string,
  *   clientEmail?: string,
  *   notes?: string,
- *   milestones: Array<{ name, percentage, description?, acceptance_criteria? }>
+ *   milestones: Array<{ name, percentage, description?, acceptance_criteria?, taskIds?: string[] }>
  * }
  */
 export const POST: RequestHandler = async ({ request }) => {
@@ -425,14 +491,40 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 	const teamId = (teamsResult.data[0] as { id: string }).id;
 
+	// Look up client user by email if provided
+	let clientUserId: string | null = null;
+	if (clientEmail) {
+		try {
+			const authRes = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
+				headers: {
+					'apikey': serviceRoleKey,
+					'Authorization': `Bearer ${serviceRoleKey}`,
+				}
+			});
+			if (authRes.ok) {
+				const authData = await authRes.json();
+				const users = authData.users || authData || [];
+				const match = users.find((u: { email?: string }) =>
+					u.email?.toLowerCase() === clientEmail.toLowerCase()
+				);
+				if (match) {
+					clientUserId = match.id;
+				}
+			}
+		} catch (err) {
+			console.warn(`[clients] Could not look up client email: ${(err as Error).message}`);
+		}
+	}
+
 	// Create the contract
-	const contractData = {
+	const contractData: Record<string, unknown> = {
 		team_id: teamId,
 		title: title || 'Service Agreement',
 		total_amount: totalAmount,
 		currency: currency || 'usd',
 		notes: notes || null,
-		status: 'draft'
+		status: 'draft',
+		...(clientUserId ? { client_user_id: clientUserId } : {})
 	};
 
 	const contractResult = await supabaseInsert(supabaseUrl, serviceRoleKey, 'contracts', contractData);
@@ -461,6 +553,29 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: `Failed to create milestones: ${msResult.error}` }, { status: 500 });
 	}
 
+	// Link tasks to milestones (if any taskIds provided)
+	const createdMilestones = (msResult.data || []) as Array<{ id: string }>;
+	let taskLinksCreated = 0;
+
+	for (let i = 0; i < milestones.length; i++) {
+		const taskIds = milestones[i].taskIds as string[] | undefined;
+		if (!taskIds || taskIds.length === 0) continue;
+		if (i >= createdMilestones.length) continue;
+
+		const milestoneId = createdMilestones[i].id;
+		const linkRows = taskIds.map((taskId: string) => ({
+			milestone_id: milestoneId,
+			task_id: taskId
+		}));
+
+		const linkResult = await supabaseInsert(supabaseUrl, serviceRoleKey, 'milestone_tasks', linkRows);
+		if (linkResult.error) {
+			console.warn(`[clients] Failed to link tasks to milestone ${milestoneId}: ${linkResult.error}`);
+		} else {
+			taskLinksCreated += taskIds.length;
+		}
+	}
+
 	// Invalidate cache so the list refreshes
 	cache = null;
 
@@ -472,7 +587,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			title: contractData.title,
 			totalAmount,
 			currency: contractData.currency,
-			milestoneCount: milestones.length
+			milestoneCount: milestones.length,
+			taskLinksCreated
 		}
 	}, { status: 201 });
 };

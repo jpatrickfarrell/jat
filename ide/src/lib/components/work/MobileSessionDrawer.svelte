@@ -705,10 +705,10 @@
 			</div>
 		{/if}
 
-		<!-- Top bar: back button + page dots + page label -->
+		<!-- Top bar: back column + centered tabs + close column -->
 		<div class="drawer-topbar">
-			<button class="back-btn" use:directClick={dismissDrawer} title="Close">
-				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="20" height="20">
+			<button class="topbar-dismiss-col" use:directClick={dismissDrawer} title="Go back">
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="18" height="18">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
 				</svg>
 			</button>
@@ -722,6 +722,12 @@
 					>{page}</button>
 				{/each}
 			</div>
+
+			<button class="topbar-dismiss-col" use:directClick={dismissDrawer} title="Close">
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="18" height="18">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+				</svg>
+			</button>
 		</div>
 
 		<!-- Horizontal pager -->
@@ -1158,23 +1164,26 @@
 		gap: 0.5rem;
 	}
 
-	.back-btn {
+	/* Full-height dismiss columns flanking the tabs */
+	.topbar-dismiss-col {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 2rem;
-		height: 2rem;
-		border-radius: 0.5rem;
+		align-self: stretch;
+		width: 2.5rem;
+		flex-shrink: 0;
 		background: transparent;
 		border: none;
-		color: oklch(0.75 0.02 250);
+		color: oklch(0.50 0.02 250);
 		cursor: pointer;
-		flex-shrink: 0;
-		transition: background 0.15s;
+		transition: color 0.15s, background 0.15s;
+		border-radius: 0.375rem;
+		margin: -0.25rem 0;
 	}
 
-	.back-btn:active {
+	.topbar-dismiss-col:active {
 		background: oklch(0.25 0.02 250);
+		color: oklch(0.80 0.02 250);
 	}
 
 	.topbar-tabs {
@@ -1182,6 +1191,7 @@
 		display: flex;
 		gap: 0.125rem;
 		align-items: center;
+		justify-content: center;
 		overflow-x: auto;
 		scrollbar-width: none;
 	}

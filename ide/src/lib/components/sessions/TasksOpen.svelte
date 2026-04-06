@@ -25,6 +25,7 @@
 	import { getFileTypeInfoFromPath } from '$lib/utils/fileUtils';
 	import FxText from '$lib/components/FxText.svelte';
 	import FeedbackReplyModal from '$lib/components/FeedbackReplyModal.svelte';
+	import HarnessTray from '$lib/components/sessions/HarnessTray.svelte';
 
 	function taskCtx(t: Task): Record<string, any> {
 		return { title: t.title, status: t.status, priority: t.priority, type: t.issue_type, assignee: t.assignee, labels: t.labels?.join(', '), created_at: t.created_at, due_date: t.due_date };
@@ -1565,57 +1566,90 @@
 				{@const typeVisual = getIssueTypeVisual(task.issue_type)}
 				{@const taskAge = getTaskAge(task.created_at)}
 				{@const harness = getTaskHarness(task)}
+				{@const integration = taskIntegrations[task.id] || null}
 				<div
 					animate:flip={{ duration: 300, easing: cubicOut }}
 					class="mobile-task-card {isBlocked && !isExiting ? 'mobile-task-blocked' : ''} {isNew ? 'animate-slide-in-fwd-center' : ''} {isExiting ? 'animate-slide-out-bck-center' : ''}"
-					style="{projectColor ? `border-left: 3px solid ${projectColor};` : ''}{isExiting ? ' pointer-events: none;' : ''}"
+					style="{isExiting ? ' pointer-events: none;' : ''}"
 					role="button" tabindex="0"
 					onclick={() => !isExiting && handleRowClick(task.id)}
 					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); !isExiting && handleRowClick(task.id); } }}
 					oncontextmenu={(e) => !isExiting && handleContextMenu(task, e)}
 				>
-					<div class="mobile-task-row1">
-						<span class="mobile-task-title" title={task.title}>
-							<FxText text={task.title} context={taskCtx(task)} />
-						</span>
-						{#if !isBlocked && !isHumanTask(task)}
-							<div class="mobile-task-launch" role="button" tabindex="0" onclick={(e) => { e.stopPropagation(); onSpawnTask(task); }} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onSpawnTask(task); } }} title="Launch agent">
-								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="14" height="14">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 0 1-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 0 0 6.16-12.12A14.98 14.98 0 0 0 9.631 8.41m5.96 5.96a14.926 14.926 0 0 1-5.841 2.58m-.119-8.54a6 6 0 0 0-7.381 5.84h4.8m2.58-5.84a14.927 14.927 0 0 0-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 0 1-2.448-2.448 14.9 14.9 0 0 1 .06-.312m-2.24 2.39a4.493 4.493 0 0 0-1.757 4.306 4.493 4.493 0 0 0 4.306-1.758M16.5 9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" />
-								</svg>
-							</div>
-						{/if}
-					</div>
-					<div class="mobile-task-row2">
-						<TaskIdBadge
-							{task}
-							size="xs"
-							variant="agentPill"
-							integration={taskIntegrations[task.id] || null}
-							onClick={() => !isExiting && handleRowClick(task.id)}
-							{harness}
-						/>
-						{#if typeVisual}
-							<span class="mobile-task-separator">·</span>
-							<span class="mobile-task-type" title={typeVisual.label}>{typeVisual.icon}</span>
-						{/if}
-						{#if task.priority != null && task.priority <= 2}
-							<span class="mobile-task-separator">·</span>
-							<span class="mobile-task-priority mobile-task-priority-{task.priority}">P{task.priority}</span>
-						{/if}
-						{#if taskAge.label}
-							<span class="mobile-task-separator">·</span>
-							<span class="mobile-task-age" style="color: {taskAge.color};">{taskAge.label}</span>
-						{/if}
-						{#if task.labels && task.labels.length > 0}
-							<span class="mobile-task-separator">·</span>
-							{#each task.labels.slice(0, 2) as label}
-								<span class="mobile-task-label">{label}</span>
-							{/each}
-							{#if task.labels.length > 2}
-								<span class="mobile-task-label-more">+{task.labels.length - 2}</span>
+					<div class="mobile-task-inner">
+						<!-- Left: circular avatar (harness logo, integration logo, or type icon) -->
+						<div class="mobile-task-avatar" style="{projectColor ? `border-color: ${projectColor};` : ''}">
+							{#if harness}
+								<ProviderLogo agentId={harness} size={22} />
+							{:else if integration}
+								<ProviderLogo agentId={integration.sourceType} size={22} />
+							{:else}
+								<span class="mobile-task-type-icon" title={typeVisual?.label}>{typeVisual?.icon ?? '📋'}</span>
 							{/if}
-						{/if}
+						</div>
+
+						<!-- Center: title, description, badges -->
+						<div class="mobile-task-body">
+							<div class="mobile-task-title" title={task.title}>
+								<FxText text={task.title} context={taskCtx(task)} />
+							</div>
+							{#if task.description}
+								<div class="mobile-task-description">{task.description}</div>
+							{/if}
+							<div class="mobile-task-meta">
+								<span class="mobile-task-id" style="{projectColor ? `color: ${projectColor};` : 'color: oklch(0.65 0.15 200);'}">{task.id}</span>
+								{#if task.priority != null && task.priority <= 2}
+									<span class="mobile-task-separator">·</span>
+									<span class="mobile-task-priority mobile-task-priority-{task.priority}">P{task.priority}</span>
+								{/if}
+								{#if typeVisual && !harness && !integration}
+									<span class="mobile-task-separator">·</span>
+									<span class="mobile-task-type-badge" title={typeVisual.label}>{typeVisual.icon}</span>
+								{/if}
+								{#if taskAge.label}
+									<span class="mobile-task-separator">·</span>
+									<span class="mobile-task-age" style="color: {taskAge.color};">{taskAge.label}</span>
+								{/if}
+								{#if task.labels && task.labels.length > 0}
+									<span class="mobile-task-separator">·</span>
+									{#each task.labels.slice(0, 2) as label}
+										<span class="mobile-task-label">{label}</span>
+									{/each}
+									{#if task.labels.length > 2}
+										<span class="mobile-task-label-more">+{task.labels.length - 2}</span>
+									{/if}
+								{/if}
+							</div>
+						</div>
+
+						<!-- Right: launch / blocked / human action column -->
+						<div class="mobile-task-actions" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="group">
+							{#if isHumanTask(task)}
+								<div class="mobile-task-action-col mobile-task-action-human" title="Human task — complete manually">
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="18" height="18">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+									</svg>
+								</div>
+							{:else if isBlocked}
+								<div class="mobile-task-action-col mobile-task-action-blocked" title="Blocked">
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="18" height="18">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" />
+									</svg>
+								</div>
+							{:else}
+								<!-- Harness tray slides out on card hover, then default-launch column -->
+								<HarnessTray onLaunch={(agentId) => onSpawnTask(task, { agentId, model: null })} />
+								<button
+									class="mobile-task-action-col mobile-task-action-launch"
+									onclick={(e) => { e.stopPropagation(); onSpawnTask(task); }}
+									title="Launch agent (default harness)"
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="20" height="20">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 0 1-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 0 0 6.16-12.12A14.98 14.98 0 0 0 9.631 8.41m5.96 5.96a14.926 14.926 0 0 1-5.841 2.58m-.119-8.54a6 6 0 0 0-7.381 5.84h4.8m2.58-5.84a14.927 14.927 0 0 0-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 0 1-2.448-2.448 14.9 14.9 0 0 1 .06-.312m-2.24 2.39a4.493 4.493 0 0 0-1.757 4.306 4.493 4.493 0 0 0 4.306-1.758M16.5 9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" />
+									</svg>
+								</button>
+							{/if}
+						</div>
 					</div>
 				</div>
 			{/each}
@@ -3479,14 +3513,16 @@
 		flex-direction: column;
 	}
 
+	/* === Mobile Task Cards — three-column swipe-card design === */
+
 	.mobile-task-card {
 		background: oklch(0.16 0.01 250);
 		border: 1px solid oklch(0.25 0.02 250);
 		border-bottom: none;
 		border-radius: 0;
-		padding: 0.375rem 0.75rem;
 		cursor: pointer;
 		transition: background 0.15s;
+		overflow: hidden;
 	}
 
 	.mobile-task-card:first-child {
@@ -3511,17 +3547,46 @@
 		opacity: 0.7;
 	}
 
-	.mobile-task-row1 {
+	/* Inner three-column flex row */
+	.mobile-task-inner {
+		display: flex;
+		align-items: stretch;
+		min-height: 0;
+	}
+
+	/* Left: circular avatar */
+	.mobile-task-avatar {
+		width: 52px;
+		flex-shrink: 0;
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
+		justify-content: center;
+		background: oklch(0.18 0.01 250);
+		border-right: 1px solid oklch(0.22 0.02 250);
+	}
+
+	.mobile-task-avatar > :global(*) {
+		border-radius: 50%;
+	}
+
+	.mobile-task-type-icon {
+		font-size: 1.25rem;
+		line-height: 1;
+	}
+
+	/* Center: title + description + meta */
+	.mobile-task-body {
+		flex: 1;
 		min-width: 0;
+		padding: 0.625rem 0.625rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
 	}
 
 	.mobile-task-title {
-		flex: 1;
 		min-width: 0;
-		font-size: 0.875rem;
+		font-size: 0.9375rem;
 		font-weight: 600;
 		color: oklch(0.88 0.02 250);
 		font-family: system-ui, -apple-system, sans-serif;
@@ -3530,57 +3595,25 @@
 		white-space: nowrap;
 	}
 
-	.mobile-task-launch {
-		flex-shrink: 0;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 28px;
-		height: 28px;
-		border-radius: 6px;
-		color: oklch(0.70 0.15 200);
-		transition: all 0.15s;
-	}
-
-	.mobile-task-launch:hover {
-		background: oklch(0.70 0.15 200 / 0.15);
-		color: oklch(0.85 0.15 200);
-	}
-
-	.mobile-task-row2 {
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
-		margin-top: 0.125rem;
+	.mobile-task-description {
+		min-width: 0;
 		font-size: 0.6875rem;
-		font-family: ui-monospace, monospace;
 		color: oklch(0.55 0.02 250);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		line-height: 1.4;
 	}
 
-	.mobile-task-separator {
-		color: oklch(0.40 0.01 250);
-	}
-
-	.mobile-task-type {
+	.mobile-task-meta {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		margin-top: 0.1rem;
 		font-size: 0.625rem;
-		line-height: 1;
-	}
-
-	.mobile-task-priority {
-		font-weight: 700;
-		font-size: 0.625rem;
-		padding: 0 0.25rem;
-		border-radius: 3px;
-	}
-
-	.mobile-task-priority-0 {
-		color: oklch(0.80 0.18 25);
-		background: oklch(0.80 0.18 25 / 0.12);
-	}
-
-	.mobile-task-priority-1 {
-		color: oklch(0.80 0.15 85);
-		background: oklch(0.80 0.15 85 / 0.12);
+		font-family: ui-monospace, monospace;
+		color: oklch(0.50 0.02 250);
+		flex-wrap: wrap;
 	}
 
 	.mobile-task-priority-2 {
@@ -3605,5 +3638,57 @@
 	.mobile-task-label-more {
 		font-size: 0.5625rem;
 		color: oklch(0.50 0.02 250);
+	}
+
+	/* Right: action column */
+	.mobile-task-actions {
+		flex-shrink: 0;
+		display: flex;
+		align-items: stretch;
+	}
+
+	.mobile-task-action-col {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		width: 52px;
+		border-left: 1px solid oklch(0.22 0.02 250);
+		gap: 3px;
+		font-size: 0.5rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		font-family: system-ui, -apple-system, sans-serif;
+	}
+
+	.mobile-task-action-launch {
+		background: transparent;
+		border: none;
+		color: oklch(0.65 0.18 250);
+		cursor: pointer;
+		transition: background 0.15s, color 0.15s;
+	}
+
+	.mobile-task-action-launch:hover {
+		background: oklch(0.65 0.18 250 / 0.08);
+		color: oklch(0.80 0.18 250);
+	}
+
+	.mobile-task-action-launch:active {
+		background: oklch(0.65 0.18 250 / 0.15);
+		color: oklch(0.85 0.18 250);
+	}
+
+	.mobile-task-action-blocked {
+		color: oklch(0.55 0.12 30);
+		opacity: 0.6;
+		cursor: default;
+	}
+
+	.mobile-task-action-human {
+		color: oklch(0.65 0.12 45);
+		opacity: 0.7;
+		cursor: default;
 	}
 </style>

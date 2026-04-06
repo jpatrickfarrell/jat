@@ -23,7 +23,13 @@
 	import { isMobileFullscreenOpen } from '$lib/stores/drawerStore';
 	import { setHoveredSession } from '$lib/stores/hoveredSession';
 	import type { SessionState } from '$lib/config/statusColors';
-	import { getIssueTypeVisual } from '$lib/config/statusColors';
+	import { getIssueTypeVisual, getSessionStateVisual } from '$lib/config/statusColors';
+
+	/** Split an agent name on camelCase boundaries: "GentleCoast" → ["Gentle", "Coast"]. */
+	function splitAgentName(name: string): string[] {
+		if (!name) return [];
+		return name.replace(/([a-z])([A-Z])/g, '$1\u0000$2').split('\u0000');
+	}
 
 	interface AgentTask {
 		id: string;
@@ -725,31 +731,43 @@
 		>
 			<!-- Page 0: Terminal / SessionCard -->
 			<div class="pager-page">
-				<!-- Custom mobile header matching TasksActive mobile layout -->
+				<!-- Custom mobile header — same swipe-card design as TasksActive standalone tasks -->
 				{#if task}
 					{@const typeVisual = getIssueTypeVisual(task.issue_type)}
+					{@const stateVisual = getSessionStateVisual(sseState || 'idle')}
 					<div class="mobile-task-header">
-						<div class="mobile-task-title">{task.title || task.id}</div>
-						{#if task.description}
-							<div class="mobile-task-desc">{task.description}</div>
-						{/if}
-						<div class="mobile-task-meta">
-							<span class="mobile-task-id-badge" style="color: oklch(0.65 0.15 200);">{task.id}</span>
-							{#if elapsed}
-								<span class="meta-sep">·</span>
-								<span class="mobile-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
-							{/if}
-							<span class="meta-sep">·</span>
-							<AgentAvatar name={agentName} size={16} showRing={true} sessionState={sseState || 'idle'} />
-							<span class="mobile-agent">{agentName}</span>
-							{#if task.issue_type}
-								<span class="meta-sep">·</span>
-								<span class="mobile-type" title={typeVisual.label}>{typeVisual.icon}</span>
-							{/if}
-							{#if task.priority != null && task.priority <= 2}
-								<span class="meta-sep">·</span>
-								<span class="mobile-priority-badge mobile-priority-{task.priority}">P{task.priority}</span>
-							{/if}
+						<div class="mobile-card-inner">
+							<!-- Left strip: large avatar + split agent name (matches TasksActive swipe card) -->
+							<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};">
+								<AgentAvatar name={agentName} size={36} showRing={true} sessionState={sseState || 'idle'} />
+								<div class="mobile-strip-agent-label" title={agentName}>
+									{#each splitAgentName(agentName) as part}
+										<span>{part}</span>
+									{/each}
+								</div>
+							</div>
+							<!-- Right body: title, description, badges row -->
+							<div class="mobile-card-body">
+								<div class="mobile-title" title={task.title}>{task.title || task.id}</div>
+								{#if task.description}
+									<div class="mobile-description">{task.description}</div>
+								{/if}
+								<div class="mobile-card-row2">
+									<span class="mobile-task-id" style="color: {stateVisual.accent};">{task.id}</span>
+									{#if elapsed}
+										<span class="mobile-separator">·</span>
+										<span class="mobile-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
+									{/if}
+									{#if task.issue_type}
+										<span class="mobile-separator">·</span>
+										<span class="mobile-type-icon" title={typeVisual.label}>{typeVisual.icon}</span>
+									{/if}
+									{#if task.priority != null && task.priority <= 2}
+										<span class="mobile-separator">·</span>
+										<span class="mobile-priority mobile-priority-{task.priority}">P{task.priority}</span>
+									{/if}
+								</div>
+							</div>
 						</div>
 					</div>
 				{/if}
@@ -1483,40 +1501,102 @@
 		white-space: nowrap;
 	}
 
-	/* Custom mobile header (matches TasksActive mobile layout) */
+	/* Custom mobile header — same swipe-card design as TasksActive standalone tasks */
 	.mobile-task-header {
-		padding: 0.5rem 0.75rem;
 		border-bottom: 1px solid oklch(0.22 0.02 250);
 		flex-shrink: 0;
 	}
 
-	.mobile-task-title {
-		font-size: 0.8125rem;
-		font-weight: 600;
-		color: oklch(0.90 0.02 250);
-		line-height: 1.3;
+	/* Inner flex row: left strip + right body */
+	.mobile-card-inner {
+		display: flex;
+		align-items: stretch;
+		min-height: 0;
 	}
 
-	.mobile-task-desc {
-		font-size: 0.6875rem;
-		color: oklch(0.55 0.02 250);
-		margin-top: 0.125rem;
+	/* Left strip: avatar + split agent name */
+	.mobile-state-strip {
+		width: 28px;
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.mobile-state-strip-agent {
+		width: 62px;
+		padding: 8px 4px;
+		flex-direction: column;
+		gap: 4px;
+	}
+
+	/* CamelCase-split agent name below avatar */
+	.mobile-strip-agent-label {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		line-height: 1.1;
+		font-size: 0.5rem;
+		font-weight: 500;
+		letter-spacing: 0.02em;
+		text-transform: uppercase;
+		color: oklch(0.60 0.015 250);
+		font-family: system-ui, -apple-system, sans-serif;
+		text-align: center;
+		max-width: 100%;
+		overflow: hidden;
+		opacity: 0.85;
+	}
+
+	.mobile-strip-agent-label span {
+		max-width: 100%;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 
-	.mobile-task-meta {
+	/* Right content area */
+	.mobile-card-body {
+		flex: 1;
+		min-width: 0;
+		padding: 0.625rem 0.75rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+
+	.mobile-title {
+		min-width: 0;
+		font-size: 0.9375rem;
+		font-weight: 600;
+		color: oklch(0.88 0.02 250);
+		font-family: system-ui, -apple-system, sans-serif;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.mobile-description {
+		min-width: 0;
+		font-size: 0.6875rem;
+		color: oklch(0.60 0.02 250);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		line-height: 1.4;
+	}
+
+	.mobile-card-row2 {
 		display: flex;
 		align-items: center;
 		gap: 0.25rem;
-		margin-top: 0.375rem;
-		font-size: 0.6875rem;
-		color: oklch(0.55 0.02 250);
+		font-size: 0.625rem;
+		color: oklch(0.50 0.02 250);
 		flex-wrap: wrap;
+		margin-top: 0.125rem;
 	}
 
-	.mobile-task-id-badge {
+	.mobile-task-id {
 		font-family: monospace;
 		font-size: 0.625rem;
 	}
@@ -1527,23 +1607,15 @@
 		color: oklch(0.50 0.02 250);
 	}
 
-	.meta-sep {
+	.mobile-separator {
 		color: oklch(0.35 0.02 250);
 	}
 
-	.mobile-agent {
-		font-size: 0.625rem;
-		font-weight: 600;
-		color: oklch(0.70 0.02 250);
-		text-transform: uppercase;
-		letter-spacing: 0.03em;
+	.mobile-type-icon {
+		font-size: 0.6875rem;
 	}
 
-	.mobile-type {
-		font-size: 0.75rem;
-	}
-
-	.mobile-priority-badge {
+	.mobile-priority {
 		font-size: 0.5625rem;
 		font-weight: 700;
 		padding: 0.0625rem 0.25rem;

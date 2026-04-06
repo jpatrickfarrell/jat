@@ -1304,7 +1304,7 @@
 			{@const sessionInfo = agentSessionInfo.get(sessionAgentName)}
 			{@const activityState = sessionInfo?.activityState}
 			{@const rawEffectiveState = optimisticStates.get(session.name) || activityState || 'idle'}
-			{@const effectiveState = rawEffectiveState === 'completing' && sessionTask?.status === 'closed' ? 'completed' : rawEffectiveState}
+			{@const effectiveState = (rawEffectiveState === 'completing' || rawEffectiveState === 'ready-for-review') && sessionTask?.status === 'closed' ? 'completed' : rawEffectiveState}
 			{@const stateVisual = getSessionStateVisual(effectiveState)}
 			{@const statusDotColor = stateVisual.accent}
 			{@const derivedProject = agentProjects.get(sessionAgentName) || session.project || null}
@@ -1578,7 +1578,7 @@
 					{@const sessionInfo = agentSessionInfo.get(sessionAgentName)}
 					{@const activityState = sessionInfo?.activityState}
 					{@const rawEffectiveState = optimisticStates.get(session.name) || activityState || 'idle'}
-					{@const effectiveState = rawEffectiveState === 'completing' && sessionTask?.status === 'closed' ? 'completed' : rawEffectiveState}
+					{@const effectiveState = (rawEffectiveState === 'completing' || rawEffectiveState === 'ready-for-review') && sessionTask?.status === 'closed' ? 'completed' : rawEffectiveState}
 					{@const statusDotColor = getSessionStateVisual(effectiveState).accent}
 					{@const derivedProject = agentProjects.get(sessionAgentName) || session.project || null}
 					{@const rowProjectColor = sessionTask?.id

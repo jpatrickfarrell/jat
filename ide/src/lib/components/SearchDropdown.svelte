@@ -26,6 +26,7 @@
 		colorFn,
 		footer,
 		variant = 'default',
+		size = 'md',
 		onChange,
 	}: {
 		value: string;
@@ -37,6 +38,8 @@
 		footer?: Snippet;
 		/** 'chip' renders a compact TopBar-style pill instead of the full-width trigger */
 		variant?: 'default' | 'chip';
+		/** 'sm' renders a smaller trigger matching text-[11px] compact UIs */
+		size?: 'sm' | 'md';
 		onChange: (value: string) => void;
 	} = $props();
 
@@ -99,6 +102,7 @@
 		class="sd-trigger"
 		class:sd-disabled={disabled}
 		class:sd-chip={variant === 'chip'}
+		class:sd-sm={size === 'sm'}
 		style={activeColor
 			? variant === 'chip'
 				? `--sd-color: ${activeColor};`
@@ -119,6 +123,7 @@
 	{#if open}
 		<div
 			class="sd-panel"
+			class:sd-panel-sm={size === 'sm'}
 			transition:slide={{ duration: 120 }}
 		>
 			<!-- Search input -->
@@ -223,6 +228,38 @@
 	.sd-trigger:disabled, .sd-disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	/* Small size variant — matches DaisyUI select-sm / input-sm */
+	.sd-sm {
+		font-size: 0.75rem;
+		min-height: 2rem;
+		padding: 0 0.75rem;
+		border-radius: var(--rounded-btn, 0.5rem);
+		background: var(--b2, oklch(0.16 0.01 250));
+		border: 1px solid oklch(from var(--bc, oklch(0.85 0.02 250)) l c h / 0.3);
+		color: var(--bc, oklch(0.85 0.02 250));
+	}
+	.sd-sm .sd-chevron {
+		width: 0.625rem;
+		height: 0.625rem;
+	}
+	.sd-panel-sm {
+		font-size: 0.75rem;
+	}
+	.sd-panel-sm .sd-search {
+		padding: 0.25rem 0.5rem;
+	}
+	.sd-panel-sm .sd-search-input {
+		font-size: 0.75rem;
+	}
+	.sd-panel-sm .sd-option {
+		padding: 0.375rem 0.625rem;
+		font-size: 0.75rem;
+	}
+	.sd-panel-sm .sd-group-label {
+		font-size: 0.625rem;
+		padding: 0.25rem 0.625rem 0.125rem;
 	}
 
 	/* Chip variant — TopBar fav-chip style: full border, color-tinted background */

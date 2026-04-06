@@ -436,22 +436,6 @@
 	// Map of normalized task title -> task ID for detecting already-created suggested tasks
 	let existingTaskTitles = $state<Map<string, string>>(new Map());
 
-	// Track which voice inbox sections are open per event key: 'summary' | 'tasks' | 'transcript'
-	let voiceInboxOpenSections = $state<Map<string, Set<string>>>(new Map());
-
-	function getVoiceOpenSections(eventKey: string): Set<string> {
-		// Pure read — returns stored set or default. No state mutation, safe in template expressions.
-		return voiceInboxOpenSections.get(eventKey) ?? new Set(['summary', 'tasks']);
-	}
-
-	function toggleVoiceSection(eventKey: string, section: string) {
-		const sections = getVoiceOpenSections(eventKey);
-		const next = new Set(sections);
-		if (next.has(section)) next.delete(section); else next.add(section);
-		voiceInboxOpenSections.set(eventKey, next);
-		voiceInboxOpenSections = new Map(voiceInboxOpenSections);
-	}
-
 	// Fetch existing task titles from JAT for "already created" detection
 	async function fetchExistingTaskTitles() {
 		try {
@@ -991,11 +975,14 @@
 			}
 		}
 
-		// Voice inbox: tasks events show count + time
+		// Voice inbox: tasks events show count + time (+ date if not today)
 		if (event.type === 'tasks') {
 			const count = Array.isArray(event.data?.tasks) ? event.data.tasks.length : 0;
-			const t = new Date(event.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-			return `Voice Inbox — ${count} suggestion${count !== 1 ? 's' : ''} · ${t}`;
+			const eventDate = new Date(event.timestamp);
+			const isToday = eventDate.toDateString() === new Date().toDateString();
+			const t = eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+			const datePart = isToday ? '' : ` · ${eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+			return `Voice Inbox — ${count} suggestion${count !== 1 ? 's' : ''}${datePart} · ${t}`;
 		}
 
 		// Fallback to uppercase label with task ID
@@ -1198,101 +1185,37 @@
 						<div class="px-3 pb-3 pt-1 border-t border-base-300">
 							<!-- Rich signal content based on type -->
 							{#if event.type === 'tasks' && event.data}
-								<!-- Voice Inbox: Summary | Tasks | Transcript groups -->
+								<!-- Voice Inbox: flat layout (summary, tasks, transcript) -->
 								{@const tasksWithState = getTasksWithState(event, eventKey)}
 								{@const selectedCount = getSelectedCount(eventKey)}
 								{@const voiceSummary = typeof event.data === 'object' && !Array.isArray(event.data) ? (event.data.summary || '') : ''}
 								{@const voiceTranscript = typeof event.data === 'object' && !Array.isArray(event.data) ? (event.data.transcript || '') : ''}
-								{@const openSections = getVoiceOpenSections(eventKey)}
-								<div class="space-y-1.5">
-									<!-- Summary Group -->
+								<div class="space-y-2">
 									{#if voiceSummary}
-										<div class="rounded-lg overflow-hidden" style="border: 1px solid oklch(0.25 0.02 250); border-left: 3px solid oklch(0.60 0.12 200);">
-											<button
-												class="w-full flex items-center justify-between px-3 py-2 text-left text-[11px] font-semibold tracking-wide transition-colors hover:brightness-110"
-												style="background: oklch(0.18 0.01 250); color: oklch(0.70 0.10 200);"
-												onclick={() => toggleVoiceSection(eventKey, 'summary')}
-											>
-												<div class="flex items-center gap-2">
-													<svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-														<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-													</svg>
-													<span>Summary</span>
-												</div>
-												<svg class="w-3.5 h-3.5 transition-transform duration-150 {openSections.has('summary') ? '' : '-rotate-90'}" style="color: oklch(0.50 0.03 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-												</svg>
-											</button>
-											{#if openSections.has('summary')}
-												<div class="px-3 py-2.5 text-[12px] leading-relaxed" style="color: oklch(0.80 0.03 250); background: oklch(0.15 0.01 250);" transition:slide={{ duration: 150 }}>
-													{voiceSummary}
-												</div>
-											{/if}
+										<div class="px-3 py-2 text-[12px] leading-relaxed rounded-lg" style="color: oklch(0.80 0.03 250); background: oklch(0.15 0.01 250); border-left: 3px solid oklch(0.60 0.12 200);">
+											{voiceSummary}
 										</div>
 									{/if}
-									<!-- Tasks Group -->
-									<div class="rounded-lg overflow-hidden" style="border: 1px solid oklch(0.25 0.02 250); border-left: 3px solid oklch(0.65 0.15 145);">
-										<button
-											class="w-full flex items-center justify-between px-3 py-2 text-left text-[11px] font-semibold tracking-wide transition-colors hover:brightness-110"
-											style="background: oklch(0.18 0.01 250); color: oklch(0.70 0.12 145);"
-											onclick={() => toggleVoiceSection(eventKey, 'tasks')}
-										>
-											<div class="flex items-center gap-2">
-												<svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-												</svg>
-												<span>Tasks</span>
-												<span class="text-[10px] font-mono px-1.5 py-0.5 rounded-full" style="background: oklch(0.65 0.15 145 / 0.15); color: oklch(0.70 0.12 145);">{tasksWithState.length}</span>
-											</div>
-											<svg class="w-3.5 h-3.5 transition-transform duration-150 {openSections.has('tasks') ? '' : '-rotate-90'}" style="color: oklch(0.50 0.03 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-											</svg>
-										</button>
-										{#if openSections.has('tasks')}
-											<div transition:slide={{ duration: 150 }}>
-												<SuggestedTasksSection
-													tasks={tasksWithState}
-													{selectedCount}
-													onToggleSelection={(taskKey) => toggleTaskSelection(eventKey, taskKey)}
-													getTaskKey={getSuggestedTaskKey}
-													onCreateTasks={onCreateTasks ? (tasks) => handleCreateTasks(eventKey, tasks) : undefined}
-													onCreateAndStartTasks={onCreateAndStartTasks ? (tasks) => handleCreateAndStartTasks(eventKey, tasks) : undefined}
-													onEditTask={(taskKey, edits) => editTask(eventKey, taskKey, edits)}
-													onClearEdits={(taskKey) => clearTaskEdits(eventKey, taskKey)}
-													isCreating={isCreatingTasks}
-													{createResults}
-													showFeedback={showCreateFeedback}
-													onDismissFeedback={dismissFeedback}
-													{availableProjects}
-													{defaultProject}
-													{onTaskClick}
-												/>
-											</div>
-										{/if}
-									</div>
-									<!-- Transcript Group -->
+									<SuggestedTasksSection
+										tasks={tasksWithState}
+										{selectedCount}
+										onToggleSelection={(taskKey) => toggleTaskSelection(eventKey, taskKey)}
+										getTaskKey={getSuggestedTaskKey}
+										onCreateTasks={onCreateTasks ? (tasks) => handleCreateTasks(eventKey, tasks) : undefined}
+										onCreateAndStartTasks={onCreateAndStartTasks ? (tasks) => handleCreateAndStartTasks(eventKey, tasks) : undefined}
+										onEditTask={(taskKey, edits) => editTask(eventKey, taskKey, edits)}
+										onClearEdits={(taskKey) => clearTaskEdits(eventKey, taskKey)}
+										isCreating={isCreatingTasks}
+										{createResults}
+										showFeedback={showCreateFeedback}
+										onDismissFeedback={dismissFeedback}
+										{availableProjects}
+										{defaultProject}
+										{onTaskClick}
+									/>
 									{#if voiceTranscript}
-										<div class="rounded-lg overflow-hidden" style="border: 1px solid oklch(0.25 0.02 250); border-left: 3px solid oklch(0.55 0.08 280);">
-											<button
-												class="w-full flex items-center justify-between px-3 py-2 text-left text-[11px] font-semibold tracking-wide transition-colors hover:brightness-110"
-												style="background: oklch(0.18 0.01 250); color: oklch(0.65 0.08 280);"
-												onclick={() => toggleVoiceSection(eventKey, 'transcript')}
-											>
-												<div class="flex items-center gap-2">
-													<svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-														<path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-													</svg>
-													<span>Transcript</span>
-												</div>
-												<svg class="w-3.5 h-3.5 transition-transform duration-150 {openSections.has('transcript') ? '' : '-rotate-90'}" style="color: oklch(0.50 0.03 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-												</svg>
-											</button>
-											{#if openSections.has('transcript')}
-												<div class="px-3 py-2.5 text-[11px] leading-relaxed whitespace-pre-wrap font-mono" style="color: oklch(0.65 0.03 250); background: oklch(0.15 0.01 250); max-height: 200px; overflow-y: auto;" transition:slide={{ duration: 150 }}>
-													{voiceTranscript}
-												</div>
-											{/if}
+										<div class="px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap font-mono rounded-lg" style="color: oklch(0.65 0.03 250); background: oklch(0.15 0.01 250); border-left: 3px solid oklch(0.55 0.08 280); max-height: 200px; overflow-y: auto;">
+											{voiceTranscript}
 										</div>
 									{/if}
 								</div>
@@ -1787,98 +1710,37 @@
 									onkeydown={(e) => e.stopPropagation()}
 								>
 									{#if event.type === 'tasks' && event.data}
-										<!-- Voice Inbox: Summary | Tasks | Transcript groups -->
+										<!-- Voice Inbox: flat layout (summary, tasks, transcript) -->
 										{@const tasksWithState = getTasksWithState(event, eventKey)}
 										{@const selectedCount = getSelectedCount(eventKey)}
 										{@const popupVoiceSummary = typeof event.data === 'object' && !Array.isArray(event.data) ? (event.data.summary || '') : ''}
 										{@const popupVoiceTranscript = typeof event.data === 'object' && !Array.isArray(event.data) ? (event.data.transcript || '') : ''}
-										{@const popupOpenSections = getVoiceOpenSections(eventKey)}
-										<div class="space-y-1.5">
+										<div class="space-y-2">
 											{#if popupVoiceSummary}
-												<div class="rounded-lg overflow-hidden" style="border: 1px solid oklch(0.25 0.02 250); border-left: 3px solid oklch(0.60 0.12 200);">
-													<button
-														class="w-full flex items-center justify-between px-3 py-2 text-left text-[11px] font-semibold tracking-wide transition-colors hover:brightness-110"
-														style="background: oklch(0.18 0.01 250); color: oklch(0.70 0.10 200);"
-														onclick={() => toggleVoiceSection(eventKey, 'summary')}
-													>
-														<div class="flex items-center gap-2">
-															<svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-																<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-															</svg>
-															<span>Summary</span>
-														</div>
-														<svg class="w-3.5 h-3.5 transition-transform duration-150 {popupOpenSections.has('summary') ? '' : '-rotate-90'}" style="color: oklch(0.50 0.03 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-															<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-														</svg>
-													</button>
-													{#if popupOpenSections.has('summary')}
-														<div class="px-3 py-2.5 text-[12px] leading-relaxed" style="color: oklch(0.80 0.03 250); background: oklch(0.15 0.01 250);" transition:slide={{ duration: 150 }}>
-															{popupVoiceSummary}
-														</div>
-													{/if}
+												<div class="px-3 py-2 text-[12px] leading-relaxed rounded-lg" style="color: oklch(0.80 0.03 250); background: oklch(0.15 0.01 250); border-left: 3px solid oklch(0.60 0.12 200);">
+													{popupVoiceSummary}
 												</div>
 											{/if}
-											<div class="rounded-lg overflow-hidden" style="border: 1px solid oklch(0.25 0.02 250); border-left: 3px solid oklch(0.65 0.15 145);">
-												<button
-													class="w-full flex items-center justify-between px-3 py-2 text-left text-[11px] font-semibold tracking-wide transition-colors hover:brightness-110"
-													style="background: oklch(0.18 0.01 250); color: oklch(0.70 0.12 145);"
-													onclick={() => toggleVoiceSection(eventKey, 'tasks')}
-												>
-													<div class="flex items-center gap-2">
-														<svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-															<path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-														</svg>
-														<span>Tasks</span>
-														<span class="text-[10px] font-mono px-1.5 py-0.5 rounded-full" style="background: oklch(0.65 0.15 145 / 0.15); color: oklch(0.70 0.12 145);">{tasksWithState.length}</span>
-													</div>
-													<svg class="w-3.5 h-3.5 transition-transform duration-150 {popupOpenSections.has('tasks') ? '' : '-rotate-90'}" style="color: oklch(0.50 0.03 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-														<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-													</svg>
-												</button>
-												{#if popupOpenSections.has('tasks')}
-													<div transition:slide={{ duration: 150 }}>
-														<SuggestedTasksSection
-															tasks={tasksWithState}
-															{selectedCount}
-															onToggleSelection={(taskKey) => toggleTaskSelection(eventKey, taskKey)}
-															getTaskKey={getSuggestedTaskKey}
-															onCreateTasks={onCreateTasks ? (tasks) => handleCreateTasks(eventKey, tasks) : undefined}
-															onCreateAndStartTasks={onCreateAndStartTasks ? (tasks) => handleCreateAndStartTasks(eventKey, tasks) : undefined}
-															onEditTask={(taskKey, edits) => editTask(eventKey, taskKey, edits)}
-															onClearEdits={(taskKey) => clearTaskEdits(eventKey, taskKey)}
-															isCreating={isCreatingTasks}
-															{createResults}
-															showFeedback={showCreateFeedback}
-															onDismissFeedback={dismissFeedback}
-															{availableProjects}
-															{defaultProject}
-															{onTaskClick}
-														/>
-													</div>
-												{/if}
-											</div>
+											<SuggestedTasksSection
+												tasks={tasksWithState}
+												{selectedCount}
+												onToggleSelection={(taskKey) => toggleTaskSelection(eventKey, taskKey)}
+												getTaskKey={getSuggestedTaskKey}
+												onCreateTasks={onCreateTasks ? (tasks) => handleCreateTasks(eventKey, tasks) : undefined}
+												onCreateAndStartTasks={onCreateAndStartTasks ? (tasks) => handleCreateAndStartTasks(eventKey, tasks) : undefined}
+												onEditTask={(taskKey, edits) => editTask(eventKey, taskKey, edits)}
+												onClearEdits={(taskKey) => clearTaskEdits(eventKey, taskKey)}
+												isCreating={isCreatingTasks}
+												{createResults}
+												showFeedback={showCreateFeedback}
+												onDismissFeedback={dismissFeedback}
+												{availableProjects}
+												{defaultProject}
+												{onTaskClick}
+											/>
 											{#if popupVoiceTranscript}
-												<div class="rounded-lg overflow-hidden" style="border: 1px solid oklch(0.25 0.02 250); border-left: 3px solid oklch(0.55 0.08 280);">
-													<button
-														class="w-full flex items-center justify-between px-3 py-2 text-left text-[11px] font-semibold tracking-wide transition-colors hover:brightness-110"
-														style="background: oklch(0.18 0.01 250); color: oklch(0.65 0.08 280);"
-														onclick={() => toggleVoiceSection(eventKey, 'transcript')}
-													>
-														<div class="flex items-center gap-2">
-															<svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-																<path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-															</svg>
-															<span>Transcript</span>
-														</div>
-														<svg class="w-3.5 h-3.5 transition-transform duration-150 {popupOpenSections.has('transcript') ? '' : '-rotate-90'}" style="color: oklch(0.50 0.03 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-															<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-														</svg>
-													</button>
-													{#if popupOpenSections.has('transcript')}
-														<div class="px-3 py-2.5 text-[11px] leading-relaxed whitespace-pre-wrap font-mono" style="color: oklch(0.65 0.03 250); background: oklch(0.15 0.01 250); max-height: 200px; overflow-y: auto;" transition:slide={{ duration: 150 }}>
-															{popupVoiceTranscript}
-														</div>
-													{/if}
+												<div class="px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap font-mono rounded-lg" style="color: oklch(0.65 0.03 250); background: oklch(0.15 0.01 250); border-left: 3px solid oklch(0.55 0.08 280); max-height: 200px; overflow-y: auto;">
+													{popupVoiceTranscript}
 												</div>
 											{/if}
 										</div>

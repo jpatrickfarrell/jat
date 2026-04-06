@@ -126,6 +126,47 @@
 		return projectColors[project.toLowerCase()] || getProjectColor(project + '-x');
 	}
 
+	// Available tasks cache per project (for depends-on dropdown)
+	let availableTasksCache = $state<Record<string, { id: string; title: string; priority: number; status: string }[]>>({});
+	let loadingTasksFor = $state<string | null>(null);
+
+	async function fetchAvailableTasks(project: string) {
+		if (availableTasksCache[project] || loadingTasksFor === project) return;
+		loadingTasksFor = project;
+		try {
+			const res = await fetch(`/api/tasks?status=open&project=${encodeURIComponent(project)}`);
+			if (res.ok) {
+				const data = await res.json();
+				availableTasksCache[project] = (data.tasks || []).map((t: any) => ({
+					id: t.id,
+					title: t.title,
+					priority: t.priority ?? 2,
+					status: t.status || 'open',
+				}));
+				availableTasksCache = { ...availableTasksCache };
+			}
+		} catch {
+			// silently fail
+		} finally {
+			loadingTasksFor = null;
+		}
+	}
+
+	function getDependsOnGroups(project: string, currentDeps: string[]): SearchDropdownGroup[] {
+		const tasks = availableTasksCache[project] || [];
+		const depSet = new Set(currentDeps);
+		const available = tasks.filter(t => !depSet.has(t.id));
+		if (available.length === 0) return [{ label: 'No tasks available', options: [] }];
+		return [{
+			label: 'Open Tasks',
+			options: available.map(t => ({
+				value: t.id,
+				label: `${t.id} — ${t.title}`,
+				icon: `P${t.priority}`,
+			})),
+		}];
+	}
+
 	// Collapsed state for the section
 	let isCollapsed = $state(false);
 
@@ -136,16 +177,22 @@
 	let editingTitleKey = $state<string | null>(null);
 	let editingTitleValue = $state<string>('');
 
-	// Task type options
-	const TASK_TYPES = ['feature', 'bug', 'task', 'chore', 'epic'];
+	// Task type options (matching TaskCreationDrawer)
+	const TYPE_OPTIONS = [
+		{ value: 'task', label: 'Task', icon: '📋' },
+		{ value: 'bug', label: 'Bug', icon: '🐛' },
+		{ value: 'feature', label: 'Feature', icon: '✨' },
+		{ value: 'epic', label: 'Epic', icon: '🏔️' },
+		{ value: 'chore', label: 'Chore', icon: '🔧' },
+	];
 
 	// Priority options with CSS class names (colors defined in style block)
 	const PRIORITIES = [
-		{ value: 0, label: 'P0', cssClass: 'priority-p0' },
-		{ value: 1, label: 'P1', cssClass: 'priority-p1' },
-		{ value: 2, label: 'P2', cssClass: 'priority-p2' },
-		{ value: 3, label: 'P3', cssClass: 'priority-p3' },
-		{ value: 4, label: 'P4', cssClass: 'priority-p4' },
+		{ value: 0, label: 'P0', fullLabel: 'P0 (Critical)', cssClass: 'priority-p0' },
+		{ value: 1, label: 'P1', fullLabel: 'P1 (High)', cssClass: 'priority-p1' },
+		{ value: 2, label: 'P2', fullLabel: 'P2 (Medium)', cssClass: 'priority-p2' },
+		{ value: 3, label: 'P3', fullLabel: 'P3 (Low)', cssClass: 'priority-p3' },
+		{ value: 4, label: 'P4', fullLabel: 'P4 (Lowest)', cssClass: 'priority-p4' },
 	];
 
 	function toggleCollapse() {
@@ -202,9 +249,14 @@
 	}
 
 	// Toggle description expansion
-	function toggleExpand(taskKey: string, event: MouseEvent) {
+	function toggleExpand(taskKey: string, event: MouseEvent, project?: string) {
 		event.stopPropagation();
-		expandedTaskKey = expandedTaskKey === taskKey ? null : taskKey;
+		const opening = expandedTaskKey !== taskKey;
+		expandedTaskKey = opening ? taskKey : null;
+		// Pre-fetch available tasks for the depends-on dropdown
+		if (opening && project) {
+			fetchAvailableTasks(project);
+		}
 	}
 
 	// Svelte action to auto-size textarea on mount
@@ -300,14 +352,17 @@
 		}
 	}
 
-	// Update depends_on (from comma-separated string)
-	function updateDependsOn(taskKey: string, dependsOnStr: string) {
+	// Add a dependency
+	function addDependency(taskKey: string, currentDeps: string[], taskId: string) {
+		if (onEditTask && !currentDeps.includes(taskId)) {
+			onEditTask(taskKey, { depends_on: [...currentDeps, taskId] });
+		}
+	}
+
+	// Remove a dependency
+	function removeDependency(taskKey: string, currentDeps: string[], taskId: string) {
 		if (onEditTask) {
-			const depends_on = dependsOnStr
-				.split(',')
-				.map((s) => s.trim())
-				.filter((s) => s.length > 0);
-			onEditTask(taskKey, { depends_on });
+			onEditTask(taskKey, { depends_on: currentDeps.filter(d => d !== taskId) });
 		}
 	}
 
@@ -459,25 +514,25 @@
 
 							<!-- Priority dropdown -->
 							<select
-								class="text-[9px] px-1 py-0.5 rounded font-mono font-bold cursor-pointer appearance-none priority-select flex-shrink-0 {priorityClass}"
+								class="select select-xs w-auto font-mono font-bold flex-shrink-0 bg-base-200 border-base-content/30 text-base-content min-h-0 h-6 pl-1.5 pr-5 {priorityClass}"
 								value={effectivePriority}
 								onclick={(e) => e.stopPropagation()}
 								onchange={(e) => updatePriority(taskKey, parseInt(e.currentTarget.value), e)}
 							>
 								{#each PRIORITIES as p}
-									<option value={p.value}>{p.label}</option>
+									<option value={p.value}>{p.fullLabel}</option>
 								{/each}
 							</select>
 
 							<!-- Type dropdown -->
 							<select
-								class="text-[9px] px-1 py-0.5 rounded font-mono cursor-pointer appearance-none capitalize type-select bg-base-300 text-base-content border border-base-content/20 flex-shrink-0"
+								class="select select-xs w-auto font-mono flex-shrink-0 bg-base-200 border-base-content/30 text-base-content min-h-0 h-6 pl-1.5 pr-5"
 								value={effectiveType}
 								onclick={(e) => e.stopPropagation()}
 								onchange={(e) => updateType(taskKey, e.currentTarget.value, e)}
 							>
-								{#each TASK_TYPES as t}
-									<option value={t}>{t}</option>
+								{#each TYPE_OPTIONS as t}
+									<option value={t.value}>{t.label} {t.icon}</option>
 								{/each}
 							</select>
 
@@ -548,7 +603,7 @@
 							<!-- Expand toggle -->
 							<button
 								type="button"
-								onclick={(e) => toggleExpand(taskKey, e)}
+								onclick={(e) => toggleExpand(taskKey, e, effectiveProject)}
 								class="flex-shrink-0 p-0.5 rounded opacity-40 hover:opacity-100 transition-opacity"
 								title={isExpanded ? 'Collapse' : 'Expand'}
 							>
@@ -568,10 +623,12 @@
 								onkeydown={(e) => e.stopPropagation()}
 							>
 								<!-- Description -->
-								<div>
-									<div class="text-[9px] font-semibold opacity-60 block mb-0.5 text-base-content/60">
-										Description
-									</div>
+								<div class="form-control">
+									<label class="label py-0.5">
+										<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
+											Description
+										</span>
+									</label>
 									<textarea
 										value={effectiveDescription}
 										oninput={(e) => {
@@ -581,35 +638,54 @@
 											updateDescription(taskKey, textarea.value);
 										}}
 										use:autosize
-										class="w-full text-[11px] p-2 rounded resize-none overflow-hidden bg-base-300 text-base-content border border-base-content/20 min-h-[50px]"
+										class="textarea textarea-sm w-full font-mono bg-base-200 border-base-content/30 text-base-content resize-none overflow-hidden min-h-[50px]"
 										placeholder="Task description..."
 									></textarea>
 								</div>
 
 								<!-- Labels and Dependencies row -->
 								<div class="grid grid-cols-2 gap-2">
-									<div>
-										<div class="text-[9px] font-semibold opacity-60 block mb-0.5 text-base-content/60">
-											Labels
-										</div>
+									<div class="form-control">
+										<label class="label py-0.5">
+											<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
+												Labels
+											</span>
+										</label>
 										<input
 											type="text"
 											value={effectiveLabels}
 											oninput={(e) => updateLabels(taskKey, e.currentTarget.value)}
-											class="w-full text-[11px] px-2 py-1 rounded bg-base-300 text-base-content border border-base-content/20"
+											class="input input-sm w-full font-mono bg-base-200 border-base-content/30 text-base-content"
 											placeholder="label1, label2, ..."
 										/>
 									</div>
-									<div>
-										<div class="text-[9px] font-semibold opacity-60 block mb-0.5 text-base-content/60">
-											Depends On (task IDs)
-										</div>
-										<input
-											type="text"
-											value={effectiveDependsOn.join(', ')}
-											oninput={(e) => updateDependsOn(taskKey, e.currentTarget.value)}
-											class="w-full text-[11px] px-2 py-1 rounded bg-base-300 text-base-content border border-base-content/20"
-											placeholder="jat-abc, jat-xyz, ..."
+									<div class="form-control">
+										<label class="label py-0.5">
+											<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
+												Depends On
+											</span>
+										</label>
+										{#if effectiveDependsOn.length > 0}
+											<div class="flex flex-wrap gap-1 mb-1">
+												{#each effectiveDependsOn as depId}
+													<span class="badge badge-sm font-mono bg-base-200 border-base-content/30 text-base-content gap-1">
+														{depId}
+														<button
+															type="button"
+															class="opacity-50 hover:opacity-100 transition-opacity"
+															onclick={(e) => { e.stopPropagation(); removeDependency(taskKey, effectiveDependsOn, depId); }}
+															title="Remove dependency"
+														>×</button>
+													</span>
+												{/each}
+											</div>
+										{/if}
+										<SearchDropdown
+											value=""
+											groups={getDependsOnGroups(effectiveProject, effectiveDependsOn)}
+											placeholder="Add dependency..."
+											size="sm"
+											onChange={(taskId) => addDependency(taskKey, effectiveDependsOn, taskId)}
 										/>
 									</div>
 								</div>

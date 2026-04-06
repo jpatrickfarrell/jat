@@ -873,6 +873,34 @@ launch_browser() {
     ) &
 }
 
+# Return the first favorite project name from projects.json, falling back to first non-hidden project
+get_first_favorite_project() {
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        echo ""
+        return
+    fi
+    # Try first project marked favorite: true
+    local fav
+    fav=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('$CONFIG_FILE'))
+    projects = d.get('projects', {})
+    for k, v in projects.items():
+        if v.get('favorite') and not v.get('hidden'):
+            print(k)
+            sys.exit(0)
+    # Fallback: first non-hidden project
+    for k, v in projects.items():
+        if not v.get('hidden'):
+            print(k)
+            sys.exit(0)
+except Exception:
+    pass
+" 2>/dev/null)
+    echo "$fav"
+}
+
 launch_ide() {
     local name="$1"
     local ide_port="${2:-3333}"
@@ -993,20 +1021,28 @@ launch_ide() {
     sleep 0.3
     tmux send-keys -t "$session_name" "$ide_cmd" Enter
 
+    # Determine landing path: /tasks?project=<firstFavorite> if available, else /
+    local ide_start_path="/"
+    local first_project
+    first_project=$(get_first_favorite_project)
+    if [[ -n "$first_project" ]]; then
+        ide_start_path="/tasks?project=${first_project}"
+    fi
+
     # Open browser after delay for server to start
     (
         sleep 3
         if command -v xdg-open &>/dev/null; then
-            xdg-open "${ide_protocol}://localhost:$ide_port" &>/dev/null
+            xdg-open "${ide_protocol}://localhost:${ide_port}${ide_start_path}" &>/dev/null
         elif command -v open &>/dev/null; then
-            open "${ide_protocol}://localhost:$ide_port"
+            open "${ide_protocol}://localhost:${ide_port}${ide_start_path}"
         elif [[ -z "${DISPLAY:-}" ]] && [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
             # Headless server — print accessible URL instead of opening browser
             local ts_ip
             ts_ip=$(tailscale ip -4 2>/dev/null || echo "localhost")
             echo ""
             echo -e "${GREEN}  ✓ JAT IDE running${NC}"
-            echo -e "  Open on any Tailscale device: ${BOLD}${ide_protocol}://${ts_ip}:${ide_port}${NC}"
+            echo -e "  Open on any Tailscale device: ${BOLD}${ide_protocol}://${ts_ip}:${ide_port}${ide_start_path}${NC}"
             echo ""
         fi
     ) &

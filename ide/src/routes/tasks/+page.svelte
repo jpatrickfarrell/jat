@@ -1684,6 +1684,7 @@
 			<span>No projects with active sessions or open tasks</span>
 		</div>
 	{:else}
+		<div class="content-area" style="--project-color: {selectedProject ? (projectColors[selectedProject] || 'oklch(0.70 0.15 200)') : 'oklch(0.70 0.15 200)'}">
 		<!-- Voice Inbox: pending suggestions from iOS voice notes (hidden when empty) -->
 		<VoiceInbox
 			availableProjects={allProjects}
@@ -2471,6 +2472,7 @@
 				{/if}
 			</section>
 		{/if}
+		</div>
 	{/if}
 </div>
 
@@ -2683,12 +2685,16 @@
 		color: oklch(0.85 0.08 200);
 	}
 
+	/* Content area wrapper — provides the project-color top border that splits TopMenu from body */
+	.content-area {
+		border-top: 3px solid var(--project-color);
+	}
+
 	/* Project Content Area */
 	.project-content {
 		background: oklch(0.18 0.01 250);
 		border-radius: 0.75rem;
 		border: 1px solid oklch(0.25 0.02 250);
-		border-top: 3px solid var(--project-color);
 		/* NOTE: overflow:hidden removed - it clips TaskIdBadge dropdowns that need to escape container (see jat-1xa13) */
 	}
 

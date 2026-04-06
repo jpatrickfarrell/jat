@@ -5,8 +5,8 @@
 	 * Shows project-relevant features: server controls, ready tasks, actions, and epics.
 	 * Project switching is handled by the TopBar's project switcher button.
 	 *
-	 * Active:   [● jat ▾|+] - plus button always visible on active project
-	 * Inactive: [● jat ▾]   - compact chip, plus button slides out on hover
+	 * Active:   [● jat +] - plus button always visible on active project
+	 * Inactive: [● jat]   - compact chip, plus button slides out on hover
 	 * Click chip: dropdown with server, ready tasks, and actions
 	 * Click +: opens task creation drawer for current project
 	 */
@@ -445,19 +445,16 @@
 				</span>
 			{/if}
 			<span class="chip-label">{selectedProject}</span>
-			<svg class="chevron" class:open viewBox="0 0 16 16" fill="currentColor">
-				<path fill-rule="evenodd" d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
-			</svg>
 
 		</button>
 
-		<!-- Inline server controls on chip (visible on hover, always for running servers) -->
-		{#if effectiveServerConfig || serverIsRunning}
-			<div class="chip-server-controls" class:chip-server-always={serverIsRunning}>
+		<!-- Inline server controls on chip (only when server is running — start server lives in dropdown) -->
+		{#if serverIsRunning || serverLoadingAction === selectedProject}
+			<div class="chip-server-controls" class:chip-server-active={isActive}>
 				{#if serverLoadingAction === selectedProject}
 					<span class="loading loading-spinner loading-xs" style="color: oklch(0.65 0.02 250); width: 0.625rem; height: 0.625rem;"></span>
-				{:else if serverIsRunning}
-					{#if isActive}
+				{:else}
+					<div class="chip-server-btns">
 						<button type="button" class="chip-server-btn" onclick={(e) => { e.stopPropagation(); handleServerOpenBrowser(); }} title="Open in browser">
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
 						</button>
@@ -470,12 +467,8 @@
 						<button type="button" class="chip-server-btn" onclick={(e) => { e.stopPropagation(); handleServerAttach(); }} title="Attach in tmux">
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" /></svg>
 						</button>
-					{/if}
+					</div>
 					<span class="chip-server-dot chip-server-running" style="margin: 0 0.25rem;"></span>
-				{:else}
-					<button type="button" class="chip-server-btn chip-server-btn-success" onclick={(e) => { e.stopPropagation(); handleServerStart(); }} title="Start server">
-						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" /></svg>
-					</button>
 				{/if}
 			</div>
 		{/if}
@@ -852,66 +845,36 @@
 		white-space: nowrap;
 	}
 
-	.chevron {
-		width: 0.875rem;
-		height: 0.875rem;
-		flex-shrink: 0;
-		max-width: 0;
-		opacity: 0;
-		overflow: hidden;
-		transition: max-width 0.2s ease, opacity 0.2s ease;
-	}
-
-	.chip-group:hover .chevron {
-		max-width: 0.875rem;
-		opacity: 0.7;
-		animation: chevron-spin-in 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-	}
-
-	.chevron.open {
-		max-width: 0.875rem;
-		opacity: 0.7;
-		transform: rotate(180deg);
-		animation: none;
-	}
-
-	@keyframes chevron-spin-in {
-		0% {
-			transform: rotate(-180deg) scale(0.5);
-			opacity: 0;
-		}
-		100% {
-			transform: rotate(0deg) scale(1);
-			opacity: 0.7;
-		}
-	}
-
-	/* Inline server controls on chip (hover-expand like new-btn) */
+	/* Inline server controls on chip (only shown when server is running) */
 	.chip-server-controls {
+		display: flex;
+		align-items: center;
+		gap: 0.125rem;
+		padding: 0 0.25rem;
+		border-left: 1px solid color-mix(in oklch, var(--project-color) 35%, transparent);
+	}
+
+	/* Server action buttons - hidden on inactive, expand on hover */
+	.chip-server-btns {
 		display: flex;
 		align-items: center;
 		gap: 0.125rem;
 		max-width: 0;
 		overflow: hidden;
 		opacity: 0;
-		border-left: 0px solid transparent;
 		transition: all 0.2s ease;
-		padding: 0;
 	}
 
-	.chip-group:hover .chip-server-controls {
-		max-width: 6rem;
+	/* Always show buttons on active chip */
+	.chip-server-active .chip-server-btns {
+		max-width: 5rem;
 		opacity: 1;
-		padding: 0 0.25rem;
-		border-left: 1px solid color-mix(in oklch, var(--project-color) 35%, transparent);
 	}
 
-	/* Always visible when server is running */
-	.chip-server-controls.chip-server-always {
-		max-width: 6rem;
+	/* Show buttons on hover for inactive chips */
+	.chip-group:hover .chip-server-btns {
+		max-width: 5rem;
 		opacity: 1;
-		padding: 0 0.25rem;
-		border-left: 1px solid color-mix(in oklch, var(--project-color) 35%, transparent);
 	}
 
 	.chip-server-btn {

@@ -1275,8 +1275,8 @@
 											</div>
 										</div>
 									{/if}
-									{@const voiceKb = Array.isArray(event.data?.knowledgeBase) ? event.data.knowledgeBase : []}
-									{#if voiceKb.length > 0}
+									{#if Array.isArray(event.data?.knowledgeBase) && event.data.knowledgeBase.length > 0}
+									{@const voiceKb = event.data.knowledgeBase}
 										<div class="rounded-lg bg-base-200 border border-base-300">
 											<div class="flex items-center gap-2 px-3 py-2 border-b border-base-300">
 												<svg class="w-4 h-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -1866,8 +1866,8 @@
 													</div>
 												</div>
 											{/if}
-											{@const popupVoiceKb = Array.isArray(event.data?.knowledgeBase) ? event.data.knowledgeBase : []}
-											{#if popupVoiceKb.length > 0}
+											{#if Array.isArray(event.data?.knowledgeBase) && event.data.knowledgeBase.length > 0}
+											{@const popupVoiceKb = event.data.knowledgeBase}
 												<div class="rounded-lg bg-base-200 border border-base-300">
 													<div class="flex items-center gap-2 px-3 py-2 border-b border-base-300">
 														<svg class="w-4 h-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

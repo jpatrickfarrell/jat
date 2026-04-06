@@ -514,13 +514,13 @@
 
 							<!-- Priority dropdown -->
 							<select
-								class="select select-xs w-auto font-mono font-bold flex-shrink-0 bg-base-200 border-base-content/30 text-base-content min-h-0 h-6 pl-1.5 pr-5 {priorityClass}"
+								class="select select-xs w-auto font-mono font-bold flex-shrink-0 bg-base-200 border-base-content/30 text-base-content min-h-0 h-6 pl-1.5 pr-3 {priorityClass}"
 								value={effectivePriority}
 								onclick={(e) => e.stopPropagation()}
 								onchange={(e) => updatePriority(taskKey, parseInt(e.currentTarget.value), e)}
 							>
 								{#each PRIORITIES as p}
-									<option value={p.value}>{p.fullLabel}</option>
+									<option value={p.value}>{p.label}</option>
 								{/each}
 							</select>
 

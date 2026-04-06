@@ -92,11 +92,15 @@ ${projects.map(p => `- ${p.name}: ${p.description}`).join('\n')}
 If a task doesn't clearly belong to any project, omit the "project" field.`
 		: '';
 
-	const prompt = `You are a task organizer. Extract every actionable task from this voice note transcript and produce a detailed summary.
+	const prompt = `You are a note organizer. Given a voice note transcript, produce two things:
 
-Return ONLY a JSON object with this exact structure (no markdown, no explanation):
+1. SUMMARY: Detailed organized notes covering EVERYTHING discussed. The speaker rambles and jumps between topics — reorganize into clear grouped sections without losing any detail. Format each topic as its own line: "TOPIC NAME: all details, names, numbers, decisions, context for that topic". Every name, date, number, idea, and decision must appear. Nothing omitted.
+
+2. TASKS: Every actionable item extracted from the transcript.
+
+Return ONLY valid JSON (no markdown, no explanation):
 {
-  "summary": "DETAILED notes covering everything discussed. The speaker rambles and jumps between topics — your job is to reorganize their thoughts into clear grouped sections WITHOUT losing any detail. Use this format: each topic on its own line starting with the topic in CAPS followed by a colon and all details (e.g. 'MEETING WITH SARAH: schedule for Tuesday, bring the Q3 report, she wants to discuss the new hiring plan'). Capture every name, number, date, decision, idea, and piece of context mentioned — nothing omitted, nothing paraphrased into oblivion.",
+  "summary": "<your detailed topic-by-topic notes here>",
   "tasks": [
     {
       "type": "task",
@@ -109,10 +113,9 @@ Return ONLY a JSON object with this exact structure (no markdown, no explanation
   ]
 }
 
-Types: task, feature, bug, chore
+Task types: task, feature, bug, chore
 Priority: 0=critical 1=high 2=medium 3=low 4=lowest
-
-Use priority cues from the transcript ("urgent", "first thing", "must", "deadline" → lower number).
+Use priority cues ("urgent", "first thing", "must", "deadline" → lower number).
 Group related items into one task rather than splitting trivially.
 ${projectSection}
 

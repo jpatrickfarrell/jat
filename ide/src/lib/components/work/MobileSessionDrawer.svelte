@@ -252,15 +252,21 @@
 		const readyAttachments = pendingAttachments.filter(a => !a.uploading && a.path);
 		if (!text && !readyAttachments.length) return;
 
-		// Send each attachment path, then the text message
+		// Send each attachment path then an extra Enter (Claude Code needs the extra
+		// Enter to submit after it processes the image path into [Image #N]).
 		for (const att of readyAttachments) {
 			await onSendInput(att.path, 'text');
+			await new Promise(r => setTimeout(r, 100));
+			await onSendInput('', 'enter'); // type='enter' → API sends Enter key (not literal text)
 			if (att.previewUrl) URL.revokeObjectURL(att.previewUrl);
 		}
 		pendingAttachments = pendingAttachments.filter(a => a.uploading); // keep any still uploading
 
 		if (text) {
 			await onSendInput(text, 'text');
+			// Extra Enter matches MobileSessionFullscreen behavior — needed for image paths.
+			await new Promise(r => setTimeout(r, 100));
+			await onSendInput('', 'enter'); // type='enter' → API sends Enter key (not literal text)
 			inputText = '';
 		}
 	}

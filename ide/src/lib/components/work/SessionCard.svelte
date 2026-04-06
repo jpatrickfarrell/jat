@@ -4688,6 +4688,7 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 
 	// Handle drag-and-drop for file attachments and image paths
 	function handleDragOver(e: DragEvent) {
+		if (hideInput) return; // Let parent handle DnD when input is hidden
 		e.preventDefault();
 		e.stopPropagation();
 		// Show drag state for files OR custom JAT image/text data OR plain text paths
@@ -4702,6 +4703,7 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 	}
 
 	function handleDragLeave(e: DragEvent) {
+		if (hideInput) return; // Let parent handle DnD when input is hidden
 		e.preventDefault();
 		e.stopPropagation();
 		// Only reset if we're leaving the card entirely (not entering a child)
@@ -4716,6 +4718,7 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 	}
 
 	function handleDragEnter(e: DragEvent) {
+		if (hideInput) return; // Let parent handle DnD when input is hidden
 		e.preventDefault();
 		e.stopPropagation();
 		const hasFiles = e.dataTransfer?.types.includes("Files");
@@ -4728,6 +4731,7 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 	}
 
 	async function handleDrop(e: DragEvent) {
+		if (hideInput) return; // Let parent handle DnD when input is hidden
 		e.preventDefault();
 		e.stopPropagation();
 		isDragOver = false;

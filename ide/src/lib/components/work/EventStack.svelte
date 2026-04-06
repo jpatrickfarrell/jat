@@ -487,17 +487,10 @@
 		return `${task.title}-${index}`;
 	}
 
-	/** Extract the tasks array from a voice inbox event (handles both legacy array format and new object format) */
-	function getVoiceTasks(data: any): SuggestedTask[] {
-		if (Array.isArray(data)) return data;
-		if (data && Array.isArray(data.tasks)) return data.tasks;
-		return [];
-	}
-
 	// Get tasks with state for a specific event
 	function getTasksWithState(event: TimelineEvent, eventKey: string): SuggestedTaskWithState[] {
-		if (event.type !== 'tasks') return [];
-		const tasksArray = getVoiceTasks(event.data);
+		if (event.type !== 'tasks' || !event.data?.tasks || !Array.isArray(event.data.tasks)) return [];
+		const tasksArray: SuggestedTask[] = event.data.tasks;
 		if (tasksArray.length === 0) return [];
 
 		let eventTasksState = tasksStateByEvent.get(eventKey);
@@ -1000,7 +993,7 @@
 
 		// Voice inbox: tasks events show count + time
 		if (event.type === 'tasks') {
-			const count = getVoiceTasks(event.data).length;
+			const count = Array.isArray(event.data?.tasks) ? event.data.tasks.length : 0;
 			const t = new Date(event.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 			return `Voice Inbox — ${count} suggestion${count !== 1 ? 's' : ''} · ${t}`;
 		}

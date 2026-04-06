@@ -26,6 +26,20 @@
 		linked_tasks?: LinkedTask[];
 	}
 
+	interface ContractTerm {
+		id: string;
+		contract_id: string;
+		title: string;
+		body: string;
+		sort_order: number;
+		status: string;
+		client_notes: string | null;
+		accepted_at: string | null;
+		signature_data: string | null;
+		created_at: string;
+		updated_at: string;
+	}
+
 	interface Contract {
 		id: string;
 		title: string;
@@ -37,6 +51,7 @@
 		created_at: string;
 		updated_at: string;
 		milestones?: Milestone[];
+		terms?: ContractTerm[];
 	}
 
 	interface ProjectData {
@@ -87,6 +102,11 @@
 		taskIds: string[];
 	}
 
+	interface TermRow {
+		title: string;
+		body: string;
+	}
+
 	let projects = $state<ProjectData[]>([]);
 	let summary = $state<Summary | null>(null);
 	let loading = $state(true);
@@ -107,7 +127,7 @@
 	const CONTRACT_STATUSES = ['draft', 'sent', 'signed', 'active', 'completed', 'cancelled'] as const;
 	const MILESTONE_STATUSES = ['pending', 'delivered', 'accepted', 'paid'] as const;
 
-	async function updateStatus(projectKey: string, type: 'contract' | 'milestone', id: string, status: string) {
+	async function updateStatus(projectKey: string, type: 'contract' | 'milestone' | 'term', id: string, status: string) {
 		updatingItem = id;
 		try {
 			const res = await fetch('/api/clients', {
@@ -145,6 +165,9 @@
 	let selectedTemplateId = $state<string | null>(null);
 	let milestones = $state<MilestoneRow[]>([]);
 	let loadingTemplates = $state(false);
+
+	// Terms state
+	let contractTerms = $state<TermRow[]>([]);
 
 	// Task picker state
 	let projectTasks = $state<ProjectTask[]>([]);
@@ -331,6 +354,7 @@
 		milestones = [];
 		selectedTemplateId = null;
 		templates = [];
+		contractTerms = [];
 		projectTasks = [];
 		taskPickerMilestoneIndex = null;
 
@@ -420,7 +444,8 @@
 					currency,
 					clientEmail: clientEmail || undefined,
 					notes: contractNotes || undefined,
-					milestones
+					milestones,
+					terms: contractTerms.filter(t => t.title.trim())
 				})
 			});
 
@@ -445,6 +470,52 @@
 			createError = (e as Error).message;
 		} finally {
 			creating = false;
+		}
+	}
+
+	// Inline add-term state for existing contracts
+	let addingTermToContract = $state<string | null>(null); // contract ID
+	let addingTermProject = $state<string>('');
+	let newTermTitle = $state('');
+	let newTermBody = $state('');
+	let savingTerm = $state(false);
+
+	function startAddingTerm(contractId: string, projectKey: string) {
+		addingTermToContract = contractId;
+		addingTermProject = projectKey;
+		newTermTitle = '';
+		newTermBody = '';
+	}
+
+	function cancelAddingTerm() {
+		addingTermToContract = null;
+		newTermTitle = '';
+		newTermBody = '';
+	}
+
+	async function saveNewTerm() {
+		if (!addingTermToContract || !newTermTitle.trim()) return;
+		savingTerm = true;
+		try {
+			const res = await fetch('/api/clients', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					action: 'addTerms',
+					projectKey: addingTermProject,
+					contractId: addingTermToContract,
+					terms: [{ title: newTermTitle.trim(), body: newTermBody.trim() }]
+				})
+			});
+			if (!res.ok) {
+				const data = await res.json();
+				console.error('Failed to add term:', data.error);
+				return;
+			}
+			cancelAddingTerm();
+			await fetchData(true);
+		} finally {
+			savingTerm = false;
 		}
 	}
 
@@ -614,6 +685,7 @@
 													<th class="text-right">Paid</th>
 													<th>Signed</th>
 													<th>Milestones</th>
+												<th>Terms</th>
 												</tr>
 											</thead>
 											<tbody>
@@ -652,12 +724,22 @@
 																{/each}
 															</div>
 														</td>
+														<td>
+															{#if contract.terms && contract.terms.length > 0}
+																{@const acceptedCount = contract.terms.filter(t => t.status === 'accepted').length}
+																<span class="text-xs opacity-60">
+																	{acceptedCount}/{contract.terms.length}
+																</span>
+															{:else}
+																<span class="text-xs opacity-30">—</span>
+															{/if}
+														</td>
 													</tr>
 
 													<!-- Expanded Contract Detail -->
 													{#if expandedContract === contract.id}
 														<tr>
-															<td colspan="6" class="p-0 overflow-visible">
+															<td colspan="7" class="p-0 overflow-visible">
 																<div class="bg-base-300/30 p-4 space-y-4 border-t border-base-300 overflow-visible">
 																	<!-- Contract Info & Actions -->
 																	<div class="flex items-start justify-between gap-4">
@@ -806,6 +888,132 @@
 																			</div>
 																		</div>
 																	{/if}
+
+																	<!-- Contract Terms -->
+																	<!-- Contract Terms -->
+																	<div>
+																		{#if contract.terms && contract.terms.length > 0}
+																			<h5 class="text-xs font-semibold uppercase opacity-50 mb-2">Terms</h5>
+																			<div class="space-y-2">
+																				{#each contract.terms as term, ti}
+																					<div class="border border-base-300 rounded-lg p-3">
+																						<div class="flex items-start justify-between gap-3">
+																							<div class="flex items-start gap-2 min-w-0">
+																								<div class="w-5 h-5 rounded-full bg-base-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+																									<span class="text-xs font-bold opacity-60">{ti + 1}</span>
+																								</div>
+																								<div class="min-w-0">
+																									<p class="font-medium text-sm">{term.title}</p>
+																									{#if term.body}
+																										<p class="text-xs opacity-60 mt-1 whitespace-pre-wrap">{term.body}</p>
+																									{/if}
+																								</div>
+																							</div>
+																							<div class="flex items-center gap-2 shrink-0">
+																								<div class="dropdown dropdown-end">
+																									<div
+																										tabindex="0"
+																										role="button"
+																										class="badge badge-xs {term.status === 'accepted' ? 'badge-success' : term.status === 'rejected' ? 'badge-error' : 'badge-warning'} cursor-pointer gap-1"
+																										onclick={(e) => e.stopPropagation()}
+																										onkeydown={(e) => e.stopPropagation()}
+																									>
+																										{term.status}
+																										{#if updatingItem === term.id}
+																											<span class="loading loading-spinner" style="width:8px;height:8px"></span>
+																										{:else}
+																											<svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+																											</svg>
+																										{/if}
+																									</div>
+																									<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+																									<ul tabindex="0" class="dropdown-content z-40 menu menu-xs shadow-lg bg-base-100 rounded-box w-36 p-1">
+																										{#each ['pending', 'accepted', 'rejected'] as s}
+																											<li>
+																												<button
+																													class:active={term.status === s}
+																													onclick={(e) => { e.stopPropagation(); updateStatus(project.projectKey, 'term', term.id, s); }}
+																													disabled={term.status === s}
+																												>
+																													<span class="badge badge-xs {s === 'accepted' ? 'badge-success' : s === 'rejected' ? 'badge-error' : 'badge-warning'}"></span>
+																													{s}
+																												</button>
+																											</li>
+																										{/each}
+																									</ul>
+																								</div>
+																							</div>
+																						</div>
+																						{#if term.client_notes}
+																							<div class="mt-2 ml-7 px-2 py-1.5 bg-base-200 rounded text-xs">
+																								<span class="opacity-50">Client notes:</span>
+																								<span class="opacity-70">{term.client_notes}</span>
+																							</div>
+																						{/if}
+																						{#if term.accepted_at}
+																							<p class="text-xs opacity-40 mt-1 ml-7">
+																								{term.status === 'accepted' ? 'Accepted' : 'Updated'} {formatDate(term.accepted_at)}
+																								{#if term.signature_data}
+																									· Signed
+																								{/if}
+																							</p>
+																						{/if}
+																					</div>
+																				{/each}
+																			</div>
+																		{:else}
+																			<h5 class="text-xs font-semibold uppercase opacity-50 mb-2">Terms</h5>
+																			<p class="text-xs opacity-40">No terms defined yet.</p>
+																		{/if}
+
+																		<!-- Inline Add Term -->
+																		{#if addingTermToContract === contract.id}
+																			<div class="border border-primary/30 rounded-lg p-3 mt-2 space-y-2 bg-primary/5">
+																				<span class="text-xs font-bold opacity-50">New Term</span>
+																				<input
+																					type="text"
+																					class="input input-bordered input-sm w-full"
+																					bind:value={newTermTitle}
+																					placeholder="Term title, e.g. Payment Terms"
+																					onclick={(e) => e.stopPropagation()}
+																				/>
+																				<textarea
+																					class="textarea textarea-bordered textarea-sm w-full"
+																					rows="3"
+																					bind:value={newTermBody}
+																					placeholder="Describe this term in detail..."
+																					onclick={(e) => e.stopPropagation()}
+																				></textarea>
+																				<div class="flex items-center gap-2 justify-end">
+																					<button
+																						class="btn btn-ghost btn-xs"
+																						onclick={(e) => { e.stopPropagation(); cancelAddingTerm(); }}
+																					>Cancel</button>
+																					<button
+																						class="btn btn-primary btn-xs"
+																						onclick={(e) => { e.stopPropagation(); saveNewTerm(); }}
+																						disabled={savingTerm || !newTermTitle.trim()}
+																					>
+																						{#if savingTerm}
+																							<span class="loading loading-spinner" style="width:10px;height:10px"></span>
+																						{/if}
+																						Save Term
+																					</button>
+																				</div>
+																			</div>
+																		{:else}
+																			<button
+																				class="btn btn-ghost btn-xs mt-2 gap-1 opacity-60 hover:opacity-100"
+																				onclick={(e) => { e.stopPropagation(); startAddingTerm(contract.id, project.projectKey); }}
+																			>
+																				<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+																				</svg>
+																				Add Term
+																			</button>
+																		{/if}
+																	</div>
 																</div>
 															</td>
 														</tr>
@@ -1182,6 +1390,70 @@
 								Add Milestone
 							</button>
 						{/if}
+					</div>
+
+					<!-- Contract Terms Section -->
+					<div class="space-y-4 mt-6">
+						<div class="flex items-center justify-between">
+							<h4 class="font-semibold text-sm uppercase opacity-60">Contract Terms</h4>
+							<span class="text-xs opacity-40">{contractTerms.length} term{contractTerms.length !== 1 ? 's' : ''}</span>
+						</div>
+
+						<p class="text-xs opacity-50">
+							Define the terms and conditions for this contract. Clients will review, accept, and initial each term.
+						</p>
+
+						{#if contractTerms.length > 0}
+							<div class="space-y-3">
+								{#each contractTerms as term, i}
+									<div class="border border-base-300 rounded-lg p-3 space-y-2">
+										<div class="flex items-center justify-between">
+											<span class="text-xs font-bold opacity-50">Term {i + 1}</span>
+											<button
+												type="button"
+												class="btn btn-ghost btn-xs text-error"
+												onclick={() => { contractTerms = contractTerms.filter((_, idx) => idx !== i); }}
+											>
+												<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+												</svg>
+											</button>
+										</div>
+
+										<label class="floating-label">
+											<span>Title</span>
+											<input
+												type="text"
+												class="input input-bordered input-sm w-full"
+												bind:value={term.title}
+												placeholder="e.g. Payment Terms"
+											/>
+										</label>
+
+										<label class="floating-label">
+											<span>Description</span>
+											<textarea
+												class="textarea textarea-bordered textarea-sm w-full"
+												rows="3"
+												bind:value={term.body}
+												placeholder="Describe this term in detail..."
+											></textarea>
+										</label>
+									</div>
+								{/each}
+							</div>
+						{/if}
+
+						<button
+							type="button"
+							class="btn btn-outline btn-sm"
+							onclick={() => { contractTerms = [...contractTerms, { title: '', body: '' }]; }}
+						>
+							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+							</svg>
+							Add Term
+						</button>
 					</div>
 
 					<!-- Actions -->

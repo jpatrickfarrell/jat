@@ -1577,9 +1577,13 @@
 					oncontextmenu={(e) => !isExiting && handleContextMenu(task, e)}
 				>
 					<div class="mobile-task-inner">
-						<!-- Left: circular avatar (harness logo, integration logo, or type icon) -->
+						<!-- Left: circular avatar (harness logo, human icon, integration logo, or type icon) -->
 						<div class="mobile-task-avatar" style="{projectColor ? `border-color: ${projectColor};` : ''}">
-							{#if harness}
+							{#if isHumanTask(task)}
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="oklch(0.70 0.12 45)" width="22" height="22">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+								</svg>
+							{:else if harness}
 								<ProviderLogo agentId={harness} size={22} />
 							{:else if integration}
 								<ProviderLogo agentId={integration.sourceType} size={22} />
@@ -1587,6 +1591,29 @@
 								<span class="mobile-task-type-icon" title={typeVisual?.label}>{typeVisual?.icon ?? '📋'}</span>
 							{/if}
 						</div>
+
+						<!-- Harness tray: slides out RIGHT from avatar on card hover -->
+						{#if !isBlocked}
+							<HarnessTray
+								onLaunch={(agentId) => {
+									if (agentId === 'human') {
+										// Mark as human task (saves harness, no launch)
+										handleSingleHarnessChange(task.id, { agentId: 'human', model: null });
+									} else {
+										onSpawnTask(task, { agentId, model: null });
+									}
+								}}
+								onSettings={() => {
+									harnessPickerTaskId = task.id;
+									harnessPickerPos = {
+										x: Math.max(8, window.innerWidth / 2 - 160),
+										y: 80,
+										openUp: true,
+										maxH: window.innerHeight - 160
+									};
+								}}
+							/>
+						{/if}
 
 						<!-- Center: title, description, badges -->
 						<div class="mobile-task-body">
@@ -1622,34 +1649,20 @@
 							</div>
 						</div>
 
-						<!-- Right: launch / blocked / human action column -->
-						<div class="mobile-task-actions" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="group">
-							{#if isHumanTask(task)}
-								<div class="mobile-task-action-col mobile-task-action-human" title="Human task — complete manually">
-									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="18" height="18">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-									</svg>
-								</div>
-							{:else if isBlocked}
-								<div class="mobile-task-action-col mobile-task-action-blocked" title="Blocked">
-									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="18" height="18">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" />
-									</svg>
-								</div>
-							{:else}
-								<!-- Harness tray slides out on card hover, then default-launch column -->
-								<HarnessTray onLaunch={(agentId) => onSpawnTask(task, { agentId, model: null })} />
-								<button
-									class="mobile-task-action-col mobile-task-action-launch"
-									onclick={(e) => { e.stopPropagation(); onSpawnTask(task); }}
-									title="Launch agent (default harness)"
-								>
-									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="20" height="20">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 0 1-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 0 0 6.16-12.12A14.98 14.98 0 0 0 9.631 8.41m5.96 5.96a14.926 14.926 0 0 1-5.841 2.58m-.119-8.54a6 6 0 0 0-7.381 5.84h4.8m2.58-5.84a14.927 14.927 0 0 0-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 0 1-2.448-2.448 14.9 14.9 0 0 1 .06-.312m-2.24 2.39a4.493 4.493 0 0 0-1.757 4.306 4.493 4.493 0 0 0 4.306-1.758M16.5 9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" />
-									</svg>
-								</button>
-							{/if}
-						</div>
+						<!-- Right: blocked / human indicator (launch handled by HarnessTray) -->
+						{#if isHumanTask(task)}
+							<div class="mobile-task-action-col mobile-task-action-human" title="Human task — complete manually">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="18" height="18">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+								</svg>
+							</div>
+						{:else if isBlocked}
+							<div class="mobile-task-action-col mobile-task-action-blocked" title="Blocked">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="18" height="18">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" />
+								</svg>
+							</div>
+						{/if}
 					</div>
 				</div>
 			{/each}
@@ -3547,8 +3560,9 @@
 		opacity: 0.7;
 	}
 
-	/* Inner three-column flex row */
+	/* Inner three-column flex row — position:relative anchors the absolute HarnessTray */
 	.mobile-task-inner {
+		position: relative;
 		display: flex;
 		align-items: stretch;
 		min-height: 0;

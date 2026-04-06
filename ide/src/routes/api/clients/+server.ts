@@ -44,6 +44,20 @@ interface Milestone {
 	updated_at: string;
 }
 
+interface ContractTerm {
+	id: string;
+	contract_id: string;
+	title: string;
+	body: string;
+	sort_order: number;
+	status: string; // pending | accepted | rejected
+	client_notes: string | null;
+	accepted_at: string | null;
+	signature_data: string | null;
+	created_at: string;
+	updated_at: string;
+}
+
 interface Contract {
 	id: string;
 	team_id: string;
@@ -57,6 +71,7 @@ interface Contract {
 	created_at: string;
 	updated_at: string;
 	milestones?: Milestone[];
+	terms?: ContractTerm[];
 }
 
 interface ProjectData {
@@ -224,6 +239,27 @@ async function fetchProjectData(projectKey: string, projectName: string): Promis
 
 	for (const contract of contracts) {
 		contract.milestones = milestonesByContract.get(contract.id) || [];
+	}
+
+	// Fetch contract terms (non-blocking — table may not exist yet)
+	const termsResult = await supabaseQuery(
+		supabaseUrl,
+		serviceRoleKey,
+		'contract_terms',
+		`select=*&contract_id=in.(${contractIds.join(',')})&order=sort_order.asc`
+	);
+
+	if (!termsResult.error && termsResult.data) {
+		const terms = termsResult.data as ContractTerm[];
+		const termsByContract = new Map<string, ContractTerm[]>();
+		for (const term of terms) {
+			const arr = termsByContract.get(term.contract_id) || [];
+			arr.push(term);
+			termsByContract.set(term.contract_id, arr);
+		}
+		for (const contract of contracts) {
+			contract.terms = termsByContract.get(contract.id) || [];
+		}
 	}
 
 	// Auto-invoice: trigger Edge Function for delivered milestones with linked tasks but no invoice
@@ -442,23 +478,54 @@ function computeSummary(projects: ProjectData[]) {
 /**
  * POST /api/clients
  *
- * Create a new contract in a specific project's Supabase instance.
- * Writes contract + milestones via REST API with service role key.
- *
- * Request body:
- * {
- *   projectKey: string,
- *   title: string,
- *   totalAmount: number (cents),
- *   currency: string,
- *   clientEmail?: string,
- *   notes?: string,
- *   milestones: Array<{ name, percentage, description?, acceptance_criteria?, taskIds?: string[] }>
- * }
+ * Two modes:
+ * 1. Create new contract: { projectKey, title, totalAmount, currency, milestones[], terms[]? }
+ * 2. Add terms to existing: { action: 'addTerms', projectKey, contractId, terms[] }
  */
 export const POST: RequestHandler = async ({ request }) => {
 	const body = await request.json();
-	const { projectKey, title, totalAmount, currency, clientEmail, notes, milestones } = body;
+
+	// Handle addTerms action for existing contracts
+	if (body.action === 'addTerms') {
+		const { projectKey, contractId, terms: newTerms } = body;
+
+		if (!projectKey || !contractId || !newTerms?.length) {
+			return json({ error: 'projectKey, contractId, and terms are required' }, { status: 400 });
+		}
+
+		const supabaseUrl = getProjectSecret(projectKey, 'supabase_url');
+		const serviceRoleKey = getProjectSecret(projectKey, 'supabase_service_role_key');
+
+		if (!supabaseUrl || !serviceRoleKey) {
+			return json({ error: `Missing Supabase credentials for "${projectKey}"` }, { status: 400 });
+		}
+
+		// Get current max sort_order for this contract's terms
+		const existingResult = await supabaseQuery(
+			supabaseUrl, serviceRoleKey,
+			'contract_terms',
+			`select=sort_order&contract_id=eq.${contractId}&order=sort_order.desc&limit=1`
+		);
+		const maxOrder = (existingResult.data?.[0] as { sort_order: number } | undefined)?.sort_order ?? -1;
+
+		const termRows = newTerms.map((t: { title: string; body: string }, i: number) => ({
+			contract_id: contractId,
+			title: t.title,
+			body: t.body || '',
+			sort_order: maxOrder + 1 + i,
+			status: 'pending'
+		}));
+
+		const result = await supabaseInsert(supabaseUrl, serviceRoleKey, 'contract_terms', termRows);
+		if (result.error) {
+			return json({ error: `Failed to add terms: ${result.error}` }, { status: 500 });
+		}
+
+		cache = null;
+		return json({ success: true, termsCreated: termRows.length }, { status: 201 });
+	}
+
+	const { projectKey, title, totalAmount, currency, clientEmail, notes, milestones, terms } = body;
 
 	if (!projectKey) {
 		return json({ error: 'projectKey is required' }, { status: 400 });
@@ -576,6 +643,25 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 	}
 
+	// Create contract terms if provided
+	let termsCreated = 0;
+	if (terms && Array.isArray(terms) && terms.length > 0) {
+		const termRows = terms.map((t: { title: string; body: string }, i: number) => ({
+			contract_id: contract.id,
+			title: t.title,
+			body: t.body || '',
+			sort_order: i,
+			status: 'pending'
+		}));
+
+		const termsResult = await supabaseInsert(supabaseUrl, serviceRoleKey, 'contract_terms', termRows);
+		if (termsResult.error) {
+			console.warn(`[clients] Failed to create contract terms: ${termsResult.error}`);
+		} else {
+			termsCreated = termRows.length;
+		}
+	}
+
 	// Invalidate cache so the list refreshes
 	cache = null;
 
@@ -588,7 +674,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			totalAmount,
 			currency: contractData.currency,
 			milestoneCount: milestones.length,
-			taskLinksCreated
+			taskLinksCreated,
+			termsCreated
 		}
 	}, { status: 201 });
 };
@@ -614,8 +701,8 @@ export const PATCH: RequestHandler = async ({ request }) => {
 		return json({ error: 'projectKey, type, id, and updates are required' }, { status: 400 });
 	}
 
-	if (type !== 'contract' && type !== 'milestone') {
-		return json({ error: 'type must be "contract" or "milestone"' }, { status: 400 });
+	if (type !== 'contract' && type !== 'milestone' && type !== 'term') {
+		return json({ error: 'type must be "contract", "milestone", or "term"' }, { status: 400 });
 	}
 
 	const supabaseUrl = getProjectSecret(projectKey, 'supabase_url');
@@ -625,15 +712,21 @@ export const PATCH: RequestHandler = async ({ request }) => {
 		return json({ error: `Missing Supabase credentials for project "${projectKey}"` }, { status: 400 });
 	}
 
-	const table = type === 'contract' ? 'contracts' : 'milestones';
+	const tableMap: Record<string, string> = { contract: 'contracts', milestone: 'milestones', term: 'contract_terms' };
+	const table = tableMap[type];
 
-	// Add timestamp fields for milestone status changes
+	// Add timestamp fields for status changes
 	const patchData = { ...updates };
 	if (type === 'milestone' && updates.status) {
 		const now = new Date().toISOString();
 		if (updates.status === 'delivered') patchData.delivered_at = now;
 		if (updates.status === 'accepted') patchData.accepted_at = now;
 		if (updates.status === 'paid') patchData.paid_at = now;
+	}
+	if (type === 'term' && updates.status) {
+		const now = new Date().toISOString();
+		if (updates.status === 'accepted') patchData.accepted_at = now;
+		if (updates.status === 'rejected') patchData.accepted_at = null;
 	}
 
 	const result = await supabaseUpdate(supabaseUrl, serviceRoleKey, table, `id=eq.${id}`, patchData);

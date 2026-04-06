@@ -309,6 +309,7 @@
 				groups={projectFilterGroups}
 				placeholder="All Projects"
 				colorFn={getMemoryProjectColor}
+				variant="chip"
 				onChange={(v) => {
 					filterProject = v;
 					if (activeTab === 'browse' && v) browseProject = v;

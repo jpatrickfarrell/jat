@@ -431,6 +431,7 @@
 							groups={projectGroups}
 							placeholder="All Projects"
 							colorFn={getProjectColorFn}
+							variant="chip"
 							onChange={(v) => { selectedProject = v; }}
 						/>
 					</div>

@@ -487,6 +487,7 @@
 									projects={availableProjects}
 									selected={effectiveProject}
 									onSelect={(p) => updateProject(taskKey, p)}
+									variant="chip"
 								/>
 							</div>
 
@@ -585,30 +586,8 @@
 									></textarea>
 								</div>
 
-								<!-- Project and Labels row -->
+								<!-- Labels and Dependencies row -->
 								<div class="grid grid-cols-2 gap-2">
-									<div>
-										<div class="text-[9px] font-semibold opacity-60 block mb-0.5 text-base-content/60">
-											Project
-										</div>
-										{#if availableProjects.length > 0}
-											<SearchDropdown
-												value={effectiveProject}
-												groups={projectGroups}
-												placeholder="Select project..."
-												colorFn={getProjectColorFn}
-												onChange={(v) => updateProject(taskKey, v)}
-											/>
-										{:else}
-											<input
-												type="text"
-												value={effectiveProject}
-												oninput={(e) => updateProject(taskKey, e.currentTarget.value)}
-												class="w-full text-[11px] px-2 py-1 rounded bg-base-300 text-base-content border border-base-content/20"
-												placeholder="e.g., jat, chimaro"
-											/>
-										{/if}
-									</div>
 									<div>
 										<div class="text-[9px] font-semibold opacity-60 block mb-0.5 text-base-content/60">
 											Labels
@@ -621,20 +600,18 @@
 											placeholder="label1, label2, ..."
 										/>
 									</div>
-								</div>
-
-								<!-- Dependencies -->
-								<div>
-									<div class="text-[9px] font-semibold opacity-60 block mb-0.5 text-base-content/60">
-										Depends On (task IDs)
+									<div>
+										<div class="text-[9px] font-semibold opacity-60 block mb-0.5 text-base-content/60">
+											Depends On (task IDs)
+										</div>
+										<input
+											type="text"
+											value={effectiveDependsOn.join(', ')}
+											oninput={(e) => updateDependsOn(taskKey, e.currentTarget.value)}
+											class="w-full text-[11px] px-2 py-1 rounded bg-base-300 text-base-content border border-base-content/20"
+											placeholder="jat-abc, jat-xyz, ..."
+										/>
 									</div>
-									<input
-										type="text"
-										value={effectiveDependsOn.join(', ')}
-										oninput={(e) => updateDependsOn(taskKey, e.currentTarget.value)}
-										class="w-full text-[11px] px-2 py-1 rounded bg-base-300 text-base-content border border-base-content/20"
-										placeholder="jat-abc, jat-xyz, ..."
-									/>
 								</div>
 
 								{#if task.reason}

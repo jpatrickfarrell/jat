@@ -1019,6 +1019,7 @@
 					groups={projectDropdownGroups}
 					placeholder="All Projects"
 					colorFn={(v) => v !== 'all' ? getProjectColor(v + '-x') : undefined}
+					variant="chip"
 					onChange={(v) => { selectedProject = v; }}
 				>
 					{#snippet footer()}

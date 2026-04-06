@@ -25,6 +25,7 @@
 		displayValue,
 		colorFn,
 		footer,
+		variant = 'default',
 		onChange,
 	}: {
 		value: string;
@@ -34,6 +35,8 @@
 		displayValue?: string;
 		colorFn?: (value: string) => string | undefined;
 		footer?: Snippet;
+		/** 'chip' renders a compact TopBar-style pill instead of the full-width trigger */
+		variant?: 'default' | 'chip';
 		onChange: (value: string) => void;
 	} = $props();
 
@@ -90,12 +93,17 @@
 	});
 </script>
 
-<div class="search-dropdown" bind:this={containerRef}>
+<div class="search-dropdown" class:sd-chip-wrap={variant === 'chip'} bind:this={containerRef}>
 	<button
 		type="button"
 		class="sd-trigger"
 		class:sd-disabled={disabled}
-		style={activeColor ? `border-left-color: ${activeColor}; border-left-width: 3px; color: ${activeColor};` : ''}
+		class:sd-chip={variant === 'chip'}
+		style={activeColor
+			? variant === 'chip'
+				? `--sd-color: ${activeColor};`
+				: `border-left-color: ${activeColor}; border-left-width: 3px; color: ${activeColor};`
+			: ''}
 		onclick={() => { if (!disabled) open = !open; }}
 		{disabled}
 	>
@@ -152,10 +160,18 @@
 									onclick={() => select(option.value)}
 									class="sd-option"
 									class:sd-option-selected={value === option.value}
-									style={colorFn && colorFn(option.value) ? `border-left-color: ${colorFn(option.value)}; color: ${colorFn(option.value)};` : ''}
+									style={colorFn && colorFn(option.value)
+										? variant === 'chip'
+											? `--sd-color: ${colorFn(option.value)};`
+											: `border-left-color: ${colorFn(option.value)}; color: ${colorFn(option.value)};`
+										: ''}
 								>
 									{#if option.icon}<span class="sd-option-icon">{option.icon}</span>{/if}
-									<span class="truncate">{option.label}</span>
+									{#if variant === 'chip' && colorFn && colorFn(option.value)}
+										<span class="sd-option-chip">{option.label}</span>
+									{:else}
+										<span class="truncate">{option.label}</span>
+									{/if}
 									{#if value === option.value}
 										<svg class="sd-check" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
 									{/if}
@@ -207,6 +223,31 @@
 	.sd-trigger:disabled, .sd-disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	/* Chip variant — TopBar fav-chip style: full border, color-tinted background */
+	.sd-chip-wrap {
+		display: inline-flex;
+	}
+	.sd-chip {
+		width: auto;
+		min-height: 1.5rem;
+		padding: 0.15rem 0.4rem;
+		border-radius: 0.375rem;
+		font-size: 0.6875rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
+		background: transparent;
+		border: 1px solid color-mix(in oklch, var(--sd-color, oklch(0.5 0 0)) 35%, transparent);
+		color: color-mix(in oklch, var(--sd-color, oklch(0.7 0 0)) 85%, oklch(0.80 0 0));
+		transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, color 0.15s;
+	}
+	.sd-chip:hover:not(:disabled) {
+		background: color-mix(in oklch, var(--sd-color, oklch(0.5 0 0)) 15%, transparent);
+		border-color: color-mix(in oklch, var(--sd-color, oklch(0.5 0 0)) 50%, transparent);
+		color: var(--sd-color, oklch(0.80 0 0));
+		box-shadow: 0 0 6px color-mix(in oklch, var(--sd-color, oklch(0.5 0 0)) 15%, transparent);
 	}
 
 	.sd-trigger-label {
@@ -328,6 +369,40 @@
 	.sd-option-selected {
 		background: oklch(0.20 0.02 250);
 		border-left-color: oklch(0.65 0.15 250);
+	}
+
+	/* Chip variant — options render as inline chip pills */
+	.sd-chip-wrap .sd-option {
+		border-left: none;
+		padding: 0.25rem 0.625rem;
+	}
+	.sd-chip-wrap .sd-option-selected {
+		background: oklch(0.19 0.01 250);
+		border-left: none;
+	}
+	.sd-option-chip {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.1rem 0.45rem;
+		border-radius: 0.3rem;
+		font-size: 0.6875rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
+		border: 1px solid color-mix(in oklch, var(--sd-color, oklch(0.5 0 0)) 35%, transparent);
+		color: color-mix(in oklch, var(--sd-color, oklch(0.7 0 0)) 85%, oklch(0.80 0 0));
+		background: transparent;
+		transition: background 0.1s, border-color 0.1s, color 0.1s;
+	}
+	.sd-chip-wrap .sd-option:hover .sd-option-chip {
+		background: color-mix(in oklch, var(--sd-color, oklch(0.5 0 0)) 12%, transparent);
+		border-color: color-mix(in oklch, var(--sd-color, oklch(0.5 0 0)) 50%, transparent);
+		color: var(--sd-color, oklch(0.80 0 0));
+	}
+	.sd-chip-wrap .sd-option-selected .sd-option-chip {
+		background: color-mix(in oklch, var(--sd-color, oklch(0.5 0 0)) 15%, transparent);
+		border-color: color-mix(in oklch, var(--sd-color, oklch(0.5 0 0)) 50%, transparent);
+		color: var(--sd-color, oklch(0.80 0 0));
 	}
 
 	.sd-option-icon {

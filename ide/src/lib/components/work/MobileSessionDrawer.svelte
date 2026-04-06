@@ -95,6 +95,16 @@
 	let keyboardOpen = $state(false);
 	let inputRef: HTMLInputElement | null = $state(null);
 
+	// Pending file attachments (staged before sending)
+	interface PendingAttachment {
+		id: string;
+		name: string;
+		previewUrl: string | null;
+		path: string;
+		uploading: boolean;
+	}
+	let pendingAttachments = $state<PendingAttachment[]>([]);
+
 	// Elapsed time
 	let now = $state(Date.now());
 	$effect(() => {
@@ -114,6 +124,146 @@
 			showHours: h > 0
 		};
 	});
+
+	// Drag-and-drop state
+	let isDragOver = $state(false);
+
+	function handleDragOver(e: DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		const hasFiles = e.dataTransfer?.types.includes('Files');
+		const hasJatImage = e.dataTransfer?.types.includes('application/x-jat-image');
+		const hasJatText = e.dataTransfer?.types.includes('application/x-jat-text');
+		const hasText = e.dataTransfer?.types.includes('text/plain');
+		if (hasFiles || hasJatImage || hasJatText || hasText) {
+			isDragOver = true;
+			e.dataTransfer!.dropEffect = 'copy';
+		}
+	}
+
+	function handleDragLeave(e: DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		const relatedTarget = e.relatedTarget as HTMLElement | null;
+		if (!relatedTarget || !e.currentTarget || !(e.currentTarget as HTMLElement).contains(relatedTarget)) {
+			isDragOver = false;
+		}
+	}
+
+	function handleDragEnter(e: DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		const hasFiles = e.dataTransfer?.types.includes('Files');
+		const hasJatImage = e.dataTransfer?.types.includes('application/x-jat-image');
+		const hasJatText = e.dataTransfer?.types.includes('application/x-jat-text');
+		const hasText = e.dataTransfer?.types.includes('text/plain');
+		if (hasFiles || hasJatImage || hasJatText || hasText) {
+			isDragOver = true;
+		}
+	}
+
+	async function handleDrop(e: DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		isDragOver = false;
+
+		// JAT image path (dragged from TaskDetailPane thumbnails)
+		const jatImageData = e.dataTransfer?.getData('application/x-jat-image');
+		if (jatImageData) {
+			try {
+				const imageInfo = JSON.parse(jatImageData);
+				if (imageInfo.path) {
+					await onSendInput(imageInfo.path, 'text');
+					return;
+				}
+			} catch { /* fall through */ }
+		}
+
+		// JAT text data (dragged description/notes from TaskDetailPane)
+		const jatTextData = e.dataTransfer?.getData('application/x-jat-text');
+		if (jatTextData) {
+			try {
+				const textInfo = JSON.parse(jatTextData);
+				if (textInfo.content) {
+					inputText = inputText.trim() ? inputText.trim() + '\n\n' + textInfo.content : textInfo.content;
+					inputRef?.focus({ preventScroll: true });
+					return;
+				}
+			} catch { /* fall through */ }
+		}
+
+		// Plain text path (fallback for image paths)
+		const plainText = e.dataTransfer?.getData('text/plain');
+		if (plainText && plainText.startsWith('/') && !e.dataTransfer?.files?.length) {
+			const isImagePath = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(plainText);
+			if (isImagePath) {
+				await onSendInput(plainText, 'text');
+				return;
+			}
+		}
+
+		// File drops - upload and send path to session
+		if (e.dataTransfer?.files?.length) {
+			for (const file of Array.from(e.dataTransfer.files)) {
+				await uploadAndSendFile(file);
+			}
+		}
+	}
+
+	async function uploadAndSendFile(file: File) {
+		const id = `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+		const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
+
+		// Show uploading placeholder immediately
+		pendingAttachments = [...pendingAttachments, { id, name: file.name, previewUrl, path: '', uploading: true }];
+
+		const formData = new FormData();
+		formData.append('file', file, file.name);
+		formData.append('sessionName', sessionName);
+		formData.append('filename', file.name);
+
+		try {
+			const res = await fetch('/api/work/upload-image', { method: 'POST', body: formData });
+			if (!res.ok) {
+				pendingAttachments = pendingAttachments.filter(a => a.id !== id);
+				if (previewUrl) URL.revokeObjectURL(previewUrl);
+				return;
+			}
+			const { filePath } = await res.json();
+			// Update with the actual path, clear uploading state
+			pendingAttachments = pendingAttachments.map(a =>
+				a.id === id ? { ...a, path: filePath, uploading: false } : a
+			);
+		} catch (e) {
+			console.warn('[MobileSessionDrawer] Failed to upload file:', e);
+			pendingAttachments = pendingAttachments.filter(a => a.id !== id);
+			if (previewUrl) URL.revokeObjectURL(previewUrl);
+		}
+	}
+
+	function removeAttachment(id: string) {
+		const att = pendingAttachments.find(a => a.id === id);
+		if (att?.previewUrl) URL.revokeObjectURL(att.previewUrl);
+		pendingAttachments = pendingAttachments.filter(a => a.id !== id);
+	}
+
+	async function sendWithAttachments() {
+		const text = inputText.trim();
+		const readyAttachments = pendingAttachments.filter(a => !a.uploading && a.path);
+		if (!text && !readyAttachments.length) return;
+
+		// Send each attachment path, then the text message
+		for (const att of readyAttachments) {
+			await onSendInput(att.path, 'text');
+			if (att.previewUrl) URL.revokeObjectURL(att.previewUrl);
+		}
+		pendingAttachments = pendingAttachments.filter(a => a.uploading); // keep any still uploading
+
+		if (text) {
+			await onSendInput(text, 'text');
+			inputText = '';
+		}
+	}
 
 	// Minimap show-on-scroll state
 	let mobileScrolling = $state(false);
@@ -526,7 +676,23 @@
 		transition:fly={{ y: globalThis.innerHeight || 900, duration: 300, easing: cubicOut }}
 		use:touchHandlers
 		use:focusInputOnHover
+		ondragover={handleDragOver}
+		ondragleave={handleDragLeave}
+		ondragenter={handleDragEnter}
+		ondrop={handleDrop}
 	>
+		<!-- File drop overlay -->
+		{#if isDragOver}
+			<div class="drop-overlay">
+				<div class="drop-content">
+					<svg class="w-10 h-10" style="color: oklch(0.75 0.15 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+					</svg>
+					<span class="drop-text">Drop to attach</span>
+				</div>
+			</div>
+		{/if}
+
 		<!-- Top bar: back button + page dots + page label -->
 		<div class="drawer-topbar">
 			<button class="back-btn" use:directClick={dismissDrawer} title="Close">
@@ -654,6 +820,29 @@
 					</button>
 				</div>
 
+				<!-- Pending Attachments Preview -->
+				{#if pendingAttachments.length > 0}
+					<div class="attachments-row">
+						{#each pendingAttachments as att (att.id)}
+							<div class="attachment-chip" class:uploading={att.uploading}>
+								{#if att.previewUrl}
+									<img src={att.previewUrl} alt={att.name} class="attachment-thumb" />
+								{:else}
+									<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: oklch(0.65 0.12 250);">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+									</svg>
+								{/if}
+								<span class="attachment-name">{att.name}</span>
+								{#if att.uploading}
+									<span class="attachment-uploading">…</span>
+								{:else}
+									<button class="attachment-remove" use:directClick={() => removeAttachment(att.id)} aria-label="Remove">×</button>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				{/if}
+
 				<!-- Mobile Input Row: [keyboard dropup | input | send] -->
 				<div class="mobile-input-row">
 					<!-- Keyboard dropup -->
@@ -694,9 +883,8 @@
 						bind:value={inputText}
 						bind:this={inputRef}
 						use:directKeydown={(e) => {
-							if (e.key === 'Enter' && inputText.trim()) {
-								onSendInput(inputText.trim(), 'text');
-								inputText = '';
+							if (e.key === 'Enter' && (inputText.trim() || pendingAttachments.some(a => !a.uploading))) {
+								sendWithAttachments();
 							}
 						}}
 					/>
@@ -704,14 +892,9 @@
 					<!-- Send button -->
 					<button
 						class="send-btn"
-						class:has-text={inputText.trim().length > 0}
-						disabled={!inputText.trim()}
-						use:directClick={() => {
-							if (inputText.trim()) {
-								onSendInput(inputText.trim(), 'text');
-								inputText = '';
-							}
-						}}
+						class:has-text={inputText.trim().length > 0 || pendingAttachments.some(a => !a.uploading)}
+						disabled={!inputText.trim() && !pendingAttachments.some(a => !a.uploading)}
+						use:directClick={sendWithAttachments}
 					>
 						<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="18" height="18">
 							<path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
@@ -1554,5 +1737,102 @@
 	.send-btn:disabled {
 		opacity: 0.4;
 		cursor: default;
+	}
+
+	.drop-overlay {
+		position: absolute;
+		inset: 0;
+		z-index: 100;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: oklch(0.25 0.15 250 / 0.9);
+		border: 3px dashed oklch(0.65 0.20 250);
+		border-radius: inherit;
+		pointer-events: none;
+	}
+
+	.drop-content {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.drop-text {
+		font-size: 0.875rem;
+		font-weight: 600;
+		color: oklch(0.85 0.10 250);
+	}
+
+	.attachments-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.375rem;
+		padding: 0.375rem 0.75rem 0.25rem;
+		background: oklch(0.18 0.02 250);
+		border-top: 1px solid oklch(0.25 0.02 250);
+	}
+
+	.attachment-chip {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.25rem 0.375rem;
+		background: oklch(0.22 0.03 250);
+		border: 1px solid oklch(0.30 0.04 250);
+		border-radius: 0.375rem;
+		max-width: 160px;
+		opacity: 1;
+		transition: opacity 0.15s;
+	}
+
+	.attachment-chip.uploading {
+		opacity: 0.6;
+	}
+
+	.attachment-thumb {
+		width: 28px;
+		height: 28px;
+		object-fit: cover;
+		border-radius: 0.25rem;
+		flex-shrink: 0;
+	}
+
+	.attachment-name {
+		font-size: 0.7rem;
+		color: oklch(0.75 0.05 250);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		min-width: 0;
+	}
+
+	.attachment-uploading {
+		font-size: 0.7rem;
+		color: oklch(0.60 0.08 250);
+		flex-shrink: 0;
+	}
+
+	.attachment-remove {
+		flex-shrink: 0;
+		width: 16px;
+		height: 16px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.875rem;
+		line-height: 1;
+		color: oklch(0.55 0.08 250);
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 0;
+		border-radius: 50%;
+		transition: color 0.1s;
+	}
+
+	.attachment-remove:hover {
+		color: oklch(0.70 0.15 25);
 	}
 </style>

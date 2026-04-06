@@ -16,6 +16,7 @@
 		selected: string;
 		onSelect: (project: string) => void;
 		disabled?: boolean;
+		variant?: 'default' | 'chip';
 	}
 
 	let {
@@ -23,6 +24,7 @@
 		selected = '',
 		onSelect,
 		disabled = false,
+		variant = 'default',
 	}: Props = $props();
 
 	let projectColors = $state<Record<string, string>>({});
@@ -46,6 +48,7 @@
 	{groups}
 	placeholder="Select project"
 	{disabled}
+	{variant}
 	colorFn={(v) => getColor(v)}
 	onChange={onSelect}
 >

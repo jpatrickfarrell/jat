@@ -885,6 +885,7 @@
 						groups={projectGroups}
 						placeholder="All Projects"
 						colorFn={getSearchProjectColor}
+						variant="chip"
 						onChange={handleProjectSelect}
 					/>
 				</div>

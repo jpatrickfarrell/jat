@@ -461,6 +461,43 @@
 	let createResults = $state<{ success: any[]; failed: any[] }>({ success: [], failed: [] });
 	let showCreateFeedback = $state(false);
 
+	// KB entry state per event: Map<eventKey, Map<index, { project, accepted, accepting }>>
+	let kbStateByEvent = $state<Map<string, Map<number, { project: string; accepted: boolean; accepting: boolean }>>>(new Map());
+
+	function getKbEntryState(eventKey: string, idx: number, fallbackProject: string) {
+		return kbStateByEvent.get(eventKey)?.get(idx) ?? { project: fallbackProject, accepted: false, accepting: false };
+	}
+
+	function setKbEntryState(eventKey: string, idx: number, updates: Partial<{ project: string; accepted: boolean; accepting: boolean }>, fallbackProject: string) {
+		const map = kbStateByEvent.get(eventKey) ?? new Map();
+		const current = map.get(idx) ?? { project: fallbackProject, accepted: false, accepting: false };
+		map.set(idx, { ...current, ...updates });
+		kbStateByEvent.set(eventKey, map);
+		kbStateByEvent = new Map(kbStateByEvent);
+	}
+
+	async function acceptKbEntry(eventKey: string, idx: number, entry: { title: string; content: string; project: string }) {
+		const state = getKbEntryState(eventKey, idx, entry.project);
+		if (state.accepted || state.accepting) return;
+		setKbEntryState(eventKey, idx, { accepting: true }, entry.project);
+		try {
+			const res = await fetch('/api/bases', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					project: state.project || entry.project,
+					name: entry.title,
+					content: entry.content,
+					source_type: 'manual'
+				})
+			});
+			if (!res.ok) throw new Error('Failed to save');
+			setKbEntryState(eventKey, idx, { accepted: true, accepting: false }, entry.project);
+		} catch {
+			setKbEntryState(eventKey, idx, { accepting: false }, entry.project);
+		}
+	}
+
 	// Generate a unique key for an event
 	function getEventKey(event: TimelineEvent): string {
 		return `${event.timestamp}-${event.type}-${event.state || ''}`;
@@ -975,13 +1012,17 @@
 			}
 		}
 
-		// Voice inbox: tasks events show count + time (+ date if not today)
+		// Voice inbox: tasks events show title (or count) + time (+ date if not today)
 		if (event.type === 'tasks') {
 			const count = Array.isArray(event.data?.tasks) ? event.data.tasks.length : 0;
 			const eventDate = new Date(event.timestamp);
 			const isToday = eventDate.toDateString() === new Date().toDateString();
 			const t = eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 			const datePart = isToday ? '' : ` · ${eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+			const title = event.data?.title?.trim();
+			if (title) {
+				return `${title}${datePart} · ${t}`;
+			}
 			return `Voice Inbox — ${count} suggestion${count !== 1 ? 's' : ''}${datePart} · ${t}`;
 		}
 
@@ -1231,6 +1272,56 @@
 											</div>
 											<div class="px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap font-mono text-base-content/60" style="max-height: 200px; overflow-y: auto;">
 												{voiceTranscript}
+											</div>
+										</div>
+									{/if}
+									{@const voiceKb = Array.isArray(event.data?.knowledgeBase) ? event.data.knowledgeBase : []}
+									{#if voiceKb.length > 0}
+										<div class="rounded-lg bg-base-200 border border-base-300">
+											<div class="flex items-center gap-2 px-3 py-2 border-b border-base-300">
+												<svg class="w-4 h-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+												</svg>
+												<span class="font-semibold text-sm text-base-content">Knowledge Base</span>
+											</div>
+											<div class="divide-y divide-base-300">
+												{#each voiceKb as kbEntry, kbIdx}
+													{@const kbState = getKbEntryState(eventKey, kbIdx, kbEntry.project || defaultProject || '')}
+													<div class="px-3 py-2 space-y-1.5">
+														<div class="text-[12px] font-semibold text-base-content">{kbEntry.title}</div>
+														<div class="text-[11px] text-base-content/70 whitespace-pre-wrap leading-relaxed">{kbEntry.content}</div>
+														<div class="flex items-center gap-2 pt-0.5">
+															<select
+																class="select select-xs select-bordered flex-1 text-[11px]"
+																value={kbState.project}
+																onchange={(e) => setKbEntryState(eventKey, kbIdx, { project: (e.target as HTMLSelectElement).value }, kbEntry.project || defaultProject || '')}
+																disabled={kbState.accepted}
+															>
+																{#if availableProjects.length === 0}
+																	<option value="">No project</option>
+																{:else}
+																	{#each availableProjects as proj}
+																		<option value={proj}>{proj}</option>
+																	{/each}
+																{/if}
+															</select>
+															<button
+																class="btn btn-xs {kbState.accepted ? 'btn-success' : 'btn-primary'} gap-1 flex-shrink-0"
+																onclick={() => acceptKbEntry(eventKey, kbIdx, { ...kbEntry, project: kbState.project || kbEntry.project || defaultProject || '' })}
+																disabled={kbState.accepted || kbState.accepting || !kbState.project}
+															>
+																{#if kbState.accepting}
+																	<span class="loading loading-spinner loading-xs"></span>
+																{:else if kbState.accepted}
+																	<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+																	Saved
+																{:else}
+																	Save
+																{/if}
+															</button>
+														</div>
+													</div>
+												{/each}
 											</div>
 										</div>
 									{/if}
@@ -1772,6 +1863,56 @@
 													</div>
 													<div class="px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap font-mono text-base-content/60" style="max-height: 200px; overflow-y: auto;">
 														{popupVoiceTranscript}
+													</div>
+												</div>
+											{/if}
+											{@const popupVoiceKb = Array.isArray(event.data?.knowledgeBase) ? event.data.knowledgeBase : []}
+											{#if popupVoiceKb.length > 0}
+												<div class="rounded-lg bg-base-200 border border-base-300">
+													<div class="flex items-center gap-2 px-3 py-2 border-b border-base-300">
+														<svg class="w-4 h-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+														</svg>
+														<span class="font-semibold text-sm text-base-content">Knowledge Base</span>
+													</div>
+													<div class="divide-y divide-base-300">
+														{#each popupVoiceKb as kbEntry, kbIdx}
+															{@const kbState = getKbEntryState(eventKey, kbIdx, kbEntry.project || defaultProject || '')}
+															<div class="px-3 py-2 space-y-1.5">
+																<div class="text-[12px] font-semibold text-base-content">{kbEntry.title}</div>
+																<div class="text-[11px] text-base-content/70 whitespace-pre-wrap leading-relaxed">{kbEntry.content}</div>
+																<div class="flex items-center gap-2 pt-0.5">
+																	<select
+																		class="select select-xs select-bordered flex-1 text-[11px]"
+																		value={kbState.project}
+																		onchange={(e) => setKbEntryState(eventKey, kbIdx, { project: (e.target as HTMLSelectElement).value }, kbEntry.project || defaultProject || '')}
+																		disabled={kbState.accepted}
+																	>
+																		{#if availableProjects.length === 0}
+																			<option value="">No project</option>
+																		{:else}
+																			{#each availableProjects as proj}
+																				<option value={proj}>{proj}</option>
+																			{/each}
+																		{/if}
+																	</select>
+																	<button
+																		class="btn btn-xs {kbState.accepted ? 'btn-success' : 'btn-primary'} gap-1 flex-shrink-0"
+																		onclick={() => acceptKbEntry(eventKey, kbIdx, { ...kbEntry, project: kbState.project || kbEntry.project || defaultProject || '' })}
+																		disabled={kbState.accepted || kbState.accepting || !kbState.project}
+																	>
+																		{#if kbState.accepting}
+																			<span class="loading loading-spinner loading-xs"></span>
+																		{:else if kbState.accepted}
+																			<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+																			Saved
+																		{:else}
+																			Save
+																		{/if}
+																	</button>
+																</div>
+															</div>
+														{/each}
 													</div>
 												</div>
 											{/if}

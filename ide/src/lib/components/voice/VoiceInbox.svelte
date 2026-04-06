@@ -24,15 +24,22 @@
 	): Promise<{ success: any[]; failed: any[] }> {
 		if (tasks.length === 0) return { success: [], failed: [] };
 
-		const tasksToCreate = tasks.map((t) => ({
-			type: t.edits?.type || t.type || 'task',
-			title: t.edits?.title || t.title,
-			description: t.edits?.description || t.description || '',
-			priority: t.edits?.priority ?? t.priority ?? 2,
-			project: t.edits?.project || t.project || defaultProject || undefined,
-			labels: t.edits?.labels || t.labels || undefined,
-			depends_on: t.edits?.depends_on || t.depends_on || undefined
-		}));
+		const tasksToCreate = tasks.map((t) => {
+			const baseDesc = t.edits?.description || t.description || '';
+			const context = (t as any).context as string | undefined;
+			const description = context
+				? `${baseDesc}${baseDesc ? '\n\n' : ''}**Voice note context:** ${context}`
+				: baseDesc;
+			return {
+				type: t.edits?.type || t.type || 'task',
+				title: t.edits?.title || t.title,
+				description,
+				priority: t.edits?.priority ?? t.priority ?? 2,
+				project: t.edits?.project || t.project || defaultProject || undefined,
+				labels: t.edits?.labels || t.labels || undefined,
+				depends_on: t.edits?.depends_on || t.depends_on || undefined
+			};
+		});
 
 		try {
 			const response = await fetch('/api/tasks/bulk', {

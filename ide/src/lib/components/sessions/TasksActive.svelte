@@ -935,6 +935,9 @@
 			await handleAttachSession(sessionName);
 		} else if (actionId === 'kill' || actionId === 'cleanup') {
 			setActionFeedback(sessionName, actionId, 'error', 1200);
+			if (actionId === 'cleanup' && sessionTask) {
+				try { await fetch(`/api/tasks/${encodeURIComponent(sessionTask.id)}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Cleaned up session' }) }); } catch (e) { console.warn('[TasksActive] close task failed:', e); }
+			}
 			await handleKillSession(sessionName);
 		} else if (actionId === 'view-task' && sessionTask) {
 			onViewTask?.(sessionTask.id);
@@ -1500,6 +1503,9 @@
 					if (actionId === 'attach') {
 						await handleAttachSession(sName);
 					} else if (actionId === 'kill' || actionId === 'cleanup') {
+						if (actionId === 'cleanup' && fsTask) {
+							try { await fetch(`/api/tasks/${encodeURIComponent(fsTask.id)}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Cleaned up session' }) }); } catch (e) { console.warn('[TasksActive] Failed to close task:', e); }
+						}
 						fullscreenSession = null;
 						await handleKillSession(sName);
 					} else if (actionId === 'view-task' && fsTask) {
@@ -1705,6 +1711,17 @@
 											if (actionId === 'attach') {
 												await handleAttachSession(session.name);
 											} else if (actionId === 'kill' || actionId === 'cleanup') {
+												if (actionId === 'cleanup' && sessionTask) {
+													try {
+														await fetch(`/api/tasks/${encodeURIComponent(sessionTask.id)}/close`, {
+															method: 'POST',
+															headers: { 'Content-Type': 'application/json' },
+															body: JSON.stringify({ reason: 'Cleaned up session' })
+														});
+													} catch (e) {
+														console.warn('[TasksActive] Failed to close task:', e);
+													}
+												}
 												await handleKillSession(session.name);
 											} else if (actionId === 'view-task' && sessionTask) {
 												onViewTask?.(sessionTask.id);

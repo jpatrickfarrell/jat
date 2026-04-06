@@ -5,8 +5,8 @@
 	 * Shows project-relevant features: server controls, ready tasks, actions, and epics.
 	 * Project switching is handled by the TopBar's project switcher button.
 	 *
-	 * Default: [● jat ▾] - compact project chip
-	 * Hover:  [● jat ▾|+] - plus button slides out
+	 * Active:   [● jat ▾|+] - plus button always visible on active project
+	 * Inactive: [● jat ▾]   - compact chip, plus button slides out on hover
 	 * Click chip: dropdown with server, ready tasks, and actions
 	 * Click +: opens task creation drawer for current project
 	 */
@@ -484,6 +484,7 @@
 			<button
 				type="button"
 				class="new-btn"
+				class:new-btn-always={isActive}
 				onclick={handleNewTaskClick}
 				title="New task (Alt+N)"
 			>
@@ -762,7 +763,6 @@
 		background: color-mix(in oklch, var(--project-color) 35%, transparent);
 		border-color: color-mix(in oklch, var(--project-color) 65%, transparent);
 		box-shadow: 0 0 10px color-mix(in oklch, var(--project-color) 25%, transparent);
-		transform: scale(1.15);
 	}
 
 	/* Muted styling for non-active project chips */
@@ -778,7 +778,6 @@
 		background: color-mix(in oklch, var(--project-color) 18%, transparent);
 		border-color: color-mix(in oklch, var(--project-color) 45%, transparent);
 		box-shadow: 0 0 6px color-mix(in oklch, var(--project-color) 15%, transparent);
-		transform: scale(1.05);
 	}
 
 	/* Main trigger button */
@@ -986,6 +985,14 @@
 		transition: all 0.2s ease;
 		cursor: pointer;
 		color: oklch(0.85 0.18 145);
+	}
+
+	/* Always visible on active project */
+	.new-btn.new-btn-always {
+		max-width: 1.75rem;
+		padding: 0 0.3rem;
+		border-left: 1px solid color-mix(in oklch, var(--project-color) 35%, transparent);
+		opacity: 1;
 	}
 
 	.chip-group:hover .new-btn {

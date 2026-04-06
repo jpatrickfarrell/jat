@@ -92,14 +92,19 @@ ${projects.map(p => `- ${p.name}: ${p.description}`).join('\n')}
 If a task doesn't clearly belong to any project, omit the "project" field.`
 		: '';
 
-	const prompt = `You are a note organizer. Given a voice note transcript, produce two things:
+	const prompt = `You are a note organizer. Given a voice note transcript, produce four things:
 
-1. SUMMARY: Detailed organized notes covering EVERYTHING discussed. The speaker rambles and jumps between topics — reorganize into clear grouped sections without losing any detail. Format each topic as its own line: "TOPIC NAME: all details, names, numbers, decisions, context for that topic". Every name, date, number, idea, and decision must appear. Nothing omitted.
+1. TITLE: A short descriptive title for this voice note (max 8 words, captures the main theme, e.g. "Morning walk: billing and Steel Bridge pricing")
 
-2. TASKS: Every actionable item extracted from the transcript.
+2. SUMMARY: Detailed organized notes covering EVERYTHING discussed. The speaker rambles and jumps between topics — reorganize into clear grouped sections without losing any detail. Format each topic as its own line: "TOPIC NAME: all details, names, numbers, decisions, context for that topic". Every name, date, number, idea, and decision must appear. Nothing omitted.
+
+3. TASKS: Every actionable item extracted from the transcript. Each task includes a "context" field: the specific topic line from the summary that this task belongs to.
+
+4. KNOWLEDGE BASE: Persistent reference facts worth saving long-term per project — pricing, decisions, requirements, client details, architectural choices. Omit one-off tasks (those go in tasks). One entry per distinct topic/project combination.
 
 Return ONLY valid JSON (no markdown, no explanation):
 {
+  "title": "Short descriptive title for this voice note",
   "summary": "<your detailed topic-by-topic notes here>",
   "tasks": [
     {
@@ -108,7 +113,15 @@ Return ONLY valid JSON (no markdown, no explanation):
       "description": "More context if the transcript provides it",
       "priority": 2,
       "project": "project-name-here",
-      "labels": "voice"
+      "labels": "voice",
+      "context": "The specific topic line from the summary relevant to this task"
+    }
+  ],
+  "knowledgeBase": [
+    {
+      "title": "Short entry title",
+      "content": "Detailed reference content worth remembering long-term",
+      "project": "project-name-here"
     }
   ]
 }
@@ -176,12 +189,14 @@ ${transcript}`;
 	const parsed = JSON.parse(fullResponse);
 	const tasks = parsed.tasks;
 	const summary = typeof parsed.summary === 'string' ? parsed.summary : '';
+	const title = typeof parsed.title === 'string' ? parsed.title : '';
+	const knowledgeBase = Array.isArray(parsed.knowledgeBase) ? parsed.knowledgeBase : [];
 
 	if (!Array.isArray(tasks) || tasks.length === 0) {
 		throw new Error('ollama returned no tasks');
 	}
 
-	return { tasks, summary };
+	return { tasks, summary, title, knowledgeBase };
 }
 
 /**
@@ -190,15 +205,17 @@ ${transcript}`;
  * @param {Array} tasks
  * @param {string} transcript
  * @param {string} summary
+ * @param {string} title
+ * @param {Array} knowledgeBase
  */
-function appendToVoiceTimeline(tasks, transcript = '', summary = '') {
+function appendToVoiceTimeline(tasks, transcript = '', summary = '', title = '', knowledgeBase = []) {
 	mkdirSync(TEMP_DIR, { recursive: true });
 	const event = {
 		type: 'tasks',
 		session_id: 'voice',
 		tmux_session: 'jat-voice',
 		timestamp: new Date().toISOString(),
-		data: { tasks, transcript, summary }
+		data: { tasks, transcript, summary, title, knowledgeBase }
 	};
 	appendFileSync(VOICE_TIMELINE_FILE, JSON.stringify(event) + '\n');
 }
@@ -261,8 +278,8 @@ function transcribeAndOrganize(audioPath, title, priority) {
 			// Step 3: Organize transcript into structured tasks via ollama
 			try {
 				const projects = loadProjects();
-				const { tasks, summary } = await organizeTranscript(text, projects);
-				appendToVoiceTimeline(tasks, text, summary);
+				const { tasks, summary, title, knowledgeBase } = await organizeTranscript(text, projects);
+				appendToVoiceTimeline(tasks, text, summary, title, knowledgeBase);
 				vlog(`Done — ${tasks.length} task(s) added to voice inbox`);
 			} catch (organizeErr) {
 				vlog(`ERROR: organize failed, falling back to single task: ${organizeErr.message}`);
@@ -314,8 +331,8 @@ export async function POST({ request }) {
 
 			// Organize in background, don't block the response
 			const projects = loadProjects();
-			organizeTranscript(text, projects).then(({ tasks, summary }) => {
-				appendToVoiceTimeline(tasks, text, summary);
+			organizeTranscript(text, projects).then(({ tasks, summary, title, knowledgeBase }) => {
+				appendToVoiceTimeline(tasks, text, summary, title, knowledgeBase);
 				console.log(`[voice] Organized ${tasks.length} task(s) from text into voice inbox`);
 			}).catch((err) => {
 				console.error('[voice] organize failed for text input:', err.message);

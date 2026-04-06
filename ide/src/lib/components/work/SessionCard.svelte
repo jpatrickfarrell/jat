@@ -3771,7 +3771,18 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 				break;
 
 			case "cleanup":
-				// Close tmux session and dismiss from UI
+				// Close task and kill tmux session, then dismiss from UI
+				if (displayTask?.id) {
+					try {
+						await fetch(`/api/tasks/${encodeURIComponent(displayTask.id)}/close`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ reason: 'Cleaned up session' })
+						});
+					} catch (e) {
+						console.warn('[SessionCard] Failed to close task:', e);
+					}
+				}
 				await onKillSession?.();
 				// Trigger collapse after delay (matches Ctrl+Enter pattern)
 				if (onActionComplete) {

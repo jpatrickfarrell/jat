@@ -62,7 +62,7 @@ export default function App() {
 <jat-feedback endpoint="http://localhost:3333"></jat-feedback>`;
 
 	const nextSnippet = `// In pages/_app.tsx or layout.tsx:
-import Script from 'next/script';
+import Script from '${"next/script"}';
 
 export default function Layout({ children }) {
   return (

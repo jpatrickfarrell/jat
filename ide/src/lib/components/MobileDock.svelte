@@ -40,7 +40,7 @@
 
 <!-- Mobile dock: only visible below md breakpoint, hidden when fullscreen overlay is open -->
 {#if !$isMobileFullscreenOpen}
-<div class="dock dock-sm md:hidden">
+<div class="dock dock-xl md:hidden">
 	<!-- Tasks -->
 	<button class:dock-active={isActive('/tasks')} onclick={() => navigate('/tasks')}>
 		<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5">

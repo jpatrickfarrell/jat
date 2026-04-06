@@ -96,6 +96,7 @@ If a task doesn't clearly belong to any project, omit the "project" field.`
 
 Return ONLY a JSON object with this exact structure (no markdown, no explanation):
 {
+  "summary": "One or two sentence summary of the voice note",
   "tasks": [
     {
       "type": "task",
@@ -171,27 +172,30 @@ ${transcript}`;
 
 	const parsed = JSON.parse(fullResponse);
 	const tasks = parsed.tasks;
+	const summary = typeof parsed.summary === 'string' ? parsed.summary : '';
 
 	if (!Array.isArray(tasks) || tasks.length === 0) {
 		throw new Error('ollama returned no tasks');
 	}
 
-	return tasks;
+	return { tasks, summary };
 }
 
 /**
  * Append organized tasks to the voice inbox timeline file.
  * EventStack polls /api/sessions/jat-voice/timeline which reads this file.
  * @param {Array} tasks
+ * @param {string} transcript
+ * @param {string} summary
  */
-function appendToVoiceTimeline(tasks) {
+function appendToVoiceTimeline(tasks, transcript = '', summary = '') {
 	mkdirSync(TEMP_DIR, { recursive: true });
 	const event = {
 		type: 'tasks',
 		session_id: 'voice',
 		tmux_session: 'jat-voice',
 		timestamp: new Date().toISOString(),
-		data: tasks
+		data: { tasks, transcript, summary }
 	};
 	appendFileSync(VOICE_TIMELINE_FILE, JSON.stringify(event) + '\n');
 }
@@ -254,8 +258,8 @@ function transcribeAndOrganize(audioPath, title, priority) {
 			// Step 3: Organize transcript into structured tasks via ollama
 			try {
 				const projects = loadProjects();
-				const tasks = await organizeTranscript(text, projects);
-				appendToVoiceTimeline(tasks);
+				const { tasks, summary } = await organizeTranscript(text, projects);
+				appendToVoiceTimeline(tasks, text, summary);
 				vlog(`Done — ${tasks.length} task(s) added to voice inbox`);
 			} catch (organizeErr) {
 				vlog(`ERROR: organize failed, falling back to single task: ${organizeErr.message}`);
@@ -307,8 +311,8 @@ export async function POST({ request }) {
 
 			// Organize in background, don't block the response
 			const projects = loadProjects();
-			organizeTranscript(text, projects).then((tasks) => {
-				appendToVoiceTimeline(tasks);
+			organizeTranscript(text, projects).then(({ tasks, summary }) => {
+				appendToVoiceTimeline(tasks, text, summary);
 				console.log(`[voice] Organized ${tasks.length} task(s) from text into voice inbox`);
 			}).catch((err) => {
 				console.error('[voice] organize failed for text input:', err.message);

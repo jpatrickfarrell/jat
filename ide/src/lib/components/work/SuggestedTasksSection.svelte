@@ -21,11 +21,15 @@
 	 * - Blue/cyan theme for agent tasks
 	 */
 
+	import { onMount } from 'svelte';
 	import { slide } from 'svelte/transition';
 	import { getIssueTypeVisual } from '$lib/config/statusColors';
 	import type { SuggestedTask } from '$lib/types/signals';
 	import SlideOpenButton from '$lib/components/SlideOpenButton.svelte';
 	import ProjectSelector from '$lib/components/tasks/ProjectSelector.svelte';
+	import SearchDropdown from '$lib/components/SearchDropdown.svelte';
+	import type { SearchDropdownGroup } from '$lib/components/SearchDropdown.svelte';
+	import { fetchAndGetProjectColors, getProjectColor } from '$lib/utils/projectColors';
 
 	/** Extended SuggestedTask with local UI state */
 	interface SuggestedTaskWithState extends SuggestedTask {
@@ -104,6 +108,23 @@
 		defaultProject = '',
 		onTaskClick,
 	}: Props = $props();
+
+	// Project colors for SearchDropdown
+	let projectColors = $state<Record<string, string>>({});
+
+	onMount(async () => {
+		projectColors = await fetchAndGetProjectColors();
+	});
+
+	const projectGroups = $derived.by<SearchDropdownGroup[]>(() => [{
+		label: 'Projects',
+		options: availableProjects.map(p => ({ value: p, label: p }))
+	}]);
+
+	function getProjectColorFn(project: string): string | undefined {
+		if (!project) return undefined;
+		return projectColors[project.toLowerCase()] || getProjectColor(project + '-x');
+	}
 
 	// Collapsed state for the section
 	let isCollapsed = $state(false);
@@ -470,7 +491,7 @@
 							</div>
 
 							<!-- Title · description inline -->
-							<div class="flex-1 min-w-0">
+							<div class="flex-1 min-w-0 flex items-center gap-1 min-w-0">
 								{#if editingTitleKey === taskKey}
 									<!-- svelte-ignore a11y_autofocus -->
 									<input
@@ -485,12 +506,21 @@
 								{:else}
 									<button
 										type="button"
-										onclick={(e) => e.stopPropagation()}
-										ondblclick={(e) => startEditingTitle(taskKey, effectiveTitle, e)}
-										class="w-full text-xs text-left font-medium text-base-content truncate block"
-										title="Double-click to edit title"
+										onclick={(e) => startEditingTitle(taskKey, effectiveTitle, e)}
+										class="flex-1 min-w-0 text-xs text-left font-medium text-base-content truncate block"
+										title="Click to edit title"
 									>
 										{effectiveTitle}{#if effectiveDescription}<span class="text-base-content/40 font-normal"> · {effectiveDescription}</span>{/if}
+									</button>
+									<button
+										type="button"
+										onclick={(e) => startEditingTitle(taskKey, effectiveTitle, e)}
+										class="flex-shrink-0 opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity p-0.5 rounded"
+										title="Edit title"
+									>
+										<svg class="w-3 h-3 text-base-content/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+										</svg>
 									</button>
 								{/if}
 							</div>
@@ -562,16 +592,13 @@
 											Project
 										</div>
 										{#if availableProjects.length > 0}
-											<select
+											<SearchDropdown
 												value={effectiveProject}
-												onchange={(e) => updateProject(taskKey, e.currentTarget.value)}
-												class="w-full text-[11px] px-2 py-1 rounded cursor-pointer project-select bg-base-300 text-base-content border border-base-content/20"
-											>
-												<option value="">Select project...</option>
-												{#each availableProjects as project}
-													<option value={project}>{project}</option>
-												{/each}
-											</select>
+												groups={projectGroups}
+												placeholder="Select project..."
+												colorFn={getProjectColorFn}
+												onChange={(v) => updateProject(taskKey, v)}
+											/>
 										{:else}
 											<input
 												type="text"
@@ -709,7 +736,7 @@
 
 			<!-- Hint -->
 			<p class="text-[9px] mt-1 text-center opacity-40 text-base-content/50">
-				Double-click or ✏️ to edit title • Click description to edit • Dropdowns for priority/type
+				Click title or ✏️ to edit • Click description to edit • Dropdowns for priority/type
 			</p>
 		</div>
 	{/if}

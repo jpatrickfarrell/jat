@@ -84,7 +84,14 @@ export default defineConfig({
 		https: getHttpsConfig()
 	},
 	optimizeDeps: {
-		include: ['svelte-dnd-action']
+		include: [
+			'svelte-dnd-action',
+			'svelte/motion',
+			'js-yaml',
+			'theme-change',
+			'@monaco-editor/loader',
+			'd3'
+		]
 	},
 	ssr: {
 		external: ['sqlite-vec']

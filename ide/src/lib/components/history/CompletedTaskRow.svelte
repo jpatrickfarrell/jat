@@ -238,38 +238,57 @@
 				/>
 			</div>
 
-			<!-- Desktop-only action buttons (hover reveal) -->
-			<div class="ctr-actions">
-				{#if memoryFilename && onMemoryClick}
-					<button type="button" class="ctr-action-btn ctr-action-memory" onclick={(e) => { e.stopPropagation(); onMemoryClick!(e, memoryFilename!, task); }} title="View memory">
-						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-						</svg>
-					</button>
-				{/if}
-				{#if onReopenTask}
-					<button type="button" class="ctr-action-btn ctr-action-reopen" onclick={(e) => { e.stopPropagation(); onReopenTask!(e, task); }} title="Reopen task">
-						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
-						</svg>
-					</button>
-				{/if}
-				{#if onDuplicateTask}
-					<button type="button" class="ctr-action-btn ctr-action-duplicate" onclick={(e) => { e.stopPropagation(); onDuplicateTask!(e, task); }} title="Duplicate">
-						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" />
-						</svg>
-					</button>
-				{/if}
+			<!-- Right: primary action column (always visible) + extras on hover -->
+			<div class="ctr-primary-col">
+				<!-- Extra actions: slide in on desktop hover -->
+				<div class="ctr-extras">
+					{#if memoryFilename && onMemoryClick}
+						<button type="button" class="ctr-extra-btn ctr-extra-memory" onclick={(e) => { e.stopPropagation(); onMemoryClick!(e, memoryFilename!, task); }} title="View memory">
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+							</svg>
+						</button>
+					{/if}
+					{#if onReopenTask}
+						<button type="button" class="ctr-extra-btn ctr-extra-reopen" onclick={(e) => { e.stopPropagation(); onReopenTask!(e, task); }} title="Reopen">
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+							</svg>
+						</button>
+					{/if}
+					{#if onDuplicateTask}
+						<button type="button" class="ctr-extra-btn ctr-extra-duplicate" onclick={(e) => { e.stopPropagation(); onDuplicateTask!(e, task); }} title="Duplicate">
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" />
+							</svg>
+						</button>
+					{/if}
+				</div>
+				<!-- Primary action: Resume (or Reopen fallback) — always visible -->
 				{#if task.assignee && onResumeSession}
-					<button type="button" class="ctr-action-btn ctr-action-resume" onclick={(e) => { e.stopPropagation(); onResumeSession!(e, task); }} title="Resume session" disabled={resuming}>
+					<button type="button" class="ctr-primary-btn ctr-primary-resume" onclick={(e) => { e.stopPropagation(); onResumeSession!(e, task); }} title="Resume session" disabled={resuming}>
 						{#if resuming}
 							<span class="loading loading-spinner loading-xs"></span>
 						{:else}
-							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="16" height="16">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
 							</svg>
 						{/if}
+						<span class="ctr-primary-label">Resume</span>
+					</button>
+				{:else if onReopenTask}
+					<button type="button" class="ctr-primary-btn ctr-primary-reopen" onclick={(e) => { e.stopPropagation(); onReopenTask!(e, task); }} title="Reopen task">
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="16" height="16">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+						</svg>
+						<span class="ctr-primary-label">Reopen</span>
+					</button>
+				{:else}
+					<button type="button" class="ctr-primary-btn ctr-primary-details" onclick={(e) => { e.stopPropagation(); onTaskClick(task.id); }} title="View details">
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="16" height="16">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178zM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z" />
+						</svg>
+						<span class="ctr-primary-label">Details</span>
 					</button>
 				{/if}
 			</div>
@@ -302,7 +321,7 @@
 	}
 
 	.ctr-tray-left { left: 0; }
-	.ctr-tray-right { right: 0; }
+	.ctr-tray-right { right: 0; width: 180px; }
 
 	.ctr-tray-visible {
 		opacity: 1;
@@ -326,9 +345,11 @@
 		font-family: system-ui, -apple-system, sans-serif;
 	}
 
-	.ctr-tray-btn-details  { background: oklch(0.50 0.12 270); }
-	.ctr-tray-btn-resume   { background: oklch(0.48 0.16 145); }
-	.ctr-tray-btn-reopen   { background: oklch(0.55 0.13 75); }
+	.ctr-tray-btn-details   { background: oklch(0.50 0.12 270); }
+	.ctr-tray-btn-resume    { background: oklch(0.48 0.16 145); }
+	.ctr-tray-btn-reopen    { background: oklch(0.55 0.13 75); }
+	.ctr-tray-btn-memory    { background: oklch(0.45 0.12 200); }
+	.ctr-tray-btn-duplicate { background: oklch(0.45 0.10 280); }
 
 	/* Sliding card */
 	.ctr-card {
@@ -451,22 +472,34 @@
 		padding: 8px 10px;
 	}
 
-	/* Desktop hover action buttons */
-	.ctr-actions {
-		display: none;
-		align-items: center;
-		gap: 4px;
-		padding: 0 8px;
+	/* Primary action column: always visible (like date picker in open tasks) */
+	.ctr-primary-col {
+		display: flex;
+		align-items: stretch;
 		flex-shrink: 0;
 	}
 
+	/* Extra icon buttons: hidden by default, slide in on desktop hover */
+	.ctr-extras {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		padding: 0;
+		overflow: hidden;
+		max-width: 0;
+		opacity: 0;
+		transition: max-width 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.15s;
+	}
+
 	@media (min-width: 640px) {
-		.ctr-actions {
-			display: flex;
+		.ctr-card:hover .ctr-extras {
+			max-width: 110px;
+			opacity: 1;
+			padding: 0 4px;
 		}
 	}
 
-	.ctr-action-btn {
+	.ctr-extra-btn {
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -476,28 +509,56 @@
 		border: 1px solid transparent;
 		background: transparent;
 		cursor: pointer;
-		opacity: 0;
-		transition: opacity 0.12s, background 0.12s;
 		flex-shrink: 0;
+		transition: background 0.12s;
 	}
 
-	.ctr-card:hover .ctr-action-btn {
-		opacity: 1;
-	}
-
-	.ctr-action-memory    { color: oklch(0.60 0.12 200); }
-	.ctr-action-reopen    { color: oklch(0.65 0.14 75); }
-	.ctr-action-duplicate { color: oklch(0.60 0.12 290); }
-	.ctr-action-resume    { color: oklch(0.62 0.16 145); }
-
-	.ctr-action-btn:hover {
-		opacity: 1 !important;
+	.ctr-extra-btn:hover {
 		background: oklch(0.24 0.02 250);
 		border-color: oklch(0.28 0.02 250);
 	}
 
-	.ctr-action-btn:disabled {
-		cursor: not-allowed;
-		opacity: 0.4 !important;
+	.ctr-extra-memory    { color: oklch(0.60 0.12 200); }
+	.ctr-extra-reopen    { color: oklch(0.65 0.14 75); }
+	.ctr-extra-duplicate { color: oklch(0.60 0.12 290); }
+
+	/* Primary button: always visible, matches date picker column style */
+	.ctr-primary-btn {
+		width: 56px;
+		flex-shrink: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 3px;
+		padding: 0;
+		background: transparent;
+		border-top: none;
+		border-right: none;
+		border-bottom: none;
+		border-left: 1px solid oklch(0.22 0.02 250);
+		cursor: pointer;
+		transition: background 0.12s;
 	}
+
+	.ctr-primary-btn:hover {
+		background: oklch(0.22 0.02 250 / 0.6);
+	}
+
+	.ctr-primary-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.ctr-primary-label {
+		font-size: 0.5rem;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		font-family: system-ui, -apple-system, sans-serif;
+	}
+
+	.ctr-primary-resume  { color: oklch(0.62 0.16 145); }
+	.ctr-primary-reopen  { color: oklch(0.65 0.14 75); }
+	.ctr-primary-details { color: oklch(0.55 0.10 250); }
 </style>

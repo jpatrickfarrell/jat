@@ -1014,6 +1014,34 @@
 		} else if (actionId === 'convert-to-tasks') {
 			setActionFeedback(sessionName, actionId, 'info');
 			await sendWorkflowCommand(sessionName, '/jat:tasktree');
+		} else if (actionId === 'resume') {
+			setActionFeedback(sessionName, actionId, 'success', 1000);
+			optimisticStates.set(sessionName, 'working');
+			optimisticStates = new Map(optimisticStates);
+			try {
+				await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'working', data: { taskId: sessionTask?.id, taskTitle: sessionTask?.title, agentName, approach: 'Resuming from paused state' } }) });
+				await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/resume`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: sessionTask?.id, agentName, project }) });
+			} catch (e) { console.warn('[TasksActive] resume failed:', e); }
+		} else if (actionId === 'close-task') {
+			setActionFeedback(sessionName, actionId, 'error', 1200);
+			if (sessionTask) {
+				try { await fetch(`/api/tasks/${encodeURIComponent(sessionTask.id)}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Closed via mobile tray' }) }); } catch (e) { console.warn('[TasksActive] close-task failed:', e); }
+			}
+			await handleKillSession(sessionName);
+		} else if (actionId === 'unassign') {
+			setActionFeedback(sessionName, actionId, 'warning', 1200);
+			if (sessionTask) {
+				try { await fetch(`/api/tasks/${encodeURIComponent(sessionTask.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assignee: null, status: 'open' }) }); } catch (e) { console.warn('[TasksActive] unassign failed:', e); }
+			}
+			await handleKillSession(sessionName);
+		} else if (actionId === 'restart') {
+			setActionFeedback(sessionName, actionId, 'success', 1200);
+			if (sessionTask) {
+				try { await fetch('/api/work/spawn', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: sessionTask.id, project }) }); } catch (e) { console.warn('[TasksActive] restart failed:', e); }
+			}
+		} else if (actionId === 'start') {
+			setActionFeedback(sessionName, actionId, 'success', 1200);
+			await sendWorkflowCommand(sessionName, '/jat:start');
 		}
 	}
 	let swipeConfig = $state(getSwipeConfig());
@@ -1403,7 +1431,7 @@
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" width="13" height="13" style="stroke: {stateVisual.accent};"><path stroke-linecap="round" stroke-linejoin="round" d={stateVisual.icon} /></svg>
 						</div>
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
-							{#each cardActions.slice(0, 4) as action}
+							{#each cardActions.slice(0, 5) as action}
 								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
 								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} title={action.description} disabled={!!fb} onclick={() => handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null)}>
 									{#if fb}
@@ -1436,7 +1464,7 @@
 							</div>
 						</div>
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
-							{#each cardActions.slice(0, 4) as action}
+							{#each cardActions.slice(0, 5) as action}
 								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
 								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} title={action.description} disabled={!!fb} onclick={() => handleMobileAction(action.id, session.name, sessionTask, sessionAgentName, session.project || null)}>
 									{#if fb}
@@ -1499,7 +1527,7 @@
 							<AgentAvatar name={sessionAgentName} size={40} showRing={true} sessionState={effectiveState} />
 						</div>
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
-							{#each cardActions.slice(0, 4) as action}
+							{#each cardActions.slice(0, 5) as action}
 								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
 								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} title={action.description} disabled={!!fb} onclick={() => handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null)}>
 									{#if fb}
@@ -1538,6 +1566,9 @@
 			{@const fsSessionInfo = agentSessionInfo.get(fsAgentName)}
 			{@const fsState = (optimisticStates.get(fullscreenSession) || fsSessionInfo?.activityState || 'idle') as SessionState}
 			{@const fsSession = sessions.find(s => s.name === fullscreenSession)}
+			{@const fsReviewStatus = fsTask ? computeReviewStatus(fsTask, getReviewRules()) : null}
+			{@const fsReviewBasedDefault = fsReviewStatus?.action !== 'auto'}
+			{@const fsAutoCompleteDisabled = autoCompleteDisabledMap.get(fullscreenSession) ?? fsReviewBasedDefault}
 			<MobileSessionFullscreen
 				sessionName={fullscreenSession}
 				agentName={fsAgentName}
@@ -1545,6 +1576,26 @@
 				taskTitle={fsTask?.title || ''}
 				sessionState={fsState}
 				project={fsSession?.project || null}
+				taskInfo={fsTask ? { id: fsTask.id, issue_type: fsTask.issue_type, priority: fsTask.priority } : null}
+				autoCompleteEnabled={!fsAutoCompleteDisabled}
+				onAutoCompleteToggle={() => {
+					const newMap = new Map(autoCompleteDisabledMap);
+					newMap.set(fullscreenSession!, !fsAutoCompleteDisabled);
+					autoCompleteDisabledMap = newMap;
+				}}
+				reviewReason={fsReviewStatus?.reason ?? null}
+				onLinkToEpic={async (epicId) => {
+					if (fsTask) {
+						try {
+							await fetch(`/api/tasks/${encodeURIComponent(fsTask.id)}/epic`, {
+								method: 'POST',
+								headers: { 'Content-Type': 'application/json' },
+								body: JSON.stringify({ epicId })
+							});
+						} catch (e) { console.warn('[TasksActive] Failed to link task to epic:', e); }
+					}
+				}}
+				onViewEpic={(epicId) => onViewTask?.(epicId)}
 				onClose={() => fullscreenSession = null}
 				onAction={async (actionId) => {
 					const sName = fullscreenSession!;
@@ -1577,6 +1628,8 @@
 						await sendWorkflowCommand(sName, cmd);
 					} else if (actionId === 'interrupt') {
 						await fetch(`/api/work/${encodeURIComponent(sName)}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'ctrl-c' }) });
+					} else if (actionId === 'escape') {
+						await fetch(`/api/work/${encodeURIComponent(sName)}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'escape' }) });
 					} else if (actionId === 'pause') {
 						optimisticStates.set(sName, 'paused');
 						optimisticStates = new Map(optimisticStates);
@@ -1584,9 +1637,27 @@
 							try { await fetch(`/api/sessions/${encodeURIComponent(sName)}/pause`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: fsTask.id, taskTitle: fsTask.title, reason: 'Paused via fullscreen', killSession: true, agentName: fsAgentName, project: fsSession?.project }) }); } catch (e) { console.warn('[TasksActive] Failed to pause session:', e); }
 						} else { await handleKillSession(sName); }
 						fullscreenSession = null;
-					} else if (actionId === 'close-kill') {
+					} else if (actionId === 'close-kill' || actionId === 'close-task') {
 						if (fsTask) {
 							try { await fetch(`/api/tasks/${encodeURIComponent(fsTask.id)}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Abandoned via Close & Kill' }) }); } catch (e) { console.warn('[TasksActive] Failed to close task:', e); }
+						}
+						fullscreenSession = null;
+						await handleKillSession(sName);
+					} else if (actionId === 'resume') {
+						optimisticStates.set(sName, 'working');
+						optimisticStates = new Map(optimisticStates);
+						try {
+							await fetch(`/api/sessions/${encodeURIComponent(sName)}/signal`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'working', data: { taskId: fsTask?.id, taskTitle: fsTask?.title, agentName: fsAgentName, approach: 'Resuming from paused state' } }) });
+							await fetch(`/api/sessions/${encodeURIComponent(sName)}/resume`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: fsTask?.id, agentName: fsAgentName, project: fsSession?.project }) });
+						} catch (e) { console.warn('[TasksActive] Failed to resume session:', e); }
+					} else if (actionId === 'restart') {
+						fullscreenSession = null;
+						if (fsTask) {
+							try { await fetch('/api/work/spawn', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: fsTask.id, project: fsSession?.project }) }); } catch (e) { console.warn('[TasksActive] Failed to restart session:', e); }
+						}
+					} else if (actionId === 'unassign') {
+						if (fsTask) {
+							try { await fetch(`/api/tasks/${encodeURIComponent(fsTask.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assignee: null, status: 'open' }) }); } catch (e) { console.warn('[TasksActive] Failed to unassign task:', e); }
 						}
 						fullscreenSession = null;
 						await handleKillSession(sName);

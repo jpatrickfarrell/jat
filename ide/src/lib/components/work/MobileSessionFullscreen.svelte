@@ -33,6 +33,12 @@
 		onClose = () => {},
 		onAction = async (_actionId: string) => {},
 		onViewTask = (_taskId: string) => {},
+		taskInfo = null as { id: string; issue_type?: string; priority?: number } | null,
+		autoCompleteEnabled = false,
+		onAutoCompleteToggle = undefined as (() => void) | undefined,
+		reviewReason = null as string | null,
+		onLinkToEpic = undefined as ((epicId: string) => Promise<void>) | undefined,
+		onViewEpic = undefined as ((epicId: string) => void) | undefined,
 	}: {
 		sessionName?: string;
 		agentName?: string;
@@ -43,6 +49,12 @@
 		onClose?: () => void;
 		onAction?: (actionId: string) => Promise<void>;
 		onViewTask?: (taskId: string) => void;
+		taskInfo?: { id: string; issue_type?: string; priority?: number } | null;
+		autoCompleteEnabled?: boolean;
+		onAutoCompleteToggle?: () => void;
+		reviewReason?: string | null;
+		onLinkToEpic?: (epicId: string) => Promise<void>;
+		onViewEpic?: (epicId: string) => void;
 	} = $props();
 
 	// Internal state
@@ -765,9 +777,15 @@
 					{sessionName}
 					alignRight={true}
 					showCommands={true}
+					showEpic={true}
 					{onAction}
-					task={taskId ? { id: taskId, issue_type: undefined, priority: undefined } : undefined}
+					task={taskInfo || (taskId ? { id: taskId, issue_type: undefined, priority: undefined } : undefined)}
 					{project}
+					{autoCompleteEnabled}
+					onAutoCompleteToggle={onAutoCompleteToggle}
+					{reviewReason}
+					onLinkToEpic={onLinkToEpic}
+					onViewEpic={onViewEpic}
 				/>
 			</div>
 		</div>

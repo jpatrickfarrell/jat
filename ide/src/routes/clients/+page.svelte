@@ -161,6 +161,11 @@
 				return;
 			}
 			saveError = null;
+			if (type === 'term' && status === 'accepted') {
+				const next = new Set(collapsedTerms);
+				next.add(id);
+				collapsedTerms = next;
+			}
 			await fetchData(true);
 		} finally {
 			updatingItem = null;
@@ -275,6 +280,7 @@
 			projects = data.projects || [];
 			summary = data.summary || null;
 			cachedAt = data.cachedAt || null;
+			initCollapsedTerms(projects);
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {
@@ -626,6 +632,39 @@
 		} finally {
 			linkingTask = false;
 		}
+	}
+
+	// Auto-grow textarea action — resizes on mount and on input
+	function autogrow(node: HTMLTextAreaElement) {
+		function resize() {
+			node.style.height = 'auto';
+			node.style.height = Math.min(node.scrollHeight, window.innerHeight * 0.3) + 'px';
+		}
+		// Run after the browser has laid out the content
+		requestAnimationFrame(resize);
+		node.addEventListener('input', resize);
+		return { destroy() { node.removeEventListener('input', resize); } };
+	}
+
+	// Collapsed terms — accepted terms collapse by default, expandable on click
+	let collapsedTerms = $state<Set<string>>(new Set());
+
+	function initCollapsedTerms(contracts: any[]) {
+		// Only seed on first load so user toggles persist during the session
+		if (collapsedTerms.size > 0) return;
+		const ids = new Set<string>();
+		for (const c of contracts) {
+			for (const term of (c.terms ?? [])) {
+				ids.add(term.id); // all terms collapsed by default
+			}
+		}
+		collapsedTerms = ids;
+	}
+
+	function toggleTermCollapse(id: string) {
+		const next = new Set(collapsedTerms);
+		if (next.has(id)) next.delete(id); else next.add(id);
+		collapsedTerms = next;
 	}
 
 	// Owner comment state
@@ -1041,7 +1080,8 @@
 																											/>
 																											<textarea
 																												class="textarea w-full text-sm bg-base-200 border-base-content/20 resize-none"
-																												rows="3"
+																												style="min-height: 5rem; max-height: 30vh; overflow-y: auto;"
+																												use:autogrow
 																												bind:value={editingValue2}
 																												placeholder="Description (optional)"
 																												onkeydown={(e) => { if (e.key === 'Escape') cancelEditing(); }}
@@ -1280,8 +1320,9 @@
 																								/>
 																								<textarea
 																									class="textarea w-full text-sm bg-base-200 border-base-content/20 resize-none"
-																									rows="4"
+																									style="min-height: 5rem; max-height: 30vh; overflow-y: auto;"
 																									bind:value={editingValue2}
+																									use:autogrow
 																									placeholder="Term body (optional)"
 																									onkeydown={(e) => { if (e.key === 'Escape') cancelEditing(); }}
 																								></textarea>
@@ -1291,123 +1332,122 @@
 																								</div>
 																							</div>
 																						{:else}
-																						<div class="flex items-start justify-between gap-3">
-																							<div class="flex items-start gap-2 min-w-0">
-																								<div class="w-5 h-5 rounded-full bg-base-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+																						{@const isCollapsed = collapsedTerms.has(term.id)}
+																						<div class="flex items-center gap-2 group cursor-pointer" role="button" tabindex="0"
+																							onclick={(e) => { e.stopPropagation(); toggleTermCollapse(term.id); }}
+																							onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); toggleTermCollapse(term.id); } }}
+																						>
+																							<div class="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors
+																								{term.status === 'accepted' ? 'bg-success/20' : term.status === 'rejected' ? 'bg-error/20' : 'bg-base-300'}">
+																								{#if term.status === 'accepted'}
+																									<svg class="w-2.5 h-2.5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+																								{:else if term.status === 'rejected'}
+																									<svg class="w-2.5 h-2.5 text-error" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"/></svg>
+																								{:else}
 																									<span class="text-xs font-bold opacity-60">{ti + 1}</span>
-																								</div>
-																							<div
-																								class={editable ? 'min-w-0 cursor-pointer hover:bg-base-300/50 rounded px-1 -mx-1 flex items-start gap-1' : 'min-w-0'}
-																								onclick={(e) => { if (editable) { e.stopPropagation(); startEditing(term.id, 'term', term.title, term.body || ''); } }}
-																								role={editable ? 'button' : undefined}
-																								tabindex={editable ? 0 : undefined}
-																								onkeydown={(e) => { if (editable && (e.key === 'Enter' || e.key === ' ')) { e.stopPropagation(); startEditing(term.id, 'term', term.title, term.body || ''); } }}
-																							>
-																								<div class="min-w-0 flex-1">
-																									<p class="font-medium text-sm">{term.title}</p>
-																									{#if term.body}
-																										<p class="text-xs opacity-60 mt-1 whitespace-pre-wrap">{term.body}</p>
-																									{/if}
-																								</div>
-																								{#if editable}<svg class="w-3 h-3 opacity-20 hover:opacity-60 transition-opacity shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>{/if}
+																								{/if}
 																							</div>
-																								</div>
-																							<div class="flex items-center gap-2 shrink-0">
-																								{#if editable}
-																									<button
-																										class="btn btn-ghost btn-xs text-error opacity-40 hover:opacity-100"
+																							<p class="font-medium text-sm flex-1 min-w-0 truncate">{term.title}</p>
+																							<div class="flex items-center gap-2 shrink-0" onclick={(e) => e.stopPropagation()} role="none">
+																								{#if !isCollapsed && editable}
+																									<button class="btn btn-ghost btn-xs text-error opacity-30 hover:opacity-100"
 																										onclick={(e) => { e.stopPropagation(); deleteItem(project.projectKey, 'term', term.id); }}
-																										title="Delete term"
-																									>
+																										title="Delete term">
 																										<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 																											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
 																										</svg>
 																									</button>
 																								{/if}
 																								<div class="dropdown dropdown-end">
-																									<div
-																										tabindex="0"
-																										role="button"
+																									<div tabindex="0" role="button"
 																										class="badge badge-xs {term.status === 'accepted' ? 'badge-success' : term.status === 'rejected' ? 'badge-error' : 'badge-warning'} cursor-pointer gap-1"
-																										onclick={(e) => e.stopPropagation()}
-																										onkeydown={(e) => e.stopPropagation()}
-																									>
+																										onkeydown={(e) => e.stopPropagation()}>
 																										{term.status}
 																										{#if updatingItem === term.id}
 																											<span class="loading loading-spinner" style="width:8px;height:8px"></span>
 																										{:else}
-																											<svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-																												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-																											</svg>
+																											<svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
 																										{/if}
 																									</div>
 																									<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 																									<ul tabindex="0" class="dropdown-content z-40 menu menu-xs shadow-lg bg-base-100 rounded-box w-36 p-1">
 																										{#each ['pending', 'accepted', 'rejected'] as s}
-																											<li>
-																												<button
-																													class:active={term.status === s}
-																													onclick={(e) => { e.stopPropagation(); updateStatus(project.projectKey, 'term', term.id, s); }}
-																													disabled={term.status === s}
-																												>
-																													<span class="badge badge-xs {s === 'accepted' ? 'badge-success' : s === 'rejected' ? 'badge-error' : 'badge-warning'}"></span>
-																													{s}
-																												</button>
-																											</li>
+																											<li><button class:active={term.status === s}
+																												onclick={(e) => { e.stopPropagation(); updateStatus(project.projectKey, 'term', term.id, s); }}
+																												disabled={term.status === s}>
+																												<span class="badge badge-xs {s === 'accepted' ? 'badge-success' : s === 'rejected' ? 'badge-error' : 'badge-warning'}"></span>
+																												{s}
+																											</button></li>
 																										{/each}
 																									</ul>
 																								</div>
+																								<!-- expand/collapse chevron -->
+																								<svg class="w-3.5 h-3.5 opacity-30 group-hover:opacity-60 transition-all duration-200 {isCollapsed ? '' : 'rotate-180'}"
+																									fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+																								</svg>
 																							</div>
 																						</div>
-																						{#if term.comments && term.comments.length > 0}
-																							<div class="mt-2 ml-7 space-y-1.5">
-																								{#each term.comments as c}
-																									<div class="flex gap-2 items-start {c.author === 'owner' ? 'flex-row-reverse' : ''}">
-																										<div class="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 {c.author === 'owner' ? 'bg-primary/15 text-primary' : 'bg-base-300 text-base-content/50'}">
-																											<svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
-																										</div>
-																										<div class="max-w-[75%] rounded-2xl px-3 py-1.5 text-xs border {c.author === 'owner' ? 'bg-primary/8 border-primary/20 text-primary/90 rounded-tr-sm' : 'bg-base-200 border-base-content/10 text-base-content/70 rounded-tl-sm'}">
-																											<p class="leading-relaxed">{c.body}</p>
-																											<p class="opacity-40 mt-0.5 {c.author === 'owner' ? 'text-right' : ''}">{formatCommentTime(c.created_at)}</p>
+																						{#if !isCollapsed}
+																							<div class="mt-1 ml-7 space-y-1">
+																								{#if term.body}
+																									<div
+																										class={editable ? 'text-xs opacity-60 mt-1 whitespace-pre-wrap cursor-pointer hover:bg-base-300/50 rounded px-1 -mx-1' : 'text-xs opacity-60 mt-1 whitespace-pre-wrap'}
+																										onclick={(e) => { if (editable) { e.stopPropagation(); startEditing(term.id, 'term', term.title, term.body || ''); } }}
+																										role={editable ? 'button' : undefined}
+																										tabindex={editable ? 0 : undefined}
+																									>{term.body}</div>
+																								{:else if editable}
+																									<button class="text-xs opacity-30 hover:opacity-60 italic mt-1" onclick={(e) => { e.stopPropagation(); startEditing(term.id, 'term', term.title, ''); }}>+ add body</button>
+																								{/if}
+																								{#if term.comments && term.comments.length > 0}
+																									<div class="mt-2 space-y-1.5">
+																										{#each term.comments as c}
+																											<div class="flex gap-2 items-start {c.author === 'owner' ? 'flex-row-reverse' : ''}">
+																												<div class="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 {c.author === 'owner' ? 'bg-primary/15 text-primary' : 'bg-base-300 text-base-content/50'}">
+																													<svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+																												</div>
+																												<div class="max-w-[75%] rounded-2xl px-3 py-1.5 text-xs border {c.author === 'owner' ? 'bg-primary/8 border-primary/20 text-primary/90 rounded-tr-sm' : 'bg-base-200 border-base-content/10 text-base-content/70 rounded-tl-sm'}">
+																													<p class="leading-relaxed">{c.body}</p>
+																													<p class="opacity-40 mt-0.5 {c.author === 'owner' ? 'text-right' : ''}">{formatCommentTime(c.created_at)}</p>
+																												</div>
+																											</div>
+																										{/each}
+																									</div>
+																								{:else if term.client_notes}
+																									<div class="mt-2 px-2 py-1.5 bg-base-200 rounded text-xs">
+																										<span class="opacity-50">Client notes:</span>
+																										<span class="opacity-70">{term.client_notes}</span>
+																									</div>
+																								{/if}
+																								{#if commentingId === term.id}
+																									<div class="mt-2 flex gap-2 items-start justify-end" onclick={(e) => e.stopPropagation()}>
+																										<textarea
+																											class="textarea textarea-xs flex-1 max-w-xs bg-base-200 border-base-content/20 resize-none text-xs"
+																											rows="2"
+																											placeholder="Add owner comment..."
+																											bind:value={commentInputs[term.id]}
+																											onkeydown={(e) => { if (e.key === 'Escape') commentingId = null; }}
+																										></textarea>
+																										<div class="flex flex-col gap-1">
+																											<button class="btn btn-primary btn-xs" onclick={() => addOwnerComment(project.projectKey, 'term', term.id, term.comments || [])} disabled={!(commentInputs[term.id] || '').trim() || commentSaving}>
+																												{#if commentSaving}<span class="loading loading-spinner loading-xs"></span>{:else}Send{/if}
+																											</button>
+																											<button class="btn btn-ghost btn-xs" onclick={() => commentingId = null}>Cancel</button>
 																										</div>
 																									</div>
-																								{/each}
-																							</div>
-																						{:else if term.client_notes}
-																							<div class="mt-2 ml-7 px-2 py-1.5 bg-base-200 rounded text-xs">
-																								<span class="opacity-50">Client notes:</span>
-																								<span class="opacity-70">{term.client_notes}</span>
-																							</div>
-																						{/if}
-																						{#if commentingId === term.id}
-																							<div class="mt-2 ml-7 flex gap-2 items-start justify-end" onclick={(e) => e.stopPropagation()}>
-																								<textarea
-																									class="textarea textarea-xs flex-1 max-w-xs bg-base-200 border-base-content/20 resize-none text-xs"
-																									rows="2"
-																									placeholder="Add owner comment..."
-																									bind:value={commentInputs[term.id]}
-																									onkeydown={(e) => { if (e.key === 'Escape') commentingId = null; }}
-																								></textarea>
-																								<div class="flex flex-col gap-1">
-																									<button class="btn btn-primary btn-xs" onclick={() => addOwnerComment(project.projectKey, 'term', term.id, term.comments || [])} disabled={!(commentInputs[term.id] || '').trim() || commentSaving}>
-																										{#if commentSaving}<span class="loading loading-spinner loading-xs"></span>{:else}Send{/if}
+																								{:else if editable}
+																									<button class="mt-1 text-[10px] opacity-30 hover:opacity-60 transition-opacity flex items-center gap-1" onclick={(e) => { e.stopPropagation(); commentingId = term.id; }}>
+																										<svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+																										Reply
 																									</button>
-																									<button class="btn btn-ghost btn-xs" onclick={() => commentingId = null}>Cancel</button>
-																								</div>
-																							</div>
-																						{:else}
-																							<button class="mt-1 ml-7 text-[10px] opacity-30 hover:opacity-60 transition-opacity flex items-center gap-1" onclick={(e) => { e.stopPropagation(); commentingId = term.id; }}>
-																								<svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
-																								Reply
-																							</button>
-																						{/if}
-																						{#if term.accepted_at}
-																							<p class="text-xs opacity-40 mt-1 ml-7">
-																								{term.status === 'accepted' ? 'Accepted' : 'Updated'} {formatDate(term.accepted_at)}
-																								{#if term.signature_data}
-																									· Signed
 																								{/if}
-																							</p>
+																								{#if term.accepted_at}
+																									<p class="text-xs opacity-40 mt-1">
+																										{term.status === 'accepted' ? 'Accepted' : 'Updated'} {formatDate(term.accepted_at)}
+																									</p>
+																								{/if}
+																							</div>
 																						{/if}
 																						{/if}
 																					</div>

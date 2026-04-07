@@ -528,6 +528,8 @@ export async function GET({ url }) {
 		const includeUsage = url.searchParams.get('usage') === 'true';
 		// Force task cache refresh (used after spawn to ensure new task assignments are visible)
 		const bustCache = url.searchParams.get('bust') === 'true';
+		// Capture output for ALL sessions regardless of signal/task state (used by /monitor)
+		const captureAll = url.searchParams.get('capture_all') === 'true';
 
 		if (bustCache) {
 			// Reset cache timestamp to force refresh
@@ -537,7 +539,8 @@ export async function GET({ url }) {
 
 		const responseCacheKey = cacheKey('work', {
 			lines: String(lines),
-			usage: includeUsage ? 'true' : undefined
+			usage: includeUsage ? 'true' : undefined,
+			captureAll: captureAll ? 'true' : undefined
 		});
 
 		// Bust cache: skip cached result but still deduplicate concurrent requests
@@ -549,7 +552,7 @@ export async function GET({ url }) {
 		// Prevents thundering herd when multiple polls arrive concurrently.
 		const responseData = await singleFlight(
 			responseCacheKey,
-			() => computeWorkData(lines, includeUsage),
+			() => computeWorkData(lines, includeUsage, captureAll),
 			CACHE_TTL.MEDIUM // 5s — SSE handles real-time updates
 		);
 
@@ -568,8 +571,9 @@ export async function GET({ url }) {
  * Extracted to enable single-flight deduplication.
  * @param {number} lines
  * @param {boolean} includeUsage
+ * @param {boolean} captureAll - capture output for all sessions, not just active ones
  */
-async function computeWorkData(lines, includeUsage) {
+async function computeWorkData(lines, includeUsage, captureAll = false) {
 	// Step 1: List jat-* tmux sessions
 		const sessionsCommand = `tmux list-sessions -F "#{session_name}:#{session_created}:#{session_attached}" 2>/dev/null || echo ""`;
 
@@ -721,7 +725,10 @@ async function computeWorkData(lines, includeUsage) {
 			const hasActiveTask = agentTaskMap.has(agentName);
 			const hasCompletedRecently = agentLastCompletedMap.has(agentName);
 
-			if (hasActiveTask) {
+			if (captureAll) {
+				// Monitor mode: capture everything regardless of signal/task state
+				activeSessionNames.add(session.name);
+			} else if (hasActiveTask) {
 				// Has in_progress task — definitely active
 				activeSessionNames.add(session.name);
 			} else if (signalState) {

@@ -8,7 +8,7 @@
 	 */
 
 	import { onMount, onDestroy } from "svelte";
-	import { slide } from "svelte/transition";
+	import { slide, fly } from "svelte/transition";
 	import { page } from "$app/stores";
 	import { classifySessionLegacy } from "$lib/utils/sessionNaming";
 	import SortDropdown from "$lib/components/SortDropdown.svelte";
@@ -150,6 +150,7 @@
 	let agentProjects = $state<Map<string, string>>(new Map());
 	let agentTasks = $state<Map<string, AgentTask>>(new Map());
 	let agentSessionInfo = $state<Map<string, AgentSessionInfo>>(new Map());
+	let agentOutputs = $state<Map<string, string>>(new Map());
 
 	// Mobile detection
 	let isMobile = $state(false);
@@ -303,6 +304,39 @@
 		}
 		return readySet;
 	});
+
+	// Agents that need user attention (needs_input or review state)
+	const attentionAgents = $derived.by(() => {
+		const result: Array<{ agentName: string; sessionName: string; state: string; taskTitle?: string; taskId?: string }> = [];
+		for (const session of sessions) {
+			if (session.type !== 'agent') continue;
+			const agentName = getAgentName(session.name);
+			const info = agentSessionInfo.get(agentName);
+			if (info?.activityState === 'needs_input' || info?.activityState === 'review' || info?.activityState === 'ready-for-review') {
+				const task = agentTasks.get(agentName);
+				result.push({ agentName, sessionName: session.name, state: info.activityState, taskTitle: task?.title, taskId: task?.id });
+			}
+		}
+		return result;
+	});
+
+	// Dismissed attention notifications (local session state — clears on reload)
+	let dismissedAttentionSessions = $state(new Set<string>());
+
+	// When an agent leaves the attention state, un-dismiss it so it can show again next time
+	$effect(() => {
+		const currentSessions = new Set(attentionAgents.map(a => a.sessionName));
+		for (const dismissed of dismissedAttentionSessions) {
+			if (!currentSessions.has(dismissed)) {
+				dismissedAttentionSessions.delete(dismissed);
+				dismissedAttentionSessions = new Set(dismissedAttentionSessions);
+			}
+		}
+	});
+
+	const visibleAttentionAgents = $derived.by(() =>
+		attentionAgents.filter(a => !dismissedAttentionSessions.has(a.sessionName))
+	);
 
 	// Get all unique projects from sessions, tasks, and configured projects
 	const allProjects = $derived.by(() => {
@@ -682,6 +716,7 @@
 			const projectMap = new Map<string, string>();
 			const taskMap = new Map<string, AgentTask>();
 			const sessionInfoMap = new Map<string, AgentSessionInfo>();
+			const outputMap = new Map<string, string>();
 
 			for (const session of data.sessions || []) {
 				if (!session.agentName) continue;
@@ -692,6 +727,10 @@
 					activityState: session.sessionState || undefined,
 					activityStateTimestamp: Date.now(),
 				});
+
+				if (session.output) {
+					outputMap.set(session.agentName, session.output);
+				}
 
 				const taskSource = session.task || session.lastCompletedTask;
 				if (taskSource?.id) {
@@ -721,6 +760,7 @@
 			agentProjects = projectMap;
 			agentTasks = taskMap;
 			agentSessionInfo = sessionInfoMap;
+			agentOutputs = outputMap;
 		} catch {
 			// Silent fail
 		}
@@ -1684,6 +1724,52 @@
 			<span>No projects with active sessions or open tasks</span>
 		</div>
 	{:else}
+		<!-- Attention notifications: agents waiting for input or review (dismissable) -->
+		{#if visibleAttentionAgents.length > 0}
+			<div class="attention-notifs">
+				{#each visibleAttentionAgents as agent (agent.sessionName)}
+					<div
+						class="attention-notif"
+						class:notif-needs-input={agent.state === 'needs_input'}
+						class:notif-review={agent.state !== 'needs_input'}
+						in:fly={{ y: -10, duration: 180, opacity: 0 }}
+						out:fly={{ y: -8, duration: 130, opacity: 0 }}
+					>
+						<span class="notif-icon">
+							{#if agent.state === 'needs_input'}
+								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" /></svg>
+							{:else}
+								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+							{/if}
+						</span>
+						<div class="notif-body">
+							<span class="notif-agent">{agent.agentName}</span>
+							<span class="notif-state">{agent.state === 'needs_input' ? 'needs input' : 'ready to review'}</span>
+							{#if agent.taskTitle}
+								<span class="notif-task">{agent.taskTitle.length > 40 ? agent.taskTitle.slice(0, 40) + '…' : agent.taskTitle}</span>
+							{/if}
+						</div>
+						<button
+							class="notif-go"
+							onclick={() => {
+								const proj = agentProjects.get(agent.agentName);
+								if (proj) selectedProject = proj;
+								drawerSessionName = agent.sessionName;
+							}}
+							title="Go to session"
+						>Go →</button>
+						<button
+							class="notif-dismiss"
+							onclick={() => {
+								dismissedAttentionSessions = new Set([...dismissedAttentionSessions, agent.sessionName]);
+							}}
+							title="Dismiss"
+						>×</button>
+					</div>
+				{/each}
+			</div>
+		{/if}
+
 		<!-- Selected Project Content -->
 		{#if selectedProject}
 			{@const projectSessions =
@@ -1839,6 +1925,7 @@
 													{projectColors}
 													{taskIntegrations}
 													{browserSessions}
+													{agentOutputs}
 													onKillSession={killSession}
 													onAttachSession={attachSession}
 													onViewTask={(taskId) =>
@@ -1918,6 +2005,7 @@
 													{projectColors}
 													{taskIntegrations}
 													{browserSessions}
+													{agentOutputs}
 													onKillSession={killSession}
 													onAttachSession={attachSession}
 													onViewTask={(taskId) =>
@@ -2313,7 +2401,7 @@
 												>📋</span
 											>
 											<span class="epic-title"
-												>Standalone Tasks</span
+												>Tasks</span
 											>
 											<span class="epic-count"
 												>{epicTasks.length} open</span
@@ -3332,6 +3420,107 @@
 		white-space: pre-wrap;
 		word-break: break-word;
 		margin: 0;
+	}
+
+	/* Attention notifications */
+	.attention-notifs {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		padding: 0.5rem 0.5rem 0;
+	}
+	.attention-notif {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.45rem 0.65rem;
+		border-radius: 8px;
+		border: 1px solid oklch(0.36 0.10 280 / 0.45);
+		background: oklch(0.18 0.03 280 / 0.9);
+		backdrop-filter: blur(6px);
+		font-size: 0.75rem;
+	}
+	.notif-needs-input {
+		border-color: oklch(0.52 0.16 290 / 0.5);
+		background: oklch(0.17 0.04 290 / 0.9);
+	}
+	.notif-review {
+		border-color: oklch(0.50 0.14 180 / 0.45);
+		background: oklch(0.17 0.03 180 / 0.9);
+	}
+	.notif-icon {
+		display: flex;
+		align-items: center;
+		flex-shrink: 0;
+		color: oklch(0.65 0.14 280);
+	}
+	.notif-needs-input .notif-icon { color: oklch(0.68 0.18 290); }
+	.notif-review .notif-icon { color: oklch(0.65 0.16 180); }
+	.notif-body {
+		display: flex;
+		align-items: baseline;
+		gap: 0.35rem;
+		flex: 1;
+		flex-wrap: wrap;
+		min-width: 0;
+	}
+	.notif-agent {
+		font-weight: 600;
+		color: oklch(0.84 0.06 250);
+		white-space: nowrap;
+	}
+	.notif-state {
+		font-size: 0.68rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		white-space: nowrap;
+	}
+	.notif-needs-input .notif-state { color: oklch(0.68 0.18 290); }
+	.notif-review .notif-state { color: oklch(0.65 0.16 180); }
+	.notif-task {
+		color: oklch(0.50 0.04 250);
+		font-size: 0.70rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		max-width: 240px;
+	}
+	.notif-go {
+		font-size: 0.68rem;
+		font-weight: 600;
+		padding: 0.18rem 0.5rem;
+		border-radius: 5px;
+		border: 1px solid oklch(0.40 0.08 250 / 0.4);
+		background: oklch(0.22 0.03 250 / 0.6);
+		color: oklch(0.70 0.10 220);
+		cursor: pointer;
+		white-space: nowrap;
+		flex-shrink: 0;
+		transition: background 0.1s, border-color 0.1s;
+	}
+	.notif-go:hover {
+		background: oklch(0.28 0.06 220 / 0.7);
+		border-color: oklch(0.55 0.12 220 / 0.5);
+	}
+	.notif-dismiss {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 20px;
+		height: 20px;
+		border-radius: 4px;
+		border: none;
+		background: transparent;
+		color: oklch(0.40 0.02 250);
+		cursor: pointer;
+		font-size: 0.9rem;
+		line-height: 1;
+		flex-shrink: 0;
+		transition: color 0.1s, background 0.1s;
+	}
+	.notif-dismiss:hover {
+		color: oklch(0.65 0.04 250);
+		background: oklch(0.22 0.02 250 / 0.5);
 	}
 
 </style>

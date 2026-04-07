@@ -111,6 +111,7 @@
 		projectColors = {},
 		taskIntegrations = {},
 		browserSessions = new Map(),
+		agentOutputs = new Map(),
 		onKillSession,
 		onAttachSession,
 		onViewTask,
@@ -124,12 +125,47 @@
 		projectColors: Record<string, string>;
 		taskIntegrations?: Record<string, { sourceId: string; sourceType: string; sourceName: string; sourceEnabled: boolean }>;
 		browserSessions?: Map<string, number>;
+		agentOutputs?: Map<string, string>;
 		onKillSession?: (sessionName: string) => Promise<void>;
 		onAttachSession?: (sessionName: string) => Promise<void>;
 		onViewTask?: (taskId: string) => void;
 		onMobileCardClick?: (sessionName: string) => void;
 		mobile?: boolean;
 	} = $props();
+
+	// Terminal output helpers (shared with /monitor)
+	function stripAnsi(str: string) {
+		return str
+			.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+			.replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '')
+			.replace(/\x1b[^[\]A-Za-z]/g, '')
+			.replace(/\x1b/g, '')
+			.replace(/\r/g, '');
+	}
+
+	function isStatusLine(line: string): boolean {
+		if (/[▪▫]{3}/.test(line)) return true;
+		if (/·\s*[●⚙○◉⏻]/.test(line)) return true;
+		if (/·\s*\[P\d\]/.test(line)) return true;
+		if (/^[^a-zA-Z]*💬/.test(line)) return true;
+		if (/bypass permissions on/.test(line)) return true;
+		if (/^[\s─]{10,}$/.test(line)) return true;
+		if (/^\s*❯\s*$/.test(line)) return true;
+		return false;
+	}
+
+	function getOutputTail(agentName: string, n: number): string[] {
+		const raw = agentOutputs.get(agentName) || '';
+		if (!raw) return [];
+		const lines = stripAnsi(raw)
+			.split('\n')
+			.map((l: string) => l.trimEnd())
+			.filter((l: string) => !isStatusLine(l));
+		// Find last non-blank line, then take n lines ending there (preserves blanks within window)
+		let end = lines.length;
+		while (end > 0 && lines[end - 1] === '') end--;
+		return lines.slice(Math.max(0, end - n), end);
+	}
 
 	// Status and priority colors
 	const statusColors: Record<string, string> = {
@@ -244,6 +280,8 @@
 	// Per-action visual feedback — tracks which button was just clicked per session
 	// key: "sessionName:actionId", value: feedback variant ('success' | 'warning' | 'error' | 'info' | 'working')
 	let actionFeedback = $state<Map<string, string>>(new Map());
+	// Mobile card hover tracking for output preview expansion
+	let hoveredMobileCard = $state<string | null>(null);
 
 	// Per-session auto-complete disabled state (when user manually overrides)
 	let autoCompleteDisabledMap = $state<Map<string, boolean>>(new Map());
@@ -1354,6 +1392,8 @@
 					ontouchmove={handleSwipeTouchMove}
 					ontouchend={handleSwipeTouchEnd}
 					ontouchcancel={handleSwipeTouchEnd}
+					onmouseenter={() => hoveredMobileCard = session.name}
+					onmouseleave={() => hoveredMobileCard = null}
 				>
 				{#if session.type === 'server'}
 					<!-- Server session -->
@@ -1385,6 +1425,7 @@
 					{@const typeVisual = getIssueTypeVisual(sessionTask.issue_type)}
 					{@const harness = getTaskHarness(sessionTask)}
 					{@const cardActions = getSessionStateActions(effectiveState)}
+					{@const mobileOutputLines = getOutputTail(sessionAgentName, hoveredMobileCard === session.name ? 15 : 3)}
 					<div class="mobile-card-inner">
 						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};">
 							<AgentAvatar name={sessionAgentName} size={36} showRing={true} sessionState={effectiveState} />
@@ -1413,6 +1454,13 @@
 							</span>
 							{#if sessionTask.description}
 								<span class="mobile-description" title={sessionTask.description}>{sessionTask.description}</span>
+							{/if}
+							{#if mobileOutputLines.length > 0}
+								<div class="output-preview mobile-output-preview" style={rowProjectColor ? `--output-accent: ${rowProjectColor};` : ''}>
+									{#each mobileOutputLines as line}
+										<div class="output-line">{line}</div>
+									{/each}
+								</div>
 							{/if}
 							<div class="mobile-card-row2">
 								<span class="mobile-task-id" style="color: {statusDotColor};">{sessionTask.id}</span>
@@ -1626,6 +1674,7 @@
 								<div class="task-cell-content">
 									{#if sessionTask}
 										{@const animateText = isNew && hadTaskOnEntry}
+										{@const outputLines = getOutputTail(sessionAgentName, 5)}
 										<div class="badge-and-text">
 											<TaskIdBadge
 												task={sessionTask}
@@ -1649,6 +1698,16 @@
 												{#if sessionTask.description}
 													<div class="task-description {animateText ? 'tracking-in-expand' : ''}" style={animateText ? 'animation-delay: 100ms;' : ''}>
 														<FxText text={sessionTask.description} context={activeTaskCtx(sessionTask)} />
+													</div>
+												{/if}
+												{#if outputLines.length > 0}
+													<div
+														class="output-preview"
+														style={rowProjectColor ? `--output-accent: ${rowProjectColor};` : ''}
+													>
+														{#each outputLines as line}
+															<div class="output-line">{line}</div>
+														{/each}
 													</div>
 												{/if}
 											</div>
@@ -2878,6 +2937,40 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	/* Live terminal output preview */
+	.output-preview {
+		margin-top: 0.4rem;
+		padding: 0.28rem 0.5rem 0.28rem 0.55rem;
+		border-left: 2px solid var(--output-accent, oklch(0.38 0.04 250));
+		background: oklch(0.11 0.01 240 / 0.7);
+		border-radius: 0 4px 4px 0;
+		font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+		font-size: 0.63rem;
+		line-height: 1.45;
+		color: oklch(0.44 0.04 155);
+		/* Desktop: show 2 lines by default, expand on row hover */
+		max-height: calc(2 * 1.45 * 0.63rem + 0.6rem);
+		overflow: hidden;
+		transition: max-height 0.22s ease-out, color 0.15s, background 0.15s;
+		cursor: default;
+	}
+	.session-row:hover .output-preview {
+		max-height: calc(5 * 1.45 * 0.63rem + 0.6rem);
+		color: oklch(0.58 0.07 155);
+		background: oklch(0.13 0.015 240 / 0.8);
+	}
+	/* Mobile: no max-height clipping — line count controlled in template via hoveredMobileCard */
+	.mobile-output-preview {
+		max-height: none;
+		margin-top: 0.35rem;
+		font-size: 0.65rem;
+	}
+	.output-line {
+		white-space: pre;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.agent-badge-row {

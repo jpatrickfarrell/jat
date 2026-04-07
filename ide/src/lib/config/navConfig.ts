@@ -99,6 +99,20 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			category: 'work'
 		},
 		{
+			id: 'triage',
+			label: 'Triage',
+			href: '/triage',
+			icon: 'radar',
+			category: 'work'
+		},
+		{
+			id: 'monitor',
+			label: 'Monitor',
+			href: '/monitor',
+			icon: 'tmux',
+			category: 'work'
+		},
+		{
 			id: 'sessions',
 			label: 'Sessions',
 			href: '/sessions',

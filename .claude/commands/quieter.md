@@ -1,0 +1,1 @@
+/home/jw/code/jat/.agents/skills/quieter//SKILL.md

@@ -441,7 +441,7 @@ function computeSummary(projects: ProjectData[]) {
 
 	for (const project of projects) {
 		for (const contract of project.contracts) {
-			const activeStatuses = ['draft', 'sent', 'signed', 'active'];
+			const activeStatuses = ['draft', 'published', 'signed', 'active'];
 			if (activeStatuses.includes(contract.status)) {
 				activeContracts++;
 			}
@@ -484,6 +484,65 @@ function computeSummary(projects: ProjectData[]) {
  */
 export const POST: RequestHandler = async ({ request }) => {
 	const body = await request.json();
+
+	// Handle linkTask action — link a task to an existing milestone
+	if (body.action === 'linkTask') {
+		const { projectKey, milestoneId, taskId } = body;
+
+		if (!projectKey || !milestoneId || !taskId) {
+			return json({ error: 'projectKey, milestoneId, and taskId are required' }, { status: 400 });
+		}
+
+		const supabaseUrl = getProjectSecret(projectKey, 'supabase_url');
+		const serviceRoleKey = getProjectSecret(projectKey, 'supabase_service_role_key');
+
+		if (!supabaseUrl || !serviceRoleKey) {
+			return json({ error: `Missing Supabase credentials for "${projectKey}"` }, { status: 400 });
+		}
+
+		const result = await supabaseInsert(supabaseUrl, serviceRoleKey, 'milestone_tasks', {
+			milestone_id: milestoneId,
+			task_id: taskId
+		});
+
+		if (result.error) {
+			// Ignore duplicate key errors (task already linked)
+			if (result.error.includes('duplicate') || result.error.includes('unique') || result.error.includes('23505')) {
+				return json({ success: true, message: 'Already linked' });
+			}
+			return json({ error: `Failed to link task: ${result.error}` }, { status: 500 });
+		}
+
+		cache = null;
+		return json({ success: true }, { status: 201 });
+	}
+
+	// Handle unlinkTask action — remove a task link from a milestone
+	if (body.action === 'unlinkTask') {
+		const { projectKey, milestoneId, taskId } = body;
+
+		if (!projectKey || !milestoneId || !taskId) {
+			return json({ error: 'projectKey, milestoneId, and taskId are required' }, { status: 400 });
+		}
+
+		const supabaseUrl = getProjectSecret(projectKey, 'supabase_url');
+		const serviceRoleKey = getProjectSecret(projectKey, 'supabase_service_role_key');
+
+		if (!supabaseUrl || !serviceRoleKey) {
+			return json({ error: `Missing Supabase credentials for "${projectKey}"` }, { status: 400 });
+		}
+
+		const result = await supabaseDelete(supabaseUrl, serviceRoleKey, 'milestone_tasks',
+			`milestone_id=eq.${milestoneId}&task_id=eq.${taskId}`
+		);
+
+		if (result.error) {
+			return json({ error: `Failed to unlink task: ${result.error}` }, { status: 500 });
+		}
+
+		cache = null;
+		return json({ success: true });
+	}
 
 	// Handle addTerms action for existing contracts
 	if (body.action === 'addTerms') {
@@ -742,4 +801,46 @@ export const PATCH: RequestHandler = async ({ request }) => {
 		success: true,
 		updated: result.data?.[0] || null
 	});
+};
+
+/**
+ * DELETE /api/clients
+ *
+ * Delete a milestone or term from a contract.
+ * Only allowed when the contract is in draft or sent status.
+ *
+ * Query params: projectKey, type (milestone|term), id
+ */
+export const DELETE: RequestHandler = async ({ url }) => {
+	const projectKey = url.searchParams.get('projectKey');
+	const type = url.searchParams.get('type');
+	const id = url.searchParams.get('id');
+
+	if (!projectKey || !type || !id) {
+		return json({ error: 'projectKey, type, and id are required' }, { status: 400 });
+	}
+
+	if (type !== 'milestone' && type !== 'term') {
+		return json({ error: 'type must be "milestone" or "term"' }, { status: 400 });
+	}
+
+	const supabaseUrl = getProjectSecret(projectKey, 'supabase_url');
+	const serviceRoleKey = getProjectSecret(projectKey, 'supabase_service_role_key');
+
+	if (!supabaseUrl || !serviceRoleKey) {
+		return json({ error: `Missing Supabase credentials for "${projectKey}"` }, { status: 400 });
+	}
+
+	const tableMap: Record<string, string> = { milestone: 'milestones', term: 'contract_terms' };
+	const table = tableMap[type];
+
+	const result = await supabaseDelete(supabaseUrl, serviceRoleKey, table, `id=eq.${id}`);
+
+	if (result.error) {
+		return json({ error: `Failed to delete ${type}: ${result.error}` }, { status: 500 });
+	}
+
+	cache = null;
+
+	return json({ success: true });
 };

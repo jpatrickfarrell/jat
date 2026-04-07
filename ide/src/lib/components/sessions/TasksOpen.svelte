@@ -118,6 +118,27 @@
 	// Uses bottom/left to drop up and to the left for better visibility
 	let agentPickerPosition = $state<{ bottom: number; left: number } | null>(null);
 
+	// === Haptic feedback ===
+	function haptic(ms = 8) {
+		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(ms);
+	}
+
+	// === Long-press → multi-select ===
+	let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+	let longPressActive = $state(false); // true while in selection mode
+
+	function startLongPress(taskId: string) {
+		longPressTimer = setTimeout(() => {
+			haptic(30); // stronger pulse for mode change
+			longPressActive = true;
+			toggleTask(taskId);
+		}, 500);
+	}
+
+	function cancelLongPress() {
+		if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+	}
+
 	// === Bulk Selection ===
 	let selectedTasks = $state<Set<string>>(new Set());
 	let lastClickedTaskId = $state<string | null>(null);
@@ -130,6 +151,168 @@
 	// === Single-task Harness Picker ===
 	let harnessPickerTaskId = $state<string | null>(null);
 	let harnessPickerPos = $state({ x: 0, y: 0, openUp: false, maxH: 0 });
+
+	// === Pull-to-refresh (mobile) ===
+	const PTR_THRESHOLD = 72;
+	let ptrTouchStartY = 0;
+	let ptrPull = $state(0);
+	let ptrRefreshing = $state(false);
+	let sectionEl = $state<HTMLElement | null>(null);
+
+	onMount(() => {
+		function onPtrTouchStart(e: TouchEvent) {
+			ptrTouchStartY = e.touches[0].clientY;
+		}
+		function onPtrTouchMove(e: TouchEvent) {
+			if (ptrRefreshing || swipeState) return;
+			if (window.scrollY > 10) return;
+			const dy = e.touches[0].clientY - ptrTouchStartY;
+			if (dy > 0) {
+				ptrPull = Math.min(dy * 0.55, PTR_THRESHOLD * 1.4);
+				if (dy > 20) e.preventDefault();
+			} else if (ptrPull > 0) {
+				ptrPull = 0;
+			}
+		}
+		function onPtrTouchEnd() {
+			if (ptrPull >= PTR_THRESHOLD && !ptrRefreshing) {
+				haptic(20);
+				ptrRefreshing = true;
+				ptrPull = 0;
+				const result = (onRetry as () => unknown)();
+				const done = () => setTimeout(() => { ptrRefreshing = false; }, 500);
+				if (result instanceof Promise) result.finally(done); else done();
+			} else {
+				ptrPull = 0;
+			}
+		}
+		function onPtrTouchCancel() { ptrPull = 0; }
+
+		// Wait for sectionEl to be bound
+		const el = sectionEl;
+		if (!el) return;
+		el.addEventListener('touchstart', onPtrTouchStart, { passive: true });
+		el.addEventListener('touchmove', onPtrTouchMove, { passive: false });
+		el.addEventListener('touchend', onPtrTouchEnd, { passive: true });
+		el.addEventListener('touchcancel', onPtrTouchCancel, { passive: true });
+		return () => {
+			el.removeEventListener('touchstart', onPtrTouchStart);
+			el.removeEventListener('touchmove', onPtrTouchMove);
+			el.removeEventListener('touchend', onPtrTouchEnd);
+			el.removeEventListener('touchcancel', onPtrTouchCancel);
+		};
+	});
+
+	// === Swipe-to-reveal (mobile) ===
+	const SWIPE_DEADZONE = 10;
+	const SWIPE_THRESHOLD = 80;
+	const SWIPE_COMMIT_THRESHOLD = 140;
+	const VELOCITY_THRESHOLD = 0.5;
+	const SWIPE_TRAY_WIDTH = 90;
+
+	interface SwipeState {
+		taskId: string;
+		startX: number;
+		startY: number;
+		startTime: number;
+		swiping: boolean;
+		committed: boolean;
+	}
+
+	let swipeState = $state<SwipeState | null>(null);
+	let swipeOffsets = $state<Map<string, number>>(new Map());
+
+	function handleSwipeTouchStart(e: TouchEvent, taskId: string) {
+		if (e.touches.length !== 1) return;
+		const touch = e.touches[0];
+		swipeState = { taskId, startX: touch.clientX, startY: touch.clientY, startTime: Date.now(), swiping: false, committed: false };
+	}
+
+	function handleSwipeTouchMove(e: TouchEvent) {
+		if (!swipeState || swipeState.committed) return;
+		const touch = e.touches[0];
+		const deltaX = touch.clientX - swipeState.startX;
+		const deltaY = touch.clientY - swipeState.startY;
+		if (!swipeState.swiping) {
+			if (Math.abs(deltaY) > SWIPE_DEADZONE) { swipeState = null; return; }
+			if (Math.abs(deltaX) > SWIPE_DEADZONE) { swipeState.swiping = true; } else { return; }
+		}
+		e.preventDefault();
+		const maxOffset = SWIPE_TRAY_WIDTH;
+		let clamped = deltaX;
+		if (Math.abs(deltaX) > maxOffset) {
+			clamped = Math.sign(deltaX) * (maxOffset + (Math.abs(deltaX) - maxOffset) * 0.3);
+		}
+		const m = new Map(swipeOffsets);
+		m.set(swipeState.taskId, clamped);
+		swipeOffsets = m;
+	}
+
+	function handleSwipeTouchEnd(task: Task) {
+		if (!swipeState || swipeState.committed) { swipeState = null; return; }
+		const { taskId, swiping } = swipeState;
+		if (!swiping) { swipeState = null; return; }
+		const offset = swipeOffsets.get(taskId) || 0;
+		const elapsed = Date.now() - swipeState.startTime;
+		const velocity = Math.abs(offset) / elapsed;
+		const isCommit = Math.abs(offset) >= SWIPE_COMMIT_THRESHOLD || (velocity >= VELOCITY_THRESHOLD && Math.abs(offset) > SWIPE_THRESHOLD);
+		if (isCommit) {
+			swipeState.committed = true;
+			haptic();
+			if (offset > 0) {
+				onSpawnTask(task, { agentId: null, model: null });
+			} else {
+				handleRowClick(taskId);
+			}
+		}
+		resetSwipe(taskId);
+		swipeState = null;
+	}
+
+	// Avatar tap on mobile → open AgentSelector (harness picker)
+	function handleAvatarTap(e: TouchEvent, task: Task) {
+		e.stopPropagation();
+		haptic(12);
+		harnessPickerTaskId = task.id;
+		harnessPickerPos = {
+			x: Math.max(8, window.innerWidth / 2 - 160),
+			y: 80,
+			openUp: false,
+			maxH: window.innerHeight - 160
+		};
+	}
+
+	function resetSwipe(taskId: string) {
+		const m = new Map(swipeOffsets);
+		m.set(taskId, 0);
+		swipeOffsets = m;
+		setTimeout(() => {
+			const m2 = new Map(swipeOffsets);
+			m2.delete(taskId);
+			swipeOffsets = m2;
+		}, 300);
+	}
+
+	// === Sort ===
+	type SortBy = 'due' | 'priority' | 'created' | 'title';
+	let sortBy = $state<SortBy>('due');
+	let sortDir = $state<'asc' | 'desc'>('asc');
+
+	function cycleSortDir(field: SortBy) {
+		if (sortBy === field) {
+			sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+		} else {
+			sortBy = field;
+			sortDir = 'asc';
+		}
+		// Re-sort taskOrder immediately with FLIP animation
+		taskOrder = [...taskOrder].sort((a, b) => {
+			const ta = previousTaskObjects.get(a);
+			const tb = previousTaskObjects.get(b);
+			if (!ta || !tb) return 0;
+			return compareTaskSort(ta, tb);
+		});
+	}
 
 	// === Due Date Picker ===
 	let dueDatePickerTaskId = $state<string | null>(null);
@@ -391,6 +574,7 @@
 		lastClickedTaskId = null;
 		priorityDropdownOpen = false;
 		harnessDropdownOpen = false;
+		longPressActive = false;
 	}
 
 	async function handleBulkDelete() {
@@ -1038,21 +1222,47 @@
 		return Array.from(projects).sort();
 	});
 
-	// Task sort comparator: due date (has due date first) → priority (P0 first) → age (newest first)
+	// Task sort comparator — respects sortBy / sortDir
 	function compareTaskSort(a: Task, b: Task): number {
-		// 1. Has due date first (tasks with due_date above those without)
-		const aHasDue = a.due_date ? 1 : 0;
-		const bHasDue = b.due_date ? 1 : 0;
-		if (aHasDue !== bHasDue) return bHasDue - aHasDue;
+		const dir = sortDir === 'asc' ? 1 : -1;
 
-		// 2. Priority (P0 first)
-		if (a.priority !== b.priority) return a.priority - b.priority;
+		if (sortBy === 'due') {
+			// Tasks with due dates first (asc = soonest first; no-due always last)
+			const aHasDue = a.due_date ? 1 : 0;
+			const bHasDue = b.due_date ? 1 : 0;
+			if (aHasDue !== bHasDue) return bHasDue - aHasDue; // no-due always last regardless of dir
+			if (a.due_date && b.due_date) {
+				const diff = new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+				if (diff !== 0) return diff * dir;
+			}
+			// Fallback: priority
+			return a.priority - b.priority;
+		}
 
-		// 3. Age: newest first (later created_at first)
-		if (a.created_at && b.created_at) {
-			const aTime = new Date(a.created_at).getTime();
-			const bTime = new Date(b.created_at).getTime();
-			if (aTime !== bTime) return bTime - aTime;
+		if (sortBy === 'priority') {
+			if (a.priority !== b.priority) return (a.priority - b.priority) * dir;
+			// Fallback: due date, then age
+			const aHasDue = a.due_date ? 1 : 0;
+			const bHasDue = b.due_date ? 1 : 0;
+			if (aHasDue !== bHasDue) return bHasDue - aHasDue;
+			if (a.created_at && b.created_at) {
+				return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+			}
+			return 0;
+		}
+
+		if (sortBy === 'created') {
+			if (a.created_at && b.created_at) {
+				const diff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+				if (diff !== 0) return diff * dir; // asc = oldest first
+			}
+			return 0;
+		}
+
+		if (sortBy === 'title') {
+			const cmp = a.title.localeCompare(b.title);
+			if (cmp !== 0) return cmp * dir;
+			return 0;
 		}
 
 		return 0;
@@ -1443,7 +1653,7 @@
 
 </script>
 
-<section class="open-tasks-section" class:no-header={!showHeader} class:has-selection={selectionCount > 0}>
+<section class="open-tasks-section" class:no-header={!showHeader} class:has-selection={selectionCount > 0} bind:this={sectionEl}>
 	{#if showHeader}
 		<div class="section-header">
 			<h2>Open Tasks</h2>
@@ -1557,8 +1767,64 @@
 				</button>
 			</div>
 		{/if}
-		{#if mobile}
-		<!-- MOBILE LAYOUT: Card-based with FLIP sort animations -->
+		<!-- Pull-to-refresh indicator -->
+		{#if ptrPull > 0 || ptrRefreshing}
+			{@const progress = Math.min(ptrPull / PTR_THRESHOLD, 1)}
+			<div class="ptr-indicator" style="height: {ptrRefreshing ? 44 : Math.round(ptrPull)}px; opacity: {ptrRefreshing ? 1 : progress}">
+				{#if ptrRefreshing}
+					<svg class="ptr-spinner" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M4 12a8 8 0 0116 0" />
+					</svg>
+				{:else}
+					<svg
+						xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"
+						style="transform: rotate({Math.round(progress * 180)}deg); transition: transform 0.1s;"
+					>
+						<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+					</svg>
+				{/if}
+			</div>
+		{/if}
+
+		<!-- Sort header bar — mirrors card columns exactly -->
+		<div class="tasks-sort-bar">
+			<!-- Spacer: checkbox col (hidden mobile) -->
+			<div class="sort-bar-checkbox-spacer"></div>
+			<!-- Spacer: avatar col -->
+			<div class="sort-bar-avatar-spacer"></div>
+			<!-- Task body col: flex-1, contains sort pills for title/priority/age -->
+			<div class="sort-bar-task">
+				<span class="sort-bar-label">Task</span>
+				<div class="sort-bar-pills">
+					<button
+						class="sort-pill"
+						class:sort-active={sortBy === 'priority'}
+						onclick={() => cycleSortDir('priority')}
+					>Pri{#if sortBy === 'priority'} {sortDir === 'asc' ? '↑' : '↓'}{/if}</button>
+					<button
+						class="sort-pill"
+						class:sort-active={sortBy === 'created'}
+						onclick={() => cycleSortDir('created')}
+					>Age{#if sortBy === 'created'} {sortDir === 'asc' ? '↑' : '↓'}{/if}</button>
+					<button
+						class="sort-pill"
+						class:sort-active={sortBy === 'title'}
+						onclick={() => cycleSortDir('title')}
+					>A–Z{#if sortBy === 'title'} {sortDir === 'asc' ? '↑' : '↓'}{/if}</button>
+				</div>
+			</div>
+			<!-- Due date col — must be exactly 56px to align with card -->
+			<button
+				class="sort-bar-col sort-bar-due"
+				class:sort-active={sortBy === 'due'}
+				onclick={() => cycleSortDir('due')}
+			>
+				Due
+				{#if sortBy === 'due'}<span class="sort-arrow">{sortDir === 'asc' ? '↑' : '↓'}</span>{/if}
+			</button>
+		</div>
+
+		<!-- SwipeCard layout — always on, all viewports -->
 		<div class="mobile-tasks-list">
 			{#each orderedTasks as { task, isExiting, isNew } (task.id)}
 				{@const projectColor = getProjectColorReactive(task.id)}
@@ -1567,18 +1833,58 @@
 				{@const taskAge = getTaskAge(task.created_at)}
 				{@const harness = getTaskHarness(task)}
 				{@const integration = taskIntegrations[task.id] || null}
+				{@const swipeOffset = swipeOffsets.get(task.id) || 0}
+				{@const isSwiping = swipeState?.taskId === task.id && swipeState.swiping}
+				<!-- Swipe container: holds revealed trays + sliding card -->
 				<div
 					animate:flip={{ duration: 300, easing: cubicOut }}
-					class="mobile-task-card {isBlocked && !isExiting ? 'mobile-task-blocked' : ''} {isNew ? 'animate-slide-in-fwd-center' : ''} {isExiting ? 'animate-slide-out-bck-center' : ''}"
-					style="{isExiting ? ' pointer-events: none;' : ''}"
+					class="open-swipe-container {isNew ? 'animate-slide-in-fwd-center' : ''} {isExiting ? 'animate-slide-out-bck-center' : ''}"
+				>
+					<!-- Left tray: right-swipe → Launch -->
+					<div class="open-swipe-tray open-swipe-tray-left" class:open-swipe-tray-visible={swipeOffset > SWIPE_DEADZONE}>
+						<button class="open-swipe-action open-swipe-action-launch" onclick={() => { onSpawnTask(task, { agentId: null, model: null }); resetSwipe(task.id); }}>
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="22" height="22"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" /></svg>
+							<span>Launch</span>
+						</button>
+					</div>
+					<!-- Right tray: left-swipe → Details -->
+					<div class="open-swipe-tray open-swipe-tray-right" class:open-swipe-tray-visible={swipeOffset < -SWIPE_DEADZONE}>
+						<button class="open-swipe-action open-swipe-action-details" onclick={() => { handleRowClick(task.id); resetSwipe(task.id); }}>
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="22" height="22"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178zM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z" /></svg>
+							<span>Details</span>
+						</button>
+					</div>
+				<div
+					class="mobile-task-card {isBlocked && !isExiting ? 'mobile-task-blocked' : ''} {longPressActive && selectedTasks.has(task.id) ? 'mobile-task-selected' : ''}"
+					style="{isExiting ? 'pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(task.id) ? 'transition: transform 0.3s cubic-bezier(0.25,0.46,0.45,0.94);' : ''}"
 					role="button" tabindex="0"
-					onclick={() => !isExiting && handleRowClick(task.id)}
-					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); !isExiting && handleRowClick(task.id); } }}
+					onclick={() => {
+						if (isExiting || swipeState?.swiping) return;
+						if (longPressActive) { haptic(8); toggleTask(task.id); }
+						else handleRowClick(task.id);
+					}}
+					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); !isExiting && !swipeState?.swiping && handleRowClick(task.id); } }}
 					oncontextmenu={(e) => !isExiting && handleContextMenu(task, e)}
+					ontouchstart={(e) => { handleSwipeTouchStart(e, task.id); startLongPress(task.id); }}
+					ontouchmove={(e) => { cancelLongPress(); handleSwipeTouchMove(e); }}
+					ontouchend={() => { cancelLongPress(); handleSwipeTouchEnd(task); }}
+					ontouchcancel={() => { cancelLongPress(); handleSwipeTouchEnd(task); }}
 				>
 					<div class="mobile-task-inner">
-						<!-- Left: circular avatar (harness logo, human icon, integration logo, or type icon) -->
-						<div class="mobile-task-avatar" style="{projectColor ? `border-color: ${projectColor};` : ''}">
+						<!-- Bulk checkbox: hidden on mobile unless long-press selection mode active -->
+						<div class="card-checkbox-col {longPressActive ? 'card-checkbox-col-active' : ''}" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="presentation">
+							<input
+								type="checkbox"
+								class="card-checkbox"
+								checked={selectedTasks.has(task.id)}
+								onclick={(e) => { e.stopPropagation(); haptic(8); toggleTask(task.id); }}
+							/>
+						</div>
+
+						<!-- Left: circular avatar — tap on mobile → harness picker -->
+						<div class="mobile-task-avatar" style="{projectColor ? `border-color: ${projectColor};` : ''}"
+							ontouchend={(e) => handleAvatarTap(e, task)}
+						>
 							{#if isHumanTask(task)}
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="oklch(0.70 0.12 45)" width="22" height="22">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
@@ -1649,14 +1955,23 @@
 							</div>
 						</div>
 
-						<!-- Right: blocked / human indicator (launch handled by HarnessTray) -->
-						{#if isHumanTask(task)}
-							<div class="mobile-task-action-col mobile-task-action-human" title="Human task — complete manually">
-								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="18" height="18">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-								</svg>
-							</div>
-						{:else if isBlocked}
+						<!-- Right: due date column (always visible, click to edit) -->
+						<button
+							class="mobile-task-duedate"
+							onclick={(e) => { e.stopPropagation(); openDueDatePicker(task, e); }}
+							title={task.due_date ? task.due_date : 'Set due date'}
+						>
+							{#if task.due_date}
+								{@const timeStr = formatDueTime(task.due_date)}
+								<span style="color: {getDueDateColor(task.due_date)};">{formatDueDate(task.due_date)}</span>
+								{#if timeStr}<span class="mobile-duedate-time">{timeStr}</span>{/if}
+							{:else}
+								<span class="mobile-duedate-empty">+</span>
+							{/if}
+						</button>
+
+						<!-- Right: blocked indicator only (human shown via amber avatar on left) -->
+						{#if isBlocked}
 							<div class="mobile-task-action-col mobile-task-action-blocked" title="Blocked">
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="18" height="18">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" />
@@ -1665,247 +1980,10 @@
 						{/if}
 					</div>
 				</div>
+			</div><!-- /open-swipe-container -->
 			{/each}
 		</div>
-		{:else}
-		<!-- DESKTOP LAYOUT: Table-based -->
-		<div class="tasks-table-wrapper">
-			<table class="tasks-table" onmousedown={(e) => { if (e.shiftKey) e.preventDefault(); }}>
-				<thead>
-					<tr>
-						<th class="th-checkbox">
-							<input
-								type="checkbox"
-								class="bulk-checkbox select-all-checkbox"
-								checked={allVisibleSelected}
-								indeterminate={someVisibleSelected}
-								onclick={(e) => { e.stopPropagation(); toggleAllVisible(); }}
-							/>
-						</th>
-						<th class="th-task">Task</th>
-						<th class="th-attachment"></th>
-						<th class="th-due-date">Due</th>
-						<th class="th-actions">Actions</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each orderedTasks as { task, isExiting, isNew } (task.id)}
-						{@const projectColor = getProjectColorReactive(task.id)}
-						{@const isBlocked = hasUnresolvedBlockers(task)}
-						{@const blockReason = isBlocked ? getBlockingReason(task) : ''}
-						{@const unresolvedBlockers = task.depends_on?.filter(d => d.status !== 'closed') || []}
-						{@const blockedTasks = blockedByMap.get(task.id) || []}
-						{@const isSelected = selectedTasks.has(task.id)}
-						{@const harness = getTaskHarness(task)}
-						{@const isSwarmHighlighted = highlightedTaskIds.has(task.id)}
-						{@const taskAttachments = taskImages?.[task.id]}
-						<tr
-							class="task-row {isBlocked && !isExiting ? 'opacity-70' : ''} {isNew ? 'animate-slide-in-fwd-center' : ''} {isExiting ? 'animate-slide-out-bck-center' : ''} {isSelected ? 'selected-row' : ''} {isSwarmHighlighted ? 'swarm-highlight' : ''}"
-							style="{projectColor ? `border-left: 3px solid ${projectColor};` : ''}{isExiting ? ' pointer-events: none;' : ''}"
-							onclick={() => !isExiting && handleRowClick(task.id)}
-							onmouseenter={() => { hoveredTaskId = task.id; }}
-							onmouseleave={() => { if (hoveredTaskId === task.id) hoveredTaskId = null; }}
-							oncontextmenu={(e) => !isExiting && handleContextMenu(task, e)}
-						>
-							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-							<td class="td-checkbox" style={isExiting ? 'background: transparent;' : ''} onclick={(e) => { e.stopPropagation(); toggleTask(task.id, e); }}>
-								<input
-									type="checkbox"
-									class="bulk-checkbox"
-									checked={isSelected}
-									style="pointer-events: none;"
-								/>
-							</td>
-							<td class="td-task" style={isExiting ? 'background: transparent;' : ''}>
-								<div class="task-cell-content">
-									<div class="badge-and-text">
-										<TaskIdBadge
-											{task}
-											size="sm"
-											variant="agentPill"
-											integration={taskIntegrations[task.id] || null}
-											onClick={() => !isExiting && handleRowClick(task.id)}
-											animate={isNew}
-											{harness}
-											onHarnessClick={(e) => {
-												e.stopPropagation();
-												harnessPickerTaskId = task.id;
-												const rect = (e.target as HTMLElement).getBoundingClientRect();
-												const selectorWidth = 300;
-												// Position to the right of the avatar, clamped to viewport edges
-												const left = Math.min(rect.right + 8, window.innerWidth - selectorWidth - 16);
-												// Decide: open up or down based on available space
-												const spaceBelow = window.innerHeight - rect.top;
-												const spaceAbove = rect.bottom;
-												const openUp = spaceBelow < 480 && spaceAbove > spaceBelow;
-												const y = openUp ? (window.innerHeight - rect.bottom) : Math.max(16, rect.top);
-												const maxH = (openUp ? spaceAbove : spaceBelow) - 16;
-												harnessPickerPos = { x: left, y, openUp, maxH };
-											}}
-										/>
-										<div class="text-column">
-											<span class="task-title {isNew ? 'tracking-in-expand' : ''}" style={isNew ? 'animation-delay: 100ms;' : ''} title={task.title}>
-												<FxText text={task.title} context={taskCtx(task)} />
-												{#if epicsReadyForVerification.has(task.id)}
-													<span style="display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 1px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em; background: oklch(0.55 0.15 200 / 0.25); color: oklch(0.80 0.15 200); border: 1px solid oklch(0.55 0.15 200 / 0.4); vertical-align: middle;" title="All children complete — epic ready for verification">
-														<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style="width: 10px; height: 10px;">
-															<path fill-rule="evenodd" d="M4.606 12.97a.75.75 0 0 1-.134 1.051 2.494 2.494 0 0 0-.93 2.437 2.494 2.494 0 0 0 2.437-.93.75.75 0 1 1 1.186.918 3.995 3.995 0 0 1-4.482 1.332.75.75 0 0 1-.461-.461 3.994 3.994 0 0 1 1.332-4.482.75.75 0 0 1 1.052.134Z" clip-rule="evenodd" />
-															<path fill-rule="evenodd" d="M5.752 12A13.07 13.07 0 0 0 8 14.248l4.47-4.47A12.03 12.03 0 0 0 16 5.5 12.03 12.03 0 0 0 11.722 9l-.002.002L7.28 13.47A13.07 13.07 0 0 0 5.752 12ZM16 4.5a.75.75 0 0 1 .75.75v.217c0 3.528-1.55 6.885-4.234 9.16l.017-.013-.003.002A14.573 14.573 0 0 1 8 17.806a.75.75 0 0 1-.553-.098.75.75 0 0 1-.198-.146A14.573 14.573 0 0 1 4.5 12.53l.002-.003-.013.017A12.78 12.78 0 0 1 13.533 3.75H13.75a.75.75 0 0 1 .75.75Z" clip-rule="evenodd" />
-														</svg>
-														VERIFY
-													</span>
-												{/if}
-											</span>
-											{#if task.description}
-												<div class="task-description {isNew ? 'tracking-in-expand' : ''}" style={isNew ? 'animation-delay: 100ms;' : ''}>
-													<FxText text={task.description} context={taskCtx(task)} />
-												</div>
-											{/if}
-										</div>
-									</div>
-								</div>
-							</td>
-							<td class="td-attachment" style={isExiting ? 'background: transparent;' : ''}>
-								{#if taskAttachments && taskAttachments.length > 0}
-									{@const firstTypeInfo = getFileTypeInfoFromPath(taskAttachments[0].path)}
-									<div class="attachment-thumb" role="button" tabindex="0" onclick={(e) => { e.stopPropagation(); window.open(`/api/work/image/${encodeURIComponent(taskAttachments[0].path)}`, '_blank'); }} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); window.open(`/api/work/image/${encodeURIComponent(taskAttachments[0].path)}`, '_blank'); } }} title="View attachment">
-										{#if firstTypeInfo.category === 'image'}
-											<img src={`/api/work/image/${encodeURIComponent(taskAttachments[0].path)}`} alt="" class="attachment-thumb-img" />
-										{:else}
-											<svg class="w-5 h-5" style="color: {firstTypeInfo.color};" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-												<path stroke-linecap="round" stroke-linejoin="round" d={firstTypeInfo.icon} />
-											</svg>
-										{/if}
-										{#if taskAttachments.length > 1}
-											<span class="attachment-count">+{taskAttachments.length - 1}</span>
-										{/if}
-									</div>
-								{/if}
-							</td>
-							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-							<td class="td-due-date" style={isExiting ? 'background: transparent;' : ''} onclick={(e) => { if (!isExiting) openDueDatePicker(task, e); }}>
-								{#if task.due_date}
-									{@const timeStr = formatDueTime(task.due_date)}
-									<span class="due-date-display" style="color: {getDueDateColor(task.due_date)}" title={task.due_date}>
-										{formatDueDate(task.due_date)}
-										{#if timeStr}
-											<span class="due-date-time-display">{timeStr}</span>
-										{/if}
-									</span>
-								{:else}
-									<span class="due-date-empty">
-										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14" style="opacity: 0;">
-											<rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
-										</svg>
-									</span>
-								{/if}
-							</td>
-							<td class="td-actions" style={isExiting ? 'background: transparent;' : ''}>
-								<div class="relative flex items-center justify-center">
-									{#if isHumanTask(task)}
-										<!-- Human task: show person icon (unclickable) instead of rocket -->
-										<div
-											class="w-7 h-7 flex items-center justify-center opacity-50 cursor-default"
-											title="Human task — complete manually"
-										>
-											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4" style="color: oklch(0.70 0.18 45);">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-											</svg>
-										</div>
-									{:else}
-									<!-- Agent picker dropdown (shown when Alt+click) -->
-									{#if agentPickerOpen && agentPickerTask?.id === task.id && agentPickerPosition}
-										<!-- svelte-ignore a11y_no_static_element_interactions -->
-										<!-- svelte-ignore a11y_click_events_have_key_events -->
-										<!-- Backdrop -->
-										<div class="fixed inset-0 z-40" onclick={handleAgentPickerCancel}></div>
-										<!-- Agent selector with fixed positioning to escape overflow containers -->
-										<!-- Drops up and to the left for better visibility -->
-										<!-- svelte-ignore a11y_no_static_element_interactions -->
-										<!-- svelte-ignore a11y_click_events_have_key_events -->
-										<div
-											class="fixed z-50"
-											style="bottom: {agentPickerPosition.bottom}px; left: {agentPickerPosition.left}px;"
-											onclick={(e) => e.stopPropagation()}
-										>
-											<AgentSelector
-												task={task}
-												onselect={handleAgentSelect}
-												onsave={(selection) => {
-													if (agentPickerTask) handleSingleHarnessChange(agentPickerTask.id, selection);
-													agentPickerOpen = false;
-													agentPickerTask = null;
-													agentPickerPosition = null;
-												}}
-												oncancel={handleAgentPickerCancel}
-											/>
-										</div>
-									{/if}
-									<button
-										class="btn btn-xs {altKeyHeld ? 'btn-info' : 'btn-ghost hover:btn-primary'} rocket-btn {spawningTaskId === task.id ? 'rocket-launching' : ''} transition-colors duration-150"
-										onclick={(e) => handleSpawnClick(task, e)}
-										disabled={spawningTaskId === task.id || isBlocked || isExiting}
-										title={altKeyHeld ? 'Click to choose agent/model' : (isBlocked ? blockReason : 'Launch agent (Alt+click for agent picker)')}
-									>
-										{#if altKeyHeld}
-											<!-- Settings/gear icon when Alt is held -->
-											<div class="w-5 h-5 flex items-center justify-center">
-												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
-													<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-												</svg>
-											</div>
-										{:else}
-											<div class="relative w-5 h-5 flex items-center justify-center overflow-visible">
-												<!-- Debris/particles -->
-												<div class="rocket-debris-1 absolute w-1 h-1 rounded-full bg-warning/80 left-1/2 top-1/2 opacity-0"></div>
-												<div class="rocket-debris-2 absolute w-0.5 h-0.5 rounded-full bg-info/60 left-1/2 top-1/3 opacity-0"></div>
-												<div class="rocket-debris-3 absolute w-1 h-0.5 rounded-full bg-base-content/40 left-1/2 top-2/3 opacity-0"></div>
 
-												<!-- Smoke puffs -->
-												<div class="rocket-smoke absolute w-2 h-2 rounded-full bg-base-content/30 bottom-0 left-1/2 -translate-x-1/2 opacity-0"></div>
-												<div class="rocket-smoke-2 absolute w-1.5 h-1.5 rounded-full bg-base-content/20 bottom-0 left-1/2 -translate-x-1/2 translate-x-1 opacity-0"></div>
-
-												<!-- Engine sparks -->
-												<div class="engine-spark-1 absolute w-1.5 h-1.5 rounded-full bg-orange-400 left-1/2 top-1/2 opacity-0"></div>
-												<div class="engine-spark-2 absolute w-1 h-1 rounded-full bg-yellow-300 left-1/2 top-1/2 opacity-0"></div>
-												<div class="engine-spark-3 absolute w-[5px] h-[5px] rounded-full bg-amber-500 left-1/2 top-1/2 opacity-0"></div>
-												<div class="engine-spark-4 absolute w-1 h-1 rounded-full bg-red-400 left-1/2 top-1/2 opacity-0"></div>
-
-												<!-- Fire/exhaust -->
-												<div class="rocket-fire absolute bottom-0 left-1/2 -translate-x-1/2 w-2 origin-top opacity-0">
-													<svg viewBox="0 0 12 20" class="w-full">
-														<path d="M6 0 L9 8 L7 6 L6 12 L5 6 L3 8 Z" fill="url(#fireGradient-{task.id})" />
-														<defs>
-															<linearGradient id="fireGradient-{task.id}" x1="0%" y1="0%" x2="0%" y2="100%">
-																<stop offset="0%" style="stop-color:#f0932b" />
-																<stop offset="50%" style="stop-color:#f39c12" />
-																<stop offset="100%" style="stop-color:#e74c3c" />
-															</linearGradient>
-														</defs>
-													</svg>
-												</div>
-
-												<!-- Rocket body -->
-												<svg class="rocket-icon w-4 h-4" viewBox="0 0 24 24" fill="none">
-													<path d="M12 2C12 2 8 6 8 12C8 15 9 17 10 18L10 21C10 21.5 10.5 22 11 22H13C13.5 22 14 21.5 14 21L14 18C15 17 16 15 16 12C16 6 12 2 12 2Z" fill="currentColor" />
-													<circle cx="12" cy="10" r="2" fill="oklch(0.75 0.15 200)" />
-													<path d="M8 14L5 17L6 18L8 16Z" fill="currentColor" />
-													<path d="M16 14L19 17L18 18L16 16Z" fill="currentColor" />
-													<path d="M12 2C12 2 10 5 10 8" stroke="oklch(0.9 0.05 200)" stroke-width="0.5" stroke-linecap="round" opacity="0.5" />
-												</svg>
-											</div>
-										{/if}
-									</button>
-									{/if}
-								</div>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
-		{/if}
 	{/if}
 </section>
 
@@ -2053,8 +2131,8 @@
 			{/if}
 		</div>
 		<div class="floating-divider"></div>
-		<button type="button" class="floating-btn floating-btn-clear" onclick={clearSelection} disabled={bulkActionLoading}>
-			Clear
+		<button type="button" class="floating-btn floating-btn-clear" onclick={() => { clearSelection(); longPressActive = false; }} disabled={bulkActionLoading}>
+			{longPressActive ? 'Done' : 'Clear'}
 		</button>
 		{#if bulkActionLoading}
 			<div class="floating-spinner"></div>
@@ -3704,5 +3782,260 @@
 		color: oklch(0.65 0.12 45);
 		opacity: 0.7;
 		cursor: default;
+	}
+
+	/* Swipe-to-reveal container */
+	.open-swipe-container {
+		position: relative;
+		overflow: hidden;
+	}
+
+	.open-swipe-tray {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		width: 90px;
+		display: flex;
+		align-items: stretch;
+		opacity: 0;
+		transition: opacity 0.15s;
+		pointer-events: none;
+	}
+
+	.open-swipe-tray-left {
+		left: 0;
+	}
+
+	.open-swipe-tray-right {
+		right: 0;
+	}
+
+	.open-swipe-tray-visible {
+		opacity: 1;
+		pointer-events: auto;
+	}
+
+	.open-swipe-action {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 4px;
+		border: none;
+		cursor: pointer;
+		font-size: 0.625rem;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		color: oklch(0.95 0.01 250);
+		font-family: system-ui, -apple-system, sans-serif;
+	}
+
+	.open-swipe-action-launch {
+		background: oklch(0.50 0.18 145);
+	}
+
+	.open-swipe-action-details {
+		background: oklch(0.50 0.12 270);
+	}
+
+	/* Sort header bar */
+	.tasks-sort-bar {
+		display: flex;
+		align-items: stretch;
+		border-bottom: 1px solid oklch(0.22 0.02 250);
+		background: oklch(0.155 0.01 250);
+		height: 26px;
+		flex-shrink: 0;
+	}
+
+	.sort-bar-checkbox-spacer {
+		display: none;
+		width: 40px;
+		flex-shrink: 0;
+		border-right: 1px solid oklch(0.20 0.01 250);
+	}
+	@media (min-width: 640px) {
+		.sort-bar-checkbox-spacer {
+			display: block;
+		}
+	}
+
+	.sort-bar-avatar-spacer {
+		width: 52px;
+		flex-shrink: 0;
+		border-right: 1px solid oklch(0.20 0.01 250);
+	}
+
+	.sort-bar-col {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 3px;
+		padding: 0 6px;
+		font-size: 0.5625rem;
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: oklch(0.45 0.02 250);
+		background: transparent;
+		border: none;
+		cursor: pointer;
+		font-family: ui-monospace, monospace;
+		transition: color 0.1s, background 0.1s;
+	}
+
+	.sort-bar-col:hover {
+		color: oklch(0.70 0.05 250);
+		background: oklch(0.20 0.01 250 / 0.6);
+	}
+
+	.sort-bar-col.sort-active {
+		color: oklch(0.72 0.15 240);
+	}
+
+	.sort-arrow {
+		font-size: 0.625rem;
+		line-height: 1;
+	}
+
+	/* Task column: flex-1, label on left, sort pills on right */
+	.sort-bar-task {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		padding: 0 10px;
+		gap: 6px;
+	}
+
+	.sort-bar-label {
+		font-size: 0.5625rem;
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: oklch(0.38 0.02 250);
+		font-family: ui-monospace, monospace;
+	}
+
+	.sort-bar-pills {
+		display: flex;
+		align-items: center;
+		gap: 3px;
+		margin-left: auto;
+	}
+
+	.sort-pill {
+		font-size: 0.5rem;
+		font-weight: 600;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		color: oklch(0.42 0.02 250);
+		background: oklch(0.20 0.01 250);
+		border: 1px solid oklch(0.24 0.02 250);
+		border-radius: 3px;
+		padding: 1px 5px;
+		cursor: pointer;
+		font-family: ui-monospace, monospace;
+		transition: color 0.1s, background 0.1s, border-color 0.1s;
+		line-height: 1.6;
+	}
+
+	.sort-pill:hover {
+		color: oklch(0.70 0.05 250);
+		background: oklch(0.24 0.02 250);
+	}
+
+	.sort-pill.sort-active {
+		color: oklch(0.72 0.15 240);
+		background: oklch(0.72 0.15 240 / 0.12);
+		border-color: oklch(0.72 0.15 240 / 0.3);
+	}
+
+	/* Due date col — 56px to match .mobile-task-duedate */
+	.sort-bar-due {
+		width: 56px;
+		flex-shrink: 0;
+		border-left: 1px solid oklch(0.20 0.01 250);
+	}
+
+	/* Checkbox column: hidden on mobile unless long-press selection active */
+	.card-checkbox-col {
+		display: none;
+		align-items: center;
+		justify-content: center;
+		width: 40px;
+		flex-shrink: 0;
+		border-right: 1px solid oklch(0.22 0.02 250);
+	}
+	.card-checkbox-col-active {
+		display: flex;
+	}
+	@media (min-width: 640px) {
+		.card-checkbox-col {
+			display: flex;
+		}
+	}
+
+	.mobile-task-selected {
+		background: oklch(0.70 0.18 240 / 0.08);
+		border-left: 3px solid oklch(0.70 0.18 240 / 0.6);
+	}
+	.card-checkbox {
+		width: 14px;
+		height: 14px;
+		cursor: pointer;
+		accent-color: oklch(0.65 0.18 240);
+	}
+
+	/* Due date column: always visible */
+	.mobile-task-duedate {
+		width: 56px;
+		flex-shrink: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		border-left: 1px solid oklch(0.22 0.02 250);
+		border-top: none;
+		border-right: none;
+		border-bottom: none;
+		background: transparent;
+		cursor: pointer;
+		font-size: 0.5625rem;
+		font-family: ui-monospace, monospace;
+		gap: 2px;
+		padding: 0 4px;
+		line-height: 1.3;
+		text-align: center;
+	}
+	.mobile-task-duedate:hover {
+		background: oklch(0.22 0.02 250 / 0.5);
+	}
+	.mobile-duedate-time {
+		color: oklch(0.50 0.02 250);
+		font-size: 0.5rem;
+	}
+	.mobile-duedate-empty {
+		color: oklch(0.35 0.02 250);
+		font-size: 1.1rem;
+		line-height: 1;
+	}
+
+	/* Pull-to-refresh indicator */
+	.ptr-indicator {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		overflow: hidden;
+		color: oklch(0.55 0.12 220);
+		transition: height 0.15s ease, opacity 0.15s ease;
+	}
+	@keyframes ptr-spin {
+		to { transform: rotate(360deg); }
+	}
+	.ptr-spinner {
+		animation: ptr-spin 0.7s linear infinite;
 	}
 </style>

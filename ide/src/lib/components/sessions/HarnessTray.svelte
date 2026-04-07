@@ -22,6 +22,10 @@
 		onSettings?: () => void;
 	} = $props();
 
+	function haptic(ms = 10) {
+		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(ms);
+	}
+
 	interface AgentProgram {
 		id: string;
 		name: string;
@@ -64,6 +68,7 @@
 				title="Launch with {program.name}"
 				onclick={(e) => {
 					e.stopPropagation();
+					haptic();
 					onLaunch(program.id);
 				}}
 			>
@@ -76,6 +81,7 @@
 			title="Mark as human task"
 			onclick={(e) => {
 				e.stopPropagation();
+				haptic();
 				onLaunch('human');
 			}}
 		>
@@ -89,6 +95,7 @@
 			title="Model options"
 			onclick={(e) => {
 				e.stopPropagation();
+				haptic(15);
 				onSettings();
 			}}
 		>

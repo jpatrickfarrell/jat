@@ -54,11 +54,90 @@
     ongrip?: (e: MouseEvent) => void;
   } = $props();
 
-  let activeTab = $state<'new' | 'requests' | 'agent' | 'notes'>('new');
+  let activeTab = $state<'new' | 'requests' | 'agent' | 'notes' | 'voice'>('new');
 
   // Lazy init: don't mount AgentPanel/NotesPanel until user first opens the tab
   let agentTabOpened = $state(false);
   let notesTabOpened = $state(false);
+
+  // === Voice capture state ===
+  let voiceRecording = $state(false);
+  let voiceProcessing = $state(false);
+  let voiceStatus = $state<'idle' | 'recording' | 'processing' | 'done' | 'error'>('idle');
+  let voiceStatusMsg = $state('');
+  let voiceMediaRecorder = $state<MediaRecorder | null>(null);
+  let voiceChunks: Blob[] = [];
+
+  async function startVoiceRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
+      const mr = new MediaRecorder(stream, { mimeType });
+      voiceChunks = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) voiceChunks.push(e.data); };
+      mr.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        submitVoiceRecording(new Blob(voiceChunks, { type: mimeType }), mimeType);
+      };
+      mr.start(500);
+      voiceMediaRecorder = mr;
+      voiceRecording = true;
+      voiceStatus = 'recording';
+      voiceStatusMsg = 'Recording…';
+    } catch (err: any) {
+      voiceStatus = 'error';
+      voiceStatusMsg = err.message?.includes('Permission') ? 'Microphone permission denied' : 'Could not start recording';
+    }
+  }
+
+  function stopVoiceRecording() {
+    if (voiceMediaRecorder && voiceMediaRecorder.state !== 'inactive') {
+      voiceMediaRecorder.stop();
+    }
+    voiceRecording = false;
+    voiceStatus = 'processing';
+    voiceStatusMsg = 'Sending to JAT…';
+  }
+
+  async function submitVoiceRecording(blob: Blob, mimeType: string) {
+    voiceProcessing = true;
+    try {
+      const ext = mimeType.includes('webm') ? 'webm' : mimeType.includes('ogg') ? 'ogg' : 'audio';
+      const formData = new FormData();
+      formData.append('file', blob, `voice-note.${ext}`);
+
+      const voiceEndpoint = `${endpoint}/api/tasks/voice`;
+      const res = await fetch(voiceEndpoint, { method: 'POST', body: formData });
+      if (res.ok) {
+        voiceStatus = 'done';
+        voiceStatusMsg = 'Done! Tasks will appear in your Voice Inbox shortly.';
+      } else {
+        const data = await res.json().catch(() => ({}));
+        voiceStatus = 'error';
+        voiceStatusMsg = data.message || `Error ${res.status}`;
+      }
+    } catch (err: any) {
+      voiceStatus = 'error';
+      voiceStatusMsg = err.message || 'Failed to send recording';
+    } finally {
+      voiceProcessing = false;
+      voiceChunks = [];
+    }
+  }
+
+  function resetVoice() {
+    if (voiceMediaRecorder && voiceMediaRecorder.state !== 'inactive') {
+      voiceMediaRecorder.stop();
+    }
+    voiceRecording = false;
+    voiceProcessing = false;
+    voiceStatus = 'idle';
+    voiceStatusMsg = '';
+    voiceChunks = [];
+    voiceMediaRecorder = null;
+  }
 
   // Agent state — managed by AgentBridge, fed to AgentPanel as props
   let agentMessages = $state<ChatMessage[]>([]);
@@ -475,6 +554,13 @@
         </svg>
         Notes
       </button>
+      <button class="tab" class:active={activeTab === 'voice'} onclick={() => activeTab = 'voice'}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3Z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8"/>
+        </svg>
+        Voice
+      </button>
     </div>
     <button class="close-btn" onclick={onclose} aria-label="Close">&times;</button>
   </div>
@@ -643,6 +729,60 @@
   {#if activeTab === 'notes' && notesTabOpened}
     <div class="notes-wrapper" transition:slide={{ duration: 200 }}>
       <NotesPanel {endpoint} {project} onnoteschanged={handleNotesChanged} />
+    </div>
+  {/if}
+
+  {#if activeTab === 'voice'}
+    <div class="voice-wrapper" transition:slide={{ duration: 200 }}>
+      <div class="voice-body">
+        <p class="voice-hint">Record a voice note — JAT will transcribe it and create tasks automatically.</p>
+
+        <!-- Mic button -->
+        <div class="voice-mic-row">
+          {#if voiceStatus === 'idle'}
+            <button class="voice-btn voice-btn-start" onclick={startVoiceRecording}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="28" height="28">
+                <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3Z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8"/>
+              </svg>
+              Start Recording
+            </button>
+          {:else if voiceStatus === 'recording'}
+            <button class="voice-btn voice-btn-stop" onclick={stopVoiceRecording}>
+              <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+                <rect x="4" y="4" width="16" height="16" rx="2"/>
+              </svg>
+              Stop Recording
+            </button>
+            <div class="voice-recording-indicator">
+              <span class="voice-dot"></span>
+              <span class="voice-dot"></span>
+              <span class="voice-dot"></span>
+            </div>
+          {:else if voiceStatus === 'processing'}
+            <div class="voice-processing">
+              <span class="voice-spinner"></span>
+              <span class="voice-status-text">{voiceStatusMsg}</span>
+            </div>
+          {:else if voiceStatus === 'done'}
+            <div class="voice-done">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="32" height="32">
+                <path d="M20 6 9 17l-5-5"/>
+              </svg>
+            </div>
+            <p class="voice-status-text voice-done-text">{voiceStatusMsg}</p>
+            <button class="voice-reset" onclick={resetVoice}>Record another</button>
+          {:else if voiceStatus === 'error'}
+            <div class="voice-error-icon">!</div>
+            <p class="voice-status-text voice-error-text">{voiceStatusMsg}</p>
+            <button class="voice-reset" onclick={resetVoice}>Try again</button>
+          {/if}
+        </div>
+
+        {#if voiceStatus === 'idle'}
+          <p class="voice-footer">Transcription uses <strong>voxtype</strong> + <strong>ollama</strong> locally — no cloud needed.</p>
+        {/if}
+      </div>
     </div>
   {/if}
 
@@ -1024,4 +1164,129 @@
     align-self: flex-end;
     padding-bottom: 6px;
   }
+
+  /* Voice tab */
+  .voice-wrapper {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .voice-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.5rem 1.25rem;
+    text-align: center;
+  }
+  .voice-hint {
+    font-size: 12px;
+    color: #9ca3af;
+    line-height: 1.5;
+    margin: 0;
+    max-width: 280px;
+  }
+  .voice-mic-row {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+  }
+  .voice-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border-radius: 10px;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    font-family: inherit;
+  }
+  .voice-btn:active { transform: scale(0.96); }
+  .voice-btn-start {
+    background: #1d4ed8;
+    color: white;
+    width: 100%;
+  }
+  .voice-btn-start:hover { background: #2563eb; }
+  .voice-btn-stop {
+    background: #991b1b;
+    color: white;
+    width: 100%;
+  }
+  .voice-btn-stop:hover { background: #b91c1c; }
+
+  @keyframes voice-pulse {
+    0%, 100% { opacity: 0.3; transform: scaleY(0.6); }
+    50% { opacity: 1; transform: scaleY(1); }
+  }
+  .voice-recording-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 24px;
+  }
+  .voice-dot {
+    width: 4px;
+    height: 16px;
+    background: #ef4444;
+    border-radius: 2px;
+    animation: voice-pulse 0.8s ease-in-out infinite;
+  }
+  .voice-dot:nth-child(2) { animation-delay: 0.15s; }
+  .voice-dot:nth-child(3) { animation-delay: 0.3s; }
+
+  .voice-processing {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #9ca3af;
+    font-size: 13px;
+  }
+  @keyframes voice-spin { to { transform: rotate(360deg); } }
+  .voice-spinner {
+    width: 16px; height: 16px;
+    border: 2px solid #374151;
+    border-top-color: #60a5fa;
+    border-radius: 50%;
+    animation: voice-spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+  .voice-status-text { font-size: 12px; color: #9ca3af; margin: 0; }
+  .voice-done { color: #22c55e; }
+  .voice-done-text { color: #22c55e !important; font-weight: 500; }
+  .voice-error-icon {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: #991b1b;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .voice-error-text { color: #f87171 !important; }
+  .voice-reset {
+    font-size: 12px;
+    color: #60a5fa;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    text-decoration: underline;
+    font-family: inherit;
+    padding: 0;
+  }
+  .voice-footer {
+    font-size: 11px;
+    color: #4b5563;
+    margin: 0;
+    line-height: 1.5;
+  }
+  .voice-footer strong { color: #6b7280; }
 </style>

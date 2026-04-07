@@ -1,0 +1,1 @@
+/home/jw/code/jat/.agents/skills/harden//SKILL.md

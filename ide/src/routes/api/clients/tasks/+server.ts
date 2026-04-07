@@ -16,7 +16,6 @@ interface ProjectTask {
 	status: string;
 	issue_type: string;
 	priority: string;
-	assignee: string | null;
 	created_at: string;
 	updated_at: string;
 }
@@ -38,7 +37,7 @@ export const GET: RequestHandler = async ({ url }) => {
 	const status = url.searchParams.get('status');
 	const search = url.searchParams.get('search');
 
-	let query = 'select=id,title,description,status,issue_type,priority,assignee,created_at,updated_at&order=updated_at.desc&limit=100';
+	let query = 'select=id,title,description,status,issue_type,priority,created_at,updated_at&order=updated_at.desc&limit=100';
 
 	if (status) {
 		query += `&status=eq.${encodeURIComponent(status)}`;
@@ -60,7 +59,8 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		if (!response.ok) {
 			const text = await response.text();
-			if (response.status === 404 || text.includes('does not exist')) {
+			// Only treat as "table not found" if it's actually about the relation/table, not a column
+			if (response.status === 404 || (text.includes('does not exist') && text.includes('relation'))) {
 				return json({ tasks: [], message: 'project_tasks table not found' });
 			}
 			return json({ error: `HTTP ${response.status}: ${text.slice(0, 200)}` }, { status: 500 });

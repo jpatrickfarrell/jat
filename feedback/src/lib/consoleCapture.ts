@@ -70,6 +70,20 @@ function captureStackInfo(): { stackTrace?: string; lineNumber?: number; columnN
   return { stackTrace };
 }
 
+/**
+ * Returns true for DOMException AbortErrors thrown by navigator.locks during page unload.
+ * These are browser lifecycle events (Supabase auth token refresh aborted on navigation),
+ * not real bugs — skip capturing them to avoid noisy feedback reports.
+ */
+function isNavigatorLockAbortError(args: unknown[]): boolean {
+  if (args.length === 0) return false;
+  const err = args[0];
+  return (
+    err instanceof DOMException &&
+    (err.name === 'AbortError' || err.message === 'The operation was aborted.')
+  );
+}
+
 function createLogEntry(type: ConsoleLogEntry['type'], args: unknown[], includeStack: boolean): ConsoleLogEntry {
   const now = new Date();
   const message = filterSensitiveData(args.map(safeStringify).join(' '));
@@ -108,6 +122,7 @@ export function startConsoleCapture(max?: number) {
 
   console.error = (...args) => {
     originalConsole.error(...args);
+    if (isNavigatorLockAbortError(args)) return;
     addLogEntry(createLogEntry('error', args, true));
   };
 

@@ -3424,6 +3424,11 @@ function captureStackInfo() {
     columnNumber: parseInt(s[3], 10)
   } : { stackTrace: r };
 }
+function isNavigatorLockAbortError(e) {
+  if (e.length === 0) return !1;
+  const t = e[0];
+  return t instanceof DOMException && (t.name === "AbortError" || t.message === "The operation was aborted.");
+}
 function createLogEntry(e, t, n) {
   const r = /* @__PURE__ */ new Date(), o = filterSensitiveData(t.map(safeStringify).join(" ")), s = {
     type: e,
@@ -3442,7 +3447,7 @@ function startConsoleCapture(e) {
   capturing || (capturing = !0, e && (maxEntries = e), console.log = (...t) => {
     originalConsole.log(...t), addLogEntry(createLogEntry("log", t, !1));
   }, console.error = (...t) => {
-    originalConsole.error(...t), addLogEntry(createLogEntry("error", t, !0));
+    originalConsole.error(...t), !isNavigatorLockAbortError(t) && addLogEntry(createLogEntry("error", t, !0));
   }, console.warn = (...t) => {
     originalConsole.warn(...t), addLogEntry(createLogEntry("warn", t, !0));
   }, console.info = (...t) => {
@@ -12344,7 +12349,7 @@ const $$css$1 = {
 };
 function FeedbackPanel(e, t) {
   push(t, !0), append_styles(e, $$css$1);
-  const n = "3.0.2";
+  const n = "3.0.3";
   let r = prop(t, "endpoint", 7), o = prop(t, "project", 7), s = prop(t, "isOpen", 7, !1), i = prop(t, "userId", 7, ""), a = prop(t, "userEmail", 7, ""), l = prop(t, "userName", 7, ""), c = prop(t, "userRole", 7, ""), u = prop(t, "orgId", 7, ""), d = prop(t, "orgName", 7, ""), f = prop(t, "onclose", 7), v = prop(t, "ongrip", 7), _ = prop(t, "agentProxy", 7, ""), y = prop(t, "agentModel", 7, ""), h = prop(t, "agentContext", 7, ""), p = prop(t, "registeredTools", 23, () => []), b = /* @__PURE__ */ state("new"), m = /* @__PURE__ */ state(!1), $ = /* @__PURE__ */ state(!1), k = /* @__PURE__ */ state(!1), N = /* @__PURE__ */ state(!1), O = /* @__PURE__ */ state("idle"), F = /* @__PURE__ */ state(""), ee = /* @__PURE__ */ state(null), J = [];
   async function fe() {
     var x;

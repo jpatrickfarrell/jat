@@ -22,6 +22,7 @@
 	import FxText from '$lib/components/FxText.svelte';
 	import MobileSessionFullscreen from '$lib/components/work/MobileSessionFullscreen.svelte';
 	import { getSwipeConfig, getSwipeActionDef, initSwipeActions } from '$lib/config/swipeActions';
+	import { isAutoKillEnabled } from '$lib/stores/autoKillConfig';
 	import { onMount } from 'svelte';
 	import { slide, fade } from 'svelte/transition';
 	import { cubicOut, cubicIn } from 'svelte/easing';
@@ -284,6 +285,8 @@
 	let actionFeedback = $state<Map<string, string>>(new Map());
 	// Per-session auto-complete disabled state (when user manually overrides)
 	let autoCompleteDisabledMap = $state<Map<string, boolean>>(new Map());
+	// Track which sessions have already had auto-complete triggered (prevent re-fire)
+	let autoCompleteTriggeredSet = $state(new Set<string>());
 
 	// "All done" flash state - shown when no more sessions to navigate to
 	let allDoneFlash = $state(false);
@@ -1189,6 +1192,46 @@
 		swipeConfig = getSwipeConfig();
 	});
 
+	// Auto-complete: fire /jat:complete when a session hits ready-for-review and
+	// review rules say auto + Session Cleanup is enabled + user hasn't toggled off.
+	$effect(() => {
+		if (!isAutoKillEnabled()) return;
+		for (const session of sessions) {
+			if (session.type !== 'agent') continue;
+			const agentName = getAgentName(session.name);
+			const effectiveState = optimisticStates.get(session.name) || agentSessionInfo.get(agentName)?.activityState;
+			if (effectiveState !== 'ready-for-review') {
+				// Reset trigger flag when leaving review state
+				if (autoCompleteTriggeredSet.has(session.name)) {
+					autoCompleteTriggeredSet.delete(session.name);
+					autoCompleteTriggeredSet = new Set(autoCompleteTriggeredSet);
+				}
+				continue;
+			}
+			if (autoCompleteTriggeredSet.has(session.name)) continue;
+			const sessionTask = agentTasks.get(agentName);
+			const reviewStatus = sessionTask ? computeReviewStatus(sessionTask, getReviewRules()) : null;
+			const reviewBasedDefault = reviewStatus?.action !== 'auto';
+			const autoCompleteDisabled = autoCompleteDisabledMap.get(session.name) ?? reviewBasedDefault;
+			if (!autoCompleteDisabled) {
+				autoCompleteTriggeredSet.add(session.name);
+				autoCompleteTriggeredSet = new Set(autoCompleteTriggeredSet);
+				const sName = session.name;
+				setTimeout(async () => {
+					optimisticStates.set(sName, 'completing');
+					optimisticStates = new Map(optimisticStates);
+					if (sessionTask) {
+						fetch(`/api/sessions/${encodeURIComponent(sName)}/signal`, {
+							method: 'POST', headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ type: 'completing', data: { taskId: sessionTask.id, taskTitle: sessionTask.title, currentStep: 'verifying', progress: 0, stepsCompleted: [], stepsRemaining: ['verifying', 'committing', 'closing', 'releasing'] } })
+						}).catch(() => {});
+					}
+					await sendWorkflowCommand(sName, '/jat:complete');
+				}, 500);
+			}
+		}
+	});
+
 	function handleSwipeTouchStart(e: TouchEvent, sessionName: string) {
 		if (e.touches.length !== 1) return;
 		const touch = e.touches[0];
@@ -1581,6 +1624,9 @@
 					{@const harness = getTaskHarness(sessionTask)}
 					{@const cardActions = getSessionStateActions(effectiveState)}
 					{@const mobileOutputLines = getOutputTail(sessionAgentName, 5)}
+					{@const reviewStatus = computeReviewStatus(sessionTask, getReviewRules())}
+					{@const reviewBasedDefault = reviewStatus.action !== 'auto'}
+					{@const autoCompleteDisabled = autoCompleteDisabledMap.get(session.name) ?? reviewBasedDefault}
 					<div class="mobile-card-inner">
 						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};">
 							<AgentAvatar name={sessionAgentName} size={36} showRing={true} sessionState={effectiveState} />
@@ -1625,6 +1671,29 @@
 									<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
 								</svg>
 								<span>Cmds</span>
+							</button>
+							<button
+								class="mobile-tray-btn mobile-tray-btn-auto"
+								class:mobile-tray-btn-auto-on={!autoCompleteDisabled}
+								title={autoCompleteDisabled ? 'Manual review — tap to enable auto-complete' : 'Auto-complete on — tap to require manual review'}
+								onclick={() => {
+									const newMap = new Map(autoCompleteDisabledMap);
+									newMap.set(session.name, !autoCompleteDisabled);
+									autoCompleteDisabledMap = newMap;
+								}}
+							>
+								{#if autoCompleteDisabled}
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+										<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+									</svg>
+									<span>Review</span>
+								{:else}
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+									</svg>
+									<span>Auto</span>
+								{/if}
 							</button>
 						</div>
 						{#if cmdPanelSession === session.name}
@@ -3892,6 +3961,8 @@
 	.mobile-tray-btn-epic-open { background: oklch(0.45 0.14 280); box-shadow: inset 0 -2px 0 oklch(0.65 0.18 280 / 0.6); }
 	.mobile-tray-btn-cmds     { background: oklch(0.30 0.08 200); }
 	.mobile-tray-btn-cmds-open { background: oklch(0.42 0.14 200); box-shadow: inset 0 -2px 0 oklch(0.65 0.18 200 / 0.6); }
+	.mobile-tray-btn-auto     { background: oklch(0.35 0.08 45); color: oklch(0.70 0.12 45); }
+	.mobile-tray-btn-auto-on  { background: oklch(0.35 0.12 145); color: oklch(0.75 0.15 145); }
 
 	/* Inline commands panel — expands below the card inner */
 	.mobile-cmd-inline {

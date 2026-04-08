@@ -1743,7 +1743,7 @@
 				projectColors[selectedProject] || "oklch(0.70 0.15 200)"}
 
 			<section
-				class="project-content"
+				class="project-content pt-10"
 				style="--project-color: {projectColor}"
 			>
 				<!-- Attention notifications: agents waiting for input or review (dismissable) -->

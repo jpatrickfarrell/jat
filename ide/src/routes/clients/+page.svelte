@@ -127,6 +127,14 @@
 	// Expanded project cards
 	let expandedProjects = $state<Set<string>>(new Set());
 
+	// Expanded notes sections (collapsed by default on mobile if long)
+	let notesExpandedIds = $state<Set<string>>(new Set());
+	function toggleNotesExpanded(id: string) {
+		const next = new Set(notesExpandedIds);
+		if (next.has(id)) next.delete(id); else next.add(id);
+		notesExpandedIds = next;
+	}
+
 	// Expanded contract detail
 	let expandedContract = $state<string | null>(null);
 	let updatingItem = $state<string | null>(null); // id of item being updated
@@ -810,30 +818,33 @@
 	<title>Clients | JAT IDE</title>
 </svelte:head>
 
-<div class="flex flex-col gap-6 p-4 md:p-6 max-w-7xl mx-auto overflow-x-hidden">
+<div class="flex flex-col gap-5 p-4 md:p-6 max-w-7xl mx-auto overflow-x-hidden">
 	<!-- Header -->
-	<div class="flex flex-wrap items-center justify-between gap-2">
+	<div class="flex items-start justify-between gap-3">
 		<div>
 			<h1 class="text-2xl font-bold">Clients</h1>
-			<p class="text-sm opacity-60 mt-1">
+			<p class="text-sm opacity-60 mt-1 hidden sm:block">
 				Contract and billing data across all client projects
 			</p>
 		</div>
-		<div class="flex items-center gap-3">
+		<div class="flex items-center gap-2 shrink-0">
 			{#if cachedAt}
-				<span class="text-xs opacity-40">
+				<span class="text-xs opacity-40 hidden sm:inline">
 					Cached {formatDate(cachedAt)}
 				</span>
 			{/if}
 			<button
-				class="btn btn-sm btn-outline"
+				class="btn btn-sm btn-ghost btn-square"
 				onclick={() => fetchData(true)}
 				disabled={loading}
+				title="Refresh"
 			>
 				{#if loading}
 					<span class="loading loading-spinner loading-xs"></span>
 				{:else}
-					Refresh
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+					</svg>
 				{/if}
 			</button>
 			<button
@@ -843,24 +854,24 @@
 				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
 				</svg>
-				New Contract
+				<span class="hidden sm:inline">New Contract</span>
+				<span class="sm:hidden">New</span>
 			</button>
 		</div>
 	</div>
 
 	{#if loading && !summary}
 		<!-- Skeleton loading -->
-		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+		<div class="rounded-xl grid grid-cols-2 sm:grid-cols-4 gap-px overflow-hidden bg-base-300/60">
 			{#each Array(4) as _}
-				<div class="card bg-base-200 shadow-sm">
-					<div class="card-body p-5">
-						<div class="skeleton h-4 w-24 mb-2"></div>
-						<div class="skeleton h-8 w-32"></div>
-					</div>
+				<div class="bg-base-200 px-4 sm:px-5 py-4">
+					<div class="skeleton h-3 w-20 mb-2"></div>
+					<div class="skeleton h-7 w-28 mt-1"></div>
+					<div class="skeleton h-3 w-24 mt-2"></div>
 				</div>
 			{/each}
 		</div>
-		<div class="skeleton h-64 w-full rounded-lg"></div>
+		<div class="skeleton h-48 w-full rounded-lg"></div>
 	{:else if error}
 		<div class="alert alert-error">
 			<span>Failed to load client data: {error}</span>
@@ -868,34 +879,54 @@
 		</div>
 	{:else if summary}
 		<!-- Revenue Summary Strip -->
-		<div in:fly={{ y: 16, duration: 500, easing: cubicOut }} class="bg-base-200 rounded-xl flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x divide-base-300">
-			<div class="flex-1 px-5 py-4">
+		<div in:fly={{ y: 16, duration: 500, easing: cubicOut }} class="rounded-xl grid grid-cols-2 sm:grid-cols-4 gap-px overflow-hidden bg-base-300/60">
+			<!-- Contracted -->
+			<div class="bg-base-200 px-4 sm:px-5 py-4">
 				<p class="text-xs font-semibold uppercase tracking-wider opacity-40">Contracted</p>
 				<p class="text-xl font-bold mt-1">{formatCents(summary.totalContracted)}</p>
 				<p class="text-xs opacity-40 mt-0.5">{summary.activeContracts} active contract{summary.activeContracts !== 1 ? 's' : ''}</p>
 			</div>
-			<div class="flex-1 px-5 py-4">
+			<!-- Collected -->
+			<div class="bg-base-200 px-4 sm:px-5 py-4">
 				<p class="text-xs font-semibold uppercase tracking-wider opacity-40">Collected</p>
 				<p class="text-xl font-bold text-success mt-1">{formatCents(summary.totalPaid)}</p>
 				<p class="text-xs opacity-40 mt-0.5">{summary.paidMilestones} milestone{summary.paidMilestones !== 1 ? 's' : ''} paid</p>
 			</div>
-			<div class="flex-1 px-5 py-4">
+			<!-- Outstanding -->
+			<div class="bg-base-200 px-4 sm:px-5 py-4">
 				<p class="text-xs font-semibold uppercase tracking-wider opacity-40">Outstanding</p>
 				<p class="text-xl font-bold text-warning mt-1">{formatCents(summary.totalOutstanding)}</p>
-				<p class="text-xs opacity-40 mt-0.5">{summary.deliveredMilestones} delivered, {summary.pendingMilestones} pending</p>
+				<p class="text-xs opacity-40 mt-0.5">
+					<span class="hidden sm:inline">{summary.deliveredMilestones} delivered, {summary.pendingMilestones} pending</span>
+					<span class="sm:hidden">{summary.deliveredMilestones} del · {summary.pendingMilestones} pend</span>
+				</p>
 			</div>
-			<div class="flex-1 px-5 py-4">
+			<!-- Pipeline -->
+			<div class="bg-base-200 px-4 sm:px-5 py-4">
 				<p class="text-xs font-semibold uppercase tracking-wider opacity-40">Pipeline</p>
-				<p class="text-xl font-bold mt-1">{summary.totalMilestones} <span class="text-sm font-normal opacity-40">milestones</span></p>
-				<div class="flex gap-1.5 mt-1.5 flex-wrap">
+				<p class="text-xl font-bold mt-1">{summary.totalMilestones} <span class="text-sm font-normal opacity-40"><span class="hidden sm:inline">milestones</span><span class="sm:hidden">ms</span></span></p>
+				<!-- Full badges on sm+ -->
+				<div class="hidden sm:flex gap-1.5 mt-1.5 flex-wrap">
 					{#if summary.paidMilestones > 0}
 						<span class="badge badge-success badge-xs">{summary.paidMilestones} paid</span>
 					{/if}
 					{#if summary.deliveredMilestones > 0}
-						<span class="badge badge-info badge-xs">{summary.deliveredMilestones} delivered</span>
+						<span class="badge badge-info badge-xs">{summary.deliveredMilestones} del</span>
 					{/if}
 					{#if summary.pendingMilestones > 0}
-						<span class="badge badge-warning badge-xs">{summary.pendingMilestones} pending</span>
+						<span class="badge badge-warning badge-xs">{summary.pendingMilestones} pend</span>
+					{/if}
+				</div>
+				<!-- Compact dots on mobile -->
+				<div class="sm:hidden flex items-center gap-1.5 mt-1.5">
+					{#if summary.paidMilestones > 0}
+						<span class="flex items-center gap-1 text-xs opacity-60"><span class="w-2 h-2 rounded-full bg-success"></span>{summary.paidMilestones}</span>
+					{/if}
+					{#if summary.deliveredMilestones > 0}
+						<span class="flex items-center gap-1 text-xs opacity-60"><span class="w-2 h-2 rounded-full bg-info"></span>{summary.deliveredMilestones}</span>
+					{/if}
+					{#if summary.pendingMilestones > 0}
+						<span class="flex items-center gap-1 text-xs opacity-60"><span class="w-2 h-2 rounded-full bg-warning"></span>{summary.pendingMilestones}</span>
 					{/if}
 				</div>
 			</div>
@@ -923,21 +954,21 @@
 						<div class="card-body p-5">
 							<!-- Project Header -->
 							<button
-								class="flex items-center justify-between w-full text-left"
+								class="flex items-center justify-between w-full text-left gap-2 min-w-0"
 								onclick={() => toggleProject(project.projectKey)}
 							>
-								<div class="flex items-center gap-3">
-									<span class="font-bold text-lg">{project.name}</span>
-									<span class="badge badge-sm badge-outline">
-										{project.contracts.length} contract{project.contracts.length !== 1 ? 's' : ''}
+								<div class="flex items-center gap-2 min-w-0">
+									<span class="font-bold text-base sm:text-lg truncate">{project.name}</span>
+									<span class="badge badge-sm badge-outline shrink-0">
+										{project.contracts.length}
 									</span>
 								</div>
-								<div class="flex items-center gap-3">
-									<span class="font-semibold">
+								<div class="flex items-center gap-2 shrink-0">
+									<span class="font-semibold text-sm sm:text-base">
 										{formatCents(project.contracts.reduce((sum, c) => sum + c.total_amount, 0))}
 									</span>
 									<svg
-										class="w-4 h-4 transition-transform"
+										class="w-4 h-4 transition-transform shrink-0 opacity-50"
 										class:rotate-180={expandedProjects.has(project.projectKey)}
 										fill="none" viewBox="0 0 24 24" stroke="currentColor"
 									>
@@ -1051,10 +1082,28 @@
 																			{#if editingItemId === contract.id && editingField === "notes"}
 																				<textarea class="textarea w-full text-sm bg-base-200 border-base-content/20 text-base-content" rows="2" bind:value={editingValue} onkeydown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveEdit(project.projectKey, "contract", contract.id, { notes: editingValue || null }); } if (e.key === "Escape") cancelEditing(); }} onclick={(e) => e.stopPropagation()}></textarea>
 																			{:else}
-																				<span class="text-sm opacity-60 inline-flex items-center gap-1 {editable ? "cursor-pointer hover:text-primary" : ""}" onclick={(e) => { if (editable) { e.stopPropagation(); startEditing(contract.id, "notes", contract.notes || ""); } }}>
-																					{contract.notes || (editable ? "Add notes..." : "")}
-																					{#if editable}<svg class="w-3 h-3 opacity-20 hover:opacity-60 transition-opacity shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>{/if}
-																				</span>
+																				{@const notesLong = (contract.notes || '').length > 180}
+																				{@const notesExpanded = notesExpandedIds.has(contract.id)}
+																				<div
+																					class="{editable ? 'cursor-pointer group' : ''}"
+																					onclick={(e) => { if (editable) { e.stopPropagation(); startEditing(contract.id, "notes", contract.notes || ""); } }}
+																					role={editable ? "button" : undefined}
+																					tabindex={editable ? 0 : undefined}
+																					onkeydown={(e) => { if (editable && (e.key === "Enter" || e.key === " ")) { e.stopPropagation(); startEditing(contract.id, "notes", contract.notes || ""); } }}
+																				>
+																					<p class="text-sm opacity-60 {notesLong && !notesExpanded ? 'line-clamp-4' : ''} {editable ? 'group-hover:opacity-80 transition-opacity' : ''}">
+																						{contract.notes || (editable ? "Add notes..." : "")}
+																					</p>
+																				</div>
+																				{#if notesLong}
+																					<button
+																						class="text-xs opacity-40 hover:opacity-70 transition-opacity mt-0.5 flex items-center gap-0.5"
+																						onclick={(e) => { e.stopPropagation(); toggleNotesExpanded(contract.id); }}
+																					>
+																						<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{notesExpanded ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'}" /></svg>
+																						{notesExpanded ? 'Show less' : 'Show more'}
+																					</button>
+																				{/if}
 																			{/if}
 																			<p class="text-xs opacity-40">
 																				Created {formatDate(contract.created_at)}
@@ -1062,7 +1111,7 @@
 																			</p>
 																		</div>
 																		<div class="flex items-center gap-2 shrink-0">
-																			<span class="text-xs opacity-40">Status:</span>
+																			<span class="text-xs opacity-40 hidden sm:inline">Status:</span>
 																			<div class="dropdown dropdown-end">
 																				<div
 																					tabindex="0"
@@ -1792,9 +1841,9 @@
 			</div>
 
 			<!-- Right: Pipeline & Payments -->
-			<div class="flex flex-col gap-6">
+			<div class="flex flex-col gap-5">
 				<!-- Upcoming Deliverables -->
-				<div>
+				<div class="bg-base-200 rounded-xl p-4 sm:p-5 lg:bg-transparent lg:p-0 lg:rounded-none">
 					<h2 class="text-sm font-semibold uppercase tracking-wider opacity-50 mb-3">Upcoming Deliverables</h2>
 					{#if upcomingMilestones.length === 0}
 						<p class="text-sm opacity-30 px-1">No pending milestones.</p>
@@ -1820,7 +1869,7 @@
 				</div>
 
 				<!-- Recent Payments -->
-				<div>
+				<div class="bg-base-200 rounded-xl p-4 sm:p-5 lg:bg-transparent lg:p-0 lg:rounded-none">
 					<h2 class="text-sm font-semibold uppercase tracking-wider opacity-50 mb-3">Recent Payments</h2>
 					{#if recentPayments.length === 0}
 						<p class="text-sm opacity-30 px-1">No payments recorded yet.</p>

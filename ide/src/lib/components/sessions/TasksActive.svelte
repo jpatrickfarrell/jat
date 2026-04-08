@@ -23,6 +23,8 @@
 	import MobileSessionFullscreen from '$lib/components/work/MobileSessionFullscreen.svelte';
 	import { getSwipeConfig, getSwipeActionDef, initSwipeActions } from '$lib/config/swipeActions';
 	import { onMount } from 'svelte';
+	import { slide, fade } from 'svelte/transition';
+	import { cubicOut, cubicIn } from 'svelte/easing';
 
 	function activeTaskCtx(t: AgentTask): Record<string, any> {
 		return { title: t.title, status: t.status, priority: t.priority, type: t.issue_type, labels: t.labels?.join(', '), created_at: t.created_at };
@@ -1585,7 +1587,13 @@
 							</button>
 						</div>
 						{#if cmdPanelSession === session.name}
-						<div class="mobile-cmd-inline" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="group">
+						<div
+							class="mobile-cmd-inline"
+							onclick={(e) => e.stopPropagation()}
+							onkeydown={(e) => e.stopPropagation()}
+							role="group"
+							transition:slide={{ duration: 200, easing: cubicOut }}
+						>
 							<div class="mobile-cmd-header">
 								<input
 									bind:value={cmdPanelSearch}
@@ -1604,9 +1612,10 @@
 							{:else if filteredCmdPanelItems.length === 0}
 								<div class="mobile-cmd-msg">{cmdPanelSearch.trim() ? `No match for "${cmdPanelSearch}"` : 'No commands found'}</div>
 							{:else}
-								{#each filteredCmdPanelItems as cmd (cmd.invocation)}
+								{#each filteredCmdPanelItems as cmd, i (cmd.invocation)}
 								<button
 									class="mobile-cmd-item"
+									in:fade={{ duration: 120, delay: Math.min(i * 25, 200) }}
 									onclick={() => { sendWorkflowCommand(session.name, cmd.invocation); cmdPanelSession = null; }}
 								>
 									<span class="mobile-cmd-ns">{cmd.namespace}</span>
@@ -1617,14 +1626,27 @@
 						</div>
 						{/if}
 						{#if epicPickerSession === session.name}
-						<div class="mobile-epic-inline" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="group">
-							{#if epicPickerItems.length > 3}
-							<input
-								bind:value={epicPickerSearch}
-								placeholder="Search epics…"
-								class="mobile-epic-search"
-							/>
-							{/if}
+						<div
+							class="mobile-epic-inline"
+							onclick={(e) => e.stopPropagation()}
+							onkeydown={(e) => e.stopPropagation()}
+							role="group"
+							transition:slide={{ duration: 200, easing: cubicOut }}
+						>
+							<div class="mobile-epic-header">
+								{#if epicPickerItems.length > 3}
+								<input
+									bind:value={epicPickerSearch}
+									placeholder="Search epics…"
+									class="mobile-epic-search"
+								/>
+								{/if}
+								<button class="mobile-epic-close" title="Close" onclick={() => epicPickerSession = null}>
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="12" height="12">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+									</svg>
+								</button>
+							</div>
 							{#if epicPickerLoading}
 								<div class="mobile-epic-msg">Loading epics…</div>
 							{:else if epicPickerItems.length === 0}
@@ -1632,11 +1654,12 @@
 							{:else if filteredEpicPickerItems.length === 0}
 								<div class="mobile-epic-msg">No match for "{epicPickerSearch}"</div>
 							{:else}
-								{#each filteredEpicPickerItems as epic (epic.id)}
+								{#each filteredEpicPickerItems as epic, i (epic.id)}
 								<button
 									class="mobile-epic-item"
 									class:mobile-epic-item-closed={epic.status === 'closed'}
 									disabled={!!epicLinkingId}
+									in:fade={{ duration: 120, delay: Math.min(i * 25, 200) }}
 									onclick={() => linkMobileTaskToEpic(sessionTask.id, epic.id)}
 								>
 									<span class="mobile-epic-id">{epic.id}</span>
@@ -3763,11 +3786,11 @@
 		text-transform: uppercase;
 		overflow-wrap: normal;
 		hyphens: none;
-		transition: filter 0.1s;
+		transition: filter 0.1s, background 0.18s cubic-bezier(0.25, 1, 0.5, 1), transform 0.1s cubic-bezier(0.25, 1, 0.5, 1);
 	}
 
 	.mobile-tray-btn:hover  { filter: brightness(1.12); }
-	.mobile-tray-btn:active { filter: brightness(1.25); }
+	.mobile-tray-btn:active { filter: brightness(1.25); transform: scaleY(0.94); }
 	.mobile-tray-btn:last-child { border-right: none; }
 
 	.mobile-tray-btn-success  { background: oklch(0.48 0.16 145); }
@@ -3777,9 +3800,9 @@
 	.mobile-tray-btn-default  { background: oklch(0.30 0.02 250); }
 	.mobile-tray-btn-working  { background: oklch(0.52 0.14 70); }
 	.mobile-tray-btn-epic     { background: oklch(0.35 0.10 280); }
-	.mobile-tray-btn-epic-open { background: oklch(0.45 0.14 280); }
+	.mobile-tray-btn-epic-open { background: oklch(0.45 0.14 280); box-shadow: inset 0 -2px 0 oklch(0.65 0.18 280 / 0.6); }
 	.mobile-tray-btn-cmds     { background: oklch(0.30 0.08 200); }
-	.mobile-tray-btn-cmds-open { background: oklch(0.42 0.14 200); }
+	.mobile-tray-btn-cmds-open { background: oklch(0.42 0.14 200); box-shadow: inset 0 -2px 0 oklch(0.65 0.18 200 / 0.6); }
 
 	/* Inline commands panel — expands below the card inner */
 	.mobile-cmd-inline {
@@ -3812,11 +3835,16 @@
 		background: oklch(0.28 0.04 200 / 0.6);
 		color: oklch(0.60 0.05 200);
 		cursor: pointer;
+		transition: background 0.15s, color 0.15s, transform 0.1s;
 	}
 
 	.mobile-cmd-close:hover {
 		background: oklch(0.38 0.08 200 / 0.7);
 		color: oklch(0.80 0.02 250);
+	}
+
+	.mobile-cmd-close:active {
+		transform: scale(0.88);
 	}
 
 	.mobile-cmd-search {
@@ -3848,11 +3876,17 @@
 		background: oklch(0.22 0.03 200 / 0.4);
 		cursor: pointer;
 		text-align: left;
-		transition: background 0.1s;
+		transition: background 0.12s, transform 0.1s cubic-bezier(0.25, 1, 0.5, 1);
 	}
 
-	.mobile-cmd-item:hover, .mobile-cmd-item:active {
+	.mobile-cmd-item:hover {
 		background: oklch(0.30 0.08 200 / 0.6);
+		transform: translateX(2px);
+	}
+
+	.mobile-cmd-item:active {
+		background: oklch(0.35 0.10 200 / 0.7);
+		transform: translateX(1px) scale(0.98);
 	}
 
 	.mobile-cmd-ns {
@@ -3884,10 +3918,40 @@
 		gap: 0.1875rem;
 	}
 
-	.mobile-epic-search {
-		width: 100%;
-		padding: 0.25rem 0.5rem;
+	.mobile-epic-header {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
 		margin-bottom: 0.1875rem;
+	}
+
+	.mobile-epic-close {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.5rem;
+		height: 1.5rem;
+		border: none;
+		border-radius: 0.3125rem;
+		background: oklch(0.28 0.04 280 / 0.6);
+		color: oklch(0.60 0.05 280);
+		cursor: pointer;
+		transition: background 0.15s, color 0.15s, transform 0.1s;
+	}
+
+	.mobile-epic-close:hover {
+		background: oklch(0.38 0.08 280 / 0.7);
+		color: oklch(0.80 0.02 250);
+	}
+
+	.mobile-epic-close:active {
+		transform: scale(0.88);
+	}
+
+	.mobile-epic-search {
+		flex: 1;
+		padding: 0.25rem 0.5rem;
 		background: oklch(0.22 0.03 280);
 		border: 1px solid oklch(0.35 0.08 280 / 0.5);
 		border-radius: 0.3125rem;
@@ -3914,11 +3978,17 @@
 		background: oklch(0.22 0.03 280 / 0.5);
 		cursor: pointer;
 		text-align: left;
-		transition: background 0.1s;
+		transition: background 0.12s, transform 0.1s cubic-bezier(0.25, 1, 0.5, 1);
 	}
 
-	.mobile-epic-item:hover, .mobile-epic-item:active {
+	.mobile-epic-item:hover {
 		background: oklch(0.30 0.08 280 / 0.6);
+		transform: translateX(2px);
+	}
+
+	.mobile-epic-item:active {
+		background: oklch(0.35 0.10 280 / 0.7);
+		transform: translateX(1px) scale(0.98);
 	}
 
 	.mobile-epic-item-closed { opacity: 0.5; }
@@ -4225,6 +4295,15 @@
 		.mobile-title,
 		.mobile-description {
 			transition: none !important;
+			animation: none !important;
+		}
+		.mobile-tray-btn,
+		.mobile-cmd-item,
+		.mobile-epic-item,
+		.mobile-cmd-close,
+		.mobile-epic-close {
+			transition: none !important;
+			transform: none !important;
 			animation: none !important;
 		}
 	}

@@ -544,6 +544,58 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ success: true });
 	}
 
+	// Handle addMilestone action — add a milestone to an existing contract
+	if (body.action === 'addMilestone') {
+		const { projectKey, contractId, name, percentage, description } = body;
+
+		if (!projectKey || !contractId || !name || percentage == null) {
+			return json({ error: 'projectKey, contractId, name, and percentage are required' }, { status: 400 });
+		}
+
+		const supabaseUrl = getProjectSecret(projectKey, 'supabase_url');
+		const serviceRoleKey = getProjectSecret(projectKey, 'supabase_service_role_key');
+
+		if (!supabaseUrl || !serviceRoleKey) {
+			return json({ error: `Missing Supabase credentials for "${projectKey}"` }, { status: 400 });
+		}
+
+		// Get the contract's total_amount and current max sort_order
+		const contractResult = await supabaseQuery(
+			supabaseUrl, serviceRoleKey,
+			'contracts',
+			`select=total_amount&id=eq.${contractId}&limit=1`
+		);
+		if (contractResult.error || !contractResult.data?.length) {
+			return json({ error: 'Contract not found' }, { status: 404 });
+		}
+		const totalAmount = (contractResult.data[0] as { total_amount: number }).total_amount;
+
+		const maxOrderResult = await supabaseQuery(
+			supabaseUrl, serviceRoleKey,
+			'milestones',
+			`select=sort_order&contract_id=eq.${contractId}&order=sort_order.desc&limit=1`
+		);
+		const maxOrder = (maxOrderResult.data?.[0] as { sort_order: number } | undefined)?.sort_order ?? -1;
+
+		const milestoneRow = {
+			contract_id: contractId,
+			name,
+			description: description || null,
+			percentage,
+			amount: Math.round((percentage / 100) * totalAmount),
+			sort_order: maxOrder + 1,
+			status: 'pending'
+		};
+
+		const result = await supabaseInsert(supabaseUrl, serviceRoleKey, 'milestones', milestoneRow);
+		if (result.error) {
+			return json({ error: `Failed to add milestone: ${result.error}` }, { status: 500 });
+		}
+
+		cache = null;
+		return json({ success: true, milestone: result.data?.[0] }, { status: 201 });
+	}
+
 	// Handle addTerms action for existing contracts
 	if (body.action === 'addTerms') {
 		const { projectKey, contractId, terms: newTerms } = body;

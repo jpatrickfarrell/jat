@@ -505,17 +505,56 @@
 		return status === 'draft' || status === 'published';
 	}
 
+	// Add milestone inline form state
+	let addingMilestoneContractId = $state<string | null>(null);
+	let newMilestoneName = $state('');
+	let newMilestonePct = $state('');
+	let newMilestoneDesc = $state('');
+	let savingNewMilestone = $state(false);
+
+	async function createMilestone(projectKey: string, contractId: string, totalAmount: number) {
+		const name = newMilestoneName.trim();
+		const pct = parseFloat(newMilestonePct);
+		if (!name || isNaN(pct) || pct <= 0 || pct > 100) return;
+		savingNewMilestone = true;
+		try {
+			const res = await fetch('/api/clients', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					action: 'addMilestone',
+					projectKey,
+					contractId,
+					name,
+					percentage: pct,
+					description: newMilestoneDesc.trim() || undefined
+				})
+			});
+			const data = await res.json();
+			if (data.error) { console.error(data.error); return; }
+			addingMilestoneContractId = null;
+			newMilestoneName = '';
+			newMilestonePct = '';
+			newMilestoneDesc = '';
+			await fetchData(true);
+		} finally {
+			savingNewMilestone = false;
+		}
+	}
+
 	// Inline editing state
 	let editingItemId = $state<string | null>(null);
 	let editingField = $state<string | null>(null);
 	let editingValue = $state('');
 	let editingValue2 = $state(''); // for second field (e.g., body, description)
+	let editingValue3 = $state(''); // for third field (e.g., percentage)
 
-	function startEditing(id: string, field: string, currentValue: string, currentValue2 = '') {
+	function startEditing(id: string, field: string, currentValue: string, currentValue2 = '', currentValue3 = '') {
 		editingItemId = id;
 		editingField = field;
 		editingValue = currentValue;
 		editingValue2 = currentValue2;
+		editingValue3 = currentValue3;
 	}
 
 	function cancelEditing() {
@@ -523,6 +562,7 @@
 		editingField = null;
 		editingValue = '';
 		editingValue2 = '';
+		editingValue3 = '';
 	}
 
 	async function saveEdit(projectKey: string, type: 'milestone' | 'term' | 'contract', id: string, updates: Record<string, unknown>) {
@@ -648,17 +688,29 @@
 
 	// Collapsed terms — accepted terms collapse by default, expandable on click
 	let collapsedTerms = $state<Set<string>>(new Set());
+	// Collapsed terms sections — the entire Terms section per contract, collapsed by default
+	let collapsedTermsSections = $state<Set<string>>(new Set());
+	// Collapsed milestones sections — the entire Milestones section per contract, collapsed by default
+	let collapsedMilestonesSections = $state<Set<string>>(new Set());
 
-	function initCollapsedTerms(contracts: any[]) {
-		// Only seed on first load so user toggles persist during the session
-		if (collapsedTerms.size > 0) return;
-		const ids = new Set<string>();
-		for (const c of contracts) {
-			for (const term of (c.terms ?? [])) {
-				ids.add(term.id); // all terms collapsed by default
+	function initCollapsedTerms(projects: any[]) {
+		// Add any IDs not yet tracked — preserves user toggles while collapsing new items
+		const newTermIds = new Set(collapsedTerms);
+		const newSectionIds = new Set(collapsedTermsSections);
+		let changed = false;
+		for (const project of projects) {
+			for (const contract of (project.contracts ?? [])) {
+				if (!newSectionIds.has(contract.id)) { newSectionIds.add(contract.id); changed = true; }
+				if (!collapsedMilestonesSections.has(contract.id)) { collapsedMilestonesSections = new Set([...collapsedMilestonesSections, contract.id]); }
+				for (const term of (contract.terms ?? [])) {
+					if (!newTermIds.has(term.id)) { newTermIds.add(term.id); changed = true; }
+				}
 			}
 		}
-		collapsedTerms = ids;
+		if (changed) {
+			collapsedTerms = newTermIds;
+			collapsedTermsSections = newSectionIds;
+		}
 	}
 
 	function toggleTermCollapse(id: string) {
@@ -1049,8 +1101,17 @@
 
 																	<!-- Milestone Table -->
 																	{#if contract.milestones && contract.milestones.length > 0}
+																		{@const milestonesSectionCollapsed = collapsedMilestonesSections.has(contract.id)}
 																		<div>
-																			<h5 class="text-xs font-semibold uppercase tracking-wider opacity-40 mb-2">Milestones</h5>
+																			<button
+																				class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider opacity-40 hover:opacity-70 transition-opacity mb-2 w-full text-left"
+																				onclick={() => { const next = new Set(collapsedMilestonesSections); if (milestonesSectionCollapsed) next.delete(contract.id); else next.add(contract.id); collapsedMilestonesSections = next; }}
+																			>
+																				<svg class="w-3 h-3 transition-transform duration-200 {milestonesSectionCollapsed ? '' : 'rotate-90'}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+																				Milestones
+																				<span class="font-normal normal-case tracking-normal opacity-60">({contract.milestones.length})</span>
+																			</button>
+																			{#if !milestonesSectionCollapsed}
 																			<div class="overflow-visible">
 																				<table class="table table-xs">
 																					<thead>
@@ -1076,7 +1137,7 @@
 																												class="input input-sm w-full bg-base-200 border-base-content/20"
 																												bind:value={editingValue}
 																												placeholder="Milestone name"
-																												onkeydown={(e) => { if (e.key === 'Enter') saveEdit(project.projectKey, 'milestone', milestone.id, { name: editingValue, description: editingValue2 }); if (e.key === 'Escape') cancelEditing(); }}
+																												onkeydown={(e) => { if (e.key === 'Escape') cancelEditing(); }}
 																											/>
 																											<textarea
 																												class="textarea w-full text-sm bg-base-200 border-base-content/20 resize-none"
@@ -1086,8 +1147,35 @@
 																												placeholder="Description (optional)"
 																												onkeydown={(e) => { if (e.key === 'Escape') cancelEditing(); }}
 																											></textarea>
+																											<div class="flex items-center gap-3">
+																												<span class="text-xs opacity-50 whitespace-nowrap">Percentage</span>
+																												<div class="flex items-center gap-2">
+																													<input
+																														type="number"
+																														class="input input-sm w-24 bg-base-200 border-base-content/20"
+																														bind:value={editingValue3}
+																														placeholder={milestone.percentage.toString()}
+																														min="0"
+																														max="100"
+																														step="0.01"
+																														onkeydown={(e) => { if (e.key === 'Escape') cancelEditing(); }}
+																													/>
+																												<span class="text-xs opacity-40">%</span>
+																												{#if editingValue3 && !isNaN(parseFloat(editingValue3)) && contract.total_amount}
+																													<span class="text-xs opacity-60">${((parseFloat(editingValue3) / 100) * (contract.total_amount / 100)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+																												{/if}
+																												</div>
+																											</div>
 																											<div class="flex gap-2">
-																												<button class="btn btn-success btn-xs" onclick={() => saveEdit(project.projectKey, 'milestone', milestone.id, { name: editingValue, description: editingValue2 })}>Save</button>
+																												<button class="btn btn-success btn-xs" onclick={() => {
+																													const updates: Record<string, unknown> = { name: editingValue, description: editingValue2 };
+																													const pct = parseFloat(editingValue3);
+																													if (editingValue3 && !isNaN(pct) && pct > 0 && pct <= 100 && contract.total_amount) {
+																														updates.percentage = pct;
+																														updates.amount = Math.round((pct / 100) * contract.total_amount);
+																													}
+																													saveEdit(project.projectKey, 'milestone', milestone.id, updates);
+																												}}>Save</button>
 																												<button class="btn btn-ghost btn-xs" onclick={() => cancelEditing()}>Cancel</button>
 																											</div>
 																										</div>
@@ -1099,10 +1187,10 @@
 																								<td>
 																										<div
 																											class={editable ? 'cursor-pointer hover:bg-base-300/50 rounded px-1 -mx-1 flex items-start gap-1' : ''}
-																											onclick={(e) => { if (editable) { e.stopPropagation(); startEditing(milestone.id, 'milestone', milestone.name, milestone.description || ''); } }}
+																											onclick={(e) => { if (editable) { e.stopPropagation(); startEditing(milestone.id, 'milestone', milestone.name, milestone.description || '', milestone.percentage.toString()); } }}
 																											role={editable ? 'button' : undefined}
 																											tabindex={editable ? 0 : undefined}
-																											onkeydown={(e) => { if (editable && (e.key === 'Enter' || e.key === ' ')) { e.stopPropagation(); startEditing(milestone.id, 'milestone', milestone.name, milestone.description || ''); } }}
+																											onkeydown={(e) => { if (editable && (e.key === 'Enter' || e.key === ' ')) { e.stopPropagation(); startEditing(milestone.id, 'milestone', milestone.name, milestone.description || '', milestone.percentage.toString()); } }}
 																										>
 																											<div class="min-w-0 flex-1">
 																												<span class="font-medium">{milestone.name}</span>
@@ -1298,13 +1386,54 @@
 																				</tbody>
 																				</table>
 																			</div>
+																			{/if}
 																		</div>
+																	{/if}
+
+																	{#if editable}
+																		{#if addingMilestoneContractId === contract.id}
+																			<div transition:fly={{ y: -4, duration: 200, easing: cubicOut }} class="mt-3 p-4 bg-primary/5 border-l-2 border-primary/40 space-y-3">
+																				<p class="text-xs font-medium opacity-50">New milestone</p>
+																				<input type="text" class="input input-sm w-full bg-base-200 border-base-content/20" bind:value={newMilestoneName} placeholder="Milestone name" onkeydown={(e) => { if (e.key === 'Escape') { addingMilestoneContractId = null; } }} />
+																				<textarea class="textarea w-full text-sm bg-base-200 border-base-content/20 resize-none" style="min-height: 4rem;" use:autogrow bind:value={newMilestoneDesc} placeholder="Description (optional)" onkeydown={(e) => { if (e.key === 'Escape') { addingMilestoneContractId = null; } }}></textarea>
+																				<div class="flex items-center gap-3">
+																					<span class="text-xs opacity-50 whitespace-nowrap">Percentage</span>
+																					<div class="flex items-center gap-2">
+																						<input type="number" class="input input-sm w-24 bg-base-200 border-base-content/20" bind:value={newMilestonePct} placeholder="0" min="0" max="100" step="0.01" onkeydown={(e) => { if (e.key === 'Escape') { addingMilestoneContractId = null; } }} />
+																						<span class="text-xs opacity-40">%</span>
+																						{#if newMilestonePct && !isNaN(parseFloat(newMilestonePct)) && contract.total_amount}
+																							<span class="text-xs opacity-60">${((parseFloat(newMilestonePct) / 100) * (contract.total_amount / 100)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+																						{/if}
+																					</div>
+																				</div>
+																				<div class="flex gap-2">
+																					<button class="btn btn-success btn-xs" disabled={savingNewMilestone || !newMilestoneName.trim() || !newMilestonePct} onclick={() => createMilestone(project.projectKey, contract.id, contract.total_amount)}>
+																						{#if savingNewMilestone}<span class="loading loading-spinner loading-xs"></span>{:else}Add{/if}
+																					</button>
+																					<button class="btn btn-ghost btn-xs" onclick={() => { addingMilestoneContractId = null; newMilestoneName = ''; newMilestonePct = ''; newMilestoneDesc = ''; }}>Cancel</button>
+																				</div>
+																			</div>
+																		{:else}
+																			<button class="btn btn-ghost btn-xs mt-2 opacity-50 hover:opacity-100" onclick={() => { addingMilestoneContractId = contract.id; newMilestoneName = ''; newMilestonePct = ''; newMilestoneDesc = ''; }}>
+																				<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+																				Add Milestone
+																			</button>
+																		{/if}
 																	{/if}
 
 																	<!-- Contract Terms -->
 																	<div>
 																		{#if contract.terms && contract.terms.length > 0}
-																			<h5 class="text-xs font-semibold uppercase tracking-wider opacity-40 mb-2">Terms</h5>
+																			{@const termsSectionCollapsed = collapsedTermsSections.has(contract.id)}
+																			<button
+																				class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider opacity-40 hover:opacity-70 transition-opacity mb-2 w-full text-left"
+																				onclick={() => { const next = new Set(collapsedTermsSections); if (termsSectionCollapsed) next.delete(contract.id); else next.add(contract.id); collapsedTermsSections = next; }}
+																			>
+																				<svg class="w-3 h-3 transition-transform duration-200 {termsSectionCollapsed ? '' : 'rotate-90'}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+																				Terms
+																				<span class="font-normal normal-case tracking-normal opacity-60">({contract.terms.length})</span>
+																			</button>
+																			{#if !termsSectionCollapsed}
 																			<div class="space-y-2">
 																				{#each contract.terms as term, ti}
 																					<div class="border border-base-300 rounded-lg p-3">
@@ -1453,6 +1582,7 @@
 																					</div>
 																				{/each}
 																			</div>
+																			{/if}
 																		{:else}
 																			<h5 class="text-xs font-semibold uppercase tracking-wider opacity-40 mb-2">Terms</h5>
 																			<p class="text-xs opacity-40">No terms defined yet.</p>

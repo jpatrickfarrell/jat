@@ -958,7 +958,7 @@
 													<th class="text-right">Amount</th>
 													<th class="text-right hidden md:table-cell">Paid</th>
 													<th class="hidden md:table-cell">Signed</th>
-													<th>
+													<th class="hidden sm:table-cell">
 											Milestones
 											<div class="flex gap-1.5 mt-0.5 font-normal">
 												<span class="flex items-center gap-0.5 text-[10px] opacity-40"><span class="w-1.5 h-1.5 rounded-full bg-success inline-block"></span>paid</span>
@@ -992,7 +992,7 @@
 															{paid > 0 ? formatCents(paid, contract.currency) : '—'}
 														</td>
 														<td class="text-sm opacity-60 hidden md:table-cell">{formatDate(contract.signed_at)}</td>
-														<td>
+														<td class="hidden sm:table-cell">
 															<div class="flex gap-1">
 																{#each contract.milestones || [] as milestone}
 																	<div
@@ -1005,7 +1005,7 @@
 																{/each}
 															</div>
 														</td>
-														<td>
+														<td class="hidden lg:table-cell">
 															{#if contract.terms && contract.terms.length > 0}
 																{@const acceptedCount = contract.terms.filter(t => t.status === 'accepted').length}
 																<span class="text-xs opacity-60">

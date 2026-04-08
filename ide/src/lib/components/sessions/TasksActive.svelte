@@ -304,6 +304,54 @@
 	// Optimistic state overrides - for instant UI feedback before WS catches up
 	let optimisticStates = $state<Map<string, string>>(new Map());
 
+	// Inline epic picker state (for mobile card tray)
+	let epicPickerSession = $state<string | null>(null);
+	let epicPickerItems = $state<{id: string; title: string; status: string}[]>([]);
+	let epicPickerLoading = $state(false);
+	let epicPickerSearch = $state('');
+	let epicLinkingId = $state<string | null>(null);
+
+	const filteredEpicPickerItems = $derived(
+		epicPickerSearch.trim()
+			? epicPickerItems.filter(e =>
+				e.id.toLowerCase().includes(epicPickerSearch.toLowerCase()) ||
+				e.title.toLowerCase().includes(epicPickerSearch.toLowerCase())
+			)
+			: epicPickerItems
+	);
+
+	async function openMobileEpicPicker(sessionName: string, taskId: string) {
+		if (epicPickerSession === sessionName) {
+			epicPickerSession = null;
+			return;
+		}
+		epicPickerSession = sessionName;
+		epicPickerSearch = '';
+		epicPickerItems = [];
+		epicPickerLoading = true;
+		const project = taskId.split('-')[0];
+		try {
+			const res = await fetch(`/api/epics?project=${project}`);
+			epicPickerItems = (await res.json()).epics || [];
+		} catch { /* silently fail */ }
+		finally { epicPickerLoading = false; }
+	}
+
+	async function linkMobileTaskToEpic(taskId: string, epicId: string) {
+		if (epicLinkingId) return;
+		epicLinkingId = epicId;
+		try {
+			await fetch(`/api/tasks/${encodeURIComponent(taskId)}/epic`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ epicId })
+			});
+			epicPickerSession = null;
+			epicPickerItems = [];
+		} catch (e) { console.warn('[TasksActive] Failed to link task to epic:', e); }
+		finally { epicLinkingId = null; }
+	}
+
 	// Clear optimistic states when WS catches up
 	$effect(() => {
 		if (optimisticStates.size === 0) return;
@@ -1475,7 +1523,55 @@
 									<span>{fb ? 'Done' : action.label}</span>
 								</button>
 							{/each}
+							{#if sessionTask.issue_type !== 'epic'}
+							<button
+								class="mobile-tray-btn mobile-tray-btn-epic"
+								class:mobile-tray-btn-epic-open={epicPickerSession === session.name}
+								title="Add to Epic"
+								onclick={() => openMobileEpicPicker(session.name, sessionTask.id)}
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+								</svg>
+								<span>Epic</span>
+							</button>
+							{/if}
 						</div>
+						{#if epicPickerSession === session.name}
+						<div class="mobile-epic-inline" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="group">
+							{#if epicPickerItems.length > 3}
+							<input
+								bind:value={epicPickerSearch}
+								placeholder="Search epics…"
+								class="mobile-epic-search"
+							/>
+							{/if}
+							{#if epicPickerLoading}
+								<div class="mobile-epic-msg">Loading epics…</div>
+							{:else if epicPickerItems.length === 0}
+								<div class="mobile-epic-msg">No epics in this project</div>
+							{:else if filteredEpicPickerItems.length === 0}
+								<div class="mobile-epic-msg">No match for "{epicPickerSearch}"</div>
+							{:else}
+								{#each filteredEpicPickerItems as epic (epic.id)}
+								<button
+									class="mobile-epic-item"
+									class:mobile-epic-item-closed={epic.status === 'closed'}
+									disabled={!!epicLinkingId}
+									onclick={() => linkMobileTaskToEpic(sessionTask.id, epic.id)}
+								>
+									<span class="mobile-epic-id">{epic.id}</span>
+									<span class="mobile-epic-title">{epic.title}</span>
+									{#if epicLinkingId === epic.id}
+										<svg class="animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+											<path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4" />
+										</svg>
+									{/if}
+								</button>
+								{/each}
+							{/if}
+						</div>
+						{/if}
 						<div class="mobile-card-body">
 							<div class="mobile-title-row">
 								<span class="mobile-title" title={sessionTask.title}>
@@ -1516,6 +1612,15 @@
 								{#if browserSessions.get(sessionAgentName)}
 									<span class="mobile-separator">·</span>
 									<span class="mobile-port">🌐 {browserSessions.get(sessionAgentName)}</span>
+								{/if}
+								{#if sessionTask.status === 'closed'}
+									<span class="mobile-separator">·</span>
+									<span class="mobile-closed-badge">
+										<svg viewBox="0 0 24 24" fill="none" stroke="oklch(0.65 0.20 145)" stroke-width="2.5" width="10" height="10">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+										</svg>
+										Closed
+									</span>
 								{/if}
 							</div>
 						</div>
@@ -3553,7 +3658,7 @@
 
 	.mobile-state-strip:hover ~ .mobile-action-tray,
 	.mobile-action-tray:hover {
-		max-width: 320px;
+		max-width: 390px;
 	}
 
 	/* Tray action buttons */
@@ -3591,6 +3696,75 @@
 	.mobile-tray-btn-info     { background: oklch(0.48 0.14 220); }
 	.mobile-tray-btn-default  { background: oklch(0.30 0.02 250); }
 	.mobile-tray-btn-working  { background: oklch(0.52 0.14 70); }
+	.mobile-tray-btn-epic     { background: oklch(0.35 0.10 280); }
+	.mobile-tray-btn-epic-open { background: oklch(0.45 0.14 280); }
+
+	/* Inline epic picker — expands below the card inner */
+	.mobile-epic-inline {
+		background: oklch(0.18 0.02 280 / 0.6);
+		border-top: 1px solid oklch(0.35 0.08 280 / 0.4);
+		padding: 0.375rem 0.5rem;
+		max-height: 180px;
+		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
+		gap: 0.1875rem;
+	}
+
+	.mobile-epic-search {
+		width: 100%;
+		padding: 0.25rem 0.5rem;
+		margin-bottom: 0.1875rem;
+		background: oklch(0.22 0.03 280);
+		border: 1px solid oklch(0.35 0.08 280 / 0.5);
+		border-radius: 0.3125rem;
+		color: oklch(0.85 0.02 250);
+		font-size: 0.6875rem;
+		outline: none;
+	}
+
+	.mobile-epic-msg {
+		padding: 0.375rem 0.25rem;
+		color: oklch(0.55 0.04 280);
+		font-size: 0.6875rem;
+		text-align: center;
+	}
+
+	.mobile-epic-item {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		width: 100%;
+		padding: 0.3125rem 0.5rem;
+		border-radius: 0.3125rem;
+		border: none;
+		background: oklch(0.22 0.03 280 / 0.5);
+		cursor: pointer;
+		text-align: left;
+		transition: background 0.1s;
+	}
+
+	.mobile-epic-item:hover, .mobile-epic-item:active {
+		background: oklch(0.30 0.08 280 / 0.6);
+	}
+
+	.mobile-epic-item-closed { opacity: 0.5; }
+
+	.mobile-epic-id {
+		font-size: 0.5625rem;
+		color: oklch(0.60 0.12 280);
+		font-family: monospace;
+		flex-shrink: 0;
+	}
+
+	.mobile-epic-title {
+		font-size: 0.6875rem;
+		color: oklch(0.80 0.02 250);
+		flex: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 
 	/* Feedback flash animation — plays when a tray button is clicked */
 	.mobile-tray-btn-feedback {
@@ -3801,6 +3975,16 @@
 	.mobile-port {
 		font-size: 0.625rem;
 		color: oklch(0.75 0.15 55);
+	}
+
+	.mobile-closed-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.2rem;
+		font-size: 0.5625rem;
+		font-weight: 600;
+		color: oklch(0.65 0.20 145);
+		line-height: 1;
 	}
 
 	/* ========== SWIPE-TO-REVEAL ========== */

@@ -576,6 +576,13 @@
 					</span>
 				{/if}
 				</div>
+			{:else if isClosed}
+				<div class="flex items-center gap-1 mt-0.5">
+					<svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="oklch(0.65 0.20 145)" stroke-width="2.5">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+					</svg>
+					<span class="text-[9px] font-semibold leading-none" style="color: oklch(0.65 0.20 145);">Closed</span>
+				</div>
 			{/if}
 				{#if copied}
 				<div class="flex items-center gap-0.5 mt-0.5">

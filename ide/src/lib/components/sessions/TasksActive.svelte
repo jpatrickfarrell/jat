@@ -384,236 +384,11 @@
 		finally { epicLinkingId = null; }
 	}
 
-	// ─── Desktop Action Tray (hover-reveal + button) ──────────────────────────
-	// Portal-based slide-out tray that appears to the left of the + button.
-	// Uses mouseenter/leave coordination so mouse can move from button → tray.
 
-	let dtraySession = $state<string | null>(null);   // session whose tray is open
-	let dtrayVisible = $state(false);                  // CSS open/close
-	let dtrayPos = $state({ top: 0, right: 0 });       // fixed position
-	let dtrayInBtn = false;                            // mouse currently in + button
-	let dtrayInTray = false;                           // mouse currently in tray
-	let dtrayTimerIn: ReturnType<typeof setTimeout> | null = null;
-	let dtrayTimerOut: ReturnType<typeof setTimeout> | null = null;
-	// Epic sub-picker state inside the desktop tray
-	let dtrayEpicOpen = $state(false);
-	let dtrayEpicItems = $state<{id: string; title: string; status: string}[]>([]);
-	let dtrayEpicLoading = $state(false);
-	let dtrayEpicSearch = $state('');
-	let dtrayEpicLinking = $state<string | null>(null);
-	let dtrayNewEpicTitle = $state('');
-	let dtrayCreatingEpic = $state(false);
-	// Commands sub-picker state inside the desktop tray
-	let dtrayCommandsOpen = $state(false);
+
+	// Shared commands cache (used by mobile cmd panel)
 	let dtrayCommandsItems = $state<{name: string; invocation: string; namespace: string}[]>([]);
 	let dtrayCommandsLoading = $state(false);
-	let dtrayCommandsSearch = $state('');
-
-	const dtrayFilteredEpics = $derived(
-		dtrayEpicSearch.trim()
-			? dtrayEpicItems.filter(e =>
-				e.id.toLowerCase().includes(dtrayEpicSearch.toLowerCase()) ||
-				e.title.toLowerCase().includes(dtrayEpicSearch.toLowerCase()))
-			: dtrayEpicItems
-	);
-
-	const dtrayFilteredCommands = $derived(
-		dtrayCommandsSearch.trim()
-			? dtrayCommandsItems.filter(c =>
-				c.name.toLowerCase().includes(dtrayCommandsSearch.toLowerCase()) ||
-				c.namespace.toLowerCase().includes(dtrayCommandsSearch.toLowerCase()))
-			: dtrayCommandsItems
-	);
-
-	/** Portal action — moves element to document.body to escape table stacking contexts */
-	function portalToBody(node: HTMLElement) {
-		document.body.appendChild(node);
-		return { destroy() { if (node.parentNode === document.body) document.body.removeChild(node); } };
-	}
-
-	function dtrayBtnEnter(sessionName: string, el: HTMLElement) {
-		dtrayInBtn = true;
-		if (dtrayTimerOut) { clearTimeout(dtrayTimerOut); dtrayTimerOut = null; }
-		if (dtrayTimerIn) clearTimeout(dtrayTimerIn);
-		dtrayTimerIn = setTimeout(() => {
-			const rect = el.getBoundingClientRect();
-			dtraySession = sessionName;
-			dtrayVisible = true;
-			dtrayEpicOpen = false;
-			dtrayCommandsOpen = false;
-			dtrayPos = {
-				top: rect.top + rect.height / 2,
-				right: window.innerWidth - rect.left + 4
-			};
-		}, 100);
-	}
-
-	function dtrayBtnLeave() {
-		dtrayInBtn = false;
-		if (dtrayTimerIn) { clearTimeout(dtrayTimerIn); dtrayTimerIn = null; }
-		schedDtrayClose();
-	}
-
-	function dtrayTrayEnter() {
-		dtrayInTray = true;
-		if (dtrayTimerOut) { clearTimeout(dtrayTimerOut); dtrayTimerOut = null; }
-	}
-
-	function dtrayTrayLeave() {
-		dtrayInTray = false;
-		schedDtrayClose();
-	}
-
-	function schedDtrayClose() {
-		if (dtrayTimerOut) clearTimeout(dtrayTimerOut);
-		dtrayTimerOut = setTimeout(() => {
-			if (!dtrayInBtn && !dtrayInTray) {
-				dtrayVisible = false;
-				dtraySession = null;
-				dtrayEpicOpen = false;
-				dtrayCommandsOpen = false;
-			}
-		}, 200);
-	}
-
-	function closeDtray() {
-		dtrayVisible = false;
-		dtraySession = null;
-		dtrayEpicOpen = false;
-		dtrayCommandsOpen = false;
-		dtrayNewEpicTitle = '';
-	}
-
-	async function dtrayOpenEpicPicker(taskId: string) {
-		if (dtrayEpicOpen) { dtrayEpicOpen = false; return; }
-		dtrayCommandsOpen = false;
-		dtrayEpicOpen = true;
-		dtrayEpicSearch = '';
-		if (dtrayEpicItems.length === 0) {
-			dtrayEpicLoading = true;
-			const project = taskId.split('-')[0];
-			try {
-				const res = await fetch(`/api/epics?project=${project}`);
-				dtrayEpicItems = (await res.json()).epics || [];
-			} catch { /* silently fail */ }
-			finally { dtrayEpicLoading = false; }
-		}
-	}
-
-	async function dtrayLinkToEpic(taskId: string, epicId: string) {
-		if (dtrayEpicLinking) return;
-		dtrayEpicLinking = epicId;
-		try {
-			await fetch(`/api/tasks/${encodeURIComponent(taskId)}/epic`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ epicId })
-			});
-			dtrayEpicOpen = false;
-		} catch (e) { console.warn('[TasksActive] dtray epic link failed:', e); }
-		finally { dtrayEpicLinking = null; }
-	}
-
-	async function dtrayCreateEpic(taskId: string) {
-		const title = dtrayNewEpicTitle.trim();
-		if (!title || dtrayCreatingEpic) return;
-		dtrayCreatingEpic = true;
-		const project = taskId.split('-')[0];
-		try {
-			const res = await fetch('/api/tasks', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ title, type: 'epic', project, priority: 2 })
-			});
-			const data = await res.json();
-			const newEpicId = data?.task?.id || data?.id;
-			if (newEpicId) {
-				dtrayEpicItems = [{ id: newEpicId, title, status: 'open' }, ...dtrayEpicItems];
-				dtrayNewEpicTitle = '';
-				await dtrayLinkToEpic(taskId, newEpicId);
-			}
-		} catch (e) { console.warn('[TasksActive] dtray create epic failed:', e); }
-		finally { dtrayCreatingEpic = false; }
-	}
-
-	async function dtrayOpenCommands() {
-		if (dtrayCommandsOpen) { dtrayCommandsOpen = false; return; }
-		dtrayEpicOpen = false;
-		dtrayCommandsOpen = true;
-		dtrayCommandsSearch = '';
-		if (dtrayCommandsItems.length === 0 && !dtrayCommandsLoading) {
-			dtrayCommandsLoading = true;
-			try {
-				const res = await fetch('/api/commands');
-				dtrayCommandsItems = (await res.json()).commands || [];
-			} catch { /* silently fail */ }
-			finally { dtrayCommandsLoading = false; }
-		}
-	}
-
-	async function handleDtrayAction(actionId: string, sessionName: string, sessionTask: AgentTask | null, agentName: string, project: string | null) {
-		if (actionId === 'attach') {
-			await handleAttachSession(sessionName);
-		} else if (actionId === 'kill' || actionId === 'cleanup') {
-			if (actionId === 'cleanup' && sessionTask) {
-				try {
-					await fetch(`/api/tasks/${encodeURIComponent(sessionTask.id)}/close`, {
-						method: 'POST', headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ reason: 'Cleaned up session' })
-					});
-				} catch (e) { console.warn('[TasksActive] dtray close task failed:', e); }
-			}
-			await handleKillSession(sessionName);
-		} else if (actionId === 'view-task' && sessionTask) {
-			onViewTask?.(sessionTask.id);
-		} else if (actionId === 'complete' || actionId === 'complete-kill') {
-			optimisticStates.set(sessionName, 'completing');
-			optimisticStates = new Map(optimisticStates);
-			if (sessionTask) {
-				try {
-					await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
-						method: 'POST', headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ type: 'completing', data: { taskId: sessionTask.id, taskTitle: sessionTask.title, currentStep: 'verifying', progress: 0, stepsCompleted: [], stepsRemaining: ['verifying', 'committing', 'closing', 'releasing'] } })
-					});
-				} catch (e) { console.warn('[TasksActive] dtray completing signal failed:', e); }
-			}
-			await sendWorkflowCommand(sessionName, actionId === 'complete-kill' ? '/jat:complete --kill' : '/jat:complete');
-		} else if (actionId === 'interrupt') {
-			await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, {
-				method: 'POST', headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ type: 'ctrl-c' })
-			});
-		} else if (actionId === 'escape') {
-			await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, {
-				method: 'POST', headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ type: 'escape' })
-			});
-		} else if (actionId === 'close-kill') {
-			if (sessionTask) {
-				try {
-					await fetch(`/api/tasks/${encodeURIComponent(sessionTask.id)}/close`, {
-						method: 'POST', headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ reason: 'Abandoned via Close & Kill' })
-					});
-				} catch (e) { console.warn('[TasksActive] dtray close task failed:', e); }
-			}
-			await handleKillSession(sessionName);
-		} else if (actionId === 'pause') {
-			optimisticStates.set(sessionName, 'paused');
-			optimisticStates = new Map(optimisticStates);
-			if (sessionTask) {
-				try {
-					await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/pause`, {
-						method: 'POST', headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ taskId: sessionTask.id, taskTitle: sessionTask.title, reason: 'Paused via desktop tray', killSession: true, agentName, project })
-					});
-				} catch (e) { console.warn('[TasksActive] dtray pause failed:', e); }
-			} else {
-				await handleKillSession(sessionName);
-			}
-		}
-	}
-	// ─── End Desktop Action Tray ──────────────────────────────────────────────
 
 	// Clear optimistic states when WS catches up
 	$effect(() => {
@@ -1811,12 +1586,19 @@
 						</div>
 						{#if cmdPanelSession === session.name}
 						<div class="mobile-cmd-inline" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="group">
-							<input
-								bind:value={cmdPanelSearch}
-								placeholder="Filter commands…"
-								class="mobile-cmd-search"
-								autofocus
-							/>
+							<div class="mobile-cmd-header">
+								<input
+									bind:value={cmdPanelSearch}
+									placeholder="Filter commands…"
+									class="mobile-cmd-search"
+									autofocus
+								/>
+								<button class="mobile-cmd-close" title="Close" onclick={() => cmdPanelSession = null}>
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="12" height="12">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+									</svg>
+								</button>
+							</div>
 							{#if dtrayCommandsLoading}
 								<div class="mobile-cmd-msg">Loading commands…</div>
 							{:else if filteredCmdPanelItems.length === 0}
@@ -2358,19 +2140,6 @@
 										}}
 										reviewReason={reviewStatus?.reason ?? null}
 									/>
-									<!-- Desktop hover tray trigger button -->
-									<button
-										class="desktop-plus-btn"
-										onmouseenter={(e) => { e.stopPropagation(); dtrayBtnEnter(session.name, e.currentTarget as HTMLElement); }}
-										onmouseleave={(e) => { e.stopPropagation(); dtrayBtnLeave(); }}
-										onclick={(e) => { e.stopPropagation(); }}
-										title="More actions"
-										aria-label="Show action tray"
-									>
-										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="12" height="12">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-										</svg>
-									</button>
 								</div>
 							{:else}
 								<!-- Non-agent sessions: simple buttons -->
@@ -3122,212 +2891,6 @@
 	</div>
 {/if}
 
-<!-- Desktop Action Tray Portal — slides left from the + button on row hover -->
-{#if dtraySession !== null}
-	{@const dtSess = sessions.find(s => s.name === dtraySession)}
-	{#if dtSess && dtSess.type === 'agent'}
-		{@const dtAgent = getAgentName(dtSess.name)}
-		{@const dtTask = agentTasks.get(dtAgent) || null}
-		{@const dtInfo = agentSessionInfo.get(dtAgent)}
-		{@const dtRawState = optimisticStates.get(dtSess.name) || dtInfo?.activityState || 'idle'}
-		{@const dtState = ((dtRawState === 'completing' || dtRawState === 'ready-for-review') && dtTask?.status === 'closed' ? 'completed' : dtRawState) as SessionState}
-		{@const dtActions = getSessionStateActions(dtState)}
-		{@const dtProject = agentProjects.get(dtAgent) || dtSess.project || null}
-		{@const dtReviewStatus = dtTask ? computeReviewStatus(dtTask, getReviewRules()) : null}
-		{@const dtAutoCompleteDisabled = autoCompleteDisabledMap.get(dtSess.name) ?? (dtReviewStatus?.action !== 'auto')}
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div
-			class="dtray-portal"
-			class:dtray-open={dtrayVisible}
-			style="top: {dtrayPos.top}px; right: {dtrayPos.right}px;"
-			use:portalToBody
-			onmouseenter={dtrayTrayEnter}
-			onmouseleave={dtrayTrayLeave}
-			onclick={(e) => e.stopPropagation()}
-			onkeydown={(e) => e.stopPropagation()}
-			role="group"
-			aria-label="Session actions"
-		>
-			<!-- State action buttons (from SESSION_STATE_ACTIONS for current state) -->
-			{#each dtActions as action (action.id)}
-			<button
-				class="dtray-btn dtray-btn-{action.variant}"
-				title="{action.label}"
-				onclick={async () => {
-					const sn = dtraySession!;
-					closeDtray();
-					await handleDtrayAction(action.id, sn, dtTask, dtAgent, dtProject);
-				}}
-			>
-				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" width="14" height="14">
-					<path stroke-linecap="round" stroke-linejoin="round" d={action.icon} />
-				</svg>
-				<span class="dtray-label">{action.label}</span>
-			</button>
-			{/each}
-
-			<!-- Auto-complete toggle -->
-			{#if dtTask}
-			<button
-				class="dtray-btn dtray-btn-auto"
-				class:dtray-btn-auto-on={!dtAutoCompleteDisabled}
-				title="{dtAutoCompleteDisabled ? 'Manual review' : 'Auto-complete'}{dtReviewStatus?.reason ? ` (${dtReviewStatus.reason})` : ''}"
-				onclick={() => {
-					const newMap = new Map(autoCompleteDisabledMap);
-					newMap.set(dtSess.name, !dtAutoCompleteDisabled);
-					autoCompleteDisabledMap = newMap;
-				}}
-			>
-				{#if dtAutoCompleteDisabled}
-					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" width="14" height="14">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-						<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-					</svg>
-				{:else}
-					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="14" height="14">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-					</svg>
-				{/if}
-				<span class="dtray-label">{dtAutoCompleteDisabled ? 'Manual' : 'Auto'}</span>
-			</button>
-			{/if}
-
-			<!-- Epic picker button (only for non-epic tasks) -->
-			{#if dtTask && dtTask.issue_type !== 'epic'}
-			<button
-				class="dtray-btn dtray-btn-epic"
-				class:dtray-btn-epic-open={dtrayEpicOpen}
-				title="Add to Epic"
-				onclick={() => dtrayOpenEpicPicker(dtTask.id)}
-			>
-				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" width="14" height="14">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-				</svg>
-				<span class="dtray-label">Epic</span>
-			</button>
-			{/if}
-
-			<!-- Commands button -->
-			<button
-				class="dtray-btn dtray-btn-cmds"
-				class:dtray-btn-cmds-open={dtrayCommandsOpen}
-				title="Slash Commands"
-				onclick={dtrayOpenCommands}
-			>
-				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" width="14" height="14">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
-				</svg>
-				<span class="dtray-label">Cmds</span>
-			</button>
-
-			<!-- Epic sub-picker dropdown (opens above/below tray) -->
-			{#if dtrayEpicOpen && dtTask}
-			<div class="dtray-subpanel" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="listbox" aria-label="Pick epic">
-				<!-- header row: label + close -->
-				<div class="dtray-subpanel-header">
-					<span class="dtray-subpanel-heading">Add to Epic</span>
-					<button class="dtray-subpanel-close" onclick={() => { dtrayEpicOpen = false; dtrayNewEpicTitle = ''; }} title="Close">
-						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="11" height="11">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-						</svg>
-					</button>
-				</div>
-				{#if dtrayEpicItems.length > 3}
-				<input
-					bind:value={dtrayEpicSearch}
-					placeholder="Search epics…"
-					class="dtray-subpanel-search"
-				/>
-				{/if}
-				{#if dtrayEpicLoading}
-					<div class="dtray-subpanel-msg">Loading epics…</div>
-				{:else if dtrayEpicItems.length === 0}
-					<div class="dtray-subpanel-msg">No epics yet — create one below</div>
-				{:else if dtrayFilteredEpics.length === 0}
-					<div class="dtray-subpanel-msg">No match for "{dtrayEpicSearch}"</div>
-				{:else}
-					{#each dtrayFilteredEpics as epic (epic.id)}
-					<button
-						class="dtray-subpanel-item"
-						class:dtray-subpanel-item-closed={epic.status === 'closed'}
-						disabled={!!dtrayEpicLinking}
-						onclick={() => dtrayLinkToEpic(dtTask.id, epic.id)}
-						role="option"
-						aria-selected={false}
-					>
-						<span class="dtray-subpanel-id">{epic.id}</span>
-						<span class="dtray-subpanel-title">{epic.title}</span>
-						{#if dtrayEpicLinking === epic.id}
-							<span class="loading loading-spinner loading-xs" style="width:10px;height:10px;"></span>
-						{/if}
-					</button>
-					{/each}
-				{/if}
-				<!-- New epic inline form -->
-				<div class="dtray-subpanel-new-epic">
-					<input
-						bind:value={dtrayNewEpicTitle}
-						placeholder="New epic title…"
-						class="dtray-subpanel-search"
-						style="flex:1;"
-						onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); dtrayCreateEpic(dtTask.id); } }}
-						disabled={dtrayCreatingEpic}
-					/>
-					<button
-						class="dtray-subpanel-create-btn"
-						onclick={() => dtrayCreateEpic(dtTask.id)}
-						disabled={!dtrayNewEpicTitle.trim() || dtrayCreatingEpic}
-						title="Create epic and link"
-					>
-						{#if dtrayCreatingEpic}
-							<span class="loading loading-spinner loading-xs" style="width:10px;height:10px;"></span>
-						{:else}
-							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="11" height="11">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-							</svg>
-						{/if}
-					</button>
-				</div>
-			</div>
-			{/if}
-
-			<!-- Commands sub-picker dropdown -->
-			{#if dtrayCommandsOpen}
-			<div class="dtray-subpanel" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="listbox" aria-label="Slash commands">
-				<input
-					bind:value={dtrayCommandsSearch}
-					placeholder="Search commands…"
-					class="dtray-subpanel-search"
-				/>
-				{#if dtrayCommandsLoading}
-					<div class="dtray-subpanel-msg">Loading commands…</div>
-				{:else if dtrayCommandsItems.length === 0}
-					<div class="dtray-subpanel-msg">No commands found</div>
-				{:else if dtrayFilteredCommands.length === 0}
-					<div class="dtray-subpanel-msg">No match for "{dtrayCommandsSearch}"</div>
-				{:else}
-					{#each dtrayFilteredCommands.slice(0, 12) as cmd (cmd.invocation)}
-					<button
-						class="dtray-subpanel-item"
-						onclick={async () => {
-							const inv = cmd.invocation;
-							const sn = dtraySession!;
-							closeDtray();
-							await sendWorkflowCommand(sn, inv);
-						}}
-						role="option"
-						aria-selected={false}
-					>
-						<span class="dtray-subpanel-id">{cmd.namespace}</span>
-						<span class="dtray-subpanel-title">{cmd.name}</span>
-					</button>
-					{/each}
-				{/if}
-			</div>
-			{/if}
-		</div>
-	{/if}
-{/if}
 
 <style>
 	/* Empty state */
@@ -4230,10 +3793,35 @@
 		gap: 0.125rem;
 	}
 
-	.mobile-cmd-search {
-		width: 100%;
-		padding: 0.25rem 0.5rem;
+	.mobile-cmd-header {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
 		margin-bottom: 0.1875rem;
+	}
+
+	.mobile-cmd-close {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.5rem;
+		height: 1.5rem;
+		border: none;
+		border-radius: 0.3125rem;
+		background: oklch(0.28 0.04 200 / 0.6);
+		color: oklch(0.60 0.05 200);
+		cursor: pointer;
+	}
+
+	.mobile-cmd-close:hover {
+		background: oklch(0.38 0.08 200 / 0.7);
+		color: oklch(0.80 0.02 250);
+	}
+
+	.mobile-cmd-search {
+		flex: 1;
+		padding: 0.25rem 0.5rem;
 		background: oklch(0.22 0.03 200);
 		border: 1px solid oklch(0.35 0.08 200 / 0.5);
 		border-radius: 0.3125rem;
@@ -4652,257 +4240,4 @@
 		overflow: hidden;
 	}
 
-	/* ── Desktop + button (hover trigger for action tray) ───────────────────── */
-	.desktop-plus-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 22px;
-		height: 22px;
-		border-radius: 50%;
-		border: 1px solid oklch(0.35 0.04 250 / 0.6);
-		background: oklch(0.22 0.02 250);
-		color: oklch(0.55 0.04 250);
-		cursor: pointer;
-		transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
-		flex-shrink: 0;
-		padding: 0;
-	}
-
-	.desktop-plus-btn:hover {
-		background: oklch(0.32 0.08 220);
-		color: oklch(0.85 0.06 220);
-		border-color: oklch(0.55 0.12 220 / 0.7);
-		transform: scale(1.1);
-	}
-
-	/* ── Desktop action tray portal ─────────────────────────────────────────── */
-	:global(.dtray-portal) {
-		position: fixed;
-		z-index: 50;
-		display: flex;
-		flex-direction: row;
-		align-items: center;
-		gap: 2px;
-		padding: 3px;
-		background: oklch(0.17 0.02 250);
-		border: 1px solid oklch(0.30 0.04 250 / 0.6);
-		border-radius: 8px;
-		box-shadow: 0 4px 20px oklch(0 0 0 / 0.5), 0 0 0 1px oklch(0.30 0.04 250 / 0.3);
-		max-width: 0;
-		overflow: hidden;
-		opacity: 0;
-		pointer-events: none;
-		transform: translateY(-50%);
-		transition:
-			max-width 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-			opacity 0.18s ease,
-			box-shadow 0.2s ease;
-		/* Sub-panels expand downward from the tray */
-		flex-wrap: wrap;
-		max-height: none;
-	}
-
-	:global(.dtray-portal.dtray-open) {
-		max-width: 600px;
-		opacity: 1;
-		pointer-events: auto;
-	}
-
-	:global(.dtray-btn) {
-		display: flex;
-		align-items: center;
-		gap: 5px;
-		padding: 5px 8px;
-		border: none;
-		border-radius: 5px;
-		background: oklch(0.24 0.02 250);
-		color: oklch(0.70 0.04 250);
-		cursor: pointer;
-		white-space: nowrap;
-		font-size: 0.6875rem;
-		font-weight: 500;
-		transition: background 0.12s, color 0.12s, transform 0.08s;
-		flex-shrink: 0;
-	}
-
-	:global(.dtray-btn:hover) {
-		background: oklch(0.30 0.05 220);
-		color: oklch(0.88 0.06 220);
-		transform: scale(1.03);
-	}
-
-	:global(.dtray-btn:active) {
-		transform: scale(0.97);
-	}
-
-	/* Variant colors matching mobile tray */
-	:global(.dtray-btn-success) { color: oklch(0.72 0.18 145); }
-	:global(.dtray-btn-success:hover) { background: oklch(0.28 0.08 145); color: oklch(0.82 0.20 145); }
-
-	:global(.dtray-btn-warning) { color: oklch(0.76 0.14 70); }
-	:global(.dtray-btn-warning:hover) { background: oklch(0.28 0.08 70); color: oklch(0.84 0.16 70); }
-
-	:global(.dtray-btn-error) { color: oklch(0.70 0.18 25); }
-	:global(.dtray-btn-error:hover) { background: oklch(0.28 0.10 25); color: oklch(0.80 0.20 25); }
-
-	:global(.dtray-btn-info) { color: oklch(0.72 0.14 220); }
-	:global(.dtray-btn-info:hover) { background: oklch(0.28 0.08 220); color: oklch(0.84 0.16 220); }
-
-	:global(.dtray-btn-auto) { color: oklch(0.65 0.12 45); }
-	:global(.dtray-btn-auto:hover) { background: oklch(0.26 0.06 45); }
-	:global(.dtray-btn-auto.dtray-btn-auto-on) { color: oklch(0.72 0.18 145); }
-	:global(.dtray-btn-auto.dtray-btn-auto-on:hover) { background: oklch(0.26 0.08 145); }
-
-	:global(.dtray-btn-epic) { color: oklch(0.65 0.12 280); }
-	:global(.dtray-btn-epic:hover) { background: oklch(0.26 0.08 280); color: oklch(0.80 0.16 280); }
-	:global(.dtray-btn-epic.dtray-btn-epic-open) { background: oklch(0.30 0.10 280); color: oklch(0.82 0.18 280); }
-
-	:global(.dtray-btn-cmds) { color: oklch(0.65 0.08 220); }
-	:global(.dtray-btn-cmds:hover) { background: oklch(0.26 0.06 220); color: oklch(0.80 0.12 220); }
-	:global(.dtray-btn-cmds.dtray-btn-cmds-open) { background: oklch(0.28 0.08 220); color: oklch(0.82 0.14 220); }
-
-	:global(.dtray-label) {
-		font-size: 0.6875rem;
-		font-weight: 500;
-		line-height: 1;
-	}
-
-	/* Sub-panel (epic picker / commands list) — appears below the tray row */
-	:global(.dtray-subpanel) {
-		width: 100%;
-		max-height: 200px;
-		overflow-y: auto;
-		border-top: 1px solid oklch(0.28 0.03 250 / 0.5);
-		padding: 4px 2px;
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		/* Allow subpanel to expand outside max-width */
-		min-width: 220px;
-	}
-
-	:global(.dtray-subpanel-search) {
-		width: 100%;
-		padding: 4px 8px;
-		margin-bottom: 2px;
-		background: oklch(0.22 0.02 250);
-		border: 1px solid oklch(0.32 0.04 250 / 0.5);
-		border-radius: 4px;
-		color: oklch(0.82 0.02 250);
-		font-size: 0.6875rem;
-		outline: none;
-	}
-
-	:global(.dtray-subpanel-search:focus) {
-		border-color: oklch(0.55 0.12 220 / 0.6);
-	}
-
-	:global(.dtray-subpanel-msg) {
-		padding: 6px 8px;
-		color: oklch(0.50 0.04 250);
-		font-size: 0.6875rem;
-		text-align: center;
-	}
-
-	:global(.dtray-subpanel-item) {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		padding: 5px 8px;
-		border-radius: 4px;
-		border: none;
-		background: transparent;
-		cursor: pointer;
-		text-align: left;
-		transition: background 0.1s;
-		width: 100%;
-	}
-
-	:global(.dtray-subpanel-item:hover) {
-		background: oklch(0.26 0.04 250);
-	}
-
-	:global(.dtray-subpanel-item-closed) {
-		opacity: 0.5;
-	}
-
-	:global(.dtray-subpanel-id) {
-		font-size: 0.5625rem;
-		color: oklch(0.55 0.10 220);
-		font-family: monospace;
-		flex-shrink: 0;
-	}
-
-	:global(.dtray-subpanel-title) {
-		font-size: 0.6875rem;
-		color: oklch(0.78 0.02 250);
-		flex: 1;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	:global(.dtray-subpanel-header) {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 5px 8px 4px;
-		border-bottom: 1px solid oklch(0.28 0.03 250 / 0.5);
-	}
-
-	:global(.dtray-subpanel-heading) {
-		font-size: 0.625rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		color: oklch(0.55 0.08 250);
-	}
-
-	:global(.dtray-subpanel-close) {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 18px;
-		height: 18px;
-		border-radius: 3px;
-		color: oklch(0.50 0.04 250);
-		transition: background 0.1s, color 0.1s;
-	}
-
-	:global(.dtray-subpanel-close:hover) {
-		background: oklch(0.30 0.04 250);
-		color: oklch(0.80 0.04 250);
-	}
-
-	:global(.dtray-subpanel-new-epic) {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		padding: 5px 6px 4px;
-		border-top: 1px solid oklch(0.28 0.03 250 / 0.5);
-	}
-
-	:global(.dtray-subpanel-create-btn) {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		flex-shrink: 0;
-		width: 22px;
-		height: 22px;
-		border-radius: 4px;
-		background: oklch(0.35 0.10 140 / 0.3);
-		color: oklch(0.70 0.15 140);
-		transition: background 0.15s, color 0.15s;
-	}
-
-	:global(.dtray-subpanel-create-btn:hover:not(:disabled)) {
-		background: oklch(0.42 0.14 140 / 0.5);
-		color: oklch(0.85 0.18 140);
-	}
-
-	:global(.dtray-subpanel-create-btn:disabled) {
-		opacity: 0.4;
-		cursor: not-allowed;
-	}
 </style>

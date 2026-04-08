@@ -368,6 +368,13 @@
 	// Convert projectColors Record to Map for ProjectSelector
 	const projectColorsMap = $derived(new Map(Object.entries(projectColors)));
 
+	// Current project accent color for bottom border
+	const activeProjectColor = $derived(
+		selectedProject && selectedProject !== 'All Projects'
+			? (projectColors[selectedProject] || getProjectColor(selectedProject))
+			: null
+	);
+
 	// Favorite projects list: user-controlled order via drag-and-drop
 	const favoriteChips = $derived(() => {
 		if (!favoriteProjects || favoriteProjects.size === 0) return [];
@@ -554,8 +561,7 @@
 	class="w-full h-12 flex items-center relative"
 	style="
 		background: linear-gradient(180deg, var(--color-base-200) 0%, var(--color-base-300) 100%);
-		border-bottom: 1px solid var(--color-base-content);
-		border-bottom-opacity: 0.2;
+		border-bottom: {activeProjectColor ? `3px solid ${activeProjectColor}` : '1px solid oklch(0.25 0.02 250)'};
 	"
 >
 	<!-- Mobile hamburger menu (visible on small screens) -->

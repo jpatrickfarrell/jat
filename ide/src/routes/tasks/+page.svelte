@@ -2750,7 +2750,6 @@
 		background: oklch(0.18 0.01 250);
 		border-radius: 0.75rem;
 		border: 1px solid oklch(0.25 0.02 250);
-		border-top: 3px solid var(--project-color);
 		/* NOTE: overflow:hidden removed - it clips TaskIdBadge dropdowns that need to escape container (see jat-1xa13) */
 	}
 
@@ -2838,7 +2837,7 @@
 	.epic-header-row {
 		display: flex;
 		align-items: center;
-		border-radius: 0.375rem;
+		border-radius: 0.5rem;
 		transition: background-color 0.15s ease;
 	}
 
@@ -2859,7 +2858,7 @@
 		padding: 0.25rem 0.5rem;
 		margin-right: 0.5rem;
 		border: 1px solid oklch(0.55 0.20 280 / 0.4);
-		border-radius: 0.375rem;
+		border-radius: 0.5rem;
 		background: oklch(0.55 0.20 280 / 0.1);
 		color: oklch(0.80 0.15 280);
 		cursor: pointer;
@@ -3169,7 +3168,7 @@
 		align-items: center;
 		padding: 0.5rem 0.75rem;
 		background: oklch(0.15 0.01 250);
-		border-radius: 0.375rem;
+		border-radius: 0.5rem;
 		margin-bottom: 0.5rem;
 	}
 
@@ -3271,7 +3270,7 @@
 		padding: 0.375rem 0.75rem;
 		background: oklch(0.25 0.02 250);
 		border: 1px solid oklch(0.35 0.02 250);
-		border-radius: 0.375rem;
+		border-radius: 0.5rem;
 		color: oklch(0.8 0.02 250);
 		cursor: pointer;
 	}
@@ -3339,7 +3338,7 @@
 	.memory-panel {
 		background: var(--color-base-100);
 		border: 1px solid var(--color-base-300);
-		border-radius: 12px;
+		border-radius: 0.75rem;
 		max-width: 700px;
 		width: 100%;
 		max-height: 80vh;
@@ -3372,7 +3371,7 @@
 		justify-content: center;
 		width: 28px;
 		height: 28px;
-		border-radius: 6px;
+		border-radius: 0.5rem;
 		border: none;
 		background: transparent;
 		color: oklch(from var(--color-base-content) l c h / 50%);
@@ -3414,7 +3413,7 @@
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.45rem 0.65rem;
-		border-radius: 8px;
+		border-radius: 0.5rem;
 		border: 1px solid oklch(0.36 0.10 280 / 0.45);
 		background: oklch(0.18 0.03 280 / 0.9);
 		backdrop-filter: blur(6px);
@@ -3501,7 +3500,7 @@
 		font-size: 0.68rem;
 		font-weight: 600;
 		padding: 0.18rem 0.5rem;
-		border-radius: 5px;
+		border-radius: 0.25rem;
 		border: 1px solid oklch(0.40 0.08 250 / 0.4);
 		background: oklch(0.22 0.03 250 / 0.6);
 		color: oklch(0.70 0.10 220);
@@ -3525,7 +3524,7 @@
 		justify-content: center;
 		width: 20px;
 		height: 20px;
-		border-radius: 4px;
+		border-radius: 0.25rem;
 		border: none;
 		background: transparent;
 		color: oklch(0.40 0.02 250);

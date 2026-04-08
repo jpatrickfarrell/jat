@@ -2502,7 +2502,7 @@
 		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 		text-transform: lowercase;
 		padding: 0.25rem 0.5rem;
-		border-radius: 0.375rem;
+		border-radius: 0.5rem;
 		cursor: pointer;
 		transition: all 0.15s ease;
 		/* Use CSS custom property for project color */
@@ -2673,7 +2673,7 @@
 		width: 80px;
 		height: 80px;
 		border: 2px solid oklch(0.60 0.15 50);
-		border-radius: 0.375rem;
+		border-radius: 0.5rem;
 		color: oklch(0.65 0.15 50);
 		transition: all 0.2s ease;
 	}
@@ -2704,7 +2704,7 @@
 		padding: 0.375rem 0.75rem;
 		background: oklch(0.25 0.02 250);
 		border: 1px solid oklch(0.35 0.02 250);
-		border-radius: 0.375rem;
+		border-radius: 0.5rem;
 		color: oklch(0.80 0.02 250);
 		cursor: pointer;
 	}
@@ -2822,7 +2822,7 @@
 		width: 28px;
 		height: 100%;
 		min-height: 28px;
-		border-radius: 4px;
+		border-radius: 0.25rem;
 		overflow: hidden;
 		cursor: pointer;
 		position: relative;
@@ -2854,7 +2854,7 @@
 		background: oklch(0.35 0.05 250);
 		color: oklch(0.85 0.02 250);
 		padding: 0 3px;
-		border-radius: 3px;
+		border-radius: 0.25rem;
 		line-height: 1.2;
 		border: 1px solid oklch(0.20 0.02 250);
 	}
@@ -2938,7 +2938,7 @@
 		padding: 0.375rem 0.25rem;
 		background: oklch(0.14 0.01 250);
 		border: 1px solid oklch(0.28 0.02 250);
-		border-radius: 0.375rem;
+		border-radius: 0.5rem;
 		cursor: pointer;
 		transition: all 0.1s;
 	}
@@ -3005,7 +3005,7 @@
 		padding: 0.5rem 0.625rem;
 		background: oklch(0.14 0.01 250);
 		border: 1px solid oklch(0.30 0.02 250);
-		border-radius: 0.375rem;
+		border-radius: 0.5rem;
 		color: oklch(0.88 0.02 250);
 		font-size: 0.8125rem;
 		outline: none;
@@ -3054,7 +3054,7 @@
 	.due-date-btn {
 		padding: 0.375rem 0.625rem;
 		border: none;
-		border-radius: 0.375rem;
+		border-radius: 0.5rem;
 		font-size: 0.75rem;
 		font-weight: 500;
 		cursor: pointer;
@@ -3145,7 +3145,7 @@
 		color: oklch(0.80 0.02 250);
 		font-size: 0.8125rem;
 		text-align: left;
-		border-radius: 0.375rem;
+		border-radius: 0.25rem;
 		cursor: pointer;
 		transition: all 0.1s ease;
 	}
@@ -3455,7 +3455,7 @@
 		gap: 0.375rem;
 		padding: 0.375rem 0.625rem;
 		border: 1px solid transparent;
-		border-radius: 0.375rem;
+		border-radius: 0.5rem;
 		font-size: 0.75rem;
 		font-weight: 500;
 		cursor: pointer;
@@ -3574,7 +3574,7 @@
 		color: oklch(0.80 0.02 250);
 		font-size: 0.75rem;
 		text-align: left;
-		border-radius: 0.375rem;
+		border-radius: 0.25rem;
 		cursor: pointer;
 		transition: background 0.1s;
 		white-space: nowrap;
@@ -3617,16 +3617,16 @@
 	}
 
 	.open-swipe-container:first-child .mobile-task-card {
-		border-radius: 8px 8px 0 0;
+		border-radius: 0.5rem 0.5rem 0 0;
 	}
 
 	.open-swipe-container:last-child .mobile-task-card {
-		border-radius: 0 0 8px 8px;
+		border-radius: 0 0 0.5rem 0.5rem;
 		border-bottom: 1px solid oklch(0.25 0.02 250);
 	}
 
 	.open-swipe-container:only-child .mobile-task-card {
-		border-radius: 8px;
+		border-radius: 0.5rem;
 		border-bottom: 1px solid oklch(0.25 0.02 250);
 	}
 
@@ -3722,7 +3722,7 @@
 		font-size: 0.5625rem;
 		font-weight: 500;
 		padding: 0 0.25rem;
-		border-radius: 3px;
+		border-radius: 0.25rem;
 		background: oklch(0.30 0.02 250);
 		color: oklch(0.65 0.02 250);
 	}
@@ -3934,7 +3934,7 @@
 		color: oklch(0.42 0.02 250);
 		background: oklch(0.20 0.01 250);
 		border: 1px solid oklch(0.24 0.02 250);
-		border-radius: 3px;
+		border-radius: 0.25rem;
 		padding: 1px 5px;
 		cursor: pointer;
 		font-family: ui-monospace, monospace;

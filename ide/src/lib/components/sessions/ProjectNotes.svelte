@@ -459,7 +459,7 @@
 		padding: 0;
 		background: transparent;
 		border: 1px solid transparent;
-		border-radius: 0.375rem;
+		border-radius: 0.5rem;
 		cursor: pointer;
 		color: oklch(0.55 0.02 250);
 		transition: all 0.15s ease;

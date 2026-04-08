@@ -1135,7 +1135,7 @@
 				{@const eventKey = getEventKey(event)}
 				<div
 					class="rounded-lg transition-all"
-					style="background: {style.bg}; border: 1px solid {style.border}; border-left: 3px solid {style.accent || style.border};"
+					style="background: {style.bg}; border: 1px solid {style.border};"
 				>
 					<!-- Event header (always visible) -->
 					<div class="flex items-center">

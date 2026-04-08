@@ -301,6 +301,39 @@
 	// Optimistic state overrides - for instant UI feedback before WS catches up
 	let optimisticStates = $state<Map<string, string>>(new Map());
 
+	// Inline commands panel state (for mobile card tray)
+	let cmdPanelSession = $state<string | null>(null);
+	let cmdPanelSearch = $state('');
+
+	const filteredCmdPanelItems = $derived(
+		cmdPanelSearch.trim()
+			? dtrayCommandsItems.filter(c =>
+				c.name.toLowerCase().includes(cmdPanelSearch.toLowerCase()) ||
+				c.namespace.toLowerCase().includes(cmdPanelSearch.toLowerCase()) ||
+				c.invocation.toLowerCase().includes(cmdPanelSearch.toLowerCase())
+			)
+			: dtrayCommandsItems
+	);
+
+	async function openMobileCmdPanel(sessionName: string) {
+		if (cmdPanelSession === sessionName) {
+			cmdPanelSession = null;
+			return;
+		}
+		// Close epic picker if open
+		epicPickerSession = null;
+		cmdPanelSession = sessionName;
+		cmdPanelSearch = '';
+		if (dtrayCommandsItems.length === 0 && !dtrayCommandsLoading) {
+			dtrayCommandsLoading = true;
+			try {
+				const res = await fetch('/api/commands');
+				dtrayCommandsItems = (await res.json()).commands || [];
+			} catch { /* silently fail */ }
+			finally { dtrayCommandsLoading = false; }
+		}
+	}
+
 	// Inline epic picker state (for mobile card tray)
 	let epicPickerSession = $state<string | null>(null);
 	let epicPickerItems = $state<{id: string; title: string; status: string}[]>([]);
@@ -322,6 +355,8 @@
 			epicPickerSession = null;
 			return;
 		}
+		// Close commands panel if open
+		cmdPanelSession = null;
 		epicPickerSession = sessionName;
 		epicPickerSearch = '';
 		epicPickerItems = [];
@@ -1762,7 +1797,43 @@
 								<span>Epic</span>
 							</button>
 							{/if}
+							<button
+								class="mobile-tray-btn mobile-tray-btn-cmds"
+								class:mobile-tray-btn-cmds-open={cmdPanelSession === session.name}
+								title="All Commands"
+								onclick={() => openMobileCmdPanel(session.name)}
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
+								</svg>
+								<span>Cmds</span>
+							</button>
 						</div>
+						{#if cmdPanelSession === session.name}
+						<div class="mobile-cmd-inline" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="group">
+							<input
+								bind:value={cmdPanelSearch}
+								placeholder="Filter commands…"
+								class="mobile-cmd-search"
+								autofocus
+							/>
+							{#if dtrayCommandsLoading}
+								<div class="mobile-cmd-msg">Loading commands…</div>
+							{:else if filteredCmdPanelItems.length === 0}
+								<div class="mobile-cmd-msg">{cmdPanelSearch.trim() ? `No match for "${cmdPanelSearch}"` : 'No commands found'}</div>
+							{:else}
+								{#each filteredCmdPanelItems as cmd (cmd.invocation)}
+								<button
+									class="mobile-cmd-item"
+									onclick={() => { sendWorkflowCommand(session.name, cmd.invocation); cmdPanelSession = null; }}
+								>
+									<span class="mobile-cmd-ns">{cmd.namespace}</span>
+									<span class="mobile-cmd-name">{cmd.invocation}</span>
+								</button>
+								{/each}
+							{/if}
+						</div>
+						{/if}
 						{#if epicPickerSession === session.name}
 						<div class="mobile-epic-inline" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="group">
 							{#if epicPickerItems.length > 3}
@@ -4104,18 +4175,18 @@
 
 	.mobile-state-strip:hover ~ .mobile-action-tray,
 	.mobile-action-tray:hover {
-		max-width: 390px;
+		max-width: 480px;
 	}
 
 	/* Tray action buttons */
 	.mobile-tray-btn {
+		flex: 1;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
 		gap: 4px;
-		padding: 6px 10px;
-		min-width: 68px;
+		padding: 6px 8px;
 		border: none;
 		border-right: 1px solid oklch(0 0 0 / 0.18);
 		cursor: pointer;
@@ -4144,6 +4215,74 @@
 	.mobile-tray-btn-working  { background: oklch(0.52 0.14 70); }
 	.mobile-tray-btn-epic     { background: oklch(0.35 0.10 280); }
 	.mobile-tray-btn-epic-open { background: oklch(0.45 0.14 280); }
+	.mobile-tray-btn-cmds     { background: oklch(0.30 0.08 200); }
+	.mobile-tray-btn-cmds-open { background: oklch(0.42 0.14 200); }
+
+	/* Inline commands panel — expands below the card inner */
+	.mobile-cmd-inline {
+		background: oklch(0.17 0.02 200 / 0.65);
+		border-top: 1px solid oklch(0.35 0.08 200 / 0.4);
+		padding: 0.375rem 0.5rem;
+		max-height: 200px;
+		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+	}
+
+	.mobile-cmd-search {
+		width: 100%;
+		padding: 0.25rem 0.5rem;
+		margin-bottom: 0.1875rem;
+		background: oklch(0.22 0.03 200);
+		border: 1px solid oklch(0.35 0.08 200 / 0.5);
+		border-radius: 0.3125rem;
+		color: oklch(0.85 0.02 250);
+		font-size: 0.6875rem;
+		outline: none;
+	}
+
+	.mobile-cmd-msg {
+		padding: 0.375rem 0.25rem;
+		color: oklch(0.55 0.04 200);
+		font-size: 0.6875rem;
+		text-align: center;
+	}
+
+	.mobile-cmd-item {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		width: 100%;
+		padding: 0.25rem 0.5rem;
+		border-radius: 0.3125rem;
+		border: none;
+		background: oklch(0.22 0.03 200 / 0.4);
+		cursor: pointer;
+		text-align: left;
+		transition: background 0.1s;
+	}
+
+	.mobile-cmd-item:hover, .mobile-cmd-item:active {
+		background: oklch(0.30 0.08 200 / 0.6);
+	}
+
+	.mobile-cmd-ns {
+		font-size: 0.5625rem;
+		color: oklch(0.55 0.10 200);
+		font-family: monospace;
+		flex-shrink: 0;
+	}
+
+	.mobile-cmd-name {
+		font-size: 0.6875rem;
+		color: oklch(0.80 0.02 250);
+		flex: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-family: monospace;
+	}
 
 	/* Inline epic picker — expands below the card inner */
 	.mobile-epic-inline {
@@ -4289,8 +4428,6 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		max-height: 1.6em;
-		transition: max-height 0.4s cubic-bezier(0.55, 0.085, 0.68, 0.53);
 	}
 
 	.mobile-description {
@@ -4299,46 +4436,9 @@
 		color: oklch(0.60 0.02 250);
 		overflow: hidden;
 		line-height: 1.4;
-		max-height: 2.8em;
-		/* Exit: tracking contracts, then height shrinks */
-		transition: max-height 0.4s 0.25s cubic-bezier(0.55, 0.085, 0.68, 0.53),
-					letter-spacing 0.35s cubic-bezier(0.55, 0.085, 0.68, 0.53),
-					opacity 0.35s cubic-bezier(0.55, 0.085, 0.68, 0.53);
 	}
 
-	.mobile-state-strip:hover ~ .mobile-card-body .mobile-title {
-		white-space: normal;
-		display: -webkit-box;
-		-webkit-line-clamp: 5;
-		-webkit-box-orient: vertical;
-		max-height: 6.5em;
-		transition: max-height 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-	}
 
-	.mobile-card-body:hover .mobile-description {
-		max-height: 7em;
-		letter-spacing: 0.02em;
-		/* Enter: height expands, then tracking reveals */
-		transition: max-height 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-					letter-spacing 0.5s 0.1s cubic-bezier(0.215, 0.61, 0.355, 1),
-					opacity 0.5s 0.1s cubic-bezier(0.215, 0.61, 0.355, 1);
-		animation: mobile-text-reveal 0.5s cubic-bezier(0.215, 0.61, 0.355, 1) both;
-	}
-
-	/* Enter: letters expand in from compressed */
-	@keyframes mobile-text-reveal {
-		0% {
-			letter-spacing: -0.15em;
-			opacity: 0.6;
-		}
-		60% {
-			opacity: 0.9;
-		}
-		100% {
-			letter-spacing: 0.02em;
-			opacity: 1;
-		}
-	}
 
 	/* Row 2: Compact metadata line */
 	.mobile-card-row2 {

@@ -779,18 +779,18 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			description: 'Open task details'
 		},
 		{
-			id: 'attach',
-			label: 'Attach Terminal',
-			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
-			variant: 'info',
-			description: 'Open session in terminal'
-		},
-		{
 			id: 'pause',
 			label: 'Pause Session',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'default',
 			description: 'Save progress and close (resumable later)'
+		},
+		{
+			id: 'attach',
+			label: 'Attach Terminal',
+			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
+			variant: 'info',
+			description: 'Open session in terminal'
 		},
 		{
 			id: 'kill',
@@ -811,13 +811,6 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			description: 'Finish polishing and close session'
 		},
 		{
-			id: 'attach',
-			label: 'Attach Terminal',
-			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
-			variant: 'info',
-			description: 'Open session in terminal'
-		},
-		{
 			id: 'interrupt',
 			label: 'Interrupt',
 			icon: 'M15.75 5.25v13.5m-7.5-13.5v13.5',
@@ -830,6 +823,13 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'default',
 			description: 'Save progress and close (resumable later)'
+		},
+		{
+			id: 'attach',
+			label: 'Attach Terminal',
+			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
+			variant: 'info',
+			description: 'Open session in terminal'
 		}
 	],
 	planning: [
@@ -841,18 +841,18 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			description: 'Ask the agent to convert the plan into tasks'
 		},
 		{
-			id: 'attach',
-			label: 'Attach Terminal',
-			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
-			variant: 'info',
-			description: 'Open planning session in terminal'
-		},
-		{
 			id: 'interrupt',
 			label: 'Interrupt',
 			icon: 'M15.75 5.25v13.5m-7.5-13.5v13.5',
 			variant: 'warning',
 			description: 'Send Ctrl+C to interrupt'
+		},
+		{
+			id: 'attach',
+			label: 'Attach Terminal',
+			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
+			variant: 'info',
+			description: 'Open planning session in terminal'
 		},
 		{
 			id: 'kill',
@@ -894,13 +894,6 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			description: 'Complete task and review completion block'
 		},
 		{
-			id: 'attach',
-			label: 'Attach Terminal',
-			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
-			variant: 'info',
-			description: 'Open session in terminal to review'
-		},
-		{
 			id: 'complete-kill',
 			label: 'Complete & Kill',
 			icon: 'M9 12.75L11.25 15 15 9.75m0 0l3 3m-3-3v7.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
@@ -920,6 +913,13 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'default',
 			description: 'Save progress and close (resumable later)'
+		},
+		{
+			id: 'attach',
+			label: 'Attach Terminal',
+			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
+			variant: 'info',
+			description: 'Open session in terminal to review'
 		},
 		{
 			id: 'kill',
@@ -954,13 +954,6 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 	],
 	'needs-input': [
 		{
-			id: 'attach',
-			label: 'Attach Terminal',
-			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
-			variant: 'warning',
-			description: 'Open session to provide input'
-		},
-		{
 			id: 'escape',
 			label: 'Send Escape',
 			icon: 'M9 9l6 6m0-6l-6 6m12-3a9 9 0 11-18 0 9 9 0 0118 0z',
@@ -975,6 +968,13 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			description: 'Save progress and close (resumable later)'
 		},
 		{
+			id: 'attach',
+			label: 'Attach Terminal',
+			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
+			variant: 'warning',
+			description: 'Open session to provide input'
+		},
+		{
 			id: 'kill',
 			label: 'Kill Session',
 			icon: 'M6 18L18 6M6 6l12 12',
@@ -984,25 +984,11 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 	],
 	working: [
 		{
-			id: 'attach',
-			label: 'Attach Terminal',
-			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
-			variant: 'info',
-			description: 'Open session in terminal'
-		},
-		{
 			id: 'interrupt',
 			label: 'Interrupt',
 			icon: 'M15.75 5.25v13.5m-7.5-13.5v13.5',
 			variant: 'warning',
 			description: 'Send Ctrl+C to interrupt'
-		},
-		{
-			id: 'pause',
-			label: 'Pause Session',
-			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-			variant: 'default',
-			description: 'Save progress and close (resumable later)'
 		},
 		{
 			id: 'complete-kill',
@@ -1017,6 +1003,20 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			icon: 'M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'error',
 			description: 'Close task immediately and kill session (skip completion)'
+		},
+		{
+			id: 'pause',
+			label: 'Pause Session',
+			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+			variant: 'default',
+			description: 'Save progress and close (resumable later)'
+		},
+		{
+			id: 'attach',
+			label: 'Attach Terminal',
+			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
+			variant: 'info',
+			description: 'Open session in terminal'
 		},
 		{
 			id: 'kill',
@@ -1051,13 +1051,6 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 	],
 	starting: [
 		{
-			id: 'attach',
-			label: 'Attach Terminal',
-			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
-			variant: 'info',
-			description: 'Open session in terminal'
-		},
-		{
 			id: 'interrupt',
 			label: 'Cancel Start',
 			icon: 'M15.75 5.25v13.5m-7.5-13.5v13.5',
@@ -1070,6 +1063,13 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'default',
 			description: 'Save progress and close (resumable later)'
+		},
+		{
+			id: 'attach',
+			label: 'Attach Terminal',
+			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
+			variant: 'info',
+			description: 'Open session in terminal'
 		},
 		{
 			id: 'kill',
@@ -1155,18 +1155,18 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			description: 'Kill tmux session'
 		},
 		{
-			id: 'attach',
-			label: 'Attach Terminal',
-			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
-			variant: 'info',
-			description: 'Open session in terminal'
-		},
-		{
 			id: 'pause',
 			label: 'Pause Session',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'default',
 			description: 'Save progress and close (resumable later)'
+		},
+		{
+			id: 'attach',
+			label: 'Attach Terminal',
+			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
+			variant: 'info',
+			description: 'Open session in terminal'
 		},
 		{
 			id: 'kill',

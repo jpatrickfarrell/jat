@@ -73,6 +73,57 @@
 	let escapeFlash = $state(false);
 	let arrowFlash = $state(false);
 
+	// Inline epic picker state
+	let epicPickerOpen = $state(false);
+	let epicsList = $state<{id: string; title: string; status: string}[]>([]);
+	let epicsLoading = $state(false);
+	let epicsError = $state<string | null>(null);
+	let epicSearch = $state('');
+	let linkingEpicId = $state<string | null>(null);
+
+	const filteredEpicsList = $derived(
+		epicSearch.trim()
+			? epicsList.filter(e =>
+				e.id.toLowerCase().includes(epicSearch.toLowerCase()) ||
+				e.title.toLowerCase().includes(epicSearch.toLowerCase())
+			)
+			: epicsList
+	);
+
+	async function toggleEpicPicker() {
+		epicPickerOpen = !epicPickerOpen;
+		if (epicPickerOpen && epicsList.length === 0 && !epicsLoading) {
+			const projectName = taskId?.split('-')[0];
+			if (!projectName) return;
+			epicsLoading = true;
+			epicsError = null;
+			try {
+				const res = await fetch(`/api/epics?project=${projectName}`);
+				const data = await res.json();
+				epicsList = data.epics || [];
+			} catch {
+				epicsError = 'Failed to load epics';
+			} finally {
+				epicsLoading = false;
+			}
+		}
+	}
+
+	async function handlePickEpic(epicId: string) {
+		if (!onLinkToEpic || linkingEpicId) return;
+		linkingEpicId = epicId;
+		try {
+			await onLinkToEpic(epicId);
+			epicPickerOpen = false;
+			epicsList = [];
+			epicSearch = '';
+		} catch {
+			// error handled by parent
+		} finally {
+			linkingEpicId = null;
+		}
+	}
+
 	// Input history (Up arrow recalls previous submissions)
 	let inputHistory: string[] = [];
 	let historyIndex = $state(-1); // -1 = not browsing history
@@ -830,6 +881,59 @@
 			{/each}
 		</div>
 
+		<!-- Add to Epic Row (always visible when task is active and linkToEpic is available) -->
+		{#if onLinkToEpic && taskInfo?.issue_type !== 'epic'}
+		<div class="epic-row">
+			<button class="epic-row-toggle" onclick={toggleEpicPicker} aria-expanded={epicPickerOpen}>
+				<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+				</svg>
+				<span>Add to Epic</span>
+				<svg class="epic-chevron" class:epic-chevron-open={epicPickerOpen} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+				</svg>
+			</button>
+			{#if epicPickerOpen}
+			<div class="epic-picker">
+				{#if epicsList.length > 3}
+				<input
+					bind:value={epicSearch}
+					placeholder="Search epics…"
+					class="epic-search"
+					onclick={(e) => e.stopPropagation()}
+				/>
+				{/if}
+				{#if epicsLoading}
+					<div class="epic-message">Loading epics…</div>
+				{:else if epicsError}
+					<div class="epic-message epic-message-error">{epicsError}</div>
+				{:else if epicsList.length === 0}
+					<div class="epic-message">No epics in this project</div>
+				{:else if filteredEpicsList.length === 0}
+					<div class="epic-message">No epics match "{epicSearch}"</div>
+				{:else}
+					{#each filteredEpicsList as epic (epic.id)}
+					<button
+						class="epic-item"
+						class:epic-item-closed={epic.status === 'closed'}
+						onclick={() => handlePickEpic(epic.id)}
+						disabled={!!linkingEpicId}
+					>
+						<span class="epic-item-id">{epic.id}</span>
+						<span class="epic-item-title">{epic.title}</span>
+						{#if linkingEpicId === epic.id}
+							<svg class="epic-item-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83" />
+							</svg>
+						{/if}
+					</button>
+					{/each}
+				{/if}
+			</div>
+			{/if}
+		</div>
+		{/if}
+
 		<!-- Input Bar -->
 		<div class="fullscreen-input">
 			{#if sendInputError}
@@ -1142,6 +1246,130 @@
 
 	.action-info:active {
 		background: oklch(0.25 0.08 240);
+	}
+
+	/* Epic Row */
+	.epic-row {
+		flex-shrink: 0;
+		background: oklch(0.16 0.01 250);
+		border-top: 1px solid oklch(0.22 0.02 250);
+	}
+
+	.epic-row-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		width: 100%;
+		padding: 0.3125rem 0.75rem;
+		background: transparent;
+		border: none;
+		color: oklch(0.60 0.10 270);
+		font-size: 0.6875rem;
+		font-weight: 500;
+		cursor: pointer;
+		text-align: left;
+	}
+
+	.epic-row-toggle:active {
+		background: oklch(0.20 0.02 250);
+	}
+
+	.epic-row-toggle span {
+		flex: 1;
+	}
+
+	.epic-chevron {
+		width: 0.75rem;
+		height: 0.75rem;
+		transition: transform 0.15s;
+		flex-shrink: 0;
+	}
+
+	.epic-chevron-open {
+		transform: rotate(180deg);
+	}
+
+	.epic-picker {
+		padding: 0 0.5rem 0.5rem;
+		max-height: 200px;
+		overflow-y: auto;
+		-webkit-overflow-scrolling: touch;
+		display: flex;
+		flex-direction: column;
+		gap: 0.1875rem;
+	}
+
+	.epic-search {
+		width: 100%;
+		padding: 0.25rem 0.5rem;
+		margin-bottom: 0.1875rem;
+		background: oklch(0.20 0.02 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.375rem;
+		color: oklch(0.85 0.02 250);
+		font-size: 0.75rem;
+		outline: none;
+	}
+
+	.epic-search:focus {
+		border-color: oklch(0.45 0.10 270 / 0.6);
+	}
+
+	.epic-message {
+		padding: 0.375rem 0.25rem;
+		color: oklch(0.55 0.04 250);
+		font-size: 0.6875rem;
+		text-align: center;
+	}
+
+	.epic-message-error {
+		color: oklch(0.65 0.12 25);
+	}
+
+	.epic-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.3125rem 0.5rem;
+		border-radius: 0.3125rem;
+		border: none;
+		background: oklch(0.20 0.02 250);
+		cursor: pointer;
+		text-align: left;
+		transition: background 0.1s;
+	}
+
+	.epic-item:active {
+		background: oklch(0.25 0.06 270);
+	}
+
+	.epic-item-closed {
+		opacity: 0.5;
+	}
+
+	.epic-item-id {
+		font-size: 0.625rem;
+		color: oklch(0.50 0.10 270);
+		font-family: monospace;
+		flex-shrink: 0;
+	}
+
+	.epic-item-title {
+		font-size: 0.6875rem;
+		color: oklch(0.80 0.02 250);
+		flex: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.epic-item-spinner {
+		width: 0.875rem;
+		height: 0.875rem;
+		flex-shrink: 0;
+		animation: spin 1s linear infinite;
+		color: oklch(0.60 0.10 270);
 	}
 
 	/* Input Bar */

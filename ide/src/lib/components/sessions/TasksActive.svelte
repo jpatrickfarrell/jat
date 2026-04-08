@@ -1477,9 +1477,14 @@
 							{/each}
 						</div>
 						<div class="mobile-card-body">
-							<span class="mobile-title" title={sessionTask.title}>
-								<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
-							</span>
+							<div class="mobile-title-row">
+								<span class="mobile-title" title={sessionTask.title}>
+									<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
+								</span>
+								{#if elapsed}
+									<span class="mobile-title-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
+								{/if}
+							</div>
 							{#if sessionTask.description}
 								<span class="mobile-description" title={sessionTask.description}>{sessionTask.description}</span>
 							{/if}
@@ -1492,10 +1497,6 @@
 							{/if}
 							<div class="mobile-card-row2">
 								<span class="mobile-task-id" style="color: {statusDotColor};">{sessionTask.id}</span>
-								{#if elapsed}
-									<span class="mobile-separator">·</span>
-									<span class="mobile-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
-								{/if}
 								{#if sessionTask.issue_type}
 									<span class="mobile-separator">·</span>
 									<span class="mobile-type-icon" title={typeVisual.label}>{typeVisual.icon}</span>
@@ -3639,7 +3640,27 @@
 		gap: 0.25rem;
 	}
 
+	.mobile-title-row {
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
+		min-width: 0;
+	}
+
+	.mobile-title-elapsed {
+		flex-shrink: 0;
+		font-size: 0.6875rem;
+		font-weight: 500;
+		color: oklch(0.55 0.02 250);
+		font-variant-numeric: tabular-nums;
+		font-family: ui-monospace, monospace;
+		align-self: flex-start;
+		padding-top: 0.2em;
+		margin-left: auto;
+	}
+
 	.mobile-title {
+		flex: 1;
 		min-width: 0;
 		font-size: 1rem;
 		font-weight: 600;

@@ -810,9 +810,9 @@
 	<title>Clients | JAT IDE</title>
 </svelte:head>
 
-<div class="flex flex-col gap-6 p-6 max-w-7xl mx-auto">
+<div class="flex flex-col gap-6 p-4 md:p-6 max-w-7xl mx-auto overflow-x-hidden">
 	<!-- Header -->
-	<div class="flex items-center justify-between">
+	<div class="flex flex-wrap items-center justify-between gap-2">
 		<div>
 			<h1 class="text-2xl font-bold">Clients</h1>
 			<p class="text-sm opacity-60 mt-1">
@@ -956,8 +956,8 @@
 													<th>Contract</th>
 													<th>Status</th>
 													<th class="text-right">Amount</th>
-													<th class="text-right">Paid</th>
-													<th>Signed</th>
+													<th class="text-right hidden md:table-cell">Paid</th>
+													<th class="hidden md:table-cell">Signed</th>
 													<th>
 											Milestones
 											<div class="flex gap-1.5 mt-0.5 font-normal">
@@ -966,7 +966,7 @@
 												<span class="flex items-center gap-0.5 text-[10px] opacity-40"><span class="w-1.5 h-1.5 rounded-full bg-warning inline-block"></span>pend</span>
 											</div>
 										</th>
-												<th>Terms</th>
+												<th class="hidden lg:table-cell">Terms</th>
 												</tr>
 											</thead>
 											<tbody>
@@ -988,10 +988,10 @@
 														<td class="text-right font-mono">
 															{formatCents(contract.total_amount, contract.currency)}
 														</td>
-														<td class="text-right font-mono text-success">
+														<td class="text-right font-mono text-success hidden md:table-cell">
 															{paid > 0 ? formatCents(paid, contract.currency) : '—'}
 														</td>
-														<td class="text-sm opacity-60">{formatDate(contract.signed_at)}</td>
+														<td class="text-sm opacity-60 hidden md:table-cell">{formatDate(contract.signed_at)}</td>
 														<td>
 															<div class="flex gap-1">
 																{#each contract.milestones || [] as milestone}
@@ -1067,7 +1067,7 @@
 																				<div
 																					tabindex="0"
 																					role="button"
-																					class="badge badge-sm {statusBadgeClass(contract.status)} cursor-pointer gap-1"
+																					class="badge badge-sm {statusBadgeClass(contract.status)} cursor-pointer gap-1 md:min-h-0 min-h-[28px]"
 																					onclick={(e) => e.stopPropagation()}
 																					onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
 																				>
@@ -1112,7 +1112,126 @@
 																				<span class="font-normal normal-case tracking-normal opacity-60">({contract.milestones.length})</span>
 																			</button>
 																			{#if !milestonesSectionCollapsed}
-																			<div class="overflow-visible">
+																			<!-- Mobile: Card layout -->
+																			<div class="md:hidden space-y-2">
+																				{#each contract.milestones as milestone, mi}
+																					{#if editable && editingItemId === milestone.id}
+																						<div transition:fly={{ y: -4, duration: 200, easing: cubicOut }} class="p-4 bg-primary/5 border-l-2 border-primary/40 space-y-3 rounded-lg" onclick={(e) => e.stopPropagation()}>
+																							<p class="text-xs font-medium opacity-50 mb-1">Edit milestone</p>
+																							<input type="text" class="input input-sm w-full bg-base-200 border-base-content/20" bind:value={editingValue} placeholder="Milestone name" onkeydown={(e) => { if (e.key === 'Escape') cancelEditing(); }} />
+																							<textarea class="textarea w-full text-sm bg-base-200 border-base-content/20 resize-none" style="min-height: 5rem; max-height: 30vh; overflow-y: auto;" use:autogrow bind:value={editingValue2} placeholder="Description (optional)" onkeydown={(e) => { if (e.key === 'Escape') cancelEditing(); }}></textarea>
+																							<div class="flex items-center gap-3">
+																								<span class="text-xs opacity-50 whitespace-nowrap">Percentage</span>
+																								<div class="flex items-center gap-2">
+																									<input type="number" class="input input-sm w-24 bg-base-200 border-base-content/20" bind:value={editingValue3} placeholder={milestone.percentage.toString()} min="0" max="100" step="0.01" onkeydown={(e) => { if (e.key === 'Escape') cancelEditing(); }} />
+																									<span class="text-xs opacity-40">%</span>
+																									{#if editingValue3 && !isNaN(parseFloat(editingValue3)) && contract.total_amount}
+																										<span class="text-xs opacity-60">${((parseFloat(editingValue3) / 100) * (contract.total_amount / 100)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+																									{/if}
+																								</div>
+																							</div>
+																							<div class="flex gap-2">
+																								<button class="btn btn-success btn-xs" onclick={() => {
+																									const updates: Record<string, unknown> = { name: editingValue, description: editingValue2 };
+																									const pct = parseFloat(editingValue3);
+																									if (editingValue3 && !isNaN(pct) && pct > 0 && pct <= 100 && contract.total_amount) { updates.percentage = pct; updates.amount = Math.round((pct / 100) * contract.total_amount); }
+																									saveEdit(project.projectKey, 'milestone', milestone.id, updates);
+																								}}>Save</button>
+																								<button class="btn btn-ghost btn-xs" onclick={() => cancelEditing()}>Cancel</button>
+																							</div>
+																						</div>
+																					{:else}
+																						<div class="rounded-lg border border-base-300/50 p-3 space-y-2 {savedItemId === milestone.id ? 'bg-success/5' : 'bg-base-100/50'}">
+																							<div class="flex items-start gap-2">
+																								<span class="text-xs opacity-40 mt-0.5 shrink-0">{mi + 1}.</span>
+																								<div class="min-w-0 flex-1 {editable ? 'cursor-pointer' : ''}" onclick={(e) => { if (editable) { e.stopPropagation(); startEditing(milestone.id, 'milestone', milestone.name, milestone.description || '', milestone.percentage.toString()); } }} role={editable ? 'button' : undefined} tabindex={editable ? 0 : undefined} onkeydown={(e) => { if (editable && (e.key === 'Enter' || e.key === ' ')) { e.stopPropagation(); startEditing(milestone.id, 'milestone', milestone.name, milestone.description || '', milestone.percentage.toString()); } }}>
+																									<span class="font-medium text-sm">{milestone.name}</span>
+																									{#if milestone.description}<p class="text-xs opacity-50 mt-0.5">{milestone.description}</p>{/if}
+																								</div>
+																								<div class="dropdown dropdown-end dropdown-top shrink-0">
+																									<div tabindex="0" role="button" class="badge badge-sm {statusBadgeClass(milestone.status)} cursor-pointer gap-1 min-h-[28px] min-w-[72px] justify-center" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+																										{milestone.status}
+																										{#if updatingItem === milestone.id}<span class="loading loading-spinner" style="width:10px;height:10px"></span>{:else}<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>{/if}
+																									</div>
+																									<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+																									<ul tabindex="0" class="dropdown-content z-50 menu menu-sm shadow-lg bg-base-100 rounded-box w-40 p-1">
+																										{#each MILESTONE_STATUSES as s}<li><button class:active={milestone.status === s} onclick={(e) => { e.stopPropagation(); updateStatus(project.projectKey, 'milestone', milestone.id, s); }} disabled={milestone.status === s}><span class="badge badge-xs {statusBadgeClass(s)}"></span>{s}</button></li>{/each}
+																									</ul>
+																								</div>
+																							</div>
+																							<div class="flex items-center gap-3 text-xs pl-5">
+																								<span class="font-mono">{formatCents(milestone.amount, contract.currency)}</span>
+																								<span class="font-mono opacity-50">({milestone.percentage}%)</span>
+																								<span class="opacity-40 ml-auto">
+																									{#if milestone.paid_at}Paid {formatDate(milestone.paid_at)}{:else if milestone.accepted_at}Accepted {formatDate(milestone.accepted_at)}{:else if milestone.delivered_at}Delivered {formatDate(milestone.delivered_at)}{:else}—{/if}
+																								</span>
+																								{#if editable}<button class="btn btn-ghost btn-xs text-error opacity-40 hover:opacity-100 p-1" onclick={(e) => { e.stopPropagation(); deleteItem(project.projectKey, 'milestone', milestone.id); }} title="Delete milestone"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>{/if}
+																							</div>
+																							{#if (milestone.linked_tasks && milestone.linked_tasks.length > 0) || editable}
+																								<div class="flex flex-wrap gap-1 items-center pl-5">
+																									{#each (milestone.linked_tasks || []) as task}
+																										<span class="badge badge-xs badge-outline gap-1 opacity-50" title="{task.title} ({task.status})">
+																											<span class="w-1.5 h-1.5 rounded-full {task.status === 'completed' || task.status === 'accepted' ? 'bg-success' : task.status === 'in_progress' ? 'bg-warning' : 'bg-base-300'}"></span>
+																											<span class="max-w-[100px] truncate">{task.title}</span>
+																											{#if editable}<button class="ml-0.5 opacity-40 hover:opacity-100 hover:text-error" onclick={(e) => { e.stopPropagation(); unlinkTask(project.projectKey, milestone.id, task.id); }} title="Remove task link">×</button>{/if}
+																										</span>
+																									{/each}
+																									{#if editable}<button class="badge badge-xs badge-ghost gap-0.5 opacity-50 hover:opacity-100" onclick={(e) => { e.stopPropagation(); startLinkingTasks(milestone.id, project.projectKey); }}><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>Link</button>{/if}
+																								</div>
+																								{#if linkingTasksMilestoneId === milestone.id}
+																									<div class="ml-5 border border-base-300 rounded-lg p-2 bg-base-100 max-h-48 overflow-y-auto" onclick={(e) => e.stopPropagation()}>
+																										<div class="flex items-center gap-2 mb-2">
+																											<input type="text" class="input input-sm flex-1 bg-base-200 border-base-content/20" placeholder="Search tasks..." bind:value={linkTaskSearch} />
+																											<button class="btn btn-ghost btn-xs" onclick={() => stopLinkingTasks()}>Done</button>
+																										</div>
+																										{#if loadingTasks}<span class="loading loading-spinner loading-xs"></span>
+																										{:else if linkFilteredTasks.length === 0}<p class="text-xs opacity-40">No tasks found</p>
+																										{:else}
+																											{#each linkFilteredTasks.slice(0, 15) as task}
+																												{@const alreadyLinked = (milestone.linked_tasks || []).some((lt) => lt.id === task.id)}
+																												<button class="flex items-center gap-2 w-full text-left px-2 py-1.5 rounded text-xs hover:bg-base-200 {alreadyLinked ? 'opacity-40' : ''}" onclick={() => { if (!alreadyLinked) linkTask(milestone.id, task.id); }} disabled={alreadyLinked || linkingTask}>
+																													<span class="w-1.5 h-1.5 rounded-full shrink-0 {task.status === 'completed' ? 'bg-success' : task.status === 'in_progress' ? 'bg-warning' : 'bg-base-300'}"></span>
+																													<span class="truncate">{task.title}</span>
+																													{#if alreadyLinked}<span class="text-[10px] opacity-50 ml-auto">linked</span>{/if}
+																												</button>
+																											{/each}
+																										{/if}
+																									</div>
+																								{/if}
+																							{/if}
+																							{#if milestone.comments && milestone.comments.length > 0}
+																								<div class="space-y-1.5 pl-5">
+																									{#each milestone.comments as c}
+																										<div class="flex gap-2 items-start {c.author === 'owner' ? 'flex-row-reverse' : ''}">
+																											<div class="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 {c.author === 'owner' ? 'bg-primary/15 text-primary' : 'bg-base-300 text-base-content/50'}"><svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg></div>
+																											<div class="max-w-[75%] rounded-2xl px-3 py-1.5 text-xs border {c.author === 'owner' ? 'bg-primary/8 border-primary/20 text-primary/90 rounded-tr-sm' : 'bg-base-200 border-base-content/10 text-base-content/70 rounded-tl-sm'}">
+																												<p class="leading-relaxed">{c.body}</p>
+																												<p class="opacity-40 mt-0.5 {c.author === 'owner' ? 'text-right' : ''}">{formatCommentTime(c.created_at)}</p>
+																											</div>
+																										</div>
+																									{/each}
+																								</div>
+																							{/if}
+																							{#if commentingId === milestone.id}
+																								<div class="flex gap-2 items-start justify-end pl-5" onclick={(e) => e.stopPropagation()}>
+																									<textarea class="textarea textarea-xs flex-1 bg-base-200 border-base-content/20 resize-none text-xs" rows="2" placeholder="Add owner comment..." bind:value={commentInputs[milestone.id]} onkeydown={(e) => { if (e.key === 'Escape') commentingId = null; }}></textarea>
+																									<div class="flex flex-col gap-1">
+																										<button class="btn btn-primary btn-xs" onclick={() => addOwnerComment(project.projectKey, 'milestone', milestone.id, milestone.comments || [])} disabled={!(commentInputs[milestone.id] || '').trim() || commentSaving}>{#if commentSaving}<span class="loading loading-spinner loading-xs"></span>{:else}Send{/if}</button>
+																										<button class="btn btn-ghost btn-xs" onclick={() => commentingId = null}>Cancel</button>
+																									</div>
+																								</div>
+																							{:else}
+																								<button class="text-[10px] opacity-30 hover:opacity-60 transition-opacity flex items-center gap-1 pl-5" onclick={(e) => { e.stopPropagation(); commentingId = milestone.id; }}>
+																									<svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+																									Reply
+																								</button>
+																							{/if}
+																						</div>
+																					{/if}
+																				{/each}
+																			</div>
+																			<!-- Desktop: Table layout -->
+																			<div class="overflow-visible hidden md:block">
 																				<table class="table table-xs">
 																					<thead>
 																						<tr>
@@ -1489,7 +1608,7 @@
 																								{/if}
 																								<div class="dropdown dropdown-end">
 																									<div tabindex="0" role="button"
-																										class="badge badge-xs {term.status === 'accepted' ? 'badge-success' : term.status === 'rejected' ? 'badge-error' : 'badge-warning'} cursor-pointer gap-1"
+																										class="badge badge-xs md:badge-xs badge-sm {term.status === 'accepted' ? 'badge-success' : term.status === 'rejected' ? 'badge-error' : 'badge-warning'} cursor-pointer gap-1 min-h-[28px] md:min-h-0"
 																										onkeydown={(e) => e.stopPropagation()}>
 																										{term.status}
 																										{#if updatingItem === term.id}

@@ -48,7 +48,7 @@
 	function getGroupItems(groupId: NavGroup) {
 		const debugMode = getDebugMode();
 		return unifiedNavConfig.navItems.filter((item) => {
-			if (!debugMode && (item.id === 'open-tasks' || item.id === 'clients')) return false;
+			if (!debugMode && (item.id === 'open-tasks' || item.id === 'clients' || item.id === 'triage' || item.id === 'monitor')) return false;
 			return item.category === groupId;
 		});
 	}

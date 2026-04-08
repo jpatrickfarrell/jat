@@ -2829,7 +2829,8 @@
 		align-items: center;
 		gap: 0.5rem;
 		width: 100%;
-		padding: 0.375rem 0.75rem;
+		min-height: 2.25rem;
+		padding: 0 0.75rem;
 		background: transparent;
 		border: none;
 		cursor: pointer;

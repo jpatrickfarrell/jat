@@ -3310,7 +3310,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
-		padding: 0.5rem 0.75rem;
+		padding: 0.5rem 0rem;
 	}
 
 	.completed-loading {

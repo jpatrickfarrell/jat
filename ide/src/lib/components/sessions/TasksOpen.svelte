@@ -3616,16 +3616,16 @@
 		overflow: hidden;
 	}
 
-	.mobile-task-card:first-child {
+	.open-swipe-container:first-child .mobile-task-card {
 		border-radius: 8px 8px 0 0;
 	}
 
-	.mobile-task-card:last-child {
+	.open-swipe-container:last-child .mobile-task-card {
 		border-radius: 0 0 8px 8px;
 		border-bottom: 1px solid oklch(0.25 0.02 250);
 	}
 
-	.mobile-task-card:only-child {
+	.open-swipe-container:only-child .mobile-task-card {
 		border-radius: 8px;
 		border-bottom: 1px solid oklch(0.25 0.02 250);
 	}

@@ -280,9 +280,6 @@
 	// Per-action visual feedback — tracks which button was just clicked per session
 	// key: "sessionName:actionId", value: feedback variant ('success' | 'warning' | 'error' | 'info' | 'working')
 	let actionFeedback = $state<Map<string, string>>(new Map());
-	// Mobile card hover tracking for output preview expansion
-	let hoveredMobileCard = $state<string | null>(null);
-
 	// Per-session auto-complete disabled state (when user manually overrides)
 	let autoCompleteDisabledMap = $state<Map<string, boolean>>(new Map());
 
@@ -1699,8 +1696,6 @@
 					ontouchmove={handleSwipeTouchMove}
 					ontouchend={handleSwipeTouchEnd}
 					ontouchcancel={handleSwipeTouchEnd}
-					onmouseenter={() => hoveredMobileCard = session.name}
-					onmouseleave={() => hoveredMobileCard = null}
 				>
 				{#if session.type === 'server'}
 					<!-- Server session -->
@@ -1732,7 +1727,7 @@
 					{@const typeVisual = getIssueTypeVisual(sessionTask.issue_type)}
 					{@const harness = getTaskHarness(sessionTask)}
 					{@const cardActions = getSessionStateActions(effectiveState)}
-					{@const mobileOutputLines = getOutputTail(sessionAgentName, hoveredMobileCard === session.name ? 15 : 3)}
+					{@const mobileOutputLines = getOutputTail(sessionAgentName, 3)}
 					<div class="mobile-card-inner">
 						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};">
 							<AgentAvatar name={sessionAgentName} size={36} showRing={true} sessionState={effectiveState} />
@@ -1812,7 +1807,7 @@
 									<span class="mobile-title-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
 								{/if}
 							</div>
-							{#if sessionTask.description}
+							{#if sessionTask.description && mobileOutputLines.length === 0}
 								<span class="mobile-description" title={sessionTask.description}>{sessionTask.description}</span>
 							{/if}
 							{#if mobileOutputLines.length > 0}
@@ -2103,7 +2098,7 @@
 												<span class="task-title {animateText ? 'tracking-in-expand' : ''}" style={animateText ? 'animation-delay: 100ms;' : ''} title={sessionTask.title}>
 													<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
 												</span>
-												{#if sessionTask.description}
+												{#if sessionTask.description && outputLines.length === 0}
 													<div class="task-description {animateText ? 'tracking-in-expand' : ''}" style={animateText ? 'animation-delay: 100ms;' : ''}>
 														<FxText text={sessionTask.description} context={activeTaskCtx(sessionTask)} />
 													</div>
@@ -3589,7 +3584,7 @@
 		color: oklch(0.58 0.07 155);
 		background: oklch(0.13 0.015 240 / 0.8);
 	}
-	/* Mobile: no max-height clipping — line count controlled in template via hoveredMobileCard */
+	/* Mobile: no max-height clipping — line count fixed at 3 lines */
 	.mobile-output-preview {
 		max-height: none;
 		margin-top: 0.35rem;
@@ -4311,7 +4306,7 @@
 					opacity 0.35s cubic-bezier(0.55, 0.085, 0.68, 0.53);
 	}
 
-	.mobile-card-body:hover .mobile-title {
+	.mobile-state-strip:hover ~ .mobile-card-body .mobile-title {
 		white-space: normal;
 		display: -webkit-box;
 		-webkit-line-clamp: 5;

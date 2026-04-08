@@ -1868,6 +1868,7 @@
 									d="M19 9l-7 7-7-7"
 								/>
 							</svg>
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.875rem;height:0.875rem;color:oklch(0.75 0.15 85);flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
 							<span>Active Tasks</span>
 							<span class="subsection-count"
 								>{projectSessions.length}</span
@@ -2027,6 +2028,7 @@
 									d="M19 9l-7 7-7-7"
 								/>
 							</svg>
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.875rem;height:0.875rem;color:oklch(0.70 0.12 250);flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" /></svg>
 							<span>Paused Sessions</span>
 							<div class="subsection-right">
 								<div class="paused-agents">
@@ -2174,6 +2176,7 @@
 										d="M19 9l-7 7-7-7"
 									/>
 								</svg>
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.875rem;height:0.875rem;color:oklch(0.70 0.15 200);flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0z" /></svg>
 								<span>Open Tasks</span>
 								<span class="subsection-count"
 									>{Array.from(tasksByEpic.values()).reduce(
@@ -2446,6 +2449,7 @@
 									d="M19 9l-7 7-7-7"
 								/>
 							</svg>
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.875rem;height:0.875rem;color:oklch(0.65 0.18 145);flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>
 							<span>Completed Tasks</span>
 							<span class="subsection-count">{completedCount}</span>
 						</button>
@@ -2771,7 +2775,8 @@
 		align-items: center;
 		gap: 0.5rem;
 		width: 100%;
-		padding: 0.5rem 1rem;
+		min-height: 2.25rem;
+		padding: 0 1rem;
 		background: transparent;
 		border: none;
 		cursor: pointer;

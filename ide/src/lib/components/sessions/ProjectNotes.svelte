@@ -410,8 +410,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		/* Match subsection-header padding exactly */
-		padding: 0.5rem 1rem;
+		/* Match subsection-header height exactly */
+		min-height: 2.25rem;
+		padding: 0 1rem;
 		background: transparent;
 		transition: background-color 0.15s ease;
 	}
@@ -453,8 +454,8 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 1.75rem;
-		height: 1.75rem;
+		width: 1.5rem;
+		height: 1.5rem;
 		padding: 0;
 		background: transparent;
 		border: 1px solid transparent;
@@ -465,8 +466,8 @@
 	}
 
 	.action-btn svg {
-		width: 1rem;
-		height: 1rem;
+		width: 0.875rem;
+		height: 0.875rem;
 	}
 
 	.action-btn:hover:not(:disabled) {

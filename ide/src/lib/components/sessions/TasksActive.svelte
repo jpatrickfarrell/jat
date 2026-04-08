@@ -1812,15 +1812,7 @@
 									<span class="mobile-separator">·</span>
 									<span class="mobile-port">🌐 {browserSessions.get(sessionAgentName)}</span>
 								{/if}
-								{#if sessionTask.status === 'closed'}
-									<span class="mobile-separator">·</span>
-									<span class="mobile-closed-badge">
-										<svg viewBox="0 0 24 24" fill="none" stroke="oklch(0.65 0.20 145)" stroke-width="2.5" width="10" height="10">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-										</svg>
-										Closed
-									</span>
-								{/if}
+								<span class="mobile-state-badge" style="color: {stateVisual.accent};">{stateVisual.shortLabel}</span>
 							</div>
 						</div>
 					</div>
@@ -4402,14 +4394,16 @@
 		color: oklch(0.75 0.15 55);
 	}
 
-	.mobile-closed-badge {
+	.mobile-state-badge {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.2rem;
 		font-size: 0.5625rem;
 		font-weight: 600;
-		color: oklch(0.65 0.20 145);
 		line-height: 1;
+		margin-left: auto;
+		flex-shrink: 0;
+		white-space: nowrap;
 	}
 
 	/* ========== SWIPE-TO-REVEAL ========== */

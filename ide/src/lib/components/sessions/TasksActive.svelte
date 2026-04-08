@@ -1580,7 +1580,7 @@
 					{@const typeVisual = getIssueTypeVisual(sessionTask.issue_type)}
 					{@const harness = getTaskHarness(sessionTask)}
 					{@const cardActions = getSessionStateActions(effectiveState)}
-					{@const mobileOutputLines = getOutputTail(sessionAgentName, 3)}
+					{@const mobileOutputLines = getOutputTail(sessionAgentName, 5)}
 					<div class="mobile-card-inner">
 						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};">
 							<AgentAvatar name={sessionAgentName} size={36} showRing={true} sessionState={effectiveState} />
@@ -3338,7 +3338,7 @@
 		color: oklch(0.58 0.07 155);
 		background: oklch(0.13 0.015 240 / 0.8);
 	}
-	/* Mobile: no max-height clipping — line count fixed at 3 lines */
+	/* Mobile: no max-height clipping — line count fixed at 5 lines (matches wide) */
 	.mobile-output-preview {
 		max-height: none;
 		margin-top: 0.35rem;

@@ -9,6 +9,7 @@
 
 	import { onMount, onDestroy } from "svelte";
 	import { slide, fly } from "svelte/transition";
+	import { cubicOut } from "svelte/easing";
 	import { page } from "$app/stores";
 	import { classifySessionLegacy } from "$lib/utils/sessionNaming";
 	import SortDropdown from "$lib/components/SortDropdown.svelte";
@@ -322,6 +323,9 @@
 
 	// Dismissed attention notifications (local session state — clears on reload)
 	let dismissedAttentionSessions = $state(new Set<string>());
+
+	// Voice inbox collapsed state (section always shown, EventStack handles empty internally)
+	let voiceInboxCollapsed = $state(false);
 
 	// When an agent leaves the attention state, un-dismiss it so it can show again next time
 	$effect(() => {
@@ -1724,52 +1728,6 @@
 			<span>No projects with active sessions or open tasks</span>
 		</div>
 	{:else}
-		<!-- Attention notifications: agents waiting for input or review (dismissable) -->
-		{#if visibleAttentionAgents.length > 0}
-			<div class="attention-notifs">
-				{#each visibleAttentionAgents as agent (agent.sessionName)}
-					<div
-						class="attention-notif"
-						class:notif-needs-input={agent.state === 'needs_input'}
-						class:notif-review={agent.state !== 'needs_input'}
-						in:fly={{ y: -10, duration: 180, opacity: 0 }}
-						out:fly={{ y: -8, duration: 130, opacity: 0 }}
-					>
-						<span class="notif-icon">
-							{#if agent.state === 'needs_input'}
-								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" /></svg>
-							{:else}
-								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
-							{/if}
-						</span>
-						<div class="notif-body">
-							<span class="notif-agent">{agent.agentName}</span>
-							<span class="notif-state">{agent.state === 'needs_input' ? 'needs input' : 'ready to review'}</span>
-							{#if agent.taskTitle}
-								<span class="notif-task">{agent.taskTitle.length > 40 ? agent.taskTitle.slice(0, 40) + '…' : agent.taskTitle}</span>
-							{/if}
-						</div>
-						<button
-							class="notif-go"
-							onclick={() => {
-								const proj = agentProjects.get(agent.agentName);
-								if (proj) selectedProject = proj;
-								drawerSessionName = agent.sessionName;
-							}}
-							title="Go to session"
-						>Go →</button>
-						<button
-							class="notif-dismiss"
-							onclick={() => {
-								dismissedAttentionSessions = new Set([...dismissedAttentionSessions, agent.sessionName]);
-							}}
-							title="Dismiss"
-						>×</button>
-					</div>
-				{/each}
-			</div>
-		{/if}
-
 		<!-- Selected Project Content -->
 		{#if selectedProject}
 			{@const projectSessions =
@@ -1788,11 +1746,83 @@
 				class="project-content"
 				style="--project-color: {projectColor}"
 			>
-				<!-- Voice Inbox: pending suggestions from iOS voice notes (hidden when empty) -->
-				<VoiceInbox
-					availableProjects={allProjects}
-					defaultProject={selectedProject}
-				/>
+				<!-- Attention notifications: agents waiting for input or review (dismissable) -->
+				<!-- Placed inside project-content so the colored top border always abuts the TopBar -->
+				{#if visibleAttentionAgents.length > 0}
+					<div class="attention-notifs">
+						{#each visibleAttentionAgents as agent (agent.sessionName)}
+							<div
+								class="attention-notif"
+								class:notif-needs-input={agent.state === 'needs_input'}
+								class:notif-review={agent.state !== 'needs_input'}
+								in:fly={{ y: -18, duration: 300, opacity: 0, easing: cubicOut }}
+								out:fly={{ y: -8, duration: 180, opacity: 0, easing: cubicOut }}
+							>
+								<span class="notif-icon">
+									{#if agent.state === 'needs_input'}
+										<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" /></svg>
+									{:else}
+										<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+									{/if}
+								</span>
+								<div class="notif-body">
+									<span class="notif-agent">{agent.agentName}</span>
+									<span class="notif-state">{agent.state === 'needs_input' ? 'needs input' : 'ready to review'}</span>
+									{#if agent.taskTitle}
+										<span class="notif-task">{agent.taskTitle.length > 40 ? agent.taskTitle.slice(0, 40) + '…' : agent.taskTitle}</span>
+									{/if}
+								</div>
+								<button
+									class="notif-go"
+									onclick={() => {
+										const proj = agentProjects.get(agent.agentName);
+										if (proj) selectedProject = proj;
+										drawerSessionName = agent.sessionName;
+									}}
+									title="Go to session"
+								>Go →</button>
+								<button
+									class="notif-dismiss"
+									onclick={() => {
+										dismissedAttentionSessions = new Set([...dismissedAttentionSessions, agent.sessionName]);
+									}}
+									title="Dismiss"
+								>×</button>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				<!-- Voice Inbox: collapsible section, EventStack renders nothing when inbox is empty -->
+				<div class="subsection voice-inbox-subsection">
+					<button
+						class="subsection-header"
+						onclick={() => voiceInboxCollapsed = !voiceInboxCollapsed}
+						aria-expanded={!voiceInboxCollapsed}
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke-width="2"
+							stroke="currentColor"
+							class="subsection-collapse-icon"
+							class:collapsed={voiceInboxCollapsed}
+						>
+							<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+						</svg>
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.875rem;height:0.875rem;color:oklch(0.65 0.15 290)"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" /></svg>
+						<span>Voice Inbox</span>
+					</button>
+					{#if !voiceInboxCollapsed}
+						<div transition:slide={{ duration: 200 }}>
+							<VoiceInbox
+								availableProjects={allProjects}
+								defaultProject={selectedProject}
+							/>
+						</div>
+					{/if}
+				</div>
 
 				<!-- Project Notes Section -->
 				<ProjectNotes
@@ -1939,85 +1969,25 @@
 										{/if}
 									</div>
 								{:else if epicSessions.length > 0}
-									<!-- Standalone Sessions (no epic) - collapsible group like epics -->
-									<!-- Uses isExpanded from outer {#each} scope (epicId=null) -->
-									<div class="epic-group standalone">
-										<button
-											class="epic-header"
-											onclick={() =>
-												toggleEpicCollapse(
-													selectedProject!,
-													null,
-													"sessions",
-												)}
-											aria-expanded={isExpanded}
-										>
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke-width="2"
-												stroke="currentColor"
-												class="collapse-icon small"
-												class:collapsed={!isExpanded}
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													d="M19 9l-7 7-7-7"
-												/>
-											</svg>
-											<span class="standalone-icon"
-												>📋</span
-											>
-											<span class="epic-title font-mono"
-												>STANDALONE TASKS</span
-											>
-											<div class="epic-agents">
-												{#each epicSessions as session}
-													<WorkingAgentBadge
-														name={getAgentName(
-															session.name,
-														)}
-														size={18}
-														variant="avatar"
-														isWorking={true}
-													/>
-												{/each}
-											</div>
-											<span class="epic-count"
-												>{epicSessions.length} active</span
-											>
-										</button>
-
-										{#if isExpanded}
-											<div
-												class="epic-content"
-												transition:slide={{
-													duration: 200,
-												}}
-											>
-												<TasksActive
-													sessions={epicSessions}
-													{agentTasks}
-													{agentSessionInfo}
-													{agentProjects}
-													{projectColors}
-													{taskIntegrations}
-													{browserSessions}
-													{agentOutputs}
-													onKillSession={killSession}
-													onAttachSession={attachSession}
-													onViewTask={(taskId) =>
-														openTaskDetailDrawer(
-															taskId,
-														)}
-													mobile={isMobile}
-													onMobileCardClick={isMobile ? (sn) => drawerSessionName = sn : undefined}
-												/>
-											</div>
-										{/if}
-									</div>
+									<!-- Standalone Sessions (no epic) - shown directly without sub-group header -->
+									<TasksActive
+										sessions={epicSessions}
+										{agentTasks}
+										{agentSessionInfo}
+										{agentProjects}
+										{projectColors}
+										{taskIntegrations}
+										{browserSessions}
+										{agentOutputs}
+										onKillSession={killSession}
+										onAttachSession={attachSession}
+										onViewTask={(taskId) =>
+											openTaskDetailDrawer(
+												taskId,
+											)}
+										mobile={isMobile}
+										onMobileCardClick={isMobile ? (sn) => drawerSessionName = sn : undefined}
+									/>
 								{/if}
 							{/each}
 						{/if}
@@ -2821,7 +2791,7 @@
 		width: 0.875rem;
 		height: 0.875rem;
 		color: oklch(0.55 0.02 250);
-		transition: transform 0.2s ease;
+		transition: transform 0.22s cubic-bezier(0.25, 1, 0.5, 1);
 	}
 
 	.subsection-collapse-icon.collapsed {
@@ -2955,7 +2925,7 @@
 		width: 1.25rem;
 		height: 1.25rem;
 		color: oklch(0.6 0.02 250);
-		transition: transform 0.2s ease;
+		transition: transform 0.22s cubic-bezier(0.25, 1, 0.5, 1);
 	}
 
 	.collapse-icon.collapsed {
@@ -3422,6 +3392,11 @@
 		margin: 0;
 	}
 
+	/* Voice inbox subsection - no bottom border since EventStack provides its own visual separation */
+	.voice-inbox-subsection {
+		padding-bottom: 0;
+	}
+
 	/* Attention notifications */
 	.attention-notifs {
 		display: flex;
@@ -3440,13 +3415,42 @@
 		backdrop-filter: blur(6px);
 		font-size: 0.75rem;
 	}
+	/* Pulsing border glow for urgent needs_input notifications */
+	@keyframes notif-urgent-glow {
+		0%, 100% {
+			border-color: oklch(0.52 0.16 290 / 0.5);
+			box-shadow: 0 0 0 0 oklch(0.55 0.18 290 / 0);
+		}
+		50% {
+			border-color: oklch(0.65 0.22 290 / 0.80);
+			box-shadow: 0 0 10px 2px oklch(0.55 0.18 290 / 0.22);
+		}
+	}
+	/* Subtle glow for review-ready notifications */
+	@keyframes notif-review-glow {
+		0%, 100% {
+			border-color: oklch(0.50 0.14 180 / 0.45);
+			box-shadow: none;
+		}
+		50% {
+			border-color: oklch(0.62 0.18 180 / 0.70);
+			box-shadow: 0 0 8px 1px oklch(0.55 0.16 180 / 0.18);
+		}
+	}
+	/* Icon breathe for needs_input */
+	@keyframes notif-icon-breathe {
+		0%, 100% { transform: scale(1); opacity: 0.82; }
+		50% { transform: scale(1.20); opacity: 1; }
+	}
 	.notif-needs-input {
 		border-color: oklch(0.52 0.16 290 / 0.5);
 		background: oklch(0.17 0.04 290 / 0.9);
+		animation: notif-urgent-glow 2.4s ease-in-out infinite;
 	}
 	.notif-review {
 		border-color: oklch(0.50 0.14 180 / 0.45);
 		background: oklch(0.17 0.03 180 / 0.9);
+		animation: notif-review-glow 3.2s ease-in-out infinite;
 	}
 	.notif-icon {
 		display: flex;
@@ -3454,7 +3458,10 @@
 		flex-shrink: 0;
 		color: oklch(0.65 0.14 280);
 	}
-	.notif-needs-input .notif-icon { color: oklch(0.68 0.18 290); }
+	.notif-needs-input .notif-icon {
+		color: oklch(0.68 0.18 290);
+		animation: notif-icon-breathe 2.4s ease-in-out infinite;
+	}
 	.notif-review .notif-icon { color: oklch(0.65 0.16 180); }
 	.notif-body {
 		display: flex;
@@ -3496,11 +3503,16 @@
 		cursor: pointer;
 		white-space: nowrap;
 		flex-shrink: 0;
-		transition: background 0.1s, border-color 0.1s;
+		transition: background 0.15s cubic-bezier(0.25, 1, 0.5, 1), border-color 0.15s, transform 0.12s cubic-bezier(0.25, 1, 0.5, 1);
 	}
 	.notif-go:hover {
 		background: oklch(0.28 0.06 220 / 0.7);
 		border-color: oklch(0.55 0.12 220 / 0.5);
+		transform: scale(1.04);
+	}
+	.notif-go:active {
+		transform: scale(0.96);
+		transition-duration: 0.06s;
 	}
 	.notif-dismiss {
 		display: flex;
@@ -3516,11 +3528,31 @@
 		font-size: 0.9rem;
 		line-height: 1;
 		flex-shrink: 0;
-		transition: color 0.1s, background 0.1s;
+		transition: color 0.15s, background 0.15s, transform 0.15s cubic-bezier(0.25, 1, 0.5, 1);
 	}
 	.notif-dismiss:hover {
 		color: oklch(0.65 0.04 250);
 		background: oklch(0.22 0.02 250 / 0.5);
+		transform: rotate(90deg) scale(1.1);
+	}
+	.notif-dismiss:active {
+		transform: rotate(90deg) scale(0.9);
+		transition-duration: 0.06s;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.notif-needs-input,
+		.notif-review,
+		.notif-needs-input .notif-icon {
+			animation: none !important;
+		}
+		.notif-go,
+		.notif-dismiss {
+			transition: background 0.15s, color 0.15s, border-color 0.15s !important;
+		}
+		.notif-go:hover,
+		.notif-dismiss:hover {
+			transform: none !important;
+		}
 	}
 
 </style>

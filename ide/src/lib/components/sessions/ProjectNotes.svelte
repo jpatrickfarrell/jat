@@ -400,26 +400,24 @@
 </div>
 
 <style>
+	/* Project Notes renders as a subsection row — no standalone card */
 	.project-notes {
-		background: oklch(0.16 0.01 250);
-		border: 1px solid oklch(0.25 0.02 250);
-		border-radius: 0.75rem;
-		margin-bottom: 1rem;
-		overflow: hidden;
-	}
-
-	@media (max-width: 1023px) {
-		.project-notes {
-			border-radius: 0;
-		}
+		border-bottom: 1px solid oklch(0.22 0.02 250);
+		padding-bottom: 0;
 	}
 
 	.notes-header {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 0.5rem 0.75rem 0.5rem 1rem;
+		/* Match subsection-header padding exactly */
+		padding: 0.5rem 1rem;
 		background: transparent;
+		transition: background-color 0.15s ease;
+	}
+
+	.notes-header:hover {
+		background: oklch(0.2 0.01 250);
 	}
 
 	.notes-toggle {
@@ -427,19 +425,22 @@
 		align-items: center;
 		gap: 0.5rem;
 		flex: 1;
-		padding: 0.25rem 0;
+		padding: 0;
 		background: transparent;
 		border: none;
 		cursor: pointer;
-		color: oklch(0.75 0.02 250);
-		font-size: 0.875rem;
-		font-weight: 500;
+		/* Match subsection-header text style */
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: oklch(0.7 0.02 250);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
 		text-align: left;
 		transition: color 0.15s ease;
 	}
 
 	.notes-toggle:hover {
-		color: oklch(0.90 0.02 250);
+		color: oklch(0.85 0.02 250);
 	}
 
 	.header-actions {
@@ -492,8 +493,9 @@
 	}
 
 	.collapse-icon {
-		width: 1rem;
-		height: 1rem;
+		/* Match subsection-collapse-icon sizing */
+		width: 0.875rem;
+		height: 0.875rem;
 		color: oklch(0.55 0.02 250);
 		transition: transform 0.2s ease;
 		flex-shrink: 0;
@@ -504,15 +506,14 @@
 	}
 
 	.notes-icon {
-		width: 1.125rem;
-		height: 1.125rem;
+		width: 0.875rem;
+		height: 0.875rem;
 		color: var(--project-color);
 		flex-shrink: 0;
 	}
 
 	.notes-title {
-		flex: 1;
-		color: oklch(0.85 0.02 250);
+		/* Text is uppercase via parent .notes-toggle, no need for extra color here */
 	}
 
 	.has-notes-indicator {
@@ -550,7 +551,8 @@
 	}
 
 	.notes-content {
-		border-top: 1px solid oklch(0.22 0.02 250);
+		border-top: 1px solid oklch(0.20 0.02 250);
+		padding-bottom: 0.75rem;
 	}
 
 	.notes-editor {

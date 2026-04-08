@@ -236,17 +236,18 @@
 	.command-card {
 		display: flex;
 		flex-direction: column;
-		gap: 0.625rem;
-		padding: 1rem;
+		gap: 0.5rem;
+		padding: 0.875rem 1rem;
 		background: oklch(0.16 0.02 250);
-		border: 1px solid oklch(0.28 0.02 250);
-		border-radius: 10px;
+		border: 1px solid oklch(0.26 0.02 250);
+		border-radius: 8px;
 		transition: all 0.15s ease;
 	}
 
 	.command-card:hover {
-		background: oklch(0.18 0.02 250);
-		border-color: oklch(0.32 0.02 250);
+		background: oklch(0.175 0.02 250);
+		border-color: oklch(0.34 0.04 200);
+		box-shadow: 0 2px 8px oklch(0 0 0 / 0.15);
 	}
 
 	/* Header */
@@ -271,9 +272,9 @@
 	}
 
 	.command-invocation {
-		font-size: 0.95rem;
+		font-size: 0.9rem;
 		font-weight: 600;
-		color: oklch(0.85 0.12 200);
+		color: oklch(0.88 0.12 200);
 		font-family: ui-monospace, monospace;
 		white-space: nowrap;
 		overflow: hidden;
@@ -281,9 +282,9 @@
 	}
 
 	.command-name {
-		font-size: 0.7rem;
-		font-weight: 500;
-		color: oklch(0.55 0.02 250);
+		font-size: 0.65rem;
+		font-weight: 400;
+		color: oklch(0.48 0.02 250);
 		font-family: ui-monospace, monospace;
 	}
 
@@ -291,16 +292,17 @@
 	.command-path {
 		display: flex;
 		align-items: center;
-		gap: 0.375rem;
-		font-size: 0.75rem;
-		color: oklch(0.60 0.02 250);
+		gap: 0.25rem;
+		font-size: 0.65rem;
+		color: oklch(0.50 0.02 250);
 		font-family: ui-monospace, monospace;
+		margin-top: -0.125rem;
 	}
 
 	.path-icon {
-		width: 14px;
-		height: 14px;
-		color: oklch(0.50 0.02 250);
+		width: 12px;
+		height: 12px;
+		color: oklch(0.40 0.02 250);
 		flex-shrink: 0;
 	}
 
@@ -314,17 +316,18 @@
 	.badges-row {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.375rem;
+		gap: 0.3rem;
+		margin-top: 0.125rem;
 	}
 
 	.badge {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.25rem;
-		font-size: 0.65rem;
+		gap: 0.2rem;
+		font-size: 0.6rem;
 		font-weight: 500;
-		padding: 0.25rem 0.5rem;
-		border-radius: 6px;
+		padding: 0.2rem 0.425rem;
+		border-radius: 4px;
 		font-family: ui-monospace, monospace;
 	}
 
@@ -367,11 +370,12 @@
 
 	/* Description */
 	.command-description {
-		font-size: 0.8rem;
-		color: oklch(0.65 0.02 250);
-		line-height: 1.4;
-		padding-top: 0.25rem;
-		border-top: 1px solid oklch(0.22 0.02 250);
+		font-size: 0.75rem;
+		color: oklch(0.60 0.02 250);
+		line-height: 1.45;
+		padding-top: 0.375rem;
+		margin-top: 0.125rem;
+		border-top: 1px solid oklch(0.21 0.02 250);
 	}
 
 	/* Action buttons */
@@ -391,12 +395,12 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 28px;
-		height: 28px;
-		background: oklch(0.22 0.02 250);
-		border: 1px solid oklch(0.30 0.02 250);
-		border-radius: 6px;
-		color: oklch(0.60 0.02 250);
+		width: 26px;
+		height: 26px;
+		background: oklch(0.20 0.02 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 5px;
+		color: oklch(0.55 0.02 250);
 		cursor: pointer;
 		transition: all 0.15s ease;
 	}

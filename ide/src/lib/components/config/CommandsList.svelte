@@ -1026,7 +1026,7 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 1rem;
-		padding: 0.75rem 1rem;
+		padding: 1rem 1.25rem;
 		background: oklch(0.12 0.02 250);
 		border-bottom: 1px solid oklch(0.25 0.02 250);
 	}
@@ -1044,10 +1044,11 @@
 	}
 
 	.header-title {
-		font-size: 0.85rem;
+		font-size: 0.9rem;
 		font-weight: 600;
-		color: oklch(0.85 0.02 250);
+		color: oklch(0.90 0.02 250);
 		font-family: ui-monospace, monospace;
+		letter-spacing: 0.01em;
 	}
 
 	.command-count {
@@ -1188,28 +1189,34 @@
 
 	/* Namespace group */
 	.namespace-group {
-		border-bottom: 1px solid oklch(0.22 0.02 250);
+		border-bottom: 1px solid oklch(0.20 0.02 250);
 	}
 
 	.namespace-group:last-child {
 		border-bottom: none;
 	}
 
+	.namespace-group + .namespace-group {
+		margin-top: 2px;
+	}
+
 	/* Namespace header */
 	.namespace-header {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
+		gap: 0.625rem;
 		width: 100%;
-		padding: 0.75rem 1rem;
+		padding: 0.875rem 1.25rem;
 		background: oklch(0.16 0.02 250);
 		border: none;
+		border-left: 3px solid transparent;
 		cursor: pointer;
-		transition: background 0.15s ease;
+		transition: all 0.15s ease;
 	}
 
 	.namespace-header:hover {
 		background: oklch(0.18 0.02 250);
+		border-left-color: oklch(0.40 0.06 250);
 	}
 
 	.chevron-icon {
@@ -1231,29 +1238,31 @@
 	.namespace-name {
 		font-size: 0.8rem;
 		font-weight: 600;
-		color: oklch(0.75 0.02 250);
+		color: oklch(0.80 0.02 250);
 		font-family: ui-monospace, monospace;
 		text-transform: uppercase;
-		letter-spacing: 0.03em;
+		letter-spacing: 0.05em;
 	}
 
 	.namespace-count {
-		font-size: 0.65rem;
-		font-weight: 400;
-		color: oklch(0.50 0.02 250);
+		font-size: 0.6rem;
+		font-weight: 500;
+		color: oklch(0.55 0.02 250);
 		background: oklch(0.22 0.02 250);
-		padding: 0.125rem 0.375rem;
-		border-radius: 8px;
+		padding: 0.125rem 0.5rem;
+		border-radius: 10px;
 		margin-left: auto;
+		min-width: 1.5rem;
+		text-align: center;
 	}
 
 	/* Namespace commands */
 	.namespace-commands {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-		gap: 1rem;
-		padding: 1rem;
-		background: oklch(0.14 0.02 250);
+		grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+		gap: 0.75rem;
+		padding: 1rem 1.25rem 1.25rem;
+		background: oklch(0.13 0.02 250);
 	}
 
 	/* Loading state */

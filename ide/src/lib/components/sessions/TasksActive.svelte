@@ -303,6 +303,103 @@
 	// Optimistic state overrides - for instant UI feedback before WS catches up
 	let optimisticStates = $state<Map<string, string>>(new Map());
 
+	// Inline epic picker state (for mobile card tray)
+	let epicPickerSession = $state<string | null>(null);
+	let epicPickerItems = $state<{id: string; title: string; status: string}[]>([]);
+	let epicPickerLoading = $state(false);
+	let epicPickerSearch = $state('');
+	let epicLinkingId = $state<string | null>(null);
+	let mobileShowCreateEpic = $state(false);
+	let mobileNewEpicTitle = $state('');
+	let mobileCreatingEpic = $state(false);
+	let mobileCreateEpicError = $state<string | null>(null);
+	let mobileNewEpicInputEl = $state<HTMLInputElement | undefined>(undefined);
+
+	async function mobileCreateEpic(taskId: string) {
+		if (!mobileNewEpicTitle.trim() || mobileCreatingEpic) return;
+		mobileCreatingEpic = true;
+		mobileCreateEpicError = null;
+		try {
+			const project = taskId.split('-')[0];
+			const res = await fetch('/api/epics', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ title: mobileNewEpicTitle.trim(), project, linkTaskId: taskId })
+			});
+			if (!res.ok) {
+				const d = await res.json();
+				throw new Error(d.error || 'Failed to create epic');
+			}
+			const d = await res.json();
+			// Add the new epic to the list and mark it as linked
+			epicPickerItems = [{ id: d.epicId, title: mobileNewEpicTitle.trim(), status: 'open' }, ...epicPickerItems];
+			mobileNewEpicTitle = '';
+			mobileShowCreateEpic = false;
+			epicLinkingId = d.epicId;
+			// Small delay so user sees the new item before closing
+			setTimeout(() => { epicPickerSession = null; epicLinkingId = null; }, 800);
+		} catch (err) {
+			mobileCreateEpicError = err instanceof Error ? err.message : 'Failed to create epic';
+		} finally {
+			mobileCreatingEpic = false;
+		}
+	}
+
+	const filteredEpicPickerItems = $derived(
+		epicPickerSearch.trim()
+			? epicPickerItems.filter(e =>
+				e.id.toLowerCase().includes(epicPickerSearch.toLowerCase()) ||
+				e.title.toLowerCase().includes(epicPickerSearch.toLowerCase())
+			)
+			: epicPickerItems
+	);
+
+	async function openMobileEpicPicker(sessionName: string, taskId: string) {
+		if (epicPickerSession === sessionName) {
+			epicPickerSession = null;
+			mobileShowCreateEpic = false;
+			mobileNewEpicTitle = '';
+			mobileCreateEpicError = null;
+			return;
+		}
+		// Close commands panel if open
+		cmdPanelSession = null;
+		mobileShowCreateEpic = false;
+		mobileNewEpicTitle = '';
+		mobileCreateEpicError = null;
+		epicPickerSession = sessionName;
+		epicPickerSearch = '';
+		epicPickerItems = [];
+		epicPickerLoading = true;
+		const project = taskId.split('-')[0];
+		try {
+			const res = await fetch(`/api/epics?project=${project}`);
+			epicPickerItems = (await res.json()).epics || [];
+		} catch { /* silently fail */ }
+		finally { epicPickerLoading = false; }
+	}
+
+	async function linkMobileTaskToEpic(taskId: string, epicId: string) {
+		if (epicLinkingId) return;
+		epicLinkingId = epicId;
+		try {
+			await fetch(`/api/tasks/${encodeURIComponent(taskId)}/epic`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ epicId })
+			});
+			epicPickerSession = null;
+			epicPickerItems = [];
+		} catch (e) { console.warn('[TasksActive] Failed to link task to epic:', e); }
+		finally { epicLinkingId = null; }
+	}
+
+
+
+	// Shared commands cache (used by desktop tray + mobile cmd panel)
+	let dtrayCommandsItems = $state<{name: string; invocation: string; namespace: string}[]>([]);
+	let dtrayCommandsLoading = $state(false);
+
 	// Inline commands panel state (for mobile card tray)
 	let cmdPanelSession = $state<string | null>(null);
 	let cmdPanelSearch = $state('');
@@ -335,62 +432,6 @@
 			finally { dtrayCommandsLoading = false; }
 		}
 	}
-
-	// Inline epic picker state (for mobile card tray)
-	let epicPickerSession = $state<string | null>(null);
-	let epicPickerItems = $state<{id: string; title: string; status: string}[]>([]);
-	let epicPickerLoading = $state(false);
-	let epicPickerSearch = $state('');
-	let epicLinkingId = $state<string | null>(null);
-
-	const filteredEpicPickerItems = $derived(
-		epicPickerSearch.trim()
-			? epicPickerItems.filter(e =>
-				e.id.toLowerCase().includes(epicPickerSearch.toLowerCase()) ||
-				e.title.toLowerCase().includes(epicPickerSearch.toLowerCase())
-			)
-			: epicPickerItems
-	);
-
-	async function openMobileEpicPicker(sessionName: string, taskId: string) {
-		if (epicPickerSession === sessionName) {
-			epicPickerSession = null;
-			return;
-		}
-		// Close commands panel if open
-		cmdPanelSession = null;
-		epicPickerSession = sessionName;
-		epicPickerSearch = '';
-		epicPickerItems = [];
-		epicPickerLoading = true;
-		const project = taskId.split('-')[0];
-		try {
-			const res = await fetch(`/api/epics?project=${project}`);
-			epicPickerItems = (await res.json()).epics || [];
-		} catch { /* silently fail */ }
-		finally { epicPickerLoading = false; }
-	}
-
-	async function linkMobileTaskToEpic(taskId: string, epicId: string) {
-		if (epicLinkingId) return;
-		epicLinkingId = epicId;
-		try {
-			await fetch(`/api/tasks/${encodeURIComponent(taskId)}/epic`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ epicId })
-			});
-			epicPickerSession = null;
-			epicPickerItems = [];
-		} catch (e) { console.warn('[TasksActive] Failed to link task to epic:', e); }
-		finally { epicLinkingId = null; }
-	}
-
-
-
-	// Shared commands cache (used by mobile cmd panel)
-	let dtrayCommandsItems = $state<{name: string; invocation: string; namespace: string}[]>([]);
-	let dtrayCommandsLoading = $state(false);
 
 	// Clear optimistic states when WS catches up
 	$effect(() => {
@@ -1623,6 +1664,19 @@
 								</button>
 								{/each}
 							{/if}
+							<a
+								href="/config?tab=commands"
+								class="mobile-cmd-new-link"
+								onclick={() => cmdPanelSession = null}
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="11" height="11">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+								</svg>
+								<span>New Command</span>
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="10" height="10" style="margin-left: auto; opacity: 0.5">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+								</svg>
+							</a>
 						</div>
 						{/if}
 						{#if epicPickerSession === session.name}
@@ -1672,6 +1726,49 @@
 								</button>
 								{/each}
 							{/if}
+							<!-- Create new epic -->
+							<div class="mobile-epic-create-section">
+								{#if mobileShowCreateEpic}
+								<div class="mobile-epic-create-form" transition:slide={{ duration: 160, easing: cubicOut }}>
+									<input
+										bind:this={mobileNewEpicInputEl}
+										bind:value={mobileNewEpicTitle}
+										placeholder="Epic title…"
+										class="mobile-epic-create-input"
+										disabled={mobileCreatingEpic}
+										onkeydown={(e) => {
+											if (e.key === 'Enter' && mobileNewEpicTitle.trim()) { e.preventDefault(); mobileCreateEpic(sessionTask.id); }
+											if (e.key === 'Escape') { e.preventDefault(); mobileShowCreateEpic = false; mobileNewEpicTitle = ''; mobileCreateEpicError = null; }
+										}}
+									/>
+									{#if mobileCreateEpicError}
+										<span class="mobile-epic-create-error">{mobileCreateEpicError}</span>
+									{/if}
+									<div class="mobile-epic-create-actions">
+										<button class="mobile-epic-create-cancel" onclick={() => { mobileShowCreateEpic = false; mobileNewEpicTitle = ''; mobileCreateEpicError = null; }} disabled={mobileCreatingEpic}>Cancel</button>
+										<button class="mobile-epic-create-submit" onclick={() => mobileCreateEpic(sessionTask.id)} disabled={mobileCreatingEpic || !mobileNewEpicTitle.trim()}>
+											{#if mobileCreatingEpic}
+												<svg class="animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4" /></svg>
+											{:else}
+												Create
+											{/if}
+										</button>
+									</div>
+								</div>
+								{:else}
+								<button
+									class="mobile-epic-create-btn"
+									in:fade={{ duration: 120 }}
+									onclick={() => { mobileShowCreateEpic = true; setTimeout(() => mobileNewEpicInputEl?.focus(), 50); }}
+									disabled={!!epicLinkingId}
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="11" height="11">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+									</svg>
+									<span>New Epic</span>
+								</button>
+								{/if}
+							</div>
 						</div>
 						{/if}
 						<div class="mobile-card-body">
@@ -3992,6 +4089,130 @@
 	}
 
 	.mobile-epic-item-closed { opacity: 0.5; }
+
+	/* Create new epic section */
+	.mobile-epic-create-section {
+		border-top: 1px solid oklch(0.35 0.08 280 / 0.25);
+		margin-top: 0.125rem;
+		padding-top: 0.125rem;
+	}
+
+	.mobile-epic-create-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		width: 100%;
+		padding: 0.3125rem 0.5rem;
+		border: none;
+		border-radius: 0.3125rem;
+		background: transparent;
+		color: oklch(0.55 0.08 280);
+		font-size: 0.6875rem;
+		cursor: pointer;
+		transition: color 0.12s, background 0.12s;
+	}
+
+	.mobile-epic-create-btn:hover:not(:disabled) {
+		color: oklch(0.75 0.12 280);
+		background: oklch(0.28 0.06 280 / 0.35);
+	}
+
+	.mobile-epic-create-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+	.mobile-epic-create-form {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		padding: 0.25rem 0.125rem;
+	}
+
+	.mobile-epic-create-input {
+		width: 100%;
+		padding: 0.3125rem 0.5rem;
+		background: oklch(0.20 0.03 280);
+		border: 1px solid oklch(0.45 0.12 280 / 0.5);
+		border-radius: 0.3125rem;
+		color: oklch(0.88 0.02 250);
+		font-size: 0.6875rem;
+		outline: none;
+		transition: border-color 0.15s;
+	}
+
+	.mobile-epic-create-input:focus {
+		border-color: oklch(0.60 0.16 280 / 0.7);
+	}
+
+	.mobile-epic-create-error {
+		font-size: 0.625rem;
+		color: oklch(0.65 0.16 25);
+		padding: 0 0.25rem;
+	}
+
+	.mobile-epic-create-actions {
+		display: flex;
+		gap: 0.375rem;
+		justify-content: flex-end;
+	}
+
+	.mobile-epic-create-cancel {
+		padding: 0.1875rem 0.625rem;
+		border: 1px solid oklch(0.35 0.04 250 / 0.5);
+		border-radius: 0.3125rem;
+		background: transparent;
+		color: oklch(0.55 0.02 250);
+		font-size: 0.625rem;
+		cursor: pointer;
+		transition: background 0.12s, color 0.12s;
+	}
+
+	.mobile-epic-create-cancel:hover:not(:disabled) {
+		background: oklch(0.25 0.02 250 / 0.5);
+		color: oklch(0.75 0.02 250);
+	}
+
+	.mobile-epic-create-submit {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.1875rem 0.75rem;
+		border: none;
+		border-radius: 0.3125rem;
+		background: oklch(0.45 0.14 280);
+		color: oklch(0.95 0.02 280);
+		font-size: 0.625rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: background 0.12s, opacity 0.12s;
+	}
+
+	.mobile-epic-create-submit:hover:not(:disabled) {
+		background: oklch(0.52 0.16 280);
+	}
+
+	.mobile-epic-create-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+	/* New Command nav link */
+	.mobile-cmd-new-link {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		width: 100%;
+		padding: 0.3125rem 0.5rem;
+		border-top: 1px solid oklch(0.35 0.08 200 / 0.25);
+		margin-top: 0.125rem;
+		border-radius: 0 0 0.3125rem 0.3125rem;
+		background: transparent;
+		color: oklch(0.50 0.08 200);
+		font-size: 0.6875rem;
+		text-decoration: none;
+		cursor: pointer;
+		transition: color 0.12s, background 0.12s;
+	}
+
+	.mobile-cmd-new-link:hover {
+		color: oklch(0.70 0.12 200);
+		background: oklch(0.25 0.05 200 / 0.35);
+	}
 
 	.mobile-epic-id {
 		font-size: 0.5625rem;

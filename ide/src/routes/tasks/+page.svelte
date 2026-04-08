@@ -1743,7 +1743,7 @@
 				projectColors[selectedProject] || "oklch(0.70 0.15 200)"}
 
 			<section
-				class="project-content pt-10"
+				class="project-content pt-0.5"
 				style="--project-color: {projectColor}"
 			>
 				<!-- Attention notifications: agents waiting for input or review (dismissable) -->
@@ -2486,6 +2486,7 @@
 												<span class="loading loading-spinner loading-xs"></span>
 												Loading...
 											{:else}
+												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:1rem;height:1rem;flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" /></svg>
 												Load previous day
 											{/if}
 										</button>
@@ -3307,21 +3308,25 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 100%;
-		padding: 0.5rem;
-		background: transparent;
-		border: 1px dashed oklch(0.3 0.02 250);
+		gap: 0.5rem;
+		width: auto;
+		margin: 0 1rem;
+		padding: 0.75rem 1rem;
+		min-height: 2.75rem;
+		background: oklch(0.18 0.01 250);
+		border: 1px solid oklch(0.30 0.02 250);
 		border-radius: 0.5rem;
-		color: oklch(0.55 0.02 250);
-		font-size: 0.8rem;
+		color: oklch(0.70 0.02 250);
+		font-size: 0.8125rem;
+		font-weight: 500;
 		cursor: pointer;
 		transition: all 0.15s ease;
 	}
 
 	.load-more-btn:hover {
-		background: oklch(0.18 0.01 250);
-		border-color: oklch(0.4 0.02 250);
-		color: oklch(0.7 0.02 250);
+		background: oklch(0.22 0.02 250);
+		border-color: oklch(0.40 0.02 250);
+		color: oklch(0.80 0.02 250);
 	}
 
 	.memory-overlay {

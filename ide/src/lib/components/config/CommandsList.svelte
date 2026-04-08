@@ -1025,22 +1025,23 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 1rem;
+		gap: 0.75rem;
 		padding: 1rem 1.25rem;
 		background: oklch(0.12 0.02 250);
 		border-bottom: 1px solid oklch(0.25 0.02 250);
+		flex-wrap: wrap;
 	}
 
 	.header-left {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
+		gap: 0.625rem;
 	}
 
 	.header-icon {
 		width: 18px;
 		height: 18px;
-		color: oklch(0.65 0.10 200);
+		color: oklch(0.60 0.12 200);
 	}
 
 	.header-title {
@@ -1063,7 +1064,7 @@
 	.header-right {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
+		gap: 0.375rem;
 	}
 
 	/* Search container */

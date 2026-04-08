@@ -624,17 +624,17 @@ Command content here...
 		>
 			<!-- Header -->
 			<div
-				class="flex items-center justify-between border-b px-6 py-4"
-				style="border-color: oklch(0.3 0.02 250); background: oklch(0.18 0.02 250);"
+				class="flex items-center justify-between border-b px-6 py-3.5"
+				style="border-color: oklch(0.25 0.02 250); background: oklch(0.16 0.02 250);"
 			>
 				<div class="flex items-center gap-3">
-					<span class="text-2xl">📝</span>
+					<span class="text-xl">📝</span>
 					<div>
-						<h2 class="text-lg font-semibold text-base-content">
+						<h2 class="text-base font-semibold text-base-content" style="letter-spacing: 0.01em;">
 							{isCreateMode ? 'Create Command' : 'Edit Command'}
 						</h2>
 						{#if command}
-							<p class="text-sm opacity-70">{command.invocation}</p>
+							<p class="text-xs font-mono opacity-60" style="margin-top: 1px;">{command.invocation}</p>
 						{/if}
 					</div>
 				</div>
@@ -657,7 +657,7 @@ Command content here...
 			</div>
 
 			<!-- Body -->
-			<div class="flex flex-1 flex-col overflow-hidden p-6">
+			<div class="flex flex-1 flex-col overflow-hidden px-6 py-5">
 				{#if loading}
 					<div class="flex h-full items-center justify-center">
 						<span class="loading loading-spinner loading-lg"></span>
@@ -1007,9 +1007,9 @@ Command content here...
 						{/if}
 
 						<!-- Frontmatter fields -->
-					<div class="mb-6 flex-shrink-0">
-						<h3 class="mb-3 font-medium text-base-content">Frontmatter</h3>
-						<div class="grid grid-cols-2 gap-4">
+					<div class="mb-5 flex-shrink-0">
+						<h3 class="mb-3 text-xs font-semibold uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Frontmatter</h3>
+						<div class="grid grid-cols-2 gap-x-4 gap-y-2">
 							<div class="form-control">
 								<label class="label" for="description">
 									<span class="label-text">Description</span>
@@ -1068,7 +1068,7 @@ Command content here...
 						</div>
 
 						<!-- Keyboard Shortcut (full width, below grid) -->
-						<div class="form-control mt-4">
+						<div class="form-control mt-3 pt-3" style="border-top: 1px solid oklch(0.22 0.02 250);">
 							<label class="label" for="shortcut">
 								<span class="label-text">Keyboard Shortcut</span>
 								<span class="label-text-alt">e.g., Alt+C, Ctrl+Shift+S</span>
@@ -1107,8 +1107,8 @@ Command content here...
 
 					<!-- Editor header with view toggle -->
 					<div class="form-control flex min-h-0 flex-1 flex-col">
-						<div class="label flex items-center justify-between">
-							<span class="label-text font-medium">Command Content (Markdown)</span>
+						<div class="label flex items-center justify-between" style="padding-bottom: 0.375rem;">
+							<span class="text-xs font-semibold uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Command Content (Markdown)</span>
 							<div class="flex items-center gap-2">
 								<span class="label-text-alt opacity-60">Cmd+S to save</span>
 								<!-- View mode toggle -->
@@ -1220,8 +1220,8 @@ Command content here...
 
 			<!-- Footer -->
 			<div
-				class="flex items-center justify-end gap-3 border-t px-6 py-4"
-				style="border-color: oklch(0.3 0.02 250); background: oklch(0.18 0.02 250);"
+				class="flex items-center justify-end gap-3 border-t px-6 py-3"
+				style="border-color: oklch(0.25 0.02 250); background: oklch(0.16 0.02 250);"
 			>
 				{#if isCreateMode && showTemplateStep}
 					<!-- Template step footer -->

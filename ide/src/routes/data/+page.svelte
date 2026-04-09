@@ -4416,7 +4416,7 @@
 														autocomplete="off"
 													/>
 													{#if tblSearchQuery}
-														<button type="button" onclick={() => { tblSearchQuery = ''; tblSearchInput?.focus(); }} style="color: oklch(0.40 0.02 250);" class="hover:opacity-80 transition-opacity">
+														<button type="button" aria-label="Clear search" onclick={() => { tblSearchQuery = ''; tblSearchInput?.focus(); }} style="color: oklch(0.40 0.02 250);" class="hover:opacity-80 transition-opacity">
 															<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
 														</button>
 													{/if}
@@ -4520,7 +4520,7 @@
 														autocomplete="off"
 													/>
 													{#if tblSearchQuery}
-														<button type="button" onclick={() => { tblSearchQuery = ''; tblSearchInput?.focus(); }} style="color: oklch(0.40 0.02 250);" class="hover:opacity-80 transition-opacity">
+														<button type="button" aria-label="Clear search" onclick={() => { tblSearchQuery = ''; tblSearchInput?.focus(); }} style="color: oklch(0.40 0.02 250);" class="hover:opacity-80 transition-opacity">
 															<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
 														</button>
 													{/if}

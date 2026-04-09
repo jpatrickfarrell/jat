@@ -1137,6 +1137,7 @@
 											{#if epicSearchQuery}
 												<button
 													type="button"
+													aria-label="Clear search"
 													onclick={() => {
 														epicSearchQuery = "";
 														epicSearchInput?.focus();
@@ -1431,6 +1432,7 @@
 										{#if commandSearchQuery}
 											<button
 												type="button"
+												aria-label="Clear search"
 												onclick={() => {
 													commandSearchQuery = "";
 													commandSearchInput?.focus();

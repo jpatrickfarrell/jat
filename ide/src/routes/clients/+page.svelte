@@ -1980,7 +1980,7 @@
 		<div class="modal-box max-w-2xl max-h-[90vh] overflow-y-auto">
 			<div class="flex items-center justify-between mb-4">
 				<h3 class="text-lg font-bold">New Contract</h3>
-				<button class="btn btn-sm btn-ghost btn-circle" onclick={() => showCreateModal = false}>
+				<button class="btn btn-sm btn-ghost btn-circle" aria-label="Close" onclick={() => showCreateModal = false}>
 					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
 					</svg>
@@ -2155,6 +2155,7 @@
 													<button
 														type="button"
 														class="btn btn-ghost btn-xs text-error"
+														aria-label="Remove milestone"
 														onclick={() => removeMilestone(i)}
 													>
 														<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2221,6 +2222,7 @@
 															<button
 																type="button"
 																class="ml-0.5 opacity-50 hover:opacity-100"
+																aria-label="Remove task link"
 																onclick={() => toggleTaskLink(i, taskId)}
 															>
 																<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2276,6 +2278,7 @@
 											<button
 												type="button"
 												class="btn btn-ghost btn-xs text-error"
+												aria-label="Remove term"
 												onclick={() => { contractTerms = contractTerms.filter((_, idx) => idx !== i); }}
 											>
 												<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

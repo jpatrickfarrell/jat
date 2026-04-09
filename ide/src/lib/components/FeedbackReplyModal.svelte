@@ -98,6 +98,7 @@
 			</div>
 			<button
 				class="btn btn-ghost btn-sm btn-circle"
+				aria-label="Close"
 				onclick={handleClose}
 				disabled={sending}
 			>

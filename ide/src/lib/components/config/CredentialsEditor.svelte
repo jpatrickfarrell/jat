@@ -751,7 +751,7 @@
 		<div class="modal-content" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="modal-header">
 				<h3>{credentials?.apiKeys[editingProvider]?.isSet ? 'Update' : 'Add'} {editingProviderInfo.name} API Key</h3>
-				<button class="btn btn-ghost btn-sm btn-circle" onclick={closeEditModal}>
+				<button class="btn btn-ghost btn-sm btn-circle" aria-label="Close dialog" onclick={closeEditModal}>
 					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="icon">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 					</svg>

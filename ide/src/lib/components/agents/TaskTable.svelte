@@ -2783,6 +2783,7 @@
 														/>
 														{#if bulkEpicSearchQuery}
 															<button
+																aria-label="Clear search"
 																class="text-base-content/40 hover:text-base-content/70"
 																onclick={(e) => { e.stopPropagation(); bulkEpicSearchQuery = ''; }}
 															>

@@ -1213,6 +1213,7 @@
 		<button
 			class="absolute inset-0 cursor-default"
 			style="background: oklch(0.10 0.02 250 / 0.7); backdrop-filter: blur(2px);"
+			aria-label="Close"
 			onclick={onClose}
 			tabindex="-1"
 		></button>

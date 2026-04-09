@@ -361,6 +361,7 @@
 											style="background: {rule.textColor || 'transparent'}; {!rule.textColor ? 'border: 1px dashed oklch(0.5 0 0)' : ''}"
 											onclick={() => { showTextColorPicker = !showTextColorPicker; showBgColorPicker = false; }}
 											title="Text color"
+											aria-label="Text color"
 										></button>
 										{#if rule.textColor}
 											<button class="cf-clear-btn" onclick={() => setRuleColor(rule.id, 'textColor', undefined)}>x</button>
@@ -372,6 +373,7 @@
 														class="cf-color-cell"
 														class:cf-color-cell-selected={rule.textColor === color}
 														style="background: {color}"
+														aria-label="Text color {color}"
 														onclick={() => { setRuleColor(rule.id, 'textColor', color); showTextColorPicker = false; }}
 													></button>
 												{/each}
@@ -387,6 +389,7 @@
 											style="background: {rule.backgroundColor || 'transparent'}; {!rule.backgroundColor ? 'border: 1px dashed oklch(0.5 0 0)' : ''}"
 											onclick={() => { showBgColorPicker = !showBgColorPicker; showTextColorPicker = false; }}
 											title="Background color"
+											aria-label="Background color"
 										></button>
 										{#if rule.backgroundColor}
 											<button class="cf-clear-btn" onclick={() => setRuleColor(rule.id, 'backgroundColor', undefined)}>x</button>
@@ -398,6 +401,7 @@
 														class="cf-color-cell"
 														class:cf-color-cell-selected={rule.backgroundColor === color}
 														style="background: {color}"
+														aria-label="Background color {color}"
 														onclick={() => { setRuleColor(rule.id, 'backgroundColor', color); showBgColorPicker = false; }}
 													></button>
 												{/each}
@@ -495,7 +499,7 @@
 					</div>
 					<div class="cf-scale-editor">
 						<div class="cf-condition-row">
-							<label class="cf-color-label">Column</label>
+							<div class="cf-color-label">Column</div>
 							<select class="cf-select" value={scale.column} onchange={(e) => updateColorScale(scale.id, { column: e.currentTarget.value })}>
 								{#each columns as col}
 									<option value={col.name}>{col.name}</option>
@@ -503,7 +507,7 @@
 							</select>
 						</div>
 						<div class="cf-condition-row">
-							<label class="cf-color-label">Range</label>
+							<div class="cf-color-label">Range</div>
 							<select class="cf-select" value={scale.rangeMode} onchange={(e) => updateColorScale(scale.id, { rangeMode: e.currentTarget.value as 'auto' | 'manual' })}>
 								<option value="auto">Auto (min/max from data)</option>
 								<option value="manual">Manual</option>
@@ -514,7 +518,7 @@
 							{/if}
 						</div>
 						<div class="cf-condition-row">
-							<label class="cf-color-label">Apply to</label>
+							<div class="cf-color-label">Apply to</div>
 							<select class="cf-select" value={scale.applyTo === 'value_column' ? 'value_column' : 'specific'} onchange={(e) => updateColorScale(scale.id, { applyTo: e.currentTarget.value === 'value_column' ? 'value_column' : [] })}>
 								<option value="value_column">Same column</option>
 								<option value="specific">Specific columns</option>

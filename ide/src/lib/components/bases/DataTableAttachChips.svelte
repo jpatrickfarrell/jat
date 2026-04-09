@@ -79,6 +79,7 @@
 				<span class="truncate max-w-[120px]">{table.display_name || table.name}</span>
 				<button
 					type="button"
+					aria-label="Remove {table.display_name || table.name}"
 					class="ml-0.5 hover:text-error"
 					onclick={() => removeTable(table.name)}
 				>

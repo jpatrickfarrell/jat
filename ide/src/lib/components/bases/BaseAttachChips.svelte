@@ -65,6 +65,7 @@
 				<span class="truncate max-w-[120px]">{base.name}</span>
 				<button
 					type="button"
+					aria-label="Remove {base.name}"
 					class="ml-0.5 hover:text-error"
 					onclick={() => removeBase(base.id)}
 				>

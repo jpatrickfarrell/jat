@@ -1021,6 +1021,7 @@
 					Help & Keyboard Shortcuts
 				</h2>
 				<button
+					aria-label="Close"
 					onclick={() => showHelpModal = false}
 					class="p-1 rounded hover:bg-base-200 transition-colors"
 				>

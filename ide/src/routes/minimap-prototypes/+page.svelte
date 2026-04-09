@@ -180,7 +180,7 @@
 			</div>
 
 			<!-- Refresh button -->
-			<button class="btn btn-ghost btn-sm" onclick={() => fetchOutput()}>
+			<button class="btn btn-ghost btn-sm" aria-label="Refresh output" onclick={() => fetchOutput()}>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					class="h-4 w-4"

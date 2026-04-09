@@ -638,7 +638,7 @@ Command content here...
 						{/if}
 					</div>
 				</div>
-				<button class="btn btn-ghost btn-sm" onclick={handleClose}>
+				<button class="btn btn-ghost btn-sm" aria-label="Close editor" onclick={handleClose}>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						class="h-5 w-5"

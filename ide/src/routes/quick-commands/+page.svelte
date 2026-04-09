@@ -2140,6 +2140,7 @@
 							<button
 								onclick={() => removeEditorVariable(i)}
 								class="p-1 rounded"
+								aria-label="Remove variable"
 								style="color: oklch(0.50 0.08 30);"
 							>
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">

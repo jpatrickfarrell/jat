@@ -830,6 +830,7 @@
 				{#if query}
 					<button
 						tabindex={-1}
+						aria-label="Clear search"
 						onclick={() => { query = ''; taskResults = []; memoryResults = []; fileResults = []; filenameResults = []; contentResults = []; meta = null; synthesis = null; if (mode === 'route') updateUrl(); searchInputEl?.focus(); }}
 						class="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded transition-colors hover:bg-base-300/30"
 						style="color: oklch(0.50 0.02 250);"

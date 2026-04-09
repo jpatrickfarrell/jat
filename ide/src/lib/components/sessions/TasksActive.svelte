@@ -1639,6 +1639,7 @@
 						<!-- Close button -->
 						<button
 							type="button"
+							aria-label="Close"
 							class="btn btn-sm btn-ghost btn-circle"
 							onclick={() => llmFileDrawerOpen = false}
 						>

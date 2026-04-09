@@ -625,7 +625,7 @@
 			<div class="modal-content">
 				<div class="modal-header">
 					<h3 class="modal-title">{editingServerName ? 'Edit Server' : 'Add MCP Server'}</h3>
-					<button class="close-btn" onclick={closeForm}>
+					<button class="close-btn" aria-label="Close form" onclick={closeForm}>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
 							fill="none"
@@ -723,7 +723,7 @@
 										bind:value={pair.value}
 										placeholder="value"
 									/>
-									<button class="remove-btn" onclick={() => removeEnvPair(index)}>
+									<button class="remove-btn" aria-label="Remove environment variable" onclick={() => removeEnvPair(index)}>
 										<svg
 											xmlns="http://www.w3.org/2000/svg"
 											fill="none"
@@ -781,7 +781,7 @@
 										bind:value={header.value}
 										placeholder="value"
 									/>
-									<button class="remove-btn" onclick={() => removeHeaderPair(index)}>
+									<button class="remove-btn" aria-label="Remove header" onclick={() => removeHeaderPair(index)}>
 										<svg
 											xmlns="http://www.w3.org/2000/svg"
 											fill="none"

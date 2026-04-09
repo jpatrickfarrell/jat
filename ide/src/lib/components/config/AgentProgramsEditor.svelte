@@ -709,7 +709,7 @@
 		<div class="drawer-content" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} transition:slide={{ duration: 200, axis: 'x' }}>
 			<div class="drawer-header">
 				<h3>Configure {editingProgram.name}</h3>
-				<button class="btn btn-ghost btn-sm btn-circle" onclick={closeEditDrawer}>
+				<button class="btn btn-ghost btn-sm btn-circle" aria-label="Close editor" onclick={closeEditDrawer}>
 					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="icon">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 					</svg>
@@ -832,6 +832,7 @@
 								</select>
 								<button
 									class="btn btn-xs btn-ghost btn-error"
+									aria-label="Remove model"
 									onclick={() => removeModel(index)}
 									disabled={(editForm.models?.length ?? 0) <= 1}
 								>
@@ -853,7 +854,7 @@
 						{#each editForm.flags ?? [] as flag, index}
 							<div class="flag-chip">
 								<code>{flag}</code>
-								<button class="chip-remove" onclick={() => removeFlag(index)}>
+								<button class="chip-remove" aria-label="Remove flag" onclick={() => removeFlag(index)}>
 									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="icon-xs">
 										<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 									</svg>
@@ -1004,7 +1005,7 @@
 		<div class="modal-content modal-lg" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="modal-header">
 				<h3>Add Agent Harness</h3>
-				<button class="btn btn-ghost btn-sm btn-circle" onclick={closeAddModal}>
+				<button class="btn btn-ghost btn-sm btn-circle" aria-label="Close dialog" onclick={closeAddModal}>
 					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="icon">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 					</svg>
@@ -1185,6 +1186,7 @@
 													<button
 														type="button"
 														class="btn btn-ghost btn-xs btn-circle"
+														aria-label="Remove flag"
 														onclick={() => {
 															newFormFlags = newFormFlags.filter((_, i) => i !== index);
 														}}

@@ -182,6 +182,7 @@
 				<!-- Close button -->
 				<button
 					class="btn btn-ghost btn-sm btn-circle shrink-0"
+					aria-label="Close"
 					style="color: oklch(0.55 0.02 250)"
 					onclick={handleClose}
 				>

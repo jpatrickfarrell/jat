@@ -1048,6 +1048,7 @@
 			<div class="flex items-center shrink-0">
 				<!-- Expand/collapse + tabs -->
 				<button
+					aria-label="Toggle log panel"
 					class="flex items-center gap-2 px-3 py-1.5"
 					onclick={() => (logExpanded = !logExpanded)}
 				>

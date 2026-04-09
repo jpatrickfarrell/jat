@@ -2515,6 +2515,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 								<button
 									type="button"
 									tabindex="0"
+									aria-label="More save options"
 									class="btn btn-primary join-item border-l border-primary-content/20"
 									disabled={formDisabled || isSubmitting}
 								>

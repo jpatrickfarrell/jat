@@ -554,7 +554,7 @@
 	<div class="drawer" transition:slide={{ axis: 'x', duration: 200 }}>
 		<div class="drawer-header">
 			<h3>{editingTemplate ? 'Edit Template' : 'New Template'}</h3>
-			<button class="close-btn" onclick={handleClose}>
+			<button class="close-btn" aria-label="Close editor" onclick={handleClose}>
 				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 				</svg>
@@ -689,7 +689,7 @@
 								<input type="checkbox" bind:checked={variable.required} />
 								Req
 							</label>
-							<button type="button" class="remove-var-btn" onclick={() => removeVariable(index)}>
+							<button type="button" class="remove-var-btn" aria-label="Remove variable" onclick={() => removeVariable(index)}>
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 								</svg>

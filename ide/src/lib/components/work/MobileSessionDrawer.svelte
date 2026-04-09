@@ -922,6 +922,7 @@
 					<!-- Send button -->
 					<button
 						class="send-btn"
+						aria-label="Send message"
 						class:has-text={inputText.trim().length > 0 || pendingAttachments.some(a => !a.uploading)}
 						disabled={!inputText.trim() && !pendingAttachments.some(a => !a.uploading)}
 						use:directClick={sendWithAttachments}

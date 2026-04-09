@@ -91,7 +91,7 @@
 <div class="claude-md-list">
 	<div class="list-header">
 		<h3 class="list-title">CLAUDE.md Files</h3>
-		<button class="refresh-btn" onclick={fetchFiles} disabled={isLoading}>
+		<button class="refresh-btn" aria-label="Refresh files" onclick={fetchFiles} disabled={isLoading}>
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				fill="none"

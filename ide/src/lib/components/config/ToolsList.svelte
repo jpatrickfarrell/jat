@@ -109,7 +109,7 @@
 <div class="tools-list">
 	<div class="list-header">
 		<h3 class="list-title">JAT Tools</h3>
-		<button class="refresh-btn" onclick={fetchTools} disabled={isLoading}>
+		<button class="refresh-btn" aria-label="Refresh tools" onclick={fetchTools} disabled={isLoading}>
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				fill="none"

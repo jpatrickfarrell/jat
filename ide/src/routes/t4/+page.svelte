@@ -219,7 +219,7 @@
 							class:has-children={hasKids}
 						>
 							{#if hasKids}
-								<button class="expand-btn" onclick={() => toggleExpand(task.id)}>
+								<button class="expand-btn" aria-label="Expand task" onclick={() => toggleExpand(task.id)}>
 									<svg
 										xmlns="http://www.w3.org/2000/svg"
 										fill="none"
@@ -267,7 +267,7 @@
 											class:has-children={childHasKids}
 										>
 											{#if childHasKids}
-												<button class="expand-btn" onclick={() => toggleExpand(child.id)}>
+												<button class="expand-btn" aria-label="Expand child task" onclick={() => toggleExpand(child.id)}>
 													<svg
 														xmlns="http://www.w3.org/2000/svg"
 														fill="none"
@@ -351,7 +351,7 @@
 							size="sm"
 							copyOnly
 						/>
-						<button class="close-btn" onclick={() => selectedTask = null}>
+						<button class="close-btn" aria-label="Close task detail" onclick={() => selectedTask = null}>
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 							</svg>

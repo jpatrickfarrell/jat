@@ -215,6 +215,7 @@
 					/>
 					<button
 						class="btn btn-ghost btn-xs"
+						aria-label="Remove variable"
 						style="color: oklch(0.55 0.10 20)"
 						onclick={() => removeVariable(key)}
 					>

@@ -327,6 +327,11 @@
 	// Voice inbox collapsed state (section always shown, EventStack handles empty internally)
 	let voiceInboxCollapsed = $state(false);
 
+	// Guard: don't let saveCollapseState overwrite localStorage until we've loaded saved state.
+	// selectProject() runs as a $effect (before onMount), so without this guard it would
+	// save default values to localStorage before loadCollapseState() ever reads the saved ones.
+	let collapseStateLoaded = false;
+
 	// When an agent leaves the attention state, un-dismiss it so it can show again next time
 	$effect(() => {
 		const currentSessions = new Set(attentionAgents.map(a => a.sessionName));
@@ -658,6 +663,7 @@
 
 	// Persist collapse state
 	function saveCollapseState() {
+		if (!collapseStateLoaded) return; // Don't save until saved state has been loaded
 		try {
 			// Save subsection collapse state
 			const subsectionData: Record<string, string[]> = {};
@@ -692,6 +698,10 @@
 				const map = new Map<string, Set<SubsectionType>>();
 				for (const [project, subsections] of Object.entries(data)) {
 					map.set(project, new Set(subsections as SubsectionType[]));
+					// Mark saved collapsed subsections as user-toggled so auto-expand doesn't override them
+					for (const subsection of subsections as SubsectionType[]) {
+						userToggledSubsections.add(`${project}:${subsection}`);
+					}
 				}
 				collapsedSubsections = map;
 			}
@@ -1580,10 +1590,11 @@
 			changed = true;
 		}
 
-		// Reset user-touched flag when section empties (so it auto-expands if it reappears)
-		if (!hasChat) userToggledSubsections.delete(chatKey);
-		if (!hasWork) userToggledSubsections.delete(pausedKey);
-		if (!hasCompleted) userToggledSubsections.delete(completedKey);
+		// Reset user-touched flag when section empties (so it auto-expands if it reappears).
+		// But preserve the flag if the section is explicitly collapsed — the user wanted it closed.
+		if (!hasChat && !projectCollapsed.has("conversations")) userToggledSubsections.delete(chatKey);
+		if (!hasWork && !projectCollapsed.has("paused")) userToggledSubsections.delete(pausedKey);
+		if (!hasCompleted && !projectCollapsed.has("completed")) userToggledSubsections.delete(completedKey);
 
 		if (changed) {
 			collapsedSubsections = new Map(collapsedSubsections);
@@ -1592,6 +1603,7 @@
 
 	onMount(() => {
 		loadCollapseState();
+		collapseStateLoaded = true;
 
 		// Mobile detection via matchMedia
 		const mql = window.matchMedia('(max-width: 768px)');

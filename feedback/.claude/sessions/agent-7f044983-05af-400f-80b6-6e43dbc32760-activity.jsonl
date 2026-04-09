@@ -1,5 +1,3 @@
-"  has_static=$(ls \"$path/static/jat-feedback.js\" 2>/dev/null && echo \"yes\" || echo \"no\")"
-"  has_npm=$(grep -q \"jat-feedback\" \"$path/package.json\" 2>/dev/null && echo \"yes\" || echo \"no\")"
 "  # Get current static version if exists"
 "  if [ \"$has_static\" = \"yes\" ]; then"
 "    mtime=$(stat -c \"%y\" \"$path/static/jat-feedback.js\" 2>/dev/null | cut -d' ' -f1)"
@@ -48,3 +46,5 @@
 "cp /home/jw/code/jat/f...","tool":"Bash"}
 {"ts":"2026-04-09T15:45:12Z","agent":"KeenStorm","type":"tool","content":"Bash: cd /home/jw/code/jat/feedback && npm run build 2>&1 | tail -5","preview":"Running: cd /home/jw/code/jat/feedback && npm run build 2>&...","tool":"Bash"}
 {"ts":"2026-04-09T15:45:21Z","agent":"KeenStorm","type":"tool","content":"Bash: npm publish 2>&1 | tail -5","preview":"Running: npm publish 2>&1 | tail -5","tool":"Bash"}
+{"ts":"2026-04-09T16:27:02Z","agent":"KeenStorm","type":"tool","content":"Bash: cd /home/jw/code/jat/feedback && npm run build 2>&1 | tail -5","preview":"Running: cd /home/jw/code/jat/feedback && npm run build 2>&...","tool":"Bash"}
+{"ts":"2026-04-09T16:27:10Z","agent":"KeenStorm","type":"tool","content":"Bash: npm version 3.3.3 --no-git-tag-version && npm publish 2>&1 | tail -10","preview":"Running: npm version 3.3.3 --no-git-tag-version && npm publ...","tool":"Bash"}

@@ -778,7 +778,7 @@
         <div class="replay-banner">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/><polygon points="10,8 16,12 10,16" fill="currentColor"/></svg>
           <span>Recording captured —</span>
-          <a href="{endpoint}/feedback/replay.html?id={lastSubmittedId}" target="_blank" rel="noreferrer">View replay</a>
+          <a href="{endpoint}/feedback/replay?id={lastSubmittedId}" target="_blank" rel="noreferrer">View replay</a>
           <button class="replay-banner-dismiss" onclick={() => { lastSubmittedId = null; lastHadRecording = false; }} aria-label="Dismiss">×</button>
         </div>
       {/if}

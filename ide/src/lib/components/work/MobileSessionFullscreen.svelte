@@ -767,6 +767,7 @@
 				<div class="topbar-text">
 					<span class="topbar-agent">{agentName}</span>
 					<span class="topbar-task" title={taskTitle}>{taskTitle || taskId || 'No task'}</span>
+					<span class="topbar-state" style="color: {stateVisual.accent};">{stateVisual.shortLabel}</span>
 				</div>
 			</div>
 
@@ -1012,6 +1013,14 @@
 		line-height: 1.2;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.topbar-state {
+		font-size: 0.5625rem;
+		font-weight: 600;
+		line-height: 1.2;
+		letter-spacing: 0.03em;
 		white-space: nowrap;
 	}
 

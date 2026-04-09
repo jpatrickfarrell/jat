@@ -428,7 +428,7 @@
                     <div class="replay-header">
                       <span class="replay-label">Session Recording</span>
                       <a
-                        href="{endpoint}/feedback/replay.html?id={report.id}"
+                        href="{endpoint}/feedback/replay?id={report.id}"
                         target="_blank"
                         rel="noreferrer"
                         class="replay-fullscreen-btn"

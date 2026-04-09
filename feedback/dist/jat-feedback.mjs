@@ -11805,7 +11805,7 @@ function RequestList(d, p) {
                           }
                         });
                       }
-                      template_effect(() => set_attribute(ut, "href", `${h() ?? ""}/feedback/replay.html?id=${get(te).id ?? ""}`)), append(ot, tt);
+                      template_effect(() => set_attribute(ut, "href", `${h() ?? ""}/feedback/replay?id=${get(te).id ?? ""}`)), append(ot, tt);
                     };
                     if_block(dt, (ot) => {
                       get(Le) && ot(St);
@@ -18315,7 +18315,7 @@ const $$css$1 = {
 };
 function FeedbackPanel(d, p) {
   push(p, !0), append_styles(d, $$css$1);
-  const h = "3.3.2";
+  const h = "3.3.3";
   let g = prop(p, "endpoint", 7), m = prop(p, "project", 7), _ = prop(p, "isOpen", 7, !1), b = prop(p, "userId", 7, ""), y = prop(p, "userEmail", 7, ""), w = prop(p, "userName", 7, ""), x = prop(p, "userRole", 7, ""), E = prop(p, "orgId", 7, ""), S = prop(p, "orgName", 7, ""), k = prop(p, "onclose", 7), I = prop(p, "ongrip", 7), R = prop(p, "agentProxy", 7, ""), M = prop(p, "agentModel", 7, ""), A = prop(p, "agentContext", 7, ""), C = prop(p, "registeredTools", 23, () => []), N = /* @__PURE__ */ state("new"), $ = /* @__PURE__ */ state(!1), O = /* @__PURE__ */ state(!1), F = /* @__PURE__ */ state(!1), j = /* @__PURE__ */ state(proxy([]));
   function Y() {
     if (get(F)) {
@@ -18995,7 +18995,7 @@ function FeedbackPanel(d, p) {
       {
         var ye = (Ue) => {
           var lt = root_28(), ft = sibling(child(lt), 4), gt = sibling(ft, 2);
-          reset(lt), template_effect(() => set_attribute(ft, "href", `${g() ?? ""}/feedback/replay.html?id=${get(_t) ?? ""}`)), delegated("click", gt, () => {
+          reset(lt), template_effect(() => set_attribute(ft, "href", `${g() ?? ""}/feedback/replay?id=${get(_t) ?? ""}`)), delegated("click", gt, () => {
             set(_t, null), set(Ge, !1);
           }), append(Ue, lt);
         };

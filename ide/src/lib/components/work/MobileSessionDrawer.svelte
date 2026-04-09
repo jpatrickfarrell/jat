@@ -772,6 +772,7 @@
 										<span class="mobile-separator">·</span>
 										<span class="mobile-priority mobile-priority-{task.priority}">P{task.priority}</span>
 									{/if}
+									<span class="mobile-state-badge" style="color: {stateVisual.accent};">{stateVisual.shortLabel}</span>
 								</div>
 							</div>
 						</div>
@@ -1646,6 +1647,18 @@
 	.mobile-priority-2 {
 		color: oklch(0.75 0.12 230);
 		background: oklch(0.75 0.12 230 / 0.15);
+	}
+
+	.mobile-state-badge {
+		display: inline-flex;
+		align-items: center;
+		font-size: 0.5625rem;
+		font-weight: 600;
+		line-height: 1;
+		margin-left: auto;
+		flex-shrink: 0;
+		white-space: nowrap;
+		letter-spacing: 0.03em;
 	}
 
 	/* === Mobile Action Buttons Row === */

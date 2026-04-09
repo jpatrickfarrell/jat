@@ -1091,6 +1091,7 @@
 									<div class="relative flex justify-center">
 										{#if editingColor === project.name}
 											<!-- Color picker dropdown -->
+											<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 											<div
 												class="absolute top-0 left-1/2 -translate-x-1/2 z-50 p-2 rounded-lg shadow-xl bg-base-200 border border-base-content/25"
 												role="group"

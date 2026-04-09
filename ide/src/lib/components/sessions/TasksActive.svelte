@@ -7,17 +7,11 @@
 	 */
 
 	import { untrack } from 'svelte';
-	import SessionCard from '$lib/components/work/SessionCard.svelte';
-	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
-	import ServerSessionBadge from '$lib/components/ServerSessionBadge.svelte';
-	import StatusActionBadge from '$lib/components/work/StatusActionBadge.svelte';
-	import TaskDetailPane from '$lib/components/sessions/TaskDetailPane.svelte';
 	import { getReviewRules } from '$lib/stores/reviewRules.svelte';
 	import { computeReviewStatus } from '$lib/utils/reviewStatusUtils';
 	import { getSessionStateVisual, getSessionStateActions, getIssueTypeVisual, type SessionState } from '$lib/config/statusColors';
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
-	import { getNotesUpdateSignal, clearNotesUpdateSignal } from '$lib/stores/taskNotesUpdate.svelte';
 	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
 	import FxText from '$lib/components/FxText.svelte';
 	import MobileSessionFullscreen from '$lib/components/work/MobileSessionFullscreen.svelte';
@@ -67,42 +61,6 @@
 		cost: number;
 		activityState?: string;
 		activityStateTimestamp?: number;
-	}
-
-	interface TaskAttachment {
-		id: string;
-		path: string;
-		filename: string;
-		url: string;
-	}
-
-	interface TaskDependency {
-		id: string;
-		title: string;
-		status: string;
-		priority: number;
-	}
-
-	interface TimelineEvent {
-		type: 'jat_event' | 'agent_mail' | 'signal';
-		event?: string;
-		timestamp: string;
-		description?: string;
-		metadata?: Record<string, any>;
-		data?: Record<string, any>;
-	}
-
-	interface ExtendedTaskDetails {
-		labels?: string[];
-		assignee?: string;
-		notes?: string;
-		depends_on?: TaskDependency[];
-		blocked_by?: TaskDependency[];
-		created_at?: string;
-		updated_at?: string;
-		attachments: TaskAttachment[];
-		timeline: TimelineEvent[];
-		timelineCounts: { total: number; jat_events: number; agent_mail: number; signals?: number };
 	}
 
 	// Props
@@ -178,30 +136,6 @@
 
 	// Mobile fullscreen state
 	let fullscreenSession = $state<string | null>(null);
-
-	// Internal state
-	let expandedSession = $state<string | null>(null);
-	let collapsingSession = $state<string | null>(null);
-	let expandedOutput = $state<string>('');
-	let outputPollInterval: ReturnType<typeof setInterval> | null = null;
-	let expandedHeight = $state(800);
-	let isResizing = $state(false);
-
-	// Horizontal split between SessionCard and TaskDetailPane
-	let sessionPanelPercent = $state(60); // SessionCard gets this %, TaskDetailPane gets the rest
-	let isSplitResizing = $state(false);
-
-	// Task detail panel state
-	let expandedTaskId = $state<string | null>(null);
-	let taskDetailOpen = $state(false);
-	let expandedTaskDetails = $state<ExtendedTaskDetails | null>(null);
-	let taskDetailsLoading = $state(false);
-	let timelineFilter = $state<'all' | 'tasks' | 'messages'>('all');
-
-	// Notes editing state
-	let notesEditing = $state(false);
-	let notesValue = $state('');
-	let notesSaving = $state(false);
 
 	// LLM file result drawer state
 	let llmFileDrawerOpen = $state(false);
@@ -285,9 +219,6 @@
 	let autoCompleteDisabledMap = $state<Map<string, boolean>>(new Map());
 	// Track which sessions have already had auto-complete triggered (prevent re-fire)
 	let autoCompleteTriggeredSet = $state(new Set<string>());
-
-	// "All done" flash state - shown when no more sessions to navigate to
-	let allDoneFlash = $state(false);
 
 	// Animation state tracking - maintains order so exiting sessions stay in position
 	let previousSessionObjects = $state<Map<string, TmuxSession>>(new Map());
@@ -571,16 +502,6 @@
 		previousSessionObjects = mergedObjects;
 	});
 
-	// React to notes updates from SendToLLM component
-	$effect(() => {
-		const signal = getNotesUpdateSignal();
-		if (signal && signal.taskId === expandedTaskId) {
-			// Notes were updated for the currently expanded task - refresh details
-			fetchExpandedTaskDetails(signal.taskId);
-			clearNotesUpdateSignal();
-		}
-	});
-
 	// Derived: sessions to render in order (includes exiting sessions in their original position)
 	const orderedSessions = $derived.by(() => {
 		const result: Array<{ session: TmuxSession; isExiting: boolean; isNew: boolean; hadTaskOnEntry: boolean }> = [];
@@ -664,359 +585,6 @@
 		};
 	}
 
-	// Session expansion
-	async function fetchExpandedOutput(sessionName: string | null) {
-		// Guard against null/undefined session names to prevent /api/work/null/output calls
-		if (!sessionName) {
-			return;
-		}
-		try {
-			const response = await fetch(`/api/work/${encodeURIComponent(sessionName)}/output`);
-			if (response.ok) {
-				const data = await response.json();
-				expandedOutput = data.output || '';
-				// Stop polling if the session has ended (tmux session gone)
-				if (data.sessionEnded && outputPollInterval) {
-					clearInterval(outputPollInterval);
-					outputPollInterval = null;
-				}
-			}
-		} catch (err) {
-			console.error('Failed to fetch session output:', err);
-		}
-	}
-
-	// Handle horizontal split resize between SessionCard and TaskDetailPane
-	let splitResizeContainer: HTMLDivElement | null = null;
-
-	function startSplitResize(e: MouseEvent) {
-		e.preventDefault();
-		isSplitResizing = true;
-		const startX = e.clientX;
-		const startPercent = sessionPanelPercent;
-
-		function onMouseMove(e: MouseEvent) {
-			if (!splitResizeContainer) return;
-			const containerRect = splitResizeContainer.getBoundingClientRect();
-			const containerWidth = containerRect.width;
-			const deltaX = e.clientX - startX;
-			const deltaPercent = (deltaX / containerWidth) * 100;
-			sessionPanelPercent = Math.max(30, Math.min(80, startPercent + deltaPercent));
-		}
-
-		function onMouseUp() {
-			isSplitResizing = false;
-			document.removeEventListener('mousemove', onMouseMove);
-			document.removeEventListener('mouseup', onMouseUp);
-		}
-
-		document.addEventListener('mousemove', onMouseMove);
-		document.addEventListener('mouseup', onMouseUp);
-	}
-
-	function toggleExpanded(sessionName: string) {
-		if (expandedSession === sessionName) {
-			// Collapse with animation
-			collapsingSession = sessionName;
-			if (outputPollInterval) {
-				clearInterval(outputPollInterval);
-				outputPollInterval = null;
-			}
-			setTimeout(() => {
-				expandedSession = null;
-				expandedOutput = '';
-				collapsingSession = null;
-			}, 200);
-		} else {
-			expandInline(sessionName);
-		}
-	}
-
-	function expandInline(sessionName: string) {
-		if (outputPollInterval) {
-			clearInterval(outputPollInterval);
-			outputPollInterval = null;
-		}
-
-		expandedSession = sessionName;
-		fetchExpandedOutput(sessionName);
-
-		const agentName = getAgentName(sessionName);
-		const task = agentTasks.get(agentName);
-		if (task) {
-			expandedTaskId = task.id;
-			taskDetailOpen = true;
-			fetchExpandedTaskDetails(task.id);
-		} else {
-			expandedTaskId = null;
-			taskDetailOpen = false;
-			expandedTaskDetails = null;
-		}
-
-		outputPollInterval = setInterval(() => {
-			if (expandedSession === sessionName) {
-				fetchExpandedOutput(sessionName);
-			}
-		}, 1000);
-	}
-
-	// Resize handling
-	function startResize(e: MouseEvent) {
-		e.preventDefault();
-		isResizing = true;
-		const startY = e.clientY;
-		const startHeight = expandedHeight;
-
-		function onMouseMove(e: MouseEvent) {
-			const delta = e.clientY - startY;
-			expandedHeight = Math.max(200, startHeight + delta);
-		}
-
-		function onMouseUp() {
-			isResizing = false;
-			document.removeEventListener('mousemove', onMouseMove);
-			document.removeEventListener('mouseup', onMouseUp);
-		}
-
-		document.addEventListener('mousemove', onMouseMove);
-		document.addEventListener('mouseup', onMouseUp);
-	}
-
-	// Task details fetching
-	async function fetchExpandedTaskDetails(taskId: string) {
-		if (!taskId) return;
-
-		taskDetailsLoading = true;
-		expandedTaskDetails = null;
-
-		try {
-			const [taskRes, attachmentsRes, historyRes, signalsRes] = await Promise.all([
-				fetch(`/api/tasks/${taskId}`),
-				fetch(`/api/tasks/${taskId}/image`),
-				fetch(`/api/tasks/${taskId}/history`),
-				fetch(`/api/tasks/${taskId}/signals`)
-			]);
-
-			const taskData = taskRes.ok ? await taskRes.json() : null;
-			const attachmentsData = attachmentsRes.ok ? await attachmentsRes.json() : { images: [] };
-			const historyData = historyRes.ok ? await historyRes.json() : { timeline: [], count: { total: 0, jat_events: 0, agent_mail: 0 } };
-			const signalsData = signalsRes.ok ? await signalsRes.json() : { signals: [] };
-
-			const signalEvents = (signalsData.signals || []).map((signal: any) => ({
-				type: 'signal' as const,
-				timestamp: signal.timestamp,
-				data: {
-					state: signal.state,
-					agentName: signal.agent_name,
-					...signal.data
-				}
-			}));
-
-			const mergedTimeline = [...(historyData.timeline || []), ...signalEvents]
-				.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-
-			expandedTaskDetails = {
-				labels: taskData?.task?.labels || [],
-				assignee: taskData?.task?.assignee,
-				notes: taskData?.task?.notes || '',
-				depends_on: taskData?.task?.depends_on || [],
-				blocked_by: taskData?.task?.blocked_by || [],
-				created_at: taskData?.task?.created_at,
-				updated_at: taskData?.task?.updated_at,
-				attachments: (attachmentsData.images || []).map((img: any) => ({
-					id: img.id || img.path,
-					path: img.path,
-					filename: img.filename || img.path.split('/').pop(),
-					url: `/api/work/image/${encodeURIComponent(img.path)}`
-				})),
-				timeline: mergedTimeline,
-				timelineCounts: {
-					total: mergedTimeline.length,
-					jat_events: historyData.count?.jat_events || 0,
-					agent_mail: historyData.count?.agent_mail || 0,
-					signals: signalEvents.length
-				}
-			};
-			// Initialize notes editing state
-			notesValue = taskData?.task?.notes || '';
-			notesEditing = false;
-		} catch (err) {
-			console.error('Failed to fetch task details:', err);
-			expandedTaskDetails = {
-				labels: [],
-				attachments: [],
-				timeline: [],
-				timelineCounts: { total: 0, jat_events: 0, agent_mail: 0 }
-			};
-		} finally {
-			taskDetailsLoading = false;
-		}
-	}
-
-	// Upload attachment for task
-	async function handleUploadAttachment(taskId: string, file: File) {
-		try {
-			// Step 1: Upload file via /api/work/upload-image
-			const formData = new FormData();
-			formData.append('image', file, `task-${taskId}-${Date.now()}-${file.name}`);
-			formData.append('sessionName', `task-${taskId}`);
-
-			const uploadResponse = await fetch('/api/work/upload-image', {
-				method: 'POST',
-				body: formData
-			});
-
-			if (!uploadResponse.ok) {
-				throw new Error('Failed to upload file');
-			}
-
-			const { filePath } = await uploadResponse.json();
-
-			// Step 2: Save metadata via /api/tasks/${taskId}/image
-			const metadataResponse = await fetch(`/api/tasks/${taskId}/image`, {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ path: filePath, id: `img-${Date.now()}` })
-			});
-
-			if (!metadataResponse.ok) {
-				throw new Error('Failed to save attachment metadata');
-			}
-
-			// Step 3: Refresh task details to show new attachment
-			if (expandedTaskId === taskId) {
-				await fetchExpandedTaskDetails(taskId);
-			}
-		} catch (err) {
-			console.error('Failed to upload attachment:', err);
-		}
-	}
-
-	// Remove attachment from task
-	async function handleRemoveAttachment(taskId: string, attachmentId: string) {
-		try {
-			const response = await fetch(`/api/tasks/${taskId}/image`, {
-				method: 'DELETE',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ id: attachmentId })
-			});
-
-			if (!response.ok) {
-				throw new Error('Failed to remove attachment');
-			}
-
-			// Refresh task details to update attachments list
-			if (expandedTaskId === taskId) {
-				await fetchExpandedTaskDetails(taskId);
-			}
-		} catch (err) {
-			console.error('Failed to remove attachment:', err);
-		}
-	}
-
-	// Save notes on blur
-	async function saveNotes(taskId: string) {
-		if (!taskId || notesSaving) return;
-
-		// Don't save if value hasn't changed
-		const currentNotes = expandedTaskDetails?.notes || '';
-		if (notesValue === currentNotes) {
-			notesEditing = false;
-			return;
-		}
-
-		notesSaving = true;
-		try {
-			const response = await fetch(`/api/tasks/${taskId}`, {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ notes: notesValue })
-			});
-
-			if (response.ok) {
-				// Update local state
-				if (expandedTaskDetails) {
-					expandedTaskDetails.notes = notesValue;
-				}
-			} else {
-				console.error('Failed to save notes:', await response.text());
-				// Revert on error
-				notesValue = currentNotes;
-			}
-		} catch (err) {
-			console.error('Error saving notes:', err);
-			// Revert on error
-			notesValue = currentNotes;
-		} finally {
-			notesSaving = false;
-			notesEditing = false;
-		}
-	}
-
-	// Save description on blur
-	async function saveDescription(taskId: string, description: string) {
-		if (!taskId) return;
-
-		try {
-			const response = await fetch(`/api/tasks/${taskId}`, {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ description })
-			});
-
-			if (response.ok) {
-				// Update local state by finding the task in agentTasks map
-				for (const [agentName, task] of agentTasks) {
-					if (task.id === taskId) {
-						task.description = description;
-						break;
-					}
-				}
-			} else {
-				console.error('Failed to save description:', await response.text());
-			}
-		} catch (err) {
-			console.error('Error saving description:', err);
-		}
-	}
-
-	// Input handling for expanded session
-	async function sendExpandedInput(text: string, type: 'text' | 'key' | 'raw' = 'text'): Promise<boolean> {
-		if (!expandedSession) return false;
-		try {
-			let apiType: string = type;
-			let apiInput: string = text;
-
-			if (type === 'key') {
-				const specialKeys = ['ctrl-c', 'ctrl-d', 'ctrl-u', 'ctrl-l', 'enter', 'escape', 'up', 'down', 'left', 'right', 'tab', 'delete', 'backspace', 'space'];
-				if (specialKeys.includes(text)) {
-					apiType = text;
-					apiInput = '';
-				} else {
-					apiType = 'raw';
-					apiInput = text;
-				}
-			}
-
-			// Note: Signal emission for user input is handled by SessionCard (which calls this
-			// function via onSendInput). SessionCard emits the "Processing user input" working
-			// signal once before sending the actual message text. We don't emit here to avoid
-			// duplicate timeline entries — previously every key event (ctrl-c, escape, enter)
-			// was also generating a signal, causing 5-6 "Processing user input" entries per
-			// single user message. See: jat-ljhxi
-
-			const response = await fetch(`/api/work/${encodeURIComponent(expandedSession)}/input`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ input: apiInput, type: apiType })
-			});
-			setTimeout(() => fetchExpandedOutput(expandedSession!), 100);
-			return response.ok;
-		} catch (err) {
-			console.error('Failed to send input:', err);
-			return false;
-		}
-	}
 
 	// Action handlers
 	async function handleKillSession(sessionName: string) {
@@ -1513,13 +1081,6 @@
 		}
 	}
 
-	// Cleanup on destroy
-	import { onDestroy } from 'svelte';
-	onDestroy(() => {
-		if (outputPollInterval) {
-			clearInterval(outputPollInterval);
-		}
-	});
 </script>
 
 {#if sessions.length === 0}
@@ -1551,8 +1112,6 @@
 			}
 			{@const elapsed = getElapsedFormatted(session.created)}
 			{@const isPlanning = effectiveState === 'planning'}
-			{@const isExpanded = expandedSession === session.name}
-			{@const isCollapsing = collapsingSession === session.name}
 
 			<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 			{@const swipeOffset = swipeOffsets.get(session.name) || 0}
@@ -1584,6 +1143,7 @@
 					style="{isExiting ? 'pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
 					role="button" tabindex="0"
 					onclick={() => !isExiting && !swipeState?.swiping && (onCardClick ? onCardClick(session.name) : (fullscreenSession = session.name))}
+					oncontextmenu={(e) => handleContextMenu(session, e)}
 					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); !isExiting && !swipeState?.swiping && (onCardClick ? onCardClick(session.name) : (fullscreenSession = session.name)); } }}
 					ontouchstart={(e) => handleSwipeTouchStart(e, session.name)}
 					ontouchmove={handleSwipeTouchMove}

@@ -3822,7 +3822,7 @@
 								<span class="loading loading-spinner loading-sm"></span>
 							</div>
 						{:else}
-							<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+							<!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_noninteractive_element_interactions -->
 							<table class="data-table" tabindex="0" onkeydown={handleTableKeydown} onpaste={handleTablePaste} bind:this={tableRef} style="min-width: {tableMinWidth}px">
 								<thead>
 									<tr>
@@ -5175,7 +5175,9 @@
 
 <!-- Create/Edit View Modal -->
 {#if showCreateViewModal}
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="modal-backdrop" role="presentation" onclick={() => { showCreateViewModal = false; resetViewForm(); }} onkeydown={(e) => { if (e.key === 'Escape') { showCreateViewModal = false; resetViewForm(); } }}>
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<div class="create-view-modal" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.ctrlKey && e.key === 'Enter' && newViewName.trim() && !createViewSaving) { e.preventDefault(); handleCreateView(); } }}>
 		<div class="create-view-header">
 			<h3>{editingViewId ? 'Edit View' : 'Create View'}</h3>

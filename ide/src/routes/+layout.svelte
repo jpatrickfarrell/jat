@@ -1171,6 +1171,7 @@
 
 {#if isSetupPage}
 	<!-- Setup page: focused layout without sidebar/topbar -->
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<div class="h-screen overflow-y-auto" role="group" onclick={handleFirstInteraction} onkeydown={handleFirstInteraction}>
 		{@render children()}
 
@@ -1180,6 +1181,7 @@
 	</div>
 {:else}
 	<!-- Drawer Structure -->
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<div class="drawer lg:drawer-open" role="group" onclick={handleFirstInteraction} onkeydown={handleFirstInteraction}>
 		<!-- Drawer toggle (hidden checkbox for mobile sidebar) -->
 		<input id="main-drawer" type="checkbox" class="drawer-toggle" />

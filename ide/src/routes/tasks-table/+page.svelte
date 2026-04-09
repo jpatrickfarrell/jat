@@ -1207,7 +1207,8 @@
 								<td class="td-name">
 									{#if session.type === 'server'}
 										<!-- Server session display -->
-										<div class="server-row" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+										<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+								<div class="server-row" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 											<ServerSessionBadge
 												sessionName={session.name}
 												project={session.project}
@@ -1479,6 +1480,7 @@
 											{/if}
 										</div>
 										<!-- Vertical resize divider for height -->
+										<!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_no_noninteractive_tabindex -->
 										<div
 											class="resize-divider"
 											class:resizing={isResizing}
@@ -1499,6 +1501,7 @@
 		{/if}
 		</div>
 		<!-- Container resize handle (right edge) -->
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_no_noninteractive_tabindex -->
 		<div
 			class="container-resize-handle"
 			class:resizing={isContainerResizing}

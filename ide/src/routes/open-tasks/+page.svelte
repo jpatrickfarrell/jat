@@ -1300,6 +1300,7 @@
 {#if dueDatePickerTaskId && dueDatePickerPos}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="fixed inset-0 z-40" role="button" tabindex="0" onclick={closeDueDatePicker} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeDueDatePicker(); } }}></div>
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<div
 		class="due-date-picker fixed z-50"
 		style="left: {dueDatePickerPos.x}px; top: {dueDatePickerPos.y}px;"
@@ -1644,6 +1645,7 @@
 		</button>
 		<div class="floating-divider"></div>
 		<!-- Priority dropdown -->
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<div class="floating-dropdown-wrapper" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<button type="button" class="floating-btn floating-btn-priority" onclick={() => { priorityDropdownOpen = !priorityDropdownOpen; harnessDropdownOpen = false; }} disabled={bulkActionLoading}>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
@@ -1669,6 +1671,7 @@
 			{/if}
 		</div>
 		<!-- Harness dropdown -->
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<div class="floating-dropdown-wrapper" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<button type="button" class="floating-btn floating-btn-harness" onclick={() => { harnessDropdownOpen = !harnessDropdownOpen; priorityDropdownOpen = false; }} disabled={bulkActionLoading}>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">

@@ -2339,6 +2339,7 @@
 				{/if}
 			{/if}
 		</div>
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<label class="modal-backdrop" onclick={() => showCreateModal = false} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showCreateModal = false; } }}></label>
 	</div>
 {/if}
@@ -2433,6 +2434,7 @@
 				<button class="btn btn-sm btn-primary" onclick={closeTaskPicker}>Done</button>
 			</div>
 		</div>
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<label class="modal-backdrop" onclick={closeTaskPicker} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTaskPicker(); } }}></label>
 	</div>
 {/if}

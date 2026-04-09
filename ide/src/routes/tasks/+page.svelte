@@ -2185,6 +2185,7 @@
 							</button>
 							<!-- Due Date Filter Chips (visible when section expanded) -->
 							{#if !isSubsectionCollapsed(selectedProject!, "tasks")}
+								<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 								<div class="date-filter-chips" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 									{#each DATE_FILTER_OPTIONS as opt}
 										{@const count = filterCounts[opt.id]}
@@ -2534,7 +2535,9 @@
 </div>
 
 {#if memoryViewerOpen}
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<div class="memory-overlay" role="presentation" onclick={() => (memoryViewerOpen = false)} onkeydown={(e) => e.key === "Escape" && (memoryViewerOpen = false)}>
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<div class="memory-panel" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="memory-header">
 				<h3 class="memory-header-title">{memoryTitle}</h3>

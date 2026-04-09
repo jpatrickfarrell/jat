@@ -134,7 +134,8 @@
 	 * Only expands on avatar hover — not the whole card.
 	 */
 	:global(.mobile-task-avatar:hover) ~ .harness-tray,
-	.harness-tray:hover {
+	.harness-tray:hover,
+	:global(.swarm-highlight) .harness-tray {
 		max-width: 400px; /* 6+ buttons × 44px each */
 	}
 

@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { fly, fade, slide } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
+	import { flip } from 'svelte/animate';
 
 	interface LinkedTask {
 		id: string;
@@ -725,6 +726,65 @@
 		const next = new Set(collapsedTerms);
 		if (next.has(id)) next.delete(id); else next.add(id);
 		collapsedTerms = next;
+	}
+
+	// Drag-to-reorder state for contract terms
+	let dragTermId = $state<string | null>(null);
+	let dragOverTermId = $state<string | null>(null);
+	let dragContractId = $state<string | null>(null);
+	let reorderSaving = $state(false);
+
+	async function reorderTerms(projectKey: string, contractId: string, terms: ContractTerm[]) {
+		reorderSaving = true;
+		try {
+			const termOrders = terms.map((t, i) => ({ id: t.id, sort_order: i }));
+			await fetch('/api/clients', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'reorderTerms', projectKey, contractId, termOrders })
+			});
+		} finally {
+			reorderSaving = false;
+		}
+	}
+
+	function handleTermDragStart(e: DragEvent, termId: string, contractId: string) {
+		dragTermId = termId;
+		dragContractId = contractId;
+		if (e.dataTransfer) {
+			e.dataTransfer.effectAllowed = 'move';
+			e.dataTransfer.setData('text/plain', termId);
+		}
+	}
+
+	function handleTermDragOver(e: DragEvent, termId: string) {
+		e.preventDefault();
+		if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+		dragOverTermId = termId;
+	}
+
+	function handleTermDrop(e: DragEvent, projectKey: string, contract: Contract) {
+		e.preventDefault();
+		if (!dragTermId || !contract.terms) { dragTermId = null; dragOverTermId = null; return; }
+		const fromIdx = contract.terms.findIndex(t => t.id === dragTermId);
+		const toIdx = contract.terms.findIndex(t => t.id === dragOverTermId);
+		if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) {
+			dragTermId = null; dragOverTermId = null; return;
+		}
+		const reordered = [...contract.terms];
+		const [moved] = reordered.splice(fromIdx, 1);
+		reordered.splice(toIdx, 0, moved);
+		contract.terms = reordered;
+		reorderTerms(projectKey, contract.id, reordered);
+		dragTermId = null;
+		dragOverTermId = null;
+		dragContractId = null;
+	}
+
+	function handleTermDragEnd() {
+		dragTermId = null;
+		dragOverTermId = null;
+		dragContractId = null;
 	}
 
 	// Owner comment state
@@ -1602,9 +1662,22 @@
 																				<span class="font-normal normal-case tracking-normal opacity-60">({contract.terms.length})</span>
 																			</button>
 																			{#if !termsSectionCollapsed}
-																			<div class="space-y-2">
-																				{#each contract.terms as term, ti}
-																					<div class="border border-base-300 rounded-lg p-3">
+																			<div class="space-y-2"
+																				role="list"
+																				ondragover={(e) => e.preventDefault()}
+																				ondrop={(e) => handleTermDrop(e, project.projectKey, contract)}
+																			>
+																				{#each contract.terms as term, ti (term.id)}
+																				<div animate:flip={{ duration: 300, easing: cubicOut }}>
+																					<div role="listitem" class="border rounded-lg p-3 transition-colors duration-150
+																						{dragOverTermId === term.id && dragTermId !== term.id ? 'border-primary/60 bg-primary/5' : 'border-base-300'}
+																						{dragTermId === term.id ? 'opacity-50' : ''}
+																						{editable ? 'cursor-grab active:cursor-grabbing' : ''}"
+																						draggable={editable ? 'true' : 'false'}
+																						ondragstart={(e) => { if (editable) handleTermDragStart(e, term.id, contract.id); }}
+																						ondragover={(e) => { if (editable) { e.stopPropagation(); handleTermDragOver(e, term.id); } }}
+																						ondragend={handleTermDragEnd}
+																					>
 																						{#if editable && editingItemId === term.id}
 																							<div transition:fly={{ y: -4, duration: 200, easing: cubicOut }} class="space-y-3" onclick={(e) => e.stopPropagation()}>
 																								<p class="text-xs font-medium opacity-50 mb-1">Edit term</p>
@@ -1634,6 +1707,11 @@
 																							onclick={(e) => { e.stopPropagation(); toggleTermCollapse(term.id); }}
 																							onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); toggleTermCollapse(term.id); } }}
 																						>
+																							{#if editable}
+																								<span class="text-base-content/20 hover:text-base-content/50 transition-colors shrink-0 cursor-grab active:cursor-grabbing" onclick={(e) => e.stopPropagation()} role="none" title="Drag to reorder">
+																									<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm8 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM8 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm8 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM8 22a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm8 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></svg>
+																								</span>
+																							{/if}
 																							<div class="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors
 																								{term.status === 'accepted' ? 'bg-success/20' : term.status === 'rejected' ? 'bg-error/20' : 'bg-base-300'}">
 																								{#if term.status === 'accepted'}
@@ -1748,6 +1826,7 @@
 																						{/if}
 																						{/if}
 																					</div>
+																				</div>
 																				{/each}
 																			</div>
 																			{/if}

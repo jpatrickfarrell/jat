@@ -1856,6 +1856,7 @@
 					</div>
 				<div
 					class="mobile-task-card {isBlocked && !isExiting ? 'mobile-task-blocked' : ''} {longPressActive && selectedTasks.has(task.id) ? 'mobile-task-selected' : ''}"
+					class:swarm-highlight={highlightedTaskIds.has(task.id)}
 					style="{isExiting ? 'pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(task.id) ? 'transition: transform 0.3s cubic-bezier(0.25,0.46,0.45,0.94);' : ''}"
 					role="button" tabindex="0"
 					onclick={() => {
@@ -3349,15 +3350,12 @@
 		background: oklch(0.70 0.18 240 / 0.12) !important;
 	}
 
-	/* Swarm hover highlight - launchable tasks glow when swarm button is hovered.
-	   IMPORTANT: Do NOT add position:relative, overflow:hidden, or ::after
-	   pseudo-elements to <tr> elements — these are undefined/non-standard in CSS
-	   for display:table-row and can break table-layout:fixed, causing columns
-	   to shrink or collapse. Only background and box-shadow are safe on <tr>. */
+	/* Swarm hover highlight - launchable tasks glow when swarm button is hovered. */
 	.swarm-highlight {
 		background: oklch(0.65 0.20 280 / 0.12) !important;
+		border-color: oklch(0.65 0.20 280 / 0.4) !important;
 		box-shadow: inset 0 0 20px oklch(0.65 0.20 280 / 0.08);
-		transition: background 0.2s ease, box-shadow 0.2s ease;
+		transition: background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 	}
 
 	/* Selection count badge in header */

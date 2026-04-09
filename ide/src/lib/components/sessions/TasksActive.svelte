@@ -3479,7 +3479,7 @@
 	}
 
 	.session-row.expandable:hover {
-		background: oklch(0.65 0.15 145 / 0.15);
+		background: oklch(0.20 0.02 250);
 	}
 
 	.session-row.planning {
@@ -3904,7 +3904,7 @@
 
 	/* Subtle row highlight when tray is active */
 	.mobile-session-card:hover {
-		background: oklch(0.19 0.015 250);
+		background: oklch(0.20 0.02 250);
 	}
 
 	/* Action tray — slides out on hover */

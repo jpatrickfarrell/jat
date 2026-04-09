@@ -8,9 +8,24 @@
  * in the background. The task appears in the IDE when transcription completes.
  *
  * POST /api/tasks/voice
+ * OPTIONS /api/tasks/voice - CORS preflight (for jat-feedback widget cross-origin usage)
  * Optional JSON fields: { "title": "...", "project": "...", "priority": 2 }
  */
 import { json } from '@sveltejs/kit';
+
+const CORS_HEADERS = {
+	'Access-Control-Allow-Origin': '*',
+	'Access-Control-Allow-Methods': 'POST, OPTIONS',
+	'Access-Control-Allow-Headers': 'Content-Type',
+	'Access-Control-Max-Age': '86400'
+};
+
+/**
+ * OPTIONS /api/tasks/voice - CORS preflight
+ */
+export async function OPTIONS() {
+	return new Response(null, { status: 204, headers: CORS_HEADERS });
+}
 import { createTask } from '$lib/server/jat-tasks.js';
 import { invalidateCache } from '$lib/server/cache.js';
 import { _resetTaskCache } from '../../../api/agents/+server.js';
@@ -326,7 +341,7 @@ export async function POST({ request }) {
 			const text = body.text?.trim();
 
 			if (!text) {
-				return json({ error: true, message: 'Missing "text" field' }, { status: 400 });
+				return json({ error: true, message: 'Missing "text" field' }, { status: 400, headers: CORS_HEADERS });
 			}
 
 			// Organize in background, don't block the response
@@ -362,7 +377,7 @@ export async function POST({ request }) {
 			return json({
 				success: true,
 				message: 'Voice note received — organizing in background. Tasks will appear in Voice Inbox shortly.'
-			}, { status: 202 });
+			}, { status: 202, headers: CORS_HEADERS });
 
 		} else {
 			// Audio file — save and process async
@@ -380,7 +395,7 @@ export async function POST({ request }) {
 				priority = priorityStr ? parseInt(priorityStr) : 2;
 
 				if (!file || !(file instanceof File)) {
-					return json({ error: true, message: 'Missing audio file' }, { status: 400 });
+					return json({ error: true, message: 'Missing audio file' }, { status: 400, headers: CORS_HEADERS });
 				}
 
 				const ext = file.name?.split('.').pop() || 'm4a';
@@ -391,7 +406,7 @@ export async function POST({ request }) {
 				// Raw audio body
 				const buffer = Buffer.from(await request.arrayBuffer());
 				if (buffer.length === 0) {
-					return json({ error: true, message: 'Empty request body' }, { status: 400 });
+					return json({ error: true, message: 'Empty request body' }, { status: 400, headers: CORS_HEADERS });
 				}
 
 				const ext = contentType.includes('m4a') ? 'm4a'
@@ -421,11 +436,11 @@ export async function POST({ request }) {
 			return json({
 				success: true,
 				message: 'Recording received — transcribing in background. Task will appear shortly.'
-			}, { status: 202 });
+			}, { status: 202, headers: CORS_HEADERS });
 		}
 	} catch (e) {
 		const message = e instanceof Error ? e.message : 'Failed to process request';
 		console.error('[voice] Error:', message);
-		return json({ error: true, message }, { status: 500 });
+		return json({ error: true, message }, { status: 500, headers: CORS_HEADERS });
 	}
 }

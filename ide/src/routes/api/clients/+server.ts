@@ -636,6 +636,36 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ success: true, termsCreated: termRows.length }, { status: 201 });
 	}
 
+	// Handle reorderTerms action — update sort_order for a list of terms
+	if (body.action === 'reorderTerms') {
+		const { projectKey, contractId, termOrders } = body;
+
+		if (!projectKey || !contractId || !Array.isArray(termOrders) || termOrders.length === 0) {
+			return json({ error: 'projectKey, contractId, and termOrders are required' }, { status: 400 });
+		}
+
+		const supabaseUrl = getProjectSecret(projectKey, 'supabase_url');
+		const serviceRoleKey = getProjectSecret(projectKey, 'supabase_service_role_key');
+
+		if (!supabaseUrl || !serviceRoleKey) {
+			return json({ error: `Missing Supabase credentials for "${projectKey}"` }, { status: 400 });
+		}
+
+		// Update each term's sort_order individually (Supabase REST doesn't support bulk updates)
+		const errors: string[] = [];
+		for (const { id, sort_order } of termOrders as Array<{ id: string; sort_order: number }>) {
+			const result = await supabaseUpdate(supabaseUrl, serviceRoleKey, 'contract_terms', `id=eq.${id}`, { sort_order });
+			if (result.error) errors.push(`term ${id}: ${result.error}`);
+		}
+
+		if (errors.length > 0) {
+			return json({ error: `Failed to reorder some terms: ${errors.join('; ')}` }, { status: 500 });
+		}
+
+		cache = null;
+		return json({ success: true });
+	}
+
 	const { projectKey, title, totalAmount, currency, clientEmail, notes, milestones, terms } = body;
 
 	if (!projectKey) {

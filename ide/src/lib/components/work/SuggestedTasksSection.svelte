@@ -615,7 +615,8 @@
 
 						<!-- Expanded task editor (all fields) -->
 						{#if isExpanded}
-							<div
+							<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+						<div
 								class="px-2 pb-2 pt-1 ml-7 space-y-2"
 								role="group"
 								transition:slide={{ duration: 150 }}

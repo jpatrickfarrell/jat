@@ -2733,7 +2733,7 @@
 														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
 													</svg>
 												</button>
-												<ul tabindex="0" class="dropdown-content menu rounded-box z-50 w-52 p-1 shadow-lg bg-base-200 border border-base-300">
+												<ul tabindex="0" role="menu" class="dropdown-content menu rounded-box z-50 w-52 p-1 shadow-lg bg-base-200 border border-base-300">
 													{#each uniqueSessions as session}
 														<li>
 															<button

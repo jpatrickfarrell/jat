@@ -136,6 +136,7 @@
 		<div
 			class="absolute right-0 top-0 bottom-0 flex flex-col shadow-2xl"
 			role="dialog"
+			tabindex="0"
 			style="width: min(420px, 90vw); background: oklch(0.15 0.01 250); border-left: 1px solid oklch(0.22 0.02 250)"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.stopPropagation()}

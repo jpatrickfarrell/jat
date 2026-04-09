@@ -1692,6 +1692,7 @@
 		</div>
 	{:else}
 		<!-- Popup layout: hover to expand (original behavior) -->
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<div
 			class="relative {className}"
 			role="group"
@@ -1808,6 +1809,7 @@
 							<!-- Expanded details -->
 							{#if expandedEventIdx === idx}
 								{@const eventKey = getEventKey(event)}
+								<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 								<div
 									class="px-3 pb-2 pt-1"
 									role="group"

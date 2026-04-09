@@ -2501,6 +2501,7 @@
 				</div>
 				<ul
 					tabindex="0"
+					role="menu"
 					class="dropdown-content z-40 menu p-2 shadow rounded-box w-40 bg-base-200 border border-base-300"
 				>
 					<li>
@@ -2677,6 +2678,7 @@
 						</div>
 						<ul
 							tabindex="0"
+							role="menu"
 							class="dropdown-content z-40 menu p-2 shadow rounded-box w-52 bg-base-200 border border-base-content/20"
 						>
 							<li><button onclick={handleBulkAssign} class="gap-2">

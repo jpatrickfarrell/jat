@@ -510,7 +510,7 @@
 {#if showImportModal}
 	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 	<div class="fixed inset-0 bg-base-300/80 flex items-center justify-center z-[1000] backdrop-blur-sm" onclick={handleCancelImport} role="presentation" transition:fade={{ duration: 150 }}>
-		<div class="bg-base-200 border border-base-content/20 rounded-xl shadow-2xl min-w-[380px] max-w-[90vw]" role="dialog" aria-modal="true" aria-labelledby="import-modal-title" onclick={(e) => e.stopPropagation()}>
+		<div class="bg-base-200 border border-base-content/20 rounded-xl shadow-2xl min-w-[380px] max-w-[90vw]" role="dialog" tabindex="0" aria-modal="true" aria-labelledby="import-modal-title" onclick={(e) => e.stopPropagation()}>
 			<div class="flex items-center gap-2.5 px-5 py-4 border-b border-base-content/10 bg-base-300 rounded-t-xl">
 				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-[22px] h-[22px] text-success">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />

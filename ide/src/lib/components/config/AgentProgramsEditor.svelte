@@ -642,6 +642,7 @@
 							{/if}
 						</div>
 
+						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 						<div class="program-actions" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							<label class="toggle-label">
 								<input
@@ -704,6 +705,7 @@
 <!-- Edit Drawer -->
 {#if editingProgram}
 	<div class="drawer-overlay" role="presentation" onclick={closeEditDrawer} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeEditDrawer(); } }} transition:fade={{ duration: 150 }}>
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<div class="drawer-content" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} transition:slide={{ duration: 200, axis: 'x' }}>
 			<div class="drawer-header">
 				<h3>Configure {editingProgram.name}</h3>
@@ -998,6 +1000,7 @@
 <!-- Add Harness Modal -->
 {#if showAddModal}
 	<div class="modal-overlay" role="presentation" onclick={closeAddModal} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeAddModal(); } }} transition:fade={{ duration: 150 }}>
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<div class="modal-content modal-lg" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="modal-header">
 				<h3>Add Agent Harness</h3>
@@ -1359,6 +1362,7 @@
 {#if deletingProgram}
 	{@const program = programs.find(p => p.id === deletingProgram)}
 	<div class="modal-overlay" role="presentation" onclick={closeDeleteConfirm} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeDeleteConfirm(); } }} transition:fade={{ duration: 150 }}>
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<div class="modal-content modal-sm" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="modal-header">
 				<h3>Delete Agent Harness</h3>

@@ -71,6 +71,8 @@
 	}
 </script>
 
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
 	class="resize-handle {className} hover:bg-primary/15 {isDragging ? 'bg-primary/15' : ''}"
 	class:dragging={isDragging}

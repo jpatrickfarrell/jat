@@ -227,6 +227,7 @@
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="commit-modal-title"
+			tabindex="0"
 		>
 			<!-- Header -->
 			<div class="modal-header">

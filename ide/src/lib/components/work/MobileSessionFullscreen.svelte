@@ -770,6 +770,7 @@
 				</div>
 			</div>
 
+			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 			<div class="topbar-status" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 				<StatusActionBadge
 					{sessionState}

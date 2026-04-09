@@ -249,6 +249,7 @@
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="branch-modal-title"
+			tabindex="0"
 		>
 			<!-- Header -->
 			<div class="modal-header">
@@ -477,7 +478,7 @@
 	<!-- Dirty Tree Warning Modal -->
 	{#if showDirtyWarning}
 		<div class="warning-backdrop" onclick={cancelDirtySwitch} role="presentation" tabindex="-1" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cancelDirtySwitch(); } }}>
-			<div class="warning-modal" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="alertdialog">
+			<div class="warning-modal" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="alertdialog" tabindex="0">
 				<div class="warning-header">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 						<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />

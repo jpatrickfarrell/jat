@@ -259,6 +259,7 @@
 			class="absolute left-0 bottom-full mb-2 z-50"
 			role="dialog"
 			aria-label="Send to LLM"
+			tabindex="0"
 			transition:fly={{ y: 10, duration: 150 }}
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.key === 'Escape' && closePopover()}
@@ -343,6 +344,7 @@
 							<div
 								class="absolute left-0 right-0 bottom-full mb-1 z-10"
 								role="menu"
+								tabindex="0"
 								transition:fade={{ duration: 100 }}
 								onkeydown={(e) => {
 									if (e.key === 'Escape') {

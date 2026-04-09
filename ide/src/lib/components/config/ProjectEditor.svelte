@@ -833,6 +833,7 @@
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="delete-confirm-title"
+			tabindex="0"
 		>
 			<div
 				class="bg-base-100 rounded-xl shadow-2xl max-w-md w-full"
@@ -906,6 +907,7 @@
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="rename-modal-title"
+			tabindex="0"
 		>
 			<div
 				class="bg-base-100 rounded-xl shadow-2xl max-w-md w-full"

@@ -4179,7 +4179,7 @@
 {#if showCreateModal}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="modal-overlay" onclick={() => showCreateModal = false} role="dialog" aria-modal="true">
+	<div class="modal-overlay" onclick={() => showCreateModal = false} role="dialog" tabindex="0" aria-modal="true">
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="modal-panel" class:create-modal-wide={createMode !== 'manual'} onclick={(e) => e.stopPropagation()}>
@@ -4681,7 +4681,7 @@
 {#if showImportModal}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="modal-overlay" onclick={() => showImportModal = false} role="dialog" aria-modal="true">
+	<div class="modal-overlay" onclick={() => showImportModal = false} role="dialog" tabindex="0" aria-modal="true">
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="modal-panel import-modal" onclick={(e) => e.stopPropagation()}>
@@ -4807,7 +4807,7 @@
 {#if showMoveModal}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="modal-overlay" onclick={() => showMoveModal = false} role="dialog" aria-modal="true">
+	<div class="modal-overlay" onclick={() => showMoveModal = false} role="dialog" tabindex="0" aria-modal="true">
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="modal-panel move-modal" onclick={(e) => e.stopPropagation()}>

@@ -317,6 +317,7 @@
 		class:ctx-menu-hidden={!ctxVisible}
 		style="left: {ctxX}px; top: {ctxY}px;"
 		role="menu"
+		tabindex="0"
 		onclick={(e) => e.stopPropagation()}
 		onkeydown={(e) => e.stopPropagation()}
 	>

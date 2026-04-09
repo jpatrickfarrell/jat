@@ -7366,6 +7366,7 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 							</button>
 							<ul
 								tabindex="0"
+								role="menu"
 								class="dropdown-content z-[100] menu menu-xs p-1 shadow-lg bg-base-200 rounded-box w-auto min-w-[140px]"
 							>
 								<li>
@@ -7474,6 +7475,7 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 							</button>
 							<ul
 								tabindex="0"
+								role="menu"
 								class="dropdown-content z-[100] menu menu-xs p-1 shadow-lg bg-base-200 rounded-box w-auto min-w-[100px]"
 							>
 								<li class="menu-title px-2 py-0.5 text-[9px] opacity-60">

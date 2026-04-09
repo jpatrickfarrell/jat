@@ -80,6 +80,7 @@
 	</button>
 
 	{#if open}
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<div
 			class="emoji-picker-dropdown absolute left-0 top-full mt-1 z-50 rounded-lg overflow-hidden"
 			style="background: oklch(0.18 0.02 250); border: 1px solid oklch(0.30 0.02 250); box-shadow: 0 8px 32px oklch(0 0 0 / 0.5); width: 280px;"

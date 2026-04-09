@@ -1594,7 +1594,7 @@
 <!-- Rename Modal -->
 {#if renameModal}
 	<div class="modal-overlay" role="presentation" onclick={closeRenameModal} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeRenameModal(); } }}>
-		<div class="modal-dialog" role="dialog" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+		<div class="modal-dialog" role="dialog" tabindex="0" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="modal-header">
 				<h3 class="modal-title">Rename {renameModal.isFolder ? 'Folder' : 'File'}</h3>
 				<button class="modal-close" onclick={closeRenameModal} aria-label="Close">
@@ -1641,7 +1641,7 @@
 <!-- Delete Confirmation Modal -->
 {#if deleteModal}
 	<div class="modal-overlay" role="presentation" onclick={closeDeleteModal} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeDeleteModal(); } }}>
-		<div class="modal-dialog" role="dialog" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+		<div class="modal-dialog" role="dialog" tabindex="0" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="modal-header">
 				<div class="modal-icon modal-icon-danger">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1687,6 +1687,7 @@
 	<div
 		class="context-menu"
 		role="menu"
+		tabindex="0"
 		style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
 		onclick={(e) => e.stopPropagation()}
 		onkeydown={(e) => e.stopPropagation()}
@@ -1759,7 +1760,7 @@
 <!-- Create Modal with FilePathPicker -->
 {#if createModal}
 	<div class="modal-overlay" role="presentation" onclick={closeCreateModal} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeCreateModal(); } }}>
-		<div class="modal-dialog modal-dialog-picker" role="dialog" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+		<div class="modal-dialog modal-dialog-picker" role="dialog" tabindex="0" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="modal-header">
 				<h3 class="modal-title">New {createModal.type === 'folder' ? 'Folder' : 'File'}</h3>
 				<button class="modal-close" onclick={closeCreateModal} aria-label="Close">

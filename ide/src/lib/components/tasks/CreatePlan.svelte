@@ -348,7 +348,8 @@
 						</svg>
 					</button>
 					{#if harnessDropdownOpen}
-						<div class="dropdown-content bg-base-200 rounded-box z-50 w-full p-2 shadow-lg border border-base-content/10 mt-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="group">
+						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+					<div class="dropdown-content bg-base-200 rounded-box z-50 w-full p-2 shadow-lg border border-base-content/10 mt-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="group">
 							<!-- Agent programs -->
 							<ul class="menu p-0">
 								{#each harnessPresets.filter(p => p.id !== 'human') as preset}

@@ -747,6 +747,7 @@
 <!-- Edit Modal -->
 {#if editingProvider && editingProviderInfo}
 	<div class="modal-overlay" role="presentation" onclick={closeEditModal} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeEditModal(); } }} transition:fade={{ duration: 150 }}>
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<div class="modal-content" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="modal-header">
 				<h3>{credentials?.apiKeys[editingProvider]?.isSet ? 'Update' : 'Add'} {editingProviderInfo.name} API Key</h3>
@@ -841,6 +842,7 @@
 {#if deletingProvider}
 	{@const providerInfo = getProviderInfo(deletingProvider)}
 	<div class="modal-overlay" role="presentation" onclick={closeDeleteConfirm} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeDeleteConfirm(); } }} transition:fade={{ duration: 150 }}>
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<div class="modal-content modal-sm" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="modal-header">
 				<h3>Delete API Key</h3>

@@ -183,6 +183,7 @@
 			<!-- Checkbox style: Menu with checkboxes -->
 			<ul
 				tabindex="0"
+				role="menu"
 				class="dropdown-content z-40 menu p-2 shadow rounded-box {menuWidth} {maxHeight ? maxHeight + ' overflow-y-auto' : ''} bg-base-200 border border-base-300"
 			>
 				{#each options as opt, index}

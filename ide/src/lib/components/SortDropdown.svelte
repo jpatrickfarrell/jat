@@ -110,6 +110,7 @@
 
 <div class="flex items-center gap-1">
 	<!-- Sort dropdown -->
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<div class="dropdown dropdown-end flex-shrink-0" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="group">
 		<button
 			tabindex="0"
@@ -141,6 +142,7 @@
 
 	<!-- Filter input (optional) -->
 	{#if showFilter}
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<div class="flex-shrink-0" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="group">
 			<input
 				type="text"

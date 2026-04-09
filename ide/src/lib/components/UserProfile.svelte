@@ -414,6 +414,7 @@
 	<!-- Dropdown Menu - Industrial -->
 	<ul
 		tabindex="0"
+		role="menu"
 		class="dropdown-content mt-3 z-[60] p-2 shadow-lg rounded w-72 max-h-[80vh] overflow-y-auto bg-base-300 border border-base-content/20"
 	>
 		<!-- User Greeting -->

@@ -1963,8 +1963,7 @@
 														openTaskDetailDrawer(
 															taskId,
 														)}
-													mobile={isMobile}
-													onMobileCardClick={isMobile ? (sn) => drawerSessionName = sn : undefined}
+																										onCardClick={(sn) => drawerSessionName = sn}
 												/>
 											</div>
 										{/if}
@@ -1986,8 +1985,7 @@
 											openTaskDetailDrawer(
 												taskId,
 											)}
-										mobile={isMobile}
-										onMobileCardClick={isMobile ? (sn) => drawerSessionName = sn : undefined}
+																				onCardClick={(sn) => drawerSessionName = sn}
 									/>
 								{/if}
 							{/each}
@@ -2337,8 +2335,7 @@
 														)}
 													showHeader={false}
 													onAddTask={() => openTaskDrawer(selectedProject ?? undefined)}
-													mobile={isMobile}
-												/>
+																									/>
 											</div>
 										{/if}
 									</div>
@@ -2405,8 +2402,7 @@
 														)}
 													showHeader={false}
 													onAddTask={() => openTaskDrawer(selectedProject ?? undefined)}
-													mobile={isMobile}
-												/>
+																									/>
 											</div>
 										{/if}
 									</div>

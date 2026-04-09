@@ -411,6 +411,7 @@
 		tabindex="0"
 	>
 		<!-- Icon (emoji picker or default) -->
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<div class="shrink-0 mt-0.5" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<EmojiPicker
 				selected={base.icon ?? null}

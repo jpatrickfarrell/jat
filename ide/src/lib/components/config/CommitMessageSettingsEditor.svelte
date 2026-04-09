@@ -529,6 +529,7 @@
 <!-- Reset Confirmation Modal -->
 {#if showResetConfirm}
 	<div class="modal-overlay" role="presentation" onclick={() => (showResetConfirm = false)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showResetConfirm = false; } }}>
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<div class="modal-content" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 			<div class="modal-header">
 				<svg class="modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

@@ -1731,6 +1731,7 @@
 										<div
 											class="discard-slide-container"
 											role="slider"
+											tabindex="0"
 											aria-label="Slide to discard changes"
 											aria-valuenow={discardSlideProgress}
 											onmousedown={() => isSliding = true}
@@ -1819,6 +1820,7 @@
 										<div
 											class="discard-slide-container"
 											role="slider"
+											tabindex="0"
 											aria-label="Slide to restore file"
 											aria-valuenow={discardSlideProgress}
 											onmousedown={() => isSliding = true}

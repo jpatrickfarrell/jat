@@ -342,6 +342,7 @@
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="preview-title"
+		tabindex="0"
 		transition:fade={{ duration: 150 }}
 	>
 		<div

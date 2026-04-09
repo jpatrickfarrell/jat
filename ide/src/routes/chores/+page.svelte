@@ -284,7 +284,7 @@
 {#if editingTask}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="modal-overlay" onclick={() => editingTask = null} role="dialog" aria-modal="true">
+	<div class="modal-overlay" onclick={() => editingTask = null} role="dialog" tabindex="0" aria-modal="true">
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="modal-panel" onclick={(e) => e.stopPropagation()}>

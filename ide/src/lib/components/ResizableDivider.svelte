@@ -126,6 +126,8 @@
 	const isExpanded = $derived(isDragging || isHovering || isNearby);
 </script>
 
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
 	bind:this={dividerElement}
 	class="divider-container flex items-center justify-center select-none {className} {isCollapsed ? 'cursor-pointer divider-collapsed' : 'cursor-row-resize'} {isDragging ? 'bg-primary/25' : isExpanded && isCollapsed ? 'bg-primary/40' : isExpanded ? 'bg-primary/15' : ''}"

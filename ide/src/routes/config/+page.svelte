@@ -663,6 +663,7 @@
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="create-dir-title"
+		tabindex="0"
 	>
 		<div
 			class="bg-base-100 rounded-xl shadow-2xl max-w-md w-full"

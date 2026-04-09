@@ -863,7 +863,7 @@
 
 <style>
   .panel {
-    width: 380px;
+    width: 460px;
     max-height: 702px;
     background: #111827;
     border: 1px solid #374151;
@@ -1014,9 +1014,11 @@
   .tool-buttons {
     display: flex;
     gap: 6px;
+    flex-wrap: wrap;
   }
   .tool-buttons .tool-btn {
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 0;
   }
   .tool-btn {
     display: inline-flex;

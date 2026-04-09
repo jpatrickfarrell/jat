@@ -1,10 +1,12 @@
 <script lang="ts">
-  import type { ConsoleLogEntry, ElementData, FileAttachment, FeedbackReport, ToolDefinition } from '../lib/types';
+  import type { ConsoleLogEntry, NetworkRequestEntry, ElementData, FileAttachment, FeedbackReport, ToolDefinition } from '../lib/types';
   import { submitReport, fetchReports, type ReportSummary } from '../lib/api';
   import { enqueue } from '../lib/queue';
   import { captureViewport, captureViewportQuick } from '../lib/screenshot';
   import { startElementPicker } from '../lib/elementPicker';
   import { getCapturedLogs } from '../lib/consoleCapture';
+  import { getCapturedRequests } from '../lib/networkCapture';
+  import { startRecording, stopRecording, isRecording } from '../lib/sessionRecorder';
   import { slide } from 'svelte/transition';
   import ScreenshotPreview from './ScreenshotPreview.svelte';
   import AnnotationEditor from './AnnotationEditor.svelte';
@@ -59,6 +61,24 @@
   // Lazy init: don't mount AgentPanel/NotesPanel until user first opens the tab
   let agentTabOpened = $state(false);
   let notesTabOpened = $state(false);
+
+  // === Session recording state ===
+  let sessionRecording = $state(false);
+  let recordedEvents = $state<unknown[]>([]);
+
+  function handleToggleRecording() {
+    if (sessionRecording) {
+      const events = stopRecording();
+      recordedEvents = events;
+      sessionRecording = false;
+      showToast(`Session recorded (${events.length} events)`, 'success');
+    } else {
+      startRecording();
+      recordedEvents = [];
+      sessionRecording = true;
+      showToast('Recording session...', 'info');
+    }
+  }
 
   // === Voice capture state ===
   let voiceRecording = $state(false);
@@ -238,6 +258,7 @@
   let attachments = $state<FileAttachment[]>([]);
   let selectedElements = $state<ElementData[]>([]);
   let consoleLogs = $state<ConsoleLogEntry[]>([]);
+  let networkRequests = $state<NetworkRequestEntry[]>([]);
 
   let fileInput = $state<HTMLInputElement | undefined>();
 
@@ -406,6 +427,7 @@
 
   function refreshLogs() {
     consoleLogs = getCapturedLogs();
+    networkRequests = getCapturedRequests();
   }
 
   async function handleSubmit(e: SubmitEvent) {
@@ -441,7 +463,9 @@
       page_url: window.location.href,
       user_agent: navigator.userAgent,
       console_logs: consoleLogs.length > 0 ? consoleLogs : null,
+      network_requests: networkRequests.length > 0 ? networkRequests : null,
       selected_elements: selectedElements.length > 0 ? selectedElements : null,
+      recording_events: recordedEvents.length > 0 ? recordedEvents : null,
       screenshots: screenshots.length > 0 ? screenshots : null,
       attachments: attachments.length > 0 ? attachments : null,
       metadata: Object.keys(metadata).length > 0 ? metadata : null,
@@ -476,6 +500,12 @@
     attachments = [];
     selectedElements = [];
     consoleLogs = [];
+    networkRequests = [];
+    recordedEvents = [];
+    if (sessionRecording) {
+      stopRecording();
+      sessionRecording = false;
+    }
   }
 
   // Grab initial logs on mount
@@ -619,6 +649,19 @@
               Click an element...
             {:else}
               Pick{#if selectedElements.length > 0} <span class="tool-count">{selectedElements.length}</span>{/if}
+            {/if}
+          </button>
+
+          <button type="button" class="tool-btn" class:recording-active={sessionRecording} onclick={handleToggleRecording} disabled={submitting}>
+            {#if sessionRecording}
+              <span class="recording-pulse"></span>
+              Stop
+            {:else}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2"/>
+                <circle cx="12" cy="12" r="4" fill="currentColor"/>
+              </svg>
+              Record{#if recordedEvents.length > 0} <span class="tool-count">{recordedEvents.length}</span>{/if}
             {/if}
           </button>
 
@@ -981,6 +1024,27 @@
   }
   @keyframes capture-spin {
     to { transform: rotate(360deg); }
+  }
+
+  .tool-btn.recording-active {
+    background: #7f1d1d;
+    border-color: #dc2626;
+    color: #fca5a5;
+  }
+  .tool-btn.recording-active:hover:not(:disabled) {
+    background: #991b1b;
+  }
+  .recording-pulse {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    background: #ef4444;
+    border-radius: 50%;
+    animation: recording-pulse 1s ease-in-out infinite;
+  }
+  @keyframes recording-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
   }
 
   .tool-count {

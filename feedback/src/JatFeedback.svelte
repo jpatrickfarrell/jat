@@ -5,6 +5,7 @@
   import type { WidgetConfig, ToolDefinition } from './lib/types';
   import { DEFAULT_CONFIG } from './lib/types';
   import { startConsoleCapture, stopConsoleCapture } from './lib/consoleCapture';
+  import { startNetworkCapture, stopNetworkCapture } from './lib/networkCapture';
   import { isElementPickerActive } from './lib/elementPicker';
   import { isAnnotationEditorOpen } from './lib/annotation';
   import { startRetryLoop, stopRetryLoop } from './lib/queue';
@@ -167,6 +168,7 @@
   onMount(() => {
     if (config.captureConsole) {
       startConsoleCapture(config.maxConsoleLogs);
+      startNetworkCapture();
     }
     startRetryLoop();
     startPickerPoll();
@@ -190,6 +192,7 @@
 
   onDestroy(() => {
     stopConsoleCapture();
+    stopNetworkCapture();
     stopRetryLoop();
     window.removeEventListener('keydown', handleEscapeCapture, true);
     if (pickerPollInterval) clearInterval(pickerPollInterval);

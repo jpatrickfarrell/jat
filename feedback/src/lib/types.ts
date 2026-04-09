@@ -10,6 +10,17 @@ export interface ConsoleLogEntry {
   fileName?: string;
 }
 
+export interface NetworkRequestEntry {
+  method: string;
+  url: string;
+  status: number | null;
+  duration: number | null;
+  timestampMs: number;
+  requestBody?: string;
+  responseType?: string;
+  error?: string;
+}
+
 export interface ElementData {
   tagName: string;
   className: string;
@@ -61,8 +72,10 @@ export interface FeedbackReport {
   page_url: string;
   user_agent: string;
   console_logs: ConsoleLogEntry[] | null;
+  network_requests: NetworkRequestEntry[] | null;
   selected_elements: ElementData[] | null;
   screenshots: string[] | null;
+  recording_events: unknown[] | null;
   attachments: FileAttachment[] | null;
   metadata: {
     reporter?: FeedbackReporter;

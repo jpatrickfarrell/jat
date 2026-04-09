@@ -285,7 +285,7 @@
 				taskDefaults: { type: 'bug', priority: 2, labels: ['feedback'] },
 				config: {
 					projectUrl: '$supabase-url', secretName: '@supabase-service-role-key',
-					table: 'feedback_reports', statusColumn: 'status', statusNew: 'submitted',
+					table: 'project_tasks', statusColumn: 'status', statusNew: 'submitted',
 					taskIdColumn: 'jat_task_id', titleColumn: 'title',
 					descriptionTemplate: '**Reporter:** {reporter_name} ({reporter_email})\n**Page:** {page_url}\n\n{description}',
 					authorColumn: 'reporter_email', timestampColumn: 'created_at',

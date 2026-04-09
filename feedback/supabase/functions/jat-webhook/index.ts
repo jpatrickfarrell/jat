@@ -82,10 +82,8 @@ interface WebhookPayload {
 
 // Tables and the columns that JAT is allowed to update.
 // Add more tables here if you want JAT to sync status for other record types.
-// "feedback_reports" kept as alias for backward compat with pre-v3 callers.
 const TABLE_CONFIG: Record<string, { statusCol: string; taskIdCol: string }> = {
   project_tasks: { statusCol: "status", taskIdCol: "jat_task_id" },
-  feedback_reports: { statusCol: "status", taskIdCol: "jat_task_id" },
 }
 
 Deno.serve(async (req) => {
@@ -139,9 +137,6 @@ Deno.serve(async (req) => {
     )
   }
 
-  // Resolve actual table name — "feedback_reports" alias maps to "project_tasks"
-  const actualTable = reference_table === "feedback_reports" ? "project_tasks" : reference_table
-
   // Build the update object from the payload fields
   const update: Record<string, unknown> = {}
   if (data.status) update[config.statusCol] = data.status
@@ -162,14 +157,14 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
   const result = await supabase
-    .from(actualTable)
+    .from(reference_table)
     .update(update)
     .eq("id", reference_id)
     .select("id")
 
   if (result.error) {
     console.error(`JAT webhook failed: ${result.error.message}`, {
-      table: actualTable,
+      table: reference_table,
       reference_id,
       update,
     })
@@ -180,11 +175,11 @@ Deno.serve(async (req) => {
   }
 
   if (!result.data || result.data.length === 0) {
-    console.warn(`JAT webhook: no rows matched ${actualTable}[${reference_id}]`, update)
+    console.warn(`JAT webhook: no rows matched ${reference_table}[${reference_id}]`, update)
     return new Response(
       JSON.stringify({
-        error: `No rows matched: ${actualTable} id=${reference_id}`,
-        table: actualTable,
+        error: `No rows matched: ${reference_table} id=${reference_id}`,
+        table: reference_table,
         id: reference_id,
         rowsAffected: 0,
       }),
@@ -192,12 +187,12 @@ Deno.serve(async (req) => {
     )
   }
 
-  console.log(`JAT webhook: ${event} → ${actualTable}[${reference_id}] (${result.data.length} row(s))`, update)
+  console.log(`JAT webhook: ${event} → ${reference_table}[${reference_id}] (${result.data.length} row(s))`, update)
 
   return new Response(
     JSON.stringify({
       success: true,
-      table: actualTable,
+      table: reference_table,
       id: reference_id,
       updated: update,
       rowsAffected: result.data.length,

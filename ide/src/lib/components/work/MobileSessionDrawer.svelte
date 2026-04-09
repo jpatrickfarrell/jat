@@ -22,8 +22,9 @@
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import { isMobileFullscreenOpen } from '$lib/stores/drawerStore';
 	import { setHoveredSession } from '$lib/stores/hoveredSession';
-	import type { SessionState } from '$lib/config/statusColors';
+	import type { SessionState, SessionStateAction } from '$lib/config/statusColors';
 	import { getIssueTypeVisual, getSessionStateVisual } from '$lib/config/statusColors';
+	import { getActions, loadUserConfig, getIsLoaded } from '$lib/stores/stateActionsConfig.svelte';
 
 	/** Split an agent name on camelCase boundaries: "GentleCoast" → ["Gentle", "Coast"]. */
 	function splitAgentName(name: string): string[] {
@@ -87,6 +88,52 @@
 
 	// Visibility animation state
 	let visible = $state(false);
+
+	// Load user action config on mount
+	$effect(() => {
+		if (!getIsLoaded()) {
+			loadUserConfig();
+		}
+	});
+
+	// Compute effective state: closed tasks → 'completed'
+	const effectiveState = $derived(
+		(task?.status === 'closed' ? 'completed' : (sseState || sessionState || 'idle')) as SessionState
+	);
+
+	// Dynamic actions from configurable state actions (same system as MobileSessionFullscreen)
+	const MOBILE_PILL_ACTIONS = new Set(['complete', 'complete-kill', 'cleanup', 'pause', 'interrupt', 'attach', 'kill', 'escape', 'convert-to-tasks']);
+	const stateActions = $derived.by(() => {
+		const actions = getActions(effectiveState);
+		return actions.filter(a => MOBILE_PILL_ACTIONS.has(a.id));
+	});
+
+	// Execute a pill action
+	async function executePillAction(action: SessionStateAction) {
+		if (action.id === 'interrupt') {
+			sendKey('ctrl-c');
+		} else if (action.id === 'attach') {
+			onAttachSession();
+		} else if (action.id === 'kill') {
+			dismissDrawer();
+			onKillSession();
+		} else if (action.id === 'complete') {
+			await onSendInput('/jat:complete', 'text');
+		} else {
+			await onAction(action.id);
+		}
+	}
+
+	// Pill color mapping from action variant
+	function getPillColorClass(variant: SessionStateAction['variant']): string {
+		switch (variant) {
+			case 'success': return 'complete-btn';
+			case 'error': return 'danger-btn';
+			case 'warning': return 'warning-btn';
+			case 'info': return 'info-btn';
+			default: return '';
+		}
+	}
 
 	// Terminal output state
 	let output = $state('');
@@ -810,45 +857,20 @@
 					/>
 				</div>
 
-				<!-- Mobile Action Buttons Row -->
+				<!-- Mobile Action Buttons Row (dynamic from state actions config) -->
 				<div class="mobile-actions-row">
-					<button class="mobile-action-btn" use:directClick={() => onAttachSession()} title="Attach Terminal">
-						<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="14" height="14">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
-						</svg>
-						<span>Attach</span>
-					</button>
-					<button class="mobile-action-btn" use:directClick={() => sendKey('ctrl-c')} title="Interrupt (Ctrl+C)">
-						<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="14" height="14">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" />
-						</svg>
-						<span>Interrupt</span>
-					</button>
-					<button
-						class="mobile-action-btn complete-btn"
-						use:directClick={async () => {
-							await onSendInput('/jat:complete', 'text');
-						}}
-						title="Complete Task"
-					>
-						<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="14" height="14">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-						</svg>
-						<span>Complete</span>
-					</button>
-					<button
-						class="mobile-action-btn danger-btn"
-						use:directClick={() => {
-							dismissDrawer();
-							onKillSession();
-						}}
-						title="Kill Session"
-					>
-						<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="14" height="14">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-						</svg>
-						<span>Kill</span>
-					</button>
+					{#each stateActions as action (action.id)}
+						<button
+							class="mobile-action-btn {getPillColorClass(action.variant)}"
+							use:directClick={() => executePillAction(action)}
+							title={action.description || action.label}
+						>
+							<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="14" height="14">
+								<path stroke-linecap="round" stroke-linejoin="round" d={action.icon} />
+							</svg>
+							<span>{action.label}</span>
+						</button>
+					{/each}
 				</div>
 
 				<!-- Pending Attachments Preview -->
@@ -1704,6 +1726,18 @@
 		color: oklch(0.75 0.15 25);
 		border-color: oklch(0.45 0.12 25 / 0.4);
 		background: oklch(0.22 0.06 25 / 0.2);
+	}
+
+	.mobile-action-btn.warning-btn {
+		color: oklch(0.80 0.15 85);
+		border-color: oklch(0.45 0.12 85 / 0.5);
+		background: oklch(0.22 0.06 85 / 0.3);
+	}
+
+	.mobile-action-btn.info-btn {
+		color: oklch(0.80 0.15 220);
+		border-color: oklch(0.45 0.12 220 / 0.5);
+		background: oklch(0.22 0.06 220 / 0.3);
 	}
 
 	/* === Mobile Input Row === */

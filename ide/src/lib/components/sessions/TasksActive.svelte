@@ -1495,7 +1495,8 @@
 			{@const fsAgentName = getAgentName(fullscreenSession)}
 			{@const fsTask = agentTasks.get(fsAgentName)}
 			{@const fsSessionInfo = agentSessionInfo.get(fsAgentName)}
-			{@const fsState = (optimisticStates.get(fullscreenSession) || fsSessionInfo?.activityState || 'idle') as SessionState}
+			{@const fsRawState = (optimisticStates.get(fullscreenSession) || fsSessionInfo?.activityState || 'idle') as SessionState}
+		{@const fsState = (fsTask?.status === 'closed' ? 'completed' : fsRawState) as SessionState}
 			{@const fsSession = sessions.find(s => s.name === fullscreenSession)}
 			{@const fsReviewStatus = fsTask ? computeReviewStatus(fsTask, getReviewRules()) : null}
 			{@const fsReviewBasedDefault = fsReviewStatus?.action !== 'auto'}

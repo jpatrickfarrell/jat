@@ -185,7 +185,7 @@
 	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 	<div
 		class="ctr-card"
-		style="{swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {!swiping && swipeOffset === 0 ? '' : !swiping ? 'transition: transform 0.3s cubic-bezier(0.25,0.46,0.45,0.94);' : ''}"
+		style="{projectColor ? `border-left-color: ${projectColor};` : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {!swiping && swipeOffset === 0 ? '' : !swiping ? 'transition: transform 0.3s cubic-bezier(0.25,0.46,0.45,0.94);' : ''}"
 		onclick={() => !swiping && onTaskClick(task.id)}
 		ontouchstart={onTouchStart}
 		ontouchmove={onTouchMove}
@@ -197,9 +197,9 @@
 
 		<div class="ctr-inner">
 			<!-- Left: avatar -->
-			<div class="ctr-avatar" style="{projectColor ? `border-color: ${projectColor};` : ''}">
+			<div class="ctr-avatar">
 				{#if task.assignee}
-					<AgentAvatar name={task.assignee} size={24} />
+					<AgentAvatar name={task.assignee} size={36} shape="rounded" />
 				{:else if resolvedIntegration && integrationIcon}
 					<svg class="w-5 h-5" viewBox={integrationIcon.viewBox} fill={integrationIcon.fill ? 'currentColor' : 'none'} stroke={integrationIcon.fill ? 'none' : 'currentColor'} stroke-width="1.5" style="color: {integrationIcon.color};">
 						<path d={integrationIcon.svg} />
@@ -356,6 +356,7 @@
 		position: relative;
 		cursor: pointer;
 		background: oklch(0.16 0.01 250);
+		border-left: 3px solid oklch(0.40 0.12 145 / 0.6);
 		transition: background 0.12s;
 	}
 
@@ -367,7 +368,7 @@
 	.ctr-duration-stripe {
 		position: absolute;
 		bottom: 0;
-		left: 52px;
+		left: 0;
 		right: 0;
 		height: 2px;
 		background: linear-gradient(90deg, oklch(0.55 0.18 145 / 0.5), oklch(0.55 0.18 145 / 0.15));
@@ -383,15 +384,13 @@
 
 	/* Avatar */
 	.ctr-avatar {
-		width: 52px;
+		width: 56px;
 		flex-shrink: 0;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: 8px 0;
+		padding: 8px 4px;
 		background: oklch(0.18 0.01 250);
-		border-right: 1px solid oklch(0.22 0.02 250);
-		border-left: 3px solid oklch(0.40 0.12 145 / 0.6);
 	}
 
 	.ctr-avatar-fallback {

@@ -1143,7 +1143,7 @@
 					class="mobile-session-card"
 					class:attached={session.attached}
 					class:swiping={isSwiping}
-					style="{isExiting ? 'pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
+					style="border-left: 3px solid {stateVisual.accent}; {isExiting ? 'pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
 					role="button" tabindex="0"
 					onclick={() => !isExiting && !swipeState?.swiping && (onCardClick ? onCardClick(session.name) : (fullscreenSession = session.name))}
 					oncontextmenu={(e) => handleContextMenu(session, e)}
@@ -1157,7 +1157,7 @@
 					<!-- Server session -->
 					{@const cardActions = getSessionStateActions(effectiveState)}
 					<div class="mobile-card-inner">
-						<div class="mobile-state-strip" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};" aria-hidden="true">
+						<div class="mobile-state-strip" style="background: {stateVisual.bgTint};" aria-hidden="true">
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" width="13" height="13" style="stroke: {stateVisual.accent};"><path stroke-linecap="round" stroke-linejoin="round" d={stateVisual.icon} /></svg>
 						</div>
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -1189,8 +1189,8 @@
 					{@const reviewBasedDefault = reviewStatus.action !== 'auto'}
 					{@const autoCompleteDisabled = autoCompleteDisabledMap.get(session.name) ?? reviewBasedDefault}
 					<div class="mobile-card-inner">
-						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};">
-							<AgentAvatar name={sessionAgentName} size={36} showRing={true} sessionState={effectiveState} />
+						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint};">
+							<AgentAvatar name={sessionAgentName} size={54} showRing={false} shape="rounded" />
 							<div class="mobile-strip-agent-label" title={sessionAgentName}>
 								{#each splitAgentName(sessionAgentName) as part}
 									<span>{part}</span>
@@ -1453,8 +1453,8 @@
 					<!-- Planning / no-task session -->
 					{@const cardActions = getSessionStateActions(effectiveState)}
 					<div class="mobile-card-inner">
-						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};">
-							<AgentAvatar name={sessionAgentName} size={40} showRing={true} sessionState={effectiveState} />
+						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint};">
+							<AgentAvatar name={sessionAgentName} size={54} showRing={false} shape="rounded" />
 						</div>
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
@@ -2338,23 +2338,24 @@
 		transition: filter 0.2s;
 	}
 
-	/* Agent variant: wider to fit avatar + name below */
+	/* Agent variant: two stacked squares — avatar fills top, name below, vertically centered */
 	.mobile-state-strip-agent {
-		width: 62px;
-		padding: 6px 4px;
+		width: 68px;
+		padding: 4px 4px;
 		flex-direction: column;
-		gap: 4px;
+		justify-content: center;
+		gap: 0.375rem;
 	}
 
-	/* Agent name below avatar — camelCase split stacked, matches tray-btn label styling */
+	/* Agent name below avatar — centered text label */
 	.mobile-strip-agent-label {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		line-height: 1.1;
-		font-size: 0.5rem;
-		font-weight: 500;
-		letter-spacing: 0.02em;
+		font-size: 0.5625rem;
+		font-weight: 600;
+		letter-spacing: 0.03em;
 		text-transform: uppercase;
 		color: oklch(0.60 0.015 250);
 		font-family: system-ui, -apple-system, sans-serif;

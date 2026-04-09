@@ -234,7 +234,7 @@
 										statusDotColor={recentStatusDotColor}
 									/>
 								{:else}
-									<AgentAvatar name={recent.agentName} size={28} />
+									<AgentAvatar name={recent.agentName} size={28} shape="rounded" />
 									<span class="recent-agent-id">{recent.agentName}</span>
 								{/if}
 							</div>

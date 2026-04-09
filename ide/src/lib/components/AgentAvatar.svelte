@@ -29,6 +29,8 @@
 		showGlow?: boolean;
 		/** Play exit animation (flip-out) instead of entrance */
 		exiting?: boolean;
+		/** Border radius style: 'circle' (default) or 'rounded' (rounded square) */
+		shape?: 'circle' | 'rounded';
 	}
 
 	let {
@@ -39,8 +41,11 @@
 		ringColor,
 		sessionState,
 		showGlow = false,
-		exiting = false
+		exiting = false,
+		shape = 'circle'
 	}: Props = $props();
+
+	const borderRadius = $derived(shape === 'rounded' ? '20%' : '9999px');
 
 	// Compute effective ring color from props, session state, or store lookup
 	const effectiveRingColor = $derived.by(() => {
@@ -212,20 +217,21 @@
 {#if showRing && effectiveRingColor}
 	<!-- Avatar with status ring -->
 	<div
-		class="inline-flex items-center justify-center rounded-full flex-shrink-0 {className}"
+		class="inline-flex items-center justify-center flex-shrink-0 {className}"
 		class:avatar-ring-exit={exiting}
 		style="
 			width: {size + 4}px;
 			height: {size + 4}px;
 			padding: 2px;
+			border-radius: {borderRadius};
 			background: {effectiveRingColor};
 			{showGlow ? `box-shadow: 0 0 8px ${effectiveRingColor};` : ''}
 		"
 		title={name}
 	>
 		<div
-			class="inline-flex items-center justify-center rounded-full overflow-hidden"
-			style="width: {size}px; height: {size}px; perspective: 200px;"
+			class="inline-flex items-center justify-center overflow-hidden"
+			style="width: {size}px; height: {size}px; border-radius: {borderRadius}; perspective: 200px;"
 		>
 			{#if loadState === 'loading'}
 				<div class="w-full h-full animate-pulse" style="background: oklch(0.30 0.02 250);"></div>
@@ -245,8 +251,8 @@
 {:else}
 	<!-- Avatar without ring (original behavior) -->
 	<div
-		class="inline-flex items-center justify-center rounded-full overflow-hidden flex-shrink-0 {className}"
-		style="width: {size}px; height: {size}px; perspective: 200px;"
+		class="inline-flex items-center justify-center overflow-hidden flex-shrink-0 {className}"
+		style="width: {size}px; height: {size}px; border-radius: {borderRadius}; perspective: 200px;"
 	>
 		{#if loadState === 'loading'}
 			<!-- Loading skeleton -->

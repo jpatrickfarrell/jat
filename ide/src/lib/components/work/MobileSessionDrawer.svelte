@@ -788,11 +788,11 @@
 				{#if task}
 					{@const typeVisual = getIssueTypeVisual(task.issue_type)}
 					{@const stateVisual = getSessionStateVisual(sseState || 'idle')}
-					<div class="mobile-task-header">
+					<div class="mobile-task-header" style="border-left: 3px solid {stateVisual.accent};">
 						<div class="mobile-card-inner">
 							<!-- Left strip: large avatar + split agent name (matches TasksActive swipe card) -->
-							<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};">
-								<AgentAvatar name={agentName} size={36} showRing={true} sessionState={sseState || 'idle'} />
+							<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint};">
+								<AgentAvatar name={agentName} size={54} showRing={false} shape="rounded" />
 								<div class="mobile-strip-agent-label" title={agentName}>
 									{#each splitAgentName(agentName) as part}
 										<span>{part}</span>
@@ -1558,10 +1558,11 @@
 	}
 
 	.mobile-state-strip-agent {
-		width: 62px;
-		padding: 8px 4px;
+		width: 68px;
+		padding: 4px 4px;
 		flex-direction: column;
-		gap: 4px;
+		justify-content: center;
+		gap: 0.375rem;
 	}
 
 	/* CamelCase-split agent name below avatar */
@@ -1570,9 +1571,9 @@
 		flex-direction: column;
 		align-items: center;
 		line-height: 1.1;
-		font-size: 0.5rem;
-		font-weight: 500;
-		letter-spacing: 0.02em;
+		font-size: 0.5625rem;
+		font-weight: 600;
+		letter-spacing: 0.03em;
 		text-transform: uppercase;
 		color: oklch(0.60 0.015 250);
 		font-family: system-ui, -apple-system, sans-serif;

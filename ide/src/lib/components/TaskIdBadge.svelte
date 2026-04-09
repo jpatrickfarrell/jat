@@ -459,7 +459,7 @@
 		{:else if isClosed && agentName}
 			{@const checkBadgeSize = Math.max(12, Math.round(avatarSize * 0.42))}
 			<button class="relative ml-1.5 mt-1 shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onclick={copyId} title="Click to copy task ID">
-				<AgentAvatar name={agentName} size={avatarSize} showRing={true} ringColor="oklch(0.65 0.20 145)" showGlow={false} {exiting} />
+				<AgentAvatar name={agentName} size={avatarSize} showRing={true} ringColor="oklch(0.65 0.20 145)" showGlow={false} {exiting} shape="rounded" />
 				<!-- Green checkmark at 4:30 clock position -->
 				<div class="absolute rounded-full flex items-center justify-center" style="width: {checkBadgeSize}px; height: {checkBadgeSize}px; bottom: 3px; right: -1px; background: oklch(0.18 0.01 250); border: 1.5px solid oklch(0.65 0.20 145);">
 					<div class="rounded-full flex items-center justify-center" style="width: {checkBadgeSize - 3}px; height: {checkBadgeSize - 3}px; background: oklch(0.65 0.20 145 / 0.35);">
@@ -472,7 +472,7 @@
 		{:else}
 			{#if agentName}
 				<button class="ml-1.5 mt-1 hrink-0 cursor-pointer hover:opacity-80 transition-opacity" onclick={copyId} title="Click to copy task ID">
-					<AgentAvatar name={agentName} size={avatarSize + 1} showRing={true} ringColor={ringColor} showGlow={true} {exiting} />
+					<AgentAvatar name={agentName} size={avatarSize + 1} showRing={true} ringColor={ringColor} showGlow={true} {exiting} shape="rounded" />
 				</button>
 			{:else if isHuman && !isClosed}
 				<button

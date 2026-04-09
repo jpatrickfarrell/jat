@@ -1,4 +1,4 @@
-import type { FeedbackReport, ThreadEntry, AgentNote } from './types';
+import type { FeedbackReport, ThreadEntry, AgentNote, ConsoleLogEntry, NetworkRequestEntry } from './types';
 
 export async function submitReport(endpoint: string, report: FeedbackReport): Promise<{ ok: boolean; id?: string; error?: string }> {
   const url = `${endpoint.replace(/\/$/, '')}/api/feedback/report`;
@@ -78,6 +78,12 @@ export interface ReportSummary {
   assignee?: string | null;
   /** Labels for categorization (v3.0.0+) */
   labels?: string[] | null;
+  /** URL to stored rrweb recording (v3.2.0+) */
+  recording_url?: string | null;
+  /** Console logs captured with the report */
+  console_logs?: ConsoleLogEntry[] | null;
+  /** Network requests captured with the report */
+  network_requests?: NetworkRequestEntry[] | null;
 }
 
 export async function fetchReports(endpoint: string): Promise<{ reports: ReportSummary[]; error?: string }> {

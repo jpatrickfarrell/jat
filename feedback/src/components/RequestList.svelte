@@ -4,6 +4,7 @@
   import { captureViewport } from '../lib/screenshot';
   import { startElementPicker } from '../lib/elementPicker';
   import { slide } from 'svelte/transition';
+  import TimelineViewer from './TimelineViewer.svelte';
 
   let {
     endpoint,
@@ -417,6 +418,19 @@
                       <img src="{endpoint}{expandedScreenshot}" alt="Screenshot" />
                       <button class="screenshot-close" onclick={() => expandedScreenshot = null} aria-label="Close">&times;</button>
                     </div>
+                  {/if}
+                {/if}
+
+                <!-- Recording replay -->
+                {#if report.recording_url || (report.thread && report.thread.some(e => e.recordingUrl))}
+                  {@const recUrl = report.recording_url ?? report.thread?.find(e => e.recordingUrl)?.recordingUrl ?? null}
+                  {#if recUrl}
+                    <TimelineViewer
+                      recordingUrl={recUrl}
+                      {endpoint}
+                      consoleLogs={report.console_logs ?? null}
+                      networkRequests={report.network_requests ?? null}
+                    />
                   {/if}
                 {/if}
 

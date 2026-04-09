@@ -19,7 +19,7 @@
 	import { isAutoKillEnabled } from '$lib/stores/autoKillConfig';
 	import { onMount } from 'svelte';
 	import { slide, fade } from 'svelte/transition';
-	import { cubicOut, cubicIn } from 'svelte/easing';
+	import { cubicOut } from 'svelte/easing';
 
 	function activeTaskCtx(t: AgentTask): Record<string, any> {
 		return { title: t.title, status: t.status, priority: t.priority, type: t.issue_type, labels: t.labels?.join(', '), created_at: t.created_at };

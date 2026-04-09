@@ -137,6 +137,15 @@ Deno.serve(async (req) => {
     )
   }
 
+  // Skip transient voice-pipeline statuses — only sync when the task
+  // has a meaningful status that JAT should know about.
+  if (data.status === "transcribing" || data.status === "failed") {
+    return new Response(
+      JSON.stringify({ skipped: true, reason: `Status "${data.status}" is transient, not synced to JAT` }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )
+  }
+
   // Build the update object from the payload fields
   const update: Record<string, unknown> = {}
   if (data.status) update[config.statusCol] = data.status

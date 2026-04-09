@@ -1597,6 +1597,7 @@
 						<div class="mobile-state-strip" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};" aria-hidden="true">
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" width="13" height="13" style="stroke: {stateVisual.accent};"><path stroke-linecap="round" stroke-linejoin="round" d={stateVisual.icon} /></svg>
 						</div>
+						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							{#each cardActions.slice(0, 5) as action}
 								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
@@ -1633,6 +1634,7 @@
 								{/each}
 							</div>
 						</div>
+						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							{#each cardActions.slice(0, 5) as action}
 								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
@@ -1694,6 +1696,7 @@
 							</button>
 						</div>
 						{#if cmdPanelSession === session.name}
+						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 						<div
 							class="mobile-cmd-inline"
 							onclick={(e) => e.stopPropagation()}
@@ -1746,6 +1749,7 @@
 						</div>
 						{/if}
 						{#if epicPickerSession === session.name}
+						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 						<div
 							class="mobile-epic-inline"
 							onclick={(e) => e.stopPropagation()}
@@ -1889,6 +1893,7 @@
 						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint}; border-right: 2px solid {stateVisual.accent};">
 							<AgentAvatar name={sessionAgentName} size={40} showRing={true} sessionState={effectiveState} />
 						</div>
+						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							{#each cardActions.slice(0, 5) as action}
 								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}

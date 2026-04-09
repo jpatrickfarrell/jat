@@ -425,6 +425,19 @@
                 {#if report.recording_url || (report.thread && report.thread.some(e => e.recordingUrl))}
                   {@const recUrl = report.recording_url ?? report.thread?.find(e => e.recordingUrl)?.recordingUrl ?? null}
                   {#if recUrl}
+                    <div class="replay-header">
+                      <span class="replay-label">Session Recording</span>
+                      <a
+                        href="{endpoint}/feedback/replay.html?id={report.id}"
+                        target="_blank"
+                        rel="noreferrer"
+                        class="replay-fullscreen-btn"
+                        title="Open full replay in new tab"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M10 2h4v4M14 2L9 7M6 14H2v-4M2 14l5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        Full replay
+                      </a>
+                    </div>
                     <TimelineViewer
                       recordingUrl={recUrl}
                       {endpoint}
@@ -869,6 +882,35 @@
     font-size: 12px;
     color: #d1d5db;
     border-left: 2px solid #3b82f6;
+  }
+  .replay-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 8px;
+    margin-bottom: 4px;
+  }
+  .replay-label {
+    font-size: 11px;
+    color: #6b7280;
+    font-weight: 500;
+  }
+  .replay-fullscreen-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: #60a5fa;
+    text-decoration: none;
+    padding: 2px 7px;
+    border: 1px solid #1e3a5f;
+    border-radius: 4px;
+    background: #0f1e33;
+    transition: background 0.15s;
+  }
+  .replay-fullscreen-btn:hover {
+    background: #1e3a5f;
+    color: #93c5fd;
   }
   .dev-notes-label {
     font-weight: 600;

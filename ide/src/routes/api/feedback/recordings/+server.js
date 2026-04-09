@@ -2,18 +2,19 @@
  * Feedback Recording Storage API
  *
  * Stores rrweb session recording events as JSON files.
- * POST - Upload recording events, returns file path for inclusion in report.
+ * GET  - Serve a recording file by filename.
+ * POST - Upload recording events, returns URL path for inclusion in report.
  * OPTIONS - CORS preflight
  */
 import { json } from '@sveltejs/kit';
-import { writeFileSync, mkdirSync, existsSync } from 'fs';
-import { join } from 'path';
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'fs';
+import { join, basename } from 'path';
 import { homedir } from 'os';
-import { gzipSync } from 'zlib';
+import { gzipSync, gunzipSync } from 'zlib';
 
 const CORS_HEADERS = {
 	'Access-Control-Allow-Origin': '*',
-	'Access-Control-Allow-Methods': 'POST, OPTIONS',
+	'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 	'Access-Control-Allow-Headers': 'Content-Type',
 	'Access-Control-Max-Age': '86400'
 };
@@ -26,6 +27,45 @@ const MAX_RECORDING_SIZE = 10 * 1024 * 1024;
  */
 export async function OPTIONS() {
 	return new Response(null, { status: 204, headers: CORS_HEADERS });
+}
+
+/**
+ * GET /api/feedback/recordings?file=filename.json.gz
+ *
+ * Serves a gzipped recording file as JSON.
+ * Also accepts filesystem paths for backwards compatibility (strips to filename).
+ */
+export async function GET({ url }) {
+	try {
+		let fileParam = url.searchParams.get('file');
+		if (!fileParam) {
+			return json({ ok: false, error: 'file parameter required' }, { status: 400, headers: CORS_HEADERS });
+		}
+
+		// Strip filesystem path to filename only (backwards compat with old stored paths)
+		const filename = basename(fileParam);
+
+		// Validate filename — only allow safe characters
+		if (!/^[\w\-\.]+\.json\.gz$/.test(filename)) {
+			return json({ ok: false, error: 'Invalid filename' }, { status: 400, headers: CORS_HEADERS });
+		}
+
+		const recordingsDir = join(homedir(), '.local', 'share', 'jat', 'task-recordings');
+		const filepath = join(recordingsDir, filename);
+
+		if (!existsSync(filepath)) {
+			return json({ ok: false, error: 'Recording not found' }, { status: 404, headers: CORS_HEADERS });
+		}
+
+		const compressed = readFileSync(filepath);
+		const eventsJson = gunzipSync(compressed).toString('utf-8');
+		const events = JSON.parse(eventsJson);
+
+		return json(events, { headers: CORS_HEADERS });
+	} catch (err) {
+		console.error('[feedback-recordings] GET error:', err);
+		return json({ ok: false, error: err.message || 'Failed to serve recording' }, { status: 500, headers: CORS_HEADERS });
+	}
 }
 
 /**
@@ -85,10 +125,13 @@ export async function POST({ request }) {
 		const filepath = join(recordingsDir, filename);
 		writeFileSync(filepath, compressed);
 
+		// Return a URL path (not filesystem path) so the widget can fetch it back
+		const recordingUrlPath = `/api/feedback/recordings?file=${filename}`;
+
 		return json(
 			{
 				ok: true,
-				recording_url: filepath,
+				recording_url: recordingUrlPath,
 				size: compressed.length,
 				events_count: body.events.length
 			},

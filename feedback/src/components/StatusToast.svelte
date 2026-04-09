@@ -1,9 +1,9 @@
 <script lang="ts">
-  let { message, type = 'success', visible = false }: { message: string; type: 'success' | 'error'; visible: boolean } = $props();
+  let { message, type = 'success', visible = false }: { message: string; type: 'success' | 'error' | 'info'; visible: boolean } = $props();
 </script>
 
 {#if visible}
-  <div class="jat-toast" class:error={type === 'error'} class:success={type === 'success'}>
+  <div class="jat-toast" class:error={type === 'error'} class:success={type === 'success'} class:info={type === 'info'}>
     <span class="icon">
       {#if type === 'success'}
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8L6.5 11.5L13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -40,6 +40,11 @@
     background: #7f1d1d;
     color: #fecaca;
     border: 1px solid #ef4444;
+  }
+  .info {
+    background: #1e3a5f;
+    color: #bfdbfe;
+    border: 1px solid #3b82f6;
   }
   .icon {
     display: flex;

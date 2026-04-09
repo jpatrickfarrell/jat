@@ -336,15 +336,23 @@ export async function POST({ request }) {
 			const ingestDbPath = join(homedir(), '.local', 'share', 'jat', 'ingest.db');
 			if (existsSync(ingestDbPath)) {
 				const db = new Database(ingestDbPath);
+				const metadata = {};
+				if (body.console_logs && Array.isArray(body.console_logs) && body.console_logs.length > 0) {
+					metadata.console_logs = body.console_logs;
+				}
+				if (body.network_requests && Array.isArray(body.network_requests) && body.network_requests.length > 0) {
+					metadata.network_requests = body.network_requests;
+				}
 				db.prepare(
-					`INSERT OR IGNORE INTO ingested_items (source_id, item_id, task_id, title, origin_adapter_type)
-					 VALUES (?, ?, ?, ?, ?)`
+					`INSERT OR IGNORE INTO ingested_items (source_id, item_id, task_id, title, origin_adapter_type, origin_metadata)
+					 VALUES (?, ?, ?, ?, ?, ?)`
 				).run(
 					'feedback-widget',
 					`feedback-${createdTask.id}`,
 					createdTask.id,
 					`[Feedback] ${title}`,
-					'feedback'
+					'feedback',
+					Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null
 				);
 				db.close();
 			}

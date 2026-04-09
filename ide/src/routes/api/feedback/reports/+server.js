@@ -41,6 +41,25 @@ function parsePageUrl(description) {
 }
 
 /**
+ * Parse recording_url from task description.
+ * Descriptions contain: **Session Recording:** /path/or/url
+ * Converts old filesystem paths to API URL paths.
+ * @param {string} description
+ * @returns {string | null}
+ */
+function parseRecordingUrl(description) {
+	if (!description) return null;
+	const match = description.match(/\*\*Session Recording:\*\*\s*(\S+)/);
+	if (!match) return null;
+	const raw = match[1];
+	// Already a URL path (new format)
+	if (raw.startsWith('/api/')) return raw;
+	// Legacy: filesystem path — convert to API URL using filename only
+	const filename = raw.split('/').pop();
+	return filename ? `/api/feedback/recordings?file=${filename}` : null;
+}
+
+/**
  * Map JAT task status to feedback report status.
  * @param {string} taskStatus - JAT task status (open, in_progress, blocked, closed)
  * @param {string | null} closeReason - Close reason text
@@ -112,6 +131,19 @@ export async function GET() {
 			 ORDER BY ingested_at DESC
 			 LIMIT 100`
 		).all();
+
+		// Pre-parse origin_metadata for all rows
+		for (const row of rows) {
+			if (row.origin_metadata) {
+				try {
+					row._metadata = JSON.parse(row.origin_metadata);
+				} catch {
+					row._metadata = null;
+				}
+			} else {
+				row._metadata = null;
+			}
+		}
 		db.close();
 
 		/** @type {import('./types').ReportSummary[]} */
@@ -187,6 +219,9 @@ export async function GET() {
 				page_url: pageUrl,
 				screenshot_urls: screenshotUrls,
 				thread,
+				recording_url: parseRecordingUrl(task.description),
+				console_logs: row._metadata?.console_logs ?? null,
+				network_requests: row._metadata?.network_requests ?? null,
 				created_at: task.created_at || row.ingested_at
 			});
 		}

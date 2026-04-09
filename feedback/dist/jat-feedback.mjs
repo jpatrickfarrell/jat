@@ -1,10 +1,10 @@
-var Jr = Object.defineProperty;
+var eo = Object.defineProperty;
 var Ir = (d) => {
   throw TypeError(d);
 };
-var Qr = (d, p, h) => p in d ? Jr(d, p, { enumerable: !0, configurable: !0, writable: !0, value: h }) : d[p] = h;
-var Ce = (d, p, h) => Qr(d, typeof p != "symbol" ? p + "" : p, h), gr = (d, p, h) => p.has(d) || Ir("Cannot " + h);
-var U = (d, p, h) => (gr(d, p, "read from private field"), h ? h.call(d) : p.get(d)), De = (d, p, h) => p.has(d) ? Ir("Cannot add the same private member more than once") : p instanceof WeakSet ? p.add(d) : p.set(d, h), Me = (d, p, h, g) => (gr(d, p, "write to private field"), g ? g.call(d, h) : p.set(d, h), h), ct = (d, p, h) => (gr(d, p, "access private method"), h);
+var to = (d, p, h) => p in d ? eo(d, p, { enumerable: !0, configurable: !0, writable: !0, value: h }) : d[p] = h;
+var Ie = (d, p, h) => to(d, typeof p != "symbol" ? p + "" : p, h), gr = (d, p, h) => p.has(d) || Ir("Cannot " + h);
+var U = (d, p, h) => (gr(d, p, "read from private field"), h ? h.call(d) : p.get(d)), ze = (d, p, h) => p.has(d) ? Ir("Cannot add the same private member more than once") : p instanceof WeakSet ? p.add(d) : p.set(d, h), $e = (d, p, h, g) => (gr(d, p, "write to private field"), g ? g.call(d, h) : p.set(d, h), h), ht = (d, p, h) => (gr(d, p, "access private method"), h);
 const PUBLIC_VERSION = "5";
 var Tr;
 typeof window < "u" && ((Tr = window.__svelte ?? (window.__svelte = {})).v ?? (Tr.v = /* @__PURE__ */ new Set())).add("5");
@@ -28,8 +28,8 @@ function deferred() {
 const DERIVED = 2, EFFECT = 4, RENDER_EFFECT = 8, MANAGED_EFFECT = 1 << 24, BLOCK_EFFECT = 16, BRANCH_EFFECT = 32, ROOT_EFFECT = 64, BOUNDARY_EFFECT = 128, CONNECTED = 512, CLEAN = 1024, DIRTY = 2048, MAYBE_DIRTY = 4096, INERT = 8192, DESTROYED = 16384, REACTION_RAN = 32768, EFFECT_TRANSPARENT = 65536, EAGER_EFFECT = 1 << 17, HEAD_EFFECT = 1 << 18, EFFECT_PRESERVED = 1 << 19, USER_EFFECT = 1 << 20, EFFECT_OFFSCREEN = 1 << 25, WAS_MARKED = 65536, REACTION_IS_UPDATING = 1 << 21, ASYNC = 1 << 22, ERROR_VALUE = 1 << 23, STATE_SYMBOL = Symbol("$state"), LEGACY_PROPS = Symbol("legacy props"), LOADING_ATTR_SYMBOL = Symbol(""), STALE_REACTION = new class extends Error {
   constructor() {
     super(...arguments);
-    Ce(this, "name", "StaleReactionError");
-    Ce(this, "message", "The reaction that called `getAbortSignal()` was re-run or destroyed");
+    Ie(this, "name", "StaleReactionError");
+    Ie(this, "message", "The reaction that called `getAbortSignal()` was re-run or destroyed");
   }
 }();
 var Rr, Ar;
@@ -240,58 +240,58 @@ function defer_effect(d, p, h) {
 }
 const batches = /* @__PURE__ */ new Set();
 let current_batch = null, previous_batch = null, batch_values = null, queued_root_effects = [], last_scheduled_effect = null, is_flushing = !1, is_flushing_sync = !1;
-var kn, Cn, fn, In, Bn, Un, pn, qt, Tn, Ut, mr, vr, zr;
+var En, Sn, dn, kn, Zn, Bn, un, Gt, Cn, jt, mr, vr, zr;
 const yr = class yr {
   constructor() {
-    De(this, Ut);
-    Ce(this, "committed", !1);
+    ze(this, jt);
+    Ie(this, "committed", !1);
     /**
      * The current values of any sources that are updated in this batch
      * They keys of this map are identical to `this.#previous`
      * @type {Map<Source, any>}
      */
-    Ce(this, "current", /* @__PURE__ */ new Map());
+    Ie(this, "current", /* @__PURE__ */ new Map());
     /**
      * The values of any sources that are updated in this batch _before_ those updates took place.
      * They keys of this map are identical to `this.#current`
      * @type {Map<Source, any>}
      */
-    Ce(this, "previous", /* @__PURE__ */ new Map());
+    Ie(this, "previous", /* @__PURE__ */ new Map());
     /**
      * When the batch is committed (and the DOM is updated), we need to remove old branches
      * and append new ones by calling the functions added inside (if/each/key/etc) blocks
      * @type {Set<() => void>}
      */
-    De(this, kn, /* @__PURE__ */ new Set());
+    ze(this, En, /* @__PURE__ */ new Set());
     /**
      * If a fork is discarded, we need to destroy any effects that are no longer needed
      * @type {Set<(batch: Batch) => void>}
      */
-    De(this, Cn, /* @__PURE__ */ new Set());
+    ze(this, Sn, /* @__PURE__ */ new Set());
     /**
      * The number of async effects that are currently in flight
      */
-    De(this, fn, 0);
+    ze(this, dn, 0);
     /**
      * The number of async effects that are currently in flight, _not_ inside a pending boundary
      */
-    De(this, In, 0);
+    ze(this, kn, 0);
     /**
      * A deferred that resolves when the batch is committed, used with `settled()`
      * TODO replace with Promise.withResolvers once supported widely enough
      * @type {{ promise: Promise<void>, resolve: (value?: any) => void, reject: (reason: unknown) => void } | null}
      */
-    De(this, Bn, null);
+    ze(this, Zn, null);
     /**
      * Deferred effects (which run after async work has completed) that are DIRTY
      * @type {Set<Effect>}
      */
-    De(this, Un, /* @__PURE__ */ new Set());
+    ze(this, Bn, /* @__PURE__ */ new Set());
     /**
      * Deferred effects that are MAYBE_DIRTY
      * @type {Set<Effect>}
      */
-    De(this, pn, /* @__PURE__ */ new Set());
+    ze(this, un, /* @__PURE__ */ new Set());
     /**
      * A map of branches that still exist, but will be destroyed when this batch
      * is committed — we skip over these during `process`.
@@ -299,19 +299,19 @@ const yr = class yr {
      * so they can be rescheduled if the branch survives.
      * @type {Map<Effect, { d: Effect[], m: Effect[] }>}
      */
-    De(this, qt, /* @__PURE__ */ new Map());
-    Ce(this, "is_fork", !1);
-    De(this, Tn, !1);
+    ze(this, Gt, /* @__PURE__ */ new Map());
+    Ie(this, "is_fork", !1);
+    ze(this, Cn, !1);
   }
   is_deferred() {
-    return this.is_fork || U(this, In) > 0;
+    return this.is_fork || U(this, kn) > 0;
   }
   /**
    * Add an effect to the #skipped_branches map and reset its children
    * @param {Effect} effect
    */
   skip_effect(p) {
-    U(this, qt).has(p) || U(this, qt).set(p, { d: [], m: [] });
+    U(this, Gt).has(p) || U(this, Gt).set(p, { d: [], m: [] });
   }
   /**
    * Remove an effect from the #skipped_branches map and reschedule
@@ -319,9 +319,9 @@ const yr = class yr {
    * @param {Effect} effect
    */
   unskip_effect(p) {
-    var h = U(this, qt).get(p);
+    var h = U(this, Gt).get(p);
     if (h) {
-      U(this, qt).delete(p);
+      U(this, Gt).delete(p);
       for (var g of h.d)
         set_signal_status(g, DIRTY), schedule_effect(g);
       for (g of h.m)
@@ -337,14 +337,14 @@ const yr = class yr {
     queued_root_effects = [], this.apply();
     var h = [], g = [];
     for (const _ of p)
-      ct(this, Ut, mr).call(this, _, h, g);
+      ht(this, jt, mr).call(this, _, h, g);
     if (this.is_deferred()) {
-      ct(this, Ut, vr).call(this, g), ct(this, Ut, vr).call(this, h);
-      for (const [_, b] of U(this, qt))
+      ht(this, jt, vr).call(this, g), ht(this, jt, vr).call(this, h);
+      for (const [_, b] of U(this, Gt))
         reset_branch(_, b);
     } else {
-      for (const _ of U(this, kn)) _();
-      U(this, kn).clear(), U(this, fn) === 0 && ct(this, Ut, zr).call(this), previous_batch = this, current_batch = null, flush_queued_effects(g), flush_queued_effects(h), previous_batch = null, (m = U(this, Bn)) == null || m.resolve();
+      for (const _ of U(this, En)) _();
+      U(this, En).clear(), U(this, dn) === 0 && ht(this, jt, zr).call(this), previous_batch = this, current_batch = null, flush_queued_effects(g), flush_queued_effects(h), previous_batch = null, (m = U(this, Zn)) == null || m.resolve();
     }
     batch_values = null;
   }
@@ -367,46 +367,46 @@ const yr = class yr {
     if (this.activate(), queued_root_effects.length > 0) {
       if (flush_effects(), current_batch !== null && current_batch !== this)
         return;
-    } else U(this, fn) === 0 && this.process([]);
+    } else U(this, dn) === 0 && this.process([]);
     this.deactivate();
   }
   discard() {
-    for (const p of U(this, Cn)) p(this);
-    U(this, Cn).clear();
+    for (const p of U(this, Sn)) p(this);
+    U(this, Sn).clear();
   }
   /**
    *
    * @param {boolean} blocking
    */
   increment(p) {
-    Me(this, fn, U(this, fn) + 1), p && Me(this, In, U(this, In) + 1);
+    $e(this, dn, U(this, dn) + 1), p && $e(this, kn, U(this, kn) + 1);
   }
   /**
    *
    * @param {boolean} blocking
    */
   decrement(p) {
-    Me(this, fn, U(this, fn) - 1), p && Me(this, In, U(this, In) - 1), !U(this, Tn) && (Me(this, Tn, !0), queue_micro_task(() => {
-      Me(this, Tn, !1), this.is_deferred() ? queued_root_effects.length > 0 && this.flush() : this.revive();
+    $e(this, dn, U(this, dn) - 1), p && $e(this, kn, U(this, kn) - 1), !U(this, Cn) && ($e(this, Cn, !0), queue_micro_task(() => {
+      $e(this, Cn, !1), this.is_deferred() ? queued_root_effects.length > 0 && this.flush() : this.revive();
     }));
   }
   revive() {
-    for (const p of U(this, Un))
-      U(this, pn).delete(p), set_signal_status(p, DIRTY), schedule_effect(p);
-    for (const p of U(this, pn))
+    for (const p of U(this, Bn))
+      U(this, un).delete(p), set_signal_status(p, DIRTY), schedule_effect(p);
+    for (const p of U(this, un))
       set_signal_status(p, MAYBE_DIRTY), schedule_effect(p);
     this.flush();
   }
   /** @param {() => void} fn */
   oncommit(p) {
-    U(this, kn).add(p);
+    U(this, En).add(p);
   }
   /** @param {(batch: Batch) => void} fn */
   ondiscard(p) {
-    U(this, Cn).add(p);
+    U(this, Sn).add(p);
   }
   settled() {
-    return (U(this, Bn) ?? Me(this, Bn, deferred())).promise;
+    return (U(this, Zn) ?? $e(this, Zn, deferred())).promise;
   }
   static ensure() {
     if (current_batch === null) {
@@ -420,7 +420,7 @@ const yr = class yr {
   apply() {
   }
 };
-kn = new WeakMap(), Cn = new WeakMap(), fn = new WeakMap(), In = new WeakMap(), Bn = new WeakMap(), Un = new WeakMap(), pn = new WeakMap(), qt = new WeakMap(), Tn = new WeakMap(), Ut = new WeakSet(), /**
+En = new WeakMap(), Sn = new WeakMap(), dn = new WeakMap(), kn = new WeakMap(), Zn = new WeakMap(), Bn = new WeakMap(), un = new WeakMap(), Gt = new WeakMap(), Cn = new WeakMap(), jt = new WeakSet(), /**
  * Traverse the effect tree, executing effects or stashing
  * them for later execution as appropriate
  * @param {Effect} root
@@ -430,9 +430,9 @@ kn = new WeakMap(), Cn = new WeakMap(), fn = new WeakMap(), In = new WeakMap(), 
 mr = function(p, h, g) {
   p.f ^= CLEAN;
   for (var m = p.first, _ = null; m !== null; ) {
-    var b = m.f, y = (b & (BRANCH_EFFECT | ROOT_EFFECT)) !== 0, w = y && (b & CLEAN) !== 0, x = w || (b & INERT) !== 0 || U(this, qt).has(m);
+    var b = m.f, y = (b & (BRANCH_EFFECT | ROOT_EFFECT)) !== 0, w = y && (b & CLEAN) !== 0, x = w || (b & INERT) !== 0 || U(this, Gt).has(m);
     if (!x && m.fn !== null) {
-      y ? m.f ^= CLEAN : _ !== null && (b & (EFFECT | RENDER_EFFECT | MANAGED_EFFECT)) !== 0 ? _.b.defer_effect(m) : (b & EFFECT) !== 0 ? h.push(m) : is_dirty(m) && ((b & BLOCK_EFFECT) !== 0 && U(this, pn).add(m), update_effect(m));
+      y ? m.f ^= CLEAN : _ !== null && (b & (EFFECT | RENDER_EFFECT | MANAGED_EFFECT)) !== 0 ? _.b.defer_effect(m) : (b & EFFECT) !== 0 ? h.push(m) : is_dirty(m) && ((b & BLOCK_EFFECT) !== 0 && U(this, un).add(m), update_effect(m));
       var E = m.first;
       if (E !== null) {
         m = E;
@@ -448,7 +448,7 @@ mr = function(p, h, g) {
  */
 vr = function(p) {
   for (var h = 0; h < p.length; h += 1)
-    defer_effect(p[h], U(this, Un), U(this, pn));
+    defer_effect(p[h], U(this, Bn), U(this, un));
 }, zr = function() {
   var m;
   if (batches.size > 1) {
@@ -480,7 +480,7 @@ vr = function(p) {
         if (queued_root_effects.length > 0) {
           current_batch = _, _.apply();
           for (const E of queued_root_effects)
-            ct(m = _, Ut, mr).call(m, E, [], []);
+            ht(m = _, jt, mr).call(m, E, [], []);
           _.deactivate();
         }
         queued_root_effects = g;
@@ -624,7 +624,7 @@ var flags = EFFECT_TRANSPARENT | EFFECT_PRESERVED | BOUNDARY_EFFECT;
 function boundary(d, p, h) {
   new Boundary(d, p, h);
 }
-var St, jn, Ft, hn, Pt, It, yt, Zt, Yt, rn, gn, Kt, Rn, mn, An, Nn, Xt, tr, it, Or, Dr, _r, Qn, er, br;
+var It, Un, Pt, fn, Zt, Rt, Et, Bt, Ht, tn, pn, qt, In, hn, Tn, Rn, Yt, tr, at, Or, Dr, _r, Qn, er, br;
 class Boundary {
   /**
    * @param {TemplateNode} node
@@ -632,38 +632,38 @@ class Boundary {
    * @param {((anchor: Node) => void)} children
    */
   constructor(p, h, g) {
-    De(this, it);
+    ze(this, at);
     /** @type {Boundary | null} */
-    Ce(this, "parent");
-    Ce(this, "is_pending", !1);
+    Ie(this, "parent");
+    Ie(this, "is_pending", !1);
     /** @type {TemplateNode} */
-    De(this, St);
+    ze(this, It);
     /** @type {TemplateNode | null} */
-    De(this, jn, hydrating ? hydrate_node : null);
+    ze(this, Un, hydrating ? hydrate_node : null);
     /** @type {BoundaryProps} */
-    De(this, Ft);
+    ze(this, Pt);
     /** @type {((anchor: Node) => void)} */
-    De(this, hn);
+    ze(this, fn);
     /** @type {Effect} */
-    De(this, Pt);
+    ze(this, Zt);
     /** @type {Effect | null} */
-    De(this, It, null);
+    ze(this, Rt, null);
     /** @type {Effect | null} */
-    De(this, yt, null);
+    ze(this, Et, null);
     /** @type {Effect | null} */
-    De(this, Zt, null);
+    ze(this, Bt, null);
     /** @type {DocumentFragment | null} */
-    De(this, Yt, null);
+    ze(this, Ht, null);
     /** @type {TemplateNode | null} */
-    De(this, rn, null);
-    De(this, gn, 0);
-    De(this, Kt, 0);
-    De(this, Rn, !1);
-    De(this, mn, !1);
+    ze(this, tn, null);
+    ze(this, pn, 0);
+    ze(this, qt, 0);
+    ze(this, In, !1);
+    ze(this, hn, !1);
     /** @type {Set<Effect>} */
-    De(this, An, /* @__PURE__ */ new Set());
+    ze(this, Tn, /* @__PURE__ */ new Set());
     /** @type {Set<Effect>} */
-    De(this, Nn, /* @__PURE__ */ new Set());
+    ze(this, Rn, /* @__PURE__ */ new Set());
     /**
      * A source containing the number of pending async deriveds/expressions.
      * Only created if `$effect.pending()` is used inside the boundary,
@@ -671,38 +671,38 @@ class Boundary {
      * calls followed by no-op flushes
      * @type {Source<number> | null}
      */
-    De(this, Xt, null);
-    De(this, tr, createSubscriber(() => (Me(this, Xt, source(U(this, gn))), () => {
-      Me(this, Xt, null);
+    ze(this, Yt, null);
+    ze(this, tr, createSubscriber(() => ($e(this, Yt, source(U(this, pn))), () => {
+      $e(this, Yt, null);
     })));
-    Me(this, St, p), Me(this, Ft, h), Me(this, hn, g), this.parent = /** @type {Effect} */
-    active_effect.b, this.is_pending = !!U(this, Ft).pending, Me(this, Pt, block(() => {
+    $e(this, It, p), $e(this, Pt, h), $e(this, fn, g), this.parent = /** @type {Effect} */
+    active_effect.b, this.is_pending = !!U(this, Pt).pending, $e(this, Zt, block(() => {
       if (active_effect.b = this, hydrating) {
-        const _ = U(this, jn);
+        const _ = U(this, Un);
         hydrate_next(), /** @type {Comment} */
         _.nodeType === COMMENT_NODE && /** @type {Comment} */
-        _.data === HYDRATION_START_ELSE ? ct(this, it, Dr).call(this) : (ct(this, it, Or).call(this), U(this, Kt) === 0 && (this.is_pending = !1));
+        _.data === HYDRATION_START_ELSE ? ht(this, at, Dr).call(this) : (ht(this, at, Or).call(this), U(this, qt) === 0 && (this.is_pending = !1));
       } else {
-        var m = ct(this, it, _r).call(this);
+        var m = ht(this, at, _r).call(this);
         try {
-          Me(this, It, branch(() => g(m)));
+          $e(this, Rt, branch(() => g(m)));
         } catch (_) {
           this.error(_);
         }
-        U(this, Kt) > 0 ? ct(this, it, er).call(this) : this.is_pending = !1;
+        U(this, qt) > 0 ? ht(this, at, er).call(this) : this.is_pending = !1;
       }
       return () => {
         var _;
-        (_ = U(this, rn)) == null || _.remove();
+        (_ = U(this, tn)) == null || _.remove();
       };
-    }, flags)), hydrating && Me(this, St, hydrate_node);
+    }, flags)), hydrating && $e(this, It, hydrate_node);
   }
   /**
    * Defer an effect inside a pending boundary until the boundary resolves
    * @param {Effect} effect
    */
   defer_effect(p) {
-    defer_effect(p, U(this, An), U(this, Nn));
+    defer_effect(p, U(this, Tn), U(this, Rn));
   }
   /**
    * Returns `false` if the effect exists inside a boundary whose pending snippet is shown
@@ -712,7 +712,7 @@ class Boundary {
     return !this.is_pending && (!this.parent || this.parent.is_rendered());
   }
   has_pending_snippet() {
-    return !!U(this, Ft).pending;
+    return !!U(this, Pt).pending;
   }
   /**
    * Update the source that powers `$effect.pending()` inside this boundary,
@@ -721,25 +721,25 @@ class Boundary {
    * @param {1 | -1} d
    */
   update_pending_count(p) {
-    ct(this, it, br).call(this, p), Me(this, gn, U(this, gn) + p), !(!U(this, Xt) || U(this, Rn)) && (Me(this, Rn, !0), queue_micro_task(() => {
-      Me(this, Rn, !1), U(this, Xt) && internal_set(U(this, Xt), U(this, gn));
+    ht(this, at, br).call(this, p), $e(this, pn, U(this, pn) + p), !(!U(this, Yt) || U(this, In)) && ($e(this, In, !0), queue_micro_task(() => {
+      $e(this, In, !1), U(this, Yt) && internal_set(U(this, Yt), U(this, pn));
     }));
   }
   get_effect_pending() {
     return U(this, tr).call(this), get(
       /** @type {Source<number>} */
-      U(this, Xt)
+      U(this, Yt)
     );
   }
   /** @param {unknown} error */
   error(p) {
-    var h = U(this, Ft).onerror;
-    let g = U(this, Ft).failed;
-    if (U(this, mn) || !h && !g)
+    var h = U(this, Pt).onerror;
+    let g = U(this, Pt).failed;
+    if (U(this, hn) || !h && !g)
       throw p;
-    U(this, It) && (destroy_effect(U(this, It)), Me(this, It, null)), U(this, yt) && (destroy_effect(U(this, yt)), Me(this, yt, null)), U(this, Zt) && (destroy_effect(U(this, Zt)), Me(this, Zt, null)), hydrating && (set_hydrate_node(
+    U(this, Rt) && (destroy_effect(U(this, Rt)), $e(this, Rt, null)), U(this, Et) && (destroy_effect(U(this, Et)), $e(this, Et, null)), U(this, Bt) && (destroy_effect(U(this, Bt)), $e(this, Bt, null)), hydrating && (set_hydrate_node(
       /** @type {TemplateNode} */
-      U(this, jn)
+      U(this, Un)
     ), next(), set_hydrate_node(skip_nodes()));
     var m = !1, _ = !1;
     const b = () => {
@@ -747,22 +747,22 @@ class Boundary {
         svelte_boundary_reset_noop();
         return;
       }
-      m = !0, _ && svelte_boundary_reset_onerror(), Batch.ensure(), Me(this, gn, 0), U(this, Zt) !== null && pause_effect(U(this, Zt), () => {
-        Me(this, Zt, null);
-      }), this.is_pending = this.has_pending_snippet(), Me(this, It, ct(this, it, Qn).call(this, () => (Me(this, mn, !1), branch(() => U(this, hn).call(this, U(this, St)))))), U(this, Kt) > 0 ? ct(this, it, er).call(this) : this.is_pending = !1;
+      m = !0, _ && svelte_boundary_reset_onerror(), Batch.ensure(), $e(this, pn, 0), U(this, Bt) !== null && pause_effect(U(this, Bt), () => {
+        $e(this, Bt, null);
+      }), this.is_pending = this.has_pending_snippet(), $e(this, Rt, ht(this, at, Qn).call(this, () => ($e(this, hn, !1), branch(() => U(this, fn).call(this, U(this, It)))))), U(this, qt) > 0 ? ht(this, at, er).call(this) : this.is_pending = !1;
     };
     queue_micro_task(() => {
       try {
         _ = !0, h == null || h(p, b), _ = !1;
       } catch (y) {
-        invoke_error_boundary(y, U(this, Pt) && U(this, Pt).parent);
+        invoke_error_boundary(y, U(this, Zt) && U(this, Zt).parent);
       }
-      g && Me(this, Zt, ct(this, it, Qn).call(this, () => {
-        Batch.ensure(), Me(this, mn, !0);
+      g && $e(this, Bt, ht(this, at, Qn).call(this, () => {
+        Batch.ensure(), $e(this, hn, !0);
         try {
           return branch(() => {
             g(
-              U(this, St),
+              U(this, It),
               () => p,
               () => b
             );
@@ -771,42 +771,42 @@ class Boundary {
           return invoke_error_boundary(
             y,
             /** @type {Effect} */
-            U(this, Pt).parent
+            U(this, Zt).parent
           ), null;
         } finally {
-          Me(this, mn, !1);
+          $e(this, hn, !1);
         }
       }));
     });
   }
 }
-St = new WeakMap(), jn = new WeakMap(), Ft = new WeakMap(), hn = new WeakMap(), Pt = new WeakMap(), It = new WeakMap(), yt = new WeakMap(), Zt = new WeakMap(), Yt = new WeakMap(), rn = new WeakMap(), gn = new WeakMap(), Kt = new WeakMap(), Rn = new WeakMap(), mn = new WeakMap(), An = new WeakMap(), Nn = new WeakMap(), Xt = new WeakMap(), tr = new WeakMap(), it = new WeakSet(), Or = function() {
+It = new WeakMap(), Un = new WeakMap(), Pt = new WeakMap(), fn = new WeakMap(), Zt = new WeakMap(), Rt = new WeakMap(), Et = new WeakMap(), Bt = new WeakMap(), Ht = new WeakMap(), tn = new WeakMap(), pn = new WeakMap(), qt = new WeakMap(), In = new WeakMap(), hn = new WeakMap(), Tn = new WeakMap(), Rn = new WeakMap(), Yt = new WeakMap(), tr = new WeakMap(), at = new WeakSet(), Or = function() {
   try {
-    Me(this, It, branch(() => U(this, hn).call(this, U(this, St))));
+    $e(this, Rt, branch(() => U(this, fn).call(this, U(this, It))));
   } catch (p) {
     this.error(p);
   }
 }, Dr = function() {
-  const p = U(this, Ft).pending;
-  p && (Me(this, yt, branch(() => p(U(this, St)))), queue_micro_task(() => {
-    var h = ct(this, it, _r).call(this);
-    Me(this, It, ct(this, it, Qn).call(this, () => (Batch.ensure(), branch(() => U(this, hn).call(this, h))))), U(this, Kt) > 0 ? ct(this, it, er).call(this) : (pause_effect(
+  const p = U(this, Pt).pending;
+  p && ($e(this, Et, branch(() => p(U(this, It)))), queue_micro_task(() => {
+    var h = ht(this, at, _r).call(this);
+    $e(this, Rt, ht(this, at, Qn).call(this, () => (Batch.ensure(), branch(() => U(this, fn).call(this, h))))), U(this, qt) > 0 ? ht(this, at, er).call(this) : (pause_effect(
       /** @type {Effect} */
-      U(this, yt),
+      U(this, Et),
       () => {
-        Me(this, yt, null);
+        $e(this, Et, null);
       }
     ), this.is_pending = !1);
   }));
 }, _r = function() {
-  var p = U(this, St);
-  return this.is_pending && (Me(this, rn, create_text()), U(this, St).before(U(this, rn)), p = U(this, rn)), p;
+  var p = U(this, It);
+  return this.is_pending && ($e(this, tn, create_text()), U(this, It).before(U(this, tn)), p = U(this, tn)), p;
 }, /**
  * @param {() => Effect | null} fn
  */
 Qn = function(p) {
   var h = active_effect, g = active_reaction, m = component_context;
-  set_active_effect(U(this, Pt)), set_active_reaction(U(this, Pt)), set_component_context(U(this, Pt).ctx);
+  set_active_effect(U(this, Zt)), set_active_reaction(U(this, Zt)), set_component_context(U(this, Zt).ctx);
   try {
     return p();
   } catch (_) {
@@ -817,12 +817,12 @@ Qn = function(p) {
 }, er = function() {
   const p = (
     /** @type {(anchor: Node) => void} */
-    U(this, Ft).pending
+    U(this, Pt).pending
   );
-  U(this, It) !== null && (Me(this, Yt, document.createDocumentFragment()), U(this, Yt).append(
+  U(this, Rt) !== null && ($e(this, Ht, document.createDocumentFragment()), U(this, Ht).append(
     /** @type {TemplateNode} */
-    U(this, rn)
-  ), move_effect(U(this, It), U(this, Yt))), U(this, yt) === null && Me(this, yt, branch(() => p(U(this, St))));
+    U(this, tn)
+  ), move_effect(U(this, Rt), U(this, Ht))), U(this, Et) === null && $e(this, Et, branch(() => p(U(this, It))));
 }, /**
  * Updates the pending count associated with the currently visible pending snippet,
  * if any, such that we can replace the snippet with content once work is done
@@ -831,18 +831,18 @@ Qn = function(p) {
 br = function(p) {
   var h;
   if (!this.has_pending_snippet()) {
-    this.parent && ct(h = this.parent, it, br).call(h, p);
+    this.parent && ht(h = this.parent, at, br).call(h, p);
     return;
   }
-  if (Me(this, Kt, U(this, Kt) + p), U(this, Kt) === 0) {
+  if ($e(this, qt, U(this, qt) + p), U(this, qt) === 0) {
     this.is_pending = !1;
-    for (const g of U(this, An))
+    for (const g of U(this, Tn))
       set_signal_status(g, DIRTY), schedule_effect(g);
-    for (const g of U(this, Nn))
+    for (const g of U(this, Rn))
       set_signal_status(g, MAYBE_DIRTY), schedule_effect(g);
-    U(this, An).clear(), U(this, Nn).clear(), U(this, yt) && pause_effect(U(this, yt), () => {
-      Me(this, yt, null);
-    }), U(this, Yt) && (U(this, St).before(U(this, Yt)), Me(this, Yt, null));
+    U(this, Tn).clear(), U(this, Rn).clear(), U(this, Et) && pause_effect(U(this, Et), () => {
+      $e(this, Et, null);
+    }), U(this, Ht) && (U(this, It).before(U(this, Ht)), $e(this, Ht, null));
   }
 };
 function flatten(d, p, h, g) {
@@ -2153,7 +2153,7 @@ function unmount(d, p) {
   const h = mounted_components.get(d);
   return h ? (mounted_components.delete(d), h(p)) : Promise.resolve();
 }
-var $t, Bt, kt, vn, Wn, Vn, nr;
+var Ot, Ut, Tt, gn, jn, Wn, nr;
 class BranchManager {
   /**
    * @param {TemplateNode} anchor
@@ -2161,9 +2161,9 @@ class BranchManager {
    */
   constructor(p, h = !0) {
     /** @type {TemplateNode} */
-    Ce(this, "anchor");
+    Ie(this, "anchor");
     /** @type {Map<Batch, Key>} */
-    De(this, $t, /* @__PURE__ */ new Map());
+    ze(this, Ot, /* @__PURE__ */ new Map());
     /**
      * Map of keys to effects that are currently rendered in the DOM.
      * These effects are visible and actively part of the document tree.
@@ -2178,69 +2178,69 @@ class BranchManager {
      * Can result in the entries `true->Effect` and `false->Effect`
      * @type {Map<Key, Effect>}
      */
-    De(this, Bt, /* @__PURE__ */ new Map());
+    ze(this, Ut, /* @__PURE__ */ new Map());
     /**
      * Similar to #onscreen with respect to the keys, but contains branches that are not yet
      * in the DOM, because their insertion is deferred.
      * @type {Map<Key, Branch>}
      */
-    De(this, kt, /* @__PURE__ */ new Map());
+    ze(this, Tt, /* @__PURE__ */ new Map());
     /**
      * Keys of effects that are currently outroing
      * @type {Set<Key>}
      */
-    De(this, vn, /* @__PURE__ */ new Set());
+    ze(this, gn, /* @__PURE__ */ new Set());
     /**
      * Whether to pause (i.e. outro) on change, or destroy immediately.
      * This is necessary for `<svelte:element>`
      */
-    De(this, Wn, !0);
-    De(this, Vn, () => {
+    ze(this, jn, !0);
+    ze(this, Wn, () => {
       var p = (
         /** @type {Batch} */
         current_batch
       );
-      if (U(this, $t).has(p)) {
+      if (U(this, Ot).has(p)) {
         var h = (
           /** @type {Key} */
-          U(this, $t).get(p)
-        ), g = U(this, Bt).get(h);
+          U(this, Ot).get(p)
+        ), g = U(this, Ut).get(h);
         if (g)
-          resume_effect(g), U(this, vn).delete(h);
+          resume_effect(g), U(this, gn).delete(h);
         else {
-          var m = U(this, kt).get(h);
-          m && (U(this, Bt).set(h, m.effect), U(this, kt).delete(h), m.fragment.lastChild.remove(), this.anchor.before(m.fragment), g = m.effect);
+          var m = U(this, Tt).get(h);
+          m && (U(this, Ut).set(h, m.effect), U(this, Tt).delete(h), m.fragment.lastChild.remove(), this.anchor.before(m.fragment), g = m.effect);
         }
-        for (const [_, b] of U(this, $t)) {
-          if (U(this, $t).delete(_), _ === p)
+        for (const [_, b] of U(this, Ot)) {
+          if (U(this, Ot).delete(_), _ === p)
             break;
-          const y = U(this, kt).get(b);
-          y && (destroy_effect(y.effect), U(this, kt).delete(b));
+          const y = U(this, Tt).get(b);
+          y && (destroy_effect(y.effect), U(this, Tt).delete(b));
         }
-        for (const [_, b] of U(this, Bt)) {
-          if (_ === h || U(this, vn).has(_)) continue;
+        for (const [_, b] of U(this, Ut)) {
+          if (_ === h || U(this, gn).has(_)) continue;
           const y = () => {
-            if (Array.from(U(this, $t).values()).includes(_)) {
+            if (Array.from(U(this, Ot).values()).includes(_)) {
               var x = document.createDocumentFragment();
-              move_effect(b, x), x.append(create_text()), U(this, kt).set(_, { effect: b, fragment: x });
+              move_effect(b, x), x.append(create_text()), U(this, Tt).set(_, { effect: b, fragment: x });
             } else
               destroy_effect(b);
-            U(this, vn).delete(_), U(this, Bt).delete(_);
+            U(this, gn).delete(_), U(this, Ut).delete(_);
           };
-          U(this, Wn) || !g ? (U(this, vn).add(_), pause_effect(b, y, !1)) : y();
+          U(this, jn) || !g ? (U(this, gn).add(_), pause_effect(b, y, !1)) : y();
         }
       }
     });
     /**
      * @param {Batch} batch
      */
-    De(this, nr, (p) => {
-      U(this, $t).delete(p);
-      const h = Array.from(U(this, $t).values());
-      for (const [g, m] of U(this, kt))
-        h.includes(g) || (destroy_effect(m.effect), U(this, kt).delete(g));
+    ze(this, nr, (p) => {
+      U(this, Ot).delete(p);
+      const h = Array.from(U(this, Ot).values());
+      for (const [g, m] of U(this, Tt))
+        h.includes(g) || (destroy_effect(m.effect), U(this, Tt).delete(g));
     });
-    this.anchor = p, Me(this, Wn, h);
+    this.anchor = p, $e(this, jn, h);
   }
   /**
    *
@@ -2252,29 +2252,29 @@ class BranchManager {
       /** @type {Batch} */
       current_batch
     ), m = should_defer_append();
-    if (h && !U(this, Bt).has(p) && !U(this, kt).has(p))
+    if (h && !U(this, Ut).has(p) && !U(this, Tt).has(p))
       if (m) {
         var _ = document.createDocumentFragment(), b = create_text();
-        _.append(b), U(this, kt).set(p, {
+        _.append(b), U(this, Tt).set(p, {
           effect: branch(() => h(b)),
           fragment: _
         });
       } else
-        U(this, Bt).set(
+        U(this, Ut).set(
           p,
           branch(() => h(this.anchor))
         );
-    if (U(this, $t).set(g, p), m) {
-      for (const [y, w] of U(this, Bt))
+    if (U(this, Ot).set(g, p), m) {
+      for (const [y, w] of U(this, Ut))
         y === p ? g.unskip_effect(w) : g.skip_effect(w);
-      for (const [y, w] of U(this, kt))
+      for (const [y, w] of U(this, Tt))
         y === p ? g.unskip_effect(w.effect) : g.skip_effect(w.effect);
-      g.oncommit(U(this, Vn)), g.ondiscard(U(this, nr));
+      g.oncommit(U(this, Wn)), g.ondiscard(U(this, nr));
     } else
-      hydrating && (this.anchor = hydrate_node), U(this, Vn).call(this);
+      hydrating && (this.anchor = hydrate_node), U(this, Wn).call(this);
   }
 }
-$t = new WeakMap(), Bt = new WeakMap(), kt = new WeakMap(), vn = new WeakMap(), Wn = new WeakMap(), Vn = new WeakMap(), nr = new WeakMap();
+Ot = new WeakMap(), Ut = new WeakMap(), Tt = new WeakMap(), gn = new WeakMap(), jn = new WeakMap(), Wn = new WeakMap(), nr = new WeakMap();
 function onMount(d) {
   component_context === null && lifecycle_outside_component(), user_effect(() => {
     const p = untrack(d);
@@ -2401,17 +2401,17 @@ function each(d, p, h, g, m, _ = null) {
       hydrating && hydrate_node.nodeType === COMMENT_NODE && /** @type {Comment} */
       hydrate_node.data === HYDRATION_END && (b = /** @type {Comment} */
       hydrate_node, N = !0, set_hydrating(!1));
-      var q = k[Y], de = g(q, Y), oe = I ? null : y.get(de);
+      var q = k[Y], ue = g(q, Y), oe = I ? null : y.get(ue);
       oe ? (oe.v && internal_set(oe.v, q), oe.i && internal_set(oe.i, Y), j && F.unskip_effect(oe.e)) : (oe = create_item(
         y,
         I ? b : offscreen_anchor ?? (offscreen_anchor = create_text()),
         q,
-        de,
+        ue,
         Y,
         m,
         p,
         h
-      ), I || (oe.e.f |= EFFECT_OFFSCREEN), y.set(de, oe)), O.add(de);
+      ), I || (oe.e.f |= EFFECT_OFFSCREEN), y.set(ue, oe)), O.add(ue);
     }
     if (C === 0 && _ && !E && (I ? E = branch(() => _(b)) : (E = branch(() => _(offscreen_anchor ?? (offscreen_anchor = create_text()))), E.f |= EFFECT_OFFSCREEN)), C > O.size && each_key_duplicate(), hydrating && C > 0 && set_hydrate_node(skip_nodes()), !I)
       if (j) {
@@ -2431,7 +2431,7 @@ function skip_to_branch(d) {
   return d;
 }
 function reconcile(d, p, h, g, m) {
-  var oe, ce, se, ye, ve, Re, Ee, me, Se;
+  var oe, ce, se, xe, ve, Re, ke, me, Ce;
   var _ = (g & EACH_IS_ANIMATED) !== 0, b = p.length, y = d.items, w = skip_to_branch(d.effect.first), x, E = null, S, k = [], I = [], R, M, A, C;
   if (_)
     for (C = 0; C < b; C += 1)
@@ -2450,7 +2450,7 @@ function reconcile(d, p, h, g, m) {
         A === d.effect.last && (d.effect.last = A.prev), A.prev && (A.prev.next = A.next), A.next && (A.next.prev = A.prev), link(d, E, A), link(d, A, N), move(A, N, h), E = A, k = [], I = [], w = skip_to_branch(E.next);
         continue;
       }
-    if ((A.f & INERT) !== 0 && (resume_effect(A), _ && ((ye = (se = A.nodes) == null ? void 0 : se.a) == null || ye.unfix(), (S ?? (S = /* @__PURE__ */ new Set())).delete(A))), A !== w) {
+    if ((A.f & INERT) !== 0 && (resume_effect(A), _ && ((xe = (se = A.nodes) == null ? void 0 : se.a) == null || xe.unfix(), (S ?? (S = /* @__PURE__ */ new Set())).delete(A))), A !== w) {
       if (x !== void 0 && x.has(A)) {
         if (k.length < I.length) {
           var $ = I[0], O;
@@ -2486,14 +2486,14 @@ function reconcile(d, p, h, g, m) {
       (w.f & INERT) === 0 && w !== d.fallback && Y.push(w), w = skip_to_branch(w.next);
     var q = Y.length;
     if (q > 0) {
-      var de = (g & EACH_IS_CONTROLLED) !== 0 && b === 0 ? h : null;
+      var ue = (g & EACH_IS_CONTROLLED) !== 0 && b === 0 ? h : null;
       if (_) {
         for (C = 0; C < q; C += 1)
-          (Ee = (Re = Y[C].nodes) == null ? void 0 : Re.a) == null || Ee.measure();
+          (ke = (Re = Y[C].nodes) == null ? void 0 : Re.a) == null || ke.measure();
         for (C = 0; C < q; C += 1)
-          (Se = (me = Y[C].nodes) == null ? void 0 : me.a) == null || Se.fix();
+          (Ce = (me = Y[C].nodes) == null ? void 0 : me.a) == null || Ce.fix();
       }
-      pause_effects(d, Y, de);
+      pause_effects(d, Y, ue);
     }
   }
   _ && queue_micro_task(() => {
@@ -2723,16 +2723,16 @@ function animate(d, p, h, g, m) {
           $.push(q), O || (O = q.overflow === "hidden");
         }
       O && (d.style.overflow = "hidden"), R = () => {
-        var de = (
+        var ue = (
           /** @type {number} */
           /** @type {globalThis.Animation} */
           M.currentTime
         );
-        return A + C * S(de / N);
+        return A + C * S(ue / N);
       }, E && loop(() => {
         if (M.playState !== "running") return !1;
-        var de = R();
-        return E(de, 1 - de), !0;
+        var ue = R();
+        return E(ue, 1 - ue), !0;
       });
     }
     M = d.animate($, { duration: N, fill: "forwards" }), M.onfinish = () => {
@@ -3049,7 +3049,7 @@ function prop(d, p, h, g) {
 function createClassComponent(d) {
   return new Svelte4Component(d);
 }
-var Jt, Tt;
+var Kt, At;
 class Svelte4Component {
   /**
    * @param {ComponentConstructorOptions & {
@@ -3058,9 +3058,9 @@ class Svelte4Component {
    */
   constructor(p) {
     /** @type {any} */
-    De(this, Jt);
+    ze(this, Kt);
     /** @type {Record<string, any>} */
-    De(this, Tt);
+    ze(this, At);
     var _;
     var h = /* @__PURE__ */ new Map(), g = (b, y) => {
       var w = /* @__PURE__ */ mutable_source(y, !1, !1);
@@ -3080,35 +3080,35 @@ class Svelte4Component {
         }
       }
     );
-    Me(this, Tt, (p.hydrate ? hydrate : mount)(p.component, {
+    $e(this, At, (p.hydrate ? hydrate : mount)(p.component, {
       target: p.target,
       anchor: p.anchor,
       props: m,
       context: p.context,
       intro: p.intro ?? !1,
       recover: p.recover
-    })), (!((_ = p == null ? void 0 : p.props) != null && _.$$host) || p.sync === !1) && flushSync(), Me(this, Jt, m.$$events);
-    for (const b of Object.keys(U(this, Tt)))
+    })), (!((_ = p == null ? void 0 : p.props) != null && _.$$host) || p.sync === !1) && flushSync(), $e(this, Kt, m.$$events);
+    for (const b of Object.keys(U(this, At)))
       b === "$set" || b === "$destroy" || b === "$on" || define_property(this, b, {
         get() {
-          return U(this, Tt)[b];
+          return U(this, At)[b];
         },
         /** @param {any} value */
         set(y) {
-          U(this, Tt)[b] = y;
+          U(this, At)[b] = y;
         },
         enumerable: !0
       });
-    U(this, Tt).$set = /** @param {Record<string, any>} next */
+    U(this, At).$set = /** @param {Record<string, any>} next */
     (b) => {
       Object.assign(m, b);
-    }, U(this, Tt).$destroy = () => {
-      unmount(U(this, Tt));
+    }, U(this, At).$destroy = () => {
+      unmount(U(this, At));
     };
   }
   /** @param {Record<string, any>} props */
   $set(p) {
-    U(this, Tt).$set(p);
+    U(this, At).$set(p);
   }
   /**
    * @param {string} event
@@ -3116,20 +3116,20 @@ class Svelte4Component {
    * @returns {any}
    */
   $on(p, h) {
-    U(this, Jt)[p] = U(this, Jt)[p] || [];
+    U(this, Kt)[p] = U(this, Kt)[p] || [];
     const g = (...m) => h.call(this, ...m);
-    return U(this, Jt)[p].push(g), () => {
-      U(this, Jt)[p] = U(this, Jt)[p].filter(
+    return U(this, Kt)[p].push(g), () => {
+      U(this, Kt)[p] = U(this, Kt)[p].filter(
         /** @param {any} fn */
         (m) => m !== g
       );
     };
   }
   $destroy() {
-    U(this, Tt).$destroy();
+    U(this, At).$destroy();
   }
 }
-Jt = new WeakMap(), Tt = new WeakMap();
+Kt = new WeakMap(), At = new WeakMap();
 let SvelteElement;
 typeof HTMLElement == "function" && (SvelteElement = class extends HTMLElement {
   /**
@@ -3140,27 +3140,27 @@ typeof HTMLElement == "function" && (SvelteElement = class extends HTMLElement {
   constructor(p, h, g) {
     super();
     /** The Svelte component constructor */
-    Ce(this, "$$ctor");
+    Ie(this, "$$ctor");
     /** Slots */
-    Ce(this, "$$s");
+    Ie(this, "$$s");
     /** @type {any} The Svelte component instance */
-    Ce(this, "$$c");
+    Ie(this, "$$c");
     /** Whether or not the custom element is connected */
-    Ce(this, "$$cn", !1);
+    Ie(this, "$$cn", !1);
     /** @type {Record<string, any>} Component props data */
-    Ce(this, "$$d", {});
+    Ie(this, "$$d", {});
     /** `true` if currently in the process of reflecting component props back to attributes */
-    Ce(this, "$$r", !1);
+    Ie(this, "$$r", !1);
     /** @type {Record<string, CustomElementPropDefinition>} Props definition (name, reflected, type etc) */
-    Ce(this, "$$p_d", {});
+    Ie(this, "$$p_d", {});
     /** @type {Record<string, EventListenerOrEventListenerObject[]>} Event listeners */
-    Ce(this, "$$l", {});
+    Ie(this, "$$l", {});
     /** @type {Map<EventListenerOrEventListenerObject, Function>} Event listener unsubscribe functions */
-    Ce(this, "$$l_u", /* @__PURE__ */ new Map());
+    Ie(this, "$$l_u", /* @__PURE__ */ new Map());
     /** @type {any} The managed render effect for reflecting attributes */
-    Ce(this, "$$me");
+    Ie(this, "$$me");
     /** @type {ShadowRoot | null} The ShadowRoot of the custom element */
-    Ce(this, "$$shadowRoot", null);
+    Ie(this, "$$shadowRoot", null);
     this.$$ctor = p, this.$$s = h, g && (this.$$shadowRoot = this.attachShadow(g));
   }
   /**
@@ -5365,11 +5365,11 @@ function serializeElementNode(d, p) {
     q && ($._cssText = absoluteToStylesheet(q, getHref()));
   }
   if (N === "input" || N === "textarea" || N === "select") {
-    var de = d.value, oe = d.checked;
-    $.type !== "radio" && $.type !== "checkbox" && $.type !== "submit" && $.type !== "button" && de ? $.value = maskInputValue({
+    var ue = d.value, oe = d.checked;
+    $.type !== "radio" && $.type !== "checkbox" && $.type !== "submit" && $.type !== "button" && ue ? $.value = maskInputValue({
       type: $.type,
       tagName: N,
-      value: de,
+      value: ue,
       maskInputOptions: y,
       maskInputFn: w
     }) : oe && ($.checked = oe);
@@ -5380,15 +5380,15 @@ function serializeElementNode(d, p) {
     else if (!("__context" in d)) {
       var ce = d.toDataURL(E.type, E.quality), se = document.createElement("canvas");
       se.width = d.width, se.height = d.height;
-      var ye = se.toDataURL(E.type, E.quality);
-      ce !== ye && ($.rr_dataURL = ce);
+      var xe = se.toDataURL(E.type, E.quality);
+      ce !== xe && ($.rr_dataURL = ce);
     }
   }
   if (N === "img" && S) {
     canvasService || (canvasService = h.createElement("canvas"), canvasCtx = canvasService.getContext("2d"));
     var ve = d, Re = ve.crossOrigin;
     ve.crossOrigin = "anonymous";
-    var Ee = function() {
+    var ke = function() {
       try {
         canvasService.width = ve.naturalWidth, canvasService.height = ve.naturalHeight, canvasCtx.drawImage(ve, 0, 0), $.rr_dataURL = canvasService.toDataURL(E.type, E.quality);
       } catch (z) {
@@ -5396,13 +5396,13 @@ function serializeElementNode(d, p) {
       }
       Re ? $.crossOrigin = Re : ve.removeAttribute("crossorigin");
     };
-    ve.complete && ve.naturalWidth !== 0 ? Ee() : ve.onload = Ee;
+    ve.complete && ve.naturalWidth !== 0 ? ke() : ve.onload = ke;
   }
   if ((N === "audio" || N === "video") && ($.rr_mediaState = d.paused ? "paused" : "played", $.rr_mediaCurrentTime = d.currentTime), M || (d.scrollLeft && ($.rr_scrollLeft = d.scrollLeft), d.scrollTop && ($.rr_scrollTop = d.scrollTop)), C) {
-    var me = d.getBoundingClientRect(), Se = me.width, T = me.height;
+    var me = d.getBoundingClientRect(), Ce = me.width, T = me.height;
     $ = {
       class: $.class,
-      rr_width: "".concat(Se, "px"),
+      rr_width: "".concat(Ce, "px"),
       rr_height: "".concat(T, "px")
     };
   }
@@ -5445,9 +5445,9 @@ function slimDOMExcluded(d, p) {
   return !1;
 }
 function serializeNodeWithId(d, p) {
-  var h = p.doc, g = p.mirror, m = p.blockClass, _ = p.blockSelector, b = p.maskTextClass, y = p.maskTextSelector, w = p.skipChild, x = w === void 0 ? !1 : w, E = p.inlineStylesheet, S = E === void 0 ? !0 : E, k = p.maskInputOptions, I = k === void 0 ? {} : k, R = p.maskTextFn, M = p.maskInputFn, A = p.slimDOMOptions, C = p.dataURLOptions, N = C === void 0 ? {} : C, $ = p.inlineImages, O = $ === void 0 ? !1 : $, F = p.recordCanvas, j = F === void 0 ? !1 : F, Y = p.onSerialize, q = p.onIframeLoad, de = p.iframeLoadTimeout, oe = de === void 0 ? 5e3 : de, ce = p.onStylesheetLoad, se = p.stylesheetLoadTimeout, ye = se === void 0 ? 5e3 : se, ve = p.keepIframeSrcFn, Re = ve === void 0 ? function() {
+  var h = p.doc, g = p.mirror, m = p.blockClass, _ = p.blockSelector, b = p.maskTextClass, y = p.maskTextSelector, w = p.skipChild, x = w === void 0 ? !1 : w, E = p.inlineStylesheet, S = E === void 0 ? !0 : E, k = p.maskInputOptions, I = k === void 0 ? {} : k, R = p.maskTextFn, M = p.maskInputFn, A = p.slimDOMOptions, C = p.dataURLOptions, N = C === void 0 ? {} : C, $ = p.inlineImages, O = $ === void 0 ? !1 : $, F = p.recordCanvas, j = F === void 0 ? !1 : F, Y = p.onSerialize, q = p.onIframeLoad, ue = p.iframeLoadTimeout, oe = ue === void 0 ? 5e3 : ue, ce = p.onStylesheetLoad, se = p.stylesheetLoadTimeout, xe = se === void 0 ? 5e3 : se, ve = p.keepIframeSrcFn, Re = ve === void 0 ? function() {
     return !1;
-  } : ve, Ee = p.newlyAddedElement, me = Ee === void 0 ? !1 : Ee, Se = p.preserveWhiteSpace, T = Se === void 0 ? !0 : Se, z = serializeNode(d, {
+  } : ve, ke = p.newlyAddedElement, me = ke === void 0 ? !1 : ke, Ce = p.preserveWhiteSpace, T = Ce === void 0 ? !0 : Ce, z = serializeNode(d, {
     doc: h,
     mirror: g,
     blockClass: m,
@@ -5501,7 +5501,7 @@ function serializeNodeWithId(d, p) {
       onIframeLoad: q,
       iframeLoadTimeout: oe,
       onStylesheetLoad: ce,
-      stylesheetLoadTimeout: ye,
+      stylesheetLoadTimeout: xe,
       keepIframeSrcFn: Re
     }, J = 0, ne = Array.from(d.childNodes); J < ne.length; J++) {
       var ge = ne[J], ee = serializeNodeWithId(ge, ie);
@@ -5537,7 +5537,7 @@ function serializeNodeWithId(d, p) {
         onIframeLoad: q,
         iframeLoadTimeout: oe,
         onStylesheetLoad: ce,
-        stylesheetLoadTimeout: ye,
+        stylesheetLoadTimeout: xe,
         keepIframeSrcFn: Re
       });
       pe && q(d, pe);
@@ -5565,17 +5565,17 @@ function serializeNodeWithId(d, p) {
         onIframeLoad: q,
         iframeLoadTimeout: oe,
         onStylesheetLoad: ce,
-        stylesheetLoadTimeout: ye,
+        stylesheetLoadTimeout: xe,
         keepIframeSrcFn: Re
       });
       K && ce(d, K);
     }
-  }, ye), P;
+  }, xe), P;
 }
 function snapshot(d, p) {
-  var h = p || {}, g = h.mirror, m = g === void 0 ? new Mirror$2() : g, _ = h.blockClass, b = _ === void 0 ? "rr-block" : _, y = h.blockSelector, w = y === void 0 ? null : y, x = h.maskTextClass, E = x === void 0 ? "rr-mask" : x, S = h.maskTextSelector, k = S === void 0 ? null : S, I = h.inlineStylesheet, R = I === void 0 ? !0 : I, M = h.inlineImages, A = M === void 0 ? !1 : M, C = h.recordCanvas, N = C === void 0 ? !1 : C, $ = h.maskAllInputs, O = $ === void 0 ? !1 : $, F = h.maskTextFn, j = h.maskInputFn, Y = h.slimDOM, q = Y === void 0 ? !1 : Y, de = h.dataURLOptions, oe = h.preserveWhiteSpace, ce = h.onSerialize, se = h.onIframeLoad, ye = h.iframeLoadTimeout, ve = h.onStylesheetLoad, Re = h.stylesheetLoadTimeout, Ee = h.keepIframeSrcFn, me = Ee === void 0 ? function() {
+  var h = p || {}, g = h.mirror, m = g === void 0 ? new Mirror$2() : g, _ = h.blockClass, b = _ === void 0 ? "rr-block" : _, y = h.blockSelector, w = y === void 0 ? null : y, x = h.maskTextClass, E = x === void 0 ? "rr-mask" : x, S = h.maskTextSelector, k = S === void 0 ? null : S, I = h.inlineStylesheet, R = I === void 0 ? !0 : I, M = h.inlineImages, A = M === void 0 ? !1 : M, C = h.recordCanvas, N = C === void 0 ? !1 : C, $ = h.maskAllInputs, O = $ === void 0 ? !1 : $, F = h.maskTextFn, j = h.maskInputFn, Y = h.slimDOM, q = Y === void 0 ? !1 : Y, ue = h.dataURLOptions, oe = h.preserveWhiteSpace, ce = h.onSerialize, se = h.onIframeLoad, xe = h.iframeLoadTimeout, ve = h.onStylesheetLoad, Re = h.stylesheetLoadTimeout, ke = h.keepIframeSrcFn, me = ke === void 0 ? function() {
     return !1;
-  } : Ee, Se = O === !0 ? {
+  } : ke, Ce = O === !0 ? {
     color: !0,
     date: !0,
     "datetime-local": !0,
@@ -5615,17 +5615,17 @@ function snapshot(d, p) {
     maskTextSelector: k,
     skipChild: !1,
     inlineStylesheet: R,
-    maskInputOptions: Se,
+    maskInputOptions: Ce,
     maskTextFn: F,
     maskInputFn: j,
     slimDOMOptions: T,
-    dataURLOptions: de,
+    dataURLOptions: ue,
     inlineImages: A,
     recordCanvas: N,
     preserveWhiteSpace: oe,
     onSerialize: ce,
     onIframeLoad: se,
-    iframeLoadTimeout: ye,
+    iframeLoadTimeout: xe,
     onStylesheetLoad: ve,
     stylesheetLoadTimeout: Re,
     keepIframeSrcFn: me,
@@ -5683,7 +5683,7 @@ function parse$1(d, p) {
   }
   function k() {
     var T, z = [];
-    for (R(), M(z); d.length && d.charAt(0) !== "}" && (T = me() || Se()); )
+    for (R(), M(z); d.length && d.charAt(0) !== "}" && (T = me() || Ce()); )
       T !== !1 && (z.push(T), M(z));
     return z;
   }
@@ -5818,7 +5818,7 @@ function parse$1(d, p) {
       }) : w("@media missing '}'");
     }
   }
-  function de() {
+  function ue() {
     var T = _(), z = I(/^@custom-media\s+(--[^\s]+)\s*([^{;]+);/);
     if (z)
       return T({
@@ -5870,8 +5870,8 @@ function parse$1(d, p) {
       }) : w("@font-face missing '}'");
     }
   }
-  var ye = Ee("import"), ve = Ee("charset"), Re = Ee("namespace");
-  function Ee(T) {
+  var xe = ke("import"), ve = ke("charset"), Re = ke("namespace");
+  function ke(T) {
     var z = new RegExp("^@" + T + "\\s*([^;]+);");
     return function() {
       var L = _(), P = I(z);
@@ -5883,9 +5883,9 @@ function parse$1(d, p) {
   }
   function me() {
     if (d[0] === "@")
-      return F() || q() || de() || j() || ye() || ve() || Re() || ce() || oe() || Y() || se();
+      return F() || q() || ue() || j() || xe() || ve() || Re() || ce() || oe() || Y() || se();
   }
-  function Se() {
+  function Ce() {
     var T = _(), z = C();
     return z ? (M(), T({
       type: "rule",
@@ -7783,13 +7783,13 @@ function wrapEvent(d) {
 let wrappedEmit, takeFullSnapshot, canvasManager, recording = !1;
 const mirror = createMirror$2();
 function record$1(d = {}) {
-  const { emit: p, checkoutEveryNms: h, checkoutEveryNth: g, blockClass: m = "rr-block", blockSelector: _ = null, ignoreClass: b = "rr-ignore", maskTextClass: y = "rr-mask", maskTextSelector: w = null, inlineStylesheet: x = !0, maskAllInputs: E, maskInputOptions: S, slimDOMOptions: k, maskInputFn: I, maskTextFn: R, hooks: M, packFn: A, sampling: C = {}, dataURLOptions: N = {}, mousemoveWait: $, recordCanvas: O = !1, recordCrossOriginIframes: F = !1, userTriggeredOnInput: j = !1, collectFonts: Y = !1, inlineImages: q = !1, plugins: de, keepIframeSrcFn: oe = () => !1, ignoreCSSAttributes: ce = /* @__PURE__ */ new Set([]) } = d, se = F ? window.parent === window : !0;
-  let ye = !1;
+  const { emit: p, checkoutEveryNms: h, checkoutEveryNth: g, blockClass: m = "rr-block", blockSelector: _ = null, ignoreClass: b = "rr-ignore", maskTextClass: y = "rr-mask", maskTextSelector: w = null, inlineStylesheet: x = !0, maskAllInputs: E, maskInputOptions: S, slimDOMOptions: k, maskInputFn: I, maskTextFn: R, hooks: M, packFn: A, sampling: C = {}, dataURLOptions: N = {}, mousemoveWait: $, recordCanvas: O = !1, recordCrossOriginIframes: F = !1, userTriggeredOnInput: j = !1, collectFonts: Y = !1, inlineImages: q = !1, plugins: ue, keepIframeSrcFn: oe = () => !1, ignoreCSSAttributes: ce = /* @__PURE__ */ new Set([]) } = d, se = F ? window.parent === window : !0;
+  let xe = !1;
   if (!se)
     try {
-      window.parent.document, ye = !1;
+      window.parent.document, xe = !1;
     } catch {
-      ye = !0;
+      xe = !0;
     }
   if (se && !p)
     throw new Error("emit function is required");
@@ -7824,31 +7824,31 @@ function record$1(d = {}) {
     headMetaDescKeywords: k === "all"
   } : k || {};
   polyfill$1();
-  let Ee, me = 0;
-  const Se = (J) => {
-    for (const ne of de || [])
+  let ke, me = 0;
+  const Ce = (J) => {
+    for (const ne of ue || [])
       ne.eventProcessor && (J = ne.eventProcessor(J));
     return A && (J = A(J)), J;
   };
   wrappedEmit = (J, ne) => {
     var ge;
     if (!((ge = mutationBuffers[0]) === null || ge === void 0) && ge.isFrozen() && J.type !== EventType.FullSnapshot && !(J.type === EventType.IncrementalSnapshot && J.data.source === IncrementalSource.Mutation) && mutationBuffers.forEach((ee) => ee.unfreeze()), se)
-      p == null || p(Se(J), ne);
-    else if (ye) {
+      p == null || p(Ce(J), ne);
+    else if (xe) {
       const ee = {
         type: "rrweb",
-        event: Se(J),
+        event: Ce(J),
         isCheckout: ne
       };
       window.parent.postMessage(ee, "*");
     }
     if (J.type === EventType.FullSnapshot)
-      Ee = J, me = 0;
+      ke = J, me = 0;
     else if (J.type === EventType.IncrementalSnapshot) {
       if (J.data.source === IncrementalSource.Mutation && J.data.isAttachIframe)
         return;
       me++;
-      const ee = g && me >= g, he = h && J.timestamp - Ee.timestamp > h;
+      const ee = g && me >= g, he = h && J.timestamp - ke.timestamp > h;
       (ee || he) && takeFullSnapshot(!0);
     }
   };
@@ -7876,7 +7876,7 @@ function record$1(d = {}) {
     recordCrossOriginIframes: F,
     wrappedEmit
   });
-  for (const J of de || [])
+  for (const J of ue || [])
     J.getMirror && J.getMirror({
       nodeMirror: mirror,
       crossOriginIframeMirror: W.crossOriginIframeMirror,
@@ -7942,11 +7942,11 @@ function record$1(d = {}) {
       onSerialize: (le) => {
         isSerializedIframe(le, mirror) && W.addIframe(le), isSerializedStylesheet(le, mirror) && G.trackLinkElement(le), hasShadowRoot(le) && ie.addShadowRoot(le.shadowRoot, document);
       },
-      onIframeLoad: (le, we) => {
-        W.attachIframe(le, we), ie.observeAttachShadow(le);
+      onIframeLoad: (le, Ee) => {
+        W.attachIframe(le, Ee), ie.observeAttachShadow(le);
       },
-      onStylesheetLoad: (le, we) => {
-        G.attachLinkElement(le, we);
+      onStylesheetLoad: (le, Ee) => {
+        G.attachLinkElement(le, Ee);
       },
       keepIframeSrcFn: oe
     });
@@ -8042,7 +8042,7 @@ function record$1(d = {}) {
         shadowDomManager: ie,
         canvasManager,
         ignoreCSSAttributes: ce,
-        plugins: ((he = de == null ? void 0 : de.filter((B) => B.observer)) === null || he === void 0 ? void 0 : he.map((B) => ({
+        plugins: ((he = ue == null ? void 0 : ue.filter((B) => B.observer)) === null || he === void 0 ? void 0 : he.map((B) => ({
           observer: B.observer,
           options: B.options,
           callback: (K) => wrappedEmit(wrapEvent({
@@ -9168,25 +9168,25 @@ function s(d, p) {
       var M = r(R.on[I.type]);
       try {
         for (var A = (function(me) {
-          var Se = typeof Symbol == "function" && Symbol.iterator, T = Se && me[Se], z = 0;
+          var Ce = typeof Symbol == "function" && Symbol.iterator, T = Ce && me[Ce], z = 0;
           if (T) return T.call(me);
           if (me && typeof me.length == "number") return { next: function() {
             return me && z >= me.length && (me = void 0), { value: me && me[z++], done: !me };
           } };
-          throw new TypeError(Se ? "Object is not iterable." : "Symbol.iterator is not defined.");
+          throw new TypeError(Ce ? "Object is not iterable." : "Symbol.iterator is not defined.");
         })(M), C = A.next(); !C.done; C = A.next()) {
           var N = C.value;
           if (N === void 0) return c(S, k);
           var $ = typeof N == "string" ? { target: N } : N, O = $.target, F = $.actions, j = F === void 0 ? [] : F, Y = $.cond, q = Y === void 0 ? function() {
             return !0;
-          } : Y, de = O === void 0, oe = O ?? S, ce = d.states[oe];
+          } : Y, ue = O === void 0, oe = O ?? S, ce = d.states[oe];
           if (q(k, I)) {
-            var se = t(f((de ? r(j) : [].concat(R.exit, j, ce.entry).filter((function(me) {
+            var se = t(f((ue ? r(j) : [].concat(R.exit, j, ce.entry).filter((function(me) {
               return me;
             }))).map((function(me) {
               return i(me, _._options.actions);
-            })), k, I), 3), ye = se[0], ve = se[1], Re = se[2], Ee = O ?? S;
-            return { value: Ee, context: ve, actions: ye, changed: O !== S || ye.length > 0 || Re, matches: a(Ee) };
+            })), k, I), 3), xe = se[0], ve = se[1], Re = se[2], ke = O ?? S;
+            return { value: ke, context: ve, actions: xe, changed: O !== S || xe.length > 0 || Re, matches: a(ke) };
           }
         }
       } catch (me) {
@@ -10575,12 +10575,12 @@ function ScreenshotPreview(d, p) {
         set_attribute(F, "alt", `Screenshot ${N + 1}`);
         var j = sibling(F, 2);
         {
-          var Y = (de) => {
+          var Y = (ue) => {
             var oe = root_3$7();
-            delegated("click", oe, () => b()(get($))), append(de, oe);
+            delegated("click", oe, () => b()(get($))), append(ue, oe);
           };
-          if_block(j, (de) => {
-            b() && de(Y);
+          if_block(j, (ue) => {
+            b() && ue(Y);
           });
         }
         var q = sibling(j, 2);
@@ -10673,7 +10673,7 @@ function AnnotationEditor(d, p) {
       top: `${D.top + V.y / (get(S) / D.height)}px`
     };
   }
-  function de(V) {
+  function ue(V) {
     const D = { color: get(b), strokeWidth: DEFAULT_STROKE_WIDTH };
     switch (get(_)) {
       case "arrow":
@@ -10713,7 +10713,7 @@ function AnnotationEditor(d, p) {
   }
   function oe(V) {
     if (get(I) === "typing") {
-      ye();
+      xe();
       return;
     }
     const D = Y(V);
@@ -10730,7 +10730,7 @@ function AnnotationEditor(d, p) {
     if (get(I) !== "drawing") return;
     const D = Y(V);
     get(_) === "freehand" && M.push(D), j();
-    const H = de(D);
+    const H = ue(D);
     if (H && get(x)) {
       const X = get(x).getContext("2d");
       X && renderShape(X, H);
@@ -10738,10 +10738,10 @@ function AnnotationEditor(d, p) {
   }
   function se(V) {
     if (get(I) !== "drawing") return;
-    const D = Y(V), H = de(D);
+    const D = Y(V), H = ue(D);
     H && set(y, [...get(y), H], !0), set(I, "idle"), M = [], j(), F();
   }
-  function ye() {
+  function xe() {
     if (get($).trim()) {
       const V = {
         id: nextShapeId(),
@@ -10757,12 +10757,12 @@ function AnnotationEditor(d, p) {
     set($, ""), set(I, "idle");
   }
   function ve(V) {
-    V.key === "Enter" ? (V.preventDefault(), ye()) : V.key === "Escape" && (V.preventDefault(), set($, ""), set(I, "idle"));
+    V.key === "Enter" ? (V.preventDefault(), xe()) : V.key === "Escape" && (V.preventDefault(), set($, ""), set(I, "idle"));
   }
   function Re() {
     get(y).length !== 0 && (set(y, get(y).slice(0, -1), !0), F());
   }
-  function Ee() {
+  function ke() {
     set(y, [], !0), F();
   }
   async function me() {
@@ -10773,11 +10773,11 @@ function AnnotationEditor(d, p) {
     const V = await mergeAnnotation(h(), get(y), get(E), get(S));
     g()(V);
   }
-  function Se() {
+  function Ce() {
     m()();
   }
   function T(V) {
-    V.stopPropagation(), V.key === "Escape" && get(I) !== "typing" && Se(), (V.ctrlKey || V.metaKey) && V.key === "z" && (V.preventDefault(), Re());
+    V.stopPropagation(), V.key === "Escape" && get(I) !== "typing" && Ce(), (V.ctrlKey || V.metaKey) && V.key === "z" && (V.preventDefault(), Re());
   }
   const z = {
     arrow: "M5 19L19 5M19 5H9M19 5V15",
@@ -10817,20 +10817,20 @@ function AnnotationEditor(d, p) {
     let X;
     var fe = child(H);
     {
-      var Q = (Ie) => {
-        var Ze = root_2$7();
-        append(Ie, Ze);
-      }, ue = (Ie) => {
-        var Ze = root_3$6(), Le = child(Ze);
-        reset(Ze), template_effect(() => set_attribute(Le, "d", z[get(D)])), append(Ie, Ze);
+      var Q = (Te) => {
+        var Le = root_2$7();
+        append(Te, Le);
+      }, de = (Te) => {
+        var Le = root_3$6(), Oe = child(Le);
+        reset(Le), template_effect(() => set_attribute(Oe, "d", z[get(D)])), append(Te, Le);
       };
-      if_block(fe, (Ie) => {
-        get(D) === "ellipse" ? Ie(Q) : Ie(ue, !1);
+      if_block(fe, (Te) => {
+        get(D) === "ellipse" ? Te(Q) : Te(de, !1);
       });
     }
-    var be = sibling(fe, 2), Ue = child(be, !0);
-    reset(be), reset(H), template_effect(() => {
-      X = set_class(H, 1, "tool-btn svelte-yff65c", null, X, { active: get(_) === get(D) }), set_attribute(H, "title", L[get(D)]), set_text(Ue, L[get(D)]);
+    var we = sibling(fe, 2), Ze = child(we, !0);
+    reset(we), reset(H), template_effect(() => {
+      X = set_class(H, 1, "tool-btn svelte-yff65c", null, X, { active: get(_) === get(D) }), set_attribute(H, "title", L[get(D)]), set_text(Ze, L[get(D)]);
     }), delegated("click", H, () => {
       set(_, get(D), !0);
     }), append(V, H);
@@ -10849,9 +10849,9 @@ function AnnotationEditor(d, p) {
   reset(ge);
   var B = sibling(ge, 4), K = child(B), pe = sibling(K, 2);
   reset(B), reset(ie);
-  var le = sibling(ie, 2), we = child(le);
+  var le = sibling(ie, 2), Ee = child(le);
   {
-    var ze = (V) => {
+    var Me = (V) => {
       var D = root_5$4(), H = first_child(D);
       bind_this(H, (Q) => set(w, Q), () => get(w));
       var X = sibling(H, 2);
@@ -10862,28 +10862,28 @@ function AnnotationEditor(d, p) {
           "cursor-text": get(_) === "text"
         });
       }), delegated("mousedown", X, oe), delegated("mousemove", X, ce), delegated("mouseup", X, se), append(V, D);
-    }, xe = (V) => {
+    }, Se = (V) => {
       var D = root_6$5();
       append(V, D);
     };
-    if_block(we, (V) => {
-      get(k) ? V(ze) : V(xe, !1);
+    if_block(Ee, (V) => {
+      get(k) ? V(Me) : V(Se, !1);
     });
   }
   reset(le);
-  var Ge = sibling(le, 2);
+  var We = sibling(le, 2);
   {
     var ae = (V) => {
       var D = root_7$5();
-      remove_input_defaults(D), bind_this(D, (H) => set(A, H), () => get(A)), template_effect(() => set_style(D, `left: ${get(N).left ?? ""}; top: ${get(N).top ?? ""}; color: ${get(b) ?? ""};`)), delegated("keydown", D, ve), event("blur", D, ye), bind_value(D, () => get($), (H) => set($, H)), append(V, D);
+      remove_input_defaults(D), bind_this(D, (H) => set(A, H), () => get(A)), template_effect(() => set_style(D, `left: ${get(N).left ?? ""}; top: ${get(N).top ?? ""}; color: ${get(b) ?? ""};`)), delegated("keydown", D, ve), event("blur", D, xe), bind_value(D, () => get($), (H) => set($, H)), append(V, D);
     };
-    if_block(Ge, (V) => {
+    if_block(We, (V) => {
       get(I) === "typing" && V(ae);
     });
   }
   return reset(W), template_effect(() => {
     ee.disabled = get(y).length === 0, he.disabled = get(y).length === 0;
-  }), delegated("keydown", W, T), delegated("keyup", W, (V) => V.stopPropagation()), event("keypress", W, (V) => V.stopPropagation()), delegated("click", ee, Re), delegated("click", he, Ee), delegated("click", K, Se), delegated("click", pe, me), append(d, W), pop(G);
+  }), delegated("keydown", W, T), delegated("keyup", W, (V) => V.stopPropagation()), event("keypress", W, (V) => V.stopPropagation()), delegated("click", ee, Re), delegated("click", he, ke), delegated("click", K, Ce), delegated("click", pe, me), append(d, W), pop(G);
 }
 delegate([
   "keydown",
@@ -10957,7 +10957,7 @@ var root_2$5 = /* @__PURE__ */ from_svg('<svg width="16" height="16" viewBox="0 
 const $$css$6 = {
   hash: "svelte-1f5s7q1",
   code: `.jat-toast.svelte-1f5s7q1 {position:absolute;bottom:70px;right:0;padding:10px 16px;border-radius:8px;font-size:13px;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;display:flex;align-items:center;gap:8px;box-shadow:0 4px 12px rgba(0,0,0,0.2);
-    animation: svelte-1f5s7q1-toast-in 0.3s ease;white-space:nowrap;}.success.svelte-1f5s7q1 {background:#065f46;color:#d1fae5;border:1px solid #10b981;}.error.svelte-1f5s7q1 {background:#7f1d1d;color:#fecaca;border:1px solid #ef4444;}.icon.svelte-1f5s7q1 {display:flex;align-items:center;}
+    animation: svelte-1f5s7q1-toast-in 0.3s ease;white-space:nowrap;}.success.svelte-1f5s7q1 {background:#065f46;color:#d1fae5;border:1px solid #10b981;}.error.svelte-1f5s7q1 {background:#7f1d1d;color:#fecaca;border:1px solid #ef4444;}.info.svelte-1f5s7q1 {background:#1e3a5f;color:#bfdbfe;border:1px solid #3b82f6;}.icon.svelte-1f5s7q1 {display:flex;align-items:center;}
   @keyframes svelte-1f5s7q1-toast-in {
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
@@ -11006,7 +11006,11 @@ function StatusToast(d, p) {
       reset(k);
       var A = sibling(k, 2), C = child(A, !0);
       reset(A), reset(E), template_effect(() => {
-        S = set_class(E, 1, "jat-toast svelte-1f5s7q1", null, S, { error: g() === "error", success: g() === "success" }), set_text(C, h());
+        S = set_class(E, 1, "jat-toast svelte-1f5s7q1", null, S, {
+          error: g() === "error",
+          success: g() === "success",
+          info: g() === "info"
+        }), set_text(C, h());
       }), append(x, E);
     };
     if_block(y, (x) => {
@@ -11136,7 +11140,7 @@ function TimelineViewer(d, p) {
   function q(T) {
     get(y) && (get(y).pause(T), set(k, T, !0));
   }
-  function de(T) {
+  function ue(T) {
     const L = T.currentTarget.getBoundingClientRect(), P = Math.max(0, Math.min(1, (T.clientX - L.left) / L.width));
     q(P * get(I));
   }
@@ -11155,7 +11159,7 @@ function TimelineViewer(d, p) {
   })), user_effect(() => {
     !get(x) && get(w).length > 0 && get(b) && setTimeout(() => O(), 50);
   });
-  var ye = {
+  var xe = {
     get recordingUrl() {
       return h();
     },
@@ -11182,13 +11186,13 @@ function TimelineViewer(d, p) {
     }
   }, ve = root$5(), Re = child(ve);
   {
-    var Ee = (T) => {
+    var ke = (T) => {
       var z = root_1$4();
       append(T, z);
     }, me = (T) => {
       var z = root_2$4(), L = child(z, !0);
       reset(z), template_effect(() => set_text(L, get(E))), append(T, z);
-    }, Se = (T) => {
+    }, Ce = (T) => {
       var z = root_3$3(), L = first_child(z);
       bind_this(L, (ae) => set(b, ae), () => get(b));
       var P = sibling(L, 2), G = child(P), W = child(G);
@@ -11222,52 +11226,52 @@ function TimelineViewer(d, p) {
           H = set_class(D, 1, "tv-speed-btn svelte-ccnhf", null, H, { active: get(R) === V }), set_text(X, `${V ?? ""}x`);
         }), delegated("click", D, () => ce(V)), append(ae, D);
       }), reset(le), reset(P);
-      var we = sibling(P, 2);
+      var Ee = sibling(P, 2);
       {
-        var ze = (ae) => {
+        var Me = (ae) => {
           var V = root_7$4(), D = child(V);
           set_attribute(D, "aria-valuemin", 0);
           var H = child(D), X = sibling(H, 2);
           each(X, 17, () => get($), index, (fe, Q) => {
-            var ue = root_8$4();
-            let be;
+            var de = root_8$4();
+            let we;
             template_effect(
-              (Ue) => {
-                be = set_class(ue, 1, "tv-dot svelte-ccnhf", null, be, { selected: get(M) === get(Q) }), set_style(ue, `left: ${get(Q).pct ?? ""}%; background: ${get(Q).color ?? ""};`), set_attribute(ue, "title", `${get(Q).label ?? ""}: ${get(Q).detail ?? ""}`), set_attribute(ue, "aria-label", `${get(Q).label ?? ""} at ${Ue ?? ""}`);
+              (Ze) => {
+                we = set_class(de, 1, "tv-dot svelte-ccnhf", null, we, { selected: get(M) === get(Q) }), set_style(de, `left: ${get(Q).pct ?? ""}%; background: ${get(Q).color ?? ""};`), set_attribute(de, "title", `${get(Q).label ?? ""}: ${get(Q).detail ?? ""}`), set_attribute(de, "aria-label", `${get(Q).label ?? ""} at ${Ze ?? ""}`);
               },
               [() => se(get(Q).offset)]
-            ), delegated("click", ue, (Ue) => {
-              Ue.stopPropagation(), oe(get(Q));
-            }), append(fe, ue);
+            ), delegated("click", de, (Ze) => {
+              Ze.stopPropagation(), oe(get(Q));
+            }), append(fe, de);
           }), reset(D), next(2), reset(V), template_effect(() => {
             set_attribute(D, "aria-valuemax", get(I)), set_attribute(D, "aria-valuenow", get(k)), set_style(H, `left: ${get(I) ? get(k) / get(I) * 100 : 0}%`);
-          }), delegated("click", D, de), delegated("keydown", D, (fe) => {
-            (fe.key === "Enter" || fe.key === " ") && de(fe);
+          }), delegated("click", D, ue), delegated("keydown", D, (fe) => {
+            (fe.key === "Enter" || fe.key === " ") && ue(fe);
           }), append(ae, V);
         };
-        if_block(we, (ae) => {
-          get($).length > 0 && ae(ze);
+        if_block(Ee, (ae) => {
+          get($).length > 0 && ae(Me);
         });
       }
-      var xe = sibling(we, 2);
+      var Se = sibling(Ee, 2);
       {
-        var Ge = (ae) => {
+        var We = (ae) => {
           var V = root_9$3(), D = child(V), H = child(D), X = child(H, !0);
           reset(H);
           var fe = sibling(H, 2), Q = child(fe, !0);
           reset(fe);
-          var ue = sibling(fe, 2);
+          var de = sibling(fe, 2);
           reset(D);
-          var be = sibling(D, 2), Ue = child(be, !0);
-          reset(be), reset(V), template_effect(
-            (Ie) => {
-              set_style(H, `background: ${get(M).color ?? ""}20; color: ${get(M).color ?? ""}; border-color: ${get(M).color ?? ""}40;`), set_text(X, get(M).label), set_text(Q, Ie), set_text(Ue, get(M).detail);
+          var we = sibling(D, 2), Ze = child(we, !0);
+          reset(we), reset(V), template_effect(
+            (Te) => {
+              set_style(H, `background: ${get(M).color ?? ""}20; color: ${get(M).color ?? ""}; border-color: ${get(M).color ?? ""}40;`), set_text(X, get(M).label), set_text(Q, Te), set_text(Ze, get(M).detail);
             },
             [() => se(get(M).offset)]
-          ), delegated("click", ue, () => set(M, null)), append(ae, V);
+          ), delegated("click", de, () => set(M, null)), append(ae, V);
         };
-        if_block(xe, (ae) => {
-          get(M) && ae(Ge);
+        if_block(Se, (ae) => {
+          get(M) && ae(We);
         });
       }
       template_effect(
@@ -11278,15 +11282,15 @@ function TimelineViewer(d, p) {
           () => se(get(k)),
           () => se(get(I))
         ]
-      ), delegated("click", G, Y), delegated("click", ee, de), delegated("keydown", ee, (ae) => {
+      ), delegated("click", G, Y), delegated("click", ee, ue), delegated("keydown", ee, (ae) => {
         ae.key === "ArrowRight" ? q(Math.min(get(I), get(k) + 5e3)) : ae.key === "ArrowLeft" && q(Math.max(0, get(k) - 5e3));
       }), append(T, z);
     };
     if_block(Re, (T) => {
-      get(x) ? T(Ee) : get(E) ? T(me, 1) : T(Se, !1);
+      get(x) ? T(ke) : get(E) ? T(me, 1) : T(Ce, !1);
     });
   }
-  return reset(ve), append(d, ve), pop(ye);
+  return reset(ve), append(d, ve), pop(xe);
 }
 delegate(["click", "keydown"]);
 create_custom_element(
@@ -11301,7 +11305,7 @@ create_custom_element(
   [],
   { mode: "open" }
 );
-var root_1$3 = /* @__PURE__ */ from_html('<div class="source-filters svelte-1fnmin5"><button>All <span class="source-pill-count svelte-1fnmin5"> </span></button> <button>Feedback <span class="source-pill-count svelte-1fnmin5"> </span></button> <button>Tasks <span class="source-pill-count svelte-1fnmin5"> </span></button></div>'), root_2$3 = /* @__PURE__ */ from_html('<span class="subtab-count svelte-1fnmin5"> </span>'), root_3$2 = /* @__PURE__ */ from_html('<span class="subtab-count done-count svelte-1fnmin5"> </span>'), root_5$2 = /* @__PURE__ */ from_html('<div class="loading svelte-1fnmin5"><span class="spinner svelte-1fnmin5"></span> <span>Loading your requests...</span></div>'), root_6$3 = /* @__PURE__ */ from_html('<div class="empty svelte-1fnmin5"><p class="error-text svelte-1fnmin5"> </p> <button class="retry-btn svelte-1fnmin5">Retry</button></div>'), root_7$3 = /* @__PURE__ */ from_html('<div class="empty svelte-1fnmin5"><div class="empty-icon svelte-1fnmin5"></div> <p>No requests yet</p> <p class="empty-sub svelte-1fnmin5">Submit feedback using the New Report tab</p></div>'), root_8$3 = /* @__PURE__ */ from_html('<div class="empty svelte-1fnmin5"><p class="empty-sub svelte-1fnmin5"> </p></div>'), root_12$2 = /* @__PURE__ */ from_html('<a class="report-url svelte-1fnmin5" target="_blank" rel="noopener noreferrer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" class="svelte-1fnmin5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg> <span class="svelte-1fnmin5"> </span></a>'), root_13$2 = /* @__PURE__ */ from_html('<p class="revision-note svelte-1fnmin5"> </p>'), root_18$2 = /* @__PURE__ */ from_html('<li class="svelte-1fnmin5"> </li>'), root_17$3 = /* @__PURE__ */ from_html('<ul class="thread-summary svelte-1fnmin5"></ul>'), root_21$2 = /* @__PURE__ */ from_html('<button class="screenshot-thumb svelte-1fnmin5"><img loading="lazy" class="svelte-1fnmin5"/></button>'), root_23$2 = /* @__PURE__ */ from_html('<div class="screenshot-expanded svelte-1fnmin5"><img alt="Screenshot" class="svelte-1fnmin5"/> <button class="screenshot-close svelte-1fnmin5" aria-label="Close">&times;</button></div>'), root_19$2 = /* @__PURE__ */ from_html('<div class="thread-screenshots svelte-1fnmin5"></div> <!>', 1), root_25$1 = /* @__PURE__ */ from_html('<span class="element-badge svelte-1fnmin5"> </span>'), root_24$1 = /* @__PURE__ */ from_html('<div class="thread-elements svelte-1fnmin5"></div>'), root_16$3 = /* @__PURE__ */ from_html('<div><div class="thread-entry-header svelte-1fnmin5"><span class="thread-from svelte-1fnmin5"> </span> <span> </span> <span class="thread-time svelte-1fnmin5"> </span></div> <p class="thread-message svelte-1fnmin5"><!></p> <!> <!> <!></div>'), root_15$3 = /* @__PURE__ */ from_html('<div class="thread svelte-1fnmin5"></div>'), root_14$3 = /* @__PURE__ */ from_html('<button class="thread-toggle svelte-1fnmin5"><svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path></svg> <span> </span></button> <!>', 1), root_26 = /* @__PURE__ */ from_html('<p class="report-desc svelte-1fnmin5"> </p>'), root_28$1 = /* @__PURE__ */ from_html('<button class="screenshot-thumb svelte-1fnmin5"><img loading="lazy" class="svelte-1fnmin5"/></button>'), root_29$1 = /* @__PURE__ */ from_html('<div class="screenshot-expanded svelte-1fnmin5"><img alt="Screenshot" class="svelte-1fnmin5"/> <button class="screenshot-close svelte-1fnmin5" aria-label="Close">&times;</button></div>'), root_27$1 = /* @__PURE__ */ from_html('<div class="report-screenshots svelte-1fnmin5"></div> <!>', 1), root_32$1 = /* @__PURE__ */ from_html('<div class="dev-notes svelte-1fnmin5"><span class="dev-notes-label svelte-1fnmin5">Dev response:</span> <span class="dev-notes-content svelte-1fnmin5"><!></span></div>'), root_33$1 = /* @__PURE__ */ from_html('<span class="status-pill accepted svelte-1fnmin5"></span>'), root_34$1 = /* @__PURE__ */ from_html('<span class="status-pill rejected svelte-1fnmin5"></span>'), root_38 = /* @__PURE__ */ from_html('<div class="reject-preview-item svelte-1fnmin5"><img class="svelte-1fnmin5"/> <button class="reject-preview-remove svelte-1fnmin5" aria-label="Remove">&times;</button></div>'), root_37 = /* @__PURE__ */ from_html('<div class="reject-preview-strip svelte-1fnmin5"></div>'), root_40 = /* @__PURE__ */ from_html('<span class="element-badge removable svelte-1fnmin5"> <button class="element-remove svelte-1fnmin5">&times;</button></span>'), root_39 = /* @__PURE__ */ from_html('<div class="reject-element-strip svelte-1fnmin5"></div>'), root_41 = /* @__PURE__ */ from_html('<span class="char-hint svelte-1fnmin5"> </span>'), root_36$1 = /* @__PURE__ */ from_html('<div class="reject-reason-form svelte-1fnmin5"><textarea class="reject-reason-input svelte-1fnmin5" placeholder="Why are you rejecting? (min 10 characters)" rows="2"></textarea> <div class="reject-attachments svelte-1fnmin5"><button class="attach-btn svelte-1fnmin5" title="Capture screenshot"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="18" rx="2" stroke="currentColor" stroke-width="2"></rect><circle cx="8.5" cy="10.5" r="1.5" stroke="currentColor" stroke-width="2"></circle><path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg> </button> <button class="attach-btn svelte-1fnmin5" title="Pick an element"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M7 7h10v10M7 17L17 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg> Pick Element</button></div> <!> <!> <div class="reject-reason-actions svelte-1fnmin5"><button class="cancel-btn svelte-1fnmin5">Cancel</button> <button class="confirm-reject-btn svelte-1fnmin5"> </button></div> <!></div>'), root_42 = /* @__PURE__ */ from_html('<div class="response-actions svelte-1fnmin5"><button class="accept-btn svelte-1fnmin5"> </button> <button class="reject-btn svelte-1fnmin5"></button></div>'), root_11$2 = /* @__PURE__ */ from_html('<div class="card-body svelte-1fnmin5"><!> <!> <!> <!> <!> <!> <div class="report-footer svelte-1fnmin5"><span class="report-time svelte-1fnmin5"> </span> <!></div></div>'), root_10$2 = /* @__PURE__ */ from_html('<div><button class="card-toggle svelte-1fnmin5"><span class="report-type svelte-1fnmin5"> </span> <span class="report-title svelte-1fnmin5"> </span> <span class="report-status svelte-1fnmin5"> </span> <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button> <!></div>'), root_9$2 = /* @__PURE__ */ from_html('<div class="reports svelte-1fnmin5"></div>'), root_4$2 = /* @__PURE__ */ from_html("<div><!></div>"), root$4 = /* @__PURE__ */ from_html('<div class="request-list svelte-1fnmin5"><!> <div class="subtabs svelte-1fnmin5"><button>In Progress <!></button> <button>Done <!></button></div> <div class="request-scroll svelte-1fnmin5"><!></div></div>');
+var root_1$3 = /* @__PURE__ */ from_html('<div class="source-filters svelte-1fnmin5"><button>All <span class="source-pill-count svelte-1fnmin5"> </span></button> <button>Feedback <span class="source-pill-count svelte-1fnmin5"> </span></button> <button>Tasks <span class="source-pill-count svelte-1fnmin5"> </span></button></div>'), root_2$3 = /* @__PURE__ */ from_html('<span class="subtab-count svelte-1fnmin5"> </span>'), root_3$2 = /* @__PURE__ */ from_html('<span class="subtab-count done-count svelte-1fnmin5"> </span>'), root_5$2 = /* @__PURE__ */ from_html('<div class="loading svelte-1fnmin5"><span class="spinner svelte-1fnmin5"></span> <span>Loading your requests...</span></div>'), root_6$3 = /* @__PURE__ */ from_html('<div class="empty svelte-1fnmin5"><p class="error-text svelte-1fnmin5"> </p> <button class="retry-btn svelte-1fnmin5">Retry</button></div>'), root_7$3 = /* @__PURE__ */ from_html('<div class="empty svelte-1fnmin5"><div class="empty-icon svelte-1fnmin5"></div> <p>No requests yet</p> <p class="empty-sub svelte-1fnmin5">Submit feedback using the New Report tab</p></div>'), root_8$3 = /* @__PURE__ */ from_html('<div class="empty svelte-1fnmin5"><p class="empty-sub svelte-1fnmin5"> </p></div>'), root_12$2 = /* @__PURE__ */ from_html('<a class="report-url svelte-1fnmin5" target="_blank" rel="noopener noreferrer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" class="svelte-1fnmin5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg> <span class="svelte-1fnmin5"> </span></a>'), root_13$2 = /* @__PURE__ */ from_html('<p class="revision-note svelte-1fnmin5"> </p>'), root_18$2 = /* @__PURE__ */ from_html('<li class="svelte-1fnmin5"> </li>'), root_17$3 = /* @__PURE__ */ from_html('<ul class="thread-summary svelte-1fnmin5"></ul>'), root_21$2 = /* @__PURE__ */ from_html('<button class="screenshot-thumb svelte-1fnmin5"><img loading="lazy" class="svelte-1fnmin5"/></button>'), root_23$2 = /* @__PURE__ */ from_html('<div class="screenshot-expanded svelte-1fnmin5"><img alt="Screenshot" class="svelte-1fnmin5"/> <button class="screenshot-close svelte-1fnmin5" aria-label="Close">&times;</button></div>'), root_19$2 = /* @__PURE__ */ from_html('<div class="thread-screenshots svelte-1fnmin5"></div> <!>', 1), root_25$1 = /* @__PURE__ */ from_html('<span class="element-badge svelte-1fnmin5"> </span>'), root_24$1 = /* @__PURE__ */ from_html('<div class="thread-elements svelte-1fnmin5"></div>'), root_16$3 = /* @__PURE__ */ from_html('<div><div class="thread-entry-header svelte-1fnmin5"><span class="thread-from svelte-1fnmin5"> </span> <span> </span> <span class="thread-time svelte-1fnmin5"> </span></div> <p class="thread-message svelte-1fnmin5"><!></p> <!> <!> <!></div>'), root_15$3 = /* @__PURE__ */ from_html('<div class="thread svelte-1fnmin5"></div>'), root_14$3 = /* @__PURE__ */ from_html('<button class="thread-toggle svelte-1fnmin5"><svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path></svg> <span> </span></button> <!>', 1), root_26 = /* @__PURE__ */ from_html('<p class="report-desc svelte-1fnmin5"> </p>'), root_28$1 = /* @__PURE__ */ from_html('<button class="screenshot-thumb svelte-1fnmin5"><img loading="lazy" class="svelte-1fnmin5"/></button>'), root_29$1 = /* @__PURE__ */ from_html('<div class="screenshot-expanded svelte-1fnmin5"><img alt="Screenshot" class="svelte-1fnmin5"/> <button class="screenshot-close svelte-1fnmin5" aria-label="Close">&times;</button></div>'), root_27$1 = /* @__PURE__ */ from_html('<div class="report-screenshots svelte-1fnmin5"></div> <!>', 1), root_31$1 = /* @__PURE__ */ from_html('<div class="replay-header svelte-1fnmin5"><span class="replay-label svelte-1fnmin5">Session Recording</span> <a target="_blank" rel="noreferrer" class="replay-fullscreen-btn svelte-1fnmin5" title="Open full replay in new tab"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M10 2h4v4M14 2L9 7M6 14H2v-4M2 14l5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg> Full replay</a></div> <!>', 1), root_32$1 = /* @__PURE__ */ from_html('<div class="dev-notes svelte-1fnmin5"><span class="dev-notes-label svelte-1fnmin5">Dev response:</span> <span class="dev-notes-content svelte-1fnmin5"><!></span></div>'), root_33$1 = /* @__PURE__ */ from_html('<span class="status-pill accepted svelte-1fnmin5"></span>'), root_34$1 = /* @__PURE__ */ from_html('<span class="status-pill rejected svelte-1fnmin5"></span>'), root_38 = /* @__PURE__ */ from_html('<div class="reject-preview-item svelte-1fnmin5"><img class="svelte-1fnmin5"/> <button class="reject-preview-remove svelte-1fnmin5" aria-label="Remove">&times;</button></div>'), root_37$1 = /* @__PURE__ */ from_html('<div class="reject-preview-strip svelte-1fnmin5"></div>'), root_40 = /* @__PURE__ */ from_html('<span class="element-badge removable svelte-1fnmin5"> <button class="element-remove svelte-1fnmin5">&times;</button></span>'), root_39 = /* @__PURE__ */ from_html('<div class="reject-element-strip svelte-1fnmin5"></div>'), root_41 = /* @__PURE__ */ from_html('<span class="char-hint svelte-1fnmin5"> </span>'), root_36$1 = /* @__PURE__ */ from_html('<div class="reject-reason-form svelte-1fnmin5"><textarea class="reject-reason-input svelte-1fnmin5" placeholder="Why are you rejecting? (min 10 characters)" rows="2"></textarea> <div class="reject-attachments svelte-1fnmin5"><button class="attach-btn svelte-1fnmin5" title="Capture screenshot"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="18" rx="2" stroke="currentColor" stroke-width="2"></rect><circle cx="8.5" cy="10.5" r="1.5" stroke="currentColor" stroke-width="2"></circle><path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg> </button> <button class="attach-btn svelte-1fnmin5" title="Pick an element"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M7 7h10v10M7 17L17 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg> Pick Element</button></div> <!> <!> <div class="reject-reason-actions svelte-1fnmin5"><button class="cancel-btn svelte-1fnmin5">Cancel</button> <button class="confirm-reject-btn svelte-1fnmin5"> </button></div> <!></div>'), root_42 = /* @__PURE__ */ from_html('<div class="response-actions svelte-1fnmin5"><button class="accept-btn svelte-1fnmin5"> </button> <button class="reject-btn svelte-1fnmin5"></button></div>'), root_11$2 = /* @__PURE__ */ from_html('<div class="card-body svelte-1fnmin5"><!> <!> <!> <!> <!> <!> <div class="report-footer svelte-1fnmin5"><span class="report-time svelte-1fnmin5"> </span> <!></div></div>'), root_10$2 = /* @__PURE__ */ from_html('<div><button class="card-toggle svelte-1fnmin5"><span class="report-type svelte-1fnmin5"> </span> <span class="report-title svelte-1fnmin5"> </span> <span class="report-status svelte-1fnmin5"> </span> <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button> <!></div>'), root_9$2 = /* @__PURE__ */ from_html('<div class="reports svelte-1fnmin5"></div>'), root_4$2 = /* @__PURE__ */ from_html("<div><!></div>"), root$4 = /* @__PURE__ */ from_html('<div class="request-list svelte-1fnmin5"><!> <div class="subtabs svelte-1fnmin5"><button>In Progress <!></button> <button>Done <!></button></div> <div class="request-scroll svelte-1fnmin5"><!></div></div>');
 const $$css$4 = {
   hash: "svelte-1fnmin5",
   code: `.request-list.svelte-1fnmin5 {display:flex;flex-direction:column;overflow:hidden;flex:1;min-height:0;}
@@ -11314,7 +11318,7 @@ const $$css$4 = {
 
   /* Collapsed card header (clickable toggle) */.card-toggle.svelte-1fnmin5 {display:flex;align-items:center;gap:6px;width:100%;padding:9px 10px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;color:inherit;}.card-toggle.svelte-1fnmin5:hover {background:#ffffff06;}.report-type.svelte-1fnmin5 {font-size:13px;flex-shrink:0;}.report-title.svelte-1fnmin5 {font-size:12px;font-weight:600;color:#f3f4f6;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.report-status.svelte-1fnmin5 {font-size:9px;font-weight:600;padding:1px 6px;border-radius:10px;border:1px solid;white-space:nowrap;flex-shrink:0;text-transform:uppercase;letter-spacing:0.3px;}.chevron.svelte-1fnmin5 {flex-shrink:0;color:#6b7280;transition:transform 0.15s;}.chevron-open.svelte-1fnmin5 {transform:rotate(90deg);}
 
-  /* Expanded card body */.card-body.svelte-1fnmin5 {padding:0 10px 10px;border-top:1px solid #ffffff08;}.report-url.svelte-1fnmin5 {display:flex;align-items:center;gap:4px;margin:6px 0 0;font-size:11px;color:#60a5fa;text-decoration:none;overflow:hidden;transition:color 0.15s;}.report-url.svelte-1fnmin5:hover {color:#93c5fd;}.report-url.svelte-1fnmin5 svg:where(.svelte-1fnmin5) {flex-shrink:0;}.report-url.svelte-1fnmin5 span:where(.svelte-1fnmin5) {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.report-screenshots.svelte-1fnmin5 {display:flex;gap:4px;margin-top:6px;overflow-x:auto;}.screenshot-thumb.svelte-1fnmin5 {flex-shrink:0;width:52px;height:36px;border-radius:4px;overflow:hidden;border:1px solid #374151;background:#111827;cursor:pointer;padding:0;transition:border-color 0.15s;}.screenshot-thumb.svelte-1fnmin5:hover {border-color:#60a5fa;}.screenshot-thumb.svelte-1fnmin5 img:where(.svelte-1fnmin5) {width:100%;height:100%;object-fit:cover;display:block;}.screenshot-expanded.svelte-1fnmin5 {position:relative;margin-top:4px;border-radius:6px;overflow:hidden;border:1px solid #374151;}.screenshot-expanded.svelte-1fnmin5 img:where(.svelte-1fnmin5) {width:100%;display:block;border-radius:5px;}.screenshot-close.svelte-1fnmin5 {position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.7);color:#e5e7eb;border:none;cursor:pointer;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;}.screenshot-close.svelte-1fnmin5:hover {background:rgba(0,0,0,0.9);}.revision-note.svelte-1fnmin5 {font-size:10px;color:#f59e0b;margin:3px 0 0;font-weight:500;}.report-desc.svelte-1fnmin5 {font-size:12px;color:#9ca3af;margin:6px 0 0;line-height:1.4;}.dev-notes.svelte-1fnmin5 {margin-top:6px;padding:6px 8px;background:#111827;border-radius:5px;font-size:12px;color:#d1d5db;border-left:2px solid #3b82f6;}.dev-notes-label.svelte-1fnmin5 {font-weight:600;color:#60a5fa;margin-right:4px;font-size:11px;}.dev-notes-content.svelte-1fnmin5 {line-height:1.5;}
+  /* Expanded card body */.card-body.svelte-1fnmin5 {padding:0 10px 10px;border-top:1px solid #ffffff08;}.report-url.svelte-1fnmin5 {display:flex;align-items:center;gap:4px;margin:6px 0 0;font-size:11px;color:#60a5fa;text-decoration:none;overflow:hidden;transition:color 0.15s;}.report-url.svelte-1fnmin5:hover {color:#93c5fd;}.report-url.svelte-1fnmin5 svg:where(.svelte-1fnmin5) {flex-shrink:0;}.report-url.svelte-1fnmin5 span:where(.svelte-1fnmin5) {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.report-screenshots.svelte-1fnmin5 {display:flex;gap:4px;margin-top:6px;overflow-x:auto;}.screenshot-thumb.svelte-1fnmin5 {flex-shrink:0;width:52px;height:36px;border-radius:4px;overflow:hidden;border:1px solid #374151;background:#111827;cursor:pointer;padding:0;transition:border-color 0.15s;}.screenshot-thumb.svelte-1fnmin5:hover {border-color:#60a5fa;}.screenshot-thumb.svelte-1fnmin5 img:where(.svelte-1fnmin5) {width:100%;height:100%;object-fit:cover;display:block;}.screenshot-expanded.svelte-1fnmin5 {position:relative;margin-top:4px;border-radius:6px;overflow:hidden;border:1px solid #374151;}.screenshot-expanded.svelte-1fnmin5 img:where(.svelte-1fnmin5) {width:100%;display:block;border-radius:5px;}.screenshot-close.svelte-1fnmin5 {position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.7);color:#e5e7eb;border:none;cursor:pointer;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;}.screenshot-close.svelte-1fnmin5:hover {background:rgba(0,0,0,0.9);}.revision-note.svelte-1fnmin5 {font-size:10px;color:#f59e0b;margin:3px 0 0;font-weight:500;}.report-desc.svelte-1fnmin5 {font-size:12px;color:#9ca3af;margin:6px 0 0;line-height:1.4;}.dev-notes.svelte-1fnmin5 {margin-top:6px;padding:6px 8px;background:#111827;border-radius:5px;font-size:12px;color:#d1d5db;border-left:2px solid #3b82f6;}.replay-header.svelte-1fnmin5 {display:flex;align-items:center;justify-content:space-between;margin-top:8px;margin-bottom:4px;}.replay-label.svelte-1fnmin5 {font-size:11px;color:#6b7280;font-weight:500;}.replay-fullscreen-btn.svelte-1fnmin5 {display:flex;align-items:center;gap:4px;font-size:11px;color:#60a5fa;text-decoration:none;padding:2px 7px;border:1px solid #1e3a5f;border-radius:4px;background:#0f1e33;transition:background 0.15s;}.replay-fullscreen-btn.svelte-1fnmin5:hover {background:#1e3a5f;color:#93c5fd;}.dev-notes-label.svelte-1fnmin5 {font-weight:600;color:#60a5fa;margin-right:4px;font-size:11px;}.dev-notes-content.svelte-1fnmin5 {line-height:1.5;}
 
   /* Thread toggle button */.thread-toggle.svelte-1fnmin5 {display:flex;align-items:center;gap:4px;margin-top:6px;padding:3px 6px;background:none;border:none;color:#9ca3af;font-size:11px;cursor:pointer;font-family:inherit;border-radius:4px;transition:color 0.15s, background 0.15s;}.thread-toggle.svelte-1fnmin5:hover {color:#d1d5db;background:#111827;}.thread-toggle-icon.svelte-1fnmin5 {transition:transform 0.15s;}.thread-toggle-icon.expanded.svelte-1fnmin5 {transform:rotate(90deg);}
 
@@ -11336,7 +11340,7 @@ function RequestList(d, p) {
     "rejected",
     "completed",
     "wontfix"
-  ].includes(D.status)).length), j = /* @__PURE__ */ user_derived(() => get($).filter((D) => D.status === "accepted" || D.status === "closed").length), Y = /* @__PURE__ */ user_derived(() => g().filter((D) => (D.source || "feedback") === "feedback").length), q = /* @__PURE__ */ user_derived(() => g().filter((D) => D.source === "jat").length), de = /* @__PURE__ */ user_derived(() => get(Y) > 0 && get(q) > 0);
+  ].includes(D.status)).length), j = /* @__PURE__ */ user_derived(() => get($).filter((D) => D.status === "accepted" || D.status === "closed").length), Y = /* @__PURE__ */ user_derived(() => g().filter((D) => (D.source || "feedback") === "feedback").length), q = /* @__PURE__ */ user_derived(() => g().filter((D) => D.source === "jat").length), ue = /* @__PURE__ */ user_derived(() => get(Y) > 0 && get(q) > 0);
   function oe(D) {
     return D ? D.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/^#{1,3} (.+)$/gm, '<strong style="display:block;margin-top:6px;color:#f3f4f6">$1</strong>').replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/\*(.+?)\*/g, "<em>$1</em>").replace(/^[-*] (.+)$/gm, '<span style="display:block;padding-left:10px">• $1</span>').replace(/\n/g, "<br>") : "";
   }
@@ -11354,7 +11358,7 @@ function RequestList(d, p) {
   function se(D) {
     set(k, D, !0), set(I, ""), set(R, [], !0), set(M, [], !0);
   }
-  function ye() {
+  function xe() {
     set(k, ""), set(I, ""), set(R, [], !0), set(M, [], !0);
   }
   async function ve() {
@@ -11372,7 +11376,7 @@ function RequestList(d, p) {
   function Re(D) {
     set(R, get(R).filter((H, X) => X !== D), !0);
   }
-  function Ee() {
+  function ke() {
     startElementPicker((D) => {
       set(
         M,
@@ -11393,18 +11397,18 @@ function RequestList(d, p) {
   function me(D) {
     set(M, get(M).filter((H, X) => X !== D), !0);
   }
-  async function Se(D, H, X) {
+  async function Ce(D, H, X) {
     set(S, D, !0);
     const fe = H === "rejected" ? {
       screenshots: get(R).length > 0 ? get(R) : void 0,
       elements: get(M).length > 0 ? get(M) : void 0
     } : void 0;
-    (await respondToReport(h(), D, H, X, fe)).ok ? (g(g().map((ue) => ue.id === D ? {
-      ...ue,
+    (await respondToReport(h(), D, H, X, fe)).ok ? (g(g().map((de) => de.id === D ? {
+      ...de,
       status: H === "rejected" ? "submitted" : "accepted",
       responded_at: (/* @__PURE__ */ new Date()).toISOString(),
-      ...H === "rejected" ? { revision_count: (ue.revision_count || 0) + 1 } : {}
-    } : ue)), set(k, ""), set(I, ""), set(R, [], !0), set(M, [], !0), b()()) : set(k, ""), set(S, "");
+      ...H === "rejected" ? { revision_count: (de.revision_count || 0) + 1 } : {}
+    } : de)), set(k, ""), set(I, ""), set(R, [], !0), set(M, [], !0), b()()) : set(k, ""), set(S, "");
   }
   function T(D) {
     set(w, get(w) === D ? null : D, !0);
@@ -11451,10 +11455,10 @@ function RequestList(d, p) {
     const H = Date.now(), X = new Date(D).getTime(), fe = H - X, Q = Math.floor(fe / 6e4);
     if (Q < 1) return "just now";
     if (Q < 60) return `${Q}m ago`;
-    const ue = Math.floor(Q / 60);
-    if (ue < 24) return `${ue}h ago`;
-    const be = Math.floor(ue / 24);
-    return be < 30 ? `${be}d ago` : new Date(D).toLocaleDateString();
+    const de = Math.floor(Q / 60);
+    if (de < 24) return `${de}h ago`;
+    const we = Math.floor(de / 24);
+    return we < 30 ? `${we}d ago` : new Date(D).toLocaleDateString();
   }
   var J = {
     get endpoint() {
@@ -11492,21 +11496,21 @@ function RequestList(d, p) {
     var ee = (D) => {
       var H = root_1$3(), X = child(H);
       let fe;
-      var Q = sibling(child(X)), ue = child(Q, !0);
+      var Q = sibling(child(X)), de = child(Q, !0);
       reset(Q), reset(X);
-      var be = sibling(X, 2);
-      let Ue;
-      var Ie = sibling(child(be)), Ze = child(Ie, !0);
-      reset(Ie), reset(be);
-      var Le = sibling(be, 2);
+      var we = sibling(X, 2);
+      let Ze;
+      var Te = sibling(child(we)), Le = child(Te, !0);
+      reset(Te), reset(we);
+      var Oe = sibling(we, 2);
       let te;
-      var Ye = sibling(child(Le)), nt = child(Ye, !0);
-      reset(Ye), reset(Le), reset(H), template_effect(() => {
-        fe = set_class(X, 1, "source-pill svelte-1fnmin5", null, fe, { active: get(N) === "all" }), set_text(ue, g().length), Ue = set_class(be, 1, "source-pill svelte-1fnmin5", null, Ue, { active: get(N) === "feedback" }), set_text(Ze, get(Y)), te = set_class(Le, 1, "source-pill svelte-1fnmin5", null, te, { active: get(N) === "jat" }), set_text(nt, get(q));
-      }), delegated("click", X, () => set(N, "all")), delegated("click", be, () => set(N, "feedback")), delegated("click", Le, () => set(N, "jat")), append(D, H);
+      var Xe = sibling(child(Oe)), _t = child(Xe, !0);
+      reset(Xe), reset(Oe), reset(H), template_effect(() => {
+        fe = set_class(X, 1, "source-pill svelte-1fnmin5", null, fe, { active: get(N) === "all" }), set_text(de, g().length), Ze = set_class(we, 1, "source-pill svelte-1fnmin5", null, Ze, { active: get(N) === "feedback" }), set_text(Le, get(Y)), te = set_class(Oe, 1, "source-pill svelte-1fnmin5", null, te, { active: get(N) === "jat" }), set_text(_t, get(q));
+      }), delegated("click", X, () => set(N, "all")), delegated("click", we, () => set(N, "feedback")), delegated("click", Oe, () => set(N, "jat")), append(D, H);
     };
     if_block(ge, (D) => {
-      get(de) && D(ee);
+      get(ue) && D(ee);
     });
   }
   var he = sibling(ge, 2), B = child(he);
@@ -11522,401 +11526,405 @@ function RequestList(d, p) {
     });
   }
   reset(B);
-  var we = sibling(B, 2);
-  let ze;
-  var xe = sibling(child(we));
+  var Ee = sibling(B, 2);
+  let Me;
+  var Se = sibling(child(Ee));
   {
-    var Ge = (D) => {
+    var We = (D) => {
       var H = root_3$2(), X = child(H, !0);
       reset(H), template_effect(() => set_text(X, get(j))), append(D, H);
     };
-    if_block(xe, (D) => {
-      get(j) > 0 && D(Ge);
+    if_block(Se, (D) => {
+      get(j) > 0 && D(We);
     });
   }
-  reset(we), reset(he);
+  reset(Ee), reset(he);
   var ae = sibling(he, 2), V = child(ae);
   return key(V, () => get(C), (D) => {
     var H = root_4$2(), X = child(H);
     {
-      var fe = (Ie) => {
-        var Ze = root_5$2();
-        append(Ie, Ze);
-      }, Q = (Ie) => {
-        var Ze = root_6$3(), Le = child(Ze), te = child(Le, !0);
-        reset(Le);
-        var Ye = sibling(Le, 2);
-        reset(Ze), template_effect(() => set_text(te, _())), delegated("click", Ye, function(...nt) {
-          var We;
-          (We = b()) == null || We.apply(this, nt);
-        }), append(Ie, Ze);
-      }, ue = (Ie) => {
-        var Ze = root_7$3(), Le = child(Ze);
-        Le.textContent = "📋", next(4), reset(Ze), append(Ie, Ze);
-      }, be = (Ie) => {
-        var Ze = root_8$3(), Le = child(Ze), te = child(Le, !0);
-        reset(Le), reset(Ze), template_effect(() => set_text(te, get(C) === "submitted" ? "No submitted requests" : get(C) === "review" ? "Nothing to review right now" : "No completed requests yet")), append(Ie, Ze);
-      }, Ue = (Ie) => {
-        var Ze = root_9$2();
-        each(Ze, 21, () => get(O), (Le) => Le.id, (Le, te) => {
-          var Ye = root_10$2();
-          let nt;
-          var We = child(Ye), rt = child(We), Ct = child(rt, !0);
-          reset(rt);
-          var Mt = sibling(rt, 2), _n = child(Mt, !0);
-          reset(Mt);
-          var je = sibling(Mt, 2), Fe = child(je, !0);
-          reset(je);
-          var vt = sibling(je, 2);
-          let Qt;
-          reset(We);
-          var jt = sibling(We, 2);
+      var fe = (Te) => {
+        var Le = root_5$2();
+        append(Te, Le);
+      }, Q = (Te) => {
+        var Le = root_6$3(), Oe = child(Le), te = child(Oe, !0);
+        reset(Oe);
+        var Xe = sibling(Oe, 2);
+        reset(Le), template_effect(() => set_text(te, _())), delegated("click", Xe, function(..._t) {
+          var Ge;
+          (Ge = b()) == null || Ge.apply(this, _t);
+        }), append(Te, Le);
+      }, de = (Te) => {
+        var Le = root_7$3(), Oe = child(Le);
+        Oe.textContent = "📋", next(4), reset(Le), append(Te, Le);
+      }, we = (Te) => {
+        var Le = root_8$3(), Oe = child(Le), te = child(Oe, !0);
+        reset(Oe), reset(Le), template_effect(() => set_text(te, get(C) === "submitted" ? "No submitted requests" : get(C) === "review" ? "Nothing to review right now" : "No completed requests yet")), append(Te, Le);
+      }, Ze = (Te) => {
+        var Le = root_9$2();
+        each(Le, 21, () => get(O), (Oe) => Oe.id, (Oe, te) => {
+          var Xe = root_10$2();
+          let _t;
+          var Ge = child(Xe), Ve = child(Ge), vt = child(Ve, !0);
+          reset(Ve);
+          var Nt = sibling(Ve, 2), mn = child(Nt, !0);
+          reset(Nt);
+          var Be = sibling(Nt, 2), He = child(Be, !0);
+          reset(Be);
+          var bt = sibling(Be, 2);
+          let it;
+          reset(Ge);
+          var Dt = sibling(Ge, 2);
           {
-            var rr = (sn) => {
-              var en = root_11$2(), an = child(en);
+            var rr = (nn) => {
+              var Xt = root_11$2(), vn = child(Xt);
               {
-                var $n = ($e) => {
-                  var Pe = root_12$2(), He = sibling(child(Pe), 2), ut = child(He, !0);
-                  reset(He), reset(Pe), template_effect(
-                    (wt) => {
-                      set_attribute(Pe, "href", get(te).page_url), set_text(ut, wt);
+                var An = (Ne) => {
+                  var De = root_12$2(), Je = sibling(child(De), 2), dt = child(Je, !0);
+                  reset(Je), reset(De), template_effect(
+                    (St) => {
+                      set_attribute(De, "href", get(te).page_url), set_text(dt, St);
                     },
                     [
                       () => get(te).page_url.replace(/^https?:\/\//, "").split("?")[0]
                     ]
-                  ), append($e, Pe);
+                  ), append(Ne, De);
                 };
-                if_block(an, ($e) => {
-                  get(te).page_url && $e($n);
+                if_block(vn, (Ne) => {
+                  get(te).page_url && Ne(An);
                 });
               }
-              var bn = sibling(an, 2);
+              var rn = sibling(vn, 2);
               {
-                var Mn = ($e) => {
-                  var Pe = root_13$2(), He = child(Pe);
-                  reset(Pe), template_effect(() => set_text(He, `Revision ${get(te).revision_count ?? ""}`)), append($e, Pe);
+                var or = (Ne) => {
+                  var De = root_13$2(), Je = child(De);
+                  reset(De), template_effect(() => set_text(Je, `Revision ${get(te).revision_count ?? ""}`)), append(Ne, De);
                 };
-                if_block(bn, ($e) => {
-                  get(te).revision_count > 0 && get(te).status !== "accepted" && $e(Mn);
+                if_block(rn, (Ne) => {
+                  get(te).revision_count > 0 && get(te).status !== "accepted" && Ne(or);
                 });
               }
-              var Gn = sibling(bn, 2);
+              var Vn = sibling(rn, 2);
               {
-                var or = ($e) => {
-                  var Pe = root_14$3(), He = first_child(Pe), ut = child(He);
-                  let wt;
-                  var st = sibling(ut, 2), Qe = child(st);
-                  reset(st), reset(He);
-                  var Ke = sibling(He, 2);
+                var Nn = (Ne) => {
+                  var De = root_14$3(), Je = first_child(De), dt = child(Je);
+                  let St;
+                  var ot = sibling(dt, 2), tt = child(ot);
+                  reset(ot), reset(Je);
+                  var qe = sibling(Je, 2);
                   {
-                    var dt = (Xe) => {
-                      var xt = root_15$3();
-                      each(xt, 21, () => get(te).thread, (cn) => cn.id, (cn, qe) => {
-                        var tn = root_16$3();
-                        let nn;
-                        var un = child(tn), Vt = child(un), xn = child(Vt, !0);
-                        reset(Vt);
-                        var Rt = sibling(Vt, 2);
-                        let Z;
-                        var re = child(Rt, !0);
-                        reset(Rt);
-                        var Te = sibling(Rt, 2), ke = child(Te, !0);
-                        reset(Te), reset(un);
-                        var Ne = sibling(un, 2), Ve = child(Ne);
-                        html(Ve, () => oe(get(qe).message)), reset(Ne);
-                        var ft = sibling(Ne, 2);
+                    var ut = (Ye) => {
+                      var yt = root_15$3();
+                      each(yt, 21, () => get(te).thread, (Wt) => Wt.id, (Wt, Ke) => {
+                        var Qt = root_16$3();
+                        let en;
+                        var ln = child(Qt), Lt = child(ln), bn = child(Lt, !0);
+                        reset(Lt);
+                        var $t = sibling(Lt, 2);
+                        let yn;
+                        var zn = child($t, !0);
+                        reset($t);
+                        var Z = sibling($t, 2), re = child(Z, !0);
+                        reset(Z), reset(ln);
+                        var _e = sibling(ln, 2), ye = child(_e);
+                        html(ye, () => oe(get(Ke).message)), reset(_e);
+                        var Fe = sibling(_e, 2);
                         {
-                          var ht = (Oe) => {
-                            var Be = root_17$3();
-                            each(Be, 21, () => get(qe).summary, index, (tt, lt) => {
-                              var pt = root_18$2(), mt = child(pt, !0);
-                              reset(pt), template_effect(() => set_text(mt, get(lt))), append(tt, pt);
-                            }), reset(Be), append(Oe, Be);
+                          var Ue = (rt) => {
+                            var pt = root_17$3();
+                            each(pt, 21, () => get(Ke).summary, index, (je, Pe) => {
+                              var Qe = root_18$2(), mt = child(Qe, !0);
+                              reset(Qe), template_effect(() => set_text(mt, get(Pe))), append(je, Qe);
+                            }), reset(pt), append(rt, pt);
                           };
-                          if_block(ft, (Oe) => {
-                            get(qe).summary && get(qe).summary.length > 0 && Oe(ht);
+                          if_block(Fe, (rt) => {
+                            get(Ke).summary && get(Ke).summary.length > 0 && rt(Ue);
                           });
                         }
-                        var _t = sibling(ft, 2);
+                        var lt = sibling(Fe, 2);
                         {
-                          var bt = (Oe) => {
-                            var Be = root_19$2(), tt = first_child(Be);
-                            each(tt, 21, () => get(qe).screenshots, index, (mt, zt, Gt) => {
-                              var En = comment(), Ot = first_child(En);
+                          var ft = (rt) => {
+                            var pt = root_19$2(), je = first_child(pt);
+                            each(je, 21, () => get(Ke).screenshots, index, (mt, wt, kt) => {
+                              var wn = comment(), On = first_child(wn);
                               {
-                                var Dt = (Ht) => {
-                                  var Lt = root_21$2();
-                                  set_attribute(Lt, "aria-label", `Screenshot ${Gt + 1}`);
-                                  var Sn = child(Lt);
-                                  set_attribute(Sn, "alt", `Screenshot ${Gt + 1}`), reset(Lt), template_effect(() => set_attribute(Sn, "src", `${h() ?? ""}${get(zt).url ?? ""}`)), delegated("click", Lt, () => set(y, get(y) === get(zt).url ? null : get(zt).url, !0)), append(Ht, Lt);
+                                var Vt = (xt) => {
+                                  var Mt = root_21$2();
+                                  set_attribute(Mt, "aria-label", `Screenshot ${kt + 1}`);
+                                  var xn = child(Mt);
+                                  set_attribute(xn, "alt", `Screenshot ${kt + 1}`), reset(Mt), template_effect(() => set_attribute(xn, "src", `${h() ?? ""}${get(wt).url ?? ""}`)), delegated("click", Mt, () => set(y, get(y) === get(wt).url ? null : get(wt).url, !0)), append(xt, Mt);
                                 };
-                                if_block(Ot, (Ht) => {
-                                  get(zt).url && Ht(Dt);
+                                if_block(On, (xt) => {
+                                  get(wt).url && xt(Vt);
                                 });
                               }
-                              append(mt, En);
-                            }), reset(tt);
-                            var lt = sibling(tt, 2);
+                              append(mt, wn);
+                            }), reset(je);
+                            var Pe = sibling(je, 2);
                             {
-                              var pt = (mt) => {
-                                const zt = /* @__PURE__ */ user_derived(() => get(qe).screenshots.find((Dt) => Dt.url === get(y)));
-                                var Gt = comment(), En = first_child(Gt);
+                              var Qe = (mt) => {
+                                const wt = /* @__PURE__ */ user_derived(() => get(Ke).screenshots.find((Vt) => Vt.url === get(y)));
+                                var kt = comment(), wn = first_child(kt);
                                 {
-                                  var Ot = (Dt) => {
-                                    var Ht = root_23$2(), Lt = child(Ht), Sn = sibling(Lt, 2);
-                                    reset(Ht), template_effect(() => set_attribute(Lt, "src", `${h() ?? ""}${get(y) ?? ""}`)), delegated("click", Sn, () => set(y, null)), append(Dt, Ht);
+                                  var On = (Vt) => {
+                                    var xt = root_23$2(), Mt = child(xt), xn = sibling(Mt, 2);
+                                    reset(xt), template_effect(() => set_attribute(Mt, "src", `${h() ?? ""}${get(y) ?? ""}`)), delegated("click", xn, () => set(y, null)), append(Vt, xt);
                                   };
-                                  if_block(En, (Dt) => {
-                                    get(zt) && Dt(Ot);
+                                  if_block(wn, (Vt) => {
+                                    get(wt) && Vt(On);
                                   });
                                 }
-                                append(mt, Gt);
+                                append(mt, kt);
                               };
-                              if_block(lt, (mt) => {
-                                get(y) && mt(pt);
+                              if_block(Pe, (mt) => {
+                                get(y) && mt(Qe);
                               });
                             }
-                            append(Oe, Be);
+                            append(rt, pt);
                           };
-                          if_block(_t, (Oe) => {
-                            get(qe).screenshots && get(qe).screenshots.length > 0 && Oe(bt);
+                          if_block(lt, (rt) => {
+                            get(Ke).screenshots && get(Ke).screenshots.length > 0 && rt(ft);
                           });
                         }
-                        var gt = sibling(_t, 2);
+                        var gt = sibling(lt, 2);
                         {
-                          var At = (Oe) => {
-                            var Be = root_24$1();
-                            each(Be, 21, () => get(qe).elements, index, (tt, lt) => {
-                              var pt = root_25$1(), mt = child(pt);
-                              reset(pt), template_effect(
-                                (zt, Gt) => {
-                                  set_attribute(pt, "title", get(lt).selector), set_text(mt, `<${zt ?? ""}${get(lt).id ? `#${get(lt).id}` : ""}${Gt ?? ""}>`);
+                          var Ft = (rt) => {
+                            var pt = root_24$1();
+                            each(pt, 21, () => get(Ke).elements, index, (je, Pe) => {
+                              var Qe = root_25$1(), mt = child(Qe);
+                              reset(Qe), template_effect(
+                                (wt, kt) => {
+                                  set_attribute(Qe, "title", get(Pe).selector), set_text(mt, `<${wt ?? ""}${get(Pe).id ? `#${get(Pe).id}` : ""}${kt ?? ""}>`);
                                 },
                                 [
-                                  () => get(lt).tagName.toLowerCase(),
-                                  () => get(lt).className ? `.${get(lt).className.split(" ")[0]}` : ""
+                                  () => get(Pe).tagName.toLowerCase(),
+                                  () => get(Pe).className ? `.${get(Pe).className.split(" ")[0]}` : ""
                                 ]
-                              ), append(tt, pt);
-                            }), reset(Be), append(Oe, Be);
+                              ), append(je, Qe);
+                            }), reset(pt), append(rt, pt);
                           };
-                          if_block(gt, (Oe) => {
-                            get(qe).elements && get(qe).elements.length > 0 && Oe(At);
+                          if_block(gt, (rt) => {
+                            get(Ke).elements && get(Ke).elements.length > 0 && rt(Ft);
                           });
                         }
-                        reset(tn), template_effect(
-                          (Oe, Be) => {
-                            nn = set_class(tn, 1, "thread-entry svelte-1fnmin5", null, nn, {
-                              "thread-user": get(qe).from === "user",
-                              "thread-dev": get(qe).from === "dev"
-                            }), set_text(xn, get(qe).from === "user" ? "You" : "Dev"), Z = set_class(Rt, 1, "thread-type-badge svelte-1fnmin5", null, Z, {
-                              submission: get(qe).type === "submission",
-                              completion: get(qe).type === "completion",
-                              rejection: get(qe).type === "rejection",
-                              acceptance: get(qe).type === "acceptance"
-                            }), set_text(re, Oe), set_text(ke, Be);
+                        reset(Qt), template_effect(
+                          (rt, pt) => {
+                            en = set_class(Qt, 1, "thread-entry svelte-1fnmin5", null, en, {
+                              "thread-user": get(Ke).from === "user",
+                              "thread-dev": get(Ke).from === "dev"
+                            }), set_text(bn, get(Ke).from === "user" ? "You" : "Dev"), yn = set_class($t, 1, "thread-type-badge svelte-1fnmin5", null, yn, {
+                              submission: get(Ke).type === "submission",
+                              completion: get(Ke).type === "completion",
+                              rejection: get(Ke).type === "rejection",
+                              acceptance: get(Ke).type === "acceptance"
+                            }), set_text(zn, rt), set_text(re, pt);
                           },
                           [
-                            () => L(get(qe)),
-                            () => ie(get(qe).at)
+                            () => L(get(Ke)),
+                            () => ie(get(Ke).at)
                           ]
-                        ), append(cn, tn);
-                      }), reset(xt), append(Xe, xt);
+                        ), append(Wt, Qt);
+                      }), reset(yt), append(Ye, yt);
                     };
-                    if_block(Ke, (Xe) => {
-                      get(w) === get(te).id && Xe(dt);
+                    if_block(qe, (Ye) => {
+                      get(w) === get(te).id && Ye(ut);
                     });
                   }
                   template_effect(
-                    (Xe, xt) => {
-                      wt = set_class(ut, 0, "thread-toggle-icon svelte-1fnmin5", null, wt, { expanded: get(w) === get(te).id }), set_text(Qe, `${Xe ?? ""} ${xt ?? ""}`);
+                    (Ye, yt) => {
+                      St = set_class(dt, 0, "thread-toggle-icon svelte-1fnmin5", null, St, { expanded: get(w) === get(te).id }), set_text(tt, `${Ye ?? ""} ${yt ?? ""}`);
                     },
                     [
                       () => z(get(te).thread),
                       () => z(get(te).thread) === 1 ? "message" : "messages"
                     ]
-                  ), delegated("click", He, () => T(get(te).id)), append($e, Pe);
-                }, zn = ($e) => {
-                  var Pe = root_26(), He = child(Pe, !0);
-                  reset(Pe), template_effect((ut) => set_text(He, ut), [
+                  ), delegated("click", Je, () => T(get(te).id)), append(Ne, De);
+                }, sr = (Ne) => {
+                  var De = root_26(), Je = child(De, !0);
+                  reset(De), template_effect((dt) => set_text(Je, dt), [
                     () => get(te).description.length > 120 ? get(te).description.slice(0, 120) + "..." : get(te).description
-                  ]), append($e, Pe);
+                  ]), append(Ne, De);
                 };
-                if_block(Gn, ($e) => {
-                  get(te).thread && get(te).thread.length > 0 ? $e(or) : get(te).description && $e(zn, 1);
+                if_block(Vn, (Ne) => {
+                  get(te).thread && get(te).thread.length > 0 ? Ne(Nn) : get(te).description && Ne(sr, 1);
+                });
+              }
+              var Gn = sibling(Vn, 2);
+              {
+                var $n = (Ne) => {
+                  var De = root_27$1(), Je = first_child(De);
+                  each(Je, 21, () => get(te).screenshot_urls, index, (tt, qe, ut) => {
+                    var Ye = root_28$1();
+                    set_attribute(Ye, "aria-label", `Screenshot ${ut + 1}`);
+                    var yt = child(Ye);
+                    set_attribute(yt, "alt", `Screenshot ${ut + 1}`), reset(Ye), template_effect(() => set_attribute(yt, "src", `${h() ?? ""}${get(qe) ?? ""}`)), delegated("click", Ye, () => set(y, get(y) === get(qe) ? null : get(qe), !0)), append(tt, Ye);
+                  }), reset(Je);
+                  var dt = sibling(Je, 2);
+                  {
+                    var St = (tt) => {
+                      var qe = root_29$1(), ut = child(qe), Ye = sibling(ut, 2);
+                      reset(qe), template_effect(() => set_attribute(ut, "src", `${h() ?? ""}${get(y) ?? ""}`)), delegated("click", Ye, () => set(y, null)), append(tt, qe);
+                    }, ot = /* @__PURE__ */ user_derived(() => get(y) && get(te).screenshot_urls.includes(get(y)));
+                    if_block(dt, (tt) => {
+                      get(ot) && tt(St);
+                    });
+                  }
+                  append(Ne, De);
+                };
+                if_block(Gn, (Ne) => {
+                  !get(te).thread && get(te).screenshot_urls && get(te).screenshot_urls.length > 0 && Ne($n);
                 });
               }
               var Hn = sibling(Gn, 2);
               {
-                var qn = ($e) => {
-                  var Pe = root_27$1(), He = first_child(Pe);
-                  each(He, 21, () => get(te).screenshot_urls, index, (Qe, Ke, dt) => {
-                    var Xe = root_28$1();
-                    set_attribute(Xe, "aria-label", `Screenshot ${dt + 1}`);
-                    var xt = child(Xe);
-                    set_attribute(xt, "alt", `Screenshot ${dt + 1}`), reset(Xe), template_effect(() => set_attribute(xt, "src", `${h() ?? ""}${get(Ke) ?? ""}`)), delegated("click", Xe, () => set(y, get(y) === get(Ke) ? null : get(Ke), !0)), append(Qe, Xe);
-                  }), reset(He);
-                  var ut = sibling(He, 2);
-                  {
-                    var wt = (Qe) => {
-                      var Ke = root_29$1(), dt = child(Ke), Xe = sibling(dt, 2);
-                      reset(Ke), template_effect(() => set_attribute(dt, "src", `${h() ?? ""}${get(y) ?? ""}`)), delegated("click", Xe, () => set(y, null)), append(Qe, Ke);
-                    }, st = /* @__PURE__ */ user_derived(() => get(y) && get(te).screenshot_urls.includes(get(y)));
-                    if_block(ut, (Qe) => {
-                      get(st) && Qe(wt);
-                    });
-                  }
-                  append($e, Pe);
-                };
-                if_block(Hn, ($e) => {
-                  !get(te).thread && get(te).screenshot_urls && get(te).screenshot_urls.length > 0 && $e(qn);
-                });
-              }
-              var Wt = sibling(Hn, 2);
-              {
-                var On = ($e) => {
-                  const Pe = /* @__PURE__ */ user_derived(() => {
-                    var st, Qe;
-                    return get(te).recording_url ?? ((Qe = (st = get(te).thread) == null ? void 0 : st.find((Ke) => Ke.recordingUrl)) == null ? void 0 : Qe.recordingUrl) ?? null;
+                var qn = (Ne) => {
+                  const De = /* @__PURE__ */ user_derived(() => {
+                    var ot, tt;
+                    return get(te).recording_url ?? ((tt = (ot = get(te).thread) == null ? void 0 : ot.find((qe) => qe.recordingUrl)) == null ? void 0 : tt.recordingUrl) ?? null;
                   });
-                  var He = comment(), ut = first_child(He);
+                  var Je = comment(), dt = first_child(Je);
                   {
-                    var wt = (st) => {
+                    var St = (ot) => {
+                      var tt = root_31$1(), qe = first_child(tt), ut = sibling(child(qe), 2);
+                      reset(qe);
+                      var Ye = sibling(qe, 2);
                       {
-                        let Qe = /* @__PURE__ */ user_derived(() => get(te).console_logs ?? null), Ke = /* @__PURE__ */ user_derived(() => get(te).network_requests ?? null);
-                        TimelineViewer(st, {
+                        let yt = /* @__PURE__ */ user_derived(() => get(te).console_logs ?? null), Wt = /* @__PURE__ */ user_derived(() => get(te).network_requests ?? null);
+                        TimelineViewer(Ye, {
                           get recordingUrl() {
-                            return get(Pe);
+                            return get(De);
                           },
                           get endpoint() {
                             return h();
                           },
                           get consoleLogs() {
-                            return get(Qe);
+                            return get(yt);
                           },
                           get networkRequests() {
-                            return get(Ke);
+                            return get(Wt);
                           }
                         });
                       }
+                      template_effect(() => set_attribute(ut, "href", `${h() ?? ""}/feedback/replay.html?id=${get(te).id ?? ""}`)), append(ot, tt);
                     };
-                    if_block(ut, (st) => {
-                      get(Pe) && st(wt);
+                    if_block(dt, (ot) => {
+                      get(De) && ot(St);
                     });
                   }
-                  append($e, He);
-                }, Yn = /* @__PURE__ */ user_derived(() => get(te).recording_url || get(te).thread && get(te).thread.some(($e) => $e.recordingUrl));
-                if_block(Wt, ($e) => {
-                  get(Yn) && $e(On);
+                  append(Ne, Je);
+                }, Jt = /* @__PURE__ */ user_derived(() => get(te).recording_url || get(te).thread && get(te).thread.some((Ne) => Ne.recordingUrl));
+                if_block(Hn, (Ne) => {
+                  get(Jt) && Ne(qn);
                 });
               }
-              var Kn = sibling(Wt, 2);
+              var _n = sibling(Hn, 2);
               {
-                var Dn = ($e) => {
-                  var Pe = root_32$1(), He = sibling(child(Pe), 2), ut = child(He);
-                  html(ut, () => oe(get(te).dev_notes)), reset(He), reset(Pe), append($e, Pe);
+                var Yn = (Ne) => {
+                  var De = root_32$1(), Je = sibling(child(De), 2), dt = child(Je);
+                  html(dt, () => oe(get(te).dev_notes)), reset(Je), reset(De), append(Ne, De);
                 };
-                if_block(Kn, ($e) => {
-                  get(te).dev_notes && !get(te).thread && get(te).status !== "in_progress" && $e(Dn);
+                if_block(_n, (Ne) => {
+                  get(te).dev_notes && !get(te).thread && get(te).status !== "in_progress" && Ne(Yn);
                 });
               }
-              var yn = sibling(Kn, 2), wn = child(yn), ln = child(wn, !0);
-              reset(wn);
-              var Xn = sibling(wn, 2);
+              var Kn = sibling(_n, 2), sn = child(Kn), Mn = child(sn, !0);
+              reset(sn);
+              var Xn = sibling(sn, 2);
               {
-                var sr = ($e) => {
-                  var Pe = root_33$1();
-                  Pe.textContent = "✓ Accepted", append($e, Pe);
-                }, ir = ($e) => {
-                  var Pe = root_34$1();
-                  Pe.textContent = "✗ Rejected", append($e, Pe);
-                }, Jn = ($e) => {
-                  var Pe = comment(), He = first_child(Pe);
+                var an = (Ne) => {
+                  var De = root_33$1();
+                  De.textContent = "✓ Accepted", append(Ne, De);
+                }, Jn = (Ne) => {
+                  var De = root_34$1();
+                  De.textContent = "✗ Rejected", append(Ne, De);
+                }, ir = (Ne) => {
+                  var De = comment(), Je = first_child(De);
                   {
-                    var ut = (st) => {
-                      var Qe = root_36$1(), Ke = child(Qe);
-                      remove_textarea_child(Ke);
-                      var dt = sibling(Ke, 2), Xe = child(dt), xt = sibling(child(Xe));
-                      reset(Xe);
-                      var cn = sibling(Xe, 2);
-                      reset(dt);
-                      var qe = sibling(dt, 2);
+                    var dt = (ot) => {
+                      var tt = root_36$1(), qe = child(tt);
+                      remove_textarea_child(qe);
+                      var ut = sibling(qe, 2), Ye = child(ut), yt = sibling(child(Ye));
+                      reset(Ye);
+                      var Wt = sibling(Ye, 2);
+                      reset(ut);
+                      var Ke = sibling(ut, 2);
                       {
-                        var tn = (Ne) => {
-                          var Ve = root_37();
-                          each(Ve, 21, () => get(R), index, (ft, ht, _t) => {
-                            var bt = root_38(), gt = child(bt);
-                            set_attribute(gt, "alt", `Screenshot ${_t + 1}`);
-                            var At = sibling(gt, 2);
-                            reset(bt), template_effect(() => set_attribute(gt, "src", get(ht))), delegated("click", At, () => Re(_t)), append(ft, bt);
-                          }), reset(Ve), append(Ne, Ve);
+                        var Qt = (_e) => {
+                          var ye = root_37$1();
+                          each(ye, 21, () => get(R), index, (Fe, Ue, lt) => {
+                            var ft = root_38(), gt = child(ft);
+                            set_attribute(gt, "alt", `Screenshot ${lt + 1}`);
+                            var Ft = sibling(gt, 2);
+                            reset(ft), template_effect(() => set_attribute(gt, "src", get(Ue))), delegated("click", Ft, () => Re(lt)), append(Fe, ft);
+                          }), reset(ye), append(_e, ye);
                         };
-                        if_block(qe, (Ne) => {
-                          get(R).length > 0 && Ne(tn);
+                        if_block(Ke, (_e) => {
+                          get(R).length > 0 && _e(Qt);
                         });
                       }
-                      var nn = sibling(qe, 2);
+                      var en = sibling(Ke, 2);
                       {
-                        var un = (Ne) => {
-                          var Ve = root_39();
-                          each(Ve, 21, () => get(M), index, (ft, ht, _t) => {
-                            var bt = root_40(), gt = child(bt), At = sibling(gt);
-                            reset(bt), template_effect((Oe) => set_text(gt, `<${Oe ?? ""}${get(ht).id ? `#${get(ht).id}` : ""}> `), [() => get(ht).tagName.toLowerCase()]), delegated("click", At, () => me(_t)), append(ft, bt);
-                          }), reset(Ve), append(Ne, Ve);
+                        var ln = (_e) => {
+                          var ye = root_39();
+                          each(ye, 21, () => get(M), index, (Fe, Ue, lt) => {
+                            var ft = root_40(), gt = child(ft), Ft = sibling(gt);
+                            reset(ft), template_effect((rt) => set_text(gt, `<${rt ?? ""}${get(Ue).id ? `#${get(Ue).id}` : ""}> `), [() => get(Ue).tagName.toLowerCase()]), delegated("click", Ft, () => me(lt)), append(Fe, ft);
+                          }), reset(ye), append(_e, ye);
                         };
-                        if_block(nn, (Ne) => {
-                          get(M).length > 0 && Ne(un);
+                        if_block(en, (_e) => {
+                          get(M).length > 0 && _e(ln);
                         });
                       }
-                      var Vt = sibling(nn, 2), xn = child(Vt), Rt = sibling(xn, 2), Z = child(Rt, !0);
-                      reset(Rt), reset(Vt);
-                      var re = sibling(Vt, 2);
+                      var Lt = sibling(en, 2), bn = child(Lt), $t = sibling(bn, 2), yn = child($t, !0);
+                      reset($t), reset(Lt);
+                      var zn = sibling(Lt, 2);
                       {
-                        var Te = (Ne) => {
-                          var Ve = root_41(), ft = child(Ve);
-                          reset(Ve), template_effect((ht) => set_text(ft, `${ht ?? ""} more characters needed`), [() => 10 - get(I).trim().length]), append(Ne, Ve);
-                        }, ke = /* @__PURE__ */ user_derived(() => get(I).trim().length > 0 && get(I).trim().length < 10);
-                        if_block(re, (Ne) => {
-                          get(ke) && Ne(Te);
+                        var Z = (_e) => {
+                          var ye = root_41(), Fe = child(ye);
+                          reset(ye), template_effect((Ue) => set_text(Fe, `${Ue ?? ""} more characters needed`), [() => 10 - get(I).trim().length]), append(_e, ye);
+                        }, re = /* @__PURE__ */ user_derived(() => get(I).trim().length > 0 && get(I).trim().length < 10);
+                        if_block(zn, (_e) => {
+                          get(re) && _e(Z);
                         });
                       }
-                      reset(Qe), template_effect(
-                        (Ne) => {
-                          Xe.disabled = get(A), set_text(xt, ` ${get(A) ? "..." : "Screenshot"}`), Rt.disabled = Ne, set_text(Z, get(S) === get(te).id ? "..." : "✗ Reject");
+                      reset(tt), template_effect(
+                        (_e) => {
+                          Ye.disabled = get(A), set_text(yt, ` ${get(A) ? "..." : "Screenshot"}`), $t.disabled = _e, set_text(yn, get(S) === get(te).id ? "..." : "✗ Reject");
                         },
                         [
                           () => get(I).trim().length < 10 || get(S) === get(te).id
                         ]
-                      ), bind_value(Ke, () => get(I), (Ne) => set(I, Ne)), delegated("click", Xe, ve), delegated("click", cn, Ee), delegated("click", xn, ye), delegated("click", Rt, () => Se(get(te).id, "rejected", get(I).trim())), append(st, Qe);
-                    }, wt = (st) => {
-                      var Qe = root_42(), Ke = child(Qe), dt = child(Ke, !0);
-                      reset(Ke);
-                      var Xe = sibling(Ke, 2);
-                      Xe.textContent = "✗ Reject", reset(Qe), template_effect(() => {
-                        Ke.disabled = get(S) === get(te).id, set_text(dt, get(S) === get(te).id ? "..." : "✓ Accept"), Xe.disabled = get(S) === get(te).id;
-                      }), delegated("click", Ke, () => Se(get(te).id, "accepted")), delegated("click", Xe, () => se(get(te).id)), append(st, Qe);
+                      ), bind_value(qe, () => get(I), (_e) => set(I, _e)), delegated("click", Ye, ve), delegated("click", Wt, ke), delegated("click", bn, xe), delegated("click", $t, () => Ce(get(te).id, "rejected", get(I).trim())), append(ot, tt);
+                    }, St = (ot) => {
+                      var tt = root_42(), qe = child(tt), ut = child(qe, !0);
+                      reset(qe);
+                      var Ye = sibling(qe, 2);
+                      Ye.textContent = "✗ Reject", reset(tt), template_effect(() => {
+                        qe.disabled = get(S) === get(te).id, set_text(ut, get(S) === get(te).id ? "..." : "✓ Accept"), Ye.disabled = get(S) === get(te).id;
+                      }), delegated("click", qe, () => Ce(get(te).id, "accepted")), delegated("click", Ye, () => se(get(te).id)), append(ot, tt);
                     };
-                    if_block(He, (st) => {
-                      get(k) === get(te).id ? st(ut) : st(wt, !1);
+                    if_block(Je, (ot) => {
+                      get(k) === get(te).id ? ot(dt) : ot(St, !1);
                     });
                   }
-                  append($e, Pe);
+                  append(Ne, De);
                 };
-                if_block(Xn, ($e) => {
-                  get(te).status === "accepted" ? $e(sr) : get(te).status === "rejected" ? $e(ir, 1) : (get(te).status === "completed" || get(te).status === "wontfix") && $e(Jn, 2);
+                if_block(Xn, (Ne) => {
+                  get(te).status === "accepted" ? Ne(an) : get(te).status === "rejected" ? Ne(Jn, 1) : (get(te).status === "completed" || get(te).status === "wontfix") && Ne(ir, 2);
                 });
               }
-              reset(yn), reset(en), template_effect(($e) => set_text(ln, $e), [() => ie(get(te).created_at)]), transition(3, en, () => slide, () => ({ duration: 200 })), append(sn, en);
+              reset(Kn), reset(Xt), template_effect((Ne) => set_text(Mn, Ne), [() => ie(get(te).created_at)]), transition(3, Xt, () => slide, () => ({ duration: 200 })), append(nn, Xt);
             };
-            if_block(jt, (sn) => {
-              get(x) === get(te).id && sn(rr);
+            if_block(Dt, (nn) => {
+              get(x) === get(te).id && nn(rr);
             });
           }
-          reset(Ye), template_effect(
-            (sn, en, an, $n, bn) => {
-              nt = set_class(Ye, 1, "report-card svelte-1fnmin5", null, nt, {
+          reset(Xe), template_effect(
+            (nn, Xt, vn, An, rn) => {
+              _t = set_class(Xe, 1, "report-card svelte-1fnmin5", null, _t, {
                 awaiting: get(te).status === "completed",
                 expanded: get(x) === get(te).id
-              }), set_attribute(Ye, "data-card-id", get(te).id), set_text(Ct, sn), set_text(_n, get(te).title), set_style(je, `background: ${en ?? ""}20; color: ${an ?? ""}; border-color: ${$n ?? ""}40;`), set_text(Fe, bn), Qt = set_class(vt, 0, "chevron svelte-1fnmin5", null, Qt, { "chevron-open": get(x) === get(te).id });
+              }), set_attribute(Xe, "data-card-id", get(te).id), set_text(vt, nn), set_text(mn, get(te).title), set_style(Be, `background: ${Xt ?? ""}20; color: ${vn ?? ""}; border-color: ${An ?? ""}40;`), set_text(He, rn), it = set_class(bt, 0, "chevron svelte-1fnmin5", null, it, { "chevron-open": get(x) === get(te).id });
             },
             [
               () => W(get(te)),
@@ -11925,17 +11933,17 @@ function RequestList(d, p) {
               () => G(get(te).status),
               () => P(get(te).status)
             ]
-          ), delegated("click", We, () => ce(get(te).id)), append(Le, Ye);
-        }), reset(Ze), append(Ie, Ze);
+          ), delegated("click", Ge, () => ce(get(te).id)), append(Oe, Xe);
+        }), reset(Le), append(Te, Le);
       };
-      if_block(X, (Ie) => {
-        m() ? Ie(fe) : _() && g().length === 0 ? Ie(Q, 1) : g().length === 0 ? Ie(ue, 2) : get(O).length === 0 ? Ie(be, 3) : Ie(Ue, !1);
+      if_block(X, (Te) => {
+        m() ? Te(fe) : _() && g().length === 0 ? Te(Q, 1) : g().length === 0 ? Te(de, 2) : get(O).length === 0 ? Te(we, 3) : Te(Ze, !1);
       });
     }
     reset(H), transition(3, H, () => slide, () => ({ duration: 200 })), append(D, H);
   }), reset(ae), bind_this(ae, (D) => set(E, D), () => get(E)), reset(ne), template_effect(() => {
-    K = set_class(B, 1, "subtab svelte-1fnmin5", null, K, { active: get(C) === "active" }), ze = set_class(we, 1, "subtab svelte-1fnmin5", null, ze, { active: get(C) === "done" });
-  }), delegated("click", B, () => set(C, "active")), delegated("click", we, () => set(C, "done")), append(d, ne), pop(J);
+    K = set_class(B, 1, "subtab svelte-1fnmin5", null, K, { active: get(C) === "active" }), Me = set_class(Ee, 1, "subtab svelte-1fnmin5", null, Me, { active: get(C) === "done" });
+  }), delegated("click", B, () => set(C, "active")), delegated("click", Ee, () => set(C, "done")), append(d, ne), pop(J);
 }
 delegate(["click"]);
 create_custom_element(
@@ -12110,7 +12118,7 @@ function AgentPanel(d, p) {
     }
   }, F = root$3(), j = child(F), Y = child(j);
   let q;
-  var de = sibling(child(Y), 2), oe = child(de);
+  var ue = sibling(child(Y), 2), oe = child(ue);
   {
     var ce = (B) => {
       var K = text("Ready");
@@ -12118,7 +12126,7 @@ function AgentPanel(d, p) {
     }, se = (B) => {
       var K = text("Thinking...");
       append(B, K);
-    }, ye = (B) => {
+    }, xe = (B) => {
       var K = text("Acting...");
       append(B, K);
     }, ve = (B) => {
@@ -12129,22 +12137,22 @@ function AgentPanel(d, p) {
       append(B, K);
     };
     if_block(oe, (B) => {
-      g() === "idle" ? B(ce) : g() === "thinking" ? B(se, 1) : g() === "acting" ? B(ye, 2) : g() === "awaiting_approval" ? B(ve, 3) : B(Re, !1);
+      g() === "idle" ? B(ce) : g() === "thinking" ? B(se, 1) : g() === "acting" ? B(xe, 2) : g() === "awaiting_approval" ? B(ve, 3) : B(Re, !1);
     });
   }
-  reset(de), reset(Y);
-  var Ee = sibling(Y, 2), me = child(Ee);
+  reset(ue), reset(Y);
+  var ke = sibling(Y, 2), me = child(ke);
   {
-    var Se = (B) => {
+    var Ce = (B) => {
       var K = root_6$2(), pe = child(K);
       reset(K), template_effect(() => set_text(pe, `Step ${m() ?? ""}/${_() ?? ""}`)), append(B, K);
     };
     if_block(me, (B) => {
-      m() > 0 && B(Se);
+      m() > 0 && B(Ce);
     });
   }
   var T = sibling(me, 2), z = child(T);
-  remove_input_defaults(z), next(2), reset(T), reset(Ee), reset(j);
+  remove_input_defaults(z), next(2), reset(T), reset(ke), reset(j);
   var L = sibling(j, 2), P = child(L);
   {
     var G = (B) => {
@@ -12152,142 +12160,142 @@ function AgentPanel(d, p) {
       append(B, K);
     }, W = (B) => {
       var K = root_8$2(), pe = first_child(K);
-      each(pe, 17, h, (ze) => ze.id, (ze, xe) => {
-        var Ge = comment(), ae = first_child(Ge);
+      each(pe, 17, h, (Me) => Me.id, (Me, Se) => {
+        var We = comment(), ae = first_child(We);
         {
           var V = (H) => {
             var X = root_10$1();
             let fe;
-            var Q = child(X), ue = child(Q);
+            var Q = child(X), de = child(Q);
             {
-              var be = (je) => {
-                var Fe = text("✓");
-                append(je, Fe);
-              }, Ue = (je) => {
-                var Fe = text("⏭");
-                append(je, Fe);
-              }, Ie = (je) => {
-                var Fe = text("?");
-                append(je, Fe);
+              var we = (Be) => {
+                var He = text("✓");
+                append(Be, He);
+              }, Ze = (Be) => {
+                var He = text("⏭");
+                append(Be, He);
+              }, Te = (Be) => {
+                var He = text("?");
+                append(Be, He);
               };
-              if_block(ue, (je) => {
-                get(xe).approvalStatus === "approved" ? je(be) : get(xe).approvalStatus === "skipped" ? je(Ue, 1) : je(Ie, !1);
+              if_block(de, (Be) => {
+                get(Se).approvalStatus === "approved" ? Be(we) : get(Se).approvalStatus === "skipped" ? Be(Ze, 1) : Be(Te, !1);
               });
             }
             reset(Q);
-            var Ze = sibling(Q, 2), Le = child(Ze);
+            var Le = sibling(Q, 2), Oe = child(Le);
             {
-              var te = (je) => {
-                var Fe = root_14$2(), vt = child(Fe, !0);
-                reset(Fe), template_effect(() => set_text(vt, get(xe).tool)), append(je, Fe);
+              var te = (Be) => {
+                var He = root_14$2(), bt = child(He, !0);
+                reset(He), template_effect(() => set_text(bt, get(Se).tool)), append(Be, He);
               };
-              if_block(Le, (je) => {
-                get(xe).tool && je(te);
+              if_block(Oe, (Be) => {
+                get(Se).tool && Be(te);
               });
             }
-            var Ye = sibling(Le, 2), nt = child(Ye, !0);
-            reset(Ye);
-            var We = sibling(Ye, 2);
+            var Xe = sibling(Oe, 2), _t = child(Xe, !0);
+            reset(Xe);
+            var Ge = sibling(Xe, 2);
             {
-              var rt = (je) => {
-                var Fe = root_15$2(), vt = child(Fe), Qt = sibling(vt, 2);
-                reset(Fe), delegated("click", vt, () => {
-                  var jt;
-                  return (jt = x()) == null ? void 0 : jt(get(xe).id);
-                }), delegated("click", Qt, () => {
-                  var jt;
-                  return (jt = E()) == null ? void 0 : jt(get(xe).id);
-                }), append(je, Fe);
-              }, Ct = (je) => {
-                var Fe = root_16$2();
-                let vt;
-                var Qt = child(Fe, !0);
-                reset(Fe), template_effect(() => {
-                  vt = set_class(Fe, 1, "approval-badge svelte-bez0nz", null, vt, {
-                    "badge-approved": get(xe).approvalStatus === "approved",
-                    "badge-skipped": get(xe).approvalStatus === "skipped"
-                  }), set_text(Qt, get(xe).approvalStatus);
-                }), append(je, Fe);
+              var Ve = (Be) => {
+                var He = root_15$2(), bt = child(He), it = sibling(bt, 2);
+                reset(He), delegated("click", bt, () => {
+                  var Dt;
+                  return (Dt = x()) == null ? void 0 : Dt(get(Se).id);
+                }), delegated("click", it, () => {
+                  var Dt;
+                  return (Dt = E()) == null ? void 0 : Dt(get(Se).id);
+                }), append(Be, He);
+              }, vt = (Be) => {
+                var He = root_16$2();
+                let bt;
+                var it = child(He, !0);
+                reset(He), template_effect(() => {
+                  bt = set_class(He, 1, "approval-badge svelte-bez0nz", null, bt, {
+                    "badge-approved": get(Se).approvalStatus === "approved",
+                    "badge-skipped": get(Se).approvalStatus === "skipped"
+                  }), set_text(it, get(Se).approvalStatus);
+                }), append(Be, He);
               };
-              if_block(We, (je) => {
-                get(xe).approvalStatus === "pending" ? je(rt) : je(Ct, !1);
+              if_block(Ge, (Be) => {
+                get(Se).approvalStatus === "pending" ? Be(Ve) : Be(vt, !1);
               });
             }
-            reset(Ze);
-            var Mt = sibling(Ze, 2);
+            reset(Le);
+            var Nt = sibling(Le, 2);
             {
-              var _n = (je) => {
-                var Fe = root_17$2(), vt = child(Fe, !0);
-                reset(Fe), template_effect(() => set_text(vt, get(xe).step)), append(je, Fe);
+              var mn = (Be) => {
+                var He = root_17$2(), bt = child(He, !0);
+                reset(He), template_effect(() => set_text(bt, get(Se).step)), append(Be, He);
               };
-              if_block(Mt, (je) => {
-                get(xe).step && je(_n);
+              if_block(Nt, (Be) => {
+                get(Se).step && Be(mn);
               });
             }
             reset(X), template_effect(() => {
               fe = set_class(X, 1, "message msg-approval svelte-bez0nz", null, fe, {
-                pending: get(xe).approvalStatus === "pending",
-                approved: get(xe).approvalStatus === "approved",
-                skipped: get(xe).approvalStatus === "skipped"
-              }), set_text(nt, get(xe).text);
+                pending: get(Se).approvalStatus === "pending",
+                approved: get(Se).approvalStatus === "approved",
+                skipped: get(Se).approvalStatus === "skipped"
+              }), set_text(_t, get(Se).text);
             }), append(H, X);
           }, D = (H) => {
             var X = root_18$1(), fe = child(X), Q = child(fe, !0);
             reset(fe);
-            var ue = sibling(fe, 2), be = child(ue);
+            var de = sibling(fe, 2), we = child(de);
             {
-              var Ue = (We) => {
-                var rt = root_19$1(), Ct = child(rt, !0);
-                reset(rt), template_effect(() => set_text(Ct, get(xe).tool)), append(We, rt);
+              var Ze = (Ge) => {
+                var Ve = root_19$1(), vt = child(Ve, !0);
+                reset(Ve), template_effect(() => set_text(vt, get(Se).tool)), append(Ge, Ve);
               };
-              if_block(be, (We) => {
-                get(xe).role === "action" && get(xe).tool && We(Ue);
+              if_block(we, (Ge) => {
+                get(Se).role === "action" && get(Se).tool && Ge(Ze);
               });
             }
-            var Ie = sibling(be, 2), Ze = child(Ie, !0);
-            reset(Ie);
-            var Le = sibling(Ie, 2);
+            var Te = sibling(we, 2), Le = child(Te, !0);
+            reset(Te);
+            var Oe = sibling(Te, 2);
             {
-              var te = (We) => {
-                var rt = root_20$1(), Ct = child(rt, !0);
-                reset(rt), template_effect((Mt) => set_text(Ct, Mt), [() => $(get(xe).duration)]), append(We, rt);
+              var te = (Ge) => {
+                var Ve = root_20$1(), vt = child(Ve, !0);
+                reset(Ve), template_effect((Nt) => set_text(vt, Nt), [() => $(get(Se).duration)]), append(Ge, Ve);
               };
-              if_block(Le, (We) => {
-                get(xe).duration != null && We(te);
+              if_block(Oe, (Ge) => {
+                get(Se).duration != null && Ge(te);
               });
             }
-            reset(ue);
-            var Ye = sibling(ue, 2);
+            reset(de);
+            var Xe = sibling(de, 2);
             {
-              var nt = (We) => {
-                var rt = root_21$1(), Ct = child(rt, !0);
-                reset(rt), template_effect(() => set_text(Ct, get(xe).step)), append(We, rt);
+              var _t = (Ge) => {
+                var Ve = root_21$1(), vt = child(Ve, !0);
+                reset(Ve), template_effect(() => set_text(vt, get(Se).step)), append(Ge, Ve);
               };
-              if_block(Ye, (We) => {
-                get(xe).step && We(nt);
+              if_block(Xe, (Ge) => {
+                get(Se).step && Ge(_t);
               });
             }
             reset(X), template_effect(
-              (We) => {
-                set_class(X, 1, `message msg-${get(xe).role ?? ""}`, "svelte-bez0nz"), set_text(Q, We), set_text(Ze, get(xe).text);
+              (Ge) => {
+                set_class(X, 1, `message msg-${get(Se).role ?? ""}`, "svelte-bez0nz"), set_text(Q, Ge), set_text(Le, get(Se).text);
               },
-              [() => N(get(xe).role)]
+              [() => N(get(Se).role)]
             ), append(H, X);
           };
           if_block(ae, (H) => {
-            get(xe).role === "approval" ? H(V) : H(D, !1);
+            get(Se).role === "approval" ? H(V) : H(D, !1);
           });
         }
-        append(ze, Ge);
+        append(Me, We);
       });
       var le = sibling(pe, 2);
       {
-        var we = (ze) => {
-          var xe = root_22$1();
-          append(ze, xe);
+        var Ee = (Me) => {
+          var Se = root_22$1();
+          append(Me, Se);
         };
-        if_block(le, (ze) => {
-          g() === "thinking" && ze(we);
+        if_block(le, (Me) => {
+          g() === "thinking" && Me(Ee);
         });
       }
       append(B, K);
@@ -12390,7 +12398,7 @@ function NotesPanel(d, p) {
   function q() {
     set(E, "list"), set(S, null), set(k, !1), set(C, !1);
   }
-  async function de() {
+  async function ue() {
     var z, L;
     if (get(I).trim()) {
       if (set(w, !0), get(k)) {
@@ -12435,7 +12443,7 @@ function NotesPanel(d, p) {
     return z ? z.split(`
 `).filter((L) => L.trim()).length : 0;
   }
-  function ye(z) {
+  function xe(z) {
     if (!z) return '<span style="color:#6b7280;font-style:italic">No content</span>';
     let L = z.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     return L = L.replace(/```([^`]*?)```/gs, '<pre style="background:#1f2937;padding:8px;border-radius:4px;font-size:11px;overflow-x:auto;margin:4px 0">$1</pre>'), L = L.replace(/`([^`]+)`/g, '<code style="background:#1f2937;padding:1px 4px;border-radius:3px;font-size:11px">$1</code>'), L = L.replace(/^### (.+)$/gm, '<strong style="display:block;margin-top:8px;font-size:12px;color:#d1d5db">$1</strong>'), L = L.replace(/^## (.+)$/gm, '<strong style="display:block;margin-top:8px;font-size:13px;color:#e5e7eb">$1</strong>'), L = L.replace(/^# (.+)$/gm, '<strong style="display:block;margin-top:8px;font-size:14px;color:#f3f4f6">$1</strong>'), L = L.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>"), L = L.replace(/\*(.+?)\*/g, "<em>$1</em>"), L = L.replace(/^- (.+)$/gm, '<span style="display:block;padding-left:12px">&#8226; $1</span>'), L = L.replace(/^(\d+)\. (.+)$/gm, '<span style="display:block;padding-left:12px">$1. $2</span>'), L = L.replace(/\n(?!<)/g, "<br>"), L;
@@ -12462,9 +12470,9 @@ function NotesPanel(d, p) {
     set onnoteschanged(z) {
       m(z), flushSync();
     }
-  }, Ee = root$2(), me = child(Ee);
+  }, ke = root$2(), me = child(ke);
   {
-    var Se = (z) => {
+    var Ce = (z) => {
       var L = root_1$2(), P = child(L), G = sibling(child(P), 2);
       reset(P);
       var W = sibling(P, 2);
@@ -12481,10 +12489,10 @@ function NotesPanel(d, p) {
             var B = (V) => {
               var D = root_5$1(), H = child(D), X = sibling(child(H), 2), fe = child(X), Q = child(fe, !0);
               reset(fe);
-              var ue = sibling(fe, 2), be = child(ue);
-              reset(ue), reset(X), reset(H), next(2), reset(D), template_effect(
-                (Ue, Ie) => {
-                  set_text(Q, get(N).title || "Site-wide notes"), set_text(be, `${Ue ?? ""} line${Ie ?? ""}`);
+              var de = sibling(fe, 2), we = child(de);
+              reset(de), reset(X), reset(H), next(2), reset(D), template_effect(
+                (Ze, Te) => {
+                  set_text(Q, get(N).title || "Site-wide notes"), set_text(we, `${Ze ?? ""} line${Te ?? ""}`);
                 },
                 [
                   () => se(get(N).content),
@@ -12509,25 +12517,25 @@ function NotesPanel(d, p) {
               (get($).length > 0 || !get(O)) && V(le);
             });
           }
-          var we = sibling(pe, 2);
-          each(we, 17, () => get($), index, (V, D) => {
+          var Ee = sibling(pe, 2);
+          each(Ee, 17, () => get($), index, (V, D) => {
             var H = root_8$1();
             let X;
-            var fe = child(H), Q = sibling(child(fe), 2), ue = child(Q), be = child(ue), Ue = sibling(be);
+            var fe = child(H), Q = sibling(child(fe), 2), de = child(Q), we = child(de), Ze = sibling(we);
             {
-              var Ie = (te) => {
-                var Ye = root_9$1();
-                append(te, Ye);
+              var Te = (te) => {
+                var Xe = root_9$1();
+                append(te, Xe);
               };
-              if_block(Ue, (te) => {
-                get(D).route === get(x) && te(Ie);
+              if_block(Ze, (te) => {
+                get(D).route === get(x) && te(Te);
               });
             }
-            reset(ue);
-            var Ze = sibling(ue, 2), Le = child(Ze);
-            reset(Ze), reset(Q), reset(fe), next(2), reset(H), template_effect(
-              (te, Ye) => {
-                X = set_class(H, 1, "note-row svelte-zp32f3", null, X, { current: get(D).route === get(x) }), set_text(be, `${get(D).route ?? ""} `), set_text(Le, `${te ?? ""} line${Ye ?? ""}`);
+            reset(de);
+            var Le = sibling(de, 2), Oe = child(Le);
+            reset(Le), reset(Q), reset(fe), next(2), reset(H), template_effect(
+              (te, Xe) => {
+                X = set_class(H, 1, "note-row svelte-zp32f3", null, X, { current: get(D).route === get(x) }), set_text(we, `${get(D).route ?? ""} `), set_text(Oe, `${te ?? ""} line${Xe ?? ""}`);
               },
               [
                 () => se(get(D).content),
@@ -12535,23 +12543,23 @@ function NotesPanel(d, p) {
               ]
             ), delegated("click", H, () => j(get(D))), append(V, H);
           });
-          var ze = sibling(we, 2);
+          var Me = sibling(Ee, 2);
           {
-            var xe = (V) => {
+            var Se = (V) => {
               var D = root_10(), H = child(D), X = sibling(child(H), 2), fe = child(X);
               reset(X), reset(H), reset(D), template_effect(() => set_text(fe, `Add note for ${get(x) ?? ""}`)), delegated("click", D, () => Y(get(x))), append(V, D);
             };
-            if_block(ze, (V) => {
-              get(O) || V(xe);
+            if_block(Me, (V) => {
+              get(O) || V(Se);
             });
           }
-          var Ge = sibling(ze, 2);
+          var We = sibling(Me, 2);
           {
             var ae = (V) => {
               var D = root_11$1();
               append(V, D);
             };
-            if_block(Ge, (V) => {
+            if_block(We, (V) => {
               get(_).length === 0 && !get(b) && V(ae);
             });
           }
@@ -12574,64 +12582,64 @@ function NotesPanel(d, p) {
       var K = sibling(he, 2);
       {
         var pe = (Q) => {
-          var ue = root_13$1(), be = child(ue);
-          html(be, () => ye(get(R))), reset(ue), append(Q, ue);
+          var de = root_13$1(), we = child(de);
+          html(we, () => xe(get(R))), reset(de), append(Q, de);
         }, le = (Q) => {
-          var ue = root_14$1(), be = sibling(child(ue), 2);
-          remove_textarea_child(be), reset(ue), template_effect(() => be.disabled = get(w)), bind_value(be, () => get(R), (Ue) => set(R, Ue)), append(Q, ue);
+          var de = root_14$1(), we = sibling(child(de), 2);
+          remove_textarea_child(we), reset(de), template_effect(() => we.disabled = get(w)), bind_value(we, () => get(R), (Ze) => set(R, Ze)), append(Q, de);
         };
         if_block(K, (Q) => {
           get(A) ? Q(pe) : Q(le, !1);
         });
       }
-      var we = sibling(K, 2);
+      var Ee = sibling(K, 2);
       {
-        var ze = (Q) => {
-          var ue = root_15$1(), be = child(ue, !0);
-          reset(ue), template_effect(() => set_text(be, get(y))), append(Q, ue);
+        var Me = (Q) => {
+          var de = root_15$1(), we = child(de, !0);
+          reset(de), template_effect(() => set_text(we, get(y))), append(Q, de);
         };
-        if_block(we, (Q) => {
-          get(y) && Q(ze);
+        if_block(Ee, (Q) => {
+          get(y) && Q(Me);
         });
       }
       reset(ee);
-      var xe = sibling(ee, 2), Ge = child(xe);
+      var Se = sibling(ee, 2), We = child(Se);
       {
         var ae = (Q) => {
-          var ue = root_16$1();
-          let be;
-          var Ue = child(ue, !0);
-          reset(ue), template_effect(() => {
-            be = set_class(ue, 1, "delete-btn svelte-zp32f3", null, be, { confirm: get(C) }), ue.disabled = get(w), set_text(Ue, get(C) ? "Confirm delete?" : "Delete");
-          }), delegated("click", ue, oe), append(Q, ue);
+          var de = root_16$1();
+          let we;
+          var Ze = child(de, !0);
+          reset(de), template_effect(() => {
+            we = set_class(de, 1, "delete-btn svelte-zp32f3", null, we, { confirm: get(C) }), de.disabled = get(w), set_text(Ze, get(C) ? "Confirm delete?" : "Delete");
+          }), delegated("click", de, oe), append(Q, de);
         };
-        if_block(Ge, (Q) => {
+        if_block(We, (Q) => {
           get(k) || Q(ae);
         });
       }
-      var V = sibling(Ge, 4), D = sibling(V, 2), H = child(D);
+      var V = sibling(We, 4), D = sibling(V, 2), H = child(D);
       {
         var X = (Q) => {
-          var ue = root_17$1();
-          append(Q, ue);
+          var de = root_17$1();
+          append(Q, de);
         };
         if_block(H, (Q) => {
           get(w) && Q(X);
         });
       }
       var fe = sibling(H);
-      reset(D), reset(xe), reset(L), template_effect(
+      reset(D), reset(Se), reset(L), template_effect(
         (Q) => {
           set_text(ie, get(M) ? get(M) : "Site-wide"), ne = set_class(J, 1, "preview-toggle svelte-zp32f3", null, ne, { active: get(A) }), set_text(ge, get(A) ? "Edit" : "Preview"), B.disabled = get(w), V.disabled = get(w), D.disabled = Q, set_text(fe, ` ${get(k) ? "Create" : "Save"}`);
         },
         [() => get(w) || !get(I).trim()]
-      ), delegated("click", G, q), delegated("click", J, () => set(A, !get(A))), bind_value(B, () => get(I), (Q) => set(I, Q)), delegated("click", V, q), delegated("click", D, de), transition(3, L, () => slide, () => ({ duration: 200 })), append(z, L);
+      ), delegated("click", G, q), delegated("click", J, () => set(A, !get(A))), bind_value(B, () => get(I), (Q) => set(I, Q)), delegated("click", V, q), delegated("click", D, ue), transition(3, L, () => slide, () => ({ duration: 200 })), append(z, L);
     };
     if_block(me, (z) => {
-      get(E) === "list" ? z(Se) : get(E) === "edit" && z(T, 1);
+      get(E) === "list" ? z(Ce) : get(E) === "edit" && z(T, 1);
     });
   }
-  return reset(Ee), delegated("keydown", Ee, ve), append(d, Ee), pop(Re);
+  return reset(ke), delegated("keydown", ke, ve), append(d, ke), pop(Re);
 }
 delegate(["keydown", "click"]);
 create_custom_element(NotesPanel, { endpoint: {}, project: {}, onnoteschanged: {} }, [], [], { mode: "open" });
@@ -14840,7 +14848,7 @@ class JSONSchemaGenerator {
       var F;
       const C = this.target === "draft-2020-12" ? "$defs" : "definitions";
       if (g.external) {
-        const j = (F = g.external.registry.get(A[0])) == null ? void 0 : F.id, Y = g.external.uri ?? ((de) => de);
+        const j = (F = g.external.registry.get(A[0])) == null ? void 0 : F.id, Y = g.external.uri ?? ((ue) => ue);
         if (j)
           return { ref: Y(j) };
         const q = A[1].defId ?? A[1].schema.id ?? `schema${this.counter++}`;
@@ -15448,13 +15456,13 @@ const InvokeErrorType = {
 }, _InvokeError = class extends Error {
   constructor(h, g, m, _) {
     super(g);
-    Ce(this, "type");
-    Ce(this, "retryable");
-    Ce(this, "statusCode");
+    Ie(this, "type");
+    Ie(this, "retryable");
+    Ie(this, "statusCode");
     /* raw error (provided if this error is caused by another error) */
-    Ce(this, "rawError");
+    Ie(this, "rawError");
     /* raw response from the API (provided if this error is caused by an API calling) */
-    Ce(this, "rawResponse");
+    Ie(this, "rawResponse");
     this.name = "InvokeError", this.type = h, this.retryable = this.isRetryable(h, m), this.rawError = m, this.rawResponse = _;
   }
   isRetryable(h, g) {
@@ -15500,12 +15508,12 @@ function normalizeModelName(d) {
 __name$3(normalizeModelName, "normalizeModelName");
 const _OpenAIClient = class {
   constructor(p) {
-    Ce(this, "config");
-    Ce(this, "fetch");
+    Ie(this, "config");
+    Ie(this, "fetch");
     this.config = p, this.fetch = p.customFetch;
   }
   async invoke(p, h, g, m) {
-    var $, O, F, j, Y, q, de, oe, ce, se, ye, ve, Re, Ee, me, Se, T, z;
+    var $, O, F, j, Y, q, ue, oe, ce, se, xe, ve, Re, ke, me, Ce, T, z;
     const _ = Object.entries(h).map(([L, P]) => zodToOpenAITool(L, P)), b = {
       model: this.config.model,
       temperature: this.config.temperature,
@@ -15582,7 +15590,7 @@ const _OpenAIClient = class {
           w
         );
     }
-    const S = (F = (m != null && m.normalizeResponse ? m.normalizeResponse(w) : w).choices) == null ? void 0 : F[0], k = (de = (q = (Y = (j = S == null ? void 0 : S.message) == null ? void 0 : j.tool_calls) == null ? void 0 : Y[0]) == null ? void 0 : q.function) == null ? void 0 : de.name;
+    const S = (F = (m != null && m.normalizeResponse ? m.normalizeResponse(w) : w).choices) == null ? void 0 : F[0], k = (ue = (q = (Y = (j = S == null ? void 0 : S.message) == null ? void 0 : j.tool_calls) == null ? void 0 : Y[0]) == null ? void 0 : q.function) == null ? void 0 : ue.name;
     if (!k)
       throw new InvokeError(
         InvokeErrorType.NO_TOOL_CALL,
@@ -15598,7 +15606,7 @@ const _OpenAIClient = class {
         void 0,
         w
       );
-    const R = (ye = (se = (ce = (oe = S.message) == null ? void 0 : oe.tool_calls) == null ? void 0 : ce[0]) == null ? void 0 : se.function) == null ? void 0 : ye.arguments;
+    const R = (xe = (se = (ce = (oe = S.message) == null ? void 0 : oe.tool_calls) == null ? void 0 : ce[0]) == null ? void 0 : se.function) == null ? void 0 : xe.arguments;
     if (!R)
       throw new InvokeError(
         InvokeErrorType.INVALID_TOOL_ARGS,
@@ -15646,8 +15654,8 @@ const _OpenAIClient = class {
       usage: {
         promptTokens: ((ve = w.usage) == null ? void 0 : ve.prompt_tokens) ?? 0,
         completionTokens: ((Re = w.usage) == null ? void 0 : Re.completion_tokens) ?? 0,
-        totalTokens: ((Ee = w.usage) == null ? void 0 : Ee.total_tokens) ?? 0,
-        cachedTokens: (Se = (me = w.usage) == null ? void 0 : me.prompt_tokens_details) == null ? void 0 : Se.cached_tokens,
+        totalTokens: ((ke = w.usage) == null ? void 0 : ke.total_tokens) ?? 0,
+        cachedTokens: (Ce = (me = w.usage) == null ? void 0 : me.prompt_tokens_details) == null ? void 0 : Ce.cached_tokens,
         reasoningTokens: (z = (T = w.usage) == null ? void 0 : T.completion_tokens_details) == null ? void 0 : z.reasoning_tokens
       },
       rawResponse: w,
@@ -15677,8 +15685,8 @@ __name$3(parseLLMConfig, "parseLLMConfig");
 const _LLM = class extends EventTarget {
   constructor(h) {
     super();
-    Ce(this, "config");
-    Ce(this, "client");
+    Ie(this, "config");
+    Ie(this, "client");
     this.config = parseLLMConfig(h), this.client = new OpenAIClient(this.config);
   }
   /**
@@ -16711,20 +16719,20 @@ const domTree = /* @__PURE__ */ __name$1((d = {
         if (X.width === 0 || X.height === 0) continue;
         const fe = document.createElement("div");
         fe.style.position = "fixed", fe.style.border = `2px solid ${B}`, fe.style.backgroundColor = K, fe.style.pointerEvents = "none", fe.style.boxSizing = "border-box";
-        const Q = X.top + pe.y, ue = X.left + pe.x;
-        fe.style.top = `${Q}px`, fe.style.left = `${ue}px`, fe.style.width = `${X.width}px`, fe.style.height = `${X.height}px`, le.appendChild(fe), P.push({ element: fe, initialRect: X });
+        const Q = X.top + pe.y, de = X.left + pe.x;
+        fe.style.top = `${Q}px`, fe.style.left = `${de}px`, fe.style.width = `${X.width}px`, fe.style.height = `${X.height}px`, le.appendChild(fe), P.push({ element: fe, initialRect: X });
       }
-      const we = ge[0];
-      G = document.createElement("div"), G.className = "playwright-highlight-label", G.style.position = "fixed", G.style.background = B, G.style.color = "white", G.style.padding = "1px 4px", G.style.borderRadius = "4px", G.style.fontSize = `${Math.min(12, Math.max(8, we.height / 2))}px`, G.textContent = z.toString(), W = G.offsetWidth > 0 ? G.offsetWidth : W, ie = G.offsetHeight > 0 ? G.offsetHeight : ie;
-      const ze = we.top + pe.y, xe = we.left + pe.x;
-      let Ge = ze + 2, ae = xe + we.width - W - 2;
-      (we.width < W + 4 || we.height < ie + 4) && (Ge = ze - ie - 2, ae = xe + we.width - W, ae < pe.x && (ae = xe)), Ge = Math.max(0, Math.min(Ge, window.innerHeight - ie)), ae = Math.max(0, Math.min(ae, window.innerWidth - W)), G.style.top = `${Ge}px`, G.style.left = `${ae}px`, le.appendChild(G);
+      const Ee = ge[0];
+      G = document.createElement("div"), G.className = "playwright-highlight-label", G.style.position = "fixed", G.style.background = B, G.style.color = "white", G.style.padding = "1px 4px", G.style.borderRadius = "4px", G.style.fontSize = `${Math.min(12, Math.max(8, Ee.height / 2))}px`, G.textContent = z.toString(), W = G.offsetWidth > 0 ? G.offsetWidth : W, ie = G.offsetHeight > 0 ? G.offsetHeight : ie;
+      const Me = Ee.top + pe.y, Se = Ee.left + pe.x;
+      let We = Me + 2, ae = Se + Ee.width - W - 2;
+      (Ee.width < W + 4 || Ee.height < ie + 4) && (We = Me - ie - 2, ae = Se + Ee.width - W, ae < pe.x && (ae = Se)), We = Math.max(0, Math.min(We, window.innerHeight - ie)), ae = Math.max(0, Math.min(ae, window.innerWidth - W)), G.style.top = `${We}px`, G.style.left = `${ae}px`, le.appendChild(G);
       const H = (/* @__PURE__ */ __name$1((X, fe) => {
         let Q = 0;
-        return (...ue) => {
-          const be = performance.now();
-          if (!(be - Q < fe))
-            return Q = be, X(...ue);
+        return (...de) => {
+          const we = performance.now();
+          if (!(we - Q < fe))
+            return Q = we, X(...de);
         };
       }, "throttleFunction"))(/* @__PURE__ */ __name$1(() => {
         const X = T.getClientRects();
@@ -16733,19 +16741,19 @@ const domTree = /* @__PURE__ */ __name$1((d = {
           const Q = L.getBoundingClientRect();
           fe.x = Q.left, fe.y = Q.top;
         }
-        if (P.forEach((Q, ue) => {
-          if (ue < X.length) {
-            const be = X[ue], Ue = be.top + fe.y, Ie = be.left + fe.x;
-            Q.element.style.top = `${Ue}px`, Q.element.style.left = `${Ie}px`, Q.element.style.width = `${be.width}px`, Q.element.style.height = `${be.height}px`, Q.element.style.display = be.width === 0 || be.height === 0 ? "none" : "block";
+        if (P.forEach((Q, de) => {
+          if (de < X.length) {
+            const we = X[de], Ze = we.top + fe.y, Te = we.left + fe.x;
+            Q.element.style.top = `${Ze}px`, Q.element.style.left = `${Te}px`, Q.element.style.width = `${we.width}px`, Q.element.style.height = `${we.height}px`, Q.element.style.display = we.width === 0 || we.height === 0 ? "none" : "block";
           } else
             Q.element.style.display = "none";
         }), X.length < P.length)
           for (let Q = X.length; Q < P.length; Q++)
             P[Q].element.style.display = "none";
         if (G && X.length > 0) {
-          const Q = X[0], ue = Q.top + fe.y, be = Q.left + fe.x;
-          let Ue = ue + 2, Ie = be + Q.width - W - 2;
-          (Q.width < W + 4 || Q.height < ie + 4) && (Ue = ue - ie - 2, Ie = be + Q.width - W, Ie < fe.x && (Ie = be)), Ue = Math.max(0, Math.min(Ue, window.innerHeight - ie)), Ie = Math.max(0, Math.min(Ie, window.innerWidth - W)), G.style.top = `${Ue}px`, G.style.left = `${Ie}px`, G.style.display = "block";
+          const Q = X[0], de = Q.top + fe.y, we = Q.left + fe.x;
+          let Ze = de + 2, Te = we + Q.width - W - 2;
+          (Q.width < W + 4 || Q.height < ie + 4) && (Ze = de - ie - 2, Te = we + Q.width - W, Te < fe.x && (Te = we)), Ze = Math.max(0, Math.min(Ze, window.innerHeight - ie)), Te = Math.max(0, Math.min(Te, window.innerWidth - W)), G.style.top = `${Ze}px`, G.style.left = `${Te}px`, G.style.display = "block";
         } else G && (G.style.display = "none");
       }, "updatePositions"), 16);
       return window.addEventListener("scroll", H, !0), window.addEventListener("resize", H), J = /* @__PURE__ */ __name$1(() => {
@@ -17036,14 +17044,14 @@ const domTree = /* @__PURE__ */ __name$1((d = {
     if (J.has(z) || ge && he.has(ge) || ee && he.has(ee)) return !0;
     try {
       if (typeof getEventListeners == "function") {
-        const ze = getEventListeners(T), xe = ["click", "mousedown", "mouseup", "dblclick"];
-        for (const Ge of xe)
-          if (ze[Ge] && ze[Ge].length > 0)
+        const Me = getEventListeners(T), Se = ["click", "mousedown", "mouseup", "dblclick"];
+        for (const We of Se)
+          if (Me[We] && Me[We].length > 0)
             return !0;
       }
       const le = ((pe = (K = T == null ? void 0 : T.ownerDocument) == null ? void 0 : K.defaultView) == null ? void 0 : pe.getEventListenersForNode) || window.getEventListenersForNode;
       if (typeof le == "function") {
-        const ze = le(T), xe = [
+        const Me = le(T), Se = [
           "click",
           "mousedown",
           "mouseup",
@@ -17055,21 +17063,21 @@ const domTree = /* @__PURE__ */ __name$1((d = {
           "focus",
           "blur"
         ];
-        for (const Ge of xe)
-          for (const ae of ze)
-            if (ae.type === Ge)
+        for (const We of Se)
+          for (const ae of Me)
+            if (ae.type === We)
               return !0;
       }
-      const we = ["onclick", "onmousedown", "onmouseup", "ondblclick"];
-      for (const ze of we)
-        if (T.hasAttribute(ze) || typeof T[ze] == "function")
+      const Ee = ["onclick", "onmousedown", "onmouseup", "ondblclick"];
+      for (const Me of Ee)
+        if (T.hasAttribute(Me) || typeof T[Me] == "function")
           return !0;
     } catch {
     }
     return !!O(T);
   }
   __name$1(q, "isInteractiveElement");
-  function de(T) {
+  function ue(T) {
     if (y === -1)
       return !0;
     const z = M(T);
@@ -17130,7 +17138,7 @@ const domTree = /* @__PURE__ */ __name$1((d = {
       }
     });
   }
-  __name$1(de, "isTopElement");
+  __name$1(ue, "isTopElement");
   function oe(T, z) {
     if (z === -1)
       return !0;
@@ -17170,7 +17178,7 @@ const domTree = /* @__PURE__ */ __name$1((d = {
     "details",
     "label",
     "option"
-  ]), ye = /* @__PURE__ */ new Set([
+  ]), xe = /* @__PURE__ */ new Set([
     "button",
     "link",
     "menuitem",
@@ -17202,7 +17210,7 @@ const domTree = /* @__PURE__ */ __name$1((d = {
     if (!T || T.nodeType !== Node.ELEMENT_NODE)
       return !1;
     const z = T.tagName.toLowerCase(), L = T.getAttribute("role");
-    if (z === "iframe" || se.has(z) || L && ye.has(L) || T.isContentEditable || T.getAttribute("contenteditable") === "true" || T.hasAttribute("data-testid") || T.hasAttribute("data-cy") || T.hasAttribute("data-test") || T.hasAttribute("onclick") || typeof T.onclick == "function")
+    if (z === "iframe" || se.has(z) || L && xe.has(L) || T.isContentEditable || T.getAttribute("contenteditable") === "true" || T.hasAttribute("data-testid") || T.hasAttribute("data-cy") || T.hasAttribute("data-test") || T.hasAttribute("onclick") || typeof T.onclick == "function")
       return !0;
     try {
       const W = ((G = (P = T == null ? void 0 : T.ownerDocument) == null ? void 0 : P.defaultView) == null ? void 0 : G.getEventListenersForNode) || window.getEventListenersForNode;
@@ -17241,12 +17249,12 @@ const domTree = /* @__PURE__ */ __name$1((d = {
     return !!ve(T);
   }
   __name$1(Re, "isElementDistinctInteraction");
-  function Ee(T, z, L, P) {
+  function ke(T, z, L, P) {
     if (!T.isInteractive) return !1;
     let G = !1;
     return P ? Re(z) ? G = !0 : G = !1 : G = !0, G && (T.isInViewport = oe(z, y), (T.isInViewport || y === -1) && (T.highlightIndex = x++, _)) ? (b >= 0 ? b === T.highlightIndex && $(z, T.highlightIndex, L) : $(z, T.highlightIndex, L), !0) : !1;
   }
-  __name$1(Ee, "handleHighlighting");
+  __name$1(ke, "handleHighlighting");
   function me(T, z = null, L = !1) {
     var ie, J, ne, ge, ee, he, B;
     if (!T || T.id === N || T.nodeType !== Node.ELEMENT_NODE && T.nodeType !== Node.TEXT_NODE || !T || T.id === N || ((ie = T.dataset) == null ? void 0 : ie.browserUseIgnore) === "true" || ((J = T.dataset) == null ? void 0 : J.pageAgentIgnore) === "true" || T.getAttribute && T.getAttribute("aria-hidden") === "true")
@@ -17259,8 +17267,8 @@ const domTree = /* @__PURE__ */ __name$1((d = {
         children: []
       };
       for (const le of T.childNodes) {
-        const we = me(le, z, !1);
-        we && K.children.push(we);
+        const Ee = me(le, z, !1);
+        Ee && K.children.push(Ee);
       }
       const pe = `${C.current++}`;
       return A[pe] = K, pe;
@@ -17284,8 +17292,8 @@ const domTree = /* @__PURE__ */ __name$1((d = {
     if (T.nodeType === Node.ELEMENT_NODE && !j(T))
       return null;
     if (y !== -1 && !T.shadowRoot) {
-      const K = I(T), pe = R(T), le = pe && (pe.position === "fixed" || pe.position === "sticky"), we = T.offsetWidth > 0 || T.offsetHeight > 0;
-      if (!K || !le && !we && (K.bottom < -y || K.top > window.innerHeight + y || K.right < -y || K.left > window.innerWidth + y))
+      const K = I(T), pe = R(T), le = pe && (pe.position === "fixed" || pe.position === "sticky"), Ee = T.offsetWidth > 0 || T.offsetHeight > 0;
+      if (!K || !le && !Ee && (K.bottom < -y || K.top > window.innerHeight + y || K.right < -y || K.left > window.innerWidth + y))
         return null;
     }
     const P = {
@@ -17307,13 +17315,13 @@ const domTree = /* @__PURE__ */ __name$1((d = {
     }
     let G = !1;
     if (T.nodeType === Node.ELEMENT_NODE && (P.isVisible = Y(T), P.isVisible)) {
-      P.isTopElement = de(T);
+      P.isTopElement = ue(T);
       const K = T.getAttribute("role"), pe = K === "menu" || K === "menubar" || K === "listbox";
-      if ((P.isTopElement || pe) && (P.isInteractive = q(T), G = Ee(P, T, z, L), P.ref = T, P.isInteractive && Object.keys(P.attributes).length === 0)) {
+      if ((P.isTopElement || pe) && (P.isInteractive = q(T), G = ke(P, T, z, L), P.ref = T, P.isInteractive && Object.keys(P.attributes).length === 0)) {
         const le = ((ee = T.getAttributeNames) == null ? void 0 : ee.call(T)) || [];
-        for (const we of le) {
-          const ze = T.getAttribute(we);
-          P.attributes[we] = ze;
+        for (const Ee of le) {
+          const Me = T.getAttribute(Ee);
+          P.attributes[Ee] = Me;
         }
       }
     }
@@ -17324,8 +17332,8 @@ const domTree = /* @__PURE__ */ __name$1((d = {
           const pe = T.contentDocument || ((he = T.contentWindow) == null ? void 0 : he.document);
           if (pe)
             for (const le of pe.childNodes) {
-              const we = me(le, T, !1);
-              we && P.children.push(we);
+              const Ee = me(le, T, !1);
+              Ee && P.children.push(Ee);
             }
         } catch (pe) {
           console.warn("Unable to access iframe:", pe);
@@ -17344,8 +17352,8 @@ const domTree = /* @__PURE__ */ __name$1((d = {
           }
         }
         for (const pe of T.childNodes) {
-          const we = me(pe, z, G || L);
-          we && P.children.push(we);
+          const Ee = me(pe, z, G || L);
+          Ee && P.children.push(Ee);
         }
       }
     }
@@ -17359,8 +17367,8 @@ const domTree = /* @__PURE__ */ __name$1((d = {
     return A[W] = P, W;
   }
   __name$1(me, "buildDomTree");
-  const Se = me(document.body);
-  return k.clearCache(), { rootId: Se, map: A };
+  const Ce = me(document.body);
+  return k.clearCache(), { rootId: Ce, map: A };
 }, "domTree"), DEFAULT_VIEWPORT_EXPANSION = -1;
 function resolveViewportExpansion(d) {
   return d ?? DEFAULT_VIEWPORT_EXPANSION;
@@ -17502,15 +17510,15 @@ function flatTreeToString(d, p) {
         const O = getAllTextTillNextClickableElement(S);
         let F = "";
         if (g.length > 0 && S.attributes) {
-          const q = matchAttributes(S.attributes, g), de = Object.keys(q);
-          if (de.length > 1) {
+          const q = matchAttributes(S.attributes, g), ue = Object.keys(q);
+          if (ue.length > 1) {
             const ce = /* @__PURE__ */ new Set(), se = {};
-            for (const ye of de) {
-              const ve = q[ye];
-              ve.length > 5 && (ve in se ? ce.add(ye) : se[ve] = ye);
+            for (const xe of ue) {
+              const ve = q[xe];
+              ve.length > 5 && (ve in se ? ce.add(xe) : se[ve] = xe);
             }
-            for (const ye of ce)
-              delete q[ye];
+            for (const xe of ce)
+              delete q[xe];
           }
           q.role === S.tagName && delete q.role;
           const oe = ["aria-label", "placeholder", "title"];
@@ -17641,28 +17649,28 @@ __name$1(patchReact, "patchReact");
 const _PageController = class extends EventTarget {
   constructor(p = {}) {
     super();
-    Ce(this, "config");
+    Ie(this, "config");
     /** Corresponds to eval_page in browser-use */
-    Ce(this, "flatTree", null);
+    Ie(this, "flatTree", null);
     /**
      * All highlighted index-mapped interactive elements
      * Corresponds to DOMState.selector_map in browser-use
      */
-    Ce(this, "selectorMap", /* @__PURE__ */ new Map());
+    Ie(this, "selectorMap", /* @__PURE__ */ new Map());
     /** Index -> element text description mapping */
-    Ce(this, "elementTextMap", /* @__PURE__ */ new Map());
+    Ie(this, "elementTextMap", /* @__PURE__ */ new Map());
     /**
      * Simplified HTML for LLM consumption.
      * Corresponds to clickable_elements_to_string in browser-use
      */
-    Ce(this, "simplifiedHTML", "<EMPTY>");
+    Ie(this, "simplifiedHTML", "<EMPTY>");
     /** last time the tree was updated */
-    Ce(this, "lastTimeUpdate", 0);
+    Ie(this, "lastTimeUpdate", 0);
     /** Whether the tree has been indexed at least once */
-    Ce(this, "isIndexed", !1);
+    Ie(this, "isIndexed", !1);
     /** Visual mask overlay for blocking user interaction during automation */
-    Ce(this, "mask", null);
-    Ce(this, "maskReady", null);
+    Ie(this, "mask", null);
+    Ie(this, "maskReady", null);
     this.config = p, patchReact(), p.enableMask && this.initMask();
   }
   /**
@@ -18277,7 +18285,7 @@ function summarizeInput(d) {
 function truncate(d, p) {
   return d.length <= p ? d : d.slice(0, p - 1) + "…";
 }
-var root_1$1 = /* @__PURE__ */ from_html('<div class="drag-handle svelte-nv4d5v"><svg width="10" height="16" viewBox="0 0 10 16" fill="none" class="svelte-nv4d5v"><circle cx="3" cy="3" r="1.5" fill="currentColor" class="svelte-nv4d5v"></circle><circle cx="7" cy="3" r="1.5" fill="currentColor" class="svelte-nv4d5v"></circle><circle cx="3" cy="8" r="1.5" fill="currentColor" class="svelte-nv4d5v"></circle><circle cx="7" cy="8" r="1.5" fill="currentColor" class="svelte-nv4d5v"></circle><circle cx="3" cy="13" r="1.5" fill="currentColor" class="svelte-nv4d5v"></circle><circle cx="7" cy="13" r="1.5" fill="currentColor" class="svelte-nv4d5v"></circle></svg></div>'), root_2$1 = /* @__PURE__ */ from_html('<span class="tab-badge svelte-nv4d5v"> </span>'), root_3 = /* @__PURE__ */ from_html('<button><svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><rect x="4" y="4" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.8" class="svelte-nv4d5v"></rect><circle cx="9" cy="10" r="1.5" fill="currentColor" class="svelte-nv4d5v"></circle><circle cx="15" cy="10" r="1.5" fill="currentColor" class="svelte-nv4d5v"></circle><path d="M8 20h8M12 16v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" class="svelte-nv4d5v"></path></svg> Agent</button>'), root_5 = /* @__PURE__ */ from_html('<option class="svelte-nv4d5v"> </option>'), root_6 = /* @__PURE__ */ from_html('<option class="svelte-nv4d5v"> </option>'), root_7 = /* @__PURE__ */ from_html('<span class="capture-spinner svelte-nv4d5v"></span> Capturing...', 1), root_9 = /* @__PURE__ */ from_html('<span class="tool-count svelte-nv4d5v"> </span>'), root_8 = /* @__PURE__ */ from_svg('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2" class="svelte-nv4d5v"></rect><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" class="svelte-nv4d5v"></circle></svg> Screenshot<!>', 1), root_12 = /* @__PURE__ */ from_html('<span class="tool-count svelte-nv4d5v"> </span>'), root_11 = /* @__PURE__ */ from_html("Pick<!>", 1), root_13 = /* @__PURE__ */ from_html('<span class="recording-pulse svelte-nv4d5v"></span> Stop', 1), root_15 = /* @__PURE__ */ from_html('<span class="tool-count svelte-nv4d5v"> </span>'), root_14 = /* @__PURE__ */ from_svg('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2" class="svelte-nv4d5v"></circle><circle cx="12" cy="12" r="4" fill="currentColor" class="svelte-nv4d5v"></circle></svg> Record<!>', 1), root_16 = /* @__PURE__ */ from_html('<span class="tool-count svelte-nv4d5v"> </span>'), root_19 = /* @__PURE__ */ from_svg('<svg width="12" height="12" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" stroke-width="2" class="svelte-nv4d5v"></path><path d="M14 2v6h6" stroke="currentColor" stroke-width="2" class="svelte-nv4d5v"></path></svg>'), root_20 = /* @__PURE__ */ from_svg('<svg width="12" height="12" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><path d="M4 4h16v16H4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" class="svelte-nv4d5v"></path><path d="M7 15V9l3 4 3-4v6M17 12h-3v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="svelte-nv4d5v"></path></svg>'), root_21 = /* @__PURE__ */ from_svg('<svg width="12" height="12" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" stroke-width="2" class="svelte-nv4d5v"></path><path d="M14 2v6h6" stroke="currentColor" stroke-width="2" class="svelte-nv4d5v"></path></svg>'), root_18 = /* @__PURE__ */ from_html('<div class="attachment-item svelte-nv4d5v"><span class="attachment-icon svelte-nv4d5v"><!></span> <span class="attachment-name svelte-nv4d5v"> </span> <span class="attachment-size svelte-nv4d5v"> </span> <button class="attachment-remove svelte-nv4d5v" aria-label="Remove">&times;</button></div>'), root_17 = /* @__PURE__ */ from_html('<div class="attachments-list svelte-nv4d5v"></div>'), root_23 = /* @__PURE__ */ from_html('<div class="element-item svelte-nv4d5v"><span class="element-tag svelte-nv4d5v"> </span> <span class="element-text svelte-nv4d5v"> </span> <button class="element-remove svelte-nv4d5v" aria-label="Remove">&times;</button></div>'), root_22 = /* @__PURE__ */ from_html('<div class="elements-list svelte-nv4d5v"></div>'), root_24 = /* @__PURE__ */ from_html('<div class="attach-summary svelte-nv4d5v"> </div>'), root_25 = /* @__PURE__ */ from_html('<span class="spinner svelte-nv4d5v"></span> Submitting...', 1), root_4 = /* @__PURE__ */ from_html('<form class="panel-body svelte-nv4d5v"><div class="field svelte-nv4d5v"><label for="jat-fb-title" class="svelte-nv4d5v">Title <span class="req svelte-nv4d5v">*</span></label> <input id="jat-fb-title" type="text" placeholder="Brief description" required="" class="svelte-nv4d5v"/></div> <div class="field svelte-nv4d5v"><label for="jat-fb-desc" class="svelte-nv4d5v">Description</label> <textarea id="jat-fb-desc" placeholder="Steps to reproduce, expected vs actual..." rows="3" class="svelte-nv4d5v"></textarea></div> <div class="field-row svelte-nv4d5v"><div class="field half svelte-nv4d5v"><label for="jat-fb-type" class="svelte-nv4d5v">Type</label> <select id="jat-fb-type" class="svelte-nv4d5v"></select></div> <div class="field half svelte-nv4d5v"><label for="jat-fb-priority" class="svelte-nv4d5v">Priority</label> <select id="jat-fb-priority" class="svelte-nv4d5v"></select></div></div> <div class="tools svelte-nv4d5v"><div class="tool-buttons svelte-nv4d5v"><button type="button" class="tool-btn svelte-nv4d5v"><!></button> <button type="button" class="tool-btn svelte-nv4d5v"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><path d="M7 2L7 22M17 2V22M2 7H22M2 17H22" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="svelte-nv4d5v"></path></svg> <!></button> <button type="button"><!></button> <button type="button" class="tool-btn svelte-nv4d5v"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svelte-nv4d5v"></path></svg> Upload<!></button> <input type="file" multiple="" accept="image/*,video/*,.md,.txt,.pdf,.doc,.docx,.csv,.json,.xml,.html,.log" style="display:none" class="svelte-nv4d5v"/></div> <!></div> <!> <!> <!> <!> <div class="actions svelte-nv4d5v"><span class="panel-version svelte-nv4d5v"> </span> <button type="button" class="cancel-btn svelte-nv4d5v">Cancel</button> <button type="submit" class="submit-btn svelte-nv4d5v"><!></button></div></form>'), root_27 = /* @__PURE__ */ from_html('<div class="requests-wrapper svelte-nv4d5v"><!></div>'), root_28 = /* @__PURE__ */ from_html('<div class="agent-wrapper svelte-nv4d5v"><!></div>'), root_29 = /* @__PURE__ */ from_html('<div class="notes-wrapper svelte-nv4d5v"><!></div>'), root_31 = /* @__PURE__ */ from_html('<button class="voice-btn voice-btn-start svelte-nv4d5v"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="28" height="28" class="svelte-nv4d5v"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3Z" class="svelte-nv4d5v"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8" class="svelte-nv4d5v"></path></svg> Start Recording</button>'), root_32 = /* @__PURE__ */ from_html('<button class="voice-btn voice-btn-stop svelte-nv4d5v"><svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24" class="svelte-nv4d5v"><rect x="4" y="4" width="16" height="16" rx="2" class="svelte-nv4d5v"></rect></svg> Stop Recording</button> <div class="voice-recording-indicator svelte-nv4d5v"><span class="voice-dot svelte-nv4d5v"></span> <span class="voice-dot svelte-nv4d5v"></span> <span class="voice-dot svelte-nv4d5v"></span></div>', 1), root_33 = /* @__PURE__ */ from_html('<div class="voice-processing svelte-nv4d5v"><span class="voice-spinner svelte-nv4d5v"></span> <span class="voice-status-text svelte-nv4d5v"> </span></div>'), root_34 = /* @__PURE__ */ from_html('<div class="voice-done svelte-nv4d5v"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="32" height="32" class="svelte-nv4d5v"><path d="M20 6 9 17l-5-5" class="svelte-nv4d5v"></path></svg></div> <p class="voice-status-text voice-done-text svelte-nv4d5v"> </p> <button class="voice-reset svelte-nv4d5v">Record another</button>', 1), root_35 = /* @__PURE__ */ from_html('<div class="voice-error-icon svelte-nv4d5v">!</div> <p class="voice-status-text voice-error-text svelte-nv4d5v"> </p> <button class="voice-reset svelte-nv4d5v">Try again</button>', 1), root_36 = /* @__PURE__ */ from_html('<p class="voice-footer svelte-nv4d5v">Transcription uses <strong class="svelte-nv4d5v">voxtype</strong> + <strong class="svelte-nv4d5v">ollama</strong> locally — no cloud needed.</p>'), root_30 = /* @__PURE__ */ from_html('<div class="voice-wrapper svelte-nv4d5v"><div class="voice-body svelte-nv4d5v"><p class="voice-hint svelte-nv4d5v">Record a voice note — JAT will transcribe it and create tasks automatically.</p> <div class="voice-mic-row svelte-nv4d5v"><!></div> <!></div></div>'), root$1 = /* @__PURE__ */ from_html('<div class="panel svelte-nv4d5v"><div class="panel-header svelte-nv4d5v"><!> <div class="tabs svelte-nv4d5v"><button><svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="svelte-nv4d5v"></path></svg> New</button> <button><svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="svelte-nv4d5v"></path></svg> History <!></button> <!> <button><svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" stroke-width="1.8" class="svelte-nv4d5v"></path><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" class="svelte-nv4d5v"></path></svg> Notes</button> <button><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="svelte-nv4d5v"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3Z" class="svelte-nv4d5v"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8" class="svelte-nv4d5v"></path></svg> Voice</button></div> <button class="close-btn svelte-nv4d5v" aria-label="Close">&times;</button></div> <!> <!> <!> <!> <!> <!></div> <!>', 1);
+var root_1$1 = /* @__PURE__ */ from_html('<div class="drag-handle svelte-nv4d5v"><svg width="10" height="16" viewBox="0 0 10 16" fill="none" class="svelte-nv4d5v"><circle cx="3" cy="3" r="1.5" fill="currentColor" class="svelte-nv4d5v"></circle><circle cx="7" cy="3" r="1.5" fill="currentColor" class="svelte-nv4d5v"></circle><circle cx="3" cy="8" r="1.5" fill="currentColor" class="svelte-nv4d5v"></circle><circle cx="7" cy="8" r="1.5" fill="currentColor" class="svelte-nv4d5v"></circle><circle cx="3" cy="13" r="1.5" fill="currentColor" class="svelte-nv4d5v"></circle><circle cx="7" cy="13" r="1.5" fill="currentColor" class="svelte-nv4d5v"></circle></svg></div>'), root_2$1 = /* @__PURE__ */ from_html('<span class="tab-badge svelte-nv4d5v"> </span>'), root_3 = /* @__PURE__ */ from_html('<button><svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><rect x="4" y="4" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.8" class="svelte-nv4d5v"></rect><circle cx="9" cy="10" r="1.5" fill="currentColor" class="svelte-nv4d5v"></circle><circle cx="15" cy="10" r="1.5" fill="currentColor" class="svelte-nv4d5v"></circle><path d="M8 20h8M12 16v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" class="svelte-nv4d5v"></path></svg> Agent</button>'), root_5 = /* @__PURE__ */ from_html('<option class="svelte-nv4d5v"> </option>'), root_6 = /* @__PURE__ */ from_html('<option class="svelte-nv4d5v"> </option>'), root_7 = /* @__PURE__ */ from_html('<span class="capture-spinner svelte-nv4d5v"></span> Capturing...', 1), root_9 = /* @__PURE__ */ from_html('<span class="tool-count svelte-nv4d5v"> </span>'), root_8 = /* @__PURE__ */ from_svg('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2" class="svelte-nv4d5v"></rect><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" class="svelte-nv4d5v"></circle></svg> Screenshot<!>', 1), root_12 = /* @__PURE__ */ from_html('<span class="tool-count svelte-nv4d5v"> </span>'), root_11 = /* @__PURE__ */ from_html("Pick<!>", 1), root_13 = /* @__PURE__ */ from_html('<span class="recording-pulse svelte-nv4d5v"></span> Stop', 1), root_15 = /* @__PURE__ */ from_html('<span class="tool-count svelte-nv4d5v"> </span>'), root_14 = /* @__PURE__ */ from_svg('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2" class="svelte-nv4d5v"></circle><circle cx="12" cy="12" r="4" fill="currentColor" class="svelte-nv4d5v"></circle></svg> Record<!>', 1), root_16 = /* @__PURE__ */ from_html('<span class="tool-count svelte-nv4d5v"> </span>'), root_19 = /* @__PURE__ */ from_svg('<svg width="12" height="12" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" stroke-width="2" class="svelte-nv4d5v"></path><path d="M14 2v6h6" stroke="currentColor" stroke-width="2" class="svelte-nv4d5v"></path></svg>'), root_20 = /* @__PURE__ */ from_svg('<svg width="12" height="12" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><path d="M4 4h16v16H4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" class="svelte-nv4d5v"></path><path d="M7 15V9l3 4 3-4v6M17 12h-3v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="svelte-nv4d5v"></path></svg>'), root_21 = /* @__PURE__ */ from_svg('<svg width="12" height="12" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" stroke-width="2" class="svelte-nv4d5v"></path><path d="M14 2v6h6" stroke="currentColor" stroke-width="2" class="svelte-nv4d5v"></path></svg>'), root_18 = /* @__PURE__ */ from_html('<div class="attachment-item svelte-nv4d5v"><span class="attachment-icon svelte-nv4d5v"><!></span> <span class="attachment-name svelte-nv4d5v"> </span> <span class="attachment-size svelte-nv4d5v"> </span> <button class="attachment-remove svelte-nv4d5v" aria-label="Remove">&times;</button></div>'), root_17 = /* @__PURE__ */ from_html('<div class="attachments-list svelte-nv4d5v"></div>'), root_23 = /* @__PURE__ */ from_html('<div class="element-item svelte-nv4d5v"><span class="element-tag svelte-nv4d5v"> </span> <span class="element-text svelte-nv4d5v"> </span> <button class="element-remove svelte-nv4d5v" aria-label="Remove">&times;</button></div>'), root_22 = /* @__PURE__ */ from_html('<div class="elements-list svelte-nv4d5v"></div>'), root_24 = /* @__PURE__ */ from_html('<div class="attach-summary svelte-nv4d5v"> </div>'), root_25 = /* @__PURE__ */ from_html('<span class="spinner svelte-nv4d5v"></span> Submitting...', 1), root_4 = /* @__PURE__ */ from_html('<form class="panel-body svelte-nv4d5v"><div class="field svelte-nv4d5v"><label for="jat-fb-title" class="svelte-nv4d5v">Title <span class="req svelte-nv4d5v">*</span></label> <input id="jat-fb-title" type="text" placeholder="Brief description" required="" class="svelte-nv4d5v"/></div> <div class="field svelte-nv4d5v"><label for="jat-fb-desc" class="svelte-nv4d5v">Description</label> <textarea id="jat-fb-desc" placeholder="Steps to reproduce, expected vs actual..." rows="3" class="svelte-nv4d5v"></textarea></div> <div class="field-row svelte-nv4d5v"><div class="field half svelte-nv4d5v"><label for="jat-fb-type" class="svelte-nv4d5v">Type</label> <select id="jat-fb-type" class="svelte-nv4d5v"></select></div> <div class="field half svelte-nv4d5v"><label for="jat-fb-priority" class="svelte-nv4d5v">Priority</label> <select id="jat-fb-priority" class="svelte-nv4d5v"></select></div></div> <div class="tools svelte-nv4d5v"><div class="tool-buttons svelte-nv4d5v"><button type="button" class="tool-btn svelte-nv4d5v"><!></button> <button type="button" class="tool-btn svelte-nv4d5v"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><path d="M7 2L7 22M17 2V22M2 7H22M2 17H22" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="svelte-nv4d5v"></path></svg> <!></button> <button type="button"><!></button> <button type="button" class="tool-btn svelte-nv4d5v"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svelte-nv4d5v"></path></svg> Upload<!></button> <input type="file" multiple="" accept="image/*,video/*,.md,.txt,.pdf,.doc,.docx,.csv,.json,.xml,.html,.log" style="display:none" class="svelte-nv4d5v"/></div> <!></div> <!> <!> <!> <!> <div class="actions svelte-nv4d5v"><span class="panel-version svelte-nv4d5v"> </span> <button type="button" class="cancel-btn svelte-nv4d5v">Cancel</button> <button type="submit" class="submit-btn svelte-nv4d5v"><!></button></div></form>'), root_28 = /* @__PURE__ */ from_html('<div class="replay-banner svelte-nv4d5v"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5" class="svelte-nv4d5v"></circle><polygon points="10,8 16,12 10,16" fill="currentColor" class="svelte-nv4d5v"></polygon></svg> <span class="svelte-nv4d5v">Recording captured —</span> <a target="_blank" rel="noreferrer" class="svelte-nv4d5v">View replay</a> <button class="replay-banner-dismiss svelte-nv4d5v" aria-label="Dismiss">×</button></div>'), root_27 = /* @__PURE__ */ from_html('<div class="requests-wrapper svelte-nv4d5v"><!> <!></div>'), root_29 = /* @__PURE__ */ from_html('<div class="agent-wrapper svelte-nv4d5v"><!></div>'), root_30 = /* @__PURE__ */ from_html('<div class="notes-wrapper svelte-nv4d5v"><!></div>'), root_32 = /* @__PURE__ */ from_html('<button class="voice-btn voice-btn-start svelte-nv4d5v"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="28" height="28" class="svelte-nv4d5v"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3Z" class="svelte-nv4d5v"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8" class="svelte-nv4d5v"></path></svg> Start Recording</button>'), root_33 = /* @__PURE__ */ from_html('<button class="voice-btn voice-btn-stop svelte-nv4d5v"><svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24" class="svelte-nv4d5v"><rect x="4" y="4" width="16" height="16" rx="2" class="svelte-nv4d5v"></rect></svg> Stop Recording</button> <div class="voice-recording-indicator svelte-nv4d5v"><span class="voice-dot svelte-nv4d5v"></span> <span class="voice-dot svelte-nv4d5v"></span> <span class="voice-dot svelte-nv4d5v"></span></div>', 1), root_34 = /* @__PURE__ */ from_html('<div class="voice-processing svelte-nv4d5v"><span class="voice-spinner svelte-nv4d5v"></span> <span class="voice-status-text svelte-nv4d5v"> </span></div>'), root_35 = /* @__PURE__ */ from_html('<div class="voice-done svelte-nv4d5v"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="32" height="32" class="svelte-nv4d5v"><path d="M20 6 9 17l-5-5" class="svelte-nv4d5v"></path></svg></div> <p class="voice-status-text voice-done-text svelte-nv4d5v"> </p> <button class="voice-reset svelte-nv4d5v">Record another</button>', 1), root_36 = /* @__PURE__ */ from_html('<div class="voice-error-icon svelte-nv4d5v">!</div> <p class="voice-status-text voice-error-text svelte-nv4d5v"> </p> <button class="voice-reset svelte-nv4d5v">Try again</button>', 1), root_37 = /* @__PURE__ */ from_html('<p class="voice-footer svelte-nv4d5v">Transcription uses <strong class="svelte-nv4d5v">voxtype</strong> + <strong class="svelte-nv4d5v">ollama</strong> locally — no cloud needed.</p>'), root_31 = /* @__PURE__ */ from_html('<div class="voice-wrapper svelte-nv4d5v"><div class="voice-body svelte-nv4d5v"><p class="voice-hint svelte-nv4d5v">Record a voice note — JAT will transcribe it and create tasks automatically.</p> <div class="voice-mic-row svelte-nv4d5v"><!></div> <!></div></div>'), root$1 = /* @__PURE__ */ from_html('<div class="panel svelte-nv4d5v"><div class="panel-header svelte-nv4d5v"><!> <div class="tabs svelte-nv4d5v"><button><svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="svelte-nv4d5v"></path></svg> New</button> <button><svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="svelte-nv4d5v"></path></svg> History <!></button> <!> <button><svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="svelte-nv4d5v"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" stroke-width="1.8" class="svelte-nv4d5v"></path><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" class="svelte-nv4d5v"></path></svg> Notes</button> <button><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="svelte-nv4d5v"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3Z" class="svelte-nv4d5v"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8" class="svelte-nv4d5v"></path></svg> Voice</button></div> <button class="close-btn svelte-nv4d5v" aria-label="Close">&times;</button></div> <!> <!> <!> <!> <!> <!></div> <!>', 1);
 const $$css$1 = {
   hash: "svelte-nv4d5v",
   code: `.panel.svelte-nv4d5v {width:460px;max-height:702px;background:#111827;border:1px solid #374151;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,0.4);font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;color:#e5e7eb;display:flex;flex-direction:column;overflow:hidden;position:relative;}.panel-header.svelte-nv4d5v {display:flex;align-items:center;justify-content:space-between;padding:0 8px 0 0;border-bottom:1px solid #1f2937;}.drag-handle.svelte-nv4d5v {display:flex;align-items:center;justify-content:center;width:24px;padding:0 2px 0 8px;color:#6b7280;cursor:grab;flex-shrink:0;user-select:none;transition:color 0.15s;}.drag-handle.svelte-nv4d5v:hover {color:#d1d5db;}.drag-handle.svelte-nv4d5v:active {cursor:grabbing;color:#e5e7eb;}.tabs.svelte-nv4d5v {display:flex;flex:1;}.tab.svelte-nv4d5v {display:flex;align-items:center;gap:5px;padding:11px 14px;background:none;border:none;border-bottom:2px solid transparent;color:#6b7280;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:color 0.15s, border-color 0.15s;white-space:nowrap;}.tab.svelte-nv4d5v:hover {color:#d1d5db;}.tab.active.svelte-nv4d5v {color:#f9fafb;border-bottom-color:#3b82f6;}.tab-badge.svelte-nv4d5v {display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:#f59e0b;color:#111827;font-size:10px;font-weight:700;line-height:1;}.close-btn.svelte-nv4d5v {background:none;border:none;color:#9ca3af;font-size:20px;cursor:pointer;padding:0 4px;line-height:1;flex-shrink:0;}.close-btn.svelte-nv4d5v:hover {color:#e5e7eb;}.panel-body.svelte-nv4d5v {padding:14px 16px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;}.field.svelte-nv4d5v {display:flex;flex-direction:column;gap:4px;}.field-row.svelte-nv4d5v {display:flex;gap:10px;}.half.svelte-nv4d5v {flex:1;}label.svelte-nv4d5v {font-weight:600;font-size:12px;color:#9ca3af;}.req.svelte-nv4d5v {color:#ef4444;}input.svelte-nv4d5v, textarea.svelte-nv4d5v, select.svelte-nv4d5v {padding:7px 10px;border:1px solid #374151;border-radius:5px;font-size:13px;font-family:inherit;color:#e5e7eb;background:#1f2937;transition:border-color 0.15s;}input.svelte-nv4d5v:focus, textarea.svelte-nv4d5v:focus, select.svelte-nv4d5v:focus {outline:none;border-color:#3b82f6;box-shadow:0 0 0 2px rgba(59, 130, 246, 0.2);}input.svelte-nv4d5v:disabled, textarea.svelte-nv4d5v:disabled, select.svelte-nv4d5v:disabled {opacity:0.5;cursor:not-allowed;}textarea.svelte-nv4d5v {resize:vertical;min-height:48px;}select.svelte-nv4d5v {appearance:auto;}.tools.svelte-nv4d5v {display:flex;flex-direction:column;gap:6px;}.tool-buttons.svelte-nv4d5v {display:flex;gap:6px;flex-wrap:wrap;}.tool-buttons.svelte-nv4d5v .tool-btn:where(.svelte-nv4d5v) {flex:1 1 auto;min-width:0;}.tool-btn.svelte-nv4d5v {display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:#1f2937;border:1px solid #374151;border-radius:5px;color:#d1d5db;font-size:12px;cursor:pointer;font-family:inherit;transition:background 0.15s;}.tool-btn.svelte-nv4d5v:hover:not(:disabled) {background:#374151;}.tool-btn.svelte-nv4d5v:disabled {opacity:0.5;cursor:not-allowed;}.capture-spinner.svelte-nv4d5v {display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,0.2);border-top-color:white;border-radius:50%;
@@ -18289,7 +18297,7 @@ const $$css$1 = {
   @keyframes svelte-nv4d5v-recording-pulse {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.5; transform: scale(0.8); }
-  }.tool-count.svelte-nv4d5v {display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#3b82f6;color:white;font-size:10px;font-weight:700;margin-left:2px;}.elements-list.svelte-nv4d5v {display:flex;flex-direction:column;gap:4px;}.element-item.svelte-nv4d5v {display:flex;align-items:center;gap:6px;padding:5px 8px;background:#1e3a5f;border:1px solid #2563eb40;border-radius:5px;font-size:11px;color:#93c5fd;}.element-tag.svelte-nv4d5v {font-family:monospace;font-weight:600;color:#60a5fa;flex-shrink:0;}.element-text.svelte-nv4d5v {flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#9ca3af;}.element-remove.svelte-nv4d5v {background:none;border:none;color:#6b7280;cursor:pointer;font-size:14px;padding:0 2px;line-height:1;flex-shrink:0;}.element-remove.svelte-nv4d5v:hover {color:#ef4444;}.attachments-list.svelte-nv4d5v {display:flex;flex-direction:column;gap:4px;}.attachment-item.svelte-nv4d5v {display:flex;align-items:center;gap:6px;padding:5px 8px;background:#1e2d3f;border:1px solid #374151;border-radius:5px;font-size:11px;color:#d1d5db;}.attachment-icon.svelte-nv4d5v {display:flex;align-items:center;color:#9ca3af;flex-shrink:0;}.attachment-name.svelte-nv4d5v {flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.attachment-size.svelte-nv4d5v {color:#6b7280;font-size:10px;flex-shrink:0;}.attachment-remove.svelte-nv4d5v {background:none;border:none;color:#6b7280;cursor:pointer;font-size:14px;padding:0 2px;line-height:1;flex-shrink:0;}.attachment-remove.svelte-nv4d5v:hover {color:#ef4444;}.attach-summary.svelte-nv4d5v {font-size:11px;color:#6b7280;text-align:center;}.actions.svelte-nv4d5v {display:flex;gap:8px;justify-content:flex-end;padding-top:4px;}.cancel-btn.svelte-nv4d5v {padding:7px 14px;background:#1f2937;border:1px solid #374151;border-radius:5px;color:#d1d5db;font-size:13px;cursor:pointer;font-family:inherit;}.cancel-btn.svelte-nv4d5v:hover:not(:disabled) {background:#374151;}.cancel-btn.svelte-nv4d5v:disabled {opacity:0.5;cursor:not-allowed;}.submit-btn.svelte-nv4d5v {padding:7px 16px;background:#3b82f6;border:none;border-radius:5px;color:white;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;font-family:inherit;transition:background 0.15s;}.submit-btn.svelte-nv4d5v:hover:not(:disabled) {background:#2563eb;}.submit-btn.svelte-nv4d5v:disabled {opacity:0.5;cursor:not-allowed;}.spinner.svelte-nv4d5v {display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.2);border-top-color:white;border-radius:50%;
+  }.tool-count.svelte-nv4d5v {display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#3b82f6;color:white;font-size:10px;font-weight:700;margin-left:2px;}.elements-list.svelte-nv4d5v {display:flex;flex-direction:column;gap:4px;}.element-item.svelte-nv4d5v {display:flex;align-items:center;gap:6px;padding:5px 8px;background:#1e3a5f;border:1px solid #2563eb40;border-radius:5px;font-size:11px;color:#93c5fd;}.element-tag.svelte-nv4d5v {font-family:monospace;font-weight:600;color:#60a5fa;flex-shrink:0;}.element-text.svelte-nv4d5v {flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#9ca3af;}.element-remove.svelte-nv4d5v {background:none;border:none;color:#6b7280;cursor:pointer;font-size:14px;padding:0 2px;line-height:1;flex-shrink:0;}.element-remove.svelte-nv4d5v:hover {color:#ef4444;}.attachments-list.svelte-nv4d5v {display:flex;flex-direction:column;gap:4px;}.attachment-item.svelte-nv4d5v {display:flex;align-items:center;gap:6px;padding:5px 8px;background:#1e2d3f;border:1px solid #374151;border-radius:5px;font-size:11px;color:#d1d5db;}.attachment-icon.svelte-nv4d5v {display:flex;align-items:center;color:#9ca3af;flex-shrink:0;}.attachment-name.svelte-nv4d5v {flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.attachment-size.svelte-nv4d5v {color:#6b7280;font-size:10px;flex-shrink:0;}.attachment-remove.svelte-nv4d5v {background:none;border:none;color:#6b7280;cursor:pointer;font-size:14px;padding:0 2px;line-height:1;flex-shrink:0;}.attachment-remove.svelte-nv4d5v:hover {color:#ef4444;}.attach-summary.svelte-nv4d5v {font-size:11px;color:#6b7280;text-align:center;}.actions.svelte-nv4d5v {display:flex;gap:8px;justify-content:flex-end;padding-top:4px;}.replay-banner.svelte-nv4d5v {display:flex;align-items:center;gap:6px;padding:8px 12px;background:#0f1e33;border-top:1px solid #1e3a5f;font-size:12px;color:#93c5fd;}.replay-banner.svelte-nv4d5v a:where(.svelte-nv4d5v) {color:#60a5fa;text-decoration:underline;font-weight:500;}.replay-banner.svelte-nv4d5v a:where(.svelte-nv4d5v):hover {color:#93c5fd;}.replay-banner-dismiss.svelte-nv4d5v {margin-left:auto;background:none;border:none;color:#4b6a8a;font-size:16px;line-height:1;cursor:pointer;padding:0 2px;}.replay-banner-dismiss.svelte-nv4d5v:hover {color:#93c5fd;}.cancel-btn.svelte-nv4d5v {padding:7px 14px;background:#1f2937;border:1px solid #374151;border-radius:5px;color:#d1d5db;font-size:13px;cursor:pointer;font-family:inherit;}.cancel-btn.svelte-nv4d5v:hover:not(:disabled) {background:#374151;}.cancel-btn.svelte-nv4d5v:disabled {opacity:0.5;cursor:not-allowed;}.submit-btn.svelte-nv4d5v {padding:7px 16px;background:#3b82f6;border:none;border-radius:5px;color:white;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;font-family:inherit;transition:background 0.15s;}.submit-btn.svelte-nv4d5v:hover:not(:disabled) {background:#2563eb;}.submit-btn.svelte-nv4d5v:disabled {opacity:0.5;cursor:not-allowed;}.spinner.svelte-nv4d5v {display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.2);border-top-color:white;border-radius:50%;
     animation: svelte-nv4d5v-spin 0.6s linear infinite;}
   @keyframes svelte-nv4d5v-spin {
     to { transform: rotate(360deg); }
@@ -18307,25 +18315,25 @@ const $$css$1 = {
 };
 function FeedbackPanel(d, p) {
   push(p, !0), append_styles(d, $$css$1);
-  const h = "3.2.1";
+  const h = "3.3.0";
   let g = prop(p, "endpoint", 7), m = prop(p, "project", 7), _ = prop(p, "isOpen", 7, !1), b = prop(p, "userId", 7, ""), y = prop(p, "userEmail", 7, ""), w = prop(p, "userName", 7, ""), x = prop(p, "userRole", 7, ""), E = prop(p, "orgId", 7, ""), S = prop(p, "orgName", 7, ""), k = prop(p, "onclose", 7), I = prop(p, "ongrip", 7), R = prop(p, "agentProxy", 7, ""), M = prop(p, "agentModel", 7, ""), A = prop(p, "agentContext", 7, ""), C = prop(p, "registeredTools", 23, () => []), N = /* @__PURE__ */ state("new"), $ = /* @__PURE__ */ state(!1), O = /* @__PURE__ */ state(!1), F = /* @__PURE__ */ state(!1), j = /* @__PURE__ */ state(proxy([]));
   function Y() {
     if (get(F)) {
       const Z = stopRecording();
-      set(j, Z, !0), set(F, !1), Fe(`Session recorded (${Z.length} events)`, "success");
+      set(j, Z, !0), set(F, !1), it(`Session recorded (${Z.length} events)`, "success");
     } else
-      startRecording(), set(j, [], !0), set(F, !0), Fe("Recording session...", "info");
+      startRecording(), set(j, [], !0), set(F, !0), it("Recording session...", "info");
   }
-  let q = /* @__PURE__ */ state(!1), de = /* @__PURE__ */ state(!1), oe = /* @__PURE__ */ state("idle"), ce = /* @__PURE__ */ state(""), se = /* @__PURE__ */ state(null), ye = [];
+  let q = /* @__PURE__ */ state(!1), ue = /* @__PURE__ */ state(!1), oe = /* @__PURE__ */ state("idle"), ce = /* @__PURE__ */ state(""), se = /* @__PURE__ */ state(null), xe = [];
   async function ve() {
     var Z;
     try {
-      const re = await navigator.mediaDevices.getUserMedia({ audio: !0 }), Te = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/ogg", ke = new MediaRecorder(re, { mimeType: Te });
-      ye = [], ke.ondataavailable = (Ne) => {
-        Ne.data.size > 0 && ye.push(Ne.data);
-      }, ke.onstop = () => {
-        re.getTracks().forEach((Ne) => Ne.stop()), Ee(new Blob(ye, { type: Te }), Te);
-      }, ke.start(500), set(se, ke, !0), set(q, !0), set(oe, "recording"), set(ce, "Recording…");
+      const re = await navigator.mediaDevices.getUserMedia({ audio: !0 }), _e = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/ogg", ye = new MediaRecorder(re, { mimeType: _e });
+      xe = [], ye.ondataavailable = (Fe) => {
+        Fe.data.size > 0 && xe.push(Fe.data);
+      }, ye.onstop = () => {
+        re.getTracks().forEach((Fe) => Fe.stop()), ke(new Blob(xe, { type: _e }), _e);
+      }, ye.start(500), set(se, ye, !0), set(q, !0), set(oe, "recording"), set(ce, "Recording…");
     } catch (re) {
       set(oe, "error"), set(
         ce,
@@ -18337,28 +18345,28 @@ function FeedbackPanel(d, p) {
   function Re() {
     get(se) && get(se).state !== "inactive" && get(se).stop(), set(q, !1), set(oe, "processing"), set(ce, "Sending to JAT…");
   }
-  async function Ee(Z, re) {
-    set(de, !0);
+  async function ke(Z, re) {
+    set(ue, !0);
     try {
-      const Te = re.includes("webm") ? "webm" : re.includes("ogg") ? "ogg" : "audio", ke = new FormData();
-      ke.append("file", Z, `voice-note.${Te}`);
-      const Ne = `${g()}/api/tasks/voice`, Ve = await fetch(Ne, { method: "POST", body: ke });
-      if (Ve.ok)
+      const _e = re.includes("webm") ? "webm" : re.includes("ogg") ? "ogg" : "audio", ye = new FormData();
+      ye.append("file", Z, `voice-note.${_e}`);
+      const Fe = `${g()}/api/tasks/voice`, Ue = await fetch(Fe, { method: "POST", body: ye });
+      if (Ue.ok)
         set(oe, "done"), set(ce, "Done! Tasks will appear in your Voice Inbox shortly.");
       else {
-        const ft = await Ve.json().catch(() => ({}));
-        set(oe, "error"), set(ce, ft.message || `Error ${Ve.status}`, !0);
+        const lt = await Ue.json().catch(() => ({}));
+        set(oe, "error"), set(ce, lt.message || `Error ${Ue.status}`, !0);
       }
-    } catch (Te) {
-      set(oe, "error"), set(ce, Te.message || "Failed to send recording", !0);
+    } catch (_e) {
+      set(oe, "error"), set(ce, _e.message || "Failed to send recording", !0);
     } finally {
-      set(de, !1), ye = [];
+      set(ue, !1), xe = [];
     }
   }
   function me() {
-    get(se) && get(se).state !== "inactive" && get(se).stop(), set(q, !1), set(de, !1), set(oe, "idle"), set(ce, ""), ye = [], set(se, null);
+    get(se) && get(se).state !== "inactive" && get(se).stop(), set(q, !1), set(ue, !1), set(oe, "idle"), set(ce, ""), xe = [], set(se, null);
   }
-  let Se = /* @__PURE__ */ state(proxy([])), T = /* @__PURE__ */ state("idle"), z = /* @__PURE__ */ state(0), L = /* @__PURE__ */ state(!1), P = /* @__PURE__ */ state(null);
+  let Ce = /* @__PURE__ */ state(proxy([])), T = /* @__PURE__ */ state("idle"), z = /* @__PURE__ */ state(0), L = /* @__PURE__ */ state(!1), P = /* @__PURE__ */ state(null);
   function G() {
     return get(P) || set(
       P,
@@ -18371,7 +18379,7 @@ function FeedbackPanel(d, p) {
         project: m(),
         registeredTools: C(),
         onMessagesChange: (Z) => {
-          set(Se, Z, !0);
+          set(Ce, Z, !0);
         },
         onStateChange: (Z, re) => {
           set(T, Z, !0), set(z, re, !0);
@@ -18420,7 +18428,7 @@ function FeedbackPanel(d, p) {
   user_effect(() => {
     g() && le();
   });
-  let we = /* @__PURE__ */ state(""), ze = /* @__PURE__ */ state(""), xe = /* @__PURE__ */ state("bug"), Ge = /* @__PURE__ */ state("medium"), ae = /* @__PURE__ */ state(proxy([])), V = /* @__PURE__ */ state(proxy([])), D = /* @__PURE__ */ state(proxy([])), H = /* @__PURE__ */ state(proxy([])), X = /* @__PURE__ */ state(proxy([])), fe = /* @__PURE__ */ state(void 0);
+  let Ee = /* @__PURE__ */ state(""), Me = /* @__PURE__ */ state(""), Se = /* @__PURE__ */ state("bug"), We = /* @__PURE__ */ state("medium"), ae = /* @__PURE__ */ state(proxy([])), V = /* @__PURE__ */ state(proxy([])), D = /* @__PURE__ */ state(proxy([])), H = /* @__PURE__ */ state(proxy([])), X = /* @__PURE__ */ state(proxy([])), fe = /* @__PURE__ */ state(void 0);
   const Q = [
     "image/png",
     "image/jpeg",
@@ -18428,53 +18436,53 @@ function FeedbackPanel(d, p) {
     "image/webp",
     "image/svg+xml"
   ];
-  function ue() {
+  function de() {
     var Z;
     (Z = get(fe)) == null || Z.click();
   }
-  async function be(Z) {
-    const re = Z.target, Te = re.files;
-    if (!(!Te || Te.length === 0)) {
-      for (const ke of Te)
+  async function we(Z) {
+    const re = Z.target, _e = re.files;
+    if (!(!_e || _e.length === 0)) {
+      for (const ye of _e)
         try {
-          const Ne = await Ue(ke);
-          Q.includes(ke.type) ? (set(ae, [...get(ae), Ne], !0), Fe(`Image added: ${ke.name}`, "success")) : (set(
+          const Fe = await Ze(ye);
+          Q.includes(ye.type) ? (set(ae, [...get(ae), Fe], !0), it(`Image added: ${ye.name}`, "success")) : (set(
             V,
             [
               ...get(V),
               {
-                name: ke.name,
-                type: ke.type || "application/octet-stream",
-                data: Ne,
-                size: ke.size
+                name: ye.name,
+                type: ye.type || "application/octet-stream",
+                data: Fe,
+                size: ye.size
               }
             ],
             !0
-          ), Fe(`File attached: ${ke.name}`, "success"));
+          ), it(`File attached: ${ye.name}`, "success"));
         } catch {
-          Fe(`Failed to read: ${ke.name}`, "error");
+          it(`Failed to read: ${ye.name}`, "error");
         }
       re.value = "";
     }
   }
-  function Ue(Z) {
-    return new Promise((re, Te) => {
-      const ke = new FileReader();
-      ke.onload = () => re(ke.result), ke.onerror = () => Te(ke.error), ke.readAsDataURL(Z);
+  function Ze(Z) {
+    return new Promise((re, _e) => {
+      const ye = new FileReader();
+      ye.onload = () => re(ye.result), ye.onerror = () => _e(ye.error), ye.readAsDataURL(Z);
     });
   }
-  function Ie(Z) {
-    set(V, get(V).filter((re, Te) => Te !== Z), !0);
+  function Te(Z) {
+    set(V, get(V).filter((re, _e) => _e !== Z), !0);
   }
-  function Ze(Z) {
+  function Le(Z) {
     return Z < 1024 ? `${Z}B` : Z < 1024 * 1024 ? `${(Z / 1024).toFixed(1)}KB` : `${(Z / (1024 * 1024)).toFixed(1)}MB`;
   }
-  let Le = /* @__PURE__ */ state(!1), te = /* @__PURE__ */ state(!1), Ye = /* @__PURE__ */ state(!1), nt = /* @__PURE__ */ state(null), We = /* @__PURE__ */ state(""), rt = /* @__PURE__ */ state(void 0), Ct = !1;
+  let Oe = /* @__PURE__ */ state(!1), te = /* @__PURE__ */ state(!1), Xe = /* @__PURE__ */ state(!1), _t = /* @__PURE__ */ state(null), Ge = /* @__PURE__ */ state(!1), Ve = /* @__PURE__ */ state(null), vt = /* @__PURE__ */ state(""), Nt = /* @__PURE__ */ state(void 0), mn = !1;
   user_effect(() => {
-    _() && !Ct && (requestAnimationFrame(() => {
+    _() && !mn && (requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         var Z;
-        (Z = get(rt)) == null || Z.focus();
+        (Z = get(Nt)) == null || Z.focus();
       });
     }), get(N) === "new" && setTimeout(
       () => {
@@ -18484,66 +18492,66 @@ function FeedbackPanel(d, p) {
         });
       },
       300
-    )), Ct = _();
+    )), mn = _();
   });
-  let Mt = /* @__PURE__ */ state(""), _n = /* @__PURE__ */ state("success"), je = /* @__PURE__ */ state(!1);
-  function Fe(Z, re) {
-    set(Mt, Z, !0), set(_n, re, !0), set(je, !0), setTimeout(
+  let Be = /* @__PURE__ */ state(""), He = /* @__PURE__ */ state("success"), bt = /* @__PURE__ */ state(!1);
+  function it(Z, re) {
+    set(Be, Z, !0), set(He, re, !0), set(bt, !0), setTimeout(
       () => {
-        set(je, !1);
+        set(bt, !1);
       },
       3e3
     );
   }
-  async function vt() {
+  async function Dt() {
     set(te, !0);
     try {
       const Z = await captureViewport();
-      set(We, Z, !0), set(nt, get(
+      set(vt, Z, !0), set(Ve, get(
         ae
         // new index (not yet in array)
       ).length, !0);
     } catch (Z) {
-      console.error("[jat-feedback] Screenshot failed:", Z), Fe("Screenshot failed: " + (Z instanceof Error ? Z.message : "unknown error"), "error");
+      console.error("[jat-feedback] Screenshot failed:", Z), it("Screenshot failed: " + (Z instanceof Error ? Z.message : "unknown error"), "error");
     } finally {
       set(te, !1);
     }
   }
-  function Qt(Z) {
-    set(ae, get(ae).filter((re, Te) => Te !== Z), !0);
-  }
-  function jt(Z) {
-    set(We, get(ae)[Z], !0), set(nt, Z, !0);
-  }
   function rr(Z) {
-    get(nt) !== null && (get(nt) >= get(ae).length ? (set(ae, [...get(ae), Z], !0), Fe(`Screenshot captured (${get(ae).length})`, "success")) : (set(ae, get(ae).map((re, Te) => Te === get(nt) ? Z : re), !0), Fe("Screenshot updated", "success"))), set(nt, null), set(We, "");
+    set(ae, get(ae).filter((re, _e) => _e !== Z), !0);
   }
-  function sn() {
-    get(nt) !== null && get(nt) >= get(ae).length && (set(ae, [...get(ae), get(We)], !0), Fe(`Screenshot captured (${get(ae).length})`, "success")), set(nt, null), set(We, "");
+  function nn(Z) {
+    set(vt, get(ae)[Z], !0), set(Ve, Z, !0);
   }
-  function en() {
-    set(Ye, !0), startElementPicker((Z) => {
-      set(D, [...get(D), Z], !0), set(Ye, !1), Fe(`Element captured: <${Z.tagName.toLowerCase()}>`, "success");
+  function Xt(Z) {
+    get(Ve) !== null && (get(Ve) >= get(ae).length ? (set(ae, [...get(ae), Z], !0), it(`Screenshot captured (${get(ae).length})`, "success")) : (set(ae, get(ae).map((re, _e) => _e === get(Ve) ? Z : re), !0), it("Screenshot updated", "success"))), set(Ve, null), set(vt, "");
+  }
+  function vn() {
+    get(Ve) !== null && get(Ve) >= get(ae).length && (set(ae, [...get(ae), get(vt)], !0), it(`Screenshot captured (${get(ae).length})`, "success")), set(Ve, null), set(vt, "");
+  }
+  function An() {
+    set(Xe, !0), startElementPicker((Z) => {
+      set(D, [...get(D), Z], !0), set(Xe, !1), it(`Element captured: <${Z.tagName.toLowerCase()}>`, "success");
     });
   }
-  function an() {
+  function rn() {
     set(H, getCapturedLogs(), !0), set(X, getCapturedRequests(), !0);
   }
-  async function $n(Z) {
-    if (Z.preventDefault(), !get(we).trim()) return;
-    set(Le, !0), an();
+  async function or(Z) {
+    if (Z.preventDefault(), !get(Ee).trim()) return;
+    set(Oe, !0), rn();
     const re = {};
     (b() || y() || w() || x()) && (re.reporter = {}, b() && (re.reporter.userId = b()), y() && (re.reporter.email = y()), w() && (re.reporter.name = w()), x() && (re.reporter.role = x())), (E() || S()) && (re.organization = {}, E() && (re.organization.id = E()), S() && (re.organization.name = S()));
-    let Te;
+    let _e;
     if (get(j).length > 0) {
-      const Ne = crypto.randomUUID(), Ve = await uploadRecording(g(), get(j), Ne);
-      Ve.ok && Ve.recording_url && (Te = Ve.recording_url);
+      const Fe = crypto.randomUUID(), Ue = await uploadRecording(g(), get(j), Fe);
+      Ue.ok && Ue.recording_url && (_e = Ue.recording_url);
     }
-    const ke = {
-      title: get(we).trim(),
-      description: get(ze).trim(),
-      type: get(xe),
-      priority: get(Ge),
+    const ye = {
+      title: get(Ee).trim(),
+      description: get(Me).trim(),
+      type: get(Se),
+      priority: get(We),
       project: m() || "",
       page_url: window.location.href,
       user_agent: navigator.userAgent,
@@ -18554,53 +18562,53 @@ function FeedbackPanel(d, p) {
       screenshots: get(ae).length > 0 ? get(ae) : null,
       attachments: get(V).length > 0 ? get(V) : null,
       metadata: Object.keys(re).length > 0 ? re : null,
-      recording_url: Te || null
+      recording_url: _e || null
     };
     try {
-      const Ne = await submitReport(g(), ke);
-      if (Ne.ok) {
-        if (ke.recording_url) {
-          const Ve = {
-            recording_url: ke.recording_url,
-            console_logs: ke.console_logs,
-            network_requests: ke.network_requests
+      const Fe = await submitReport(g(), ye);
+      if (Fe.ok) {
+        if (ye.recording_url) {
+          const Ue = {
+            recording_url: ye.recording_url,
+            console_logs: ye.console_logs,
+            network_requests: ye.network_requests
           };
-          G().setReportContext(Ve);
+          G().setReportContext(Ue);
         }
-        Fe(`Report submitted (${Ne.id})`, "success"), bn(), setTimeout(
+        set(_t, Fe.id, !0), set(Ge, !!ye.recording_url), it(`Report submitted (${Fe.id})`, "success"), Vn(), setTimeout(
           () => {
             le(), set(N, "requests");
           },
           1200
         );
       } else
-        enqueue(g(), ke), Fe("Queued for retry (endpoint unreachable)", "error");
+        enqueue(g(), ye), it("Queued for retry (endpoint unreachable)", "error");
     } catch {
-      enqueue(g(), ke), Fe("Queued for retry (endpoint unreachable)", "error");
+      enqueue(g(), ye), it("Queued for retry (endpoint unreachable)", "error");
     } finally {
-      set(Le, !1);
+      set(Oe, !1);
     }
   }
-  function bn() {
-    set(we, ""), set(ze, ""), set(xe, "bug"), set(Ge, "medium"), set(ae, [], !0), set(V, [], !0), set(D, [], !0), set(H, [], !0), set(X, [], !0), set(j, [], !0), get(F) && (stopRecording(), set(F, !1));
+  function Vn() {
+    set(Ee, ""), set(Me, ""), set(Se, "bug"), set(We, "medium"), set(ae, [], !0), set(V, [], !0), set(D, [], !0), set(H, [], !0), set(X, [], !0), set(j, [], !0), get(F) && (stopRecording(), set(F, !1));
   }
   user_effect(() => {
-    an();
+    rn();
   });
-  function Mn(Z) {
+  function Nn(Z) {
     Z.stopPropagation();
   }
-  const Gn = [
+  const sr = [
     { value: "bug", label: "Bug" },
     { value: "enhancement", label: "Enhancement" },
     { value: "other", label: "Other" }
-  ], or = [
+  ], Gn = [
     { value: "low", label: "Low" },
     { value: "medium", label: "Medium" },
     { value: "high", label: "High" },
     { value: "critical", label: "Critical" }
   ];
-  function zn() {
+  function $n() {
     return get(ae).length + get(V).length + get(D).length;
   }
   var Hn = {
@@ -18694,242 +18702,242 @@ function FeedbackPanel(d, p) {
     set registeredTools(Z = []) {
       C(Z), flushSync();
     }
-  }, qn = root$1(), Wt = first_child(qn), On = child(Wt), Yn = child(On);
+  }, qn = root$1(), Jt = first_child(qn), _n = child(Jt), Yn = child(_n);
   {
     var Kn = (Z) => {
       var re = root_1$1();
-      delegated("mousedown", re, function(...Te) {
-        var ke;
-        (ke = I()) == null || ke.apply(this, Te);
+      delegated("mousedown", re, function(..._e) {
+        var ye;
+        (ye = I()) == null || ye.apply(this, _e);
       }), append(Z, re);
     };
     if_block(Yn, (Z) => {
       I() && Z(Kn);
     });
   }
-  var Dn = sibling(Yn, 2), yn = child(Dn);
-  let wn;
-  var ln = sibling(yn, 2);
+  var sn = sibling(Yn, 2), Mn = child(sn);
   let Xn;
-  var sr = sibling(child(ln), 2);
+  var an = sibling(Mn, 2);
+  let Jn;
+  var ir = sibling(child(an), 2);
   {
-    var ir = (Z) => {
-      var re = root_2$1(), Te = child(re, !0);
-      reset(re), template_effect(() => set_text(Te, get(pe))), append(Z, re);
+    var Ne = (Z) => {
+      var re = root_2$1(), _e = child(re, !0);
+      reset(re), template_effect(() => set_text(_e, get(pe))), append(Z, re);
     };
-    if_block(sr, (Z) => {
-      get(pe) > 0 && Z(ir);
+    if_block(ir, (Z) => {
+      get(pe) > 0 && Z(Ne);
     });
   }
-  reset(ln);
-  var Jn = sibling(ln, 2);
+  reset(an);
+  var De = sibling(an, 2);
   {
-    var $e = (Z) => {
+    var Je = (Z) => {
       var re = root_3();
-      let Te;
-      template_effect(() => Te = set_class(re, 1, "tab svelte-nv4d5v", null, Te, { active: get(N) === "agent" })), delegated("click", re, () => {
+      let _e;
+      template_effect(() => _e = set_class(re, 1, "tab svelte-nv4d5v", null, _e, { active: get(N) === "agent" })), delegated("click", re, () => {
         set(N, "agent"), set($, !0);
       }), append(Z, re);
     };
-    if_block(Jn, (Z) => {
-      R() && Z($e);
+    if_block(De, (Z) => {
+      R() && Z(Je);
     });
   }
-  var Pe = sibling(Jn, 2);
-  let He;
-  var ut = sibling(Pe, 2);
-  let wt;
-  reset(Dn);
-  var st = sibling(Dn, 2);
-  reset(On);
-  var Qe = sibling(On, 2);
+  var dt = sibling(De, 2);
+  let St;
+  var ot = sibling(dt, 2);
+  let tt;
+  reset(sn);
+  var qe = sibling(sn, 2);
+  reset(_n);
+  var ut = sibling(_n, 2);
   {
-    var Ke = (Z) => {
-      var re = root_4(), Te = child(re), ke = sibling(child(Te), 2);
-      remove_input_defaults(ke), bind_this(ke, (_e) => set(rt, _e), () => get(rt)), reset(Te);
-      var Ne = sibling(Te, 2), Ve = sibling(child(Ne), 2);
-      remove_textarea_child(Ve), reset(Ne);
-      var ft = sibling(Ne, 2), ht = child(ft), _t = sibling(child(ht), 2);
-      each(_t, 21, () => Gn, index, (_e, Ae) => {
-        var Je = root_5(), ot = child(Je, !0);
-        reset(Je);
-        var et = {};
+    var Ye = (Z) => {
+      var re = root_4(), _e = child(re), ye = sibling(child(_e), 2);
+      remove_input_defaults(ye), bind_this(ye, (be) => set(Nt, be), () => get(Nt)), reset(_e);
+      var Fe = sibling(_e, 2), Ue = sibling(child(Fe), 2);
+      remove_textarea_child(Ue), reset(Fe);
+      var lt = sibling(Fe, 2), ft = child(lt), gt = sibling(child(ft), 2);
+      each(gt, 21, () => sr, index, (be, Ae) => {
+        var et = root_5(), st = child(et, !0);
+        reset(et);
+        var nt = {};
         template_effect(() => {
-          set_text(ot, get(Ae).label), et !== (et = get(Ae).value) && (Je.value = (Je.__value = get(Ae).value) ?? "");
-        }), append(_e, Je);
-      }), reset(_t), reset(ht);
-      var bt = sibling(ht, 2), gt = sibling(child(bt), 2);
-      each(gt, 21, () => or, index, (_e, Ae) => {
-        var Je = root_6(), ot = child(Je, !0);
-        reset(Je);
-        var et = {};
+          set_text(st, get(Ae).label), nt !== (nt = get(Ae).value) && (et.value = (et.__value = get(Ae).value) ?? "");
+        }), append(be, et);
+      }), reset(gt), reset(ft);
+      var Ft = sibling(ft, 2), rt = sibling(child(Ft), 2);
+      each(rt, 21, () => Gn, index, (be, Ae) => {
+        var et = root_6(), st = child(et, !0);
+        reset(et);
+        var nt = {};
         template_effect(() => {
-          set_text(ot, get(Ae).label), et !== (et = get(Ae).value) && (Je.value = (Je.__value = get(Ae).value) ?? "");
-        }), append(_e, Je);
-      }), reset(gt), reset(bt), reset(ft);
-      var At = sibling(ft, 2), Oe = child(At), Be = child(Oe), tt = child(Be);
+          set_text(st, get(Ae).label), nt !== (nt = get(Ae).value) && (et.value = (et.__value = get(Ae).value) ?? "");
+        }), append(be, et);
+      }), reset(rt), reset(Ft), reset(lt);
+      var pt = sibling(lt, 2), je = child(pt), Pe = child(je), Qe = child(Pe);
       {
-        var lt = (_e) => {
+        var mt = (be) => {
           var Ae = root_7();
-          next(), append(_e, Ae);
-        }, pt = (_e) => {
-          var Ae = root_8(), Je = sibling(first_child(Ae), 2);
+          next(), append(be, Ae);
+        }, wt = (be) => {
+          var Ae = root_8(), et = sibling(first_child(Ae), 2);
           {
-            var ot = (et) => {
-              var at = root_9(), Et = child(at, !0);
-              reset(at), template_effect(() => set_text(Et, get(ae).length)), append(et, at);
+            var st = (nt) => {
+              var ct = root_9(), Ct = child(ct, !0);
+              reset(ct), template_effect(() => set_text(Ct, get(ae).length)), append(nt, ct);
             };
-            if_block(Je, (et) => {
-              get(ae).length > 0 && et(ot);
+            if_block(et, (nt) => {
+              get(ae).length > 0 && nt(st);
             });
           }
-          append(_e, Ae);
+          append(be, Ae);
         };
-        if_block(tt, (_e) => {
-          get(te) ? _e(lt) : _e(pt, !1);
+        if_block(Qe, (be) => {
+          get(te) ? be(mt) : be(wt, !1);
         });
       }
-      reset(Be);
-      var mt = sibling(Be, 2), zt = sibling(child(mt), 2);
+      reset(Pe);
+      var kt = sibling(Pe, 2), wn = sibling(child(kt), 2);
       {
-        var Gt = (_e) => {
+        var On = (be) => {
           var Ae = text("Click an element...");
-          append(_e, Ae);
-        }, En = (_e) => {
-          var Ae = root_11(), Je = sibling(first_child(Ae));
+          append(be, Ae);
+        }, Vt = (be) => {
+          var Ae = root_11(), et = sibling(first_child(Ae));
           {
-            var ot = (et) => {
-              var at = root_12(), Et = child(at, !0);
-              reset(at), template_effect(() => set_text(Et, get(D).length)), append(et, at);
+            var st = (nt) => {
+              var ct = root_12(), Ct = child(ct, !0);
+              reset(ct), template_effect(() => set_text(Ct, get(D).length)), append(nt, ct);
             };
-            if_block(Je, (et) => {
-              get(D).length > 0 && et(ot);
+            if_block(et, (nt) => {
+              get(D).length > 0 && nt(st);
             });
           }
-          append(_e, Ae);
+          append(be, Ae);
         };
-        if_block(zt, (_e) => {
-          get(Ye) ? _e(Gt) : _e(En, !1);
+        if_block(wn, (be) => {
+          get(Xe) ? be(On) : be(Vt, !1);
         });
       }
-      reset(mt);
-      var Ot = sibling(mt, 2);
-      let Dt;
-      var Ht = child(Ot);
+      reset(kt);
+      var xt = sibling(kt, 2);
+      let Mt;
+      var xn = child(xt);
       {
-        var Lt = (_e) => {
+        var Fr = (be) => {
           var Ae = root_13();
-          next(), append(_e, Ae);
-        }, Sn = (_e) => {
-          var Ae = root_14(), Je = sibling(first_child(Ae), 2);
+          next(), append(be, Ae);
+        }, Pr = (be) => {
+          var Ae = root_14(), et = sibling(first_child(Ae), 2);
           {
-            var ot = (et) => {
-              var at = root_15(), Et = child(at, !0);
-              reset(at), template_effect(() => set_text(Et, get(j).length)), append(et, at);
+            var st = (nt) => {
+              var ct = root_15(), Ct = child(ct, !0);
+              reset(ct), template_effect(() => set_text(Ct, get(j).length)), append(nt, ct);
             };
-            if_block(Je, (et) => {
-              get(j).length > 0 && et(ot);
+            if_block(et, (nt) => {
+              get(j).length > 0 && nt(st);
             });
           }
-          append(_e, Ae);
+          append(be, Ae);
         };
-        if_block(Ht, (_e) => {
-          get(F) ? _e(Lt) : _e(Sn, !1);
+        if_block(xn, (be) => {
+          get(F) ? be(Fr) : be(Pr, !1);
         });
       }
-      reset(Ot);
-      var Ln = sibling(Ot, 2), Fr = sibling(child(Ln), 2);
+      reset(xt);
+      var Dn = sibling(xt, 2), Zr = sibling(child(Dn), 2);
       {
-        var Pr = (_e) => {
-          var Ae = root_16(), Je = child(Ae, !0);
-          reset(Ae), template_effect(() => set_text(Je, get(V).length)), append(_e, Ae);
+        var Br = (be) => {
+          var Ae = root_16(), et = child(Ae, !0);
+          reset(Ae), template_effect(() => set_text(et, get(V).length)), append(be, Ae);
         };
-        if_block(Fr, (_e) => {
-          get(V).length > 0 && _e(Pr);
+        if_block(Zr, (be) => {
+          get(V).length > 0 && be(Br);
         });
       }
-      reset(Ln);
-      var wr = sibling(Ln, 2);
-      bind_this(wr, (_e) => set(fe, _e), () => get(fe)), reset(Oe);
-      var Zr = sibling(Oe, 2);
-      ScreenshotPreview(Zr, {
+      reset(Dn);
+      var wr = sibling(Dn, 2);
+      bind_this(wr, (be) => set(fe, be), () => get(fe)), reset(je);
+      var Ur = sibling(je, 2);
+      ScreenshotPreview(Ur, {
         get screenshots() {
           return get(ae);
         },
         get capturing() {
           return get(te);
         },
-        oncapture: vt,
-        onremove: Qt,
-        onedit: jt
-      }), reset(At);
-      var xr = sibling(At, 2);
+        oncapture: Dt,
+        onremove: rr,
+        onedit: nn
+      }), reset(pt);
+      var xr = sibling(pt, 2);
       {
-        var Br = (_e) => {
+        var jr = (be) => {
           var Ae = root_17();
-          each(Ae, 21, () => get(V), index, (Je, ot, et) => {
-            var at = root_18(), Et = child(at), ur = child(Et);
+          each(Ae, 21, () => get(V), index, (et, st, nt) => {
+            var ct = root_18(), Ct = child(ct), dr = child(Ct);
             {
-              var Fn = (Nt) => {
-                var Zn = root_19();
-                append(Nt, Zn);
-              }, dr = /* @__PURE__ */ user_derived(() => get(ot).type.includes("pdf")), fr = (Nt) => {
-                var Zn = root_20();
-                append(Nt, Zn);
-              }, dn = /* @__PURE__ */ user_derived(() => get(ot).type.includes("markdown") || get(ot).name.endsWith(".md")), Pn = (Nt) => {
-                var Zn = root_21();
-                append(Nt, Zn);
+              var Ln = (zt) => {
+                var Pn = root_19();
+                append(zt, Pn);
+              }, ur = /* @__PURE__ */ user_derived(() => get(st).type.includes("pdf")), fr = (zt) => {
+                var Pn = root_20();
+                append(zt, Pn);
+              }, cn = /* @__PURE__ */ user_derived(() => get(st).type.includes("markdown") || get(st).name.endsWith(".md")), Fn = (zt) => {
+                var Pn = root_21();
+                append(zt, Pn);
               };
-              if_block(ur, (Nt) => {
-                get(dr) ? Nt(Fn) : get(dn) ? Nt(fr, 1) : Nt(Pn, !1);
+              if_block(dr, (zt) => {
+                get(ur) ? zt(Ln) : get(cn) ? zt(fr, 1) : zt(Fn, !1);
               });
             }
-            reset(Et);
-            var pr = sibling(Et, 2), Yr = child(pr, !0);
+            reset(Ct);
+            var pr = sibling(Ct, 2), Xr = child(pr, !0);
             reset(pr);
-            var hr = sibling(pr, 2), Kr = child(hr, !0);
+            var hr = sibling(pr, 2), Jr = child(hr, !0);
             reset(hr);
-            var Xr = sibling(hr, 2);
-            reset(at), template_effect(
-              (Nt) => {
-                set_text(Yr, get(ot).name), set_text(Kr, Nt);
+            var Qr = sibling(hr, 2);
+            reset(ct), template_effect(
+              (zt) => {
+                set_text(Xr, get(st).name), set_text(Jr, zt);
               },
-              [() => Ze(get(ot).size)]
-            ), delegated("click", Xr, () => Ie(et)), append(Je, at);
-          }), reset(Ae), append(_e, Ae);
+              [() => Le(get(st).size)]
+            ), delegated("click", Qr, () => Te(nt)), append(et, ct);
+          }), reset(Ae), append(be, Ae);
         };
-        if_block(xr, (_e) => {
-          get(V).length > 0 && _e(Br);
+        if_block(xr, (be) => {
+          get(V).length > 0 && be(jr);
         });
       }
       var Er = sibling(xr, 2);
       {
-        var Ur = (_e) => {
+        var Wr = (be) => {
           var Ae = root_22();
-          each(Ae, 21, () => get(D), index, (Je, ot, et) => {
-            var at = root_23(), Et = child(at), ur = child(Et);
-            reset(Et);
-            var Fn = sibling(Et, 2), dr = child(Fn, !0);
-            reset(Fn);
-            var fr = sibling(Fn, 2);
-            reset(at), template_effect(
-              (dn, Pn) => {
-                set_text(ur, `<${dn ?? ""}>`), set_text(dr, Pn);
+          each(Ae, 21, () => get(D), index, (et, st, nt) => {
+            var ct = root_23(), Ct = child(ct), dr = child(Ct);
+            reset(Ct);
+            var Ln = sibling(Ct, 2), ur = child(Ln, !0);
+            reset(Ln);
+            var fr = sibling(Ln, 2);
+            reset(ct), template_effect(
+              (cn, Fn) => {
+                set_text(dr, `<${cn ?? ""}>`), set_text(ur, Fn);
               },
               [
-                () => get(ot).tagName.toLowerCase(),
+                () => get(st).tagName.toLowerCase(),
                 () => {
-                  var dn;
-                  return ((dn = get(ot).textContent) == null ? void 0 : dn.substring(0, 40)) || get(ot).selector;
+                  var cn;
+                  return ((cn = get(st).textContent) == null ? void 0 : cn.substring(0, 40)) || get(st).selector;
                 }
               ]
             ), delegated("click", fr, () => {
-              set(D, get(D).filter((dn, Pn) => Pn !== et), !0);
-            }), append(Je, at);
-          }), reset(Ae), append(_e, Ae);
+              set(D, get(D).filter((cn, Fn) => Fn !== nt), !0);
+            }), append(et, ct);
+          }), reset(Ae), append(be, Ae);
         };
-        if_block(Er, (_e) => {
-          get(D).length > 0 && _e(Ur);
+        if_block(Er, (be) => {
+          get(D).length > 0 && be(Wr);
         });
       }
       var Sr = sibling(Er, 2);
@@ -18940,48 +18948,60 @@ function FeedbackPanel(d, p) {
       });
       var kr = sibling(Sr, 2);
       {
-        var jr = (_e) => {
-          var Ae = root_24(), Je = child(Ae);
-          reset(Ae), template_effect((ot, et) => set_text(Je, `${ot ?? ""} attachment${et ?? ""} will be included`), [zn, () => zn() > 1 ? "s" : ""]), append(_e, Ae);
-        }, Wr = /* @__PURE__ */ user_derived(() => zn() > 0);
-        if_block(kr, (_e) => {
-          get(Wr) && _e(jr);
+        var Vr = (be) => {
+          var Ae = root_24(), et = child(Ae);
+          reset(Ae), template_effect((st, nt) => set_text(et, `${st ?? ""} attachment${nt ?? ""} will be included`), [$n, () => $n() > 1 ? "s" : ""]), append(be, Ae);
+        }, Gr = /* @__PURE__ */ user_derived(() => $n() > 0);
+        if_block(kr, (be) => {
+          get(Gr) && be(Vr);
         });
       }
-      var Cr = sibling(kr, 2), ar = child(Cr), Vr = child(ar);
+      var Cr = sibling(kr, 2), ar = child(Cr), Hr = child(ar);
       reset(ar);
-      var lr = sibling(ar, 2), cr = sibling(lr, 2), Gr = child(cr);
+      var lr = sibling(ar, 2), cr = sibling(lr, 2), qr = child(cr);
       {
-        var Hr = (_e) => {
+        var Yr = (be) => {
           var Ae = root_25();
-          next(), append(_e, Ae);
-        }, qr = (_e) => {
+          next(), append(be, Ae);
+        }, Kr = (be) => {
           var Ae = text("Submit");
-          append(_e, Ae);
+          append(be, Ae);
         };
-        if_block(Gr, (_e) => {
-          get(Le) ? _e(Hr) : _e(qr, !1);
+        if_block(qr, (be) => {
+          get(Oe) ? be(Yr) : be(Kr, !1);
         });
       }
       reset(cr), reset(Cr), reset(re), template_effect(
-        (_e) => {
-          ke.disabled = get(Le), Ve.disabled = get(Le), _t.disabled = get(Le), gt.disabled = get(Le), Be.disabled = get(te), mt.disabled = get(Ye), Dt = set_class(Ot, 1, "tool-btn svelte-nv4d5v", null, Dt, { "recording-active": get(F) }), Ot.disabled = get(Le), Ln.disabled = get(Le), set_text(Vr, `v${h}`), lr.disabled = get(Le), cr.disabled = _e;
+        (be) => {
+          ye.disabled = get(Oe), Ue.disabled = get(Oe), gt.disabled = get(Oe), rt.disabled = get(Oe), Pe.disabled = get(te), kt.disabled = get(Xe), Mt = set_class(xt, 1, "tool-btn svelte-nv4d5v", null, Mt, { "recording-active": get(F) }), xt.disabled = get(Oe), Dn.disabled = get(Oe), set_text(Hr, `v${h}`), lr.disabled = get(Oe), cr.disabled = be;
         },
-        [() => get(Le) || !get(we).trim()]
-      ), event("submit", re, $n), bind_value(ke, () => get(we), (_e) => set(we, _e)), bind_value(Ve, () => get(ze), (_e) => set(ze, _e)), bind_select_value(_t, () => get(xe), (_e) => set(xe, _e)), bind_select_value(gt, () => get(Ge), (_e) => set(Ge, _e)), delegated("click", Be, vt), delegated("click", mt, en), delegated("click", Ot, Y), delegated("click", Ln, ue), delegated("change", wr, be), delegated("click", lr, function(..._e) {
+        [() => get(Oe) || !get(Ee).trim()]
+      ), event("submit", re, or), bind_value(ye, () => get(Ee), (be) => set(Ee, be)), bind_value(Ue, () => get(Me), (be) => set(Me, be)), bind_select_value(gt, () => get(Se), (be) => set(Se, be)), bind_select_value(rt, () => get(We), (be) => set(We, be)), delegated("click", Pe, Dt), delegated("click", kt, An), delegated("click", xt, Y), delegated("click", Dn, de), delegated("change", wr, we), delegated("click", lr, function(...be) {
         var Ae;
-        (Ae = k()) == null || Ae.apply(this, _e);
+        (Ae = k()) == null || Ae.apply(this, be);
       }), transition(3, re, () => slide, () => ({ duration: 200 })), append(Z, re);
     };
-    if_block(Qe, (Z) => {
-      get(N) === "new" && Z(Ke);
+    if_block(ut, (Z) => {
+      get(N) === "new" && Z(Ye);
     });
   }
-  var dt = sibling(Qe, 2);
+  var yt = sibling(ut, 2);
   {
-    var Xe = (Z) => {
-      var re = root_27(), Te = child(re);
-      RequestList(Te, {
+    var Wt = (Z) => {
+      var re = root_27(), _e = child(re);
+      {
+        var ye = (Ue) => {
+          var lt = root_28(), ft = sibling(child(lt), 4), gt = sibling(ft, 2);
+          reset(lt), template_effect(() => set_attribute(ft, "href", `${g() ?? ""}/feedback/replay.html?id=${get(_t) ?? ""}`)), delegated("click", gt, () => {
+            set(_t, null), set(Ge, !1);
+          }), append(Ue, lt);
+        };
+        if_block(_e, (Ue) => {
+          get(_t) && get(Ge) && Ue(ye);
+        });
+      }
+      var Fe = sibling(_e, 2);
+      RequestList(Fe, {
         get endpoint() {
           return g();
         },
@@ -18995,27 +19015,27 @@ function FeedbackPanel(d, p) {
         get reports() {
           return get(he);
         },
-        set reports(ke) {
-          set(he, ke, !0);
+        set reports(Ue) {
+          set(he, Ue, !0);
         }
       }), reset(re), transition(3, re, () => slide, () => ({ duration: 200 })), append(Z, re);
     };
-    if_block(dt, (Z) => {
-      get(N) === "requests" && Z(Xe);
+    if_block(yt, (Z) => {
+      get(N) === "requests" && Z(Wt);
     });
   }
-  var xt = sibling(dt, 2);
+  var Ke = sibling(yt, 2);
   {
-    var cn = (Z) => {
-      var re = root_28(), Te = child(re);
+    var Qt = (Z) => {
+      var re = root_29(), _e = child(re);
       {
-        let ke = /* @__PURE__ */ user_derived(() => {
-          var Ne;
-          return ((Ne = get(P)) == null ? void 0 : Ne.getMaxSteps()) ?? 20;
+        let ye = /* @__PURE__ */ user_derived(() => {
+          var Fe;
+          return ((Fe = get(P)) == null ? void 0 : Fe.getMaxSteps()) ?? 20;
         });
-        AgentPanel(Te, {
+        AgentPanel(_e, {
           get messages() {
-            return get(Se);
+            return get(Ce);
           },
           get agentState() {
             return get(T);
@@ -19024,7 +19044,7 @@ function FeedbackPanel(d, p) {
             return get(z);
           },
           get maxSteps() {
-            return get(ke);
+            return get(ye);
           },
           get autoApprove() {
             return get(L);
@@ -19038,15 +19058,15 @@ function FeedbackPanel(d, p) {
       }
       reset(re), transition(3, re, () => slide, () => ({ duration: 200 })), append(Z, re);
     };
-    if_block(xt, (Z) => {
-      get(N) === "agent" && get($) && Z(cn);
+    if_block(Ke, (Z) => {
+      get(N) === "agent" && get($) && Z(Qt);
     });
   }
-  var qe = sibling(xt, 2);
+  var en = sibling(Ke, 2);
   {
-    var tn = (Z) => {
-      var re = root_29(), Te = child(re);
-      NotesPanel(Te, {
+    var ln = (Z) => {
+      var re = root_30(), _e = child(re);
+      NotesPanel(_e, {
         get endpoint() {
           return g();
         },
@@ -19056,88 +19076,88 @@ function FeedbackPanel(d, p) {
         onnoteschanged: W
       }), reset(re), transition(3, re, () => slide, () => ({ duration: 200 })), append(Z, re);
     };
-    if_block(qe, (Z) => {
-      get(N) === "notes" && get(O) && Z(tn);
+    if_block(en, (Z) => {
+      get(N) === "notes" && get(O) && Z(ln);
     });
   }
-  var nn = sibling(qe, 2);
+  var Lt = sibling(en, 2);
   {
-    var un = (Z) => {
-      var re = root_30(), Te = child(re), ke = sibling(child(Te), 2), Ne = child(ke);
+    var bn = (Z) => {
+      var re = root_31(), _e = child(re), ye = sibling(child(_e), 2), Fe = child(ye);
       {
-        var Ve = (Oe) => {
-          var Be = root_31();
-          delegated("click", Be, ve), append(Oe, Be);
-        }, ft = (Oe) => {
-          var Be = root_32(), tt = first_child(Be);
-          next(2), delegated("click", tt, Re), append(Oe, Be);
-        }, ht = (Oe) => {
-          var Be = root_33(), tt = sibling(child(Be), 2), lt = child(tt, !0);
-          reset(tt), reset(Be), template_effect(() => set_text(lt, get(ce))), append(Oe, Be);
-        }, _t = (Oe) => {
-          var Be = root_34(), tt = sibling(first_child(Be), 2), lt = child(tt, !0);
-          reset(tt);
-          var pt = sibling(tt, 2);
-          template_effect(() => set_text(lt, get(ce))), delegated("click", pt, me), append(Oe, Be);
-        }, bt = (Oe) => {
-          var Be = root_35(), tt = sibling(first_child(Be), 2), lt = child(tt, !0);
-          reset(tt);
-          var pt = sibling(tt, 2);
-          template_effect(() => set_text(lt, get(ce))), delegated("click", pt, me), append(Oe, Be);
+        var Ue = (je) => {
+          var Pe = root_32();
+          delegated("click", Pe, ve), append(je, Pe);
+        }, lt = (je) => {
+          var Pe = root_33(), Qe = first_child(Pe);
+          next(2), delegated("click", Qe, Re), append(je, Pe);
+        }, ft = (je) => {
+          var Pe = root_34(), Qe = sibling(child(Pe), 2), mt = child(Qe, !0);
+          reset(Qe), reset(Pe), template_effect(() => set_text(mt, get(ce))), append(je, Pe);
+        }, gt = (je) => {
+          var Pe = root_35(), Qe = sibling(first_child(Pe), 2), mt = child(Qe, !0);
+          reset(Qe);
+          var wt = sibling(Qe, 2);
+          template_effect(() => set_text(mt, get(ce))), delegated("click", wt, me), append(je, Pe);
+        }, Ft = (je) => {
+          var Pe = root_36(), Qe = sibling(first_child(Pe), 2), mt = child(Qe, !0);
+          reset(Qe);
+          var wt = sibling(Qe, 2);
+          template_effect(() => set_text(mt, get(ce))), delegated("click", wt, me), append(je, Pe);
         };
-        if_block(Ne, (Oe) => {
-          get(oe) === "idle" ? Oe(Ve) : get(oe) === "recording" ? Oe(ft, 1) : get(oe) === "processing" ? Oe(ht, 2) : get(oe) === "done" ? Oe(_t, 3) : get(oe) === "error" && Oe(bt, 4);
+        if_block(Fe, (je) => {
+          get(oe) === "idle" ? je(Ue) : get(oe) === "recording" ? je(lt, 1) : get(oe) === "processing" ? je(ft, 2) : get(oe) === "done" ? je(gt, 3) : get(oe) === "error" && je(Ft, 4);
         });
       }
-      reset(ke);
-      var gt = sibling(ke, 2);
+      reset(ye);
+      var rt = sibling(ye, 2);
       {
-        var At = (Oe) => {
-          var Be = root_36();
-          append(Oe, Be);
+        var pt = (je) => {
+          var Pe = root_37();
+          append(je, Pe);
         };
-        if_block(gt, (Oe) => {
-          get(oe) === "idle" && Oe(At);
+        if_block(rt, (je) => {
+          get(oe) === "idle" && je(pt);
         });
       }
-      reset(Te), reset(re), transition(3, re, () => slide, () => ({ duration: 200 })), append(Z, re);
+      reset(_e), reset(re), transition(3, re, () => slide, () => ({ duration: 200 })), append(Z, re);
     };
-    if_block(nn, (Z) => {
-      get(N) === "voice" && Z(un);
+    if_block(Lt, (Z) => {
+      get(N) === "voice" && Z(bn);
     });
   }
-  var Vt = sibling(nn, 2);
-  StatusToast(Vt, {
+  var $t = sibling(Lt, 2);
+  StatusToast($t, {
     get message() {
-      return get(Mt);
+      return get(Be);
     },
     get type() {
-      return get(_n);
+      return get(He);
     },
     get visible() {
-      return get(je);
+      return get(bt);
     }
-  }), reset(Wt);
-  var xn = sibling(Wt, 2);
+  }), reset(Jt);
+  var yn = sibling(Jt, 2);
   {
-    var Rt = (Z) => {
+    var zn = (Z) => {
       AnnotationEditor(Z, {
         get imageDataUrl() {
-          return get(We);
+          return get(vt);
         },
-        onsave: rr,
-        oncancel: sn
+        onsave: Xt,
+        oncancel: vn
       });
     };
-    if_block(xn, (Z) => {
-      get(nt) !== null && Z(Rt);
+    if_block(yn, (Z) => {
+      get(Ve) !== null && Z(zn);
     });
   }
   return template_effect(() => {
-    wn = set_class(yn, 1, "tab svelte-nv4d5v", null, wn, { active: get(N) === "new" }), Xn = set_class(ln, 1, "tab svelte-nv4d5v", null, Xn, { active: get(N) === "requests" }), He = set_class(Pe, 1, "tab svelte-nv4d5v", null, He, { active: get(N) === "notes" }), wt = set_class(ut, 1, "tab svelte-nv4d5v", null, wt, { active: get(N) === "voice" });
-  }), delegated("keydown", Wt, Mn), delegated("keyup", Wt, Mn), event("keypress", Wt, Mn), delegated("click", yn, () => set(N, "new")), delegated("click", ln, () => set(N, "requests")), delegated("click", Pe, () => {
+    Xn = set_class(Mn, 1, "tab svelte-nv4d5v", null, Xn, { active: get(N) === "new" }), Jn = set_class(an, 1, "tab svelte-nv4d5v", null, Jn, { active: get(N) === "requests" }), St = set_class(dt, 1, "tab svelte-nv4d5v", null, St, { active: get(N) === "notes" }), tt = set_class(ot, 1, "tab svelte-nv4d5v", null, tt, { active: get(N) === "voice" });
+  }), delegated("keydown", Jt, Nn), delegated("keyup", Jt, Nn), event("keypress", Jt, Nn), delegated("click", Mn, () => set(N, "new")), delegated("click", an, () => set(N, "requests")), delegated("click", dt, () => {
     set(N, "notes"), set(O, !0);
-  }), delegated("click", ut, () => set(N, "voice")), delegated("click", st, function(...Z) {
+  }), delegated("click", ot, () => set(N, "voice")), delegated("click", qe, function(...Z) {
     var re;
     (re = k()) == null || re.apply(this, Z);
   }), append(d, qn), pop(Hn);
@@ -19190,8 +19210,8 @@ function JatFeedback(d, p) {
       const pe = K.clientX - J, le = K.clientY - ne;
       if (!ee && Math.abs(pe) + Math.abs(le) < j) return;
       ee = !0, set($, !0), K.preventDefault();
-      const we = K.clientX - O.x, ze = K.clientY - O.y;
-      get(F).style.top = `${ze}px`, get(F).style.left = `${we}px`, get(F).style.bottom = "auto", get(F).style.right = "auto";
+      const Ee = K.clientX - O.x, Me = K.clientY - O.y;
+      get(F).style.top = `${Me}px`, get(F).style.left = `${Ee}px`, get(F).style.bottom = "auto", get(F).style.right = "auto";
     }
     function B() {
       set($, !1), window.removeEventListener("mousemove", he), window.removeEventListener("mouseup", B), ie == null || ie(ee);
@@ -19201,10 +19221,10 @@ function JatFeedback(d, p) {
   function q(W) {
     Y(W);
   }
-  function de(W) {
+  function ue(W) {
     W.button === 0 && (W.preventDefault(), Y(W, {
       onDragEnd(ie) {
-        ie || ye();
+        ie || xe();
       }
     }));
   }
@@ -19225,7 +19245,7 @@ function JatFeedback(d, p) {
     theme: _() || DEFAULT_CONFIG.theme,
     buttonColor: b() || DEFAULT_CONFIG.buttonColor
   }));
-  function ye() {
+  function xe() {
     set(A, !get(A));
   }
   function ve() {
@@ -19236,7 +19256,7 @@ function JatFeedback(d, p) {
     "bottom-left": "bottom: 20px; left: 20px;",
     "top-right": "top: 20px; right: 20px;",
     "top-left": "top: 20px; left: 20px;"
-  }, Ee = {
+  }, ke = {
     "bottom-right": "bottom: 80px; right: 0;",
     "bottom-left": "bottom: 80px; left: 0;",
     "top-right": "top: 80px; right: 0;",
@@ -19261,7 +19281,7 @@ function JatFeedback(d, p) {
   }), onDestroy(() => {
     stopConsoleCapture(), stopNetworkCapture(), stopRetryLoop(), window.removeEventListener("keydown", me, !0), oe && clearInterval(oe);
   });
-  var Se = {
+  var Ce = {
     get endpoint() {
       return h();
     },
@@ -19395,11 +19415,11 @@ function JatFeedback(d, p) {
         onclose: ve,
         ongrip: q
       }), reset(ie), template_effect(() => {
-        J = set_class(ie, 1, "jat-feedback-panel svelte-qpyrvv", null, J, { dragging: get($), hidden: !get(A) }), set_style(ie, Ee[get(se).position] || Ee["bottom-right"]);
+        J = set_class(ie, 1, "jat-feedback-panel svelte-qpyrvv", null, J, { dragging: get($), hidden: !get(A) }), set_style(ie, ke[get(se).position] || ke["bottom-right"]);
       }), append(W, ie);
     }, P = (W) => {
       var ie = root_2();
-      template_effect(() => set_style(ie, Ee[get(se).position] || Ee["bottom-right"])), append(W, ie);
+      template_effect(() => set_style(ie, ke[get(se).position] || ke["bottom-right"])), append(W, ie);
     };
     if_block(z, (W) => {
       get(se).endpoint ? W(L) : get(A) && W(P, 1);
@@ -19407,11 +19427,11 @@ function JatFeedback(d, p) {
   }
   var G = sibling(z, 2);
   return FeedbackButton(G, {
-    onmousedown: de,
+    onmousedown: ue,
     get open() {
       return get(A);
     }
-  }), reset(T), bind_this(T, (W) => set(F, W), () => get(F)), template_effect(() => set_style(T, `${(Re[get(se).position] || Re["bottom-right"]) ?? ""}; --jat-btn-color: ${get(se).buttonColor ?? ""}; ${get(C) ? "display: none;" : ""}`)), append(d, T), pop(Se);
+  }), reset(T), bind_this(T, (W) => set(F, W), () => get(F)), template_effect(() => set_style(T, `${(Re[get(se).position] || Re["bottom-right"]) ?? ""}; --jat-btn-color: ${get(se).buttonColor ?? ""}; ${get(C) ? "display: none;" : ""}`)), append(d, T), pop(Ce);
 }
 customElements.define("jat-feedback", create_custom_element(
   JatFeedback,
@@ -19443,7 +19463,7 @@ customElements.define("jat-feedback", create_custom_element(
  * @repository https://github.com/gaomeng1900/ai-motion
  */
 function computeBorderGeometry(d, p, h, g) {
-  const m = Math.max(1, Math.min(d, p)), _ = Math.min(h, 20), y = Math.min(_ + g, m), w = Math.min(y, Math.floor(d / 2)), x = Math.min(y, Math.floor(p / 2)), E = (P) => P / d * 2 - 1, S = (P) => P / p * 2 - 1, k = 0, I = d, R = 0, M = p, A = w, C = d - w, N = x, $ = p - x, O = E(k), F = E(I), j = S(R), Y = S(M), q = E(A), de = E(C), oe = S(N), ce = S($), se = 0, ye = 0, ve = 1, Re = 1, Ee = w / d, me = 1 - w / d, Se = x / p, T = 1 - x / p, z = new Float32Array([
+  const m = Math.max(1, Math.min(d, p)), _ = Math.min(h, 20), y = Math.min(_ + g, m), w = Math.min(y, Math.floor(d / 2)), x = Math.min(y, Math.floor(p / 2)), E = (P) => P / d * 2 - 1, S = (P) => P / p * 2 - 1, k = 0, I = d, R = 0, M = p, A = w, C = d - w, N = x, $ = p - x, O = E(k), F = E(I), j = S(R), Y = S(M), q = E(A), ue = E(C), oe = S(N), ce = S($), se = 0, xe = 0, ve = 1, Re = 1, ke = w / d, me = 1 - w / d, Ce = x / p, T = 1 - x / p, z = new Float32Array([
     // Top strip
     O,
     j,
@@ -19484,13 +19504,13 @@ function computeBorderGeometry(d, p, h, g) {
     q,
     ce,
     // Right strip
-    de,
+    ue,
     oe,
     F,
     oe,
-    de,
+    ue,
     ce,
-    de,
+    ue,
     ce,
     F,
     oe,
@@ -19499,17 +19519,17 @@ function computeBorderGeometry(d, p, h, g) {
   ]), L = new Float32Array([
     // Top strip
     se,
-    ye,
+    xe,
     ve,
-    ye,
+    xe,
     se,
-    Se,
+    Ce,
     se,
-    Se,
+    Ce,
     ve,
-    ye,
+    xe,
     ve,
-    Se,
+    Ce,
     // Bottom strip
     se,
     T,
@@ -19525,28 +19545,28 @@ function computeBorderGeometry(d, p, h, g) {
     Re,
     // Left strip
     se,
-    Se,
-    Ee,
-    Se,
+    Ce,
+    ke,
+    Ce,
     se,
     T,
     se,
     T,
-    Ee,
-    Se,
-    Ee,
+    ke,
+    Ce,
+    ke,
     T,
     // Right strip
     me,
-    Se,
+    Ce,
     ve,
-    Se,
+    Ce,
     me,
     T,
     me,
     T,
     ve,
-    Se,
+    Ce,
     ve,
     T
   ]);
@@ -19710,16 +19730,16 @@ function parseColor(d) {
 }
 class Motion {
   constructor(p = {}) {
-    Ce(this, "element");
-    Ce(this, "canvas");
-    Ce(this, "options");
-    Ce(this, "running", !1);
-    Ce(this, "disposed", !1);
-    Ce(this, "startTime", 0);
-    Ce(this, "lastTime", 0);
-    Ce(this, "rafId", null);
-    Ce(this, "glr");
-    Ce(this, "observer");
+    Ie(this, "element");
+    Ie(this, "canvas");
+    Ie(this, "options");
+    Ie(this, "running", !1);
+    Ie(this, "disposed", !1);
+    Ie(this, "startTime", 0);
+    Ie(this, "lastTime", 0);
+    Ie(this, "rafId", null);
+    Ie(this, "glr");
+    Ie(this, "observer");
     this.options = {
       width: p.width ?? 600,
       height: p.height ?? 600,

@@ -322,6 +322,8 @@
   let submitting = $state(false);
   let capturing = $state(false);
   let picking = $state(false);
+  let lastSubmittedId = $state<string | null>(null);
+  let lastHadRecording = $state(false);
 
   // Annotation editor state
   let editingScreenshotIndex = $state<number | null>(null);
@@ -356,10 +358,10 @@
   });
 
   let toastMessage = $state('');
-  let toastType = $state<'success' | 'error'>('success');
+  let toastType = $state<'success' | 'error' | 'info'>('success');
   let toastVisible = $state(false);
 
-  function showToast(message: string, type: 'success' | 'error') {
+  function showToast(message: string, type: 'success' | 'error' | 'info') {
     toastMessage = message;
     toastType = type;
     toastVisible = true;
@@ -495,6 +497,8 @@
           getAgentBridge().setReportContext(ctx);
         }
 
+        lastSubmittedId = result.id;
+        lastHadRecording = !!report.recording_url;
         showToast(`Report submitted (${result.id})`, 'success');
         resetForm();
         // Switch to requests tab to show the new report (reload first to include it)
@@ -763,6 +767,14 @@
 
   {#if activeTab === 'requests'}
     <div class="requests-wrapper" transition:slide={{ duration: 200 }}>
+      {#if lastSubmittedId && lastHadRecording}
+        <div class="replay-banner">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/><polygon points="10,8 16,12 10,16" fill="currentColor"/></svg>
+          <span>Recording captured —</span>
+          <a href="{endpoint}/feedback/replay.html?id={lastSubmittedId}" target="_blank" rel="noreferrer">View replay</a>
+          <button class="replay-banner-dismiss" onclick={() => { lastSubmittedId = null; lastHadRecording = false; }} aria-label="Dismiss">×</button>
+        </div>
+      {/if}
       <RequestList
         {endpoint}
         bind:reports
@@ -1180,6 +1192,33 @@
     justify-content: flex-end;
     padding-top: 4px;
   }
+  .replay-banner {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: #0f1e33;
+    border-top: 1px solid #1e3a5f;
+    font-size: 12px;
+    color: #93c5fd;
+  }
+  .replay-banner a {
+    color: #60a5fa;
+    text-decoration: underline;
+    font-weight: 500;
+  }
+  .replay-banner a:hover { color: #93c5fd; }
+  .replay-banner-dismiss {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: #4b6a8a;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+  }
+  .replay-banner-dismiss:hover { color: #93c5fd; }
   .cancel-btn {
     padding: 7px 14px;
     background: #1f2937;

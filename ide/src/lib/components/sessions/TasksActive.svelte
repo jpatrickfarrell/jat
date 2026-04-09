@@ -940,6 +940,7 @@
 		task: AgentTask | undefined;
 		agentName: string;
 		activityState: string;
+		effectiveState: string;
 	}
 	let ctxData = $state<CtxSession | null>(null);
 	let ctxX = $state(0);

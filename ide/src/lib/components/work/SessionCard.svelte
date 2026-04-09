@@ -5287,6 +5287,12 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 							{typeIcons[displayTask.issue_type] ?? "📋"}
 						</span>
 					{/if}
+					<!-- State badge (right-aligned) -->
+					<span
+						class="font-mono text-[9px] font-semibold ml-auto whitespace-nowrap shrink-0"
+						style="color: {displayAccent};"
+						title={stateVisual.description}
+					>{displayShortLabel}</span>
 				</div>
 				<!-- Task title -->
 				<button
@@ -5631,6 +5637,12 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 								{displayTask.title || displayTask.id}
 							</span>
 						{/if}
+						<!-- State badge -->
+						<span
+							class="font-mono text-[9px] font-semibold shrink-0 ml-auto mt-1 whitespace-nowrap self-start"
+							style="color: {displayAccent};"
+							title={stateVisual.description}
+						>{displayShortLabel}</span>
 					</div>
 					<!-- Row 2: Description (hover to expand) -->
 					<button

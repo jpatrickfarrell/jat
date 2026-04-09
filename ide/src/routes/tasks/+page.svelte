@@ -668,6 +668,11 @@
 				"tasks3-collapsed-subsections",
 				JSON.stringify(subsectionData),
 			);
+			// Save voice inbox collapsed state
+			localStorage.setItem(
+				"tasks3-voice-inbox-collapsed",
+				voiceInboxCollapsed ? "1" : "0",
+			);
 		} catch {
 			// Ignore storage errors
 		}
@@ -689,6 +694,11 @@
 					map.set(project, new Set(subsections as SubsectionType[]));
 				}
 				collapsedSubsections = map;
+			}
+			// Load voice inbox collapsed state
+			const voiceSaved = localStorage.getItem("tasks3-voice-inbox-collapsed");
+			if (voiceSaved !== null) {
+				voiceInboxCollapsed = voiceSaved === "1";
 			}
 		} catch {
 			// Ignore storage errors
@@ -734,6 +744,11 @@
 
 				if (session.output) {
 					outputMap.set(session.agentName, session.output);
+				} else {
+					// Preserve cached output for completed/idle sessions
+					// (API skips tmux capture for non-active sessions)
+					const cached = agentOutputs.get(session.agentName);
+					if (cached) outputMap.set(session.agentName, cached);
 				}
 
 				const taskSource = session.task || session.lastCompletedTask;
@@ -1797,7 +1812,7 @@
 				<div class="subsection voice-inbox-subsection">
 					<button
 						class="subsection-header"
-						onclick={() => voiceInboxCollapsed = !voiceInboxCollapsed}
+						onclick={() => { voiceInboxCollapsed = !voiceInboxCollapsed; saveCollapseState(); }}
 						aria-expanded={!voiceInboxCollapsed}
 					>
 						<svg

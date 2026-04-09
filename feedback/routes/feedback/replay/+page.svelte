@@ -272,8 +272,6 @@
 </script>
 
 <div id="header">
-  <!-- svelte-ignore a11y_invalid_attribute -->
-  <a id="back-link" href="#" onclick={() => { history.back() }}>← Back</a>
   <div class="meta">
     <span id="report-title">Loading…</span>
     <a id="page-url" href="#" target="_blank" rel="noreferrer" style="display:none"></a>
@@ -354,16 +352,6 @@
     background: #161b22;
     border-bottom: 1px solid #30363d;
     flex-shrink: 0;
-  }
-
-  :global(#back-link) {
-    color: #58a6ff;
-    text-decoration: none;
-    font-size: 13px;
-  }
-
-  :global(#back-link:hover) {
-    text-decoration: underline;
   }
 
   :global(#report-title) {

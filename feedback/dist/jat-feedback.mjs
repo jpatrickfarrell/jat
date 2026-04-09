@@ -624,7 +624,7 @@ var flags = EFFECT_TRANSPARENT | EFFECT_PRESERVED | BOUNDARY_EFFECT;
 function boundary(d, p, h) {
   new Boundary(d, p, h);
 }
-var It, Un, Pt, fn, Zt, Rt, Et, Bt, Ht, tn, pn, qt, In, hn, Tn, Rn, Yt, tr, at, Or, Dr, _r, Qn, er, br;
+var It, Un, Pt, fn, Zt, Rt, Et, Bt, Ht, tn, pn, qt, In, hn, Tn, Rn, Yt, nr, at, Or, Dr, _r, er, tr, br;
 class Boundary {
   /**
    * @param {TemplateNode} node
@@ -672,7 +672,7 @@ class Boundary {
      * @type {Source<number> | null}
      */
     ze(this, Yt, null);
-    ze(this, tr, createSubscriber(() => ($e(this, Yt, source(U(this, pn))), () => {
+    ze(this, nr, createSubscriber(() => ($e(this, Yt, source(U(this, pn))), () => {
       $e(this, Yt, null);
     })));
     $e(this, It, p), $e(this, Pt, h), $e(this, fn, g), this.parent = /** @type {Effect} */
@@ -689,7 +689,7 @@ class Boundary {
         } catch (_) {
           this.error(_);
         }
-        U(this, qt) > 0 ? ht(this, at, er).call(this) : this.is_pending = !1;
+        U(this, qt) > 0 ? ht(this, at, tr).call(this) : this.is_pending = !1;
       }
       return () => {
         var _;
@@ -726,7 +726,7 @@ class Boundary {
     }));
   }
   get_effect_pending() {
-    return U(this, tr).call(this), get(
+    return U(this, nr).call(this), get(
       /** @type {Source<number>} */
       U(this, Yt)
     );
@@ -749,7 +749,7 @@ class Boundary {
       }
       m = !0, _ && svelte_boundary_reset_onerror(), Batch.ensure(), $e(this, pn, 0), U(this, Bt) !== null && pause_effect(U(this, Bt), () => {
         $e(this, Bt, null);
-      }), this.is_pending = this.has_pending_snippet(), $e(this, Rt, ht(this, at, Qn).call(this, () => ($e(this, hn, !1), branch(() => U(this, fn).call(this, U(this, It)))))), U(this, qt) > 0 ? ht(this, at, er).call(this) : this.is_pending = !1;
+      }), this.is_pending = this.has_pending_snippet(), $e(this, Rt, ht(this, at, er).call(this, () => ($e(this, hn, !1), branch(() => U(this, fn).call(this, U(this, It)))))), U(this, qt) > 0 ? ht(this, at, tr).call(this) : this.is_pending = !1;
     };
     queue_micro_task(() => {
       try {
@@ -757,7 +757,7 @@ class Boundary {
       } catch (y) {
         invoke_error_boundary(y, U(this, Zt) && U(this, Zt).parent);
       }
-      g && $e(this, Bt, ht(this, at, Qn).call(this, () => {
+      g && $e(this, Bt, ht(this, at, er).call(this, () => {
         Batch.ensure(), $e(this, hn, !0);
         try {
           return branch(() => {
@@ -780,7 +780,7 @@ class Boundary {
     });
   }
 }
-It = new WeakMap(), Un = new WeakMap(), Pt = new WeakMap(), fn = new WeakMap(), Zt = new WeakMap(), Rt = new WeakMap(), Et = new WeakMap(), Bt = new WeakMap(), Ht = new WeakMap(), tn = new WeakMap(), pn = new WeakMap(), qt = new WeakMap(), In = new WeakMap(), hn = new WeakMap(), Tn = new WeakMap(), Rn = new WeakMap(), Yt = new WeakMap(), tr = new WeakMap(), at = new WeakSet(), Or = function() {
+It = new WeakMap(), Un = new WeakMap(), Pt = new WeakMap(), fn = new WeakMap(), Zt = new WeakMap(), Rt = new WeakMap(), Et = new WeakMap(), Bt = new WeakMap(), Ht = new WeakMap(), tn = new WeakMap(), pn = new WeakMap(), qt = new WeakMap(), In = new WeakMap(), hn = new WeakMap(), Tn = new WeakMap(), Rn = new WeakMap(), Yt = new WeakMap(), nr = new WeakMap(), at = new WeakSet(), Or = function() {
   try {
     $e(this, Rt, branch(() => U(this, fn).call(this, U(this, It))));
   } catch (p) {
@@ -790,7 +790,7 @@ It = new WeakMap(), Un = new WeakMap(), Pt = new WeakMap(), fn = new WeakMap(), 
   const p = U(this, Pt).pending;
   p && ($e(this, Et, branch(() => p(U(this, It)))), queue_micro_task(() => {
     var h = ht(this, at, _r).call(this);
-    $e(this, Rt, ht(this, at, Qn).call(this, () => (Batch.ensure(), branch(() => U(this, fn).call(this, h))))), U(this, qt) > 0 ? ht(this, at, er).call(this) : (pause_effect(
+    $e(this, Rt, ht(this, at, er).call(this, () => (Batch.ensure(), branch(() => U(this, fn).call(this, h))))), U(this, qt) > 0 ? ht(this, at, tr).call(this) : (pause_effect(
       /** @type {Effect} */
       U(this, Et),
       () => {
@@ -804,7 +804,7 @@ It = new WeakMap(), Un = new WeakMap(), Pt = new WeakMap(), fn = new WeakMap(), 
 }, /**
  * @param {() => Effect | null} fn
  */
-Qn = function(p) {
+er = function(p) {
   var h = active_effect, g = active_reaction, m = component_context;
   set_active_effect(U(this, Zt)), set_active_reaction(U(this, Zt)), set_component_context(U(this, Zt).ctx);
   try {
@@ -814,7 +814,7 @@ Qn = function(p) {
   } finally {
     set_active_effect(h), set_active_reaction(g), set_component_context(m);
   }
-}, er = function() {
+}, tr = function() {
   const p = (
     /** @type {(anchor: Node) => void} */
     U(this, Pt).pending
@@ -2153,7 +2153,7 @@ function unmount(d, p) {
   const h = mounted_components.get(d);
   return h ? (mounted_components.delete(d), h(p)) : Promise.resolve();
 }
-var Ot, Ut, Tt, gn, jn, Wn, nr;
+var Ot, Ut, Tt, gn, jn, Wn, rr;
 class BranchManager {
   /**
    * @param {TemplateNode} anchor
@@ -2234,7 +2234,7 @@ class BranchManager {
     /**
      * @param {Batch} batch
      */
-    ze(this, nr, (p) => {
+    ze(this, rr, (p) => {
       U(this, Ot).delete(p);
       const h = Array.from(U(this, Ot).values());
       for (const [g, m] of U(this, Tt))
@@ -2269,12 +2269,12 @@ class BranchManager {
         y === p ? g.unskip_effect(w) : g.skip_effect(w);
       for (const [y, w] of U(this, Tt))
         y === p ? g.unskip_effect(w.effect) : g.skip_effect(w.effect);
-      g.oncommit(U(this, Wn)), g.ondiscard(U(this, nr));
+      g.oncommit(U(this, Wn)), g.ondiscard(U(this, rr));
     } else
       hydrating && (this.anchor = hydrate_node), U(this, Wn).call(this);
   }
 }
-Ot = new WeakMap(), Ut = new WeakMap(), Tt = new WeakMap(), gn = new WeakMap(), jn = new WeakMap(), Wn = new WeakMap(), nr = new WeakMap();
+Ot = new WeakMap(), Ut = new WeakMap(), Tt = new WeakMap(), gn = new WeakMap(), jn = new WeakMap(), Wn = new WeakMap(), rr = new WeakMap();
 function onMount(d) {
   component_context === null && lifecycle_outside_component(), user_effect(() => {
     const p = untrack(d);
@@ -10818,11 +10818,11 @@ function AnnotationEditor(d, p) {
     var fe = child(H);
     {
       var Q = (Te) => {
-        var Le = root_2$7();
-        append(Te, Le);
+        var Fe = root_2$7();
+        append(Te, Fe);
       }, de = (Te) => {
-        var Le = root_3$6(), Oe = child(Le);
-        reset(Le), template_effect(() => set_attribute(Oe, "d", z[get(D)])), append(Te, Le);
+        var Fe = root_3$6(), Oe = child(Fe);
+        reset(Fe), template_effect(() => set_attribute(Oe, "d", z[get(D)])), append(Te, Fe);
       };
       if_block(fe, (Te) => {
         get(D) === "ellipse" ? Te(Q) : Te(de, !1);
@@ -11500,13 +11500,13 @@ function RequestList(d, p) {
       reset(Q), reset(X);
       var we = sibling(X, 2);
       let Ze;
-      var Te = sibling(child(we)), Le = child(Te, !0);
+      var Te = sibling(child(we)), Fe = child(Te, !0);
       reset(Te), reset(we);
       var Oe = sibling(we, 2);
       let te;
       var Xe = sibling(child(Oe)), _t = child(Xe, !0);
       reset(Xe), reset(Oe), reset(H), template_effect(() => {
-        fe = set_class(X, 1, "source-pill svelte-1fnmin5", null, fe, { active: get(N) === "all" }), set_text(de, g().length), Ze = set_class(we, 1, "source-pill svelte-1fnmin5", null, Ze, { active: get(N) === "feedback" }), set_text(Le, get(Y)), te = set_class(Oe, 1, "source-pill svelte-1fnmin5", null, te, { active: get(N) === "jat" }), set_text(_t, get(q));
+        fe = set_class(X, 1, "source-pill svelte-1fnmin5", null, fe, { active: get(N) === "all" }), set_text(de, g().length), Ze = set_class(we, 1, "source-pill svelte-1fnmin5", null, Ze, { active: get(N) === "feedback" }), set_text(Fe, get(Y)), te = set_class(Oe, 1, "source-pill svelte-1fnmin5", null, te, { active: get(N) === "jat" }), set_text(_t, get(q));
       }), delegated("click", X, () => set(N, "all")), delegated("click", we, () => set(N, "feedback")), delegated("click", Oe, () => set(N, "jat")), append(D, H);
     };
     if_block(ge, (D) => {
@@ -11544,25 +11544,25 @@ function RequestList(d, p) {
     var H = root_4$2(), X = child(H);
     {
       var fe = (Te) => {
-        var Le = root_5$2();
-        append(Te, Le);
+        var Fe = root_5$2();
+        append(Te, Fe);
       }, Q = (Te) => {
-        var Le = root_6$3(), Oe = child(Le), te = child(Oe, !0);
+        var Fe = root_6$3(), Oe = child(Fe), te = child(Oe, !0);
         reset(Oe);
         var Xe = sibling(Oe, 2);
-        reset(Le), template_effect(() => set_text(te, _())), delegated("click", Xe, function(..._t) {
+        reset(Fe), template_effect(() => set_text(te, _())), delegated("click", Xe, function(..._t) {
           var Ge;
           (Ge = b()) == null || Ge.apply(this, _t);
-        }), append(Te, Le);
+        }), append(Te, Fe);
       }, de = (Te) => {
-        var Le = root_7$3(), Oe = child(Le);
-        Oe.textContent = "📋", next(4), reset(Le), append(Te, Le);
+        var Fe = root_7$3(), Oe = child(Fe);
+        Oe.textContent = "📋", next(4), reset(Fe), append(Te, Fe);
       }, we = (Te) => {
-        var Le = root_8$3(), Oe = child(Le), te = child(Oe, !0);
-        reset(Oe), reset(Le), template_effect(() => set_text(te, get(C) === "submitted" ? "No submitted requests" : get(C) === "review" ? "Nothing to review right now" : "No completed requests yet")), append(Te, Le);
+        var Fe = root_8$3(), Oe = child(Fe), te = child(Oe, !0);
+        reset(Oe), reset(Fe), template_effect(() => set_text(te, get(C) === "submitted" ? "No submitted requests" : get(C) === "review" ? "Nothing to review right now" : "No completed requests yet")), append(Te, Fe);
       }, Ze = (Te) => {
-        var Le = root_9$2();
-        each(Le, 21, () => get(O), (Oe) => Oe.id, (Oe, te) => {
+        var Fe = root_9$2();
+        each(Fe, 21, () => get(O), (Oe) => Oe.id, (Oe, te) => {
           var Xe = root_10$2();
           let _t;
           var Ge = child(Xe), Ve = child(Ge), vt = child(Ve, !0);
@@ -11576,19 +11576,19 @@ function RequestList(d, p) {
           reset(Ge);
           var Dt = sibling(Ge, 2);
           {
-            var rr = (nn) => {
+            var or = (nn) => {
               var Xt = root_11$2(), vn = child(Xt);
               {
                 var An = (Ne) => {
-                  var De = root_12$2(), Je = sibling(child(De), 2), dt = child(Je, !0);
-                  reset(Je), reset(De), template_effect(
+                  var Le = root_12$2(), Je = sibling(child(Le), 2), dt = child(Je, !0);
+                  reset(Je), reset(Le), template_effect(
                     (St) => {
-                      set_attribute(De, "href", get(te).page_url), set_text(dt, St);
+                      set_attribute(Le, "href", get(te).page_url), set_text(dt, St);
                     },
                     [
                       () => get(te).page_url.replace(/^https?:\/\//, "").split("?")[0]
                     ]
-                  ), append(Ne, De);
+                  ), append(Ne, Le);
                 };
                 if_block(vn, (Ne) => {
                   get(te).page_url && Ne(An);
@@ -11596,18 +11596,18 @@ function RequestList(d, p) {
               }
               var rn = sibling(vn, 2);
               {
-                var or = (Ne) => {
-                  var De = root_13$2(), Je = child(De);
-                  reset(De), template_effect(() => set_text(Je, `Revision ${get(te).revision_count ?? ""}`)), append(Ne, De);
+                var sr = (Ne) => {
+                  var Le = root_13$2(), Je = child(Le);
+                  reset(Le), template_effect(() => set_text(Je, `Revision ${get(te).revision_count ?? ""}`)), append(Ne, Le);
                 };
                 if_block(rn, (Ne) => {
-                  get(te).revision_count > 0 && get(te).status !== "accepted" && Ne(or);
+                  get(te).revision_count > 0 && get(te).status !== "accepted" && Ne(sr);
                 });
               }
               var Vn = sibling(rn, 2);
               {
                 var Nn = (Ne) => {
-                  var De = root_14$3(), Je = first_child(De), dt = child(Je);
+                  var Le = root_14$3(), Je = first_child(Le), dt = child(Je);
                   let St;
                   var ot = sibling(dt, 2), tt = child(ot);
                   reset(ot), reset(Je);
@@ -11628,7 +11628,7 @@ function RequestList(d, p) {
                         reset(Z), reset(ln);
                         var _e = sibling(ln, 2), ye = child(_e);
                         html(ye, () => oe(get(Ke).message)), reset(_e);
-                        var Fe = sibling(_e, 2);
+                        var De = sibling(_e, 2);
                         {
                           var Ue = (rt) => {
                             var pt = root_17$3();
@@ -11637,11 +11637,11 @@ function RequestList(d, p) {
                               reset(Qe), template_effect(() => set_text(mt, get(Pe))), append(je, Qe);
                             }), reset(pt), append(rt, pt);
                           };
-                          if_block(Fe, (rt) => {
+                          if_block(De, (rt) => {
                             get(Ke).summary && get(Ke).summary.length > 0 && rt(Ue);
                           });
                         }
-                        var lt = sibling(Fe, 2);
+                        var lt = sibling(De, 2);
                         {
                           var ft = (rt) => {
                             var pt = root_19$2(), je = first_child(pt);
@@ -11738,21 +11738,21 @@ function RequestList(d, p) {
                       () => z(get(te).thread),
                       () => z(get(te).thread) === 1 ? "message" : "messages"
                     ]
-                  ), delegated("click", Je, () => T(get(te).id)), append(Ne, De);
-                }, sr = (Ne) => {
-                  var De = root_26(), Je = child(De, !0);
-                  reset(De), template_effect((dt) => set_text(Je, dt), [
+                  ), delegated("click", Je, () => T(get(te).id)), append(Ne, Le);
+                }, ir = (Ne) => {
+                  var Le = root_26(), Je = child(Le, !0);
+                  reset(Le), template_effect((dt) => set_text(Je, dt), [
                     () => get(te).description.length > 120 ? get(te).description.slice(0, 120) + "..." : get(te).description
-                  ]), append(Ne, De);
+                  ]), append(Ne, Le);
                 };
                 if_block(Vn, (Ne) => {
-                  get(te).thread && get(te).thread.length > 0 ? Ne(Nn) : get(te).description && Ne(sr, 1);
+                  get(te).thread && get(te).thread.length > 0 ? Ne(Nn) : get(te).description && Ne(ir, 1);
                 });
               }
               var Gn = sibling(Vn, 2);
               {
                 var $n = (Ne) => {
-                  var De = root_27$1(), Je = first_child(De);
+                  var Le = root_27$1(), Je = first_child(Le);
                   each(Je, 21, () => get(te).screenshot_urls, index, (tt, qe, ut) => {
                     var Ye = root_28$1();
                     set_attribute(Ye, "aria-label", `Screenshot ${ut + 1}`);
@@ -11769,7 +11769,7 @@ function RequestList(d, p) {
                       get(ot) && tt(St);
                     });
                   }
-                  append(Ne, De);
+                  append(Ne, Le);
                 };
                 if_block(Gn, (Ne) => {
                   !get(te).thread && get(te).screenshot_urls && get(te).screenshot_urls.length > 0 && Ne($n);
@@ -11778,7 +11778,7 @@ function RequestList(d, p) {
               var Hn = sibling(Gn, 2);
               {
                 var qn = (Ne) => {
-                  const De = /* @__PURE__ */ user_derived(() => {
+                  const Le = /* @__PURE__ */ user_derived(() => {
                     var ot, tt;
                     return get(te).recording_url ?? ((tt = (ot = get(te).thread) == null ? void 0 : ot.find((qe) => qe.recordingUrl)) == null ? void 0 : tt.recordingUrl) ?? null;
                   });
@@ -11792,7 +11792,7 @@ function RequestList(d, p) {
                         let yt = /* @__PURE__ */ user_derived(() => get(te).console_logs ?? null), Wt = /* @__PURE__ */ user_derived(() => get(te).network_requests ?? null);
                         TimelineViewer(Ye, {
                           get recordingUrl() {
-                            return get(De);
+                            return get(Le);
                           },
                           get endpoint() {
                             return h();
@@ -11808,7 +11808,7 @@ function RequestList(d, p) {
                       template_effect(() => set_attribute(ut, "href", `${h() ?? ""}/feedback/replay.html?id=${get(te).id ?? ""}`)), append(ot, tt);
                     };
                     if_block(dt, (ot) => {
-                      get(De) && ot(St);
+                      get(Le) && ot(St);
                     });
                   }
                   append(Ne, Je);
@@ -11820,8 +11820,8 @@ function RequestList(d, p) {
               var _n = sibling(Hn, 2);
               {
                 var Yn = (Ne) => {
-                  var De = root_32$1(), Je = sibling(child(De), 2), dt = child(Je);
-                  html(dt, () => oe(get(te).dev_notes)), reset(Je), reset(De), append(Ne, De);
+                  var Le = root_32$1(), Je = sibling(child(Le), 2), dt = child(Je);
+                  html(dt, () => oe(get(te).dev_notes)), reset(Je), reset(Le), append(Ne, Le);
                 };
                 if_block(_n, (Ne) => {
                   get(te).dev_notes && !get(te).thread && get(te).status !== "in_progress" && Ne(Yn);
@@ -11832,13 +11832,13 @@ function RequestList(d, p) {
               var Xn = sibling(sn, 2);
               {
                 var an = (Ne) => {
-                  var De = root_33$1();
-                  De.textContent = "✓ Accepted", append(Ne, De);
+                  var Le = root_33$1();
+                  Le.textContent = "✓ Accepted", append(Ne, Le);
                 }, Jn = (Ne) => {
-                  var De = root_34$1();
-                  De.textContent = "✗ Rejected", append(Ne, De);
-                }, ir = (Ne) => {
-                  var De = comment(), Je = first_child(De);
+                  var Le = root_34$1();
+                  Le.textContent = "✗ Rejected", append(Ne, Le);
+                }, ar = (Ne) => {
+                  var Le = comment(), Je = first_child(Le);
                   {
                     var dt = (ot) => {
                       var tt = root_36$1(), qe = child(tt);
@@ -11851,11 +11851,11 @@ function RequestList(d, p) {
                       {
                         var Qt = (_e) => {
                           var ye = root_37$1();
-                          each(ye, 21, () => get(R), index, (Fe, Ue, lt) => {
+                          each(ye, 21, () => get(R), index, (De, Ue, lt) => {
                             var ft = root_38(), gt = child(ft);
                             set_attribute(gt, "alt", `Screenshot ${lt + 1}`);
                             var Ft = sibling(gt, 2);
-                            reset(ft), template_effect(() => set_attribute(gt, "src", get(Ue))), delegated("click", Ft, () => Re(lt)), append(Fe, ft);
+                            reset(ft), template_effect(() => set_attribute(gt, "src", get(Ue))), delegated("click", Ft, () => Re(lt)), append(De, ft);
                           }), reset(ye), append(_e, ye);
                         };
                         if_block(Ke, (_e) => {
@@ -11866,9 +11866,9 @@ function RequestList(d, p) {
                       {
                         var ln = (_e) => {
                           var ye = root_39();
-                          each(ye, 21, () => get(M), index, (Fe, Ue, lt) => {
+                          each(ye, 21, () => get(M), index, (De, Ue, lt) => {
                             var ft = root_40(), gt = child(ft), Ft = sibling(gt);
-                            reset(ft), template_effect((rt) => set_text(gt, `<${rt ?? ""}${get(Ue).id ? `#${get(Ue).id}` : ""}> `), [() => get(Ue).tagName.toLowerCase()]), delegated("click", Ft, () => me(lt)), append(Fe, ft);
+                            reset(ft), template_effect((rt) => set_text(gt, `<${rt ?? ""}${get(Ue).id ? `#${get(Ue).id}` : ""}> `), [() => get(Ue).tagName.toLowerCase()]), delegated("click", Ft, () => me(lt)), append(De, ft);
                           }), reset(ye), append(_e, ye);
                         };
                         if_block(en, (_e) => {
@@ -11880,8 +11880,8 @@ function RequestList(d, p) {
                       var zn = sibling(Lt, 2);
                       {
                         var Z = (_e) => {
-                          var ye = root_41(), Fe = child(ye);
-                          reset(ye), template_effect((Ue) => set_text(Fe, `${Ue ?? ""} more characters needed`), [() => 10 - get(I).trim().length]), append(_e, ye);
+                          var ye = root_41(), De = child(ye);
+                          reset(ye), template_effect((Ue) => set_text(De, `${Ue ?? ""} more characters needed`), [() => 10 - get(I).trim().length]), append(_e, ye);
                         }, re = /* @__PURE__ */ user_derived(() => get(I).trim().length > 0 && get(I).trim().length < 10);
                         if_block(zn, (_e) => {
                           get(re) && _e(Z);
@@ -11907,16 +11907,16 @@ function RequestList(d, p) {
                       get(k) === get(te).id ? ot(dt) : ot(St, !1);
                     });
                   }
-                  append(Ne, De);
+                  append(Ne, Le);
                 };
                 if_block(Xn, (Ne) => {
-                  get(te).status === "accepted" ? Ne(an) : get(te).status === "rejected" ? Ne(Jn, 1) : (get(te).status === "completed" || get(te).status === "wontfix") && Ne(ir, 2);
+                  get(te).status === "accepted" ? Ne(an) : get(te).status === "rejected" ? Ne(Jn, 1) : (get(te).status === "completed" || get(te).status === "wontfix") && Ne(ar, 2);
                 });
               }
               reset(Kn), reset(Xt), template_effect((Ne) => set_text(Mn, Ne), [() => ie(get(te).created_at)]), transition(3, Xt, () => slide, () => ({ duration: 200 })), append(nn, Xt);
             };
             if_block(Dt, (nn) => {
-              get(x) === get(te).id && nn(rr);
+              get(x) === get(te).id && nn(or);
             });
           }
           reset(Xe), template_effect(
@@ -11934,7 +11934,7 @@ function RequestList(d, p) {
               () => P(get(te).status)
             ]
           ), delegated("click", Ge, () => ce(get(te).id)), append(Oe, Xe);
-        }), reset(Le), append(Te, Le);
+        }), reset(Fe), append(Te, Fe);
       };
       if_block(X, (Te) => {
         m() ? Te(fe) : _() && g().length === 0 ? Te(Q, 1) : g().length === 0 ? Te(de, 2) : get(O).length === 0 ? Te(we, 3) : Te(Ze, !1);
@@ -12183,7 +12183,7 @@ function AgentPanel(d, p) {
               });
             }
             reset(Q);
-            var Le = sibling(Q, 2), Oe = child(Le);
+            var Fe = sibling(Q, 2), Oe = child(Fe);
             {
               var te = (Be) => {
                 var He = root_14$2(), bt = child(He, !0);
@@ -12221,8 +12221,8 @@ function AgentPanel(d, p) {
                 get(Se).approvalStatus === "pending" ? Be(Ve) : Be(vt, !1);
               });
             }
-            reset(Le);
-            var Nt = sibling(Le, 2);
+            reset(Fe);
+            var Nt = sibling(Fe, 2);
             {
               var mn = (Be) => {
                 var He = root_17$2(), bt = child(He, !0);
@@ -12252,7 +12252,7 @@ function AgentPanel(d, p) {
                 get(Se).role === "action" && get(Se).tool && Ge(Ze);
               });
             }
-            var Te = sibling(we, 2), Le = child(Te, !0);
+            var Te = sibling(we, 2), Fe = child(Te, !0);
             reset(Te);
             var Oe = sibling(Te, 2);
             {
@@ -12277,7 +12277,7 @@ function AgentPanel(d, p) {
             }
             reset(X), template_effect(
               (Ge) => {
-                set_class(X, 1, `message msg-${get(Se).role ?? ""}`, "svelte-bez0nz"), set_text(Q, Ge), set_text(Le, get(Se).text);
+                set_class(X, 1, `message msg-${get(Se).role ?? ""}`, "svelte-bez0nz"), set_text(Q, Ge), set_text(Fe, get(Se).text);
               },
               [() => N(get(Se).role)]
             ), append(H, X);
@@ -12532,8 +12532,8 @@ function NotesPanel(d, p) {
               });
             }
             reset(de);
-            var Le = sibling(de, 2), Oe = child(Le);
-            reset(Le), reset(Q), reset(fe), next(2), reset(H), template_effect(
+            var Fe = sibling(de, 2), Oe = child(Fe);
+            reset(Fe), reset(Q), reset(fe), next(2), reset(H), template_effect(
               (te, Xe) => {
                 X = set_class(H, 1, "note-row svelte-zp32f3", null, X, { current: get(D).route === get(x) }), set_text(we, `${get(D).route ?? ""} `), set_text(Oe, `${te ?? ""} line${Xe ?? ""}`);
               },
@@ -18315,7 +18315,7 @@ const $$css$1 = {
 };
 function FeedbackPanel(d, p) {
   push(p, !0), append_styles(d, $$css$1);
-  const h = "3.3.0";
+  const h = "3.3.1";
   let g = prop(p, "endpoint", 7), m = prop(p, "project", 7), _ = prop(p, "isOpen", 7, !1), b = prop(p, "userId", 7, ""), y = prop(p, "userEmail", 7, ""), w = prop(p, "userName", 7, ""), x = prop(p, "userRole", 7, ""), E = prop(p, "orgId", 7, ""), S = prop(p, "orgName", 7, ""), k = prop(p, "onclose", 7), I = prop(p, "ongrip", 7), R = prop(p, "agentProxy", 7, ""), M = prop(p, "agentModel", 7, ""), A = prop(p, "agentContext", 7, ""), C = prop(p, "registeredTools", 23, () => []), N = /* @__PURE__ */ state("new"), $ = /* @__PURE__ */ state(!1), O = /* @__PURE__ */ state(!1), F = /* @__PURE__ */ state(!1), j = /* @__PURE__ */ state(proxy([]));
   function Y() {
     if (get(F)) {
@@ -18329,10 +18329,10 @@ function FeedbackPanel(d, p) {
     var Z;
     try {
       const re = await navigator.mediaDevices.getUserMedia({ audio: !0 }), _e = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/ogg", ye = new MediaRecorder(re, { mimeType: _e });
-      xe = [], ye.ondataavailable = (Fe) => {
-        Fe.data.size > 0 && xe.push(Fe.data);
+      xe = [], ye.ondataavailable = (De) => {
+        De.data.size > 0 && xe.push(De.data);
       }, ye.onstop = () => {
-        re.getTracks().forEach((Fe) => Fe.stop()), ke(new Blob(xe, { type: _e }), _e);
+        re.getTracks().forEach((De) => De.stop()), ke(new Blob(xe, { type: _e }), _e);
       }, ye.start(500), set(se, ye, !0), set(q, !0), set(oe, "recording"), set(ce, "Recording…");
     } catch (re) {
       set(oe, "error"), set(
@@ -18350,7 +18350,7 @@ function FeedbackPanel(d, p) {
     try {
       const _e = re.includes("webm") ? "webm" : re.includes("ogg") ? "ogg" : "audio", ye = new FormData();
       ye.append("file", Z, `voice-note.${_e}`);
-      const Fe = `${g()}/api/tasks/voice`, Ue = await fetch(Fe, { method: "POST", body: ye });
+      const De = `${g()}/api/tasks/voice`, Ue = await fetch(De, { method: "POST", body: ye });
       if (Ue.ok)
         set(oe, "done"), set(ce, "Done! Tasks will appear in your Voice Inbox shortly.");
       else {
@@ -18445,15 +18445,15 @@ function FeedbackPanel(d, p) {
     if (!(!_e || _e.length === 0)) {
       for (const ye of _e)
         try {
-          const Fe = await Ze(ye);
-          Q.includes(ye.type) ? (set(ae, [...get(ae), Fe], !0), it(`Image added: ${ye.name}`, "success")) : (set(
+          const De = await Ze(ye);
+          Q.includes(ye.type) ? (set(ae, [...get(ae), De], !0), it(`Image added: ${ye.name}`, "success")) : (set(
             V,
             [
               ...get(V),
               {
                 name: ye.name,
                 type: ye.type || "application/octet-stream",
-                data: Fe,
+                data: De,
                 size: ye.size
               }
             ],
@@ -18474,7 +18474,7 @@ function FeedbackPanel(d, p) {
   function Te(Z) {
     set(V, get(V).filter((re, _e) => _e !== Z), !0);
   }
-  function Le(Z) {
+  function Fe(Z) {
     return Z < 1024 ? `${Z}B` : Z < 1024 * 1024 ? `${(Z / 1024).toFixed(1)}KB` : `${(Z / (1024 * 1024)).toFixed(1)}MB`;
   }
   let Oe = /* @__PURE__ */ state(!1), te = /* @__PURE__ */ state(!1), Xe = /* @__PURE__ */ state(!1), _t = /* @__PURE__ */ state(null), Ge = /* @__PURE__ */ state(!1), Ve = /* @__PURE__ */ state(null), vt = /* @__PURE__ */ state(""), Nt = /* @__PURE__ */ state(void 0), mn = !1;
@@ -18517,7 +18517,7 @@ function FeedbackPanel(d, p) {
       set(te, !1);
     }
   }
-  function rr(Z) {
+  function or(Z) {
     set(ae, get(ae).filter((re, _e) => _e !== Z), !0);
   }
   function nn(Z) {
@@ -18537,14 +18537,17 @@ function FeedbackPanel(d, p) {
   function rn() {
     set(H, getCapturedLogs(), !0), set(X, getCapturedRequests(), !0);
   }
-  async function or(Z) {
+  async function sr(Z) {
     if (Z.preventDefault(), !get(Ee).trim()) return;
     set(Oe, !0), rn();
     const re = {};
-    (b() || y() || w() || x()) && (re.reporter = {}, b() && (re.reporter.userId = b()), y() && (re.reporter.email = y()), w() && (re.reporter.name = w()), x() && (re.reporter.role = x())), (E() || S()) && (re.organization = {}, E() && (re.organization.id = E()), S() && (re.organization.name = S()));
+    if ((b() || y() || w() || x()) && (re.reporter = {}, b() && (re.reporter.userId = b()), y() && (re.reporter.email = y()), w() && (re.reporter.name = w()), x() && (re.reporter.role = x())), (E() || S()) && (re.organization = {}, E() && (re.organization.id = E()), S() && (re.organization.name = S())), get(F)) {
+      const De = stopRecording();
+      set(j, De, !0), set(F, !1);
+    }
     let _e;
     if (get(j).length > 0) {
-      const Fe = crypto.randomUUID(), Ue = await uploadRecording(g(), get(j), Fe);
+      const De = crypto.randomUUID(), Ue = await uploadRecording(g(), get(j), De);
       Ue.ok && Ue.recording_url && (_e = Ue.recording_url);
     }
     const ye = {
@@ -18565,8 +18568,8 @@ function FeedbackPanel(d, p) {
       recording_url: _e || null
     };
     try {
-      const Fe = await submitReport(g(), ye);
-      if (Fe.ok) {
+      const De = await submitReport(g(), ye);
+      if (De.ok) {
         if (ye.recording_url) {
           const Ue = {
             recording_url: ye.recording_url,
@@ -18575,7 +18578,7 @@ function FeedbackPanel(d, p) {
           };
           G().setReportContext(Ue);
         }
-        set(_t, Fe.id, !0), set(Ge, !!ye.recording_url), it(`Report submitted (${Fe.id})`, "success"), Vn(), setTimeout(
+        set(_t, De.id, !0), set(Ge, !!ye.recording_url), it(`Report submitted (${De.id})`, "success"), Vn(), setTimeout(
           () => {
             le(), set(N, "requests");
           },
@@ -18598,7 +18601,7 @@ function FeedbackPanel(d, p) {
   function Nn(Z) {
     Z.stopPropagation();
   }
-  const sr = [
+  const ir = [
     { value: "bug", label: "Bug" },
     { value: "enhancement", label: "Enhancement" },
     { value: "other", label: "Other" }
@@ -18719,18 +18722,18 @@ function FeedbackPanel(d, p) {
   let Xn;
   var an = sibling(Mn, 2);
   let Jn;
-  var ir = sibling(child(an), 2);
+  var ar = sibling(child(an), 2);
   {
     var Ne = (Z) => {
       var re = root_2$1(), _e = child(re, !0);
       reset(re), template_effect(() => set_text(_e, get(pe))), append(Z, re);
     };
-    if_block(ir, (Z) => {
+    if_block(ar, (Z) => {
       get(pe) > 0 && Z(Ne);
     });
   }
   reset(an);
-  var De = sibling(an, 2);
+  var Le = sibling(an, 2);
   {
     var Je = (Z) => {
       var re = root_3();
@@ -18739,11 +18742,11 @@ function FeedbackPanel(d, p) {
         set(N, "agent"), set($, !0);
       }), append(Z, re);
     };
-    if_block(De, (Z) => {
+    if_block(Le, (Z) => {
       R() && Z(Je);
     });
   }
-  var dt = sibling(De, 2);
+  var dt = sibling(Le, 2);
   let St;
   var ot = sibling(dt, 2);
   let tt;
@@ -18755,10 +18758,10 @@ function FeedbackPanel(d, p) {
     var Ye = (Z) => {
       var re = root_4(), _e = child(re), ye = sibling(child(_e), 2);
       remove_input_defaults(ye), bind_this(ye, (be) => set(Nt, be), () => get(Nt)), reset(_e);
-      var Fe = sibling(_e, 2), Ue = sibling(child(Fe), 2);
-      remove_textarea_child(Ue), reset(Fe);
-      var lt = sibling(Fe, 2), ft = child(lt), gt = sibling(child(ft), 2);
-      each(gt, 21, () => sr, index, (be, Ae) => {
+      var De = sibling(_e, 2), Ue = sibling(child(De), 2);
+      remove_textarea_child(Ue), reset(De);
+      var lt = sibling(De, 2), ft = child(lt), gt = sibling(child(ft), 2);
+      each(gt, 21, () => ir, index, (be, Ae) => {
         var et = root_5(), st = child(et, !0);
         reset(et);
         var nt = {};
@@ -18868,7 +18871,7 @@ function FeedbackPanel(d, p) {
           return get(te);
         },
         oncapture: Dt,
-        onremove: rr,
+        onremove: or,
         onedit: nn
       }), reset(pt);
       var xr = sibling(pt, 2);
@@ -18902,7 +18905,7 @@ function FeedbackPanel(d, p) {
               (zt) => {
                 set_text(Xr, get(st).name), set_text(Jr, zt);
               },
-              [() => Le(get(st).size)]
+              [() => Fe(get(st).size)]
             ), delegated("click", Qr, () => Te(nt)), append(et, ct);
           }), reset(Ae), append(be, Ae);
         };
@@ -18956,9 +18959,9 @@ function FeedbackPanel(d, p) {
           get(Gr) && be(Vr);
         });
       }
-      var Cr = sibling(kr, 2), ar = child(Cr), Hr = child(ar);
-      reset(ar);
-      var lr = sibling(ar, 2), cr = sibling(lr, 2), qr = child(cr);
+      var Cr = sibling(kr, 2), lr = child(Cr), Hr = child(lr);
+      reset(lr);
+      var cr = sibling(lr, 2), Qn = sibling(cr, 2), qr = child(Qn);
       {
         var Yr = (be) => {
           var Ae = root_25();
@@ -18971,12 +18974,12 @@ function FeedbackPanel(d, p) {
           get(Oe) ? be(Yr) : be(Kr, !1);
         });
       }
-      reset(cr), reset(Cr), reset(re), template_effect(
+      reset(Qn), reset(Cr), reset(re), template_effect(
         (be) => {
-          ye.disabled = get(Oe), Ue.disabled = get(Oe), gt.disabled = get(Oe), rt.disabled = get(Oe), Pe.disabled = get(te), kt.disabled = get(Xe), Mt = set_class(xt, 1, "tool-btn svelte-nv4d5v", null, Mt, { "recording-active": get(F) }), xt.disabled = get(Oe), Dn.disabled = get(Oe), set_text(Hr, `v${h}`), lr.disabled = get(Oe), cr.disabled = be;
+          ye.disabled = get(Oe), Ue.disabled = get(Oe), gt.disabled = get(Oe), rt.disabled = get(Oe), Pe.disabled = get(te), kt.disabled = get(Xe), Mt = set_class(xt, 1, "tool-btn svelte-nv4d5v", null, Mt, { "recording-active": get(F) }), xt.disabled = get(Oe), Dn.disabled = get(Oe), set_text(Hr, `v${h}`), cr.disabled = get(Oe), Qn.disabled = be, set_attribute(Qn, "title", get(F) ? "Stop recording first, or click Submit to auto-stop" : "");
         },
         [() => get(Oe) || !get(Ee).trim()]
-      ), event("submit", re, or), bind_value(ye, () => get(Ee), (be) => set(Ee, be)), bind_value(Ue, () => get(Me), (be) => set(Me, be)), bind_select_value(gt, () => get(Se), (be) => set(Se, be)), bind_select_value(rt, () => get(We), (be) => set(We, be)), delegated("click", Pe, Dt), delegated("click", kt, An), delegated("click", xt, Y), delegated("click", Dn, de), delegated("change", wr, we), delegated("click", lr, function(...be) {
+      ), event("submit", re, sr), bind_value(ye, () => get(Ee), (be) => set(Ee, be)), bind_value(Ue, () => get(Me), (be) => set(Me, be)), bind_select_value(gt, () => get(Se), (be) => set(Se, be)), bind_select_value(rt, () => get(We), (be) => set(We, be)), delegated("click", Pe, Dt), delegated("click", kt, An), delegated("click", xt, Y), delegated("click", Dn, de), delegated("change", wr, we), delegated("click", cr, function(...be) {
         var Ae;
         (Ae = k()) == null || Ae.apply(this, be);
       }), transition(3, re, () => slide, () => ({ duration: 200 })), append(Z, re);
@@ -19000,8 +19003,8 @@ function FeedbackPanel(d, p) {
           get(_t) && get(Ge) && Ue(ye);
         });
       }
-      var Fe = sibling(_e, 2);
-      RequestList(Fe, {
+      var De = sibling(_e, 2);
+      RequestList(De, {
         get endpoint() {
           return g();
         },
@@ -19030,8 +19033,8 @@ function FeedbackPanel(d, p) {
       var re = root_29(), _e = child(re);
       {
         let ye = /* @__PURE__ */ user_derived(() => {
-          var Fe;
-          return ((Fe = get(P)) == null ? void 0 : Fe.getMaxSteps()) ?? 20;
+          var De;
+          return ((De = get(P)) == null ? void 0 : De.getMaxSteps()) ?? 20;
         });
         AgentPanel(_e, {
           get messages() {
@@ -19083,7 +19086,7 @@ function FeedbackPanel(d, p) {
   var Lt = sibling(en, 2);
   {
     var bn = (Z) => {
-      var re = root_31(), _e = child(re), ye = sibling(child(_e), 2), Fe = child(ye);
+      var re = root_31(), _e = child(re), ye = sibling(child(_e), 2), De = child(ye);
       {
         var Ue = (je) => {
           var Pe = root_32();
@@ -19105,7 +19108,7 @@ function FeedbackPanel(d, p) {
           var wt = sibling(Qe, 2);
           template_effect(() => set_text(mt, get(ce))), delegated("click", wt, me), append(je, Pe);
         };
-        if_block(Fe, (je) => {
+        if_block(De, (je) => {
           get(oe) === "idle" ? je(Ue) : get(oe) === "recording" ? je(lt, 1) : get(oe) === "processing" ? je(ft, 2) : get(oe) === "done" ? je(gt, 3) : get(oe) === "error" && je(Ft, 4);
         });
       }

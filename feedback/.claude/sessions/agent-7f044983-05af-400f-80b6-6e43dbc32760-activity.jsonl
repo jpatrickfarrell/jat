@@ -1,0 +1,50 @@
+"for proj in jst flush meadow steelbridge headcount; do"
+"  path=\"/home/jw/code/$proj\""
+"  has_static=$(ls \"$path/static/jat-feedback.js\" 2>/dev/null && echo \"yes\" || echo \"no\")"
+"  has_npm=$(grep -q \"jat-feedback\" \"$path/package.json\" 2>/dev/null && echo \"yes\" || echo \"no\")"
+"  # Get current static version if exists"
+"  if [ \"$has_static\" = \"yes\" ]; then"
+"    mtime=$(stat -c \"%y\" \"$path/static/jat-feedback.js\" 2>/dev/null | cut -d' ' -f1)"
+"    size=$(stat -c \"%s\" \"$path/static/jat-feedback.js\" 2>/dev/null)"
+"    echo \"$proj | static=$has_static ($mtime, ${size}B) | npm=$has_npm\""
+"  else"
+"    echo \"$proj | static=$has_static | npm=$has_npm\""
+"  fi"
+"done","preview":"Running: # Check if projects have a static copy vs npm inst...","tool":"Bash"}
+{"ts":"2026-04-09T14:32:20Z","agent":"KeenStorm","type":"tool","content":"Bash: # Check how projects with npm install get the static file (postinstall/copy script?)"
+"cat /home/jw/code/jst/package.json | python3 -c \""
+"import json,sys"
+"p=json.load(sys.stdin)"
+"print('version dep:', p.get('dependencies',{}).get('jat-feedback','?'))"
+"print('scripts:', {k:v for k,v in p.get('scripts',{}).items() if 'feedback' in v.lower() or 'copy' in v.lower()})"
+"\""
+"echo \"---\""
+"# How does jst get the static file? Check if there's a vite plugin or postinstall"
+"cat /home/jw/code/jst/vite.config.ts 2>/dev/null | grep -A5 -i \"feedback\\|copy\" | head -20","preview":"Running: # Check how projects with npm install get the stat...","tool":"Bash"}
+{"ts":"2026-04-09T14:32:33Z","agent":"KeenStorm","type":"tool","content":"Bash: cat /home/jw/code/jat/feedback/package.json | python3 -c \""
+"import json,sys"
+"p=json.load(sys.stdin)"
+"print('name:', p['name'])"
+"print('version:', p['version'])"
+"print('publishConfig:', p.get('publishConfig','not set'))"
+"print('registry:', p.get('registry','not set'))"
+"\" && npm info jat-feedback version 2>/dev/null || echo \"not on npm registry\"","preview":"Running: cat /home/jw/code/jat/feedback/package.json | pyth...","tool":"Bash"}
+{"ts":"2026-04-09T14:32:48Z","agent":"KeenStorm","type":"tool","content":"Bash: grep -A10 \"feedback\\|StaticCopy\\|viteStatic\" /home/jw/code/flush/vite.config.ts 2>/dev/null | head -20"
+"echo \"---\""
+"grep -A10 \"feedback\\|StaticCopy\" /home/jw/code/headcount/vite.config.ts 2>/dev/null | head -15","preview":"Running: grep -A10 \"feedback\\|StaticCopy\\|viteStatic\" /home...","tool":"Bash"}
+{"ts":"2026-04-09T14:32:52Z","agent":"KeenStorm","type":"tool","content":"Bash: grep \"jat-feedback\" /home/jw/code/flush/package.json && grep \"jat-feedback\" /home/jw/code/headcount/package.json && grep \"jat-feedback\" /home/jw/code/meadow/package.json && grep \"jat-feedback\" /home/jw/code/steelbridge/package.json","preview":"Running: grep \"jat-feedback\" /home/jw/code/flush/package.js...","tool":"Bash"}
+{"ts":"2026-04-09T14:33:07Z","agent":"KeenStorm","type":"tool","content":"Bash: npm version minor --no-git-tag-version 2>/dev/null && cat package.json | grep '\"version\"'","preview":"Running: npm version minor --no-git-tag-version 2>/dev/null...","tool":"Bash"}
+{"ts":"2026-04-09T14:33:14Z","agent":"KeenStorm","type":"tool","content":"Bash: npm publish 2>&1 | tail -5","preview":"Running: npm publish 2>&1 | tail -5","tool":"Bash"}
+{"ts":"2026-04-09T14:59:01Z","agent":"KeenStorm","type":"tool","content":"Bash: cd /home/jw/code/jat/feedback && npm run build 2>&1 | tail -5 && npm version patch --no-git-tag-version && npm publish 2>&1 | tail -3","preview":"Running: cd /home/jw/code/jat/feedback && npm run build 2>&...","tool":"Bash"}
+{"ts":"2026-04-09T14:59:06Z","agent":"KeenStorm","type":"tool","content":"Bash: cat /home/jw/code/meadow/src/routes/api/feedback/report/+server.ts | head -30","preview":"Running: cat /home/jw/code/meadow/src/routes/api/feedback/r...","tool":"Bash"}
+{"ts":"2026-04-09T14:59:11Z","agent":"KeenStorm","type":"tool","content":"Bash: grep -n \"supabase\\|SUPABASE\\|createClient\\|service_role\" /home/jw/code/meadow/src/routes/api/feedback/report/+server.ts | head -10","preview":"Running: grep -n \"supabase\\|SUPABASE\\|createClient\\|service...","tool":"Bash"}
+{"ts":"2026-04-09T14:59:19Z","agent":"KeenStorm","type":"tool","content":"Bash: ls /home/jw/code/meadow/src/routes/api/feedback/","preview":"Running: ls /home/jw/code/meadow/src/routes/api/feedback/","tool":"Bash"}
+{"ts":"2026-04-09T14:59:23Z","agent":"KeenStorm","type":"tool","content":"Bash: mkdir -p /home/jw/code/meadow/src/routes/api/feedback/recordings","preview":"Running: mkdir -p /home/jw/code/meadow/src/routes/api/feedb...","tool":"Bash"}
+{"ts":"2026-04-09T14:59:39Z","agent":"KeenStorm","type":"tool","content":"Write file: /home/jw/code/meadow/src/routes/api/feedback/recordings/+server.ts","preview":"Writing +server.ts","tool":"Write","file":"/home/jw/code/meadow/src/routes/api/feedback/recordings/+server.ts"}
+{"ts":"2026-04-09T14:59:44Z","agent":"KeenStorm","type":"tool","content":"Bash: # Copy migrations to meadow"
+"cp /home/jw/code/jat/feedback/supabase/migrations/3.2.0_recording_storage.sql \\"
+"   /home/jw/code/meadow/supabase/migrations/$(date +%Y%m%d%H%M%S)_feedback_3_2_0.sql"
+"cp /home/jw/code/jat/feedback/supabase/migrations/3.3.0_realtime_voice.sql \\"
+"   /home/jw/code/meadow/supabase/migrations/$(date +%Y%m%d%H%M%S)_feedback_3_3_0.sql"
+"ls /home/jw/code/meadow/supabase/migrations/ | grep feedback","preview":"Running: # Copy migrations to meadow"
+"cp /home/jw/code/jat/f...","tool":"Bash"}

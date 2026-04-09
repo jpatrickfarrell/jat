@@ -456,6 +456,13 @@
       if (orgName) metadata.organization.name = orgName;
     }
 
+    // Auto-stop recording if user submits while still recording
+    if (sessionRecording) {
+      const events = stopRecording();
+      recordedEvents = events;
+      sessionRecording = false;
+    }
+
     // Upload recording events separately if present, get back URL
     let recording_url: string | undefined;
     if (recordedEvents.length > 0) {
@@ -753,7 +760,7 @@
       <div class="actions">
         <span class="panel-version">v{version}</span>
         <button type="button" class="cancel-btn" onclick={onclose} disabled={submitting}>Cancel</button>
-        <button type="submit" class="submit-btn" disabled={submitting || !title.trim()}>
+        <button type="submit" class="submit-btn" disabled={submitting || !title.trim()} title={sessionRecording ? 'Stop recording first, or click Submit to auto-stop' : ''}>
           {#if submitting}
             <span class="spinner"></span>
             Submitting...

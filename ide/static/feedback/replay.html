@@ -59,7 +59,7 @@
 </head>
 <body>
   <div id="header">
-    <a id="back-link" href="#">← Back</a>
+    <a id="back-link" href="#" onclick="history.back(); return false;">← Back</a>
     <div class="meta">
       <span id="report-title">Loading…</span>
       <a id="page-url" href="#" target="_blank" rel="noreferrer" style="display:none"></a>
@@ -109,7 +109,7 @@
     const taskId = new URLSearchParams(location.search).get('id') || location.pathname.split('/').pop();
     const apiBase = location.origin;
 
-    document.getElementById('back-link').href = `${apiBase}/tasks/${taskId}`;
+    // back-link uses history.back() — works on any host
 
     let replayer = null, totalDuration = 0, currentTime = 0, playing = false, speed = 1;
     let recordingStartTime = 0, consoleLogs = [], networkRequests = [];

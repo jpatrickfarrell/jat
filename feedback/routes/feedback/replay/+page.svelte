@@ -273,7 +273,7 @@
 
 <div id="header">
   <!-- svelte-ignore a11y_invalid_attribute -->
-  <a id="back-link" href="#" onclick="history.back(); return false;">← Back</a>
+  <a id="back-link" href="#" onclick={() => { history.back() }}>← Back</a>
   <div class="meta">
     <span id="report-title">Loading…</span>
     <a id="page-url" href="#" target="_blank" rel="noreferrer" style="display:none"></a>

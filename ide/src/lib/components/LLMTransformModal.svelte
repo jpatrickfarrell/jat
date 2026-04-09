@@ -171,6 +171,7 @@
 		onkeydown={handleKeydown}
 		role="dialog"
 		aria-modal="true"
+		tabindex="0"
 		aria-labelledby="llm-transform-title"
 	>
 		<!-- Modal content -->

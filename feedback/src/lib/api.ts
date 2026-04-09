@@ -18,6 +18,32 @@ export async function submitReport(endpoint: string, report: FeedbackReport): Pr
   return { ok: true, id: data.id };
 }
 
+export async function uploadRecording(
+  endpoint: string,
+  events: unknown[],
+  reportId: string,
+): Promise<{ ok: boolean; recording_url?: string; error?: string }> {
+  const url = `${endpoint.replace(/\/$/, '')}/api/feedback/recordings`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ events, reportId }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return { ok: false, error: data.error || `HTTP ${response.status}` };
+    }
+
+    return { ok: true, recording_url: data.recording_url };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to upload recording' };
+  }
+}
+
 export async function healthCheck(endpoint: string): Promise<boolean> {
   try {
     const url = `${endpoint.replace(/\/$/, '')}/api/feedback/report`;

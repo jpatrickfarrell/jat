@@ -76,6 +76,7 @@ export interface FeedbackReport {
   selected_elements: ElementData[] | null;
   screenshots: string[] | null;
   recording_events: unknown[] | null;
+  recording_url: string | null;
   attachments: FileAttachment[] | null;
   metadata: {
     reporter?: FeedbackReporter;
@@ -108,6 +109,7 @@ export interface ThreadEntry {
   elements?: ThreadElement[];
   summary?: string[];
   pageUrl?: string;
+  recordingUrl?: string;
   at: string;
 }
 

@@ -838,6 +838,7 @@
 		contenteditable={disabled ? 'false' : 'true'}
 		role="textbox"
 		aria-multiline="true"
+		tabindex="0"
 		class="w-full rounded-md px-3 py-2 text-sm"
 		style="
 			background: oklch(0.14 0.01 250);

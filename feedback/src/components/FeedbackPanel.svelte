@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { ConsoleLogEntry, NetworkRequestEntry, ElementData, FileAttachment, FeedbackReport, ToolDefinition } from '../lib/types';
-  import { submitReport, fetchReports, type ReportSummary } from '../lib/api';
+  import { submitReport, uploadRecording, fetchReports, type ReportSummary } from '../lib/api';
   import { enqueue } from '../lib/queue';
   import { captureViewport, captureViewportQuick } from '../lib/screenshot';
   import { startElementPicker } from '../lib/elementPicker';
@@ -454,6 +454,16 @@
       if (orgName) metadata.organization.name = orgName;
     }
 
+    // Upload recording events separately if present, get back URL
+    let recording_url: string | undefined;
+    if (recordedEvents.length > 0) {
+      const reportId = crypto.randomUUID();
+      const uploadResult = await uploadRecording(endpoint, recordedEvents, reportId);
+      if (uploadResult.ok && uploadResult.recording_url) {
+        recording_url = uploadResult.recording_url;
+      }
+    }
+
     const report: FeedbackReport = {
       title: title.trim(),
       description: description.trim(),
@@ -465,10 +475,11 @@
       console_logs: consoleLogs.length > 0 ? consoleLogs : null,
       network_requests: networkRequests.length > 0 ? networkRequests : null,
       selected_elements: selectedElements.length > 0 ? selectedElements : null,
-      recording_events: recordedEvents.length > 0 ? recordedEvents : null,
+      recording_events: null,
       screenshots: screenshots.length > 0 ? screenshots : null,
       attachments: attachments.length > 0 ? attachments : null,
       metadata: Object.keys(metadata).length > 0 ? metadata : null,
+      recording_url: recording_url || null,
     };
 
     try {

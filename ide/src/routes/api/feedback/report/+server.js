@@ -222,6 +222,11 @@ export async function POST({ request }) {
 			descParts.push(`**Console Logs** (${allLogs.length} total, ${selected.length} shown):\n${logSummary}`);
 		}
 
+		// Add recording URL reference
+		if (body.recording_url && typeof body.recording_url === 'string') {
+			descParts.push(`**Session Recording:** ${body.recording_url}`);
+		}
+
 		// Add selected elements summary
 		if (
 			body.selected_elements &&
@@ -319,6 +324,7 @@ export async function POST({ request }) {
 				screenshots: threadScreenshots.length > 0 ? threadScreenshots : undefined,
 				elements: threadElements.length > 0 ? threadElements : undefined,
 				pageUrl: body.page_url || undefined,
+				recordingUrl: body.recording_url || undefined,
 				at: new Date().toISOString(),
 			});
 		} catch (err) {

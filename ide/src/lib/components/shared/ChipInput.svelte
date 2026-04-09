@@ -403,6 +403,7 @@
 		contenteditable={disabled ? 'false' : 'true'}
 		role="textbox"
 		aria-multiline="true"
+		tabindex="0"
 		class="chip-input-editable w-full rounded-md text-sm"
 		class:chip-input-monospace={monospace}
 		class:chip-input-compact={compact}

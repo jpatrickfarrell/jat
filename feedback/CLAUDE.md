@@ -64,6 +64,16 @@ cp node_modules/jat-feedback/supabase/migrations/1.2.0_*.sql \
 supabase db push
 ```
 
+## Changelog
+
+### 3.2.0
+
+- Added `recording_url` TEXT column (nullable) to `feedback_reports` table
+- Added `feedback-recordings` Supabase Storage bucket (private, with RLS)
+- Added `POST /api/feedback/recordings` endpoint for uploading rrweb events
+- FeedbackPanel now uploads recording events separately before report submission
+- Recording events no longer sent inline in the report payload (replaced by URL)
+
 ## Building the Widget
 
 ```bash

@@ -3,7 +3,7 @@
 	 * TasksOpen Component
 	 *
 	 * Displays open tasks that are ready to spawn with a rocket button.
-	 * Used on /tasks2 page below the active sessions section.
+	 * Used on /tasks page below the active sessions section.
 	 */
 
 	import { untrack, onMount } from 'svelte';

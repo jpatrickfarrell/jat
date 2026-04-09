@@ -66,6 +66,27 @@ supabase db push
 
 ## Changelog
 
+### 3.3.3
+
+- Fixed `recording_url` never being persisted: recordings POST now UPDATEs `project_tasks`, report INSERT now includes `recording_url` from body
+- Fixed reports GET SELECT missing `recording_url` column (history "Full replay" link was never appearing)
+- Added `routes/feedback/replay/` — prerendered SvelteKit route; copy to `src/routes/feedback/replay/` in each consumer project. Fixes Cloudflare Pages `.html` stripping that caused 404 on the static replay page
+- Added `static/feedback/` to npm package (replay.html, rrweb-replay.min.js/css) — copied via `viteStaticCopy` in consumer projects
+- Fixed widget URLs: removed `.html` from replay hrefs in FeedbackPanel and RequestList
+
+### Consumer project checklist (per-project, not in npm package)
+
+These files must be present in each consumer project — they are NOT auto-applied:
+
+| File | Action |
+|------|--------|
+| `src/routes/feedback/replay/+page.js` | Copy from `node_modules/jat-feedback/routes/feedback/replay/` |
+| `src/routes/feedback/replay/+page.svelte` | Copy from `node_modules/jat-feedback/routes/feedback/replay/` |
+| `src/routes/api/feedback/recordings/+server.ts` | Add `.update({ recording_url }).eq('id', reportId)` after storage upload |
+| `src/routes/api/feedback/report/+server.ts` | Add `recording_url: body.recording_url \|\| null` to INSERT |
+| `src/routes/api/feedback/reports/+server.ts` | Add `recording_url` to `.select(...)` string |
+| `vite.config.ts` | Add `viteStaticCopy` target for `node_modules/jat-feedback/static/feedback` |
+
 ### 3.2.0
 
 - Added `recording_url` TEXT column (nullable) to `feedback_reports` table

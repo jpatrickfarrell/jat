@@ -182,13 +182,13 @@
 
 	<div class="popover-body">
 		<div class="field">
-			<label class="field-label">Type</label>
+			<div class="field-label">Type</div>
 			<ColumnTypeSelector value={selectedType} onChange={handleTypeChange} />
 		</div>
 
 		{#if selectedType === 'enum'}
 			<div class="field">
-				<label class="field-label">Options</label>
+				<div class="field-label">Options</div>
 				<EnumOptionsEditor
 					options={(editConfig as EnumConfig)?.options || []}
 					onChange={(opts) => editConfig = { ...editConfig, options: opts }}
@@ -199,15 +199,15 @@
 		{#if selectedType === 'currency'}
 			<div class="field-row">
 				<div class="field">
-					<label class="field-label">Symbol</label>
+					<div class="field-label">Symbol</div>
 					<input type="text" class="field-input small" bind:value={editConfig.symbol} placeholder="$" />
 				</div>
 				<div class="field">
-					<label class="field-label">Decimals</label>
+					<div class="field-label">Decimals</div>
 					<input type="number" class="field-input small" bind:value={editConfig.decimals} min="0" max="6" />
 				</div>
 				<div class="field">
-					<label class="field-label">Position</label>
+					<div class="field-label">Position</div>
 					<select class="field-input small" bind:value={editConfig.position}>
 						<option value="before">Before ($100)</option>
 						<option value="after">After (100€)</option>
@@ -218,7 +218,7 @@
 
 		{#if selectedType === 'date' || selectedType === 'datetime'}
 			<div class="field">
-				<label class="field-label">Format</label>
+				<div class="field-label">Format</div>
 				<select class="field-input" bind:value={editConfig.format}>
 					<option value="iso">ISO (2026-02-28)</option>
 					<option value="short">Short (Feb 28, 2026)</option>
@@ -231,7 +231,7 @@
 		{#if selectedType === 'percentage'}
 			<div class="field-row">
 				<div class="field">
-					<label class="field-label">Decimals</label>
+					<div class="field-label">Decimals</div>
 					<input type="number" class="field-input small" bind:value={editConfig.decimals} min="0" max="4" />
 				</div>
 				<div class="field">
@@ -245,7 +245,7 @@
 
 		{#if selectedType === 'relation'}
 			<div class="field">
-				<label class="field-label">Link to table</label>
+				<div class="field-label">Link to table</div>
 				<select
 					class="field-input"
 					bind:value={editConfig.targetTable}
@@ -260,7 +260,7 @@
 
 			{#if editConfig.targetTable}
 				<div class="field">
-					<label class="field-label">Display column</label>
+					<div class="field-label">Display column</div>
 					{#if targetTableLoading}
 						<span class="field-hint">Loading columns...</span>
 					{:else}
@@ -284,7 +284,7 @@
 
 		{#if selectedType === 'formula'}
 			<div class="field">
-				<label class="field-label">Expression</label>
+				<div class="field-label">Expression</div>
 				<FormulaInput
 					bind:this={formulaInputRef}
 					bind:value={editConfig.expression}
@@ -305,7 +305,7 @@
 			</div>
 
 			<div class="field">
-				<label class="field-label">Output format</label>
+				<div class="field-label">Output format</div>
 				<select class="field-input" bind:value={editConfig.outputType}>
 					<option value="number">Number</option>
 					<option value="text">Text</option>
@@ -317,11 +317,11 @@
 			{#if editConfig.outputType === 'currency'}
 				<div class="field-row">
 					<div class="field">
-						<label class="field-label">Symbol</label>
+						<div class="field-label">Symbol</div>
 						<input type="text" class="field-input small" value={editConfig.outputConfig?.symbol || '$'} oninput={(e) => editConfig = { ...editConfig, outputConfig: { ...editConfig.outputConfig, symbol: (e.target as HTMLInputElement).value } }} />
 					</div>
 					<div class="field">
-						<label class="field-label">Decimals</label>
+						<div class="field-label">Decimals</div>
 						<input type="number" class="field-input small" value={editConfig.outputConfig?.decimals ?? 2} min="0" max="6" oninput={(e) => editConfig = { ...editConfig, outputConfig: { ...editConfig.outputConfig, decimals: parseInt((e.target as HTMLInputElement).value) } }} />
 					</div>
 				</div>

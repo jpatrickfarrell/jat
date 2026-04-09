@@ -683,6 +683,38 @@
 		}
 	}
 
+	// Invoice generation
+	let invoicingMilestone = $state<string | null>(null);
+	let invoiceError = $state<string | null>(null);
+	let invoiceSuccess = $state<string | null>(null);
+	let invoiceSuccessTimer: ReturnType<typeof setTimeout> | null = null;
+
+	async function generateInvoice(projectKey: string, milestoneId: string, contractId: string, force = false) {
+		invoicingMilestone = milestoneId;
+		invoiceError = null;
+		invoiceSuccess = null;
+		try {
+			const res = await fetch('/api/clients/invoice', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ projectKey, milestoneId, contractId, force })
+			});
+			const data = await res.json();
+			if (!res.ok) {
+				invoiceError = data.error || 'Invoice generation failed';
+				return;
+			}
+			invoiceSuccess = milestoneId;
+			if (invoiceSuccessTimer) clearTimeout(invoiceSuccessTimer);
+			invoiceSuccessTimer = setTimeout(() => { invoiceSuccess = null; }, 3000);
+			await fetchData(true);
+		} catch (err) {
+			invoiceError = (err as Error).message;
+		} finally {
+			invoicingMilestone = null;
+		}
+	}
+
 	// Auto-grow textarea action — resizes on mount and on input
 	function autogrow(node: HTMLTextAreaElement) {
 		function resize() {
@@ -1120,6 +1152,12 @@
 																			<button class="btn btn-ghost btn-xs p-0 h-auto min-h-0 text-error opacity-60 hover:opacity-100" onclick={() => saveError = null} aria-label="Dismiss">✕</button>
 																		</div>
 																	{/if}
+																	{#if invoiceError}
+																		<div transition:fly={{ y: -8, duration: 200, easing: cubicOut }} class="flex items-center justify-between gap-2 px-3 py-2 bg-warning/10 border border-warning/30 rounded-lg text-xs text-warning" role="alert">
+																			<span>Invoice: {invoiceError}</span>
+																			<button class="btn btn-ghost btn-xs p-0 h-auto min-h-0 text-warning opacity-60 hover:opacity-100" onclick={() => invoiceError = null} aria-label="Dismiss">✕</button>
+																		</div>
+																	{/if}
 																	{#if !editable}
 																		<div class="flex items-center gap-2 text-xs opacity-50">
 																			<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1274,6 +1312,16 @@
 																								<span class="opacity-40 ml-auto">
 																									{#if milestone.paid_at}Paid {formatDate(milestone.paid_at)}{:else if milestone.accepted_at}Accepted {formatDate(milestone.accepted_at)}{:else if milestone.delivered_at}Delivered {formatDate(milestone.delivered_at)}{:else}—{/if}
 																								</span>
+																								{#if milestone.stripe_invoice_id}
+																									<span class="badge badge-xs badge-success gap-0.5" title="Invoice {milestone.stripe_invoice_id}">Invoiced</span>
+																								{:else if invoiceSuccess === milestone.id}
+																									<span class="badge badge-xs badge-success gap-0.5">Sent</span>
+																								{:else if milestone.status !== 'pending'}
+																									<button class="btn btn-ghost btn-xs gap-0.5 opacity-60 hover:opacity-100 p-1" onclick={(e) => { e.stopPropagation(); generateInvoice(project.projectKey, milestone.id, contract.id); }} disabled={invoicingMilestone === milestone.id} title="Generate invoice">
+																										{#if invoicingMilestone === milestone.id}<span class="loading loading-spinner" style="width:10px;height:10px"></span>{:else}<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>{/if}
+																										Invoice
+																									</button>
+																								{/if}
 																								{#if editable}<button class="btn btn-ghost btn-xs text-error opacity-40 hover:opacity-100 p-1" onclick={(e) => { e.stopPropagation(); deleteItem(project.projectKey, 'milestone', milestone.id); }} title="Delete milestone"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>{/if}
 																							</div>
 																							{#if (milestone.linked_tasks && milestone.linked_tasks.length > 0) || editable}
@@ -1350,6 +1398,7 @@
 																							<th class="text-right">%</th>
 																							<th class="text-right">Amount</th>
 																							<th>Date</th>
+																							<th></th>
 																							{#if editable}<th class="w-8"></th>{/if}
 																						</tr>
 																					</thead>
@@ -1477,6 +1526,33 @@
 																										—
 																									{/if}
 																								</td>
+																								<td>
+																									{#if milestone.stripe_invoice_id}
+																										<span class="badge badge-xs badge-success gap-1" title="Invoice {milestone.stripe_invoice_id}">
+																											<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+																											Invoiced
+																										</span>
+																									{:else if invoiceSuccess === milestone.id}
+																										<span class="badge badge-xs badge-success gap-1">
+																											<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+																											Sent
+																										</span>
+																									{:else if milestone.status !== 'pending'}
+																										<button
+																											class="btn btn-ghost btn-xs gap-1 opacity-60 hover:opacity-100"
+																											onclick={(e) => { e.stopPropagation(); generateInvoice(project.projectKey, milestone.id, contract.id); }}
+																											disabled={invoicingMilestone === milestone.id}
+																											title="Generate Stripe invoice and send email"
+																										>
+																											{#if invoicingMilestone === milestone.id}
+																												<span class="loading loading-spinner" style="width:12px;height:12px"></span>
+																											{:else}
+																												<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+																											{/if}
+																											Invoice
+																										</button>
+																									{/if}
+																								</td>
 																								{#if editable}
 																									<td>
 																										<button
@@ -1495,7 +1571,7 @@
 																							{#if (milestone.linked_tasks && milestone.linked_tasks.length > 0) || editable}
 																								<tr>
 																									<td></td>
-																									<td colspan={editable ? 6 : 5} class="pt-1.5 pb-2">
+																									<td colspan={editable ? 7 : 6} class="pt-1.5 pb-2">
 																										<div class="flex flex-wrap gap-1 items-center">
 																											{#each (milestone.linked_tasks || []) as task}
 																												<span class="badge badge-xs badge-outline gap-1 opacity-50" title="{task.title} ({task.status})">
@@ -1561,7 +1637,7 @@
 																						{#if milestone.comments && milestone.comments.length > 0}
 																							<tr>
 																								<td></td>
-																								<td colspan={editable ? 6 : 5} class="pt-1 pb-2">
+																								<td colspan={editable ? 7 : 6} class="pt-1 pb-2">
 																									<div class="space-y-1.5">
 																										{#each milestone.comments as c}
 																											<div class="flex gap-2 items-start {c.author === 'owner' ? 'flex-row-reverse' : ''}">
@@ -1581,7 +1657,7 @@
 																						{#if commentingId === milestone.id}
 																							<tr>
 																								<td></td>
-																								<td colspan={editable ? 6 : 5} class="pt-1 pb-2">
+																								<td colspan={editable ? 7 : 6} class="pt-1 pb-2">
 																									<div class="flex gap-2 items-start justify-end" onclick={(e) => e.stopPropagation()}>
 																										<textarea
 																											class="textarea textarea-xs flex-1 max-w-xs bg-base-200 border-base-content/20 resize-none text-xs"
@@ -1602,7 +1678,7 @@
 																						{:else}
 																							<tr>
 																								<td></td>
-																								<td colspan={editable ? 6 : 5} class="pb-1">
+																								<td colspan={editable ? 7 : 6} class="pb-1">
 																									<button class="text-[10px] opacity-30 hover:opacity-60 transition-opacity flex items-center gap-1" onclick={(e) => { e.stopPropagation(); commentingId = milestone.id; }}>
 																										<svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
 																										Reply
@@ -2015,9 +2091,9 @@
 							{/if}
 						{/each}
 					</select>
-					<label class="label">
+					<div class="label">
 						<span class="label-text-alt opacity-50">Contract will be created in this project's Supabase</span>
-					</label>
+					</div>
 				</div>
 
 				{#if selectedProject}
@@ -2049,9 +2125,9 @@
 									bind:value={clientEmail}
 									placeholder="client@example.com"
 								/>
-								<label class="label">
+								<div class="label">
 									<span class="label-text-alt opacity-50">Optional</span>
-								</label>
+								</div>
 							</div>
 
 							<div class="form-control">
@@ -2342,8 +2418,7 @@
 				{/if}
 			{/if}
 		</div>
-		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-		<label class="modal-backdrop" onclick={() => showCreateModal = false} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showCreateModal = false; } }}></label>
+		<div class="modal-backdrop" role="button" tabindex="-1" onclick={() => showCreateModal = false} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showCreateModal = false; } }}></div>
 	</div>
 {/if}
 
@@ -2437,8 +2512,7 @@
 				<button class="btn btn-sm btn-primary" onclick={closeTaskPicker}>Done</button>
 			</div>
 		</div>
-		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-		<label class="modal-backdrop" onclick={closeTaskPicker} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTaskPicker(); } }}></label>
+		<div class="modal-backdrop" role="button" tabindex="-1" onclick={closeTaskPicker} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeTaskPicker(); } }}></div>
 	</div>
 {/if}
 

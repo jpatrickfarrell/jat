@@ -221,6 +221,27 @@ export async function upsertNote(
   }
 }
 
+export async function fetchRecordingSummary(
+  endpoint: string,
+  recording_url: string,
+  console_logs?: ConsoleLogEntry[] | null,
+  network_requests?: NetworkRequestEntry[] | null,
+): Promise<{ ok: boolean; summary?: string; error?: string }> {
+  try {
+    const url = `${endpoint.replace(/\/$/, '')}/api/feedback/recordings/summary`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recording_url, console_logs, network_requests }),
+    });
+    const data = await res.json();
+    if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ok: true, summary: data.summary };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to fetch recording summary' };
+  }
+}
+
 export async function deleteNote(endpoint: string, id: string): Promise<{ ok: boolean; error?: string }> {
   try {
     const res = await fetch(`${notesUrl(endpoint)}/${id}`, { method: 'DELETE' });

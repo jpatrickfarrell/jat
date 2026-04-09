@@ -262,26 +262,6 @@ async function fetchProjectData(projectKey: string, projectName: string): Promis
 		}
 	}
 
-	// Auto-invoice: trigger Edge Function for delivered milestones with linked tasks but no invoice
-	for (const m of milestones) {
-		if (m.status === 'delivered' && !m.stripe_invoice_id) {
-			const tasks = tasksByMilestone.get(m.id);
-			if (tasks && tasks.length > 0) {
-				// Fire-and-forget: call the auto-invoice Edge Function
-				fetch(`${supabaseUrl}/functions/v1/milestone-auto-invoice`, {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json',
-						'Authorization': `Bearer ${serviceRoleKey}`
-					},
-					body: JSON.stringify({ milestoneId: m.id })
-				}).catch(err => {
-					console.warn(`[clients] Auto-invoice call failed for milestone ${m.id}: ${err.message}`);
-				});
-			}
-		}
-	}
-
 	return { name: projectName, projectKey, contracts };
 }
 
@@ -834,7 +814,7 @@ export const POST: RequestHandler = async ({ request }) => {
  *   updates: { status?: string, notes?: string, title?: string, ... }
  * }
  */
-export const PATCH: RequestHandler = async ({ request }) => {
+export const PATCH: RequestHandler = async ({ request, url: reqUrl }) => {
 	const body = await request.json();
 	const { projectKey, type, id, updates } = body;
 
@@ -879,9 +859,30 @@ export const PATCH: RequestHandler = async ({ request }) => {
 	// Invalidate cache
 	cache = null;
 
+	const updated = result.data?.[0] as Record<string, unknown> | undefined;
+
+	// Auto-invoice: when milestone transitions to 'delivered', fire invoice generation
+	if (type === 'milestone' && updates.status === 'delivered' && updated) {
+		const milestoneId = id;
+		const contractId = updated.contract_id as string;
+		const existingInvoice = updated.stripe_invoice_id as string | null;
+
+		if (contractId && !existingInvoice) {
+			// Fire-and-forget: call our own invoice endpoint
+			const origin = reqUrl.origin;
+			fetch(`${origin}/api/clients/invoice`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ projectKey, milestoneId, contractId })
+			}).catch(err => {
+				console.warn(`[clients] Auto-invoice trigger failed for milestone ${milestoneId}: ${err.message}`);
+			});
+		}
+	}
+
 	return json({
 		success: true,
-		updated: result.data?.[0] || null
+		updated: updated || null
 	});
 };
 

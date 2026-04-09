@@ -16,7 +16,7 @@
   import AgentPanel from './AgentPanel.svelte';
   import NotesPanel from './NotesPanel.svelte';
   import type { ChatMessage, AgentState } from '../lib/types';
-  import { AgentBridge } from '../lib/agentBridge';
+  import { AgentBridge, type ReportContext } from '../lib/agentBridge';
   import { onDestroy } from 'svelte';
 
   declare const __JAT_FEEDBACK_VERSION__: string;
@@ -485,6 +485,16 @@
     try {
       const result = await submitReport(endpoint, report);
       if (result.ok) {
+        // Pass report context to agent bridge so recording summary is available
+        if (report.recording_url) {
+          const ctx: ReportContext = {
+            recording_url: report.recording_url,
+            console_logs: report.console_logs,
+            network_requests: report.network_requests,
+          };
+          getAgentBridge().setReportContext(ctx);
+        }
+
         showToast(`Report submitted (${result.id})`, 'success');
         resetForm();
         // Switch to requests tab to show the new report (reload first to include it)

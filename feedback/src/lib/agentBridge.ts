@@ -17,8 +17,15 @@ import type {
   PageAgentTool,
 } from '../page-agent';
 import type { ChatMessage, AgentState, AgentNote, ToolDefinition } from './types';
-import { fetchNotes } from './api';
+import { fetchNotes, fetchRecordingSummary } from './api';
+import type { ConsoleLogEntry, NetworkRequestEntry } from './types';
 import { z } from 'zod/v4';
+
+export interface ReportContext {
+  recording_url: string | null;
+  console_logs: ConsoleLogEntry[] | null;
+  network_requests: NetworkRequestEntry[] | null;
+}
 
 export interface AgentBridgeConfig {
   /** Proxy endpoint URL for LLM API calls (host app implements this) */
@@ -91,6 +98,12 @@ export class AgentBridge {
   /** Cached notes from the backend */
   private notesCache: AgentNote[] | null = null;
 
+  /** Report context for recording summary injection */
+  private reportContext: ReportContext | null = null;
+
+  /** Cached recording summary text (fetched lazily on first execute()) */
+  private recordingSummaryCache: string | null = null;
+
   /** Whether to skip approval prompts */
   autoApprove = false;
 
@@ -113,8 +126,8 @@ export class AgentBridge {
     return this.notesCache;
   }
 
-  /** Build the combined system prompt from appContext + notes */
-  private buildSystemPrompt(notes: AgentNote[]): string | undefined {
+  /** Build the combined system prompt from appContext + notes + recording summary */
+  private buildSystemPrompt(notes: AgentNote[], recordingSummary?: string | null): string | undefined {
     const sections: string[] = [];
 
     if (this.config.appContext) {
@@ -124,6 +137,10 @@ export class AgentBridge {
     const siteWide = notes.filter((n) => n.route === null);
     if (siteWide.length > 0) {
       sections.push(`[Site-wide notes]\n${siteWide.map((n) => n.content).join('\n\n')}`);
+    }
+
+    if (recordingSummary) {
+      sections.push(recordingSummary);
     }
 
     return sections.length > 0 ? sections.join('\n\n') : undefined;
@@ -145,6 +162,38 @@ export class AgentBridge {
   /** Invalidate the notes cache so next execute() re-fetches */
   invalidateNotesCache(): void {
     this.notesCache = null;
+  }
+
+  /**
+   * Set the report context for recording summary injection.
+   * Call this when the user submits or views a report with a recording.
+   * The summary will be fetched lazily on the next execute() call.
+   */
+  setReportContext(ctx: ReportContext | null): void {
+    if (ctx?.recording_url !== this.reportContext?.recording_url) {
+      this.recordingSummaryCache = null;
+    }
+    this.reportContext = ctx;
+  }
+
+  /** Fetch recording summary from the backend (uses cache if available) */
+  private async loadRecordingSummary(): Promise<string | null> {
+    if (this.recordingSummaryCache !== null) return this.recordingSummaryCache;
+    if (!this.reportContext?.recording_url || !this.config.endpoint) return null;
+
+    const result = await fetchRecordingSummary(
+      this.config.endpoint,
+      this.reportContext.recording_url,
+      this.reportContext.console_logs,
+      this.reportContext.network_requests,
+    );
+
+    if (result.ok && result.summary) {
+      this.recordingSummaryCache = result.summary;
+      return this.recordingSummaryCache;
+    }
+
+    return null;
   }
 
   /** Lazy-initialize controller and agent on first use */
@@ -469,9 +518,12 @@ export class AgentBridge {
     this.init();
     if (!this.agent || !this.agentConfig) return;
 
-    // Fetch notes (uses cache if available) and update system prompt
-    const notes = await this.loadNotes();
-    this.agentConfig.instructions!.system = this.buildSystemPrompt(notes);
+    // Fetch notes and recording summary (both use caches) and update system prompt
+    const [notes, recordingSummary] = await Promise.all([
+      this.loadNotes(),
+      this.loadRecordingSummary(),
+    ]);
+    this.agentConfig.instructions!.system = this.buildSystemPrompt(notes, recordingSummary);
 
     // Add user message
     this.addMessage({

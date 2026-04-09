@@ -1259,9 +1259,9 @@
 					<div class="flex flex-col gap-3">
 						{#each runningTemplate.variables as variable}
 							<div>
-								<label class="block text-xs mb-1" style="color: oklch(0.70 0.01 250);">
+								<div class="block text-xs mb-1" style="color: oklch(0.70 0.01 250);">
 									{variable.label || variable.name}
-								</label>
+								</div>
 								<input
 									type="text"
 									bind:value={variableValues[variable.name]}
@@ -1670,7 +1670,7 @@
 			<div class="flex flex-col gap-3">
 				<!-- Name -->
 				<div>
-					<label class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Name</label>
+					<div class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Name</div>
 					<input
 						type="text"
 						bind:value={pipelineEditorName}
@@ -1682,7 +1682,7 @@
 
 				<!-- Description -->
 				<div>
-					<label class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Description</label>
+					<div class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Description</div>
 					<input
 						type="text"
 						bind:value={pipelineEditorDescription}
@@ -1694,7 +1694,7 @@
 
 				<!-- Default Project -->
 				<div>
-					<label class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Default Project</label>
+					<div class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Default Project</div>
 					<select
 						bind:value={pipelineEditorProject}
 						class="w-full rounded-md px-2 py-2 text-sm"
@@ -1709,9 +1709,9 @@
 
 				<!-- Steps -->
 				<div>
-					<label class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">
+					<div class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">
 						Steps <span class="font-normal opacity-60">({pipelineEditorSteps.length} steps, drag to reorder)</span>
-					</label>
+					</div>
 					<div class="flex flex-col gap-2">
 						{#each pipelineEditorSteps as step, i (step.id)}
 							<div
@@ -1888,7 +1888,7 @@
 			<!-- Project selector -->
 			{#if !pipelineRunning && pipelineRunSteps.every(s => s.status === 'pending')}
 				<div class="mb-3">
-					<label class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Project</label>
+					<div class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Project</div>
 					<select
 						bind:value={pipelineRunProject}
 						class="w-full rounded-md px-2 py-2 text-sm"
@@ -2026,7 +2026,7 @@
 			<div class="flex flex-col gap-3">
 				<!-- Name -->
 				<div>
-					<label class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Name</label>
+					<div class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Name</div>
 					<input
 						type="text"
 						bind:value={editorName}
@@ -2038,10 +2038,10 @@
 
 				<!-- Prompt -->
 				<div>
-					<label class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">
+					<div class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">
 						Prompt
 						<span class="font-normal opacity-60 ml-1">Use {`{variableName}`} for placeholders, <code style="background: oklch(0.25 0.02 250); padding: 1px 3px; border-radius: 2px; color: oklch(0.65 0.10 200);">@</code> for files</span>
-					</label>
+					</div>
 					<PromptInput
 						bind:value={editorPrompt}
 						project={selectedProject}
@@ -2053,7 +2053,7 @@
 				<!-- Project & Model -->
 				<div class="grid grid-cols-2 gap-3">
 					<div>
-						<label class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Default Project</label>
+						<div class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Default Project</div>
 						<select
 							bind:value={editorProject}
 							class="w-full rounded-md px-2 py-2 text-sm"
@@ -2066,7 +2066,7 @@
 						</select>
 					</div>
 					<div>
-						<label class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Default Model</label>
+						<div class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Default Model</div>
 						<select
 							bind:value={editorModel}
 							class="w-full rounded-md px-2 py-2 text-sm"
@@ -2081,7 +2081,7 @@
 
 				<!-- Output Action -->
 				<div>
-					<label class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Default Output Action</label>
+					<div class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Default Output Action</div>
 					<div class="flex flex-wrap gap-1.5">
 						{#each OUTPUT_ACTIONS as action}
 							<button
@@ -2105,7 +2105,7 @@
 				<!-- Variables -->
 				<div>
 					<div class="flex items-center justify-between mb-2">
-						<label class="text-xs font-medium" style="color: oklch(0.65 0.01 250);">Variables</label>
+						<div class="text-xs font-medium" style="color: oklch(0.65 0.01 250);">Variables</div>
 						<button
 							onclick={addEditorVariable}
 							class="text-xs px-2 py-0.5 rounded"
@@ -2252,7 +2252,7 @@
 				{pendingWriteResult?.result ? `${pendingWriteResult.result.length} characters` : ''}
 			</p>
 			<div class="mb-3">
-				<label class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">File Path</label>
+				<div class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">File Path</div>
 				<input
 					type="text"
 					bind:value={writeFilePath}
@@ -2341,7 +2341,7 @@
 
 				<!-- Cron Expression -->
 				<div>
-					<label class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Cron Expression</label>
+					<div class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Cron Expression</div>
 					<input
 						type="text"
 						bind:value={scheduleCron}
@@ -2371,7 +2371,7 @@
 
 				<!-- Project -->
 				<div>
-					<label class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Project</label>
+					<div class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Project</div>
 					<select
 						bind:value={scheduleProject}
 						class="w-full rounded-md px-3 py-2 text-sm"
@@ -2385,7 +2385,7 @@
 
 				<!-- Model -->
 				<div>
-					<label class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Model</label>
+					<div class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">Model</div>
 					<div class="flex gap-1.5">
 						{#each MODELS as model}
 							<button
@@ -2406,14 +2406,14 @@
 				<!-- Variable Defaults (if template has variables) -->
 				{#if schedulingTemplate.variables && schedulingTemplate.variables.length > 0}
 					<div>
-						<label class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">
+						<div class="block text-xs mb-1 font-medium" style="color: oklch(0.65 0.01 250);">
 							Variable Defaults
 							<span class="font-normal opacity-60 ml-1">Used for each scheduled run</span>
-						</label>
+						</div>
 						<div class="flex flex-col gap-2">
 							{#each schedulingTemplate.variables as variable}
 								<div>
-									<label class="block text-xs mb-0.5" style="color: oklch(0.55 0.01 250);">{variable.label || variable.name}</label>
+									<div class="block text-xs mb-0.5" style="color: oklch(0.55 0.01 250);">{variable.label || variable.name}</div>
 									<input
 										type="text"
 										bind:value={scheduleVariables[variable.name]}

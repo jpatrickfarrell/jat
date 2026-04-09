@@ -479,7 +479,7 @@
 
 		<!-- Table Source -->
 		<div class="settings-field">
-			<label class="settings-label">Table Source</label>
+			<div class="settings-label">Table Source</div>
 			<div class="source-toggle">
 				<button
 					class="source-toggle-btn"
@@ -515,7 +515,7 @@
 		{#if settingsSourceMode === 'static'}
 			<!-- Static: Table dropdown -->
 			<div class="settings-field">
-				<label class="settings-label">Table</label>
+				<div class="settings-label">Table</div>
 				<select
 					class="settings-select"
 					bind:value={settingsTableName}
@@ -530,7 +530,7 @@
 		{:else}
 			<!-- Dynamic: Control selector -->
 			<div class="settings-field">
-				<label class="settings-label">Source Control</label>
+				<div class="settings-label">Source Control</div>
 				<select
 					class="settings-select"
 					bind:value={settingsSourceControl}
@@ -560,7 +560,7 @@
 		<!-- Visible Columns -->
 		{#if availableColumns.length > 0}
 			<div class="settings-field">
-				<label class="settings-label">Visible Columns <span class="settings-hint">(none = all)</span></label>
+				<div class="settings-label">Visible Columns <span class="settings-hint">(none = all)</span></div>
 				<div class="column-checkboxes">
 					{#each availableColumns as col}
 						<label class="column-checkbox">
@@ -579,7 +579,7 @@
 		<!-- Sort -->
 		{#if availableColumns.length > 0}
 			<div class="settings-field">
-				<label class="settings-label">Sort</label>
+				<div class="settings-label">Sort</div>
 				<div class="flex gap-2">
 					<select
 						class="settings-select flex-1"
@@ -614,7 +614,7 @@
 
 		<!-- Control Filters -->
 		<div class="settings-field">
-			<label class="settings-label">Control Filters</label>
+			<div class="settings-label">Control Filters</div>
 			{#if Object.keys(settingsFilters).length > 0}
 				<div class="filter-list">
 					{#each Object.entries(settingsFilters) as [col, ctrl]}

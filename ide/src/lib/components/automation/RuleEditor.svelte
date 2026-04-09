@@ -536,7 +536,7 @@
 							<span class="block text-[0.65rem] text-base-content/50 mt-1 font-mono">Higher = processed first</span>
 						</div>
 						<div class="mb-3.5">
-							<label class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Enabled</label>
+							<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Enabled</div>
 							<label class="inline-flex items-center cursor-pointer mt-1">
 								<input
 									type="checkbox"
@@ -660,7 +660,7 @@
 
 							<div class="flex gap-4 items-start">
 								<div class="mb-3.5 flex-1">
-									<label class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Action Type</label>
+									<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Action Type</div>
 									<select
 										value={action.type}
 										onchange={(e) => handleActionTypeChange(index, e.currentTarget.value as ActionType)}
@@ -675,7 +675,7 @@
 									</span>
 								</div>
 								<div class="mb-3.5 w-28">
-									<label class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Delay (ms)</label>
+									<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Delay (ms)</div>
 									<input
 										type="number"
 										bind:value={action.delay}
@@ -691,7 +691,7 @@
 							{#if action.type === 'show_question_ui' && action.questionUIConfig}
 								<div class="mt-3 p-3 rounded-lg bg-secondary/10 border border-secondary/20">
 									<div class="mb-3.5">
-										<label class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Question Text <span class="text-error">*</span></label>
+										<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Question Text <span class="text-error">*</span></div>
 										<input
 											type="text"
 											bind:value={action.questionUIConfig.question}
@@ -705,7 +705,7 @@
 
 									<div class="flex gap-4 items-start">
 										<div class="mb-3.5 flex-1">
-											<label class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Question Type</label>
+											<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Question Type</div>
 											<select bind:value={action.questionUIConfig.questionType} class="w-full py-2 px-3 text-sm font-mono rounded-md bg-base-300 border border-base-300 text-base-content transition-all duration-150 focus:outline-none focus:border-info cursor-pointer">
 												{#each questionTypes as qType}
 													<option value={qType.value}>{qType.label}</option>
@@ -716,7 +716,7 @@
 											</span>
 										</div>
 										<div class="mb-3.5 w-28">
-											<label class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Timeout (s)</label>
+											<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Timeout (s)</div>
 											<input
 												type="number"
 												bind:value={action.questionUIConfig.timeout}
@@ -762,7 +762,7 @@
 													</div>
 													<div class="flex gap-4 items-start">
 														<div class="mb-3.5 flex-1">
-															<label class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Label <span class="text-error">*</span></label>
+															<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Label <span class="text-error">*</span></div>
 															<input
 																type="text"
 																bind:value={option.label}
@@ -774,7 +774,7 @@
 															{/if}
 														</div>
 														<div class="mb-3.5 w-24">
-															<label class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Value <span class="text-error">*</span></label>
+															<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Value <span class="text-error">*</span></div>
 															<input
 																type="text"
 																bind:value={option.value}
@@ -787,7 +787,7 @@
 														</div>
 													</div>
 													<div class="mb-0">
-														<label class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Description (optional)</label>
+														<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Description (optional)</div>
 														<input
 															type="text"
 															bind:value={option.description}
@@ -803,7 +803,7 @@
 							{:else if action.type === 'run_command'}
 								<!-- Command selector for run_command action -->
 								<div class="mb-3.5 mt-2">
-									<label class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Slash Command</label>
+									<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">Slash Command</div>
 									{#if commandsLoading}
 										<div class="flex items-center gap-2 py-2 px-3 text-xs text-base-content/60 font-mono">
 											<span class="inline-block w-3.5 h-3.5 rounded-full border-2 border-base-300 border-t-info animate-spin"></span>
@@ -834,7 +834,7 @@
 							{:else}
 								<!-- Standard payload input for other action types -->
 								<div class="mb-3.5">
-									<label class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">
+									<div class="block text-xs font-medium text-base-content/70 mb-1.5 font-mono">
 										{#if action.type === 'send_keys'}
 											Key to Send
 										{:else if action.type === 'notify_only'}
@@ -846,7 +846,7 @@
 										{:else}
 											Text to Send
 										{/if}
-									</label>
+									</div>
 									{#if action.type === 'send_keys'}
 										<select bind:value={action.payload} class="w-full py-2 px-3 text-sm font-mono rounded-md bg-base-300 border border-base-300 text-base-content transition-all duration-150 focus:outline-none focus:border-info cursor-pointer">
 											{#each specialKeys as key}

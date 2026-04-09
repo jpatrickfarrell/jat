@@ -4110,7 +4110,7 @@
 						{#if contextViewOpen}
 							<div class="context-view-body">
 								<div class="context-field">
-									<label class="context-label">Description</label>
+									<div class="context-label">Description</div>
 									<input
 										type="text"
 										class="context-input"
@@ -4120,7 +4120,7 @@
 								</div>
 
 								<div class="context-field">
-									<label class="context-label">SQL Query</label>
+									<div class="context-label">SQL Query</div>
 									<textarea
 										class="sql-input"
 										bind:value={contextQuery}
@@ -4221,7 +4221,7 @@
 					</div>
 
 					<div class="form-group">
-						<label class="form-label">Columns</label>
+						<div class="form-label">Columns</div>
 						{#each newTableColumns as col, i}
 							<div class="column-row">
 								<input
@@ -4250,7 +4250,7 @@
 				{:else if createMode === 'csv'}
 					<div class="form-group">
 						<div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.25rem;">
-							<label class="form-label" style="margin:0">Data</label>
+							<div class="form-label" style="margin:0">Data</div>
 							<div class="create-format-pills">
 								<button class="format-pill" class:active={createCsvFormat === 'auto'} onclick={() => createCsvFormat = 'auto'}>Auto</button>
 								<button class="format-pill" class:active={createCsvFormat === 'tsv'} onclick={() => createCsvFormat = 'tsv'}>TSV</button>
@@ -4283,7 +4283,7 @@
 				{:else if createMode === 'json'}
 					<div class="form-group">
 						<div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.25rem;">
-							<label class="form-label" style="margin:0">JSON Array</label>
+							<div class="form-label" style="margin:0">JSON Array</div>
 							<div class="relative ml-auto" bind:this={filePickerRef}>
 								<button class="file-picker-btn" onclick={openFilePicker} title="Load from project file">
 									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style="width:14px;height:14px;">
@@ -4311,7 +4311,7 @@
 				{:else if createMode === 'sql'}
 					<div class="form-group">
 						<div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.25rem;">
-							<label class="form-label" style="margin:0">CREATE TABLE Statement</label>
+							<div class="form-label" style="margin:0">CREATE TABLE Statement</div>
 							<div class="relative ml-auto" bind:this={filePickerRef}>
 								<button class="file-picker-btn" onclick={openFilePicker} title="Load from project file">
 									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style="width:14px;height:14px;">
@@ -4367,7 +4367,7 @@
 					<!-- Source-specific inputs -->
 					{#if externalSource === 'coda'}
 						<div class="form-group">
-							<label class="form-label">Doc ID or URL</label>
+							<div class="form-label">Doc ID or URL</div>
 							<div style="display:flex;gap:0.5rem;align-items:center;">
 								<input type="text" class="form-input font-mono flex-1" bind:value={codaDocId} placeholder="dAbCdEfGhI or coda.io/d/..." onpaste={handleCodaPaste} />
 								<button class="btn-add-col" onclick={listExternalTables} disabled={codaTablesLoading || !codaDocId.trim()}>
@@ -4378,7 +4378,7 @@
 						</div>
 						{#if codaDocTables.length > 0}
 							<div class="form-group">
-								<label class="form-label">Table <span class="tbl-count-badge">{codaDocTables.length}</span></label>
+								<div class="form-label">Table <span class="tbl-count-badge">{codaDocTables.length}</span></div>
 								<div class="relative" bind:this={tblDropdownRef}>
 									<button
 										type="button"
@@ -4451,27 +4451,27 @@
 							</div>
 						{:else if !codaTablesLoading && codaDocId.trim()}
 							<div class="form-group">
-								<label class="form-label">Table ID</label>
+								<div class="form-label">Table ID</div>
 								<input type="text" class="form-input font-mono" bind:value={codaTableId} placeholder="grid-abcdef" />
 							</div>
 						{/if}
 
 					{:else if externalSource === 'gsheet'}
 						<div class="form-group">
-							<label class="form-label">Sheet URL or ID</label>
+							<div class="form-label">Sheet URL or ID</div>
 							<input type="text" class="form-input font-mono" bind:value={gsheetUrl} placeholder="https://docs.google.com/spreadsheets/d/..." />
 							<span class="form-hint">Public sheets work without an API key. Private sheets need a Google API key.</span>
 						</div>
 
 					{:else if externalSource === 'notion'}
 						<div class="form-group">
-							<label class="form-label">Database URL or ID</label>
+							<div class="form-label">Database URL or ID</div>
 							<input type="text" class="form-input font-mono" bind:value={notionDatabaseId} placeholder="https://notion.so/... or 32-char ID" />
 						</div>
 
 					{:else if externalSource === 'airtable'}
 						<div class="form-group">
-							<label class="form-label">Base ID or URL</label>
+							<div class="form-label">Base ID or URL</div>
 							<div style="display:flex;gap:0.5rem;align-items:center;">
 								<input type="text" class="form-input font-mono flex-1" bind:value={airtableBaseId} placeholder="appAbCdEfGhIj or airtable.com/app..." onpaste={handleAirtablePaste} />
 								<button class="btn-add-col" onclick={listExternalTables} disabled={airtableTablesLoading || !airtableBaseId.trim()}>
@@ -4482,7 +4482,7 @@
 						</div>
 						{#if airtableTables.length > 0}
 							<div class="form-group">
-								<label class="form-label">Table <span class="tbl-count-badge">{airtableTables.length}</span></label>
+								<div class="form-label">Table <span class="tbl-count-badge">{airtableTables.length}</span></div>
 								<div class="relative" bind:this={tblDropdownRef}>
 									<button
 										type="button"
@@ -4552,14 +4552,14 @@
 							</div>
 						{:else if !airtableTablesLoading && airtableBaseId.trim()}
 							<div class="form-group">
-								<label class="form-label">Table ID or Name</label>
+								<div class="form-label">Table ID or Name</div>
 								<input type="text" class="form-input font-mono" bind:value={airtableTableId} placeholder="tblAbCdEfGh or Table Name" />
 							</div>
 						{/if}
 
 					{:else if externalSource === 'csv-url'}
 						<div class="form-group">
-							<label class="form-label">CSV/TSV URL</label>
+							<div class="form-label">CSV/TSV URL</div>
 							<input type="text" class="form-input font-mono" bind:value={csvUrl} placeholder="https://example.com/data.csv" />
 							<span class="form-hint">Any public URL that returns CSV or TSV data.</span>
 						</div>
@@ -4581,7 +4581,7 @@
 				{#if createMode !== 'manual' && inferredColumns.length > 0}
 					<div class="form-group">
 						<div style="display:flex; align-items:center; gap:0.5rem;">
-							<label class="form-label" style="margin:0">Detected Columns</label>
+							<div class="form-label" style="margin:0">Detected Columns</div>
 							{#if inferredRows.length > 0}
 								<span class="inferred-badge">{inferredRows.length} row{inferredRows.length !== 1 ? 's' : ''}</span>
 							{/if}
@@ -4697,7 +4697,7 @@
 			<div class="modal-body">
 				<!-- File picker -->
 				<div class="form-group">
-					<label class="form-label">Choose file or paste data</label>
+					<div class="form-label">Choose file or paste data</div>
 					<div class="import-source-row">
 						<label class="file-picker-btn">
 							<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

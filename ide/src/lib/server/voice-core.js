@@ -499,3 +499,58 @@ export function appendTranscriptToVoiceTimeline(transcript, title = '', meta = {
 	};
 	appendFileSync(timelineFile, JSON.stringify(event) + '\n');
 }
+
+/**
+ * Title-only ollama call — returns a short descriptive title for a transcript
+ * without running the full organize/tasks/kb pipeline. Used by
+ * /api/tasks/voice-transcript to get meaningful titles without paying the cost
+ * of the full task-extraction pass.
+ *
+ * Returns empty string on any failure; callers should fall back to a
+ * heuristic title (filename, date, etc).
+ *
+ * @param {string} transcript
+ * @returns {Promise<string>}
+ */
+export async function generateTitleFromTranscript(transcript) {
+	const text = (transcript || '').trim();
+	if (!text) return '';
+
+	const prompt = `You are a note titler. Given a voice note transcript, return a short descriptive title (max 8 words) that captures the main theme. Example: "Morning walk: billing and Steel Bridge pricing".
+
+Return ONLY valid JSON (no markdown, no explanation):
+{
+  "title": "Short descriptive title"
+}
+
+Transcript:
+${text}`;
+
+	try {
+		const response = await fetch('http://localhost:11434/api/generate', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				model: process.env.ORGANIZE_TASKS_MODEL || 'gemma4:e2b',
+				prompt,
+				format: 'json',
+				stream: false,
+				options: { temperature: 0.3, num_predict: 64 }
+			}),
+			signal: AbortSignal.timeout(60_000)
+		});
+
+		if (!response.ok) {
+			vlog(`[title] ollama request failed: ${response.status}`);
+			return '';
+		}
+
+		const body = await response.json();
+		const parsed = JSON.parse(body.response || '{}');
+		const title = typeof parsed.title === 'string' ? parsed.title.trim() : '';
+		return title;
+	} catch (e) {
+		vlog(`[title] ERROR: ${e instanceof Error ? e.message : String(e)}`);
+		return '';
+	}
+}

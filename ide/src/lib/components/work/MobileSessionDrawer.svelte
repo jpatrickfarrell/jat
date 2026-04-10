@@ -180,6 +180,19 @@
 			onAttachSession();
 		} else if (action.id === 'kill') {
 			onKillSession();
+		} else if (action.id === 'cleanup') {
+			if (task?.id) {
+				try {
+					await fetch(`/api/tasks/${encodeURIComponent(task.id)}/close`, {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ reason: 'Cleaned up session' })
+					});
+				} catch (e) {
+					console.warn('[MobileSessionDrawer] Failed to close task:', e);
+				}
+			}
+			await onKillSession();
 		} else if (action.id === 'complete') {
 			await onSendInput('/jat:complete', 'text');
 		} else {

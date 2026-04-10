@@ -5,6 +5,10 @@
  * the ollama organize step — no task extraction, no knowledge base, no summary.
  * The user just wants a clean text copy of what they said.
  *
+ * Title resolution: explicit user-supplied title wins; otherwise a small
+ * title-only ollama call produces a descriptive title from the transcript;
+ * falls back to filename/date heuristic on any ollama failure.
+ *
  * Accepts either:
  *   1. JSON: { "text": "already-transcribed text", "title"?: "..." } — appends
  *      the text directly to the voice timeline as a transcript event.
@@ -26,7 +30,8 @@ import {
 	TEMP_DIR,
 	vlog,
 	transcribe,
-	appendTranscriptToVoiceTimeline
+	appendTranscriptToVoiceTimeline,
+	generateTitleFromTranscript
 } from '$lib/server/voice-core.js';
 
 const CORS_HEADERS = {
@@ -92,11 +97,18 @@ function formatTimestamp(date) {
 
 /**
  * Convert audio -> WAV -> transcribe -> append transcript event (background).
+ *
+ * Title resolution: if `explicitTitle` is set (user supplied via form field),
+ * use it verbatim. Otherwise ask ollama for a descriptive title based on the
+ * transcript content, falling back to `fallbackTitle` (filename/date) on any
+ * ollama failure.
+ *
  * @param {string} audioPath
- * @param {string} title
+ * @param {string} explicitTitle — user-supplied title, or '' if none
+ * @param {string} fallbackTitle — heuristic title (filename or date)
  * @param {number} sizeBytes — original upload size, captured before ffmpeg deletes the file
  */
-function transcribeInBackground(audioPath, title, sizeBytes) {
+function transcribeInBackground(audioPath, explicitTitle, fallbackTitle, sizeBytes) {
 	const id = randomBytes(4).toString('hex');
 	const wavPath = join(TEMP_DIR, `transcript-${id}.wav`);
 
@@ -129,9 +141,22 @@ function transcribeInBackground(audioPath, title, sizeBytes) {
 
 		try { unlinkSync(wavPath); } catch {}
 
+		// Derive title: explicit > ollama-generated > heuristic fallback.
+		let finalTitle = explicitTitle;
+		if (!finalTitle) {
+			vlog('[voice-transcript] Generating title via ollama...');
+			const ollamaTitle = await generateTitleFromTranscript(text);
+			finalTitle = ollamaTitle || fallbackTitle;
+			if (ollamaTitle) {
+				vlog(`[voice-transcript] ollama title: "${ollamaTitle}"`);
+			} else {
+				vlog(`[voice-transcript] ollama title unavailable, using fallback: "${fallbackTitle}"`);
+			}
+		}
+
 		try {
-			appendTranscriptToVoiceTimeline(text, title, { durationSec, sizeBytes, source: 'audio' });
-			vlog(`[voice-transcript] Done — transcript (${text.length} chars, ${durationSec ?? '?'}s) added to voice inbox as "${title}"`);
+			appendTranscriptToVoiceTimeline(text, finalTitle, { durationSec, sizeBytes, source: 'audio' });
+			vlog(`[voice-transcript] Done — transcript (${text.length} chars, ${durationSec ?? '?'}s) added to voice inbox as "${finalTitle}"`);
 		} catch (e) {
 			vlog(`[voice-transcript] ERROR: failed to append transcript: ${e.message}`);
 		}
@@ -151,7 +176,12 @@ export async function POST({ request }) {
 				return json({ error: true, message: 'Missing "text" field' }, { status: 400, headers: CORS_HEADERS });
 			}
 
-			const title = body.title?.trim() || `Transcript ${formatTimestamp(new Date())}`;
+			const explicitTitle = body.title?.trim() || '';
+			let title = explicitTitle;
+			if (!title) {
+				const ollamaTitle = await generateTitleFromTranscript(text);
+				title = ollamaTitle || `Transcript ${formatTimestamp(new Date())}`;
+			}
 
 			appendTranscriptToVoiceTimeline(text, title);
 			vlog(`[voice-transcript] Appended text transcript "${title}" (${text.length} chars)`);
@@ -166,14 +196,14 @@ export async function POST({ request }) {
 		// Audio file path — save and process async
 		mkdirSync(TEMP_DIR, { recursive: true });
 
-		let title = '';
+		let explicitTitle = '';
 		let audioTempPath = '';
 		let originalFilename = '';
 
 		if (contentType.includes('multipart/form-data')) {
 			const formData = await request.formData();
 			const file = formData.get('file') || formData.get('audio');
-			title = /** @type {string} */ (formData.get('title'))?.trim() || '';
+			explicitTitle = /** @type {string} */ (formData.get('title'))?.trim() || '';
 
 			if (!file || !(file instanceof File)) {
 				return json({ error: true, message: 'Missing audio file' }, { status: 400, headers: CORS_HEADERS });
@@ -200,29 +230,29 @@ export async function POST({ request }) {
 			writeFileSync(audioTempPath, buffer);
 		}
 
-		// Derive title from filename if provided, otherwise from audio creation date.
-		if (!title) {
-			if (originalFilename) {
-				title = originalFilename.replace(/\.[^.]+$/, '');
-			} else {
-				title = `Transcript ${formatTimestamp(getAudioDate(audioTempPath))}`;
-			}
-		}
+		// Heuristic fallback title (used only if ollama fails).
+		const fallbackTitle = originalFilename
+			? originalFilename.replace(/\.[^.]+$/, '')
+			: `Transcript ${formatTimestamp(getAudioDate(audioTempPath))}`;
+
+		// What we return in the 202 response — ollama title isn't known yet,
+		// so we surface the best title we have at this point.
+		const responseTitle = explicitTitle || fallbackTitle;
 
 		let sizeBytes = 0;
 		try {
 			sizeBytes = statSync(audioTempPath).size;
-			vlog(`[voice-transcript] Audio received: "${title}" (${(sizeBytes/1024).toFixed(0)}KB) — queuing transcription`);
+			vlog(`[voice-transcript] Audio received: "${responseTitle}" (${(sizeBytes/1024).toFixed(0)}KB) — queuing transcription`);
 		} catch {
-			vlog(`[voice-transcript] Audio received: "${title}" — queuing transcription`);
+			vlog(`[voice-transcript] Audio received: "${responseTitle}" — queuing transcription`);
 		}
 
-		transcribeInBackground(audioTempPath, title, sizeBytes);
+		transcribeInBackground(audioTempPath, explicitTitle, fallbackTitle, sizeBytes);
 
 		return json({
 			success: true,
 			message: 'Recording received — transcribing in background. Transcript will appear shortly.',
-			title
+			title: responseTitle
 		}, { status: 202, headers: CORS_HEADERS });
 	} catch (e) {
 		const message = e instanceof Error ? e.message : 'Failed to process request';

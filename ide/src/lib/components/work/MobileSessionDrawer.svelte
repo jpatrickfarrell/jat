@@ -25,6 +25,16 @@
 	import type { SessionState, SessionStateAction } from '$lib/config/statusColors';
 	import { getIssueTypeVisual, getSessionStateVisual } from '$lib/config/statusColors';
 	import { getActions, loadUserConfig, getIsLoaded } from '$lib/stores/stateActionsConfig.svelte';
+	import {
+		playTaskCompleteSound,
+		playCleanupSound,
+		playKillSound,
+		playInterruptSound,
+		playAttachSound,
+		playSuccessChime,
+		playErrorSound,
+		initAudioOnInteraction
+	} from '$lib/utils/soundEffects';
 
 	/** Split an agent name on camelCase boundaries: "GentleCoast" → ["Gentle", "Coast"]. */
 	function splitAgentName(name: string): string[] {
@@ -108,19 +118,38 @@
 		return actions.filter(a => MOBILE_PILL_ACTIONS.has(a.id));
 	});
 
-	// Execute a pill action
-	async function executePillAction(action: SessionStateAction) {
-		if (action.id === 'interrupt') {
-			sendKey('ctrl-c');
-		} else if (action.id === 'attach') {
-			onAttachSession();
-		} else if (action.id === 'kill') {
-			dismissDrawer();
-			onKillSession();
-		} else if (action.id === 'complete') {
-			await onSendInput('/jat:complete', 'text');
-		} else {
-			await onAction(action.id);
+	// Track which action button is currently animating
+	let activeActionId = $state<string | null>(null);
+
+	// Map action ID to appropriate sound
+	function playActionSound(actionId: string): void {
+		initAudioOnInteraction();
+		switch (actionId) {
+			case 'complete':
+			case 'complete-kill':
+				playTaskCompleteSound();
+				break;
+			case 'cleanup':
+				playCleanupSound();
+				break;
+			case 'kill':
+				playKillSound();
+				break;
+			case 'interrupt':
+			case 'escape':
+				playInterruptSound();
+				break;
+			case 'pause':
+				playErrorSound();
+				break;
+			case 'attach':
+				playAttachSound();
+				break;
+			case 'convert-to-tasks':
+				playSuccessChime();
+				break;
+			default:
+				break;
 		}
 	}
 
@@ -133,6 +162,32 @@
 			case 'info': return 'info-btn';
 			default: return '';
 		}
+	}
+
+	// Execute a pill action — plays unique sound, flashes button, then dismisses drawer
+	async function executePillAction(action: SessionStateAction) {
+		// 1. Play unique sound for this action type
+		playActionSound(action.id);
+
+		// 2. Trigger button flash animation
+		activeActionId = action.id;
+		setTimeout(() => { activeActionId = null; }, 300);
+
+		// 3. Execute the action
+		if (action.id === 'interrupt') {
+			sendKey('ctrl-c');
+		} else if (action.id === 'attach') {
+			onAttachSession();
+		} else if (action.id === 'kill') {
+			onKillSession();
+		} else if (action.id === 'complete') {
+			await onSendInput('/jat:complete', 'text');
+		} else {
+			await onAction(action.id);
+		}
+
+		// 4. Dismiss drawer after button flash animation completes
+		setTimeout(dismissDrawer, 180);
 	}
 
 	// Terminal output state
@@ -862,6 +917,7 @@
 					{#each stateActions as action (action.id)}
 						<button
 							class="mobile-action-btn {getPillColorClass(action.variant)}"
+							class:is-flashing={activeActionId === action.id}
 							use:directClick={() => executePillAction(action)}
 							title={action.description || action.label}
 						>
@@ -1715,6 +1771,17 @@
 
 	.mobile-action-btn:active {
 		background: oklch(0.28 0.02 250);
+	}
+
+	@keyframes mobile-btn-flash {
+		0%   { transform: scale(1); opacity: 1; }
+		30%  { transform: scale(0.88); opacity: 0.85; }
+		65%  { transform: scale(1.06); opacity: 1; }
+		100% { transform: scale(1); opacity: 1; }
+	}
+
+	.mobile-action-btn.is-flashing {
+		animation: mobile-btn-flash 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 	}
 
 	.mobile-action-btn.complete-btn {

@@ -55,7 +55,7 @@
 		"@vitest/ui": "^4.0.12",
 		"autoprefixer": "^10.4.22",
 		"daisyui": "^5.5.5",
-		"jat-feedback": "^3.2.1",
+		"jat-feedback": "^3.3.3",
 		"jsdom": "^27.4.0",
 		"postcss": "^8.5.6",
 		"svelte": "^5.41.0",

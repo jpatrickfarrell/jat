@@ -19,6 +19,9 @@
 	import { fly, slide } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import SuggestedTasksSection from './SuggestedTasksSection.svelte';
+	import SearchDropdown from '$lib/components/SearchDropdown.svelte';
+	import type { SearchDropdownGroup } from '$lib/components/SearchDropdown.svelte';
+	import { getProjectColor } from '$lib/utils/projectColors';
 	import {
 		WorkingSignalCard,
 		ReviewSignalCard,
@@ -153,6 +156,16 @@
 	} = $props();
 
 	let events = $state<TimelineEvent[]>([]);
+
+	// KB entry project dropdown groups (matches /history pattern)
+	const kbProjectGroups = $derived.by<SearchDropdownGroup[]>(() => [{
+		label: 'Projects',
+		options: availableProjects.map(p => ({ value: p, label: p }))
+	}]);
+	function getKbProjectColorFn(project: string): string | undefined {
+		if (!project) return undefined;
+		return getProjectColor(project + '-x');
+	}
 
 	function dismissStorageKey() {
 		return `jat-dismissed-events-${sessionName || 'default'}`;
@@ -1026,6 +1039,19 @@
 			return `Voice Inbox — ${count} suggestion${count !== 1 ? 's' : ''}${datePart} · ${t}`;
 		}
 
+		// Voice inbox: transcript-only events show title + time
+		if (event.type === 'transcript') {
+			const eventDate = new Date(event.timestamp);
+			const isToday = eventDate.toDateString() === new Date().toDateString();
+			const t = eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+			const datePart = isToday ? '' : ` · ${eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+			const title = (event.data as any)?.title?.trim();
+			if (title) {
+				return `${title}${datePart} · ${t}`;
+			}
+			return `Transcript${datePart} · ${t}`;
+		}
+
 		// Fallback to uppercase label with task ID
 		const label = signalType.toUpperCase().replace('_', ' ');
 		if (event.task_id) {
@@ -1231,18 +1257,20 @@
 								{@const selectedCount = getSelectedCount(eventKey)}
 								{@const voiceSummary = typeof event.data === 'object' && !Array.isArray(event.data) ? (event.data.summary || '') : ''}
 								{@const voiceTranscript = typeof event.data === 'object' && !Array.isArray(event.data) ? (event.data.transcript || '') : ''}
-								<div class="space-y-2">
+								<div class="space-y-4 pt-1">
 									{#if voiceSummary}
-										<div class="rounded-lg bg-base-200 border border-base-300">
-											<div class="flex items-center gap-2 px-3 py-2 border-b border-base-300">
-												<svg class="w-4 h-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-												</svg>
-												<span class="font-semibold text-sm text-base-content">Summary</span>
+										<div class="border-l-2 border-primary/50 pl-3 ml-1">
+											<div class="flex items-center gap-1 mb-1">
+												<span class="text-[10px] font-semibold uppercase tracking-wider text-base-content/40">Summary</span>
+												<button class="ml-auto btn btn-ghost btn-xs px-1 h-4 min-h-0 opacity-40 hover:opacity-100 text-base-content/60" onclick={() => copyToClipboard(voiceSummary, `voice-summary-${eventKey}`)} title="Copy summary">
+													{#if copiedField === `voice-summary-${eventKey}`}
+														<svg class="w-3 h-3 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+													{:else}
+														<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path></svg>
+													{/if}
+												</button>
 											</div>
-											<div class="px-3 py-2 text-[12px] leading-relaxed whitespace-pre-wrap text-base-content/80">
-												{voiceSummary}
-											</div>
+											<div class="text-[12px] leading-relaxed whitespace-pre-wrap text-base-content/70 hover:text-base-content/80">{voiceSummary}</div>
 										</div>
 									{/if}
 									<SuggestedTasksSection
@@ -1262,49 +1290,28 @@
 										{defaultProject}
 										{onTaskClick}
 									/>
-									{#if voiceTranscript}
-										<div class="rounded-lg bg-base-200 border border-base-300">
-											<div class="flex items-center gap-2 px-3 py-2 border-b border-base-300">
-												<svg class="w-4 h-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-												</svg>
-												<span class="font-semibold text-sm text-base-content">Transcript</span>
-											</div>
-											<div class="px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap font-mono text-base-content/60" style="max-height: 200px; overflow-y: auto;">
-												{voiceTranscript}
-											</div>
-										</div>
-									{/if}
 									{#if Array.isArray(event.data?.knowledgeBase) && event.data.knowledgeBase.length > 0}
 									{@const voiceKb = event.data.knowledgeBase}
-										<div class="rounded-lg bg-base-200 border border-base-300">
-											<div class="flex items-center gap-2 px-3 py-2 border-b border-base-300">
-												<svg class="w-4 h-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-												</svg>
-												<span class="font-semibold text-sm text-base-content">Knowledge Base</span>
-											</div>
-											<div class="divide-y divide-base-300">
+										<div>
+											<div class="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-2">Knowledge Base</div>
+											<div class="space-y-2">
 												{#each voiceKb as kbEntry, kbIdx}
 													{@const kbState = getKbEntryState(eventKey, kbIdx, kbEntry.project || defaultProject || '')}
-													<div class="px-3 py-2 space-y-1.5">
+													<div class="rounded-lg border border-base-300 bg-base-200/50 px-3 py-3 space-y-2">
 														<div class="text-[12px] font-semibold text-base-content">{kbEntry.title}</div>
 														<div class="text-[11px] text-base-content/70 whitespace-pre-wrap leading-relaxed">{kbEntry.content}</div>
 														<div class="flex items-center gap-2 pt-0.5">
-															<select
-																class="select select-xs select-bordered flex-1 text-[11px]"
-																value={kbState.project}
-																onchange={(e) => setKbEntryState(eventKey, kbIdx, { project: (e.target as HTMLSelectElement).value }, kbEntry.project || defaultProject || '')}
-																disabled={kbState.accepted}
-															>
-																{#if availableProjects.length === 0}
-																	<option value="">No project</option>
-																{:else}
-																	{#each availableProjects as proj}
-																		<option value={proj}>{proj}</option>
-																	{/each}
-																{/if}
-															</select>
+															<div style="min-width: 140px;">
+																<SearchDropdown
+																	value={kbState.project}
+																	groups={kbProjectGroups}
+																	placeholder="Select project"
+																	colorFn={getKbProjectColorFn}
+																	variant="chip"
+																	disabled={kbState.accepted}
+																	onChange={(v) => setKbEntryState(eventKey, kbIdx, { project: v }, kbEntry.project || defaultProject || '')}
+																/>
+															</div>
 															<button
 																class="btn btn-xs {kbState.accepted ? 'btn-success' : 'btn-primary'} gap-1 flex-shrink-0"
 																onclick={() => acceptKbEntry(eventKey, kbIdx, { ...kbEntry, project: kbState.project || kbEntry.project || defaultProject || '' })}
@@ -1325,6 +1332,40 @@
 											</div>
 										</div>
 									{/if}
+									{#if voiceTranscript}
+										<div class="pt-1 border-t border-base-300/40">
+											<div class="flex items-center gap-1 mb-1.5">
+												<span class="text-[10px] font-semibold uppercase tracking-wider text-base-content/55">Transcript</span>
+												<button class="ml-auto btn btn-ghost btn-xs px-1 h-4 min-h-0 text-base-content/50 hover:text-base-content/75" onclick={() => copyToClipboard(voiceTranscript, `voice-tx-${eventKey}`)} title="Copy transcript">
+													{#if copiedField === `voice-tx-${eventKey}`}
+														<svg class="w-3 h-3 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+													{:else}
+														<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path></svg>
+													{/if}
+												</button>
+											</div>
+											<div class="text-[11px] leading-relaxed whitespace-pre-wrap font-mono hover:text-base-content/75 text-base-content/45" style="max-height: 200px; overflow-y: auto;">{voiceTranscript}</div>
+										</div>
+									{/if}
+								</div>
+							{:else if event.type === 'transcript' && event.data}
+								<!-- Voice Transcript: raw transcription only -->
+								{@const txText = event.data.transcript || ''}
+								{@const txMeta = event.data}
+								<div class="rounded-lg bg-base-200 border border-base-300">
+									<div class="flex items-center gap-2 px-3 py-2 border-b border-base-300">
+										<svg class="w-4 h-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+										<span class="font-semibold text-sm text-base-content">Transcript</span>
+										{#if txMeta.durationSec}<span class="text-[11px] text-base-content/50">{Math.round(txMeta.durationSec)}s</span>{/if}
+										<button class="ml-auto btn btn-ghost btn-xs px-1.5 h-5 min-h-0 text-base-content/40 hover:text-base-content/70" onclick={() => copyToClipboard(txText, `tx-card-${eventKey}`)} title="Copy transcript">
+											{#if copiedField === `tx-card-${eventKey}`}
+												<svg class="w-3 h-3 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+											{:else}
+												<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path></svg>
+											{/if}
+										</button>
+									</div>
+									<div class="px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap font-mono text-base-content/70" style="max-height: 300px; overflow-y: auto;">{txText || '(empty transcript)'}</div>
 								</div>
 							{:else if event.type === 'complete' && event.data}
 								<!-- Rich Completion Bundle UI -->
@@ -1824,18 +1865,20 @@
 										{@const selectedCount = getSelectedCount(eventKey)}
 										{@const popupVoiceSummary = typeof event.data === 'object' && !Array.isArray(event.data) ? (event.data.summary || '') : ''}
 										{@const popupVoiceTranscript = typeof event.data === 'object' && !Array.isArray(event.data) ? (event.data.transcript || '') : ''}
-										<div class="space-y-2">
+										<div class="space-y-4 pt-1">
 											{#if popupVoiceSummary}
-												<div class="rounded-lg bg-base-200 border border-base-300">
-													<div class="flex items-center gap-2 px-3 py-2 border-b border-base-300">
-														<svg class="w-4 h-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-															<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-														</svg>
-														<span class="font-semibold text-sm text-base-content">Summary</span>
+												<div class="border-l-2 border-primary/50 pl-3 ml-1">
+													<div class="flex items-center gap-1 mb-1">
+														<span class="text-[10px] font-semibold uppercase tracking-wider text-base-content/40">Summary</span>
+														<button class="ml-auto btn btn-ghost btn-xs px-1 h-4 min-h-0 opacity-40 hover:opacity-100 text-base-content/60" onclick={() => copyToClipboard(popupVoiceSummary, `voice-summary-popup-${eventKey}`)} title="Copy summary">
+															{#if copiedField === `voice-summary-popup-${eventKey}`}
+																<svg class="w-3 h-3 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+															{:else}
+																<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path></svg>
+															{/if}
+														</button>
 													</div>
-													<div class="px-3 py-2 text-[12px] leading-relaxed whitespace-pre-wrap text-base-content/80">
-														{popupVoiceSummary}
-													</div>
+													<div class="text-[12px] leading-relaxed whitespace-pre-wrap text-base-content/80">{popupVoiceSummary}</div>
 												</div>
 											{/if}
 											<SuggestedTasksSection
@@ -1855,49 +1898,28 @@
 												{defaultProject}
 												{onTaskClick}
 											/>
-											{#if popupVoiceTranscript}
-												<div class="rounded-lg bg-base-200 border border-base-300">
-													<div class="flex items-center gap-2 px-3 py-2 border-b border-base-300">
-														<svg class="w-4 h-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-															<path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-														</svg>
-														<span class="font-semibold text-sm text-base-content">Transcript</span>
-													</div>
-													<div class="px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap font-mono text-base-content/60" style="max-height: 200px; overflow-y: auto;">
-														{popupVoiceTranscript}
-													</div>
-												</div>
-											{/if}
 											{#if Array.isArray(event.data?.knowledgeBase) && event.data.knowledgeBase.length > 0}
 											{@const popupVoiceKb = event.data.knowledgeBase}
-												<div class="rounded-lg bg-base-200 border border-base-300">
-													<div class="flex items-center gap-2 px-3 py-2 border-b border-base-300">
-														<svg class="w-4 h-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-															<path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-														</svg>
-														<span class="font-semibold text-sm text-base-content">Knowledge Base</span>
-													</div>
-													<div class="divide-y divide-base-300">
+												<div>
+													<div class="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-2">Knowledge Base</div>
+													<div class="space-y-2">
 														{#each popupVoiceKb as kbEntry, kbIdx}
 															{@const kbState = getKbEntryState(eventKey, kbIdx, kbEntry.project || defaultProject || '')}
-															<div class="px-3 py-2 space-y-1.5">
+															<div class="rounded-lg border border-base-300 bg-base-200/50 px-3 py-3 space-y-2">
 																<div class="text-[12px] font-semibold text-base-content">{kbEntry.title}</div>
 																<div class="text-[11px] text-base-content/70 whitespace-pre-wrap leading-relaxed">{kbEntry.content}</div>
 																<div class="flex items-center gap-2 pt-0.5">
-																	<select
-																		class="select select-xs select-bordered flex-1 text-[11px]"
-																		value={kbState.project}
-																		onchange={(e) => setKbEntryState(eventKey, kbIdx, { project: (e.target as HTMLSelectElement).value }, kbEntry.project || defaultProject || '')}
-																		disabled={kbState.accepted}
-																	>
-																		{#if availableProjects.length === 0}
-																			<option value="">No project</option>
-																		{:else}
-																			{#each availableProjects as proj}
-																				<option value={proj}>{proj}</option>
-																			{/each}
-																		{/if}
-																	</select>
+																	<div style="min-width: 140px;">
+																		<SearchDropdown
+																			value={kbState.project}
+																			groups={kbProjectGroups}
+																			placeholder="Select project"
+																			colorFn={getKbProjectColorFn}
+																			variant="chip"
+																			disabled={kbState.accepted}
+																			onChange={(v) => setKbEntryState(eventKey, kbIdx, { project: v }, kbEntry.project || defaultProject || '')}
+																		/>
+																	</div>
 																	<button
 																		class="btn btn-xs {kbState.accepted ? 'btn-success' : 'btn-primary'} gap-1 flex-shrink-0"
 																		onclick={() => acceptKbEntry(eventKey, kbIdx, { ...kbEntry, project: kbState.project || kbEntry.project || defaultProject || '' })}
@@ -1918,7 +1940,33 @@
 													</div>
 												</div>
 											{/if}
+											{#if popupVoiceTranscript}
+												<div class="pt-1 border-t border-base-300/40">
+													<div class="flex items-center gap-1 mb-1.5">
+														<span class="text-[10px] font-semibold uppercase tracking-wider text-base-content/35">Transcript</span>
+														<button class="ml-auto btn btn-ghost btn-xs px-1 h-4 min-h-0 text-base-content/50 " onclick={() => copyToClipboard(popupVoiceTranscript, `voice-tx-popup-${eventKey}`)} title="Copy transcript">
+															{#if copiedField === `voice-tx-popup-${eventKey}`}
+																<svg class="w-3 h-3 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+															{:else}
+																<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path></svg>
+															{/if}
+														</button>
+													</div>
+													<div class="text-[11px] leading-relaxed whitespace-pre-wrap font-mono text-base-content/45 hover:text-base-content/75" style="max-height: 200px; overflow-y: auto;">{popupVoiceTranscript}</div>
+												</div>
+											{/if}
 										</div>
+										{:else if event.type === 'transcript' && event.data}
+											{@const txText = event.data.transcript || ''}
+											{@const txMeta = event.data}
+											<div class="rounded-lg bg-base-200 border border-base-300">
+												<div class="flex items-center gap-2 px-3 py-2 border-b border-base-300">
+													<svg class="w-4 h-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+													<span class="font-semibold text-sm text-base-content">Transcript</span>
+													{#if txMeta.durationSec}<span class="text-[11px] text-base-content/50 ml-auto">{Math.round(txMeta.durationSec)}s</span>{/if}
+												</div>
+												<div class="px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap font-mono text-base-content/70" style="max-height: 300px; overflow-y: auto;">{txText || '(empty transcript)'}</div>
+											</div>
 									{:else if event.type === 'complete' && event.data}
 										<!-- Rich Completion Bundle UI -->
 										{@const bundle = event.data}

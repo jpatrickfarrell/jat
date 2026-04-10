@@ -467,7 +467,10 @@ export function appendToVoiceTimeline(tasks, transcript = '', summary = '', titl
 		timestamp: new Date().toISOString(),
 		data: { tasks, transcript, summary, title, knowledgeBase, speakers }
 	};
-	appendFileSync(timelineFile, JSON.stringify(event) + '\n');
+	const line = JSON.stringify(event) + '\n';
+	appendFileSync(timelineFile, line);
+	// Also write to SSE timeline so VoiceInbox picks it up in real-time
+	appendFileSync('/tmp/jat-timeline-jat-voice.jsonl', line);
 }
 
 /**
@@ -497,7 +500,10 @@ export function appendTranscriptToVoiceTimeline(transcript, title = '', meta = {
 			source: meta.source ?? 'text'
 		}
 	};
-	appendFileSync(timelineFile, JSON.stringify(event) + '\n');
+	const line = JSON.stringify(event) + '\n';
+	appendFileSync(timelineFile, line);
+	// Also write to SSE timeline so VoiceInbox picks it up in real-time
+	appendFileSync('/tmp/jat-timeline-jat-voice.jsonl', line);
 }
 
 /**

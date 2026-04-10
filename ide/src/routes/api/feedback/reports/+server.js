@@ -146,7 +146,7 @@ export async function GET() {
 		}
 		db.close();
 
-		/** @type {import('./types').ReportSummary[]} */
+		/** @type {any[]} */
 		const reports = [];
 
 		for (const row of rows) {

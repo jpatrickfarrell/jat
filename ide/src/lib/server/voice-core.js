@@ -5,10 +5,10 @@
  * the upcoming /voice-transcript, /voice-summary, /voice-kb, /voice-launch,
  * and /voice-diarize routes.
  */
-import { appendFileSync, mkdirSync, readFileSync, existsSync } from 'fs';
+import { appendFileSync, mkdirSync, readFileSync, existsSync, mkdtempSync, rmSync } from 'fs';
 import { exec } from 'child_process';
-import { join, dirname } from 'path';
-import { homedir } from 'os';
+import { join, dirname, basename } from 'path';
+import { homedir, tmpdir } from 'os';
 
 export const TEMP_DIR = '/tmp/jat-voice';
 export const VOICE_LOG_FILE = '/tmp/jat-voice.log';
@@ -102,30 +102,80 @@ export function transcribe(wavPath, opts = {}) {
 
 /**
  * Call local ollama to organize a transcript into a structured voice note.
- * Returns { tasks, summary, title, knowledgeBase }.
  *
- * The `mode` parameter is reserved for future prompt variants (e.g. a
- * speaker-aware variant that comes with diarize in jat-2atga.3). For now,
- * only the default 'organize' mode is implemented.
+ * Modes:
+ *   - 'organize' (default): returns { tasks, summary, title, knowledgeBase }
+ *     Requires at least one extracted task.
+ *   - 'kb': KB-only extraction — returns { tasks: [], summary: '', title, knowledgeBase }
+ *     Used by /api/tasks/voice-kb to capture reference material (pricing,
+ *     decisions, requirements) without generating tasks. Requires at least
+ *     one knowledge base entry.
+ *   - 'summary': Summary-only — returns { tasks: [], summary, title, knowledgeBase: [] }
+ *     Used by /api/tasks/voice-summary for long brain dumps where the user
+ *     wants organized notes but not task extraction. Faster because ollama
+ *     produces fewer output tokens.
  *
  * @param {string} transcript
  * @param {Array<{name: string, description: string}>} projects
- * @param {'organize'} [mode]
+ * @param {'organize'|'kb'|'summary'} [mode]
  * @returns {Promise<{tasks: Array, summary: string, title: string, knowledgeBase: Array}>}
  */
 export async function organizeTranscript(transcript, projects = [], mode = 'organize') {
-	if (mode !== 'organize') {
+	if (mode !== 'organize' && mode !== 'kb' && mode !== 'summary') {
 		throw new Error(`Unsupported organizeTranscript mode: ${mode}`);
 	}
 
 	const projectSection = projects.length > 0
-		? `Available projects (assign each task to the most relevant one based on context):
+		? `Available projects (assign each entry to the most relevant one based on context):
 ${projects.map(p => `- ${p.name}: ${p.description}`).join('\n')}
 
-If a task doesn't clearly belong to any project, omit the "project" field.`
+If an entry doesn't clearly belong to any project, omit the "project" field.`
 		: '';
 
-	const prompt = `You are a note organizer. Given a voice note transcript, produce four things:
+	const summaryPrompt = `You are a note organizer. Given a voice note transcript, produce exactly two things:
+
+1. TITLE: A short descriptive title for this voice note (max 8 words, captures the main theme, e.g. "Morning walk: billing and Steel Bridge pricing")
+
+2. SUMMARY: Detailed organized notes covering EVERYTHING discussed. The speaker rambles and jumps between topics — reorganize into clear grouped sections without losing any detail. Format each topic as its own line: "TOPIC NAME: all details, names, numbers, decisions, context for that topic". Every name, date, number, idea, and decision must appear. Nothing omitted.
+
+Do NOT extract tasks. Do NOT extract knowledge base entries. Only organize the transcript into a title and a detailed topic-by-topic summary.
+
+Return ONLY valid JSON (no markdown, no explanation):
+{
+  "title": "Short descriptive title for this voice note",
+  "summary": "<your detailed topic-by-topic notes here>"
+}
+
+Transcript:
+${transcript}`;
+
+	const prompt = mode === 'summary'
+		? summaryPrompt
+		: mode === 'kb'
+		? `You are a knowledge base extractor. Given a voice note transcript, extract ONLY persistent reference facts worth saving long-term — pricing, architectural decisions, client details, requirements, configuration, domain knowledge. Ignore one-off tasks or momentary intentions ("I should", "remind me to", "later I'll") — only capture durable reference material.
+
+Return ONLY valid JSON (no markdown, no explanation):
+{
+  "title": "Short descriptive title for this voice note (max 8 words)",
+  "knowledgeBase": [
+    {
+      "title": "Short entry title",
+      "content": "Detailed reference content worth remembering long-term — include every name, number, decision, and piece of context relevant to this topic",
+      "project": "project-name-here"
+    }
+  ]
+}
+
+Rules:
+- One entry per distinct topic/project combination.
+- Each entry's content must stand on its own without the original transcript.
+- Preserve every specific name, number, date, and decision verbatim.
+- Omit the "project" field if an entry doesn't clearly belong to any project.
+${projectSection}
+
+Transcript:
+${transcript}`
+		: `You are a note organizer. Given a voice note transcript, produce four things:
 
 1. TITLE: A short descriptive title for this voice note (max 8 words, captures the main theme, e.g. "Morning walk: billing and Steel Bridge pricing")
 
@@ -220,10 +270,26 @@ ${transcript}`;
 	vlog(`ollama done: ${tokenCount} tokens generated in ${((Date.now() - (firstTokenAt || ollamaStart)) / 1000).toFixed(1)}s`);
 
 	const parsed = JSON.parse(fullResponse);
-	const tasks = parsed.tasks;
-	const summary = typeof parsed.summary === 'string' ? parsed.summary : '';
 	const title = typeof parsed.title === 'string' ? parsed.title : '';
 	const knowledgeBase = Array.isArray(parsed.knowledgeBase) ? parsed.knowledgeBase : [];
+
+	if (mode === 'kb') {
+		if (knowledgeBase.length === 0) {
+			throw new Error('ollama returned no knowledge base entries');
+		}
+		return { tasks: [], summary: '', title, knowledgeBase };
+	}
+
+	if (mode === 'summary') {
+		const summary = typeof parsed.summary === 'string' ? parsed.summary : '';
+		if (!summary) {
+			throw new Error('ollama returned no summary');
+		}
+		return { tasks: [], summary, title, knowledgeBase: [] };
+	}
+
+	const tasks = parsed.tasks;
+	const summary = typeof parsed.summary === 'string' ? parsed.summary : '';
 
 	if (!Array.isArray(tasks) || tasks.length === 0) {
 		throw new Error('ollama returned no tasks');
@@ -251,6 +317,27 @@ export function appendToVoiceTimeline(tasks, transcript = '', summary = '', titl
 		tmux_session: 'jat-voice',
 		timestamp: new Date().toISOString(),
 		data: { tasks, transcript, summary, title, knowledgeBase }
+	};
+	appendFileSync(timelineFile, JSON.stringify(event) + '\n');
+}
+
+/**
+ * Append a raw transcript (no task extraction) to the voice inbox timeline.
+ * Used by /api/tasks/voice-transcript when the user wants only a clean text
+ * copy of what they said — no ollama, no task inference.
+ * @param {string} transcript
+ * @param {string} title
+ */
+export function appendTranscriptToVoiceTimeline(transcript, title = '') {
+	mkdirSync(TEMP_DIR, { recursive: true });
+	const timelineFile = getVoiceTimelineFile();
+	mkdirSync(dirname(timelineFile), { recursive: true });
+	const event = {
+		type: 'transcript',
+		session_id: 'voice',
+		tmux_session: 'jat-voice',
+		timestamp: new Date().toISOString(),
+		data: { transcript, title }
 	};
 	appendFileSync(timelineFile, JSON.stringify(event) + '\n');
 }

@@ -58,20 +58,36 @@ export function loadProjects() {
 }
 
 /**
- * Transcribe a 16kHz mono WAV file via local voxtype (whisper large-v3-turbo).
+ * Transcribe a 16kHz mono WAV file.
  *
- * Options are accepted for forward compatibility — the `diarize` branch will
- * be added in jat-2atga.3 and will return speaker-tagged segments instead of
- * a flat string.
+ * - **Fast path (default):** voxtype (whisper large-v3-turbo) — single speaker,
+ *   returns a flat transcript string.
+ * - **Diarize path (`opts.diarize=true`):** whisperx + pyannote — multi-speaker,
+ *   returns a speaker-labeled transcript like:
+ *     [SPEAKER_00]: Hi I'm John
+ *     [SPEAKER_01]: Nice to meet you
+ *   Falls back to the fast path if whisperx fails (missing token, model load
+ *   error, etc.) so the caller always gets *some* usable transcript.
  *
  * @param {string} wavPath — path to a 16kHz mono WAV file
- * @param {{ timeout?: number, maxBuffer?: number }} [opts]
- * @returns {Promise<string>} cleaned transcript text
+ * @param {{ timeout?: number, maxBuffer?: number, diarize?: boolean }} [opts]
+ * @returns {Promise<string>} cleaned transcript text (optionally speaker-labeled)
  */
 export function transcribe(wavPath, opts = {}) {
 	const timeout = opts.timeout ?? 600_000;
 	const maxBuffer = opts.maxBuffer ?? 10 * 1024 * 1024;
 
+	if (opts.diarize === true) {
+		return transcribeDiarized(wavPath, { timeout, maxBuffer })
+			.catch((err) => {
+				vlog(`whisperx diarize failed, falling back to voxtype: ${err.message}`);
+				return transcribeFast(wavPath, { timeout, maxBuffer });
+			});
+	}
+	return transcribeFast(wavPath, { timeout, maxBuffer });
+}
+
+function transcribeFast(wavPath, { timeout, maxBuffer }) {
 	return new Promise((resolve, reject) => {
 		exec(`voxtype transcribe "${wavPath}" 2>/dev/null`, {
 			timeout,
@@ -101,6 +117,126 @@ export function transcribe(wavPath, opts = {}) {
 }
 
 /**
+ * Run whisperx with --diarize, parse the JSON output, and format segments
+ * into a speaker-labeled transcript. Consecutive segments from the same
+ * speaker are merged into one line so the result reads like a conversation
+ * rather than a timestamped log.
+ */
+async function transcribeDiarized(wavPath, { timeout, maxBuffer }) {
+	const hfToken = await getHfToken();
+	if (!hfToken) {
+		throw new Error('hf-token not found — run `jat-secret --set hf-token ...`');
+	}
+
+	const outputDir = mkdtempSync(join(tmpdir(), 'jat-whisperx-'));
+	try {
+		await new Promise((resolve, reject) => {
+			const cmd = [
+				`whisperx "${wavPath}"`,
+				`--model large-v3-turbo`,
+				`--diarize`,
+				`--hf_token "${hfToken}"`,
+				`--device cpu`,
+				`--compute_type int8`,
+				`--output_format json`,
+				`--output_dir "${outputDir}"`
+			].join(' ');
+			vlog(`running whisperx (diarize): ${wavPath}`);
+			exec(cmd, { timeout, encoding: 'utf-8', maxBuffer }, (err, _stdout, stderr) => {
+				if (err) {
+					reject(new Error(`whisperx failed: ${err.message}\n${stderr || ''}`.trim()));
+					return;
+				}
+				resolve(null);
+			});
+		});
+
+		// whisperx writes <stem>.json into --output_dir (stem = basename minus .wav).
+		const stem = basename(wavPath).replace(/\.wav$/i, '');
+		const jsonPath = join(outputDir, `${stem}.json`);
+		if (!existsSync(jsonPath)) {
+			throw new Error(`whisperx output not found at ${jsonPath}`);
+		}
+
+		const parsed = JSON.parse(readFileSync(jsonPath, 'utf-8'));
+		const segments = Array.isArray(parsed.segments) ? parsed.segments : [];
+		if (segments.length === 0) {
+			throw new Error('whisperx produced no segments');
+		}
+
+		const lines = [];
+		let currentSpeaker = null;
+		let currentText = [];
+		const flush = () => {
+			if (currentSpeaker !== null && currentText.length > 0) {
+				lines.push(`[${currentSpeaker}]: ${currentText.join(' ')}`);
+			}
+		};
+		for (const seg of segments) {
+			const speaker = seg.speaker || 'SPEAKER_UNKNOWN';
+			const text = typeof seg.text === 'string' ? seg.text.trim() : '';
+			if (!text) continue;
+			if (speaker !== currentSpeaker) {
+				flush();
+				currentSpeaker = speaker;
+				currentText = [text];
+			} else {
+				currentText.push(text);
+			}
+		}
+		flush();
+
+		const result = lines.join('\n').trim();
+		if (!result) {
+			throw new Error('whisperx segments had no usable text');
+		}
+		vlog(`whisperx produced ${lines.length} speaker-grouped lines`);
+		return result;
+	} finally {
+		try { rmSync(outputDir, { recursive: true, force: true }); } catch {}
+	}
+}
+
+function getHfToken() {
+	return new Promise((resolve) => {
+		exec('jat-secret hf-token', { encoding: 'utf-8' }, (err, stdout) => {
+			if (err) { resolve(null); return; }
+			const token = (stdout || '').trim();
+			resolve(token || null);
+		});
+	});
+}
+
+/**
+ * Detect whether a transcript is diarized (contains [SPEAKER_XX]: labels).
+ * @param {string} transcript
+ * @returns {boolean}
+ */
+function isDiarizedTranscript(transcript) {
+	return /\[SPEAKER_[A-Z0-9_]+\]:/.test(transcript);
+}
+
+/**
+ * Extract the set of unique SPEAKER_XX labels from a diarized transcript,
+ * preserving first-mention order.
+ * @param {string} transcript
+ * @returns {string[]}
+ */
+function extractSpeakerLabels(transcript) {
+	const seen = new Set();
+	const labels = [];
+	const re = /\[(SPEAKER_[A-Z0-9_]+)\]:/g;
+	let m;
+	while ((m = re.exec(transcript)) !== null) {
+		if (!seen.has(m[1])) {
+			seen.add(m[1]);
+			labels.push(m[1]);
+		}
+	}
+	return labels;
+}
+
+/**
  * Call local ollama to organize a transcript into a structured voice note.
  *
  * Modes:
@@ -125,6 +261,15 @@ export async function organizeTranscript(transcript, projects = [], mode = 'orga
 		throw new Error(`Unsupported organizeTranscript mode: ${mode}`);
 	}
 
+	const diarized = isDiarizedTranscript(transcript);
+	const speakerLabels = diarized ? extractSpeakerLabels(transcript) : [];
+	const speakerInstructions = diarized
+		? `\n\nSpeaker diarization: This transcript is labeled with SPEAKER_XX tags (${speakerLabels.join(', ')}). If any speaker introduces themselves by name (e.g. "Hi I'm John", "This is Sarah", "my name is..."), map their SPEAKER_XX label to that name in the "speakers" object. Leave the value null for any speaker whose name cannot be determined from the transcript.`
+		: '';
+	const speakersSchemaLine = diarized
+		? `,\n  "speakers": { ${speakerLabels.map(l => `"${l}": null`).join(', ')} }`
+		: '';
+
 	const projectSection = projects.length > 0
 		? `Available projects (assign each entry to the most relevant one based on context):
 ${projects.map(p => `- ${p.name}: ${p.description}`).join('\n')}
@@ -138,12 +283,12 @@ If an entry doesn't clearly belong to any project, omit the "project" field.`
 
 2. SUMMARY: Detailed organized notes covering EVERYTHING discussed. The speaker rambles and jumps between topics — reorganize into clear grouped sections without losing any detail. Format each topic as its own line: "TOPIC NAME: all details, names, numbers, decisions, context for that topic". Every name, date, number, idea, and decision must appear. Nothing omitted.
 
-Do NOT extract tasks. Do NOT extract knowledge base entries. Only organize the transcript into a title and a detailed topic-by-topic summary.
+Do NOT extract tasks. Do NOT extract knowledge base entries. Only organize the transcript into a title and a detailed topic-by-topic summary.${speakerInstructions}
 
 Return ONLY valid JSON (no markdown, no explanation):
 {
   "title": "Short descriptive title for this voice note",
-  "summary": "<your detailed topic-by-topic notes here>"
+  "summary": "<your detailed topic-by-topic notes here>"${speakersSchemaLine}
 }
 
 Transcript:
@@ -183,12 +328,12 @@ ${transcript}`
 
 3. TASKS: Every actionable item extracted from the transcript. Each task includes a "context" field: the specific topic line from the summary that this task belongs to.
 
-4. KNOWLEDGE BASE: Persistent reference facts worth saving long-term per project — pricing, decisions, requirements, client details, architectural choices. Omit one-off tasks (those go in tasks). One entry per distinct topic/project combination.
+4. KNOWLEDGE BASE: Persistent reference facts worth saving long-term per project — pricing, decisions, requirements, client details, architectural choices. Omit one-off tasks (those go in tasks). One entry per distinct topic/project combination.${speakerInstructions}
 
 Return ONLY valid JSON (no markdown, no explanation):
 {
   "title": "Short descriptive title for this voice note",
-  "summary": "<your detailed topic-by-topic notes here>",
+  "summary": "<your detailed topic-by-topic notes here>"${speakersSchemaLine},
   "tasks": [
     {
       "type": "task",
@@ -222,7 +367,7 @@ ${transcript}`;
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({
-			model: process.env.ORGANIZE_TASKS_MODEL || 'qwen2.5:7b',
+			model: process.env.ORGANIZE_TASKS_MODEL || 'gemma4:e2b',
 			prompt,
 			format: 'json',
 			stream: true,
@@ -272,12 +417,15 @@ ${transcript}`;
 	const parsed = JSON.parse(fullResponse);
 	const title = typeof parsed.title === 'string' ? parsed.title : '';
 	const knowledgeBase = Array.isArray(parsed.knowledgeBase) ? parsed.knowledgeBase : [];
+	const speakers = diarized && parsed.speakers && typeof parsed.speakers === 'object' && !Array.isArray(parsed.speakers)
+		? parsed.speakers
+		: null;
 
 	if (mode === 'kb') {
 		if (knowledgeBase.length === 0) {
 			throw new Error('ollama returned no knowledge base entries');
 		}
-		return { tasks: [], summary: '', title, knowledgeBase };
+		return { tasks: [], summary: '', title, knowledgeBase, speakers };
 	}
 
 	if (mode === 'summary') {
@@ -285,7 +433,7 @@ ${transcript}`;
 		if (!summary) {
 			throw new Error('ollama returned no summary');
 		}
-		return { tasks: [], summary, title, knowledgeBase: [] };
+		return { tasks: [], summary, title, knowledgeBase: [], speakers };
 	}
 
 	const tasks = parsed.tasks;
@@ -295,7 +443,7 @@ ${transcript}`;
 		throw new Error('ollama returned no tasks');
 	}
 
-	return { tasks, summary, title, knowledgeBase };
+	return { tasks, summary, title, knowledgeBase, speakers };
 }
 
 /**
@@ -306,8 +454,9 @@ ${transcript}`;
  * @param {string} summary
  * @param {string} title
  * @param {Array} knowledgeBase
+ * @param {Object|null} speakers — map of SPEAKER_XX labels to names (diarized only)
  */
-export function appendToVoiceTimeline(tasks, transcript = '', summary = '', title = '', knowledgeBase = []) {
+export function appendToVoiceTimeline(tasks, transcript = '', summary = '', title = '', knowledgeBase = [], speakers = null) {
 	mkdirSync(TEMP_DIR, { recursive: true });
 	const timelineFile = getVoiceTimelineFile();
 	mkdirSync(dirname(timelineFile), { recursive: true });
@@ -316,7 +465,7 @@ export function appendToVoiceTimeline(tasks, transcript = '', summary = '', titl
 		session_id: 'voice',
 		tmux_session: 'jat-voice',
 		timestamp: new Date().toISOString(),
-		data: { tasks, transcript, summary, title, knowledgeBase }
+		data: { tasks, transcript, summary, title, knowledgeBase, speakers }
 	};
 	appendFileSync(timelineFile, JSON.stringify(event) + '\n');
 }
@@ -325,10 +474,12 @@ export function appendToVoiceTimeline(tasks, transcript = '', summary = '', titl
  * Append a raw transcript (no task extraction) to the voice inbox timeline.
  * Used by /api/tasks/voice-transcript when the user wants only a clean text
  * copy of what they said — no ollama, no task inference.
- * @param {string} transcript
- * @param {string} title
+ *
+ * @param {string} transcript — raw transcript text
+ * @param {string} title — short title (derived from filename or timestamp)
+ * @param {{ durationSec?: number, sizeBytes?: number, source?: 'text'|'audio' }} [meta]
  */
-export function appendTranscriptToVoiceTimeline(transcript, title = '') {
+export function appendTranscriptToVoiceTimeline(transcript, title = '', meta = {}) {
 	mkdirSync(TEMP_DIR, { recursive: true });
 	const timelineFile = getVoiceTimelineFile();
 	mkdirSync(dirname(timelineFile), { recursive: true });
@@ -337,7 +488,14 @@ export function appendTranscriptToVoiceTimeline(transcript, title = '') {
 		session_id: 'voice',
 		tmux_session: 'jat-voice',
 		timestamp: new Date().toISOString(),
-		data: { transcript, title }
+		data: {
+			transcript,
+			title,
+			charCount: transcript.length,
+			durationSec: meta.durationSec ?? null,
+			sizeBytes: meta.sizeBytes ?? null,
+			source: meta.source ?? 'text'
+		}
 	};
 	appendFileSync(timelineFile, JSON.stringify(event) + '\n');
 }

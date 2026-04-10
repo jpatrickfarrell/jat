@@ -65,6 +65,24 @@ function getAudioDate(filePath) {
 	return new Date();
 }
 
+/**
+ * Read audio duration (seconds) via ffprobe. Returns null on failure.
+ * @param {string} filePath
+ * @returns {number|null}
+ */
+function getAudioDuration(filePath) {
+	try {
+		const result = execSync(
+			`ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${filePath}" 2>/dev/null`,
+			{ encoding: 'utf-8', timeout: 5000 }
+		).trim();
+		const n = parseFloat(result);
+		return isNaN(n) ? null : Math.round(n * 10) / 10;
+	} catch {
+		return null;
+	}
+}
+
 function formatTimestamp(date) {
 	return date.toLocaleString('en-US', {
 		month: 'short', day: 'numeric', year: 'numeric',
@@ -76,10 +94,14 @@ function formatTimestamp(date) {
  * Convert audio -> WAV -> transcribe -> append transcript event (background).
  * @param {string} audioPath
  * @param {string} title
+ * @param {number} sizeBytes — original upload size, captured before ffmpeg deletes the file
  */
-function transcribeInBackground(audioPath, title) {
+function transcribeInBackground(audioPath, title, sizeBytes) {
 	const id = randomBytes(4).toString('hex');
 	const wavPath = join(TEMP_DIR, `transcript-${id}.wav`);
+
+	// Capture duration before ffmpeg (probes the original container).
+	const durationSec = getAudioDuration(audioPath);
 
 	vlog(`[voice-transcript] Received audio: ${audioPath}`);
 	vlog('[voice-transcript] Converting to WAV...');
@@ -108,8 +130,8 @@ function transcribeInBackground(audioPath, title) {
 		try { unlinkSync(wavPath); } catch {}
 
 		try {
-			appendTranscriptToVoiceTimeline(text, title);
-			vlog(`[voice-transcript] Done — transcript (${text.length} chars) added to voice inbox as "${title}"`);
+			appendTranscriptToVoiceTimeline(text, title, { durationSec, sizeBytes, source: 'audio' });
+			vlog(`[voice-transcript] Done — transcript (${text.length} chars, ${durationSec ?? '?'}s) added to voice inbox as "${title}"`);
 		} catch (e) {
 			vlog(`[voice-transcript] ERROR: failed to append transcript: ${e.message}`);
 		}
@@ -187,14 +209,15 @@ export async function POST({ request }) {
 			}
 		}
 
+		let sizeBytes = 0;
 		try {
-			const sz = statSync(audioTempPath).size;
-			vlog(`[voice-transcript] Audio received: "${title}" (${(sz/1024).toFixed(0)}KB) — queuing transcription`);
+			sizeBytes = statSync(audioTempPath).size;
+			vlog(`[voice-transcript] Audio received: "${title}" (${(sizeBytes/1024).toFixed(0)}KB) — queuing transcription`);
 		} catch {
 			vlog(`[voice-transcript] Audio received: "${title}" — queuing transcription`);
 		}
 
-		transcribeInBackground(audioTempPath, title);
+		transcribeInBackground(audioTempPath, title, sizeBytes);
 
 		return json({
 			success: true,

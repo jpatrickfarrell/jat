@@ -42,6 +42,37 @@ DB="$PROJECT_ROOT/$DB_NAME"
 DATA_DB="$PROJECT_ROOT/$DATA_DB_NAME"
 BASES_DB="$PROJECT_ROOT/$BASES_DB_NAME"
 
+# Resolve the configured JAT task backend for the current project.
+# Reads ~/.config/jat/projects.json and matches by absolute path.
+# Defaults to "sqlite" when the project isn't listed or has no backend field.
+# Echoes: "sqlite" or "postgres".  Never fails — missing jq is treated as sqlite.
+resolve_project_backend() {
+  local config="$HOME/.config/jat/projects.json"
+  [[ -f "$config" ]] || { echo "sqlite"; return; }
+  command -v jq >/dev/null 2>&1 || { echo "sqlite"; return; }
+
+  # Expand ~ in config paths at query time so absolute matching works.
+  local backend
+  backend="$(jq -r --arg root "$PROJECT_ROOT" --arg home "$HOME" '
+    .projects // {} | to_entries[] |
+    select((.value.path // "" | gsub("^~"; $home)) == $root) |
+    (.value.backend // "sqlite")
+  ' "$config" 2>/dev/null | head -n1)"
+
+  [[ -n "$backend" ]] || backend="sqlite"
+  echo "$backend"
+}
+
+# Guard: abort with a clear error if the current project is postgres-backed.
+# The bash CLI is sqlite-only; postgres projects must use the IDE/Node code path.
+require_sqlite_backend() {
+  local backend
+  backend="$(resolve_project_backend)"
+  if [[ "$backend" != "sqlite" ]]; then
+    die "Project '$PROJECT_ROOT' is configured with backend=$backend. The 'jt' bash CLI only supports sqlite. Use the JAT IDE or a Node entry point for postgres-backed projects."
+  fi
+}
+
 # Get project prefix from directory name
 project_prefix() {
   basename "$PROJECT_ROOT" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-'
@@ -83,8 +114,9 @@ sql_exec() {
   sqlite3 "$DB" "PRAGMA foreign_keys=ON; $1"
 }
 
-# Ensure DB exists
+# Ensure DB exists and the configured backend is sqlite (this CLI's only flavour).
 require_db() {
+  require_sqlite_backend
   [[ -f "$DB" ]] || die "No .jat/ database found. Run 'jt init' first."
 }
 

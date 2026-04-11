@@ -44,6 +44,14 @@
 	let tasks = $state<CompletedTask[]>([]);
 	let loading = $state(false);
 	let error = $state<string | null>(null);
+	let copiedHistoryId = $state<string | null>(null);
+
+	function copyHistoryTaskId(e: MouseEvent, taskId: string) {
+		e.stopPropagation();
+		navigator.clipboard.writeText(taskId);
+		copiedHistoryId = taskId;
+		setTimeout(() => (copiedHistoryId = null), 1500);
+	}
 
 	// Fetch completed tasks when drawer opens
 	$effect(() => {
@@ -454,7 +462,7 @@
 													{/if}
 												</span>
 												<div style="display: flex; flex-direction: column; gap: 2px;">
-													<span style="font-size: 0.7rem; font-family: ui-monospace, monospace; font-weight: 600; line-height: 1; color: var(--pc);">{task.id}</span>
+													<span role="button" tabindex="0" onclick={(e) => { e.stopPropagation(); copyHistoryTaskId(e, task.id); }} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); copyHistoryTaskId(e as any, task.id); } }} title="Click to copy task ID" style="font-size: 0.7rem; font-family: ui-monospace, monospace; font-weight: 600; line-height: 1; color: var(--pc); cursor: pointer;">{copiedHistoryId === task.id ? '✓ copied' : task.id}</span>
 													<span style="display: flex; align-items: center; gap: 3px;">
 														{#if task.issue_type}
 															<span style="font-size: 0.7rem; line-height: 1;">{typeVis.icon}</span>

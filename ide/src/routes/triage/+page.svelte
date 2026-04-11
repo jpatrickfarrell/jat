@@ -48,6 +48,7 @@
 	let loading = $state(true);
 	let refreshInterval: ReturnType<typeof setInterval> | null = null;
 	let spawning = $state<string | null>(null); // taskId being spawned
+	let copiedTriageId = $state<string | null>(null); // taskId that was just copied
 
 	// Swipe state per card
 	let swipeOffsets = $state<Map<string, number>>(new Map());
@@ -55,6 +56,14 @@
 
 	const SWIPE_THRESHOLD = 80;
 	const SWIPE_DEADZONE = 10;
+
+	function copyTriageTaskId(e: MouseEvent, taskId: string) {
+		e.stopPropagation();
+		navigator.clipboard.writeText(taskId);
+		copiedTriageId = taskId;
+		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(4);
+		setTimeout(() => (copiedTriageId = null), 1500);
+	}
 
 	function haptic(ms = 8) {
 		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(ms);
@@ -308,7 +317,7 @@
 											<span class="task-priority" style="color: {getPriorityColor(task.priority)};">P{task.priority}</span>
 										</div>
 										<div class="task-meta">
-											<span class="task-id-label">{task.id}</span>
+											<button class="task-id-label" onclick={(e) => copyTriageTaskId(e, task.id)} title="Click to copy task ID">{copiedTriageId === task.id ? '✓' : task.id}</button>
 											{#if task.due_date}
 												<span class="task-due" class:due-overdue={overdue} class:due-today={dueToday}>
 													{overdue ? '⚠ ' : ''}{formatShortDate(task.due_date)}
@@ -494,6 +503,13 @@
 		font-size: 0.60rem;
 		color: oklch(0.35 0.02 250);
 		font-family: ui-monospace, monospace;
+		background: none;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+	}
+	.task-id-label:hover {
+		color: oklch(0.55 0.10 200);
 	}
 	.agent-notask {
 		font-size: 0.72rem;

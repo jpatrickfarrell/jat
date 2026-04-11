@@ -2838,7 +2838,7 @@
 
 			<!-- Content (scrollable area between sticky header and footer) - Industrial -->
 			<div
-				class="flex-1 overflow-y-auto p-6 flex flex-col min-h-0 bg-base-100"
+				class="flex-1 overflow-y-auto px-6 pt-5 pb-6 flex flex-col min-h-0 bg-base-100"
 			>
 				{#if loading}
 					<!-- Loading state - Industrial skeleton -->
@@ -2868,7 +2868,8 @@
 					</div>
 				{:else if task}
 					<!-- View Mode -->
-					<div class="flex flex-col gap-6">
+					<div class="flex flex-col gap-10">
+						<div class="flex flex-col gap-6">
 						<!-- Labels (badges, click to edit) - Industrial -->
 						<div>
 							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider text-base-content/60">Labels</h4>
@@ -3507,6 +3508,9 @@
 							</div>
 						{/if}
 
+						</div>
+
+						<div class="flex flex-col gap-6">
 						<!-- Attachments - Industrial (drop zone is now the whole drawer) -->
 						<div
 							class="relative rounded transition-all duration-200"
@@ -4310,6 +4314,7 @@
 								/>
 							</div>
 						{/if}
+						</div>
 					</div>
 				{/if}
 
@@ -4378,7 +4383,7 @@
 			<!-- Footer Actions - Industrial -->
 			{#if !loading && !error && task}
 				<div
-					class="p-6 bg-base-200 border-t border-base-300"
+					class="px-6 py-4 bg-base-200 border-t border-base-300"
 				>
 					<div class="flex justify-between items-center">
 						<!-- Delete button (left) -->

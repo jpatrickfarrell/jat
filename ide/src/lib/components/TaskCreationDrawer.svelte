@@ -1765,8 +1765,10 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 
 			<!-- Content: Task mode (original form) -->
 			{#if activeMode === 'task'}
-			<form onsubmit={handleSubmit} class="flex-1 overflow-y-auto p-4 flex flex-col min-h-0 bg-base-300">
-				<div class="space-y-3">
+			<form onsubmit={handleSubmit} class="flex-1 overflow-y-auto px-6 pt-5 pb-6 flex flex-col min-h-0 bg-base-300">
+				<div class="flex flex-col gap-6">
+					<!-- SECTION: Describe — title, description, notes, AI error -->
+					<section class="space-y-3">
 					<!-- Title (Required) - Industrial -->
 					<div class="form-control">
 						<label class="label justify-between w-full py-0.5" for="task-title">
@@ -1877,7 +1879,10 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 							</div>
 						</div>
 					{/if}
+					</section>
 
+					<!-- SECTION: Classify — type/priority/labels, context -->
+					<section class="space-y-3">
 					<!-- Type / Priority / Labels — 3-col grid -->
 					<div class="grid grid-cols-3 gap-3">
 						<!-- Type (Required) -->
@@ -1979,7 +1984,10 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 							/>
 						</div>
 					</div>
+					</section>
 
+					<!-- SECTION: Execute — command/date, schedule, attachments -->
+					<section class="space-y-3">
 					<!-- Command / Due Date — 2-col grid -->
 					<div class="grid grid-cols-2 gap-3">
 						<!-- Command (searchable dropdown) -->
@@ -2147,7 +2155,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 
 						<!-- Click-to-browse zone (compact) -->
 						<div
-							class="relative rounded-lg p-3 transition-all duration-200 {formDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} bg-base-200 border-base-content/30"
+							class="relative rounded-lg p-4 transition-all duration-200 {formDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} bg-base-200 border-base-content/30"
 							style="border: 2px dashed;"
 							onclick={() => !formDisabled && openFilePicker()}
 							role="button"
@@ -2206,7 +2214,10 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 							</div>
 						{/if}
 					</div>
+					</section>
 
+					<!-- SECTION: Rules — review override, dependencies, AI analysis -->
+					<section class="space-y-3">
 					<!-- Review Override — compact join -->
 					<div class="form-control">
 						<div class="label py-0.5">
@@ -2251,7 +2262,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 
 					<!-- Dependencies (Optional) - Industrial -->
 					<div class="form-control">
-						<div class="flex items-center justify-between mb-2">
+						<div class="label py-0.5 justify-between">
 							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
 								Dependencies
 								{#if selectedDependencies.length > 0}
@@ -2383,7 +2394,10 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 							</p>
 						</details>
 					{/if}
+					</section>
 
+					<!-- SECTION: Feedback — submit/success alerts -->
+					<section class="space-y-3">
 					<!-- Error Message - Industrial -->
 					{#if submitError}
 						<div
@@ -2427,6 +2441,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 							<span>{successMessage}</span>
 						</div>
 					{/if}
+					</section>
 				</div>
 			</form>
 			{:else}
@@ -2476,7 +2491,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 			<!-- Footer Actions - Industrial (only for Task mode) -->
 			{#if activeMode === 'task'}
 			<div
-				class="p-6 bg-base-200 border-t border-base-content/30"
+				class="px-6 py-4 bg-base-200 border-t border-base-content/30"
 			>
 				<div class="flex items-center justify-between">
 					<!-- Spacer (shortcuts shown in dropdown) -->

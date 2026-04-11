@@ -15,6 +15,14 @@
 	let sending = $state(false);
 	let error = $state('');
 	let closeTask = $state(true);
+	let copiedId = $state(false);
+
+	function copyFeedbackTaskId(e: MouseEvent) {
+		e.stopPropagation();
+		navigator.clipboard.writeText(taskId);
+		copiedId = true;
+		setTimeout(() => (copiedId = false), 1500);
+	}
 
 	function resetForm() {
 		message = '';
@@ -112,7 +120,7 @@
 		<div class="px-5 py-4">
 			<!-- Task info -->
 			<div class="mb-3 flex items-center gap-2">
-				<span class="badge badge-sm font-mono" style="background: oklch(0.25 0.02 250); color: oklch(0.65 0.05 250);">{taskId}</span>
+				<button class="badge badge-sm font-mono cursor-pointer hover:opacity-80 transition-opacity" style="background: oklch(0.25 0.02 250); color: oklch(0.65 0.05 250); border: none;" onclick={copyFeedbackTaskId} title="Click to copy task ID">{copiedId ? '✓ copied' : taskId}</button>
 				<span class="text-sm truncate" style="color: oklch(0.75 0.02 250);">{displayTitle}</span>
 			</div>
 

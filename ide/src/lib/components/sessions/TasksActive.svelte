@@ -949,6 +949,14 @@
 	let ctxStatusSubmenuOpen = $state(false);
 	let ctxStateSubmenuOpen = $state(false);
 	let ctxProjectSubmenuOpen = $state(false);
+	let copiedMobileId = $state<string | null>(null);
+	function copyMobileId(e: MouseEvent, taskId: string) {
+		e.stopPropagation();
+		navigator.clipboard.writeText(taskId);
+		copiedMobileId = taskId;
+		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(4);
+		setTimeout(() => (copiedMobileId = null), 1500);
+	}
 
 	function handleContextMenu(session: TmuxSession, event: MouseEvent) {
 		if (session.type !== 'agent') return;
@@ -1425,7 +1433,7 @@
 								</div>
 							{/if}
 							<div class="mobile-card-row2">
-								<span class="mobile-task-id" style="color: {statusDotColor};">{sessionTask.id}</span>
+								<button class="mobile-task-id" style="color: {statusDotColor};" onclick={(e) => copyMobileId(e, sessionTask.id)} title="Click to copy task ID">{copiedMobileId === sessionTask.id ? '✓' : sessionTask.id}</button>
 								{#if sessionTask.issue_type}
 									<span class="mobile-separator">·</span>
 									<span class="mobile-type-icon" title={typeVisual.label}>{typeVisual.icon}</span>
@@ -2886,6 +2894,12 @@
 		font-weight: 600;
 		white-space: nowrap;
 		flex-shrink: 0;
+		background: none;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+		font-family: inherit;
+		font-size: inherit;
 	}
 
 	.mobile-elapsed {

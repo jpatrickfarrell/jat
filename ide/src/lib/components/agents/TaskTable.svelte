@@ -3425,6 +3425,7 @@
 											{@const isOnCriticalPath = criticalPathResult?.criticalPathIds.has(task.id) && task.status !== 'closed'}
 											{@const criticalPathLength = criticalPathResult?.pathLengths.get(task.id) || 0}
 											{@const reviewStatus = computeReviewStatus(task, reviewRules)}
+											{@const titleSource = getTaskSourceOrigin(task)}
 											<tr
 												class="industrial-row hover:bg-base-200/50 cursor-pointer transition-colors {isNewTask ? 'task-new' : ''} {isStarting ? 'task-starting' : ''} {isWorkingCompleted ? 'task-working-completed' : isCompleted ? 'task-completed' : ''} {isChildTask ? 'pl-6' : ''} {taskIsActive && isAgentGenerating(task.assignee) ? 'row-shimmer' : ''}"
 												onclick={() => handleRowClick(task.id)}
@@ -3524,7 +3525,6 @@
 												</td>
 
 												<!-- Title -->
-												{@const titleSource = getTaskSourceOrigin(task)}
 												<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
 													<div>
 														<div class="flex items-start gap-1.5">
@@ -3929,6 +3929,7 @@
 									{@const isOnCriticalPath = criticalPathResult?.criticalPathIds.has(task.id) && task.status !== 'closed'}
 									{@const criticalPathLength = criticalPathResult?.pathLengths.get(task.id) || 0}
 									{@const reviewStatusStd = computeReviewStatus(task, reviewRules)}
+										{@const stdTitleSource = getTaskSourceOrigin(task)}
 									<!-- Main task row -->
 									<tr
 										class="cursor-pointer group overflow-visible industrial-row {depStatus.hasBlockers ? 'opacity-70' : ''} {isNewTask ? 'task-new-entrance' : ''} {isStarting ? 'task-starting' : ''} {isWorkingCompleted ? 'task-working-completed' : isCompleted ? 'task-completed' : ''} {taskIsActive && isAgentGenerating(task.assignee) ? 'row-shimmer' : ''}"
@@ -4032,7 +4033,6 @@
 												}}
 											/>
 										</td>
-										{@const stdTitleSource = getTaskSourceOrigin(task)}
 										<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
 											<div>
 												<div class="flex items-start gap-1.5">
@@ -4205,6 +4205,7 @@
 						{#each exitingTasks as task (task.id)}
 							{@const isTaskCompleted = task.status === 'closed'}
 							{@const blockedTasks = blockedByMap.get(task.id) || []}
+							{@const exitingTitleSource = getTaskSourceOrigin(task)}
 							<tr
 								class="{isTaskCompleted ? 'task-completed-exit' : 'task-exit'}"
 								style="
@@ -4252,7 +4253,6 @@
 										</div>
 									{/if}
 								</td>
-								{@const exitingTitleSource = getTaskSourceOrigin(task)}
 								<td style="background: transparent;">
 									<div class="flex items-start gap-1.5">
 										{#if exitingTitleSource.clientVisible}

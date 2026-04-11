@@ -1447,6 +1447,15 @@
 		};
 	});
 
+	let copiedMobileId = $state<string | null>(null);
+	function copyMobileId(e: MouseEvent, taskId: string) {
+		e.stopPropagation();
+		navigator.clipboard.writeText(taskId);
+		copiedMobileId = taskId;
+		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(4);
+		setTimeout(() => (copiedMobileId = null), 1500);
+	}
+
 	// Context menu actions
 	let resumingTaskId = $state<string | null>(null);
 
@@ -1959,7 +1968,7 @@
 								<div class="mobile-task-description">{task.description}</div>
 							{/if}
 							<div class="mobile-task-meta">
-								<span class="mobile-task-id" style="{projectColor ? `color: ${projectColor};` : 'color: oklch(0.65 0.15 200);'}">{task.id}</span>
+								<button class="mobile-task-id" style="{projectColor ? `color: ${projectColor};` : 'color: oklch(0.65 0.15 200);'}" onclick={(e) => copyMobileId(e, task.id)} title="Click to copy task ID">{copiedMobileId === task.id ? '✓' : task.id}</button>
 								{#if task.priority != null && task.priority <= 2}
 									<span class="mobile-task-separator">·</span>
 									<span class="mobile-task-priority mobile-task-priority-{task.priority}">P{task.priority}</span>
@@ -3778,6 +3787,16 @@
 		font-family: ui-monospace, monospace;
 		color: oklch(0.50 0.02 250);
 		flex-wrap: wrap;
+	}
+
+	.mobile-task-id {
+		background: none;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+		font-family: inherit;
+		font-size: inherit;
+		font-weight: 600;
 	}
 
 	.mobile-task-priority-2 {

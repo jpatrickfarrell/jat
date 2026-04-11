@@ -5259,7 +5259,7 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 						size="xs"
 						showType={false}
 						showStatus={false}
-						onOpenTask={onTaskClick}
+						copyOnly={true}
 						{browserPort}
 					/>
 					{#if displayTask.priority !== undefined}
@@ -5606,7 +5606,7 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 								size="sm"
 								showType={false}
 								showStatus={false}
-								onOpenTask={onTaskClick}
+								copyOnly={true}
 								{browserPort}
 							/>
 						</div>

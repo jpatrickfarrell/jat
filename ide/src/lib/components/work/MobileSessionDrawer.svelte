@@ -583,6 +583,15 @@
 		};
 	}
 
+	let copiedMobileTaskId = $state<string | null>(null);
+	function copyMobileTaskId(e: MouseEvent, taskId: string) {
+		e.stopPropagation();
+		navigator.clipboard.writeText(taskId);
+		copiedMobileTaskId = taskId;
+		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(4);
+		setTimeout(() => (copiedMobileTaskId = null), 1500);
+	}
+
 	// Minimap scroll detection: track the wrapper element ref
 	let wrapperRef: HTMLElement | null = $state(null);
 
@@ -875,7 +884,7 @@
 									<div class="mobile-description">{task.description}</div>
 								{/if}
 								<div class="mobile-card-row2">
-									<span class="mobile-task-id" style="color: {stateVisual.accent};">{task.id}</span>
+									<button class="mobile-task-id" style="color: {stateVisual.accent};" onclick={(e) => copyMobileTaskId(e, task.id)} title="Click to copy task ID">{copiedMobileTaskId === task.id ? '✓' : task.id}</button>
 									{#if elapsed}
 										<span class="mobile-separator">·</span>
 										<span class="mobile-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
@@ -1704,6 +1713,10 @@
 	.mobile-task-id {
 		font-family: monospace;
 		font-size: 0.625rem;
+		background: none;
+		border: none;
+		padding: 0;
+		cursor: pointer;
 	}
 
 	.mobile-elapsed {

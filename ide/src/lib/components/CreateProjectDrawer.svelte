@@ -312,8 +312,8 @@
 			accentColor: 'oklch(0.65 0.15 45)',
 			icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.51 15.86l.55-1.89c.12-.41.08-.79-.11-1.07-.17-.25-.45-.4-.78-.42l-8.07-.1a.17.17 0 01-.15-.09.17.17 0 01.01-.18c.04-.06.1-.1.17-.1l8.16-.1c.83-.05 1.74-.72 2.07-1.53l.42-1.03a.35.35 0 00.02-.18A5.82 5.82 0 0013.26 4a5.84 5.84 0 00-5.32 3.45 2.56 2.56 0 00-3.97 1.75A4.09 4.09 0 000 13.25a.16.16 0 00.16.17h15.87c.08 0 .14-.04.17-.11l.31-.95v-.5zM20.16 9.22a.09.09 0 00-.09.02.09.09 0 00-.04.08 3.37 3.37 0 01-.13.81l-.53 1.81c-.12.41-.08.79.11 1.07.17.25.45.4.78.42l2.1.1c.06 0 .12.04.15.09a.17.17 0 01-.01.18c-.04.06-.1.1-.17.1l-2.19.1c-.84.05-1.74.72-2.07 1.53l-.12.3a.08.08 0 00.04.1.08.08 0 00.05.02h5.73A.22.22 0 0024 15.8 5.59 5.59 0 0020.16 9.22z"/></svg>',
 			secrets: [
-				{ key: 'cloudflare-api-token', label: 'API Token', type: 'secret', required: true, placeholder: 'Token with Pages:Read', group: 'Cloudflare' },
-				{ key: 'cloudflare-account-id', label: 'Account ID', type: 'string', required: true, placeholder: '48c159dd...', group: 'Cloudflare' },
+				{ key: 'cloudflare-api-token', label: 'API Token', type: 'secret', required: true, placeholder: 'Token with Pages:Read', group: 'Cloudflare', scope: 'global' },
+				{ key: 'cloudflare-account-id', label: 'Account ID', type: 'string', required: true, placeholder: '48c159dd...', group: 'Cloudflare', scope: 'global' },
 				{ key: 'cloudflare-pages-project', label: 'Pages Project', type: 'string', required: true, placeholder: 'my-app', group: 'Cloudflare' },
 			],
 			integration: {
@@ -337,7 +337,7 @@
 			accentColor: 'oklch(0.60 0.15 0)',
 			icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 6a2 2 0 012-2h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6zm2.4 0L12 11.6 19.6 6H4.4zM20 7.87l-8 5.93-8-5.93V18h16V7.87z"/></svg>',
 			secrets: [
-				{ key: 'resend-api-key', label: 'API Key', type: 'secret', required: true, placeholder: 're_...', group: 'Resend' },
+				{ key: 'resend-api-key', label: 'API Key', type: 'secret', required: true, placeholder: 're_...', group: 'Resend', scope: 'global' },
 			],
 		},
 		{
@@ -347,7 +347,7 @@
 			accentColor: 'oklch(0.60 0.12 160)',
 			icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M22.28 9.37a6.04 6.04 0 00-.52-4.93 6.1 6.1 0 00-6.57-2.93A6.06 6.06 0 0010.68 0a6.1 6.1 0 00-5.82 4.23 6.05 6.05 0 00-4.03 2.93 6.1 6.1 0 00.75 7.15 6.04 6.04 0 00.52 4.93 6.1 6.1 0 006.57 2.93A6.06 6.06 0 0013.18 24a6.1 6.1 0 005.82-4.22 6.05 6.05 0 004.03-2.93 6.1 6.1 0 00-.75-7.48zM13.18 22.44a4.56 4.56 0 01-2.93-1.06l.15-.08 4.86-2.81a.79.79 0 00.4-.69v-6.86l2.05 1.19a.07.07 0 01.04.06v5.68a4.58 4.58 0 01-4.57 4.57zM3.6 18.31a4.54 4.54 0 01-.55-3.06l.15.09 4.86 2.81a.79.79 0 00.79 0l5.93-3.43v2.37a.07.07 0 01-.03.06l-4.91 2.84a4.58 4.58 0 01-6.24-1.68zM2.34 7.9A4.54 4.54 0 014.72 5.9v5.78a.79.79 0 00.4.68l5.93 3.43-2.05 1.18a.08.08 0 01-.07 0l-4.91-2.83A4.58 4.58 0 012.34 7.9zm17.23 4.01l-5.93-3.43 2.05-1.18a.08.08 0 01.07 0l4.91 2.83a4.57 4.57 0 01-.7 8.24v-5.78a.79.79 0 00-.4-.68zm2.04-3.08l-.15-.09-4.86-2.81a.79.79 0 00-.79 0L9.88 9.36V6.99a.07.07 0 01.03-.06l4.91-2.83a4.57 4.57 0 016.79 4.73zM8.72 12.87l-2.05-1.19a.07.07 0 01-.04-.06V5.94a4.57 4.57 0 017.5-3.5l-.15.08-4.86 2.81a.79.79 0 00-.4.69v6.85zm1.11-2.4l2.64-1.53 2.64 1.52v3.05l-2.64 1.53-2.64-1.53v-3.04z"/></svg>',
 			secrets: [
-				{ key: 'openai-api-key', label: 'API Key', type: 'secret', required: true, placeholder: 'sk-...', group: 'OpenAI' },
+				{ key: 'openai-api-key', label: 'API Key', type: 'secret', required: true, placeholder: 'sk-...', group: 'OpenAI', scope: 'global' },
 			],
 		},
 		{
@@ -357,7 +357,7 @@
 			accentColor: 'oklch(0.60 0.18 30)',
 			icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.83 2L21 22h-4.3l-7.17-20h4.3zM7.17 2L0 22h4.3l7.17-20H7.17z"/></svg>',
 			secrets: [
-				{ key: 'anthropic-api-key', label: 'API Key', type: 'secret', required: true, placeholder: 'sk-ant-...', group: 'Anthropic' },
+				{ key: 'anthropic-api-key', label: 'API Key', type: 'secret', required: true, placeholder: 'sk-ant-...', group: 'Anthropic', scope: 'global' },
 			],
 		},
 	];
@@ -573,6 +573,14 @@
 		placeholder?: string;
 		description?: string;
 		group?: string;
+		/**
+		 * Secret scope:
+		 * - 'project' (default): stored as {projectKey}-{key}, unique per project
+		 * - 'global': stored as {key} (no prefix), shared across all projects.
+		 *   The wizard probes jat-secret for the unprefixed name and offers
+		 *   "Reuse existing" when found.
+		 */
+		scope?: 'global' | 'project';
 	}
 	interface JatConfigIntegration {
 		id: string;
@@ -600,6 +608,12 @@
 	let configLoading = $state(false);
 	let secretValues = $state<Record<string, string>>({});
 	let selectedIntegrations = $state<Set<string>>(new Set());
+
+	// Global secret reuse tracking — for secrets with scope: 'global'.
+	// `exists` means an unprefixed secret of that name is already in the vault.
+	// `override` means the user chose to replace the existing global value.
+	let globalSecretExists = $state<Record<string, boolean>>({});
+	let globalSecretOverride = $state<Record<string, boolean>>({});
 
 	// Derived: required secret keys for the currently selected integrations
 	const configRequiredKeys = $derived.by(() => {
@@ -649,6 +663,22 @@
 			.map(s => s.integration!)
 	);
 
+	// Derived: global-scoped secret keys needed by the active flow (config or manual)
+	const globalScopedKeys = $derived.by(() => {
+		const keys: string[] = [];
+		if (projectConfig) {
+			for (const k of configRequiredKeys) {
+				const def = (projectConfig.secrets ?? []).find(s => s.key === k);
+				if (def?.scope === 'global') keys.push(k);
+			}
+		} else {
+			for (const s of serviceRequiredSecrets) {
+				if (s.scope === 'global') keys.push(s.key);
+			}
+		}
+		return keys;
+	});
+
 	// Fetch jat.config.json when entering the tech stack step (step 2)
 	$effect(() => {
 		if (currentStep !== 2) return;
@@ -680,6 +710,29 @@
 			})
 			.catch(() => { projectConfig = null; })
 			.finally(() => { configLoading = false; });
+	});
+
+	// Probe jat-secret for existing global secrets so we can offer "reuse"
+	// instead of asking the user to re-enter an account-level key.
+	$effect(() => {
+		if (currentStep !== 2) return;
+		const keys = globalScopedKeys;
+		if (keys.length === 0) {
+			globalSecretExists = {};
+			return;
+		}
+		fetch('/api/credentials/check-global', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ keys }),
+		})
+			.then((r) => r.json())
+			.then((data) => {
+				if (data?.success && data.exists) {
+					globalSecretExists = data.exists;
+				}
+			})
+			.catch(() => { /* non-blocking — fall back to normal input */ });
 	});
 
 	// Auto-focus when drawer opens
@@ -1208,10 +1261,34 @@
 			if (createdProjectKey && (hasConfigInteg || hasManualInteg)) {
 				try {
 					let integsToSetup: JatConfigIntegration[];
-					let secretsPayload: Record<string, string> = {};
+					// Secrets stored under `{projectKey}-{key}` in jat-secret
+					const projectSecrets: Record<string, string> = {};
+					// Secrets stored under unprefixed `{key}` (shared across projects)
+					const globalSecrets: Record<string, string> = {};
+					// Full list of global-scoped key names — used server-side so the
+					// config interpolator skips the project prefix for `$key` / `@key`.
+					const globalKeyNames: string[] = [];
+
+					const routeSecret = (def: JatConfigSecret) => {
+						if (def.scope === 'global') {
+							if (!globalKeyNames.includes(def.key)) globalKeyNames.push(def.key);
+							// Only send a value when no existing global secret is found
+							// or the user explicitly chose to override it. Otherwise we
+							// reuse the value already in the vault.
+							const exists = globalSecretExists[def.key];
+							const override = globalSecretOverride[def.key];
+							const shouldSendValue = !exists || override;
+							if (shouldSendValue && secretValues[def.key]?.trim()) {
+								globalSecrets[def.key] = secretValues[def.key].trim();
+							}
+						} else {
+							if (secretValues[def.key]?.trim()) {
+								projectSecrets[def.key] = secretValues[def.key].trim();
+							}
+						}
+					};
 
 					if (hasConfigInteg) {
-						// Config-driven path (existing logic)
 						const requiredKeys = new Set<string>();
 						integsToSetup = [];
 						for (const integ of projectConfig!.integrations ?? []) {
@@ -1221,14 +1298,13 @@
 							}
 						}
 						for (const k of requiredKeys) {
-							if (secretValues[k]?.trim()) secretsPayload[k] = secretValues[k].trim();
+							const def = (projectConfig!.secrets ?? []).find(s => s.key === k)
+								?? { key: k, label: k, type: 'secret' as const };
+							routeSecret(def);
 						}
 					} else {
-						// Manual service selection path
 						integsToSetup = serviceIntegrations;
-						for (const s of serviceRequiredSecrets) {
-							if (secretValues[s.key]?.trim()) secretsPayload[s.key] = secretValues[s.key].trim();
-						}
+						for (const s of serviceRequiredSecrets) routeSecret(s);
 					}
 
 					const integRes = await fetch('/api/projects/setup-integrations', {
@@ -1236,7 +1312,9 @@
 						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({
 							projectKey: createdProjectKey,
-							secrets: secretsPayload,
+							secrets: projectSecrets,
+							globalSecrets,
+							globalKeyNames,
 							integrations: integsToSetup,
 						}),
 					});
@@ -1769,19 +1847,42 @@
 												<div class="text-xs font-mono font-semibold uppercase tracking-wider" style="color: oklch(0.60 0.12 240);">{group}</div>
 											{/if}
 											{#each groupSecrets as secret}
+												{@const isGlobal = secret.scope === 'global'}
+												{@const hasExisting = isGlobal && globalSecretExists[secret.key]}
+												{@const isReusing = hasExisting && !globalSecretOverride[secret.key]}
 												<div class="flex flex-col gap-1.5">
-													<label class="text-xs" style="color: oklch(0.55 0.02 250);" for="ts-secret-{secret.key}">
+													<label class="text-xs flex items-center gap-1.5" style="color: oklch(0.55 0.02 250);" for="ts-secret-{secret.key}">
 														{secret.label ?? secret.key}
+														{#if isGlobal}
+															<span class="text-[10px] px-1.5 py-0.5 rounded font-mono uppercase tracking-wider" style="background: oklch(0.22 0.08 240 / 0.3); color: oklch(0.70 0.15 240); border: 1px solid oklch(0.40 0.12 240 / 0.4);">global</span>
+														{/if}
 														{#if !secret.required}<span style="color: oklch(0.40 0.02 250);"> (optional)</span>{/if}
 													</label>
-													<input
-														id="ts-secret-{secret.key}"
-														type={secret.type === 'secret' ? 'password' : (secret.type === 'url' ? 'url' : 'text')}
-														class="input input-bordered input-sm w-full font-mono text-xs"
-														placeholder={secret.placeholder ?? ''}
-														bind:value={secretValues[secret.key]}
-														style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
-													/>
+													{#if isReusing}
+														<div class="flex items-center justify-between gap-2 rounded px-2.5 py-2" style="background: oklch(0.22 0.08 145 / 0.2); border: 1px solid oklch(0.40 0.15 145 / 0.4);">
+															<div class="flex items-center gap-2 text-xs" style="color: oklch(0.75 0.12 145);">
+																<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+																Reusing existing global secret
+															</div>
+															<button type="button" class="btn btn-ghost btn-xs" onclick={() => globalSecretOverride = { ...globalSecretOverride, [secret.key]: true }}>
+																Override
+															</button>
+														</div>
+													{:else}
+														<input
+															id="ts-secret-{secret.key}"
+															type={secret.type === 'secret' ? 'password' : (secret.type === 'url' ? 'url' : 'text')}
+															class="input input-bordered input-sm w-full font-mono text-xs"
+															placeholder={secret.placeholder ?? ''}
+															bind:value={secretValues[secret.key]}
+															style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
+														/>
+														{#if hasExisting}
+															<button type="button" class="text-[11px] text-left self-start" style="color: oklch(0.65 0.15 240);" onclick={() => globalSecretOverride = { ...globalSecretOverride, [secret.key]: false }}>
+																Cancel override — reuse existing
+															</button>
+														{/if}
+													{/if}
 													{#if secret.description}
 														<p class="text-[11px]" style="color: oklch(0.45 0.02 250);">{secret.description}</p>
 													{/if}
@@ -1826,19 +1927,42 @@
 								<div class="flex flex-col gap-4 pt-2">
 									<div class="text-xs font-mono uppercase tracking-wider" style="color: oklch(0.55 0.02 250);">Credentials</div>
 									{#each serviceRequiredSecrets as secret}
+										{@const isGlobal = secret.scope === 'global'}
+										{@const hasExisting = isGlobal && globalSecretExists[secret.key]}
+										{@const isReusing = hasExisting && !globalSecretOverride[secret.key]}
 										<div class="flex flex-col gap-1.5">
-											<label class="text-xs font-semibold" style="color: oklch(0.65 0.02 250);" for="ts-svc-{secret.key}">
+											<label class="text-xs font-semibold flex items-center gap-1.5" style="color: oklch(0.65 0.02 250);" for="ts-svc-{secret.key}">
 												{secret.label}
+												{#if isGlobal}
+													<span class="text-[10px] px-1.5 py-0.5 rounded font-mono uppercase tracking-wider" style="background: oklch(0.22 0.08 240 / 0.3); color: oklch(0.70 0.15 240); border: 1px solid oklch(0.40 0.12 240 / 0.4);">global</span>
+												{/if}
 												{#if !secret.required}<span class="font-normal" style="color: oklch(0.40 0.02 250);"> (optional)</span>{/if}
 											</label>
-											<input
-												id="ts-svc-{secret.key}"
-												type={secret.type === 'secret' ? 'password' : (secret.type === 'url' ? 'url' : 'text')}
-												class="input input-bordered input-sm w-full font-mono text-xs"
-												placeholder={secret.placeholder ?? ''}
-												bind:value={secretValues[secret.key]}
-												style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
-											/>
+											{#if isReusing}
+												<div class="flex items-center justify-between gap-2 rounded px-2.5 py-2" style="background: oklch(0.22 0.08 145 / 0.2); border: 1px solid oklch(0.40 0.15 145 / 0.4);">
+													<div class="flex items-center gap-2 text-xs" style="color: oklch(0.75 0.12 145);">
+														<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+														Reusing existing global secret
+													</div>
+													<button type="button" class="btn btn-ghost btn-xs" onclick={() => globalSecretOverride = { ...globalSecretOverride, [secret.key]: true }}>
+														Override
+													</button>
+												</div>
+											{:else}
+												<input
+													id="ts-svc-{secret.key}"
+													type={secret.type === 'secret' ? 'password' : (secret.type === 'url' ? 'url' : 'text')}
+													class="input input-bordered input-sm w-full font-mono text-xs"
+													placeholder={secret.placeholder ?? ''}
+													bind:value={secretValues[secret.key]}
+													style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
+												/>
+												{#if hasExisting}
+													<button type="button" class="text-[11px] text-left self-start" style="color: oklch(0.65 0.15 240);" onclick={() => globalSecretOverride = { ...globalSecretOverride, [secret.key]: false }}>
+														Cancel override — reuse existing
+													</button>
+												{/if}
+											{/if}
 											{#if secret.description}
 												<p class="text-[11px]" style="color: oklch(0.45 0.02 250);">{secret.description}</p>
 											{/if}

@@ -38,6 +38,14 @@
 	const resolvedIntegration = $derived(integration ?? task.integration ?? null);
 	const integrationIcon = $derived(resolvedIntegration ? getIntegrationIcon(resolvedIntegration.sourceType) : null);
 
+	let copiedId = $state(false);
+	function copyTaskId(e: MouseEvent) {
+		e.stopPropagation();
+		navigator.clipboard.writeText(task.id);
+		copiedId = true;
+		setTimeout(() => (copiedId = false), 1500);
+	}
+
 	function haptic(ms = 8) {
 		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(ms);
 	}
@@ -214,7 +222,7 @@
 			<div class="ctr-body">
 				<div class="ctr-title">{task.title}</div>
 				<div class="ctr-meta">
-					<span class="ctr-id" style="{projectColor ? `color: ${projectColor};` : ''}">{task.id}</span>
+					<button class="ctr-id" style="{projectColor ? `color: ${projectColor};` : ''}" onclick={copyTaskId} title="Click to copy task ID">{task.id}{#if copiedId} ✓{/if}</button>
 					{#if task.priority != null}
 						<span class="ctr-sep">·</span>
 						<span class="ctr-priority" style="background: {pc.bg}; color: {pc.text}; border: 1px solid {pc.border};">P{task.priority}</span>
@@ -435,6 +443,15 @@
 		color: oklch(0.60 0.12 200);
 		font-weight: 600;
 		white-space: nowrap;
+		background: none;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+		font-family: inherit;
+		font-size: inherit;
+	}
+	.ctr-id:hover {
+		opacity: 0.8;
 	}
 
 	.ctr-sep {

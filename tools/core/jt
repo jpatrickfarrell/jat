@@ -3473,6 +3473,18 @@ cmd_graduate() {
   PROJECT_ROOT="$PROJECT_ROOT" exec node "$script_dir/jt-graduate" "$@"
 }
 
+# ---------------------------------------------------------------------------
+# Downgrade command — reverse of graduate. Moves a project's tasks from
+# shared Postgres back to local SQLite. Like graduate, it shells out to a
+# Node entry point because the bash CLI is sqlite-only (nsa33.4 guard).
+# ---------------------------------------------------------------------------
+
+cmd_downgrade() {
+  local script_dir
+  script_dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+  PROJECT_ROOT="$PROJECT_ROOT" exec node "$script_dir/jt-downgrade" "$@"
+}
+
 cmd_help() {
   cat <<'HELP'
 jt - JAT task CLI
@@ -3506,6 +3518,8 @@ Commands:
   audit   [--json] [--fix]    Check project context injection compliance
   graduate [PROJECT] --url <postgres-url> [--dry-run] [--yes] [--force]
                                Migrate project tasks from SQLite to Postgres
+  downgrade [PROJECT] [--dry-run] [--yes] [--force] [--confirm PHRASE]
+                               Reverse graduation: Postgres → local SQLite
   init    [--quiet]
 
 Options:
@@ -3539,6 +3553,7 @@ case "${1:-}" in
   ssh)       shift; cmd_ssh "$@" ;;
   audit)     shift; cmd_audit "$@" ;;
   graduate)  shift; cmd_graduate "$@" ;;
+  downgrade) shift; cmd_downgrade "$@" ;;
   init)      shift; cmd_init "$@" ;;
   --version) echo "jt $VERSION" ;;
   --help|-h|help) cmd_help ;;

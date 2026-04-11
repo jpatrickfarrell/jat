@@ -1,0 +1,331 @@
+#!/usr/bin/env node
+/**
+ * jt-downgrade — Migrate a JAT project from shared Postgres back to local SQLite.
+ *
+ * Reverse of jt-graduate.  Deliberately scarier: refuses to proceed if any
+ * task or comment has been written on the shared Postgres database in the
+ * last 30 days (override with --force plus a typed confirmation phrase).
+ *
+ * See lib/tasks-downgrade.js for the full step-by-step contract.
+ *
+ * Usage:
+ *   jt downgrade [PROJECT] [--dry-run] [--yes] [--force] [--json] [--window-days N]
+ *
+ * If PROJECT is omitted, the project is inferred from the PROJECT_ROOT env
+ * var (set by the bash wrapper) or the current working directory.
+ */
+
+import { createInterface } from 'readline';
+
+import {
+  downgradeProject,
+  requiredConfirmationPhrase,
+} from '../../lib/tasks-downgrade.js';
+import { getProjectConfig } from '../../lib/projects-config.js';
+
+// ---------------------------------------------------------------------------
+// Args
+// ---------------------------------------------------------------------------
+
+const argv = process.argv.slice(2);
+
+let projectArg = null;
+let dryRun = false;
+let yes = false;
+let force = false;
+let jsonOut = false;
+let windowDays = 30;
+let confirmationPhraseArg = null;
+
+function usage() {
+  console.log(`Usage: jt downgrade [PROJECT] [options]
+
+Migrate a project's task store from shared Postgres back to local SQLite.
+Writes an offline export at .jat/tasks.db.postgres-backup-{ts} and then
+drops a fresh .jat/tasks.db into place before flipping projects.json.
+
+Postgres is NOT touched by this flow — the shared database keeps every row.
+Other agents on the shared db are unaffected; this project simply stops
+pointing at it.
+
+Arguments:
+  PROJECT             Project name or path. Defaults to the current project
+                      (inferred from PROJECT_ROOT or cwd).
+
+Options:
+  --dry-run           Gather the preview and exit without writing
+  --yes, -y           Skip the interactive confirmation prompt
+  --force             Proceed past the 30-day write-activity guard
+  --window-days N     Change the write-activity window (default: 30)
+  --confirm PHRASE    Supply the confirmation phrase non-interactively
+                      (required with --force when activity is present)
+  --json              Machine-readable JSON output (implies --yes)
+  --help, -h          Show this help
+
+Behaviour:
+  Idempotent — re-running on an already-sqlite project exits 0 with a
+  message and does not touch either database.
+
+  Safe-by-default — if ANY task or comment was written to Postgres in
+  the last N days, downgrade refuses unless --force is set AND the user
+  types the exact phrase "downgrade PROJECT_NAME".
+
+Examples:
+  jt downgrade --dry-run
+  jt downgrade jat
+  jt downgrade jat --force --confirm "downgrade jat" --yes
+`);
+}
+
+for (let i = 0; i < argv.length; i++) {
+  const a = argv[i];
+  if (a === '--help' || a === '-h') { usage(); process.exit(0); }
+  if (a === '--dry-run') { dryRun = true; continue; }
+  if (a === '--yes' || a === '-y') { yes = true; continue; }
+  if (a === '--force') { force = true; continue; }
+  if (a === '--json') { jsonOut = true; yes = true; continue; }
+  if (a === '--window-days' && argv[i + 1]) {
+    windowDays = parseInt(argv[++i], 10);
+    if (!Number.isFinite(windowDays) || windowDays < 0) {
+      console.error('--window-days must be a non-negative integer');
+      process.exit(2);
+    }
+    continue;
+  }
+  if (a.startsWith('--window-days=')) {
+    windowDays = parseInt(a.slice(14), 10);
+    if (!Number.isFinite(windowDays) || windowDays < 0) {
+      console.error('--window-days must be a non-negative integer');
+      process.exit(2);
+    }
+    continue;
+  }
+  if (a === '--confirm' && argv[i + 1]) { confirmationPhraseArg = argv[++i]; continue; }
+  if (a.startsWith('--confirm=')) { confirmationPhraseArg = a.slice(10); continue; }
+  if (a.startsWith('--')) {
+    console.error(`Unknown option: ${a}`);
+    process.exit(2);
+  }
+  if (!projectArg) { projectArg = a; continue; }
+  console.error(`Unexpected argument: ${a}`);
+  process.exit(2);
+}
+
+const resolvedProjectHint =
+  projectArg ||
+  process.env.PROJECT_ROOT ||
+  process.cwd();
+
+// ---------------------------------------------------------------------------
+// TTY helpers
+// ---------------------------------------------------------------------------
+
+const isTty = process.stdout.isTTY && !jsonOut;
+
+const C = {
+  reset: isTty ? '\x1b[0m'  : '',
+  dim:   isTty ? '\x1b[2m'  : '',
+  bold:  isTty ? '\x1b[1m'  : '',
+  red:   isTty ? '\x1b[31m' : '',
+  green: isTty ? '\x1b[32m' : '',
+  yellow:isTty ? '\x1b[33m' : '',
+  blue:  isTty ? '\x1b[34m' : '',
+  cyan:  isTty ? '\x1b[36m' : '',
+};
+
+function die(message, code = 1) {
+  if (jsonOut) {
+    console.log(JSON.stringify({ status: 'error', error: message }));
+  } else {
+    console.error(`${C.red}Error:${C.reset} ${message}`);
+  }
+  process.exit(code);
+}
+
+function maskUrl(url) {
+  if (!url) return '';
+  return url.replace(/\/\/([^:]+):([^@]+)@/, '//$1:***@');
+}
+
+function printSummary(summary) {
+  if (jsonOut) return;
+  console.log('');
+  console.log(`${C.bold}Downgrade preview${C.reset}`);
+  console.log(`  ${C.dim}Project:${C.reset}     ${summary.project}`);
+  console.log(`  ${C.dim}Path:${C.reset}        ${summary.projectPath}`);
+  console.log(`  ${C.dim}Postgres:${C.reset}    ${maskUrl(summary.postgresUrl)}`);
+  console.log('');
+  console.log(`  ${C.cyan}${summary.tasks}${C.reset} tasks`);
+  console.log(`  ${C.cyan}${summary.dependencies}${C.reset} dependencies`);
+  console.log(`  ${C.cyan}${summary.labels}${C.reset} labels`);
+  console.log(`  ${C.cyan}${summary.comments}${C.reset} comments`);
+  console.log('');
+
+  const a = summary.activity;
+  const banner = summary.activityBlocks
+    ? `${C.red}${C.bold}⚠ Recent write activity (last ${a.windowDays}d)${C.reset}`
+    : `${C.green}No write activity in the last ${a.windowDays} days${C.reset}`;
+  console.log(`  ${banner}`);
+  if (summary.activityBlocks) {
+    console.log(`    ${C.yellow}${a.taskCount}${C.reset} task(s) updated, ${C.yellow}${a.commentCount}${C.reset} comment(s) added`);
+    if (a.assignees.length) {
+      console.log(`    ${C.dim}Task assignees:${C.reset}  ${a.assignees.join(', ')}`);
+    }
+    if (a.commentAuthors.length) {
+      console.log(`    ${C.dim}Comment authors:${C.reset} ${a.commentAuthors.join(', ')}`);
+    }
+    console.log('');
+    console.log(`  ${C.red}Downgrading now would orphan that work on the shared database.${C.reset}`);
+    console.log(`  ${C.dim}Use --force and type the confirmation phrase to override.${C.reset}`);
+  }
+  console.log('');
+}
+
+async function prompt(question) {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer);
+    });
+  });
+}
+
+async function confirm(question) {
+  if (yes) return true;
+  if (!process.stdin.isTTY) {
+    die('Refusing to proceed without --yes in a non-interactive shell.');
+    return false;
+  }
+  const answer = await prompt(`${question} [y/N] `);
+  return /^y(es)?$/i.test(answer.trim());
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+async function main() {
+  const entry = getProjectConfig(resolvedProjectHint);
+  if (!entry) {
+    die(
+      `Project "${resolvedProjectHint}" is not listed in ~/.config/jat/projects.json.`
+    );
+    return;
+  }
+
+  // Step 1: dry-run preview to gather counts + activity.
+  let previewResult;
+  try {
+    previewResult = await downgradeProject({
+      projectNameOrPath: entry.name,
+      dryRun: true,
+      windowDays,
+    });
+  } catch (err) {
+    die(err instanceof Error ? err.message : String(err));
+    return;
+  }
+
+  if (previewResult.status === 'already_sqlite') {
+    if (jsonOut) {
+      console.log(JSON.stringify(previewResult));
+    } else {
+      console.log(`${C.yellow}${previewResult.message}${C.reset}`);
+    }
+    process.exit(0);
+  }
+
+  if (previewResult.summary) {
+    printSummary(previewResult.summary);
+  }
+
+  if (dryRun) {
+    if (jsonOut) console.log(JSON.stringify(previewResult));
+    else console.log(`${C.dim}(dry-run — no changes made)${C.reset}`);
+    process.exit(0);
+  }
+
+  // Block on activity unless --force.
+  if (previewResult.summary?.activityBlocks && !force) {
+    die(
+      `Refusing to downgrade "${entry.name}": write activity detected in the ` +
+      `last ${windowDays} days. Re-run with --force and --confirm "${requiredConfirmationPhrase(entry.name)}".`
+    );
+    return;
+  }
+
+  // With --force + activity, we need the confirmation phrase.
+  let confirmationPhrase = confirmationPhraseArg || '';
+  if (previewResult.summary?.activityBlocks && force) {
+    const required = requiredConfirmationPhrase(entry.name);
+    if (!confirmationPhrase) {
+      if (!process.stdin.isTTY || jsonOut) {
+        die(
+          `--force requires --confirm "${required}" in non-interactive mode.`
+        );
+        return;
+      }
+      console.log(
+        `${C.red}${C.bold}This project has recent write activity on the shared database.${C.reset}`
+      );
+      console.log(
+        `${C.dim}Type the phrase below exactly to confirm. Anything else cancels.${C.reset}`
+      );
+      const typed = await prompt(`  ${C.bold}Phrase:${C.reset} ${C.dim}(${required}) >${C.reset} `);
+      confirmationPhrase = typed;
+    }
+    if (confirmationPhrase.trim() !== required) {
+      die(`Confirmation phrase mismatch. Expected exactly: "${required}"`);
+      return;
+    }
+  }
+
+  // Final y/N confirm (skipped with --yes / --json).
+  const ok = await confirm(
+    `Downgrade "${entry.name}" back to local SQLite? This points the project away from the shared database.`
+  );
+  if (!ok) {
+    if (jsonOut) console.log(JSON.stringify({ status: 'cancelled' }));
+    else console.log(`${C.dim}Cancelled.${C.reset}`);
+    process.exit(0);
+  }
+
+  let result;
+  try {
+    result = await downgradeProject({
+      projectNameOrPath: entry.name,
+      force,
+      confirmationPhrase,
+      windowDays,
+    });
+  } catch (err) {
+    die(err instanceof Error ? err.message : String(err));
+    return;
+  }
+
+  if (jsonOut) {
+    console.log(JSON.stringify(result));
+    process.exit(0);
+  }
+
+  if (result.status === 'already_sqlite') {
+    console.log(`${C.yellow}${result.message}${C.reset}`);
+    process.exit(0);
+  }
+
+  console.log('');
+  console.log(`${C.green}${C.bold}✓ Downgrade complete${C.reset}`);
+  console.log(`  ${C.dim}Offline backup:${C.reset} ${result.backupPath}`);
+  console.log(`  ${C.dim}Live db:${C.reset}        ${result.liveDbPath}`);
+  if (result.displacedPath) {
+    console.log(`  ${C.dim}Pre-existing tasks.db moved to:${C.reset} ${result.displacedPath}`);
+  }
+  console.log('');
+  console.log(`${C.yellow}Note:${C.reset} Postgres still contains every row. Drop the shared data manually if desired.`);
+  console.log(`Next: run ${C.cyan}jat${C.reset} to reopen the IDE on the SQLite backend.`);
+}
+
+main().catch((err) => {
+  die(err instanceof Error ? err.stack || err.message : String(err));
+});

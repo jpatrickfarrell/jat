@@ -19,6 +19,7 @@ import { promisify } from 'util';
 import { apiCache, cacheKey, CACHE_TTL, invalidateCache } from '$lib/server/cache.js';
 import { rgbToHex } from '$lib/utils/projectConfig';
 import { getTasks, initProject } from '$lib/server/jat-tasks.js';
+import { deleteAllProjectSecrets } from '$lib/utils/credentials';
 
 const execAsync = promisify(exec);
 
@@ -1084,6 +1085,9 @@ export async function DELETE({ request }) {
 			settings.hiddenProjects = settings.hiddenProjects.filter((/** @type {string} */ p) => p !== project);
 			await writeIdeSettings(settings);
 		}
+
+		// Remove project secrets from credentials.json
+		deleteAllProjectSecrets(project);
 
 		// Invalidate cache
 		invalidateCache.projects();

@@ -406,8 +406,9 @@
 		createdOn: string;
 	}
 	interface HistorySB {
-		name: string;
+		name: string;       // latest migration name, or status label
 		localOnly: number;
+		isLinked: boolean;
 	}
 	interface HistoryData {
 		git: HistoryGit | null;
@@ -465,16 +466,24 @@
 			: null;
 
 		let sb: HistorySB | null = null;
-		if (sbVal?.hasSupabase && sbVal?.migrations?.length) {
-			// Find latest local migration (highest version timestamp)
-			const localMigrations = sbVal.migrations
-				.filter((m: { localVersion?: string; name?: string; filename?: string }) => m.localVersion)
-				.sort((a: { localVersion: string }, b: { localVersion: string }) => b.localVersion.localeCompare(a.localVersion));
-			if (localMigrations.length > 0) {
-				const latest = localMigrations[0];
+		if (sbVal?.hasSupabase) {
+			if (sbVal.migrations?.length) {
+				// Show latest migration (sorted by version desc)
+				const sorted = [...sbVal.migrations].sort(
+					(a: { version: string }, b: { version: string }) => b.version.localeCompare(a.version)
+				);
+				const latest = sorted[0];
 				sb = {
-					name: latest.name || latest.filename || latest.localVersion,
+					name: latest.name || latest.filename || latest.version || '—',
 					localOnly: sbVal.stats?.localOnly || 0,
+					isLinked: !!sbVal.isLinked,
+				};
+			} else {
+				// Has supabase but no migrations (or not linked)
+				sb = {
+					name: sbVal.isLinked ? 'no migrations' : 'not linked',
+					localOnly: 0,
+					isLinked: !!sbVal.isLinked,
 				};
 			}
 		}
@@ -649,8 +658,8 @@
 					{/if}
 					{#if historyData.sb}
 						<div class="history-row">
-							<span class="history-label history-label-sb" title="Supabase">sb</span>
-							<span class="history-msg">{historyData.sb.name}</span>
+							<span class="history-label {historyData.sb.isLinked ? 'history-label-sb' : 'history-label-sb-unlinked'}" title="Supabase{historyData.sb.isLinked ? '' : ' · not linked'}">sb</span>
+							<span class="history-msg" class:history-msg-muted={!historyData.sb.isLinked}>{historyData.sb.name}</span>
 							{#if historyData.sb.localOnly > 0}
 								<span class="history-tag history-tag-warn" title="{historyData.sb.localOnly} local-only migration(s)">+{historyData.sb.localOnly}</span>
 							{/if}
@@ -1706,10 +1715,21 @@
 	.history-label-cf-active  { color: oklch(0.76 0.14 220); background: oklch(0.72 0.14 220 / 0.15); }
 	.history-label-cf-idle    { color: oklch(0.52 0.03 250); background: oklch(0.50 0.03 250 / 0.12); }
 
-	/* Supabase: teal */
+	/* Supabase: teal (linked) */
 	.history-label-sb {
 		color: oklch(0.72 0.18 168);
 		background: oklch(0.68 0.18 168 / 0.15);
+	}
+
+	/* Supabase: muted (not linked) */
+	.history-label-sb-unlinked {
+		color: oklch(0.50 0.03 250);
+		background: oklch(0.50 0.03 250 / 0.10);
+	}
+
+	.history-msg-muted {
+		color: oklch(0.42 0.02 250);
+		font-style: italic;
 	}
 
 	.history-hash {

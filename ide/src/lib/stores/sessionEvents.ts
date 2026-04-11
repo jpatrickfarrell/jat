@@ -28,7 +28,7 @@ import { initializeStore as initAutomationStore, clearSessionTriggers, getRuleBy
 import { getIsActive as isEpicSwarmActive, getChildren as getEpicChildren, getNextReadyTask as getNextEpicTask } from './epicQueueStore.svelte';
 import { getAutoKillDelayForPriority, isAutoKillEnabled, hasPendingAutoKill, clearPendingAutoKill } from './autoKillConfig';
 import { addToast } from './toasts.svelte';
-import { getToastNeedsInput, getToastReview, getToastComplete } from './preferences.svelte';
+import { getToastNeedsInput, getToastReview, getToastComplete, getMaxSessions } from './preferences.svelte';
 import { AUTO_PAUSE_IDLE } from '$lib/config/constants';
 import { isAutoPauseEnabled, getAutoPauseTimeout, loadAutoPauseConfig } from './autoPauseConfig';
 
@@ -716,6 +716,92 @@ function handleSessionSignal(_data: SessionEvent): void {
 }
 
 /**
+ * After a forceKill (/jat:complete --kill) completion, check if any tasks were
+ * unblocked by the just-completed task and auto-spawn agents for them.
+ *
+ * Only fires when forceKill === true to avoid aggressive auto-spawning on every
+ * regular completion. Respects max_sessions config.
+ */
+async function spawnDependentTasksAfterKill(completedTaskId: string): Promise<void> {
+	try {
+		// Fetch the completed task to get its blocked_by list (tasks that depended on it)
+		const response = await fetch(`/api/tasks/${encodeURIComponent(completedTaskId)}`);
+		if (!response.ok) {
+			console.warn(`[AutoSpawn] Could not fetch task ${completedTaskId}: ${response.status}`);
+			return;
+		}
+		const { task } = await response.json();
+
+		const dependents: Array<{ id: string; status: string; title: string }> = task?.blocked_by || [];
+		if (dependents.length === 0) {
+			console.log(`[AutoSpawn] No dependents for completed task ${completedTaskId}`);
+			return;
+		}
+
+		console.log(`[AutoSpawn] ${completedTaskId} has ${dependents.length} dependent(s): ${dependents.map(d => d.id).join(', ')}`);
+
+		// Check how many agents we can still spawn
+		const maxSessions = getMaxSessions();
+		let activeCount = workSessionsState.sessions.filter(
+			s => s._sseState !== 'completed' && s._sseState !== 'idle' && s._sseState !== undefined
+		).length;
+
+		let spawned = 0;
+
+		for (const dependent of dependents) {
+			if (dependent.status !== 'open') {
+				console.log(`[AutoSpawn] Skipping ${dependent.id} — status is ${dependent.status}`);
+				continue;
+			}
+
+			if ((activeCount + spawned) >= maxSessions) {
+				console.log(`[AutoSpawn] Reached max_sessions (${maxSessions}), stopping auto-spawn`);
+				break;
+			}
+
+			// Fetch full dependent task to verify all its blockers are now closed
+			try {
+				const depResponse = await fetch(`/api/tasks/${encodeURIComponent(dependent.id)}`);
+				if (!depResponse.ok) continue;
+				const { task: depTask } = await depResponse.json();
+
+				const dependsOn: Array<{ id: string; status: string }> = depTask?.depends_on || [];
+				const hasOpenBlockers = dependsOn.some(dep => dep.status !== 'closed');
+
+				if (hasOpenBlockers) {
+					console.log(`[AutoSpawn] ${dependent.id} still has open blockers, skipping`);
+					continue;
+				}
+
+				// All blockers closed — spawn an agent for this task
+				console.log(`[AutoSpawn] Spawning agent for newly unblocked task ${dependent.id}`);
+				const spawnResponse = await fetch('/api/work/spawn', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ taskId: dependent.id })
+				});
+
+				const spawnResult = await spawnResponse.json();
+				if (spawnResult.success) {
+					console.log(`[AutoSpawn] Spawned ${spawnResult.session?.agentName} for ${dependent.id}`);
+					spawned++;
+				} else {
+					console.warn(`[AutoSpawn] Failed to spawn for ${dependent.id}: ${spawnResult.reason || spawnResult.error}`);
+				}
+			} catch (depErr) {
+				console.error(`[AutoSpawn] Error processing dependent ${dependent.id}:`, depErr);
+			}
+		}
+
+		if (spawned > 0) {
+			console.log(`[AutoSpawn] Auto-spawned ${spawned} agent(s) for tasks unblocked by ${completedTaskId}`);
+		}
+	} catch (err) {
+		console.error('[AutoSpawn] Error in spawnDependentTasksAfterKill:', err);
+	}
+}
+
+/**
  * Handle session-complete event: update session with full completion bundle
  * This event contains the structured completion data from jat-signal complete
  *
@@ -830,6 +916,12 @@ function handleSessionComplete(data: SessionEvent): void {
 		});
 	}
 	// If autoKillDelay is null, auto-kill is disabled - session persists
+
+	// When the agent explicitly ran /jat:complete --kill, auto-spawn agents for
+	// any tasks that were unblocked by this completion.
+	if (forceKill && completionBundle.taskId) {
+		spawnDependentTasksAfterKill(completionBundle.taskId);
+	}
 }
 
 /**

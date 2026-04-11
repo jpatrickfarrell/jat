@@ -225,6 +225,108 @@
 	let fullTask = $state<Record<string, any> | null>(null);
 	let taskLoading = $state(false);
 
+	// Inline edit state — which field (if any) is currently being edited
+	type EditMode = 'none' | 'status' | 'priority' | 'labels' | 'title' | 'description';
+	let editMode = $state<EditMode>('none');
+	let editDraft = $state('');
+	let editSaving = $state(false);
+	let editError = $state<string | null>(null);
+
+	const STATUS_OPTIONS = [
+		{ value: 'open', label: 'Open' },
+		{ value: 'in_progress', label: 'In Progress' },
+		{ value: 'blocked', label: 'Blocked' },
+		{ value: 'closed', label: 'Closed' }
+	];
+	const PRIORITY_OPTIONS = [
+		{ value: 0, label: 'P0 — Critical' },
+		{ value: 1, label: 'P1 — High' },
+		{ value: 2, label: 'P2 — Medium' },
+		{ value: 3, label: 'P3 — Low' },
+		{ value: 4, label: 'P4 — Lowest' }
+	];
+
+	function openEditor(mode: EditMode) {
+		if (!task) return;
+		editError = null;
+		editMode = mode;
+		if (mode === 'title') {
+			editDraft = task.title || '';
+		} else if (mode === 'description') {
+			editDraft = (fullTask?.description ?? task.description ?? '') as string;
+		} else if (mode === 'labels') {
+			editDraft = (fullTask?.labels || []).join(', ');
+		} else {
+			editDraft = '';
+		}
+	}
+
+	function closeEditor() {
+		editMode = 'none';
+		editDraft = '';
+		editError = null;
+	}
+
+	async function patchTask(body: Record<string, any>): Promise<boolean> {
+		if (!task?.id) return false;
+		editSaving = true;
+		editError = null;
+		try {
+			const resp = await fetch(`/api/tasks/${encodeURIComponent(task.id)}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body)
+			});
+			if (!resp.ok) {
+				const data = await resp.json().catch(() => ({}));
+				throw new Error(data?.message || 'Failed to save');
+			}
+			const data = await resp.json();
+			const updated = data.task || data;
+			if (task) {
+				task = { ...task, ...updated };
+			}
+			fullTask = { ...(fullTask || {}), ...updated };
+			playSuccessChime();
+			return true;
+		} catch (err: any) {
+			editError = err?.message || 'Failed to save';
+			playErrorSound();
+			return false;
+		} finally {
+			editSaving = false;
+		}
+	}
+
+	async function saveStatus(value: string) {
+		if (await patchTask({ status: value })) closeEditor();
+	}
+
+	async function savePriority(value: number) {
+		if (await patchTask({ priority: value })) closeEditor();
+	}
+
+	async function saveTitle() {
+		const trimmed = editDraft.trim();
+		if (!trimmed) {
+			editError = 'Title cannot be empty';
+			return;
+		}
+		if (await patchTask({ title: trimmed })) closeEditor();
+	}
+
+	async function saveDescription() {
+		if (await patchTask({ description: editDraft })) closeEditor();
+	}
+
+	async function saveLabels() {
+		const labels = editDraft
+			.split(',')
+			.map(l => l.trim())
+			.filter(Boolean);
+		if (await patchTask({ labels })) closeEditor();
+	}
+
 	// Mobile input state
 	let inputText = $state('');
 	let keyboardOpen = $state(false);
@@ -1054,26 +1156,41 @@
 			<div class="pager-page">
 				<div class="flex-1 overflow-y-auto p-4" style="-webkit-overflow-scrolling: touch;">
 					{#if task}
-						<!-- Task Header -->
+						<!-- Task Header — tap title to edit -->
 						<div class="mb-4">
 							<TaskHeaderBlock id={task.id} type={task.issue_type}>
 								{#snippet title()}
-									<h2 class="text-lg font-semibold text-base-content leading-snug m-0">{task.title || 'Untitled'}</h2>
+									<button
+										type="button"
+										class="text-left w-full text-lg font-semibold text-base-content leading-snug m-0 bg-transparent border-0 p-0 cursor-pointer hover:text-info active:text-info transition-colors"
+										onclick={() => openEditor('title')}
+										aria-label="Edit title"
+									>
+										{task.title || 'Untitled'}
+									</button>
 								{/snippet}
 							</TaskHeaderBlock>
 						</div>
 
-						<!-- Status & Priority Row -->
+						<!-- Status & Priority Row — tap badges to edit -->
 						<div class="mb-5">
 							<TaskMetaRow>
-								<div class="badge badge-sm {getStatusBadgeClass(task.status)} badge-outline uppercase tracking-wide">
+								<button
+									type="button"
+									class="badge badge-sm {getStatusBadgeClass(task.status)} badge-outline uppercase tracking-wide cursor-pointer active:scale-95 transition-transform"
+									onclick={() => openEditor('status')}
+									aria-label="Edit status"
+								>
 									{task.status.replace('_', ' ')}
-								</div>
-								{#if task.priority !== undefined && task.priority !== null}
-									<div class="badge badge-sm {getPriorityBadgeClass(task.priority)} badge-outline uppercase tracking-wide">
-										{getPriorityLabel(task.priority)}
-									</div>
-								{/if}
+								</button>
+								<button
+									type="button"
+									class="badge badge-sm {getPriorityBadgeClass(task.priority)} badge-outline uppercase tracking-wide cursor-pointer active:scale-95 transition-transform"
+									onclick={() => openEditor('priority')}
+									aria-label="Edit priority"
+								>
+									{task.priority !== undefined && task.priority !== null ? getPriorityLabel(task.priority) : 'Set priority'}
+								</button>
 								{#if agentName}
 									<div class="badge badge-sm badge-info badge-outline uppercase tracking-wide">
 										{agentName}
@@ -1101,24 +1218,41 @@
 							</TaskFieldGrid>
 						</div>
 
-						<!-- Description -->
-						{#if task.description || fullTask?.description}
-							<div class="mb-5">
-								<TaskFieldLabel>Description</TaskFieldLabel>
-								<div class="text-sm text-base-content/80 leading-relaxed whitespace-pre-wrap bg-base-200 border border-base-300 p-3 rounded-lg">
+						<!-- Description — tap to edit -->
+						<div class="mb-5">
+							<TaskFieldLabel>Description</TaskFieldLabel>
+							<button
+								type="button"
+								class="text-left w-full text-sm text-base-content/80 leading-relaxed whitespace-pre-wrap bg-base-200 hover:bg-base-300 active:bg-base-300 border border-base-300 p-3 rounded-lg cursor-pointer transition-colors"
+								onclick={() => openEditor('description')}
+								aria-label="Edit description"
+							>
+								{#if task.description || fullTask?.description}
 									{task.description || fullTask?.description}
-								</div>
-							</div>
-						{/if}
+								{:else}
+									<span class="italic text-base-content/50">Tap to add a description…</span>
+								{/if}
+							</button>
+						</div>
 
 						<!-- Full task details (loaded from API) -->
 						{#if fullTask}
-							{#if fullTask.labels?.length}
-								<div class="mb-5">
-									<TaskFieldLabel>Labels</TaskFieldLabel>
-									<TaskLabelsList labels={fullTask.labels} />
-								</div>
-							{/if}
+							<!-- Labels — tap to edit -->
+							<div class="mb-5">
+								<TaskFieldLabel>Labels</TaskFieldLabel>
+								<button
+									type="button"
+									class="text-left w-full bg-base-200 hover:bg-base-300 active:bg-base-300 border border-base-300 p-3 rounded-lg cursor-pointer transition-colors"
+									onclick={() => openEditor('labels')}
+									aria-label="Edit labels"
+								>
+									{#if fullTask.labels?.length}
+										<TaskLabelsList labels={fullTask.labels} />
+									{:else}
+										<span class="text-sm italic text-base-content/50">Tap to add labels…</span>
+									{/if}
+								</button>
+							</div>
 
 							{#if fullTask.depends_on?.length}
 								<div class="mb-5">
@@ -1198,6 +1332,125 @@
 						</div>
 					</div>
 				</div>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Edit bottom sheet — renders over the drawer when editing a field -->
+	{#if editMode !== 'none' && task}
+		<div
+			class="fixed inset-0 z-[60] flex items-end justify-center bg-black/50"
+			role="button"
+			tabindex="-1"
+			onclick={closeEditor}
+			onkeydown={(e) => { if (e.key === 'Escape') closeEditor(); }}
+			transition:fade={{ duration: 150 }}
+		>
+			<div
+				class="w-full max-w-lg bg-base-100 rounded-t-2xl border-t border-base-300 shadow-2xl p-4 pb-8"
+				role="dialog"
+				aria-modal="true"
+				aria-label="Edit {editMode}"
+				onclick={(e) => e.stopPropagation()}
+				onkeydown={(e) => e.stopPropagation()}
+				transition:fly={{ y: 300, duration: 200, easing: cubicOut }}
+			>
+				<!-- Drag handle -->
+				<div class="w-10 h-1 bg-base-300 rounded-full mx-auto mb-4"></div>
+
+				<div class="flex items-center justify-between mb-3">
+					<h3 class="text-base font-semibold capitalize">Edit {editMode}</h3>
+					<button
+						type="button"
+						class="btn btn-sm btn-ghost btn-circle"
+						onclick={closeEditor}
+						aria-label="Close"
+					>
+						✕
+					</button>
+				</div>
+
+				{#if editError}
+					<div class="alert alert-error text-xs mb-3 py-2">{editError}</div>
+				{/if}
+
+				{#if editMode === 'status'}
+					<div class="flex flex-col gap-2">
+						{#each STATUS_OPTIONS as opt}
+							<button
+								type="button"
+								class="btn btn-block justify-start {task.status === opt.value ? 'btn-primary' : 'btn-outline'}"
+								disabled={editSaving}
+								onclick={() => saveStatus(opt.value)}
+							>
+								{opt.label}
+							</button>
+						{/each}
+					</div>
+				{:else if editMode === 'priority'}
+					<div class="flex flex-col gap-2">
+						{#each PRIORITY_OPTIONS as opt}
+							<button
+								type="button"
+								class="btn btn-block justify-start {task.priority === opt.value ? 'btn-primary' : 'btn-outline'}"
+								disabled={editSaving}
+								onclick={() => savePriority(opt.value)}
+							>
+								{opt.label}
+							</button>
+						{/each}
+					</div>
+				{:else if editMode === 'title'}
+					<div class="flex flex-col gap-3">
+						<input
+							type="text"
+							class="input input-bordered w-full"
+							bind:value={editDraft}
+							placeholder="Task title"
+							disabled={editSaving}
+							onkeydown={(e) => { if (e.key === 'Enter') saveTitle(); }}
+						/>
+						<div class="flex gap-2">
+							<button type="button" class="btn btn-outline flex-1" disabled={editSaving} onclick={closeEditor}>Cancel</button>
+							<button type="button" class="btn btn-primary flex-1" disabled={editSaving} onclick={saveTitle}>
+								{editSaving ? 'Saving…' : 'Save'}
+							</button>
+						</div>
+					</div>
+				{:else if editMode === 'description'}
+					<div class="flex flex-col gap-3">
+						<textarea
+							class="textarea textarea-bordered w-full h-40 font-mono text-sm"
+							bind:value={editDraft}
+							placeholder="Task description"
+							disabled={editSaving}
+						></textarea>
+						<div class="flex gap-2">
+							<button type="button" class="btn btn-outline flex-1" disabled={editSaving} onclick={closeEditor}>Cancel</button>
+							<button type="button" class="btn btn-primary flex-1" disabled={editSaving} onclick={saveDescription}>
+								{editSaving ? 'Saving…' : 'Save'}
+							</button>
+						</div>
+					</div>
+				{:else if editMode === 'labels'}
+					<div class="flex flex-col gap-3">
+						<input
+							type="text"
+							class="input input-bordered w-full"
+							bind:value={editDraft}
+							placeholder="comma, separated, labels"
+							disabled={editSaving}
+							onkeydown={(e) => { if (e.key === 'Enter') saveLabels(); }}
+						/>
+						<p class="text-xs text-base-content/60">Separate multiple labels with commas.</p>
+						<div class="flex gap-2">
+							<button type="button" class="btn btn-outline flex-1" disabled={editSaving} onclick={closeEditor}>Cancel</button>
+							<button type="button" class="btn btn-primary flex-1" disabled={editSaving} onclick={saveLabels}>
+								{editSaving ? 'Saving…' : 'Save'}
+							</button>
+						</div>
+					</div>
+				{/if}
 			</div>
 		</div>
 	{/if}

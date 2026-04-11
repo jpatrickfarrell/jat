@@ -153,14 +153,14 @@
 		}
 	}
 
-	// Pill color mapping from action variant
+	// Pill color mapping from action variant → DaisyUI token classes
 	function getPillColorClass(variant: SessionStateAction['variant']): string {
 		switch (variant) {
-			case 'success': return 'complete-btn';
-			case 'error': return 'danger-btn';
-			case 'warning': return 'warning-btn';
-			case 'info': return 'info-btn';
-			default: return '';
+			case 'success': return 'text-success border-success/50 bg-success/15';
+			case 'error': return 'text-error border-error/50 bg-error/15';
+			case 'warning': return 'text-warning border-warning/50 bg-warning/15';
+			case 'info': return 'text-info border-info/50 bg-info/15';
+			default: return 'text-base-content/80 border-base-300 bg-base-200';
 		}
 	}
 
@@ -225,6 +225,7 @@
 		uploading: boolean;
 	}
 	let pendingAttachments = $state<PendingAttachment[]>([]);
+	const hasSendable = $derived(inputText.trim().length > 0 || pendingAttachments.some(a => !a.uploading));
 
 	// Elapsed time
 	let now = $state(Date.now());
@@ -801,7 +802,7 @@
 	<!-- Backdrop -->
 	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 	<div
-		class="drawer-backdrop"
+		class="fixed inset-0 z-[49] bg-black/60"
 		transition:fade={{ duration: 300 }}
 		use:directClick={dismissDrawer}
 	></div>
@@ -809,7 +810,7 @@
 	<!-- Drawer Panel (full screen, slides up from bottom) -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
-		class="drawer-panel"
+		class="drawer-panel fixed inset-0 z-50 flex flex-col overflow-hidden bg-base-100"
 		transition:fly={{ y: globalThis.innerHeight || 900, duration: 300, easing: cubicOut }}
 		use:touchHandlers
 		use:focusInputOnHover
@@ -820,35 +821,34 @@
 	>
 		<!-- File drop overlay -->
 		{#if isDragOver}
-			<div class="drop-overlay">
-				<div class="drop-content">
-					<svg class="w-10 h-10" style="color: oklch(0.75 0.15 250);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+			<div class="absolute inset-0 z-[100] flex items-center justify-center pointer-events-none bg-info/30 border-[3px] border-dashed border-info rounded-[inherit]">
+				<div class="flex flex-col items-center gap-2">
+					<svg class="w-10 h-10 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
 					</svg>
-					<span class="drop-text">Drop to attach</span>
+					<span class="text-sm font-semibold text-info">Drop to attach</span>
 				</div>
 			</div>
 		{/if}
 
 		<!-- Top bar: back column + centered tabs + close column -->
-		<div class="drawer-topbar">
-			<button class="topbar-dismiss-col" use:directClick={dismissDrawer} title="Go back">
+		<div class="drawer-topbar flex items-center gap-2 px-3 py-2 bg-base-200 border-b border-base-300 flex-shrink-0">
+			<button class="topbar-dismiss-col self-stretch flex items-center justify-center w-10 -my-1 flex-shrink-0 rounded-md text-base-content/50 active:bg-base-300 active:text-base-content transition-colors" use:directClick={dismissDrawer} title="Go back">
 				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="18" height="18">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
 				</svg>
 			</button>
 
-			<div class="topbar-tabs">
+			<div class="topbar-tabs flex-1 flex gap-0.5 items-center justify-center overflow-x-auto">
 				{#each PAGES as page, i}
 					<button
-						class="topbar-tab"
-						class:active={i === currentPage}
+						class="px-2 py-1 text-[0.6875rem] font-medium whitespace-nowrap rounded-md transition-colors {i === currentPage ? 'text-base-content bg-base-300' : 'text-base-content/50 bg-transparent active:bg-base-300/70'}"
 						use:directClick={() => navigateToPage(i)}
 					>{page}</button>
 				{/each}
 			</div>
 
-			<button class="topbar-dismiss-col" use:directClick={dismissDrawer} title="Close">
+			<button class="topbar-dismiss-col self-stretch flex items-center justify-center w-10 -my-1 flex-shrink-0 rounded-md text-base-content/50 active:bg-base-300 active:text-base-content transition-colors" use:directClick={dismissDrawer} title="Close">
 				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="18" height="18">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 				</svg>
@@ -866,38 +866,39 @@
 				{#if task}
 					{@const typeVisual = getIssueTypeVisual(task.issue_type)}
 					{@const stateVisual = getSessionStateVisual(sseState || 'idle')}
-					<div class="mobile-task-header" style="border-left: 3px solid {stateVisual.accent};">
-						<div class="mobile-card-inner">
+					{@const priorityClass = task.priority === 0 ? 'text-error bg-error/15' : task.priority === 1 ? 'text-warning bg-warning/15' : 'text-info bg-info/15'}
+					<div class="border-b border-base-300 flex-shrink-0" style="border-left: 3px solid {stateVisual.accent};">
+						<div class="flex items-stretch min-h-0">
 							<!-- Left strip: large avatar + split agent name (matches TasksActive swipe card) -->
-							<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint};">
+							<div class="w-[68px] flex-shrink-0 flex flex-col items-center justify-center gap-1.5 p-1" style="background: {stateVisual.bgTint};">
 								<AgentAvatar name={agentName} size={54} showRing={false} shape="rounded" />
-								<div class="mobile-strip-agent-label" title={agentName}>
+								<div class="flex flex-col items-center leading-[1.1] text-[0.5625rem] font-semibold uppercase tracking-wide text-base-content/60 text-center max-w-full overflow-hidden opacity-85" title={agentName}>
 									{#each splitAgentName(agentName) as part}
-										<span>{part}</span>
+										<span class="max-w-full overflow-hidden text-ellipsis whitespace-nowrap">{part}</span>
 									{/each}
 								</div>
 							</div>
 							<!-- Right body: title, description, badges row -->
-							<div class="mobile-card-body">
-								<div class="mobile-title" title={task.title}>{task.title || task.id}</div>
+							<div class="flex-1 min-w-0 px-3 py-2.5 flex flex-col gap-[0.2rem]">
+								<div class="min-w-0 text-[0.9375rem] font-semibold text-base-content overflow-hidden text-ellipsis whitespace-nowrap" title={task.title}>{task.title || task.id}</div>
 								{#if task.description}
-									<div class="mobile-description">{task.description}</div>
+									<div class="min-w-0 text-[0.6875rem] text-base-content/60 overflow-hidden text-ellipsis whitespace-nowrap leading-snug">{task.description}</div>
 								{/if}
-								<div class="mobile-card-row2">
-									<button class="mobile-task-id" style="color: {stateVisual.accent};" onclick={(e) => copyMobileTaskId(e, task.id)} title="Click to copy task ID">{copiedMobileTaskId === task.id ? '✓' : task.id}</button>
+								<div class="flex items-center gap-1 text-[0.625rem] text-base-content/50 flex-wrap mt-0.5">
+									<button class="font-mono text-[0.625rem] bg-transparent border-none p-0 cursor-pointer" style="color: {stateVisual.accent};" onclick={(e) => copyMobileTaskId(e, task.id)} title="Click to copy task ID">{copiedMobileTaskId === task.id ? '✓' : task.id}</button>
 									{#if elapsed}
-										<span class="mobile-separator">·</span>
-										<span class="mobile-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
+										<span class="text-base-content/30">·</span>
+										<span class="font-mono text-[0.625rem] text-base-content/50">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
 									{/if}
 									{#if task.issue_type}
-										<span class="mobile-separator">·</span>
-										<span class="mobile-type-icon" title={typeVisual.label}>{typeVisual.icon}</span>
+										<span class="text-base-content/30">·</span>
+										<span class="text-[0.6875rem]" title={typeVisual.label}>{typeVisual.icon}</span>
 									{/if}
 									{#if task.priority != null && task.priority <= 2}
-										<span class="mobile-separator">·</span>
-										<span class="mobile-priority mobile-priority-{task.priority}">P{task.priority}</span>
+										<span class="text-base-content/30">·</span>
+										<span class="text-[0.5625rem] font-bold py-px px-1 rounded {priorityClass}">P{task.priority}</span>
 									{/if}
-									<span class="mobile-state-badge" style="color: {stateVisual.accent};">{stateVisual.shortLabel}</span>
+									<span class="inline-flex items-center text-[0.5625rem] font-semibold leading-none ml-auto flex-shrink-0 whitespace-nowrap tracking-wide" style="color: {stateVisual.accent};">{stateVisual.shortLabel}</span>
 								</div>
 							</div>
 						</div>
@@ -936,11 +937,11 @@
 				</div>
 
 				<!-- Mobile Action Buttons Row (dynamic from state actions config) -->
-				<div class="mobile-actions-row">
+				<div class="flex gap-1.5 px-2 py-1.5 bg-base-200 border-t border-base-300 flex-shrink-0 overflow-x-auto">
 					{#each stateActions as action (action.id)}
 						<button
-							class="mobile-action-btn {getPillColorClass(action.variant)}"
-							class:is-flashing={activeActionId === action.id}
+							class="flex items-center gap-1 px-2 py-[0.3rem] text-[0.6875rem] font-medium rounded-md whitespace-nowrap cursor-pointer flex-shrink-0 border transition-colors active:brightness-125 {getPillColorClass(action.variant)}"
+							class:mobile-btn-flashing={activeActionId === action.id}
 							use:directClick={() => executePillAction(action)}
 							title={action.description || action.label}
 						>
@@ -954,21 +955,21 @@
 
 				<!-- Pending Attachments Preview -->
 				{#if pendingAttachments.length > 0}
-					<div class="attachments-row">
+					<div class="flex flex-wrap gap-1.5 px-3 pt-1.5 pb-1 bg-base-200 border-t border-base-300">
 						{#each pendingAttachments as att (att.id)}
-							<div class="attachment-chip" class:uploading={att.uploading}>
+							<div class="flex items-center gap-1 px-1.5 py-1 bg-base-300/60 border border-base-300 rounded-md max-w-[160px] transition-opacity {att.uploading ? 'opacity-60' : 'opacity-100'}">
 								{#if att.previewUrl}
-									<img src={att.previewUrl} alt={att.name} class="attachment-thumb" />
+									<img src={att.previewUrl} alt={att.name} class="w-7 h-7 object-cover rounded flex-shrink-0" />
 								{:else}
-									<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="16" height="16" style="color: oklch(0.65 0.12 250);">
+									<svg class="text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="16" height="16">
 										<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
 									</svg>
 								{/if}
-								<span class="attachment-name">{att.name}</span>
+								<span class="text-[0.7rem] text-base-content/70 overflow-hidden text-ellipsis whitespace-nowrap min-w-0">{att.name}</span>
 								{#if att.uploading}
-									<span class="attachment-uploading">…</span>
+									<span class="text-[0.7rem] text-base-content/50 flex-shrink-0">…</span>
 								{:else}
-									<button class="attachment-remove" use:directClick={() => removeAttachment(att.id)} aria-label="Remove">×</button>
+									<button class="flex-shrink-0 w-4 h-4 flex items-center justify-center text-sm leading-none text-base-content/50 hover:text-error bg-transparent border-none cursor-pointer p-0 rounded-full transition-colors" use:directClick={() => removeAttachment(att.id)} aria-label="Remove">×</button>
 								{/if}
 							</div>
 						{/each}
@@ -976,11 +977,11 @@
 				{/if}
 
 				<!-- Mobile Input Row: [keyboard dropup | input | send] -->
-				<div class="mobile-input-row">
+				<div class="mobile-input-row flex items-center gap-1.5 px-2 py-1.5 bg-base-100 border-t border-base-300 flex-shrink-0">
 					<!-- Keyboard dropup -->
-					<div class="keyboard-dropup">
+					<div class="relative flex-shrink-0">
 						<button
-							class="keyboard-btn"
+							class="flex items-center justify-center w-9 h-9 rounded-lg bg-base-200 border border-base-300 text-base-content/70 cursor-pointer active:bg-base-300 transition-colors"
 							use:directClick={() => keyboardOpen = !keyboardOpen}
 							title="Keyboard keys"
 						>
@@ -989,19 +990,19 @@
 							</svg>
 						</button>
 						{#if keyboardOpen}
-							<div class="keyboard-menu">
-								<div class="keyboard-row">
-									<button class="key-btn" use:directClick={() => sendKey('up')}>↑</button>
-									<button class="key-btn" use:directClick={() => sendKey('down')}>↓</button>
-									<button class="key-btn" use:directClick={() => sendKey('left')}>←</button>
-									<button class="key-btn" use:directClick={() => sendKey('right')}>→</button>
+							<div class="absolute bottom-full left-0 mb-1.5 bg-base-200 border border-base-300 rounded-lg p-1.5 flex flex-col gap-1 shadow-xl z-[60] min-w-[200px]">
+								<div class="flex gap-1">
+									<button class="flex-1 flex items-center justify-center px-2 py-1.5 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('up')}>↑</button>
+									<button class="flex-1 flex items-center justify-center px-2 py-1.5 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('down')}>↓</button>
+									<button class="flex-1 flex items-center justify-center px-2 py-1.5 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('left')}>←</button>
+									<button class="flex-1 flex items-center justify-center px-2 py-1.5 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('right')}>→</button>
 								</div>
-								<div class="keyboard-row">
-									<button class="key-btn wide" use:directClick={() => sendKey('enter')}>Enter ⤶</button>
-									<button class="key-btn wide" use:directClick={() => sendKey('tab')}>Tab ⇥</button>
-									<button class="key-btn wide" use:directClick={() => sendKey('escape')}>ESC</button>
-									<button class="key-btn wide" use:directClick={() => sendKey('ctrl-c')}>^C</button>
-									<button class="key-btn wide" use:directClick={() => sendKey('ctrl-l')}>^L</button>
+								<div class="flex gap-1">
+									<button class="flex-1 flex items-center justify-center px-2 py-1.5 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('enter')}>Enter ⤶</button>
+									<button class="flex-1 flex items-center justify-center px-2 py-1.5 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('tab')}>Tab ⇥</button>
+									<button class="flex-1 flex items-center justify-center px-2 py-1.5 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('escape')}>ESC</button>
+									<button class="flex-1 flex items-center justify-center px-2 py-1.5 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('ctrl-c')}>^C</button>
+									<button class="flex-1 flex items-center justify-center px-2 py-1.5 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('ctrl-l')}>^L</button>
 								</div>
 							</div>
 						{/if}
@@ -1010,7 +1011,7 @@
 					<!-- Input field -->
 					<input
 						type="text"
-						class="mobile-input"
+						class="flex-1 min-w-0 h-9 px-2.5 text-[0.8125rem] font-mono text-base-content bg-base-200 border border-base-300 rounded-lg outline-none focus:border-info transition-colors placeholder:text-base-content/40"
 						placeholder="Type and press Enter..."
 						bind:value={inputText}
 						bind:this={inputRef}
@@ -1023,10 +1024,9 @@
 
 					<!-- Send button -->
 					<button
-						class="send-btn"
+						class="flex items-center justify-center w-9 h-9 rounded-lg border cursor-pointer flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-default {hasSendable ? 'bg-info border-info text-info-content active:bg-info/80' : 'bg-base-200 border-base-300 text-base-content/40'}"
 						aria-label="Send message"
-						class:has-text={inputText.trim().length > 0 || pendingAttachments.some(a => !a.uploading)}
-						disabled={!inputText.trim() && !pendingAttachments.some(a => !a.uploading)}
+						disabled={!hasSendable}
 						use:directClick={sendWithAttachments}
 					>
 						<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="18" height="18">
@@ -1238,109 +1238,36 @@
 </div>
 
 <style>
-	.drawer-backdrop {
-		position: fixed;
-		inset: 0;
-		z-index: 49;
-		background: oklch(0 0 0 / 0.6);
-	}
+	/* Layout-only CSS: colors, spacing, and typography are handled via DaisyUI + Tailwind
+	   classes inline. What remains here is structural layout that can't be expressed with
+	   utility classes: iOS safe-area insets, the 400%/25% pager math, scoped minimap
+	   overrides, and the action-button flash keyframe. */
 
-	.drawer-panel {
-		position: fixed;
-		inset: 0;
-		z-index: 50;
-		display: flex;
-		flex-direction: column;
-		background: oklch(0.14 0.01 250);
-		overflow: hidden;
-	}
+	/* iOS safe-area insets (Tailwind has no utility for env()) */
+	.drawer-topbar { padding-top: max(0.5rem, env(safe-area-inset-top)); }
+	.mobile-input-row { padding-bottom: max(0.375rem, env(safe-area-inset-bottom)); }
 
-	/* Top bar */
-	.drawer-topbar {
-		display: flex;
-		align-items: center;
-		padding: 0.5rem 0.75rem;
-		background: oklch(0.16 0.01 250);
-		border-bottom: 1px solid oklch(0.25 0.02 250);
-		flex-shrink: 0;
-		padding-top: max(0.5rem, env(safe-area-inset-top));
-		gap: 0.5rem;
-	}
+	/* Hide horizontal scrollbar on topbar tabs */
+	.topbar-tabs { scrollbar-width: none; }
+	.topbar-tabs::-webkit-scrollbar { display: none; }
 
-	/* Full-height dismiss columns flanking the tabs */
-	.topbar-dismiss-col {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		align-self: stretch;
-		width: 2.5rem;
-		flex-shrink: 0;
-		background: transparent;
-		border: none;
-		color: oklch(0.50 0.02 250);
-		cursor: pointer;
-		transition: color 0.15s, background 0.15s;
-		border-radius: 0.375rem;
-		margin: -0.25rem 0;
-	}
-
-	.topbar-dismiss-col:active {
-		background: oklch(0.25 0.02 250);
-		color: oklch(0.80 0.02 250);
-	}
-
-	.topbar-tabs {
-		flex: 1;
-		display: flex;
-		gap: 0.125rem;
-		align-items: center;
-		justify-content: center;
-		overflow-x: auto;
-		scrollbar-width: none;
-	}
-
-	.topbar-tabs::-webkit-scrollbar {
-		display: none;
-	}
-
-	.topbar-tab {
-		padding: 0.25rem 0.5rem;
-		font-size: 0.6875rem;
-		font-weight: 500;
-		color: oklch(0.50 0.02 250);
-		background: transparent;
-		border: none;
-		border-radius: 0.375rem;
-		cursor: pointer;
-		white-space: nowrap;
-		transition: all 0.15s;
-	}
-
-	.topbar-tab.active {
-		color: oklch(0.90 0.02 250);
-		background: oklch(0.25 0.02 250);
-	}
-
-	.topbar-tab:active {
-		background: oklch(0.22 0.02 250);
-	}
-
-	/* Horizontal pager */
+	/* Horizontal pager: 4 pages × 25% each */
 	.pager-container {
 		flex: 1;
 		display: flex;
-		width: 400%; /* 4 pages */
+		width: 400%;
 		min-height: 0;
 	}
 
 	.pager-page {
-		width: 25%; /* Each page = 100% of viewport */
+		width: 25%;
 		flex-shrink: 0;
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
 	}
 
+	/* Session card wrapper: fills page and stretches child SessionCard */
 	.session-card-wrapper {
 		flex: 1;
 		overflow: hidden;
@@ -1348,7 +1275,6 @@
 		flex-direction: column;
 	}
 
-	/* Make SessionCard fill the page */
 	.session-card-wrapper :global(> *) {
 		width: 100% !important;
 		height: 100%;
@@ -1356,450 +1282,39 @@
 		border-radius: 0;
 	}
 
-	/* Mobile minimap: hidden by default, revealed on scroll.
-	   SessionCard sets inline right:60px on the terminal scroll container when minimap is enabled.
-	   We override to right:0 by default, then restore to 60px when scrolling.
-	   Selectors target the output+minimap parent's children by structure. */
-
-	/* The output+minimap parent container */
+	/* Mobile minimap overrides — hidden by default, slides in on scroll.
+	   Targets SessionCard's output+minimap parent via structural selectors. */
 	.session-card-wrapper :global(.relative.flex-1.min-h-0) {
 		overflow-x: hidden;
 	}
 
-	/* Terminal scroll container: always full-width, minimap overlays on top */
 	.session-card-wrapper :global(.relative.flex-1.min-h-0 > .absolute.inset-0) {
 		right: 0 !important;
 		overflow-x: hidden !important;
 	}
 
-	/* Wrap long terminal lines on mobile instead of scrolling */
+	/* Wrap long terminal lines on mobile */
 	.session-card-wrapper :global(pre) {
 		white-space: pre-wrap !important;
 		word-break: break-all;
 	}
 
-	/* Minimap container: hidden by default, slides in from right as overlay */
+	/* Minimap: hidden by default, slides in from right as overlay */
 	.session-card-wrapper :global(.relative.flex-1.min-h-0 > .absolute.top-0.right-0.bottom-0) {
 		opacity: 0;
 		transform: translateX(100%);
 		transition: opacity 0.25s ease, transform 0.25s ease;
 		pointer-events: none;
-		/* Semi-transparent so user can still read text behind it */
 		backdrop-filter: blur(1px);
 	}
 
-	/* When scrolling, slide minimap in from right — no layout shift */
 	.session-card-wrapper.mobile-scrolling :global(.relative.flex-1.min-h-0 > .absolute.top-0.right-0.bottom-0) {
 		opacity: 0.9;
 		transform: translateX(0);
 		pointer-events: auto;
 	}
 
-	/* Task Detail Page */
-	.task-detail-page {
-		flex: 1;
-		overflow-y: auto;
-		padding: 1rem;
-		-webkit-overflow-scrolling: touch;
-	}
-
-	.task-header {
-		margin-bottom: 1rem;
-	}
-
-	.task-id-row {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		margin-bottom: 0.5rem;
-	}
-
-	.task-id {
-		font-family: monospace;
-		font-size: 0.75rem;
-		color: oklch(0.65 0.12 230);
-		background: oklch(0.65 0.12 230 / 0.12);
-		padding: 0.125rem 0.5rem;
-		border-radius: 0.25rem;
-	}
-
-	.task-type-badge {
-		font-size: 0.6875rem;
-		color: oklch(0.70 0.08 250);
-		background: oklch(0.25 0.02 250);
-		padding: 0.125rem 0.375rem;
-		border-radius: 0.25rem;
-		text-transform: uppercase;
-		letter-spacing: 0.03em;
-	}
-
-	.task-title {
-		font-size: 1.125rem;
-		font-weight: 600;
-		color: oklch(0.90 0.02 250);
-		line-height: 1.4;
-		margin: 0;
-	}
-
-	.task-meta-row {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.375rem;
-		margin-bottom: 1.25rem;
-	}
-
-	.meta-badge {
-		font-size: 0.6875rem;
-		font-weight: 600;
-		padding: 0.25rem 0.5rem;
-		border-radius: 0.375rem;
-		border: 1px solid;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-	}
-
-	.agent-badge {
-		border-color: oklch(0.60 0.15 200);
-		color: oklch(0.70 0.15 200);
-	}
-
-	.detail-section {
-		margin-bottom: 1.25rem;
-	}
-
-	.section-label {
-		font-size: 0.6875rem;
-		font-weight: 600;
-		color: oklch(0.55 0.02 250);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		margin: 0 0 0.5rem 0;
-	}
-
-	.session-info-grid {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 0.5rem;
-	}
-
-	.info-item {
-		display: flex;
-		flex-direction: column;
-		gap: 0.125rem;
-		background: oklch(0.18 0.01 250);
-		padding: 0.5rem 0.625rem;
-		border-radius: 0.375rem;
-	}
-
-	.info-key {
-		font-size: 0.625rem;
-		color: oklch(0.50 0.02 250);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-	}
-
-	.info-value {
-		font-size: 0.8125rem;
-		color: oklch(0.85 0.02 250);
-		font-weight: 500;
-	}
-
-	.description-content {
-		font-size: 0.8125rem;
-		color: oklch(0.75 0.02 250);
-		line-height: 1.6;
-		white-space: pre-wrap;
-		background: oklch(0.18 0.01 250);
-		padding: 0.75rem;
-		border-radius: 0.5rem;
-		border: 1px solid oklch(0.22 0.02 250);
-	}
-
-	.labels-row {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.375rem;
-	}
-
-	.label-badge {
-		font-size: 0.6875rem;
-		color: oklch(0.70 0.08 250);
-		background: oklch(0.22 0.02 250);
-		padding: 0.1875rem 0.5rem;
-		border-radius: 0.25rem;
-		border: 1px solid oklch(0.28 0.02 250);
-	}
-
-	.dep-list {
-		display: flex;
-		flex-direction: column;
-		gap: 0.375rem;
-	}
-
-	.dep-item {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.375rem 0.625rem;
-		background: oklch(0.18 0.01 250);
-		border-radius: 0.375rem;
-		border: 1px solid oklch(0.22 0.02 250);
-	}
-
-	.dep-id {
-		font-family: monospace;
-		font-size: 0.6875rem;
-		color: oklch(0.65 0.12 230);
-		flex-shrink: 0;
-	}
-
-	.dep-title {
-		font-size: 0.75rem;
-		color: oklch(0.65 0.02 250);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.loading-indicator {
-		text-align: center;
-		padding: 2rem;
-		color: oklch(0.50 0.02 250);
-		font-size: 0.8125rem;
-	}
-
-	.no-task {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		height: 100%;
-		color: oklch(0.45 0.02 250);
-		font-size: 0.875rem;
-	}
-
-	.empty-page-message {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 0.75rem;
-		padding: 3rem 1rem;
-		color: oklch(0.40 0.02 250);
-	}
-
-	.empty-page-message p {
-		font-size: 0.875rem;
-	}
-
-	.attachments-list {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-	}
-
-	.attachment-item {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.5rem 0.75rem;
-		background: oklch(0.18 0.01 250);
-		border-radius: 0.375rem;
-		border: 1px solid oklch(0.25 0.02 250);
-		color: oklch(0.75 0.02 250);
-		font-size: 0.8125rem;
-	}
-
-	.attachment-name {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	/* Custom mobile header — same swipe-card design as TasksActive standalone tasks */
-	.mobile-task-header {
-		border-bottom: 1px solid oklch(0.22 0.02 250);
-		flex-shrink: 0;
-	}
-
-	/* Inner flex row: left strip + right body */
-	.mobile-card-inner {
-		display: flex;
-		align-items: stretch;
-		min-height: 0;
-	}
-
-	/* Left strip: avatar + split agent name */
-	.mobile-state-strip {
-		width: 28px;
-		flex-shrink: 0;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.mobile-state-strip-agent {
-		width: 68px;
-		padding: 4px 4px;
-		flex-direction: column;
-		justify-content: center;
-		gap: 0.375rem;
-	}
-
-	/* CamelCase-split agent name below avatar */
-	.mobile-strip-agent-label {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		line-height: 1.1;
-		font-size: 0.5625rem;
-		font-weight: 600;
-		letter-spacing: 0.03em;
-		text-transform: uppercase;
-		color: oklch(0.60 0.015 250);
-		font-family: system-ui, -apple-system, sans-serif;
-		text-align: center;
-		max-width: 100%;
-		overflow: hidden;
-		opacity: 0.85;
-	}
-
-	.mobile-strip-agent-label span {
-		max-width: 100%;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	/* Right content area */
-	.mobile-card-body {
-		flex: 1;
-		min-width: 0;
-		padding: 0.625rem 0.75rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.2rem;
-	}
-
-	.mobile-title {
-		min-width: 0;
-		font-size: 0.9375rem;
-		font-weight: 600;
-		color: oklch(0.88 0.02 250);
-		font-family: system-ui, -apple-system, sans-serif;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.mobile-description {
-		min-width: 0;
-		font-size: 0.6875rem;
-		color: oklch(0.60 0.02 250);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		line-height: 1.4;
-	}
-
-	.mobile-card-row2 {
-		display: flex;
-		align-items: center;
-		gap: 0.25rem;
-		font-size: 0.625rem;
-		color: oklch(0.50 0.02 250);
-		flex-wrap: wrap;
-		margin-top: 0.125rem;
-	}
-
-	.mobile-task-id {
-		font-family: monospace;
-		font-size: 0.625rem;
-		background: none;
-		border: none;
-		padding: 0;
-		cursor: pointer;
-	}
-
-	.mobile-elapsed {
-		font-family: monospace;
-		font-size: 0.625rem;
-		color: oklch(0.50 0.02 250);
-	}
-
-	.mobile-separator {
-		color: oklch(0.35 0.02 250);
-	}
-
-	.mobile-type-icon {
-		font-size: 0.6875rem;
-	}
-
-	.mobile-priority {
-		font-size: 0.5625rem;
-		font-weight: 700;
-		padding: 0.0625rem 0.25rem;
-		border-radius: 0.25rem;
-	}
-
-	.mobile-priority-0 {
-		color: oklch(0.85 0.18 25);
-		background: oklch(0.85 0.18 25 / 0.15);
-	}
-
-	.mobile-priority-1 {
-		color: oklch(0.80 0.15 85);
-		background: oklch(0.80 0.15 85 / 0.15);
-	}
-
-	.mobile-priority-2 {
-		color: oklch(0.75 0.12 230);
-		background: oklch(0.75 0.12 230 / 0.15);
-	}
-
-	.mobile-state-badge {
-		display: inline-flex;
-		align-items: center;
-		font-size: 0.5625rem;
-		font-weight: 600;
-		line-height: 1;
-		margin-left: auto;
-		flex-shrink: 0;
-		white-space: nowrap;
-		letter-spacing: 0.03em;
-	}
-
-	/* === Mobile Action Buttons Row === */
-	.mobile-actions-row {
-		display: flex;
-		gap: 0.375rem;
-		padding: 0.375rem 0.5rem;
-		background: oklch(0.16 0.01 250);
-		border-top: 1px solid oklch(0.22 0.02 250);
-		flex-shrink: 0;
-		overflow-x: auto;
-		-webkit-overflow-scrolling: touch;
-	}
-
-	.mobile-action-btn {
-		display: flex;
-		align-items: center;
-		gap: 0.25rem;
-		padding: 0.3rem 0.5rem;
-		font-size: 0.6875rem;
-		font-weight: 500;
-		color: oklch(0.80 0.02 250);
-		background: oklch(0.22 0.02 250);
-		border: 1px solid oklch(0.28 0.02 250);
-		border-radius: 0.375rem;
-		white-space: nowrap;
-		cursor: pointer;
-		transition: background 0.15s;
-		flex-shrink: 0;
-	}
-
-	.mobile-action-btn:active {
-		background: oklch(0.28 0.02 250);
-	}
-
+	/* Action button flash animation (fired when user taps a pill action) */
 	@keyframes mobile-btn-flash {
 		0%   { transform: scale(1); opacity: 1; }
 		30%  { transform: scale(0.88); opacity: 0.85; }
@@ -1807,263 +1322,7 @@
 		100% { transform: scale(1); opacity: 1; }
 	}
 
-	.mobile-action-btn.is-flashing {
+	.mobile-btn-flashing {
 		animation: mobile-btn-flash 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-	}
-
-	.mobile-action-btn.complete-btn {
-		color: oklch(0.80 0.15 145);
-		border-color: oklch(0.45 0.12 145 / 0.5);
-		background: oklch(0.22 0.06 145 / 0.3);
-	}
-
-	.mobile-action-btn.danger-btn {
-		color: oklch(0.75 0.15 25);
-		border-color: oklch(0.45 0.12 25 / 0.4);
-		background: oklch(0.22 0.06 25 / 0.2);
-	}
-
-	.mobile-action-btn.warning-btn {
-		color: oklch(0.80 0.15 85);
-		border-color: oklch(0.45 0.12 85 / 0.5);
-		background: oklch(0.22 0.06 85 / 0.3);
-	}
-
-	.mobile-action-btn.info-btn {
-		color: oklch(0.80 0.15 220);
-		border-color: oklch(0.45 0.12 220 / 0.5);
-		background: oklch(0.22 0.06 220 / 0.3);
-	}
-
-	/* === Mobile Input Row === */
-	.mobile-input-row {
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
-		padding: 0.375rem 0.5rem;
-		background: oklch(0.14 0.01 250);
-		border-top: 1px solid oklch(0.22 0.02 250);
-		flex-shrink: 0;
-		padding-bottom: max(0.375rem, env(safe-area-inset-bottom));
-	}
-
-	.keyboard-dropup {
-		position: relative;
-		flex-shrink: 0;
-	}
-
-	.keyboard-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 2.25rem;
-		height: 2.25rem;
-		border-radius: 0.5rem;
-		background: oklch(0.22 0.02 250);
-		border: 1px solid oklch(0.30 0.02 250);
-		color: oklch(0.70 0.02 250);
-		cursor: pointer;
-		transition: background 0.15s;
-	}
-
-	.keyboard-btn:active {
-		background: oklch(0.28 0.02 250);
-	}
-
-	.keyboard-menu {
-		position: absolute;
-		bottom: 100%;
-		left: 0;
-		margin-bottom: 0.375rem;
-		background: oklch(0.20 0.02 250);
-		border: 1px solid oklch(0.30 0.02 250);
-		border-radius: 0.5rem;
-		padding: 0.375rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
-		box-shadow: 0 -4px 16px oklch(0 0 0 / 0.4);
-		z-index: 60;
-		min-width: 200px;
-	}
-
-	.keyboard-row {
-		display: flex;
-		gap: 0.25rem;
-	}
-
-	.key-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 0.375rem 0.5rem;
-		font-family: monospace;
-		font-size: 0.75rem;
-		color: oklch(0.80 0.02 250);
-		background: oklch(0.25 0.02 250);
-		border: 1px solid oklch(0.32 0.02 250);
-		border-radius: 0.375rem;
-		cursor: pointer;
-		flex: 1;
-		white-space: nowrap;
-		transition: background 0.1s;
-	}
-
-	.key-btn:active {
-		background: oklch(0.35 0.02 250);
-	}
-
-	.key-btn.wide {
-		flex: 1;
-	}
-
-	.mobile-input {
-		flex: 1;
-		min-width: 0;
-		height: 2.25rem;
-		padding: 0 0.625rem;
-		font-size: 0.8125rem;
-		font-family: monospace;
-		color: oklch(0.85 0.02 250);
-		background: oklch(0.22 0.02 250);
-		border: 1px solid oklch(0.30 0.02 250);
-		border-radius: 0.5rem;
-		outline: none;
-		transition: border-color 0.15s;
-	}
-
-	.mobile-input:focus {
-		border-color: oklch(0.50 0.15 230);
-	}
-
-	.mobile-input::placeholder {
-		color: oklch(0.45 0.02 250);
-	}
-
-	.send-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 2.25rem;
-		height: 2.25rem;
-		border-radius: 0.5rem;
-		background: oklch(0.25 0.02 250);
-		border: 1px solid oklch(0.30 0.02 250);
-		color: oklch(0.50 0.02 250);
-		cursor: pointer;
-		flex-shrink: 0;
-		transition: all 0.15s;
-	}
-
-	.send-btn.has-text {
-		background: oklch(0.45 0.15 230);
-		border-color: oklch(0.55 0.15 230);
-		color: oklch(0.95 0.02 250);
-	}
-
-	.send-btn:active.has-text {
-		background: oklch(0.50 0.15 230);
-	}
-
-	.send-btn:disabled {
-		opacity: 0.4;
-		cursor: default;
-	}
-
-	.drop-overlay {
-		position: absolute;
-		inset: 0;
-		z-index: 100;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: oklch(0.25 0.15 250 / 0.9);
-		border: 3px dashed oklch(0.65 0.20 250);
-		border-radius: inherit;
-		pointer-events: none;
-	}
-
-	.drop-content {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.drop-text {
-		font-size: 0.875rem;
-		font-weight: 600;
-		color: oklch(0.85 0.10 250);
-	}
-
-	.attachments-row {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.375rem;
-		padding: 0.375rem 0.75rem 0.25rem;
-		background: oklch(0.18 0.02 250);
-		border-top: 1px solid oklch(0.25 0.02 250);
-	}
-
-	.attachment-chip {
-		display: flex;
-		align-items: center;
-		gap: 0.25rem;
-		padding: 0.25rem 0.375rem;
-		background: oklch(0.22 0.03 250);
-		border: 1px solid oklch(0.30 0.04 250);
-		border-radius: 0.375rem;
-		max-width: 160px;
-		opacity: 1;
-		transition: opacity 0.15s;
-	}
-
-	.attachment-chip.uploading {
-		opacity: 0.6;
-	}
-
-	.attachment-thumb {
-		width: 28px;
-		height: 28px;
-		object-fit: cover;
-		border-radius: 0.25rem;
-		flex-shrink: 0;
-	}
-
-	.attachment-name {
-		font-size: 0.7rem;
-		color: oklch(0.75 0.05 250);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		min-width: 0;
-	}
-
-	.attachment-uploading {
-		font-size: 0.7rem;
-		color: oklch(0.60 0.08 250);
-		flex-shrink: 0;
-	}
-
-	.attachment-remove {
-		flex-shrink: 0;
-		width: 16px;
-		height: 16px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 0.875rem;
-		line-height: 1;
-		color: oklch(0.55 0.08 250);
-		background: none;
-		border: none;
-		cursor: pointer;
-		padding: 0;
-		border-radius: 50%;
-		transition: color 0.1s;
-	}
-
-	.attachment-remove:hover {
-		color: oklch(0.70 0.15 25);
 	}
 </style>

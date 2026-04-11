@@ -1166,7 +1166,7 @@
 										onclick={() => openEditor('title')}
 										aria-label="Edit title"
 									>
-										{task.title || 'Untitled'}
+										{task?.title || 'Untitled'}
 									</button>
 								{/snippet}
 							</TaskHeaderBlock>

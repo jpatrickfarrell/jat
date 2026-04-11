@@ -1,0 +1,403 @@
+#!/usr/bin/env node
+/**
+ * jat-join-project — Companion to `jt graduate`.
+ *
+ * A teammate clones a graduated project, then runs:
+ *
+ *   jat join-project <name> --postgres-url <url> [--path PATH]
+ *
+ * This adds the project to their local ~/.config/jat/projects.json with
+ * backend="postgres", tests the pg connection, and sets up the local agent
+ * workflow files (.jat/, .claude/settings.json, git pre-commit hook). Tasks
+ * continue to live in shared Postgres — no .jat/tasks.db is created.
+ *
+ * Usage:
+ *   jat join-project NAME --postgres-url URL [options]
+ *
+ * Options:
+ *   --postgres-url URL  Postgres connection string (required)
+ *   --path PATH         Project directory (default: cwd)
+ *   --force             Overwrite an existing projects.json entry
+ *   --json              Machine-readable output
+ *   --help, -h          Show help
+ */
+
+import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync, chmodSync, statSync } from 'fs';
+import { join, resolve, dirname, basename } from 'path';
+import { homedir } from 'os';
+import { createHash } from 'crypto';
+import { fileURLToPath } from 'url';
+
+import pg from 'pg';
+
+const __filename = fileURLToPath(import.meta.url);
+const JAT_SOURCE_DIR = resolve(dirname(__filename), '..', '..');
+const CONFIG_PATH = join(homedir(), '.config', 'jat', 'projects.json');
+const HOOKS_SOURCE = join(JAT_SOURCE_DIR, 'tools', 'scripts', 'hooks', 'pre-commit');
+
+// ---------------------------------------------------------------------------
+// Args
+// ---------------------------------------------------------------------------
+
+const argv = process.argv.slice(2);
+
+let projectName = null;
+let postgresUrl = null;
+let pathArg = null;
+let force = false;
+let jsonOut = false;
+
+function usage() {
+  console.log(`Usage: jat join-project NAME --postgres-url URL [options]
+
+Join a graduated JAT project on your machine. Tests the shared Postgres
+connection, registers the project locally with backend="postgres", and sets
+up the agent workflow files (.jat/, .claude/settings.json, git hook).
+
+Arguments:
+  NAME                The project name as it appears in the team config
+                      (the key used in ~/.config/jat/projects.json).
+
+Options:
+  --postgres-url URL  Postgres connection string (required)
+  --path PATH         Project directory on your machine (default: cwd)
+  --force             Overwrite an existing projects.json entry with the
+                      same name
+  --json              Machine-readable JSON output
+  --help, -h          Show this help
+
+Examples:
+  cd ~/code/acme-app
+  jat join-project acme-app --postgres-url postgres://jat:pw@host/jat_prod
+
+  jat join-project acme-app --path ~/work/acme \\
+      --postgres-url postgres://jat:pw@host/jat_prod
+`);
+}
+
+for (let i = 0; i < argv.length; i++) {
+  const a = argv[i];
+  if (a === '--help' || a === '-h') { usage(); process.exit(0); }
+  if (a === '--postgres-url' && argv[i + 1]) { postgresUrl = argv[++i]; continue; }
+  if (a.startsWith('--postgres-url=')) { postgresUrl = a.slice('--postgres-url='.length); continue; }
+  if (a === '--path' && argv[i + 1]) { pathArg = argv[++i]; continue; }
+  if (a.startsWith('--path=')) { pathArg = a.slice('--path='.length); continue; }
+  if (a === '--force') { force = true; continue; }
+  if (a === '--json') { jsonOut = true; continue; }
+  if (a.startsWith('--')) {
+    console.error(`Unknown option: ${a}`);
+    process.exit(2);
+  }
+  if (!projectName) { projectName = a; continue; }
+  console.error(`Unexpected argument: ${a}`);
+  process.exit(2);
+}
+
+// ---------------------------------------------------------------------------
+// TTY helpers
+// ---------------------------------------------------------------------------
+
+const isTty = process.stdout.isTTY && !jsonOut;
+
+const C = {
+  reset:  isTty ? '\x1b[0m'  : '',
+  dim:    isTty ? '\x1b[2m'  : '',
+  bold:   isTty ? '\x1b[1m'  : '',
+  red:    isTty ? '\x1b[31m' : '',
+  green:  isTty ? '\x1b[32m' : '',
+  yellow: isTty ? '\x1b[33m' : '',
+  cyan:   isTty ? '\x1b[36m' : '',
+};
+
+function die(message, code = 1) {
+  if (jsonOut) {
+    console.log(JSON.stringify({ status: 'error', error: message }));
+  } else {
+    console.error(`${C.red}Error:${C.reset} ${message}`);
+  }
+  process.exit(code);
+}
+
+function info(message) {
+  if (jsonOut) return;
+  console.log(message);
+}
+
+function maskUrl(url) {
+  return url.replace(/\/\/([^:/]+):([^@]+)@/, '//$1:***@');
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function expandHome(p) {
+  if (!p) return p;
+  return p.startsWith('~') ? p.replace(/^~/, homedir()) : p;
+}
+
+function toStoredPath(abs) {
+  const home = homedir();
+  if (abs === home) return '~';
+  if (abs.startsWith(home + '/')) return '~' + abs.slice(home.length);
+  return abs;
+}
+
+function hashColor(name) {
+  const h = createHash('md5').update(name).digest('hex').slice(0, 6);
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const hex = (n) => n.toString(16).padStart(2, '0');
+  return {
+    active:   `rgb(${hex(r)}${hex(g)}${hex(b)})`,
+    inactive: `rgb(${hex(Math.floor(r * 3 / 4))}${hex(Math.floor(g * 3 / 4))}${hex(Math.floor(b * 3 / 4))})`,
+  };
+}
+
+function detectPort(projectPath) {
+  const pkgPath = join(projectPath, 'package.json');
+  if (!existsSync(pkgPath)) return null;
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    const dev = pkg.scripts?.dev || '';
+    const m = dev.match(/--port[= ]+(\d+)/);
+    return m ? parseInt(m[1], 10) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function testPostgresConnection(url) {
+  const pool = new pg.Pool({ connectionString: url, max: 1, connectionTimeoutMillis: 5000 });
+  try {
+    const res = await pool.query('SELECT 1 AS ok');
+    if (res.rows[0]?.ok !== 1) throw new Error('Unexpected response from Postgres');
+    // Also verify the tasks table exists so we fail fast on an un-graduated db.
+    const schemaCheck = await pool.query(
+      "SELECT to_regclass('public.tasks') AS tasks_table"
+    );
+    if (!schemaCheck.rows[0]?.tasks_table) {
+      throw new Error(
+        'Connected, but no "tasks" table found. Has this database been graduated? ' +
+        'Run `jt graduate` on the origin machine first.'
+      );
+    }
+  } finally {
+    await pool.end();
+  }
+}
+
+function readConfig() {
+  if (!existsSync(CONFIG_PATH)) {
+    // Mirror `jat ensure_config`: create an empty config if missing.
+    mkdirSync(dirname(CONFIG_PATH), { recursive: true });
+    const skeleton = { projects: {}, defaults: {} };
+    writeFileSync(CONFIG_PATH, JSON.stringify(skeleton, null, 2));
+    return skeleton;
+  }
+  return JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'));
+}
+
+function writeConfig(cfg) {
+  writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2));
+}
+
+function ensureJatDir(projectPath) {
+  const jatDir = join(projectPath, '.jat');
+  const created = !existsSync(jatDir);
+  if (created) mkdirSync(jatDir, { recursive: true });
+
+  const gitignorePath = join(jatDir, '.gitignore');
+  if (!existsSync(gitignorePath)) {
+    writeFileSync(
+      gitignorePath,
+      'tasks.db\ntasks.db-wal\ntasks.db-shm\ndata.db\ndata.db-wal\ndata.db-shm\nlast-touched\n'
+    );
+  }
+  return created;
+}
+
+function ensureClaudeSettings(projectPath) {
+  const settingsPath = join(projectPath, '.claude', 'settings.json');
+  if (existsSync(settingsPath)) return false;
+  mkdirSync(dirname(settingsPath), { recursive: true });
+  const settings = {
+    statusLine: {
+      type: 'command',
+      command: '~/.claude/statusline.sh',
+      padding: 1,
+    },
+    hooks: {
+      PostToolUse: [
+        {
+          matcher: '^Bash$',
+          hooks: [
+            {
+              type: 'command',
+              command: '~/.claude/hooks/post-bash-agent-state-refresh.sh',
+              statusMessage: 'Checking agent state changes...',
+              streamStdinJson: true,
+            },
+            {
+              type: 'command',
+              command: '~/.claude/hooks/post-bash-jat-signal.sh',
+              statusMessage: '',
+              streamStdinJson: true,
+            },
+          ],
+        },
+      ],
+    },
+  };
+  writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+  return true;
+}
+
+function installGitHook(projectPath) {
+  const gitDir = join(projectPath, '.git');
+  if (!existsSync(gitDir)) return { installed: false, reason: 'not-a-git-repo' };
+  if (!existsSync(HOOKS_SOURCE)) return { installed: false, reason: 'hook-source-missing' };
+
+  const hooksDir = join(gitDir, 'hooks');
+  mkdirSync(hooksDir, { recursive: true });
+  const target = join(hooksDir, 'pre-commit');
+
+  // Back up an existing non-JAT hook (matches cli/jat install_hooks behavior).
+  if (existsSync(target)) {
+    try {
+      const existing = readFileSync(target, 'utf-8');
+      if (!existing.includes('AGENT REGISTRATION CHECK')) {
+        copyFileSync(target, `${target}.backup`);
+      }
+    } catch { /* fall through and overwrite */ }
+  }
+
+  copyFileSync(HOOKS_SOURCE, target);
+  chmodSync(target, 0o755);
+  return { installed: true };
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+async function main() {
+  if (!projectName) {
+    usage();
+    die('Missing NAME argument.', 2);
+  }
+  if (!postgresUrl) {
+    die('Missing --postgres-url. Pass --postgres-url postgres://user:pass@host/db');
+  }
+  if (!/^postgres(ql)?:\/\//.test(postgresUrl)) {
+    die(`Invalid postgres URL: ${postgresUrl}`);
+  }
+
+  // Resolve project path
+  const projectPath = resolve(expandHome(pathArg || process.cwd()));
+  try {
+    const st = statSync(projectPath);
+    if (!st.isDirectory()) die(`Not a directory: ${projectPath}`);
+  } catch {
+    die(`Cannot access directory: ${projectPath}`);
+  }
+
+  const isGitRepo = existsSync(join(projectPath, '.git'));
+
+  info('');
+  info(`${C.bold}Joining project${C.reset}`);
+  info(`  ${C.dim}Name:${C.reset}     ${projectName}`);
+  info(`  ${C.dim}Path:${C.reset}     ${projectPath}`);
+  info(`  ${C.dim}Postgres:${C.reset} ${maskUrl(postgresUrl)}`);
+  info('');
+
+  // 1. Check for existing projects.json entry
+  const cfg = readConfig();
+  if (!cfg.projects) cfg.projects = {};
+  const existing = cfg.projects[projectName];
+  if (existing && !force) {
+    die(
+      `Project "${projectName}" is already registered at ${existing.path}. ` +
+      `Use --force to overwrite, or 'jat remove ${projectName}' first.`
+    );
+  }
+
+  // 2. Test Postgres connection
+  info(`${C.dim}→ Testing Postgres connection...${C.reset}`);
+  try {
+    await testPostgresConnection(postgresUrl);
+  } catch (err) {
+    die(`Postgres connection failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  info(`  ${C.green}✓${C.reset} Connected`);
+
+  if (!isGitRepo) {
+    info(`  ${C.yellow}⚠${C.reset} ${projectPath} is not a git repository — pre-commit hook will be skipped`);
+  }
+
+  // 3. Write projects.json entry
+  const colors = hashColor(projectName);
+  const port = detectPort(projectPath);
+  const entry = {
+    name: projectName.toUpperCase(),
+    path: toStoredPath(projectPath),
+    port: port ?? null,
+    database_url: null,
+    active_color: colors.active,
+    inactive_color: colors.inactive,
+    hidden: false,
+    backend: 'postgres',
+    backend_url: postgresUrl,
+  };
+  cfg.projects[projectName] = entry;
+  writeConfig(cfg);
+  info(`  ${C.green}✓${C.reset} Registered in ~/.config/jat/projects.json`);
+
+  // 4. Create .jat/ skeleton (no tasks.db — tasks live in Postgres)
+  const createdJatDir = ensureJatDir(projectPath);
+  if (createdJatDir) {
+    info(`  ${C.green}✓${C.reset} Created .jat/ directory`);
+  } else {
+    info(`  ${C.dim}•${C.reset} .jat/ already exists`);
+  }
+
+  // 5. Create .claude/settings.json with signal hooks
+  const createdSettings = ensureClaudeSettings(projectPath);
+  if (createdSettings) {
+    info(`  ${C.green}✓${C.reset} Created .claude/settings.json`);
+  } else {
+    info(`  ${C.dim}•${C.reset} .claude/settings.json already exists`);
+  }
+
+  // 6. Install git pre-commit hook
+  const hookResult = installGitHook(projectPath);
+  if (hookResult.installed) {
+    info(`  ${C.green}✓${C.reset} Installed git pre-commit hook`);
+  } else if (hookResult.reason === 'not-a-git-repo') {
+    info(`  ${C.dim}•${C.reset} Skipped git hook (not a git repo)`);
+  } else {
+    info(`  ${C.yellow}⚠${C.reset} Skipped git hook (${hookResult.reason})`);
+  }
+
+  info('');
+  info(`${C.green}${C.bold}You're in${C.reset} — run ${C.cyan}jat${C.reset} to open the IDE on this project.`);
+  info('');
+
+  if (jsonOut) {
+    console.log(JSON.stringify({
+      status: 'joined',
+      project: projectName,
+      path: projectPath,
+      backend: 'postgres',
+      backendUrl: postgresUrl,
+      createdJatDir,
+      createdSettings,
+      hookInstalled: hookResult.installed,
+    }));
+  }
+}
+
+main().catch((err) => {
+  die(err instanceof Error ? err.stack || err.message : String(err));
+});

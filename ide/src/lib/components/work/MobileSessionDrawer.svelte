@@ -665,11 +665,11 @@
 	}
 
 	// Direct click action (bypasses Svelte 5 event delegation for portals)
-	function directClick(node: HTMLElement, handler: () => void) {
-		node.addEventListener('click', handler);
+	function directClick(node: HTMLElement, handler: ((e: MouseEvent) => void) | (() => void)) {
+		node.addEventListener('click', handler as EventListener);
 		return {
 			destroy() {
-				node.removeEventListener('click', handler);
+				node.removeEventListener('click', handler as EventListener);
 			}
 		};
 	}
@@ -1163,7 +1163,7 @@
 									<button
 										type="button"
 										class="text-left w-full text-lg font-semibold text-base-content leading-snug m-0 bg-transparent border-0 p-0 cursor-pointer hover:text-info active:text-info transition-colors"
-										onclick={() => openEditor('title')}
+										use:directClick={() => openEditor('title')}
 										aria-label="Edit title"
 									>
 										{task?.title || 'Untitled'}
@@ -1178,7 +1178,7 @@
 								<button
 									type="button"
 									class="badge badge-sm {getStatusBadgeClass(task.status)} badge-outline uppercase tracking-wide cursor-pointer active:scale-95 transition-transform"
-									onclick={() => openEditor('status')}
+									use:directClick={() => openEditor('status')}
 									aria-label="Edit status"
 								>
 									{task.status.replace('_', ' ')}
@@ -1186,7 +1186,7 @@
 								<button
 									type="button"
 									class="badge badge-sm {getPriorityBadgeClass(task.priority)} badge-outline uppercase tracking-wide cursor-pointer active:scale-95 transition-transform"
-									onclick={() => openEditor('priority')}
+									use:directClick={() => openEditor('priority')}
 									aria-label="Edit priority"
 								>
 									{task.priority !== undefined && task.priority !== null ? getPriorityLabel(task.priority) : 'Set priority'}
@@ -1224,7 +1224,7 @@
 							<button
 								type="button"
 								class="text-left w-full text-sm text-base-content/80 leading-relaxed whitespace-pre-wrap bg-base-200 hover:bg-base-300 active:bg-base-300 border border-base-300 p-3 rounded-lg cursor-pointer transition-colors"
-								onclick={() => openEditor('description')}
+								use:directClick={() => openEditor('description')}
 								aria-label="Edit description"
 							>
 								{#if task.description || fullTask?.description}
@@ -1243,7 +1243,7 @@
 								<button
 									type="button"
 									class="text-left w-full bg-base-200 hover:bg-base-300 active:bg-base-300 border border-base-300 p-3 rounded-lg cursor-pointer transition-colors"
-									onclick={() => openEditor('labels')}
+									use:directClick={() => openEditor('labels')}
 									aria-label="Edit labels"
 								>
 									{#if fullTask.labels?.length}
@@ -1342,8 +1342,8 @@
 			class="fixed inset-0 z-[60] flex items-end justify-center bg-black/50"
 			role="button"
 			tabindex="-1"
-			onclick={closeEditor}
-			onkeydown={(e) => { if (e.key === 'Escape') closeEditor(); }}
+			use:directClick={closeEditor}
+			use:directKeydown={(e) => { if (e.key === 'Escape') closeEditor(); }}
 			transition:fade={{ duration: 150 }}
 		>
 			<div
@@ -1351,8 +1351,8 @@
 				role="dialog"
 				aria-modal="true"
 				aria-label="Edit {editMode}"
-				onclick={(e) => e.stopPropagation()}
-				onkeydown={(e) => e.stopPropagation()}
+				use:directClick={(e) => e.stopPropagation()}
+				use:directKeydown={(e) => e.stopPropagation()}
 				transition:fly={{ y: 300, duration: 200, easing: cubicOut }}
 			>
 				<!-- Drag handle -->
@@ -1363,7 +1363,7 @@
 					<button
 						type="button"
 						class="btn btn-sm btn-ghost btn-circle"
-						onclick={closeEditor}
+						use:directClick={closeEditor}
 						aria-label="Close"
 					>
 						✕
@@ -1381,7 +1381,7 @@
 								type="button"
 								class="btn btn-block justify-start {task.status === opt.value ? 'btn-primary' : 'btn-outline'}"
 								disabled={editSaving}
-								onclick={() => saveStatus(opt.value)}
+								use:directClick={() => saveStatus(opt.value)}
 							>
 								{opt.label}
 							</button>
@@ -1394,7 +1394,7 @@
 								type="button"
 								class="btn btn-block justify-start {task.priority === opt.value ? 'btn-primary' : 'btn-outline'}"
 								disabled={editSaving}
-								onclick={() => savePriority(opt.value)}
+								use:directClick={() => savePriority(opt.value)}
 							>
 								{opt.label}
 							</button>
@@ -1408,11 +1408,11 @@
 							bind:value={editDraft}
 							placeholder="Task title"
 							disabled={editSaving}
-							onkeydown={(e) => { if (e.key === 'Enter') saveTitle(); }}
+							use:directKeydown={(e) => { if (e.key === 'Enter') saveTitle(); }}
 						/>
 						<div class="flex gap-2">
-							<button type="button" class="btn btn-outline flex-1" disabled={editSaving} onclick={closeEditor}>Cancel</button>
-							<button type="button" class="btn btn-primary flex-1" disabled={editSaving} onclick={saveTitle}>
+							<button type="button" class="btn btn-outline flex-1" disabled={editSaving} use:directClick={closeEditor}>Cancel</button>
+							<button type="button" class="btn btn-primary flex-1" disabled={editSaving} use:directClick={saveTitle}>
 								{editSaving ? 'Saving…' : 'Save'}
 							</button>
 						</div>
@@ -1426,8 +1426,8 @@
 							disabled={editSaving}
 						></textarea>
 						<div class="flex gap-2">
-							<button type="button" class="btn btn-outline flex-1" disabled={editSaving} onclick={closeEditor}>Cancel</button>
-							<button type="button" class="btn btn-primary flex-1" disabled={editSaving} onclick={saveDescription}>
+							<button type="button" class="btn btn-outline flex-1" disabled={editSaving} use:directClick={closeEditor}>Cancel</button>
+							<button type="button" class="btn btn-primary flex-1" disabled={editSaving} use:directClick={saveDescription}>
 								{editSaving ? 'Saving…' : 'Save'}
 							</button>
 						</div>
@@ -1440,12 +1440,12 @@
 							bind:value={editDraft}
 							placeholder="comma, separated, labels"
 							disabled={editSaving}
-							onkeydown={(e) => { if (e.key === 'Enter') saveLabels(); }}
+							use:directKeydown={(e) => { if (e.key === 'Enter') saveLabels(); }}
 						/>
 						<p class="text-xs text-base-content/60">Separate multiple labels with commas.</p>
 						<div class="flex gap-2">
-							<button type="button" class="btn btn-outline flex-1" disabled={editSaving} onclick={closeEditor}>Cancel</button>
-							<button type="button" class="btn btn-primary flex-1" disabled={editSaving} onclick={saveLabels}>
+							<button type="button" class="btn btn-outline flex-1" disabled={editSaving} use:directClick={closeEditor}>Cancel</button>
+							<button type="button" class="btn btn-primary flex-1" disabled={editSaving} use:directClick={saveLabels}>
 								{editSaving ? 'Saving…' : 'Save'}
 							</button>
 						</div>

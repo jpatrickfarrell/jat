@@ -53,6 +53,7 @@
 	import LlmProviderEditor from '$lib/components/config/LlmProviderEditor.svelte';
 	import AgentProgramsEditor from '$lib/components/config/AgentProgramsEditor.svelte';
 	import SkillsEditor from '$lib/components/config/SkillsEditor.svelte';
+	import GraduationWizard from '$lib/components/GraduationWizard.svelte';
 	import type { SlashCommand, ProjectConfig, HooksConfig } from '$lib/types/config';
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 	import { reveal } from '$lib/actions/reveal';
@@ -73,6 +74,10 @@
 	// Project editor state
 	let isProjectEditorOpen = $state(false);
 	let editingProject = $state<{ key: string; config: ProjectConfig } | null>(null);
+
+	// Graduation wizard state
+	let isGraduationWizardOpen = $state(false);
+	let graduatingProjectKey = $state<string | null>(null);
 
 	// CLAUDE.md editor state
 	interface ClaudeMdFile {
@@ -651,6 +656,23 @@
 	onSave={handleProjectSave}
 	onCancel={handleProjectCancel}
 	onDelete={handleProjectDelete}
+	onGraduate={(key) => {
+		graduatingProjectKey = key;
+		isGraduationWizardOpen = true;
+	}}
+/>
+
+<!-- Graduation Wizard Modal -->
+<GraduationWizard
+	isOpen={isGraduationWizardOpen}
+	projectKey={graduatingProjectKey}
+	onClose={() => {
+		isGraduationWizardOpen = false;
+		graduatingProjectKey = null;
+	}}
+	onGraduated={() => {
+		loadProjects();
+	}}
 />
 
 <!-- Create Directory Confirmation Modal -->

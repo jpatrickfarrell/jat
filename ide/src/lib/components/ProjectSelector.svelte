@@ -14,6 +14,7 @@
 	import { slide } from "svelte/transition";
 	import { getProjectColor } from "$lib/utils/projectColors";
 	import FxText from '$lib/components/FxText.svelte';
+	import BackendBadge from '$lib/components/BackendBadge.svelte';
 	import { SESSION_STATE_VISUALS } from "$lib/config/statusColors";
 	import {
 		isStartDropdownOpen,
@@ -94,6 +95,8 @@
 		isFavorite?: boolean;
 		/** Called when favorite star is toggled */
 		onToggleFavorite?: (project: string) => void;
+		/** Backend type for this project */
+		backend?: 'sqlite' | 'postgres';
 	}
 
 	let {
@@ -116,6 +119,7 @@
 		openOnHover = false,
 		isFavorite = false,
 		onToggleFavorite,
+		backend = 'sqlite',
 	}: Props = $props();
 
 	// If projects list is provided (non-TopBar usage), show projects section in dropdown
@@ -605,6 +609,8 @@
 			<div class="dropdown-header-row" style="--project-color: {selectedColor};">
 				<span class="dropdown-fav-dot"></span>
 				<span class="dropdown-fav-label">{selectedProject}</span>
+
+				<BackendBadge {backend} project={selectedProject} size="sm" />
 
 				{#if serverError}
 					<span class="header-server-error" title={serverError}>!</span>

@@ -705,16 +705,14 @@
 						</div>
 					{/if}
 					{#if historyData.cf}
-						{@const cfStatusColor = historyData.cf.status === 'success' ? 'history-cf-success' : historyData.cf.status === 'failure' ? 'history-cf-fail' : historyData.cf.status === 'active' ? 'history-cf-active' : 'history-cf-idle'}
-						{@const cfGlyph = historyData.cf.status === 'success' ? '✓' : historyData.cf.status === 'failure' ? '✗' : historyData.cf.status === 'active' ? '◉' : '○'}
+						{@const cfColor = historyData.cf.status === 'success' ? 'history-icon-cf-success' : historyData.cf.status === 'failure' ? 'history-icon-cf-fail' : historyData.cf.status === 'active' ? 'history-icon-cf-active' : 'history-icon-cf-idle'}
 						<div class="history-row">
-							<!-- Cloudflare logo -->
-							<span class="history-icon history-icon-cf" title="Cloudflare">
+							<!-- Cloudflare logo — colored by deployment status -->
+							<span class="history-icon {cfColor}" title="Cloudflare Pages · {historyData.cf.status}">
 								<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
 									<path d="M16.6 5.82s.51.56.11 1.18c-.17.26-.44.47-.88.52l-12.91.02c-.35 0-.57-.24-.63-.4-.07-.2-.07-.55.25-.79l.57-.23c.4-.17.69-.36.77-.62.07-.24-.02-.46-.17-.61-.22-.2-.55-.29-.88-.18a.97.97 0 0 0-.67.95c0 .54.26 1.03.7 1.32l.47.3-.03.04a2 2 0 0 0-1.4 1.93 2 2 0 0 0 2 2l12.27.02h.02c.66 0 1.2-.54 1.2-1.2v-.04c0-.44-.24-.84-.62-1.06l-.84-.47.59-.59c.63-.63.62-1.6.05-2.19z"/>
 								</svg>
 							</span>
-							<span class="history-cf-status {cfStatusColor}">{cfGlyph}</span>
 							<span class="history-msg">{historyData.cf.environment}</span>
 							<span class="history-time">{relativeTime(historyData.cf.createdOn)}</span>
 						</div>
@@ -1700,8 +1698,8 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 0.875rem;
-		height: 0.875rem;
+		width: 1rem;
+		height: 1rem;
 		flex-shrink: 0;
 	}
 
@@ -1710,9 +1708,17 @@
 		height: 100%;
 	}
 
-	.history-icon-git  { color: oklch(0.72 0.18 40);  } /* Git orange */
-	.history-icon-cf   { color: oklch(0.75 0.16 55);  } /* Cloudflare orange */
-	.history-icon-sb   { color: oklch(0.68 0.18 168); } /* Supabase green */
+	/* Git: always orange */
+	.history-icon-git { color: oklch(0.72 0.18 40); }
+
+	/* Cloudflare: logo color = deployment status */
+	.history-icon-cf-success { color: oklch(0.70 0.18 145); } /* green  */
+	.history-icon-cf-fail    { color: oklch(0.68 0.18 25);  } /* red    */
+	.history-icon-cf-active  { color: oklch(0.72 0.14 220); } /* blue   */
+	.history-icon-cf-idle    { color: oklch(0.50 0.03 250); } /* muted  */
+
+	/* Supabase: always teal */
+	.history-icon-sb { color: oklch(0.68 0.18 168); }
 
 	.history-hash {
 		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
@@ -1752,15 +1758,4 @@
 		color: oklch(0.80 0.15 55);
 	}
 
-	/* Cloudflare status glyph */
-	.history-cf-status {
-		font-size: 0.625rem;
-		font-weight: 700;
-		flex-shrink: 0;
-	}
-
-	.history-cf-success { color: oklch(0.72 0.18 145); }
-	.history-cf-fail    { color: oklch(0.72 0.18 25);  }
-	.history-cf-active  { color: oklch(0.75 0.15 200); }
-	.history-cf-idle    { color: oklch(0.45 0.02 250); }
 </style>

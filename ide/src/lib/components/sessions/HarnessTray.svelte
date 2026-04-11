@@ -15,11 +15,12 @@
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
 
 	let {
-		onLaunch = (_agentId: string) => {},
+		onSelect = (_agentId: string) => {},
 		onSettings = () => {},
 		selectedHarness = ''
 	}: {
-		onLaunch?: (agentId: string) => void;
+		/** Called when user clicks a harness — switches selection, does NOT launch */
+		onSelect?: (agentId: string) => void;
 		onSettings?: () => void;
 		/** Currently selected harness (task.agent_program) — highlights that button */
 		selectedHarness?: string;
@@ -68,11 +69,11 @@
 		{#each programs as program (program.id)}
 			<button
 				class="harness-tray-btn {selectedHarness === program.id ? 'harness-tray-btn-selected' : ''}"
-				title="Launch with {program.name}{selectedHarness === program.id ? ' (current)' : ''}"
+				title="{selectedHarness === program.id ? `${program.name} (selected — click rocket to launch)` : `Switch to ${program.name}`}"
 				onclick={(e) => {
 					e.stopPropagation();
 					haptic();
-					onLaunch(program.id);
+					onSelect(program.id);
 				}}
 			>
 				<ProviderLogo agentId={program.id} size={22} />
@@ -88,7 +89,7 @@
 			onclick={(e) => {
 				e.stopPropagation();
 				haptic();
-				onLaunch('human');
+				onSelect('human');
 			}}
 		>
 			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" width="18" height="18">
@@ -122,7 +123,7 @@
 	 */
 	.harness-tray {
 		position: absolute;
-		left: 52px; /* flush against avatar right edge */
+		left: 52px; /* mobile: no checkbox col, avatar starts at 0 */
 		top: 0;
 		bottom: 0;
 		z-index: 5;
@@ -132,6 +133,13 @@
 		max-width: 0;
 		overflow: hidden;
 		transition: max-width 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+	}
+
+	/* Desktop: checkbox col (40px) is visible, so avatar starts at 40px → tray at 92px */
+	@media (min-width: 640px) {
+		.harness-tray {
+			left: 92px; /* 40px checkbox + 52px avatar */
+		}
 	}
 
 	/*

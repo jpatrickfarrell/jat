@@ -213,6 +213,60 @@ function buildTaskSessionsMap(taskIds: Set<string>, projectPath: string): Map<st
 		}
 	}
 
+	// Fallback: scan persistent .jat/signals/{taskId}.jsonl files for tasks still missing sessions
+	// These survive system reboots unlike /tmp timeline files
+	const signalsDir = join(projectPath, '.jat', 'signals');
+	if (existsSync(signalsDir)) {
+		for (const taskId of taskIds) {
+			const sessionMap = taskSessions.get(taskId);
+			if (!sessionMap || sessionMap.size > 0) continue; // Already have sessions for this task
+
+			const signalFile = join(signalsDir, `${taskId}.jsonl`);
+			if (!existsSync(signalFile)) continue;
+
+			try {
+				const content = readFileSync(signalFile, 'utf-8');
+				const lines = content.trim().split('\n').filter(Boolean);
+
+				// Find the most recent agent/session from this task's signals
+				const agentActivity = new Map<string, { sessionId: string | null; lastActivity: string | null; count: number }>();
+
+				for (const line of lines) {
+					try {
+						const event = JSON.parse(line);
+						const agentName = event.agent_name;
+						const sessionId = event.session_id;
+						if (!agentName) continue;
+
+						const existing = agentActivity.get(agentName) || { sessionId: null, lastActivity: null, count: 0 };
+						existing.count++;
+						if (sessionId && !existing.sessionId) existing.sessionId = sessionId;
+						if (event.timestamp && (!existing.lastActivity || event.timestamp > existing.lastActivity)) {
+							existing.lastActivity = event.timestamp;
+						}
+						agentActivity.set(agentName, existing);
+					} catch {
+						// Skip malformed lines
+					}
+				}
+
+				for (const [agentName, activity] of agentActivity) {
+					if (activity.count > 0) {
+						sessionMap.set(agentName, {
+							agentName,
+							sessionId: activity.sessionId,
+							lastActivity: activity.lastActivity,
+							signalCount: activity.count,
+							isOnline: onlineAgents.has(agentName)
+						});
+					}
+				}
+			} catch {
+				// Skip unreadable files
+			}
+		}
+	}
+
 	// Convert to sorted arrays
 	const result = new Map<string, TaskSession[]>();
 	for (const [taskId, sessionMap] of taskSessions) {

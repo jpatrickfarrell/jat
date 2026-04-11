@@ -1896,7 +1896,7 @@
 								<button
 									class="avatar-rocket-btn rocket-btn {task.id === spawningTaskId ? 'rocket-launching' : ''}"
 									onclick={(e) => { e.stopPropagation(); onSpawnTask(task, { agentId: harness, model: null }); }}
-									title="Launch task (hover to switch harness)"
+									title="Launch with {harness} (hover avatar to switch harness)"
 									disabled={task.id === spawningTaskId || isBlocked}
 								>
 									<div class="relative flex items-center justify-center" style="width:22px;height:22px;overflow:visible;">
@@ -1934,13 +1934,9 @@
 						{#if !isBlocked && !isHumanTask(task)}
 							<HarnessTray
 								selectedHarness={task.agent_program || ''}
-								onLaunch={(agentId) => {
-									if (agentId === 'human') {
-										// Mark as human task (saves harness, no launch)
-										handleSingleHarnessChange(task.id, { agentId: 'human', model: null });
-									} else {
-										onSpawnTask(task, { agentId, model: null });
-									}
+								onSelect={(agentId) => {
+									// Tray always just switches harness — rocket button launches
+									handleSingleHarnessChange(task.id, { agentId, model: null });
 								}}
 								onSettings={() => {
 									harnessPickerTaskId = task.id;

@@ -391,6 +391,104 @@
 		return unsubscribe;
 	});
 
+	// ─── History (latest commit / CF deployment / Supabase migration) ───────────
+
+	interface HistoryGit {
+		hashShort: string;
+		message: string;
+		date: string;
+		isPushed: boolean;
+		branch: string;
+	}
+	interface HistoryCF {
+		status: 'success' | 'failure' | 'active' | 'canceled' | 'idle';
+		environment: string;
+		createdOn: string;
+	}
+	interface HistorySB {
+		name: string;
+		localOnly: number;
+	}
+	interface HistoryData {
+		git: HistoryGit | null;
+		cf: HistoryCF | null;
+		sb: HistorySB | null;
+		loading: boolean;
+	}
+
+	let historyData = $state<HistoryData>({ git: null, cf: null, sb: null, loading: false });
+	let historyFetchedFor = $state<string | null>(null);
+
+	function relativeTime(dateStr: string): string {
+		const diff = Date.now() - new Date(dateStr).getTime();
+		const mins = Math.floor(diff / 60000);
+		const hours = Math.floor(diff / 3600000);
+		const days = Math.floor(diff / 86400000);
+		if (mins < 1) return 'just now';
+		if (mins < 60) return `${mins}m`;
+		if (hours < 24) return `${hours}h`;
+		if (days < 30) return `${days}d`;
+		return `${Math.floor(days / 30)}mo`;
+	}
+
+	async function fetchHistory() {
+		if (historyData.loading) return;
+		historyData = { git: null, cf: null, sb: null, loading: true };
+		historyFetchedFor = selectedProject;
+
+		const [gitRes, cfRes, sbRes] = await Promise.allSettled([
+			fetch(`/api/files/git/log?project=${encodeURIComponent(selectedProject)}&limit=1`).then(r => r.ok ? r.json() : null),
+			fetch(`/api/cloudflare/deployments?project=${encodeURIComponent(selectedProject)}&per_page=1`).then(r => r.ok ? r.json() : null),
+			fetch(`/api/supabase/status?project=${encodeURIComponent(selectedProject)}`).then(r => r.ok ? r.json() : null),
+		]);
+
+		const gitVal = gitRes.status === 'fulfilled' ? gitRes.value : null;
+		const cfVal  = cfRes.status  === 'fulfilled' ? cfRes.value  : null;
+		const sbVal  = sbRes.status  === 'fulfilled' ? sbRes.value  : null;
+
+		const git: HistoryGit | null = gitVal?.commits?.[0]
+			? {
+				hashShort: gitVal.commits[0].hashShort,
+				message:   gitVal.commits[0].message,
+				date:      gitVal.commits[0].date,
+				isPushed:  gitVal.commits[0].isPushed,
+				branch:    gitVal.currentBranch || '',
+			  }
+			: null;
+
+		const cf: HistoryCF | null = cfVal?.deployments?.[0]
+			? {
+				status:      cfVal.deployments[0].status,
+				environment: cfVal.deployments[0].environment,
+				createdOn:   cfVal.deployments[0].createdOn,
+			  }
+			: null;
+
+		let sb: HistorySB | null = null;
+		if (sbVal?.hasSupabase && sbVal?.migrations?.length) {
+			// Find latest local migration (highest version timestamp)
+			const localMigrations = sbVal.migrations
+				.filter((m: { localVersion?: string; name?: string; filename?: string }) => m.localVersion)
+				.sort((a: { localVersion: string }, b: { localVersion: string }) => b.localVersion.localeCompare(a.localVersion));
+			if (localMigrations.length > 0) {
+				const latest = localMigrations[0];
+				sb = {
+					name: latest.name || latest.filename || latest.localVersion,
+					localOnly: sbVal.stats?.localOnly || 0,
+				};
+			}
+		}
+
+		historyData = { git, cf, sb, loading: false };
+	}
+
+	// Fetch history when dropdown opens for a new project
+	$effect(() => {
+		if (open && historyFetchedFor !== selectedProject) {
+			fetchHistory();
+		}
+	});
+
 	$effect(() => {
 		if (open) {
 			document.addEventListener('click', handleClickOutside, true);
@@ -581,9 +679,53 @@
 				{/each}
 			{/if}
 
+			<!-- History Section: latest commit / CF deployment / Supabase migration -->
+			{#if historyData.loading}
+				<div class="history-row history-loading-row">
+					<span class="loading loading-spinner loading-xs" style="color: oklch(0.50 0.02 250);"></span>
+					<span class="history-loading-text">Loading history…</span>
+				</div>
+				<div class="dropdown-divider"></div>
+			{:else if historyData.git || historyData.cf || historyData.sb}
+				<div class="history-rows">
+					{#if historyData.git}
+						<div class="history-row">
+							<span class="history-label history-label-git">git</span>
+							<span class="history-hash">{historyData.git.hashShort}</span>
+							<span class="history-msg">{historyData.git.message}</span>
+							<span class="history-time">{relativeTime(historyData.git.date)}</span>
+							{#if !historyData.git.isPushed}
+								<span class="history-tag history-tag-warn" title="Uncommitted changes">↑</span>
+							{/if}
+						</div>
+					{/if}
+					{#if historyData.cf}
+						{@const cfStatusColor = historyData.cf.status === 'success' ? 'history-cf-success' : historyData.cf.status === 'failure' ? 'history-cf-fail' : historyData.cf.status === 'active' ? 'history-cf-active' : 'history-cf-idle'}
+						{@const cfGlyph = historyData.cf.status === 'success' ? '✓' : historyData.cf.status === 'failure' ? '✗' : historyData.cf.status === 'active' ? '◉' : '○'}
+						<div class="history-row">
+							<span class="history-label history-label-cf">cf</span>
+							<span class="history-cf-status {cfStatusColor}">{cfGlyph}</span>
+							<span class="history-msg">{historyData.cf.environment}</span>
+							<span class="history-time">{relativeTime(historyData.cf.createdOn)}</span>
+						</div>
+					{/if}
+					{#if historyData.sb}
+						<div class="history-row">
+							<span class="history-label history-label-db">db</span>
+							<span class="history-msg">{historyData.sb.name}</span>
+							{#if historyData.sb.localOnly > 0}
+								<span class="history-tag history-tag-warn" title="{historyData.sb.localOnly} local-only migration(s)">+{historyData.sb.localOnly}</span>
+							{/if}
+						</div>
+					{/if}
+				</div>
+				<div class="dropdown-divider"></div>
+			{/if}
+
 			<!-- Active Tasks Section -->
 			{#if projectActiveTasks.length > 0}
-				{#if showProjectsList}<div class="dropdown-divider"></div>{/if}
+				{@const historyShown = historyData.loading || !!(historyData.git || historyData.cf || historyData.sb)}
+				{#if showProjectsList && !historyShown}<div class="dropdown-divider"></div>{/if}
 				<div class="dropdown-section-header">Active ({projectActiveTasks.length})</div>
 				{#each projectActiveTasks as task}
 					<div class="dropdown-item task-item active-task-item">
@@ -1514,4 +1656,103 @@
 		text-align: center;
 		font-style: italic;
 	}
+
+	/* ── History section ── */
+	.history-rows {
+		padding: 0.2rem 0;
+	}
+
+	.history-row {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.175rem 0.5rem;
+		min-width: 0;
+	}
+
+	.history-loading-row {
+		padding: 0.35rem 0.5rem;
+	}
+
+	.history-loading-text {
+		font-size: 0.625rem;
+		color: oklch(0.45 0.02 250);
+		font-style: italic;
+	}
+
+	/* Small monospace label badge (git / cf / db) */
+	.history-label {
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		font-size: 0.5625rem;
+		font-weight: 700;
+		padding: 0.0625rem 0.25rem;
+		border-radius: 0.2rem;
+		flex-shrink: 0;
+		letter-spacing: 0.03em;
+	}
+
+	.history-label-git {
+		background: oklch(0.30 0.06 300 / 0.35);
+		color: oklch(0.72 0.10 300);
+	}
+
+	.history-label-cf {
+		background: oklch(0.28 0.10 55 / 0.35);
+		color: oklch(0.75 0.15 55);
+	}
+
+	.history-label-db {
+		background: oklch(0.25 0.08 200 / 0.35);
+		color: oklch(0.68 0.12 200);
+	}
+
+	.history-hash {
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		font-size: 0.5625rem;
+		color: oklch(0.55 0.02 250);
+		flex-shrink: 0;
+	}
+
+	.history-msg {
+		flex: 1;
+		font-size: 0.6rem;
+		color: oklch(0.60 0.02 250);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		min-width: 0;
+	}
+
+	.history-time {
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		font-size: 0.5625rem;
+		color: oklch(0.42 0.02 250);
+		flex-shrink: 0;
+		white-space: nowrap;
+	}
+
+	.history-tag {
+		font-size: 0.5rem;
+		font-weight: 700;
+		padding: 0.0625rem 0.2rem;
+		border-radius: 0.2rem;
+		flex-shrink: 0;
+	}
+
+	.history-tag-warn {
+		background: oklch(0.28 0.10 55 / 0.3);
+		color: oklch(0.80 0.15 55);
+	}
+
+	/* Cloudflare status glyph */
+	.history-cf-status {
+		font-size: 0.625rem;
+		font-weight: 700;
+		flex-shrink: 0;
+	}
+
+	.history-cf-success { color: oklch(0.72 0.18 145); }
+	.history-cf-fail    { color: oklch(0.72 0.18 25);  }
+	.history-cf-active  { color: oklch(0.75 0.15 200); }
+	.history-cf-idle    { color: oklch(0.45 0.02 250); }
 </style>

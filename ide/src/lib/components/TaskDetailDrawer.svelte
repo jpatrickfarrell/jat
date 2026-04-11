@@ -42,6 +42,7 @@
 	import BaseAttachChips from './bases/BaseAttachChips.svelte';
 	import DataTableAttachChips from './bases/DataTableAttachChips.svelte';
 	import type { KnowledgeBase, RenderedBase } from '$lib/types/knowledgeBase';
+	import { TaskFieldLabel } from '$lib/components/task/primitives';
 	import FeedbackReplyModal from '$lib/components/FeedbackReplyModal.svelte';
 
 	// Task interface for drawer (extends API Task with additional optional fields)
@@ -2871,7 +2872,7 @@
 					<div class="flex flex-col">
 						<!-- Labels (badges, click to edit) - Industrial -->
 						<div>
-							<h4 class="text-sm font-semibold mb-2 text-base-content">Labels</h4>
+							<TaskFieldLabel>Labels</TaskFieldLabel>
 							{#if editingLabels}
 								<!-- Edit mode: text input - Industrial -->
 								<input
@@ -3070,7 +3071,7 @@
 
 						<!-- Description (Inline Editable) - Industrial -->
 						<div class="mt-5">
-							<h4 class="text-sm font-semibold mb-2 text-base-content">Description</h4>
+							<TaskFieldLabel>Description</TaskFieldLabel>
 							<InlineEdit
 								value={task.description || ''}
 								onSave={async (newValue) => {
@@ -3087,7 +3088,7 @@
 
 						<!-- Execution & Scheduling -->
 						<div class="mt-8">
-							<h4 class="text-sm font-semibold mb-2 text-base-content">Execution</h4>
+							<TaskFieldLabel>Execution</TaskFieldLabel>
 							<div class="flex flex-col gap-3">
 
 								<!-- Command (searchable dropdown) -->
@@ -3358,9 +3359,7 @@
 							<!-- Full summary section for closed tasks or when summary has been generated -->
 							<div class="mt-8 rounded-lg p-4 bg-base-200 border border-base-300">
 								<div class="flex items-center justify-between mb-3">
-									<h4 class="text-sm font-semibold text-base-content">
-										{task.status === 'closed' ? 'Completion Summary' : 'Progress Summary'}
-									</h4>
+									<TaskFieldLabel>{task.status === 'closed' ? 'Completion Summary' : 'Progress Summary'}</TaskFieldLabel>
 									{#if summaryData}
 										<button
 											class="btn btn-xs btn-ghost"
@@ -3491,9 +3490,7 @@
 							<div class="rounded-lg p-4 bg-base-200 border border-base-300 border-dashed">
 								<div class="flex items-center justify-between">
 									<div>
-										<h4 class="text-sm font-semibold text-base-content mb-1">
-											Progress Summary
-										</h4>
+										<TaskFieldLabel>Progress Summary</TaskFieldLabel>
 										<p class="text-xs text-base-content/50">Generate a summary of work done so far</p>
 									</div>
 									<button
@@ -3519,12 +3516,7 @@
 						<div
 							class="mt-5 relative rounded transition-all duration-200"
 						>
-							<h4 class="text-sm font-semibold mb-2 text-base-content">
-								Attachments
-								{#if attachments.length > 0}
-									<span class="ml-1 badge badge-xs bg-base-300 text-base-content/70">{attachments.length}</span>
-								{/if}
-							</h4>
+							<TaskFieldLabel>Attachments{#if attachments.length > 0}<span class="ml-1 badge badge-xs bg-base-300 text-base-content/70 normal-case tracking-normal">{attachments.length}</span>{/if}</TaskFieldLabel>
 
 							{#if isUploading}
 								<div class="flex items-center gap-2 p-3 rounded bg-base-200">
@@ -3621,12 +3613,7 @@
 						<!-- Task Activity Timeline (Signals) -->
 						<div class="mt-8">
 							<div class="flex items-center justify-between mb-2">
-								<h4 class="text-sm font-semibold text-base-content">
-									Activity Timeline
-									{#if taskSignals.length > 0}
-										<span class="ml-1 badge badge-xs bg-base-300 text-base-content/70">{taskSignals.length}</span>
-									{/if}
-								</h4>
+								<TaskFieldLabel>Activity Timeline{#if taskSignals.length > 0}<span class="ml-1 badge badge-xs bg-base-300 text-base-content/70 normal-case tracking-normal">{taskSignals.length}</span>{/if}</TaskFieldLabel>
 								<div class="flex items-center gap-1">
 									{#if taskSignals.length > 0}
 										<button

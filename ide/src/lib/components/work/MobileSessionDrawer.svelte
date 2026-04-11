@@ -20,6 +20,11 @@
 	import { cubicOut } from 'svelte/easing';
 	import SessionCard from '$lib/components/work/SessionCard.svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
+	import {
+		TaskFieldLabel,
+		TaskFieldGrid,
+		TaskFieldCell
+	} from '$lib/components/task/primitives';
 	import { isMobileFullscreenOpen } from '$lib/stores/drawerStore';
 	import { setHoveredSession } from '$lib/stores/hoveredSession';
 	import type { SessionState, SessionStateAction } from '$lib/config/statusColors';
@@ -1070,39 +1075,27 @@
 
 						<!-- Session Info -->
 						<div class="mb-5">
-							<h4 class="text-xs font-semibold uppercase tracking-wider text-base-content/60 mb-2">Session</h4>
-							<div class="grid grid-cols-2 gap-2">
+							<TaskFieldLabel>Session</TaskFieldLabel>
+							<TaskFieldGrid>
 								{#if created}
-									<div class="flex flex-col gap-0.5 bg-base-200 px-2.5 py-2 rounded-md">
-										<span class="text-[0.625rem] uppercase tracking-wide text-base-content/50">Started</span>
-										<span class="text-sm font-medium text-base-content">{formatTimeAgo(created)}</span>
-									</div>
+									<TaskFieldCell label="Started">{formatTimeAgo(created)}</TaskFieldCell>
 								{/if}
 								{#if tokens > 0}
-									<div class="flex flex-col gap-0.5 bg-base-200 px-2.5 py-2 rounded-md">
-										<span class="text-[0.625rem] uppercase tracking-wide text-base-content/50">Tokens</span>
-										<span class="text-sm font-medium text-base-content">{tokens > 1000000 ? `${(tokens / 1000000).toFixed(1)}M` : tokens > 1000 ? `${(tokens / 1000).toFixed(0)}K` : tokens}</span>
-									</div>
+									<TaskFieldCell label="Tokens">{tokens > 1000000 ? `${(tokens / 1000000).toFixed(1)}M` : tokens > 1000 ? `${(tokens / 1000).toFixed(0)}K` : tokens}</TaskFieldCell>
 								{/if}
 								{#if cost > 0}
-									<div class="flex flex-col gap-0.5 bg-base-200 px-2.5 py-2 rounded-md">
-										<span class="text-[0.625rem] uppercase tracking-wide text-base-content/50">Cost</span>
-										<span class="text-sm font-medium text-base-content">${cost.toFixed(2)}</span>
-									</div>
+									<TaskFieldCell label="Cost">${cost.toFixed(2)}</TaskFieldCell>
 								{/if}
 								{#if sseState}
-									<div class="flex flex-col gap-0.5 bg-base-200 px-2.5 py-2 rounded-md">
-										<span class="text-[0.625rem] uppercase tracking-wide text-base-content/50">State</span>
-										<span class="text-sm font-medium text-base-content">{sseState}</span>
-									</div>
+									<TaskFieldCell label="State">{sseState}</TaskFieldCell>
 								{/if}
-							</div>
+							</TaskFieldGrid>
 						</div>
 
 						<!-- Description -->
 						{#if task.description || fullTask?.description}
 							<div class="mb-5">
-								<h4 class="text-xs font-semibold uppercase tracking-wider text-base-content/60 mb-2">Description</h4>
+								<TaskFieldLabel>Description</TaskFieldLabel>
 								<div class="text-sm text-base-content/80 leading-relaxed whitespace-pre-wrap bg-base-200 border border-base-300 p-3 rounded-lg">
 									{task.description || fullTask?.description}
 								</div>
@@ -1113,7 +1106,7 @@
 						{#if fullTask}
 							{#if fullTask.labels?.length}
 								<div class="mb-5">
-									<h4 class="text-xs font-semibold uppercase tracking-wider text-base-content/60 mb-2">Labels</h4>
+									<TaskFieldLabel>Labels</TaskFieldLabel>
 									<div class="flex flex-wrap gap-1.5">
 										{#each fullTask.labels as label}
 											<span class="badge badge-sm badge-outline">{label}</span>
@@ -1124,7 +1117,7 @@
 
 							{#if fullTask.depends_on?.length}
 								<div class="mb-5">
-									<h4 class="text-xs font-semibold uppercase tracking-wider text-base-content/60 mb-2">Depends On</h4>
+									<TaskFieldLabel>Depends On</TaskFieldLabel>
 									<div class="flex flex-col gap-1.5">
 										{#each fullTask.depends_on as dep}
 											<div class="flex items-center gap-2 px-2.5 py-1.5 bg-base-200 rounded-md border border-base-300">
@@ -1140,7 +1133,7 @@
 
 							{#if fullTask.blocked_by?.length}
 								<div class="mb-5">
-									<h4 class="text-xs font-semibold uppercase tracking-wider text-base-content/60 mb-2">Blocks</h4>
+									<TaskFieldLabel>Blocks</TaskFieldLabel>
 									<div class="flex flex-col gap-1.5">
 										{#each fullTask.blocked_by as dep}
 											<div class="flex items-center gap-2 px-2.5 py-1.5 bg-base-200 rounded-md border border-base-300">
@@ -1156,21 +1149,15 @@
 
 							{#if fullTask.created_at || fullTask.updated_at}
 								<div class="mb-5">
-									<h4 class="text-xs font-semibold uppercase tracking-wider text-base-content/60 mb-2">Dates</h4>
-									<div class="grid grid-cols-2 gap-2">
+									<TaskFieldLabel>Dates</TaskFieldLabel>
+									<TaskFieldGrid>
 										{#if fullTask.created_at}
-											<div class="flex flex-col gap-0.5 bg-base-200 px-2.5 py-2 rounded-md">
-												<span class="text-[0.625rem] uppercase tracking-wide text-base-content/50">Created</span>
-												<span class="text-sm font-medium text-base-content">{formatDate(fullTask.created_at)}</span>
-											</div>
+											<TaskFieldCell label="Created">{formatDate(fullTask.created_at)}</TaskFieldCell>
 										{/if}
 										{#if fullTask.updated_at}
-											<div class="flex flex-col gap-0.5 bg-base-200 px-2.5 py-2 rounded-md">
-												<span class="text-[0.625rem] uppercase tracking-wide text-base-content/50">Updated</span>
-												<span class="text-sm font-medium text-base-content">{formatDate(fullTask.updated_at)}</span>
-											</div>
+											<TaskFieldCell label="Updated">{formatDate(fullTask.updated_at)}</TaskFieldCell>
 										{/if}
-									</div>
+									</TaskFieldGrid>
 								</div>
 							{/if}
 						{:else if taskLoading}
@@ -1190,7 +1177,7 @@
 				<div class="pager-page">
 					<div class="flex-1 overflow-y-auto p-4" style="-webkit-overflow-scrolling: touch;">
 						<div class="mb-5">
-							<h4 class="text-xs font-semibold uppercase tracking-wider text-base-content/60 mb-2">Attachments</h4>
+							<TaskFieldLabel>Attachments</TaskFieldLabel>
 							{#if fullTask?.attachments?.length}
 								<div class="flex flex-col gap-2">
 									{#each fullTask.attachments as attachment}
@@ -1218,7 +1205,7 @@
 				<div class="pager-page">
 					<div class="flex-1 overflow-y-auto p-4" style="-webkit-overflow-scrolling: touch;">
 						<div class="mb-5">
-							<h4 class="text-xs font-semibold uppercase tracking-wider text-base-content/60 mb-2">Notes</h4>
+							<TaskFieldLabel>Notes</TaskFieldLabel>
 							{#if fullTask?.notes}
 								<div class="text-sm text-base-content/80 leading-relaxed whitespace-pre-wrap bg-base-200 border border-base-300 p-3 rounded-lg">{fullTask.notes}</div>
 							{:else}

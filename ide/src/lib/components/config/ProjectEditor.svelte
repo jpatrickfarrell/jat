@@ -78,6 +78,86 @@
 	let hidden = $state(false);
 	let defaultHarness = $state('');
 
+	// Sharing & Backend state
+	let backend = $state<'sqlite' | 'postgres'>('sqlite');
+	let backendUrl = $state('');
+	interface ProjectAgent {
+		name: string;
+		last_active_ts?: string | null;
+		model?: string | null;
+	}
+	let projectAgents = $state<ProjectAgent[]>([]);
+	let loadingAgents = $state(false);
+
+	let isTeamBackend = $derived(backend === 'postgres');
+
+	function maskConnectionUrl(url: string): string {
+		if (!url) return '';
+		try {
+			const u = new URL(url);
+			if (u.password) u.password = '***';
+			return u.toString();
+		} catch {
+			return url.replace(/:\/\/([^:/@]+):([^@]+)@/, '://$1:***@');
+		}
+	}
+
+	async function loadProjectAgents(projectKey: string) {
+		loadingAgents = true;
+		try {
+			const res = await fetch(`/api/agents?project=${encodeURIComponent(projectKey)}`);
+			if (res.ok) {
+				const data = await res.json();
+				projectAgents = Array.isArray(data.agents) ? data.agents : [];
+			} else {
+				projectAgents = [];
+			}
+		} catch {
+			projectAgents = [];
+		} finally {
+			loadingAgents = false;
+		}
+	}
+
+	function handleGraduate() {
+		if (!project?.key) return;
+		if (onGraduate) {
+			onGraduate(project.key);
+		} else {
+			infoToast(
+				'Graduation wizard coming soon',
+				'Team-mode migration is tracked in jat-nsa33.7'
+			);
+		}
+	}
+
+	function handleDowngrade() {
+		if (!project?.key) return;
+		if (onDowngrade) {
+			onDowngrade(project.key);
+		} else {
+			infoToast(
+				'Downgrade flow coming soon',
+				'Team → Solo migration is tracked in jat-nsa33.7'
+			);
+		}
+	}
+
+	function formatLastActive(ts: string | null | undefined): string {
+		if (!ts) return 'never';
+		const d = new Date(ts);
+		if (Number.isNaN(d.getTime())) return ts;
+		const diffMs = Date.now() - d.getTime();
+		const mins = Math.floor(diffMs / 60000);
+		if (mins < 1) return 'just now';
+		if (mins < 60) return `${mins}m ago`;
+		const hours = Math.floor(mins / 60);
+		if (hours < 24) return `${hours}h ago`;
+		const days = Math.floor(hours / 24);
+		if (days < 30) return `${days}d ago`;
+		return d.toLocaleDateString();
+	}
+
 	// Validation state
 	let errors = $state<Record<string, string>>({});
 	let touched = $state<Record<string, boolean>>({});
@@ -133,6 +213,13 @@
 				databaseUrl = project.config.database_url || '';
 				hidden = project.config.hidden || false;
 				defaultHarness = project.config.default_harness || '';
+				backend = project.config.backend || 'sqlite';
+				backendUrl = project.config.backend_url || '';
+				projectAgents = [];
+				loadingAgents = false;
+				if (backend === 'postgres') {
+					loadProjectAgents(project.key);
+				}
 			} else {
 				// New project - reset all fields
 				key = '';
@@ -146,6 +233,10 @@
 				databaseUrl = '';
 				hidden = false;
 				defaultHarness = '';
+				backend = 'sqlite';
+				backendUrl = '';
+				projectAgents = [];
+				loadingAgents = false;
 			}
 			errors = {};
 			touched = {};
@@ -280,6 +371,9 @@
 		if (defaultHarness && defaultHarness !== 'claude-code') {
 			config.default_harness = defaultHarness;
 		}
+		// Preserve backend fields — they're owned by the graduation wizard, not this form
+		if (project?.config?.backend) config.backend = project.config.backend;
+		if (project?.config?.backend_url) config.backend_url = project.config.backend_url;
 
 		onSave?.(key.trim(), config);
 		isOpen = false;
@@ -542,6 +636,145 @@
 					</label>
 				</div>
 			</div>
+
+			{#if !isNewProject}
+				<!-- Sharing & Backend Section -->
+				<div class="space-y-4">
+					<h3 class="text-sm font-medium text-base-content/70 uppercase tracking-wide">
+						Sharing &amp; Backend
+					</h3>
+
+					<!-- Current state card -->
+					<div
+						class="rounded-lg border p-4 space-y-3"
+						class:border-success={!isTeamBackend}
+						class:bg-success={!isTeamBackend}
+						class:bg-opacity-5={!isTeamBackend}
+						class:border-info={isTeamBackend}
+					>
+						<div class="flex items-center gap-3">
+							{#if isTeamBackend}
+								<div class="badge badge-info gap-1.5 font-semibold">
+									<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+									</svg>
+									Team
+								</div>
+								<span class="text-sm text-base-content/70">Tasks stored in shared Postgres</span>
+							{:else}
+								<div class="badge badge-success gap-1.5 font-semibold">
+									<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+									</svg>
+									Solo
+								</div>
+								<span class="text-sm text-base-content/70">Tasks stored locally in SQLite</span>
+							{/if}
+						</div>
+
+						{#if isTeamBackend}
+							<!-- Connection info -->
+							<div class="space-y-2">
+								<div class="text-xs font-medium text-base-content/60 uppercase tracking-wide">Connection</div>
+								<div
+									class="font-mono text-xs bg-base-300 rounded px-2 py-1.5 break-all select-all"
+									title="Password is masked. Configure backend_url in ~/.config/jat/projects.json"
+								>
+									{backendUrl ? maskConnectionUrl(backendUrl) : '— no backend_url configured —'}
+								</div>
+							</div>
+
+							<!-- Agents list -->
+							<div class="space-y-2">
+								<div class="text-xs font-medium text-base-content/60 uppercase tracking-wide">
+									Team members ({projectAgents.length})
+								</div>
+								{#if loadingAgents}
+									<div class="flex items-center gap-2 text-sm text-base-content/50">
+										<span class="loading loading-spinner loading-xs"></span>
+										Loading agents…
+									</div>
+								{:else if projectAgents.length === 0}
+									<div class="text-sm text-base-content/50 italic">No agents registered yet</div>
+								{:else}
+									<ul class="space-y-1">
+										{#each projectAgents as agent (agent.name)}
+											<li class="flex items-center justify-between text-sm py-1 px-2 rounded hover:bg-base-200">
+												<div class="flex items-center gap-2">
+													<div class="w-1.5 h-1.5 rounded-full bg-success"></div>
+													<span class="font-medium">{agent.name}</span>
+													{#if agent.model}
+														<span class="text-xs text-base-content/50">· {agent.model}</span>
+													{/if}
+												</div>
+												<span class="text-xs text-base-content/50">
+													{formatLastActive(agent.last_active_ts)}
+												</span>
+											</li>
+										{/each}
+									</ul>
+								{/if}
+							</div>
+
+							<!-- Downgrade link -->
+							<div class="pt-2 border-t border-base-300">
+								<button
+									type="button"
+									class="btn btn-ghost btn-sm btn-xs text-error hover:bg-error/10"
+									onclick={handleDowngrade}
+								>
+									<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+									</svg>
+									Downgrade to solo…
+								</button>
+								<p class="text-xs text-base-content/50 mt-1 px-1">
+									Disconnects this project from the shared Postgres backend. Team members lose access to these tasks.
+								</p>
+							</div>
+						{:else}
+							<!-- Graduate CTA -->
+							<button
+								type="button"
+								class="btn btn-primary w-full gap-2"
+								onclick={handleGraduate}
+							>
+								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+								</svg>
+								Graduate to team
+							</button>
+							<p class="text-xs text-base-content/50 px-1">
+								Move this project's tasks to a shared Postgres database so teammates can collaborate.
+							</p>
+						{/if}
+					</div>
+
+					<!-- What's still local -->
+					<details class="rounded-lg border border-base-300 bg-base-200/50">
+						<summary class="cursor-pointer px-4 py-2.5 text-sm font-medium hover:bg-base-200 rounded-lg flex items-center gap-2">
+							<svg class="w-4 h-4 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+							</svg>
+							What's still local
+						</summary>
+						<div class="px-4 pb-3 pt-1 text-xs text-base-content/70 space-y-2">
+							<p>
+								Even in Team mode, some data stays on each developer's machine. Graduating only
+								moves the task database — everything below remains per-machine:
+							</p>
+							<ul class="space-y-1 ml-4 list-disc">
+								<li><span class="font-mono">tmux</span> sessions (agent processes)</li>
+								<li><span class="font-mono">.jat/memory/</span> (agent memory &amp; context)</li>
+								<li>Claude Code hooks (<span class="font-mono">.claude/hooks/</span>)</li>
+								<li>Signal files (<span class="font-mono">/tmp/jat-signal-*</span>)</li>
+								<li>Session identity files (<span class="font-mono">.claude/sessions/</span>)</li>
+								<li>Per-machine credentials (<span class="font-mono">~/.config/jat/credentials.json</span>)</li>
+							</ul>
+						</div>
+					</details>
+				</div>
+			{/if}
 
 			<!-- Agent Defaults Section -->
 			<div class="space-y-4">

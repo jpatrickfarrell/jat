@@ -32,6 +32,7 @@
 	import { getFileTypeInfo, getFileTypeInfoFromPath, formatFileSize, type FileCategory } from '$lib/utils/fileUtils';
 	import { calculateRecommendationScore, type RecommendationScore } from '$lib/utils/recommendationUtils';
 	import RecommendedBadge from '$lib/components/RecommendedBadge.svelte';
+	import BackendBadge from '$lib/components/BackendBadge.svelte';
 	import { getEpicId, getProgress, getRunningAgents, getIsActive } from '$lib/stores/epicQueueStore.svelte';
 	import EpicSwarmModal from '$lib/components/EpicSwarmModal.svelte';
 	import { openEpicSwarmModal } from '$lib/stores/drawerStore';
@@ -135,9 +136,11 @@
 		onTasksChanged?: () => void;
 		/** Agent session info for determining status ring colors (from parent's /api/work fetch) */
 		agentSessionInfo?: Map<string, AgentSessionInfo>;
+		/** Per-project backend kind ('sqlite' | 'postgres') for Solo/Team badge */
+		projectBackends?: Record<string, 'sqlite' | 'postgres'>;
 	}
 
-	let { tasks = [], allTasks = [], agents = [], completedTasksFromActiveSessions = new Set(), ontaskclick = () => {}, onagentclick, hideProjectFilter = false, hideSearch = false, onTasksChanged, agentSessionInfo }: Props = $props();
+	let { tasks = [], allTasks = [], agents = [], completedTasksFromActiveSessions = new Set(), ontaskclick = () => {}, onagentclick, hideProjectFilter = false, hideSearch = false, onTasksChanged, agentSessionInfo, projectBackends = {} }: Props = $props();
 
 	// Build epic->child mapping for dependency-based grouping
 	// This allows tasks linked to epics via depends_on to be grouped under the epic
@@ -3180,6 +3183,15 @@
 										>
 											{projectTaskCount} {projectTaskCount === 1 ? 'task' : 'tasks'}
 										</span>
+
+										<!-- Backend badge (Solo/Team) -->
+										<div class="ml-2">
+											<BackendBadge
+												backend={projectBackends[projectKey] ?? 'sqlite'}
+												project={projectKey}
+												size="sm"
+											/>
+										</div>
 
 										<!-- Working agents avatars -->
 										{#if projectAssignedAgents.length > 0}

@@ -59,6 +59,7 @@
 	import { getMaxSessions } from "$lib/stores/preferences.svelte";
 	import { spawnInBatches } from "$lib/utils/spawnBatch";
 	import ProjectSelector from "./ProjectSelector.svelte";
+	import BackendBadge from "./BackendBadge.svelte";
 	// Initialize sort stores on mount
 	onMount(() => {
 		initAgentSort();
@@ -302,6 +303,8 @@
 		multiProjectData?: MultiProjectDataPoint[];
 		/** Project colors map (from API response) */
 		projectColors?: Record<string, string>;
+		/** Per-project backend kind ('sqlite' | 'postgres') */
+		projectBackends?: Record<string, 'sqlite' | 'postgres'>;
 		/** Number of ready tasks for Swarm button */
 		readyTaskCount?: number;
 		/** Ready tasks list for swarm dropdown */
@@ -344,6 +347,7 @@
 		sparklineData = [],
 		multiProjectData,
 		projectColors = {},
+		projectBackends = {},
 		readyTaskCount = 0,
 		readyTasks = [],
 		activeTasks = [],
@@ -643,27 +647,37 @@
 						isFavorite={favoriteProjects.has(favProject)}
 						{onToggleFavorite}
 					/>
+					<BackendBadge
+						backend={projectBackends[favProject] ?? 'sqlite'}
+						project={favProject}
+					/>
 				</div>
 			{/each}
 			<!-- Fallback: if selected project is NOT a favorite, show selector outside the each -->
 			{#if !favoriteProjects.has(selectedProject)}
-				<ProjectSelector
-					{selectedProject}
-					compact={true}
-					showColors={true}
-					projectColors={projectColorsMap}
-					{readyTasks}
-					{activeTasks}
-					epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount, readyChildIds: e.readyChildIds, children: e.children }))}
-					idleSlots={availableSlots}
-					onNewTask={handleNewTask}
-					onStart={handleSpawnSingle}
-					onSwarm={(count, epicId) => epicId ? handleRunEpic(epicId) : handleSwarm()}
-					sessionStates={projectSessionStates.get(selectedProject) || []}
-					openOnHover={true}
-					isFavorite={favoriteProjects.has(selectedProject)}
-					{onToggleFavorite}
-				/>
+				<div class="flex items-center gap-1.5">
+					<ProjectSelector
+						{selectedProject}
+						compact={true}
+						showColors={true}
+						projectColors={projectColorsMap}
+						{readyTasks}
+						{activeTasks}
+						epics={epicsWithReadyChildren.map(e => ({ id: e.id, title: e.title, project: e.project, childCount: e.readyCount, readyChildIds: e.readyChildIds, children: e.children }))}
+						idleSlots={availableSlots}
+						onNewTask={handleNewTask}
+						onStart={handleSpawnSingle}
+						onSwarm={(count, epicId) => epicId ? handleRunEpic(epicId) : handleSwarm()}
+						sessionStates={projectSessionStates.get(selectedProject) || []}
+						openOnHover={true}
+						isFavorite={favoriteProjects.has(selectedProject)}
+						{onToggleFavorite}
+					/>
+					<BackendBadge
+						backend={projectBackends[selectedProject] ?? 'sqlite'}
+						project={selectedProject}
+					/>
+				</div>
 			{/if}
 
 			<!-- Project switcher: switch projects or add new -->
@@ -1123,6 +1137,9 @@
 	.fav-flip-wrapper {
 		cursor: grab;
 		flex-shrink: 0;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
 	}
 
 	.fav-flip-wrapper:active {

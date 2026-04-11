@@ -108,6 +108,7 @@
 	let browserSessions = $state<Map<string, number>>(new Map());
 	let configProjects = $state<string[]>([]); // Projects from JAT config
 	let projectColorsMap = $state<Record<string, string>>({});
+	let projectBackends = $state<Record<string, 'sqlite' | 'postgres'>>({});
 
 	// Drawer state
 	let drawerOpen = $state(false);
@@ -1367,6 +1368,11 @@
 			const data = await response.json();
 			// Extract project names from the config
 			configProjects = (data.projects || []).map((p: { name: string }) => p.name);
+			const backends: Record<string, 'sqlite' | 'postgres'> = {};
+			for (const p of data.projects || []) {
+				backends[p.name] = p.backend === 'postgres' ? 'postgres' : 'sqlite';
+			}
+			projectBackends = backends;
 		} catch (error) {
 			configProjects = [];
 		}
@@ -1961,6 +1967,7 @@
 												allTasks={allTasks}
 												{agents}
 												{agentSessionInfo}
+												{projectBackends}
 												completedTasksFromActiveSessions={getCompletedTasksForProject(project)}
 												ontaskclick={handleTaskClick}
 												onagentclick={handleAgentClick}

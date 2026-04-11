@@ -169,6 +169,7 @@
 	}
 	let multiProjectData = $state<MultiProjectDataPoint[]>([]);
 	let projectColors = $state<Record<string, string>>({});
+	let projectBackends = $state<Record<string, 'sqlite' | 'postgres'>>({});
 
 	// React to real-time task events from WS (plays sound and refreshes data instantly)
 	$effect(() => {
@@ -718,6 +719,7 @@
 
 			// Populate the projects cache for fileLinks.ts localhost URL utilities
 			const projectsCache: Record<string, ProjectConfig> = {};
+			const backends: Record<string, 'sqlite' | 'postgres'> = {};
 			for (const p of projectsArray) {
 				projectsCache[p.name.toLowerCase()] = {
 					name: p.name,
@@ -725,7 +727,9 @@
 					port: p.port ?? null,
 					description: p.description
 				};
+				backends[p.name] = p.backend === 'postgres' ? 'postgres' : 'sqlite';
 			}
+			projectBackends = backends;
 			setProjectsCache(projectsCache);
 			configProjectsLoaded = true;
 		} catch (error) {
@@ -1203,6 +1207,7 @@
 				{readyTasks}
 				{activeTasks}
 				{projects}
+				{projectBackends}
 				{selectedProject}
 				{epicsWithReady}
 				{reviewRules}

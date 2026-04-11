@@ -143,6 +143,7 @@ TASK_TITLE=""
 AGENT_NAME=""
 TASK_TYPE="task"
 TASK_STATUS="in_progress"
+FORCE_KILL=false  # --kill: pass to jat-complete-bundle to signal IDE self-destruct
 
 # First argument is the step
 if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
@@ -171,6 +172,10 @@ while [[ $# -gt 0 ]]; do
         --status)
             TASK_STATUS="$2"
             shift 2
+            ;;
+        --kill)
+            FORCE_KILL=true
+            shift
             ;;
         --help|-h)
             show_usage
@@ -385,7 +390,9 @@ EOF
         # the timeline file doesn't work because the PostToolUse hook that
         # writes to the timeline fires AFTER this bash command exits.
         log_dim "Generating completion bundle via LLM..."
-        BUNDLE_JSON=$(jat-complete-bundle --task "$TASK_ID" --agent "$AGENT_NAME") || true
+        KILL_FLAG=""
+        if [[ "$FORCE_KILL" == true ]]; then KILL_FLAG="--kill"; fi
+        BUNDLE_JSON=$(jat-complete-bundle --task "$TASK_ID" --agent "$AGENT_NAME" $KILL_FLAG) || true
         if [[ -n "$BUNDLE_JSON" ]] && echo "$BUNDLE_JSON" | jq empty 2>/dev/null; then
             jat-signal complete "$BUNDLE_JSON"
             log_success "Completion bundle emitted"

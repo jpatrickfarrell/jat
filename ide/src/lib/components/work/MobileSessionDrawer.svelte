@@ -205,6 +205,10 @@
 			await onKillSession();
 		} else if (action.id === 'complete') {
 			await onSendInput('/jat:complete', 'text');
+		} else if (action.id === 'complete-kill') {
+			// Send /jat:complete --kill command - agent will emit forceKill:true in bundle
+			// IDE will then show 15-second countdown before killing the tmux session
+			await onSendInput('/jat:complete --kill', 'text');
 		} else {
 			await onAction(action.id);
 		}

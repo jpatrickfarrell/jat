@@ -89,6 +89,7 @@ COMPLETION_MODE=""  # Empty = auto-detect
 NEXT_TASK_ID=""
 EMIT_SIGNAL=false
 AUTO_MODE=false
+FORCE_KILL=false  # --kill: signals IDE to self-destruct session after completion
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -114,6 +115,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --auto-mode)
             AUTO_MODE=true
+            shift
+            ;;
+        --kill)
+            FORCE_KILL=true
             shift
             ;;
         --help|-h)
@@ -225,6 +230,12 @@ if [[ -z "$COMPLETION_MODE" ]] || [[ "$AUTO_MODE" == true ]]; then
     fi
 
     COMPLETION_MODE="$DETECTED_MODE"
+fi
+
+# --kill flag overrides to auto_proceed (IDE will handle the kill)
+if [[ "$FORCE_KILL" == true ]]; then
+    COMPLETION_MODE="auto_proceed"
+    log_dim "  • --kill flag: forcing completionMode=auto_proceed, forceKill=true"
 fi
 
 # 2. Get git status and diff
@@ -432,7 +443,8 @@ BUNDLE_JSON=$(echo "$BUNDLE_JSON" | jq \
     --arg taskTitle "$TASK_TITLE" \
     --arg agentName "$AGENT_NAME" \
     --arg mode "$COMPLETION_MODE" \
-    '. + {taskId: $taskId, taskTitle: $taskTitle, agentName: $agentName, completionMode: $mode}')
+    --argjson forceKill "$FORCE_KILL" \
+    '. + {taskId: $taskId, taskTitle: $taskTitle, agentName: $agentName, completionMode: $mode, forceKill: $forceKill}')
 
 # Add nextTaskId if provided
 if [[ -n "$NEXT_TASK_ID" ]]; then

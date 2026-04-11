@@ -140,6 +140,29 @@ SESSION_ID="abc" && if [[ -f "$file" ]]; then echo "yes"; fi
 
 ## Implementation Steps
 
+### STEP 0: Detect `--kill` Flag
+
+Check the command arguments to see if `--kill` was passed:
+```bash
+# The command you received is: /jat:complete --kill
+# (or just: /jat:complete)
+# Parse by checking if "--kill" appears in the command/args
+```
+
+Set a variable for use in later steps:
+```
+is_kill = true   # if --kill was in the args
+is_kill = false  # if no --kill flag
+```
+
+If `is_kill = true`, output:
+```
+💥 SELF-DESTRUCT MODE: Session will self-destruct after completion.
+   IDE will show a 15-second countdown before killing this tmux session.
+```
+
+---
+
 ### STEP 1: Get Current Task and Agent Identity
 
 #### 1A: Get Session ID
@@ -600,9 +623,17 @@ jat-step releasing --task "$task_id" --title "$task_title" --agent "$agent_name"
 
 ```bash
 # Generate completion bundle via LLM and emit the complete signal
-# Review mode is auto-detected from task notes, session context, and project rules
+# If --kill was passed to /jat:complete, add --kill flag to trigger IDE self-destruct
+# with 15-second countdown after completion
+
+# Normal completion:
 jat-step complete --task "$task_id" --title "$task_title" --agent "$agent_name"
+
+# With --kill flag (self-destruct mode):
+jat-step complete --task "$task_id" --title "$task_title" --agent "$agent_name" --kill
 ```
+
+**Use `--kill` when:** The command was invoked as `/jat:complete --kill` (detected in STEP 0).
 
 **What this does:**
 1. Fetches task details

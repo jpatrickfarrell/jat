@@ -784,23 +784,29 @@ function handleSessionComplete(data: SessionEvent): void {
 	}
 
 	// Schedule auto-kill for completed session
-	// Three sources determine auto-kill behavior:
-	// 1. User clicked "Complete & Kill" button (tracked in pendingAutoKill store) → immediate kill
-	// 2. completionMode from signal:
+	// Four sources determine auto-kill behavior (checked in priority order):
+	// 1. forceKill in signal (agent ran /jat:complete --kill) → 15-second countdown
+	// 2. User clicked "Complete & Kill" button (tracked in pendingAutoKill store) → 15-second countdown
+	// 3. completionMode from signal:
 	//    - 'auto_proceed' (Epic Swarm): use priority-based auto-kill
 	//    - 'review_required' (one-off task): no auto-kill, wait for user review
-	// 3. Priority-based auto-kill (only if completionMode === 'auto_proceed' or not set)
+	// 4. Priority-based auto-kill (only if completionMode === 'auto_proceed' or not set)
+	const KILL_COUNTDOWN_SECONDS = 15; // countdown duration for user-initiated kills
 	const session = workSessionsState.sessions[sessionIndex];
 	const taskPriority = session.task?.priority ?? null;
 	const userWantsKill = hasPendingAutoKill(sessionName);
 	const completionMode = completionBundle.completionMode;
+	const forceKill = (completionBundle as any).forceKill === true;
 
-	// User intent takes precedence over everything
+	// forceKill from signal (agent ran /jat:complete --kill) takes top priority
 	let autoKillDelay: number | null;
-	if (userWantsKill) {
-		// User explicitly wants kill - use immediate or very short delay
-		autoKillDelay = 0;
-		console.log(`[AutoKill] User intent: ${sessionName} will be killed immediately`);
+	if (forceKill) {
+		autoKillDelay = KILL_COUNTDOWN_SECONDS;
+		console.log(`[AutoKill] forceKill=true in signal: ${sessionName} will be killed in ${KILL_COUNTDOWN_SECONDS}s`);
+	} else if (userWantsKill) {
+		// User clicked "Complete & Kill" button - show 15-second countdown
+		autoKillDelay = KILL_COUNTDOWN_SECONDS;
+		console.log(`[AutoKill] User intent: ${sessionName} will be killed in ${KILL_COUNTDOWN_SECONDS}s`);
 		// Clear the pending intent
 		clearPendingAutoKill(sessionName);
 	} else if (completionMode === 'review_required') {
@@ -815,7 +821,7 @@ function handleSessionComplete(data: SessionEvent): void {
 	if (autoKillDelay !== null && autoKillDelay > 0) {
 		scheduleAutoKill(sessionName, autoKillDelay);
 	} else if (autoKillDelay === 0) {
-		// Immediate kill (delay of 0)
+		// Immediate kill (delay of 0, from priority-based config)
 		console.log(`[AutoKill] Immediate kill for ${sessionName} (delay=0)`);
 		fetch(`/api/sessions/${encodeURIComponent(sessionName.replace(/^jat-/, ''))}`, {
 			method: 'DELETE'

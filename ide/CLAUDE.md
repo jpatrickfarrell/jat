@@ -2848,6 +2848,18 @@ The **SwarmSettingsEditor** component (`src/lib/components/config/SwarmSettingsE
 | **spawn** | Create a new session for the next task |
 | **auto-complete** | IDE auto-triggers `/jat:complete` based on review rules |
 | **auto-kill** | Session self-destructs (tracked by IDE, not in signal) |
+| **dependent auto-spawn** | After `forceKill` completion, IDE spawns agents for tasks unblocked by the completed task |
+
+### Dependent Auto-Spawn (forceKill)
+
+When an agent runs `/jat:complete --kill`, the `forceKill` flag is set in the completion bundle. After scheduling the auto-kill countdown, `handleSessionComplete` in `sessionEvents.ts` calls `spawnDependentTasksAfterKill(completedTaskId)`:
+
+1. Fetches the completed task's `blocked_by` list (tasks that depended on it)
+2. For each dependent with `status === 'open'`, fetches its full `depends_on` to verify all blockers are now `closed`
+3. Spawns an agent via `POST /api/work/spawn` for each fully-unblocked task
+4. Stops if the active session count reaches `max_sessions`
+
+**Only fires on `forceKill === true`** (not regular completions) to avoid aggressive auto-spawning outside of explicit pipeline workflows.
 
 ### Features
 

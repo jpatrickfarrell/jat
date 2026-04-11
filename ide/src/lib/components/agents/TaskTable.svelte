@@ -64,6 +64,39 @@
 		blocked_by?: Array<{ id: string; title: string; status: string; priority: number }>;
 		created_ts?: string;
 		updated_at?: string;
+		integration?: { sourceId: string; sourceType: string; sourceName: string } | null;
+	}
+
+	// A task is "client-visible" when it was ingested from an external source
+	// (feedback widget, Supabase, Slack, etc.) or tagged as customer-facing.
+	// JAT SQLite has no `source` column, so we derive origin from ingest-enriched
+	// `integration` and the `feedback`/`customer-visible` labels.
+	function getTaskSourceOrigin(task: Task): { clientVisible: boolean; label: string; sourceName: string | null } {
+		if (task.integration) {
+			return {
+				clientVisible: true,
+				label: `Synced from ${task.integration.sourceType}${task.integration.sourceName ? ` — ${task.integration.sourceName}` : ''} — visible to client`,
+				sourceName: task.integration.sourceName || task.integration.sourceType
+			};
+		}
+		const labels = task.labels || [];
+		if (labels.includes('feedback')) {
+			const project = getProjectFromTaskId(task.id) || 'project';
+			return {
+				clientVisible: true,
+				label: `Feedback from ${project} — visible to client`,
+				sourceName: project
+			};
+		}
+		if (labels.includes('customer-visible')) {
+			const project = getProjectFromTaskId(task.id) || 'project';
+			return {
+				clientVisible: true,
+				label: `Synced to ${project} — visible to client`,
+				sourceName: project
+			};
+		}
+		return { clientVisible: false, label: '', sourceName: null };
 	}
 
 	interface Agent {
@@ -3491,11 +3524,25 @@
 												</td>
 
 												<!-- Title -->
+												{@const titleSource = getTaskSourceOrigin(task)}
 												<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
 													<div>
-														<div
-															class="font-medium text-sm {taskIsActive && isAgentGenerating(task.assignee) ? 'shimmer-text-fast' : 'text-base-content/90'}"
-														>{task.title}</div>
+														<div class="flex items-start gap-1.5">
+															{#if titleSource.clientVisible}
+																<span
+																	class="source-origin-icon inline-flex shrink-0 mt-0.5"
+																	title={titleSource.label}
+																	aria-label={titleSource.label}
+																>
+																	<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+																		<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15a4.5 4.5 0 0 0 4.5 4.5H18a3.75 3.75 0 0 0 1.332-7.257 3 3 0 0 0-3.758-3.848 5.25 5.25 0 0 0-10.233 2.33A4.502 4.502 0 0 0 2.25 15Z" />
+																	</svg>
+																</span>
+															{/if}
+															<div
+																class="font-medium text-sm {taskIsActive && isAgentGenerating(task.assignee) ? 'shimmer-text-fast' : 'text-base-content/90'}"
+															>{task.title}</div>
+														</div>
 														{#if task.description}
 															<div class="text-xs line-clamp-5 text-base-content/55">
 																{task.description}
@@ -3985,11 +4032,25 @@
 												}}
 											/>
 										</td>
+										{@const stdTitleSource = getTaskSourceOrigin(task)}
 										<td style="background: {hasRowGradient ? 'transparent' : 'inherit'};">
 											<div>
-												<div
-													class="font-medium text-sm {taskIsActive && isAgentGenerating(task.assignee) ? 'shimmer-text-fast' : 'text-base-content/90'}"
-												>{task.title}</div>
+												<div class="flex items-start gap-1.5">
+													{#if stdTitleSource.clientVisible}
+														<span
+															class="source-origin-icon inline-flex shrink-0 mt-0.5"
+															title={stdTitleSource.label}
+															aria-label={stdTitleSource.label}
+														>
+															<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+																<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15a4.5 4.5 0 0 0 4.5 4.5H18a3.75 3.75 0 0 0 1.332-7.257 3 3 0 0 0-3.758-3.848 5.25 5.25 0 0 0-10.233 2.33A4.502 4.502 0 0 0 2.25 15Z" />
+															</svg>
+														</span>
+													{/if}
+													<div
+														class="font-medium text-sm {taskIsActive && isAgentGenerating(task.assignee) ? 'shimmer-text-fast' : 'text-base-content/90'}"
+													>{task.title}</div>
+												</div>
 												{#if task.description}
 													<div class="text-xs line-clamp-5 text-base-content/55">
 														{task.description}
@@ -4191,8 +4252,18 @@
 										</div>
 									{/if}
 								</td>
+								{@const exitingTitleSource = getTaskSourceOrigin(task)}
 								<td style="background: transparent;">
-									<div class="font-medium text-sm text-base-content/65">{task.title}</div>
+									<div class="flex items-start gap-1.5">
+										{#if exitingTitleSource.clientVisible}
+											<span class="source-origin-icon inline-flex shrink-0 mt-0.5" title={exitingTitleSource.label}>
+												<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15a4.5 4.5 0 0 0 4.5 4.5H18a3.75 3.75 0 0 0 1.332-7.257 3 3 0 0 0-3.758-3.848 5.25 5.25 0 0 0-10.233 2.33A4.502 4.502 0 0 0 2.25 15Z" />
+												</svg>
+											</span>
+										{/if}
+										<div class="font-medium text-sm text-base-content/65">{task.title}</div>
+									</div>
 								</td>
 								<td class="w-28" style="background: transparent;"></td><!-- Image column -->
 								<td class="text-center" style="background: transparent;">

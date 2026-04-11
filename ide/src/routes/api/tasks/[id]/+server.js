@@ -10,6 +10,7 @@ import { join } from 'path';
 import { invalidateCache } from '$lib/server/cache.js';
 import { _resetTaskCache } from '../../../api/agents/+server.js';
 import { emitEvent } from '$lib/utils/eventBus.server.js';
+import { lookupIntegrations } from '$lib/server/integrationLookup.js';
 
 // Path to task images store
 const getImageStorePath = () => {
@@ -63,6 +64,11 @@ export async function GET({ params }) {
 
 	if (!task) {
 		return json({ error: 'Task not found' }, { status: 404 });
+	}
+
+	const integrations = lookupIntegrations([taskId]);
+	if (integrations[taskId]) {
+		task.integration = integrations[taskId];
 	}
 
 	return json({ task });

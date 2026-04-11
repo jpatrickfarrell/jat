@@ -1764,3 +1764,18 @@
 		transition: none !important;
 	}
 }
+
+/* ================================================================
+   SOURCE ORIGIN ICON — client-visible task indicator
+   Shown next to titles of tasks ingested from external sources
+   (feedback widget, Supabase, Slack, etc.) or tagged as customer-visible.
+   ================================================================ */
+.source-origin-icon {
+	color: oklch(0.60 0.02 250 / 0.5);
+	transition: color 0.2s ease;
+}
+tr:hover .source-origin-icon,
+.task-row:hover .source-origin-icon,
+.group:hover .source-origin-icon {
+	color: oklch(0.75 0.12 220);
+}

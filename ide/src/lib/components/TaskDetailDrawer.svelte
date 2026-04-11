@@ -68,6 +68,29 @@
 		schedule_cron?: string | null;
 		next_run_at?: string | null;
 		due_date?: string | null;
+		integration?: { sourceId: string; sourceType: string; sourceName: string } | null;
+	}
+
+	// Derive source origin from ingest-enriched `integration` or labels.
+	// JAT SQLite has no `source` column, so `feedback`/`customer-visible` labels
+	// act as the signal for client-visible tasks.
+	function getTaskSourceOrigin(t: DrawerTask): { clientVisible: boolean; label: string; sourceName: string | null } {
+		if (t.integration) {
+			return {
+				clientVisible: true,
+				label: `Synced from ${t.integration.sourceType}${t.integration.sourceName ? ` — ${t.integration.sourceName}` : ''} — visible to client`,
+				sourceName: t.integration.sourceName || t.integration.sourceType
+			};
+		}
+		const labels = t.labels || [];
+		const project = getProjectFromTaskId(t.id) || 'project';
+		if (labels.includes('feedback')) {
+			return { clientVisible: true, label: `Feedback from ${project} — visible to client`, sourceName: project };
+		}
+		if (labels.includes('customer-visible')) {
+			return { clientVisible: true, label: `Synced to ${project} — visible to client`, sourceName: project };
+		}
+		return { clientVisible: false, label: '', sourceName: null };
 	}
 
 	// Agent interface for action state
@@ -2412,7 +2435,22 @@
 				<div class="flex-1 min-w-0">
 					<!-- Task Title (Inline Editable, truncated with tooltip) -->
 					{#if task}
+						{@const drawerSource = getTaskSourceOrigin(task)}
 						<div class="group relative flex items-center gap-2">
+							{#if drawerSource.clientVisible}
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke-width="1.8"
+									stroke="currentColor"
+									class="w-5 h-5 source-origin-icon flex-shrink-0"
+									aria-label={drawerSource.label}
+								>
+									<title>{drawerSource.label}</title>
+									<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15a4.5 4.5 0 0 0 4.5 4.5H18a3.75 3.75 0 0 0 1.332-7.257 3 3 0 0 0-3.758-3.848 5.25 5.25 0 0 0-10.233 2.33A4.502 4.502 0 0 0 2.25 15Z" />
+								</svg>
+							{/if}
 							<InlineEdit
 								value={task.title || ''}
 								onSave={async (newValue) => {

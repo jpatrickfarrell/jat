@@ -8,7 +8,9 @@
 -- Safe for 3.x — no existing data affected.
 
 -- Add recording_url column (nullable, no default — safe for minor bump)
-ALTER TABLE feedback_reports ADD COLUMN recording_url TEXT;
+-- NOTE: The table was renamed feedback_reports → project_tasks in 3.0.0.
+-- This migration must be applied AFTER 3.0.0.
+ALTER TABLE project_tasks ADD COLUMN IF NOT EXISTS recording_url TEXT;
 
 -- Storage bucket for rrweb session recordings (private, not public)
 INSERT INTO storage.buckets (id, name, public)

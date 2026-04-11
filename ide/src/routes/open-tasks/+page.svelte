@@ -1181,6 +1181,7 @@
 								{:else if col.id === 'priority'}
 									<td>
 										{#if editingCell?.taskId === task.id && editingCell?.field === 'priority'}
+											<!-- svelte-ignore a11y_autofocus -->
 											<select
 												class="inline-edit-select"
 												value={task.priority}
@@ -1341,13 +1342,14 @@
 				bind:value={dueDateTempValue}
 			/>
 			<div class="due-date-time-row">
-				<label class="due-date-time-label">
+				<label for="opentasks-due-time" class="due-date-time-label">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12">
 						<circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
 					</svg>
 					Time
 				</label>
 				<input
+					id="opentasks-due-time"
 					type="time"
 					class="due-date-time-input"
 					bind:value={dueDateTempTime}

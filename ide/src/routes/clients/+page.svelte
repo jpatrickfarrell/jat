@@ -1172,6 +1172,8 @@
 																			{#if editingItemId === contract.id && editingField === "title"}
 																				<input type="text" class="input input-sm w-full bg-base-200 border-base-content/20 text-base-content" bind:value={editingValue} onkeydown={(e) => { if (e.key === "Enter") saveEdit(project.projectKey, "contract", contract.id, { title: editingValue }); if (e.key === "Escape") cancelEditing(); }} onclick={(e) => e.stopPropagation()} />
 																			{:else}
+																				<!-- svelte-ignore a11y_click_events_have_key_events -->
+																				<!-- svelte-ignore a11y_no_static_element_interactions -->
 																				<span class="font-semibold inline-flex items-center gap-1 {editable ? "cursor-pointer hover:text-primary" : ""}" onclick={(e) => { if (editable) { e.stopPropagation(); startEditing(contract.id, "title", contract.title); } }}>
 																					{contract.title}
 																					{#if editable}<svg class="w-3 h-3 opacity-20 hover:opacity-60 transition-opacity shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>{/if}
@@ -1182,6 +1184,7 @@
 																			{:else}
 																				{@const notesLong = (contract.notes || '').length > 180}
 																				{@const notesExpanded = notesExpandedIds.has(contract.id)}
+																				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 																				<div
 																					class="{editable ? 'cursor-pointer group' : ''}"
 																					onclick={(e) => { if (editable) { e.stopPropagation(); startEditing(contract.id, "notes", contract.notes || ""); } }}
@@ -1263,6 +1266,8 @@
 																			<div class="md:hidden space-y-2">
 																				{#each contract.milestones as milestone, mi}
 																					{#if editable && editingItemId === milestone.id}
+																						<!-- svelte-ignore a11y_click_events_have_key_events -->
+																						<!-- svelte-ignore a11y_no_static_element_interactions -->
 																						<div transition:fly={{ y: -4, duration: 200, easing: cubicOut }} class="p-4 bg-primary/5 border-l-2 border-primary/40 space-y-3 rounded-lg" onclick={(e) => e.stopPropagation()}>
 																							<p class="text-xs font-medium opacity-50 mb-1">Edit milestone</p>
 																							<input type="text" class="input input-sm w-full bg-base-200 border-base-content/20" bind:value={editingValue} placeholder="Milestone name" onkeydown={(e) => { if (e.key === 'Escape') cancelEditing(); }} />
@@ -1291,6 +1296,7 @@
 																						<div class="rounded-lg border border-base-300/50 p-3 space-y-2 {savedItemId === milestone.id ? 'bg-success/5' : 'bg-base-100/50'}">
 																							<div class="flex items-start gap-2">
 																								<span class="text-xs opacity-40 mt-0.5 shrink-0">{mi + 1}.</span>
+																								<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 																								<div class="min-w-0 flex-1 {editable ? 'cursor-pointer' : ''}" onclick={(e) => { if (editable) { e.stopPropagation(); startEditing(milestone.id, 'milestone', milestone.name, milestone.description || '', milestone.percentage.toString()); } }} role={editable ? 'button' : undefined} tabindex={editable ? 0 : undefined} onkeydown={(e) => { if (editable && (e.key === 'Enter' || e.key === ' ')) { e.stopPropagation(); startEditing(milestone.id, 'milestone', milestone.name, milestone.description || '', milestone.percentage.toString()); } }}>
 																									<span class="font-medium text-sm">{milestone.name}</span>
 																									{#if milestone.description}<p class="text-xs opacity-50 mt-0.5">{milestone.description}</p>{/if}
@@ -1336,6 +1342,8 @@
 																									{#if editable}<button class="badge badge-xs badge-ghost gap-0.5 opacity-50 hover:opacity-100" onclick={(e) => { e.stopPropagation(); startLinkingTasks(milestone.id, project.projectKey); }}><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>Link</button>{/if}
 																								</div>
 																								{#if linkingTasksMilestoneId === milestone.id}
+																									<!-- svelte-ignore a11y_click_events_have_key_events -->
+																									<!-- svelte-ignore a11y_no_static_element_interactions -->
 																									<div class="ml-5 border border-base-300 rounded-lg p-2 bg-base-100 max-h-48 overflow-y-auto" onclick={(e) => e.stopPropagation()}>
 																										<div class="flex items-center gap-2 mb-2">
 																											<input type="text" class="input input-sm flex-1 bg-base-200 border-base-content/20" placeholder="Search tasks..." bind:value={linkTaskSearch} />
@@ -1370,6 +1378,8 @@
 																								</div>
 																							{/if}
 																							{#if commentingId === milestone.id}
+																								<!-- svelte-ignore a11y_click_events_have_key_events -->
+																								<!-- svelte-ignore a11y_no_static_element_interactions -->
 																								<div class="flex gap-2 items-start justify-end pl-5" onclick={(e) => e.stopPropagation()}>
 																									<textarea class="textarea textarea-xs flex-1 bg-base-200 border-base-content/20 resize-none text-xs" rows="2" placeholder="Add owner comment..." bind:value={commentInputs[milestone.id]} onkeydown={(e) => { if (e.key === 'Escape') commentingId = null; }}></textarea>
 																									<div class="flex flex-col gap-1">
@@ -1407,6 +1417,8 @@
 																							{#if editable && editingItemId === milestone.id}
 																								<tr>
 																									<td colspan={editable ? 7 : 6} class="p-0">
+																										<!-- svelte-ignore a11y_click_events_have_key_events -->
+																										<!-- svelte-ignore a11y_no_static_element_interactions -->
 																										<div transition:fly={{ y: -4, duration: 200, easing: cubicOut }} class="p-4 bg-primary/5 border-l-2 border-primary/40 space-y-3" onclick={(e) => e.stopPropagation()}>
 																											<p class="text-xs font-medium opacity-50 mb-1">Edit milestone</p>
 																											<input
@@ -1462,6 +1474,7 @@
 																							<tr class="hover:bg-base-300/30 transition-colors duration-500 {savedItemId === milestone.id ? 'bg-success/5' : ''}">
 																								<td class="opacity-40">{mi + 1}</td>
 																								<td>
+																										<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 																										<div
 																											class={editable ? 'cursor-pointer hover:bg-base-300/50 rounded px-1 -mx-1 flex items-start gap-1' : ''}
 																											onclick={(e) => { if (editable) { e.stopPropagation(); startEditing(milestone.id, 'milestone', milestone.name, milestone.description || '', milestone.percentage.toString()); } }}
@@ -1599,6 +1612,8 @@
 																											{/if}
 																										</div>
 																										{#if linkingTasksMilestoneId === milestone.id}
+																											<!-- svelte-ignore a11y_click_events_have_key_events -->
+																											<!-- svelte-ignore a11y_no_static_element_interactions -->
 																											<div class="mt-2 border border-base-300 rounded-lg p-2 bg-base-100 max-h-48 overflow-y-auto" onclick={(e) => e.stopPropagation()}>
 																												<div class="flex items-center gap-2 mb-2">
 																													<input
@@ -1658,6 +1673,8 @@
 																							<tr>
 																								<td></td>
 																								<td colspan={editable ? 7 : 6} class="pt-1 pb-2">
+																									<!-- svelte-ignore a11y_click_events_have_key_events -->
+																									<!-- svelte-ignore a11y_no_static_element_interactions -->
 																									<div class="flex gap-2 items-start justify-end" onclick={(e) => e.stopPropagation()}>
 																										<textarea
 																											class="textarea textarea-xs flex-1 max-w-xs bg-base-200 border-base-content/20 resize-none text-xs"
@@ -1755,6 +1772,8 @@
 																						ondragend={handleTermDragEnd}
 																					>
 																						{#if editable && editingItemId === term.id}
+																							<!-- svelte-ignore a11y_click_events_have_key_events -->
+																							<!-- svelte-ignore a11y_no_static_element_interactions -->
 																							<div transition:fly={{ y: -4, duration: 200, easing: cubicOut }} class="space-y-3" onclick={(e) => e.stopPropagation()}>
 																								<p class="text-xs font-medium opacity-50 mb-1">Edit term</p>
 																								<input
@@ -1842,6 +1861,7 @@
 																						{#if !isCollapsed}
 																							<div class="mt-1 ml-7 space-y-1">
 																								{#if term.body}
+																									<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 																									<div
 																										class={editable ? 'text-xs opacity-60 mt-1 whitespace-pre-wrap cursor-pointer hover:bg-base-300/50 rounded px-1 -mx-1' : 'text-xs opacity-60 mt-1 whitespace-pre-wrap'}
 																										onclick={(e) => { if (editable) { e.stopPropagation(); startEditing(term.id, 'term', term.title, term.body || ''); } }}
@@ -1872,6 +1892,8 @@
 																									</div>
 																								{/if}
 																								{#if commentingId === term.id}
+																									<!-- svelte-ignore a11y_click_events_have_key_events -->
+																									<!-- svelte-ignore a11y_no_static_element_interactions -->
 																									<div class="mt-2 flex gap-2 items-start justify-end" onclick={(e) => e.stopPropagation()}>
 																										<textarea
 																											class="textarea textarea-xs flex-1 max-w-xs bg-base-200 border-base-content/20 resize-none text-xs"

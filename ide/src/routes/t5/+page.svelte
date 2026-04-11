@@ -337,7 +337,8 @@
 	<!-- Help overlay -->
 	{#if showHelp}
 		<div class="help-overlay" role="dialog" tabindex="0" onclick={() => showHelp = false} onkeydown={(e) => { if (e.key === 'Escape') showHelp = false; }}>
-			<div class="help-modal" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+		<div class="help-modal" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 				<h3>Keyboard Shortcuts</h3>
 				<div class="shortcuts-grid">
 					<div class="shortcut"><kbd>j</kbd> / <kbd>↓</kbd> <span>Next task</span></div>

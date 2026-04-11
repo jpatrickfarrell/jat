@@ -326,7 +326,7 @@
 				</div>
 
 				<div class="form-group">
-					<label class="form-label">Presets</label>
+					<span class="form-label">Presets</span>
 					<div class="preset-chips">
 						{#each CRON_PRESETS as preset}
 							<button

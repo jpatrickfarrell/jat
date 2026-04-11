@@ -23,8 +23,13 @@
 	import {
 		TaskFieldLabel,
 		TaskFieldGrid,
-		TaskFieldCell
-	} from '$lib/components/task/primitives';
+		TaskFieldCell,
+		TaskHeaderBlock,
+		TaskMetaRow,
+		TaskLabelsList,
+		DependencyList,
+		TaskDatesPair
+	} from '$lib/components/task';
 	import { isMobileFullscreenOpen } from '$lib/stores/drawerStore';
 	import { setHoveredSession } from '$lib/stores/hoveredSession';
 	import type { SessionState, SessionStateAction } from '$lib/config/statusColors';
@@ -1047,30 +1052,30 @@
 					{#if task}
 						<!-- Task Header -->
 						<div class="mb-4">
-							<div class="flex items-center gap-2 mb-2">
-								<span class="font-mono text-xs px-2 py-0.5 rounded bg-info/10 text-info">{task.id}</span>
-								{#if task.issue_type}
-									<span class="badge badge-sm badge-outline uppercase tracking-wide">{task.issue_type}</span>
-								{/if}
-							</div>
-							<h2 class="text-lg font-semibold text-base-content leading-snug m-0">{task.title || 'Untitled'}</h2>
+							<TaskHeaderBlock id={task.id} type={task.issue_type}>
+								{#snippet title()}
+									<h2 class="text-lg font-semibold text-base-content leading-snug m-0">{task.title || 'Untitled'}</h2>
+								{/snippet}
+							</TaskHeaderBlock>
 						</div>
 
 						<!-- Status & Priority Row -->
-						<div class="flex flex-wrap gap-1.5 mb-5">
-							<div class="badge badge-sm {getStatusBadgeClass(task.status)} badge-outline uppercase tracking-wide">
-								{task.status.replace('_', ' ')}
-							</div>
-							{#if task.priority !== undefined && task.priority !== null}
-								<div class="badge badge-sm {getPriorityBadgeClass(task.priority)} badge-outline uppercase tracking-wide">
-									{getPriorityLabel(task.priority)}
+						<div class="mb-5">
+							<TaskMetaRow>
+								<div class="badge badge-sm {getStatusBadgeClass(task.status)} badge-outline uppercase tracking-wide">
+									{task.status.replace('_', ' ')}
 								</div>
-							{/if}
-							{#if agentName}
-								<div class="badge badge-sm badge-info badge-outline uppercase tracking-wide">
-									{agentName}
-								</div>
-							{/if}
+								{#if task.priority !== undefined && task.priority !== null}
+									<div class="badge badge-sm {getPriorityBadgeClass(task.priority)} badge-outline uppercase tracking-wide">
+										{getPriorityLabel(task.priority)}
+									</div>
+								{/if}
+								{#if agentName}
+									<div class="badge badge-sm badge-info badge-outline uppercase tracking-wide">
+										{agentName}
+									</div>
+								{/if}
+							</TaskMetaRow>
 						</div>
 
 						<!-- Session Info -->
@@ -1107,57 +1112,27 @@
 							{#if fullTask.labels?.length}
 								<div class="mb-5">
 									<TaskFieldLabel>Labels</TaskFieldLabel>
-									<div class="flex flex-wrap gap-1.5">
-										{#each fullTask.labels as label}
-											<span class="badge badge-sm badge-outline">{label}</span>
-										{/each}
-									</div>
+									<TaskLabelsList labels={fullTask.labels} />
 								</div>
 							{/if}
 
 							{#if fullTask.depends_on?.length}
 								<div class="mb-5">
 									<TaskFieldLabel>Depends On</TaskFieldLabel>
-									<div class="flex flex-col gap-1.5">
-										{#each fullTask.depends_on as dep}
-											<div class="flex items-center gap-2 px-2.5 py-1.5 bg-base-200 rounded-md border border-base-300">
-												<span class="font-mono text-xs text-info flex-shrink-0">{typeof dep === 'string' ? dep : dep.id}</span>
-												{#if typeof dep === 'object' && dep.title}
-													<span class="text-xs text-base-content/70 truncate">{dep.title}</span>
-												{/if}
-											</div>
-										{/each}
-									</div>
+									<DependencyList items={fullTask.depends_on.map((d: any) => typeof d === 'string' ? { id: d } : d)} />
 								</div>
 							{/if}
 
 							{#if fullTask.blocked_by?.length}
 								<div class="mb-5">
 									<TaskFieldLabel>Blocks</TaskFieldLabel>
-									<div class="flex flex-col gap-1.5">
-										{#each fullTask.blocked_by as dep}
-											<div class="flex items-center gap-2 px-2.5 py-1.5 bg-base-200 rounded-md border border-base-300">
-												<span class="font-mono text-xs text-info flex-shrink-0">{typeof dep === 'string' ? dep : dep.id}</span>
-												{#if typeof dep === 'object' && dep.title}
-													<span class="text-xs text-base-content/70 truncate">{dep.title}</span>
-												{/if}
-											</div>
-										{/each}
-									</div>
+									<DependencyList items={fullTask.blocked_by.map((d: any) => typeof d === 'string' ? { id: d } : d)} />
 								</div>
 							{/if}
 
 							{#if fullTask.created_at || fullTask.updated_at}
 								<div class="mb-5">
-									<TaskFieldLabel>Dates</TaskFieldLabel>
-									<TaskFieldGrid>
-										{#if fullTask.created_at}
-											<TaskFieldCell label="Created">{formatDate(fullTask.created_at)}</TaskFieldCell>
-										{/if}
-										{#if fullTask.updated_at}
-											<TaskFieldCell label="Updated">{formatDate(fullTask.updated_at)}</TaskFieldCell>
-										{/if}
-									</TaskFieldGrid>
+									<TaskDatesPair createdAt={fullTask.created_at} updatedAt={fullTask.updated_at} />
 								</div>
 							{/if}
 						{:else if taskLoading}

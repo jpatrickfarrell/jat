@@ -42,7 +42,14 @@
 	import BaseAttachChips from './bases/BaseAttachChips.svelte';
 	import DataTableAttachChips from './bases/DataTableAttachChips.svelte';
 	import type { KnowledgeBase, RenderedBase } from '$lib/types/knowledgeBase';
-	import { TaskFieldLabel } from '$lib/components/task/primitives';
+	import {
+		TaskFieldLabel,
+		TaskHeaderBlock,
+		TaskMetaRow,
+		TaskLabelsList,
+		DependencyList,
+		TaskDatesPair
+	} from '$lib/components/task';
 	import FeedbackReplyModal from '$lib/components/FeedbackReplyModal.svelte';
 
 	// Task interface for drawer (extends API Task with additional optional fields)
@@ -2434,73 +2441,59 @@
 					class="absolute left-0 top-0 bottom-0 w-1 bg-primary"
 				></div>
 				<div class="flex-1 min-w-0">
-					<!-- Task Title (Inline Editable, truncated with tooltip) -->
+					<!-- Task Header: ID badge + title (shared TaskHeaderBlock) -->
 					{#if task}
 						{@const drawerSource = getTaskSourceOrigin(task)}
-						<div class="group relative flex items-center gap-2">
-							{#if drawerSource.clientVisible}
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									fill="none"
-									viewBox="0 0 24 24"
-									stroke-width="1.8"
-									stroke="currentColor"
-									class="w-5 h-5 source-origin-icon flex-shrink-0"
-									aria-label={drawerSource.label}
-								>
-									<title>{drawerSource.label}</title>
-									<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15a4.5 4.5 0 0 0 4.5 4.5H18a3.75 3.75 0 0 0 1.332-7.257 3 3 0 0 0-3.758-3.848 5.25 5.25 0 0 0-10.233 2.33A4.502 4.502 0 0 0 2.25 15Z" />
-								</svg>
-							{/if}
-							<InlineEdit
-								value={task.title || ''}
-								onSave={async (newValue) => {
-									await autoSave('title', newValue);
-								}}
-								type="text"
-								placeholder="Enter task title..."
-								disabled={isSaving}
-								class="text-2xl font-bold flex-1 min-w-0"
-								truncate={true}
-								formulaContext={{ title: task.title, status: task.status, priority: task.priority, type: task.type, assignee: task.assignee, labels: task.labels?.join(', '), project: task.project, created_at: task.created_at, updated_at: task.updated_at, due_date: task.due_date }}
-							/>
-							<!-- Pencil icon hint (shows on hover) -->
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								fill="none"
-								viewBox="0 0 24 24"
-								stroke-width="1.5"
-								stroke="currentColor"
-								class="w-4 h-4 text-base-content/30 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-								aria-hidden="true"
-							>
-								<path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
-							</svg>
-						</div>
+						<TaskHeaderBlock id={task.id} onCopyId={copyTaskIdToClipboard} copiedId={copiedTaskId}>
+							{#snippet title()}
+								<div class="group relative flex items-center gap-2">
+									{#if drawerSource.clientVisible}
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											fill="none"
+											viewBox="0 0 24 24"
+											stroke-width="1.8"
+											stroke="currentColor"
+											class="w-5 h-5 source-origin-icon flex-shrink-0"
+											aria-label={drawerSource.label}
+										>
+											<title>{drawerSource.label}</title>
+											<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15a4.5 4.5 0 0 0 4.5 4.5H18a3.75 3.75 0 0 0 1.332-7.257 3 3 0 0 0-3.758-3.848 5.25 5.25 0 0 0-10.233 2.33A4.502 4.502 0 0 0 2.25 15Z" />
+										</svg>
+									{/if}
+									<InlineEdit
+										value={task.title || ''}
+										onSave={async (newValue) => {
+											await autoSave('title', newValue);
+										}}
+										type="text"
+										placeholder="Enter task title..."
+										disabled={isSaving}
+										class="text-2xl font-bold flex-1 min-w-0"
+										truncate={true}
+										formulaContext={{ title: task.title, status: task.status, priority: task.priority, type: task.type, assignee: task.assignee, labels: task.labels?.join(', '), project: task.project, created_at: task.created_at, updated_at: task.updated_at, due_date: task.due_date }}
+									/>
+									<!-- Pencil icon hint (shows on hover) -->
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke-width="1.5"
+										stroke="currentColor"
+										class="w-4 h-4 text-base-content/30 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+										aria-hidden="true"
+									>
+										<path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+									</svg>
+								</div>
+							{/snippet}
+						</TaskHeaderBlock>
 					{:else}
 						<h2 class="text-2xl font-bold text-base-content">Task Details</h2>
 					{/if}
-					<!-- Task ID + Badges + Metadata (all in one row) -->
-					<div class="flex flex-wrap items-center gap-2 mt-1">
+					<!-- Badges + Metadata row -->
+					<TaskMetaRow class="flex flex-wrap items-center gap-2 mt-1">
 						{#if task}
-							<!-- Task ID (clickable to copy) -->
-							<button
-								class="badge badge-sm badge-outline gap-1 cursor-pointer hover:badge-primary transition-colors"
-								onclick={copyTaskIdToClipboard}
-								title="Click to copy task ID"
-							>
-								{task.id}
-								{#if copiedTaskId}
-									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3 text-success">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-									</svg>
-								{:else}
-									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
-									</svg>
-								{/if}
-							</button>
-
 							<!-- Status (editable for non-closed; distinct static badge for closed) -->
 							{#if task.status === 'closed'}
 								<div class="badge badge-sm badge-success gap-1" style="border: 1.5px solid oklch(0.65 0.18 145 / 0.6);">
@@ -2823,7 +2816,7 @@
 								✓ Saved {formatSavedTime(lastSaved)}
 							</span>
 						{/if}
-					</div>
+					</TaskMetaRow>
 				</div>
 				<!-- Close button (header) -->
 				<button
@@ -2905,13 +2898,7 @@
 									onclick={() => (editingLabels = true)}
 									type="button"
 								>
-									{#if task.labels && task.labels.length > 0}
-										{#each task.labels as label}
-											<span class="badge badge-sm badge-outline">{label}</span>
-										{/each}
-									{:else}
-										<span class="text-sm text-base-content/50 italic">Add labels...</span>
-									{/if}
+									<TaskLabelsList labels={task.labels || []} emptyText="Add labels..." />
 								</button>
 							{/if}
 						</div>
@@ -3967,37 +3954,11 @@
 								</div>
 							</div>
 
-							{#if task.depends_on && task.depends_on.length > 0}
-								<div class="space-y-2">
-									{#each task.depends_on as dep}
-										<div
-											class="flex items-center gap-2 text-sm p-2 rounded group bg-base-200 border-l-2 border-primary/30"
-										>
-											<span class="badge badge-sm {statusColors[dep.status] || 'badge-ghost'}">
-												{dep.status || 'unknown'}
-											</span>
-											<span class="badge badge-sm {priorityColors[dep.priority] || 'badge-ghost'}">
-												P{dep.priority ?? '?'}
-											</span>
-											<span class="font-mono text-xs">{dep.id}</span>
-											<span class="flex-1 truncate">{dep.title || 'Untitled'}</span>
-											<!-- Remove button -->
-											<button
-												class="btn btn-xs btn-ghost btn-circle opacity-0 group-hover:opacity-100 transition-opacity text-error hover:bg-error/10"
-												onclick={() => removeDependency(dep.id)}
-												disabled={isSaving}
-												title="Remove dependency"
-											>
-												<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-													<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
-												</svg>
-											</button>
-										</div>
-									{/each}
-								</div>
-								{:else}
-									<p class="text-sm text-base-content/50 italic px-2">No dependencies</p>
-								{/if}
+							<DependencyList
+								items={task.depends_on || []}
+								onRemove={isSaving ? undefined : removeDependency}
+								emptyText="No dependencies"
+							/>
 							</div>
 						</details>
 
@@ -4010,25 +3971,15 @@
 									<span class="badge badge-xs bg-base-300 text-base-content/70 border-0">{task.blocked_by.length}</span>
 								</summary>
 								<div class="pt-3">
-								<div class="space-y-2">
-									{#each task.blocked_by as dep}
-										<div
-											class="flex items-center gap-2 text-sm p-2 rounded bg-base-200 border-l-2 border-primary/30"
-										>
-											<span class="badge badge-sm {statusColors[dep.status] || 'badge-ghost'}">
-												{dep.status || 'unknown'}
-											</span>
-											<span class="badge badge-sm {priorityColors[dep.priority] || 'badge-ghost'}">
-												P{dep.priority ?? '?'}
-											</span>
-											<span class="font-mono text-xs">{dep.id}</span>
-											<span class="flex-1">{dep.title || 'Untitled'}</span>
-										</div>
-									{/each}
-									</div>
+									<DependencyList items={task.blocked_by} emptyText="No blockers" />
 								</div>
 							</details>
 						{/if}
+
+						<!-- Dates - Industrial -->
+						<div class="border-t border-base-300/50 pt-3 mt-1">
+							<TaskDatesPair createdAt={task.created_at} updatedAt={task.updated_at} />
+						</div>
 
 						<!-- Epic Children Section (only for epic tasks) -->
 						{#if (task.type === 'epic' || task.issue_type === 'epic') && (epicChildren.length > 0 || epicChildrenLoading)}

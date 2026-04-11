@@ -1053,7 +1053,8 @@ export async function POST({ request }) {
  * DELETE /api/projects - Remove project from config
  * Body: { project: string }
  *
- * Note: This only removes the project from the config, not the actual directory.
+ * Note: This removes the project from projects.json, hiddenProjects, and credentials.json secrets.
+ * The actual project directory is not deleted.
  */
 export async function DELETE({ request }) {
 	try {

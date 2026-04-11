@@ -537,6 +537,8 @@
 							</select>
 
 							<!-- Project selector -->
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<!-- svelte-ignore a11y_click_events_have_key_events -->
 							<div onclick={(e) => e.stopPropagation()} class="flex-shrink-0">
 								<ProjectSelector
 									projects={availableProjects}
@@ -625,11 +627,11 @@
 							>
 								<!-- Description -->
 								<div class="form-control">
-									<label class="label py-0.5">
+									<div class="label py-0.5">
 										<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
 											Description
 										</span>
-									</label>
+									</div>
 									<textarea
 										value={effectiveDescription}
 										oninput={(e) => {
@@ -647,11 +649,11 @@
 								<!-- Labels and Dependencies row -->
 								<div class="grid grid-cols-2 gap-2">
 									<div class="form-control">
-										<label class="label py-0.5">
+										<div class="label py-0.5">
 											<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
 												Labels
 											</span>
-										</label>
+										</div>
 										<input
 											type="text"
 											value={effectiveLabels}
@@ -661,11 +663,11 @@
 										/>
 									</div>
 									<div class="form-control">
-										<label class="label py-0.5">
+										<div class="label py-0.5">
 											<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
 												Depends On
 											</span>
-										</label>
+										</div>
 										{#if effectiveDependsOn.length > 0}
 											<div class="flex flex-wrap gap-1 mb-1">
 												{#each effectiveDependsOn as depId}

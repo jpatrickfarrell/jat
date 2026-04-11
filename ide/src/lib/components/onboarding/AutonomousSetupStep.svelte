@@ -203,7 +203,7 @@
 			>
 				<span class="text-[11px]" style="color: oklch(0.55 0.02 250);">Run this in your terminal instead:</span>
 				<!-- svelte-ignore a11y_click_events_have_key_events -->
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 				<code
 					class="block px-2 py-1.5 rounded text-xs font-mono cursor-pointer select-all"
 					style="background: oklch(0.10 0.02 250); border: 1px solid oklch(0.25 0.02 250); color: oklch(0.85 0.10 200);"

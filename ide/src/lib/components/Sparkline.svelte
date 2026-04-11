@@ -780,10 +780,11 @@
 									<div class="grid grid-cols-2 gap-2">
 										<!-- From Date -->
 										<div class="form-control">
-											<label class="label py-0">
+											<label for="sparkline-date-from" class="label py-0">
 												<span class="label-text text-xs">From</span>
 											</label>
 											<input
+												id="sparkline-date-from"
 												type="date"
 												class="input input-xs input-bordered w-full"
 												bind:value={customDateFrom}
@@ -793,10 +794,11 @@
 
 										<!-- To Date -->
 										<div class="form-control">
-											<label class="label py-0">
+											<label for="sparkline-date-to" class="label py-0">
 												<span class="label-text text-xs">To</span>
 											</label>
 											<input
+												id="sparkline-date-to"
 												type="date"
 												class="input input-xs input-bordered w-full"
 												bind:value={customDateTo}

@@ -552,7 +552,8 @@
 		<!-- NOTIFICATIONS (collapsible) -->
 		<!-- ═══════════════════════════════════════════ -->
 		<div class="divider my-1 h-px bg-base-content/20"></div>
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<li class="menu-title mt-1 cursor-pointer select-none" onclick={() => toggleSection('notifications')}>
 			<span class="text-xs text-base-content/50 uppercase tracking-wider flex items-center gap-1">
 				<svg class="w-3 h-3 transition-transform duration-200 {expandedSections.has('notifications') ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -750,7 +751,8 @@
 		<!-- TERMINAL (collapsible) -->
 		<!-- ═══════════════════════════════════════════ -->
 		<div class="divider my-1 h-px bg-base-content/20"></div>
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<li class="menu-title mt-1 cursor-pointer select-none" onclick={() => toggleSection('terminal')}>
 			<span class="text-xs text-base-content/50 uppercase tracking-wider flex items-center gap-1">
 				<svg class="w-3 h-3 transition-transform duration-200 {expandedSections.has('terminal') ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -883,7 +885,8 @@
 		<!-- AGENTS (collapsible) -->
 		<!-- ═══════════════════════════════════════════ -->
 		<div class="divider my-1 h-px bg-base-content/20"></div>
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<li class="menu-title mt-1 cursor-pointer select-none" onclick={() => toggleSection('agents')}>
 			<span class="text-xs text-base-content/50 uppercase tracking-wider flex items-center gap-1">
 				<svg class="w-3 h-3 transition-transform duration-200 {expandedSections.has('agents') ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

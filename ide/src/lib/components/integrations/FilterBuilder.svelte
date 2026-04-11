@@ -118,9 +118,9 @@
 <div class="space-y-3">
 	<!-- Header -->
 	<div class="flex items-center justify-between">
-		<label class="font-mono text-xs font-semibold" style="color: oklch(0.65 0.02 250);">
+		<span class="font-mono text-xs font-semibold" style="color: oklch(0.65 0.02 250);">
 			Filter Conditions
-		</label>
+		</span>
 		<div class="flex items-center gap-2">
 			{#if hasDefault}
 				<button

@@ -79,6 +79,7 @@
 		{@const isClickable = !!toast.taskId || !!toast.route}
 		{@const projectColor = toast.projectId ? getProjectColor(toast.projectId) : null}
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 		<div
 			class="pointer-events-auto rounded-lg shadow-lg px-4 py-3 flex items-start gap-3 min-w-[280px]"
 			class:cursor-pointer={isClickable}

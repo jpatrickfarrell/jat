@@ -16,10 +16,13 @@
 
 	let {
 		onLaunch = (_agentId: string) => {},
-		onSettings = () => {}
+		onSettings = () => {},
+		selectedHarness = ''
 	}: {
 		onLaunch?: (agentId: string) => void;
 		onSettings?: () => void;
+		/** Currently selected harness (task.agent_program) — highlights that button */
+		selectedHarness?: string;
 	} = $props();
 
 	function haptic(ms = 10) {
@@ -64,8 +67,8 @@
 	<div class="harness-tray" role="group" aria-label="Choose harness">
 		{#each programs as program (program.id)}
 			<button
-				class="harness-tray-btn"
-				title="Launch with {program.name}"
+				class="harness-tray-btn {selectedHarness === program.id ? 'harness-tray-btn-selected' : ''}"
+				title="Launch with {program.name}{selectedHarness === program.id ? ' (current)' : ''}"
 				onclick={(e) => {
 					e.stopPropagation();
 					haptic();
@@ -73,6 +76,9 @@
 				}}
 			>
 				<ProviderLogo agentId={program.id} size={22} />
+				{#if selectedHarness === program.id}
+					<span class="harness-selected-dot" aria-hidden="true"></span>
+				{/if}
 			</button>
 		{/each}
 		<!-- Human: marks as human task, no launch -->
@@ -186,5 +192,30 @@
 	.harness-tray-btn-settings:hover {
 		background: oklch(0.24 0.02 250);
 		color: oklch(0.65 0.04 250);
+	}
+
+	/* Selected harness — blue highlight to indicate current selection */
+	.harness-tray-btn-selected {
+		background: oklch(0.22 0.05 220);
+		border-bottom: 2px solid oklch(0.65 0.18 220);
+	}
+	.harness-tray-btn-selected:hover {
+		background: oklch(0.28 0.08 220);
+	}
+
+	/* Small selection indicator dot */
+	.harness-selected-dot {
+		position: absolute;
+		bottom: 4px;
+		left: 50%;
+		transform: translateX(-50%);
+		width: 4px;
+		height: 4px;
+		border-radius: 50%;
+		background: oklch(0.70 0.18 220);
+	}
+
+	.harness-tray-btn {
+		position: relative; /* needed for absolute dot */
 	}
 </style>

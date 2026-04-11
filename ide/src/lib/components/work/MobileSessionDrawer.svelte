@@ -798,6 +798,7 @@
 	></div>
 
 	<!-- Drawer Panel (full screen, slides up from bottom) -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="drawer-panel"
 		transition:fly={{ y: globalThis.innerHeight || 900, duration: 300, easing: cubicOut }}

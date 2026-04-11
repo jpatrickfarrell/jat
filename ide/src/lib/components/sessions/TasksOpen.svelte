@@ -1882,26 +1882,58 @@
 							/>
 						</div>
 
-						<!-- Left: circular avatar — tap on mobile → harness picker -->
+						<!-- Left: rocket launch button — click to launch, hover to show harness tray -->
 						<div class="mobile-task-avatar" style="{projectColor ? `border-color: ${projectColor};` : ''}"
 							ontouchend={(e) => handleAvatarTap(e, task)}
 						>
 							{#if isHumanTask(task)}
+								<!-- Human tasks: show human icon (no launch) -->
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="oklch(0.70 0.12 45)" width="22" height="22">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
 								</svg>
-							{:else if harness}
-								<ProviderLogo agentId={harness} size={22} />
-							{:else if integration}
-								<ProviderLogo agentId={integration.sourceType} size={22} />
 							{:else}
-								<span class="mobile-task-type-icon" title={typeVisual?.label}>{typeVisual?.icon ?? '📋'}</span>
+								<!-- Rocket launch button — always shown for launchable tasks -->
+								<button
+									class="avatar-rocket-btn rocket-btn {task.id === spawningTaskId ? 'rocket-launching' : ''}"
+									onclick={(e) => { e.stopPropagation(); onSpawnTask(task, { agentId: harness, model: null }); }}
+									title="Launch task (hover to switch harness)"
+									disabled={task.id === spawningTaskId || isBlocked}
+								>
+									<div class="relative flex items-center justify-center" style="width:22px;height:22px;overflow:visible;">
+										<!-- Smoke puffs -->
+										<div class="rocket-smoke absolute rounded-full bg-base-content/30 opacity-0" style="width:8px;height:8px;bottom:0;left:50%;transform:translateX(-50%);"></div>
+										<div class="rocket-smoke-2 absolute rounded-full bg-base-content/20 opacity-0" style="width:6px;height:6px;bottom:0;left:50%;transform:translateX(-50%) translateX(4px);"></div>
+
+										<!-- Fire/exhaust -->
+										<div class="rocket-fire absolute opacity-0" style="bottom:0;left:50%;transform:translateX(-50%);width:8px;transform-origin:top center;">
+											<svg viewBox="0 0 12 20" style="width:100%;">
+												<path d="M6 0 L9 8 L7 6 L6 12 L5 6 L3 8 Z" fill="url(#rocketFire-{task.id})" />
+												<defs>
+													<linearGradient id="rocketFire-{task.id}" x1="0%" y1="0%" x2="0%" y2="100%">
+														<stop offset="0%" style="stop-color:#f0932b" />
+														<stop offset="50%" style="stop-color:#f39c12" />
+														<stop offset="100%" style="stop-color:#e74c3c" />
+													</linearGradient>
+												</defs>
+											</svg>
+										</div>
+
+										<!-- Rocket body -->
+										<svg class="rocket-icon" viewBox="0 0 24 24" fill="none" width="20" height="20">
+											<path d="M12 2C12 2 8 6 8 12C8 15 9 17 10 18L10 21C10 21.5 10.5 22 11 22H13C13.5 22 14 21.5 14 21L14 18C15 17 16 15 16 12C16 6 12 2 12 2Z" fill="currentColor" />
+											<circle cx="12" cy="10" r="2" fill="oklch(0.75 0.15 200)" />
+											<path d="M8 14L5 17L6 18L8 16Z" fill="currentColor" />
+											<path d="M16 14L19 17L18 18L16 16Z" fill="currentColor" />
+										</svg>
+									</div>
+								</button>
 							{/if}
 						</div>
 
 						<!-- Harness tray: slides out RIGHT from avatar on card hover -->
-						{#if !isBlocked}
+						{#if !isBlocked && !isHumanTask(task)}
 							<HarnessTray
+								selectedHarness={task.agent_program || ''}
 								onLaunch={(agentId) => {
 									if (agentId === 'human') {
 										// Mark as human task (saves harness, no launch)
@@ -1936,7 +1968,12 @@
 									<span class="mobile-task-separator">·</span>
 									<span class="mobile-task-priority mobile-task-priority-{task.priority}">P{task.priority}</span>
 								{/if}
-								{#if typeVisual && !harness && !integration}
+								{#if task.agent_program && !isHumanTask(task)}
+									<span class="mobile-task-separator">·</span>
+									<span class="mobile-task-harness-badge" title="Harness: {task.agent_program}">
+										<ProviderLogo agentId={task.agent_program} size={11} />
+									</span>
+								{:else if typeVisual}
 									<span class="mobile-task-separator">·</span>
 									<span class="mobile-task-type-badge" title={typeVisual.label}>{typeVisual.icon}</span>
 								{/if}
@@ -2031,13 +2068,14 @@
 				bind:value={dueDateTempValue}
 			/>
 			<div class="due-date-time-row">
-				<label class="due-date-time-label">
+				<label for="tasksopen-due-time" class="due-date-time-label">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12">
 						<circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
 					</svg>
 					Time
 				</label>
 				<input
+					id="tasksopen-due-time"
 					type="time"
 					class="due-date-time-input"
 					bind:value={dueDateTempTime}
@@ -3662,6 +3700,41 @@
 
 	.mobile-task-avatar > :global(*) {
 		border-radius: 50%;
+	}
+
+	/* Rocket launch button inside avatar column */
+	.avatar-rocket-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		height: 100%;
+		background: transparent;
+		border: none;
+		cursor: pointer;
+		color: oklch(0.65 0.15 220);
+		transition: color 0.15s ease;
+		padding: 0;
+	}
+
+	.avatar-rocket-btn:hover:not(:disabled) {
+		color: oklch(0.80 0.18 220);
+	}
+
+	.avatar-rocket-btn:active:not(:disabled) {
+		color: oklch(0.90 0.20 220);
+	}
+
+	.avatar-rocket-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	/* Harness badge in meta row */
+	.mobile-task-harness-badge {
+		display: inline-flex;
+		align-items: center;
+		opacity: 0.75;
 	}
 
 	.mobile-task-type-icon {

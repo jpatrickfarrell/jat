@@ -69,7 +69,7 @@
 	{#each configFields as field}
 		<div>
 			{#if field.type !== 'boolean'}
-				<label class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">
+				<label for="dynform-{field.key}" class="font-mono text-xs font-semibold block mb-1.5" style="color: oklch(0.65 0.02 250);">
 					{field.label || field.key}
 					{#if field.required}
 						<span style="color: oklch(0.70 0.12 25);">*</span>
@@ -79,6 +79,7 @@
 
 			{#if field.type === 'string'}
 				<input
+					id="dynform-{field.key}"
 					type="text"
 					class="input input-bordered w-full font-mono text-sm"
 					placeholder={field.placeholder || ''}
@@ -88,6 +89,7 @@
 
 			{:else if field.type === 'number'}
 				<input
+					id="dynform-{field.key}"
 					type="number"
 					class="input input-bordered w-full font-mono text-sm"
 					placeholder={field.placeholder || ''}

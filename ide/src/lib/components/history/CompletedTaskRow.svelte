@@ -182,7 +182,8 @@
 	</div>
 
 	<!-- The sliding card -->
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="ctr-card"
 		style="{projectColor ? `border-left-color: ${projectColor};` : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {!swiping && swipeOffset === 0 ? '' : !swiping ? 'transition: transform 0.3s cubic-bezier(0.25,0.46,0.45,0.94);' : ''}"

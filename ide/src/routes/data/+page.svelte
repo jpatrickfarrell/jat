@@ -3822,7 +3822,8 @@
 								<span class="loading loading-spinner loading-sm"></span>
 							</div>
 						{:else}
-							<!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_noninteractive_element_interactions -->
+							<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+							<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 							<table class="data-table" tabindex="0" onkeydown={handleTableKeydown} onpaste={handleTablePaste} bind:this={tableRef} style="min-width: {tableMinWidth}px">
 								<thead>
 									<tr>

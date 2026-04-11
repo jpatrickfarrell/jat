@@ -212,12 +212,12 @@
 				<!-- Agent count slider -->
 				<div class="mb-6">
 					<div class="flex justify-between items-center mb-2">
-						<label
+						<span
 							class="text-xs font-semibold font-mono uppercase tracking-wider"
 							style="color: oklch(0.55 0.02 250);"
 						>
 							Agents to Spawn
-						</label>
+						</span>
 						<span
 							class="text-lg font-bold font-mono"
 							style="color: oklch(0.85 0.02 250);"

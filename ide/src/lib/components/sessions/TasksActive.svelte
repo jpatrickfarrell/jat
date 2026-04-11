@@ -1268,6 +1268,7 @@
 							transition:slide={{ duration: 200, easing: cubicOut }}
 						>
 							<div class="mobile-cmd-header">
+								<!-- svelte-ignore a11y_autofocus -->
 								<input
 									bind:value={cmdPanelSearch}
 									placeholder="Filter commands…"
@@ -1607,7 +1608,8 @@
 		<input id="llm-file-drawer" type="checkbox" class="drawer-toggle" checked />
 		<div class="drawer-side">
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+			<!-- svelte-ignore a11y_label_has_associated_control -->
 			<label
 				class="drawer-overlay"
 				onclick={() => llmFileDrawerOpen = false}
@@ -1656,10 +1658,11 @@
 
 				<!-- Filename input with path preview and validation -->
 				<div class="px-4 py-3 border-b border-base-content/10">
-					<label class="text-xs text-base-content/60 mb-1 block">Save as:</label>
+					<label for="llm-filename-input" class="text-xs text-base-content/60 mb-1 block">Save as:</label>
 					<div class="flex items-center gap-1">
 						<span class="text-xs text-base-content/40 font-mono shrink-0">~/code/{llmFileProject}/</span>
 						<input
+							id="llm-filename-input"
 							type="text"
 							class="input input-sm input-bordered flex-1 font-mono text-sm {llmFileValidation.status === 'invalid' ? 'input-error' : ''}"
 							bind:value={llmFileName}

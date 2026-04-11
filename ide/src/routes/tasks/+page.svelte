@@ -32,7 +32,9 @@
 	import {
 		type CompletedTask,
 		type DayGroup,
+		type PausedSession,
 		groupTasksByDay,
+		mergePausedSessions,
 	} from "$lib/utils/completedTaskHelpers";
 	import { isHumanTask } from "$lib/utils/badgeHelpers";
 	import VoiceInbox from "$lib/components/voice/VoiceInbox.svelte";
@@ -980,18 +982,34 @@
 	async function fetchCompletedDay(daysAgo: number): Promise<DayGroup[]> {
 		if (!selectedProject) return [];
 		const { start, end } = getDayRange(daysAgo);
-		const params = new URLSearchParams({
+		const tasksParams = new URLSearchParams({
 			status: "closed",
 			project: selectedProject,
 			closedAfter: start,
 			closedBefore: end,
 		});
-		const response = await fetch(`/api/tasks?${params}`);
-		if (!response.ok) return [];
-		const data = await response.json();
-		const tasks: CompletedTask[] = data.tasks || [];
-		if (tasks.length === 0) return [];
-		return groupTasksByDay(tasks);
+		const pausedParams = new URLSearchParams({
+			project: selectedProject,
+			closedAfter: start,
+			closedBefore: end,
+		});
+
+		const [tasksRes, pausedRes] = await Promise.all([
+			fetch(`/api/tasks?${tasksParams}`),
+			fetch(`/api/tasks/paused-sessions?${pausedParams}`),
+		]);
+
+		const tasks: CompletedTask[] = tasksRes.ok
+			? ((await tasksRes.json()).tasks || [])
+			: [];
+		const pausedSessions: PausedSession[] = pausedRes.ok
+			? ((await pausedRes.json()).sessions || [])
+			: [];
+
+		if (tasks.length === 0 && pausedSessions.length === 0) return [];
+
+		const groups = groupTasksByDay(tasks);
+		return mergePausedSessions(groups, pausedSessions);
 	}
 
 	/** Initial fetch: load today's completed tasks, auto-lookback if empty */
@@ -1130,11 +1148,37 @@
 				// Remove from completed groups and refresh open tasks
 				completedDayGroups = completedDayGroups
 					.map((g) => ({ ...g, tasks: g.tasks.filter((t) => t.id !== task.id) }))
-					.filter((g) => g.tasks.length > 0);
+					.filter((g) => g.tasks.length > 0 || (g.pausedSessions?.length || 0) > 0);
 				await fetchTasks();
 			}
 		} catch (error) {
 			console.error("Error reopening task:", error);
+		}
+	}
+
+	async function handleResumePausedSession(
+		event: MouseEvent,
+		session: PausedSession,
+	) {
+		event.stopPropagation();
+
+		completedResumingTasks.add(session.taskId);
+		completedResumingTasks = new Set(completedResumingTasks);
+
+		try {
+			const response = await fetch(`/api/sessions/${session.agentName}/resume`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+			});
+			if (!response.ok) {
+				const data = await response.json();
+				console.error("Failed to resume paused session:", data.message);
+			}
+		} catch (error) {
+			console.error("Error resuming paused session:", error);
+		} finally {
+			completedResumingTasks.delete(session.taskId);
+			completedResumingTasks = new Set(completedResumingTasks);
 		}
 	}
 
@@ -2494,6 +2538,7 @@
 											onMemoryClick={handleMemoryClick}
 											onReopenTask={handleReopenTask}
 											onDuplicateTask={handleDuplicateTask}
+											onResumePausedSession={handleResumePausedSession}
 											resumingTasks={completedResumingTasks}
 											memoryMap={completedMemoryMap}
 											{taskIntegrations}

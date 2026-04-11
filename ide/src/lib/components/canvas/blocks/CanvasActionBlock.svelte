@@ -135,8 +135,9 @@
 	<!-- Edit mode: configure label and action type -->
 	<div class="flex flex-col gap-2">
 		<div class="flex items-center gap-2">
-			<label class="text-xs font-medium" style="color: oklch(0.55 0.02 250); min-width: 50px;">Label</label>
+			<label for="canvas-action-label" class="text-xs font-medium" style="color: oklch(0.55 0.02 250); min-width: 50px;">Label</label>
 			<input
+				id="canvas-action-label"
 				type="text"
 				bind:value={editLabel}
 				onblur={commitEdit}
@@ -147,8 +148,9 @@
 			/>
 		</div>
 		<div class="flex items-center gap-2">
-			<label class="text-xs font-medium" style="color: oklch(0.55 0.02 250); min-width: 50px;">Action</label>
+			<label for="canvas-action-type" class="text-xs font-medium" style="color: oklch(0.55 0.02 250); min-width: 50px;">Action</label>
 			<input
+				id="canvas-action-type"
 				type="text"
 				bind:value={editActionType}
 				onblur={commitEdit}

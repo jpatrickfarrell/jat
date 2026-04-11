@@ -16,11 +16,23 @@ export interface CompletedTask {
 	integration?: { sourceId: string; sourceType: string; sourceName: string } | null;
 }
 
+export interface PausedSession {
+	id: string;
+	taskId: string;
+	taskTitle: string;
+	agentName: string;
+	reason: string;
+	startedAt: string | null;
+	endedAt: string;
+	project: string;
+}
+
 export interface DayGroup {
 	date: string;
 	displayDate: string;
 	tasks: CompletedTask[];
 	agents: Map<string, number>;
+	pausedSessions?: PausedSession[];
 }
 
 /** Get YYYY-MM-DD in local timezone (not UTC) */
@@ -149,4 +161,48 @@ export function groupTasksByDay(tasks: CompletedTask[]): DayGroup[] {
 	return Array.from(groups.values()).sort((a, b) =>
 		b.date.localeCompare(a.date),
 	);
+}
+
+/**
+ * Merge paused sessions into existing day groups by local date of endedAt.
+ * Creates new day groups for dates that have only paused sessions.
+ */
+export function mergePausedSessions(
+	groups: DayGroup[],
+	paused: PausedSession[],
+): DayGroup[] {
+	if (paused.length === 0) return groups;
+
+	const byDate = new Map<string, DayGroup>();
+	for (const group of groups) byDate.set(group.date, group);
+
+	for (const session of paused) {
+		const dateStr = toLocalDateStr(session.endedAt);
+		let group = byDate.get(dateStr);
+		if (!group) {
+			group = {
+				date: dateStr,
+				displayDate: formatDisplayDate(parseLocalDate(dateStr)),
+				tasks: [],
+				agents: new Map(),
+				pausedSessions: [],
+			};
+			byDate.set(dateStr, group);
+		}
+		if (!group.pausedSessions) group.pausedSessions = [];
+		group.pausedSessions.push(session);
+	}
+
+	return Array.from(byDate.values()).sort((a, b) =>
+		b.date.localeCompare(a.date),
+	);
+}
+
+/** Unix time of the end of a task or paused session, for merge sorting. */
+export function getTaskEndTime(task: CompletedTask): number {
+	return new Date(task.closed_at || task.updated_at).getTime();
+}
+
+export function getPausedEndTime(session: PausedSession): number {
+	return new Date(session.endedAt).getTime();
 }

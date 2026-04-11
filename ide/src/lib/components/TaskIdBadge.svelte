@@ -505,6 +505,7 @@
 			<span class="cursor-pointer hover:opacity-80 {animate ? 'tracking-in-expand' : ''} {isClosed ? 'line-through opacity-70' : ''}" style={animate ? 'animation-delay: 100ms;' : ''} onclick={copyId} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); navigator.clipboard.writeText(task.id); copied = true; dropdownOpen = false; setTimeout(() => (copied = false), 1500); } }} role="button" tabindex="-1">{task.id}</span>
 			<!-- Row 2: Agent name -->
 			{#if agentName}
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 					<span
 					class="mt-0.25 mb-0.5 text-[10px] font-medium leading-none {onAgentClick ? 'cursor-pointer hover:opacity-100 hover:underline' : ''} opacity-70"
 					style="color: {ringColor};"

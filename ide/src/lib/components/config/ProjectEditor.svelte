@@ -2,7 +2,7 @@
 	import { fly, fade } from 'svelte/transition';
 	import type { ProjectConfig } from '$lib/types/config';
 	import { saveProject } from '$lib/stores/configStore.svelte';
-	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
+	import { successToast, errorToast, infoToast } from '$lib/stores/toasts.svelte';
 	import ProjectSecretsEditor from './ProjectSecretsEditor.svelte';
 	import { AGENT_PRESETS } from '$lib/types/agentProgram';
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
@@ -13,9 +13,21 @@
 		onSave?: (key: string, config: ProjectConfig) => void;
 		onCancel?: () => void;
 		onDelete?: (key: string) => void;
+		/** Open the graduation wizard (Solo → Team). Wired by jat-nsa33.7. */
+		onGraduate?: (projectKey: string) => void;
+		/** Open the downgrade flow (Team → Solo). Wired by jat-nsa33.7. */
+		onDowngrade?: (projectKey: string) => void;
 	}
 
-	let { isOpen = $bindable(false), project = null, onSave, onCancel, onDelete }: Props = $props();
+	let {
+		isOpen = $bindable(false),
+		project = null,
+		onSave,
+		onCancel,
+		onDelete,
+		onGraduate,
+		onDowngrade
+	}: Props = $props();
 
 	// Delete confirmation state
 	let showDeleteConfirm = $state(false);

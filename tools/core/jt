@@ -3461,6 +3461,18 @@ LOGS_HELP
   fi
 }
 
+# ---------------------------------------------------------------------------
+# Graduate command — shells out to Node entry point (postgres adapter is
+# async; bash jt is sqlite-only per nsa33.4). Argument handling happens
+# inside jt-graduate; this wrapper only passes them through.
+# ---------------------------------------------------------------------------
+
+cmd_graduate() {
+  local script_dir
+  script_dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+  PROJECT_ROOT="$PROJECT_ROOT" exec node "$script_dir/jt-graduate" "$@"
+}
+
 cmd_help() {
   cat <<'HELP'
 jt - JAT task CLI
@@ -3492,6 +3504,8 @@ Commands:
   logs    <agent-name> [--remote] [--follow] [--lines N]  Stream agent output
   ssh     [agent-name]         Connect to VPS or attach to remote agent session
   audit   [--json] [--fix]    Check project context injection compliance
+  graduate [PROJECT] --url <postgres-url> [--dry-run] [--yes] [--force]
+                               Migrate project tasks from SQLite to Postgres
   init    [--quiet]
 
 Options:
@@ -3524,6 +3538,7 @@ case "${1:-}" in
   logs)      shift; cmd_logs "$@" ;;
   ssh)       shift; cmd_ssh "$@" ;;
   audit)     shift; cmd_audit "$@" ;;
+  graduate)  shift; cmd_graduate "$@" ;;
   init)      shift; cmd_init "$@" ;;
   --version) echo "jt $VERSION" ;;
   --help|-h|help) cmd_help ;;

@@ -489,6 +489,7 @@ export async function GET({ url }) {
 					defaultHarness: config.default_harness || null,
 					hidden: hiddenProjects.has(key.toLowerCase()),
 					favorite: config.favorite || false,
+					backend: config.backend === 'postgres' ? 'postgres' : 'sqlite',
 					source: 'jat-config'
 				});
 			}

@@ -172,6 +172,10 @@ export interface ProjectConfig {
 	colors?: ProjectColors;
 	/** Database URL for database tools (optional) */
 	database_url?: string;
+	/** JAT task backend engine: 'sqlite' (default, local) or 'postgres' (team) */
+	backend?: 'sqlite' | 'postgres';
+	/** Postgres connection DSN — required when backend === 'postgres' */
+	backend_url?: string;
 	/** Whether to hide this project from default views (optional) */
 	hidden?: boolean;
 	/** Whether this project is marked as a favorite (optional) */

@@ -1,0 +1,256 @@
+#!/usr/bin/env node
+/**
+ * jt-graduate — Migrate a JAT project from local SQLite to shared Postgres.
+ *
+ * Invoked by the `jt graduate` bash subcommand and by the graduation wizard
+ * REST endpoint.  See lib/tasks-graduate.js for the full step-by-step
+ * contract (export → import → flip → archive).
+ *
+ * Usage:
+ *   jt graduate [PROJECT] --url <postgres-url> [--dry-run] [--yes] [--force] [--json]
+ *
+ * If PROJECT is omitted, the project is inferred from the PROJECT_ROOT
+ * environment variable (set by the bash wrapper) or the current working
+ * directory.
+ */
+
+import { createInterface } from 'readline';
+import { basename } from 'path';
+
+import { graduateProject } from '../../lib/tasks-graduate.js';
+import { getProjectConfig } from '../../lib/projects-config.js';
+
+// ---------------------------------------------------------------------------
+// Args
+// ---------------------------------------------------------------------------
+
+const argv = process.argv.slice(2);
+
+/** @type {string|null} */
+let projectArg = null;
+/** @type {string|null} */
+let postgresUrl = null;
+let dryRun = false;
+let yes = false;
+let force = false;
+let jsonOut = false;
+
+function usage() {
+  console.log(`Usage: jt graduate [PROJECT] --url <postgres-url> [options]
+
+Migrate a project's task store from local SQLite to shared Postgres.
+One-way: exports every task/dep/label/comment from .jat/tasks.db, imports
+them atomically into Postgres, flips the projects.json backend flag, and
+archives the local db as .jat/tasks.db.sqlite-backup-{timestamp}.
+
+Arguments:
+  PROJECT             Project name or path. Defaults to the current project
+                      (inferred from PROJECT_ROOT or cwd).
+
+Options:
+  --url URL           Postgres connection string (required unless --dry-run)
+  --dry-run           Print the migration preview and exit without writing
+  --yes, -y           Skip the interactive confirmation prompt
+  --force             Proceed even if the target Postgres db is non-empty
+  --json              Machine-readable JSON output (implies --yes)
+  --help, -h          Show this help
+
+Behaviour:
+  Idempotent — re-running on an already-graduated project exits 0 with a
+  message and does not touch either database.
+
+  Atomic   — on any import error the Postgres transaction rolls back; the
+  local SQLite db and projects.json are untouched.
+
+Examples:
+  jt graduate --dry-run
+  jt graduate --url postgres://jat:pw@host/jat_prod
+  jt graduate jat --url postgres://jat:pw@host/jat_prod --yes
+`);
+}
+
+for (let i = 0; i < argv.length; i++) {
+  const a = argv[i];
+  if (a === '--help' || a === '-h') { usage(); process.exit(0); }
+  if (a === '--url' && argv[i + 1]) { postgresUrl = argv[++i]; continue; }
+  if (a.startsWith('--url=')) { postgresUrl = a.slice(6); continue; }
+  if (a === '--dry-run') { dryRun = true; continue; }
+  if (a === '--yes' || a === '-y') { yes = true; continue; }
+  if (a === '--force') { force = true; continue; }
+  if (a === '--json') { jsonOut = true; yes = true; continue; }
+  if (a.startsWith('--')) {
+    console.error(`Unknown option: ${a}`);
+    process.exit(2);
+  }
+  if (!projectArg) { projectArg = a; continue; }
+  console.error(`Unexpected argument: ${a}`);
+  process.exit(2);
+}
+
+// Resolve project: explicit arg > PROJECT_ROOT env var > cwd
+const resolvedProjectHint =
+  projectArg ||
+  process.env.PROJECT_ROOT ||
+  process.cwd();
+
+// ---------------------------------------------------------------------------
+// TTY helpers
+// ---------------------------------------------------------------------------
+
+const isTty = process.stdout.isTTY && !jsonOut;
+
+const C = {
+  reset: isTty ? '\x1b[0m'  : '',
+  dim:   isTty ? '\x1b[2m'  : '',
+  bold:  isTty ? '\x1b[1m'  : '',
+  red:   isTty ? '\x1b[31m' : '',
+  green: isTty ? '\x1b[32m' : '',
+  yellow:isTty ? '\x1b[33m' : '',
+  blue:  isTty ? '\x1b[34m' : '',
+  cyan:  isTty ? '\x1b[36m' : '',
+};
+
+function die(message, code = 1) {
+  if (jsonOut) {
+    console.log(JSON.stringify({ status: 'error', error: message }));
+  } else {
+    console.error(`${C.red}Error:${C.reset} ${message}`);
+  }
+  process.exit(code);
+}
+
+function printSummary(summary) {
+  if (jsonOut) return;
+  console.log('');
+  console.log(`${C.bold}Graduation preview${C.reset}`);
+  console.log(`  ${C.dim}Project:${C.reset}     ${summary.project}`);
+  console.log(`  ${C.dim}Path:${C.reset}        ${summary.projectPath}`);
+  if (summary.postgresUrl) {
+    const masked = summary.postgresUrl.replace(/\/\/([^:]+):([^@]+)@/, '//$1:***@');
+    console.log(`  ${C.dim}Postgres:${C.reset}    ${masked}`);
+  }
+  console.log('');
+  console.log(`  ${C.cyan}${summary.tasks}${C.reset} tasks`);
+  console.log(`  ${C.cyan}${summary.dependencies}${C.reset} dependencies`);
+  console.log(`  ${C.cyan}${summary.labels}${C.reset} labels`);
+  console.log(`  ${C.cyan}${summary.comments}${C.reset} comments`);
+  console.log('');
+}
+
+async function confirm(question) {
+  if (yes) return true;
+  if (!process.stdin.isTTY) {
+    die('Refusing to proceed without --yes in a non-interactive shell.');
+    return false;
+  }
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(`${question} [y/N] `, (answer) => {
+      rl.close();
+      resolve(/^y(es)?$/i.test(answer.trim()));
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+async function main() {
+  // Resolve project early so we can reject unknown names before asking the
+  // user for a pg URL.
+  const entry = getProjectConfig(resolvedProjectHint);
+  if (!entry) {
+    die(
+      `Project "${resolvedProjectHint}" is not listed in ~/.config/jat/projects.json. ` +
+      `Add it with 'jat add' before graduating.`
+    );
+    return;
+  }
+
+  // Up-front URL requirement (lib also checks, but we want a clean CLI error).
+  if (!dryRun && !postgresUrl) {
+    die('Missing --url. Pass --url postgres://user:pass@host/db (or use --dry-run).');
+    return;
+  }
+
+  // Step 1: dry-run preview to gather counts.  This is cheap and idempotent;
+  // we always run it so the user sees the summary before writes start.
+  let previewResult;
+  try {
+    previewResult = await graduateProject({
+      projectNameOrPath: entry.name,
+      postgresUrl: postgresUrl || '',
+      dryRun: true,
+    });
+  } catch (err) {
+    die(err instanceof Error ? err.message : String(err));
+    return;
+  }
+
+  if (previewResult.status === 'already_graduated') {
+    if (jsonOut) {
+      console.log(JSON.stringify(previewResult));
+    } else {
+      console.log(`${C.yellow}${previewResult.message}${C.reset}`);
+    }
+    process.exit(0);
+  }
+
+  if (previewResult.summary) {
+    previewResult.summary.postgresUrl = postgresUrl || '';
+    printSummary(previewResult.summary);
+  }
+
+  if (dryRun) {
+    if (jsonOut) console.log(JSON.stringify(previewResult));
+    else console.log(`${C.dim}(dry-run — no changes made)${C.reset}`);
+    process.exit(0);
+  }
+
+  const ok = await confirm(
+    `Graduate "${entry.name}" to Postgres? This is a one-way migration.`
+  );
+  if (!ok) {
+    if (jsonOut) console.log(JSON.stringify({ status: 'cancelled' }));
+    else console.log(`${C.dim}Cancelled.${C.reset}`);
+    process.exit(0);
+  }
+
+  let result;
+  try {
+    result = await graduateProject({
+      projectNameOrPath: entry.name,
+      postgresUrl,
+      force,
+    });
+  } catch (err) {
+    die(err instanceof Error ? err.message : String(err));
+    return;
+  }
+
+  if (jsonOut) {
+    console.log(JSON.stringify(result));
+    process.exit(0);
+  }
+
+  if (result.status === 'already_graduated') {
+    console.log(`${C.yellow}${result.message}${C.reset}`);
+    process.exit(0);
+  }
+
+  console.log('');
+  console.log(`${C.green}${C.bold}✓ Graduation complete${C.reset}`);
+  if (result.archivePath) {
+    console.log(`  ${C.dim}Local backup:${C.reset} ${result.archivePath}`);
+  }
+  if (result.message) {
+    console.log(`  ${C.yellow}${result.message}${C.reset}`);
+  }
+  console.log('');
+  console.log(`Next: run ${C.cyan}jat${C.reset} to reopen the IDE on the Postgres backend.`);
+}
+
+main().catch((err) => {
+  die(err instanceof Error ? err.stack || err.message : String(err));
+});

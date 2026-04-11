@@ -3406,6 +3406,19 @@
 		transition: background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 	}
 
+	/* Avatar column and rocket button tint purple to match swarm-highlight on parent row */
+	.swarm-highlight .mobile-task-avatar {
+		background: oklch(0.65 0.20 280 / 0.08);
+		border-right-color: oklch(0.65 0.20 280 / 0.3);
+	}
+	.swarm-highlight .avatar-rocket-btn {
+		color: oklch(0.72 0.22 280);
+	}
+	.swarm-highlight .avatar-rocket-btn:hover:not(:disabled) {
+		color: oklch(0.88 0.22 280);
+		background: oklch(0.65 0.20 280 / 0.15);
+	}
+
 	/* Selection count badge in header */
 	.selection-count {
 		font-size: 0.75rem;

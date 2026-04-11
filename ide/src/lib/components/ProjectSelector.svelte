@@ -690,12 +690,8 @@
 				<div class="history-rows">
 					{#if historyData.git}
 						<div class="history-row">
-							<!-- Git logo -->
-							<span class="history-icon history-icon-git" title="git">
-								<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-									<path d="M23.546 10.93 13.067.452a1.55 1.55 0 0 0-2.188 0L8.708 2.627l2.76 2.76a1.838 1.838 0 0 1 2.327 2.341l2.658 2.66a1.838 1.838 0 0 1 1.9 3.039 1.837 1.837 0 0 1-2.6 0 1.846 1.846 0 0 1-.404-1.996L12.86 8.955v6.525c.176.086.342.203.488.348a1.848 1.848 0 0 1 0 2.6 1.844 1.844 0 0 1-2.609 0 1.834 1.834 0 0 1 0-2.6c.182-.18.387-.316.605-.406V8.835a1.834 1.834 0 0 1-.996-2.41L7.636 3.7.45 10.881a1.55 1.55 0 0 0 0 2.189L10.929 23.55a1.549 1.549 0 0 0 2.189 0l10.428-10.428a1.549 1.549 0 0 0 0-2.19"/>
-								</svg>
-							</span>
+							<!-- Git label -->
+							<span class="history-label history-label-git" title="git">git</span>
 							<span class="history-hash">{historyData.git.hashShort}</span>
 							<span class="history-msg">{historyData.git.message}</span>
 							<span class="history-time">{relativeTime(historyData.git.date)}</span>
@@ -705,26 +701,18 @@
 						</div>
 					{/if}
 					{#if historyData.cf}
-						{@const cfColor = historyData.cf.status === 'success' ? 'history-icon-cf-success' : historyData.cf.status === 'failure' ? 'history-icon-cf-fail' : historyData.cf.status === 'active' ? 'history-icon-cf-active' : 'history-icon-cf-idle'}
+						{@const cfColor = historyData.cf.status === 'success' ? 'history-label-cf-success' : historyData.cf.status === 'failure' ? 'history-label-cf-fail' : historyData.cf.status === 'active' ? 'history-label-cf-active' : 'history-label-cf-idle'}
 						<div class="history-row">
-							<!-- Cloudflare logo — colored by deployment status -->
-							<span class="history-icon {cfColor}" title="Cloudflare Pages · {historyData.cf.status}">
-								<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-									<path d="M16.6 5.82s.51.56.11 1.18c-.17.26-.44.47-.88.52l-12.91.02c-.35 0-.57-.24-.63-.4-.07-.2-.07-.55.25-.79l.57-.23c.4-.17.69-.36.77-.62.07-.24-.02-.46-.17-.61-.22-.2-.55-.29-.88-.18a.97.97 0 0 0-.67.95c0 .54.26 1.03.7 1.32l.47.3-.03.04a2 2 0 0 0-1.4 1.93 2 2 0 0 0 2 2l12.27.02h.02c.66 0 1.2-.54 1.2-1.2v-.04c0-.44-.24-.84-.62-1.06l-.84-.47.59-.59c.63-.63.62-1.6.05-2.19z"/>
-								</svg>
-							</span>
+							<!-- Cloudflare label — colored by deployment status -->
+							<span class="history-label {cfColor}" title="Cloudflare Pages · {historyData.cf.status}">CF</span>
 							<span class="history-msg">{historyData.cf.environment}</span>
 							<span class="history-time">{relativeTime(historyData.cf.createdOn)}</span>
 						</div>
 					{/if}
 					{#if historyData.sb}
 						<div class="history-row">
-							<!-- Supabase logo -->
-							<span class="history-icon history-icon-sb" title="Supabase">
-								<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-									<path d="M11.9 1.036c-.015-.986-1.26-1.41-1.874-.637L.764 12.05C-.33 13.427.607 15.5 2.33 15.5h7.84l.025 7.464c.015.986 1.26 1.41 1.874.637l9.262-11.653c1.093-1.375.157-3.449-1.565-3.449h-7.84L11.9 1.036z"/>
-								</svg>
-							</span>
+							<!-- Supabase label -->
+							<span class="history-label history-label-sb" title="Supabase">sb</span>
 							<span class="history-msg">{historyData.sb.name}</span>
 							{#if historyData.sb.localOnly > 0}
 								<span class="history-tag history-tag-warn" title="{historyData.sb.localOnly} local-only migration(s)">+{historyData.sb.localOnly}</span>
@@ -1693,32 +1681,40 @@
 		font-style: italic;
 	}
 
-	/* Brand logo icons (git / Cloudflare / Supabase) */
-	.history-icon {
+	/* Brand text labels (git / CF / sb) */
+	.history-label {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 1rem;
-		height: 1rem;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		font-size: 0.5rem;
+		font-weight: 700;
+		letter-spacing: 0.03em;
+		text-transform: uppercase;
+		line-height: 1;
+		padding: 0.1em 0.25em;
+		border-radius: 0.2rem;
 		flex-shrink: 0;
+		min-width: 1.6em;
 	}
 
-	.history-icon svg {
-		width: 100%;
-		height: 100%;
+	/* Git: orange */
+	.history-label-git {
+		color: oklch(0.78 0.18 40);
+		background: oklch(0.72 0.18 40 / 0.15);
 	}
 
-	/* Git: always orange */
-	.history-icon-git { color: oklch(0.72 0.18 40); }
+	/* Cloudflare: color = deployment status */
+	.history-label-cf-success { color: oklch(0.75 0.18 145); background: oklch(0.70 0.18 145 / 0.15); }
+	.history-label-cf-fail    { color: oklch(0.72 0.18 25);  background: oklch(0.68 0.18 25 / 0.15);  }
+	.history-label-cf-active  { color: oklch(0.76 0.14 220); background: oklch(0.72 0.14 220 / 0.15); }
+	.history-label-cf-idle    { color: oklch(0.52 0.03 250); background: oklch(0.50 0.03 250 / 0.12); }
 
-	/* Cloudflare: logo color = deployment status */
-	.history-icon-cf-success { color: oklch(0.70 0.18 145); } /* green  */
-	.history-icon-cf-fail    { color: oklch(0.68 0.18 25);  } /* red    */
-	.history-icon-cf-active  { color: oklch(0.72 0.14 220); } /* blue   */
-	.history-icon-cf-idle    { color: oklch(0.50 0.03 250); } /* muted  */
-
-	/* Supabase: always teal */
-	.history-icon-sb { color: oklch(0.68 0.18 168); }
+	/* Supabase: teal */
+	.history-label-sb {
+		color: oklch(0.72 0.18 168);
+		background: oklch(0.68 0.18 168 / 0.15);
+	}
 
 	.history-hash {
 		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;

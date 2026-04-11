@@ -619,6 +619,47 @@
 			</div>
 			<div class="dropdown-divider"></div>
 
+			<!-- Source Section: latest commit / CF deployment / Supabase migration -->
+			{#if historyData.loading}
+				<div class="history-row history-loading-row">
+					<span class="loading loading-spinner loading-xs" style="color: oklch(0.50 0.02 250);"></span>
+					<span class="history-loading-text">Loading…</span>
+				</div>
+				<div class="dropdown-divider"></div>
+			{:else if historyData.git || historyData.cf || historyData.sb}
+				<div class="history-rows">
+					{#if historyData.git}
+						<div class="history-row">
+							<span class="history-label history-label-git" title="git">git</span>
+							<span class="history-hash">{historyData.git.hashShort}</span>
+							<span class="history-msg">{historyData.git.message}</span>
+							<span class="history-time">{relativeTime(historyData.git.date)}</span>
+							{#if !historyData.git.isPushed}
+								<span class="history-tag history-tag-warn" title="Uncommitted changes">↑</span>
+							{/if}
+						</div>
+					{/if}
+					{#if historyData.cf}
+						{@const cfColor = historyData.cf.status === 'success' ? 'history-label-cf-success' : historyData.cf.status === 'failure' ? 'history-label-cf-fail' : historyData.cf.status === 'active' ? 'history-label-cf-active' : 'history-label-cf-idle'}
+						<div class="history-row">
+							<span class="history-label {cfColor}" title="Cloudflare Pages · {historyData.cf.status}">CF</span>
+							<span class="history-msg">{historyData.cf.environment}</span>
+							<span class="history-time">{relativeTime(historyData.cf.createdOn)}</span>
+						</div>
+					{/if}
+					{#if historyData.sb}
+						<div class="history-row">
+							<span class="history-label history-label-sb" title="Supabase">sb</span>
+							<span class="history-msg">{historyData.sb.name}</span>
+							{#if historyData.sb.localOnly > 0}
+								<span class="history-tag history-tag-warn" title="{historyData.sb.localOnly} local-only migration(s)">+{historyData.sb.localOnly}</span>
+							{/if}
+						</div>
+					{/if}
+				</div>
+				<div class="dropdown-divider"></div>
+			{/if}
+
 			<!-- Server Section (shown when project has server config or running session) -->
 			{#if effectiveServerConfig}
 				<div class="dropdown-server-row">
@@ -679,54 +720,9 @@
 				{/each}
 			{/if}
 
-			<!-- History Section: latest commit / CF deployment / Supabase migration -->
-			{#if historyData.loading}
-				<div class="history-row history-loading-row">
-					<span class="loading loading-spinner loading-xs" style="color: oklch(0.50 0.02 250);"></span>
-					<span class="history-loading-text">Loading history…</span>
-				</div>
-				<div class="dropdown-divider"></div>
-			{:else if historyData.git || historyData.cf || historyData.sb}
-				<div class="history-rows">
-					{#if historyData.git}
-						<div class="history-row">
-							<!-- Git label -->
-							<span class="history-label history-label-git" title="git">git</span>
-							<span class="history-hash">{historyData.git.hashShort}</span>
-							<span class="history-msg">{historyData.git.message}</span>
-							<span class="history-time">{relativeTime(historyData.git.date)}</span>
-							{#if !historyData.git.isPushed}
-								<span class="history-tag history-tag-warn" title="Uncommitted changes">↑</span>
-							{/if}
-						</div>
-					{/if}
-					{#if historyData.cf}
-						{@const cfColor = historyData.cf.status === 'success' ? 'history-label-cf-success' : historyData.cf.status === 'failure' ? 'history-label-cf-fail' : historyData.cf.status === 'active' ? 'history-label-cf-active' : 'history-label-cf-idle'}
-						<div class="history-row">
-							<!-- Cloudflare label — colored by deployment status -->
-							<span class="history-label {cfColor}" title="Cloudflare Pages · {historyData.cf.status}">CF</span>
-							<span class="history-msg">{historyData.cf.environment}</span>
-							<span class="history-time">{relativeTime(historyData.cf.createdOn)}</span>
-						</div>
-					{/if}
-					{#if historyData.sb}
-						<div class="history-row">
-							<!-- Supabase label -->
-							<span class="history-label history-label-sb" title="Supabase">sb</span>
-							<span class="history-msg">{historyData.sb.name}</span>
-							{#if historyData.sb.localOnly > 0}
-								<span class="history-tag history-tag-warn" title="{historyData.sb.localOnly} local-only migration(s)">+{historyData.sb.localOnly}</span>
-							{/if}
-						</div>
-					{/if}
-				</div>
-				<div class="dropdown-divider"></div>
-			{/if}
-
 			<!-- Active Tasks Section -->
 			{#if projectActiveTasks.length > 0}
-				{@const historyShown = historyData.loading || !!(historyData.git || historyData.cf || historyData.sb)}
-				{#if showProjectsList && !historyShown}<div class="dropdown-divider"></div>{/if}
+				{#if showProjectsList}<div class="dropdown-divider"></div>{/if}
 				<div class="dropdown-section-header">Active ({projectActiveTasks.length})</div>
 				{#each projectActiveTasks as task}
 					<div class="dropdown-item task-item active-task-item">

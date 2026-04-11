@@ -725,22 +725,22 @@
 		return `P${p}`;
 	}
 
-	function getPriorityColor(p: number | undefined): string {
+	function getPriorityBadgeClass(p: number | undefined): string {
 		switch (p) {
-			case 0: return 'oklch(0.70 0.20 25)'; // red
-			case 1: return 'oklch(0.75 0.15 85)'; // amber
-			case 2: return 'oklch(0.70 0.15 230)'; // blue
-			default: return 'oklch(0.60 0.02 250)'; // gray
+			case 0: return 'badge-error';
+			case 1: return 'badge-warning';
+			case 2: return 'badge-info';
+			default: return 'badge-ghost';
 		}
 	}
 
-	function getStatusColor(s: string): string {
+	function getStatusBadgeClass(s: string): string {
 		switch (s) {
-			case 'open': return 'oklch(0.70 0.15 230)';
-			case 'in_progress': return 'oklch(0.75 0.15 85)';
-			case 'blocked': return 'oklch(0.70 0.20 25)';
-			case 'closed': return 'oklch(0.65 0.18 145)';
-			default: return 'oklch(0.60 0.02 250)';
+			case 'open': return 'badge-info';
+			case 'in_progress': return 'badge-warning';
+			case 'blocked': return 'badge-error';
+			case 'closed': return 'badge-success';
+			default: return 'badge-ghost';
 		}
 	}
 
@@ -1038,62 +1038,62 @@
 
 			<!-- Page 1: Task Detail -->
 			<div class="pager-page">
-				<div class="task-detail-page">
+				<div class="flex-1 overflow-y-auto p-4" style="-webkit-overflow-scrolling: touch;">
 					{#if task}
 						<!-- Task Header -->
-						<div class="task-header">
-							<div class="task-id-row">
-								<span class="task-id">{task.id}</span>
+						<div class="mb-4">
+							<div class="flex items-center gap-2 mb-2">
+								<span class="font-mono text-xs px-2 py-0.5 rounded bg-info/10 text-info">{task.id}</span>
 								{#if task.issue_type}
-									<span class="task-type-badge">{task.issue_type}</span>
+									<span class="badge badge-sm badge-outline uppercase tracking-wide">{task.issue_type}</span>
 								{/if}
 							</div>
-							<h2 class="task-title">{task.title || 'Untitled'}</h2>
+							<h2 class="text-lg font-semibold text-base-content leading-snug m-0">{task.title || 'Untitled'}</h2>
 						</div>
 
 						<!-- Status & Priority Row -->
-						<div class="task-meta-row">
-							<div class="meta-badge" style="border-color: {getStatusColor(task.status)}; color: {getStatusColor(task.status)}">
+						<div class="flex flex-wrap gap-1.5 mb-5">
+							<div class="badge badge-sm {getStatusBadgeClass(task.status)} badge-outline uppercase tracking-wide">
 								{task.status.replace('_', ' ')}
 							</div>
 							{#if task.priority !== undefined && task.priority !== null}
-								<div class="meta-badge" style="border-color: {getPriorityColor(task.priority)}; color: {getPriorityColor(task.priority)}">
+								<div class="badge badge-sm {getPriorityBadgeClass(task.priority)} badge-outline uppercase tracking-wide">
 									{getPriorityLabel(task.priority)}
 								</div>
 							{/if}
 							{#if agentName}
-								<div class="meta-badge agent-badge">
+								<div class="badge badge-sm badge-info badge-outline uppercase tracking-wide">
 									{agentName}
 								</div>
 							{/if}
 						</div>
 
 						<!-- Session Info -->
-						<div class="detail-section">
-							<h4 class="section-label">Session</h4>
-							<div class="session-info-grid">
+						<div class="mb-5">
+							<h4 class="text-xs font-semibold uppercase tracking-wider text-base-content/60 mb-2">Session</h4>
+							<div class="grid grid-cols-2 gap-2">
 								{#if created}
-									<div class="info-item">
-										<span class="info-key">Started</span>
-										<span class="info-value">{formatTimeAgo(created)}</span>
+									<div class="flex flex-col gap-0.5 bg-base-200 px-2.5 py-2 rounded-md">
+										<span class="text-[0.625rem] uppercase tracking-wide text-base-content/50">Started</span>
+										<span class="text-sm font-medium text-base-content">{formatTimeAgo(created)}</span>
 									</div>
 								{/if}
 								{#if tokens > 0}
-									<div class="info-item">
-										<span class="info-key">Tokens</span>
-										<span class="info-value">{tokens > 1000000 ? `${(tokens / 1000000).toFixed(1)}M` : tokens > 1000 ? `${(tokens / 1000).toFixed(0)}K` : tokens}</span>
+									<div class="flex flex-col gap-0.5 bg-base-200 px-2.5 py-2 rounded-md">
+										<span class="text-[0.625rem] uppercase tracking-wide text-base-content/50">Tokens</span>
+										<span class="text-sm font-medium text-base-content">{tokens > 1000000 ? `${(tokens / 1000000).toFixed(1)}M` : tokens > 1000 ? `${(tokens / 1000).toFixed(0)}K` : tokens}</span>
 									</div>
 								{/if}
 								{#if cost > 0}
-									<div class="info-item">
-										<span class="info-key">Cost</span>
-										<span class="info-value">${cost.toFixed(2)}</span>
+									<div class="flex flex-col gap-0.5 bg-base-200 px-2.5 py-2 rounded-md">
+										<span class="text-[0.625rem] uppercase tracking-wide text-base-content/50">Cost</span>
+										<span class="text-sm font-medium text-base-content">${cost.toFixed(2)}</span>
 									</div>
 								{/if}
 								{#if sseState}
-									<div class="info-item">
-										<span class="info-key">State</span>
-										<span class="info-value">{sseState}</span>
+									<div class="flex flex-col gap-0.5 bg-base-200 px-2.5 py-2 rounded-md">
+										<span class="text-[0.625rem] uppercase tracking-wide text-base-content/50">State</span>
+										<span class="text-sm font-medium text-base-content">{sseState}</span>
 									</div>
 								{/if}
 							</div>
@@ -1101,9 +1101,9 @@
 
 						<!-- Description -->
 						{#if task.description || fullTask?.description}
-							<div class="detail-section">
-								<h4 class="section-label">Description</h4>
-								<div class="description-content">
+							<div class="mb-5">
+								<h4 class="text-xs font-semibold uppercase tracking-wider text-base-content/60 mb-2">Description</h4>
+								<div class="text-sm text-base-content/80 leading-relaxed whitespace-pre-wrap bg-base-200 border border-base-300 p-3 rounded-lg">
 									{task.description || fullTask?.description}
 								</div>
 							</div>
@@ -1112,25 +1112,25 @@
 						<!-- Full task details (loaded from API) -->
 						{#if fullTask}
 							{#if fullTask.labels?.length}
-								<div class="detail-section">
-									<h4 class="section-label">Labels</h4>
-									<div class="labels-row">
+								<div class="mb-5">
+									<h4 class="text-xs font-semibold uppercase tracking-wider text-base-content/60 mb-2">Labels</h4>
+									<div class="flex flex-wrap gap-1.5">
 										{#each fullTask.labels as label}
-											<span class="label-badge">{label}</span>
+											<span class="badge badge-sm badge-outline">{label}</span>
 										{/each}
 									</div>
 								</div>
 							{/if}
 
 							{#if fullTask.depends_on?.length}
-								<div class="detail-section">
-									<h4 class="section-label">Depends On</h4>
-									<div class="dep-list">
+								<div class="mb-5">
+									<h4 class="text-xs font-semibold uppercase tracking-wider text-base-content/60 mb-2">Depends On</h4>
+									<div class="flex flex-col gap-1.5">
 										{#each fullTask.depends_on as dep}
-											<div class="dep-item">
-												<span class="dep-id">{typeof dep === 'string' ? dep : dep.id}</span>
+											<div class="flex items-center gap-2 px-2.5 py-1.5 bg-base-200 rounded-md border border-base-300">
+												<span class="font-mono text-xs text-info flex-shrink-0">{typeof dep === 'string' ? dep : dep.id}</span>
 												{#if typeof dep === 'object' && dep.title}
-													<span class="dep-title">{dep.title}</span>
+													<span class="text-xs text-base-content/70 truncate">{dep.title}</span>
 												{/if}
 											</div>
 										{/each}
@@ -1139,14 +1139,14 @@
 							{/if}
 
 							{#if fullTask.blocked_by?.length}
-								<div class="detail-section">
-									<h4 class="section-label">Blocks</h4>
-									<div class="dep-list">
+								<div class="mb-5">
+									<h4 class="text-xs font-semibold uppercase tracking-wider text-base-content/60 mb-2">Blocks</h4>
+									<div class="flex flex-col gap-1.5">
 										{#each fullTask.blocked_by as dep}
-											<div class="dep-item">
-												<span class="dep-id">{typeof dep === 'string' ? dep : dep.id}</span>
+											<div class="flex items-center gap-2 px-2.5 py-1.5 bg-base-200 rounded-md border border-base-300">
+												<span class="font-mono text-xs text-info flex-shrink-0">{typeof dep === 'string' ? dep : dep.id}</span>
 												{#if typeof dep === 'object' && dep.title}
-													<span class="dep-title">{dep.title}</span>
+													<span class="text-xs text-base-content/70 truncate">{dep.title}</span>
 												{/if}
 											</div>
 										{/each}
@@ -1155,31 +1155,31 @@
 							{/if}
 
 							{#if fullTask.created_at || fullTask.updated_at}
-								<div class="detail-section">
-									<h4 class="section-label">Dates</h4>
-									<div class="session-info-grid">
+								<div class="mb-5">
+									<h4 class="text-xs font-semibold uppercase tracking-wider text-base-content/60 mb-2">Dates</h4>
+									<div class="grid grid-cols-2 gap-2">
 										{#if fullTask.created_at}
-											<div class="info-item">
-												<span class="info-key">Created</span>
-												<span class="info-value">{formatDate(fullTask.created_at)}</span>
+											<div class="flex flex-col gap-0.5 bg-base-200 px-2.5 py-2 rounded-md">
+												<span class="text-[0.625rem] uppercase tracking-wide text-base-content/50">Created</span>
+												<span class="text-sm font-medium text-base-content">{formatDate(fullTask.created_at)}</span>
 											</div>
 										{/if}
 										{#if fullTask.updated_at}
-											<div class="info-item">
-												<span class="info-key">Updated</span>
-												<span class="info-value">{formatDate(fullTask.updated_at)}</span>
+											<div class="flex flex-col gap-0.5 bg-base-200 px-2.5 py-2 rounded-md">
+												<span class="text-[0.625rem] uppercase tracking-wide text-base-content/50">Updated</span>
+												<span class="text-sm font-medium text-base-content">{formatDate(fullTask.updated_at)}</span>
 											</div>
 										{/if}
 									</div>
 								</div>
 							{/if}
 						{:else if taskLoading}
-							<div class="detail-section">
-								<div class="loading-indicator">Loading task details...</div>
+							<div class="mb-5">
+								<div class="text-center py-8 text-base-content/50 text-sm">Loading task details...</div>
 							</div>
 						{/if}
 					{:else}
-						<div class="no-task">
+						<div class="flex items-center justify-center h-full text-base-content/50 text-sm">
 							<p>No task assigned to this session</p>
 						</div>
 					{/if}
@@ -1188,26 +1188,26 @@
 
 				<!-- Page 2: Attachments -->
 				<div class="pager-page">
-					<div class="task-detail-page">
-						<div class="detail-section">
-							<h4 class="section-label">Attachments</h4>
+					<div class="flex-1 overflow-y-auto p-4" style="-webkit-overflow-scrolling: touch;">
+						<div class="mb-5">
+							<h4 class="text-xs font-semibold uppercase tracking-wider text-base-content/60 mb-2">Attachments</h4>
 							{#if fullTask?.attachments?.length}
-								<div class="attachments-list">
+								<div class="flex flex-col gap-2">
 									{#each fullTask.attachments as attachment}
-										<div class="attachment-item">
+										<div class="flex items-center gap-2 px-3 py-2 bg-base-200 border border-base-300 rounded-md text-sm text-base-content/80">
 											<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="16" height="16">
 												<path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
 											</svg>
-											<span class="attachment-name">{attachment.name || attachment.filename || 'Attachment'}</span>
+											<span class="truncate">{attachment.name || attachment.filename || 'Attachment'}</span>
 										</div>
 									{/each}
 								</div>
 							{:else}
-								<div class="empty-page-message">
+								<div class="flex flex-col items-center gap-3 py-12 text-base-content/40">
 									<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="32" height="32">
 										<path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
 									</svg>
-									<p>No attachments</p>
+									<p class="text-sm">No attachments</p>
 								</div>
 							{/if}
 						</div>
@@ -1216,17 +1216,17 @@
 
 				<!-- Page 3: Notes -->
 				<div class="pager-page">
-					<div class="task-detail-page">
-						<div class="detail-section">
-							<h4 class="section-label">Notes</h4>
+					<div class="flex-1 overflow-y-auto p-4" style="-webkit-overflow-scrolling: touch;">
+						<div class="mb-5">
+							<h4 class="text-xs font-semibold uppercase tracking-wider text-base-content/60 mb-2">Notes</h4>
 							{#if fullTask?.notes}
-								<div class="description-content">{fullTask.notes}</div>
+								<div class="text-sm text-base-content/80 leading-relaxed whitespace-pre-wrap bg-base-200 border border-base-300 p-3 rounded-lg">{fullTask.notes}</div>
 							{:else}
-								<div class="empty-page-message">
+								<div class="flex flex-col items-center gap-3 py-12 text-base-content/40">
 									<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="32" height="32">
 										<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
 									</svg>
-									<p>No notes</p>
+									<p class="text-sm">No notes</p>
 								</div>
 							{/if}
 						</div>

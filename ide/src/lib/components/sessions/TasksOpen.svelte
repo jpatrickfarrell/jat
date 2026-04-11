@@ -1933,7 +1933,7 @@
 						<!-- Harness tray: slides out RIGHT from avatar on card hover -->
 						{#if !isBlocked && !isHumanTask(task)}
 							<HarnessTray
-								selectedHarness={task.agent_program || ''}
+								selectedHarness={harness}
 								onSelect={(agentId) => {
 									// Tray always just switches harness — rocket button launches
 									handleSingleHarnessChange(task.id, { agentId, model: null });
@@ -1964,10 +1964,10 @@
 									<span class="mobile-task-separator">·</span>
 									<span class="mobile-task-priority mobile-task-priority-{task.priority}">P{task.priority}</span>
 								{/if}
-								{#if task.agent_program && !isHumanTask(task)}
+								{#if !isHumanTask(task)}
 									<span class="mobile-task-separator">·</span>
-									<span class="mobile-task-harness-badge" title="Harness: {task.agent_program}">
-										<ProviderLogo agentId={task.agent_program} size={11} />
+									<span class="mobile-task-harness-badge" title="Harness: {harness}">
+										<ProviderLogo agentId={harness} size={11} />
 									</span>
 								{:else if typeVisual}
 									<span class="mobile-task-separator">·</span>

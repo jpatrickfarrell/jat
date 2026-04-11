@@ -2838,7 +2838,7 @@
 
 			<!-- Content (scrollable area between sticky header and footer) - Industrial -->
 			<div
-				class="flex-1 overflow-y-auto px-6 pt-5 pb-6 flex flex-col min-h-0 bg-base-100"
+				class="flex-1 overflow-y-auto p-6 flex flex-col min-h-0 bg-base-100"
 			>
 				{#if loading}
 					<!-- Loading state - Industrial skeleton -->
@@ -2868,11 +2868,10 @@
 					</div>
 				{:else if task}
 					<!-- View Mode -->
-					<div class="flex flex-col gap-10">
-						<div class="flex flex-col gap-6">
+					<div class="flex flex-col">
 						<!-- Labels (badges, click to edit) - Industrial -->
 						<div>
-							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider text-base-content/60">Labels</h4>
+							<h4 class="text-sm font-semibold mb-2 text-base-content">Labels</h4>
 							{#if editingLabels}
 								<!-- Edit mode: text input - Industrial -->
 								<input
@@ -2917,8 +2916,15 @@
 						</div>
 
 						<!-- Context (Knowledge Bases + Data Tables) -->
-						<div>
-							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider text-base-content/60">Context</h4>
+						<details class="group border-t border-base-300/50 pt-3 mt-1">
+							<summary class="flex items-center gap-2 cursor-pointer list-none text-xs font-medium text-base-content/50 hover:text-base-content/80 py-1 marker:hidden [&::-webkit-details-marker]:hidden">
+								<svg class="h-3 w-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+								<span>Context</span>
+								{#if taskBaseIds.length + taskTableNames.length > 0}
+									<span class="badge badge-xs bg-base-300 text-base-content/70 border-0">{taskBaseIds.length + taskTableNames.length}</span>
+								{/if}
+							</summary>
+							<div class="pt-3">
 							<div class="flex flex-wrap items-center gap-1.5">
 								<BaseAttachChips
 									selectedIds={taskBaseIds}
@@ -3059,11 +3065,12 @@
 									{/each}
 								</div>
 							{/if}
-						</div>
+							</div>
+						</details>
 
 						<!-- Description (Inline Editable) - Industrial -->
-						<div>
-							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider text-base-content/60">Description</h4>
+						<div class="mt-5">
+							<h4 class="text-sm font-semibold mb-2 text-base-content">Description</h4>
 							<InlineEdit
 								value={task.description || ''}
 								onSave={async (newValue) => {
@@ -3079,8 +3086,8 @@
 						</div>
 
 						<!-- Execution & Scheduling -->
-						<div>
-							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider text-base-content/60">Execution</h4>
+						<div class="mt-8">
+							<h4 class="text-sm font-semibold mb-2 text-base-content">Execution</h4>
 							<div class="flex flex-col gap-3">
 
 								<!-- Command (searchable dropdown) -->
@@ -3216,7 +3223,7 @@
 
 							<!-- Schedule (Optional) — collapsed disclosure -->
 							<details class="group" open={hasScheduleFields || undefined}>
-								<summary class="cursor-pointer list-none flex items-center gap-1.5 text-xs font-semibold font-mono uppercase tracking-wider text-base-content/60 py-1">
+								<summary class="cursor-pointer list-none flex items-center gap-1.5 text-sm font-semibold text-base-content py-1">
 									<svg class="w-3 h-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 										<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
 									</svg>
@@ -3349,9 +3356,9 @@
 						<!-- Task Summary - Industrial -->
 						{#if task.status === 'closed' || summaryData}
 							<!-- Full summary section for closed tasks or when summary has been generated -->
-							<div class="rounded-lg p-4 bg-base-200 border border-base-300">
+							<div class="mt-8 rounded-lg p-4 bg-base-200 border border-base-300">
 								<div class="flex items-center justify-between mb-3">
-									<h4 class="text-xs font-semibold font-mono uppercase tracking-wider text-base-content/60">
+									<h4 class="text-sm font-semibold text-base-content">
 										{task.status === 'closed' ? 'Completion Summary' : 'Progress Summary'}
 									</h4>
 									{#if summaryData}
@@ -3484,7 +3491,7 @@
 							<div class="rounded-lg p-4 bg-base-200 border border-base-300 border-dashed">
 								<div class="flex items-center justify-between">
 									<div>
-										<h4 class="text-xs font-semibold font-mono uppercase tracking-wider text-base-content/60 mb-1">
+										<h4 class="text-sm font-semibold text-base-content mb-1">
 											Progress Summary
 										</h4>
 										<p class="text-xs text-base-content/50">Generate a summary of work done so far</p>
@@ -3508,14 +3515,11 @@
 							</div>
 						{/if}
 
-						</div>
-
-						<div class="flex flex-col gap-6">
 						<!-- Attachments - Industrial (drop zone is now the whole drawer) -->
 						<div
-							class="relative rounded transition-all duration-200"
+							class="mt-5 relative rounded transition-all duration-200"
 						>
-							<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider text-base-content/60">
+							<h4 class="text-sm font-semibold mb-2 text-base-content">
 								Attachments
 								{#if attachments.length > 0}
 									<span class="ml-1 badge badge-xs bg-base-300 text-base-content/70">{attachments.length}</span>
@@ -3615,9 +3619,9 @@
 						</div>
 
 						<!-- Task Activity Timeline (Signals) -->
-						<div>
+						<div class="mt-8">
 							<div class="flex items-center justify-between mb-2">
-								<h4 class="text-xs font-semibold font-mono uppercase tracking-wider text-base-content/60">
+								<h4 class="text-sm font-semibold text-base-content">
 									Activity Timeline
 									{#if taskSignals.length > 0}
 										<span class="ml-1 badge badge-xs bg-base-300 text-base-content/70">{taskSignals.length}</span>
@@ -3730,14 +3734,16 @@
 						</div>
 
 						<!-- Session Logs - Industrial (Legacy fallback) -->
-						<div>
+						<details class="group mt-10 pt-5 border-t-2 border-base-300/60">
+							<summary class="flex items-center gap-2 cursor-pointer list-none text-xs font-medium text-base-content/50 hover:text-base-content/80 py-1 marker:hidden [&::-webkit-details-marker]:hidden">
+								<svg class="h-3 w-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+								<span>Session Logs</span>
+								{#if sessionLogs.length > 0}
+									<span class="badge badge-xs bg-base-300 text-base-content/70 border-0">{sessionLogs.length}</span>
+								{/if}
+							</summary>
+							<div class="pt-3">
 							<div class="flex items-center justify-between mb-2">
-								<h4 class="text-xs font-semibold font-mono uppercase tracking-wider text-base-content/60">
-									Session Logs
-									{#if sessionLogs.length > 0}
-										<span class="ml-1 badge badge-xs bg-base-300 text-base-content/70">{sessionLogs.length}</span>
-									{/if}
-								</h4>
 								{#if sessionLogs.length > 0}
 									<button
 										class="btn btn-xs btn-ghost gap-1"
@@ -3848,7 +3854,8 @@
 									<p class="text-xs mt-1 text-base-content/40">Logs are saved when agents work on this task</p>
 								</div>
 							{/if}
-						</div>
+							</div>
+						</details>
 
 						<!-- Log Content Viewer Modal -->
 						{#if selectedLog}
@@ -3905,9 +3912,17 @@
 						{/if}
 
 						<!-- Dependencies - Industrial -->
-						<div>
-							<div class="flex items-center justify-between mb-2">
-								<h4 class="text-xs font-semibold font-mono uppercase tracking-wider text-base-content/60">Depends On</h4>
+						<details class="group border-t border-base-300/50 pt-3 mt-1">
+							<summary class="flex items-center gap-2 cursor-pointer list-none text-xs font-medium text-base-content/50 hover:text-base-content/80 py-1 marker:hidden [&::-webkit-details-marker]:hidden">
+								<svg class="h-3 w-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+								<span>Depends On</span>
+								{#if task.depends_on && task.depends_on.length > 0}
+									<span class="badge badge-xs bg-base-300 text-base-content/70 border-0">{task.depends_on.length}</span>
+								{/if}
+							</summary>
+							<div class="pt-3">
+								<div class="flex items-center justify-between mb-2">
+									<span class="text-xs text-base-content/40">Dependencies</span>
 								<!-- Add dependency button -->
 								<div class="relative">
 									<button
@@ -3993,15 +4008,21 @@
 										</div>
 									{/each}
 								</div>
-							{:else}
-								<p class="text-sm text-base-content/50 italic px-2">No dependencies</p>
-							{/if}
-						</div>
+								{:else}
+									<p class="text-sm text-base-content/50 italic px-2">No dependencies</p>
+								{/if}
+							</div>
+						</details>
 
 						<!-- Blocks (dependents) - Industrial -->
 						{#if task.blocked_by && task.blocked_by.length > 0}
-							<div>
-								<h4 class="text-xs font-semibold mb-2 font-mono uppercase tracking-wider text-base-content/60">Blocks</h4>
+							<details class="group border-t border-base-300/50 pt-3 mt-1">
+								<summary class="flex items-center gap-2 cursor-pointer list-none text-xs font-medium text-base-content/50 hover:text-base-content/80 py-1 marker:hidden [&::-webkit-details-marker]:hidden">
+									<svg class="h-3 w-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+									<span>Blocks</span>
+									<span class="badge badge-xs bg-base-300 text-base-content/70 border-0">{task.blocked_by.length}</span>
+								</summary>
+								<div class="pt-3">
 								<div class="space-y-2">
 									{#each task.blocked_by as dep}
 										<div
@@ -4017,20 +4038,24 @@
 											<span class="flex-1">{dep.title || 'Untitled'}</span>
 										</div>
 									{/each}
+									</div>
 								</div>
-							</div>
+							</details>
 						{/if}
 
 						<!-- Epic Children Section (only for epic tasks) -->
 						{#if (task.type === 'epic' || task.issue_type === 'epic') && (epicChildren.length > 0 || epicChildrenLoading)}
-							<div>
-								<div class="flex items-center justify-between mb-2">
-									<h4 class="text-xs font-semibold font-mono uppercase tracking-wider text-base-content/60">
-										Children
-										{#if epicSummary}
-											<span class="font-normal text-base-content/40 ml-1">({epicSummary.total})</span>
-										{/if}
-									</h4>
+							<details class="group border-t border-base-300/50 pt-3 mt-1" open>
+								<summary class="flex items-center gap-2 cursor-pointer list-none text-xs font-medium text-base-content/50 hover:text-base-content/80 py-1 marker:hidden [&::-webkit-details-marker]:hidden">
+									<svg class="h-3 w-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+									<span>Children</span>
+									{#if epicSummary}
+										<span class="badge badge-xs bg-base-300 text-base-content/70 border-0">{epicSummary.total}</span>
+									{/if}
+								</summary>
+								<div class="pt-3">
+									<div class="flex items-center justify-between mb-2">
+										<span class="sr-only">Children</span>
 									{#if epicSummary && epicSummary.total > 0}
 										<div class="flex items-center gap-1.5 text-[10px] font-mono">
 											{#if epicSummary.ready > 0}
@@ -4102,14 +4127,23 @@
 										{/each}
 									</div>
 								{/if}
-							</div>
+								</div>
+							</details>
 						{/if}
 
 						<!-- Activity Timeline (Task Events on Left, Messages on Right) - Industrial -->
-						<div class="pt-4 flex-1 flex flex-col min-h-0 border-t border-base-300">
-							<!-- Header with filter tabs -->
-							<div class="flex items-center justify-between mb-3">
-								<h4 class="text-xs font-semibold font-mono uppercase tracking-wider text-base-content/60">Activity Timeline</h4>
+						<details class="group border-t border-base-300/50 pt-3 mt-1">
+							<summary class="flex items-center gap-2 cursor-pointer list-none text-xs font-medium text-base-content/50 hover:text-base-content/80 py-1 marker:hidden [&::-webkit-details-marker]:hidden">
+								<svg class="h-3 w-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+								<span>Full Activity &amp; Messages</span>
+								{#if taskHistory?.count?.total}
+									<span class="badge badge-xs bg-base-300 text-base-content/70 border-0">{taskHistory.count.total}</span>
+								{/if}
+							</summary>
+							<div class="pt-3 flex flex-col min-h-0">
+								<!-- Header with filter tabs -->
+								<div class="flex items-center justify-between mb-3">
+									<span class="sr-only">Filter</span>
 
 								<!-- Filter tabs - Industrial -->
 								<div class="tabs tabs-boxed tabs-xs bg-base-200">
@@ -4299,11 +4333,17 @@
 									No activity yet
 								</div>
 							{/if}
-						</div>
+							</div>
+						</details>
 
 						<!-- Dependency Graph Section - Industrial -->
 						{#if task && ((task.depends_on && task.depends_on.length > 0) || (task.blocked_by && task.blocked_by.length > 0))}
-							<div class="pt-4 mt-4 border-t border-base-300">
+							<details class="group border-t border-base-300/50 pt-3 mt-1">
+								<summary class="flex items-center gap-2 cursor-pointer list-none text-xs font-medium text-base-content/50 hover:text-base-content/80 py-1 marker:hidden [&::-webkit-details-marker]:hidden">
+									<svg class="h-3 w-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+									<span>Dependency Graph</span>
+								</summary>
+								<div class="pt-3">
 								<TaskDependencyGraph
 									{task}
 									onNodeClick={(nodeTaskId) => {
@@ -4312,9 +4352,9 @@
 									}}
 									height={220}
 								/>
-							</div>
+								</div>
+							</details>
 						{/if}
-						</div>
 					</div>
 				{/if}
 
@@ -4383,7 +4423,7 @@
 			<!-- Footer Actions - Industrial -->
 			{#if !loading && !error && task}
 				<div
-					class="px-6 py-4 bg-base-200 border-t border-base-300"
+					class="p-6 bg-base-200 border-t border-base-300"
 				>
 					<div class="flex justify-between items-center">
 						<!-- Delete button (left) -->

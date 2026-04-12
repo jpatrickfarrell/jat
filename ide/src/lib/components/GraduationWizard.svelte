@@ -33,6 +33,12 @@
 		comments: number;
 	}
 
+	interface ProgressState {
+		phase: string;
+		message: string;
+		percent: number;
+	}
+
 	let step = $state<WizardStep>(1);
 	let backendChoice = $state<'sqlite' | 'postgres'>('postgres');
 	let connectionUrl = $state('');
@@ -41,6 +47,12 @@
 	let phase = $state<Phase>('idle');
 	let errorMessage = $state<string | null>(null);
 	let archivePath = $state<string | null>(null);
+	let progress = $state<ProgressState>({
+		phase: 'idle',
+		message: '',
+		percent: 0,
+	});
+	let abortController: AbortController | null = null;
 
 	// Reset state whenever the modal is opened for a new project
 	$effect(() => {
@@ -53,6 +65,7 @@
 			phase = 'idle';
 			errorMessage = null;
 			archivePath = null;
+			progress = { phase: 'idle', message: '', percent: 0 };
 		}
 	});
 
@@ -125,32 +138,79 @@
 		if (!projectKey || !previewSummary) return;
 		phase = 'running';
 		errorMessage = null;
+		progress = { phase: 'starting', message: 'Starting graduation…', percent: 0 };
+
+		abortController = new AbortController();
 		try {
 			const res = await fetch(
-				`/api/projects/${encodeURIComponent(projectKey)}/graduate`,
+				`/api/projects/${encodeURIComponent(projectKey)}/graduate/stream`,
 				{
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({
-						action: 'graduate',
-						url: connectionUrl.trim(),
-					}),
+					body: JSON.stringify({ url: connectionUrl.trim() }),
+					signal: abortController.signal,
 				},
 			);
-			const data = await res.json();
 
-			if (!res.ok || data?.status === 'error') {
-				throw new Error(data?.error || `Migration failed (${res.status})`);
+			if (!res.ok || !res.body) {
+				const text = await res.text().catch(() => '');
+				throw new Error(text || `Migration failed (${res.status})`);
 			}
-			if (data.status === 'already_graduated') {
+
+			const reader = res.body.getReader();
+			const decoder = new TextDecoder();
+			let buffer = '';
+			let finalEvent: { type: string; [k: string]: any } | null = null;
+
+			while (true) {
+				const { value, done } = await reader.read();
+				if (done) break;
+				buffer += decoder.decode(value, { stream: true });
+
+				// NDJSON: one complete JSON object per line
+				let newlineIdx = buffer.indexOf('\n');
+				while (newlineIdx !== -1) {
+					const line = buffer.slice(0, newlineIdx).trim();
+					buffer = buffer.slice(newlineIdx + 1);
+					if (line) {
+						try {
+							const event = JSON.parse(line);
+							if (event.type === 'progress') {
+								progress = {
+									phase: event.phase || '',
+									message: event.message || '',
+									percent: Math.max(0, Math.min(100, event.percent ?? 0)),
+								};
+							} else if (event.type === 'done' || event.type === 'error') {
+								finalEvent = event;
+							}
+						} catch {
+							// Ignore malformed line; stream keeps going
+						}
+					}
+					newlineIdx = buffer.indexOf('\n');
+				}
+			}
+
+			if (!finalEvent) {
+				throw new Error('Migration stream ended without a result');
+			}
+
+			if (finalEvent.type === 'error') {
+				throw new Error(finalEvent.error || 'Migration failed');
+			}
+
+			const result = finalEvent.result;
+			if (result?.status === 'already_graduated') {
 				errorMessage =
-					data.message ||
+					result.message ||
 					'Project was already on Postgres. Nothing to migrate.';
 				phase = 'error';
 				return;
 			}
 
-			archivePath = data.archivePath || null;
+			archivePath = result?.archivePath || null;
+			progress = { phase: 'complete', message: 'Graduation complete.', percent: 100 };
 			phase = 'done';
 			successToast(
 				'Graduation complete',
@@ -162,6 +222,8 @@
 			errorMessage = msg;
 			phase = 'error';
 			errorToast('Graduation failed', msg);
+		} finally {
+			abortController = null;
 		}
 	}
 
@@ -496,14 +558,32 @@
 						{/if}
 
 						{#if phase === 'running'}
-							<div
-								class="rounded-lg bg-base-200 p-3 flex items-center gap-3 text-sm"
-							>
-								<span class="loading loading-spinner loading-sm text-primary"
-								></span>
-								<span>
-									Running migration — exporting, importing, and archiving.
-								</span>
+							<div class="rounded-lg bg-base-200 p-4 space-y-3">
+								<div class="flex items-center gap-3 text-sm">
+									<span
+										class="loading loading-spinner loading-sm text-primary"
+									></span>
+									<span class="font-medium">
+										{progress.message || 'Running migration…'}
+									</span>
+								</div>
+								<div>
+									<progress
+										class="progress progress-primary w-full"
+										value={progress.percent}
+										max="100"
+									></progress>
+									<div
+										class="flex items-center justify-between text-xs text-base-content/60 mt-1 font-mono"
+									>
+										<span>{progress.phase || '—'}</span>
+										<span>{progress.percent}%</span>
+									</div>
+								</div>
+								<p class="text-xs text-base-content/50">
+									Migration is atomic — any failure automatically rolls back
+									Postgres and leaves your local SQLite untouched.
+								</p>
 							</div>
 						{/if}
 					</div>

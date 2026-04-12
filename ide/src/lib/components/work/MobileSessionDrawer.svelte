@@ -986,8 +986,8 @@
 					<div class="border-b border-base-300 flex-shrink-0" style="border-left: 3px solid {stateVisual.accent};">
 						<div class="flex items-stretch min-h-0">
 							<!-- Left strip: large avatar + split agent name (matches TasksActive swipe card) -->
-							<div class="w-[68px] flex-shrink-0 flex flex-col items-center justify-center gap-1.5 p-1" style="background: {stateVisual.bgTint};">
-								<AgentAvatar name={agentName} size={54} showRing={false} shape="rounded" />
+							<div class="w-[68px] flex-shrink-0 flex flex-col items-center justify-start gap-1.5 p-1" style="background: {stateVisual.bgTint};">
+								<AgentAvatar name={agentName} size={60} showRing={false} shape="rounded" />
 								<div class="flex flex-col items-center leading-[1.1] text-[0.5625rem] font-semibold uppercase tracking-wide text-base-content/60 text-center max-w-full overflow-hidden opacity-85" title={agentName}>
 									{#each splitAgentName(agentName) as part}
 										<span class="max-w-full overflow-hidden text-ellipsis whitespace-nowrap">{part}</span>

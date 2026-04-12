@@ -1198,7 +1198,7 @@
 					{@const autoCompleteDisabled = autoCompleteDisabledMap.get(session.name) ?? reviewBasedDefault}
 					<div class="mobile-card-inner">
 						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint};">
-							<AgentAvatar name={sessionAgentName} size={54} showRing={false} shape="rounded" />
+							<AgentAvatar name={sessionAgentName} size={60} showRing={false} shape="rounded" />
 							<div class="mobile-strip-agent-label" title={sessionAgentName}>
 								{#each splitAgentName(sessionAgentName) as part}
 									<span>{part}</span>
@@ -1463,7 +1463,7 @@
 					{@const cardActions = getSessionStateActions(effectiveState)}
 					<div class="mobile-card-inner">
 						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint};">
-							<AgentAvatar name={sessionAgentName} size={54} showRing={false} shape="rounded" />
+							<AgentAvatar name={sessionAgentName} size={60} showRing={false} shape="rounded" />
 						</div>
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
@@ -2349,12 +2349,12 @@
 		transition: filter 0.2s;
 	}
 
-	/* Agent variant: two stacked squares — avatar fills top, name below, vertically centered */
+	/* Agent variant: avatar fills top, name below — pushed to top to avoid dead space */
 	.mobile-state-strip-agent {
 		width: 68px;
 		padding: 4px 4px;
 		flex-direction: column;
-		justify-content: center;
+		justify-content: flex-start;
 		gap: 0.375rem;
 	}
 

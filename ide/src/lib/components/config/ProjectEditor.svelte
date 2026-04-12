@@ -4,6 +4,7 @@
 	import { saveProject } from '$lib/stores/configStore.svelte';
 	import { successToast, errorToast, infoToast } from '$lib/stores/toasts.svelte';
 	import ProjectSecretsEditor from './ProjectSecretsEditor.svelte';
+	import ColorPickerField from './ColorPickerField.svelte';
 	import { AGENT_PRESETS } from '$lib/types/agentProgram';
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
 
@@ -41,29 +42,6 @@
 	let newProjectKey = $state('');
 	let renameResult = $state<{ killedAgents: string[] } | null>(null);
 
-	// Color picker state
-	let editingActiveColor = $state(false);
-	let editingInactiveColor = $state(false);
-
-
-	// Predefined color palette for quick selection - using oklch for perceptual uniformity
-	const COLOR_PALETTE = [
-		'oklch(0.70 0.18 220)', // Blue
-		'oklch(0.75 0.18 160)', // Cyan
-		'oklch(0.65 0.20 30)',  // Red
-		'oklch(0.80 0.18 90)',  // Yellow
-		'oklch(0.70 0.18 145)', // Green
-		'oklch(0.65 0.18 280)', // Purple
-		'oklch(0.75 0.18 60)',  // Orange
-		'oklch(0.70 0.18 200)', // Sky blue
-		'oklch(0.60 0.18 300)', // Violet
-		'oklch(0.55 0.25 25)',  // Dark red
-		'oklch(0.80 0.20 150)', // Mint green
-		'oklch(0.75 0.12 220)', // Light blue
-		'oklch(0.70 0.22 15)',  // Bright red
-		'oklch(0.75 0.20 120)', // Lime
-		'oklch(0.85 0.18 85)'   // Bright yellow
-	];
 
 	// Form state
 	let key = $state('');
@@ -250,9 +228,6 @@
 			renameError = null;
 			newProjectKey = '';
 			renameResult = null;
-			// Reset color picker state
-			editingActiveColor = false;
-			editingInactiveColor = false;
 			}
 	});
 
@@ -497,7 +472,7 @@
 	}
 
 	// Compute the preview path for rename
-	let renamePreviewPath = $derived(() => {
+	let renamePreviewPath = $derived.by(() => {
 		if (!path || !newProjectKey) return '';
 		const parts = path.split('/');
 		parts[parts.length - 1] = newProjectKey.trim().toLowerCase();
@@ -514,9 +489,7 @@
 		class="fixed inset-0 bg-black/50 z-40"
 		transition:fade={{ duration: 200 }}
 		onclick={handleBackdropClick}
-		onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCancel(); } }}
-		role="button"
-		tabindex="-1"
+		role="presentation"
 	></div>
 
 	<!-- Side Drawer -->
@@ -537,8 +510,8 @@
 		</div>
 
 		<!-- Form Content -->
-		<div class="flex-1 overflow-y-auto p-4 space-y-6">
-			<!-- Basic Information Section -->
+		<div class="flex-1 overflow-y-auto p-4 space-y-4">
+			<!-- Basic Information Section (always open) -->
 			<div class="space-y-4">
 				<h3 class="text-sm font-medium text-base-content/70 uppercase tracking-wide">Basic Information</h3>
 
@@ -565,7 +538,7 @@
 					{/if}
 					{#if !isNewProject}
 						<div class="label">
-							<span class="label-text-alt text-base-content/50">Key cannot be changed for existing projects</span>
+							<span class="label-text-alt text-base-content/50">Use <button type="button" class="link link-warning" onclick={() => { showRenameModal = true; newProjectKey = ''; renameError = null; }}>Rename</button> to change the project key</span>
 						</div>
 					{/if}
 				</div>
@@ -626,6 +599,9 @@
 						rows="2"
 						bind:value={description}
 					></textarea>
+					<div class="label">
+						<span class="label-text-alt text-base-content/50">Shown in project list and agent context</span>
+					</div>
 				</div>
 
 				<!-- Hidden Toggle -->
@@ -639,18 +615,16 @@
 
 			{#if !isNewProject}
 				<!-- Sharing & Backend Section -->
-				<div class="space-y-4">
-					<h3 class="text-sm font-medium text-base-content/70 uppercase tracking-wide">
+				<details class="group rounded-lg border border-base-300">
+					<summary class="cursor-pointer px-4 py-3 text-sm font-medium text-base-content/70 uppercase tracking-wide hover:bg-base-200 rounded-lg flex items-center justify-between">
 						Sharing &amp; Backend
-					</h3>
+						<span class="badge badge-sm {isTeamBackend ? 'badge-info' : 'badge-success'}">{isTeamBackend ? 'Team' : 'Solo'}</span>
+					</summary>
+					<div class="px-4 pb-4 space-y-4">
 
 					<!-- Current state card -->
 					<div
-						class="rounded-lg border p-4 space-y-3"
-						class:border-success={!isTeamBackend}
-						class:bg-success={!isTeamBackend}
-						class:bg-opacity-5={!isTeamBackend}
-						class:border-info={isTeamBackend}
+						class="rounded-lg border p-4 space-y-3 {!isTeamBackend ? 'border-success bg-success/5' : 'border-info'}"
 					>
 						<div class="flex items-center gap-3">
 							{#if isTeamBackend}
@@ -773,36 +747,49 @@
 							</ul>
 						</div>
 					</details>
-				</div>
+
+					</div>
+				</details>
 			{/if}
 
 			<!-- Agent Defaults Section -->
-			<div class="space-y-4">
-				<h3 class="text-sm font-medium text-base-content/70 uppercase tracking-wide">Agent Defaults</h3>
-				<div class="form-control">
-					<label class="label" for="project-default-harness">
-						<span class="label-text">Default Harness</span>
-					</label>
-					<div class="flex items-center gap-2 flex-wrap">
-						{#each AGENT_PRESETS as preset}
-							<button type="button"
-								class="btn btn-sm gap-1.5 {defaultHarness === preset.id || (!defaultHarness && preset.id === 'claude-code') ? 'btn-primary' : 'btn-ghost'}"
-								onclick={() => defaultHarness = preset.id}
-							>
-								<ProviderLogo agentId={preset.id} size={16} />
-								<span class="text-xs">{preset.config.name}</span>
-							</button>
-						{/each}
-					</div>
-					<div class="label">
-						<span class="label-text-alt text-base-content/50">Agent program used when creating new tasks for this project</span>
+			<details class="group rounded-lg border border-base-300">
+				<summary class="cursor-pointer px-4 py-3 text-sm font-medium text-base-content/70 uppercase tracking-wide hover:bg-base-200 rounded-lg flex items-center justify-between">
+					Agent Defaults
+					<span class="text-xs font-normal normal-case text-base-content/50">{(AGENT_PRESETS.find(p => p.id === defaultHarness) || AGENT_PRESETS.find(p => p.id === 'claude-code'))?.config.name ?? ''}</span>
+				</summary>
+				<div class="px-4 pb-4">
+					<div class="form-control">
+						<label class="label" for="project-default-harness">
+							<span class="label-text">Default Agent Program</span>
+						</label>
+						<div class="flex items-center gap-2 flex-wrap">
+							{#each AGENT_PRESETS as preset}
+								<button type="button"
+									class="btn btn-sm gap-1.5 {defaultHarness === preset.id || (!defaultHarness && preset.id === 'claude-code') ? 'btn-primary' : 'btn-ghost'}"
+									onclick={() => defaultHarness = preset.id}
+								>
+									<ProviderLogo agentId={preset.id} size={16} />
+									<span class="text-xs">{preset.config.name}</span>
+								</button>
+							{/each}
+						</div>
+						<div class="label">
+							<span class="label-text-alt text-base-content/50">Used when spawning new agents for this project</span>
+						</div>
 					</div>
 				</div>
-			</div>
+			</details>
 
 			<!-- Server Configuration Section -->
-			<div class="space-y-4">
-				<h3 class="text-sm font-medium text-base-content/70 uppercase tracking-wide">Server Configuration</h3>
+			<details class="group rounded-lg border border-base-300">
+				<summary class="cursor-pointer px-4 py-3 text-sm font-medium text-base-content/70 uppercase tracking-wide hover:bg-base-200 rounded-lg flex items-center justify-between">
+					Server &amp; Secrets
+					{#if port}
+						<span class="text-xs font-normal normal-case text-base-content/50">:{port}</span>
+					{/if}
+				</summary>
+				<div class="px-4 pb-4 space-y-4">
 
 				<!-- Port -->
 				<div class="form-control">
@@ -826,13 +813,17 @@
 						<div class="label">
 							<span class="label-text-alt text-error">{errors['port']}</span>
 						</div>
+					{:else}
+						<div class="label">
+							<span class="label-text-alt text-base-content/50">Port the IDE uses to detect and link to the running dev server</span>
+						</div>
 					{/if}
 				</div>
 
 				<!-- Server Path -->
 				<div class="form-control">
 					<label class="label" for="project-server-path">
-						<span class="label-text">Server Path</span>
+						<span class="label-text">Server Subdirectory</span>
 					</label>
 					<input
 						id="project-server-path"
@@ -842,7 +833,7 @@
 						bind:value={serverPath}
 					/>
 					<div class="label">
-						<span class="label-text-alt text-base-content/50">Just the folder name, e.g. server</span>
+						<span class="label-text-alt text-base-content/50">Subfolder within the project path where the server runs, e.g. <code>server</code></span>
 					</div>
 				</div>
 
@@ -859,212 +850,84 @@
 						</p>
 					</div>
 				{/if}
-			</div>
+
+				</div>
+			</details>
 
 				<!-- Display Colors Section -->
-			<div class="space-y-4">
-				<h3 class="text-sm font-medium text-base-content/70 uppercase tracking-wide">Display Colors</h3>
-
-				<!-- Active Color -->
-				<div class="form-control">
-					<label class="label" for="project-active-color">
-						<span class="label-text">Active Badge Color</span>
-					</label>
-					<div class="flex gap-2 items-start">
-						<div class="relative">
-							{#if editingActiveColor}
-								<!-- Color picker dropdown -->
-								<div class="absolute top-0 left-0 z-50 p-3 rounded-lg shadow-xl bg-base-200 border border-base-content/25 w-64">
-									<!-- Palette grid -->
-									<div class="grid grid-cols-5 gap-1.5 mb-3">
-										{#each COLOR_PALETTE as color}
-											<button
-												type="button"
-												class="w-8 h-8 rounded-full transition-transform hover:scale-110 {activeColor === color ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-200' : ''}"
-												style="background: {color};"
-												onclick={() => { activeColor = color; validateField('activeColor', color); }}
-												title={color}
-											></button>
-										{/each}
-									</div>
-									<!-- Custom color input -->
-									<div class="flex items-center gap-2 mb-3">
-										<input
-											type="color"
-											class="w-8 h-8 rounded cursor-pointer border-0 p-0"
-											value={activeColor.startsWith('#') ? activeColor : '#6688cc'}
-											oninput={(e) => { activeColor = e.currentTarget.value; validateField('activeColor', e.currentTarget.value); }}
-										/>
-										<input
-											type="text"
-											class="flex-1 px-2 py-1.5 rounded font-mono text-xs bg-base-300 border border-base-content/20 text-base-content/90"
-											class:border-error={touched['activeColor'] && errors['activeColor']}
-											bind:value={activeColor}
-											placeholder="oklch(0.7 0.15 150)"
-											onfocus={() => touched['activeColor'] = true}
-											onblur={() => validateField('activeColor', activeColor)}
-										/>
-									</div>
-									<!-- Close button -->
-									<div class="flex justify-end">
-										<button
-											type="button"
-											class="btn btn-xs btn-ghost"
-											onclick={() => editingActiveColor = false}
-										>
-											Done
-										</button>
-									</div>
-								</div>
+			<details class="group rounded-lg border border-base-300">
+				<summary class="cursor-pointer px-4 py-3 text-sm font-medium text-base-content/70 uppercase tracking-wide hover:bg-base-200 rounded-lg flex items-center gap-3">
+					Display Colors
+					{#if activeColor || inactiveColor}
+						<span class="flex gap-1.5 ml-auto">
+							{#if activeColor}
+								<span class="w-4 h-4 rounded-full border border-base-content/20" style="background: {activeColor};"></span>
 							{/if}
-							<!-- Color swatch button -->
-							<button
-								type="button"
-								class="w-10 h-10 rounded-lg transition-all hover:scale-105 border-2 {editingActiveColor ? 'border-primary ring-2 ring-primary/30' : 'border-base-content/20 hover:border-base-content/40'}"
-								style="background: {activeColor || 'oklch(0.50 0.05 250)'};"
-								onclick={() => { editingActiveColor = !editingActiveColor; editingInactiveColor = false; }}
-								title="Click to change color"
-							></button>
-						</div>
-						<div class="flex-1">
-							<input
-								id="project-active-color"
-								type="text"
-								class="input input-bordered w-full font-mono text-sm"
-								class:input-error={touched['activeColor'] && errors['activeColor']}
-								placeholder="oklch(0.7 0.15 150)"
-								bind:value={activeColor}
-								onfocus={() => touched['activeColor'] = true}
-								onblur={() => validateField('activeColor', activeColor)}
-							/>
-							{#if touched['activeColor'] && errors['activeColor']}
-								<div class="label py-1">
-									<span class="label-text-alt text-error">{errors['activeColor']}</span>
-								</div>
+							{#if inactiveColor}
+								<span class="w-4 h-4 rounded-full border border-base-content/20" style="background: {inactiveColor};"></span>
 							{/if}
-						</div>
+						</span>
+					{/if}
+				</summary>
+				<div class="px-4 pb-4 grid grid-cols-2 gap-4">
+					<ColorPickerField
+						bind:value={activeColor}
+						label="Active Badge"
+						id="project-active-color"
+						placeholder="oklch(0.7 0.15 150)"
+						error={errors['activeColor']}
+						touched={touched['activeColor']}
+						onValidate={(v) => validateField('activeColor', v)}
+					/>
+					<ColorPickerField
+						bind:value={inactiveColor}
+						label="Inactive Badge"
+						id="project-inactive-color"
+						placeholder="oklch(0.5 0.1 150)"
+						error={errors['inactiveColor']}
+						touched={touched['inactiveColor']}
+						onValidate={(v) => validateField('inactiveColor', v)}
+					/>
+				</div>
+			</details>
+			{#if !isNewProject}
+				<!-- Danger Zone -->
+				<div class="rounded-lg border border-error/30 p-4 space-y-3">
+					<h3 class="text-sm font-medium text-error/70 uppercase tracking-wide">Danger Zone</h3>
+					<div class="flex gap-2">
+						<button
+							class="btn btn-sm btn-warning btn-outline"
+							onclick={() => { showRenameModal = true; newProjectKey = ''; renameError = null; }}
+							disabled={isRenaming || isDeleting}
+						>
+							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+							</svg>
+							Rename
+						</button>
+						<button
+							class="btn btn-sm btn-error btn-outline"
+							onclick={() => showDeleteConfirm = true}
+							disabled={isDeleting || isRenaming}
+						>
+							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+							</svg>
+							Delete
+						</button>
 					</div>
 				</div>
-
-				<!-- Inactive Color -->
-				<div class="form-control">
-					<label class="label" for="project-inactive-color">
-						<span class="label-text">Inactive Badge Color</span>
-					</label>
-					<div class="flex gap-2 items-start">
-						<div class="relative">
-							{#if editingInactiveColor}
-								<!-- Color picker dropdown -->
-								<div class="absolute top-0 left-0 z-50 p-3 rounded-lg shadow-xl bg-base-200 border border-base-content/25 w-64">
-									<!-- Palette grid -->
-									<div class="grid grid-cols-5 gap-1.5 mb-3">
-										{#each COLOR_PALETTE as color}
-											<button
-												type="button"
-												class="w-8 h-8 rounded-full transition-transform hover:scale-110 {inactiveColor === color ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-200' : ''}"
-												style="background: {color};"
-												onclick={() => { inactiveColor = color; validateField('inactiveColor', color); }}
-												title={color}
-											></button>
-										{/each}
-									</div>
-									<!-- Custom color input -->
-									<div class="flex items-center gap-2 mb-3">
-										<input
-											type="color"
-											class="w-8 h-8 rounded cursor-pointer border-0 p-0"
-											value={inactiveColor.startsWith('#') ? inactiveColor : '#445566'}
-											oninput={(e) => { inactiveColor = e.currentTarget.value; validateField('inactiveColor', e.currentTarget.value); }}
-										/>
-										<input
-											type="text"
-											class="flex-1 px-2 py-1.5 rounded font-mono text-xs bg-base-300 border border-base-content/20 text-base-content/90"
-											class:border-error={touched['inactiveColor'] && errors['inactiveColor']}
-											bind:value={inactiveColor}
-											placeholder="oklch(0.5 0.1 150)"
-											onfocus={() => touched['inactiveColor'] = true}
-											onblur={() => validateField('inactiveColor', inactiveColor)}
-										/>
-									</div>
-									<!-- Close button -->
-									<div class="flex justify-end">
-										<button
-											type="button"
-											class="btn btn-xs btn-ghost"
-											onclick={() => editingInactiveColor = false}
-										>
-											Done
-										</button>
-									</div>
-								</div>
-							{/if}
-							<!-- Color swatch button -->
-							<button
-								type="button"
-								class="w-10 h-10 rounded-lg transition-all hover:scale-105 border-2 {editingInactiveColor ? 'border-primary ring-2 ring-primary/30' : 'border-base-content/20 hover:border-base-content/40'}"
-								style="background: {inactiveColor || 'oklch(0.35 0.03 250)'};"
-								onclick={() => { editingInactiveColor = !editingInactiveColor; editingActiveColor = false; }}
-								title="Click to change color"
-							></button>
-						</div>
-						<div class="flex-1">
-							<input
-								id="project-inactive-color"
-								type="text"
-								class="input input-bordered w-full font-mono text-sm"
-								class:input-error={touched['inactiveColor'] && errors['inactiveColor']}
-								placeholder="oklch(0.5 0.1 150)"
-								bind:value={inactiveColor}
-								onfocus={() => touched['inactiveColor'] = true}
-								onblur={() => validateField('inactiveColor', inactiveColor)}
-							/>
-							{#if touched['inactiveColor'] && errors['inactiveColor']}
-								<div class="label py-1">
-									<span class="label-text-alt text-error">{errors['inactiveColor']}</span>
-								</div>
-							{/if}
-						</div>
-					</div>
-				</div>
-			</div>
+			{/if}
 		</div>
 
 		<!-- Footer -->
-		<div class="flex justify-between p-4 border-t border-base-300">
-			<!-- Rename and Delete buttons (only for existing projects) -->
-			<div class="flex gap-2">
-				{#if !isNewProject}
-					<button
-						class="btn btn-warning btn-outline"
-						onclick={() => { showRenameModal = true; newProjectKey = ''; renameError = null; }}
-						disabled={isRenaming || isDeleting}
-					>
-						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-						</svg>
-						Rename
-					</button>
-					<button
-						class="btn btn-error btn-outline"
-						onclick={() => showDeleteConfirm = true}
-						disabled={isDeleting || isRenaming}
-					>
-						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-						</svg>
-						Delete
-					</button>
-				{/if}
-			</div>
-			<!-- Save/Cancel buttons -->
-			<div class="flex gap-2">
-				<button class="btn btn-ghost" onclick={handleCancel}>
-					Cancel
-				</button>
-				<button class="btn btn-primary" onclick={handleSave}>
-					{isNewProject ? 'Create Project' : 'Save Changes'}
-				</button>
-			</div>
+		<div class="flex justify-end gap-2 p-4 border-t border-base-300">
+			<button class="btn btn-ghost" onclick={handleCancel}>
+				Cancel
+			</button>
+			<button class="btn btn-primary" onclick={handleSave}>
+				{isNewProject ? 'Create Project' : 'Save Changes'}
+			</button>
 		</div>
 	</div>
 
@@ -1207,7 +1070,7 @@
 					{#if newProjectKey.trim()}
 						<div class="bg-base-200 rounded-lg p-3 mb-4 text-sm font-mono">
 							<div class="text-base-content/50 text-xs mb-1">New path:</div>
-							<div class="text-success">{renamePreviewPath()}</div>
+							<div class="text-success">{renamePreviewPath}</div>
 						</div>
 					{/if}
 

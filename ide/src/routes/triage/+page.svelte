@@ -17,6 +17,8 @@
 	import { addToast } from '$lib/stores/toasts.svelte';
 	import { broadcastTaskEvent } from '$lib/stores/taskEvents';
 	import { getProjectFromTaskId } from '$lib/utils/projectUtils';
+	import SearchDropdown from '$lib/components/SearchDropdown.svelte';
+	import type { SearchDropdownGroup } from '$lib/components/SearchDropdown.svelte';
 
 	interface Task {
 		id: string;
@@ -52,8 +54,48 @@
 			const p = getProjectFromTaskId(t.id);
 			if (p) set.add(p);
 		}
-		return ['all', ...Array.from(set).sort()];
+		return Array.from(set).sort();
 	});
+
+	const projectGroups = $derived.by<SearchDropdownGroup[]>(() => [{
+		label: 'Projects',
+		options: [
+			{ value: 'all', label: 'All Projects' },
+			...availableProjects.map(p => ({ value: p, label: p }))
+		]
+	}]);
+
+	const statusGroups: SearchDropdownGroup[] = [{
+		label: 'Status',
+		options: [
+			{ value: 'all', label: 'All Statuses' },
+			{ value: 'submitted', label: 'Submitted' },
+			{ value: 'open', label: 'Open' },
+			{ value: 'in_progress', label: 'In Progress' }
+		]
+	}];
+
+	const typeGroups: SearchDropdownGroup[] = [{
+		label: 'Type',
+		options: [
+			{ value: 'all', label: 'All Types' },
+			{ value: 'bug', label: 'Bug' },
+			{ value: 'feature', label: 'Feature' },
+			{ value: 'task', label: 'Task' },
+			{ value: 'chore', label: 'Chore' },
+			{ value: 'chat', label: 'Chat' }
+		]
+	}];
+
+	function projectColorFn(val: string): string | undefined {
+		if (!val || val === 'all') return undefined;
+		return getProjectColor(val + '-x');
+	}
+
+	function statusColorFn(val: string): string | undefined {
+		if (!val || val === 'all') return undefined;
+		return getStatusColor(val);
+	}
 
 	let filteredTasks = $derived.by(() => {
 		let result = tasks;
@@ -477,25 +519,29 @@
 	<!-- Filter bar -->
 	<div class="filter-bar">
 		<div class="filter-group">
-			<select class="filter-select" bind:value={filterProject}>
-				{#each availableProjects as proj}
-					<option value={proj}>{proj === 'all' ? 'All Projects' : proj}</option>
-				{/each}
-			</select>
-			<select class="filter-select" bind:value={filterStatus}>
-				<option value="all">All Statuses</option>
-				<option value="submitted">Submitted</option>
-				<option value="open">Open</option>
-				<option value="in_progress">In Progress</option>
-			</select>
-			<select class="filter-select" bind:value={filterType}>
-				<option value="all">All Types</option>
-				<option value="bug">Bug</option>
-				<option value="feature">Feature</option>
-				<option value="task">Task</option>
-				<option value="chore">Chore</option>
-				<option value="chat">Chat</option>
-			</select>
+			<SearchDropdown
+				value={filterProject}
+				groups={projectGroups}
+				placeholder="All Projects"
+				colorFn={projectColorFn}
+				variant="chip"
+				onChange={(v) => { filterProject = v; }}
+			/>
+			<SearchDropdown
+				value={filterStatus}
+				groups={statusGroups}
+				placeholder="All Statuses"
+				colorFn={statusColorFn}
+				variant="chip"
+				onChange={(v) => { filterStatus = v; }}
+			/>
+			<SearchDropdown
+				value={filterType}
+				groups={typeGroups}
+				placeholder="All Types"
+				variant="chip"
+				onChange={(v) => { filterType = v; }}
+			/>
 		</div>
 		<div class="filter-search-wrap">
 			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" class="search-icon"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
@@ -880,18 +926,9 @@
 	}
 	.filter-group {
 		display: flex;
-		gap: 0.35rem;
+		gap: 0.5rem;
+		align-items: center;
 	}
-	.filter-select {
-		font-size: 0.7rem;
-		padding: 0.25rem 0.5rem;
-		border-radius: 5px;
-		border: 1px solid oklch(0.25 0.02 250);
-		background: oklch(0.18 0.01 250);
-		color: oklch(0.70 0.03 250);
-		outline: none;
-	}
-	.filter-select:focus { border-color: oklch(0.55 0.15 220); }
 	.filter-search-wrap {
 		flex: 1;
 		position: relative;

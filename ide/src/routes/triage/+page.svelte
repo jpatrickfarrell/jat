@@ -1,13 +1,13 @@
 <script lang="ts">
 	/**
-	 * Triage — Story Refinement Queue
+	 * Triage — Task Refinement Queue
 	 *
-	 * Where feedback widget submissions land and get groomed before agents pick them up.
-	 * Queue of tasks with status='submitted' (or open tasks as fallback).
-	 * Dev reviews each item: promote to open, reject, refine, split, assign.
+	 * One screen to review all actionable tasks across projects.
+	 * See everything submitted/open/in-progress, then quickly:
+	 * solve (spawn agent), assign, edit, close, or delete.
 	 *
 	 * Layout: Left queue panel + Right detail panel
-	 * Keyboard: J/K navigate, P promote, R reject, E edit, / filter
+	 * Keyboard: J/K navigate, S spawn, P promote, R reject, E edit, D delete, / filter
 	 */
 	import { onMount, onDestroy } from 'svelte';
 	import { fade } from 'svelte/transition';
@@ -44,6 +44,7 @@
 	// Filters
 	let filterProject = $state('all');
 	let filterType = $state('all');
+	let filterStatus = $state('all');
 	let filterSearch = $state('');
 	let availableProjects = $derived.by(() => {
 		const set = new Set<string>();
@@ -61,6 +62,9 @@
 		}
 		if (filterType !== 'all') {
 			result = result.filter(t => t.issue_type === filterType);
+		}
+		if (filterStatus !== 'all') {
+			result = result.filter(t => t.status === filterStatus);
 		}
 		if (filterSearch.trim()) {
 			const q = filterSearch.toLowerCase();
@@ -84,6 +88,8 @@
 	let saving = $state(false);
 	let promoting = $state(false);
 	let rejecting = $state(false);
+	let spawning = $state(false);
+	let deleting = $state(false);
 
 	// Epics for assignment
 	let epics = $state<Task[]>([]);
@@ -100,20 +106,33 @@
 
 	async function load() {
 		try {
-			// Try submitted first, fallback to open
-			let res = await fetch('/api/tasks?status=submitted&limit=200');
-			let data = res.ok ? await res.json() : { tasks: [] };
-			let items: Task[] = data.tasks || [];
+			// Fetch all actionable statuses in parallel
+			const [submittedRes, openRes, inProgressRes] = await Promise.all([
+				fetch('/api/tasks?status=submitted&limit=200'),
+				fetch('/api/tasks?status=open&limit=200'),
+				fetch('/api/tasks?status=in_progress&limit=200')
+			]);
 
-			// Fallback: if no submitted tasks, show open tasks (for before status migration)
-			if (items.length === 0) {
-				res = await fetch('/api/tasks?status=open&limit=200');
-				data = res.ok ? await res.json() : { tasks: [] };
-				items = (data.tasks || []).filter((t: Task) => t.issue_type !== 'epic');
+			const parse = async (r: Response) => r.ok ? ((await r.json()).tasks || []) : [];
+			const [submitted, open, inProgress] = await Promise.all([
+				parse(submittedRes), parse(openRes), parse(inProgressRes)
+			]);
+
+			// Combine, dedup by id, exclude epics
+			const seen = new Set<string>();
+			const items: Task[] = [];
+			for (const t of [...submitted, ...open, ...inProgress]) {
+				if (seen.has(t.id) || t.issue_type === 'epic') continue;
+				seen.add(t.id);
+				items.push(t);
 			}
 
-			// Sort by priority (P0 first), then by created_at (oldest first)
+			// Sort: submitted first, then by priority, then by created_at
+			const statusOrder: Record<string, number> = { submitted: 0, open: 1, in_progress: 2 };
 			items.sort((a, b) => {
+				const sa = statusOrder[a.status] ?? 9;
+				const sb = statusOrder[b.status] ?? 9;
+				if (sa !== sb) return sa - sb;
 				if (a.priority !== b.priority) return a.priority - b.priority;
 				return (a.created_at ?? '').localeCompare(b.created_at ?? '');
 			});
@@ -121,8 +140,8 @@
 			tasks = items;
 
 			// Keep selection in bounds
-			if (selectedIdx >= tasks.length) {
-				selectedIdx = Math.max(0, tasks.length - 1);
+			if (selectedIdx >= filteredTasks.length) {
+				selectedIdx = Math.max(0, filteredTasks.length - 1);
 			}
 		} catch {
 			// silent
@@ -238,6 +257,51 @@
 		}
 	}
 
+	async function spawnTask() {
+		if (!selectedTask || spawning) return;
+		spawning = true;
+		try {
+			const res = await fetch('/api/work/spawn', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ taskId: selectedTask.id })
+			});
+			if (res.ok) {
+				addToast({ message: `Agent launched for: ${selectedTask.title}`, type: 'success' });
+				broadcastTaskEvent('task-updated', selectedTask.id);
+				await load();
+			} else {
+				const d = await res.json().catch(() => ({}));
+				addToast({ message: d.message || 'Failed to spawn', type: 'error' });
+			}
+		} catch {
+			addToast({ message: 'Failed to spawn agent', type: 'error' });
+		} finally {
+			spawning = false;
+		}
+	}
+
+	async function deleteTask() {
+		if (!selectedTask || deleting) return;
+		const confirm = window.confirm(`Delete "${selectedTask.title}"? This cannot be undone.`);
+		if (!confirm) return;
+		deleting = true;
+		try {
+			const res = await fetch(`/api/tasks/${selectedTask.id}`, { method: 'DELETE' });
+			if (res.ok) {
+				addToast({ message: `Deleted: ${selectedTask.title}`, type: 'info' });
+				broadcastTaskEvent('task-updated', selectedTask.id);
+				await load();
+			} else {
+				addToast({ message: 'Failed to delete', type: 'error' });
+			}
+		} catch {
+			addToast({ message: 'Failed to delete', type: 'error' });
+		} finally {
+			deleting = false;
+		}
+	}
+
 	async function assignToEpic(epicId: string) {
 		if (!selectedTask) return;
 		try {
@@ -316,6 +380,9 @@
 				if (selectedIdx > 0) selectedIdx--;
 				scrollSelectedIntoView();
 				break;
+			case 's':
+				if (!editing) { e.preventDefault(); spawnTask(); }
+				break;
 			case 'p':
 				if (!editing) { e.preventDefault(); promote(); }
 				break;
@@ -324,6 +391,9 @@
 				break;
 			case 'e':
 				if (!editing) { e.preventDefault(); startEdit(); }
+				break;
+			case 'd':
+				if (!editing) { e.preventDefault(); deleteTask(); }
 				break;
 			case 'Escape':
 				if (editing) cancelEdit();
@@ -355,6 +425,26 @@
 	function getPriorityColor(p: number): string {
 		const colors = ['oklch(0.65 0.20 25)', 'oklch(0.70 0.18 50)', 'oklch(0.65 0.15 220)', 'oklch(0.50 0.04 250)', 'oklch(0.40 0.02 250)'];
 		return colors[p] ?? colors[2];
+	}
+
+	function getStatusColor(s: string): string {
+		const map: Record<string, string> = {
+			submitted: 'oklch(0.70 0.15 280)',
+			open: 'oklch(0.65 0.15 220)',
+			in_progress: 'oklch(0.70 0.18 85)',
+			blocked: 'oklch(0.65 0.18 25)'
+		};
+		return map[s] ?? 'oklch(0.50 0.04 250)';
+	}
+
+	function getStatusLabel(s: string): string {
+		const map: Record<string, string> = {
+			submitted: 'Submitted',
+			open: 'Open',
+			in_progress: 'In Progress',
+			blocked: 'Blocked'
+		};
+		return map[s] ?? s;
 	}
 </script>
 
@@ -391,6 +481,12 @@
 				{#each availableProjects as proj}
 					<option value={proj}>{proj === 'all' ? 'All Projects' : proj}</option>
 				{/each}
+			</select>
+			<select class="filter-select" bind:value={filterStatus}>
+				<option value="all">All Statuses</option>
+				<option value="submitted">Submitted</option>
+				<option value="open">Open</option>
+				<option value="in_progress">In Progress</option>
 			</select>
 			<select class="filter-select" bind:value={filterType}>
 				<option value="all">All Types</option>
@@ -448,9 +544,7 @@
 							</div>
 							<div class="qi-meta">
 								<span class="qi-id">{task.id}</span>
-								{#if task.issue_type}
-									<span class="qi-type-label">{task.issue_type}</span>
-								{/if}
+								<span class="qi-status" style="color: {getStatusColor(task.status)};">{getStatusLabel(task.status)}</span>
 								{#if task.created_at}
 									<span class="qi-date">{formatRelativeTimestamp(task.created_at)}</span>
 								{/if}
@@ -476,6 +570,7 @@
 							{typeVisual.icon} {typeVisual.label}
 						</div>
 						<span class="detail-id">{selectedTask.id}</span>
+						<span class="detail-status" style="color: {getStatusColor(selectedTask.status)};">{getStatusLabel(selectedTask.status)}</span>
 						<div class="detail-priority" style="color: {getPriorityColor(selectedTask.priority)};">
 							{getPriorityLabel(selectedTask.priority)}
 						</div>
@@ -545,6 +640,20 @@
 						<!-- Action bar -->
 						<div class="detail-actions">
 							<button
+								class="action-btn action-spawn"
+								onclick={spawnTask}
+								disabled={spawning || selectedTask.status === 'in_progress'}
+								title="Spawn agent (S)"
+							>
+								{#if spawning}
+									<span class="animate-spin" style="display:inline-block;width:14px;height:14px;border:2px solid transparent;border-top-color:white;border-radius:50%;"></span>
+								{:else}
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" /></svg>
+								{/if}
+								Solve
+								<kbd>S</kbd>
+							</button>
+							<button
 								class="action-btn action-promote"
 								onclick={() => promote()}
 								disabled={promoting}
@@ -559,20 +668,6 @@
 								<kbd>P</kbd>
 							</button>
 							<button
-								class="action-btn action-reject"
-								onclick={() => reject()}
-								disabled={rejecting}
-								title="Reject & close (R)"
-							>
-								{#if rejecting}
-									<span class="animate-spin" style="display:inline-block;width:14px;height:14px;border:2px solid transparent;border-top-color:white;border-radius:50%;"></span>
-								{:else}
-									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
-								{/if}
-								Reject
-								<kbd>R</kbd>
-							</button>
-							<button
 								class="action-btn action-edit"
 								onclick={startEdit}
 								title="Edit fields (E)"
@@ -580,6 +675,34 @@
 								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>
 								Edit
 								<kbd>E</kbd>
+							</button>
+							<button
+								class="action-btn action-reject"
+								onclick={() => reject()}
+								disabled={rejecting}
+								title="Close task (R)"
+							>
+								{#if rejecting}
+									<span class="animate-spin" style="display:inline-block;width:14px;height:14px;border:2px solid transparent;border-top-color:white;border-radius:50%;"></span>
+								{:else}
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+								{/if}
+								Close
+								<kbd>R</kbd>
+							</button>
+							<button
+								class="action-btn action-delete"
+								onclick={deleteTask}
+								disabled={deleting}
+								title="Delete task (D)"
+							>
+								{#if deleting}
+									<span class="animate-spin" style="display:inline-block;width:14px;height:14px;border:2px solid transparent;border-top-color:white;border-radius:50%;"></span>
+								{:else}
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+								{/if}
+								Delete
+								<kbd>D</kbd>
 							</button>
 						</div>
 
@@ -657,11 +780,13 @@
 			<div class="help-grid">
 				<div class="help-row"><kbd>J</kbd> / <kbd>↓</kbd><span>Next item</span></div>
 				<div class="help-row"><kbd>K</kbd> / <kbd>↑</kbd><span>Previous item</span></div>
+				<div class="help-row"><kbd>S</kbd><span>Spawn agent (solve)</span></div>
 				<div class="help-row"><kbd>P</kbd><span>Promote to open</span></div>
-				<div class="help-row"><kbd>R</kbd><span>Reject & close</span></div>
 				<div class="help-row"><kbd>E</kbd><span>Edit task</span></div>
+				<div class="help-row"><kbd>R</kbd><span>Close task</span></div>
+				<div class="help-row"><kbd>D</kbd><span>Delete task</span></div>
 				<div class="help-row"><kbd>/</kbd><span>Focus search</span></div>
-				<div class="help-row"><kbd>Esc</kbd><span>Cancel edit / Close help</span></div>
+				<div class="help-row"><kbd>Esc</kbd><span>Cancel edit / Close</span></div>
 				<div class="help-row"><kbd>?</kbd><span>Toggle this help</span></div>
 			</div>
 			<button class="help-close" onclick={() => showHelp = false}>Close</button>
@@ -885,12 +1010,11 @@
 		color: oklch(0.40 0.02 250);
 		font-family: ui-monospace, monospace;
 	}
-	.qi-type-label {
+	.qi-status {
 		font-size: 0.55rem;
+		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
-		color: oklch(0.45 0.04 250);
-		font-weight: 600;
 	}
 	.qi-date {
 		font-size: 0.58rem;
@@ -940,6 +1064,12 @@
 		font-size: 0.65rem;
 		color: oklch(0.45 0.03 250);
 		font-family: ui-monospace, monospace;
+	}
+	.detail-status {
+		font-size: 0.65rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
 	}
 	.detail-priority {
 		font-size: 0.7rem;
@@ -1104,10 +1234,23 @@
 	}
 	.action-reject:hover:not(:disabled) { background: oklch(0.50 0.15 25 / 0.2); }
 
+	.action-spawn {
+		color: oklch(0.75 0.18 145);
+		border-color: oklch(0.55 0.15 145 / 0.4);
+		background: oklch(0.55 0.18 145 / 0.12);
+	}
+	.action-spawn:hover:not(:disabled) { background: oklch(0.55 0.18 145 / 0.22); }
+
 	.action-edit {
 		color: oklch(0.70 0.15 220);
 		border-color: oklch(0.50 0.12 220 / 0.4);
 	}
+
+	.action-delete {
+		color: oklch(0.60 0.12 25);
+		border-color: oklch(0.45 0.10 25 / 0.3);
+	}
+	.action-delete:hover:not(:disabled) { background: oklch(0.50 0.15 25 / 0.15); }
 
 	.action-cancel {
 		color: oklch(0.60 0.04 250);

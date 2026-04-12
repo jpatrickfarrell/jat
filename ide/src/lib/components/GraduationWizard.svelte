@@ -61,6 +61,8 @@
 	let abortController: AbortController | null = null;
 	let copied = $state(false);
 	let graduatedTaskCount = $state(0);
+	let graduatedInserted = $state(0);
+	let graduatedSkipped = $state(0);
 	let importStatus = $state<string>('dev');
 
 	// Reset state whenever the modal is opened for a new project
@@ -76,6 +78,8 @@
 			archivePath = null;
 			copied = false;
 			graduatedTaskCount = 0;
+			graduatedInserted = 0;
+			graduatedSkipped = 0;
 			importStatus = 'dev';
 			progress = { phase: 'idle', message: '', percent: 0 };
 
@@ -233,11 +237,15 @@
 
 			archivePath = result?.archivePath || null;
 			graduatedTaskCount = result?.summary?.tasks ?? previewSummary.tasks;
+			graduatedInserted = result?.summary?.inserted ?? graduatedTaskCount;
+			graduatedSkipped = result?.summary?.skipped ?? 0;
 			progress = { phase: 'complete', message: 'Graduation complete.', percent: 100 };
 			phase = 'done';
 			successToast(
 				'Graduation complete',
-				`${previewSummary.tasks} tasks now live on Postgres`,
+				graduatedSkipped > 0
+					? `${graduatedInserted} tasks imported, ${graduatedSkipped} duplicates skipped`
+					: `${graduatedInserted} tasks now live on Postgres`,
 			);
 			onGraduated?.(projectKey);
 		} catch (err) {
@@ -532,6 +540,23 @@
 						</div>
 					</div>
 
+					<!-- Import status summary -->
+					{#if importStatus}
+						<div class="rounded-lg border border-base-300 bg-base-200/50 p-3 text-xs">
+							<span class="font-medium">All {previewSummary.tasks} tasks will import as:</span>
+							<span class="badge badge-sm ml-1.5" class:badge-ghost={importStatus === 'dev'} class:badge-secondary={importStatus === 'submitted'}>
+								{importStatus}
+							</span>
+							<span class="text-base-content/50 ml-1">
+								(original statuses will be overridden)
+							</span>
+						</div>
+					{:else}
+						<div class="rounded-lg border border-base-300 bg-base-200/50 p-3 text-xs">
+							<span class="font-medium">Tasks will keep their original status values.</span>
+						</div>
+					{/if}
+
 					<div class="alert alert-warning text-xs">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -548,7 +573,7 @@
 							/>
 						</svg>
 						<span>
-							One-way migration — local <code>.jat/tasks.db</code> is archived after the move. Tasks keep their original status, assignee, and type.
+							One-way migration — local <code>.jat/tasks.db</code> is archived after the move. Duplicate tasks (same JAT ID) are automatically skipped.
 						</span>
 					</div>
 				</div>
@@ -580,13 +605,33 @@
 						</div>
 
 						<!-- Migration stats -->
-						<div class="rounded-lg bg-base-200 p-3 text-center">
-							<div class="text-2xl font-bold font-mono text-success">
-								{graduatedTaskCount}
+						<div class="grid gap-2" class:grid-cols-2={graduatedSkipped > 0}>
+							<div class="rounded-lg bg-base-200 p-3 text-center">
+								<div class="text-2xl font-bold font-mono text-success">
+									{graduatedInserted}
+								</div>
+								<div class="text-xs text-base-content/60 uppercase tracking-wide">
+									tasks imported
+								</div>
 							</div>
-							<div class="text-xs text-base-content/60 uppercase tracking-wide">
-								tasks migrated
-							</div>
+							{#if graduatedSkipped > 0}
+								<div class="rounded-lg bg-base-200 p-3 text-center">
+									<div class="text-2xl font-bold font-mono text-base-content/50">
+										{graduatedSkipped}
+									</div>
+									<div class="text-xs text-base-content/60 uppercase tracking-wide">
+										duplicates skipped
+									</div>
+								</div>
+							{/if}
+						</div>
+
+						<!-- jat_id linkage note -->
+						<div class="text-xs text-base-content/60">
+							<span class="font-medium">Linkage:</span>
+							Each imported task stores its original JAT ID in the
+							<code class="font-mono bg-base-200 px-1 py-0.5 rounded">jat_id</code>
+							column for cross-reference.
 						</div>
 
 						<!-- Archive path -->

@@ -343,10 +343,10 @@
 	let pendingAttachments = $state<PendingAttachment[]>([]);
 	const hasSendable = $derived(inputText.trim().length > 0 || pendingAttachments.some(a => !a.uploading));
 
-	// Elapsed time
+	// Elapsed time — 30s precision is plenty for "15m ago" display
 	let now = $state(Date.now());
 	$effect(() => {
-		const interval = setInterval(() => now = Date.now(), 1000);
+		const interval = setInterval(() => now = Date.now(), 30_000);
 		return () => clearInterval(interval);
 	});
 	const elapsed = $derived.by(() => {
@@ -645,6 +645,10 @@
 		if (page >= 1 && task?.id && !fullTask) {
 			fetchTaskDetail();
 		}
+		// Resume output fetch immediately when returning to terminal page
+		if (page === 0) {
+			fetchOutput();
+		}
 	}
 
 	function dismissDrawer() {
@@ -798,14 +802,19 @@
 		};
 	}
 
+	// Max characters to keep in terminal output — prevents unbounded growth on mobile
+	const MAX_OUTPUT_CHARS = 40_000;
+
 	// Fetch terminal output
 	async function fetchOutput() {
-		if (!sessionName) return;
+		if (!sessionName || currentPage !== 0) return; // skip when not on terminal page
 		try {
 			const resp = await fetch(`/api/work/${encodeURIComponent(sessionName)}/output`);
 			if (resp.ok) {
 				const data = await resp.json();
-				output = data.output || '';
+				const raw: string = data.output || '';
+				// Truncate from the front to avoid unbounded DOM growth on mobile
+				output = raw.length > MAX_OUTPUT_CHARS ? raw.slice(-MAX_OUTPUT_CHARS) : raw;
 			}
 		} catch {
 			// Ignore fetch errors
@@ -904,9 +913,9 @@
 		isMobileFullscreenOpen.set(true);
 		setHoveredSession(sessionName);
 
-		// Start polling output
+		// Start polling output — 3s on mobile is responsive enough and much lighter
 		fetchOutput();
-		pollInterval = setInterval(fetchOutput, 1000);
+		pollInterval = setInterval(fetchOutput, 3000);
 	});
 
 	onDestroy(() => {
@@ -1034,6 +1043,7 @@
 					</div>
 				{/if}
 				<div class="session-card-wrapper" class:mobile-scrolling={mobileScrolling} bind:this={wrapperRef}>
+					{#if currentPage === 0}
 					<SessionCard
 						mode="agent"
 						{sessionName}
@@ -1063,6 +1073,7 @@
 						onTaskClick={(taskId) => onViewTask(taskId)}
 						onSendInput={(text, type) => onSendInput(text, type)}
 					/>
+					{/if}
 				</div>
 
 				<!-- Mobile Action Buttons Row (dynamic from state actions config) -->

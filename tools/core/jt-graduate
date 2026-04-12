@@ -35,7 +35,7 @@ let yes = false;
 let force = false;
 /** @type {string|null} */
 let importStatus = null;
-let targetTable = 'tasks';
+let targetTable = 'project_tasks';
 let jsonOut = false;
 
 function usage() {

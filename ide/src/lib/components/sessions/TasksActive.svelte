@@ -16,7 +16,8 @@
 	import FxText from '$lib/components/FxText.svelte';
 	import MobileSessionFullscreen from '$lib/components/work/MobileSessionFullscreen.svelte';
 	import { getSwipeConfig, getSwipeActionDef, initSwipeActions } from '$lib/config/swipeActions';
-	import { isAutoKillEnabled } from '$lib/stores/autoKillConfig';
+	import { isAutoKillEnabled, setPendingAutoKill } from '$lib/stores/autoKillConfig';
+	import { autoKillCountdowns, cancelAutoKill } from '$lib/stores/sessionEvents';
 	import { onMount } from 'svelte';
 	import { slide, fade } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
@@ -681,6 +682,10 @@
 			setActionFeedback(sessionName, actionId, 'success', 1500);
 			optimisticStates.set(sessionName, 'completing');
 			optimisticStates = new Map(optimisticStates);
+			// For complete-kill: set pending intent as fallback in case forceKill isn't in the bundle
+			if (actionId === 'complete-kill') {
+				setPendingAutoKill(sessionName, true);
+			}
 			if (sessionTask) {
 				try {
 					await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
@@ -1453,6 +1458,10 @@
 								{#if browserSessions.get(sessionAgentName)}
 									<span class="mobile-separator">·</span>
 									<span class="mobile-port">🌐 {browserSessions.get(sessionAgentName)}</span>
+								{/if}
+								{#if ($autoKillCountdowns.get(session.name) ?? null) !== null && ($autoKillCountdowns.get(session.name) ?? 0) > 0}
+									<span class="mobile-separator">·</span>
+									<span class="mobile-destruct-countdown" title="Session self-destructing">💣 {$autoKillCountdowns.get(session.name)}s</span>
 								{/if}
 								<span class="mobile-state-badge" style="color: {stateVisual.accent};">{stateVisual.shortLabel}</span>
 							</div>
@@ -2967,6 +2976,16 @@
 		margin-left: auto;
 		flex-shrink: 0;
 		white-space: nowrap;
+	}
+
+	.mobile-destruct-countdown {
+		display: inline-flex;
+		align-items: center;
+		font-size: 0.5625rem;
+		font-weight: 700;
+		color: oklch(0.70 0.20 25);
+		white-space: nowrap;
+		animation: pulse-subtle 1s ease-in-out infinite;
 	}
 
 	/* ========== SWIPE-TO-REVEAL ========== */

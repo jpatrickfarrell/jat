@@ -816,7 +816,21 @@ function handleSessionComplete(data: SessionEvent): void {
 
 	const sessionIndex = workSessionsState.sessions.findIndex(s => s.sessionName === sessionName);
 	if (sessionIndex === -1) {
-		console.log('[SessionEvents] Session not found:', sessionName);
+		console.log('[SessionEvents] Session not found in store:', sessionName);
+		// Still handle forceKill/userWantsKill even if session isn't in workSessionsState
+		// This happens when the user is on /tasks page (TasksActive) instead of /work page
+		const KILL_COUNTDOWN_SECONDS_EARLY = 15;
+		const forceKillEarly = (completionBundle as any).forceKill === true;
+		const userWantsKillEarly = hasPendingAutoKill(sessionName);
+		if (forceKillEarly) {
+			console.log(`[AutoKill] forceKill=true, session not in store: ${sessionName} will be killed in ${KILL_COUNTDOWN_SECONDS_EARLY}s`);
+			scheduleAutoKill(sessionName, KILL_COUNTDOWN_SECONDS_EARLY);
+			if ((completionBundle as any).taskId) spawnDependentTasksAfterKill((completionBundle as any).taskId);
+		} else if (userWantsKillEarly) {
+			console.log(`[AutoKill] userWantsKill, session not in store: ${sessionName} will be killed in ${KILL_COUNTDOWN_SECONDS_EARLY}s`);
+			clearPendingAutoKill(sessionName);
+			scheduleAutoKill(sessionName, KILL_COUNTDOWN_SECONDS_EARLY);
+		}
 		return;
 	}
 	console.log('[SessionEvents] Found session at index:', sessionIndex);

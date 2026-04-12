@@ -1264,7 +1264,8 @@
 							<TaskFieldLabel>Description</TaskFieldLabel>
 							<button
 								type="button"
-								class="text-left w-full text-sm text-base-content/80 leading-relaxed whitespace-pre-wrap bg-base-200 hover:bg-base-300 active:bg-base-300 border border-base-300 p-3 rounded-lg cursor-pointer transition-colors"
+								class="text-left w-full text-sm text-base-content/80 leading-relaxed whitespace-pre-wrap break-words bg-base-200 hover:bg-base-300 active:bg-base-300 border border-base-300 p-3 rounded-lg cursor-pointer transition-colors"
+								style="overflow-wrap: break-word; word-break: break-word; min-width: 0;"
 								use:directClick={() => openEditor('description')}
 								aria-label="Edit description"
 							>
@@ -1372,7 +1373,7 @@
 						<div class="mb-5">
 							<TaskFieldLabel>Notes</TaskFieldLabel>
 							{#if fullTask?.notes}
-								<div class="text-sm text-base-content/80 leading-relaxed whitespace-pre-wrap bg-base-200 border border-base-300 p-3 rounded-lg">{fullTask.notes}</div>
+								<div class="text-sm text-base-content/80 leading-relaxed whitespace-pre-wrap break-words bg-base-200 border border-base-300 p-3 rounded-lg" style="overflow-wrap: break-word; word-break: break-word; min-width: 0;">{fullTask.notes}</div>
 							{:else}
 								<div class="flex flex-col items-center gap-3 py-12 text-base-content/40">
 									<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="32" height="32">
@@ -1399,7 +1400,8 @@
 			transition:fade={{ duration: 150 }}
 		>
 			<div
-				class="w-full max-w-lg bg-base-100 rounded-t-2xl border-t border-base-300 shadow-2xl p-4 pb-8 overflow-hidden"
+				class="w-full bg-base-100 rounded-t-2xl border-t border-base-300 shadow-2xl p-4 pb-8"
+				style="max-width: 100%; box-sizing: border-box; overflow-x: hidden;"
 				role="dialog"
 				aria-modal="true"
 				aria-label="Edit {editMode}"
@@ -1457,6 +1459,7 @@
 						<input
 							type="text"
 							class="input input-bordered w-full"
+							style="max-width: 100%; box-sizing: border-box;"
 							bind:value={editDraft}
 							placeholder="Task title"
 							disabled={editSaving}
@@ -1473,6 +1476,7 @@
 					<div class="flex flex-col gap-3">
 						<textarea
 							class="textarea textarea-bordered w-full h-40 font-mono text-sm"
+							style="max-width: 100%; box-sizing: border-box;"
 							bind:value={editDraft}
 							placeholder="Task description"
 							disabled={editSaving}
@@ -1489,6 +1493,7 @@
 						<input
 							type="text"
 							class="input input-bordered w-full"
+							style="max-width: 100%; box-sizing: border-box;"
 							bind:value={editDraft}
 							placeholder="comma, separated, labels"
 							disabled={editSaving}

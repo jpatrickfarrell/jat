@@ -33,7 +33,9 @@ let postgresUrl = null;
 let dryRun = false;
 let yes = false;
 let force = false;
-let markAllInternal = false;
+/** @type {string|null} */
+let importStatus = null;
+let targetTable = 'tasks';
 let jsonOut = false;
 
 function usage() {
@@ -51,8 +53,10 @@ Arguments:
 Options:
   --url URL           Postgres connection string (required unless --dry-run)
   --dry-run           Print the migration preview and exit without writing
-  --mark-internal     Set internal=true on all imported rows (hides them from
-                      client-visible views; on by default in the IDE wizard)
+  --status STATUS     Override status for all imported rows (e.g. 'dev', 'submitted')
+  --target-table TBL  Postgres table to import into: 'project_tasks' (default)
+                      or 'tasks' (legacy JAT-owned table)
+  --mark-internal     Deprecated: equivalent to --status dev (kept for compat)
   --yes, -y           Skip the interactive confirmation prompt
   --force             Proceed even if the target Postgres db is non-empty
   --json              Machine-readable JSON output (implies --yes)
@@ -80,7 +84,11 @@ for (let i = 0; i < argv.length; i++) {
   if (a === '--dry-run') { dryRun = true; continue; }
   if (a === '--yes' || a === '-y') { yes = true; continue; }
   if (a === '--force') { force = true; continue; }
-  if (a === '--mark-internal') { markAllInternal = true; continue; }
+  if (a === '--mark-internal') { importStatus = 'dev'; continue; }
+  if (a === '--status' && argv[i + 1]) { importStatus = argv[++i]; continue; }
+  if (a.startsWith('--status=')) { importStatus = a.slice(9); continue; }
+  if (a === '--target-table' && argv[i + 1]) { targetTable = argv[++i]; continue; }
+  if (a.startsWith('--target-table=')) { targetTable = a.slice(15); continue; }
   if (a === '--json') { jsonOut = true; yes = true; continue; }
   if (a.startsWith('--')) {
     console.error(`Unknown option: ${a}`);
@@ -227,7 +235,8 @@ async function main() {
       projectNameOrPath: entry.name,
       postgresUrl,
       force,
-      markAllInternal,
+      importStatus,
+      targetTable,
     });
   } catch (err) {
     die(err instanceof Error ? err.message : String(err));

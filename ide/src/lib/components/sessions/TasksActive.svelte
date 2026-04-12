@@ -111,6 +111,12 @@
 		if (/bypass permissions on/.test(line)) return true;
 		if (/^[\s─]{10,}$/.test(line)) return true;
 		if (/^\s*❯\s*$/.test(line)) return true;
+		// Claude Code extended thinking completion lines (✻ Baked for..., ✻ Brewed for..., etc.)
+		if (/^✻/.test(line)) return true;
+		// Claude Code session rating prompt
+		if (/How is Claude doing this session/.test(line)) return true;
+		// Claude Code session rating options (1: Bad  2: Fine  3: Good  0: Dismiss)
+		if (/\d:\s*(Bad|Fine|Good|Dismiss)/.test(line)) return true;
 		return false;
 	}
 
@@ -132,7 +138,9 @@
 		open: 'badge-info',
 		in_progress: 'badge-warning',
 		blocked: 'badge-error',
-		closed: 'badge-success'
+		closed: 'badge-success',
+		dev: 'badge-ghost',
+		submitted: 'badge-secondary badge-outline'
 	};
 
 	// Mobile fullscreen state

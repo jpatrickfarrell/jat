@@ -159,7 +159,7 @@
 		count: tasks.filter(t => String(t.priority) === p).length
 	})));
 
-	const statusOptions = $derived(['open', 'in_progress', 'blocked', 'closed'].map(s => ({
+	const statusOptions = $derived(['open', 'in_progress', 'blocked', 'closed', 'dev', 'submitted'].map(s => ({
 		value: s,
 		label: s,
 		count: tasks.filter(t => t.status === s).length

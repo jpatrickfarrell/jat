@@ -74,7 +74,8 @@ export async function POST({ params, request }) {
 
 	const url = typeof body?.url === 'string' ? body.url.trim() : '';
 	const force = body?.force === true;
-	const markAllInternal = body?.markAllInternal === true;
+	const importStatus = typeof body?.importStatus === 'string' ? body.importStatus : null;
+	const targetTable = typeof body?.targetTable === 'string' ? body.targetTable : 'project_tasks';
 
 	if (action === 'graduate') {
 		if (!url) {
@@ -94,7 +95,8 @@ export async function POST({ params, request }) {
 			postgresUrl: url,
 			dryRun: action === 'preview',
 			force,
-			markAllInternal,
+			importStatus,
+			targetTable,
 		});
 		return json(result);
 	} catch (err) {

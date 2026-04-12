@@ -57,7 +57,7 @@
 		id: string;
 		title: string;
 		description?: string;
-		status: 'open' | 'in_progress' | 'blocked' | 'closed';
+		status: 'open' | 'in_progress' | 'blocked' | 'closed' | 'dev' | 'submitted';
 		priority: number;
 		type?: string;
 		issue_type?: string;
@@ -597,7 +597,9 @@
 		open: 'badge-info',
 		in_progress: 'badge-warning',
 		closed: 'badge-success',
-		blocked: 'badge-error'
+		blocked: 'badge-error',
+		dev: 'badge-ghost',
+		submitted: 'badge-secondary badge-outline'
 	};
 
 	// Priority badge colors

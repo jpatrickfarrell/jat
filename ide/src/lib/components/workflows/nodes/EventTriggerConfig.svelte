@@ -59,7 +59,7 @@
 			fields: [
 				{ name: 'data.taskId', type: 'string', desc: 'Task ID' },
 				{ name: 'data.title', type: 'string', desc: 'Task title' },
-				{ name: 'data.oldStatus', type: 'string', desc: 'Previous status (open, in_progress, blocked, closed)' },
+				{ name: 'data.oldStatus', type: 'string', desc: 'Previous status (open, in_progress, blocked, closed, dev, submitted)' },
 				{ name: 'data.newStatus', type: 'string', desc: 'New status' },
 				{ name: 'data.type', type: 'string', desc: 'bug, feature, task, chore, epic' },
 				{ name: 'data.priority', type: 'number', desc: 'Priority (0-4)' },

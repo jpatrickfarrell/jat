@@ -1,21 +1,22 @@
 <script lang="ts">
 	/**
-	 * Triage Mode — mobile-optimized ranked task view.
-	 * Shows everything sorted by urgency:
-	 *   1. Agents waiting for input (needs_input)
-	 *   2. Agents ready for review
-	 *   3. Actively working agents
-	 *   4. Open tasks (no agent) — sorted by priority + due date
+	 * Triage — Story Refinement Queue
 	 *
-	 * One scroll, full context, swipe actions on each card.
+	 * Where feedback widget submissions land and get groomed before agents pick them up.
+	 * Queue of tasks with status='submitted' (or open tasks as fallback).
+	 * Dev reviews each item: promote to open, reject, refine, split, assign.
+	 *
+	 * Layout: Left queue panel + Right detail panel
+	 * Keyboard: J/K navigate, P promote, R reject, E edit, / filter
 	 */
 	import { onMount, onDestroy } from 'svelte';
-	import { fade, slide } from 'svelte/transition';
+	import { fade } from 'svelte/transition';
 	import { getIssueTypeVisual } from '$lib/config/statusColors';
 	import { getProjectColor } from '$lib/utils/projectColors';
-	import { formatShortDate } from '$lib/utils/dateFormatters';
+	import { formatShortDate, formatRelativeTimestamp } from '$lib/utils/dateFormatters';
 	import { addToast } from '$lib/stores/toasts.svelte';
-	import { SESSION_STATE_VISUALS } from '$lib/config/statusColors';
+	import { broadcastTaskEvent } from '$lib/stores/taskEvents';
+	import { getProjectFromTaskId } from '$lib/utils/projectUtils';
 
 	interface Task {
 		id: string;
@@ -24,564 +25,842 @@
 		status: string;
 		priority: number;
 		issue_type?: string;
+		assignee?: string;
 		labels?: string[];
 		created_at?: string;
+		updated_at?: string;
 		due_date?: string | null;
+		parent_id?: string;
+		source?: string;
 	}
 
-	interface AgentSession {
-		sessionName: string;
-		agentName: string;
-		state: string;
-		taskId?: string;
-		taskTitle?: string;
-		taskPriority?: number;
-		taskDesc?: string;
-		taskType?: string;
-	}
-
-	type Section =
-		| { kind: 'agent'; label: string; state: string; items: AgentSession[] }
-		| { kind: 'tasks'; label: string; items: Task[] };
-
-	let sections = $state<Section[]>([]);
+	// Queue state
+	let tasks = $state<Task[]>([]);
 	let loading = $state(true);
+	let selectedIdx = $state(0);
+	let selectedTask = $derived(tasks[selectedIdx] ?? null);
 	let refreshInterval: ReturnType<typeof setInterval> | null = null;
-	let spawning = $state<string | null>(null); // taskId being spawned
-	let copiedTriageId = $state<string | null>(null); // taskId that was just copied
 
-	// Swipe state per card
-	let swipeOffsets = $state<Map<string, number>>(new Map());
-	let activeSwipe = $state<{ id: string; startX: number; startY: number; active: boolean } | null>(null);
+	// Filters
+	let filterProject = $state('all');
+	let filterType = $state('all');
+	let filterSearch = $state('');
+	let availableProjects = $derived.by(() => {
+		const set = new Set<string>();
+		for (const t of tasks) {
+			const p = getProjectFromTaskId(t.id);
+			if (p) set.add(p);
+		}
+		return ['all', ...Array.from(set).sort()];
+	});
 
-	const SWIPE_THRESHOLD = 80;
-	const SWIPE_DEADZONE = 10;
+	let filteredTasks = $derived.by(() => {
+		let result = tasks;
+		if (filterProject !== 'all') {
+			result = result.filter(t => getProjectFromTaskId(t.id) === filterProject);
+		}
+		if (filterType !== 'all') {
+			result = result.filter(t => t.issue_type === filterType);
+		}
+		if (filterSearch.trim()) {
+			const q = filterSearch.toLowerCase();
+			result = result.filter(t =>
+				t.title.toLowerCase().includes(q) ||
+				t.id.toLowerCase().includes(q) ||
+				(t.description?.toLowerCase().includes(q) ?? false)
+			);
+		}
+		return result;
+	});
 
-	function copyTriageTaskId(e: MouseEvent, taskId: string) {
-		e.stopPropagation();
-		navigator.clipboard.writeText(taskId);
-		copiedTriageId = taskId;
-		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(4);
-		setTimeout(() => (copiedTriageId = null), 1500);
-	}
+	// Detail editing state
+	let editing = $state(false);
+	let editTitle = $state('');
+	let editDescription = $state('');
+	let editPriority = $state(2);
+	let editType = $state('task');
+	let editAssignee = $state('');
+	let editLabels = $state('');
+	let saving = $state(false);
+	let promoting = $state(false);
+	let rejecting = $state(false);
 
-	function haptic(ms = 8) {
-		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(ms);
-	}
+	// Epics for assignment
+	let epics = $state<Task[]>([]);
+
+	// Keyboard help
+	let showHelp = $state(false);
 
 	onMount(() => {
 		load();
-		refreshInterval = setInterval(load, 5000);
+		loadEpics();
+		refreshInterval = setInterval(load, 8000);
 	});
 	onDestroy(() => { if (refreshInterval) clearInterval(refreshInterval); });
 
 	async function load() {
 		try {
-			const [workRes, tasksRes] = await Promise.all([
-				fetch('/api/work'),
-				fetch('/api/tasks?status=open&limit=100')
-			]);
+			// Try submitted first, fallback to open
+			let res = await fetch('/api/tasks?status=submitted&limit=200');
+			let data = res.ok ? await res.json() : { tasks: [] };
+			let items: Task[] = data.tasks || [];
 
-			const workData = workRes.ok ? await workRes.json() : {};
-			const tasksData = tasksRes.ok ? await tasksRes.json() : {};
-
-			const workSessions: any[] = workData.sessions || [];
-			const openTasks: Task[] = (tasksData.tasks || []).filter((t: Task) => t.status === 'open');
-
-			// Build set of task IDs already being worked on
-			const activatedTaskIds = new Set<string>();
-			for (const ws of workSessions) {
-				if (ws.task?.id) activatedTaskIds.add(ws.task.id);
+			// Fallback: if no submitted tasks, show open tasks (for before status migration)
+			if (items.length === 0) {
+				res = await fetch('/api/tasks?status=open&limit=200');
+				data = res.ok ? await res.json() : { tasks: [] };
+				items = (data.tasks || []).filter((t: Task) => t.issue_type !== 'epic');
 			}
 
-			// Group work sessions by state
-			const needsInput: AgentSession[] = [];
-			const readyReview: AgentSession[] = [];
-			const working: AgentSession[] = [];
+			// Sort by priority (P0 first), then by created_at (oldest first)
+			items.sort((a, b) => {
+				if (a.priority !== b.priority) return a.priority - b.priority;
+				return (a.created_at ?? '').localeCompare(b.created_at ?? '');
+			});
 
-			for (const ws of workSessions) {
-				if (!ws.agentName) continue;
-				const sess: AgentSession = {
-					sessionName: ws.sessionName,
-					agentName: ws.agentName,
-					state: ws.sessionState || 'idle',
-					taskId: ws.task?.id,
-					taskTitle: ws.task?.title,
-					taskPriority: ws.task?.priority,
-					taskDesc: ws.task?.description,
-					taskType: ws.task?.issue_type,
-				};
-				if (ws.sessionState === 'needs_input') needsInput.push(sess);
-				else if (ws.sessionState === 'review' || ws.sessionState === 'ready-for-review') readyReview.push(sess);
-				else if (ws.sessionState === 'working' || ws.sessionState === 'starting') working.push(sess);
+			tasks = items;
+
+			// Keep selection in bounds
+			if (selectedIdx >= tasks.length) {
+				selectedIdx = Math.max(0, tasks.length - 1);
 			}
-
-			// Open tasks not being worked on
-			const idleTasks = openTasks
-				.filter(t => !activatedTaskIds.has(t.id))
-				.sort((a, b) => {
-					// Overdue/due today first
-					const aOver = isOverdue(a.due_date);
-					const bOver = isOverdue(b.due_date);
-					if (aOver !== bOver) return aOver ? -1 : 1;
-					// Then priority
-					return (a.priority ?? 2) - (b.priority ?? 2);
-				});
-
-			const result: Section[] = [];
-			if (needsInput.length > 0) result.push({ kind: 'agent', label: 'Needs Your Input', state: 'needs_input', items: needsInput });
-			if (readyReview.length > 0) result.push({ kind: 'agent', label: 'Ready for Review', state: 'ready-for-review', items: readyReview });
-			if (working.length > 0) result.push({ kind: 'agent', label: 'Working', state: 'working', items: working });
-			if (idleTasks.length > 0) result.push({ kind: 'tasks', label: `Open Tasks (${idleTasks.length})`, items: idleTasks });
-
-			sections = result;
-		} catch (e) {
+		} catch {
 			// silent
 		} finally {
 			loading = false;
 		}
 	}
 
-	function isOverdue(dueDate?: string | null): boolean {
-		if (!dueDate) return false;
-		return new Date(dueDate) < new Date();
-	}
-
-	function isDueToday(dueDate?: string | null): boolean {
-		if (!dueDate) return false;
-		const d = new Date(dueDate);
-		const today = new Date();
-		return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
-	}
-
-	async function spawnTask(taskId: string) {
-		haptic(15);
-		spawning = taskId;
+	async function loadEpics() {
 		try {
-			const res = await fetch('/api/work/spawn', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ taskId })
-			});
+			const res = await fetch('/api/tasks?status=open&limit=100');
 			if (res.ok) {
-				addToast({ message: 'Agent launched', type: 'success' });
-				resetSwipe(taskId);
-				load();
-			} else {
-				const d = await res.json().catch(() => ({}));
-				addToast({ message: d.message || 'Failed to launch', type: 'error' });
+				const data = await res.json();
+				epics = (data.tasks || []).filter((t: Task) => t.issue_type === 'epic');
 			}
 		} catch {
-			addToast({ message: 'Failed to launch', type: 'error' });
+			// silent
+		}
+	}
+
+	function startEdit() {
+		if (!selectedTask) return;
+		editTitle = selectedTask.title;
+		editDescription = selectedTask.description ?? '';
+		editPriority = selectedTask.priority;
+		editType = selectedTask.issue_type ?? 'task';
+		editAssignee = selectedTask.assignee ?? '';
+		editLabels = selectedTask.labels?.join(', ') ?? '';
+		editing = true;
+	}
+
+	function cancelEdit() {
+		editing = false;
+	}
+
+	async function saveEdit() {
+		if (!selectedTask || saving) return;
+		saving = true;
+		try {
+			const res = await fetch(`/api/tasks/${selectedTask.id}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					title: editTitle,
+					description: editDescription,
+					priority: editPriority,
+					type: editType,
+					assignee: editAssignee || undefined,
+					labels: editLabels ? editLabels.split(',').map(l => l.trim()).filter(Boolean) : []
+				})
+			});
+			if (res.ok) {
+				addToast({ message: 'Task updated', type: 'success' });
+				editing = false;
+				await load();
+				broadcastTaskEvent('task-updated',selectedTask.id);
+			} else {
+				const d = await res.json().catch(() => ({}));
+				addToast({ message: d.error || 'Failed to save', type: 'error' });
+			}
+		} catch {
+			addToast({ message: 'Failed to save', type: 'error' });
 		} finally {
-			spawning = null;
+			saving = false;
 		}
 	}
 
-	function resetSwipe(id: string) {
-		const m = new Map(swipeOffsets);
-		m.set(id, 0);
-		swipeOffsets = m;
-		setTimeout(() => {
-			const m2 = new Map(swipeOffsets);
-			m2.delete(id);
-			swipeOffsets = m2;
-		}, 300);
-	}
-
-	function swipeTouchStart(e: TouchEvent, id: string) {
-		activeSwipe = { id, startX: e.touches[0].clientX, startY: e.touches[0].clientY, active: false };
-	}
-
-	function swipeTouchMove(e: TouchEvent) {
-		if (!activeSwipe) return;
-		const dx = e.touches[0].clientX - activeSwipe.startX;
-		const dy = e.touches[0].clientY - activeSwipe.startY;
-		if (!activeSwipe.active) {
-			if (Math.abs(dy) > SWIPE_DEADZONE) { activeSwipe = null; return; }
-			if (Math.abs(dx) > SWIPE_DEADZONE) activeSwipe.active = true; else return;
+	async function promote(taskId?: string) {
+		const task = taskId ? tasks.find(t => t.id === taskId) : selectedTask;
+		if (!task || promoting) return;
+		promoting = true;
+		try {
+			const res = await fetch(`/api/tasks/${task.id}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ status: 'open' })
+			});
+			if (res.ok) {
+				addToast({ message: `Promoted: ${task.title}`, type: 'success' });
+				broadcastTaskEvent('task-updated',task.id);
+				await load();
+			} else {
+				addToast({ message: 'Failed to promote', type: 'error' });
+			}
+		} catch {
+			addToast({ message: 'Failed to promote', type: 'error' });
+		} finally {
+			promoting = false;
 		}
-		e.preventDefault();
-		const clamped = dx > 0 ? Math.min(dx, SWIPE_THRESHOLD * 1.3) : Math.max(dx, -SWIPE_THRESHOLD * 1.3);
-		const m = new Map(swipeOffsets);
-		m.set(activeSwipe.id, clamped * 0.7);
-		swipeOffsets = m;
 	}
 
-	function swipeTouchEnd(taskId: string) {
-		if (!activeSwipe?.active) { activeSwipe = null; return; }
-		const offset = swipeOffsets.get(activeSwipe.id) || 0;
-		if (offset > SWIPE_THRESHOLD * 0.6) {
-			haptic(8);
-			spawnTask(taskId);
+	async function reject(taskId?: string) {
+		const task = taskId ? tasks.find(t => t.id === taskId) : selectedTask;
+		if (!task || rejecting) return;
+		rejecting = true;
+		try {
+			const res = await fetch(`/api/tasks/${task.id}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ status: 'closed', close_reason: 'Rejected in triage' })
+			});
+			if (res.ok) {
+				addToast({ message: `Rejected: ${task.title}`, type: 'info' });
+				broadcastTaskEvent('task-updated',task.id);
+				await load();
+			} else {
+				addToast({ message: 'Failed to reject', type: 'error' });
+			}
+		} catch {
+			addToast({ message: 'Failed to reject', type: 'error' });
+		} finally {
+			rejecting = false;
 		}
-		resetSwipe(activeSwipe.id);
-		activeSwipe = null;
 	}
 
-	function getPriorityColor(p?: number) {
-		const colors = ['oklch(0.65 0.20 25)', 'oklch(0.70 0.18 50)', 'oklch(0.65 0.15 200)', 'oklch(0.50 0.04 250)', 'oklch(0.40 0.02 250)'];
-		return colors[p ?? 2] ?? colors[2];
+	async function assignToEpic(epicId: string) {
+		if (!selectedTask) return;
+		try {
+			const res = await fetch(`/api/tasks/${selectedTask.id}/deps`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ parentId: epicId, childId: selectedTask.id })
+			});
+			if (res.ok) {
+				addToast({ message: 'Assigned to epic', type: 'success' });
+				await load();
+			} else {
+				addToast({ message: 'Failed to assign', type: 'error' });
+			}
+		} catch {
+			addToast({ message: 'Failed to assign', type: 'error' });
+		}
+	}
+
+	async function promoteAll() {
+		const toPromote = filteredTasks;
+		if (toPromote.length === 0) return;
+		const confirm = window.confirm(`Promote all ${toPromote.length} tasks to open?`);
+		if (!confirm) return;
+
+		let success = 0;
+		for (const task of toPromote) {
+			try {
+				const res = await fetch(`/api/tasks/${task.id}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ status: 'open' })
+				});
+				if (res.ok) success++;
+			} catch { /* continue */ }
+		}
+		addToast({ message: `Promoted ${success}/${toPromote.length} tasks`, type: 'success' });
+		await load();
+	}
+
+	async function dismissAll() {
+		const toDismiss = filteredTasks;
+		if (toDismiss.length === 0) return;
+		const confirm = window.confirm(`Reject all ${toDismiss.length} tasks?`);
+		if (!confirm) return;
+
+		let success = 0;
+		for (const task of toDismiss) {
+			try {
+				const res = await fetch(`/api/tasks/${task.id}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ status: 'closed', close_reason: 'Bulk rejected in triage' })
+				});
+				if (res.ok) success++;
+			} catch { /* continue */ }
+		}
+		addToast({ message: `Rejected ${success}/${toDismiss.length} tasks`, type: 'info' });
+		await load();
+	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		// Don't capture when typing in inputs
+		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+
+		switch (e.key) {
+			case 'j':
+			case 'ArrowDown':
+				e.preventDefault();
+				if (selectedIdx < filteredTasks.length - 1) selectedIdx++;
+				scrollSelectedIntoView();
+				break;
+			case 'k':
+			case 'ArrowUp':
+				e.preventDefault();
+				if (selectedIdx > 0) selectedIdx--;
+				scrollSelectedIntoView();
+				break;
+			case 'p':
+				if (!editing) { e.preventDefault(); promote(); }
+				break;
+			case 'r':
+				if (!editing) { e.preventDefault(); reject(); }
+				break;
+			case 'e':
+				if (!editing) { e.preventDefault(); startEdit(); }
+				break;
+			case 'Escape':
+				if (editing) cancelEdit();
+				else if (showHelp) showHelp = false;
+				break;
+			case '/':
+				if (!editing) {
+					e.preventDefault();
+					document.getElementById('triage-search')?.focus();
+				}
+				break;
+			case '?':
+				if (!editing) { e.preventDefault(); showHelp = !showHelp; }
+				break;
+		}
+	}
+
+	function scrollSelectedIntoView() {
+		requestAnimationFrame(() => {
+			const el = document.querySelector(`[data-triage-idx="${selectedIdx}"]`);
+			el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+		});
+	}
+
+	function getPriorityLabel(p: number): string {
+		return ['P0 Critical', 'P1 High', 'P2 Medium', 'P3 Low', 'P4 Lowest'][p] ?? `P${p}`;
+	}
+
+	function getPriorityColor(p: number): string {
+		const colors = ['oklch(0.65 0.20 25)', 'oklch(0.70 0.18 50)', 'oklch(0.65 0.15 220)', 'oklch(0.50 0.04 250)', 'oklch(0.40 0.02 250)'];
+		return colors[p] ?? colors[2];
 	}
 </script>
 
-<svelte:head><title>Triage</title></svelte:head>
+<svelte:head><title>Triage ({filteredTasks.length})</title></svelte:head>
+<svelte:window onkeydown={handleKeydown} />
 
 <div class="triage-page">
+	<!-- Header -->
 	<div class="triage-header">
-		<a href="/tasks" class="back-btn" aria-label="Back to tasks">
-			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" /></svg>
-		</a>
-		<h1>Triage</h1>
-		<button class="reload-btn" aria-label="Reload" onclick={load}>
-			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
-		</button>
+		<div class="header-left">
+			<h1>
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" /></svg>
+				Triage
+			</h1>
+			<span class="queue-count">{filteredTasks.length}</span>
+		</div>
+		<div class="header-actions">
+			<button class="btn-action btn-promote-all" onclick={promoteAll} disabled={filteredTasks.length === 0} title="Promote all visible to open">
+				Promote All
+			</button>
+			<button class="btn-action btn-dismiss-all" onclick={dismissAll} disabled={filteredTasks.length === 0} title="Reject all visible">
+				Dismiss All
+			</button>
+			<button class="btn-action btn-help" onclick={() => showHelp = !showHelp} title="Keyboard shortcuts (?)">
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" /></svg>
+			</button>
+		</div>
+	</div>
+
+	<!-- Filter bar -->
+	<div class="filter-bar">
+		<div class="filter-group">
+			<select class="filter-select" bind:value={filterProject}>
+				{#each availableProjects as proj}
+					<option value={proj}>{proj === 'all' ? 'All Projects' : proj}</option>
+				{/each}
+			</select>
+			<select class="filter-select" bind:value={filterType}>
+				<option value="all">All Types</option>
+				<option value="bug">Bug</option>
+				<option value="feature">Feature</option>
+				<option value="task">Task</option>
+				<option value="chore">Chore</option>
+				<option value="chat">Chat</option>
+			</select>
+		</div>
+		<div class="filter-search-wrap">
+			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" class="search-icon"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+			<input
+				id="triage-search"
+				type="text"
+				class="filter-search"
+				placeholder="Search... (/)"
+				bind:value={filterSearch}
+			/>
+		</div>
 	</div>
 
 	{#if loading}
 		<div class="triage-loading" in:fade>
-			<div class="spinner"></div>
+			<div class="animate-spin" style="width:28px;height:28px;border:2.5px solid oklch(0.25 0.03 250);border-top-color:oklch(0.60 0.15 220);border-radius:50%;"></div>
 		</div>
-	{:else if sections.length === 0}
+	{:else if filteredTasks.length === 0}
 		<div class="triage-empty" in:fade>
-			<p>Nothing to triage 🎉</p>
+			<div class="empty-icon">
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+			</div>
+			<p class="empty-title">Queue is clear</p>
+			<p class="empty-sub">No items to triage right now.</p>
 		</div>
 	{:else}
-		<div class="sections">
-			{#each sections as section}
-				{@const vis = section.kind === 'agent' ? SESSION_STATE_VISUALS[section.state] ?? SESSION_STATE_VISUALS['idle'] : null}
-				<div class="section" in:fade={{ duration: 150 }}>
-					<div class="section-header" style={vis ? `--accent: ${vis.accent};` : ''}>
-						<span class="section-label">{section.label}</span>
-						{#if vis}<span class="section-dot"></span>{/if}
+		<div class="triage-content">
+			<!-- Left: Queue list -->
+			<div class="queue-panel">
+				{#each filteredTasks as task, idx (task.id)}
+					{@const typeVisual = getIssueTypeVisual(task.issue_type)}
+					{@const projColor = getProjectColor(getProjectFromTaskId(task.id) ?? '')}
+					{@const isSelected = idx === selectedIdx}
+					<button
+						class="queue-item"
+						class:queue-item-selected={isSelected}
+						data-triage-idx={idx}
+						onclick={() => { selectedIdx = idx; editing = false; }}
+					>
+						<div class="qi-accent" style="background: {projColor};"></div>
+						<div class="qi-body">
+							<div class="qi-top">
+								<span class="qi-type" title={typeVisual.label}>{typeVisual.icon}</span>
+								<span class="qi-title">{task.title}</span>
+								<span class="qi-priority" style="color: {getPriorityColor(task.priority)};">P{task.priority}</span>
+							</div>
+							<div class="qi-meta">
+								<span class="qi-id">{task.id}</span>
+								{#if task.issue_type}
+									<span class="qi-type-label">{task.issue_type}</span>
+								{/if}
+								{#if task.created_at}
+									<span class="qi-date">{formatRelativeTimestamp(task.created_at)}</span>
+								{/if}
+								{#if task.labels?.length}
+									{#each task.labels.slice(0, 2) as label}
+										<span class="qi-label">{label}</span>
+									{/each}
+								{/if}
+							</div>
+						</div>
+					</button>
+				{/each}
+			</div>
+
+			<!-- Right: Detail panel -->
+			<div class="detail-panel">
+				{#if selectedTask}
+					{@const typeVisual = getIssueTypeVisual(selectedTask.issue_type)}
+					{@const projColor = getProjectColor(getProjectFromTaskId(selectedTask.id) ?? '')}
+
+					<div class="detail-header">
+						<div class="detail-type-badge" style="background: {typeVisual.accent}; color: white;">
+							{typeVisual.icon} {typeVisual.label}
+						</div>
+						<span class="detail-id">{selectedTask.id}</span>
+						<div class="detail-priority" style="color: {getPriorityColor(selectedTask.priority)};">
+							{getPriorityLabel(selectedTask.priority)}
+						</div>
 					</div>
 
-					{#if section.kind === 'agent'}
-						{#each section.items as sess (sess.sessionName)}
-							{@const proj = sess.taskId?.split('-')[0] ?? ''}
-							{@const projColor = getProjectColor(proj)}
-							<a href="/tasks" class="agent-row" style="--proj: {projColor}; --accent: {vis?.accent ?? 'oklch(0.55 0.10 220)'};">
-								<div class="agent-accent"></div>
-								<div class="agent-body">
-									<div class="agent-top">
-										<span class="agent-name">{sess.agentName}</span>
-										<span class="agent-badge" style="color: {vis?.accent};">{vis?.shortLabel ?? sess.state}</span>
-									</div>
-									{#if sess.taskTitle}
-										<div class="agent-task">
-											{#if sess.taskPriority !== undefined}
-												<span class="priority-dot" style="background: {getPriorityColor(sess.taskPriority)};"></span>
-											{/if}
-											<span class="agent-task-title">{sess.taskTitle}</span>
-										</div>
-										{#if sess.taskId}<span class="task-id-small">{sess.taskId}</span>{/if}
-									{:else}
-										<span class="agent-notask">no task</span>
-									{/if}
-								</div>
-								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="row-chevron" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
-							</a>
-						{/each}
-					{:else}
-						{#each section.items as task (task.id)}
-							{@const typeVisual = getIssueTypeVisual(task.issue_type)}
-							{@const projColor = getProjectColor(task.id.split('-')[0])}
-							{@const offset = swipeOffsets.get(task.id) || 0}
-							{@const overdue = isOverdue(task.due_date)}
-							{@const dueToday = isDueToday(task.due_date)}
+					{#if !editing}
+						<!-- View mode -->
+						<div class="detail-body">
+							<h2 class="detail-title">{selectedTask.title}</h2>
 
-							<!-- Swipe wrapper -->
-							<div class="task-swipe-wrapper">
-								<!-- Left tray: launch -->
-								<div class="task-tray task-tray-left" class:tray-active={offset > 20}>
-									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" /></svg>
-									<span>Launch</span>
-								</div>
-								<!-- Card -->
-								<div
-									class="task-row"
-									class:task-overdue={overdue}
-									class:task-today={dueToday && !overdue}
-									class:task-spawning={spawning === task.id}
-									style="transform: translateX({offset}px); --proj: {projColor};"
-									ontouchstart={(e) => swipeTouchStart(e, task.id)}
-									ontouchmove={swipeTouchMove}
-									ontouchend={() => swipeTouchEnd(task.id)}
-									ontouchcancel={() => { resetSwipe(task.id); activeSwipe = null; }}
-								>
-									<div class="task-proj-bar"></div>
-									<div class="task-body">
-										<div class="task-top">
-											<span class="task-type-icon">{typeVisual?.emoji ?? '📋'}</span>
-											<span class="task-title">{task.title}</span>
-											<span class="task-priority" style="color: {getPriorityColor(task.priority)};">P{task.priority}</span>
-										</div>
-										<div class="task-meta">
-											<button class="task-id-label" onclick={(e) => copyTriageTaskId(e, task.id)} title="Click to copy task ID">{copiedTriageId === task.id ? '✓' : task.id}</button>
-											{#if task.due_date}
-												<span class="task-due" class:due-overdue={overdue} class:due-today={dueToday}>
-													{overdue ? '⚠ ' : ''}{formatShortDate(task.due_date)}
-												</span>
-											{/if}
-											{#if task.labels?.length}
-												{#each task.labels.slice(0, 2) as label}
-													<span class="task-label">{label}</span>
-												{/each}
-											{/if}
+							{#if selectedTask.description}
+								<div class="detail-description">{selectedTask.description}</div>
+							{:else}
+								<p class="detail-no-desc">No description</p>
+							{/if}
+
+							<div class="detail-fields">
+								{#if selectedTask.assignee}
+									<div class="detail-field">
+										<span class="field-label">Assignee</span>
+										<span class="field-value">{selectedTask.assignee}</span>
+									</div>
+								{/if}
+								{#if selectedTask.labels?.length}
+									<div class="detail-field">
+										<span class="field-label">Labels</span>
+										<div class="detail-labels">
+											{#each selectedTask.labels as label}
+												<span class="detail-label-tag">{label}</span>
+											{/each}
 										</div>
 									</div>
-									<!-- Launch button (tap) -->
-									<button
-										class="launch-btn"
-										onclick={() => spawnTask(task.id)}
-										disabled={spawning === task.id}
-										title="Launch agent"
-									>
-										{#if spawning === task.id}
-											<svg class="spin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="M4 12a8 8 0 0 1 16 0" /></svg>
-										{:else}
-											<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" /></svg>
-										{/if}
-									</button>
+								{/if}
+								{#if selectedTask.parent_id}
+									<div class="detail-field">
+										<span class="field-label">Epic</span>
+										<span class="field-value">{selectedTask.parent_id}</span>
+									</div>
+								{/if}
+								{#if selectedTask.due_date}
+									<div class="detail-field">
+										<span class="field-label">Due</span>
+										<span class="field-value">{formatShortDate(selectedTask.due_date)}</span>
+									</div>
+								{/if}
+								<div class="detail-field">
+									<span class="field-label">Created</span>
+									<span class="field-value">{selectedTask.created_at ? formatRelativeTimestamp(selectedTask.created_at) : '—'}</span>
 								</div>
 							</div>
-						{/each}
+
+							{#if epics.length > 0}
+								<div class="detail-section">
+									<span class="section-label">Assign to Epic</span>
+									<div class="epic-list">
+										{#each epics as epic}
+											<button class="epic-btn" onclick={() => assignToEpic(epic.id)}>
+												<span class="epic-priority" style="color: {getPriorityColor(epic.priority)};">P{epic.priority}</span>
+												{epic.title}
+											</button>
+										{/each}
+									</div>
+								</div>
+							{/if}
+						</div>
+
+						<!-- Action bar -->
+						<div class="detail-actions">
+							<button
+								class="action-btn action-promote"
+								onclick={() => promote()}
+								disabled={promoting}
+								title="Promote to open (P)"
+							>
+								{#if promoting}
+									<span class="animate-spin" style="display:inline-block;width:14px;height:14px;border:2px solid transparent;border-top-color:white;border-radius:50%;"></span>
+								{:else}
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" /></svg>
+								{/if}
+								Promote
+								<kbd>P</kbd>
+							</button>
+							<button
+								class="action-btn action-reject"
+								onclick={() => reject()}
+								disabled={rejecting}
+								title="Reject & close (R)"
+							>
+								{#if rejecting}
+									<span class="animate-spin" style="display:inline-block;width:14px;height:14px;border:2px solid transparent;border-top-color:white;border-radius:50%;"></span>
+								{:else}
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+								{/if}
+								Reject
+								<kbd>R</kbd>
+							</button>
+							<button
+								class="action-btn action-edit"
+								onclick={startEdit}
+								title="Edit fields (E)"
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>
+								Edit
+								<kbd>E</kbd>
+							</button>
+						</div>
+
+					{:else}
+						<!-- Edit mode -->
+						<div class="detail-body edit-mode">
+							<div class="edit-field">
+								<label class="edit-label" for="edit-title">Title</label>
+								<input id="edit-title" type="text" class="edit-input" bind:value={editTitle} />
+							</div>
+							<div class="edit-field">
+								<label class="edit-label" for="edit-desc">Description</label>
+								<textarea id="edit-desc" class="edit-textarea" bind:value={editDescription} rows="6"></textarea>
+							</div>
+							<div class="edit-row">
+								<div class="edit-field edit-field-half">
+									<label class="edit-label" for="edit-priority">Priority</label>
+									<select id="edit-priority" class="edit-select" bind:value={editPriority}>
+										<option value={0}>P0 - Critical</option>
+										<option value={1}>P1 - High</option>
+										<option value={2}>P2 - Medium</option>
+										<option value={3}>P3 - Low</option>
+										<option value={4}>P4 - Lowest</option>
+									</select>
+								</div>
+								<div class="edit-field edit-field-half">
+									<label class="edit-label" for="edit-type">Type</label>
+									<select id="edit-type" class="edit-select" bind:value={editType}>
+										<option value="bug">Bug</option>
+										<option value="feature">Feature</option>
+										<option value="task">Task</option>
+										<option value="chore">Chore</option>
+										<option value="chat">Chat</option>
+									</select>
+								</div>
+							</div>
+							<div class="edit-field">
+								<label class="edit-label" for="edit-assignee">Assignee</label>
+								<input id="edit-assignee" type="text" class="edit-input" bind:value={editAssignee} placeholder="Agent or person name" />
+							</div>
+							<div class="edit-field">
+								<label class="edit-label" for="edit-labels">Labels</label>
+								<input id="edit-labels" type="text" class="edit-input" bind:value={editLabels} placeholder="Comma-separated labels" />
+							</div>
+						</div>
+
+						<div class="detail-actions">
+							<button class="action-btn action-cancel" onclick={cancelEdit}>
+								Cancel
+								<kbd>Esc</kbd>
+							</button>
+							<button class="action-btn action-save" onclick={saveEdit} disabled={saving}>
+								{#if saving}
+									<span class="animate-spin" style="display:inline-block;width:14px;height:14px;border:2px solid transparent;border-top-color:white;border-radius:50%;"></span>
+								{/if}
+								Save Changes
+							</button>
+						</div>
 					{/if}
-				</div>
-			{/each}
+				{:else}
+					<div class="detail-empty">
+						<p>Select a task from the queue</p>
+					</div>
+				{/if}
+			</div>
 		</div>
 	{/if}
 </div>
 
+<!-- Keyboard shortcuts help modal -->
+{#if showHelp}
+	<div class="help-overlay" onclick={() => showHelp = false} role="presentation">
+		<div class="help-modal" onclick={(e) => e.stopPropagation()} role="dialog">
+			<h3>Keyboard Shortcuts</h3>
+			<div class="help-grid">
+				<div class="help-row"><kbd>J</kbd> / <kbd>↓</kbd><span>Next item</span></div>
+				<div class="help-row"><kbd>K</kbd> / <kbd>↑</kbd><span>Previous item</span></div>
+				<div class="help-row"><kbd>P</kbd><span>Promote to open</span></div>
+				<div class="help-row"><kbd>R</kbd><span>Reject & close</span></div>
+				<div class="help-row"><kbd>E</kbd><span>Edit task</span></div>
+				<div class="help-row"><kbd>/</kbd><span>Focus search</span></div>
+				<div class="help-row"><kbd>Esc</kbd><span>Cancel edit / Close help</span></div>
+				<div class="help-row"><kbd>?</kbd><span>Toggle this help</span></div>
+			</div>
+			<button class="help-close" onclick={() => showHelp = false}>Close</button>
+		</div>
+	</div>
+{/if}
+
 <style>
+	/* ========== Layout ========== */
 	.triage-page {
-		max-width: 600px;
-		margin: 0 auto;
-		padding: 0;
-		min-height: 100vh;
+		display: flex;
+		flex-direction: column;
+		height: 100vh;
+		overflow: hidden;
+		background: oklch(0.13 0.01 250);
+		color: oklch(0.80 0.03 250);
 	}
 
+	/* ========== Header ========== */
 	.triage-header {
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
-		padding: 0.75rem 1rem;
-		position: sticky;
-		top: 0;
-		z-index: 10;
-		background: oklch(0.13 0.01 250 / 0.95);
-		backdrop-filter: blur(8px);
+		justify-content: space-between;
+		padding: 0.6rem 1rem;
 		border-bottom: 1px solid oklch(0.22 0.02 250);
+		background: oklch(0.14 0.01 250);
+		flex-shrink: 0;
 	}
-	.triage-header h1 {
-		font-size: 0.95rem;
+	.header-left {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+	}
+	.header-left h1 {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.9rem;
 		font-weight: 700;
-		letter-spacing: 0.06em;
+		letter-spacing: 0.04em;
 		text-transform: uppercase;
-		color: oklch(0.80 0.04 250);
+		color: oklch(0.75 0.04 250);
 		margin: 0;
-		flex: 1;
 	}
-	.back-btn, .reload-btn {
+	.queue-count {
+		font-size: 0.7rem;
+		font-weight: 700;
+		padding: 0.1rem 0.45rem;
+		border-radius: 8px;
+		background: oklch(0.70 0.18 240 / 0.2);
+		color: oklch(0.75 0.15 240);
+	}
+	.header-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
+	.btn-action {
+		font-size: 0.7rem;
+		font-weight: 600;
+		padding: 0.3rem 0.65rem;
+		border-radius: 6px;
+		border: 1px solid oklch(0.25 0.03 250);
+		background: oklch(0.18 0.02 250);
+		color: oklch(0.60 0.04 250);
+		cursor: pointer;
+		transition: background 0.1s;
+	}
+	.btn-action:hover:not(:disabled) { background: oklch(0.22 0.03 250); }
+	.btn-action:disabled { opacity: 0.4; cursor: not-allowed; }
+	.btn-promote-all { color: oklch(0.65 0.18 145); border-color: oklch(0.50 0.15 145 / 0.3); }
+	.btn-dismiss-all { color: oklch(0.65 0.15 25); border-color: oklch(0.50 0.12 25 / 0.3); }
+	.btn-help {
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		width: 30px;
 		height: 30px;
-		border-radius: 7px;
-		border: none;
-		background: oklch(0.20 0.02 250);
-		color: oklch(0.55 0.04 250);
-		cursor: pointer;
-		text-decoration: none;
+		padding: 0;
 	}
-	.back-btn:hover, .reload-btn:hover { background: oklch(0.24 0.03 250); }
 
+	/* ========== Filter bar ========== */
+	.filter-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.4rem 1rem;
+		border-bottom: 1px solid oklch(0.20 0.02 250);
+		background: oklch(0.135 0.01 250);
+		flex-shrink: 0;
+	}
+	.filter-group {
+		display: flex;
+		gap: 0.35rem;
+	}
+	.filter-select {
+		font-size: 0.7rem;
+		padding: 0.25rem 0.5rem;
+		border-radius: 5px;
+		border: 1px solid oklch(0.25 0.02 250);
+		background: oklch(0.18 0.01 250);
+		color: oklch(0.70 0.03 250);
+		outline: none;
+	}
+	.filter-select:focus { border-color: oklch(0.55 0.15 220); }
+	.filter-search-wrap {
+		flex: 1;
+		position: relative;
+		max-width: 280px;
+	}
+	.search-icon {
+		position: absolute;
+		left: 0.5rem;
+		top: 50%;
+		transform: translateY(-50%);
+		color: oklch(0.40 0.03 250);
+		pointer-events: none;
+	}
+	.filter-search {
+		width: 100%;
+		font-size: 0.7rem;
+		padding: 0.25rem 0.5rem 0.25rem 1.75rem;
+		border-radius: 5px;
+		border: 1px solid oklch(0.25 0.02 250);
+		background: oklch(0.18 0.01 250);
+		color: oklch(0.75 0.03 250);
+		outline: none;
+	}
+	.filter-search:focus { border-color: oklch(0.55 0.15 220); }
+	.filter-search::placeholder { color: oklch(0.40 0.03 250); }
+
+	/* ========== Loading / Empty ========== */
 	.triage-loading, .triage-empty {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		padding: 4rem 1rem;
-		color: oklch(0.45 0.03 250);
-	}
-	@keyframes spin { to { transform: rotate(360deg); } }
-	.spinner {
-		width: 28px; height: 28px;
-		border: 2.5px solid oklch(0.25 0.03 250);
-		border-top-color: oklch(0.60 0.15 220);
-		border-radius: 50%;
-		animation: spin 0.7s linear infinite;
-	}
-	.spin-icon { animation: spin 0.7s linear infinite; }
-
-	.sections { display: flex; flex-direction: column; }
-
-	/* Section */
-	.section { margin-bottom: 0.25rem; }
-	.section-header {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.5rem 1rem 0.3rem;
-	}
-	.section-label {
-		font-size: 0.65rem;
-		font-weight: 700;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: oklch(0.45 0.03 250);
-	}
-	.section-dot {
-		width: 6px; height: 6px;
-		border-radius: 50%;
-		background: var(--accent, oklch(0.55 0.10 220));
-		animation: pulse 2s infinite;
-	}
-	@keyframes pulse {
-		0%, 100% { opacity: 1; }
-		50% { opacity: 0.4; }
-	}
-
-	/* Agent rows */
-	.agent-row {
-		display: flex;
-		align-items: center;
-		gap: 0;
-		padding: 0.6rem 1rem 0.6rem 0;
-		text-decoration: none;
-		border-bottom: 1px solid oklch(0.20 0.02 250 / 0.5);
-		position: relative;
-		overflow: hidden;
-		transition: background 0.1s;
-	}
-	.agent-row:hover { background: oklch(0.18 0.02 250 / 0.5); }
-	.agent-accent {
-		width: 3px;
-		align-self: stretch;
-		background: var(--accent);
-		margin-right: 0.75rem;
-		flex-shrink: 0;
-		opacity: 0.8;
-	}
-	.agent-body { flex: 1; min-width: 0; }
-	.agent-top {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		margin-bottom: 0.2rem;
-	}
-	.agent-name {
-		font-size: 0.82rem;
-		font-weight: 700;
-		color: oklch(0.82 0.04 250);
-	}
-	.agent-badge {
-		font-size: 0.6rem;
-		font-weight: 700;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
-		margin-left: auto;
-	}
-	.agent-task {
-		display: flex;
-		align-items: center;
-		gap: 0.35rem;
-	}
-	.priority-dot {
-		width: 5px; height: 5px;
-		border-radius: 50%;
-		flex-shrink: 0;
-	}
-	.agent-task-title {
-		font-size: 0.75rem;
-		color: oklch(0.58 0.03 250);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.task-id-small, .task-id-label {
-		font-size: 0.60rem;
-		color: oklch(0.35 0.02 250);
-		font-family: ui-monospace, monospace;
-		background: none;
-		border: none;
-		padding: 0;
-		cursor: pointer;
-	}
-	.task-id-label:hover {
-		color: oklch(0.55 0.10 200);
-	}
-	.agent-notask {
-		font-size: 0.72rem;
-		color: oklch(0.35 0.02 250);
-		font-style: italic;
-	}
-	.row-chevron {
-		color: oklch(0.35 0.03 250);
-		flex-shrink: 0;
-		margin-left: 0.5rem;
-	}
-
-	/* Task swipe wrapper */
-	.task-swipe-wrapper {
-		position: relative;
-		overflow: hidden;
-		border-bottom: 1px solid oklch(0.20 0.02 250 / 0.5);
-	}
-
-	/* Launch tray */
-	.task-tray {
-		position: absolute;
-		top: 0; bottom: 0;
-		display: flex;
-		align-items: center;
 		justify-content: center;
-		gap: 0.4rem;
-		padding: 0 1rem;
-		background: oklch(0.50 0.20 145);
-		color: white;
-		font-size: 0.75rem;
-		font-weight: 600;
-		opacity: 0;
-		transition: opacity 0.1s;
+		flex: 1;
+		gap: 0.75rem;
+		color: oklch(0.45 0.03 250);
 	}
-	.task-tray-left { left: 0; }
-	.tray-active { opacity: 1; }
+	.empty-icon { color: oklch(0.50 0.15 145); }
+	.empty-title { font-size: 1rem; font-weight: 600; color: oklch(0.60 0.04 250); margin: 0; }
+	.empty-sub { font-size: 0.8rem; margin: 0; }
 
-	/* Task row card */
-	.task-row {
+	/* ========== Content split ========== */
+	.triage-content {
 		display: flex;
-		align-items: center;
-		padding: 0.55rem 0.75rem 0.55rem 0;
-		position: relative;
-		background: oklch(0.14 0.01 250);
-		will-change: transform;
-		cursor: pointer;
-		user-select: none;
+		flex: 1;
+		overflow: hidden;
 	}
-	.task-row:hover { background: oklch(0.17 0.02 250); }
-	.task-overdue { background: oklch(0.65 0.20 25 / 0.07) !important; }
-	.task-today { background: oklch(0.70 0.18 50 / 0.06) !important; }
-	.task-spawning { opacity: 0.6; }
 
-	.task-proj-bar {
+	/* ========== Queue panel (left) ========== */
+	.queue-panel {
+		width: 380px;
+		min-width: 280px;
+		border-right: 1px solid oklch(0.20 0.02 250);
+		overflow-y: auto;
+		flex-shrink: 0;
+	}
+	.queue-item {
+		display: flex;
+		align-items: stretch;
+		width: 100%;
+		padding: 0;
+		border: none;
+		border-bottom: 1px solid oklch(0.18 0.02 250 / 0.6);
+		background: transparent;
+		cursor: pointer;
+		text-align: left;
+		color: inherit;
+		transition: background 0.08s;
+	}
+	.queue-item:hover { background: oklch(0.17 0.02 250 / 0.5); }
+	.queue-item-selected {
+		background: oklch(0.70 0.18 240 / 0.08) !important;
+		border-left: 2px solid oklch(0.70 0.18 240);
+	}
+	.qi-accent {
 		width: 3px;
-		align-self: stretch;
-		background: var(--proj, oklch(0.55 0.10 220));
-		margin-right: 0.75rem;
 		flex-shrink: 0;
 		opacity: 0.6;
 	}
-	.task-body { flex: 1; min-width: 0; }
-	.task-top {
+	.queue-item-selected .qi-accent { opacity: 0; }
+	.qi-body {
+		flex: 1;
+		padding: 0.5rem 0.75rem;
+		min-width: 0;
+	}
+	.qi-top {
 		display: flex;
 		align-items: center;
-		gap: 0.35rem;
-		margin-bottom: 0.25rem;
+		gap: 0.3rem;
+		margin-bottom: 0.2rem;
 	}
-	.task-type-icon { font-size: 0.72rem; flex-shrink: 0; }
-	.task-title {
-		font-size: 0.82rem;
+	.qi-type { font-size: 0.72rem; flex-shrink: 0; }
+	.qi-title {
+		font-size: 0.78rem;
+		font-weight: 500;
 		color: oklch(0.78 0.03 250);
 		flex: 1;
 		white-space: nowrap;
@@ -589,46 +868,375 @@
 		text-overflow: ellipsis;
 		line-height: 1.3;
 	}
-	.task-priority {
-		font-size: 0.62rem;
+	.queue-item-selected .qi-title { color: oklch(0.88 0.04 250); font-weight: 600; }
+	.qi-priority {
+		font-size: 0.6rem;
 		font-weight: 700;
 		flex-shrink: 0;
 	}
-	.task-meta {
+	.qi-meta {
 		display: flex;
 		align-items: center;
-		gap: 0.4rem;
+		gap: 0.35rem;
 		flex-wrap: wrap;
 	}
-	.task-due {
-		font-size: 0.65rem;
-		color: oklch(0.55 0.04 250);
+	.qi-id {
+		font-size: 0.58rem;
+		color: oklch(0.40 0.02 250);
+		font-family: ui-monospace, monospace;
 	}
-	.due-overdue { color: oklch(0.65 0.20 25) !important; font-weight: 600; }
-	.due-today { color: oklch(0.70 0.18 50) !important; }
-	.task-label {
-		font-size: 0.60rem;
-		padding: 0.1rem 0.35rem;
+	.qi-type-label {
+		font-size: 0.55rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: oklch(0.45 0.04 250);
+		font-weight: 600;
+	}
+	.qi-date {
+		font-size: 0.58rem;
+		color: oklch(0.42 0.02 250);
+	}
+	.qi-label {
+		font-size: 0.55rem;
+		padding: 0.05rem 0.3rem;
 		border-radius: 3px;
 		background: oklch(0.22 0.02 250);
 		color: oklch(0.50 0.03 250);
 	}
 
-	/* Launch button */
-	.launch-btn {
+	/* ========== Detail panel (right) ========== */
+	.detail-panel {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+	.detail-empty {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 32px; height: 32px;
-		border-radius: 8px;
-		border: 1px solid oklch(0.28 0.06 145 / 0.6);
-		background: oklch(0.50 0.20 145 / 0.15);
-		color: oklch(0.65 0.20 145);
-		cursor: pointer;
-		flex-shrink: 0;
-		margin-left: 0.5rem;
-		transition: background 0.12s;
+		flex: 1;
+		color: oklch(0.40 0.03 250);
+		font-size: 0.85rem;
 	}
-	.launch-btn:hover:not(:disabled) { background: oklch(0.50 0.20 145 / 0.3); }
-	.launch-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+	.detail-header {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		padding: 0.75rem 1.25rem;
+		border-bottom: 1px solid oklch(0.20 0.02 250);
+		flex-shrink: 0;
+	}
+	.detail-type-badge {
+		font-size: 0.65rem;
+		font-weight: 700;
+		padding: 0.2rem 0.55rem;
+		border-radius: 5px;
+		letter-spacing: 0.03em;
+		text-transform: uppercase;
+	}
+	.detail-id {
+		font-size: 0.65rem;
+		color: oklch(0.45 0.03 250);
+		font-family: ui-monospace, monospace;
+	}
+	.detail-priority {
+		font-size: 0.7rem;
+		font-weight: 700;
+		margin-left: auto;
+	}
+
+	.detail-body {
+		flex: 1;
+		overflow-y: auto;
+		padding: 1.25rem;
+	}
+	.detail-title {
+		font-size: 1.1rem;
+		font-weight: 700;
+		color: oklch(0.90 0.03 250);
+		margin: 0 0 0.75rem;
+		line-height: 1.35;
+	}
+	.detail-description {
+		font-size: 0.82rem;
+		color: oklch(0.68 0.03 250);
+		line-height: 1.6;
+		white-space: pre-wrap;
+		margin-bottom: 1.25rem;
+		padding: 0.75rem;
+		background: oklch(0.16 0.01 250);
+		border-radius: 8px;
+		border: 1px solid oklch(0.22 0.02 250);
+	}
+	.detail-no-desc {
+		font-size: 0.8rem;
+		color: oklch(0.38 0.02 250);
+		font-style: italic;
+		margin-bottom: 1rem;
+	}
+
+	.detail-fields {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+		margin-bottom: 1.25rem;
+	}
+	.detail-field {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.75rem;
+	}
+	.field-label {
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: oklch(0.50 0.03 250);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		min-width: 80px;
+		flex-shrink: 0;
+		padding-top: 0.1rem;
+	}
+	.field-value {
+		font-size: 0.8rem;
+		color: oklch(0.72 0.03 250);
+	}
+	.detail-labels {
+		display: flex;
+		gap: 0.3rem;
+		flex-wrap: wrap;
+	}
+	.detail-label-tag {
+		font-size: 0.65rem;
+		padding: 0.1rem 0.4rem;
+		border-radius: 4px;
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.58 0.04 250);
+	}
+
+	.detail-section {
+		margin-top: 1rem;
+		padding-top: 1rem;
+		border-top: 1px solid oklch(0.20 0.02 250);
+	}
+	.section-label {
+		font-size: 0.65rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: oklch(0.50 0.03 250);
+		margin-bottom: 0.5rem;
+		display: block;
+	}
+	.epic-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+	.epic-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.35rem 0.6rem;
+		font-size: 0.75rem;
+		color: oklch(0.68 0.03 250);
+		background: oklch(0.17 0.01 250);
+		border: 1px solid oklch(0.23 0.02 250);
+		border-radius: 5px;
+		cursor: pointer;
+		text-align: left;
+		transition: background 0.1s;
+	}
+	.epic-btn:hover { background: oklch(0.22 0.03 250); }
+	.epic-priority {
+		font-size: 0.6rem;
+		font-weight: 700;
+		flex-shrink: 0;
+	}
+
+	/* ========== Action bar ========== */
+	.detail-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.6rem 1.25rem;
+		border-top: 1px solid oklch(0.20 0.02 250);
+		background: oklch(0.14 0.01 250);
+		flex-shrink: 0;
+	}
+	.action-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.75rem;
+		font-weight: 600;
+		padding: 0.4rem 0.8rem;
+		border-radius: 6px;
+		border: 1px solid oklch(0.28 0.03 250);
+		background: oklch(0.18 0.02 250);
+		color: oklch(0.65 0.04 250);
+		cursor: pointer;
+		transition: background 0.1s;
+	}
+	.action-btn:hover:not(:disabled) { background: oklch(0.22 0.03 250); }
+	.action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+	.action-btn kbd {
+		font-size: 0.55rem;
+		padding: 0.1rem 0.3rem;
+		border-radius: 3px;
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.50 0.03 250);
+		font-family: ui-monospace, monospace;
+	}
+
+	.action-promote {
+		color: oklch(0.70 0.18 145);
+		border-color: oklch(0.50 0.15 145 / 0.4);
+		background: oklch(0.50 0.18 145 / 0.1);
+	}
+	.action-promote:hover:not(:disabled) { background: oklch(0.50 0.18 145 / 0.2); }
+
+	.action-reject {
+		color: oklch(0.70 0.15 25);
+		border-color: oklch(0.50 0.12 25 / 0.4);
+		background: oklch(0.50 0.15 25 / 0.1);
+	}
+	.action-reject:hover:not(:disabled) { background: oklch(0.50 0.15 25 / 0.2); }
+
+	.action-edit {
+		color: oklch(0.70 0.15 220);
+		border-color: oklch(0.50 0.12 220 / 0.4);
+	}
+
+	.action-cancel {
+		color: oklch(0.60 0.04 250);
+	}
+
+	.action-save {
+		color: oklch(0.70 0.18 145);
+		border-color: oklch(0.50 0.15 145 / 0.4);
+		background: oklch(0.50 0.18 145 / 0.1);
+		margin-left: auto;
+	}
+	.action-save:hover:not(:disabled) { background: oklch(0.50 0.18 145 / 0.2); }
+
+	/* ========== Edit mode ========== */
+	.edit-mode {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+	.edit-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+	.edit-row {
+		display: flex;
+		gap: 0.75rem;
+	}
+	.edit-field-half { flex: 1; }
+	.edit-label {
+		font-size: 0.65rem;
+		font-weight: 600;
+		color: oklch(0.50 0.03 250);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+	.edit-input, .edit-select, .edit-textarea {
+		font-size: 0.8rem;
+		padding: 0.4rem 0.6rem;
+		border-radius: 6px;
+		border: 1px solid oklch(0.28 0.03 250);
+		background: oklch(0.16 0.01 250);
+		color: oklch(0.82 0.03 250);
+		outline: none;
+		transition: border-color 0.1s;
+	}
+	.edit-input:focus, .edit-select:focus, .edit-textarea:focus {
+		border-color: oklch(0.55 0.15 220);
+	}
+	.edit-textarea {
+		resize: vertical;
+		min-height: 100px;
+		font-family: inherit;
+		line-height: 1.5;
+	}
+
+	/* ========== Help modal ========== */
+	.help-overlay {
+		position: fixed;
+		inset: 0;
+		z-index: 50;
+		background: oklch(0 0 0 / 0.5);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.help-modal {
+		background: oklch(0.16 0.01 250);
+		border: 1px solid oklch(0.25 0.03 250);
+		border-radius: 12px;
+		padding: 1.25rem;
+		min-width: 320px;
+		box-shadow: 0 20px 60px oklch(0 0 0 / 0.5);
+	}
+	.help-modal h3 {
+		font-size: 0.85rem;
+		font-weight: 700;
+		color: oklch(0.80 0.04 250);
+		margin: 0 0 1rem;
+	}
+	.help-grid {
+		display: flex;
+		flex-direction: column;
+		gap: 0.45rem;
+	}
+	.help-row {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		font-size: 0.78rem;
+		color: oklch(0.65 0.03 250);
+	}
+	.help-row kbd {
+		font-size: 0.65rem;
+		padding: 0.15rem 0.4rem;
+		border-radius: 4px;
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.60 0.04 250);
+		font-family: ui-monospace, monospace;
+		border: 1px solid oklch(0.28 0.02 250);
+		min-width: 22px;
+		text-align: center;
+	}
+	.help-close {
+		margin-top: 1rem;
+		width: 100%;
+		font-size: 0.75rem;
+		font-weight: 600;
+		padding: 0.4rem;
+		border-radius: 6px;
+		border: 1px solid oklch(0.25 0.03 250);
+		background: oklch(0.20 0.02 250);
+		color: oklch(0.60 0.04 250);
+		cursor: pointer;
+	}
+	.help-close:hover { background: oklch(0.24 0.03 250); }
+
+	/* ========== Responsive ========== */
+	@media (max-width: 768px) {
+		.triage-content { flex-direction: column; }
+		.queue-panel {
+			width: 100%;
+			max-height: 40vh;
+			border-right: none;
+			border-bottom: 1px solid oklch(0.20 0.02 250);
+		}
+		.filter-bar { flex-wrap: wrap; }
+		.filter-search-wrap { max-width: 100%; }
+		.header-actions { gap: 0.25rem; }
+		.btn-promote-all, .btn-dismiss-all { display: none; }
+	}
 </style>

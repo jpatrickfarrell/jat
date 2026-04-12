@@ -61,7 +61,7 @@ function parseRecordingUrl(description) {
 
 /**
  * Map JAT task status to feedback report status.
- * @param {string} taskStatus - JAT task status (open, in_progress, blocked, closed)
+ * @param {string} taskStatus - JAT task status (open, in_progress, blocked, closed, dev, submitted)
  * @param {string | null} closeReason - Close reason text
  * @returns {string}
  */

@@ -46,6 +46,8 @@ jt search "keyword"         # Search tasks
 - `in_progress` - Being worked on
 - `blocked` - Waiting on something
 - `closed` - Completed
+- `dev` - Internal/dev-only (hidden from clients)
+- `submitted` - Submitted for review/triage
 
 **Task types:** `bug`, `feature`, `task`, `epic`, `chore` (recurring scheduled task), `chat`
 

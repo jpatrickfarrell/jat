@@ -309,7 +309,9 @@
 		'open': 'badge-info',
 		'in_progress': 'badge-warning',
 		'closed': 'badge-success',
-		'blocked': 'badge-error'
+		'blocked': 'badge-error',
+		'dev': 'badge-ghost',
+		'submitted': 'badge-secondary badge-outline'
 	};
 
 	// Active tab - now includes 'notes', 'summary', and 'integration' as separate tabs

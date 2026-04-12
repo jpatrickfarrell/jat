@@ -195,6 +195,30 @@ export const TASK_STATUS_VISUALS: Record<string, TaskStatusVisual> = {
 		description: 'Completed'
 	},
 
+	// DEV: Internal/dev-only task, not yet visible to clients
+	dev: {
+		badge: 'badge-ghost badge-outline',
+		text: 'text-base-content/50',
+		icon: 'M11.42 15.17l-5.1-5.1m0 0L11.42 4.97m-5.1 5.1H20.8',
+		iconType: 'svg',
+		iconStyle: 'outline',
+		animation: undefined,
+		label: 'Dev',
+		description: 'Internal/dev-only task'
+	},
+
+	// SUBMITTED: Submitted for review/triage, not yet open
+	submitted: {
+		badge: 'badge-secondary badge-outline',
+		text: 'text-secondary',
+		icon: 'M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5',
+		iconType: 'svg',
+		iconStyle: 'outline',
+		animation: undefined,
+		label: 'Submitted',
+		description: 'Submitted for review'
+	},
+
 	// REOPENED: Previously closed, reopened for additional work
 	reopened: {
 		badge: 'badge-warning badge-outline',

@@ -225,7 +225,7 @@ export function getProjectsFromTasks(tasks: Task[]): string[] {
  * Count tasks per project (filtered by status)
  *
  * @param tasks - Array of task objects
- * @param statusFilter - Optional status filter ('open', 'in_progress', 'blocked', 'closed', or 'all' for no filter)
+ * @param statusFilter - Optional status filter ('open', 'in_progress', 'blocked', 'closed', 'dev', 'submitted', or 'all' for no filter)
  * @returns Map of project name to task count
  *
  * @example

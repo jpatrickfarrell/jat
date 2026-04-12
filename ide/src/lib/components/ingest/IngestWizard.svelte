@@ -516,8 +516,8 @@
 					jatStatus,
 					externalStatus: externalStatus as string
 				}));
-				// Ensure all 4 JAT statuses are present
-				for (const s of ['open', 'in_progress', 'blocked', 'closed']) {
+				// Ensure all JAT statuses are present
+				for (const s of ['open', 'in_progress', 'blocked', 'closed', 'dev', 'submitted']) {
 					if (!mappings.find(m => m.jatStatus === s)) {
 						mappings.push({ jatStatus: s, externalStatus: '' });
 					}

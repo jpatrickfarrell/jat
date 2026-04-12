@@ -13,7 +13,7 @@ jt update <id> --status in_progress --assignee AgentName
 jt close <id> --reason "Completed"
 ```
 
-**Status values:** `open`, `in_progress`, `blocked`, `closed` (use underscores)
+**Status values:** `open`, `in_progress`, `blocked`, `closed`, `dev`, `submitted` (use underscores)
 **Task types:** `bug`, `feature`, `task`, `epic`, `chore`, `chat`
 
 ### Dependencies

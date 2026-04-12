@@ -61,7 +61,7 @@
 	let abortController: AbortController | null = null;
 	let copied = $state(false);
 	let graduatedTaskCount = $state(0);
-	let markAllInternal = $state(true);
+	let importStatus = $state<string>('dev');
 
 	// Reset state whenever the modal is opened for a new project
 	$effect(() => {
@@ -76,7 +76,7 @@
 			archivePath = null;
 			copied = false;
 			graduatedTaskCount = 0;
-			markAllInternal = true;
+			importStatus = 'dev';
 			progress = { phase: 'idle', message: '', percent: 0 };
 
 			// Try to auto-fill the Postgres URL from stored credentials
@@ -169,7 +169,7 @@
 				{
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ url: connectionUrl.trim(), markAllInternal }),
+					body: JSON.stringify({ url: connectionUrl.trim(), importStatus: importStatus || null, targetTable: 'project_tasks' }),
 					signal: abortController.signal,
 				},
 			);
@@ -434,8 +434,8 @@
 			<!-- Step 2: Preview -->
 			{#if step === 2 && previewSummary}
 				{@const bd = previewSummary.breakdown}
-				{@const statusOrder = ['open', 'in_progress', 'blocked', 'closed']}
-				{@const statusColors: Record<string, string> = { open: 'text-info', in_progress: 'text-warning', blocked: 'text-error', closed: 'text-success' }}
+				{@const statusOrder = ['open', 'in_progress', 'blocked', 'closed', 'dev', 'submitted']}
+				{@const statusColors: Record<string, string> = { open: 'text-info', in_progress: 'text-warning', blocked: 'text-error', closed: 'text-success', dev: 'text-base-content/50', submitted: 'text-secondary' }}
 				{@const typeOrder = ['task', 'bug', 'feature', 'epic', 'chore']}
 				{@const typeColors: Record<string, string> = { task: 'text-primary', bug: 'text-error', feature: 'text-success', epic: 'text-secondary', chore: 'text-base-content/60' }}
 				<div class="space-y-4">
@@ -512,21 +512,24 @@
 					</div>
 
 					<div class="form-control">
-						<label class="label cursor-pointer justify-start gap-3" for="mark-internal-toggle">
-							<input
-								id="mark-internal-toggle"
-								type="checkbox"
-								class="toggle toggle-sm toggle-primary"
-								bind:checked={markAllInternal}
-							/>
-							<div>
-								<span class="label-text font-medium">Import all as internal</span>
-								<div class="text-xs text-base-content/50 mt-0.5">
-									Marks all imported tasks as internal (dev-only). Client/member
-									roles won't see them until explicitly published.
-								</div>
-							</div>
+						<label class="label" for="import-status-select">
+							<span class="label-text font-medium">Import status</span>
 						</label>
+						<select
+							id="import-status-select"
+							class="select select-bordered select-sm"
+							bind:value={importStatus}
+						>
+							<option value="dev">Dev (hidden from clients)</option>
+							<option value="submitted">Submitted (pending triage)</option>
+							<option value="">Keep original status</option>
+						</select>
+						<div class="label">
+							<span class="label-text-alt text-base-content/50">
+								Override status for all imported tasks. "Dev" keeps them hidden
+								until explicitly promoted.
+							</span>
+						</div>
 					</div>
 
 					<div class="alert alert-warning text-xs">

@@ -41,7 +41,9 @@
 		open: '#3b82f6',      // blue
 		in_progress: '#f59e0b', // amber
 		closed: '#10b981',     // green
-		blocked: '#ef4444'     // red
+		blocked: '#ef4444',    // red
+		dev: '#6b7280',        // gray
+		submitted: '#8b5cf6'   // purple
 	};
 
 	// Priority color mapping for timeline bars
@@ -243,7 +245,9 @@
 			{ label: 'Open', color: statusColors.open },
 			{ label: 'In Progress', color: statusColors.in_progress },
 			{ label: 'Blocked', color: statusColors.blocked },
-			{ label: 'Closed', color: statusColors.closed }
+			{ label: 'Closed', color: statusColors.closed },
+			{ label: 'Dev', color: statusColors.dev },
+			{ label: 'Submitted', color: statusColors.submitted }
 		];
 
 		legendItems.forEach((item, i) => {

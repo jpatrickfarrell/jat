@@ -149,7 +149,7 @@ Add a `callback` section to your integration source in `~/.config/jat/integratio
 | `referenceIdFrom` | No | How to extract the external record ID (default: `item_id`) |
 | `secretName` | No | Override secret for callbacks (falls back to source's `secretName`) |
 
-**Status mapping:** Keys are JAT task statuses (`open`, `in_progress`, `blocked`, `closed`). Values are whatever your external system expects. Make sure the values match your database column constraints.
+**Status mapping:** Keys are JAT task statuses (`open`, `in_progress`, `blocked`, `closed`, `dev`, `submitted`). Values are whatever your external system expects. Make sure the values match your database column constraints.
 
 You can also configure callbacks through the **IngestWizard** in the IDE — see the "Wizard Setup" section below.
 

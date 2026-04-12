@@ -3535,7 +3535,7 @@ Options:
   --version    Show version
   --help       Show this help
 
-Status values: open, in_progress, blocked, closed
+Status values: open, in_progress, blocked, closed, dev, submitted
 Task types: bug, feature, task, epic, chore
 HELP
 }

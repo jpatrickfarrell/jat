@@ -46,7 +46,9 @@
 		open: 'oklch(0.70 0.18 220)',      // blue
 		in_progress: 'oklch(0.75 0.18 60)', // amber
 		closed: 'oklch(0.70 0.18 145)',     // green
-		blocked: 'oklch(0.65 0.20 30)'      // red
+		blocked: 'oklch(0.65 0.20 30)',     // red
+		dev: 'oklch(0.55 0.02 250)',        // gray
+		submitted: 'oklch(0.65 0.18 300)'   // purple
 	};
 
 	// Priority stroke widths

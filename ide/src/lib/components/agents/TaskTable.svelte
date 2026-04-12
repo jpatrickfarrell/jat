@@ -55,7 +55,7 @@
 		id: string;
 		title: string;
 		description: string;
-		status: 'open' | 'in_progress' | 'blocked' | 'closed';
+		status: 'open' | 'in_progress' | 'blocked' | 'closed' | 'dev' | 'submitted';
 		priority: number;
 		issue_type: 'task' | 'bug' | 'feature' | 'epic' | 'chore';
 		project: string;
@@ -1549,7 +1549,7 @@
 		count: tasks.filter(t => String(t.priority) === p).length
 	})));
 
-	const statusOptions = $derived(['open', 'in_progress', 'blocked', 'closed'].map(s => ({
+	const statusOptions = $derived(['open', 'in_progress', 'blocked', 'closed', 'dev', 'submitted'].map(s => ({
 		value: s,
 		label: s.replace('_', ' '),
 		count: tasks.filter(t => t.status === s).length

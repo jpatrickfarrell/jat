@@ -43,6 +43,7 @@ export async function POST({ params, request }) {
 
 	const url = typeof body?.url === 'string' ? body.url.trim() : '';
 	const force = body?.force === true;
+	const markAllInternal = body?.markAllInternal === true;
 
 	if (!url) {
 		throw error(400, 'url is required');
@@ -71,6 +72,7 @@ export async function POST({ params, request }) {
 					projectNameOrPath: projectName,
 					postgresUrl: url,
 					force,
+					markAllInternal,
 					onProgress: (event) => send({ type: 'progress', ...event }),
 				});
 				send({ type: 'done', result });

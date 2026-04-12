@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     next_run_at TEXT,
     due_date TEXT,
     labels_text TEXT DEFAULT '',
+    internal INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     closed_at TEXT,

@@ -684,6 +684,18 @@
 		};
 	}
 
+	// Direct change action (bypasses Svelte 5 event delegation for portals)
+	function directChange(node: HTMLElement, handler: (e: Event) => void) {
+		node.addEventListener('change', handler as EventListener);
+		return {
+			destroy() {
+				node.removeEventListener('change', handler as EventListener);
+			}
+		};
+	}
+
+	let fileInputEl = $state<HTMLInputElement | null>(null);
+
 	// Focus input when hovering/touching the drawer (input is the main interaction)
 	function focusInputOnHover(node: HTMLElement) {
 		function focusInput(e: Event) {
@@ -1092,7 +1104,25 @@
 					</div>
 				{/if}
 
-				<!-- Mobile Input Row: [keyboard dropup | input | send] -->
+				<!-- Hidden file picker — triggered by paperclip button -->
+				<input
+					type="file"
+					accept="image/*,application/pdf,text/*,.csv,.json,.md,.txt,.log"
+					multiple
+					style="display:none"
+					bind:this={fileInputEl}
+					use:directChange={async (e) => {
+						const files = (e.target as HTMLInputElement).files;
+						if (!files) return;
+						for (const file of Array.from(files)) {
+							await uploadAndSendFile(file);
+						}
+						// Reset so same file can be picked again
+						if (fileInputEl) fileInputEl.value = '';
+					}}
+				/>
+
+				<!-- Mobile Input Row: [keyboard dropup | attach | input | send] -->
 				<div class="mobile-input-row flex items-center gap-1.5 px-2 py-1.5 bg-base-100 border-t border-base-300 flex-shrink-0">
 					<!-- Keyboard dropup -->
 					<div class="relative flex-shrink-0">
@@ -1123,6 +1153,17 @@
 							</div>
 						{/if}
 					</div>
+
+					<!-- Paperclip / file picker -->
+					<button
+						class="flex items-center justify-center w-9 h-9 rounded-lg bg-base-200 border border-base-300 text-base-content/70 cursor-pointer active:bg-base-300 transition-colors flex-shrink-0"
+						title="Attach file"
+						use:directClick={() => fileInputEl?.click()}
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" width="18" height="18">
+							<path stroke-linecap="round" stroke-linejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
+						</svg>
+					</button>
 
 					<!-- Input field -->
 					<input
@@ -1290,7 +1331,18 @@
 				<div class="pager-page">
 					<div class="flex-1 overflow-y-auto p-4" style="-webkit-overflow-scrolling: touch;">
 						<div class="mb-5">
-							<TaskFieldLabel>Attachments</TaskFieldLabel>
+							<div class="flex items-center justify-between mb-2">
+								<TaskFieldLabel>Attachments</TaskFieldLabel>
+								<button
+									class="flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg bg-base-200 border border-base-300 text-base-content/70 cursor-pointer active:bg-base-300 transition-colors"
+									use:directClick={() => fileInputEl?.click()}
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" width="14" height="14">
+										<path stroke-linecap="round" stroke-linejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
+									</svg>
+									Add file
+								</button>
+							</div>
 							{#if fullTask?.attachments?.length}
 								<div class="flex flex-col gap-2">
 									{#each fullTask.attachments as attachment}
@@ -1307,7 +1359,7 @@
 									<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="32" height="32">
 										<path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
 									</svg>
-									<p class="text-sm">No attachments</p>
+									<p class="text-sm">No attachments yet</p>
 								</div>
 							{/if}
 						</div>
@@ -1347,7 +1399,7 @@
 			transition:fade={{ duration: 150 }}
 		>
 			<div
-				class="w-full max-w-lg bg-base-100 rounded-t-2xl border-t border-base-300 shadow-2xl p-4 pb-8"
+				class="w-full max-w-lg bg-base-100 rounded-t-2xl border-t border-base-300 shadow-2xl p-4 pb-8 overflow-hidden"
 				role="dialog"
 				aria-modal="true"
 				aria-label="Edit {editMode}"

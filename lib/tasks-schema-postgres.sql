@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     next_run_at    TEXT,
     due_date       TEXT,
     labels_text    TEXT NOT NULL DEFAULT '',
+    internal       BOOLEAN NOT NULL DEFAULT true,
     created_at     TEXT NOT NULL,
     updated_at     TEXT NOT NULL,
     closed_at      TEXT,
@@ -72,6 +73,17 @@ CREATE INDEX IF NOT EXISTS idx_tasks_due_date        ON tasks(due_date);
 -- indexed via a GIN index on a generated column so INSERT/UPDATE stays cheap
 -- and search uses `tasks_fts_doc @@ plainto_tsquery(...)`.
 -- ---------------------------------------------------------------------------
+
+-- Add internal column to existing tables (idempotent migration)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'tasks' AND column_name = 'internal'
+    ) THEN
+        ALTER TABLE tasks ADD COLUMN internal BOOLEAN NOT NULL DEFAULT true;
+    END IF;
+END$$;
 
 -- Postgres 12+ supports stored generated columns; guarded with a DO block
 -- so re-applying the schema on an older version doesn't error.

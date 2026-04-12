@@ -237,6 +237,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     next_run_at TEXT,
     due_date TEXT,
     labels_text TEXT DEFAULT "",
+    internal INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     closed_at TEXT,
@@ -332,6 +333,14 @@ cmd_init() {
   if [[ "$has_reserved_files" == "0" ]]; then
     sqlite3 "$jat_dir/tasks.db" "ALTER TABLE tasks ADD COLUMN reserved_files TEXT;"
     $quiet || echo "Migrated: added reserved_files column"
+  fi
+
+  # Migrate: add internal column if missing
+  local has_internal
+  has_internal="$(sqlite3 "$jat_dir/tasks.db" "PRAGMA table_info(tasks);" | grep -c 'internal' || true)"
+  if [[ "$has_internal" == "0" ]]; then
+    sqlite3 "$jat_dir/tasks.db" "ALTER TABLE tasks ADD COLUMN internal INTEGER NOT NULL DEFAULT 1;"
+    $quiet || echo "Migrated: added internal column"
   fi
 
   # Migrate: add FTS5 full-text search index
@@ -751,7 +760,7 @@ _task_json() {
     SELECT
       t.id, t.title, t.description, t.status, t.priority, t.issue_type,
       t.assignee, t.reserved_files, t.parent_id, t.command, t.agent_program, t.model,
-      t.schedule_cron, t.next_run_at, t.due_date,
+      t.schedule_cron, t.next_run_at, t.due_date, t.internal,
       t.created_at, t.updated_at, t.closed_at, t.close_reason,
       COALESCE(
         (SELECT json_group_array(l.label) FROM labels l WHERE l.issue_id = t.id),

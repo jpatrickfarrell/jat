@@ -24,6 +24,11 @@
 	type WizardStep = 1 | 2 | 3;
 	type Phase = 'idle' | 'testing' | 'running' | 'done' | 'error';
 
+	interface Breakdown {
+		byStatus: Record<string, number>;
+		byType: Record<string, number>;
+	}
+
 	interface Summary {
 		project: string;
 		projectPath: string;
@@ -31,6 +36,7 @@
 		dependencies: number;
 		labels: number;
 		comments: number;
+		breakdown?: Breakdown;
 	}
 
 	interface ProgressState {
@@ -55,10 +61,11 @@
 	let abortController: AbortController | null = null;
 	let copied = $state(false);
 	let graduatedTaskCount = $state(0);
+	let markAllInternal = $state(true);
 
 	// Reset state whenever the modal is opened for a new project
 	$effect(() => {
-		if (isOpen) {
+		if (isOpen && projectKey) {
 			step = 1;
 			backendChoice = 'postgres';
 			connectionUrl = '';
@@ -69,7 +76,18 @@
 			archivePath = null;
 			copied = false;
 			graduatedTaskCount = 0;
+			markAllInternal = true;
 			progress = { phase: 'idle', message: '', percent: 0 };
+
+			// Try to auto-fill the Postgres URL from stored credentials
+			fetch(`/api/projects/${encodeURIComponent(projectKey)}/graduate`)
+				.then((r) => r.json())
+				.then((data) => {
+					if (data.suggestedUrl && !connectionUrl) {
+						connectionUrl = data.suggestedUrl;
+					}
+				})
+				.catch(() => {});
 		}
 	});
 
@@ -151,7 +169,7 @@
 				{
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ url: connectionUrl.trim() }),
+					body: JSON.stringify({ url: connectionUrl.trim(), markAllInternal }),
 					signal: abortController.signal,
 				},
 			);
@@ -376,10 +394,8 @@
 								spellcheck="false"
 							/>
 							<div class="label">
-								<span class="label-text-alt text-base-content/50">
-									Must start with <code>postgres://</code> or
-									<code>postgresql://</code>. Password is stored locally in
-									<code>~/.config/jat/projects.json</code>.
+								<span class="label-text-alt text-base-content/50 break-words min-w-0">
+									Must start with <code>postgres://</code> or <code>postgresql://</code>.
 								</span>
 							</div>
 						</div>
@@ -417,54 +433,68 @@
 
 			<!-- Step 2: Preview -->
 			{#if step === 2 && previewSummary}
+				{@const bd = previewSummary.breakdown}
+				{@const statusOrder = ['open', 'in_progress', 'blocked', 'closed']}
+				{@const statusColors: Record<string, string> = { open: 'text-info', in_progress: 'text-warning', blocked: 'text-error', closed: 'text-success' }}
+				{@const typeOrder = ['task', 'bug', 'feature', 'epic', 'chore']}
+				{@const typeColors: Record<string, string> = { task: 'text-primary', bug: 'text-error', feature: 'text-success', epic: 'text-secondary', chore: 'text-base-content/60' }}
 				<div class="space-y-4">
 					<p class="text-sm text-base-content/70">
-						Connection verified. The following rows will be copied into
-						Postgres:
+						Connection verified. Here's what will be copied to Postgres:
 					</p>
 
-					<div class="grid grid-cols-4 gap-3">
-						<div
-							class="rounded-lg border border-base-300 p-3 text-center"
-						>
-							<div class="text-2xl font-bold font-mono text-primary">
-								{previewSummary.tasks}
+					<!-- Top-level counts -->
+					<div class="grid grid-cols-4 gap-2">
+						{#each [['Tasks', previewSummary.tasks, 'text-primary'], ['Deps', previewSummary.dependencies, 'text-primary'], ['Labels', previewSummary.labels, 'text-primary'], ['Comments', previewSummary.comments, 'text-primary']] as [label, count, cls]}
+							<div class="rounded-lg border border-base-300 p-2 text-center">
+								<div class="text-xl font-bold font-mono {cls}">{count}</div>
+								<div class="text-xs text-base-content/60 uppercase tracking-wide">{label}</div>
 							</div>
-							<div class="text-xs text-base-content/60 uppercase tracking-wide">
-								Tasks
-							</div>
-						</div>
-						<div
-							class="rounded-lg border border-base-300 p-3 text-center"
-						>
-							<div class="text-2xl font-bold font-mono text-primary">
-								{previewSummary.dependencies}
-							</div>
-							<div class="text-xs text-base-content/60 uppercase tracking-wide">
-								Deps
-							</div>
-						</div>
-						<div
-							class="rounded-lg border border-base-300 p-3 text-center"
-						>
-							<div class="text-2xl font-bold font-mono text-primary">
-								{previewSummary.labels}
-							</div>
-							<div class="text-xs text-base-content/60 uppercase tracking-wide">
-								Labels
-							</div>
-						</div>
-						<div
-							class="rounded-lg border border-base-300 p-3 text-center"
-						>
-							<div class="text-2xl font-bold font-mono text-primary">
-								{previewSummary.comments}
-							</div>
-							<div class="text-xs text-base-content/60 uppercase tracking-wide">
-								Comments
-							</div>
-						</div>
+						{/each}
 					</div>
+
+					<!-- Breakdown: status + type side by side -->
+					{#if bd}
+						<div class="grid grid-cols-2 gap-3">
+							<!-- By status -->
+							<div class="rounded-lg border border-base-300 p-3 space-y-1.5">
+								<div class="text-xs font-semibold text-base-content/50 uppercase tracking-wide mb-2">By Status</div>
+								{#each statusOrder as s}
+									{#if bd.byStatus[s]}
+										<div class="flex items-center justify-between text-sm">
+											<span class="capitalize {statusColors[s] ?? ''}">{s.replace('_', ' ')}</span>
+											<span class="font-mono font-semibold">{bd.byStatus[s]}</span>
+										</div>
+									{/if}
+								{/each}
+								{#each Object.entries(bd.byStatus).filter(([s]) => !statusOrder.includes(s)) as [s, n]}
+									<div class="flex items-center justify-between text-sm">
+										<span class="capitalize">{s}</span>
+										<span class="font-mono font-semibold">{n}</span>
+									</div>
+								{/each}
+							</div>
+
+							<!-- By type -->
+							<div class="rounded-lg border border-base-300 p-3 space-y-1.5">
+								<div class="text-xs font-semibold text-base-content/50 uppercase tracking-wide mb-2">By Type</div>
+								{#each typeOrder as t}
+									{#if bd.byType[t]}
+										<div class="flex items-center justify-between text-sm">
+											<span class="capitalize {typeColors[t] ?? ''}">{t}</span>
+											<span class="font-mono font-semibold">{bd.byType[t]}</span>
+										</div>
+									{/if}
+								{/each}
+								{#each Object.entries(bd.byType).filter(([t]) => !typeOrder.includes(t)) as [t, n]}
+									<div class="flex items-center justify-between text-sm">
+										<span class="capitalize">{t}</span>
+										<span class="font-mono font-semibold">{n}</span>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
 
 					<div class="rounded-lg bg-base-200 p-3 space-y-1 text-xs font-mono">
 						<div>
@@ -475,10 +505,28 @@
 							<span class="text-base-content/50">path:</span>
 							{previewSummary.projectPath}
 						</div>
-						<div>
+						<div class="break-all">
 							<span class="text-base-content/50">postgres:</span>
 							{maskUrl(connectionUrl)}
 						</div>
+					</div>
+
+					<div class="form-control">
+						<label class="label cursor-pointer justify-start gap-3" for="mark-internal-toggle">
+							<input
+								id="mark-internal-toggle"
+								type="checkbox"
+								class="toggle toggle-sm toggle-primary"
+								bind:checked={markAllInternal}
+							/>
+							<div>
+								<span class="label-text font-medium">Import all as internal</span>
+								<div class="text-xs text-base-content/50 mt-0.5">
+									Marks all imported tasks as internal (dev-only). Client/member
+									roles won't see them until explicitly published.
+								</div>
+							</div>
+						</label>
 					</div>
 
 					<div class="alert alert-warning text-xs">
@@ -497,8 +545,7 @@
 							/>
 						</svg>
 						<span>
-							This is a one-way migration. The local <code>.jat/tasks.db</code>
-							will be archived after the move.
+							One-way migration — local <code>.jat/tasks.db</code> is archived after the move. Tasks keep their original status, assignee, and type.
 						</span>
 					</div>
 				</div>

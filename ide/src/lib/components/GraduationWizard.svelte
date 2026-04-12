@@ -53,6 +53,8 @@
 		percent: 0,
 	});
 	let abortController: AbortController | null = null;
+	let copied = $state(false);
+	let graduatedTaskCount = $state(0);
 
 	// Reset state whenever the modal is opened for a new project
 	$effect(() => {
@@ -65,6 +67,8 @@
 			phase = 'idle';
 			errorMessage = null;
 			archivePath = null;
+			copied = false;
+			graduatedTaskCount = 0;
 			progress = { phase: 'idle', message: '', percent: 0 };
 		}
 	});
@@ -210,6 +214,7 @@
 			}
 
 			archivePath = result?.archivePath || null;
+			graduatedTaskCount = result?.summary?.tasks ?? previewSummary.tasks;
 			progress = { phase: 'complete', message: 'Graduation complete.', percent: 100 };
 			phase = 'done';
 			successToast(
@@ -233,6 +238,24 @@
 		else if (step === 3) step = 2;
 		phase = 'idle';
 		errorMessage = null;
+	}
+
+	const teammateCommand = $derived(
+		projectKey
+			? `jat join-project ${projectKey} --postgres-url '${connectionUrl.trim()}'`
+			: '',
+	);
+
+	async function copyTeammateCommand() {
+		if (!teammateCommand) return;
+		try {
+			await navigator.clipboard.writeText(teammateCommand);
+			copied = true;
+			successToast('Copied', 'Teammate setup command copied to clipboard');
+			setTimeout(() => (copied = false), 3000);
+		} catch {
+			errorToast('Copy failed', 'Could not copy to clipboard');
+		}
 	}
 </script>
 
@@ -491,43 +514,77 @@
 			<!-- Step 3: Confirm -->
 			{#if step === 3 && previewSummary}
 				{#if phase === 'done'}
-					<div class="space-y-3">
-						<div class="alert alert-success">
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								class="h-6 w-6 shrink-0"
-								fill="none"
-								viewBox="0 0 24 24"
-								stroke="currentColor"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-								/>
-							</svg>
-							<div>
-								<div class="font-semibold">Graduation complete</div>
-								<div class="text-xs opacity-80">
-									{previewSummary.tasks} tasks moved to Postgres.
-								</div>
+					<div class="space-y-4">
+						<!-- Celebration header -->
+						<div class="text-center py-3">
+							<div class="text-4xl mb-2">🎉</div>
+							<h4 class="text-lg font-bold">
+								<span class="font-mono">{projectKey}</span> is now on Team backend
+							</h4>
+							<div class="badge badge-success badge-sm mt-1 gap-1">
+								<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+								</svg>
+								Postgres
 							</div>
 						</div>
+
+						<!-- Migration stats -->
+						<div class="rounded-lg bg-base-200 p-3 text-center">
+							<div class="text-2xl font-bold font-mono text-success">
+								{graduatedTaskCount}
+							</div>
+							<div class="text-xs text-base-content/60 uppercase tracking-wide">
+								tasks migrated
+							</div>
+						</div>
+
+						<!-- Archive path -->
 						{#if archivePath}
 							<div class="text-xs text-base-content/60">
-								Local backup: <code class="font-mono">{archivePath}</code>
+								<span class="font-medium">Local backup:</span>
+								<code class="font-mono text-[0.7rem] break-all">{archivePath}</code>
 							</div>
 						{/if}
-						<p class="text-xs text-base-content/60">
-							Reopen the IDE to reload agents and settings on the new
-							backend.
-						</p>
+
+						<!-- Teammate setup command -->
+						<div class="rounded-lg border border-base-300 p-3 space-y-2">
+							<div class="text-sm font-semibold">Invite a teammate</div>
+							<p class="text-xs text-base-content/60">
+								They run this on their machine to join:
+							</p>
+							<div class="bg-base-300 rounded p-2 font-mono text-xs break-all select-all">
+								{teammateCommand}
+							</div>
+							<button
+								class="btn btn-sm w-full gap-2"
+								class:btn-primary={!copied}
+								class:btn-success={copied}
+								onclick={copyTeammateCommand}
+							>
+								{#if copied}
+									<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+									</svg>
+									Copied!
+								{:else}
+									<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+									</svg>
+									Copy teammate setup command
+								{/if}
+							</button>
+						</div>
 					</div>
+
 					<div class="modal-action">
-						<button class="btn btn-primary btn-sm" onclick={handleClose}>
-							Done
-						</button>
+						<a
+							href="/tasks?project={projectKey}"
+							class="btn btn-primary btn-sm"
+							onclick={handleClose}
+						>
+							View project
+						</a>
 					</div>
 				{:else}
 					<div class="space-y-4">

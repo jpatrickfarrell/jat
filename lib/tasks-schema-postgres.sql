@@ -1,4 +1,5 @@
 -- JAT task database schema — Postgres edition
+-- Status values: open, in_progress, blocked, closed, dev, submitted
 --
 -- Mirrors lib/tasks-schema.sql, adapted for Postgres:
 --   TEXT/INTEGER primary keys stay the same (ids are strings like "jat-abc12")

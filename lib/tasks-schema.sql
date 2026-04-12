@@ -1,5 +1,6 @@
 -- JAT task database schema
 -- Lightweight task tracking with 4 clean tables
+-- Status values: open, in_progress, blocked, closed, dev, submitted
 
 CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,

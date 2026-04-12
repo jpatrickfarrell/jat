@@ -939,6 +939,7 @@
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="drawer-panel fixed inset-0 z-50 flex flex-col overflow-hidden bg-base-100"
+		style="max-width: 100vw;"
 		transition:fly={{ y: globalThis.innerHeight || 900, duration: 300, easing: cubicOut }}
 		use:touchHandlers
 		use:focusInputOnHover

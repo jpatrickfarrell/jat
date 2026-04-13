@@ -40,6 +40,7 @@
 		"stripe": "^22.0.1",
 		"svelte-dnd-action": "^0.9.67",
 		"theme-change": "^2.5.0",
+		"web-push": "^3.6.7",
 		"ws": "^8.18.3"
 	},
 	"devDependencies": {

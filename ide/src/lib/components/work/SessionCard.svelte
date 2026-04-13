@@ -45,7 +45,7 @@
 		playNewTaskChime,
 		playCopySound,
 	} from "$lib/utils/soundEffects";
-import StatusActionBadge from "./StatusActionBadge.svelte";
+import StatusActionBadge from "./atoms/StatusActionBadge.svelte";
 	import ServerStatusBadge from "./ServerStatusBadge.svelte";
 	import TerminalActivitySparkline from "./TerminalActivitySparkline.svelte";
 	import { workSessionsState } from "$lib/stores/workSessions.svelte";
@@ -1109,6 +1109,15 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 			}
 		}
 
+		// Restore draft from localStorage (desktop input)
+		if (sessionName) {
+			const saved = localStorage.getItem(`${DRAFT_KEY_PREFIX}${sessionName}`);
+			if (saved) {
+				inputText = saved;
+				setTimeout(autoResizeTextarea, 0);
+			}
+		}
+
 		// Set up ResizeObserver after a short delay to ensure DOM is fully ready
 		// This auto-resizes tmux session to match the SessionCard width
 		// Add random stagger (0-200ms) to spread requests when multiple cards mount
@@ -1193,6 +1202,9 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 		}
 		if (streamDebounceTimer) {
 			clearTimeout(streamDebounceTimer);
+		}
+		if (draftDebounceTimer) {
+			clearTimeout(draftDebounceTimer);
 		}
 		if (resizeDebounceTimer) {
 			clearTimeout(resizeDebounceTimer);
@@ -1402,6 +1414,7 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 	const MAX_CARD_WIDTH = 1200; // Maximum card width in pixels
 	const DEFAULT_CARD_WIDTH = 720; // Default width for 80-column terminal output
 	const STORAGE_KEY_PREFIX = "workcard-width-";
+	const DRAFT_KEY_PREFIX = "jat-draft-desktop-";
 
 	// Tmux height configuration (from unified preferences store)
 	const MIN_TMUX_HEIGHT = 20;
@@ -1655,6 +1668,32 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 	let lastStreamedText = $state(""); // Track what we've already sent to terminal
 	let streamDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 	const STREAM_DEBOUNCE_MS = 50; // Short debounce for responsive feel
+	let draftDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function clearDraft() {
+		if (sessionName) {
+			localStorage.removeItem(`${DRAFT_KEY_PREFIX}${sessionName}`);
+		}
+		if (draftDebounceTimer) {
+			clearTimeout(draftDebounceTimer);
+			draftDebounceTimer = null;
+		}
+	}
+
+	// Debounced autosave of inputText to localStorage (300ms)
+	$effect(() => {
+		const text = inputText;
+		if (!sessionName) return;
+		if (draftDebounceTimer) clearTimeout(draftDebounceTimer);
+		draftDebounceTimer = setTimeout(() => {
+			if (text) {
+				localStorage.setItem(`${DRAFT_KEY_PREFIX}${sessionName}`, text);
+			} else {
+				localStorage.removeItem(`${DRAFT_KEY_PREFIX}${sessionName}`);
+			}
+		}, 300);
+	});
+
 	let isStreaming = $state(false); // Track if we're actively streaming
 
 	// Track the "high water mark" of text we've sent - this prevents re-sending
@@ -4388,6 +4427,7 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 
 			// Clear input and attached files on success
 			inputText = "";
+			clearDraft(); // Remove saved draft on successful send
 			lastStreamedText = ""; // Reset streamed text tracking
 			maxStreamedLength = 0; // Reset high water mark after submit
 			// Reset textarea height after clearing
@@ -4539,6 +4579,7 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 			// Claude Code: 2x Escape = clear, 3x Escape = history dialog
 			e.preventDefault();
 			inputText = "";
+			clearDraft();
 			if (onSendInput) {
 				onSendInput("escape", "key");
 				// Small delay between escapes to ensure they're registered separately
@@ -4558,6 +4599,7 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 			// (Only when intercept is enabled; otherwise let browser handle copy)
 			e.preventDefault();
 			inputText = "";
+			clearDraft();
 			lastStreamedText = "";
 			maxStreamedLength = 0; // Reset high water mark on Ctrl+C
 			setTimeout(autoResizeTextarea, 0);
@@ -7701,6 +7743,7 @@ import StatusActionBadge from "./StatusActionBadge.svelte";
 									(e.currentTarget.style.color = "oklch(0.55 0.02 250)")}
 								onclick={() => {
 									inputText = "";
+									clearDraft();
 									lastStreamedText = "";
 									maxStreamedLength = 0;
 									setTimeout(handleInputChange, 0);

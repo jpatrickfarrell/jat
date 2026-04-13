@@ -20,7 +20,7 @@
 	import { cubicOut } from 'svelte/easing';
 	import MobileTerminal from '$lib/components/work/MobileTerminal.svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
-	import MobileTaskBody from '$lib/components/work/mobile/MobileTaskBody.svelte';
+	import MobileTaskBody from '$lib/components/work/atoms/MobileTaskBody.svelte';
 	import { getElapsedFormatted } from '$lib/utils/elapsedTime';
 	import {
 		TaskFieldLabel,
@@ -334,6 +334,9 @@
 	let keyboardOpen = $state(false);
 	let inputRef: HTMLTextAreaElement | null = $state(null);
 
+	// Draft persistence — debounce timer for autosave
+	let mainDraftTimer: ReturnType<typeof setTimeout> | null = null;
+
 	// Pending file attachments (staged before sending)
 	interface PendingAttachment {
 		id: string;
@@ -496,6 +499,9 @@
 			await new Promise(r => setTimeout(r, 100));
 			await onSendInput('', 'enter'); // type='enter' → API sends Enter key (not literal text)
 			inputText = '';
+			if (sessionName && typeof localStorage !== 'undefined') {
+				localStorage.removeItem(`jat-draft-mobile-${sessionName}-main-input`);
+			}
 		}
 	}
 
@@ -910,6 +916,21 @@
 		}
 	});
 
+	// Autosave main input draft to localStorage (debounced 300ms)
+	$effect(() => {
+		const text = inputText;
+		if (!sessionName || typeof localStorage === 'undefined') return;
+		if (mainDraftTimer) clearTimeout(mainDraftTimer);
+		mainDraftTimer = setTimeout(() => {
+			const key = `jat-draft-mobile-${sessionName}-main-input`;
+			if (text.trim()) {
+				localStorage.setItem(key, text);
+			} else {
+				localStorage.removeItem(key);
+			}
+		}, 300);
+	});
+
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape') {
 			e.preventDefault();
@@ -923,12 +944,19 @@
 		isMobileFullscreenOpen.set(true);
 		setHoveredSession(sessionName);
 
+		// Restore main input draft
+		if (sessionName && typeof localStorage !== 'undefined') {
+			const saved = localStorage.getItem(`jat-draft-mobile-${sessionName}-main-input`);
+			if (saved) inputText = saved;
+		}
+
 		// Start polling output — 3s on mobile is responsive enough and much lighter
 		fetchOutput();
 		pollInterval = setInterval(fetchOutput, 3000);
 	});
 
 	onDestroy(() => {
+		if (mainDraftTimer) clearTimeout(mainDraftTimer);
 		if (pollInterval) {
 			clearInterval(pollInterval);
 			pollInterval = null;

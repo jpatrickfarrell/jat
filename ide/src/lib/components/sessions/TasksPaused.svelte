@@ -8,7 +8,7 @@
 	 */
 
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
-	import StatusActionBadge from '$lib/components/work/StatusActionBadge.svelte';
+	import StatusActionBadge from '$lib/components/work/atoms/StatusActionBadge.svelte';
 
 	// Types
 	interface PausedSession {

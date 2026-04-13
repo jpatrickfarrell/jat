@@ -7,7 +7,7 @@
 	 */
 
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
-	import StatusActionBadge from '$lib/components/work/StatusActionBadge.svelte';
+	import StatusActionBadge from '$lib/components/work/atoms/StatusActionBadge.svelte';
 	import type { SessionState } from '$lib/config/statusColors';
 
 	// Normalized row item that works for all three modes

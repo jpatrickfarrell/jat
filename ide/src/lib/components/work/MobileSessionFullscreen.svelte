@@ -15,7 +15,7 @@
 
 	import { onMount, onDestroy } from 'svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
-	import StatusActionBadge from '$lib/components/work/StatusActionBadge.svelte';
+	import StatusActionBadge from '$lib/components/work/atoms/StatusActionBadge.svelte';
 	import { ansiToHtmlWithLinks } from '$lib/utils/ansiToHtml';
 	import { getSessionStateVisual, type SessionState, type SessionStateAction } from '$lib/config/statusColors';
 	import { setHoveredSession } from '$lib/stores/hoveredSession';

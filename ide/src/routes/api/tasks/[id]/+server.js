@@ -170,6 +170,9 @@ export async function PUT({ params, request }) {
 		if (updates.notes !== undefined) {
 			updateFields.notes = updates.notes ? updates.notes.trim() : '';
 		}
+		if (updates.reserved_files !== undefined) {
+			updateFields.reserved_files = updates.reserved_files ? updates.reserved_files.trim() : null;
+		}
 		// Handle scheduling fields in PUT
 		if (updates.command !== undefined) {
 			updateFields.command = updates.command ? updates.command.trim() : null;

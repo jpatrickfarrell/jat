@@ -73,6 +73,336 @@ require_sqlite_backend() {
   fi
 }
 
+# ---------------------------------------------------------------------------
+# Postgres / IDE REST proxy helpers
+# Used when backend=postgres; proxies jt commands to localhost IDE API.
+# ---------------------------------------------------------------------------
+
+# Resolve the IDE port for the current project from projects.json.
+resolve_ide_port() {
+  local config="$HOME/.config/jat/projects.json"
+  [[ -f "$config" ]] || { echo ""; return; }
+  command -v jq >/dev/null 2>&1 || { echo ""; return; }
+  jq -r --arg root "$PROJECT_ROOT" --arg home "$HOME" '
+    .projects // {} | to_entries[] |
+    select((.value.path // "" | gsub("^~"; $home)) == $root) |
+    (.value.port // "") | tostring
+  ' "$config" 2>/dev/null | head -n1
+}
+
+# Resolve the project key name from projects.json (used as ?project= param).
+resolve_project_name() {
+  local config="$HOME/.config/jat/projects.json"
+  [[ -f "$config" ]] || { echo ""; return; }
+  command -v jq >/dev/null 2>&1 || { echo ""; return; }
+  jq -r --arg root "$PROJECT_ROOT" --arg home "$HOME" '
+    .projects // {} | to_entries[] |
+    select((.value.path // "" | gsub("^~"; $home)) == $root) |
+    .key
+  ' "$config" 2>/dev/null | head -n1
+}
+
+# Make a curl request to the IDE REST API.
+# Usage: pg_curl GET /api/tasks/id
+#        pg_curl PUT /api/tasks/id '{"status":"closed"}'
+#        pg_curl POST /api/tasks/id/close '{"reason":"Done"}'
+pg_curl() {
+  local method="$1" path="$2" data="${3:-}"
+  local port
+  port="$(resolve_ide_port)"
+  if [[ -z "$port" || "$port" == "null" ]]; then
+    die "Cannot proxy to IDE: no port configured for this project in ~/.config/jat/projects.json"
+  fi
+  if [[ -n "$data" ]]; then
+    curl -sf --max-time 10 -X "$method" "http://127.0.0.1:${port}${path}" \
+      -H "Content-Type: application/json" --data "$data" 2>/dev/null
+  else
+    curl -sf --max-time 10 -X "$method" "http://127.0.0.1:${port}${path}" 2>/dev/null
+  fi
+}
+
+# Assert IDE is running; die with a helpful message if not.
+require_ide_reachable() {
+  local port
+  port="$(resolve_ide_port)"
+  if [[ -z "$port" || "$port" == "null" ]]; then
+    die "Project uses postgres backend but no IDE port is configured. Add 'port' to this project in ~/.config/jat/projects.json."
+  fi
+  if ! curl -sf --max-time 2 "http://127.0.0.1:${port}/" >/dev/null 2>&1; then
+    die "Project uses postgres backend. Start the JAT IDE (run: jat) first — the API at localhost:${port} is not reachable."
+  fi
+}
+
+# Transform IDE API response (various formats) to a JSON array matching jt output.
+# Handles: {task:{...}}, {tasks:[...]}, {success:true,task:{...}}, [{...}]
+_pg_normalize_tasks() {
+  python3 -c "
+import sys, json
+raw = json.load(sys.stdin)
+if isinstance(raw, list):
+    items = raw
+elif isinstance(raw, dict):
+    if 'task' in raw and isinstance(raw.get('task'), dict):
+        items = [raw['task']]
+    elif 'tasks' in raw:
+        items = raw['tasks']
+    else:
+        items = [raw]
+else:
+    items = []
+result = []
+for t in items:
+    if not t:
+        continue
+    for key in ('labels', 'dependencies', 'dependents'):
+        val = t.get(key)
+        if isinstance(val, str):
+            try:
+                t[key] = json.loads(val)
+            except (json.JSONDecodeError, TypeError):
+                t[key] = []
+        elif val is None:
+            t[key] = []
+    if 'issue_type' not in t and 'type' in t:
+        t['issue_type'] = t['type']
+    result.append(t)
+json.dump(result, sys.stdout, indent=2)
+print()
+"
+}
+
+# pg_show: print task from IDE API (mirrors cmd_show)
+pg_show() {
+  local task_id="$1" json_out="${2:-false}"
+  require_ide_reachable
+  local response
+  response="$(pg_curl GET "/api/tasks/${task_id}")" || die "Task not found: ${task_id}"
+  if echo "$response" | jq -e '.error' >/dev/null 2>&1; then
+    die "Task not found: ${task_id}"
+  fi
+  local normalized
+  normalized="$(echo "$response" | _pg_normalize_tasks)"
+  if [[ "$json_out" == "true" ]]; then
+    echo "$normalized"
+  else
+    echo "$normalized" | _pretty_print_task
+  fi
+}
+
+# pg_update: update task via IDE API (mirrors cmd_update flags)
+# Usage: pg_update TASK_ID [--status X] [--assignee X] [--files X] [--priority N]
+#                          [--title X] [--description X] [--notes X] [--labels X] [--json]
+pg_update() {
+  local task_id="$1"
+  shift
+  local json_out=false
+  local payload="{}"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --status)      payload="$(echo "$payload" | jq --arg v "$2" '. + {status: $v}')"; shift 2 ;;
+      --priority)    payload="$(echo "$payload" | jq --argjson v "$2" '. + {priority: $v}')"; shift 2 ;;
+      --title)       payload="$(echo "$payload" | jq --arg v "$2" '. + {title: $v}')"; shift 2 ;;
+      --description) payload="$(echo "$payload" | jq --arg v "$2" '. + {description: $v}')"; shift 2 ;;
+      --notes)       payload="$(echo "$payload" | jq --arg v "$2" '. + {notes: $v}')"; shift 2 ;;
+      --assignee)    payload="$(echo "$payload" | jq --arg v "$2" '. + {assignee: $v}')"; shift 2 ;;
+      --files)       payload="$(echo "$payload" | jq --arg v "$2" '. + {reserved_files: $v}')"; shift 2 ;;
+      --labels)      payload="$(echo "$payload" | jq --arg v "$2" '. + {labels: ($v | split(",") | map(ltrimstr(" ") | rtrimstr(" ")))}')"; shift 2 ;;
+      --json)        json_out=true; shift ;;
+      # silently skip flags not supported via REST (--command, --agent-program, etc.)
+      --command|--agent-program|--model|--schedule-cron|--next-run-at|--due-date) shift 2 ;;
+      *) shift ;;
+    esac
+  done
+
+  require_ide_reachable
+  local response
+  response="$(pg_curl PUT "/api/tasks/${task_id}" "$payload")" || die "Failed to update task: ${task_id}"
+  if echo "$response" | jq -e '.error' >/dev/null 2>&1; then
+    local err_msg
+    err_msg="$(echo "$response" | jq -r '.error // .message // "unknown"')"
+    die "Failed to update task ${task_id}: ${err_msg}"
+  fi
+  if $json_out; then
+    echo "$response" | _pg_normalize_tasks
+  else
+    echo "Updated $task_id"
+  fi
+}
+
+# pg_close: close task via IDE API (mirrors cmd_close)
+pg_close() {
+  local task_id="$1"
+  shift
+  local reason="" json_out=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --reason) reason="$2"; shift 2 ;;
+      --json)   json_out=true; shift ;;
+      *)        shift ;;
+    esac
+  done
+
+  require_ide_reachable
+  local payload
+  payload="$(jq -n --arg r "$reason" '{reason: $r}')"
+  local response
+  response="$(pg_curl POST "/api/tasks/${task_id}/close" "$payload")" || die "Failed to close task: ${task_id}"
+  if echo "$response" | jq -e '.error' >/dev/null 2>&1; then
+    local err_msg
+    err_msg="$(echo "$response" | jq -r '.error // .message // "unknown"')"
+    die "Failed to close task ${task_id}: ${err_msg}"
+  fi
+  if $json_out; then
+    echo "$response" | _pg_normalize_tasks
+  else
+    echo "Closed $task_id"
+  fi
+}
+
+# pg_list: list tasks via IDE API (mirrors cmd_list)
+pg_list() {
+  local status="" type="" limit="" json_out=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --status) status="$2"; shift 2 ;;
+      --type)   type="$2"; shift 2 ;;
+      --limit)  limit="$2"; shift 2 ;;
+      --json)   json_out=true; shift ;;
+      *)        shift ;;
+    esac
+  done
+
+  local project_name
+  project_name="$(resolve_project_name)"
+  [[ -n "$project_name" ]] || die "Could not determine project name from ~/.config/jat/projects.json"
+
+  local params="project=${project_name}"
+  [[ -n "$status" ]] && params="${params}&status=${status}"
+  [[ -n "$limit" ]] && params="${params}&limit=${limit}"
+
+  require_ide_reachable
+  local response normalized
+  response="$(pg_curl GET "/api/tasks?${params}")" || die "Failed to list tasks"
+  normalized="$(echo "$response" | _pg_normalize_tasks)"
+
+  if $json_out; then
+    echo "$normalized"
+  else
+    if [[ "$(echo "$normalized" | jq 'length')" == "0" ]]; then
+      echo "No tasks found."
+    else
+      echo "$normalized" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for t in data:
+    labels = t.get('labels', [])
+    lbl_str = (' [' + ', '.join(labels) + ']') if labels else ''
+    assignee = (' @' + t['assignee']) if t.get('assignee') else ''
+    print(f\"  [P{t['priority']}] {t['id']}: {t['title']}{lbl_str}{assignee} ({t['status']})\")
+"
+    fi
+  fi
+}
+
+# pg_ready: return open tasks via IDE API (mirrors cmd_ready; no dep-filtering)
+pg_ready() {
+  local limit="" json_out=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json)  json_out=true; shift ;;
+      --limit) limit="$2"; shift 2 ;;
+      *)       shift ;;
+    esac
+  done
+
+  local project_name
+  project_name="$(resolve_project_name)"
+  [[ -n "$project_name" ]] || die "Could not determine project name from ~/.config/jat/projects.json"
+
+  local params="project=${project_name}&status=open"
+  [[ -n "$limit" ]] && params="${params}&limit=${limit}"
+
+  require_ide_reachable
+  local response normalized
+  response="$(pg_curl GET "/api/tasks?${params}")" || die "Failed to fetch ready tasks"
+  normalized="$(echo "$response" | _pg_normalize_tasks)"
+
+  if $json_out; then
+    echo "$normalized"
+  else
+    if [[ "$(echo "$normalized" | jq 'length')" == "0" ]]; then
+      echo "No ready tasks."
+    else
+      echo "Ready tasks:"
+      echo "$normalized" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for t in data:
+    labels = t.get('labels', [])
+    lbl_str = (' [' + ', '.join(labels) + ']') if labels else ''
+    print(f\"  [P{t['priority']}] {t['id']}: {t['title']}{lbl_str}\")
+"
+    fi
+  fi
+}
+
+# pg_search: search tasks via IDE API (mirrors cmd_search)
+pg_search() {
+  local query="" status="" limit=50 json_out=false updated_after=""
+
+  if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
+    query="$1"; shift
+  fi
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json)          json_out=true; shift ;;
+      --limit)         limit="$2"; shift 2 ;;
+      --status)        status="$2"; shift 2 ;;
+      --updated-after) updated_after="$2"; shift 2 ;;
+      *)               [[ -z "$query" ]] && query="$1"; shift ;;
+    esac
+  done
+
+  [[ -n "$query" ]] || die "Usage: jt search \"query\" [--status X] [--limit N] [--json]"
+
+  local project_name
+  project_name="$(resolve_project_name)"
+  [[ -n "$project_name" ]] || die "Could not determine project name from ~/.config/jat/projects.json"
+
+  local encoded_query
+  encoded_query="$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$query")"
+  local params="project=${project_name}&search=${encoded_query}&limit=${limit}"
+  [[ -n "$status" ]] && params="${params}&status=${status}"
+
+  require_ide_reachable
+  local response normalized
+  response="$(pg_curl GET "/api/tasks?${params}")" || die "Failed to search tasks"
+  normalized="$(echo "$response" | _pg_normalize_tasks)"
+
+  if $json_out; then
+    echo "$normalized"
+  else
+    if [[ "$(echo "$normalized" | jq 'length')" == "0" ]]; then
+      echo "No tasks found matching: $query"
+    else
+      echo "$normalized" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for t in data:
+    labels = t.get('labels', [])
+    lbl_str = (' [' + ', '.join(labels) + ']') if labels else ''
+    assignee = (' @' + t['assignee']) if t.get('assignee') else ''
+    print(f\"  [P{t['priority']}] {t['id']}: {t['title']}{lbl_str}{assignee} ({t['status']})\")
+"
+    fi
+  fi
+}
+
 # Get project prefix from directory name
 project_prefix() {
   basename "$PROJECT_ROOT" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-'
@@ -505,7 +835,7 @@ cmd_create() {
 }
 
 cmd_update() {
-  require_db
+  local all_args=("$@")
   local task_id="" json_out=false new_labels="" new_status=""
   local -a sets=()
 
@@ -537,6 +867,14 @@ cmd_update() {
   done
 
   [[ -n "$task_id" ]] || die "Usage: jt update TASK_ID [--status X] [--priority N] [--assignee X] [--files \"globs\"] [--title X] [--command CMD] [--agent-program X] [--model X] [--schedule-cron EXPR] [--next-run-at ISO] [--due-date ISO] [--json]"
+
+  # Postgres-backed project: proxy through IDE REST API
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_update "$task_id" "${all_args[@]:1}"
+    return
+  fi
+
+  require_db
 
   # Check task exists
   local exists
@@ -594,7 +932,6 @@ cmd_update() {
 }
 
 cmd_close() {
-  require_db
   local task_id="" reason="" json_out=false
 
   if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
@@ -610,6 +947,17 @@ cmd_close() {
   done
 
   [[ -n "$task_id" ]] || die "Usage: jt close TASK_ID [--reason \"...\"] [--json]"
+
+  # Postgres-backed project: proxy through IDE REST API
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    local pg_close_args=()
+    [[ -n "$reason" ]] && pg_close_args+=(--reason "$reason")
+    $json_out && pg_close_args+=(--json)
+    pg_close "$task_id" "${pg_close_args[@]}"
+    return
+  fi
+
+  require_db
 
   local exists
   exists="$(sql_json "SELECT id FROM tasks WHERE id = '$(sql_escape "$task_id")';" 2>/dev/null)"
@@ -800,7 +1148,6 @@ _task_json() {
 }
 
 cmd_show() {
-  require_db
   local task_id="" json_out=false
 
   if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
@@ -816,6 +1163,13 @@ cmd_show() {
 
   [[ -n "$task_id" ]] || die "Usage: jt show TASK_ID [--json]"
 
+  # Postgres-backed project: proxy through IDE REST API
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_show "$task_id" "$json_out"
+    return
+  fi
+
+  require_db
   local result
   result="$(_task_json "$task_id")"
 
@@ -900,7 +1254,6 @@ for t in data:
 }
 
 cmd_list() {
-  require_db
   local status="" type="" json_out=false limit=""
 
   while [[ $# -gt 0 ]]; do
@@ -912,6 +1265,19 @@ cmd_list() {
       *)        shift ;;
     esac
   done
+
+  # Postgres-backed project: proxy through IDE REST API
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    local pg_list_args=()
+    [[ -n "$status" ]] && pg_list_args+=(--status "$status")
+    [[ -n "$type" ]]   && pg_list_args+=(--type "$type")
+    [[ -n "$limit" ]]  && pg_list_args+=(--limit "$limit")
+    $json_out && pg_list_args+=(--json)
+    pg_list "${pg_list_args[@]}"
+    return
+  fi
+
+  require_db
 
   local where="1=1"
   [[ -n "$status" ]] && where="$where AND status = '$(sql_escape "$status")'"
@@ -961,7 +1327,6 @@ for t in data:
 }
 
 cmd_ready() {
-  require_db
   local json_out=false limit=""
 
   while [[ $# -gt 0 ]]; do
@@ -971,6 +1336,17 @@ cmd_ready() {
       *)       shift ;;
     esac
   done
+
+  # Postgres-backed project: proxy through IDE REST API
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    local pg_ready_args=()
+    [[ -n "$limit" ]] && pg_ready_args+=(--limit "$limit")
+    $json_out && pg_ready_args+=(--json)
+    pg_ready "${pg_ready_args[@]}"
+    return
+  fi
+
+  require_db
 
   local limit_clause=""
   if [[ -n "$limit" ]]; then
@@ -1183,8 +1559,6 @@ for item in json.load(sys.stdin):
 }
 
 cmd_search() {
-  require_db
-  ensure_fts
   local query="" updated_after="" limit=50 json_out=false status="" type="" labels_filter=""
 
   if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
@@ -1205,6 +1579,19 @@ cmd_search() {
 
   [[ -n "$query" ]] || die "Usage: jt search \"query\" [--status X] [--type X] [--labels \"a,b\"] [--updated-after DATE] [--limit N] [--json]"
 
+  # Postgres-backed project: proxy through IDE REST API
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    local pg_search_args=("$query")
+    [[ -n "$status" ]]        && pg_search_args+=(--status "$status")
+    [[ -n "$limit" ]]         && pg_search_args+=(--limit "$limit")
+    [[ -n "$updated_after" ]] && pg_search_args+=(--updated-after "$updated_after")
+    $json_out && pg_search_args+=(--json)
+    pg_search "${pg_search_args[@]}"
+    return
+  fi
+
+  require_db
+  ensure_fts
   require_integer "$limit" "--limit"
 
   # Build SQL filter clauses

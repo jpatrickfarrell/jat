@@ -101,3 +101,34 @@ ALTER TABLE project_tasks
 
 ALTER TABLE project_tasks DROP CONSTRAINT IF EXISTS project_tasks_issue_type_check;
 ALTER TABLE project_tasks DROP CONSTRAINT IF EXISTS feedback_reports_issue_type_check;
+
+-- ============================================================
+-- 8. Previous assignee tracking
+--
+-- When assignee_id changes (agent spawn takes a task, user clicks
+-- "take it", manual reassignment), stash the prior value here so
+-- completion flows can restore it without the app having to read
+-- and pass it around.
+--
+-- Trigger fires BEFORE UPDATE and only when assignee_id is
+-- actually changing (IS DISTINCT FROM handles NULL correctly).
+-- ============================================================
+
+ALTER TABLE project_tasks
+  ADD COLUMN IF NOT EXISTS previous_assignee_id UUID;
+
+CREATE OR REPLACE FUNCTION project_tasks_stash_prev_assignee()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.assignee_id IS DISTINCT FROM OLD.assignee_id THEN
+    NEW.previous_assignee_id := OLD.assignee_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_project_tasks_stash_prev_assignee ON project_tasks;
+CREATE TRIGGER trg_project_tasks_stash_prev_assignee
+  BEFORE UPDATE ON project_tasks
+  FOR EACH ROW
+  EXECUTE FUNCTION project_tasks_stash_prev_assignee();

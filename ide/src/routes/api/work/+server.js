@@ -804,10 +804,19 @@ async function computeWorkData(lines, includeUsage, captureAll = false) {
 				// renames the tmux session when registering the agent
 				const agentName = session.name.replace(/^jat-/, '');
 
-				// Get task for this agent (DB lookup, then signal file fallback)
+				// Get task for this agent
+				// Priority: signal task wins when agent is actively "working" (cross-project aware),
+				// otherwise DB task wins, then any signal task, then null.
+				// This handles postgres-backend projects whose tasks don't appear in agentTaskMap
+				// (which is SQLite-only). When an agent emits `working` with a meadow/postgres taskId,
+				// we trust that self-declaration over a potentially stale SQLite assignment.
+				const sessionSignalState = preSignalStates.get(session.name);
+				const signalTask = readSignalTask(session.name);
+				const dbTask = /** @type {Task|undefined} */ (agentTaskMap.get(agentName));
 				/** @type {Task|null} */
-				const task = /** @type {Task|undefined} */ (agentTaskMap.get(agentName))
-					|| readSignalTask(session.name)
+				const task = (sessionSignalState === 'working' && signalTask ? signalTask : null)
+					|| dbTask
+					|| signalTask
 					|| null;
 
 				// Get last completed task for this agent (for completion state display)

@@ -163,8 +163,17 @@ if [[ "$IS_STATE_SIGNAL" == "true" ]]; then
             # working requires taskId and taskTitle
             HAS_TASK_ID=$(echo "$PARSED_DATA" | jq -r '.taskId // ""' 2>/dev/null)
             HAS_TASK_TITLE=$(echo "$PARSED_DATA" | jq -r '.taskTitle // ""' 2>/dev/null)
-            if [[ -z "$HAS_TASK_ID" ]] || [[ -z "$HAS_TASK_TITLE" ]]; then
-                exit 0  # Silently skip incomplete working signals
+            if [[ -z "$HAS_TASK_ID" ]]; then
+                exit 0  # Silently skip signals with no taskId
+            fi
+            if [[ -z "$HAS_TASK_TITLE" ]]; then
+                # Missing taskTitle — try to look it up via jt show (supports both sqlite and postgres)
+                LOOKED_UP_TITLE=$(jt show "$HAS_TASK_ID" --json 2>/dev/null | jq -r '.title // ""' 2>/dev/null || echo "")
+                if [[ -n "$LOOKED_UP_TITLE" ]]; then
+                    PARSED_DATA=$(echo "$PARSED_DATA" | jq -c --arg title "$LOOKED_UP_TITLE" '. + {taskTitle: $title}' 2>/dev/null || echo "$PARSED_DATA")
+                else
+                    exit 0  # Can't resolve title, skip incomplete signal
+                fi
             fi
             ;;
         review)
@@ -198,7 +207,19 @@ if [[ "$IS_STATE_SIGNAL" == "true" ]]; then
                 exit 0  # Silently skip incomplete question signals
             fi
             ;;
-        # idle, starting, compacting are more flexible
+        starting)
+            # starting: if taskId is present but taskTitle is missing, auto-lookup via jt show
+            # This fixes meadow/postgres tasks where the agent may not know the title at start time
+            START_TASK_ID=$(echo "$PARSED_DATA" | jq -r '.taskId // ""' 2>/dev/null)
+            START_TASK_TITLE=$(echo "$PARSED_DATA" | jq -r '.taskTitle // ""' 2>/dev/null)
+            if [[ -n "$START_TASK_ID" ]] && [[ -z "$START_TASK_TITLE" ]]; then
+                LOOKED_UP_TITLE=$(jt show "$START_TASK_ID" --json 2>/dev/null | jq -r '.title // ""' 2>/dev/null || echo "")
+                if [[ -n "$LOOKED_UP_TITLE" ]]; then
+                    PARSED_DATA=$(echo "$PARSED_DATA" | jq -c --arg title "$LOOKED_UP_TITLE" '. + {taskTitle: $title}' 2>/dev/null || echo "$PARSED_DATA")
+                fi
+            fi
+            ;;
+        # idle, compacting are more flexible
     esac
 fi
 

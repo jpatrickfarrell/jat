@@ -4,6 +4,8 @@ Essential tools and capabilities available to all JAT agents. This context is au
 
 ## Task Management (jt)
 
+`jt` works on **both SQLite and postgres-backed projects** (e.g. graduated meadow projects). For postgres projects it transparently proxies through the IDE REST API — the JAT IDE must be running (`jat` command) when working on postgres projects.
+
 ```bash
 jt ready --json                    # Find available work (highest priority, no blockers)
 jt show <id> --json                # View task details
@@ -15,6 +17,8 @@ jt close <id> --reason "Completed"
 
 **Status values:** `open`, `in_progress`, `blocked`, `closed`, `dev`, `submitted` (use underscores)
 **Task types:** `bug`, `feature`, `task`, `epic`, `chore`, `chat`
+
+> **Postgres note:** `jt ready` on postgres returns all open tasks (dependency filtering is SQLite-only). The JAT IDE at the project's configured port must be running.
 
 ### Dependencies
 

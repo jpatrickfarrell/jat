@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     priority INTEGER NOT NULL DEFAULT 2,
     issue_type TEXT NOT NULL DEFAULT 'task',
     assignee TEXT,
+    previous_assignee TEXT,
     reserved_files TEXT,
     parent_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
     command TEXT DEFAULT '/jat:start',
@@ -89,6 +90,16 @@ END;
 CREATE TRIGGER IF NOT EXISTS tasks_fts_au AFTER UPDATE OF title, description, labels_text ON tasks BEGIN
     INSERT INTO tasks_fts(rowid, title, description, labels_text)
     VALUES (new.rowid, new.title, COALESCE(new.description, ''), COALESCE(new.labels_text, ''));
+END;
+
+-- Auto-stash previous assignee whenever assignee changes.
+-- Mirrors the postgres project_tasks trigger so completion flows can
+-- restore the prior owner without explicit application bookkeeping.
+CREATE TRIGGER IF NOT EXISTS tasks_stash_prev_assignee
+AFTER UPDATE OF assignee ON tasks
+WHEN NEW.assignee IS NOT OLD.assignee
+BEGIN
+    UPDATE tasks SET previous_assignee = OLD.assignee WHERE id = NEW.id;
 END;
 
 -- Sync triggers: labels table → tasks.labels_text → FTS index (cascading)

@@ -32,7 +32,26 @@ import {
 	AGENT_MAIL_URL
 } from '$lib/config/spawnConfig.js';
 import { getTaskById, updateTask } from '$lib/server/jat-tasks.js';
+import { resolveBackendForProject } from '../../../../../../lib/projects-config.js';
 import { getProjectPath, getJatDefaults, getProjectConfig } from '$lib/server/projectPaths.js';
+
+/**
+ * Return async postgres backend if taskId belongs to a graduated project.
+ * Otherwise returns null (caller falls back to sqlite updateTask/getTaskById).
+ */
+async function getPgBackendForTask(taskId) {
+	if (!taskId) return null;
+	const match = taskId.match(/^([a-zA-Z0-9_-]+?)-[a-zA-Z0-9.]+$/);
+	if (!match) return null;
+	try {
+		const backendConfig = resolveBackendForProject(match[1]);
+		if (backendConfig.kind !== 'postgres') return null;
+		const { getBackendForProject } = await import('../../../../../../lib/tasks-backend.js');
+		return getBackendForProject(match[1]);
+	} catch {
+		return null;
+	}
+}
 import { routeAgent } from '$lib/server/agentRouter.js';
 import {
 	evaluateRouting,
@@ -932,10 +951,12 @@ export async function POST({ request }) {
 		const jatDefaults = await getJatDefaults();
 
 		// Step 0: Fetch task data early (needed for routing rule evaluation)
+		// Route to postgres backend for graduated projects (e.g. meadow), sqlite otherwise.
+		const pgBackend = await getPgBackendForTask(taskId);
 		let task = null;
 		if (taskId) {
 			try {
-				task = getTaskById(taskId);
+				task = pgBackend ? await pgBackend.getById(taskId) : getTaskById(taskId);
 			} catch (err) {
 				console.warn(`[spawn] Could not fetch task ${taskId} for routing:`, err);
 			}
@@ -997,18 +1018,22 @@ export async function POST({ request }) {
 		console.log(`[spawn] Registered agent ${agentName} in Agent Mail database (id: ${registerResult.agentId})`)
 
 		// Step 2: Assign task to new agent in JAT (if taskId provided)
-		// Always use local SQLite for task assignment — it's the agent-facing
-		// store regardless of whether the project is graduated to Postgres.
-		// The jat-team sync service (future) will push status changes upstream.
+		// Route to postgres backend for graduated projects, sqlite otherwise.
 		if (taskId) {
 			try {
-				updateTask(taskId, {
+				const updates = {
 					status: 'in_progress',
 					assignee: agentName,
 					agent_program: selectedAgent.id,
 					model: selectedModel.shortName,
-				});
-				console.log(`[spawn] Assigned task ${taskId} to ${agentName} in local SQLite`);
+				};
+				if (pgBackend) {
+					await pgBackend.update(taskId, updates);
+					console.log(`[spawn] Assigned task ${taskId} to ${agentName} in Postgres`);
+				} else {
+					updateTask(taskId, updates);
+					console.log(`[spawn] Assigned task ${taskId} to ${agentName} in local SQLite`);
+				}
 			} catch (err) {
 				const errorDetail = err instanceof Error ? err.message : String(err);
 

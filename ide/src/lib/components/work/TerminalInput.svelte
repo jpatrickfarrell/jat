@@ -12,6 +12,7 @@
 	 */
 
 	import { browser } from '$app/environment';
+	import { marked } from 'marked';
 	// Props
 	let {
 		sessionName = '',
@@ -49,6 +50,13 @@
 	// Internal state
 	let inputRef: HTMLTextAreaElement | HTMLInputElement | null = null;
 	let sendingInput = $state(false);
+	let showPreview = $state(false);
+
+	// Rendered markdown for preview
+	const renderedMarkdown = $derived.by(() => {
+		if (!showPreview || !inputText.trim()) return '';
+		return marked.parse(inputText) as string;
+	});
 
 	// Visual flash feedback states
 	let escapeFlash = $state(false);
@@ -390,9 +398,21 @@
 		{/if}
 	</div>
 
-	<!-- MIDDLE: Text input -->
+	<!-- MIDDLE: Text input or markdown preview -->
 	<div class="relative flex-1 min-w-0">
-		{#if multiline}
+		{#if showPreview && multiline}
+			<!-- Markdown preview mode -->
+			<div
+				class="markdown-preview-area w-full font-mono leading-tight overflow-y-auto"
+				style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.50 0.10 200 / 0.5); color: oklch(0.80 0.02 250); min-height: 24px; max-height: 96px; padding: 0.25rem 0.375rem; border-radius: 0.375rem; font-size: 0.75rem;"
+			>
+				{#if inputText.trim()}
+					{@html renderedMarkdown}
+				{:else}
+					<span style="color: oklch(0.45 0.02 250); font-style: italic;">Nothing to preview</span>
+				{/if}
+			</div>
+		{:else if multiline}
 			<textarea
 				bind:this={inputRef}
 				bind:value={inputText}
@@ -428,8 +448,8 @@
 			/>
 		{/if}
 
-		<!-- Clear button -->
-		{#if inputText.trim()}
+		<!-- Clear button (hidden in preview mode) -->
+		{#if inputText.trim() && !showPreview}
 			<button
 				type="button"
 				class="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full transition-colors"
@@ -458,7 +478,7 @@
 		{/if}
 
 		<!-- Streaming indicator -->
-		{#if liveStreamEnabled && inputText}
+		{#if liveStreamEnabled && inputText && !showPreview}
 			<div
 				class="absolute left-1.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-info animate-pulse"
 				title="Streaming to terminal"
@@ -466,12 +486,40 @@
 		{/if}
 	</div>
 
-	<!-- RIGHT: Send button -->
+	<!-- RIGHT: Preview toggle + Send button -->
 	<div class="flex items-center gap-0.5 flex-shrink-0 pb-0.5">
+		{#if multiline}
+			<!-- Markdown preview toggle (eye icon) -->
+			<button
+				type="button"
+				onclick={() => {
+					showPreview = !showPreview;
+					if (!showPreview) {
+						requestAnimationFrame(() => inputRef?.focus());
+					}
+				}}
+				class="btn btn-xs {showPreview ? 'btn-info' : 'btn-ghost'}"
+				title={showPreview ? 'Back to edit' : 'Preview markdown'}
+				disabled={sendingInput || disabled}
+			>
+				{#if showPreview}
+					<!-- Pencil icon (editing mode) -->
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+					</svg>
+				{:else}
+					<!-- Eye icon (preview mode) -->
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+						<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+					</svg>
+				{/if}
+			</button>
+		{/if}
 		<button
 			onclick={sendTextInput}
 			class="btn btn-xs btn-primary"
-			disabled={sendingInput || disabled || !inputText.trim()}
+			disabled={sendingInput || disabled || !inputText.trim() || showPreview}
 		>
 			{#if sendingInput}
 				<span class="loading loading-spinner loading-xs"></span>
@@ -481,3 +529,69 @@
 		</button>
 	</div>
 </div>
+
+<style>
+	.markdown-preview-area :global(p) {
+		margin: 0 0 0.25rem 0;
+		font-family: ui-sans-serif, system-ui, sans-serif;
+		font-size: 0.75rem;
+	}
+	.markdown-preview-area :global(p:last-child) {
+		margin-bottom: 0;
+	}
+	.markdown-preview-area :global(code) {
+		font-family: ui-monospace, monospace;
+		font-size: 0.7em;
+		background: oklch(0.18 0.02 250);
+		padding: 0.1rem 0.25rem;
+		border-radius: 3px;
+		color: oklch(0.75 0.10 280);
+	}
+	.markdown-preview-area :global(pre) {
+		background: oklch(0.18 0.02 250);
+		padding: 0.5rem;
+		border-radius: 4px;
+		overflow-x: auto;
+		margin: 0.25rem 0;
+		font-size: 0.7rem;
+	}
+	.markdown-preview-area :global(pre code) {
+		background: none;
+		padding: 0;
+	}
+	.markdown-preview-area :global(ul),
+	.markdown-preview-area :global(ol) {
+		margin: 0 0 0.25rem 0;
+		padding-left: 1rem;
+		font-family: ui-sans-serif, system-ui, sans-serif;
+		font-size: 0.75rem;
+	}
+	.markdown-preview-area :global(li) {
+		margin-bottom: 0.125rem;
+	}
+	.markdown-preview-area :global(strong) {
+		font-weight: 600;
+		color: oklch(0.90 0.02 250);
+	}
+	.markdown-preview-area :global(em) {
+		font-style: italic;
+	}
+	.markdown-preview-area :global(h1),
+	.markdown-preview-area :global(h2),
+	.markdown-preview-area :global(h3),
+	.markdown-preview-area :global(h4) {
+		font-family: ui-sans-serif, system-ui, sans-serif;
+		font-weight: 600;
+		color: oklch(0.90 0.02 250);
+		margin: 0.25rem 0 0.125rem 0;
+		font-size: 0.8rem;
+	}
+	.markdown-preview-area :global(blockquote) {
+		border-left: 2px solid oklch(0.50 0.10 200);
+		padding-left: 0.5rem;
+		margin: 0.25rem 0;
+		color: oklch(0.65 0.02 250);
+		font-family: ui-sans-serif, system-ui, sans-serif;
+		font-size: 0.75rem;
+	}
+</style>

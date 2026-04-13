@@ -12,6 +12,7 @@
 	import type { Snippet } from 'svelte';
 	import { SESSION_STATE_VISUALS } from '$lib/config/statusColors';
 	import { mobileSurface } from '$lib/config/mobileSurface';
+	import Spinner from './Spinner.svelte';
 
 	const input = SESSION_STATE_VISUALS['needs-input'];
 
@@ -57,9 +58,7 @@
 	use:directClick={onClick}
 >
 	{#if busy}
-		<svg class="option-spinner" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
-			<path d="M21 12a9 9 0 1 1-6.22-8.56" />
-		</svg>
+		<Spinner size={12} />
 	{/if}
 	{@render children()}
 </button>
@@ -75,15 +74,8 @@
 	.option-btn-disabled:active {
 		transform: none;
 	}
-	.option-spinner {
-		animation: option-spin 0.9s linear infinite;
-	}
-	@keyframes option-spin {
-		to { transform: rotate(360deg); }
-	}
 	@media (prefers-reduced-motion: reduce) {
 		.option-btn { transition: none; }
 		.option-btn:active { transform: none; }
-		.option-spinner { animation-duration: 2s; }
 	}
 </style>

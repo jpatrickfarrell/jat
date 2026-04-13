@@ -112,9 +112,9 @@
 		maxEvents?: number;
 		pollInterval?: number;
 		onRollback?: (event: TimelineEvent) => void;
-		onCreateTasks?: (tasks: SuggestedTaskWithState[]) => Promise<{ success: any[]; failed: any[] }>;
+		onCreateTasks?: (tasks: SuggestedTaskWithState[]) => Promise<{ success: { title: string; taskId?: string }[]; failed: { title: string; error: string }[] }>;
 		/** Callback when user wants to create tasks AND spawn agent sessions */
-		onCreateAndStartTasks?: (tasks: SuggestedTaskWithState[]) => Promise<{ success: any[]; failed: any[] }>;
+		onCreateAndStartTasks?: (tasks: SuggestedTaskWithState[]) => Promise<{ success: { title: string; taskId?: string }[]; failed: { title: string; error: string }[] }>;
 		/** Callback when a task ID is clicked */
 		onTaskClick?: (taskId: string) => void;
 		/** Callback when a file path is clicked */
@@ -471,7 +471,7 @@
 		}
 	}
 	let isCreatingTasks = $state(false);
-	let createResults = $state<{ success: any[]; failed: any[] }>({ success: [], failed: [] });
+	let createResults = $state<{ success: { title: string; taskId?: string }[]; failed: { title: string; error: string }[] }>({ success: [], failed: [] });
 	let showCreateFeedback = $state(false);
 
 	// KB entry state per event: Map<eventKey, Map<index, { project, accepted, accepting }>>

@@ -659,6 +659,16 @@
 
 	let swipeState = $state<SwipeState | null>(null);
 	let swipeOffsets = $state<Map<string, number>>(new Map());
+	let trayOpenSession = $state<string | null>(null);
+	let trayLongPressTimer: ReturnType<typeof setTimeout> | null = null;
+	const TRAY_LONG_PRESS_MS = 500;
+
+	function clearTrayLongPress() {
+		if (trayLongPressTimer) {
+			clearTimeout(trayLongPressTimer);
+			trayLongPressTimer = null;
+		}
+	}
 
 	// Set visual feedback on a tray button, auto-clears after animation
 	function setActionFeedback(sessionName: string, actionId: string, variant: string, durationMs = 800) {
@@ -678,6 +688,18 @@
 	let holdKey = $state<string | null>(null);
 	let holdProgress = $state(0);
 	let holdTimer: ReturnType<typeof setInterval> | null = null;
+	let pointerLocked = $state(false);
+
+	function armPointerLock() {
+		pointerLocked = true;
+		const release = () => {
+			pointerLocked = false;
+			window.removeEventListener('pointerup', release, true);
+			window.removeEventListener('pointercancel', release, true);
+		};
+		window.addEventListener('pointerup', release, true);
+		window.addEventListener('pointercancel', release, true);
+	}
 
 	function startTrayHold(
 		actionId: string,
@@ -686,6 +708,7 @@
 		agentName: string,
 		project: string | null
 	) {
+		if (pointerLocked) return;
 		const key = `${sessionName}:${actionId}`;
 		if (!DESTRUCTIVE_TRAY_ACTIONS.has(actionId)) {
 			handleMobileAction(actionId, sessionName, sessionTask, agentName, project);
@@ -700,6 +723,7 @@
 			holdProgress = Math.min(100, (elapsed / HOLD_DURATION_MS) * 100);
 			if (elapsed >= HOLD_DURATION_MS) {
 				clearTrayHold();
+				armPointerLock();
 				handleMobileAction(actionId, sessionName, sessionTask, agentName, project);
 			}
 		}, HOLD_TICK_MS);
@@ -718,6 +742,7 @@
 		// Prevent double-clicks while feedback is active
 		const feedbackKey = `${sessionName}:${actionId}`;
 		if (actionFeedback.has(feedbackKey)) return;
+		if (trayOpenSession === sessionName) trayOpenSession = null;
 
 		if (actionId === 'attach') {
 			setActionFeedback(sessionName, actionId, 'info');
@@ -876,6 +901,16 @@
 			swiping: false,
 			committed: false
 		};
+		if (trayOpenSession && trayOpenSession !== sessionName) {
+			trayOpenSession = null;
+		}
+		clearTrayLongPress();
+		trayLongPressTimer = setTimeout(() => {
+			if (swipeState && !swipeState.swiping && swipeState.sessionName === sessionName) {
+				trayOpenSession = sessionName;
+			}
+			trayLongPressTimer = null;
+		}, TRAY_LONG_PRESS_MS);
 	}
 
 	function handleSwipeTouchMove(e: TouchEvent) {
@@ -886,10 +921,12 @@
 
 		if (!swipeState.swiping) {
 			if (Math.abs(deltaY) > SWIPE_DEADZONE) {
+				clearTrayLongPress();
 				swipeState = null;
 				return;
 			}
 			if (Math.abs(deltaX) > SWIPE_DEADZONE) {
+				clearTrayLongPress();
 				swipeState.swiping = true;
 			} else {
 				return;
@@ -915,6 +952,7 @@
 	}
 
 	function handleSwipeTouchEnd() {
+		clearTrayLongPress();
 		if (!swipeState || swipeState.committed) {
 			swipeState = null;
 			return;
@@ -1222,11 +1260,12 @@
 					class:attached={session.attached}
 					class:swiping={isSwiping}
 					class:tray-hint-active={!trayHintDismissed}
+					class:tray-open={trayOpenSession === session.name}
 					class:is-completing={effectiveState === 'completing'}
 					onmouseenter={dismissTrayHint}
 					style="border-left: 3px solid {stateVisual.accent}; {isExiting ? 'pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
 					role="button" tabindex="0"
-					onclick={() => !isExiting && !swipeState?.swiping && (onCardClick ? onCardClick(session.name) : (fullscreenSession = session.name))}
+					onclick={() => { if (isExiting || swipeState?.swiping) return; if (trayOpenSession === session.name) { trayOpenSession = null; return; } if (onCardClick) onCardClick(session.name); else fullscreenSession = session.name; }}
 					oncontextmenu={(e) => handleContextMenu(session, e)}
 					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); !isExiting && !swipeState?.swiping && (onCardClick ? onCardClick(session.name) : (fullscreenSession = session.name)); } }}
 					ontouchstart={(e) => { dismissTrayHint(); handleSwipeTouchStart(e, session.name); }}
@@ -1247,7 +1286,7 @@
 								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
 								{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
 								{@const holdMatch = holdKey === `${session.name}:${action.id}`}
-								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} class:mobile-tray-btn-holding={holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive) handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
+								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} class:mobile-tray-btn-holding={holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive && !pointerLocked) handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
 									{#if isDestructive && holdMatch}<span class="tray-hold-fill" style="width: {holdProgress}%"></span>{/if}
 									{#if fb}
 										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
@@ -1287,7 +1326,7 @@
 								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
 								{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
 								{@const holdMatch = holdKey === `${session.name}:${action.id}`}
-								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} class:mobile-tray-btn-holding={holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive) handleMobileAction(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
+								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} class:mobile-tray-btn-holding={holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive && !pointerLocked) handleMobileAction(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
 									{#if isDestructive && holdMatch}<span class="tray-hold-fill" style="width: {holdProgress}%"></span>{/if}
 									{#if fb}
 										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
@@ -1568,7 +1607,7 @@
 								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
 								{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
 								{@const holdMatch = holdKey === `${session.name}:${action.id}`}
-								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} class:mobile-tray-btn-holding={holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive) handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
+								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} class:mobile-tray-btn-holding={holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive && !pointerLocked) handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
 									{#if isDestructive && holdMatch}<span class="tray-hold-fill" style="width: {holdProgress}%"></span>{/if}
 									{#if fb}
 										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
@@ -2564,10 +2603,8 @@
 		}
 	}
 
-	@media (hover: none) {
-		.mobile-session-card:active .mobile-action-tray {
-			max-width: 480px;
-		}
+	.mobile-session-card.tray-open .mobile-action-tray {
+		max-width: 480px;
 	}
 
 	/* Tray action buttons */

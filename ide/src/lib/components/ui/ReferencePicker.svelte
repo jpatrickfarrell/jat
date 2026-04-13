@@ -23,7 +23,7 @@
 	// ─── Types ──────────────────────────────────────────────────────────────────
 
 	interface ReferenceItem {
-		type: 'file' | 'base' | 'command';
+		type: 'file' | 'base' | 'command' | 'task';
 		value: string;    // what gets inserted / returned
 		label: string;    // primary display string
 		meta: string;     // secondary display string (folder, base type, namespace)
@@ -33,13 +33,13 @@
 
 	let {
 		project = '',
-		types = ['files', 'bases', 'commands'] as Array<'files' | 'bases' | 'commands'>,
+		types = ['files', 'bases', 'commands', 'tasks'] as Array<'files' | 'bases' | 'commands' | 'tasks'>,
 		initialFilter = '',
 		onselect = (_item: ReferenceItem) => {},
 		oncancel = () => {}
 	}: {
 		project?: string;
-		types?: Array<'files' | 'bases' | 'commands'>;
+		types?: Array<'files' | 'bases' | 'commands' | 'tasks'>;
 		initialFilter?: string;
 		onselect?: (item: ReferenceItem) => void;
 		oncancel?: () => void;
@@ -111,6 +111,19 @@
 			);
 		}
 
+		if (types.includes('tasks') && project) {
+			fetches.push(
+				fetch(`/api/tasks?project=${encodeURIComponent(project)}&limit=200`)
+					.then(r => r.json())
+					.then(data => {
+						for (const t of (data.tasks || [])) {
+							items.push({ type: 'task', value: t.id, label: t.id, meta: t.title || '' });
+						}
+					})
+					.catch(() => {})
+			);
+		}
+
 		if (types.includes('commands')) {
 			fetches.push(
 				fetch(`/api/commands${project ? `?project=${encodeURIComponent(project)}` : ''}`)
@@ -126,8 +139,9 @@
 
 		await Promise.all(fetches);
 
-		// Order: files first, then bases, then commands
+		// Order: tasks, files, bases, commands
 		allItems = [
+			...items.filter(i => i.type === 'task'),
 			...items.filter(i => i.type === 'file'),
 			...items.filter(i => i.type === 'base'),
 			...items.filter(i => i.type === 'command')
@@ -187,8 +201,9 @@
 
 	// ─── Section grouping helpers ────────────────────────────────────────────────
 
-	const typeLabels: Record<string, string> = { file: 'Files', base: 'Knowledge Bases', command: 'Commands' };
+	const typeLabels: Record<string, string> = { task: 'Tasks', file: 'Files', base: 'Knowledge Bases', command: 'Commands' };
 	const typeIcon: Record<string, string> = {
+		task: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
 		file: 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z',
 		base: 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4',
 		command: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z'
@@ -197,7 +212,7 @@
 	// Sections in filtered list (global index preserved for keyboard nav across sections)
 	const sections = $derived.by(() => {
 		const result: Array<{ type: string; items: Array<{ item: ReferenceItem; globalIndex: number }> }> = [];
-		for (const type of ['file', 'base', 'command']) {
+		for (const type of ['task', 'file', 'base', 'command']) {
 			const typeItems = filteredItems
 				.map((item, i) => ({ item, globalIndex: i }))
 				.filter(({ item }) => item.type === type);

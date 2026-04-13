@@ -3148,7 +3148,7 @@ import StatusActionBadge from "./atoms/StatusActionBadge.svelte";
 	/** Create tasks from EventStack timeline events - returns results for feedback UI */
 	async function createTimelineEventTasks(
 		selectedTasks: SuggestedTaskWithState[],
-	): Promise<{ success: any[]; failed: any[] }> {
+	): Promise<{ success: { title: string; taskId?: string }[]; failed: { title: string; error: string }[] }> {
 		if (selectedTasks.length === 0) {
 			return { success: [], failed: [] };
 		}
@@ -3227,7 +3227,7 @@ import StatusActionBadge from "./atoms/StatusActionBadge.svelte";
 	/** Create tasks AND spawn agent sessions for each - returns results for feedback UI */
 	async function createAndStartTimelineEventTasks(
 		selectedTasks: SuggestedTaskWithState[],
-	): Promise<{ success: any[]; failed: any[] }> {
+	): Promise<{ success: { title: string; taskId?: string }[]; failed: { title: string; error: string }[] }> {
 		// First, create the tasks
 		const createResult = await createTimelineEventTasks(selectedTasks);
 

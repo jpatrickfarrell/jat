@@ -1496,8 +1496,25 @@
 								</div>
 							{/if}
 						{:else if taskLoading}
-							<div class="mb-5">
-								<div class="text-center py-8 text-base-content/50 text-sm">Loading task details...</div>
+							<div class="flex flex-col gap-4 mb-5">
+								<!-- Labels skeleton -->
+								<div>
+									<div class="skeleton h-3 w-12 mb-2 rounded"></div>
+									<div class="skeleton h-8 w-full rounded-lg"></div>
+								</div>
+								<!-- Dependencies skeleton -->
+								<div>
+									<div class="skeleton h-3 w-20 mb-2 rounded"></div>
+									<div class="flex flex-col gap-1.5">
+										<div class="skeleton h-6 w-4/5 rounded"></div>
+										<div class="skeleton h-6 w-3/5 rounded"></div>
+									</div>
+								</div>
+								<!-- Dates skeleton -->
+								<div>
+									<div class="skeleton h-3 w-16 mb-2 rounded"></div>
+									<div class="skeleton h-10 w-full rounded-lg"></div>
+								</div>
 							</div>
 						{/if}
 					{:else}

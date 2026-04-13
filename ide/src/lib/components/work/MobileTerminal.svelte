@@ -22,9 +22,12 @@
 	import { mobileSurface } from '$lib/config/mobileSurface';
 	import QuestionPanel from './mobile/QuestionPanel.svelte';
 	import OptionButton from './mobile/OptionButton.svelte';
+	import Spinner from './mobile/Spinner.svelte';
 	import MentionPicker from '$lib/components/ui/MentionPicker.svelte';
 	import EventStack from './EventStack.svelte';
 	import { errorToast } from '$lib/stores/toasts.svelte';
+	import type { SuggestedTaskWithState } from '$lib/types/signals';
+	import { delay } from '$lib/utils/async';
 
 	const input = SESSION_STATE_VISUALS['needs-input'];
 
@@ -39,8 +42,8 @@
 		onCleanup = undefined as (() => void | Promise<void>) | undefined,
 		onComplete = undefined as (() => void | Promise<void>) | undefined,
 		onViewTask = undefined as ((taskId: string) => void) | undefined,
-		onCreateTasks = undefined as ((tasks: any[]) => Promise<{ success: any[]; failed: any[] }>) | undefined,
-		onCreateAndStartTasks = undefined as ((tasks: any[]) => Promise<{ success: any[]; failed: any[] }>) | undefined,
+		onCreateTasks = undefined as ((tasks: SuggestedTaskWithState[]) => Promise<{ success: { title: string; taskId?: string }[]; failed: { title: string; error: string }[] }>) | undefined,
+		onCreateAndStartTasks = undefined as ((tasks: SuggestedTaskWithState[]) => Promise<{ success: { title: string; taskId?: string }[]; failed: { title: string; error: string }[] }>) | undefined,
 		onOptimisticAnswer = undefined as ((state: string | null) => void) | undefined
 	}: {
 		sessionName?: string;
@@ -53,8 +56,8 @@
 		onCleanup?: () => void | Promise<void>;
 		onComplete?: () => void | Promise<void>;
 		onViewTask?: (taskId: string) => void;
-		onCreateTasks?: (tasks: any[]) => Promise<{ success: any[]; failed: any[] }>;
-		onCreateAndStartTasks?: (tasks: any[]) => Promise<{ success: any[]; failed: any[] }>;
+		onCreateTasks?: (tasks: SuggestedTaskWithState[]) => Promise<{ success: { title: string; taskId?: string }[]; failed: { title: string; error: string }[] }>;
+		onCreateAndStartTasks?: (tasks: SuggestedTaskWithState[]) => Promise<{ success: { title: string; taskId?: string }[]; failed: { title: string; error: string }[] }>;
 		/** Called when a custom question answer is submitted (state='working') or rolled back (state=null). */
 		onOptimisticAnswer?: (state: string | null) => void;
 	} = $props();
@@ -228,7 +231,8 @@
 	// Suppress background polls briefly after a local clear so the just-answered
 	// question doesn't flash back in before the server-side delete lands.
 	let suppressFetchUntil = 0;
-	let questionPollTimer: ReturnType<typeof setInterval> | null = null;
+	let questionFailures = 0;
+	let questionPollTimer: ReturnType<typeof setTimeout> | null = null;
 
 	async function fetchQuestion() {
 		if (!sessionName || destroyed || Date.now() < suppressFetchUntil) return;
@@ -249,12 +253,23 @@
 				smartError = null;
 			}
 			questionData = data;
+			questionFailures = 0;
 		} catch (e) {
 			if ((e as Error).name === 'AbortError') return;
-			// Poll errors are silent (they'll retry in 3s) — only surface if we
-			// currently have a question visible and the user might be confused.
+			questionFailures++;
+			// Poll errors are silent — only surface if we currently have a question
+			// visible and the user might be confused.
 			if (questionData?.active) smartError = 'Connection lost. Retrying…';
 		}
+	}
+
+	function scheduleQuestionPoll() {
+		if (destroyed) return;
+		const delay = 3000 * Math.min(Math.pow(2, questionFailures), 4); // max 12s
+		questionPollTimer = setTimeout(async () => {
+			await fetchQuestion();
+			scheduleQuestionPoll();
+		}, delay);
 	}
 
 	async function clearQuestion() {
@@ -274,8 +289,6 @@
 			}
 		}
 	}
-
-	function delay(ms: number) { return new Promise<void>(r => setTimeout(r, ms)); }
 
 	async function navigateTo(targetIndex: number) {
 		const delta = targetIndex - currentOptionIndex;
@@ -402,7 +415,8 @@
 	let customInput = $state('');
 	let customError = $state<string | null>(null);
 	let isSubmittingCustom = $state(false);
-	let customPollTimer: ReturnType<typeof setInterval> | null = null;
+	let customFailures = 0;
+	let customPollTimer: ReturnType<typeof setTimeout> | null = null;
 
 	// Draft persistence — debounce timers for autosave
 	let customDraftTimer: ReturnType<typeof setTimeout> | null = null;
@@ -457,10 +471,21 @@
 			const data = await r.json();
 			customQuestion = data?.active ? data : null;
 			if (customQuestion) customError = null;
+			customFailures = 0;
 		} catch (e) {
 			if ((e as Error).name === 'AbortError') return;
+			customFailures++;
 			if (customQuestion?.active) customError = 'Connection lost. Retrying…';
 		}
+	}
+
+	function scheduleCustomPoll() {
+		if (destroyed) return;
+		const delay = 5000 * Math.min(Math.pow(2, customFailures), 4); // max 20s
+		customPollTimer = setTimeout(async () => {
+			await fetchCustomQuestion();
+			scheduleCustomPoll();
+		}, delay);
 	}
 
 	async function answerCustom(answer: string) {
@@ -502,9 +527,9 @@
 
 	onMount(() => {
 		fetchQuestion();
-		questionPollTimer = setInterval(fetchQuestion, 3000);
+		scheduleQuestionPoll();
 		fetchCustomQuestion();
-		customPollTimer = setInterval(fetchCustomQuestion, 5000);
+		scheduleCustomPoll();
 		// Restore custom question input draft
 		if (sessionName && typeof localStorage !== 'undefined') {
 			const saved = localStorage.getItem(`jat-draft-mobile-${sessionName}-custom-question`);
@@ -517,8 +542,8 @@
 	onDestroy(() => {
 		destroyed = true;
 		aborter.abort();
-		if (questionPollTimer) clearInterval(questionPollTimer);
-		if (customPollTimer) clearInterval(customPollTimer);
+		if (questionPollTimer) clearTimeout(questionPollTimer);
+		if (customPollTimer) clearTimeout(customPollTimer);
 		if (customDraftTimer) clearTimeout(customDraftTimer);
 		if (otherDraftTimer) clearTimeout(otherDraftTimer);
 	});
@@ -606,7 +631,7 @@
 					style="min-height: 2.75rem; min-width: 2.75rem;"
 					disabled={isSubmittingCustom}
 					use:directClick={() => { if (customInput.trim() && !isSubmittingCustom) answerCustom(customInput); }}
-				>{isSubmittingCustom ? '…' : 'Send'}</button>
+				>{#if isSubmittingCustom}<Spinner />{:else}Send{/if}</button>
 			</div>
 			{#if customError}
 				<div class="mt-2 flex items-center gap-2 text-xs" style="color: {input.textColor};" role="alert">
@@ -651,7 +676,7 @@
 						style="min-height: 2.75rem; min-width: 2.75rem;"
 						disabled={isBusy}
 						use:directClick={submitOther}
-					>{isBusy ? '…' : 'Send'}</button>
+					>{#if isBusy}<Spinner />{:else}Send{/if}</button>
 					<button
 						class="btn btn-ghost"
 						style="color: {mobileSurface.textMuted}; min-height: 2.75rem; min-width: 2.75rem;"

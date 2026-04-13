@@ -206,19 +206,53 @@ jt create "Task title" \
   --labels "label1,label2"
 ```
 
-### Set Up Dependencies Between Tasks
+---
+
+## STEP 5D: Wire Inter-Task Dependencies ⚠️ MANDATORY
+
+**Do this immediately after creating ALL tasks. Do not skip to Step 6 without completing this step.**
+
+Every dependency relationship you identified in Step 4 must be wired now. Unwired deps mean agents pick up tasks in the wrong order and produce broken work.
 
 ```bash
-jt dep add <task-id> <depends-on-task-id>
+jt dep add <task-that-is-blocked> <task-it-depends-on>
 ```
 
-**Example with hierarchical tasks:**
-```bash
-# Child 2 depends on Child 1
-jt dep add jat-a3f8.2 jat-a3f8.1
+**Work through the full dependency graph systematically:**
 
-# Child 3 depends on Child 2
-jt dep add jat-a3f8.3 jat-a3f8.2
+```bash
+# Foundation tasks block everything above them
+jt dep add jat-a3f8.2 jat-a3f8.1   # .2 cannot start until .1 done
+jt dep add jat-a3f8.3 jat-a3f8.1   # .3 also needs .1
+jt dep add jat-a3f8.4 jat-a3f8.2   # .4 needs .2 (and transitively .1)
+jt dep add jat-a3f8.4 jat-a3f8.3   # .4 also needs .3
+```
+
+**Rules:**
+- Wire EVERY parent→child relationship you described in Step 4
+- If task B cannot start until task A is done, `jt dep add B A`
+- Multiple deps per task are fine — wire all of them
+- Do NOT leave any dependency from your Step 4 analysis unwired
+- After wiring, run `jt ready --json` — foundation tasks should be ready, downstream tasks should be blocked
+
+**Common patterns:**
+```bash
+# Sequential chain: A → B → C
+jt dep add B A
+jt dep add C B
+
+# Fan-out: A unblocks B and C (B and C can parallel after A)
+jt dep add B A
+jt dep add C A
+
+# Fan-in: D needs both B and C done
+jt dep add D B
+jt dep add D C
+
+# Shared atom: multiple tasks need a base component
+jt dep add consumer1 base-component
+jt dep add consumer2 base-component
+jt dep add consumer3 base-component
 ```
 
 ---
@@ -365,7 +399,7 @@ jt show jat-auth
 2. **Use epics for multi-task features** - Create epic first, then children with `--parent`
 3. **⚠️ NEVER close epics after creating children** - Leave them open+blocked. They become ready when all children complete, serving as a verification task. Closing them prematurely shows confusing "complete" status.
 4. **Right-size tasks** - 2-8 hours, not too big or small
-5. **Set dependencies correctly** - enables parallel work
+5. **Wire ALL inter-task dependencies in Step 5D** - don't skip this step; unwired deps mean agents pick up tasks in the wrong order
 6. **Prioritize thoughtfully** - P0 = foundation, P1 = core, P2 = nice-to-have
 7. **Write clear descriptions** - acceptance criteria included
 8. **Ask if unclear** - don't guess on ambiguous requirements

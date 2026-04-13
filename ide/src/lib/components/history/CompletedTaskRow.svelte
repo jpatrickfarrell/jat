@@ -492,8 +492,9 @@
 	/* Primary action column: always visible (like date picker in open tasks) */
 	.ctr-primary-col {
 		display: flex;
-		align-items: stretch;
+		align-items: center;
 		flex-shrink: 0;
+		border-left: 1px solid oklch(0.22 0.02 250);
 	}
 
 	/* Extra icon buttons: hidden by default, slide in on desktop hover */
@@ -542,18 +543,17 @@
 	/* Primary button: always visible, matches date picker column style */
 	.ctr-primary-btn {
 		width: 56px;
+		min-height: 44px;
 		flex-shrink: 0;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
 		gap: 3px;
-		padding: 0;
+		padding: 6px 0;
 		background: transparent;
-		border-top: none;
-		border-right: none;
-		border-bottom: none;
-		border-left: 1px solid oklch(0.22 0.02 250);
+		border: none;
+		border-radius: 4px;
 		cursor: pointer;
 		transition: background 0.12s;
 	}

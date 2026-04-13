@@ -726,6 +726,13 @@
 	</div> <!-- /.bottom-stack -->
 </div>
 
+<MentionPicker
+	bind:open={mentionOpen}
+	project={defaultProject}
+	initialFilter={mentionQuery}
+	onselect={insertMention}
+/>
+
 <style>
 	.mobile-terminal {
 		contain: strict; /* hint browser to isolate layout/paint */

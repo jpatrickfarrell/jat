@@ -1585,7 +1585,7 @@
 			transition:fade={{ duration: 150 }}
 		>
 			<div
-				class="w-full bg-base-100 rounded-t-2xl border-t border-base-300 shadow-2xl p-4 pb-8"
+				class="mobile-edit-sheet w-full bg-base-100 rounded-t-2xl border-t border-base-300 shadow-2xl p-4 pb-8"
 				style="max-width: 100%; box-sizing: border-box; overflow-x: hidden;"
 				role="dialog"
 				aria-modal="true"
@@ -1742,6 +1742,16 @@
 	/* iOS safe-area insets (Tailwind has no utility for env()) */
 	.drawer-topbar { padding-top: max(0.5rem, env(safe-area-inset-top)); }
 	.mobile-input-row { padding-bottom: max(0.375rem, env(safe-area-inset-bottom)); }
+
+	/* Prevent iOS Safari auto-zoom on focus.
+	   iOS zooms the viewport when a form field's computed font-size < 16px.
+	   Force 16px on all inputs/textareas inside the mobile drawer at sm/md widths. */
+	@media (max-width: 1024px) {
+		.mobile-input-row :global(textarea),
+		.mobile-input-row :global(input:not([type="file"])) { font-size: 16px !important; }
+		:global(.mobile-edit-sheet input:not([type="file"])),
+		:global(.mobile-edit-sheet textarea) { font-size: 16px !important; }
+	}
 
 	/* Agent strip — mirrors .mobile-state-strip-agent in TasksActive so the
 	   /tasks list and session detail share one visual language. Square corners

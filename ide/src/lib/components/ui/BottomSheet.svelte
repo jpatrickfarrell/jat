@@ -90,6 +90,7 @@
 		class="fixed bottom-0 inset-x-0 flex flex-col bg-base-100 rounded-t-2xl border-t border-base-300 shadow-2xl"
 		style="z-index: {zIndex + 1}; transform: translateY({dragCurrentY}px); opacity: {dragOpacity}; transition: {isDragging ? 'none' : 'transform 0.15s ease, opacity 0.15s ease'}; max-height: 80dvh;"
 		role="dialog"
+		tabindex="-1"
 		aria-modal="true"
 		aria-label={title || 'Bottom sheet'}
 		transition:fly={{ y: 300, duration: 200, easing: cubicOut }}

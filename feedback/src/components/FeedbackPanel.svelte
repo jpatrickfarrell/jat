@@ -38,6 +38,8 @@
     agentModel = '',
     agentContext = '',
     registeredTools = [],
+    supabaseUrl = '',
+    supabaseAnonKey = '',
   }: {
     endpoint: string;
     project: string;
@@ -52,6 +54,8 @@
     agentModel?: string;
     agentContext?: string;
     registeredTools?: ToolDefinition[];
+    supabaseUrl?: string;
+    supabaseAnonKey?: string;
     onclose: () => void;
     ongrip?: (e: MouseEvent) => void;
   } = $props();
@@ -80,13 +84,168 @@
     }
   }
 
-  // === Voice capture state ===
-  let voiceRecording = $state(false);
-  let voiceProcessing = $state(false);
-  let voiceStatus = $state<'idle' | 'recording' | 'processing' | 'done' | 'error'>('idle');
+  // === Voice capture state machine ===
+  // States: idle → recording → uploading → transcribing → confirming → submitted | error
+  let voiceStatus = $state<'idle' | 'recording' | 'uploading' | 'transcribing' | 'confirming' | 'submitted' | 'error'>('idle');
   let voiceStatusMsg = $state('');
   let voiceMediaRecorder = $state<MediaRecorder | null>(null);
   let voiceChunks: Blob[] = [];
+  let voiceTaskId = $state<string | null>(null);
+  let voiceTitle = $state('');
+  let voiceDescription = $state('');
+  // Watcher cleanup handles
+  let voiceTranscribeTimer: ReturnType<typeof setTimeout> | null = null;
+  let voiceRealtimeWs: WebSocket | null = null;
+  let voicePollTimer: ReturnType<typeof setInterval> | null = null;
+
+  function cleanupVoiceWatchers() {
+    if (voiceTranscribeTimer) { clearTimeout(voiceTranscribeTimer); voiceTranscribeTimer = null; }
+    if (voiceRealtimeWs) { try { voiceRealtimeWs.close(); } catch {} voiceRealtimeWs = null; }
+    if (voicePollTimer) { clearInterval(voicePollTimer); voicePollTimer = null; }
+  }
+
+  function onTranscriptionComplete(title: string, description: string) {
+    cleanupVoiceWatchers();
+    voiceTitle = title || '';
+    voiceDescription = description || '';
+    voiceStatus = 'confirming';
+    voiceStatusMsg = '';
+  }
+
+  function onTranscriptionFailed(msg = 'Transcription failed. Try again.') {
+    cleanupVoiceWatchers();
+    voiceStatus = 'error';
+    voiceStatusMsg = msg;
+  }
+
+  function startRealtimeWatch(taskId: string) {
+    const base = supabaseUrl.replace(/\/$/, '');
+    const wsUrl = base.replace(/^https/, 'wss').replace(/^http/, 'ws') +
+      `/realtime/v1/websocket?apikey=${supabaseAnonKey}&vsn=1.0.0`;
+
+    let ws: WebSocket;
+    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+    let refCounter = 1;
+    function getRef() { return String(refCounter++); }
+
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch {
+      startPollingWatch(taskId);
+      return;
+    }
+    voiceRealtimeWs = ws;
+
+    ws.onopen = () => {
+      const joinRef = getRef();
+      ws.send(JSON.stringify({
+        topic: 'realtime:*',
+        event: 'phx_join',
+        payload: {
+          config: {
+            broadcast: { self: false },
+            presence: { key: '' },
+            postgres_changes: [
+              { event: 'UPDATE', schema: 'public', table: 'project_tasks', filter: `id=eq.${taskId}` }
+            ]
+          },
+          access_token: supabaseAnonKey
+        },
+        ref: joinRef,
+        join_ref: joinRef
+      }));
+      heartbeatTimer = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: getRef() }));
+        }
+      }, 30_000);
+    };
+
+    ws.onmessage = (e) => {
+      let msg: any;
+      try { msg = JSON.parse(e.data); } catch { return; }
+      if (msg.event === 'postgres_changes' && msg.payload?.data) {
+        const { type, record } = msg.payload.data;
+        if (type === 'UPDATE' && record) {
+          if (record.status === 'open') {
+            if (heartbeatTimer) clearInterval(heartbeatTimer);
+            onTranscriptionComplete(record.title || '', record.description || '');
+          } else if (record.status === 'failed') {
+            if (heartbeatTimer) clearInterval(heartbeatTimer);
+            onTranscriptionFailed('Transcription failed. Try again.');
+          }
+        }
+      }
+    };
+
+    ws.onerror = () => {
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      voiceRealtimeWs = null;
+      // Fall back to polling if Realtime errors out
+      startPollingWatch(taskId);
+    };
+
+    ws.onclose = () => {
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+    };
+  }
+
+  function startPollingWatch(taskId: string) {
+    if (voicePollTimer) return; // already polling
+    voicePollTimer = setInterval(async () => {
+      try {
+        let status: string | null = null;
+        let title = '';
+        let desc = '';
+
+        if (supabaseUrl && supabaseAnonKey) {
+          // Poll Supabase REST API directly
+          const url = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/project_tasks?id=eq.${taskId}&select=id,status,title,description`;
+          const res = await fetch(url, {
+            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${supabaseAnonKey}` }
+          });
+          if (res.ok) {
+            const rows = await res.json();
+            if (Array.isArray(rows) && rows.length > 0) {
+              status = rows[0].status; title = rows[0].title || ''; desc = rows[0].description || '';
+            }
+          }
+        } else {
+          // Poll JAT server endpoint
+          const res = await fetch(`${endpoint.replace(/\/$/, '')}/api/tasks/voice?id=${encodeURIComponent(taskId)}`);
+          if (res.ok) {
+            const data = await res.json();
+            status = data.status; title = data.title || ''; desc = data.description || '';
+          }
+        }
+
+        if (status === 'open') {
+          clearInterval(voicePollTimer!); voicePollTimer = null;
+          onTranscriptionComplete(title, desc);
+        } else if (status === 'failed') {
+          clearInterval(voicePollTimer!); voicePollTimer = null;
+          onTranscriptionFailed('Transcription failed. Try again.');
+        }
+      } catch {
+        // ignore poll errors — keep trying
+      }
+    }, 3000);
+  }
+
+  function startTranscriptionWatch(taskId: string) {
+    // 30s client-side timeout
+    voiceTranscribeTimer = setTimeout(() => {
+      cleanupVoiceWatchers();
+      voiceStatus = 'error';
+      voiceStatusMsg = 'Transcription timed out (30s). Try again.';
+    }, 30_000);
+
+    if (supabaseUrl && supabaseAnonKey) {
+      startRealtimeWatch(taskId);
+    } else {
+      startPollingWatch(taskId);
+    }
+  }
 
   async function startVoiceRecording() {
     try {
@@ -103,9 +262,8 @@
       };
       mr.start(500);
       voiceMediaRecorder = mr;
-      voiceRecording = true;
       voiceStatus = 'recording';
-      voiceStatusMsg = 'Recording…';
+      voiceStatusMsg = '';
     } catch (err: any) {
       voiceStatus = 'error';
       voiceStatusMsg = err.message?.includes('Permission') ? 'Microphone permission denied' : 'Could not start recording';
@@ -116,47 +274,97 @@
     if (voiceMediaRecorder && voiceMediaRecorder.state !== 'inactive') {
       voiceMediaRecorder.stop();
     }
-    voiceRecording = false;
-    voiceStatus = 'processing';
-    voiceStatusMsg = 'Sending to JAT…';
+    voiceMediaRecorder = null;
+    voiceStatus = 'uploading';
+    voiceStatusMsg = '';
   }
 
   async function submitVoiceRecording(blob: Blob, mimeType: string) {
-    voiceProcessing = true;
+    voiceStatus = 'uploading';
     try {
       const ext = mimeType.includes('webm') ? 'webm' : mimeType.includes('ogg') ? 'ogg' : 'audio';
       const formData = new FormData();
-      formData.append('file', blob, `voice-note.${ext}`);
+      formData.append('audio', blob, `voice-note.${ext}`);
+      if (project) formData.append('project', project);
 
-      const voiceEndpoint = `${endpoint}/api/tasks/voice`;
-      const res = await fetch(voiceEndpoint, { method: 'POST', body: formData });
+      const res = await fetch(`${endpoint.replace(/\/$/, '')}/api/tasks/voice`, { method: 'POST', body: formData });
       if (res.ok) {
-        voiceStatus = 'done';
-        voiceStatusMsg = 'Done! Tasks will appear in your Voice Inbox shortly.';
+        const data = await res.json();
+        const taskId = data.id;
+        if (!taskId) throw new Error('No task ID returned from server');
+        voiceTaskId = taskId;
+        voiceStatus = 'transcribing';
+        voiceStatusMsg = '';
+        startTranscriptionWatch(taskId);
       } else {
         const data = await res.json().catch(() => ({}));
-        voiceStatus = 'error';
-        voiceStatusMsg = data.message || `Error ${res.status}`;
+        throw new Error(data.error || data.message || `Upload failed (${res.status})`);
       }
     } catch (err: any) {
       voiceStatus = 'error';
-      voiceStatusMsg = err.message || 'Failed to send recording';
+      voiceStatusMsg = err.message || 'Failed to upload recording';
     } finally {
-      voiceProcessing = false;
       voiceChunks = [];
     }
   }
 
+  async function confirmVoiceNote() {
+    if (!voiceTaskId) return;
+    voiceStatus = 'uploading'; // reuse as "submitting" indicator
+    voiceStatusMsg = '';
+    try {
+      if (supabaseUrl && supabaseAnonKey) {
+        const res = await fetch(
+          `${supabaseUrl.replace(/\/$/, '')}/rest/v1/project_tasks?id=eq.${voiceTaskId}`,
+          {
+            method: 'PATCH',
+            headers: {
+              'apikey': supabaseAnonKey,
+              'Authorization': `Bearer ${supabaseAnonKey}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=minimal',
+            },
+            body: JSON.stringify({ title: voiceTitle, description: voiceDescription, status: 'submitted' })
+          }
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      } else {
+        const res = await fetch(
+          `${endpoint.replace(/\/$/, '')}/api/tasks/voice?id=${encodeURIComponent(voiceTaskId)}`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: voiceTitle, description: voiceDescription, status: 'submitted' })
+          }
+        );
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+      }
+      voiceStatus = 'submitted';
+      voiceStatusMsg = '';
+      // Switch to History tab after brief delay
+      setTimeout(() => { activeTab = 'requests'; loadReports(); }, 1500);
+    } catch (err: any) {
+      // Return to confirming so user can retry
+      voiceStatus = 'confirming';
+      voiceStatusMsg = err.message || 'Failed to submit. Please try again.';
+    }
+  }
+
   function resetVoice() {
+    cleanupVoiceWatchers();
     if (voiceMediaRecorder && voiceMediaRecorder.state !== 'inactive') {
       voiceMediaRecorder.stop();
     }
-    voiceRecording = false;
-    voiceProcessing = false;
+    voiceMediaRecorder = null;
     voiceStatus = 'idle';
     voiceStatusMsg = '';
     voiceChunks = [];
-    voiceMediaRecorder = null;
+    voiceTaskId = null;
+    voiceTitle = '';
+    voiceDescription = '';
   }
 
   // Agent state — managed by AgentBridge, fed to AgentPanel as props
@@ -225,6 +433,10 @@
 
   onDestroy(() => {
     bridge?.dispose();
+    cleanupVoiceWatchers();
+    if (voiceMediaRecorder && voiceMediaRecorder.state !== 'inactive') {
+      voiceMediaRecorder.stop();
+    }
   });
 
   // Reports state — loaded eagerly so badge count is available before tab is clicked
@@ -818,11 +1030,10 @@
   {#if activeTab === 'voice'}
     <div class="voice-wrapper" transition:slide={{ duration: 200 }}>
       <div class="voice-body">
-        <p class="voice-hint">Record a voice note — JAT will transcribe it and create tasks automatically.</p>
 
-        <!-- Mic button -->
-        <div class="voice-mic-row">
-          {#if voiceStatus === 'idle'}
+        {#if voiceStatus === 'idle'}
+          <p class="voice-hint">Record a voice note — JAT will transcribe it and create a task you can review before submitting.</p>
+          <div class="voice-mic-row">
             <button class="voice-btn voice-btn-start" onclick={startVoiceRecording}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="28" height="28">
                 <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3Z"/>
@@ -830,7 +1041,12 @@
               </svg>
               Start Recording
             </button>
-          {:else if voiceStatus === 'recording'}
+          </div>
+          <p class="voice-footer">Transcription uses <strong>voxtype</strong> + <strong>ollama</strong> locally — no cloud needed.</p>
+
+        {:else if voiceStatus === 'recording'}
+          <p class="voice-hint">Recording… speak your note, then tap Stop.</p>
+          <div class="voice-mic-row">
             <button class="voice-btn voice-btn-stop" onclick={stopVoiceRecording}>
               <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
                 <rect x="4" y="4" width="16" height="16" rx="2"/>
@@ -842,29 +1058,69 @@
               <span class="voice-dot"></span>
               <span class="voice-dot"></span>
             </div>
-          {:else if voiceStatus === 'processing'}
-            <div class="voice-processing">
-              <span class="voice-spinner"></span>
-              <span class="voice-status-text">{voiceStatusMsg}</span>
-            </div>
-          {:else if voiceStatus === 'done'}
-            <div class="voice-done">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="32" height="32">
-                <path d="M20 6 9 17l-5-5"/>
-              </svg>
-            </div>
-            <p class="voice-status-text voice-done-text">{voiceStatusMsg}</p>
-            <button class="voice-reset" onclick={resetVoice}>Record another</button>
-          {:else if voiceStatus === 'error'}
-            <div class="voice-error-icon">!</div>
-            <p class="voice-status-text voice-error-text">{voiceStatusMsg}</p>
-            <button class="voice-reset" onclick={resetVoice}>Try again</button>
-          {/if}
-        </div>
+          </div>
 
-        {#if voiceStatus === 'idle'}
-          <p class="voice-footer">Transcription uses <strong>voxtype</strong> + <strong>ollama</strong> locally — no cloud needed.</p>
+        {:else if voiceStatus === 'uploading'}
+          <div class="voice-processing">
+            <span class="voice-spinner"></span>
+            <span class="voice-status-text">Uploading…</span>
+          </div>
+
+        {:else if voiceStatus === 'transcribing'}
+          <div class="voice-processing">
+            <span class="voice-spinner"></span>
+            <span class="voice-status-text">Transcribing…</span>
+          </div>
+          <p class="voice-hint" style="margin-top: 0.25rem;">This usually takes a few seconds.</p>
+
+        {:else if voiceStatus === 'confirming'}
+          <div class="voice-confirm">
+            <p class="voice-confirm-hint">Review and edit before submitting as feedback.</p>
+            {#if voiceStatusMsg}
+              <p class="voice-error-text" style="font-size: 12px; margin: 0 0 0.5rem;">{voiceStatusMsg}</p>
+            {/if}
+            <div class="voice-confirm-field">
+              <label class="voice-confirm-label" for="voice-title">Title</label>
+              <input
+                id="voice-title"
+                class="voice-confirm-input"
+                type="text"
+                bind:value={voiceTitle}
+                placeholder="Task title"
+              />
+            </div>
+            <div class="voice-confirm-field">
+              <label class="voice-confirm-label" for="voice-desc">Description</label>
+              <textarea
+                id="voice-desc"
+                class="voice-confirm-textarea"
+                bind:value={voiceDescription}
+                placeholder="Task description"
+                rows="4"
+              ></textarea>
+            </div>
+            <div class="voice-confirm-actions">
+              <button class="voice-reset" onclick={resetVoice}>Discard</button>
+              <button class="voice-btn voice-btn-submit" onclick={confirmVoiceNote} disabled={!voiceTitle.trim()}>
+                Submit as feedback
+              </button>
+            </div>
+          </div>
+
+        {:else if voiceStatus === 'submitted'}
+          <div class="voice-done">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="36" height="36">
+              <path d="M20 6 9 17l-5-5"/>
+            </svg>
+          </div>
+          <p class="voice-status-text voice-done-text">Submitted! Switching to history…</p>
+
+        {:else if voiceStatus === 'error'}
+          <div class="voice-error-icon">!</div>
+          <p class="voice-status-text voice-error-text">{voiceStatusMsg}</p>
+          <button class="voice-reset" onclick={resetVoice}>Try again</button>
         {/if}
+
       </div>
     </div>
   {/if}
@@ -1422,4 +1678,78 @@
     line-height: 1.5;
   }
   .voice-footer strong { color: #6b7280; }
+
+  /* Voice confirmation UI */
+  .voice-confirm {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    width: 100%;
+    text-align: left;
+  }
+  .voice-confirm-hint {
+    font-size: 12px;
+    color: #9ca3af;
+    margin: 0;
+    line-height: 1.4;
+  }
+  .voice-confirm-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .voice-confirm-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .voice-confirm-input {
+    width: 100%;
+    background: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 6px;
+    color: #e5e7eb;
+    font-size: 13px;
+    font-family: inherit;
+    padding: 0.5rem 0.625rem;
+    box-sizing: border-box;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .voice-confirm-input:focus { border-color: #4b6cf7; }
+  .voice-confirm-textarea {
+    width: 100%;
+    background: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 6px;
+    color: #e5e7eb;
+    font-size: 13px;
+    font-family: inherit;
+    padding: 0.5rem 0.625rem;
+    box-sizing: border-box;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.15s;
+    min-height: 80px;
+  }
+  .voice-confirm-textarea:focus { border-color: #4b6cf7; }
+  .voice-confirm-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 0.25rem;
+  }
+  .voice-btn-submit {
+    background: #1d4ed8;
+    color: white;
+    padding: 0.5rem 1.125rem;
+    font-size: 13px;
+  }
+  .voice-btn-submit:hover:not(:disabled) { background: #2563eb; }
+  .voice-btn-submit:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
 </style>

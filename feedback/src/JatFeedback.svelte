@@ -28,6 +28,8 @@
     'agent-proxy': agentProxy = '',
     'agent-model': agentModel = '',
     'agent-context': agentContext = '',
+    'supabase-url': supabaseUrl = '',
+    'supabase-anon-key': supabaseAnonKey = '',
   }: {
     endpoint: string;
     project: string;
@@ -43,6 +45,8 @@
     'agent-proxy': string;
     'agent-model': string;
     'agent-context': string;
+    'supabase-url': string;
+    'supabase-anon-key': string;
   } = $props();
 
   let open = $state(false);
@@ -207,7 +211,7 @@
       class:hidden={!open}
       style="{panelPositionStyles[config.position] || panelPositionStyles['bottom-right']}"
     >
-      <FeedbackPanel endpoint={config.endpoint} {project} isOpen={open} {userId} {userEmail} {userName} {userRole} {orgId} {orgName} {agentProxy} {agentModel} {agentContext} {registeredTools} onclose={close} ongrip={handlePanelDragStart} />
+      <FeedbackPanel endpoint={config.endpoint} {project} isOpen={open} {userId} {userEmail} {userName} {userRole} {orgId} {orgName} {agentProxy} {agentModel} {agentContext} {registeredTools} {supabaseUrl} {supabaseAnonKey} onclose={close} ongrip={handlePanelDragStart} />
     </div>
   {:else if open}
     <div class="jat-feedback-panel" style="{panelPositionStyles[config.position] || panelPositionStyles['bottom-right']}">

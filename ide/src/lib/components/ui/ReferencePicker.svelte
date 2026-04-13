@@ -34,18 +34,20 @@
 	let {
 		project = '',
 		types = ['files', 'bases', 'commands'] as Array<'files' | 'bases' | 'commands'>,
+		initialFilter = '',
 		onselect = (_item: ReferenceItem) => {},
 		oncancel = () => {}
 	}: {
 		project?: string;
 		types?: Array<'files' | 'bases' | 'commands'>;
+		initialFilter?: string;
 		onselect?: (item: ReferenceItem) => void;
 		oncancel?: () => void;
 	} = $props();
 
 	// ─── State ──────────────────────────────────────────────────────────────────
 
-	let filterText = $state('');
+	let filterText = $state(initialFilter);
 	let filterInput: HTMLInputElement | undefined = $state();
 
 	// All loaded items (fetched once on mount)

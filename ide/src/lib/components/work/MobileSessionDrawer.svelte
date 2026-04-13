@@ -21,6 +21,7 @@
 	import MobileTerminal from '$lib/components/work/MobileTerminal.svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import MobileTaskBody from '$lib/components/work/atoms/MobileTaskBody.svelte';
+	import MentionPicker from '$lib/components/ui/MentionPicker.svelte';
 	import { getElapsedFormatted } from '$lib/utils/elapsedTime';
 	import {
 		TaskFieldLabel,
@@ -144,6 +145,43 @@
 
 	// Track which action button is currently animating
 	let activeActionId = $state<string | null>(null);
+
+	// Hold-to-confirm for destructive pills (kill, complete, complete-kill)
+	const DESTRUCTIVE_ACTIONS = new Set(['kill', 'complete', 'complete-kill']);
+	const HOLD_DURATION_MS = 600;
+	const HOLD_TICK_MS = 30;
+	let holdActionId = $state<string | null>(null);
+	let holdProgress = $state(0);
+	let holdTimer: ReturnType<typeof setInterval> | null = null;
+
+	function startHold(action: SessionStateAction) {
+		if (!DESTRUCTIVE_ACTIONS.has(action.id)) {
+			executePillAction(action);
+			return;
+		}
+		clearHold();
+		holdActionId = action.id;
+		holdProgress = 0;
+		let elapsed = 0;
+		holdTimer = setInterval(() => {
+			elapsed += HOLD_TICK_MS;
+			holdProgress = Math.min(100, (elapsed / HOLD_DURATION_MS) * 100);
+			if (elapsed >= HOLD_DURATION_MS) {
+				const a = action;
+				clearHold();
+				executePillAction(a);
+			}
+		}, HOLD_TICK_MS);
+	}
+
+	function clearHold() {
+		if (holdTimer) {
+			clearInterval(holdTimer);
+			holdTimer = null;
+		}
+		holdActionId = null;
+		holdProgress = 0;
+	}
 
 	// Map action ID to appropriate sound
 	function playActionSound(actionId: string): void {
@@ -270,6 +308,8 @@
 			editDraft = (fullTask?.description ?? task.description ?? '') as string;
 		} else if (mode === 'labels') {
 			editDraft = (fullTask?.labels || []).join(', ');
+		} else if (mode === 'notes') {
+			editDraft = (fullTask?.notes ?? '') as string;
 		} else {
 			editDraft = '';
 		}
@@ -333,6 +373,10 @@
 		if (await patchTask({ description: editDraft })) closeEditor();
 	}
 
+	async function saveNotes() {
+		if (await patchTask({ notes: editDraft })) closeEditor();
+	}
+
 	async function saveLabels() {
 		const labels = editDraft
 			.split(',')
@@ -345,6 +389,51 @@
 	let inputText = $state('');
 	let keyboardOpen = $state(false);
 	let inputRef: HTMLTextAreaElement | null = $state(null);
+
+	// @-reference picker state (shared across drawer textareas)
+	let mentionOpen = $state(false);
+	let mentionQuery = $state('');
+	let mentionAtPos = $state(0);
+	let mentionTarget: HTMLTextAreaElement | null = null;
+	let mentionSetter: ((next: string) => void) | null = null;
+
+	function detectMention(el: HTMLTextAreaElement, setter: (next: string) => void) {
+		const value = el.value;
+		const pos = el.selectionStart ?? value.length;
+		const before = value.slice(0, pos);
+		const m = before.match(/@([\w\-\.\/]*)$/);
+		if (m) {
+			mentionQuery = m[1];
+			mentionAtPos = pos - m[0].length;
+			mentionTarget = el;
+			mentionSetter = setter;
+			mentionOpen = true;
+		}
+	}
+
+	function insertMention(item: { value: string }) {
+		if (!mentionTarget || !mentionSetter) return;
+		const el = mentionTarget;
+		const value = el.value;
+		const caret = el.selectionStart ?? value.length;
+		// Replace from captured @-pos up to current caret (picker's own filter input
+		// doesn't change the textarea, so these span the `@query` we want to kill).
+		const before = value.slice(0, mentionAtPos);
+		const after = value.slice(caret);
+		const insertion = item.value + ' ';
+		const next = before + insertion + after;
+		mentionSetter(next);
+		const newCursor = mentionAtPos + insertion.length;
+		requestAnimationFrame(() => {
+			el.focus({ preventScroll: true });
+			el.setSelectionRange(newCursor, newCursor);
+		});
+	}
+
+	function directInput(node: HTMLElement, handler: (e: Event) => void) {
+		node.addEventListener('input', handler as EventListener);
+		return { destroy() { node.removeEventListener('input', handler as EventListener); } };
+	}
 
 	// Draft persistence — debounce timer for autosave
 	let mainDraftTimer: ReturnType<typeof setTimeout> | null = null;
@@ -975,6 +1064,7 @@
 	});
 
 	onDestroy(() => {
+		clearHold();
 		if (mainDraftTimer) clearTimeout(mainDraftTimer);
 		if (pollInterval) {
 			clearInterval(pollInterval);
@@ -1028,7 +1118,7 @@
 
 		<!-- Top bar: back column + centered tabs + close column -->
 		<div class="drawer-topbar flex items-center gap-2 px-3 py-2 bg-base-200 border-b border-base-300 flex-shrink-0">
-			<button class="topbar-dismiss-col self-stretch flex items-center justify-center w-10 -my-1 flex-shrink-0 rounded-md text-base-content/50 active:bg-base-300 active:text-base-content transition-colors" use:directClick={dismissDrawer} title="Go back">
+			<button class="topbar-dismiss-col self-stretch flex items-center justify-center w-10 -my-1 flex-shrink-0 rounded-md text-base-content/50 active:bg-base-300 active:text-base-content transition-colors" use:directClick={() => currentPage === 0 ? dismissDrawer() : navigateToPage(0)} title={currentPage === 0 ? 'Close' : 'Back to Terminal'}>
 				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="18" height="18">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
 				</svg>
@@ -1037,7 +1127,7 @@
 			<div class="topbar-tabs flex-1 flex gap-0.5 items-center justify-center overflow-x-auto">
 				{#each PAGES as page, i}
 					<button
-						class="px-2 py-1 text-[0.6875rem] font-medium whitespace-nowrap rounded-md transition-colors {i === currentPage ? 'text-base-content bg-base-300' : 'text-base-content/50 bg-transparent active:bg-base-300/70'}"
+						class="px-2 py-1 text-[0.6875rem] whitespace-nowrap rounded-md border-b-2 transition-colors {i === currentPage ? 'font-semibold text-base-content bg-base-300 border-base-content' : 'font-medium text-base-content/50 bg-transparent border-transparent active:bg-base-300/70'}"
 						use:directClick={() => navigateToPage(i)}
 					>{page}</button>
 				{/each}
@@ -1097,20 +1187,33 @@
 				</div>
 
 				<!-- Mobile Action Buttons Row (dynamic from state actions config) -->
-				<div class="flex gap-1.5 px-2 py-1.5 bg-base-200 border-t border-base-300 flex-shrink-0 overflow-x-auto">
+				<div class="action-pills-wrapper bg-base-200 border-t border-base-300 flex-shrink-0">
+				<div class="flex gap-1.5 px-2 py-1.5 overflow-x-auto">
 					{#each stateActions as action (action.id)}
+						{@const isDestructive = DESTRUCTIVE_ACTIONS.has(action.id)}
 						<button
-							class="flex items-center gap-1 px-2 py-[0.3rem] text-[0.6875rem] font-medium rounded-md whitespace-nowrap cursor-pointer flex-shrink-0 border transition-colors active:brightness-125 {getPillColorClass(action.variant)}"
+							class="relative overflow-hidden flex items-center gap-1 px-2 py-[0.3rem] text-[0.6875rem] font-medium rounded-md whitespace-nowrap cursor-pointer flex-shrink-0 border transition-colors active:brightness-125 {getPillColorClass(action.variant)}"
 							class:mobile-btn-flashing={activeActionId === action.id}
-							use:directClick={() => executePillAction(action)}
-							title={action.description || action.label}
+							class:hold-active={holdActionId === action.id}
+							use:directClick={() => { if (!isDestructive) executePillAction(action); }}
+							onmousedown={() => startHold(action)}
+							ontouchstart={() => startHold(action)}
+							onmouseup={clearHold}
+							onmouseleave={clearHold}
+							ontouchend={clearHold}
+							ontouchcancel={clearHold}
+							title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : (action.description || action.label)}
 						>
-							<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="14" height="14">
+							{#if isDestructive && holdActionId === action.id}
+								<span class="hold-fill" style="width: {holdProgress}%"></span>
+							{/if}
+							<svg class="relative z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="14" height="14">
 								<path stroke-linecap="round" stroke-linejoin="round" d={action.icon} />
 							</svg>
-							<span>{action.label}</span>
+							<span class="relative z-10">{action.label}</span>
 						</button>
 					{/each}
+				</div>
 				</div>
 
 				<!-- Pending Attachments Preview -->
@@ -1218,6 +1321,10 @@
 						bind:value={inputText}
 						bind:this={inputRef}
 						use:autoGrow
+						use:directInput={(e) => {
+							const el = e.target as HTMLTextAreaElement;
+							detectMention(el, (next) => { inputText = next; });
+						}}
 						use:directKeydown={(e) => {
 							if (e.key === 'Enter' && !e.shiftKey && (inputText.trim() || pendingAttachments.some(a => !a.uploading))) {
 								e.preventDefault();
@@ -1447,16 +1554,19 @@
 					<div class="flex-1 overflow-y-auto p-4" style="-webkit-overflow-scrolling: touch;">
 						<div class="mb-5">
 							<TaskFieldLabel>Notes</TaskFieldLabel>
-							{#if fullTask?.notes}
-								<div class="text-sm text-base-content/80 leading-relaxed whitespace-pre-wrap break-words bg-base-200 border border-base-300 p-3 rounded-lg" style="overflow-wrap: break-word; word-break: break-word; min-width: 0;">{fullTask.notes}</div>
-							{:else}
-								<div class="flex flex-col items-center gap-3 py-12 text-base-content/40">
-									<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="32" height="32">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-									</svg>
-									<p class="text-sm">No notes</p>
-								</div>
-							{/if}
+							<button
+								type="button"
+								class="text-left w-full text-sm text-base-content/80 leading-relaxed whitespace-pre-wrap break-words bg-base-200 hover:bg-base-300 active:bg-base-300 border border-base-300 p-3 rounded-lg cursor-pointer transition-colors"
+								style="overflow-wrap: break-word; word-break: break-word; min-width: 0;"
+								use:directClick={() => openEditor('notes')}
+								aria-label="Edit notes"
+							>
+								{#if fullTask?.notes}
+									{fullTask.notes}
+								{:else}
+									<span class="italic text-base-content/50">Tap to add notes…</span>
+								{/if}
+							</button>
 						</div>
 					</div>
 				</div>
@@ -1582,11 +1692,34 @@
 							</button>
 						</div>
 					</div>
+				{:else if editMode === 'notes'}
+					<div class="flex flex-col gap-3">
+						<textarea
+							class="textarea textarea-bordered w-full h-40 font-mono text-sm"
+							style="max-width: 100%; box-sizing: border-box;"
+							bind:value={editDraft}
+							placeholder="Task notes"
+							disabled={editSaving}
+						></textarea>
+						<div class="flex gap-2">
+							<button type="button" class="btn btn-outline flex-1" disabled={editSaving} use:directClick={closeEditor}>Cancel</button>
+							<button type="button" class="btn btn-primary flex-1" disabled={editSaving} use:directClick={saveNotes}>
+								{editSaving ? 'Saving…' : 'Save'}
+							</button>
+						</div>
+					</div>
 				{/if}
 			</div>
 		</div>
 	{/if}
 </div>
+
+<MentionPicker
+	bind:open={mentionOpen}
+	project={project || ''}
+	initialFilter={mentionQuery}
+	onselect={insertMention}
+/>
 
 <style>
 	/* Layout-only CSS: colors, spacing, and typography are handled via DaisyUI + Tailwind
@@ -1688,5 +1821,41 @@
 
 	.mobile-btn-flashing {
 		animation: mobile-btn-flash 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+	}
+
+	/* Hold-to-confirm progress fill for destructive action pills */
+	.hold-fill {
+		position: absolute;
+		left: 0;
+		top: 0;
+		bottom: 0;
+		background: currentColor;
+		opacity: 0.35;
+		transition: width 30ms linear;
+		pointer-events: none;
+		z-index: 0;
+	}
+
+	.hold-active {
+		transform: scale(0.97);
+		transition: transform 0.1s ease-out;
+	}
+
+	/* Right-edge fade signals scrollable overflow on the action pills row.
+	   Pinned to wrapper (not scrollable row) so it stays visible while content
+	   scrolls underneath. Gradient fades to bg-base-200; visually neutral when
+	   no overflow (area behind last pill is already base-200). */
+	.action-pills-wrapper {
+		position: relative;
+	}
+	.action-pills-wrapper::after {
+		content: '';
+		position: absolute;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		width: 2rem;
+		background: linear-gradient(to right, transparent, var(--color-base-200));
+		pointer-events: none;
 	}
 </style>

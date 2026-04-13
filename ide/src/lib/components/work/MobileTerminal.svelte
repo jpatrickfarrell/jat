@@ -22,6 +22,7 @@
 	import { mobileSurface } from '$lib/config/mobileSurface';
 	import QuestionPanel from './mobile/QuestionPanel.svelte';
 	import OptionButton from './mobile/OptionButton.svelte';
+	import MentionPicker from '$lib/components/ui/MentionPicker.svelte';
 	import EventStack from './EventStack.svelte';
 	import { errorToast } from '$lib/stores/toasts.svelte';
 
@@ -159,6 +160,48 @@
 		resize();
 		node.addEventListener('input', resize);
 		return { destroy() { node.removeEventListener('input', resize); } };
+	}
+
+	function directInput(node: HTMLElement, handler: (e: Event) => void) {
+		node.addEventListener('input', handler as EventListener);
+		return { destroy() { node.removeEventListener('input', handler as EventListener); } };
+	}
+
+	// @-reference picker state
+	let mentionOpen = $state(false);
+	let mentionQuery = $state('');
+	let mentionAtPos = 0;
+	let mentionTarget: HTMLTextAreaElement | null = null;
+	let mentionSetter: ((next: string) => void) | null = null;
+
+	function detectMention(el: HTMLTextAreaElement, setter: (next: string) => void) {
+		const value = el.value;
+		const pos = el.selectionStart ?? value.length;
+		const before = value.slice(0, pos);
+		const m = before.match(/@([\w\-\.\/]*)$/);
+		if (m) {
+			mentionQuery = m[1];
+			mentionAtPos = pos - m[0].length;
+			mentionTarget = el;
+			mentionSetter = setter;
+			mentionOpen = true;
+		}
+	}
+
+	function insertMention(item: { value: string }) {
+		if (!mentionTarget || !mentionSetter) return;
+		const el = mentionTarget;
+		const value = el.value;
+		const caret = el.selectionStart ?? value.length;
+		const before = value.slice(0, mentionAtPos);
+		const after = value.slice(caret);
+		const insertion = item.value + ' ';
+		mentionSetter(before + insertion + after);
+		const newCursor = mentionAtPos + insertion.length;
+		requestAnimationFrame(() => {
+			el.focus({ preventScroll: true });
+			el.setSelectionRange(newCursor, newCursor);
+		});
 	}
 
 	// ─── Smart question UI (AskUserQuestion) ────────────────────────────────────
@@ -547,6 +590,10 @@
 					disabled={isSubmittingCustom}
 					bind:value={customInput}
 					use:autoGrow
+					use:directInput={(e) => {
+						const el = e.target as HTMLTextAreaElement;
+						detectMention(el, (next) => { customInput = next; });
+					}}
 					use:directKeydown={(e) => {
 						if (e.key === 'Enter' && !e.shiftKey && customInput.trim() && !isSubmittingCustom) {
 							e.preventDefault();
@@ -588,6 +635,10 @@
 						placeholder="Type your response… (Shift+Enter for newline)"
 						bind:value={otherText}
 						use:autoGrow
+						use:directInput={(e) => {
+							const el = e.target as HTMLTextAreaElement;
+							detectMention(el, (next) => { otherText = next; });
+						}}
 						use:directKeydown={(e) => {
 							if (e.key === 'Enter' && !e.shiftKey && otherText.trim()) {
 								e.preventDefault();

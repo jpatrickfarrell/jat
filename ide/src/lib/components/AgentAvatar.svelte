@@ -234,7 +234,9 @@
 			style="width: {size}px; height: {size}px; border-radius: {borderRadius}; perspective: 200px;"
 		>
 			{#if loadState === 'loading'}
-				<div class="w-full h-full animate-pulse" style="background: oklch(0.30 0.02 250);"></div>
+				<div class="w-full h-full flex items-center justify-center" style="background: oklch(0.22 0.02 250);">
+					<span class="loading loading-infinity text-base-content/30" style="width: {Math.max(Math.round(size * 0.55), 10)}px; height: {Math.max(Math.round(size * 0.55), 10)}px;"></span>
+				</div>
 			{:else if loadState === 'success' && svgContent}
 				<div class="w-full h-full {flipClass}" style="background: oklch(0.15 0.01 250);">
 					{@html svgContent}
@@ -255,11 +257,10 @@
 		style="width: {size}px; height: {size}px; border-radius: {borderRadius}; perspective: 200px;"
 	>
 		{#if loadState === 'loading'}
-			<!-- Loading skeleton -->
-			<div
-				class="w-full h-full animate-pulse"
-				style="background: oklch(0.30 0.02 250);"
-			></div>
+			<!-- Loading spinner -->
+			<div class="w-full h-full flex items-center justify-center" style="background: oklch(0.22 0.02 250);">
+				<span class="loading loading-infinity text-base-content/30" style="width: {Math.max(Math.round(size * 0.55), 10)}px; height: {Math.max(Math.round(size * 0.55), 10)}px;"></span>
+			</div>
 		{:else if loadState === 'success' && svgContent}
 			<!-- SVG avatar with flip animation -->
 			<div

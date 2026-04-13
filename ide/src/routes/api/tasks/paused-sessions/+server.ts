@@ -22,6 +22,7 @@ import { readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { getTaskById } from '$lib/server/jat-tasks.js';
 import { singleFlight, cacheKey } from '$lib/server/cache.js';
+import { reconcileOrphansForProject } from '../../../../../../lib/reconcile-orphans.js';
 import type { RequestHandler } from './$types';
 
 interface PausedSession {
@@ -65,6 +66,14 @@ export const GET: RequestHandler = async ({ url }) => {
     const key = cacheKey('paused-sessions', { project, closedAfter, closedBefore });
 
     const responseData = await singleFlight(key, async () => {
+        if (project) {
+            try {
+                await reconcileOrphansForProject(project);
+            } catch {
+                // non-fatal: proceed with timeline scan
+            }
+        }
+
         const tmpDir = '/tmp';
         const timelinePattern = /^jat-timeline-jat-(.+)\.jsonl$/;
         const sessions: PausedSession[] = [];

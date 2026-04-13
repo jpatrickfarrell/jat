@@ -31,7 +31,7 @@ import {
 	DEFAULT_MODEL,
 	AGENT_MAIL_URL
 } from '$lib/config/spawnConfig.js';
-import { getTaskById } from '$lib/server/jat-tasks.js';
+import { getTaskById, updateTask } from '$lib/server/jat-tasks.js';
 import { getProjectPath, getJatDefaults, getProjectConfig } from '$lib/server/projectPaths.js';
 import { routeAgent } from '$lib/server/agentRouter.js';
 import {
@@ -997,17 +997,20 @@ export async function POST({ request }) {
 		console.log(`[spawn] Registered agent ${agentName} in Agent Mail database (id: ${registerResult.agentId})`)
 
 		// Step 2: Assign task to new agent in JAT (if taskId provided)
+		// Always use local SQLite for task assignment — it's the agent-facing
+		// store regardless of whether the project is graduated to Postgres.
+		// The jat-team sync service (future) will push status changes upstream.
 		if (taskId) {
 			try {
-				await execAsync(`jt update "${taskId}" --status in_progress --assignee "${agentName}" --agent-program "${selectedAgent.id}" --model "${selectedModel.shortName}"`, {
-					cwd: projectPath,
-					timeout: 10000
+				updateTask(taskId, {
+					status: 'in_progress',
+					assignee: agentName,
+					agent_program: selectedAgent.id,
+					model: selectedModel.shortName,
 				});
-				console.log(`[spawn] Assigned task ${taskId} to ${agentName} in ${projectPath}`);
+				console.log(`[spawn] Assigned task ${taskId} to ${agentName} in local SQLite`);
 			} catch (err) {
-				// Provide detailed error context for debugging
-				const execErr = /** @type {{ stderr?: string, stdout?: string, message?: string }} */ (err);
-				const errorDetail = execErr.stderr || execErr.stdout || (err instanceof Error ? err.message : String(err));
+				const errorDetail = err instanceof Error ? err.message : String(err);
 
 				console.error(`[spawn] Failed to assign task ${taskId}:`, {
 					error: errorDetail,

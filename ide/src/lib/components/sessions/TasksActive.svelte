@@ -2098,6 +2098,19 @@
 				<span>Cleanup Session</span>
 			</button>
 		{:else}
+			<!-- Kill session only (task stays in_progress) -->
+			<button class="active-context-menu-item active-context-menu-item-warning" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; ctxProjectSubmenuOpen = false; }} onclick={async () => {
+				const d = ctxData!;
+				closeCtxMenu();
+				ctxData = null;
+				await handleKillSession(d.session.name);
+			}}>
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<line x1="18" y1="6" x2="6" y2="18" />
+					<line x1="6" y1="6" x2="18" y2="18" />
+				</svg>
+				<span>Kill Session</span>
+			</button>
 			<!-- Close task + kill session -->
 			<button class="active-context-menu-item active-context-menu-item-danger" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; ctxProjectSubmenuOpen = false; }} onclick={async () => {
 				const d = ctxData!;
@@ -2246,6 +2259,14 @@
 
 	.active-context-menu-item-success:hover {
 		background: oklch(0.25 0.06 145);
+	}
+
+	.active-context-menu-item-warning {
+		color: oklch(0.80 0.15 75);
+	}
+
+	.active-context-menu-item-warning:hover {
+		background: oklch(0.25 0.06 75);
 	}
 
 	.active-context-menu-divider {

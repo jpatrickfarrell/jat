@@ -4,7 +4,7 @@
 	 *
 	 * Full-screen drawer with horizontal pager for mobile session viewing.
 	 * Slides in from right. Contains swipeable pages:
-	 *   Page 0: Terminal (SessionCard with output)
+	 *   Page 0: Terminal (MobileTerminal — lightweight ANSI output + question UI)
 	 *   Page 1: Task Detail (task info, description, status)
 	 *
 	 * Swipe gestures:
@@ -18,7 +18,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { fly, fade } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
-	import SessionCard from '$lib/components/work/SessionCard.svelte';
+	import MobileTerminal from '$lib/components/work/MobileTerminal.svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import {
 		TaskFieldLabel,
@@ -771,7 +771,7 @@
 		}
 
 		tryAttach();
-		// Re-attach when DOM changes (SessionCard may re-render with output)
+		// Re-attach when DOM changes (MobileTerminal may update)
 		observer = new MutationObserver(tryAttach);
 		observer.observe(wrapperRef, { childList: true, subtree: true });
 
@@ -998,7 +998,7 @@
 			class="pager-container"
 			style="transform: {pagerTransform}; {pageTransitioning ? 'transition: transform 0.3s cubic-bezier(0.33, 1, 0.68, 1);' : ''} {swipeDragging ? 'will-change: transform;' : ''}"
 		>
-			<!-- Page 0: Terminal / SessionCard -->
+			<!-- Page 0: Terminal -->
 			<div class="pager-page">
 				<!-- Custom mobile header — same swipe-card design as TasksActive standalone tasks -->
 				{#if task}
@@ -1044,33 +1044,9 @@
 				{/if}
 				<div class="session-card-wrapper" class:mobile-scrolling={mobileScrolling} bind:this={wrapperRef}>
 					{#if currentPage === 0}
-					<SessionCard
-						mode="agent"
+					<MobileTerminal
 						{sessionName}
-						{agentName}
-						{task}
 						{output}
-						{tokens}
-						{cost}
-						{sseState}
-						{sseStateTimestamp}
-						{created}
-						{attached}
-						headerless={true}
-						hideInput={true}
-						onKillSession={() => {
-							dismissDrawer();
-							onKillSession();
-						}}
-						onInterrupt={() => {
-							fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, {
-								method: 'POST',
-								headers: { 'Content-Type': 'application/json' },
-								body: JSON.stringify({ type: 'ctrl-c' })
-							});
-						}}
-						onAttachTerminal={onAttachSession}
-						onTaskClick={(taskId) => onViewTask(taskId)}
 						onSendInput={(text, type) => onSendInput(text, type)}
 					/>
 					{/if}
@@ -1555,7 +1531,7 @@
 		overflow: hidden;
 	}
 
-	/* Session card wrapper: fills page and stretches child SessionCard */
+	/* Terminal wrapper: fills page and stretches child MobileTerminal */
 	.session-card-wrapper {
 		flex: 1;
 		overflow: hidden;
@@ -1570,16 +1546,6 @@
 		border-radius: 0;
 	}
 
-	/* Mobile minimap overrides — hidden by default, slides in on scroll.
-	   Targets SessionCard's output+minimap parent via structural selectors. */
-	.session-card-wrapper :global(.relative.flex-1.min-h-0) {
-		overflow-x: hidden;
-	}
-
-	.session-card-wrapper :global(.relative.flex-1.min-h-0 > .absolute.inset-0) {
-		right: 0 !important;
-		overflow-x: hidden !important;
-	}
 
 	/* Wrap long terminal lines on mobile */
 	.session-card-wrapper :global(pre) {

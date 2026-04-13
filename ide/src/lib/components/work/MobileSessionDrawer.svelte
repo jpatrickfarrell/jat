@@ -118,9 +118,20 @@
 		}
 	});
 
-	// Compute effective state: closed tasks → 'completed'
+	// Optimistic answer state: set to 'working' when user submits a needs_input answer,
+	// cleared when SSE confirms the session is no longer in needs-input state.
+	let optimisticAnswerState = $state<SessionState | null>(null);
+
+	// Clear optimistic state once SSE has caught up (session is no longer needs-input).
+	$effect(() => {
+		if (optimisticAnswerState !== null && sseState !== 'needs-input') {
+			optimisticAnswerState = null;
+		}
+	});
+
+	// Compute effective state: closed tasks → 'completed', optimistic answer → override SSE
 	const effectiveState = $derived(
-		(task?.status === 'closed' ? 'completed' : (sseState || sessionState || 'idle')) as SessionState
+		(task?.status === 'closed' ? 'completed' : (optimisticAnswerState || sseState || sessionState || 'idle')) as SessionState
 	);
 
 	// Dynamic actions from configurable state actions (same system as MobileSessionFullscreen)
@@ -1041,7 +1052,7 @@
 				<!-- Custom mobile header — same swipe-card design as TasksActive standalone tasks -->
 				{#if task}
 					{@const typeVisual = getIssueTypeVisual(task.issue_type)}
-					{@const stateVisual = getSessionStateVisual(sseState || 'idle')}
+					{@const stateVisual = getSessionStateVisual(effectiveState || 'idle')}
 					<div class="border-b border-base-300 flex-shrink-0" style="border-left: 3px solid {stateVisual.accent};">
 						<div class="flex items-stretch min-h-0">
 							<!-- Left strip: square agent tile (matches TasksActive swipe card pattern) -->
@@ -1072,6 +1083,7 @@
 						onCleanup={() => onAction('cleanup')}
 						onComplete={() => onSendInput('/jat:complete', 'text')}
 						onViewTask={onViewTask}
+						onOptimisticAnswer={(state) => { optimisticAnswerState = state as SessionState | null; }}
 					/>
 					{/if}
 				</div>

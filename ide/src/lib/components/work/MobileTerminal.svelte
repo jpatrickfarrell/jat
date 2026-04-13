@@ -23,6 +23,7 @@
 	import QuestionPanel from './mobile/QuestionPanel.svelte';
 	import OptionButton from './mobile/OptionButton.svelte';
 	import EventStack from './EventStack.svelte';
+	import { errorToast } from '$lib/stores/toasts.svelte';
 
 	const input = SESSION_STATE_VISUALS['needs-input'];
 
@@ -38,7 +39,8 @@
 		onComplete = undefined as (() => void | Promise<void>) | undefined,
 		onViewTask = undefined as ((taskId: string) => void) | undefined,
 		onCreateTasks = undefined as ((tasks: any[]) => Promise<{ success: any[]; failed: any[] }>) | undefined,
-		onCreateAndStartTasks = undefined as ((tasks: any[]) => Promise<{ success: any[]; failed: any[] }>) | undefined
+		onCreateAndStartTasks = undefined as ((tasks: any[]) => Promise<{ success: any[]; failed: any[] }>) | undefined,
+		onOptimisticAnswer = undefined as ((state: string | null) => void) | undefined
 	}: {
 		sessionName?: string;
 		output?: string;
@@ -52,6 +54,8 @@
 		onViewTask?: (taskId: string) => void;
 		onCreateTasks?: (tasks: any[]) => Promise<{ success: any[]; failed: any[] }>;
 		onCreateAndStartTasks?: (tasks: any[]) => Promise<{ success: any[]; failed: any[] }>;
+		/** Called when a custom question answer is submitted (state='working') or rolled back (state=null). */
+		onOptimisticAnswer?: (state: string | null) => void;
 	} = $props();
 
 	// Emit review signal for the active task
@@ -420,6 +424,17 @@
 		if (!sessionName || isSubmittingCustom) return;
 		isSubmittingCustom = true;
 		customError = null;
+
+		// Optimistic: dismiss the question immediately so the UI responds without waiting for the server.
+		// Snapshot for rollback in case the POST fails.
+		const snapshot = customQuestion;
+		customQuestion = null;
+		customInput = '';
+		if (sessionName && typeof localStorage !== 'undefined') {
+			localStorage.removeItem(`jat-draft-mobile-${sessionName}-custom-question`);
+		}
+		onOptimisticAnswer?.('working');
+
 		try {
 			const r = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/custom-question`, {
 				method: 'POST',
@@ -428,14 +443,14 @@
 				signal: aborter.signal
 			});
 			if (!r.ok) throw new Error(`HTTP ${r.status}`);
-			customQuestion = null;
-			customInput = '';
-			if (sessionName && typeof localStorage !== 'undefined') {
-				localStorage.removeItem(`jat-draft-mobile-${sessionName}-custom-question`);
-			}
+			// Success — optimistic clear was correct, nothing more to do.
 		} catch (e) {
 			if ((e as Error).name !== 'AbortError') {
-				customError = 'Failed to send. Try again.';
+				// Rollback: restore the question panel and the typed answer so the user can retry.
+				customQuestion = snapshot;
+				customInput = answer;
+				onOptimisticAnswer?.(null);
+				errorToast('Answer failed to send', 'Check connection and try again');
 			}
 		} finally {
 			isSubmittingCustom = false;
@@ -471,7 +486,7 @@
 	<div
 		bind:this={scrollEl}
 		class="flex-1 overflow-y-auto min-h-0"
-		style="background: {mobileSurface.terminalBg}; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;"
+		style="background: {mobileSurface.terminalBg}; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; min-height: 140px;"
 		onscroll={handleScroll}
 	>
 		<pre
@@ -480,6 +495,8 @@
 		>{@html renderedOutput}</pre>
 	</div>
 
+	<!-- Bottom stack: EventStack + question panels — capped at 60vh so terminal stays visible -->
+	<div class="bottom-stack">
 	<!-- Event Timeline Stack: signal history, action buttons, suggested tasks, needs_input cards -->
 	{#if sessionName}
 		<div class="relative px-2 bg-base-300 flex-shrink-0">
@@ -654,10 +671,19 @@
 			{/if}
 		</QuestionPanel>
 	{/if}
+	</div> <!-- /.bottom-stack -->
 </div>
 
 <style>
 	.mobile-terminal {
 		contain: strict; /* hint browser to isolate layout/paint */
+	}
+
+	.bottom-stack {
+		max-height: 60vh;
+		overflow-y: auto;
+		flex-shrink: 0;
+		-webkit-overflow-scrolling: touch;
+		overscroll-behavior: contain;
 	}
 </style>

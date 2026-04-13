@@ -11,10 +11,11 @@
 import { json } from '@sveltejs/kit';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, extname } from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getProjectPath } from '$lib/server/projectPaths.js';
+import { getProjectSupabaseConfig } from '../../../../../../lib/projects-config.js';
 
 const execAsync = promisify(exec);
 
@@ -205,6 +206,16 @@ export async function PUT({ params, request }) {
 		// Sync image paths to task notes so agents see them via `jt show`
 		await syncNotesToTask(taskId, images[taskId]);
 
+		// For postgres-backed projects: also upload to Supabase Storage and
+		// update project_tasks.screenshot_paths so the app sees the attachment.
+		// Best-effort — local save already succeeded so don't fail the request.
+		const projectName = getProjectFromTaskId(taskId);
+		if (projectName) {
+			syncAttachmentToSupabase(projectName, taskId, path).catch((err) => {
+				console.error('[supabase-sync] Failed to sync attachment:', err.message);
+			});
+		}
+
 		return json({
 			success: true,
 			taskId,
@@ -215,6 +226,109 @@ export async function PUT({ params, request }) {
 		console.error('Error adding task image:', err);
 		return json({ error: 'Failed to add task image' }, { status: 500 });
 	}
+}
+
+/**
+ * Upload a local attachment to Supabase Storage and append the path to
+ * project_tasks.screenshot_paths for the matching Meadow task.
+ *
+ * @param {string} projectName  - e.g. "meadow"
+ * @param {string} taskId       - e.g. "meadow-okzpt"
+ * @param {string} localPath    - absolute path to the local file
+ */
+async function syncAttachmentToSupabase(projectName, taskId, localPath) {
+	const supabase = getProjectSupabaseConfig(projectName);
+	if (!supabase) return; // No Supabase config for this project
+
+	if (!existsSync(localPath)) {
+		console.warn(`[supabase-sync] Local file not found: ${localPath}`);
+		return;
+	}
+
+	const buffer = await readFile(localPath);
+	const ext = extname(localPath).slice(1) || 'png';
+	const storagePath = `tasks/${taskId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+	const mimeType = getMimeType(ext);
+
+	// Upload to Supabase Storage (screenshots bucket)
+	const uploadRes = await fetch(
+		`${supabase.supabaseUrl}/storage/v1/object/screenshots/${storagePath}`,
+		{
+			method: 'POST',
+			headers: {
+				Authorization: `Bearer ${supabase.serviceRoleKey}`,
+				apikey: supabase.serviceRoleKey,
+				'Content-Type': mimeType,
+				'x-upsert': 'true'
+			},
+			body: buffer
+		}
+	);
+
+	if (!uploadRes.ok) {
+		const body = await uploadRes.text();
+		throw new Error(`Storage upload failed (${uploadRes.status}): ${body}`);
+	}
+
+	// Append storagePath to project_tasks.screenshot_paths WHERE jat_id = taskId
+	const patchRes = await fetch(
+		`${supabase.supabaseUrl}/rest/v1/rpc/append_task_screenshot`,
+		{
+			method: 'POST',
+			headers: {
+				Authorization: `Bearer ${supabase.serviceRoleKey}`,
+				apikey: supabase.serviceRoleKey,
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify({ p_jat_id: taskId, p_path: storagePath })
+		}
+	);
+
+	if (!patchRes.ok) {
+		// Fallback: direct array append via REST PATCH
+		// First read current paths, then write merged array
+		const readRes = await fetch(
+			`${supabase.supabaseUrl}/rest/v1/project_tasks?jat_id=eq.${encodeURIComponent(taskId)}&select=id,screenshot_paths`,
+			{
+				headers: {
+					Authorization: `Bearer ${supabase.serviceRoleKey}`,
+					apikey: supabase.serviceRoleKey
+				}
+			}
+		);
+		if (!readRes.ok) throw new Error(`Failed to read project_tasks: ${readRes.status}`);
+		const [row] = await readRes.json();
+		if (!row) {
+			console.warn(`[supabase-sync] No project_tasks row for jat_id=${taskId}`);
+			return;
+		}
+		const merged = [...(row.screenshot_paths ?? []), storagePath];
+		const writeRes = await fetch(
+			`${supabase.supabaseUrl}/rest/v1/project_tasks?id=eq.${row.id}`,
+			{
+				method: 'PATCH',
+				headers: {
+					Authorization: `Bearer ${supabase.serviceRoleKey}`,
+					apikey: supabase.serviceRoleKey,
+					'Content-Type': 'application/json',
+					Prefer: 'return=minimal'
+				},
+				body: JSON.stringify({ screenshot_paths: merged })
+			}
+		);
+		if (!writeRes.ok) throw new Error(`Failed to patch screenshot_paths: ${writeRes.status}`);
+	}
+
+	console.log(`[supabase-sync] Synced ${localPath} → screenshots/${storagePath} for ${taskId}`);
+}
+
+/**
+ * @param {string} ext
+ * @returns {string}
+ */
+function getMimeType(ext) {
+	const map = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', pdf: 'application/pdf', txt: 'text/plain' };
+	return map[ext.toLowerCase()] || 'application/octet-stream';
 }
 
 /**

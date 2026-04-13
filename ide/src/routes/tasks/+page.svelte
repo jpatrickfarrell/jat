@@ -2636,6 +2636,7 @@
 	<MobileSessionDrawer
 		sessionName={drawerSessionName}
 		agentName={drawerAgent}
+		project={selectedProject || (drawerTask?.id?.includes('-') ? drawerTask.id.split('-')[0] : null)}
 		task={drawerTask ? {
 			id: drawerTask.id,
 			title: drawerTask.title,

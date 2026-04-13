@@ -671,6 +671,49 @@
 		}, durationMs);
 	}
 
+	// Hold-to-confirm for destructive mobile tray actions (kill, complete, complete-kill)
+	const DESTRUCTIVE_TRAY_ACTIONS = new Set(['kill', 'complete', 'complete-kill']);
+	const HOLD_DURATION_MS = 600;
+	const HOLD_TICK_MS = 30;
+	let holdKey = $state<string | null>(null);
+	let holdProgress = $state(0);
+	let holdTimer: ReturnType<typeof setInterval> | null = null;
+
+	function startTrayHold(
+		actionId: string,
+		sessionName: string,
+		sessionTask: AgentTask | null,
+		agentName: string,
+		project: string | null
+	) {
+		const key = `${sessionName}:${actionId}`;
+		if (!DESTRUCTIVE_TRAY_ACTIONS.has(actionId)) {
+			handleMobileAction(actionId, sessionName, sessionTask, agentName, project);
+			return;
+		}
+		clearTrayHold();
+		holdKey = key;
+		holdProgress = 0;
+		let elapsed = 0;
+		holdTimer = setInterval(() => {
+			elapsed += HOLD_TICK_MS;
+			holdProgress = Math.min(100, (elapsed / HOLD_DURATION_MS) * 100);
+			if (elapsed >= HOLD_DURATION_MS) {
+				clearTrayHold();
+				handleMobileAction(actionId, sessionName, sessionTask, agentName, project);
+			}
+		}, HOLD_TICK_MS);
+	}
+
+	function clearTrayHold() {
+		if (holdTimer) {
+			clearInterval(holdTimer);
+			holdTimer = null;
+		}
+		holdKey = null;
+		holdProgress = 0;
+	}
+
 	async function handleMobileAction(actionId: string, sessionName: string, sessionTask: AgentTask | null, agentName: string, project: string | null) {
 		// Prevent double-clicks while feedback is active
 		const feedbackKey = `${sessionName}:${actionId}`;
@@ -1202,7 +1245,10 @@
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							{#each cardActions.slice(0, 5) as action}
 								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
-								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} title={action.description} disabled={!!fb} onclick={() => handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null)}>
+								{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
+								{@const holdMatch = holdKey === `${session.name}:${action.id}`}
+								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} class:mobile-tray-btn-holding={holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive) handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
+									{#if isDestructive && holdMatch}<span class="tray-hold-fill" style="width: {holdProgress}%"></span>{/if}
 									{#if fb}
 										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
 									{:else}
@@ -1239,7 +1285,10 @@
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							{#each cardActions.slice(0, 5) as action}
 								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
-								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} title={action.description} disabled={!!fb} onclick={() => handleMobileAction(action.id, session.name, sessionTask, sessionAgentName, session.project || null)}>
+								{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
+								{@const holdMatch = holdKey === `${session.name}:${action.id}`}
+								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} class:mobile-tray-btn-holding={holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive) handleMobileAction(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
+									{#if isDestructive && holdMatch}<span class="tray-hold-fill" style="width: {holdProgress}%"></span>{/if}
 									{#if fb}
 										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
 									{:else}
@@ -1517,7 +1566,10 @@
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							{#each cardActions.slice(0, 5) as action}
 								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
-								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} title={action.description} disabled={!!fb} onclick={() => handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null)}>
+								{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
+								{@const holdMatch = holdKey === `${session.name}:${action.id}`}
+								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} class:mobile-tray-btn-holding={holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive) handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
+									{#if isDestructive && holdMatch}<span class="tray-hold-fill" style="width: {holdProgress}%"></span>{/if}
 									{#if fb}
 										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
 									{:else}
@@ -2559,6 +2611,21 @@
 	.mobile-tray-btn-cmds-open { background: oklch(0.42 0.14 200); box-shadow: inset 0 -2px 0 oklch(0.65 0.18 200 / 0.6); }
 	.mobile-tray-btn-auto     { background: oklch(0.35 0.08 45); color: oklch(0.70 0.12 45); }
 	.mobile-tray-btn-auto-on  { background: oklch(0.35 0.12 145); color: oklch(0.75 0.15 145); }
+
+	.mobile-tray-btn { position: relative; overflow: hidden; }
+	.tray-hold-fill {
+		position: absolute;
+		left: 0;
+		top: 0;
+		bottom: 0;
+		background: oklch(1 0 0 / 0.28);
+		transition: width 30ms linear;
+		pointer-events: none;
+		z-index: 0;
+	}
+	.mobile-tray-btn-holding { filter: brightness(1.2); }
+	.mobile-tray-btn > :not(.tray-hold-fill) { position: relative; z-index: 1; }
+
 
 	/* Inline commands panel — expands below the card inner */
 	.mobile-cmd-inline {

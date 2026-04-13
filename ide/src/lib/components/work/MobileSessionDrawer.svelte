@@ -1176,6 +1176,7 @@
 						{sessionName}
 						{output}
 						{task}
+						defaultProject={project || ''}
 						sessionState={effectiveState}
 						onSendInput={(text, type) => onSendInput(text, type)}
 						onCleanup={() => onAction('cleanup')}
@@ -1196,12 +1197,9 @@
 							class:mobile-btn-flashing={activeActionId === action.id}
 							class:hold-active={holdActionId === action.id}
 							use:directClick={() => { if (!isDestructive) executePillAction(action); }}
-							onmousedown={() => startHold(action)}
-							ontouchstart={() => startHold(action)}
-							onmouseup={clearHold}
-							onmouseleave={clearHold}
-							ontouchend={clearHold}
-							ontouchcancel={clearHold}
+							onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startHold(action); }}
+							onpointerup={clearHold}
+							onpointercancel={clearHold}
 							title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : (action.description || action.label)}
 						>
 							{#if isDestructive && holdActionId === action.id}

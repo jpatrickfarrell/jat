@@ -53,10 +53,11 @@ export async function POST({ request }) {
 			if (stdout.trim() === 'exists') {
 				return json(
 					{
-						error: 'Session already exists',
+						success: true,
+						alreadyRunning: true,
 						message: `Server session "${sessionName}" is already running`
 					},
-					{ status: 409 }
+					{ status: 200 }
 				);
 			}
 		} catch {

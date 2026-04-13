@@ -13,6 +13,28 @@
 import { json } from '@sveltejs/kit';
 import { getTaskById } from '$lib/server/jat-tasks.js';
 import { getThreadMessages } from '$lib/server/agent-mail.js';
+import { resolveBackendForProject } from '../../../../../../../lib/projects-config.js';
+
+/**
+ * Detect if a task ID belongs to a postgres-backed graduated project.
+ * Returns the async backend if so, null otherwise.
+ *
+ * @param {string} taskId  - e.g. "meadow-abc12"
+ * @returns {Promise<import('../../../../../../lib/tasks-backend.js').TaskBackend|null>}
+ */
+async function getPgBackendForTask(taskId) {
+	const match = taskId.match(/^([a-zA-Z0-9_-]+?)-[a-zA-Z0-9.]+$/);
+	if (!match) return null;
+	const projectName = match[1];
+	try {
+		const backendConfig = resolveBackendForProject(projectName);
+		if (backendConfig.kind !== 'postgres') return null;
+		const { getBackendForProject } = await import('../../../../../../../lib/tasks-backend.js');
+		return getBackendForProject(projectName);
+	} catch {
+		return null;
+	}
+}
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ params }) {
@@ -23,8 +45,14 @@ export async function GET({ params }) {
 	}
 
 	try {
-		// Fetch task data from JAT
-		const task = getTaskById(id);
+		// Fetch task data — route postgres-backed cross-project tasks through async backend
+		const pgBackend = await getPgBackendForTask(id);
+		let task;
+		if (pgBackend) {
+			task = await pgBackend.getById(id);
+		} else {
+			task = getTaskById(id);
+		}
 
 		if (!task) {
 			return json({ error: 'Task not found' }, { status: 404 });

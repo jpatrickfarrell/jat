@@ -8,11 +8,13 @@
  * - Cleans up orphaned .claude/sessions/agent-*.txt files (where Claude session no longer exists)
  * - Runs token usage aggregation on startup
  * - Schedules periodic aggregation every 5 minutes
+ * - Starts Supabase Realtime sync service (replaces 5-min polling)
  * - Request context logging with unique request IDs
  * - Performance tracking for all API requests
  */
 
 import { runAggregation } from '$lib/server/tokenUsageDb';
+import { start as startSupabaseRealtime } from '$lib/server/supabase-realtime.js';
 import { readdirSync, unlinkSync, statSync, existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
@@ -238,6 +240,13 @@ async function initializeStartupTasks() {
 		);
 	} else if (sessionCleanupResult.scanned > 0) {
 		console.log(`[Session Cleanup] All ${sessionCleanupResult.scanned} session files are valid`);
+	}
+
+	// Start Supabase Realtime sync service (replaces 5-min polling adapter)
+	try {
+		startSupabaseRealtime();
+	} catch (err) {
+		console.error('[Supabase Realtime] Failed to start:', err);
 	}
 
 	// Defer aggregation by 2 seconds to let server start serving requests first

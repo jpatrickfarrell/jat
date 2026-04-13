@@ -33,6 +33,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 	import { AGENT_PRESETS, type AgentProgramPreset } from '$lib/types/agentProgram';
 	import { CRON_PRESETS, describeCron } from '$lib/utils/cronUtils';
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
+	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
 	import { loadCommands, getCommands, getCommandDropdownGroups } from '$lib/stores/configStore.svelte';
 
 	// Type for pending attachments (before upload)
@@ -1859,14 +1860,13 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 								<span class="badge badge-xs bg-base-content/20 text-base-content/60 ml-auto normal-case tracking-normal font-normal">has notes</span>
 							{/if}
 						</summary>
-						<div class="mt-1">
-							<textarea
-								id="task-notes"
-								placeholder={formDisabled ? "Select a project first..." : "Personal notes, reference links, etc."}
-								class="textarea w-full h-20 font-mono text-sm bg-base-200 border-base-content/30 text-base-content {formDisabled ? 'opacity-50' : ''}"
+						<div class="mt-1 rounded-md overflow-hidden border border-base-content/30 bg-base-200 {formDisabled ? 'opacity-50 pointer-events-none' : ''}" style="height: 10rem;">
+							<MonacoWrapper
 								bind:value={formData.notes}
-								disabled={formDisabled || isSubmitting}
-							></textarea>
+								language="markdown"
+								readonly={formDisabled || isSubmitting}
+								disableSuggestions={true}
+							/>
 						</div>
 					</details>
 

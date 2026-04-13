@@ -7,6 +7,7 @@
 	 */
 
 	import { untrack } from 'svelte';
+	import { addToast } from '$lib/stores/toasts.svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import { getReviewRules } from '$lib/stores/reviewRules.svelte';
 	import { computeReviewStatus } from '$lib/utils/reviewStatusUtils';
@@ -766,10 +767,19 @@
 	const rightAction = $derived(getSwipeActionDef(swipeConfig.rightSwipe));
 	const leftAction = $derived(getSwipeActionDef(swipeConfig.leftSwipe));
 
+	let trayHintDismissed = $state(true);
 	onMount(() => {
 		initSwipeActions();
 		swipeConfig = getSwipeConfig();
+		try {
+			trayHintDismissed = localStorage.getItem('jat-tray-hint-seen') === '1';
+		} catch { trayHintDismissed = true; }
 	});
+	function dismissTrayHint() {
+		if (trayHintDismissed) return;
+		trayHintDismissed = true;
+		try { localStorage.setItem('jat-tray-hint-seen', '1'); } catch {}
+	}
 
 	// Auto-complete: fire /jat:complete when a session hits ready-for-review and
 	// review rules say auto + Session Cleanup is enabled + user hasn't toggled off.
@@ -963,12 +973,16 @@
 	let ctxStateSubmenuOpen = $state(false);
 	let ctxProjectSubmenuOpen = $state(false);
 	let copiedMobileId = $state<string | null>(null);
-	function copyMobileId(e: MouseEvent, taskId: string) {
+	async function copyMobileId(e: MouseEvent, taskId: string) {
 		e.stopPropagation();
-		navigator.clipboard.writeText(taskId);
-		copiedMobileId = taskId;
-		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(4);
-		setTimeout(() => (copiedMobileId = null), 1500);
+		try {
+			await navigator.clipboard.writeText(taskId);
+			copiedMobileId = taskId;
+			if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(4);
+			setTimeout(() => { if (copiedMobileId === taskId) copiedMobileId = null; }, 2500);
+		} catch (err) {
+			addToast({ message: 'Could not copy task ID', type: 'error', details: String((err as Error)?.message || err) });
+		}
 	}
 
 	function handleContextMenu(session: TmuxSession, event: MouseEvent) {
@@ -1112,8 +1126,8 @@
 		<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="empty-icon">
 			<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
 		</svg>
-		<p class="empty-title">No active sessions</p>
-		<p class="empty-hint">Start a new agent or dev server to see sessions here.</p>
+		<p class="empty-title">No sessions running</p>
+		<p class="empty-hint">Spawn an agent from an open task below, or start a dev server to see it here.</p>
 	</div>
 {:else}
 	<!-- Card-based layout -->
@@ -1164,12 +1178,15 @@
 					class="mobile-session-card"
 					class:attached={session.attached}
 					class:swiping={isSwiping}
+					class:tray-hint-active={!trayHintDismissed}
+					class:is-completing={effectiveState === 'completing'}
+					onmouseenter={dismissTrayHint}
 					style="border-left: 3px solid {stateVisual.accent}; {isExiting ? 'pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
 					role="button" tabindex="0"
 					onclick={() => !isExiting && !swipeState?.swiping && (onCardClick ? onCardClick(session.name) : (fullscreenSession = session.name))}
 					oncontextmenu={(e) => handleContextMenu(session, e)}
 					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); !isExiting && !swipeState?.swiping && (onCardClick ? onCardClick(session.name) : (fullscreenSession = session.name)); } }}
-					ontouchstart={(e) => handleSwipeTouchStart(e, session.name)}
+					ontouchstart={(e) => { dismissTrayHint(); handleSwipeTouchStart(e, session.name); }}
 					ontouchmove={handleSwipeTouchMove}
 					ontouchend={handleSwipeTouchEnd}
 					ontouchcancel={handleSwipeTouchEnd}
@@ -1211,7 +1228,7 @@
 					{@const autoCompleteDisabled = autoCompleteDisabledMap.get(session.name) ?? reviewBasedDefault}
 					<div class="mobile-card-inner">
 						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint};">
-							<AgentAvatar name={sessionAgentName} size={60} showRing={false} shape="rounded" />
+							<AgentAvatar name={sessionAgentName} size={96} showRing={false} shape="rounded" />
 							<div class="mobile-strip-agent-label" title={sessionAgentName}>
 								{#each splitAgentName(sessionAgentName) as part}
 									<span>{part}</span>
@@ -1303,7 +1320,13 @@
 								</button>
 							</div>
 							{#if dtrayCommandsLoading}
-								<div class="mobile-cmd-msg">Loading commands…</div>
+								{#each Array(3) as _, i}
+									<div class="mobile-cmd-skeleton" style="animation-delay: {i * 80}ms;" aria-hidden="true">
+										<div class="mobile-cmd-skeleton-ns"></div>
+										<div class="mobile-cmd-skeleton-name"></div>
+									</div>
+								{/each}
+								<span class="sr-only">Loading commands…</span>
 							{:else if filteredCmdPanelItems.length === 0}
 								<div class="mobile-cmd-msg">{cmdPanelSearch.trim() ? `No match for "${cmdPanelSearch}"` : 'No commands found'}</div>
 							{:else}
@@ -1357,7 +1380,10 @@
 								</button>
 							</div>
 							{#if epicPickerLoading}
-								<div class="mobile-epic-msg">Loading epics…</div>
+								{#each Array(3) as _, i}
+									<div class="mobile-epic-skeleton" style="animation-delay: {i * 80}ms;" aria-hidden="true"></div>
+								{/each}
+								<span class="sr-only">Loading epics…</span>
 							{:else if epicPickerItems.length === 0}
 								<div class="mobile-epic-msg">No epics in this project</div>
 							{:else if filteredEpicPickerItems.length === 0}
@@ -1446,7 +1472,12 @@
 								</div>
 							{/if}
 							<div class="mobile-card-row2">
-								<button class="mobile-task-id" style="color: {statusDotColor};" onclick={(e) => copyMobileId(e, sessionTask.id)} title="Click to copy task ID">{copiedMobileId === sessionTask.id ? '✓' : sessionTask.id}</button>
+								<span class="mobile-agent-name" title={sessionAgentName}>{sessionAgentName}</span>
+								<span class="mobile-separator">·</span>
+								<button class="mobile-task-id" class:mobile-task-id-copied={copiedMobileId === sessionTask.id} style="color: {statusDotColor};" onclick={(e) => copyMobileId(e, sessionTask.id)} title="Click to copy task ID" aria-label={copiedMobileId === sessionTask.id ? `Copied task ID ${sessionTask.id}` : `Copy task ID ${sessionTask.id}`}>
+									<span class="mobile-task-id-text">{sessionTask.id}</span>
+									{#if copiedMobileId === sessionTask.id}<span class="mobile-task-id-badge" aria-hidden="true">✓ copied</span>{/if}
+								</button>
 								{#if sessionTask.issue_type}
 									<span class="mobile-separator">·</span>
 									<span class="mobile-type-icon" title={typeVisual.label}>{typeVisual.icon}</span>
@@ -1457,7 +1488,7 @@
 								{/if}
 								{#if sessionTask.priority != null && sessionTask.priority <= 2}
 									<span class="mobile-separator">·</span>
-									<span class="mobile-priority mobile-priority-{sessionTask.priority}">P{sessionTask.priority}</span>
+									<span class="mobile-priority mobile-priority-{sessionTask.priority}" title={sessionTask.priority === 0 ? 'P0 — Critical' : sessionTask.priority === 1 ? 'P1 — High' : 'P2 — Medium'}>P{sessionTask.priority}</span>
 								{/if}
 								{#if taskAge.label}
 									<span class="mobile-separator">·</span>
@@ -1480,7 +1511,7 @@
 					{@const cardActions = getSessionStateActions(effectiveState)}
 					<div class="mobile-card-inner">
 						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint};">
-							<AgentAvatar name={sessionAgentName} size={60} showRing={false} shape="rounded" />
+							<AgentAvatar name={sessionAgentName} size={96} showRing={false} shape="rounded" />
 						</div>
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
@@ -1498,7 +1529,7 @@
 						</div>
 						<div class="mobile-card-body">
 							<span class="mobile-title" style="color: oklch(0.70 0.12 270);">
-								{effectiveState === 'planning' ? 'Planning session' : 'No active task'}
+								{effectiveState === 'planning' ? 'Planning session' : 'Idle — no task assigned'}
 							</span>
 							<div class="mobile-card-row2">
 								<AgentAvatar name={sessionAgentName} size={16} showRing={true} sessionState={effectiveState} />
@@ -2387,38 +2418,21 @@
 		transition: filter 0.2s;
 	}
 
-	/* Agent variant: avatar fills top, name below — pushed to top to avoid dead space */
+	/* Agent variant: avatar only — name moved to metadata row */
 	.mobile-state-strip-agent {
-		width: 68px;
-		padding: 4px 4px;
-		flex-direction: column;
-		justify-content: flex-start;
-		gap: 0.375rem;
-	}
-
-	/* Agent name below avatar — centered text label */
-	.mobile-strip-agent-label {
+		width: 140px;
+		padding: 0;
 		display: flex;
-		flex-direction: column;
 		align-items: center;
-		line-height: 1.1;
-		font-size: 0.5625rem;
-		font-weight: 600;
-		letter-spacing: 0.03em;
-		text-transform: uppercase;
-		color: oklch(0.60 0.015 250);
-		font-family: system-ui, -apple-system, sans-serif;
-		text-align: center;
-		max-width: 100%;
-		overflow: hidden;
-		opacity: 0.85;
+		justify-content: center;
+	}
+	.mobile-state-strip-agent :global(*) {
+		border-radius: 0 !important;
 	}
 
-	.mobile-strip-agent-label span {
-		max-width: 100%;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+	/* Hide redundant agent name label — it's shown in the metadata row now */
+	.mobile-strip-agent-label {
+		display: none;
 	}
 
 	/* Brighten strip on card hover */
@@ -2431,7 +2445,7 @@
 		background: oklch(0.65 0.15 145 / 0.15);
 	}
 
-	/* Action tray — slides out on hover */
+	/* Action tray — primary actions always visible, expands on hover/focus to reveal secondary */
 	.mobile-action-tray {
 		display: flex;
 		align-items: stretch;
@@ -2439,11 +2453,69 @@
 		overflow: hidden;
 		transition: max-width 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 		flex-shrink: 0;
+		order: 3;
 	}
 
-	.mobile-state-strip:hover ~ .mobile-action-tray,
-	.mobile-action-tray:hover {
+	.mobile-session-card:hover .mobile-action-tray,
+	.mobile-action-tray:hover,
+	.mobile-action-tray:focus-within {
 		max-width: 480px;
+	}
+
+	/* Completing: indeterminate progress shimmer across the bottom edge */
+	.mobile-session-card.is-completing {
+		position: relative;
+	}
+	.mobile-session-card.is-completing::after {
+		content: '';
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		height: 2px;
+		background: linear-gradient(
+			90deg,
+			transparent 0%,
+			oklch(0.75 0.12 175 / 0.6) 40%,
+			oklch(0.85 0.15 175) 50%,
+			oklch(0.75 0.12 175 / 0.6) 60%,
+			transparent 100%
+		);
+		background-size: 200% 100%;
+		animation: completing-progress 1.6s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+		pointer-events: none;
+	}
+	@keyframes completing-progress {
+		0%   { background-position: 150% 0; }
+		100% { background-position: -50% 0; }
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.mobile-session-card.is-completing::after {
+			animation: none;
+			background: oklch(0.75 0.12 175 / 0.5);
+		}
+	}
+
+	/* Onboarding hint: briefly peek the tray on the first card so users discover the reveal */
+	.swipe-container:first-child .mobile-session-card.tray-hint-active .mobile-action-tray {
+		animation: tray-hint-peek 2.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.8s 1 both;
+	}
+	@keyframes tray-hint-peek {
+		0%   { max-width: 0; }
+		25%  { max-width: 96px; }
+		55%  { max-width: 96px; }
+		100% { max-width: 0; }
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.swipe-container:first-child .mobile-session-card.tray-hint-active .mobile-action-tray {
+			animation: none;
+		}
+	}
+
+	@media (hover: none) {
+		.mobile-session-card:active .mobile-action-tray {
+			max-width: 480px;
+		}
 	}
 
 	/* Tray action buttons */
@@ -2547,6 +2619,44 @@
 		color: oklch(0.55 0.04 200);
 		font-size: 0.6875rem;
 		text-align: center;
+	}
+
+	.mobile-cmd-skeleton {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		width: 100%;
+		padding: 0.35rem 0.5rem;
+		border-radius: 0.25rem;
+		background: oklch(0.22 0.03 200 / 0.4);
+	}
+	.mobile-cmd-skeleton-ns {
+		width: 2.5rem;
+		height: 0.625rem;
+		border-radius: 0.125rem;
+		background: oklch(0.35 0.03 200 / 0.6);
+		animation: skeleton-pulse 1.6s ease-in-out infinite;
+	}
+	.mobile-cmd-skeleton-name {
+		flex: 1;
+		height: 0.75rem;
+		border-radius: 0.125rem;
+		background: oklch(0.35 0.03 200 / 0.5);
+		animation: skeleton-pulse 1.6s ease-in-out infinite;
+	}
+	.mobile-epic-skeleton {
+		width: 100%;
+		height: 1.75rem;
+		border-radius: 0.25rem;
+		background: oklch(0.22 0.03 200 / 0.4);
+		position: relative;
+		overflow: hidden;
+		animation: skeleton-pulse 1.6s ease-in-out infinite;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.mobile-cmd-skeleton-ns,
+		.mobile-cmd-skeleton-name,
+		.mobile-epic-skeleton { animation: none; }
 	}
 
 	.mobile-cmd-item {
@@ -2859,10 +2969,10 @@
 	.mobile-card-body {
 		flex: 1;
 		min-width: 0;
-		padding: 0.75rem 0.75rem;
+		padding: 0.75rem 0.875rem;
 		display: flex;
 		flex-direction: column;
-		gap: 0.25rem;
+		gap: 0.375rem;
 	}
 
 	.mobile-title-row {
@@ -2899,33 +3009,35 @@
 	.mobile-description {
 		min-width: 0;
 		font-size: 0.75rem;
-		color: oklch(0.60 0.02 250);
+		color: oklch(0.72 0.02 250);
 		overflow: hidden;
-		line-height: 1.4;
+		line-height: 1.45;
 	}
 
 
 
-	/* Row 2: Compact metadata line */
+	/* Row 2: metadata line — default sans-serif for readability, mono only for IDs/timestamps */
 	.mobile-card-row2 {
 		display: flex;
 		align-items: center;
-		gap: 0.375rem;
-		margin-top: 0;
-		font-size: 0.6875rem;
-		font-family: ui-monospace, monospace;
-		color: oklch(0.55 0.02 250);
+		gap: 0.5rem;
+		margin-top: 0.125rem;
+		font-size: 0.75rem;
+		font-family: system-ui, -apple-system, sans-serif;
+		color: oklch(0.70 0.02 250);
 		overflow: hidden;
 		flex-wrap: nowrap;
 	}
 
 	.mobile-agent-name {
-		font-weight: 500;
-		color: oklch(0.65 0.02 250);
+		font-weight: 600;
+		color: oklch(0.78 0.02 250);
+		letter-spacing: 0.01em;
 	}
 
 	.mobile-separator {
-		color: oklch(0.40 0.01 250);
+		color: oklch(0.35 0.01 250);
+		font-size: 0.625rem;
 	}
 
 	.mobile-task-id {
@@ -2936,8 +3048,33 @@
 		border: none;
 		padding: 0;
 		cursor: pointer;
-		font-family: inherit;
-		font-size: inherit;
+		font-family: ui-monospace, monospace;
+		font-size: 0.6875rem;
+		text-decoration: underline;
+		text-decoration-color: oklch(0.40 0.01 250 / 0.4);
+		text-underline-offset: 2px;
+		transition: text-decoration-color 0.15s;
+	}
+	.mobile-task-id:hover {
+		text-decoration-color: currentColor;
+	}
+	.mobile-task-id:focus-visible {
+		outline: 2px solid oklch(0.70 0.18 240);
+		outline-offset: 2px;
+		border-radius: 2px;
+	}
+	.mobile-task-id-badge {
+		margin-left: 0.375rem;
+		font-family: system-ui, -apple-system, sans-serif;
+		font-size: 0.625rem;
+		font-weight: 700;
+		letter-spacing: 0.03em;
+		text-transform: uppercase;
+		color: oklch(0.82 0.18 145);
+		text-decoration: none;
+	}
+	.mobile-task-id-copied {
+		text-decoration-color: oklch(0.70 0.18 145 / 0.6);
 	}
 
 	.mobile-elapsed {
@@ -2963,24 +3100,29 @@
 
 	.mobile-priority {
 		font-weight: 700;
-		font-size: 0.625rem;
-		padding: 0 0.25rem;
-		/*border-radius: 3px;*/
+		font-size: 0.6875rem;
+		padding: 0.0625rem 0.375rem;
+		border-radius: 3px;
+		letter-spacing: 0.02em;
+		line-height: 1.25;
 	}
 
 	.mobile-priority-0 {
-		color: oklch(0.80 0.18 25);
-		background: oklch(0.80 0.18 25 / 0.12);
+		color: oklch(0.88 0.18 25);
+		background: oklch(0.55 0.20 25 / 0.22);
+		border: 1px solid oklch(0.70 0.20 25 / 0.35);
 	}
 
 	.mobile-priority-1 {
-		color: oklch(0.80 0.15 85);
-		background: oklch(0.80 0.15 85 / 0.12);
+		color: oklch(0.88 0.15 85);
+		background: oklch(0.55 0.18 85 / 0.20);
+		border: 1px solid oklch(0.70 0.18 85 / 0.32);
 	}
 
 	.mobile-priority-2 {
-		color: oklch(0.70 0.12 200);
-		background: oklch(0.70 0.12 200 / 0.12);
+		color: oklch(0.82 0.12 200);
+		background: oklch(0.55 0.14 200 / 0.18);
+		border: 1px solid oklch(0.70 0.14 200 / 0.30);
 	}
 
 	.mobile-project {

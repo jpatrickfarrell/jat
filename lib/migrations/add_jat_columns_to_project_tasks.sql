@@ -31,6 +31,18 @@ ALTER TABLE project_tasks
   ADD COLUMN IF NOT EXISTS command TEXT;
 
 -- ============================================================
+-- 2a. JAT text assignee
+--
+-- project_tasks.assignee TEXT was dropped by the JST schema-clean
+-- migration (replaced with assignee_id UUID FK for user-facing
+-- assignment). JAT needs a text field to store agent names
+-- (e.g. "GrandRavine") independently of the profile UUID FK.
+-- ============================================================
+
+ALTER TABLE project_tasks
+  ADD COLUMN IF NOT EXISTS assignee TEXT;
+
+-- ============================================================
 -- 3. Task lifecycle columns
 -- ============================================================
 
@@ -82,6 +94,10 @@ ALTER TABLE project_tasks
 -- Base: bug, feature, task, epic
 -- JAT adds: chore, chat
 --
--- Original CHECK constraint was dropped in follow_up_tasks
--- migration, so no DDL needed.
+-- The CHECK constraint may persist depending on which migrations
+-- the host project has applied (not all projects run the
+-- follow_up_tasks migration that drops it). Drop idempotently.
 -- ============================================================
+
+ALTER TABLE project_tasks DROP CONSTRAINT IF EXISTS project_tasks_issue_type_check;
+ALTER TABLE project_tasks DROP CONSTRAINT IF EXISTS feedback_reports_issue_type_check;

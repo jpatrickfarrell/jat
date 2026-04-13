@@ -832,8 +832,10 @@
 
 	async function fetchTasks() {
 		try {
-			// Single fetch for all tasks - used for both display (openTasks) and epic mapping (allTasks)
-			const response = await fetch("/api/tasks");
+			// Pass project param so postgres-backed projects (e.g. meadow) hit Postgres instead of SQLite.
+			// Without this, app-created tasks that only live in Postgres are invisible to the IDE.
+			const url = selectedProject ? `/api/tasks?project=${encodeURIComponent(selectedProject)}` : '/api/tasks';
+			const response = await fetch(url);
 			if (!response.ok) {
 				throw new Error("Failed to fetch tasks");
 			}
@@ -1556,6 +1558,7 @@
 	function selectProject(project: string) {
 		selectedProject = project;
 		completedDayGroups = []; // Reset completed tasks for new project
+		fetchTasks(); // Re-fetch tasks — routes to Postgres for postgres-backed projects
 		fetchCompletedTasks(); // Re-fetch completed tasks for the new project
 		fetchTaskIntegrations(); // Re-fetch integrations for new project's tasks
 

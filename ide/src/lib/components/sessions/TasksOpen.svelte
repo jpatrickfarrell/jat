@@ -2261,6 +2261,9 @@
 						{ value: 'open', label: 'Open', color: 'oklch(0.70 0.15 220)' },
 						{ value: 'in_progress', label: 'In Progress', color: 'oklch(0.75 0.15 85)' },
 						{ value: 'blocked', label: 'Blocked', color: 'oklch(0.65 0.18 30)' },
+						{ value: 'submitted', label: 'Submitted', color: 'oklch(0.70 0.15 290)' },
+						{ value: 'accepted', label: 'Accepted', color: 'oklch(0.70 0.18 200)' },
+						{ value: 'deployed', label: 'Deployed', color: 'oklch(0.65 0.20 160)' },
 						{ value: 'closed', label: 'Closed', color: 'oklch(0.65 0.18 145)' }
 					] as status}
 						<button

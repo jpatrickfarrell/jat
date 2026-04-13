@@ -128,8 +128,12 @@ export async function PUT({ params, request }) {
 	const updates = await request.json();
 
 	try {
-		// Get existing task to find project path
-		const existingTask = getTaskById(taskId);
+		// Get existing task — try SQLite first, then Postgres for graduated projects
+		let existingTask = getTaskById(taskId);
+		const pgBackendForPut = existingTask ? null : await getPgBackendForTask(taskId);
+		if (!existingTask && pgBackendForPut) {
+			existingTask = await pgBackendForPut.getById(taskId);
+		}
 		if (!existingTask) {
 			return json({ error: 'Task not found' }, { status: 404 });
 		}
@@ -193,8 +197,12 @@ export async function PUT({ params, request }) {
 
 		// Execute update if we have fields
 		if (Object.keys(updateFields).length > 0) {
-			updateFields.projectPath = existingTask.project_path;
-			updateTask(taskId, updateFields);
+			if (pgBackendForPut) {
+				await pgBackendForPut.update(taskId, updateFields);
+			} else {
+				updateFields.projectPath = existingTask.project_path;
+				updateTask(taskId, updateFields);
+			}
 		}
 
 		// Invalidate related caches (both apiCache and module-level task cache in agents endpoint)
@@ -202,8 +210,10 @@ export async function PUT({ params, request }) {
 		invalidateCache.agents();
 		_resetTaskCache();
 
-		// Get updated task
-		const updatedTask = getTaskById(taskId);
+		// Get updated task — re-fetch from the same backend used for the update
+		const updatedTask = pgBackendForPut
+			? await pgBackendForPut.getById(taskId)
+			: getTaskById(taskId);
 
 		if (!updatedTask) {
 			return json({ error: 'Task not found after update' }, { status: 404 });
@@ -290,7 +300,7 @@ export async function PATCH({ params, request }) {
 
 		// Validate status (if provided, must be valid enum value)
 		if (updates.status !== undefined) {
-			const validStatuses = ['open', 'in_progress', 'blocked', 'closed', 'reopened', 'dev', 'submitted'];
+			const validStatuses = ['open', 'in_progress', 'blocked', 'closed', 'reopened', 'dev', 'submitted', 'accepted', 'deployed'];
 			if (!validStatuses.includes(updates.status)) {
 				validationErrors.push(`status: Must be one of: ${validStatuses.join(', ')}`);
 			}
@@ -467,8 +477,10 @@ export async function PATCH({ params, request }) {
 		invalidateCache.agents();
 		_resetTaskCache();
 
-		// Fetch and return updated task
-		const updatedTask = getTaskById(taskId);
+		// Fetch and return updated task — use the same backend that performed the update
+		const updatedTask = pgBackendForPatch
+			? await pgBackendForPatch.getById(taskId)
+			: getTaskById(taskId);
 
 		if (!updatedTask) {
 			return json(

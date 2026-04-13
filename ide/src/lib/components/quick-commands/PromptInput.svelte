@@ -875,8 +875,8 @@
 	{#if showFileAutocomplete && (autocompleteMode === 'provider-picker' ? (filteredProviderCategories.length > 0 || fileSearchResults.length > 0) : autocompleteMode === 'provider-search' ? providerSearchResults.length > 0 : fileSearchResults.length > 0)}
 		<div
 			bind:this={autocompleteRef}
-			class="absolute z-40 w-full mt-1 rounded-lg overflow-hidden shadow-xl"
-			style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.30 0.03 250); max-height: 280px; overflow-y: auto;"
+			class="absolute z-40 w-full rounded-lg overflow-hidden shadow-xl {compact ? 'bottom-full mb-1' : 'mt-1'}"
+			style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.30 0.03 250); max-height: 280px; overflow-y: auto;{compact ? '' : ''}"
 		>
 			{#if autocompleteMode === 'provider-picker'}
 				<!-- Provider categories -->

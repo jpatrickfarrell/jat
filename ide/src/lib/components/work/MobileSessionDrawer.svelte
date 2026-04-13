@@ -21,7 +21,7 @@
 	import MobileTerminal from '$lib/components/work/MobileTerminal.svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import MobileTaskBody from '$lib/components/work/atoms/MobileTaskBody.svelte';
-	import MentionPicker from '$lib/components/ui/MentionPicker.svelte';
+	import PromptInput from '$lib/components/quick-commands/PromptInput.svelte';
 	import { getElapsedFormatted } from '$lib/utils/elapsedTime';
 	import {
 		TaskFieldLabel,
@@ -164,8 +164,21 @@
 	let holdActionId = $state<string | null>(null);
 	let holdProgress = $state(0);
 	let holdTimer: ReturnType<typeof setInterval> | null = null;
+	let pillPointerLocked = $state(false);
+
+	function armPillPointerLock() {
+		pillPointerLocked = true;
+		const release = () => {
+			pillPointerLocked = false;
+			window.removeEventListener('pointerup', release, true);
+			window.removeEventListener('pointercancel', release, true);
+		};
+		window.addEventListener('pointerup', release, true);
+		window.addEventListener('pointercancel', release, true);
+	}
 
 	function startHold(action: SessionStateAction) {
+		if (pillPointerLocked) return;
 		if (!DESTRUCTIVE_ACTIONS.has(action.id)) {
 			executePillAction(action);
 			return;
@@ -180,6 +193,7 @@
 			if (elapsed >= HOLD_DURATION_MS) {
 				const a = action;
 				clearHold();
+				armPillPointerLock();
 				executePillAction(a);
 			}
 		}, HOLD_TICK_MS);
@@ -398,53 +412,9 @@
 
 	// Mobile input state
 	let inputText = $state('');
+	let promptRefs = $state<Array<{ path: string; name: string }>>([]);
 	let keyboardOpen = $state(false);
-	let inputRef: HTMLTextAreaElement | null = $state(null);
-
-	// @-reference picker state (shared across drawer textareas)
-	let mentionOpen = $state(false);
-	let mentionQuery = $state('');
-	let mentionAtPos = $state(0);
-	let mentionTarget: HTMLTextAreaElement | null = null;
-	let mentionSetter: ((next: string) => void) | null = null;
-
-	function detectMention(el: HTMLTextAreaElement, setter: (next: string) => void) {
-		const value = el.value;
-		const pos = el.selectionStart ?? value.length;
-		const before = value.slice(0, pos);
-		const m = before.match(/@([\w\-\.\/]*)$/);
-		if (m) {
-			mentionQuery = m[1];
-			mentionAtPos = pos - m[0].length;
-			mentionTarget = el;
-			mentionSetter = setter;
-			mentionOpen = true;
-		}
-	}
-
-	function insertMention(item: { value: string }) {
-		if (!mentionTarget || !mentionSetter) return;
-		const el = mentionTarget;
-		const value = el.value;
-		const caret = el.selectionStart ?? value.length;
-		// Replace from captured @-pos up to current caret (picker's own filter input
-		// doesn't change the textarea, so these span the `@query` we want to kill).
-		const before = value.slice(0, mentionAtPos);
-		const after = value.slice(caret);
-		const insertion = item.value + ' ';
-		const next = before + insertion + after;
-		mentionSetter(next);
-		const newCursor = mentionAtPos + insertion.length;
-		requestAnimationFrame(() => {
-			el.focus({ preventScroll: true });
-			el.setSelectionRange(newCursor, newCursor);
-		});
-	}
-
-	function directInput(node: HTMLElement, handler: (e: Event) => void) {
-		node.addEventListener('input', handler as EventListener);
-		return { destroy() { node.removeEventListener('input', handler as EventListener); } };
-	}
+	let inputRef: { focus: (opts?: { preventScroll?: boolean }) => void } | null = $state(null);
 
 	// Draft persistence — debounce timer for autosave
 	let mainDraftTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1212,7 +1182,7 @@
 							class="relative overflow-hidden flex items-center gap-1 px-2 py-[0.3rem] text-[0.6875rem] font-medium rounded-md whitespace-nowrap cursor-pointer flex-shrink-0 border transition-colors active:brightness-125 {getPillColorClass(action.variant)}"
 							class:mobile-btn-flashing={activeActionId === action.id}
 							class:hold-active={holdActionId === action.id}
-							use:directClick={() => { if (!isDestructive) executePillAction(action); }}
+							use:directClick={() => { if (!isDestructive && !pillPointerLocked) executePillAction(action); }}
 							onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startHold(action); }}
 							onpointerup={clearHold}
 							onpointercancel={clearHold}
@@ -1327,25 +1297,23 @@
 							{/if}
 						</div>
 					{:else}
-					<textarea
-						rows="1"
-						class="flex-1 min-w-0 px-2.5 py-2 text-[0.8125rem] font-mono text-base-content bg-base-200 border border-base-300 rounded-lg outline-none focus:border-info transition-colors placeholder:text-base-content/40 resize-none leading-snug"
-						style="min-height: 2.25rem; max-height: 12rem; overflow-y: auto;"
-						placeholder="Type and press Enter (Shift+Enter for newline)"
-						bind:value={inputText}
-						bind:this={inputRef}
-						use:autoGrow
-						use:directInput={(e) => {
-							const el = e.target as HTMLTextAreaElement;
-							detectMention(el, (next) => { inputText = next; });
-						}}
-						use:directKeydown={(e) => {
-							if (e.key === 'Enter' && !e.shiftKey && (inputText.trim() || pendingAttachments.some(a => !a.uploading))) {
-								e.preventDefault();
-								sendWithAttachments();
-							}
-						}}
-					></textarea>
+					<div class="flex-1 min-w-0">
+						<PromptInput
+							bind:this={inputRef}
+							bind:value={inputText}
+							bind:references={promptRefs}
+							project={project || ''}
+							placeholder="Type and press Enter (Shift+Enter for newline)"
+							rows={1}
+							compact={true}
+							onkeydown={(e) => {
+								if (e.key === 'Enter' && !e.shiftKey && (inputText.trim() || pendingAttachments.some(a => !a.uploading))) {
+									e.preventDefault();
+									sendWithAttachments();
+								}
+							}}
+						/>
+					</div>
 					{/if}
 
 					<!-- Eye/pencil preview toggle -->
@@ -1744,13 +1712,6 @@
 		</div>
 	{/if}
 </div>
-
-<MentionPicker
-	bind:open={mentionOpen}
-	project={project || ''}
-	initialFilter={mentionQuery}
-	onselect={insertMention}
-/>
 
 <style>
 	/* Layout-only CSS: colors, spacing, and typography are handled via DaisyUI + Tailwind

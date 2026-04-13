@@ -57,7 +57,7 @@
 		id: string;
 		title: string;
 		description?: string;
-		status: 'open' | 'in_progress' | 'blocked' | 'closed' | 'dev' | 'submitted';
+		status: 'open' | 'in_progress' | 'blocked' | 'closed' | 'dev' | 'submitted' | 'accepted' | 'deployed';
 		priority: number;
 		type?: string;
 		issue_type?: string;
@@ -615,7 +615,9 @@
 		closed: 'badge-success',
 		blocked: 'badge-error',
 		dev: 'badge-ghost',
-		submitted: 'badge-secondary badge-outline'
+		submitted: 'badge-secondary badge-outline',
+		accepted: 'badge-info badge-outline',
+		deployed: 'badge-success badge-outline'
 	};
 
 	// Priority badge colors
@@ -648,6 +650,9 @@
 		{ value: 'open', label: 'Open' },
 		{ value: 'in_progress', label: 'In Progress' },
 		{ value: 'blocked', label: 'Blocked' },
+		{ value: 'submitted', label: 'Submitted' },
+		{ value: 'accepted', label: 'Accepted' },
+		{ value: 'deployed', label: 'Deployed' },
 		{ value: 'closed', label: 'Closed' }
 	];
 

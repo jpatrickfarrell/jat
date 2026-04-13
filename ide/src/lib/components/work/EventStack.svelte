@@ -423,11 +423,12 @@
 	$effect(() => {
 		if (autoExpand && filteredEvents.length > 0) {
 			const latestEvent = filteredEvents[0];
-			// Check both new format (type=completed) and legacy (state=completed)
+			// Check both new format (type=completed) and legacy (state=completed), plus review
 			const isCompletion = latestEvent?.type === 'complete' ||
 				latestEvent?.type === 'completed' ||
 				latestEvent?.type === 'tasks' ||
-				latestEvent?.state === 'completed';
+				latestEvent?.state === 'completed' ||
+				latestEvent?.state === 'review';
 			if (isCompletion) {
 				const eventKey = getEventKey(latestEvent);
 				// Only auto-expand if this is a NEW completion event we haven't expanded for yet

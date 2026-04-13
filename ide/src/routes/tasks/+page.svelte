@@ -210,6 +210,7 @@
 	// Swarm button state
 	let swarmHoveredEpicId = $state<string | null>(null);
 	let swarmSpawningEpicId = $state<string | null>(null);
+	let swarmAutoExpandedEpicId = $state<string | null>(null); // epic expanded by hover (collapse on leave)
 
 	// Completed tasks state (loaded day-by-day from API)
 	let completedDayGroups = $state<DayGroup[]>([]);
@@ -1527,6 +1528,13 @@
 			spawningTaskId = null;
 			swarmSpawningEpicId = null;
 			swarmHoveredEpicId = null;
+			// Collapse the epic if hover had auto-expanded it
+			if (swarmAutoExpandedEpicId === epicId) {
+				swarmAutoExpandedEpicId = null;
+				if (selectedProject && isEpicExpanded(selectedProject, epicId)) {
+					toggleEpicCollapse(selectedProject, epicId);
+				}
+			}
 		}
 	}
 
@@ -2362,9 +2370,19 @@
 													// Auto-expand epic to show highlighted tasks
 													if (!isEpicExpanded(selectedProject!, epicId)) {
 														toggleEpicCollapse(selectedProject!, epicId);
+														swarmAutoExpandedEpicId = epicId;
 													}
 												}}
-												onmouseleave={() => { if (swarmHoveredEpicId === epicId) swarmHoveredEpicId = null; }}
+												onmouseleave={() => {
+													if (swarmHoveredEpicId === epicId) swarmHoveredEpicId = null;
+													// Collapse back if hover caused the expansion
+													if (swarmAutoExpandedEpicId === epicId) {
+														swarmAutoExpandedEpicId = null;
+														if (isEpicExpanded(selectedProject!, epicId)) {
+															toggleEpicCollapse(selectedProject!, epicId);
+														}
+													}
+												}}
 												onclick={(e) => {
 													e.stopPropagation();
 													swarmEpic(epicId);

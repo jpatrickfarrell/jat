@@ -16,6 +16,7 @@
 	import StreakCalendar from "$lib/components/StreakCalendar.svelte";
 	import AnimatedDigits from "$lib/components/AnimatedDigits.svelte";
 	import TaskDetailDrawer from "$lib/components/TaskDetailDrawer.svelte";
+	import CompletedSignalDrawer from "$lib/components/history/CompletedSignalDrawer.svelte";
 	import { HistorySkeleton } from "$lib/components/skeleton";
 	import { initProjectColors, fetchAndGetProjectColors, getProjectColor } from "$lib/utils/projectColors";
 	import { openTaskDrawer } from "$lib/stores/drawerStore";
@@ -62,9 +63,13 @@
 		return projectColors[project.toLowerCase()] || getProjectColor(project + '-x');
 	}
 
-	// Task detail drawer
+	// Task detail drawer (fallback for tasks without signal data)
 	let selectedTaskId = $state<string | null>(null);
 	let drawerOpen = $state(false);
+
+	// Signal drawer (primary: shows EventStack completion card)
+	let signalDrawerTask = $state<CompletedTask | null>(null);
+	let signalDrawerOpen = $state(false);
 
 	// Memory
 	let memoryMap = $state<Map<string, string>>(new Map());
@@ -271,8 +276,44 @@
 	const tasksByDay = $derived(groupTasksByDay(filteredTasks));
 
 	function handleTaskClick(taskId: string) {
-		selectedTaskId = taskId;
-		drawerOpen = true;
+		const task = tasks.find((t) => t.id === taskId);
+		if (task?.assignee) {
+			// Has an agent — show EventStack completion card
+			signalDrawerTask = task;
+			signalDrawerOpen = true;
+		} else {
+			// No agent (manual task, imported, etc.) — fall back to task detail
+			selectedTaskId = taskId;
+			drawerOpen = true;
+		}
+	}
+
+	async function handleSignalDrawerCreateTasks(suggestedTasks: any[]) {
+		const results: { success: { title: string; taskId?: string }[]; failed: { title: string; error: string }[] } = { success: [], failed: [] };
+		for (const t of suggestedTasks) {
+			if (!t.selected) continue;
+			try {
+				const project = t.edits?.project || t.project || (signalDrawerTask?.project ?? signalDrawerTask?.id.split('-')[0] ?? '');
+				const body = {
+					title: t.edits?.title || t.title,
+					description: t.edits?.description || t.description || '',
+					issue_type: t.edits?.type || t.type || 'task',
+					priority: t.edits?.priority ?? t.priority ?? 2,
+					project,
+					labels: t.edits?.labels ? t.edits.labels.split(',').map((l: string) => l.trim()).filter(Boolean) : (t.labels || []),
+				};
+				const res = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+				if (res.ok) {
+					const data = await res.json();
+					results.success.push({ title: body.title, taskId: data.task?.id });
+				} else {
+					results.failed.push({ title: body.title, error: 'API error' });
+				}
+			} catch (e: any) {
+				results.failed.push({ title: t.title, error: e.message || 'Unknown error' });
+			}
+		}
+		return results;
 	}
 
 	// Track which tasks are resuming
@@ -497,7 +538,14 @@
 	</div>
 </div>
 
-<!-- Task Detail Drawer -->
+<!-- Signal Drawer (primary: shows EventStack completion card) -->
+<CompletedSignalDrawer
+	bind:task={signalDrawerTask}
+	bind:isOpen={signalDrawerOpen}
+	onCreateTasks={handleSignalDrawerCreateTasks}
+/>
+
+<!-- Task Detail Drawer (fallback for tasks without an agent) -->
 <TaskDetailDrawer bind:taskId={selectedTaskId} bind:isOpen={drawerOpen} />
 
 <!-- Memory Viewer Modal -->

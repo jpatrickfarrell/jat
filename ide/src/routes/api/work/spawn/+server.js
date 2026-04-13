@@ -1028,6 +1028,21 @@ export async function POST({ request }) {
 					model: selectedModel.shortName,
 				};
 				if (pgBackend) {
+					// For graduated (postgres) projects, also set assignee_id to the
+					// configured JAT agent user so Meadow-style UIs show the task as
+					// being worked by an agent. The DB trigger auto-stashes the
+					// prior assignee_id into jat_previous_assignee_id, so completion
+					// can restore the original owner.
+					if (projectName) {
+						try {
+							const cfg = await getProjectConfig(projectName);
+							if (cfg?.jat_agent_user_id) {
+								updates.assignee_id = cfg.jat_agent_user_id;
+							}
+						} catch (err) {
+							console.warn(`[spawn] Could not read jat_agent_user_id for ${projectName}:`, err);
+						}
+					}
 					await pgBackend.update(taskId, updates);
 					console.log(`[spawn] Assigned task ${taskId} to ${agentName} in Postgres`);
 				} else {

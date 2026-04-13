@@ -23,7 +23,7 @@
 	import QuestionPanel from './mobile/QuestionPanel.svelte';
 	import OptionButton from './mobile/OptionButton.svelte';
 	import Spinner from './mobile/Spinner.svelte';
-	import MentionPicker from '$lib/components/ui/MentionPicker.svelte';
+	import PromptInput from '$lib/components/quick-commands/PromptInput.svelte';
 	import EventStack from './EventStack.svelte';
 	import { errorToast } from '$lib/stores/toasts.svelte';
 	import type { SuggestedTaskWithState } from '$lib/types/signals';
@@ -165,47 +165,9 @@
 		return { destroy() { node.removeEventListener('input', resize); } };
 	}
 
-	function directInput(node: HTMLElement, handler: (e: Event) => void) {
-		node.addEventListener('input', handler as EventListener);
-		return { destroy() { node.removeEventListener('input', handler as EventListener); } };
-	}
-
-	// @-reference picker state
-	let mentionOpen = $state(false);
-	let mentionQuery = $state('');
-	let mentionAtPos = 0;
-	let mentionTarget: HTMLTextAreaElement | null = null;
-	let mentionSetter: ((next: string) => void) | null = null;
-
-	function detectMention(el: HTMLTextAreaElement, setter: (next: string) => void) {
-		const value = el.value;
-		const pos = el.selectionStart ?? value.length;
-		const before = value.slice(0, pos);
-		const m = before.match(/@([\w\-\.\/]*)$/);
-		if (m) {
-			mentionQuery = m[1];
-			mentionAtPos = pos - m[0].length;
-			mentionTarget = el;
-			mentionSetter = setter;
-			mentionOpen = true;
-		}
-	}
-
-	function insertMention(item: { value: string }) {
-		if (!mentionTarget || !mentionSetter) return;
-		const el = mentionTarget;
-		const value = el.value;
-		const caret = el.selectionStart ?? value.length;
-		const before = value.slice(0, mentionAtPos);
-		const after = value.slice(caret);
-		const insertion = item.value + ' ';
-		mentionSetter(before + insertion + after);
-		const newCursor = mentionAtPos + insertion.length;
-		requestAnimationFrame(() => {
-			el.focus({ preventScroll: true });
-			el.setSelectionRange(newCursor, newCursor);
-		});
-	}
+	// Chip references for PromptInput instances
+	let customRefs = $state<Array<{ path: string; name: string }>>([]);
+	let otherRefs = $state<Array<{ path: string; name: string }>>([]);
 
 	// ─── Smart question UI (AskUserQuestion) ────────────────────────────────────
 	interface QuestionOption { label: string; description?: string; }
@@ -604,28 +566,23 @@
 				</div>
 			{/if}
 			<div class="flex gap-2 items-end">
-				<textarea
-					rows="1"
-					inputmode="text"
-					autocapitalize="sentences"
-					autocorrect="on"
-					class="textarea textarea-bordered flex-1 text-sm resize-none leading-relaxed"
-					style="background: {mobileSurface.inputBg}; border-color: {input.borderColor}; color: {mobileSurface.textBright}; min-height: 2.75rem; max-height: 12rem; overflow-y: auto;"
-					placeholder="Type response… (Shift+Enter for newline)"
-					disabled={isSubmittingCustom}
-					bind:value={customInput}
-					use:autoGrow
-					use:directInput={(e) => {
-						const el = e.target as HTMLTextAreaElement;
-						detectMention(el, (next) => { customInput = next; });
-					}}
-					use:directKeydown={(e) => {
-						if (e.key === 'Enter' && !e.shiftKey && customInput.trim() && !isSubmittingCustom) {
-							e.preventDefault();
-							answerCustom(customInput);
-						}
-					}}
-				></textarea>
+				<div class="flex-1 min-w-0">
+					<PromptInput
+						bind:value={customInput}
+						bind:references={customRefs}
+						project={defaultProject}
+						placeholder="Type response… (Shift+Enter for newline)"
+						rows={1}
+						compact={true}
+						disabled={isSubmittingCustom}
+						onkeydown={(e) => {
+							if (e.key === 'Enter' && !e.shiftKey && customInput.trim() && !isSubmittingCustom) {
+								e.preventDefault();
+								answerCustom(customInput);
+							}
+						}}
+					/>
+				</div>
 				<button
 					class="btn btn-success"
 					style="min-height: 2.75rem; min-width: 2.75rem;"
@@ -653,24 +610,22 @@
 		<QuestionPanel question={q.question} badge="?" onDismiss={clearQuestion}>
 			{#if isOtherMode}
 				<div class="flex gap-2 items-end">
-					<textarea
-						rows="1"
-						class="textarea textarea-bordered flex-1 text-sm resize-none leading-relaxed"
-						style="background: {mobileSurface.inputBg}; border-color: {input.borderColor}; color: {mobileSurface.textBright}; min-height: 2.75rem; max-height: 12rem; overflow-y: auto;"
-						placeholder="Type your response… (Shift+Enter for newline)"
-						bind:value={otherText}
-						use:autoGrow
-						use:directInput={(e) => {
-							const el = e.target as HTMLTextAreaElement;
-							detectMention(el, (next) => { otherText = next; });
-						}}
-						use:directKeydown={(e) => {
-							if (e.key === 'Enter' && !e.shiftKey && otherText.trim()) {
-								e.preventDefault();
-								submitOther();
-							} else if (e.key === 'Escape') { isOtherMode = false; }
-						}}
-					></textarea>
+					<div class="flex-1 min-w-0">
+						<PromptInput
+							bind:value={otherText}
+							bind:references={otherRefs}
+							project={defaultProject}
+							placeholder="Type your response… (Shift+Enter for newline)"
+							rows={1}
+							compact={true}
+							onkeydown={(e) => {
+								if (e.key === 'Enter' && !e.shiftKey && otherText.trim()) {
+									e.preventDefault();
+									submitOther();
+								} else if (e.key === 'Escape') { isOtherMode = false; }
+							}}
+						/>
+					</div>
 					<button
 						class="btn btn-success"
 						style="min-height: 2.75rem; min-width: 2.75rem;"
@@ -750,13 +705,6 @@
 	{/if}
 	</div> <!-- /.bottom-stack -->
 </div>
-
-<MentionPicker
-	bind:open={mentionOpen}
-	project={defaultProject}
-	initialFilter={mentionQuery}
-	onselect={insertMention}
-/>
 
 <style>
 	.mobile-terminal {

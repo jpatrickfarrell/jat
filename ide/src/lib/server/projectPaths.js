@@ -213,6 +213,7 @@ export async function getProjectConfig(projectName) {
 				description: config.description || null,
 				server_path: config.server_path || null,
 				dev_command: config.dev_command || null,
+				jat_agent_user_id: config.jat_agent_user_id || null,
 				path: config.path?.replace(/^~/, homedir()) || join(homedir(), 'code', key)
 			};
 		}

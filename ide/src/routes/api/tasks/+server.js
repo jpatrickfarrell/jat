@@ -9,6 +9,7 @@ import { _resetTaskCache } from '../../api/agents/+server.js';
 import { getProjectPath } from '$lib/server/projectPaths.js';
 import { emitEvent } from '$lib/utils/eventBus.server.js';
 import { lookupIntegrations } from '$lib/server/integrationLookup.js';
+import { resolveBackendForProject, getProjectConfig } from '../../../../../lib/projects-config.js';
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET({ url }) {
@@ -32,7 +33,36 @@ export async function GET({ url }) {
 	const responseData = await singleFlight(key, async () => {
 		// If ?scheduled=true, return only tasks with schedule_cron or next_run_at
 		let tasks;
-		if (scheduled === 'true') {
+
+		// Detect graduated (postgres-backed) projects and route through the async backend.
+		// resolveBackendForProject throws when backend_url is missing, so guard with try.
+		let pgBackend = null;
+		if (project) {
+			try {
+				const backendConfig = resolveBackendForProject(project);
+				if (backendConfig.kind === 'postgres') {
+					const { getBackendForProject } = await import('../../../../../lib/tasks-backend.js');
+					pgBackend = await getBackendForProject(project);
+				}
+			} catch {
+				// Not a postgres project or config error — fall through to SQLite
+			}
+		}
+
+		if (pgBackend) {
+			// Async postgres path for graduated projects
+			if (scheduled === 'true') {
+				tasks = await pgBackend.getScheduled({ projectName: project });
+			} else {
+				/** @type {import('../../../../../lib/tasks-backend.js').ListOptions} */
+				const filters = { projectName: project };
+				if (status) filters.status = status;
+				if (priority !== null) filters.priority = parseInt(priority);
+				if (closedAfter) filters.closedAfter = closedAfter;
+				if (closedBefore) filters.closedBefore = closedBefore;
+				tasks = await pgBackend.list(filters);
+			}
+		} else if (scheduled === 'true') {
 			tasks = getScheduledTasks({ projectName: project || undefined });
 		} else {
 			const filters = {};

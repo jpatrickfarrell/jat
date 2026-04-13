@@ -11,6 +11,29 @@ import { invalidateCache } from '$lib/server/cache.js';
 import { _resetTaskCache } from '../../../api/agents/+server.js';
 import { emitEvent } from '$lib/utils/eventBus.server.js';
 import { lookupIntegrations } from '$lib/server/integrationLookup.js';
+import { resolveBackendForProject } from '../../../../../../lib/projects-config.js';
+
+/**
+ * Detect if a task ID belongs to a postgres-backed graduated project.
+ * Returns the async backend if so, null otherwise.
+ *
+ * @param {string} taskId  - e.g. "meadow-abc12"
+ * @returns {Promise<import('../../../../../../lib/tasks-backend.js').TaskBackend|null>}
+ */
+async function getPgBackendForTask(taskId) {
+	// Extract project prefix: "meadow-abc12" → "meadow"
+	const match = taskId.match(/^([a-zA-Z0-9_-]+?)-[a-zA-Z0-9.]+$/);
+	if (!match) return null;
+	const projectName = match[1];
+	try {
+		const backendConfig = resolveBackendForProject(projectName);
+		if (backendConfig.kind !== 'postgres') return null;
+		const { getBackendForProject } = await import('../../../../../../lib/tasks-backend.js');
+		return getBackendForProject(projectName);
+	} catch {
+		return null;
+	}
+}
 
 // Path to task images store
 const getImageStorePath = () => {
@@ -60,7 +83,14 @@ async function cleanupTaskAttachments(taskId) {
 export async function GET({ params }) {
 	const taskId = params.id;
 
-	const task = getTaskById(taskId);
+	// Route graduated (postgres-backed) tasks through the async backend
+	const pgBackend = await getPgBackendForTask(taskId);
+	let task;
+	if (pgBackend) {
+		task = await pgBackend.getById(taskId);
+	} else {
+		task = getTaskById(taskId);
+	}
 
 	if (!task) {
 		return json({ error: 'Task not found' }, { status: 404 });

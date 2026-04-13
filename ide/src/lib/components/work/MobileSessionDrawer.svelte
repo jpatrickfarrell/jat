@@ -1127,7 +1127,7 @@
 			<div class="topbar-tabs flex-1 flex gap-0.5 items-center justify-center overflow-x-auto">
 				{#each PAGES as page, i}
 					<button
-						class="px-2 py-1 text-[0.6875rem] whitespace-nowrap rounded-md border-b-2 transition-colors {i === currentPage ? 'font-semibold text-base-content bg-base-300 border-base-content' : 'font-medium text-base-content/50 bg-transparent border-transparent active:bg-base-300/70'}"
+						class="px-2 py-1 text-[0.6875rem] whitespace-nowrap rounded-t-md border-b-2 transition-colors {i === currentPage ? 'font-semibold text-base-content bg-base-300 border-base-content' : 'font-medium text-base-content/50 bg-transparent border-transparent active:bg-base-300/70'}"
 						use:directClick={() => navigateToPage(i)}
 					>{page}</button>
 				{/each}

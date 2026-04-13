@@ -1,14 +1,15 @@
 <script lang="ts">
 	import AgentAvatar from "$lib/components/AgentAvatar.svelte";
-	import ProviderLogo from "$lib/components/agents/ProviderLogo.svelte";
-	import DurationTrack from "$lib/components/history/DurationTrack.svelte";
 	import { getProjectColor } from "$lib/utils/projectColors";
 	import { getIssueTypeVisual } from "$lib/config/statusColors";
 	import { getIntegrationIcon } from "$lib/config/integrationIcons";
 	import {
 		type CompletedTask,
 		PRIORITY_COLORS,
+		getTaskDuration,
+		formatDuration,
 	} from "$lib/utils/completedTaskHelpers";
+	import type { CompletionBundle, SuggestedTask } from "$lib/types/signals";
 
 	let {
 		task,
@@ -37,7 +38,63 @@
 	const pc = $derived(PRIORITY_COLORS[task.priority as keyof typeof PRIORITY_COLORS] || PRIORITY_COLORS[3]);
 	const resolvedIntegration = $derived(integration ?? task.integration ?? null);
 	const integrationIcon = $derived(resolvedIntegration ? getIntegrationIcon(resolvedIntegration.sourceType) : null);
+	const durationText = $derived(formatDuration(getTaskDuration(task)));
 
+	// === Signal data for completion summary ===
+	type SignalState = null | 'loading' | 'empty' | CompletionBundle;
+	let signalData = $state<SignalState>(null);
+	let fetchStarted = $state(false);
+	let isHovered = $state(false);
+
+	const isLoading = $derived(signalData === 'loading');
+	const hasData = $derived(signalData !== null && signalData !== 'loading' && signalData !== 'empty');
+	const isLoaded = $derived(signalData !== null && signalData !== 'loading');
+
+	const summaryLines = $derived.by<string[]>(() => {
+		if (!hasData) return [];
+		return (signalData as CompletionBundle).summary || [];
+	});
+
+	const suggestedTasks = $derived.by<SuggestedTask[]>(() => {
+		if (!hasData) return [];
+		return (signalData as CompletionBundle).suggestedTasks || [];
+	});
+
+	async function fetchSignalData() {
+		if (fetchStarted || !task.assignee) return;
+		fetchStarted = true;
+		signalData = 'loading';
+		try {
+			const res = await fetch(
+				`/api/sessions/${encodeURIComponent(task.assignee)}/timeline?limit=30&type=complete,review&taskId=${encodeURIComponent(task.id)}`
+			);
+			if (!res.ok) { signalData = 'empty'; return; }
+			const data = await res.json();
+			const events: any[] = data.events || [];
+			// Prefer complete signal, fall back to review
+			const event =
+				events.find((e) => e.type === 'complete') ||
+				events.find((e) => e.type === 'state' && e.state === 'review');
+			if (event?.data?.summary?.length) {
+				signalData = event.data as CompletionBundle;
+			} else {
+				signalData = 'empty';
+			}
+		} catch {
+			signalData = 'empty';
+		}
+	}
+
+	function handleMouseEnter() {
+		isHovered = true;
+		fetchSignalData();
+	}
+
+	function handleMouseLeave() {
+		isHovered = false;
+	}
+
+	// === Copy ID ===
 	let copiedId = $state(false);
 	function copyTaskId(e: MouseEvent) {
 		e.stopPropagation();
@@ -102,14 +159,12 @@
 			committed = true;
 			haptic();
 			if (swipeOffset > 0) {
-				// right swipe → primary action (resume if available, else reopen)
 				if (task.assignee && onResumeSession) {
 					onResumeSession(new MouseEvent('click'), task);
 				} else if (onReopenTask) {
 					onReopenTask(new MouseEvent('click'), task);
 				}
 			} else {
-				// left swipe → details
 				onTaskClick(task.id);
 			}
 		}
@@ -196,14 +251,17 @@
 		class="ctr-card"
 		style="{projectColor ? `border-left-color: ${projectColor};` : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {!swiping && swipeOffset === 0 ? '' : !swiping ? 'transition: transform 0.3s cubic-bezier(0.25,0.46,0.45,0.94);' : ''}"
 		onclick={() => !swiping && onTaskClick(task.id)}
+		onmouseenter={handleMouseEnter}
+		onmouseleave={handleMouseLeave}
 		ontouchstart={onTouchStart}
 		ontouchmove={onTouchMove}
 		ontouchend={onTouchEnd}
 		ontouchcancel={onTouchEnd}
 	>
-		<!-- Duration stripe along bottom -->
+		<!-- Green stripe at bottom — indicates completed -->
 		<div class="ctr-duration-stripe"></div>
 
+		<!-- Compact row -->
 		<div class="ctr-inner">
 			<!-- Left: avatar -->
 			<div class="ctr-avatar">
@@ -218,7 +276,7 @@
 				{/if}
 			</div>
 
-			<!-- Center: title + meta -->
+			<!-- Center: title + meta + compact summary -->
 			<div class="ctr-body">
 				<div class="ctr-title">{task.title}</div>
 				<div class="ctr-meta">
@@ -236,15 +294,12 @@
 						<span class="ctr-agent">{task.assignee}</span>
 					{/if}
 				</div>
-			</div>
-
-			<!-- Right: duration track (time-of-day graph) -->
-			<div class="ctr-duration">
-				<DurationTrack
-					createdAt={task.created_at}
-					endedAt={task.closed_at || task.updated_at}
-					width="150px"
-				/>
+				<!-- Compact summary snippet -->
+				{#if isLoading}
+					<div class="ctr-summary-skeleton animate-skeleton-pulse"></div>
+				{:else if summaryLines.length > 0}
+					<div class="ctr-summary-snippet">{summaryLines[0]}</div>
+				{/if}
 			</div>
 
 			<!-- Right: primary action column (always visible) + extras on hover -->
@@ -299,6 +354,82 @@
 						</svg>
 						<span class="ctr-primary-label">Details</span>
 					</button>
+				{/if}
+			</div>
+		</div>
+
+		<!-- Expansion area: animates open on hover (desktop only) -->
+		<div class="ctr-expand-wrapper" class:ctr-expanded={isHovered && isLoaded}>
+			<div class="ctr-expand-inner">
+				{#if isLoaded}
+					<div class="ctr-expand-content" onclick={(e) => e.stopPropagation()}>
+						{#if hasData && summaryLines.length > 0}
+							<!-- Full summary bullets -->
+							<ul class="ctr-exp-bullets">
+								{#each summaryLines as bullet}
+									<li>{bullet}</li>
+								{/each}
+							</ul>
+						{/if}
+
+						<!-- Suggested tasks (if any) -->
+						{#if suggestedTasks.length > 0}
+							<div class="ctr-exp-suggested">
+								<span class="ctr-exp-label">Suggested:</span>
+								{#each suggestedTasks.slice(0, 3) as st}
+									<span class="ctr-exp-chip">
+										<span class="ctr-exp-chip-type">{st.type}</span>
+										{st.title}
+									</span>
+								{/each}
+							</div>
+						{/if}
+
+						<!-- Footer: duration + memory + extra actions -->
+						<div class="ctr-exp-footer">
+							<span class="ctr-exp-duration">ran for {durationText}</span>
+
+							{#if memoryFilename && onMemoryClick}
+								<button
+									type="button"
+									class="ctr-exp-action ctr-exp-action-memory"
+									onclick={(e) => { e.stopPropagation(); onMemoryClick!(e, memoryFilename!, task); }}
+									title="View memory"
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="12" height="12">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+									</svg>
+									Memory
+								</button>
+							{/if}
+
+							{#if onReopenTask}
+								<button
+									type="button"
+									class="ctr-exp-action ctr-exp-action-reopen"
+									onclick={(e) => { e.stopPropagation(); onReopenTask!(e, task); }}
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="12" height="12">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+									</svg>
+									Reopen
+								</button>
+							{/if}
+
+							{#if onDuplicateTask}
+								<button
+									type="button"
+									class="ctr-exp-action ctr-exp-action-dup"
+									onclick={(e) => { e.stopPropagation(); onDuplicateTask!(e, task); }}
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="12" height="12">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" />
+									</svg>
+									Duplicate
+								</button>
+							{/if}
+						</div>
+					</div>
 				{/if}
 			</div>
 		</div>
@@ -480,16 +611,26 @@
 		max-width: 80px;
 	}
 
-	/* Right: duration track column */
-	.ctr-duration {
-		flex-shrink: 0;
-		display: flex;
-		align-items: center;
-		border-left: 1px solid oklch(0.22 0.02 250);
-		padding: 8px 10px;
+	/* Summary snippet (compact state) */
+	.ctr-summary-snippet {
+		font-size: 0.72rem;
+		color: oklch(0.55 0.03 250);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		line-height: 1.3;
+		font-family: system-ui, -apple-system, sans-serif;
 	}
 
-	/* Primary action column: always visible (like date picker in open tasks) */
+	/* Skeleton loading line in compact state */
+	.ctr-summary-skeleton {
+		height: 0.65rem;
+		width: 60%;
+		border-radius: 3px;
+		background: oklch(0.25 0.01 250);
+	}
+
+	/* Primary action column: always visible */
 	.ctr-primary-col {
 		display: flex;
 		align-items: center;
@@ -540,7 +681,7 @@
 	.ctr-extra-reopen    { color: oklch(0.65 0.14 75); }
 	.ctr-extra-duplicate { color: oklch(0.60 0.12 290); }
 
-	/* Primary button: always visible, matches date picker column style */
+	/* Primary button: always visible */
 	.ctr-primary-btn {
 		width: 56px;
 		min-height: 44px;
@@ -578,4 +719,159 @@
 	.ctr-primary-resume  { color: oklch(0.62 0.16 145); }
 	.ctr-primary-reopen  { color: oklch(0.65 0.14 75); }
 	.ctr-primary-details { color: oklch(0.55 0.10 250); }
+
+	/* === Expansion area (desktop hover) === */
+	.ctr-expand-wrapper {
+		display: grid;
+		grid-template-rows: 0fr;
+		transition: grid-template-rows 200ms ease-out;
+		overflow: hidden;
+	}
+
+	/* Only animate on hover-capable devices (not touch-only) */
+	@media (hover: hover) and (min-width: 640px) {
+		.ctr-expand-wrapper.ctr-expanded {
+			grid-template-rows: 1fr;
+		}
+	}
+
+	.ctr-expand-inner {
+		overflow: hidden;
+		min-height: 0;
+	}
+
+	.ctr-expand-content {
+		padding: 0.625rem 0.625rem 0.75rem 56px; /* align with body content */
+		border-top: 1px solid oklch(0.22 0.02 250 / 0.5);
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	/* Full summary bullet list */
+	.ctr-exp-bullets {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+
+	.ctr-exp-bullets li {
+		font-size: 0.78rem;
+		color: oklch(0.70 0.02 250);
+		line-height: 1.4;
+		font-family: system-ui, -apple-system, sans-serif;
+		padding-left: 0.9rem;
+		position: relative;
+	}
+
+	.ctr-exp-bullets li::before {
+		content: '·';
+		position: absolute;
+		left: 0.25rem;
+		color: oklch(0.55 0.10 145);
+		font-weight: 700;
+	}
+
+	/* Suggested tasks row */
+	.ctr-exp-suggested {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		flex-wrap: wrap;
+	}
+
+	.ctr-exp-label {
+		font-size: 0.6rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: oklch(0.45 0.02 250);
+		white-space: nowrap;
+	}
+
+	.ctr-exp-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.68rem;
+		padding: 0.15rem 0.5rem;
+		border-radius: 4px;
+		background: oklch(0.22 0.02 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		color: oklch(0.65 0.02 250);
+		font-family: system-ui, -apple-system, sans-serif;
+		white-space: nowrap;
+		max-width: 200px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.ctr-exp-chip-type {
+		color: oklch(0.60 0.10 200);
+		font-weight: 600;
+		font-size: 0.6rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+
+	/* Footer row */
+	.ctr-exp-footer {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.ctr-exp-duration {
+		font-size: 0.65rem;
+		color: oklch(0.42 0.02 250);
+		font-family: ui-monospace, monospace;
+		margin-right: 0.25rem;
+	}
+
+	/* Action buttons in expanded footer */
+	.ctr-exp-action {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		font-size: 0.625rem;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		padding: 0.25rem 0.5rem;
+		border-radius: 4px;
+		border: 1px solid transparent;
+		background: transparent;
+		cursor: pointer;
+		transition: background 0.12s, border-color 0.12s;
+		font-family: system-ui, -apple-system, sans-serif;
+	}
+
+	.ctr-exp-action:hover {
+		background: oklch(0.22 0.02 250);
+		border-color: oklch(0.28 0.02 250);
+	}
+
+	.ctr-exp-action-memory {
+		color: oklch(0.60 0.12 200);
+	}
+	.ctr-exp-action-reopen {
+		color: oklch(0.65 0.14 75);
+	}
+	.ctr-exp-action-dup {
+		color: oklch(0.60 0.12 290);
+	}
+
+	/* prefers-reduced-motion: instant expand, no animation */
+	@media (prefers-reduced-motion: reduce) {
+		.ctr-expand-wrapper {
+			transition: none !important;
+		}
+		.ctr-summary-skeleton {
+			animation: none !important;
+		}
+	}
 </style>

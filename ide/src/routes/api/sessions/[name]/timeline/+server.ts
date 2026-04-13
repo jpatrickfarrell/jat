@@ -31,6 +31,8 @@ export interface TimelineResponse {
  * - limit: Max events to return (default 50, max 500)
  * - offset: Skip N events from the end (for pagination)
  * - since: ISO timestamp - only return events after this time
+ * - type: Comma-separated list of event types to include (e.g. "complete,review")
+ * - taskId: Only return events matching this task ID
  */
 export const GET: RequestHandler = async ({ params, url }) => {
 	const sessionName = params.name;
@@ -43,6 +45,8 @@ export const GET: RequestHandler = async ({ params, url }) => {
 	const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 500);
 	const offset = parseInt(url.searchParams.get('offset') || '0');
 	const since = url.searchParams.get('since');
+	const typeFilter = url.searchParams.get('type')?.split(',').map(t => t.trim()).filter(Boolean);
+	const taskIdFilter = url.searchParams.get('taskId');
 
 	// Timeline file is named by tmux session (with jat- prefix if not present)
 	const tmuxSession = sessionName.startsWith('jat-') ? sessionName : `jat-${sessionName}`;
@@ -75,6 +79,19 @@ export const GET: RequestHandler = async ({ params, url }) => {
 		if (since) {
 			const sinceDate = new Date(since);
 			events = events.filter(e => new Date(e.timestamp) > sinceDate);
+		}
+
+		// Filter by type if specified (e.g. type=complete,review)
+		if (typeFilter && typeFilter.length > 0) {
+			events = events.filter(e =>
+				typeFilter.includes(e.type) ||
+				(e.state && typeFilter.includes(e.state))
+			);
+		}
+
+		// Filter by taskId if specified
+		if (taskIdFilter) {
+			events = events.filter(e => !e.task_id || e.task_id === taskIdFilter);
 		}
 
 		// Get total count before pagination

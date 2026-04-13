@@ -495,9 +495,8 @@
 		>{@html renderedOutput}</pre>
 	</div>
 
-	<!-- Bottom stack: EventStack + question panels — capped at 60vh so terminal stays visible -->
-	<div class="bottom-stack">
 	<!-- Event Timeline Stack: signal history, action buttons, suggested tasks, needs_input cards -->
+	<!-- Kept outside bottom-stack so its absolute-positioned popup can expand freely -->
 	{#if sessionName}
 		<div class="relative px-2 bg-base-300 flex-shrink-0">
 			<EventStack
@@ -521,6 +520,8 @@
 		</div>
 	{/if}
 
+	<!-- Question panels capped so they can't push the terminal off-screen -->
+	<div class="bottom-stack">
 	<!-- Custom question (jat-signal question) -->
 	{#if customQuestion?.active && customQuestion.question}
 		<QuestionPanel

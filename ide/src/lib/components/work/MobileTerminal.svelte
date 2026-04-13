@@ -327,6 +327,9 @@
 				await onSendInput?.(text, 'text');
 				isOtherMode = false;
 				otherText = '';
+				if (sessionName && typeof localStorage !== 'undefined') {
+					localStorage.removeItem(`jat-draft-mobile-${sessionName}-smart-other`);
+				}
 				await clearQuestion();
 			} finally {
 				activeAction = null;
@@ -353,6 +356,48 @@
 	let customError = $state<string | null>(null);
 	let isSubmittingCustom = $state(false);
 	let customPollTimer: ReturnType<typeof setInterval> | null = null;
+
+	// Draft persistence — debounce timers for autosave
+	let customDraftTimer: ReturnType<typeof setTimeout> | null = null;
+	let otherDraftTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Autosave customInput draft (debounced 300ms)
+	$effect(() => {
+		const text = customInput;
+		if (!sessionName || typeof localStorage === 'undefined') return;
+		if (customDraftTimer) clearTimeout(customDraftTimer);
+		customDraftTimer = setTimeout(() => {
+			const key = `jat-draft-mobile-${sessionName}-custom-question`;
+			if (text.trim()) {
+				localStorage.setItem(key, text);
+			} else {
+				localStorage.removeItem(key);
+			}
+		}, 300);
+	});
+
+	// Autosave otherText draft (debounced 300ms)
+	$effect(() => {
+		const text = otherText;
+		if (!sessionName || typeof localStorage === 'undefined') return;
+		if (otherDraftTimer) clearTimeout(otherDraftTimer);
+		otherDraftTimer = setTimeout(() => {
+			const key = `jat-draft-mobile-${sessionName}-smart-other`;
+			if (text.trim()) {
+				localStorage.setItem(key, text);
+			} else {
+				localStorage.removeItem(key);
+			}
+		}, 300);
+	});
+
+	// Restore otherText draft when Other mode is activated
+	$effect(() => {
+		if (isOtherMode && sessionName && typeof localStorage !== 'undefined') {
+			const saved = localStorage.getItem(`jat-draft-mobile-${sessionName}-smart-other`);
+			if (saved) otherText = saved;
+		}
+	});
 
 	async function fetchCustomQuestion() {
 		if (!sessionName || destroyed) return;
@@ -385,6 +430,9 @@
 			if (!r.ok) throw new Error(`HTTP ${r.status}`);
 			customQuestion = null;
 			customInput = '';
+			if (sessionName && typeof localStorage !== 'undefined') {
+				localStorage.removeItem(`jat-draft-mobile-${sessionName}-custom-question`);
+			}
 		} catch (e) {
 			if ((e as Error).name !== 'AbortError') {
 				customError = 'Failed to send. Try again.';
@@ -399,6 +447,13 @@
 		questionPollTimer = setInterval(fetchQuestion, 3000);
 		fetchCustomQuestion();
 		customPollTimer = setInterval(fetchCustomQuestion, 5000);
+		// Restore custom question input draft
+		if (sessionName && typeof localStorage !== 'undefined') {
+			const saved = localStorage.getItem(`jat-draft-mobile-${sessionName}-custom-question`);
+			if (saved) customInput = saved;
+		}
+		// Restore smart-question Other draft (available when user next activates Other mode)
+		// (restored reactively via $effect when isOtherMode becomes true)
 	});
 
 	onDestroy(() => {
@@ -406,6 +461,8 @@
 		aborter.abort();
 		if (questionPollTimer) clearInterval(questionPollTimer);
 		if (customPollTimer) clearInterval(customPollTimer);
+		if (customDraftTimer) clearTimeout(customDraftTimer);
+		if (otherDraftTimer) clearTimeout(otherDraftTimer);
 	});
 </script>
 

@@ -109,6 +109,7 @@ import StatusActionBadge from "./atoms/StatusActionBadge.svelte";
 	import CompactingSignalCard from "$lib/components/signals/CompactingSignalCard.svelte";
 	import { MinimapCssScale } from "$lib/components/minimap";
 	import SendToLLM from "./SendToLLM.svelte";
+	import { marked } from 'marked';
 	import type {
 		WorkingSignal,
 		ReviewSignal,
@@ -1651,6 +1652,13 @@ import StatusActionBadge from "./atoms/StatusActionBadge.svelte";
 	// Derived check for whether input has content (for Send button visibility)
 	// Using $derived ensures reactivity when inputText changes
 	const hasInputContent = $derived(inputText.trim().length > 0 || attachedFiles.length > 0);
+
+	// Markdown preview toggle
+	let showPreview = $state(false);
+	const renderedMarkdown = $derived.by(() => {
+		if (!showPreview || !inputText.trim()) return '';
+		return marked.parse(inputText) as string;
+	});
 	let escapeFlash = $state(false); // Brief flash when Escape clears
 	let pasteFlash = $state(false); // Brief flash when content is pasted
 	let tabFlash = $state(false); // Brief flash when Tab autocomplete is sent
@@ -7675,6 +7683,19 @@ import StatusActionBadge from "./atoms/StatusActionBadge.svelte";
 						role="textbox"
 						tabindex="-1"
 					>
+						{#if showPreview}
+							<!-- Markdown preview -->
+							<div
+								class="sc-md-preview w-full leading-tight overflow-y-auto"
+								style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.50 0.10 200 / 0.5); color: oklch(0.80 0.02 250); min-height: 24px; max-height: 96px; padding: 0.25rem 0.375rem; border-radius: 0.375rem; font-size: 0.75rem;"
+							>
+								{#if inputText.trim()}
+									{@html renderedMarkdown}
+								{:else}
+									<span style="color: oklch(0.45 0.02 250); font-style: italic;">Nothing to preview</span>
+								{/if}
+							</div>
+						{:else}
 						<textarea
 							bind:this={inputRef}
 							bind:value={inputText}
@@ -7694,6 +7715,7 @@ import StatusActionBadge from "./atoms/StatusActionBadge.svelte";
 							disabled={sendingInput || !onSendInput}
 							data-session-input="true"
 						></textarea>
+						{/if}
 						<!-- Path autocomplete dropdown -->
 						{#if showPathAutocomplete && pathSearchResults.length > 0}
 							<div
@@ -7732,7 +7754,7 @@ import StatusActionBadge from "./atoms/StatusActionBadge.svelte";
 								<span class="text-exit-animation" style="transform-origin: left center; display: inline-block;">{exitingText}</span>
 							</div>
 						{/if}
-						{#if inputText.trim().length > 0}
+						{#if inputText.trim().length > 0 && !showPreview}
 							<button
 								type="button"
 								class="absolute right-1.5 top-2 p-0.5 rounded-full transition-colors"
@@ -7784,11 +7806,37 @@ import StatusActionBadge from "./atoms/StatusActionBadge.svelte";
 					<!-- RIGHT: Action buttons (context-dependent) -->
 					<div class="flex items-center gap-0.5 flex-shrink-0 pb-0.5">
 						{#if hasInputContent}
+							<!-- Markdown preview toggle -->
+							<button
+								type="button"
+								onclick={() => {
+									showPreview = !showPreview;
+									if (!showPreview) {
+										requestAnimationFrame(() => inputRef?.focus());
+									}
+								}}
+								class="btn btn-xs {showPreview ? 'btn-info' : 'btn-ghost'}"
+								title={showPreview ? 'Back to edit' : 'Preview markdown'}
+								disabled={sendingInput || !onSendInput}
+							>
+								{#if showPreview}
+									<!-- Pencil icon -->
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+									</svg>
+								{:else}
+									<!-- Eye icon -->
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+										<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+									</svg>
+								{/if}
+							</button>
 							<!-- User is typing: show Send button -->
 							<button
 								onclick={sendTextInput}
 								class="btn btn-xs btn-primary"
-								disabled={sendingInput || !onSendInput}
+								disabled={sendingInput || !onSendInput || showPreview}
 							>
 								{#if sendingInput}
 									<span class="loading loading-spinner loading-xs"></span>
@@ -7974,6 +8022,19 @@ import StatusActionBadge from "./atoms/StatusActionBadge.svelte";
 />
 
 <style>
+	/* Markdown preview area in input composer */
+	:global(.sc-md-preview p) { margin: 0 0 0.2rem 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+	:global(.sc-md-preview p:last-child) { margin-bottom: 0; }
+	:global(.sc-md-preview code) { font-family: ui-monospace, monospace; font-size: 0.7em; background: oklch(0.18 0.02 250); padding: 0.1rem 0.25rem; border-radius: 3px; color: oklch(0.75 0.10 280); }
+	:global(.sc-md-preview pre) { background: oklch(0.18 0.02 250); padding: 0.4rem; border-radius: 4px; overflow-x: auto; margin: 0.2rem 0; font-size: 0.7rem; }
+	:global(.sc-md-preview pre code) { background: none; padding: 0; }
+	:global(.sc-md-preview ul, .sc-md-preview ol) { margin: 0 0 0.2rem 0; padding-left: 1rem; font-family: ui-sans-serif, system-ui, sans-serif; }
+	:global(.sc-md-preview li) { margin-bottom: 0.1rem; }
+	:global(.sc-md-preview strong) { font-weight: 600; color: oklch(0.90 0.02 250); }
+	:global(.sc-md-preview em) { font-style: italic; }
+	:global(.sc-md-preview h1, .sc-md-preview h2, .sc-md-preview h3, .sc-md-preview h4) { font-family: ui-sans-serif, system-ui, sans-serif; font-weight: 600; color: oklch(0.90 0.02 250); margin: 0.2rem 0 0.1rem 0; font-size: 0.8rem; }
+	:global(.sc-md-preview blockquote) { border-left: 2px solid oklch(0.50 0.10 200); padding-left: 0.5rem; margin: 0.2rem 0; color: oklch(0.65 0.02 250); font-family: ui-sans-serif, system-ui, sans-serif; }
+
 	.unified-agent-card {
 		position: relative;
 		transition: all 0.2s ease;

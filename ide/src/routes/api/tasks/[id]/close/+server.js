@@ -8,6 +8,18 @@ import { getTaskById, closeTask } from '$lib/server/jat-tasks.js';
 import { invalidateCache } from '$lib/server/cache.js';
 import { _resetTaskCache } from '../../../../api/agents/+server.js';
 import { emitEvent } from '$lib/utils/eventBus.server.js';
+import { resolveBackendForProject } from '../../../../../../../lib/projects-config.js';
+
+async function getPgBackendForTask(taskId) {
+	const match = taskId.match(/^([a-zA-Z0-9_-]+?)-[a-zA-Z0-9.]+$/);
+	if (!match) return null;
+	try {
+		const backendConfig = resolveBackendForProject(match[1]);
+		if (backendConfig.kind !== 'postgres') return null;
+		const { getBackendForProject } = await import('../../../../../../../lib/tasks-backend.js');
+		return getBackendForProject(match[1]);
+	} catch { return null; }
+}
 
 /**
  * Fire integration callback if this task was ingested from an external source.
@@ -59,8 +71,12 @@ export async function POST({ params, request, fetch: internalFetch }) {
 	const taskId = params.id;
 
 	try {
-		// Check if task exists first
-		const existingTask = getTaskById(taskId);
+		// Check if task exists — try SQLite first, then Postgres for graduated projects
+		let existingTask = getTaskById(taskId);
+		const pgBackend = existingTask ? null : await getPgBackendForTask(taskId);
+		if (!existingTask && pgBackend) {
+			existingTask = await pgBackend.getById(taskId);
+		}
 		if (!existingTask) {
 			return json(
 				{ error: true, message: `Task '${taskId}' not found` },
@@ -88,8 +104,10 @@ export async function POST({ params, request, fetch: internalFetch }) {
 			// Body is optional, use default reason
 		}
 
-		// Close the task directly
-		const closedTask = closeTask(taskId, reason, existingTask.project_path);
+		// Close the task — route through Postgres backend for graduated projects
+		const closedTask = pgBackend
+			? await pgBackend.close(taskId, reason)
+			: closeTask(taskId, reason, existingTask.project_path);
 
 		console.log(`[close] Closed task ${taskId}`);
 

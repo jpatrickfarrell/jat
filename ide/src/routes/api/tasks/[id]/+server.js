@@ -228,8 +228,12 @@ export async function PATCH({ params, request }) {
 	const taskId = params.id;
 
 	try {
-		// Check if task exists first
-		const existingTask = getTaskById(taskId);
+		// Check if task exists — try SQLite first, then Postgres for graduated projects
+		let existingTask = getTaskById(taskId);
+		const pgBackendForPatch = existingTask ? null : await getPgBackendForTask(taskId);
+		if (!existingTask && pgBackendForPatch) {
+			existingTask = await pgBackendForPatch.getById(taskId);
+		}
 		if (!existingTask) {
 			return json(
 				{ error: true, message: `Task '${taskId}' not found` },
@@ -358,10 +362,14 @@ export async function PATCH({ params, request }) {
 			}
 		}
 
-		// Execute update if we have fields
+		// Execute update — route through Postgres backend for graduated projects
 		if (Object.keys(updateFields).length > 0) {
-			updateFields.projectPath = projectPath;
-			updateTask(taskId, updateFields);
+			if (pgBackendForPatch) {
+				await pgBackendForPatch.update(taskId, updateFields);
+			} else {
+				updateFields.projectPath = projectPath;
+				updateTask(taskId, updateFields);
+			}
 		}
 
 		// Handle dependencies separately using addDependency/removeDependency
@@ -406,7 +414,9 @@ export async function PATCH({ params, request }) {
 			try {
 				const value = updates.review_override;
 				// Get current notes from the task (re-fetch in case notes were updated above)
-				const currentTask = getTaskById(taskId);
+				const currentTask = pgBackendForPatch
+					? await pgBackendForPatch.getById(taskId)
+					: getTaskById(taskId);
 				let currentNotes = currentTask?.notes || '';
 
 				// Remove existing review override tag if present
@@ -415,10 +425,17 @@ export async function PATCH({ params, request }) {
 				if (value === 'always_review' || value === 'always_auto') {
 					const overrideTag = `[REVIEW_OVERRIDE:${value}]`;
 					const newNotes = currentNotes ? `${currentNotes}\n${overrideTag}` : overrideTag;
-					updateTask(taskId, { notes: newNotes, projectPath });
+					if (pgBackendForPatch) {
+						await pgBackendForPatch.update(taskId, { notes: newNotes });
+					} else {
+						updateTask(taskId, { notes: newNotes, projectPath });
+					}
 				} else if (value === null || value === '' || value === 'null') {
-					// Clear the override - just save notes without the tag
-					updateTask(taskId, { notes: currentNotes, projectPath });
+					if (pgBackendForPatch) {
+						await pgBackendForPatch.update(taskId, { notes: currentNotes });
+					} else {
+						updateTask(taskId, { notes: currentNotes, projectPath });
+					}
 				}
 			} catch (err) {
 				const error = /** @type {Error} */ (err);

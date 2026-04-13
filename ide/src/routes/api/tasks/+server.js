@@ -302,19 +302,46 @@ export async function POST({ request }) {
 			type = 'chore';
 		}
 
-		// Create the task directly
-		const createdTask = createTask({
-			projectPath,
-			title,
-			description,
-			type,
-			priority,
-			labels,
-			deps,
-			assignee: null,
-			notes,
-			...schedulingFields
-		});
+		// Route to Postgres backend for graduated projects
+		let pgBackendForCreate = null;
+		if (project) {
+			try {
+				const backendConfig = resolveBackendForProject(project);
+				if (backendConfig.kind === 'postgres') {
+					const { getBackendForProject } = await import('../../../../../lib/tasks-backend.js');
+					pgBackendForCreate = await getBackendForProject(project);
+				}
+			} catch {
+				// Not a postgres project — fall through to SQLite
+			}
+		}
+
+		/** @type {any} */
+		const createdTask = pgBackendForCreate
+			? await pgBackendForCreate.create({
+				projectPath,
+				title,
+				description,
+				type,
+				priority,
+				labels,
+				deps,
+				assignee: null,
+				notes,
+				...schedulingFields
+			})
+			: createTask({
+				projectPath,
+				title,
+				description,
+				type,
+				priority,
+				labels,
+				deps,
+				assignee: null,
+				notes,
+				...schedulingFields
+			});
 
 		// Invalidate caches so subsequent fetches get fresh data
 		invalidateCache.tasks();

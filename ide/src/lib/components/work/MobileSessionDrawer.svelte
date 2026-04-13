@@ -107,6 +107,17 @@
 	// === Page State ===
 	const PAGES = ['Terminal', 'Task Detail', 'Attachments', 'Notes'] as const;
 	let currentPage = $state(0);
+	let tabRefs = $state<HTMLButtonElement[]>([]);
+	let indicatorLeft = $state(0);
+	let indicatorWidth = $state(0);
+
+	$effect(() => {
+		const el = tabRefs[currentPage];
+		if (el) {
+			indicatorLeft = el.offsetLeft;
+			indicatorWidth = el.offsetWidth;
+		}
+	});
 	let pageTranslateX = $state(0); // drag offset during swipe
 	let pageTransitioning = $state(false);
 
@@ -1124,13 +1135,18 @@
 				</svg>
 			</button>
 
-			<div class="topbar-tabs flex-1 flex gap-0.5 items-center justify-center overflow-x-auto">
+			<div class="topbar-tabs relative flex-1 flex gap-0.5 items-center justify-center overflow-x-auto">
 				{#each PAGES as page, i}
 					<button
-						class="px-2 py-1 text-[0.6875rem] whitespace-nowrap rounded-t-md border-b-2 transition-colors {i === currentPage ? 'font-semibold text-base-content bg-base-300 border-base-content' : 'font-medium text-base-content/50 bg-transparent border-transparent active:bg-base-300/70'}"
+						bind:this={tabRefs[i]}
+						class="px-2 py-1 text-[0.6875rem] whitespace-nowrap rounded-t-md transition-colors {i === currentPage ? 'font-semibold text-base-content bg-base-300' : 'font-medium text-base-content/50 bg-transparent active:bg-base-300/70'}"
 						use:directClick={() => navigateToPage(i)}
 					>{page}</button>
 				{/each}
+				<div
+					class="pointer-events-none absolute bottom-0 h-0.5 rounded-full bg-info"
+					style="left: {indicatorLeft}px; width: {indicatorWidth}px; transition: left 280ms cubic-bezier(0.22, 1, 0.36, 1), width 280ms cubic-bezier(0.22, 1, 0.36, 1);"
+				></div>
 			</div>
 
 			<button class="topbar-dismiss-col self-stretch flex items-center justify-center w-10 -my-1 flex-shrink-0 rounded-md text-base-content/50 active:bg-base-300 active:text-base-content transition-colors" use:directClick={dismissDrawer} title="Close">

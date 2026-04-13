@@ -511,9 +511,15 @@
 
 		<!-- Form Content -->
 		<div class="flex-1 overflow-y-auto p-4 space-y-4">
-			<!-- Basic Information Section (always open) -->
-			<div class="space-y-4">
-				<h3 class="text-sm font-medium text-base-content/70 uppercase tracking-wide">Basic Information</h3>
+			<!-- Basic Information Section -->
+			<details open class="group rounded-lg border border-base-300">
+				<summary class="cursor-pointer px-4 py-3 text-sm font-medium text-base-content/70 uppercase tracking-wide hover:bg-base-200 rounded-lg flex items-center justify-between gap-3">
+					<span class="flex-shrink-0">Basic Information</span>
+					{#if name || key}
+						<span class="text-xs font-normal normal-case text-base-content/50 truncate min-w-0">{name || key}</span>
+					{/if}
+				</summary>
+				<div class="px-4 pb-4 space-y-4">
 
 				<!-- Project Key -->
 				<div class="form-control">
@@ -611,7 +617,8 @@
 						<span class="label-text">Hide from project list</span>
 					</label>
 				</div>
-			</div>
+				</div>
+			</details>
 
 			{#if !isNewProject}
 				<!-- Sharing & Backend Section -->
@@ -652,9 +659,9 @@
 								<div class="text-xs font-medium text-base-content/60 uppercase tracking-wide">Connection</div>
 								<div
 									class="font-mono text-xs bg-base-300 rounded px-2 py-1.5 break-all select-all"
-									title="Password is masked. Configure backend_url in ~/.config/jat/projects.json"
+									title="Password is masked. Set the connection URL in ~/.config/jat/projects.json"
 								>
-									{backendUrl ? maskConnectionUrl(backendUrl) : '— no backend_url configured —'}
+									{backendUrl ? maskConnectionUrl(backendUrl) : '— no connection configured —'}
 								</div>
 							</div>
 
@@ -724,29 +731,12 @@
 						{/if}
 					</div>
 
-					<!-- What's still local -->
-					<details class="rounded-lg border border-base-300 bg-base-200/50">
-						<summary class="cursor-pointer px-4 py-2.5 text-sm font-medium hover:bg-base-200 rounded-lg flex items-center gap-2">
-							<svg class="w-4 h-4 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-							</svg>
-							What's still local
-						</summary>
-						<div class="px-4 pb-3 pt-1 text-xs text-base-content/70 space-y-2">
-							<p>
-								Even in Team mode, some data stays on each developer's machine. Graduating only
-								moves the task database — everything below remains per-machine:
-							</p>
-							<ul class="space-y-1 ml-4 list-disc">
-								<li><span class="font-mono">tmux</span> sessions (agent processes)</li>
-								<li><span class="font-mono">.jat/memory/</span> (agent memory &amp; context)</li>
-								<li>Claude Code hooks (<span class="font-mono">.claude/hooks/</span>)</li>
-								<li>Signal files (<span class="font-mono">/tmp/jat-signal-*</span>)</li>
-								<li>Session identity files (<span class="font-mono">.claude/sessions/</span>)</li>
-								<li>Per-machine credentials (<span class="font-mono">~/.config/jat/credentials.json</span>)</li>
-							</ul>
-						</div>
-					</details>
+					{#if isTeamBackend}
+						<p class="text-xs text-base-content/50 px-1 leading-relaxed">
+							<span class="font-medium text-base-content/70">Stays per-machine:</span>
+							tmux sessions, <span class="font-mono">.jat/memory/</span>, hooks, signal files, credentials. Only the task database is shared.
+						</p>
+					{/if}
 
 					</div>
 				</details>
@@ -892,8 +882,11 @@
 			</details>
 			{#if !isNewProject}
 				<!-- Danger Zone -->
-				<div class="rounded-lg border border-error/30 p-4 space-y-3">
-					<h3 class="text-sm font-medium text-error/70 uppercase tracking-wide">Danger Zone</h3>
+				<div class="rounded-lg border-2 border-error/40 bg-error/5 p-4 space-y-3">
+					<div class="flex items-baseline justify-between gap-3">
+						<h3 class="text-sm font-semibold text-error uppercase tracking-wider">Danger Zone</h3>
+						<span class="text-xs text-error/60">Irreversible actions</span>
+					</div>
 					<div class="flex gap-2">
 						<button
 							class="btn btn-sm btn-warning btn-outline"
@@ -961,12 +954,12 @@
 					</div>
 
 					<p class="mb-4">
-						Are you sure you want to remove <span class="font-semibold text-error">{project?.key}</span> from the configuration?
+						Remove <span class="font-semibold text-error">{project?.key}</span> from JAT?
 					</p>
 
 					<div class="bg-base-200 rounded-lg p-3 mb-4 text-sm">
 						<p class="text-base-content/70">
-							<strong>Note:</strong> This only removes the project from the JAT configuration file. The actual project directory and files will not be deleted.
+							Only the JAT configuration entry is removed. Files on disk stay untouched.
 						</p>
 					</div>
 
@@ -1081,7 +1074,7 @@
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
 							</svg>
 							<div class="text-warning">
-								<strong>Running agents will be stopped.</strong> Any active agent sessions on this project will be terminated before renaming.
+								<strong>Active agent sessions on this project will be killed before renaming.</strong>
 							</div>
 						</div>
 					</div>

@@ -1031,7 +1031,7 @@ export async function POST({ request }) {
 					// For graduated (postgres) projects, also set assignee_id to the
 					// configured JAT agent user so Meadow-style UIs show the task as
 					// being worked by an agent. The DB trigger auto-stashes the
-					// prior assignee_id into jat_previous_assignee_id, so completion
+					// prior assignee_id into previous_assignee_id, so completion
 					// can restore the original owner.
 					if (projectName) {
 						try {

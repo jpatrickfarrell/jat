@@ -15,7 +15,7 @@ import { join, dirname, extname } from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getProjectPath } from '$lib/server/projectPaths.js';
-import { getProjectSupabaseConfig } from '../../../../../../lib/projects-config.js';
+import { getProjectSupabaseConfig } from '../../../../../../../lib/projects-config.js';
 
 const execAsync = promisify(exec);
 

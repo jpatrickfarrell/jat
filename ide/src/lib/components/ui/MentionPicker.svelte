@@ -27,14 +27,14 @@
 		open = $bindable(false),
 		project = '',
 		initialFilter = '',
-		types = ['files', 'bases', 'commands'] as Array<'files' | 'bases' | 'commands'>,
+		types = ['tasks', 'files', 'bases', 'commands'] as Array<'files' | 'bases' | 'commands' | 'tasks'>,
 		onselect = (_item: ReferenceItem) => {},
 		onclose = () => {}
 	}: {
 		open?: boolean;
 		project?: string;
 		initialFilter?: string;
-		types?: Array<'files' | 'bases' | 'commands'>;
+		types?: Array<'files' | 'bases' | 'commands' | 'tasks'>;
 		onselect?: (item: ReferenceItem) => void;
 		onclose?: () => void;
 	} = $props();

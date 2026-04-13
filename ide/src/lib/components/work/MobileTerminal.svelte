@@ -8,22 +8,102 @@
 	 *   - Smart question UI (AskUserQuestion buttons)
 	 *   - Custom question UI (jat-signal question)
 	 *
+	 * Both question surfaces render through QuestionPanel so they share the
+	 * same chrome, palette, and dismiss affordance. They differ only in the
+	 * interactive body (free-text answer vs TUI navigation).
+	 *
 	 * Deliberately excludes: minimap, event stack, token tracking, keyboard shortcuts,
 	 * confirm modals, sparklines, and all other desktop-only machinery.
 	 */
 
 	import { onMount, onDestroy } from 'svelte';
 	import { ansiToHtmlWithLinks } from '$lib/utils/ansiToHtml';
+	import { SESSION_STATE_VISUALS } from '$lib/config/statusColors';
+	import { mobileSurface } from '$lib/config/mobileSurface';
+	import QuestionPanel from './mobile/QuestionPanel.svelte';
+	import OptionButton from './mobile/OptionButton.svelte';
+	import EventStack from './EventStack.svelte';
+
+	const input = SESSION_STATE_VISUALS['needs-input'];
 
 	let {
 		sessionName = '',
 		output = '',
-		onSendInput = undefined as ((text: string, type: 'text' | 'key') => Promise<void>) | undefined
+		task = null as { id?: string; title?: string } | null,
+		sessionState = '' as string,
+		availableProjects = [] as string[],
+		defaultProject = '',
+		onSendInput = undefined as ((text: string, type: 'text' | 'key') => Promise<void>) | undefined,
+		onCleanup = undefined as (() => void | Promise<void>) | undefined,
+		onComplete = undefined as (() => void | Promise<void>) | undefined,
+		onViewTask = undefined as ((taskId: string) => void) | undefined,
+		onCreateTasks = undefined as ((tasks: any[]) => Promise<{ success: any[]; failed: any[] }>) | undefined,
+		onCreateAndStartTasks = undefined as ((tasks: any[]) => Promise<{ success: any[]; failed: any[] }>) | undefined
 	}: {
 		sessionName?: string;
 		output?: string;
+		task?: { id?: string; title?: string } | null;
+		sessionState?: string;
+		availableProjects?: string[];
+		defaultProject?: string;
 		onSendInput?: (text: string, type: 'text' | 'key') => Promise<void>;
+		onCleanup?: () => void | Promise<void>;
+		onComplete?: () => void | Promise<void>;
+		onViewTask?: (taskId: string) => void;
+		onCreateTasks?: (tasks: any[]) => Promise<{ success: any[]; failed: any[] }>;
+		onCreateAndStartTasks?: (tasks: any[]) => Promise<{ success: any[]; failed: any[] }>;
 	} = $props();
+
+	// Emit review signal for the active task
+	async function emitReview() {
+		if (!sessionName) return;
+		try {
+			await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					type: 'review',
+					data: {
+						taskId: task?.id || '',
+						taskTitle: task?.title || '',
+						summary: ['Work completed, ready for review']
+					}
+				}),
+				signal: aborter.signal
+			});
+		} catch (e) {
+			if ((e as Error).name !== 'AbortError') {
+				console.error('[MobileTerminal] Failed to emit review signal:', e);
+			}
+		}
+	}
+
+	async function patchTask(taskId: string, body: Record<string, unknown>) {
+		try {
+			await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body),
+				signal: aborter.signal
+			});
+		} catch (e) {
+			if ((e as Error).name !== 'AbortError') {
+				console.error('[MobileTerminal] PATCH failed:', e);
+			}
+		}
+	}
+
+	// ─── Lifecycle + network plumbing ───────────────────────────────────────────
+	// AbortController shared by every in-flight fetch so unmount kills pending
+	// requests cleanly and background polls can't race user actions after teardown.
+	const aborter = new AbortController();
+	let destroyed = false;
+
+	// Reduced-motion preference: users with vestibular sensitivity get instant
+	// scroll jumps instead of the default smooth auto-scroll behavior.
+	const reduceMotion =
+		typeof window !== 'undefined' &&
+		window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 	// ─── Terminal output ────────────────────────────────────────────────────────
 	const renderedOutput = $derived(ansiToHtmlWithLinks(output));
@@ -35,9 +115,13 @@
 		// Depend on renderedOutput so this re-runs when output changes
 		const _ = renderedOutput;
 		if (autoScroll && scrollEl) {
-			requestAnimationFrame(() => {
-				if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
-			});
+			if (reduceMotion) {
+				scrollEl.scrollTop = scrollEl.scrollHeight;
+			} else {
+				requestAnimationFrame(() => {
+					if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
+				});
+			}
 		}
 	});
 
@@ -61,6 +145,18 @@
 		return { destroy() { node.removeEventListener('keydown', handler); } };
 	}
 
+	// Auto-grow textarea up to its CSS max-height. Resets to content height on
+	// each input so removing lines also shrinks the field.
+	function autoGrow(node: HTMLTextAreaElement) {
+		const resize = () => {
+			node.style.height = 'auto';
+			node.style.height = `${node.scrollHeight}px`;
+		};
+		resize();
+		node.addEventListener('input', resize);
+		return { destroy() { node.removeEventListener('input', resize); } };
+	}
+
 	// ─── Smart question UI (AskUserQuestion) ────────────────────────────────────
 	interface QuestionOption { label: string; description?: string; }
 	interface Question { question: string; options: QuestionOption[]; multiSelect?: boolean; }
@@ -71,14 +167,30 @@
 	let currentOptionIndex = $state(0);
 	let isOtherMode = $state(false);
 	let otherText = $state('');
-	let suppressFetch = false;
+	// `isBusy` is set while a TUI-key chain is in flight. Every user action in the
+	// smart-question panel must check this flag — mobile double-taps produced
+	// overlapping navigation sequences that selected the wrong option.
+	let isBusy = $state(false);
+	// Index of the option currently being acted on (for inline spinner feedback).
+	// -1 = no active option; Submit/Other use sentinels handled separately.
+	let activeOptionIndex = $state<number>(-1);
+	let activeAction = $state<'option' | 'submit' | 'other' | null>(null);
+	// Last attempted action, so the retry button can re-run it verbatim.
+	let lastSmartAction = $state<(() => void) | null>(null);
+	let smartError = $state<string | null>(null);
+	// Suppress background polls briefly after a local clear so the just-answered
+	// question doesn't flash back in before the server-side delete lands.
+	let suppressFetchUntil = 0;
 	let questionPollTimer: ReturnType<typeof setInterval> | null = null;
 
 	async function fetchQuestion() {
-		if (!sessionName || suppressFetch) return;
+		if (!sessionName || destroyed || Date.now() < suppressFetchUntil) return;
 		try {
-			const r = await fetch(`/api/work/${encodeURIComponent(sessionName)}/question`);
-			if (!r.ok) return;
+			const r = await fetch(
+				`/api/work/${encodeURIComponent(sessionName)}/question`,
+				{ signal: aborter.signal }
+			);
+			if (!r.ok) throw new Error(`HTTP ${r.status}`);
 			const data: QuestionData = await r.json();
 			const newQ = data?.questions?.[0]?.question;
 			const oldQ = questionData?.questions?.[0]?.question;
@@ -87,19 +199,33 @@
 				currentOptionIndex = 0;
 				isOtherMode = false;
 				otherText = '';
+				smartError = null;
 			}
 			questionData = data;
-		} catch { /* ignore */ }
+		} catch (e) {
+			if ((e as Error).name === 'AbortError') return;
+			// Poll errors are silent (they'll retry in 3s) — only surface if we
+			// currently have a question visible and the user might be confused.
+			if (questionData?.active) smartError = 'Connection lost. Retrying…';
+		}
 	}
 
 	async function clearQuestion() {
-		suppressFetch = true;
+		suppressFetchUntil = Date.now() + 2000;
 		questionData = null;
 		isOtherMode = false;
+		smartError = null;
 		try {
-			await fetch(`/api/work/${encodeURIComponent(sessionName)}/question`, { method: 'DELETE' });
-		} catch { /* ignore */ }
-		setTimeout(() => { suppressFetch = false; }, 2000);
+			await fetch(
+				`/api/work/${encodeURIComponent(sessionName)}/question`,
+				{ method: 'DELETE', signal: aborter.signal }
+			);
+		} catch (e) {
+			if ((e as Error).name !== 'AbortError') {
+				// Delete failure is non-fatal — the server will clear the question
+				// when it receives the TUI keystroke. No need to alarm the user.
+			}
+		}
 	}
 
 	function delay(ms: number) { return new Promise<void>(r => setTimeout(r, ms)); }
@@ -108,6 +234,7 @@
 		const delta = targetIndex - currentOptionIndex;
 		const dir = delta > 0 ? 'down' : 'up';
 		for (let i = 0; i < Math.abs(delta); i++) {
+			if (destroyed) return;
 			await onSendInput?.(dir, 'key');
 			await delay(30);
 		}
@@ -115,41 +242,103 @@
 		await delay(50);
 	}
 
-	async function selectOption(index: number) {
-		if (!questionData?.questions?.[0]) return;
-		const q = questionData.questions[0];
-		await navigateTo(index);
-		if (q.multiSelect) {
-			await onSendInput?.('space', 'key');
-			const next = new Set(selectedOptions);
-			if (next.has(index)) next.delete(index); else next.add(index);
-			selectedOptions = next;
-		} else {
-			await onSendInput?.('enter', 'key');
-			clearQuestion();
+	// Wrap a user-initiated async chain so the UI is guaranteed to release the
+	// busy flag even when the chain throws. All option buttons / Submit / Other
+	// funnel through here.
+	async function runExclusive(fn: () => Promise<void>) {
+		if (isBusy) return;
+		isBusy = true;
+		smartError = null;
+		try {
+			await fn();
+		} catch (e) {
+			if ((e as Error).name !== 'AbortError') {
+				smartError = 'Something went wrong sending your answer. Try again.';
+			}
+		} finally {
+			isBusy = false;
 		}
 	}
 
-	async function submitMultiSelect(optionCount: number) {
-		// Claude Code's TUI: options + "Type something" + "Submit" = index optionCount+1
-		await navigateTo(optionCount + 1);
-		await onSendInput?.('enter', 'key');
-		clearQuestion();
+	function selectOption(index: number) {
+		if (!questionData?.questions?.[0]) return;
+		const q = questionData.questions[0];
+		const run = () => runExclusive(async () => {
+			activeAction = 'option';
+			activeOptionIndex = index;
+			try {
+				await navigateTo(index);
+				if (q.multiSelect) {
+					await onSendInput?.('space', 'key');
+					const next = new Set(selectedOptions);
+					if (next.has(index)) next.delete(index); else next.add(index);
+					selectedOptions = next;
+				} else {
+					await onSendInput?.('enter', 'key');
+					await clearQuestion();
+				}
+			} finally {
+				activeOptionIndex = -1;
+				activeAction = null;
+			}
+		});
+		lastSmartAction = run;
+		run();
 	}
 
-	async function activateOther(optionCount: number) {
-		await navigateTo(optionCount); // "Other" is right after the last option
-		await onSendInput?.('enter', 'key');
-		isOtherMode = true;
-		otherText = '';
+	function submitMultiSelect(optionCount: number) {
+		const run = () => runExclusive(async () => {
+			activeAction = 'submit';
+			try {
+				// Claude Code's TUI: options + "Type something" + "Submit" = index optionCount+1
+				await navigateTo(optionCount + 1);
+				await onSendInput?.('enter', 'key');
+				await clearQuestion();
+			} finally {
+				activeAction = null;
+			}
+		});
+		lastSmartAction = run;
+		run();
 	}
 
-	async function submitOther() {
-		if (!otherText.trim()) return;
-		await onSendInput?.(otherText, 'text');
-		isOtherMode = false;
-		otherText = '';
-		clearQuestion();
+	function activateOther(optionCount: number) {
+		const run = () => runExclusive(async () => {
+			activeAction = 'other';
+			try {
+				await navigateTo(optionCount); // "Other" is right after the last option
+				await onSendInput?.('enter', 'key');
+				isOtherMode = true;
+				otherText = '';
+			} finally {
+				activeAction = null;
+			}
+		});
+		lastSmartAction = run;
+		run();
+	}
+
+	function submitOther() {
+		const text = otherText.trim();
+		if (!text) return;
+		const run = () => runExclusive(async () => {
+			activeAction = 'submit';
+			try {
+				await onSendInput?.(text, 'text');
+				isOtherMode = false;
+				otherText = '';
+				await clearQuestion();
+			} finally {
+				activeAction = null;
+			}
+		});
+		lastSmartAction = run;
+		run();
+	}
+
+	function retrySmart() {
+		smartError = null;
+		lastSmartAction?.();
 	}
 
 	// ─── Custom question UI (jat-signal question) ───────────────────────────────
@@ -161,30 +350,48 @@
 	}
 	let customQuestion = $state<CustomQuestion | null>(null);
 	let customInput = $state('');
+	let customError = $state<string | null>(null);
+	let isSubmittingCustom = $state(false);
 	let customPollTimer: ReturnType<typeof setInterval> | null = null;
 
 	async function fetchCustomQuestion() {
-		if (!sessionName) return;
+		if (!sessionName || destroyed) return;
 		try {
-			const r = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/custom-question`);
-			if (r.ok) {
-				const data = await r.json();
-				customQuestion = data?.active ? data : null;
-			}
-		} catch { /* ignore */ }
+			const r = await fetch(
+				`/api/sessions/${encodeURIComponent(sessionName)}/custom-question`,
+				{ signal: aborter.signal }
+			);
+			if (!r.ok) throw new Error(`HTTP ${r.status}`);
+			const data = await r.json();
+			customQuestion = data?.active ? data : null;
+			if (customQuestion) customError = null;
+		} catch (e) {
+			if ((e as Error).name === 'AbortError') return;
+			if (customQuestion?.active) customError = 'Connection lost. Retrying…';
+		}
 	}
 
 	async function answerCustom(answer: string) {
-		if (!sessionName) return;
+		if (!sessionName || isSubmittingCustom) return;
+		isSubmittingCustom = true;
+		customError = null;
 		try {
-			await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/custom-question`, {
+			const r = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/custom-question`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ answer })
+				body: JSON.stringify({ answer }),
+				signal: aborter.signal
 			});
-		} catch { /* ignore */ }
-		customQuestion = null;
-		customInput = '';
+			if (!r.ok) throw new Error(`HTTP ${r.status}`);
+			customQuestion = null;
+			customInput = '';
+		} catch (e) {
+			if ((e as Error).name !== 'AbortError') {
+				customError = 'Failed to send. Try again.';
+			}
+		} finally {
+			isSubmittingCustom = false;
+		}
 	}
 
 	onMount(() => {
@@ -195,6 +402,8 @@
 	});
 
 	onDestroy(() => {
+		destroyed = true;
+		aborter.abort();
 		if (questionPollTimer) clearInterval(questionPollTimer);
 		if (customPollTimer) clearInterval(customPollTimer);
 	});
@@ -205,117 +414,188 @@
 	<div
 		bind:this={scrollEl}
 		class="flex-1 overflow-y-auto min-h-0"
-		style="background: oklch(0.17 0.01 250); -webkit-overflow-scrolling: touch;"
+		style="background: {mobileSurface.terminalBg}; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;"
 		onscroll={handleScroll}
 	>
 		<pre
 			class="m-0 px-3 py-2 text-[0.8125rem] leading-relaxed"
-			style="font-family: var(--terminal-font, 'JetBrains Mono', 'Fira Code', monospace); white-space: pre-wrap; word-break: break-all; color: oklch(0.90 0.01 250); min-height: 100%;"
+			style="font-family: var(--terminal-font, 'JetBrains Mono', 'Fira Code', monospace); white-space: pre-wrap; word-break: break-word; color: {mobileSurface.terminalFg}; min-height: 100%;"
 		>{@html renderedOutput}</pre>
 	</div>
 
+	<!-- Event Timeline Stack: signal history, action buttons, suggested tasks, needs_input cards -->
+	{#if sessionName}
+		<div class="relative px-2 bg-base-300 flex-shrink-0">
+			<EventStack
+				{sessionName}
+				maxEvents={20}
+				pollInterval={5000}
+				autoExpand={sessionState === 'completed'}
+				onCleanup={() => onCleanup?.()}
+				onComplete={() => onComplete?.()}
+				onReview={emitReview}
+				onTaskClick={(id) => onViewTask?.(id)}
+				onCreateTasks={onCreateTasks}
+				onCreateAndStartTasks={onCreateAndStartTasks}
+				{availableProjects}
+				{defaultProject}
+				onSelectOption={async (optionId) => { await onSendInput?.(optionId, 'text'); }}
+				onSubmitText={async (text) => { await onSendInput?.(text, 'text'); }}
+				onApplyRename={(taskId, newTitle) => patchTask(taskId, { title: newTitle })}
+				onApplyLabels={(taskId, labels) => patchTask(taskId, { labels })}
+			/>
+		</div>
+	{/if}
+
 	<!-- Custom question (jat-signal question) -->
 	{#if customQuestion?.active && customQuestion.question}
-		<div class="flex-shrink-0 p-2 border-t border-base-300" style="background: oklch(0.20 0.05 200);">
-			<div class="flex items-center gap-2 mb-2">
-				<span class="text-[10px] px-1.5 py-0.5 rounded font-mono flex-shrink-0"
-					style="background: oklch(0.32 0.12 200); color: oklch(0.90 0.05 200);">?</span>
-				<span class="text-xs font-semibold" style="color: oklch(0.90 0.10 200);">{customQuestion.question}</span>
-			</div>
+		<QuestionPanel
+			question={customQuestion.question}
+			onDismiss={() => { customQuestion = null; customInput = ''; customError = null; }}
+		>
 			{#if customQuestion.options?.length}
-				<div class="flex flex-wrap gap-1.5 mb-1">
+				<div class="flex flex-wrap gap-1.5 mb-2">
 					{#each customQuestion.options as opt}
-						<button
-							class="btn btn-xs"
-							style="background: oklch(0.25 0.04 200); border-color: oklch(0.40 0.08 200); color: oklch(0.85 0.05 200);"
-							use:directClick={() => answerCustom(opt)}
-						>{opt}</button>
+						<OptionButton disabled={isSubmittingCustom} onClick={() => answerCustom(opt)}>{opt}</OptionButton>
 					{/each}
 				</div>
 			{/if}
-			<div class="flex gap-2 mt-1">
-				<input
-					type="text"
-					class="input input-xs input-bordered flex-1 text-xs"
-					style="background: oklch(0.18 0.02 250); border-color: oklch(0.40 0.08 200); color: oklch(0.90 0.02 250);"
-					placeholder="Type response…"
+			<div class="flex gap-2 items-end">
+				<textarea
+					rows="1"
+					inputmode="text"
+					autocapitalize="sentences"
+					autocorrect="on"
+					class="textarea textarea-bordered flex-1 text-sm resize-none leading-relaxed"
+					style="background: {mobileSurface.inputBg}; border-color: {input.borderColor}; color: {mobileSurface.textBright}; min-height: 2.75rem; max-height: 12rem; overflow-y: auto;"
+					placeholder="Type response… (Shift+Enter for newline)"
+					disabled={isSubmittingCustom}
 					bind:value={customInput}
-					use:directKeydown={(e) => { if (e.key === 'Enter' && customInput.trim()) answerCustom(customInput); }}
-				/>
+					use:autoGrow
+					use:directKeydown={(e) => {
+						if (e.key === 'Enter' && !e.shiftKey && customInput.trim() && !isSubmittingCustom) {
+							e.preventDefault();
+							answerCustom(customInput);
+						}
+					}}
+				></textarea>
 				<button
-					class="btn btn-xs btn-success"
-					use:directClick={() => { if (customInput.trim()) answerCustom(customInput); }}
-				>Send</button>
+					class="btn btn-success"
+					style="min-height: 2.75rem; min-width: 2.75rem;"
+					disabled={isSubmittingCustom}
+					use:directClick={() => { if (customInput.trim() && !isSubmittingCustom) answerCustom(customInput); }}
+				>{isSubmittingCustom ? '…' : 'Send'}</button>
 			</div>
-		</div>
+			{#if customError}
+				<div class="mt-2 flex items-center gap-2 text-xs" style="color: {input.textColor};" role="alert">
+					<span class="flex-1">{customError}</span>
+					<button
+						class="btn btn-xs btn-ghost"
+						style="min-height: 1.75rem; color: {input.textColor};"
+						disabled={isSubmittingCustom}
+						use:directClick={() => { if (customInput.trim()) answerCustom(customInput); }}
+					>Retry</button>
+				</div>
+			{/if}
+		</QuestionPanel>
 	{/if}
 
 	<!-- Smart question UI (AskUserQuestion) -->
 	{#if questionData?.active && questionData.questions?.length}
 		{@const q = questionData.questions[0]}
-		<div class="flex-shrink-0 p-2 border-t border-base-300" style="background: oklch(0.22 0.04 250);">
-			<div class="flex items-start justify-between gap-2 mb-2">
-				<div class="flex items-center gap-2 min-w-0 flex-1">
-					<span class="text-[10px] px-1.5 py-0.5 rounded font-mono flex-shrink-0"
-						style="background: oklch(0.35 0.10 200); color: oklch(0.90 0.05 200);">❓</span>
-					<span class="text-xs font-semibold leading-snug" style="color: oklch(0.90 0.10 200);">{q.question}</span>
-				</div>
-				<button
-					class="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded-full opacity-50 active:opacity-100 text-xs"
-					style="color: oklch(0.65 0.02 250);"
-					use:directClick={clearQuestion}
-					aria-label="Dismiss"
-				>✕</button>
-			</div>
-
+		<QuestionPanel question={q.question} badge="?" onDismiss={clearQuestion}>
 			{#if isOtherMode}
-				<div class="flex gap-2">
-					<input
-						type="text"
-						class="input input-xs input-bordered flex-1 text-xs"
-						style="background: oklch(0.18 0.02 250); border-color: oklch(0.45 0.12 200); color: oklch(0.90 0.02 250);"
-						placeholder="Type your response…"
+				<div class="flex gap-2 items-end">
+					<textarea
+						rows="1"
+						class="textarea textarea-bordered flex-1 text-sm resize-none leading-relaxed"
+						style="background: {mobileSurface.inputBg}; border-color: {input.borderColor}; color: {mobileSurface.textBright}; min-height: 2.75rem; max-height: 12rem; overflow-y: auto;"
+						placeholder="Type your response… (Shift+Enter for newline)"
 						bind:value={otherText}
+						use:autoGrow
 						use:directKeydown={(e) => {
-							if (e.key === 'Enter' && otherText.trim()) submitOther();
-							else if (e.key === 'Escape') { isOtherMode = false; }
+							if (e.key === 'Enter' && !e.shiftKey && otherText.trim()) {
+								e.preventDefault();
+								submitOther();
+							} else if (e.key === 'Escape') { isOtherMode = false; }
 						}}
-					/>
-					<button class="btn btn-xs btn-success" use:directClick={submitOther}>Send</button>
-					<button class="btn btn-xs btn-ghost" style="color: oklch(0.65 0.02 250);"
-						use:directClick={() => { isOtherMode = false; }}>✕</button>
+					></textarea>
+					<button
+						class="btn btn-success"
+						style="min-height: 2.75rem; min-width: 2.75rem;"
+						disabled={isBusy}
+						use:directClick={submitOther}
+					>{isBusy ? '…' : 'Send'}</button>
+					<button
+						class="btn btn-ghost"
+						style="color: {mobileSurface.textMuted}; min-height: 2.75rem; min-width: 2.75rem;"
+						use:directClick={() => { isOtherMode = false; }}
+						aria-label="Cancel free-text"
+					>
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<path d="M18 6 6 18M6 6l12 12" />
+						</svg>
+					</button>
 				</div>
 			{:else}
 				<div class="flex flex-wrap gap-1.5">
 					{#each q.options as opt, i}
-						<button
-							class="btn btn-xs gap-1"
-							style={selectedOptions.has(i)
-								? 'background: oklch(0.45 0.15 250); border-color: oklch(0.55 0.18 250); color: oklch(0.98 0.01 250);'
-								: 'background: oklch(0.25 0.03 250); border-color: oklch(0.40 0.03 250); color: oklch(0.80 0.02 250);'}
-							use:directClick={() => selectOption(i)}
+						<OptionButton
+							variant={selectedOptions.has(i) ? 'selected' : 'default'}
 							title={opt.description}
+							disabled={isBusy}
+							busy={activeAction === 'option' && activeOptionIndex === i}
+							onClick={() => selectOption(i)}
 						>
-							{#if q.multiSelect}<span class="text-[10px]">{selectedOptions.has(i) ? '☑' : '☐'}</span>{/if}
+							{#if q.multiSelect}
+								{#if selectedOptions.has(i)}
+									<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+										<rect x="3" y="3" width="18" height="18" rx="3" />
+										<path d="m8 12 3 3 5-6" />
+									</svg>
+								{:else}
+									<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+										<rect x="3" y="3" width="18" height="18" rx="3" />
+									</svg>
+								{/if}
+							{/if}
 							{opt.label}
-						</button>
+						</OptionButton>
 					{/each}
 
-					<button
-						class="btn btn-xs btn-outline"
-						style="background: oklch(0.20 0.04 45); border-color: oklch(0.45 0.10 45); color: oklch(0.80 0.08 45);"
-						use:directClick={() => activateOther(q.options.length)}
-					>Other</button>
+					<OptionButton
+						variant="ghost"
+						disabled={isBusy}
+						busy={activeAction === 'other'}
+						onClick={() => activateOther(q.options.length)}
+					>
+						Other
+					</OptionButton>
 
 					{#if q.multiSelect && selectedOptions.size > 0}
 						<button
-							class="btn btn-xs btn-success"
+							class="btn btn-success gap-1"
+							style="min-height: 2.75rem;"
+							disabled={isBusy}
 							use:directClick={() => submitMultiSelect(q.options.length)}
 						>Done ({selectedOptions.size})</button>
 					{/if}
 				</div>
 			{/if}
-		</div>
+			{#if smartError}
+				<div class="mt-2 flex items-center gap-2 text-xs" style="color: {input.textColor};" role="alert">
+					<span class="flex-1">{smartError}</span>
+					{#if lastSmartAction}
+						<button
+							class="btn btn-xs btn-ghost"
+							style="min-height: 1.75rem; color: {input.textColor};"
+							disabled={isBusy}
+							use:directClick={retrySmart}
+						>Retry</button>
+					{/if}
+				</div>
+			{/if}
+		</QuestionPanel>
 	{/if}
 </div>
 

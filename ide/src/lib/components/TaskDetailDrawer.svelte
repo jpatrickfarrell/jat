@@ -166,7 +166,6 @@
 
 	let availableTasks = $state<AvailableTask[]>([]);
 	let availableTasksLoading = $state(false);
-	let showDependencyDropdown = $state(false);
 
 	// Epic children state
 	interface EpicChild {
@@ -580,6 +579,20 @@
 
 	// Command dropdown groups for SearchDropdown
 	const commandGroups = $derived(getCommandDropdownGroups());
+
+	// Dependency search dropdown
+	let depSearchValue = $state('');
+	const dependencySearchGroups = $derived.by(() => {
+		if (availableTasks.length === 0) return [];
+		return [{
+			label: 'Available Tasks',
+			options: availableTasks.map((t: { id: string; title: string; priority: number }) => ({
+				value: t.id,
+				label: `${t.id} — ${t.title}`,
+				icon: `P${t.priority}`
+			}))
+		}];
+	});
 
 	// Timeline filter state
 	let timelineFilter = $state<'all' | 'tasks' | 'messages'>('all');
@@ -1649,9 +1662,6 @@
 
 			// Refresh available tasks (to remove the one we just added)
 			fetchAvailableTasks(taskId);
-
-			// Hide dropdown
-			showDependencyDropdown = false;
 
 			showToast('success', `Added dependency ${depId}`);
 		} catch (error: any) {
@@ -3897,64 +3907,24 @@
 								{/if}
 							</summary>
 							<div class="pt-3">
-								<div class="flex items-center justify-between mb-2">
-									<span class="text-xs text-base-content/40">Dependencies</span>
-								<!-- Add dependency button -->
-								<div class="relative">
-									<button
-										class="btn btn-xs btn-ghost gap-1"
-										onclick={() => showDependencyDropdown = !showDependencyDropdown}
-										disabled={isSaving || availableTasksLoading}
-									>
-										{#if availableTasksLoading}
+								<!-- Dependency search -->
+								<div class="mb-2">
+									{#if availableTasksLoading}
+										<div class="flex items-center gap-1.5 text-xs text-base-content/40 py-1">
 											<span class="loading loading-spinner loading-xs"></span>
-										{:else}
-											<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-												<path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
-											</svg>
-										{/if}
-										Add
-									</button>
-
-									<!-- Dropdown menu - Industrial -->
-									{#if showDependencyDropdown}
-										<div
-											class="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-xl w-72 max-h-64 overflow-y-auto bg-base-200 border border-base-300"
-										>
-											{#if availableTasks.length === 0}
-												<div class="p-3 text-sm text-base-content/50 text-center">
-													No available tasks in this project
-												</div>
-											{:else}
-												<div class="py-1">
-													{#each availableTasks as availTask}
-														<button
-															class="w-full text-left px-3 py-2 flex items-center gap-2 text-sm industrial-hover"
-															onclick={() => addDependency(availTask.id)}
-															disabled={isSaving}
-														>
-															<span class="badge badge-xs {priorityColors[availTask.priority] || 'badge-ghost'}">
-																P{availTask.priority}
-															</span>
-															<span class="font-mono text-xs text-base-content/60">{availTask.id}</span>
-															<span class="flex-1 truncate">{availTask.title}</span>
-														</button>
-													{/each}
-												</div>
-											{/if}
-											<!-- Close button - Industrial -->
-											<div class="p-2 border-t border-base-300">
-												<button
-													class="btn btn-xs btn-ghost w-full"
-													onclick={() => showDependencyDropdown = false}
-												>
-													Cancel
-												</button>
-											</div>
+											Loading tasks...
 										</div>
+									{:else}
+										<SearchDropdown
+											value={depSearchValue}
+											groups={dependencySearchGroups}
+											placeholder={availableTasks.length === 0 ? 'No tasks available' : 'Search to add dependency...'}
+											size="sm"
+											disabled={isSaving || availableTasks.length === 0}
+											onChange={(v) => { depSearchValue = ''; addDependency(v); }}
+										/>
 									{/if}
 								</div>
-							</div>
 
 							<DependencyList
 								items={task.depends_on || []}

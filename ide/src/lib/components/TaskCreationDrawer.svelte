@@ -341,6 +341,9 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 	// Command dropdown groups for SearchDropdown
 	const commandGroups = $derived(getCommandDropdownGroups());
 
+	// Dependency search dropdown
+	let depSearchValue = $state('');
+
 	const commandsByNamespace = $derived.by(() => {
 		const cmds = getCommands();
 		const groups = new Map<string, Array<{ invocation: string; name: string }>>();
@@ -431,7 +434,18 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 	}
 	let availableTasks = $state<AvailableTask[]>([]);
 	let availableTasksLoading = $state(false);
-	let showDependencyDropdown = $state(false);
+
+	const dependencySearchGroups = $derived.by(() => {
+		if (availableTasks.length === 0) return [];
+		return [{
+			label: 'Available Tasks',
+			options: availableTasks.map((t: AvailableTask) => ({
+				value: t.id,
+				label: `${t.id} — ${t.title}`,
+				icon: `P${t.priority}`
+			}))
+		}];
+	});
 
 	// Attachment state
 	let pendingAttachments = $state<PendingAttachment[]>([]);
@@ -876,7 +890,6 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 		selectedDependencies = [...selectedDependencies, task];
 		// Remove from available list
 		availableTasks = availableTasks.filter(t => t.id !== task.id);
-		showDependencyDropdown = false;
 	}
 
 	// Remove a dependency from the selected list
@@ -1317,7 +1330,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 		// Reset dependencies
 		selectedDependencies = [];
 		availableTasks = [];
-		showDependencyDropdown = false;
+		depSearchValue = '';
 
 		// Reset harness selection
 		selectedHarness = 'claude-code';
@@ -2262,72 +2275,34 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 
 					<!-- Dependencies (Optional) - Industrial -->
 					<div class="form-control">
-						<div class="label py-0.5 justify-between">
+						<div class="label py-0.5">
 							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
 								Dependencies
 								{#if selectedDependencies.length > 0}
 									<span class="ml-1 badge badge-xs bg-base-content/20 text-base-content/80">{selectedDependencies.length}</span>
 								{/if}
 							</span>
-							<!-- Add dependency button -->
-							<div class="relative">
-								<button
-									type="button"
-									class="btn btn-xs btn-ghost gap-1"
-									onclick={() => showDependencyDropdown = !showDependencyDropdown}
-									disabled={formDisabled || isSubmitting || availableTasksLoading || !formData.project}
-									title={formDisabled || !formData.project ? 'Select a project first' : 'Add dependency'}
-								>
-									{#if availableTasksLoading}
-										<span class="loading loading-spinner loading-xs"></span>
-									{:else}
-										<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-											<path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
-										</svg>
-									{/if}
-									Add
-								</button>
-
-								<!-- Dropdown menu - Industrial -->
-								{#if showDependencyDropdown}
-									<div
-										class="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-xl w-72 max-h-64 overflow-y-auto bg-base-200 border border-base-content/30"
-									>
-										{#if availableTasks.length === 0}
-											<div class="p-3 text-sm text-base-content/50 text-center">
-												No available tasks in this project
-											</div>
-										{:else}
-											<div class="py-1">
-												{#each availableTasks as availTask}
-													<button
-														type="button"
-														class="w-full text-left px-3 py-2 flex items-center gap-2 text-sm hover:bg-base-300/30 transition-colors"
-														onclick={() => addDependency(availTask)}
-														disabled={isSubmitting}
-													>
-														<span class="badge badge-xs {priorityColors[availTask.priority] || 'badge-ghost'}">
-															P{availTask.priority}
-														</span>
-														<span class="font-mono text-xs text-base-content/60">{availTask.id}</span>
-														<span class="flex-1 truncate">{availTask.title}</span>
-													</button>
-												{/each}
-											</div>
-										{/if}
-										<!-- Close button - Industrial -->
-										<div class="p-2 border-t border-base-content/30">
-											<button
-												type="button"
-												class="btn btn-xs btn-ghost w-full"
-												onclick={() => showDependencyDropdown = false}
-											>
-												Cancel
-											</button>
-										</div>
-									</div>
-								{/if}
-							</div>
+						</div>
+						<!-- Dependency search dropdown -->
+						<div class="mb-2">
+							{#if availableTasksLoading}
+								<div class="flex items-center gap-1.5 text-xs text-base-content/40 py-1">
+									<span class="loading loading-spinner loading-xs"></span>
+									Loading tasks...
+								</div>
+							{:else}
+								<SearchDropdown
+									value={depSearchValue}
+									groups={dependencySearchGroups}
+									placeholder={!formData.project ? 'Select a project first' : availableTasks.length === 0 ? 'No tasks available' : 'Search to add dependency...'}
+									size="sm"
+									disabled={formDisabled || isSubmitting || !formData.project || availableTasks.length === 0}
+									onChange={(v) => {
+										const t = availableTasks.find(task => task.id === v);
+										if (t) { depSearchValue = ''; addDependency(t); }
+									}}
+								/>
+							{/if}
 						</div>
 
 						<!-- Selected dependencies list -->

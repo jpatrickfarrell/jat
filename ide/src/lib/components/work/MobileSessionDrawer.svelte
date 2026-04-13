@@ -20,6 +20,8 @@
 	import { cubicOut } from 'svelte/easing';
 	import MobileTerminal from '$lib/components/work/MobileTerminal.svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
+	import MobileTaskBody from '$lib/components/work/mobile/MobileTaskBody.svelte';
+	import { getElapsedFormatted } from '$lib/utils/elapsedTime';
 	import {
 		TaskFieldLabel,
 		TaskFieldGrid,
@@ -330,7 +332,7 @@
 	// Mobile input state
 	let inputText = $state('');
 	let keyboardOpen = $state(false);
-	let inputRef: HTMLInputElement | null = $state(null);
+	let inputRef: HTMLTextAreaElement | null = $state(null);
 
 	// Pending file attachments (staged before sending)
 	interface PendingAttachment {
@@ -343,25 +345,13 @@
 	let pendingAttachments = $state<PendingAttachment[]>([]);
 	const hasSendable = $derived(inputText.trim().length > 0 || pendingAttachments.some(a => !a.uploading));
 
-	// Elapsed time — 30s precision is plenty for "15m ago" display
+	// Elapsed time — 1s tick so HH:MM:SS matches TasksActive swipe cards exactly.
 	let now = $state(Date.now());
 	$effect(() => {
-		const interval = setInterval(() => now = Date.now(), 30_000);
+		const interval = setInterval(() => now = Date.now(), 1000);
 		return () => clearInterval(interval);
 	});
-	const elapsed = $derived.by(() => {
-		if (!created) return null;
-		const diff = Math.max(0, Math.floor((now - new Date(created).getTime()) / 1000));
-		const h = Math.floor(diff / 3600);
-		const m = Math.floor((diff % 3600) / 60);
-		const s = diff % 60;
-		return {
-			hours: String(h).padStart(2, '0'),
-			minutes: String(m).padStart(2, '0'),
-			seconds: String(s).padStart(2, '0'),
-			showHours: h > 0
-		};
-	});
+	const elapsed = $derived(getElapsedFormatted(created, now));
 
 	// Drag-and-drop state
 	let isDragOver = $state(false);
@@ -688,6 +678,26 @@
 		};
 	}
 
+	// Auto-grow textarea up to its CSS max-height. Runs on input + on
+	// programmatic value changes so clearing after send snaps back to 1 row.
+	function autoGrow(node: HTMLTextAreaElement) {
+		const resize = () => {
+			node.style.height = 'auto';
+			node.style.height = `${node.scrollHeight}px`;
+		};
+		resize();
+		node.addEventListener('input', resize);
+		const observer = new MutationObserver(resize);
+		observer.observe(node, { attributes: true, attributeFilter: ['value'] });
+		return {
+			update() { resize(); },
+			destroy() {
+				node.removeEventListener('input', resize);
+				observer.disconnect();
+			}
+		};
+	}
+
 	// Direct change action (bypasses Svelte 5 event delegation for portals)
 	function directChange(node: HTMLElement, handler: (e: Event) => void) {
 		node.addEventListener('change', handler as EventListener);
@@ -1004,41 +1014,22 @@
 				{#if task}
 					{@const typeVisual = getIssueTypeVisual(task.issue_type)}
 					{@const stateVisual = getSessionStateVisual(sseState || 'idle')}
-					{@const priorityClass = task.priority === 0 ? 'text-error bg-error/15' : task.priority === 1 ? 'text-warning bg-warning/15' : 'text-info bg-info/15'}
 					<div class="border-b border-base-300 flex-shrink-0" style="border-left: 3px solid {stateVisual.accent};">
 						<div class="flex items-stretch min-h-0">
-							<!-- Left strip: large avatar + split agent name (matches TasksActive swipe card) -->
-							<div class="w-[68px] flex-shrink-0 flex flex-col items-center justify-start gap-1.5 p-1" style="background: {stateVisual.bgTint};">
-								<AgentAvatar name={agentName} size={60} showRing={false} shape="rounded" />
-								<div class="flex flex-col items-center leading-[1.1] text-[0.5625rem] font-semibold uppercase tracking-wide text-base-content/60 text-center max-w-full overflow-hidden opacity-85" title={agentName}>
-									{#each splitAgentName(agentName) as part}
-										<span class="max-w-full overflow-hidden text-ellipsis whitespace-nowrap">{part}</span>
-									{/each}
-								</div>
+							<!-- Left strip: square agent tile (matches TasksActive swipe card pattern) -->
+							<div class="detail-agent-strip flex-shrink-0 flex items-center justify-center" style="background: {stateVisual.bgTint};" title={agentName}>
+								<AgentAvatar name={agentName} size={80} showRing={false} shape="rounded" />
 							</div>
-							<!-- Right body: title, description, badges row -->
-							<div class="flex-1 min-w-0 px-3 py-2.5 flex flex-col gap-[0.2rem]">
-								<div class="min-w-0 text-[0.9375rem] font-semibold text-base-content overflow-hidden text-ellipsis whitespace-nowrap" title={task.title}>{task.title || task.id}</div>
-								{#if task.description}
-									<div class="min-w-0 text-[0.6875rem] text-base-content/60 overflow-hidden text-ellipsis whitespace-nowrap leading-snug">{task.description}</div>
-								{/if}
-								<div class="flex items-center gap-1 text-[0.625rem] text-base-content/50 flex-wrap mt-0.5">
-									<button class="font-mono text-[0.625rem] bg-transparent border-none p-0 cursor-pointer" style="color: {stateVisual.accent};" onclick={(e) => copyMobileTaskId(e, task.id)} title="Click to copy task ID">{copiedMobileTaskId === task.id ? '✓' : task.id}</button>
-									{#if elapsed}
-										<span class="text-base-content/30">·</span>
-										<span class="font-mono text-[0.625rem] text-base-content/50">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
-									{/if}
-									{#if task.issue_type}
-										<span class="text-base-content/30">·</span>
-										<span class="text-[0.6875rem]" title={typeVisual.label}>{typeVisual.icon}</span>
-									{/if}
-									{#if task.priority != null && task.priority <= 2}
-										<span class="text-base-content/30">·</span>
-										<span class="text-[0.5625rem] font-bold py-px px-1 rounded {priorityClass}">P{task.priority}</span>
-									{/if}
-									<span class="inline-flex items-center text-[0.5625rem] font-semibold leading-none ml-auto flex-shrink-0 whitespace-nowrap tracking-wide" style="color: {stateVisual.accent};">{stateVisual.shortLabel}</span>
-								</div>
-							</div>
+							<!-- Shared body markup — same component TasksActive uses -->
+							<MobileTaskBody
+								{task}
+								{agentName}
+								{stateVisual}
+								{typeVisual}
+								{elapsed}
+								copiedTaskId={copiedMobileTaskId}
+								onCopyTaskId={copyMobileTaskId}
+							/>
 						</div>
 					</div>
 				{/if}
@@ -1047,7 +1038,12 @@
 					<MobileTerminal
 						{sessionName}
 						{output}
+						{task}
+						sessionState={effectiveState}
 						onSendInput={(text, type) => onSendInput(text, type)}
+						onCleanup={() => onAction('cleanup')}
+						onComplete={() => onSendInput('/jat:complete', 'text')}
+						onViewTask={onViewTask}
 					/>
 					{/if}
 				</div>
@@ -1154,18 +1150,21 @@
 					</button>
 
 					<!-- Input field -->
-					<input
-						type="text"
-						class="flex-1 min-w-0 h-9 px-2.5 text-[0.8125rem] font-mono text-base-content bg-base-200 border border-base-300 rounded-lg outline-none focus:border-info transition-colors placeholder:text-base-content/40"
-						placeholder="Type and press Enter..."
+					<textarea
+						rows="1"
+						class="flex-1 min-w-0 px-2.5 py-2 text-[0.8125rem] font-mono text-base-content bg-base-200 border border-base-300 rounded-lg outline-none focus:border-info transition-colors placeholder:text-base-content/40 resize-none leading-snug"
+						style="min-height: 2.25rem; max-height: 12rem; overflow-y: auto;"
+						placeholder="Type and press Enter (Shift+Enter for newline)"
 						bind:value={inputText}
 						bind:this={inputRef}
+						use:autoGrow
 						use:directKeydown={(e) => {
-							if (e.key === 'Enter' && (inputText.trim() || pendingAttachments.some(a => !a.uploading))) {
+							if (e.key === 'Enter' && !e.shiftKey && (inputText.trim() || pendingAttachments.some(a => !a.uploading))) {
+								e.preventDefault();
 								sendWithAttachments();
 							}
 						}}
-					/>
+					></textarea>
 
 					<!-- Send button -->
 					<button
@@ -1510,6 +1509,17 @@
 	/* iOS safe-area insets (Tailwind has no utility for env()) */
 	.drawer-topbar { padding-top: max(0.5rem, env(safe-area-inset-top)); }
 	.mobile-input-row { padding-bottom: max(0.375rem, env(safe-area-inset-bottom)); }
+
+	/* Agent strip — mirrors .mobile-state-strip-agent in TasksActive so the
+	   /tasks list and session detail share one visual language. Square corners
+	   (even on the avatar's internal rounding), no padding, name omitted. */
+	.detail-agent-strip {
+		width: 100px;
+		padding: 0;
+	}
+	.detail-agent-strip :global(*) {
+		border-radius: 0 !important;
+	}
 
 	/* Hide horizontal scrollbar on topbar tabs */
 	.topbar-tabs { scrollbar-width: none; }

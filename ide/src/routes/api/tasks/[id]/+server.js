@@ -101,6 +101,24 @@ export async function GET({ params }) {
 		task.integration = integrations[taskId];
 	}
 
+	// For postgres-backed projects, try to fetch extra fields from the app's
+	// project_tasks table (e.g. Meadow's page_url / origin from feedback submissions).
+	// This is a best-effort query — if the table or columns don't exist, skip silently.
+	if (pgBackend) {
+		try {
+			const { rows } = await pgBackend.pool.query(
+				`SELECT page_url, origin FROM project_tasks WHERE jat_id = $1 LIMIT 1`,
+				[taskId]
+			);
+			if (rows[0]) {
+				if (rows[0].page_url) task.page_url = rows[0].page_url;
+				if (rows[0].origin) task.origin = rows[0].origin;
+			}
+		} catch {
+			// project_tasks doesn't exist on this postgres instance — skip
+		}
+	}
+
 	return json({ task });
 }
 

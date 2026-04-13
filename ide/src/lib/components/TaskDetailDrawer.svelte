@@ -77,6 +77,9 @@
 		next_run_at?: string | null;
 		due_date?: string | null;
 		integration?: { sourceId: string; sourceType: string; sourceName: string } | null;
+		// Meadow-specific fields fetched from project_tasks (postgres-backed projects)
+		page_url?: string | null;
+		origin?: string | null;
 	}
 
 	// Derive source origin from ingest-enriched `integration` or labels.
@@ -2914,6 +2917,20 @@
 								</button>
 							{/if}
 						</div>
+
+						<!-- Origin URL (from Meadow feedback widget — page where task was submitted) -->
+						{#if task.page_url}
+							<div class="border-t border-base-300/50 pt-3 mt-1">
+								<TaskFieldLabel>Submitted from</TaskFieldLabel>
+								<a
+									href={task.page_url}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="text-xs text-primary/70 hover:text-primary break-all leading-relaxed"
+									title={task.page_url}
+								>{task.page_url}</a>
+							</div>
+						{/if}
 
 						<!-- Context (Knowledge Bases + Data Tables) -->
 						<details class="group border-t border-base-300/50 pt-3 mt-1">

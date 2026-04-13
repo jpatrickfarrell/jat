@@ -34,6 +34,7 @@
 	} from '$lib/components/task';
 	import { isMobileFullscreenOpen } from '$lib/stores/drawerStore';
 	import { setHoveredSession } from '$lib/stores/hoveredSession';
+	import { marked } from 'marked';
 	import type { SessionState, SessionStateAction } from '$lib/config/statusColors';
 	import { getIssueTypeVisual, getSessionStateVisual } from '$lib/config/statusColors';
 	import { getActions, loadUserConfig, getIsLoaded } from '$lib/stores/stateActionsConfig.svelte';
@@ -358,6 +359,13 @@
 	}
 	let pendingAttachments = $state<PendingAttachment[]>([]);
 	const hasSendable = $derived(inputText.trim().length > 0 || pendingAttachments.some(a => !a.uploading));
+
+	// Markdown preview toggle
+	let showPreview = $state(false);
+	const renderedMarkdown = $derived.by(() => {
+		if (!showPreview || !inputText.trim()) return '';
+		return marked.parse(inputText) as string;
+	});
 
 	// Elapsed time — 1s tick so HH:MM:SS matches TasksActive swipe cards exactly.
 	let now = $state(Date.now());
@@ -1189,7 +1197,19 @@
 						</svg>
 					</button>
 
-					<!-- Input field -->
+					<!-- Input field or markdown preview -->
+					{#if showPreview}
+						<div
+							class="mob-md-preview flex-1 min-w-0 px-2.5 py-2 text-[0.8125rem] text-base-content bg-base-200 border border-info/40 rounded-lg leading-snug overflow-y-auto"
+							style="min-height: 2.25rem; max-height: 12rem;"
+						>
+							{#if inputText.trim()}
+								{@html renderedMarkdown}
+							{:else}
+								<span class="text-base-content/30 italic">Nothing to preview</span>
+							{/if}
+						</div>
+					{:else}
 					<textarea
 						rows="1"
 						class="flex-1 min-w-0 px-2.5 py-2 text-[0.8125rem] font-mono text-base-content bg-base-200 border border-base-300 rounded-lg outline-none focus:border-info transition-colors placeholder:text-base-content/40 resize-none leading-snug"
@@ -1205,12 +1225,40 @@
 							}
 						}}
 					></textarea>
+					{/if}
+
+					<!-- Eye/pencil preview toggle -->
+					{#if inputText.trim()}
+						<button
+							class="flex items-center justify-center w-9 h-9 rounded-lg border flex-shrink-0 transition-colors {showPreview ? 'bg-info/20 border-info text-info' : 'bg-base-200 border-base-300 text-base-content/50 active:bg-base-300'}"
+							aria-label={showPreview ? 'Back to edit' : 'Preview markdown'}
+							use:directClick={() => {
+								showPreview = !showPreview;
+								if (!showPreview) {
+									requestAnimationFrame(() => inputRef?.focus());
+								}
+							}}
+						>
+							{#if showPreview}
+								<!-- Pencil -->
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="18" height="18">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+								</svg>
+							{:else}
+								<!-- Eye -->
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="18" height="18">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+									<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+								</svg>
+							{/if}
+						</button>
+					{/if}
 
 					<!-- Send button -->
 					<button
-						class="flex items-center justify-center w-9 h-9 rounded-lg border cursor-pointer flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-default {hasSendable ? 'bg-info border-info text-info-content active:bg-info/80' : 'bg-base-200 border-base-300 text-base-content/40'}"
+						class="flex items-center justify-center w-9 h-9 rounded-lg border cursor-pointer flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-default {hasSendable && !showPreview ? 'bg-info border-info text-info-content active:bg-info/80' : 'bg-base-200 border-base-300 text-base-content/40'}"
 						aria-label="Send message"
-						disabled={!hasSendable}
+						disabled={!hasSendable || showPreview}
 						use:directClick={sendWithAttachments}
 					>
 						<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="18" height="18">
@@ -1545,6 +1593,18 @@
 	   classes inline. What remains here is structural layout that can't be expressed with
 	   utility classes: iOS safe-area insets, the 400%/25% pager math, scoped minimap
 	   overrides, and the action-button flash keyframe. */
+
+	/* Markdown preview in mobile input composer */
+	:global(.mob-md-preview p) { margin: 0 0 0.3rem 0; }
+	:global(.mob-md-preview p:last-child) { margin-bottom: 0; }
+	:global(.mob-md-preview code) { font-family: ui-monospace, monospace; font-size: 0.8em; background: oklch(0.20 0.02 250 / 0.4); padding: 0.1rem 0.3rem; border-radius: 3px; }
+	:global(.mob-md-preview pre) { background: oklch(0.15 0.02 250 / 0.5); padding: 0.5rem; border-radius: 6px; overflow-x: auto; margin: 0.3rem 0; font-size: 0.75rem; }
+	:global(.mob-md-preview pre code) { background: none; padding: 0; }
+	:global(.mob-md-preview ul, .mob-md-preview ol) { margin: 0 0 0.3rem 0; padding-left: 1.25rem; }
+	:global(.mob-md-preview li) { margin-bottom: 0.125rem; }
+	:global(.mob-md-preview strong) { font-weight: 600; }
+	:global(.mob-md-preview h1, .mob-md-preview h2, .mob-md-preview h3) { font-weight: 600; margin: 0.25rem 0 0.125rem 0; font-size: 0.9rem; }
+	:global(.mob-md-preview blockquote) { border-left: 2px solid oklch(0.50 0.10 200); padding-left: 0.5rem; margin: 0.25rem 0; opacity: 0.8; }
 
 	/* iOS safe-area insets (Tailwind has no utility for env()) */
 	.drawer-topbar { padding-top: max(0.5rem, env(safe-area-inset-top)); }

@@ -1,0 +1,168 @@
+#!/usr/bin/env node
+/**
+ * jt-pg-direct — Direct postgres query for jt operations when the IDE is offline.
+ *
+ * Usage:
+ *   jt-pg-direct show <taskId> <projectRoot>
+ *   jt-pg-direct update <taskId> <projectRoot> <jsonPatch>
+ *
+ * Output: JSON array in the same format as `jt show --json` / IDE API responses.
+ *
+ * This is called by the jt bash CLI as a fallback when the IDE REST API
+ * (localhost:3333) is not reachable for postgres-backed projects.
+ */
+
+import { readFileSync, existsSync } from 'fs';
+import { join, resolve } from 'path';
+import { homedir } from 'os';
+import pg from 'pg';
+
+const { Client } = pg;
+
+const CONFIG_PATH = join(homedir(), '.config', 'jat', 'projects.json');
+
+function readConfig() {
+  if (!existsSync(CONFIG_PATH)) return null;
+  try { return JSON.parse(readFileSync(CONFIG_PATH, 'utf-8')); }
+  catch { return null; }
+}
+
+function resolveBackendUrl(projectRoot) {
+  const config = readConfig();
+  if (!config?.projects) return null;
+  const home = homedir();
+  for (const [, entry] of Object.entries(config.projects)) {
+    const path = (entry.path || '').replace(/^~/, home);
+    if (resolve(path) === resolve(projectRoot)) {
+      return entry.backend === 'postgres' ? (entry.backend_url || null) : null;
+    }
+  }
+  return null;
+}
+
+function resolveProjectName(projectRoot) {
+  const config = readConfig();
+  if (!config?.projects) return null;
+  const home = homedir();
+  for (const [name, entry] of Object.entries(config.projects)) {
+    const path = (entry.path || '').replace(/^~/, home);
+    if (resolve(path) === resolve(projectRoot)) return name;
+  }
+  return null;
+}
+
+const PRIORITY_TO_INT = { critical: 0, high: 1, medium: 2, low: 3 };
+
+function mapRow(row, projectName, projectPath) {
+  return {
+    id:             row.jat_id || String(row.id),
+    title:          row.title || '',
+    description:    row.description || '',
+    notes:          row.notes || '',
+    status:         row.status,
+    priority:       PRIORITY_TO_INT[row.priority] ?? 2,
+    issue_type:     row.issue_type || 'task',
+    assignee:       row.assignee_name || row.assignee || null,
+    assignee_id:    row.assignee_id || null,
+    command:        row.command || null,
+    agent_program:  row.agent_program || null,
+    model:          row.model || null,
+    schedule_cron:  row.schedule_cron || null,
+    next_run_at:    row.next_run_at ? String(row.next_run_at) : null,
+    due_date:       row.due_date ? String(row.due_date) : null,
+    created_at:     String(row.created_at),
+    updated_at:     String(row.updated_at),
+    closed_at:      row.closed_at ? String(row.closed_at) : null,
+    close_reason:   row.close_reason || '',
+    internal:       false,
+    project:        projectName,
+    project_path:   projectPath,
+    labels:         Array.isArray(row.labels) ? row.labels : (row.labels || '').split(' ').filter(Boolean),
+    reserved_files: row.reserved_files || null,
+    dependencies:   [],
+    dependents:     [],
+  };
+}
+
+async function cmdShow(taskId, projectRoot) {
+  const url = resolveBackendUrl(projectRoot);
+  if (!url) { process.stderr.write(`No postgres backend_url for project at ${projectRoot}\n`); process.exit(1); }
+  const projectName = resolveProjectName(projectRoot) || '';
+  const client = new Client({ connectionString: url });
+  await client.connect();
+  try {
+    const { rows } = await client.query(
+      `SELECT pt.*,
+              p.full_name AS assignee_name
+       FROM project_tasks pt
+       LEFT JOIN profiles p ON p.id = pt.assignee_id
+       WHERE pt.jat_id = $1`,
+      [taskId]
+    );
+    if (!rows.length) { process.stderr.write(`Task not found: ${taskId}\n`); process.exit(1); }
+    process.stdout.write(JSON.stringify([mapRow(rows[0], projectName, projectRoot)], null, 2) + '\n');
+  } finally {
+    await client.end();
+  }
+}
+
+async function cmdUpdate(taskId, projectRoot, patch) {
+  const url = resolveBackendUrl(projectRoot);
+  if (!url) { process.stderr.write(`No postgres backend_url for project at ${projectRoot}\n`); process.exit(1); }
+  const projectName = resolveProjectName(projectRoot) || '';
+
+  const ALLOWED = new Set(['status', 'assignee', 'assignee_id', 'reserved_files', 'agent_program', 'model', 'title', 'description', 'notes', 'priority', 'labels']);
+  const PRIORITY_FROM_INT = { 0: 'critical', 1: 'high', 2: 'medium', 3: 'low' };
+
+  const setClauses = [];
+  const params = [];
+  for (const [key, val] of Object.entries(patch)) {
+    if (!ALLOWED.has(key)) continue;
+    let v = val;
+    if (key === 'priority') v = PRIORITY_FROM_INT[val] || 'medium';
+    params.push(v);
+    setClauses.push(`${key} = $${params.length}`);
+  }
+  if (!setClauses.length) { process.stderr.write('Nothing to update\n'); process.exit(0); }
+
+  params.push(new Date().toISOString());
+  setClauses.push(`updated_at = $${params.length}`);
+  params.push(taskId);
+
+  const client = new Client({ connectionString: url });
+  await client.connect();
+  try {
+    const { rows } = await client.query(
+      `UPDATE project_tasks SET ${setClauses.join(', ')}
+       WHERE jat_id = $${params.length}
+       RETURNING *`,
+      params
+    );
+    if (!rows.length) { process.stderr.write(`Task not found: ${taskId}\n`); process.exit(1); }
+    process.stdout.write(JSON.stringify([mapRow(rows[0], projectName, projectRoot)], null, 2) + '\n');
+  } finally {
+    await client.end();
+  }
+}
+
+const [,, cmd, taskId, projectRoot, patchArg] = process.argv;
+
+if (!cmd || !taskId || !projectRoot) {
+  process.stderr.write('Usage: jt-pg-direct show|update <taskId> <projectRoot> [jsonPatch]\n');
+  process.exit(1);
+}
+
+try {
+  if (cmd === 'show') {
+    await cmdShow(taskId, projectRoot);
+  } else if (cmd === 'update') {
+    const patch = patchArg ? JSON.parse(patchArg) : {};
+    await cmdUpdate(taskId, projectRoot, patch);
+  } else {
+    process.stderr.write(`Unknown command: ${cmd}\n`);
+    process.exit(1);
+  }
+} catch (err) {
+  process.stderr.write(`Error: ${err.message}\n`);
+  process.exit(1);
+}

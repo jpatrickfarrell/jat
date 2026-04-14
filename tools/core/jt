@@ -141,6 +141,22 @@ require_ide_reachable() {
   fi
 }
 
+# Return 0 (true) when the IDE is reachable, 1 (false) otherwise.
+# Unlike require_ide_reachable, this never dies — it's for branching logic.
+ide_is_reachable() {
+  local port
+  port="$(resolve_ide_port)"
+  [[ -z "$port" || "$port" == "null" ]] && return 1
+  curl -sf --max-time 2 "http://127.0.0.1:${port}/" >/dev/null 2>&1
+}
+
+# Resolve the path to the jt-pg-direct Node.js helper (lives alongside this script).
+_jt_pg_direct() {
+  local script_dir
+  script_dir="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+  "${script_dir}/jt-pg-direct" "$@"
+}
+
 # Transform IDE API response (various formats) to a JSON array matching jt output.
 # Handles: {task:{...}}, {tasks:[...]}, {success:true,task:{...}}, [{...}]
 _pg_normalize_tasks() {
@@ -180,16 +196,24 @@ print()
 }
 
 # pg_show: print task from IDE API (mirrors cmd_show)
+# Falls back to jt-pg-direct for a direct postgres query when the IDE is offline.
 pg_show() {
   local task_id="$1" json_out="${2:-false}"
-  require_ide_reachable
-  local response
-  response="$(pg_curl GET "/api/tasks/${task_id}")" || die "Task not found: ${task_id}"
-  if echo "$response" | jq -e '.error' >/dev/null 2>&1; then
-    die "Task not found: ${task_id}"
-  fi
   local normalized
-  normalized="$(echo "$response" | _pg_normalize_tasks)"
+
+  if ide_is_reachable; then
+    local response
+    response="$(pg_curl GET "/api/tasks/${task_id}")" || die "Task not found: ${task_id}"
+    if echo "$response" | jq -e '.error' >/dev/null 2>&1; then
+      die "Task not found: ${task_id}"
+    fi
+    normalized="$(echo "$response" | _pg_normalize_tasks)"
+  else
+    # IDE not running — query postgres directly via Node.js helper.
+    normalized="$(_jt_pg_direct show "$task_id" "$PROJECT_ROOT")" \
+      || die "Task not found: ${task_id} (IDE offline; direct postgres query failed)"
+  fi
+
   if [[ "$json_out" == "true" ]]; then
     echo "$normalized"
   else
@@ -223,18 +247,29 @@ pg_update() {
     esac
   done
 
-  require_ide_reachable
-  local response
-  response="$(pg_curl PUT "/api/tasks/${task_id}" "$payload")" || die "Failed to update task: ${task_id}"
-  if echo "$response" | jq -e '.error' >/dev/null 2>&1; then
-    local err_msg
-    err_msg="$(echo "$response" | jq -r '.error // .message // "unknown"')"
-    die "Failed to update task ${task_id}: ${err_msg}"
-  fi
-  if $json_out; then
-    echo "$response" | _pg_normalize_tasks
+  if ide_is_reachable; then
+    local response
+    response="$(pg_curl PUT "/api/tasks/${task_id}" "$payload")" || die "Failed to update task: ${task_id}"
+    if echo "$response" | jq -e '.error' >/dev/null 2>&1; then
+      local err_msg
+      err_msg="$(echo "$response" | jq -r '.error // .message // "unknown"')"
+      die "Failed to update task ${task_id}: ${err_msg}"
+    fi
+    if $json_out; then
+      echo "$response" | _pg_normalize_tasks
+    else
+      echo "Updated $task_id"
+    fi
   else
-    echo "Updated $task_id"
+    # IDE not running — write directly via Node.js helper.
+    local result
+    result="$(_jt_pg_direct update "$task_id" "$PROJECT_ROOT" "$payload")" \
+      || die "Failed to update task ${task_id} (IDE offline; direct postgres query failed)"
+    if $json_out; then
+      echo "$result"
+    else
+      echo "Updated $task_id"
+    fi
   fi
 }
 

@@ -16,7 +16,7 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync, readFileSync } from 'node:fs';
 import Database from 'better-sqlite3';
-import { SqliteTaskBackend } from '../../../../../lib/tasks-sqlite.js';
+import { SqliteTaskBackend } from '../../../../lib/tasks-sqlite.js';
 
 const execAsync = promisify(exec);
 

@@ -7,13 +7,14 @@
  *
  * Works for SQLite-backed and Postgres-backed projects.
  *
- * NOTE: The resume trigger side-effect (when comment_type === 'answer' and an
- * open question comment with session_id exists) is implemented in jat-njdae.5
- * and not wired here yet.
+ * Resume trigger: if comment_type === 'answer' on a SQLite-backed task that
+ * has an open `question` comment with a session_id, fire the resume flow
+ * (claude -r + tmux inject). See lib/server/resumeOnAnswer.js.
  */
 import { json } from '@sveltejs/kit';
 import { SqliteTaskBackend } from '../../../../../../../lib/tasks-sqlite.js';
 import { resolveBackendForProject } from '../../../../../../../lib/projects-config.js';
+import { triggerResumeOnAnswer } from '$lib/server/resumeOnAnswer.js';
 
 const sqlite = new SqliteTaskBackend();
 
@@ -127,7 +128,13 @@ export async function POST({ params, request }) {
 			metadata: metadata ?? null,
 		});
 
-		// Resume trigger (jat-njdae.5) will be wired here in a later task.
+		// Resume trigger: if this is an answer to an open agent question,
+		// fire `claude -r` + tmux inject in the background.
+		if (comment_type === 'answer') {
+			triggerResumeOnAnswer(taskId, text).catch((err) => {
+				console.error('[comments POST] resume trigger failed:', err);
+			});
+		}
 
 		return json(
 			{

@@ -82,23 +82,6 @@ export function getOriginByTaskId(taskId) {
   };
 }
 
-export function getAdapterState(sourceId) {
-  const row = getDb().prepare(
-    'SELECT state_json FROM adapter_state WHERE source_id = ?'
-  ).get(sourceId);
-  return row ? JSON.parse(row.state_json) : {};
-}
-
-export function setAdapterState(sourceId, state) {
-  getDb().prepare(
-    `INSERT INTO adapter_state (source_id, state_json, updated_at)
-     VALUES (?, ?, datetime('now'))
-     ON CONFLICT(source_id) DO UPDATE SET
-       state_json = excluded.state_json,
-       updated_at = excluded.updated_at`
-  ).run(sourceId, JSON.stringify(state));
-}
-
 export function logPoll(sourceId, itemsFound, itemsNew, error, durationMs) {
   getDb().prepare(
     `INSERT INTO poll_log (source_id, items_found, items_new, error, duration_ms)

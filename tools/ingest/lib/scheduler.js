@@ -1,5 +1,6 @@
 import { getEnabledSources, getConfig, getSecret } from './config.js';
-import { isDuplicate, recordItem, getAdapterState, setAdapterState, logPoll, registerThread, getActiveThreads, updateThreadCursor } from './dedup.js';
+import { isDuplicate, recordItem, logPoll, registerThread, getActiveThreads, updateThreadCursor } from './dedup.js';
+import { getAdapterState, setAdapterState } from './adapterState.js';
 import { downloadAttachments } from './downloader.js';
 import { createTask, appendToTask, registerTaskAttachments, applyAutomation, handleThreadReply, handleReaction, handleRejection } from './taskCreator.js';
 import { discoverPlugins } from './pluginLoader.js';

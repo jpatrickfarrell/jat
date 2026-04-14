@@ -1,4 +1,5 @@
-import { isDuplicate, recordItem, getAdapterState, setAdapterState, registerThread } from './dedup.js';
+import { isDuplicate, recordItem, registerThread } from './dedup.js';
+import { getAdapterState, setAdapterState } from './adapterState.js';
 import { downloadAttachments } from './downloader.js';
 import { createTask, appendToTask, registerTaskAttachments, applyAutomation, handleThreadReply, handleReaction } from './taskCreator.js';
 import { applyFilter, resolveFilter } from './filterEngine.js';
@@ -357,7 +358,7 @@ export class ConnectionManager {
   }
 
   /**
-   * Persist connection metadata into the adapter_state table.
+   * Persist connection metadata into daemon-state.json via adapterState.
    * Merges with existing adapter state (preserves cursors etc.).
    * @param {string} sourceId
    */

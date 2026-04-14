@@ -16,7 +16,7 @@
 	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
 	import FxText from '$lib/components/FxText.svelte';
 	import MobileSessionFullscreen from '$lib/components/work/MobileSessionFullscreen.svelte';
-	import EventStack from '$lib/components/work/EventStack.svelte';
+	import CompletionCardCompact from '$lib/components/work/CompletionCardCompact.svelte';
 	import { getSwipeConfig, getSwipeActionDef, initSwipeActions } from '$lib/config/swipeActions';
 	import { isAutoKillEnabled, setPendingAutoKill } from '$lib/stores/autoKillConfig';
 	import { autoKillCountdowns, cancelAutoKill } from '$lib/stores/sessionEvents';
@@ -1587,13 +1587,7 @@
 								{#if completionEntry?.state === 'loaded' && completionEntry.events.length > 0}
 									<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 								<div class="completion-card-inline" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
-										<EventStack
-											sessionName={sessionAgentName}
-											initialEvents={completionEntry.events}
-											layoutMode="inline"
-											autoExpand={true}
-											pollInterval={0}
-										/>
+										<CompletionCardCompact events={completionEntry.events} />
 									</div>
 								{:else if completionEntry?.state === 'loading'}
 									<div class="mobile-title-row">

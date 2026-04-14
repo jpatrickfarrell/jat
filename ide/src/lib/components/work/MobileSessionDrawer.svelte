@@ -471,6 +471,14 @@
 	}
 	let pendingAttachments = $state<PendingAttachment[]>([]);
 	const hasSendable = $derived(inputText.trim().length > 0 || pendingAttachments.some(a => !a.uploading));
+	let sentFlash = $state(false);
+
+	async function sendAndDismiss() {
+		if (!hasSendable) return;
+		await sendWithAttachments();
+		sentFlash = true;
+		setTimeout(() => dismissDrawer(), 320);
+	}
 
 	// Markdown preview toggle
 	let showPreview = $state(false);
@@ -1067,6 +1075,12 @@
 			e.preventDefault();
 			dismissDrawer();
 		}
+		if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+			if (inputText.trim() || pendingAttachments.some(a => !a.uploading)) {
+				e.preventDefault();
+				sendAndDismiss();
+			}
+		}
 	}
 
 	onMount(() => {
@@ -1314,7 +1328,7 @@
 				/>
 
 				<!-- Mobile Input Row: [keyboard dropup | attach | input | send] -->
-				<div class="mobile-input-row flex items-center gap-1.5 px-2 py-1.5 bg-base-100 border-t border-base-300 flex-shrink-0">
+				<div class="mobile-input-row flex items-center gap-1.5 px-2 py-1.5 bg-base-100 border-t border-base-300 flex-shrink-0 {sentFlash ? 'send-flash' : ''}">
 					<!-- Keyboard dropup -->
 					<div class="relative flex-shrink-0">
 						<button
@@ -1369,7 +1383,7 @@
 							{/if}
 						</div>
 					{:else}
-					<div class="flex-1 min-w-0">
+					<div class="flex-1 min-w-0 {sentFlash ? 'send-input-recede' : ''}">
 						<PromptInput
 							bind:this={inputRef}
 							bind:value={inputText}
@@ -1378,11 +1392,6 @@
 							placeholder="Type a message… (Ctrl+Enter to send)"
 							rows={1}
 							compact={true}
-							onSend={() => {
-								if (inputText.trim() || pendingAttachments.some(a => !a.uploading)) {
-									sendWithAttachments().then(() => dismissDrawer());
-								}
-							}}
 						/>
 					</div>
 					{/if}
@@ -1416,14 +1425,20 @@
 
 					<!-- Send button -->
 					<button
-						class="flex items-center justify-center w-9 h-9 rounded-lg border cursor-pointer flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-default {hasSendable && !showPreview ? 'bg-info border-info text-info-content active:bg-info/80' : 'bg-base-200 border-base-300 text-base-content/40'}"
+						class="send-btn flex items-center justify-center w-9 h-9 rounded-lg border cursor-pointer flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-default {sentFlash ? 'bg-success border-success text-success-content send-btn-sent' : hasSendable && !showPreview ? 'bg-info border-info text-info-content active:bg-info/80' : 'bg-base-200 border-base-300 text-base-content/40'}"
 						aria-label="Send message"
 						disabled={!hasSendable || showPreview}
-						use:directClick={() => sendWithAttachments().then(() => dismissDrawer())}
+						use:directClick={sendAndDismiss}
 					>
-						<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="18" height="18">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-						</svg>
+						{#if sentFlash}
+							<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" width="18" height="18">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+							</svg>
+						{:else}
+							<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="18" height="18">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+							</svg>
+						{/if}
 					</button>
 				</div>
 			</div>
@@ -1898,6 +1913,48 @@
 		opacity: 0.9;
 		transform: translateX(0);
 		pointer-events: auto;
+	}
+
+	/* Send confirmation — input row outline flash (outline is not clipped by overflow) */
+	@keyframes send-row-flash {
+		0%   { outline-color: oklch(0.65 0.20 145 / 0); }
+		25%  { outline-color: oklch(0.65 0.20 145 / 0.8); }
+		100% { outline-color: oklch(0.65 0.20 145 / 0); }
+	}
+
+	.mobile-input-row.send-flash {
+		outline: 2px solid transparent;
+		outline-offset: -1px;
+		animation: send-row-flash 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+	}
+
+	/* Input text recedes backwards into the screen on send (like session card exit) */
+	@keyframes send-input-recede {
+		0%   { transform: perspective(600px) translateZ(0) scale(1); opacity: 1; }
+		100% { transform: perspective(600px) translateZ(-280px) scale(0.82); opacity: 0; }
+	}
+
+	.send-input-recede {
+		animation: send-input-recede 0.22s cubic-bezier(0.55, 0.085, 0.68, 0.53) both;
+		pointer-events: none;
+	}
+
+	/* Send button: scale-up + checkmark pop */
+	@keyframes send-btn-sent-anim {
+		0%   { transform: scale(1); }
+		40%  { transform: scale(1.18); }
+		70%  { transform: scale(0.95); }
+		100% { transform: scale(1); }
+	}
+
+	.send-btn-sent {
+		animation: send-btn-sent-anim 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.mobile-input-row.send-flash,
+		.send-input-recede,
+		.send-btn-sent { animation: none !important; }
 	}
 
 	/* Action button flash animation (fired when user taps a pill action) */

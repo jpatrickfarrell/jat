@@ -50,7 +50,6 @@
 		onfocus,
 		onblur,
 		onkeydown: externalKeydown,
-		onSend,
 		formulaContext = {},
 	}: {
 		value: string;
@@ -64,7 +63,6 @@
 		onfocus?: (e: FocusEvent) => void;
 		onblur?: (e: FocusEvent) => void;
 		onkeydown?: (e: KeyboardEvent) => void;
-		onSend?: () => void;
 		formulaContext?: Record<string, any>;
 	} = $props();
 
@@ -340,13 +338,6 @@
 				showFileAutocomplete = false;
 				return;
 			}
-		}
-
-		// Ctrl+Enter or Cmd+Enter → submit
-		if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && onSend) {
-			e.preventDefault();
-			onSend();
-			return;
 		}
 
 		// Forward to external handler

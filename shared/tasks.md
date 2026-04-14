@@ -120,12 +120,22 @@ jt tree task-abc                        jt dep tree task-abc
 jt update task-abc --status in-progress jt update task-abc --status in_progress
 ```
 
-**Status Values:**
-Use **underscores** not hyphens:
+**Status Values** — use underscores not hyphens:
+
+Agent-workable (agents pick these up via `jt ready`):
 - `open` - Available to start
-- `in_progress` - Currently being worked on (NOT `in-progress`)
-- `blocked` - Waiting on something
+- `in_progress` - Being worked on
+
+Paused / mid-flight (agents do NOT pick these up):
+- `waiting` - Ball in counterparty's court (awaiting their input)
+- `blocked` - Blocked by external dependency
+- `submitted` - Submitted for review/triage
+- `accepted` - Stakeholder approved, pending deploy
+- `deployed` - Shipped, pending archive/closeout
+
+Terminal / special:
 - `closed` - Completed
+- `dev` - Internal/dev-only (hidden from clients)
 
 **Common types:** `bug`, `feature`, `task`, `epic`, `chore` (recurring scheduled task — see scheduler.md), `chat` (conversational/external-channel threads, typically with `/jat:chat`)
 **Common labels:** Project-specific (e.g., `security`, `ui`, `backend`, `frontend`, `urgent`)

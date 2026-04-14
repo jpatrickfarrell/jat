@@ -15,7 +15,10 @@ jt update <id> --status in_progress --assignee AgentName
 jt close <id> --reason "Completed"
 ```
 
-**Status values:** `open`, `in_progress`, `blocked`, `closed`, `dev`, `submitted` (use underscores)
+**Status values** (use underscores, not hyphens):
+- Agent-workable: `open`, `in_progress`
+- Paused/mid-flight: `waiting`, `blocked`, `submitted`, `accepted`, `deployed`
+- Terminal/special: `closed`, `dev`
 **Task types:** `bug`, `feature`, `task`, `epic`, `chore`, `chat`
 
 > **Postgres note:** `jt ready` on postgres returns all open tasks (dependency filtering is SQLite-only). The JAT IDE at the project's configured port must be running.

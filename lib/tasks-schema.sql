@@ -1,13 +1,14 @@
 -- JAT task database schema
 -- Lightweight task tracking with 4 clean tables
--- Status values: open, in_progress, blocked, closed, dev, submitted
+-- Status values: open, in_progress, waiting, blocked, submitted, accepted, deployed, closed, dev
+-- Canonical source of truth: lib/task-statuses.js (ALL_STATUSES)
 
 CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     description TEXT DEFAULT '',
     notes TEXT DEFAULT '',
-    status TEXT NOT NULL DEFAULT 'open',
+    status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','waiting','blocked','submitted','accepted','deployed','closed','dev')),
     priority INTEGER NOT NULL DEFAULT 2,
     issue_type TEXT NOT NULL DEFAULT 'task',
     assignee TEXT,

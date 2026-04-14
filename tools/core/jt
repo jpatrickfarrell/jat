@@ -3930,7 +3930,7 @@ Options:
   --version    Show version
   --help       Show this help
 
-Status values: open, in_progress, blocked, closed, dev, submitted
+Status values: open, in_progress, waiting, blocked, submitted, accepted, deployed, closed, dev
 Task types: bug, feature, task, epic, chore
 HELP
 }

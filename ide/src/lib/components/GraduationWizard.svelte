@@ -11,6 +11,7 @@
 	 */
 
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
+	import { ALL_STATUSES } from '$lib/config/task-statuses';
 
 	interface Props {
 		isOpen: boolean;
@@ -404,8 +405,8 @@
 			<!-- Step 2: Preview -->
 			{#if step === 2 && previewSummary}
 				{@const bd = previewSummary.breakdown}
-				{@const statusOrder = ['open', 'in_progress', 'blocked', 'closed', 'dev', 'submitted']}
-				{@const statusColors: Record<string, string> = { open: 'text-info', in_progress: 'text-warning', blocked: 'text-error', closed: 'text-success', dev: 'text-base-content/50', submitted: 'text-secondary' }}
+				{@const statusOrder = ALL_STATUSES}
+				{@const statusColors: Record<string, string> = { open: 'text-info', in_progress: 'text-warning', waiting: 'text-info', blocked: 'text-error', submitted: 'text-secondary', accepted: 'text-success', deployed: 'text-primary', closed: 'text-success', dev: 'text-base-content/50' }}
 				{@const typeOrder = ['task', 'bug', 'feature', 'epic', 'chore']}
 				{@const typeColors: Record<string, string> = { task: 'text-primary', bug: 'text-error', feature: 'text-success', epic: 'text-secondary', chore: 'text-base-content/60' }}
 				<div class="space-y-4">

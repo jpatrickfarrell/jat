@@ -23,6 +23,7 @@
 	import DynamicConfigForm from '$lib/components/integrations/DynamicConfigForm.svelte';
 	import FilterBuilder from '$lib/components/integrations/FilterBuilder.svelte';
 	import SearchDropdown from '$lib/components/SearchDropdown.svelte';
+	import { ALL_STATUSES } from '$lib/config/task-statuses';
 
 	interface Props {
 		open: boolean;
@@ -517,7 +518,7 @@
 					externalStatus: externalStatus as string
 				}));
 				// Ensure all JAT statuses are present
-				for (const s of ['open', 'in_progress', 'blocked', 'closed', 'dev', 'submitted']) {
+				for (const s of ALL_STATUSES) {
 					if (!mappings.find(m => m.jatStatus === s)) {
 						mappings.push({ jatStatus: s, externalStatus: '' });
 					}

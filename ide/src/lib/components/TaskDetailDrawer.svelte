@@ -28,6 +28,7 @@
 	import { TaskDetailSkeleton } from '$lib/components/skeleton';
 	import SlideOpenButton from '$lib/components/SlideOpenButton.svelte';
 	import { SESSION_STATE_VISUALS } from '$lib/config/statusColors';
+	import { STATUS_OPTIONS as statusOptions } from '$lib/config/task-statuses';
 	import { AGENT_PRESETS } from '$lib/types/agentProgram';
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
 	import EventStack from '$lib/components/work/EventStack.svelte';
@@ -649,16 +650,6 @@
 		{ value: 'feature', label: 'Feature' },
 		{ value: 'epic', label: 'Epic' },
 		{ value: 'chore', label: 'Chore' }
-	];
-
-	const statusOptions = [
-		{ value: 'open', label: 'Open' },
-		{ value: 'in_progress', label: 'In Progress' },
-		{ value: 'blocked', label: 'Blocked' },
-		{ value: 'submitted', label: 'Submitted' },
-		{ value: 'accepted', label: 'Accepted' },
-		{ value: 'deployed', label: 'Deployed' },
-		{ value: 'closed', label: 'Closed' }
 	];
 
 	// Project options (dynamically loaded)

@@ -8,6 +8,8 @@
  * import type { Agent, Task, AgentsApiResponse } from '$lib/types/api.types';
  */
 
+import type { TaskStatus } from '$lib/config/task-statuses';
+
 // =============================================================================
 // CORE ENTITY TYPES
 // =============================================================================
@@ -64,7 +66,7 @@ export interface Task {
 	id: string;
 	title: string;
 	description: string;
-	status: 'open' | 'in_progress' | 'blocked' | 'closed' | 'dev' | 'submitted';
+	status: TaskStatus;
 	priority: number;
 	issue_type: 'task' | 'bug' | 'feature' | 'epic' | 'chore';
 	project: string;

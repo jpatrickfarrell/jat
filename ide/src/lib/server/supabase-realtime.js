@@ -7,7 +7,9 @@
  * Responsibilities:
  * 1. GENERAL SYNC   — project_tasks INSERT (status=statusNew, not voice) → JAT SQLite
  * 2. VOICE HANDLER  — INSERT where source='voice', status='transcribing'
- *                     → download audio → transcribe → upsert {title, description, status:'open'}
+ *                     → download audio → transcribe → organizeTranscript()
+ *                     → if tasks[]: INSERT N child rows + PATCH placeholder to status='voice_split'
+ *                     → else: PATCH placeholder {title, description, status:'open'}
  * 3. UPDATE SYNC    — status changes and dev_notes updates → JAT task
  * 4. BOOT CATCH-UP  — on start: process missed records and stuck voice records (>30s)
  * 5. STALE CLEANUP  — voice records stuck >5min → PATCH status='failed'
@@ -301,25 +303,54 @@ async function handleVoiceRecord(source, row, serviceKey, projectUrl) {
 		try { unlinkSync(wavPath); } catch {}
 		vlog(`[supabase-rt] Voice ${rowId}: transcribed (${transcript.length} chars)`);
 
-		// 5. Organize with ollama → title + description
+		// 5. Organize with ollama → tasks[] or title + description
 		let title = 'Voice note';
 		let description = transcript;
+		let organized = null;
 		try {
 			const projects = loadProjects();
-			const organized = await organizeTranscript(transcript, projects);
+			organized = await organizeTranscript(transcript, projects);
 			if (organized.title) title = organized.title;
 			if (organized.summary) description = organized.summary;
-			else if (organized.tasks && organized.tasks.length > 0) description = organized.summary || transcript;
 		} catch (organizeErr) {
 			vlog(`[supabase-rt] Voice ${rowId}: organize failed (${organizeErr.message}), using raw transcript`);
 		}
 
 		// 6. Upsert back to Supabase — triggers jat-webhook to sync to JAT SQLite
-		await supabaseRequest(projectUrl, serviceKey, `project_tasks?id=eq.${encodeURIComponent(rowId)}`, {
-			method: 'PATCH',
-			body: { title, description, status: 'open' }
-		});
-		vlog(`[supabase-rt] Voice ${rowId}: upserted as status=open`);
+		if (organized?.tasks && organized.tasks.length > 0) {
+			// Multi-task flow: insert N child rows, mark placeholder as voice_split
+			const childRows = organized.tasks.map((task) => ({
+				source: 'voice',
+				status: 'open',
+				type: task.type || 'task',
+				title: (task.title || 'Voice task').substring(0, 200),
+				description: task.description || '',
+				priority: task.priority ?? 2,
+				...(task.project ? { project: task.project } : {}),
+				...(task.labels ? { labels: task.labels } : {}),
+				...(row.user_id ? { user_id: row.user_id } : {})
+			}));
+
+			const inserted = await supabaseRequest(projectUrl, serviceKey, 'project_tasks', {
+				method: 'POST',
+				body: childRows
+			});
+
+			const taskIds = (Array.isArray(inserted) ? inserted : []).map((r) => r.id).filter(Boolean);
+			vlog(`[supabase-rt] Voice ${rowId}: created ${taskIds.length} child tasks`);
+
+			await supabaseRequest(projectUrl, serviceKey, `project_tasks?id=eq.${encodeURIComponent(rowId)}`, {
+				method: 'PATCH',
+				body: { status: 'voice_split', description: JSON.stringify({ taskIds }) }
+			});
+			vlog(`[supabase-rt] Voice ${rowId}: updated as status=voice_split with ${taskIds.length} tasks`);
+		} else {
+			await supabaseRequest(projectUrl, serviceKey, `project_tasks?id=eq.${encodeURIComponent(rowId)}`, {
+				method: 'PATCH',
+				body: { title, description, status: 'open' }
+			});
+			vlog(`[supabase-rt] Voice ${rowId}: upserted as status=open`);
+		}
 	} catch (err) {
 		vlog(`[supabase-rt] Voice ${rowId} ERROR: ${err.message}`);
 		// Mark as failed so the widget can show an error state

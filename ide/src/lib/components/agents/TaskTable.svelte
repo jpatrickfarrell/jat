@@ -14,6 +14,7 @@
 	import { formatRelativeTime, formatFullDate, normalizeTimestamp, getAgeColorClass } from '$lib/utils/dateFormatters';
 	import { toggleSetItem } from '$lib/utils/filterHelpers';
 	import { getTaskStatusVisual, STATUS_ICONS, getIssueTypeVisual, getGroupHeaderInfo, type GroupingMode } from '$lib/config/statusColors';
+	import { ALL_STATUSES } from '$lib/config/task-statuses';
 	import { getElapsedTimeColor, getFireScale, formatElapsedTime } from '$lib/config/rocketConfig';
 	import { isAgentWorking as checkAgentWorking, computeAgentStatus } from '$lib/utils/agentStatusUtils';
 	import TaskActionButton from './TaskActionButton.svelte';
@@ -1549,7 +1550,7 @@
 		count: tasks.filter(t => String(t.priority) === p).length
 	})));
 
-	const statusOptions = $derived(['open', 'in_progress', 'blocked', 'closed', 'dev', 'submitted'].map(s => ({
+	const statusOptions = $derived(ALL_STATUSES.map(s => ({
 		value: s,
 		label: s.replace('_', ' '),
 		count: tasks.filter(t => t.status === s).length

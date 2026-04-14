@@ -39,6 +39,7 @@
 	import { marked } from 'marked';
 	import type { SessionState, SessionStateAction } from '$lib/config/statusColors';
 	import { getIssueTypeVisual, getSessionStateVisual } from '$lib/config/statusColors';
+	import { STATUS_OPTIONS } from '$lib/config/task-statuses';
 	import { getActions, loadUserConfig, getIsLoaded } from '$lib/stores/stateActionsConfig.svelte';
 	import {
 		playTaskCompleteSound,
@@ -351,12 +352,6 @@
 	let editSaving = $state(false);
 	let editError = $state<string | null>(null);
 
-	const STATUS_OPTIONS = [
-		{ value: 'open', label: 'Open' },
-		{ value: 'in_progress', label: 'In Progress' },
-		{ value: 'blocked', label: 'Blocked' },
-		{ value: 'closed', label: 'Closed' }
-	];
 	const PRIORITY_OPTIONS = [
 		{ value: 0, label: 'P0 — Critical' },
 		{ value: 1, label: 'P1 — High' },

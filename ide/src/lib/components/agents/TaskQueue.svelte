@@ -11,6 +11,7 @@
 	import AnimatedDigits from '$lib/components/AnimatedDigits.svelte';
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 	import type { Task, Agent } from '$lib/stores/agents.svelte';
+	import { ALL_STATUSES } from '$lib/config/task-statuses';
 
 	// Types
 	interface FilterOption {
@@ -159,7 +160,7 @@
 		count: tasks.filter(t => String(t.priority) === p).length
 	})));
 
-	const statusOptions = $derived(['open', 'in_progress', 'blocked', 'closed', 'dev', 'submitted'].map(s => ({
+	const statusOptions = $derived(ALL_STATUSES.map(s => ({
 		value: s,
 		label: s,
 		count: tasks.filter(t => t.status === s).length

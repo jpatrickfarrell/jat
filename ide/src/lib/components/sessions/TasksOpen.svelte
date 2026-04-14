@@ -1974,14 +1974,15 @@
 									<span class="mobile-task-separator">·</span>
 									<span class="mobile-task-priority mobile-task-priority-{task.priority}">P{task.priority}</span>
 								{/if}
+								{#if typeVisual}
+									<span class="mobile-task-separator">·</span>
+									<span class="mobile-task-type-badge" title={typeVisual.label}>{typeVisual.icon}</span>
+								{/if}
 								{#if !isHumanTask(task)}
 									<span class="mobile-task-separator">·</span>
 									<span class="mobile-task-harness-badge" title="Harness: {harness}">
 										<ProviderLogo agentId={harness} size={11} />
 									</span>
-								{:else if typeVisual}
-									<span class="mobile-task-separator">·</span>
-									<span class="mobile-task-type-badge" title={typeVisual.label}>{typeVisual.icon}</span>
 								{/if}
 								{#if taskAge.label}
 									<span class="mobile-task-separator">·</span>

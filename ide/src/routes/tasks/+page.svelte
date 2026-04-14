@@ -16,6 +16,7 @@
 	import TasksActive from "$lib/components/sessions/TasksActive.svelte";
 	import MobileSessionDrawer from "$lib/components/work/MobileSessionDrawer.svelte";
 	import TasksPaused from "$lib/components/sessions/TasksPaused.svelte";
+	import TaskIdBadge from "$lib/components/TaskIdBadge.svelte";
 	import TasksOpen from "$lib/components/sessions/TasksOpen.svelte";
 	import ProjectNotes from "$lib/components/sessions/ProjectNotes.svelte";
 	import WorkingAgentBadge from "$lib/components/WorkingAgentBadge.svelte";
@@ -226,8 +227,8 @@
 	// Selected project (synced from URL ?project= param, managed by TopBar)
 	let selectedProject = $state<string | null>(null);
 
-	// Subsection collapse state per project (sessions/paused/conversations/tasks)
-	type SubsectionType = "sessions" | "paused" | "conversations" | "tasks" | "completed";
+	// Subsection collapse state per project (sessions/paused/waiting/conversations/tasks)
+	type SubsectionType = "sessions" | "paused" | "waiting" | "conversations" | "tasks" | "completed";
 	let collapsedSubsections = $state<Map<string, Set<SubsectionType>>>(
 		new Map(),
 	);
@@ -292,6 +293,9 @@
 		const state = agentSessionInfo.get(agentName)?.activityState || "idle";
 		return STATE_PRIORITY[state] ?? 99;
 	}
+
+	// Tasks in 'waiting' status (agent asked a question and paused session)
+	const waitingTasks = $derived(allTasks.filter(t => t.status === 'waiting'));
 
 	// Build epic-child map from all tasks
 	const epicChildMap = $derived(buildEpicChildMap(allTasks));
@@ -1405,6 +1409,36 @@
 		}
 	}
 
+	async function reopenWaitingTask(taskId: string) {
+		try {
+			await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ status: "open", assignee: "" }),
+			});
+			await fetchCriticalData();
+		} catch (err) {
+			console.error("Failed to reopen waiting task:", err);
+		}
+	}
+
+	async function spawnWaitingTask(taskId: string) {
+		try {
+			const response = await fetch("/api/work/spawn", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ taskId, autoStart: true }),
+			});
+			if (!response.ok) {
+				const data = await response.json();
+				throw new Error(data.error || "Failed to spawn agent");
+			}
+			await fetchAllData();
+		} catch (err) {
+			console.error("Failed to spawn agent for waiting task:", err);
+		}
+	}
+
 	async function closeOrphanedTask(taskId: string, agentName: string) {
 		try {
 			// 1. Close the task
@@ -1639,10 +1673,13 @@
 		const paused = getProjectPausedSessions(selectedProject);
 		const hasWork = paused.some(s => s.taskType !== 'chat');
 		const hasChat = paused.some(s => s.taskType === 'chat');
+		const projectWaiting = waitingTasks.filter(t => (t.id || '').startsWith(selectedProject + '-'));
+		const hasWaiting = projectWaiting.length > 0;
 		let changed = false;
 
 		const chatKey = `${selectedProject}:conversations`;
 		const pausedKey = `${selectedProject}:paused`;
+		const waitingKey = `${selectedProject}:waiting`;
 
 		// Auto-expand when content appears (only if user hasn't manually toggled)
 		if (hasChat && projectCollapsed.has("conversations") && !userToggledSubsections.has(chatKey)) {
@@ -1651,6 +1688,10 @@
 		}
 		if (hasWork && projectCollapsed.has("paused") && !userToggledSubsections.has(pausedKey)) {
 			projectCollapsed.delete("paused");
+			changed = true;
+		}
+		if (hasWaiting && projectCollapsed.has("waiting") && !userToggledSubsections.has(waitingKey)) {
+			projectCollapsed.delete("waiting");
 			changed = true;
 		}
 
@@ -1666,6 +1707,7 @@
 		// But preserve the flag if the section is explicitly collapsed — the user wanted it closed.
 		if (!hasChat && !projectCollapsed.has("conversations")) userToggledSubsections.delete(chatKey);
 		if (!hasWork && !projectCollapsed.has("paused")) userToggledSubsections.delete(pausedKey);
+		if (!hasWaiting && !projectCollapsed.has("waiting")) userToggledSubsections.delete(waitingKey);
 		if (!hasCompleted && !projectCollapsed.has("completed")) userToggledSubsections.delete(completedKey);
 
 		if (changed) {
@@ -1836,6 +1878,7 @@
 				getProjectPausedSessions(selectedProject)}
 			{@const projectPausedSessions = allPausedSessions.filter(s => s.taskType !== 'chat')}
 			{@const projectChatSessions = allPausedSessions.filter(s => s.taskType === 'chat')}
+			{@const projectWaitingTasks = waitingTasks.filter(t => (t.id || '').startsWith(selectedProject + '-'))}
 			{@const sessionsByEpic = getSessionsByEpic(projectSessions)}
 			{@const tasksByEpic = getTasksByEpic(projectTasks)}
 			{@const projectColor =
@@ -2088,6 +2131,95 @@
 									/>
 								{/if}
 							{/each}
+						{/if}
+					</div>
+				{/if}
+
+				<!-- Waiting for Input Section -->
+				{#if projectWaitingTasks.length > 0}
+					<div class="subsection waiting-subsection">
+						<button
+							class="subsection-header"
+							onclick={() => toggleSubsectionCollapse(selectedProject!, "waiting")}
+							aria-expanded={!isSubsectionCollapsed(selectedProject!, "waiting")}
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="2"
+								stroke="currentColor"
+								class="subsection-collapse-icon"
+								class:collapsed={isSubsectionCollapsed(selectedProject!, "waiting")}
+							>
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+							</svg>
+							<!-- Clock icon -->
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.875rem;height:0.875rem;color:oklch(0.75 0.15 85);flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+							<span>Waiting for Input</span>
+							<span class="subsection-count-inline">{projectWaitingTasks.length}</span>
+						</button>
+
+						{#if !isSubsectionCollapsed(selectedProject!, "waiting")}
+							<div class="waiting-content" transition:slide={{ duration: 200 }}>
+								<div class="waiting-tasks-table">
+									<table class="waiting-table">
+										<thead>
+											<tr>
+												<th class="th-task">Task</th>
+												<th class="th-action">Action</th>
+											</tr>
+										</thead>
+										<tbody>
+											{#each projectWaitingTasks as task (task.id)}
+												<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+												<tr class="waiting-row clickable" onclick={() => openTaskDetailDrawer(task.id)}>
+													<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+													<td class="td-task" onclick={(e) => e.stopPropagation()}>
+														<div class="badge-and-text">
+															<TaskIdBadge
+																{task}
+																size="sm"
+																variant="agentPill"
+																agentName={task.assignee || ''}
+																harness={task.agent_program || 'claude-code'}
+																onClick={() => openTaskDetailDrawer(task.id)}
+															/>
+															<div class="text-column">
+																<span class="task-title" title={task.title}>
+																	{task.title || task.id}
+																</span>
+																{#if task.assignee}
+																	<span class="waiting-agent">agent: {task.assignee}</span>
+																{/if}
+															</div>
+														</div>
+													</td>
+													<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+													<td class="td-action" onclick={(e) => e.stopPropagation()}>
+														<div class="waiting-actions">
+															<button
+																class="waiting-btn spawn-btn"
+																onclick={() => spawnWaitingTask(task.id)}
+																title="Spawn a new agent to continue this task"
+															>
+																Spawn Agent
+															</button>
+															<button
+																class="waiting-btn reopen-btn"
+																onclick={() => reopenWaitingTask(task.id)}
+																title="Reset to open so any agent can pick it up"
+															>
+																Reopen
+															</button>
+														</div>
+													</td>
+												</tr>
+											{/each}
+										</tbody>
+									</table>
+								</div>
+							</div>
 						{/if}
 					</div>
 				{/if}
@@ -3153,12 +3285,133 @@
 		background: oklch(0.18 0.01 250);
 	}
 
-	/* Paused/Conversations subsections - indent to align with epic-group content */
+	/* Paused/Waiting/Conversations subsections - indent to align with epic-group content */
 	.paused-subsection,
+	.waiting-subsection,
 	.conversations-subsection {
 		margin-left: 0.75rem;
 		margin-right: 0.75rem;
 		max-width: calc(100% - 1.5rem); /* Constrain width accounting for margins */
+	}
+
+	/* Waiting for Input section */
+	.waiting-content {
+		overflow: hidden;
+	}
+
+	.waiting-tasks-table {
+		border-radius: 0.375rem;
+		overflow: hidden;
+		border: 1px solid oklch(0.75 0.15 85 / 0.15);
+	}
+
+	.waiting-table {
+		width: 100%;
+		border-collapse: collapse;
+		table-layout: fixed;
+	}
+
+	.waiting-table thead {
+		display: none;
+	}
+
+	.waiting-row {
+		background: linear-gradient(90deg, oklch(0.75 0.15 85 / 0.06), transparent 60%);
+		border-left: 3px solid oklch(0.75 0.15 85 / 0.5);
+		border-bottom: 1px solid oklch(0.75 0.15 85 / 0.08);
+		cursor: pointer;
+		transition: background 0.15s ease;
+	}
+
+	.waiting-row:last-child {
+		border-bottom: none;
+	}
+
+	.waiting-row:hover {
+		background: linear-gradient(90deg, oklch(0.75 0.15 85 / 0.12), oklch(0.20 0.01 250 / 0.3) 60%);
+	}
+
+	.waiting-row .td-task {
+		padding: 0.625rem 0.75rem;
+		vertical-align: middle;
+	}
+
+	.waiting-row .td-action {
+		padding: 0.5rem 0.75rem;
+		vertical-align: middle;
+		width: 180px;
+		text-align: right;
+	}
+
+	.badge-and-text {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.625rem;
+		min-width: 0;
+		width: 100%;
+	}
+
+	.text-column {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+		min-width: 0;
+		flex: 1;
+		padding-top: 0.125rem;
+	}
+
+	.waiting-row .task-title {
+		font-size: 0.9rem;
+		font-weight: 600;
+		color: oklch(0.85 0.02 250);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.waiting-agent {
+		font-size: 0.7rem;
+		color: oklch(0.75 0.15 85 / 0.8);
+	}
+
+	.waiting-actions {
+		display: flex;
+		gap: 0.375rem;
+		justify-content: flex-end;
+		align-items: center;
+	}
+
+	.waiting-btn {
+		font-size: 0.7rem;
+		font-weight: 600;
+		padding: 0.25rem 0.625rem;
+		border-radius: 0.375rem;
+		border: 1px solid;
+		cursor: pointer;
+		transition: all 0.15s ease;
+		white-space: nowrap;
+	}
+
+	.spawn-btn {
+		background: oklch(0.75 0.15 85 / 0.15);
+		border-color: oklch(0.75 0.15 85 / 0.4);
+		color: oklch(0.80 0.15 85);
+	}
+
+	.spawn-btn:hover {
+		background: oklch(0.75 0.15 85 / 0.25);
+		border-color: oklch(0.75 0.15 85 / 0.7);
+	}
+
+	.reopen-btn {
+		background: oklch(0.65 0.02 250 / 0.12);
+		border-color: oklch(0.45 0.02 250 / 0.4);
+		color: oklch(0.65 0.02 250);
+	}
+
+	.reopen-btn:hover {
+		background: oklch(0.65 0.02 250 / 0.2);
+		border-color: oklch(0.55 0.02 250 / 0.6);
 	}
 
 	/* Override TasksPaused table styles to match TasksActive and TasksOpen */

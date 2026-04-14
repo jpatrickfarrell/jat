@@ -73,15 +73,57 @@ export async function GET({ url }) {
 
 /**
  * PATCH /api/tasks/voice?id=<jobId>
- * Acknowledge task submission from jat-feedback widget. Tasks are already in
- * voice inbox from appendToVoiceTimeline — this is a no-op acknowledgment.
+ * Create a JAT task from the user-confirmed voice note submission.
+ * Body: { title: string, description: string, status: 'submitted' }
+ * Called once per submitted task from the jat-feedback widget review UI.
  */
-export async function PATCH({ url }) {
+export async function PATCH({ url, request }) {
 	const id = url.searchParams.get('id');
 	if (id && voiceJobs.has(id)) {
 		const job = voiceJobs.get(id);
 		voiceJobs.set(id, { ...job, status: 'submitted' });
 	}
+
+	let title = '';
+	let description = '';
+	try {
+		const body = await request.json();
+		title = (body.title || '').trim();
+		description = (body.description || '').trim();
+	} catch {
+		// Ignore body parse errors — still mark submitted
+	}
+
+	if (title) {
+		try {
+			const projectPath = process.cwd().replace(/\/ide$/, '');
+			const createdTask = createTask({
+				projectPath,
+				title,
+				description,
+				type: 'task',
+				priority: 2,
+				labels: ['voice'],
+				deps: [],
+				assignee: null,
+				notes: ''
+			});
+			invalidateCache.tasks();
+			invalidateCache.agents();
+			_resetTaskCache();
+			emitEvent({
+				type: 'task_created',
+				source: 'voice_widget',
+				data: { taskId: createdTask.id, title, type: 'task', priority: 2, labels: ['voice'] }
+			});
+			vlog(`Voice task created: ${createdTask.id} "${title}"`);
+		} catch (e) {
+			const message = e instanceof Error ? e.message : String(e);
+			vlog(`ERROR: Failed to create voice task "${title}": ${message}`);
+			return json({ error: true, message }, { status: 500, headers: CORS_HEADERS });
+		}
+	}
+
 	return json({ ok: true }, { headers: CORS_HEADERS });
 }
 

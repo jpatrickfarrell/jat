@@ -790,90 +790,160 @@
 		holdProgress = 0;
 	}
 
+	// ── Tray action helpers ────────────────────────────────────────────────
+
+	interface TrayCtx {
+		sessionName: string;
+		sessionTask: AgentTask | null;
+		agentName: string;
+		project: string | null;
+	}
+
+	async function trayCloseAndKill(ctx: TrayCtx, reason: string) {
+		if (ctx.sessionTask) {
+			await fetch(`/api/tasks/${encodeURIComponent(ctx.sessionTask.id)}/close`, {
+				method: 'POST', headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ reason })
+			});
+		}
+		await handleKillSession(ctx.sessionName);
+	}
+
+	async function trayRunComplete(ctx: TrayCtx, kill: boolean) {
+		optimisticStates.set(ctx.sessionName, 'completing');
+		optimisticStates = new Map(optimisticStates);
+		if (kill) setPendingAutoKill(ctx.sessionName, true);
+		if (ctx.sessionTask) {
+			await fetch(`/api/sessions/${encodeURIComponent(ctx.sessionName)}/signal`, {
+				method: 'POST', headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ type: 'completing', data: { taskId: ctx.sessionTask.id, taskTitle: ctx.sessionTask.title, currentStep: 'verifying', progress: 0, stepsCompleted: [], stepsRemaining: ['verifying', 'committing', 'closing', 'releasing'] } })
+			});
+		}
+		await sendWorkflowCommand(ctx.sessionName, kill ? '/jat:complete --kill' : '/jat:complete');
+	}
+
+	// Per-action feedback: [variant, durationMs]
+	const TRAY_FEEDBACK: Record<string, [string, number]> = {
+		attach:           ['info',    800],
+		kill:             ['error',  1200],
+		cleanup:          ['error',  1200],
+		'close-kill':     ['error',  1200],
+		'close-task':     ['error',  1200],
+		unassign:         ['warning',1200],
+		complete:         ['success',1500],
+		'complete-kill':  ['success',1500],
+		interrupt:        ['warning', 800],
+		escape:           ['warning', 800],
+		pause:            ['info',   1200],
+		resume:           ['success',1000],
+		restart:          ['success',1200],
+		start:            ['success',1200],
+		'convert-to-tasks':['info',   800],
+		'view-task':      ['info',    400],
+	};
+
+	// Dispatch table: one async handler per action id
+	const TRAY_DISPATCH: Record<string, (ctx: TrayCtx) => Promise<void>> = {
+		attach: async (ctx) => handleAttachSession(ctx.sessionName),
+
+		kill:         async (ctx) => trayCloseAndKill(ctx, 'Killed via tray'),
+		cleanup:      async (ctx) => trayCloseAndKill(ctx, 'Cleaned up session'),
+		'close-kill': async (ctx) => trayCloseAndKill(ctx, 'Abandoned via Close & Kill'),
+		'close-task': async (ctx) => trayCloseAndKill(ctx, 'Closed via mobile tray'),
+
+		unassign: async (ctx) => {
+			if (ctx.sessionTask) {
+				await fetch(`/api/tasks/${encodeURIComponent(ctx.sessionTask.id)}`, {
+					method: 'PUT', headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ assignee: null, status: 'open' })
+				});
+			}
+			await handleKillSession(ctx.sessionName);
+		},
+
+		complete:        async (ctx) => trayRunComplete(ctx, false),
+		'complete-kill': async (ctx) => trayRunComplete(ctx, true),
+
+		interrupt: async (ctx) => {
+			await fetch(`/api/work/${encodeURIComponent(ctx.sessionName)}/input`, {
+				method: 'POST', headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ type: 'ctrl-c' })
+			});
+		},
+
+		escape: async (ctx) => {
+			await fetch(`/api/work/${encodeURIComponent(ctx.sessionName)}/input`, {
+				method: 'POST', headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ type: 'escape' })
+			});
+		},
+
+		pause: async (ctx) => {
+			optimisticStates.set(ctx.sessionName, 'paused');
+			optimisticStates = new Map(optimisticStates);
+			if (ctx.sessionTask) {
+				await fetch(`/api/sessions/${encodeURIComponent(ctx.sessionName)}/pause`, {
+					method: 'POST', headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ taskId: ctx.sessionTask.id, taskTitle: ctx.sessionTask.title, reason: 'Paused via mobile tray', killSession: true, agentName: ctx.agentName, project: ctx.project })
+				});
+			} else {
+				await handleKillSession(ctx.sessionName);
+			}
+		},
+
+		resume: async (ctx) => {
+			optimisticStates.set(ctx.sessionName, 'working');
+			optimisticStates = new Map(optimisticStates);
+			await fetch(`/api/sessions/${encodeURIComponent(ctx.sessionName)}/signal`, {
+				method: 'POST', headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ type: 'working', data: { taskId: ctx.sessionTask?.id, taskTitle: ctx.sessionTask?.title, agentName: ctx.agentName, approach: 'Resuming from paused state' } })
+			});
+			await fetch(`/api/sessions/${encodeURIComponent(ctx.sessionName)}/resume`, {
+				method: 'POST', headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ taskId: ctx.sessionTask?.id, agentName: ctx.agentName, project: ctx.project })
+			});
+		},
+
+		restart: async (ctx) => {
+			if (ctx.sessionTask) {
+				await fetch('/api/work/spawn', {
+					method: 'POST', headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ taskId: ctx.sessionTask.id, project: ctx.project })
+				});
+			}
+		},
+
+		start: async (ctx) => sendWorkflowCommand(ctx.sessionName, '/jat:start'),
+
+		'convert-to-tasks': async (ctx) => sendWorkflowCommand(ctx.sessionName, '/jat:tasktree'),
+
+		'view-task': async (ctx) => {
+			if (ctx.sessionTask) onViewTask?.(ctx.sessionTask.id);
+		},
+	};
+
 	async function handleMobileAction(actionId: string, sessionName: string, sessionTask: AgentTask | null, agentName: string, project: string | null) {
-		// Prevent double-clicks while feedback is active
 		const feedbackKey = `${sessionName}:${actionId}`;
 		if (actionFeedback.has(feedbackKey)) return;
 		if (trayOpenSession === sessionName) trayOpenSession = null;
 
-		if (actionId === 'attach') {
-			setActionFeedback(sessionName, actionId, 'info');
-			await handleAttachSession(sessionName);
-		} else if (actionId === 'kill' || actionId === 'cleanup') {
-			setActionFeedback(sessionName, actionId, 'error', 1200);
-			if (actionId === 'cleanup' && sessionTask) {
-				try { await fetch(`/api/tasks/${encodeURIComponent(sessionTask.id)}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Cleaned up session' }) }); } catch (e) { console.warn('[TasksActive] close task failed:', e); }
-			}
-			await handleKillSession(sessionName);
-		} else if (actionId === 'view-task' && sessionTask) {
-			onViewTask?.(sessionTask.id);
-		} else if (actionId === 'complete' || actionId === 'complete-kill') {
-			setActionFeedback(sessionName, actionId, 'success', 1500);
-			optimisticStates.set(sessionName, 'completing');
-			optimisticStates = new Map(optimisticStates);
-			// For complete-kill: set pending intent as fallback in case forceKill isn't in the bundle
-			if (actionId === 'complete-kill') {
-				setPendingAutoKill(sessionName, true);
-			}
-			if (sessionTask) {
-				try {
-					await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, {
-						method: 'POST', headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ type: 'completing', data: { taskId: sessionTask.id, taskTitle: sessionTask.title, currentStep: 'verifying', progress: 0, stepsCompleted: [], stepsRemaining: ['verifying', 'committing', 'closing', 'releasing'] } })
-					});
-				} catch (e) { console.warn('[TasksActive] Failed to write completing signal:', e); }
-			}
-			await sendWorkflowCommand(sessionName, actionId === 'complete-kill' ? '/jat:complete --kill' : '/jat:complete');
-		} else if (actionId === 'interrupt') {
-			setActionFeedback(sessionName, actionId, 'warning');
-			await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'ctrl-c' }) });
-		} else if (actionId === 'escape') {
-			setActionFeedback(sessionName, actionId, 'warning');
-			await fetch(`/api/work/${encodeURIComponent(sessionName)}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'escape' }) });
-		} else if (actionId === 'close-kill') {
-			setActionFeedback(sessionName, actionId, 'error', 1200);
-			if (sessionTask) {
-				try { await fetch(`/api/tasks/${encodeURIComponent(sessionTask.id)}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Abandoned via Close & Kill' }) }); } catch (e) { console.warn('[TasksActive] close task failed:', e); }
-			}
-			await handleKillSession(sessionName);
-		} else if (actionId === 'pause') {
-			setActionFeedback(sessionName, actionId, 'info', 1200);
-			optimisticStates.set(sessionName, 'paused');
-			optimisticStates = new Map(optimisticStates);
-			if (sessionTask) {
-				try { await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/pause`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: sessionTask.id, taskTitle: sessionTask.title, reason: 'Paused via mobile tray', killSession: true, agentName, project }) }); } catch (e) { console.warn('[TasksActive] pause failed:', e); }
-			} else { await handleKillSession(sessionName); }
-		} else if (actionId === 'convert-to-tasks') {
-			setActionFeedback(sessionName, actionId, 'info');
-			await sendWorkflowCommand(sessionName, '/jat:tasktree');
-		} else if (actionId === 'resume') {
-			setActionFeedback(sessionName, actionId, 'success', 1000);
-			optimisticStates.set(sessionName, 'working');
-			optimisticStates = new Map(optimisticStates);
-			try {
-				await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/signal`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'working', data: { taskId: sessionTask?.id, taskTitle: sessionTask?.title, agentName, approach: 'Resuming from paused state' } }) });
-				await fetch(`/api/sessions/${encodeURIComponent(sessionName)}/resume`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: sessionTask?.id, agentName, project }) });
-			} catch (e) { console.warn('[TasksActive] resume failed:', e); }
-		} else if (actionId === 'close-task') {
-			setActionFeedback(sessionName, actionId, 'error', 1200);
-			if (sessionTask) {
-				try { await fetch(`/api/tasks/${encodeURIComponent(sessionTask.id)}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Closed via mobile tray' }) }); } catch (e) { console.warn('[TasksActive] close-task failed:', e); }
-			}
-			await handleKillSession(sessionName);
-		} else if (actionId === 'unassign') {
-			setActionFeedback(sessionName, actionId, 'warning', 1200);
-			if (sessionTask) {
-				try { await fetch(`/api/tasks/${encodeURIComponent(sessionTask.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assignee: null, status: 'open' }) }); } catch (e) { console.warn('[TasksActive] unassign failed:', e); }
-			}
-			await handleKillSession(sessionName);
-		} else if (actionId === 'restart') {
-			setActionFeedback(sessionName, actionId, 'success', 1200);
-			if (sessionTask) {
-				try { await fetch('/api/work/spawn', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: sessionTask.id, project }) }); } catch (e) { console.warn('[TasksActive] restart failed:', e); }
-			}
-		} else if (actionId === 'start') {
-			setActionFeedback(sessionName, actionId, 'success', 1200);
-			await sendWorkflowCommand(sessionName, '/jat:start');
+		const handler = TRAY_DISPATCH[actionId];
+		if (!handler) return;
+
+		const [variant, duration] = TRAY_FEEDBACK[actionId] ?? ['success', 800];
+		setActionFeedback(sessionName, actionId, variant, duration);
+
+		try {
+			await handler({ sessionName, sessionTask, agentName, project });
+		} catch (e) {
+			console.warn(`[TasksActive] ${actionId} failed:`, e);
+			// Override to error state — clears after 1.8s
+			actionFeedback.set(feedbackKey, 'error-fail');
+			actionFeedback = new Map(actionFeedback);
+			setTimeout(() => {
+				actionFeedback.delete(feedbackKey);
+				actionFeedback = new Map(actionFeedback);
+			}, 1800);
 		}
 	}
 	let swipeConfig = $state(getSwipeConfig());
@@ -1315,7 +1385,7 @@
 					class:tray-open={trayOpenSession === session.name}
 					class:is-completing={effectiveState === 'completing'}
 					onmouseenter={dismissTrayHint}
-					style="border-left: 3px solid {stateVisual.accent}; {isExiting ? 'pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
+					style="--card-hover-tint: {stateVisual.accent}; border-left: 3px solid {stateVisual.accent}; {isExiting ? 'pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
 					role="button" tabindex="0"
 					onclick={() => { if (isExiting || swipeState?.swiping) return; if (trayOpenSession === session.name) { trayOpenSession = null; return; } if (onCardClick) onCardClick(session.name); else fullscreenSession = session.name; }}
 					oncontextmenu={(e) => handleContextMenu(session, e)}
@@ -1623,14 +1693,21 @@
 										{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
 										{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
 										{@const holdMatch = holdKey === `${session.name}:${action.id}`}
-										<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} class:mobile-tray-btn-holding={holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive && !pointerLocked) handleMobileAction(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
+										{@const isFailed = fb === 'error-fail'}
+										<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} class:mobile-tray-btn-holding={holdMatch} class:tray-btn-hold-dimmed={holdKey !== null && !holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive && !pointerLocked) handleMobileAction(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
 											{#if isDestructive && holdMatch}<span class="tray-hold-fill" style="width: {holdProgress}%"></span>{/if}
 											{#if fb}
-												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+												{#if isFailed}
+													<!-- ✕ error icon -->
+													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+												{:else}
+													<!-- ✓ success icon -->
+													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+												{/if}
 											{:else}
 												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d={action.icon} /></svg>
 											{/if}
-											<span>{fb ? 'Done' : action.label}</span>
+											<span>{isFailed ? 'Error' : fb ? 'Done' : action.label}</span>
 										</button>
 									{/each}
 									{#if sessionTask.issue_type !== 'epic'}
@@ -2630,9 +2707,9 @@
 		filter: brightness(1.15) saturate(1.2);
 	}
 
-	/* Subtle row highlight when tray is active */
+	/* State-aware row highlight: tint follows session state color */
 	.mobile-session-card:hover {
-		background: oklch(0.65 0.15 145 / 0.15);
+		background: color-mix(in oklch, var(--card-hover-tint, oklch(0.65 0.15 145)) 12%, transparent);
 	}
 
 	/* Action tray — legacy behavior (server cards, no-task cards): expands from right on hover */
@@ -2646,9 +2723,10 @@
 		order: 3;
 	}
 
-	.mobile-session-card:hover .mobile-action-tray,
-	.mobile-action-tray:hover,
-	.mobile-action-tray:focus-within {
+	/* Legacy tray (server + no-task cards): direct child of card-inner only */
+	.mobile-session-card:hover .mobile-card-inner > .mobile-action-tray,
+	.mobile-card-inner > .mobile-action-tray:hover,
+	.mobile-card-inner > .mobile-action-tray:focus-within {
 		max-width: 480px;
 	}
 
@@ -2663,34 +2741,46 @@
 		margin-top: 0;
 	}
 
-	/* Tray inside wrapper: overrides legacy max-width expand, uses opacity overlay instead */
+	/* Tray inside wrapper: opacity overlay, triggered only by hovering the row2 zone */
 	.mobile-row2-wrapper > .mobile-action-tray {
 		grid-area: row2;
 		position: relative;
 		max-width: none;
-		overflow: visible;
+		overflow: hidden;
 		order: unset;
 		flex-shrink: unset;
 		opacity: 0;
 		pointer-events: none;
-		transition: opacity 0.18s ease;
+		transition: opacity 0.15s ease;
 		border-radius: 3px;
-		overflow: hidden;
 	}
 
-	.mobile-session-card:hover .mobile-row2-wrapper > .mobile-action-tray,
-	.mobile-row2-wrapper > .mobile-action-tray:hover,
+	/* Reveal on row2-zone hover (not full-card hover) + focus/open states */
+	.mobile-row2-wrapper:hover > .mobile-action-tray,
 	.mobile-row2-wrapper > .mobile-action-tray:focus-within,
 	.mobile-session-card.tray-open .mobile-row2-wrapper > .mobile-action-tray {
 		opacity: 1;
 		pointer-events: auto;
-		max-width: none;
 	}
 
-	/* Compact button height to match row2 */
+	/* Overlay buttons: single-line horizontal layout to fit row2 height */
 	.mobile-row2-wrapper > .mobile-action-tray .mobile-tray-btn {
-		padding: 3px 6px;
-		font-size: 0.5rem;
+		flex-direction: row;
+		padding: 0 7px;
+		font-size: 0.6rem;
+		height: 100%;
+		gap: 3px;
+	}
+	/* No icon in overlay context — label only */
+	.mobile-row2-wrapper > .mobile-action-tray .mobile-tray-btn > svg {
+		display: none;
+	}
+
+	/* Hold isolation: dim inactive buttons while a hold is in progress */
+	.mobile-tray-btn.tray-btn-hold-dimmed {
+		opacity: 0.25;
+		pointer-events: none;
+		transition: opacity 0.1s;
 	}
 
 	/* State badge in title row */
@@ -2746,9 +2836,11 @@
 	}
 
 	/* Onboarding hint: briefly peek the tray on the first card so users discover the reveal */
-	.swipe-container:first-child .mobile-session-card.tray-hint-active .mobile-action-tray {
+	/* Legacy tray only (direct child of card-inner) — animates max-width */
+	.swipe-container:first-child .mobile-session-card.tray-hint-active .mobile-card-inner > .mobile-action-tray {
 		animation: tray-hint-peek 2.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.8s 1 both;
 	}
+	/* Overlay tray (inside row2-wrapper) — animates opacity instead */
 	.swipe-container:first-child .mobile-session-card.tray-hint-active .mobile-row2-wrapper > .mobile-action-tray {
 		animation: tray-hint-peek-opacity 2.4s ease 0.8s 1 both;
 	}
@@ -2765,13 +2857,14 @@
 		100% { opacity: 0; }
 	}
 	@media (prefers-reduced-motion: reduce) {
-		.swipe-container:first-child .mobile-session-card.tray-hint-active .mobile-action-tray,
+		.swipe-container:first-child .mobile-session-card.tray-hint-active .mobile-card-inner > .mobile-action-tray,
 		.swipe-container:first-child .mobile-session-card.tray-hint-active .mobile-row2-wrapper > .mobile-action-tray {
 			animation: none;
 		}
 	}
 
-	.mobile-session-card.tray-open .mobile-action-tray {
+	/* Legacy tray only on tray-open: direct child of card-inner, not the overlay tray */
+	.mobile-session-card.tray-open .mobile-card-inner > .mobile-action-tray {
 		max-width: 480px;
 	}
 
@@ -2814,8 +2907,9 @@
 	.mobile-tray-btn-epic-open { background: oklch(0.45 0.14 280); box-shadow: inset 0 -2px 0 oklch(0.65 0.18 280 / 0.6); }
 	.mobile-tray-btn-cmds     { background: oklch(0.30 0.08 200); }
 	.mobile-tray-btn-cmds-open { background: oklch(0.42 0.14 200); box-shadow: inset 0 -2px 0 oklch(0.65 0.18 200 / 0.6); }
-	.mobile-tray-btn-auto     { background: oklch(0.35 0.08 45); color: oklch(0.70 0.12 45); }
-	.mobile-tray-btn-auto-on  { background: oklch(0.35 0.12 145); color: oklch(0.75 0.15 145); }
+	.mobile-tray-btn-auto      { background: oklch(0.35 0.08 45); color: oklch(0.70 0.12 45); }
+	.mobile-tray-btn-auto-on   { background: oklch(0.35 0.12 145); color: oklch(0.75 0.15 145); }
+	.mobile-tray-btn-error-fail { background: oklch(0.40 0.16 25); color: oklch(0.92 0.04 25); }
 
 	.mobile-tray-btn { position: relative; overflow: hidden; }
 	.tray-hold-fill {

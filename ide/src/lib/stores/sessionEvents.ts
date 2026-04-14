@@ -414,8 +414,11 @@ async function scanAndPauseIdleSessions(): Promise<void> {
 			if (response.ok) {
 				console.log(`[AutoPauseIdle] Successfully paused ${sessionName}`);
 				const projectId = taskId !== 'unknown' ? taskId.split('-')[0] : undefined;
+				const toastMessage = state === 'completed'
+					? `Completed & killed: ${agentName}`
+					: `Auto-paused idle session ${agentName}`;
 				addToast({
-					message: `Auto-paused idle session ${agentName}`,
+					message: toastMessage,
 					type: 'info',
 					duration: 3000,
 					projectId,

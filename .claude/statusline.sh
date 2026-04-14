@@ -6,7 +6,7 @@
 # Multi-line status display for agent orchestration workflows
 #
 # Line 1: Agent Name · [Priority] TaskIcon TaskID ⏲ ActiveTime  (NO WRAPPING)
-# Line 2: ▪▪▪▪▪▪▫▫▫▫ · ⎇ folder@branch · 25%  ⛔ 3             (NO WRAPPING)
+# Line 2: ▪▪▪▪▪▪▫▫▫▫ 39% · 5h ▪▪▪▪▫▫▫▫▫▫ 41% ↺2h30m · ⎇ folder@branch · 25%  ⛔ 3   (NO WRAPPING)
 # Line 3: 💬 Xm Last user prompt...                              (can wrap)
 #
 # Features:
@@ -208,21 +208,53 @@ cwd=$(echo "$json_input" | jq -r '.cwd // empty')
 session_id=$(echo "$json_input" | jq -r '.session_id // empty')
 transcript_path=$(echo "$json_input" | jq -r '.transcript_path // empty')
 
-# Get context usage from transcript (for context remaining indicator)
-# The JSON input doesn't have usage info, so we read from the transcript
-context_used=0
-context_limit=200000
+# Get context usage directly from JSON input (context_window field)
+# Falls back to transcript parsing if not available
+context_remaining_pct=$(echo "$json_input" | jq -r '.context_window.remaining_percentage // empty' 2>/dev/null)
+context_used_pct=$(echo "$json_input" | jq -r '.context_window.used_percentage // empty' 2>/dev/null)
 
-if [[ -n "$transcript_path" ]] && [[ -f "$transcript_path" ]]; then
-    # Get the most recent assistant message with usage info
-    # Total context = input_tokens + cache_creation_input_tokens + cache_read_input_tokens
-    last_usage=$(tail -20 "$transcript_path" 2>/dev/null | \
-        jq -r 'select(.message.role == "assistant") | .message.usage |
-               (.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0)' 2>/dev/null | \
-        tail -1)
+if [[ -n "$context_remaining_pct" ]] && [[ "$context_remaining_pct" != "null" ]]; then
+    context_percent="$context_remaining_pct"
+else
+    # Fallback: calculate from transcript
+    context_used=0
+    context_limit=200000
+    if [[ -n "$transcript_path" ]] && [[ -f "$transcript_path" ]]; then
+        last_usage=$(tail -20 "$transcript_path" 2>/dev/null | \
+            jq -r 'select(.message.role == "assistant") | .message.usage |
+                   (.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0)' 2>/dev/null | \
+            tail -1)
+        if [[ -n "$last_usage" ]] && [[ "$last_usage" != "null" ]] && [[ "$last_usage" != "0" ]]; then
+            context_used=$last_usage
+        fi
+    fi
+    context_percent=$((100 - (context_used * 100 / context_limit)))
+    [[ $context_percent -lt 0 ]] && context_percent=0
+    [[ $context_percent -gt 100 ]] && context_percent=100
+fi
 
-    if [[ -n "$last_usage" ]] && [[ "$last_usage" != "null" ]] && [[ "$last_usage" != "0" ]]; then
-        context_used=$last_usage
+# Get 5-hour rate limit block from JSON input
+fiveh_used_pct=$(echo "$json_input" | jq -r '.rate_limits.five_hour.used_percentage // empty' 2>/dev/null)
+fiveh_resets_at=$(echo "$json_input" | jq -r '.rate_limits.five_hour.resets_at // empty' 2>/dev/null)
+fiveh_remaining_pct=""
+fiveh_resets_in=""
+if [[ -n "$fiveh_used_pct" ]] && [[ "$fiveh_used_pct" != "null" ]]; then
+    fiveh_remaining_pct=$((100 - fiveh_used_pct))
+    [[ $fiveh_remaining_pct -lt 0 ]] && fiveh_remaining_pct=0
+    # Calculate time until reset
+    if [[ -n "$fiveh_resets_at" ]] && [[ "$fiveh_resets_at" != "null" ]]; then
+        now_ts=$(date +%s)
+        secs_until_reset=$(( fiveh_resets_at - now_ts ))
+        if [[ $secs_until_reset -gt 0 ]]; then
+            mins_until_reset=$(( secs_until_reset / 60 ))
+            hrs_until_reset=$(( mins_until_reset / 60 ))
+            mins_rem=$(( mins_until_reset % 60 ))
+            if [[ $hrs_until_reset -gt 0 ]]; then
+                fiveh_resets_in="${hrs_until_reset}h${mins_rem}m"
+            else
+                fiveh_resets_in="${mins_until_reset}m"
+            fi
+        fi
     fi
 fi
 
@@ -344,15 +376,6 @@ if [[ -n "$transcript_path" ]] && [[ -f "$transcript_path" ]]; then
     fi
 fi
 
-# Calculate context remaining percentage
-# Default to 100% when no usage data (full context available)
-context_percent=100
-if [[ $context_used -gt 0 ]] && [[ $context_limit -gt 0 ]]; then
-    context_percent=$((100 - (context_used * 100 / context_limit)))
-    # Clamp to 0-100 range
-    [[ $context_percent -lt 0 ]] && context_percent=0
-    [[ $context_percent -gt 100 ]] && context_percent=100
-fi
 context_remaining="${context_percent}%"
 
 # Generate battery/progress bar representation (10 segments, each = 10%)
@@ -394,7 +417,21 @@ if [[ -z "$agent_name" ]]; then
             context_color="${RED}"
         fi
         battery_bar=$(generate_battery_bar $context_percent)
-        second_line="${second_line}${context_color}${battery_bar}${RESET}"
+        second_line="${second_line}${context_color}${battery_bar} ${context_percent}%${RESET}"
+    fi
+    if [[ -n "$fiveh_remaining_pct" ]]; then
+        [[ -n "$second_line" ]] && second_line="${second_line} ${GRAY}·${RESET} "
+        if [[ $fiveh_remaining_pct -gt 50 ]]; then
+            fiveh_color="${GREEN}"
+        elif [[ $fiveh_remaining_pct -gt 20 ]]; then
+            fiveh_color="${YELLOW}"
+        else
+            fiveh_color="${RED}"
+        fi
+        fiveh_bar=$(generate_battery_bar $fiveh_remaining_pct)
+        fiveh_display="${fiveh_color}${fiveh_bar} ${fiveh_remaining_pct}%${RESET}"
+        [[ -n "$fiveh_resets_in" ]] && fiveh_display="${fiveh_display} ${DIM}↺${fiveh_resets_in}${RESET}"
+        second_line="${second_line}${CYAN}5h${RESET} ${fiveh_display}"
     fi
     if [[ -n "$git_branch" ]]; then
         [[ -n "$second_line" ]] && second_line="${second_line} ${GRAY}|${RESET} "
@@ -703,7 +740,7 @@ fi
 
 # Last activity indicator moved to line 3 (with last prompt) - see below
 
-# Build second line with context battery, git branch, and indicators
+# Build second line with context battery, 5h block, git branch, and indicators
 second_line=""
 
 # Add context remaining with battery bar FIRST
@@ -718,7 +755,26 @@ if [[ -n "$context_remaining" ]]; then
     fi
 
     battery_bar=$(generate_battery_bar $context_percent)
-    second_line="${second_line}${context_color}${battery_bar}${RESET}"
+    second_line="${second_line}${context_color}${battery_bar} ${context_percent}%${RESET}"
+fi
+
+# Add 5-hour rate limit block
+if [[ -n "$fiveh_remaining_pct" ]]; then
+    [[ -n "$second_line" ]] && second_line="${second_line} ${GRAY}·${RESET} "
+    # Color based on remaining 5h budget
+    if [[ $fiveh_remaining_pct -gt 50 ]]; then
+        fiveh_color="${GREEN}"
+    elif [[ $fiveh_remaining_pct -gt 20 ]]; then
+        fiveh_color="${YELLOW}"
+    else
+        fiveh_color="${RED}"
+    fi
+    fiveh_bar=$(generate_battery_bar $fiveh_remaining_pct)
+    fiveh_display="${fiveh_color}${fiveh_bar} ${fiveh_remaining_pct}%${RESET}"
+    if [[ -n "$fiveh_resets_in" ]]; then
+        fiveh_display="${fiveh_display} ${DIM}↺${fiveh_resets_in}${RESET}"
+    fi
+    second_line="${second_line}${CYAN}5h${RESET} ${fiveh_display}"
 fi
 
 # Add git branch

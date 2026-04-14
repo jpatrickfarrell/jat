@@ -80,6 +80,11 @@
 		// Meadow-specific fields fetched from project_tasks (postgres-backed projects)
 		page_url?: string | null;
 		origin?: string | null;
+		selected_elements?: Array<{ tagName?: string; textContent?: string; selector?: string; xpath?: string }> | null;
+		recording_url?: string | null;
+		user_agent?: string | null;
+		metadata?: Record<string, any> | null;
+		db_id?: string | null;  // postgres UUID for replay links
 	}
 
 	// Derive source origin from ingest-enriched `integration` or labels.
@@ -2935,6 +2940,67 @@
 									title={task.page_url}
 								>{task.page_url}</a>
 							</div>
+						{/if}
+
+						<!-- Browser / User Agent -->
+						{#if task.user_agent}
+							{@const ua = task.user_agent}
+							{@const browserMatch = ua.match(/Chrome\/(\d+)|Firefox\/(\d+)|Safari\/(\d+)/)}
+							{@const osMatch = ua.match(/Mac OS X|Windows NT|Linux|Android|iPhone|iPad/)}
+							{@const browserStr = browserMatch
+								? (ua.includes('Chrome') ? `Chrome ${browserMatch[1]}` : ua.includes('Firefox') ? `Firefox ${browserMatch[2]}` : `Safari ${browserMatch[3]}`)
+								: ua.slice(0, 40)}
+							{@const osStr = osMatch
+								? (ua.includes('Mac OS X') ? 'macOS' : ua.includes('Windows') ? 'Windows' : ua.includes('Linux') ? 'Linux' : ua.includes('iPhone') ? 'iPhone' : ua.includes('iPad') ? 'iPad' : 'Android')
+								: ''}
+							<div class="border-t border-base-300/50 pt-3 mt-1">
+								<TaskFieldLabel>Browser</TaskFieldLabel>
+								<span class="text-xs text-base-content/60 font-mono">{browserStr}{osStr ? ` / ${osStr}` : ''}</span>
+							</div>
+						{/if}
+
+						<!-- Selected Elements (from Meadow feedback widget DOM capture) -->
+						{#if task.selected_elements?.length}
+							<div class="border-t border-base-300/50 pt-3 mt-1">
+								<TaskFieldLabel>Selected Elements</TaskFieldLabel>
+								<div class="flex flex-col gap-1.5 mt-1">
+									{#each task.selected_elements as el}
+										<div class="rounded bg-base-200 px-2.5 py-1.5 text-xs">
+											<div class="flex items-center gap-2 mb-1">
+												{#if el.tagName}
+													<span class="badge badge-xs badge-ghost font-mono uppercase">{el.tagName}</span>
+												{/if}
+												{#if el.textContent?.trim()}
+													<span class="text-base-content/60 truncate">"{el.textContent.trim().slice(0, 80)}"</span>
+												{/if}
+											</div>
+											{#if el.selector || el.xpath}
+												<div class="font-mono text-base-content/40 break-all text-[10px]">{el.selector || el.xpath}</div>
+											{/if}
+										</div>
+									{/each}
+								</div>
+							</div>
+						{/if}
+
+						<!-- Session Recording (rrweb replay link) -->
+						{#if task.recording_url && task.page_url}
+							{@const replayBase = (() => { try { return new URL(task.page_url).origin; } catch { return ''; } })()}
+							{@const replayUrl = task.db_id && replayBase ? `${replayBase}/feedback/replay?id=${task.db_id}` : ''}
+							{#if replayUrl}
+								<div class="border-t border-base-300/50 pt-3 mt-1">
+									<TaskFieldLabel>Recording</TaskFieldLabel>
+									<a
+										href={replayUrl}
+										target="_blank"
+										rel="noopener noreferrer"
+										class="inline-flex items-center gap-1.5 text-xs text-primary/70 hover:text-primary mt-1"
+									>
+										<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+										View Session Recording
+									</a>
+								</div>
+							{/if}
 						{/if}
 
 						<!-- Context (Knowledge Bases + Data Tables) -->

@@ -805,16 +805,19 @@ async function computeWorkData(lines, includeUsage, captureAll = false) {
 				const agentName = session.name.replace(/^jat-/, '');
 
 				// Get task for this agent
-				// Priority: signal task wins when agent is actively "working" (cross-project aware),
+				// Priority: signal task wins for any active signal state (cross-project aware),
 				// otherwise DB task wins, then any signal task, then null.
+				// "Active" = any state except completed/idle (which mean the agent isn't on a task).
 				// This handles postgres-backend projects whose tasks don't appear in agentTaskMap
-				// (which is SQLite-only). When an agent emits `working` with a meadow/postgres taskId,
-				// we trust that self-declaration over a potentially stale SQLite assignment.
+				// (which is SQLite-only). When an agent has a signal with a meadow/postgres taskId
+				// in any active state (starting, working, review, needs_input), we trust it over
+				// a potentially stale or wrong SQLite assignment.
 				const sessionSignalState = preSignalStates.get(session.name);
 				const signalTask = readSignalTask(session.name);
 				const dbTask = /** @type {Task|undefined} */ (agentTaskMap.get(agentName));
+				const ACTIVE_SIGNAL_STATES = new Set(['starting', 'working', 'review', 'needs_input', 'compacting']);
 				/** @type {Task|null} */
-				const task = (sessionSignalState === 'working' && signalTask ? signalTask : null)
+				const task = (sessionSignalState && ACTIVE_SIGNAL_STATES.has(sessionSignalState) && signalTask ? signalTask : null)
 					|| dbTask
 					|| signalTask
 					|| null;

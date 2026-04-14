@@ -101,18 +101,25 @@ export async function GET({ params }) {
 		task.integration = integrations[taskId];
 	}
 
-	// For postgres-backed projects, try to fetch extra fields from the app's
-	// project_tasks table (e.g. Meadow's page_url / origin from feedback submissions).
-	// This is a best-effort query — if the table or columns don't exist, skip silently.
+	// For postgres-backed projects, fetch extra fields from the app's project_tasks table
+	// (e.g. Meadow's page_url, origin, selected_elements, recording_url from feedback submissions).
+	// Best-effort — if the table or columns don't exist, skip silently.
 	if (pgBackend) {
 		try {
 			const { rows } = await pgBackend.pool.query(
-				`SELECT page_url, origin FROM project_tasks WHERE jat_id = $1 LIMIT 1`,
+				`SELECT id, page_url, origin, selected_elements, recording_url, user_agent, metadata
+				 FROM project_tasks WHERE jat_id = $1 LIMIT 1`,
 				[taskId]
 			);
 			if (rows[0]) {
 				if (rows[0].page_url) task.page_url = rows[0].page_url;
 				if (rows[0].origin) task.origin = rows[0].origin;
+				if (rows[0].selected_elements) task.selected_elements = rows[0].selected_elements;
+				if (rows[0].recording_url) task.recording_url = rows[0].recording_url;
+				if (rows[0].user_agent) task.user_agent = rows[0].user_agent;
+				if (rows[0].metadata) task.metadata = rows[0].metadata;
+				// Store postgres UUID so the drawer can construct replay links
+				if (rows[0].id) task.db_id = String(rows[0].id);
 			}
 		} catch {
 			// project_tasks doesn't exist on this postgres instance — skip

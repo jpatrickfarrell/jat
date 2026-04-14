@@ -17,6 +17,7 @@
 	import FxText from '$lib/components/FxText.svelte';
 	import MobileSessionFullscreen from '$lib/components/work/MobileSessionFullscreen.svelte';
 	import CompletionCardCompact from '$lib/components/work/CompletionCardCompact.svelte';
+	import StateCardCompact from '$lib/components/work/StateCardCompact.svelte';
 	import { getSwipeConfig, getSwipeActionDef, initSwipeActions } from '$lib/config/swipeActions';
 	import { isAutoKillEnabled, setPendingAutoKill } from '$lib/stores/autoKillConfig';
 	import { autoKillCountdowns, cancelAutoKill } from '$lib/stores/sessionEvents';
@@ -284,6 +285,59 @@
 			});
 		} catch {
 			completionDataMap = new Map(completionDataMap).set(agentName, { state: 'empty', events: [] });
+		}
+	}
+
+	// ── Signal data for active (non-completed) states ────────────────────────
+	// Key: `${agentName}:${uiState}` so re-fetches automatically on state change.
+	interface SignalEventEntry { state: 'loading' | 'loaded' | 'empty'; event: CompletionEvent | null; }
+	let signalDataMap = $state<Map<string, SignalEventEntry>>(new Map());
+
+	// Maps UI state → timeline event type filter
+	const STATE_TO_SIGNAL_TYPE: Record<string, string> = {
+		'starting':         'starting',
+		'working':          'working',
+		'needs-input':      'needs_input',
+		'ready-for-review': 'review',
+		'completing':       'completing',
+	};
+
+	$effect(() => {
+		for (const session of sessions) {
+			if (session.type !== 'agent') continue;
+			const agentName = getAgentName(session.name);
+			const task = agentTasks.get(agentName);
+			const rawState = optimisticStates.get(session.name) || agentSessionInfo.get(agentName)?.activityState || 'idle';
+			const effectiveState = task?.status === 'closed' ? 'completed' : rawState;
+			// Only fetch for states that have signal payloads
+			if (!STATE_TO_SIGNAL_TYPE[effectiveState]) continue;
+			const key = `${agentName}:${effectiveState}`;
+			if (!signalDataMap.has(key)) {
+				fetchSignalForAgent(agentName, effectiveState);
+			}
+		}
+	});
+
+	async function fetchSignalForAgent(agentName: string, uiState: string) {
+		const key = `${agentName}:${uiState}`;
+		if (signalDataMap.has(key)) return;
+		signalDataMap = new Map(signalDataMap).set(key, { state: 'loading', event: null });
+		const eventType = STATE_TO_SIGNAL_TYPE[uiState] ?? uiState;
+		try {
+			const res = await fetch(`/api/sessions/${encodeURIComponent(agentName)}/timeline?limit=5&type=${eventType}`);
+			if (!res.ok) {
+				signalDataMap = new Map(signalDataMap).set(key, { state: 'empty', event: null });
+				return;
+			}
+			const data = await res.json();
+			const events: CompletionEvent[] = data.events || [];
+			// events are newest-first; take the most recent
+			signalDataMap = new Map(signalDataMap).set(key, {
+				state: events.length > 0 ? 'loaded' : 'empty',
+				event: events[0] ?? null,
+			});
+		} catch {
+			signalDataMap = new Map(signalDataMap).set(key, { state: 'empty', event: null });
 		}
 	}
 
@@ -1429,7 +1483,7 @@
 					{@const typeVisual = getIssueTypeVisual(sessionTask.issue_type)}
 					{@const harness = getTaskHarness(sessionTask)}
 					{@const cardActions = getSessionStateActions(effectiveState)}
-					{@const mobileOutputLines = getOutputTail(sessionAgentName, 5)}
+					{@const mobileOutputLines = getOutputTail(sessionAgentName, 15)}
 					{@const reviewStatus = computeReviewStatus(sessionTask, getReviewRules())}
 					{@const reviewBasedDefault = reviewStatus.action !== 'auto'}
 					{@const autoCompleteDisabled = autoCompleteDisabledMap.get(session.name) ?? reviewBasedDefault}
@@ -1633,6 +1687,8 @@
 									{/if}
 								{/if}
 							{:else}
+							{@const signalKey = `${sessionAgentName}:${effectiveState}`}
+							{@const signalEntry = signalDataMap.get(signalKey)}
 							<div class="mobile-title-row">
 								<span class="mobile-title" title={sessionTask.title}>
 									<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
@@ -1642,16 +1698,15 @@
 									<span class="mobile-title-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
 								{/if}
 							</div>
-							{#if sessionTask.description && mobileOutputLines.length === 0}
-								<span class="mobile-description" title={sessionTask.description}>{sessionTask.description}</span>
-							{/if}
-							{#if mobileOutputLines.length > 0}
-								<div class="output-preview" style={rowProjectColor ? `--output-accent: ${rowProjectColor};` : ''}>
-									{#each mobileOutputLines as line}
-										<div class="output-line">{line}</div>
-									{/each}
-								</div>
-							{/if}
+							<!-- State card: signal payload + hover-revealed terminal output -->
+							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+							<div class="state-card-inline" style="--scc-accent: {stateVisual.accent};" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+								<StateCardCompact
+									state={effectiveState}
+									event={signalEntry?.event ?? null}
+									outputLines={mobileOutputLines}
+								/>
+							</div>
 							{/if}<!-- end {:else} non-completed -->
 							<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 							<div class="mobile-row2-wrapper">
@@ -2459,6 +2514,11 @@
 		background: transparent;
 	}
 
+	.state-card-inline {
+		margin-top: 0.2rem;
+		background: transparent;
+	}
+
 	.completion-loading-inline {
 		display: flex;
 		align-items: center;
@@ -2468,23 +2528,7 @@
 		color: oklch(0.55 0.05 250);
 	}
 
-	.output-preview {
-		margin-top: 0.35rem;
-		padding: 0.28rem 0.5rem 0.28rem 0.55rem;
-		border-left: 2px solid var(--output-accent, oklch(0.38 0.04 250));
-		background: oklch(0.11 0.01 240 / 0.7);
-		border-radius: 0 0.25rem 0.25rem 0;
-		font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
-		font-size: 0.65rem;
-		line-height: 1.45;
-		color: oklch(0.44 0.04 155);
-		cursor: default;
-	}
-	.output-line {
-		white-space: pre;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
+	/* .output-preview and .output-line removed — output now lives inside StateCardCompact */
 
 	/* === Context Menu === */
 	.active-context-menu {

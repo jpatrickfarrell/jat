@@ -115,116 +115,170 @@ function getScreenshotUrls(taskId) {
 /** @type {import('./$types').RequestHandler} */
 export async function GET() {
 	try {
-		const ingestDbPath = join(homedir(), '.local', 'share', 'jat', 'ingest.db');
-		if (!existsSync(ingestDbPath)) {
-			return json({ reports: [] }, { headers: CORS_HEADERS });
-		}
-
-		const db = new Database(ingestDbPath, { readonly: true });
-
-		// Get all feedback widget items
-		const rows = db.prepare(
-			`SELECT source_id, item_id, task_id, title, ingested_at,
-			        origin_sender_id, origin_metadata
-			 FROM ingested_items
-			 WHERE origin_adapter_type = 'feedback'
-			 ORDER BY ingested_at DESC
-			 LIMIT 100`
-		).all();
-
-		// Pre-parse origin_metadata for all rows
-		for (const row of rows) {
-			if (row.origin_metadata) {
-				try {
-					row._metadata = JSON.parse(row.origin_metadata);
-				} catch {
-					row._metadata = null;
-				}
-			} else {
-				row._metadata = null;
-			}
-		}
-		db.close();
-
 		/** @type {any[]} */
 		const reports = [];
+		/** @type {Set<string>} */
+		const seenTaskIds = new Set();
 
-		for (const row of rows) {
-			if (!row.task_id) continue;
+		// --- Feedback ingest pipeline reports ---
+		const ingestDbPath = join(homedir(), '.local', 'share', 'jat', 'ingest.db');
+		if (existsSync(ingestDbPath)) {
+			const db = new Database(ingestDbPath, { readonly: true });
 
-			// Fetch task details from JAT Tasks DB
-			let task;
-			try {
-				task = getTaskById(row.task_id);
-			} catch {
-				continue; // Task may have been deleted
-			}
-			if (!task) continue;
+			// Get all feedback widget items
+			const rows = db.prepare(
+				`SELECT source_id, item_id, task_id, title, ingested_at,
+				        origin_sender_id, origin_metadata
+				 FROM ingested_items
+				 WHERE origin_adapter_type = 'feedback'
+				 ORDER BY ingested_at DESC
+				 LIMIT 100`
+			).all();
 
-			// Strip [Feedback] prefix from title
-			const title = (task.title || row.title || '')
-				.replace(/^\[Feedback\]\s*/, '');
-
-			// Parse page_url from description
-			const pageUrl = parsePageUrl(task.description);
-
-			// Get screenshot URLs
-			const screenshotUrls = getScreenshotUrls(row.task_id);
-
-			// Extract user description (first paragraph before **Page:** metadata)
-			let description = task.description || '';
-			const metaStart = description.indexOf('\n\n**Page:**');
-			if (metaStart > 0) {
-				description = description.substring(0, metaStart).trim();
-			}
-
-			// Check for dev_notes in task notes field
-			const devNotes = task.notes || null;
-
-			// Load thread data (sidecar JSON)
-			let thread = null;
-			let revisionCount = 0;
-			try {
-				const rawThread = getThread(row.task_id);
-				if (rawThread && rawThread.length > 0) {
-					// Map screenshot paths to serving URLs
-					thread = rawThread.map((entry) => {
-						if (entry.screenshots && entry.screenshots.length > 0) {
-							return {
-								...entry,
-								screenshots: entry.screenshots.map((s) => ({
-									...s,
-									url: s.path ? `/api/work/image/${basename(s.path)}` : undefined,
-								})),
-							};
-						}
-						return entry;
-					});
-					revisionCount = rawThread.filter((e) => e.type === 'rejection').length;
+			// Pre-parse origin_metadata for all rows
+			for (const row of rows) {
+				if (row.origin_metadata) {
+					try {
+						row._metadata = JSON.parse(row.origin_metadata);
+					} catch {
+						row._metadata = null;
+					}
+				} else {
+					row._metadata = null;
 				}
-			} catch {
-				// Thread loading failure is non-fatal
 			}
+			db.close();
 
-			reports.push({
-				id: row.task_id,
-				title,
-				description,
-				type: task.issue_type || 'bug',
-				priority: task.priority != null ? String(task.priority) : '2',
-				status: mapTaskStatusToReportStatus(task.status, task.close_reason),
-				dev_notes: devNotes,
-				revision_count: revisionCount,
-				responded_at: task.status === 'closed' ? (task.updated_at || null) : null,
-				page_url: pageUrl,
-				screenshot_urls: screenshotUrls,
-				thread,
-				recording_url: parseRecordingUrl(task.description),
-				console_logs: row._metadata?.console_logs ?? null,
-				network_requests: row._metadata?.network_requests ?? null,
-				created_at: task.created_at || row.ingested_at
-			});
+			for (const row of rows) {
+				if (!row.task_id) continue;
+
+				// Fetch task details from JAT Tasks DB
+				let task;
+				try {
+					task = getTaskById(row.task_id);
+				} catch {
+					continue; // Task may have been deleted
+				}
+				if (!task) continue;
+
+				seenTaskIds.add(row.task_id);
+
+				// Strip [Feedback] prefix from title
+				const title = (task.title || row.title || '')
+					.replace(/^\[Feedback\]\s*/, '');
+
+				// Parse page_url from description
+				const pageUrl = parsePageUrl(task.description);
+
+				// Get screenshot URLs
+				const screenshotUrls = getScreenshotUrls(row.task_id);
+
+				// Extract user description (first paragraph before **Page:** metadata)
+				let description = task.description || '';
+				const metaStart = description.indexOf('\n\n**Page:**');
+				if (metaStart > 0) {
+					description = description.substring(0, metaStart).trim();
+				}
+
+				// Check for dev_notes in task notes field
+				const devNotes = task.notes || null;
+
+				// Load thread data (sidecar JSON)
+				let thread = null;
+				let revisionCount = 0;
+				try {
+					const rawThread = getThread(row.task_id);
+					if (rawThread && rawThread.length > 0) {
+						// Map screenshot paths to serving URLs
+						thread = rawThread.map((entry) => {
+							if (entry.screenshots && entry.screenshots.length > 0) {
+								return {
+									...entry,
+									screenshots: entry.screenshots.map((s) => ({
+										...s,
+										url: s.path ? `/api/work/image/${basename(s.path)}` : undefined,
+									})),
+								};
+							}
+							return entry;
+						});
+						revisionCount = rawThread.filter((e) => e.type === 'rejection').length;
+					}
+				} catch {
+					// Thread loading failure is non-fatal
+				}
+
+				reports.push({
+					id: row.task_id,
+					title,
+					description,
+					type: task.issue_type || 'bug',
+					priority: task.priority != null ? String(task.priority) : '2',
+					status: mapTaskStatusToReportStatus(task.status, task.close_reason),
+					dev_notes: devNotes,
+					revision_count: revisionCount,
+					responded_at: task.status === 'closed' ? (task.updated_at || null) : null,
+					page_url: pageUrl,
+					screenshot_urls: screenshotUrls,
+					thread,
+					recording_url: parseRecordingUrl(task.description),
+					console_logs: row._metadata?.console_logs ?? null,
+					network_requests: row._metadata?.network_requests ?? null,
+					created_at: task.created_at || row.ingested_at
+				});
+			}
 		}
+
+		// --- Voice tasks submitted via widget (labels_text contains 'voice') ---
+		// These bypass the ingest pipeline, so we add them directly from the JAT tasks DB.
+		try {
+			const projectPath = process.cwd().replace(/\/ide$/, '');
+			const tasksDbPath = join(projectPath, '.jat', 'tasks.db');
+			if (existsSync(tasksDbPath)) {
+				const tasksDb = new Database(tasksDbPath, { readonly: true });
+				const voiceTasks = tasksDb.prepare(
+					`SELECT id, title, description, status, priority, close_reason, notes, created_at, updated_at
+					 FROM tasks
+					 WHERE labels_text LIKE '%voice%'
+					 ORDER BY created_at DESC
+					 LIMIT 50`
+				).all();
+				tasksDb.close();
+
+				for (const task of voiceTasks) {
+					if (seenTaskIds.has(task.id)) continue; // Already in reports from ingest
+
+					reports.push({
+						id: task.id,
+						title: task.title || '',
+						description: task.description || '',
+						type: 'task',
+						priority: task.priority != null ? String(task.priority) : '2',
+						status: mapTaskStatusToReportStatus(task.status, task.close_reason),
+						dev_notes: task.notes || null,
+						revision_count: 0,
+						responded_at: task.status === 'closed' ? (task.updated_at || null) : null,
+						page_url: null,
+						screenshot_urls: [],
+						thread: null,
+						recording_url: null,
+						console_logs: null,
+						network_requests: null,
+						created_at: task.created_at
+					});
+				}
+			}
+		} catch (voiceErr) {
+			// Non-fatal: voice tasks just won't appear in history
+			console.error('[feedback/reports] Failed to load voice tasks:', voiceErr.message);
+		}
+
+		// Sort combined list by created_at descending
+		reports.sort((a, b) => {
+			const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+			const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+			return tb - ta;
+		});
 
 		return json({ reports }, { headers: CORS_HEADERS });
 	} catch (err) {

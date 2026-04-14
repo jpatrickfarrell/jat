@@ -1140,9 +1140,6 @@
 			return;
 		}
 
-		// Only handle input shortcuts when a textarea/input is focused
-		if (target.tagName !== 'TEXTAREA' && target.tagName !== 'INPUT') return;
-
 		// Shift+Enter → let through (natural linebreak in textarea)
 		if (e.key === 'Enter' && e.shiftKey) return;
 
@@ -1176,8 +1173,8 @@
 
 		// ↑ → previous history (only when cursor is on first line)
 		if (e.key === 'ArrowUp') {
-			const textarea = target as HTMLTextAreaElement;
-			const cursorPos = textarea.selectionStart ?? 0;
+			const textarea = target instanceof HTMLTextAreaElement ? target : null;
+			const cursorPos = textarea?.selectionStart ?? 0;
 			const isFirstLine = !inputText.substring(0, cursorPos).includes('\n');
 			if (isFirstLine && sentHistory.length > 0) {
 				e.preventDefault();
@@ -1194,8 +1191,8 @@
 
 		// ↓ → forward through history / restore current buffer
 		if (e.key === 'ArrowDown' && historyIndex !== -1) {
-			const textarea = target as HTMLTextAreaElement;
-			const cursorPos = textarea.selectionStart ?? 0;
+			const textarea = target instanceof HTMLTextAreaElement ? target : null;
+			const cursorPos = textarea?.selectionStart ?? inputText.length;
 			const isLastLine = !inputText.substring(cursorPos).includes('\n');
 			if (isLastLine) {
 				e.preventDefault();

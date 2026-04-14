@@ -16,6 +16,7 @@
 	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
 	import FxText from '$lib/components/FxText.svelte';
 	import MobileSessionFullscreen from '$lib/components/work/MobileSessionFullscreen.svelte';
+	import EventStack from '$lib/components/work/EventStack.svelte';
 	import { getSwipeConfig, getSwipeActionDef, initSwipeActions } from '$lib/config/swipeActions';
 	import { isAutoKillEnabled, setPendingAutoKill } from '$lib/stores/autoKillConfig';
 	import { autoKillCountdowns, cancelAutoKill } from '$lib/stores/sessionEvents';
@@ -244,6 +245,46 @@
 
 	// Optimistic state overrides - for instant UI feedback before WS catches up
 	let optimisticStates = $state<Map<string, string>>(new Map());
+
+	// Completion signal events per agent (for completed state card body)
+	interface CompletionEvent { type: string; state?: string; data?: any; }
+	type CompletionEntry = { state: 'loading' | 'loaded' | 'empty'; events: CompletionEvent[] };
+	let completionDataMap = $state<Map<string, CompletionEntry>>(new Map());
+
+	// Auto-fetch completion data for any completed session
+	$effect(() => {
+		for (const session of sessions) {
+			if (session.type !== 'agent') continue;
+			const agentName = getAgentName(session.name);
+			const task = agentTasks.get(agentName);
+			const rawState = optimisticStates.get(session.name) || agentSessionInfo.get(agentName)?.activityState || 'idle';
+			const effectiveState = task?.status === 'closed' ? 'completed' : rawState;
+			if (effectiveState === 'completed' && !completionDataMap.has(agentName)) {
+				fetchCompletionForAgent(agentName);
+			}
+		}
+	});
+
+	async function fetchCompletionForAgent(agentName: string) {
+		if (!agentName || completionDataMap.has(agentName)) return;
+		// Mark loading
+		completionDataMap = new Map(completionDataMap).set(agentName, { state: 'loading', events: [] });
+		try {
+			const res = await fetch(`/api/sessions/${encodeURIComponent(agentName)}/timeline?limit=50&type=complete,review`);
+			if (!res.ok) {
+				completionDataMap = new Map(completionDataMap).set(agentName, { state: 'empty', events: [] });
+				return;
+			}
+			const data = await res.json();
+			const events: CompletionEvent[] = data.events || [];
+			completionDataMap = new Map(completionDataMap).set(agentName, {
+				state: events.length > 0 ? 'loaded' : 'empty',
+				events
+			});
+		} catch {
+			completionDataMap = new Map(completionDataMap).set(agentName, { state: 'empty', events: [] });
+		}
+	}
 
 	// Inline epic picker state (for mobile card tray)
 	let epicPickerSession = $state<string | null>(null);
@@ -1541,6 +1582,44 @@
 						</div>
 						{/if}
 						<div class="mobile-card-body">
+							{#if effectiveState === 'completed'}
+								{@const completionEntry = completionDataMap.get(sessionAgentName)}
+								{#if completionEntry?.state === 'loaded' && completionEntry.events.length > 0}
+									<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+								<div class="completion-card-inline" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+										<EventStack
+											sessionName={sessionAgentName}
+											initialEvents={completionEntry.events}
+											layoutMode="inline"
+											autoExpand={true}
+											pollInterval={0}
+										/>
+									</div>
+								{:else if completionEntry?.state === 'loading'}
+									<div class="mobile-title-row">
+										<span class="mobile-title" title={sessionTask.title}>
+											<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
+										</span>
+									</div>
+									<div class="completion-loading-inline">
+										<div class="animate-spin-fast w-3.5 h-3.5 border-2 border-success border-t-transparent rounded-full"></div>
+										<span>Loading completion…</span>
+									</div>
+								{:else}
+									<!-- empty/fallback: show title + description -->
+									<div class="mobile-title-row">
+										<span class="mobile-title" title={sessionTask.title}>
+											<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
+										</span>
+										{#if elapsed}
+											<span class="mobile-title-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
+										{/if}
+									</div>
+									{#if sessionTask.description}
+										<span class="mobile-description" title={sessionTask.description}>{sessionTask.description}</span>
+									{/if}
+								{/if}
+							{:else}
 							<div class="mobile-title-row">
 								<span class="mobile-title" title={sessionTask.title}>
 									<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
@@ -1559,6 +1638,7 @@
 									{/each}
 								</div>
 							{/if}
+							{/if}<!-- end {:else} non-completed -->
 							<div class="mobile-card-row2">
 								<span class="mobile-agent-name" title={sessionAgentName}>{sessionAgentName}</span>
 								<span class="mobile-separator">·</span>
@@ -2290,6 +2370,20 @@
 		font-size: 0.85rem;
 		color: oklch(0.50 0.02 250);
 		margin: 0;
+	}
+
+	.completion-card-inline {
+		margin-top: 0.25rem;
+		background: transparent;
+	}
+
+	.completion-loading-inline {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-top: 0.35rem;
+		font-size: 0.7rem;
+		color: oklch(0.55 0.05 250);
 	}
 
 	.output-preview {

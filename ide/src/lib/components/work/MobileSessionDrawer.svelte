@@ -311,14 +311,15 @@
 	let completionFetchedFor = $state<string | null>(null);
 
 	async function fetchCompletionEvents() {
-		if (!agentName || !task?.id) return;
-		const key = `${agentName}:${task.id}`;
-		if (completionFetchedFor === key) return;
+		if (!agentName) return;
+		if (completionFetchedFor === agentName) return;
 		completionLoadState = 'loading';
-		completionFetchedFor = key;
+		completionFetchedFor = agentName;
 		try {
+			// No taskId filter — get the latest complete/review event for this session
+			// (task.id in the prop may not match the signal's task_id)
 			const res = await fetch(
-				`/api/sessions/${encodeURIComponent(agentName)}/timeline?limit=50&type=complete,review&taskId=${encodeURIComponent(task.id)}`
+				`/api/sessions/${encodeURIComponent(agentName)}/timeline?limit=50&type=complete,review`
 			);
 			if (!res.ok) { completionLoadState = 'empty'; return; }
 			const data = await res.json();
@@ -330,7 +331,7 @@
 
 	// Fetch completion events when state becomes completed
 	$effect(() => {
-		if (effectiveState === 'completed' && agentName && task?.id) {
+		if (effectiveState === 'completed' && agentName) {
 			fetchCompletionEvents();
 		}
 	});
@@ -1374,13 +1375,12 @@
 							bind:value={inputText}
 							bind:references={promptRefs}
 							project={project || ''}
-							placeholder="Type and press Enter (Shift+Enter for newline)"
+							placeholder="Type a message… (Ctrl+Enter to send)"
 							rows={1}
 							compact={true}
-							onkeydown={(e) => {
-								if (e.key === 'Enter' && !e.shiftKey && (inputText.trim() || pendingAttachments.some(a => !a.uploading))) {
-									e.preventDefault();
-									sendWithAttachments();
+							onSend={() => {
+								if (inputText.trim() || pendingAttachments.some(a => !a.uploading)) {
+									sendWithAttachments().then(() => dismissDrawer());
 								}
 							}}
 						/>
@@ -1419,7 +1419,7 @@
 						class="flex items-center justify-center w-9 h-9 rounded-lg border cursor-pointer flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-default {hasSendable && !showPreview ? 'bg-info border-info text-info-content active:bg-info/80' : 'bg-base-200 border-base-300 text-base-content/40'}"
 						aria-label="Send message"
 						disabled={!hasSendable || showPreview}
-						use:directClick={sendWithAttachments}
+						use:directClick={() => sendWithAttachments().then(() => dismissDrawer())}
 					>
 						<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="18" height="18">
 							<path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />

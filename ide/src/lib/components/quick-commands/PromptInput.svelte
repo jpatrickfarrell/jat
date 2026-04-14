@@ -50,6 +50,7 @@
 		onfocus,
 		onblur,
 		onkeydown: externalKeydown,
+		onSend,
 		formulaContext = {},
 	}: {
 		value: string;
@@ -63,6 +64,7 @@
 		onfocus?: (e: FocusEvent) => void;
 		onblur?: (e: FocusEvent) => void;
 		onkeydown?: (e: KeyboardEvent) => void;
+		onSend?: () => void;
 		formulaContext?: Record<string, any>;
 	} = $props();
 
@@ -249,38 +251,6 @@
 		syncReferencedFiles();
 	}
 
-	// Capture-phase listener: intercepts arrow keys BEFORE contenteditable's native caret
-	// movement. Without this, up/down/left/right fire keydown but the browser has already
-	// applied cursor movement visually on some engines.
-	function captureAutocompleteKeys(node: HTMLElement) {
-		const handler = (e: KeyboardEvent) => {
-			if (!showFileAutocomplete) return;
-			const totalItems = getAutocompleteItemCount();
-			if (totalItems === 0) return;
-			if (e.key === 'ArrowDown') {
-				e.preventDefault();
-				e.stopPropagation();
-				fileAutocompleteIndex = (fileAutocompleteIndex + 1) % totalItems;
-			} else if (e.key === 'ArrowUp') {
-				e.preventDefault();
-				e.stopPropagation();
-				fileAutocompleteIndex = (fileAutocompleteIndex - 1 + totalItems) % totalItems;
-			} else if (e.key === 'Tab' || e.key === 'Enter') {
-				e.preventDefault();
-				e.stopPropagation();
-				selectAutocompleteItem(fileAutocompleteIndex);
-			} else if (e.key === 'Escape') {
-				e.preventDefault();
-				e.stopPropagation();
-				showFileAutocomplete = false;
-			}
-		};
-		node.addEventListener('keydown', handler, { capture: true });
-		return {
-			destroy() { node.removeEventListener('keydown', handler, { capture: true } as any); }
-		};
-	}
-
 	function handleTextareaKeydown(e: KeyboardEvent) {
 		// Auto-create chip for @fx: when Tab/Enter pressed with balanced expression
 		if (!showFileAutocomplete && (e.key === 'Tab' || e.key === 'Enter')) {
@@ -370,6 +340,13 @@
 				showFileAutocomplete = false;
 				return;
 			}
+		}
+
+		// Ctrl+Enter or Cmd+Enter → submit
+		if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && onSend) {
+			e.preventDefault();
+			onSend();
+			return;
 		}
 
 		// Forward to external handler
@@ -892,7 +869,6 @@
 		"
 		oninput={handleTextareaInput}
 		onkeydown={handleTextareaKeydown}
-		use:captureAutocompleteKeys
 		onpaste={handlePaste}
 		onfocus={onfocus}
 		onblur={handleBlur}

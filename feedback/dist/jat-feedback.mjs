@@ -5504,12 +5504,12 @@ function serializeNodeWithId(d, p) {
       stylesheetLoadTimeout: Ee,
       keepIframeSrcFn: Ie
     }, B = 0, Q = Array.from(d.childNodes); B < Q.length; B++) {
-      var de = Q[B], re = serializeNodeWithId(de, _e);
+      var ue = Q[B], re = serializeNodeWithId(ue, _e);
       re && Z.childNodes.push(re);
     }
     if (isElement(d) && d.shadowRoot)
       for (var ve = 0, U = Array.from(d.shadowRoot.childNodes); ve < U.length; ve++) {
-        var de = U[ve], re = serializeNodeWithId(de, _e);
+        var ue = U[ve], re = serializeNodeWithId(ue, _e);
         re && (isNativeShadowDom(d.shadowRoot) && (re.isShadow = !0), Z.childNodes.push(re));
       }
   }
@@ -7831,8 +7831,8 @@ function record$1(d = {}) {
     return R && (B = R(B)), B;
   };
   wrappedEmit = (B, Q) => {
-    var de;
-    if (!((de = mutationBuffers[0]) === null || de === void 0) && de.isFrozen() && B.type !== EventType.FullSnapshot && !(B.type === EventType.IncrementalSnapshot && B.data.source === IncrementalSource.Mutation) && mutationBuffers.forEach((re) => re.unfreeze()), se)
+    var ue;
+    if (!((ue = mutationBuffers[0]) === null || ue === void 0) && ue.isFrozen() && B.type !== EventType.FullSnapshot && !(B.type === EventType.IncrementalSnapshot && B.data.source === IncrementalSource.Mutation) && mutationBuffers.forEach((re) => re.unfreeze()), se)
       p == null || p(xe(B), Q);
     else if (Ee) {
       const re = {
@@ -7917,7 +7917,7 @@ function record$1(d = {}) {
     mirror
   });
   takeFullSnapshot = (B = !1) => {
-    var Q, de, re, ve, U, X;
+    var Q, ue, re, ve, U, X;
     wrappedEmit(wrapEvent({
       type: EventType.Meta,
       data: {
@@ -7957,7 +7957,7 @@ function record$1(d = {}) {
       data: {
         node: fe,
         initialOffset: {
-          left: window.pageXOffset !== void 0 ? window.pageXOffset : (document == null ? void 0 : document.documentElement.scrollLeft) || ((de = (Q = document == null ? void 0 : document.body) === null || Q === void 0 ? void 0 : Q.parentElement) === null || de === void 0 ? void 0 : de.scrollLeft) || ((re = document == null ? void 0 : document.body) === null || re === void 0 ? void 0 : re.scrollLeft) || 0,
+          left: window.pageXOffset !== void 0 ? window.pageXOffset : (document == null ? void 0 : document.documentElement.scrollLeft) || ((ue = (Q = document == null ? void 0 : document.body) === null || Q === void 0 ? void 0 : Q.parentElement) === null || ue === void 0 ? void 0 : ue.scrollLeft) || ((re = document == null ? void 0 : document.body) === null || re === void 0 ? void 0 : re.scrollLeft) || 0,
           top: window.pageYOffset !== void 0 ? window.pageYOffset : (document == null ? void 0 : document.documentElement.scrollTop) || ((U = (ve = document == null ? void 0 : document.body) === null || ve === void 0 ? void 0 : ve.parentElement) === null || U === void 0 ? void 0 : U.scrollTop) || ((X = document == null ? void 0 : document.body) === null || X === void 0 ? void 0 : X.scrollTop) || 0
         }
       }
@@ -8058,14 +8058,14 @@ function record$1(d = {}) {
     oe.addLoadListener((re) => {
       B.push(Q(re.contentDocument));
     });
-    const de = () => {
+    const ue = () => {
       takeFullSnapshot(), B.push(Q(document)), recording = !0;
     };
-    return document.readyState === "interactive" || document.readyState === "complete" ? de() : B.push(on("load", () => {
+    return document.readyState === "interactive" || document.readyState === "complete" ? ue() : B.push(on("load", () => {
       wrappedEmit(wrapEvent({
         type: EventType.Load,
         data: {}
-      })), de();
+      })), ue();
     }, window)), () => {
       B.forEach((re) => re()), recording = !1;
     };
@@ -10845,9 +10845,9 @@ function AnnotationEditor(d, p) {
       set(b, get(L), !0);
     }), append(H, Y);
   }), reset(Q);
-  var de = sibling(Q, 4), re = child(de), ve = sibling(re, 2);
-  reset(de);
-  var U = sibling(de, 4), X = child(U), fe = sibling(X, 2);
+  var ue = sibling(Q, 4), re = child(ue), ve = sibling(re, 2);
+  reset(ue);
+  var U = sibling(ue, 4), X = child(U), fe = sibling(X, 2);
   reset(U), reset(_e);
   var le = sibling(_e, 2), we = child(le);
   {
@@ -11209,7 +11209,7 @@ function TimelineViewer(d, p) {
         });
       }
       reset(G);
-      var Q = sibling(G, 2), de = child(Q, !0);
+      var Q = sibling(G, 2), ue = child(Q, !0);
       reset(Q);
       var re = sibling(Q, 2);
       set_attribute(re, "aria-valuemin", 0);
@@ -11276,7 +11276,7 @@ function TimelineViewer(d, p) {
       }
       template_effect(
         (Re, H) => {
-          set_attribute(G, "aria-label", get(S) ? "Pause" : "Play"), set_text(de, Re), set_attribute(re, "aria-valuemax", get(I)), set_attribute(re, "aria-valuenow", get(k)), set_style(ve, `width: ${get(I) ? get(k) / get(I) * 100 : 0}%`), set_style(U, `left: ${get(I) ? get(k) / get(I) * 100 : 0}%`), set_text(fe, H);
+          set_attribute(G, "aria-label", get(S) ? "Pause" : "Play"), set_text(ue, Re), set_attribute(re, "aria-valuemax", get(I)), set_attribute(re, "aria-valuenow", get(k)), set_style(ve, `width: ${get(I) ? get(k) / get(I) * 100 : 0}%`), set_style(U, `left: ${get(I) ? get(k) / get(I) * 100 : 0}%`), set_text(fe, H);
         },
         [
           () => se(get(k)),
@@ -11491,7 +11491,7 @@ function RequestList(d, p) {
     set onreload(L) {
       b(L), flushSync();
     }
-  }, Q = root$4(), de = child(Q);
+  }, Q = root$4(), ue = child(Q);
   {
     var re = (L) => {
       var Y = root_1$3(), ee = child(Y);
@@ -11509,11 +11509,11 @@ function RequestList(d, p) {
         pe = set_class(ee, 1, "source-pill svelte-1fnmin5", null, pe, { active: get($) === "all" }), set_text(ce, g().length), De = set_class(be, 1, "source-pill svelte-1fnmin5", null, De, { active: get($) === "feedback" }), set_text(ze, get(V)), K = set_class(Be, 1, "source-pill svelte-1fnmin5", null, K, { active: get($) === "jat" }), set_text(Qe, get(q));
       }), delegated("click", ee, () => set($, "all")), delegated("click", be, () => set($, "feedback")), delegated("click", Be, () => set($, "jat")), append(L, Y);
     };
-    if_block(de, (L) => {
+    if_block(ue, (L) => {
       get(he) && L(re);
     });
   }
-  var ve = sibling(de, 2), U = child(ve);
+  var ve = sibling(ue, 2), U = child(ve);
   let X;
   var fe = sibling(child(U));
   {
@@ -11645,17 +11645,17 @@ function RequestList(d, p) {
                         {
                           var Zt = (mt) => {
                             var Et = root_19$2(), Qt = first_child(Et);
-                            each(Qt, 21, () => get(Xe).screenshots, index, (ye, ue, ke) => {
+                            each(Qt, 21, () => get(Xe).screenshots, index, (ye, de, ke) => {
                               var Pe = comment(), Ke = first_child(Pe);
                               {
                                 var at = (lt) => {
                                   var _t = root_21$2();
                                   set_attribute(_t, "aria-label", `Screenshot ${ke + 1}`);
                                   var It = child(_t);
-                                  set_attribute(It, "alt", `Screenshot ${ke + 1}`), reset(_t), template_effect(() => set_attribute(It, "src", `${h() ?? ""}${get(ue).url ?? ""}`)), delegated("click", _t, () => set(y, get(y) === get(ue).url ? null : get(ue).url, !0)), append(lt, _t);
+                                  set_attribute(It, "alt", `Screenshot ${ke + 1}`), reset(_t), template_effect(() => set_attribute(It, "src", `${h() ?? ""}${get(de).url ?? ""}`)), delegated("click", _t, () => set(y, get(y) === get(de).url ? null : get(de).url, !0)), append(lt, _t);
                                 };
                                 if_block(Ke, (lt) => {
-                                  get(ue).url && lt(at);
+                                  get(de).url && lt(at);
                                 });
                               }
                               append(ye, Pe);
@@ -11663,7 +11663,7 @@ function RequestList(d, p) {
                             var F = sibling(Qt, 2);
                             {
                               var J = (ye) => {
-                                const ue = /* @__PURE__ */ user_derived(() => get(Xe).screenshots.find((at) => at.url === get(y)));
+                                const de = /* @__PURE__ */ user_derived(() => get(Xe).screenshots.find((at) => at.url === get(y)));
                                 var ke = comment(), Pe = first_child(ke);
                                 {
                                   var Ke = (at) => {
@@ -11671,7 +11671,7 @@ function RequestList(d, p) {
                                     reset(lt), template_effect(() => set_attribute(_t, "src", `${h() ?? ""}${get(y) ?? ""}`)), delegated("click", It, () => set(y, null)), append(at, lt);
                                   };
                                   if_block(Pe, (at) => {
-                                    get(ue) && at(Ke);
+                                    get(de) && at(Ke);
                                   });
                                 }
                                 append(ye, ke);
@@ -11693,8 +11693,8 @@ function RequestList(d, p) {
                             each(Et, 21, () => get(Xe).elements, index, (Qt, F) => {
                               var J = root_25$1(), ye = child(J);
                               reset(J), template_effect(
-                                (ue, ke) => {
-                                  set_attribute(J, "title", get(F).selector), set_text(ye, `<${ue ?? ""}${get(F).id ? `#${get(F).id}` : ""}${ke ?? ""}>`);
+                                (de, ke) => {
+                                  set_attribute(J, "title", get(F).selector), set_text(ye, `<${de ?? ""}${get(F).id ? `#${get(F).id}` : ""}${ke ?? ""}>`);
                                 },
                                 [
                                   () => get(F).tagName.toLowerCase(),
@@ -12315,10 +12315,10 @@ function AgentPanel(d, p) {
       get(C) && U(Q);
     });
   }
-  var de = sibling(B, 2), re = child(de);
+  var ue = sibling(B, 2), re = child(ue);
   remove_input_defaults(re);
   var ve = sibling(re, 2);
-  return reset(de), reset(_e), reset(P), template_effect(
+  return reset(ue), reset(_e), reset(P), template_effect(
     (U) => {
       q = set_class(V, 1, "status-indicator svelte-bez0nz", null, q, {
         idle: g() === "idle",
@@ -12477,13 +12477,13 @@ function NotesPanel(d, p) {
       reset(Z);
       var oe = sibling(Z, 2);
       {
-        var _e = (de) => {
+        var _e = (ue) => {
           var re = root_2$2();
-          append(de, re);
-        }, B = (de) => {
+          append(ue, re);
+        }, B = (ue) => {
           var re = root_3$1(), ve = child(re), U = sibling(ve);
-          reset(re), template_effect(() => set_text(ve, `${get(y) ?? ""} `)), delegated("click", U, P), append(de, re);
-        }, Q = (de) => {
+          reset(re), template_effect(() => set_text(ve, `${get(y) ?? ""} `)), delegated("click", U, P), append(ue, re);
+        }, Q = (ue) => {
           var re = root_4$1(), ve = first_child(re);
           {
             var U = (H) => {
@@ -12563,10 +12563,10 @@ function NotesPanel(d, p) {
               get(_).length === 0 && !get(b) && H(Re);
             });
           }
-          append(de, re);
+          append(ue, re);
         };
-        if_block(oe, (de) => {
-          get(b) ? de(_e) : get(y) ? de(B, 1) : de(Q, !1);
+        if_block(oe, (ue) => {
+          get(b) ? ue(_e) : get(y) ? ue(B, 1) : ue(Q, !1);
         });
       }
       reset(D), template_effect(() => G.disabled = !!get($)), delegated("click", G, () => V(null)), transition(3, D, () => slide, () => ({ duration: 200 })), append(z, D);
@@ -12575,7 +12575,7 @@ function NotesPanel(d, p) {
       reset(oe);
       var B = sibling(oe, 2);
       let Q;
-      var de = child(B, !0);
+      var ue = child(B, !0);
       reset(B), reset(Z);
       var re = sibling(Z, 2), ve = child(re), U = sibling(child(ve), 2);
       remove_input_defaults(U), reset(ve);
@@ -12630,7 +12630,7 @@ function NotesPanel(d, p) {
       var pe = sibling(Y);
       reset(L), reset(Ce), reset(D), template_effect(
         (te) => {
-          set_text(_e, get(M) ? get(M) : "Site-wide"), Q = set_class(B, 1, "preview-toggle svelte-zp32f3", null, Q, { active: get(R) }), set_text(de, get(R) ? "Edit" : "Preview"), U.disabled = get(w), H.disabled = get(w), L.disabled = te, set_text(pe, ` ${get(k) ? "Create" : "Save"}`);
+          set_text(_e, get(M) ? get(M) : "Site-wide"), Q = set_class(B, 1, "preview-toggle svelte-zp32f3", null, Q, { active: get(R) }), set_text(ue, get(R) ? "Edit" : "Preview"), U.disabled = get(w), H.disabled = get(w), L.disabled = te, set_text(pe, ` ${get(k) ? "Create" : "Save"}`);
         },
         [() => get(w) || !get(I).trim()]
       ), delegated("click", G, q), delegated("click", B, () => set(R, !get(R))), bind_value(U, () => get(I), (te) => set(I, te)), delegated("click", H, q), delegated("click", L, he), transition(3, D, () => slide, () => ({ duration: 200 })), append(z, D);
@@ -16690,8 +16690,8 @@ const domTree = /* @__PURE__ */ __name$1((d = {
     try {
       let Q = document.getElementById($);
       Q || (Q = document.createElement("div"), Q.id = $, Q.style.position = "fixed", Q.style.pointerEvents = "none", Q.style.top = "0", Q.style.left = "0", Q.style.width = "100%", Q.style.height = "100%", Q.style.zIndex = "2147483640", Q.style.backgroundColor = "transparent", document.body.appendChild(Q));
-      const de = T.getClientRects();
-      if (!de || de.length === 0) return z;
+      const ue = T.getClientRects();
+      if (!ue || ue.length === 0) return z;
       const re = [
         "#FF0000",
         "#00FF00",
@@ -16715,14 +16715,14 @@ const domTree = /* @__PURE__ */ __name$1((d = {
         fe.x = ee.left, fe.y = ee.top;
       }
       const le = document.createDocumentFragment();
-      for (const ee of de) {
+      for (const ee of ue) {
         if (ee.width === 0 || ee.height === 0) continue;
         const pe = document.createElement("div");
         pe.style.position = "fixed", pe.style.border = `2px solid ${U}`, pe.style.backgroundColor = X, pe.style.pointerEvents = "none", pe.style.boxSizing = "border-box";
         const te = ee.top + fe.y, ce = ee.left + fe.x;
         pe.style.top = `${te}px`, pe.style.left = `${ce}px`, pe.style.width = `${ee.width}px`, pe.style.height = `${ee.height}px`, le.appendChild(pe), Z.push({ element: pe, initialRect: ee });
       }
-      const we = de[0];
+      const we = ue[0];
       G = document.createElement("div"), G.className = "playwright-highlight-label", G.style.position = "fixed", G.style.background = U, G.style.color = "white", G.style.padding = "1px 4px", G.style.borderRadius = "4px", G.style.fontSize = `${Math.min(12, Math.max(8, we.height / 2))}px`, G.textContent = z.toString(), oe = G.offsetWidth > 0 ? G.offsetWidth : oe, _e = G.offsetHeight > 0 ? G.offsetHeight : _e;
       const Le = we.top + fe.y, Ce = we.left + fe.x;
       let He = Le + 2, Re = Ce + we.width - oe - 2;
@@ -16777,8 +16777,8 @@ const domTree = /* @__PURE__ */ __name$1((d = {
     const Z = z.overflowX, G = z.overflowY, oe = Z === "auto" || Z === "scroll", _e = G === "auto" || G === "scroll";
     if (!oe && !_e)
       return null;
-    const B = T.scrollWidth - T.clientWidth, Q = T.scrollHeight - T.clientHeight, de = 4;
-    if (B < de && Q < de || !_e && B < de || !oe && Q < de)
+    const B = T.scrollWidth - T.clientWidth, Q = T.scrollHeight - T.clientHeight, ue = 4;
+    if (B < ue && Q < ue || !_e && B < ue || !oe && Q < ue)
       return null;
     const re = T.scrollTop, ve = T.scrollLeft, U = T.scrollWidth - T.clientWidth - T.scrollLeft, X = T.scrollHeight - T.clientHeight - T.scrollTop, fe = {
       top: re,
@@ -16999,7 +16999,7 @@ const domTree = /* @__PURE__ */ __name$1((d = {
           return !1;
       return !(T.disabled || T.readOnly || T.inert);
     }
-    const de = T.getAttribute("role"), re = T.getAttribute("aria-role");
+    const ue = T.getAttribute("role"), re = T.getAttribute("aria-role");
     if (T.getAttribute("contenteditable") === "true" || T.isContentEditable || T.classList && (T.classList.contains("button") || T.classList.contains("dropdown-toggle") || T.getAttribute("data-index") || T.getAttribute("data-toggle") === "dropdown" || T.getAttribute("aria-haspopup") === "true"))
       return !0;
     const ve = /* @__PURE__ */ new Set([
@@ -17041,7 +17041,7 @@ const domTree = /* @__PURE__ */ __name$1((d = {
       "scrollbar"
       // Scrollable control
     ]);
-    if (B.has(z) || de && ve.has(de) || re && ve.has(re)) return !0;
+    if (B.has(z) || ue && ve.has(ue) || re && ve.has(re)) return !0;
     try {
       if (typeof getEventListeners == "function") {
         const Le = getEventListeners(T), Ce = ["click", "mousedown", "mouseup", "dblclick"];
@@ -17099,9 +17099,9 @@ const domTree = /* @__PURE__ */ __name$1((d = {
       return !1;
     const oe = T.getRootNode();
     if (oe instanceof ShadowRoot) {
-      const Q = G.left + G.width / 2, de = G.top + G.height / 2;
+      const Q = G.left + G.width / 2, ue = G.top + G.height / 2;
       try {
-        const re = oe.elementFromPoint(Q, de);
+        const re = oe.elementFromPoint(Q, ue);
         if (!re) return !1;
         let ve = re;
         for (; ve && ve !== oe; ) {
@@ -17123,9 +17123,9 @@ const domTree = /* @__PURE__ */ __name$1((d = {
       // { x: rect.left + margin, y: rect.bottom - margin },  // bottom left
       { x: G.right - _e, y: G.bottom - _e }
       // bottom right
-    ].some(({ x: Q, y: de }) => {
+    ].some(({ x: Q, y: ue }) => {
       try {
-        const re = document.elementFromPoint(Q, de);
+        const re = document.elementFromPoint(Q, ue);
         if (!re) return !1;
         let ve = re;
         for (; ve && ve !== document.documentElement; ) {
@@ -17227,9 +17227,9 @@ const domTree = /* @__PURE__ */ __name$1((d = {
           "focus",
           "blur"
         ];
-        for (const de of Q)
+        for (const ue of Q)
           for (const re of B)
-            if (re.type === de)
+            if (re.type === ue)
               return !0;
       }
       if ([
@@ -17256,7 +17256,7 @@ const domTree = /* @__PURE__ */ __name$1((d = {
   }
   __name$1(Se, "handleHighlighting");
   function ge(T, z = null, D = !1) {
-    var _e, B, Q, de, re, ve, U;
+    var _e, B, Q, ue, re, ve, U;
     if (!T || T.id === $ || T.nodeType !== Node.ELEMENT_NODE && T.nodeType !== Node.TEXT_NODE || !T || T.id === $ || ((_e = T.dataset) == null ? void 0 : _e.browserUseIgnore) === "true" || ((B = T.dataset) == null ? void 0 : B.pageAgentIgnore) === "true" || T.getAttribute && T.getAttribute("aria-hidden") === "true")
       return null;
     if (T === document.body) {
@@ -17306,7 +17306,7 @@ const domTree = /* @__PURE__ */ __name$1((d = {
       children: []
     };
     if (ie(T) || T.tagName.toLowerCase() === "iframe" || T.tagName.toLowerCase() === "body") {
-      const X = ((de = T.getAttributeNames) == null ? void 0 : de.call(T)) || [];
+      const X = ((ue = T.getAttributeNames) == null ? void 0 : ue.call(T)) || [];
       for (const fe of X) {
         const le = T.getAttribute(fe);
         Z.attributes[fe] = le;
@@ -18317,7 +18317,7 @@ const $$css$1 = {
 };
 function FeedbackPanel(d, p) {
   push(p, !0), append_styles(d, $$css$1);
-  const h = "3.3.3";
+  const h = "3.3.5";
   let g = prop(p, "endpoint", 7), m = prop(p, "project", 7), _ = prop(p, "isOpen", 7, !1), b = prop(p, "userId", 7, ""), y = prop(p, "userEmail", 7, ""), w = prop(p, "userName", 7, ""), x = prop(p, "userRole", 7, ""), E = prop(p, "orgId", 7, ""), S = prop(p, "orgName", 7, ""), k = prop(p, "onclose", 7), I = prop(p, "ongrip", 7), A = prop(p, "agentProxy", 7, ""), M = prop(p, "agentModel", 7, ""), R = prop(p, "agentContext", 7, ""), C = prop(p, "registeredTools", 23, () => []), $ = prop(p, "supabaseUrl", 7, ""), N = prop(p, "supabaseAnonKey", 7, ""), O = /* @__PURE__ */ state("new"), P = /* @__PURE__ */ state(!1), W = /* @__PURE__ */ state(!1), V = /* @__PURE__ */ state(!1), q = /* @__PURE__ */ state(proxy([]));
   function he() {
     if (get(V)) {
@@ -18345,19 +18345,19 @@ function FeedbackPanel(d, p) {
   }
   function G(F) {
     const ye = $().replace(/\/$/, "").replace(/^https/, "wss").replace(/^http/, "ws") + `/realtime/v1/websocket?apikey=${N()}&vsn=1.0.0`;
-    let ue, ke = null, Pe = 1;
+    let de, ke = null, Pe = 1;
     function Ke() {
       return String(Pe++);
     }
     try {
-      ue = new WebSocket(ye);
+      de = new WebSocket(ye);
     } catch {
       oe(F);
       return;
     }
-    xe = ue, ue.onopen = () => {
+    xe = de, de.onopen = () => {
       const at = Ke();
-      ue.send(JSON.stringify({
+      de.send(JSON.stringify({
         topic: "realtime:*",
         event: "phx_join",
         payload: {
@@ -18379,7 +18379,7 @@ function FeedbackPanel(d, p) {
         join_ref: at
       })), ke = setInterval(
         () => {
-          ue.readyState === WebSocket.OPEN && ue.send(JSON.stringify({
+          de.readyState === WebSocket.OPEN && de.send(JSON.stringify({
             topic: "phoenix",
             event: "heartbeat",
             payload: {},
@@ -18388,7 +18388,7 @@ function FeedbackPanel(d, p) {
         },
         3e4
       );
-    }, ue.onmessage = (at) => {
+    }, de.onmessage = (at) => {
       var _t;
       let lt;
       try {
@@ -18400,9 +18400,9 @@ function FeedbackPanel(d, p) {
         const { type: It, record: je } = lt.payload.data;
         It === "UPDATE" && je && (je.status === "open" ? (ke && clearInterval(ke), D(je.title || "", je.description || "")) : je.status === "failed" && (ke && clearInterval(ke), Z("Transcription failed. Try again.")));
       }
-    }, ue.onerror = () => {
+    }, de.onerror = () => {
       ke && clearInterval(ke), xe = null, oe(F);
-    }, ue.onclose = () => {
+    }, de.onclose = () => {
       ke && clearInterval(ke);
     };
   }
@@ -18410,7 +18410,7 @@ function FeedbackPanel(d, p) {
     T || (T = setInterval(
       async () => {
         try {
-          let J = null, ye = "", ue = "";
+          let J = null, ye = "", de = "";
           if ($() && N()) {
             const ke = `${$().replace(/\/$/, "")}/rest/v1/project_tasks?id=eq.${F}&select=id,status,title,description`, Pe = await fetch(ke, {
               headers: {
@@ -18420,16 +18420,16 @@ function FeedbackPanel(d, p) {
             });
             if (Pe.ok) {
               const Ke = await Pe.json();
-              Array.isArray(Ke) && Ke.length > 0 && (J = Ke[0].status, ye = Ke[0].title || "", ue = Ke[0].description || "");
+              Array.isArray(Ke) && Ke.length > 0 && (J = Ke[0].status, ye = Ke[0].title || "", de = Ke[0].description || "");
             }
           } else {
             const ke = await fetch(`${g().replace(/\/$/, "")}/api/tasks/voice?id=${encodeURIComponent(F)}`);
             if (ke.ok) {
               const Pe = await ke.json();
-              J = Pe.status, ye = Pe.title || "", ue = Pe.description || "";
+              J = Pe.status, ye = Pe.title || "", de = Pe.description || "";
             }
           }
-          J === "open" ? (clearInterval(T), T = null, D(ye, ue)) : J === "failed" && (clearInterval(T), T = null, Z("Transcription failed. Try again."));
+          J === "open" ? (clearInterval(T), T = null, D(ye, de)) : J === "failed" && (clearInterval(T), T = null, Z("Transcription failed. Try again."));
         } catch {
         }
       },
@@ -18447,12 +18447,12 @@ function FeedbackPanel(d, p) {
   async function B() {
     var F;
     try {
-      const J = await navigator.mediaDevices.getUserMedia({ audio: !0 }), ye = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/ogg", ue = new MediaRecorder(J, { mimeType: ye });
-      Ee = [], ue.ondataavailable = (ke) => {
+      const J = await navigator.mediaDevices.getUserMedia({ audio: !0 }), ye = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/ogg", de = new MediaRecorder(J, { mimeType: ye });
+      Ee = [], de.ondataavailable = (ke) => {
         ke.data.size > 0 && Ee.push(ke.data);
-      }, ue.onstop = () => {
-        J.getTracks().forEach((ke) => ke.stop()), de(new Blob(Ee, { type: ye }), ye);
-      }, ue.start(500), set(se, ue, !0), set(ne, "recording"), set(ie, "");
+      }, de.onstop = () => {
+        J.getTracks().forEach((ke) => ke.stop()), ue(new Blob(Ee, { type: ye }), ye);
+      }, de.start(500), set(se, de, !0), set(ne, "recording"), set(ie, "");
     } catch (J) {
       set(ne, "error"), set(
         ie,
@@ -18464,12 +18464,12 @@ function FeedbackPanel(d, p) {
   function Q() {
     get(se) && get(se).state !== "inactive" && get(se).stop(), set(se, null), set(ne, "uploading"), set(ie, "");
   }
-  async function de(F, J) {
+  async function ue(F, J) {
     set(ne, "uploading");
     try {
-      const ye = J.includes("webm") ? "webm" : J.includes("ogg") ? "ogg" : "audio", ue = new FormData();
-      ue.append("audio", F, `voice-note.${ye}`), m() && ue.append("project", m());
-      const ke = await fetch(`${g().replace(/\/$/, "")}/api/tasks/voice`, { method: "POST", body: ue });
+      const ye = J.includes("webm") ? "webm" : J.includes("ogg") ? "ogg" : "audio", de = new FormData();
+      de.append("audio", F, `voice-note.${ye}`), m() && de.append("project", m()), b() && de.append("user_id", b());
+      const ke = await fetch(`${g().replace(/\/$/, "")}/api/tasks/voice`, { method: "POST", body: de });
       if (ke.ok) {
         const Ke = (await ke.json()).id;
         if (!Ke) throw new Error("No task ID returned from server");
@@ -18614,32 +18614,32 @@ function FeedbackPanel(d, p) {
   async function Ue(F) {
     const J = F.target, ye = J.files;
     if (!(!ye || ye.length === 0)) {
-      for (const ue of ye)
+      for (const de of ye)
         try {
-          const ke = await qe(ue);
-          Jt.includes(ue.type) ? (set(K, [...get(K), ke], !0), bt(`Image added: ${ue.name}`, "success")) : (set(
+          const ke = await qe(de);
+          Jt.includes(de.type) ? (set(K, [...get(K), ke], !0), bt(`Image added: ${de.name}`, "success")) : (set(
             Ze,
             [
               ...get(Ze),
               {
-                name: ue.name,
-                type: ue.type || "application/octet-stream",
+                name: de.name,
+                type: de.type || "application/octet-stream",
                 data: ke,
-                size: ue.size
+                size: de.size
               }
             ],
             !0
-          ), bt(`File attached: ${ue.name}`, "success"));
+          ), bt(`File attached: ${de.name}`, "success"));
         } catch {
-          bt(`Failed to read: ${ue.name}`, "error");
+          bt(`Failed to read: ${de.name}`, "error");
         }
       J.value = "";
     }
   }
   function qe(F) {
     return new Promise((J, ye) => {
-      const ue = new FileReader();
-      ue.onload = () => J(ue.result), ue.onerror = () => ye(ue.error), ue.readAsDataURL(F);
+      const de = new FileReader();
+      de.onload = () => J(de.result), de.onerror = () => ye(de.error), de.readAsDataURL(F);
     });
   }
   function Ct(F) {
@@ -18721,7 +18721,7 @@ function FeedbackPanel(d, p) {
       const ke = crypto.randomUUID(), Pe = await uploadRecording(g(), get(q), ke);
       Pe.ok && Pe.recording_url && (ye = Pe.recording_url);
     }
-    const ue = {
+    const de = {
       title: get(De).trim(),
       description: get(Te).trim(),
       type: get(ze),
@@ -18739,26 +18739,26 @@ function FeedbackPanel(d, p) {
       recording_url: ye || null
     };
     try {
-      const ke = await submitReport(g(), ue);
+      const ke = await submitReport(g(), de);
       if (ke.ok) {
-        if (ue.recording_url) {
+        if (de.recording_url) {
           const Pe = {
-            recording_url: ue.recording_url,
-            console_logs: ue.console_logs,
-            network_requests: ue.network_requests
+            recording_url: de.recording_url,
+            console_logs: de.console_logs,
+            network_requests: de.network_requests
           };
           Le().setReportContext(Pe);
         }
-        set(Ot, ke.id, !0), set(un, !!ue.recording_url), bt(`Report submitted (${ke.id})`, "success"), _r(), setTimeout(
+        set(Ot, ke.id, !0), set(un, !!de.recording_url), bt(`Report submitted (${ke.id})`, "success"), _r(), setTimeout(
           () => {
             be(), set(O, "requests");
           },
           1200
         );
       } else
-        enqueue(g(), ue), bt("Queued for retry (endpoint unreachable)", "error");
+        enqueue(g(), de), bt("Queued for retry (endpoint unreachable)", "error");
     } catch {
-      enqueue(g(), ue), bt("Queued for retry (endpoint unreachable)", "error");
+      enqueue(g(), de), bt("Queued for retry (endpoint unreachable)", "error");
     } finally {
       set(ut, !1);
     }
@@ -18893,8 +18893,8 @@ function FeedbackPanel(d, p) {
     var et = (F) => {
       var J = root_1$1();
       delegated("mousedown", J, function(...ye) {
-        var ue;
-        (ue = I()) == null || ue.apply(this, ye);
+        var de;
+        (de = I()) == null || de.apply(this, ye);
       }), append(F, J);
     };
     if_block(it, (F) => {
@@ -18939,8 +18939,8 @@ function FeedbackPanel(d, p) {
   var bn = sibling(xt, 2);
   {
     var Wn = (F) => {
-      var J = root_4(), ye = child(J), ue = sibling(child(ye), 2);
-      remove_input_defaults(ue), bind_this(ue, (me) => set(Pn, me), () => get(Pn)), reset(ye);
+      var J = root_4(), ye = child(J), de = sibling(child(ye), 2);
+      remove_input_defaults(de), bind_this(de, (me) => set(Pn, me), () => get(Pn)), reset(ye);
       var ke = sibling(ye, 2), Pe = sibling(child(ke), 2);
       remove_textarea_child(Pe), reset(ke);
       var Ke = sibling(ke, 2), at = child(Ke), lt = sibling(child(at), 2);
@@ -19159,10 +19159,10 @@ function FeedbackPanel(d, p) {
       }
       reset(cr), reset(Zr), reset(J), template_effect(
         (me) => {
-          ue.disabled = get(ut), Pe.disabled = get(ut), lt.disabled = get(ut), It.disabled = get(ut), gt.disabled = get(gn), tn.disabled = get(Wt), $t = set_class(nn, 1, "tool-btn svelte-nv4d5v", null, $t, { "recording-active": get(V) }), nn.disabled = get(ut), Gn.disabled = get(ut), set_text(io, `v${h}`), Er.disabled = get(ut), cr.disabled = me, set_attribute(cr, "title", get(V) ? "Stop recording first, or click Submit to auto-stop" : "");
+          de.disabled = get(ut), Pe.disabled = get(ut), lt.disabled = get(ut), It.disabled = get(ut), gt.disabled = get(gn), tn.disabled = get(Wt), $t = set_class(nn, 1, "tool-btn svelte-nv4d5v", null, $t, { "recording-active": get(V) }), nn.disabled = get(ut), Gn.disabled = get(ut), set_text(io, `v${h}`), Er.disabled = get(ut), cr.disabled = me, set_attribute(cr, "title", get(V) ? "Stop recording first, or click Submit to auto-stop" : "");
         },
         [() => get(ut) || !get(De).trim()]
-      ), event("submit", J, mr), bind_value(ue, () => get(De), (me) => set(De, me)), bind_value(Pe, () => get(Te), (me) => set(Te, me)), bind_select_value(lt, () => get(ze), (me) => set(ze, me)), bind_select_value(It, () => get(Be), (me) => set(Be, me)), delegated("click", gt, Bn), delegated("click", tn, or), delegated("click", nn, he), delegated("click", Gn, Fn), delegated("change", Or, Ue), delegated("click", Er, function(...me) {
+      ), event("submit", J, mr), bind_value(de, () => get(De), (me) => set(De, me)), bind_value(Pe, () => get(Te), (me) => set(Te, me)), bind_select_value(lt, () => get(ze), (me) => set(ze, me)), bind_select_value(It, () => get(Be), (me) => set(Be, me)), delegated("click", gt, Bn), delegated("click", tn, or), delegated("click", nn, he), delegated("click", Gn, Fn), delegated("change", Or, Ue), delegated("click", Er, function(...me) {
         var Ne;
         (Ne = k()) == null || Ne.apply(this, me);
       }), transition(3, J, () => slide, () => ({ duration: 200 })), append(F, J);
@@ -19176,14 +19176,14 @@ function FeedbackPanel(d, p) {
     var yt = (F) => {
       var J = root_27(), ye = child(J);
       {
-        var ue = (Pe) => {
+        var de = (Pe) => {
           var Ke = root_28(), at = sibling(child(Ke), 4), lt = sibling(at, 2);
           reset(Ke), template_effect(() => set_attribute(at, "href", `${g() ?? ""}/feedback/replay?id=${get(Ot) ?? ""}`)), delegated("click", lt, () => {
             set(Ot, null), set(un, !1);
           }), append(Pe, Ke);
         };
         if_block(ye, (Pe) => {
-          get(Ot) && get(un) && Pe(ue);
+          get(Ot) && get(un) && Pe(de);
         });
       }
       var ke = sibling(ye, 2);
@@ -19215,7 +19215,7 @@ function FeedbackPanel(d, p) {
     var Pt = (F) => {
       var J = root_29(), ye = child(J);
       {
-        let ue = /* @__PURE__ */ user_derived(() => {
+        let de = /* @__PURE__ */ user_derived(() => {
           var ke;
           return ((ke = get(we)) == null ? void 0 : ke.getMaxSteps()) ?? 20;
         });
@@ -19230,7 +19230,7 @@ function FeedbackPanel(d, p) {
             return get(fe);
           },
           get maxSteps() {
-            return get(ue);
+            return get(de);
           },
           get autoApprove() {
             return get(le);
@@ -19269,7 +19269,7 @@ function FeedbackPanel(d, p) {
   var Bt = sibling(Gt, 2);
   {
     var yn = (F) => {
-      var J = root_31(), ye = child(J), ue = child(ye);
+      var J = root_31(), ye = child(J), de = child(ye);
       {
         var ke = (je) => {
           var ot = root_32(), gt = sibling(first_child(ot), 2), en = child(gt);
@@ -19309,7 +19309,7 @@ function FeedbackPanel(d, p) {
           var wn = sibling(gt, 2);
           template_effect(() => set_text(en, get(ie))), delegated("click", wn, ve), append(je, ot);
         };
-        if_block(ue, (je) => {
+        if_block(de, (je) => {
           get(ne) === "idle" ? je(ke) : get(ne) === "recording" ? je(Pe, 1) : get(ne) === "uploading" ? je(Ke, 2) : get(ne) === "transcribing" ? je(at, 3) : get(ne) === "confirming" ? je(lt, 4) : get(ne) === "submitted" ? je(_t, 5) : get(ne) === "error" && je(It, 6);
         });
       }
@@ -19397,12 +19397,12 @@ function JatFeedback(d, p) {
   const q = 5;
   function he(B, { onDragEnd: Q } = {}) {
     if (!get(V)) return;
-    const de = B.clientX, re = B.clientY, ve = get(V).getBoundingClientRect();
+    const ue = B.clientX, re = B.clientY, ve = get(V).getBoundingClientRect();
     W = { x: B.clientX - ve.left, y: B.clientY - ve.top };
     let U = !1;
     function X(le) {
       if (!get(V)) return;
-      const we = le.clientX - de, Le = le.clientY - re;
+      const we = le.clientX - ue, Le = le.clientY - re;
       if (!U && Math.abs(we) + Math.abs(Le) < q) return;
       U = !0, set(P, !0), le.preventDefault();
       const Ce = le.clientX - W.x, He = le.clientY - W.y;
@@ -19470,8 +19470,8 @@ function JatFeedback(d, p) {
     };
     window.addEventListener("jat-feedback:open", B);
     const Q = p.$$host;
-    return Q.registerTools = (de) => {
-      set(O, [...get(O), ...de], !0);
+    return Q.registerTools = (ue) => {
+      set(O, [...get(O), ...ue], !0);
     }, () => window.removeEventListener("jat-feedback:open", B);
   }), onDestroy(() => {
     stopConsoleCapture(), stopNetworkCapture(), stopRetryLoop(), window.removeEventListener("keydown", T, !0), se && clearInterval(se);
@@ -19577,7 +19577,7 @@ function JatFeedback(d, p) {
   {
     var G = (B) => {
       var Q = root_1();
-      let de;
+      let ue;
       var re = child(Q);
       FeedbackPanel(re, {
         get endpoint() {
@@ -19628,7 +19628,7 @@ function JatFeedback(d, p) {
         onclose: Se,
         ongrip: ne
       }), reset(Q), template_effect(() => {
-        de = set_class(Q, 1, "jat-feedback-panel svelte-qpyrvv", null, de, { dragging: get(P), hidden: !get($) }), set_style(Q, xe[get(ae).position] || xe["bottom-right"]);
+        ue = set_class(Q, 1, "jat-feedback-panel svelte-qpyrvv", null, ue, { dragging: get(P), hidden: !get($) }), set_style(Q, xe[get(ae).position] || xe["bottom-right"]);
       }), append(B, Q);
     }, oe = (B) => {
       var Q = root_2();

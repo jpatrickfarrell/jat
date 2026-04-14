@@ -1470,7 +1470,7 @@
 				/>
 
 				<!-- Mobile Input Row: [keyboard dropup | attach | input | send] -->
-				<div class="mobile-input-row flex items-center gap-1.5 px-2 py-1.5 bg-base-100 border-t border-base-300 flex-shrink-0 {sentFlash ? 'send-flash' : ''}">
+				<div class="mobile-input-row flex items-center gap-1.5 px-2 py-1.5 bg-base-100 border-t border-base-300 flex-shrink-0 {(sentFlash || sentStayFlash) ? 'send-flash' : ''}">
 					<!-- Keyboard dropup -->
 					<div class="relative flex-shrink-0">
 						<button
@@ -1531,7 +1531,7 @@
 							bind:value={inputText}
 							bind:references={promptRefs}
 							project={project || ''}
-							placeholder="Type a message… (Ctrl+Enter to send)"
+							placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
 							rows={1}
 							compact={true}
 						/>
@@ -1567,7 +1567,7 @@
 
 					<!-- Send button -->
 					<button
-						class="send-btn flex items-center justify-center w-9 h-9 rounded-lg border cursor-pointer flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-default {sentFlash ? 'bg-success border-success text-success-content send-btn-sent' : hasSendable && !showPreview ? 'bg-info border-info text-info-content active:bg-info/80' : 'bg-base-200 border-base-300 text-base-content/40'}"
+						class="send-btn flex items-center justify-center w-9 h-9 rounded-lg border cursor-pointer flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-default {(sentFlash || sentStayFlash) ? 'bg-success border-success text-success-content send-btn-sent' : hasSendable && !showPreview ? 'bg-info border-info text-info-content active:bg-info/80' : 'bg-base-200 border-base-300 text-base-content/40'}"
 						aria-label="Send message"
 						disabled={!hasSendable || showPreview}
 						use:directClick={sendAndDismiss}

@@ -286,6 +286,7 @@
       const formData = new FormData();
       formData.append('audio', blob, `voice-note.${ext}`);
       if (project) formData.append('project', project);
+      if (userId) formData.append('user_id', userId);
 
       const res = await fetch(`${endpoint.replace(/\/$/, '')}/api/tasks/voice`, { method: 'POST', body: formData });
       if (res.ok) {

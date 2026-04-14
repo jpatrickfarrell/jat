@@ -196,7 +196,7 @@
       }, 30_000);
     };
 
-    ws.onmessage = (e) => {
+    ws.onmessage = async (e) => {
       let msg: any;
       try { msg = JSON.parse(e.data); } catch { return; }
       if (msg.event === 'postgres_changes' && msg.payload?.data) {
@@ -205,6 +205,24 @@
           if (record.status === 'open') {
             if (heartbeatTimer) clearInterval(heartbeatTimer);
             onTranscriptionComplete([{ title: record.title || '', description: record.description || '' }]);
+          } else if (record.status === 'voice_split') {
+            if (heartbeatTimer) clearInterval(heartbeatTimer);
+            // Fetch all child tasks by ID
+            try {
+              const taskIds: string[] = JSON.parse(record.description || '{}').taskIds || [];
+              if (taskIds.length > 0) {
+                const url = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/project_tasks?id=in.(${taskIds.join(',')})&select=id,title,description&order=created_at`;
+                const res = await fetch(url, {
+                  headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${supabaseAnonKey}` }
+                });
+                if (res.ok) {
+                  const rows = await res.json();
+                  onTranscriptionComplete(rows.map((r: any) => ({ title: r.title || '', description: r.description || '' })));
+                  return;
+                }
+              }
+            } catch {}
+            onTranscriptionComplete([{ title: record.title || '', description: '' }]);
           } else if (record.status === 'failed') {
             if (heartbeatTimer) clearInterval(heartbeatTimer);
             onTranscriptionFailed('Transcription failed. Try again.');
@@ -243,7 +261,25 @@
           if (res.ok) {
             const rows = await res.json();
             if (Array.isArray(rows) && rows.length > 0) {
-              status = rows[0].status; title = rows[0].title || ''; desc = rows[0].description || '';
+              status = rows[0].status;
+              title = rows[0].title || '';
+              desc = rows[0].description || '';
+              if (status === 'voice_split') {
+                // Fetch all child tasks by ID
+                try {
+                  const taskIds: string[] = JSON.parse(desc || '{}').taskIds || [];
+                  if (taskIds.length > 0) {
+                    const childUrl = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/project_tasks?id=in.(${taskIds.join(',')})&select=id,title,description&order=created_at`;
+                    const childRes = await fetch(childUrl, {
+                      headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${supabaseAnonKey}` }
+                    });
+                    if (childRes.ok) {
+                      const childRows = await childRes.json();
+                      pollTasks = childRows.map((r: any) => ({ title: r.title || '', description: r.description || '' }));
+                    }
+                  }
+                } catch {}
+              }
             }
           }
         } else {
@@ -261,7 +297,7 @@
           }
         }
 
-        if (status === 'open') {
+        if (status === 'open' || status === 'voice_split') {
           clearInterval(voicePollTimer!); voicePollTimer = null;
           const tasksToUse = pollTasks.length > 0 ? pollTasks : [{ title, description: desc }];
           onTranscriptionComplete(tasksToUse);

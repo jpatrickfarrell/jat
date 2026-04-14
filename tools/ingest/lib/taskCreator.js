@@ -66,6 +66,19 @@ export function createTask(source, item, downloadedAttachments = []) {
     args.push('--notes', `Author: ${item.author}`);
   }
 
+  // Write source provenance — enables dedup via unique index on (source, source_item_id)
+  // and lets the widget History tab query tasks.db directly.
+  if (source.type) {
+    args.push('--source', source.type);
+  }
+  if (item.id) {
+    args.push('--source-item-id', item.id);
+  }
+  if (item.metadata) {
+    args.push('--metadata',
+      typeof item.metadata === 'string' ? item.metadata : JSON.stringify(item.metadata));
+  }
+
   try {
     const output = execFileSync('jt', args, {
       encoding: 'utf-8',

@@ -1,19 +1,18 @@
 /**
  * Feedback Reports List API
  *
- * GET /api/feedback/reports - List all feedback widget reports
+ * GET /api/feedback/reports - List all feedback widget + voice reports
  *
- * Returns reports with enriched data: page_url (parsed from task description),
- * screenshot_urls (from task-images.json), status, dev_notes, etc.
+ * Queries tasks.db directly (no ingest.db join). Returns reports with enriched
+ * data: page_url (parsed from task description), screenshot_urls (from
+ * task-images.json), console_logs/network_requests (from metadata JSON), etc.
  *
  * CORS enabled for cross-origin widget usage.
  */
 import { json } from '@sveltejs/kit';
 import { existsSync, readFileSync } from 'fs';
 import { join, basename } from 'path';
-import { homedir } from 'os';
 import Database from 'better-sqlite3';
-import { getTaskById } from '$lib/server/jat-tasks.js';
 import { getThread } from '$lib/server/feedbackThreads.js';
 
 const CORS_HEADERS = {
@@ -28,53 +27,30 @@ export async function OPTIONS() {
 	return new Response(null, { status: 204, headers: CORS_HEADERS });
 }
 
-/**
- * Parse page_url from task description.
- * Feedback report descriptions contain: **Page:** https://...
- * @param {string} description
- * @returns {string | null}
- */
 function parsePageUrl(description) {
 	if (!description) return null;
 	const match = description.match(/\*\*Page:\*\*\s*(https?:\/\/\S+)/);
 	return match ? match[1] : null;
 }
 
-/**
- * Parse recording_url from task description.
- * Descriptions contain: **Session Recording:** /path/or/url
- * Converts old filesystem paths to API URL paths.
- * @param {string} description
- * @returns {string | null}
- */
 function parseRecordingUrl(description) {
 	if (!description) return null;
 	const match = description.match(/\*\*Session Recording:\*\*\s*(\S+)/);
 	if (!match) return null;
 	const raw = match[1];
-	// Already a URL path (new format)
 	if (raw.startsWith('/api/')) return raw;
-	// Legacy: filesystem path — convert to API URL using filename only
 	const filename = raw.split('/').pop();
 	return filename ? `/api/feedback/recordings?file=${filename}` : null;
 }
 
-/**
- * Map JAT task status to feedback report status.
- * @param {string} taskStatus - JAT task status (open, in_progress, blocked, closed, dev, submitted)
- * @param {string | null} closeReason - Close reason text
- * @returns {string}
- */
 function mapTaskStatusToReportStatus(taskStatus, closeReason) {
 	switch (taskStatus) {
 		case 'open':
 			return 'submitted';
 		case 'in_progress':
-			return 'in_progress';
 		case 'blocked':
 			return 'in_progress';
 		case 'closed': {
-			// Check close_reason for accept/reject/wontfix
 			const reason = (closeReason || '').toLowerCase();
 			if (reason.includes('accepted')) return 'accepted';
 			if (reason.includes('rejected')) return 'rejected';
@@ -86,23 +62,13 @@ function mapTaskStatusToReportStatus(taskStatus, closeReason) {
 	}
 }
 
-/**
- * Get screenshot URLs for a task from task-images.json.
- * Returns array of API URLs that serve the images.
- * @param {string} taskId
- * @returns {string[]}
- */
-function getScreenshotUrls(taskId) {
-	const projectPath = process.cwd().replace(/\/ide$/, '');
+function getScreenshotUrls(projectPath, taskId) {
 	const imageStorePath = join(projectPath, '.jat', 'task-images.json');
-
 	if (!existsSync(imageStorePath)) return [];
-
 	try {
 		const data = JSON.parse(readFileSync(imageStorePath, 'utf-8'));
 		const taskImages = data[taskId];
 		if (!taskImages) return [];
-
 		const images = Array.isArray(taskImages) ? taskImages : [taskImages];
 		return images
 			.filter((img) => img && img.path)
@@ -115,174 +81,95 @@ function getScreenshotUrls(taskId) {
 /** @type {import('./$types').RequestHandler} */
 export async function GET() {
 	try {
-		/** @type {any[]} */
-		const reports = [];
-		/** @type {Set<string>} */
-		const seenTaskIds = new Set();
+		const projectPath = process.cwd().replace(/\/ide$/, '');
+		const tasksDbPath = join(projectPath, '.jat', 'tasks.db');
 
-		// --- Feedback ingest pipeline reports ---
-		const ingestDbPath = join(homedir(), '.local', 'share', 'jat', 'ingest.db');
-		if (existsSync(ingestDbPath)) {
-			const db = new Database(ingestDbPath, { readonly: true });
-
-			// Get all feedback widget items
-			const rows = db.prepare(
-				`SELECT source_id, item_id, task_id, title, ingested_at,
-				        origin_sender_id, origin_metadata
-				 FROM ingested_items
-				 WHERE origin_adapter_type = 'feedback'
-				 ORDER BY ingested_at DESC
-				 LIMIT 100`
-			).all();
-
-			// Pre-parse origin_metadata for all rows
-			for (const row of rows) {
-				if (row.origin_metadata) {
-					try {
-						row._metadata = JSON.parse(row.origin_metadata);
-					} catch {
-						row._metadata = null;
-					}
-				} else {
-					row._metadata = null;
-				}
-			}
-			db.close();
-
-			for (const row of rows) {
-				if (!row.task_id) continue;
-
-				// Fetch task details from JAT Tasks DB
-				let task;
-				try {
-					task = getTaskById(row.task_id);
-				} catch {
-					continue; // Task may have been deleted
-				}
-				if (!task) continue;
-
-				seenTaskIds.add(row.task_id);
-
-				// Strip [Feedback] prefix from title
-				const title = (task.title || row.title || '')
-					.replace(/^\[Feedback\]\s*/, '');
-
-				// Parse page_url from description
-				const pageUrl = parsePageUrl(task.description);
-
-				// Get screenshot URLs
-				const screenshotUrls = getScreenshotUrls(row.task_id);
-
-				// Extract user description (first paragraph before **Page:** metadata)
-				let description = task.description || '';
-				const metaStart = description.indexOf('\n\n**Page:**');
-				if (metaStart > 0) {
-					description = description.substring(0, metaStart).trim();
-				}
-
-				// Check for dev_notes in task notes field
-				const devNotes = task.notes || null;
-
-				// Load thread data (sidecar JSON)
-				let thread = null;
-				let revisionCount = 0;
-				try {
-					const rawThread = getThread(row.task_id);
-					if (rawThread && rawThread.length > 0) {
-						// Map screenshot paths to serving URLs
-						thread = rawThread.map((entry) => {
-							if (entry.screenshots && entry.screenshots.length > 0) {
-								return {
-									...entry,
-									screenshots: entry.screenshots.map((s) => ({
-										...s,
-										url: s.path ? `/api/work/image/${basename(s.path)}` : undefined,
-									})),
-								};
-							}
-							return entry;
-						});
-						revisionCount = rawThread.filter((e) => e.type === 'rejection').length;
-					}
-				} catch {
-					// Thread loading failure is non-fatal
-				}
-
-				reports.push({
-					id: row.task_id,
-					title,
-					description,
-					type: task.issue_type || 'bug',
-					priority: task.priority != null ? String(task.priority) : '2',
-					status: mapTaskStatusToReportStatus(task.status, task.close_reason),
-					dev_notes: devNotes,
-					revision_count: revisionCount,
-					responded_at: task.status === 'closed' ? (task.updated_at || null) : null,
-					page_url: pageUrl,
-					screenshot_urls: screenshotUrls,
-					thread,
-					recording_url: parseRecordingUrl(task.description),
-					console_logs: row._metadata?.console_logs ?? null,
-					network_requests: row._metadata?.network_requests ?? null,
-					created_at: task.created_at || row.ingested_at
-				});
-			}
+		if (!existsSync(tasksDbPath)) {
+			return json({ reports: [] }, { headers: CORS_HEADERS });
 		}
 
-		// --- Voice tasks submitted via widget (labels_text contains 'voice') ---
-		// These bypass the ingest pipeline, so we add them directly from the JAT tasks DB.
-		try {
-			const projectPath = process.cwd().replace(/\/ide$/, '');
-			const tasksDbPath = join(projectPath, '.jat', 'tasks.db');
-			if (existsSync(tasksDbPath)) {
-				const tasksDb = new Database(tasksDbPath, { readonly: true });
-				const voiceTasks = tasksDb.prepare(
-					`SELECT id, title, description, status, priority, close_reason, notes, created_at, updated_at
-					 FROM tasks
-					 WHERE labels_text LIKE '%voice%'
-					 ORDER BY created_at DESC
-					 LIMIT 50`
-				).all();
-				tasksDb.close();
+		const db = new Database(tasksDbPath, { readonly: true });
+		const rows = db.prepare(
+			`SELECT id, title, description, status, priority, issue_type,
+			        close_reason, notes, created_at, updated_at, source, metadata,
+			        labels_text
+			 FROM tasks
+			 WHERE source IN ('feedback-widget', 'voice')
+			    OR labels_text LIKE '%widget%'
+			    OR labels_text LIKE '%voice%'
+			 ORDER BY created_at DESC
+			 LIMIT 100`
+		).all();
+		db.close();
 
-				for (const task of voiceTasks) {
-					if (seenTaskIds.has(task.id)) continue; // Already in reports from ingest
+		const reports = rows.map((task) => {
+			let metadata = null;
+			if (task.metadata) {
+				try {
+					metadata = JSON.parse(task.metadata);
+				} catch {
+					metadata = null;
+				}
+			}
 
-					reports.push({
-						id: task.id,
-						title: task.title || '',
-						description: task.description || '',
-						type: 'task',
-						priority: task.priority != null ? String(task.priority) : '2',
-						status: mapTaskStatusToReportStatus(task.status, task.close_reason),
-						dev_notes: task.notes || null,
-						revision_count: 0,
-						responded_at: task.status === 'closed' ? (task.updated_at || null) : null,
-						page_url: null,
-						screenshot_urls: [],
-						thread: null,
-						recording_url: null,
-						console_logs: null,
-						network_requests: null,
-						created_at: task.created_at
+			const title = (task.title || '').replace(/^\[Feedback\]\s*/, '');
+			const pageUrl = parsePageUrl(task.description);
+			const screenshotUrls = getScreenshotUrls(projectPath, task.id);
+
+			// User description (before **Page:** metadata)
+			let description = task.description || '';
+			const metaStart = description.indexOf('\n\n**Page:**');
+			if (metaStart > 0) {
+				description = description.substring(0, metaStart).trim();
+			}
+
+			// Thread (sidecar JSON) — feedback-widget tasks only
+			let thread = null;
+			let revisionCount = 0;
+			try {
+				const rawThread = getThread(task.id);
+				if (rawThread && rawThread.length > 0) {
+					thread = rawThread.map((entry) => {
+						if (entry.screenshots && entry.screenshots.length > 0) {
+							return {
+								...entry,
+								screenshots: entry.screenshots.map((s) => ({
+									...s,
+									url: s.path ? `/api/work/image/${basename(s.path)}` : undefined
+								}))
+							};
+						}
+						return entry;
 					});
+					revisionCount = rawThread.filter((e) => e.type === 'rejection').length;
 				}
+			} catch {
+				// non-fatal
 			}
-		} catch (voiceErr) {
-			// Non-fatal: voice tasks just won't appear in history
-			console.error('[feedback/reports] Failed to load voice tasks:', voiceErr.message);
-		}
 
-		// Sort combined list by created_at descending
-		reports.sort((a, b) => {
-			const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
-			const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
-			return tb - ta;
+			return {
+				id: task.id,
+				title,
+				description,
+				type: task.issue_type || 'bug',
+				priority: task.priority != null ? String(task.priority) : '2',
+				status: mapTaskStatusToReportStatus(task.status, task.close_reason),
+				dev_notes: task.notes || null,
+				revision_count: revisionCount,
+				responded_at: task.status === 'closed' ? (task.updated_at || null) : null,
+				page_url: pageUrl,
+				screenshot_urls: screenshotUrls,
+				thread,
+				recording_url: parseRecordingUrl(task.description),
+				console_logs: metadata?.console_logs ?? null,
+				network_requests: metadata?.network_requests ?? null,
+				created_at: task.created_at
+			};
 		});
 
 		return json({ reports }, { headers: CORS_HEADERS });
 	} catch (err) {
-		console.error('[project-tasks] Error:', err);
+		console.error('[feedback/reports] Error:', err);
 		return json(
 			{ reports: [], error: err.message || 'Failed to fetch reports' },
 			{ status: 500, headers: CORS_HEADERS }

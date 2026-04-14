@@ -106,7 +106,8 @@ export async function PATCH({ url, request }) {
 				labels: ['voice'],
 				deps: [],
 				assignee: null,
-				notes: ''
+				notes: '',
+				source: 'voice'
 			});
 			invalidateCache.tasks();
 			invalidateCache.agents();
@@ -228,7 +229,8 @@ function transcribeAndOrganize(audioPath, title, priority) {
 						labels: ['voice'],
 						deps: [],
 						assignee: null,
-						notes: ''
+						notes: '',
+						source: 'voice'
 					});
 					invalidateCache.tasks();
 					invalidateCache.agents();
@@ -282,7 +284,8 @@ export async function POST({ request }) {
 					const createdTask = createTask({
 						projectPath, title, description: text, type: 'task',
 						priority: isNaN(priority) ? 2 : Math.max(0, Math.min(4, priority)),
-						labels: ['voice'], deps: [], assignee: null, notes: ''
+						labels: ['voice'], deps: [], assignee: null, notes: '',
+						source: 'voice'
 					});
 					invalidateCache.tasks();
 					invalidateCache.agents();

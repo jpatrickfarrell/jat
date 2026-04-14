@@ -770,6 +770,7 @@ cmd_create() {
   require_db
   local title="" description="" type="task" priority=2 labels="" deps="" assignee="" json_out=false explicit_id="" parent_id="" reserved_files=""
   local command="" agent_program="" model="" schedule_cron="" next_run_at="" due_date=""
+  local source="" source_item_id="" metadata=""
 
   # First positional arg is title
   if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
@@ -794,6 +795,9 @@ cmd_create() {
       --schedule-cron)  schedule_cron="$2"; shift 2 ;;
       --next-run-at)    next_run_at="$2"; shift 2 ;;
       --due-date)       due_date="$2"; shift 2 ;;
+      --source)         source="$2"; shift 2 ;;
+      --source-item-id) source_item_id="$2"; shift 2 ;;
+      --metadata)       metadata="$2"; shift 2 ;;
       --json)           json_out=true; shift ;;
       *)                [[ -z "$title" ]] && title="$1"; shift ;;
     esac
@@ -841,9 +845,14 @@ cmd_create() {
   esc_next_run="$(sql_escape "$next_run_at")"
   esc_due_date="$(sql_escape "$due_date")"
 
+  local esc_source esc_source_item_id esc_metadata
+  esc_source="$(sql_escape "$source")"
+  esc_source_item_id="$(sql_escape "$source_item_id")"
+  esc_metadata="$(sql_escape "$metadata")"
+
   sql_exec "
-    INSERT INTO tasks (id, title, description, status, priority, issue_type, assignee, reserved_files, parent_id, command, agent_program, model, schedule_cron, next_run_at, due_date, created_at, updated_at)
-    VALUES ('$id', '$esc_title', '$esc_desc', 'open', $priority, '$esc_type', $([ -n "$assignee" ] && echo "'$esc_assignee'" || echo "NULL"), $([ -n "$reserved_files" ] && echo "'$esc_reserved_files'" || echo "NULL"), $([ -n "$parent_id" ] && echo "'$esc_parent_id'" || echo "NULL"), $([ -n "$command" ] && echo "'$esc_command'" || echo "NULL"), $([ -n "$agent_program" ] && echo "'$esc_agent_program'" || echo "NULL"), $([ -n "$model" ] && echo "'$esc_model'" || echo "NULL"), $([ -n "$schedule_cron" ] && echo "'$esc_cron'" || echo "NULL"), $([ -n "$next_run_at" ] && echo "'$esc_next_run'" || echo "NULL"), $([ -n "$due_date" ] && echo "'$esc_due_date'" || echo "NULL"), '$ts', '$ts');"
+    INSERT INTO tasks (id, title, description, status, priority, issue_type, assignee, reserved_files, parent_id, command, agent_program, model, schedule_cron, next_run_at, due_date, source, source_item_id, metadata, created_at, updated_at)
+    VALUES ('$id', '$esc_title', '$esc_desc', 'open', $priority, '$esc_type', $([ -n "$assignee" ] && echo "'$esc_assignee'" || echo "NULL"), $([ -n "$reserved_files" ] && echo "'$esc_reserved_files'" || echo "NULL"), $([ -n "$parent_id" ] && echo "'$esc_parent_id'" || echo "NULL"), $([ -n "$command" ] && echo "'$esc_command'" || echo "NULL"), $([ -n "$agent_program" ] && echo "'$esc_agent_program'" || echo "NULL"), $([ -n "$model" ] && echo "'$esc_model'" || echo "NULL"), $([ -n "$schedule_cron" ] && echo "'$esc_cron'" || echo "NULL"), $([ -n "$next_run_at" ] && echo "'$esc_next_run'" || echo "NULL"), $([ -n "$due_date" ] && echo "'$esc_due_date'" || echo "NULL"), $([ -n "$source" ] && echo "'$esc_source'" || echo "NULL"), $([ -n "$source_item_id" ] && echo "'$esc_source_item_id'" || echo "NULL"), $([ -n "$metadata" ] && echo "'$esc_metadata'" || echo "NULL"), '$ts', '$ts');"
 
   # Auto-wire epic→child dependency: parent depends on child (child is READY, parent is BLOCKED)
   if [[ -n "$parent_id" ]]; then
@@ -904,6 +913,9 @@ cmd_update() {
       --schedule-cron)  sets+=("schedule_cron = '$(sql_escape "$2")'"); shift 2 ;;
       --next-run-at)    sets+=("next_run_at = '$(sql_escape "$2")'"); shift 2 ;;
       --due-date)       sets+=("due_date = '$(sql_escape "$2")'"); shift 2 ;;
+      --source)         sets+=("source = '$(sql_escape "$2")'"); shift 2 ;;
+      --source-item-id) sets+=("source_item_id = '$(sql_escape "$2")'"); shift 2 ;;
+      --metadata)       sets+=("metadata = '$(sql_escape "$2")'"); shift 2 ;;
       --json)           json_out=true; shift ;;
       *)                [[ -z "$task_id" ]] && task_id="$1"; shift ;;
     esac

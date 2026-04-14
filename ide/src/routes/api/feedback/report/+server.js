@@ -21,7 +21,7 @@ import { resolve, join, dirname } from 'path';
 import { homedir } from 'os';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import Database from 'better-sqlite3';
+import { createHash } from 'crypto';
 
 const execAsync = promisify(exec);
 
@@ -249,18 +249,56 @@ export async function POST({ request }) {
 
 		const fullDescription = descParts.join('\n\n');
 
-		// Create the task
-		const createdTask = createTask({
-			projectPath,
-			title: `[Feedback] ${title}`,
-			description: fullDescription,
-			type,
-			priority,
-			labels: ['widget', 'bug-report'],
-			deps: [],
-			assignee: null,
-			notes: ''
-		});
+		// Build metadata JSON (console_logs, network_requests, selected_elements, screenshots)
+		const metadata = {};
+		if (body.console_logs && Array.isArray(body.console_logs) && body.console_logs.length > 0) {
+			metadata.console_logs = body.console_logs;
+		}
+		if (body.network_requests && Array.isArray(body.network_requests) && body.network_requests.length > 0) {
+			metadata.network_requests = body.network_requests;
+		}
+		if (body.selected_elements && Array.isArray(body.selected_elements) && body.selected_elements.length > 0) {
+			metadata.selected_elements = body.selected_elements;
+		}
+		if (savedAttachments.length > 0) {
+			metadata.screenshots = savedAttachments.map(a => ({ id: a.id, path: a.path, originalName: a.originalName }));
+		}
+		if (body.page_url) metadata.page_url = body.page_url;
+		if (body.user_agent) metadata.user_agent = body.user_agent;
+		if (body.recording_url) metadata.recording_url = body.recording_url;
+
+		// Deterministic source_item_id: hash of title + page_url + client timestamp
+		const sourceItemId = createHash('sha256')
+			.update(`${title}|${body.page_url || ''}|${body.client_timestamp || description || Date.now()}`)
+			.digest('hex')
+			.slice(0, 32);
+
+		// Create the task — catch unique-constraint conflicts (dedup) silently
+		let createdTask;
+		try {
+			createdTask = createTask({
+				projectPath,
+				title: `[Feedback] ${title}`,
+				description: fullDescription,
+				type,
+				priority,
+				labels: ['widget', 'bug-report'],
+				deps: [],
+				assignee: null,
+				notes: '',
+				source: 'feedback-widget',
+				source_item_id: sourceItemId,
+				metadata: Object.keys(metadata).length > 0 ? metadata : null
+			});
+		} catch (err) {
+			if (err && (err.code === 'SQLITE_CONSTRAINT_UNIQUE' || /UNIQUE constraint/i.test(err.message || ''))) {
+				return json(
+					{ ok: true, deduped: true, message: 'Duplicate feedback — ignored' },
+					{ status: 200, headers: CORS_HEADERS }
+				);
+			}
+			throw err;
+		}
 
 		// Register screenshots as proper task attachments
 		if (savedAttachments.length > 0) {
@@ -329,35 +367,6 @@ export async function POST({ request }) {
 			});
 		} catch (err) {
 			console.warn('[feedback-report] Failed to create thread entry:', err.message);
-		}
-
-		// Register in ingest.db so lookupIntegrations finds this task
-		try {
-			const ingestDbPath = join(homedir(), '.local', 'share', 'jat', 'ingest.db');
-			if (existsSync(ingestDbPath)) {
-				const db = new Database(ingestDbPath);
-				const metadata = {};
-				if (body.console_logs && Array.isArray(body.console_logs) && body.console_logs.length > 0) {
-					metadata.console_logs = body.console_logs;
-				}
-				if (body.network_requests && Array.isArray(body.network_requests) && body.network_requests.length > 0) {
-					metadata.network_requests = body.network_requests;
-				}
-				db.prepare(
-					`INSERT OR IGNORE INTO ingested_items (source_id, item_id, task_id, title, origin_adapter_type, origin_metadata)
-					 VALUES (?, ?, ?, ?, ?, ?)`
-				).run(
-					'feedback-widget',
-					`feedback-${createdTask.id}`,
-					createdTask.id,
-					`[Feedback] ${title}`,
-					'feedback',
-					Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null
-				);
-				db.close();
-			}
-		} catch (err) {
-			console.warn('[feedback-report] Failed to register in ingest.db:', err.message);
 		}
 
 		// Invalidate caches

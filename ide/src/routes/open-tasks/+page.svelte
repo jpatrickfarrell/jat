@@ -19,6 +19,7 @@
 	import { AGENT_PRESETS } from '$lib/types/agentProgram';
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
 	import { spawnInBatches, type SpawnResult } from '$lib/utils/spawnBatch';
+	import { STATUS_OPTIONS } from '$lib/config/task-statuses';
 
 	interface Task {
 		id: string;
@@ -1424,12 +1425,7 @@
 			</button>
 			{#if statusSubmenuOpen}
 				<div class="task-context-submenu">
-					{#each [
-						{ value: 'open', label: 'Open', color: 'oklch(0.70 0.15 220)' },
-						{ value: 'in_progress', label: 'In Progress', color: 'oklch(0.75 0.15 85)' },
-						{ value: 'blocked', label: 'Blocked', color: 'oklch(0.65 0.18 30)' },
-						{ value: 'closed', label: 'Closed', color: 'oklch(0.65 0.18 145)' }
-					] as status}
+					{#each STATUS_OPTIONS as status}
 						<button
 							class="task-context-menu-item {ctxTask!.status === status.value ? 'task-context-menu-item-active' : ''}"
 							onclick={() => ctxChangeStatus(ctxTask!.id, status.value)}

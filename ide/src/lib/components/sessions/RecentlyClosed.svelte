@@ -16,6 +16,7 @@
 	import { toLocalDateStr, formatDisplayDate, parseLocalDate } from '$lib/utils/completedTaskHelpers';
 	import { addToast } from '$lib/stores/toasts.svelte';
 	import FxText from '$lib/components/FxText.svelte';
+	import { STATUS_OPTIONS } from '$lib/config/task-statuses';
 
 	function recentCtx(r: RecentSession): Record<string, any> {
 		return { title: r.taskTitle, priority: r.taskPriority, type: r.taskType, project: r.project, created_at: r.taskCreatedAt };
@@ -371,12 +372,7 @@
 				{#if ctxStatusSubmenuOpen}
 					{@const currentStatus = ctxData!.taskStatus || (ctxData!.lastState === 'complete' || ctxData!.lastState === 'completed' ? 'closed' : 'open')}
 					<div class="ctx-submenu">
-						{#each [
-							{ value: 'open', label: 'Open', color: 'oklch(0.70 0.15 220)' },
-							{ value: 'in_progress', label: 'In Progress', color: 'oklch(0.75 0.15 85)' },
-							{ value: 'blocked', label: 'Blocked', color: 'oklch(0.65 0.18 30)' },
-							{ value: 'closed', label: 'Closed', color: 'oklch(0.65 0.18 145)' }
-						] as status}
+						{#each STATUS_OPTIONS as status}
 							<button
 								class="ctx-item {currentStatus === status.value ? 'ctx-item-active' : ''}"
 								onclick={() => handleStatusChange(ctxData!.taskId!, status.value)}

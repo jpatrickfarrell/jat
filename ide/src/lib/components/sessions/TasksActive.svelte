@@ -23,6 +23,7 @@
 	import { onMount } from 'svelte';
 	import { slide, fade } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
+	import { STATUS_OPTIONS } from '$lib/config/task-statuses';
 
 	function activeTaskCtx(t: AgentTask): Record<string, any> {
 		return { title: t.title, status: t.status, priority: t.priority, type: t.issue_type, labels: t.labels?.join(', '), created_at: t.created_at };
@@ -2065,12 +2066,7 @@
 				</button>
 				{#if ctxStatusSubmenuOpen}
 					<div class="active-context-submenu">
-						{#each [
-							{ value: 'open', label: 'Open', color: 'oklch(0.70 0.15 220)' },
-							{ value: 'in_progress', label: 'In Progress', color: 'oklch(0.75 0.15 85)' },
-							{ value: 'blocked', label: 'Blocked', color: 'oklch(0.65 0.18 30)' },
-							{ value: 'closed', label: 'Closed', color: 'oklch(0.65 0.18 145)' }
-						] as status}
+						{#each STATUS_OPTIONS as status}
 							<button
 								class="active-context-menu-item {ctxData!.task!.status === status.value ? 'active-context-menu-item-active' : ''}"
 								onclick={() => ctxChangeStatus(ctxData!.task!.id, status.value)}

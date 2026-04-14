@@ -26,6 +26,7 @@
 	import FxText from '$lib/components/FxText.svelte';
 	import FeedbackReplyModal from '$lib/components/FeedbackReplyModal.svelte';
 	import HarnessTray from '$lib/components/sessions/HarnessTray.svelte';
+	import { STATUS_OPTIONS, TERMINAL_STATUSES } from '$lib/config/task-statuses';
 
 	function taskCtx(t: Task): Record<string, any> {
 		return { title: t.title, status: t.status, priority: t.priority, type: t.issue_type, assignee: t.assignee, labels: t.labels?.join(', '), created_at: t.created_at, due_date: t.due_date };
@@ -1299,12 +1300,12 @@
 
 	function hasUnresolvedBlockers(task: Task): boolean {
 		if (!task.depends_on || task.depends_on.length === 0) return false;
-		return task.depends_on.some(dep => dep.status !== 'closed');
+		return task.depends_on.some(dep => !TERMINAL_STATUSES.has(dep.status as any));
 	}
 
 	function getBlockingReason(task: Task): string {
 		if (!task.depends_on) return '';
-		const unresolvedDeps = task.depends_on.filter(dep => dep.status !== 'closed');
+		const unresolvedDeps = task.depends_on.filter(dep => !TERMINAL_STATUSES.has(dep.status as any));
 		if (unresolvedDeps.length === 0) return '';
 		if (unresolvedDeps.length === 1) {
 			return `Blocked by ${unresolvedDeps[0].id}`;
@@ -1317,7 +1318,7 @@
 	const blockedByMap = $derived.by(() => {
 		const map = new Map<string, Task[]>();
 		for (const task of tasks) {
-			if (task.status === 'closed') continue; // Only track open blockers
+			if (TERMINAL_STATUSES.has(task.status as any)) continue; // Only track open blockers
 			if (!task.depends_on) continue;
 			for (const dep of task.depends_on) {
 				if (!map.has(dep.id)) {
@@ -2257,15 +2258,7 @@
 			</button>
 			{#if statusSubmenuOpen}
 				<div class="task-context-submenu">
-					{#each [
-						{ value: 'open', label: 'Open', color: 'oklch(0.70 0.15 220)' },
-						{ value: 'in_progress', label: 'In Progress', color: 'oklch(0.75 0.15 85)' },
-						{ value: 'blocked', label: 'Blocked', color: 'oklch(0.65 0.18 30)' },
-						{ value: 'submitted', label: 'Submitted', color: 'oklch(0.70 0.15 290)' },
-						{ value: 'accepted', label: 'Accepted', color: 'oklch(0.70 0.18 200)' },
-						{ value: 'deployed', label: 'Deployed', color: 'oklch(0.65 0.20 160)' },
-						{ value: 'closed', label: 'Closed', color: 'oklch(0.65 0.18 145)' }
-					] as status}
+					{#each STATUS_OPTIONS as status}
 						<button
 							class="task-context-menu-item {ctxTask!.status === status.value ? 'task-context-menu-item-active' : ''}"
 							onclick={() => handleChangeStatus(ctxTask!.id, status.value)}

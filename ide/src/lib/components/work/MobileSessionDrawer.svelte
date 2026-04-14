@@ -35,6 +35,7 @@
 		TaskDatesPair
 	} from '$lib/components/task';
 	import { isMobileFullscreenOpen } from '$lib/stores/drawerStore';
+	import CommentsThread from '$lib/components/comments/CommentsThread.svelte';
 	import { setHoveredSession } from '$lib/stores/hoveredSession';
 	import { marked } from 'marked';
 	import type { SessionState, SessionStateAction } from '$lib/config/statusColors';
@@ -1787,6 +1788,13 @@
 								{/if}
 							</button>
 						</div>
+
+						{#if task?.id}
+							<div class="mb-5">
+								<TaskFieldLabel>Comments</TaskFieldLabel>
+								<CommentsThread taskId={task.id} />
+							</div>
+						{/if}
 					</div>
 				</div>
 			</div>

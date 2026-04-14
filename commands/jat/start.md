@@ -351,6 +351,20 @@ jat-signal needs_input '{
 }'
 ```
 
+### Asynchronous Questions (dev not at terminal)
+
+When the user isn't present to answer live (overnight, scheduled, long-running work), use `jat-signal waiting` instead of `needs_input` + `AskUserQuestion`. It posts the question as a task comment, sets status to `waiting`, and pauses the session cleanly:
+
+```bash
+jat-signal waiting '{
+  "taskId": "jat-abc",
+  "question": "Should the export include archived items?",
+  "reason": "blocked on scope decision"
+}'
+```
+
+The session ends after this call — the human answers via the IDE comment thread, and a future agent resumes the task with that context. Do not follow with `AskUserQuestion`.
+
 ---
 
 ## Session Lifecycle
@@ -391,7 +405,8 @@ To work on another task → spawn new agent
 |-------|--------|-------|------|------------|
 | 1 | `jat-signal starting '{...}'` | Starting | Immediately after registration | agentName, model, gitBranch, gitStatus, tools |
 | 2 | `jat-signal working '{...}'` | Working | After reading task, before coding | taskId, taskTitle, approach, expectedFiles |
-| - | `jat-signal needs_input '{...}'` | Needs Input | When clarification needed (anytime) | taskId, question, questionType |
+| - | `jat-signal needs_input '{...}'` | Needs Input | When clarification needed (dev present) | taskId, question, questionType |
+| - | `jat-signal waiting '{...}'` | Waiting (async) | When dev not present — posts comment, pauses session | taskId, question |
 | 3 | `jat-signal review '{...}'` | Ready for Review | When work complete, before /jat:complete | taskId, summary, filesModified or findings |
 
 ### Minimal Copy-Paste Templates
@@ -403,8 +418,11 @@ jat-signal starting '{"agentName":"NAME","sessionId":"ID","project":"PROJECT","m
 # Working (after reading task)
 jat-signal working '{"taskId":"ID","taskTitle":"TITLE","approach":"APPROACH"}'
 
-# Needs Input (before AskUserQuestion)
+# Needs Input (before AskUserQuestion — dev present)
 jat-signal needs_input '{"taskId":"ID","question":"QUESTION","questionType":"clarification"}'
+
+# Waiting (async — dev not present; posts comment + pauses session)
+jat-signal waiting '{"taskId":"ID","question":"QUESTION"}'
 
 # Review (before presenting findings)
 jat-signal review '{"taskId":"ID","taskTitle":"TITLE","summary":["ITEM1","ITEM2"]}'

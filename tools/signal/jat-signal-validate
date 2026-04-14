@@ -1261,6 +1261,20 @@ validate_reply() {
     return 0
 }
 
+validate_waiting() {
+    local payload="$1"
+
+    if ! echo "$payload" | jq -e 'type == "object"' >/dev/null 2>&1; then
+        echo "Error: waiting signal must be a JSON object" >&2
+        return 1
+    fi
+
+    require_string_field "$payload" "waiting" "taskId" || return 1
+    require_string_field "$payload" "waiting" "question" || return 1
+
+    return 0
+}
+
 # =============================================================================
 # Data Signal Validators (existing)
 # =============================================================================
@@ -1515,9 +1529,12 @@ case "$SIGNAL_TYPE" in
     reply)
         validate_reply "$PAYLOAD"
         ;;
+    waiting)
+        validate_waiting "$PAYLOAD"
+        ;;
     *)
         echo "Error: Unknown signal type '$SIGNAL_TYPE'" >&2
-        echo "Valid types: complete, working, review, needs_input, idle, completing, starting, compacting, question, reply" >&2
+        echo "Valid types: complete, working, review, needs_input, idle, completing, starting, compacting, question, reply, waiting" >&2
         exit 2
         ;;
 esac

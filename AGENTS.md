@@ -121,9 +121,12 @@ jat-signal needs_input '{"taskId":"ID","question":"QUESTION","questionType":"cla
 
 # 4. Review (when work is done)
 jat-signal review '{"taskId":"ID","taskTitle":"TITLE","summary":["ITEM1","ITEM2"]}'
+
+# Waiting (async question — posts comment, sets status=waiting, pauses session)
+jat-signal waiting '{"taskId":"ID","question":"QUESTION"}'
 ```
 
-**Signal types:** `starting`, `working`, `needs_input`, `review`, `completing`, `complete`
+**Signal types:** `starting`, `working`, `needs_input`, `waiting`, `review`, `completing`, `complete`
 
 ## Session Lifecycle
 
@@ -169,6 +172,26 @@ jat-signal working '{"taskId":"ID","taskTitle":"TITLE","approach":"Updated appro
 ```
 
 **Question types:** `clarification`, `decision`, `approval`, `blocker`, `duplicate_check`
+
+### Asynchronous Questions (dev not present)
+
+When the human isn't available to answer interactively (overnight agent, scheduled task, long-running work), use `jat-signal waiting` instead of `AskUserQuestion`. This bundles three operations into one call:
+
+1. Posts a `question` comment to the task's comment thread (visible in IDE)
+2. Updates task status to `waiting` (agents won't pick it up via `jt ready`)
+3. Pauses the session (kills tmux cleanly; can be resumed later)
+
+```bash
+jat-signal waiting '{
+  "taskId": "jat-abc",
+  "question": "Should the export include archived items? I can proceed with either but need your call.",
+  "reason": "blocked on scope decision"
+}'
+```
+
+The human answers by posting an `answer` comment in the IDE. When the session resumes (new agent picks up the task), it reads the comment thread for context.
+
+**Use `AskUserQuestion` when the dev is present at the terminal. Use `jat-signal waiting` when they're not.**
 
 ## Completion Workflow
 

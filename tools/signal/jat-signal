@@ -11,6 +11,7 @@
 #   jat-signal starting '{"agentName":"...","project":"..."}'
 #   jat-signal compacting '{"reason":"...","contextSizeBefore":180000}'
 #   jat-signal paused '{"taskId":"...","taskTitle":"...","resumable":true}'
+#   jat-signal waiting '{"taskId":"...","question":"...","sessionId":"..."}'
 #   jat-signal question '{"question":"...","questionType":"choice","options":[...]}'
 #
 # Usage (Completion Signal - bundles everything):
@@ -55,6 +56,7 @@ show_usage() {
     echo "  starting '{...}'      - Session initializing"
     echo "  compacting '{...}'    - Summarizing context"
     echo "  paused '{...}'        - Session paused (resumable)"
+    echo "  waiting '{...}'       - Write question comment, set task waiting, pause+kill session"
     echo "  question '{...}'      - Structured question for IDE"
     echo "  reply '{...}'         - Reply to originating channel (two-way)"
     echo ""
@@ -85,6 +87,7 @@ show_usage() {
     echo "  starting:    agentName"
     echo "  compacting:  reason, contextSizeBefore"
     echo "  paused:      taskId, resumable"
+    echo "  waiting:     taskId, question"
     echo "  question:    question, questionType"
     echo "  reply:       taskId, message, replyType"
     echo "  complete:    (use jat-complete-bundle, do not construct manually)"
@@ -195,6 +198,15 @@ require_json() {
                 echo "" >&2
                 echo "Example:" >&2
                 echo "  jat-signal needs_input '{\"taskId\":\"jat-abc\",\"question\":\"Which approach?\",\"questionType\":\"choice\"}'" >&2
+                ;;
+            waiting)
+                echo "Required fields:" >&2
+                echo "  - taskId: The JAT task ID" >&2
+                echo "  - question: The question to record as a comment" >&2
+                echo "Optional: sessionId, taskTitle, reason" >&2
+                echo "" >&2
+                echo "Example:" >&2
+                echo "  jat-signal waiting '{\"taskId\":\"jat-abc\",\"question\":\"Should I use X or Y?\"}'" >&2
                 ;;
             starting)
                 echo "Required fields:" >&2
@@ -374,6 +386,70 @@ case "$SIGNAL_TYPE" in
         OUTPUT="$OUTPUT, resumable: ${RESUMABLE})"
         echo "$OUTPUT"
         echo "[JAT-SIGNAL:paused] $SIGNAL_DATA"
+        ;;
+
+    waiting)
+        require_json "waiting" "$SIGNAL_DATA"
+        SIGNAL_DATA=$(echo "$SIGNAL_DATA" | jq -c .)
+        validate_payload "waiting" "$SIGNAL_DATA"
+
+        TASK_ID=$(echo "$SIGNAL_DATA" | jq -r '.taskId // ""')
+        QUESTION=$(echo "$SIGNAL_DATA" | jq -r '.question // ""')
+        TASK_TITLE=$(echo "$SIGNAL_DATA" | jq -r '.taskTitle // ""')
+        SESSION_ID=$(echo "$SIGNAL_DATA" | jq -r '.sessionId // ""')
+        REASON=$(echo "$SIGNAL_DATA" | jq -r '.reason // ""')
+
+        if [[ -z "$TASK_ID" || -z "$QUESTION" ]]; then
+            echo "Error: waiting signal requires taskId and question" >&2
+            exit 1
+        fi
+
+        # Derive agent name and tmux session
+        TMUX_SESSION_W=$(tmux display-message -p '#S' 2>/dev/null || true)
+        AGENT_NAME="${TMUX_SESSION_W#jat-}"
+        [[ -z "$AGENT_NAME" || "$AGENT_NAME" == "$TMUX_SESSION_W" ]] && AGENT_NAME="unknown"
+
+        # Auto-fill session id if not provided
+        if [[ -z "$SESSION_ID" ]] && command -v get-current-session-id &>/dev/null; then
+            SESSION_ID=$(get-current-session-id 2>/dev/null || true)
+        fi
+
+        IDE_URL="${JAT_IDE_URL:-http://127.0.0.1:3333}"
+
+        echo "Signal: waiting (task: ${TASK_ID}, agent: ${AGENT_NAME})"
+        echo "[JAT-SIGNAL:waiting] $SIGNAL_DATA"
+
+        # 1. POST question comment
+        COMMENT_BODY=$(jq -cn \
+            --arg text "$QUESTION" \
+            --arg author "$AGENT_NAME" \
+            --arg sid "$SESSION_ID" \
+            '{text: $text, author: $author, author_type: "agent", comment_type: "question", session_id: (if $sid == "" then null else $sid end)}')
+        COMMENT_RES=$(curl -sf -X POST "${IDE_URL}/api/tasks/${TASK_ID}/comments" \
+            -H 'Content-Type: application/json' \
+            -d "$COMMENT_BODY" 2>&1) || {
+            echo "Warning: failed to post question comment: $COMMENT_RES" >&2
+        }
+
+        # 2. Set task status → waiting
+        if command -v jt &>/dev/null; then
+            jt update "$TASK_ID" --status waiting 2>&1 | grep -v "^Updated" || true
+        fi
+
+        # 3. Call pause API to kill session cleanly
+        if [[ -n "$TMUX_SESSION_W" && "$TMUX_SESSION_W" == jat-* ]]; then
+            PAUSE_BODY=$(jq -cn \
+                --arg tid "$TASK_ID" \
+                --arg tt "$TASK_TITLE" \
+                --arg an "$AGENT_NAME" \
+                --arg sid "$SESSION_ID" \
+                --arg r "${REASON:-Waiting for answer to question}" \
+                '{taskId: $tid, taskTitle: $tt, agentName: $an, sessionId: $sid, reason: $r, killSession: true}')
+            curl -sf -X POST "${IDE_URL}/api/sessions/${TMUX_SESSION_W}/pause" \
+                -H 'Content-Type: application/json' \
+                -d "$PAUSE_BODY" >/dev/null 2>&1 || \
+                echo "Warning: pause API call failed (IDE may not be running)" >&2
+        fi
         ;;
 
     question)

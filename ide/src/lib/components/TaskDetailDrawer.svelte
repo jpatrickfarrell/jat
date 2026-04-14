@@ -52,6 +52,7 @@
 		TaskDatesPair
 	} from '$lib/components/task';
 	import FeedbackReplyModal from '$lib/components/FeedbackReplyModal.svelte';
+	import CommentsThread from '$lib/components/comments/CommentsThread.svelte';
 
 	// Task interface for drawer (extends API Task with additional optional fields)
 	interface DrawerTask {
@@ -3687,6 +3688,14 @@
 								</div>
 							{/if}
 						</div>
+
+						<!-- Comments -->
+						{#if task?.id}
+							<div class="mt-8">
+								<TaskFieldLabel>Comments</TaskFieldLabel>
+								<CommentsThread taskId={task.id} />
+							</div>
+						{/if}
 
 						<!-- Task Activity Timeline (Signals) -->
 						<div class="mt-8">

@@ -9,6 +9,7 @@
 	import { untrack } from 'svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
+	import CommentsThread from '$lib/components/comments/CommentsThread.svelte';
 	import SlideOpenButton from '$lib/components/SlideOpenButton.svelte';
 	import { getIntegrationIcon, type IntegrationIconDef } from '$lib/config/integrationIcons';
 	import type { IntegrationAction, CallbackLogEntry } from '$lib/types/integration';
@@ -1141,6 +1142,12 @@
 							disableSuggestions={true}
 						/>
 					</div>
+					{#if task?.id}
+						<div class="mt-4 px-3 pb-3">
+							<div class="text-[10px] uppercase tracking-wider font-semibold text-base-content/50 mb-2">Comments</div>
+							<CommentsThread taskId={task.id} />
+						</div>
+					{/if}
 
 				{:else if activeTab === 'activity'}
 					<!-- Activity Timeline -->

@@ -829,6 +829,19 @@
         }
       }
     },
+    "waitingSignal": {
+      "type": "object",
+      "description": "Waiting signal: records a question comment on the task, sets task status to waiting, and pauses/kills the session.",
+      "required": ["taskId", "question"],
+      "additionalProperties": false,
+      "properties": {
+        "taskId": { "type": "string", "description": "JAT task ID to mark as waiting" },
+        "question": { "type": "string", "minLength": 1, "description": "Question to record as a task comment" },
+        "sessionId": { "type": "string", "description": "Originating Claude Code session ID (used to correlate answers)" },
+        "taskTitle": { "type": "string", "description": "Task title (for display in pause signal)" },
+        "reason": { "type": "string", "description": "Reason passed to pause API" }
+      }
+    },
     "questionSignalQuestionType": {
       "type": "string",
       "enum": ["choice", "confirm", "input"],

@@ -319,6 +319,7 @@
 		line-height: 1.45;
 		color: oklch(0.70 0.03 250);
 		/* Clamp to 2 lines */
+		line-clamp: 2;
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
 		-webkit-box-orient: vertical;
@@ -331,6 +332,7 @@
 		font-size: 0.68rem;
 		line-height: 1.45;
 		color: oklch(0.72 0.03 250);
+		line-clamp: 2;
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
 		-webkit-box-orient: vertical;
@@ -507,11 +509,6 @@
 	}
 
 	/* ── Output lines ───────────────────────────────────────────────────────── */
-	.scc-output,
-	.scc-output-inner {
-		/* shared between no-signal (always visible) and hover reveal */
-	}
-
 	.scc-output-line {
 		font-family: ui-monospace, 'Cascadia Code', monospace;
 		font-size: 0.6rem;

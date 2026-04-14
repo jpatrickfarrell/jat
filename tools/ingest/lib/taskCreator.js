@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { findThreadByParentItemId, updateThreadCursor, deactivateThread } from './dedup.js';
+import { findThreadByParentItemId, updateThreadCursor, deactivateThread } from './threadTracker.js';
 import * as logger from './logger.js';
 
 // Resolve jat root from this file's location (tools/ingest/lib/ → jat/)

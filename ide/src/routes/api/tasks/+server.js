@@ -136,9 +136,8 @@ export async function GET({ url }) {
 			}
 		}
 
-		// Enrich tasks with integration source info (from ingest.db)
-		const taskIds = tasks.map((/** @type {any} */ t) => t.id);
-		const integrations = lookupIntegrations(taskIds);
+		// Enrich tasks with integration source info (from tasks.source column)
+		const integrations = lookupIntegrations(tasks);
 		if (Object.keys(integrations).length > 0) {
 			tasks = tasks.map((/** @type {any} */ t) => integrations[t.id] ? { ...t, integration: integrations[t.id] } : t);
 		}

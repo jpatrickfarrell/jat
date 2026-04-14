@@ -436,6 +436,22 @@ case "$SIGNAL_TYPE" in
             jt update "$TASK_ID" --status waiting 2>&1 | grep -v "^Updated" || true
         fi
 
+        # 2.5. Telegram notification — ping dev with the question
+        if command -v jat-secret &>/dev/null; then
+            _TG_TOKEN=$(jat-secret telegram-bot 2>/dev/null || true)
+            _TG_CHAT="6906192562"
+            if [[ -n "$_TG_TOKEN" ]]; then
+                _TG_TITLE=""
+                [[ -n "$TASK_TITLE" ]] && _TG_TITLE=$'\n'"_${TASK_TITLE}_"
+                _TG_MSG="🤔 *${AGENT_NAME}* is waiting on \`${TASK_ID}\`${_TG_TITLE}"$'\n\n'"${QUESTION}"
+                curl -sf -X POST "https://api.telegram.org/bot${_TG_TOKEN}/sendMessage" \
+                    -H 'Content-Type: application/json' \
+                    -d "$(jq -cn --arg chat_id "$_TG_CHAT" --arg text "$_TG_MSG" \
+                        '{chat_id: $chat_id, text: $text, parse_mode: "Markdown"}')" \
+                    >/dev/null 2>&1 || true
+            fi
+        fi
+
         # 3. Call pause API to kill session cleanly
         if [[ -n "$TMUX_SESSION_W" && "$TMUX_SESSION_W" == jat-* ]]; then
             PAUSE_BODY=$(jq -cn \

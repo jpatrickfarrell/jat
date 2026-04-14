@@ -96,7 +96,7 @@ export async function GET({ params }) {
 		return json({ error: 'Task not found' }, { status: 404 });
 	}
 
-	const integrations = lookupIntegrations([taskId]);
+	const integrations = lookupIntegrations([task]);
 	if (integrations[taskId]) {
 		task.integration = integrations[taskId];
 	}

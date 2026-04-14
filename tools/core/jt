@@ -851,7 +851,7 @@ cmd_create() {
   esc_metadata="$(sql_escape "$metadata")"
 
   sql_exec "
-    INSERT INTO tasks (id, title, description, status, priority, issue_type, assignee, reserved_files, parent_id, command, agent_program, model, schedule_cron, next_run_at, due_date, source, source_item_id, metadata, created_at, updated_at)
+    INSERT OR IGNORE INTO tasks (id, title, description, status, priority, issue_type, assignee, reserved_files, parent_id, command, agent_program, model, schedule_cron, next_run_at, due_date, source, source_item_id, metadata, created_at, updated_at)
     VALUES ('$id', '$esc_title', '$esc_desc', 'open', $priority, '$esc_type', $([ -n "$assignee" ] && echo "'$esc_assignee'" || echo "NULL"), $([ -n "$reserved_files" ] && echo "'$esc_reserved_files'" || echo "NULL"), $([ -n "$parent_id" ] && echo "'$esc_parent_id'" || echo "NULL"), $([ -n "$command" ] && echo "'$esc_command'" || echo "NULL"), $([ -n "$agent_program" ] && echo "'$esc_agent_program'" || echo "NULL"), $([ -n "$model" ] && echo "'$esc_model'" || echo "NULL"), $([ -n "$schedule_cron" ] && echo "'$esc_cron'" || echo "NULL"), $([ -n "$next_run_at" ] && echo "'$esc_next_run'" || echo "NULL"), $([ -n "$due_date" ] && echo "'$esc_due_date'" || echo "NULL"), $([ -n "$source" ] && echo "'$esc_source'" || echo "NULL"), $([ -n "$source_item_id" ] && echo "'$esc_source_item_id'" || echo "NULL"), $([ -n "$metadata" ] && echo "'$esc_metadata'" || echo "NULL"), '$ts', '$ts');"
 
   # Auto-wire epic→child dependency: parent depends on child (child is READY, parent is BLOCKED)

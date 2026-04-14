@@ -309,10 +309,18 @@ export async function GET({ url }) {
 			}
 		}
 
-		// Enrich sessions with integration source info
-		const taskIdsWithSessions = sessions.filter(s => s.taskId).map(s => s.taskId);
-		if (taskIdsWithSessions.length > 0) {
-			const integrations = lookupIntegrations(taskIdsWithSessions);
+		// Enrich sessions with integration source info (from task.source column)
+		const tasksForIntegration = sessions
+			.filter(s => s.taskId)
+			.map(s => {
+				try {
+					const t = getTaskById(s.taskId);
+					return t ? { id: t.id, source: t.source, source_item_id: t.source_item_id, metadata: t.metadata } : null;
+				} catch { return null; }
+			})
+			.filter(Boolean);
+		if (tasksForIntegration.length > 0) {
+			const integrations = lookupIntegrations(tasksForIntegration);
 			for (const session of sessions) {
 				if (session.taskId && integrations[session.taskId]) {
 					session.integration = integrations[session.taskId];

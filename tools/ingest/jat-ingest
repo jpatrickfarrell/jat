@@ -21,7 +21,7 @@ USAGE:
 
 CONFIG:
     ~/.config/jat/integrations.json   Source configuration
-    ~/.local/share/jat/ingest.db      Dedup database
+    ~/.config/jat/thread-tracking/    Thread reply state (JSON per source)
 
 SOURCES:
     telegram    Telegram Bot API (getUpdates polling)

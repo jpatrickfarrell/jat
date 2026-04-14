@@ -17,6 +17,7 @@ import { promisify } from 'node:util';
 import { existsSync, readFileSync } from 'node:fs';
 import Database from 'better-sqlite3';
 import { SqliteTaskBackend } from '../../../../lib/tasks-sqlite.js';
+import { resolveBackendForProject } from '../../../../lib/projects-config.js';
 
 const execAsync = promisify(exec);
 
@@ -58,14 +59,45 @@ function getClaudeFlags() {
 }
 
 /**
+ * Resolve the correct backend (SQLite or Postgres) for a task ID.
+ * Returns an object with a `findOpenQuestion(taskId)` method.
+ * @param {string} taskId
+ */
+async function resolveBackend(taskId) {
+	const match = taskId.match(/^([a-zA-Z0-9_-]+?)-[a-zA-Z0-9.]+$/);
+	if (match) {
+		const projectName = match[1];
+		try {
+			const cfg = resolveBackendForProject(projectName);
+			if (cfg.kind === 'postgres') {
+				const { getBackendForProject } = await import('../../../../lib/tasks-backend.js');
+				return await getBackendForProject(projectName);
+			}
+		} catch {
+			// Fall through to SQLite
+		}
+	}
+	return new SqliteTaskBackend();
+}
+
+/**
  * @param {string} taskId
  * @param {string} answerText
  */
 export async function triggerResumeOnAnswer(taskId, answerText) {
-	const sqlite = new SqliteTaskBackend();
+	let backend;
+	try {
+		backend = await resolveBackend(taskId);
+	} catch (err) {
+		console.error('[resume-on-answer] resolveBackend failed:', err);
+		return;
+	}
+
 	let question;
 	try {
-		question = sqlite.findOpenQuestion(taskId);
+		question = backend.findOpenQuestion
+			? await backend.findOpenQuestion(taskId)
+			: new SqliteTaskBackend().findOpenQuestion(taskId);
 	} catch (err) {
 		console.error('[resume-on-answer] findOpenQuestion failed:', err);
 		return;
@@ -86,9 +118,7 @@ export async function triggerResumeOnAnswer(taskId, answerText) {
 	const projectPath = getAgentProjectFromDb(agentName);
 	if (!projectPath || !existsSync(projectPath)) {
 		console.warn(`[resume-on-answer] could not locate project path for agent ${agentName}`);
-		try {
-			sqlite.update(taskId, { status: 'open' });
-		} catch {}
+		try { await backend.update(taskId, { status: 'open' }); } catch {}
 		return;
 	}
 
@@ -110,9 +140,7 @@ export async function triggerResumeOnAnswer(taskId, answerText) {
 		await execAsync(createCmd);
 	} catch (err) {
 		console.error(`[resume-on-answer] failed to spawn tmux session for ${agentName}:`, err);
-		try {
-			sqlite.update(taskId, { status: 'open' });
-		} catch {}
+		try { await backend.update(taskId, { status: 'open' }); } catch {}
 		return;
 	}
 
@@ -122,15 +150,13 @@ export async function triggerResumeOnAnswer(taskId, answerText) {
 		await execAsync(`tmux has-session -t ${shellEscape(sessionName)}`);
 	} catch {
 		console.error(`[resume-on-answer] tmux session died after spawn (session_id likely expired)`);
-		try {
-			sqlite.update(taskId, { status: 'open' });
-		} catch {}
+		try { await backend.update(taskId, { status: 'open' }); } catch {}
 		return;
 	}
 
 	// Mark task as back in progress before we inject (so IDE shows state correctly).
 	try {
-		sqlite.update(taskId, { status: 'in_progress' });
+		await backend.update(taskId, { status: 'in_progress' });
 	} catch (err) {
 		console.warn(`[resume-on-answer] failed to update task status:`, err);
 	}

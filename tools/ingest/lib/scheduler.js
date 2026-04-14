@@ -1,5 +1,5 @@
 import { getEnabledSources, getConfig, getSecret } from './config.js';
-import { isDuplicate, recordItem, logPoll, registerThread, getActiveThreads, updateThreadCursor } from './dedup.js';
+import { isDuplicate, recordItem, registerThread, getActiveThreads, updateThreadCursor } from './dedup.js';
 import { getAdapterState, setAdapterState } from './adapterState.js';
 import { downloadAttachments } from './downloader.js';
 import { createTask, appendToTask, registerTaskAttachments, applyAutomation, handleThreadReply, handleReaction, handleRejection } from './taskCreator.js';
@@ -351,8 +351,6 @@ async function pollSource(source) {
     }
   }
 
-  const durationMs = Date.now() - startTime;
-  logPoll(source.id, itemsFound, itemsNew, error, durationMs);
 }
 
 /**

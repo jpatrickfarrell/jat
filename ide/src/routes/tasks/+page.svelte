@@ -18,6 +18,7 @@
 	import TasksPaused from "$lib/components/sessions/TasksPaused.svelte";
 	import AgentAvatar from "$lib/components/AgentAvatar.svelte";
 	import StatusActionBadge from "$lib/components/work/atoms/StatusActionBadge.svelte";
+	import CommentsThread from "$lib/components/comments/CommentsThread.svelte";
 	import TasksOpen from "$lib/components/sessions/TasksOpen.svelte";
 	import ProjectNotes from "$lib/components/sessions/ProjectNotes.svelte";
 	import WorkingAgentBadge from "$lib/components/WorkingAgentBadge.svelte";
@@ -2166,28 +2167,37 @@
 								<div class="waiting-sessions-list">
 									{#each projectWaitingTasks as task (task.id)}
 										<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
-										<div class="waiting-row" onclick={() => openTaskDetailDrawer(task.id)}>
+										<div class="waiting-row">
+											<!-- Top bar: avatar + title + actions -->
 											<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-											<div class="waiting-row-task" onclick={(e) => e.stopPropagation()}>
-												<AgentAvatar name={task.assignee || task.id} size={40} />
-												<div class="waiting-task-text">
-													<span class="waiting-task-title" title={task.title}>{task.title || task.id}</span>
-													<span class="waiting-task-id">{task.id}{task.assignee ? ` · ${task.assignee}` : ''}</span>
+											<div class="waiting-row-top" onclick={() => openTaskDetailDrawer(task.id)}>
+												<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+												<div class="waiting-row-task" onclick={(e) => e.stopPropagation()}>
+													<AgentAvatar name={task.assignee || task.id} size={40} />
+													<div class="waiting-task-text">
+														<span class="waiting-task-title" title={task.title}>{task.title || task.id}</span>
+														<span class="waiting-task-id">{task.id}{task.assignee ? ` · ${task.assignee}` : ''}</span>
+													</div>
+												</div>
+												<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+												<div class="waiting-row-action" onclick={(e) => e.stopPropagation()}>
+													<StatusActionBadge
+														sessionState="waiting"
+														sessionName={task.assignee ? `jat-${task.assignee}` : task.id}
+														onAction={(actionId) => {
+															if (actionId === 'restart') spawnWaitingTask(task.id);
+															else if (actionId === 'reopen') reopenWaitingTask(task.id);
+															else if (actionId === 'view-task') openTaskDetailDrawer(task.id);
+														}}
+														alignRight={true}
+														stacked={true}
+													/>
 												</div>
 											</div>
+											<!-- Inline question + reply — stops click from bubbling to drawer -->
 											<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-											<div class="waiting-row-action" onclick={(e) => e.stopPropagation()}>
-												<StatusActionBadge
-													sessionState="waiting"
-													sessionName={task.assignee ? `jat-${task.assignee}` : task.id}
-													onAction={(actionId) => {
-														if (actionId === 'restart') spawnWaitingTask(task.id);
-														else if (actionId === 'reopen') reopenWaitingTask(task.id);
-														else if (actionId === 'view-task') openTaskDetailDrawer(task.id);
-													}}
-													alignRight={true}
-													stacked={true}
-												/>
+											<div class="waiting-row-thread" onclick={(e) => e.stopPropagation()}>
+												<CommentsThread taskId={task.id} compact={true} />
 											</div>
 										</div>
 									{/each}
@@ -3280,22 +3290,32 @@
 
 	.waiting-row {
 		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		padding: 0.75rem;
+		flex-direction: column;
 		background: linear-gradient(90deg, oklch(0.75 0.15 85 / 0.06), transparent 60%);
 		border-left: 3px solid oklch(0.75 0.15 85 / 0.5);
 		border-bottom: 1px solid oklch(0.75 0.15 85 / 0.08);
-		cursor: pointer;
-		transition: background 0.15s ease;
 	}
 
 	.waiting-row:last-child {
 		border-bottom: none;
 	}
 
-	.waiting-row:hover {
+	.waiting-row-top {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.75rem;
+		cursor: pointer;
+		transition: background 0.15s ease;
+	}
+
+	.waiting-row-top:hover {
 		background: linear-gradient(90deg, oklch(0.75 0.15 85 / 0.12), oklch(0.20 0.01 250 / 0.3) 60%);
+	}
+
+	.waiting-row-thread {
+		padding: 0 0.75rem 0.75rem 0.75rem;
+		padding-left: calc(0.75rem + 40px + 0.625rem); /* align with task text */
 	}
 
 	.waiting-row-task {

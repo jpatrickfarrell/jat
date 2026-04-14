@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 import { loadConfig, configPath } from './lib/config.js';
-import { getDb, closeDb, getAllSourceStats, getLastPoll, getItemCount, getRecentPolls } from './lib/dedup.js';
+import Database from 'better-sqlite3';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 const args = process.argv.slice(2);
 
@@ -19,14 +21,6 @@ USAGE:
 const sourceId = getArg('--source');
 const jsonOutput = args.includes('--json');
 
-try {
-  getDb(); // Ensure DB is initialized
-} catch (err) {
-  console.error(`Database error: ${err.message}`);
-  console.error('Run jat-ingest once to initialize the database.');
-  process.exit(1);
-}
-
 let config;
 try {
   config = loadConfig();
@@ -35,31 +29,84 @@ try {
   process.exit(1);
 }
 
+// Find tasks.db by walking up from cwd
+function findTasksDb() {
+  let dir = process.cwd();
+  for (let i = 0; i < 10; i++) {
+    const p = join(dir, '.jat', 'tasks.db');
+    if (existsSync(p)) return p;
+    const parent = join(dir, '..');
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
+/**
+ * Query per-source task counts from tasks.db.
+ * @returns {Map<string, { total: number, lastCreated: string | null }>}
+ */
+function getSourceStats(dbPath) {
+  const stats = new Map();
+  if (!dbPath || !existsSync(dbPath)) return stats;
+  let db;
+  try {
+    db = new Database(dbPath, { readonly: true });
+    const rows = db.prepare(
+      `SELECT source, COUNT(*) as total, MAX(created_at) as lastCreated
+       FROM tasks
+       WHERE source IS NOT NULL
+       GROUP BY source`
+    ).all();
+    for (const row of rows) {
+      stats.set(row.source, { total: row.total, lastCreated: row.lastCreated || null });
+    }
+  } catch (err) {
+    // tasks.db may not have source column on old installs
+  } finally {
+    db?.close();
+  }
+  return stats;
+}
+
+/**
+ * Get item count for a specific source.
+ */
+function getItemCount(dbPath, source) {
+  if (!dbPath || !existsSync(dbPath)) return 0;
+  let db;
+  try {
+    db = new Database(dbPath, { readonly: true });
+    const row = db.prepare(
+      'SELECT COUNT(*) as count FROM tasks WHERE source = ?'
+    ).get(source);
+    return row?.count || 0;
+  } catch {
+    return 0;
+  } finally {
+    db?.close();
+  }
+}
+
+const dbPath = findTasksDb();
+const statsMap = getSourceStats(dbPath);
+
 if (sourceId) {
   showSourceDetail(sourceId);
 } else {
   showOverview();
 }
 
-closeDb();
-
 function showOverview() {
-  const stats = getAllSourceStats();
-  const statsMap = new Map(stats.map(s => [s.source_id, s]));
-
   const results = config.sources.map(source => {
-    const stat = statsMap.get(source.id) || { total_items: 0, last_ingested: null };
-    const lastPoll = getLastPoll(source.id);
-
+    const stat = statsMap.get(source.type) || statsMap.get(source.id) || { total: 0, lastCreated: null };
     return {
       id: source.id,
       type: source.type,
       enabled: source.enabled !== false,
       project: source.project,
-      totalItems: stat.total_items,
-      lastIngested: stat.last_ingested,
-      lastPoll: lastPoll?.poll_at || null,
-      lastPollError: lastPoll?.error || null,
+      totalItems: stat.total,
+      lastIngested: stat.lastCreated,
       pollInterval: source.pollInterval || 60
     };
   });
@@ -74,18 +121,13 @@ function showOverview() {
   console.log('');
 
   for (const r of results) {
-    const status = !r.enabled ? 'disabled' :
-                   r.lastPollError ? 'error' : 'ok';
-    const statusIcon = status === 'disabled' ? '-' :
-                       status === 'error' ? 'x' : 'o';
+    const status = !r.enabled ? 'disabled' : 'ok';
+    const statusIcon = status === 'disabled' ? '-' : 'o';
 
     console.log(`[${statusIcon}] ${r.id} (${r.type}) -> ${r.project}`);
     console.log(`    Items: ${r.totalItems} | Poll interval: ${r.pollInterval}s`);
-    if (r.lastPoll) {
-      console.log(`    Last poll: ${r.lastPoll}`);
-    }
-    if (r.lastPollError) {
-      console.log(`    Last error: ${r.lastPollError}`);
+    if (r.lastIngested) {
+      console.log(`    Last ingested: ${r.lastIngested}`);
     }
     console.log('');
   }
@@ -98,11 +140,11 @@ function showSourceDetail(id) {
     process.exit(1);
   }
 
-  const count = getItemCount(id);
-  const recentPolls = getRecentPolls(id, 20);
+  const count = getItemCount(dbPath, source.type || source.id);
+  const stat = statsMap.get(source.type) || statsMap.get(source.id) || { total: count, lastCreated: null };
 
   if (jsonOutput) {
-    console.log(JSON.stringify({ source, itemCount: count, recentPolls }, null, 2));
+    console.log(JSON.stringify({ source, itemCount: count, lastCreated: stat.lastCreated }, null, 2));
     return;
   }
 
@@ -112,16 +154,8 @@ function showSourceDetail(id) {
   console.log(`Enabled: ${source.enabled !== false}`);
   console.log(`Poll interval: ${source.pollInterval || 60}s`);
   console.log(`Total items ingested: ${count}`);
-  console.log('');
-
-  if (recentPolls.length > 0) {
-    console.log('Recent polls:');
-    for (const poll of recentPolls) {
-      const err = poll.error ? ` ERROR: ${poll.error}` : '';
-      console.log(`  ${poll.poll_at} | found: ${poll.items_found} new: ${poll.items_new} | ${poll.duration_ms}ms${err}`);
-    }
-  } else {
-    console.log('No poll history yet.');
+  if (stat.lastCreated) {
+    console.log(`Last ingested: ${stat.lastCreated}`);
   }
 }
 

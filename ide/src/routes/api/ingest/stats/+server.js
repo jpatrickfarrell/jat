@@ -3,76 +3,50 @@
  *
  * GET /api/ingest/stats
  *
- * Returns item counts and last ingested timestamp per source.
+ * Returns per-source task counts from tasks.db (source column).
+ * Previously queried ingest.db ingested_items; now uses tasks.source.
  */
 
 import { json } from '@sveltejs/kit';
 import Database from 'better-sqlite3';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-
-const DB_PATH = join(homedir(), '.local/share/jat/ingest.db');
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET() {
-	if (!existsSync(DB_PATH)) {
+	const projectPath = process.cwd().replace(/\/ide$/, '');
+	const dbPath = join(projectPath, '.jat', 'tasks.db');
+
+	if (!existsSync(dbPath)) {
 		return json({ stats: {} });
 	}
 
 	let db;
 	try {
-		db = new Database(DB_PATH, { readonly: true });
+		db = new Database(dbPath, { readonly: true });
 
-		const rows = db.prepare(
-			'SELECT source_id, COUNT(*) as total, MAX(ingested_at) as lastIngested FROM ingested_items GROUP BY source_id'
-		).all();
-
-		// Get last poll info per source from poll_log
-		/** @type {any[]} */
-		let pollRows = [];
-		try {
-			pollRows = /** @type {any[]} */ (db.prepare(
-				`SELECT p.source_id, p.poll_at, p.items_found, p.items_new, p.error, p.duration_ms
-				 FROM poll_log p
-				 INNER JOIN (SELECT source_id, MAX(id) as max_id FROM poll_log GROUP BY source_id) latest
-				 ON p.source_id = latest.source_id AND p.id = latest.max_id`
-			).all());
-		} catch {
-			// poll_log table may not exist yet
+		// Check source column exists
+		const cols = /** @type {any[]} */ (db.pragma('table_info(tasks)')).map((c) => c.name);
+		if (!cols.includes('source')) {
+			return json({ stats: {} });
 		}
 
-		/** @type {Record<string, any>} */
-		const pollMap = {};
-		for (const row of pollRows) {
-			pollMap[row.source_id] = {
-				lastPollAt: row.poll_at,
-				lastPollItemsFound: row.items_found,
-				lastPollItemsNew: row.items_new,
-				lastPollError: row.error || null,
-				lastPollDurationMs: row.duration_ms
-			};
-		}
+		const rows = /** @type {any[]} */ (
+			db.prepare(
+				`SELECT source, COUNT(*) as total, MAX(created_at) as lastIngested
+				 FROM tasks
+				 WHERE source IS NOT NULL
+				 GROUP BY source`
+			).all()
+		);
 
-		/** @type {Record<string, { total: number, lastIngested: string | null, lastPollAt?: string, lastPollError?: string | null, lastPollItemsFound?: number, lastPollItemsNew?: number, lastPollDurationMs?: number }>} */
+		/** @type {Record<string, { total: number, lastIngested: string | null }>} */
 		const stats = {};
-		for (const row of /** @type {any[]} */ (rows)) {
-			stats[row.source_id] = {
+		for (const row of rows) {
+			stats[row.source] = {
 				total: row.total,
-				lastIngested: row.lastIngested || null,
-				...(pollMap[row.source_id] || {})
+				lastIngested: row.lastIngested || null
 			};
-		}
-
-		// Also include sources that have poll_log entries but no ingested items yet
-		for (const sourceId of Object.keys(pollMap)) {
-			if (!stats[sourceId]) {
-				stats[sourceId] = {
-					total: 0,
-					lastIngested: null,
-					...pollMap[sourceId]
-				};
-			}
 		}
 
 		return json({ stats });

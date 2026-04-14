@@ -99,19 +99,18 @@ export async function POST({ params, request }) {
 		if (pg) {
 			const task = await pg.getById(taskId);
 			if (!task) return json({ error: 'Task not found' }, { status: 404 });
-			// Postgres backend currently stores only author/text; other fields are dropped.
-			const created = await pg.addComment(taskId, { author, text });
+			const created = await pg.addComment(taskId, {
+				author,
+				text,
+				author_type,
+				comment_type,
+				session_id: session_id ?? null,
+			});
 			return json(
 				{
 					comment: {
-						id: created.id,
-						text: created.text,
-						author: created.author,
-						author_type,
-						comment_type,
-						session_id: session_id ?? null,
+						...created,
 						metadata: metadata ?? null,
-						created_at: created.created_at,
 					},
 				},
 				{ status: 201 }

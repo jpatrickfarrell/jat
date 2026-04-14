@@ -45,10 +45,14 @@ CREATE TABLE IF NOT EXISTS labels (
 );
 
 CREATE TABLE IF NOT EXISTS comments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT PRIMARY KEY,
     issue_id TEXT NOT NULL,
-    author TEXT NOT NULL,
     text TEXT NOT NULL,
+    author TEXT,
+    author_type TEXT,
+    comment_type TEXT,
+    session_id TEXT,
+    metadata TEXT,
     created_at TEXT NOT NULL,
     FOREIGN KEY (issue_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
@@ -60,6 +64,7 @@ CREATE INDEX IF NOT EXISTS idx_deps_issue ON dependencies(issue_id);
 CREATE INDEX IF NOT EXISTS idx_deps_depends ON dependencies(depends_on_id);
 CREATE INDEX IF NOT EXISTS idx_labels_label ON labels(label);
 CREATE INDEX IF NOT EXISTS idx_comments_issue ON comments(issue_id);
+CREATE INDEX IF NOT EXISTS idx_comments_issue_type ON comments(issue_id, comment_type);
 CREATE INDEX IF NOT EXISTS idx_tasks_next_run ON tasks(next_run_at);
 CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
 

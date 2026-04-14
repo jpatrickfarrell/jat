@@ -26,7 +26,10 @@ CREATE TABLE IF NOT EXISTS tasks (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     closed_at TEXT,
-    close_reason TEXT DEFAULT ''
+    close_reason TEXT DEFAULT '',
+    source TEXT,
+    source_item_id TEXT,
+    metadata TEXT
 );
 
 CREATE TABLE IF NOT EXISTS dependencies (
@@ -68,6 +71,7 @@ CREATE INDEX IF NOT EXISTS idx_comments_issue ON comments(issue_id);
 CREATE INDEX IF NOT EXISTS idx_comments_issue_type ON comments(issue_id, comment_type);
 CREATE INDEX IF NOT EXISTS idx_tasks_next_run ON tasks(next_run_at);
 CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_source_item ON tasks(source, source_item_id) WHERE source_item_id IS NOT NULL;
 
 -- FTS5 full-text search index over tasks (porter stemming + unicode)
 CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(

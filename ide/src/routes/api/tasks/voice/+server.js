@@ -8,6 +8,7 @@
  * in the background. The task appears in the IDE when transcription completes.
  *
  * POST /api/tasks/voice
+ * GET  /api/tasks/voice?id=<jobId> — poll transcription status (for jat-feedback widget)
  * OPTIONS /api/tasks/voice - CORS preflight (for jat-feedback widget cross-origin usage)
  * Optional JSON fields: { "title": "...", "project": "...", "priority": 2 }
  */
@@ -18,8 +19,9 @@ import { _resetTaskCache } from '../../../api/agents/+server.js';
 import { emitEvent } from '$lib/utils/eventBus.server.js';
 import { writeFileSync, unlinkSync, mkdirSync, statSync } from 'fs';
 import { exec, execSync } from 'child_process';
-import { randomBytes } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import { join } from 'path';
+
 import {
 	TEMP_DIR,
 	vlog,
@@ -29,9 +31,17 @@ import {
 	appendToVoiceTimeline
 } from '$lib/server/voice-core.js';
 
+/**
+ * In-memory job status map for voice transcription polling.
+ * Used by the jat-feedback widget to poll transcription status.
+ * Keys: UUID job IDs. Values: { status: 'transcribing'|'open'|'error', title?: string }
+ * @type {Map<string, { status: string, title?: string }>}
+ */
+const voiceJobs = new Map();
+
 const CORS_HEADERS = {
 	'Access-Control-Allow-Origin': '*',
-	'Access-Control-Allow-Methods': 'POST, OPTIONS',
+	'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 	'Access-Control-Allow-Headers': 'Content-Type',
 	'Access-Control-Max-Age': '86400'
 };
@@ -41,6 +51,24 @@ const CORS_HEADERS = {
  */
 export async function OPTIONS() {
 	return new Response(null, { status: 204, headers: CORS_HEADERS });
+}
+
+/**
+ * GET /api/tasks/voice?id=<jobId>
+ * Poll transcription status for the jat-feedback widget.
+ * Returns task-like status so the widget knows when to stop polling.
+ */
+export async function GET({ url }) {
+	const id = url.searchParams.get('id');
+	if (!id) {
+		return json({ error: true, message: 'Missing id parameter' }, { status: 400, headers: CORS_HEADERS });
+	}
+	const job = voiceJobs.get(id);
+	if (!job) {
+		// Unknown ID — return open so the widget stops polling
+		return json({ id, status: 'open' }, { headers: CORS_HEADERS });
+	}
+	return json({ id, status: job.status, title: job.title }, { headers: CORS_HEADERS });
 }
 
 /**
@@ -75,79 +103,85 @@ function getAudioDate(filePath) {
  * @param {string} audioPath
  * @param {string} title
  * @param {number} priority
+ * @returns {Promise<void>}
  */
 function transcribeAndOrganize(audioPath, title, priority) {
-	const id = randomBytes(4).toString('hex');
-	const wavPath = join(TEMP_DIR, `transcribe-${id}.wav`);
+	return new Promise((resolve) => {
+		const id = randomBytes(4).toString('hex');
+		const wavPath = join(TEMP_DIR, `transcribe-${id}.wav`);
 
-	vlog(`Received audio: ${audioPath}`);
+		vlog(`Received audio: ${audioPath}`);
 
-	// Step 1: Convert to 16kHz mono WAV
-	vlog('Converting to WAV...');
-	exec(`ffmpeg -i "${audioPath}" -ar 16000 -ac 1 -y "${wavPath}" 2>/dev/null`, {
-		timeout: 120_000
-	}, async (convertErr) => {
-		// Clean up original audio file
-		try { unlinkSync(audioPath); } catch {}
+		// Step 1: Convert to 16kHz mono WAV
+		vlog('Converting to WAV...');
+		exec(`ffmpeg -i "${audioPath}" -ar 16000 -ac 1 -y "${wavPath}" 2>/dev/null`, {
+			timeout: 120_000
+		}, async (convertErr) => {
+			// Clean up original audio file
+			try { unlinkSync(audioPath); } catch {}
 
-		if (convertErr) {
-			vlog(`ERROR: ffmpeg conversion failed: ${convertErr.message}`);
-			try { unlinkSync(wavPath); } catch {}
-			return;
-		}
-
-		// Step 2: Transcribe with voxtype
-		vlog('Transcribing with voxtype...');
-		let text;
-		try {
-			text = await transcribe(wavPath);
-		} catch (transcribeErr) {
-			vlog(`ERROR: ${transcribeErr.message}`);
-			try { unlinkSync(wavPath); } catch {}
-			return;
-		}
-
-		// Clean up wav
-		try { unlinkSync(wavPath); } catch {}
-
-		vlog(`Transcription complete (${text.length} chars). Organizing with ollama...`);
-
-		// Step 3: Organize transcript into structured tasks via ollama
-		try {
-			const projects = loadProjects();
-			const { tasks, summary, title: organizedTitle, knowledgeBase } = await organizeTranscript(text, projects);
-			appendToVoiceTimeline(tasks, text, summary, organizedTitle, knowledgeBase);
-			vlog(`Done — ${tasks.length} task(s) added to voice inbox`);
-		} catch (organizeErr) {
-			vlog(`ERROR: organize failed, falling back to single task: ${organizeErr.message}`);
-
-			// Fallback: create a single task from the transcript directly
-			const projectPath = process.cwd().replace(/\/ide$/, '');
-			try {
-				const createdTask = createTask({
-					projectPath,
-					title,
-					description: text,
-					type: 'task',
-					priority: isNaN(priority) ? 2 : Math.max(0, Math.min(4, priority)),
-					labels: ['voice'],
-					deps: [],
-					assignee: null,
-					notes: ''
-				});
-				invalidateCache.tasks();
-				invalidateCache.agents();
-				_resetTaskCache();
-				emitEvent({
-					type: 'task_created',
-					source: 'voice_api',
-					data: { taskId: createdTask.id, title, type: 'task', priority, labels: ['voice'] }
-				});
-				vlog(`Fallback: task ${createdTask.id} created: "${title}"`);
-			} catch (e) {
-				vlog(`ERROR: Fallback task creation also failed: ${e.message}`);
+			if (convertErr) {
+				vlog(`ERROR: ffmpeg conversion failed: ${convertErr.message}`);
+				try { unlinkSync(wavPath); } catch {}
+				resolve();
+				return;
 			}
-		}
+
+			// Step 2: Transcribe with voxtype
+			vlog('Transcribing with voxtype...');
+			let text;
+			try {
+				text = await transcribe(wavPath);
+			} catch (transcribeErr) {
+				vlog(`ERROR: ${transcribeErr.message}`);
+				try { unlinkSync(wavPath); } catch {}
+				resolve();
+				return;
+			}
+
+			// Clean up wav
+			try { unlinkSync(wavPath); } catch {}
+
+			vlog(`Transcription complete (${text.length} chars). Organizing with ollama...`);
+
+			// Step 3: Organize transcript into structured tasks via ollama
+			try {
+				const projects = loadProjects();
+				const { tasks, summary, title: organizedTitle, knowledgeBase } = await organizeTranscript(text, projects);
+				appendToVoiceTimeline(tasks, text, summary, organizedTitle, knowledgeBase);
+				vlog(`Done — ${tasks.length} task(s) added to voice inbox`);
+			} catch (organizeErr) {
+				vlog(`ERROR: organize failed, falling back to single task: ${organizeErr.message}`);
+
+				// Fallback: create a single task from the transcript directly
+				const projectPath = process.cwd().replace(/\/ide$/, '');
+				try {
+					const createdTask = createTask({
+						projectPath,
+						title,
+						description: text,
+						type: 'task',
+						priority: isNaN(priority) ? 2 : Math.max(0, Math.min(4, priority)),
+						labels: ['voice'],
+						deps: [],
+						assignee: null,
+						notes: ''
+					});
+					invalidateCache.tasks();
+					invalidateCache.agents();
+					_resetTaskCache();
+					emitEvent({
+						type: 'task_created',
+						source: 'voice_api',
+						data: { taskId: createdTask.id, title, type: 'task', priority, labels: ['voice'] }
+					});
+					vlog(`Fallback: task ${createdTask.id} created: "${title}"`);
+				} catch (e) {
+					vlog(`ERROR: Fallback task creation also failed: ${e.message}`);
+				}
+			}
+			resolve();
+		});
 	});
 }
 
@@ -195,7 +229,14 @@ export async function POST({ request }) {
 				}
 			});
 
+			const jobId = randomUUID();
+			voiceJobs.set(jobId, { status: 'transcribing' });
+			// Mark complete after a short delay (text is already organized above)
+			setTimeout(() => { voiceJobs.set(jobId, { status: 'open' }); }, 2000);
+
 			return json({
+				ok: true,
+				id: jobId,
 				success: true,
 				message: 'Voice note received — organizing in background. Tasks will appear in Voice Inbox shortly.'
 			}, { status: 202, headers: CORS_HEADERS });
@@ -251,10 +292,18 @@ export async function POST({ request }) {
 
 			try { const sz = statSync(audioTempPath).size; vlog(`Audio received: "${title}" (${(sz/1024).toFixed(0)}KB) — queuing transcription`); } catch { vlog(`Audio received: "${title}" — queuing transcription`); }
 
+			// Create a job ID for the widget to poll status
+			const jobId = randomUUID();
+			voiceJobs.set(jobId, { status: 'transcribing', title });
+
 			// Fire and forget — transcription + organize happens in background
-			transcribeAndOrganize(audioTempPath, title, priority);
+			transcribeAndOrganize(audioTempPath, title, priority).finally(() => {
+				voiceJobs.set(jobId, { status: 'open', title });
+			});
 
 			return json({
+				ok: true,
+				id: jobId,
 				success: true,
 				message: 'Recording received — transcribing in background. Task will appear shortly.'
 			}, { status: 202, headers: CORS_HEADERS });

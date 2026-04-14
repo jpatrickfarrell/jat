@@ -93,6 +93,9 @@
   let voiceTaskId = $state<string | null>(null);
   let voiceTitle = $state('');
   let voiceDescription = $state('');
+  // Multi-task review state
+  let voiceTasks = $state<{title: string, description: string}[]>([]);
+  let voiceTaskIndex = $state(0);
   // Watcher cleanup handles
   let voiceTranscribeTimer: ReturnType<typeof setTimeout> | null = null;
   let voiceRealtimeWs: WebSocket | null = null;
@@ -104,10 +107,13 @@
     if (voicePollTimer) { clearInterval(voicePollTimer); voicePollTimer = null; }
   }
 
-  function onTranscriptionComplete(title: string, description: string) {
+  function onTranscriptionComplete(tasks: {title: string, description: string}[]) {
     cleanupVoiceWatchers();
-    voiceTitle = title || '';
-    voiceDescription = description || '';
+    voiceTasks = tasks.filter(t => t.title || t.description);
+    if (voiceTasks.length === 0) voiceTasks = [{ title: '', description: '' }];
+    voiceTaskIndex = 0;
+    voiceTitle = voiceTasks[0].title || '';
+    voiceDescription = voiceTasks[0].description || '';
     voiceStatus = 'confirming';
     voiceStatusMsg = '';
   }
@@ -116,6 +122,35 @@
     cleanupVoiceWatchers();
     voiceStatus = 'error';
     voiceStatusMsg = msg;
+  }
+
+  /** Save edits to current task slot and advance to next, or finish. */
+  function advanceVoiceTask() {
+    // Persist edits for current task
+    voiceTasks = voiceTasks.map((t, i) =>
+      i === voiceTaskIndex ? { title: voiceTitle, description: voiceDescription } : t
+    );
+    if (voiceTaskIndex < voiceTasks.length - 1) {
+      voiceTaskIndex++;
+      voiceTitle = voiceTasks[voiceTaskIndex].title || '';
+      voiceDescription = voiceTasks[voiceTaskIndex].description || '';
+      voiceStatus = 'confirming';
+    } else {
+      voiceStatus = 'submitted';
+      voiceStatusMsg = '';
+      setTimeout(() => { activeTab = 'requests'; loadReports(); }, 1500);
+    }
+  }
+
+  /** Skip current task without submitting, advance to next or discard. */
+  function skipVoiceTask() {
+    if (voiceTaskIndex < voiceTasks.length - 1) {
+      voiceTaskIndex++;
+      voiceTitle = voiceTasks[voiceTaskIndex].title || '';
+      voiceDescription = voiceTasks[voiceTaskIndex].description || '';
+    } else {
+      resetVoice();
+    }
   }
 
   function startRealtimeWatch(taskId: string) {
@@ -169,7 +204,7 @@
         if (type === 'UPDATE' && record) {
           if (record.status === 'open') {
             if (heartbeatTimer) clearInterval(heartbeatTimer);
-            onTranscriptionComplete(record.title || '', record.description || '');
+            onTranscriptionComplete([{ title: record.title || '', description: record.description || '' }]);
           } else if (record.status === 'failed') {
             if (heartbeatTimer) clearInterval(heartbeatTimer);
             onTranscriptionFailed('Transcription failed. Try again.');
@@ -197,6 +232,7 @@
         let status: string | null = null;
         let title = '';
         let desc = '';
+        let pollTasks: {title: string, description: string}[] = [];
 
         if (supabaseUrl && supabaseAnonKey) {
           // Poll Supabase REST API directly
@@ -215,13 +251,20 @@
           const res = await fetch(`${endpoint.replace(/\/$/, '')}/api/tasks/voice?id=${encodeURIComponent(taskId)}`);
           if (res.ok) {
             const data = await res.json();
-            status = data.status; title = data.title || ''; desc = data.description || '';
+            status = data.status;
+            // Use tasks array if present (multi-task), fall back to single title/description
+            if (Array.isArray(data.tasks) && data.tasks.length > 0) {
+              pollTasks = data.tasks;
+            } else {
+              title = data.title || ''; desc = data.description || '';
+            }
           }
         }
 
         if (status === 'open') {
           clearInterval(voicePollTimer!); voicePollTimer = null;
-          onTranscriptionComplete(title, desc);
+          const tasksToUse = pollTasks.length > 0 ? pollTasks : [{ title, description: desc }];
+          onTranscriptionComplete(tasksToUse);
         } else if (status === 'failed') {
           clearInterval(voicePollTimer!); voicePollTimer = null;
           onTranscriptionFailed('Transcription failed. Try again.');
@@ -343,10 +386,8 @@
           throw new Error(data.error || `HTTP ${res.status}`);
         }
       }
-      voiceStatus = 'submitted';
-      voiceStatusMsg = '';
-      // Switch to History tab after brief delay
-      setTimeout(() => { activeTab = 'requests'; loadReports(); }, 1500);
+      // Advance to next task or finish
+      advanceVoiceTask();
     } catch (err: any) {
       // Return to confirming so user can retry
       voiceStatus = 'confirming';
@@ -366,6 +407,8 @@
     voiceTaskId = null;
     voiceTitle = '';
     voiceDescription = '';
+    voiceTasks = [];
+    voiceTaskIndex = 0;
   }
 
   // Agent state — managed by AgentBridge, fed to AgentPanel as props
@@ -1076,6 +1119,16 @@
 
         {:else if voiceStatus === 'confirming'}
           <div class="voice-confirm">
+            {#if voiceTasks.length > 1}
+              <div class="voice-task-nav">
+                <div class="voice-task-dots">
+                  {#each voiceTasks as _, i}
+                    <span class="voice-task-dot {i === voiceTaskIndex ? 'voice-task-dot-active' : ''}"></span>
+                  {/each}
+                </div>
+                <span class="voice-task-counter">Task {voiceTaskIndex + 1} of {voiceTasks.length}</span>
+              </div>
+            {/if}
             <p class="voice-confirm-hint">Review and edit before submitting as feedback.</p>
             {#if voiceStatusMsg}
               <p class="voice-error-text" style="font-size: 12px; margin: 0 0 0.5rem;">{voiceStatusMsg}</p>
@@ -1101,9 +1154,18 @@
               ></textarea>
             </div>
             <div class="voice-confirm-actions">
-              <button class="voice-reset" onclick={resetVoice}>Discard</button>
+              <button class="voice-reset" onclick={resetVoice}>Discard all</button>
+              {#if voiceTasks.length > 1}
+                <button class="voice-btn voice-btn-skip" onclick={skipVoiceTask}>
+                  Skip
+                </button>
+              {/if}
               <button class="voice-btn voice-btn-submit" onclick={confirmVoiceNote} disabled={!voiceTitle.trim()}>
-                Submit as feedback
+                {#if voiceTasks.length > 1 && voiceTaskIndex < voiceTasks.length - 1}
+                  Submit &amp; next →
+                {:else}
+                  Submit as feedback
+                {/if}
               </button>
             </div>
           </div>
@@ -1753,4 +1815,41 @@
     opacity: 0.45;
     cursor: not-allowed;
   }
+  .voice-task-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+  }
+  .voice-task-dots {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+  }
+  .voice-task-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #374151;
+    transition: background 0.2s;
+  }
+  .voice-task-dot-active {
+    background: #1d4ed8;
+    width: 8px;
+    height: 8px;
+  }
+  .voice-task-counter {
+    font-size: 11px;
+    color: #6b7280;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+  .voice-btn-skip {
+    background: transparent;
+    color: #6b7280;
+    border: 1px solid #374151;
+    padding: 0.5rem 0.875rem;
+    font-size: 13px;
+  }
+  .voice-btn-skip:hover { color: #9ca3af; border-color: #4b5563; }
 </style>

@@ -42,12 +42,21 @@ jt search "keyword"         # Search tasks
 ```
 
 **Status values** (use underscores, not hyphens):
+
+Agent-workable (agents pick these up via `jt ready`):
 - `open` - Available to start
 - `in_progress` - Being worked on
-- `blocked` - Waiting on something
+
+Paused / mid-flight (agents do NOT pick these up):
+- `waiting` - Ball in counterparty's court (awaiting their input)
+- `blocked` - Blocked by external dependency
+- `submitted` - Submitted for review/triage
+- `accepted` - Stakeholder approved, pending deploy
+- `deployed` - Shipped, pending archive/closeout
+
+Terminal / special:
 - `closed` - Completed
 - `dev` - Internal/dev-only (hidden from clients)
-- `submitted` - Submitted for review/triage
 
 **Task types:** `bug`, `feature`, `task`, `epic`, `chore` (recurring scheduled task), `chat`
 

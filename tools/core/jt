@@ -1362,7 +1362,9 @@ cmd_ready() {
     limit_clause="LIMIT $limit"
   fi
 
-  # Ready = open + no open/in_progress dependencies
+  # Ready = open + no unclosed dependencies.
+  # Excludes in_progress (another agent is on it) and paused statuses
+  # (waiting/blocked/submitted/accepted/deployed) owned by a human workflow.
   local result
   result="$(sql_json "
     SELECT

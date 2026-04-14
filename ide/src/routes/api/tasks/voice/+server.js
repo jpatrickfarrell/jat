@@ -34,8 +34,8 @@ import {
 /**
  * In-memory job status map for voice transcription polling.
  * Used by the jat-feedback widget to poll transcription status.
- * Keys: UUID job IDs. Values: { status: 'transcribing'|'open'|'error', title?: string }
- * @type {Map<string, { status: string, title?: string }>}
+ * Keys: UUID job IDs. Values: { status: 'transcribing'|'open'|'error', title?: string, description?: string }
+ * @type {Map<string, { status: string, title?: string, description?: string }>}
  */
 const voiceJobs = new Map();
 
@@ -68,7 +68,7 @@ export async function GET({ url }) {
 		// Unknown ID — return open so the widget stops polling
 		return json({ id, status: 'open' }, { headers: CORS_HEADERS });
 	}
-	return json({ id, status: job.status, title: job.title }, { headers: CORS_HEADERS });
+	return json({ id, status: job.status, title: job.title, description: job.description || '' }, { headers: CORS_HEADERS });
 }
 
 /**
@@ -100,10 +100,12 @@ function getAudioDate(filePath) {
 
 /**
  * Transcribe audio file and organize into suggested tasks (runs in background).
+ * Resolves with { title, description } from the first organized task so the caller
+ * can update voiceJobs for widget polling.
  * @param {string} audioPath
  * @param {string} title
  * @param {number} priority
- * @returns {Promise<void>}
+ * @returns {Promise<{ title: string, description: string }>}
  */
 function transcribeAndOrganize(audioPath, title, priority) {
 	return new Promise((resolve) => {
@@ -123,7 +125,7 @@ function transcribeAndOrganize(audioPath, title, priority) {
 			if (convertErr) {
 				vlog(`ERROR: ffmpeg conversion failed: ${convertErr.message}`);
 				try { unlinkSync(wavPath); } catch {}
-				resolve();
+				resolve({ title, description: '' });
 				return;
 			}
 
@@ -135,7 +137,7 @@ function transcribeAndOrganize(audioPath, title, priority) {
 			} catch (transcribeErr) {
 				vlog(`ERROR: ${transcribeErr.message}`);
 				try { unlinkSync(wavPath); } catch {}
-				resolve();
+				resolve({ title, description: '' });
 				return;
 			}
 
@@ -150,6 +152,12 @@ function transcribeAndOrganize(audioPath, title, priority) {
 				const { tasks, summary, title: organizedTitle, knowledgeBase } = await organizeTranscript(text, projects);
 				appendToVoiceTimeline(tasks, text, summary, organizedTitle, knowledgeBase);
 				vlog(`Done — ${tasks.length} task(s) added to voice inbox`);
+				// Return first task's title/description for widget review form
+				const firstTask = tasks[0];
+				resolve({
+					title: firstTask?.title || organizedTitle || title,
+					description: firstTask?.description || summary || text
+				});
 			} catch (organizeErr) {
 				vlog(`ERROR: organize failed, falling back to single task: ${organizeErr.message}`);
 
@@ -179,8 +187,8 @@ function transcribeAndOrganize(audioPath, title, priority) {
 				} catch (e) {
 					vlog(`ERROR: Fallback task creation also failed: ${e.message}`);
 				}
+				resolve({ title, description: text || '' });
 			}
-			resolve();
 		});
 	});
 }
@@ -297,7 +305,10 @@ export async function POST({ request }) {
 			voiceJobs.set(jobId, { status: 'transcribing', title });
 
 			// Fire and forget — transcription + organize happens in background
-			transcribeAndOrganize(audioTempPath, title, priority).finally(() => {
+			// Update voiceJobs with actual title/description for widget review form
+			transcribeAndOrganize(audioTempPath, title, priority).then((result) => {
+				voiceJobs.set(jobId, { status: 'open', title: result.title, description: result.description });
+			}).catch(() => {
 				voiceJobs.set(jobId, { status: 'open', title });
 			});
 

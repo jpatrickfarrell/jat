@@ -73,6 +73,10 @@
 		{ prefix: 'git:', label: 'Git', icon: '🔀', description: 'Inject git diff, log, or branch info' },
 		{ prefix: 'memory:', label: 'Memory', icon: '🧠', description: 'Search project memory for context' },
 		{ prefix: 'url:', label: 'URL', icon: '🔗', description: 'Fetch and inject URL content' },
+		{ prefix: 'base:', label: 'Base', icon: '📚', description: 'Attach a knowledge base' },
+		{ prefix: 'command:', label: 'Command', icon: '⚡', description: 'Reference a slash command' },
+		{ prefix: 'agent:', label: 'Agent', icon: '🤖', description: 'Reference an agent by name' },
+		{ prefix: 'data:', label: 'Data', icon: '📊', description: 'Reference a data table or view' },
 		{ prefix: 'fx:', label: 'Formula', icon: 'ƒx', description: 'Insert a formula expression' }
 	];
 
@@ -151,7 +155,7 @@
 			return { mode: 'provider-search', provider: 'fx', query: fxMatch[1] };
 		}
 
-		const providerMatch = beforeCursor.match(/@(task|git|memory|url):([\w\-\.\/:%?&#=+~]*)$/);
+		const providerMatch = beforeCursor.match(/@(task|git|memory|url|base|command|agent|data):([\w\-\.\/:%?&#=+~]*)$/);
 		if (providerMatch) {
 			return { mode: 'provider-search', provider: providerMatch[1], query: providerMatch[2] };
 		}
@@ -243,6 +247,38 @@
 		}
 
 		syncReferencedFiles();
+	}
+
+	// Capture-phase listener: intercepts arrow keys BEFORE contenteditable's native caret
+	// movement. Without this, up/down/left/right fire keydown but the browser has already
+	// applied cursor movement visually on some engines.
+	function captureAutocompleteKeys(node: HTMLElement) {
+		const handler = (e: KeyboardEvent) => {
+			if (!showFileAutocomplete) return;
+			const totalItems = getAutocompleteItemCount();
+			if (totalItems === 0) return;
+			if (e.key === 'ArrowDown') {
+				e.preventDefault();
+				e.stopPropagation();
+				fileAutocompleteIndex = (fileAutocompleteIndex + 1) % totalItems;
+			} else if (e.key === 'ArrowUp') {
+				e.preventDefault();
+				e.stopPropagation();
+				fileAutocompleteIndex = (fileAutocompleteIndex - 1 + totalItems) % totalItems;
+			} else if (e.key === 'Tab' || e.key === 'Enter') {
+				e.preventDefault();
+				e.stopPropagation();
+				selectAutocompleteItem(fileAutocompleteIndex);
+			} else if (e.key === 'Escape') {
+				e.preventDefault();
+				e.stopPropagation();
+				showFileAutocomplete = false;
+			}
+		};
+		node.addEventListener('keydown', handler, { capture: true });
+		return {
+			destroy() { node.removeEventListener('keydown', handler, { capture: true } as any); }
+		};
 	}
 
 	function handleTextareaKeydown(e: KeyboardEvent) {
@@ -856,6 +892,7 @@
 		"
 		oninput={handleTextareaInput}
 		onkeydown={handleTextareaKeydown}
+		use:captureAutocompleteKeys
 		onpaste={handlePaste}
 		onfocus={onfocus}
 		onblur={handleBlur}

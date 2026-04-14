@@ -19,6 +19,7 @@
 	import { fly, fade } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import MobileTerminal from '$lib/components/work/MobileTerminal.svelte';
+	import EventStack from '$lib/components/work/EventStack.svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import MobileTaskBody from '$lib/components/work/atoms/MobileTaskBody.svelte';
 	import PromptInput from '$lib/components/quick-commands/PromptInput.svelte';
@@ -293,6 +294,46 @@
 		// 4. Dismiss drawer after button flash animation completes
 		setTimeout(dismissDrawer, 180);
 	}
+
+	// Completion signal events (for completed state)
+	interface TimelineEvent {
+		type: string;
+		session_id: string;
+		tmux_session: string;
+		timestamp: string;
+		state?: string;
+		task_id?: string;
+		data?: any;
+	}
+	type CompletionLoadState = 'idle' | 'loading' | 'loaded' | 'empty';
+	let completionEvents = $state<TimelineEvent[]>([]);
+	let completionLoadState = $state<CompletionLoadState>('idle');
+	let completionFetchedFor = $state<string | null>(null);
+
+	async function fetchCompletionEvents() {
+		if (!agentName || !task?.id) return;
+		const key = `${agentName}:${task.id}`;
+		if (completionFetchedFor === key) return;
+		completionLoadState = 'loading';
+		completionFetchedFor = key;
+		try {
+			const res = await fetch(
+				`/api/sessions/${encodeURIComponent(agentName)}/timeline?limit=50&type=complete,review&taskId=${encodeURIComponent(task.id)}`
+			);
+			if (!res.ok) { completionLoadState = 'empty'; return; }
+			const data = await res.json();
+			const fetched: TimelineEvent[] = data.events || [];
+			if (fetched.length === 0) { completionLoadState = 'empty'; }
+			else { completionEvents = fetched; completionLoadState = 'loaded'; }
+		} catch { completionLoadState = 'empty'; }
+	}
+
+	// Fetch completion events when state becomes completed
+	$effect(() => {
+		if (effectiveState === 'completed' && agentName && task?.id) {
+			fetchCompletionEvents();
+		}
+	});
 
 	// Terminal output state
 	let output = $state('');
@@ -1158,18 +1199,48 @@
 				{/if}
 				<div class="session-card-wrapper" class:mobile-scrolling={mobileScrolling} bind:this={wrapperRef}>
 					{#if currentPage === 0}
-					<MobileTerminal
-						{sessionName}
-						{output}
-						{task}
-						defaultProject={project || ''}
-						sessionState={effectiveState}
-						onSendInput={(text, type) => onSendInput(text, type)}
-						onCleanup={() => onAction('cleanup')}
-						onComplete={() => onSendInput('/jat:complete', 'text')}
-						onViewTask={onViewTask}
-						onOptimisticAnswer={(state) => { optimisticAnswerState = state as SessionState | null; }}
-					/>
+						{#if effectiveState === 'completed' && completionLoadState === 'loaded' && completionEvents.length > 0}
+							<div class="completion-eventstack-wrapper">
+								<EventStack
+									sessionName={agentName}
+									initialEvents={completionEvents}
+									layoutMode="inline"
+									autoExpand={true}
+									pollInterval={0}
+								/>
+							</div>
+						{:else if effectiveState === 'completed' && completionLoadState === 'loading'}
+							<div class="completion-loading">
+								<div class="animate-spin-fast w-5 h-5 border-2 border-primary border-t-transparent rounded-full"></div>
+								<span class="text-xs text-base-content/50">Loading completion data…</span>
+							</div>
+						{:else if effectiveState === 'completed' && completionLoadState === 'empty'}
+							<MobileTerminal
+								{sessionName}
+								{output}
+								{task}
+								defaultProject={project || ''}
+								sessionState={effectiveState}
+								onSendInput={(text, type) => onSendInput(text, type)}
+								onCleanup={() => onAction('cleanup')}
+								onComplete={() => onSendInput('/jat:complete', 'text')}
+								onViewTask={onViewTask}
+								onOptimisticAnswer={(state) => { optimisticAnswerState = state as SessionState | null; }}
+							/>
+						{:else}
+							<MobileTerminal
+								{sessionName}
+								{output}
+								{task}
+								defaultProject={project || ''}
+								sessionState={effectiveState}
+								onSendInput={(text, type) => onSendInput(text, type)}
+								onCleanup={() => onAction('cleanup')}
+								onComplete={() => onSendInput('/jat:complete', 'text')}
+								onViewTask={onViewTask}
+								onOptimisticAnswer={(state) => { optimisticAnswerState = state as SessionState | null; }}
+							/>
+						{/if}
 					{/if}
 				</div>
 
@@ -1782,6 +1853,22 @@
 		overflow: hidden;
 		display: flex;
 		flex-direction: column;
+	}
+
+	.completion-eventstack-wrapper {
+		flex: 1;
+		overflow-y: auto;
+		padding: 0.5rem;
+		background: transparent;
+	}
+
+	.completion-loading {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.75rem;
 	}
 
 	.session-card-wrapper :global(> *) {

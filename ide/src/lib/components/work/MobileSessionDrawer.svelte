@@ -471,13 +471,72 @@
 	}
 	let pendingAttachments = $state<PendingAttachment[]>([]);
 	const hasSendable = $derived(inputText.trim().length > 0 || pendingAttachments.some(a => !a.uploading));
-	let sentFlash = $state(false);
+	let sentFlash = $state(false);      // full flash: recede + close
+	let sentStayFlash = $state(false);  // brief flash: button+row only, stay open
+
+	// Message history (per session, persisted to localStorage)
+	let sentHistory = $state<string[]>([]);
+	let historyIndex = $state(-1);       // -1 = not browsing history
+	let historyBuffer = $state('');      // saved current input when browsing history
+
+	function loadHistory() {
+		if (!sessionName || typeof localStorage === 'undefined') return;
+		try {
+			const saved = localStorage.getItem(`jat-input-history-${sessionName}`);
+			if (saved) sentHistory = JSON.parse(saved);
+		} catch { /* ignore */ }
+	}
+
+	function pushToHistory(text: string) {
+		if (!text.trim()) return;
+		// Don't duplicate last entry
+		if (sentHistory.length > 0 && sentHistory[sentHistory.length - 1] === text) return;
+		sentHistory = [...sentHistory, text].slice(-50);
+		if (sessionName && typeof localStorage !== 'undefined') {
+			try { localStorage.setItem(`jat-input-history-${sessionName}`, JSON.stringify(sentHistory)); } catch { /* ignore */ }
+		}
+	}
+
+	async function sendWithStay() {
+		if (!hasSendable) return;
+		await sendWithAttachments();
+		sentStayFlash = true;
+		setTimeout(() => { sentStayFlash = false; }, 420);
+		historyIndex = -1;
+	}
+
+	async function sendBroadcast() {
+		if (!hasSendable) return;
+		const text = inputText.trim();
+		await sendWithAttachments(); // sends to current session
+		// Broadcast to all other active sessions
+		try {
+			const resp = await fetch('/api/work');
+			const data = await resp.json();
+			const sessions: Array<{ sessionName: string }> = data.sessions || [];
+			for (const session of sessions) {
+				if (session.sessionName === sessionName) continue;
+				try {
+					await fetch(`/api/work/${encodeURIComponent(session.sessionName)}/input`, {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ type: 'text', input: text })
+					});
+				} catch { /* ignore */ }
+				await new Promise(r => setTimeout(r, 60));
+			}
+		} catch { /* ignore */ }
+		sentStayFlash = true;
+		setTimeout(() => { sentStayFlash = false; }, 420);
+		historyIndex = -1;
+	}
 
 	async function sendAndDismiss() {
 		if (!hasSendable) return;
 		await sendWithAttachments();
 		sentFlash = true;
 		setTimeout(() => dismissDrawer(), 320);
+		historyIndex = -1;
 	}
 
 	// Markdown preview toggle
@@ -633,6 +692,7 @@
 		pendingAttachments = pendingAttachments.filter(a => a.uploading); // keep any still uploading
 
 		if (text) {
+			pushToHistory(text);
 			await onSendInput(text, 'text');
 			// Extra Enter matches MobileSessionFullscreen behavior — needed for image paths.
 			await new Promise(r => setTimeout(r, 100));
@@ -1071,15 +1131,96 @@
 	});
 
 	function handleKeydown(e: KeyboardEvent) {
+		const target = e.target as HTMLElement;
+
+		// Esc: two-stage — clear non-empty input first, then close
 		if (e.key === 'Escape') {
 			e.preventDefault();
-			dismissDrawer();
+			if (inputText.trim().length > 0) {
+				inputText = '';
+				historyIndex = -1;
+			} else {
+				dismissDrawer();
+			}
+			return;
 		}
+
+		// Only handle input shortcuts when a textarea/input is focused
+		if (target.tagName !== 'TEXTAREA' && target.tagName !== 'INPUT') return;
+
+		// Shift+Enter → let through (natural linebreak in textarea)
+		if (e.key === 'Enter' && e.shiftKey) return;
+
+		// Alt+Enter → broadcast to all active sessions
+		if (e.key === 'Enter' && e.altKey) {
+			if (hasSendable) {
+				e.preventDefault();
+				sendBroadcast();
+			}
+			return;
+		}
+
+		// Ctrl/Cmd+Enter → send + close drawer
 		if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-			if (inputText.trim() || pendingAttachments.some(a => !a.uploading)) {
+			if (hasSendable) {
 				e.preventDefault();
 				sendAndDismiss();
 			}
+			return;
+		}
+
+		// Enter (bare) → send, stay open
+		// Skip if autocomplete in PromptInput already handled it (e.defaultPrevented)
+		if (e.key === 'Enter' && !e.defaultPrevented) {
+			if (hasSendable) {
+				e.preventDefault();
+				sendWithStay();
+			}
+			return;
+		}
+
+		// ↑ → previous history (only when cursor is on first line)
+		if (e.key === 'ArrowUp') {
+			const textarea = target as HTMLTextAreaElement;
+			const cursorPos = textarea.selectionStart ?? 0;
+			const isFirstLine = !inputText.substring(0, cursorPos).includes('\n');
+			if (isFirstLine && sentHistory.length > 0) {
+				e.preventDefault();
+				if (historyIndex === -1) {
+					historyBuffer = inputText;
+					historyIndex = sentHistory.length - 1;
+				} else if (historyIndex > 0) {
+					historyIndex--;
+				}
+				inputText = sentHistory[historyIndex];
+			}
+			return;
+		}
+
+		// ↓ → forward through history / restore current buffer
+		if (e.key === 'ArrowDown' && historyIndex !== -1) {
+			const textarea = target as HTMLTextAreaElement;
+			const cursorPos = textarea.selectionStart ?? 0;
+			const isLastLine = !inputText.substring(cursorPos).includes('\n');
+			if (isLastLine) {
+				e.preventDefault();
+				if (historyIndex < sentHistory.length - 1) {
+					historyIndex++;
+					inputText = sentHistory[historyIndex];
+				} else {
+					historyIndex = -1;
+					inputText = historyBuffer;
+				}
+			}
+			return;
+		}
+
+		// Ctrl+K → clear input
+		if (e.key === 'k' && e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
+			e.preventDefault();
+			inputText = '';
+			historyIndex = -1;
+			return;
 		}
 	}
 
@@ -1089,11 +1230,12 @@
 		isMobileFullscreenOpen.set(true);
 		setHoveredSession(sessionName);
 
-		// Restore main input draft
+		// Restore main input draft and history
 		if (sessionName && typeof localStorage !== 'undefined') {
 			const saved = localStorage.getItem(`jat-draft-mobile-${sessionName}-main-input`);
 			if (saved) inputText = saved;
 		}
+		loadHistory();
 
 		// Start polling output — 3s on mobile is responsive enough and much lighter
 		fetchOutput();

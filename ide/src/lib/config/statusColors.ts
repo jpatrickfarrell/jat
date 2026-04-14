@@ -843,7 +843,7 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 	completed: [
 		{
 			id: 'cleanup',
-			label: 'Cleanup Session',
+			label: 'Cleanup',
 			icon: 'M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0',
 			variant: 'success',
 			description: 'Close tmux session'
@@ -857,21 +857,21 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 		},
 		{
 			id: 'pause',
-			label: 'Pause Session',
+			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'default',
 			description: 'Save progress and close (resumable later)'
 		},
 		{
 			id: 'attach',
-			label: 'Attach Terminal',
+			label: 'Attach',
 			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
 			variant: 'info',
 			description: 'Open session in terminal'
 		},
 		{
 			id: 'kill',
-			label: 'Kill Session',
+			label: 'Kill',
 			icon: 'M6 18L18 6M6 6l12 12',
 			variant: 'error',
 			description: 'Terminate tmux session'
@@ -896,14 +896,14 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 		},
 		{
 			id: 'pause',
-			label: 'Pause Session',
+			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'default',
 			description: 'Save progress and close (resumable later)'
 		},
 		{
 			id: 'attach',
-			label: 'Attach Terminal',
+			label: 'Attach',
 			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
 			variant: 'info',
 			description: 'Open session in terminal'
@@ -926,7 +926,7 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 		},
 		{
 			id: 'attach',
-			label: 'Attach Terminal',
+			label: 'Attach',
 			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
 			variant: 'info',
 			description: 'Open planning session in terminal'
@@ -949,7 +949,7 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 		},
 		{
 			id: 'pause',
-			label: 'Pause Session',
+			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'default',
 			description: 'Save progress and close (resumable later)'
@@ -972,7 +972,7 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 		},
 		{
 			id: 'complete-kill',
-			label: 'Complete & Kill',
+			label: 'Comp & Kill',
 			icon: 'M9 12.75L11.25 15 15 9.75m0 0l3 3m-3-3v7.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'warning',
 			description: 'Complete task and self-destruct session'
@@ -986,21 +986,21 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 		},
 		{
 			id: 'pause',
-			label: 'Pause Session',
+			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'default',
 			description: 'Save progress and close (resumable later)'
 		},
 		{
 			id: 'attach',
-			label: 'Attach Terminal',
+			label: 'Attach',
 			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
 			variant: 'info',
 			description: 'Open session in terminal to review'
 		},
 		{
 			id: 'kill',
-			label: 'Kill Session',
+			label: 'Kill',
 			icon: 'M6 18L18 6M6 6l12 12',
 			variant: 'error',
 			description: 'Terminate tmux session'
@@ -1009,21 +1009,21 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 	completing: [
 		{
 			id: 'attach',
-			label: 'Attach Terminal',
+			label: 'Attach',
 			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
 			variant: 'info',
 			description: 'Watch completion progress'
 		},
 		{
 			id: 'pause',
-			label: 'Pause Session',
+			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'default',
 			description: 'Save progress and close (resumable later)'
 		},
 		{
 			id: 'kill',
-			label: 'Kill Session',
+			label: 'Kill',
 			icon: 'M6 18L18 6M6 6l12 12',
 			variant: 'error',
 			description: 'Terminate tmux session'
@@ -1039,21 +1039,21 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 		},
 		{
 			id: 'pause',
-			label: 'Pause Session',
+			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'default',
 			description: 'Save progress and close (resumable later)'
 		},
 		{
 			id: 'attach',
-			label: 'Attach Terminal',
+			label: 'Attach',
 			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
 			variant: 'warning',
 			description: 'Open session to provide input'
 		},
 		{
 			id: 'kill',
-			label: 'Kill Session',
+			label: 'Kill',
 			icon: 'M6 18L18 6M6 6l12 12',
 			variant: 'error',
 			description: 'Terminate tmux session'
@@ -1069,7 +1069,7 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 		},
 		{
 			id: 'complete-kill',
-			label: 'Complete & Kill',
+			label: 'Comp & Kill',
 			icon: 'M9 12.75L11.25 15 15 9.75m0 0l3 3m-3-3v7.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'warning',
 			description: 'Complete task and self-destruct session'
@@ -1083,21 +1083,21 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 		},
 		{
 			id: 'pause',
-			label: 'Pause Session',
+			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'default',
 			description: 'Save progress and close (resumable later)'
 		},
 		{
 			id: 'kill',
-			label: 'Kill Session',
+			label: 'Kill',
 			icon: 'M6 18L18 6M6 6l12 12',
 			variant: 'error',
 			description: 'Terminate tmux session (task stays in_progress)'
 		},
 		{
 			id: 'attach',
-			label: 'Attach Terminal',
+			label: 'Attach',
 			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
 			variant: 'info',
 			description: 'Open session in terminal'
@@ -1113,7 +1113,7 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 		},
 		{
 			id: 'pause',
-			label: 'Pause Session',
+			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'default',
 			description: 'Save progress and close (resumable later)'
@@ -1136,21 +1136,21 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 		},
 		{
 			id: 'pause',
-			label: 'Pause Session',
+			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'default',
 			description: 'Save progress and close (resumable later)'
 		},
 		{
 			id: 'attach',
-			label: 'Attach Terminal',
+			label: 'Attach',
 			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
 			variant: 'info',
 			description: 'Open session in terminal'
 		},
 		{
 			id: 'kill',
-			label: 'Kill Session',
+			label: 'Kill',
 			icon: 'M6 18L18 6M6 6l12 12',
 			variant: 'error',
 			description: 'Terminate tmux session'
@@ -1173,7 +1173,7 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 		},
 		{
 			id: 'kill',
-			label: 'Kill Session',
+			label: 'Kill',
 			icon: 'M6 18L18 6M6 6l12 12',
 			variant: 'error',
 			description: 'Terminate tmux session'
@@ -1210,7 +1210,7 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 		},
 		{
 			id: 'kill',
-			label: 'Kill Session',
+			label: 'Kill',
 			icon: 'M6 18L18 6M6 6l12 12',
 			variant: 'error',
 			description: 'Kill session and release task back to open'
@@ -1256,21 +1256,21 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 		},
 		{
 			id: 'pause',
-			label: 'Pause Session',
+			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'default',
 			description: 'Save progress and close (resumable later)'
 		},
 		{
 			id: 'attach',
-			label: 'Attach Terminal',
+			label: 'Attach',
 			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
 			variant: 'info',
 			description: 'Open session in terminal'
 		},
 		{
 			id: 'kill',
-			label: 'Kill Session',
+			label: 'Kill',
 			icon: 'M6 18L18 6M6 6l12 12',
 			variant: 'error',
 			description: 'Terminate tmux session'
@@ -1286,14 +1286,14 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 		},
 		{
 			id: 'pause',
-			label: 'Pause Session',
+			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 			variant: 'default',
 			description: 'Save progress and close (resumable later)'
 		},
 		{
 			id: 'kill',
-			label: 'Kill Session',
+			label: 'Kill',
 			icon: 'M6 18L18 6M6 6l12 12',
 			variant: 'error',
 			description: 'Terminate tmux session'
@@ -1436,7 +1436,7 @@ export const SERVER_STATE_ACTIONS: Record<ServerState, ServerStateAction[]> = {
 		},
 		{
 			id: 'attach',
-			label: 'Attach Terminal',
+			label: 'Attach',
 			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
 			variant: 'info',
 			description: 'Open server output in terminal'
@@ -1445,7 +1445,7 @@ export const SERVER_STATE_ACTIONS: Record<ServerState, ServerStateAction[]> = {
 	starting: [
 		{
 			id: 'attach',
-			label: 'Attach Terminal',
+			label: 'Attach',
 			icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z',
 			variant: 'info',
 			description: 'Watch server startup'

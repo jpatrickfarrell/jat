@@ -16,7 +16,8 @@
 	import TasksActive from "$lib/components/sessions/TasksActive.svelte";
 	import MobileSessionDrawer from "$lib/components/work/MobileSessionDrawer.svelte";
 	import TasksPaused from "$lib/components/sessions/TasksPaused.svelte";
-	import TaskIdBadge from "$lib/components/TaskIdBadge.svelte";
+	import AgentAvatar from "$lib/components/AgentAvatar.svelte";
+	import StatusActionBadge from "$lib/components/work/atoms/StatusActionBadge.svelte";
 	import TasksOpen from "$lib/components/sessions/TasksOpen.svelte";
 	import ProjectNotes from "$lib/components/sessions/ProjectNotes.svelte";
 	import WorkingAgentBadge from "$lib/components/WorkingAgentBadge.svelte";
@@ -2162,62 +2163,34 @@
 
 						{#if !isSubsectionCollapsed(selectedProject!, "waiting")}
 							<div class="waiting-content" transition:slide={{ duration: 200 }}>
-								<div class="waiting-tasks-table">
-									<table class="waiting-table">
-										<thead>
-											<tr>
-												<th class="th-task">Task</th>
-												<th class="th-action">Action</th>
-											</tr>
-										</thead>
-										<tbody>
-											{#each projectWaitingTasks as task (task.id)}
-												<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
-												<tr class="waiting-row clickable" onclick={() => openTaskDetailDrawer(task.id)}>
-													<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-													<td class="td-task" onclick={(e) => e.stopPropagation()}>
-														<div class="badge-and-text">
-															<TaskIdBadge
-																{task}
-																size="sm"
-																variant="agentPill"
-																agentName={task.assignee || ''}
-																harness={task.agent_program || 'claude-code'}
-																onClick={() => openTaskDetailDrawer(task.id)}
-															/>
-															<div class="text-column">
-																<span class="task-title" title={task.title}>
-																	{task.title || task.id}
-																</span>
-																{#if task.assignee}
-																	<span class="waiting-agent">agent: {task.assignee}</span>
-																{/if}
-															</div>
-														</div>
-													</td>
-													<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-													<td class="td-action" onclick={(e) => e.stopPropagation()}>
-														<div class="waiting-actions">
-															<button
-																class="waiting-btn spawn-btn"
-																onclick={() => spawnWaitingTask(task.id)}
-																title="Spawn a new agent to continue this task"
-															>
-																Spawn Agent
-															</button>
-															<button
-																class="waiting-btn reopen-btn"
-																onclick={() => reopenWaitingTask(task.id)}
-																title="Reset to open so any agent can pick it up"
-															>
-																Reopen
-															</button>
-														</div>
-													</td>
-												</tr>
-											{/each}
-										</tbody>
-									</table>
+								<div class="waiting-sessions-list">
+									{#each projectWaitingTasks as task (task.id)}
+										<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+										<div class="waiting-row" onclick={() => openTaskDetailDrawer(task.id)}>
+											<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+											<div class="waiting-row-task" onclick={(e) => e.stopPropagation()}>
+												<AgentAvatar name={task.assignee || task.id} size={40} />
+												<div class="waiting-task-text">
+													<span class="waiting-task-title" title={task.title}>{task.title || task.id}</span>
+													<span class="waiting-task-id">{task.id}{task.assignee ? ` · ${task.assignee}` : ''}</span>
+												</div>
+											</div>
+											<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+											<div class="waiting-row-action" onclick={(e) => e.stopPropagation()}>
+												<StatusActionBadge
+													sessionState="waiting"
+													sessionName={task.assignee ? `jat-${task.assignee}` : task.id}
+													onAction={(actionId) => {
+														if (actionId === 'restart') spawnWaitingTask(task.id);
+														else if (actionId === 'reopen') reopenWaitingTask(task.id);
+														else if (actionId === 'view-task') openTaskDetailDrawer(task.id);
+													}}
+													alignRight={true}
+													stacked={true}
+												/>
+											</div>
+										</div>
+									{/each}
 								</div>
 							</div>
 						{/if}
@@ -3299,23 +3272,17 @@
 		overflow: hidden;
 	}
 
-	.waiting-tasks-table {
+	.waiting-sessions-list {
 		border-radius: 0.375rem;
 		overflow: hidden;
 		border: 1px solid oklch(0.75 0.15 85 / 0.15);
 	}
 
-	.waiting-table {
-		width: 100%;
-		border-collapse: collapse;
-		table-layout: fixed;
-	}
-
-	.waiting-table thead {
-		display: none;
-	}
-
 	.waiting-row {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.75rem;
 		background: linear-gradient(90deg, oklch(0.75 0.15 85 / 0.06), transparent 60%);
 		border-left: 3px solid oklch(0.75 0.15 85 / 0.5);
 		border-bottom: 1px solid oklch(0.75 0.15 85 / 0.08);
@@ -3331,36 +3298,23 @@
 		background: linear-gradient(90deg, oklch(0.75 0.15 85 / 0.12), oklch(0.20 0.01 250 / 0.3) 60%);
 	}
 
-	.waiting-row .td-task {
-		padding: 0.625rem 0.75rem;
-		vertical-align: middle;
-	}
-
-	.waiting-row .td-action {
-		padding: 0.5rem 0.75rem;
-		vertical-align: middle;
-		width: 180px;
-		text-align: right;
-	}
-
-	.badge-and-text {
+	.waiting-row-task {
 		display: flex;
-		align-items: flex-start;
+		align-items: center;
 		gap: 0.625rem;
+		flex: 1;
 		min-width: 0;
-		width: 100%;
 	}
 
-	.text-column {
+	.waiting-task-text {
 		display: flex;
 		flex-direction: column;
-		gap: 0.1rem;
+		gap: 0.125rem;
 		min-width: 0;
 		flex: 1;
-		padding-top: 0.125rem;
 	}
 
-	.waiting-row .task-title {
+	.waiting-task-title {
 		font-size: 0.9rem;
 		font-weight: 600;
 		color: oklch(0.85 0.02 250);
@@ -3369,49 +3323,13 @@
 		white-space: nowrap;
 	}
 
-	.waiting-agent {
+	.waiting-task-id {
 		font-size: 0.7rem;
 		color: oklch(0.75 0.15 85 / 0.8);
 	}
 
-	.waiting-actions {
-		display: flex;
-		gap: 0.375rem;
-		justify-content: flex-end;
-		align-items: center;
-	}
-
-	.waiting-btn {
-		font-size: 0.7rem;
-		font-weight: 600;
-		padding: 0.25rem 0.625rem;
-		border-radius: 0.375rem;
-		border: 1px solid;
-		cursor: pointer;
-		transition: all 0.15s ease;
-		white-space: nowrap;
-	}
-
-	.spawn-btn {
-		background: oklch(0.75 0.15 85 / 0.15);
-		border-color: oklch(0.75 0.15 85 / 0.4);
-		color: oklch(0.80 0.15 85);
-	}
-
-	.spawn-btn:hover {
-		background: oklch(0.75 0.15 85 / 0.25);
-		border-color: oklch(0.75 0.15 85 / 0.7);
-	}
-
-	.reopen-btn {
-		background: oklch(0.65 0.02 250 / 0.12);
-		border-color: oklch(0.45 0.02 250 / 0.4);
-		color: oklch(0.65 0.02 250);
-	}
-
-	.reopen-btn:hover {
-		background: oklch(0.65 0.02 250 / 0.2);
-		border-color: oklch(0.55 0.02 250 / 0.6);
+	.waiting-row-action {
+		flex-shrink: 0;
 	}
 
 	/* Override TasksPaused table styles to match TasksActive and TasksOpen */

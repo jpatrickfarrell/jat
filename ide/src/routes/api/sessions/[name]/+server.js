@@ -11,6 +11,8 @@ import { appendFile, mkdir, access, readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import { getTasks } from '$lib/server/jat-tasks.js';
+import { readProjectsConfig } from '../../../../../../lib/projects-config.js';
+import { getBackendForProject } from '../../../../../../lib/tasks-backend.js';
 
 const execAsync = promisify(exec);
 
@@ -211,6 +213,44 @@ export async function PATCH({ params, request }) {
 	}
 }
 
+/**
+ * Find and release an in-progress task assigned to the given agent across all
+ * postgres-backed projects. Returns the task ID if found and released, or null.
+ *
+ * This is the fallback for when getTasks() (SQLite-only) finds nothing.
+ *
+ * @param {string} agentName
+ * @returns {Promise<string|null>}
+ */
+async function releasePostgresTask(agentName) {
+	const config = readProjectsConfig();
+	if (!config?.projects) return null;
+
+	for (const [projectName, projectEntry] of Object.entries(config.projects)) {
+		const backend_kind = projectEntry?.backend;
+		if (backend_kind !== 'postgres') continue;
+
+		try {
+			const backend = await getBackendForProject(projectName);
+			const tasks = backend.list({ status: 'in_progress' });
+			const list = tasks && typeof tasks.then === 'function' ? await tasks : tasks;
+			if (!Array.isArray(list) || list.length === 0) continue;
+
+			const task = list.find(t => t.assignee === agentName);
+			if (!task) continue;
+			// Clear both assignee (text) and assignee_id (UUID FK) so the task
+			// shows as unassigned in the UI.
+			const r = backend.update(task.id, { status: 'open', assignee: null, assignee_id: null });
+			if (r && typeof r.then === 'function') await r;
+			return task.id;
+		} catch (err) {
+			console.warn(`[Session DELETE] Failed to check/release postgres task for project ${projectName}:`, err?.message || err);
+		}
+	}
+
+	return null;
+}
+
 /** @type {import('./$types').RequestHandler} */
 export async function DELETE({ params }) {
 	const t0 = Date.now();
@@ -269,7 +309,7 @@ export async function DELETE({ params }) {
 		if (isAgentSession) {
 			const t3 = Date.now();
 			try {
-				// Use jat-tasks.js to find tasks across all projects
+				// Use jat-tasks.js to find tasks across all SQLite projects
 				const allTasks = getTasks({ status: 'in_progress' });
 				const agentTask = allTasks.find(t => t.assignee === agentName);
 				console.log(`[Session DELETE] getTasks scan took ${Date.now() - t3}ms (found ${allTasks.length} in_progress tasks, match: ${agentTask?.id || 'none'})`);
@@ -285,6 +325,16 @@ export async function DELETE({ params }) {
 					console.log(`[Session DELETE] jt update (release task) took ${Date.now() - t4}ms`);
 					taskReleased = true;
 					releasedTaskId = agentTask.id;
+				} else {
+					// SQLite scan found nothing — check postgres-backed projects directly.
+					// (jt CLI requires the IDE to be running for postgres projects, so
+					// we query the backend API directly here.)
+					const result = await releasePostgresTask(agentName);
+					if (result) {
+						console.log(`[Session DELETE] Released postgres task ${result} for agent ${agentName}`);
+						taskReleased = true;
+						releasedTaskId = result;
+					}
 				}
 			} catch (err) {
 				// Non-fatal - session is killed, task release just failed

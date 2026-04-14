@@ -414,7 +414,12 @@
 		const grouped = new Map<string, TmuxSession[]>();
 
 		for (const session of sessions.filter((s) => s.type === "agent")) {
-			const project = session.project || "Unknown";
+			// Prefer task-derived project (from task ID prefix) over signal-reported project.
+			// Signal files can report the wrong project if an agent was resumed in a different
+			// project context (e.g. DenseHorizon resumed in meadow while its task was steelbridge).
+			const agentName = getAgentName(session.name);
+			const taskDerivedProject = agentProjects.get(agentName);
+			const project = taskDerivedProject || session.project || "Unknown";
 			if (!grouped.has(project)) {
 				grouped.set(project, []);
 			}
@@ -1025,18 +1030,30 @@
 			completedDayGroups = await fetchCompletedDay(0);
 			completedDaysSearched = 1;
 
-			// If today is empty, automatically look back up to 14 days
+			// Count actual tasks (not paused sessions) to decide whether to look back.
+			// Today may have paused sessions but no completed tasks — in that case we
+			// still want to look back to find recent completed work.
+			const todayTaskCount = completedDayGroups.reduce((sum, g) => sum + g.tasks.length, 0);
+
+			// If today has no completed tasks, automatically look back up to 14 days
 			// to find the most recent completed tasks
-			if (completedDayGroups.length === 0) {
+			if (todayTaskCount === 0) {
 				for (let attempt = 1; attempt <= 14; attempt++) {
 					const dayGroups = await fetchCompletedDay(attempt);
-					if (dayGroups.length > 0) {
-						completedDayGroups = dayGroups;
+					if (dayGroups.some(g => g.tasks.length > 0)) {
+						// Merge lookback tasks with today's paused sessions (if any)
+						if (completedDayGroups.length > 0) {
+							// Keep today's paused-session groups + add lookback task groups
+							const todayGroups = completedDayGroups.filter(g => g.tasks.length === 0 && g.pausedSessions?.length);
+							completedDayGroups = [...todayGroups, ...dayGroups];
+						} else {
+							completedDayGroups = dayGroups;
+						}
 						completedDaysSearched = attempt + 1;
 						break;
 					}
 				}
-				if (completedDayGroups.length === 0) {
+				if (completedDayGroups.reduce((sum, g) => sum + g.tasks.length, 0) === 0 && !completedDayGroups.some(g => g.pausedSessions?.length)) {
 					completedDaysSearched += 14;
 					completedNoMoreDays = true;
 				}
@@ -1057,7 +1074,7 @@
 			for (let attempt = 0; attempt < 14; attempt++) {
 				const daysAgo = completedDaysSearched + attempt;
 				const dayGroups = await fetchCompletedDay(daysAgo);
-				if (dayGroups.length > 0) {
+				if (dayGroups.some(g => g.tasks.length > 0)) {
 					completedDayGroups = [...completedDayGroups, ...dayGroups];
 					completedDaysSearched = daysAgo + 1;
 					found = true;
@@ -2506,7 +2523,7 @@
 				{/if}
 
 				<!-- Completed Tasks Section -->
-				{#if completedCount > 0 || completedLoading}
+				{#if completedCount > 0 || completedLoading || completedDayGroups.some(g => g.pausedSessions?.length)}
 					<div class="subsection">
 						<button
 							class="subsection-header"

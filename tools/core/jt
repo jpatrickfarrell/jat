@@ -78,16 +78,24 @@ require_sqlite_backend() {
 # Used when backend=postgres; proxies jt commands to localhost IDE API.
 # ---------------------------------------------------------------------------
 
-# Resolve the IDE port for the current project from projects.json.
+# Resolve the JAT IDE port. The JAT IDE always runs on 3333.
+# Projects have a "port" field for their own dev server, which is separate.
+# We check for an explicit "jat_ide_port" override, otherwise use 3333.
 resolve_ide_port() {
   local config="$HOME/.config/jat/projects.json"
-  [[ -f "$config" ]] || { echo ""; return; }
-  command -v jq >/dev/null 2>&1 || { echo ""; return; }
-  jq -r --arg root "$PROJECT_ROOT" --arg home "$HOME" '
-    .projects // {} | to_entries[] |
-    select((.value.path // "" | gsub("^~"; $home)) == $root) |
-    (.value.port // "") | tostring
-  ' "$config" 2>/dev/null | head -n1
+  local override=""
+  if [[ -f "$config" ]] && command -v jq >/dev/null 2>&1; then
+    override="$(jq -r --arg root "$PROJECT_ROOT" --arg home "$HOME" '
+      .projects // {} | to_entries[] |
+      select((.value.path // "" | gsub("^~"; $home)) == $root) |
+      (.value.jat_ide_port // "") | tostring
+    ' "$config" 2>/dev/null | head -n1)"
+  fi
+  if [[ -n "$override" && "$override" != "null" && "$override" != "" ]]; then
+    echo "$override"
+  else
+    echo "3333"
+  fi
 }
 
 # Resolve the project key name from projects.json (used as ?project= param).

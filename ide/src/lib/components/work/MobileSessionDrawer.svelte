@@ -1570,9 +1570,9 @@
 						class="send-btn flex items-center justify-center w-9 h-9 rounded-lg border cursor-pointer flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-default {(sentFlash || sentStayFlash) ? 'bg-success border-success text-success-content send-btn-sent' : hasSendable && !showPreview ? 'bg-info border-info text-info-content active:bg-info/80' : 'bg-base-200 border-base-300 text-base-content/40'}"
 						aria-label="Send message"
 						disabled={!hasSendable || showPreview}
-						use:directClick={sendAndDismiss}
+						use:directClick={sendWithStay}
 					>
-						{#if sentFlash}
+						{#if sentFlash || sentStayFlash}
 							<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" width="18" height="18">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
 							</svg>

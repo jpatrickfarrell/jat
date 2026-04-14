@@ -34,14 +34,14 @@ import {
 /**
  * In-memory job status map for voice transcription polling.
  * Used by the jat-feedback widget to poll transcription status.
- * Keys: UUID job IDs. Values: { status: 'transcribing'|'open'|'error', title?: string, description?: string }
- * @type {Map<string, { status: string, title?: string, description?: string }>}
+ * Keys: UUID job IDs. Values: { status: 'transcribing'|'open'|'error', tasks?: {title: string, description: string}[], title?: string }
+ * @type {Map<string, { status: string, tasks?: {title: string, description: string}[], title?: string }>}
  */
 const voiceJobs = new Map();
 
 const CORS_HEADERS = {
 	'Access-Control-Allow-Origin': '*',
-	'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+	'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
 	'Access-Control-Allow-Headers': 'Content-Type',
 	'Access-Control-Max-Age': '86400'
 };
@@ -68,7 +68,21 @@ export async function GET({ url }) {
 		// Unknown ID — return open so the widget stops polling
 		return json({ id, status: 'open' }, { headers: CORS_HEADERS });
 	}
-	return json({ id, status: job.status, title: job.title, description: job.description || '' }, { headers: CORS_HEADERS });
+	return json({ id, status: job.status, tasks: job.tasks || [], title: job.title, description: job.tasks?.[0]?.description || '' }, { headers: CORS_HEADERS });
+}
+
+/**
+ * PATCH /api/tasks/voice?id=<jobId>
+ * Acknowledge task submission from jat-feedback widget. Tasks are already in
+ * voice inbox from appendToVoiceTimeline — this is a no-op acknowledgment.
+ */
+export async function PATCH({ url }) {
+	const id = url.searchParams.get('id');
+	if (id && voiceJobs.has(id)) {
+		const job = voiceJobs.get(id);
+		voiceJobs.set(id, { ...job, status: 'submitted' });
+	}
+	return json({ ok: true }, { headers: CORS_HEADERS });
 }
 
 /**
@@ -100,12 +114,11 @@ function getAudioDate(filePath) {
 
 /**
  * Transcribe audio file and organize into suggested tasks (runs in background).
- * Resolves with { title, description } from the first organized task so the caller
- * can update voiceJobs for widget polling.
+ * Resolves with { tasks, title } so the caller can update voiceJobs for widget polling.
  * @param {string} audioPath
  * @param {string} title
  * @param {number} priority
- * @returns {Promise<{ title: string, description: string }>}
+ * @returns {Promise<{ tasks: {title: string, description: string}[], title: string }>}
  */
 function transcribeAndOrganize(audioPath, title, priority) {
 	return new Promise((resolve) => {
@@ -125,7 +138,7 @@ function transcribeAndOrganize(audioPath, title, priority) {
 			if (convertErr) {
 				vlog(`ERROR: ffmpeg conversion failed: ${convertErr.message}`);
 				try { unlinkSync(wavPath); } catch {}
-				resolve({ title, description: '' });
+				resolve({ tasks: [{ title, description: '' }], title });
 				return;
 			}
 
@@ -137,7 +150,7 @@ function transcribeAndOrganize(audioPath, title, priority) {
 			} catch (transcribeErr) {
 				vlog(`ERROR: ${transcribeErr.message}`);
 				try { unlinkSync(wavPath); } catch {}
-				resolve({ title, description: '' });
+				resolve({ tasks: [{ title, description: '' }], title });
 				return;
 			}
 
@@ -152,11 +165,11 @@ function transcribeAndOrganize(audioPath, title, priority) {
 				const { tasks, summary, title: organizedTitle, knowledgeBase } = await organizeTranscript(text, projects);
 				appendToVoiceTimeline(tasks, text, summary, organizedTitle, knowledgeBase);
 				vlog(`Done — ${tasks.length} task(s) added to voice inbox`);
-				// Return first task's title/description for widget review form
-				const firstTask = tasks[0];
 				resolve({
-					title: firstTask?.title || organizedTitle || title,
-					description: firstTask?.description || summary || text
+					tasks: tasks.length > 0
+						? tasks.map(t => ({ title: String(t.title || ''), description: String(t.description || '') }))
+						: [{ title: organizedTitle || title, description: summary || text }],
+					title: tasks[0]?.title || organizedTitle || title
 				});
 			} catch (organizeErr) {
 				vlog(`ERROR: organize failed, falling back to single task: ${organizeErr.message}`);
@@ -187,7 +200,7 @@ function transcribeAndOrganize(audioPath, title, priority) {
 				} catch (e) {
 					vlog(`ERROR: Fallback task creation also failed: ${e.message}`);
 				}
-				resolve({ title, description: text || '' });
+				resolve({ tasks: [{ title, description: text || '' }], title });
 			}
 		});
 	});
@@ -305,11 +318,11 @@ export async function POST({ request }) {
 			voiceJobs.set(jobId, { status: 'transcribing', title });
 
 			// Fire and forget — transcription + organize happens in background
-			// Update voiceJobs with actual title/description for widget review form
+			// Update voiceJobs with all tasks for widget review form
 			transcribeAndOrganize(audioTempPath, title, priority).then((result) => {
-				voiceJobs.set(jobId, { status: 'open', title: result.title, description: result.description });
+				voiceJobs.set(jobId, { status: 'open', tasks: result.tasks, title: result.tasks[0]?.title || title });
 			}).catch(() => {
-				voiceJobs.set(jobId, { status: 'open', title });
+				voiceJobs.set(jobId, { status: 'open', tasks: [{ title, description: '' }], title });
 			});
 
 			return json({

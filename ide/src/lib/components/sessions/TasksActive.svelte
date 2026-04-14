@@ -734,13 +734,23 @@
 
 	function armPointerLock() {
 		pointerLocked = true;
-		const release = () => {
+		// Release on click (capture phase) so the lock outlives pointerup and kills
+		// the ghost-click that would otherwise fire on whatever button re-renders
+		// at the same position after the destructive action updates the DOM.
+		const releaseOnClick = (e: Event) => {
+			e.stopPropagation();
+			e.preventDefault();
 			pointerLocked = false;
-			window.removeEventListener('pointerup', release, true);
-			window.removeEventListener('pointercancel', release, true);
+			window.removeEventListener('click', releaseOnClick, true);
+			window.removeEventListener('pointercancel', releaseOnCancel, true);
 		};
-		window.addEventListener('pointerup', release, true);
-		window.addEventListener('pointercancel', release, true);
+		const releaseOnCancel = () => {
+			pointerLocked = false;
+			window.removeEventListener('click', releaseOnClick, true);
+			window.removeEventListener('pointercancel', releaseOnCancel, true);
+		};
+		window.addEventListener('click', releaseOnClick, true);
+		window.addEventListener('pointercancel', releaseOnCancel, true);
 	}
 
 	function startTrayHold(
@@ -1353,7 +1363,7 @@
 					{@const reviewStatus = computeReviewStatus(sessionTask, getReviewRules())}
 					{@const reviewBasedDefault = reviewStatus.action !== 'auto'}
 					{@const autoCompleteDisabled = autoCompleteDisabledMap.get(session.name) ?? reviewBasedDefault}
-					<div class="mobile-card-inner">
+					<div class="mobile-card-inner mobile-card-inner-agent">
 						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint};">
 							<AgentAvatar name={sessionAgentName} size={96} showRing={false} shape="rounded" />
 							<div class="mobile-strip-agent-label" title={sessionAgentName}>
@@ -1361,70 +1371,6 @@
 									<span>{part}</span>
 								{/each}
 							</div>
-						</div>
-						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
-							{#each cardActions.slice(0, 5) as action}
-								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
-								{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
-								{@const holdMatch = holdKey === `${session.name}:${action.id}`}
-								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} class:mobile-tray-btn-holding={holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive && !pointerLocked) handleMobileAction(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
-									{#if isDestructive && holdMatch}<span class="tray-hold-fill" style="width: {holdProgress}%"></span>{/if}
-									{#if fb}
-										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-									{:else}
-										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d={action.icon} /></svg>
-									{/if}
-									<span>{fb ? 'Done' : action.label}</span>
-								</button>
-							{/each}
-							{#if sessionTask.issue_type !== 'epic'}
-							<button
-								class="mobile-tray-btn mobile-tray-btn-epic"
-								class:mobile-tray-btn-epic-open={epicPickerSession === session.name}
-								title="Add to Epic"
-								onclick={() => openMobileEpicPicker(session.name, sessionTask.id)}
-							>
-								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-								</svg>
-								<span>Epic</span>
-							</button>
-							{/if}
-							<button
-								class="mobile-tray-btn mobile-tray-btn-cmds"
-								class:mobile-tray-btn-cmds-open={cmdPanelSession === session.name}
-								title="All Commands"
-								onclick={() => openMobileCmdPanel(session.name)}
-							>
-								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
-								</svg>
-								<span>Cmds</span>
-							</button>
-							<button
-								class="mobile-tray-btn mobile-tray-btn-auto"
-								class:mobile-tray-btn-auto-on={!autoCompleteDisabled}
-								title={autoCompleteDisabled ? 'Manual review — tap to enable auto-complete' : 'Auto-complete on — tap to require manual review'}
-								onclick={() => {
-									const newMap = new Map(autoCompleteDisabledMap);
-									newMap.set(session.name, !autoCompleteDisabled);
-									autoCompleteDisabledMap = newMap;
-								}}
-							>
-								{#if autoCompleteDisabled}
-									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-										<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-									</svg>
-									<span>Review</span>
-								{:else}
-									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-									</svg>
-									<span>Auto</span>
-								{/if}
-							</button>
 						</div>
 						{#if cmdPanelSession === session.name}
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -1595,6 +1541,7 @@
 										<span class="mobile-title" title={sessionTask.title}>
 											<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
 										</span>
+										<span class="mobile-title-state" style="background: {stateVisual.bgColor}; color: {stateVisual.textColor}; border: 1px solid {stateVisual.borderColor};">{stateVisual.shortLabel}</span>
 									</div>
 									<div class="completion-loading-inline">
 										<div class="animate-spin-fast w-3.5 h-3.5 border-2 border-success border-t-transparent rounded-full"></div>
@@ -1606,6 +1553,7 @@
 										<span class="mobile-title" title={sessionTask.title}>
 											<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
 										</span>
+										<span class="mobile-title-state" style="background: {stateVisual.bgColor}; color: {stateVisual.textColor}; border: 1px solid {stateVisual.borderColor};">{stateVisual.shortLabel}</span>
 										{#if elapsed}
 											<span class="mobile-title-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
 										{/if}
@@ -1619,6 +1567,7 @@
 								<span class="mobile-title" title={sessionTask.title}>
 									<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
 								</span>
+								<span class="mobile-title-state" style="background: {stateVisual.bgColor}; color: {stateVisual.textColor}; border: 1px solid {stateVisual.borderColor};">{stateVisual.shortLabel}</span>
 								{#if elapsed}
 									<span class="mobile-title-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
 								{/if}
@@ -1634,38 +1583,104 @@
 								</div>
 							{/if}
 							{/if}<!-- end {:else} non-completed -->
-							<div class="mobile-card-row2">
-								<span class="mobile-agent-name" title={sessionAgentName}>{sessionAgentName}</span>
-								<span class="mobile-separator">·</span>
-								<button class="mobile-task-id" class:mobile-task-id-copied={copiedMobileId === sessionTask.id} style="color: {statusDotColor};" onclick={(e) => copyMobileId(e, sessionTask.id)} title="Click to copy task ID" aria-label={copiedMobileId === sessionTask.id ? `Copied task ID ${sessionTask.id}` : `Copy task ID ${sessionTask.id}`}>
-									<span class="mobile-task-id-text">{sessionTask.id}</span>
-									{#if copiedMobileId === sessionTask.id}<span class="mobile-task-id-badge" aria-hidden="true">✓ copied</span>{/if}
-								</button>
-								{#if sessionTask.issue_type}
+							<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+							<div class="mobile-row2-wrapper">
+								<div class="mobile-card-row2">
+									<span class="mobile-agent-name" title={sessionAgentName}>{sessionAgentName}</span>
 									<span class="mobile-separator">·</span>
-									<span class="mobile-type-icon" title={typeVisual.label}>{typeVisual.icon}</span>
-								{/if}
-								{#if harness}
-									<span class="mobile-separator">·</span>
-									<span class="mobile-harness" title={harness}><ProviderLogo agentId={harness} size={11} /></span>
-								{/if}
-								{#if sessionTask.priority != null && sessionTask.priority <= 2}
-									<span class="mobile-separator">·</span>
-									<span class="mobile-priority mobile-priority-{sessionTask.priority}" title={sessionTask.priority === 0 ? 'P0 — Critical' : sessionTask.priority === 1 ? 'P1 — High' : 'P2 — Medium'}>P{sessionTask.priority}</span>
-								{/if}
-								{#if taskAge.label}
-									<span class="mobile-separator">·</span>
-									<span class="mobile-age" style="color: {taskAge.color};">{taskAge.label}</span>
-								{/if}
-								{#if browserSessions.get(sessionAgentName)}
-									<span class="mobile-separator">·</span>
-									<span class="mobile-port">🌐 {browserSessions.get(sessionAgentName)}</span>
-								{/if}
-								{#if ($autoKillCountdowns.get(session.name) ?? null) !== null && ($autoKillCountdowns.get(session.name) ?? 0) > 0}
-									<span class="mobile-separator">·</span>
-									<span class="mobile-destruct-countdown" title="Session self-destructing">💣 {$autoKillCountdowns.get(session.name)}s</span>
-								{/if}
-								<span class="mobile-state-badge" style="color: {stateVisual.accent};">{stateVisual.shortLabel}</span>
+									<button class="mobile-task-id" class:mobile-task-id-copied={copiedMobileId === sessionTask.id} style="color: {statusDotColor};" onclick={(e) => copyMobileId(e, sessionTask.id)} title="Click to copy task ID" aria-label={copiedMobileId === sessionTask.id ? `Copied task ID ${sessionTask.id}` : `Copy task ID ${sessionTask.id}`}>
+										<span class="mobile-task-id-text">{sessionTask.id}</span>
+										{#if copiedMobileId === sessionTask.id}<span class="mobile-task-id-badge" aria-hidden="true">✓ copied</span>{/if}
+									</button>
+									{#if sessionTask.issue_type}
+										<span class="mobile-separator">·</span>
+										<span class="mobile-type-icon" title={typeVisual.label}>{typeVisual.icon}</span>
+									{/if}
+									{#if harness}
+										<span class="mobile-separator">·</span>
+										<span class="mobile-harness" title={harness}><ProviderLogo agentId={harness} size={11} /></span>
+									{/if}
+									{#if sessionTask.priority != null && sessionTask.priority <= 2}
+										<span class="mobile-separator">·</span>
+										<span class="mobile-priority mobile-priority-{sessionTask.priority}" title={sessionTask.priority === 0 ? 'P0 — Critical' : sessionTask.priority === 1 ? 'P1 — High' : 'P2 — Medium'}>P{sessionTask.priority}</span>
+									{/if}
+									{#if taskAge.label}
+										<span class="mobile-separator">·</span>
+										<span class="mobile-age" style="color: {taskAge.color};">{taskAge.label}</span>
+									{/if}
+									{#if browserSessions.get(sessionAgentName)}
+										<span class="mobile-separator">·</span>
+										<span class="mobile-port">🌐 {browserSessions.get(sessionAgentName)}</span>
+									{/if}
+									{#if ($autoKillCountdowns.get(session.name) ?? null) !== null && ($autoKillCountdowns.get(session.name) ?? 0) > 0}
+										<span class="mobile-separator">·</span>
+										<span class="mobile-destruct-countdown" title="Session self-destructing">💣 {$autoKillCountdowns.get(session.name)}s</span>
+									{/if}
+								</div>
+								<!-- Action tray — fades in over row2 on hover -->
+								<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+									{#each cardActions.slice(0, 5) as action}
+										{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
+										{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
+										{@const holdMatch = holdKey === `${session.name}:${action.id}`}
+										<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} class:mobile-tray-btn-holding={holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive && !pointerLocked) handleMobileAction(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
+											{#if isDestructive && holdMatch}<span class="tray-hold-fill" style="width: {holdProgress}%"></span>{/if}
+											{#if fb}
+												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+											{:else}
+												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d={action.icon} /></svg>
+											{/if}
+											<span>{fb ? 'Done' : action.label}</span>
+										</button>
+									{/each}
+									{#if sessionTask.issue_type !== 'epic'}
+									<button
+										class="mobile-tray-btn mobile-tray-btn-epic"
+										class:mobile-tray-btn-epic-open={epicPickerSession === session.name}
+										title="Add to Epic"
+										onclick={() => openMobileEpicPicker(session.name, sessionTask.id)}
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+										</svg>
+										<span>Epic</span>
+									</button>
+									{/if}
+									<button
+										class="mobile-tray-btn mobile-tray-btn-cmds"
+										class:mobile-tray-btn-cmds-open={cmdPanelSession === session.name}
+										title="All Commands"
+										onclick={() => openMobileCmdPanel(session.name)}
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
+										</svg>
+										<span>Cmds</span>
+									</button>
+									<button
+										class="mobile-tray-btn mobile-tray-btn-auto"
+										class:mobile-tray-btn-auto-on={!autoCompleteDisabled}
+										title={autoCompleteDisabled ? 'Manual review — tap to enable auto-complete' : 'Auto-complete on — tap to require manual review'}
+										onclick={() => {
+											const newMap = new Map(autoCompleteDisabledMap);
+											newMap.set(session.name, !autoCompleteDisabled);
+											autoCompleteDisabledMap = newMap;
+										}}
+									>
+										{#if autoCompleteDisabled}
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+												<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+											</svg>
+											<span>Review</span>
+										{:else}
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+											</svg>
+											<span>Auto</span>
+										{/if}
+									</button>
+								</div>
 							</div>
 						</div>
 					</div>
@@ -2620,7 +2635,7 @@
 		background: oklch(0.65 0.15 145 / 0.15);
 	}
 
-	/* Action tray — primary actions always visible, expands on hover/focus to reveal secondary */
+	/* Action tray — legacy behavior (server cards, no-task cards): expands from right on hover */
 	.mobile-action-tray {
 		display: flex;
 		align-items: stretch;
@@ -2635,6 +2650,65 @@
 	.mobile-action-tray:hover,
 	.mobile-action-tray:focus-within {
 		max-width: 480px;
+	}
+
+	/* Row2 wrapper — overlays tray over meta row on hover */
+	.mobile-row2-wrapper {
+		display: grid;
+		grid-template-areas: "row2";
+	}
+
+	.mobile-row2-wrapper > .mobile-card-row2 {
+		grid-area: row2;
+		margin-top: 0;
+	}
+
+	/* Tray inside wrapper: overrides legacy max-width expand, uses opacity overlay instead */
+	.mobile-row2-wrapper > .mobile-action-tray {
+		grid-area: row2;
+		position: relative;
+		max-width: none;
+		overflow: visible;
+		order: unset;
+		flex-shrink: unset;
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity 0.18s ease;
+		border-radius: 3px;
+		overflow: hidden;
+	}
+
+	.mobile-session-card:hover .mobile-row2-wrapper > .mobile-action-tray,
+	.mobile-row2-wrapper > .mobile-action-tray:hover,
+	.mobile-row2-wrapper > .mobile-action-tray:focus-within,
+	.mobile-session-card.tray-open .mobile-row2-wrapper > .mobile-action-tray {
+		opacity: 1;
+		pointer-events: auto;
+		max-width: none;
+	}
+
+	/* Compact button height to match row2 */
+	.mobile-row2-wrapper > .mobile-action-tray .mobile-tray-btn {
+		padding: 3px 6px;
+		font-size: 0.5rem;
+	}
+
+	/* State badge in title row */
+	.mobile-title-state {
+		flex-shrink: 0;
+		font-size: 0.5rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		padding: 0.1rem 0.4rem;
+		border-radius: 3px;
+		white-space: nowrap;
+		margin-left: auto;
+	}
+
+	/* Elapsed follows state badge (no auto margin needed) */
+	.mobile-title-state + .mobile-title-elapsed {
+		margin-left: 0.35rem;
 	}
 
 	/* Completing: indeterminate progress shimmer across the bottom edge */
@@ -2675,14 +2749,24 @@
 	.swipe-container:first-child .mobile-session-card.tray-hint-active .mobile-action-tray {
 		animation: tray-hint-peek 2.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.8s 1 both;
 	}
+	.swipe-container:first-child .mobile-session-card.tray-hint-active .mobile-row2-wrapper > .mobile-action-tray {
+		animation: tray-hint-peek-opacity 2.4s ease 0.8s 1 both;
+	}
 	@keyframes tray-hint-peek {
 		0%   { max-width: 0; }
 		25%  { max-width: 96px; }
 		55%  { max-width: 96px; }
 		100% { max-width: 0; }
 	}
+	@keyframes tray-hint-peek-opacity {
+		0%   { opacity: 0; }
+		25%  { opacity: 1; }
+		75%  { opacity: 1; }
+		100% { opacity: 0; }
+	}
 	@media (prefers-reduced-motion: reduce) {
-		.swipe-container:first-child .mobile-session-card.tray-hint-active .mobile-action-tray {
+		.swipe-container:first-child .mobile-session-card.tray-hint-active .mobile-action-tray,
+		.swipe-container:first-child .mobile-session-card.tray-hint-active .mobile-row2-wrapper > .mobile-action-tray {
 			animation: none;
 		}
 	}
@@ -3179,7 +3263,6 @@
 		font-family: ui-monospace, monospace;
 		align-self: flex-start;
 		padding-top: 0.2em;
-		margin-left: auto;
 	}
 
 	.mobile-title {

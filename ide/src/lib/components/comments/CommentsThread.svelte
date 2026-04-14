@@ -67,6 +67,12 @@
 		if (taskId) load();
 	});
 
+	async function submitOption(optionText: string) {
+		if (submitting) return;
+		draft = optionText;
+		await submit();
+	}
+
 	async function submit() {
 		const text = draft.trim();
 		if (!text || submitting) return;
@@ -201,32 +207,55 @@
 				Answering {pendingQuestion.author || 'agent'}'s question…
 			</p>
 		{/if}
-		<textarea
-			class="textarea textarea-bordered textarea-sm w-full resize-none text-sm"
-			rows="2"
-			placeholder={pendingQuestion ? 'Type your answer… (Ctrl+Enter to send)' : 'Add a comment… (Ctrl+Enter to send)'}
-			bind:value={draft}
-			onkeydown={handleKey}
-			disabled={submitting}
-		></textarea>
-		{#if submitError}
-			<p class="text-xs text-error">{submitError}</p>
+
+		{#if pendingQuestion?.metadata?.options?.length > 0}
+			<!-- Structured option buttons — click to immediately answer -->
+			<div class="flex flex-wrap gap-1.5">
+				{#each pendingQuestion.metadata.options as option, i}
+					<button
+						type="button"
+						class="btn btn-sm btn-outline btn-warning"
+						disabled={submitting}
+						onclick={() => submitOption(option)}
+					>
+						{#if submitting && draft === option}
+							<span class="loading loading-spinner loading-xs"></span>
+						{/if}
+						{option}
+					</button>
+				{/each}
+			</div>
+			{#if submitError}
+				<p class="text-xs text-error">{submitError}</p>
+			{/if}
+		{:else}
+			<textarea
+				class="textarea textarea-bordered textarea-sm w-full resize-none text-sm"
+				rows="2"
+				placeholder={pendingQuestion ? 'Type your answer… (Ctrl+Enter to send)' : 'Add a comment… (Ctrl+Enter to send)'}
+				bind:value={draft}
+				onkeydown={handleKey}
+				disabled={submitting}
+			></textarea>
+			{#if submitError}
+				<p class="text-xs text-error">{submitError}</p>
+			{/if}
+			<div class="flex justify-end">
+				<button
+					type="button"
+					class="btn btn-primary btn-xs"
+					disabled={submitting || !draft.trim()}
+					onclick={submit}
+				>
+					{#if submitting}
+						<span class="loading loading-spinner loading-xs"></span>
+					{:else if pendingQuestion}
+						Send Answer
+					{:else}
+						Add Comment
+					{/if}
+				</button>
+			</div>
 		{/if}
-		<div class="flex justify-end">
-			<button
-				type="button"
-				class="btn btn-primary btn-xs"
-				disabled={submitting || !draft.trim()}
-				onclick={submit}
-			>
-				{#if submitting}
-					<span class="loading loading-spinner loading-xs"></span>
-				{:else if pendingQuestion}
-					Send Answer
-				{:else}
-					Add Comment
-				{/if}
-			</button>
-		</div>
 	</div>
 </div>

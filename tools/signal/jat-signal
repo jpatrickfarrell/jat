@@ -419,12 +419,22 @@ case "$SIGNAL_TYPE" in
         echo "Signal: waiting (task: ${TASK_ID}, agent: ${AGENT_NAME})"
         echo "[JAT-SIGNAL:waiting] $SIGNAL_DATA"
 
-        # 1. POST question comment
-        COMMENT_BODY=$(jq -cn \
-            --arg text "$QUESTION" \
-            --arg author "$AGENT_NAME" \
-            --arg sid "$SESSION_ID" \
-            '{text: $text, author: $author, author_type: "agent", comment_type: "question", session_id: (if $sid == "" then null else $sid end)}')
+        # 1. POST question comment (include options in metadata if provided)
+        OPTIONS_JSON=$(echo "$SIGNAL_DATA" | jq '.options // empty')
+        if [[ -n "$OPTIONS_JSON" ]]; then
+            COMMENT_BODY=$(jq -cn \
+                --arg text "$QUESTION" \
+                --arg author "$AGENT_NAME" \
+                --arg sid "$SESSION_ID" \
+                --argjson opts "$OPTIONS_JSON" \
+                '{text: $text, author: $author, author_type: "agent", comment_type: "question", session_id: (if $sid == "" then null else $sid end), metadata: {options: $opts}}')
+        else
+            COMMENT_BODY=$(jq -cn \
+                --arg text "$QUESTION" \
+                --arg author "$AGENT_NAME" \
+                --arg sid "$SESSION_ID" \
+                '{text: $text, author: $author, author_type: "agent", comment_type: "question", session_id: (if $sid == "" then null else $sid end)}')
+        fi
         COMMENT_RES=$(curl -sf -X POST "${IDE_URL}/api/tasks/${TASK_ID}/comments" \
             -H 'Content-Type: application/json' \
             -d "$COMMENT_BODY" 2>&1) || {

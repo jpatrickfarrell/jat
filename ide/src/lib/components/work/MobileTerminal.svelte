@@ -128,29 +128,28 @@
 	function stripTerminalChrome(raw: string): string {
 		if (!raw) return raw;
 		const lines = raw.split('\n');
-		const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*[mGKHFJ]/g, '');
+		const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*[mGKHFJA-Z]/g, '');
 
-		// Scan the last 10 lines for a separator
-		for (let i = lines.length - 1; i >= Math.max(0, lines.length - 10); i--) {
-			const clean = stripAnsi(lines[i]).trim();
-
-			// Separator line = 5+ consecutive box-drawing horizontal chars
-			if (/^─{5,}$/.test(clean)) {
-				// Verify every line below looks like TUI chrome
-				const below = lines.slice(i + 1).map(l => stripAnsi(l).trim());
-				const allChrome = below.every(l =>
-					l === '' ||
-					/[▪▫]/.test(l) ||          // battery bar dots
-					/^>\s*$/.test(l) ||          // bare Claude Code prompt
-					/^[·●⚙○◉⏻\s>│]+$/.test(l)  // status-only line
-				);
-				if (allChrome) {
-					return lines.slice(0, i).join('\n');
-				}
+		// Strip lines from the bottom that are clearly TUI chrome.
+		// Stop as soon as we hit a line that looks like real content.
+		let end = lines.length;
+		while (end > 0) {
+			const clean = stripAnsi(lines[end - 1]).trim();
+			if (
+				clean === '' ||
+				/^[─═\u2500-\u257F]+$/.test(clean) ||   // pure separator (box-drawing)
+				/[▪▫\u25AA\u25AB]/.test(clean) ||         // battery bar dots
+				/^>\s*$/.test(clean) ||                    // bare Claude Code prompt "> "
+				/^·\s/.test(clean) ||                      // JAT status prefix "· ●…"
+				/^\s*[●⚙○◉⏻]\s/.test(clean)               // state icon line
+			) {
+				end--;
+			} else {
+				break;
 			}
 		}
 
-		return raw;
+		return lines.slice(0, end).join('\n');
 	}
 
 	const renderedOutput = $derived(ansiToHtmlWithLinks(stripTerminalChrome(output)));

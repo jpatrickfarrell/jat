@@ -186,6 +186,7 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let isExpanded = $state(false);
+	let isPinned = $state(false); // Pinned open (e.g., after completion) — mouseleave won't close
 	let clickLocked = false; // Prevents mouseleave from closing after click-to-open
 	let swipeStartY = 0;
 	let actionSubmitting = $state(false);
@@ -435,6 +436,7 @@
 				if (eventKey !== autoExpandedForEventKey) {
 					autoExpandedForEventKey = eventKey;
 					isExpanded = true;
+					isPinned = true;
 					// Also expand the completion event details so users see full debrief immediately
 					// (not just the collapsed label that requires clicking to expand)
 					expandedEventIdx = 0;
@@ -1369,92 +1371,83 @@
 									<div class="px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap font-mono text-base-content/70" style="max-height: 300px; overflow-y: auto;">{txText || '(empty transcript)'}</div>
 								</div>
 							{:else if event.type === 'complete' && event.data}
-								<!-- Rich Completion Bundle UI -->
+								<!-- Completion Bundle - 3 visual tiers: Hero (summary), Actionable (must-do + follow-ups), Metadata -->
 								{@const bundle = event.data}
 								{@const bundleSummary = Array.isArray(bundle.summary) ? bundle.summary : (typeof bundle.summary === 'string' ? [bundle.summary] : [])}
 								{@const bundleQuality = bundle.quality || bundle.qualityChecks}
-								<div class="space-y-3">
-									<!-- Summary Section -->
+								{@const hasActionRequired = (bundle.humanActions && bundle.humanActions.length > 0) || (bundle.breakingChanges && bundle.breakingChanges.length > 0)}
+								{@const hasMeta = bundleQuality || bundle.riskLevel || bundle.suggestedRename || (bundle.suggestedLabels && bundle.suggestedLabels.length > 0) || (bundle.documentationNeeds && bundle.documentationNeeds.length > 0) || bundle.crossAgentIntel}
+								<div class="space-y-4">
+
+									<!-- TIER 1 - HERO: Summary -->
 									{#if bundleSummary.length > 0}
-										<div>
-											<div class="text-[10px] font-medium mb-1 text-base-content/50">CHANGES MADE</div>
-											<ul class="space-y-0.5">
-												{#each bundleSummary as item}
-													<li class="flex items-start gap-2 text-xs text-base-content/70">
-														<span class="text-success">•</span>
-														<span>{item}</span>
-													</li>
-												{/each}
-											</ul>
+										<ul class="space-y-1">
+											{#each bundleSummary as item}
+												<li class="flex items-start gap-2 text-sm text-base-content/90 leading-relaxed">
+													<span class="text-success mt-0.5 flex-shrink-0">•</span>
+													<span>{item}</span>
+												</li>
+											{/each}
+										</ul>
+									{/if}
+
+									<!-- TIER 2 - ACTIONABLE: Required actions + follow-up tasks -->
+									{#if hasActionRequired}
+										<div class="border-l-2 border-warning/60 pl-3 py-0.5 space-y-2">
+											<div class="text-xs font-semibold text-warning/90">Action required</div>
+											{#if bundle.breakingChanges && bundle.breakingChanges.length > 0}
+												<ul class="space-y-1">
+													{#each bundle.breakingChanges as change}
+														<li class="flex items-start gap-2 text-xs text-base-content/85">
+															<span class="text-error font-medium flex-shrink-0">Breaking:</span>
+															<span>{change}</span>
+														</li>
+													{/each}
+												</ul>
+											{/if}
+											{#if bundle.humanActions && bundle.humanActions.length > 0}
+												<ul class="space-y-2">
+													{#each bundle.humanActions as humanAction}
+														{@const actionTitle = humanAction.title || humanAction.action}
+														{@const actionDesc = humanAction.description || humanAction.context}
+														{@const actionPriority = humanAction.priority}
+														<li>
+															{#if actionTitle}
+																<div class="flex items-center gap-2 text-xs">
+																	<span class="font-medium text-base-content/90">{actionTitle}</span>
+																	{#if actionPriority === 'high'}
+																		<span class="text-[9px] uppercase tracking-wide text-error font-semibold">high</span>
+																	{/if}
+																</div>
+															{/if}
+															{#if actionDesc}
+																<div class="text-[11px] mt-0.5 whitespace-pre-wrap text-base-content/65">{actionDesc}</div>
+															{/if}
+															{#if humanAction.items && humanAction.items.length > 0}
+																<ul class="mt-1 space-y-0.5">
+																	{#each humanAction.items as item}
+																		<li class="flex items-start gap-1.5 text-[11px] text-base-content/70">
+																			<span class="mt-0.5 flex-shrink-0">☐</span>
+																			<span class="whitespace-pre-wrap">{item}</span>
+																		</li>
+																	{/each}
+																</ul>
+															{/if}
+														</li>
+													{/each}
+												</ul>
+											{/if}
 										</div>
 									{/if}
 
-									<!-- Quality Badges -->
-									{#if bundleQuality}
-										<div class="flex flex-wrap gap-2">
-											{#if bundleQuality.tests}
-												<span class="badge badge-xs {bundleQuality.tests === 'passing' ? 'badge-success' : bundleQuality.tests === 'failing' ? 'badge-error' : 'badge-ghost'}">
-													Tests: {bundleQuality.tests}
-												</span>
-											{/if}
-											{#if bundleQuality.build}
-												<span class="badge badge-xs {bundleQuality.build === 'clean' ? 'badge-success' : bundleQuality.build === 'warnings' ? 'badge-warning' : 'badge-error'}">
-													Build: {bundleQuality.build}
-												</span>
-											{/if}
-											{#if bundleQuality.preExisting}
-												<span class="badge badge-xs badge-ghost">ℹ️ {bundleQuality.preExisting}</span>
-											{/if}
-										</div>
-									{/if}
-
-									<!-- Human Actions -->
-									{#if bundle.humanActions && bundle.humanActions.length > 0}
-										<div>
-											<div class="text-[10px] font-medium mb-1 text-warning">🧑 HUMAN ACTIONS REQUIRED ({bundle.humanActions.length})</div>
-											<div class="space-y-1.5">
-												{#each bundle.humanActions as humanAction}
-													{@const actionTitle = humanAction.title || humanAction.action}
-													{@const actionDesc = humanAction.description || humanAction.context}
-													{@const actionPriority = humanAction.priority}
-													<div class="p-2 rounded bg-warning/10 border border-warning/30">
-														{#if actionTitle}
-															<div class="flex items-center gap-2">
-																<div class="font-medium text-xs text-warning flex-1">{actionTitle}</div>
-																{#if actionPriority}
-																	<span class="text-[9px] px-1.5 py-0.5 rounded uppercase font-medium"
-																		style="background: {actionPriority === 'high' ? 'oklch(0.50 0.15 30 / 0.3)' : 'oklch(0.50 0.10 85 / 0.3)'}; color: {actionPriority === 'high' ? 'oklch(0.75 0.15 30)' : 'oklch(0.75 0.10 85)'};">
-																		{actionPriority}
-																	</span>
-																{/if}
-															</div>
-														{/if}
-														{#if actionDesc}
-															<div class="text-[10px] mt-1 whitespace-pre-wrap text-warning/70">{actionDesc}</div>
-														{/if}
-														{#if humanAction.items && humanAction.items.length > 0}
-															<ul class="mt-1 space-y-0.5">
-																{#each humanAction.items as item}
-																	<li class="flex items-start gap-1.5 text-[10px] text-warning/80">
-																		<span class="mt-0.5">☐</span>
-																		<span class="whitespace-pre-wrap">{item}</span>
-																	</li>
-																{/each}
-															</ul>
-														{/if}
-													</div>
-												{/each}
-											</div>
-										</div>
-									{/if}
-
-									<!-- Suggested Tasks (from complete bundle) -->
 									{#if bundle.suggestedTasks && bundle.suggestedTasks.length > 0}
 										{@const bundleTasksWithState = getCompleteBundleTasksWithState(bundle.suggestedTasks, eventKey)}
 										{@const bundleSelectedCount = getSelectedCount(eventKey)}
 										{@const bundleProject = bundle.project || (bundle.taskId || event.task_id || '').split('-')[0] || defaultProject}
-										<div>
-											<div class="text-[10px] font-medium mb-1 text-info">📋 SUGGESTED FOLLOW-UP ({bundle.suggestedTasks.length})</div>
+										<div class="space-y-1.5">
+											<div class="text-xs font-semibold text-base-content/70">
+												Suggested follow-up <span class="text-base-content/40 font-normal">({bundle.suggestedTasks.length})</span>
+											</div>
 											<SuggestedTasksSection
 												tasks={bundleTasksWithState}
 												selectedCount={bundleSelectedCount}
@@ -1475,115 +1468,68 @@
 										</div>
 									{/if}
 
-									<!-- Cross-Agent Intel -->
-									{#if bundle.crossAgentIntel}
-										<div>
-											<div class="text-[10px] font-medium mb-1 text-base-content/50">🔗 CROSS-AGENT INTEL</div>
-											<div class="p-2 rounded bg-base-300 space-y-2">
+									<!-- TIER 3 - METADATA: Quiet row -->
+									{#if hasMeta}
+										<div class="pt-2 border-t border-base-content/10 space-y-1.5 text-[11px] text-base-content/60">
+											{#if bundleQuality || bundle.riskLevel}
+												<div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+													{#if bundleQuality?.tests}
+														<span>Tests <span class="{bundleQuality.tests === 'passing' ? 'text-success' : bundleQuality.tests === 'failing' ? 'text-error' : 'text-base-content/70'}">{bundleQuality.tests}</span></span>
+													{/if}
+													{#if bundleQuality?.build}
+														<span>Build <span class="{bundleQuality.build === 'clean' ? 'text-success' : bundleQuality.build === 'warnings' ? 'text-warning' : 'text-error'}">{bundleQuality.build}</span></span>
+													{/if}
+													{#if bundle.riskLevel}
+														<span>Risk <span class="{bundle.riskLevel === 'low' ? 'text-success' : bundle.riskLevel === 'medium' ? 'text-warning' : 'text-error'}">{bundle.riskLevel}</span></span>
+													{/if}
+													{#if bundleQuality?.preExisting}
+														<span class="text-base-content/45">{bundleQuality.preExisting}</span>
+													{/if}
+												</div>
+											{/if}
+											{#if bundle.suggestedRename}
+												<div class="flex items-center gap-2">
+													<span class="text-base-content/45">Rename to</span>
+													<code class="text-base-content/85 font-mono">{bundle.suggestedRename}</code>
+													<button class="text-info hover:underline" onclick={() => onApplyRename?.(bundle.taskId, bundle.suggestedRename)} title="Apply suggested rename">apply</button>
+												</div>
+											{/if}
+											{#if bundle.suggestedLabels && bundle.suggestedLabels.length > 0}
+												<div class="flex flex-wrap items-center gap-1.5">
+													<span class="text-base-content/45">Labels</span>
+													{#each bundle.suggestedLabels as label}
+														<span class="px-1.5 py-0.5 rounded text-[10px] text-base-content/75 bg-base-content/5">{label}</span>
+													{/each}
+													<button class="text-info hover:underline ml-1" onclick={() => onApplyLabels?.(bundle.taskId, bundle.suggestedLabels)} title="Apply suggested labels">apply</button>
+												</div>
+											{/if}
+											{#if bundle.documentationNeeds && bundle.documentationNeeds.length > 0}
+												<div>
+													<span class="text-base-content/45">Docs to update:</span>
+													<span class="text-base-content/75">{bundle.documentationNeeds.join(', ')}</span>
+												</div>
+											{/if}
+											{#if bundle.crossAgentIntel}
 												{#if bundle.crossAgentIntel.files && bundle.crossAgentIntel.files.length > 0}
-													<div>
-														<span class="text-[9px] font-medium text-base-content/50">Files:</span>
-														<div class="flex flex-wrap gap-1 mt-0.5">
-															{#each bundle.crossAgentIntel.files as file}
-																<span class="px-1.5 py-0.5 rounded text-[9px] font-mono bg-base-200 text-base-content/60">
-																	{file.split('/').pop()}
-																</span>
-															{/each}
-														</div>
+													<div class="flex flex-wrap items-center gap-1.5">
+														<span class="text-base-content/45">Files:</span>
+														{#each bundle.crossAgentIntel.files as file}
+															<code class="text-[10px] text-base-content/65 font-mono">{file.split('/').pop()}</code>
+														{/each}
 													</div>
 												{/if}
 												{#if bundle.crossAgentIntel.patterns && bundle.crossAgentIntel.patterns.length > 0}
 													<div>
-														<span class="text-[9px] font-medium text-base-content/50">Patterns:</span>
-														<ul class="mt-0.5">
-															{#each bundle.crossAgentIntel.patterns as pattern}
-																<li class="text-[10px] text-base-content/60">• {pattern}</li>
-															{/each}
-														</ul>
+														<span class="text-base-content/45">Patterns:</span>
+														<span class="text-base-content/75">{bundle.crossAgentIntel.patterns.join(' · ')}</span>
 													</div>
 												{/if}
 												{#if bundle.crossAgentIntel.gotchas && bundle.crossAgentIntel.gotchas.length > 0}
 													<div>
-														<span class="text-[9px] font-medium text-warning">⚠️ Gotchas:</span>
-														<ul class="mt-0.5">
-															{#each bundle.crossAgentIntel.gotchas as gotcha}
-																<li class="text-[10px] text-warning/80">• {gotcha}</li>
-															{/each}
-														</ul>
+														<span class="text-warning/80">Gotchas:</span>
+														<span class="text-base-content/75">{bundle.crossAgentIntel.gotchas.join(' · ')}</span>
 													</div>
 												{/if}
-											</div>
-										</div>
-									{/if}
-
-									<!-- AI Insights Section -->
-									{#if bundle.riskLevel || bundle.suggestedRename || bundle.suggestedLabels?.length || bundle.breakingChanges?.length || bundle.documentationNeeds?.length}
-										<div class="space-y-2">
-											<div class="text-[10px] font-medium mb-1 text-secondary">🤖 AI INSIGHTS</div>
-
-											<!-- Risk Level & Suggested Rename Row -->
-											<div class="flex flex-wrap items-center gap-2">
-												{#if bundle.riskLevel}
-													<span class="badge badge-xs {bundle.riskLevel === 'low' ? 'badge-success' : bundle.riskLevel === 'medium' ? 'badge-warning' : 'badge-error'}">
-														Risk: {bundle.riskLevel}
-													</span>
-												{/if}
-												{#if bundle.suggestedRename}
-													<div class="flex items-center gap-1.5 px-2 py-1 rounded bg-secondary/10 border border-secondary/30">
-														<span class="text-[10px] text-secondary/70">Rename to:</span>
-														<span class="text-[10px] font-medium text-secondary">{bundle.suggestedRename}</span>
-														<button
-															class="btn btn-xs btn-ghost text-secondary hover:bg-secondary/20"
-															onclick={() => onApplyRename?.(bundle.taskId, bundle.suggestedRename)}
-															title="Apply suggested rename"
-														>
-															Apply
-														</button>
-													</div>
-												{/if}
-											</div>
-
-											<!-- Suggested Labels -->
-											{#if bundle.suggestedLabels && bundle.suggestedLabels.length > 0}
-												<div class="flex items-center gap-2">
-													<span class="text-[9px] text-base-content/50">Labels:</span>
-													<div class="flex flex-wrap gap-1">
-														{#each bundle.suggestedLabels as label}
-															<span class="badge badge-xs badge-outline">{label}</span>
-														{/each}
-													</div>
-													<button
-														class="btn btn-xs btn-ghost text-info hover:bg-info/20"
-														onclick={() => onApplyLabels?.(bundle.taskId, bundle.suggestedLabels)}
-														title="Apply suggested labels"
-													>
-														Apply
-													</button>
-												</div>
-											{/if}
-
-											<!-- Breaking Changes -->
-											{#if bundle.breakingChanges && bundle.breakingChanges.length > 0}
-												<div class="p-2 rounded bg-error/10 border border-error/30">
-													<div class="text-[10px] font-medium text-error mb-1">⚠️ BREAKING CHANGES</div>
-													<ul class="space-y-0.5">
-														{#each bundle.breakingChanges as change}
-															<li class="text-[10px] text-error/80">• {change}</li>
-														{/each}
-													</ul>
-												</div>
-											{/if}
-
-											<!-- Documentation Needs -->
-											{#if bundle.documentationNeeds && bundle.documentationNeeds.length > 0}
-												<div class="p-2 rounded bg-info/10 border border-info/30">
-													<div class="text-[10px] font-medium text-info mb-1">📚 DOCS TO UPDATE</div>
-													<ul class="space-y-0.5">
-														{#each bundle.documentationNeeds as doc}
-															<li class="text-[10px] text-info/80">• {doc}</li>
-														{/each}
-													</ul>
-												</div>
 											{/if}
 										</div>
 									{/if}
@@ -1749,7 +1695,7 @@
 			onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!isExpanded) { isExpanded = true; clickLocked = true; setTimeout(() => clickLocked = false, 400); } } }}
 			onmouseenter={() => (isExpanded = true)}
 			onmouseleave={() => {
-				if (clickLocked) return;
+				if (clickLocked || isPinned) return;
 				isExpanded = false;
 				expandedEventIdx = null;
 			}}
@@ -1763,21 +1709,31 @@
 				style="background: oklch(0.18 0.01 250); border: 1px solid oklch(0.30 0.02 250); box-shadow: 0 -4px 20px oklch(0 0 0 / 0.5); max-height: {expandedEventIdx !== null ? 'calc(100vh - 12rem)' : '32rem'};"
 				transition:slide={{ duration: 200, easing: cubicOut }}
 			>
-				<!-- Swipe-down handle / tap to collapse -->
+				<!-- Sticky header: swipe-down handle + unpin button (when pinned) -->
 				<div
-					class="sticky top-0 z-10 flex items-center justify-center py-1.5 cursor-pointer"
+					class="sticky top-0 z-10 flex items-center justify-center py-1.5 cursor-pointer relative"
 					role="button"
 					tabindex="0"
 					style="background: oklch(0.18 0.01 250); border-bottom: 1px solid oklch(0.25 0.02 250);"
-					onclick={() => { isExpanded = false; expandedEventIdx = null; }}
-					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); isExpanded = false; expandedEventIdx = null; } }}
+					onclick={() => { isPinned = false; isExpanded = false; expandedEventIdx = null; }}
+					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); isPinned = false; isExpanded = false; expandedEventIdx = null; } }}
 					ontouchstart={(e) => { swipeStartY = e.touches[0].clientY; }}
 					ontouchmove={(e) => {
 						const dy = e.touches[0].clientY - swipeStartY;
-						if (dy > 40) { isExpanded = false; expandedEventIdx = null; }
+						if (dy > 40) { isPinned = false; isExpanded = false; expandedEventIdx = null; }
 					}}
 				>
 					<div style="width: 2rem; height: 0.25rem; border-radius: 9999px; background: oklch(0.40 0.02 250);"></div>
+					{#if isPinned}
+						<button
+							class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-base-content/70 hover:text-base-content hover:bg-base-content/10 transition-colors"
+							onclick={(e) => { e.stopPropagation(); isPinned = false; isExpanded = false; expandedEventIdx = null; }}
+							title="Unpin — return to hover-to-expand"
+						>
+							<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+							<span>Unpin</span>
+						</button>
+					{/if}
 				</div>
 				<div class="p-2 flex flex-col-reverse gap-1">
 					{#each filteredEvents as event, idx (event.timestamp + '-' + idx)}
@@ -1968,168 +1924,170 @@
 												</div>
 												<div class="px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap font-mono text-base-content/70" style="max-height: 300px; overflow-y: auto;">{txText || '(empty transcript)'}</div>
 											</div>
-									{:else if event.type === 'complete' && event.data}
-										<!-- Rich Completion Bundle UI -->
-										{@const bundle = event.data}
-										{@const popupBundleSummary = Array.isArray(bundle.summary) ? bundle.summary : (typeof bundle.summary === 'string' ? [bundle.summary] : [])}
-										{@const popupBundleQuality = bundle.quality || bundle.qualityChecks}
-										<div class="space-y-3">
-											<!-- Summary Section -->
-											{#if popupBundleSummary.length > 0}
-												<div>
-													<div class="text-[10px] font-medium mb-1" style="color: oklch(0.55 0.02 250);">
-														CHANGES MADE
-													</div>
-													<ul class="space-y-0.5">
-														{#each popupBundleSummary as item}
-															<li class="flex items-start gap-2 text-xs" style="color: oklch(0.75 0.02 250);">
-																<span style="color: oklch(0.50 0.15 145);">•</span>
-																<span>{item}</span>
+								{:else if event.type === 'complete' && event.data}
+									<!-- Completion Bundle - 3 visual tiers: Hero (summary), Actionable, Metadata -->
+									{@const bundle = event.data}
+									{@const popupBundleSummary = Array.isArray(bundle.summary) ? bundle.summary : (typeof bundle.summary === 'string' ? [bundle.summary] : [])}
+									{@const popupBundleQuality = bundle.quality || bundle.qualityChecks}
+									{@const hasActionRequired = (bundle.humanActions && bundle.humanActions.length > 0) || (bundle.breakingChanges && bundle.breakingChanges.length > 0)}
+									{@const hasMeta = popupBundleQuality || bundle.riskLevel || bundle.suggestedRename || (bundle.suggestedLabels && bundle.suggestedLabels.length > 0) || (bundle.documentationNeeds && bundle.documentationNeeds.length > 0) || bundle.crossAgentIntel}
+									<div class="space-y-4">
+
+										<!-- TIER 1 - HERO: Summary -->
+										{#if popupBundleSummary.length > 0}
+											<ul class="space-y-1">
+												{#each popupBundleSummary as item}
+													<li class="flex items-start gap-2 text-sm text-base-content/90 leading-relaxed">
+														<span class="text-success mt-0.5 flex-shrink-0">•</span>
+														<span>{item}</span>
+													</li>
+												{/each}
+											</ul>
+										{/if}
+
+										<!-- TIER 2 - ACTIONABLE: Required actions + follow-up tasks -->
+										{#if hasActionRequired}
+											<div class="border-l-2 border-warning/60 pl-3 py-0.5 space-y-2">
+												<div class="text-xs font-semibold text-warning/90">Action required</div>
+												{#if bundle.breakingChanges && bundle.breakingChanges.length > 0}
+													<ul class="space-y-1">
+														{#each bundle.breakingChanges as change}
+															<li class="flex items-start gap-2 text-xs text-base-content/85">
+																<span class="text-error font-medium flex-shrink-0">Breaking:</span>
+																<span>{change}</span>
 															</li>
 														{/each}
 													</ul>
-												</div>
-											{/if}
-
-											<!-- Quality Badges -->
-											{#if popupBundleQuality}
-												<div class="flex flex-wrap gap-2">
-													{#if popupBundleQuality.tests}
-														{@const testColor = popupBundleQuality.tests === 'passing' ? 'oklch(0.65 0.18 145)' : popupBundleQuality.tests === 'failing' ? 'oklch(0.65 0.18 25)' : 'oklch(0.55 0.02 250)'}
-														<span class="px-2 py-0.5 rounded text-[10px] font-medium" style="background: oklch(0.20 0.03 250); color: {testColor};">
-															Tests: {popupBundleQuality.tests}
-														</span>
-													{/if}
-													{#if popupBundleQuality.build}
-														{@const buildColor = popupBundleQuality.build === 'clean' ? 'oklch(0.65 0.18 145)' : popupBundleQuality.build === 'warnings' ? 'oklch(0.65 0.15 85)' : 'oklch(0.65 0.18 25)'}
-														<span class="px-2 py-0.5 rounded text-[10px] font-medium" style="background: oklch(0.20 0.03 250); color: {buildColor};">
-															Build: {popupBundleQuality.build}
-														</span>
-													{/if}
-													{#if popupBundleQuality.preExisting}
-														<span class="px-2 py-0.5 rounded text-[10px]" style="background: oklch(0.20 0.03 250); color: oklch(0.55 0.02 250);">
-															ℹ️ {popupBundleQuality.preExisting}
-														</span>
-													{/if}
-												</div>
-											{/if}
-
-											<!-- Human Actions -->
-											{#if bundle.humanActions && bundle.humanActions.length > 0}
-												<div>
-													<div class="text-[10px] font-medium mb-1" style="color: oklch(0.65 0.12 30);">
-														🧑 HUMAN ACTIONS REQUIRED ({bundle.humanActions.length})
-													</div>
-													<div class="space-y-1.5">
+												{/if}
+												{#if bundle.humanActions && bundle.humanActions.length > 0}
+													<ul class="space-y-2">
 														{#each bundle.humanActions as humanAction}
 															{@const actionTitle = humanAction.title || humanAction.action}
 															{@const actionDesc = humanAction.description || humanAction.context}
 															{@const actionPriority = humanAction.priority}
-															<div class="p-2 rounded" style="background: oklch(0.18 0.04 30); border: 1px solid oklch(0.30 0.06 30);">
+															<li>
 																{#if actionTitle}
-																	<div class="flex items-center gap-2">
-																		<div class="font-medium text-xs flex-1" style="color: oklch(0.80 0.10 30);">{actionTitle}</div>
-																		{#if actionPriority}
-																			<span class="text-[9px] px-1.5 py-0.5 rounded uppercase font-medium"
-																				style="background: {actionPriority === 'high' ? 'oklch(0.50 0.15 30 / 0.3)' : 'oklch(0.50 0.10 85 / 0.3)'}; color: {actionPriority === 'high' ? 'oklch(0.75 0.15 30)' : 'oklch(0.75 0.10 85)'};">
-																				{actionPriority}
-																			</span>
+																	<div class="flex items-center gap-2 text-xs">
+																		<span class="font-medium text-base-content/90">{actionTitle}</span>
+																		{#if actionPriority === 'high'}
+																			<span class="text-[9px] uppercase tracking-wide text-error font-semibold">high</span>
 																		{/if}
 																	</div>
 																{/if}
 																{#if actionDesc}
-																	<div class="text-[10px] mt-1 whitespace-pre-wrap" style="color: oklch(0.65 0.05 30);">
-																		{actionDesc}
-																	</div>
+																	<div class="text-[11px] mt-0.5 whitespace-pre-wrap text-base-content/65">{actionDesc}</div>
 																{/if}
 																{#if humanAction.items && humanAction.items.length > 0}
 																	<ul class="mt-1 space-y-0.5">
 																		{#each humanAction.items as item}
-																			<li class="flex items-start gap-1.5 text-[10px]" style="color: oklch(0.70 0.08 30);">
-																				<span class="mt-0.5">☐</span>
+																			<li class="flex items-start gap-1.5 text-[11px] text-base-content/70">
+																				<span class="mt-0.5 flex-shrink-0">☐</span>
 																				<span class="whitespace-pre-wrap">{item}</span>
 																			</li>
 																		{/each}
 																	</ul>
 																{/if}
-															</div>
+															</li>
 														{/each}
-													</div>
-												</div>
-											{/if}
+													</ul>
+												{/if}
+											</div>
+										{/if}
 
-											<!-- Suggested Tasks (from complete bundle) -->
-											{#if bundle.suggestedTasks && bundle.suggestedTasks.length > 0}
-												{@const bundleTasksWithState = getCompleteBundleTasksWithState(bundle.suggestedTasks, eventKey)}
-												{@const bundleSelectedCount = getSelectedCount(eventKey)}
-												{@const bundleProject = bundle.project || (bundle.taskId || event.task_id || '').split('-')[0] || defaultProject}
-												<div>
-													<div class="text-[10px] font-medium mb-1" style="color: oklch(0.65 0.12 280);">
-														📋 SUGGESTED FOLLOW-UP ({bundle.suggestedTasks.length})
-													</div>
-													<SuggestedTasksSection
-														tasks={bundleTasksWithState}
-														selectedCount={bundleSelectedCount}
-														onToggleSelection={(taskKey) => toggleTaskSelection(eventKey, taskKey)}
-														getTaskKey={getSuggestedTaskKey}
-														onCreateTasks={onCreateTasks ? (tasks) => handleCreateTasks(eventKey, tasks) : undefined}
-														onCreateAndStartTasks={onCreateAndStartTasks ? (tasks) => handleCreateAndStartTasks(eventKey, tasks) : undefined}
-														onEditTask={(taskKey, edits) => editTask(eventKey, taskKey, edits)}
-														onClearEdits={(taskKey) => clearTaskEdits(eventKey, taskKey)}
-														isCreating={isCreatingTasks}
-														{createResults}
-														showFeedback={showCreateFeedback}
-														onDismissFeedback={dismissFeedback}
-														{availableProjects}
-														defaultProject={bundleProject}
-														{onTaskClick}
-													/>
+										{#if bundle.suggestedTasks && bundle.suggestedTasks.length > 0}
+											{@const bundleTasksWithState = getCompleteBundleTasksWithState(bundle.suggestedTasks, eventKey)}
+											{@const bundleSelectedCount = getSelectedCount(eventKey)}
+											{@const bundleProject = bundle.project || (bundle.taskId || event.task_id || '').split('-')[0] || defaultProject}
+											<div class="space-y-1.5">
+												<div class="text-xs font-semibold text-base-content/70">
+													Suggested follow-up <span class="text-base-content/40 font-normal">({bundle.suggestedTasks.length})</span>
 												</div>
-											{/if}
+												<SuggestedTasksSection
+													tasks={bundleTasksWithState}
+													selectedCount={bundleSelectedCount}
+													onToggleSelection={(taskKey) => toggleTaskSelection(eventKey, taskKey)}
+													getTaskKey={getSuggestedTaskKey}
+													onCreateTasks={onCreateTasks ? (tasks) => handleCreateTasks(eventKey, tasks) : undefined}
+													onCreateAndStartTasks={onCreateAndStartTasks ? (tasks) => handleCreateAndStartTasks(eventKey, tasks) : undefined}
+													onEditTask={(taskKey, edits) => editTask(eventKey, taskKey, edits)}
+													onClearEdits={(taskKey) => clearTaskEdits(eventKey, taskKey)}
+													isCreating={isCreatingTasks}
+													{createResults}
+													showFeedback={showCreateFeedback}
+													onDismissFeedback={dismissFeedback}
+													{availableProjects}
+													defaultProject={bundleProject}
+													{onTaskClick}
+												/>
+											</div>
+										{/if}
 
-											<!-- Cross-Agent Intel -->
-											{#if bundle.crossAgentIntel}
-												<div>
-													<div class="text-[10px] font-medium mb-1" style="color: oklch(0.55 0.02 250);">
-														🔗 CROSS-AGENT INTEL
-													</div>
-													<div class="p-2 rounded space-y-2" style="background: oklch(0.15 0.01 250);">
-														{#if bundle.crossAgentIntel.files && bundle.crossAgentIntel.files.length > 0}
-															<div>
-																<span class="text-[9px] font-medium" style="color: oklch(0.50 0.02 250);">Files:</span>
-																<div class="flex flex-wrap gap-1 mt-0.5">
-																	{#each bundle.crossAgentIntel.files as file}
-																		<span class="px-1.5 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.20 0.02 250); color: oklch(0.65 0.02 250);">
-																			{file.split('/').pop()}
-																		</span>
-																	{/each}
-																</div>
-															</div>
+										<!-- TIER 3 - METADATA: Quiet row -->
+										{#if hasMeta}
+											<div class="pt-2 border-t border-base-content/10 space-y-1.5 text-[11px] text-base-content/60">
+												{#if popupBundleQuality || bundle.riskLevel}
+													<div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+														{#if popupBundleQuality?.tests}
+															<span>Tests <span class="{popupBundleQuality.tests === 'passing' ? 'text-success' : popupBundleQuality.tests === 'failing' ? 'text-error' : 'text-base-content/70'}">{popupBundleQuality.tests}</span></span>
 														{/if}
-														{#if bundle.crossAgentIntel.patterns && bundle.crossAgentIntel.patterns.length > 0}
-															<div>
-																<span class="text-[9px] font-medium" style="color: oklch(0.50 0.02 250);">Patterns:</span>
-																<ul class="mt-0.5">
-																	{#each bundle.crossAgentIntel.patterns as pattern}
-																		<li class="text-[10px]" style="color: oklch(0.60 0.02 250);">• {pattern}</li>
-																	{/each}
-																</ul>
-															</div>
+														{#if popupBundleQuality?.build}
+															<span>Build <span class="{popupBundleQuality.build === 'clean' ? 'text-success' : popupBundleQuality.build === 'warnings' ? 'text-warning' : 'text-error'}">{popupBundleQuality.build}</span></span>
 														{/if}
-														{#if bundle.crossAgentIntel.gotchas && bundle.crossAgentIntel.gotchas.length > 0}
-															<div>
-																<span class="text-[9px] font-medium" style="color: oklch(0.55 0.10 40);">⚠️ Gotchas:</span>
-																<ul class="mt-0.5">
-																	{#each bundle.crossAgentIntel.gotchas as gotcha}
-																		<li class="text-[10px]" style="color: oklch(0.65 0.08 40);">• {gotcha}</li>
-																	{/each}
-																</ul>
-															</div>
+														{#if bundle.riskLevel}
+															<span>Risk <span class="{bundle.riskLevel === 'low' ? 'text-success' : bundle.riskLevel === 'medium' ? 'text-warning' : 'text-error'}">{bundle.riskLevel}</span></span>
+														{/if}
+														{#if popupBundleQuality?.preExisting}
+															<span class="text-base-content/45">{popupBundleQuality.preExisting}</span>
 														{/if}
 													</div>
-												</div>
-											{/if}
-										</div>
+												{/if}
+												{#if bundle.suggestedRename}
+													<div class="flex items-center gap-2">
+														<span class="text-base-content/45">Rename to</span>
+														<code class="text-base-content/85 font-mono">{bundle.suggestedRename}</code>
+														<button class="text-info hover:underline" onclick={() => onApplyRename?.(bundle.taskId, bundle.suggestedRename)} title="Apply suggested rename">apply</button>
+													</div>
+												{/if}
+												{#if bundle.suggestedLabels && bundle.suggestedLabels.length > 0}
+													<div class="flex flex-wrap items-center gap-1.5">
+														<span class="text-base-content/45">Labels</span>
+														{#each bundle.suggestedLabels as label}
+															<span class="px-1.5 py-0.5 rounded text-[10px] text-base-content/75 bg-base-content/5">{label}</span>
+														{/each}
+														<button class="text-info hover:underline ml-1" onclick={() => onApplyLabels?.(bundle.taskId, bundle.suggestedLabels)} title="Apply suggested labels">apply</button>
+													</div>
+												{/if}
+												{#if bundle.documentationNeeds && bundle.documentationNeeds.length > 0}
+													<div>
+														<span class="text-base-content/45">Docs to update:</span>
+														<span class="text-base-content/75">{bundle.documentationNeeds.join(', ')}</span>
+													</div>
+												{/if}
+												{#if bundle.crossAgentIntel}
+													{#if bundle.crossAgentIntel.files && bundle.crossAgentIntel.files.length > 0}
+														<div class="flex flex-wrap items-center gap-1.5">
+															<span class="text-base-content/45">Files:</span>
+															{#each bundle.crossAgentIntel.files as file}
+																<code class="text-[10px] text-base-content/65 font-mono">{file.split('/').pop()}</code>
+															{/each}
+														</div>
+													{/if}
+													{#if bundle.crossAgentIntel.patterns && bundle.crossAgentIntel.patterns.length > 0}
+														<div>
+															<span class="text-base-content/45">Patterns:</span>
+															<span class="text-base-content/75">{bundle.crossAgentIntel.patterns.join(' · ')}</span>
+														</div>
+													{/if}
+													{#if bundle.crossAgentIntel.gotchas && bundle.crossAgentIntel.gotchas.length > 0}
+														<div>
+															<span class="text-warning/80">Gotchas:</span>
+															<span class="text-base-content/75">{bundle.crossAgentIntel.gotchas.join(' · ')}</span>
+														</div>
+													{/if}
+												{/if}
+											</div>
+										{/if}
+									</div>
 									{:else if (event.state === 'completed' || event.type === 'completed' || event.type === 'complete') && event.data}
 										<!-- Rich Completed Signal UI -->
 										{@const completedData = event.data}

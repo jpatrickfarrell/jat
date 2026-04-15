@@ -173,25 +173,16 @@
 		pillPointerLocked = true;
 		// Release lock AFTER the click event is fully processed (not on pointerup,
 		// which fires before click and would unlock too early, causing double-trigger).
-		const cleanup = () => {
-			window.removeEventListener('click', releaseAfterClick, true);
-			window.removeEventListener('pointercancel', releaseOnCancel, true);
-			clearTimeout(fallbackTimer);
-		};
 		const releaseAfterClick = () => {
 			setTimeout(() => { pillPointerLocked = false; }, 0);
-			cleanup();
+			window.removeEventListener('click', releaseAfterClick, true);
+			window.removeEventListener('pointercancel', releaseOnCancel, true);
 		};
 		const releaseOnCancel = () => {
 			pillPointerLocked = false;
-			cleanup();
+			window.removeEventListener('click', releaseAfterClick, true);
+			window.removeEventListener('pointercancel', releaseOnCancel, true);
 		};
-		// Safety fallback: if the pill's click event never fires (e.g. drawer
-		// dismissed on action before click bubbles), release the lock after 800ms.
-		const fallbackTimer = setTimeout(() => {
-			pillPointerLocked = false;
-			cleanup();
-		}, 800);
 		window.addEventListener('click', releaseAfterClick, true);
 		window.addEventListener('pointercancel', releaseOnCancel, true);
 	}
@@ -1616,7 +1607,6 @@
 							placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
 							rows={1}
 							compact={true}
-							onkeydown={handleKeydown}
 						/>
 					</div>
 					{/if}

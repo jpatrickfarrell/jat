@@ -556,4 +556,15 @@ case "$SIGNAL_TYPE" in
         ;;
 esac
 
+# Clear the compacting lockfile when any signal fires (except 'compacting' itself).
+# This ensures the IDE stops showing the compacting badge as soon as the agent
+# resumes and emits any signal — even if the user hasn't sent a message yet.
+if [[ "$SIGNAL_TYPE" != "compacting" && "$SIGNAL_TYPE" != "starting" ]]; then
+    _TMUX_S=$(tmux display-message -p '#S' 2>/dev/null || true)
+    if [[ -n "$_TMUX_S" ]]; then
+        _COMPACT_LOCK="/tmp/jat-compacting-${_TMUX_S}"
+        [[ -f "$_COMPACT_LOCK" ]] && rm -f "$_COMPACT_LOCK" 2>/dev/null || true
+    fi
+fi
+
 exit 0

@@ -96,53 +96,8 @@
 	let pathSearchTimeout: ReturnType<typeof setTimeout> | null = null;
 	let pathSearchGeneration = 0;
 
-	// Strip Claude Code TUI chrome (separator + prompt + statuslines) from terminal output.
-	// Strategy 1: Find the ❯ prompt then cut at the separator just above it.
-	// Strategy 2: Bottom-up stripping as fallback.
-	function stripTerminalChrome(raw: string): string {
-		if (!raw) return raw;
-		const lines = raw.split('\n');
-		const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*[mGKHFJA-Z]/g, '');
-		const isSeparator = (s: string) => s.length >= 5 && /^[\u2500-\u257F─═]+$/.test(s);
-
-		// Strategy 1: Find the input prompt (❯ or >) in the last 12 lines,
-		// then cut at the separator immediately above it.
-		for (let i = lines.length - 1; i >= Math.max(0, lines.length - 12); i--) {
-			const clean = stripAnsi(lines[i]).trim();
-			if (/^[❯>]\s*$/.test(clean)) {
-				for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
-					const sep = stripAnsi(lines[j]).trim();
-					if (isSeparator(sep)) {
-						return lines.slice(0, j).join('\n');
-					}
-				}
-				break;
-			}
-		}
-
-		// Strategy 2: Bottom-up for non-standard terminals
-		let end = lines.length;
-		while (end > 0) {
-			const clean = stripAnsi(lines[end - 1]).trim();
-			if (
-				clean === '' ||
-				isSeparator(clean) ||
-				/[▪▫\u25AA\u25AB]/.test(clean) ||
-				/^[❯>]\s*$/.test(clean) ||
-				/^·\s/.test(clean) ||
-				/^\s*[●⚙○◉⏻]\s/.test(clean) ||
-				/[\u23F5\u23F4\u23F6\u23F7]/.test(clean)
-			) {
-				end--;
-			} else {
-				break;
-			}
-		}
-		return lines.slice(0, end).join('\n');
-	}
-
 	// Rendered HTML output
-	const renderedOutput = $derived(ansiToHtmlWithLinks(stripTerminalChrome(output)));
+	const renderedOutput = $derived(ansiToHtmlWithLinks(output));
 
 	// Status visual
 	const stateVisual = $derived(getSessionStateVisual(sessionState));
@@ -748,9 +703,7 @@
 		}
 	}
 
-	// Handle global shortcuts in capture phase while fullscreen is open.
-	// The layout's global handler skips all shortcuts when isMobileFullscreenOpen is true,
-	// so we need to handle session shortcuts (Alt+A, Alt+I) here directly.
+	// Handle Escape in capture phase to close overlay without sending to tmux
 	$effect(() => {
 		if (!visible) return;
 		function handleKeydown(e: KeyboardEvent) {
@@ -758,21 +711,6 @@
 				e.stopPropagation();
 				e.preventDefault();
 				handleClose();
-				return;
-			}
-			// Alt+A → attach terminal
-			if (e.key === 'a' && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-				e.preventDefault();
-				e.stopPropagation();
-				onAction('attach');
-				return;
-			}
-			// Alt+I → interrupt (Ctrl+C)
-			if (e.key === 'i' && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-				e.preventDefault();
-				e.stopPropagation();
-				handleSendInput('ctrl-c', 'key');
-				return;
 			}
 		}
 		window.addEventListener('keydown', handleKeydown, true);

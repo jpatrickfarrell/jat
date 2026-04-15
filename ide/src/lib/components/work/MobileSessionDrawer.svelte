@@ -171,20 +171,13 @@
 
 	function armPillPointerLock() {
 		pillPointerLocked = true;
-		// Release lock AFTER the click event is fully processed (not on pointerup,
-		// which fires before click and would unlock too early, causing double-trigger).
-		const releaseAfterClick = () => {
-			setTimeout(() => { pillPointerLocked = false; }, 0);
-			window.removeEventListener('click', releaseAfterClick, true);
-			window.removeEventListener('pointercancel', releaseOnCancel, true);
-		};
-		const releaseOnCancel = () => {
+		const release = () => {
 			pillPointerLocked = false;
-			window.removeEventListener('click', releaseAfterClick, true);
-			window.removeEventListener('pointercancel', releaseOnCancel, true);
+			window.removeEventListener('pointerup', release, true);
+			window.removeEventListener('pointercancel', release, true);
 		};
-		window.addEventListener('click', releaseAfterClick, true);
-		window.addEventListener('pointercancel', releaseOnCancel, true);
+		window.addEventListener('pointerup', release, true);
+		window.addEventListener('pointercancel', release, true);
 	}
 
 	function startHold(action: SessionStateAction) {

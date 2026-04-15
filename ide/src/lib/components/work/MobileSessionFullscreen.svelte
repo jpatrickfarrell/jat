@@ -130,8 +130,51 @@
 	let pathSearchTimeout: ReturnType<typeof setTimeout> | null = null;
 	let pathSearchGeneration = 0;
 
+	// Strip Claude Code TUI chrome (separator + ❯ prompt + statuslines) from output.
+	// The TUI structure is: content | ───── | ❯ | ───── | statuslines.
+	// Strategy 1: find the ❯ prompt in the last 12 lines, cut at separator above it.
+	// Strategy 2: bottom-up strip of blank/separator/status lines as fallback.
+	function stripTerminalChrome(raw: string): string {
+		if (!raw) return raw;
+		const lines = raw.split('\n');
+		const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*[mGKHFJA-Z]/g, '');
+		const isSeparator = (s: string) => s.length >= 5 && /^[\u2500-\u257F─═]+$/.test(s);
+
+		for (let i = lines.length - 1; i >= Math.max(0, lines.length - 12); i--) {
+			const clean = stripAnsi(lines[i]).trim();
+			if (/^[❯>]\s*$/.test(clean) || /^[❯>]\s/.test(clean)) {
+				for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
+					const sep = stripAnsi(lines[j]).trim();
+					if (isSeparator(sep)) {
+						return lines.slice(0, j).join('\n');
+					}
+				}
+				break;
+			}
+		}
+
+		let end = lines.length;
+		while (end > 0) {
+			const clean = stripAnsi(lines[end - 1]).trim();
+			if (
+				clean === '' ||
+				isSeparator(clean) ||
+				/^[❯>]\s*/.test(clean) ||
+				/^·\s/.test(clean) ||
+				/^\s*[●⚙○◉⏻]\s/.test(clean) ||
+				/[\u23F4-\u23F7]/.test(clean) ||
+				/[▪▫\u25AA\u25AB]/.test(clean)
+			) {
+				end--;
+			} else {
+				break;
+			}
+		}
+		return lines.slice(0, end).join('\n');
+	}
+
 	// Rendered HTML output
-	const renderedOutput = $derived(ansiToHtmlWithLinks(output));
+	const renderedOutput = $derived(ansiToHtmlWithLinks(stripTerminalChrome(output)));
 
 	// Status visual
 	const stateVisual = $derived(getSessionStateVisual(sessionState));

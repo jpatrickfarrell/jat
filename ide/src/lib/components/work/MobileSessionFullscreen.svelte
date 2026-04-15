@@ -69,6 +69,21 @@
 	let sendingInput = $state(false);
 	let sendInputError = $state<string | null>(null);
 
+	// Queued attachments (shown as preview chips above input, sent with next submit)
+	type PendingAttachment = { id: string; path: string; name: string; isImage: boolean };
+	let pendingAttachments = $state<PendingAttachment[]>([]);
+	function queueAttachment(path: string) {
+		const name = path.split('/').pop() || path;
+		const isImage = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(path);
+		pendingAttachments = [...pendingAttachments, {
+			id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+			path, name, isImage
+		}];
+	}
+	function removeAttachment(id: string) {
+		pendingAttachments = pendingAttachments.filter(a => a.id !== id);
+	}
+
 	// Visual flash states
 	let submitFlash = $state(false);
 	let escapeFlash = $state(false);
@@ -464,14 +479,14 @@
 		e.stopPropagation();
 		isDragOver = false;
 
-		// JAT image path (dragged from TaskDetailPane thumbnails)
+		// JAT image path (dragged from TaskDetailPane thumbnails) — queue as preview
 		const jatImageData = e.dataTransfer?.getData('application/x-jat-image');
 		if (jatImageData) {
 			try {
 				const imageInfo = JSON.parse(jatImageData);
 				if (imageInfo.path) {
-					// Send image path to session as input
-					await handleSendInput(imageInfo.path, 'text');
+					queueAttachment(imageInfo.path);
+					inputRef?.focus({ preventScroll: true });
 					return;
 				}
 			} catch { /* fall through */ }
@@ -490,12 +505,13 @@
 			} catch { /* fall through */ }
 		}
 
-		// Plain text path (fallback for image paths)
+		// Plain text path (fallback for image paths) — queue as preview
 		const plainText = e.dataTransfer?.getData('text/plain');
 		if (plainText && plainText.startsWith('/') && !e.dataTransfer?.files?.length) {
 			const isImagePath = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(plainText);
 			if (isImagePath) {
-				await handleSendInput(plainText, 'text');
+				queueAttachment(plainText);
+				inputRef?.focus({ preventScroll: true });
 				return;
 			}
 		}
@@ -529,8 +545,9 @@
 				});
 			}
 
-			// Send file path to the session
-			await handleSendInput(filePath, 'text');
+			// Queue as preview — user can send it with next submit (or dismiss)
+			queueAttachment(filePath);
+			inputRef?.focus({ preventScroll: true });
 		} catch (e) {
 			console.warn('[MobileFullscreen] Failed to upload file:', e);
 		}
@@ -609,7 +626,8 @@
 	// Send text input to session (matches SessionCard pattern)
 	async function sendTextInput() {
 		const hasText = inputText.trim().length > 0;
-		if (!hasText) return;
+		const hasAttachments = pendingAttachments.length > 0;
+		if (!hasText && !hasAttachments) return;
 
 		sendingInput = true;
 		try {
@@ -644,8 +662,12 @@
 				}
 			}
 
+			// Build message: prepend any queued attachment paths on their own lines
+			const attachmentLines = pendingAttachments.map(a => a.path).join('\n');
+			const body = [attachmentLines, inputText.trim()].filter(Boolean).join('\n');
+
 			// Send the message
-			const sendResult = await handleSendInput(inputText.trim(), 'text');
+			const sendResult = await handleSendInput(body, 'text');
 
 			// Send extra Enter after delay
 			await new Promise(r => setTimeout(r, 100));
@@ -659,6 +681,7 @@
 			historyIndex = -1;
 			savedInput = '';
 			inputText = '';
+			pendingAttachments = [];
 			setTimeout(autoResizeTextarea, 0);
 
 			// Visual flash
@@ -704,10 +727,11 @@
 		}
 
 		if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-			// Enter: submit input or send Enter key to tmux if empty
+			// Enter: submit input or send Enter key to tmux if empty (no attachments)
 			e.preventDefault();
 			const hasText = inputText.trim().length > 0;
-			if (!hasText) {
+			const hasAttachments = pendingAttachments.length > 0;
+			if (!hasText && !hasAttachments) {
 				handleSendInput('enter', 'key');
 				submitFlash = true;
 				setTimeout(() => { submitFlash = false; }, 300);
@@ -928,6 +952,31 @@
 
 		<!-- Input Bar -->
 		<div class="fullscreen-input">
+			{#if pendingAttachments.length > 0}
+				<div class="attachment-row">
+					{#each pendingAttachments as att (att.id)}
+						<div class="attachment-chip" title={att.path}>
+							{#if att.isImage}
+								<img class="attachment-thumb" src="/api/work/image?path={encodeURIComponent(att.path)}" alt={att.name} />
+							{:else}
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 attachment-icon">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+								</svg>
+							{/if}
+							<span class="attachment-name">{att.name}</span>
+							<button
+								class="attachment-remove"
+								use:directClick={() => removeAttachment(att.id)}
+								aria-label="Remove attachment"
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3 h-3">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+								</svg>
+							</button>
+						</div>
+					{/each}
+				</div>
+			{/if}
 			{#if sendInputError}
 				<div class="input-error">
 					<span class="flex-1">{sendInputError}</span>
@@ -994,7 +1043,7 @@
 				<button
 					class="send-btn"
 					use:directClick={sendTextInput}
-					disabled={sendingInput || !inputText.trim()}
+					disabled={sendingInput || (!inputText.trim() && pendingAttachments.length === 0)}
 					aria-label="Send"
 				>
 					{#if sendingInput}
@@ -1015,6 +1064,61 @@
 {/if}
 
 <style>
+	.attachment-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.375rem;
+		padding: 0.5rem 0.75rem 0.25rem;
+	}
+	.attachment-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		max-width: 100%;
+		padding: 0.25rem 0.375rem 0.25rem 0.25rem;
+		background: oklch(0.20 0.02 250);
+		border: 1px solid oklch(0.30 0.03 250);
+		border-radius: 0.375rem;
+		font-size: 0.75rem;
+		color: oklch(0.85 0.02 250);
+	}
+	.attachment-thumb {
+		width: 1.75rem;
+		height: 1.75rem;
+		object-fit: cover;
+		border-radius: 0.25rem;
+		flex-shrink: 0;
+		background: oklch(0.15 0.01 250);
+	}
+	.attachment-icon {
+		flex-shrink: 0;
+		color: oklch(0.60 0.08 200);
+	}
+	.attachment-name {
+		max-width: 10rem;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.attachment-remove {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1rem;
+		height: 1rem;
+		border: none;
+		background: transparent;
+		color: oklch(0.60 0.02 250);
+		border-radius: 0.25rem;
+		cursor: pointer;
+		padding: 0;
+		flex-shrink: 0;
+	}
+	.attachment-remove:hover {
+		background: oklch(0.30 0.10 30 / 0.3);
+		color: oklch(0.75 0.15 30);
+	}
+
 	.eventstack-wrapper {
 		position: relative;
 		flex-shrink: 0;

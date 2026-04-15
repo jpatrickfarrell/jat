@@ -241,8 +241,9 @@ pg_update() {
       --files)       payload="$(echo "$payload" | jq --arg v "$2" '. + {reserved_files: $v}')"; shift 2 ;;
       --labels)      payload="$(echo "$payload" | jq --arg v "$2" '. + {labels: ($v | split(",") | map(ltrimstr(" ") | rtrimstr(" ")))}')"; shift 2 ;;
       --json)        json_out=true; shift ;;
-      # silently skip flags not supported via REST (--command, --agent-program, etc.)
-      --command|--agent-program|--model|--schedule-cron|--next-run-at|--due-date) shift 2 ;;
+      # warn on flags not supported via REST (--command, --agent-program, etc.)
+      --command|--agent-program|--model|--schedule-cron|--next-run-at|--due-date)
+        echo "Warning: $1 is not supported for postgres projects (skipped)" >&2; shift 2 ;;
       *) shift ;;
     esac
   done
@@ -395,7 +396,7 @@ for t in data:
 
 # pg_search: search tasks via IDE API (mirrors cmd_search)
 pg_search() {
-  local query="" status="" limit=50 json_out=false updated_after=""
+  local query="" status="" type="" labels="" limit=50 json_out=false updated_after=""
 
   if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
     query="$1"; shift
@@ -406,12 +407,14 @@ pg_search() {
       --json)          json_out=true; shift ;;
       --limit)         limit="$2"; shift 2 ;;
       --status)        status="$2"; shift 2 ;;
+      --type)          type="$2"; shift 2 ;;
+      --labels)        labels="$2"; shift 2 ;;
       --updated-after) updated_after="$2"; shift 2 ;;
       *)               [[ -z "$query" ]] && query="$1"; shift ;;
     esac
   done
 
-  [[ -n "$query" ]] || die "Usage: jt search \"query\" [--status X] [--limit N] [--json]"
+  [[ -n "$query" ]] || die "Usage: jt search \"query\" [--status X] [--type X] [--labels X] [--limit N] [--json]"
 
   local project_name
   project_name="$(resolve_project_name)"
@@ -426,6 +429,18 @@ pg_search() {
   local response normalized
   response="$(pg_curl GET "/api/tasks?${params}")" || die "Failed to search tasks"
   normalized="$(echo "$response" | _pg_normalize_tasks)"
+
+  # Client-side filter by type (issue_type) if specified
+  if [[ -n "$type" ]]; then
+    normalized="$(echo "$normalized" | jq --arg t "$type" '[.[] | select(.issue_type == $t)]')"
+  fi
+  # Client-side filter by labels if specified (comma-separated, match any)
+  if [[ -n "$labels" ]]; then
+    normalized="$(echo "$normalized" | jq --arg l "$labels" '
+      ($l | split(",") | map(ltrimstr(" ") | rtrimstr(" "))) as $wanted |
+      [.[] | select(.labels != null and (.labels | any(. as $lbl | $wanted | any(. == $lbl))))]
+    ')"
+  fi
 
   if $json_out; then
     echo "$normalized"
@@ -531,6 +546,21 @@ pg_create() {
   else
     echo "Created ${new_id}: ${new_title}"
   fi
+}
+
+# pg_delete: delete task via IDE API (mirrors cmd_delete)
+pg_delete() {
+  local task_id="$1"
+  [[ -n "$task_id" ]] || die "Usage: jt delete TASK_ID"
+  require_ide_reachable
+  local response
+  response="$(pg_curl DELETE "/api/tasks/${task_id}")" || die "Failed to delete task: ${task_id}"
+  if echo "$response" | jq -e '.error' >/dev/null 2>&1; then
+    local err_msg
+    err_msg="$(echo "$response" | jq -r '.error // .message // "unknown"')"
+    die "Failed to delete task ${task_id}: ${err_msg}"
+  fi
+  echo "Deleted $task_id"
 }
 
 # Get project prefix from directory name
@@ -1549,9 +1579,16 @@ for t in data:
 }
 
 cmd_dep() {
-  require_db
   local subcmd="${1:-}"; shift || true
 
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    # project_tasks schema has no dependency table; deps not yet supported
+    echo "Warning: jt dep is not supported for postgres-backed projects." >&2
+    echo "The project_tasks schema has no dependency table." >&2
+    return 1
+  fi
+
+  require_db
   case "$subcmd" in
     add)    cmd_dep_add "$@" ;;
     remove) cmd_dep_remove "$@" ;;
@@ -1732,6 +1769,8 @@ cmd_search() {
   if [[ "$(resolve_project_backend)" == "postgres" ]]; then
     local pg_search_args=("$query")
     [[ -n "$status" ]]        && pg_search_args+=(--status "$status")
+    [[ -n "$type" ]]          && pg_search_args+=(--type "$type")
+    [[ -n "$labels_filter" ]] && pg_search_args+=(--labels "$labels_filter")
     [[ -n "$limit" ]]         && pg_search_args+=(--limit "$limit")
     [[ -n "$updated_after" ]] && pg_search_args+=(--updated-after "$updated_after")
     $json_out && pg_search_args+=(--json)
@@ -1831,7 +1870,6 @@ for t in data:
 }
 
 cmd_delete() {
-  require_db
   local task_id=""
 
   if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
@@ -1839,6 +1877,13 @@ cmd_delete() {
   fi
 
   [[ -n "$task_id" ]] || die "Usage: jt delete TASK_ID"
+
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_delete "$task_id"
+    return
+  fi
+
+  require_db
 
   local exists
   exists="$(sql_json "SELECT id FROM tasks WHERE id = '$(sql_escape "$task_id")';" 2>/dev/null)"

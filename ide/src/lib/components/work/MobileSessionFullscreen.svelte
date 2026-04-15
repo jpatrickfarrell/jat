@@ -138,6 +138,67 @@
 		node.addEventListener('mouseenter', h);
 		return { destroy() { node.removeEventListener('mouseenter', h); } };
 	}
+	function directPointerdown(node: HTMLElement, handler: (e: PointerEvent) => void) {
+		const h = handler as EventListener;
+		node.addEventListener('pointerdown', h);
+		return { destroy() { node.removeEventListener('pointerdown', h); } };
+	}
+	function directPointerup(node: HTMLElement, handler: (e: PointerEvent) => void) {
+		const h = handler as EventListener;
+		node.addEventListener('pointerup', h);
+		node.addEventListener('pointercancel', h);
+		node.addEventListener('pointerleave', h);
+		return {
+			destroy() {
+				node.removeEventListener('pointerup', h);
+				node.removeEventListener('pointercancel', h);
+				node.removeEventListener('pointerleave', h);
+			}
+		};
+	}
+
+	// Hold-to-confirm for destructive pills
+	const DESTRUCTIVE_ACTIONS = new Set(['kill', 'complete', 'complete-kill', 'cleanup']);
+	const HOLD_DURATION_MS = 600;
+	const HOLD_TICK_MS = 30;
+	let holdActionId = $state<string | null>(null);
+	let holdProgress = $state(0);
+	let holdTimer: ReturnType<typeof setInterval> | null = null;
+	let holdFired = false;
+
+	function startHold(action: SessionStateAction, ev: PointerEvent) {
+		(ev.currentTarget as HTMLElement)?.setPointerCapture?.(ev.pointerId);
+		if (!DESTRUCTIVE_ACTIONS.has(action.id)) return;
+		clearHold();
+		holdFired = false;
+		holdActionId = action.id;
+		holdProgress = 0;
+		let elapsed = 0;
+		holdTimer = setInterval(() => {
+			elapsed += HOLD_TICK_MS;
+			holdProgress = Math.min(100, (elapsed / HOLD_DURATION_MS) * 100);
+			if (elapsed >= HOLD_DURATION_MS) {
+				const a = action;
+				clearHold();
+				holdFired = true;
+				executePillAction(a);
+			}
+		}, HOLD_TICK_MS);
+	}
+	function clearHold() {
+		if (holdTimer) { clearInterval(holdTimer); holdTimer = null; }
+		holdActionId = null;
+		holdProgress = 0;
+	}
+	function handlePillClick(action: SessionStateAction) {
+		// Destructive: click alone does nothing — must use hold. Suppress the
+		// click that follows a successful hold (hold-fired already ran it).
+		if (DESTRUCTIVE_ACTIONS.has(action.id)) {
+			if (holdFired) { holdFired = false; return; }
+			return;
+		}
+		executePillAction(action);
+	}
 
 	// Path autocomplete state (triggered by @ in input)
 	let showPathAutocomplete = $state(false);
@@ -937,15 +998,22 @@
 		<!-- Quick Action Pills (dynamic from state actions config) -->
 		<div class="quick-actions">
 			{#each stateActions as action (action.id)}
+				{@const isDestructive = DESTRUCTIVE_ACTIONS.has(action.id)}
 				<button
 					class="action-pill {getPillColorClass(action.variant)}"
-					use:directClick={() => executePillAction(action)}
-					title={action.description || action.label}
+					class:hold-active={holdActionId === action.id}
+					use:directClick={() => handlePillClick(action)}
+					use:directPointerdown={(e) => startHold(action, e)}
+					use:directPointerup={clearHold}
+					title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : (action.description || action.label)}
 				>
-					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+					{#if isDestructive && holdActionId === action.id}
+						<span class="hold-fill" style="width: {holdProgress}%"></span>
+					{/if}
+					<svg class="relative z-10" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="14" height="14">
 						<path stroke-linecap="round" stroke-linejoin="round" d={action.icon} />
 					</svg>
-					{action.label}
+					<span class="relative z-10">{action.label}</span>
 				</button>
 			{/each}
 		</div>
@@ -1303,6 +1371,8 @@
 	}
 
 	.action-pill {
+		position: relative;
+		overflow: hidden;
 		display: flex;
 		align-items: center;
 		gap: 0.25rem;
@@ -1313,6 +1383,20 @@
 		color: oklch(0.75 0.02 250);
 		font-size: 0.6875rem;
 		font-weight: 500;
+	}
+	.action-pill .hold-fill {
+		position: absolute;
+		left: 0;
+		top: 0;
+		bottom: 0;
+		background: currentColor;
+		opacity: 0.25;
+		pointer-events: none;
+		transition: width 30ms linear;
+		z-index: 0;
+	}
+	.action-pill.hold-active {
+		border-color: currentColor;
 		cursor: pointer;
 		white-space: nowrap;
 		flex-shrink: 0;

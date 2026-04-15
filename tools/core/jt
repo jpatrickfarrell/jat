@@ -446,6 +446,93 @@ for t in data:
   fi
 }
 
+# pg_create: create task via IDE API (mirrors cmd_create flags)
+# Requires IDE to be running (no direct postgres write path).
+pg_create() {
+  local title="" description="" type="task" priority=2 labels="" deps="" assignee="" json_out=false parent_id="" reserved_files=""
+  local command="" agent_program="" model="" schedule_cron="" next_run_at="" due_date=""
+
+  if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
+    title="$1"; shift
+  fi
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --title)          title="$2"; shift 2 ;;
+      --type)           type="$2"; shift 2 ;;
+      --priority)       priority="$2"; shift 2 ;;
+      --description)    description="$2"; shift 2 ;;
+      --labels)         labels="$2"; shift 2 ;;
+      --deps)           deps="$2"; shift 2 ;;
+      --assignee)       assignee="$2"; shift 2 ;;
+      --files)          reserved_files="$2"; shift 2 ;;
+      --parent)         parent_id="$2"; shift 2 ;;
+      --command)        command="$2"; shift 2 ;;
+      --agent-program)  agent_program="$2"; shift 2 ;;
+      --model)          model="$2"; shift 2 ;;
+      --schedule-cron)  schedule_cron="$2"; shift 2 ;;
+      --next-run-at)    next_run_at="$2"; shift 2 ;;
+      --due-date)       due_date="$2"; shift 2 ;;
+      --json)           json_out=true; shift ;;
+      # silently skip flags not supported via REST
+      --id|--source|--source-item-id|--metadata) shift 2 ;;
+      *)                [[ -z "$title" ]] && title="$1"; shift ;;
+    esac
+  done
+
+  [[ -n "$title" ]] || die "Usage: jt create \"title\" [--type X] [--priority N] [--description \"...\"] [--labels \"a,b\"] [--deps \"id1,id2\"] [--assignee X] [--files \"globs\"] [--parent EPIC_ID] [--json]"
+
+  local project_name
+  project_name="$(resolve_project_name)"
+  [[ -n "$project_name" ]] || die "Could not determine project name from ~/.config/jat/projects.json"
+
+  require_ide_reachable
+
+  # Build payload
+  local payload
+  payload="$(jq -n \
+    --arg project "$project_name" \
+    --arg title "$title" \
+    --arg description "$description" \
+    --arg type "$type" \
+    --argjson priority "$priority" \
+    '{project: $project, title: $title, description: $description, type: $type, priority: $priority}')"
+
+  if [[ -n "$labels" ]]; then
+    payload="$(echo "$payload" | jq --arg v "$labels" '. + {labels: ($v | split(",") | map(ltrimstr(" ") | rtrimstr(" ")) | map(select(length > 0)))}')"
+  fi
+  if [[ -n "$deps" ]]; then
+    payload="$(echo "$payload" | jq --arg v "$deps" '. + {deps: ($v | split(",") | map(ltrimstr(" ") | rtrimstr(" ")) | map(select(length > 0)))}')"
+  fi
+  [[ -n "$assignee" ]]        && payload="$(echo "$payload" | jq --arg v "$assignee" '. + {assignee: $v}')"
+  [[ -n "$reserved_files" ]]  && payload="$(echo "$payload" | jq --arg v "$reserved_files" '. + {reserved_files: $v}')"
+  [[ -n "$parent_id" ]]       && payload="$(echo "$payload" | jq --arg v "$parent_id" '. + {parent_id: $v}')"
+  [[ -n "$command" ]]         && payload="$(echo "$payload" | jq --arg v "$command" '. + {command: $v}')"
+  [[ -n "$agent_program" ]]   && payload="$(echo "$payload" | jq --arg v "$agent_program" '. + {agent_program: $v}')"
+  [[ -n "$model" ]]           && payload="$(echo "$payload" | jq --arg v "$model" '. + {model: $v}')"
+  [[ -n "$schedule_cron" ]]   && payload="$(echo "$payload" | jq --arg v "$schedule_cron" '. + {schedule_cron: $v}')"
+  [[ -n "$next_run_at" ]]     && payload="$(echo "$payload" | jq --arg v "$next_run_at" '. + {next_run_at: $v}')"
+  [[ -n "$due_date" ]]        && payload="$(echo "$payload" | jq --arg v "$due_date" '. + {due_date: $v}')"
+
+  local response
+  response="$(pg_curl POST "/api/tasks" "$payload")" || die "Failed to create task"
+  if echo "$response" | jq -e '.error' >/dev/null 2>&1; then
+    local err_msg
+    err_msg="$(echo "$response" | jq -r '.message // .error // "unknown"')"
+    die "Failed to create task: ${err_msg}"
+  fi
+
+  local new_id new_title
+  new_id="$(echo "$response" | jq -r '.task.id // .id // ""')"
+  new_title="$(echo "$response" | jq -r '.task.title // .title // ""')"
+
+  if $json_out; then
+    echo "$response" | _pg_normalize_tasks
+  else
+    echo "Created ${new_id}: ${new_title}"
+  fi
+}
+
 # Get project prefix from directory name
 project_prefix() {
   basename "$PROJECT_ROOT" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-'
@@ -767,6 +854,11 @@ HOOKEOF
 }
 
 cmd_create() {
+  # Postgres-backed project: proxy through IDE REST API
+  if [[ "$(resolve_project_backend)" == "postgres" ]]; then
+    pg_create "$@"
+    return $?
+  fi
   require_db
   local title="" description="" type="task" priority=2 labels="" deps="" assignee="" json_out=false explicit_id="" parent_id="" reserved_files=""
   local command="" agent_program="" model="" schedule_cron="" next_run_at="" due_date=""

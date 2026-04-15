@@ -21,6 +21,7 @@
 	import { setHoveredSession } from '$lib/stores/hoveredSession';
 	import { getActions, loadUserConfig, getIsLoaded } from '$lib/stores/stateActionsConfig.svelte';
 	import { isMobileFullscreenOpen } from '$lib/stores/drawerStore';
+	import EventStack from '$lib/components/work/EventStack.svelte';
 
 	// Props
 	let {
@@ -893,6 +894,22 @@
 			{/if}
 		</div>
 
+		<!-- Event Timeline Stack: signal history, suggested tasks, needs_input cards -->
+		{#if sessionName}
+			<div class="eventstack-wrapper">
+				<EventStack
+					{sessionName}
+					maxEvents={20}
+					pollInterval={5000}
+					autoExpand={sessionState === 'completed'}
+					onComplete={() => handleSendInput('/jat:complete', 'text')}
+					onTaskClick={(id) => onViewTask(id)}
+					onSelectOption={async (optionId) => { await handleSendInput(optionId, 'text'); }}
+					onSubmitText={async (text) => { await handleSendInput(text, 'text'); }}
+				/>
+			</div>
+		{/if}
+
 		<!-- Quick Action Pills (dynamic from state actions config) -->
 		<div class="quick-actions">
 			{#each stateActions as action (action.id)}
@@ -998,6 +1015,13 @@
 {/if}
 
 <style>
+	.eventstack-wrapper {
+		position: relative;
+		flex-shrink: 0;
+		padding: 0 0.5rem;
+		background: oklch(0.17 0.01 250);
+	}
+
 	.fullscreen-backdrop {
 		position: fixed;
 		inset: 0;

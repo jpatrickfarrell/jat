@@ -1068,7 +1068,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.375rem;
-		padding: 0.5rem 0.75rem 0.25rem;
+		padding: 0 0 0.375rem 0;
 	}
 	.attachment-chip {
 		display: inline-flex;

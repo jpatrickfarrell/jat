@@ -587,6 +587,20 @@
 		return { closed, total: children.length };
 	}
 
+	// Get agents actively working on tasks within an epic (for Open Tasks indicators)
+	function getActiveAgentsForEpic(epicId: string): Array<{ name: string }> {
+		const result: Array<{ name: string }> = [];
+		for (const [agentName, task] of agentTasks) {
+			if (getParentEpicId(task.id, epicChildMap) === epicId) {
+				const state = agentSessionInfo.get(agentName)?.activityState;
+				if (state && state !== 'idle' && state !== 'completed' && state !== 'planning') {
+					result.push({ name: agentName });
+				}
+			}
+		}
+		return result;
+	}
+
 	// Toggle epic collapse
 	function toggleEpicCollapse(
 		project: string,
@@ -860,7 +874,7 @@
 
 			// Clean up stale collapsed epic IDs to prevent memory leak
 			// (removes IDs for tasks that no longer exist)
-			const existingIds = new Set(tasks.map((t: Task) => t.id));
+			const existingIds = new Set<string>(tasks.map((t: Task) => t.id));
 			cleanupCollapsedEpics(existingIds);
 		} catch (err) {
 			tasksError = err instanceof Error ? err.message : "Unknown error";
@@ -2459,6 +2473,7 @@
 									{@const isSwarmHovered = swarmHoveredEpicId === epicId}
 									{@const isSwarmSpawning = swarmSpawningEpicId === epicId}
 									{@const progress = getEpicProgress(epicId)}
+									{@const openTasksActiveAgents = getActiveAgentsForEpic(epicId)}
 									<div class="epic-group">
 										<div class="epic-header-row">
 										<button
@@ -2489,6 +2504,8 @@
 												{epicId}
 												title={epic?.title || "Untitled Epic"}
 												{progress}
+												agents={openTasksActiveAgents}
+												AgentBadge={openTasksActiveAgents.length > 0 ? WorkingAgentBadge : null}
 											/>
 										</button>
 										{#if launchableCount > 0}

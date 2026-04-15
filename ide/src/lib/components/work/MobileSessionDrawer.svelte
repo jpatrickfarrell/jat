@@ -184,6 +184,7 @@
 		if (pillPointerLocked) return;
 		if (!DESTRUCTIVE_ACTIONS.has(action.id)) {
 			executePillAction(action);
+			armPillPointerLock(); // prevent click event from double-firing the same action
 			return;
 		}
 		clearHold();
@@ -1016,6 +1017,24 @@
 	// Max characters to keep in terminal output — prevents unbounded growth on mobile
 	const MAX_OUTPUT_CHARS = 40_000;
 
+	// Resize the tmux pane to match the current viewport width so output fills the screen.
+	// Called on drawer open so tmux doesn't render to a stale column count.
+	async function resizeTerminalToFit() {
+		if (!sessionName) return;
+		// Monospace chars at 0.8125rem (~13px) are ~7.8px wide.
+		// The pre has px-3 padding (12px each side = 24px total).
+		const cols = Math.max(40, Math.floor((window.innerWidth - 24) / 7.8));
+		try {
+			await fetch(`/api/work/${encodeURIComponent(sessionName)}/resize`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ width: cols, height: 40 })
+			});
+		} catch {
+			// Non-critical — ignore resize errors
+		}
+	}
+
 	// Fetch terminal output
 	async function fetchOutput() {
 		if (!sessionName || currentPage !== 0) return; // skip when not on terminal page
@@ -1141,6 +1160,40 @@
 			return;
 		}
 
+		// Alt+A → attach terminal (mirrors desktop Alt+A session shortcut)
+		if (e.key === 'a' && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+			e.preventDefault();
+			onAttachSession();
+			return;
+		}
+
+		// Alt+I → interrupt (send Ctrl+C) — common mobile need
+		if (e.key === 'i' && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+			e.preventDefault();
+			sendKey('ctrl-c');
+			return;
+		}
+
+		// Alt+ArrowLeft → previous page (or dismiss on page 0)
+		if (e.key === 'ArrowLeft' && e.altKey && !e.ctrlKey && !e.metaKey) {
+			e.preventDefault();
+			if (currentPage > 0) {
+				navigateToPage(currentPage - 1);
+			} else {
+				dismissDrawer();
+			}
+			return;
+		}
+
+		// Alt+ArrowRight → next page
+		if (e.key === 'ArrowRight' && e.altKey && !e.ctrlKey && !e.metaKey) {
+			e.preventDefault();
+			if (currentPage < PAGES.length - 1) {
+				navigateToPage(currentPage + 1);
+			}
+			return;
+		}
+
 		// Shift+Enter → let through (natural linebreak in textarea)
 		if (e.key === 'Enter' && e.shiftKey) return;
 
@@ -1230,9 +1283,29 @@
 		}
 		loadHistory();
 
+		// Resize tmux pane to match viewport width, then fetch output so the
+		// first render reflects the new column count (not the old narrow width).
+		// The 300ms delay gives Claude Code time to redraw after SIGWINCH.
+		resizeTerminalToFit().then(() => setTimeout(fetchOutput, 300));
+
+		// Re-resize whenever the window width changes (debounced 400ms).
+		// This keeps the tmux column count in sync as the user resizes the browser.
+		let resizeDebounce: ReturnType<typeof setTimeout> | null = null;
+		function onWindowResize() {
+			if (resizeDebounce) clearTimeout(resizeDebounce);
+			resizeDebounce = setTimeout(() => {
+				resizeTerminalToFit().then(() => setTimeout(fetchOutput, 300));
+			}, 400);
+		}
+		window.addEventListener('resize', onWindowResize);
+
 		// Start polling output — 3s on mobile is responsive enough and much lighter
-		fetchOutput();
 		pollInterval = setInterval(fetchOutput, 3000);
+
+		return () => {
+			window.removeEventListener('resize', onWindowResize);
+			if (resizeDebounce) clearTimeout(resizeDebounce);
+		};
 	});
 
 	onDestroy(() => {

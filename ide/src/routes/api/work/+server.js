@@ -140,6 +140,39 @@ function readSignalState(sessionName) {
 }
 
 /**
+ * Scan timeline JSONL to find the most recent signal with a taskId + taskTitle.
+ * Used as fallback when the current signal file is missing or has no taskTitle
+ * (e.g., needs_input signals which omit taskTitle from the standard template).
+ * @param {string} sessionName - tmux session name (e.g., "jat-WindyCopse")
+ * @param {string|null} [filterTaskId] - If provided, only match entries for this task
+ * @returns {{ taskId: string, taskTitle: string } | null}
+ */
+function getActiveTaskFromTimeline(sessionName, filterTaskId = null) {
+	const timelineFile = `/tmp/jat-timeline-${sessionName}.jsonl`;
+	try {
+		if (!existsSync(timelineFile)) return null;
+		const content = readFileSync(timelineFile, 'utf-8');
+		const lines = content.trim().split('\n');
+		// Search backwards for most recent active signal with taskId + taskTitle
+		for (let i = lines.length - 1; i >= 0; i--) {
+			const entry = JSON.parse(lines[i]);
+			// Skip completion signals — those belong to lastCompletedTask, not current task
+			if (entry.type === 'complete' || entry.state === 'completing') continue;
+			const entryTaskId = entry.task_id || entry.data?.taskId;
+			const entryTitle = entry.data?.taskTitle;
+			if (entryTaskId && entryTitle) {
+				if (!filterTaskId || filterTaskId === entryTaskId) {
+					return { taskId: entryTaskId, taskTitle: entryTitle };
+				}
+			}
+		}
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Extract last completed task info from timeline JSONL file.
  * Used as fallback when agentLastCompletedMap doesn't have an entry
  * (e.g., when the task's assignee was changed to another agent).
@@ -213,33 +246,50 @@ function readSignalProject(sessionName) {
 
 function readSignalTask(sessionName) {
 	const signalFile = `/tmp/jat-signal-tmux-${sessionName}.json`;
+
+	let taskId = null;
+	let taskTitle = null;
+
+	// Try signal file first (most current state)
 	try {
-		if (!existsSync(signalFile)) return null;
-		const content = readFileSync(signalFile, 'utf-8');
-		const signal = JSON.parse(content);
+		if (existsSync(signalFile)) {
+			const content = readFileSync(signalFile, 'utf-8');
+			const signal = JSON.parse(content);
 
-		// Skip completed/completing signals — those are handled by lastCompletedTask from DB
-		if (signal.type === 'complete' || signal.type === 'completing') return null;
+			// Skip completed/completing signals — those are handled by lastCompletedTask from DB
+			if (signal.type === 'complete' || signal.type === 'completing') return null;
 
-		// Extract task info from signal data payload
-		const taskId = signal.task_id || signal.data?.taskId;
-		if (!taskId) return null;
-
-		return {
-			id: taskId,
-			title: signal.data?.taskTitle || taskId,
-			description: '',
-			status: 'in_progress',
-			priority: null,
-			issue_type: null,
-			depends_on: [],
-			labels: [],
-			created_at: null,
-			agent_program: null
-		};
+			taskId = signal.task_id || signal.data?.taskId || null;
+			taskTitle = signal.data?.taskTitle || null;
+		}
 	} catch {
-		return null;
+		// Fall through to timeline scan
 	}
+
+	// If title is missing (needs_input omits taskTitle; or signal file was deleted),
+	// scan the session timeline for the most recent signal that has both taskId + taskTitle.
+	if (!taskTitle) {
+		const timelineInfo = getActiveTaskFromTimeline(sessionName, taskId || undefined);
+		if (timelineInfo) {
+			taskId = taskId || timelineInfo.taskId;
+			taskTitle = timelineInfo.taskTitle;
+		}
+	}
+
+	if (!taskId) return null;
+
+	return {
+		id: taskId,
+		title: taskTitle || taskId,
+		description: '',
+		status: 'in_progress',
+		priority: null,
+		issue_type: null,
+		depends_on: [],
+		labels: [],
+		created_at: null,
+		agent_program: null
+	};
 }
 
 // ============================================================================

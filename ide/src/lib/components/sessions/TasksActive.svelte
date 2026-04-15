@@ -1441,7 +1441,7 @@
 					onmouseenter={dismissTrayHint}
 					style="--card-hover-tint: {stateVisual.accent}; border-left: 3px solid {stateVisual.accent}; {isExiting ? 'pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
 					role="button" tabindex="0"
-					onclick={() => { if (isExiting || swipeState?.swiping) return; if (trayOpenSession === session.name) { trayOpenSession = null; return; } if (onCardClick) onCardClick(session.name); else fullscreenSession = session.name; }}
+					onclick={() => { if (isExiting || swipeState?.swiping) return; if (trayOpenSession === session.name) { trayOpenSession = null; return; } if (sessionTask) { onViewTask?.(sessionTask.id); } else if (onCardClick) { onCardClick(session.name); } else { fullscreenSession = session.name; } }}
 					oncontextmenu={(e) => handleContextMenu(session, e)}
 					onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); !isExiting && !swipeState?.swiping && (onCardClick ? onCardClick(session.name) : (fullscreenSession = session.name)); } }}
 					ontouchstart={(e) => { dismissTrayHint(); handleSwipeTouchStart(e, session.name); }}
@@ -1488,7 +1488,8 @@
 					{@const reviewBasedDefault = reviewStatus.action !== 'auto'}
 					{@const autoCompleteDisabled = autoCompleteDisabledMap.get(session.name) ?? reviewBasedDefault}
 					<div class="mobile-card-inner mobile-card-inner-agent">
-						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint};">
+						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+						<div class="mobile-state-strip mobile-state-strip-agent mobile-state-strip-clickable" style="background: {stateVisual.bgTint};" role="button" tabindex="0" title="Open terminal" onclick={(e) => { e.stopPropagation(); fullscreenSession = session.name; }} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); fullscreenSession = session.name; } }}>
 							<AgentAvatar name={sessionAgentName} size={96} showRing={false} shape="rounded" />
 							<div class="mobile-strip-agent-label" title={sessionAgentName}>
 								{#each splitAgentName(sessionAgentName) as part}
@@ -1820,7 +1821,8 @@
 					<!-- Planning / no-task session -->
 					{@const cardActions = getSessionStateActions(effectiveState)}
 					<div class="mobile-card-inner">
-						<div class="mobile-state-strip mobile-state-strip-agent" style="background: {stateVisual.bgTint};">
+						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+						<div class="mobile-state-strip mobile-state-strip-agent mobile-state-strip-clickable" style="background: {stateVisual.bgTint};" role="button" tabindex="0" title="Open terminal" onclick={(e) => { e.stopPropagation(); fullscreenSession = session.name; }} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); fullscreenSession = session.name; } }}>
 							<AgentAvatar name={sessionAgentName} size={96} showRing={false} shape="rounded" />
 						</div>
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -2751,6 +2753,18 @@
 		filter: brightness(1.15) saturate(1.2);
 	}
 
+	/* Avatar strip is now a dedicated click target → opens MobileTerminal */
+	.mobile-state-strip-clickable {
+		cursor: pointer;
+	}
+	.mobile-state-strip-clickable:hover {
+		filter: brightness(1.3) saturate(1.35);
+	}
+	.mobile-state-strip-clickable:focus-visible {
+		outline: 2px solid oklch(0.70 0.18 240);
+		outline-offset: -2px;
+	}
+
 	/* State-aware row highlight: tint follows session state color */
 	.mobile-session-card:hover {
 		background: color-mix(in oklch, var(--card-hover-tint, oklch(0.65 0.15 145)) 12%, transparent);
@@ -2805,6 +2819,17 @@
 	.mobile-session-card.tray-open .mobile-row2-wrapper > .mobile-action-tray {
 		opacity: 1;
 		pointer-events: auto;
+	}
+
+	/* When hovering the row2 zone (action tray target), also expand the state
+	   card body so the card doesn't subtly contract while the user is trying to
+	   aim at a tray button. Mirrors StateCardCompact's own hover-expand rule. */
+	@media (hover: hover) and (min-width: 640px) {
+		:global(.mobile-session-card:hover .scc-output-wrapper),
+		:global(.mobile-session-card:focus-within .scc-output-wrapper),
+		:global(.mobile-session-card.tray-open .scc-output-wrapper) {
+			grid-template-rows: 1fr;
+		}
 	}
 
 	/* Overlay buttons: single-line horizontal layout to fit row2 height */

@@ -114,7 +114,46 @@
 		window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 	// ─── Terminal output ────────────────────────────────────────────────────────
-	const renderedOutput = $derived(ansiToHtmlWithLinks(output));
+
+	/**
+	 * Strip the Claude Code TUI chrome from the bottom of captured terminal output.
+	 * The mobile drawer provides its own input + statusline, so we don't need:
+	 *   - The separator line(s) (all ─ box-drawing chars)
+	 *   - The JAT statusline (battery dots ▪▫, status badges · ●⚙○)
+	 *   - The Claude Code input prompt line (bare "> ")
+	 *
+	 * Strategy: scan up from the bottom, find the last separator line, verify
+	 * everything below it looks like chrome, then strip from there.
+	 */
+	function stripTerminalChrome(raw: string): string {
+		if (!raw) return raw;
+		const lines = raw.split('\n');
+		const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*[mGKHFJ]/g, '');
+
+		// Scan the last 10 lines for a separator
+		for (let i = lines.length - 1; i >= Math.max(0, lines.length - 10); i--) {
+			const clean = stripAnsi(lines[i]).trim();
+
+			// Separator line = 5+ consecutive box-drawing horizontal chars
+			if (/^─{5,}$/.test(clean)) {
+				// Verify every line below looks like TUI chrome
+				const below = lines.slice(i + 1).map(l => stripAnsi(l).trim());
+				const allChrome = below.every(l =>
+					l === '' ||
+					/[▪▫]/.test(l) ||          // battery bar dots
+					/^>\s*$/.test(l) ||          // bare Claude Code prompt
+					/^[·●⚙○◉⏻\s>│]+$/.test(l)  // status-only line
+				);
+				if (allChrome) {
+					return lines.slice(0, i).join('\n');
+				}
+			}
+		}
+
+		return raw;
+	}
+
+	const renderedOutput = $derived(ansiToHtmlWithLinks(stripTerminalChrome(output)));
 
 	let scrollEl = $state<HTMLElement | null>(null);
 	let autoScroll = true;
@@ -521,7 +560,7 @@
 	>
 		<pre
 			class="m-0 px-3 py-2 text-[0.8125rem] leading-relaxed"
-			style="font-family: var(--terminal-font, 'JetBrains Mono', 'Fira Code', monospace); white-space: pre-wrap; word-break: break-word; color: {mobileSurface.terminalFg}; min-height: 100%;"
+			style="font-family: var(--terminal-font, 'JetBrains Mono', 'Fira Code', monospace); white-space: pre-wrap; word-break: break-word; color: {mobileSurface.terminalFg}; min-height: 100%; min-width: 100%; width: 100%; box-sizing: border-box;"
 		>{@html renderedOutput}</pre>
 	</div>
 

@@ -129,19 +129,38 @@
 		if (!raw) return raw;
 		const lines = raw.split('\n');
 		const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*[mGKHFJA-Z]/g, '');
+		const isSeparator = (s: string) => s.length >= 5 && /^[\u2500-\u257F─═]+$/.test(s);
 
-		// Strip lines from the bottom that are clearly TUI chrome.
-		// Stop as soon as we hit a line that looks like real content.
+		// Strategy 1: Locate the Claude Code input prompt (❯ or >) in the last 12 lines,
+		// then cut at the separator line just above it.
+		// TUI structure: content | ─── (upper sep) | ❯ | ─── (lower sep) | statuslines
+		for (let i = lines.length - 1; i >= Math.max(0, lines.length - 12); i--) {
+			const clean = stripAnsi(lines[i]).trim();
+			if (/^[❯>]\s*$/.test(clean)) {
+				// Found the prompt — find the separator immediately above it (within 3 lines)
+				for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
+					const sep = stripAnsi(lines[j]).trim();
+					if (isSeparator(sep)) {
+						return lines.slice(0, j).join('\n');
+					}
+				}
+				break; // Found prompt but no separator above — fall through to Strategy 2
+			}
+		}
+
+		// Strategy 2: Bottom-up stripping for non-standard terminals or when prompt
+		// isn't in view. Handles JAT signals, bash prompts, etc.
 		let end = lines.length;
 		while (end > 0) {
 			const clean = stripAnsi(lines[end - 1]).trim();
 			if (
 				clean === '' ||
-				/^[─═\u2500-\u257F]+$/.test(clean) ||   // pure separator (box-drawing)
-				/[▪▫\u25AA\u25AB]/.test(clean) ||         // battery bar dots
-				/^>\s*$/.test(clean) ||                    // bare Claude Code prompt "> "
-				/^·\s/.test(clean) ||                      // JAT status prefix "· ●…"
-				/^\s*[●⚙○◉⏻]\s/.test(clean)               // state icon line
+				isSeparator(clean) ||                        // box-drawing separator line
+				/[▪▫\u25AA\u25AB]/.test(clean) ||            // battery bar dots
+				/^[❯>]\s*$/.test(clean) ||                   // input prompt (❯ or >)
+				/^·\s/.test(clean) ||                         // JAT status prefix "· ●…"
+				/^\s*[●⚙○◉⏻]\s/.test(clean) ||               // state icon line
+				/[\u23F5\u23F4\u23F6\u23F7]/.test(clean)     // ⏵⏶⏷⏴ mode/permission indicators
 			) {
 				end--;
 			} else {

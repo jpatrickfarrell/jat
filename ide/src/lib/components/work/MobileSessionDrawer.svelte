@@ -171,13 +171,20 @@
 
 	function armPillPointerLock() {
 		pillPointerLocked = true;
-		const release = () => {
-			pillPointerLocked = false;
-			window.removeEventListener('pointerup', release, true);
-			window.removeEventListener('pointercancel', release, true);
+		// Release lock AFTER the click event is fully processed (not on pointerup,
+		// which fires before click and would unlock too early, causing double-trigger).
+		const releaseAfterClick = () => {
+			setTimeout(() => { pillPointerLocked = false; }, 0);
+			window.removeEventListener('click', releaseAfterClick, true);
+			window.removeEventListener('pointercancel', releaseOnCancel, true);
 		};
-		window.addEventListener('pointerup', release, true);
-		window.addEventListener('pointercancel', release, true);
+		const releaseOnCancel = () => {
+			pillPointerLocked = false;
+			window.removeEventListener('click', releaseAfterClick, true);
+			window.removeEventListener('pointercancel', releaseOnCancel, true);
+		};
+		window.addEventListener('click', releaseAfterClick, true);
+		window.addEventListener('pointercancel', releaseOnCancel, true);
 	}
 
 	function startHold(action: SessionStateAction) {

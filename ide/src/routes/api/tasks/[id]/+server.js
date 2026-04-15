@@ -531,8 +531,12 @@ export async function DELETE({ params }) {
 	const taskId = params.id;
 
 	try {
-		// Check if task exists first
-		const existingTask = getTaskById(taskId);
+		// Check if task exists — try SQLite first, then Postgres for graduated projects
+		let existingTask = getTaskById(taskId);
+		const pgBackendForDelete = existingTask ? null : await getPgBackendForTask(taskId);
+		if (!existingTask && pgBackendForDelete) {
+			existingTask = await pgBackendForDelete.getById(taskId);
+		}
 		if (!existingTask) {
 			return json(
 				{ error: true, message: `Task '${taskId}' not found` },
@@ -544,7 +548,11 @@ export async function DELETE({ params }) {
 		await cleanupTaskAttachments(taskId);
 
 		// Hard delete: removes task row + cascades to deps, labels, comments
-		deleteTask(taskId, existingTask.project_path);
+		if (pgBackendForDelete) {
+			await pgBackendForDelete.delete(taskId);
+		} else {
+			deleteTask(taskId, existingTask.project_path);
+		}
 
 		// Invalidate related caches (both apiCache and module-level task cache in agents endpoint)
 		invalidateCache.tasks();

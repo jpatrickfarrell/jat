@@ -502,8 +502,26 @@ function detectSessionStateFromOutput(output, task, lastCompletedTask, sessionNa
 	const workingPos = recentOutput.lastIndexOf('[JAT:WORKING');
 	const compactingPos = recentOutput.lastIndexOf('[JAT:COMPACTING]');
 
+	// Check persistent lockfile — written by pre-compact hook, cleared by user-prompt hook.
+	// More reliable than terminal scanning: survives output scrolling past 50-line window.
+	// TTL: 5 minutes — safety net in case the session ends before the next user prompt.
+	const COMPACTING_TTL_MS = 5 * 60 * 1000;
+	const compactingLockFile = `/tmp/jat-compacting-${sessionName}`;
+	const compactingLockActive = (() => {
+		if (!existsSync(compactingLockFile)) return false;
+		try {
+			const age = Date.now() - statSync(compactingLockFile).mtimeMs;
+			return age < COMPACTING_TTL_MS;
+		} catch { return false; }
+	})();
+
 	// If there's an active task, use marker-based detection
 	if (task) {
+		// Lockfile takes priority over all terminal markers — it's written by the pre-compact
+		// hook and cleared by the next user-prompt hook, so it accurately spans the full
+		// compaction window regardless of terminal scroll.
+		if (compactingLockActive) return 'compacting';
+
 		// Build list of detected states with their positions (excluding idle - handled below)
 		const positions = [
 			{ state: 'needs-input', pos: needsInputPos },

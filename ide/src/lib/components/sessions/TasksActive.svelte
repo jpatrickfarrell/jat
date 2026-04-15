@@ -15,7 +15,7 @@
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
 	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
 	import FxText from '$lib/components/FxText.svelte';
-	import MobileSessionFullscreen from '$lib/components/work/MobileSessionFullscreen.svelte';
+	import MobileSessionDrawer from '$lib/components/work/MobileSessionDrawer.svelte';
 	import CompletionCardCompact from '$lib/components/work/CompletionCardCompact.svelte';
 	import StateCardCompact from '$lib/components/work/StateCardCompact.svelte';
 	import { getSwipeConfig, getSwipeActionDef, initSwipeActions } from '$lib/config/swipeActions';
@@ -1438,6 +1438,7 @@
 					class:tray-hint-active={!trayHintDismissed}
 					class:tray-open={trayOpenSession === session.name}
 					class:is-completing={effectiveState === 'completing'}
+					class:is-compacting={effectiveState === 'compacting'}
 					onmouseenter={dismissTrayHint}
 					style="--card-hover-tint: {stateVisual.accent}; border-left: 3px solid {stateVisual.accent}; {isExiting ? 'pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
 					role="button" tabindex="0"
@@ -1873,102 +1874,111 @@
 			{@const fsReviewStatus = fsTask ? computeReviewStatus(fsTask, getReviewRules()) : null}
 			{@const fsReviewBasedDefault = fsReviewStatus?.action !== 'auto'}
 			{@const fsAutoCompleteDisabled = autoCompleteDisabledMap.get(fullscreenSession) ?? fsReviewBasedDefault}
-			<MobileSessionFullscreen
-				sessionName={fullscreenSession}
-				agentName={fsAgentName}
-				taskId={fsTask?.id || ''}
-				taskTitle={fsTask?.title || ''}
-				sessionState={fsState}
-				project={fsSession?.project || null}
-				taskInfo={fsTask ? { id: fsTask.id, issue_type: fsTask.issue_type, priority: fsTask.priority } : null}
-				autoCompleteEnabled={!fsAutoCompleteDisabled}
-				onAutoCompleteToggle={() => {
-					const newMap = new Map(autoCompleteDisabledMap);
-					newMap.set(fullscreenSession!, !fsAutoCompleteDisabled);
-					autoCompleteDisabledMap = newMap;
-				}}
-				reviewReason={fsReviewStatus?.reason ?? null}
-				onLinkToEpic={async (epicId) => {
+			{@const fsActionHandler = async (actionId: string) => {
+				const sName = fullscreenSession!;
+				if (actionId === 'attach') {
+					await handleAttachSession(sName);
+				} else if (actionId === 'kill' || actionId === 'cleanup') {
+					if (actionId === 'cleanup' && fsTask) {
+						try { await fetch(`/api/tasks/${encodeURIComponent(fsTask.id)}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Cleaned up session' }) }); } catch (e) { console.warn('[TasksActive] Failed to close task:', e); }
+					}
+					fullscreenSession = null;
+					await handleKillSession(sName);
+				} else if (actionId === 'view-task' && fsTask) {
+					onViewTask?.(fsTask.id);
+				} else if (actionId === 'complete' || actionId === 'complete-kill') {
+					optimisticStates.set(sName, 'completing');
+					optimisticStates = new Map(optimisticStates);
 					if (fsTask) {
 						try {
-							await fetch(`/api/tasks/${encodeURIComponent(fsTask.id)}/epic`, {
+							await fetch(`/api/sessions/${encodeURIComponent(sName)}/signal`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'completing', data: { taskId: fsTask.id, taskTitle: fsTask.title, currentStep: 'verifying', progress: 0, stepsCompleted: [], stepsRemaining: ['verifying', 'committing', 'closing', 'releasing'] } }) });
+						} catch (e) { console.warn('[TasksActive] Failed to write completing signal:', e); }
+					}
+					const cmd = actionId === 'complete-kill' ? '/jat:complete --kill' : '/jat:complete';
+					await sendWorkflowCommand(sName, cmd);
+				} else if (actionId === 'interrupt') {
+					await fetch(`/api/work/${encodeURIComponent(sName)}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'ctrl-c' }) });
+				} else if (actionId === 'escape') {
+					await fetch(`/api/work/${encodeURIComponent(sName)}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'escape' }) });
+				} else if (actionId === 'pause') {
+					optimisticStates.set(sName, 'paused');
+					optimisticStates = new Map(optimisticStates);
+					if (fsTask) {
+						try { await fetch(`/api/sessions/${encodeURIComponent(sName)}/pause`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: fsTask.id, taskTitle: fsTask.title, reason: 'Paused via fullscreen', killSession: true, agentName: fsAgentName, project: fsSession?.project }) }); } catch (e) { console.warn('[TasksActive] Failed to pause session:', e); }
+					} else { await handleKillSession(sName); }
+					fullscreenSession = null;
+				} else if (actionId === 'close-kill' || actionId === 'close-task') {
+					if (fsTask) {
+						try { await fetch(`/api/tasks/${encodeURIComponent(fsTask.id)}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Abandoned via Close & Kill' }) }); } catch (e) { console.warn('[TasksActive] Failed to close task:', e); }
+					}
+					fullscreenSession = null;
+					await handleKillSession(sName);
+				} else if (actionId === 'resume') {
+					optimisticStates.set(sName, 'working');
+					optimisticStates = new Map(optimisticStates);
+					try {
+						await fetch(`/api/sessions/${encodeURIComponent(sName)}/signal`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'working', data: { taskId: fsTask?.id, taskTitle: fsTask?.title, agentName: fsAgentName, approach: 'Resuming from paused state' } }) });
+						await fetch(`/api/sessions/${encodeURIComponent(sName)}/resume`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: fsTask?.id, agentName: fsAgentName, project: fsSession?.project }) });
+					} catch (e) { console.warn('[TasksActive] Failed to resume session:', e); }
+				} else if (actionId === 'restart') {
+					fullscreenSession = null;
+					if (fsTask) {
+						try { await fetch('/api/work/spawn', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: fsTask.id, project: fsSession?.project }) }); } catch (e) { console.warn('[TasksActive] Failed to restart session:', e); }
+					}
+				} else if (actionId === 'unassign') {
+					if (fsTask) {
+						try { await fetch(`/api/tasks/${encodeURIComponent(fsTask.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assignee: null, status: 'open' }) }); } catch (e) { console.warn('[TasksActive] Failed to unassign task:', e); }
+					}
+					fullscreenSession = null;
+					await handleKillSession(sName);
+				}
+			}}
+			{@const fsLinkEpic = async () => {
+				if (!fsTask) return;
+				try {
+					await fetch(`/api/tasks/${encodeURIComponent(fsTask.id)}/epic`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ epicId: null }) });
+				} catch (e) { console.warn('[TasksActive] Failed to link task to epic:', e); }
+			}}
+			{@const fsAutoToggle = () => {
+				const newMap = new Map(autoCompleteDisabledMap);
+				newMap.set(fullscreenSession!, !fsAutoCompleteDisabled);
+				autoCompleteDisabledMap = newMap;
+			}}
+
+			<MobileSessionDrawer
+					sessionName={fullscreenSession}
+					agentName={fsAgentName}
+					task={fsTask as any}
+					sessionState={fsState}
+					project={fsSession?.project || null}
+					sseState={fsSessionInfo?.activityState}
+					sseStateTimestamp={fsSessionInfo?.activityStateTimestamp}
+					created={fsSession?.created || ''}
+					attached={false}
+					autoCompleteEnabled={!fsAutoCompleteDisabled}
+					onAutoCompleteToggle={fsAutoToggle}
+					reviewReason={fsReviewStatus?.reason ?? ''}
+					onLinkToEpic={fsLinkEpic}
+					onViewEpic={(epicId) => onViewTask?.(epicId)}
+					onClose={() => fullscreenSession = null}
+					onKillSession={async () => { const sName = fullscreenSession!; fullscreenSession = null; await handleKillSession(sName); }}
+					onAttachSession={async () => { await handleAttachSession(fullscreenSession!); }}
+					onViewTask={(taskId) => onViewTask?.(taskId)}
+					onAction={fsActionHandler}
+					onSendInput={async (text: string, type?: string) => {
+						const sName = fullscreenSession!;
+						const body = type === 'enter'
+							? { type: 'enter' }
+							: { type: type || 'text', input: text };
+						try {
+							await fetch(`/api/work/${encodeURIComponent(sName)}/input`, {
 								method: 'POST',
 								headers: { 'Content-Type': 'application/json' },
-								body: JSON.stringify({ epicId })
+								body: JSON.stringify(body)
 							});
-						} catch (e) { console.warn('[TasksActive] Failed to link task to epic:', e); }
-					}
-				}}
-				onViewEpic={(epicId) => onViewTask?.(epicId)}
-				onClose={() => fullscreenSession = null}
-				onAction={async (actionId) => {
-					const sName = fullscreenSession!;
-					if (actionId === 'attach') {
-						await handleAttachSession(sName);
-					} else if (actionId === 'kill' || actionId === 'cleanup') {
-						if (actionId === 'cleanup' && fsTask) {
-							try { await fetch(`/api/tasks/${encodeURIComponent(fsTask.id)}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Cleaned up session' }) }); } catch (e) { console.warn('[TasksActive] Failed to close task:', e); }
-						}
-						fullscreenSession = null;
-						await handleKillSession(sName);
-					} else if (actionId === 'view-task' && fsTask) {
-						onViewTask?.(fsTask.id);
-					} else if (actionId === 'complete' || actionId === 'complete-kill') {
-						optimisticStates.set(sName, 'completing');
-						optimisticStates = new Map(optimisticStates);
-						if (fsTask) {
-							try {
-								await fetch(`/api/sessions/${encodeURIComponent(sName)}/signal`, {
-									method: 'POST',
-									headers: { 'Content-Type': 'application/json' },
-									body: JSON.stringify({
-										type: 'completing',
-										data: { taskId: fsTask.id, taskTitle: fsTask.title, currentStep: 'verifying', progress: 0, stepsCompleted: [], stepsRemaining: ['verifying', 'committing', 'closing', 'releasing'] }
-									})
-								});
-							} catch (e) { console.warn('[TasksActive] Failed to write completing signal:', e); }
-						}
-						const cmd = actionId === 'complete-kill' ? '/jat:complete --kill' : '/jat:complete';
-						await sendWorkflowCommand(sName, cmd);
-					} else if (actionId === 'interrupt') {
-						await fetch(`/api/work/${encodeURIComponent(sName)}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'ctrl-c' }) });
-					} else if (actionId === 'escape') {
-						await fetch(`/api/work/${encodeURIComponent(sName)}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'escape' }) });
-					} else if (actionId === 'pause') {
-						optimisticStates.set(sName, 'paused');
-						optimisticStates = new Map(optimisticStates);
-						if (fsTask) {
-							try { await fetch(`/api/sessions/${encodeURIComponent(sName)}/pause`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: fsTask.id, taskTitle: fsTask.title, reason: 'Paused via fullscreen', killSession: true, agentName: fsAgentName, project: fsSession?.project }) }); } catch (e) { console.warn('[TasksActive] Failed to pause session:', e); }
-						} else { await handleKillSession(sName); }
-						fullscreenSession = null;
-					} else if (actionId === 'close-kill' || actionId === 'close-task') {
-						if (fsTask) {
-							try { await fetch(`/api/tasks/${encodeURIComponent(fsTask.id)}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Abandoned via Close & Kill' }) }); } catch (e) { console.warn('[TasksActive] Failed to close task:', e); }
-						}
-						fullscreenSession = null;
-						await handleKillSession(sName);
-					} else if (actionId === 'resume') {
-						optimisticStates.set(sName, 'working');
-						optimisticStates = new Map(optimisticStates);
-						try {
-							await fetch(`/api/sessions/${encodeURIComponent(sName)}/signal`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'working', data: { taskId: fsTask?.id, taskTitle: fsTask?.title, agentName: fsAgentName, approach: 'Resuming from paused state' } }) });
-							await fetch(`/api/sessions/${encodeURIComponent(sName)}/resume`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: fsTask?.id, agentName: fsAgentName, project: fsSession?.project }) });
-						} catch (e) { console.warn('[TasksActive] Failed to resume session:', e); }
-					} else if (actionId === 'restart') {
-						fullscreenSession = null;
-						if (fsTask) {
-							try { await fetch('/api/work/spawn', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: fsTask.id, project: fsSession?.project }) }); } catch (e) { console.warn('[TasksActive] Failed to restart session:', e); }
-						}
-					} else if (actionId === 'unassign') {
-						if (fsTask) {
-							try { await fetch(`/api/tasks/${encodeURIComponent(fsTask.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assignee: null, status: 'open' }) }); } catch (e) { console.warn('[TasksActive] Failed to unassign task:', e); }
-						}
-						fullscreenSession = null;
-						await handleKillSession(sName);
-					}
-				}}
-				onViewTask={(taskId) => onViewTask?.(taskId)}
-			/>
+						} catch (e) { console.warn('[TasksActive] Failed to send input:', e); }
+					}}
+				/>
 		{/if}
 	</div>
 {/if}
@@ -2901,6 +2911,40 @@
 		.mobile-session-card.is-completing::after {
 			animation: none;
 			background: oklch(0.75 0.12 175 / 0.5);
+		}
+	}
+
+	/* Compacting: slow pulsing shimmer in purple/violet across the bottom edge */
+	.mobile-session-card.is-compacting {
+		position: relative;
+	}
+	.mobile-session-card.is-compacting::after {
+		content: '';
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		height: 2px;
+		background: linear-gradient(
+			90deg,
+			transparent 0%,
+			oklch(0.65 0.15 280 / 0.5) 40%,
+			oklch(0.75 0.18 280) 50%,
+			oklch(0.65 0.15 280 / 0.5) 60%,
+			transparent 100%
+		);
+		background-size: 200% 100%;
+		animation: compacting-progress 2.4s ease-in-out infinite;
+		pointer-events: none;
+	}
+	@keyframes compacting-progress {
+		0%   { background-position: 150% 0; }
+		100% { background-position: -50% 0; }
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.mobile-session-card.is-compacting::after {
+			animation: none;
+			background: oklch(0.65 0.15 280 / 0.5);
 		}
 	}
 

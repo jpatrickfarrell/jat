@@ -381,6 +381,7 @@ export function filterTasksByProjects(tasks: Task[], projectNames: Set<string>):
 export interface TaskWithDeps extends Task {
   issue_type?: string;
   depends_on?: Array<{ id: string; [key: string]: any }>;
+  parent_id?: string | null;
 }
 
 /**
@@ -407,15 +408,23 @@ export function buildEpicChildMap(tasks: TaskWithDeps[]): Map<string, string> {
   // Find all epics
   const epics = tasks.filter(t => t.issue_type === 'epic');
 
-  // For each epic, look at what it depends on (its children)
+  // Method 1: For each epic, look at what it depends on (its children)
+  // Used by SQLite-backed projects where epic→child deps are in the dependencies table
   for (const epic of epics) {
     if (epic.depends_on && Array.isArray(epic.depends_on)) {
       for (const dep of epic.depends_on) {
         if (dep.id && dep.id !== epic.id) {
-          // This dependency is a child of the epic
           childToEpic.set(dep.id, epic.id);
         }
       }
+    }
+  }
+
+  // Method 2: For each task with a parent_id, use that directly
+  // Used by postgres-backed projects where parent_id is stored on the child row
+  for (const task of tasks) {
+    if (task.parent_id && task.parent_id !== task.id && !childToEpic.has(task.id)) {
+      childToEpic.set(task.id, task.parent_id);
     }
   }
 

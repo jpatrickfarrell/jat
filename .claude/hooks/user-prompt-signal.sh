@@ -72,6 +72,13 @@ if [[ -z "$TMUX_SESSION" ]]; then
     exit 0
 fi
 
+# Clear compacting lockfile if present — compaction is done once user sends next prompt
+AGENT_FILE_CHECK="${TMUX_SESSION#jat-}"  # strip "jat-" prefix to get agent name
+COMPACTING_LOCK="/tmp/jat-compacting-${TMUX_SESSION}"
+if [[ -f "$COMPACTING_LOCK" ]]; then
+    rm -f "$COMPACTING_LOCK"
+fi
+
 # Detect if the prompt contains an image (by checking for common image paths/patterns)
 # Image paths typically match: /path/to/file.(png|jpg|jpeg|gif|webp|svg)
 # Also check for task-images directory and upload patterns

@@ -87,6 +87,11 @@
 		onViewTask = (_taskId: string) => {},
 		onSendInput = async (_text: string, _type?: string) => {},
 		onAction = async (_actionId: string) => {},
+		autoCompleteEnabled = true,
+		onAutoCompleteToggle = (_enabled: boolean) => {},
+		reviewReason = '' as string,
+		onLinkToEpic = async () => {},
+		onViewEpic = (_epicId: string) => {},
 	}: {
 		sessionName?: string;
 		agentName?: string;
@@ -105,6 +110,11 @@
 		onViewTask?: (taskId: string) => void;
 		onSendInput?: (text: string, type?: string) => Promise<void>;
 		onAction?: (actionId: string) => Promise<void>;
+		autoCompleteEnabled?: boolean;
+		onAutoCompleteToggle?: (enabled: boolean) => void;
+		reviewReason?: string;
+		onLinkToEpic?: () => Promise<void>;
+		onViewEpic?: (epicId: string) => void;
 	} = $props();
 
 	// === Page State ===
@@ -470,6 +480,9 @@
 	const hasSendable = $derived(inputText.trim().length > 0 || pendingAttachments.some(a => !a.uploading));
 	let sentFlash = $state(false);      // full flash: recede + close
 	let sentStayFlash = $state(false);  // brief flash: button+row only, stay open
+	let escapeFlash = $state(false);    // red flash on escape/clear
+	let arrowFlash = $state(false);     // cyan flash on history recall
+	let noopFlash = $state(false);      // amber flash on no-op (nothing to navigate to)
 
 	// Message history (per session, persisted to localStorage)
 	let sentHistory = $state<string[]>([]);
@@ -1154,6 +1167,8 @@
 			if (inputText.trim().length > 0) {
 				inputText = '';
 				historyIndex = -1;
+				escapeFlash = true;
+				setTimeout(() => { escapeFlash = false; }, 300);
 			} else {
 				dismissDrawer();
 			}
@@ -1226,7 +1241,7 @@
 		}
 
 		// ↑ → previous history (only when cursor is on first line)
-		if (e.key === 'ArrowUp') {
+		if (e.key === 'ArrowUp' && !e.defaultPrevented) {
 			const textarea = target instanceof HTMLTextAreaElement ? target : null;
 			const cursorPos = textarea?.selectionStart ?? 0;
 			const isFirstLine = !inputText.substring(0, cursorPos).includes('\n');
@@ -1239,12 +1254,21 @@
 					historyIndex--;
 				}
 				inputText = sentHistory[historyIndex];
+				arrowFlash = true;
+				setTimeout(() => { arrowFlash = false; }, 300);
 			}
 			return;
 		}
 
+		// ↓ on empty (not browsing history) → amber flash to signal no-op
+		if (e.key === 'ArrowDown' && historyIndex === -1 && !e.defaultPrevented) {
+			noopFlash = true;
+			setTimeout(() => { noopFlash = false; }, 300);
+			return;
+		}
+
 		// ↓ → forward through history / restore current buffer
-		if (e.key === 'ArrowDown' && historyIndex !== -1) {
+		if (e.key === 'ArrowDown' && historyIndex !== -1 && !e.defaultPrevented) {
 			const textarea = target instanceof HTMLTextAreaElement ? target : null;
 			const cursorPos = textarea?.selectionStart ?? inputText.length;
 			const isLastLine = !inputText.substring(cursorPos).includes('\n');
@@ -1257,6 +1281,8 @@
 					historyIndex = -1;
 					inputText = historyBuffer;
 				}
+				arrowFlash = true;
+				setTimeout(() => { arrowFlash = false; }, 300);
 			}
 			return;
 		}
@@ -1266,6 +1292,8 @@
 			e.preventDefault();
 			inputText = '';
 			historyIndex = -1;
+			escapeFlash = true;
+			setTimeout(() => { escapeFlash = false; }, 300);
 			return;
 		}
 	}
@@ -1496,7 +1524,7 @@
 
 				<!-- Pending Attachments Preview -->
 				{#if pendingAttachments.length > 0}
-					<div class="flex flex-wrap gap-1.5 px-3 pt-1.5 pb-1 bg-base-200 border-t border-base-300">
+					<div class="flex flex-wrap gap-1.5 px-3 pt-1.5 pb-1 bg-base-200">
 						{#each pendingAttachments as att (att.id)}
 							<div class="flex items-center gap-1 px-1.5 py-1 bg-base-300/60 border border-base-300 rounded-md max-w-[160px] transition-opacity {att.uploading ? 'opacity-60' : 'opacity-100'}">
 								{#if att.previewUrl}
@@ -1536,11 +1564,11 @@
 				/>
 
 				<!-- Mobile Input Row: [keyboard dropup | attach | input | send] -->
-				<div class="mobile-input-row flex items-center gap-1.5 px-2 py-1.5 bg-base-100 border-t border-base-300 flex-shrink-0 {(sentFlash || sentStayFlash) ? 'send-flash' : ''}">
+				<div class="mobile-input-row flex items-center gap-1.5 px-2 py-1.5 bg-base-200 flex-shrink-0 {(sentFlash || sentStayFlash) ? 'send-flash' : ''}">
 					<!-- Keyboard dropup -->
 					<div class="relative flex-shrink-0">
 						<button
-							class="flex items-center justify-center w-9 h-9 rounded-lg bg-base-200 border border-base-300 text-base-content/70 cursor-pointer active:bg-base-300 transition-colors"
+							class="flex items-center justify-center w-9 h-9 rounded-lg bg-base-300 border border-base-300 text-base-content/70 cursor-pointer active:brightness-125 transition-all"
 							use:directClick={() => keyboardOpen = !keyboardOpen}
 							title="Keyboard keys"
 						>
@@ -1569,7 +1597,7 @@
 
 					<!-- Paperclip / file picker -->
 					<button
-						class="flex items-center justify-center w-9 h-9 rounded-lg bg-base-200 border border-base-300 text-base-content/70 cursor-pointer active:bg-base-300 transition-colors flex-shrink-0"
+						class="flex items-center justify-center w-9 h-9 rounded-lg bg-base-300 border border-base-300 text-base-content/70 cursor-pointer active:brightness-125 transition-all flex-shrink-0"
 						title="Attach file"
 						use:directClick={() => fileInputEl?.click()}
 					>
@@ -1591,13 +1619,13 @@
 							{/if}
 						</div>
 					{:else}
-					<div class="flex-1 min-w-0 {sentFlash ? 'send-input-recede' : ''}">
+					<div class="flex-1 min-w-0 mobile-input-wrap {sentFlash ? 'send-input-recede' : ''} {sentStayFlash ? 'submit-flash' : ''} {escapeFlash ? 'escape-flash' : ''} {arrowFlash ? 'arrow-flash' : ''} {noopFlash ? 'noop-flash' : ''}">
 						<PromptInput
 							bind:this={inputRef}
 							bind:value={inputText}
 							bind:references={promptRefs}
 							project={project || ''}
-							placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
+							placeholder="Type and press Enter..."
 							rows={1}
 							compact={true}
 						/>
@@ -1605,9 +1633,10 @@
 					{/if}
 
 					<!-- Eye/pencil preview toggle -->
-					{#if inputText.trim()}
+					{#if true}
 						<button
-							class="flex items-center justify-center w-9 h-9 rounded-lg border flex-shrink-0 transition-colors {showPreview ? 'bg-info/20 border-info text-info' : 'bg-base-200 border-base-300 text-base-content/50 active:bg-base-300'}"
+							class="flex items-center justify-center w-9 h-9 rounded-lg border flex-shrink-0 transition-all disabled:opacity-40 {showPreview ? 'bg-info/20 border-info text-info' : 'bg-base-300 border-base-300 text-base-content/60 active:brightness-125'}"
+							disabled={!inputText.trim() && !showPreview}
 							aria-label={showPreview ? 'Back to edit' : 'Preview markdown'}
 							use:directClick={() => {
 								showPreview = !showPreview;
@@ -1633,7 +1662,7 @@
 
 					<!-- Send button -->
 					<button
-						class="send-btn flex items-center justify-center w-9 h-9 rounded-lg border cursor-pointer flex-shrink-0 transition-colors disabled:opacity-40 disabled:cursor-default {(sentFlash || sentStayFlash) ? 'bg-success border-success text-success-content send-btn-sent' : hasSendable && !showPreview ? 'bg-info border-info text-info-content active:bg-info/80' : 'bg-base-200 border-base-300 text-base-content/40'}"
+						class="send-btn flex items-center justify-center w-9 h-9 rounded-lg border cursor-pointer flex-shrink-0 transition-all disabled:opacity-40 disabled:cursor-default {(sentFlash || sentStayFlash) ? 'bg-success border-success text-success-content send-btn-sent' : hasSendable && !showPreview ? 'bg-info border-info text-info-content active:bg-info/80' : 'bg-base-300 border-base-300 text-base-content/40'}"
 						aria-label="Send message"
 						disabled={!hasSendable || showPreview}
 						use:directClick={sendWithStay}
@@ -1696,6 +1725,36 @@
 									</div>
 								{/if}
 							</TaskMetaRow>
+						</div>
+
+						<!-- Review Reason Banner -->
+						{#if reviewReason}
+							<div class="mb-4 p-3 rounded-lg border border-warning/40 bg-warning/10 text-sm">
+								<div class="font-semibold text-xs uppercase tracking-wide mb-1 text-warning">Review Reason</div>
+								{reviewReason}
+							</div>
+						{/if}
+
+						<!-- Auto-complete toggle + Epic link -->
+						<div class="mb-5 flex items-center gap-3 flex-wrap">
+							<label class="flex items-center gap-2 text-sm cursor-pointer">
+								<input
+									type="checkbox"
+									class="toggle toggle-sm toggle-success"
+									checked={autoCompleteEnabled}
+									onchange={(e) => onAutoCompleteToggle((e.target as HTMLInputElement).checked)}
+								/>
+								<span>Auto-complete</span>
+							</label>
+							{#if task?.issue_type !== 'epic'}
+								<button
+									type="button"
+									class="btn btn-xs btn-outline"
+									onclick={() => onLinkToEpic()}
+								>
+									Link to Epic
+								</button>
+							{/if}
 						</div>
 
 						<!-- Session Info -->
@@ -2015,6 +2074,51 @@
 </div>
 
 <style>
+	/* Port Fullscreen's mobile-input styling onto PromptInput contenteditable */
+	.mobile-input-wrap :global(.prompt-input-wrapper > [contenteditable]) {
+		font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace !important;
+		font-size: 0.8125rem !important;
+		padding: 0.5rem 0.625rem !important;
+		background: oklch(0.22 0.02 250) !important;
+		border: 1px solid oklch(0.30 0.02 250) !important;
+		border-radius: 0.5rem !important;
+		color: oklch(0.85 0.02 250) !important;
+		min-height: 36px !important;
+		max-height: 96px !important;
+		line-height: 1.4 !important;
+		outline: none !important;
+		transition: border-color 0.15s, box-shadow 0.15s !important;
+	}
+	.mobile-input-wrap :global(.prompt-input-wrapper > [contenteditable]:focus) {
+		border-color: oklch(0.45 0.12 240) !important;
+		box-shadow: 0 0 0 2px oklch(0.45 0.12 240 / 0.2) !important;
+	}
+	/* Flash feedback: submit (green), escape (red), arrow/history (cyan) */
+	.mobile-input-wrap.submit-flash :global(.prompt-input-wrapper > [contenteditable]) {
+		border-color: oklch(0.65 0.18 145) !important;
+		box-shadow: 0 0 8px oklch(0.65 0.18 145 / 0.3) !important;
+	}
+	.mobile-input-wrap.escape-flash :global(.prompt-input-wrapper > [contenteditable]) {
+		border-color: oklch(0.65 0.15 25) !important;
+		box-shadow: 0 0 8px oklch(0.65 0.15 25 / 0.3) !important;
+	}
+	.mobile-input-wrap.arrow-flash :global(.prompt-input-wrapper > [contenteditable]) {
+		border-color: oklch(0.65 0.12 200) !important;
+		box-shadow: 0 0 8px oklch(0.65 0.12 200 / 0.3) !important;
+	}
+	.mobile-input-wrap.noop-flash :global(.prompt-input-wrapper > [contenteditable]) {
+		border-color: oklch(0.75 0.15 85) !important;
+		box-shadow: 0 0 8px oklch(0.75 0.15 85 / 0.3) !important;
+	}
+	/* Match Fullscreen's native textarea placeholder: monospace + same dim color */
+	.mobile-input-wrap :global(.prompt-input-wrapper > div[class*="absolute"]) {
+		font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace !important;
+		font-size: 0.8125rem !important;
+		padding: 0.5rem 0.625rem !important;
+		line-height: 1.4 !important;
+		color: oklch(0.55 0.02 250) !important;
+	}
+
 	/* Layout-only CSS: colors, spacing, and typography are handled via DaisyUI + Tailwind
 	   classes inline. What remains here is structural layout that can't be expressed with
 	   utility classes: iOS safe-area insets, the 400%/25% pager math, scoped minimap

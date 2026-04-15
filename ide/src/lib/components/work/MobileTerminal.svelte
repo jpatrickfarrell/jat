@@ -129,26 +129,40 @@
 		if (!raw) return raw;
 		const lines = raw.split('\n');
 		const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*[mGKHFJA-Z]/g, '');
+		const isSeparator = (s: string) => s.length >= 5 && /^[\u2500-\u257F─═]+$/.test(s);
 
-		// Strip lines from the bottom that are clearly TUI chrome.
-		// Stop as soon as we hit a line that looks like real content.
+		// Strategy 1: find the ❯/> prompt near the bottom, cut at separator above it.
+		for (let i = lines.length - 1; i >= Math.max(0, lines.length - 12); i--) {
+			const clean = stripAnsi(lines[i]).trim();
+			if (/^[❯>]\s*$/.test(clean) || /^[❯>]\s/.test(clean)) {
+				for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
+					const sep = stripAnsi(lines[j]).trim();
+					if (isSeparator(sep)) {
+						return lines.slice(0, j).join('\n');
+					}
+				}
+				break;
+			}
+		}
+
+		// Strategy 2: strip trailing chrome lines until we hit real content.
 		let end = lines.length;
 		while (end > 0) {
 			const clean = stripAnsi(lines[end - 1]).trim();
 			if (
 				clean === '' ||
-				/^[─═\u2500-\u257F]+$/.test(clean) ||   // pure separator (box-drawing)
-				/[▪▫\u25AA\u25AB]/.test(clean) ||         // battery bar dots
-				/^>\s*$/.test(clean) ||                    // bare Claude Code prompt "> "
-				/^·\s/.test(clean) ||                      // JAT status prefix "· ●…"
-				/^\s*[●⚙○◉⏻]\s/.test(clean)               // state icon line
+				isSeparator(clean) ||
+				/^[❯>]\s*/.test(clean) ||
+				/^·\s/.test(clean) ||
+				/^\s*[●⚙○◉⏻]\s/.test(clean) ||
+				/[\u23F4-\u23F7]/.test(clean) ||
+				/[▪▫\u25AA\u25AB]/.test(clean)
 			) {
 				end--;
 			} else {
 				break;
 			}
 		}
-
 		return lines.slice(0, end).join('\n');
 	}
 

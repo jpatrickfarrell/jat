@@ -94,12 +94,21 @@
 {#if !hasSignal}
 	<!-- No signal data: show error badge + raw terminal immediately (no hiding) -->
 	<div class="scc-nosignal">
-		<span class="scc-nosignal-badge">
-			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="9" height="9">
-				<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-			</svg>
-			NO SIGNAL DATA
-		</span>
+		{#if stateName === 'compacting'}
+			<div class="scc-completing scc-completing-compact">
+				<svg class="animate-spin scc-completing-spinner scc-compacting-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="10" height="10">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+				</svg>
+				<span>Compacting context…</span>
+			</div>
+		{:else}
+			<span class="scc-nosignal-badge">
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="9" height="9">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+				</svg>
+				NO SIGNAL DATA
+			</span>
+		{/if}
 		{#if outputLines.length > 0}
 			<div class="scc-output">
 				{#each outputLines as line}
@@ -227,6 +236,14 @@
 					<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
 				</svg>
 				<span>Running /jat:complete…</span>
+			</div>
+
+		{:else if stateName === 'compacting'}
+			<div class="scc-completing scc-completing-compact">
+				<svg class="animate-spin scc-completing-spinner scc-compacting-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="10" height="10">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+				</svg>
+				<span>Compacting context…</span>
 			</div>
 		{/if}
 
@@ -466,6 +483,14 @@
 	.scc-completing-spinner {
 		color: oklch(0.65 0.12 175);
 		flex-shrink: 0;
+	}
+
+	.scc-completing-compact {
+		color: oklch(0.70 0.12 280);
+	}
+
+	.scc-compacting-spinner {
+		color: oklch(0.70 0.12 280);
 	}
 
 	/* ── No-signal fallback ─────────────────────────────────────────────────── */

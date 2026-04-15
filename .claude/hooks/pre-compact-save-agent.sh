@@ -108,6 +108,11 @@ EOF
     # Output marker for IDE state detection
     echo "[JAT:COMPACTING]"
 
+    # Write lockfile so IDE can detect compacting state even after terminal output scrolls away
+    if [[ -n "$TMUX_SESSION" ]]; then
+        echo "$AGENT_NAME" > "/tmp/jat-compacting-jat-${AGENT_NAME}"
+    fi
+
     # Log for debugging
     echo "[PreCompact] Saved agent: $AGENT_NAME, state: $SIGNAL_STATE, task: $TASK_ID (WINDOWID=$WINDOW_KEY)" >> "$CLAUDE_DIR/.agent-activity.log"
 fi

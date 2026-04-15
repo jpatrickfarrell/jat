@@ -74,7 +74,7 @@ log(`subcommand=${subcommand || 'meta'} query="${query}" limit=${limit}`);
 // --- Dispatch ---
 try {
   if (subcommand === 'tasks') {
-    const results = searchTasks(query, { project, limit, verbose });
+    const results = await searchTasks(query, { project, limit, verbose });
     outputResults(results, jsonOutput);
   } else if (subcommand === 'memory') {
     const results = await searchMemory(query, { project, limit, verbose });

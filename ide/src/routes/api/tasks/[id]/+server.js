@@ -357,6 +357,11 @@ export async function PATCH({ params, request }) {
 		if (updates.status !== undefined) {
 			updateFields.status = updates.status;
 		}
+		if (updates.issue_type !== undefined) {
+			updateFields.issue_type = updates.issue_type;
+		} else if (updates.type !== undefined) {
+			updateFields.issue_type = updates.type;
+		}
 		if (updates.assignee !== undefined) {
 			updateFields.assignee = updates.assignee ? updates.assignee.trim() : '';
 		}

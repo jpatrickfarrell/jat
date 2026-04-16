@@ -2550,14 +2550,14 @@
 
 							<!-- Type (editable) -->
 							<InlineSelect
-								value={task.type || 'task'}
+								value={task.issue_type || task.type || 'task'}
 								options={typeOptions}
 								onSave={async (newValue) => {
-									await autoSave('type', newValue);
+									await autoSave('issue_type', newValue);
 								}}
 								disabled={isSaving}
 							>
-								<div class="badge badge-sm badge-outline">{task.type || 'task'}</div>
+								<div class="badge badge-sm badge-outline">{task.issue_type || task.type || 'task'}</div>
 							</InlineSelect>
 
 							<!-- Project (migrate to different project) -->

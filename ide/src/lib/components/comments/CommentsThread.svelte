@@ -26,7 +26,15 @@
 		created_at: string;
 	}
 
-	let { taskId, compact = false }: { taskId: string; compact?: boolean } = $props();
+	let {
+		taskId,
+		compact = false,
+		onCountChange
+	}: {
+		taskId: string;
+		compact?: boolean;
+		onCountChange?: (count: number) => void;
+	} = $props();
 
 	let comments = $state<Comment[]>([]);
 	let loading = $state(true);
@@ -54,6 +62,7 @@
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			const data = await res.json();
 			comments = data.comments || [];
+			onCountChange?.(comments.length);
 		} catch (e: any) {
 			error = e?.message || 'Failed to load comments';
 		} finally {

@@ -255,6 +255,7 @@ export async function loadProjects(): Promise<void> {
 				inactive: p.inactiveColor
 			},
 			database_url: p.databaseUrl,
+			backend: p.backend,
 			hidden: p.hidden,
 			favorite: p.favorite,
 			stats: p.stats ? {

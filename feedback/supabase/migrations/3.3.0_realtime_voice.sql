@@ -31,25 +31,12 @@ ALTER TABLE project_tasks REPLICA IDENTITY FULL;
 ALTER TABLE project_tasks ADD COLUMN IF NOT EXISTS audio_url TEXT;
 
 -- ============================================================================
--- 3. Expand status CHECK constraint to include voice transcription states
+-- 3. Drop any old status CHECK constraint (no new constraint — each consuming
+--    project uses different status values, so we don't enforce a fixed list)
 -- ============================================================================
 
--- Drop the existing constraint (inherited from 1.0.0_feedback_reports.sql)
--- and recreate with additional values for the voice pipeline.
 ALTER TABLE project_tasks DROP CONSTRAINT IF EXISTS feedback_reports_status_check;
-
-ALTER TABLE project_tasks ADD CONSTRAINT project_tasks_status_check
-  CHECK (status IN (
-    'submitted',
-    'in_progress',
-    'completed',
-    'accepted',
-    'rejected',
-    'wontfix',
-    'closed',
-    'transcribing',
-    'failed'
-  ));
+ALTER TABLE project_tasks DROP CONSTRAINT IF EXISTS project_tasks_status_check;
 
 -- ============================================================================
 -- 4. Storage bucket for voice recordings (private)

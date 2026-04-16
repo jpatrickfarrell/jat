@@ -1088,6 +1088,16 @@
 		return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 	}
 
+	function formatDateCompact(dateStr: string): string {
+		if (!dateStr) return '';
+		const d = new Date(dateStr);
+		const opts: Intl.DateTimeFormatOptions =
+			d.getFullYear() === new Date().getFullYear()
+				? { month: 'short', day: 'numeric' }
+				: { month: 'short', day: 'numeric', year: '2-digit' };
+		return d.toLocaleDateString('en-US', opts);
+	}
+
 	function formatTimeAgo(dateStr: string): string {
 		if (!dateStr) return '';
 		const now = Date.now();
@@ -1700,7 +1710,7 @@
 								</TaskHeaderBlock>
 							</div>
 
-							<div class="mb-4">
+							<div class="mb-4 flex flex-col gap-1.5">
 								<TaskMetaRow>
 									<button
 										type="button"
@@ -1724,37 +1734,41 @@
 											<span class="font-mono text-xs text-info/85">@{agentName}</span>
 										</span>
 									{/if}
-									{#if commentsCount > 0}
-										<button
-											type="button"
-											class="inline-flex items-center gap-1 self-center whitespace-nowrap text-xs text-base-content/70 active:text-base-content transition-colors"
-											use:directClick={() => document.getElementById('comments-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-											aria-label={`Jump to ${commentsCount} comment${commentsCount === 1 ? '' : 's'}`}
-										>
-											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
-											</svg>
-											<span class="tabular-nums">{commentsCount}</span>
-										</button>
-									{/if}
-									{#if fullTask?.labels?.length}
-										{#each fullTask.labels as label}
+								</TaskMetaRow>
+								{#if commentsCount > 0 || fullTask}
+									<TaskMetaRow>
+										{#if commentsCount > 0}
 											<button
 												type="button"
-												class="badge badge-sm badge-outline cursor-pointer active:scale-95 transition-transform text-base-content/80"
+												class="inline-flex items-center gap-1 self-center whitespace-nowrap text-xs text-base-content/70 active:text-base-content transition-colors"
+												use:directClick={() => document.getElementById('comments-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+												aria-label={`Jump to ${commentsCount} comment${commentsCount === 1 ? '' : 's'}`}
+											>
+												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+												</svg>
+												<span class="tabular-nums">{commentsCount}</span>
+											</button>
+										{/if}
+										{#if fullTask?.labels?.length}
+											{#each fullTask.labels as label}
+												<button
+													type="button"
+													class="badge badge-sm badge-outline cursor-pointer active:scale-95 transition-transform text-base-content/80"
+													use:directClick={() => openEditor('labels')}
+													aria-label="Edit labels"
+												>{label}</button>
+											{/each}
+										{:else if fullTask}
+											<button
+												type="button"
+												class="badge badge-sm badge-ghost badge-outline cursor-pointer active:scale-95 transition-transform text-base-content/50"
 												use:directClick={() => openEditor('labels')}
-												aria-label="Edit labels"
-											>{label}</button>
-										{/each}
-									{:else if fullTask}
-										<button
-											type="button"
-											class="badge badge-sm badge-ghost badge-outline cursor-pointer active:scale-95 transition-transform text-base-content/50"
-											use:directClick={() => openEditor('labels')}
-											aria-label="Add labels"
-										>+ label</button>
-									{/if}
-								</TaskMetaRow>
+												aria-label="Add labels"
+											>+ label</button>
+										{/if}
+									</TaskMetaRow>
+								{/if}
 							</div>
 
 							{#if reviewReason}
@@ -1785,42 +1799,46 @@
 								{/if}
 							</div>
 
-							<button
-								type="button"
-								class="group text-left w-full text-sm text-base-content/85 leading-relaxed whitespace-pre-wrap break-words bg-transparent border-0 -mx-1 px-1 py-1.5 rounded cursor-pointer active:bg-base-200/60 transition-colors"
+							<div
+								role="button"
+								tabindex="0"
+								class="group text-left w-full text-sm text-base-content/85 leading-relaxed break-words -mx-1 px-1 py-1.5 rounded cursor-pointer active:bg-base-200/60 transition-colors"
 								style="overflow-wrap: break-word; word-break: break-word; min-width: 0;"
 								use:directClick={() => openEditor('description')}
+								use:directKeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEditor('description'); } }}
 								aria-label="Edit description"
 							>
 								{#if task.description || fullTask?.description}
-									<span class="align-middle">{task.description || fullTask?.description}</span>
+									<div class="md-body inline">{@html marked.parse(task.description || fullTask?.description || '')}</div>
 									<svg xmlns="http://www.w3.org/2000/svg" class="inline-block ml-1.5 mb-0.5 w-3 h-3 opacity-55 group-active:opacity-90 transition-opacity" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" /></svg>
 								{:else}
 									<span class="italic text-base-content/50">Add description</span>
 								{/if}
-							</button>
+							</div>
 						</div>
 
 						<!-- Notes -->
 						{#if fullTask}
 							<section class="px-4 pt-4 pb-5 border-t border-base-300/60">
 								<h4 class="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-base-content/55 mb-2">Notes</h4>
-								<button
-									type="button"
-									class="group text-left w-full text-sm text-base-content/85 leading-relaxed whitespace-pre-wrap break-words bg-transparent border-0 -mx-1 px-1 py-1.5 rounded cursor-pointer active:bg-base-200/60 transition-colors"
+								<div
+									role="button"
+									tabindex="0"
+									class="group text-left w-full text-sm text-base-content/85 leading-relaxed break-words -mx-1 px-1 py-1.5 rounded cursor-pointer active:bg-base-200/60 transition-colors"
 									style="overflow-wrap: break-word; word-break: break-word; min-width: 0;"
 									use:directClick={() => openEditor('notes')}
+									use:directKeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEditor('notes'); } }}
 									aria-label="Edit notes"
 								>
 									{#if fullTask?.notes}
-										<span class="align-middle">{fullTask.notes}</span>
+										<div class="md-body inline">{@html marked.parse(fullTask.notes)}</div>
 										<svg class="inline-block ml-1.5 mb-0.5 w-3 h-3 opacity-55 group-active:opacity-90 transition-opacity" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
 											<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
 										</svg>
 									{:else}
 										<span class="italic text-base-content/45">Add notes</span>
 									{/if}
-								</button>
+								</div>
 							</section>
 						{/if}
 

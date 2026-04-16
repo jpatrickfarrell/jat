@@ -227,6 +227,20 @@ function getProjectFromTaskId(taskId) {
 }
 
 /**
+ * Derive project from a tmux pane's working directory.
+ * e.g. "/home/jw/code/meadow" or "/home/jw/code/jat/ide" → "meadow" / "jat".
+ * This is ground-truth for which project a session belongs to — a session
+ * never shows another project's task/label/id regardless of stale DB state.
+ * @param {string|null|undefined} cwd
+ * @returns {string|null}
+ */
+function getProjectFromCwd(cwd) {
+	if (!cwd) return null;
+	const match = cwd.match(/\/code\/([^/]+)/);
+	return match ? match[1] : null;
+}
+
+/**
  * Read the project from a session's signal file.
  * Signal data contains `data.project` set by the agent's starting signal.
  * @param {string} sessionName
@@ -651,7 +665,7 @@ export async function GET({ url }) {
  */
 async function computeWorkData(lines, includeUsage, captureAll = false) {
 	// Step 1: List jat-* tmux sessions
-		const sessionsCommand = `tmux list-sessions -F "#{session_name}:#{session_created}:#{session_attached}" 2>/dev/null || echo ""`;
+		const sessionsCommand = `tmux list-sessions -F "#{session_name}:#{session_created}:#{session_attached}:#{pane_current_path}" 2>/dev/null || echo ""`;
 
 		let sessionsOutput = '';
 		try {
@@ -683,11 +697,14 @@ async function computeWorkData(lines, includeUsage, captureAll = false) {
 			.split('\n')
 			.filter(line => line.length > 0)
 			.map(line => {
-				const [name, created, attached] = line.split(':');
+				const [name, created, attached, ...rest] = line.split(':');
+				// cwd may contain ':' (unlikely but safe); rejoin the tail
+				const cwd = rest.join(':') || null;
 				return {
 					name,
 					created: new Date(parseInt(created, 10) * 1000).toISOString(),
-					attached: attached === '1'
+					attached: attached === '1',
+					cwd
 				};
 			})
 			.filter(session => session.name.startsWith('jat-'))
@@ -892,17 +909,33 @@ async function computeWorkData(lines, includeUsage, captureAll = false) {
 				const signalTask = readSignalTask(session.name);
 				const dbTask = /** @type {Task|undefined} */ (agentTaskMap.get(agentName));
 				const ACTIVE_SIGNAL_STATES = new Set(['starting', 'working', 'review', 'needs_input', 'compacting']);
+
+				// Session's authoritative project from tmux cwd — one project's task
+				// should never show under another project's session.
+				const sessionProject = getProjectFromCwd(session.cwd);
+				const belongsToSession = (/** @type {Task|null|undefined} */ t) => {
+					if (!t || !sessionProject) return true;
+					const p = getProjectFromTaskId(t.id);
+					return !p || p === sessionProject;
+				};
+
+				// Filter cross-project stragglers before picking task.
+				const dbTaskScoped = belongsToSession(dbTask) ? dbTask : undefined;
+				const signalTaskScoped = belongsToSession(signalTask) ? signalTask : null;
 				/** @type {Task|null} */
-				const task = (sessionSignalState && ACTIVE_SIGNAL_STATES.has(sessionSignalState) && signalTask ? signalTask : null)
-					|| dbTask
-					|| signalTask
+				const task = (sessionSignalState && ACTIVE_SIGNAL_STATES.has(sessionSignalState) && signalTaskScoped ? signalTaskScoped : null)
+					|| dbTaskScoped
+					|| signalTaskScoped
 					|| null;
 
 				// Get last completed task for this agent (for completion state display)
-				// Falls back to timeline JSONL if DB has no record (e.g., assignee was changed)
+				// Falls back to timeline JSONL if DB has no record (e.g., assignee was changed).
+				// Scope to the session's project so an agent's old work in project A never
+				// appears under a session that's currently running in project B.
 				/** @type {Task|null} */
-				const lastCompletedTask = /** @type {Task|undefined} */ (agentLastCompletedMap.get(agentName))
+				const lastCompletedTaskRaw = /** @type {Task|undefined} */ (agentLastCompletedMap.get(agentName))
 					|| (!task ? getLastCompletedTaskFromTimeline(session.name) : null);
+				const lastCompletedTask = belongsToSession(lastCompletedTaskRaw) ? lastCompletedTaskRaw : null;
 
 				// Use pre-captured output from Step 4
 				const captured = captureMap.get(session.name) || { output: '', lineCount: 0 };
@@ -982,11 +1015,11 @@ async function computeWorkData(lines, includeUsage, captureAll = false) {
 					sessionState = detectSessionState(output, task, lastCompletedTask, session.name);
 				}
 
-				// Determine project: current task → fresh signal (incl. completion bundle) → stale lastCompletedTask
-				// Signal must beat lastCompletedTask — lastCompletedTask can be weeks old if the
-				// agent's DB row wasn't updated, while the signal reflects the agent's current work.
+				// Determine project: current task → fresh signal → tmux cwd → scoped lastCompletedTask.
+				// tmux cwd is ground truth — beats stale DB rows from a different project.
 				const project = getProjectFromTaskId(task?.id)
 					|| preSignalProjects.get(session.name)
+					|| sessionProject
 					|| getProjectFromTaskId(lastCompletedTask?.id)
 					|| null;
 

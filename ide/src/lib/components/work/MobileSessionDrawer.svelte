@@ -1802,15 +1802,15 @@
 							<div
 								role="button"
 								tabindex="0"
-								class="group text-left w-full text-sm text-base-content/85 leading-relaxed break-words -mx-1 px-1 py-1.5 rounded cursor-pointer active:bg-base-200/60 transition-colors"
+								class="group relative text-left w-full text-sm text-base-content/85 leading-relaxed break-words -mx-1 px-1 py-1.5 pr-6 rounded cursor-pointer active:bg-base-200/60 transition-colors"
 								style="overflow-wrap: break-word; word-break: break-word; min-width: 0;"
 								use:directClick={() => openEditor('description')}
 								use:directKeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEditor('description'); } }}
 								aria-label="Edit description"
 							>
 								{#if task.description || fullTask?.description}
-									<div class="md-body inline">{@html marked.parse(task.description || fullTask?.description || '')}</div>
-									<svg xmlns="http://www.w3.org/2000/svg" class="inline-block ml-1.5 mb-0.5 w-3 h-3 opacity-55 group-active:opacity-90 transition-opacity" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" /></svg>
+									<div class="md-body">{@html marked.parse(task.description || fullTask?.description || '')}</div>
+									<svg xmlns="http://www.w3.org/2000/svg" class="absolute top-1.5 right-1.5 w-3 h-3 opacity-55 group-active:opacity-90 transition-opacity pointer-events-none" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" /></svg>
 								{:else}
 									<span class="italic text-base-content/50">Add description</span>
 								{/if}
@@ -1824,17 +1824,17 @@
 								<div
 									role="button"
 									tabindex="0"
-									class="group text-left w-full text-sm text-base-content/85 leading-relaxed break-words -mx-1 px-1 py-1.5 rounded cursor-pointer active:bg-base-200/60 transition-colors"
+									class="group relative text-left w-full text-sm text-base-content/85 leading-relaxed break-words -mx-1 px-1 py-1.5 pr-6 rounded cursor-pointer active:bg-base-200/60 transition-colors"
 									style="overflow-wrap: break-word; word-break: break-word; min-width: 0;"
 									use:directClick={() => openEditor('notes')}
 									use:directKeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEditor('notes'); } }}
 									aria-label="Edit notes"
 								>
 									{#if fullTask?.notes}
-										<div class="md-body inline">{@html marked.parse(fullTask.notes)}</div>
-										<svg class="inline-block ml-1.5 mb-0.5 w-3 h-3 opacity-55 group-active:opacity-90 transition-opacity" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+										<div class="md-body">{@html marked.parse(fullTask.notes)}</div>
+										<svg class="absolute top-1.5 right-1.5 w-3 h-3 opacity-55 group-active:opacity-90 transition-opacity pointer-events-none" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
 											<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
-										</svg>
+									</svg>
 									{:else}
 										<span class="italic text-base-content/45">Add notes</span>
 									{/if}
@@ -1880,7 +1880,10 @@
 									{#if created}
 										<div class="flex items-center justify-between py-2">
 											<dt class="text-base-content/55">Started</dt>
-											<dd class="text-base-content/90 tabular-nums" title={formatDate(created)}>{formatTimeAgo(created)}</dd>
+											<dd class="text-base-content/90 tabular-nums" title={formatDate(created)}>
+											<span>{formatTimeAgo(created)}</span>
+											<span class="text-base-content/45"> · {formatDateCompact(created)}</span>
+										</dd>
 										</div>
 									{/if}
 									{#if tokens > 0}
@@ -1936,13 +1939,19 @@
 									{#if fullTask?.created_at}
 										<div class="flex items-center justify-between py-2">
 											<dt class="text-base-content/55">Created</dt>
-											<dd class="text-base-content/80 tabular-nums" title={formatDate(fullTask.created_at)}>{formatTimeAgo(fullTask.created_at)}</dd>
+											<dd class="text-base-content/80 tabular-nums" title={formatDate(fullTask.created_at)}>
+											<span>{formatTimeAgo(fullTask.created_at)}</span>
+											<span class="text-base-content/45"> · {formatDateCompact(fullTask.created_at)}</span>
+										</dd>
 										</div>
 									{/if}
 									{#if fullTask?.updated_at}
 										<div class="flex items-center justify-between py-2">
 											<dt class="text-base-content/55">Updated</dt>
-											<dd class="text-base-content/80 tabular-nums" title={formatDate(fullTask.updated_at)}>{formatTimeAgo(fullTask.updated_at)}</dd>
+											<dd class="text-base-content/80 tabular-nums" title={formatDate(fullTask.updated_at)}>
+											<span>{formatTimeAgo(fullTask.updated_at)}</span>
+											<span class="text-base-content/45"> · {formatDateCompact(fullTask.updated_at)}</span>
+										</dd>
 										</div>
 									{/if}
 								</dl>
@@ -2176,6 +2185,28 @@
 	:global(.mob-md-preview strong) { font-weight: 600; }
 	:global(.mob-md-preview h1, .mob-md-preview h2, .mob-md-preview h3) { font-weight: 600; margin: 0.25rem 0 0.125rem 0; font-size: 0.9rem; }
 	:global(.mob-md-preview blockquote) { border-left: 2px solid oklch(0.50 0.10 200); padding-left: 0.5rem; margin: 0.25rem 0; opacity: 0.8; }
+
+	/* Markdown rendering for Description and Notes (tap-to-edit prose) */
+	:global(.md-body) { color: inherit; }
+	:global(.md-body.inline) { display: inline; }
+	:global(.md-body p) { margin: 0.25rem 0; }
+	:global(.md-body p:first-child) { margin-top: 0; }
+	:global(.md-body p:last-child) { margin-bottom: 0; }
+	:global(.md-body.inline p) { display: inline; margin: 0; }
+	:global(.md-body code) { font-family: ui-monospace, monospace; font-size: 0.875em; background: oklch(0.22 0.02 250); padding: 0.1em 0.3em; border-radius: 3px; }
+	:global(.md-body pre) { margin: 0.375rem 0; padding: 0.5rem; background: oklch(0.18 0.02 250); border-radius: 6px; overflow-x: auto; font-size: 0.8125rem; }
+	:global(.md-body pre code) { background: none; padding: 0; }
+	:global(.md-body ul, .md-body ol) { margin: 0.25rem 0; padding-left: 1.25rem; }
+	:global(.md-body li) { margin-bottom: 0.125rem; }
+	:global(.md-body strong) { font-weight: 600; }
+	:global(.md-body em) { font-style: italic; }
+	:global(.md-body h1, .md-body h2, .md-body h3) { font-weight: 600; margin: 0.375rem 0 0.25rem 0; }
+	:global(.md-body h1) { font-size: 1rem; }
+	:global(.md-body h2) { font-size: 0.9375rem; }
+	:global(.md-body h3) { font-size: 0.875rem; }
+	:global(.md-body a) { color: oklch(0.70 0.18 240); text-decoration: underline; text-underline-offset: 2px; }
+	:global(.md-body blockquote) { border-left: 2px solid oklch(0.50 0.10 200); padding-left: 0.5rem; margin: 0.25rem 0; opacity: 0.8; }
+	:global(.md-body hr) { border: 0; border-top: 1px solid oklch(0.30 0.02 250); margin: 0.5rem 0; }
 
 	/* iOS safe-area insets (Tailwind has no utility for env()) */
 	.drawer-topbar { padding-top: max(0.5rem, env(safe-area-inset-top)); }

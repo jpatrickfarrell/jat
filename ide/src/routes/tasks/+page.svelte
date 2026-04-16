@@ -1995,17 +1995,6 @@
 					{/if}
 				</div>
 
-				<!-- Project Notes Section -->
-				<ProjectNotes
-					projectName={selectedProject}
-					notes={projectNotes[selectedProject] || ""}
-					{projectColor}
-					onSave={(project, content) => {
-						projectNotes[project] = content;
-						projectNotes = projectNotes;
-					}}
-				/>
-
 				<!-- Active Sessions Section -->
 				{#if projectSessions.length > 0}
 					<div class="subsection bg-base-100">
@@ -2755,6 +2744,17 @@
 					</div>
 				{/if}
 
+				<!-- Project Notes Section -->
+				<ProjectNotes
+					projectName={selectedProject}
+					notes={projectNotes[selectedProject] || ""}
+					{projectColor}
+					onSave={(project, content) => {
+						projectNotes[project] = content;
+						projectNotes = projectNotes;
+					}}
+				/>
+
 				<!-- Empty state for selected project -->
 				{#if projectSessions.length === 0 && tasksByEpic.size === 0 && filterCounts.all === 0 && projectPausedSessions.length === 0 && projectChatSessions.length === 0 && completedCount === 0}
 					<div class="project-empty-state">
@@ -3298,6 +3298,11 @@
 		background: oklch(0.18 0.01 250);
 	}
 
+	/* Active Sessions subsection - amber left border to signal live ops */
+	.subsection.bg-base-100 {
+		border-left: 2px solid oklch(0.75 0.15 85 / 0.45);
+	}
+
 	/* Paused/Waiting/Conversations subsections - indent to align with epic-group content */
 	.paused-subsection,
 	.waiting-subsection,
@@ -3305,6 +3310,15 @@
 		margin-left: 0.75rem;
 		margin-right: 0.75rem;
 		max-width: calc(100% - 1.5rem); /* Constrain width accounting for margins */
+	}
+
+	/* Waiting for Input header - amber tint signals "needs you" even when collapsed */
+	.waiting-subsection .subsection-header {
+		background: oklch(0.75 0.15 85 / 0.05);
+		border-left: 2px solid oklch(0.75 0.15 85 / 0.5);
+	}
+	.waiting-subsection .subsection-header:hover {
+		background: oklch(0.75 0.15 85 / 0.09);
 	}
 
 	/* Waiting for Input section */

@@ -11,7 +11,7 @@
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
 	import { getReviewRules } from '$lib/stores/reviewRules.svelte';
 	import { computeReviewStatus } from '$lib/utils/reviewStatusUtils';
-	import { getSessionStateVisual, getSessionStateActions, getIssueTypeVisual, type SessionState } from '$lib/config/statusColors';
+	import { getSessionStateVisual, getSessionStateActions, type SessionState } from '$lib/config/statusColors';
 	import ProviderLogo from '$lib/components/agents/ProviderLogo.svelte';
 	import MonacoWrapper from '$lib/components/config/MonacoWrapper.svelte';
 	import FxText from '$lib/components/FxText.svelte';
@@ -1481,7 +1481,6 @@
 				{:else if sessionTask}
 					<!-- Agent session with task -->
 					{@const taskAge = getTaskAge(sessionTask.created_at)}
-					{@const typeVisual = getIssueTypeVisual(sessionTask.issue_type)}
 					{@const harness = getTaskHarness(sessionTask)}
 					{@const cardActions = getSessionStateActions(effectiveState)}
 					{@const mobileOutputLines = getOutputTail(sessionAgentName, 15)}
@@ -1696,6 +1695,35 @@
 									<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
 								</span>
 								<span class="mobile-title-state" style="background: {stateVisual.bgColor}; color: {stateVisual.textColor}; border: 1px solid {stateVisual.borderColor};">{stateVisual.shortLabel}</span>
+								{#if effectiveState === 'ready-for-review'}
+									{@const completeFb = actionFeedback.get(`${session.name}:complete`)}
+									{@const completeFailed = completeFb === 'error-fail'}
+									<button
+										type="button"
+										class="mobile-title-complete"
+										class:mobile-title-complete-feedback={!!completeFb}
+										class:mobile-title-complete-failed={completeFailed}
+										disabled={!!completeFb}
+										title="Mark task complete (/jat:complete)"
+										onclick={(e) => { e.stopPropagation(); handleMobileAction('complete', session.name, sessionTask, sessionAgentName, session.project || null); }}
+									>
+										{#if completeFb}
+											{#if completeFailed}
+												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="11" height="11"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+												<span>Error</span>
+											{:else}
+												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="11" height="11"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+												<span>Done</span>
+											{/if}
+										{:else}
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="11" height="11"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+											<span>Complete</span>
+										{/if}
+									</button>
+								{/if}
+								{#if ($autoKillCountdowns.get(session.name) ?? null) !== null && ($autoKillCountdowns.get(session.name) ?? 0) > 0}
+									<span class="mobile-title-destruct" title="Session self-destructing">💣 {$autoKillCountdowns.get(session.name)}s</span>
+								{/if}
 								{#if elapsed}
 									<span class="mobile-title-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
 								{/if}
@@ -1719,29 +1747,17 @@
 										<span class="mobile-task-id-text">{sessionTask.id}</span>
 										{#if copiedMobileId === sessionTask.id}<span class="mobile-task-id-badge" aria-hidden="true">✓ copied</span>{/if}
 									</button>
-									{#if sessionTask.issue_type}
-										<span class="mobile-separator">·</span>
-										<span class="mobile-type-icon" title={typeVisual.label}>{typeVisual.icon}</span>
-									{/if}
 									{#if harness}
 										<span class="mobile-separator">·</span>
 										<span class="mobile-harness" title={harness}><ProviderLogo agentId={harness} size={11} /></span>
 									{/if}
-									{#if sessionTask.priority != null && sessionTask.priority <= 2}
+									{#if sessionTask.priority != null && sessionTask.priority <= 1}
 										<span class="mobile-separator">·</span>
-										<span class="mobile-priority mobile-priority-{sessionTask.priority}" title={sessionTask.priority === 0 ? 'P0 — Critical' : sessionTask.priority === 1 ? 'P1 — High' : 'P2 — Medium'}>P{sessionTask.priority}</span>
+										<span class="mobile-priority mobile-priority-{sessionTask.priority}" title={sessionTask.priority === 0 ? 'P0 — Critical' : 'P1 — High'}>P{sessionTask.priority}</span>
 									{/if}
 									{#if taskAge.label}
 										<span class="mobile-separator">·</span>
 										<span class="mobile-age" style="color: {taskAge.color};">{taskAge.label}</span>
-									{/if}
-									{#if browserSessions.get(sessionAgentName)}
-										<span class="mobile-separator">·</span>
-										<span class="mobile-port">🌐 {browserSessions.get(sessionAgentName)}</span>
-									{/if}
-									{#if ($autoKillCountdowns.get(session.name) ?? null) !== null && ($autoKillCountdowns.get(session.name) ?? 0) > 0}
-										<span class="mobile-separator">·</span>
-										<span class="mobile-destruct-countdown" title="Session self-destructing">💣 {$autoKillCountdowns.get(session.name)}s</span>
 									{/if}
 								</div>
 								<!-- Action tray — fades in over row2 on hover -->
@@ -2446,10 +2462,10 @@
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
 				</svg>
-				<span>Cleanup</span>
+				<span>End Session</span>
 			</button>
 		{:else}
-			<!-- Kill session only (task stays in_progress) -->
+			<!-- Stop agent only (task stays in_progress) -->
 			<button class="active-context-menu-item active-context-menu-item-warning" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; ctxProjectSubmenuOpen = false; }} onclick={async () => {
 				const d = ctxData!;
 				closeCtxMenu();
@@ -2460,7 +2476,7 @@
 					<line x1="18" y1="6" x2="6" y2="18" />
 					<line x1="6" y1="6" x2="18" y2="18" />
 				</svg>
-				<span>Kill</span>
+				<span>Stop Agent</span>
 			</button>
 			<!-- Close task + kill session -->
 			<button class="active-context-menu-item active-context-menu-item-danger" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; ctxProjectSubmenuOpen = false; }} onclick={async () => {
@@ -2483,7 +2499,7 @@
 					<line x1="15" y1="9" x2="9" y2="15" />
 					<line x1="9" y1="9" x2="15" y2="15" />
 				</svg>
-				<span>Close & Kill</span>
+				<span>Close Task & Stop</span>
 			</button>
 		{/if}
 	</div>
@@ -2802,11 +2818,40 @@
 	.mobile-row2-wrapper {
 		display: grid;
 		grid-template-areas: "row2";
+		position: relative;
+		cursor: pointer;
+		border-radius: 3px;
+		transition: background 0.15s ease;
+	}
+
+	.mobile-row2-wrapper:hover,
+	.mobile-session-card.tray-open .mobile-row2-wrapper {
+		background: oklch(0.22 0.02 250 / 0.6);
+	}
+
+	/* Affordance glyph hinting that hover reveals actions */
+	.mobile-row2-wrapper::after {
+		content: '⋯';
+		position: absolute;
+		right: 0.375rem;
+		top: 50%;
+		transform: translateY(-50%);
+		font-size: 0.75rem;
+		line-height: 1;
+		color: oklch(0.50 0.02 250);
+		pointer-events: none;
+		transition: opacity 0.12s ease;
+	}
+
+	.mobile-row2-wrapper:hover::after,
+	.mobile-session-card.tray-open .mobile-row2-wrapper::after {
+		opacity: 0;
 	}
 
 	.mobile-row2-wrapper > .mobile-card-row2 {
 		grid-area: row2;
 		margin-top: 0;
+		padding-right: 1.125rem;
 	}
 
 	/* Tray inside wrapper: opacity overlay, triggered only by hovering the row2 zone */
@@ -2865,11 +2910,11 @@
 	/* State badge in title row */
 	.mobile-title-state {
 		flex-shrink: 0;
-		font-size: 0.5rem;
+		font-size: 0.625rem;
 		font-weight: 700;
-		letter-spacing: 0.04em;
+		letter-spacing: 0.05em;
 		text-transform: uppercase;
-		padding: 0.1rem 0.4rem;
+		padding: 0.1875rem 0.5rem;
 		border-radius: 3px;
 		white-space: nowrap;
 		margin-left: auto;
@@ -2993,12 +3038,12 @@
 		border: none;
 		border-right: 1px solid oklch(0 0 0 / 0.18);
 		cursor: pointer;
-		font-size: 0.5625rem;
+		font-size: 0.6875rem;
 		font-weight: 700;
-		line-height: 1.25;
-		color: oklch(0.95 0 0);
+		line-height: 1.2;
+		color: oklch(0.96 0 0);
 		font-family: system-ui, -apple-system, sans-serif;
-		letter-spacing: 0.03em;
+		letter-spacing: 0.04em;
 		text-align: center;
 		text-transform: uppercase;
 		overflow-wrap: normal;
@@ -3475,9 +3520,10 @@
 	.mobile-title {
 		flex: 1;
 		min-width: 0;
-		font-size: 1rem;
-		font-weight: 600;
-		color: oklch(0.88 0.02 250);
+		font-size: 1.0625rem;
+		font-weight: 650;
+		letter-spacing: -0.005em;
+		color: oklch(0.94 0.02 250);
 		font-family: system-ui, -apple-system, sans-serif;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -3499,17 +3545,17 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		margin-top: 0.125rem;
+		margin-top: 0.1875rem;
 		font-size: 0.75rem;
 		font-family: system-ui, -apple-system, sans-serif;
-		color: oklch(0.70 0.02 250);
+		color: oklch(0.62 0.02 250);
 		overflow: hidden;
 		flex-wrap: nowrap;
 	}
 
 	.mobile-agent-name {
-		font-weight: 600;
-		color: oklch(0.78 0.02 250);
+		font-weight: 500;
+		color: oklch(0.72 0.02 250);
 		letter-spacing: 0.01em;
 	}
 
@@ -3561,11 +3607,6 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	.mobile-type-icon {
-		font-size: 0.625rem;
-		line-height: 1;
-	}
-
 	.mobile-harness {
 		display: inline-flex;
 		align-items: center;
@@ -3597,22 +3638,11 @@
 		border: 1px solid oklch(0.70 0.18 85 / 0.32);
 	}
 
-	.mobile-priority-2 {
-		color: oklch(0.82 0.12 200);
-		background: oklch(0.55 0.14 200 / 0.18);
-		border: 1px solid oklch(0.70 0.14 200 / 0.30);
-	}
-
 	.mobile-project {
 		font-weight: 500;
 		color: oklch(0.60 0.05 250);
 		text-transform: uppercase;
 		letter-spacing: 0.03em;
-	}
-
-	.mobile-port {
-		font-size: 0.625rem;
-		color: oklch(0.75 0.15 55);
 	}
 
 	.mobile-state-badge {
@@ -3627,14 +3657,70 @@
 		white-space: nowrap;
 	}
 
-	.mobile-destruct-countdown {
+	.mobile-title-destruct {
 		display: inline-flex;
 		align-items: center;
-		font-size: 0.5625rem;
+		gap: 0.25rem;
+		padding: 0.125rem 0.4375rem;
+		font-size: 0.625rem;
 		font-weight: 700;
-		color: oklch(0.70 0.20 25);
+		letter-spacing: 0.02em;
+		color: oklch(0.95 0.05 25);
+		background: oklch(0.55 0.22 25 / 0.25);
+		border: 1px solid oklch(0.65 0.22 25 / 0.55);
+		border-radius: 0.25rem;
 		white-space: nowrap;
+		flex-shrink: 0;
 		animation: pulse-subtle 1s ease-in-out infinite;
+	}
+
+	/* Primary action in title row — visible Complete button when review-ready */
+	.mobile-title-complete {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.1875rem 0.5rem;
+		font-size: 0.625rem;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		color: oklch(0.97 0.05 180);
+		background: oklch(0.55 0.14 180 / 0.8);
+		border: 1px solid oklch(0.70 0.16 180 / 0.7);
+		border-radius: 3px;
+		white-space: nowrap;
+		flex-shrink: 0;
+		cursor: pointer;
+		font-family: system-ui, -apple-system, sans-serif;
+		line-height: 1;
+		transition: background 0.12s ease, border-color 0.12s ease, filter 0.12s ease, transform 0.08s ease;
+	}
+	.mobile-title-complete:hover {
+		background: oklch(0.62 0.16 180 / 0.9);
+		border-color: oklch(0.78 0.16 180 / 0.85);
+		filter: brightness(1.08);
+	}
+	.mobile-title-complete:active {
+		transform: translateY(1px) scale(0.97);
+	}
+	.mobile-title-complete:focus-visible {
+		outline: 2px solid oklch(0.78 0.16 180);
+		outline-offset: 2px;
+	}
+	.mobile-title-complete:disabled {
+		cursor: default;
+	}
+	.mobile-title-complete-feedback {
+		background: oklch(0.55 0.18 145 / 0.85);
+		border-color: oklch(0.70 0.18 145 / 0.85);
+		color: oklch(0.98 0.08 145);
+		animation: tray-btn-confirm 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+	}
+	.mobile-title-complete-failed {
+		background: oklch(0.55 0.22 25 / 0.85);
+		border-color: oklch(0.70 0.22 25 / 0.85);
+		color: oklch(0.98 0.08 25);
+		animation: none;
 	}
 
 	/* ========== SWIPE-TO-REVEAL ========== */

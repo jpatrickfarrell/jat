@@ -42,14 +42,12 @@ function isFragmentUrl(url: string): boolean {
   if (typeof url === 'string' && url.startsWith('#')) return true;
   try {
     const parsed = new URL(url, window.location.href);
-    // Normal case: url(#id) resolved to same-page fragment
-    if (parsed.origin === window.location.origin
-      && parsed.pathname === window.location.pathname
-      && parsed.hash) return true;
-    // Encoded case: modern-screenshot percent-encodes # → %23, making a
-    // path like /%23filter-id instead of a hash. Decode and re-check.
-    const decodedPath = decodeURIComponent(parsed.pathname);
-    if (decodedPath.startsWith('/#')) return true;
+    // Block any same-origin URL with a hash — these are SVG/DOM fragment refs
+    // that will never load as network resources (url(#filter-id) etc.).
+    if (parsed.origin === window.location.origin && parsed.hash) return true;
+    // Block %23-encoded variant: modern-screenshot sometimes encodes # → %23,
+    // turning url(#id) into a path like /%23id with no hash property.
+    if (decodeURIComponent(parsed.pathname).startsWith('/#')) return true;
     return false;
   } catch {
     return true; // malformed → treat as skip

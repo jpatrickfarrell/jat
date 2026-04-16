@@ -556,12 +556,25 @@
 			grouped.get(epicId)!.push(task);
 		}
 
-		// Add open epics that have no open children to the standalone group
-		// so they remain visible and workable on the /tasks page
+		// Pass 1: Add child epics (epics that are children of another epic) to their parent's group.
+		// Must happen before pass 2 so parent epics that receive child epics don't end up in standalone.
+		for (const task of projectTasks) {
+			if (task.issue_type === "epic" && task.status === "open" && !grouped.has(task.id)) {
+				const parentEpicId = getParentEpicId(task.id, epicChildMap);
+				if (parentEpicId) {
+					if (!grouped.has(parentEpicId)) {
+						grouped.set(parentEpicId, []);
+					}
+					grouped.get(parentEpicId)!.push(task);
+				}
+			}
+		}
+
+		// Pass 2: Add standalone epics — open epics with no non-epic children AND no parent epic.
 		for (const task of projectTasks) {
 			if (task.issue_type === "epic" && task.status === "open") {
-				// Check if this epic already has a group (meaning it has open children)
-				if (!grouped.has(task.id)) {
+				const isChildEpic = getParentEpicId(task.id, epicChildMap) !== null;
+				if (!grouped.has(task.id) && !isChildEpic) {
 					if (!grouped.has(null)) {
 						grouped.set(null, []);
 					}

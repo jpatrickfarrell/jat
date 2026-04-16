@@ -9,6 +9,8 @@
 import { json } from '@sveltejs/kit';
 import { getReadyTasks, getTasks } from '$lib/server/jat-tasks.js';
 import { apiCache, cacheKey, CACHE_TTL } from '$lib/server/cache.js';
+import { readProjectsConfig, resolveBackendForProject } from '../../../../../../lib/projects-config.js';
+import { getBackendForProject } from '../../../../../../lib/tasks-backend.js';
 
 /** @type {import('./$types').RequestHandler} */
 export async function GET() {
@@ -19,11 +21,33 @@ export async function GET() {
 			return json(cached);
 		}
 
-		// Get ready tasks from all projects using the jat-tasks.js library
+		// Get ready tasks from SQLite-backed projects
 		const tasks = getReadyTasks();
 
-		// Get active (in_progress) tasks across all projects
+		// Get active (in_progress) tasks from SQLite-backed projects
 		const inProgressTasks = getTasks({ status: 'in_progress' });
+
+		// Also include ready + in_progress tasks from postgres-graduated projects.
+		// These don't flow through the SQLite backend, so they need to be fetched
+		// per-project through their own backend adapter.
+		const cfg = readProjectsConfig();
+		if (cfg?.projects) {
+			for (const [name, pconfig] of Object.entries(cfg.projects)) {
+				try {
+					const backend = resolveBackendForProject(name);
+					if (backend.kind !== 'postgres') continue;
+					const pg = await getBackendForProject(name);
+					const [pgReady, pgActive] = await Promise.all([
+						pg.getReady(),
+						pg.list({ status: 'in_progress', projectName: name })
+					]);
+					for (const t of pgReady) tasks.push({ ...t, project: name });
+					for (const t of pgActive) inProgressTasks.push({ ...t, project: name });
+				} catch (err) {
+					console.error(`Failed to fetch tasks for postgres project ${name}:`, err);
+				}
+			}
+		}
 
 		const responseData = {
 			count: tasks.length,

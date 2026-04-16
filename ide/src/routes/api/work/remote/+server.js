@@ -152,7 +152,8 @@ export async function GET() {
 					title: data.taskTitle || null,
 					status: 'in_progress'
 				} : null;
-				session.project = data.project || (data.taskId ? data.taskId.split('-')[0] : null);
+				// Invariant: project derives from taskId. Stored data.project is fallback only.
+				session.project = (data.taskId ? data.taskId.split('-')[0] : null) || data.project || null;
 				session.model = data.model || null;
 				session.approach = data.approach || null;
 			}

@@ -1225,29 +1225,15 @@
 								</svg>
 							</div>
 						</button>
-						{#if confirmingDismissKey === eventKey}
-							<div class="flex items-center gap-1 px-2 py-1.5 flex-shrink-0">
-								<span class="text-[10px] text-base-content/60 font-mono">dismiss?</span>
-								<button
-									class="text-[10px] px-1.5 py-0.5 rounded bg-error/20 text-error hover:bg-error/40 transition-colors font-mono"
-									onclick={() => { confirmingDismissKey = null; dismissedEventKeys = new Set([...dismissedEventKeys, eventKey]); }}
-								>yes</button>
-								<button
-									class="text-[10px] px-1.5 py-0.5 rounded bg-base-300 text-base-content/60 hover:bg-base-300/80 transition-colors font-mono"
-									onclick={() => { confirmingDismissKey = null; }}
-								>no</button>
-							</div>
-						{:else}
-							<button
-								class="px-2 py-2 flex items-center justify-center text-base-content/30 hover:text-base-content/70 hover:bg-base-300 transition-colors flex-shrink-0 rounded-tr-lg"
-								onclick={() => { confirmingDismissKey = eventKey; }}
-								title="Dismiss"
-							>
-								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-								</svg>
-							</button>
-						{/if}
+						<button
+							class="px-2 py-2 flex items-center justify-center text-base-content/40 hover:text-error hover:bg-error/10 transition-colors flex-shrink-0 rounded-tr-lg"
+							onclick={(e) => { e.stopPropagation(); dismissedEventKeys = new Set([...dismissedEventKeys, eventKey]); }}
+							title="Dismiss"
+						>
+							<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+							</svg>
+						</button>
 					</div>
 
 					<!-- Expanded details -->
@@ -1370,7 +1356,7 @@
 									</div>
 									<div class="px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap font-mono text-base-content/70" style="max-height: 300px; overflow-y: auto;">{txText || '(empty transcript)'}</div>
 								</div>
-							{:else if event.type === 'complete' && event.data}
+							{:else if (event.type === 'complete' || event.type === 'completed' || event.state === 'completed') && event.data}
 								<!-- Completion Bundle - 3 visual tiers: Hero (summary), Actionable (must-do + follow-ups), Metadata -->
 								{@const bundle = event.data}
 								{@const bundleSummary = Array.isArray(bundle.summary) ? bundle.summary : (typeof bundle.summary === 'string' ? [bundle.summary] : [])}
@@ -1724,16 +1710,14 @@
 					}}
 				>
 					<div style="width: 2rem; height: 0.25rem; border-radius: 9999px; background: oklch(0.40 0.02 250);"></div>
-					{#if isPinned}
-						<button
-							class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-base-content/70 hover:text-base-content hover:bg-base-content/10 transition-colors"
-							onclick={(e) => { e.stopPropagation(); isPinned = false; isExpanded = false; expandedEventIdx = null; }}
-							title="Unpin — return to hover-to-expand"
-						>
-							<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-							<span>Unpin</span>
-						</button>
-					{/if}
+					<button
+						class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-base-content/70 hover:text-base-content hover:bg-base-content/10 transition-colors"
+						onclick={(e) => { e.stopPropagation(); isPinned = false; isExpanded = false; expandedEventIdx = null; }}
+						title={isPinned ? 'Unpin — return to hover-to-expand' : 'Close'}
+					>
+						<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+						<span>{isPinned ? 'Unpin' : 'Close'}</span>
+					</button>
 				</div>
 				<div class="p-2 flex flex-col-reverse gap-1">
 					{#each filteredEvents as event, idx (event.timestamp + '-' + idx)}

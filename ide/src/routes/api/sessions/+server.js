@@ -56,17 +56,13 @@ function getProjectFromSignal(sessionName) {
 		const content = readFileSync(signalFile, 'utf-8');
 		const signal = JSON.parse(content);
 
-		// Try direct project field (from startingSignal)
-		if (signal.project) {
-			return signal.project;
+		// Invariant: project derives from taskId. Stored signal.project is fallback only.
+		const taskId = signal.data?.taskId || signal.taskId;
+		if (taskId && taskId.includes('-')) {
+			return taskId.split('-')[0];
 		}
 
-		// Try extracting from taskId (e.g., "steelbridge-abc" -> "steelbridge")
-		if (signal.taskId && signal.taskId.includes('-')) {
-			return signal.taskId.split('-')[0];
-		}
-
-		return null;
+		return signal.data?.project || signal.project || null;
 	} catch {
 		return null;
 	}

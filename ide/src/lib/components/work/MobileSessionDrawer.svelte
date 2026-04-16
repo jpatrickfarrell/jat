@@ -118,7 +118,7 @@
 	} = $props();
 
 	// === Page State ===
-	const PAGES = ['Terminal', 'Task Detail', 'Attachments', 'Notes'] as const;
+	const PAGES = ['Terminal', 'Detail'] as const;
 	let currentPage = $state(0);
 	let tabRefs = $state<HTMLButtonElement[]>([]);
 	let indicatorLeft = $state(0);
@@ -771,7 +771,7 @@
 		}
 
 		// Determine valid swipe directions based on current page
-		const canSwipeRight = currentPage > 0 || true; // page 0 right = dismiss
+		const canSwipeRight = true; // page 0 right = dismiss, page >0 right = prev page
 		const canSwipeLeft = currentPage < PAGES.length - 1;
 
 		if (deltaX > 0 && canSwipeRight) {
@@ -1633,32 +1633,30 @@
 					{/if}
 
 					<!-- Eye/pencil preview toggle -->
-					{#if true}
-						<button
-							class="flex items-center justify-center w-9 h-9 rounded-lg border flex-shrink-0 transition-all disabled:opacity-40 {showPreview ? 'bg-info/20 border-info text-info' : 'bg-base-300 border-base-300 text-base-content/60 active:brightness-125'}"
-							disabled={!inputText.trim() && !showPreview}
-							aria-label={showPreview ? 'Back to edit' : 'Preview markdown'}
-							use:directClick={() => {
-								showPreview = !showPreview;
-								if (!showPreview) {
-									requestAnimationFrame(() => inputRef?.focus());
-								}
-							}}
-						>
-							{#if showPreview}
-								<!-- Pencil -->
-								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="18" height="18">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
-								</svg>
-							{:else}
-								<!-- Eye -->
-								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="18" height="18">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-									<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-								</svg>
-							{/if}
-						</button>
-					{/if}
+					<button
+						class="flex items-center justify-center w-9 h-9 rounded-lg border flex-shrink-0 transition-all disabled:opacity-40 {showPreview ? 'bg-info/20 border-info text-info' : 'bg-base-300 border-base-300 text-base-content/60 active:brightness-125'}"
+						disabled={!inputText.trim() && !showPreview}
+						aria-label={showPreview ? 'Back to edit' : 'Preview markdown'}
+						use:directClick={() => {
+							showPreview = !showPreview;
+							if (!showPreview) {
+								requestAnimationFrame(() => inputRef?.focus());
+							}
+						}}
+					>
+						{#if showPreview}
+							<!-- Pencil -->
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="18" height="18">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+							</svg>
+						{:else}
+							<!-- Eye -->
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="18" height="18">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+								<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+							</svg>
+						{/if}
+					</button>
 
 					<!-- Send button -->
 					<button
@@ -1680,255 +1678,263 @@
 				</div>
 			</div>
 
-			<!-- Page 1: Task Detail -->
+			<!-- Page 1: Detail (everything else — stacked hairline sections) -->
 			<div class="pager-page">
-				<div class="flex-1 overflow-y-auto p-4" style="-webkit-overflow-scrolling: touch;">
+				<div class="flex-1 overflow-y-auto" style="-webkit-overflow-scrolling: touch;">
 					{#if task}
-						<!-- Task Header — tap title to edit -->
-						<div class="mb-4">
-							<TaskHeaderBlock id={task.id} type={task.issue_type}>
-								{#snippet title()}
+						<!-- Primary band: title, meta, alerts, controls, description -->
+						<div class="px-4 pt-4 pb-6">
+							<div class="mb-3">
+								<TaskHeaderBlock id={task.id} type={task.issue_type}>
+									{#snippet title()}
+										<button
+											type="button"
+											class="text-left w-full text-lg font-semibold text-base-content leading-snug m-0 bg-transparent border-0 p-0 cursor-pointer hover:text-info active:text-info transition-colors"
+											use:directClick={() => openEditor('title')}
+											aria-label="Edit title"
+										>
+											{task?.title || 'Untitled'}
+										</button>
+									{/snippet}
+								</TaskHeaderBlock>
+							</div>
+
+							<div class="mb-4">
+								<TaskMetaRow>
 									<button
 										type="button"
-										class="text-left w-full text-lg font-semibold text-base-content leading-snug m-0 bg-transparent border-0 p-0 cursor-pointer hover:text-info active:text-info transition-colors"
-										use:directClick={() => openEditor('title')}
-										aria-label="Edit title"
+										class="badge badge-sm {getStatusBadgeClass(task.status)} badge-outline uppercase tracking-wide cursor-pointer active:scale-95 transition-transform"
+										use:directClick={() => openEditor('status')}
+										aria-label="Edit status"
 									>
-										{task?.title || 'Untitled'}
+										{task.status.replace('_', ' ')}
 									</button>
-								{/snippet}
-							</TaskHeaderBlock>
-						</div>
-
-						<!-- Status & Priority Row — tap badges to edit -->
-						<div class="mb-5">
-							<TaskMetaRow>
-								<button
-									type="button"
-									class="badge badge-sm {getStatusBadgeClass(task.status)} badge-outline uppercase tracking-wide cursor-pointer active:scale-95 transition-transform"
-									use:directClick={() => openEditor('status')}
-									aria-label="Edit status"
-								>
-									{task.status.replace('_', ' ')}
-								</button>
-								<button
-									type="button"
-									class="badge badge-sm {getPriorityBadgeClass(task.priority)} badge-outline uppercase tracking-wide cursor-pointer active:scale-95 transition-transform"
-									use:directClick={() => openEditor('priority')}
-									aria-label="Edit priority"
-								>
-									{task.priority !== undefined && task.priority !== null ? getPriorityLabel(task.priority) : 'Set priority'}
-								</button>
-								{#if agentName}
-									<div class="badge badge-sm badge-info badge-outline uppercase tracking-wide">
-										{agentName}
-									</div>
-								{/if}
-							</TaskMetaRow>
-						</div>
-
-						<!-- Review Reason Banner -->
-						{#if reviewReason}
-							<div class="mb-4 p-3 rounded-lg border border-warning/40 bg-warning/10 text-sm">
-								<div class="font-semibold text-xs uppercase tracking-wide mb-1 text-warning">Review Reason</div>
-								{reviewReason}
+									<button
+										type="button"
+										class="badge badge-sm {getPriorityBadgeClass(task.priority)} badge-outline uppercase tracking-wide cursor-pointer active:scale-95 transition-transform"
+										use:directClick={() => openEditor('priority')}
+										aria-label="Edit priority"
+									>
+										{task.priority !== undefined && task.priority !== null ? getPriorityLabel(task.priority) : 'Set priority'}
+									</button>
+									{#if agentName}
+										<span class="font-mono text-xs text-info/85 self-center whitespace-nowrap">@{agentName}</span>
+									{/if}
+									{#if fullTask?.labels?.length}
+										{#each fullTask.labels as label}
+											<button
+												type="button"
+												class="badge badge-sm badge-outline cursor-pointer active:scale-95 transition-transform text-base-content/80"
+												use:directClick={() => openEditor('labels')}
+												aria-label="Edit labels"
+											>{label}</button>
+										{/each}
+									{:else if fullTask}
+										<button
+											type="button"
+											class="badge badge-sm badge-ghost badge-outline cursor-pointer active:scale-95 transition-transform text-base-content/50"
+											use:directClick={() => openEditor('labels')}
+											aria-label="Add labels"
+										>+ label</button>
+									{/if}
+								</TaskMetaRow>
 							</div>
-						{/if}
 
-						<!-- Auto-complete toggle + Epic link -->
-						<div class="mb-5 flex items-center gap-3 flex-wrap">
-							<label class="flex items-center gap-2 text-sm cursor-pointer">
-								<input
-									type="checkbox"
-									class="toggle toggle-sm toggle-success"
-									checked={autoCompleteEnabled}
-									onchange={(e) => onAutoCompleteToggle((e.target as HTMLInputElement).checked)}
-								/>
-								<span>Auto-complete</span>
-							</label>
-							{#if task?.issue_type !== 'epic'}
-								<button
-									type="button"
-									class="btn btn-xs btn-outline"
-									onclick={() => onLinkToEpic()}
-								>
-									Link to Epic
-								</button>
+							{#if reviewReason}
+								<div class="mb-4 p-3 rounded-lg border border-warning/40 bg-warning/10 text-sm">
+									<div class="font-semibold text-xs uppercase tracking-wide mb-1 text-warning">Review Reason</div>
+									{reviewReason}
+								</div>
 							{/if}
-						</div>
 
-						<!-- Session Info -->
-						<div class="mb-5">
-							<TaskFieldLabel>Session</TaskFieldLabel>
-							<TaskFieldGrid>
-								{#if created}
-									<TaskFieldCell label="Started">{formatTimeAgo(created)}</TaskFieldCell>
+							<div class="mb-5 flex items-center gap-3 flex-wrap">
+								<label class="flex items-center gap-2 text-sm cursor-pointer">
+									<input
+										type="checkbox"
+										class="toggle toggle-sm toggle-success"
+										checked={autoCompleteEnabled}
+										onchange={(e) => onAutoCompleteToggle((e.target as HTMLInputElement).checked)}
+									/>
+									<span>Auto-complete</span>
+								</label>
+								{#if task?.issue_type !== 'epic'}
+									<button
+										type="button"
+										class="btn btn-xs btn-outline"
+										onclick={() => onLinkToEpic()}
+									>
+										Link to Epic
+									</button>
 								{/if}
-								{#if tokens > 0}
-									<TaskFieldCell label="Tokens">{tokens > 1000000 ? `${(tokens / 1000000).toFixed(1)}M` : tokens > 1000 ? `${(tokens / 1000).toFixed(0)}K` : tokens}</TaskFieldCell>
-								{/if}
-								{#if cost > 0}
-									<TaskFieldCell label="Cost">${cost.toFixed(2)}</TaskFieldCell>
-								{/if}
-								{#if sseState}
-									<TaskFieldCell label="State">{sseState}</TaskFieldCell>
-								{/if}
-							</TaskFieldGrid>
-						</div>
+							</div>
 
-						<!-- Description — tap to edit -->
-						<div class="mb-5">
-							<TaskFieldLabel>Description</TaskFieldLabel>
 							<button
 								type="button"
-								class="text-left w-full text-sm text-base-content/80 leading-relaxed whitespace-pre-wrap break-words bg-base-200 hover:bg-base-300 active:bg-base-300 border border-base-300 p-3 rounded-lg cursor-pointer transition-colors"
+								class="group text-left w-full text-sm text-base-content/85 leading-relaxed whitespace-pre-wrap break-words bg-transparent border-0 -mx-1 px-1 py-1.5 rounded cursor-pointer active:bg-base-200/60 transition-colors"
 								style="overflow-wrap: break-word; word-break: break-word; min-width: 0;"
 								use:directClick={() => openEditor('description')}
 								aria-label="Edit description"
 							>
 								{#if task.description || fullTask?.description}
-									{task.description || fullTask?.description}
+									<span class="align-middle">{task.description || fullTask?.description}</span>
+									<svg xmlns="http://www.w3.org/2000/svg" class="inline-block ml-1.5 mb-0.5 w-3 h-3 opacity-55 group-active:opacity-90 transition-opacity" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" /></svg>
 								{:else}
-									<span class="italic text-base-content/50">Tap to add a description…</span>
+									<span class="italic text-base-content/50">Add description</span>
 								{/if}
 							</button>
 						</div>
 
-						<!-- Full task details (loaded from API) -->
+						<!-- Notes -->
 						{#if fullTask}
-							<!-- Labels — tap to edit -->
-							<div class="mb-5">
-								<TaskFieldLabel>Labels</TaskFieldLabel>
+							<section class="px-4 pt-4 pb-5 border-t border-base-300/60">
+								<h4 class="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-base-content/55 mb-2">Notes</h4>
 								<button
 									type="button"
-									class="text-left w-full bg-base-200 hover:bg-base-300 active:bg-base-300 border border-base-300 p-3 rounded-lg cursor-pointer transition-colors"
-									use:directClick={() => openEditor('labels')}
-									aria-label="Edit labels"
+									class="group text-left w-full text-sm text-base-content/85 leading-relaxed whitespace-pre-wrap break-words bg-transparent border-0 -mx-1 px-1 py-1.5 rounded cursor-pointer active:bg-base-200/60 transition-colors"
+									style="overflow-wrap: break-word; word-break: break-word; min-width: 0;"
+									use:directClick={() => openEditor('notes')}
+									aria-label="Edit notes"
 								>
-									{#if fullTask.labels?.length}
-										<TaskLabelsList labels={fullTask.labels} />
+									{#if fullTask?.notes}
+										<span class="align-middle">{fullTask.notes}</span>
+										<svg class="inline-block ml-1.5 mb-0.5 w-3 h-3 opacity-55 group-active:opacity-90 transition-opacity" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+										</svg>
 									{:else}
-										<span class="text-sm italic text-base-content/50">Tap to add labels…</span>
+										<span class="italic text-base-content/45">Add notes</span>
 									{/if}
 								</button>
-							</div>
-
-							{#if fullTask.depends_on?.length}
-								<div class="mb-5">
-									<TaskFieldLabel>Depends On</TaskFieldLabel>
-									<DependencyList items={fullTask.depends_on.map((d: any) => typeof d === 'string' ? { id: d } : d)} />
-								</div>
-							{/if}
-
-							{#if fullTask.blocked_by?.length}
-								<div class="mb-5">
-									<TaskFieldLabel>Blocks</TaskFieldLabel>
-									<DependencyList items={fullTask.blocked_by.map((d: any) => typeof d === 'string' ? { id: d } : d)} />
-								</div>
-							{/if}
-
-							{#if fullTask.created_at || fullTask.updated_at}
-								<div class="mb-5">
-									<TaskDatesPair createdAt={fullTask.created_at} updatedAt={fullTask.updated_at} />
-								</div>
-							{/if}
-						{:else if taskLoading}
-							<div class="flex flex-col gap-4 mb-5">
-								<!-- Labels skeleton -->
-								<div>
-									<div class="skeleton h-3 w-12 mb-2 rounded"></div>
-									<div class="skeleton h-8 w-full rounded-lg"></div>
-								</div>
-								<!-- Dependencies skeleton -->
-								<div>
-									<div class="skeleton h-3 w-20 mb-2 rounded"></div>
-									<div class="flex flex-col gap-1.5">
-										<div class="skeleton h-6 w-4/5 rounded"></div>
-										<div class="skeleton h-6 w-3/5 rounded"></div>
-									</div>
-								</div>
-								<!-- Dates skeleton -->
-								<div>
-									<div class="skeleton h-3 w-16 mb-2 rounded"></div>
-									<div class="skeleton h-10 w-full rounded-lg"></div>
-								</div>
-							</div>
+							</section>
 						{/if}
-					{:else}
-						<div class="flex items-center justify-center h-full text-base-content/50 text-sm">
-							<p>No task assigned to this session</p>
-						</div>
-					{/if}
-				</div>
-			</div>
 
-				<!-- Page 2: Attachments -->
-				<div class="pager-page">
-					<div class="flex-1 overflow-y-auto p-4" style="-webkit-overflow-scrolling: touch;">
-						<div class="mb-5">
+						<!-- Attachments -->
+						<section class="px-4 pt-4 pb-5 border-t border-base-300/60">
 							<div class="flex items-center justify-between mb-2">
-								<TaskFieldLabel>Attachments</TaskFieldLabel>
+								<h4 class="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-base-content/55">Attachments</h4>
 								<button
-									class="flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg bg-base-200 border border-base-300 text-base-content/70 cursor-pointer active:bg-base-300 transition-colors"
+									class="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md text-base-content/70 cursor-pointer active:bg-base-200 transition-colors"
 									use:directClick={() => fileInputEl?.click()}
 								>
 									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" width="14" height="14">
-										<path stroke-linecap="round" stroke-linejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
+										<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
 									</svg>
 									Add file
 								</button>
 							</div>
 							{#if fullTask?.attachments?.length}
-								<div class="flex flex-col gap-2">
+								<ul class="flex flex-col divide-y divide-base-300/40">
 									{#each fullTask.attachments as attachment}
-										<div class="flex items-center gap-2 px-3 py-2 bg-base-200 border border-base-300 rounded-md text-sm text-base-content/80">
-											<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="16" height="16">
+										<li class="flex items-center gap-3 py-2.5 text-sm text-base-content/85">
+											<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="16" height="16" class="flex-shrink-0 text-base-content/45">
 												<path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
 											</svg>
 											<span class="truncate">{attachment.name || attachment.filename || 'Attachment'}</span>
-										</div>
+										</li>
 									{/each}
-								</div>
+								</ul>
 							{:else}
-								<div class="flex flex-col items-center gap-3 py-12 text-base-content/40">
-									<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="32" height="32">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
-									</svg>
-									<p class="text-sm">No attachments yet</p>
-								</div>
+								<p class="text-xs text-base-content/40 italic py-1">No files attached.</p>
 							{/if}
-						</div>
-					</div>
-				</div>
+						</section>
 
-				<!-- Page 3: Notes -->
-				<div class="pager-page">
-					<div class="flex-1 overflow-y-auto p-4" style="-webkit-overflow-scrolling: touch;">
-						<div class="mb-5">
-							<TaskFieldLabel>Notes</TaskFieldLabel>
-							<button
-								type="button"
-								class="text-left w-full text-sm text-base-content/80 leading-relaxed whitespace-pre-wrap break-words bg-base-200 hover:bg-base-300 active:bg-base-300 border border-base-300 p-3 rounded-lg cursor-pointer transition-colors"
-								style="overflow-wrap: break-word; word-break: break-word; min-width: 0;"
-								use:directClick={() => openEditor('notes')}
-								aria-label="Edit notes"
-							>
-								{#if fullTask?.notes}
-									{fullTask.notes}
-								{:else}
-									<span class="italic text-base-content/50">Tap to add notes…</span>
+						<!-- Details: quiet diagnostics footer with hairline dividers -->
+						{#if created || tokens > 0 || cost > 0 || sseState || fullTask}
+							<section class="px-4 pt-4 pb-5 border-t border-base-300/60">
+								<h4 class="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-base-content/55 mb-3">Details</h4>
+								<dl class="flex flex-col divide-y divide-base-300/40 text-sm">
+									{#if created}
+										<div class="flex items-center justify-between py-2">
+											<dt class="text-base-content/55">Started</dt>
+											<dd class="text-base-content/90 tabular-nums" title={formatDate(created)}>{formatTimeAgo(created)}</dd>
+										</div>
+									{/if}
+									{#if tokens > 0}
+										<div class="flex items-center justify-between py-2">
+											<dt class="text-base-content/55">Tokens</dt>
+											<dd class="text-base-content/90 tabular-nums">{tokens > 1000000 ? `${(tokens / 1000000).toFixed(1)}M` : tokens > 1000 ? `${(tokens / 1000).toFixed(0)}K` : tokens}</dd>
+										</div>
+									{/if}
+									{#if cost > 0}
+										<div class="flex items-center justify-between py-2">
+											<dt class="text-base-content/55">Cost</dt>
+											<dd class="text-base-content/90 tabular-nums">${cost.toFixed(2)}</dd>
+										</div>
+									{/if}
+									{#if sseState}
+										<div class="flex items-center justify-between py-2">
+											<dt class="text-base-content/55">State</dt>
+											<dd class="text-base-content/90">{getSessionStateVisual(sseState).shortLabel}</dd>
+										</div>
+									{/if}
+									{#if fullTask?.depends_on?.length}
+										<div class="flex items-start justify-between py-2 gap-3">
+											<dt class="text-base-content/55 pt-0.5 flex-shrink-0">Depends on</dt>
+											<dd class="flex flex-col items-end gap-1 text-xs flex-1 min-w-0">
+												{#each fullTask.depends_on as dep}
+													{@const depObj = typeof dep === 'string' ? { id: dep } : dep}
+													<button
+														type="button"
+														class="font-mono text-info truncate max-w-full text-right active:text-info/60 transition-colors"
+														use:directClick={() => onViewTask?.(depObj.id)}
+														aria-label={`View ${depObj.id}`}
+													>{depObj.id}{depObj.title ? ` · ${depObj.title}` : ''}</button>
+												{/each}
+											</dd>
+										</div>
+									{/if}
+									{#if fullTask?.blocked_by?.length}
+										<div class="flex items-start justify-between py-2 gap-3">
+											<dt class="text-base-content/55 pt-0.5 flex-shrink-0">Blocks</dt>
+											<dd class="flex flex-col items-end gap-1 text-xs flex-1 min-w-0">
+												{#each fullTask.blocked_by as dep}
+													{@const depObj = typeof dep === 'string' ? { id: dep } : dep}
+													<button
+														type="button"
+														class="font-mono text-info truncate max-w-full text-right active:text-info/60 transition-colors"
+														use:directClick={() => onViewTask?.(depObj.id)}
+														aria-label={`View ${depObj.id}`}
+													>{depObj.id}{depObj.title ? ` · ${depObj.title}` : ''}</button>
+												{/each}
+											</dd>
+										</div>
+									{/if}
+									{#if fullTask?.created_at}
+										<div class="flex items-center justify-between py-2">
+											<dt class="text-base-content/55">Created</dt>
+											<dd class="text-base-content/80 tabular-nums" title={formatDate(fullTask.created_at)}>{formatTimeAgo(fullTask.created_at)}</dd>
+										</div>
+									{/if}
+									{#if fullTask?.updated_at}
+										<div class="flex items-center justify-between py-2">
+											<dt class="text-base-content/55">Updated</dt>
+											<dd class="text-base-content/80 tabular-nums" title={formatDate(fullTask.updated_at)}>{formatTimeAgo(fullTask.updated_at)}</dd>
+										</div>
+									{/if}
+								</dl>
+								{#if !fullTask && taskLoading}
+									<div class="flex flex-col gap-2 mt-2">
+										<div class="skeleton h-4 w-full rounded"></div>
+										<div class="skeleton h-4 w-4/5 rounded"></div>
+										<div class="skeleton h-4 w-3/5 rounded"></div>
+									</div>
 								{/if}
-							</button>
-						</div>
-
-						{#if task?.id}
-							<div class="mb-5">
-								<TaskFieldLabel>Comments</TaskFieldLabel>
-								<CommentsThread taskId={task.id} />
-							</div>
+							</section>
 						{/if}
-					</div>
+
+						<!-- Comments -->
+						{#if task?.id}
+							<section class="px-4 pt-4 pb-6 border-t border-base-300/60">
+								<h4 class="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-base-content/55 mb-3">Comments</h4>
+								<CommentsThread taskId={task.id} />
+							</section>
+						{/if}
+					{:else}
+						<div class="flex items-center justify-center h-full text-base-content/50 text-sm">
+							<p>No task</p>
+						</div>
+					{/if}
 				</div>
+			</div>
 			</div>
 		</div>
 	{/if}
@@ -2165,16 +2171,16 @@
 	.topbar-tabs { scrollbar-width: none; }
 	.topbar-tabs::-webkit-scrollbar { display: none; }
 
-	/* Horizontal pager: 4 pages × 25% each */
+	/* Horizontal pager: 2 pages × 50% each */
 	.pager-container {
 		flex: 1;
 		display: flex;
-		width: 400%;
+		width: 200%;
 		min-height: 0;
 	}
 
 	.pager-page {
-		width: 25%;
+		width: 50%;
 		flex-shrink: 0;
 		display: flex;
 		flex-direction: column;

@@ -85,9 +85,10 @@ function parseSignalFile(filePath, sessionName) {
 			taskTitle = lookupTaskTitleFromPersistent(taskId);
 		}
 
-		const project = signal.project
-			|| signal.data?.project
-			|| (taskId && taskId.includes('-') ? taskId.split('-')[0] : null);
+		// Invariant: project derives from taskId. Stored signal.project is fallback only.
+		const project = (taskId && taskId.includes('-') ? taskId.split('-')[0] : null)
+			|| signal.project
+			|| signal.data?.project;
 
 		const sessionId = signal.session_id || null;
 

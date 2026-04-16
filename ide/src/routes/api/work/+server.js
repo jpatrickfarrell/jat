@@ -238,6 +238,9 @@ function readSignalProject(sessionName) {
 		if (!existsSync(signalFile)) return null;
 		const content = readFileSync(signalFile, 'utf-8');
 		const signal = JSON.parse(content);
+		// Invariant: project derives from taskId. Stored signal.project is fallback only.
+		const signalTaskId = signal.data?.taskId || signal.taskId;
+		if (signalTaskId) return getProjectFromTaskId(signalTaskId);
 		return signal.data?.project || signal.project || null;
 	} catch {
 		return null;
@@ -979,10 +982,12 @@ async function computeWorkData(lines, includeUsage, captureAll = false) {
 					sessionState = detectSessionState(output, task, lastCompletedTask, session.name);
 				}
 
-				// Determine project: task ID → lastCompletedTask ID → signal data
+				// Determine project: current task → fresh signal (incl. completion bundle) → stale lastCompletedTask
+				// Signal must beat lastCompletedTask — lastCompletedTask can be weeks old if the
+				// agent's DB row wasn't updated, while the signal reflects the agent's current work.
 				const project = getProjectFromTaskId(task?.id)
-					|| getProjectFromTaskId(lastCompletedTask?.id)
 					|| preSignalProjects.get(session.name)
+					|| getProjectFromTaskId(lastCompletedTask?.id)
 					|| null;
 
 				return {

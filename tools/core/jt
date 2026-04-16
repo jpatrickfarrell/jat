@@ -464,7 +464,7 @@ for t in data:
 # pg_create: create task via IDE API (mirrors cmd_create flags)
 # Requires IDE to be running (no direct postgres write path).
 pg_create() {
-  local title="" description="" type="task" priority=2 labels="" deps="" assignee="" json_out=false parent_id="" reserved_files=""
+  local title="" description="" type="task" priority=2 labels="" deps="" assignee="" requester="" json_out=false parent_id="" reserved_files=""
   local command="" agent_program="" model="" schedule_cron="" next_run_at="" due_date=""
 
   if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
@@ -480,6 +480,7 @@ pg_create() {
       --labels)         labels="$2"; shift 2 ;;
       --deps)           deps="$2"; shift 2 ;;
       --assignee)       assignee="$2"; shift 2 ;;
+      --requester)      requester="$2"; shift 2 ;;
       --files)          reserved_files="$2"; shift 2 ;;
       --parent)         parent_id="$2"; shift 2 ;;
       --command)        command="$2"; shift 2 ;;
@@ -495,7 +496,7 @@ pg_create() {
     esac
   done
 
-  [[ -n "$title" ]] || die "Usage: jt create \"title\" [--type X] [--priority N] [--description \"...\"] [--labels \"a,b\"] [--deps \"id1,id2\"] [--assignee X] [--files \"globs\"] [--parent EPIC_ID] [--json]"
+  [[ -n "$title" ]] || die "Usage: jt create \"title\" [--type X] [--priority N] [--description \"...\"] [--labels \"a,b\"] [--deps \"id1,id2\"] [--assignee X] [--requester X] [--files \"globs\"] [--parent EPIC_ID] [--json]"
 
   local project_name
   project_name="$(resolve_project_name)"
@@ -520,6 +521,7 @@ pg_create() {
     payload="$(echo "$payload" | jq --arg v "$deps" '. + {deps: ($v | split(",") | map(ltrimstr(" ") | rtrimstr(" ")) | map(select(length > 0)))}')"
   fi
   [[ -n "$assignee" ]]        && payload="$(echo "$payload" | jq --arg v "$assignee" '. + {assignee: $v}')"
+  [[ -n "$requester" ]]       && payload="$(echo "$payload" | jq --arg v "$requester" '. + {requester: $v}')"
   [[ -n "$reserved_files" ]]  && payload="$(echo "$payload" | jq --arg v "$reserved_files" '. + {reserved_files: $v}')"
   [[ -n "$parent_id" ]]       && payload="$(echo "$payload" | jq --arg v "$parent_id" '. + {parent_id: $v}')"
   [[ -n "$command" ]]         && payload="$(echo "$payload" | jq --arg v "$command" '. + {command: $v}')"
@@ -608,6 +610,7 @@ sql_exec() {
 require_db() {
   require_sqlite_backend
   [[ -f "$DB" ]] || die "No .jat/ database found. Run 'jt init' first."
+  ensure_columns
 }
 
 # Escape single quotes for SQL
@@ -636,6 +639,14 @@ escape_fts_query() {
     fi
   done
   echo "${result# }"
+}
+
+# Lazy migration: add columns introduced after initial schema (idempotent, silent)
+ensure_columns() {
+  local cols
+  cols="$(sqlite3 "$DB" "PRAGMA table_info(tasks);" 2>/dev/null)"
+  echo "$cols" | grep -q 'previous_assignee' || sqlite3 "$DB" "ALTER TABLE tasks ADD COLUMN previous_assignee TEXT;"
+  echo "$cols" | grep -q '|requester|'        || sqlite3 "$DB" "ALTER TABLE tasks ADD COLUMN requester TEXT;"
 }
 
 # Ensure FTS5 index exists (auto-migration for existing databases)
@@ -892,7 +903,7 @@ cmd_create() {
   require_db
   local title="" description="" type="task" priority=2 labels="" deps="" assignee="" json_out=false explicit_id="" parent_id="" reserved_files=""
   local command="" agent_program="" model="" schedule_cron="" next_run_at="" due_date=""
-  local source="" source_item_id="" metadata=""
+  local source="" source_item_id="" metadata="" requester=""
 
   # First positional arg is title
   if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
@@ -920,12 +931,13 @@ cmd_create() {
       --source)         source="$2"; shift 2 ;;
       --source-item-id) source_item_id="$2"; shift 2 ;;
       --metadata)       metadata="$2"; shift 2 ;;
+      --requester)      requester="$2"; shift 2 ;;
       --json)           json_out=true; shift ;;
       *)                [[ -z "$title" ]] && title="$1"; shift ;;
     esac
   done
 
-  [[ -n "$title" ]] || die "Usage: jt create \"title\" [--title X] [--type X] [--priority N] [--description \"...\"] [--labels \"a,b\"] [--deps \"id1,id2\"] [--assignee \"X\"] [--files \"glob1,glob2\"] [--parent EPIC_ID] [--command CMD] [--agent-program X] [--model X] [--schedule-cron EXPR] [--next-run-at ISO] [--due-date ISO] [--json]"
+  [[ -n "$title" ]] || die "Usage: jt create \"title\" [--title X] [--type X] [--priority N] [--description \"...\"] [--labels \"a,b\"] [--deps \"id1,id2\"] [--assignee \"X\"] [--requester \"X\"] [--files \"glob1,glob2\"] [--parent EPIC_ID] [--command CMD] [--agent-program X] [--model X] [--schedule-cron EXPR] [--next-run-at ISO] [--due-date ISO] [--json]"
 
   require_integer "$priority" "--priority"
   local id="${explicit_id:-$(gen_id)}"
@@ -967,14 +979,15 @@ cmd_create() {
   esc_next_run="$(sql_escape "$next_run_at")"
   esc_due_date="$(sql_escape "$due_date")"
 
-  local esc_source esc_source_item_id esc_metadata
+  local esc_source esc_source_item_id esc_metadata esc_requester
   esc_source="$(sql_escape "$source")"
   esc_source_item_id="$(sql_escape "$source_item_id")"
   esc_metadata="$(sql_escape "$metadata")"
+  esc_requester="$(sql_escape "$requester")"
 
   sql_exec "
-    INSERT OR IGNORE INTO tasks (id, title, description, status, priority, issue_type, assignee, reserved_files, parent_id, command, agent_program, model, schedule_cron, next_run_at, due_date, source, source_item_id, metadata, created_at, updated_at)
-    VALUES ('$id', '$esc_title', '$esc_desc', 'open', $priority, '$esc_type', $([ -n "$assignee" ] && echo "'$esc_assignee'" || echo "NULL"), $([ -n "$reserved_files" ] && echo "'$esc_reserved_files'" || echo "NULL"), $([ -n "$parent_id" ] && echo "'$esc_parent_id'" || echo "NULL"), $([ -n "$command" ] && echo "'$esc_command'" || echo "NULL"), $([ -n "$agent_program" ] && echo "'$esc_agent_program'" || echo "NULL"), $([ -n "$model" ] && echo "'$esc_model'" || echo "NULL"), $([ -n "$schedule_cron" ] && echo "'$esc_cron'" || echo "NULL"), $([ -n "$next_run_at" ] && echo "'$esc_next_run'" || echo "NULL"), $([ -n "$due_date" ] && echo "'$esc_due_date'" || echo "NULL"), $([ -n "$source" ] && echo "'$esc_source'" || echo "NULL"), $([ -n "$source_item_id" ] && echo "'$esc_source_item_id'" || echo "NULL"), $([ -n "$metadata" ] && echo "'$esc_metadata'" || echo "NULL"), '$ts', '$ts');"
+    INSERT OR IGNORE INTO tasks (id, title, description, status, priority, issue_type, assignee, requester, reserved_files, parent_id, command, agent_program, model, schedule_cron, next_run_at, due_date, source, source_item_id, metadata, created_at, updated_at)
+    VALUES ('$id', '$esc_title', '$esc_desc', 'open', $priority, '$esc_type', $([ -n "$assignee" ] && echo "'$esc_assignee'" || echo "NULL"), $([ -n "$requester" ] && echo "'$esc_requester'" || echo "NULL"), $([ -n "$reserved_files" ] && echo "'$esc_reserved_files'" || echo "NULL"), $([ -n "$parent_id" ] && echo "'$esc_parent_id'" || echo "NULL"), $([ -n "$command" ] && echo "'$esc_command'" || echo "NULL"), $([ -n "$agent_program" ] && echo "'$esc_agent_program'" || echo "NULL"), $([ -n "$model" ] && echo "'$esc_model'" || echo "NULL"), $([ -n "$schedule_cron" ] && echo "'$esc_cron'" || echo "NULL"), $([ -n "$next_run_at" ] && echo "'$esc_next_run'" || echo "NULL"), $([ -n "$due_date" ] && echo "'$esc_due_date'" || echo "NULL"), $([ -n "$source" ] && echo "'$esc_source'" || echo "NULL"), $([ -n "$source_item_id" ] && echo "'$esc_source_item_id'" || echo "NULL"), $([ -n "$metadata" ] && echo "'$esc_metadata'" || echo "NULL"), '$ts', '$ts');"
 
   # Auto-wire epic→child dependency: parent depends on child (child is READY, parent is BLOCKED)
   if [[ -n "$parent_id" ]]; then
@@ -1038,12 +1051,13 @@ cmd_update() {
       --source)         sets+=("source = '$(sql_escape "$2")'"); shift 2 ;;
       --source-item-id) sets+=("source_item_id = '$(sql_escape "$2")'"); shift 2 ;;
       --metadata)       sets+=("metadata = '$(sql_escape "$2")'"); shift 2 ;;
+      --requester)      sets+=("requester = '$(sql_escape "$2")'"); shift 2 ;;
       --json)           json_out=true; shift ;;
       *)                [[ -z "$task_id" ]] && task_id="$1"; shift ;;
     esac
   done
 
-  [[ -n "$task_id" ]] || die "Usage: jt update TASK_ID [--status X] [--priority N] [--assignee X] [--files \"globs\"] [--title X] [--command CMD] [--agent-program X] [--model X] [--schedule-cron EXPR] [--next-run-at ISO] [--due-date ISO] [--json]"
+  [[ -n "$task_id" ]] || die "Usage: jt update TASK_ID [--status X] [--priority N] [--assignee X] [--requester X] [--files \"globs\"] [--title X] [--command CMD] [--agent-program X] [--model X] [--schedule-cron EXPR] [--next-run-at ISO] [--due-date ISO] [--json]"
 
   # Postgres-backed project: proxy through IDE REST API
   if [[ "$(resolve_project_backend)" == "postgres" ]]; then
@@ -1142,7 +1156,16 @@ cmd_close() {
 
   local ts
   ts="$(now_ts)"
-  sql_exec "UPDATE tasks SET status = 'closed', closed_at = '$ts', close_reason = '$(sql_escape "$reason")', reserved_files = NULL, updated_at = '$ts' WHERE id = '$(sql_escape "$task_id")';"
+
+  # If a requester is set, submit to them for review instead of closing directly.
+  local requester_val
+  requester_val="$(sql_json "SELECT requester FROM tasks WHERE id = '$(sql_escape "$task_id")';" 2>/dev/null | jq -r '.[0].requester // empty' 2>/dev/null)"
+
+  if [[ -n "$requester_val" ]]; then
+    sql_exec "UPDATE tasks SET status = 'submitted', assignee = '$(sql_escape "$requester_val")', closed_at = NULL, close_reason = '$(sql_escape "$reason")', reserved_files = NULL, updated_at = '$ts' WHERE id = '$(sql_escape "$task_id")';"
+  else
+    sql_exec "UPDATE tasks SET status = 'closed', closed_at = '$ts', close_reason = '$(sql_escape "$reason")', reserved_files = NULL, updated_at = '$ts' WHERE id = '$(sql_escape "$task_id")';"
+  fi
 
   touch_sentinel
 
@@ -1284,7 +1307,7 @@ _task_json() {
   sql_json "
     SELECT
       t.id, t.title, t.description, t.status, t.priority, t.issue_type,
-      t.assignee, t.reserved_files, t.parent_id, t.command, t.agent_program, t.model,
+      t.assignee, t.previous_assignee, t.requester, t.reserved_files, t.parent_id, t.command, t.agent_program, t.model,
       t.schedule_cron, t.next_run_at, t.due_date, t.internal,
       t.created_at, t.updated_at, t.closed_at, t.close_reason,
       COALESCE(

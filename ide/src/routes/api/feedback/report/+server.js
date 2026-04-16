@@ -285,6 +285,7 @@ export async function POST({ request }) {
 				labels: ['widget', 'bug-report'],
 				deps: [],
 				assignee: null,
+				requester: body.reporter && typeof body.reporter === 'string' ? body.reporter.trim() : null,
 				notes: '',
 				source: 'feedback-widget',
 				source_item_id: sourceItemId,

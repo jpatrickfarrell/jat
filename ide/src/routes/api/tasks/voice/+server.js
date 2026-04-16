@@ -86,10 +86,12 @@ export async function PATCH({ url, request }) {
 
 	let title = '';
 	let description = '';
+	let widgetRequester = null;
 	try {
 		const body = await request.json();
 		title = (body.title || '').trim();
 		description = (body.description || '').trim();
+		if (body.requester && typeof body.requester === 'string') widgetRequester = body.requester.trim();
 	} catch {
 		// Ignore body parse errors — still mark submitted
 	}
@@ -106,6 +108,7 @@ export async function PATCH({ url, request }) {
 				labels: ['voice'],
 				deps: [],
 				assignee: null,
+				requester: widgetRequester,
 				notes: '',
 				source: 'voice'
 			});
@@ -229,6 +232,7 @@ function transcribeAndOrganize(audioPath, title, priority) {
 						labels: ['voice'],
 						deps: [],
 						assignee: null,
+						requester: postRequester,
 						notes: '',
 						source: 'voice'
 					});
@@ -259,6 +263,7 @@ export async function POST({ request }) {
 			// JSON body — pre-transcribed text, organize async and add to voice inbox
 			const body = await request.json();
 			const text = body.text?.trim();
+			const postRequester = body.requester && typeof body.requester === 'string' ? body.requester.trim() : null;
 
 			if (!text) {
 				return json({ error: true, message: 'Missing "text" field' }, { status: 400, headers: CORS_HEADERS });
@@ -284,7 +289,7 @@ export async function POST({ request }) {
 					const createdTask = createTask({
 						projectPath, title, description: text, type: 'task',
 						priority: isNaN(priority) ? 2 : Math.max(0, Math.min(4, priority)),
-						labels: ['voice'], deps: [], assignee: null, notes: '',
+						labels: ['voice'], deps: [], assignee: null, requester: postRequester, notes: '',
 						source: 'voice'
 					});
 					invalidateCache.tasks();

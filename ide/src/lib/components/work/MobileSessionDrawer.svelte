@@ -5,7 +5,8 @@
 	 * Full-screen drawer with horizontal pager for mobile session viewing.
 	 * Slides in from right. Contains swipeable pages:
 	 *   Page 0: Terminal (MobileTerminal — lightweight ANSI output + question UI)
-	 *   Page 1: Task Detail (task info, description, status)
+	 *   Page 1: Task Detail (task info, description, status) — or Timeline when hasPendingQuestion
+	 *   Page 2: Timeline (CommentsThread) — or Detail when hasPendingQuestion
 	 *
 	 * Swipe gestures:
 	 *   - Right-to-left: next page
@@ -118,19 +119,14 @@
 	} = $props();
 
 	// === Page State ===
-	const PAGES = ['Terminal', 'Detail'] as const;
-	let currentPage = $state(0);
+	const PAGES = ['Terminal', 'Detail', 'Timeline'] as const;
+	type LogicalPage = typeof PAGES[number];
+	let logicalPage = $state<LogicalPage>('Terminal');
 	let tabRefs = $state<HTMLButtonElement[]>([]);
 	let indicatorLeft = $state(0);
 	let indicatorWidth = $state(0);
-
-	$effect(() => {
-		const el = tabRefs[currentPage];
-		if (el) {
-			indicatorLeft = el.offsetLeft;
-			indicatorWidth = el.offsetWidth;
-		}
-	});
+	// Note: pageOrder, currentPage, and tab indicator $effect are declared after
+	// hasPendingQuestion (below) because pageOrder depends on it.
 	let pageTranslateX = $state(0); // drag offset during swipe
 	let pageTransitioning = $state(false);
 
@@ -178,6 +174,19 @@
 	let holdProgress = $state(0);
 	let holdTimer: ReturnType<typeof setInterval> | null = null;
 	let pillPointerLocked = $state(false);
+
+	// Hold-to-hint: show brief "↕ hold" hint when destructive pill is tapped without holding
+	let hintPillId = $state<string | null>(null);
+	let hintTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function showPillHint(actionId: string) {
+		if (hintTimer) clearTimeout(hintTimer);
+		hintPillId = actionId;
+		hintTimer = setTimeout(() => {
+			hintPillId = null;
+			hintTimer = null;
+		}, 2000);
+	}
 
 	function armPillPointerLock() {
 		pillPointerLocked = true;
@@ -304,8 +313,18 @@
 			await onAction(action.id);
 		}
 
-		// 4. Dismiss drawer after button flash animation completes
-		setTimeout(dismissDrawer, 180);
+		// 4. Dismiss — kill/complete-kill show a brief recovery notice first
+		if (action.id === 'kill' || action.id === 'cleanup') {
+			sessionKilledNotice = action.id;
+			if (sessionKilledTimer) clearTimeout(sessionKilledTimer);
+			sessionKilledTimer = setTimeout(() => {
+				sessionKilledNotice = null;
+				sessionKilledTimer = null;
+				dismissDrawer();
+			}, 2000);
+		} else {
+			setTimeout(dismissDrawer, 180);
+		}
 	}
 
 	// Completion signal events (for completed state)
@@ -359,8 +378,31 @@
 	let commentsCount = $state(0);
 	let hasPendingQuestion = $state(false);
 
+	// Dynamic page order: when agent has a pending question, Timeline moves to position 1
+	const pageOrder = $derived.by((): LogicalPage[] =>
+		hasPendingQuestion ? ['Terminal', 'Timeline', 'Detail'] : ['Terminal', 'Detail', 'Timeline']
+	);
+	const currentPage = $derived(pageOrder.indexOf(logicalPage));
+	const timelineNotificationCount = $derived(hasPendingQuestion ? commentsCount : 0);
+
+	// Tab indicator effect (depends on currentPage derived above)
+	$effect(() => {
+		const el = tabRefs[currentPage];
+		if (el) {
+			indicatorLeft = el.offsetLeft;
+			indicatorWidth = el.offsetWidth;
+		}
+	});
+
+	// Post-kill recovery notice — shown briefly after kill/complete-kill fires
+	let sessionKilledNotice = $state<string | null>(null);
+	let sessionKilledTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Swipe hint — tab indicator briefly peeks right on each drawer open
+	let swipeHintActive = $state(false);
+
 	// Inline edit state — which field (if any) is currently being edited
-	type EditMode = 'none' | 'status' | 'priority' | 'labels' | 'title' | 'description';
+	type EditMode = 'none' | 'status' | 'priority' | 'labels' | 'title' | 'description' | 'notes' | 'settings';
 	let editMode = $state<EditMode>('none');
 	let editDraft = $state('');
 	let editSaving = $state(false);
@@ -845,15 +887,15 @@
 	function navigateToPage(page: number) {
 		pageTransitioning = true;
 		pageTranslateX = 0;
-		currentPage = page;
+		logicalPage = pageOrder[page];
 		setTimeout(() => pageTransitioning = false, 300);
 
-		// Fetch full task detail when navigating to any detail page
-		if (page >= 1 && task?.id && !fullTask) {
+		// Fetch full task detail when navigating to Detail or Timeline page
+		if (logicalPage !== 'Terminal' && task?.id && !fullTask) {
 			fetchTaskDetail();
 		}
 		// Resume output fetch immediately when returning to terminal page
-		if (page === 0) {
+		if (logicalPage === 'Terminal') {
 			fetchOutput();
 		}
 	}
@@ -1052,7 +1094,7 @@
 
 	// Fetch terminal output
 	async function fetchOutput() {
-		if (!sessionName || currentPage !== 0) return; // skip when not on terminal page
+		if (!sessionName || logicalPage !== 'Terminal') return; // skip when not on terminal page
 		try {
 			const resp = await fetch(`/api/work/${encodeURIComponent(sessionName)}/output`);
 			if (resp.ok) {
@@ -1316,6 +1358,15 @@
 		isMobileFullscreenOpen.set(true);
 		setHoveredSession(sessionName);
 
+		// Swipe discoverability hint — after drawer finishes entering, briefly
+		// slide the tab indicator toward page 2 and snap back
+		let swipeHintTimer: ReturnType<typeof setTimeout>;
+		let swipeHintResetTimer: ReturnType<typeof setTimeout>;
+		swipeHintTimer = setTimeout(() => {
+			swipeHintActive = true;
+			swipeHintResetTimer = setTimeout(() => { swipeHintActive = false; }, 900);
+		}, 650);
+
 		// Restore main input draft and history
 		if (sessionName && typeof localStorage !== 'undefined') {
 			const saved = localStorage.getItem(`jat-draft-mobile-${sessionName}-main-input`);
@@ -1345,6 +1396,8 @@
 		return () => {
 			window.removeEventListener('resize', onWindowResize);
 			if (resizeDebounce) clearTimeout(resizeDebounce);
+			clearTimeout(swipeHintTimer);
+			clearTimeout(swipeHintResetTimer);
 		};
 	});
 
@@ -1358,6 +1411,10 @@
 		if (scrollTimeout) {
 			clearTimeout(scrollTimeout);
 			scrollTimeout = null;
+		}
+		if (sessionKilledTimer) {
+			clearTimeout(sessionKilledTimer);
+			sessionKilledTimer = null;
 		}
 		isMobileFullscreenOpen.set(false);
 		setHoveredSession(null);
@@ -1410,15 +1467,22 @@
 			</button>
 
 			<div class="topbar-tabs relative flex-1 flex gap-0.5 items-center justify-center overflow-x-auto">
-				{#each PAGES as page, i}
+				{#each pageOrder as page, i}
+					{@const isTimeline = page === 'Timeline'}
+					{@const badge = isTimeline && timelineNotificationCount > 0}
 					<button
 						bind:this={tabRefs[i]}
-						class="px-2 py-1 text-[0.6875rem] whitespace-nowrap rounded-t-md transition-colors {i === currentPage ? 'font-semibold text-base-content bg-base-300' : 'font-medium text-base-content/50 bg-transparent active:bg-base-300/70'}"
+						class="relative px-2 py-1 text-[0.6875rem] whitespace-nowrap rounded-t-md transition-colors {i === currentPage ? 'font-semibold text-base-content bg-base-300' : 'font-medium text-base-content/50 bg-transparent active:bg-base-300/70'}"
 						use:directClick={() => navigateToPage(i)}
-					>{page}</button>
+					>
+						{page}
+						{#if badge}
+							<span class="absolute -top-0.5 -right-0.5 min-w-[0.875rem] h-3.5 px-0.5 rounded-full bg-warning text-base-100 text-[0.5625rem] font-bold leading-3.5 flex items-center justify-center tabular-nums">{timelineNotificationCount > 9 ? '9+' : timelineNotificationCount}</span>
+						{/if}
+					</button>
 				{/each}
 				<div
-					class="pointer-events-none absolute bottom-0 h-0.5 rounded-full bg-info"
+					class="pointer-events-none absolute bottom-0 h-0.5 rounded-full bg-info {swipeHintActive ? 'tab-swipe-hint' : ''}"
 					style="left: {indicatorLeft}px; width: {indicatorWidth}px; transition: left 280ms cubic-bezier(0.22, 1, 0.36, 1), width 280ms cubic-bezier(0.22, 1, 0.36, 1);"
 				></div>
 			</div>
@@ -1430,13 +1494,26 @@
 			</button>
 		</div>
 
+		<!-- Kill/cleanup recovery notice — shown after kill/complete-kill, visible from any page -->
+		{#if sessionKilledNotice}
+			{@const isKill = sessionKilledNotice === 'kill'}
+			<div class="mx-3 mt-2 mb-1 flex items-center gap-2 rounded-lg border px-3 py-2.5 animate-slide-down flex-shrink-0 {isKill ? 'border-error/30 bg-error/10' : 'border-success/30 bg-success/10'}">
+				<svg class="w-4 h-4 flex-shrink-0 {isKill ? 'text-error' : 'text-success'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d={isKill ? 'M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z' : 'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z'} />
+				</svg>
+				<span class="text-xs font-medium {isKill ? 'text-error' : 'text-success'}">{isKill ? 'Session terminated' : 'Session closed'}</span>
+				<button type="button" class="ml-auto text-xs text-base-content/40 active:text-base-content transition-colors" use:directClick={() => { sessionKilledNotice = null; if (sessionKilledTimer) { clearTimeout(sessionKilledTimer); sessionKilledTimer = null; } dismissDrawer(); }}>Dismiss</button>
+			</div>
+		{/if}
+
 		<!-- Horizontal pager -->
 		<div
 			class="pager-container"
 			style="transform: {pagerTransform}; {pageTransitioning ? 'transition: transform 0.3s cubic-bezier(0.33, 1, 0.68, 1);' : ''} {swipeDragging ? 'will-change: transform;' : ''}"
 		>
-			<!-- Page 0: Terminal -->
+		{#each pageOrder as page}
 			<div class="pager-page">
+			{#if page === 'Terminal'}
 				<!-- Custom mobile header — same swipe-card design as TasksActive standalone tasks -->
 				{#if task}
 					{@const typeVisual = getIssueTypeVisual(task.issue_type)}
@@ -1508,15 +1585,19 @@
 				</div>
 
 				<!-- Mobile Action Buttons Row (dynamic from state actions config) -->
+				{#if stateActions.length > 0}
 				<div class="action-pills-wrapper bg-base-200 border-t border-base-300 flex-shrink-0">
 				<div class="flex gap-1.5 px-2 py-1.5 overflow-x-auto">
 					{#each stateActions as action (action.id)}
 						{@const isDestructive = DESTRUCTIVE_ACTIONS.has(action.id)}
 						<button
-							class="relative overflow-hidden flex items-center gap-1 px-2 py-[0.3rem] text-[0.6875rem] font-medium rounded-md whitespace-nowrap cursor-pointer flex-shrink-0 border transition-colors active:brightness-125 {getPillColorClass(action.variant)}"
+							class="relative overflow-hidden flex items-center gap-1 px-2 py-[0.3rem] text-[0.6875rem] font-medium rounded-md whitespace-nowrap cursor-pointer flex-shrink-0 border transition-colors active:brightness-125 {getPillColorClass(action.variant)} {isDestructive && holdActionId !== action.id ? 'border-dashed' : ''}"
 							class:mobile-btn-flashing={activeActionId === action.id}
 							class:hold-active={holdActionId === action.id}
-							use:directClick={() => { if (!isDestructive && !pillPointerLocked) executePillAction(action); }}
+							use:directClick={() => {
+								if (pillPointerLocked) return;
+								if (isDestructive) { showPillHint(action.id); } else { executePillAction(action); }
+							}}
 							onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startHold(action); }}
 							onpointerup={clearHold}
 							onpointercancel={clearHold}
@@ -1525,14 +1606,15 @@
 							{#if isDestructive && holdActionId === action.id}
 								<span class="hold-fill" style="width: {holdProgress}%"></span>
 							{/if}
-							<svg class="relative z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="14" height="14">
-								<path stroke-linecap="round" stroke-linejoin="round" d={action.icon} />
+							<svg class="relative z-10 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="14" height="14">
+								<path stroke-linecap="round" stroke-linejoin="round" d={hintPillId === action.id ? 'M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z' : action.icon} />
 							</svg>
-							<span class="relative z-10">{action.label}</span>
+							<span class="relative z-10 transition-all duration-150 {hintPillId === action.id ? 'text-warning' : ''}">{hintPillId === action.id ? 'hold' : action.label}</span>
 						</button>
 					{/each}
 				</div>
 				</div>
+				{/if}
 
 				<!-- Pending Attachments Preview -->
 				{#if pendingAttachments.length > 0}
@@ -1697,10 +1779,8 @@
 						{/if}
 					</button>
 				</div>
-			</div>
 
-			<!-- Page 1: Detail (everything else — stacked hairline sections) -->
-			<div class="pager-page">
+			{:else if page === 'Detail'}
 				<div class="flex-1 overflow-y-auto" style="-webkit-overflow-scrolling: touch;">
 					{#if task}
 						<!-- Primary band: title, meta, alerts, controls, description -->
@@ -1720,93 +1800,61 @@
 								</TaskHeaderBlock>
 							</div>
 
-							<div class="mb-4 flex flex-col gap-1.5">
-								<TaskMetaRow>
-									<button
-										type="button"
-										class="badge badge-sm {getStatusBadgeClass(task.status)} badge-outline uppercase tracking-wide cursor-pointer active:scale-95 transition-transform"
-										use:directClick={() => openEditor('status')}
-										aria-label="Edit status"
-									>
-										{task.status.replace('_', ' ')}
-									</button>
-									<button
-										type="button"
-										class="badge badge-sm {getPriorityBadgeClass(task.priority)} badge-outline uppercase tracking-wide cursor-pointer active:scale-95 transition-transform"
-										use:directClick={() => openEditor('priority')}
-										aria-label="Edit priority"
-									>
-										{task.priority !== undefined && task.priority !== null ? getPriorityLabel(task.priority) : 'Set priority'}
-									</button>
-									{#if agentName}
-										<span class="inline-flex items-center gap-1 self-center whitespace-nowrap">
-											<AgentAvatar name={agentName} size={14} />
-											<span class="font-mono text-xs text-info/85">@{agentName}</span>
-										</span>
-									{/if}
-								</TaskMetaRow>
-								<TaskMetaRow>
-									<!-- Type badge — always present, anchors the row -->
-									{@const typeVisual = getIssueTypeVisual(task.issue_type)}
-									<span class="inline-flex items-center gap-1 self-center whitespace-nowrap text-xs text-base-content/60">
-										<span aria-hidden="true">{typeVisual.icon}</span>
-										<span class="uppercase tracking-wide">{typeVisual.label}</span>
-									</span>
-									<!-- Comments jump (only when comments exist) -->
-									{#if commentsCount > 0}
+							<!-- Single meta row: status · priority · labels · agent · settings gear -->
+							<div class="mb-4 flex flex-wrap items-center gap-1.5">
+								<button
+									type="button"
+									class="badge badge-sm {getStatusBadgeClass(task.status)} badge-outline uppercase tracking-wide cursor-pointer active:scale-95 transition-transform py-1"
+									use:directClick={() => openEditor('status')}
+									aria-label="Edit status"
+								>
+									{task.status.replace('_', ' ')}
+								</button>
+								<button
+									type="button"
+									class="badge badge-sm {getPriorityBadgeClass(task.priority)} badge-outline uppercase tracking-wide cursor-pointer active:scale-95 transition-transform py-1"
+									use:directClick={() => openEditor('priority')}
+									aria-label="Edit priority"
+								>
+									{task.priority !== undefined && task.priority !== null ? getPriorityLabel(task.priority) : 'Set priority'}
+								</button>
+								<!-- Labels (edit existing or add) -->
+								{#if fullTask?.labels?.length}
+									{#each fullTask.labels as label}
 										<button
 											type="button"
-											class="inline-flex items-center gap-1 self-center whitespace-nowrap text-xs transition-colors {hasPendingQuestion ? 'text-warning font-medium' : 'text-base-content/60 hover:text-base-content/90 active:text-base-content'}"
-											use:directClick={() => document.getElementById('comments-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-											aria-label={hasPendingQuestion ? `Jump to comments — agent is waiting for your answer` : `Jump to ${commentsCount} comment${commentsCount === 1 ? '' : 's'}`}
-											title={hasPendingQuestion ? 'Agent is waiting for your answer' : undefined}
-										>
-											{#if hasPendingQuestion}
-												<span class="relative inline-flex w-2 h-2 -ml-0.5 mr-0.5">
-													<span class="absolute inline-flex w-full h-full rounded-full bg-warning opacity-75 animate-ping"></span>
-													<span class="relative inline-flex w-2 h-2 rounded-full bg-warning"></span>
-												</span>
-											{/if}
-											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
-											</svg>
-											<span class="tabular-nums">{commentsCount}</span>
-										</button>
-									{/if}
-									<!-- Attachments jump (only when attachments exist) -->
-									{@const attachmentCount = fullTask?.attachments?.length ?? 0}
-									{#if attachmentCount > 0}
-										<button
-											type="button"
-											class="inline-flex items-center gap-1 self-center whitespace-nowrap text-xs text-base-content/60 hover:text-base-content/90 active:text-base-content transition-colors"
-											use:directClick={() => document.getElementById('attachments-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-											aria-label={`Jump to ${attachmentCount} attachment${attachmentCount === 1 ? '' : 's'}`}
-										>
-											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5">
-												<path stroke-linecap="round" stroke-linejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
-											</svg>
-											<span class="tabular-nums">{attachmentCount}</span>
-										</button>
-									{/if}
-									<!-- Labels (edit existing or add) -->
-									{#if fullTask?.labels?.length}
-										{#each fullTask.labels as label}
-											<button
-												type="button"
-												class="badge badge-sm badge-outline cursor-pointer active:scale-95 transition-transform text-base-content/80"
-												use:directClick={() => openEditor('labels')}
-												aria-label="Edit labels"
-											>{label}</button>
-										{/each}
-									{:else if fullTask}
-										<button
-											type="button"
-											class="badge badge-sm badge-ghost badge-outline cursor-pointer active:scale-95 transition-transform text-base-content/50"
+											class="badge badge-sm badge-outline cursor-pointer active:scale-95 transition-transform text-base-content/80 py-1"
 											use:directClick={() => openEditor('labels')}
-											aria-label="Add labels"
-										>+ label</button>
+											aria-label="Edit labels"
+										>{label}</button>
+									{/each}
+								{:else if fullTask}
+									<button
+										type="button"
+										class="badge badge-sm badge-ghost badge-outline cursor-pointer active:scale-95 transition-transform text-base-content/50 py-1"
+										use:directClick={() => openEditor('labels')}
+										aria-label="Add labels"
+									>+ label</button>
+								{/if}
+								<!-- Agent + settings gear (right side) -->
+								<span class="ml-auto inline-flex items-center gap-1.5 self-center whitespace-nowrap">
+									{#if agentName}
+										<AgentAvatar name={agentName} size={14} />
+										<span class="font-mono text-xs text-info/80">@{agentName}</span>
 									{/if}
-								</TaskMetaRow>
+									<button
+										type="button"
+										class="-mr-1 flex items-center justify-center w-8 h-8 rounded text-base-content/40 active:text-base-content/80 active:bg-base-300 transition-colors"
+										use:directClick={() => openEditor('settings')}
+										aria-label="Session settings"
+										title="Session settings"
+									>
+										<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" width="14" height="14">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+											<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+										</svg>
+									</button>
+								</span>
 							</div>
 
 							{#if reviewReason}
@@ -1815,30 +1863,6 @@
 									{reviewReason}
 								</div>
 							{/if}
-
-							<div class="mb-5 flex items-center gap-3 flex-wrap">
-								<label
-									class="flex items-center gap-2 text-sm cursor-pointer"
-									title="When the agent signals ready for review, automatically run /jat:complete — closes the task and ends the session."
-								>
-									<input
-										type="checkbox"
-										class="toggle toggle-sm toggle-success"
-										checked={autoCompleteEnabled}
-										onchange={(e) => onAutoCompleteToggle((e.target as HTMLInputElement).checked)}
-									/>
-									<span>Auto-close on review</span>
-								</label>
-								{#if task?.issue_type !== 'epic'}
-									<button
-										type="button"
-										class="btn btn-xs btn-outline"
-										onclick={() => onLinkToEpic()}
-									>
-										Link to Epic
-									</button>
-								{/if}
-							</div>
 
 							<div
 								role="button"
@@ -2006,22 +2030,39 @@
 							</section>
 						{/if}
 
-						<!-- Comments -->
-						{#if task?.id}
-							<section id="comments-section" class="px-4 pt-4 pb-6 border-t border-base-300/60">
-								<h4 class="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-base-content/55 mb-3">Comments</h4>
-								<CommentsThread taskId={task.id} onCountChange={(n) => (commentsCount = n)} onPendingQuestionChange={(p) => (hasPendingQuestion = p)} />
-							</section>
-						{/if}
 					{:else}
 						<div class="flex items-center justify-center h-full text-base-content/50 text-sm">
 							<p>No task</p>
 						</div>
 					{/if}
 				</div>
+			{:else}
+				<!-- Timeline page: Comments + activity -->
+				<div class="flex-1 overflow-y-auto" style="-webkit-overflow-scrolling: touch;">
+					{#if task?.id}
+						{#if hasPendingQuestion}
+							<div class="mx-4 mt-4 flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2">
+								<span class="relative inline-flex w-2 h-2 flex-shrink-0">
+									<span class="absolute inline-flex w-full h-full rounded-full bg-warning opacity-75 animate-ping"></span>
+									<span class="relative inline-flex w-2 h-2 rounded-full bg-warning"></span>
+								</span>
+								<p class="text-[0.6875rem] font-medium text-warning">Agent is waiting for your answer</p>
+							</div>
+						{/if}
+						<section class="px-4 pt-4 pb-6">
+							<CommentsThread taskId={task.id} onCountChange={(n) => (commentsCount = n)} onPendingQuestionChange={(p) => (hasPendingQuestion = p)} />
+						</section>
+					{:else}
+						<div class="flex items-center justify-center h-full text-base-content/50 text-sm">
+							<p>No task</p>
+						</div>
+					{/if}
+				</div>
+			{/if}
 			</div>
-			</div>
+		{/each}
 		</div>
+	</div>
 	{/if}
 
 	<!-- Edit bottom sheet — renders over the drawer when editing a field -->
@@ -2048,7 +2089,7 @@
 				<div class="w-10 h-1 bg-base-300 rounded-full mx-auto mb-4"></div>
 
 				<div class="flex items-center justify-between mb-3">
-					<h3 class="text-base font-semibold capitalize">Edit {editMode}</h3>
+					<h3 class="text-base font-semibold capitalize">{editMode === 'settings' ? 'Session Settings' : `Edit ${editMode}`}</h3>
 					<button
 						type="button"
 						class="btn btn-sm btn-ghost btn-circle"
@@ -2158,6 +2199,47 @@
 							</button>
 						</div>
 					</div>
+				{:else if editMode === 'settings'}
+					<div class="flex flex-col divide-y divide-base-300/50">
+						<!-- Auto-close toggle -->
+						<label
+							class="flex items-center justify-between gap-3 py-3 cursor-pointer"
+							title="When the agent signals ready for review, automatically run /jat:complete — closes the task and ends the session."
+						>
+							<div class="flex flex-col gap-0.5">
+								<span class="text-sm font-medium">Auto-close on review</span>
+								<span class="text-xs text-base-content/50">Runs /jat:complete automatically when agent signals review</span>
+							</div>
+							<input
+								type="checkbox"
+								class="toggle toggle-success flex-shrink-0"
+								checked={autoCompleteEnabled}
+								onchange={(e) => onAutoCompleteToggle((e.target as HTMLInputElement).checked)}
+							/>
+						</label>
+						<!-- Link to Epic -->
+						{#if task?.issue_type !== 'epic'}
+							<div class="flex items-center justify-between gap-3 py-3">
+								<div class="flex flex-col gap-0.5">
+									<span class="text-sm font-medium">Epic</span>
+									<span class="text-xs text-base-content/50">
+										{#if fullTask?.epic_id}
+											<button type="button" class="font-mono text-info active:text-info/60 transition-colors" use:directClick={() => { onViewEpic(fullTask.epic_id); closeEditor(); }}>{fullTask.epic_id} ›</button>
+										{:else}
+											Not linked to an epic
+										{/if}
+									</span>
+								</div>
+								<button
+									type="button"
+									class="btn btn-sm btn-outline flex-shrink-0"
+									use:directClick={() => { onLinkToEpic(); closeEditor(); }}
+								>
+									{fullTask?.epic_id ? 'Change' : 'Link to Epic'}
+								</button>
+							</div>
+						{/if}
+					</div>
 				{/if}
 			</div>
 		</div>
@@ -2165,6 +2247,17 @@
 </div>
 
 <style>
+	/* Swipe discoverability: tab indicator peeks right then snaps back on drawer open */
+	@keyframes tab-swipe-peek {
+		0%   { transform: translateX(0);    opacity: 1; }
+		30%  { transform: translateX(38px); opacity: 0.7; }
+		65%  { transform: translateX(38px); opacity: 0.7; }
+		100% { transform: translateX(0);    opacity: 1; }
+	}
+	.tab-swipe-hint {
+		animation: tab-swipe-peek 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+	}
+
 	/* Port Fullscreen's mobile-input styling onto PromptInput contenteditable */
 	.mobile-input-wrap :global(.prompt-input-wrapper > [contenteditable]) {
 		font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace !important;
@@ -2278,16 +2371,16 @@
 	.topbar-tabs { scrollbar-width: none; }
 	.topbar-tabs::-webkit-scrollbar { display: none; }
 
-	/* Horizontal pager: 2 pages × 50% each */
+	/* Horizontal pager: 3 pages × 33.333% each */
 	.pager-container {
 		flex: 1;
 		display: flex;
-		width: 200%;
+		width: 300%;
 		min-height: 0;
 	}
 
 	.pager-page {
-		width: 50%;
+		width: 33.3333%;
 		flex-shrink: 0;
 		display: flex;
 		flex-direction: column;

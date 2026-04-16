@@ -403,6 +403,48 @@
 		return merged;
 	});
 
+	// Strip embedded date and time tokens from inline labels — the right column provides the time,
+	// date separators provide the date. Removes " · Apr 14" and " · 9:34 AM" / " · 11:25 AM".
+	function stripDateFromLabel(label: string): string {
+		return label
+			.replace(/\s+·\s+[A-Za-z]{3,9}\s+\d{1,2}(?:,\s*\d{4})?/g, '')
+			.replace(/\s+·\s+\d{1,2}:\d{2}(?:\s*[AP]M)?/gi, '')
+			.trimEnd();
+	}
+
+	// Date label helper for inline layout grouping
+	function getDateLabel(timestamp: string): string {
+		const date = new Date(timestamp);
+		const now = new Date();
+		const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+		const yesterday = new Date(today.getTime() - 86400000);
+		const eventDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+		if (eventDay.getTime() === today.getTime()) return 'Today';
+		if (eventDay.getTime() === yesterday.getTime()) return 'Yesterday';
+		const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+		if (date.getFullYear() !== now.getFullYear()) (opts as any).year = 'numeric';
+		return date.toLocaleDateString('en-US', opts);
+	}
+
+	type InlineItem =
+		| { kind: 'separator'; label: string }
+		| { kind: 'event'; event: TimelineEvent; idx: number };
+
+	const inlineDisplayItems = $derived.by<InlineItem[]>(() => {
+		if (layoutMode !== 'inline') return [];
+		const items: InlineItem[] = [];
+		let lastLabel = '';
+		filteredEvents.forEach((event, idx) => {
+			const label = getDateLabel(event.timestamp);
+			if (label !== lastLabel) {
+				items.push({ kind: 'separator', label });
+				lastLabel = label;
+			}
+			items.push({ kind: 'event', event, idx });
+		});
+		return items;
+	});
+
 	// Helper to check if event has rich signal data
 	function hasRichSignalData(event: TimelineEvent): boolean {
 		return event.data && typeof event.data === 'object' && !Array.isArray(event.data);
@@ -517,6 +559,24 @@
 	// Generate a unique key for an event
 	function getEventKey(event: TimelineEvent): string {
 		return `${event.timestamp}-${event.type}-${event.state || ''}`;
+	}
+
+	/** Dismiss all currently visible events */
+	export function dismissAll() {
+		const keysToAdd = filteredEvents.map(getEventKey);
+		dismissedEventKeys = new Set([...dismissedEventKeys, ...keysToAdd]);
+		try { localStorage.setItem(dismissStorageKey(), JSON.stringify([...dismissedEventKeys])); } catch {}
+	}
+
+	/** Dismiss specific events by their keys */
+	export function dismissEvents(keys: string[]) {
+		dismissedEventKeys = new Set([...dismissedEventKeys, ...keys]);
+		try { localStorage.setItem(dismissStorageKey(), JSON.stringify([...dismissedEventKeys])); } catch {}
+	}
+
+	/** Get visible (non-dismissed) events */
+	export function getVisibleEvents(): TimelineEvent[] {
+		return filteredEvents;
 	}
 
 	// Generate a key for a suggested task
@@ -1157,7 +1217,14 @@
 	{#if layoutMode === 'inline'}
 		<!-- Inline layout: always expanded, no hover interaction -->
 		<div class="space-y-2 mt-1 mb-2 {className}">
-			{#each filteredEvents as event, idx (event.timestamp + '-' + idx)}
+			{#each inlineDisplayItems as item (item.kind === 'separator' ? 'sep-' + item.label : item.event.timestamp + '-' + item.idx)}
+				{#if item.kind === 'separator'}
+					<div class="inline-date-separator">
+						<span class="inline-date-label">{item.label}</span>
+					</div>
+				{:else}
+				{@const event = item.event}
+				{@const idx = item.idx}
 				{@const style = getEventStyle(event)}
 				{@const isQuestionEvent = event.type === 'question' || event.state === 'question'}
 				{@const isUnansweredQuestion = isQuestionEvent && !answeredQuestions.has(getEventKey(event))}
@@ -1186,7 +1253,7 @@
 									class="font-mono text-xs font-medium truncate min-w-0"
 									style="color: {style.text};"
 								>
-									{getEventLabel(event)}
+									{stripDateFromLabel(getEventLabel(event))}
 								</span>
 								{#if event.git_sha}
 									<span
@@ -1662,6 +1729,7 @@
 						</div>
 					{/if}
 				</div>
+				{/if}
 			{/each}
 		</div>
 	{:else}
@@ -2934,6 +3002,31 @@
 
 	.animate-slide-in-top {
 		animation: slide-in-top 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+	}
+
+	.inline-date-separator {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.25rem 0.25rem 0;
+	}
+
+	.inline-date-separator::before,
+	.inline-date-separator::after {
+		content: '';
+		flex: 1;
+		height: 1px;
+		background: oklch(0.28 0.02 250 / 0.6);
+	}
+
+	.inline-date-label {
+		font-size: 0.65rem;
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: oklch(0.45 0.03 250);
+		white-space: nowrap;
+		flex-shrink: 0;
 	}
 
 	/* Existing cards shift down smoothly via transition-all */

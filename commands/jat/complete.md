@@ -584,6 +584,13 @@ This incrementally indexes the new file. If no memory index exists yet, it creat
 jat-step closing --task "$task_id" --title "$task_title" --agent "$agent_name"
 ```
 
+> **Requester workflow:** `jt close` (called by `jat-step closing`) checks for a `requester`
+> field on the task. If set, the task transitions to **`status=submitted`** with
+> **`assignee=requester`** instead of being marked closed. This puts the task in the
+> requester's queue for acceptance or rejection. The task is considered "done" by the agent
+> but not yet terminal — the requester must accept/reject to reach `closed`.
+> If no requester is set, the task closes normally.
+
 ---
 
 ### STEP 4.5: Auto-Close Eligible Epics

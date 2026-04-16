@@ -31,11 +31,6 @@
 	}
 
 	/** Split an agent name on camelCase boundaries: "GentleCoast" → ["Gentle", "Coast"]. */
-	function splitAgentName(name: string): string[] {
-		if (!name) return [];
-		return name.replace(/([a-z])([A-Z])/g, '$1\u0000$2').split('\u0000');
-	}
-
 	// Types
 	interface TmuxSession {
 		name: string;
@@ -766,12 +761,13 @@
 		}
 	}
 
-	// Set visual feedback on a tray button, auto-clears after animation
-	function setActionFeedback(sessionName: string, actionId: string, variant: string, durationMs = 800) {
+	// Set visual feedback on a tray button, auto-clears after animation.
+	// Returns the timer ID so callers can cancel it (e.g. on error override).
+	function setActionFeedback(sessionName: string, actionId: string, variant: string, durationMs = 800): ReturnType<typeof setTimeout> {
 		const key = `${sessionName}:${actionId}`;
 		actionFeedback.set(key, variant);
 		actionFeedback = new Map(actionFeedback);
-		setTimeout(() => {
+		return setTimeout(() => {
 			actionFeedback.delete(key);
 			actionFeedback = new Map(actionFeedback);
 		}, durationMs);
@@ -985,19 +981,20 @@
 		if (!handler) return;
 
 		const [variant, duration] = TRAY_FEEDBACK[actionId] ?? ['success', 800];
-		setActionFeedback(sessionName, actionId, variant, duration);
+		const successTimer = setActionFeedback(sessionName, actionId, variant, duration);
 
 		try {
 			await handler({ sessionName, sessionTask, agentName, project });
 		} catch (e) {
 			console.warn(`[TasksActive] ${actionId} failed:`, e);
-			// Override to error state — clears after 1.8s
+			// Cancel the optimistic success timer so it doesn't wipe the error state early
+			clearTimeout(successTimer);
 			actionFeedback.set(feedbackKey, 'error-fail');
 			actionFeedback = new Map(actionFeedback);
 			setTimeout(() => {
 				actionFeedback.delete(feedbackKey);
 				actionFeedback = new Map(actionFeedback);
-			}, 1800);
+			}, 4000);
 		}
 	}
 	let swipeConfig = $state(getSwipeConfig());
@@ -1229,6 +1226,8 @@
 	let ctxStatusSubmenuOpen = $state(false);
 	let ctxStateSubmenuOpen = $state(false);
 	let ctxProjectSubmenuOpen = $state(false);
+	let killConfirmState = $state<'stop-agent' | 'close-kill' | null>(null);
+	let killConfirmTimer: ReturnType<typeof setTimeout> | null = null;
 	let copiedMobileId = $state<string | null>(null);
 	async function copyMobileId(e: MouseEvent, taskId: string) {
 		e.stopPropagation();
@@ -1272,6 +1271,9 @@
 		ctxStatusSubmenuOpen = false;
 		ctxStateSubmenuOpen = false;
 		ctxProjectSubmenuOpen = false;
+		if (killConfirmTimer) clearTimeout(killConfirmTimer);
+		killConfirmState = null;
+		killConfirmTimer = null;
 	}
 
 	// Close context menu on click outside or Escape
@@ -1463,14 +1465,21 @@
 								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
 								{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
 								{@const holdMatch = holdKey === `${session.name}:${action.id}`}
-								<button class="ta-tray-btn ta-tray-btn-{fb ? fb : action.variant}" class:ta-tray-btn-feedback={!!fb} class:ta-tray-btn-holding={holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive && !pointerLocked) handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
+								{@const isFailed = fb === 'error-fail'}
+								<button class="ta-tray-btn ta-tray-btn-{fb ? fb : action.variant}" class:ta-tray-btn-feedback={!!fb} class:ta-tray-btn-holding={holdMatch} title={isFailed ? `${action.label} failed — tap to retry` : isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb && !isFailed} onclick={() => { if (!pointerLocked) handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); if (!isFailed) startTrayHold(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
 									{#if isDestructive && holdMatch}<span class="tray-hold-fill" style="width: {holdProgress}%"></span>{/if}
 									{#if fb}
-										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+										{#if isFailed}
+											<!-- ↺ retry icon -->
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+										{:else}
+											<!-- ✓ success icon -->
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+										{/if}
 									{:else}
 										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d={action.icon} /></svg>
 									{/if}
-									<span>{fb ? 'Done' : action.label}</span>
+									<span>{isFailed ? 'Retry' : fb ? 'Done' : action.label}</span>
 								</button>
 							{/each}
 						</div>
@@ -1487,15 +1496,19 @@
 					{@const reviewStatus = computeReviewStatus(sessionTask, getReviewRules())}
 					{@const reviewBasedDefault = reviewStatus.action !== 'auto'}
 					{@const autoCompleteDisabled = autoCompleteDisabledMap.get(session.name) ?? reviewBasedDefault}
+					{@const stripDestructActive = ($autoKillCountdowns.get(session.name) ?? 0) > 0}
 					<div class="ta-card-inner ta-card-inner-agent">
 						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 						<div class="ta-state-strip ta-state-strip-agent ta-state-strip-clickable" style="background: {stateVisual.bgTint};" role="button" tabindex="0" title="Open terminal" onclick={(e) => { e.stopPropagation(); fullscreenSession = session.name; }} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); fullscreenSession = session.name; } }}>
 							<AgentAvatar name={sessionAgentName} size={96} showRing={false} shape="rounded" />
-							<div class="ta-strip-agent-label" title={sessionAgentName}>
-								{#each splitAgentName(sessionAgentName) as part}
-									<span>{part}</span>
-								{/each}
-							</div>
+							{#if stripDestructActive}
+								<span class="ta-strip-elapsed ta-strip-elapsed-destruct" title="Session self-destructing">
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="9" height="9"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+									{$autoKillCountdowns.get(session.name)}s
+								</span>
+							{:else if elapsed}
+								<span class="ta-strip-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
+							{/if}
 						</div>
 						{#if cmdPanelSession === session.name}
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -1679,9 +1692,6 @@
 											<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
 										</span>
 										<span class="ta-title-state" style="background: {stateVisual.bgColor}; color: {stateVisual.textColor}; border: 1px solid {stateVisual.borderColor};">{stateVisual.shortLabel}</span>
-										{#if elapsed}
-											<span class="ta-title-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
-										{/if}
 									</div>
 									{#if sessionTask.description}
 										<span class="ta-description" title={sessionTask.description}>{sessionTask.description}</span>
@@ -1690,7 +1700,6 @@
 							{:else}
 							{@const signalKey = `${sessionAgentName}:${effectiveState}`}
 							{@const signalEntry = signalDataMap.get(signalKey)}
-							{@const destructActive = ($autoKillCountdowns.get(session.name) ?? 0) > 0}
 							<div class="ta-title-row">
 								<span class="ta-title" title={sessionTask.title}>
 									<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
@@ -1704,32 +1713,24 @@
 										class="ta-title-complete"
 										class:ta-title-complete-feedback={!!completeFb}
 										class:ta-title-complete-failed={completeFailed}
-										disabled={!!completeFb}
-										title="Mark task complete (/jat:complete)"
+										disabled={!!completeFb && !completeFailed}
+										title={completeFailed ? 'Complete failed — tap to retry' : 'Mark task complete (/jat:complete)'}
 										onclick={(e) => { e.stopPropagation(); handleMobileAction('complete', session.name, sessionTask, sessionAgentName, session.project || null); }}
 									>
 										{#if completeFb}
 											{#if completeFailed}
-												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="11" height="11"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-												<span>Error</span>
+												<!-- ↺ retry icon -->
+												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="11" height="11"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+												<span>Retry</span>
 											{:else}
 												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="11" height="11"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
 												<span>Done</span>
 											{/if}
 										{:else}
-											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="11" height="11"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="11" height="11"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
 											<span>Complete</span>
 										{/if}
 									</button>
-								{/if}
-								{#if destructActive}
-									<span class="ta-title-destruct" title="Session self-destructing">
-										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="11" height="11"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-										{$autoKillCountdowns.get(session.name)}s
-									</span>
-								{/if}
-								{#if elapsed && !destructActive}
-									<span class="ta-title-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
 								{/if}
 							</div>
 							<!-- State card: signal payload + hover-revealed terminal output -->
@@ -1771,12 +1772,12 @@
 										{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
 										{@const holdMatch = holdKey === `${session.name}:${action.id}`}
 										{@const isFailed = fb === 'error-fail'}
-										<button class="ta-tray-btn ta-tray-btn-{fb ? fb : action.variant}" class:ta-tray-btn-feedback={!!fb} class:ta-tray-btn-holding={holdMatch} class:tray-btn-hold-dimmed={holdKey !== null && !holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive && !pointerLocked) handleMobileAction(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
+										<button class="ta-tray-btn ta-tray-btn-{fb ? fb : action.variant}" class:ta-tray-btn-feedback={!!fb} class:ta-tray-btn-holding={holdMatch} class:tray-btn-hold-dimmed={holdKey !== null && !holdMatch} title={isFailed ? `${action.label} failed — tap to retry` : isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb && !isFailed} onclick={() => { if (!pointerLocked) handleMobileAction(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); if (!isFailed) startTrayHold(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
 											{#if isDestructive && holdMatch}<span class="tray-hold-fill" style="width: {holdProgress}%"></span>{/if}
 											{#if fb}
 												{#if isFailed}
-													<!-- ✕ error icon -->
-													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+													<!-- ↺ retry icon -->
+													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
 												{:else}
 													<!-- ✓ success icon -->
 													<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
@@ -1784,7 +1785,7 @@
 											{:else}
 												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d={action.icon} /></svg>
 											{/if}
-											<span>{isFailed ? 'Error' : fb ? 'Done' : action.label}</span>
+											<span>{isFailed ? 'Retry' : fb ? 'Done' : action.label}</span>
 										</button>
 									{/each}
 									{#if sessionTask.issue_type !== 'epic'}
@@ -1803,7 +1804,7 @@
 									<button
 										class="ta-tray-btn ta-tray-btn-cmds"
 										class:ta-tray-btn-cmds-open={cmdPanelSession === session.name}
-										title="All Commands"
+										title="Run a slash command (/jat:complete, /commit, etc.)"
 										onclick={() => openMobileCmdPanel(session.name)}
 									>
 										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14">
@@ -1852,14 +1853,21 @@
 								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
 								{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
 								{@const holdMatch = holdKey === `${session.name}:${action.id}`}
-								<button class="ta-tray-btn ta-tray-btn-{fb ? fb : action.variant}" class:ta-tray-btn-feedback={!!fb} class:ta-tray-btn-holding={holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive && !pointerLocked) handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
+								{@const isFailed = fb === 'error-fail'}
+								<button class="ta-tray-btn ta-tray-btn-{fb ? fb : action.variant}" class:ta-tray-btn-feedback={!!fb} class:ta-tray-btn-holding={holdMatch} title={isFailed ? `${action.label} failed — tap to retry` : isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb && !isFailed} onclick={() => { if (!pointerLocked) handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); if (!isFailed) startTrayHold(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
 									{#if isDestructive && holdMatch}<span class="tray-hold-fill" style="width: {holdProgress}%"></span>{/if}
 									{#if fb}
-										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+										{#if isFailed}
+											<!-- ↺ retry icon -->
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+										{:else}
+											<!-- ✓ success icon -->
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+										{/if}
 									{:else}
 										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d={action.icon} /></svg>
 									{/if}
-									<span>{fb ? 'Done' : action.label}</span>
+									<span>{isFailed ? 'Retry' : fb ? 'Done' : action.label}</span>
 								</button>
 							{/each}
 						</div>
@@ -2470,7 +2478,13 @@
 			</button>
 		{:else}
 			<!-- Stop agent only (task stays in_progress) -->
-			<button class="active-context-menu-item active-context-menu-item-warning" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; ctxProjectSubmenuOpen = false; }} onclick={async () => {
+			<button class="active-context-menu-item {killConfirmState === 'stop-agent' ? 'active-context-menu-item-confirm' : 'active-context-menu-item-warning'}" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; ctxProjectSubmenuOpen = false; }} onclick={async () => {
+				if (killConfirmState !== 'stop-agent') {
+					killConfirmState = 'stop-agent';
+					if (killConfirmTimer) clearTimeout(killConfirmTimer);
+					killConfirmTimer = setTimeout(() => { killConfirmState = null; killConfirmTimer = null; }, 2500);
+					return;
+				}
 				const d = ctxData!;
 				closeCtxMenu();
 				ctxData = null;
@@ -2480,10 +2494,16 @@
 					<line x1="18" y1="6" x2="6" y2="18" />
 					<line x1="6" y1="6" x2="18" y2="18" />
 				</svg>
-				<span>Stop Agent</span>
+				<span>{killConfirmState === 'stop-agent' ? 'Confirm stop?' : 'Stop Agent'}</span>
 			</button>
 			<!-- Close task + kill session -->
-			<button class="active-context-menu-item active-context-menu-item-danger" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; ctxProjectSubmenuOpen = false; }} onclick={async () => {
+			<button class="active-context-menu-item {killConfirmState === 'close-kill' ? 'active-context-menu-item-confirm' : 'active-context-menu-item-danger'}" onmouseenter={() => { ctxStatusSubmenuOpen = false; ctxStateSubmenuOpen = false; ctxProjectSubmenuOpen = false; }} onclick={async () => {
+				if (killConfirmState !== 'close-kill') {
+					killConfirmState = 'close-kill';
+					if (killConfirmTimer) clearTimeout(killConfirmTimer);
+					killConfirmTimer = setTimeout(() => { killConfirmState = null; killConfirmTimer = null; }, 2500);
+					return;
+				}
 				const d = ctxData!;
 				closeCtxMenu();
 				ctxData = null;
@@ -2503,7 +2523,7 @@
 					<line x1="15" y1="9" x2="9" y2="15" />
 					<line x1="9" y1="9" x2="15" y2="15" />
 				</svg>
-				<span>Close Task & Stop</span>
+				<span>{killConfirmState === 'close-kill' ? 'Confirm close & stop?' : 'Close Task & Stop'}</span>
 			</button>
 		{/if}
 	</div>
@@ -2549,6 +2569,21 @@
 	.state-card-inline {
 		margin-top: 0.2rem;
 		background: transparent;
+	}
+
+	/* Collapse approach text to 1 line by default; expand to 2 on card hover.
+	   Approach is supplementary context — compact by default is fine.
+	   Question text (needs_input state) is NOT clamped here — it stays at its
+	   2-line default from StateCardCompact so mobile users see the full ask. */
+	.state-card-inline :global(.scc-approach) {
+		-webkit-line-clamp: 1;
+		line-clamp: 1;
+	}
+	@media (hover: hover) {
+		.ta-session-card:hover .state-card-inline :global(.scc-approach) {
+			-webkit-line-clamp: 2;
+			line-clamp: 2;
+		}
 	}
 
 	.completion-loading-inline {
@@ -2641,6 +2676,16 @@
 
 	.active-context-menu-item-warning:hover {
 		background: oklch(0.25 0.06 75);
+	}
+
+	.active-context-menu-item-confirm {
+		color: oklch(0.90 0.18 85);
+		background: oklch(0.22 0.07 85);
+		font-weight: 500;
+	}
+
+	.active-context-menu-item-confirm:hover {
+		background: oklch(0.27 0.09 85);
 	}
 
 	.active-context-menu-divider {
@@ -2761,21 +2806,42 @@
 		transition: filter 0.2s;
 	}
 
-	/* Agent variant: avatar only — name moved to metadata row */
+	/* Agent variant: avatar + elapsed time below */
 	.ta-state-strip-agent {
 		width: 140px;
 		padding: 0;
 		display: flex;
+		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-	}
-	.ta-state-strip-agent :global(*) {
-		border-radius: 0 !important;
+		gap: 0.25rem;
+		overflow: hidden;
 	}
 
-	/* Hide redundant agent name label — it's shown in the metadata row now */
-	.ta-strip-agent-label {
-		display: none;
+	.ta-strip-elapsed {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.2rem;
+		font-size: 0.625rem;
+		font-weight: 500;
+		color: oklch(0.58 0.03 250);
+		font-variant-numeric: tabular-nums;
+		font-family: ui-monospace, monospace;
+		letter-spacing: 0.02em;
+	}
+	.ta-strip-elapsed svg {
+		flex-shrink: 0;
+	}
+
+	/* Destruct countdown: red pulse urgency */
+	.ta-strip-elapsed-destruct {
+		color: oklch(0.90 0.08 25);
+		animation: pulse-subtle 1s ease-in-out infinite;
+	}
+
+	.ta-state-strip-agent :global(*) {
+		border-radius: 0 !important;
+		max-width: 100%;
 	}
 
 	/* Brighten strip on card hover */
@@ -2921,12 +2987,6 @@
 		padding: 0.1875rem 0.5rem;
 		border-radius: 3px;
 		white-space: nowrap;
-		margin-left: auto;
-	}
-
-	/* Elapsed follows state badge (no auto margin needed) */
-	.ta-title-state + .ta-title-elapsed {
-		margin-left: 0.35rem;
 	}
 
 	/* Completing: indeterminate progress shimmer across the bottom edge */
@@ -3505,27 +3565,16 @@
 
 	.ta-title-row {
 		display: flex;
-		align-items: baseline;
+		align-items: center;
 		gap: 0.5rem;
 		min-width: 0;
-	}
-
-	.ta-title-elapsed {
-		flex-shrink: 0;
-		font-size: 0.6875rem;
-		font-weight: 500;
-		color: oklch(0.55 0.02 250);
-		font-variant-numeric: tabular-nums;
-		font-family: ui-monospace, monospace;
-		align-self: flex-start;
-		padding-top: 0.2em;
 	}
 
 	.ta-title {
 		flex: 1;
 		min-width: 0;
 		font-size: 1.0625rem;
-		font-weight: 650;
+		font-weight: 600;
 		letter-spacing: -0.005em;
 		color: oklch(0.94 0.02 250);
 		font-family: system-ui, -apple-system, sans-serif;
@@ -3540,6 +3589,8 @@
 		color: oklch(0.72 0.02 250);
 		overflow: hidden;
 		line-height: 1.45;
+		white-space: nowrap;
+		text-overflow: ellipsis;
 	}
 
 
@@ -3549,7 +3600,6 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		margin-top: 0.1875rem;
 		font-size: 0.75rem;
 		font-family: system-ui, -apple-system, sans-serif;
 		color: oklch(0.62 0.02 250);
@@ -3605,12 +3655,6 @@
 		text-decoration-color: oklch(0.70 0.18 145 / 0.6);
 	}
 
-	.ta-elapsed {
-		font-weight: 500;
-		color: oklch(0.60 0.02 250);
-		font-variant-numeric: tabular-nums;
-	}
-
 	.ta-harness {
 		display: inline-flex;
 		align-items: center;
@@ -3661,21 +3705,9 @@
 		white-space: nowrap;
 	}
 
-	.ta-title-destruct {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.25rem;
-		padding: 0.125rem 0.4375rem;
-		font-size: 0.625rem;
-		font-weight: 700;
-		letter-spacing: 0.02em;
-		color: oklch(0.95 0.05 25);
-		background: oklch(0.55 0.22 25 / 0.25);
-		border: 1px solid oklch(0.65 0.22 25 / 0.55);
-		border-radius: 0.25rem;
-		white-space: nowrap;
-		flex-shrink: 0;
-		animation: pulse-subtle 1s ease-in-out infinite;
+	/* Hide state badge when Complete button is present (badge is redundant with the button's context) */
+	.ta-title-row:has(.ta-title-complete) .ta-title-state {
+		display: none;
 	}
 
 	/* Primary action in title row — visible Complete button when review-ready */
@@ -3819,6 +3851,13 @@
 	.ta-session-card:only-child {
 		border-radius: 0;
 		border-bottom: none;
+	}
+
+	/* Mobile: shrink avatar strip so title has room to breathe */
+	@media (max-width: 560px) {
+		.ta-state-strip-agent {
+			width: 80px;
+		}
 	}
 
 	@media (prefers-reduced-motion: reduce) {

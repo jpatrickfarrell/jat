@@ -1328,7 +1328,7 @@
 									</div>
 									<div class="report-files">
 										{#each summaryData.keyChanges as file}
-											<span class="file-badge">{file}</span>
+											<span class="file-badge">{file === "**" ? "all files" : file}</span>
 										{/each}
 									</div>
 								</div>

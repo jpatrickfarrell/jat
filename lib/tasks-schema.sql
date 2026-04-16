@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     issue_type TEXT NOT NULL DEFAULT 'task',
     assignee TEXT,
     previous_assignee TEXT,
+    requester TEXT,
     reserved_files TEXT,
     parent_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
     command TEXT DEFAULT '/jat:start',

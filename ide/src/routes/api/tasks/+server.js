@@ -315,6 +315,8 @@ export async function POST({ request }) {
 			}
 		}
 
+		const requester = body.requester && typeof body.requester === 'string' ? body.requester.trim() : null;
+
 		/** @type {any} */
 		const createdTask = pgBackendForCreate
 			? await pgBackendForCreate.create({
@@ -326,6 +328,7 @@ export async function POST({ request }) {
 				labels,
 				deps,
 				assignee: null,
+				requester,
 				notes,
 				...schedulingFields
 			})
@@ -338,6 +341,7 @@ export async function POST({ request }) {
 				labels,
 				deps,
 				assignee: null,
+				requester,
 				notes,
 				...schedulingFields
 			});

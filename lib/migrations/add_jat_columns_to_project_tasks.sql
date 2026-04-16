@@ -117,6 +117,18 @@ ALTER TABLE project_tasks DROP CONSTRAINT IF EXISTS feedback_reports_issue_type_
 ALTER TABLE project_tasks
   ADD COLUMN IF NOT EXISTS previous_assignee_id UUID;
 
+-- ============================================================
+-- 9. Requester tracking
+--
+-- The person who originally requested the task. When an agent
+-- completes (closes) a task with a requester set, the task
+-- transitions to status=submitted and assignee=requester so the
+-- requester can accept or reject the work.
+-- ============================================================
+
+ALTER TABLE project_tasks
+  ADD COLUMN IF NOT EXISTS requester TEXT;
+
 CREATE OR REPLACE FUNCTION project_tasks_stash_prev_assignee()
 RETURNS TRIGGER AS $$
 BEGIN

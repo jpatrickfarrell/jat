@@ -305,6 +305,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 		type: string;
 		project: string;
 		labels: string;
+		requester: string;
 		command: string;
 		due_date: string;
 		schedule_type: 'none' | 'one-shot' | 'recurring';
@@ -320,6 +321,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 		type: 'task',
 		project: '',
 		labels: '',
+		requester: '',
 		command: '/jat:start',
 		due_date: '',
 		schedule_type: 'none',
@@ -1139,6 +1141,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 				project: formData.project.trim() || undefined,
 				labels: labels.length > 0 ? labels : undefined,
 				deps: dependencies.length > 0 ? dependencies : undefined,
+				requester: formData.requester.trim() || undefined,
 				review_override: reviewOverride || undefined,
 				command: resolvedCommand !== '/jat:start' ? resolvedCommand : undefined,
 				agent_program: agentProgram,
@@ -1312,6 +1315,7 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 			type: 'task',
 			project: '',
 			labels: '',
+			requester: '',
 			command: '/jat:start',
 			due_date: '',
 			schedule_type: 'none',
@@ -1970,6 +1974,23 @@ import BaseAttachChips from './bases/BaseAttachChips.svelte';
 					{#if validationErrors.type}
 						<div class="text-xs text-error -mt-2">{validationErrors.type}</div>
 					{/if}
+
+					<!-- Requester -->
+					<div class="form-control">
+						<label class="label py-0.5" for="task-requester">
+							<span class="label-text text-xs font-semibold font-mono uppercase tracking-wider text-base-content/70">
+								Requester
+							</span>
+						</label>
+						<input
+							id="task-requester"
+							type="text"
+							placeholder="e.g. mike, j@chimaro.ai"
+							class="input input-sm w-full font-mono bg-base-200 border-base-content/30 text-base-content {formDisabled ? 'opacity-50' : ''}"
+							bind:value={formData.requester}
+							disabled={formDisabled || isSubmitting}
+						/>
+					</div>
 
 					<!-- Context (Knowledge Bases + Data Tables) -->
 					<div class="form-control">

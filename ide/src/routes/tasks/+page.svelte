@@ -333,8 +333,54 @@
 	// Dismissed attention notifications (local session state — clears on reload)
 	let dismissedAttentionSessions = $state(new Set<string>());
 
-	// Voice inbox collapsed state (section always shown, EventStack handles empty internally)
+	// Voice inbox collapsed state (section hidden entirely when empty)
 	let voiceInboxCollapsed = $state(false);
+	// null = not yet checked (show by default until confirmed empty)
+	let voiceInboxHasItems = $state<boolean | null>(null);
+	let voiceInboxCount = $state(0);
+	let voiceInboxPollTimer: ReturnType<typeof setInterval> | null = null;
+	let voiceInboxRef = $state<{ dismissAll: () => void; enterMergeMode: () => void; exitMergeMode: () => void; executeMerge: () => void } | null>(null);
+	// Dismiss All slide-to-confirm state
+	let voicePendingDismissAll = $state(false);
+	let voiceDismissProgress = $state(0);
+	let voiceIsSliding = $state(false);
+	// Merge mode state (bound to VoiceInbox)
+	let voiceMergeMode = $state(false);
+	let voiceMergeSelectedCount = $state(0);
+	let voiceIsMerging = $state(false);
+	let voiceDismissAfterMerge = $state(true);
+
+	async function checkVoiceInbox() {
+		try {
+			const res = await fetch('/api/sessions/jat-voice/timeline?limit=50');
+			if (!res.ok) return;
+			const data = await res.json();
+			const events = Array.isArray(data.events) ? data.events : [];
+			voiceInboxHasItems = events.length > 0;
+			voiceInboxCount = events.length;
+		} catch {
+			// ignore — keep current state on error
+		}
+	}
+
+	function voiceStartDismiss() { voicePendingDismissAll = true; voiceDismissProgress = 0; voiceIsSliding = false; }
+	function voiceCancelDismiss() { voicePendingDismissAll = false; voiceDismissProgress = 0; voiceIsSliding = false; }
+	function voiceSlideMove(e: MouseEvent | TouchEvent, el: HTMLElement) {
+		if (!voiceIsSliding) return;
+		const rect = el.getBoundingClientRect();
+		const clientX = 'touches' in e ? (e as TouchEvent).touches[0].clientX : (e as MouseEvent).clientX;
+		voiceDismissProgress = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+	}
+	function voiceSlideEnd() {
+		if (voiceDismissProgress >= 80) {
+			voiceInboxRef?.dismissAll();
+			voiceInboxHasItems = false;
+			voiceInboxCount = 0;
+		}
+		voicePendingDismissAll = false;
+		voiceDismissProgress = 0;
+		voiceIsSliding = false;
+	}
 
 	// Guard: don't let saveCollapseState overwrite localStorage until we've loaded saved state.
 	// selectProject() runs as a $effect (before onMount), so without this guard it would
@@ -1770,6 +1816,10 @@
 			fetchRecoverableSessions();
 		}, 5000);
 
+		// Voice inbox: check on mount and every 30s (lightweight, limit=1)
+		checkVoiceInbox();
+		voiceInboxPollTimer = setInterval(checkVoiceInbox, 30000);
+
 		// Auto-open drawer for new users from /setup
 		const params = new URL(window.location.href).searchParams;
 		if (params.get('welcome') === 'true') {
@@ -1801,6 +1851,9 @@
 		}
 		if (recoveryPollInterval) {
 			clearInterval(recoveryPollInterval);
+		}
+		if (voiceInboxPollTimer) {
+			clearInterval(voiceInboxPollTimer);
 		}
 		mobileCleanup?.();
 	});
@@ -1963,37 +2016,6 @@
 						{/each}
 					</div>
 				{/if}
-
-				<!-- Voice Inbox: collapsible section, EventStack renders nothing when inbox is empty -->
-				<div class="subsection voice-inbox-subsection">
-					<button
-						class="subsection-header"
-						onclick={() => { voiceInboxCollapsed = !voiceInboxCollapsed; saveCollapseState(); }}
-						aria-expanded={!voiceInboxCollapsed}
-					>
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							fill="none"
-							viewBox="0 0 24 24"
-							stroke-width="2"
-							stroke="currentColor"
-							class="subsection-collapse-icon"
-							class:collapsed={voiceInboxCollapsed}
-						>
-							<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-						</svg>
-						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.875rem;height:0.875rem;color:oklch(0.65 0.15 290)"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" /></svg>
-						<span>Voice Inbox</span>
-					</button>
-					{#if !voiceInboxCollapsed}
-						<div transition:slide={{ duration: 200 }}>
-							<VoiceInbox
-								availableProjects={allProjects}
-								defaultProject={selectedProject}
-							/>
-						</div>
-					{/if}
-				</div>
 
 				<!-- Active Sessions Section -->
 				{#if projectSessions.length > 0}
@@ -2223,6 +2245,121 @@
 					</div>
 				{/if}
 
+				<!-- Voice Inbox: hidden only when confirmed empty (null = not checked yet = show) -->
+				{#if voiceInboxHasItems !== false}
+				<div class="subsection voice-inbox-subsection">
+					<div class="subsection-header-row">
+						<button
+							class="subsection-header"
+							onclick={() => { voiceInboxCollapsed = !voiceInboxCollapsed; saveCollapseState(); }}
+							aria-expanded={!voiceInboxCollapsed}
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke-width="2"
+								stroke="currentColor"
+								class="subsection-collapse-icon"
+								class:collapsed={voiceInboxCollapsed}
+							>
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+							</svg>
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.875rem;height:0.875rem;color:oklch(0.65 0.15 290);flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" /></svg>
+							<span>Voice Inbox</span>
+							{#if voiceInboxCount > 0}
+							<span class="subsection-count">{voiceInboxCount}</span>
+							{/if}
+						</button>
+						<!-- Toolbar actions inline in header row -->
+						{#if !voiceInboxCollapsed && voiceInboxHasItems}
+						<div class="voice-header-actions" onclick={(e) => e.stopPropagation()}>
+							{#if !voiceMergeMode}
+								<button class="vi-btn" onclick={() => voiceInboxRef?.enterMergeMode()} title="Select notes to merge">
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.75rem;height:0.75rem"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
+									Merge
+								</button>
+								{#if !voicePendingDismissAll}
+									<button class="vi-btn" onclick={voiceStartDismiss} title="Dismiss all voice inbox items">
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.75rem;height:0.75rem"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+										Dismiss All
+									</button>
+								{:else}
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
+									<div
+										class="vi-slide-container"
+										role="slider"
+										tabindex="0"
+										aria-label="Slide to dismiss all"
+										aria-valuenow={Math.round(voiceDismissProgress)}
+										aria-valuemin={0}
+										aria-valuemax={100}
+										onmousedown={(e) => { voiceIsSliding = true; voiceSlideMove(e, e.currentTarget); }}
+										onmousemove={(e) => voiceSlideMove(e, e.currentTarget)}
+										onmouseup={voiceSlideEnd}
+										onmouseleave={voiceSlideEnd}
+										ontouchstart={(e) => { voiceIsSliding = true; voiceSlideMove(e, e.currentTarget); }}
+										ontouchmove={(e) => { e.preventDefault(); voiceSlideMove(e, e.currentTarget); }}
+										ontouchend={voiceSlideEnd}
+										onkeydown={(e) => {
+											if (e.key === 'Enter' || e.key === ' ') {
+												e.preventDefault();
+												voiceIsSliding = true;
+												voiceDismissProgress = 100;
+												voiceSlideEnd();
+											} else if (e.key === 'Escape') {
+												voiceCancelDismiss();
+											}
+										}}
+									>
+										<div class="vi-slide-track">
+											<div class="vi-slide-fill" style="width: {voiceDismissProgress}%"></div>
+											<div class="vi-slide-thumb" style="left: {voiceDismissProgress}%"></div>
+											<span class="vi-slide-text">{voiceDismissProgress >= 80 ? 'Release to dismiss' : 'Slide to dismiss all'}</span>
+										</div>
+									</div>
+									<button class="vi-btn vi-btn-cancel" onclick={voiceCancelDismiss} title="Cancel">✕</button>
+								{/if}
+							{:else}
+								<label class="vi-toggle" onclick={(e) => e.stopPropagation()}>
+									<input type="checkbox" bind:checked={voiceDismissAfterMerge} />
+									<span>Dismiss sources</span>
+								</label>
+								<button
+									class="vi-btn vi-btn-primary"
+									onclick={() => voiceInboxRef?.executeMerge()}
+									disabled={voiceMergeSelectedCount < 2 || voiceIsMerging}
+									title={voiceMergeSelectedCount < 2 ? 'Select at least 2 notes' : `Merge ${voiceMergeSelectedCount} notes`}
+								>
+									{#if voiceIsMerging}
+										<svg style="width:0.75rem;height:0.75rem;animation:vi-spin 0.8s linear infinite" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31.4" stroke-dashoffset="10" /></svg>
+									{:else}
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:0.75rem;height:0.75rem"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
+									{/if}
+									Merge{voiceMergeSelectedCount >= 2 ? ` (${voiceMergeSelectedCount})` : ''}
+								</button>
+								<button class="vi-btn" onclick={() => voiceInboxRef?.exitMergeMode()}>Cancel</button>
+							{/if}
+						</div>
+						{/if}
+					</div>
+					{#if !voiceInboxCollapsed}
+						<div transition:slide={{ duration: 200 }}>
+							<VoiceInbox
+								bind:this={voiceInboxRef}
+								bind:mergeMode={voiceMergeMode}
+								bind:mergeSelectedCount={voiceMergeSelectedCount}
+								bind:isMerging={voiceIsMerging}
+								bind:dismissAfterMerge={voiceDismissAfterMerge}
+								availableProjects={allProjects}
+								defaultProject={selectedProject}
+								onHasItems={(has, count) => { voiceInboxHasItems = has; if (count !== undefined) voiceInboxCount = count; }}
+							/>
+						</div>
+					{/if}
+				</div>
+				{/if}
+
 				<!-- Paused Sessions Section -->
 				{#if projectPausedSessions.length > 0}
 					<div class="subsection paused-subsection">
@@ -2372,7 +2509,7 @@
 
 				<!-- Open Tasks Section (show if filtered tasks exist OR unfiltered tasks exist but filter hides them) -->
 				{#if tasksByEpic.size > 0 || (dueDateFilter !== "all" && filterCounts.all > 0)}
-					<div class="subsection">
+					<div class="subsection open-tasks-subsection">
 						<div class="subsection-header-row">
 							<button
 								class="subsection-header"
@@ -2658,7 +2795,7 @@
 
 				<!-- Completed Tasks Section -->
 				{#if completedCount > 0 || completedLoading || completedDayGroups.some(g => g.pausedSessions?.length)}
-					<div class="subsection">
+					<div class="subsection completed-tasks-subsection">
 						<button
 							class="subsection-header"
 							onclick={() =>
@@ -2907,8 +3044,8 @@
 		align-items: center;
 	}
 	.subsection-header-row .subsection-header {
-		flex-shrink: 0;
-		width: auto;
+		flex: 1;
+		min-width: 0;
 	}
 	.date-filter-chips {
 		display: flex;
@@ -3300,13 +3437,161 @@
 
 	/* Active Sessions subsection - amber left border on header to signal live ops */
 	.subsection.bg-base-100 .subsection-header {
-		border-left: 2px solid oklch(0.75 0.15 85 / 0.45);
+		border-left: 3px solid oklch(0.75 0.15 85 / 0.9);
+		background: oklch(0.75 0.15 85 / 0.04);
 	}
 
 	/* Active Sessions count badge - amber tint so it reads as live even when collapsed */
 	.subsection.bg-base-100 .subsection-count {
 		background: oklch(0.28 0.08 85);
 		color: oklch(0.75 0.15 85);
+	}
+
+	/* Voice Inbox subsection - violet left border and chip (matches mic icon hue 290) */
+	.voice-inbox-subsection .subsection-header {
+		border-left: 2px solid oklch(0.65 0.15 290 / 0.4);
+	}
+
+	.voice-inbox-subsection .subsection-count {
+		background: oklch(0.25 0.08 290);
+		color: oklch(0.70 0.15 290);
+	}
+
+	/* Voice Inbox header action buttons */
+	.voice-header-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding-right: 0.5rem;
+		flex-shrink: 0;
+	}
+
+	.vi-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.15rem 0.45rem;
+		font-size: 0.6875rem;
+		border-radius: 0.25rem;
+		border: 1px solid oklch(0.28 0.03 250 / 0.6);
+		background: oklch(0.20 0.02 250 / 0.4);
+		color: oklch(0.58 0.04 250);
+		cursor: pointer;
+		white-space: nowrap;
+		transition: background 0.1s, color 0.1s;
+	}
+
+	.vi-btn:hover:not(:disabled) {
+		background: oklch(0.25 0.03 250 / 0.6);
+		color: oklch(0.75 0.04 250);
+	}
+
+	.vi-btn:disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
+	}
+
+	.vi-btn-cancel {
+		padding: 0.15rem 0.35rem;
+	}
+
+	.vi-btn-primary {
+		background: oklch(0.22 0.06 290 / 0.4);
+		border-color: oklch(0.45 0.12 290 / 0.5);
+		color: oklch(0.68 0.12 290);
+	}
+
+	.vi-btn-primary:hover:not(:disabled) {
+		background: oklch(0.28 0.08 290 / 0.5);
+		color: oklch(0.78 0.14 290);
+	}
+
+	.vi-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.6875rem;
+		color: oklch(0.55 0.04 250);
+		cursor: pointer;
+		user-select: none;
+		white-space: nowrap;
+	}
+
+	.vi-toggle input[type="checkbox"] {
+		accent-color: oklch(0.65 0.15 290);
+		cursor: pointer;
+		width: 0.75rem;
+		height: 0.75rem;
+	}
+
+	/* Slide-to-dismiss track in header */
+	.vi-slide-container {
+		width: 9rem;
+		height: 22px;
+		cursor: grab;
+		user-select: none;
+		touch-action: none;
+		flex-shrink: 0;
+	}
+
+	.vi-slide-container:active { cursor: grabbing; }
+
+	.vi-slide-track {
+		position: relative;
+		height: 100%;
+		background: oklch(0.20 0.05 25 / 0.3);
+		border-radius: 11px;
+		border: 1px solid oklch(0.40 0.10 25 / 0.4);
+		overflow: hidden;
+	}
+
+	.vi-slide-fill {
+		position: absolute;
+		inset: 0 auto 0 0;
+		background: linear-gradient(90deg, oklch(0.45 0.12 25 / 0.6), oklch(0.55 0.15 25 / 0.7));
+		border-radius: 11px;
+		transition: width 0.05s linear;
+		pointer-events: none;
+	}
+
+	.vi-slide-thumb {
+		position: absolute;
+		top: 50%;
+		transform: translate(-50%, -50%);
+		width: 18px;
+		height: 18px;
+		background: oklch(0.88 0.03 250);
+		border: 1.5px solid oklch(0.55 0.12 25 / 0.8);
+		border-radius: 50%;
+		pointer-events: none;
+		transition: left 0.05s linear;
+	}
+
+	.vi-slide-text {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.6rem;
+		font-weight: 600;
+		color: oklch(0.72 0.08 25);
+		pointer-events: none;
+		white-space: nowrap;
+	}
+
+	@keyframes vi-spin { to { transform: rotate(360deg); } }
+
+	/* Open Tasks subsection - cyan chip (matches list icon hue 200) */
+	.open-tasks-subsection .subsection-count {
+		background: oklch(0.22 0.07 200);
+		color: oklch(0.70 0.15 200);
+	}
+
+	/* Completed Tasks subsection - green chip (matches check icon hue 145) */
+	.completed-tasks-subsection .subsection-count {
+		background: oklch(0.22 0.07 145);
+		color: oklch(0.65 0.18 145);
 	}
 
 	/* Paused/Waiting/Conversations subsections - flush with other top-level sections */

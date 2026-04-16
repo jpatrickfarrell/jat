@@ -92,7 +92,7 @@ export async function GET({ params }) {
 export async function POST({ params, request }) {
 	try {
 		const body = await request.json();
-		const { cronExpr, project, model = 'haiku', runMode = 'quick-command', variables = {} } = body;
+		const { cronExpr, project, model = 'haiku', runMode = 'quick-command', variables = {}, requester } = body;
 
 		// Validate required fields
 		if (!cronExpr || typeof cronExpr !== 'string') {
@@ -183,7 +183,8 @@ export async function POST({ params, request }) {
 			command,
 			model: model || (isSpawnAgent ? 'sonnet' : template.defaultModel || 'haiku'),
 			schedule_cron: cronExpr,
-			next_run_at: nextRunAt
+			next_run_at: nextRunAt,
+			requester: requester && typeof requester === 'string' ? requester.trim() : null
 		});
 
 		return json({

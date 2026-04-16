@@ -36,9 +36,10 @@ jt ready                    # Find available work (highest priority, no blockers
 jt show <id>                # View task details
 jt show <id> --json         # JSON format
 jt update <id> --status in_progress --assignee AgentName
-jt close <id> --reason "Completed"
+jt close <id> --reason "Completed"   # If requester is set → status=submitted, assignee=requester
 jt list --status open       # List all open tasks
 jt search "keyword"         # Search tasks
+jt create "Title" --requester "username"  # Set who must review/accept completed work
 ```
 
 **Status values** (use underscores, not hyphens):
@@ -50,7 +51,7 @@ Agent-workable (agents pick these up via `jt ready`):
 Paused / mid-flight (agents do NOT pick these up):
 - `waiting` - Ball in counterparty's court (awaiting their input)
 - `blocked` - Blocked by external dependency
-- `submitted` - Submitted for review/triage
+- `submitted` - Submitted for review/triage; also set automatically by `jt close` when the task has a `requester` — the task lands in the requester's queue for acceptance
 - `accepted` - Stakeholder approved, pending deploy
 - `deployed` - Shipped, pending archive/closeout
 

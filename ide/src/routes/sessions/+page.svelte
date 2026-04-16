@@ -333,7 +333,7 @@
 		fetchRecentSessions();
 	}
 
-	// Fetch open tasks for a project
+	// Fetch open tasks for a project (includes 'dev' = internal tasks workable in IDE)
 	async function fetchOpenTasks(project: string | null) {
 		if (!project) {
 			openTasks = [];
@@ -341,10 +341,11 @@
 		}
 		openTasksLoading = true;
 		try {
-			const response = await fetch(`/api/tasks?status=open&project=${encodeURIComponent(project)}`);
+			const response = await fetch(`/api/tasks?project=${encodeURIComponent(project)}`);
 			if (!response.ok) return;
 			const data = await response.json();
-			openTasks = data.tasks || [];
+			const tasks = data.tasks || [];
+			openTasks = tasks.filter((t: { status: string }) => t.status === 'open' || t.status === 'dev');
 		} catch {
 			// Silent fail
 		} finally {

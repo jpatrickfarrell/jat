@@ -928,6 +928,15 @@ async function computeWorkData(lines, includeUsage, captureAll = false) {
 					|| signalTaskScoped
 					|| null;
 
+				// Stale signal fix: if the signal task ID matches the agent's last completed task,
+				// the signal is stale — the task was closed after the agent emitted it. Override
+				// status to 'closed' so TasksActive's completed-override fires correctly.
+				const lastCompletedCheck = agentLastCompletedMap.get(agentName);
+				if (task && lastCompletedCheck && lastCompletedCheck.id === task.id && lastCompletedCheck.status === 'closed') {
+					task.status = 'closed';
+					if (lastCompletedCheck.closedAt) task.closedAt = lastCompletedCheck.closedAt;
+				}
+
 				// Get last completed task for this agent (for completion state display)
 				// Falls back to timeline JSONL if DB has no record (e.g., assignee was changed).
 				// Scope to the session's project so an agent's old work in project A never

@@ -531,7 +531,7 @@
 			: openTasks;
 
 		const candidates = projectTasks.filter(
-			(t) => t.status === "open" && t.issue_type !== "epic",
+			(t) => (t.status === "open" || t.status === "dev") && t.issue_type !== "epic",
 		);
 
 		const counts: Record<DueDateFilter, number> = {
@@ -589,8 +589,8 @@
 				continue;
 			}
 
-			// Only include open tasks (not in_progress, blocked, or closed)
-			if (task.status !== "open") {
+			// Show open and dev tasks (dev = internal/not-for-end-users but workable in IDE)
+			if (task.status !== "open" && task.status !== "dev") {
 				continue;
 			}
 
@@ -605,7 +605,7 @@
 		// Pass 1: Add child epics (epics that are children of another epic) to their parent's group.
 		// Must happen before pass 2 so parent epics that receive child epics don't end up in standalone.
 		for (const task of projectTasks) {
-			if (task.issue_type === "epic" && task.status === "open" && !grouped.has(task.id)) {
+			if (task.issue_type === "epic" && (task.status === "open" || task.status === "dev") && !grouped.has(task.id)) {
 				const parentEpicId = getParentEpicId(task.id, epicChildMap);
 				if (parentEpicId) {
 					if (!grouped.has(parentEpicId)) {
@@ -616,9 +616,9 @@
 			}
 		}
 
-		// Pass 2: Add standalone epics — open epics with no non-epic children AND no parent epic.
+		// Pass 2: Add standalone epics — open/dev epics with no non-epic children AND no parent epic.
 		for (const task of projectTasks) {
-			if (task.issue_type === "epic" && task.status === "open") {
+			if (task.issue_type === "epic" && (task.status === "open" || task.status === "dev")) {
 				const isChildEpic = getParentEpicId(task.id, epicChildMap) !== null;
 				if (!grouped.has(task.id) && !isChildEpic) {
 					if (!grouped.has(null)) {
@@ -1075,20 +1075,35 @@
 			closedAfter: start,
 			closedBefore: end,
 		});
+		const doneParams = new URLSearchParams({
+			project: selectedProject,
+			updatedAfter: start,
+			updatedBefore: end,
+		});
 		const pausedParams = new URLSearchParams({
 			project: selectedProject,
 			closedAfter: start,
 			closedBefore: end,
 		});
 
-		const [tasksRes, pausedRes] = await Promise.all([
+		const [tasksRes, doneRes, pausedRes] = await Promise.all([
 			fetch(`/api/tasks?${tasksParams}`),
+			fetch(`/api/tasks?${doneParams}`),
 			fetch(`/api/tasks/paused-sessions?${pausedParams}`),
 		]);
 
-		const tasks: CompletedTask[] = tasksRes.ok
+		const closedTasks: CompletedTask[] = tasksRes.ok
 			? ((await tasksRes.json()).tasks || [])
 			: [];
+
+		// Filter done-statuses tasks: completed, accepted, submitted (not closed — already fetched above)
+		const DONE_STATUSES = new Set(['completed', 'accepted', 'submitted']);
+		const doneTasks: CompletedTask[] = doneRes.ok
+			? ((await doneRes.json()).tasks || []).filter((t: CompletedTask) => DONE_STATUSES.has(t.status ?? ''))
+			: [];
+
+		const tasks: CompletedTask[] = [...closedTasks, ...doneTasks];
+
 		const pausedSessions: PausedSession[] = pausedRes.ok
 			? ((await pausedRes.json()).sessions || [])
 			: [];
@@ -1300,7 +1315,7 @@
 	async function fetchResumableTasks() {
 		try {
 			const taskIds = openTasks
-				.filter(t => t.status === 'open' && t.issue_type !== 'epic')
+				.filter(t => (t.status === 'open' || t.status === 'dev') && t.issue_type !== 'epic')
 				.map(t => t.id);
 			if (taskIds.length === 0) return;
 			const response = await fetch('/api/tasks/sessions', {
@@ -1672,17 +1687,16 @@
 	// Count helpers
 	function getProjectTaskCount(project: string): number {
 		const tasks = tasksByProject.get(project) || [];
-		// Count open non-epic tasks
+		const isWorkable = (t: Task) => t.status === "open" || t.status === "dev";
 		let count = tasks.filter(
-			(t) => t.status === "open" && t.issue_type !== "epic",
+			(t) => isWorkable(t) && t.issue_type !== "epic",
 		).length;
-		// Also count open epics with no open children (they appear in standalone group)
 		for (const t of tasks) {
-			if (t.issue_type === "epic" && t.status === "open") {
-				const hasOpenChildren = tasks.some(
-					(child) => child.status === "open" && child.issue_type !== "epic" && getParentEpicId(child.id, epicChildMap) === t.id,
+			if (t.issue_type === "epic" && isWorkable(t)) {
+				const hasWorkableChildren = tasks.some(
+					(child) => isWorkable(child) && child.issue_type !== "epic" && getParentEpicId(child.id, epicChildMap) === t.id,
 				);
-				if (!hasOpenChildren) count++;
+				if (!hasWorkableChildren) count++;
 			}
 		}
 		return count;

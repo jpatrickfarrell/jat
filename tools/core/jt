@@ -1157,12 +1157,18 @@ cmd_close() {
   local ts
   ts="$(now_ts)"
 
-  # If a requester is set, submit to them for review instead of closing directly.
-  local requester_val
-  requester_val="$(sql_json "SELECT requester FROM tasks WHERE id = '$(sql_escape "$task_id")';" 2>/dev/null | jq -r '.[0].requester // empty' 2>/dev/null)"
+  # If a requester is set, submit to them for review — unless the person who
+  # handed the task to the agent IS the requester, in which case go straight to accepted.
+  local requester_val prev_assignee_val
+  requester_val="$(sql_json "SELECT requester, previous_assignee FROM tasks WHERE id = '$(sql_escape "$task_id")';" 2>/dev/null | jq -r '.[0].requester // empty' 2>/dev/null)"
+  prev_assignee_val="$(sql_json "SELECT previous_assignee FROM tasks WHERE id = '$(sql_escape "$task_id")';" 2>/dev/null | jq -r '.[0].previous_assignee // empty' 2>/dev/null)"
 
   if [[ -n "$requester_val" ]]; then
-    sql_exec "UPDATE tasks SET status = 'submitted', assignee = '$(sql_escape "$requester_val")', closed_at = NULL, close_reason = '$(sql_escape "$reason")', reserved_files = NULL, updated_at = '$ts' WHERE id = '$(sql_escape "$task_id")';"
+    if [[ -n "$prev_assignee_val" && "$prev_assignee_val" == "$requester_val" ]]; then
+      sql_exec "UPDATE tasks SET status = 'accepted', assignee = '$(sql_escape "$requester_val")', closed_at = NULL, close_reason = '$(sql_escape "$reason")', reserved_files = NULL, updated_at = '$ts' WHERE id = '$(sql_escape "$task_id")';"
+    else
+      sql_exec "UPDATE tasks SET status = 'submitted', assignee = '$(sql_escape "$requester_val")', closed_at = NULL, close_reason = '$(sql_escape "$reason")', reserved_files = NULL, updated_at = '$ts' WHERE id = '$(sql_escape "$task_id")';"
+    fi
   else
     sql_exec "UPDATE tasks SET status = 'closed', closed_at = '$ts', close_reason = '$(sql_escape "$reason")', reserved_files = NULL, updated_at = '$ts' WHERE id = '$(sql_escape "$task_id")';"
   fi
@@ -1418,6 +1424,8 @@ for t in data:
     print(f\"  Status: {t['status']}  Type: {t['issue_type']}\")
     if t.get('assignee'):
         print(f\"  Assignee: {t['assignee']}\")
+    if t.get('requester'):
+        print(f\"  Requester: {t['requester']}\")
     if t.get('reserved_files'):
         print(f\"  Files: {t['reserved_files']}\")
     if t.get('description'):

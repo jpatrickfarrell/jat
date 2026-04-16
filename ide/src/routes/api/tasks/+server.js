@@ -20,13 +20,15 @@ export async function GET({ url }) {
 	const scheduled = url.searchParams.get('scheduled');
 	const closedAfter = url.searchParams.get('closedAfter');
 	const closedBefore = url.searchParams.get('closedBefore');
+	const updatedAfter = url.searchParams.get('updatedAfter');
+	const updatedBefore = url.searchParams.get('updatedBefore');
 
 	// Pagination parameters
 	const limit = url.searchParams.get('limit');
 	const offset = url.searchParams.get('offset');
 	const cursor = url.searchParams.get('cursor'); // For cursor-based pagination (task ID)
 
-	const key = cacheKey('tasks', { project, status, priority, search, scheduled, closedAfter, closedBefore, limit, offset, cursor });
+	const key = cacheKey('tasks', { project, status, priority, search, scheduled, closedAfter, closedBefore, updatedAfter, updatedBefore, limit, offset, cursor });
 
 	// singleFlight: cache + deduplication. Tasks endpoint queries SQLite
 	// across multiple projects — avoid redundant concurrent queries.
@@ -60,6 +62,8 @@ export async function GET({ url }) {
 				if (priority !== null) filters.priority = parseInt(priority);
 				if (closedAfter) filters.closedAfter = closedAfter;
 				if (closedBefore) filters.closedBefore = closedBefore;
+				if (updatedAfter) filters.updatedAfter = updatedAfter;
+				if (updatedBefore) filters.updatedBefore = updatedBefore;
 				tasks = await pgBackend.list(filters);
 			}
 		} else if (scheduled === 'true') {

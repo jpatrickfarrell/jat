@@ -240,7 +240,7 @@ function getAllProjectStats() {
 				taskCounts.set(projectName, taskEntry);
 			}
 			taskEntry.total++;
-			if (task.status === 'open' || task.status === 'in_progress') {
+			if (task.status === 'open' || task.status === 'dev' || task.status === 'in_progress') {
 				taskEntry.open++;
 			}
 

@@ -51,8 +51,8 @@ Agent-workable (agents pick these up via `jt ready`):
 Paused / mid-flight (agents do NOT pick these up):
 - `waiting` - Ball in counterparty's court (awaiting their input)
 - `blocked` - Blocked by external dependency
-- `submitted` - Submitted for review/triage; also set automatically by `jt close` when the task has a `requester` — the task lands in the requester's queue for acceptance
-- `accepted` - Stakeholder approved, pending deploy
+- `submitted` - In requester's queue for acceptance (see Requester Workflow below)
+- `accepted` - Requester approved, pending deploy
 - `deployed` - Shipped, pending archive/closeout
 
 Terminal / special:
@@ -60,6 +60,29 @@ Terminal / special:
 - `dev` - Internal/dev-only (hidden from clients)
 
 **Task types:** `bug`, `feature`, `task`, `epic`, `chore` (recurring scheduled task), `chat`
+
+### Requester Workflow
+
+`requester` is the person who originally asked for the work. Set it at task creation so `jt close` knows where to route the completed task.
+
+```bash
+jt create "Fix login bug" --requester "mike"   # mike must accept when done
+jt create "Refactor cache" --requester "jw"    # jw must accept (or auto-accepts if jw delegated it)
+```
+
+**What happens on `jt close`:**
+
+| Condition | Outcome |
+|-----------|---------|
+| No `requester` | `closed` immediately |
+| `requester` set, third party delegated | `submitted` → requester's queue for accept/reject |
+| `requester` set, requester delegated to agent themselves | `accepted` automatically (requester already endorsed the work by spawning the agent) |
+
+**The self-accept rule:** when `previous_assignee == requester`, the requester was the one who handed the task to the agent — they've implicitly accepted the outcome. No review queue needed.
+
+**Example:**
+- jw creates task (`requester=jw`), spawns agent → agent completes → **`accepted`** (jw delegated it)
+- mike creates task (`requester=mike`), jw spawns agent → agent completes → **`submitted`** to mike for review
 
 ### Dependencies
 

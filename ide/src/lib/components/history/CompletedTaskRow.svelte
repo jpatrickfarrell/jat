@@ -293,6 +293,10 @@
 						<span class="ctr-sep">·</span>
 						<span class="ctr-agent">{task.assignee}</span>
 					{/if}
+					{#if task.status && task.status !== 'closed'}
+						<span class="ctr-sep">·</span>
+						<span class="ctr-status-pill" data-status={task.status}>{task.status}</span>
+					{/if}
 				</div>
 				<!-- Compact summary snippet -->
 				{#if isLoading}
@@ -609,6 +613,38 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		max-width: 80px;
+	}
+
+	.ctr-status-pill {
+		font-size: 0.65rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		padding: 0.1em 0.45em;
+		border-radius: 0.25rem;
+		white-space: nowrap;
+		border: 1px solid;
+		color: oklch(0.70 0.05 250);
+		background: oklch(0.30 0.03 250 / 0.4);
+		border-color: oklch(0.45 0.04 250 / 0.5);
+	}
+
+	.ctr-status-pill[data-status="completed"] {
+		color: oklch(0.78 0.18 145);
+		background: oklch(0.28 0.08 145 / 0.35);
+		border-color: oklch(0.55 0.15 145 / 0.5);
+	}
+
+	.ctr-status-pill[data-status="accepted"] {
+		color: oklch(0.78 0.16 195);
+		background: oklch(0.28 0.08 195 / 0.35);
+		border-color: oklch(0.55 0.14 195 / 0.5);
+	}
+
+	.ctr-status-pill[data-status="submitted"] {
+		color: oklch(0.82 0.16 80);
+		background: oklch(0.30 0.08 80 / 0.35);
+		border-color: oklch(0.58 0.15 80 / 0.5);
 	}
 
 	/* Summary snippet (compact state) */

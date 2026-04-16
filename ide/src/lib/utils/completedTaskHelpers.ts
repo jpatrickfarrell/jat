@@ -13,6 +13,7 @@ export interface CompletedTask {
 	priority?: number;
 	issue_type?: string;
 	project?: string;
+	status?: string;
 	integration?: { sourceId: string; sourceType: string; sourceName: string } | null;
 }
 

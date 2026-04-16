@@ -129,6 +129,35 @@ ALTER TABLE project_tasks
 ALTER TABLE project_tasks
   ADD COLUMN IF NOT EXISTS requester TEXT;
 
+-- ============================================================
+-- 10. Previous assignee TEXT tracking
+--
+-- JAT assignee is a TEXT field (agent names, usernames, emails).
+-- Stash the prior TEXT assignee here so the self-accept heuristic
+-- can compare previous_assignee == requester without needing a
+-- UUID join.  Trigger fires BEFORE UPDATE when assignee (TEXT)
+-- actually changes.
+-- ============================================================
+
+ALTER TABLE project_tasks
+  ADD COLUMN IF NOT EXISTS previous_assignee TEXT;
+
+CREATE OR REPLACE FUNCTION project_tasks_stash_prev_assignee_text()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.assignee IS DISTINCT FROM OLD.assignee THEN
+    NEW.previous_assignee := OLD.assignee;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_project_tasks_stash_prev_assignee_text ON project_tasks;
+CREATE TRIGGER trg_project_tasks_stash_prev_assignee_text
+  BEFORE UPDATE ON project_tasks
+  FOR EACH ROW
+  EXECUTE FUNCTION project_tasks_stash_prev_assignee_text();
+
 CREATE OR REPLACE FUNCTION project_tasks_stash_prev_assignee()
 RETURNS TRIGGER AS $$
 BEGIN

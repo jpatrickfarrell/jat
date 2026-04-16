@@ -2388,6 +2388,13 @@ import StatusActionBadge from "./atoms/StatusActionBadge.svelte";
 			return "recovering";
 		}
 
+		// If task is already closed, always show completed regardless of signal state.
+		// Mirrors TasksActive's: task?.status === 'closed' ? 'completed' : rawEffectiveState
+		// This prevents stale 'ready-for-review' signals from overriding the closed state.
+		if (task?.status === "closed") {
+			return "completed";
+		}
+
 		// Rich signal payload is the most authoritative source for certain states
 		// These states persist based on the signal type, not a short TTL, because:
 		// 1. "completing" - the task closes during this state, so no task prop will be available

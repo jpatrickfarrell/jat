@@ -584,12 +584,22 @@ This incrementally indexes the new file. If no memory index exists yet, it creat
 jat-step closing --task "$task_id" --title "$task_title" --agent "$agent_name"
 ```
 
-> **Requester workflow:** `jt close` (called by `jat-step closing`) checks for a `requester`
-> field on the task. If set, the task transitions to **`status=submitted`** with
-> **`assignee=requester`** instead of being marked closed. This puts the task in the
-> requester's queue for acceptance or rejection. The task is considered "done" by the agent
-> but not yet terminal — the requester must accept/reject to reach `closed`.
-> If no requester is set, the task closes normally.
+> **Requester workflow:** `jt close` (called by `jat-step closing`) routes the task based
+> on the `requester` field:
+>
+> | Condition | Result |
+> |-----------|--------|
+> | No `requester` set | `status=closed` (normal close) |
+> | `requester` set, `previous_assignee != requester` | `status=submitted, assignee=requester` — lands in requester's queue for acceptance |
+> | `requester` set, `previous_assignee == requester` | `status=accepted, assignee=requester` — requester delegated to the agent themselves, so work is auto-accepted |
+>
+> **The self-accept heuristic:** `previous_assignee` is auto-stashed whenever `assignee`
+> changes. When jw creates a task (`requester=jw`) and spawns an agent, the assignee changes
+> from jw → agent, stashing `previous_assignee=jw`. At close time, `previous_assignee ==
+> requester` signals that jw was the one who delegated the work — they've implicitly accepted
+> it by triggering the agent. When a third party (e.g. jw) works on a task that mike
+> requested (`requester=mike`), `previous_assignee=jw != requester=mike`, so it goes to
+> `submitted` for mike to review.
 
 ---
 

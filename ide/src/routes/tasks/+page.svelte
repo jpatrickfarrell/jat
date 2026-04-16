@@ -3017,7 +3017,7 @@
 
 	/* Subsections */
 	.subsection {
-		padding: 0 0 0.75rem 0;
+		padding: 0.5rem 0 0.75rem 0;
 		border-bottom: 1px solid oklch(0.22 0.02 250);
 	}
 
@@ -3070,9 +3070,9 @@
 		letter-spacing: normal;
 	}
 
-	/* Epic Groups */
+	/* Epic Groups - indented to visually nest inside their parent section */
 	.epic-group {
-		margin: 0.5rem 0rem;
+		margin: 0.5rem 0.75rem;
 		background: oklch(0.16 0.01 250);
 		border-radius: 0.5rem;
 		border: 1px solid oklch(0.23 0.02 250);
@@ -3298,18 +3298,23 @@
 		background: oklch(0.18 0.01 250);
 	}
 
-	/* Active Sessions subsection - amber left border to signal live ops */
-	.subsection.bg-base-100 {
+	/* Active Sessions subsection - amber left border on header to signal live ops */
+	.subsection.bg-base-100 .subsection-header {
 		border-left: 2px solid oklch(0.75 0.15 85 / 0.45);
 	}
 
-	/* Paused/Waiting/Conversations subsections - indent to align with epic-group content */
+	/* Active Sessions count badge - amber tint so it reads as live even when collapsed */
+	.subsection.bg-base-100 .subsection-count {
+		background: oklch(0.28 0.08 85);
+		color: oklch(0.75 0.15 85);
+	}
+
+	/* Paused/Waiting/Conversations subsections - flush with other top-level sections */
 	.paused-subsection,
 	.waiting-subsection,
 	.conversations-subsection {
-		margin-left: 0.75rem;
-		margin-right: 0.75rem;
-		max-width: calc(100% - 1.5rem); /* Constrain width accounting for margins */
+		margin-left: 0;
+		margin-right: 0;
 	}
 
 	/* Waiting for Input header - amber tint signals "needs you" even when collapsed */
@@ -3709,10 +3714,7 @@
 		margin: 0;
 	}
 
-	/* Voice inbox subsection - no bottom border since EventStack provides its own visual separation */
-	.voice-inbox-subsection {
-		padding-bottom: 0;
-	}
+	/* Voice inbox subsection - uses standard .subsection padding-bottom like all other sections */
 
 	/* Attention notifications */
 	.attention-notifs {

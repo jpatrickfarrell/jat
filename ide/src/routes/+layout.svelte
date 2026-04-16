@@ -116,6 +116,36 @@
 	// Active (in_progress) tasks for ProjectSelector dropdown
 	let activeTasks = $state<Array<{ id: string; title: string; priority: number; type: string; project: string; assignee: string | null }>>([]);
 
+	// Supplement activeTasks with session-based tasks. Postgres-graduated projects
+	// may have agents working on tasks that aren't reflected as in_progress in the
+	// postgres DB (e.g. tasks set in_progress before graduation, or tasks where the
+	// DB update was missed). Sessions with active states are the real-time source of
+	// truth for what agents are actually doing.
+	const ACTIVE_SESSION_STATES = new Set(['working', 'needs-input', 'needs_input', 'ready-for-review', 'starting']);
+	const supplementedActiveTasks = $derived.by(() => {
+		const sessions = getWorkSessions();
+		const existingIds = new Set(activeTasks.map((t) => t.id));
+		const sessionTasks: Array<{ id: string; title: string; priority: number; type: string; project: string; assignee: string | null }> = [];
+		for (const session of sessions) {
+			const task = session.task;
+			if (!task?.id) continue;
+			if (existingIds.has(task.id)) continue;
+			const state = session._sseState;
+			if (!state || !ACTIVE_SESSION_STATES.has(state)) continue;
+			const proj = session.project || getProjectFromTaskId(task.id);
+			if (!proj) continue;
+			sessionTasks.push({
+				id: task.id,
+				title: task.title || task.id,
+				priority: task.priority ?? 2,
+				type: task.issue_type || 'task',
+				project: proj,
+				assignee: session.agentName || null,
+			});
+		}
+		return [...activeTasks, ...sessionTasks];
+	});
+
 	// Epics with ready children for Run Epic feature
 	interface EpicChild {
 		id: string;
@@ -1208,7 +1238,7 @@
 				{projectColors}
 				{readyTaskCount}
 				{readyTasks}
-				{activeTasks}
+				activeTasks={supplementedActiveTasks}
 				{projects}
 				{projectBackends}
 				{selectedProject}

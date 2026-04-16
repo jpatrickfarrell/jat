@@ -1388,7 +1388,7 @@
 	</div>
 {:else}
 	<!-- Card-based layout -->
-	<div class="mobile-sessions-list">
+	<div class="ta-sessions-list">
 		{#each orderedSessions as { session, isExiting, isNew, hadTaskOnEntry } (session.name)}
 			{@const sessionAgentName = getAgentName(session.name)}
 			{@const sessionTask = agentTasks.get(sessionAgentName) || (isExiting ? cachedAgentTasks.get(sessionAgentName) : null)}
@@ -1432,7 +1432,7 @@
 				{/if}
 				<!-- The actual card that slides -->
 				<div
-					class="mobile-session-card"
+					class="ta-session-card"
 					class:attached={session.attached}
 					class:swiping={isSwiping}
 					class:tray-hint-active={!trayHintDismissed}
@@ -1453,17 +1453,17 @@
 				{#if session.type === 'server'}
 					<!-- Server session -->
 					{@const cardActions = getSessionStateActions(effectiveState)}
-					<div class="mobile-card-inner">
-						<div class="mobile-state-strip" style="background: {stateVisual.bgTint};" aria-hidden="true">
+					<div class="ta-card-inner">
+						<div class="ta-state-strip" style="background: {stateVisual.bgTint};" aria-hidden="true">
 							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" width="13" height="13" style="stroke: {stateVisual.accent};"><path stroke-linecap="round" stroke-linejoin="round" d={stateVisual.icon} /></svg>
 						</div>
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+						<div class="ta-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							{#each cardActions.slice(0, 5) as action}
 								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
 								{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
 								{@const holdMatch = holdKey === `${session.name}:${action.id}`}
-								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} class:mobile-tray-btn-holding={holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive && !pointerLocked) handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
+								<button class="ta-tray-btn ta-tray-btn-{fb ? fb : action.variant}" class:ta-tray-btn-feedback={!!fb} class:ta-tray-btn-holding={holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive && !pointerLocked) handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
 									{#if isDestructive && holdMatch}<span class="tray-hold-fill" style="width: {holdProgress}%"></span>{/if}
 									{#if fb}
 										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
@@ -1474,8 +1474,8 @@
 								</button>
 							{/each}
 						</div>
-						<div class="mobile-card-body">
-							<span class="mobile-title">{session.name}</span>
+						<div class="ta-card-body">
+							<span class="ta-title">{session.name}</span>
 						</div>
 					</div>
 				{:else if sessionTask}
@@ -1487,11 +1487,11 @@
 					{@const reviewStatus = computeReviewStatus(sessionTask, getReviewRules())}
 					{@const reviewBasedDefault = reviewStatus.action !== 'auto'}
 					{@const autoCompleteDisabled = autoCompleteDisabledMap.get(session.name) ?? reviewBasedDefault}
-					<div class="mobile-card-inner mobile-card-inner-agent">
+					<div class="ta-card-inner ta-card-inner-agent">
 						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-						<div class="mobile-state-strip mobile-state-strip-agent mobile-state-strip-clickable" style="background: {stateVisual.bgTint};" role="button" tabindex="0" title="Open terminal" onclick={(e) => { e.stopPropagation(); fullscreenSession = session.name; }} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); fullscreenSession = session.name; } }}>
+						<div class="ta-state-strip ta-state-strip-agent ta-state-strip-clickable" style="background: {stateVisual.bgTint};" role="button" tabindex="0" title="Open terminal" onclick={(e) => { e.stopPropagation(); fullscreenSession = session.name; }} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); fullscreenSession = session.name; } }}>
 							<AgentAvatar name={sessionAgentName} size={96} showRing={false} shape="rounded" />
-							<div class="mobile-strip-agent-label" title={sessionAgentName}>
+							<div class="ta-strip-agent-label" title={sessionAgentName}>
 								{#each splitAgentName(sessionAgentName) as part}
 									<span>{part}</span>
 								{/each}
@@ -1500,21 +1500,21 @@
 						{#if cmdPanelSession === session.name}
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 						<div
-							class="mobile-cmd-inline"
+							class="ta-cmd-inline"
 							onclick={(e) => e.stopPropagation()}
 							onkeydown={(e) => e.stopPropagation()}
 							role="group"
 							transition:slide={{ duration: 200, easing: cubicOut }}
 						>
-							<div class="mobile-cmd-header">
+							<div class="ta-cmd-header">
 								<!-- svelte-ignore a11y_autofocus -->
 								<input
 									bind:value={cmdPanelSearch}
 									placeholder="Filter commands…"
-									class="mobile-cmd-search"
+									class="ta-cmd-search"
 									autofocus
 								/>
-								<button class="mobile-cmd-close" title="Close" onclick={() => cmdPanelSession = null}>
+								<button class="ta-cmd-close" title="Close" onclick={() => cmdPanelSession = null}>
 									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="12" height="12">
 										<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 									</svg>
@@ -1522,29 +1522,29 @@
 							</div>
 							{#if dtrayCommandsLoading}
 								{#each Array(3) as _, i}
-									<div class="mobile-cmd-skeleton" style="animation-delay: {i * 80}ms;" aria-hidden="true">
-										<div class="mobile-cmd-skeleton-ns"></div>
-										<div class="mobile-cmd-skeleton-name"></div>
+									<div class="ta-cmd-skeleton" style="animation-delay: {i * 80}ms;" aria-hidden="true">
+										<div class="ta-cmd-skeleton-ns"></div>
+										<div class="ta-cmd-skeleton-name"></div>
 									</div>
 								{/each}
 								<span class="sr-only">Loading commands…</span>
 							{:else if filteredCmdPanelItems.length === 0}
-								<div class="mobile-cmd-msg">{cmdPanelSearch.trim() ? `No match for "${cmdPanelSearch}"` : 'No commands found'}</div>
+								<div class="ta-cmd-msg">{cmdPanelSearch.trim() ? `No match for "${cmdPanelSearch}"` : 'No commands found'}</div>
 							{:else}
 								{#each filteredCmdPanelItems as cmd, i (cmd.invocation)}
 								<button
-									class="mobile-cmd-item"
+									class="ta-cmd-item"
 									in:fade={{ duration: 120, delay: Math.min(i * 25, 200) }}
 									onclick={() => { sendWorkflowCommand(session.name, cmd.invocation); cmdPanelSession = null; }}
 								>
-									<span class="mobile-cmd-ns">{cmd.namespace}</span>
-									<span class="mobile-cmd-name">{cmd.invocation}</span>
+									<span class="ta-cmd-ns">{cmd.namespace}</span>
+									<span class="ta-cmd-name">{cmd.invocation}</span>
 								</button>
 								{/each}
 							{/if}
 							<a
 								href="/config?tab=commands"
-								class="mobile-cmd-new-link"
+								class="ta-cmd-new-link"
 								onclick={() => cmdPanelSession = null}
 							>
 								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="11" height="11">
@@ -1560,21 +1560,21 @@
 						{#if epicPickerSession === session.name}
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 						<div
-							class="mobile-epic-inline"
+							class="ta-epic-inline"
 							onclick={(e) => e.stopPropagation()}
 							onkeydown={(e) => e.stopPropagation()}
 							role="group"
 							transition:slide={{ duration: 200, easing: cubicOut }}
 						>
-							<div class="mobile-epic-header">
+							<div class="ta-epic-header">
 								{#if epicPickerItems.length > 3}
 								<input
 									bind:value={epicPickerSearch}
 									placeholder="Search epics…"
-									class="mobile-epic-search"
+									class="ta-epic-search"
 								/>
 								{/if}
-								<button class="mobile-epic-close" title="Close" onclick={() => epicPickerSession = null}>
+								<button class="ta-epic-close" title="Close" onclick={() => epicPickerSession = null}>
 									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="12" height="12">
 										<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 									</svg>
@@ -1582,24 +1582,24 @@
 							</div>
 							{#if epicPickerLoading}
 								{#each Array(3) as _, i}
-									<div class="mobile-epic-skeleton" style="animation-delay: {i * 80}ms;" aria-hidden="true"></div>
+									<div class="ta-epic-skeleton" style="animation-delay: {i * 80}ms;" aria-hidden="true"></div>
 								{/each}
 								<span class="sr-only">Loading epics…</span>
 							{:else if epicPickerItems.length === 0}
-								<div class="mobile-epic-msg">No epics in this project</div>
+								<div class="ta-epic-msg">No epics in this project</div>
 							{:else if filteredEpicPickerItems.length === 0}
-								<div class="mobile-epic-msg">No match for "{epicPickerSearch}"</div>
+								<div class="ta-epic-msg">No match for "{epicPickerSearch}"</div>
 							{:else}
 								{#each filteredEpicPickerItems as epic, i (epic.id)}
 								<button
-									class="mobile-epic-item"
-									class:mobile-epic-item-closed={epic.status === 'closed'}
+									class="ta-epic-item"
+									class:ta-epic-item-closed={epic.status === 'closed'}
 									disabled={!!epicLinkingId}
 									in:fade={{ duration: 120, delay: Math.min(i * 25, 200) }}
 									onclick={() => linkMobileTaskToEpic(sessionTask.id, epic.id)}
 								>
-									<span class="mobile-epic-id">{epic.id}</span>
-									<span class="mobile-epic-title">{epic.title}</span>
+									<span class="ta-epic-id">{epic.id}</span>
+									<span class="ta-epic-title">{epic.title}</span>
 									{#if epicLinkingId === epic.id}
 										<svg class="animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
 											<path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4" />
@@ -1609,14 +1609,14 @@
 								{/each}
 							{/if}
 							<!-- Create new epic -->
-							<div class="mobile-epic-create-section">
+							<div class="ta-epic-create-section">
 								{#if mobileShowCreateEpic}
-								<div class="mobile-epic-create-form" transition:slide={{ duration: 160, easing: cubicOut }}>
+								<div class="ta-epic-create-form" transition:slide={{ duration: 160, easing: cubicOut }}>
 									<input
 										bind:this={mobileNewEpicInputEl}
 										bind:value={mobileNewEpicTitle}
 										placeholder="Epic title…"
-										class="mobile-epic-create-input"
+										class="ta-epic-create-input"
 										disabled={mobileCreatingEpic}
 										onkeydown={(e) => {
 											if (e.key === 'Enter' && mobileNewEpicTitle.trim()) { e.preventDefault(); mobileCreateEpic(sessionTask.id); }
@@ -1624,11 +1624,11 @@
 										}}
 									/>
 									{#if mobileCreateEpicError}
-										<span class="mobile-epic-create-error">{mobileCreateEpicError}</span>
+										<span class="ta-epic-create-error">{mobileCreateEpicError}</span>
 									{/if}
-									<div class="mobile-epic-create-actions">
-										<button class="mobile-epic-create-cancel" onclick={() => { mobileShowCreateEpic = false; mobileNewEpicTitle = ''; mobileCreateEpicError = null; }} disabled={mobileCreatingEpic}>Cancel</button>
-										<button class="mobile-epic-create-submit" onclick={() => mobileCreateEpic(sessionTask.id)} disabled={mobileCreatingEpic || !mobileNewEpicTitle.trim()}>
+									<div class="ta-epic-create-actions">
+										<button class="ta-epic-create-cancel" onclick={() => { mobileShowCreateEpic = false; mobileNewEpicTitle = ''; mobileCreateEpicError = null; }} disabled={mobileCreatingEpic}>Cancel</button>
+										<button class="ta-epic-create-submit" onclick={() => mobileCreateEpic(sessionTask.id)} disabled={mobileCreatingEpic || !mobileNewEpicTitle.trim()}>
 											{#if mobileCreatingEpic}
 												<svg class="animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4" /></svg>
 											{:else}
@@ -1639,7 +1639,7 @@
 								</div>
 								{:else}
 								<button
-									class="mobile-epic-create-btn"
+									class="ta-epic-create-btn"
 									in:fade={{ duration: 120 }}
 									onclick={() => { mobileShowCreateEpic = true; setTimeout(() => mobileNewEpicInputEl?.focus(), 50); }}
 									disabled={!!epicLinkingId}
@@ -1653,7 +1653,7 @@
 							</div>
 						</div>
 						{/if}
-						<div class="mobile-card-body">
+						<div class="ta-card-body">
 							{#if effectiveState === 'completed'}
 								{@const completionEntry = completionDataMap.get(sessionAgentName)}
 								{#if completionEntry?.state === 'loaded' && completionEntry.events.length > 0}
@@ -1662,11 +1662,11 @@
 										<CompletionCardCompact events={completionEntry.events} />
 									</div>
 								{:else if completionEntry?.state === 'loading'}
-									<div class="mobile-title-row">
-										<span class="mobile-title" title={sessionTask.title}>
+									<div class="ta-title-row">
+										<span class="ta-title" title={sessionTask.title}>
 											<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
 										</span>
-										<span class="mobile-title-state" style="background: {stateVisual.bgColor}; color: {stateVisual.textColor}; border: 1px solid {stateVisual.borderColor};">{stateVisual.shortLabel}</span>
+										<span class="ta-title-state" style="background: {stateVisual.bgColor}; color: {stateVisual.textColor}; border: 1px solid {stateVisual.borderColor};">{stateVisual.shortLabel}</span>
 									</div>
 									<div class="completion-loading-inline">
 										<div class="animate-spin-fast w-3.5 h-3.5 border-2 border-success border-t-transparent rounded-full"></div>
@@ -1674,35 +1674,36 @@
 									</div>
 								{:else}
 									<!-- empty/fallback: show title + description -->
-									<div class="mobile-title-row">
-										<span class="mobile-title" title={sessionTask.title}>
+									<div class="ta-title-row">
+										<span class="ta-title" title={sessionTask.title}>
 											<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
 										</span>
-										<span class="mobile-title-state" style="background: {stateVisual.bgColor}; color: {stateVisual.textColor}; border: 1px solid {stateVisual.borderColor};">{stateVisual.shortLabel}</span>
+										<span class="ta-title-state" style="background: {stateVisual.bgColor}; color: {stateVisual.textColor}; border: 1px solid {stateVisual.borderColor};">{stateVisual.shortLabel}</span>
 										{#if elapsed}
-											<span class="mobile-title-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
+											<span class="ta-title-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
 										{/if}
 									</div>
 									{#if sessionTask.description}
-										<span class="mobile-description" title={sessionTask.description}>{sessionTask.description}</span>
+										<span class="ta-description" title={sessionTask.description}>{sessionTask.description}</span>
 									{/if}
 								{/if}
 							{:else}
 							{@const signalKey = `${sessionAgentName}:${effectiveState}`}
 							{@const signalEntry = signalDataMap.get(signalKey)}
-							<div class="mobile-title-row">
-								<span class="mobile-title" title={sessionTask.title}>
+							{@const destructActive = ($autoKillCountdowns.get(session.name) ?? 0) > 0}
+							<div class="ta-title-row">
+								<span class="ta-title" title={sessionTask.title}>
 									<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
 								</span>
-								<span class="mobile-title-state" style="background: {stateVisual.bgColor}; color: {stateVisual.textColor}; border: 1px solid {stateVisual.borderColor};">{stateVisual.shortLabel}</span>
+								<span class="ta-title-state" style="background: {stateVisual.bgColor}; color: {stateVisual.textColor}; border: 1px solid {stateVisual.borderColor};">{stateVisual.shortLabel}</span>
 								{#if effectiveState === 'ready-for-review'}
 									{@const completeFb = actionFeedback.get(`${session.name}:complete`)}
 									{@const completeFailed = completeFb === 'error-fail'}
 									<button
 										type="button"
-										class="mobile-title-complete"
-										class:mobile-title-complete-feedback={!!completeFb}
-										class:mobile-title-complete-failed={completeFailed}
+										class="ta-title-complete"
+										class:ta-title-complete-feedback={!!completeFb}
+										class:ta-title-complete-failed={completeFailed}
 										disabled={!!completeFb}
 										title="Mark task complete (/jat:complete)"
 										onclick={(e) => { e.stopPropagation(); handleMobileAction('complete', session.name, sessionTask, sessionAgentName, session.project || null); }}
@@ -1721,11 +1722,14 @@
 										{/if}
 									</button>
 								{/if}
-								{#if ($autoKillCountdowns.get(session.name) ?? null) !== null && ($autoKillCountdowns.get(session.name) ?? 0) > 0}
-									<span class="mobile-title-destruct" title="Session self-destructing">💣 {$autoKillCountdowns.get(session.name)}s</span>
+								{#if destructActive}
+									<span class="ta-title-destruct" title="Session self-destructing">
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="11" height="11"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+										{$autoKillCountdowns.get(session.name)}s
+									</span>
 								{/if}
-								{#if elapsed}
-									<span class="mobile-title-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
+								{#if elapsed && !destructActive}
+									<span class="ta-title-elapsed">{#if elapsed.showHours}{elapsed.hours}:{/if}{elapsed.minutes}:{elapsed.seconds}</span>
 								{/if}
 							</div>
 							<!-- State card: signal payload + hover-revealed terminal output -->
@@ -1738,36 +1742,36 @@
 								/>
 							</div>
 							{/if}<!-- end {:else} non-completed -->
-							<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-							<div class="mobile-row2-wrapper">
-								<div class="mobile-card-row2">
-									<span class="mobile-agent-name" title={sessionAgentName}>{sessionAgentName}</span>
-									<span class="mobile-separator">·</span>
-									<button class="mobile-task-id" class:mobile-task-id-copied={copiedMobileId === sessionTask.id} style="color: {statusDotColor};" onclick={(e) => copyMobileId(e, sessionTask.id)} title="Click to copy task ID" aria-label={copiedMobileId === sessionTask.id ? `Copied task ID ${sessionTask.id}` : `Copy task ID ${sessionTask.id}`}>
-										<span class="mobile-task-id-text">{sessionTask.id}</span>
-										{#if copiedMobileId === sessionTask.id}<span class="mobile-task-id-badge" aria-hidden="true">✓ copied</span>{/if}
+							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+							<div class="ta-row2-wrapper" onclick={(e) => { if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(hover: none)').matches) { e.stopPropagation(); trayOpenSession = trayOpenSession === session.name ? null : session.name; dismissTrayHint(); } }}>
+								<div class="ta-card-row2">
+									<span class="ta-agent-name" title={sessionAgentName}>{sessionAgentName}</span>
+									<span class="ta-separator">·</span>
+									<button class="ta-task-id" class:ta-task-id-copied={copiedMobileId === sessionTask.id} style="color: {statusDotColor};" onclick={(e) => copyMobileId(e, sessionTask.id)} title="Click to copy task ID" aria-label={copiedMobileId === sessionTask.id ? `Copied task ID ${sessionTask.id}` : `Copy task ID ${sessionTask.id}`}>
+										<span class="ta-task-id-text">{sessionTask.id}</span>
+										{#if copiedMobileId === sessionTask.id}<span class="ta-task-id-badge" aria-hidden="true">✓ copied</span>{/if}
 									</button>
 									{#if harness}
-										<span class="mobile-separator">·</span>
-										<span class="mobile-harness" title={harness}><ProviderLogo agentId={harness} size={11} /></span>
+										<span class="ta-separator">·</span>
+										<span class="ta-harness" title={harness}><ProviderLogo agentId={harness} size={11} /></span>
 									{/if}
 									{#if sessionTask.priority != null && sessionTask.priority <= 1}
-										<span class="mobile-separator">·</span>
-										<span class="mobile-priority mobile-priority-{sessionTask.priority}" title={sessionTask.priority === 0 ? 'P0 — Critical' : 'P1 — High'}>P{sessionTask.priority}</span>
+										<span class="ta-separator">·</span>
+										<span class="ta-priority ta-priority-{sessionTask.priority}" title={sessionTask.priority === 0 ? 'P0 — Critical' : 'P1 — High'}>P{sessionTask.priority}</span>
 									{/if}
-									{#if taskAge.label}
-										<span class="mobile-separator">·</span>
-										<span class="mobile-age" style="color: {taskAge.color};">{taskAge.label}</span>
+									{#if /d$|w$|mo$/.test(taskAge.label)}
+										<span class="ta-separator">·</span>
+										<span class="ta-age" style="color: {taskAge.color};">{taskAge.label}</span>
 									{/if}
 								</div>
 								<!-- Action tray — fades in over row2 on hover -->
-								<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+								<div class="ta-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 									{#each cardActions.slice(0, 5) as action}
 										{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
 										{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
 										{@const holdMatch = holdKey === `${session.name}:${action.id}`}
 										{@const isFailed = fb === 'error-fail'}
-										<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} class:mobile-tray-btn-holding={holdMatch} class:tray-btn-hold-dimmed={holdKey !== null && !holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive && !pointerLocked) handleMobileAction(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
+										<button class="ta-tray-btn ta-tray-btn-{fb ? fb : action.variant}" class:ta-tray-btn-feedback={!!fb} class:ta-tray-btn-holding={holdMatch} class:tray-btn-hold-dimmed={holdKey !== null && !holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive && !pointerLocked) handleMobileAction(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, sessionTask, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
 											{#if isDestructive && holdMatch}<span class="tray-hold-fill" style="width: {holdProgress}%"></span>{/if}
 											{#if fb}
 												{#if isFailed}
@@ -1785,8 +1789,8 @@
 									{/each}
 									{#if sessionTask.issue_type !== 'epic'}
 									<button
-										class="mobile-tray-btn mobile-tray-btn-epic"
-										class:mobile-tray-btn-epic-open={epicPickerSession === session.name}
+										class="ta-tray-btn ta-tray-btn-epic"
+										class:ta-tray-btn-epic-open={epicPickerSession === session.name}
 										title="Add to Epic"
 										onclick={() => openMobileEpicPicker(session.name, sessionTask.id)}
 									>
@@ -1797,8 +1801,8 @@
 									</button>
 									{/if}
 									<button
-										class="mobile-tray-btn mobile-tray-btn-cmds"
-										class:mobile-tray-btn-cmds-open={cmdPanelSession === session.name}
+										class="ta-tray-btn ta-tray-btn-cmds"
+										class:ta-tray-btn-cmds-open={cmdPanelSession === session.name}
 										title="All Commands"
 										onclick={() => openMobileCmdPanel(session.name)}
 									>
@@ -1808,8 +1812,8 @@
 										<span>Cmds</span>
 									</button>
 									<button
-										class="mobile-tray-btn mobile-tray-btn-auto"
-										class:mobile-tray-btn-auto-on={!autoCompleteDisabled}
+										class="ta-tray-btn ta-tray-btn-auto"
+										class:ta-tray-btn-auto-on={!autoCompleteDisabled}
 										title={autoCompleteDisabled ? 'Manual review — tap to enable auto-complete' : 'Auto-complete on — tap to require manual review'}
 										onclick={() => {
 											const newMap = new Map(autoCompleteDisabledMap);
@@ -1837,18 +1841,18 @@
 				{:else}
 					<!-- Planning / no-task session -->
 					{@const cardActions = getSessionStateActions(effectiveState)}
-					<div class="mobile-card-inner">
+					<div class="ta-card-inner">
 						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-						<div class="mobile-state-strip mobile-state-strip-agent mobile-state-strip-clickable" style="background: {stateVisual.bgTint};" role="button" tabindex="0" title="Open terminal" onclick={(e) => { e.stopPropagation(); fullscreenSession = session.name; }} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); fullscreenSession = session.name; } }}>
+						<div class="ta-state-strip ta-state-strip-agent ta-state-strip-clickable" style="background: {stateVisual.bgTint};" role="button" tabindex="0" title="Open terminal" onclick={(e) => { e.stopPropagation(); fullscreenSession = session.name; }} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); fullscreenSession = session.name; } }}>
 							<AgentAvatar name={sessionAgentName} size={96} showRing={false} shape="rounded" />
 						</div>
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-						<div class="mobile-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+						<div class="ta-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 							{#each cardActions.slice(0, 5) as action}
 								{@const fb = actionFeedback.get(`${session.name}:${action.id}`)}
 								{@const isDestructive = DESTRUCTIVE_TRAY_ACTIONS.has(action.id)}
 								{@const holdMatch = holdKey === `${session.name}:${action.id}`}
-								<button class="mobile-tray-btn mobile-tray-btn-{fb ? fb : action.variant}" class:mobile-tray-btn-feedback={!!fb} class:mobile-tray-btn-holding={holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive && !pointerLocked) handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
+								<button class="ta-tray-btn ta-tray-btn-{fb ? fb : action.variant}" class:ta-tray-btn-feedback={!!fb} class:ta-tray-btn-holding={holdMatch} title={isDestructive ? `Hold to ${action.label.toLowerCase()}` : action.description} disabled={!!fb} onclick={() => { if (!isDestructive && !pointerLocked) handleMobileAction(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerdown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); startTrayHold(action.id, session.name, null, sessionAgentName, session.project || null); }} onpointerup={clearTrayHold} onpointercancel={clearTrayHold}>
 									{#if isDestructive && holdMatch}<span class="tray-hold-fill" style="width: {holdProgress}%"></span>{/if}
 									{#if fb}
 										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
@@ -1859,16 +1863,16 @@
 								</button>
 							{/each}
 						</div>
-						<div class="mobile-card-body">
-							<span class="mobile-title" style="color: oklch(0.70 0.12 270);">
+						<div class="ta-card-body">
+							<span class="ta-title" style="color: oklch(0.70 0.12 270);">
 								{effectiveState === 'planning' ? 'Planning session' : 'Idle — no task assigned'}
 							</span>
-							<div class="mobile-card-row2">
+							<div class="ta-card-row2">
 								<AgentAvatar name={sessionAgentName} size={16} showRing={true} sessionState={effectiveState} />
-								<span class="mobile-agent-name">{sessionAgentName}</span>
+								<span class="ta-agent-name">{sessionAgentName}</span>
 								{#if derivedProject}
-									<span class="mobile-separator">·</span>
-									<span class="mobile-project">{derivedProject}</span>
+									<span class="ta-separator">·</span>
+									<span class="ta-project">{derivedProject}</span>
 								{/if}
 							</div>
 						</div>
@@ -2696,13 +2700,13 @@
 
 	/* ========== MOBILE LAYOUT ========== */
 
-	.mobile-sessions-list {
+	.ta-sessions-list {
 		display: flex;
 		flex-direction: column;
 		gap: 0;
 	}
 
-	.mobile-session-card {
+	.ta-session-card {
 		position: relative;
 		z-index: 1;
 		background: oklch(0.16 0.01 250);
@@ -2717,38 +2721,38 @@
 		overflow: hidden;
 	}
 
-	/*.mobile-session-card:first-child {
+	/*.ta-session-card:first-child {
 		border-radius: 8px 8px 0 0;
 	}*/
 
-	.mobile-session-card:last-child {
+	.ta-session-card:last-child {
 		/*border-radius: 0 0 8px 8px;*/
 		border-bottom: 1px solid oklch(0.25 0.02 250);
 	}
 
-	.mobile-session-card:only-child {
+	.ta-session-card:only-child {
 		/*border-radius: 8px;*/
 		border-bottom: 1px solid oklch(0.25 0.02 250);
 	}
 
-	.mobile-session-card:active {
+	.ta-session-card:active {
 		background: oklch(0.20 0.02 250);
 	}
 
-	.mobile-session-card.attached {
+	.ta-session-card.attached {
 		border-color: oklch(0.55 0.15 145 / 0.5);
 		background: oklch(0.65 0.15 145 / 0.06);
 	}
 
 	/* Inner flex container: state strip + content body */
-	.mobile-card-inner {
+	.ta-card-inner {
 		display: flex;
 		align-items: stretch;
 		min-height: 0;
 	}
 
 	/* State indicator strip */
-	.mobile-state-strip {
+	.ta-state-strip {
 		width: 28px;
 		flex-shrink: 0;
 		display: flex;
@@ -2758,46 +2762,46 @@
 	}
 
 	/* Agent variant: avatar only — name moved to metadata row */
-	.mobile-state-strip-agent {
+	.ta-state-strip-agent {
 		width: 140px;
 		padding: 0;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 	}
-	.mobile-state-strip-agent :global(*) {
+	.ta-state-strip-agent :global(*) {
 		border-radius: 0 !important;
 	}
 
 	/* Hide redundant agent name label — it's shown in the metadata row now */
-	.mobile-strip-agent-label {
+	.ta-strip-agent-label {
 		display: none;
 	}
 
 	/* Brighten strip on card hover */
-	.mobile-session-card:hover .mobile-state-strip {
+	.ta-session-card:hover .ta-state-strip {
 		filter: brightness(1.15) saturate(1.2);
 	}
 
 	/* Avatar strip is now a dedicated click target → opens MobileTerminal */
-	.mobile-state-strip-clickable {
+	.ta-state-strip-clickable {
 		cursor: pointer;
 	}
-	.mobile-state-strip-clickable:hover {
+	.ta-state-strip-clickable:hover {
 		filter: brightness(1.3) saturate(1.35);
 	}
-	.mobile-state-strip-clickable:focus-visible {
+	.ta-state-strip-clickable:focus-visible {
 		outline: 2px solid oklch(0.70 0.18 240);
 		outline-offset: -2px;
 	}
 
 	/* State-aware row highlight: tint follows session state color */
-	.mobile-session-card:hover {
+	.ta-session-card:hover {
 		background: color-mix(in oklch, var(--card-hover-tint, oklch(0.65 0.15 145)) 12%, transparent);
 	}
 
 	/* Action tray — legacy behavior (server cards, no-task cards): expands from right on hover */
-	.mobile-action-tray {
+	.ta-action-tray {
 		display: flex;
 		align-items: stretch;
 		max-width: 0;
@@ -2808,14 +2812,14 @@
 	}
 
 	/* Legacy tray (server + no-task cards): direct child of card-inner only */
-	.mobile-session-card:hover .mobile-card-inner > .mobile-action-tray,
-	.mobile-card-inner > .mobile-action-tray:hover,
-	.mobile-card-inner > .mobile-action-tray:focus-within {
+	.ta-session-card:hover .ta-card-inner > .ta-action-tray,
+	.ta-card-inner > .ta-action-tray:hover,
+	.ta-card-inner > .ta-action-tray:focus-within {
 		max-width: 480px;
 	}
 
 	/* Row2 wrapper — overlays tray over meta row on hover */
-	.mobile-row2-wrapper {
+	.ta-row2-wrapper {
 		display: grid;
 		grid-template-areas: "row2";
 		position: relative;
@@ -2824,13 +2828,13 @@
 		transition: background 0.15s ease;
 	}
 
-	.mobile-row2-wrapper:hover,
-	.mobile-session-card.tray-open .mobile-row2-wrapper {
+	.ta-row2-wrapper:hover,
+	.ta-session-card.tray-open .ta-row2-wrapper {
 		background: oklch(0.22 0.02 250 / 0.6);
 	}
 
 	/* Affordance glyph hinting that hover reveals actions */
-	.mobile-row2-wrapper::after {
+	.ta-row2-wrapper::after {
 		content: '⋯';
 		position: absolute;
 		right: 0.375rem;
@@ -2838,24 +2842,24 @@
 		transform: translateY(-50%);
 		font-size: 0.75rem;
 		line-height: 1;
-		color: oklch(0.50 0.02 250);
+		color: oklch(0.65 0.04 250);
 		pointer-events: none;
 		transition: opacity 0.12s ease;
 	}
 
-	.mobile-row2-wrapper:hover::after,
-	.mobile-session-card.tray-open .mobile-row2-wrapper::after {
+	.ta-row2-wrapper:hover::after,
+	.ta-session-card.tray-open .ta-row2-wrapper::after {
 		opacity: 0;
 	}
 
-	.mobile-row2-wrapper > .mobile-card-row2 {
+	.ta-row2-wrapper > .ta-card-row2 {
 		grid-area: row2;
 		margin-top: 0;
 		padding-right: 1.125rem;
 	}
 
 	/* Tray inside wrapper: opacity overlay, triggered only by hovering the row2 zone */
-	.mobile-row2-wrapper > .mobile-action-tray {
+	.ta-row2-wrapper > .ta-action-tray {
 		grid-area: row2;
 		position: relative;
 		max-width: none;
@@ -2869,9 +2873,9 @@
 	}
 
 	/* Reveal on row2-zone hover (not full-card hover) + focus/open states */
-	.mobile-row2-wrapper:hover > .mobile-action-tray,
-	.mobile-row2-wrapper > .mobile-action-tray:focus-within,
-	.mobile-session-card.tray-open .mobile-row2-wrapper > .mobile-action-tray {
+	.ta-row2-wrapper:hover > .ta-action-tray,
+	.ta-row2-wrapper > .ta-action-tray:focus-within,
+	.ta-session-card.tray-open .ta-row2-wrapper > .ta-action-tray {
 		opacity: 1;
 		pointer-events: auto;
 	}
@@ -2880,15 +2884,15 @@
 	   card body so the card doesn't subtly contract while the user is trying to
 	   aim at a tray button. Mirrors StateCardCompact's own hover-expand rule. */
 	@media (hover: hover) and (min-width: 640px) {
-		:global(.mobile-session-card:hover .scc-output-wrapper),
-		:global(.mobile-session-card:focus-within .scc-output-wrapper),
-		:global(.mobile-session-card.tray-open .scc-output-wrapper) {
+		:global(.ta-session-card:hover .scc-output-wrapper),
+		:global(.ta-session-card:focus-within .scc-output-wrapper),
+		:global(.ta-session-card.tray-open .scc-output-wrapper) {
 			grid-template-rows: 1fr;
 		}
 	}
 
 	/* Overlay buttons: single-line horizontal layout to fit row2 height */
-	.mobile-row2-wrapper > .mobile-action-tray .mobile-tray-btn {
+	.ta-row2-wrapper > .ta-action-tray .ta-tray-btn {
 		flex-direction: row;
 		padding: 0 7px;
 		font-size: 0.6rem;
@@ -2896,19 +2900,19 @@
 		gap: 3px;
 	}
 	/* No icon in overlay context — label only */
-	.mobile-row2-wrapper > .mobile-action-tray .mobile-tray-btn > svg {
+	.ta-row2-wrapper > .ta-action-tray .ta-tray-btn > svg {
 		display: none;
 	}
 
 	/* Hold isolation: dim inactive buttons while a hold is in progress */
-	.mobile-tray-btn.tray-btn-hold-dimmed {
+	.ta-tray-btn.tray-btn-hold-dimmed {
 		opacity: 0.25;
 		pointer-events: none;
 		transition: opacity 0.1s;
 	}
 
 	/* State badge in title row */
-	.mobile-title-state {
+	.ta-title-state {
 		flex-shrink: 0;
 		font-size: 0.625rem;
 		font-weight: 700;
@@ -2921,15 +2925,15 @@
 	}
 
 	/* Elapsed follows state badge (no auto margin needed) */
-	.mobile-title-state + .mobile-title-elapsed {
+	.ta-title-state + .ta-title-elapsed {
 		margin-left: 0.35rem;
 	}
 
 	/* Completing: indeterminate progress shimmer across the bottom edge */
-	.mobile-session-card.is-completing {
+	.ta-session-card.is-completing {
 		position: relative;
 	}
-	.mobile-session-card.is-completing::after {
+	.ta-session-card.is-completing::after {
 		content: '';
 		position: absolute;
 		left: 0;
@@ -2953,17 +2957,17 @@
 		100% { background-position: -50% 0; }
 	}
 	@media (prefers-reduced-motion: reduce) {
-		.mobile-session-card.is-completing::after {
+		.ta-session-card.is-completing::after {
 			animation: none;
 			background: oklch(0.75 0.12 175 / 0.5);
 		}
 	}
 
 	/* Compacting: slow pulsing shimmer in purple/violet across the bottom edge */
-	.mobile-session-card.is-compacting {
+	.ta-session-card.is-compacting {
 		position: relative;
 	}
-	.mobile-session-card.is-compacting::after {
+	.ta-session-card.is-compacting::after {
 		content: '';
 		position: absolute;
 		left: 0;
@@ -2987,7 +2991,7 @@
 		100% { background-position: -50% 0; }
 	}
 	@media (prefers-reduced-motion: reduce) {
-		.mobile-session-card.is-compacting::after {
+		.ta-session-card.is-compacting::after {
 			animation: none;
 			background: oklch(0.65 0.15 280 / 0.5);
 		}
@@ -2995,11 +2999,11 @@
 
 	/* Onboarding hint: briefly peek the tray on the first card so users discover the reveal */
 	/* Legacy tray only (direct child of card-inner) — animates max-width */
-	.swipe-container:first-child .mobile-session-card.tray-hint-active .mobile-card-inner > .mobile-action-tray {
+	.swipe-container:first-child .ta-session-card.tray-hint-active .ta-card-inner > .ta-action-tray {
 		animation: tray-hint-peek 2.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.8s 1 both;
 	}
 	/* Overlay tray (inside row2-wrapper) — animates opacity instead */
-	.swipe-container:first-child .mobile-session-card.tray-hint-active .mobile-row2-wrapper > .mobile-action-tray {
+	.swipe-container:first-child .ta-session-card.tray-hint-active .ta-row2-wrapper > .ta-action-tray {
 		animation: tray-hint-peek-opacity 2.4s ease 0.8s 1 both;
 	}
 	@keyframes tray-hint-peek {
@@ -3015,19 +3019,19 @@
 		100% { opacity: 0; }
 	}
 	@media (prefers-reduced-motion: reduce) {
-		.swipe-container:first-child .mobile-session-card.tray-hint-active .mobile-card-inner > .mobile-action-tray,
-		.swipe-container:first-child .mobile-session-card.tray-hint-active .mobile-row2-wrapper > .mobile-action-tray {
+		.swipe-container:first-child .ta-session-card.tray-hint-active .ta-card-inner > .ta-action-tray,
+		.swipe-container:first-child .ta-session-card.tray-hint-active .ta-row2-wrapper > .ta-action-tray {
 			animation: none;
 		}
 	}
 
 	/* Legacy tray only on tray-open: direct child of card-inner, not the overlay tray */
-	.mobile-session-card.tray-open .mobile-card-inner > .mobile-action-tray {
+	.ta-session-card.tray-open .ta-card-inner > .ta-action-tray {
 		max-width: 480px;
 	}
 
 	/* Tray action buttons */
-	.mobile-tray-btn {
+	.ta-tray-btn {
 		flex: 1;
 		display: flex;
 		flex-direction: column;
@@ -3051,25 +3055,25 @@
 		transition: filter 0.1s, background 0.18s cubic-bezier(0.25, 1, 0.5, 1), transform 0.1s cubic-bezier(0.25, 1, 0.5, 1);
 	}
 
-	.mobile-tray-btn:hover  { filter: brightness(1.12); }
-	.mobile-tray-btn:active { filter: brightness(1.25); transform: scaleY(0.94); }
-	.mobile-tray-btn:last-child { border-right: none; }
+	.ta-tray-btn:hover  { filter: brightness(1.12); }
+	.ta-tray-btn:active { filter: brightness(1.25); transform: scaleY(0.94); }
+	.ta-tray-btn:last-child { border-right: none; }
 
-	.mobile-tray-btn-success  { background: oklch(0.48 0.16 145); }
-	.mobile-tray-btn-warning  { background: oklch(0.52 0.14 70); }
-	.mobile-tray-btn-error    { background: oklch(0.45 0.16 25); }
-	.mobile-tray-btn-info     { background: oklch(0.48 0.14 220); }
-	.mobile-tray-btn-default  { background: oklch(0.30 0.02 250); }
-	.mobile-tray-btn-working  { background: oklch(0.52 0.14 70); }
-	.mobile-tray-btn-epic     { background: oklch(0.35 0.10 280); }
-	.mobile-tray-btn-epic-open { background: oklch(0.45 0.14 280); box-shadow: inset 0 -2px 0 oklch(0.65 0.18 280 / 0.6); }
-	.mobile-tray-btn-cmds     { background: oklch(0.30 0.08 200); }
-	.mobile-tray-btn-cmds-open { background: oklch(0.42 0.14 200); box-shadow: inset 0 -2px 0 oklch(0.65 0.18 200 / 0.6); }
-	.mobile-tray-btn-auto      { background: oklch(0.35 0.08 45); color: oklch(0.70 0.12 45); }
-	.mobile-tray-btn-auto-on   { background: oklch(0.35 0.12 145); color: oklch(0.75 0.15 145); }
-	.mobile-tray-btn-error-fail { background: oklch(0.40 0.16 25); color: oklch(0.92 0.04 25); }
+	.ta-tray-btn-success  { background: oklch(0.48 0.16 145); }
+	.ta-tray-btn-warning  { background: oklch(0.52 0.14 70); }
+	.ta-tray-btn-error    { background: oklch(0.45 0.16 25); }
+	.ta-tray-btn-info     { background: oklch(0.48 0.14 220); }
+	.ta-tray-btn-default  { background: oklch(0.30 0.02 250); }
+	.ta-tray-btn-working  { background: oklch(0.52 0.14 70); }
+	.ta-tray-btn-epic     { background: oklch(0.35 0.10 280); }
+	.ta-tray-btn-epic-open { background: oklch(0.45 0.14 280); box-shadow: inset 0 -2px 0 oklch(0.65 0.18 280 / 0.6); }
+	.ta-tray-btn-cmds     { background: oklch(0.30 0.08 200); }
+	.ta-tray-btn-cmds-open { background: oklch(0.42 0.14 200); box-shadow: inset 0 -2px 0 oklch(0.65 0.18 200 / 0.6); }
+	.ta-tray-btn-auto      { background: oklch(0.35 0.08 45); color: oklch(0.70 0.12 45); }
+	.ta-tray-btn-auto-on   { background: oklch(0.35 0.12 145); color: oklch(0.75 0.15 145); }
+	.ta-tray-btn-error-fail { background: oklch(0.40 0.16 25); color: oklch(0.92 0.04 25); }
 
-	.mobile-tray-btn { position: relative; overflow: hidden; }
+	.ta-tray-btn { position: relative; overflow: hidden; }
 	.tray-hold-fill {
 		position: absolute;
 		left: 0;
@@ -3080,12 +3084,12 @@
 		pointer-events: none;
 		z-index: 0;
 	}
-	.mobile-tray-btn-holding { filter: brightness(1.2); }
-	.mobile-tray-btn > :not(.tray-hold-fill) { position: relative; z-index: 1; }
+	.ta-tray-btn-holding { filter: brightness(1.2); }
+	.ta-tray-btn > :not(.tray-hold-fill) { position: relative; z-index: 1; }
 
 
 	/* Inline commands panel — expands below the card inner */
-	.mobile-cmd-inline {
+	.ta-cmd-inline {
 		background: oklch(0.17 0.02 200 / 0.65);
 		border-top: 1px solid oklch(0.35 0.08 200 / 0.4);
 		padding: 0.375rem 0.5rem;
@@ -3096,14 +3100,14 @@
 		gap: 0.125rem;
 	}
 
-	.mobile-cmd-header {
+	.ta-cmd-header {
 		display: flex;
 		align-items: center;
 		gap: 0.25rem;
 		margin-bottom: 0.1875rem;
 	}
 
-	.mobile-cmd-close {
+	.ta-cmd-close {
 		flex-shrink: 0;
 		display: flex;
 		align-items: center;
@@ -3118,16 +3122,16 @@
 		transition: background 0.15s, color 0.15s, transform 0.1s;
 	}
 
-	.mobile-cmd-close:hover {
+	.ta-cmd-close:hover {
 		background: oklch(0.38 0.08 200 / 0.7);
 		color: oklch(0.80 0.02 250);
 	}
 
-	.mobile-cmd-close:active {
+	.ta-cmd-close:active {
 		transform: scale(0.88);
 	}
 
-	.mobile-cmd-search {
+	.ta-cmd-search {
 		flex: 1;
 		padding: 0.25rem 0.5rem;
 		background: oklch(0.22 0.03 200);
@@ -3138,14 +3142,14 @@
 		outline: none;
 	}
 
-	.mobile-cmd-msg {
+	.ta-cmd-msg {
 		padding: 0.375rem 0.25rem;
 		color: oklch(0.55 0.04 200);
 		font-size: 0.6875rem;
 		text-align: center;
 	}
 
-	.mobile-cmd-skeleton {
+	.ta-cmd-skeleton {
 		display: flex;
 		align-items: center;
 		gap: 0.375rem;
@@ -3154,21 +3158,21 @@
 		border-radius: 0.25rem;
 		background: oklch(0.22 0.03 200 / 0.4);
 	}
-	.mobile-cmd-skeleton-ns {
+	.ta-cmd-skeleton-ns {
 		width: 2.5rem;
 		height: 0.625rem;
 		border-radius: 0.125rem;
 		background: oklch(0.35 0.03 200 / 0.6);
 		animation: skeleton-pulse 1.6s ease-in-out infinite;
 	}
-	.mobile-cmd-skeleton-name {
+	.ta-cmd-skeleton-name {
 		flex: 1;
 		height: 0.75rem;
 		border-radius: 0.125rem;
 		background: oklch(0.35 0.03 200 / 0.5);
 		animation: skeleton-pulse 1.6s ease-in-out infinite;
 	}
-	.mobile-epic-skeleton {
+	.ta-epic-skeleton {
 		width: 100%;
 		height: 1.75rem;
 		border-radius: 0.25rem;
@@ -3178,12 +3182,12 @@
 		animation: skeleton-pulse 1.6s ease-in-out infinite;
 	}
 	@media (prefers-reduced-motion: reduce) {
-		.mobile-cmd-skeleton-ns,
-		.mobile-cmd-skeleton-name,
-		.mobile-epic-skeleton { animation: none; }
+		.ta-cmd-skeleton-ns,
+		.ta-cmd-skeleton-name,
+		.ta-epic-skeleton { animation: none; }
 	}
 
-	.mobile-cmd-item {
+	.ta-cmd-item {
 		display: flex;
 		align-items: center;
 		gap: 0.375rem;
@@ -3197,24 +3201,24 @@
 		transition: background 0.12s, transform 0.1s cubic-bezier(0.25, 1, 0.5, 1);
 	}
 
-	.mobile-cmd-item:hover {
+	.ta-cmd-item:hover {
 		background: oklch(0.30 0.08 200 / 0.6);
 		transform: translateX(2px);
 	}
 
-	.mobile-cmd-item:active {
+	.ta-cmd-item:active {
 		background: oklch(0.35 0.10 200 / 0.7);
 		transform: translateX(1px) scale(0.98);
 	}
 
-	.mobile-cmd-ns {
+	.ta-cmd-ns {
 		font-size: 0.5625rem;
 		color: oklch(0.55 0.10 200);
 		font-family: monospace;
 		flex-shrink: 0;
 	}
 
-	.mobile-cmd-name {
+	.ta-cmd-name {
 		font-size: 0.6875rem;
 		color: oklch(0.80 0.02 250);
 		flex: 1;
@@ -3225,7 +3229,7 @@
 	}
 
 	/* Inline epic picker — expands below the card inner */
-	.mobile-epic-inline {
+	.ta-epic-inline {
 		background: oklch(0.18 0.02 280 / 0.6);
 		border-top: 1px solid oklch(0.35 0.08 280 / 0.4);
 		padding: 0.375rem 0.5rem;
@@ -3236,14 +3240,14 @@
 		gap: 0.1875rem;
 	}
 
-	.mobile-epic-header {
+	.ta-epic-header {
 		display: flex;
 		align-items: center;
 		gap: 0.25rem;
 		margin-bottom: 0.1875rem;
 	}
 
-	.mobile-epic-close {
+	.ta-epic-close {
 		flex-shrink: 0;
 		display: flex;
 		align-items: center;
@@ -3258,16 +3262,16 @@
 		transition: background 0.15s, color 0.15s, transform 0.1s;
 	}
 
-	.mobile-epic-close:hover {
+	.ta-epic-close:hover {
 		background: oklch(0.38 0.08 280 / 0.7);
 		color: oklch(0.80 0.02 250);
 	}
 
-	.mobile-epic-close:active {
+	.ta-epic-close:active {
 		transform: scale(0.88);
 	}
 
-	.mobile-epic-search {
+	.ta-epic-search {
 		flex: 1;
 		padding: 0.25rem 0.5rem;
 		background: oklch(0.22 0.03 280);
@@ -3278,14 +3282,14 @@
 		outline: none;
 	}
 
-	.mobile-epic-msg {
+	.ta-epic-msg {
 		padding: 0.375rem 0.25rem;
 		color: oklch(0.55 0.04 280);
 		font-size: 0.6875rem;
 		text-align: center;
 	}
 
-	.mobile-epic-item {
+	.ta-epic-item {
 		display: flex;
 		align-items: center;
 		gap: 0.375rem;
@@ -3299,26 +3303,26 @@
 		transition: background 0.12s, transform 0.1s cubic-bezier(0.25, 1, 0.5, 1);
 	}
 
-	.mobile-epic-item:hover {
+	.ta-epic-item:hover {
 		background: oklch(0.30 0.08 280 / 0.6);
 		transform: translateX(2px);
 	}
 
-	.mobile-epic-item:active {
+	.ta-epic-item:active {
 		background: oklch(0.35 0.10 280 / 0.7);
 		transform: translateX(1px) scale(0.98);
 	}
 
-	.mobile-epic-item-closed { opacity: 0.5; }
+	.ta-epic-item-closed { opacity: 0.5; }
 
 	/* Create new epic section */
-	.mobile-epic-create-section {
+	.ta-epic-create-section {
 		border-top: 1px solid oklch(0.35 0.08 280 / 0.25);
 		margin-top: 0.125rem;
 		padding-top: 0.125rem;
 	}
 
-	.mobile-epic-create-btn {
+	.ta-epic-create-btn {
 		display: flex;
 		align-items: center;
 		gap: 0.375rem;
@@ -3333,21 +3337,21 @@
 		transition: color 0.12s, background 0.12s;
 	}
 
-	.mobile-epic-create-btn:hover:not(:disabled) {
+	.ta-epic-create-btn:hover:not(:disabled) {
 		color: oklch(0.75 0.12 280);
 		background: oklch(0.28 0.06 280 / 0.35);
 	}
 
-	.mobile-epic-create-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+	.ta-epic-create-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-	.mobile-epic-create-form {
+	.ta-epic-create-form {
 		display: flex;
 		flex-direction: column;
 		gap: 0.25rem;
 		padding: 0.25rem 0.125rem;
 	}
 
-	.mobile-epic-create-input {
+	.ta-epic-create-input {
 		width: 100%;
 		padding: 0.3125rem 0.5rem;
 		background: oklch(0.20 0.03 280);
@@ -3359,23 +3363,23 @@
 		transition: border-color 0.15s;
 	}
 
-	.mobile-epic-create-input:focus {
+	.ta-epic-create-input:focus {
 		border-color: oklch(0.60 0.16 280 / 0.7);
 	}
 
-	.mobile-epic-create-error {
+	.ta-epic-create-error {
 		font-size: 0.625rem;
 		color: oklch(0.65 0.16 25);
 		padding: 0 0.25rem;
 	}
 
-	.mobile-epic-create-actions {
+	.ta-epic-create-actions {
 		display: flex;
 		gap: 0.375rem;
 		justify-content: flex-end;
 	}
 
-	.mobile-epic-create-cancel {
+	.ta-epic-create-cancel {
 		padding: 0.1875rem 0.625rem;
 		border: 1px solid oklch(0.35 0.04 250 / 0.5);
 		border-radius: 0.25rem;
@@ -3386,12 +3390,12 @@
 		transition: background 0.12s, color 0.12s;
 	}
 
-	.mobile-epic-create-cancel:hover:not(:disabled) {
+	.ta-epic-create-cancel:hover:not(:disabled) {
 		background: oklch(0.25 0.02 250 / 0.5);
 		color: oklch(0.75 0.02 250);
 	}
 
-	.mobile-epic-create-submit {
+	.ta-epic-create-submit {
 		display: flex;
 		align-items: center;
 		gap: 0.25rem;
@@ -3406,14 +3410,14 @@
 		transition: background 0.12s, opacity 0.12s;
 	}
 
-	.mobile-epic-create-submit:hover:not(:disabled) {
+	.ta-epic-create-submit:hover:not(:disabled) {
 		background: oklch(0.52 0.16 280);
 	}
 
-	.mobile-epic-create-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+	.ta-epic-create-submit:disabled { opacity: 0.5; cursor: not-allowed; }
 
 	/* New Command nav link */
-	.mobile-cmd-new-link {
+	.ta-cmd-new-link {
 		display: flex;
 		align-items: center;
 		gap: 0.375rem;
@@ -3430,19 +3434,19 @@
 		transition: color 0.12s, background 0.12s;
 	}
 
-	.mobile-cmd-new-link:hover {
+	.ta-cmd-new-link:hover {
 		color: oklch(0.70 0.12 200);
 		background: oklch(0.25 0.05 200 / 0.35);
 	}
 
-	.mobile-epic-id {
+	.ta-epic-id {
 		font-size: 0.5625rem;
 		color: oklch(0.60 0.12 280);
 		font-family: monospace;
 		flex-shrink: 0;
 	}
 
-	.mobile-epic-title {
+	.ta-epic-title {
 		font-size: 0.6875rem;
 		color: oklch(0.80 0.02 250);
 		flex: 1;
@@ -3452,21 +3456,21 @@
 	}
 
 	/* Feedback flash animation — plays when a tray button is clicked */
-	.mobile-tray-btn-feedback {
+	.ta-tray-btn-feedback {
 		animation: tray-btn-confirm 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
 		pointer-events: none;
 	}
 
-	.mobile-tray-btn-feedback.mobile-tray-btn-success {
+	.ta-tray-btn-feedback.ta-tray-btn-success {
 		background: oklch(0.58 0.20 145);
 	}
-	.mobile-tray-btn-feedback.mobile-tray-btn-error {
+	.ta-tray-btn-feedback.ta-tray-btn-error {
 		background: oklch(0.55 0.20 25);
 	}
-	.mobile-tray-btn-feedback.mobile-tray-btn-warning {
+	.ta-tray-btn-feedback.ta-tray-btn-warning {
 		background: oklch(0.60 0.16 70);
 	}
-	.mobile-tray-btn-feedback.mobile-tray-btn-info {
+	.ta-tray-btn-feedback.ta-tray-btn-info {
 		background: oklch(0.56 0.16 220);
 	}
 
@@ -3490,7 +3494,7 @@
 	}
 
 	/* Content area (full width minus strip) */
-	.mobile-card-body {
+	.ta-card-body {
 		flex: 1;
 		min-width: 0;
 		padding: 0.75rem 0.875rem;
@@ -3499,14 +3503,14 @@
 		gap: 0.375rem;
 	}
 
-	.mobile-title-row {
+	.ta-title-row {
 		display: flex;
 		align-items: baseline;
 		gap: 0.5rem;
 		min-width: 0;
 	}
 
-	.mobile-title-elapsed {
+	.ta-title-elapsed {
 		flex-shrink: 0;
 		font-size: 0.6875rem;
 		font-weight: 500;
@@ -3517,7 +3521,7 @@
 		padding-top: 0.2em;
 	}
 
-	.mobile-title {
+	.ta-title {
 		flex: 1;
 		min-width: 0;
 		font-size: 1.0625rem;
@@ -3530,7 +3534,7 @@
 		white-space: nowrap;
 	}
 
-	.mobile-description {
+	.ta-description {
 		min-width: 0;
 		font-size: 0.75rem;
 		color: oklch(0.72 0.02 250);
@@ -3541,7 +3545,7 @@
 
 
 	/* Row 2: metadata line — default sans-serif for readability, mono only for IDs/timestamps */
-	.mobile-card-row2 {
+	.ta-card-row2 {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
@@ -3553,18 +3557,18 @@
 		flex-wrap: nowrap;
 	}
 
-	.mobile-agent-name {
+	.ta-agent-name {
 		font-weight: 500;
 		color: oklch(0.72 0.02 250);
 		letter-spacing: 0.01em;
 	}
 
-	.mobile-separator {
+	.ta-separator {
 		color: oklch(0.35 0.01 250);
 		font-size: 0.625rem;
 	}
 
-	.mobile-task-id {
+	.ta-task-id {
 		font-weight: 600;
 		white-space: nowrap;
 		flex-shrink: 0;
@@ -3579,15 +3583,15 @@
 		text-underline-offset: 2px;
 		transition: text-decoration-color 0.15s;
 	}
-	.mobile-task-id:hover {
+	.ta-task-id:hover {
 		text-decoration-color: currentColor;
 	}
-	.mobile-task-id:focus-visible {
+	.ta-task-id:focus-visible {
 		outline: 2px solid oklch(0.70 0.18 240);
 		outline-offset: 2px;
 		border-radius: 2px;
 	}
-	.mobile-task-id-badge {
+	.ta-task-id-badge {
 		margin-left: 0.375rem;
 		font-family: system-ui, -apple-system, sans-serif;
 		font-size: 0.625rem;
@@ -3597,27 +3601,27 @@
 		color: oklch(0.82 0.18 145);
 		text-decoration: none;
 	}
-	.mobile-task-id-copied {
+	.ta-task-id-copied {
 		text-decoration-color: oklch(0.70 0.18 145 / 0.6);
 	}
 
-	.mobile-elapsed {
+	.ta-elapsed {
 		font-weight: 500;
 		color: oklch(0.60 0.02 250);
 		font-variant-numeric: tabular-nums;
 	}
 
-	.mobile-harness {
+	.ta-harness {
 		display: inline-flex;
 		align-items: center;
 	}
 
-	.mobile-age {
+	.ta-age {
 		font-weight: 600;
 		font-size: 0.5625rem;
 	}
 
-	.mobile-priority {
+	.ta-priority {
 		font-weight: 700;
 		font-size: 0.6875rem;
 		padding: 0.0625rem 0.375rem;
@@ -3626,26 +3630,26 @@
 		line-height: 1.25;
 	}
 
-	.mobile-priority-0 {
+	.ta-priority-0 {
 		color: oklch(0.88 0.18 25);
 		background: oklch(0.55 0.20 25 / 0.22);
 		border: 1px solid oklch(0.70 0.20 25 / 0.35);
 	}
 
-	.mobile-priority-1 {
+	.ta-priority-1 {
 		color: oklch(0.88 0.15 85);
 		background: oklch(0.55 0.18 85 / 0.20);
 		border: 1px solid oklch(0.70 0.18 85 / 0.32);
 	}
 
-	.mobile-project {
+	.ta-project {
 		font-weight: 500;
 		color: oklch(0.60 0.05 250);
 		text-transform: uppercase;
 		letter-spacing: 0.03em;
 	}
 
-	.mobile-state-badge {
+	.ta-state-badge {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.2rem;
@@ -3657,7 +3661,7 @@
 		white-space: nowrap;
 	}
 
-	.mobile-title-destruct {
+	.ta-title-destruct {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.25rem;
@@ -3675,7 +3679,7 @@
 	}
 
 	/* Primary action in title row — visible Complete button when review-ready */
-	.mobile-title-complete {
+	.ta-title-complete {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.25rem;
@@ -3695,28 +3699,28 @@
 		line-height: 1;
 		transition: background 0.12s ease, border-color 0.12s ease, filter 0.12s ease, transform 0.08s ease;
 	}
-	.mobile-title-complete:hover {
+	.ta-title-complete:hover {
 		background: oklch(0.62 0.16 180 / 0.9);
 		border-color: oklch(0.78 0.16 180 / 0.85);
 		filter: brightness(1.08);
 	}
-	.mobile-title-complete:active {
+	.ta-title-complete:active {
 		transform: translateY(1px) scale(0.97);
 	}
-	.mobile-title-complete:focus-visible {
+	.ta-title-complete:focus-visible {
 		outline: 2px solid oklch(0.78 0.16 180);
 		outline-offset: 2px;
 	}
-	.mobile-title-complete:disabled {
+	.ta-title-complete:disabled {
 		cursor: default;
 	}
-	.mobile-title-complete-feedback {
+	.ta-title-complete-feedback {
 		background: oklch(0.55 0.18 145 / 0.85);
 		border-color: oklch(0.70 0.18 145 / 0.85);
 		color: oklch(0.98 0.08 145);
 		animation: tray-btn-confirm 0.35s cubic-bezier(0.25, 1, 0.5, 1);
 	}
-	.mobile-title-complete-failed {
+	.ta-title-complete-failed {
 		background: oklch(0.55 0.22 25 / 0.85);
 		border-color: oklch(0.70 0.22 25 / 0.85);
 		color: oklch(0.98 0.08 25);
@@ -3730,16 +3734,16 @@
 		overflow: hidden;
 	}
 
-	.swipe-container:first-child .mobile-session-card {
+	.swipe-container:first-child .ta-session-card {
 		border-radius: 0.5rem 0.5rem 0 0;
 	}
 
-	.swipe-container:last-child .mobile-session-card {
+	.swipe-container:last-child .ta-session-card {
 		border-radius: 0 0 0.5rem 0.5rem;
 		border-bottom: 1px solid oklch(0.25 0.02 250);
 	}
 
-	.swipe-container:only-child .mobile-session-card {
+	.swipe-container:only-child .ta-session-card {
 		border-radius: 0.5rem;
 		border-bottom: 1px solid oklch(0.25 0.02 250);
 	}
@@ -3795,45 +3799,45 @@
 		font-size: 0.625rem;
 	}
 
-	.mobile-session-card.swiping {
+	.ta-session-card.swiping {
 		/* Disable :active state during swipe */
 		background: oklch(0.16 0.01 250);
 	}
 
-	.mobile-session-card.swiping.attached {
+	.ta-session-card.swiping.attached {
 		background: oklch(0.65 0.15 145 / 0.06);
 	}
 
-	/* Override first/last/only-child on .mobile-session-card since .swipe-container owns that now */
-	.mobile-session-card:first-child {
+	/* Override first/last/only-child on .ta-session-card since .swipe-container owns that now */
+	.ta-session-card:first-child {
 		border-radius: 0;
 	}
-	.mobile-session-card:last-child {
+	.ta-session-card:last-child {
 		border-radius: 0;
 		border-bottom: none;
 	}
-	.mobile-session-card:only-child {
+	.ta-session-card:only-child {
 		border-radius: 0;
 		border-bottom: none;
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.mobile-session-card {
+		.ta-session-card {
 			transition: none !important;
 		}
 		.swipe-tray {
 			transition: none !important;
 		}
-		.mobile-title,
-		.mobile-description {
+		.ta-title,
+		.ta-description {
 			transition: none !important;
 			animation: none !important;
 		}
-		.mobile-tray-btn,
-		.mobile-cmd-item,
-		.mobile-epic-item,
-		.mobile-cmd-close,
-		.mobile-epic-close {
+		.ta-tray-btn,
+		.ta-cmd-item,
+		.ta-epic-item,
+		.ta-cmd-close,
+		.ta-epic-close {
 			transition: none !important;
 			transform: none !important;
 			animation: none !important;
@@ -3841,7 +3845,7 @@
 	}
 
 	/* Expanded card within mobile */
-	.mobile-expanded-card {
+	.ta-expanded-card {
 		background: oklch(0.14 0.01 250);
 		border: 1px solid oklch(0.25 0.02 250);
 		border-top: none;

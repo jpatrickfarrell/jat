@@ -29,11 +29,13 @@
 	let {
 		taskId,
 		compact = false,
-		onCountChange
+		onCountChange,
+		onPendingQuestionChange
 	}: {
 		taskId: string;
 		compact?: boolean;
 		onCountChange?: (count: number) => void;
+		onPendingQuestionChange?: (hasPending: boolean) => void;
 	} = $props();
 
 	let comments = $state<Comment[]>([]);
@@ -74,6 +76,10 @@
 
 	$effect(() => {
 		if (taskId) load();
+	});
+
+	$effect(() => {
+		onPendingQuestionChange?.(pendingQuestion !== null);
 	});
 
 	async function submitOption(optionText: string) {

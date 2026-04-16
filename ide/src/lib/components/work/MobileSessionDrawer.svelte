@@ -357,6 +357,7 @@
 	let fullTask = $state<Record<string, any> | null>(null);
 	let taskLoading = $state(false);
 	let commentsCount = $state(0);
+	let hasPendingQuestion = $state(false);
 
 	// Inline edit state — which field (if any) is currently being edited
 	type EditMode = 'none' | 'status' | 'priority' | 'labels' | 'title' | 'description';
@@ -1574,8 +1575,17 @@
 					}}
 				/>
 
+				<!-- Keyboard dropup tap-away backdrop -->
+				{#if keyboardOpen}
+					<div
+						class="fixed inset-0 z-[59]"
+						use:directClick={() => (keyboardOpen = false)}
+						aria-hidden="true"
+					></div>
+				{/if}
+
 				<!-- Mobile Input Row: [keyboard dropup | attach | input | send] -->
-				<div class="mobile-input-row flex items-center gap-1.5 px-2 py-1.5 bg-base-200 flex-shrink-0 {(sentFlash || sentStayFlash) ? 'send-flash' : ''}">
+				<div class="mobile-input-row flex items-center gap-1.5 px-2 py-1.5 bg-base-100 border-t border-base-300 flex-shrink-0 {(sentFlash || sentStayFlash) ? 'send-flash' : ''}">
 					<!-- Keyboard dropup -->
 					<div class="relative flex-shrink-0">
 						<button
@@ -1588,19 +1598,19 @@
 							</svg>
 						</button>
 						{#if keyboardOpen}
-							<div class="absolute bottom-full left-0 mb-1.5 bg-base-200 border border-base-300 rounded-lg p-1.5 flex flex-col gap-1 shadow-xl z-[60] min-w-[200px]">
+							<div class="absolute bottom-full left-0 mb-1.5 bg-base-200 border border-base-300 rounded-lg p-1.5 flex flex-col gap-1 shadow-xl z-[60] min-w-[240px]">
 								<div class="flex gap-1">
-									<button class="flex-1 flex items-center justify-center px-2 py-1.5 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('up')}>↑</button>
-									<button class="flex-1 flex items-center justify-center px-2 py-1.5 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('down')}>↓</button>
-									<button class="flex-1 flex items-center justify-center px-2 py-1.5 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('left')}>←</button>
-									<button class="flex-1 flex items-center justify-center px-2 py-1.5 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('right')}>→</button>
+									<button class="flex-1 flex items-center justify-center h-11 px-2 font-mono text-sm text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('up')}>↑</button>
+									<button class="flex-1 flex items-center justify-center h-11 px-2 font-mono text-sm text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('down')}>↓</button>
+									<button class="flex-1 flex items-center justify-center h-11 px-2 font-mono text-sm text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('left')}>←</button>
+									<button class="flex-1 flex items-center justify-center h-11 px-2 font-mono text-sm text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('right')}>→</button>
 								</div>
 								<div class="flex gap-1">
-									<button class="flex-1 flex items-center justify-center px-2 py-1.5 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('enter')}>Enter ⤶</button>
-									<button class="flex-1 flex items-center justify-center px-2 py-1.5 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('tab')}>Tab ⇥</button>
-									<button class="flex-1 flex items-center justify-center px-2 py-1.5 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('escape')}>ESC</button>
-									<button class="flex-1 flex items-center justify-center px-2 py-1.5 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('ctrl-c')}>^C</button>
-									<button class="flex-1 flex items-center justify-center px-2 py-1.5 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('ctrl-l')}>^L</button>
+									<button class="flex-1 flex items-center justify-center h-11 px-2 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('enter')}>Enter ⤶</button>
+									<button class="flex-1 flex items-center justify-center h-11 px-2 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('tab')}>Tab ⇥</button>
+									<button class="flex-1 flex items-center justify-center h-11 px-2 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('escape')}>ESC</button>
+									<button class="flex-1 flex items-center justify-center h-11 px-2 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('ctrl-c')}>^C</button>
+									<button class="flex-1 flex items-center justify-center h-11 px-2 font-mono text-xs text-base-content bg-base-300 border border-base-300 rounded-md cursor-pointer whitespace-nowrap active:bg-base-content/20 transition-colors" use:directClick={() => sendKey('ctrl-l')}>^L</button>
 								</div>
 							</div>
 						{/if}
@@ -1735,40 +1745,68 @@
 										</span>
 									{/if}
 								</TaskMetaRow>
-								{#if commentsCount > 0 || fullTask}
-									<TaskMetaRow>
-										{#if commentsCount > 0}
+								<TaskMetaRow>
+									<!-- Type badge — always present, anchors the row -->
+									{@const typeVisual = getIssueTypeVisual(task.issue_type)}
+									<span class="inline-flex items-center gap-1 self-center whitespace-nowrap text-xs text-base-content/60">
+										<span aria-hidden="true">{typeVisual.icon}</span>
+										<span class="uppercase tracking-wide">{typeVisual.label}</span>
+									</span>
+									<!-- Comments jump (only when comments exist) -->
+									{#if commentsCount > 0}
+										<button
+											type="button"
+											class="inline-flex items-center gap-1 self-center whitespace-nowrap text-xs transition-colors {hasPendingQuestion ? 'text-warning font-medium' : 'text-base-content/60 hover:text-base-content/90 active:text-base-content'}"
+											use:directClick={() => document.getElementById('comments-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+											aria-label={hasPendingQuestion ? `Jump to comments — agent is waiting for your answer` : `Jump to ${commentsCount} comment${commentsCount === 1 ? '' : 's'}`}
+											title={hasPendingQuestion ? 'Agent is waiting for your answer' : undefined}
+										>
+											{#if hasPendingQuestion}
+												<span class="relative inline-flex w-2 h-2 -ml-0.5 mr-0.5">
+													<span class="absolute inline-flex w-full h-full rounded-full bg-warning opacity-75 animate-ping"></span>
+													<span class="relative inline-flex w-2 h-2 rounded-full bg-warning"></span>
+												</span>
+											{/if}
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+											</svg>
+											<span class="tabular-nums">{commentsCount}</span>
+										</button>
+									{/if}
+									<!-- Attachments jump (only when attachments exist) -->
+									{@const attachmentCount = fullTask?.attachments?.length ?? 0}
+									{#if attachmentCount > 0}
+										<button
+											type="button"
+											class="inline-flex items-center gap-1 self-center whitespace-nowrap text-xs text-base-content/60 hover:text-base-content/90 active:text-base-content transition-colors"
+											use:directClick={() => document.getElementById('attachments-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+											aria-label={`Jump to ${attachmentCount} attachment${attachmentCount === 1 ? '' : 's'}`}
+										>
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5">
+												<path stroke-linecap="round" stroke-linejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
+											</svg>
+											<span class="tabular-nums">{attachmentCount}</span>
+										</button>
+									{/if}
+									<!-- Labels (edit existing or add) -->
+									{#if fullTask?.labels?.length}
+										{#each fullTask.labels as label}
 											<button
 												type="button"
-												class="inline-flex items-center gap-1 self-center whitespace-nowrap text-xs text-base-content/70 active:text-base-content transition-colors"
-												use:directClick={() => document.getElementById('comments-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-												aria-label={`Jump to ${commentsCount} comment${commentsCount === 1 ? '' : 's'}`}
-											>
-												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
-												</svg>
-												<span class="tabular-nums">{commentsCount}</span>
-											</button>
-										{/if}
-										{#if fullTask?.labels?.length}
-											{#each fullTask.labels as label}
-												<button
-													type="button"
-													class="badge badge-sm badge-outline cursor-pointer active:scale-95 transition-transform text-base-content/80"
-													use:directClick={() => openEditor('labels')}
-													aria-label="Edit labels"
-												>{label}</button>
-											{/each}
-										{:else if fullTask}
-											<button
-												type="button"
-												class="badge badge-sm badge-ghost badge-outline cursor-pointer active:scale-95 transition-transform text-base-content/50"
+												class="badge badge-sm badge-outline cursor-pointer active:scale-95 transition-transform text-base-content/80"
 												use:directClick={() => openEditor('labels')}
-												aria-label="Add labels"
-											>+ label</button>
-										{/if}
-									</TaskMetaRow>
-								{/if}
+												aria-label="Edit labels"
+											>{label}</button>
+										{/each}
+									{:else if fullTask}
+										<button
+											type="button"
+											class="badge badge-sm badge-ghost badge-outline cursor-pointer active:scale-95 transition-transform text-base-content/50"
+											use:directClick={() => openEditor('labels')}
+											aria-label="Add labels"
+										>+ label</button>
+									{/if}
+								</TaskMetaRow>
 							</div>
 
 							{#if reviewReason}
@@ -1779,14 +1817,17 @@
 							{/if}
 
 							<div class="mb-5 flex items-center gap-3 flex-wrap">
-								<label class="flex items-center gap-2 text-sm cursor-pointer">
+								<label
+									class="flex items-center gap-2 text-sm cursor-pointer"
+									title="When the agent signals ready for review, automatically run /jat:complete — closes the task and ends the session."
+								>
 									<input
 										type="checkbox"
 										class="toggle toggle-sm toggle-success"
 										checked={autoCompleteEnabled}
 										onchange={(e) => onAutoCompleteToggle((e.target as HTMLInputElement).checked)}
 									/>
-									<span>Auto-complete</span>
+									<span>Auto-close on review</span>
 								</label>
 								{#if task?.issue_type !== 'epic'}
 									<button
@@ -1843,7 +1884,7 @@
 						{/if}
 
 						<!-- Attachments -->
-						<section class="px-4 pt-4 pb-5 border-t border-base-300/60">
+						<section id="attachments-section" class="px-4 pt-4 pb-5 border-t border-base-300/60">
 							<div class="flex items-center justify-between mb-2">
 								<h4 class="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-base-content/55">Attachments</h4>
 								<button
@@ -1969,7 +2010,7 @@
 						{#if task?.id}
 							<section id="comments-section" class="px-4 pt-4 pb-6 border-t border-base-300/60">
 								<h4 class="text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-base-content/55 mb-3">Comments</h4>
-								<CommentsThread taskId={task.id} onCountChange={(n) => (commentsCount = n)} />
+								<CommentsThread taskId={task.id} onCountChange={(n) => (commentsCount = n)} onPendingQuestionChange={(p) => (hasPendingQuestion = p)} />
 							</section>
 						{/if}
 					{:else}

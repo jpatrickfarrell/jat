@@ -310,6 +310,7 @@
 			{/if}
 		</button>
 
+		{#if !internalCollapsed}
 		<div class="header-actions">
 			<button
 				class="action-btn"
@@ -376,6 +377,7 @@
 				</svg>
 			</button>
 		</div>
+		{/if}
 	</div>
 
 	{#if !internalCollapsed}

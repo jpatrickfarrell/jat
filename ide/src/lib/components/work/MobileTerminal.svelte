@@ -451,6 +451,10 @@
 	let customInput = $state('');
 	let customError = $state<string | null>(null);
 	let isSubmittingCustom = $state(false);
+	// Payload captured at the start of the most recent answerCustom(). Preserved on
+	// failure so Retry replays the exact text that failed, even if the user edited
+	// the textarea afterwards. Cleared on success or dismissal.
+	let lastCustomPayload = $state<string | null>(null);
 	let customFailures = 0;
 	let customPollTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -526,6 +530,9 @@
 
 	async function answerCustom(answer: string) {
 		if (!sessionName || isSubmittingCustom) return;
+		// Capture BEFORE any await so Retry replays the exact failed payload even
+		// if the user edits customInput in the meantime.
+		lastCustomPayload = answer;
 		isSubmittingCustom = true;
 		customError = null;
 
@@ -548,13 +555,19 @@
 			});
 			if (!r.ok) throw new Error(`HTTP ${r.status}`);
 			// Success — optimistic clear was correct, nothing more to do.
+			lastCustomPayload = null;
 		} catch (e) {
 			if ((e as Error).name !== 'AbortError') {
 				// Rollback: restore the question panel and the typed answer so the user can retry.
+				// lastCustomPayload is preserved so Retry sends the original failed text.
 				customQuestion = snapshot;
 				customInput = answer;
 				onOptimisticAnswer?.(null);
 				errorToast('Answer failed to send', 'Check connection and try again');
+			} else {
+				// AbortError = component teardown or cancelled request. Don't leave a
+				// stale payload around for a Retry that will never happen.
+				lastCustomPayload = null;
 			}
 		} finally {
 			isSubmittingCustom = false;
@@ -646,7 +659,7 @@
 	{#if customQuestion?.active && customQuestion.question}
 		<QuestionPanel
 			question={customQuestion.question}
-			onDismiss={() => { customQuestion = null; customInput = ''; customError = null; }}
+			onDismiss={() => { customQuestion = null; customInput = ''; customError = null; lastCustomPayload = null; }}
 		>
 			{#if customQuestion.options?.length}
 				<div class="flex flex-wrap gap-1.5 mb-2">
@@ -681,14 +694,21 @@
 				>{#if isSubmittingCustom}<Spinner />{:else}Send{/if}</button>
 			</div>
 			{#if customError}
-				<div class="mt-2 flex items-center gap-2 text-xs" style="color: {input.textColor};" role="alert">
-					<span class="flex-1">{customError}</span>
-					<button
-						class="btn btn-xs btn-ghost"
-						style="min-height: 1.75rem; color: {input.textColor};"
-						disabled={isSubmittingCustom}
-						use:directClick={() => { if (customInput.trim()) answerCustom(customInput); }}
-					>Retry</button>
+				<div class="mt-2 flex flex-col gap-1" role="alert">
+					<div class="flex items-center gap-2 text-xs" style="color: {input.textColor};">
+						<span class="flex-1">{customError}</span>
+						<button
+							class="btn btn-xs btn-ghost"
+							style="min-height: 1.75rem; color: {input.textColor};"
+							disabled={isSubmittingCustom || !lastCustomPayload}
+							use:directClick={() => { if (lastCustomPayload) answerCustom(lastCustomPayload); }}
+						>Retry</button>
+					</div>
+					{#if lastCustomPayload && lastCustomPayload !== customInput.trim()}
+						<div class="text-[0.6875rem] opacity-70 truncate" style="color: {input.textColor};">
+							Retry will send: "{lastCustomPayload}"
+						</div>
+					{/if}
 				</div>
 			{/if}
 		</QuestionPanel>

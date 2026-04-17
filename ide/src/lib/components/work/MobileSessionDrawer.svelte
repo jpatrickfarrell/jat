@@ -997,6 +997,40 @@
 		setTimeout(() => (copiedMobileTaskId = null), 1500);
 	}
 
+	let copiedAttachmentId = $state<string | null>(null);
+	function copyAttachmentPath(attachment: any) {
+		const path = attachment?.path || attachment?.name || attachment?.filename;
+		if (!path) return;
+		navigator.clipboard.writeText(path);
+		copiedAttachmentId = attachment.id || path;
+		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(4);
+		setTimeout(() => (copiedAttachmentId = null), 1500);
+	}
+
+	function isImageAttachment(attachment: any): boolean {
+		const path = (attachment?.path || attachment?.name || attachment?.filename || '').toLowerCase();
+		return /\.(png|jpg|jpeg|gif|webp|svg)$/.test(path);
+	}
+
+	async function deleteAttachment(attachment: any) {
+		if (!task?.id || !attachment?.id) return;
+		try {
+			const resp = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/image`, {
+				method: 'DELETE',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ id: attachment.id })
+			});
+			if (resp.ok && fullTask) {
+				fullTask = {
+					...fullTask,
+					attachments: (fullTask.attachments || []).filter((a: any) => a.id !== attachment.id)
+				};
+			}
+		} catch {
+			// Ignore errors
+		}
+	}
+
 	// Minimap scroll detection: track the wrapper element ref
 	let wrapperRef: HTMLElement | null = $state(null);
 
@@ -1116,10 +1150,18 @@
 		if (!task?.id || taskLoading) return;
 		taskLoading = true;
 		try {
-			const resp = await fetch(`/api/tasks/${encodeURIComponent(task.id)}`);
-			if (resp.ok) {
-				const data = await resp.json();
-				fullTask = data.task || data;
+			const [taskResp, imagesResp] = await Promise.all([
+				fetch(`/api/tasks/${encodeURIComponent(task.id)}`),
+				fetch(`/api/tasks/${encodeURIComponent(task.id)}/image`).catch(() => null)
+			]);
+			if (taskResp.ok) {
+				const data = await taskResp.json();
+				const merged = data.task || data;
+				if (imagesResp && imagesResp.ok) {
+					const imageData = await imagesResp.json();
+					merged.attachments = imageData.images || [];
+				}
+				fullTask = merged;
 			}
 		} catch {
 			// Use basic task info as fallback
@@ -1927,11 +1969,44 @@
 							{#if fullTask?.attachments?.length}
 								<ul class="flex flex-col divide-y divide-base-300/40">
 									{#each fullTask.attachments as attachment}
-										<li class="flex items-center gap-3 py-2.5 text-sm text-base-content/85">
-											<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="16" height="16" class="flex-shrink-0 text-base-content/45">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
-											</svg>
-											<span class="truncate">{attachment.name || attachment.filename || 'Attachment'}</span>
+										{@const attId = attachment.id || attachment.path || attachment.name}
+										{@const isCopied = copiedAttachmentId === attId}
+										{@const isImg = isImageAttachment(attachment)}
+										{@const displayName = attachment.name || attachment.filename || attachment.path?.split('/').pop() || 'Attachment'}
+										<li class="flex items-center gap-3 py-2 text-sm text-base-content/85">
+											<button
+												type="button"
+												class="flex-1 flex items-center gap-3 min-w-0 bg-transparent border-none p-0 text-left cursor-pointer active:opacity-70 transition-opacity"
+												use:directClick={() => copyAttachmentPath(attachment)}
+												aria-label="Copy path"
+											>
+												{#if isImg && attachment.path}
+													<img
+														src={`/api/work/image${attachment.path}`}
+														alt={displayName}
+														class="flex-shrink-0 w-10 h-10 object-cover rounded border border-base-300/60 bg-base-200"
+														loading="lazy"
+														onerror={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+													/>
+												{:else}
+													<span class="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded border border-base-300/60 bg-base-200">
+														<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" width="16" height="16" class="text-base-content/55">
+															<path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+														</svg>
+													</span>
+												{/if}
+												<span class="truncate flex-1 {isCopied ? 'text-success' : ''}">
+													{isCopied ? 'Copied!' : displayName}
+												</span>
+											</button>
+											<button
+												type="button"
+												class="flex-shrink-0 w-6 h-6 flex items-center justify-center text-base leading-none text-base-content/50 hover:text-error active:text-error bg-transparent border-none cursor-pointer p-0 rounded-full transition-colors"
+												use:directClick={() => deleteAttachment(attachment)}
+												aria-label="Remove attachment"
+											>
+												×
+											</button>
 										</li>
 									{/each}
 								</ul>

@@ -22,8 +22,13 @@
 		events: CompletionEvent[];
 	} = $props();
 
-	// Pick most recent `complete` event only
-	const event = $derived(events.find(e => e.type === 'complete') ?? null);
+	// Pick most recent `complete` event, falling back to `review` if none.
+	// Review events may have type='state' + state='review' or type='review'.
+	const event = $derived(
+		events.find(e => e.type === 'complete') ??
+		events.find(e => e.type === 'review' || e.state === 'review') ??
+		null
+	);
 	const bundle = $derived(event?.data ?? null);
 
 	const summary = $derived.by<string[]>(() => {
@@ -45,6 +50,10 @@
 
 	const crossAgentIntel = $derived(() => bundle?.crossAgentIntel ?? null);
 
+	const isReviewFallback = $derived(
+		event !== null && event.type !== 'complete'
+	);
+
 	const hasExpandContent = $derived(
 		suggestedTasks.length > 0 ||
 		filesModified.length > 0 ||
@@ -63,7 +72,7 @@
 	>
 		<!-- Always visible: header badge + CHANGES MADE -->
 		<div class="ccc-header">
-			<span class="ccc-badge">✓ COMPLETED</span>
+			<span class="ccc-badge" class:ccc-badge-review={isReviewFallback}>{isReviewFallback ? '👁 REVIEW' : '✓ COMPLETED'}</span>
 			{#if bundle.taskTitle || bundle.taskId}
 				<span class="ccc-task-title">{bundle.taskTitle || bundle.taskId}</span>
 			{/if}
@@ -168,6 +177,12 @@
 		border-radius: 3px;
 		padding: 0.1rem 0.35rem;
 		flex-shrink: 0;
+	}
+
+	.ccc-badge-review {
+		color: oklch(0.78 0.14 200);
+		background: oklch(0.55 0.14 200 / 0.15);
+		border-color: oklch(0.55 0.14 200 / 0.3);
 	}
 
 	.ccc-task-title {

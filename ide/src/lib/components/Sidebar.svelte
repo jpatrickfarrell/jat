@@ -125,6 +125,7 @@
 		// LABS: Experimental features
 		terminal: 'M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5',
 		beaker: 'M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 5.607c.28 1.12-.62 2.093-1.772 2.093H4.57c-1.152 0-2.052-.973-1.772-2.093L5 14.5',
+		radar: 'M9.348 14.651a3.75 3.75 0 010-5.303m5.304-.001a3.75 3.75 0 010 5.304m-7.425 2.122a6.75 6.75 0 010-9.546m9.546.001a6.75 6.75 0 010 9.547m-11.667 2.12a10.5 10.5 0 010-13.787m13.787.001a10.5 10.5 0 010 13.787M12 12h.008v.008H12V12z',
 		// Utilities
 		help: 'M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 		// Chevron for group collapse
@@ -228,7 +229,6 @@
 						background: linear-gradient(135deg, oklch(0.70 0.18 240 / 0.15) 0%, oklch(0.70 0.18 240 / 0.05) 100%);
 						border: 1px solid oklch(0.70 0.18 240 / 0.3);
 						color: oklch(0.75 0.16 240);
-						text-shadow: 0 0 15px oklch(0.70 0.18 240 / 0.5);
 					"
 				>
 					JAT
@@ -263,7 +263,7 @@
 						>
 							<path stroke-linecap="round" stroke-linejoin="round" d={icons.chevronRight} />
 						</svg>
-						<span class="font-mono text-[9px] tracking-widest uppercase select-none"
+						<span class="text-[10px] tracking-widest uppercase select-none"
 							style="color: {style.headerColor};">
 							{group.label}
 						</span>
@@ -292,7 +292,6 @@
 									background: {active ? `linear-gradient(90deg, ${style.activeBg} 0%, transparent 100%)` : 'transparent'};
 									border-left: 2px solid {active ? style.activeAccent : 'transparent'};
 									color: {active ? style.activeText : style.inactiveText};
-									{group.style === 'labs' && !active ? 'opacity: 0.7;' : ''}
 									text-decoration: none;
 								"
 								data-tip="{navItem.label}{group.style === 'labs' ? ' (experimental)' : ''}"
@@ -321,7 +320,7 @@
 								<!-- Label (hidden when sidebar collapsed) -->
 								{#if !$isSidebarCollapsed}
 									<span
-										class="fade-in font-mono {style.labelSize} tracking-wider uppercase transition-colors
+										class="fade-in {style.labelSize} tracking-wider uppercase transition-colors
 											{active ? '' : 'group-hover:text-base-content/80'}"
 										style="text-shadow: {active && group.style === 'main' ? '0 0 10px oklch(0.70 0.18 240 / 0.4)' : 'none'};"
 									>
@@ -375,7 +374,12 @@
 
 			<!-- Ambient shortcut hint -->
 			{#if !$isSidebarCollapsed}
-				<p class="px-3 pb-2 pointer-events-none select-none" style="font-family: monospace; font-size: 0.65rem; color: oklch(0.38 0.02 250); letter-spacing: 0.02em;">ctrl+b · ?</p>
+				<button
+					onclick={() => sidebarHelpOpen.set(true)}
+					class="px-3 pb-2 w-full text-left transition-colors duration-150 hover:opacity-70"
+					style="font-family: monospace; font-size: 0.65rem; color: oklch(0.45 0.02 250); letter-spacing: 0.02em;"
+					aria-label="Open keyboard shortcuts"
+				>ctrl+b · ?</button>
 			{/if}
 		</div>
 
@@ -427,12 +431,12 @@
 				{ label: 'Jump to session', keys: ['Alt', '1–9'] },
 			] as shortcut}
 				<div class="flex items-baseline justify-between gap-3">
-					<dd style="font-size: 0.8rem; color: oklch(0.60 0.02 250);">{shortcut.label}</dd>
-					<dt class="shrink-0 flex gap-1">
+					<dt style="font-size: 0.8rem; color: oklch(0.60 0.02 250);">{shortcut.label}</dt>
+					<dd class="shrink-0 flex gap-1">
 						{#each shortcut.keys as k}
 							<kbd style="font-family: monospace; font-size: 0.65rem; color: oklch(0.65 0.02 250); background: oklch(0.22 0.02 250); border: 1px solid oklch(0.32 0.02 250); border-radius: 3px; padding: 1px 5px;">{k}</kbd>
 						{/each}
-					</dt>
+					</dd>
 				</div>
 			{/each}
 		</dl>

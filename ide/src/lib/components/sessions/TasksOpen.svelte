@@ -27,6 +27,7 @@
 	import FeedbackReplyModal from '$lib/components/FeedbackReplyModal.svelte';
 	import HarnessTray from '$lib/components/sessions/HarnessTray.svelte';
 	import { STATUS_OPTIONS, TERMINAL_STATUSES } from '$lib/config/task-statuses';
+	import { jkFocusedOpenTaskId } from '$lib/stores/drawerStore';
 
 	function taskCtx(t: Task): Record<string, any> {
 		return { title: t.title, status: t.status, priority: t.priority, type: t.issue_type, assignee: t.assignee, labels: t.labels?.join(', '), created_at: t.created_at, due_date: t.due_date };
@@ -88,7 +89,8 @@
 		onAddTask = null,
 		onFilterCountsChange = (_counts: Record<string, number>) => {},
 		mobile = false,
-		resumableTasks = new Map<string, string>()
+		resumableTasks = new Map<string, string>(),
+		onOrderedIdsChange = undefined
 	}: {
 		tasks: Task[];
 		loading: boolean;
@@ -109,6 +111,8 @@
 		mobile?: boolean;
 		/** Map of taskId → agentName for tasks with resumable sessions */
 		resumableTasks?: Map<string, string>;
+		/** Called whenever the visible ordered task IDs change — used by parent for j/k nav */
+		onOrderedIdsChange?: (ids: string[]) => void;
 	} = $props();
 
 	// Alt key tracking for agent picker
@@ -856,6 +860,20 @@
 		return () => window.removeEventListener('keydown', handleSpaceToggle);
 	});
 
+	// Scroll focused task into view when store changes and this instance contains the task
+	$effect(() => {
+		const taskId = $jkFocusedOpenTaskId;
+		if (!taskId) return;
+		const el = document.querySelector(`[data-task-jk-id="${taskId}"]`);
+		el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+	});
+
+	// Report current visible ordered IDs to parent for j/k navigation
+	$effect(() => {
+		const ids = orderedTasks.filter(e => !e.isExiting).map(e => e.task.id);
+		untrack(() => onOrderedIdsChange?.(ids));
+	});
+
 	function handleSpawnClick(task: Task, event: MouseEvent) {
 		event.stopPropagation();
 
@@ -896,6 +914,7 @@
 	}
 
 	function handleRowClick(taskId: string) {
+		jkFocusedOpenTaskId.set(null);
 		onTaskClick(taskId);
 	}
 
@@ -1867,6 +1886,8 @@
 				<div
 					class="mobile-task-card {isBlocked && !isExiting ? 'mobile-task-blocked' : ''} {longPressActive && selectedTasks.has(task.id) ? 'mobile-task-selected' : ''}"
 					class:swarm-highlight={highlightedTaskIds.has(task.id)}
+					class:to-jk-focused={task.id === $jkFocusedOpenTaskId && !isExiting}
+					data-task-jk-id={task.id}
 					style="{isExiting ? 'pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(task.id) ? 'transition: transform 0.3s cubic-bezier(0.25,0.46,0.45,0.94);' : ''}"
 					role="button" tabindex="0"
 					onclick={() => {
@@ -2794,6 +2815,12 @@
 
 	.task-row:hover {
 		background: oklch(0.20 0.01 250);
+	}
+
+	.to-jk-focused {
+		outline: 1px solid oklch(0.55 0.15 240 / 0.6);
+		outline-offset: -1px;
+		background: oklch(0.22 0.04 240) !important;
 	}
 
 	/* Task cell content - matches TasksActive structure */

@@ -96,21 +96,21 @@ export const unifiedNavConfig: UnifiedNavConfig = {
 			label: 'Open Tasks',
 			href: '/open-tasks',
 			icon: 'data',
-			category: 'work'
+			category: 'labs'
 		},
 		{
 			id: 'triage',
 			label: 'Triage',
 			href: '/triage',
 			icon: 'radar',
-			category: 'work'
+			category: 'labs'
 		},
 		{
 			id: 'monitor',
 			label: 'Monitor',
 			href: '/monitor',
 			icon: 'tmux',
-			category: 'work'
+			category: 'labs'
 		},
 		{
 			id: 'sessions',

@@ -1,28 +1,8 @@
 <script lang="ts">
-	/**
-	 * TopBar Component - Horizontal utilities bar
-	 *
-	 * Simplified navigation bar containing only utility components:
-	 * - Hamburger toggle (mobile only, for sidebar)
-	 * - AgentCountBadge
-	 * - TokenUsageBadge (tokens today, cost, sparkline)
-	 * - CommandPalette
-	 * - UserProfile
-	 *
-	 * Navigation buttons (List, Graph, Agents) removed - moved to Sidebar
-	 * Project filtering removed - handled by TaskTable filter bar
-	 *
-	 * Props:
-	 * - tokensToday: number (total tokens consumed today)
-	 * - costToday: number (total cost today in USD)
-	 * - sparklineData: DataPoint[] (24h sparkline data)
-	 */
-
 	import { page } from "$app/stores";
 	import { flip } from "svelte/animate";
 	import { cubicOut } from "svelte/easing";
 	import { getProjectColor } from "$lib/utils/projectColors";
-	import { SESSION_STATE_VISUALS } from "$lib/config/statusColors";
 	import ActivityBadge from "./ActivityBadge.svelte";
 	import ServersBadge from "./ServersBadge.svelte";
 	import UserProfile from "./UserProfile.svelte";
@@ -36,8 +16,6 @@
 	import {
 		startSpawning,
 		stopSpawning,
-		startBulkSpawn,
-		endBulkSpawn,
 	} from "$lib/stores/spawningTasks";
 	import {
 		AGENT_SORT_OPTIONS,
@@ -55,7 +33,7 @@
 		getServerSortDir,
 		type ServerSortOption,
 	} from "$lib/stores/serverSort.svelte.js";
-	import { onMount } from "svelte";
+	import { onMount, onDestroy } from "svelte";
 	import { getMaxSessions } from "$lib/stores/preferences.svelte";
 	import { spawnInBatches } from "$lib/utils/spawnBatch";
 	import ProjectSelector from "./ProjectSelector.svelte";
@@ -128,7 +106,7 @@
 			"Sort",
 	);
 	const currentAgentSortIcon = $derived(
-		AGENT_SORT_OPTIONS.find((o) => o.value === currentAgentSort)?.icon ?? "🔔",
+		AGENT_SORT_OPTIONS.find((o) => o.value === currentAgentSort)?.icon ?? "↕",
 	);
 
 	// Get current sort state reactively (servers page)
@@ -140,7 +118,7 @@
 	);
 	const currentServerSortIcon = $derived(
 		SERVER_SORT_OPTIONS.find((o) => o.value === currentServerSort)?.icon ??
-			"🔔",
+			"↕",
 	);
 
 	// Handle sort dropdown show/hide with delay
@@ -169,32 +147,33 @@
 		showSortDropdown = false;
 	}
 
+	function handleSortKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') showSortDropdown = false;
+	}
+
+	$effect(() => {
+		if (showSortDropdown) {
+			document.addEventListener('keydown', handleSortKeydown);
+		}
+		return () => {
+			document.removeEventListener('keydown', handleSortKeydown);
+		};
+	});
+
 	// Global action loading states
-	let newSessionLoading = $state(false);
 	let swarmLoading = $state(false);
 
-	// New Session - spawn a planning session in selected project
-	async function handleNewSession(projectName: string) {
-		newSessionLoading = true;
-		try {
-			const response = await fetch("/api/work/spawn", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					attach: true,
-					project: projectName,
-				}),
-			});
-			const data = await response.json();
-			if (!response.ok) {
-				throw new Error(data.message || "Failed to spawn session");
-			}
-		} catch (error) {
-			alert(error instanceof Error ? error.message : "Failed to spawn session");
-		} finally {
-			newSessionLoading = false;
-		}
+	// Error toast
+	let toastError = $state<string | null>(null);
+	let toastTimeout: ReturnType<typeof setTimeout> | null = null;
+
+	function showError(msg: string) {
+		if (toastTimeout) clearTimeout(toastTimeout);
+		toastError = msg;
+		toastTimeout = setTimeout(() => { toastError = null; }, 5000);
 	}
+
+	onDestroy(() => { if (toastTimeout) clearTimeout(toastTimeout); });
 
 	// Swarm - spawn one agent per ready task up to MAX_SESSIONS limit
 	async function handleSwarm() {
@@ -218,7 +197,7 @@
 				throw new Error(firstError);
 			}
 		} catch (error) {
-			alert(error instanceof Error ? error.message : "Failed to spawn agents");
+			showError(error instanceof Error ? error.message : "Failed to spawn agents");
 		} finally {
 			swarmLoading = false;
 		}
@@ -292,8 +271,6 @@
 
 	interface Props {
 		activeAgentCount?: number;
-		totalAgentCount?: number;
-		activeAgents?: string[];
 		stateCounts?: StateCounts;
 		tokensToday?: number;
 		costToday?: number;
@@ -304,8 +281,6 @@
 		projectColors?: Record<string, string>;
 		/** Per-project backend kind ('sqlite' | 'postgres') */
 		projectBackends?: Record<string, 'sqlite' | 'postgres'>;
-		/** Number of ready tasks for Swarm button */
-		readyTaskCount?: number;
 		/** Ready tasks list for swarm dropdown */
 		readyTasks?: ReadyTask[];
 		/** Active (in_progress) tasks for ProjectSelector dropdown */
@@ -316,8 +291,6 @@
 		selectedProject?: string;
 		/** Open epics with ready children */
 		epicsWithReady?: EpicWithReady[];
-		/** Current review rules */
-		reviewRules?: ReviewRule[];
 		/** Callback to open global file search (Ctrl+Shift+F) */
 		onGlobalSearchOpen?: () => void;
 		/** Callback when project selection changes */
@@ -338,8 +311,6 @@
 
 	let {
 		activeAgentCount = 0,
-		totalAgentCount = 0,
-		activeAgents = [],
 		stateCounts,
 		tokensToday = 0,
 		costToday = 0,
@@ -347,13 +318,11 @@
 		multiProjectData,
 		projectColors = {},
 		projectBackends = {},
-		readyTaskCount = 0,
 		readyTasks = [],
 		activeTasks = [],
 		projects = [],
 		selectedProject = "All Projects",
 		epicsWithReady = [],
-		reviewRules = [],
 		onGlobalSearchOpen,
 		onProjectChange,
 		taskCounts = null,
@@ -379,12 +348,10 @@
 	);
 
 	// Favorite projects list: user-controlled order via drag-and-drop
-	const favoriteChips = $derived(() => {
+	const favoriteChips = $derived.by(() => {
 		if (!favoriteProjects || favoriteProjects.size === 0) return [];
 		const favSet = new Set(actualProjects.filter(p => favoriteProjects.has(p)));
-		// Use persisted order, filtering to only current favorites that exist
 		const ordered = favoriteChipOrder.filter(p => favSet.has(p));
-		// Append any favorites not yet in the order array (newly added)
 		const unordered = [...favSet].filter(p => !ordered.includes(p));
 		return [...ordered, ...unordered];
 	});
@@ -397,34 +364,26 @@
 	// Max sessions from user preferences (reactive)
 	const maxSessions = $derived(getMaxSessions());
 
-	// Calculate available slots and effective spawn count for Run All Ready
+	// Calculate available slots for Run All Ready
 	const availableSlots = $derived(Math.max(0, maxSessions - activeAgentCount));
-	const effectiveSpawnCount = $derived(
-		Math.min(readyTaskCount, availableSlots),
-	);
-
 	// Handle task creation for selected project
 	function handleNewTask(projectName: string) {
 		openTaskDrawer(projectName);
 	}
 
 	// Run Epic - spawn agents for all ready children of an epic
-	let runningEpicId = $state<string | null>(null);
-
 	async function handleRunEpic(epicId: string) {
-		if (runningEpicId || swarmLoading) return;
+		if (swarmLoading) return;
 
-		runningEpicId = epicId;
+		swarmLoading = true;
 
 		try {
-			// Fetch epic's children with ready status
 			const response = await fetch(`/api/epics/${epicId}/children`);
 			if (!response.ok) {
 				throw new Error("Failed to fetch epic children");
 			}
 			const data = await response.json();
 
-			// Filter to ready children only
 			const allReadyChildren = data.children.filter(
 				(c: { isBlocked: boolean; status: string }) =>
 					!c.isBlocked && c.status !== "closed" && c.status !== "in_progress",
@@ -440,20 +399,17 @@
 			const successCount = results.filter((r) => r.success).length;
 
 			if (successCount === 0 && results.length > 0) {
-				// If we had tasks but 0 success, likely all were skipped due to limits
-				// or all failed. spawnInBatches returns "Skipped" errors if full.
 				const firstError = results[0]?.error || "Failed to spawn agents";
 				if (firstError.includes("session slots are in use")) {
-					alert(firstError);
+					showError(firstError);
 				} else {
 					throw new Error(firstError);
 				}
 			}
-
 		} catch (err) {
-			alert(err instanceof Error ? err.message : "Failed to run epic");
+			showError(err instanceof Error ? err.message : "Failed to run epic");
 		} finally {
-			runningEpicId = null;
+			swarmLoading = false;
 		}
 	}
 
@@ -520,7 +476,7 @@
 			draggedChip = null;
 			return;
 		}
-		const chips = favoriteChips();
+		const chips = favoriteChips;
 		const fromIndex = chips.indexOf(draggedChip);
 		const toIndex = chips.indexOf(targetProject);
 		if (fromIndex === -1 || toIndex === -1) {
@@ -541,22 +497,6 @@
 		dragOverChip = null;
 	}
 
-	// Group ready tasks by project for ActionPill
-	const tasksByProject = $derived.by(() => {
-		const groups = new Map<string, ReadyTask[]>();
-		for (const task of readyTasks) {
-			const project = task.project || "unknown";
-			if (!groups.has(project)) {
-				groups.set(project, []);
-			}
-			groups.get(project)!.push(task);
-		}
-		// Sort by priority within each group
-		for (const tasks of groups.values()) {
-			tasks.sort((a, b) => a.priority - b.priority);
-		}
-		return groups;
-	});
 </script>
 
 <!-- Industrial/Terminal TopBar -->
@@ -612,7 +552,7 @@
 	<!-- Project Selector + Favorite Chips (global, always visible) -->
 	{#if actualProjects.length > 0 && onProjectChange}
 		<div class="fav-chips-scroll ml-3 flex items-center gap-1.5">
-			{#each favoriteChips() as favProject (favProject)}
+			{#each favoriteChips as favProject (favProject)}
 				{@const favColor = projectColorsMap.get(favProject) || getProjectColor(favProject)}
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
@@ -646,8 +586,8 @@
 						isFavorite={favoriteProjects.has(favProject)}
 						{onToggleFavorite}
 						backend={projectBackends[favProject] ?? 'sqlite'}
-						onPrevProject={() => { const chips = favoriteChips(); const idx = chips.indexOf(favProject); if (idx > 0) onProjectChange?.(chips[idx - 1]); }}
-						onNextProject={() => { const chips = favoriteChips(); const idx = chips.indexOf(favProject); if (idx < chips.length - 1) onProjectChange?.(chips[idx + 1]); }}
+						onPrevProject={() => { const chips = favoriteChips; const idx = chips.indexOf(favProject); if (idx > 0) onProjectChange?.(chips[idx - 1]); }}
+						onNextProject={() => { const chips = favoriteChips; const idx = chips.indexOf(favProject); if (idx < chips.length - 1) onProjectChange?.(chips[idx + 1]); }}
 					/>
 				</div>
 			{/each}
@@ -666,6 +606,8 @@
 					onStart={handleSpawnSingle}
 					onSwarm={(count, epicId) => epicId ? handleRunEpic(epicId) : handleSwarm()}
 					sessionStates={projectSessionStates.get(selectedProject) || []}
+					isActive={true}
+					onSelect={() => onProjectChange?.(selectedProject)}
 					openOnHover={true}
 					isFavorite={favoriteProjects.has(selectedProject)}
 					{onToggleFavorite}
@@ -764,8 +706,11 @@
 					padding-right: 8px;
 				"
 				title="Sort agents"
+				aria-haspopup="true"
+				aria-expanded={showSortDropdown}
 				onmouseenter={() => (sortHovered = true)}
 				onmouseleave={() => (sortHovered = false)}
+				onfocus={showSortMenu}
 			>
 				<span class="text-xs">{currentAgentSortIcon}</span>
 				<span class="hidden sm:inline">{currentAgentSortLabel}</span>
@@ -793,6 +738,7 @@
 			{#if showSortDropdown}
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
+					role="menu"
 					class="absolute top-full left-0 mt-1 min-w-[160px] rounded-lg shadow-xl z-50 overflow-hidden dropdown-content bg-base-200 border border-base-content/20"
 					onmouseenter={keepSortMenuOpen}
 					onmouseleave={hideSortMenuDelayed}
@@ -809,6 +755,7 @@
 					<div class="py-1">
 						{#each AGENT_SORT_OPTIONS as opt (opt.value)}
 							<button
+								role="menuitem"
 								class="w-full px-3 py-2 text-left text-xs font-mono flex items-center gap-2 transition-colors hover:bg-base-300"
 								class:text-primary={currentAgentSort === opt.value}
 								class:bg-base-300={currentAgentSort === opt.value}
@@ -845,8 +792,11 @@
 					padding-right: 8px;
 				"
 				title="Sort servers"
+				aria-haspopup="true"
+				aria-expanded={showSortDropdown}
 				onmouseenter={() => (sortHovered = true)}
 				onmouseleave={() => (sortHovered = false)}
+				onfocus={showSortMenu}
 			>
 				<span class="text-xs">{currentServerSortIcon}</span>
 				<span class="hidden sm:inline">{currentServerSortLabel}</span>
@@ -874,6 +824,7 @@
 			{#if showSortDropdown}
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
+					role="menu"
 					class="absolute top-full left-0 mt-1 min-w-[160px] rounded-lg shadow-xl z-50 overflow-hidden dropdown-content bg-base-200 border border-base-content/20"
 					onmouseenter={keepSortMenuOpen}
 					onmouseleave={hideSortMenuDelayed}
@@ -890,6 +841,7 @@
 					<div class="py-1">
 						{#each SERVER_SORT_OPTIONS as opt (opt.value)}
 							<button
+								role="menuitem"
 								class="w-full px-3 py-2 text-left text-xs font-mono flex items-center gap-2 transition-colors hover:bg-base-300"
 								class:text-primary={currentServerSort === opt.value}
 								class:bg-base-300={currentServerSort === opt.value}
@@ -954,6 +906,16 @@
 
 	<!-- Right side: Activity Badge + Servers + User Profile -->
 	<div class="flex-none flex items-center gap-2.5 pr-3">
+		<!-- Swarm loading indicator -->
+		{#if swarmLoading}
+			<div class="hidden lg:flex items-center gap-1.5 px-2 py-0.5 rounded" style="background: oklch(0.22 0.04 85 / 0.4); border: 1px solid oklch(0.55 0.15 85 / 0.4);">
+				<svg class="w-3 h-3 animate-spin-fast" style="color: oklch(0.75 0.18 85);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+					<path stroke-linecap="round" d="M12 3v3m0 12v3M3 12h3m12 0h3"/>
+				</svg>
+				<span class="font-mono text-[9px] uppercase tracking-wider" style="color: oklch(0.75 0.15 85);">Spawning</span>
+			</div>
+		{/if}
+
 		<!-- Combined Activity Badge (hidden on small screens) -->
 		<div class="hidden lg:block">
 			<ActivityBadge
@@ -977,6 +939,18 @@
 	</div>
 </nav>
 
+{#if toastError}
+	<div class="topbar-toast" role="alert">
+		<svg viewBox="0 0 16 16" fill="currentColor" class="topbar-toast-icon">
+			<path fill-rule="evenodd" d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-3a.75.75 0 0 1 .75.75v2.5a.75.75 0 0 1-1.5 0v-2.5A.75.75 0 0 1 8 5Zm0 6.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" />
+		</svg>
+		<span class="topbar-toast-msg">{toastError}</span>
+		<button class="topbar-toast-close" onclick={() => toastError = null} aria-label="Dismiss">
+			<svg viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/></svg>
+		</button>
+	</div>
+{/if}
+
 <style>
 	/* Chips container — shrinks on narrow viewports, scrolls horizontally.
 	   ProjectSelector dropdown uses position:fixed so it's not clipped. */
@@ -988,133 +962,6 @@
 	}
 	.fav-chips-scroll::-webkit-scrollbar {
 		display: none; /* Chrome/Safari */
-	}
-
-	/* Favorite project chips — ghost style, expand on hover */
-	.fav-chip {
-		display: inline-flex;
-		align-items: stretch;
-		border-radius: 0.375rem;
-		background: transparent;
-		border: 1px solid color-mix(in oklch, var(--fav-color) 20%, transparent);
-		transition: all 0.15s ease;
-		overflow: hidden;
-		opacity: 0.5;
-	}
-
-	.fav-chip.has-agents {
-		opacity: 0.85;
-		border-color: color-mix(in oklch, var(--fav-color) 35%, transparent);
-	}
-
-	.fav-chip:hover,
-	.fav-chip.has-agents:hover {
-		opacity: 1;
-		background: color-mix(in oklch, var(--fav-color) 18%, transparent);
-		border-color: color-mix(in oklch, var(--fav-color) 45%, transparent);
-		box-shadow: 0 0 6px color-mix(in oklch, var(--fav-color) 15%, transparent);
-	}
-
-	.fav-chip-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.3rem;
-		padding: 0.2rem 0.4rem;
-		background: transparent;
-		border: none;
-		cursor: pointer;
-		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
-		font-size: 0.6875rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.025em;
-		color: color-mix(in oklch, var(--fav-color) 70%, oklch(0.70 0 0));
-		transition: color 0.15s ease;
-	}
-
-	.fav-chip:hover .fav-chip-btn {
-		color: var(--fav-color);
-	}
-
-
-	.fav-dots {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.25rem;
-		flex-shrink: 0;
-	}
-
-	.fav-dot {
-		width: 0.5rem;
-		height: 0.5rem;
-		border-radius: 50%;
-		flex-shrink: 0;
-	}
-
-	/* Animated dot wrapper (needs-input ping, review pulse) */
-	.fav-dot-animated {
-		position: relative;
-		display: inline-flex;
-		width: 0.5rem;
-		height: 0.5rem;
-		flex-shrink: 0;
-		overflow: hidden;
-	}
-
-	.fav-dot-ping {
-		position: absolute;
-		inset: 0;
-		border-radius: 50%;
-		opacity: 0.75;
-	}
-
-	.fav-dot-core {
-		position: relative;
-		display: inline-flex;
-		width: 100%;
-		height: 100%;
-		border-radius: 50%;
-	}
-
-	.fav-label {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		max-width: 6rem;
-	}
-
-	/* Hover-expand + button */
-	.fav-new-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		max-width: 0;
-		padding: 0;
-		border: none;
-		border-left: 0px solid transparent;
-		background: transparent;
-		opacity: 0;
-		overflow: hidden;
-		transition: all 0.2s ease;
-		cursor: pointer;
-		color: oklch(0.85 0.18 145);
-	}
-
-	.fav-chip:hover .fav-new-btn {
-		max-width: 1.5rem;
-		padding: 0 0.25rem;
-		border-left: 1px solid color-mix(in oklch, var(--fav-color) 30%, transparent);
-		opacity: 1;
-	}
-
-	.fav-new-btn:hover {
-		background: oklch(0.30 0.08 145 / 0.3);
-	}
-
-	.fav-new-btn svg {
-		width: 0.8rem;
-		height: 0.8rem;
-		flex-shrink: 0;
 	}
 
 	/* Drag feedback */
@@ -1329,5 +1176,70 @@
 
 	.psd-add-item:hover .psd-add-icon {
 		color: oklch(0.85 0.18 145);
+	}
+
+	/* Error toast */
+	.topbar-toast {
+		position: fixed;
+		top: 3.5rem;
+		right: 1rem;
+		z-index: 50;
+		display: flex;
+		align-items: flex-start;
+		gap: 0.5rem;
+		padding: 0.5rem 0.625rem 0.5rem 0.75rem;
+		border-radius: 0.375rem;
+		background: oklch(0.18 0.04 25);
+		border: 1px solid oklch(0.55 0.18 25 / 0.5);
+		box-shadow: 0 4px 16px oklch(0 0 0 / 0.4);
+		max-width: 28rem;
+		animation: topbar-toast-in 0.15s ease-out;
+	}
+
+	@keyframes topbar-toast-in {
+		from { opacity: 0; transform: translateY(-6px); }
+		to   { opacity: 1; transform: translateY(0); }
+	}
+
+	.topbar-toast-icon {
+		width: 0.875rem;
+		height: 0.875rem;
+		flex-shrink: 0;
+		color: oklch(0.70 0.20 25);
+		margin-top: 0.1rem;
+	}
+
+	.topbar-toast-msg {
+		flex: 1;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		font-size: 0.75rem;
+		color: oklch(0.85 0.08 25);
+		line-height: 1.4;
+	}
+
+	.topbar-toast-close {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.25rem;
+		height: 1.25rem;
+		flex-shrink: 0;
+		padding: 0;
+		border: none;
+		border-radius: 0.25rem;
+		background: transparent;
+		cursor: pointer;
+		color: oklch(0.50 0.06 25);
+		transition: color 0.1s, background 0.1s;
+	}
+
+	.topbar-toast-close:hover {
+		color: oklch(0.80 0.12 25);
+		background: oklch(0.55 0.18 25 / 0.15);
+	}
+
+	.topbar-toast-close svg {
+		width: 0.75rem;
+		height: 0.75rem;
 	}
 </style>

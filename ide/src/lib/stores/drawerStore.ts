@@ -350,3 +350,9 @@ export const isMobileFullscreenOpen = writable(false);
 
 // Request to open MobileSessionDrawer for a session name (e.g. from ProjectSelector keyboard nav)
 export const openMobileSessionName = writable<string | null>(null);
+
+// Keyboard-focused open task ID for j/k navigation (managed by /tasks page, read by TasksOpen)
+export const jkFocusedOpenTaskId = writable<string | null>(null);
+
+// Keyboard-focused active session name for j/k navigation (managed by /tasks page, read by TasksActive)
+export const jkFocusedActiveSessionName = writable<string | null>(null);

@@ -26,7 +26,7 @@
 	import EpicBar from "$lib/components/sessions/EpicBar.svelte";
 	import { fetchAndGetProjectColors } from "$lib/utils/projectColors";
 	import MobileProjectSelector from "$lib/components/MobileProjectSelector.svelte";
-	import { openTaskDetailDrawer, openProjectDrawer, projectCreatedSignal, openTaskDrawer } from "$lib/stores/drawerStore";
+	import { openTaskDetailDrawer, openProjectDrawer, projectCreatedSignal, openTaskDrawer, jkFocusedOpenTaskId, jkFocusedActiveSessionName, openMobileSessionName } from "$lib/stores/drawerStore";
 	import {
 		getProjectFromTaskId,
 		buildEpicChildMap,
@@ -1902,6 +1902,107 @@
 			fetchAllData();
 		}
 	});
+
+	// Ordered task IDs reported back from each TasksOpen instance, keyed by epicId (null = standalone)
+	// Plain variable (not $state) — only read inside keydown handler, not in reactive context
+	let jkEpicOrderedIds = new Map<string | null, string[]>();
+
+	// Unified j/k navigation: active sessions first, then open tasks
+	$effect(() => {
+		function handleUnifiedJK(e: KeyboardEvent) {
+			if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+			if (e.key !== 'j' && e.key !== 'k' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Escape') return;
+			const tag = (e.target as HTMLElement)?.tagName;
+			if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+			if ((e.target as HTMLElement)?.isContentEditable) return;
+
+			// Build session nav list (sessionsByProject already filters for agent type)
+			const activeSessions = selectedProject ? (sessionsByProject.get(selectedProject) || []) : [];
+			const navSessions = activeSessions.map(s => s.name);
+
+			// Build task nav list in visual order
+			const projectTasks = selectedProject ? (tasksByProject.get(selectedProject) || []) : [];
+			const epicMap = getTasksByEpic(projectTasks);
+			const sortedEpicEntries = Array.from(epicMap.entries()).sort(([a], [b]) => {
+				if (a === null) return 1;
+				if (b === null) return -1;
+				const pa = getEpicTask(a)?.priority ?? 99;
+				const pb = getEpicTask(b)?.priority ?? 99;
+				return pa - pb;
+			});
+			const navTaskIds: string[] = [];
+			for (const [epicId] of sortedEpicEntries) {
+				const ids = jkEpicOrderedIds.get(epicId);
+				if (ids) navTaskIds.push(...ids);
+			}
+
+			const navList = [...navSessions, ...navTaskIds];
+			if (navList.length === 0) return;
+
+			// Determine current position
+			const currentSession = $jkFocusedActiveSessionName;
+			const currentTask = $jkFocusedOpenTaskId;
+			let currentIdx = -1;
+			if (currentSession) currentIdx = navList.indexOf(currentSession);
+			else if (currentTask) currentIdx = navList.indexOf(currentTask);
+
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				jkFocusedActiveSessionName.set(null);
+				jkFocusedOpenTaskId.set(null);
+				return;
+			}
+
+			if ((e.key === 'Enter' || e.key === ' ') && currentIdx >= 0) {
+				e.preventDefault();
+				if (currentSession && navSessions.includes(currentSession)) {
+					openMobileSessionName.set(currentSession);
+				} else if (currentTask) {
+					jkFocusedOpenTaskId.set(null);
+					openTaskDetailDrawer(currentTask);
+				}
+				return;
+			}
+
+			if (e.key === 'j' || e.key === 'ArrowDown') {
+				e.preventDefault();
+				const next = currentIdx < navList.length - 1 ? currentIdx + 1 : 0;
+				const nextItem = navList[next];
+				if (next < navSessions.length) {
+					jkFocusedActiveSessionName.set(nextItem);
+					jkFocusedOpenTaskId.set(null);
+				} else {
+					jkFocusedActiveSessionName.set(null);
+					jkFocusedOpenTaskId.set(nextItem);
+				}
+				return;
+			}
+
+			if (e.key === 'k' || e.key === 'ArrowUp') {
+				e.preventDefault();
+				const prev = currentIdx > 0 ? currentIdx - 1 : navList.length - 1;
+				const prevItem = navList[prev];
+				if (prev < navSessions.length) {
+					jkFocusedActiveSessionName.set(prevItem);
+					jkFocusedOpenTaskId.set(null);
+				} else {
+					jkFocusedActiveSessionName.set(null);
+					jkFocusedOpenTaskId.set(prevItem);
+				}
+				return;
+			}
+		}
+
+		document.addEventListener('keydown', handleUnifiedJK);
+		return () => document.removeEventListener('keydown', handleUnifiedJK);
+	});
+
+	// Reset focus when project changes
+	$effect(() => {
+		selectedProject; // reactive dependency
+		jkFocusedOpenTaskId.set(null);
+		jkFocusedActiveSessionName.set(null);
+	});
 </script>
 
 <svelte:head>
@@ -2764,6 +2865,7 @@
 														)}
 													showHeader={false}
 													onAddTask={() => openTaskDrawer(selectedProject ?? undefined)}
+													onOrderedIdsChange={(ids) => { jkEpicOrderedIds.set(epicId, ids); }}
 																									/>
 											</div>
 										{/if}
@@ -2831,6 +2933,7 @@
 														)}
 													showHeader={false}
 													onAddTask={() => openTaskDrawer(selectedProject ?? undefined)}
+													onOrderedIdsChange={(ids) => { jkEpicOrderedIds.set(null, ids); }}
 																									/>
 											</div>
 										{/if}

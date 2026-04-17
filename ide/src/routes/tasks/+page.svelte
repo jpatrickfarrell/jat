@@ -1601,7 +1601,7 @@
 		const projectTasks = tasksByProject.get(selectedProject!) || [];
 		const ids = new Set<string>();
 		for (const task of projectTasks) {
-			if (task.status !== "open" || task.issue_type === "epic") continue;
+			if ((task.status !== "open" && task.status !== "dev") || task.issue_type === "epic") continue;
 			// Skip human tasks - can't be automated
 			if (isHumanTask(task)) continue;
 			const parentEpic = getParentEpicId(task.id, epicChildMap);

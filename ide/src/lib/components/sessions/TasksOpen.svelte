@@ -526,7 +526,7 @@
 
 	// Clean up stale selections when tasks change
 	$effect(() => {
-		const openIds = new Set(tasks.filter(t => t.status === 'open').map(t => t.id));
+		const openIds = new Set(tasks.filter(t => t.status === 'open' || t.status === 'dev').map(t => t.id));
 		const stale = [...selectedTasks].filter(id => !openIds.has(id));
 		if (stale.length > 0) {
 			const next = new Set(selectedTasks);
@@ -936,7 +936,7 @@
 	// Counts for filter chips
 	const filterCounts = $derived.by(() => {
 		const candidates = tasks.filter(t =>
-			t.status === 'open' && t.issue_type !== 'epic' &&
+			(t.status === 'open' || t.status === 'dev') && t.issue_type !== 'epic' &&
 			(!showHeader || selectedProject === null || getProjectFromTaskId(t.id) === selectedProject)
 		);
 		const counts: Record<DueDateFilterType, number> = { today: 0, tomorrow: 0, week: 0, overdue: 0, unscheduled: 0, all: candidates.length };
@@ -985,7 +985,7 @@
 
 	// Effect to detect new and exiting tasks while preserving order
 	$effect(() => {
-		const openTasks = tasks.filter(t => t.status === 'open');
+		const openTasks = tasks.filter(t => t.status === 'open' || t.status === 'dev');
 		const currentIds = new Set(openTasks.map(t => t.id));
 
 		// Use untrack to read previous state without creating a dependency
@@ -1129,7 +1129,7 @@
 
 		// Get all open task IDs that exist in our order
 		const openTaskIds = currentOrder.filter(id => {
-			const task = currentTasks.find(t => t.id === id && t.status === 'open') || taskObjects.get(id);
+			const task = currentTasks.find(t => t.id === id && (t.status === 'open' || t.status === 'dev')) || taskObjects.get(id);
 			return task !== undefined;
 		});
 
@@ -1176,13 +1176,13 @@
 	const orderedTasks = $derived.by(() => {
 		const result: Array<{ task: Task; isExiting: boolean; isNew: boolean }> = [];
 		for (const id of taskOrder) {
-			const task = tasks.find(t => t.id === id && t.status === 'open') || previousTaskObjects.get(id);
+			const task = tasks.find(t => t.id === id && (t.status === 'open' || t.status === 'dev')) || previousTaskObjects.get(id);
 			if (task) {
 				const taskProject = getProjectFromTaskId(task.id);
 				// Only apply project filter when header is shown (filter UI is visible)
 				const matchesProject = !showHeader || selectedProject === null || taskProject === selectedProject;
 				// Apply date filter (epics and non-open tasks pass through)
-				const matchesDate = dueDateFilter === 'all' || task.issue_type === 'epic' || task.status !== 'open' || taskMatchesDateFilter(task, dueDateFilter);
+				const matchesDate = dueDateFilter === 'all' || task.issue_type === 'epic' || (task.status !== 'open' && task.status !== 'dev') || taskMatchesDateFilter(task, dueDateFilter);
 				const matchesFilter = matchesProject && matchesDate;
 				const isFilterExiting = filterExitingTaskIds.has(id);
 
@@ -1216,7 +1216,7 @@
 	const uniqueProjects = $derived(() => {
 		const projects = new Set<string>();
 		for (const task of tasks) {
-			if (task.status === 'open') {
+			if (task.status === 'open' || task.status === 'dev') {
 				projects.add(getProjectFromTaskId(task.id));
 			}
 		}
@@ -1272,7 +1272,7 @@
 	// Derived: open tasks sorted by due date → newest first → priority, filtered by project + date (only when header is shown)
 	const sortedOpenTasks = $derived(
 		tasks
-			.filter(t => t.status === 'open')
+			.filter(t => t.status === 'open' || t.status === 'dev')
 			.filter(t => !showHeader || selectedProject === null || getProjectFromTaskId(t.id) === selectedProject)
 			.filter(t => dueDateFilter === 'all' || t.issue_type === 'epic' || taskMatchesDateFilter(t, dueDateFilter))
 			.sort(compareTaskSort)
@@ -2718,14 +2718,11 @@
 		justify-content: center;
 		width: 80px;
 		height: 80px;
-		border: 2px solid oklch(0.60 0.15 50);
-		border-radius: 0.5rem;
 		color: oklch(0.65 0.15 50);
 		transition: all 0.2s ease;
 	}
 
 	.add-task-button:hover .add-task-icon {
-		border-color: oklch(0.70 0.18 50);
 		color: oklch(0.75 0.18 50);
 	}
 

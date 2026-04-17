@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { readFileSync, existsSync, statSync } from 'fs';
+import { join } from 'path';
 import type { RequestHandler } from './$types';
 
 export interface TimelineEvent {
@@ -52,7 +53,18 @@ export const GET: RequestHandler = async ({ params, url }) => {
 	const tmuxSession = sessionName.startsWith('jat-') ? sessionName : `jat-${sessionName}`;
 	const timelineFile = `/tmp/jat-timeline-${tmuxSession}.jsonl`;
 
-	if (!existsSync(timelineFile)) {
+	// For jat-voice, also check the persistent .jat/voice-timeline.jsonl which
+	// survives reboots (the /tmp file is ephemeral and wiped on restart).
+	const isVoiceSession = tmuxSession === 'jat-voice';
+	const projectRoot = process.cwd().replace(/\/ide$/, '');
+	const persistentVoiceFile = isVoiceSession
+		? join(projectRoot, '.jat', 'voice-timeline.jsonl')
+		: null;
+
+	const hasTmpFile = existsSync(timelineFile);
+	const hasPersistentFile = persistentVoiceFile ? existsSync(persistentVoiceFile) : false;
+
+	if (!hasTmpFile && !hasPersistentFile) {
 		return json({
 			session: sessionName,
 			events: [],
@@ -61,8 +73,35 @@ export const GET: RequestHandler = async ({ params, url }) => {
 	}
 
 	try {
-		const content = readFileSync(timelineFile, 'utf-8');
-		const lines = content.trim().split('\n').filter(line => line.trim());
+		// Merge persistent + tmp content (persistent first for chronological order,
+		// then deduplicate since voice-core dual-writes both during normal operation).
+		let rawLines: string[] = [];
+
+		if (hasPersistentFile && persistentVoiceFile) {
+			const persContent = readFileSync(persistentVoiceFile, 'utf-8');
+			rawLines.push(...persContent.trim().split('\n').filter(l => l.trim()));
+		}
+
+		if (hasTmpFile) {
+			const tmpContent = readFileSync(timelineFile, 'utf-8');
+			rawLines.push(...tmpContent.trim().split('\n').filter(l => l.trim()));
+		}
+
+		// Deduplicate by timestamp+type (voice-core writes the same event to both files)
+		const seen = new Set<string>();
+		const dedupedLines = rawLines.filter(line => {
+			try {
+				const ev = JSON.parse(line);
+				const key = `${ev.timestamp}|${ev.type}`;
+				if (seen.has(key)) return false;
+				seen.add(key);
+				return true;
+			} catch {
+				return true; // keep unparseable lines for later error handling
+			}
+		});
+
+		const lines = dedupedLines;
 
 		// Parse all events
 		let events: TimelineEvent[] = [];

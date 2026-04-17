@@ -2875,6 +2875,7 @@
 		transition: max-width 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 		flex-shrink: 0;
 		order: 3;
+		margin-right: 2.75rem; /* clear fixed TERMINAL drawer tab at viewport right edge */
 	}
 
 	/* Legacy tray (server + no-task cards): direct child of card-inner only */
@@ -2892,6 +2893,7 @@
 		cursor: pointer;
 		border-radius: 3px;
 		transition: background 0.15s ease;
+		padding-right: 2.75rem; /* clear fixed TERMINAL drawer tab at viewport right edge */
 	}
 
 	.ta-row2-wrapper:hover,
@@ -2903,7 +2905,7 @@
 	.ta-row2-wrapper::after {
 		content: '⋯';
 		position: absolute;
-		right: 0.375rem;
+		right: 2.875rem; /* aligns just inside the padding-right zone, clear of TERMINAL tab */
 		top: 50%;
 		transform: translateY(-50%);
 		font-size: 0.75rem;
@@ -2932,6 +2934,7 @@
 		overflow: hidden;
 		order: unset;
 		flex-shrink: unset;
+		margin-right: 0; /* override base tray margin — wrapper padding-right handles clearance */
 		opacity: 0;
 		pointer-events: none;
 		transition: opacity 0.15s ease;

@@ -87,7 +87,8 @@ const sharedOptions = {
   },
   filter: (el: Node) => {
     if (el instanceof HTMLElement) {
-      if (el.tagName === 'JAT-FEEDBACK' || el.id?.startsWith('jat-feedback-')) return false;
+      const id = el.getAttribute?.('id') ?? '';
+      if (el.tagName === 'JAT-FEEDBACK' || id.startsWith('jat-feedback-')) return false;
     }
     return true;
   },
@@ -99,9 +100,6 @@ export async function captureViewport(): Promise<string> {
       ...sharedOptions,
       width: window.innerWidth,
       height: window.innerHeight,
-      style: {
-        transform: `translate(-${window.scrollX}px, -${window.scrollY}px)`,
-      },
     });
 
     if (!canvasHasContent(canvas)) {
@@ -132,9 +130,6 @@ export async function captureViewportQuick(): Promise<string> {
       scale: 0.5,
       width: window.innerWidth,
       height: window.innerHeight,
-      style: {
-        transform: `translate(-${window.scrollX}px, -${window.scrollY}px)`,
-      },
     });
 
     if (!canvasHasContent(canvas)) {

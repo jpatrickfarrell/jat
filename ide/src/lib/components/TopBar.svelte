@@ -709,6 +709,7 @@
 						<button
 							type="button"
 							class="psd-item psd-add-item"
+							role="menuitem"
 							onclick={() => { showProjectSwitcher = false; openProjectDrawer(); }}
 						>
 							<svg viewBox="0 0 20 20" fill="currentColor" class="psd-add-icon">

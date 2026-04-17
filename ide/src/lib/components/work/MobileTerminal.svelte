@@ -23,6 +23,8 @@
 	import QuestionPanel from './mobile/QuestionPanel.svelte';
 	import OptionButton from './mobile/OptionButton.svelte';
 	import Spinner from './mobile/Spinner.svelte';
+	import MobileFreeTextButton from './mobile/MobileFreeTextButton.svelte';
+	import BottomSheet from '$lib/components/ui/BottomSheet.svelte';
 	import PromptInput from '$lib/components/quick-commands/PromptInput.svelte';
 	import EventStack from './EventStack.svelte';
 	import { errorToast } from '$lib/stores/toasts.svelte';
@@ -249,7 +251,7 @@
 	let questionData = $state<QuestionData | null>(null);
 	let selectedOptions = $state(new Set<number>());
 	let currentOptionIndex = $state(0);
-	let isOtherMode = $state(false);
+	let isOtherSheetOpen = $state(false);
 	let otherText = $state('');
 	// `isBusy` is set while a TUI-key chain is in flight. Every user action in the
 	// smart-question panel must check this flag — mobile double-taps produced
@@ -282,7 +284,7 @@
 			if (newQ !== oldQ) {
 				selectedOptions = new Set();
 				currentOptionIndex = 0;
-				isOtherMode = false;
+				isOtherSheetOpen = false;
 				otherText = '';
 				smartError = null;
 			}
@@ -309,7 +311,7 @@
 	async function clearQuestion() {
 		suppressFetchUntil = Date.now() + 2000;
 		questionData = null;
-		isOtherMode = false;
+		isOtherSheetOpen = false;
 		smartError = null;
 		try {
 			await fetch(
@@ -402,7 +404,7 @@
 			try {
 				await navigateTo(optionCount); // "Other" is right after the last option
 				await onSendInput?.('enter', 'key');
-				isOtherMode = true;
+				isOtherSheetOpen = true;
 				otherText = '';
 			} finally {
 				activeAction = null;
@@ -419,7 +421,7 @@
 			activeAction = 'submit';
 			try {
 				await onSendInput?.(text, 'text');
-				isOtherMode = false;
+				isOtherSheetOpen = false;
 				otherText = '';
 				if (sessionName && typeof localStorage !== 'undefined') {
 					localStorage.removeItem(`jat-draft-mobile-${sessionName}-smart-other`);
@@ -488,7 +490,7 @@
 
 	// Restore otherText draft when Other mode is activated
 	$effect(() => {
-		if (isOtherMode && sessionName && typeof localStorage !== 'undefined') {
+		if (isOtherSheetOpen && sessionName && typeof localStorage !== 'undefined') {
 			const saved = localStorage.getItem(`jat-draft-mobile-${sessionName}-smart-other`);
 			if (saved) otherText = saved;
 		}
@@ -570,7 +572,7 @@
 			if (saved) customInput = saved;
 		}
 		// Restore smart-question Other draft (available when user next activates Other mode)
-		// (restored reactively via $effect when isOtherMode becomes true)
+		// (restored reactively via $effect when isOtherSheetOpen becomes true)
 	});
 
 	onDestroy(() => {
@@ -696,42 +698,7 @@
 	{#if questionData?.active && questionData.questions?.length}
 		{@const q = questionData.questions[0]}
 		<QuestionPanel question={q.question} badge="?" onDismiss={clearQuestion}>
-			{#if isOtherMode}
-				<div class="flex gap-2 items-end">
-					<div class="flex-1 min-w-0">
-						<PromptInput
-							bind:value={otherText}
-							bind:references={otherRefs}
-							project={defaultProject}
-							placeholder="Type your response… (Shift+Enter for newline)"
-							rows={1}
-							compact={true}
-							onkeydown={(e) => {
-								if (e.key === 'Enter' && !e.shiftKey && otherText.trim()) {
-									e.preventDefault();
-									submitOther();
-								} else if (e.key === 'Escape') { isOtherMode = false; }
-							}}
-						/>
-					</div>
-					<button
-						class="btn btn-success"
-						style="min-height: 2.75rem; min-width: 2.75rem;"
-						disabled={isBusy}
-						use:directClick={submitOther}
-					>{#if isBusy}<Spinner />{:else}Send{/if}</button>
-					<button
-						class="btn btn-ghost"
-						style="color: {mobileSurface.textMuted}; min-height: 2.75rem; min-width: 2.75rem;"
-						use:directClick={() => { isOtherMode = false; }}
-						aria-label="Cancel free-text"
-					>
-						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-							<path d="M18 6 6 18M6 6l12 12" />
-						</svg>
-					</button>
-				</div>
-			{:else}
+			<div class="flex flex-col gap-2">
 				<div class="flex flex-wrap gap-1.5">
 					{#each q.options as opt, i}
 						<OptionButton
@@ -757,15 +724,6 @@
 						</OptionButton>
 					{/each}
 
-					<OptionButton
-						variant="ghost"
-						disabled={isBusy}
-						busy={activeAction === 'other'}
-						onClick={() => activateOther(q.options.length)}
-					>
-						Other
-					</OptionButton>
-
 					{#if q.multiSelect && selectedOptions.size > 0}
 						<button
 							class="btn btn-success gap-1"
@@ -775,7 +733,11 @@
 						>Done ({selectedOptions.size})</button>
 					{/if}
 				</div>
-			{/if}
+				<MobileFreeTextButton
+					disabled={isBusy}
+					onClick={() => activateOther(q.options.length)}
+				/>
+			</div>
 			{#if smartError}
 				<div class="mt-2 flex items-center gap-2 text-xs" style="color: {input.textColor};" role="alert">
 					<span class="flex-1">{smartError}</span>
@@ -792,6 +754,43 @@
 		</QuestionPanel>
 	{/if}
 	</div> <!-- /.bottom-stack -->
+
+	<BottomSheet
+		bind:open={isOtherSheetOpen}
+		title="Custom answer"
+		onclose={() => { isOtherSheetOpen = false; }}
+	>
+		<div class="flex flex-col gap-3">
+			<PromptInput
+				bind:value={otherText}
+				bind:references={otherRefs}
+				project={defaultProject}
+				placeholder="Type your response… (Shift+Enter for newline)"
+				rows={3}
+				compact={false}
+				onkeydown={(e) => {
+					if (e.key === 'Enter' && !e.shiftKey && otherText.trim() && !isBusy) {
+						e.preventDefault();
+						submitOther();
+					}
+				}}
+			/>
+			<div class="flex gap-2 justify-end">
+				<button
+					class="btn btn-ghost"
+					style="color: {mobileSurface.textMuted}; min-height: 2.75rem;"
+					disabled={isBusy}
+					use:directClick={() => { isOtherSheetOpen = false; }}
+				>Cancel</button>
+				<button
+					class="btn btn-success"
+					style="min-height: 2.75rem; min-width: 4rem;"
+					disabled={isBusy || !otherText.trim()}
+					use:directClick={submitOther}
+				>{#if isBusy}<Spinner />{:else}Send{/if}</button>
+			</div>
+		</div>
+	</BottomSheet>
 </div>
 
 <style>

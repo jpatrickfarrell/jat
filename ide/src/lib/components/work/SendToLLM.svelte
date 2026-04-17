@@ -17,6 +17,7 @@
 	 */
 
 	import { fade, fly } from 'svelte/transition';
+	import { richPaste } from '$lib/actions/richPaste';
 	import { successToast, errorToast } from '$lib/stores/toasts.svelte';
 	import { signalNotesUpdate } from '$lib/stores/taskNotesUpdate.svelte';
 
@@ -304,6 +305,7 @@
 						rows="4"
 						disabled={isProcessing}
 						style="background: oklch(0.14 0.01 250); border-color: oklch(0.25 0.02 250);"
+						use:richPaste
 					></textarea>
 
 					<!-- Submit with route dropdown -->

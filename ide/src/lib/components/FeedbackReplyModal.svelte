@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { richPaste } from '$lib/actions/richPaste';
+
 	let {
 		taskId = $bindable(''),
 		taskTitle = $bindable(''),
@@ -133,6 +135,7 @@
 				bind:value={message}
 				disabled={sending}
 				autofocus
+				use:richPaste
 			></textarea>
 
 			{#if error}

@@ -13,6 +13,7 @@
 	import SlideOpenButton from '$lib/components/SlideOpenButton.svelte';
 	import { getIntegrationIcon, type IntegrationIconDef } from '$lib/config/integrationIcons';
 	import type { IntegrationAction, CallbackLogEntry } from '$lib/types/integration';
+	import { richPaste, hasPendingUndo } from '$lib/actions/richPaste';
 
 	// Types
 	interface AgentTask {
@@ -365,6 +366,7 @@
 	let descriptionEditing = $state(false);
 	let descriptionValue = $state('');
 	let descriptionSaving = $state(false);
+	let descriptionTextareaRef = $state<HTMLTextAreaElement | null>(null);
 
 	// Notes editing state
 	let notesEditing = $state(false);
@@ -416,9 +418,13 @@
 	async function saveDescription() {
 		if (!task?.id || descriptionSaving) return;
 
+		// If a richPaste undo toast is still available, save the current value but keep
+		// the textarea mounted so the user can still click "Paste plain text instead".
+		const undoPending = descriptionTextareaRef != null && hasPendingUndo(descriptionTextareaRef);
+
 		const currentDescription = task?.description || '';
 		if (descriptionValue === currentDescription) {
-			descriptionEditing = false;
+			if (!undoPending) descriptionEditing = false;
 			return;
 		}
 
@@ -429,7 +435,7 @@
 			}
 		} finally {
 			descriptionSaving = false;
-			descriptionEditing = false;
+			if (!undoPending) descriptionEditing = false;
 		}
 	}
 
@@ -891,9 +897,11 @@
 							{#if descriptionEditing}
 								<textarea
 									class="task-panel-description-input"
+									bind:this={descriptionTextareaRef}
 									bind:value={descriptionValue}
 									onblur={saveDescription}
 									use:autoResizeTextarea
+									use:richPaste
 									placeholder="Add description..."
 									disabled={descriptionSaving}
 								></textarea>

@@ -6,6 +6,7 @@
 	 * Right side: SessionCard with live agent terminal for interactive planning
 	 */
 	import { onMount, onDestroy } from 'svelte';
+	import { richPaste } from '$lib/actions/richPaste';
 	import SessionCard from '$lib/components/work/SessionCard.svelte';
 	import {
 		fetch as fetchSessions,
@@ -405,6 +406,7 @@
 					bind:value={description}
 					disabled={contextSent}
 					placeholder={`Describe the feature or system you want to plan. Be specific about requirements, target users, and technical constraints.\n\nExample: Build a notification system with email and in-app alerts. Users should configure preferences per event type. Support batching to avoid notification fatigue.`}
+					use:richPaste
 				onkeydown={(e) => {
 					if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
 						e.preventDefault();

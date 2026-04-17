@@ -15,6 +15,7 @@
 	import ProjectSelector from './ProjectSelector.svelte';
 	import AttachmentZone from './AttachmentZone.svelte';
 	import { onDestroy } from 'svelte';
+	import { richPaste } from '$lib/actions/richPaste';
 
 	interface Props {
 		projects: string[];
@@ -218,6 +219,7 @@
 				placeholder="Describe the feature you want to build. Be specific about requirements, target users, and technical constraints.
 
 Example: Build a user notification system with email and in-app notifications. Users should be able to set preferences for which events trigger notifications. Support batching to avoid notification fatigue."
+				use:richPaste
 			></textarea>
 		</div>
 

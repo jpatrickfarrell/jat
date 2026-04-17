@@ -22,6 +22,7 @@
 	 */
 
 	import { onMount } from 'svelte';
+	import { richPaste } from '$lib/actions/richPaste';
 	import { slide } from 'svelte/transition';
 	import { getIssueTypeVisual } from '$lib/config/statusColors';
 	import type { SuggestedTask } from '$lib/types/signals';
@@ -641,6 +642,7 @@
 											updateDescription(taskKey, textarea.value);
 										}}
 										use:autosize
+										use:richPaste
 										class="textarea textarea-sm w-full font-mono bg-base-200 border-base-content/30 text-base-content resize-none overflow-hidden min-h-[50px]"
 										placeholder="Task description..."
 									></textarea>

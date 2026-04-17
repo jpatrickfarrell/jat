@@ -10,6 +10,7 @@
 	 * @see src/lib/types/richSignals.ts for type definitions
 	 */
 
+	import { richPaste } from '$lib/actions/richPaste';
 	import type { ReviewSignal, FileModification, KeyDecision, CommitInfo, ReviewFocusItem } from '$lib/types/richSignals';
 	import {
 		openInJatEditor,
@@ -729,6 +730,7 @@
 								class="textarea textarea-sm w-full text-xs bg-base-100 border-error text-base-content"
 								rows="3"
 								disabled={submitting}
+								use:richPaste
 							></textarea>
 							<div class="flex gap-2 justify-end">
 								<button

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { richPaste } from '$lib/actions/richPaste';
 	import type { ActionCreateTaskConfig } from '$lib/types/workflow';
 	import { TASK_TYPES, PRIORITY_OPTIONS } from '$lib/config/workflowNodes';
 
@@ -56,6 +57,7 @@
 			value={config.description || ''}
 			oninput={(e) => update({ description: e.currentTarget.value || undefined })}
 			placeholder={`Supports {{input}} and {{result}}`}
+			use:richPaste
 		></textarea>
 		<div class="mt-1.5 flex items-center gap-1">
 			<button

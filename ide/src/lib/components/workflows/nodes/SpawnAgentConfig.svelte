@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { richPaste } from '$lib/actions/richPaste';
 	import type { ActionSpawnAgentConfig } from '$lib/types/workflow';
 	import type { UpstreamVariableGroup } from '$lib/utils/workflowVariables';
 	import { loadCommands, getCommandDropdownGroups } from '$lib/stores/configStore.svelte';
@@ -114,6 +115,7 @@
 				value={config.taskDescription || ''}
 				oninput={(e) => update({ taskDescription: e.currentTarget.value || undefined })}
 				placeholder={upstreamVariables.length > 0 ? 'Task description — click a variable below to insert' : `Detailed task description. Use {{input}} for upstream data.`}
+				use:richPaste
 			></textarea>
 			{#if upstreamVariables.length > 0}
 				<TemplateVariables

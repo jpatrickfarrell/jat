@@ -15,6 +15,7 @@
 	 */
 
 	import { parseFx, hasFx } from '$lib/utils/formulaDisplay';
+	import { richPaste, hasPendingUndo } from '$lib/actions/richPaste';
 
 	interface Props {
 		/** Current value */
@@ -120,6 +121,10 @@
 	// Handle blur (auto-save when not using buttons)
 	function handleBlur() {
 		if (!showButtons) {
+			// Keep editing if a richPaste undo toast is still available
+			if (type === 'textarea' && inputElement instanceof HTMLTextAreaElement && hasPendingUndo(inputElement)) {
+				return;
+			}
 			saveValue();
 		}
 	}
@@ -173,6 +178,7 @@
 				onblur={handleBlur}
 				use:autofocus
 				use:autoresize
+				use:richPaste
 			></textarea>
 		{:else}
 			<input

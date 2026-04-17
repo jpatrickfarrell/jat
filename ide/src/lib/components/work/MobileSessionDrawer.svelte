@@ -19,6 +19,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { fly, fade } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
+	import { richPaste } from '$lib/actions/richPaste';
 	import MobileTerminal from '$lib/components/work/MobileTerminal.svelte';
 	import EventStack from '$lib/components/work/EventStack.svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
@@ -160,16 +161,39 @@
 
 	// Dynamic actions from configurable state actions (same system as MobileSessionFullscreen)
 	const MOBILE_PILL_ACTIONS = new Set(['complete', 'complete-kill', 'cleanup', 'pause', 'interrupt', 'attach', 'kill', 'escape', 'convert-to-tasks']);
+
+	// Fallbacks injected when a state doesn't define kill/attach/interrupt
+	const TAIL_FALLBACKS: SessionStateAction[] = [
+		{ id: 'kill', label: 'Kill', icon: 'M6 18L18 6M6 6l12 12', variant: 'error', description: 'Terminate tmux session' },
+		{ id: 'attach', label: 'Attach', icon: 'M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z', variant: 'info', description: 'Open session in terminal' },
+		{ id: 'interrupt', label: 'Interrupt', icon: 'M15.75 5.25v13.5m-7.5-13.5v13.5', variant: 'warning', description: 'Send Ctrl+C to interrupt' }
+	];
+	const TAIL_IDS = new Set(['kill', 'attach', 'interrupt']);
+
 	const stateActions = $derived.by(() => {
 		const actions = getActions(effectiveState);
-		return actions.filter(a => MOBILE_PILL_ACTIONS.has(a.id));
+		let filtered = actions.filter(a => MOBILE_PILL_ACTIONS.has(a.id));
+
+		if (effectiveState === 'completed') return filtered;
+
+		// Inject any missing tail actions from fallbacks
+		const existingIds = new Set(filtered.map(a => a.id));
+		for (const fallback of TAIL_FALLBACKS) {
+			if (!existingIds.has(fallback.id)) filtered = [...filtered, fallback];
+		}
+
+		// Sort: head (non-tail) first, then tail in kill → attach → interrupt order
+		const TAIL_ORDER = ['kill', 'attach', 'interrupt'];
+		const head = filtered.filter(a => !TAIL_IDS.has(a.id));
+		const tail = TAIL_ORDER.map(id => filtered.find(a => a.id === id)).filter(Boolean) as SessionStateAction[];
+		return [...head, ...tail];
 	});
 
 	// Track which action button is currently animating
 	let activeActionId = $state<string | null>(null);
 
-	// Hold-to-confirm for destructive pills (kill, complete, complete-kill)
-	const DESTRUCTIVE_ACTIONS = new Set(['kill', 'complete', 'complete-kill']);
+	// Hold-to-confirm for destructive pills (kill, complete, complete-kill, pause)
+	const DESTRUCTIVE_ACTIONS = new Set(['kill', 'complete', 'complete-kill', 'pause']);
 	const HOLD_DURATION_MS = 600;
 	const HOLD_TICK_MS = 30;
 	let holdActionId = $state<string | null>(null);
@@ -277,6 +301,7 @@
 			case 'error': return 'text-error border-error/50 bg-error/15';
 			case 'warning': return 'text-warning border-warning/50 bg-warning/15';
 			case 'info': return 'text-info border-info/50 bg-info/15';
+			case 'secondary': return 'text-secondary border-secondary/50 bg-secondary/15';
 			default: return 'text-base-content/80 border-base-300 bg-base-200';
 		}
 	}
@@ -2234,6 +2259,7 @@
 							bind:value={editDraft}
 							placeholder="Task description"
 							disabled={editSaving}
+							use:richPaste
 						></textarea>
 						<div class="flex gap-2">
 							<button type="button" class="btn btn-outline flex-1" disabled={editSaving} use:directClick={closeEditor}>Cancel</button>
@@ -2269,6 +2295,7 @@
 							bind:value={editDraft}
 							placeholder="Task notes"
 							disabled={editSaving}
+							use:richPaste
 						></textarea>
 						<div class="flex gap-2">
 							<button type="button" class="btn btn-outline flex-1" disabled={editSaving} use:directClick={closeEditor}>Cancel</button>

@@ -3,6 +3,8 @@
 	import loader from '@monaco-editor/loader';
 	import type * as Monaco from 'monaco-editor';
 	import { getMonacoTheme } from '$lib/utils/themeManager';
+	import { htmlToMarkdown, hasRichFormatting } from '$lib/utils/htmlToMarkdown';
+	import { addToast, removeToast } from '$lib/stores/toasts.svelte';
 
 	/** Completion item returned by the completionProvider callback */
 	export interface CompletionItem {
@@ -55,6 +57,7 @@
 	let themeObserver: MutationObserver | null = null;
 	let isEditorFocused = $state(false);
 	let completionDisposable: Monaco.IDisposable | null = null;
+	let richPasteCleanup: (() => void) | null = null;
 
 	// Track the current DaisyUI theme for reactivity
 	let daisyTheme = $state('nord');
@@ -319,6 +322,76 @@
 				});
 			}
 
+			// Rich paste: intercept paste events to convert HTML → Markdown.
+			// Uses document-level capture because Monaco intercepts Ctrl+V at the
+			// keyboard level and the getDomNode() capture listener never fires.
+			// Containment check limits this to our specific editor instance.
+			const containerEl = containerRef;
+			const handleRichPaste = (event: ClipboardEvent) => {
+				// Only handle paste events targeting elements inside our editor container
+				const target = event.target as HTMLElement | null;
+				if (!containerEl || !target || !containerEl.contains(target)) return;
+
+				if (editorInstance.getOption(monacoInstance.editor.EditorOption.readOnly)) return;
+
+				// Skip code editors — converting HTML to markdown makes no sense for code
+				const lang = editorInstance.getModel()?.getLanguageId() ?? '';
+				const textLangs = new Set(['markdown', 'plaintext', '']);
+				if (!textLangs.has(lang)) return;
+
+				const html = event.clipboardData?.getData('text/html') ?? '';
+				const plain = event.clipboardData?.getData('text/plain') ?? '';
+				if (!html || !hasRichFormatting(html)) return;
+
+				event.preventDefault();
+				event.stopPropagation();
+
+				const markdown = htmlToMarkdown(html);
+
+				// Replace current selection (or insert at cursor)
+				const sel = editorInstance.getSelection();
+				if (!sel) return;
+
+				editorInstance.executeEdits('richPaste', [{
+					range: sel,
+					text: markdown,
+					forceMoveMarkers: true
+				}]);
+				editorInstance.focus();
+
+				// Calculate inserted range for undo
+				const model = editorInstance.getModel();
+				if (!model) return;
+				const startOffset = model.getOffsetAt(sel.getStartPosition());
+				const insertedEnd = model.getPositionAt(startOffset + markdown.length);
+				const insertedRange = new monacoInstance.Range(
+					sel.startLineNumber, sel.startColumn,
+					insertedEnd.lineNumber, insertedEnd.column
+				);
+
+				let toastId: string | undefined;
+				toastId = addToast({
+					message: 'Pasted as Markdown',
+					type: 'info',
+					duration: 6000,
+					action: {
+						label: 'Paste plain text instead',
+						onClick: () => {
+							editorInstance.executeEdits('richPaste-undo', [{
+								range: insertedRange,
+								text: plain,
+								forceMoveMarkers: true
+							}]);
+							editorInstance.focus();
+							if (toastId) removeToast(toastId);
+						}
+					}
+				});
+			};
+
+			document.addEventListener('paste', handleRichPaste, true);
+			richPasteCleanup = () => document.removeEventListener('paste', handleRichPaste, true);
+
 			// Set up resize observer for auto-layout
 			resizeObserver = new ResizeObserver(() => {
 				editor?.layout();
@@ -381,6 +454,7 @@
 
 	// Handle cleanup
 	onDestroy(() => {
+		richPasteCleanup?.();
 		completionDisposable?.dispose();
 		themeObserver?.disconnect();
 		resizeObserver?.disconnect();

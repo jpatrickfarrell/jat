@@ -15,6 +15,7 @@
 	 */
 
 	import { tick } from 'svelte';
+	import { richPaste } from '$lib/actions/richPaste';
 	import { isProjectDrawerOpen, closeProjectDrawer, signalProjectCreated } from '$lib/stores/drawerStore';
 	import { playSuccessChime, playErrorSound } from '$lib/utils/soundEffects';
 	import { invalidateAll, goto } from '$app/navigation';
@@ -1789,6 +1790,7 @@
 								bind:value={wizardData.description}
 								rows="3"
 								style="background: oklch(0.20 0.01 250); border-color: oklch(0.30 0.02 250); color: oklch(0.85 0.02 250);"
+								use:richPaste
 							></textarea>
 						</div>
 					</div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { richPaste } from '$lib/actions/richPaste';
 	import type { ActionSendMessageConfig } from '$lib/types/workflow';
 
 	let {
@@ -58,6 +59,7 @@
 			value={config.message}
 			oninput={(e) => update({ message: e.currentTarget.value })}
 			placeholder={`Message body (supports {{input}} and {{result}})`}
+			use:richPaste
 		></textarea>
 		<div class="mt-1.5 flex items-center gap-1">
 			<button

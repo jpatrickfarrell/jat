@@ -30,6 +30,7 @@
 	import { RULE_CATEGORY_META } from '$lib/config/automationConfig';
 	import { SESSION_STATE_VISUALS } from '$lib/config/statusColors';
 	import { fly, fade } from 'svelte/transition';
+	import { richPaste } from '$lib/actions/richPaste';
 
 	// =============================================================================
 	// PROPS
@@ -510,6 +511,7 @@
 							class="w-full py-2 px-3 text-sm font-mono rounded-md bg-base-300 border border-base-300 text-base-content transition-all duration-150 focus:outline-none focus:border-info resize-y min-h-[60px]"
 							placeholder="Describe what this rule does..."
 							rows="2"
+							use:richPaste
 						></textarea>
 					</div>
 

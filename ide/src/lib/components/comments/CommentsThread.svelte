@@ -14,6 +14,7 @@
 	 */
 	import { onMount } from 'svelte';
 	import AgentAvatar from '$lib/components/AgentAvatar.svelte';
+	import { richPaste } from '$lib/actions/richPaste';
 
 	interface Comment {
 		id: string;
@@ -251,6 +252,7 @@
 				bind:value={draft}
 				onkeydown={handleKey}
 				disabled={submitting}
+				use:richPaste
 			></textarea>
 			{#if submitError}
 				<p class="text-xs text-error">{submitError}</p>

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { richPaste } from '$lib/actions/richPaste';
 	import type { LlmPromptConfig } from '$lib/types/workflow';
 	import { MODEL_OPTIONS } from '$lib/config/workflowNodes';
 
@@ -76,6 +77,7 @@
 			value={config.prompt}
 			oninput={(e) => update({ prompt: e.currentTarget.value })}
 			placeholder={`Enter your prompt here...\n\nUse {{input}} to reference data from the previous node.`}
+			use:richPaste
 		></textarea>
 		<div class="mt-1.5 flex items-center gap-1">
 			<button

@@ -7,6 +7,7 @@
 	 */
 
 	import { onMount } from 'svelte';
+	import { richPaste } from '$lib/actions/richPaste';
 	import {
 		COMMIT_MESSAGE_DEFAULTS,
 		type CommitMessageStyle,
@@ -482,6 +483,7 @@
 						placeholder="e.g., Always mention ticket numbers, prefer short messages, use past tense..."
 						bind:value={customInstructions}
 						rows="3"
+						use:richPaste
 					></textarea>
 					<span class="field-hint">These instructions are appended to the generation prompt</span>
 				</div>

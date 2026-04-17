@@ -13,6 +13,7 @@
 	import ProjectSelector from './ProjectSelector.svelte';
 	import AttachmentZone from './AttachmentZone.svelte';
 	import { onDestroy } from 'svelte';
+	import { richPaste } from '$lib/actions/richPaste';
 
 	interface Props {
 		projects: string[];
@@ -176,6 +177,7 @@
 			rows={6}
 			placeholder="Describe the task in detail..."
 			bind:value={description}
+			use:richPaste
 		></textarea>
 	</div>
 

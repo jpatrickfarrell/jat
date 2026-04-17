@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { TextBlock } from '$lib/types/canvas';
 	import { marked, type MarkedOptions } from 'marked';
+	import { richPaste, hasPendingUndo } from '$lib/actions/richPaste';
 
 	let {
 		block,
@@ -107,6 +108,9 @@
 	}
 
 	function stopEditing() {
+		// Keep editing if a richPaste undo toast is still dismissable
+		if (textareaEl && hasPendingUndo(textareaEl)) return;
+
 		if (saveTimeout) clearTimeout(saveTimeout);
 		if (editValue !== block.content) {
 			onUpdate?.({ ...block, content: editValue });
@@ -157,6 +161,7 @@
 			oninput={handleInput}
 			class="canvas-text-editor"
 			placeholder="Type markdown here..."
+			use:richPaste
 		></textarea>
 	{:else if block.content}
 		<!-- svelte-ignore a11y_click_events_have_key_events -->

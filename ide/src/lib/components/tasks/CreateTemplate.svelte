@@ -16,6 +16,7 @@
 	import ProjectSelector from './ProjectSelector.svelte';
 	import AttachmentZone from './AttachmentZone.svelte';
 	import { onDestroy } from 'svelte';
+	import { richPaste } from '$lib/actions/richPaste';
 
 	interface Props {
 		projects: string[];
@@ -239,6 +240,7 @@ data:
 			rows={14}
 			bind:value={textInput}
 			placeholder={`template:\n  title: "Upgrade {{crate}} to latest version"\n  type: task\n  priority: 2\n  labels: [rust, upgrade]\n  description: "Update {{crate}}, fix breaking changes."\n\ndata:\n  - crate: serde\n  - crate: tokio\n  - crate: axum`}
+			use:richPaste
 		></textarea>
 
 		{#if expandResult && expandResult.variables.length > 0}

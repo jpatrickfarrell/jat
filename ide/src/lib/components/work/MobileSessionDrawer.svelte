@@ -341,8 +341,11 @@
 			await onAction(action.id);
 		}
 
-		// 4. Dismiss — kill/complete-kill show a brief recovery notice first
-		if (action.id === 'kill' || action.id === 'cleanup') {
+		// 4. Dismiss — interrupt/escape stay open so user can type follow-up commands;
+		//    kill/cleanup show a brief recovery notice first
+		if (action.id === 'interrupt' || action.id === 'escape') {
+			// Stay open — user interrupted to fix something and needs to type next
+		} else if (action.id === 'kill' || action.id === 'cleanup') {
 			sessionKilledNotice = action.id;
 			if (sessionKilledTimer) clearTimeout(sessionKilledTimer);
 			sessionKilledTimer = setTimeout(() => {

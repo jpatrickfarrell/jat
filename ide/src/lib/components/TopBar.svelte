@@ -165,12 +165,14 @@
 
 	// Error toast
 	let toastError = $state<string | null>(null);
+	let toastRetry = $state<(() => void) | null>(null);
 	let toastTimeout: ReturnType<typeof setTimeout> | null = null;
 
-	function showError(msg: string) {
+	function showError(msg: string, retryFn?: () => void) {
 		if (toastTimeout) clearTimeout(toastTimeout);
 		toastError = msg;
-		toastTimeout = setTimeout(() => { toastError = null; }, 5000);
+		toastRetry = retryFn ?? null;
+		toastTimeout = setTimeout(() => { toastError = null; toastRetry = null; }, 5000);
 	}
 
 	onDestroy(() => { if (toastTimeout) clearTimeout(toastTimeout); });
@@ -197,7 +199,7 @@
 				throw new Error(firstError);
 			}
 		} catch (error) {
-			showError(error instanceof Error ? error.message : "Failed to spawn agents");
+			showError(error instanceof Error ? error.message : "Failed to spawn agents", handleSwarm);
 		} finally {
 			swarmLoading = false;
 		}
@@ -251,13 +253,6 @@
 		totalCount: number;
 		readyChildIds: string[];
 		children: EpicChild[];
-	}
-
-	/** Review rule structure */
-	interface ReviewRule {
-		type: string;
-		maxAutoPriority: number;
-		note?: string;
 	}
 
 	interface StateCounts {
@@ -359,6 +354,8 @@
 	// Drag state for chip reordering
 	let draggedChip = $state<string | null>(null);
 	let dragOverChip = $state<string | null>(null);
+	// Roving tabindex: tracks which chip holds tabindex=0
+	let focusedChipProject = $state<string | null>(null);
 
 
 	// Max sessions from user preferences (reactive)
@@ -407,7 +404,7 @@
 				}
 			}
 		} catch (err) {
-			showError(err instanceof Error ? err.message : "Failed to run epic");
+			showError(err instanceof Error ? err.message : "Failed to run epic", () => handleRunEpic(epicId));
 		} finally {
 			swarmLoading = false;
 		}
@@ -497,6 +494,33 @@
 		dragOverChip = null;
 	}
 
+	function handleChipKeydown(e: KeyboardEvent, project: string) {
+		if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+		e.preventDefault();
+		const chips = favoriteChips;
+		const idx = chips.indexOf(project);
+		if (idx === -1) return;
+		const targetIdx = e.key === 'ArrowLeft' ? idx - 1 : idx + 1;
+		if (targetIdx < 0 || targetIdx >= chips.length) return;
+		if (e.altKey) {
+			// Alt+Arrow: reorder — re-focus after FLIP animation (300ms)
+			const reordered = [...chips];
+			reordered.splice(idx, 1);
+			reordered.splice(targetIdx, 0, project);
+			onReorderFavorites?.(reordered);
+			setTimeout(() => {
+				const el = document.querySelector<HTMLElement>(`[data-chip-project="${CSS.escape(project)}"]`);
+				el?.focus();
+			}, 310);
+		} else {
+			// Plain Arrow: move focus
+			const targetProject = chips[targetIdx];
+			focusedChipProject = targetProject;
+			const el = document.querySelector<HTMLElement>(`[data-chip-project="${CSS.escape(targetProject)}"]`);
+			el?.focus();
+		}
+	}
+
 </script>
 
 <!-- Industrial/Terminal TopBar -->
@@ -551,22 +575,28 @@
 
 	<!-- Project Selector + Favorite Chips (global, always visible) -->
 	{#if actualProjects.length > 0 && onProjectChange}
-		<div class="fav-chips-scroll ml-3 flex items-center gap-1.5">
-			{#each favoriteChips as favProject (favProject)}
-				{@const favColor = projectColorsMap.get(favProject) || getProjectColor(favProject)}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="fav-chips-scroll ml-3 flex items-center gap-1.5" role="list" aria-label="Favorite projects">
+			{#each favoriteChips as favProject, chipIdx (favProject)}
 				<div
 					class="fav-flip-wrapper"
 					class:fav-dragging={draggedChip === favProject}
 					class:fav-drag-over={dragOverChip === favProject}
 					animate:flip={{ duration: 300, easing: cubicOut }}
 					draggable="true"
+					data-chip-project={favProject}
+					tabindex={focusedChipProject === favProject || (!focusedChipProject && chipIdx === 0) ? 0 : -1}
+					role="listitem"
+					aria-label="{favProject} — ←→ navigate · Alt+←→ reorder"
+					title="Drag or Alt+←→ to reorder · ←→ to navigate"
 					ondragstart={(e) => handleChipDragStart(e, favProject)}
 					ondragover={(e) => handleChipDragOver(e, favProject)}
 					ondragleave={handleChipDragLeave}
 					ondrop={(e) => handleChipDrop(e, favProject)}
 					ondragend={handleChipDragEnd}
+					onfocus={() => (focusedChipProject = favProject)}
+					onkeydown={(e) => handleChipKeydown(e, favProject)}
 				>
+					<span class="fav-drag-handle" aria-hidden="true">⠿</span>
 					<ProjectSelector
 						selectedProject={favProject}
 						compact={true}
@@ -593,6 +623,7 @@
 			{/each}
 			<!-- Fallback: if selected project is NOT a favorite, show selector outside the each -->
 			{#if !favoriteProjects.has(selectedProject)}
+				<div role="listitem">
 				<ProjectSelector
 					{selectedProject}
 					compact={true}
@@ -613,6 +644,7 @@
 					{onToggleFavorite}
 					backend={projectBackends[selectedProject] ?? 'sqlite'}
 				/>
+				</div>
 			{/if}
 
 			<!-- Project switcher: switch projects or add new -->
@@ -621,6 +653,9 @@
 					type="button"
 					class="project-switcher-btn"
 					onclick={toggleProjectSwitcher}
+					aria-label="Switch project (Alt+Shift+P)"
+					aria-haspopup="true"
+					aria-expanded={showProjectSwitcher}
 					title="Switch project or add new (Alt+Shift+P)"
 				>
 					<svg viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3">
@@ -629,28 +664,35 @@
 				</button>
 
 				{#if showProjectSwitcher}
-					<div class="project-switcher-dropdown" style="top: {projectSwitcherPos.top}px; left: {projectSwitcherPos.left}px;">
+					<div class="project-switcher-dropdown" role="menu" aria-label="Switch project" style="top: {projectSwitcherPos.top}px; left: {projectSwitcherPos.left}px;">
 						<div class="psd-header">Switch Project</div>
 						<div class="psd-scroll">
 							{#each actualProjects as project}
 								{@const projColor = getSwitcherColor(project)}
 								{@const isFavorite = favoriteProjects?.has(project)}
 								{@const count = taskCounts?.get(project)}
-								<button
-									type="button"
-									class="psd-item"
-									class:psd-active={selectedProject === project}
-									style="--psd-color: {projColor};"
-									onclick={() => { onProjectChange?.(project); showProjectSwitcher = false; }}
-								>
-									<span class="psd-dot"></span>
-									<span class="psd-label">{project}{count ? ` (${count})` : ''}</span>
+								<div class="psd-row" role="none" style="--psd-color: {projColor};">
+									<button
+										type="button"
+										class="psd-item"
+										class:psd-active={selectedProject === project}
+										role="menuitem"
+										onclick={() => { onProjectChange?.(project); showProjectSwitcher = false; }}
+									>
+										<span class="psd-dot"></span>
+										<span class="psd-label">{project}{count ? ` (${count})` : ''}</span>
+										{#if selectedProject === project}
+											<svg class="psd-check" viewBox="0 0 16 16" fill="currentColor">
+												<path fill-rule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd" />
+											</svg>
+										{/if}
+									</button>
 									{#if onToggleFavorite}
 										<button
 											type="button"
 											class="psd-star"
 											class:psd-star-active={isFavorite}
-											onclick={(e) => { e.stopPropagation(); onToggleFavorite?.(project); }}
+											onclick={() => { onToggleFavorite?.(project); }}
 											title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
 										>
 											{#if isFavorite}
@@ -660,12 +702,7 @@
 											{/if}
 										</button>
 									{/if}
-									{#if selectedProject === project}
-										<svg class="psd-check" viewBox="0 0 16 16" fill="currentColor">
-											<path fill-rule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd" />
-										</svg>
-									{/if}
-								</button>
+								</div>
 							{/each}
 						</div>
 						<div class="psd-divider"></div>
@@ -699,22 +736,19 @@
 			onmouseleave={hideSortMenuDelayed}
 		>
 			<button
-				class="flex items-center gap-1 py-1 mr-3 rounded font-mono text-[10px] tracking-wider uppercase transition-all duration-200 ease-out overflow-hidden btn btn-sm btn-ghost"
-				class:btn-active={sortHovered || showSortDropdown}
-				style="
-					padding-left: 8px;
-					padding-right: 8px;
-				"
+				class="sort-btn"
+				class:sort-btn-active={sortHovered || showSortDropdown}
 				title="Sort agents"
 				aria-haspopup="true"
 				aria-expanded={showSortDropdown}
 				onmouseenter={() => (sortHovered = true)}
 				onmouseleave={() => (sortHovered = false)}
 				onfocus={showSortMenu}
+				onblur={hideSortMenuDelayed}
 			>
 				<span class="text-xs">{currentAgentSortIcon}</span>
 				<span class="hidden sm:inline">{currentAgentSortLabel}</span>
-				<span class="text-[9px] opacity-70"
+				<span class="text-[10px] opacity-60"
 					>{currentAgentDir === "asc" ? "▲" : "▼"}</span
 				>
 				<svg
@@ -742,12 +776,14 @@
 					class="absolute top-full left-0 mt-1 min-w-[160px] rounded-lg shadow-xl z-50 overflow-hidden dropdown-content bg-base-200 border border-base-content/20"
 					onmouseenter={keepSortMenuOpen}
 					onmouseleave={hideSortMenuDelayed}
+					onfocusin={keepSortMenuOpen}
+					onfocusout={hideSortMenuDelayed}
 				>
 					<div
 						class="px-3 py-2 border-b border-base-content/10"
 					>
 						<span
-							class="text-[9px] font-mono uppercase tracking-wider text-base-content/60"
+							class="text-[10px] font-mono uppercase tracking-wider text-base-content/60"
 						>
 							Sort Agents
 						</span>
@@ -764,7 +800,7 @@
 								<span class="text-sm">{opt.icon}</span>
 								<span class="flex-1">{opt.label}</span>
 								{#if currentAgentSort === opt.value}
-									<span class="text-[10px] opacity-70"
+									<span class="text-[10px] opacity-60"
 										>{currentAgentDir === "asc" ? "▲" : "▼"}</span
 									>
 								{/if}
@@ -785,22 +821,19 @@
 			onmouseleave={hideSortMenuDelayed}
 		>
 			<button
-				class="flex items-center gap-1 py-1 mr-3 rounded font-mono text-[10px] tracking-wider uppercase transition-all duration-200 ease-out overflow-hidden btn btn-sm btn-ghost"
-				class:btn-active={sortHovered || showSortDropdown}
-				style="
-					padding-left: 8px;
-					padding-right: 8px;
-				"
+				class="sort-btn"
+				class:sort-btn-active={sortHovered || showSortDropdown}
 				title="Sort servers"
 				aria-haspopup="true"
 				aria-expanded={showSortDropdown}
 				onmouseenter={() => (sortHovered = true)}
 				onmouseleave={() => (sortHovered = false)}
 				onfocus={showSortMenu}
+				onblur={hideSortMenuDelayed}
 			>
 				<span class="text-xs">{currentServerSortIcon}</span>
 				<span class="hidden sm:inline">{currentServerSortLabel}</span>
-				<span class="text-[9px] opacity-70"
+				<span class="text-[10px] opacity-60"
 					>{currentServerDir === "asc" ? "▲" : "▼"}</span
 				>
 				<svg
@@ -828,12 +861,14 @@
 					class="absolute top-full left-0 mt-1 min-w-[160px] rounded-lg shadow-xl z-50 overflow-hidden dropdown-content bg-base-200 border border-base-content/20"
 					onmouseenter={keepSortMenuOpen}
 					onmouseleave={hideSortMenuDelayed}
+					onfocusin={keepSortMenuOpen}
+					onfocusout={hideSortMenuDelayed}
 				>
 					<div
 						class="px-3 py-2 border-b border-base-content/10"
 					>
 						<span
-							class="text-[9px] font-mono uppercase tracking-wider text-base-content/60"
+							class="text-[10px] font-mono uppercase tracking-wider text-base-content/60"
 						>
 							Sort Servers
 						</span>
@@ -850,7 +885,7 @@
 								<span class="text-sm">{opt.icon}</span>
 								<span class="flex-1">{opt.label}</span>
 								{#if currentServerSort === opt.value}
-									<span class="text-[10px] opacity-70"
+									<span class="text-[10px] opacity-60"
 										>{currentServerDir === "asc" ? "▲" : "▼"}</span
 									>
 								{/if}
@@ -908,11 +943,18 @@
 	<div class="flex-none flex items-center gap-2.5 pr-3">
 		<!-- Swarm loading indicator -->
 		{#if swarmLoading}
+			<!-- Mobile: icon only -->
+			<div class="flex lg:hidden items-center justify-center w-7 h-7" style="color: oklch(0.75 0.18 85);">
+				<svg class="w-4 h-4 animate-spin-fast" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+					<path stroke-linecap="round" d="M12 3v3m0 12v3M3 12h3m12 0h3"/>
+				</svg>
+			</div>
+			<!-- Desktop: icon + label -->
 			<div class="hidden lg:flex items-center gap-1.5 px-2 py-0.5 rounded" style="background: oklch(0.22 0.04 85 / 0.4); border: 1px solid oklch(0.55 0.15 85 / 0.4);">
 				<svg class="w-3 h-3 animate-spin-fast" style="color: oklch(0.75 0.18 85);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
 					<path stroke-linecap="round" d="M12 3v3m0 12v3M3 12h3m12 0h3"/>
 				</svg>
-				<span class="font-mono text-[9px] uppercase tracking-wider" style="color: oklch(0.75 0.15 85);">Spawning</span>
+				<span class="font-mono text-[10px] uppercase tracking-wider" style="color: oklch(0.75 0.15 85);">Spawning</span>
 			</div>
 		{/if}
 
@@ -945,13 +987,28 @@
 			<path fill-rule="evenodd" d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-3a.75.75 0 0 1 .75.75v2.5a.75.75 0 0 1-1.5 0v-2.5A.75.75 0 0 1 8 5Zm0 6.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" />
 		</svg>
 		<span class="topbar-toast-msg">{toastError}</span>
-		<button class="topbar-toast-close" onclick={() => toastError = null} aria-label="Dismiss">
+		{#if toastRetry}
+			<button class="topbar-toast-retry" onclick={() => { const fn = toastRetry; toastError = null; toastRetry = null; fn?.(); }} aria-label="Retry">
+				<svg viewBox="0 0 16 16" fill="currentColor">
+					<path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z"/>
+					<path fill-rule="evenodd" d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5.002 5.002 0 0 0 8 3zM3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9H3.1z"/>
+				</svg>
+			</button>
+		{/if}
+		<button class="topbar-toast-close" onclick={() => { toastError = null; toastRetry = null; }} aria-label="Dismiss">
 			<svg viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/></svg>
 		</button>
 	</div>
 {/if}
 
 <style>
+	/* Focus rings for nav buttons that rely on Tailwind classes (sidebar toggle, hamburger) */
+	nav > button:focus-visible,
+	nav > label:focus-visible {
+		outline: 1px solid oklch(0.65 0.15 240 / 0.7);
+		outline-offset: 2px;
+	}
+
 	/* Chips container — shrinks on narrow viewports, scrolls horizontally.
 	   ProjectSelector dropdown uses position:fixed so it's not clipped. */
 	.fav-chips-scroll {
@@ -977,10 +1034,16 @@
 	.fav-flip-wrapper {
 		cursor: grab;
 		flex-shrink: 0;
+		position: relative;
 	}
 
 	.fav-flip-wrapper:active {
 		cursor: grabbing;
+	}
+
+	.fav-flip-wrapper:focus-visible {
+		outline: 1px solid oklch(0.65 0.15 240 / 0.7);
+		border-radius: 0.375rem;
 	}
 
 	/* ── Project Switcher (+ button & dropdown) ── */
@@ -1003,6 +1066,11 @@
 		color: oklch(0.55 0.02 250);
 		cursor: pointer;
 		transition: all 0.15s ease;
+	}
+
+	.project-switcher-btn:focus-visible {
+		outline: 1px solid oklch(0.65 0.15 240 / 0.7);
+		outline-offset: 2px;
 	}
 
 	.project-switcher-btn:hover {
@@ -1057,11 +1125,22 @@
 		border-radius: 0.2rem;
 	}
 
+	.psd-row {
+		display: flex;
+		align-items: center;
+		border-radius: 0.375rem;
+	}
+
+	.psd-row:hover .psd-item {
+		background: color-mix(in oklch, var(--psd-color, oklch(0.60 0.02 250)) 15%, transparent);
+		color: var(--psd-color, oklch(0.92 0.02 250));
+	}
+
 	.psd-item {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		width: 100%;
+		flex: 1;
 		padding: 0.375rem 0.5rem;
 		border-radius: 0.375rem;
 		border: none;
@@ -1078,8 +1157,7 @@
 	}
 
 	.psd-item:hover {
-		background: color-mix(in oklch, var(--psd-color, oklch(0.60 0.02 250)) 15%, transparent);
-		color: var(--psd-color, oklch(0.92 0.02 250));
+		background: oklch(0.22 0.01 250);
 	}
 
 	.psd-item.psd-active {
@@ -1130,7 +1208,7 @@
 		height: 0.8rem;
 	}
 
-	.psd-item:hover .psd-star {
+	.psd-row:hover .psd-star {
 		opacity: 1;
 	}
 
@@ -1217,6 +1295,32 @@
 		line-height: 1.4;
 	}
 
+	.topbar-toast-retry {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.25rem;
+		height: 1.25rem;
+		flex-shrink: 0;
+		padding: 0;
+		border: none;
+		border-radius: 0.25rem;
+		background: transparent;
+		cursor: pointer;
+		color: oklch(0.65 0.15 25);
+		transition: color 0.1s, background 0.1s;
+	}
+
+	.topbar-toast-retry:hover {
+		color: oklch(0.80 0.18 25);
+		background: oklch(0.55 0.18 25 / 0.15);
+	}
+
+	.topbar-toast-retry svg {
+		width: 0.75rem;
+		height: 0.75rem;
+	}
+
 	.topbar-toast-close {
 		display: flex;
 		align-items: center;
@@ -1242,4 +1346,57 @@
 		width: 0.75rem;
 		height: 0.75rem;
 	}
+
+	/* ── Sort button (custom, no DaisyUI) ── */
+	.sort-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.25rem 8px;
+		margin-right: 0.75rem;
+		border-radius: 0.375rem;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		font-size: 0.625rem;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		cursor: pointer;
+		outline: none;
+		transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+		background: oklch(0.18 0.01 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		color: oklch(0.58 0.03 240);
+	}
+
+	.sort-btn:hover,
+	.sort-btn-active {
+		background: oklch(0.22 0.04 240 / 0.6);
+		border-color: oklch(0.45 0.12 240 / 0.5);
+		color: oklch(0.80 0.08 240);
+	}
+
+	.sort-btn:focus-visible {
+		outline: 1px solid oklch(0.65 0.15 240 / 0.7);
+		outline-offset: 2px;
+	}
+
+	/* ── Chip drag affordance ── */
+	.fav-drag-handle {
+		position: absolute;
+		left: 3px;
+		top: 50%;
+		transform: translateY(-50%);
+		font-size: 10px;
+		line-height: 1;
+		color: oklch(0.55 0.08 240 / 0.6);
+		opacity: 0.3;
+		transition: opacity 0.15s ease;
+		pointer-events: none;
+		z-index: 2;
+		user-select: none;
+	}
+
+	.fav-flip-wrapper:hover .fav-drag-handle {
+		opacity: 1;
+	}
+
 </style>

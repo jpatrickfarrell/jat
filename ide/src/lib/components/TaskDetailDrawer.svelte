@@ -2455,7 +2455,8 @@
 			>
 				<!-- Left accent bar -->
 				<div
-					class="absolute left-0 top-0 bottom-0 w-1 bg-primary"
+					class="absolute left-0 top-0 bottom-0 w-1"
+					style="background: {task?.status === 'in_progress' ? 'var(--anim-warning)' : task?.status === 'closed' ? 'var(--anim-success)' : task?.status === 'blocked' ? 'var(--anim-error)' : (task?.status === 'submitted' || task?.status === 'accepted' || task?.status === 'deployed') ? 'var(--anim-secondary)' : 'var(--anim-primary)'};"
 				></div>
 				<div class="flex-1 min-w-0">
 					<!-- Task Header: ID badge + title (shared TaskHeaderBlock) -->
@@ -2880,6 +2881,91 @@
 				{:else if task}
 					<!-- View Mode -->
 					<div class="flex flex-col">
+						<!-- Feedback Context (JST app feedback: page URL, recording, selected elements) -->
+						{#if task.page_url || task.recording_url || task.selected_elements?.length}
+							<div class="rounded-lg mb-5 overflow-hidden" style="border-left: 3px solid oklch(0.70 0.18 200); border: 1px solid oklch(0.70 0.18 200 / 0.20); background: oklch(0.16 0.01 250);">
+								<div class="px-3 py-2.5 flex flex-col gap-2">
+									<!-- Recording CTA (most prominent) -->
+									{#if task.recording_url || task.db_id}
+										{@const replayBase = (() => { try { return new URL(task.page_url || '').origin; } catch { return ''; } })()}
+										{@const replayUrl = task.db_id && replayBase ? `${replayBase}/feedback/replay?id=${task.db_id}` : task.recording_url || ''}
+										{#if replayUrl}
+											<a
+												href={replayUrl}
+												target="_blank"
+												rel="noopener noreferrer"
+												class="inline-flex items-center gap-2 self-start px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
+												style="background: oklch(0.70 0.18 200 / 0.15); color: oklch(0.75 0.18 200); border: 1px solid oklch(0.70 0.18 200 / 0.30);"
+												onmouseenter={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'oklch(0.70 0.18 200 / 0.25)'; }}
+												onmouseleave={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'oklch(0.70 0.18 200 / 0.15)'; }}
+											>
+												<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+												▶ View Recording
+											</a>
+										{/if}
+									{/if}
+									<!-- page_url chip -->
+									{#if task.page_url}
+										<a
+											href={task.page_url}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="inline-flex items-center gap-1.5 max-w-full group"
+											title={task.page_url}
+										>
+											<svg class="w-3 h-3 flex-shrink-0 text-base-content/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+											<span class="text-xs text-base-content/50 group-hover:text-base-content/80 truncate transition-colors">{task.page_url}</span>
+										</a>
+									{/if}
+									<!-- selected_elements list -->
+									{#if task.selected_elements?.length}
+										<div class="flex flex-col gap-1 mt-0.5">
+											{#each task.selected_elements as el}
+												<div class="rounded bg-base-300/40 px-2 py-1 text-xs flex items-center gap-2">
+													{#if el.tagName}
+														<span class="badge badge-xs badge-ghost font-mono uppercase flex-shrink-0">{el.tagName}</span>
+													{/if}
+													{#if el.textContent?.trim()}
+														<span class="text-base-content/55 truncate">"{el.textContent.trim().slice(0, 80)}"</span>
+													{/if}
+												</div>
+											{/each}
+										</div>
+									{/if}
+									<!-- user_agent subtle -->
+									{#if task.user_agent}
+										{@const ua = task.user_agent}
+										{@const browserMatch = ua.match(/Chrome\/(\d+)|Firefox\/(\d+)|Safari\/(\d+)/)}
+										{@const osMatch = ua.match(/Mac OS X|Windows NT|Linux|Android|iPhone|iPad/)}
+										{@const browserStr = browserMatch
+											? (ua.includes('Chrome') ? `Chrome ${browserMatch[1]}` : ua.includes('Firefox') ? `Firefox ${browserMatch[2]}` : `Safari ${browserMatch[3]}`)
+											: ua.slice(0, 40)}
+										{@const osStr = osMatch
+											? (ua.includes('Mac OS X') ? 'macOS' : ua.includes('Windows') ? 'Windows' : ua.includes('Linux') ? 'Linux' : ua.includes('iPhone') ? 'iPhone' : ua.includes('iPad') ? 'iPad' : 'Android')
+											: ''}
+										<span class="text-xs font-mono text-base-content/35">{browserStr}{osStr ? ` / ${osStr}` : ''}</span>
+									{/if}
+								</div>
+							</div>
+						{/if}
+
+						<!-- Description (Inline Editable) - Industrial -->
+						<div class="mt-5">
+							<TaskFieldLabel>Description</TaskFieldLabel>
+							<InlineEdit
+								value={task.description || ''}
+								onSave={async (newValue) => {
+									await autoSave('description', newValue);
+								}}
+								type="textarea"
+								placeholder="No description"
+								disabled={isSaving}
+								rows={4}
+								class="text-sm"
+								formulaContext={{ title: task.title, status: task.status, priority: task.priority, type: task.type, assignee: task.assignee, labels: task.labels?.join(', '), project: task.project, created_at: task.created_at, updated_at: task.updated_at, due_date: task.due_date }}
+							/>
+						</div>
+
 						<!-- Labels (badges, click to edit) - Industrial -->
 						<div>
 							<TaskFieldLabel>Labels</TaskFieldLabel>
@@ -2918,251 +3004,6 @@
 									<TaskLabelsList labels={task.labels || []} emptyText="Add labels..." />
 								</button>
 							{/if}
-						</div>
-
-						<!-- Origin URL (from Meadow feedback widget — page where task was submitted) -->
-						{#if task.page_url}
-							<div class="border-t border-base-300/50 pt-3 mt-1">
-								<TaskFieldLabel>Submitted from</TaskFieldLabel>
-								<a
-									href={task.page_url}
-									target="_blank"
-									rel="noopener noreferrer"
-									class="text-xs text-primary/70 hover:text-primary break-all leading-relaxed"
-									title={task.page_url}
-								>{task.page_url}</a>
-							</div>
-						{/if}
-
-						<!-- Browser / User Agent -->
-						{#if task.user_agent}
-							{@const ua = task.user_agent}
-							{@const browserMatch = ua.match(/Chrome\/(\d+)|Firefox\/(\d+)|Safari\/(\d+)/)}
-							{@const osMatch = ua.match(/Mac OS X|Windows NT|Linux|Android|iPhone|iPad/)}
-							{@const browserStr = browserMatch
-								? (ua.includes('Chrome') ? `Chrome ${browserMatch[1]}` : ua.includes('Firefox') ? `Firefox ${browserMatch[2]}` : `Safari ${browserMatch[3]}`)
-								: ua.slice(0, 40)}
-							{@const osStr = osMatch
-								? (ua.includes('Mac OS X') ? 'macOS' : ua.includes('Windows') ? 'Windows' : ua.includes('Linux') ? 'Linux' : ua.includes('iPhone') ? 'iPhone' : ua.includes('iPad') ? 'iPad' : 'Android')
-								: ''}
-							<div class="border-t border-base-300/50 pt-3 mt-1">
-								<TaskFieldLabel>Browser</TaskFieldLabel>
-								<span class="text-xs text-base-content/60 font-mono">{browserStr}{osStr ? ` / ${osStr}` : ''}</span>
-							</div>
-						{/if}
-
-						<!-- Selected Elements (from Meadow feedback widget DOM capture) -->
-						{#if task.selected_elements?.length}
-							<div class="border-t border-base-300/50 pt-3 mt-1">
-								<TaskFieldLabel>Selected Elements</TaskFieldLabel>
-								<div class="flex flex-col gap-1.5 mt-1">
-									{#each task.selected_elements as el}
-										<div class="rounded bg-base-200 px-2.5 py-1.5 text-xs">
-											<div class="flex items-center gap-2 mb-1">
-												{#if el.tagName}
-													<span class="badge badge-xs badge-ghost font-mono uppercase">{el.tagName}</span>
-												{/if}
-												{#if el.textContent?.trim()}
-													<span class="text-base-content/60 truncate">"{el.textContent.trim().slice(0, 80)}"</span>
-												{/if}
-											</div>
-											{#if el.selector || el.xpath}
-												<div class="font-mono text-base-content/40 break-all text-[10px]">{el.selector || el.xpath}</div>
-											{/if}
-										</div>
-									{/each}
-								</div>
-							</div>
-						{/if}
-
-						<!-- Session Recording (rrweb replay link) -->
-						{#if task.recording_url && task.page_url}
-							{@const replayBase = (() => { try { return new URL(task.page_url).origin; } catch { return ''; } })()}
-							{@const replayUrl = task.db_id && replayBase ? `${replayBase}/feedback/replay?id=${task.db_id}` : ''}
-							{#if replayUrl}
-								<div class="border-t border-base-300/50 pt-3 mt-1">
-									<TaskFieldLabel>Recording</TaskFieldLabel>
-									<a
-										href={replayUrl}
-										target="_blank"
-										rel="noopener noreferrer"
-										class="inline-flex items-center gap-1.5 text-xs text-primary/70 hover:text-primary mt-1"
-									>
-										<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-										View Session Recording
-									</a>
-								</div>
-							{/if}
-						{/if}
-
-						<!-- Context (Knowledge Bases + Data Tables) -->
-						<details class="group border-t border-base-300/50 pt-3 mt-1">
-							<summary class="flex items-center gap-2 cursor-pointer list-none text-xs font-medium text-base-content/50 hover:text-base-content/80 py-1 marker:hidden [&::-webkit-details-marker]:hidden">
-								<svg class="h-3 w-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-								<span>Context</span>
-								{#if taskBaseIds.length + taskTableNames.length > 0}
-									<span class="badge badge-xs bg-base-300 text-base-content/70 border-0">{taskBaseIds.length + taskTableNames.length}</span>
-								{/if}
-							</summary>
-							<div class="pt-3">
-							<div class="flex flex-wrap items-center gap-1.5">
-								<BaseAttachChips
-									selectedIds={taskBaseIds}
-									project={task.project || getProjectFromTaskId(task.id)}
-									onChange={handleBasesChange}
-								/>
-								<DataTableAttachChips
-									selectedTables={taskTableNames}
-									project={task.project || getProjectFromTaskId(task.id)}
-									onChange={handleTablesChange}
-								/>
-							</div>
-
-							<!-- Rendered context previews -->
-							{#if taskBases.length > 0 || taskTables.length > 0}
-								<div class="flex flex-col gap-1.5 mt-2">
-									{#if renderingContext && renderedBases.size === 0 && renderedTables.size === 0}
-										<div class="flex items-center gap-2 px-2.5 py-1.5 text-xs" style="color: oklch(0.55 0.01 250);">
-											<span class="loading loading-spinner loading-xs"></span>
-											Loading previews...
-										</div>
-									{/if}
-
-									<!-- Knowledge base previews -->
-									{#each taskBases as base (base.id)}
-										{@const preview = renderedBases.get(base.id)}
-										{@const expanded = expandedContext.has(`base-${base.id}`)}
-											<div
-											class="rounded-lg overflow-hidden"
-											style="border: 1px solid oklch(0.25 0.01 250); background: oklch(0.16 0.01 250);"
-										>
-											<!-- Header row -->
-											<button
-												type="button"
-												class="w-full flex items-center gap-2 px-2.5 py-1.5 text-left transition-colors"
-												style="background: oklch(0.16 0.01 250);"
-												onmouseenter={(e) => { (e.currentTarget as HTMLElement).style.background = 'oklch(0.19 0.01 250)'; }}
-												onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.background = 'oklch(0.16 0.01 250)'; }}
-												onclick={() => toggleContextExpand(`base-${base.id}`)}
-											>
-												<span class="text-xs flex-shrink-0">{base.icon || '📄'}</span>
-												<span class="text-xs font-medium truncate flex-1" style="color: oklch(0.85 0.01 250);">
-													{base.name}
-												</span>
-												{#if preview?.token_estimate}
-													<span class="text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0" style="background: oklch(0.22 0.02 250); color: oklch(0.60 0.01 250);">
-														~{formatContextTokens(preview.token_estimate)} tok
-													</span>
-												{:else if !preview && renderingContext}
-													<span class="loading loading-spinner loading-xs flex-shrink-0" style="color: oklch(0.45 0.01 250);"></span>
-												{/if}
-												<svg
-													class="w-3 h-3 flex-shrink-0 transition-transform {expanded ? 'rotate-180' : ''}"
-													style="color: oklch(0.45 0.01 250);"
-													fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
-												>
-													<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-												</svg>
-											</button>
-
-											<!-- Expanded content -->
-											{#if expanded && preview}
-												<div
-													class="px-2.5 pb-2.5 overflow-auto text-xs font-mono whitespace-pre-wrap"
-													style="max-height: 240px; color: oklch(0.70 0.01 250); border-top: 1px solid oklch(0.22 0.01 250); line-height: 1.5;"
-													transition:slide={{ duration: 150 }}
-												>
-													{preview.content}
-												</div>
-											{:else if expanded && !preview}
-												<div
-													class="px-2.5 py-2 text-xs italic"
-													style="color: oklch(0.50 0.01 250); border-top: 1px solid oklch(0.22 0.01 250);"
-													transition:slide={{ duration: 150 }}
-												>
-													{renderingContext ? 'Rendering...' : 'No preview available'}
-												</div>
-											{/if}
-										</div>
-									{/each}
-
-									<!-- Data table previews -->
-									{#each taskTables as tbl (tbl.table_name)}
-										{@const preview = renderedTables.get(tbl.table_name)}
-										{@const expanded = expandedContext.has(`table-${tbl.table_name}`)}
-										<div
-											class="rounded-lg overflow-hidden"
-											style="border: 1px solid oklch(0.25 0.02 145 / 0.3); background: oklch(0.16 0.01 250);"
-										>
-											<!-- Header row -->
-											<button
-												type="button"
-												class="w-full flex items-center gap-2 px-2.5 py-1.5 text-left transition-colors"
-												style="background: oklch(0.16 0.01 250);"
-												onmouseenter={(e) => { (e.currentTarget as HTMLElement).style.background = 'oklch(0.19 0.01 250)'; }}
-												onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.background = 'oklch(0.16 0.01 250)'; }}
-												onclick={() => toggleContextExpand(`table-${tbl.table_name}`)}
-											>
-												<span class="text-xs flex-shrink-0">🗃️</span>
-												<span class="text-xs font-medium truncate flex-1" style="color: oklch(0.85 0.01 250);">
-													{tbl.table_name}
-												</span>
-												{#if preview?.token_estimate}
-													<span class="text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0" style="background: oklch(0.22 0.02 250); color: oklch(0.60 0.01 250);">
-														~{formatContextTokens(preview.token_estimate)} tok
-													</span>
-												{:else if !preview && renderingContext}
-													<span class="loading loading-spinner loading-xs flex-shrink-0" style="color: oklch(0.45 0.01 250);"></span>
-												{/if}
-												<svg
-													class="w-3 h-3 flex-shrink-0 transition-transform {expanded ? 'rotate-180' : ''}"
-													style="color: oklch(0.45 0.01 250);"
-													fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
-												>
-													<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-												</svg>
-											</button>
-
-											<!-- Expanded content -->
-											{#if expanded && preview}
-												<div
-													class="px-2.5 pb-2.5 overflow-auto text-xs font-mono whitespace-pre-wrap"
-													style="max-height: 240px; color: oklch(0.70 0.01 250); border-top: 1px solid oklch(0.22 0.01 250); line-height: 1.5;"
-													transition:slide={{ duration: 150 }}
-												>
-													{preview.content}
-												</div>
-											{:else if expanded && !preview}
-												<div
-													class="px-2.5 py-2 text-xs italic"
-													style="color: oklch(0.50 0.01 250); border-top: 1px solid oklch(0.22 0.01 250);"
-													transition:slide={{ duration: 150 }}
-												>
-													{renderingContext ? 'Rendering...' : 'No preview available'}
-												</div>
-											{/if}
-										</div>
-									{/each}
-								</div>
-							{/if}
-							</div>
-						</details>
-
-						<!-- Description (Inline Editable) - Industrial -->
-						<div class="mt-5">
-							<TaskFieldLabel>Description</TaskFieldLabel>
-							<InlineEdit
-								value={task.description || ''}
-								onSave={async (newValue) => {
-									await autoSave('description', newValue);
-								}}
-								type="textarea"
-								placeholder="No description"
-								disabled={isSaving}
-								rows={4}
-								class="text-sm"
-								formulaContext={{ title: task.title, status: task.status, priority: task.priority, type: task.type, assignee: task.assignee, labels: task.labels?.join(', '), project: task.project, created_at: task.created_at, updated_at: task.updated_at, due_date: task.due_date }}
-							/>
 						</div>
 
 						<!-- Execution & Scheduling -->

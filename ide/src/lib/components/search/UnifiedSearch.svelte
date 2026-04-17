@@ -23,6 +23,7 @@
 	import SearchDropdown from '$lib/components/SearchDropdown.svelte';
 	import type { SearchDropdownGroup } from '$lib/components/SearchDropdown.svelte';
 	import { fetchAndGetProjectColors, getProjectColor } from '$lib/utils/projectColors';
+	import { unifiedNavConfig } from '$lib/config/navConfig';
 
 	// --- Types ---
 	interface TaskResult {
@@ -513,7 +514,18 @@
 
 		if (e.key === 'Escape') {
 			if (mode === 'modal') {
-				onClose?.();
+				if (query) {
+					query = '';
+					taskResults = [];
+					memoryResults = [];
+					fileResults = [];
+					filenameResults = [];
+					contentResults = [];
+					meta = null;
+					synthesis = null;
+				} else {
+					onClose?.();
+				}
 			} else if (isTabButton) {
 				searchInputEl?.focus();
 			} else {
@@ -786,8 +798,8 @@
 		{@render searchUI(false)}
 	</div>
 {:else if isOpen}
-	<div class="us-overlay" onkeydown={handleKeydown} onclick={onClose} role="presentation">
-		<div class="us-modal" role="dialog" tabindex="0" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+	<div class="us-overlay" onclick={onClose} role="presentation">
+		<div class="us-modal" role="dialog" tabindex="0" onclick={(e) => e.stopPropagation()} onkeydown={handleKeydown}>
 			{@render searchUI(true)}
 		</div>
 	</div>
@@ -973,7 +985,7 @@
 				{#if !query.trim()}Use arrows to switch tabs{:else if activeTab !== 'all'}<kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);">↑↓</kbd> navigate <kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);">↵</kbd> open <kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);">←→</kbd> tabs{/if}
 			</span>
 			<span class="text-[11px]" style="color: oklch(0.45 0.02 250);">
-				<kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);">esc</kbd> close
+				<kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);">esc</kbd> {query ? 'clear' : 'close'}
 			</span>
 		</div>
 	{/if}
@@ -1001,20 +1013,36 @@
 {/snippet}
 
 {#snippet emptyState(isModal: boolean)}
-	<div class="text-center py-{isModal ? '10' : '16'}">
-		<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" class="w-14 h-14 mx-auto mb-3" style="color: oklch(0.30 0.02 250);">
-			<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-		</svg>
-		<p class="text-sm" style="color: oklch(0.45 0.02 250);">Search across tasks, memory, and files</p>
-		<p class="text-xs mt-2" style="color: oklch(0.35 0.02 250);">
-			{#if !isModal}
+	{#if isModal}
+		<div class="px-3 py-2">
+			<p class="text-[10px] uppercase tracking-wider mb-2 px-1" style="color: oklch(0.40 0.02 250); letter-spacing: 0.08em;">Navigate</p>
+			<div class="grid grid-cols-2 gap-0.5">
+				{#each unifiedNavConfig.navItems.slice(0, 12) as item}
+					<button
+						class="us-nav-item"
+						onclick={() => { goto(item.href); onClose?.(); }}
+					>
+						<span class="us-nav-slash">/</span>
+						{item.label}
+					</button>
+				{/each}
+			</div>
+			<p class="text-[10px] mt-3 px-1" style="color: oklch(0.35 0.02 250);">
+				Type to search · <kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.28 0.02 250);">Tab</kbd> navigate routes · <kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.28 0.02 250);">↵</kbd> go
+			</p>
+		</div>
+	{:else}
+		<div class="text-center py-16">
+			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" class="w-14 h-14 mx-auto mb-3" style="color: oklch(0.30 0.02 250);">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+			</svg>
+			<p class="text-sm" style="color: oklch(0.45 0.02 250);">Search across tasks, memory, and files</p>
+			<p class="text-xs mt-2" style="color: oklch(0.35 0.02 250);">
 				<kbd class="px-1.5 py-0.5 rounded text-[10px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);">Ctrl+K</kbd>
 				to open search from anywhere
-			{:else}
-				Type to search &middot; <kbd class="px-1 py-0.5 rounded text-[10px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);">←→</kbd> to switch tabs
-			{/if}
-		</p>
-	</div>
+			</p>
+		</div>
+	{/if}
 {/snippet}
 
 {#snippet synthesisPanel()}
@@ -1414,6 +1442,37 @@
 		box-shadow: 0 25px 60px oklch(0.05 0 0 / 0.6);
 		animation: slideDown 0.15s ease;
 		overflow: hidden;
+	}
+
+	.us-nav-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.375rem 0.625rem;
+		border-radius: 0.375rem;
+		text-align: left;
+		font-size: 0.75rem;
+		color: oklch(0.72 0.04 250);
+		background: transparent;
+		border: none;
+		cursor: pointer;
+		width: 100%;
+		transition: background 0.1s, color 0.1s;
+	}
+
+	.us-nav-item:hover,
+	.us-nav-item:focus-visible {
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.88 0.06 250);
+		outline: none;
+	}
+
+	.us-nav-slash {
+		font-size: 0.625rem;
+		width: 1rem;
+		text-align: center;
+		color: oklch(0.45 0.04 250);
+		flex-shrink: 0;
 	}
 
 	.us-results-modal {

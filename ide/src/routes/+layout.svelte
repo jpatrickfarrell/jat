@@ -27,8 +27,8 @@
 	import { connect as connectWebSocket, disconnect as disconnectWebSocket, subscribe as wsSubscribe, unsubscribe as wsUnsubscribe, setMessageRelay, setSubscriptionRouter, injectMessage, setFollowerConnected, subscribeDirect, unsubscribeDirect, type Channel } from '$lib/stores/websocket.svelte';
 	import { initLeaderElection, destroyLeaderElection, setWsCallbacks, relayToFollowers, onRelayedMessage, requestSubscribe, requestUnsubscribe, onRoleChange } from '$lib/utils/wsLeaderElection';
 	import { getExtraChannelsForRoute } from '$lib/config/wsChannelMap';
-	import { availableProjects, projectColorsStore, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, openStartDropdownViaKeyboard, closeStartDropdown, isFilePreviewDrawerOpen, filePreviewDrawerPath, filePreviewDrawerProject, filePreviewDrawerLine, closeFilePreviewDrawer, toggleTerminalDrawer, isDiffPreviewDrawerOpen, diffPreviewDrawerPath, diffPreviewDrawerProject, diffPreviewDrawerIsStaged, diffPreviewDrawerCommitHash, closeDiffPreviewDrawer, setGitAheadCount, setGitChangesCount, setActiveSessionsCount, setRunningServersCount, setActiveAgentSessionsCount, syncSidebarFromPreferences, isMobileFullscreenOpen } from '$lib/stores/drawerStore';
-	import { hoveredSessionName, triggerCompleteFlash, jumpToSession } from '$lib/stores/hoveredSession';
+	import { availableProjects, projectColorsStore, openTaskDrawer, openProjectDrawer, isTaskDetailDrawerOpen, taskDetailDrawerTaskId, closeTaskDetailDrawer, isEpicSwarmModalOpen, epicSwarmModalEpicId, isStartDropdownOpen, openStartDropdownViaKeyboard, closeStartDropdown, isFilePreviewDrawerOpen, filePreviewDrawerPath, filePreviewDrawerProject, filePreviewDrawerLine, closeFilePreviewDrawer, toggleTerminalDrawer, isDiffPreviewDrawerOpen, diffPreviewDrawerPath, diffPreviewDrawerProject, diffPreviewDrawerIsStaged, diffPreviewDrawerCommitHash, closeDiffPreviewDrawer, setGitAheadCount, setGitChangesCount, setActiveSessionsCount, setRunningServersCount, setActiveAgentSessionsCount, syncSidebarFromPreferences, isMobileFullscreenOpen, sidebarState, sidebarHelpOpen, cycleSidebarState } from '$lib/stores/drawerStore';
+	import { hoveredSessionName, triggerCompleteFlash, jumpToSession, jumpedToSessionName } from '$lib/stores/hoveredSession';
 	import { get } from 'svelte/store';
 	import { browser } from '$app/environment';
 	import { initPreferences, getActiveProject, setActiveProject, setMaxSessions, getDebugMode, type MaxSessions } from '$lib/stores/preferences.svelte';
@@ -37,6 +37,7 @@
 	import { getSessions as getWorkSessions, startActivityPolling, stopActivityPolling, fetch as fetchWorkSessions } from '$lib/stores/workSessions.svelte';
 	import { getSessions as getServerSessions } from '$lib/stores/serverSessions.svelte';
 	import { initKeyboardShortcuts, findMatchingCommand, findMatchingGlobalShortcut } from '$lib/stores/keyboardShortcuts.svelte';
+	import { unifiedNavConfig } from '$lib/config/navConfig';
 	import { loadAutoKillConfig } from '$lib/stores/autoKillConfig';
 	import { setReviewRules as setReviewRulesStore } from '$lib/stores/reviewRules.svelte';
 	import {
@@ -1156,6 +1157,40 @@
 		// MobileSessionDrawer handles its own keyboard shortcuts when open
 		if (get(isMobileFullscreenOpen)) return;
 
+		const _t = event.target as HTMLElement | null;
+		const _tag = _t?.tagName ?? '';
+		const _isEditing = _tag === 'INPUT' || _tag === 'TEXTAREA' || _tag === 'SELECT' || !!_t?.isContentEditable;
+
+		// ? → toggle help panel (editing-guarded)
+		if ((event.key === '?' || (event.key === '/' && event.shiftKey)) && !event.ctrlKey && !event.metaKey && !event.altKey) {
+			if (_isEditing) { /* fall through */ } else {
+				event.preventDefault();
+				sidebarHelpOpen.update(v => !v);
+				return;
+			}
+		}
+
+		// Ctrl/Cmd+B → cycle sidebar state (editing-guarded)
+		if ((event.key === 'b' || event.key === 'B') && (event.metaKey || event.ctrlKey) && !event.altKey) {
+			if (!_isEditing) {
+				event.preventDefault();
+				if (window.innerWidth >= 1024) {
+					cycleSidebarState();
+				} else {
+					const el = document.getElementById('main-drawer') as HTMLInputElement | null;
+					if (el) el.checked = !el.checked;
+				}
+				return;
+			}
+		}
+
+		// Esc → close help panel
+		if (event.key === 'Escape' && get(sidebarHelpOpen)) {
+			event.preventDefault();
+			sidebarHelpOpen.set(false);
+			return;
+		}
+
 		// First check for user-defined command shortcuts (unless in an input field that should capture the event)
 		// User shortcuts take priority over global shortcuts (except Shift variants)
 		if (!event.shiftKey) {
@@ -1193,7 +1228,47 @@
 			if (index < allSessions.length) {
 				const session = allSessions[index];
 				jumpToSession(session.sessionName, session.agentName);
+				jumpedToSessionName.set(session.sessionName);
+				setTimeout(() => jumpedToSessionName.set(null), 100);
 			}
+			return;
+		}
+
+		// Alt+← / Alt+→ = cycle TopBar project chips (x-axis navigation)
+		if (event.altKey && !event.shiftKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+			if (_isEditing) return;
+			event.preventDefault();
+			const chips = favoriteChipOrder.length > 0
+				? favoriteChipOrder.filter(p => configProjects.includes(p))
+				: configProjects;
+			if (chips.length < 2) return;
+			const idx = chips.indexOf(selectedProject);
+			if (idx === -1) return;
+			const next = event.key === 'ArrowLeft'
+				? chips[(idx - 1 + chips.length) % chips.length]
+				: chips[(idx + 1) % chips.length];
+			handleProjectChange(next);
+			return;
+		}
+
+		// Alt+↑ / Alt+↓ = cycle sidebar routes (y-axis navigation)
+		if (event.altKey && !event.shiftKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+			if (_isEditing) return;
+			event.preventDefault();
+			const debugMode = getDebugMode();
+			const hiddenIds = new Set(['open-tasks', 'clients', 'triage', 'monitor']);
+			const routes = unifiedNavConfig.navItems
+				.filter(item => debugMode || !hiddenIds.has(item.id))
+				.map(item => item.href);
+			const currentPath = window.location.pathname;
+			const idx = routes.indexOf(currentPath);
+			if (routes.length < 2) return;
+			const next = event.key === 'ArrowUp'
+				? routes[(idx - 1 + routes.length) % routes.length]
+				: routes[(idx + 1) % routes.length];
+			const projectParam = new URL(window.location.href).searchParams.get('project');
+			const url = projectParam ? `${next}?project=${encodeURIComponent(projectParam)}` : next;
+			goto(url, { noScroll: true });
 			return;
 		}
 	}
@@ -1222,7 +1297,7 @@
 {:else}
 	<!-- Drawer Structure -->
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-	<div class="drawer lg:drawer-open" role="group" onclick={handleFirstInteraction} onkeydown={handleFirstInteraction}>
+	<div class="drawer {$sidebarState !== 'hidden' ? 'lg:drawer-open' : ''}" role="group" onclick={handleFirstInteraction} onkeydown={handleFirstInteraction}>
 		<!-- Drawer toggle (hidden checkbox for mobile sidebar) -->
 		<input id="main-drawer" type="checkbox" class="drawer-toggle" />
 
@@ -1277,6 +1352,21 @@
 
 		<!-- Sidebar (Sidebar component provides the drawer-side wrapper) -->
 		<Sidebar />
+
+		<!-- Show-sidebar button (desktop only, visible when sidebar is hidden) -->
+		{#if $sidebarState === 'hidden'}
+			<button
+				onclick={cycleSidebarState}
+				aria-label="Show sidebar"
+				class="hidden lg:flex fixed top-3 left-3 z-30 items-center justify-center w-7 h-7 rounded transition-all duration-200"
+				style="background: oklch(0.20 0.02 250 / 0.9); border: 1px solid oklch(0.35 0.02 250); color: oklch(0.60 0.02 250);"
+				title="Show sidebar (Ctrl+B)"
+			>
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+				</svg>
+			</button>
+		{/if}
 	</div>
 
 	<!-- Mobile bottom dock navigation (outside drawer for proper click handling) -->

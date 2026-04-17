@@ -3,47 +3,65 @@
  * Manages state for task creation drawer, spawn modal, and sidebar collapse
  */
 
-import { writable, get } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import {
 	getSidebarCollapsed as getPrefSidebarCollapsed,
-	setSidebarCollapsed as setPrefSidebarCollapsed,
-	toggleSidebarCollapsed as togglePrefSidebarCollapsed,
 	isInitialized as isPrefsInitialized
 } from './preferences.svelte';
 
-// Sidebar collapsed state (for desktop - separate from DaisyUI drawer mechanism)
-// When collapsed: sidebar is narrow (w-14), shows tooltips on hover
-// When expanded: sidebar is wide (w-64), shows full labels
-// Delegates to preferences store for localStorage persistence
-export const isSidebarCollapsed = writable(false);
+const SIDEBAR_STATE_KEY = 'jat-sidebar-state';
+
+export type SidebarState = 'expanded' | 'collapsed' | 'hidden';
+
+export const sidebarState = writable<SidebarState>('expanded');
+
+// Backward-compat derived — true when not fully expanded
+export const isSidebarCollapsed = derived(sidebarState, $s => $s !== 'expanded');
+
+// Help panel open state (shared with +layout.svelte keyboard handler)
+export const sidebarHelpOpen = writable(false);
 
 /**
- * Sync isSidebarCollapsed writable store from preferences.
+ * Sync sidebarState from preferences/localStorage.
  * Call after initPreferences() in +layout.svelte onMount.
  */
 export function syncSidebarFromPreferences(): void {
+	if (typeof localStorage !== 'undefined') {
+		const stored = localStorage.getItem(SIDEBAR_STATE_KEY) as SidebarState | null;
+		if (stored === 'expanded' || stored === 'collapsed' || stored === 'hidden') {
+			sidebarState.set(stored);
+			return;
+		}
+	}
 	if (isPrefsInitialized()) {
-		isSidebarCollapsed.set(getPrefSidebarCollapsed());
+		sidebarState.set(getPrefSidebarCollapsed() ? 'collapsed' : 'expanded');
 	}
 }
 
+export function cycleSidebarState(): void {
+	sidebarState.update(current => {
+		const next: SidebarState = current === 'expanded' ? 'collapsed' : current === 'collapsed' ? 'hidden' : 'expanded';
+		if (typeof localStorage !== 'undefined') localStorage.setItem(SIDEBAR_STATE_KEY, next);
+		return next;
+	});
+}
+
 export function toggleSidebar() {
-	const newValue = togglePrefSidebarCollapsed();
-	isSidebarCollapsed.set(newValue);
+	cycleSidebarState();
 }
 
 export function collapseSidebar() {
-	setPrefSidebarCollapsed(true);
-	isSidebarCollapsed.set(true);
+	sidebarState.set('collapsed');
+	if (typeof localStorage !== 'undefined') localStorage.setItem(SIDEBAR_STATE_KEY, 'collapsed');
 }
 
 export function expandSidebar() {
-	setPrefSidebarCollapsed(false);
-	isSidebarCollapsed.set(false);
+	sidebarState.set('expanded');
+	if (typeof localStorage !== 'undefined') localStorage.setItem(SIDEBAR_STATE_KEY, 'expanded');
 }
 
 export function getSidebarCollapsed(): boolean {
-	return get(isSidebarCollapsed);
+	return get(sidebarState) !== 'expanded';
 }
 
 // Task drawer state
@@ -329,3 +347,6 @@ export function getFileChangesCount(): number {
 
 // Mobile fullscreen overlay state (hides MobileDock when open)
 export const isMobileFullscreenOpen = writable(false);
+
+// Request to open MobileSessionDrawer for a session name (e.g. from ProjectSelector keyboard nav)
+export const openMobileSessionName = writable<string | null>(null);

@@ -18,6 +18,9 @@ export function setHoveredSession(sessionName: string | null) {
 // Track the session that should be highlighted (from Alt+number jump)
 export const highlightedSessionName = writable<string | null>(null);
 
+// Signal from Alt+1-9 so components can set keyboard focus on the jumped-to session
+export const jumpedToSessionName = writable<string | null>(null);
+
 /**
  * Jump to a session by setting it as hovered, scrolling to it, highlighting it,
  * and optionally maximizing the session panel height.

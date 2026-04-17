@@ -20,6 +20,7 @@
 		isStartDropdownOpen,
 		closeStartDropdown,
 		openTaskDetailDrawer,
+		openMobileSessionName,
 	} from '$lib/stores/drawerStore';
 	import {
 		start as startServer,
@@ -97,6 +98,10 @@
 		onToggleFavorite?: (project: string) => void;
 		/** Backend type for this project */
 		backend?: 'sqlite' | 'postgres';
+		/** Cycle to the previous project chip in TopBar (called on ArrowLeft when dropdown open) */
+		onPrevProject?: () => void;
+		/** Cycle to the next project chip in TopBar (called on ArrowRight when dropdown open) */
+		onNextProject?: () => void;
 	}
 
 	let {
@@ -120,6 +125,8 @@
 		isFavorite = false,
 		onToggleFavorite,
 		backend = 'sqlite',
+		onPrevProject,
+		onNextProject,
 	}: Props = $props();
 
 	// If projects list is provided (non-TopBar usage), show projects section in dropdown
@@ -132,6 +139,7 @@
 	let expandedEpics = $state(new Set<string>());
 	let dropdownPos = $state({ top: 0, left: 0 });
 	let hoverCloseTimer = $state<ReturnType<typeof setTimeout> | null>(null);
+	let dropdownFocusIdx = $state(-1);
 
 	function computeDropdownPos() {
 		if (!containerEl) return;
@@ -287,6 +295,14 @@
 		return null;
 	});
 
+	// Flat keyboard-nav indices for dropdown items
+	const psNavServerIdx = $derived(effectiveServerConfig ? 0 : -1);
+	const psNavActiveOffset = $derived(effectiveServerConfig ? 1 : 0);
+	const psNavReadyOffset = $derived(psNavActiveOffset + projectActiveTasks.length);
+	const psNavItemCount = $derived(
+		(effectiveServerConfig ? 1 : 0) + projectActiveTasks.length + epicTaskGroups.standalone.length
+	);
+
 	async function handleServerStart() {
 		serverLoadingAction = selectedProject;
 		serverError = null;
@@ -358,6 +374,69 @@
 		if (e.key === 'Escape') {
 			open = false;
 			closeStartDropdown();
+			dropdownFocusIdx = -1;
+			return;
+		}
+
+		if (!open) return;
+
+		if (e.key === 'ArrowLeft') {
+			e.preventDefault();
+			open = false;
+			closeStartDropdown();
+			dropdownFocusIdx = -1;
+			onPrevProject?.();
+			return;
+		}
+
+		if (e.key === 'ArrowRight') {
+			e.preventDefault();
+			open = false;
+			closeStartDropdown();
+			dropdownFocusIdx = -1;
+			onNextProject?.();
+			return;
+		}
+
+		if (psNavItemCount === 0) return;
+
+		if (e.key === 'j' || e.key === 'ArrowDown') {
+			e.preventDefault();
+			dropdownFocusIdx = dropdownFocusIdx < psNavItemCount - 1 ? dropdownFocusIdx + 1 : 0;
+			return;
+		}
+
+		if (e.key === 'k' || e.key === 'ArrowUp') {
+			e.preventDefault();
+			dropdownFocusIdx = dropdownFocusIdx > 0 ? dropdownFocusIdx - 1 : psNavItemCount - 1;
+			return;
+		}
+
+		if ((e.key === 'Enter' || e.key === ' ') && dropdownFocusIdx >= 0) {
+			e.preventDefault();
+			if (dropdownFocusIdx === psNavServerIdx) {
+				if (serverIsRunning) {
+					handleServerStop();
+				} else {
+					handleServerStart();
+				}
+			} else if (dropdownFocusIdx >= psNavActiveOffset && dropdownFocusIdx < psNavActiveOffset + projectActiveTasks.length) {
+				// Active task: open MobileSessionDrawer
+				const task = projectActiveTasks[dropdownFocusIdx - psNavActiveOffset];
+				open = false;
+				closeStartDropdown();
+				dropdownFocusIdx = -1;
+				if (task?.assignee) {
+					openMobileSessionName.set(`jat-${task.assignee}`);
+				} else {
+					openTaskDetailDrawer(task.id);
+				}
+			} else {
+				// Ready (standalone) task: open detail drawer
+				const task = epicTaskGroups.standalone[dropdownFocusIdx - psNavReadyOffset];
+				if (task) handleViewTask(task.id);
+			}
+			return;
 		}
 	}
 
@@ -384,10 +463,10 @@
 	}
 
 
-	// Alt+S keyboard shortcut support - open dropdown to show ready tasks
+	// Alt+S keyboard shortcut support - open dropdown to show ready tasks (active project only)
 	$effect(() => {
 		const unsubscribe = isStartDropdownOpen.subscribe((isOpen: boolean) => {
-			if (isOpen && readyTasks.length > 0) {
+			if (isOpen && readyTasks.length > 0 && isActive) {
 				computeDropdownPos();
 				open = true;
 			}
@@ -506,6 +585,8 @@
 		if (open) {
 			document.addEventListener('click', handleClickOutside, true);
 			document.addEventListener('keydown', handleKeydown);
+		} else {
+			dropdownFocusIdx = -1;
 		}
 		return () => {
 			document.removeEventListener('click', handleClickOutside, true);
@@ -677,7 +758,7 @@
 
 			<!-- Server Section (shown when project has server config or running session) -->
 			{#if effectiveServerConfig}
-				<div class="dropdown-server-row">
+				<div class="dropdown-server-row" class:ps-nav-focused={dropdownFocusIdx === psNavServerIdx}>
 					<div class="dropdown-server-info">
 						<span class="dropdown-server-dot" class:dropdown-server-dot-running={serverIsRunning}></span>
 						<span class="dropdown-server-port">:{effectiveServerConfig.port}</span>
@@ -739,8 +820,8 @@
 			{#if projectActiveTasks.length > 0}
 				{#if showProjectsList}<div class="dropdown-divider"></div>{/if}
 				<div class="dropdown-section-header">Active ({projectActiveTasks.length})</div>
-				{#each projectActiveTasks as task}
-					<div class="dropdown-item task-item active-task-item">
+				{#each projectActiveTasks as task, i}
+					<div class="dropdown-item task-item active-task-item" class:ps-nav-focused={dropdownFocusIdx === psNavActiveOffset + i}>
 						<button
 							type="button"
 							class="task-info-btn"
@@ -853,8 +934,8 @@
 						{#if projectEpics.some(e => (epicTaskGroups.groups.get(e.id) || []).length > 0)}
 							<div class="dropdown-divider"></div>
 						{/if}
-						{#each epicTaskGroups.standalone as task}
-							<div class="dropdown-item task-item">
+						{#each epicTaskGroups.standalone as task, i}
+							<div class="dropdown-item task-item" class:ps-nav-focused={dropdownFocusIdx === psNavReadyOffset + i}>
 								<button
 									type="button"
 									class="task-info-btn"
@@ -1186,6 +1267,16 @@
 		color: oklch(0.92 0.02 250);
 	}
 
+	/* Keyboard navigation focus highlight */
+	:global(.ps-nav-focused),
+	.dropdown-item.ps-nav-focused,
+	.dropdown-server-row.ps-nav-focused {
+		background: oklch(0.26 0.06 240) !important;
+		outline: 1px solid oklch(0.55 0.15 240 / 0.5);
+		outline-offset: -1px;
+		color: oklch(0.95 0.02 250) !important;
+	}
+
 	.dropdown-item:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
@@ -1252,6 +1343,8 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 0.3rem 0.5rem;
+		border-radius: 0.375rem;
+		transition: background 0.1s ease;
 	}
 
 	.dropdown-server-info {

@@ -26,6 +26,8 @@
 	import { slide, fade } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import { STATUS_OPTIONS } from '$lib/config/task-statuses';
+	import { jumpedToSessionName } from '$lib/stores/hoveredSession';
+	import { openMobileSessionName } from '$lib/stores/drawerStore';
 
 	function activeTaskCtx(t: AgentTask): Record<string, any> {
 		return { title: t.title, status: t.status, priority: t.priority, type: t.issue_type, labels: t.labels?.join(', '), created_at: t.created_at };
@@ -145,6 +147,93 @@
 
 	// Mobile fullscreen state
 	let fullscreenSession = $state<string | null>(null);
+
+	// j/k keyboard navigation
+	let focusedSessionIdx = $state(-1);
+	let sessionListEl = $state<HTMLElement | null>(null);
+
+	function getActiveSessions() {
+		return orderedSessions.filter(s => !s.isExiting);
+	}
+
+	function scrollFocusedIntoView() {
+		if (focusedSessionIdx < 0 || !sessionListEl) return;
+		const cards = sessionListEl.querySelectorAll<HTMLElement>('.ta-session-card[data-agent-name]');
+		cards[focusedSessionIdx]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+	}
+
+	// Global j/k handler via document listener (same pattern as TasksOpen)
+	$effect(() => {
+		function handleJKKeydown(e: KeyboardEvent) {
+			if (fullscreenSession) return; // terminal open — don't intercept
+			const t = e.target as HTMLElement | null;
+			const tag = t?.tagName ?? '';
+			if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t?.isContentEditable) return;
+
+			const active = getActiveSessions();
+			const count = active.length;
+			if (count === 0) return;
+
+			if (e.key === 'j' || e.key === 'ArrowDown') {
+				if (focusedSessionIdx < 0 && e.key === 'ArrowDown') return; // ArrowDown without focus = don't steal
+				e.preventDefault();
+				focusedSessionIdx = focusedSessionIdx < count - 1 ? focusedSessionIdx + 1 : 0;
+				scrollFocusedIntoView();
+			} else if (e.key === 'k' || e.key === 'ArrowUp') {
+				if (focusedSessionIdx < 0 && e.key === 'ArrowUp') return;
+				e.preventDefault();
+				focusedSessionIdx = focusedSessionIdx > 0 ? focusedSessionIdx - 1 : count - 1;
+				scrollFocusedIntoView();
+			} else if ((e.key === 'Enter' || e.key === ' ') && focusedSessionIdx >= 0) {
+				e.preventDefault();
+				const session = active[focusedSessionIdx]?.session;
+				if (session) {
+					// Always open terminal — it has detail/timeline tabs inside
+					if (onCardClick) { onCardClick(session.name); }
+					else { fullscreenSession = session.name; }
+				}
+			} else if (e.key === 'Escape' && focusedSessionIdx >= 0) {
+				e.preventDefault();
+				focusedSessionIdx = -1;
+			}
+		}
+
+		document.addEventListener('keydown', handleJKKeydown);
+		return () => document.removeEventListener('keydown', handleJKKeydown);
+	});
+
+	// Subscribe to jumpedToSessionName so Alt+1-9 sets keyboard focus
+	$effect(() => {
+		const unsub = jumpedToSessionName.subscribe(name => {
+			if (!name) return;
+			const idx = getActiveSessions().findIndex(s => s.session.name === name);
+			if (idx >= 0) focusedSessionIdx = idx;
+		});
+		return unsub;
+	});
+
+	// Open MobileSessionDrawer when ProjectSelector keyboard nav requests it
+	$effect(() => {
+		const unsub = openMobileSessionName.subscribe(name => {
+			if (!name) return;
+			if (sessions.some(s => s.name === name)) {
+				fullscreenSession = name;
+				openMobileSessionName.set(null);
+			}
+		});
+		return unsub;
+	});
+
+	// When fullscreen terminal closes, restore focus to the previously focused session
+	let prevFullscreenSession = $state<string | null>(null);
+	$effect(() => {
+		if (prevFullscreenSession !== null && fullscreenSession === null) {
+			// Keep focusedSessionIdx where it was (or set to 0 if not set)
+			if (focusedSessionIdx < 0) focusedSessionIdx = 0;
+			scrollFocusedIntoView();
+		}
+		prevFullscreenSession = fullscreenSession;
+	});
 
 	// LLM file result drawer state
 	let llmFileDrawerOpen = $state(false);
@@ -1391,7 +1480,7 @@
 	</div>
 {:else}
 	<!-- Card-based layout -->
-	<div class="ta-sessions-list">
+	<div class="ta-sessions-list" bind:this={sessionListEl}>
 		{#each orderedSessions as { session, isExiting, isNew, hadTaskOnEntry } (session.name)}
 			{@const sessionAgentName = getAgentName(session.name)}
 			{@const sessionTask = agentTasks.get(sessionAgentName) || (isExiting ? cachedAgentTasks.get(sessionAgentName) : null)}
@@ -1436,12 +1525,14 @@
 				<!-- The actual card that slides -->
 				<div
 					class="ta-session-card"
+					data-agent-name={sessionAgentName}
 					class:attached={session.attached}
 					class:swiping={isSwiping}
 					class:tray-hint-active={!trayHintDismissed}
 					class:tray-open={trayOpenSession === session.name}
 					class:is-completing={effectiveState === 'completing'}
 					class:is-compacting={effectiveState === 'compacting'}
+					class:ta-session-jk-focused={orderedSessions.filter(s => !s.isExiting).findIndex(s => s.session.name === session.name) === focusedSessionIdx}
 					onmouseenter={dismissTrayHint}
 					style="--card-hover-tint: {stateVisual.accent}; border-left: 3px solid {stateVisual.accent}; {isExiting ? 'pointer-events: none;' : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {isSwiping ? '' : swipeOffsets.has(session.name) ? 'transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);' : ''}"
 					role="button" tabindex="0"
@@ -2778,6 +2869,13 @@
 		will-change: transform;
 		overflow: hidden;
 	}
+
+	.ta-session-card.ta-session-jk-focused {
+		background: oklch(0.19 0.02 250);
+		outline: 2px solid oklch(0.60 0.15 240 / 0.5);
+		outline-offset: -2px;
+	}
+
 
 	/*.ta-session-card:first-child {
 		border-radius: 8px 8px 0 0;

@@ -646,6 +646,8 @@
 						isFavorite={favoriteProjects.has(favProject)}
 						{onToggleFavorite}
 						backend={projectBackends[favProject] ?? 'sqlite'}
+						onPrevProject={() => { const chips = favoriteChips(); const idx = chips.indexOf(favProject); if (idx > 0) onProjectChange?.(chips[idx - 1]); }}
+						onNextProject={() => { const chips = favoriteChips(); const idx = chips.indexOf(favProject); if (idx < chips.length - 1) onProjectChange?.(chips[idx + 1]); }}
 					/>
 				</div>
 			{/each}

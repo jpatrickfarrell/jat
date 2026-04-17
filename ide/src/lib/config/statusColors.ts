@@ -844,7 +844,7 @@ export interface SessionStateAction {
 	id: string;
 	label: string;
 	icon: string;         // SVG path
-	variant: 'default' | 'success' | 'warning' | 'error' | 'info';
+	variant: 'default' | 'success' | 'warning' | 'error' | 'info' | 'secondary';
 	description?: string;
 	/** For custom command actions: the slash command to execute (e.g., "/jat:tasktree") */
 	command?: string;
@@ -873,7 +873,7 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			id: 'pause',
 			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-			variant: 'default',
+			variant: 'secondary',
 			description: 'Save progress and close (resumable later)'
 		},
 		{
@@ -912,7 +912,7 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			id: 'pause',
 			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-			variant: 'default',
+			variant: 'secondary',
 			description: 'Save progress and close (resumable later)'
 		},
 		{
@@ -965,7 +965,7 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			id: 'pause',
 			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-			variant: 'default',
+			variant: 'secondary',
 			description: 'Save progress and close (resumable later)'
 		},
 		{
@@ -1002,7 +1002,7 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			id: 'pause',
 			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-			variant: 'default',
+			variant: 'secondary',
 			description: 'Save progress and close (resumable later)'
 		},
 		{
@@ -1032,7 +1032,7 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			id: 'pause',
 			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-			variant: 'default',
+			variant: 'secondary',
 			description: 'Save progress and close (resumable later)'
 		},
 		{
@@ -1055,7 +1055,7 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			id: 'pause',
 			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-			variant: 'default',
+			variant: 'secondary',
 			description: 'Save progress and close (resumable later)'
 		},
 		{
@@ -1099,7 +1099,7 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			id: 'pause',
 			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-			variant: 'default',
+			variant: 'secondary',
 			description: 'Save progress and close (resumable later)'
 		},
 		{
@@ -1129,7 +1129,7 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			id: 'pause',
 			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-			variant: 'default',
+			variant: 'secondary',
 			description: 'Save progress and close (resumable later)'
 		},
 		{
@@ -1152,7 +1152,7 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			id: 'pause',
 			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-			variant: 'default',
+			variant: 'secondary',
 			description: 'Save progress and close (resumable later)'
 		},
 		{
@@ -1272,7 +1272,7 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			id: 'pause',
 			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-			variant: 'default',
+			variant: 'secondary',
 			description: 'Save progress and close (resumable later)'
 		},
 		{
@@ -1302,7 +1302,7 @@ export const SESSION_STATE_ACTIONS: Record<string, SessionStateAction[]> = {
 			id: 'pause',
 			label: 'Pause',
 			icon: 'M14.25 9v6m-4.5 0V9M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-			variant: 'default',
+			variant: 'secondary',
 			description: 'Save progress and close (resumable later)'
 		},
 		{

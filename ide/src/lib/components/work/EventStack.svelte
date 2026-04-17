@@ -18,6 +18,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { fly, slide } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
+	import { swipe } from '$lib/actions/swipe';
 	import SuggestedTasksSection from './SuggestedTasksSection.svelte';
 	import SearchDropdown from '$lib/components/SearchDropdown.svelte';
 	import type { SearchDropdownGroup } from '$lib/components/SearchDropdown.svelte';
@@ -172,6 +173,21 @@
 	}
 	let dismissedEventKeys = $state(new Set<string>());
 	let confirmingDismissKey = $state<string | null>(null);
+
+	// Swipe-gesture state for inline event cards (shared use:swipe action).
+	// swipe-right dismisses the event; swipe-left reveals the action tray.
+	let swipeOffsets = $state<Map<string, number>>(new Map());
+	let revealedEventKey = $state<string | null>(null);
+	function setSwipeOffset(key: string, offset: number) {
+		const m = new Map(swipeOffsets);
+		if (offset === 0) m.delete(key);
+		else m.set(key, offset);
+		swipeOffsets = m;
+	}
+	function dismissEventByKey(key: string) {
+		dismissedEventKeys = new Set([...dismissedEventKeys, key]);
+		if (revealedEventKey === key) revealedEventKey = null;
+	}
 	onMount(() => {
 		try {
 			const saved = localStorage.getItem(dismissStorageKey());
@@ -1229,10 +1245,44 @@
 				{@const isQuestionEvent = event.type === 'question' || event.state === 'question'}
 				{@const isUnansweredQuestion = isQuestionEvent && !answeredQuestions.has(getEventKey(event))}
 				{@const eventKey = getEventKey(event)}
-				<div
-					class="rounded-lg transition-all"
-					style="background: {style.bg}; border: 1px solid {style.border};"
-				>
+				{@const swipeOffset = swipeOffsets.get(eventKey) ?? 0}
+				{@const isRevealed = revealedEventKey === eventKey}
+				<div class="swipe-event-wrap relative overflow-hidden rounded-lg">
+					<!-- Reveal tray (behind card, visible when swiped left) -->
+					{#if isRevealed || swipeOffset < -10}
+						<div class="swipe-tray" style="width: 100px;">
+							{#if event.git_sha && onRollback}
+								<button
+									class="swipe-tray-btn swipe-tray-btn-info"
+									onclick={(e) => { e.stopPropagation(); revealedEventKey = null; handleRollback(event); }}
+									title="Rollback to this point"
+								>
+									↶
+								</button>
+							{/if}
+							<button
+								class="swipe-tray-btn swipe-tray-btn-error"
+								onclick={(e) => { e.stopPropagation(); dismissEventByKey(eventKey); }}
+								title="Dismiss"
+							>
+								✕
+							</button>
+						</div>
+					{/if}
+					<!-- Swipeable card -->
+					<div
+						class="rounded-lg transition-all relative"
+						style="background: {style.bg}; border: 1px solid {style.border}; transform: translateX({isRevealed ? -100 : swipeOffset}px); transition: transform {swipeOffset === 0 ? '200ms' : '0ms'} cubic-bezier(0.2, 0, 0, 1);"
+						use:swipe={{
+							onSwipeLeft: () => { revealedEventKey = eventKey; },
+							onSwipeRight: () => dismissEventByKey(eventKey),
+							onOffsetChange: (v) => setSwipeOffset(eventKey, v),
+							allowLeft: true,
+							allowRight: true
+						}}
+						onclick={() => { if (isRevealed) revealedEventKey = null; }}
+						role="presentation"
+					>
 					<!-- Event header (always visible) -->
 					<div class="flex items-center">
 						<button
@@ -1728,6 +1778,7 @@
 							{/if}
 						</div>
 					{/if}
+				</div>
 				</div>
 				{/if}
 			{/each}
@@ -3002,6 +3053,52 @@
 
 	.animate-slide-in-top {
 		animation: slide-in-top 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+	}
+
+	/* Swipe-to-reveal action tray for inline event cards */
+	.swipe-event-wrap {
+		touch-action: pan-y;
+	}
+	.swipe-tray {
+		position: absolute;
+		right: 0;
+		top: 0;
+		bottom: 0;
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 0.25rem;
+		padding: 0 0.5rem;
+		pointer-events: auto;
+		z-index: 1;
+	}
+	.swipe-tray-btn {
+		width: 2rem;
+		height: 2rem;
+		border-radius: 0.375rem;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 1rem;
+		font-weight: 600;
+		transition: transform 100ms ease, background 100ms ease;
+		border: 1px solid transparent;
+	}
+	.swipe-tray-btn:hover {
+		transform: scale(1.05);
+	}
+	.swipe-tray-btn:active {
+		transform: scale(0.95);
+	}
+	.swipe-tray-btn-info {
+		background: oklch(0.70 0.15 220 / 0.85);
+		color: oklch(0.15 0.02 250);
+		border-color: oklch(0.70 0.15 220);
+	}
+	.swipe-tray-btn-error {
+		background: oklch(0.60 0.20 25 / 0.85);
+		color: oklch(0.97 0.02 25);
+		border-color: oklch(0.60 0.20 25);
 	}
 
 	.inline-date-separator {

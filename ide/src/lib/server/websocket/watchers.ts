@@ -136,6 +136,57 @@ const questionFileStates = new Map<string, { hasQuestion: boolean; questionHash:
 const questionDebounceTimers = new Map<string, NodeJS.Timeout>();
 const QUESTION_DEBOUNCE_MS = 50;
 
+/**
+ * Fire-and-forget web push for a state transition that deserves user attention.
+ * Runs async via dynamic import so the watcher hot path stays synchronous and
+ * never pays for the push module on state changes we don't notify on.
+ */
+function dispatchStatePush(
+	sessionName: string,
+	mappedState: 'needs-input' | 'ready-for-review',
+	signalData: Record<string, unknown> | undefined
+): void {
+	const agentName = sessionName.replace(/^jat-/, '');
+	const isReview = mappedState === 'ready-for-review';
+	const title = isReview
+		? `${agentName}: ready for review`
+		: `${agentName}: needs input`;
+
+	let body: string | undefined;
+	if (isReview) {
+		const summary = signalData?.summary;
+		if (Array.isArray(summary) && summary.length > 0 && typeof summary[0] === 'string') {
+			body = summary[0];
+		} else {
+			body = 'Review the agent\'s work to complete the task.';
+		}
+	} else {
+		const question = signalData?.question;
+		body = typeof question === 'string' && question.length > 0
+			? question
+			: 'The agent is waiting for your input.';
+	}
+
+	const payload = {
+		title,
+		body,
+		tag: `${sessionName}-${mappedState}`,
+		url: `/tasks?openSession=${encodeURIComponent(sessionName)}`,
+		requireInteraction: true
+	};
+
+	import('../pushSender.js')
+		.then(({ sendPushToSubscribers }) => sendPushToSubscribers(payload))
+		.then((result) => {
+			if (result && (result.sent > 0 || result.pruned > 0 || result.failed > 0)) {
+				console.log(`[WS Watcher] push ${mappedState} for ${sessionName}: sent=${result.sent} pruned=${result.pruned} failed=${result.failed}`);
+			}
+		})
+		.catch((err) => {
+			console.error(`[WS Watcher] push dispatch failed for ${sessionName}:`, err?.message ?? err);
+		});
+}
+
 // Task cache for session lifecycle (avoids expensive JSONL parsing)
 interface TaskInfo {
 	id: string;
@@ -492,6 +543,9 @@ function processSignalFileChange(sessionName: string): void {
 			} else {
 				console.log(`[WS Watcher] Signal payload update for ${sessionName}: ${mappedState} (data changed)`);
 			}
+			if (stateChanged && (mappedState === 'needs-input' || mappedState === 'ready-for-review')) {
+				dispatchStatePush(sessionName, mappedState, signal.data as Record<string, unknown> | undefined);
+			}
 		}
 	}
 
@@ -517,6 +571,9 @@ function processSignalFileChange(sessionName: string): void {
 				console.log(`[WS Watcher] IDE signal state for ${sessionName}: ${prevFileState.state} -> ${mappedState}${hasPayload ? ' (with payload)' : ''}`);
 			} else {
 				console.log(`[WS Watcher] IDE signal payload update for ${sessionName}: ${mappedState} (data changed)`);
+			}
+			if (stateChanged && (mappedState === 'needs-input' || mappedState === 'ready-for-review')) {
+				dispatchStatePush(sessionName, mappedState, idePayloadData);
 			}
 		}
 	}

@@ -18,6 +18,7 @@
 	import MobileSessionDrawer from '$lib/components/work/MobileSessionDrawer.svelte';
 	import CompletionCardCompact from '$lib/components/work/CompletionCardCompact.svelte';
 	import StateCardCompact from '$lib/components/work/StateCardCompact.svelte';
+	import StatusActionBadge from '$lib/components/work/atoms/StatusActionBadge.svelte';
 	import { getSwipeConfig, getSwipeActionDef, initSwipeActions } from '$lib/config/swipeActions';
 	import { isAutoKillEnabled, setPendingAutoKill } from '$lib/stores/autoKillConfig';
 	import { autoKillCountdowns, cancelAutoKill } from '$lib/stores/sessionEvents';
@@ -1704,34 +1705,24 @@
 								<span class="ta-title" title={sessionTask.title}>
 									<FxText text={sessionTask.title || sessionTask.id} context={activeTaskCtx(sessionTask)} />
 								</span>
-								<span class="ta-title-state" style="background: {stateVisual.bgColor}; color: {stateVisual.textColor}; border: 1px solid {stateVisual.borderColor};">{stateVisual.shortLabel}</span>
-								{#if effectiveState === 'ready-for-review'}
-									{@const completeFb = actionFeedback.get(`${session.name}:complete`)}
-									{@const completeFailed = completeFb === 'error-fail'}
-									<button
-										type="button"
-										class="ta-title-complete"
-										class:ta-title-complete-feedback={!!completeFb}
-										class:ta-title-complete-failed={completeFailed}
-										disabled={!!completeFb && !completeFailed}
-										title={completeFailed ? 'Complete failed — tap to retry' : 'Mark task complete (/jat:complete)'}
-										onclick={(e) => { e.stopPropagation(); handleMobileAction('complete', session.name, sessionTask, sessionAgentName, session.project || null); }}
-									>
-										{#if completeFb}
-											{#if completeFailed}
-												<!-- ↺ retry icon -->
-												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="11" height="11"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
-												<span>Retry</span>
-											{:else}
-												<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="11" height="11"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-												<span>Done</span>
-											{/if}
-										{:else}
-											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" width="11" height="11"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-											<span>Complete</span>
-										{/if}
-									</button>
-								{/if}
+								<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+								<div onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+									<StatusActionBadge
+										sessionState={effectiveState as SessionState}
+										sessionName={session.name}
+										alignRight={true}
+										compact={true}
+										task={sessionTask}
+										autoCompleteEnabled={!autoCompleteDisabled}
+										reviewReason={reviewStatus?.reason ?? ''}
+										onAutoCompleteToggle={() => {
+											const newMap = new Map(autoCompleteDisabledMap);
+											newMap.set(session.name, !autoCompleteDisabled);
+											autoCompleteDisabledMap = newMap;
+										}}
+										onAction={(actionId) => handleMobileAction(actionId, session.name, sessionTask, sessionAgentName, session.project || null)}
+									/>
+								</div>
 							</div>
 							<!-- State card: signal payload + hover-revealed terminal output -->
 							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -1764,6 +1755,24 @@
 										<span class="ta-separator">·</span>
 										<span class="ta-age" style="color: {taskAge.color};">{taskAge.label}</span>
 									{/if}
+									<span class="ta-separator">·</span>
+									<button
+										class="ta-autocomplete-toggle"
+										class:ta-autocomplete-toggle-on={!autoCompleteDisabled}
+										title={autoCompleteDisabled ? 'Manual review — tap to enable auto-complete' : 'Auto-complete on — tap to require manual review'}
+										onclick={(e) => { e.stopPropagation(); const newMap = new Map(autoCompleteDisabledMap); newMap.set(session.name, !autoCompleteDisabled); autoCompleteDisabledMap = newMap; }}
+									>
+										{#if autoCompleteDisabled}
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="10" height="10">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+												<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+											</svg>
+										{:else}
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="10" height="10">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+											</svg>
+										{/if}
+									</button>
 								</div>
 								<!-- Action tray — fades in over row2 on hover -->
 								<div class="ta-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
@@ -1959,6 +1968,10 @@
 					}
 					fullscreenSession = null;
 					await handleKillSession(sName);
+				} else if (actionId === 'convert-to-tasks') {
+					await sendWorkflowCommand(sName, '/jat:tasktree');
+				} else if (actionId === 'start') {
+					await sendWorkflowCommand(sName, '/jat:start');
 				}
 			}}
 			{@const fsLinkEpic = async () => {
@@ -3621,6 +3634,31 @@
 		font-size: 0.625rem;
 	}
 
+	.ta-autocomplete-toggle {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		background: none;
+		border: none;
+		padding: 1px 3px;
+		cursor: pointer;
+		border-radius: 3px;
+		color: oklch(0.45 0.05 45);
+		opacity: 0.7;
+		transition: opacity 0.15s, color 0.15s;
+		flex-shrink: 0;
+	}
+	.ta-autocomplete-toggle:hover {
+		opacity: 1;
+	}
+	.ta-autocomplete-toggle-on {
+		color: oklch(0.65 0.15 145);
+		opacity: 0.85;
+	}
+	.ta-autocomplete-toggle-on:hover {
+		opacity: 1;
+	}
+
 	.ta-task-id {
 		font-weight: 600;
 		white-space: nowrap;
@@ -3706,60 +3744,6 @@
 		margin-left: auto;
 		flex-shrink: 0;
 		white-space: nowrap;
-	}
-
-	/* Hide state badge when Complete button is present (badge is redundant with the button's context) */
-	.ta-title-row:has(.ta-title-complete) .ta-title-state {
-		display: none;
-	}
-
-	/* Primary action in title row — visible Complete button when review-ready */
-	.ta-title-complete {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.25rem;
-		padding: 0.1875rem 0.5rem;
-		font-size: 0.625rem;
-		font-weight: 700;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
-		color: oklch(0.97 0.05 180);
-		background: oklch(0.55 0.14 180 / 0.8);
-		border: 1px solid oklch(0.70 0.16 180 / 0.7);
-		border-radius: 3px;
-		white-space: nowrap;
-		flex-shrink: 0;
-		cursor: pointer;
-		font-family: system-ui, -apple-system, sans-serif;
-		line-height: 1;
-		transition: background 0.12s ease, border-color 0.12s ease, filter 0.12s ease, transform 0.08s ease;
-	}
-	.ta-title-complete:hover {
-		background: oklch(0.62 0.16 180 / 0.9);
-		border-color: oklch(0.78 0.16 180 / 0.85);
-		filter: brightness(1.08);
-	}
-	.ta-title-complete:active {
-		transform: translateY(1px) scale(0.97);
-	}
-	.ta-title-complete:focus-visible {
-		outline: 2px solid oklch(0.78 0.16 180);
-		outline-offset: 2px;
-	}
-	.ta-title-complete:disabled {
-		cursor: default;
-	}
-	.ta-title-complete-feedback {
-		background: oklch(0.55 0.18 145 / 0.85);
-		border-color: oklch(0.70 0.18 145 / 0.85);
-		color: oklch(0.98 0.08 145);
-		animation: tray-btn-confirm 0.35s cubic-bezier(0.25, 1, 0.5, 1);
-	}
-	.ta-title-complete-failed {
-		background: oklch(0.55 0.22 25 / 0.85);
-		border-color: oklch(0.70 0.22 25 / 0.85);
-		color: oklch(0.98 0.08 25);
-		animation: none;
 	}
 
 	/* ========== SWIPE-TO-REVEAL ========== */

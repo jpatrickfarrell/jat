@@ -11,6 +11,7 @@
 	import { slide, fly } from "svelte/transition";
 	import { cubicOut } from "svelte/easing";
 	import { page } from "$app/stores";
+	import { goto } from "$app/navigation";
 	import { classifySessionLegacy } from "$lib/utils/sessionNaming";
 	import SortDropdown from "$lib/components/SortDropdown.svelte";
 	import TasksActive from "$lib/components/sessions/TasksActive.svelte";
@@ -24,6 +25,7 @@
 	import WorkingAgentBadge from "$lib/components/WorkingAgentBadge.svelte";
 	import EpicBar from "$lib/components/sessions/EpicBar.svelte";
 	import { fetchAndGetProjectColors } from "$lib/utils/projectColors";
+	import MobileProjectSelector from "$lib/components/MobileProjectSelector.svelte";
 	import { openTaskDetailDrawer, openProjectDrawer, projectCreatedSignal, openTaskDrawer } from "$lib/stores/drawerStore";
 	import {
 		getProjectFromTaskId,
@@ -164,12 +166,31 @@
 
 	// Mobile session drawer
 	let drawerSessionName = $state<string | null>(null);
+	let drawerInitialPage = $state<'Terminal' | 'Detail' | 'Timeline'>('Terminal');
 	function getAgentNameFromSession(sessionName: string): string {
 		return sessionName.replace(/^jat-/, '');
 	}
 	$effect(() => {
 		if (drawerSessionName && !sessions.some(s => s.name === drawerSessionName)) {
 			drawerSessionName = null;
+		}
+	});
+
+	// URL-driven drawer open (for deep-linking from /mobile/inbox)
+	$effect(() => {
+		const sessionParam = $page.url.searchParams.get('session');
+		const pageParam = $page.url.searchParams.get('page');
+		if (sessionParam && sessions.some(s => s.name === sessionParam)) {
+			if (drawerSessionName !== sessionParam) {
+				drawerInitialPage = (pageParam === 'Detail' || pageParam === 'Timeline' || pageParam === 'Terminal')
+					? pageParam
+					: 'Timeline';
+				drawerSessionName = sessionParam;
+				const url = new URL($page.url.href);
+				url.searchParams.delete('session');
+				url.searchParams.delete('page');
+				goto(url.pathname + url.search, { replaceState: true, noScroll: true, keepFocus: true });
+			}
 		}
 	});
 
@@ -1965,6 +1986,19 @@
 			<span>No projects with active sessions or open tasks</span>
 		</div>
 	{:else}
+		<!-- Mobile project nav bar — only visible on touch/mobile viewports -->
+		{#if isMobile}
+			<MobileProjectSelector
+				projects={allProjects}
+				selected={selectedProject || ''}
+				onSelect={(p) => {
+					const url = new URL(window.location.href);
+					url.searchParams.set('project', p);
+					goto(url.toString(), { replaceState: true, noScroll: true, keepFocus: true });
+				}}
+			/>
+		{/if}
+
 		<!-- Selected Project Content -->
 		{#if selectedProject}
 			{@const projectSessions =
@@ -2967,6 +3001,7 @@
 	<MobileSessionDrawer
 		sessionName={drawerSessionName}
 		agentName={drawerAgent}
+		initialPage={drawerInitialPage}
 		project={selectedProject || (drawerTask?.id?.includes('-') ? drawerTask.id.split('-')[0] : null)}
 		task={drawerTask ? {
 			id: drawerTask.id,

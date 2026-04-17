@@ -93,6 +93,7 @@
 		reviewReason = '' as string,
 		onLinkToEpic = async () => {},
 		onViewEpic = (_epicId: string) => {},
+		initialPage = 'Terminal' as 'Terminal' | 'Detail' | 'Timeline',
 	}: {
 		sessionName?: string;
 		agentName?: string;
@@ -116,12 +117,13 @@
 		reviewReason?: string;
 		onLinkToEpic?: () => Promise<void>;
 		onViewEpic?: (epicId: string) => void;
+		initialPage?: 'Terminal' | 'Detail' | 'Timeline';
 	} = $props();
 
 	// === Page State ===
 	const PAGES = ['Terminal', 'Detail', 'Timeline'] as const;
 	type LogicalPage = typeof PAGES[number];
-	let logicalPage = $state<LogicalPage>('Terminal');
+	let logicalPage = $state<LogicalPage>(initialPage);
 	let tabRefs = $state<HTMLButtonElement[]>([]);
 	let indicatorLeft = $state(0);
 	let indicatorWidth = $state(0);
@@ -308,13 +310,9 @@
 				}
 			}
 			await onKillSession();
-		} else if (action.id === 'complete') {
-			await onSendInput('/jat:complete', 'text');
-		} else if (action.id === 'complete-kill') {
-			// Send /jat:complete --kill command - agent will emit forceKill:true in bundle
-			// IDE will then show 15-second countdown before killing the tmux session
-			await onSendInput('/jat:complete --kill', 'text');
 		} else {
+			// Route all remaining actions through onAction so TasksActive can set
+			// optimistic state before the drawer closes (complete → completing, pause → paused, etc.)
 			await onAction(action.id);
 		}
 

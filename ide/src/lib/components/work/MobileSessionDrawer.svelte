@@ -190,10 +190,15 @@
 
 	function armPillPointerLock() {
 		pillPointerLocked = true;
+		// Event order is pointerdown → pointerup → click (same tick).
+		// If we release on pointerup, the synthetic click still fires with
+		// the lock already cleared → use:directClick runs executePillAction
+		// a second time (two attaches → two terminal windows). Defer the
+		// release to the next tick so the click handler sees locked=true.
 		const release = () => {
-			pillPointerLocked = false;
 			window.removeEventListener('pointerup', release, true);
 			window.removeEventListener('pointercancel', release, true);
+			setTimeout(() => { pillPointerLocked = false; }, 0);
 		};
 		window.addEventListener('pointerup', release, true);
 		window.addEventListener('pointercancel', release, true);

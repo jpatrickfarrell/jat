@@ -95,7 +95,10 @@
 		const map = new Map<string, string[]>();
 		for (const session of sessions) {
 			const taskId = session.task?.id || session.lastCompletedTask?.id;
-			const proj = session.project || (taskId ? getProjectFromTaskId(taskId) : null);
+			// Prefer task-derived project over signal-reported project — signal files can
+			// report the wrong project if an agent was resumed in a different project context.
+			const taskDerivedProject = taskId ? getProjectFromTaskId(taskId) : null;
+			const proj = taskDerivedProject || session.project;
 			if (!proj) continue;
 			const state = session._sseState || 'idle';
 			const arr = map.get(proj) || [];
@@ -132,7 +135,7 @@
 			if (existingIds.has(task.id)) continue;
 			const state = session._sseState;
 			if (!state || !ACTIVE_SESSION_STATES.has(state)) continue;
-			const proj = session.project || getProjectFromTaskId(task.id);
+			const proj = getProjectFromTaskId(task.id) || session.project;
 			if (!proj) continue;
 			sessionTasks.push({
 				id: task.id,

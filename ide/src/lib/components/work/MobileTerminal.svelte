@@ -16,7 +16,7 @@
 	 * confirm modals, sparklines, and all other desktop-only machinery.
 	 */
 
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, untrack } from 'svelte';
 	import { ansiToHtmlWithLinks } from '$lib/utils/ansiToHtml';
 	import { SESSION_STATE_VISUALS } from '$lib/config/statusColors';
 	import { mobileSurface } from '$lib/config/mobileSurface';
@@ -169,12 +169,19 @@
 	const renderedOutput = $derived(ansiToHtmlWithLinks(stripTerminalChrome(output)));
 
 	let scrollEl = $state<HTMLElement | null>(null);
-	let autoScroll = true;
+	let autoScroll = $state(true);
+	// True when new terminal output has arrived while the user is scrolled up.
+	// Drives the "↓ New output" label on the jump-to-bottom pill.
+	let hasNewOutputWhilePaused = $state(false);
 
 	$effect(() => {
-		// Depend on renderedOutput so this re-runs when output changes
+		// Depend ONLY on renderedOutput so this re-runs when output changes.
+		// `autoScroll` must be untracked — reading it reactively would re-fire
+		// this effect on scroll and spuriously set hasNewOutputWhilePaused=true
+		// even when no new output arrived.
 		const _ = renderedOutput;
-		if (autoScroll && scrollEl) {
+		const scrolling = untrack(() => autoScroll);
+		if (scrolling && scrollEl) {
 			if (reduceMotion) {
 				scrollEl.scrollTop = scrollEl.scrollHeight;
 			} else {
@@ -182,6 +189,8 @@
 					if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
 				});
 			}
+		} else if (!scrolling && scrollEl) {
+			hasNewOutputWhilePaused = true;
 		}
 	});
 
@@ -189,6 +198,17 @@
 		if (!scrollEl) return;
 		const distFromBottom = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
 		autoScroll = distFromBottom < 100;
+		if (distFromBottom < 100) hasNewOutputWhilePaused = false;
+	}
+
+	function jumpToBottom() {
+		if (!scrollEl) return;
+		autoScroll = true;
+		hasNewOutputWhilePaused = false;
+		scrollEl.scrollTo({
+			top: scrollEl.scrollHeight,
+			behavior: reduceMotion ? 'instant' : 'smooth'
+		});
 	}
 
 	// ─── Portal-safe event actions ──────────────────────────────────────────────
@@ -564,17 +584,33 @@
 </script>
 
 <div class="mobile-terminal flex flex-col h-full min-h-0">
-	<!-- Terminal output area -->
-	<div
-		bind:this={scrollEl}
-		class="flex-1 overflow-y-auto min-h-0"
-		style="background: {mobileSurface.terminalBg}; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; min-height: 140px;"
-		onscroll={handleScroll}
-	>
-		<pre
-			class="m-0 px-3 py-2 text-[0.8125rem] leading-relaxed"
-			style="font-family: var(--terminal-font, 'JetBrains Mono', 'Fira Code', monospace); white-space: pre-wrap; word-break: break-word; color: {mobileSurface.terminalFg}; min-height: 100%; min-width: 100%; width: 100%; box-sizing: border-box;"
-		>{@html renderedOutput}</pre>
+	<!-- Terminal output area + jump-to-bottom pill (wrapped so the pill can be
+	     absolutely positioned relative to the visible scroller, not the scrolled
+	     content inside it) -->
+	<div class="relative flex-1 min-h-0" style="min-height: 140px;">
+		<div
+			bind:this={scrollEl}
+			class="w-full h-full overflow-y-auto"
+			style="background: {mobileSurface.terminalBg}; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;"
+			onscroll={handleScroll}
+		>
+			<pre
+				class="m-0 px-3 py-2 text-[0.8125rem] leading-relaxed"
+				style="font-family: var(--terminal-font, 'JetBrains Mono', 'Fira Code', monospace); white-space: pre-wrap; word-break: break-word; color: {mobileSurface.terminalFg}; min-height: 100%; min-width: 100%; width: 100%; box-sizing: border-box;"
+			>{@html renderedOutput}</pre>
+		</div>
+
+		{#if !autoScroll}
+			<button
+				type="button"
+				class="jump-to-bottom-pill"
+				style="background: {mobileSurface.hoverBg}; border-color: {input.accent}; color: {mobileSurface.textBright};"
+				use:directClick={jumpToBottom}
+				aria-label="Jump to latest output"
+			>
+				{#if hasNewOutputWhilePaused}↓ New output{:else}↓{/if}
+			</button>
+		{/if}
 	</div>
 
 	<!-- Event Timeline Stack: signal history, action buttons, suggested tasks, needs_input cards -->
@@ -769,5 +805,38 @@
 		flex-shrink: 0;
 		-webkit-overflow-scrolling: touch;
 		overscroll-behavior: contain;
+	}
+
+	.jump-to-bottom-pill {
+		position: absolute;
+		bottom: 0.75rem;
+		right: 0.75rem;
+		z-index: 10;
+		padding: 0.25rem 0.75rem;
+		border-radius: 9999px;
+		font-size: 0.75rem;
+		font-weight: 600;
+		min-height: 2rem;
+		min-width: 2rem;
+		border: 1px solid;
+		box-shadow: 0 2px 8px oklch(0 0 0 / 0.25);
+		transition: opacity 0.15s ease, transform 0.15s ease;
+		animation: jump-pill-fade-in 0.15s ease-out;
+	}
+
+	.jump-to-bottom-pill:active {
+		transform: scale(0.96);
+	}
+
+	@keyframes jump-pill-fade-in {
+		from { opacity: 0; transform: translateY(4px); }
+		to   { opacity: 1; transform: translateY(0); }
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.jump-to-bottom-pill {
+			transition: none;
+			animation: none;
+		}
 	}
 </style>

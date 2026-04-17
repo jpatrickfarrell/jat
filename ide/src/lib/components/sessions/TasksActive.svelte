@@ -1481,7 +1481,7 @@
 			{@const isSwiping = swipeState?.sessionName === session.name && swipeState.swiping}
 			<div class="swipe-container {isNew ? 'animate-slide-in-fwd-center' : ''} {isExiting ? 'animate-slide-out-bck-center exit-delayed' : ''}">
 				<!-- Left tray (revealed on right/left-to-right swipe) -->
-				{#if rightAction}
+				{#if rightAction && !(swipeConfig.rightSwipe === 'complete' && effectiveState === 'completed')}
 				<div class="swipe-tray swipe-tray-left" class:swipe-tray-visible={swipeOffset > SWIPE_DEADZONE}>
 					<button class="swipe-action" style="background: {rightAction.color};" onclick={() => { executeSwipeAction(session.name, swipeConfig.rightSwipe); resetSwipe(session.name); }}>
 						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="22" height="22"><path stroke-linecap="round" stroke-linejoin="round" d={rightAction.icon} /></svg>
@@ -1490,7 +1490,7 @@
 				</div>
 				{/if}
 				<!-- Right tray (revealed on left/right-to-left swipe) -->
-				{#if leftAction}
+				{#if leftAction && !(swipeConfig.leftSwipe === 'complete' && effectiveState === 'completed')}
 				<div class="swipe-tray swipe-tray-right" class:swipe-tray-visible={swipeOffset < -SWIPE_DEADZONE}>
 					<button class="swipe-action" style="background: {leftAction.color};" onclick={() => { executeSwipeAction(session.name, swipeConfig.leftSwipe); resetSwipe(session.name); }}>
 						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="22" height="22"><path stroke-linecap="round" stroke-linejoin="round" d={leftAction.icon} /></svg>

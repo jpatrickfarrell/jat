@@ -69,13 +69,33 @@
 	}
 
 	function handleProjectSwitcherKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') showProjectSwitcher = false;
+		if (e.key === 'Escape') {
+			showProjectSwitcher = false;
+			projectSwitcherEl?.querySelector<HTMLButtonElement>('.project-switcher-btn')?.focus();
+		}
+	}
+
+	function handleDropdownKeydown(e: KeyboardEvent) {
+		if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
+		e.preventDefault();
+		const items = Array.from(projectSwitcherEl?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+		if (!items.length) return;
+		const idx = items.indexOf(document.activeElement as HTMLElement);
+		let next: HTMLElement | undefined;
+		if (e.key === 'ArrowDown') next = items[idx + 1] ?? items[0];
+		else if (e.key === 'ArrowUp') next = items[idx - 1] ?? items[items.length - 1];
+		else if (e.key === 'Home') next = items[0];
+		else if (e.key === 'End') next = items[items.length - 1];
+		next?.focus();
 	}
 
 	$effect(() => {
 		if (showProjectSwitcher) {
 			document.addEventListener('click', handleProjectSwitcherClickOutside, true);
 			document.addEventListener('keydown', handleProjectSwitcherKeydown);
+			// Auto-focus first menuitem when dropdown opens (ARIA menu pattern)
+			const first = projectSwitcherEl?.querySelector<HTMLElement>('[role="menuitem"]');
+			first?.focus();
 		}
 		return () => {
 			document.removeEventListener('click', handleProjectSwitcherClickOutside, true);
@@ -151,6 +171,21 @@
 		if (e.key === 'Escape') showSortDropdown = false;
 	}
 
+	function handleSortDropdownKeydown(e: KeyboardEvent) {
+		if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
+		e.preventDefault();
+		const container = e.currentTarget as HTMLElement;
+		const items = Array.from(container.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+		if (!items.length) return;
+		const idx = items.indexOf(document.activeElement as HTMLElement);
+		let next: HTMLElement | undefined;
+		if (e.key === 'ArrowDown') next = items[idx + 1] ?? items[0];
+		else if (e.key === 'ArrowUp') next = items[idx - 1] ?? items[items.length - 1];
+		else if (e.key === 'Home') next = items[0];
+		else if (e.key === 'End') next = items[items.length - 1];
+		next?.focus();
+	}
+
 	$effect(() => {
 		if (showSortDropdown) {
 			document.addEventListener('keydown', handleSortKeydown);
@@ -175,7 +210,20 @@
 		toastTimeout = setTimeout(() => { toastError = null; toastRetry = null; }, 5000);
 	}
 
-	onDestroy(() => { if (toastTimeout) clearTimeout(toastTimeout); });
+	// Success toast
+	let toastSuccess = $state<string | null>(null);
+	let toastSuccessTimeout: ReturnType<typeof setTimeout> | null = null;
+
+	function showSuccess(msg: string) {
+		if (toastSuccessTimeout) clearTimeout(toastSuccessTimeout);
+		toastSuccess = msg;
+		toastSuccessTimeout = setTimeout(() => { toastSuccess = null; }, 3000);
+	}
+
+	onDestroy(() => {
+		if (toastTimeout) clearTimeout(toastTimeout);
+		if (toastSuccessTimeout) clearTimeout(toastSuccessTimeout);
+	});
 
 	// Swarm - spawn one agent per ready task up to MAX_SESSIONS limit
 	async function handleSwarm() {
@@ -198,6 +246,7 @@
 				const firstError = results[0]?.error || "Failed to spawn any agents";
 				throw new Error(firstError);
 			}
+			showSuccess(`Spawned ${successCount} agent${successCount !== 1 ? 's' : ''}`);
 		} catch (error) {
 			showError(error instanceof Error ? error.message : "Failed to spawn agents", handleSwarm);
 		} finally {
@@ -402,6 +451,8 @@
 				} else {
 					throw new Error(firstError);
 				}
+			} else if (successCount > 0) {
+				showSuccess(`Spawned ${successCount} agent${successCount !== 1 ? 's' : ''}`);
 			}
 		} catch (err) {
 			showError(err instanceof Error ? err.message : "Failed to run epic", () => handleRunEpic(epicId));
@@ -664,7 +715,7 @@
 				</button>
 
 				{#if showProjectSwitcher}
-					<div class="project-switcher-dropdown" role="menu" aria-label="Switch project" style="top: {projectSwitcherPos.top}px; left: {projectSwitcherPos.left}px;">
+					<div class="project-switcher-dropdown" role="menu" aria-label="Switch project" onkeydown={handleDropdownKeydown} style="top: {projectSwitcherPos.top}px; left: {projectSwitcherPos.left}px;">
 						<div class="psd-header">Switch Project</div>
 						<div class="psd-scroll">
 							{#each actualProjects as project}
@@ -692,6 +743,8 @@
 											type="button"
 											class="psd-star"
 											class:psd-star-active={isFavorite}
+											role="menuitem"
+											aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
 											onclick={() => { onToggleFavorite?.(project); }}
 											title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
 										>
@@ -779,6 +832,7 @@
 					onmouseleave={hideSortMenuDelayed}
 					onfocusin={keepSortMenuOpen}
 					onfocusout={hideSortMenuDelayed}
+					onkeydown={handleSortDropdownKeydown}
 				>
 					<div
 						class="px-3 py-2 border-b border-base-content/10"
@@ -864,6 +918,7 @@
 					onmouseleave={hideSortMenuDelayed}
 					onfocusin={keepSortMenuOpen}
 					onfocusout={hideSortMenuDelayed}
+					onkeydown={handleSortDropdownKeydown}
 				>
 					<div
 						class="px-3 py-2 border-b border-base-content/10"
@@ -982,6 +1037,18 @@
 	</div>
 </nav>
 
+{#if toastSuccess}
+	<div class="topbar-toast topbar-toast-success" role="status" aria-live="polite">
+		<svg viewBox="0 0 16 16" fill="currentColor" class="topbar-toast-icon">
+			<path fill-rule="evenodd" d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0z" clip-rule="evenodd" />
+		</svg>
+		<span class="topbar-toast-msg">{toastSuccess}</span>
+		<button class="topbar-toast-close" onclick={() => toastSuccess = null} aria-label="Dismiss">
+			<svg viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/></svg>
+		</button>
+	</div>
+{/if}
+
 {#if toastError}
 	<div class="topbar-toast" role="alert">
 		<svg viewBox="0 0 16 16" fill="currentColor" class="topbar-toast-icon">
@@ -989,7 +1056,7 @@
 		</svg>
 		<span class="topbar-toast-msg">{toastError}</span>
 		{#if toastRetry}
-			<button class="topbar-toast-retry" onclick={() => { const fn = toastRetry; toastError = null; toastRetry = null; fn?.(); }} aria-label="Retry">
+			<button class="topbar-toast-retry" onclick={() => { const fn = toastRetry; toastError = null; toastRetry = null; fn?.(); }} aria-label="Retry" title="Retry">
 				<svg viewBox="0 0 16 16" fill="currentColor">
 					<path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z"/>
 					<path fill-rule="evenodd" d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5.002 5.002 0 0 0 8 3zM3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9H3.1z"/>
@@ -1218,6 +1285,10 @@
 		color: oklch(0.80 0.18 85);
 	}
 
+	.psd-star:focus-visible {
+		opacity: 1;
+	}
+
 	.psd-star:hover {
 		color: oklch(0.85 0.15 85);
 		background: oklch(0.28 0.08 85 / 0.3);
@@ -1346,6 +1417,28 @@
 	.topbar-toast-close svg {
 		width: 0.75rem;
 		height: 0.75rem;
+	}
+
+	.topbar-toast-success {
+		background: oklch(0.18 0.04 145);
+		border-color: oklch(0.55 0.18 145 / 0.5);
+	}
+
+	.topbar-toast-success .topbar-toast-icon {
+		color: oklch(0.70 0.20 145);
+	}
+
+	.topbar-toast-success .topbar-toast-msg {
+		color: oklch(0.85 0.08 145);
+	}
+
+	.topbar-toast-success .topbar-toast-close {
+		color: oklch(0.50 0.06 145);
+	}
+
+	.topbar-toast-success .topbar-toast-close:hover {
+		color: oklch(0.80 0.12 145);
+		background: oklch(0.55 0.18 145 / 0.15);
 	}
 
 	/* ── Sort button (custom, no DaisyUI) ── */

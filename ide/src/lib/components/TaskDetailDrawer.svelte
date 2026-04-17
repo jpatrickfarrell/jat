@@ -2883,7 +2883,7 @@
 					<div class="flex flex-col">
 						<!-- Feedback Context (JST app feedback: page URL, recording, selected elements) -->
 						{#if task.page_url || task.recording_url || task.selected_elements?.length}
-							<div class="rounded-lg mb-5 overflow-hidden" style="border-left: 3px solid oklch(0.70 0.18 200); border: 1px solid oklch(0.70 0.18 200 / 0.20); background: oklch(0.16 0.01 250);">
+							<div class="rounded-lg overflow-hidden" style="border: 1px solid oklch(0.70 0.18 200 / 0.20); border-left: 3px solid oklch(0.70 0.18 200); background: oklch(0.16 0.01 250);">
 								<div class="px-3 py-2.5 flex flex-col gap-2">
 									<!-- Recording CTA (most prominent) -->
 									{#if task.recording_url || task.db_id}
@@ -2894,13 +2894,10 @@
 												href={replayUrl}
 												target="_blank"
 												rel="noopener noreferrer"
-												class="inline-flex items-center gap-2 self-start px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
-												style="background: oklch(0.70 0.18 200 / 0.15); color: oklch(0.75 0.18 200); border: 1px solid oklch(0.70 0.18 200 / 0.30);"
-												onmouseenter={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'oklch(0.70 0.18 200 / 0.25)'; }}
-												onmouseleave={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'oklch(0.70 0.18 200 / 0.15)'; }}
+												class="feedback-recording-cta inline-flex items-center gap-2 self-start px-3 py-1.5 rounded-full text-xs font-medium"
 											>
 												<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-												▶ View Recording
+												View Recording
 											</a>
 										{/if}
 									{/if}
@@ -2926,7 +2923,7 @@
 														<span class="badge badge-xs badge-ghost font-mono uppercase flex-shrink-0">{el.tagName}</span>
 													{/if}
 													{#if el.textContent?.trim()}
-														<span class="text-base-content/55 truncate">"{el.textContent.trim().slice(0, 80)}"</span>
+														<span class="text-base-content/50 truncate">"{el.textContent.trim().slice(0, 80)}"</span>
 													{/if}
 												</div>
 											{/each}
@@ -2943,7 +2940,7 @@
 										{@const osStr = osMatch
 											? (ua.includes('Mac OS X') ? 'macOS' : ua.includes('Windows') ? 'Windows' : ua.includes('Linux') ? 'Linux' : ua.includes('iPhone') ? 'iPhone' : ua.includes('iPad') ? 'iPad' : 'Android')
 											: ''}
-										<span class="text-xs font-mono text-base-content/35">{browserStr}{osStr ? ` / ${osStr}` : ''}</span>
+										<span class="text-xs font-mono text-base-content/30">{browserStr}{osStr ? ` / ${osStr}` : ''}</span>
 									{/if}
 								</div>
 							</div>
@@ -2967,7 +2964,7 @@
 						</div>
 
 						<!-- Labels (badges, click to edit) - Industrial -->
-						<div>
+						<div class="mt-4">
 							<TaskFieldLabel>Labels</TaskFieldLabel>
 							{#if editingLabels}
 								<!-- Edit mode: text input - Industrial -->
@@ -3432,6 +3429,230 @@
 							</div>
 						{/if}
 
+						<!-- Dependencies - Industrial -->
+						<details class="group border-t border-base-300/50 pt-3 mt-1">
+							<summary class="flex items-center gap-2 cursor-pointer list-none text-xs font-medium text-base-content/50 hover:text-base-content/80 py-1 marker:hidden [&::-webkit-details-marker]:hidden">
+								<svg class="h-3 w-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+								<span>Depends On</span>
+								{#if task.depends_on && task.depends_on.length > 0}
+									<span class="badge badge-xs bg-base-300 text-base-content/70 border-0">{task.depends_on.length}</span>
+								{/if}
+							</summary>
+							<div class="pt-3">
+								<!-- Dependency search -->
+								<div class="mb-2">
+									{#if availableTasksLoading}
+										<div class="flex items-center gap-1.5 text-xs text-base-content/40 py-1">
+											<span class="loading loading-spinner loading-xs"></span>
+											Loading tasks...
+										</div>
+									{:else}
+										<SearchDropdown
+											value={depSearchValue}
+											groups={dependencySearchGroups}
+											placeholder={availableTasks.length === 0 ? 'No tasks available' : 'Search to add dependency...'}
+											size="sm"
+											disabled={isSaving || availableTasks.length === 0}
+											onChange={(v) => { depSearchValue = ''; addDependency(v); }}
+										/>
+									{/if}
+								</div>
+
+							<DependencyList
+								items={task.depends_on || []}
+								onRemove={isSaving ? undefined : removeDependency}
+								emptyText="No dependencies"
+							/>
+							</div>
+						</details>
+
+						<!-- Blocks (dependents) - Industrial -->
+						{#if task.blocked_by && task.blocked_by.length > 0}
+							<details class="group border-t border-base-300/50 pt-3 mt-1">
+								<summary class="flex items-center gap-2 cursor-pointer list-none text-xs font-medium text-base-content/50 hover:text-base-content/80 py-1 marker:hidden [&::-webkit-details-marker]:hidden">
+									<svg class="h-3 w-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+									<span>Blocks</span>
+									<span class="badge badge-xs bg-base-300 text-base-content/70 border-0">{task.blocked_by.length}</span>
+								</summary>
+								<div class="pt-3">
+									<DependencyList items={task.blocked_by} emptyText="No blockers" />
+								</div>
+							</details>
+						{/if}
+
+						<!-- Dependency Graph Section - Industrial -->
+						{#if task && ((task.depends_on && task.depends_on.length > 0) || (task.blocked_by && task.blocked_by.length > 0))}
+							<details class="group border-t border-base-300/50 pt-3 mt-1">
+								<summary class="flex items-center gap-2 cursor-pointer list-none text-xs font-medium text-base-content/50 hover:text-base-content/80 py-1 marker:hidden [&::-webkit-details-marker]:hidden">
+									<svg class="h-3 w-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+									<span>Dependency Graph</span>
+								</summary>
+								<div class="pt-3">
+								<TaskDependencyGraph
+									{task}
+									onNodeClick={(nodeTaskId) => {
+										// Navigate to clicked task
+										taskId = nodeTaskId;
+									}}
+									height={220}
+								/>
+								</div>
+							</details>
+						{/if}
+
+						<!-- Context (Knowledge Bases + Data Tables) -->
+						<details class="group border-t border-base-300/50 pt-3 mt-1">
+							<summary class="flex items-center gap-2 cursor-pointer list-none text-xs font-medium text-base-content/50 hover:text-base-content/80 py-1 marker:hidden [&::-webkit-details-marker]:hidden">
+								<svg class="h-3 w-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+								<span>Context</span>
+								{#if taskBaseIds.length + taskTableNames.length > 0}
+									<span class="badge badge-xs bg-base-300 text-base-content/70 border-0">{taskBaseIds.length + taskTableNames.length}</span>
+								{/if}
+							</summary>
+							<div class="pt-3">
+							<div class="flex flex-wrap items-center gap-1.5">
+								<BaseAttachChips
+									selectedIds={taskBaseIds}
+									project={task.project || getProjectFromTaskId(task.id)}
+									onChange={handleBasesChange}
+								/>
+								<DataTableAttachChips
+									selectedTables={taskTableNames}
+									project={task.project || getProjectFromTaskId(task.id)}
+									onChange={handleTablesChange}
+								/>
+							</div>
+
+							<!-- Rendered context previews -->
+							{#if taskBases.length > 0 || taskTables.length > 0}
+								<div class="flex flex-col gap-1.5 mt-2">
+									{#if renderingContext && renderedBases.size === 0 && renderedTables.size === 0}
+										<div class="flex items-center gap-2 px-2.5 py-1.5 text-xs" style="color: oklch(0.55 0.01 250);">
+											<span class="loading loading-spinner loading-xs"></span>
+											Loading previews...
+										</div>
+									{/if}
+
+									<!-- Knowledge base previews -->
+									{#each taskBases as base (base.id)}
+										{@const preview = renderedBases.get(base.id)}
+										{@const expanded = expandedContext.has(`base-${base.id}`)}
+											<div
+											class="rounded-lg overflow-hidden"
+											style="border: 1px solid oklch(0.25 0.01 250); background: oklch(0.16 0.01 250);"
+										>
+											<!-- Header row -->
+											<button
+												type="button"
+												class="w-full flex items-center gap-2 px-2.5 py-1.5 text-left transition-colors"
+												style="background: oklch(0.16 0.01 250);"
+												onmouseenter={(e) => { (e.currentTarget as HTMLElement).style.background = 'oklch(0.19 0.01 250)'; }}
+												onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.background = 'oklch(0.16 0.01 250)'; }}
+												onclick={() => toggleContextExpand(`base-${base.id}`)}
+											>
+												<span class="text-xs flex-shrink-0">{base.icon || '📄'}</span>
+												<span class="text-xs font-medium truncate flex-1" style="color: oklch(0.85 0.01 250);">
+													{base.name}
+												</span>
+												{#if preview?.token_estimate}
+													<span class="text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0" style="background: oklch(0.22 0.02 250); color: oklch(0.60 0.01 250);">
+														~{formatContextTokens(preview.token_estimate)} tok
+													</span>
+												{:else if !preview && renderingContext}
+													<span class="loading loading-spinner loading-xs flex-shrink-0" style="color: oklch(0.45 0.01 250);"></span>
+												{/if}
+												<svg
+													class="w-3 h-3 flex-shrink-0 transition-transform {expanded ? 'rotate-180' : ''}"
+													style="color: oklch(0.45 0.01 250);"
+													fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+												>
+													<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+												</svg>
+											</button>
+
+											<!-- Expanded content -->
+											{#if expanded && preview}
+												<div
+													class="px-2.5 pb-2.5 overflow-auto text-xs font-mono whitespace-pre-wrap"
+													style="max-height: 240px; color: oklch(0.70 0.01 250); border-top: 1px solid oklch(0.22 0.01 250); line-height: 1.5;"
+													transition:slide={{ duration: 150 }}
+												>
+													{preview.content}
+												</div>
+											{:else if expanded && !preview}
+												<div
+													class="px-2.5 py-2 text-xs italic"
+													style="color: oklch(0.50 0.01 250); border-top: 1px solid oklch(0.22 0.01 250);"
+													transition:slide={{ duration: 150 }}
+												>
+													{renderingContext ? 'Rendering...' : 'No preview available'}
+												</div>
+											{/if}
+										</div>
+									{/each}
+
+									<!-- Data table previews -->
+									{#each taskTables as tbl (tbl.table_name)}
+										{@const preview = renderedTables.get(tbl.table_name)}
+										{@const expanded = expandedContext.has(`table-${tbl.table_name}`)}
+										<div
+											class="rounded-lg overflow-hidden"
+											style="border: 1px solid oklch(0.25 0.02 145 / 0.3); background: oklch(0.16 0.01 250);"
+										>
+											<!-- Header row -->
+											<button
+												type="button"
+												class="w-full flex items-center gap-2 px-2.5 py-1.5 text-left transition-colors"
+												style="background: oklch(0.16 0.01 250);"
+												onmouseenter={(e) => { (e.currentTarget as HTMLElement).style.background = 'oklch(0.19 0.01 250)'; }}
+												onmouseleave={(e) => { (e.currentTarget as HTMLElement).style.background = 'oklch(0.16 0.01 250)'; }}
+												onclick={() => toggleContextExpand(`table-${tbl.table_name}`)}
+											>
+												<span class="text-xs flex-shrink-0">🗃️</span>
+												<span class="text-xs font-medium truncate flex-1" style="color: oklch(0.85 0.01 250);">
+													{tbl.table_name}
+												</span>
+												{#if preview?.token_estimate}
+													<span class="text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0" style="background: oklch(0.22 0.02 250); color: oklch(0.60 0.01 250);">
+														~{formatContextTokens(preview.token_estimate)} tok
+													</span>
+												{:else if !preview && renderingContext}
+													<span class="loading loading-spinner loading-xs flex-shrink-0" style="color: oklch(0.45 0.01 250);"></span>
+												{/if}
+												<svg
+													class="w-3 h-3 flex-shrink-0 transition-transform {expanded ? 'rotate-180' : ''}"
+													style="color: oklch(0.45 0.01 250);"
+													fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+												>
+													<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+												</svg>
+											</button>
+
+											<!-- Expanded content -->
+											{#if expanded && preview}
+												<div
+													class="px-2.5 pb-2.5 overflow-auto text-xs font-mono whitespace-pre-wrap"
+													style="max-height: 240px; color: oklch(0.70 0.01 250); border-top: 1px solid oklch(0.22 0.01 250); line-height: 1.5;"
+													transition:slide={{ duration: 150 }}
+												>
+													{preview.content}
+												</div>
+											{:else if expanded && !preview}
+												<div
+													class="px-2.5 py-2 text-xs italic"
+													style="color: oklch(0.50 0.01 250); border-top: 1px solid oklch(0.22 0.01 250);"
+													transition:slide={{ duration: 150 }}
+												>
+													{renderingContext ? 'Rendering...' : 'No preview available'}
+												</div>
+											{/if}
+										</div>
+									{/each}
+								</div>
+							{/if}
+							</div>
+						</details>
+
 						<!-- Attachments - Industrial (drop zone is now the whole drawer) -->
 						<div
 							class="mt-5 relative rounded transition-all duration-200"
@@ -3826,150 +4047,6 @@
 							</div>
 						{/if}
 
-						<!-- Dependencies - Industrial -->
-						<details class="group border-t border-base-300/50 pt-3 mt-1">
-							<summary class="flex items-center gap-2 cursor-pointer list-none text-xs font-medium text-base-content/50 hover:text-base-content/80 py-1 marker:hidden [&::-webkit-details-marker]:hidden">
-								<svg class="h-3 w-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-								<span>Depends On</span>
-								{#if task.depends_on && task.depends_on.length > 0}
-									<span class="badge badge-xs bg-base-300 text-base-content/70 border-0">{task.depends_on.length}</span>
-								{/if}
-							</summary>
-							<div class="pt-3">
-								<!-- Dependency search -->
-								<div class="mb-2">
-									{#if availableTasksLoading}
-										<div class="flex items-center gap-1.5 text-xs text-base-content/40 py-1">
-											<span class="loading loading-spinner loading-xs"></span>
-											Loading tasks...
-										</div>
-									{:else}
-										<SearchDropdown
-											value={depSearchValue}
-											groups={dependencySearchGroups}
-											placeholder={availableTasks.length === 0 ? 'No tasks available' : 'Search to add dependency...'}
-											size="sm"
-											disabled={isSaving || availableTasks.length === 0}
-											onChange={(v) => { depSearchValue = ''; addDependency(v); }}
-										/>
-									{/if}
-								</div>
-
-							<DependencyList
-								items={task.depends_on || []}
-								onRemove={isSaving ? undefined : removeDependency}
-								emptyText="No dependencies"
-							/>
-							</div>
-						</details>
-
-						<!-- Blocks (dependents) - Industrial -->
-						{#if task.blocked_by && task.blocked_by.length > 0}
-							<details class="group border-t border-base-300/50 pt-3 mt-1">
-								<summary class="flex items-center gap-2 cursor-pointer list-none text-xs font-medium text-base-content/50 hover:text-base-content/80 py-1 marker:hidden [&::-webkit-details-marker]:hidden">
-									<svg class="h-3 w-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-									<span>Blocks</span>
-									<span class="badge badge-xs bg-base-300 text-base-content/70 border-0">{task.blocked_by.length}</span>
-								</summary>
-								<div class="pt-3">
-									<DependencyList items={task.blocked_by} emptyText="No blockers" />
-								</div>
-							</details>
-						{/if}
-
-						<!-- Dates - Industrial -->
-						<div class="border-t border-base-300/50 pt-3 mt-1">
-							<TaskDatesPair createdAt={task.created_at} updatedAt={task.updated_at} />
-						</div>
-
-						<!-- Epic Children Section (only for epic tasks) -->
-						{#if (task.type === 'epic' || task.issue_type === 'epic') && (epicChildren.length > 0 || epicChildrenLoading)}
-							<details class="group border-t border-base-300/50 pt-3 mt-1" open>
-								<summary class="flex items-center gap-2 cursor-pointer list-none text-xs font-medium text-base-content/50 hover:text-base-content/80 py-1 marker:hidden [&::-webkit-details-marker]:hidden">
-									<svg class="h-3 w-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-									<span>Children</span>
-									{#if epicSummary}
-										<span class="badge badge-xs bg-base-300 text-base-content/70 border-0">{epicSummary.total}</span>
-									{/if}
-								</summary>
-								<div class="pt-3">
-									<div class="flex items-center justify-between mb-2">
-										<span class="sr-only">Children</span>
-									{#if epicSummary && epicSummary.total > 0}
-										<div class="flex items-center gap-1.5 text-[10px] font-mono">
-											{#if epicSummary.ready > 0}
-												<span class="text-info">{epicSummary.ready} ready</span>
-											{/if}
-											{#if epicSummary.inProgress > 0}
-												<span class="text-warning">{epicSummary.inProgress} active</span>
-											{/if}
-											{#if epicSummary.blocked > 0}
-												<span class="text-error">{epicSummary.blocked} blocked</span>
-											{/if}
-											{#if epicSummary.closed > 0}
-												<span class="text-success">{epicSummary.closed} done</span>
-											{/if}
-										</div>
-									{/if}
-								</div>
-
-								<!-- Progress bar -->
-								{#if epicSummary && epicSummary.total > 0}
-									{@const pct = Math.round((epicSummary.closed / epicSummary.total) * 100)}
-									<div class="w-full h-1.5 bg-base-300 rounded-full mb-3 overflow-hidden">
-										<div
-											class="h-full rounded-full bg-success transition-all duration-300"
-											style="width: {pct}%;"
-										></div>
-									</div>
-								{/if}
-
-								{#if epicChildrenLoading}
-									<div class="flex items-center gap-2 py-3 text-xs text-base-content/50">
-										<span class="loading loading-spinner loading-xs"></span>
-										Loading children...
-									</div>
-								{:else}
-									<div class="space-y-1">
-										{#each epicChildren as child}
-											{@const isChildClosed = child.status === 'closed'}
-											<button
-												class="group flex items-center gap-2 text-sm p-2 rounded w-full text-left transition-colors bg-base-200 border-l-2 {child.isBlocked ? 'border-error/50' : isChildClosed ? 'border-success/50' : child.status === 'in_progress' ? 'border-warning/50' : 'border-info/50'} hover:bg-base-300"
-												onclick={() => { if (taskId !== undefined) taskId = child.id; }}
-												title="Open {child.id}"
-											>
-												<span class="badge badge-sm {statusColors[child.status] || 'badge-ghost'}">
-													{child.status === 'in_progress' ? 'active' : child.status}
-												</span>
-												<span class="badge badge-sm {priorityColors[child.priority] || 'badge-ghost'}">
-													P{child.priority ?? '?'}
-												</span>
-												<span class="font-mono text-xs text-base-content/50">{child.id}</span>
-												<span class="flex-1 truncate {isChildClosed ? 'line-through text-base-content/40' : ''}">{child.title || 'Untitled'}</span>
-												{#if child.assignee}
-													<span class="text-xs text-base-content/40 font-mono">{child.assignee}</span>
-												{/if}
-												{#if child.isBlocked}
-													<span class="text-[10px] text-error font-mono" title="Blocked by: {child.blockedBy.join(', ')}">blocked</span>
-												{/if}
-												{#if !isChildClosed && !child.isBlocked && !child.assignee}
-													<span
-														class="opacity-0 group-hover:opacity-100 text-xs cursor-pointer"
-														title="Launch agent for this task"
-														role="button"
-														tabindex="-1"
-														onclick={(e) => { e.stopPropagation(); onspawn(child.id); }}
-														onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onspawn(child.id); } }}
-													>🚀</span>
-												{/if}
-											</button>
-										{/each}
-									</div>
-								{/if}
-								</div>
-							</details>
-						{/if}
-
 						<!-- Activity Timeline (Task Events on Left, Messages on Right) - Industrial -->
 						<details class="group border-t border-base-300/50 pt-3 mt-1">
 							<summary class="flex items-center gap-2 cursor-pointer list-none text-xs font-medium text-base-content/50 hover:text-base-content/80 py-1 marker:hidden [&::-webkit-details-marker]:hidden">
@@ -4175,22 +4252,95 @@
 							</div>
 						</details>
 
-						<!-- Dependency Graph Section - Industrial -->
-						{#if task && ((task.depends_on && task.depends_on.length > 0) || (task.blocked_by && task.blocked_by.length > 0))}
-							<details class="group border-t border-base-300/50 pt-3 mt-1">
+						<!-- Dates - Industrial -->
+						<div class="border-t border-base-300/50 pt-3 mt-1">
+							<TaskDatesPair createdAt={task.created_at} updatedAt={task.updated_at} />
+						</div>
+
+						<!-- Epic Children Section (only for epic tasks) -->
+						{#if (task.type === 'epic' || task.issue_type === 'epic') && (epicChildren.length > 0 || epicChildrenLoading)}
+							<details class="group border-t border-base-300/50 pt-3 mt-1" open>
 								<summary class="flex items-center gap-2 cursor-pointer list-none text-xs font-medium text-base-content/50 hover:text-base-content/80 py-1 marker:hidden [&::-webkit-details-marker]:hidden">
 									<svg class="h-3 w-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-									<span>Dependency Graph</span>
+									<span>Children</span>
+									{#if epicSummary}
+										<span class="badge badge-xs bg-base-300 text-base-content/70 border-0">{epicSummary.total}</span>
+									{/if}
 								</summary>
 								<div class="pt-3">
-								<TaskDependencyGraph
-									{task}
-									onNodeClick={(nodeTaskId) => {
-										// Navigate to clicked task
-										taskId = nodeTaskId;
-									}}
-									height={220}
-								/>
+									<div class="flex items-center justify-between mb-2">
+										<span class="sr-only">Children</span>
+									{#if epicSummary && epicSummary.total > 0}
+										<div class="flex items-center gap-1.5 text-[10px] font-mono">
+											{#if epicSummary.ready > 0}
+												<span class="text-info">{epicSummary.ready} ready</span>
+											{/if}
+											{#if epicSummary.inProgress > 0}
+												<span class="text-warning">{epicSummary.inProgress} active</span>
+											{/if}
+											{#if epicSummary.blocked > 0}
+												<span class="text-error">{epicSummary.blocked} blocked</span>
+											{/if}
+											{#if epicSummary.closed > 0}
+												<span class="text-success">{epicSummary.closed} done</span>
+											{/if}
+										</div>
+									{/if}
+								</div>
+
+								<!-- Progress bar -->
+								{#if epicSummary && epicSummary.total > 0}
+									{@const pct = Math.round((epicSummary.closed / epicSummary.total) * 100)}
+									<div class="w-full h-1.5 bg-base-300 rounded-full mb-3 overflow-hidden">
+										<div
+											class="h-full rounded-full bg-success transition-all duration-300"
+											style="width: {pct}%;"
+										></div>
+									</div>
+								{/if}
+
+								{#if epicChildrenLoading}
+									<div class="flex items-center gap-2 py-3 text-xs text-base-content/50">
+										<span class="loading loading-spinner loading-xs"></span>
+										Loading children...
+									</div>
+								{:else}
+									<div class="space-y-1">
+										{#each epicChildren as child}
+											{@const isChildClosed = child.status === 'closed'}
+											<button
+												class="group flex items-center gap-2 text-sm p-2 rounded w-full text-left transition-colors bg-base-200 border-l-2 {child.isBlocked ? 'border-error/50' : isChildClosed ? 'border-success/50' : child.status === 'in_progress' ? 'border-warning/50' : 'border-info/50'} hover:bg-base-300"
+												onclick={() => { if (taskId !== undefined) taskId = child.id; }}
+												title="Open {child.id}"
+											>
+												<span class="badge badge-sm {statusColors[child.status] || 'badge-ghost'}">
+													{child.status === 'in_progress' ? 'active' : child.status}
+												</span>
+												<span class="badge badge-sm {priorityColors[child.priority] || 'badge-ghost'}">
+													P{child.priority ?? '?'}
+												</span>
+												<span class="font-mono text-xs text-base-content/50">{child.id}</span>
+												<span class="flex-1 truncate {isChildClosed ? 'line-through text-base-content/40' : ''}">{child.title || 'Untitled'}</span>
+												{#if child.assignee}
+													<span class="text-xs text-base-content/40 font-mono">{child.assignee}</span>
+												{/if}
+												{#if child.isBlocked}
+													<span class="text-[10px] text-error font-mono" title="Blocked by: {child.blockedBy.join(', ')}">blocked</span>
+												{/if}
+												{#if !isChildClosed && !child.isBlocked && !child.assignee}
+													<span
+														class="opacity-0 group-hover:opacity-100 text-xs cursor-pointer"
+														title="Launch agent for this task"
+														role="button"
+														tabindex="-1"
+														onclick={(e) => { e.stopPropagation(); onspawn(child.id); }}
+														onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onspawn(child.id); } }}
+													>🚀</span>
+												{/if}
+											</button>
+										{/each}
+									</div>
+								{/if}
 								</div>
 							</details>
 						{/if}
@@ -4508,6 +4658,21 @@
 {/if}
 
 <style>
+	/* Feedback Context recording CTA */
+	.feedback-recording-cta {
+		background: oklch(0.70 0.18 200 / 0.15);
+		color: oklch(0.75 0.18 200);
+		border: 1px solid oklch(0.70 0.18 200 / 0.30);
+		transition: background 150ms ease;
+	}
+	.feedback-recording-cta:hover {
+		background: oklch(0.70 0.18 200 / 0.25);
+	}
+	.feedback-recording-cta:focus-visible {
+		outline: 2px solid oklch(0.70 0.18 200 / 0.70);
+		outline-offset: 2px;
+	}
+
 	/* Command dropdown styling (matching IngestWizard) */
 	.cmd-dropdown-trigger {
 		background: oklch(0.16 0.01 250);

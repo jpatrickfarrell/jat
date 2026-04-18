@@ -20,6 +20,7 @@
 	import CompletionCardCompact from '$lib/components/work/CompletionCardCompact.svelte';
 	import StateCardCompact from '$lib/components/work/StateCardCompact.svelte';
 	import StatusActionBadge from '$lib/components/work/atoms/StatusActionBadge.svelte';
+	import ActivityPulse from '$lib/components/work/ActivityPulse.svelte';
 	import { getSwipeConfig, getSwipeActionDef, initSwipeActions } from '$lib/config/swipeActions';
 	import { isAutoKillEnabled, setPendingAutoKill } from '$lib/stores/autoKillConfig';
 	import { autoKillCountdowns, cancelAutoKill } from '$lib/stores/sessionEvents';
@@ -308,6 +309,42 @@
 
 	// Optimistic state overrides - for instant UI feedback before WS catches up
 	let optimisticStates = $state<Map<string, string>>(new Map());
+
+	// Activity pulse: rolling delta of output line counts per agent (last 10 polls)
+	let activityHistories = $state<Map<string, number[]>>(new Map());
+	let activityLastCounts = $state<Map<string, number>>(new Map());
+
+	$effect(() => {
+		// Reactive reads: agentOutputs, sessions
+		const currentSessions = sessions;
+		const currentOutputs = agentOutputs;
+
+		// Untracked reads to avoid dependency loops on our own state
+		const prevHistories = untrack(() => activityHistories);
+		const prevCounts = untrack(() => activityLastCounts);
+
+		const newHistories = new Map(prevHistories);
+		const newCounts = new Map(prevCounts);
+		let changed = false;
+
+		for (const session of currentSessions) {
+			const agentName = getAgentName(session.name);
+			const output = currentOutputs.get(agentName) || '';
+			const currentCount = output ? output.split('\n').length : 0;
+			const prev = newCounts.get(agentName) ?? currentCount;
+			const delta = Math.max(0, currentCount - prev);
+
+			const prevHistory = newHistories.get(agentName) ?? [];
+			newHistories.set(agentName, [...prevHistory, delta].slice(-10));
+			newCounts.set(agentName, currentCount);
+			changed = true;
+		}
+
+		if (changed) {
+			activityHistories = newHistories;
+			activityLastCounts = newCounts;
+		}
+	});
 
 	// Completion signal events per agent (for completed state card body)
 	interface CompletionEvent { type: string; state?: string; data?: any; }
@@ -1841,6 +1878,12 @@
 											</svg>
 										{/if}
 									</button>
+									{#if effectiveState !== 'completed'}
+										<ActivityPulse
+											data={activityHistories.get(sessionAgentName) ?? []}
+											state={effectiveState}
+										/>
+									{/if}
 								</div>
 								<!-- Action tray — fades in over row2 on hover -->
 								<div class="ta-action-tray" role="group" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>

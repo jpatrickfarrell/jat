@@ -8,7 +8,7 @@
 	 * Configuration is imported from statusColors.ts for consistency.
 	 */
 
-	import { fly } from 'svelte/transition';
+	import { fly, fade } from 'svelte/transition';
 	import {
 		getServerStateVisual,
 		getServerStateActions,
@@ -225,9 +225,9 @@
 
 			<!-- Destructive confirmation row -->
 			{#if confirmingAction}
-				<div class="px-3 py-2.5 confirm-row" transition:fly={{ y: -4, duration: 100 }}>
+				<div class="px-3 py-2.5 confirm-row" transition:fade={{ duration: 120 }}>
 					<p class="text-xs text-error font-semibold mb-1.5">{confirmingAction.label}?</p>
-					<p class="text-[10px] opacity-60 mb-2">{confirmingAction.description ?? 'This action cannot be undone.'}</p>
+					<p class="text-xs opacity-60 mb-2">{confirmingAction.description ?? 'This action cannot be undone.'}</p>
 					<div class="flex gap-2">
 						<button
 							type="button"
@@ -260,8 +260,9 @@
 							type="button"
 							onclick={() => executeAction(action)}
 							class="w-full px-3 py-2 flex items-center gap-2 text-left text-xs transition-colors {getVariantClasses(action.variant)}"
+							class:opacity-30={confirmingAction !== null && confirmingAction.id !== action.id}
 							class:opacity-40={executingId !== null && executingId !== action.id}
-							disabled={executingId !== null}
+							disabled={executingId !== null || confirmingAction !== null}
 							role="menuitem"
 							aria-label={action.label}
 						>

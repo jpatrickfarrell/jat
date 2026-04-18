@@ -13,6 +13,7 @@
 	 */
 
 	import { onDestroy, onMount } from 'svelte';
+	import { browser } from '$app/environment';
 	import { areSoundsEnabled, playTaskCompleteSound, playCelebrationSound } from '$lib/utils/soundEffects';
 	import AnimatedDigits from './AnimatedDigits.svelte';
 	import AnimatedCost from './AnimatedCost.svelte';
@@ -125,6 +126,7 @@
 	let hitMilestoneTimeout: ReturnType<typeof setTimeout> | null = null;
 	let completedTasksAbortController: AbortController | null = null;
 	let completedTasksInFlight = false;
+	let fetchFailCount = $state(0); // Consecutive fetch failures — drives fault indicator on badge
 
 	const MILESTONES = [5, 10, 25, 50, 100];
 
@@ -282,12 +284,14 @@
 			completedCount = newCount;
 			tasks = completedToday;
 			loading = false;
+			fetchFailCount = 0; // Reset fault indicator on success
 		} catch (error) {
 			if (error instanceof Error && error.name === 'AbortError') {
 				return;
 			}
 			console.error('Error fetching completed tasks:', error);
 			loading = false;
+			fetchFailCount++; // Two+ consecutive failures → fault indicator on badge
 		} finally {
 			if (completedTasksAbortController === controller) {
 				completedTasksAbortController = null;
@@ -296,9 +300,28 @@
 		}
 	}
 
+	// Global Alt+H shortcut — open dropdown and focus search from anywhere
+	function handleGlobalKeydown(e: KeyboardEvent) {
+		if (!e.altKey || e.key !== 'h') return;
+		const target = e.target as HTMLElement;
+		const tag = target.tagName;
+		// Don't intercept when typing, except inside our own search input
+		if (target !== searchInputRef && (tag === 'INPUT' || tag === 'TEXTAREA' || target.contentEditable === 'true')) return;
+		e.preventDefault();
+		if (showDropdown) {
+			showDropdown = false;
+			searchQuery = '';
+			debouncedSearchQuery = '';
+		} else {
+			showDropdown = true;
+			setTimeout(() => searchInputRef?.focus(), 50);
+		}
+	}
+
 	onMount(() => {
 		fetchCompletedToday();
 		completedTasksInterval = setInterval(fetchCompletedToday, 30000);
+		window.addEventListener('keydown', handleGlobalKeydown);
 		return () => {
 			if (completedTasksInterval) {
 				clearInterval(completedTasksInterval);
@@ -308,6 +331,7 @@
 	});
 
 	onDestroy(() => {
+		if (browser) window.removeEventListener('keydown', handleGlobalKeydown);
 		if (dropdownTimeout) {
 			clearTimeout(dropdownTimeout);
 			dropdownTimeout = null;
@@ -346,11 +370,11 @@
 
 	function handleMouseLeave() {
 		// 600ms delay: long enough to move between badge and dropdown without flicker,
-		// and stable enough to type in the search without accidental close
+		// and stable enough to type without accidental close.
+		// Search query is intentionally NOT cleared here — if the user moves off briefly,
+		// their in-progress search survives so they can continue on re-entry.
 		dropdownTimeout = setTimeout(() => {
 			showDropdown = false;
-			searchQuery = ''; // Clear search when dropdown closes
-			debouncedSearchQuery = ''; // Also clear debounced query immediately
 		}, 600);
 	}
 
@@ -560,7 +584,7 @@
 			--escalate-color: {urgencyLevel === 3 ? 'oklch(0.70 0.20 280 / 0.8)' : urgencyLevel === 2 ? 'oklch(0.70 0.18 200 / 0.8)' : 'oklch(0.70 0.15 85 / 0.8)'};
 		"
 	>
-		<!-- Active session count (state dots moved to project chips in TopBar) -->
+		<!-- Active session count -->
 		{#if activeAgentCount > 0}
 			<div class="flex items-center gap-1" title="{activeAgentCount} active session{activeAgentCount > 1 ? 's' : ''}">
 				<span class="relative flex h-2 w-2">
@@ -571,8 +595,16 @@
 			</div>
 		{/if}
 
+		<!-- Needs-input fault chip — unmissable alert on the badge face -->
+		{#if stateCounts && stateCounts.needsInput > 0}
+			<span
+				class="needs-input-chip"
+				title="{stateCounts.needsInput} agent{stateCounts.needsInput > 1 ? 's need' : ' needs'} input"
+			>{stateCounts.needsInput}!</span>
+		{/if}
+
 		<!-- Separator -->
-		{#if activeAgentCount > 0 && completedCount > 0}
+		{#if (activeAgentCount > 0 || (stateCounts && stateCounts.needsInput > 0)) && completedCount > 0}
 			<span class="w-px h-3 mx-0.5" style="background: oklch(0.35 0.02 250);"></span>
 		{/if}
 
@@ -586,14 +618,14 @@
 						</svg>
 					</span>
 				{/if}
-				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5 relative z-10" style="color: {completedCount > 0 ? 'oklch(0.75 0.20 85)' : 'oklch(0.50 0.02 250)'};">
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5 relative z-10" style="color: {fetchFailCount >= 2 ? 'oklch(0.55 0.15 30)' : completedCount > 0 ? 'oklch(0.75 0.20 85)' : 'oklch(0.50 0.02 250)'};">
 					<path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clip-rule="evenodd" />
 				</svg>
 			</span>
 			{#if loading}
 				<span class="opacity-50">-</span>
 			{:else}
-				<AnimatedDigits value={completedCount.toString()} class="font-medium" style="color: {completedCount > 0 ? 'oklch(0.75 0.20 85)' : 'oklch(0.50 0.02 250)'};" />
+				<AnimatedDigits value={completedCount.toString()} class="font-medium" style="color: {fetchFailCount >= 2 ? 'oklch(0.55 0.15 30)' : completedCount > 0 ? 'oklch(0.75 0.20 85)' : 'oklch(0.50 0.02 250)'};" />
 			{/if}
 		</div>
 
@@ -844,6 +876,20 @@
 />
 
 <style>
+	/* Needs-input fault chip — rendered directly on badge face */
+	.needs-input-chip {
+		font-size: 0.6rem;
+		font-family: ui-monospace, monospace;
+		font-weight: 700;
+		line-height: 1.2;
+		color: oklch(0.84 0.18 280);
+		background: oklch(0.55 0.15 280 / 0.18);
+		border: 1px solid oklch(0.55 0.15 280 / 0.45);
+		border-radius: 0.2rem;
+		padding: 0.05rem 0.2rem;
+		letter-spacing: 0.02em;
+	}
+
 	/* Glow effect for star */
 	.star-glow {
 		filter: drop-shadow(0 0 3px oklch(0.75 0.20 85 / 0.5));

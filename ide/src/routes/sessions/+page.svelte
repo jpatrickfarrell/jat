@@ -578,11 +578,6 @@
 		}
 	}
 
-	// Copy attach command
-	// Fetch extended task details (attachments, dependencies, timeline, signals)
-
-	// Expand session inline (works for any session)
-
 	// Handle tab change - update URL
 	function handleTabChange(tabId: string) {
 		activeTab = tabId;

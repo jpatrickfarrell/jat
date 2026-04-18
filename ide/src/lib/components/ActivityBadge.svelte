@@ -58,6 +58,8 @@
 		title: string;
 		assignee?: string;
 		updated_at: string;
+		status?: string;
+		priority?: string;
 	}
 
 	interface Props {
@@ -152,17 +154,6 @@
 		)
 	);
 
-	// Calculate total active agents
-	const totalActiveAgents = $derived.by(() => {
-		if (!stateCounts) return activeAgentCount;
-		return (stateCounts.needsInput || 0) +
-			(stateCounts.working || 0) +
-			(stateCounts.review || 0) +
-			(stateCounts.completed || 0) +
-			(stateCounts.starting || 0) +
-			(stateCounts.idle || 0);
-	});
-
 	// Urgency-reactive border color: needs-input → purple, review → cyan, working → amber, idle → gray
 	const urgencyBorderColor = $derived.by(() => {
 		if (!stateCounts) return 'oklch(0.35 0.02 250)';
@@ -239,10 +230,11 @@
 		completedTasksInFlight = true;
 
 		try {
-			// Only fetch tasks closed today — avoids pulling entire closed task history
-			const today = new Date();
-			today.setHours(0, 0, 0, 0);
-			const closedAfter = today.toISOString();
+			// Fetch 90 days of closed tasks — needed for streak calculation and today's badge count
+			const ninetyDaysAgo = new Date();
+			ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+			ninetyDaysAgo.setHours(0, 0, 0, 0);
+			const closedAfter = ninetyDaysAgo.toISOString();
 			const response = await fetch(`/api/tasks?status=closed&closedAfter=${encodeURIComponent(closedAfter)}`, {
 				signal: controller.signal
 			});
@@ -252,10 +244,14 @@
 
 			allClosedTasks = data.tasks || [];
 
-			// Server already filters by closedAfter — just sort
-			const completedToday = [...allClosedTasks].sort((a: CompletedTask, b: CompletedTask) =>
-				new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-			);
+			// Filter to today for badge count and milestone detection
+			const today = new Date();
+			today.setHours(0, 0, 0, 0);
+			const completedToday = allClosedTasks
+				.filter((t: CompletedTask) => t.updated_at && new Date(t.updated_at) >= today)
+				.sort((a: CompletedTask, b: CompletedTask) =>
+					new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+				);
 
 			const newCount = completedToday.length;
 
@@ -584,12 +580,15 @@
 			--escalate-color: {urgencyLevel === 3 ? 'oklch(0.70 0.20 280 / 0.8)' : urgencyLevel === 2 ? 'oklch(0.70 0.18 200 / 0.8)' : 'oklch(0.70 0.15 85 / 0.8)'};
 		"
 	>
-		<!-- Active session count -->
+		<!-- Active session count — dot dims to neutral when a fault is active so the purple chip reads as sole signal -->
 		{#if activeAgentCount > 0}
+			{@const hasFault = stateCounts && stateCounts.needsInput > 0}
 			<div class="flex items-center gap-1" title="{activeAgentCount} active session{activeAgentCount > 1 ? 's' : ''}">
 				<span class="relative flex h-2 w-2">
-					<span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style="background: oklch(0.70 0.18 150);"></span>
-					<span class="relative inline-flex rounded-full h-2 w-2" style="background: oklch(0.70 0.18 150);"></span>
+					{#if !hasFault}
+						<span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style="background: oklch(0.70 0.18 150);"></span>
+					{/if}
+					<span class="relative inline-flex rounded-full h-2 w-2" style="background: {hasFault ? 'oklch(0.45 0.02 250)' : 'oklch(0.70 0.18 150)'};"></span>
 				</span>
 				<span class="mt-0.5 text-[10px] font-bold">{activeAgentCount}</span>
 			</div>

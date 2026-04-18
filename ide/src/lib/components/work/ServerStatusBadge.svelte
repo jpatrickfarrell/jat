@@ -49,6 +49,7 @@
 	let executingId = $state<string | null>(null);
 	let actionError = $state<string | null>(null);
 	let confirmingAction = $state<ServerStateAction | null>(null);
+	let successFlash = $state(false);
 	let dropdownRef: HTMLDivElement | null = null;
 
 	// Get config from centralized statusColors.ts
@@ -126,6 +127,8 @@
 		executingId = action.id;
 		try {
 			await onAction?.(action.id);
+			successFlash = true;
+			setTimeout(() => { successFlash = false; }, 1200);
 			closeDropdown();
 		} catch (e) {
 			actionError = e instanceof Error ? e.message : 'Action failed';
@@ -162,6 +165,7 @@
 			? 'text-[11px] px-2 py-0.5 hover:bg-white/5 rounded focus:ring-1 focus:ring-current focus:ring-offset-1'
 			: 'text-[10px] px-1.5 pt-0.5 rounded hover:scale-105 hover:brightness-110 focus:ring-2 focus:ring-offset-1 focus:ring-offset-base-100'}"
 		class:animate-pulse={config.pulse && variant === 'badge'}
+		class:badge-success-flash={successFlash}
 		class:cursor-not-allowed={disabled}
 		class:opacity-50={disabled}
 		style={variant === 'integrated'
@@ -233,6 +237,7 @@
 							type="button"
 							onclick={() => (confirmingAction = null)}
 							class="flex-1 px-2 py-1 text-[11px] font-semibold rounded confirm-cancel"
+							role="menuitem"
 						>
 							Cancel
 						</button>
@@ -241,6 +246,7 @@
 							onclick={() => executeAction(confirmingAction!)}
 							class="flex-1 px-2 py-1 text-[11px] font-semibold rounded confirm-proceed text-error"
 							disabled={executingId !== null}
+							role="menuitem"
 						>
 							{#if executingId === confirmingAction.id}
 								<span class="loading loading-spinner loading-xs" aria-label="Running…"></span>
@@ -286,7 +292,7 @@
 
 			<!-- Inline error — stays open so user can retry -->
 			{#if actionError}
-				<div class="px-3 py-2 flex items-start gap-2 action-error" role="alert" transition:fly={{ y: -4, duration: 100 }}>
+				<div class="px-3 py-2 flex items-start gap-2 action-error" role="alert" transition:fade={{ duration: 120 }}>
 					<svg class="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
 					</svg>
@@ -313,6 +319,17 @@
 </div>
 
 <style>
+	/* Success flash on badge after action completes */
+	@keyframes badge-success {
+		0%   { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-success) 0%, transparent); }
+		25%  { box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-success) 60%, transparent); }
+		100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-success) 0%, transparent); }
+	}
+
+	.badge-success-flash {
+		animation: badge-success 1.2s ease-out forwards;
+	}
+
 	/* Port status indicators */
 	.port-active {
 		background: var(--color-success);

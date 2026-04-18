@@ -310,39 +310,51 @@
 	// Optimistic state overrides - for instant UI feedback before WS catches up
 	let optimisticStates = $state<Map<string, string>>(new Map());
 
-	// Activity pulse: rolling delta of output line counts per agent (last 10 polls)
+	// Activity pulse: rolling delta of output content per agent (last 10 polls)
+	// Uses tail-content comparison, not line count — works with fixed tmux scrollback
 	let activityHistories = $state<Map<string, number[]>>(new Map());
-	let activityLastCounts = $state<Map<string, number>>(new Map());
+	let activityLastTails = $state<Map<string, string>>(new Map());
 
 	$effect(() => {
-		// Reactive reads: agentOutputs, sessions
 		const currentSessions = sessions;
 		const currentOutputs = agentOutputs;
 
-		// Untracked reads to avoid dependency loops on our own state
 		const prevHistories = untrack(() => activityHistories);
-		const prevCounts = untrack(() => activityLastCounts);
+		const prevTails = untrack(() => activityLastTails);
 
 		const newHistories = new Map(prevHistories);
-		const newCounts = new Map(prevCounts);
+		const newTails = new Map(prevTails);
 		let changed = false;
 
 		for (const session of currentSessions) {
 			const agentName = getAgentName(session.name);
 			const output = currentOutputs.get(agentName) || '';
-			const currentCount = output ? output.split('\n').length : 0;
-			const prev = newCounts.get(agentName) ?? currentCount;
-			const delta = Math.max(0, currentCount - prev);
+			// Last 300 raw chars as content fingerprint — changes even when line count stays constant
+			const tail = output.slice(-300);
+			const prevTail = prevTails.get(agentName);
+
+			let delta = 0;
+			if (prevTail !== undefined && tail !== prevTail) {
+				const addedLen = Math.max(0, tail.length - prevTail.length);
+				const overlapLen = Math.min(tail.length, prevTail.length);
+				let diffCount = addedLen;
+				for (let i = 0; i < overlapLen; i += 8) {
+					if (tail[tail.length - overlapLen + i] !== prevTail[prevTail.length - overlapLen + i]) {
+						diffCount++;
+					}
+				}
+				delta = Math.min(diffCount, 20);
+			}
 
 			const prevHistory = newHistories.get(agentName) ?? [];
 			newHistories.set(agentName, [...prevHistory, delta].slice(-10));
-			newCounts.set(agentName, currentCount);
+			newTails.set(agentName, tail);
 			changed = true;
 		}
 
 		if (changed) {
 			activityHistories = newHistories;
-			activityLastCounts = newCounts;
+			activityLastTails = newTails;
 		}
 	});
 
@@ -2100,6 +2112,7 @@
 			<MobileSessionDrawer
 					sessionName={fullscreenSession}
 					agentName={fsAgentName}
+					activityData={activityHistories.get(fsAgentName) ?? []}
 					task={fsTask as any}
 					sessionState={fsState}
 					project={fsSession?.project || null}

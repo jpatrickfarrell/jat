@@ -47,30 +47,47 @@
 	// Delete confirmation state
 	let confirmDeleteIndex = $state<number | null>(null);
 
-	// Block type menu options — control types expanded for direct selection
-	type BlockMenuOption = { type: CanvasBlockType; label: string; icon: string; desc: string; controlType?: string };
+	// Block delete undo
+	let deletedBlock = $state<{ block: CanvasBlock; index: number } | null>(null);
+	let deletedBlockTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Block type menu options — grouped by category, labels match toolbar
+	type BlockMenuOption = { type: CanvasBlockType; label: string; desc: string; controlType?: string; category: string };
 	const blockTypes: BlockMenuOption[] = [
-		{ type: 'text', label: 'Text', icon: 'T', desc: 'Rich text content' },
-		{ type: 'table_view', label: 'Table View', icon: '⊞', desc: 'Embed a data table' },
-		{ type: 'control', label: 'Select', icon: '▾', desc: 'Dropdown from data table', controlType: 'select' },
-		{ type: 'control', label: 'Slider', icon: '≡', desc: 'Numeric range slider', controlType: 'slider' },
-		{ type: 'control', label: 'Date', icon: '◷', desc: 'Date or date range picker', controlType: 'date' },
-		{ type: 'control', label: 'Text Input', icon: 'A', desc: 'Free-form text entry', controlType: 'text_input' },
-		{ type: 'control', label: 'Checkbox', icon: '☑', desc: 'Boolean toggle', controlType: 'checkbox' },
-		{ type: 'formula', label: 'Formula', icon: '=', desc: 'Computed value' },
-		{ type: 'action', label: 'Action', icon: '▶', desc: 'Clickable action button' },
-		{ type: 'divider', label: 'Divider', icon: '—', desc: 'Horizontal separator' },
+		{ type: 'text',       label: 'text',   desc: 'Write text, markdown, or notes',       category: 'Content'  },
+		{ type: 'divider',    label: 'rule',   desc: 'Horizontal separator',                  category: 'Content'  },
+		{ type: 'table_view', label: 'table',  desc: 'View and filter data from a table',     category: 'Data'     },
+		{ type: 'control',    label: 'select', desc: 'Dropdown filter linked to a table',     controlType: 'select',     category: 'Controls' },
+		{ type: 'control',    label: 'slider', desc: 'Numeric range filter',                  controlType: 'slider',     category: 'Controls' },
+		{ type: 'control',    label: 'date',   desc: 'Date or date range picker',             controlType: 'date',       category: 'Controls' },
+		{ type: 'control',    label: 'input',  desc: 'Free-form text entry',                  controlType: 'text_input', category: 'Controls' },
+		{ type: 'control',    label: 'check',  desc: 'Boolean toggle',                        controlType: 'checkbox',   category: 'Controls' },
+		{ type: 'formula',    label: 'fx',     desc: 'Calculate a value from other fields',   category: 'Logic'    },
+		{ type: 'action',     label: 'btn',    desc: 'Clickable action button',               category: 'Logic'    },
 	];
 
-	// Block type icons for the toolbar
-	const blockTypeIcons: Record<string, string> = {
-		text: 'T',
-		table_view: '⊞',
-		control: '◉',
-		formula: '=',
-		action: '▶',
-		divider: '—',
+	// Block type labels for the toolbar
+	const blockTypeLabels: Record<string, string> = {
+		text: 'text',
+		table_view: 'table',
+		formula: 'fx',
+		action: 'btn',
+		divider: 'rule',
 	};
+	const controlTypeLabels: Record<string, string> = {
+		select: 'select',
+		slider: 'slider',
+		date: 'date',
+		text_input: 'input',
+		checkbox: 'check',
+	};
+	function getBlockLabel(block: CanvasBlock): string {
+		if (block.type === 'control') {
+			const ct = (block as any).controlType as string | undefined;
+			return ct ? (controlTypeLabels[ct] ?? ct) : 'ctrl';
+		}
+		return blockTypeLabels[block.type] ?? block.type;
+	}
 
 	function startEditTitle() {
 		if (!page) return;
@@ -241,21 +258,32 @@
 		if (!block) return;
 
 		if (isBlockEmpty(block)) {
-			// Delete immediately for empty blocks
 			const blocks = [...page.blocks];
 			blocks.splice(index, 1);
 			onUpdatePage(blocks);
 			confirmDeleteIndex = null;
 		} else if (confirmDeleteIndex === index) {
-			// Second click = confirm
+			// Store for 8-second undo
+			deletedBlock = { block, index };
+			if (deletedBlockTimer) clearTimeout(deletedBlockTimer);
+			deletedBlockTimer = setTimeout(() => { deletedBlock = null; }, 8000);
 			const blocks = [...page.blocks];
 			blocks.splice(index, 1);
 			onUpdatePage(blocks);
 			confirmDeleteIndex = null;
 		} else {
-			// First click on non-empty = show confirmation
 			confirmDeleteIndex = index;
 		}
+	}
+
+	function undoDeleteBlock() {
+		if (!deletedBlock || !page) return;
+		const { block, index } = deletedBlock;
+		deletedBlock = null;
+		if (deletedBlockTimer) { clearTimeout(deletedBlockTimer); deletedBlockTimer = null; }
+		const blocks = [...page.blocks];
+		blocks.splice(Math.min(index, blocks.length), 0, block);
+		onUpdatePage(blocks);
 	}
 
 	function handleBlockKeydown(e: KeyboardEvent, index: number) {
@@ -273,6 +301,32 @@
 				blocks.splice(index, 1);
 				onUpdatePage(blocks);
 			}
+		}
+
+		// Alt+↑/↓ — move block up/down
+		if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+			const target = e.target as HTMLElement;
+			if (target.closest('textarea') || target.closest('input') || target.closest('[contenteditable]')) return;
+			e.preventDefault();
+			const blocks = [...page.blocks];
+			if (e.key === 'ArrowUp' && index > 0) {
+				[blocks[index - 1], blocks[index]] = [blocks[index], blocks[index - 1]];
+				onUpdatePage(blocks);
+			} else if (e.key === 'ArrowDown' && index < blocks.length - 1) {
+				[blocks[index], blocks[index + 1]] = [blocks[index + 1], blocks[index]];
+				onUpdatePage(blocks);
+			}
+			return;
+		}
+
+		// Alt+D — duplicate block
+		if (e.altKey && (e.key === 'd' || e.key === 'D')) {
+			const target = e.target as HTMLElement;
+			if (target.closest('textarea') || target.closest('input') || target.closest('[contenteditable]')) return;
+			e.preventDefault();
+			const blocks = [...page.blocks];
+			blocks.splice(index + 1, 0, { ...block, id: generateId() });
+			onUpdatePage(blocks);
 		}
 	}
 
@@ -296,59 +350,46 @@
 			<p class="text-sm" style="color: oklch(0.45 0.02 250);">Select a canvas page to start editing</p>
 		</div>
 	{:else}
+		{@const isKB = !!page.always_inject}
 		<!-- Page content -->
 		<div class="flex-1 overflow-y-auto">
 			<div class="max-w-3xl mx-auto px-8 py-6">
-				<!-- Page title (inline editable) -->
-				<div class="mb-2">
-					{#if editingTitle}
-						<input
-							type="text"
-							bind:this={titleInputEl}
-							bind:value={titleValue}
-							onblur={commitTitle}
-							onkeydown={handleTitleKeydown}
-							class="w-full bg-transparent border-none outline-none text-2xl font-bold"
-							style="color: oklch(0.90 0.02 250);"
-						/>
-					{:else}
-						<!-- svelte-ignore a11y_click_events_have_key_events -->
-						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-						<h1
-							class="text-2xl font-bold cursor-text transition-colors duration-150"
-							style="color: oklch(0.90 0.02 250);"
-							onclick={startEditTitle}
-							title="Click to edit title"
-						>
-							{page.name}
-						</h1>
-					{/if}
+				<!-- Page title (inline editable) + Always Inject badge -->
+				<div class="mb-6 flex items-start gap-2">
+					<div class="flex-1 min-w-0">
+						{#if editingTitle}
+							<input
+								type="text"
+								bind:this={titleInputEl}
+								bind:value={titleValue}
+								onblur={commitTitle}
+								onkeydown={handleTitleKeydown}
+								class="w-full bg-transparent border-none outline-none text-2xl font-bold"
+								style="color: oklch(0.90 0.02 250);"
+							/>
+						{:else}
+							<!-- svelte-ignore a11y_click_events_have_key_events -->
+							<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+							<h1
+								class="text-2xl font-bold cursor-text transition-colors duration-150"
+								style="color: oklch(0.90 0.02 250);"
+								onclick={startEditTitle}
+								title="Click to edit title"
+							>
+								{page.name}
+							</h1>
+						{/if}
+					</div>
+					<!-- Always Inject toggle — compact badge in title row -->
+					<button
+						class="mt-1.5 shrink-0 text-[9px] font-mono px-1.5 py-0.5 rounded transition-all duration-150 cursor-pointer"
+						style="background: {isKB ? 'oklch(0.45 0.15 145 / 0.3)' : 'oklch(0.22 0.01 250)'}; color: {isKB ? 'oklch(0.75 0.15 145)' : 'oklch(0.50 0.01 250)'}; border: 1px solid {isKB ? 'oklch(0.55 0.15 145 / 0.4)' : 'oklch(0.30 0.01 250)'};"
+						onclick={() => onToggleBase(!isKB)}
+						title={isKB ? 'Always Inject: content included in every agent prompt — click to disable' : 'Enable Always Inject: content will be included in every agent prompt'}
+					>
+						{isKB ? 'INJECT' : 'inject'}
+					</button>
 				</div>
-
-				<!-- Knowledge Base toggle -->
-				{#if true}
-				{@const isKB = !!page.always_inject}
-				<div class="mb-6 flex items-center gap-2">
-					<label class="canvas-base-toggle">
-						<input
-							type="checkbox"
-							checked={isKB}
-							onchange={() => onToggleBase(!isKB)}
-						/>
-						<span class="toggle-track">
-							<span class="toggle-thumb"></span>
-						</span>
-						<span class="toggle-label" class:active={isKB}>
-							{isKB ? 'Always Inject' : 'Inject into Agent Prompts'}
-						</span>
-					</label>
-					{#if isKB}
-						<span class="text-[10px] px-1.5 py-0.5 rounded" style="background: oklch(0.65 0.20 145 / 0.15); color: oklch(0.70 0.18 145); border: 1px solid oklch(0.65 0.20 145 / 0.3);">
-							Injected into agent prompts
-						</span>
-					{/if}
-				</div>
-				{/if}
 
 				{#if page.blocks.length === 0}
 					<!-- Empty state: prominent add block button -->
@@ -366,9 +407,12 @@
 							<!-- svelte-ignore a11y_click_events_have_key_events -->
 							<!-- svelte-ignore a11y_no_static_element_interactions -->
 							<div class="add-block-menu add-block-menu-empty" onclick={(e) => e.stopPropagation()}>
-								{#each blockTypes as bt}
+								{#each blockTypes as bt, bi}
+									{#if bi === 0 || bt.category !== blockTypes[bi - 1].category}
+										<div class="text-[9px] font-mono uppercase tracking-wider px-2 pt-2 pb-0.5" style="color: oklch(0.45 0.06 250);">{bt.category}</div>
+									{/if}
 									<button onclick={() => addBlock(bt.type, 0, bt.controlType)}>
-										<span class="block-type-icon">{bt.icon}</span>
+										
 										<div>
 											<div class="text-xs font-medium" style="color: oklch(0.80 0.02 250);">{bt.label}</div>
 											<div class="text-[10px]" style="color: oklch(0.45 0.02 250);">{bt.desc}</div>
@@ -381,7 +425,7 @@
 				{:else}
 					<!-- Drop zone at top -->
 					<div
-						class="add-block-zone"
+						class="add-block-zone last-zone"
 						class:drop-indicator-active={draggedIndex !== null && dropTargetIndex === 0 && draggedIndex !== 0}
 						ondragover={(e) => handleZoneDragOver(e, 0)}
 						ondragleave={handleZoneDragLeave}
@@ -401,9 +445,12 @@
 							<!-- svelte-ignore a11y_click_events_have_key_events -->
 							<!-- svelte-ignore a11y_no_static_element_interactions -->
 							<div class="add-block-menu" onclick={(e) => e.stopPropagation()}>
-								{#each blockTypes as bt}
+								{#each blockTypes as bt, bi}
+									{#if bi === 0 || bt.category !== blockTypes[bi - 1].category}
+										<div class="text-[9px] font-mono uppercase tracking-wider px-2 pt-2 pb-0.5" style="color: oklch(0.45 0.06 250);">{bt.category}</div>
+									{/if}
 									<button onclick={() => addBlock(bt.type, 0, bt.controlType)}>
-										<span class="block-type-icon">{bt.icon}</span>
+										
 										<div>
 											<div class="text-xs font-medium" style="color: oklch(0.80 0.02 250);">{bt.label}</div>
 											<div class="text-[10px]" style="color: oklch(0.45 0.02 250);">{bt.desc}</div>
@@ -437,7 +484,7 @@
 									draggable="true"
 									ondragstart={(e) => handleDragStart(e, i)}
 									ondragend={handleDragEnd}
-									title="Drag to reorder"
+									title="Drag to reorder · Alt+↑/↓ to move"
 								>
 									<svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 16 16" class="w-3.5 h-3.5">
 										<circle cx="5.5" cy="3.5" r="1.25" />
@@ -450,7 +497,7 @@
 								</div>
 
 								<!-- Block type indicator -->
-								<span class="toolbar-type-icon">{blockTypeIcons[block.type] || '?'}</span>
+								<span class="toolbar-type-icon">{getBlockLabel(block)}</span>
 
 								<!-- Spacer -->
 								<div class="flex-1"></div>
@@ -482,6 +529,7 @@
 						<div
 							class="add-block-zone"
 							class:drop-indicator-active={draggedIndex !== null && dropTargetIndex === i + 1 && draggedIndex !== i && draggedIndex !== i + 1}
+							class:last-zone={i === page.blocks.length - 1}
 							ondragover={(e) => handleZoneDragOver(e, i + 1)}
 							ondragleave={handleZoneDragLeave}
 							ondrop={(e) => handleZoneDrop(e, i + 1)}
@@ -500,9 +548,12 @@
 								<!-- svelte-ignore a11y_click_events_have_key_events -->
 								<!-- svelte-ignore a11y_no_static_element_interactions -->
 								<div class="add-block-menu" onclick={(e) => e.stopPropagation()}>
-									{#each blockTypes as bt}
+									{#each blockTypes as bt, bi}
+										{#if bi === 0 || bt.category !== blockTypes[bi - 1].category}
+											<div class="text-[9px] font-mono uppercase tracking-wider px-2 pt-2 pb-0.5" style="color: oklch(0.45 0.06 250);">{bt.category}</div>
+										{/if}
 										<button onclick={() => addBlock(bt.type, i + 1, bt.controlType)}>
-											<span class="block-type-icon">{bt.icon}</span>
+											
 											<div>
 												<div class="text-xs font-medium" style="color: oklch(0.80 0.02 250);">{bt.label}</div>
 												<div class="text-[10px]" style="color: oklch(0.45 0.02 250);">{bt.desc}</div>
@@ -513,6 +564,14 @@
 							{/if}
 						</div>
 					{/each}
+				{/if}
+
+				<!-- Block undo strip -->
+				{#if deletedBlock}
+					<div class="flex items-center justify-between gap-2 mt-4 px-3 py-2 rounded-lg text-xs" style="background: oklch(0.20 0.01 250); border: 1px solid oklch(0.28 0.02 250); color: oklch(0.65 0.02 250);">
+						<span><span class="font-mono" style="color: oklch(0.55 0.06 250);">{getBlockLabel(deletedBlock.block)}</span> block deleted</span>
+						<button class="btn btn-xs btn-ghost font-mono gap-1" style="color: oklch(0.70 0.18 200 / 0.80);" onclick={undoDeleteBlock}>↩ undo</button>
+					</div>
 				{/if}
 			</div>
 		</div>
@@ -550,7 +609,7 @@
 		flex-direction: column;
 		align-items: center;
 		gap: 2px;
-		opacity: 0;
+		opacity: 0.2;
 		transition: opacity 0.15s;
 		z-index: 10;
 	}
@@ -631,6 +690,10 @@
 		transition: height 0.15s;
 	}
 
+	.add-block-zone.last-zone .add-block-btn {
+		opacity: 0.65;
+	}
+
 	.add-block-zone.drop-indicator-active {
 		height: 4px;
 		background: oklch(0.65 0.15 200);
@@ -702,20 +765,6 @@
 
 	.add-block-menu button:hover {
 		background: oklch(0.28 0.02 250);
-	}
-
-	.block-type-icon {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 24px;
-		height: 24px;
-		border-radius: 4px;
-		font-size: 12px;
-		font-weight: 600;
-		background: oklch(0.25 0.02 250);
-		color: oklch(0.65 0.10 240);
-		flex-shrink: 0;
 	}
 
 	/* Empty state add block */

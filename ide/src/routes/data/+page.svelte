@@ -7,11 +7,10 @@
 	 * - Right: Table view with inline editing, add/delete rows, SQL console
 	 */
 
-	import { tick } from 'svelte';
+	import { tick, onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { reveal } from '$lib/actions/reveal';
 	import { saveColumnSettings as saveColumnSettingsUtil, loadColumnSettings as loadColumnSettingsUtil } from '$lib/utils/columnStorage';
 	import { toggleSort as toggleSortUtil } from '$lib/utils/tableSort';
 	import { columnResize } from '$lib/actions/columnResize';
@@ -28,6 +27,7 @@
 	import type { FormulaConfig, RelationConfig, TableConditionalFormat } from '$lib/types/dataTable';
 	import { getCellStyle, cellStyleToCSS, computeColumnRange } from '$lib/utils/conditionalFormat';
 	import ConditionalFormatPanel from '$lib/components/data/ConditionalFormatPanel.svelte';
+	import { swipe } from '$lib/actions/swipe';
 
 	interface TableInfo {
 		name: string;
@@ -77,8 +77,8 @@
 		'name-desc': 'Z–A',
 		'rows-desc': 'Most rows',
 		'rows-asc': 'Fewest rows',
-		'newest': 'Newest',
-		'oldest': 'Oldest',
+		'newest': 'Created (newest)',
+		'oldest': 'Created (oldest)',
 	};
 
 	// State — selectedProject synced from URL ?project= param (set by TopBar ProjectSelector)
@@ -121,6 +121,11 @@
 	let isSystemTableSelected = $derived(
 		selectedTable != null && systemTables.some(t => t.name === selectedTable)
 	);
+	const selectedTableDisplayName = $derived.by(() => {
+		if (!selectedTable) return null;
+		const t = [...tables, ...systemTables].find(t => t.name === selectedTable);
+		return t?.display_name || selectedTable;
+	});
 	let schema = $state<ColumnInfo[]>([]);
 	let rows = $state<any[]>([]);
 	let totalRows = $state(0);
@@ -274,6 +279,7 @@
 
 	// Create table mode
 	let createMode = $state<'manual' | 'csv' | 'json' | 'sql' | 'external'>('manual');
+	let showImportDropdown = $state(false);
 	let createCsvText = $state('');
 	let createCsvFormat = $state<'auto' | 'tsv' | 'csv'>('auto');
 	let createJsonText = $state('');
@@ -486,7 +492,15 @@
 	let editingSelectedCell = $state(false);
 	let initialEditChar = $state<string | null>(null);
 	let copiedCell = $state<{ rowIdx: number; colIdx: number; value: any } | null>(null);
-	let undoStack = $state<Array<{ type?: 'cell' | 'add-row'; rowid: number; column: string; oldValue: any }>>([]);
+	type UndoEntry =
+		| { type: 'cell'; rowid: number; column: string; oldValue: any }
+		| { type: 'add-row'; rowid: number; column: string; oldValue: null }
+		| { type: 'add-column'; column: string; sqliteType: string; semanticType: string }
+		| { type: 'delete-column'; column: string; sqliteType: string; semanticType: string; values: Array<{ rowid: number; value: any }> }
+		| { type: 'rename-column'; oldName: string; newName: string }
+		| { type: 'duplicate-column'; column: string }
+		| { type: 'rename-table'; oldName: string; newName: string };
+	let undoStack = $state<UndoEntry[]>([]);
 
 	function cellKey(rowIdx: number, colIdx: number) { return `${rowIdx}:${colIdx}`; }
 	function isCellInSelection(rowIdx: number, colIdx: number) {
@@ -508,6 +522,7 @@
 	let sqlResult = $state<any>(null);
 	let sqlError = $state<string | null>(null);
 	let sqlRunning = $state(false);
+	let sqlTextareaRef = $state<HTMLTextAreaElement | undefined>(undefined);
 
 	// Import modal
 	let showImportModal = $state(false);
@@ -1390,10 +1405,112 @@
 		}
 	}
 
-	function cycleTableSort() {
-		const idx = TABLE_SORT_CYCLE.indexOf(tableSortMode);
-		tableSortMode = TABLE_SORT_CYCLE[(idx + 1) % TABLE_SORT_CYCLE.length];
+	let tableSortDropdownOpen = $state(false);
+
+	// Sidebar resize
+	const SIDEBAR_WIDTH_KEY = 'jat-data-sidebar-width';
+	const SIDEBAR_COLLAPSED_KEY = 'jat-data-sidebar-collapsed';
+	const SIDEBAR_MIN = 160;
+	const SIDEBAR_MAX = 400;
+	const SIDEBAR_COLLAPSE_THRESHOLD = 110;
+	let sidebarWidth = $state(
+		browser ? Number(localStorage.getItem(SIDEBAR_WIDTH_KEY)) || 200 : 200
+	);
+	let sidebarCollapsed = $state(
+		browser ? localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true' : false
+	);
+	let resizing = $state(false);
+
+	function onSidebarPointerDown(e: PointerEvent) {
+		e.preventDefault();
+		resizing = true;
+		document.body.classList.add('resizing-sidebar');
+		const startX = e.clientX;
+		const startWidth = sidebarWidth;
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		// Store startX/startWidth on the element for move handler
+		(e.currentTarget as HTMLElement).dataset.startX = String(startX);
+		(e.currentTarget as HTMLElement).dataset.startWidth = String(startWidth);
 	}
+
+	function onSidebarPointerMove(e: PointerEvent) {
+		if (!resizing) return;
+		const startX = Number((e.currentTarget as HTMLElement).dataset.startX);
+		const startWidth = Number((e.currentTarget as HTMLElement).dataset.startWidth);
+		const newWidth = startX + (e.clientX - startX);
+		const delta = e.clientX - startX;
+		const computed = startWidth + delta;
+		if (computed < SIDEBAR_COLLAPSE_THRESHOLD) {
+			sidebarCollapsed = true;
+			if (browser) localStorage.setItem(SIDEBAR_COLLAPSED_KEY, 'true');
+			return;
+		}
+		sidebarCollapsed = false;
+		const clamped = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, computed));
+		sidebarWidth = clamped;
+		if (browser) localStorage.setItem(SIDEBAR_COLLAPSED_KEY, 'false');
+	}
+
+	function onSidebarPointerUp(e: PointerEvent) {
+		resizing = false;
+		document.body.classList.remove('resizing-sidebar');
+		if (browser) {
+			localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth));
+			localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(sidebarCollapsed));
+		}
+		(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+	}
+
+	function expandSidebar() {
+		sidebarCollapsed = false;
+		if (browser) localStorage.setItem(SIDEBAR_COLLAPSED_KEY, 'false');
+	}
+
+	// Ctrl+\ toggles the table list panel
+	onMount(() => {
+		function handlePanelToggle(e: KeyboardEvent) {
+			if (e.ctrlKey && e.key === '\\') {
+				e.preventDefault();
+				sidebarCollapsed = !sidebarCollapsed;
+				if (browser) localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(sidebarCollapsed));
+			}
+		}
+		window.addEventListener('keydown', handlePanelToggle, true);
+		return () => window.removeEventListener('keydown', handlePanelToggle, true);
+	});
+
+	function setTableSort(mode: TableSortMode) {
+		tableSortMode = mode;
+		tableSortDropdownOpen = false;
+	}
+
+	function handleSortDropdownOutside(e: MouseEvent) {
+		const el = document.querySelector('.sort-dropdown-container');
+		if (el && !el.contains(e.target as Node)) {
+			tableSortDropdownOpen = false;
+		}
+	}
+
+	function handleImportDropdownOutside(e: MouseEvent) {
+		const el = document.querySelector('.create-mode-import-wrapper');
+		if (el && !el.contains(e.target as Node)) {
+			showImportDropdown = false;
+		}
+	}
+
+	$effect(() => {
+		if (tableSortDropdownOpen) {
+			document.addEventListener('mousedown', handleSortDropdownOutside);
+			return () => document.removeEventListener('mousedown', handleSortDropdownOutside);
+		}
+	});
+
+	$effect(() => {
+		if (showImportDropdown) {
+			document.addEventListener('mousedown', handleImportDropdownOutside);
+			return () => document.removeEventListener('mousedown', handleImportDropdownOutside);
+		}
+	});
 
 	// Drop table
 	async function handleDropTable(tableName: string) {
@@ -1471,6 +1588,7 @@
 			});
 			const data = await res.json();
 			if (res.ok) {
+				undoStack = [...undoStack, { type: 'rename-table', oldName: tableName, newName: newName.trim() }];
 				successToast(`Table renamed to "${newName.trim()}"`);
 				if (selectedTable === tableName) {
 					selectedTable = newName.trim();
@@ -1886,6 +2004,8 @@
 				undoStack = undoStack.slice(0, -1);
 				if (entry.type === 'add-row') {
 					undoDeleteRow(entry.rowid);
+				} else if (entry.type === 'add-column' || entry.type === 'delete-column' || entry.type === 'rename-column' || entry.type === 'duplicate-column' || entry.type === 'rename-table') {
+					colUndoRestore(entry);
 				} else {
 					handleCellSave(entry.rowid, entry.column, entry.oldValue, true);
 				}
@@ -2126,7 +2246,7 @@
 		}
 		// Push to undo stack before changing (skip when called from undo itself)
 		if (row && !skipUndo) {
-			undoStack = [...undoStack, { rowid, column, oldValue: row[column] }];
+			undoStack = [...undoStack, { type: 'cell', rowid, column, oldValue: row[column] }];
 		}
 		// Optimistic local update — avoids table blink from tableDataLoading spinner
 		if (row) {
@@ -2318,6 +2438,19 @@
 	}
 
 	// SQL Console
+	function insertSqlAtCursor(text: string) {
+		const ta = sqlTextareaRef;
+		if (!ta) { sqlText = sqlText + (sqlText && !sqlText.endsWith(' ') ? ' ' : '') + text; return; }
+		const start = ta.selectionStart ?? sqlText.length;
+		const end = ta.selectionEnd ?? sqlText.length;
+		const before = sqlText.slice(0, start);
+		const after = sqlText.slice(end);
+		const needsSpace = before.length > 0 && !before.endsWith(' ');
+		sqlText = before + (needsSpace ? ' ' : '') + text + after;
+		const newPos = start + (needsSpace ? 1 : 0) + text.length;
+		tick().then(() => { if (ta) { ta.selectionStart = ta.selectionEnd = newPos; ta.focus(); } });
+	}
+
 	async function runSql(mode: 'query' | 'exec') {
 		if (!selectedProject || !sqlText.trim()) return;
 		sqlRunning = true;
@@ -2736,6 +2869,48 @@
 		}
 	}
 
+	async function snapshotColumnValues(colName: string): Promise<Array<{ rowid: number; value: any }>> {
+		return rows.map(r => ({ rowid: r.rowid, value: r[colName] ?? null }));
+	}
+
+	async function colUndoRestore(entry: UndoEntry) {
+		if (!selectedProject || !selectedTable) return;
+		if (entry.type === 'add-column') {
+			await colOperation('delete', { column: entry.column });
+		} else if (entry.type === 'delete-column') {
+			const ok = await colOperation('add', { column: entry.column, sqliteType: entry.sqliteType, semanticType: entry.semanticType });
+			if (ok && entry.values.length > 0) {
+				try {
+					await fetch(`/api/data/tables/${encodeURIComponent(selectedTable)}/rows/batch-update`, {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ project: selectedProject, column: entry.column, updates: entry.values })
+					});
+					await fetchTableData();
+				} catch {
+					errorToast(`Column restored but data could not be recovered`);
+				}
+			}
+		} else if (entry.type === 'rename-column') {
+			await colOperation('rename', { column: entry.newName, newName: entry.oldName });
+		} else if (entry.type === 'duplicate-column') {
+			await colOperation('delete', { column: entry.column });
+		} else if (entry.type === 'rename-table') {
+			if (!selectedProject) return;
+			try {
+				await fetch(`/api/data/tables/${encodeURIComponent(entry.newName)}/rename`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ project: selectedProject, newName: entry.oldName })
+				});
+				if (selectedTable === entry.newName) selectedTable = entry.oldName;
+				await fetchTables();
+			} catch {
+				errorToast('Failed to undo rename');
+			}
+		}
+	}
+
 	function handleCtxSort(dir: 'ASC' | 'DESC') {
 		if (!ctxCol) return;
 		orderBy = ctxCol.name;
@@ -2756,17 +2931,19 @@
 		if (!name?.trim()) return;
 		const trimmed = name.trim();
 		const refCol = ctxCol?.name;
-		// Capture current column order BEFORE the add (fetchTableData will append new col at end)
 		const colsBefore = orderedColumns.map(c => c.name);
 		closeColContextMenu();
 		const ok = await colOperation('add', { column: trimmed, sqliteType, semanticType });
-		if (ok && refCol) {
-			const refIdx = colsBefore.indexOf(refCol);
-			if (refIdx !== -1) {
-				const insertIdx = position === 'before' ? refIdx : refIdx + 1;
-				colsBefore.splice(insertIdx, 0, trimmed);
-				columnOrder = colsBefore;
-				persistColumnOrder();
+		if (ok) {
+			undoStack = [...undoStack, { type: 'add-column', column: trimmed, sqliteType, semanticType }];
+			if (refCol) {
+				const refIdx = colsBefore.indexOf(refCol);
+				if (refIdx !== -1) {
+					const insertIdx = position === 'before' ? refIdx : refIdx + 1;
+					colsBefore.splice(insertIdx, 0, trimmed);
+					columnOrder = colsBefore;
+					persistColumnOrder();
+				}
 			}
 		}
 	}
@@ -2779,6 +2956,7 @@
 		mcAddColOpen = false;
 		const ok = await colOperation('add', { column: trimmed, sqliteType, semanticType });
 		if (ok) {
+			undoStack = [...undoStack, { type: 'add-column', column: trimmed, sqliteType, semanticType }];
 			columnOrder = [...colsBefore, trimmed];
 			persistColumnOrder();
 		}
@@ -2795,7 +2973,8 @@
 		const oldName = mcRenamingCol;
 		mcRenamingCol = null;
 		if (!newName || newName === oldName) return;
-		await colOperation('rename', { column: oldName, newName });
+		const ok = await colOperation('rename', { column: oldName, newName });
+		if (ok) undoStack = [...undoStack, { type: 'rename-column', oldName, newName }];
 	}
 
 	function cancelMcRename() {
@@ -2803,8 +2982,13 @@
 	}
 
 	async function handleMcDeleteColumn(colName: string) {
-		if (!confirm(`Delete column "${colName}"? This cannot be undone.`)) return;
-		await colOperation('delete', { column: colName });
+		const colInfo = schema.find(c => c.name === colName);
+		const sqliteType = colInfo?.type || 'TEXT';
+		const semanticType = (columnMeta[colName]?.semanticType as string) || 'text';
+		if (!confirm(`Delete column "${colName}"? Press Ctrl+Z to undo.`)) return;
+		const values = await snapshotColumnValues(colName);
+		const ok = await colOperation('delete', { column: colName });
+		if (ok) undoStack = [...undoStack, { type: 'delete-column', column: colName, sqliteType, semanticType, values }];
 	}
 
 	function handleCtxHideColumn() {
@@ -2939,6 +3123,7 @@
 		closeColContextMenu();
 		const ok = await colOperation('duplicate', { sourceColumn: refCol, newName: trimmed });
 		if (ok) {
+			undoStack = [...undoStack, { type: 'duplicate-column', column: trimmed }];
 			const refIdx = colsBefore.indexOf(refCol);
 			if (refIdx !== -1) {
 				colsBefore.splice(refIdx + 1, 0, trimmed);
@@ -2950,10 +3135,13 @@
 
 	async function handleCtxRename() {
 		if (!ctxCol) return;
-		const name = prompt('New column name:', ctxCol.name);
-		if (!name?.trim() || name.trim() === ctxCol.name) return;
+		const oldName = ctxCol.name;
+		const name = prompt('New column name:', oldName);
+		if (!name?.trim() || name.trim() === oldName) return;
+		const newName = name.trim();
 		closeColContextMenu();
-		await colOperation('rename', { column: ctxCol.name, newName: name.trim() });
+		const ok = await colOperation('rename', { column: oldName, newName });
+		if (ok) undoStack = [...undoStack, { type: 'rename-column', oldName, newName }];
 	}
 
 	function handleCtxCopyColJson() {
@@ -3138,9 +3326,15 @@
 
 	async function handleCtxDelete() {
 		if (!ctxCol) return;
-		if (!confirm(`Delete column "${ctxCol.name}"? This cannot be undone.`)) return;
+		const colName = ctxCol.name;
+		const colInfo = schema.find(c => c.name === colName);
+		const sqliteType = colInfo?.type || 'TEXT';
+		const semanticType = (columnMeta[colName]?.semanticType as string) || 'text';
+		if (!confirm(`Delete column "${colName}"? Press Ctrl+Z to undo.`)) return;
+		const values = await snapshotColumnValues(colName);
 		closeColContextMenu();
-		await colOperation('delete', { column: ctxCol.name });
+		const ok = await colOperation('delete', { column: colName });
+		if (ok) undoStack = [...undoStack, { type: 'delete-column', column: colName, sqliteType, semanticType, values }];
 	}
 
 	// ─── Row context menu ────────────────────────────────────────
@@ -3304,50 +3498,73 @@
 {/snippet}
 
 <div class="data-page">
-	<!-- Header -->
-	<div class="page-header">
-		<div class="header-left">
-			<h1 class="page-title tracking-in-expand">Data Tables</h1>
-		</div>
-		{#if selectedProject}
-			<button class="btn btn-primary btn-sm gap-1.5" onclick={() => showCreateModal = true}>
-				<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-				</svg>
-				New Table
-			</button>
-		{/if}
-	</div>
-
 	{#if !selectedProject}
-		<div class="empty-state" use:reveal>
-			<div class="empty-icon">
-				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-					<path d="M3.75 5.25h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5M3.75 3v18M9.75 3v18M15.75 3v18M20.25 3v18" />
-				</svg>
-			</div>
-			<h3 class="empty-title">Select a project</h3>
-			<p class="empty-description">Choose a project to manage its data tables.</p>
+		<div class="empty-state-project">
+			<span class="empty-state-project-text">Select a project</span>
 		</div>
 	{:else}
 		<!-- Two-panel layout -->
 		<div class="panels">
 			<!-- Left: Table List -->
-			<div class="table-list-panel">
+			<div class="table-list-panel" class:collapsed={sidebarCollapsed} style="width: {sidebarCollapsed ? 0 : sidebarWidth}px; transition: {resizing ? 'none' : 'width 0.2s ease'};"
+				use:swipe={{ onSwipeLeft: () => { sidebarCollapsed = true; if (browser) localStorage.setItem(SIDEBAR_COLLAPSED_KEY, 'true'); }, allowRight: false, commitThreshold: 60, threshold: 40 }}>
 				<div class="panel-header">
 					<span class="panel-title">Tables</span>
 					<div class="panel-header-right">
-						<button
-							class="table-sort-btn"
-							title="Sort: {TABLE_SORT_LABELS[tableSortMode]}"
-							onclick={cycleTableSort}
-						>
-							<svg xmlns="http://www.w3.org/2000/svg" class="sort-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
-							</svg>
-							<span class="sort-label">{TABLE_SORT_LABELS[tableSortMode]}</span>
-						</button>
+						<div class="sort-dropdown-container">
+							<button
+								class="table-sort-btn"
+								class:active={tableSortDropdownOpen}
+								title="Sort tables"
+								onclick={() => tableSortDropdownOpen = !tableSortDropdownOpen}
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" class="sort-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+								</svg>
+								<span class="sort-label">{TABLE_SORT_LABELS[tableSortMode]}</span>
+							</button>
+							{#if tableSortDropdownOpen}
+								<div class="sort-dropdown">
+									{#each TABLE_SORT_CYCLE as mode}
+										<button
+											class="sort-dropdown-item"
+											class:active={tableSortMode === mode}
+											onclick={() => setTableSort(mode)}
+										>
+											{#if tableSortMode === mode}
+												<svg xmlns="http://www.w3.org/2000/svg" class="sort-check" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+												</svg>
+											{:else}
+												<span class="sort-check-spacer"></span>
+											{/if}
+											{TABLE_SORT_LABELS[mode]}
+										</button>
+									{/each}
+								</div>
+							{/if}
+						</div>
 						<span class="panel-count">{tables.length}</span>
+						<button
+							class="panel-add-btn"
+							onclick={() => showCreateModal = true}
+							title="New table"
+							aria-label="New table"
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+							</svg>
+						</button>
+						<button
+							class="panel-collapse-btn"
+							onclick={() => { sidebarCollapsed = true; if (browser) localStorage.setItem(SIDEBAR_COLLAPSED_KEY, 'true'); }}
+							title="Collapse panel (Ctrl+\)"
+							aria-label="Collapse table list"
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+							</svg>
+						</button>
 					</div>
 				</div>
 				{#if tablesLoading}
@@ -3358,7 +3575,7 @@
 					<div class="panel-empty">
 						<p>No tables yet</p>
 						<button class="btn-create-small" onclick={() => showCreateModal = true}>
-							Create first table
+							New table
 						</button>
 					</div>
 				{:else}
@@ -3380,6 +3597,9 @@
 											<path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
 										</svg>
 										<span class="view-name">{view.display_name || view.name}</span>
+										{#if view.filters?.length > 0}
+											<span class="view-filter-dot" title="{view.filters.length} filter{view.filters.length !== 1 ? 's' : ''} active"></span>
+										{/if}
 										<span class="fav-view-table">{view.table_name}</span>
 									</button>
 									<button
@@ -3442,6 +3662,9 @@
 														<path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
 													</svg>
 													<span class="view-name">{view.display_name || view.name}</span>
+													{#if view.filters?.length > 0}
+														<span class="view-filter-dot" title="{view.filters.length} filter{view.filters.length !== 1 ? 's' : ''} active"></span>
+													{/if}
 												</button>
 												<button
 													class="view-fav-btn"
@@ -3497,7 +3720,7 @@
 												onclick={() => selectTable(table.name)}
 											>
 												<span class="table-name">{table.display_name || table.name}</span>
-												<span class="system-badge-inline">read-only</span>
+												<span class="system-badge-inline">system</span>
 												<span class="table-meta">{table.row_count}</span>
 											</button>
 										</div>
@@ -3509,28 +3732,64 @@
 				{/if}
 			</div>
 
+			<!-- Resize handle / Expand tab -->
+			{#if sidebarCollapsed}
+				<button
+					class="expand-tab"
+					onclick={expandSidebar}
+					title="Expand table list (Ctrl+\\)"
+					aria-label="Expand table list panel"
+				>
+					<div class="expand-tab-inner">
+						<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+						</svg>
+					</div>
+				</button>
+			{:else}
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+				<div
+					class="panel-resize-handle"
+					class:resizing
+					onpointerdown={onSidebarPointerDown}
+					onpointermove={onSidebarPointerMove}
+					onpointerup={onSidebarPointerUp}
+					role="separator"
+					aria-orientation="vertical"
+					aria-valuenow={sidebarWidth}
+					aria-valuemin={SIDEBAR_MIN}
+					aria-valuemax={SIDEBAR_MAX}
+				></div>
+			{/if}
+
 			<!-- Right: Table View -->
 			<div class="table-view-panel">
 				{#if !selectedTable}
 					<div class="panel-placeholder">
 						{#if tables.length > 0}
-							<p>Select a table to view its data</p>
+							<div class="table-roster">
+								<div class="table-roster-header">Tables</div>
+								{#each sortedTables as table}
+									<button
+										class="table-roster-row"
+										onclick={() => selectTable(table.name)}
+									>
+										<span class="table-roster-name">{table.display_name || table.name}</span>
+										<span class="table-roster-meta">
+											<span class="table-roster-count">{table.row_count.toLocaleString()}</span>
+											{#if table.column_count > 0}
+												<span class="table-roster-cols">· {table.column_count}c</span>
+											{/if}
+										</span>
+									</button>
+								{/each}
+							</div>
 						{:else}
-							<div class="empty-state-inline" use:reveal>
-								<div class="empty-icon-small">
-									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-										<path d="M3.75 5.25h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5M3.75 3v18M9.75 3v18M15.75 3v18M20.25 3v18" />
-									</svg>
-								</div>
-								<h3 class="empty-title-small">No data tables</h3>
-								<p class="empty-description-small">
-									Create structured data tables for your project. Use them for grocery lists, inventories, logs, or any persistent data your agents need.
-								</p>
-								<button class="btn btn-primary btn-sm gap-1.5" onclick={() => showCreateModal = true}>
-									<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-									</svg>
-									Create Your First Table
+							<div class="empty-state-inline">
+								<p class="empty-inline-text">No tables</p>
+								<button class="btn-create-small" onclick={() => showCreateModal = true}>
+									New table
 								</button>
 							</div>
 						{/if}
@@ -3539,13 +3798,13 @@
 					<!-- Table header -->
 					<div class="view-header">
 						<div class="view-title-row">
-							<h2 class="view-title">{selectedTable}</h2>
+							<h2 class="view-title">{selectedTableDisplayName}</h2>
 							{#if isSystemTableSelected}
 								<span class="system-table-badge">
 									<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
 										<path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
 									</svg>
-									SYSTEM
+									system
 								</span>
 							{/if}
 							{#if selectedView}
@@ -3600,8 +3859,7 @@
 									<!-- svelte-ignore a11y_no_static_element_interactions -->
 									<div class="manage-cols-dropdown">
 										<div class="manage-cols-header">
-											<span class="manage-cols-title">Manage Columns</span>
-											<span class="manage-cols-count">{#if hiddenColumns.size > 0}{allColumnsManage.length - hiddenColumns.size}/{allColumnsManage.length} visible{:else}{allColumnsManage.length} total{/if}</span>
+											<span class="manage-cols-count">{#if hiddenColumns.size > 0}{allColumnsManage.length - hiddenColumns.size}/{allColumnsManage.length} visible{:else}{allColumnsManage.length} columns{/if}</span>
 										</div>
 										<div class="manage-cols-list">
 											{#each allColumnsManage as col, idx}
@@ -3726,7 +3984,7 @@
 								{/if}
 							</div>
 							{#if !isSystemTableSelected}
-							<button class="btn-action" onclick={() => startAddRow()} title="Add row">
+							<button class="btn-action btn-action-primary" onclick={() => startAddRow()} title="Add row">
 								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
 								</svg>
@@ -3739,19 +3997,20 @@
 								Import
 							</button>
 							{/if}
-							<button class="btn-action" onclick={handleCopyTableJson} title="Copy table as JSON">
+							{#if !isSystemTableSelected}<div class="view-actions-sep"></div>{/if}
+							<button class="btn-action btn-action-muted btn-icon-only" onclick={handleCopyTableJson} title="Copy table as JSON" aria-label="Copy table as JSON">
 								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
 								</svg>
-								Copy JSON
 							</button>
 							<!-- Export dropdown -->
 							<div class="export-dropdown-wrapper">
 								<button
-									class="btn-action"
+									class="btn-action btn-action-muted btn-icon-only"
 									disabled={exporting}
 									onclick={() => showExportDropdown = !showExportDropdown}
 									title="Export table"
+									aria-label="Export table"
 								>
 									{#if exporting}
 										<span class="loading loading-spinner" style="width:14px;height:14px"></span>
@@ -3760,7 +4019,6 @@
 											<path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
 										</svg>
 									{/if}
-									Export
 								</button>
 								{#if showExportDropdown}
 									<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -3781,14 +4039,13 @@
 								{/if}
 							</div>
 							<!-- Move/Copy table -->
-							<button class="btn-action" onclick={openMoveModal} title="Move or copy table to another project">
+							<button class="btn-action btn-action-muted btn-icon-only" onclick={openMoveModal} title="Move or copy table to another project" aria-label="Move or copy table">
 								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
 								</svg>
-								Move
 							</button>
 							<button
-								class="btn-action"
+								class="btn-action btn-icon-only"
 								class:btn-action-active={showConditionalFormatPanel}
 								onclick={() => {
 									if (!showConditionalFormatPanel) {
@@ -3797,13 +4054,14 @@
 									showConditionalFormatPanel = !showConditionalFormatPanel;
 								}}
 								title="Conditional formatting"
+								aria-label="Conditional formatting"
 							>
 								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
 								</svg>
-								Format
 							</button>
-							<button class="btn-action btn-danger" onclick={() => selectedTable && handleDropTable(selectedTable)} title="Drop table">
+							<div class="view-actions-sep"></div>
+							<button class="btn-action btn-danger btn-icon-only" onclick={() => selectedTable && handleDropTable(selectedTable)} title="Drop table" aria-label="Drop table">
 								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
 								</svg>
@@ -4042,24 +4300,48 @@
 						</button>
 						{#if sqlConsoleOpen}
 							<div class="sql-body">
+								<!-- Column chips: click to insert column name at cursor -->
+								{#if schema.filter(c => c.name !== 'rowid').length > 0}
+									<div class="sql-col-chips">
+										{#each schema.filter(c => c.name !== 'rowid') as col}
+											<button
+												class="sql-col-chip"
+												onclick={() => insertSqlAtCursor(col.name)}
+												title="{col.type}"
+											>{col.name}</button>
+										{/each}
+									</div>
+								{/if}
 								<textarea
 									class="sql-input"
 									bind:value={sqlText}
+									bind:this={sqlTextareaRef}
 									placeholder="SELECT * FROM {selectedTable} WHERE ..."
 									rows="3"
 									onkeydown={(e) => {
 										if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) runSql('query');
 									}}
 								></textarea>
+								<!-- Destructive pattern warning -->
+								{#if sqlText.trim() && /^\s*(DELETE|UPDATE|DROP|TRUNCATE)\b/i.test(sqlText) && !/\bWHERE\b/i.test(sqlText)}
+									<div class="sql-destructive-warn">
+										<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+										</svg>
+										Destructive operation with no WHERE clause — all rows affected
+									</div>
+								{/if}
 								<div class="sql-actions">
 									<button class="btn-sql" onclick={() => runSql('query')} disabled={sqlRunning || !sqlText.trim()}>
 										{#if sqlRunning}<span class="loading loading-spinner loading-xs"></span>{/if}
 										Run Query
+										<span class="sql-query-tag">→ rows</span>
 									</button>
-									<button class="btn-sql btn-sql-exec" onclick={() => runSql('exec')} disabled={sqlRunning || !sqlText.trim()}>
+									<button class="btn-sql btn-sql-exec" onclick={() => runSql('exec')} disabled={sqlRunning || !sqlText.trim()} title="Runs INSERT, UPDATE, DELETE, DROP — mutates data">
 										Run Exec
+										<span class="sql-exec-tag">mutates</span>
 									</button>
-									<span class="sql-hint">Ctrl+Enter to run query</span>
+									<span class="sql-hint">Ctrl+Enter to query</span>
 								</div>
 								{#if sqlError}
 									<div class="sql-error">{sqlError}</div>
@@ -4097,15 +4379,17 @@
 						{/if}
 					</div>
 
-					<!-- Context View -->
+					<!-- Agent Context -->
 					<div class="context-view-section">
 						<button class="sql-toggle" onclick={() => contextViewOpen = !contextViewOpen}>
 							<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 toggle-icon" class:rotated={contextViewOpen} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
 							</svg>
-							Context View
+							Agent Context
 							{#if linkedBase}
-								<span class="context-base-badge">Knowledge Base</span>
+								<span class="context-base-badge">Active</span>
+							{:else}
+								<span class="context-toggle-hint">inject query results into prompts</span>
 							{/if}
 						</button>
 						{#if contextViewOpen}
@@ -4116,7 +4400,7 @@
 										type="text"
 										class="context-input"
 										bind:value={contextDescription}
-										placeholder="What this context view provides to agents..."
+										placeholder="What agents should know about this data..."
 									/>
 								</div>
 
@@ -4156,9 +4440,9 @@
 								<div class="context-base-toggle">
 									<label class="context-base-label">
 										<input type="checkbox" class="toggle toggle-sm toggle-primary" bind:checked={enableBase} />
-										<span>Enable as Knowledge Base</span>
+										<span>Inject into agent prompts</span>
 									</label>
-									<span class="context-base-hint">When enabled, query results are available for injection into agent prompts</span>
+									<span class="context-base-hint">Query results will be included in the system prompt for agents working on this project</span>
 								</div>
 
 								<div class="context-save-row">
@@ -4194,13 +4478,42 @@
 			</div>
 
 			<div class="modal-body">
-				<!-- Mode Switcher -->
+				<!-- Mode Switcher: Manual (primary) + Import... (secondary with dropdown) -->
 				<div class="create-mode-switcher">
-					<button class="create-mode-btn" class:active={createMode === 'manual'} onclick={() => switchCreateMode('manual')}>Manual</button>
-					<button class="create-mode-btn" class:active={createMode === 'csv'} onclick={() => switchCreateMode('csv')}>CSV / TSV</button>
-					<button class="create-mode-btn" class:active={createMode === 'json'} onclick={() => switchCreateMode('json')}>JSON</button>
-					<button class="create-mode-btn" class:active={createMode === 'sql'} onclick={() => switchCreateMode('sql')}>SQL</button>
-					<button class="create-mode-btn" class:active={createMode === 'external'} onclick={() => switchCreateMode('external')}>External</button>
+					<button class="create-mode-btn" class:active={createMode === 'manual'} onclick={() => { switchCreateMode('manual'); showImportDropdown = false; }}>Manual</button>
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div class="create-mode-import-wrapper" onmouseleave={() => showImportDropdown = false}>
+						<button
+							class="create-mode-btn create-mode-import-trigger"
+							class:active={createMode !== 'manual'}
+							onclick={() => showImportDropdown = !showImportDropdown}
+						>
+							{createMode !== 'manual' ? { csv: 'CSV', json: 'JSON', sql: 'SQL', external: 'External' }[createMode] : 'Import…'}
+							<svg xmlns="http://www.w3.org/2000/svg" class="create-mode-chevron" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+							</svg>
+						</button>
+						{#if showImportDropdown}
+							<div class="create-mode-dropdown">
+								<button class="create-mode-dropdown-item" class:active={createMode === 'csv'} onclick={() => { switchCreateMode('csv'); showImportDropdown = false; }}>
+									<span class="create-mode-dropdown-label">CSV / TSV</span>
+									<span class="create-mode-dropdown-hint">paste or upload spreadsheet data</span>
+								</button>
+								<button class="create-mode-dropdown-item" class:active={createMode === 'json'} onclick={() => { switchCreateMode('json'); showImportDropdown = false; }}>
+									<span class="create-mode-dropdown-label">JSON</span>
+									<span class="create-mode-dropdown-hint">array of objects</span>
+								</button>
+								<button class="create-mode-dropdown-item" class:active={createMode === 'sql'} onclick={() => { switchCreateMode('sql'); showImportDropdown = false; }}>
+									<span class="create-mode-dropdown-label">SQL</span>
+									<span class="create-mode-dropdown-hint">CREATE TABLE statement</span>
+								</button>
+								<button class="create-mode-dropdown-item" class:active={createMode === 'external'} onclick={() => { switchCreateMode('external'); showImportDropdown = false; }}>
+									<span class="create-mode-dropdown-label">External source</span>
+									<span class="create-mode-dropdown-hint">Coda, Sheets, Notion, Airtable</span>
+								</button>
+							</div>
+						{/if}
+					</div>
 				</div>
 
 				<div class="form-group">
@@ -5390,36 +5703,47 @@
 	.data-page {
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
-		padding: 1.25rem 1.5rem;
-		height: 100%;
+		flex: 1;
+		min-height: 0;
 		overflow: hidden;
 	}
 
-	.page-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		flex-shrink: 0;
+	@media (max-width: 640px) {
+		.data-page {
+			padding: 0;
+		}
+		.panels {
+			border-radius: 0;
+			border-left: none;
+			border-right: none;
+			border-top: none;
+		}
 	}
 
-	.header-left {
+	.empty-state-project {
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
+		justify-content: center;
+		flex: 1;
+		color: oklch(0.45 0.02 250);
+		font-size: 0.8125rem;
 	}
 
-	.page-title {
-		font-size: 1.25rem;
-		font-weight: 700;
-		color: oklch(0.90 0.02 250);
-		letter-spacing: -0.01em;
+	.empty-state-inline {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.625rem;
+		padding: 2rem 1rem;
+	}
+	.empty-inline-text {
+		font-size: 0.75rem;
+		color: oklch(0.45 0.02 250);
 	}
 
 	/* Panels */
 	.panels {
 		display: flex;
-		gap: 1px;
 		flex: 1;
 		min-height: 0;
 		background: oklch(0.25 0.02 250);
@@ -5428,13 +5752,69 @@
 		overflow: hidden;
 	}
 
+	/* Prevent cursor flicker while dragging resize handle */
+	:global(body.resizing-sidebar) {
+		cursor: col-resize !important;
+		user-select: none;
+	}
+
 	.table-list-panel {
-		width: 200px;
 		min-width: 160px;
+		max-width: 400px;
 		flex-shrink: 0;
 		display: flex;
 		flex-direction: column;
 		background: oklch(0.16 0.01 250);
+	}
+
+	.table-list-panel.collapsed {
+		min-width: 0 !important;
+		overflow: hidden;
+	}
+
+	.expand-tab {
+		width: 16px;
+		min-width: 16px;
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: transparent;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+	}
+
+	.expand-tab-inner {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 16px;
+		height: 52px;
+		border-radius: 0 6px 6px 0;
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.55 0.02 250);
+		transition: background 0.15s ease, color 0.15s ease, width 0.15s ease;
+	}
+
+	.expand-tab:hover .expand-tab-inner {
+		background: oklch(0.65 0.15 200 / 0.25);
+		color: oklch(0.75 0.15 200);
+		width: 20px;
+	}
+
+	.panel-resize-handle {
+		width: 4px;
+		flex-shrink: 0;
+		background: oklch(0.28 0.02 250);
+		cursor: col-resize;
+		transition: background 0.15s;
+		position: relative;
+		z-index: 1;
+	}
+	.panel-resize-handle:hover,
+	.panel-resize-handle.resizing {
+		background: oklch(0.60 0.14 200 / 0.5);
 	}
 
 	.panel-header {
@@ -5487,12 +5867,95 @@
 		white-space: nowrap;
 	}
 
+	.sort-dropdown-container {
+		position: relative;
+	}
+
+	.table-sort-btn.active {
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.75 0.02 250);
+	}
+
+	.sort-dropdown {
+		position: absolute;
+		top: calc(100% + 4px);
+		right: 0;
+		z-index: 50;
+		background: oklch(0.18 0.01 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.375rem;
+		padding: 0.25rem;
+		min-width: 110px;
+		box-shadow: 0 4px 16px oklch(0 0 0 / 0.4);
+		animation: animate-scale-in 0.1s ease-out;
+	}
+
+	.sort-dropdown-item {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		width: 100%;
+		padding: 0.3125rem 0.5rem;
+		border: none;
+		border-radius: 0.25rem;
+		background: transparent;
+		color: oklch(0.65 0.02 250);
+		font-size: 0.6875rem;
+		cursor: pointer;
+		text-align: left;
+		transition: background 0.1s, color 0.1s;
+	}
+	.sort-dropdown-item:hover {
+		background: oklch(0.24 0.02 250);
+		color: oklch(0.85 0.02 250);
+	}
+	.sort-dropdown-item.active {
+		color: oklch(0.80 0.12 200);
+	}
+
+	.sort-check {
+		width: 0.625rem;
+		height: 0.625rem;
+		flex-shrink: 0;
+		color: oklch(0.70 0.14 200);
+	}
+
+	.sort-check-spacer {
+		display: inline-block;
+		width: 0.625rem;
+		flex-shrink: 0;
+	}
+
 	.panel-count {
 		font-size: 0.625rem;
 		color: oklch(0.45 0.02 250);
 		background: oklch(0.22 0.01 250);
 		padding: 0.0625rem 0.375rem;
 		border-radius: 9999px;
+	}
+
+	.panel-add-btn,
+	.panel-collapse-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.375rem;
+		height: 1.375rem;
+		padding: 0;
+		border: none;
+		border-radius: 0.25rem;
+		background: transparent;
+		color: oklch(0.50 0.02 250);
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+	.panel-add-btn:hover {
+		background: oklch(0.25 0.06 200 / 0.3);
+		color: oklch(0.75 0.14 200);
+	}
+	.panel-collapse-btn:hover {
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.72 0.02 250);
 	}
 
 	.panel-loading {
@@ -5736,6 +6199,16 @@
 		white-space: nowrap;
 	}
 
+	.view-filter-dot {
+		display: inline-block;
+		width: 0.3125rem;
+		height: 0.3125rem;
+		border-radius: 50%;
+		background: oklch(0.65 0.14 200);
+		flex-shrink: 0;
+		margin-left: 0.125rem;
+	}
+
 	/* View badge in header */
 	.view-badge {
 		display: inline-flex;
@@ -5847,11 +6320,73 @@
 
 	.panel-placeholder {
 		display: flex;
-		align-items: center;
-		justify-content: center;
+		flex-direction: column;
 		flex: 1;
-		color: oklch(0.45 0.02 250);
+		overflow-y: auto;
+	}
+
+	.table-roster {
+		display: flex;
+		flex-direction: column;
+		padding: 0.75rem 0;
+		flex: 1;
+	}
+
+	.table-roster-header {
+		font-size: 0.625rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: oklch(0.42 0.02 250);
+		padding: 0 1rem 0.5rem;
+	}
+
+	.table-roster-row {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		padding: 0.4375rem 1rem;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		text-align: left;
+		transition: background 0.1s;
+		gap: 0.75rem;
+	}
+	.table-roster-row:hover {
+		background: oklch(0.20 0.02 250);
+	}
+	.table-roster-row:hover .table-roster-name {
+		color: oklch(0.85 0.02 250);
+	}
+
+	.table-roster-name {
 		font-size: 0.8125rem;
+		color: oklch(0.68 0.02 250);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		min-width: 0;
+		transition: color 0.1s;
+	}
+
+	.table-roster-meta {
+		display: flex;
+		align-items: baseline;
+		gap: 0.25rem;
+		flex-shrink: 0;
+	}
+
+	.table-roster-count {
+		font-size: 0.6875rem;
+		color: oklch(0.42 0.02 250);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.table-roster-cols {
+		font-size: 0.5625rem;
+		color: oklch(0.35 0.02 250);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.view-header {
@@ -5884,7 +6419,11 @@
 	.view-actions {
 		display: flex;
 		gap: 0.375rem;
+		overflow-x: auto;
+		scrollbar-width: none;
+		flex-shrink: 0;
 	}
+	.view-actions::-webkit-scrollbar { display: none; }
 
 	.btn-action {
 		display: flex;
@@ -5897,15 +6436,56 @@
 		color: oklch(0.70 0.02 250);
 		border-radius: 0.25rem;
 		cursor: pointer;
+		transition: background 0.12s, color 0.12s, border-color 0.12s;
+		white-space: nowrap;
 	}
 	.btn-action:hover {
 		background: oklch(0.25 0.02 250);
 		color: oklch(0.85 0.02 250);
 	}
+
+	.btn-action.btn-action-primary {
+		border-color: oklch(0.45 0.10 200 / 0.6);
+		background: oklch(0.22 0.04 200);
+		color: oklch(0.80 0.12 200);
+	}
+	.btn-action.btn-action-primary:hover {
+		background: oklch(0.28 0.08 200);
+		color: oklch(0.92 0.10 200);
+		border-color: oklch(0.55 0.12 200 / 0.7);
+	}
+
+	.btn-action.btn-action-muted {
+		color: oklch(0.52 0.02 250);
+		border-color: oklch(0.26 0.02 250);
+	}
+	.btn-action.btn-action-muted:hover {
+		color: oklch(0.78 0.02 250);
+	}
+
+	.view-actions-sep {
+		width: 2px;
+		background: oklch(0.28 0.02 250);
+		opacity: 0.6;
+		align-self: stretch;
+		margin: 0.125rem 0.375rem;
+		flex-shrink: 0;
+	}
+
+	.btn-icon-only {
+		padding: 0.25rem;
+		min-width: 1.75rem;
+		justify-content: center;
+	}
+
+	.btn-action.btn-danger {
+		color: oklch(0.58 0.08 25);
+		border-color: oklch(0.35 0.08 25 / 0.45);
+	}
 	.btn-action.btn-danger:hover {
 		background: oklch(0.30 0.10 25 / 0.2);
-		border-color: oklch(0.50 0.15 25 / 0.4);
-		color: oklch(0.75 0.15 25);
+		border-color: oklch(0.50 0.15 25 / 0.5);
+		color: oklch(0.78 0.15 25);
 	}
 	.btn-action-active {
 		background: oklch(0.30 0.08 200);
@@ -6323,18 +6903,79 @@
 		cursor: default;
 	}
 	.btn-sql-exec {
-		border-color: oklch(0.35 0.10 45 / 0.4);
-		background: oklch(0.25 0.06 45 / 0.2);
-		color: oklch(0.80 0.10 45);
+		border-color: oklch(0.45 0.14 25 / 0.45);
+		background: oklch(0.22 0.06 25 / 0.25);
+		color: oklch(0.72 0.14 25);
 	}
 	.btn-sql-exec:hover:not(:disabled) {
-		background: oklch(0.30 0.08 45 / 0.3);
+		background: oklch(0.28 0.10 25 / 0.35);
+		border-color: oklch(0.52 0.16 25 / 0.55);
+		color: oklch(0.82 0.14 25);
+	}
+
+	.sql-exec-tag {
+		font-size: 0.5625rem;
+		padding: 0.0625rem 0.25rem;
+		border-radius: 0.2rem;
+		background: oklch(0.35 0.12 25 / 0.3);
+		color: oklch(0.65 0.14 25);
+		letter-spacing: 0.03em;
+		font-weight: 600;
+		text-transform: uppercase;
 	}
 
 	.sql-hint {
 		font-size: 0.625rem;
 		color: oklch(0.40 0.02 250);
 		margin-left: auto;
+	}
+
+	.sql-col-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem;
+		padding: 0.375rem 0 0.25rem;
+	}
+
+	.sql-col-chip {
+		font-size: 0.5625rem;
+		font-family: ui-monospace, monospace;
+		padding: 0.0625rem 0.375rem;
+		border-radius: 0.25rem;
+		border: 1px solid oklch(0.30 0.02 250);
+		background: oklch(0.20 0.01 250);
+		color: oklch(0.60 0.10 200);
+		cursor: pointer;
+		transition: background 0.1s, color 0.1s;
+	}
+	.sql-col-chip:hover {
+		background: oklch(0.25 0.06 200 / 0.3);
+		color: oklch(0.80 0.12 200);
+		border-color: oklch(0.45 0.10 200 / 0.5);
+	}
+
+	.sql-destructive-warn {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		font-size: 0.6875rem;
+		color: oklch(0.72 0.14 25);
+		background: oklch(0.22 0.06 25 / 0.2);
+		border: 1px solid oklch(0.40 0.12 25 / 0.3);
+		border-radius: 0.25rem;
+		padding: 0.3125rem 0.5rem;
+		margin-bottom: 0.25rem;
+	}
+
+	.sql-query-tag {
+		font-size: 0.5625rem;
+		padding: 0.0625rem 0.25rem;
+		border-radius: 0.2rem;
+		background: oklch(0.30 0.08 200 / 0.3);
+		color: oklch(0.72 0.12 200);
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
 	}
 
 	.sql-error {
@@ -6479,6 +7120,13 @@
 		margin-left: auto;
 	}
 
+	.context-toggle-hint {
+		font-size: 0.5625rem;
+		color: oklch(0.52 0.02 250);
+		margin-left: auto;
+		font-weight: 400;
+	}
+
 	.context-save-row {
 		display: flex;
 		justify-content: flex-end;
@@ -6491,75 +7139,6 @@
 		padding: 3rem;
 	}
 
-	.empty-state {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 0.75rem;
-		padding: 3rem 2rem;
-		background: oklch(0.16 0.01 250);
-		border: 1px solid oklch(0.25 0.02 250);
-		border-radius: 0.5rem;
-		text-align: center;
-	}
-
-	.empty-icon {
-		width: 48px;
-		height: 48px;
-		color: oklch(0.40 0.02 250);
-		margin-bottom: 0.25rem;
-	}
-	.empty-icon svg {
-		width: 100%;
-		height: 100%;
-	}
-
-	.empty-title {
-		font-size: 1rem;
-		font-weight: 600;
-		color: oklch(0.75 0.02 250);
-	}
-
-	.empty-description {
-		font-size: 0.8125rem;
-		color: oklch(0.55 0.02 250);
-		line-height: 1.6;
-		max-width: 480px;
-	}
-
-	/* Inline empty state (inside panel) */
-	.empty-state-inline {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 0.75rem;
-		padding: 2rem;
-		text-align: center;
-	}
-
-	.empty-icon-small {
-		width: 36px;
-		height: 36px;
-		color: oklch(0.35 0.02 250);
-	}
-	.empty-icon-small svg {
-		width: 100%;
-		height: 100%;
-	}
-
-	.empty-title-small {
-		font-size: 0.875rem;
-		font-weight: 600;
-		color: oklch(0.65 0.02 250);
-	}
-
-	.empty-description-small {
-		font-size: 0.75rem;
-		color: oklch(0.50 0.02 250);
-		line-height: 1.6;
-		max-width: 380px;
-	}
 
 	/* Modal (same as chores page) */
 	.modal-overlay {
@@ -6747,23 +7326,22 @@
 	.create-mode-switcher {
 		display: flex;
 		border-radius: 0.5rem;
-		overflow: hidden;
+		overflow: visible;
 		border: 1px solid oklch(0.30 0.02 250);
 	}
 
 	.create-mode-btn {
 		flex: 1;
-		padding: 0.375rem 0.5rem;
+		padding: 0.375rem 0.75rem;
 		font-size: 0.75rem;
 		font-weight: 500;
 		background: oklch(0.16 0.01 250);
 		color: oklch(0.55 0.02 250);
 		border: none;
+		border-radius: 0.5rem 0 0 0.5rem;
 		cursor: pointer;
 		transition: background 0.15s, color 0.15s;
-	}
-	.create-mode-btn:not(:last-child) {
-		border-right: 1px solid oklch(0.30 0.02 250);
+		white-space: nowrap;
 	}
 	.create-mode-btn:hover {
 		background: oklch(0.22 0.02 250);
@@ -6772,6 +7350,99 @@
 	.create-mode-btn.active {
 		background: oklch(0.30 0.08 240);
 		color: oklch(0.90 0.05 240);
+	}
+
+	.create-mode-import-wrapper {
+		position: relative;
+		flex: 1;
+	}
+
+	.create-mode-import-trigger {
+		width: 100%;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.375rem;
+		padding: 0.375rem 0.625rem;
+		font-size: 0.75rem;
+		font-weight: 500;
+		background: oklch(0.16 0.01 250);
+		color: oklch(0.55 0.02 250);
+		border: none;
+		border-left: 1px solid oklch(0.30 0.02 250);
+		border-radius: 0 0.5rem 0.5rem 0;
+		cursor: pointer;
+		transition: background 0.15s, color 0.15s;
+	}
+	.create-mode-import-trigger:hover,
+	.create-mode-import-trigger.active {
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.75 0.02 250);
+	}
+	.create-mode-import-trigger.active {
+		background: oklch(0.30 0.08 240);
+		color: oklch(0.90 0.05 240);
+	}
+
+	.create-mode-chevron {
+		width: 0.75rem;
+		height: 0.75rem;
+		flex-shrink: 0;
+		opacity: 0.6;
+	}
+
+	.create-mode-dropdown {
+		position: absolute;
+		top: calc(100% + 4px);
+		left: 0;
+		right: 0;
+		z-index: 60;
+		background: oklch(0.18 0.01 250);
+		border: 1px solid oklch(0.28 0.02 250);
+		border-radius: 0.375rem;
+		padding: 0.25rem;
+		box-shadow: 0 6px 20px oklch(0 0 0 / 0.4);
+		animation: animate-scale-in 0.1s ease-out;
+	}
+
+	.create-mode-dropdown-item {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		width: 100%;
+		padding: 0.4375rem 0.625rem;
+		border: none;
+		border-radius: 0.25rem;
+		background: transparent;
+		cursor: pointer;
+		text-align: left;
+		transition: background 0.1s;
+		gap: 0.0625rem;
+	}
+	.create-mode-dropdown-item:hover,
+	.create-mode-dropdown-item.active {
+		background: oklch(0.24 0.02 250);
+	}
+
+	.create-mode-dropdown-label {
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: oklch(0.78 0.02 250);
+	}
+
+	.create-mode-dropdown-hint {
+		font-size: 0.625rem;
+		color: oklch(0.45 0.02 250);
+	}
+
+	.create-mode-sep {
+		width: 2px;
+		background: oklch(0.30 0.02 250);
+		flex-shrink: 0;
+	}
+
+	.create-mode-import {
+		flex: 0.8;
 	}
 
 	.create-format-pills {

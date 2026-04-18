@@ -28,6 +28,7 @@ export {
 	insertRow,
 	insertRows,
 	updateRow,
+	batchUpdateRows,
 	deleteRow,
 	duplicateRow,
 	// Column Operations

@@ -2602,6 +2602,12 @@
 		animation: mobile-btn-flash 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 	}
 
+	/* Prevent iOS magnifying glass / cursor mover on long-press */
+	.action-pills-wrapper button {
+		-webkit-touch-callout: none;
+		user-select: none;
+	}
+
 	/* Hold-to-confirm progress fill for destructive action pills */
 	.hold-fill {
 		position: absolute;

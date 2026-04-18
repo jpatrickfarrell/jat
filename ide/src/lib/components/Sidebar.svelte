@@ -407,39 +407,185 @@
 
 	<!-- Panel -->
 	<aside
-		class="fixed bottom-6 right-6 z-50 w-72 max-w-[calc(100vw-3rem)] rounded-lg p-5"
-		style="background: oklch(0.16 0.015 250); border: 1px solid oklch(0.28 0.02 250); box-shadow: 0 8px 32px oklch(0.05 0.01 250 / 0.6);"
+		class="fixed bottom-6 right-6 z-50 rounded-lg overflow-hidden"
+		style="width: min(30rem, calc(100vw - 3rem)); max-height: calc(100vh - 5rem); display: flex; flex-direction: column; background: oklch(0.16 0.015 250); border: 1px solid oklch(0.28 0.02 250); box-shadow: 0 8px 40px oklch(0.05 0.01 250 / 0.7);"
 		in:fly={{ y: 12, duration: 220, easing: cubicOut }}
 		out:fly={{ y: 12, duration: 160, easing: cubicOut }}
 	>
-		<div class="flex items-center justify-between mb-4">
-			<span style="font-family: monospace; font-size: 0.7rem; letter-spacing: 0.1em; color: oklch(0.45 0.02 250); text-transform: uppercase;">Keyboard Shortcuts</span>
+		<!-- Header -->
+		<div class="flex items-center justify-between px-4 py-3 flex-shrink-0" style="border-bottom: 1px solid oklch(0.22 0.02 250);">
+			<span style="font-family: monospace; font-size: 0.65rem; letter-spacing: 0.12em; color: oklch(0.40 0.02 250); text-transform: uppercase;">Keyboard Shortcuts</span>
 			<button
 				onclick={() => sidebarHelpOpen.set(false)}
 				aria-label="Close"
-				style="color: oklch(0.45 0.02 250); line-height: 1;"
+				style="color: oklch(0.40 0.02 250); line-height: 1; font-size: 0.8rem;"
 				class="transition-colors hover:text-base-content"
 			>✕</button>
 		</div>
-		<dl class="space-y-2">
+
+		<!-- Scrollable content -->
+		<div class="overflow-y-auto flex-1" style="padding: 0.75rem 1rem;">
+
+			<!-- Navigate -->
+			<p class="shortcuts-section-label">Navigate</p>
+			<div class="shortcuts-nav-grid">
+				{#each [
+					['Tasks',        ['Ctrl', 'Shift', 'T']],
+					['Sessions',     ['Ctrl', 'Shift', 'W']],
+					['Source',       ['Ctrl', 'Shift', 'G']],
+					['Files',        ['Ctrl', 'Shift', 'E']],
+					['History',      ['Ctrl', 'Shift', 'H']],
+					['Servers',      ['Ctrl', 'Shift', 'S']],
+					['Data',         ['Ctrl', 'Shift', 'D']],
+					['Bases',        ['Ctrl', 'Shift', 'B']],
+					['Search',       ['Ctrl', 'Shift', 'F']],
+					['Integrations', ['Ctrl', 'Shift', 'X']],
+					['Chores',       ['Ctrl', 'Shift', 'A']],
+					['Memory',       ['Ctrl', 'Shift', 'M']],
+					['Clients',      ['Ctrl', 'Shift', 'C']],
+					['Config',       ['Ctrl', 'Shift', ',']],
+				] as [label, keys]}
+					<div class="shortcuts-nav-row">
+						<span class="shortcuts-label">{label}</span>
+						<span class="shortcuts-keys">
+							{#each keys as k}<kbd class="shortcut-key">{k}</kbd>{/each}
+						</span>
+					</div>
+				{/each}
+			</div>
+
+			<!-- Panels -->
+			<p class="shortcuts-section-label" style="margin-top: 0.875rem;">Panels</p>
 			{#each [
-				{ label: 'Cycle sidebar', keys: ['Ctrl', 'B'] },
-				{ label: 'This panel', keys: ['?'] },
-				{ label: 'Command palette', keys: ['Ctrl', 'K'] },
-				{ label: 'New task', keys: ['Alt', 'N'] },
-				{ label: 'Start next', keys: ['Alt', 'S'] },
-				{ label: 'Jump to session', keys: ['Alt', '1–9'] },
-			] as shortcut}
-				<div class="flex items-baseline justify-between gap-3">
-					<dt style="font-size: 0.8rem; color: oklch(0.60 0.02 250);">{shortcut.label}</dt>
-					<dd class="shrink-0 flex gap-1">
-						{#each shortcut.keys as k}
-							<kbd style="font-family: monospace; font-size: 0.65rem; color: oklch(0.65 0.02 250); background: oklch(0.22 0.02 250); border: 1px solid oklch(0.32 0.02 250); border-radius: 3px; padding: 1px 5px;">{k}</kbd>
-						{/each}
-					</dd>
+				['Sidebar',         ['Ctrl', 'B']],
+				['Source panel',    ['Ctrl', '\\']],
+				['Command palette', ['Ctrl', 'K']],
+				['This panel',      ['?']],
+			] as [label, keys]}
+				<div class="shortcuts-row">
+					<span class="shortcuts-label">{label}</span>
+					<span class="shortcuts-keys">{#each keys as k}<kbd class="shortcut-key">{k}</kbd>{/each}</span>
 				</div>
 			{/each}
-		</dl>
+
+			<!-- Actions -->
+			<p class="shortcuts-section-label" style="margin-top: 0.875rem;">Actions</p>
+			{#each [
+				['New task',           ['Alt', 'N']],
+				['Epic swarm',         ['Alt', 'E']],
+				['Start next',         ['Alt', 'S']],
+				['Add project',        ['Alt', 'Shift', 'P']],
+				['Cycle project →',    ['Alt', '→']],
+				['Cycle route',        ['Alt', '↑ / ↓']],
+			] as [label, keys]}
+				<div class="shortcuts-row">
+					<span class="shortcuts-label">{label}</span>
+					<span class="shortcuts-keys">{#each keys as k}<kbd class="shortcut-key">{k}</kbd>{/each}</span>
+				</div>
+			{/each}
+
+			<!-- Sessions (work page) -->
+			<p class="shortcuts-section-label" style="margin-top: 0.875rem;">Sessions <span style="opacity:0.5; font-style:normal;">work page</span></p>
+			{#each [
+				['Jump to session',    ['Alt', '1–9']],
+				['Attach terminal',    ['Alt', 'A']],
+				['Kill session',        ['Alt', 'K']],
+				['Interrupt',          ['Alt', 'I']],
+				['Pause',              ['Alt', 'P']],
+				['Restart',            ['Alt', 'R']],
+				['Copy output',        ['Alt', 'Shift', 'C']],
+			] as [label, keys]}
+				<div class="shortcuts-row">
+					<span class="shortcuts-label">{label}</span>
+					<span class="shortcuts-keys">{#each keys as k}<kbd class="shortcut-key">{k}</kbd>{/each}</span>
+				</div>
+			{/each}
+
+			<!-- Source page -->
+			<p class="shortcuts-section-label" style="margin-top: 0.875rem;">Source page</p>
+			{#each [
+				['Git mode',           ['Alt', 'G']],
+				['Supabase mode',      ['Alt', 'U']],
+				['Cloudflare mode',    ['Alt', 'C']],
+			] as [label, keys]}
+				<div class="shortcuts-row">
+					<span class="shortcuts-label">{label}</span>
+					<span class="shortcuts-keys">{#each keys as k}<kbd class="shortcut-key">{k}</kbd>{/each}</span>
+				</div>
+			{/each}
+
+			<!-- Files page -->
+			<p class="shortcuts-section-label" style="margin-top: 0.875rem;">Files page</p>
+			{#each [
+				['Save',               ['Ctrl', 'S']],
+				['Close tab',          ['Alt', 'W']],
+				['Quick finder',       ['Alt', 'P']],
+				['Next tab',           ['Alt', ']']],
+				['Prev tab',           ['Alt', '[']],
+			] as [label, keys]}
+				<div class="shortcuts-row">
+					<span class="shortcuts-label">{label}</span>
+					<span class="shortcuts-keys">{#each keys as k}<kbd class="shortcut-key">{k}</kbd>{/each}</span>
+				</div>
+			{/each}
+
+		</div>
+
+		<!-- Footer -->
+		<div class="flex-shrink-0 px-4 py-2.5" style="border-top: 1px solid oklch(0.20 0.01 250);">
+			<a href="/config?tab=shortcuts" onclick={() => sidebarHelpOpen.set(false)} style="font-size: 0.65rem; color: oklch(0.42 0.02 250); text-decoration: none; letter-spacing: 0.04em;" class="hover:opacity-70 transition-opacity">
+				Full shortcut editor →
+			</a>
+		</div>
 	</aside>
 {/if}
+
+<style>
+	.shortcuts-section-label {
+		font-size: 0.6rem;
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		color: oklch(0.44 0.02 250);
+		margin: 0 0 0.375rem;
+	}
+	.shortcuts-nav-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.25rem 1rem;
+		margin-bottom: 0.125rem;
+	}
+	.shortcuts-nav-row {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+	.shortcuts-row {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 0.5rem;
+		margin-bottom: 0.25rem;
+	}
+	.shortcuts-label {
+		font-size: 0.75rem;
+		color: oklch(0.60 0.02 250);
+		white-space: nowrap;
+	}
+	.shortcuts-keys {
+		display: flex;
+		gap: 0.2rem;
+		flex-shrink: 0;
+	}
+	.shortcut-key {
+		font-family: ui-monospace, monospace;
+		font-size: 0.6rem;
+		color: oklch(0.65 0.02 250);
+		background: oklch(0.22 0.02 250);
+		border: 1px solid oklch(0.32 0.02 250);
+		border-radius: 3px;
+		padding: 1px 4px;
+		line-height: 1.4;
+	}
+</style>
 

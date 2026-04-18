@@ -401,7 +401,8 @@
 		gap: 1rem;
 		padding: 1.25rem 1.5rem;
 		max-width: 1400px;
-		height: 100%;
+		flex: 1;
+		min-height: 0;
 	}
 
 	.page-header {

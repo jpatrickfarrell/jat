@@ -45,6 +45,8 @@
 	let signalData = $state<SignalState>(null);
 	let fetchStarted = $state(false);
 	let isHovered = $state(false);
+	let isExpanded = $state(false);
+	let touchDevice = $state(false);
 
 	const isLoading = $derived(signalData === 'loading');
 	const hasData = $derived(signalData !== null && signalData !== 'loading' && signalData !== 'empty');
@@ -86,11 +88,13 @@
 	}
 
 	function handleMouseEnter() {
+		if (touchDevice) return;
 		isHovered = true;
 		fetchSignalData();
 	}
 
 	function handleMouseLeave() {
+		if (touchDevice) return;
 		isHovered = false;
 	}
 
@@ -123,6 +127,7 @@
 	let committed = $state(false);
 
 	function onTouchStart(e: TouchEvent) {
+		touchDevice = true;
 		if (e.touches.length !== 1) return;
 		const t = e.touches[0];
 		swipeStartX = t.clientX;
@@ -250,7 +255,19 @@
 	<div
 		class="ctr-card"
 		style="{projectColor ? `border-left-color: ${projectColor};` : ''} {swipeOffset !== 0 ? `transform: translateX(${swipeOffset}px);` : ''} {!swiping && swipeOffset === 0 ? '' : !swiping ? 'transition: transform 0.3s cubic-bezier(0.25,0.46,0.45,0.94);' : ''}"
-		onclick={() => !swiping && onTaskClick(task.id)}
+		onclick={() => {
+			if (swiping) return;
+			if (touchDevice) {
+				if (!isExpanded) {
+					isExpanded = true;
+					fetchSignalData();
+				} else {
+					onTaskClick(task.id);
+				}
+			} else {
+				onTaskClick(task.id);
+			}
+		}}
 		onmouseenter={handleMouseEnter}
 		onmouseleave={handleMouseLeave}
 		ontouchstart={onTouchStart}
@@ -298,12 +315,14 @@
 						<span class="ctr-status-pill" data-status={task.status}>{task.status}</span>
 					{/if}
 				</div>
-				<!-- Compact summary snippet -->
-				{#if isLoading}
-					<div class="ctr-summary-skeleton animate-skeleton-pulse"></div>
-				{:else if summaryLines.length > 0}
-					<div class="ctr-summary-snippet">{summaryLines[0]}</div>
-				{/if}
+				<!-- Snippet slot: always rendered so all rows share consistent height -->
+				<div class="ctr-snippet-slot">
+					{#if isLoading}
+						<div class="ctr-summary-skeleton animate-skeleton-pulse"></div>
+					{:else if summaryLines.length > 0}
+						<div class="ctr-summary-snippet">{summaryLines[0]}</div>
+					{/if}
+				</div>
 			</div>
 
 			<!-- Right: primary action column (always visible) + extras on hover -->
@@ -363,7 +382,7 @@
 		</div>
 
 		<!-- Expansion area: animates open on hover (desktop only) -->
-		<div class="ctr-expand-wrapper" class:ctr-expanded={isHovered && isLoaded}>
+		<div class="ctr-expand-wrapper" class:ctr-expanded={isHovered && isLoaded} class:ctr-expanded-touch={isExpanded && isLoaded}>
 			<div class="ctr-expand-inner">
 				{#if isLoaded}
 					<div class="ctr-expand-content" onclick={(e) => e.stopPropagation()}>
@@ -594,7 +613,7 @@
 	}
 
 	.ctr-priority {
-		font-size: 0.5rem;
+		font-size: 0.575rem;
 		font-weight: 700;
 		padding: 0 3px;
 		border-radius: 3px;
@@ -645,6 +664,13 @@
 		color: oklch(0.82 0.16 80);
 		background: oklch(0.30 0.08 80 / 0.35);
 		border-color: oklch(0.58 0.15 80 / 0.5);
+	}
+
+	/* Snippet slot: reserves height even when empty for row-height consistency */
+	.ctr-snippet-slot {
+		min-height: 1rem;
+		display: flex;
+		align-items: center;
 	}
 
 	/* Summary snippet (compact state) */
@@ -745,7 +771,7 @@
 	}
 
 	.ctr-primary-label {
-		font-size: 0.5rem;
+		font-size: 0.575rem;
 		font-weight: 700;
 		letter-spacing: 0.05em;
 		text-transform: uppercase;
@@ -764,11 +790,16 @@
 		overflow: hidden;
 	}
 
-	/* Only animate on hover-capable devices (not touch-only) */
+	/* Hover-expand on pointer devices */
 	@media (hover: hover) and (min-width: 640px) {
 		.ctr-expand-wrapper.ctr-expanded {
 			grid-template-rows: 1fr;
 		}
+	}
+
+	/* Tap-expand on touch devices */
+	.ctr-expand-wrapper.ctr-expanded-touch {
+		grid-template-rows: 1fr;
 	}
 
 	.ctr-expand-inner {

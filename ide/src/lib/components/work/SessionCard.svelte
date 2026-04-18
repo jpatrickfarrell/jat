@@ -5850,7 +5850,8 @@ import StatusActionBadge from "./atoms/StatusActionBadge.svelte";
 					<!-- Token Activity Sparkline (bar chart style, moved to right side) -->
 					{#if sparklineData && sparklineData.length > 0}
 						{@const tokenActivityData = sparklineData.map((d) => d.tokens)}
-						<div class="mr-6">
+						<div class="mr-6 flex flex-col items-end gap-0.5">
+							<span style="font-size:0.5rem; letter-spacing:0.04em; color:oklch(0.42 0.02 250); text-transform:uppercase; font-weight:600; font-family:ui-monospace,monospace;">Activity</span>
 							<TerminalActivitySparkline
 								activityData={tokenActivityData}
 								maxBars={12}

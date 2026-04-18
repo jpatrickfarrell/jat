@@ -14,8 +14,10 @@
 	import type { KnowledgeBase } from '$lib/types/knowledgeBase';
 	import type { CanvasBlock, ControlBlock, TableViewBlock } from '$lib/types/canvas';
 	import { onMessage, type WebSocketMessage } from '$lib/stores/websocket.svelte';
+	import { errorToast } from '$lib/stores/toasts.svelte';
 	import BasesList from '$lib/components/bases/BasesList.svelte';
 	import CanvasEditor from '$lib/components/canvas/CanvasEditor.svelte';
+	import { swipe } from '$lib/actions/swipe';
 
 	// Get project and page ID from URL
 	const project = $derived($page.url.searchParams.get('project'));
@@ -28,6 +30,14 @@
 	let selectedBase = $state<KnowledgeBase | null>(null);
 	let isLoading = $state(true);
 	let error = $state<string | null>(null);
+
+	// Delete confirmation state
+	let showDeleteConfirm = $state(false);
+	let baseToDelete = $state<KnowledgeBase | null>(null);
+
+	// Canvas save state
+	let isSavingCanvas = $state(false);
+	let lastCanvasSave = $state<Date | null>(null);
 
 	// Control values map: { [controlName]: value }
 	let controlValues = $state<Record<string, unknown>>({});
@@ -59,32 +69,53 @@
 	let leftPanelWidth = $state(300);
 	const MIN_PANEL_WIDTH = 200;
 	const MAX_PANEL_WIDTH = 550;
+	const COLLAPSE_THRESHOLD = 140;
 	let isDragging = $state(false);
+	let isCollapsed = $state(false);
 	let startX = $state(0);
 	let startWidth = $state(0);
 
-	function handleDividerMouseDown(e: MouseEvent) {
+	function onDividerPointerDown(e: PointerEvent) {
 		e.preventDefault();
 		isDragging = true;
 		startX = e.clientX;
 		startWidth = leftPanelWidth;
-		document.addEventListener('mousemove', handleDividerMouseMove);
-		document.addEventListener('mouseup', handleDividerMouseUp);
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 	}
 
-	function handleDividerMouseMove(e: MouseEvent) {
+	function onDividerPointerMove(e: PointerEvent) {
 		if (!isDragging) return;
 		const deltaX = e.clientX - startX;
 		let newWidth = startWidth + deltaX;
+		if (newWidth < COLLAPSE_THRESHOLD) {
+			isCollapsed = true;
+			return;
+		}
+		isCollapsed = false;
 		newWidth = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, newWidth));
 		leftPanelWidth = newWidth;
 	}
 
-	function handleDividerMouseUp() {
+	function onDividerPointerUp(e: PointerEvent) {
 		isDragging = false;
-		document.removeEventListener('mousemove', handleDividerMouseMove);
-		document.removeEventListener('mouseup', handleDividerMouseUp);
+		(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
 	}
+
+	function expandPanel() {
+		isCollapsed = false;
+	}
+
+	// Ctrl+\ toggles the KB browser panel
+	onMount(() => {
+		function handlePanelToggle(e: KeyboardEvent) {
+			if (e.ctrlKey && e.key === '\\') {
+				e.preventDefault();
+				isCollapsed = !isCollapsed;
+			}
+		}
+		window.addEventListener('keydown', handlePanelToggle, true);
+		return () => window.removeEventListener('keydown', handlePanelToggle, true);
+	});
 
 	// Fetch all bases
 	async function fetchBases() {
@@ -142,7 +173,7 @@
 			const newBase = bases.find(b => b.id === data.base.id);
 			if (newBase) handleSelect(newBase);
 		} catch (err) {
-			console.error('Failed to create from template:', err);
+			errorToast((err as Error).message || 'Failed to create from template');
 		}
 	}
 
@@ -164,14 +195,21 @@
 			const newBase = bases.find(b => b.id === data.base.id);
 			if (newBase) handleSelect(newBase);
 		} catch (err) {
-			console.error('Failed to create base:', err);
+			errorToast((err as Error).message || 'Failed to create base');
 		}
 	}
 
 	// Delete a base
-	async function handleDelete(base: KnowledgeBase) {
-		if (!project) return;
-		if (!confirm(`Delete "${base.name}"? This cannot be undone.`)) return;
+	function handleDelete(base: KnowledgeBase) {
+		baseToDelete = base;
+		showDeleteConfirm = true;
+	}
+
+	async function confirmDelete() {
+		if (!baseToDelete || !project) return;
+		const base = baseToDelete;
+		showDeleteConfirm = false;
+		baseToDelete = null;
 		try {
 			const res = await fetch(`/api/bases/${base.id}?project=${encodeURIComponent(project)}`, {
 				method: 'DELETE'
@@ -186,7 +224,7 @@
 			}
 			await fetchBases();
 		} catch (err) {
-			console.error('Failed to delete base:', err);
+			errorToast((err as Error).message || 'Failed to delete base');
 		}
 	}
 
@@ -201,13 +239,15 @@
 			});
 			await fetchBases();
 		} catch (err) {
-			console.error('Failed to rename base:', err);
+			errorToast((err as Error).message || 'Failed to rename base');
 		}
 	}
 
 	// Select a base and sync URL
 	function handleSelect(base: KnowledgeBase) {
 		selectedBase = base;
+		showDeleteConfirm = false;
+		baseToDelete = null;
 		// Initialize controlValues from control blocks
 		controlValues = {};
 		for (const block of (base.blocks || [])) {
@@ -248,7 +288,7 @@
 				body: JSON.stringify({ project, name: newName })
 			});
 		} catch (err) {
-			console.error('Failed to update title:', err);
+			errorToast((err as Error).message || 'Failed to save title');
 			await fetchBases();
 		}
 	}
@@ -265,7 +305,7 @@
 				body: JSON.stringify({ project, always_inject: isBase })
 			});
 		} catch (err) {
-			console.error('Failed to toggle base flag:', err);
+			errorToast((err as Error).message || 'Failed to update base');
 			await fetchBases();
 		}
 	}
@@ -286,7 +326,7 @@
 				body: JSON.stringify({ project, always_inject: newValue })
 			});
 		} catch (err) {
-			console.error('Failed to toggle always_inject:', err);
+			errorToast((err as Error).message || 'Failed to update base');
 			await fetchBases();
 		}
 	}
@@ -306,7 +346,7 @@
 				body: JSON.stringify({ project, icon })
 			});
 		} catch (err) {
-			console.error('Failed to update icon:', err);
+			errorToast((err as Error).message || 'Failed to update icon');
 			await fetchBases();
 		}
 	}
@@ -330,7 +370,7 @@
 				body: JSON.stringify({ project, order })
 			});
 		} catch (err) {
-			console.error('Failed to reorder bases:', err);
+			errorToast((err as Error).message || 'Failed to reorder bases');
 			await fetchBases();
 		}
 	}
@@ -341,15 +381,19 @@
 		const updatedAt = new Date().toISOString();
 		selectedBase = { ...selectedBase, blocks, updated_at: updatedAt };
 		bases = bases.map(b => b.id === selectedBase!.id ? { ...b, blocks, updated_at: updatedAt } : b);
+		isSavingCanvas = true;
 		try {
 			await fetch(`/api/bases/${selectedBase.id}`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ project, blocks })
 			});
+			lastCanvasSave = new Date();
 		} catch (err) {
-			console.error('Failed to update blocks:', err);
+			errorToast((err as Error).message || 'Failed to save page');
 			await fetchBases();
+		} finally {
+			isSavingCanvas = false;
 		}
 	}
 
@@ -415,7 +459,7 @@
 			const newBase = bases.find(b => b.id === data.base.id);
 			if (newBase) handleSelect(newBase);
 		} catch (err) {
-			console.error('Failed to create canvas from table:', err);
+			errorToast((err as Error).message || 'Failed to create page from table');
 		}
 	}
 
@@ -490,10 +534,31 @@
 			</div>
 		</div>
 	{:else}
+		<!-- Delete Confirmation Bar -->
+		{#if showDeleteConfirm && baseToDelete}
+			<div class="flex items-center justify-between gap-3 px-4 py-2 flex-shrink-0" style="background: oklch(0.55 0.18 25 / 0.15); border-bottom: 1px solid oklch(0.55 0.18 25 / 0.30);">
+				<div class="flex items-center gap-2">
+					<svg class="h-4 w-4 flex-shrink-0" style="color: oklch(0.70 0.18 25);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+					</svg>
+					<span class="text-sm font-medium" style="color: oklch(0.80 0.15 25);">Delete "{baseToDelete.name}"?</span>
+					<span class="text-xs text-base-content/50">Cannot be undone</span>
+				</div>
+				<div class="flex items-center gap-1.5">
+					<button class="btn btn-xs btn-ghost" onclick={() => { showDeleteConfirm = false; baseToDelete = null; }}>Cancel</button>
+					<button class="btn btn-xs btn-error" onclick={confirmDelete}>Delete</button>
+				</div>
+			</div>
+		{/if}
 		<!-- Main Content: Resizable Split Panel -->
 		<div class="bases-body" class:dragging={isDragging}>
 			<!-- Left Panel: Bases List -->
-			<div class="bases-panel-left" style="width: {leftPanelWidth}px;">
+			<div
+				class="bases-panel-left"
+				class:collapsed={isCollapsed}
+				style="width: {isCollapsed ? 0 : leftPanelWidth}px; transition: {isDragging ? 'none' : 'width 0.2s ease'};"
+				use:swipe={{ onSwipeLeft: () => { isCollapsed = true; }, allowRight: false, commitThreshold: 60, threshold: 40 }}
+			>
 				<BasesList
 					{bases}
 					selectedBaseId={selectedBase?.id ?? null}
@@ -505,27 +570,61 @@
 					onToggleAlwaysInject={handleToggleAlwaysInject}
 					onIconChange={handleIconChange}
 					onReorder={handleReorder}
+					onCollapse={() => { isCollapsed = true; }}
 				/>
 			</div>
 
-			<!-- Vertical Divider -->
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-			<div
-				class="vertical-divider"
-				class:dragging={isDragging}
-				onmousedown={handleDividerMouseDown}
-				role="separator"
-				aria-orientation="vertical"
-			>
-				<div class="divider-grip">
-					<div class="grip-line"></div>
-					<div class="grip-line"></div>
+			<!-- Vertical Divider / Expand Tab -->
+			{#if isCollapsed}
+				<button
+					class="expand-tab"
+					onclick={expandPanel}
+					title="Expand knowledge bases (Ctrl+\\)"
+					aria-label="Expand knowledge bases panel"
+				>
+					<div class="expand-tab-inner">
+						<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+						</svg>
+					</div>
+				</button>
+			{:else}
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+				<div
+					class="vertical-divider"
+					class:dragging={isDragging}
+					onpointerdown={onDividerPointerDown}
+					onpointermove={onDividerPointerMove}
+					onpointerup={onDividerPointerUp}
+					role="separator"
+					aria-orientation="vertical"
+					aria-valuenow={leftPanelWidth}
+					aria-valuemin={MIN_PANEL_WIDTH}
+					aria-valuemax={MAX_PANEL_WIDTH}
+				>
+					<div class="divider-grip">
+						<div class="grip-line"></div>
+						<div class="grip-line"></div>
+					</div>
 				</div>
-			</div>
+			{/if}
 
 			<!-- Right Panel: Canvas Editor -->
-			<div class="bases-panel-right">
+			<div class="bases-panel-right" style="position: relative;">
+				<!-- Canvas save indicator -->
+				{#if isSavingCanvas}
+					<div class="absolute top-2 right-3 z-10 flex items-center gap-1 text-xs text-base-content/50 pointer-events-none">
+						<span class="loading loading-spinner loading-xs"></span>
+						Saving...
+					</div>
+				{:else if lastCanvasSave}
+					{#key lastCanvasSave}
+						<div class="absolute top-2 right-3 z-10 text-xs pointer-events-none canvas-saved-flash" style="color: oklch(0.65 0.15 145 / 0.80);">
+							✓ Saved
+						</div>
+					{/key}
+				{/if}
 				{#if selectedBase?._system}
 					<!-- Read-only system base view -->
 					<div class="h-full flex flex-col overflow-hidden" style="background: oklch(0.14 0.01 250);">
@@ -598,6 +697,42 @@
 		overflow: hidden;
 	}
 
+	.bases-panel-left.collapsed {
+		min-width: 0;
+	}
+
+	/* Expand tab — shown when left panel is collapsed */
+	.expand-tab {
+		width: 16px;
+		min-width: 16px;
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: transparent;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+	}
+
+	.expand-tab-inner {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 16px;
+		height: 52px;
+		border-radius: 0 6px 6px 0;
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.55 0.02 250);
+		transition: background 0.15s ease, color 0.15s ease, width 0.15s ease;
+	}
+
+	.expand-tab:hover .expand-tab-inner {
+		background: oklch(0.65 0.15 200 / 0.25);
+		color: oklch(0.75 0.15 200);
+		width: 20px;
+	}
+
 	.bases-panel-right {
 		display: flex;
 		flex-direction: column;
@@ -655,5 +790,15 @@
 
 	.vertical-divider.dragging .grip-line {
 		background: oklch(0.70 0.18 200);
+	}
+
+	@keyframes saved-flash {
+		0%   { opacity: 0; transform: translateY(-3px); color: oklch(0.75 0.20 145); }
+		20%  { opacity: 1; transform: translateY(0); }
+		70%  { opacity: 1; }
+		100% { opacity: 0.4; color: oklch(0.55 0.10 145 / 0.60); }
+	}
+	.canvas-saved-flash {
+		animation: saved-flash 1.8s ease-out forwards;
 	}
 </style>

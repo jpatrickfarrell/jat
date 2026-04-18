@@ -30,6 +30,7 @@
 		onToggleAlwaysInject,
 		onIconChange,
 		onReorder,
+		onCollapse = undefined,
 	}: {
 		bases: KnowledgeBase[];
 		selectedBaseId: string | null;
@@ -41,6 +42,7 @@
 		onToggleAlwaysInject: (base: KnowledgeBase) => void;
 		onIconChange: (base: KnowledgeBase, icon: string | null) => void;
 		onReorder: (orderedIds: string[]) => void;
+		onCollapse?: () => void;
 	} = $props();
 
 	// Search state
@@ -227,13 +229,21 @@
 	}
 </script>
 
-<svelte:window onclick={closeContextMenu} />
+<svelte:window
+	onclick={closeContextMenu}
+	onkeydown={(e) => {
+		if (e.key === 'Escape' && ctxVisible) { closeContextMenu(); return; }
+		const t = e.target as HTMLElement;
+		if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return;
+		if (e.key === 'n' || e.key === 'N') { e.preventDefault(); onAdd(); }
+	}}
+/>
 
 <div class="h-full flex flex-col overflow-hidden" style="background: oklch(0.16 0.01 250);">
 	<!-- Header -->
 	<div class="flex items-center justify-between px-4 py-3" style="border-bottom: 1px solid oklch(0.25 0.02 250);">
-		<h2 class="font-mono text-xs tracking-wider uppercase flex items-center gap-2" style="color: oklch(0.65 0.02 250);">
-			Knowledge Bases
+		<h2 class="font-mono text-xs tracking-wider uppercase flex items-center gap-2 whitespace-nowrap" style="color: oklch(0.65 0.02 250);">
+			Bases
 			{#if bases.length > 0}
 				<span class="text-[10px] font-mono px-1.5 py-0.5 rounded-full" style="background: oklch(0.25 0.02 250); color: oklch(0.55 0.02 250);">
 					{bases.length}
@@ -255,14 +265,14 @@
 			<!-- New blank page button -->
 			<button
 				onclick={onAdd}
-				class="flex items-center gap-1 px-2 py-1 rounded text-xs font-mono transition-all duration-150 hover:scale-105 cursor-pointer"
+				class="flex items-center justify-center w-6 h-6 rounded transition-all duration-150 hover:scale-105 cursor-pointer"
 				style="background: oklch(0.70 0.18 240 / 0.15); color: oklch(0.75 0.15 240); border: 1px solid oklch(0.70 0.18 240 / 0.3);"
-				title="Create new base"
+				title="New base"
+				aria-label="New base"
 			>
-				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3.5 h-3.5">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
 				</svg>
-				New
 			</button>
 		</div>
 	</div>
@@ -342,16 +352,14 @@
 						<span class="text-[10px]" style="color: oklch(0.40 0.02 250);">({systemBases.length})</span>
 					</div>
 					{#each systemBases as base (base.id)}
-						<div
-							class="flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition-all duration-150"
+						<button
+							type="button"
+							class="flex items-center gap-2 px-3 py-2 rounded w-full text-left transition-all duration-150"
 							style="
 								background: {selectedBaseId === base.id ? 'oklch(0.70 0.18 240 / 0.12)' : 'transparent'};
 								border-left: 2px solid {selectedBaseId === base.id ? 'oklch(0.70 0.18 240 / 0.6)' : 'transparent'};
 							"
 							onclick={() => onSelect(base)}
-							onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(base); } }}
-							role="button"
-							tabindex="0"
 						>
 							<span class="text-sm shrink-0">🔒</span>
 							<div class="flex-1 min-w-0">
@@ -363,7 +371,7 @@
 								class="text-[9px] font-mono px-1 py-0.5 rounded shrink-0"
 								style="background: oklch(0.40 0.10 270 / 0.2); color: oklch(0.65 0.08 270);"
 							>SYSTEM</span>
-						</div>
+						</button>
 					{/each}
 				</div>
 
@@ -398,17 +406,14 @@
 </div>
 
 {#snippet baseItem(base: KnowledgeBase)}
-	<div
-		class="group flex items-start gap-2 px-2 py-2 rounded cursor-pointer transition-all duration-150"
+	<button type="button"
+		class="group flex items-start gap-2 px-2 py-2 rounded cursor-pointer w-full text-left transition-all duration-150"
 		style="
 			background: {selectedBaseId === base.id ? 'oklch(0.70 0.18 240 / 0.12)' : 'transparent'};
 			border-left: 2px solid {selectedBaseId === base.id ? 'oklch(0.70 0.18 240 / 0.6)' : 'transparent'};
 		"
 		onclick={() => onSelect(base)}
-		onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(base); } }}
 		oncontextmenu={(e) => handleContextMenu(e, base)}
-		role="button"
-		tabindex="0"
 	>
 		<!-- Icon (emoji picker or default) -->
 		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -437,11 +442,20 @@
 					<div class="text-sm font-medium truncate" style="color: {selectedBaseId === base.id ? 'oklch(0.85 0.12 240)' : 'oklch(0.75 0.02 250)'};">
 						{base.name}
 					</div>
+					<!-- Rename pencil (hover) -->
+					<button
+						class="opacity-0 group-hover:opacity-40 hover:!opacity-100 shrink-0 p-0.5 rounded transition-opacity"
+						style="color: oklch(0.55 0.02 250); background: transparent; border: none;"
+						onclick={(e) => { e.stopPropagation(); startRename(base); }}
+						title="Rename"
+					>
+						<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z"/></svg>
+					</button>
 					{#if base._projectNotes || base.id?.startsWith('_notes_')}
 						<span class="shrink-0 text-[9px] font-mono px-1 py-0.5 rounded" style="background: oklch(0.55 0.12 85 / 0.15); color: oklch(0.70 0.12 85); border: 1px solid oklch(0.55 0.12 85 / 0.25);">NOTES</span>
 					{/if}
 					{#if base.always_inject}
-						<span class="shrink-0 text-[9px] font-mono px-1 py-0.5 rounded" style="background: oklch(0.55 0.15 145 / 0.15); color: oklch(0.70 0.15 145); border: 1px solid oklch(0.55 0.15 145 / 0.25);">AI</span>
+						<span class="shrink-0 text-[9px] font-mono px-1 py-0.5 rounded" style="background: oklch(0.55 0.15 145 / 0.15); color: oklch(0.70 0.15 145); border: 1px solid oklch(0.55 0.15 145 / 0.25);">INJECT</span>
 					{/if}
 				</div>
 				<div class="flex items-center gap-1.5 mt-0.5">
@@ -451,7 +465,7 @@
 					{#if base.token_estimate}
 						<span class="text-[10px]" style="color: oklch(0.40 0.02 250);">·</span>
 						<span class="text-[10px]" style="color: oklch(0.45 0.02 250);">
-							~{formatTokens(base.token_estimate)} tok
+							~{formatTokens(base.token_estimate)} tokens
 						</span>
 					{/if}
 					<span class="text-[10px]" style="color: oklch(0.40 0.02 250);">·</span>
@@ -463,15 +477,18 @@
 		</div>
 
 		<!-- Always-inject toggle (hover visible for non-injected) -->
-		<button
-			class="shrink-0 mt-0.5 text-[9px] font-mono px-1.5 py-0.5 rounded transition-all duration-150 cursor-pointer {base.always_inject ? '' : 'opacity-0 group-hover:opacity-100'}"
-			style="background: {base.always_inject ? 'oklch(0.45 0.15 145 / 0.3)' : 'oklch(0.30 0.01 250)'}; color: {base.always_inject ? 'oklch(0.75 0.15 145)' : 'oklch(0.55 0.01 250)'}; border: none;"
+		<!-- svelte-ignore a11y_interactive_supports_focus -->
+		<span
+			role="button"
+			class="shrink-0 mt-0.5 text-[9px] font-mono px-1.5 py-0.5 rounded transition-all duration-150 cursor-pointer {base.always_inject ? '' : 'opacity-0 group-hover:opacity-60'}"
+			style="background: {base.always_inject ? 'oklch(0.45 0.15 145 / 0.3)' : 'oklch(0.30 0.01 250)'}; color: {base.always_inject ? 'oklch(0.75 0.15 145)' : 'oklch(0.50 0.01 250)'};"
 			onclick={(e) => handleToggle(e, base)}
-			title={base.always_inject ? 'Always injected into agent prompts (click to disable)' : 'Click to always inject into agent prompts'}
+			onkeydown={(e) => e.key === 'Enter' && handleToggle(e as any, base)}
+			title={base.always_inject ? 'Always Inject: on — click to disable' : 'Enable Always Inject'}
 		>
-			{base.always_inject ? 'ON' : 'OFF'}
-		</button>
-	</div>
+			{base.always_inject ? 'INJECT' : 'inject'}
+		</span>
+	</button>
 {/snippet}
 
 <!-- Context Menu -->

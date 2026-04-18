@@ -191,84 +191,56 @@
 			return {
 				totalCompleted: 0,
 				todayCount: 0,
-				streak: 0,
-				bestStreak: 0,
+				thisWeekCount: 0,
+				topAgent: null as { name: string; count: number } | null,
+				topProject: null as { name: string; count: number } | null,
 				avgPerDay: 0,
 			};
 
 		const today = new Date();
 		today.setHours(0, 0, 0, 0);
+		const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
-		// Group by date
-		const tasksByDate = new Map<string, CompletedTask[]>();
+		const weekAgo = new Date(today);
+		weekAgo.setDate(weekAgo.getDate() - 7);
+
+		const thirtyDaysAgo = new Date(today);
+		thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+		let todayCount = 0;
+		let thisWeekCount = 0;
+		let last30Count = 0;
+
+		const agentCounts = new Map<string, number>();
+		const projectCounts = new Map<string, number>();
 
 		for (const task of filteredTasks) {
 			const dateStr = toLocalDateStr(task.closed_at || task.updated_at);
-
-			if (!tasksByDate.has(dateStr)) {
-				tasksByDate.set(dateStr, []);
-			}
-			tasksByDate.get(dateStr)!.push(task);
-		}
-
-		// Today's count
-		const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-		const todayCount = tasksByDate.get(todayStr)?.length || 0;
-
-		// Calculate current streak
-		let streak = 0;
-		const checkDate = new Date(today);
-
-		for (let i = 0; i < 365; i++) {
-			const dateStr = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, "0")}-${String(checkDate.getDate()).padStart(2, "0")}`;
-			if (tasksByDate.has(dateStr)) {
-				streak++;
-			} else if (i > 0) {
-				break;
-			}
-			checkDate.setDate(checkDate.getDate() - 1);
-		}
-
-		// Calculate best streak
-		const sortedDates = Array.from(tasksByDate.keys()).sort();
-		let bestStreak = 0;
-		let currentStreak = 0;
-		let prevDate: Date | null = null;
-
-		for (const dateStr of sortedDates) {
 			const date = parseLocalDate(dateStr);
-			if (prevDate) {
-				const diff =
-					(date.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
-				if (diff === 1) {
-					currentStreak++;
-				} else {
-					currentStreak = 1;
-				}
-			} else {
-				currentStreak = 1;
+
+			if (dateStr === todayStr) todayCount++;
+			if (date >= weekAgo) thisWeekCount++;
+			if (date >= thirtyDaysAgo) last30Count++;
+
+			if (task.assignee) {
+				agentCounts.set(task.assignee, (agentCounts.get(task.assignee) || 0) + 1);
 			}
-			bestStreak = Math.max(bestStreak, currentStreak);
-			prevDate = date;
+			const project = task.project || task.id.split('-')[0];
+			if (project) {
+				projectCounts.set(project, (projectCounts.get(project) || 0) + 1);
+			}
 		}
 
-		// Average per day (last 30 days)
-		const thirtyDaysAgo = new Date(today);
-		thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-		let last30Count = 0;
-		for (const [dateStr, dateTasks] of tasksByDate) {
-			if (parseLocalDate(dateStr) >= thirtyDaysAgo) {
-				last30Count += dateTasks.length;
-			}
-		}
-		const avgPerDay = last30Count / 30;
+		const topAgentEntry = [...agentCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+		const topProjectEntry = [...projectCounts.entries()].sort((a, b) => b[1] - a[1])[0];
 
 		return {
 			totalCompleted: filteredTasks.length,
 			todayCount,
-			streak,
-			bestStreak,
-			avgPerDay,
+			thisWeekCount,
+			topAgent: topAgentEntry ? { name: topAgentEntry[0], count: topAgentEntry[1] } : null,
+			topProject: topProjectEntry ? { name: topProjectEntry[0], count: topProjectEntry[1] } : null,
+			avgPerDay: last30Count / 30,
 		};
 	});
 
@@ -394,66 +366,49 @@
 				>
 			</div>
 		{:else}
-			<!-- Stats Row - Stats + Graph (title on lg+) -->
-			<div
-				class="grid grid-cols-[auto_1fr] lg:grid-cols-[auto_auto_1fr] gap-3 items-stretch mb-6"
-			>
-				<!-- Left: Title (lg+ only) -->
-				<div class="mr-10 hidden lg:flex flex-col justify-center pr-2">
-					<h1 class="text-xl font-semibold text-base-content font-mono tracking-in-expand">
-						Task History
-					</h1>
-					<p class="text-sm text-base-content/60">
-						{stats.totalCompleted} completed
-					</p>
-				</div>
-
-				<!-- Stats cluster -->
-				<div class="stats-cluster">
-					<div class="stat-card streak-card" use:reveal={{ animation: 'scale-in-center' }}>
-						<div class="stat-icon">
-							<span class="streak-fire">🔥</span>
-						</div>
-						<div class="stat-content">
-							<span class="stat-value">
-								<AnimatedDigits value={stats.streak.toString()} />
-							</span>
-							<span class="stat-label">day streak</span>
-						</div>
+			<!-- Page Header: Title + Instrument Strip -->
+			<div class="page-header mb-3">
+				<h1 class="page-title tracking-in-expand">Task History</h1>
+				<div class="instrument-strip">
+					<div class="instr-reading" use:reveal={{ animation: 'scale-in-center' }}>
+						<span class="instr-value"><AnimatedDigits value={stats.totalCompleted.toString()} /></span>
+						<span class="instr-label">total</span>
 					</div>
-
-					<div class="stat-card" use:reveal={{ animation: 'scale-in-center', delay: 0.1 }}>
-						<div class="stat-content">
-							<span class="stat-value today-value">
-								<AnimatedDigits value={stats.todayCount.toString()} />
-							</span>
-							<span class="stat-label">today</span>
-						</div>
+					<div class="instr-divider"></div>
+					<div class="instr-reading" use:reveal={{ animation: 'scale-in-center', delay: 0.05 }}>
+						<span class="instr-value instr-today"><AnimatedDigits value={stats.todayCount.toString()} /></span>
+						<span class="instr-label">today</span>
 					</div>
-
-					<div class="stat-card" use:reveal={{ animation: 'scale-in-center', delay: 0.2 }}>
-						<div class="stat-content">
-							<span class="stat-value">
-								<AnimatedDigits value={stats.bestStreak.toString()} />
-							</span>
-							<span class="stat-label">best streak</span>
-						</div>
+					<div class="instr-divider"></div>
+					<div class="instr-reading" use:reveal={{ animation: 'scale-in-center', delay: 0.1 }}>
+						<span class="instr-value">{stats.thisWeekCount}</span>
+						<span class="instr-label">this week</span>
 					</div>
-
-					<div class="stat-card" use:reveal={{ animation: 'scale-in-center', delay: 0.3 }}>
-						<div class="stat-content">
-							<span class="stat-value">
-								{stats.avgPerDay.toFixed(1)}
-							</span>
-							<span class="stat-label">avg/day</span>
-						</div>
+					{#if stats.topAgent}
+					<div class="instr-divider"></div>
+					<div class="instr-reading" use:reveal={{ animation: 'scale-in-center', delay: 0.15 }}>
+						<span class="instr-value instr-agent">{stats.topAgent.name}</span>
+						<span class="instr-label">top agent · {stats.topAgent.count}</span>
+					</div>
+					{/if}
+					{#if stats.topProject && !selectedProject}
+					<div class="instr-divider"></div>
+					<div class="instr-reading" use:reveal={{ animation: 'scale-in-center', delay: 0.2 }}>
+						<span class="instr-value instr-project">{stats.topProject.name}</span>
+						<span class="instr-label">top project · {stats.topProject.count}</span>
+					</div>
+					{/if}
+					<div class="instr-divider"></div>
+					<div class="instr-reading" use:reveal={{ animation: 'scale-in-center', delay: 0.25 }}>
+						<span class="instr-value">{stats.avgPerDay.toFixed(1)}</span>
+						<span class="instr-label">avg/day (30d)</span>
 					</div>
 				</div>
+			</div>
 
-				<!-- Right: Activity Graph -->
-				<div class="graph-card" use:reveal>
-					<StreakCalendar tasks={filteredTasks} weeks={16} />
-				</div>
+			<!-- Activity Calendar -->
+			<div class="calendar-row mb-4" use:reveal>
+				<StreakCalendar tasks={filteredTasks} weeks={16} />
 			</div>
 
 			<!-- Daily Breakdown -->
@@ -568,26 +523,89 @@
 {/if}
 
 <style>
-	/* Stats cluster - 2x2 grid of stat cards */
-	.stats-cluster {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: 0.5rem;
-	}
-
-	.stat-card {
-		background: var(--color-base-100);
-		border: 1px solid var(--color-base-300);
-		border-radius: 8px;
-		padding: 0.5rem 0.75rem;
+	/* Page header: title + instrument strip */
+	.page-header {
 		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.5rem;
-		min-width: 80px;
+		flex-direction: column;
+		gap: 0.75rem;
 	}
 
-	.graph-card {
+	@media (min-width: 640px) {
+		.page-header {
+			flex-direction: row;
+			align-items: center;
+			gap: 1.5rem;
+		}
+	}
+
+	.page-title {
+		font-size: 0.75rem;
+		font-weight: 700;
+		color: oklch(from var(--color-base-content) l c h / 50%);
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		white-space: nowrap;
+		font-family: system-ui, -apple-system, sans-serif;
+	}
+
+	@media (min-width: 640px) {
+		.page-title {
+			padding-right: 1.5rem;
+			border-right: 1px solid var(--color-base-300);
+		}
+	}
+
+	/* Instrument strip: borderless horizontal readout row */
+	.instrument-strip {
+		display: flex;
+		align-items: stretch;
+		flex-wrap: wrap;
+		row-gap: 0.5rem;
+		gap: 0;
+	}
+
+	.instr-reading {
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		padding: 0 1rem;
+		gap: 0.1rem;
+	}
+
+	.instr-reading:first-child {
+		padding-left: 0;
+	}
+
+	.instr-value {
+		font-size: 1.25rem;
+		font-weight: 700;
+		color: var(--color-base-content);
+		font-family: ui-monospace, monospace;
+		line-height: 1;
+	}
+
+	.instr-label {
+		font-size: 0.625rem;
+		text-transform: uppercase;
+		letter-spacing: 0.07em;
+		color: oklch(from var(--color-base-content) l c h / 40%);
+		font-family: system-ui, -apple-system, sans-serif;
+		white-space: nowrap;
+	}
+
+	.instr-divider {
+		width: 1px;
+		height: 2rem;
+		background: var(--color-base-300);
+		flex-shrink: 0;
+	}
+
+	.instr-today   { color: oklch(0.78 0.16 85); }
+	.instr-agent   { color: oklch(0.62 0.16 145); font-size: 0.9rem; }
+	.instr-project { color: oklch(0.65 0.14 200); font-size: 0.9rem; }
+
+	/* Activity calendar row */
+	.calendar-row {
 		background: var(--color-base-100);
 		border: 1px solid var(--color-base-300);
 		border-radius: 8px;
@@ -596,51 +614,6 @@
 		align-items: center;
 		justify-content: center;
 		overflow-x: auto;
-	}
-
-	.streak-card {
-		background: linear-gradient(
-			135deg,
-			color-mix(in oklch, var(--color-warning) 25%, var(--color-base-100)),
-			var(--color-base-100)
-		);
-		border-color: oklch(from var(--color-warning) l c h / 40%);
-	}
-
-	.stat-icon {
-		font-size: 1.25rem;
-	}
-
-	.streak-fire {
-		filter: drop-shadow(
-			0 0 6px color-mix(in oklch, var(--color-warning) 60%, transparent)
-		);
-	}
-
-	.stat-content {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-	}
-
-	.stat-value {
-		font-size: 1.25rem;
-		font-weight: 700;
-		color: var(--color-base-content);
-		font-family: ui-monospace, monospace;
-		line-height: 1;
-	}
-
-	.today-value {
-		color: var(--color-warning);
-	}
-
-	.stat-label {
-		font-size: 0.65rem;
-		color: oklch(from var(--color-base-content) l c h / 55%);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		margin-top: 2px;
 	}
 
 	/* Daily Section */
@@ -653,11 +626,9 @@
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
-		margin-bottom: 1rem;
-		padding: 0.75rem 1rem;
-		background: var(--color-base-100);
-		border: 1px solid var(--color-base-300);
-		border-radius: 8px;
+		margin-bottom: 0.75rem;
+		padding: 0.5rem 0;
+		border-bottom: 1px solid var(--color-base-300);
 	}
 
 	.day-list {

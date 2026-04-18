@@ -1,20 +1,20 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { fetchAndGetProjectColors, getProjectColor } from '$lib/utils/projectColors';
-	import { openProjectDrawer } from '$lib/stores/drawerStore';
-	import SearchDropdown from '$lib/components/SearchDropdown.svelte';
-	import type { SearchDropdownGroup } from '$lib/components/SearchDropdown.svelte';
+	import { SESSION_STATE_VISUALS } from '$lib/config/statusColors';
 
 	interface Props {
 		projects: string[];
 		selected: string;
 		onSelect: (project: string) => void;
+		colorFn?: (project: string) => string;
+		onOpenSearch?: () => void;
+		sessionStates?: string[];
 	}
 
-	let { projects = [], selected = '', onSelect }: Props = $props();
+	let { projects = [], selected = '', onSelect, colorFn, onOpenSearch, sessionStates = [] }: Props = $props();
 
 	let projectColors = $state<Record<string, string>>({});
-	let dropdownOpen = $state(false);
 
 	// Swipe state
 	let touchStartX = $state(0);
@@ -28,10 +28,13 @@
 	const DIR_RATIO = 2; // deltaX must be > DIR_RATIO * deltaY
 
 	onMount(async () => {
-		projectColors = await fetchAndGetProjectColors();
+		if (!colorFn) {
+			projectColors = await fetchAndGetProjectColors();
+		}
 	});
 
 	function getColor(project: string): string {
+		if (colorFn) return colorFn(project);
 		return projectColors[project?.toLowerCase()] || getProjectColor(project + '-x');
 	}
 
@@ -48,11 +51,6 @@
 		if (!isSwiping || Math.abs(swipeDelta) < 8) return null;
 		return swipeDelta > 0 ? prevProject : nextProject;
 	});
-
-	const groups = $derived.by<SearchDropdownGroup[]>(() => [{
-		label: 'Projects',
-		options: projects.map(p => ({ value: p, label: p }))
-	}]);
 
 	function go(direction: 1 | -1) {
 		if (projects.length < 2) return;
@@ -156,29 +154,39 @@
 				</span>
 			{/if}
 
-			<!-- SearchDropdown for fuzzy project search -->
-			<SearchDropdown
-				value={selected}
-				{groups}
-				placeholder="Search projects…"
-				colorFn={getColor}
-				variant="chip"
-				size="sm"
-				onChange={(p) => onSelect(p)}
+			<!-- Project name button — tapping opens UnifiedSearch (Ctrl+K) -->
+			<button
+				type="button"
+				class="mps-name-btn"
+				style="--mps-color: {selectedColor}"
+				onclick={() => onOpenSearch?.()}
+				aria-label="Search projects and commands"
 			>
-				{#snippet footer()}
-					<button
-						type="button"
-						class="mps-add-project"
-						onclick={(e) => { e.stopPropagation(); openProjectDrawer(); }}
-					>
-						<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-						</svg>
-						<span>Add Project</span>
-					</button>
-				{/snippet}
-			</SearchDropdown>
+				{#if sessionStates.length > 0}
+					<span class="mps-dots">
+						{#each sessionStates as state}
+							{@const visual = SESSION_STATE_VISUALS[state]}
+							{@const color = visual?.accent || selectedColor}
+							{@const isNI = state === 'needs-input'}
+							{@const isRev = state === 'ready-for-review'}
+							{#if isNI || isRev}
+								<span class="mps-dot-animated">
+									<span class="mps-dot-ping" class:animate-ping={isNI} class:animate-pulse={isRev} style="background: {color};"></span>
+									<span class="mps-dot-core" style="background: {color};"></span>
+								</span>
+							{:else}
+								<span class="mps-dot" style="background: {color};"></span>
+							{/if}
+						{/each}
+					</span>
+				{:else}
+					<span class="mps-dot" style="background: {selectedColor};"></span>
+				{/if}
+				<span class="mps-name-text truncate">{selected || 'Select project'}</span>
+				<svg class="mps-name-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<path d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+				</svg>
+			</button>
 		</div>
 	</div>
 
@@ -211,26 +219,10 @@
 		align-items: center;
 		height: 44px;
 		padding: 0 0.25rem;
-		background: oklch(0.14 0.01 250);
-		border-bottom: 1px solid color-mix(in oklch, var(--mps-color) 25%, oklch(0.22 0.02 250));
 		touch-action: pan-y;
 		user-select: none;
 		-webkit-user-select: none;
 		position: relative;
-		overflow: hidden;
-	}
-
-	/* Color accent at bottom */
-	.mps-bar::after {
-		content: '';
-		position: absolute;
-		bottom: 0;
-		left: 0;
-		right: 0;
-		height: 2px;
-		background: var(--mps-color);
-		opacity: 0.6;
-		pointer-events: none;
 	}
 
 	.mps-chevron {
@@ -269,8 +261,92 @@
 		align-items: center;
 		justify-content: center;
 		min-width: 0;
-		overflow: hidden;
+		overflow: visible;
 		position: relative;
+	}
+
+	/* Project name button — matches desktop chip-group language */
+	.mps-name-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.3rem 0.625rem;
+		border-radius: 0.375rem;
+		border: 1px solid color-mix(in oklch, var(--mps-color) 62%, transparent);
+		background: color-mix(in oklch, var(--mps-color) 30%, transparent);
+		box-shadow: 0 0 14px color-mix(in oklch, var(--mps-color) 28%, transparent), 0 0 4px color-mix(in oklch, var(--mps-color) 12%, transparent);
+		cursor: pointer;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		font-size: 0.75rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
+		color: var(--mps-color);
+		max-width: 16rem;
+		transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+		-webkit-tap-highlight-color: transparent;
+		/* Ensure touch target is at least 44px tall via line-height */
+		min-height: 2rem;
+	}
+	.mps-name-btn:hover, .mps-name-btn:focus-visible {
+		background: color-mix(in oklch, var(--mps-color) 38%, transparent);
+		border-color: color-mix(in oklch, var(--mps-color) 75%, transparent);
+		box-shadow: 0 0 18px color-mix(in oklch, var(--mps-color) 38%, transparent), 0 0 6px color-mix(in oklch, var(--mps-color) 18%, transparent);
+		outline: none;
+	}
+	.mps-name-btn:active {
+		background: color-mix(in oklch, var(--mps-color) 42%, transparent);
+	}
+	/* Session state dots — mirrors ProjectSelector chip-dot pattern */
+	.mps-dots {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.2rem;
+		flex-shrink: 0;
+	}
+
+	.mps-dot {
+		width: 0.5rem;
+		height: 0.5rem;
+		border-radius: 50%;
+		flex-shrink: 0;
+	}
+
+	.mps-dot-animated {
+		position: relative;
+		display: inline-flex;
+		width: 0.5rem;
+		height: 0.5rem;
+		flex-shrink: 0;
+		overflow: hidden;
+	}
+
+	.mps-dot-ping {
+		position: absolute;
+		inset: 0;
+		border-radius: 50%;
+		opacity: 0.75;
+	}
+
+	.mps-dot-core {
+		position: relative;
+		display: inline-flex;
+		width: 100%;
+		height: 100%;
+		border-radius: 50%;
+	}
+	.mps-name-text {
+		flex: 1;
+		min-width: 0;
+		text-overflow: ellipsis;
+		overflow: hidden;
+		white-space: nowrap;
+	}
+	.mps-name-chevron {
+		width: 11px;
+		height: 11px;
+		flex-shrink: 0;
+		opacity: 0.5;
 	}
 
 	.mps-label-wrap {
@@ -303,26 +379,7 @@
 		left: calc(100% + 0.75rem);
 	}
 
-	.mps-add-project {
-		width: 100%;
-		padding: 0.375rem 0.75rem;
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		background: transparent;
-		border: none;
-		cursor: pointer;
-		font-size: 0.6875rem;
-		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
-		color: oklch(0.65 0.12 145);
-		transition: background 0.1s, color 0.1s;
-	}
-	.mps-add-project:hover {
-		background: oklch(0.24 0.06 145 / 0.3);
-		color: oklch(0.80 0.15 145);
-	}
-
-	@media (prefers-reduced-motion: reduce) {
+@media (prefers-reduced-motion: reduce) {
 		.mps-label-wrap {
 			transition: none;
 		}

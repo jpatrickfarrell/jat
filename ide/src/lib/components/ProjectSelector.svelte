@@ -980,17 +980,17 @@
 		display: inline-flex;
 		align-items: stretch;
 		border-radius: 0.375rem;
-		background: color-mix(in oklch, var(--project-color) 25%, transparent);
-		border: 1px solid color-mix(in oklch, var(--project-color) 50%, transparent);
-		box-shadow: 0 0 6px color-mix(in oklch, var(--project-color) 15%, transparent);
+		background: color-mix(in oklch, var(--project-color) 30%, transparent);
+		border: 1px solid color-mix(in oklch, var(--project-color) 62%, transparent);
+		box-shadow: 0 0 14px color-mix(in oklch, var(--project-color) 28%, transparent), 0 0 4px color-mix(in oklch, var(--project-color) 12%, transparent);
 		transition: all 0.15s ease;
 		overflow: hidden;
 	}
 
 	.chip-group:hover {
-		background: color-mix(in oklch, var(--project-color) 35%, transparent);
-		border-color: color-mix(in oklch, var(--project-color) 65%, transparent);
-		box-shadow: 0 0 10px color-mix(in oklch, var(--project-color) 25%, transparent);
+		background: color-mix(in oklch, var(--project-color) 38%, transparent);
+		border-color: color-mix(in oklch, var(--project-color) 75%, transparent);
+		box-shadow: 0 0 18px color-mix(in oklch, var(--project-color) 38%, transparent), 0 0 6px color-mix(in oklch, var(--project-color) 18%, transparent);
 	}
 
 	/* Muted styling for non-active project chips */
@@ -998,7 +998,7 @@
 		background: transparent;
 		border-color: color-mix(in oklch, var(--project-color) 20%, transparent);
 		box-shadow: none;
-		opacity: 0.5;
+		opacity: 0.38;
 	}
 
 	.chip-group.inactive:hover {

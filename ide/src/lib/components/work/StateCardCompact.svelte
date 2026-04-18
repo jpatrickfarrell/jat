@@ -89,11 +89,15 @@
 	});
 
 	let hovered = $state(false);
+	const NOSIGNAL_PREVIEW = 4;
+	const nosignalPreview = $derived(outputLines.slice(-NOSIGNAL_PREVIEW));
+	const nosignalHidden = $derived(outputLines.slice(0, -NOSIGNAL_PREVIEW));
 </script>
 
 {#if !hasSignal}
-	<!-- No signal data: show error badge + raw terminal immediately (no hiding) -->
-	<div class="scc-nosignal">
+	<!-- No signal data: show badge + last 4 lines; hover reveals full output -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="scc-nosignal" onmouseenter={() => hovered = true} onmouseleave={() => hovered = false}>
 		{#if stateName === 'compacting'}
 			<div class="scc-completing scc-completing-compact">
 				<svg class="animate-spin scc-completing-spinner scc-compacting-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="10" height="10">
@@ -102,16 +106,32 @@
 				<span>Compacting context…</span>
 			</div>
 		{:else}
-			<span class="scc-nosignal-badge">
-				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="9" height="9">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-				</svg>
-				NO SIGNAL DATA
-			</span>
+			<div class="scc-nosignal-header">
+				<span class="scc-nosignal-badge">
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="9" height="9">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+					</svg>
+					NO SIGNAL
+				</span>
+				{#if nosignalHidden.length > 0}
+					<span class="scc-nosignal-more">+{nosignalHidden.length} lines</span>
+				{/if}
+			</div>
 		{/if}
 		{#if outputLines.length > 0}
-			<div class="scc-output">
-				{#each outputLines as line}
+			<!-- Hidden overflow lines: reveal on hover via grid trick -->
+			{#if nosignalHidden.length > 0}
+				<div class="scc-output-wrapper" class:scc-output-expanded={hovered}>
+					<div class="scc-output-inner">
+						{#each nosignalHidden as line}
+							<div class="scc-output-line">{line || '\u00a0'}</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+			<!-- Always-visible preview: last 4 lines -->
+			<div class="scc-output scc-output-preview">
+				{#each nosignalPreview as line}
 					<div class="scc-output-line">{line || '\u00a0'}</div>
 				{/each}
 			</div>
@@ -498,6 +518,13 @@
 		padding: 0.2rem 0;
 	}
 
+	.scc-nosignal-header {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		margin-bottom: 0.25rem;
+	}
+
 	.scc-nosignal-badge {
 		display: inline-flex;
 		align-items: center;
@@ -510,7 +537,16 @@
 		border: 1px solid oklch(0.55 0.10 40 / 0.30);
 		border-radius: 3px;
 		padding: 0.1rem 0.35rem;
-		margin-bottom: 0.3rem;
+	}
+
+	.scc-nosignal-more {
+		font-size: 0.55rem;
+		color: oklch(0.45 0.02 250);
+		letter-spacing: 0.02em;
+	}
+
+	.scc-output-preview {
+		/* Preview lines are always visible, no extra margin needed */
 	}
 
 	/* ── Terminal output expand wrapper (grid trick) ────────────────────────── */

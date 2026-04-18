@@ -26,6 +26,7 @@
 	import ResizableDivider from '$lib/components/ResizableDivider.svelte';
 	import { FilesSkeleton } from '$lib/components/skeleton';
 	import type { OpenFile } from '$lib/components/files/types';
+	import { swipe } from '$lib/actions/swipe';
 
 	// Types
 	interface Project {
@@ -75,6 +76,10 @@
 	// Cloudflare project detection
 	let hasCloudflare = $state(false);
 
+	// Stage/unstage error feedback (auto-clears after 4s)
+	let stageError = $state<string | null>(null);
+	let stageErrorTimer: ReturnType<typeof setTimeout> | null = null;
+
 	// Cloudflare mode state: selected deployment for detail view
 	let selectedDeployment = $state<DeploymentItem | null>(null);
 
@@ -88,6 +93,8 @@
 	let leftPanelWidth = $state(520);
 	const MIN_PANEL_WIDTH = 200;
 	const MAX_PANEL_WIDTH_FALLBACK = 900;
+	const COLLAPSE_THRESHOLD = 140;
+	let isCollapsed = $state(false);
 
 	// Mobile layout state
 	let isMobileLayout = $state(false);
@@ -104,30 +111,54 @@
 	// Container ref for mobile layout
 	let containerRef: HTMLDivElement | null = $state(null);
 
-	function handleDividerMouseDown(e: MouseEvent) {
+	function onDividerPointerDown(e: PointerEvent) {
 		e.preventDefault();
 		isDragging = true;
 		startX = e.clientX;
 		startWidth = leftPanelWidth;
-
-		document.addEventListener('mousemove', handleDividerMouseMove);
-		document.addEventListener('mouseup', handleDividerMouseUp);
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 	}
 
-	function handleDividerMouseMove(e: MouseEvent) {
+	function onDividerPointerMove(e: PointerEvent) {
 		if (!isDragging) return;
 		const deltaX = e.clientX - startX;
 		let newWidth = startWidth + deltaX;
+		if (newWidth < COLLAPSE_THRESHOLD) {
+			isCollapsed = true;
+			return;
+		}
+		isCollapsed = false;
 		const maxWidth = Math.max(MAX_PANEL_WIDTH_FALLBACK, window.innerWidth * 0.8);
 		newWidth = Math.max(MIN_PANEL_WIDTH, Math.min(maxWidth, newWidth));
 		leftPanelWidth = newWidth;
 	}
 
-	function handleDividerMouseUp() {
+	function onDividerPointerUp(e: PointerEvent) {
 		isDragging = false;
-		document.removeEventListener('mousemove', handleDividerMouseMove);
-		document.removeEventListener('mouseup', handleDividerMouseUp);
+		(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
 	}
+
+	function expandSourcePanel() {
+		isCollapsed = false;
+	}
+
+	// Ctrl+\ toggles panel; Alt+G/U/C switches mode tabs (capture phase — fires before layout handler)
+	onMount(() => {
+		function handlePanelToggle(e: KeyboardEvent) {
+			if (e.ctrlKey && e.key === '\\') {
+				e.preventDefault();
+				isCollapsed = !isCollapsed;
+			}
+			if (e.altKey && !e.ctrlKey && !e.shiftKey) {
+				if (e.key === 'g' || e.key === 'G') { e.preventDefault(); switchMode('git'); }
+				if ((e.key === 'u' || e.key === 'U') && hasSupabase) { e.preventDefault(); switchMode('supabase'); }
+				if ((e.key === 'c' || e.key === 'C') && hasCloudflare) { e.preventDefault(); switchMode('cloudflare'); }
+			}
+		}
+		window.addEventListener('keydown', handlePanelToggle, true);
+		return () => window.removeEventListener('keydown', handlePanelToggle, true);
+	});
+
 
 	function handleMobileResize(deltaY: number) {
 		if (!containerRef) return;
@@ -227,7 +258,10 @@
 				selectedFileIsStaged = true;
 			}
 		} catch (err) {
-			console.error('[Git] Failed to stage file:', err);
+			const msg = err instanceof Error ? err.message : 'Stage failed';
+			stageError = msg;
+			if (stageErrorTimer) clearTimeout(stageErrorTimer);
+			stageErrorTimer = setTimeout(() => { stageError = null; }, 4000);
 		}
 	}
 
@@ -252,7 +286,10 @@
 				selectedFileIsStaged = false;
 			}
 		} catch (err) {
-			console.error('[Git] Failed to unstage file:', err);
+			const msg = err instanceof Error ? err.message : 'Unstage failed';
+			stageError = msg;
+			if (stageErrorTimer) clearTimeout(stageErrorTimer);
+			stageErrorTimer = setTimeout(() => { stageError = null; }, 4000);
 		}
 	}
 
@@ -377,6 +414,7 @@
 		return () => {
 			window.removeEventListener('resize', handleResize);
 			clearInterval(cfInterval);
+			if (stageErrorTimer) clearTimeout(stageErrorTimer);
 		};
 	});
 </script>
@@ -421,94 +459,86 @@
 			<div class="git-body" class:mobile-layout={isMobileLayout} bind:this={containerRef}>
 				<!-- Left Panel: Git Changes -->
 				<div
-					class="git-panel-left"
-					style="{isMobileLayout ? `height: ${topPanelHeight}%` : `width: ${leftPanelWidth}px`};"
+					class="git-panel-left" class:collapsed={isCollapsed}
+					style="{isMobileLayout ? `height: ${topPanelHeight}%` : `width: ${isCollapsed ? 0 : leftPanelWidth}px; transition: ${isDragging ? 'none' : 'width 0.2s ease'}`};"
+					use:swipe={{ onSwipeLeft: () => { isCollapsed = true; }, allowRight: false, commitThreshold: 60, threshold: 40 }}
 				>
 					<!-- Source Control Header -->
 					<div class="panel-title-header">
-						{#if hasSupabase || hasCloudflare}
-							<!-- Multi-mode: tabs left, controls right -->
-							<div class="mode-toggle">
-								<button
-									class="mode-btn mode-git"
-									class:active={activeMode === 'git'}
-									onclick={() => switchMode('git')}
-									title="Git Source Control"
-								>
-									<svg class="mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-										<line x1="6" y1="3" x2="6" y2="15"></line>
-										<circle cx="18" cy="6" r="3"></circle>
-										<circle cx="6" cy="18" r="3"></circle>
-										<path d="M18 9a9 9 0 0 1-9 9"></path>
-									</svg>
-									Git
-								</button>
-								{#if hasSupabase}
-									<button
-										class="mode-btn mode-supabase"
-										class:active={activeMode === 'supabase'}
-										onclick={() => switchMode('supabase')}
-										title="Supabase Migrations"
-									>
-										<svg class="mode-icon" viewBox="0 0 24 24" fill="currentColor">
-											<path d="M13.5 3L6 14h6l-1.5 7L18 10h-6l1.5-7z"/>
-										</svg>
-										Supabase
-									</button>
-								{/if}
-								{#if hasCloudflare}
-									<button
-										class="mode-btn mode-cloudflare"
-										class:active={activeMode === 'cloudflare'}
-										onclick={() => switchMode('cloudflare')}
-										title="Cloudflare Deployments"
-									>
-										<svg class="mode-icon" viewBox="0 0 24 24" fill="currentColor">
-											<path d="M16.5088 16.8447c.1475-.5068.0908-.9707-.1553-1.3154-.2246-.3164-.6045-.499-1.0615-.5205l-8.6592-.1123a.1559.1559 0 0 1-.1333-.0713c-.0283-.042-.0351-.0986-.021-.1553.0278-.084.1123-.1484.2036-.1562l8.7359-.1123c1.0351-.0489 2.1601-.8868 2.5537-1.9136l.499-1.3013c.0215-.0561.0293-.1128.0147-.168-.5625-2.5463-2.835-4.4453-5.5499-4.4453-2.5039 0-4.6284 1.6177-5.3876 3.8614-.4927-.3658-1.1187-.5625-1.794-.499-1.2026.119-2.1665 1.083-2.2861 2.2856-.0283.31-.0069.6128.0635.894C1.5683 13.171 0 14.7754 0 16.752c0 .1748.0142.3515.0352.5273.0141.083.0844.1475.1689.1475h15.9814c.0909 0 .1758-.0645.2032-.1553l.12-.4268zm2.7568-5.5634c-.0771 0-.1611 0-.2383.0112-.0566 0-.1054.0415-.127.0976l-.3378 1.1744c-.1475.5068-.0918.9707.1543 1.3164.2256.3164.6055.498 1.0625.5195l1.8437.1133c.0557 0 .1055.0263.1329.0703.0283.043.0351.1074.0214.1562-.0283.084-.1132.1485-.204.1553l-1.921.1123c-1.041.0488-2.1582.8867-2.5527 1.914l-.1406.3585c-.0283.0713.0215.1416.0986.1416h6.5977c.0771 0 .1474-.0489.169-.126.1122-.4082.1757-.837.1757-1.2803 0-2.6025-2.125-4.727-4.7344-4.727"/>
-										</svg>
-										Cloudflare
-									</button>
-								{/if}
-							</div>
-							<!-- Contextual controls for cloudflare mode -->
-							{#if activeMode === 'cloudflare'}
-								<div class="header-controls">
-									{#if cfTotalCount > 0}
-										<span class="cf-header-count">{cfTotalCount}</span>
-									{/if}
-									<select
-										class="cf-header-filter"
-										value={cfEnvFilter}
-										onchange={(e) => { const v = (e.target as HTMLSelectElement).value; cfEnvFilter = v; cfPanelRef?.setEnvFilter(v); }}
-										title="Filter by environment"
-									>
-										<option value="">All</option>
-										<option value="production">Production</option>
-										<option value="preview">Preview</option>
-									</select>
-									<button class="cf-header-refresh" onclick={() => cfPanelRef?.refresh()} title="Refresh">
-										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5" class:spinning={cfIsLoading}>
-											<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-											<path d="M3 3v5h5"/>
-											<path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
-											<path d="M21 21v-5h-5"/>
-										</svg>
-									</button>
-								</div>
-							{/if}
-						{:else}
-							<!-- Git-only: show project name + icon -->
-							<div class="title-left">
-								<svg class="panel-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<div class="mode-toggle">
+							<button
+								class="mode-btn mode-git"
+								class:active={activeMode === 'git'}
+								onclick={() => switchMode('git')}
+								title="Git Source Control (Alt+G)"
+							>
+								<svg class="mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 									<line x1="6" y1="3" x2="6" y2="15"></line>
 									<circle cx="18" cy="6" r="3"></circle>
 									<circle cx="6" cy="18" r="3"></circle>
 									<path d="M18 9a9 9 0 0 1-9 9"></path>
 								</svg>
-								<span class="font-medium text-base-content/90">{selectedProject || 'No project selected'}</span>
+								Git
+							</button>
+							{#if hasSupabase}
+								<button
+									class="mode-btn mode-supabase"
+									class:active={activeMode === 'supabase'}
+									onclick={() => switchMode('supabase')}
+									title="Supabase Migrations (Alt+U)"
+								>
+									<svg class="mode-icon" viewBox="0 0 24 24" fill="currentColor">
+										<path d="M13.5 3L6 14h6l-1.5 7L18 10h-6l1.5-7z"/>
+									</svg>
+									Supabase
+								</button>
+							{/if}
+							{#if hasCloudflare}
+								<button
+									class="mode-btn mode-cloudflare"
+									class:active={activeMode === 'cloudflare'}
+									onclick={() => switchMode('cloudflare')}
+									title="Cloudflare Deployments (Alt+C)"
+								>
+									<svg class="mode-icon" viewBox="0 0 24 24" fill="currentColor">
+										<path d="M16.5088 16.8447c.1475-.5068.0908-.9707-.1553-1.3154-.2246-.3164-.6045-.499-1.0615-.5205l-8.6592-.1123a.1559.1559 0 0 1-.1333-.0713c-.0283-.042-.0351-.0986-.021-.1553.0278-.084.1123-.1484.2036-.1562l8.7359-.1123c1.0351-.0489 2.1601-.8868 2.5537-1.9136l.499-1.3013c.0215-.0561.0293-.1128.0147-.168-.5625-2.5463-2.835-4.4453-5.5499-4.4453-2.5039 0-4.6284 1.6177-5.3876 3.8614-.4927-.3658-1.1187-.5625-1.794-.499-1.2026.119-2.1665 1.083-2.2861 2.2856-.0283.31-.0069.6128.0635.894C1.5683 13.171 0 14.7754 0 16.752c0 .1748.0142.3515.0352.5273.0141.083.0844.1475.1689.1475h15.9814c.0909 0 .1758-.0645.2032-.1553l.12-.4268zm2.7568-5.5634c-.0771 0-.1611 0-.2383.0112-.0566 0-.1054.0415-.127.0976l-.3378 1.1744c-.1475.5068-.0918.9707.1543 1.3164.2256.3164.6055.498 1.0625.5195l1.8437.1133c.0557 0 .1055.0263.1329.0703.0283.043.0351.1074.0214.1562-.0283.084-.1132.1485-.204.1553l-1.921.1123c-1.041.0488-2.1582.8867-2.5527 1.914l-.1406.3585c-.0283.0713.0215.1416.0986.1416h6.5977c.0771 0 .1474-.0489.169-.126.1122-.4082.1757-.837.1757-1.2803 0-2.6025-2.125-4.727-4.7344-4.727"/>
+									</svg>
+									Cloudflare
+								</button>
+							{/if}
+						</div>
+						{#if activeMode === 'cloudflare'}
+							<div class="header-controls">
+								{#if cfTotalCount > 0}
+									<span class="cf-header-count">{cfTotalCount}</span>
+								{/if}
+								<select
+									class="cf-header-filter"
+									value={cfEnvFilter}
+									onchange={(e) => { const v = (e.target as HTMLSelectElement).value; cfEnvFilter = v; cfPanelRef?.setEnvFilter(v); }}
+									title="Filter by environment"
+								>
+									<option value="">All</option>
+									<option value="production">Production</option>
+									<option value="preview">Preview</option>
+								</select>
+								<button class="cf-header-refresh" onclick={() => cfPanelRef?.refresh()} title="Refresh">
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5" class:spinning={cfIsLoading}>
+										<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+										<path d="M3 3v5h5"/>
+										<path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+										<path d="M21 21v-5h-5"/>
+									</svg>
+								</button>
 							</div>
+						{:else if selectedProject}
+							<span class="header-project-label">{selectedProject}</span>
 						{/if}
+						<span class="panel-kbd-hint" title="Toggle panel">Ctrl \</span>
 					</div>
+					{#if stageError}
+						<div class="stage-error-strip">{stageError}</div>
+					{/if}
 
 					<div class="panel-content git-panel-content">
 						{#if !selectedProject}
@@ -544,20 +574,40 @@
 				{#if isMobileLayout}
 					<ResizableDivider onResize={handleMobileResize} />
 				{:else}
+					{#if isCollapsed}
+					<button
+						class="expand-tab"
+						onclick={expandSourcePanel}
+						title="Expand source panel (Ctrl+\\)"
+						aria-label="Expand source control panel"
+					>
+						<div class="expand-tab-inner">
+							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+							</svg>
+						</div>
+					</button>
+				{:else}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 					<div
 						class="vertical-divider"
 						class:dragging={isDragging}
-						onmousedown={handleDividerMouseDown}
+						onpointerdown={onDividerPointerDown}
+						onpointermove={onDividerPointerMove}
+						onpointerup={onDividerPointerUp}
 						role="separator"
 						aria-orientation="vertical"
+						aria-valuenow={leftPanelWidth}
+						aria-valuemin={MIN_PANEL_WIDTH}
+						aria-valuemax={MAX_PANEL_WIDTH_FALLBACK}
 					>
 						<div class="divider-grip">
 							<div class="grip-line"></div>
 							<div class="grip-line"></div>
 						</div>
 					</div>
+				{/if}
 				{/if}
 
 				<!-- Right Panel: Diff Viewer (Git) or Migration Viewer (Supabase) -->
@@ -597,18 +647,8 @@
 								{/key}
 							</div>
 						{:else}
-							<div class="diff-placeholder">
-								<div class="diff-placeholder-content">
-									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="diff-placeholder-icon">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-									</svg>
-									<p class="diff-placeholder-text">
-										{selectedProject ? 'Select a file or commit to view diff' : 'Select a project to start'}
-									</p>
-									<p class="diff-placeholder-hint">
-										Click on a modified file or a commit in the timeline
-									</p>
-								</div>
+							<div class="panel-idle">
+								<span class="panel-idle-hint">{selectedProject ? 'select a file or commit to view diff' : 'select a project to start'}</span>
 							</div>
 						{/if}
 					{:else if activeMode === 'supabase'}
@@ -623,19 +663,8 @@
 								onSave={(newContent) => { selectedMigrationContent = newContent; }}
 							/>
 						{:else}
-							<div class="diff-placeholder">
-								<div class="diff-placeholder-content">
-									<!-- Supabase logo (lightning bolt) -->
-									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="diff-placeholder-icon">
-										<path d="M13.5 3L6 14h6l-1.5 7L18 10h-6l1.5-7z"/>
-									</svg>
-									<p class="diff-placeholder-text">
-										{selectedProject ? 'Select a migration to view SQL' : 'Select a project to start'}
-									</p>
-									<p class="diff-placeholder-hint">
-										Click on a migration or check schema diff in the left panel
-									</p>
-								</div>
+							<div class="panel-idle">
+								<span class="panel-idle-hint">{selectedProject ? 'select a migration to view SQL' : 'select a project to start'}</span>
 							</div>
 						{/if}
 					{:else if activeMode === 'cloudflare'}
@@ -719,19 +748,8 @@
 								</div>
 							</div>
 						{:else}
-							<div class="diff-placeholder">
-								<div class="diff-placeholder-content">
-									<!-- Cloudflare cloud icon -->
-									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="diff-placeholder-icon">
-										<path d="M2.25 15a4.5 4.5 0 0 1 0-9h.22A6.75 6.75 0 0 1 15.75 4.5 4.5 4.5 0 0 1 18 13.5h.75a3 3 0 1 1 0 6H2.25z"/>
-									</svg>
-									<p class="diff-placeholder-text">
-										{selectedProject ? 'Select a deployment to view details' : 'Select a project to start'}
-									</p>
-									<p class="diff-placeholder-hint">
-										Click on a deployment in the left panel to see build stages and details
-									</p>
-								</div>
+							<div class="panel-idle">
+								<span class="panel-idle-hint">{selectedProject ? 'select a deployment to view details' : 'select a project to start'}</span>
 							</div>
 						{/if}
 					{/if}
@@ -743,7 +761,8 @@
 
 <style>
 	.git-page {
-		height: 100%;
+		flex: 1;
+		min-height: 0;
 		display: flex;
 		flex-direction: column;
 	}
@@ -783,6 +802,41 @@
 		container-name: git-panel;
 	}
 
+	.git-panel-left.collapsed {
+		min-width: 0;
+	}
+
+	.expand-tab {
+		width: 16px;
+		min-width: 16px;
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: transparent;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+	}
+
+	.expand-tab-inner {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 16px;
+		height: 52px;
+		border-radius: 0 6px 6px 0;
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.55 0.02 250);
+		transition: background 0.15s ease, color 0.15s ease, width 0.15s ease;
+	}
+
+	.expand-tab:hover .expand-tab-inner {
+		background: oklch(0.65 0.15 200 / 0.25);
+		color: oklch(0.75 0.15 200);
+		width: 20px;
+	}
+
 	/* Diff Panel (Right) */
 	.git-panel-right {
 		display: flex;
@@ -807,31 +861,6 @@
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		color: oklch(0.55 0.02 250);
-	}
-
-	.title-left {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		min-width: 0;
-		flex: 1;
-	}
-
-	.project-selector-wrapper {
-		flex: 1;
-		min-width: 0;
-	}
-
-.panel-title-icon {
-		width: 1rem;
-		height: 1rem;
-		flex-shrink: 0;
-	}
-
-	@container git-panel (max-width: 220px) {
-		.project-selector-wrapper {
-			display: none;
-		}
 	}
 
 	/* Mode Toggle */
@@ -872,8 +901,8 @@
 
 	/* Brand colors when active */
 	.mode-git.active {
-		color: oklch(0.70 0.18 25);
-		background: oklch(0.70 0.18 25 / 0.12);
+		color: oklch(0.70 0.18 240);
+		background: oklch(0.70 0.18 240 / 0.12);
 	}
 
 	.mode-supabase.active {
@@ -889,6 +918,51 @@
 	.mode-icon {
 		width: 0.875rem;
 		height: 0.875rem;
+	}
+
+	/* Project label shown in header when not in CF mode */
+	.header-project-label {
+		font-size: 0.6875rem;
+		color: oklch(0.42 0.02 250);
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	/* Passive keyboard shortcut hint */
+	.panel-kbd-hint {
+		font-size: 0.5625rem;
+		color: oklch(0.30 0.015 250);
+		letter-spacing: 0.04em;
+		font-family: ui-monospace, monospace;
+		flex-shrink: 0;
+		user-select: none;
+	}
+
+	/* Inline stage/unstage error strip */
+	.stage-error-strip {
+		padding: 0.25rem 0.75rem;
+		font-size: 0.6875rem;
+		color: oklch(0.72 0.16 25);
+		background: oklch(0.55 0.16 25 / 0.10);
+		border-bottom: 1px solid oklch(0.55 0.16 25 / 0.25);
+		flex-shrink: 0;
+	}
+
+	/* Minimal idle state for right panel — replaces large empty state */
+	.panel-idle {
+		flex: 1;
+		padding: 0.625rem 1rem;
+		border-top: 1px solid oklch(0.18 0.01 250);
+		background: oklch(0.14 0.01 250);
+	}
+
+	.panel-idle-hint {
+		font-size: 0.625rem;
+		text-transform: uppercase;
+		letter-spacing: 0.07em;
+		color: oklch(0.36 0.015 250);
 	}
 
 	/* Header Controls (right side — CF count, filter, refresh) */
@@ -917,6 +991,7 @@
 		color: oklch(0.65 0.02 250);
 		cursor: pointer;
 	}
+
 
 	.cf-header-refresh {
 		display: flex;
@@ -1022,37 +1097,6 @@
 		background: oklch(0.70 0.18 200);
 	}
 
-	/* Diff Placeholder */
-	.diff-placeholder {
-		flex: 1;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: oklch(0.14 0.01 250);
-	}
-
-	.diff-placeholder-content {
-		text-align: center;
-		padding: 2rem;
-	}
-
-	.diff-placeholder-icon {
-		width: 4rem;
-		height: 4rem;
-		color: oklch(0.35 0.02 250);
-		margin: 0 auto 1rem;
-	}
-
-	.diff-placeholder-text {
-		font-size: 0.9375rem;
-		color: oklch(0.55 0.02 250);
-		margin-bottom: 0.5rem;
-	}
-
-	.diff-placeholder-hint {
-		font-size: 0.8125rem;
-		color: oklch(0.40 0.02 250);
-	}
 
 	/* Commit Diff Container (FileTabBar + DiffViewer) */
 	.commit-diff-container {
@@ -1134,27 +1178,6 @@
 		min-height: 0;
 	}
 
-	.git-body.mobile-layout .diff-placeholder {
-		padding: 0.5rem;
-	}
-
-	.git-body.mobile-layout .diff-placeholder-content {
-		padding: 0.75rem;
-	}
-
-	.git-body.mobile-layout .diff-placeholder-icon {
-		width: 2rem;
-		height: 2rem;
-		margin-bottom: 0.5rem;
-	}
-
-	.git-body.mobile-layout .diff-placeholder-text {
-		font-size: 0.8125rem;
-	}
-
-	.git-body.mobile-layout .diff-placeholder-hint {
-		font-size: 0.75rem;
-	}
 
 	/* Cloudflare Detail Panel */
 	.cf-detail-panel {

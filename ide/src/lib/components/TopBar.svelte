@@ -6,7 +6,7 @@
 	import ActivityBadge from "./ActivityBadge.svelte";
 	import ServersBadge from "./ServersBadge.svelte";
 	import UserProfile from "./UserProfile.svelte";
-	import CommandPalette from "./CommandPalette.svelte";
+	import MobileProjectSelector from "./MobileProjectSelector.svelte";
 	import {
 		openTaskDrawer,
 		toggleSidebar,
@@ -576,7 +576,7 @@
 
 <!-- Industrial/Terminal TopBar -->
 <nav
-	class="w-full h-12 flex items-center relative"
+	class="w-full h-12 flex items-center relative flex-shrink-0 z-30"
 	style="
 		background: linear-gradient(180deg, var(--color-base-200) 0%, var(--color-base-300) 100%);
 		border-bottom: {activeProjectColor ? `3px solid ${activeProjectColor}` : '1px solid oklch(0.25 0.02 250)'};
@@ -626,7 +626,7 @@
 
 	<!-- Project Selector + Favorite Chips (global, always visible) -->
 	{#if actualProjects.length > 0 && onProjectChange}
-		<div class="fav-chips-scroll ml-3 flex items-center gap-1.5" role="list" aria-label="Favorite projects">
+		<div class="fav-chips-scroll ml-3 hidden lg:flex items-center gap-1.5" role="list" aria-label="Favorite projects">
 			{#each favoriteChips as favProject, chipIdx (favProject)}
 				<div
 					class="fav-flip-wrapper"
@@ -776,227 +776,153 @@
 		</div>
 	{/if}
 
-	<!-- Spacer (only fills space when no favorite chips) -->
+	<!-- Mobile project selector (inline in TopBar, replaces the separate row below) -->
+	{#if actualProjects.length > 0 && onProjectChange}
+		{@const mobileProject = selectedProject !== 'All Projects' ? (selectedProject || '') : (actualProjects[0] || '')}
+		<div class="flex-1 lg:hidden">
+			<MobileProjectSelector
+				projects={actualProjects}
+				selected={mobileProject}
+				onSelect={(p) => onProjectChange?.(p)}
+				colorFn={getSwitcherColor}
+				onOpenSearch={onGlobalSearchOpen}
+				sessionStates={projectSessionStates.get(mobileProject) || []}
+			/>
+		</div>
+	{/if}
+
+	<!-- Spacer / Empty project CTA -->
 	{#if !actualProjects.length || !onProjectChange || favoriteProjects.size === 0}
+		{#if !actualProjects.length && onProjectChange}
+			<!-- No projects yet: guide user toward first action -->
+			<button
+				type="button"
+				class="no-projects-cta"
+				onclick={openProjectDrawer}
+				title="Add your first project"
+			>
+				<svg viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3">
+					<path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" />
+				</svg>
+				<span>Add Project</span>
+			</button>
+		{/if}
 		<div class="flex-1"></div>
 	{/if}
 
-	<!-- Agent Sort Dropdown (on /agents page) -->
+	<!-- Shared sort dropdown snippet — used by both /agents and /servers pages -->
+	{#snippet sortDropdownPanel(
+		options: Array<{value: string; label: string; icon: string}>,
+		currentSort: string,
+		currentDir: 'asc' | 'desc',
+		currentLabel: string,
+		currentIcon: string,
+		headerLabel: string,
+		onSelect: (value: string) => void
+	)}
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="relative flex-none"
+			onmouseenter={showSortMenu}
+			onmouseleave={hideSortMenuDelayed}
+		>
+			<button
+				class="sort-btn"
+				class:sort-btn-active={sortHovered || showSortDropdown}
+				title={headerLabel}
+				aria-haspopup="true"
+				aria-expanded={showSortDropdown}
+				onmouseenter={() => (sortHovered = true)}
+				onmouseleave={() => (sortHovered = false)}
+				onfocus={showSortMenu}
+				onblur={hideSortMenuDelayed}
+			>
+				<span class="text-xs">{currentIcon}</span>
+				<span class="hidden sm:inline">{currentLabel}</span>
+				<span class="text-[10px] opacity-60">{currentDir === "asc" ? "▲" : "▼"}</span>
+				<svg
+					class="w-2.5 h-2.5 ml-0.5 transition-transform {showSortDropdown ? 'rotate-180' : ''}"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+					stroke-width="2"
+				>
+					<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+				</svg>
+			</button>
+
+			{#if showSortDropdown}
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					role="menu"
+					class="absolute top-full left-0 mt-1 min-w-[160px] rounded-lg shadow-xl z-50 overflow-hidden dropdown-content bg-base-200 border border-base-content/20"
+					onmouseenter={keepSortMenuOpen}
+					onmouseleave={hideSortMenuDelayed}
+					onfocusin={keepSortMenuOpen}
+					onfocusout={hideSortMenuDelayed}
+					onkeydown={handleSortDropdownKeydown}
+				>
+					<div class="px-3 py-2 border-b border-base-content/10">
+						<span class="text-[10px] font-mono uppercase tracking-wider text-base-content/60">
+							{headerLabel}
+						</span>
+					</div>
+					<div class="py-1">
+						{#each options as opt (opt.value)}
+							<button
+								role="menuitem"
+								class="w-full px-3 py-2 text-left text-xs font-mono flex items-center gap-2 transition-colors hover:bg-base-300"
+								class:text-primary={currentSort === opt.value}
+								class:bg-base-300={currentSort === opt.value}
+								onclick={() => onSelect(opt.value)}
+							>
+								<span class="text-sm">{opt.icon}</span>
+								<span class="flex-1">{opt.label}</span>
+								{#if currentSort === opt.value}
+									<span class="text-[10px] opacity-60">{currentDir === "asc" ? "▲" : "▼"}</span>
+								{/if}
+							</button>
+						{/each}
+					</div>
+				</div>
+			{/if}
+		</div>
+	{/snippet}
+
+	<!-- Sort Dropdown (on /agents page) -->
 	{#if isAgentsPage}
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div
-			class="relative flex-none"
-			onmouseenter={showSortMenu}
-			onmouseleave={hideSortMenuDelayed}
-		>
-			<button
-				class="sort-btn"
-				class:sort-btn-active={sortHovered || showSortDropdown}
-				title="Sort agents"
-				aria-haspopup="true"
-				aria-expanded={showSortDropdown}
-				onmouseenter={() => (sortHovered = true)}
-				onmouseleave={() => (sortHovered = false)}
-				onfocus={showSortMenu}
-				onblur={hideSortMenuDelayed}
-			>
-				<span class="text-xs">{currentAgentSortIcon}</span>
-				<span class="hidden sm:inline">{currentAgentSortLabel}</span>
-				<span class="text-[10px] opacity-60"
-					>{currentAgentDir === "asc" ? "▲" : "▼"}</span
-				>
-				<svg
-					class="w-2.5 h-2.5 ml-0.5 transition-transform {showSortDropdown
-						? 'rotate-180'
-						: ''}"
-					fill="none"
-					viewBox="0 0 24 24"
-					stroke="currentColor"
-					stroke-width="2"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						d="M19.5 8.25l-7.5 7.5-7.5-7.5"
-					/>
-				</svg>
-			</button>
-
-			<!-- Agent Sort Dropdown Menu -->
-			{#if showSortDropdown}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					role="menu"
-					class="absolute top-full left-0 mt-1 min-w-[160px] rounded-lg shadow-xl z-50 overflow-hidden dropdown-content bg-base-200 border border-base-content/20"
-					onmouseenter={keepSortMenuOpen}
-					onmouseleave={hideSortMenuDelayed}
-					onfocusin={keepSortMenuOpen}
-					onfocusout={hideSortMenuDelayed}
-					onkeydown={handleSortDropdownKeydown}
-				>
-					<div
-						class="px-3 py-2 border-b border-base-content/10"
-					>
-						<span
-							class="text-[10px] font-mono uppercase tracking-wider text-base-content/60"
-						>
-							Sort Agents
-						</span>
-					</div>
-					<div class="py-1">
-						{#each AGENT_SORT_OPTIONS as opt (opt.value)}
-							<button
-								role="menuitem"
-								class="w-full px-3 py-2 text-left text-xs font-mono flex items-center gap-2 transition-colors hover:bg-base-300"
-								class:text-primary={currentAgentSort === opt.value}
-								class:bg-base-300={currentAgentSort === opt.value}
-								onclick={() => onAgentSortSelect(opt.value)}
-							>
-								<span class="text-sm">{opt.icon}</span>
-								<span class="flex-1">{opt.label}</span>
-								{#if currentAgentSort === opt.value}
-									<span class="text-[10px] opacity-60"
-										>{currentAgentDir === "asc" ? "▲" : "▼"}</span
-									>
-								{/if}
-							</button>
-						{/each}
-					</div>
-				</div>
-			{/if}
-		</div>
+		{@render sortDropdownPanel(AGENT_SORT_OPTIONS, currentAgentSort, currentAgentDir, currentAgentSortLabel, currentAgentSortIcon, 'Sort Agents', onAgentSortSelect)}
 	{/if}
 
-	<!-- Server Sort Dropdown (on /servers page) -->
+	<!-- Sort Dropdown (on /servers page) -->
 	{#if isServersPage}
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div
-			class="relative flex-none"
-			onmouseenter={showSortMenu}
-			onmouseleave={hideSortMenuDelayed}
-		>
-			<button
-				class="sort-btn"
-				class:sort-btn-active={sortHovered || showSortDropdown}
-				title="Sort servers"
-				aria-haspopup="true"
-				aria-expanded={showSortDropdown}
-				onmouseenter={() => (sortHovered = true)}
-				onmouseleave={() => (sortHovered = false)}
-				onfocus={showSortMenu}
-				onblur={hideSortMenuDelayed}
-			>
-				<span class="text-xs">{currentServerSortIcon}</span>
-				<span class="hidden sm:inline">{currentServerSortLabel}</span>
-				<span class="text-[10px] opacity-60"
-					>{currentServerDir === "asc" ? "▲" : "▼"}</span
-				>
-				<svg
-					class="w-2.5 h-2.5 ml-0.5 transition-transform {showSortDropdown
-						? 'rotate-180'
-						: ''}"
-					fill="none"
-					viewBox="0 0 24 24"
-					stroke="currentColor"
-					stroke-width="2"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						d="M19.5 8.25l-7.5 7.5-7.5-7.5"
-					/>
-				</svg>
-			</button>
-
-			<!-- Server Sort Dropdown Menu -->
-			{#if showSortDropdown}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					role="menu"
-					class="absolute top-full left-0 mt-1 min-w-[160px] rounded-lg shadow-xl z-50 overflow-hidden dropdown-content bg-base-200 border border-base-content/20"
-					onmouseenter={keepSortMenuOpen}
-					onmouseleave={hideSortMenuDelayed}
-					onfocusin={keepSortMenuOpen}
-					onfocusout={hideSortMenuDelayed}
-					onkeydown={handleSortDropdownKeydown}
-				>
-					<div
-						class="px-3 py-2 border-b border-base-content/10"
-					>
-						<span
-							class="text-[10px] font-mono uppercase tracking-wider text-base-content/60"
-						>
-							Sort Servers
-						</span>
-					</div>
-					<div class="py-1">
-						{#each SERVER_SORT_OPTIONS as opt (opt.value)}
-							<button
-								role="menuitem"
-								class="w-full px-3 py-2 text-left text-xs font-mono flex items-center gap-2 transition-colors hover:bg-base-300"
-								class:text-primary={currentServerSort === opt.value}
-								class:bg-base-300={currentServerSort === opt.value}
-								onclick={() => onServerSortSelect(opt.value)}
-							>
-								<span class="text-sm">{opt.icon}</span>
-								<span class="flex-1">{opt.label}</span>
-								{#if currentServerSort === opt.value}
-									<span class="text-[10px] opacity-60"
-										>{currentServerDir === "asc" ? "▲" : "▼"}</span
-									>
-								{/if}
-							</button>
-						{/each}
-					</div>
-				</div>
-			{/if}
-		</div>
+		{@render sortDropdownPanel(SERVER_SORT_OPTIONS, currentServerSort, currentServerDir, currentServerSortLabel, currentServerSortIcon, 'Sort Servers', onServerSortSelect)}
 	{/if}
 
-	<!-- Middle: Command Palette + Global Search (hidden on small screens) -->
-	<div class="hidden lg:flex flex-none items-center gap-2">
-		<CommandPalette />
-
-		<!-- Global File Search Button -->
-		{#if onGlobalSearchOpen}
-			<button
-				class="group h-7 px-2 rounded text-xs font-mono flex items-center transition-all duration-200"
-				style="
-					background: oklch(0.18 0.01 250);
-					border: 1px solid oklch(0.35 0.02 250);
-					color: oklch(0.60 0.02 250);
-				"
-				onclick={onGlobalSearchOpen}
-				aria-label="Unified search (Ctrl+K)"
-			>
-				<!-- Search/Magnifying glass icon -->
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					fill="none"
-					viewBox="0 0 24 24"
-					stroke-width="1.5"
-					stroke="currentColor"
-					class="w-3 h-3 flex-shrink-0"
-					style="color: oklch(0.55 0.02 250);"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
-					/>
-				</svg>
-				<span class="inline-block max-w-0 overflow-hidden whitespace-nowrap opacity-0 group-hover:max-w-28 group-hover:opacity-100 transition-all duration-200 pl-1.5 pt-0.5">Ctrl+K</span>
-			</button>
-		{/if}
-	</div>
-
-	<!-- Vertical separator (hidden on small screens) -->
+	<!-- Vertical separator (desktop only) -->
 	<div
 		class="hidden lg:block w-px h-6 mx-3 bg-gradient-to-b from-transparent via-base-content/45 to-transparent"
 	></div>
 
-	<!-- Right side: Activity Badge + Servers + User Profile -->
-	<div class="flex-none flex items-center gap-2.5 pr-3">
+	<!-- Right side: Cmd + Search (all screens) + Activity + Servers + Profile -->
+	<div class="flex-none flex items-center gap-2 pr-3">
+		<!-- Unified search + commands — opens UnifiedSearch (Ctrl+K) -->
+		{#if onGlobalSearchOpen}
+			<button
+				class="search-cmd-btn"
+				onclick={onGlobalSearchOpen}
+				aria-label="Search and commands (Ctrl+K)"
+				title="Search and commands (Ctrl+K)"
+			>
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5 flex-shrink-0">
+					<path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+				</svg>
+				<span class="search-cmd-hint">⌘K</span>
+			</button>
+		<!-- Inner separator: tools | status (desktop only) -->
+		<div class="hidden lg:block w-px h-5 mx-1 bg-gradient-to-b from-transparent via-base-content/30 to-transparent flex-shrink-0"></div>
+		{/if}
+
 		<!-- Swarm loading indicator -->
 		{#if swarmLoading}
 			<!-- Mobile: icon only -->
@@ -1077,6 +1003,42 @@
 		outline-offset: 2px;
 	}
 
+	/* Ctrl+K search/command button */
+	.search-cmd-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		height: 1.75rem;
+		padding: 0 0.5rem;
+		border-radius: 0.375rem;
+		background: oklch(0.18 0.01 250);
+		border: 1px solid oklch(0.35 0.02 250);
+		color: oklch(0.55 0.02 250);
+		cursor: pointer;
+		transition: color 0.15s, background 0.15s, border-color 0.15s;
+		flex-shrink: 0;
+	}
+	.search-cmd-btn:hover {
+		color: oklch(0.75 0.02 250);
+		background: oklch(0.22 0.02 250);
+		border-color: oklch(0.45 0.03 250);
+	}
+	.search-cmd-btn:focus-visible {
+		outline: 1px solid oklch(0.65 0.15 240 / 0.7);
+		outline-offset: 2px;
+	}
+	.search-cmd-hint {
+		font-family: ui-monospace, monospace;
+		font-size: 0.625rem;
+		font-weight: 500;
+		color: oklch(0.42 0.02 250);
+		letter-spacing: 0.01em;
+		display: none;
+	}
+	@media (min-width: 640px) {
+		.search-cmd-hint { display: inline; }
+	}
+
 	/* Chips container — shrinks on narrow viewports, scrolls horizontally.
 	   ProjectSelector dropdown uses position:fixed so it's not clipped. */
 	.fav-chips-scroll {
@@ -1114,6 +1076,36 @@
 		border-radius: 0.375rem;
 	}
 
+	/* ── No-projects CTA ── */
+	.no-projects-cta {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		margin-left: 0.75rem;
+		padding: 0.25rem 0.625rem;
+		border-radius: 0.375rem;
+		border: 1px dashed oklch(0.45 0.08 145 / 0.6);
+		background: transparent;
+		color: oklch(0.65 0.12 145);
+		cursor: pointer;
+		font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+		font-size: 0.6875rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.025em;
+		transition: all 0.15s ease;
+		flex-shrink: 0;
+	}
+	.no-projects-cta:hover {
+		border-color: oklch(0.65 0.12 145);
+		color: oklch(0.80 0.15 145);
+		background: oklch(0.25 0.04 145 / 0.15);
+	}
+	.no-projects-cta:focus-visible {
+		outline: 1px solid oklch(0.65 0.15 145 / 0.7);
+		outline-offset: 2px;
+	}
+
 	/* ── Project Switcher (+ button & dropdown) ── */
 	.project-switcher-container {
 		position: relative;
@@ -1142,10 +1134,10 @@
 	}
 
 	.project-switcher-btn:hover {
-		border-color: oklch(0.65 0.12 200);
-		color: oklch(0.75 0.15 200);
-		background: oklch(0.25 0.04 200 / 0.2);
-		box-shadow: 0 0 6px oklch(0.65 0.12 200 / 0.2);
+		border-color: oklch(0.65 0.12 145);
+		color: oklch(0.75 0.15 145);
+		background: oklch(0.25 0.04 145 / 0.2);
+		box-shadow: 0 0 6px oklch(0.65 0.12 145 / 0.2);
 	}
 
 	.project-switcher-dropdown {
@@ -1199,11 +1191,6 @@
 		border-radius: 0.375rem;
 	}
 
-	.psd-row:hover .psd-item {
-		background: color-mix(in oklch, var(--psd-color, oklch(0.60 0.02 250)) 15%, transparent);
-		color: var(--psd-color, oklch(0.92 0.02 250));
-	}
-
 	.psd-item {
 		display: flex;
 		align-items: center;
@@ -1226,6 +1213,13 @@
 
 	.psd-item:hover {
 		background: oklch(0.22 0.01 250);
+	}
+
+	/* Placed AFTER .psd-item:hover so equal-specificity row-hover wins,
+	   giving project-colored background when hovering anywhere on the row. */
+	.psd-row:hover .psd-item {
+		background: color-mix(in oklch, var(--psd-color, oklch(0.60 0.02 250)) 15%, transparent);
+		color: var(--psd-color, oklch(0.92 0.02 250));
 	}
 
 	.psd-item.psd-active {
@@ -1328,10 +1322,10 @@
 		color: oklch(0.85 0.18 145);
 	}
 
-	/* Error toast */
+	/* Error toast (stacks below success toast when both are shown) */
 	.topbar-toast {
 		position: fixed;
-		top: 3.5rem;
+		top: 6.5rem;
 		right: 1rem;
 		z-index: 50;
 		display: flex;
@@ -1420,6 +1414,7 @@
 	}
 
 	.topbar-toast-success {
+		top: 3.5rem; /* Success stacks above error when both are shown */
 		background: oklch(0.18 0.04 145);
 		border-color: oklch(0.55 0.18 145 / 0.5);
 	}

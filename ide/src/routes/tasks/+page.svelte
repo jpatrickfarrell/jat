@@ -25,7 +25,7 @@
 	import WorkingAgentBadge from "$lib/components/WorkingAgentBadge.svelte";
 	import EpicBar from "$lib/components/sessions/EpicBar.svelte";
 	import { fetchAndGetProjectColors } from "$lib/utils/projectColors";
-	import MobileProjectSelector from "$lib/components/MobileProjectSelector.svelte";
+
 	import { openTaskDetailDrawer, openProjectDrawer, projectCreatedSignal, openTaskDrawer, jkFocusedOpenTaskId, jkFocusedActiveSessionName, openMobileSessionName } from "$lib/stores/drawerStore";
 	import {
 		getProjectFromTaskId,
@@ -159,10 +159,6 @@
 	let agentTasks = $state<Map<string, AgentTask>>(new Map());
 	let agentSessionInfo = $state<Map<string, AgentSessionInfo>>(new Map());
 	let agentOutputs = $state<Map<string, string>>(new Map());
-
-	// Mobile detection
-	let isMobile = $state(false);
-	let mobileCleanup: (() => void) | null = null;
 
 	// Mobile session drawer
 	let drawerSessionName = $state<string | null>(null);
@@ -1829,13 +1825,7 @@
 		loadCollapseState();
 		collapseStateLoaded = true;
 
-		// Mobile detection via matchMedia
-		const mql = window.matchMedia('(max-width: 768px)');
-		isMobile = mql.matches;
-		const handleMobileChange = (e: MediaQueryListEvent) => { isMobile = e.matches; };
-		mql.addEventListener('change', handleMobileChange);
-		// Store cleanup function for onDestroy
-		mobileCleanup = () => mql.removeEventListener('change', handleMobileChange);
+
 
 		// Phase 1: Critical data for initial render (clears loading skeleton ASAP)
 		fetchCriticalData();
@@ -1890,7 +1880,6 @@
 		if (voiceInboxPollTimer) {
 			clearInterval(voiceInboxPollTimer);
 		}
-		mobileCleanup?.();
 	});
 
 	// Refresh data when a new project is created via CreateProjectDrawer.
@@ -2087,19 +2076,6 @@
 			<span>No projects with active sessions or open tasks</span>
 		</div>
 	{:else}
-		<!-- Mobile project nav bar — only visible on touch/mobile viewports -->
-		{#if isMobile}
-			<MobileProjectSelector
-				projects={allProjects}
-				selected={selectedProject || ''}
-				onSelect={(p) => {
-					const url = new URL(window.location.href);
-					url.searchParams.set('project', p);
-					goto(url.toString(), { replaceState: true, noScroll: true, keepFocus: true });
-				}}
-			/>
-		{/if}
-
 		<!-- Selected Project Content -->
 		{#if selectedProject}
 			{@const projectSessions =
@@ -3607,6 +3583,18 @@
 	.voice-inbox-subsection .subsection-count {
 		background: oklch(0.25 0.08 290);
 		color: oklch(0.70 0.15 290);
+	}
+
+	/* Completed Tasks & Project Notes — recede visually, these are reference sections */
+	.completed-tasks-subsection .subsection-header {
+		opacity: 0.55;
+		font-size: 0.6875rem;
+	}
+	.completed-tasks-subsection .subsection-header:hover {
+		opacity: 0.85;
+	}
+	.completed-tasks-subsection .subsection-count {
+		opacity: 0.7;
 	}
 
 	/* Voice Inbox header action buttons */

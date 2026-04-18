@@ -76,6 +76,9 @@
 	let loadingAction = $state<string | null>(null); // projectKey being actioned
 	let error = $state<string | null>(null);
 	let spawningSession = $state(false); // Track spawn loading state
+	let pendingStopProject = $state<string | null>(null);
+	let pendingStopTimer: ReturnType<typeof setTimeout> | null = null;
+	let lastFailedAction = $state<{ type: 'start' | 'stop' | 'restart'; projectKey: string } | null>(null);
 
 	// Get sessions reactively
 	const sessions = $derived(serverSessionsState.sessions);
@@ -193,27 +196,42 @@
 	async function handleStart(projectKey: string) {
 		loadingAction = projectKey;
 		error = null;
+		lastFailedAction = null;
 		try {
 			await startServer(projectKey);
 			playServerStartSound();
 		} catch (e) {
 			error = `Failed to start ${projectKey}`;
+			lastFailedAction = { type: 'start', projectKey };
 		} finally {
 			loadingAction = null;
 		}
 	}
 
 	async function handleStop(projectKey: string) {
+		// First click: require confirmation
+		if (pendingStopProject !== projectKey) {
+			pendingStopProject = projectKey;
+			if (pendingStopTimer) clearTimeout(pendingStopTimer);
+			pendingStopTimer = setTimeout(() => { pendingStopProject = null; }, 2000);
+			return;
+		}
+		// Second click: confirmed
+		if (pendingStopTimer) clearTimeout(pendingStopTimer);
+		pendingStopProject = null;
+
 		const session = getSessionForProject(projectKey);
 		if (!session) return;
 
 		loadingAction = projectKey;
 		error = null;
+		lastFailedAction = null;
 		try {
 			await stopServer(session.sessionName);
 			playServerStopSound();
 		} catch (e) {
 			error = `Failed to stop ${projectKey}`;
+			lastFailedAction = { type: 'stop', projectKey };
 		} finally {
 			loadingAction = null;
 		}
@@ -225,14 +243,30 @@
 
 		loadingAction = projectKey;
 		error = null;
+		lastFailedAction = null;
 		try {
 			await restartServer(session.sessionName);
 			playServerStartSound();
 		} catch (e) {
 			error = `Failed to restart ${projectKey}`;
+			lastFailedAction = { type: 'restart', projectKey };
 		} finally {
 			loadingAction = null;
 		}
+	}
+
+	async function retryLastAction() {
+		if (!lastFailedAction) return;
+		const { type, projectKey } = lastFailedAction;
+		error = null;
+		lastFailedAction = null;
+		if (type === 'start') await handleStart(projectKey);
+		else if (type === 'stop') {
+			// Bypass the confirmation guard for retry
+			pendingStopProject = projectKey;
+			await handleStop(projectKey);
+		}
+		else if (type === 'restart') await handleRestart(projectKey);
 	}
 
 	function handleOpenBrowser(port: number) {
@@ -391,11 +425,23 @@
 
 			<!-- Error message -->
 			{#if error}
-				<div
-					class="px-3 py-2 text-xs"
-					style="background: oklch(0.25 0.12 30); color: oklch(0.85 0.15 30);"
-				>
-					{error}
+				<div class="error-row">
+					<span class="error-text">{error}</span>
+					<div class="error-actions">
+						{#if lastFailedAction}
+							<button class="error-action-btn" onclick={retryLastAction} title="Retry">
+								<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+								</svg>
+								Retry
+							</button>
+						{/if}
+						<button class="error-action-btn error-action-dismiss" onclick={() => { error = null; lastFailedAction = null; }} title="Dismiss">
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+							</svg>
+						</button>
+					</div>
 				</div>
 			{/if}
 
@@ -525,11 +571,13 @@
 											/>
 										</svg>
 									</button>
-									<!-- Stop -->
+									<!-- Stop (requires double-click confirmation) -->
 									<button
 										class="action-btn action-btn-danger"
+										class:action-btn-pending={pendingStopProject === project.key}
 										onclick={() => handleStop(project.key)}
-										title="Stop server"
+										onmouseleave={() => { if (pendingStopProject === project.key) { pendingStopProject = null; } }}
+										title={pendingStopProject === project.key ? 'Click again to confirm stop' : 'Stop server'}
 									>
 										<svg
 											xmlns="http://www.w3.org/2000/svg"
@@ -713,6 +761,70 @@
 	.action-btn-spawn:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	.action-btn-pending {
+		background: oklch(0.28 0.10 30 / 0.4);
+		border-color: oklch(0.65 0.22 25 / 0.9);
+		color: oklch(0.90 0.18 30);
+		animation: animate-pulse-subtle 0.7s ease-in-out infinite;
+	}
+
+	/* Error row */
+	.error-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		background: oklch(0.22 0.10 30 / 0.4);
+		border-bottom: 1px solid oklch(0.40 0.12 30 / 0.3);
+	}
+
+	.error-text {
+		flex: 1;
+		font-size: 0.6875rem;
+		font-family: ui-monospace, monospace;
+		color: oklch(0.85 0.15 30);
+		min-width: 0;
+	}
+
+	.error-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		flex-shrink: 0;
+	}
+
+	.error-action-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.2rem 0.4rem;
+		border-radius: 0.25rem;
+		border: 1px solid oklch(0.45 0.12 30 / 0.5);
+		background: oklch(0.28 0.10 30 / 0.4);
+		color: oklch(0.80 0.15 30);
+		font-size: 0.625rem;
+		font-family: ui-monospace, monospace;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.error-action-btn:hover {
+		background: oklch(0.35 0.12 30 / 0.5);
+		color: oklch(0.95 0.18 30);
+	}
+
+	.error-action-dismiss {
+		border-color: oklch(0.35 0.02 250 / 0.5);
+		background: transparent;
+		color: oklch(0.55 0.02 250);
+	}
+
+	.error-action-dismiss:hover {
+		background: oklch(0.25 0.02 250);
+		color: oklch(0.75 0.02 250);
 	}
 
 	/* View All Button */

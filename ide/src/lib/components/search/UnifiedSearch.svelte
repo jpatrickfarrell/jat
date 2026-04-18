@@ -15,7 +15,7 @@
 	 * Task: jat-fqaqf
 	 */
 
-	import { onMount, tick } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import TaskIdBadge from '$lib/components/TaskIdBadge.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
@@ -24,6 +24,7 @@
 	import type { SearchDropdownGroup } from '$lib/components/SearchDropdown.svelte';
 	import { fetchAndGetProjectColors, getProjectColor } from '$lib/utils/projectColors';
 	import { unifiedNavConfig } from '$lib/config/navConfig';
+	import { openTaskDrawer } from '$lib/stores/drawerStore';
 
 	// --- Types ---
 	interface TaskResult {
@@ -88,14 +89,45 @@
 		model?: string;
 	}
 
-	type SourceTab = 'all' | 'tasks' | 'memory' | 'filenames' | 'content';
+	type SourceTab = 'routes' | 'tasks' | 'filenames' | 'content' | 'memory';
 
 	const TABS: { id: SourceTab; label: string; icon: string }[] = [
-		{ id: 'all', label: 'All', icon: 'M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5' },
+		{ id: 'routes', label: 'Go', icon: 'M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z' },
 		{ id: 'tasks', label: 'Tasks', icon: 'M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z' },
-		{ id: 'memory', label: 'Memory', icon: 'M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125' },
-		{ id: 'filenames', label: 'Filenames', icon: 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z' },
+		{ id: 'filenames', label: 'Files', icon: 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z' },
 		{ id: 'content', label: 'Content', icon: 'M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5' },
+		{ id: 'memory', label: 'Memory', icon: 'M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125' },
+	];
+
+	// --- Route/Command Actions ---
+	interface RouteAction {
+		id: string;
+		label: string;
+		description: string;
+		keywords: string[];
+		path?: string;
+		execute?: () => void;
+	}
+
+	const ROUTE_ACTIONS: RouteAction[] = [
+		{ id: 'nav-tasks', label: 'Tasks', description: 'Open tasks list', keywords: ['tasks', 'list', 'work', 'queue'], path: '/tasks' },
+		{ id: 'nav-sessions', label: 'Sessions', description: 'View active agent sessions', keywords: ['sessions', 'work', 'agents', 'terminal', 'active'], path: '/sessions' },
+		{ id: 'nav-triage', label: 'Triage', description: 'Triage incoming tasks', keywords: ['triage', 'inbox', 'radar', 'review'], path: '/triage' },
+		{ id: 'nav-kanban', label: 'Kanban', description: 'Kanban board view', keywords: ['kanban', 'board', 'columns', 'workflow'], path: '/kanban' },
+		{ id: 'nav-history', label: 'History', description: 'Task history and timeline', keywords: ['history', 'timeline', 'log', 'chronological'], path: '/history' },
+		{ id: 'nav-files', label: 'Files', description: 'Browse and edit project files', keywords: ['files', 'browse', 'edit', 'editor', 'code', 'tree'], path: '/files' },
+		{ id: 'nav-source', label: 'Source', description: 'Git source and diffs', keywords: ['source', 'git', 'diff', 'commits', 'branches'], path: '/source' },
+		{ id: 'nav-servers', label: 'Servers', description: 'Dev server management', keywords: ['servers', 'dev', 'port', 'process', 'run'], path: '/servers' },
+		{ id: 'nav-agents', label: 'Agents', description: 'Agent registry and status', keywords: ['agents', 'ai', 'workers', 'registry'], path: '/agents' },
+		{ id: 'nav-memory', label: 'Memory', description: 'Agent memory viewer', keywords: ['memory', 'context', 'recall', 'knowledge'], path: '/memory' },
+		{ id: 'nav-search', label: 'Search', description: 'Full search page', keywords: ['search', 'find', 'query'], path: '/search' },
+		{ id: 'nav-data', label: 'Data', description: 'Data and analytics', keywords: ['data', 'analytics', 'stats', 'metrics'], path: '/data' },
+		{ id: 'nav-bases', label: 'Bases', description: 'Knowledge bases', keywords: ['bases', 'knowledge', 'docs', 'documentation'], path: '/bases' },
+		{ id: 'nav-integrations', label: 'Integrations', description: 'External integrations', keywords: ['integrations', 'connect', 'api', 'webhooks'], path: '/integrations' },
+		{ id: 'nav-config', label: 'Config', description: 'IDE settings and configuration', keywords: ['config', 'settings', 'preferences', 'setup'], path: '/config' },
+		{ id: 'nav-monitor', label: 'Monitor', description: 'Live monitoring view', keywords: ['monitor', 'live', 'watch', 'overview'], path: '/monitor' },
+		{ id: 'create-task', label: 'Create Task', description: 'Open task creation drawer', keywords: ['create', 'new', 'task', 'add', 'issue'], execute: () => { openTaskDrawer(); } },
+		{ id: 'pause-all', label: 'Pause All Agents', description: 'Send Ctrl+C to all active sessions', keywords: ['pause', 'stop', 'interrupt', 'halt', 'agents'], execute: async () => { await fetch('/api/sessions/pause-all', { method: 'POST' }); } },
 	];
 
 	// --- Props ---
@@ -120,7 +152,7 @@
 		selectedProject: projectProp = '',
 		onProjectChange,
 		initialQuery = '',
-		initialTab = 'all',
+		initialTab = 'routes',
 		onFileSelect,
 	}: Props = $props();
 
@@ -165,6 +197,7 @@
 
 	let loading = $state(false);
 	let error = $state('');
+	let routeResults = $state<RouteAction[]>([...ROUTE_ACTIONS]);
 
 	// Synthesis
 	let synthesis = $state<SynthesisResult | null>(null);
@@ -203,12 +236,10 @@
 			contentResults = [];
 			meta = null;
 			synthesis = null;
-			activeTab = 'all';
+			activeTab = 'routes';
+			untrack(() => filterRoutes(''));
 			selectedResultIndex = -1;
-			// tick alone isn't enough — modal DOM mounts async after isOpen changes
-			tick().then(() => searchInputEl?.focus());
-			setTimeout(() => searchInputEl?.focus(), 50);
-			setTimeout(() => searchInputEl?.focus(), 150);
+			requestAnimationFrame(() => searchInputEl?.focus());
 		}
 	});
 
@@ -222,7 +253,7 @@
 
 	function tabCount(tab: SourceTab): number {
 		switch (tab) {
-			case 'all': return allCount;
+			case 'routes': return routeResults.length;
 			case 'tasks': return taskCount;
 			case 'memory': return memoryCount;
 			case 'filenames': return filenameCount;
@@ -230,11 +261,11 @@
 		}
 	}
 
-	const hasSearched = $derived(meta !== null || filenameResults.length > 0 || contentResults.length > 0);
+	const hasSearched = $derived(meta !== null || filenameResults.length > 0 || contentResults.length > 0 || (activeTab === 'routes'));
 	const currentTabHasResults = $derived(
 		tabCount(activeTab) > 0 ||
-		// On "all" tab, don't show "no results" while some searches are still loading
-		(activeTab === 'all' && (filenameLoading || contentLoading))
+		(activeTab === 'filenames' && filenameLoading) ||
+		(activeTab === 'content' && contentLoading)
 	);
 
 	// --- Search Functions ---
@@ -395,14 +426,38 @@
 		}
 	}
 
+	function filterRoutes(q: string) {
+		const projectActions: RouteAction[] = (projects ?? [])
+			.filter(p => p && p !== 'All Projects')
+			.map(p => ({
+				id: `switch-project-${p}`,
+				label: p,
+				description: p === selectedProject ? 'Current project' : `Switch to ${p}`,
+				keywords: [p.toLowerCase(), 'project', 'switch', 'go'],
+				execute: () => { onProjectChange?.(p); closeModal(); }
+			}));
+		const allActions = [...projectActions, ...ROUTE_ACTIONS];
+		if (!q.trim()) { routeResults = allActions; return; }
+		const ql = q.toLowerCase();
+		routeResults = allActions.filter(a =>
+			a.label.toLowerCase().includes(ql) ||
+			a.description.toLowerCase().includes(ql) ||
+			a.keywords.some(k => k.includes(ql))
+		).sort((a, b) => {
+			const score = (a: RouteAction) =>
+				a.label.toLowerCase().startsWith(ql) ? 3 :
+				a.label.toLowerCase().includes(ql) ? 2 :
+				a.keywords.some(k => k.startsWith(ql)) ? 1 : 0;
+			return score(b) - score(a);
+		});
+	}
+
 	function doSearchForActiveTab() {
 		selectedResultIndex = -1;
 		focusedColumn = null;
-		if (activeTab === 'all') {
-			// Fire all searches in parallel for the 4-column layout
-			doUnifiedSearch();
-			doFilenameSearch();
-			doContentSearch();
+		if (activeTab === 'routes') {
+			filterRoutes(query);
+			return;
 		} else if (activeTab === 'filenames') {
 			doFilenameSearch();
 		} else if (activeTab === 'content') {
@@ -417,7 +472,7 @@
 		if (mode !== 'route') return;
 		const params = new URLSearchParams();
 		if (query) params.set('q', query);
-		if (activeTab !== 'all') params.set('tab', activeTab);
+		if (activeTab !== 'routes') params.set('tab', activeTab);
 		if (selectedProject) params.set('project', selectedProject);
 		const search = params.toString();
 		const newUrl = `/search${search ? '?' + search : ''}`;
@@ -426,15 +481,21 @@
 
 	// --- Event Handlers ---
 	function handleInput() {
+		filterRoutes(query); // instant, client-side
+		// Auto-select first result when filtering routes with a query
+		if (activeTab === 'routes') {
+			selectedResultIndex = query.trim() && routeResults.length > 0 ? 0 : -1;
+		}
 		if (debounceTimer) clearTimeout(debounceTimer);
 		debounceTimer = setTimeout(() => {
 			if (mode === 'route') updateUrl();
-			doSearchForActiveTab();
+			if (activeTab !== 'routes') doSearchForActiveTab();
 		}, 300);
 	}
 
 	function activeTabResultCount(): number {
 		switch (activeTab) {
+			case 'routes': return routeResults.length;
 			case 'tasks': return taskResults.length;
 			case 'memory': return memoryResults.length;
 			case 'filenames': return filenameResults.length;
@@ -445,6 +506,12 @@
 
 	function openSelectedResult(): boolean {
 		if (selectedResultIndex < 0) return false;
+		if (activeTab === 'routes' && selectedResultIndex < routeResults.length) {
+			const action = routeResults[selectedResultIndex];
+			if (action.execute) { action.execute(); closeModal(); }
+			else if (action.path) { goto(action.path); closeModal(); }
+			return true;
+		}
 		if (activeTab === 'tasks' && selectedResultIndex < taskResults.length) {
 			openTask(taskResults[selectedResultIndex].id);
 			return true;
@@ -473,9 +540,10 @@
 		activeTab = newTab;
 		selectedResultIndex = -1;
 		if (mode === 'route') updateUrl();
-		if (query.trim()) doSearchForActiveTab();
-		if (newTab === 'all' && columnsContainerEl) {
-			columnsContainerEl.scrollLeft = 0;
+		if (newTab === 'routes') {
+			filterRoutes(query);
+		} else if (query.trim()) {
+			doSearchForActiveTab();
 		}
 		return newTab;
 	}
@@ -493,6 +561,14 @@
 		const isInput = target === searchInputEl;
 		const isTabButton = !!target.getAttribute?.('data-tab');
 
+		// Tab key cycles tabs (Shift+Tab goes backward)
+		if (e.key === 'Tab' && !e.altKey && !e.ctrlKey && !e.metaKey) {
+			e.preventDefault();
+			const newTab = cycleTab(e.shiftKey ? -1 : 1);
+			searchInputEl?.focus();
+			return;
+		}
+
 		// When focused on tab bar, redirect typing to search input
 		if (isTabButton && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
 			searchInputEl?.focus();
@@ -500,14 +576,17 @@
 		}
 
 		if (e.key === 'Enter') {
+			e.preventDefault();
 			if (debounceTimer) clearTimeout(debounceTimer);
-
-			// If a result is selected, open it
-			if (openSelectedResult()) {
-				e.preventDefault();
+			// Routes tab: directly execute selected (or first) action — don't go through state update cycle
+			if (activeTab === 'routes' && routeResults.length > 0) {
+				const idx = selectedResultIndex >= 0 ? Math.min(selectedResultIndex, routeResults.length - 1) : 0;
+				const action = routeResults[idx];
+				if (action?.execute) { action.execute(); closeModal(); }
+				else if (action.path) { goto(action.path); closeModal(); }
 				return;
 			}
-
+			if (openSelectedResult()) return;
 			if (mode === 'route') updateUrl();
 			doSearchForActiveTab();
 		}
@@ -516,95 +595,76 @@
 			if (mode === 'modal') {
 				if (query) {
 					query = '';
-					taskResults = [];
-					memoryResults = [];
-					fileResults = [];
-					filenameResults = [];
-					contentResults = [];
-					meta = null;
-					synthesis = null;
+					taskResults = []; memoryResults = []; fileResults = [];
+					filenameResults = []; contentResults = [];
+					meta = null; synthesis = null;
+					filterRoutes('');
 				} else {
 					onClose?.();
 				}
 			} else if (isTabButton) {
 				searchInputEl?.focus();
 			} else {
-				query = '';
-				taskResults = [];
-				memoryResults = [];
-				fileResults = [];
-				filenameResults = [];
-				contentResults = [];
-				meta = null;
-				synthesis = null;
+				query = ''; taskResults = []; memoryResults = []; fileResults = [];
+				filenameResults = []; contentResults = [];
+				meta = null; synthesis = null;
 				updateUrl();
 			}
 		}
 
-		// Arrow down/up: zone navigation (Input → Tab Bar → Results)
+		// j/k vim navigation (only when a result is already selected)
+		if ((e.key === 'j' || e.key === 'k') && isInput && !e.ctrlKey && !e.metaKey && !e.altKey && selectedResultIndex >= 0) {
+			e.preventDefault();
+			const maxIndex = activeTabResultCount();
+			if (e.key === 'j') {
+				if (selectedResultIndex < maxIndex - 1) { selectedResultIndex += 1; scrollSelectedIntoView(); }
+			} else {
+				if (selectedResultIndex > 0) { selectedResultIndex -= 1; scrollSelectedIntoView(); }
+				else { selectedResultIndex = -1; }
+			}
+			return;
+		}
+
+		// Arrow down/up: navigate directly into results (skip tab-bar step)
 		if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
 			if (e.key === 'ArrowDown') {
-				if (isInput) {
-					if (activeTab !== 'all' && selectedResultIndex >= 0) {
-						// Continue navigating results downward
-						e.preventDefault();
-						const maxIndex = activeTabResultCount();
-						if (selectedResultIndex < maxIndex - 1) {
-							selectedResultIndex += 1;
-							scrollSelectedIntoView();
-						} else {
-							// Past last result: deselect and return to tab bar
-							selectedResultIndex = -1;
-							focusTabButton(activeTab);
-						}
-					} else {
-						// From input (no result selected): move focus to tab bar
-						e.preventDefault();
-						focusTabButton(activeTab);
-					}
-				} else if (isTabButton) {
-					// From tab bar: enter result navigation (non-all tabs only)
+				if (isInput || isTabButton) {
 					e.preventDefault();
-					if (activeTab !== 'all') {
-						const maxIndex = activeTabResultCount();
-						if (maxIndex > 0) {
-							selectedResultIndex = 0;
-							scrollSelectedIntoView();
-							searchInputEl?.focus(); // keep input focused for continued key nav
+					const maxIndex = activeTabResultCount();
+					if (maxIndex > 0) {
+						if (selectedResultIndex < maxIndex - 1) {
+							selectedResultIndex = selectedResultIndex < 0 ? 0 : selectedResultIndex + 1;
 						}
+						scrollSelectedIntoView();
+						searchInputEl?.focus();
+					} else if (query && activeTab !== 'routes' && debounceTimer) {
+						// Search not fired yet — run it immediately so results appear
+						clearTimeout(debounceTimer);
+						debounceTimer = null;
+						doSearchForActiveTab();
 					}
 				}
 			} else { // ArrowUp
-				if (isInput) {
-					if (activeTab !== 'all' && selectedResultIndex > 0) {
-						e.preventDefault();
+				if (isInput || isTabButton) {
+					e.preventDefault();
+					if (selectedResultIndex > 0) {
 						selectedResultIndex -= 1;
 						scrollSelectedIntoView();
-					} else if (activeTab !== 'all' && selectedResultIndex === 0) {
-						// At first result: deselect and return to tab bar
-						e.preventDefault();
+					} else if (selectedResultIndex === 0) {
 						selectedResultIndex = -1;
-						focusTabButton(activeTab);
 					}
-				} else if (isTabButton) {
-					// From tab bar: return to input
-					e.preventDefault();
-					searchInputEl?.focus();
 				}
 			}
 		}
 
-		// Arrow left/right: tab cycling
+		// Arrow left/right: tab cycling from tab bar or input boundary
 		if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
 			const direction = e.key === 'ArrowLeft' ? -1 : 1;
-
 			if (isTabButton) {
-				// Smooth tab cycling from tab bar — focus follows selection
 				e.preventDefault();
 				const newTab = cycleTab(direction);
 				focusTabButton(newTab);
 			} else if (isInput) {
-				// Only cycle tabs when cursor is at input boundary
 				const input = target as HTMLInputElement;
 				const atStart = !input.value || (input.selectionStart === 0 && input.selectionEnd === 0);
 				const atEnd = !input.value || (input.selectionStart === input.value.length && input.selectionEnd === input.value.length);
@@ -650,31 +710,15 @@
 	});
 
 	function switchTab(tab: SourceTab) {
-		// Cover-flow behavior: clicking a tab while on "All" scrolls to that column
-		if (activeTab === 'all' && tab !== 'all') {
-			if (focusedColumn === tab) {
-				// Double-click: switch to the dedicated tab view
-				focusedColumn = null;
-				activeTab = tab;
-				selectedResultIndex = -1;
-				if (mode === 'route') updateUrl();
-				if (query.trim()) doSearchForActiveTab();
-			} else {
-				// First click: scroll to column, stay on All
-				focusedColumn = tab;
-			}
-			return;
-		}
-
 		// Normal tab switching
 		focusedColumn = null;
 		activeTab = tab;
 		selectedResultIndex = -1;
 		if (mode === 'route') updateUrl();
-		if (query.trim()) doSearchForActiveTab();
-
-		if (tab === 'all' && columnsContainerEl) {
-			columnsContainerEl.scrollLeft = 0;
+		if (tab === 'routes') {
+			filterRoutes(query);
+		} else if (query.trim()) {
+			doSearchForActiveTab();
 		}
 	}
 
@@ -808,15 +852,10 @@
 {#snippet searchUI(isModal: boolean)}
 	<!-- Header: Search bar + tabs -->
 	<div class="flex-none" style="background: {isModal ? 'oklch(0.16 0.02 250)' : 'oklch(0.18 0.01 250)'}; border-bottom: 1px solid oklch(0.25 0.02 250); {isModal ? 'border-radius: 0.75rem 0.75rem 0 0;' : 'padding: 0 1.5rem;'}">
-		<!-- AI Synthesis (above search bar) -->
-		{#if activeTab === 'all'}
-			<div class="{isModal ? 'px-4 pt-3' : 'pt-3 max-w-4xl mx-auto'}" style="{synthesisOpen ? '' : 'display:none;'}">
-				{@render synthesisPanel()}
-			</div>
-		{/if}
+		<!-- AI Synthesis (above search bar) - no longer used (all tab removed) -->
 
 		<!-- Search input -->
-		<div class="{isModal ? 'px-4 pt-3' : 'pt-5 max-w-4xl mx-auto'}" style="{activeTab === 'all' && synthesisOpen ? 'padding-top: 0.5rem;' : ''}">
+		<div class="{isModal ? 'px-4 pt-3' : 'pt-5 max-w-4xl mx-auto'}">
 			<div class="relative">
 				<div class="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style="color: oklch(0.50 0.02 250);">
 					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
@@ -827,6 +866,7 @@
 					bind:this={searchInputEl}
 					bind:value={query}
 					oninput={handleInput}
+					onkeydown={handleKeydown}
 					type="text"
 					placeholder="Search tasks, memory, and files...{isModal ? '' : ' (Ctrl+K)'}"
 					class="w-full pl-11 pr-4 py-3 rounded-lg text-sm font-mono outline-none transition-all duration-200"
@@ -863,7 +903,7 @@
 			<div class="flex gap-0.5">
 				{#each TABS as tab}
 					{@const isActive = activeTab === tab.id}
-					{@const isFocused = activeTab === 'all' && focusedColumn === tab.id}
+					{@const isFocused = focusedColumn === tab.id}
 					<button
 						data-tab={tab.id}
 						onclick={() => switchTab(tab.id)}
@@ -873,7 +913,7 @@
 							color: {isActive ? 'oklch(0.90 0.10 200)' : isFocused ? 'oklch(0.78 0.08 200)' : 'oklch(0.55 0.02 250)'};
 							border: 1px solid {isActive ? 'oklch(0.40 0.08 200)' : isFocused ? 'oklch(0.35 0.06 200)' : 'transparent'};
 						"
-						title={activeTab === 'all' && tab.id !== 'all' ? (focusedColumn === tab.id ? 'Click again to view all' : 'Scroll to column') : ''}
+						title=""
 					>
 						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3 flex-none">
 							<path stroke-linecap="round" stroke-linejoin="round" d={tab.icon} />
@@ -949,13 +989,13 @@
 				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10 mx-auto mb-2" style="color: oklch(0.40 0.02 250);">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
 				</svg>
-				<p class="text-sm" style="color: oklch(0.55 0.02 250);">No {activeTab === 'all' ? '' : activeTab + ' '}results for "{query}"</p>
+				<p class="text-sm" style="color: oklch(0.55 0.02 250);">No {activeTab} results for "{query}"</p>
 			</div>
 		{:else if !hasSearched}
 			{@render emptyState(isModal)}
 		{:else}
 			<!-- Meta info -->
-			{#if meta && (activeTab === 'all' || activeTab === 'tasks' || activeTab === 'memory')}
+			{#if meta && (activeTab === 'tasks' || activeTab === 'memory')}
 				<div class="flex items-center justify-between mb-2 {isModal ? 'px-3' : ''}">
 					<p class="text-[11px]" style="color: oklch(0.50 0.02 250);">
 						{meta.totalResults} result{meta.totalResults !== 1 ? 's' : ''} in {meta.queryTime}ms
@@ -964,8 +1004,8 @@
 			{/if}
 
 			<!-- Tab-specific content -->
-			{#if activeTab === 'all'}
-				{@render trinityLayout()}
+			{#if activeTab === 'routes'}
+				{@render routesList(isModal)}
 			{:else if activeTab === 'tasks'}
 				{@render tasksList(isModal)}
 			{:else if activeTab === 'memory'}
@@ -982,7 +1022,7 @@
 	{#if isModal}
 		<div class="flex items-center justify-between px-3 py-2" style="border-top: 1px solid oklch(0.25 0.02 250); background: oklch(0.14 0.01 250); border-radius: 0 0 0.75rem 0.75rem;">
 			<span class="text-[11px]" style="color: oklch(0.45 0.02 250);">
-				{#if !query.trim()}Use arrows to switch tabs{:else if activeTab !== 'all'}<kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);">↑↓</kbd> navigate <kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);">↵</kbd> open <kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);">←→</kbd> tabs{/if}
+				<kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);">↑↓</kbd> <kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);">j/k</kbd> navigate · <kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);">Tab</kbd> <kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);">←→</kbd> tabs · <kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);">↵</kbd> open
 			</span>
 			<span class="text-[11px]" style="color: oklch(0.45 0.02 250);">
 				<kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.30 0.02 250);">esc</kbd> {query ? 'clear' : 'close'}
@@ -1012,6 +1052,43 @@
 	</div>
 {/snippet}
 
+{#snippet routesList(isModal: boolean)}
+	<div class="{isModal ? 'px-3 py-2' : 'max-w-2xl mx-auto py-4'}">
+		{#if routeResults.length === 0}
+			<p class="text-[11px] px-1 py-2" style="color: oklch(0.40 0.02 250);">No commands match "{query}"</p>
+		{:else}
+			<div class="space-y-0.5">
+				{#each routeResults as action, i}
+					{@const isSelected = selectedResultIndex === i}
+					<button
+						class="result-item w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors duration-75"
+						class:result-selected={isSelected}
+						style="
+							background: {isSelected ? 'oklch(0.26 0.04 200)' : 'transparent'};
+							border: 1px solid {isSelected ? 'oklch(0.40 0.08 200 / 0.5)' : 'transparent'};
+							color: {isSelected ? 'oklch(0.92 0.06 200)' : 'oklch(0.75 0.02 250)'};
+						"
+						onclick={() => {
+							if (action.execute) { action.execute(); closeModal(); }
+							else if (action.path) { goto(action.path); closeModal(); }
+						}}
+						onmouseenter={() => selectedResultIndex = i}
+					>
+						<span class="font-mono text-[10px] w-4 text-center flex-shrink-0" style="color: {isSelected ? 'oklch(0.65 0.12 200)' : 'oklch(0.40 0.02 250)'};">/</span>
+						<span class="flex-1 min-w-0">
+							<span class="text-xs font-medium font-mono block">{action.label}</span>
+							<span class="text-[10px] block truncate" style="color: {isSelected ? 'oklch(0.70 0.04 200)' : 'oklch(0.45 0.02 250)'};">{action.description}</span>
+						</span>
+						{#if action.path}
+							<span class="text-[10px] font-mono flex-shrink-0" style="color: {isSelected ? 'oklch(0.55 0.10 200)' : 'oklch(0.35 0.02 250)'};">{action.path}</span>
+						{/if}
+					</button>
+				{/each}
+			</div>
+		{/if}
+	</div>
+{/snippet}
+
 {#snippet emptyState(isModal: boolean)}
 	{#if isModal}
 		<div class="px-3 py-2">
@@ -1028,7 +1105,7 @@
 				{/each}
 			</div>
 			<p class="text-[10px] mt-3 px-1" style="color: oklch(0.35 0.02 250);">
-				Type to search · <kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.28 0.02 250);">Tab</kbd> navigate routes · <kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.28 0.02 250);">↵</kbd> go
+				Type to search · <kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.28 0.02 250);">Tab</kbd> switch tabs · <kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.28 0.02 250);">↓ j/k</kbd> navigate · <kbd class="px-1 py-0.5 rounded text-[9px] font-mono" style="background: oklch(0.22 0.02 250); border: 1px solid oklch(0.28 0.02 250);">↵</kbd> go
 			</p>
 		</div>
 	{:else}

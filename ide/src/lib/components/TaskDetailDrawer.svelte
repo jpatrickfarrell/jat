@@ -209,12 +209,18 @@
 	let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 	let isUpdatingFromServer = $state(false); // Flag to prevent effect loops during server updates
 
+	// Undo system
+	let undoEntry = $state<{ field: string; previousValue: any } | null>(null);
+	let undoTimer: ReturnType<typeof setTimeout> | null = null;
+	let isUndoing = $state(false);
+
 	// AbortController to cancel pending fetches when task changes or drawer closes
 	let fetchController: AbortController | null = null;
 
 	// UI state
 	let showHelp = $state(false);
 	let copiedTaskId = $state(false);
+	let copiedPageUrl = $state(false);
 	let editingLabels = $state(false);
 
 	// Action state
@@ -1490,6 +1496,19 @@
 		}
 	}
 
+	async function copyPageUrl() {
+		if (!task?.page_url) return;
+		try {
+			await navigator.clipboard.writeText(task.page_url);
+			copiedPageUrl = true;
+			setTimeout(() => {
+				copiedPageUrl = false;
+			}, 1500);
+		} catch (err) {
+			console.error('Failed to copy:', err);
+		}
+	}
+
 	// Debounced auto-save function
 	async function autoSave(field: string, value: any) {
 		// Clear any pending save
@@ -1499,6 +1518,8 @@
 
 		// Debounce for 500ms
 		saveTimeout = setTimeout(async () => {
+			// Each new save cancels the previous undo window
+			if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; undoEntry = null; }
 			isSaving = true;
 			isUpdatingFromServer = true;
 			saveError = null;
@@ -1538,6 +1559,11 @@
 
 				lastSaved = new Date();
 
+				// Set up 8-second undo window
+				undoEntry = { field, previousValue: (taskBackup as Record<string, any>)[field] ?? null };
+				if (undoTimer) clearTimeout(undoTimer);
+				undoTimer = setTimeout(() => { undoEntry = null; }, 8000);
+
 				// Show success toast
 				showToast('success', 'Saved');
 
@@ -1555,6 +1581,39 @@
 				isUpdatingFromServer = false;
 			}
 		}, 500);
+	}
+
+	async function undoLastSave() {
+		if (!undoEntry || !taskId) return;
+		const { field, previousValue } = undoEntry;
+		undoEntry = null;
+		if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
+		isUndoing = true;
+		isUpdatingFromServer = true;
+		saveError = null;
+		try {
+			if (task) task = { ...task, [field]: previousValue };
+			const response = await fetch(`/api/tasks/${taskId}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ [field]: previousValue })
+			});
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.message || 'Undo failed');
+			}
+			const data = await response.json();
+			task = data.task as DrawerTask;
+			originalTask = task ? { ...task } : null;
+			lastSaved = new Date();
+			showToast('success', '↩ Undone');
+		} catch (error: any) {
+			saveError = error.message;
+			showToast('error', `✗ Undo failed: ${error.message}`);
+		} finally {
+			isUndoing = false;
+			isUpdatingFromServer = false;
+		}
 	}
 
 	// Fetch available projects from the API
@@ -1721,17 +1780,17 @@
 
 	// Delete task with confirmation
 	let isDeleting = $state(false);
+	let showDeleteConfirm = $state(false);
 
-	async function handleDelete() {
+	function handleDelete() {
+		if (!task || !taskId) return;
+		showDeleteConfirm = true;
+	}
+
+	async function confirmDelete() {
 		if (!task || !taskId) return;
 
-		// Confirm deletion
-		const confirmed = confirm(
-			`Are you sure you want to delete task "${task.title}"?\n\nThis action cannot be undone.`
-		);
-
-		if (!confirmed) return;
-
+		showDeleteConfirm = false;
 		isDeleting = true;
 		isUpdatingFromServer = true;
 
@@ -1741,25 +1800,20 @@
 			});
 
 			if (!response.ok) {
-				// Parse error response to get specific error message
 				const errorData = await response.json();
 				const errorMessage = errorData.message || 'Failed to delete task';
 				throw new Error(errorMessage);
 			}
 
-			// Show success message
 			showToast('success', 'Task deleted');
 
-			// Reset state and close drawer
 			isDeleting = false;
 			isUpdatingFromServer = false;
 
-			// Close drawer after short delay for toast visibility
 			setTimeout(() => {
 				isOpen = false;
 				task = null;
 				taskId = null;
-				// Notify parent to refresh task list
 				ondelete();
 			}, 500);
 		} catch (error: any) {
@@ -2205,6 +2259,30 @@
 			}
 			return;
 		}
+
+		// D: focus Description field
+		if (event.key === 'd' || event.key === 'D') {
+			event.preventDefault();
+			const descEl = document.querySelector('[data-field="description"]');
+			if (descEl) (descEl as HTMLElement).click();
+			return;
+		}
+
+		// L: focus Labels field
+		if (event.key === 'l' || event.key === 'L') {
+			event.preventDefault();
+			if (!editingLabels) editingLabels = true;
+			return;
+		}
+
+		// U: undo last save (if available)
+		if (event.key === 'u' || event.key === 'U') {
+			if (undoEntry) {
+				event.preventDefault();
+				undoLastSave();
+			}
+			return;
+		}
 	}
 
 	// Mark task as complete
@@ -2347,6 +2425,10 @@
 			saveError = null;
 			lastSaved = null;
 			showHelp = false;
+			showDeleteConfirm = false;
+			undoEntry = null;
+			if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
+			isUndoing = false;
 			// Reset logs state
 			sessionLogs = [];
 			logsExpanded = false;
@@ -2830,8 +2912,20 @@
 								Saving...
 							</span>
 						{:else if lastSaved}
-							<span class="text-xs text-base-content/70">
-								✓ Saved {formatSavedTime(lastSaved)}
+							<span class="flex items-center gap-1.5 text-xs text-base-content/70">
+								{#if isUndoing}
+									<span class="loading loading-spinner loading-xs"></span>
+									Undoing...
+								{:else}
+									✓ Saved {formatSavedTime(lastSaved)}
+									{#if undoEntry}
+										<button
+											class="btn btn-xs btn-ghost gap-1 font-mono text-info/70 hover:text-info"
+											onclick={undoLastSave}
+											title="Undo last save (U)"
+										>↩ undo</button>
+									{/if}
+								{/if}
 							</span>
 						{/if}
 					</TaskMetaRow>
@@ -2881,10 +2975,24 @@
 				{:else if task}
 					<!-- View Mode -->
 					<div class="flex flex-col">
+						<!-- Save error banner -->
+						{#if saveError}
+							<div class="flex items-center justify-between gap-2 mb-4 px-3 py-2 rounded-lg text-xs" style="background: oklch(0.55 0.18 25 / 0.12); border: 1px solid oklch(0.55 0.18 25 / 0.30); color: oklch(0.80 0.15 25);">
+								<span class="flex items-center gap-1.5">
+									<svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/></svg>
+									Save failed: {saveError}
+								</span>
+								<button class="opacity-60 hover:opacity-100 transition-opacity" onclick={() => saveError = null} aria-label="Dismiss error">
+									<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+								</button>
+							</div>
+						{/if}
 						<!-- Feedback Context (JST app feedback: page URL, recording, selected elements) -->
 						{#if task.page_url || task.recording_url || task.selected_elements?.length}
-							<div class="rounded-lg overflow-hidden" style="border: 1px solid oklch(0.70 0.18 200 / 0.20); border-left: 3px solid oklch(0.70 0.18 200); background: oklch(0.16 0.01 250);">
+							<div role="region" aria-label="Feedback Context" class="rounded-lg overflow-hidden" style="border: 1px solid oklch(0.70 0.18 200 / 0.20); border-left: 3px solid oklch(0.70 0.18 200); background: oklch(0.16 0.01 250);">
 								<div class="px-3 py-2.5 flex flex-col gap-2">
+									<!-- Section label -->
+									<div class="text-[10px] font-mono uppercase tracking-widest text-base-content/30">Feedback Context</div>
 									<!-- Recording CTA (most prominent) -->
 									{#if task.recording_url || task.db_id}
 										{@const replayBase = (() => { try { return new URL(task.page_url || '').origin; } catch { return ''; } })()}
@@ -2901,31 +3009,49 @@
 											</a>
 										{/if}
 									{/if}
-									<!-- page_url chip -->
+									<!-- page_url chip with copy -->
 									{#if task.page_url}
-										<a
-											href={task.page_url}
-											target="_blank"
-											rel="noopener noreferrer"
-											class="inline-flex items-center gap-1.5 max-w-full group"
-											title={task.page_url}
-										>
-											<svg class="w-3 h-3 flex-shrink-0 text-base-content/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-											<span class="text-xs text-base-content/50 group-hover:text-base-content/80 truncate transition-colors">{task.page_url}</span>
-										</a>
+										<div class="flex items-center gap-1 group/pageurl">
+											<a
+												href={task.page_url}
+												target="_blank"
+												rel="noopener noreferrer"
+												class="feedback-page-url inline-flex items-center gap-1.5 flex-1 min-w-0 rounded px-1 py-0.5 -mx-1 -my-0.5 transition-colors"
+												aria-label="Open page: {task.page_url}"
+												title={task.page_url}
+											>
+												<svg class="w-3 h-3 flex-shrink-0 text-base-content/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+												<span class="text-xs text-base-content/50 group-hover/pageurl:text-base-content/80 truncate transition-colors">{task.page_url}</span>
+											</a>
+											<button
+												type="button"
+												class="opacity-0 group-hover/pageurl:opacity-100 transition-opacity flex-shrink-0 p-0.5 rounded hover:bg-base-300/50"
+												onclick={copyPageUrl}
+												title={copiedPageUrl ? 'Copied!' : 'Copy URL'}
+												aria-label="Copy page URL"
+											>
+												{#if copiedPageUrl}
+													<svg class="w-3 h-3 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
+												{:else}
+													<svg class="w-3 h-3 text-base-content/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"/></svg>
+												{/if}
+											</button>
+										</div>
 									{/if}
 									<!-- selected_elements list -->
 									{#if task.selected_elements?.length}
 										<div class="flex flex-col gap-1 mt-0.5">
 											{#each task.selected_elements as el}
-												<div class="rounded bg-base-300/40 px-2 py-1 text-xs flex items-center gap-2">
-													{#if el.tagName}
-														<span class="badge badge-xs badge-ghost font-mono uppercase flex-shrink-0">{el.tagName}</span>
-													{/if}
-													{#if el.textContent?.trim()}
-														<span class="text-base-content/50 truncate">"{el.textContent.trim().slice(0, 80)}"</span>
-													{/if}
-												</div>
+												{#if el.tagName || el.textContent?.trim()}
+													<div class="rounded bg-base-300/40 px-2 py-1 text-xs flex items-center gap-2">
+														{#if el.tagName}
+															<span class="badge badge-xs badge-ghost font-mono uppercase flex-shrink-0">{el.tagName}</span>
+														{/if}
+														{#if el.textContent?.trim()}
+															<span class="text-base-content/50 truncate">"{el.textContent.trim().slice(0, 80)}"</span>
+														{/if}
+													</div>
+												{/if}
 											{/each}
 										</div>
 									{/if}
@@ -2947,7 +3073,7 @@
 						{/if}
 
 						<!-- Description (Inline Editable) - Industrial -->
-						<div class="mt-5">
+						<div class="mt-4" data-field="description">
 							<TaskFieldLabel>Description</TaskFieldLabel>
 							<InlineEdit
 								value={task.description || ''}
@@ -2964,7 +3090,7 @@
 						</div>
 
 						<!-- Labels (badges, click to edit) - Industrial -->
-						<div class="mt-4">
+						<div class="mt-4" data-field="labels">
 							<TaskFieldLabel>Labels</TaskFieldLabel>
 							{#if editingLabels}
 								<!-- Edit mode: text input - Industrial -->
@@ -3010,7 +3136,12 @@
 
 								<!-- Command (searchable dropdown) -->
 									<div class="flex items-start gap-2">
-										<span class="text-xs text-base-content/50 w-20 shrink-0 pt-0.5">Command</span>
+										<span class="text-xs text-base-content/50 w-20 shrink-0 pt-0.5 flex items-center gap-1">
+										Command
+										<span class="tooltip tooltip-right z-50" data-tip="Slash command the agent runs at session start (e.g. /jat:start)">
+											<svg class="w-3 h-3 text-base-content/25 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z"/></svg>
+										</span>
+									</span>
 										<div class="flex-1">
 											<SearchDropdown
 												value={task.command || '/jat:start'}
@@ -3023,7 +3154,12 @@
 
 									<!-- Harness / Model Override (dropdowns) -->
 									<div class="flex items-start gap-2">
-										<span class="text-xs text-base-content/50 w-20 shrink-0 pt-0.5">Harness</span>
+										<span class="text-xs text-base-content/50 w-20 shrink-0 pt-0.5 flex items-center gap-1">
+										Harness
+										<span class="tooltip tooltip-right z-50" data-tip="AI runtime to use — Claude Code, Pi, Gemini CLI, etc. Leave blank for project default">
+											<svg class="w-3 h-3 text-base-content/25 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z"/></svg>
+										</span>
+									</span>
 										<div class="flex-1 flex flex-wrap gap-1.5 items-center">
 											<!-- Harness dropdown (AGENT_PRESETS + ProviderLogo) -->
 											<div class="relative" bind:this={harnessDropdownRef}>
@@ -3084,6 +3220,9 @@
 											<span class="text-base-content/20 self-center">/</span>
 
 											<!-- Model dropdown -->
+											<span class="tooltip tooltip-right z-50 self-center" data-tip="AI model override for this task. Leave blank to use the harness default">
+												<svg class="w-3 h-3 text-base-content/25 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z"/></svg>
+											</span>
 											<div class="relative" bind:this={modelDropdownRef}>
 												<button
 													type="button"
@@ -3434,6 +3573,9 @@
 							<summary class="flex items-center gap-2 cursor-pointer list-none text-xs font-medium text-base-content/50 hover:text-base-content/80 py-1 marker:hidden [&::-webkit-details-marker]:hidden">
 								<svg class="h-3 w-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
 								<span>Depends On</span>
+								<span class="tooltip tooltip-right z-50" data-tip="Tasks that must complete before this one can start">
+									<svg class="w-3 h-3 text-base-content/25 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z"/></svg>
+								</span>
 								{#if task.depends_on && task.depends_on.length > 0}
 									<span class="badge badge-xs bg-base-300 text-base-content/70 border-0">{task.depends_on.length}</span>
 								{/if}
@@ -3472,6 +3614,9 @@
 								<summary class="flex items-center gap-2 cursor-pointer list-none text-xs font-medium text-base-content/50 hover:text-base-content/80 py-1 marker:hidden [&::-webkit-details-marker]:hidden">
 									<svg class="h-3 w-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
 									<span>Blocks</span>
+									<span class="tooltip tooltip-right z-50" data-tip="Tasks waiting for this one to finish — completing this unblocks them">
+										<svg class="w-3 h-3 text-base-content/25 cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z"/></svg>
+									</span>
 									<span class="badge badge-xs bg-base-300 text-base-content/70 border-0">{task.blocked_by.length}</span>
 								</summary>
 								<div class="pt-3">
@@ -4384,6 +4529,18 @@
 									<span>Mark task complete</span>
 									<kbd class="kbd kbd-sm">M</kbd>
 								</div>
+								<div class="flex justify-between items-center py-1">
+									<span>Edit description</span>
+									<kbd class="kbd kbd-sm">D</kbd>
+								</div>
+								<div class="flex justify-between items-center py-1">
+									<span>Edit labels</span>
+									<kbd class="kbd kbd-sm">L</kbd>
+								</div>
+								<div class="flex justify-between items-center py-1">
+									<span>Undo last save</span>
+									<kbd class="kbd kbd-sm">U</kbd>
+								</div>
 							</div>
 
 							<!-- Tip -->
@@ -4402,7 +4559,7 @@
 										d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
 									></path>
 								</svg>
-								<span>Click any field to edit inline</span>
+								<span>Click any field to edit — all changes auto-save · Undo within 8s</span>
 							</div>
 						</div>
 					</div>
@@ -4414,63 +4571,63 @@
 				<div
 					class="p-6 bg-base-200 border-t border-base-300"
 				>
-					<div class="flex justify-between items-center">
-						<!-- Delete button (left) -->
-						<button
-							class="btn btn-sm btn-ghost text-error hover:btn-error gap-1"
-							onclick={handleDelete}
-							disabled={isSaving || isDeleting}
-						>
-							{#if isDeleting}
-								<span class="loading loading-spinner loading-xs"></span>
-								Deleting...
-							{:else}
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									class="h-4 w-4"
-									fill="none"
-									viewBox="0 0 24 24"
-									stroke="currentColor"
+					{#if showDeleteConfirm}
+						<!-- Inline delete confirmation -->
+						<div class="flex items-center justify-between gap-3 py-2 px-3 rounded-lg" style="background: oklch(0.55 0.18 25 / 0.15); border: 1px solid oklch(0.55 0.18 25 / 0.30);">
+							<div class="flex items-center gap-2">
+								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" style="color: oklch(0.70 0.18 25);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+								</svg>
+								<span class="text-sm font-medium" style="color: oklch(0.75 0.15 25);">Delete "{task?.title?.slice(0, 40)}{(task?.title?.length ?? 0) > 40 ? '…' : ''}"?</span>
+								<span class="text-xs text-base-content/50">Cannot be undone</span>
+							</div>
+							<div class="flex items-center gap-1.5 flex-shrink-0">
+								<button
+									class="btn btn-xs btn-ghost"
+									onclick={() => showDeleteConfirm = false}
+									disabled={isDeleting}
 								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-									/>
+									Cancel
+								</button>
+								<button
+									class="btn btn-xs btn-error gap-1"
+									onclick={confirmDelete}
+									disabled={isDeleting}
+								>
+									{#if isDeleting}
+										<span class="loading loading-spinner loading-xs"></span>
+									{/if}
+									Delete
+								</button>
+							</div>
+						</div>
+					{:else}
+						<div class="flex justify-between items-center">
+							<!-- Delete button (left) -->
+							<button
+								class="btn btn-sm btn-ghost text-error hover:btn-error gap-1"
+								onclick={handleDelete}
+								disabled={isSaving || isDeleting}
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
 								</svg>
 								Delete
-							{/if}
-						</button>
-						<!-- Right side buttons -->
-						<div class="flex items-center gap-2">
-							<!-- Shortcuts button -->
-							<button
-								class="btn btn-sm btn-ghost gap-1"
-								onclick={() => (showHelp = !showHelp)}
-							>
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									class="h-4 w-4"
-									fill="none"
-									viewBox="0 0 24 24"
-									stroke="currentColor"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-									/>
-								</svg>
-								Shortcuts
 							</button>
-							<!-- Close button -->
-							<button type="button" class="btn btn-ghost" onclick={handleClose} disabled={isSaving || isDeleting}>
-								Close
-							</button>
+							<!-- Right side buttons -->
+							<div class="flex items-center gap-2">
+								<button class="btn btn-sm btn-ghost gap-1" onclick={() => (showHelp = !showHelp)}>
+									<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+									</svg>
+									Shortcuts
+								</button>
+								<button type="button" class="btn btn-sm btn-ghost" onclick={handleClose} disabled={isSaving || isDeleting}>
+									Close
+								</button>
+							</div>
 						</div>
-					</div>
+					{/if}
 				</div>
 			{/if}
 		</div>
@@ -4658,6 +4815,22 @@
 {/if}
 
 <style>
+	/* Feedback Context: page URL link */
+	.feedback-page-url:hover {
+		background: oklch(0.25 0.01 250 / 0.40);
+	}
+	.feedback-page-url:focus-visible {
+		outline: 2px solid oklch(0.70 0.18 200 / 0.70);
+		outline-offset: 1px;
+	}
+
+	/* Feedback Context: URL copy button */
+	.feedback-page-url + button:focus-visible {
+		outline: 2px solid oklch(0.70 0.18 200 / 0.70);
+		outline-offset: 1px;
+		opacity: 1;
+	}
+
 	/* Feedback Context recording CTA */
 	.feedback-recording-cta {
 		background: oklch(0.70 0.18 200 / 0.15);

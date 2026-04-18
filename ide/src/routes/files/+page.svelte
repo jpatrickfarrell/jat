@@ -27,6 +27,7 @@
 	import { FilesSkeleton } from '$lib/components/skeleton';
 	import { setGitChangesCount, setGitAheadCount } from '$lib/stores/drawerStore';
 	import { successToast, errorToast, warningToast, infoToast } from '$lib/stores/toasts.svelte';
+	import { swipe } from '$lib/actions/swipe';
 
 	// Types
 	interface Project {
@@ -78,6 +79,8 @@
 	let leftPanelWidth = $state(303); // pixels (for desktop horizontal layout)
 	const MIN_PANEL_WIDTH = 180;
 	const MAX_PANEL_WIDTH = 600;
+	const COLLAPSE_THRESHOLD = 120;
+	let isCollapsed = $state(false);
 
 	// Mobile layout state (for vertical stacked layout)
 	let isMobileLayout = $state(false);
@@ -91,30 +94,54 @@
 	let startX = $state(0);
 	let startWidth = $state(0);
 
-	function handleDividerMouseDown(e: MouseEvent) {
+	function onDividerPointerDown(e: PointerEvent) {
 		e.preventDefault();
 		isDragging = true;
 		startX = e.clientX;
 		startWidth = leftPanelWidth;
-
-		document.addEventListener('mousemove', handleDividerMouseMove);
-		document.addEventListener('mouseup', handleDividerMouseUp);
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 	}
 
-	function handleDividerMouseMove(e: MouseEvent) {
+	function onDividerPointerMove(e: PointerEvent) {
 		if (!isDragging) return;
 		const deltaX = e.clientX - startX;
 		let newWidth = startWidth + deltaX;
-		// Clamp to min/max
+		if (newWidth < COLLAPSE_THRESHOLD) {
+			isCollapsed = true;
+			return;
+		}
+		isCollapsed = false;
 		newWidth = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, newWidth));
 		leftPanelWidth = newWidth;
 	}
 
-	function handleDividerMouseUp() {
+	function onDividerPointerUp(e: PointerEvent) {
 		isDragging = false;
-		document.removeEventListener('mousemove', handleDividerMouseMove);
-		document.removeEventListener('mouseup', handleDividerMouseUp);
+		(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
 	}
+
+	function expandFileTree() {
+		isCollapsed = false;
+	}
+
+	// Capture-phase shortcuts — must run before Monaco intercepts events
+	onMount(() => {
+		function handleCapture(e: KeyboardEvent) {
+			if (e.ctrlKey && e.key === '\\') {
+				e.preventDefault();
+				isCollapsed = !isCollapsed;
+			}
+			// Ctrl+K: open unified search (capture phase so Monaco can't block it)
+			if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+				e.preventDefault();
+				e.stopPropagation();
+				if (selectedProject) globalSearchOpen = true;
+			}
+		}
+		window.addEventListener('keydown', handleCapture, true);
+		return () => window.removeEventListener('keydown', handleCapture, true);
+	});
+
 
 	// Mobile horizontal divider resize handler
 	let containerRef: HTMLDivElement | null = $state(null);
@@ -1077,7 +1104,9 @@
 				<!-- Left Panel: File Tree -->
 				<div
 					class="file-tree-panel"
-					style="{isMobileLayout ? `height: ${topPanelHeight}%` : `width: ${leftPanelWidth}px`};"
+					class:collapsed={isCollapsed}
+					style="{isMobileLayout ? `height: ${topPanelHeight}%` : `width: ${isCollapsed ? 0 : leftPanelWidth}px; min-width: ${isCollapsed ? 0 : ''}px; transition: ${isDragging ? 'none' : 'width 0.2s ease'}`};"
+					use:swipe={{ onSwipeLeft: () => { isCollapsed = true; }, allowRight: false, commitThreshold: 60, threshold: 40 }}
 				>
 					<!-- Panel Header -->
 					<div class="panel-header project-header">
@@ -1091,6 +1120,17 @@
 						>
 							<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+							</svg>
+						</button>
+						<!-- Collapse button (touch-friendly; keyboard: Ctrl+\) -->
+						<button
+							class="search-button"
+							title="Collapse panel (Ctrl+\)"
+							aria-label="Collapse file tree"
+							onclick={() => { isCollapsed = true; }}
+						>
+							<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
 							</svg>
 						</button>
 					</div>
@@ -1122,20 +1162,40 @@
 				{#if isMobileLayout}
 					<ResizableDivider onResize={handleMobileResize} />
 				{:else}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-					<div
-						class="vertical-divider"
-						class:dragging={isDragging}
-						onmousedown={handleDividerMouseDown}
-						role="separator"
-						aria-orientation="vertical"
-					>
-						<div class="divider-grip">
-							<div class="grip-line"></div>
-							<div class="grip-line"></div>
+					{#if isCollapsed}
+						<button
+							class="expand-tab"
+							onclick={expandFileTree}
+							title="Expand file tree (Ctrl+\\)"
+							aria-label="Expand file tree panel"
+						>
+							<div class="expand-tab-inner">
+								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+								</svg>
+							</div>
+						</button>
+					{:else}
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+						<div
+							class="vertical-divider"
+							class:dragging={isDragging}
+							onpointerdown={onDividerPointerDown}
+							onpointermove={onDividerPointerMove}
+							onpointerup={onDividerPointerUp}
+							role="separator"
+							aria-orientation="vertical"
+							aria-valuenow={leftPanelWidth}
+							aria-valuemin={MIN_PANEL_WIDTH}
+							aria-valuemax={MAX_PANEL_WIDTH}
+						>
+							<div class="divider-grip">
+								<div class="grip-line"></div>
+								<div class="grip-line"></div>
+							</div>
 						</div>
-					</div>
+					{/if}
 				{/if}
 
 				<!-- Right Panel: Editor -->
@@ -1199,7 +1259,8 @@
 
 <style>
 	.files-page {
-		height: 100%;
+		flex: 1;
+		min-height: 0;
 		display: flex;
 		flex-direction: column;
 	}
@@ -1265,6 +1326,41 @@
 		flex-shrink: 0;
 		background: oklch(0.15 0.01 250);
 		border-right: 1px solid oklch(0.22 0.02 250);
+	}
+
+	.file-tree-panel.collapsed {
+		min-width: 0;
+	}
+
+	.expand-tab {
+		width: 16px;
+		min-width: 16px;
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: transparent;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+	}
+
+	.expand-tab-inner {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 16px;
+		height: 52px;
+		border-radius: 0 6px 6px 0;
+		background: oklch(0.22 0.02 250);
+		color: oklch(0.55 0.02 250);
+		transition: background 0.15s ease, color 0.15s ease, width 0.15s ease;
+	}
+
+	.expand-tab:hover .expand-tab-inner {
+		background: oklch(0.65 0.15 200 / 0.25);
+		color: oklch(0.75 0.15 200);
+		width: 20px;
 	}
 
 	/* Editor Panel (Right) */

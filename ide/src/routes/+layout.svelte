@@ -10,6 +10,7 @@
 	import EpicSwarmModal from '$lib/components/EpicSwarmModal.svelte';
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
 	import TopBar from '$lib/components/TopBar.svelte';
+	import ReviewNotificationBar, { type ReviewSession } from '$lib/components/ReviewNotificationBar.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import MobileDock from '$lib/components/MobileDock.svelte';
 	import TaskDetailDrawer from '$lib/components/TaskDetailDrawer.svelte';
@@ -111,6 +112,19 @@
 			states.sort((a, b) => (SESSION_STATE_PRIORITY[a] ?? 99) - (SESSION_STATE_PRIORITY[b] ?? 99));
 		}
 		return map;
+	});
+
+	// Sessions currently ready for review (shown in TopBar notification bar)
+	const reviewSessions = $derived.by(() => {
+		return getWorkSessions()
+			.filter(s => s._sseState === 'ready-for-review')
+			.map(s => ({
+				sessionName: s.sessionName,
+				agentName: s.agentName || '',
+				taskId: s.task?.id,
+				taskTitle: s.task?.title,
+				project: getProjectFromTaskId(s.task?.id) || s.project || undefined,
+			})) satisfies ReviewSession[];
 	});
 
 	// Ready task count and list for Swarm button dropdown
@@ -1184,6 +1198,24 @@
 			}
 		}
 
+		// Ctrl+Shift+letter → navigate to route
+		if (event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey && !_isEditing) {
+			const NAV: Record<string, string> = {
+				't': '/tasks', 'w': '/sessions', 'g': '/source', 'e': '/files',
+				'h': '/history', 's': '/servers', 'd': '/data', 'b': '/bases',
+				'f': '/search', 'x': '/integrations', 'a': '/chores',
+				'm': '/memory', 'c': '/clients',
+			};
+			const key = event.key.toLowerCase();
+			const route = NAV[key] ?? (event.key === ',' ? '/config' : null);
+			if (route) {
+				event.preventDefault();
+				const proj = new URL(window.location.href).searchParams.get('project');
+				goto(proj ? `${route}?project=${encodeURIComponent(proj)}` : route, { noScroll: true });
+				return;
+			}
+		}
+
 		// Esc → close help panel
 		if (event.key === 'Escape' && get(sidebarHelpOpen)) {
 			event.preventDefault();
@@ -1332,8 +1364,11 @@
 				{taskCounts}
 			/>
 
+			<!-- Review notification bar — slim strip below TopBar, visible on all pages -->
+			<ReviewNotificationBar {reviewSessions} />
+
 			<!-- Page content (pb-14 on mobile for dock clearance) -->
-			<main class="flex-1 min-h-0 overflow-y-auto pb-14 md:pb-0" style="scrollbar-gutter: stable;">
+			<main class="flex-1 min-h-0 overflow-y-auto pb-14 md:pb-0 flex flex-col" style="scrollbar-gutter: stable;">
 				{@render children()}
 			</main>
 
@@ -1412,6 +1447,7 @@
 	selectedProject={getActiveProject() || configProjects[0] || ''}
 	onClose={() => { globalSearchOpen = false; }}
 	onFileSelect={handleGlobalSearchResult}
+	onProjectChange={handleProjectChange}
 />
 
 <!-- Sound Permission Toast -->

@@ -12,7 +12,6 @@
 	 */
 
 	import { onMount, onDestroy } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import SessionPanel from '$lib/components/work/SessionPanel.svelte';
 	import ResizableDivider from '$lib/components/ResizableDivider.svelte';
@@ -207,6 +206,11 @@
 	let editingColor = $state<string | null>(null); // Project name being edited (color)
 	let colorDraft = $state<string>(''); // Color in hex format for picker
 
+	// Brief success flash state after inline saves
+	let savedDescription = $state<string | null>(null);
+	let savedPort = $state<string | null>(null);
+	let savedColor = $state<string | null>(null);
+
 	// Predefined color palette for quick selection - using oklch for perceptual uniformity
 	// These are designed to work well across different themes
 	const COLOR_PALETTE = [
@@ -397,6 +401,8 @@
 			projects = projects.map(p =>
 				p.name === project.name ? { ...p, description: descriptionDraft.trim() || null } : p
 			);
+			savedDescription = project.name;
+			setTimeout(() => { savedDescription = null; }, 1500);
 			editingDescription = null;
 			descriptionDraft = '';
 		} catch (err: any) {
@@ -458,6 +464,8 @@
 			projects = projects.map(p =>
 				p.name === project.name ? { ...p, port: portValue } : p
 			);
+			savedPort = project.name;
+			setTimeout(() => { savedPort = null; }, 1500);
 			editingPort = null;
 			portDraft = '';
 		} catch (err: any) {
@@ -518,6 +526,8 @@
 			// Update the global project color cache so other components see the new color immediately
 			updateProjectColorCache(project.name, newColor);
 
+			savedColor = project.name;
+			setTimeout(() => { savedColor = null; }, 1500);
 			editingColor = null;
 			colorDraft = '';
 		} catch (err: any) {
@@ -1045,24 +1055,27 @@
 							{@const runningSessionName = getServerSessionName(project.name)}
 						{@const isServerOnly = project.source === 'server-session'}
 							<tr
-								class="border-b border-base-content/15 transition-colors {runningSessionName ? 'cursor-pointer' : ''} {project.status === 'running' ? 'bg-success/10 hover:bg-success/15' : 'hover:bg-base-200'}"
+								class="group border-b border-base-content/15 transition-colors {runningSessionName ? 'cursor-pointer' : ''} {project.status === 'running' ? 'bg-success/10 hover:bg-success/15' : 'hover:bg-base-200'}"
 								style="opacity: {project.hidden ? '0.5' : '1'};"
+								tabindex={runningSessionName ? 0 : undefined}
 								onmouseenter={() => { hoveredProject = project.name; }}
 								onmouseleave={() => { hoveredProject = null; }}
 								onclick={() => runningSessionName && scrollToSession(runningSessionName)}
+								onkeydown={(e) => e.key === 'Enter' && runningSessionName && scrollToSession(runningSessionName)}
 							>
 								<!-- Project name and path (with left color stripe) -->
 								<td class="py-2 pr-4 pl-0 relative">
 									<!-- Left color accent stripe — click to edit color -->
 									{#if !isServerOnly}
 										<button
-											class="absolute left-0 top-0 bottom-0 w-1 hover:w-1.5 transition-all cursor-pointer"
-											style="background: {editingColor === project.name ? (colorDraft || 'oklch(0.40 0.02 250)') : (project.activeColor || 'oklch(0.40 0.02 250)')};"
+											class="absolute left-0 top-0 bottom-0 transition-[width] duration-150 cursor-pointer {savedColor === project.name ? 'w-1.5' : 'w-1 hover:w-1.5'}"
+											style="background: {editingColor === project.name ? (colorDraft || 'oklch(0.35 0.05 250)') : (project.activeColor || 'oklch(0.35 0.05 250)')};"
 											onclick={(e) => { e.stopPropagation(); editingColor === project.name ? cancelEditingColor() : startEditingColor(project); }}
 											title="Click to change project color"
 											aria-label="Change color for {project.name}"
 										></button>
 										{#if editingColor === project.name}
+											{@const isColorValid = colorDraft.length > 0 && (typeof CSS === 'undefined' || CSS.supports('color', colorDraft))}
 											<!-- Color picker anchored to stripe -->
 											<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 											<div
@@ -1091,7 +1104,7 @@
 													/>
 													<input
 														type="text"
-														class="flex-1 px-2 py-1 rounded font-mono text-xs bg-base-300 border border-base-content/20 text-base-content/90"
+														class="flex-1 px-2 py-1 rounded font-mono text-xs bg-base-300 border {!isColorValid && colorDraft.length > 0 ? 'border-error/60' : 'border-base-content/20'} text-base-content/90 transition-colors"
 														bind:value={colorDraft}
 														placeholder="oklch(0.70 0.18 220)"
 													/>
@@ -1105,9 +1118,9 @@
 														Cancel
 													</button>
 													<button
-														class="px-2 py-1 rounded text-xs font-medium transition-colors bg-success text-base-100"
+														class="px-2 py-1 rounded text-xs font-medium transition-colors bg-success text-base-100 disabled:opacity-40 disabled:cursor-not-allowed"
 														onclick={() => saveColor(project, colorDraft)}
-														disabled={saving === project.name}
+														disabled={saving === project.name || !isColorValid}
 													>
 														{saving === project.name ? 'Saving...' : 'Save'}
 													</button>
@@ -1124,6 +1137,9 @@
 											</span>
 											{#if isServerOnly}
 												<span class="text-base-content/40 text-[9px] px-1 py-0.5 rounded bg-base-content/8 leading-none">server</span>
+											{/if}
+											{#if runningSessionName}
+												<span class="text-[9px] text-success leading-none opacity-0 group-hover:opacity-50 transition-opacity duration-150">↑ session</span>
 											{/if}
 										</div>
 										{#if project.path}
@@ -1224,7 +1240,7 @@
 												<!-- Not running: port + edit + copy tmux command -->
 												<div class="flex items-center gap-1">
 													<button
-														class="text-base-content/75 font-mono text-xs"
+														class="font-mono text-xs transition-colors duration-500 {savedPort === project.name ? 'text-success' : 'text-base-content/75'}"
 														onclick={(e) => { e.stopPropagation(); startEditingPort(project); }}
 														title="Click to edit port"
 													>
@@ -1267,13 +1283,13 @@
 											{:else}
 												<!-- No port: click to add -->
 												<button
-													class="group flex items-center gap-1 font-mono text-xs"
+													class="group/port flex items-center gap-1 text-xs"
 													onclick={(e) => { e.stopPropagation(); startEditingPort(project); }}
 													title="Click to set port"
 												>
 													<span class="text-base-content/45 italic">—</span>
 													<svg
-														class="text-base-content/55 w-2.5 h-2.5 opacity-0 group-hover:opacity-60 transition-opacity"
+														class="text-base-content/55 w-2.5 h-2.5 opacity-0 group-hover/port:opacity-60 transition-opacity"
 														fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
 													>
 														<path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -1352,15 +1368,23 @@
 									{:else if editingDescription === project.name}
 										<div class="flex items-center gap-2">
 											<!-- svelte-ignore a11y_autofocus -->
-											<input
-												type="text"
-												class="flex-1 px-2 py-1 rounded text-xs outline-none bg-base-300 border border-info/50 text-base-content/90"
-												placeholder="Short description for AI context..."
-												bind:value={descriptionDraft}
-												onclick={(e) => e.stopPropagation()}
-												onkeydown={(e) => handleDescriptionKeydown(e, project)}
-												autofocus
-											/>
+											<div class="flex-1 relative">
+												<input
+													type="text"
+													class="w-full px-2 py-1 rounded text-xs outline-none bg-base-300 border border-info/50 text-base-content/90"
+													placeholder="Short description for AI context..."
+													maxlength={200}
+													bind:value={descriptionDraft}
+													onclick={(e) => e.stopPropagation()}
+													onkeydown={(e) => handleDescriptionKeydown(e, project)}
+													autofocus
+												/>
+												{#if descriptionDraft.length > 160}
+													<span class="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] pointer-events-none {descriptionDraft.length >= 200 ? 'text-error/70' : 'text-base-content/35'}">
+														{200 - descriptionDraft.length}
+													</span>
+												{/if}
+											</div>
 											<button
 												class="text-success p-1 rounded hover:bg-base-300/20"
 												onclick={(e) => { e.stopPropagation(); saveDescription(project); }}
@@ -1387,12 +1411,12 @@
 										</div>
 									{:else}
 										<button
-											class="group flex items-center gap-2 w-full text-left"
+											class="group/desc flex items-center gap-2 w-full text-left"
 											onclick={(e) => { e.stopPropagation(); startEditingDescription(project); }}
 											title="Click to edit description"
 										>
 											{#if project.description}
-												<span class="text-base-content/75 text-xs truncate max-w-[180px]">
+												<span class="text-xs truncate max-w-[180px] transition-colors duration-500 {savedDescription === project.name ? 'text-success' : 'text-base-content/75'}">
 													{project.description}
 												</span>
 											{:else}
@@ -1401,7 +1425,7 @@
 												</span>
 											{/if}
 											<svg
-												class="text-base-content/60 w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+												class="text-base-content/60 w-3 h-3 opacity-0 group-hover/desc:opacity-100 transition-opacity flex-shrink-0"
 												fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
 											>
 												<path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -1410,28 +1434,41 @@
 									{/if}
 								</td>
 
-								<!-- Visibility toggle (diminished, hidden for server-only entries) -->
-								<td class="px-2 py-3 text-center">
-									{#if !isServerOnly}
-									<button
-										class="relative w-7 h-3.5 rounded-full transition-all cursor-pointer opacity-60 hover:opacity-100 {project.hidden ? 'bg-base-content/25' : 'bg-success/45'}"
-										onclick={(e) => { e.stopPropagation(); toggleVisibility(project); }}
-										disabled={saving === project.name}
-										title={project.hidden ? 'Show in dropdowns' : 'Hide from dropdowns'}
-									>
-										{#if saving === project.name}
-											<span class="absolute inset-0 flex items-center justify-center">
-												<span class="loading loading-spinner" style="width: 8px; height: 8px;"></span>
-											</span>
-										{:else}
-											<span
-												class="absolute top-0.5 w-2.5 h-2.5 rounded-full transition-all bg-base-content/90"
-												class:visibility-toggle-knob-animate={animatingVisibility === project.name}
-												style="left: {project.hidden ? '2px' : 'calc(100% - 12px)'};"
-											></span>
+								<!-- Keyboard hints + Visibility toggle -->
+								<td class="px-2 py-3">
+									<div class="flex items-center justify-center gap-2">
+										<!-- Keyboard shortcut hints — fade in on row hover -->
+										<div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+											<kbd class="px-1 rounded text-[8px] font-mono bg-base-content/8 text-base-content/35 leading-tight border border-base-content/10">R</kbd>
+											{#if project.status === 'running'}
+												<kbd class="px-1 rounded text-[8px] font-mono bg-base-content/8 text-base-content/35 leading-tight border border-base-content/10">S</kbd>
+											{/if}
+											{#if project.port && project.status === 'running'}
+												<kbd class="px-1 rounded text-[8px] font-mono bg-base-content/8 text-base-content/35 leading-tight border border-base-content/10">O</kbd>
+											{/if}
+										</div>
+										<!-- Visibility toggle (not for server-only entries) -->
+										{#if !isServerOnly}
+										<button
+											class="relative w-7 h-3.5 rounded-full transition-all cursor-pointer opacity-60 hover:opacity-100 {project.hidden ? 'bg-base-content/25' : 'bg-success/45'}"
+											onclick={(e) => { e.stopPropagation(); toggleVisibility(project); }}
+											disabled={saving === project.name}
+											title={project.hidden ? 'Show in dropdowns' : 'Hide from dropdowns'}
+										>
+											{#if saving === project.name}
+												<span class="absolute inset-0 flex items-center justify-center">
+													<span class="loading loading-spinner" style="width: 8px; height: 8px;"></span>
+												</span>
+											{:else}
+												<span
+													class="absolute top-0.5 w-2.5 h-2.5 rounded-full transition-all bg-base-content/90"
+													class:visibility-toggle-knob-animate={animatingVisibility === project.name}
+													style="left: {project.hidden ? '2px' : 'calc(100% - 12px)'};"
+												></span>
+											{/if}
+										</button>
 										{/if}
-									</button>
-									{/if}
+									</div>
 								</td>
 							</tr>
 						{/each}

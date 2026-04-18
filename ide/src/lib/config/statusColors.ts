@@ -1423,6 +1423,7 @@ export interface ServerStateAction {
 	icon: string;         // SVG path
 	variant: 'default' | 'success' | 'warning' | 'error' | 'info';
 	description?: string;
+	destructive?: boolean;
 }
 
 export const SERVER_STATE_ACTIONS: Record<ServerState, ServerStateAction[]> = {
@@ -1439,7 +1440,8 @@ export const SERVER_STATE_ACTIONS: Record<ServerState, ServerStateAction[]> = {
 			label: 'Stop Server',
 			icon: 'M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z',
 			variant: 'error',
-			description: 'Stop the dev server'
+			description: 'Stop the dev server',
+			destructive: true
 		},
 		{
 			id: 'restart',
@@ -1476,7 +1478,8 @@ export const SERVER_STATE_ACTIONS: Record<ServerState, ServerStateAction[]> = {
 			label: 'Kill Process',
 			icon: 'M6 18L18 6M6 6l12 12',
 			variant: 'error',
-			description: 'Force kill the server process'
+			description: 'Force kill the server process',
+			destructive: true
 		}
 	],
 	stopped: [

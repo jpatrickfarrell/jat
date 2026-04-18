@@ -31,7 +31,6 @@
 		type SpawnResult,
 	} from "$lib/stores/epicQueueStore.svelte";
 	import { SPAWN_STAGGER_MS } from "$lib/config/spawnConfig";
-	import { isSpawnModalOpen } from "$lib/stores/drawerStore";
 	import {
 		startSpawning,
 		stopSpawning,

@@ -345,11 +345,13 @@
 	}
 
 	function handleMouseLeave() {
+		// 600ms delay: long enough to move between badge and dropdown without flicker,
+		// and stable enough to type in the search without accidental close
 		dropdownTimeout = setTimeout(() => {
 			showDropdown = false;
 			searchQuery = ''; // Clear search when dropdown closes
 			debouncedSearchQuery = ''; // Also clear debounced query immediately
-		}, 150);
+		}, 600);
 	}
 
 	// Format helpers
@@ -611,7 +613,7 @@
 	<!-- Dropdown Panel -->
 	{#if showDropdown}
 		<div class="dropdown-panel">
-			<!-- Search bar -->
+			<!-- Search bar — primary entry point for task history lookup -->
 			<div class="search-bar">
 				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="search-icon">
 					<path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
@@ -619,7 +621,8 @@
 				<input
 					type="text"
 					class="search-input"
-					placeholder="Search tasks..."
+					placeholder="Search completed tasks..."
+					aria-label="Search completed tasks"
 					bind:value={searchQuery}
 					bind:this={searchInputRef}
 					onclick={(e) => e.stopPropagation()}
@@ -641,56 +644,7 @@
 				{/if}
 			</div>
 
-			<!-- Header: Sparkline + Tokens + Cost -->
-			<div class="dropdown-header">
-				<!-- Sparkline -->
-				<div class="flex-1 min-w-[100px] h-[24px]">
-					{#if isMultiProject}
-						<Sparkline
-							{multiSeriesData}
-							{projectMeta}
-							width="100%"
-							height={24}
-							showTooltip={true}
-							showGrid={false}
-							showStyleToolbar={false}
-							showLegend={false}
-						/>
-					{:else if sparklineData && sparklineData.length > 0}
-						<Sparkline
-							data={sparklineData}
-							width="100%"
-							height={24}
-							colorMode="usage"
-							showTooltip={true}
-							showGrid={false}
-							showStyleToolbar={false}
-						/>
-					{:else}
-						<div class="h-full flex items-center justify-center text-[10px] opacity-50">No data</div>
-					{/if}
-				</div>
-
-				<!-- Tokens -->
-				<div class="flex items-center gap-1 px-2 py-1 rounded" style="background: oklch(0.20 0.02 260);">
-					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3" style="color: oklch(0.60 0.10 260);">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-					</svg>
-					<span class="text-[11px] font-mono font-medium" style="color: oklch(0.75 0.10 260);">
-						{formatTokensCompact(tokensToday)}
-					</span>
-				</div>
-
-				<!-- Cost -->
-				<div class="flex items-center gap-1 px-2 py-1 rounded" style="background: oklch(0.20 0.04 145);">
-					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3" style="color: oklch(0.60 0.12 145);">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-					</svg>
-					<AnimatedCost value={costToday} format={formatCostCompact} class="text-[11px] font-mono font-medium" style="color: oklch(0.75 0.12 145);" />
-				</div>
-			</div>
-
-			<!-- Agent State Breakdown (if any) -->
+			<!-- Agent State Breakdown — primary section: what needs attention NOW -->
 			{#if hasStateCounts && stateCounts}
 				<div class="px-3 py-2 border-b" style="border-color: oklch(0.25 0.01 250);">
 					<div class="text-[10px] font-mono uppercase tracking-wider mb-1.5" style="color: oklch(0.50 0.02 250);">
@@ -698,39 +652,39 @@
 					</div>
 					<div class="flex flex-wrap gap-2">
 						{#if stateCounts.needsInput > 0}
-							<div class="flex items-center gap-1">
-								<span class="w-2 h-2 rounded-full" style="background: {STATE_COLORS.needsInput};"></span>
-								<span class="text-xs" style="color: {STATE_COLORS.needsInput};">{stateCounts.needsInput} needs input</span>
+							<div class="flex items-center gap-1.5">
+								<span class="w-2 h-2 rounded-full flex-shrink-0" style="background: {STATE_COLORS.needsInput};"></span>
+								<span class="text-xs font-semibold" style="color: {STATE_COLORS.needsInput};">{stateCounts.needsInput} needs input</span>
 							</div>
 						{/if}
 						{#if stateCounts.review > 0}
-							<div class="flex items-center gap-1">
-								<span class="w-2 h-2 rounded-full" style="background: {STATE_COLORS.review};"></span>
-								<span class="text-xs" style="color: {STATE_COLORS.review};">{stateCounts.review} in review</span>
+							<div class="flex items-center gap-1.5">
+								<span class="w-2 h-2 rounded-full flex-shrink-0" style="background: {STATE_COLORS.review};"></span>
+								<span class="text-xs font-semibold" style="color: {STATE_COLORS.review};">{stateCounts.review} in review</span>
 							</div>
 						{/if}
 						{#if stateCounts.working > 0}
 							<div class="flex items-center gap-1">
-								<span class="w-2 h-2 rounded-full" style="background: {STATE_COLORS.working};"></span>
-								<span class="text-xs" style="color: {STATE_COLORS.working};">{stateCounts.working} working</span>
+								<span class="w-1.5 h-1.5 rounded-full flex-shrink-0" style="background: {STATE_COLORS.working};"></span>
+								<span class="text-[11px]" style="color: {STATE_COLORS.working};">{stateCounts.working} working</span>
 							</div>
 						{/if}
 						{#if stateCounts.starting && stateCounts.starting > 0}
 							<div class="flex items-center gap-1">
-								<span class="w-2 h-2 rounded-full" style="background: {STATE_COLORS.starting};"></span>
-								<span class="text-xs" style="color: {STATE_COLORS.starting};">{stateCounts.starting} starting</span>
+								<span class="w-1.5 h-1.5 rounded-full flex-shrink-0" style="background: {STATE_COLORS.starting};"></span>
+								<span class="text-[11px]" style="color: {STATE_COLORS.starting};">{stateCounts.starting} starting</span>
 							</div>
 						{/if}
 						{#if stateCounts.completed > 0}
 							<div class="flex items-center gap-1">
-								<span class="w-2 h-2 rounded-full" style="background: {STATE_COLORS.completed};"></span>
-								<span class="text-xs" style="color: {STATE_COLORS.completed};">{stateCounts.completed} complete</span>
+								<span class="w-1.5 h-1.5 rounded-full flex-shrink-0" style="background: {STATE_COLORS.completed};"></span>
+								<span class="text-[11px]" style="color: {STATE_COLORS.completed};">{stateCounts.completed} complete</span>
 							</div>
 						{/if}
 						{#if stateCounts.idle && stateCounts.idle > 0}
 							<div class="flex items-center gap-1">
-								<span class="w-2 h-2 rounded-full" style="background: {STATE_COLORS.idle};"></span>
-								<span class="text-xs" style="color: {STATE_COLORS.idle};">{stateCounts.idle} idle</span>
+								<span class="w-1.5 h-1.5 rounded-full flex-shrink-0" style="background: {STATE_COLORS.idle};"></span>
+								<span class="text-[11px]" style="color: {STATE_COLORS.idle};">{stateCounts.idle} idle</span>
 							</div>
 						{/if}
 					</div>
@@ -806,15 +760,49 @@
 				{/if}
 			</div>
 
-			<!-- Milestone celebration -->
-			{#if hitMilestone}
-				<div
-					class="px-3 py-2 text-center text-xs font-bold task-completed"
-					style="background: oklch(0.25 0.15 85); color: oklch(0.90 0.20 85);"
-				>
-					<span class="tracking-in-expand">{milestoneNumber}</span> tasks milestone!
+			<!-- Analytics strip — tertiary: usage context, moved below task history -->
+			<div class="analytics-strip">
+				<div class="flex-1 min-w-[100px] h-[40px]">
+					{#if isMultiProject}
+						<Sparkline
+							{multiSeriesData}
+							{projectMeta}
+							width="100%"
+							height={40}
+							showTooltip={true}
+							showGrid={false}
+							showStyleToolbar={false}
+							showLegend={false}
+						/>
+					{:else if sparklineData && sparklineData.length > 0}
+						<Sparkline
+							data={sparklineData}
+							width="100%"
+							height={40}
+							colorMode="usage"
+							showTooltip={true}
+							showGrid={false}
+							showStyleToolbar={false}
+						/>
+					{:else}
+						<div class="h-full flex items-center justify-center text-[10px] opacity-50">No data</div>
+					{/if}
 				</div>
-			{/if}
+				<div class="flex items-center gap-1 px-2 py-1 rounded" style="background: oklch(0.20 0.02 260);">
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3" style="color: oklch(0.60 0.10 260);">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+					</svg>
+					<span class="text-[11px] font-mono font-medium" style="color: oklch(0.75 0.10 260);">
+						{formatTokensCompact(tokensToday)}
+					</span>
+				</div>
+				<div class="flex items-center gap-1 px-2 py-1 rounded" style="background: oklch(0.20 0.04 145);">
+					<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3" style="color: oklch(0.60 0.12 145);">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+					</svg>
+					<AnimatedCost value={costToday} format={formatCostCompact} class="text-[11px] font-mono font-medium" style="color: oklch(0.75 0.12 145);" />
+				</div>
+			</div>
 
 			<!-- View History Button -->
 			<button
@@ -824,11 +812,21 @@
 				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
 				</svg>
-				View Full History
+				Full History
 				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
 				</svg>
 			</button>
+
+			<!-- Milestone overlay — cinematic full-panel flash, cockpit-appropriate -->
+			{#if hitMilestone}
+				<div class="milestone-overlay" role="status" aria-live="polite" aria-atomic="true">
+					<div class="milestone-inner">
+						<span class="milestone-number">{milestoneNumber}</span>
+						<span class="milestone-label">tasks complete</span>
+					</div>
+				</div>
+			{/if}
 		</div>
 	{/if}
 </div>
@@ -915,14 +913,92 @@
 
 	/* Uses global @keyframes dropdown-slide from app.css */
 
-	/* Dropdown header with sparkline and badges */
-	.dropdown-header {
+	/* Analytics strip — tertiary info at bottom of panel */
+	.analytics-strip {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.5rem 0.75rem;
 		background: oklch(0.14 0.02 250);
-		border-bottom: 1px solid oklch(0.25 0.01 250);
+		border-top: 1px solid oklch(0.25 0.01 250);
+	}
+
+	/* Milestone overlay — cinematic full-panel flash */
+	.milestone-overlay {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: oklch(0.10 0.06 85 / 0.94);
+		z-index: 10;
+		pointer-events: none;
+		animation: milestone-panel-appear 2.4s ease-in-out forwards;
+	}
+
+	.milestone-inner {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.5rem;
+		animation: milestone-content-enter 2.4s ease-in-out forwards;
+	}
+
+	.milestone-number {
+		font-size: 5rem;
+		font-family: ui-monospace, monospace;
+		font-weight: 900;
+		color: oklch(0.88 0.22 85);
+		line-height: 1;
+		animation: milestone-number-glow 2.4s ease-in-out forwards;
+	}
+
+	.milestone-label {
+		font-size: 0.6rem;
+		font-family: ui-monospace, monospace;
+		font-weight: 600;
+		color: oklch(0.60 0.12 85);
+		text-transform: uppercase;
+		letter-spacing: 0.22em;
+	}
+
+	@keyframes milestone-panel-appear {
+		0%   { opacity: 0; }
+		8%   { opacity: 1; }
+		72%  { opacity: 1; }
+		100% { opacity: 0; }
+	}
+
+	@keyframes milestone-content-enter {
+		0%   { transform: scale(0.35); opacity: 0; }
+		12%  { transform: scale(1.06); opacity: 1; }
+		18%  { transform: scale(1.00); }
+		72%  { transform: scale(1.00); opacity: 1; }
+		100% { transform: scale(1.15); opacity: 0; }
+	}
+
+	@keyframes milestone-number-glow {
+		0%   { text-shadow: none; }
+		12%  {
+			text-shadow:
+				0 0 20px oklch(0.75 0.20 85 / 0.95),
+				0 0 60px oklch(0.75 0.20 85 / 0.55),
+				0 0 100px oklch(0.75 0.20 85 / 0.30);
+		}
+		72%  {
+			text-shadow:
+				0 0 12px oklch(0.75 0.20 85 / 0.60),
+				0 0 35px oklch(0.75 0.20 85 / 0.30);
+		}
+		100% { text-shadow: none; }
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.milestone-overlay,
+		.milestone-inner,
+		.milestone-number {
+			animation: none !important;
+		}
 	}
 
 	/* Day header */

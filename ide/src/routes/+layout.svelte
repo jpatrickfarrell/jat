@@ -6,7 +6,6 @@
 	import { goto } from '$app/navigation';
 	import TaskCreationDrawer from '$lib/components/TaskCreationDrawer.svelte';
 	import CreateProjectDrawer from '$lib/components/CreateProjectDrawer.svelte';
-	import SpawnModal from '$lib/components/SpawnModal.svelte';
 	import EpicSwarmModal from '$lib/components/EpicSwarmModal.svelte';
 	import ToastContainer from '$lib/components/ToastContainer.svelte';
 	import TopBar from '$lib/components/TopBar.svelte';
@@ -1385,7 +1384,6 @@
 		</div>
 
 		<!-- Fixed modals — z-index handles stacking regardless of DOM position -->
-		<SpawnModal />
 		<EpicSwarmModal />
 
 	</div>

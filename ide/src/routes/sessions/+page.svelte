@@ -41,9 +41,7 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let pollInterval: ReturnType<typeof setInterval> | null = null;
-	let selectedSession = $state<string | null>(null);
 	let actionLoading = $state<string | null>(null);
-	let copiedCmd = $state<string | null>(null);
 	let attachMessage = $state<{ session: string; message: string; method: string } | null>(null);
 
 	// Tab filter state - synced with URL
@@ -108,14 +106,6 @@
 
 
 
-
-	const priorityColors: Record<number, string> = {
-		0: 'badge-error',
-		1: 'badge-warning',
-		2: 'badge-info',
-		3: 'badge-ghost',
-		4: 'badge-ghost'
-	};
 
 	// Agent to project mapping (from current task)
 	let agentProjects = $state<Map<string, string>>(new Map());
@@ -569,20 +559,12 @@
 			if (!response.ok) {
 				throw new Error(data.error || 'Failed to attach session');
 			}
-			// Show success message
 			attachMessage = {
 				session: sessionName,
 				message: `Opened in ${data.terminal?.split('/').pop() || 'terminal'}`,
 				method: 'terminal'
 			};
-			// Clear message after 4 seconds
-			setTimeout(() => {
-				if (attachMessage?.session === sessionName) {
-					attachMessage = null;
-				}
-			}, 4000);
 		} catch (err) {
-			console.error('Failed to attach session:', err);
 			attachMessage = {
 				session: sessionName,
 				message: err instanceof Error ? err.message : 'Failed to attach',
@@ -590,65 +572,16 @@
 			};
 		} finally {
 			actionLoading = null;
+			setTimeout(() => {
+				if (attachMessage?.session === sessionName) attachMessage = null;
+			}, 4000);
 		}
 	}
 
 	// Copy attach command
-	function copyAttachCmd(sessionName: string) {
-		navigator.clipboard.writeText(`tmux attach-session -t ${sessionName}`);
-		copiedCmd = sessionName;
-		setTimeout(() => {
-			copiedCmd = null;
-		}, 2000);
-	}
-
-	// Format elapsed time
-
-	// Format elapsed time for AnimatedDigits display
-	// Returns object with hours, minutes, seconds as zero-padded strings
-	function getElapsedFormatted(createdISO: string): { hours: string; minutes: string; seconds: string; showHours: boolean } | null {
-		if (!createdISO) return null;
-		const created = new Date(createdISO).getTime();
-		const now = Date.now();
-		const elapsedMs = now - created;
-
-		if (elapsedMs < 0) return { hours: '00', minutes: '00', seconds: '00', showHours: false };
-
-		const totalSeconds = Math.floor(elapsedMs / 1000);
-		const hours = Math.floor(totalSeconds / 3600);
-		const minutes = Math.floor((totalSeconds % 3600) / 60);
-		const seconds = totalSeconds % 60;
-
-		return {
-			hours: hours.toString().padStart(2, '0'),
-			minutes: minutes.toString().padStart(2, '0'),
-			seconds: seconds.toString().padStart(2, '0'),
-			showHours: hours > 0
-		};
-	}
-
-	// Get type badge styling
-	function getTypeBadge(type: TmuxSession['type']) {
-		switch (type) {
-			case 'agent':
-				return { bg: 'oklch(0.65 0.15 200 / 0.2)', text: 'oklch(0.75 0.15 200)', label: 'AGENT' };
-			case 'server':
-				return { bg: 'oklch(0.65 0.15 145 / 0.2)', text: 'oklch(0.75 0.15 145)', label: 'SERVER' };
-			case 'ide':
-				return { bg: 'oklch(0.65 0.15 280 / 0.2)', text: 'oklch(0.75 0.15 280)', label: 'IDE' };
-			default:
-				return { bg: 'oklch(0.50 0.02 250 / 0.2)', text: 'oklch(0.65 0.02 250)', label: 'OTHER' };
-		}
-	}
-
-	// Fetch output for expanded session
-
 	// Fetch extended task details (attachments, dependencies, timeline, signals)
 
 	// Expand session inline (works for any session)
-
-	// Tick for elapsed time updates
-	let tick = $state(0);
 
 	// Handle tab change - update URL
 	function handleTabChange(tabId: string) {
@@ -685,10 +618,7 @@
 	onMount(() => {
 		fetchAllData();
 		// Poll every 3 seconds
-		pollInterval = setInterval(() => {
-			fetchAllData();
-			tick++;
-		}, 3000);
+		pollInterval = setInterval(fetchAllData, 3000);
 	});
 
 	onDestroy(() => {
@@ -806,7 +736,6 @@
 		})
 	);
 
-	// === Context Menu ===
 
 </script>
 
@@ -835,7 +764,7 @@
 					onTabChange={handleTabChange}
 				/>
 				<div class="tmux-tip-wrapper">
-					<button class="tmux-tip-btn" aria-label="tmux commands tip">
+					<button class="tmux-tip-btn" aria-label="tmux commands tip" title="tmux quick reference">
 						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="tmux-tip-icon">
 							<path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
 						</svg>
@@ -862,10 +791,10 @@
 			<div class="loading-skeleton">
 				{#each [1, 2, 3] as _}
 					<div class="skeleton-row">
-						<div class="skeleton h-5 w-32 rounded"></div>
-						<div class="skeleton h-4 w-16 rounded"></div>
-						<div class="skeleton h-4 w-20 rounded"></div>
-						<div class="skeleton h-8 w-24 rounded"></div>
+						<div class="skeleton h-5 w-32 rounded animate-skeleton-pulse"></div>
+						<div class="skeleton h-4 w-16 rounded animate-skeleton-pulse"></div>
+						<div class="skeleton h-4 w-20 rounded animate-skeleton-pulse"></div>
+						<div class="skeleton h-8 w-24 rounded animate-skeleton-pulse"></div>
 					</div>
 				{/each}
 			</div>
@@ -894,6 +823,7 @@
 			<div class="sessions-table-wrapper">
 				<button
 					class="sessions-collapse-header"
+					aria-expanded={!sessionsCollapsed}
 					onclick={() => sessionsCollapsed = !sessionsCollapsed}
 				>
 					<div class="sessions-collapse-header-left">
@@ -927,11 +857,21 @@
 			</div>
 
 			<!-- Open Tasks (agents tab only, when project is selected) -->
+			{#if activeTab === 'agents' && !selectedProject}
+			<div class="open-tasks-placeholder">
+				Select a project in the top bar to see open tasks here
+			</div>
+			{:else if activeTab === 'agents' && selectedProject && openTasks.length === 0 && !openTasksLoading}
+			<div class="open-tasks-placeholder">
+				No open tasks in {selectedProject}
+			</div>
+			{/if}
 			{#if activeTab === 'agents' && selectedProject && (openTasks.length > 0 || openTasksLoading)}
 			<div class="open-tasks-section" style="margin-top: 1.5rem;">
 				<div class="open-tasks-header-row">
 					<button
 						class="open-tasks-header"
+						aria-expanded={!openTasksCollapsed}
 						onclick={() => openTasksCollapsed = !openTasksCollapsed}
 					>
 						<div class="open-tasks-header-left">
@@ -1074,42 +1014,17 @@
 
 	/* Header */
 	.tmux-header {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 1.5rem;
-		margin-bottom: 1.5rem;
-		flex-wrap: wrap;
-	}
-
-	.header-left {
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
+		margin-bottom: 1rem;
 	}
 
 	.page-title {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: 1.5rem;
-		font-weight: 600;
-		color: oklch(0.90 0.02 250);
+		font-size: 0.875rem;
+		font-weight: 700;
+		color: oklch(from var(--color-base-content) l c h / 60%);
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
 		margin: 0;
-		font-family: ui-monospace, monospace;
-	}
-
-	.title-icon {
-		width: 24px;
-		height: 24px;
-		color: oklch(0.70 0.15 200);
-	}
-
-	.page-subtitle {
-		font-size: 0.8rem;
-		color: oklch(0.55 0.02 250);
-		margin: 0;
-		font-family: ui-monospace, monospace;
+		font-family: system-ui, -apple-system, sans-serif;
 	}
 
 	/* Table controls (tabs + sort) above the session table */
@@ -1155,7 +1070,6 @@
 
 	.skeleton {
 		background: oklch(0.25 0.02 250);
-		animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 	}
 
 	/* Error state */
@@ -1207,8 +1121,8 @@
 	}
 
 	.empty-icon {
-		width: 64px;
-		height: 64px;
+		width: 32px;
+		height: 32px;
 		color: oklch(0.35 0.02 250);
 	}
 
@@ -1283,6 +1197,19 @@
 		padding: 0.05rem 0.4rem;
 		border-radius: 9999px;
 		font-family: ui-monospace, monospace;
+	}
+
+	/* Open Tasks placeholder — shown when no project selected */
+	.open-tasks-placeholder {
+		margin-top: 1.5rem;
+		padding: 0.625rem 1rem;
+		background: oklch(0.16 0.01 250);
+		border: 1px dashed oklch(0.26 0.02 250);
+		border-radius: 6px;
+		font-size: 0.75rem;
+		color: oklch(from var(--color-base-content) l c h / 35%);
+		font-family: system-ui, -apple-system, sans-serif;
+		text-align: center;
 	}
 
 	/* Open Tasks Header */
@@ -1465,7 +1392,8 @@
 		z-index: 50;
 	}
 
-	.tmux-tip-btn:hover .tmux-tip-tooltip {
+	.tmux-tip-btn:hover .tmux-tip-tooltip,
+	.tmux-tip-btn:focus .tmux-tip-tooltip {
 		display: flex;
 	}
 

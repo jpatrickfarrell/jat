@@ -30,11 +30,14 @@
 	let {
 		taskId,
 		compact = false,
+		hideInput = false,
 		onCountChange,
 		onPendingQuestionChange
 	}: {
 		taskId: string;
 		compact?: boolean;
+		/** Hide the built-in reply textarea (e.g. when a parent renders its own compose box). */
+		hideInput?: boolean;
 		onCountChange?: (count: number) => void;
 		onPendingQuestionChange?: (hasPending: boolean) => void;
 	} = $props();
@@ -217,6 +220,7 @@
 	{/if}
 
 	<!-- Reply input -->
+	{#if !hideInput}
 	<div class="mt-2 flex flex-col gap-1.5">
 		{#if pendingQuestion}
 			<p class="text-[10px] text-warning font-medium">
@@ -275,4 +279,5 @@
 			</div>
 		{/if}
 	</div>
+	{/if}
 </div>

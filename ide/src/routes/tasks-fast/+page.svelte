@@ -1,11 +1,16 @@
 <script lang="ts">
-	import { onMount } from "svelte";
+	import { onMount, tick } from "svelte";
+	import { page } from "$app/stores";
+	import { goto } from "$app/navigation";
+	import { browser } from "$app/environment";
 	import {
 		getPriorityBadge,
 		getTaskStatusBadge,
 		getTypeBadge,
 	} from "$lib/utils/badgeHelpers";
 	import { formatRelativeTime } from "$lib/utils/dateFormatters";
+	import { getProjectFromTaskId } from "$lib/utils/projectUtils";
+	import TaskFastDetail from "$lib/components/tasks-fast/TaskFastDetail.svelte";
 
 	interface Task {
 		id: string;
@@ -24,6 +29,24 @@
 
 	type FocusZone = "list" | "detail" | "compose";
 
+	const FETCH_STATUSES = [
+		"submitted",
+		"open",
+		"in_progress",
+		"waiting",
+	] as const;
+	const STATUS_OPTIONS = FETCH_STATUSES;
+	const PRIORITY_OPTIONS = [0, 1, 2, 3, 4] as const;
+	const TYPE_OPTIONS = [
+		"bug",
+		"feature",
+		"task",
+		"epic",
+		"chore",
+		"chat",
+	] as const;
+	const DEFAULT_STATUSES = new Set<string>(["submitted", "open"]);
+
 	let tasks = $state<Task[]>([]);
 	let selectedIdx = $state(0);
 	let panelOpen = $state(false);
@@ -32,30 +55,149 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
-	const selectedTask = $derived<Task | null>(tasks[selectedIdx] ?? null);
+	// Filter state — hydrated from URL on mount.
+	let filterStatuses = $state<Set<string>>(new Set(DEFAULT_STATUSES));
+	let filterPriorities = $state<Set<number>>(new Set());
+	let filterProject = $state<string>("");
+	let filterTypes = $state<Set<string>>(new Set());
+	let filterAssignee = $state<string>("");
+	let filterSearch = $state<string>("");
+	let hydrated = $state(false);
+
+	let currentUser = $state<string>("");
+
+	let filterInputEl = $state<HTMLInputElement | null>(null);
+	let listEl = $state<HTMLUListElement | null>(null);
+	let detailRef = $state<{ focusCompose: () => void } | null>(null);
+
+	// All projects detected from current task list — populates the project dropdown.
+	const projectOptions = $derived.by<string[]>(() => {
+		const set = new Set<string>();
+		for (const t of tasks) {
+			const p = t.project || getProjectFromTaskId(t.id);
+			if (p) set.add(p);
+		}
+		return [...set].sort();
+	});
+
+	const filteredTasks = $derived.by<Task[]>(() => {
+		const meName = currentUser.toLowerCase();
+		const search = filterSearch.trim().toLowerCase();
+		const assigneeRaw = filterAssignee.trim().toLowerCase();
+		const assigneeMatch =
+			assigneeRaw === "@me" && meName ? meName : assigneeRaw;
+
+		return tasks.filter((t) => {
+			if (filterStatuses.size > 0 && !filterStatuses.has(t.status)) {
+				return false;
+			}
+			if (
+				filterPriorities.size > 0 &&
+				!filterPriorities.has(t.priority ?? -1)
+			) {
+				return false;
+			}
+			if (filterProject) {
+				const p = t.project || getProjectFromTaskId(t.id) || "";
+				if (p !== filterProject) return false;
+			}
+			if (
+				filterTypes.size > 0 &&
+				!filterTypes.has(t.issue_type ?? "task")
+			) {
+				return false;
+			}
+			if (assigneeMatch) {
+				const a = (t.assignee ?? "").toLowerCase();
+				if (!a || !a.includes(assigneeMatch)) return false;
+			}
+			if (search) {
+				const haystack = `${t.title ?? ""} ${
+					t.description ?? ""
+				}`.toLowerCase();
+				if (!haystack.includes(search)) return false;
+			}
+			return true;
+		});
+	});
+
+	const selectedTask = $derived<Task | null>(
+		filteredTasks[selectedIdx] ?? null,
+	);
+
+	const hasActiveFilters = $derived.by(() => {
+		const statusDefault =
+			filterStatuses.size === DEFAULT_STATUSES.size &&
+			[...filterStatuses].every((s) => DEFAULT_STATUSES.has(s));
+		return (
+			!statusDefault ||
+			filterPriorities.size > 0 ||
+			filterProject !== "" ||
+			filterTypes.size > 0 ||
+			filterAssignee.trim() !== "" ||
+			filterSearch.trim() !== ""
+		);
+	});
+
+	// Keep selection in bounds when the filtered set shrinks.
+	$effect(() => {
+		if (selectedIdx >= filteredTasks.length) {
+			selectedIdx = Math.max(0, filteredTasks.length - 1);
+		}
+	});
+
+	function jumpToCompose() {
+		focusZone = "compose";
+		tick().then(() => detailRef?.focusCompose());
+	}
+
+	function isTypingTarget(target: EventTarget | null): boolean {
+		if (!(target instanceof HTMLElement)) return false;
+		const tag = target.tagName;
+		if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+		if (target.isContentEditable) return true;
+		return false;
+	}
+
+	function handleWindowKeydown(e: KeyboardEvent) {
+		if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+		// "/" focuses the filter input from anywhere except other inputs.
+		if (e.key === "/" && !isTypingTarget(e.target)) {
+			e.preventDefault();
+			focusFilter();
+			return;
+		}
+
+		// r/c jumps to the compose box when the user is in the detail zone.
+		// j/k list navigation is out of scope (jat-nm0nq.2).
+		if (focusZone !== "detail") return;
+		if (isTypingTarget(e.target)) return;
+		if (e.key === "r" || e.key === "c") {
+			if (!panelOpen || !selectedTask) return;
+			e.preventDefault();
+			jumpToCompose();
+		}
+	}
+
+	function handleEscapeCompose() {
+		focusZone = "detail";
+	}
 
 	async function fetchTasks() {
 		loading = true;
 		error = null;
 		try {
-			// API accepts a single status per request — fetch both in parallel.
-			const [submittedRes, openRes] = await Promise.all([
-				fetch("/api/tasks?status=submitted"),
-				fetch("/api/tasks?status=open"),
-			]);
-			if (!submittedRes.ok || !openRes.ok) {
-				throw new Error(
-					`Fetch failed (${submittedRes.status}/${openRes.status})`,
-				);
+			const responses = await Promise.all(
+				FETCH_STATUSES.map((s) => fetch(`/api/tasks?status=${s}`)),
+			);
+			const failed = responses.find((r) => !r.ok);
+			if (failed) {
+				throw new Error(`Fetch failed (${failed.status})`);
 			}
-			const submittedJson = await submittedRes.json();
-			const openJson = await openRes.json();
-			const combined: Task[] = [
-				...(submittedJson.tasks ?? []),
-				...(openJson.tasks ?? []),
-			];
+			const payloads = await Promise.all(responses.map((r) => r.json()));
+			const combined: Task[] = payloads.flatMap((p) => p.tasks ?? []);
 
-			// Sort: priority asc (0 = highest), then created_at asc (oldest first).
 			combined.sort((a, b) => {
 				const pa = a.priority ?? 99;
 				const pb = b.priority ?? 99;
@@ -66,7 +208,6 @@
 			});
 
 			tasks = combined;
-			selectedIdx = Math.min(selectedIdx, Math.max(0, tasks.length - 1));
 		} catch (err) {
 			error = err instanceof Error ? err.message : String(err);
 		} finally {
@@ -75,13 +216,154 @@
 	}
 
 	function selectTask(idx: number) {
-		if (idx < 0 || idx >= tasks.length) return;
+		if (idx < 0 || idx >= filteredTasks.length) return;
 		selectedIdx = idx;
 		panelOpen = true;
 		focusZone = "detail";
 	}
 
+	// ---- URL <-> filter state sync ----
+
+	function parseSet(
+		raw: string | null,
+		allowed: readonly string[],
+	): Set<string> {
+		if (!raw) return new Set();
+		const out = new Set<string>();
+		for (const part of raw.split(",")) {
+			const v = part.trim();
+			if (v && allowed.includes(v)) out.add(v);
+		}
+		return out;
+	}
+
+	function parsePrioritySet(raw: string | null): Set<number> {
+		if (!raw) return new Set();
+		const out = new Set<number>();
+		for (const part of raw.split(",")) {
+			const trimmed = part.trim().replace(/^p/i, "");
+			const n = Number(trimmed);
+			if (Number.isInteger(n) && n >= 0 && n <= 4) out.add(n);
+		}
+		return out;
+	}
+
+	function hydrateFromUrl(searchParams: URLSearchParams) {
+		const statusRaw = searchParams.get("status");
+		// Distinguish "no param" (use defaults) from "empty param" (no statuses).
+		if (statusRaw === null) {
+			filterStatuses = new Set(DEFAULT_STATUSES);
+		} else {
+			filterStatuses = parseSet(statusRaw, FETCH_STATUSES);
+		}
+		filterPriorities = parsePrioritySet(searchParams.get("priority"));
+		filterProject = searchParams.get("project") ?? "";
+		filterTypes = parseSet(searchParams.get("type"), TYPE_OPTIONS);
+		filterAssignee = searchParams.get("assignee") ?? "";
+		filterSearch = searchParams.get("q") ?? "";
+	}
+
+	function buildSearchParams(): URLSearchParams {
+		const sp = new URLSearchParams();
+
+		// Only encode status when it diverges from the default set, so a clean URL
+		// stays clean and shared URLs only carry user intent.
+		const statusEqualsDefault =
+			filterStatuses.size === DEFAULT_STATUSES.size &&
+			[...filterStatuses].every((s) => DEFAULT_STATUSES.has(s));
+		if (!statusEqualsDefault) {
+			sp.set("status", [...filterStatuses].sort().join(","));
+		}
+		if (filterPriorities.size > 0) {
+			sp.set(
+				"priority",
+				[...filterPriorities].sort((a, b) => a - b).join(","),
+			);
+		}
+		if (filterProject) sp.set("project", filterProject);
+		if (filterTypes.size > 0) {
+			sp.set("type", [...filterTypes].sort().join(","));
+		}
+		if (filterAssignee.trim()) sp.set("assignee", filterAssignee.trim());
+		if (filterSearch.trim()) sp.set("q", filterSearch.trim());
+
+		return sp;
+	}
+
+	// Sync filter state → URL after hydration. replaceState avoids piling each
+	// keystroke onto history.
+	$effect(() => {
+		if (!hydrated || !browser) return;
+		const next = buildSearchParams().toString();
+		const current = $page.url.searchParams.toString();
+		if (next === current) return;
+		const target = next
+			? `${$page.url.pathname}?${next}`
+			: $page.url.pathname;
+		goto(target, { replaceState: true, keepFocus: true, noScroll: true });
+	});
+
+	// ---- Filter toggle helpers ----
+
+	function toggleSetItem<T>(set: Set<T>, item: T): Set<T> {
+		const next = new Set(set);
+		if (next.has(item)) next.delete(item);
+		else next.add(item);
+		return next;
+	}
+
+	function toggleStatus(s: string) {
+		filterStatuses = toggleSetItem(filterStatuses, s);
+	}
+	function togglePriority(p: number) {
+		filterPriorities = toggleSetItem(filterPriorities, p);
+	}
+	function toggleType(t: string) {
+		filterTypes = toggleSetItem(filterTypes, t);
+	}
+
+	function clearAllFilters() {
+		filterStatuses = new Set(DEFAULT_STATUSES);
+		filterPriorities = new Set();
+		filterProject = "";
+		filterTypes = new Set();
+		filterAssignee = "";
+		filterSearch = "";
+	}
+
+	async function focusFilter() {
+		await tick();
+		filterInputEl?.focus();
+		filterInputEl?.select();
+	}
+
+	function focusList() {
+		filterInputEl?.blur();
+		(listEl as HTMLElement | null)?.focus();
+		focusZone = "list";
+	}
+
+	function handleFilterKey(e: KeyboardEvent) {
+		if (e.key === "Escape") {
+			e.preventDefault();
+			focusList();
+		}
+	}
+
+	// ---- Mount ----
+
 	onMount(() => {
+		hydrateFromUrl($page.url.searchParams);
+		hydrated = true;
+
+		// Best-effort identity for @me resolution; failure is silent.
+		fetch("/api/config/user")
+			.then((r) => (r.ok ? r.json() : null))
+			.then((data) => {
+				if (data?.name) currentUser = data.name;
+			})
+			.catch(() => {});
+
 		fetchTasks();
 	});
 </script>
@@ -100,10 +382,112 @@
 		<header class="panel-header">
 			<h1 class="panel-title">Inbox</h1>
 			<span class="panel-count">
-				{tasks.length}
-				{tasks.length === 1 ? "task" : "tasks"}
+				{filteredTasks.length} of {tasks.length}
 			</span>
 		</header>
+
+		<!-- FILTER BAR -->
+		<div class="filter-bar" role="search" aria-label="Filter tasks">
+			<div class="filter-row filter-row-search">
+				<input
+					bind:this={filterInputEl}
+					bind:value={filterSearch}
+					onkeydown={handleFilterKey}
+					type="search"
+					class="filter-search input input-sm input-bordered"
+					placeholder="Filter… ( / to focus, Esc to exit )"
+					aria-label="Search title and description"
+				/>
+				{#if hasActiveFilters}
+					<button
+						type="button"
+						class="btn btn-xs btn-ghost"
+						onclick={clearAllFilters}
+						title="Clear all filters"
+					>
+						Clear
+					</button>
+				{/if}
+			</div>
+
+			<div class="filter-row filter-row-chips">
+				<div class="chip-group" aria-label="Status">
+					{#each STATUS_OPTIONS as status}
+						{@const active = filterStatuses.has(status)}
+						<button
+							type="button"
+							class="chip"
+							class:active
+							onclick={() => toggleStatus(status)}
+							aria-pressed={active}
+							title="Status: {status}"
+						>
+							{status}
+						</button>
+					{/each}
+				</div>
+
+				<div class="chip-group" aria-label="Priority">
+					{#each PRIORITY_OPTIONS as p}
+						{@const active = filterPriorities.has(p)}
+						<button
+							type="button"
+							class="chip chip-priority"
+							class:active
+							onclick={() => togglePriority(p)}
+							aria-pressed={active}
+							title="Priority P{p}"
+						>
+							P{p}
+						</button>
+					{/each}
+				</div>
+			</div>
+
+			<div class="filter-row filter-row-secondary">
+				<label class="filter-field">
+					<span class="filter-label">Project</span>
+					<select
+						bind:value={filterProject}
+						onkeydown={handleFilterKey}
+						class="select select-xs select-bordered"
+					>
+						<option value="">All</option>
+						{#each projectOptions as project}
+							<option value={project}>{project}</option>
+						{/each}
+					</select>
+				</label>
+
+				<div class="chip-group chip-group-types" aria-label="Type">
+					{#each TYPE_OPTIONS as type}
+						{@const active = filterTypes.has(type)}
+						<button
+							type="button"
+							class="chip chip-type"
+							class:active
+							onclick={() => toggleType(type)}
+							aria-pressed={active}
+							title="Type: {type}"
+						>
+							{type}
+						</button>
+					{/each}
+				</div>
+
+				<label class="filter-field filter-field-assignee">
+					<span class="filter-label">Assignee</span>
+					<input
+						bind:value={filterAssignee}
+						onkeydown={handleFilterKey}
+						type="text"
+						class="input input-xs input-bordered"
+						placeholder="@me or name"
+						aria-label="Assignee filter"
+					/>
+				</label>
+			</div>
+		</div>
 
 		{#if loading}
 			<div class="state-message">Loading tasks…</div>
@@ -115,10 +499,25 @@
 				</button>
 			</div>
 		{:else if tasks.length === 0}
-			<div class="state-message">No submitted or open tasks.</div>
+			<div class="state-message">
+				No submitted, open, in-progress, or waiting tasks.
+			</div>
+		{:else if filteredTasks.length === 0}
+			<div class="state-message state-muted">
+				<p>No tasks match the current filters.</p>
+				<button class="btn btn-xs btn-ghost" onclick={clearAllFilters}>
+					Clear filters
+				</button>
+			</div>
 		{:else}
-			<ul class="task-list" role="listbox" aria-label="Tasks">
-				{#each tasks as task, idx (task.id)}
+			<ul
+				bind:this={listEl}
+				class="task-list"
+				role="listbox"
+				aria-label="Tasks"
+				tabindex="-1"
+			>
+				{#each filteredTasks as task, idx (task.id)}
 					{@const isSelected = idx === selectedIdx}
 					<li>
 						<button
@@ -130,12 +529,16 @@
 							onclick={() => selectTask(idx)}
 						>
 							<span
-								class="status-dot badge badge-xs {getTaskStatusBadge(task.status)}"
+								class="status-dot badge badge-xs {getTaskStatusBadge(
+									task.status,
+								)}"
 								aria-hidden="true"
 							></span>
 							<span class="task-id">{task.id}</span>
 							<span
-								class="priority-badge badge badge-sm {getPriorityBadge(task.priority)}"
+								class="priority-badge badge badge-sm {getPriorityBadge(
+									task.priority,
+								)}"
 							>
 								P{task.priority ?? "?"}
 							</span>
@@ -155,6 +558,17 @@
 				{/each}
 			</ul>
 		{/if}
+
+		<footer class="status-bar" aria-label="Status">
+			<span class="status-bar-count">
+				{filteredTasks.length} of {tasks.length}
+			</span>
+			{#if hasActiveFilters}
+				<span class="status-bar-filters">filtered</span>
+			{/if}
+			<span class="status-bar-spacer"></span>
+			<span class="status-bar-hint">/ to filter · Esc to exit</span>
+		</footer>
 	</section>
 
 	<!-- RIGHT: DETAIL PANEL -->
@@ -164,56 +578,17 @@
 				Select a task to view details.
 			</div>
 		{:else}
-			{@const t = selectedTask}
-			<header class="detail-header">
-				<div class="detail-title-row">
-					<h2 class="detail-title">{t.title}</h2>
-				</div>
-				<div class="detail-badges">
-					<span class="badge badge-sm badge-outline">{t.id}</span>
-					<span class="badge badge-sm {getTypeBadge(t.issue_type)}">
-						{t.issue_type ?? "task"}
-					</span>
-					<span class="badge badge-sm {getPriorityBadge(t.priority)}">
-						P{t.priority ?? "?"}
-					</span>
-					<span class="badge badge-sm {getTaskStatusBadge(t.status)}">
-						{t.status}
-					</span>
-					{#if t.project}
-						<span class="badge badge-sm badge-ghost">{t.project}</span>
-					{/if}
-				</div>
-			</header>
-
-			<div class="detail-meta">
-				{#if t.assignee}
-					<span><strong>Assignee:</strong> {t.assignee}</span>
-				{/if}
-				{#if t.requester}
-					<span><strong>Requester:</strong> {t.requester}</span>
-				{/if}
-				{#if t.created_at}
-					<span
-						><strong>Created:</strong> {formatRelativeTime(t.created_at)}</span
-					>
-				{/if}
-			</div>
-
-			{#if t.description}
-				<div class="detail-description">{t.description}</div>
-			{:else}
-				<div class="state-message state-muted">No description.</div>
-			{/if}
-
-			<footer class="detail-footer">
-				<span class="detail-footer-note">
-					Detail panel scaffold. Comments + compose: jat-nm0nq.3.
-				</span>
-			</footer>
+			<TaskFastDetail
+				bind:this={detailRef}
+				task={selectedTask}
+				onEscapeCompose={handleEscapeCompose}
+				onComposeFocus={() => (focusZone = "compose")}
+			/>
 		{/if}
 	</section>
 </div>
+
+<svelte:window onkeydown={handleWindowKeydown} />
 
 <style>
 	.tasks-fast-layout {
@@ -276,8 +651,7 @@
 		align-items: baseline;
 		justify-content: space-between;
 		gap: 0.5rem;
-		padding: 0.75rem 1rem;
-		border-bottom: 1px solid oklch(var(--b3, 0.22 0.02 250));
+		padding: 0.75rem 1rem 0.5rem;
 	}
 
 	.panel-title {
@@ -289,7 +663,106 @@
 	.panel-count {
 		font-size: 0.75rem;
 		opacity: 0.65;
+		font-variant-numeric: tabular-nums;
 	}
+
+	/* ---- Filter bar ---- */
+
+	.filter-bar {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+		padding: 0 1rem 0.6rem;
+		border-bottom: 1px solid oklch(var(--b3, 0.22 0.02 250));
+	}
+
+	.filter-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem;
+		min-width: 0;
+	}
+
+	.filter-row-search {
+		gap: 0.5rem;
+	}
+
+	.filter-search {
+		flex: 1 1 auto;
+		min-width: 8rem;
+	}
+
+	.chip-group {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem;
+	}
+
+	.chip {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.1rem 0.5rem;
+		font-size: 0.7rem;
+		line-height: 1.2;
+		border-radius: 999px;
+		border: 1px solid oklch(0.30 0.02 250);
+		background: transparent;
+		color: inherit;
+		cursor: pointer;
+		opacity: 0.7;
+		transition: all 0.1s ease;
+	}
+
+	.chip:hover {
+		opacity: 1;
+		background: oklch(0.30 0.03 250 / 0.4);
+	}
+
+	.chip.active {
+		background: oklch(0.70 0.18 240 / 0.18);
+		border-color: oklch(0.70 0.18 240 / 0.7);
+		color: oklch(0.92 0.05 240);
+		opacity: 1;
+	}
+
+	.chip-priority.active {
+		background: oklch(0.70 0.18 30 / 0.20);
+		border-color: oklch(0.70 0.18 30 / 0.7);
+		color: oklch(0.92 0.08 30);
+	}
+
+	.chip-type.active {
+		background: oklch(0.65 0.15 145 / 0.18);
+		border-color: oklch(0.65 0.15 145 / 0.7);
+		color: oklch(0.90 0.10 145);
+	}
+
+	.filter-field {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		font-size: 0.7rem;
+		opacity: 0.85;
+	}
+
+	.filter-field-assignee {
+		flex: 0 1 12rem;
+		min-width: 6rem;
+	}
+
+	.filter-field-assignee .input {
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+
+	.filter-label {
+		opacity: 0.65;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+
+	/* ---- Task list ---- */
 
 	.task-list {
 		list-style: none;
@@ -297,6 +770,10 @@
 		padding: 0;
 		overflow-y: auto;
 		flex: 1 1 auto;
+	}
+
+	.task-list:focus-visible {
+		outline: none;
 	}
 
 	.task-row {
@@ -361,50 +838,40 @@
 		white-space: nowrap;
 	}
 
-	.detail-header {
-		padding: 1rem 1.25rem 0.75rem;
-		border-bottom: 1px solid oklch(var(--b3, 0.22 0.02 250));
-	}
+	/* ---- Status bar ---- */
 
-	.detail-title {
-		font-size: 1.125rem;
-		font-weight: 600;
-		margin: 0 0 0.5rem;
-	}
-
-	.detail-badges {
+	.status-bar {
 		display: flex;
-		flex-wrap: wrap;
-		gap: 0.375rem;
-	}
-
-	.detail-meta {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 1rem;
-		padding: 0.75rem 1.25rem;
-		border-bottom: 1px solid oklch(var(--b3, 0.22 0.02 250));
-		font-size: 0.8125rem;
-		opacity: 0.85;
-	}
-
-	.detail-description {
-		padding: 1rem 1.25rem;
-		font-size: 0.875rem;
-		line-height: 1.5;
-		white-space: pre-wrap;
-		overflow-y: auto;
-		flex: 1 1 auto;
-	}
-
-	.detail-footer {
-		padding: 0.5rem 1.25rem;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.3rem 1rem;
 		border-top: 1px solid oklch(var(--b3, 0.22 0.02 250));
+		font-size: 0.7rem;
+		opacity: 0.75;
 	}
 
-	.detail-footer-note {
-		font-size: 0.75rem;
-		opacity: 0.55;
+	.status-bar-count {
+		font-variant-numeric: tabular-nums;
+	}
+
+	.status-bar-filters {
+		padding: 0.05rem 0.4rem;
+		border-radius: 999px;
+		background: oklch(0.70 0.18 240 / 0.18);
+		color: oklch(0.92 0.05 240);
+		font-size: 0.65rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	.status-bar-spacer {
+		flex: 1;
+	}
+
+	.status-bar-hint {
+		opacity: 0.6;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+		font-size: 0.65rem;
 	}
 
 	.state-message {
